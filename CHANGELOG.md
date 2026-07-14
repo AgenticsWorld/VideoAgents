@@ -2,6 +2,13 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Made the test import path explicit for pytest 9 and GitHub-hosted runners.
+- Updated GitHub Actions to their Node.js 24 releases.
+
 ## [0.1.0] - 2026-07-14
 
 ### Added
