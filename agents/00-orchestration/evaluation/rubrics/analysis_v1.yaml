@@ -1,0 +1,20 @@
+# analysis_v1 — 结构/性格/关系分析类产物评分表
+# 适用:story-structure, personality, dialogue-style, relationship 等「基于原文做判断」型产物
+rubric: analysis_v1
+threshold: 80
+dimensions:
+  - name: 证据充分
+    weight: 35
+    check: 每个结论附原文证据(引文或章节);无证据的判断显式标注为假设
+    anchors: { 95: 关键结论全部有引文, 80: 少数结论证据弱但不影响使用, 60: 结论多凭空 }
+  - name: 洞察深度
+    weight: 25
+    check: 超越表面复述;能指出隐含动机/结构功能/风格特征
+  - name: 自洽性
+    weight: 25
+    check: 结论之间不互相矛盾;与 Bible 已确认设定不冲突
+    anchors: { 95: 零矛盾, 80: 存在已标注的待仲裁项, 60: 未标注的矛盾 }
+  - name: 格式规范
+    weight: 15
+    check: schema 通过、可被下游直接消费(如风格卡可用于回测)
+feedback_required: true

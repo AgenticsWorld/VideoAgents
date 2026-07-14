@@ -1,0 +1,18 @@
+# edit_v1 — 剪辑产物评分表
+# 适用:edit(cut), transition 后版本, 含字幕/片头尾的准成片
+rubric: edit_v1
+threshold: 80
+dimensions:
+  - name: 节奏
+    weight: 35
+    check: 符合 pacing.json 情绪曲线;无拖沓段(连续>15s 无信息增量);钩子在设计位置
+  - name: 音画配合
+    weight: 30
+    check: 剪辑点与音乐/音效对拍;对白口型对位;情绪转折处音画同步转
+  - name: 技术规范
+    weight: 20
+    check: 无黑帧/跳帧/闪白;时长=预算±5%;字幕时轴<200ms 偏差;分辨率/码率合规
+  - name: 完成度
+    weight: 15
+    check: 片头/片尾/字幕/花字/封面齐备;下集预告位按 hooks 落位
+feedback_required: true

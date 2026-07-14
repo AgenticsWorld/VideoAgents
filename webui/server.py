@@ -1,0 +1,3108 @@
+#!/usr/bin/env python3
+"""小说→视频 多 Agent 团队 Web 控制台。
+
+- 每个 Agent 一个对话入口:对话触发 `claude -p`(注入该 Agent 的 SOUL.md 作为身份),
+  工作产物写入 data/projects/<project>/。
+- Director(调度型 Agent)可通过 webui/dispatch.py 把任务派给其他 Agent,形成父子运行链。
+- 全部运行状态 / 工具活动 / 产物文件通过 SSE 实时推送到前端。
+
+启动:python3 webui/server.py   →  http://127.0.0.1:8630
+"""
+import asyncio
+import json
+import os
+import re
+import shutil
+import subprocess
+import threading
+import time
+import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from collections import defaultdict, deque
+from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
+
+import uvicorn
+import base64
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+# ---------------- 配置 ----------------
+ROOT = Path(__file__).resolve().parent.parent          # 工作区根目录
+AGENTS_DIR = ROOT / "agents"
+PROJECTS_DIR = ROOT / "data" / "projects"
+WEBUI_DIR = Path(__file__).resolve().parent
+CHATS_DIR = WEBUI_DIR / "chats"
+RUNS_DIR = WEBUI_DIR / "runs"
+STATE_PATH = WEBUI_DIR / "state.json"
+
+# Public releases are local-only by default. Set VIDEOAGENTS_HOST=0.0.0.0
+# explicitly when LAN storyboard access is required.
+HOST = os.environ.get("VIDEOAGENTS_HOST", "127.0.0.1")
+PORT = int(os.environ.get("VIDEOAGENTS_PORT", "8630"))
+CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
+CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
+DEEPAGENTS_PY = os.environ.get(
+    "DEEPAGENTS_PY", str(Path(__file__).resolve().parent / ".venv-deepagents" / "bin" / "python"))
+ENGINES = ("claude", "codex", "deepagents")   # 执行引擎:claude -p / codex exec / deepagents runner
+PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
+CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
+    "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
+).lower() in {"1", "true", "yes"}
+MAX_TURNS = "100"
+MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
+RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
+STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
+# 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
+DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
+# 无状态服务型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
+# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)
+STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation"}
+STATELESS_PREFIXES = ("11-qa/",)
+# 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
+# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token)
+CHAT_RESUME_LIMIT = 512 * 1024
+# 总制片(仅 workflow-orchestrator 一个,不随 DISPATCHERS 扩员生效)单独调低:
+# 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
+# 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
+# 只在新会话首轮注入 SOUL,更需要尽早重开
+ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
+ORCHESTRATOR_RESUME_LIMIT = 128 * 1024
+IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
+                                         # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
+# 生成类 Agent 所在类别(系统提示词里会附加 genmedia 模块用法)
+MEDIA_CATEGORIES = {"06-art", "08-video-gen"}
+
+CATEGORY_NAMES = {
+    "00-orchestration": "调度层", "01-story": "剧情", "02-worldbuilding": "世界设定",
+    "03-characters": "角色", "04-creatures": "生物资产", "05-scenes": "场景资产",
+    "06-art": "美术资产", "07-directing": "导演", "08-video-gen": "视频生成",
+    "09-audio": "音频", "10-editing": "剪辑", "11-qa": "审核", "12-publishing": "发布",
+}
+
+CHATS_DIR.mkdir(exist_ok=True)
+RUNS_DIR.mkdir(exist_ok=True)
+PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+
+REFS_README = """# refs/ — 用户参考目录
+
+把「希望成片长成什么样」的参考图和希望使用的音乐丢进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2):
+
+- `style/`      整体视觉风格:画风/渲染质感/色调/构图
+- `characters/` 角色形象;按角色建子目录(如 characters/林昭/)可定向到该角色
+- `scenes/`     场景与世界观:建筑/地貌/氛围
+- `props/`      道具/法宝;服装放 props/costumes/
+- `music/`      希望使用的音乐文件(BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
+- `NOTES.md`    可选:逐图/逐曲说明哪张图管什么、哪首曲子想用在哪(有则 Agent 必读)
+
+规则:用户参考素材 > Agent 自行发挥;与文字设定冲突时 Agent 会上报你裁决;目录为空不影响流程。
+"""
+
+
+def safe_slug(name, default: str = "demo") -> str:
+    """项目名统一清洗:非 [字母数字_-] 一律替换为 '-'。"""
+    return re.sub(r"[^\w\-]", "-", str(name or default))
+
+
+def safe_agent(agent: str) -> str:
+    """agent id 白名单校验(恒为「类别/名字」两段),防路径遍历。"""
+    if not re.fullmatch(r"[\w\-]+/[\w\-]+", agent or ""):
+        raise HTTPException(400, f"非法 agent id: {agent}")
+    return agent
+
+
+def atomic_write_json(path: Path, obj):
+    """临时文件 + os.replace,防写中崩溃损坏 JSON。"""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2))
+    os.replace(tmp, path)
+
+
+def ensure_project(project: str):
+    """建项目目录 + 用户参考目录骨架。"""
+    refs = PROJECTS_DIR / project / "refs"
+    for sub in ("style", "characters", "scenes", "props", "music"):
+        (refs / sub).mkdir(parents=True, exist_ok=True)
+    readme = refs / "README.md"
+    if not readme.exists():
+        readme.write_text(REFS_README)
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    wd_task = asyncio.create_task(idle_watchdog())
+    try:
+        yield
+    finally:
+        wd_task.cancel()
+
+
+app = FastAPI(title="VideoAgents Console", lifespan=_lifespan)
+
+# 局域网防护:非本机(手机等)客户端仅可访问「手绘分镜」页与其 API,
+# 控制台/派单/配置等一律拒绝;手绘页以一次性 token 为凭证(见 DRAW_SESSIONS)
+# /static/ 仅界面静态资源(i18n 词典等),手绘页也要加载,放行
+LAN_ALLOWED_PREFIXES = ("/draw/", "/api/draw/", "/static/")
+
+
+@app.middleware("http")
+async def _lan_guard(request: Request, call_next):
+    host = (request.client.host if request.client else "") or ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        p = request.url.path
+        if not any(p.startswith(x) for x in LAN_ALLOWED_PREFIXES):
+            return JSONResponse({"detail": "局域网客户端仅可访问手绘分镜页"}, status_code=403)
+    return await call_next(request)
+
+# ---------------- 状态 ----------------
+RUNS: dict[str, dict] = {}                       # run_id -> run 记录
+RUN_TASKS: dict[str, asyncio.Task] = {}          # run_id -> execute_run 任务(停止排队用)
+RUN_PROCS: dict[str, asyncio.subprocess.Process] = {}  # run_id -> 子进程(停止运行用)
+CONFIRMS: dict[str, dict] = {}                   # confirm_id -> 待用户确认项
+SEM = asyncio.Semaphore(MAX_CONCURRENT)
+AGENT_LOCKS: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+def load_state() -> dict:
+    try:
+        return json.loads(STATE_PATH.read_text())
+    except Exception:
+        return {"sessions": {}}
+
+
+def save_state(state: dict):
+    atomic_write_json(STATE_PATH, state)
+
+
+STATE = load_state()
+
+# ---------------- 生成模型配置(图像/视频) ----------------
+GENCONFIG_PATH = WEBUI_DIR / "genconfig.json"
+
+DEFAULT_GENCONFIG = {
+    "image": {
+        "provider": "openrouter",   # openrouter | ideogram | volcengine | byteplus | comfyui
+        "openrouter": {"api_key": "", "model": "google/gemini-3.1-flash-image",
+                       "custom_model": ""},
+        "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
+        "volcengine": {"api_key": "", "model": "doubao-seedream-4-5-251128",
+                       "custom_model": ""},
+        "byteplus": {"api_key": "", "model": "seedream-4-5-251128",
+                     "custom_model": ""},
+        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+    },
+    "video": {
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
+        "openrouter": {"api_key": "", "model": "kwaivgi/kling-v3.0-pro",
+                       "custom_model": ""},
+        "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
+                       "custom_model": ""},
+        "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
+                     "custom_model": ""},
+        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+    },
+    "music": {
+        "provider": "openrouter",   # 目前仅 openrouter(Lyria 3 系列)
+        "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
+                       "custom_model": ""},
+    },
+    "tts": {
+        "provider": "openrouter",   # 目前仅 openrouter(POST /api/v1/audio/speech)
+        "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
+                       "custom_model": "", "voice": "eve"},
+    },
+    # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
+    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
+    "deepagents": {
+        "provider": "local",   # local | openrouter
+        "local": {"base_url": "http://127.0.0.1:1234/v1",
+                  "api_key": "lm-studio", "model": ""},
+        "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
+                       "custom_model": ""},
+    },
+    # 文件管理(设置页「文件管理」):对象存储托管,V2V 参考视频经预签名 URL 传给
+    # 方舟(reference_video 硬性要求公网 URL,base64 内联被拒);生效渠道=选中标签页
+    "storage": {
+        "provider": "tos",   # tos | oss | cos | s3
+        "tos": {"access_key": "", "secret_key": "",
+                "endpoint": "tos-cn-beijing.volces.com", "region": "cn-beijing",
+                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
+        "oss": {"access_key": "", "secret_key": "",
+                "endpoint": "oss-cn-beijing.aliyuncs.com", "region": "",
+                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
+        "cos": {"access_key": "", "secret_key": "",
+                "endpoint": "", "region": "ap-beijing",
+                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
+        "s3": {"access_key": "", "secret_key": "",
+               "endpoint": "", "region": "us-east-1",
+               "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
+    },
+    # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
+    "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
+    # 「Agent模型」策略(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
+    # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
+    "agentmodel_mode": "global",
+    # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
+    # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
+    # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
+    # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
+    #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配
+    "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
+               "draft_resolution": "480p", "final_resolution": "480p",
+               "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
+    # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立
+    "review": {k: 60 for k in (
+        "audio_quality", "character_consistency", "content_safety", "copyright",
+        "logic", "timeline", "visual_quality", "worldview")},
+    # 片头片尾设置(设置菜单「片头片尾」):三段包装的开关 + 片头/片尾自由文本要求,按项目独立
+    "packaging": {"intro_enabled": True, "intro_notes": "",
+                  "outro_enabled": True, "outro_notes": "",
+                  "teaser_enabled": True},
+    # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
+    # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定
+    "ui_language": "",
+}
+
+# 界面语言:code -> 提示词中使用的语言名称(与 static/i18n/i18n.js 的 LANGS 一致)
+UI_LANG_NAMES = {
+    "en": "English", "zh": "中文", "ja": "日本語", "ko": "한국어",
+    "vi": "Tiếng Việt", "es": "Español", "fr": "français", "de": "Deutsch",
+    "id": "Bahasa Indonesia", "pt": "Português", "ru": "русский", "ar": "العربية",
+}
+
+
+def resolve_ui_language(cfg: dict | None = None) -> str:
+    """genconfig -> 界面语言名称(未设置回落中文,与历史行为一致)。"""
+    code = (cfg or load_genconfig()).get("ui_language") or "zh"
+    return UI_LANG_NAMES.get(code, "中文")
+
+# 审核维度:key -> (名称, 负责的 QA Agent)(审核设置弹窗与提示词注入共用,顺序即展示顺序)
+REVIEW_DIMENSIONS = {
+    "audio_quality": ("音频质量审核", "11-qa/audio-qa"),
+    "character_consistency": ("角色一致性审核", "11-qa/character-consistency-qa"),
+    "content_safety": ("内容安全", "11-qa/content-safety"),
+    "copyright": ("版权审核", "11-qa/copyright"),
+    "logic": ("逻辑审核", "11-qa/logic-qa"),
+    "timeline": ("时间线审核", "11-qa/timeline-qa"),
+    "visual_quality": ("画面质量审核", "11-qa/visual-qa"),
+    "worldview": ("世界观审核", "11-qa/world-consistency-qa"),
+}
+
+# 片头片尾设定的注入对象:包装制作(title)、占位(edit)、预告文案上游(hook)+ 调度(派单时写入工单)
+PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS
+
+# 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
+OUTPUT_ASPECTS = {"youtube": ("16:9", "YouTube 横屏"), "douyin": ("9:16", "抖音竖屏")}
+# 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
+# aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序)
+OUTPUT_PLATFORMS = {
+    "youtube": ("YouTube", "16:9"),
+    "bilibili": ("Bilibili", "16:9"),
+    "tiktok": ("TikTok", "9:16"),
+    "douyin": ("抖音", "9:16"),
+    "xiaohongshu": ("小红书", "9:16"),
+}
+OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
+                "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
+# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持,方舟 API 取小写)
+VIDEO_RESOLUTIONS = ("480p", "720p", "1080p", "4k")
+
+
+def resolve_output(cfg: dict) -> tuple[str, str, str]:
+    """genconfig -> (画幅比例, 画幅名称, 输出语言)。"""
+    out = cfg.get("output") or {}
+    preset = out.get("aspect_preset") or "youtube"
+    if preset == "custom":
+        aspect = re.sub(r"\s", "", out.get("aspect_custom") or "") or "16:9"
+        name = "自定义"
+    else:
+        aspect, name = OUTPUT_ASPECTS.get(preset, OUTPUT_ASPECTS["youtube"])
+    lang = out.get("language") or "English"
+    return aspect, name, lang
+
+
+def resolve_platforms(cfg: dict) -> list[tuple[str, str, str]]:
+    """genconfig -> 已选发布平台 [(key, 名称, 默认画幅), ...],按注册表顺序;为空回落全选。"""
+    out = cfg.get("output") or {}
+    sel = out.get("platforms")
+    if not isinstance(sel, list) or not sel:
+        sel = list(OUTPUT_PLATFORMS)
+    return [(k, OUTPUT_PLATFORMS[k][0], OUTPUT_PLATFORMS[k][1])
+            for k in OUTPUT_PLATFORMS if k in sel]
+
+
+def _merge(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def load_genconfig() -> dict:
+    try:
+        saved = json.loads(GENCONFIG_PATH.read_text())
+    except Exception:
+        saved = {}
+    da = saved.get("deepagents")
+    if isinstance(da, dict) and "provider" not in da and "local" not in da:
+        # 旧版扁平格式(base_url/api_key/model 直挂 deepagents)→ 迁移为 local 渠道
+        saved["deepagents"] = {"provider": "local", "local": da}
+    return _merge(DEFAULT_GENCONFIG, saved)
+
+
+def save_genconfig(cfg: dict):
+    atomic_write_json(GENCONFIG_PATH, cfg)
+
+
+DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
+
+def resolve_deepagents(cfg: dict | None = None) -> dict:
+    """deepagents 配置 -> 生效渠道的 {provider, base_url, api_key, model}。"""
+    da = (cfg or load_genconfig()).get("deepagents") or {}
+    if (da.get("provider") or "local") == "openrouter":
+        o = da.get("openrouter") or {}
+        return {"provider": "openrouter", "base_url": DEEPAGENTS_OPENROUTER_URL,
+                "api_key": o.get("api_key") or "",
+                "model": o.get("model") or o.get("custom_model") or ""}
+    lo = da.get("local") or {}
+    return {"provider": "local",
+            "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
+            "api_key": lo.get("api_key") or "lm-studio",
+            "model": lo.get("model") or ""}
+
+
+# ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
+# 生成模型/Agent模型 为全局配置(genconfig.json/agentmodels.json);
+# output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
+PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging")
+
+
+def project_settings_path(project: str) -> Path:
+    return PROJECTS_DIR / safe_slug(project) / "settings.json"
+
+
+def load_project_settings(project: str) -> dict:
+    base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
+    try:
+        saved = json.loads(project_settings_path(project).read_text())
+    except Exception:
+        saved = {}
+    return _merge(base, {k: v for k, v in saved.items()
+                         if k in PROJECT_SETTINGS_KEYS})
+
+
+def _validate_duration(d: dict):
+    try:
+        ep = float(d.get("episode_minutes", 10))
+        mn = float(d.get("shot_min_s", 4))
+        mx = float(d.get("shot_max_s", 8))
+        assert ep > 0 and 0 < mn <= mx
+    except (TypeError, ValueError, AssertionError):
+        raise HTTPException(400, "时长设置不合法:每集时长需 >0;分镜时长需 0<下限≤上限") from None
+
+
+def _validate_output(o: dict):
+    if o.get("aspect_preset") not in (*OUTPUT_ASPECTS, "custom"):
+        raise HTTPException(400, f"output.aspect_preset 必须是 {(*OUTPUT_ASPECTS, 'custom')}")
+    if o.get("aspect_preset") == "custom" and \
+            not re.match(r"^\d+\s*:\s*\d+$", o.get("aspect_custom") or ""):
+        raise HTTPException(400, "自定义画幅格式须为 宽:高,如 21:9")
+    if o.get("language") not in OUTPUT_LANGS:
+        raise HTTPException(400, f"output.language 必须是 {OUTPUT_LANGS}")
+    for key in ("draft_resolution", "final_resolution"):
+        if o.get(key) and o[key] not in VIDEO_RESOLUTIONS:
+            raise HTTPException(400, f"output.{key} 必须是 {VIDEO_RESOLUTIONS}")
+    if "platforms" in o:
+        pf = o["platforms"]
+        if not isinstance(pf, list) or not pf:
+            raise HTTPException(400, "output.platforms 须为非空数组(至少选一个发布平台)")
+        bad = [p for p in pf if p not in OUTPUT_PLATFORMS]
+        if bad:
+            raise HTTPException(400, f"output.platforms 含未知平台 {bad},合法值 {tuple(OUTPUT_PLATFORMS)}")
+
+
+def _validate_packaging(p: dict):
+    for k in ("intro_enabled", "outro_enabled", "teaser_enabled"):
+        if k in p and not isinstance(p[k], bool):
+            raise HTTPException(400, f"packaging.{k} 须为布尔值")
+    for k in ("intro_notes", "outro_notes"):
+        if k in p:
+            if not isinstance(p[k], str):
+                raise HTTPException(400, f"packaging.{k} 须为字符串")
+            if len(p[k]) > 2000:
+                raise HTTPException(400, "片头/片尾要求文本过长(≤2000 字)")
+
+
+def _validate_review(r: dict):
+    for k, v in (r or {}).items():
+        if k not in REVIEW_DIMENSIONS:
+            raise HTTPException(400, f"未知审核维度: {k}(可选 {sorted(REVIEW_DIMENSIONS)})")
+        try:
+            assert 0 <= int(v) <= 100
+        except (TypeError, ValueError, AssertionError):
+            raise HTTPException(400, f"审核力度不合法:{REVIEW_DIMENSIONS[k][0]} 须为 0-100 整数") from None
+
+
+# ---------------- Agent 级模型配置(引擎/文字模型/图像/视频渠道) ----------------
+# 每个 Agent 可单独指定,优先级:dispatch 显式 --engine/--model(force)> Agent 级配置 > 顶栏全局。
+# 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
+AGENTMODELS_PATH = WEBUI_DIR / "agentmodels.json"
+
+# 「Agent模型」策略(genconfig.agentmodel_mode,设置菜单「Agent模型」子菜单切换):
+#   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
+#   smart_claude 按任务复杂度自动选 claude 模型(high→opus low→sonnet)
+#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
+AM_MODES = ("global", "smart_claude", "smart_codex")
+
+# 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
+AM_CATEGORY_TIERS = {
+    "00-orchestration": "high", "01-story": "high", "02-worldbuilding": "high",
+    "03-characters": "high", "04-creatures": "high", "05-scenes": "high",
+    "06-art": "high", "07-directing": "high",
+    "11-qa": "low",
+    "08-video-gen": "low", "09-audio": "low", "10-editing": "low",
+    "12-publishing": "low",
+}
+AM_AGENT_TIERS = {                                      # 分类内的例外
+    "00-orchestration/context": "low",                  # context 打包 = 机械活
+    "00-orchestration/version": "low",                  # 版本快照 = 机械活
+    "00-orchestration/evaluation": "low",               # 评分
+    "01-story/novel-parser": "low",                     # 解析
+    "01-story/event": "low",                            # 事件抽取索引
+    "01-story/timeline-story": "low",                   # 时间线索引
+    "02-worldbuilding/dictionary": "low",               # 词典索引
+    "02-worldbuilding/timeline": "low",                 # 编年史索引
+    "03-characters/character-manager": "low",           # 角色索引管理
+    "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
+}
+AM_MODE_MODELS = {
+    "smart_claude": {"high": {"engine": "claude", "model": "opus"},
+                     "low": {"engine": "claude", "model": "sonnet"}},
+    "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
+                    "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
+}
+
+AM_ENGINES = ("", "claude", "codex", "deepagents")      # "" = 跟随全局
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
+
+
+def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
+    """按「Agent模型」策略给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
+    if mode is None:
+        mode = load_genconfig().get("agentmodel_mode") or "global"
+    tier = AM_AGENT_TIERS.get(agent_id) \
+        or AM_CATEGORY_TIERS.get(agent_id.split("/")[0]) or "low"
+    d = AM_MODE_MODELS.get(mode, {}).get(tier) or {}
+    return {"engine": d.get("engine", ""), "model": d.get("model", ""),
+            "image_provider": "", "video_provider": ""}
+
+
+def load_agentmodels() -> dict:
+    try:
+        return json.loads(AGENTMODELS_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def agent_model_config(agent_id: str) -> dict:
+    """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「Agent模型」策略默认。"""
+    ov = load_agentmodels().get(agent_id)
+    return ov if isinstance(ov, dict) else default_agent_model(agent_id)
+
+
+# macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
+# 本机服务(ComfyUI/LM Studio)强制直连,外网 URL 维持默认代理行为。
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
+    """阻塞式 HTTP GET(在线程里跑),返回解析后的 JSON。"""
+    req = urllib.request.Request(url, headers=headers or {})
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
+    with opener(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+_OPENROUTER_CACHE: dict = {}          # modality -> (ts, models)
+_OPENROUTER_TTL = 600
+
+
+# ---------------- 引擎会话用量探测(watchdog 阈值门控用,参考 CodexBar) ----------------
+# codex:本地 ~/.codex/sessions/**/*.jsonl 会记录 rate_limits.primary.used_percent(5h 窗口)。
+# claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour.utilization;
+#   token 读取顺序 env CLAUDE_CODE_OAUTH_TOKEN → macOS Keychain → ~/.claude/.credentials.json,
+#   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
+CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
+CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+_USAGE_CACHE: dict = {}               # engine -> (ts, percent|None)
+_USAGE_TTL = {"claude": 180, "codex": 30}   # claude 探针接口限流激进,≥180s 才安全
+_CLAUDE_VERSION: str | None = None
+
+
+def _find_rate_limits(d):
+    """在 codex session 事件 JSON 里递归找非空 rate_limits 对象。"""
+    if isinstance(d, dict):
+        rl = d.get("rate_limits")
+        if isinstance(rl, dict) and isinstance(rl.get("primary"), dict):
+            return rl
+        for v in d.values():
+            r = _find_rate_limits(v)
+            if r:
+                return r
+    elif isinstance(d, list):
+        for v in d:
+            r = _find_rate_limits(v)
+            if r:
+                return r
+    return None
+
+
+def _codex_usage_percent() -> float | None:
+    """最近 codex session 里最后一次 rate_limits.primary.used_percent(5h 窗口)。
+
+    读数是被动扒 session 文件的,codex 不跑就不会有新读数;若最新读数所在文件
+    距今已超 5h(窗口必然已滚过),旧百分比只会误导,视为过期返回 None。
+    """
+    try:
+        files = sorted(CODEX_SESSIONS_DIR.rglob("*.jsonl"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)[:8]
+    except OSError:
+        return None
+    for f in files:                          # 新→旧,取第一个有读数的文件里最后一条
+        last = None
+        try:
+            mtime = f.stat().st_mtime
+            with open(f, errors="replace") as fh:
+                for line in fh:
+                    if '"rate_limits"' not in line:
+                        continue
+                    try:
+                        rl = _find_rate_limits(json.loads(line))
+                    except ValueError:
+                        continue
+                    if rl and isinstance(rl["primary"].get("used_percent"), (int, float)):
+                        last = float(rl["primary"]["used_percent"])
+        except OSError:
+            continue
+        if last is not None:
+            return None if time.time() - mtime > 5 * 3600 else last
+    return None
+
+
+def _claude_oauth_token() -> str | None:
+    """Claude Code 的 OAuth access token;过期或读不到返回 None(不做 refresh)。"""
+    if not CLAUDE_USAGE_PROBE_ENABLED:
+        return None
+    env = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+    if env:
+        return env
+    raw = None
+    try:                                     # macOS Keychain(首次访问需在弹窗点「始终允许」)
+        r = subprocess.run(["security", "find-generic-password",
+                            "-s", "Claude Code-credentials", "-w"],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            raw = r.stdout.strip()
+    except Exception:
+        pass
+    if raw is None:
+        try:                                 # Linux/Windows 落盘文件
+            raw = (Path.home() / ".claude" / ".credentials.json").read_text()
+        except OSError:
+            return None
+    try:
+        oauth = json.loads(raw).get("claudeAiOauth") or {}
+        exp = oauth.get("expiresAt")         # epoch 毫秒
+        if exp and time.time() * 1000 >= float(exp):
+            return None
+        return oauth.get("accessToken") or None
+    except Exception:
+        return None
+
+
+def _claude_version() -> str:
+    """claude CLI 版本(User-Agent 用,错 UA 会撞激进限流桶);探测一次缓存。"""
+    global _CLAUDE_VERSION
+    if _CLAUDE_VERSION is None:
+        _CLAUDE_VERSION = "2.1.0"            # 探测失败的回退值
+        try:
+            r = subprocess.run([CLAUDE_BIN, "--version"],
+                               capture_output=True, text=True, timeout=10)
+            m = re.search(r"(\d+\.\d+\.\d+)", r.stdout or "")
+            if m:
+                _CLAUDE_VERSION = m.group(1)
+        except Exception:
+            pass
+    return _CLAUDE_VERSION
+
+
+def _claude_usage_percent() -> float | None:
+    """OAuth 探针取 claude 5h 窗口 utilization;任何异常返回 None。"""
+    token = _claude_oauth_token()
+    if not token:
+        return None
+    try:
+        data = _http_get_json(CLAUDE_USAGE_URL, headers={
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent": f"claude-code/{_claude_version()}",
+            "Content-Type": "application/json",
+        })
+        pct = (data.get("five_hour") or {}).get("utilization")
+        return float(pct) if isinstance(pct, (int, float)) else None
+    except Exception:
+        return None
+
+
+def engine_usage_percent(engine: str) -> float | None:
+    """该引擎当前会话(5h 窗口)已用百分比;不支持的引擎/取不到返回 None。带 TTL 缓存。"""
+    if engine not in ("claude", "codex"):
+        return None
+    ts, pct = _USAGE_CACHE.get(engine, (0, None))
+    if time.time() - ts < _USAGE_TTL[engine]:
+        return pct
+    pct = _claude_usage_percent() if engine == "claude" else _codex_usage_percent()
+    _USAGE_CACHE[engine] = (time.time(), pct)
+    return pct
+
+
+class Hub:
+    """SSE 广播中心。"""
+
+    def __init__(self):
+        self.clients: list[asyncio.Queue] = []
+
+    def publish(self, ev: dict):
+        for q in list(self.clients):
+            try:
+                q.put_nowait(ev)
+            except Exception:
+                pass
+
+    def subscribe(self) -> asyncio.Queue:
+        q = asyncio.Queue()
+        self.clients.append(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue):
+        if q in self.clients:
+            self.clients.remove(q)
+
+
+HUB = Hub()
+
+# ---------------- Agent 目录 ----------------
+
+
+_AGENTS_CACHE: tuple[float, list] = (0.0, [])   # (过期时刻, 数据);目录基本静态,TTL 足矣
+_AGENTS_CACHE_TTL = 30.0
+
+
+def list_agents(refresh: bool = False) -> list[dict]:
+    global _AGENTS_CACHE
+    if not refresh and time.time() < _AGENTS_CACHE[0]:
+        return _AGENTS_CACHE[1]
+    agents = []
+    for cat_dir in sorted(AGENTS_DIR.iterdir()):
+        if not cat_dir.is_dir() or cat_dir.name not in CATEGORY_NAMES:
+            continue
+        for a_dir in sorted(cat_dir.iterdir()):
+            soul = a_dir / "SOUL.md"
+            if not soul.is_file():
+                continue
+            title, tagline = a_dir.name, ""
+            try:
+                for line in soul.read_text().splitlines()[:8]:
+                    m = re.match(r"^#\s*SOUL\.md\s*[—\-]+\s*(.+)$", line.strip())
+                    if m:
+                        title = m.group(1).strip()
+                    elif line.strip().startswith(">") and not tagline:
+                        tagline = line.strip().lstrip("> ").strip()
+            except Exception:
+                pass
+            aid = f"{cat_dir.name}/{a_dir.name}"
+            agents.append({
+                "id": aid,
+                "name": title,
+                "tagline": tagline,
+                "category": cat_dir.name,
+                "category_name": CATEGORY_NAMES[cat_dir.name],
+                "dispatcher": aid in DISPATCHERS,
+            })
+    _AGENTS_CACHE = (time.time() + _AGENTS_CACHE_TTL, agents)
+    return agents
+
+
+def chat_path(agent_id: str, project: str) -> Path:
+    """对话记录按项目隔离:chats/<project>/<agent>.jsonl。"""
+    d = CHATS_DIR / safe_slug(project)
+    d.mkdir(parents=True, exist_ok=True)
+    return d / (agent_id.replace("/", "__") + ".jsonl")
+
+
+def append_chat(agent_id: str, project: str, entry: dict):
+    entry["ts"] = time.time()
+    with chat_path(agent_id, project).open("a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    HUB.publish({"type": "chat", "agent": agent_id, "project": project, **entry})
+
+# ---------------- 提示词 ----------------
+
+
+def _fmt_num(x) -> str:
+    """4.0 → 4;7.5 → 7.5"""
+    f = float(x)
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def build_role_prompt(agent_id: str, project: str) -> str:
+    soul = (AGENTS_DIR / agent_id / "SOUL.md").read_text()
+    proj_rel = f"data/projects/{project}"
+    ps = load_project_settings(project)   # 输出/时长为项目级设置
+    aspect, aspect_name, out_lang = resolve_output(ps)
+    out = ps.get("output") or {}
+    draft_res = out.get("draft_resolution") or "480p"
+    final_res = out.get("final_resolution") or "480p"
+    platforms = resolve_platforms(ps)
+    plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
+    cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
+    dur = ps.get("duration") or {}
+    brief = ""
+    try:
+        bp = PROJECTS_DIR / project / "brief.md"
+        if bp.is_file():
+            brief = bp.read_text().strip()
+    except Exception:
+        brief = ""
+    rv = ps.get("review") or {}
+    review_lines = "\n".join(
+        f"- {label}(负责:{qa_agent}):{int(rv.get(key, 60))}"
+        for key, (label, qa_agent) in REVIEW_DIMENSIONS.items())
+    # 当前 Agent 本身是某维度的 QA 时,单独点名其力度,避免它按 SOUL.md 固定阈值照旧执行
+    own_review = "\n".join(
+        f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 60))},"
+        f"按下方换算规则执行,而非 SOUL.md 固定阈值**"
+        for key, (label, qa_agent) in REVIEW_DIMENSIONS.items() if qa_agent == agent_id)
+    if own_review:
+        own_review = "\n" + own_review
+    ui_lang = resolve_ui_language()
+    ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
+    ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
+    shot_min = _fmt_num(dur.get("shot_min_s") or 4)
+    shot_max = _fmt_num(dur.get("shot_max_s") or 8)
+    p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
+以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
+
+{soul}
+
+## 运行环境
+- 当前目录即工作区根目录;团队流程权威文件:agents/WORKFLOW.md、agents/workflow.yaml(需要时自行阅读相关章节)
+- 当前项目目录:{proj_rel}/ —— 你的一切工作产物必须写入该目录下的对应子目录(布局见 WORKFLOW.md §2);目录不存在就创建
+- 只做你 SOUL.md 职责内的事;越界的需求要说明应由哪个 Agent 负责,不要代劳
+- 任务回执/评分/日志一律写 {proj_rel}/runs/<task_id>/(项目目录内);**严禁写工作区根 runs/**(文档中省略前缀的 runs/ 均指项目目录内)
+- 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
+- 完成后:用{ui_lang}简要汇报做了什么、关键决策,并列出「创建/修改的文件路径」清单
+- 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
+
+## 用户时长设定(Web 控制台「⏱ 时长设置」按项目配置,当前项目实时生效,优先级高于文档中的示例值)
+- 每集目标时长:{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、节奏(pacing)、剪辑(edit)一律以此为基准
+- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
+- 生成组(generation group)总时长上限:15 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤15s(Seedance 2.0 单次生成上限,见 WORKFLOW.md §7A)
+
+## 用户输出设定(Web 控制台「📤 输出设置」按项目配置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
+- 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
+- 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/视频生成模型的英文 prompt 不受此限
+- 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
+- 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
+
+## 用户审核设定(Web 控制台「🔍 审核设置」按项目配置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
+各维度审核力度 0-100(默认 60=按文档既有阈值执行),当前项目取值:
+{review_lines}{own_review}
+力度换算规则(QA Agent 审核打分、orchestrator 派单与判闸门、evaluation 评分一律遵守):
+- **0:跳过该维度** —— orchestrator 不派该维度 QA 单;QA 被派到也不检查、不开缺陷单,报告只写 `"skipped": true`;闸门按通过处理
+- **1-39 宽松**:只拦 blocker;SOUL.md 中的分数合格线下调 10 分、比例上限翻倍;major/minor 记录在报告中但不拦、不强制返工
+- **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
+- **70-89 严格**:分数合格线上调 5 分、比例上限减半;blocker/major 均拦;minor 也要开缺陷单
+- **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵"""
+    if agent_id in PACKAGING_AGENTS:
+        pk = ps.get("packaging") or {}
+
+        def _seg(label: str, enabled: bool, notes: str = "") -> str:
+            if not enabled:
+                return f"- {label}:**禁用** —— 不制作、不预留占位、不占包装时长额度,相关工单不含该段"
+            line = f"- {label}:启用"
+            notes = (notes or "").strip()
+            if notes:
+                line += ",用户要求如下(逐字落实,署名/网址/版权声明等文本内容原样呈现不得改写;未提及的沿用 SOUL.md 与 style.json 默认):\n" \
+                    + "\n".join(f"  > {ln}" for ln in notes.splitlines() if ln.strip())
+            else:
+                line += ",无附加要求,按 SOUL.md 与 style.json 默认制作"
+            return line
+        p += f"""
+
+## 用户片头片尾设定(Web 控制台「🎞 片头片尾」按项目配置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的默认包装方案)
+{_seg("片头(intro)", pk.get("intro_enabled", True), pk.get("intro_notes", ""))}
+{_seg("片尾(outro)", pk.get("outro_enabled", True), pk.get("outro_notes", ""))}
+{_seg("下集预告(teaser)", pk.get("teaser_enabled", True))}
+执行规则:
+- 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
+- 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
+- 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if brief:
+        p += f"""
+
+## 用户主创构想(项目 {proj_rel}/brief.md,全片最高创作前提)
+以下构想约束题材类型、画面风格、叙事取舍等全部环节;你的任何决策与其冲突时,以构想为准或上报用户裁决:
+
+{brief[:2000]}"""
+    if agent_id.split("/")[0] in MEDIA_CATEGORIES:
+        p += f"""
+
+## 生成模型调用(环境已配置好)
+图像/视频生成一律通过统一模块 modules/genmedia.py(渠道与模型已由用户在 Web 控制台配置,勿自行挑模型或直连各家 API):
+- 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
+- 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 1920x1080] [--ref 参考图...] [--n 4] [--seed N]`
+- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
+- 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
+- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3>`(模型由「🎨 生成模型」页音乐生成配置;Lyria 3 Pro 出完整歌曲、Lyria 3 Clip 出 30s 片段/Loop)
+- TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(模型与默认音色由「🎨 生成模型」页 TTS语音模型配置;instructions 仅 OpenAI 系模型生效)
+- 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
+
+## 用户参考素材(视觉/配乐工作前必查)
+用户会把风格/角色/场景/道具参考图放在 {proj_rel}/refs/(style/ characters/ scenes/ props/),希望使用的音乐文件放在 {proj_rel}/refs/music/(有 NOTES.md 必读):
+- 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
+- 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
+- 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
+- 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
+    if agent_id in DISPATCHERS:
+        p += f"""
+
+## 你的调度权(团队中仅调度型 Agent 拥有)
+你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
+- 同步派单(阻塞至完成并返回结果摘要):`python3 webui/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
+- 异步派单(立即返回 run_id):同上去掉 `--wait`
+- 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
+  显式传 `--engine claude|codex` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
+- 查看全部 agent_id:`python3 webui/dispatch.py --list`
+- 查看运行状态:`python3 webui/dispatch.py --runs`;查看单个:`python3 webui/dispatch.py --status <run_id>`
+
+派单守则:
+1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
+2. 有依赖关系的任务用 --wait 串行;相互独立的任务异步并行派发,之后用
+   `python3 webui/dispatch.py --wait-all <run_id...> --timeout 3600` 一次性等待全部完成
+   (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
+   严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
+   等待类命令记得给 Bash 工具设置足够大的 timeout(如 3600000 毫秒)
+3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 3 次)
+4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
+   `python3 webui/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
+   该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
+   命令输出「重跑」→ 正常重新派单;输出「跳过」→ 不再重跑,把该问题记入
+   data/projects/<project>/qa/defects/ 并在最终汇报中说明跳过原因。首次派单不需要确认,只有重跑需要
+5. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
+6. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
+   其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
+7. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex)
+   或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
+    return p
+
+# ---------------- 运行 claude -p ----------------
+
+
+def tool_summary(name: str, inp: dict) -> tuple[str, str | None]:
+    """返回 (活动描述, 涉及的产物文件路径或 None)。"""
+    fp = inp.get("file_path") or inp.get("path")
+    if fp:
+        fp = rel_path(fp)
+    if name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        return f"✎ {name}: {fp}", fp
+    if name == "Read":
+        return f"📖 Read: {fp}", None
+    if name == "Bash":
+        cmd = (inp.get("command") or "")[:160]
+        return f"⚙ Bash: {cmd}", None
+    if name in ("Glob", "Grep"):
+        return f"🔍 {name}: {inp.get('pattern', '')}", None
+    if name == "Task":
+        return f"🤖 Task: {inp.get('description', '')}", None
+    return f"🔧 {name}", None
+
+
+def run_public(run: dict) -> dict:
+    """给前端的运行摘要(不带大文本)。"""
+    return {k: run[k] for k in (
+        "id", "agent", "agent_name", "source", "parent", "project", "status",
+        "created", "started", "ended", "cost", "turns", "error",
+        "engine", "model", "tokens", "progress") if k in run} | {
+        "activity": run.get("activity", [])[-8:],
+        "files": run.get("files", [])[-20:],
+        "message": (run.get("message") or "")[:120],
+    }
+
+
+def publish_run(run: dict):
+    HUB.publish({"type": "run", "run": run_public(run)})
+
+
+async def read_jsonl_line(stream: asyncio.StreamReader) -> bytes:
+    """readline,但单行超过缓冲上限时分段拼接返回完整行,而不是抛
+    LimitOverrunError(chunk is longer than limit)导致整个运行报错。"""
+    buf = bytearray()
+    while True:
+        try:
+            buf += await stream.readuntil(b"\n")
+            return bytes(buf)
+        except asyncio.IncompleteReadError as e:      # EOF,返回残余
+            buf += e.partial
+            return bytes(buf)
+        except asyncio.LimitOverrunError as e:        # 缓冲区满还没见到换行:先取走已缓冲部分
+            buf += await stream.readexactly(e.consumed)
+
+
+def is_stateless_agent(agent_id: str) -> bool:
+    return agent_id in STATELESS_AGENTS or agent_id.startswith(STATELESS_PREFIXES)
+
+
+async def execute_run(run: dict, message: str, model: str | None):
+    agent_id = run["agent"]
+    # 调度型 Agent 要等整条流水线,超时放宽
+    run_timeout = RUN_TIMEOUT * (4 if agent_id in DISPATCHERS else 1)
+    is_dispatcher = agent_id in DISPATCHERS
+    is_stateless = is_stateless_agent(agent_id)
+    async with AsyncExitStack() as stack:
+        # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
+        if not is_dispatcher:
+            await stack.enter_async_context(SEM)
+        # 无状态服务型 agent 每次全新会话,允许同 agent 并发;其余仍串行保护会话
+        if not is_stateless:
+            await stack.enter_async_context(AGENT_LOCKS[agent_id])
+        run["status"] = "running"
+        run["started"] = time.time()
+        publish_run(run)
+
+        engine = run.get("engine", "claude")
+        role = build_role_prompt(agent_id, run["project"])
+        session_key = f"{engine}::{agent_id}::{run['project']}"
+        session_id = None if is_stateless else STATE["sessions"].get(session_key)
+        # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
+        if session_id:
+            resume_limit = (ORCHESTRATOR_RESUME_LIMIT if agent_id == ORCHESTRATOR_AGENT
+                            else CHAT_RESUME_LIMIT)
+            try:
+                if chat_path(agent_id, run["project"]).stat().st_size > resume_limit:
+                    session_id = None
+                    run["session_reset"] = True
+            except OSError:
+                pass
+
+        if engine == "deepagents":
+            da = resolve_deepagents()
+            use_model = model or da["model"]
+            err = None
+            if not use_model:
+                err = ("deepagents 引擎未选择模型:请在顶栏选择语言模型,"
+                       "或在 🎨 生成模型 页「语言模型DeepAgents」配置默认模型")
+            elif da["provider"] == "openrouter" and not da["api_key"]:
+                err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
+                       "请在 🎨 生成模型 页「语言模型DeepAgents → OpenRouter」填写")
+            if err:
+                run["status"] = "error"
+                run["error"] = err
+                run["ended"] = time.time()
+                append_chat(agent_id, run["project"],
+                            {"role": "assistant", "text": run["error"],
+                             "run_id": run["id"], "status": "error"})
+                publish_run(run)
+                return
+            cmd = [DEEPAGENTS_PY, str(ROOT / "modules" / "deepagents_runner.py"),
+                   "--model", use_model,
+                   "--base-url", da["base_url"],
+                   "--api-key", da["api_key"]]
+        elif engine == "codex":
+            # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
+            base = [CODEX_BIN, "exec", "--json", "--skip-git-repo-check",
+                    "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
+            if model:
+                base += ["-c", f"model={model}"]
+            if session_id:
+                cmd = base + ["resume", session_id, message]
+            else:
+                cmd = base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+        else:
+            cmd = [CLAUDE_BIN, "-p", message,
+                   "--output-format", "stream-json", "--verbose",
+                   "--append-system-prompt", role,
+                   "--permission-mode", PERMISSION_MODE,
+                   "--max-turns", MAX_TURNS]
+            if model:
+                cmd += ["--model", model]
+            if session_id:
+                cmd += ["--resume", session_id]
+
+        env = {**os.environ,
+               "WEBUI_RUN_ID": run["id"], "WEBUI_PORT": str(PORT),
+               "WEBUI_PROJECT": run["project"], "WEBUI_ENGINE": engine,
+               "WEBUI_AGENT": agent_id}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
+        env.pop("CLAUDECODE", None)
+        env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
+            env["DA_SYSTEM"] = role
+            env["DA_PROMPT"] = message
+
+        log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w")
+        proc = None
+        stderr_task = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=ROOT, env=env, limit=STREAM_LIMIT,
+                start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            RUN_PROCS[run["id"]] = proc
+            # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
+            stderr_task = asyncio.create_task(proc.stderr.read())
+            deadline = time.time() + run_timeout
+            while True:
+                if time.time() > deadline:
+                    raise TimeoutError(f"运行超过 {run_timeout}s")
+                raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
+                                             timeout=max(1, deadline - time.time()))
+                if not raw:
+                    break
+                line = raw.decode("utf-8", "replace").strip()
+                if not line:
+                    continue
+                log_f.write(line + "\n")
+                log_f.flush()
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if engine == "codex":
+                    handle_codex_event(run, obj)
+                elif engine == "deepagents":
+                    handle_deepagents_event(run, obj)
+                else:
+                    handle_claude_event(run, obj)
+            await proc.wait()
+            stderr = (await stderr_task).decode("utf-8", "replace").strip()
+            if proc.returncode != 0 and not run.get("result"):
+                run["status"] = "error"
+                # 引擎事件流里报过错(如 deepagents 的 error 事件)则保留原始信息
+                run["error"] = (run.get("error") or stderr
+                                or f"{engine} 退出码 {proc.returncode}")[:500]
+            else:
+                run["status"] = "done"
+        except (TimeoutError, asyncio.TimeoutError):
+            run["status"] = "error"
+            run["error"] = f"超时({run_timeout}s),进程已终止"
+            if proc:
+                proc.kill()
+        except Exception as e:  # noqa: BLE001
+            run["status"] = "error"
+            run["error"] = str(e)[:500]
+            if proc:
+                proc.kill()
+        finally:
+            RUN_PROCS.pop(run["id"], None)
+            RUN_TASKS.pop(run["id"], None)
+            if stderr_task and not stderr_task.done():
+                stderr_task.cancel()
+            log_f.close()
+            run["ended"] = time.time()
+            run.pop("progress", None)
+            # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
+            if run.get("session_id") and not is_stateless:
+                STATE["sessions"][session_key] = run["session_id"]
+                save_state(STATE)
+            reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
+            append_chat(agent_id, run["project"],
+                        {"role": "assistant", "text": reply,
+                         "run_id": run["id"], "status": run["status"]})
+            publish_run(run)
+
+
+def rel_path(p: str) -> str:
+    try:
+        return os.path.relpath(p, ROOT) if os.path.isabs(p) else p
+    except Exception:
+        return p
+
+
+def handle_codex_event(run: dict, obj: dict):
+    """解析 codex exec --json 的 JSONL 事件。"""
+    t = obj.get("type")
+    if t == "thread.started":
+        run["session_id"] = obj.get("thread_id")
+    elif t in ("item.started", "item.completed"):
+        item = obj.get("item") or {}
+        it = item.get("type")
+        if it == "agent_message" and t == "item.completed":
+            txt = item.get("text") or ""
+            if txt:
+                run["text"] = run.get("text", "") + txt
+                run["result"] = txt          # codex 无独立 result 事件,取最后一条 agent_message
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": txt})
+        elif it == "command_execution" and t == "item.started":
+            desc = "⚙ $ " + (item.get("command") or "")[:160]
+            run.setdefault("activity", []).append(desc)
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": desc})
+            publish_run(run)
+        elif it == "file_change" and t == "item.completed":
+            for ch in item.get("changes", []):
+                fp = rel_path(ch.get("path") or "")
+                if not fp:
+                    continue
+                run.setdefault("files", []).append(fp)
+                run.setdefault("activity", []).append(f"✎ {ch.get('kind', 'edit')}: {fp}")
+                HUB.publish({"type": "file", "run_id": run["id"],
+                             "agent": run["agent"], "path": fp})
+            publish_run(run)
+        elif it in ("web_search", "mcp_tool_call") and t == "item.started":
+            desc = f"🔍 {it}: {item.get('query') or item.get('tool') or ''}"[:160]
+            run.setdefault("activity", []).append(desc)
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": desc})
+            publish_run(run)
+    elif t == "turn.completed":
+        u = obj.get("usage") or {}
+        run["tokens"] = (run.get("tokens") or 0) + \
+            (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+    elif t in ("turn.failed", "error"):
+        run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
+
+
+def handle_deepagents_event(run: dict, obj: dict):
+    """解析 deepagents_runner 的 JSONL 事件。"""
+    t = obj.get("type")
+    if t == "text":
+        txt = obj.get("text") or ""
+        if txt:
+            run["text"] = run.get("text", "") + txt
+            HUB.publish({"type": "text", "run_id": run["id"],
+                         "agent": run["agent"], "text": txt})
+    elif t == "tool":
+        name = obj.get("name", "?")
+        inp = obj.get("input") or {}
+        fp = inp.get("file_path") or inp.get("path")
+        if fp:
+            fp = rel_path(fp)
+        if name in ("write_file", "edit_file"):
+            desc = f"✎ {name}: {fp}"
+        elif name == "execute":
+            desc = "⚙ $ " + str(inp.get("command") or "")[:160]
+            fp = None
+        elif name in ("read_file", "ls", "glob", "grep"):
+            desc = f"📖 {name}: {fp or inp.get('pattern', '')}"
+            fp = None
+        else:
+            desc = f"🔧 {name}"
+            fp = None
+        run.setdefault("activity", []).append(desc)
+        if fp:
+            run.setdefault("files", []).append(fp)
+            HUB.publish({"type": "file", "run_id": run["id"],
+                         "agent": run["agent"], "path": fp})
+        HUB.publish({"type": "tool", "run_id": run["id"],
+                     "agent": run["agent"], "desc": desc})
+        publish_run(run)
+    elif t == "usage":
+        run["tokens"] = (run.get("tokens") or 0) + \
+            (obj.get("input_tokens") or 0) + (obj.get("output_tokens") or 0)
+    elif t == "result":
+        run["result"] = obj.get("text") or ""
+    elif t == "error":
+        run["error"] = str(obj.get("message") or "")[:500]
+
+
+def handle_claude_event(run: dict, obj: dict):
+    t = obj.get("type")
+    if t == "system" and obj.get("subtype") == "init":
+        run["session_id"] = obj.get("session_id")
+    elif t == "assistant":
+        for c in (obj.get("message") or {}).get("content", []):
+            if c.get("type") == "text" and c.get("text"):
+                run["text"] = run.get("text", "") + c["text"]
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": c["text"]})
+            elif c.get("type") == "tool_use":
+                desc, fp = tool_summary(c.get("name", "?"), c.get("input") or {})
+                run.setdefault("activity", []).append(desc)
+                if fp:
+                    run.setdefault("files", []).append(fp)
+                    HUB.publish({"type": "file", "run_id": run["id"],
+                                 "agent": run["agent"], "path": fp})
+                HUB.publish({"type": "tool", "run_id": run["id"],
+                             "agent": run["agent"], "desc": desc})
+                publish_run(run)
+    elif t == "result":
+        run["result"] = obj.get("result") or ""
+        run["session_id"] = obj.get("session_id") or run.get("session_id")
+        run["cost"] = round(obj.get("total_cost_usd") or 0, 4)
+        run["turns"] = obj.get("num_turns")
+
+# ---------------- API ----------------
+
+
+@app.get("/")
+async def index():
+    return FileResponse(WEBUI_DIR / "static" / "index.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/models")
+async def models_page():
+    return FileResponse(WEBUI_DIR / "static" / "models.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/storage")
+async def storage_page():
+    return FileResponse(WEBUI_DIR / "static" / "storage.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/versions")
+async def versions_page():
+    return FileResponse(WEBUI_DIR / "static" / "versions.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+# ---------------- 预览页(人物/场景/分镜预览) ----------------
+PREVIEW_PAGES = ("characters", "scenes", "props", "storyboard", "videos")
+IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+VIDEO_EXTS = (".mp4", ".webm", ".mov")
+
+# 项目产物静态文件(图片/视频,StaticFiles 自带 Range 支持,视频可拖进度条)
+app.mount("/projects", StaticFiles(directory=str(PROJECTS_DIR)), name="projects")
+# 界面静态资源(i18n 运行时与各语言词典:/static/i18n/<lang>.js)
+app.mount("/static", StaticFiles(directory=str(WEBUI_DIR / "static")), name="static")
+
+
+@app.get("/preview/{page}")
+async def preview_page(page: str):
+    if page not in PREVIEW_PAGES:
+        raise HTTPException(404, "no such preview page")
+    return FileResponse(WEBUI_DIR / "static" / f"preview_{page}.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+# ---------------- 手绘分镜(手机扫码为生成组绘制空间线稿) ----------------
+# 流程:桌面在分镜预览页对某组发起会话 → 手机扫码打开 /draw/<token> 全屏画布 →
+# 提交线稿+文字说明 → 落盘 assets/sketches/epNN/grpNNN/ 并自动补丁 grpNNN.json
+# (refs 追加 + video_prompt 注入 Spatial layout guide 句),重出该组即生效。
+DRAW_SESSIONS: dict[str, dict] = {}      # token -> {project, ep, grp, expires}
+DRAW_TTL_S = 1800
+SKETCH_GUIDE_TMPL = (
+    " Spatial layout guide: follow the composition sketched in [Image {n}] — a rough "
+    "user-drawn black-and-white line draft; use it ONLY for spatial arrangement and "
+    "object positions, never for art style or rendering. It indicates: {text}.")
+
+
+def _lan_ip() -> str:
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def _qr_svg(data: str) -> str:
+    import io
+
+    import qrcode
+    import qrcode.image.svg
+    img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage, box_size=12)
+    buf = io.BytesIO()
+    img.save(buf)
+    return buf.getvalue().decode()
+
+
+def _draw_session(token: str) -> dict:
+    s = DRAW_SESSIONS.get(token)
+    if not s or s["expires"] < time.time():
+        DRAW_SESSIONS.pop(token, None)
+        raise HTTPException(404, "手绘会话不存在或已过期,请在分镜预览页重新发起")
+    return s
+
+
+def _grp_prompt_path(project: str, ep: str, grp: str) -> Path:
+    return PROJECTS_DIR / project / "assets" / "prompts" / ep / f"{grp}.json"
+
+
+def _sketch_dir(project: str, ep: str, grp: str) -> Path:
+    return PROJECTS_DIR / project / "assets" / "sketches" / ep / grp
+
+
+def _sketch_list(project: str, ep: str, grp: str) -> list[dict]:
+    d = _sketch_dir(project, ep, grp)
+    out = []
+    for p in sorted(d.glob("sketch_*.png")):
+        meta = _read_json_safe(p.with_suffix(".json")) or {}
+        out.append({"name": p.name, "text": meta.get("text", ""),
+                    "image_n": meta.get("image_n"),
+                    "url": f"/projects/{project}/assets/sketches/{ep}/{grp}/{p.name}"
+                           f"?v={int(p.stat().st_mtime)}"})
+    return out
+
+
+@app.post("/api/draw-session")
+async def api_draw_session(body: dict):
+    """桌面发起手绘会话,返回手机页 URL 与二维码 SVG。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    if not _grp_prompt_path(project, ep, grp).is_file():
+        raise HTTPException(404, f"组 prompt 不存在:{project}/{ep}/{grp}")
+    token = uuid.uuid4().hex
+    DRAW_SESSIONS[token] = {"project": project, "ep": ep, "grp": grp,
+                            "expires": time.time() + DRAW_TTL_S}
+    url = f"http://{_lan_ip()}:{PORT}/draw/{token}"
+    return {"token": token, "url": url, "qr_svg": _qr_svg(url), "ttl_s": DRAW_TTL_S}
+
+
+@app.get("/draw/{token}")
+async def draw_page(token: str):
+    _draw_session(token)
+    return FileResponse(WEBUI_DIR / "static" / "draw.html",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/draw/{token}")
+async def api_draw_info(token: str):
+    s = _draw_session(token)
+    ps = load_project_settings(s["project"])
+    aspect, _, _ = resolve_output(ps)
+    return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
+
+
+def _sketch_inject(project: str, ep: str, grp: str, ref_rel: str, text: str) -> tuple[int, str]:
+    """把手绘线稿注入组 prompt:refs 追加 + Spatial layout guide 句(置于 Global constraints 前)。"""
+    pf = _grp_prompt_path(project, ep, grp)
+    d = json.loads(pf.read_text())
+    refs = d.setdefault("refs", [])
+    if len(refs) >= MAX_SKETCH_REFS:
+        raise HTTPException(400, f"该组 refs 已达 {MAX_SKETCH_REFS} 张上限,无法再注入线稿")
+    refs.append(ref_rel)
+    n = len(refs)
+    sent = SKETCH_GUIDE_TMPL.format(n=n, text=text.strip())
+    vp = d["video_prompt"]
+    k = vp.rfind(" Global constraints:")
+    d["video_prompt"] = (vp[:k] + sent + vp[k:]) if k != -1 else vp + sent
+    d["video_prompt_word_count"] = len(d["video_prompt"].split())
+    d.setdefault("notes", []).append(
+        f"手绘分镜注入:{ref_rel} 作 [Image {n}](用户手机绘制的空间线稿,说明:{text.strip()[:80]});"
+        f"重出本组时生效。经 webui /api/draw 自动补丁。")
+    atomic_write_json(pf, d)
+    return n, sent
+
+
+MAX_SKETCH_REFS = 9   # 方舟多参考图上限
+
+
+@app.post("/api/draw/{token}")
+async def api_draw_submit(token: str, body: dict):
+    """手机提交线稿:PNG dataURL + 文字说明。落盘 + 注入组 prompt + SSE 通知桌面。"""
+    s = _draw_session(token)
+    text = (body.get("text") or "").strip()
+    img = body.get("image") or ""
+    if not text:
+        raise HTTPException(400, "必须填写文字说明(线稿表达什么空间关系)")
+    if img.startswith("data:image/png;base64,"):
+        img = img.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(img)
+        assert raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) < 8 * 1024 * 1024
+    except Exception:
+        raise HTTPException(400, "图片须为 PNG(base64),且小于 8MB") from None
+    project, ep, grp = s["project"], s["ep"], s["grp"]
+    d = _sketch_dir(project, ep, grp)
+    d.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while (d / f"sketch_{n:02d}.png").exists():
+        n += 1
+    png = d / f"sketch_{n:02d}.png"
+    png.write_bytes(raw)
+    ref_rel = f"assets/sketches/{ep}/{grp}/{png.name}"
+    try:
+        image_n, sent = _sketch_inject(project, ep, grp, ref_rel, text)
+    except HTTPException:
+        png.unlink(missing_ok=True)
+        raise
+    atomic_write_json(png.with_suffix(".json"), {
+        "text": text, "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "ref_path": ref_rel, "image_n": image_n, "prompt_sentence": sent,
+        "source": "user_hand_drawn(webui /draw)"})
+    HUB.publish({"type": "sketch", "project": project, "ep": ep, "grp": grp,
+                 "name": png.name})
+    return {"saved": png.name, "image_n": image_n}
+
+
+# ---------------- 组注释(用户对生成组的导演意图注释,注入组 prompt) ----------------
+GRPNOTE_TMPL = " Director's note (user instruction, must follow): {text}"
+
+
+def _grpnote_path(project: str, ep: str, grp: str) -> Path:
+    return PROJECTS_DIR / project / "assets" / "notes" / ep / f"{grp}.json"
+
+
+def _grpnote_get(project: str, ep: str, grp: str) -> dict:
+    return _read_json_safe(_grpnote_path(project, ep, grp)) or {}
+
+
+@app.post("/api/grpnote")
+async def api_grpnote_set(body: dict):
+    """保存/编辑/清空组注释:替换式注入组 prompt(旧句精确移除再注入新句);空文本=清除。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    text = (body.get("text") or "").strip()
+    pf = _grp_prompt_path(project, ep, grp)
+    if not pf.is_file():
+        raise HTTPException(404, f"组 prompt 不存在:{project}/{ep}/{grp}")
+    d = json.loads(pf.read_text())
+    vp = d["video_prompt"]
+    old = _grpnote_get(project, ep, grp)
+    if old.get("prompt_sentence") and old["prompt_sentence"] in vp:
+        vp = vp.replace(old["prompt_sentence"], "", 1)
+    np = _grpnote_path(project, ep, grp)
+    if text:
+        sent = GRPNOTE_TMPL.format(text=text) + ("" if text.endswith(("。", ".", "!", "！")) else ".")
+        k = vp.rfind(" Global constraints:")
+        vp = (vp[:k] + sent + vp[k:]) if k != -1 else vp + sent
+        np.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(np, {"text": text, "prompt_sentence": sent,
+                               "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+        d.setdefault("notes", []).append(f"组注释更新(webui /api/grpnote,重出生效):{text[:80]}")
+    else:
+        np.unlink(missing_ok=True)
+        d.setdefault("notes", []).append("组注释已清除并从 video_prompt 回滚(webui /api/grpnote)")
+    d["video_prompt"] = vp
+    d["video_prompt_word_count"] = len(vp.split())
+    atomic_write_json(pf, d)
+    return {"text": text}
+
+
+@app.get("/api/sketches")
+async def api_sketches(project: str, ep: str, grp: str):
+    """桌面查询某组已有线稿(仅本机,受 _lan_guard 保护)。"""
+    return _sketch_list(safe_slug(project), re.sub(r"[^\w\-]", "", ep),
+                        re.sub(r"[^\w\-]", "", grp))
+
+
+@app.delete("/api/sketch")
+async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
+    """删除线稿并回滚组 prompt 补丁(仅允许删 refs 末位的线稿,避免 [Image N] 错位)。"""
+    project = safe_slug(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    grp = re.sub(r"[^\w\-]", "", grp)
+    name = re.sub(r"[^\w.\-]", "", name)
+    png = _sketch_dir(project, ep, grp) / name
+    meta = _read_json_safe(png.with_suffix(".json")) or {}
+    pf = _grp_prompt_path(project, ep, grp)
+    d = json.loads(pf.read_text())
+    ref_rel, sent = meta.get("ref_path"), meta.get("prompt_sentence")
+    if ref_rel and d.get("refs"):
+        if d["refs"][-1] != ref_rel:
+            raise HTTPException(400, "该线稿不是 refs 末位,先删除更晚注入的线稿(避免 [Image N] 编号错位)")
+        d["refs"].pop()
+        if sent and sent in d["video_prompt"]:
+            d["video_prompt"] = d["video_prompt"].replace(sent, "", 1)
+            d["video_prompt_word_count"] = len(d["video_prompt"].split())
+        d.setdefault("notes", []).append(f"手绘分镜删除并回滚:{ref_rel}")
+        atomic_write_json(pf, d)
+    png.unlink(missing_ok=True)
+    png.with_suffix(".json").unlink(missing_ok=True)
+    return {"deleted": name}
+
+
+def _read_json_safe(p: Path):
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def _proj_base(project: str) -> Path:
+    base = PROJECTS_DIR / safe_slug(project)
+    if not base.is_dir():
+        raise HTTPException(404, f"项目不存在: {project}")
+    return base
+
+
+def _asset_urls(base: Path, adir: Path, exts: tuple) -> list[dict]:
+    """目录下(含子目录)的媒体文件 → [{name, url}],按文件名排序。"""
+    if not adir.is_dir():
+        return []
+    files = sorted(f for f in adir.rglob("*")
+                   if f.is_file() and f.suffix.lower() in exts)
+    # URL 带 mtime 版本参数,文件被覆写后浏览器不会命中旧缓存
+    return [{"name": str(f.relative_to(adir)),
+             "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+                     f"?v={int(f.stat().st_mtime)}")} for f in files]
+
+
+def _preview_characters(project: str):
+    """人物设定聚合:bible/characters/* 文字 + assets/concepts/characters/* 概念图。"""
+    base = _proj_base(project)
+    idx = _read_json_safe(base / "bible" / "characters" / "index.json") or {}
+    info = {c.get("id"): c for c in idx.get("characters", [])
+            if isinstance(c, dict) and c.get("id")}
+    bdir = base / "bible" / "characters"
+    adir = base / "assets" / "concepts" / "characters"
+    ids = set(info)
+    for d in (bdir, adir):
+        if d.is_dir():
+            ids |= {x.name for x in d.iterdir()
+                    if x.is_dir() and not x.name.startswith(".")}
+    chars = []
+    for cid in sorted(ids):
+        docs = {}
+        if (bdir / cid).is_dir():
+            for f in sorted((bdir / cid).glob("*.json")):
+                docs[f.stem] = _read_json_safe(f)
+        meta = info.get(cid) or {}
+        chars.append({"id": cid, "name": meta.get("canonical_name") or cid,
+                      "meta": meta, "docs": docs,
+                      "images": _asset_urls(base, adir / cid, IMG_EXTS)})
+    return {"project": base.name, "characters": chars}
+
+
+@app.get("/api/preview/characters")
+async def api_preview_characters(project: str = "demo"):
+    return await asyncio.to_thread(_preview_characters, project)
+
+
+def _preview_props(project: str):
+    """道具设定聚合:bible/props.json 设定卡 + assets/concepts/props/* 参考图。"""
+    base = _proj_base(project)
+    doc = _read_json_safe(base / "bible" / "props.json") or {}
+    cards = {p.get("id"): p for p in doc.get("props", [])
+             if isinstance(p, dict) and p.get("id")}
+    adir = base / "assets" / "concepts" / "props"
+    ids = set(cards)
+    if adir.is_dir():
+        ids |= {x.name for x in adir.iterdir()
+                if x.is_dir() and not x.name.startswith(".")}
+    props = []
+    for pid in sorted(ids):
+        card = cards.get(pid) or {}
+        props.append({"id": pid, "name": card.get("name") or pid,
+                      "card": card,
+                      "images": _asset_urls(base, adir / pid, IMG_EXTS)})
+    return {"project": base.name, "props": props}
+
+
+@app.get("/api/preview/props")
+async def api_preview_props(project: str = "demo"):
+    return await asyncio.to_thread(_preview_props, project)
+
+
+def _preview_scenes(project: str):
+    """场景设定聚合:bible/scenes/* 文字 + assets/concepts/scenes/* 概念图。"""
+    base = _proj_base(project)
+    idx = _read_json_safe(base / "bible" / "scenes" / "index.json") or {}
+    info = {s.get("id"): s for s in idx.get("scenes", [])
+            if isinstance(s, dict) and s.get("id")}
+    bdir = base / "bible" / "scenes"
+    adir = base / "assets" / "concepts" / "scenes"
+    ids = set(info)
+    for d in (bdir, adir):
+        if d.is_dir():
+            ids |= {x.name for x in d.iterdir()
+                    if x.is_dir() and not x.name.startswith(".")}
+    scenes = []
+    for sid in sorted(ids):
+        docs = {}
+        if (bdir / sid).is_dir():
+            for f in sorted((bdir / sid).glob("*.json")):
+                docs[f.stem] = _read_json_safe(f)
+        meta = info.get(sid) or {}
+        scenes.append({"id": sid, "name": meta.get("name") or sid,
+                       "meta": meta, "docs": docs,
+                       "images": _asset_urls(base, adir / sid, IMG_EXTS)})
+    return {"project": base.name, "scenes": scenes}
+
+
+@app.get("/api/preview/scenes")
+async def api_preview_scenes(project: str = "demo"):
+    return await asyncio.to_thread(_preview_scenes, project)
+
+
+def _preview_storyboard(project: str, ep: str):
+    """分镜设定聚合:分集列表 + 指定集的剧本/分镜表/每镜关键帧与成片视频。"""
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    plan_eps = {e.get("ep"): e for e in plan.get("episodes", [])
+                if isinstance(e, dict) and e.get("ep")}
+    eps = set(plan_eps)
+    for sub in ("story/episodes", "directing"):
+        d = base / sub
+        if d.is_dir():
+            eps |= {x.name for x in d.iterdir()
+                    if x.is_dir() and not x.name.startswith(".")}
+    episodes = [{"ep": e, "title": (plan_eps.get(e) or {}).get("title", ""),
+                 "summary": (plan_eps.get(e) or {}).get("mainline_summary", "")}
+                for e in sorted(eps)]
+    ep = ep or (episodes[0]["ep"] if episodes else "")
+    data = {"project": base.name, "episodes": episodes, "ep": ep}
+    if not ep:
+        return data
+    ep = re.sub(r"[^\w\-]", "", ep)
+
+    def _read_text(rel: str) -> str:
+        p = base / rel
+        try:
+            return p.read_text() if p.is_file() else ""
+        except Exception:
+            return ""
+
+    data["screenplay"] = _read_text(f"story/episodes/{ep}/screenplay.md")
+    data["narration"] = _read_text(f"story/episodes/{ep}/narration.md")
+    # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
+    data["narration_items"] = [
+        {"id": m.group(1), "anchor": m.group(2).strip(),
+         "est_s": float(m.group(3)), "text": m.group(4).strip()}
+        for m in re.finditer(
+            r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)"
+            r"\s*\|[^\]]*\]\s*\n(.+)$",
+            data["narration"], re.M)]
+    sb = _read_json_safe(base / "directing" / ep / "storyboard.json") or {}
+    data["title"] = sb.get("title") or (plan_eps.get(ep) or {}).get("title", "")
+    data["board_scenes"] = [
+        {k: s.get(k) for k in ("scene_no", "scene_code", "int_ext", "alloc_s",
+                               "emotion", "director_beat_note")}
+        for s in sb.get("scenes", []) if isinstance(s, dict)]
+    sl = _read_json_safe(base / "directing" / ep / "shot_list.json") or {}
+    # 旁白挂点定稿(shot-planning 产出,§7D ①):预览页最优先按它对位,
+    # 缺失时前端回退 narration.md 锚的 grpNNN/beat 前缀匹配并标注"挂点未定稿"
+    data["narration_anchors"] = [
+        {k: a.get(k) for k in ("narration_id", "anchor_shots", "anchor_group",
+                               "window_s", "est_duration_s")}
+        for a in (sl.get("narration_anchors") or []) if isinstance(a, dict)]
+    # 分镜脚本文案索引:storyboard.json scenes[].shots_draft[](shot_list 的镜条目
+    # 不带文案,经 storyboard_ref "SCN-0001/order:1" 指回这里)
+    drafts = {}
+    for sc in sb.get("scenes", []):
+        if not isinstance(sc, dict):
+            continue
+        for dr in (sc.get("shots_draft") or []):
+            if isinstance(dr, dict) and dr.get("order") is not None:
+                drafts[(sc.get("scene_no"), dr["order"])] = dr
+
+    def _shot_content(s: dict) -> str:
+        if s.get("content"):
+            return s["content"]
+        m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
+        dr = drafts.get((m.group(1), int(m.group(2)))) if m else None
+        return (dr or {}).get("content") or (dr or {}).get("subject_action") or ""
+
+    kroot = base / "assets" / "keyframes" / ep
+    croot = base / "assets" / "clips" / ep
+    clips = _asset_urls(base, croot, VIDEO_EXTS)
+    shots = []
+    for s in (sl.get("shots") or []):
+        if not isinstance(s, dict):
+            continue
+        sid = s.get("shot_id") or ""
+        shots.append({k: s.get(k) for k in (
+            "shot_id", "scene_no", "scene_id", "duration_s", "size",
+            "camera_position", "characters", "is_dialogue", "dialogue_ref",
+            "beat")} | {
+            "scene_no": s.get("scene_no") or s.get("scene_id"),
+            "content": _shot_content(s),
+            "keyframes": _asset_urls(base, kroot / sid, IMG_EXTS),
+            "clips": [c for c in clips
+                      if sid and (c["name"].startswith(sid) or f"/{sid}" in f"/{c['name']}")],
+        })
+    data["shots"] = shots
+    # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、
+    # 切变边界与尾帧来自 clips/<grp>.meta.json
+    groups = []
+    for g in (sl.get("generation_groups") or []):
+        if not isinstance(g, dict):
+            continue
+        gid = g.get("group_id") or ""
+        meta = _read_json_safe(croot / f"{gid}.meta.json") or {}
+        groups.append({k: g.get(k) for k in (
+            "group_id", "scene_id", "shots", "total_duration_s",
+            "characters_union", "has_dialogue", "continuity_from")} | {
+            "anchors": _asset_urls(base, kroot / gid, IMG_EXTS),
+            "clips": [c for c in clips if gid and c["name"].startswith(gid)],
+            "boundaries_s": meta.get("boundaries_s") or [],
+            "sketches": _sketch_list(base.name, ep, gid),
+            "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
+        })
+    data["generation_groups"] = groups
+    return data
+
+
+@app.get("/api/preview/storyboard")
+async def api_preview_storyboard(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_storyboard, project, ep)
+
+
+def _ep_video_tokens(base, ep: str):
+    """该集视频模型 token 累计消耗。权威来源是 assets/clips/<ep>/usage_ledger.jsonl
+    (genmedia 每次成功生成追加一行,含重roll,覆盖/删档不丢);台账未覆盖的组再补
+    meta.json 里的 usage.completion_tokens(避免与台账重复:按文件名去重)。
+    无任何记录返回 None(历史生成未落 usage,前端显示 —)。"""
+    cdir = base / "assets" / "clips" / ep
+    if not cdir.is_dir():
+        return None
+    total, in_ledger, found = 0, set(), False
+    ledger = cdir / "usage_ledger.jsonl"
+    if ledger.is_file():
+        try:
+            lines = ledger.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            lines = []
+        for ln in lines:
+            try:
+                rec = json.loads(ln)
+            except Exception:
+                continue
+            in_ledger.add(str(rec.get("file") or ""))
+            t = rec.get("completion_tokens") or rec.get("total_tokens")
+            if isinstance(t, (int, float)):
+                total += int(t)
+                found = True
+    for mf in cdir.glob("*.meta.json"):
+        if mf.name[:-len(".meta.json")] + ".mp4" in in_ledger:
+            continue
+        u = (_read_json_safe(mf) or {}).get("usage") or {}
+        t = u.get("completion_tokens")
+        if isinstance(t, (int, float)):
+            total += int(t)
+            found = True
+    return total if found else None
+
+
+_LLM_INDEX_LOCK = threading.Lock()
+
+
+def _parse_run_usage(path: Path):
+    """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
+    三种情形:claude stream-json 末尾 result.usage(整个 run 的累计);codex exec
+    末尾 turn.completed.usage;无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            fh.seek(max(0, size - 262144))
+            tail = fh.read().decode("utf-8", "replace").splitlines()
+        if size > 262144:
+            tail = tail[1:]          # 掐掉可能被截断的首行
+    except OSError:
+        return None
+    for ln in reversed(tail):
+        try:
+            d = json.loads(ln)
+        except Exception:
+            continue
+        u = d.get("usage")
+        if not isinstance(u, dict):
+            continue
+        if d.get("type") == "result":        # claude:input 三段是互斥口径,求和
+            return {"in": int(u.get("input_tokens") or 0)
+                          + int(u.get("cache_creation_input_tokens") or 0)
+                          + int(u.get("cache_read_input_tokens") or 0),
+                    "out": int(u.get("output_tokens") or 0)}
+        if d.get("type") == "turn.completed":   # codex:input_tokens 已含 cached
+            return {"in": int(u.get("input_tokens") or 0),
+                    "out": int(u.get("output_tokens") or 0)}
+    # claude 每次 API 调用发多条 assistant 事件(每内容块一条)携带同一 usage,
+    # 必须按 message.id 去重取末次快照,直接累加会把输入算 ~2.4 倍(已实测:
+    # 去重后 input 与 result.usage 完全一致;output 在流事件中只有极小快照值,
+    # 会低估 ~1%,可接受——中断 run 的消耗以输入为绝对主体)。
+    by_id, tin, tout, found = {}, 0, 0, False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for i, ln in enumerate(fh):
+                try:
+                    d = json.loads(ln)
+                except Exception:
+                    continue
+                t = d.get("type")
+                if t == "assistant":
+                    m = d.get("message") or {}
+                    u = m.get("usage")
+                    if isinstance(u, dict):
+                        by_id[m.get("id") or i] = u
+                        found = True
+                elif t == "turn.completed":
+                    u = d.get("usage")
+                    if isinstance(u, dict):
+                        tin += int(u.get("input_tokens") or 0)
+                        tout += int(u.get("output_tokens") or 0)
+                        found = True
+    except OSError:
+        return None
+    for u in by_id.values():
+        tin += (int(u.get("input_tokens") or 0)
+                + int(u.get("cache_creation_input_tokens") or 0)
+                + int(u.get("cache_read_input_tokens") or 0))
+        tout += int(u.get("output_tokens") or 0)
+    return {"in": tin, "out": tout} if found else None
+
+
+def _llm_usage_index() -> dict:
+    """runs/*.jsonl → {run_id: {in, out, size}} 增量索引,缓存 runs/llm_usage_index.json。
+    只重解析新增或大小变化的文件(运行中的 run 随日志增长自动刷新),日常请求开销≈一次
+    目录 stat + 读缓存;首次全量构建约扫 1GB 日志,只发生一次。"""
+    cache_p = RUNS_DIR / "llm_usage_index.json"
+    with _LLM_INDEX_LOCK:
+        try:
+            cache = json.loads(cache_p.read_text(encoding="utf-8"))
+            if not isinstance(cache, dict):
+                cache = {}
+        except Exception:
+            cache = {}
+        dirty, seen = False, set()
+        for f in RUNS_DIR.glob("*.jsonl"):
+            rid = f.stem
+            seen.add(rid)
+            try:
+                size = f.stat().st_size
+            except OSError:
+                continue
+            ent = cache.get(rid)
+            if isinstance(ent, dict) and ent.get("size") == size:
+                continue
+            u = _parse_run_usage(f) or {"in": 0, "out": 0}
+            cache[rid] = {"in": u["in"], "out": u["out"], "size": size}
+            dirty = True
+        for rid in [k for k in cache if k not in seen]:
+            cache.pop(rid)
+            dirty = True
+        if dirty:
+            tmp = cache_p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cache), encoding="utf-8")
+            tmp.replace(cache_p)
+        return cache
+
+
+def _ep_llm_tokens(project: str, ep: str):
+    """该集语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
+    派单记录(run_id→工单文本)归集。工单文本提到多集时 token 均分到各集(避免重复
+    计数);未提到任何 epNN 的全局任务(bible/世界观/角色等)不归入任何一集。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/deepagents)。"""
+    cdir = CHATS_DIR / safe_slug(project)
+    if not cdir.is_dir():
+        return None
+    idx = _llm_usage_index()
+    total, found = 0.0, False
+    for cf in cdir.glob("*.jsonl"):
+        try:
+            lines = cf.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            if r.get("role") != "user" or not r.get("run_id"):
+                continue
+            eps = set(re.findall(r"ep\d+", str(r.get("text") or "").lower()))
+            if ep not in eps:
+                continue
+            u = idx.get(str(r["run_id"]))
+            if not u:
+                continue
+            total += (u.get("in", 0) + u.get("out", 0)) / len(eps)
+            found = True
+    return int(total) if found else None
+
+
+def _ep_publish_info(base: Path, ep: str):
+    """publish/<ep>/ 发布物料聚合:metadata.json 关键字段、seo.json 标题备选/标签/简介、
+    各平台子目录的 spec_report.json 核对结论与 package/ 发布包文件清单。目录不存在返回 None。"""
+    pdir = base / "publish" / ep
+    if not pdir.is_dir():
+        return None
+    info = {"metadata": None, "seo": None, "platforms": []}
+    meta = _read_json_safe(pdir / "metadata.json")
+    if isinstance(meta, dict):
+        v = meta.get("video") or {}
+        nxt = meta.get("next_episode") or {}
+        info["metadata"] = {
+            "date": meta.get("date"),
+            "series": meta.get("series"),
+            "episode_no": meta.get("episode_no"),
+            "episode_total": meta.get("episode_total"),
+            "episode_title": meta.get("episode_title"),
+            "producer": meta.get("producer"),
+            "production_credit": meta.get("production_credit"),
+            "rating": meta.get("rating"),
+            "made_for_kids": meta.get("rating_made_for_kids"),
+            "age_restricted": meta.get("rating_age_restricted"),
+            "source_file": v.get("source_file"),
+            "duration_s": v.get("duration_s_measured") or v.get("duration_s_nominal"),
+            "resolution": v.get("resolution"),
+            "fps": v.get("fps"),
+            "gate_verdict": v.get("h5_gate_verdict"),
+            "next_episode": " ".join(str(nxt.get(k) or "") for k in ("ep", "title")).strip(),
+        }
+    seo = _read_json_safe(pdir / "seo.json")
+    if isinstance(seo, dict):
+        items = seo.get("items") or []
+        it = items[0] if items and isinstance(items[0], dict) else {}
+        info["seo"] = {
+            "platform": (seo.get("meta") or {}).get("platform"),
+            "titles": [t for t in (it.get("titles") or []) if isinstance(t, dict)],
+            "picked": it.get("picked"),
+            "tags": [str(t) for t in (it.get("tags") or [])],
+            "description": str(it.get("description") or ""),
+        }
+    for d in sorted(x for x in pdir.iterdir()
+                    if x.is_dir() and not x.name.startswith(".")):
+        rep = _read_json_safe(d / "spec_report.json") or {}
+        lint = rep.get("lint_summary") or {}
+        files = []
+        pkg = d / "package"
+        if pkg.is_dir():
+            for f in sorted(pkg.rglob("*")):
+                if not f.is_file() or f.name.startswith("."):
+                    continue
+                st = f.stat()
+                ext = f.suffix.lower()
+                files.append({"name": str(f.relative_to(pkg)),
+                              "size_mb": round(st.st_size / 1048576, 1),
+                              "kind": ("video" if ext in VIDEO_EXTS
+                                       else "image" if ext in IMG_EXTS else "file"),
+                              "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+                                      f"?v={int(st.st_mtime)}")})
+        info["platforms"].append({
+            "platform": d.name,
+            "verdict": rep.get("overall_verdict"),
+            "uploaded": rep.get("uploaded"),
+            "note": rep.get("note"),
+            "lint_total": len(lint),
+            "lint_flagged": {k: str(v) for k, v in lint.items()
+                             if isinstance(v, str)
+                             and v.lower() != "pass" and not v.startswith("pass（")},
+            "files": files})
+    return info
+
+
+def _preview_videos(project: str, ep: str):
+    """视频预览聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    plan_eps = {e.get("ep"): e for e in plan.get("episodes", [])
+                if isinstance(e, dict) and e.get("ep")}
+    eps = set(plan_eps)
+    for sub in ("story/episodes", "directing", "edit"):
+        d = base / sub
+        if d.is_dir():
+            eps |= {x.name for x in d.iterdir()
+                    if x.is_dir() and not x.name.startswith(".")}
+    episodes = [{"ep": e, "title": (plan_eps.get(e) or {}).get("title", "")}
+                for e in sorted(eps)]
+    ep = ep or (episodes[0]["ep"] if episodes else "")
+    data = {"project": base.name, "episodes": episodes, "ep": ep}
+    if not ep:
+        return data
+    ep = re.sub(r"[^\w\-]", "", ep)
+    data["video_tokens"] = _ep_video_tokens(base, ep)
+    data["llm_tokens"] = _ep_llm_tokens(project, ep)
+    edir = base / "edit" / ep
+
+    def _files(match: str, exts: tuple) -> list[dict]:
+        if not edir.is_dir():
+            return []
+        out = []
+        for f in sorted(edir.rglob("*")):
+            if not (f.is_file() and f.suffix.lower() in exts
+                    and match in f.name.lower()):
+                continue
+            st = f.stat()
+            out.append({"name": str(f.relative_to(edir)),
+                        "size_mb": round(st.st_size / 1048576, 1),
+                        "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+                                f"?v={int(st.st_mtime)}")})
+        return out
+
+    data["finals"] = _files("final", VIDEO_EXTS)
+    data["thumbnails"] = _files("thumb", IMG_EXTS)
+    data["publish"] = _ep_publish_info(base, ep)
+
+    # 审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要
+    defects = []
+    ddir = base / "qa" / "defects"
+    if ddir.is_dir():
+        for f in sorted(ddir.iterdir()):
+            if f.name.startswith("."):
+                continue
+            row = None
+            if f.suffix.lower() == ".json":
+                j = _read_json_safe(f)
+                if isinstance(j, dict):
+                    row = {k: j.get(k) for k in (
+                        "defect_id", "severity", "blocking", "type", "status",
+                        "artifact", "found_by", "task_id", "date", "violated",
+                        "evidence", "impact", "recommended_fix", "assigned_to",
+                        "resolution", "waiver")}
+                    row["defect_id"] = row["defect_id"] or f.stem
+            elif f.suffix.lower() in (".md", ".txt"):
+                try:
+                    txt = f.read_text()
+                except Exception:
+                    txt = ""
+                first = next((ln.strip().lstrip("# ").strip()
+                              for ln in txt.splitlines() if ln.strip()), "")
+                row = {"defect_id": f.stem, "type": "文字工单",
+                       "violated": first, "detail_text": txt[:6000]}
+            if row is None:
+                continue
+            blob = " ".join(str(row.get(k) or "") for k in
+                            ("defect_id", "task_id", "artifact", "violated"))
+            row["eps"] = sorted(set(re.findall(r"ep\d+", blob.lower())))
+            defects.append(row)
+    data["defects"] = defects
+    return data
+
+
+@app.get("/api/preview/videos")
+async def api_preview_videos(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_videos, project, ep)
+
+
+@app.get("/api/genconfig")
+async def api_genconfig_get():
+    return load_genconfig()
+
+
+def _flat_diff(old, new, prefix="") -> list[str]:
+    """递归比较两份配置,返回「路径: 旧 → 新」清单;密钥类字段不回显明文。"""
+    out = []
+    for k in sorted(set(old or {}) | set(new or {})):
+        ov, nv = (old or {}).get(k), (new or {}).get(k)
+        if ov == nv:
+            continue
+        path = f"{prefix}{k}"
+        if isinstance(ov, dict) or isinstance(nv, dict):
+            out += _flat_diff(ov if isinstance(ov, dict) else {},
+                              nv if isinstance(nv, dict) else {}, path + ".")
+        elif any(t in k.lower() for t in ("key", "token", "secret")):
+            out.append(f"{path}: (已更新,不回显)")
+        else:
+            out.append(f"{path}: {json.dumps(ov, ensure_ascii=False)}"
+                       f" → {json.dumps(nv, ensure_ascii=False)}")
+    return out
+
+
+async def _notify_settings_change(project: str, label: str, changes: list[str]):
+    """设置保存后自动知会总制片,由其通知依赖该配置的 agent,避免继续按旧配置执行。"""
+    if not changes:
+        return
+    orch = next(iter(DISPATCHERS))
+    lines = "\n".join(f"- {c}" for c in changes[:40])
+    msg = (f"[设置变更] 用户刚在控制台更新了「{label}」,差异:\n{lines}\n"
+           "请评估影响范围并通知相关 agent 更新配置认知:在跑/待派任务中依赖旧配置的,"
+           "在派单工单里注明以最新配置为准;已按旧配置产出且已过审的产物不重做,"
+           "除非与新配置冲突。若无受影响任务,简要确认记录后结束,不要额外派活。")
+    try:
+        await api_chat({"agent": orch, "message": msg, "project": project,
+                        "source": "settings"})
+    except Exception as e:  # noqa: BLE001
+        print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
+
+
+@app.post("/api/genconfig")
+async def api_genconfig_set(body: dict):
+    body = dict(body or {})
+    # project 仅用于「设置变更」通知的会话归属(genconfig 本身是全局配置),不落盘
+    project = safe_slug(body.pop("project", None))
+    old = load_genconfig()
+    cfg = _merge(load_genconfig(), body)
+    for kind in ("image", "video", "music", "tts", "deepagents"):
+        allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
+        if cfg.get(kind, {}).get("provider") not in allowed:
+            raise HTTPException(400, f"{kind}.provider 必须是 {sorted(allowed)}")
+    if cfg.get("agentmodel_mode") not in AM_MODES:
+        raise HTTPException(400, f"agentmodel_mode 必须是 {AM_MODES}")
+    if cfg.get("ui_language") not in ("", *UI_LANG_NAMES):
+        raise HTTPException(400, f"ui_language 必须是 {sorted(UI_LANG_NAMES)} 或空")
+    storage = cfg.get("storage") or {}
+    allowed_st = set(DEFAULT_GENCONFIG["storage"]) - {"provider"}
+    if storage.get("provider") not in allowed_st:
+        raise HTTPException(400, f"storage.provider 必须是 {sorted(allowed_st)}")
+    for name, pc in storage.items():
+        if not isinstance(pc, dict):
+            continue
+        try:
+            pc["url_expires"] = int(pc.get("url_expires") or 86400)
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"storage.{name}.url_expires 必须是秒数(整数)")
+    save_genconfig(cfg)
+    lang_only = set(body) <= {"ui_language"}
+    if lang_only and not old.get("ui_language"):
+        # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
+        return {"ok": True, "config": cfg}
+    await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
+                                  _flat_diff(old, cfg))
+    return {"ok": True, "config": cfg}
+
+
+BRIEF_HEADER = "# 主创构想"
+
+
+@app.get("/api/brief")
+async def api_brief_get(project: str = "demo"):
+    """当前项目的主要构想(brief.md 正文,不含标题行)。"""
+    p = PROJECTS_DIR / safe_slug(project) / "brief.md"
+    text = ""
+    if p.is_file():
+        text = p.read_text().strip()
+        if text.startswith(BRIEF_HEADER):
+            text = text[len(BRIEF_HEADER):].strip()
+    return {"project": project, "brief": text}
+
+
+@app.post("/api/brief")
+async def api_brief_set(body: dict):
+    """保存主要构想到 data/projects/<项目>/brief.md;清空即移除该设定。"""
+    project = safe_slug(body.get("project"))
+    if not (PROJECTS_DIR / project).is_dir():
+        raise HTTPException(404, f"项目不存在: {project}")
+    brief = str(body.get("brief") or "").strip()
+    p = PROJECTS_DIR / project / "brief.md"
+    old = p.read_text().strip() if p.is_file() else ""
+    if brief:
+        p.write_text(f"{BRIEF_HEADER}\n\n{brief}\n")
+    elif p.is_file():
+        p.unlink()
+    new = p.read_text().strip() if p.is_file() else ""
+    if new != old:
+        await _notify_settings_change(project, "主要构想", [
+            f"brief.md 已更新,最新全文:\n{brief[:1200]}" if brief
+            else "brief.md 已清空(移除主创构想设定)"])
+    return {"ok": True, "project": project, "brief": brief}
+
+
+@app.get("/api/projconfig")
+async def api_projconfig_get(project: str = "demo"):
+    """项目级设置(输出设置/时长设置/审核设置),每个项目独立。"""
+    return load_project_settings(project)
+
+
+PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
+                       "review": "审核设置", "packaging": "片头片尾"}
+
+
+@app.post("/api/projconfig")
+async def api_projconfig_set(body: dict):
+    project = safe_slug(body.get("project"))
+    old = load_project_settings(project)
+    cfg = _merge(load_project_settings(project),
+                 {k: v for k, v in (body or {}).items()
+                  if k in PROJECT_SETTINGS_KEYS})
+    _validate_duration(cfg.get("duration") or {})
+    _validate_output(cfg.get("output") or {})
+    _validate_review(cfg.get("review") or {})
+    _validate_packaging(cfg.get("packaging") or {})
+    ensure_project(project)
+    project_settings_path(project).write_text(
+        json.dumps(cfg, ensure_ascii=False, indent=2))
+    changes = _flat_diff(old, cfg)
+    secs = {c.split(":")[0].split(".")[0] for c in changes}
+    label = "、".join(v for k, v in PROJ_SETTING_LABELS.items() if k in secs)
+    await _notify_settings_change(project, label or "项目设置", changes)
+    return {"ok": True, "project": project, "config": cfg}
+
+
+OPENROUTER_TTS_MODELS = [
+    ("x-ai/grok-voice-tts-1.0", "Grok Voice TTS 1.0(xAI)· 20+语言/5音色(eve/ara/rex/sal/leo)"),
+    ("microsoft/mai-voice-2", "MAI-Voice-2(微软)· 英/西/法/德(en-US-Harper:MAI-Voice-2 等)"),
+    ("mistralai/voxtral-mini-tts-2603", "Voxtral Mini TTS(Mistral)· 英/法,音色带情绪(en_paul_neutral 等)"),
+    ("hexgrad/kokoro-82m", "Kokoro 82M · 唯一含中文音色(zf_xiaoxiao/zm_yunxi 等)/多语言/快"),
+    ("zyphra/zonos-v0.1-transformer", "Zonos v0.1 Transformer(Zyphra)· 英文 american/british 音色"),
+    ("zyphra/zonos-v0.1-hybrid", "Zonos v0.1 Hybrid(Zyphra)· 英文 american/british 音色"),
+    ("sesame/csm-1b", "CSM 1B(Sesame)· 英文对话/朗读音色(conversational/read_speech)"),
+    ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
+]
+
+
+@app.get("/api/openrouter/models")
+async def api_openrouter_models(modality: str = "image", refresh: bool = False):
+    """列出 OpenRouter 目录里的模型(image/video/music/tts/text,带 10 分钟缓存)。"""
+    if modality not in ("image", "video", "music", "tts", "text"):
+        raise HTTPException(400, "modality 必须是 image / video / music / tts / text")
+    if modality == "tts":
+        # TTS 模型无公开目录端点(/audio/speech 专用),返回内置清单;自定义 ID 走前端「自定义…」
+        return {"models": [{"id": i, "name": n} for i, n in OPENROUTER_TTS_MODELS], "cached": True}
+    cached = _OPENROUTER_CACHE.get(modality)
+    if cached and not refresh and time.time() - cached[0] < _OPENROUTER_TTL:
+        return {"models": cached[1], "cached": True}
+    # image/video 有专门的媒体模型目录;music/text 无专目录,走总目录(music 按输出模态 audio 过滤)
+    url = ("https://openrouter.ai/api/v1/models" if modality in ("music", "text")
+           else f"https://openrouter.ai/api/v1/{modality}s/models")
+    try:
+        data = await asyncio.to_thread(_http_get_json, url)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"拉取 OpenRouter 模型列表失败:{e}") from e
+    models = []
+    for m in data.get("data", []):
+        if m.get("id") == "openrouter/auto":
+            continue
+        out_mods = (m.get("architecture") or {}).get("output_modalities") or []
+        if modality == "music" and "audio" not in out_mods:
+            continue
+        if modality == "text" and "text" not in out_mods:
+            continue
+        models.append({"id": m.get("id"), "name": m.get("name") or m.get("id")})
+    models.sort(key=lambda x: x["id"] or "")
+    _OPENROUTER_CACHE[modality] = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
+@app.post("/api/test/openrouter")
+async def api_test_openrouter(body: dict):
+    """验证 OpenRouter API Key(GET /api/v1/key)。"""
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        raise HTTPException(400, "api_key 不能为空")
+    try:
+        data = await asyncio.to_thread(
+            _http_get_json, "https://openrouter.ai/api/v1/key",
+            {"Authorization": f"Bearer {key}"})
+        d = data.get("data") or {}
+        return {"ok": True, "label": d.get("label"),
+                "usage": d.get("usage"), "limit": d.get("limit")}
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {"ok": False, "error": "Key 无效(401)"}
+        return {"ok": False, "error": f"HTTP {e.code}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.get("/api/deepagents/models")
+async def api_deepagents_models():
+    """列出 deepagents 生效渠道端点上的可用模型(本地端点如 LM Studio,或 OpenRouter)。"""
+    da = resolve_deepagents()
+    base = (da.get("base_url") or "").rstrip("/")
+    if not base:
+        raise HTTPException(400, "未配置 deepagents base_url")
+    headers = {}
+    if da.get("api_key"):
+        headers["Authorization"] = f"Bearer {da['api_key']}"
+    try:
+        data = await asyncio.to_thread(_http_get_json, base + "/models", headers, 8)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"连接 {base} 失败:{str(e)[:200]}") from e
+    models = sorted(m.get("id") for m in data.get("data", []) if m.get("id"))
+    return {"models": models, "base_url": base}
+
+
+@app.post("/api/test/deepagents")
+async def api_test_deepagents(body: dict):
+    """测试 OpenAI 兼容端点连通性,返回模型列表。"""
+    base = (body.get("base_url") or "").strip().rstrip("/")
+    if not re.match(r"^https?://", base):
+        raise HTTPException(400, "base_url 需以 http(s):// 开头")
+    headers = {}
+    if body.get("api_key"):
+        headers["Authorization"] = f"Bearer {body['api_key']}"
+    try:
+        data = await asyncio.to_thread(_http_get_json, base + "/models", headers, 8)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+    return {"ok": True,
+            "models": sorted(m.get("id") for m in data.get("data", []) if m.get("id"))}
+
+
+@app.post("/api/test/comfyui")
+async def api_test_comfyui(body: dict):
+    """测试本地 ComfyUI 连接,顺带返回可用 checkpoint 列表。"""
+    url = (body.get("url") or "").strip().rstrip("/")
+    if not re.match(r"^https?://", url):
+        raise HTTPException(400, "url 需以 http(s):// 开头")
+    try:
+        stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", None, 6)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"连接失败:{str(e)[:200]}"}
+    checkpoints = []
+    try:
+        info = await asyncio.to_thread(
+            _http_get_json, url + "/object_info/CheckpointLoaderSimple", None, 6)
+        req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
+        ckpt = req.get("ckpt_name") or [[]]
+        if isinstance(ckpt[0], list):
+            checkpoints = ckpt[0]
+    except Exception:  # noqa: BLE001
+        pass
+    sysinfo = (stats.get("system") or {})
+    return {"ok": True,
+            "version": sysinfo.get("comfyui_version") or sysinfo.get("os") or "unknown",
+            "devices": [d.get("name") for d in stats.get("devices") or []],
+            "checkpoints": checkpoints}
+
+
+@app.get("/api/agents")
+async def api_agents(refresh: bool = False):
+    return list_agents(refresh=refresh)
+
+
+@app.get("/api/agentmodels")
+async def api_agentmodels():
+    """全部 Agent 的模型配置:mode=「Agent模型」策略;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
+    mode = load_genconfig().get("agentmodel_mode") or "global"
+    return {"mode": mode,
+            "defaults": {a["id"]: default_agent_model(a["id"], mode)
+                         for a in list_agents()},
+            "overrides": load_agentmodels()}
+
+
+@app.post("/api/agentmodels")
+async def api_agentmodels_set(body: dict):
+    agent = body.get("agent") or ""
+    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+        raise HTTPException(404, f"未知 agent: {agent}")
+    overrides = load_agentmodels()
+    if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
+        overrides.pop(agent, None)
+    else:
+        cfg = body.get("config") or {}
+        c = {"engine": str(cfg.get("engine") or "").lower(),
+             "model": str(cfg.get("model") or "").strip(),
+             "image_provider": str(cfg.get("image_provider") or ""),
+             "video_provider": str(cfg.get("video_provider") or "")}
+        if c["engine"] not in AM_ENGINES:
+            raise HTTPException(400, f"engine 必须是 {AM_ENGINES}(空=跟随全局)")
+        if c["image_provider"] not in AM_IMAGE_PROVIDERS:
+            raise HTTPException(400, f"image_provider 必须是 {AM_IMAGE_PROVIDERS}")
+        if c["video_provider"] not in AM_VIDEO_PROVIDERS:
+            raise HTTPException(400, f"video_provider 必须是 {AM_VIDEO_PROVIDERS}")
+        if not c["engine"]:
+            c["model"] = ""                     # 引擎跟随全局时模型无意义
+        overrides[agent] = c
+    atomic_write_json(AGENTMODELS_PATH, overrides)
+    return {"ok": True, "effective": agent_model_config(agent)}
+
+
+@app.get("/api/soul")
+async def api_soul(agent: str):
+    p = AGENTS_DIR / safe_agent(agent) / "SOUL.md"
+    if not p.is_file():
+        raise HTTPException(404, "no such agent")
+    return {"agent": agent, "soul": p.read_text()}
+
+
+@app.get("/api/projects")
+async def api_projects():
+    return sorted([d.name for d in PROJECTS_DIR.iterdir()
+                   if d.is_dir() and not d.name.startswith(".")])
+
+
+@app.post("/api/projects")
+async def api_projects_create(body: dict):
+    """新建项目(顶栏「＋新建项目」弹窗):建目录、存小说原文与主创构想,
+    并自动派总制片完成初始化(整理文本结构,完成后提醒用户放参考图)。"""
+    name = (body.get("name") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9]+", name):
+        raise HTTPException(400, "项目名称只能使用英文字母和数字")
+    if (PROJECTS_DIR / name).exists():
+        raise HTTPException(400, f"项目已存在: {name}")
+    # 向导初始设置(输出/时长/审核/片头片尾):先校验后建目录,校验失败不留下半成品项目
+    # 新建项目的审核力度默认全 0(不审核),向导/调用方显式给值则覆盖
+    settings = body.get("settings") or {}
+    base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
+    base["review"] = {k: 0 for k in REVIEW_DIMENSIONS}
+    cfg = _merge(base, {k: v for k, v in settings.items()
+                        if k in PROJECT_SETTINGS_KEYS})
+    _validate_duration(cfg["duration"])
+    _validate_output(cfg["output"])
+    _validate_review(cfg["review"])
+    _validate_packaging(cfg["packaging"])
+    ensure_project(name)
+    project_settings_path(name).write_text(
+        json.dumps(cfg, ensure_ascii=False, indent=2))
+    novel = (body.get("novel") or "").strip()
+    brief = (body.get("brief") or "").strip()
+    if novel:
+        nd = PROJECTS_DIR / name / "novel"
+        nd.mkdir(parents=True, exist_ok=True)
+        (nd / "original.txt").write_text(novel)
+    if brief:
+        (PROJECTS_DIR / name / "brief.md").write_text(f"# 主创构想\n\n{brief}\n")
+
+    # 交给总制片完成初始化;完成后提醒用户放参考图,不自行启动后续流水线
+    orch = next(iter(DISPATCHERS))
+    msg = [f"【项目初始化】新项目 {name} 刚创建,请完成初始化:",
+           f"1) 检查并补全项目目录结构(data/projects/{name}/,布局见 WORKFLOW.md §2)"]
+    if novel:
+        msg.append(
+            f"2) 小说原文已导入 novel/original.txt(约 {len(novel)} 字):请优化文本结构与格式"
+            "——清洗乱码与冗余空白、规范分章分段,按章节拆分为 novel/ 下的规范文件;"
+            "工作量大时派单给 01-story/novel-parser 执行")
+    else:
+        msg.append("2) 用户暂未导入小说文本:在汇报中提醒用户把小说原文放入 novel/ 目录")
+    if brief:
+        msg.append(
+            "3) 用户主创构想已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
+            "是后续全部工作的最高创作前提):请通读,并在汇报中简要复述你的理解以便用户纠偏")
+    if cfg is not None:
+        aspect, aspect_name, lang = resolve_output(cfg)
+        dur = cfg["duration"]
+        msg.append(
+            f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
+            f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
+            "后续派单自动生效,无需再向用户逐项确认。")
+    msg.append(
+        "完成以上工作后只做汇报,并【提醒用户】:可以把觉得值得参考的图放入 "
+        f"data/projects/{name}/refs/(style/ characters/ scenes/ props/),"
+        "希望使用的音乐放入 refs/music/(约定见该目录 README.md);"
+        "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
+    await api_chat({"agent": orch, "message": "\n".join(msg),
+                    "project": name, "source": "user"})
+    return {"ok": True, "name": name}
+
+
+# ---------------- 版本克隆(设置菜单 → 版本克隆页) ----------------
+# 从项目 .version/repo.git 的任一历史提交(全量快照)克隆出全新项目:
+# git archive 导出该 commit 整树 → vc.py install 建全新版本库 → 全部文件登记 v1 基线。
+# 对源项目纯只读(固定 commit),与在跑的流水线无写盘冲突。
+CLONE_JOBS: dict = {}                    # 源项目名 → 最近一次克隆任务状态
+CLONE_LOCK = threading.Lock()
+
+
+def _git_env():
+    # 与 modules/vc.py:git() 同法:剥离 GIT_*,避免外层 git 上下文污染嵌入式库
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
+def _version_dir(base: Path) -> Path:
+    vdir = base / ".version"
+    if not (vdir / "changelog.jsonl").is_file():
+        raise HTTPException(404, f"该项目无版本库: {base.name}")
+    return vdir
+
+
+@app.get("/api/versions/log")
+async def api_versions_log(project: str = "demo"):
+    """changelog.jsonl → 按 task_id 连续分组的提交批次,倒序。
+    仅取含 commit 字段的 register 记录(freeze_gate_record/backfill 等异构行跳过)。"""
+    base = _proj_base(project)
+    vdir = _version_dir(base)
+
+    def _load():
+        batches, cur = [], None
+        with open(vdir / "changelog.jsonl", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if not (rec.get("commit") and rec.get("artifact")):
+                    continue                      # 非 register 记录
+                tid = rec.get("task_id") or "?"
+                if cur is None or cur["task_id"] != tid:
+                    cur = {"task_id": tid, "reason": rec.get("reason") or "",
+                           "timestamp": rec.get("timestamp") or "",
+                           "files": [], "frozen_tags": [], "snapshot_commit": ""}
+                    batches.append(cur)
+                cur["files"].append({"artifact": rec["artifact"],
+                                     "version": rec.get("version") or ""})
+                cur["timestamp"] = rec.get("timestamp") or cur["timestamp"]
+                cur["snapshot_commit"] = rec["commit"]   # 批内最后一条 = 快照点
+                tag = rec.get("tag")
+                if tag and tag not in cur["frozen_tags"]:
+                    cur["frozen_tags"].append(tag)
+        return batches
+
+    batches = await asyncio.to_thread(_load)
+    batches.reverse()
+    return {"project": base.name, "batches": batches}
+
+
+def _clone_worker(project: str, gitdir: str, commit: str, task_id: str,
+                  commit_time: str, name: str):
+    job = CLONE_JOBS[project]
+    tmp = PROJECTS_DIR / f".clone-tmp-{name}"    # . 开头:构建期间不被 /api/projects 列出
+    env = _git_env()
+    try:
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True)
+
+        job["step"] = "导出快照"
+        p1 = subprocess.Popen(["git", "--git-dir", gitdir, "archive",
+                               "--format=tar", commit],
+                              stdout=subprocess.PIPE, env=env)
+        p2 = subprocess.run(["tar", "-x", "-C", str(tmp)], stdin=p1.stdout, env=env)
+        p1.stdout.close()
+        if p1.wait() or p2.returncode:
+            raise RuntimeError("git archive 导出快照失败")
+
+        job["step"] = "初始化版本库"
+        r = subprocess.run(["python3", str(ROOT / "modules" / "vc.py"),
+                            "install", str(tmp)],
+                           capture_output=True, text=True, env=env, cwd=str(ROOT))
+        if r.returncode:
+            raise RuntimeError(f"vc.py install 失败: {(r.stderr or r.stdout)[-500:]}")
+
+        files = sorted(str(f.relative_to(tmp)) for f in tmp.rglob("*")
+                       if f.is_file()
+                       and not str(f.relative_to(tmp)).startswith(".version/"))
+        total = len(files)
+        job["step"] = "登记 v1 基线"
+        job["progress"] = [0, total]
+        reason = (f"克隆自 {project}@{commit[:12]}(任务 {task_id or '?'}, "
+                  f"{commit_time}),全部产物重置为 v1 基线")
+        for i in range(0, total, 25):
+            chunk = files[i:i + 25]
+            r = subprocess.run(["python3", str(tmp / ".version" / "vc.py"),
+                                "register", *chunk,
+                                "--task-id", "p0-clone-baseline",
+                                "--attempt", "1", "--reason", reason],
+                               capture_output=True, text=True, env=env, cwd=str(tmp))
+            if r.returncode:
+                raise RuntimeError(f"基线登记失败: {(r.stderr or r.stdout)[-500:]}")
+            job["progress"] = [min(i + 25, total), total]
+
+        # manifest project 字段用最终名(install 时目录还叫 .clone-tmp-*)
+        mpath = tmp / ".version" / "manifest.json"
+        m = json.loads(mpath.read_text())
+        m["project"] = name
+        mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+
+        os.rename(tmp, PROJECTS_DIR / name)      # 原子上线
+        job["step"] = "完成"
+        job["state"] = "done"
+    except Exception as e:
+        job["state"] = "error"
+        job["error"] = str(e)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+@app.post("/api/versions/clone")
+async def api_versions_clone(body: dict):
+    project = safe_slug(body.get("project"))
+    base = _proj_base(project)
+    vdir = _version_dir(base)
+    commit = (body.get("snapshot_commit") or "").strip().lower()
+    task_id = (body.get("task_id") or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise HTTPException(400, "snapshot_commit 必须是 40 位十六进制 git commit")
+    gitdir = str(vdir / "repo.git")
+    env = _git_env()
+    r = subprocess.run(["git", "--git-dir", gitdir, "cat-file", "-e",
+                        commit + "^{commit}"], env=env, capture_output=True)
+    if r.returncode:
+        raise HTTPException(400, f"该提交不存在于 {project} 的版本库: {commit[:12]}")
+
+    with CLONE_LOCK:
+        job = CLONE_JOBS.get(project)
+        if job and job.get("state") == "running":
+            raise HTTPException(409, f"已有克隆任务进行中: {job.get('new_name')}")
+        # 新名 = 源名-提交时间(如 sample-20260712-215704);重名追加 -2/-3
+        ct = subprocess.run(["git", "--git-dir", gitdir, "show", "-s",
+                             "--format=%cI", commit],
+                            env=env, capture_output=True, text=True).stdout.strip()
+        stamp = ct[:19].replace("-", "").replace(":", "").replace("T", "-")
+        name = f"{project}-{stamp}"
+        n = 2
+        while (PROJECTS_DIR / name).exists():
+            name = f"{project}-{stamp}-{n}"
+            n += 1
+        CLONE_JOBS[project] = {"state": "running", "step": "准备",
+                               "progress": [0, 0], "new_name": name,
+                               "source": project, "commit": commit,
+                               "task_id": task_id, "error": None}
+        threading.Thread(target=_clone_worker,
+                         args=(project, gitdir, commit, task_id, ct, name),
+                         daemon=True).start()
+    return {"ok": True, "name": name}
+
+
+@app.get("/api/versions/clone-status")
+async def api_versions_clone_status(project: str = "demo"):
+    return CLONE_JOBS.get(safe_slug(project)) or {"state": "idle"}
+
+
+@app.post("/api/projects/delete")
+async def api_projects_delete(body: dict):
+    """删除整个项目目录(版本管理页「危险操作」):前端已两重确认,
+    后端再校验一次 confirm 必须与项目名完全一致,防误调。"""
+    project = safe_slug(body.get("project"))
+    base = _proj_base(project)
+    confirm = (body.get("confirm") or "").strip()
+    if confirm != base.name:
+        raise HTTPException(400, "输入的项目名称与要删除的项目不一致")
+    job = CLONE_JOBS.get(project)
+    if job and job.get("state") == "running":
+        raise HTTPException(409, "该项目正有克隆任务进行中,完成后再删除")
+    live = [r for r in RUNS.values()
+            if r.get("project") == project
+            and r.get("status") in ("queued", "running")]
+    if live:
+        raise HTTPException(409, f"该项目有 {len(live)} 个任务排队/运行中,请先停止再删除")
+    await asyncio.to_thread(shutil.rmtree, base)
+    remain = sorted([d.name for d in PROJECTS_DIR.iterdir()
+                     if d.is_dir() and not d.name.startswith(".")])
+    return {"ok": True, "deleted": project, "next": remain[0] if remain else ""}
+
+
+@app.get("/api/history")
+async def api_history(agent: str, project: str = "demo", limit: int = 200):
+    p = chat_path(agent, project)
+    if not p.is_file():
+        return []
+
+    def _tail():
+        with p.open() as f:
+            return list(deque(f, maxlen=limit))
+    lines = await asyncio.to_thread(_tail)
+    return [json.loads(x) for x in lines if x.strip()]
+
+
+@app.get("/api/runs")
+async def api_runs():
+    return [run_public(r) for r in list(RUNS.values())[-100:]]
+
+
+@app.get("/api/runs/{run_id}")
+async def api_run(run_id: str):
+    r = RUNS.get(run_id)
+    if not r:
+        raise HTTPException(404, "no such run")
+    return run_public(r) | {"result": r.get("result"), "text": r.get("text")}
+
+
+@app.post("/api/runs/{run_id}/progress")
+async def api_run_progress(run_id: str, body: dict):
+    """父运行(如总制片)等待子任务期间上报进度,UI 实时显示。"""
+    r = RUNS.get(run_id)
+    if not r:
+        raise HTTPException(404, "no such run")
+    r["progress"] = str(body.get("note") or "")[:300]
+    publish_run(r)
+    return {"ok": True}
+
+
+# ---------------- 用户确认(重跑/跳过等) ----------------
+
+
+def notify_user(text: str):
+    """macOS 本机通知(失败静默):人工确认/签字等待是全天最大空转来源,主动喊人。"""
+    try:
+        subprocess.Popen(
+            ["osascript", "-e",
+             f'display notification {json.dumps(text[:120], ensure_ascii=False)} '
+             f'with title "VideoAgents" sound name "Glass"'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+def confirm_public(c: dict) -> dict:
+    remaining = max(0, int(c["created"] + c["timeout"] - time.time()))
+    return {k: c[k] for k in ("id", "question", "options", "default",
+                              "timeout", "parent", "answer")} | {"remaining": remaining}
+
+
+@app.post("/api/confirm")
+async def api_confirm_create(body: dict):
+    """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。"""
+    q = (body.get("question") or "").strip()
+    if not q:
+        raise HTTPException(400, "question 不能为空")
+    options = [str(o)[:40] for o in (body.get("options") or ["重跑", "跳过"])][:4]
+    c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
+         "default": str(body.get("default") or options[0])[:40],
+         "timeout": min(600, max(5, int(body.get("timeout") or 60))),
+         "parent": body.get("parent"), "created": time.time(), "answer": None}
+    CONFIRMS[c["id"]] = c
+    HUB.publish({"type": "confirm", **confirm_public(c)})
+    notify_user(f"需要你确认:{q}")
+    return {"confirm_id": c["id"]}
+
+
+@app.get("/api/confirms")
+async def api_confirms():
+    """未答复且未超时的确认项(前端刷新页面后恢复弹窗用)。"""
+    now = time.time()
+    return [confirm_public(c) for c in CONFIRMS.values()
+            if c["answer"] is None and now - c["created"] < c["timeout"]]
+
+
+@app.get("/api/confirm/{cid}")
+async def api_confirm_get(cid: str):
+    c = CONFIRMS.get(cid)
+    if not c:
+        raise HTTPException(404, "no such confirm")
+    return confirm_public(c)
+
+
+@app.post("/api/confirm/{cid}/answer")
+async def api_confirm_answer(cid: str, body: dict):
+    c = CONFIRMS.get(cid)
+    if not c:
+        raise HTTPException(404, "no such confirm")
+    if c["answer"] is None:
+        c["answer"] = str(body.get("answer") or "")[:40] or c["default"]
+        HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
+    return {"ok": True, "answer": c["answer"]}
+
+
+@app.post("/api/chat")
+async def api_chat(body: dict):
+    agent = safe_agent(body.get("agent", ""))
+    message = (body.get("message") or "").strip()
+    project = safe_slug(body.get("project"))
+    model = body.get("model") or None
+    engine = (body.get("engine") or "claude").lower()
+    source = body.get("source", "user")
+    parent = body.get("parent") or None
+    if not message:
+        raise HTTPException(400, "message 不能为空")
+    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+        raise HTTPException(404, f"未知 agent: {agent}")
+    # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
+    if not body.get("force"):
+        am = agent_model_config(agent)
+        if am.get("engine"):
+            engine = am["engine"]
+            model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
+    if engine not in ENGINES:
+        raise HTTPException(400, f"engine 必须是 {ENGINES}")
+    ensure_project(project)
+
+    agents = {a["id"]: a for a in list_agents()}
+    # 缓存 TTL 内新建的 agent 可能不在 agents 里(存在性已由上方 is_file 校验)
+    agent_name = (agents.get(agent) or {}).get("name") or agent.split("/")[-1]
+    run = {
+        "id": uuid.uuid4().hex[:12], "agent": agent,
+        "agent_name": agent_name, "source": source, "parent": parent,
+        "project": project, "status": "queued", "created": time.time(),
+        "message": message, "engine": engine, "model": model or "",
+    }
+    RUNS[run["id"]] = run
+    append_chat(agent, project, {"role": "user", "text": message,
+                                 "run_id": run["id"], "source": source})
+    publish_run(run)
+    RUN_TASKS[run["id"]] = asyncio.create_task(
+        execute_run(run, message, model))
+    return {"run_id": run["id"]}
+
+
+def _kill_proc_tree(proc):
+    """杀整个进程组(claude/codex 及其派生的 bash/dispatch 子进程)。"""
+    import signal
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+@app.post("/api/stop")
+async def api_stop_all():
+    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
+    stopped = []
+    for run in list(RUNS.values()):
+        if run.get("status") == "running":
+            run["error"] = "已被用户手动停止"
+            proc = RUN_PROCS.get(run["id"])
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
+            stopped.append(run["id"])
+        elif run.get("status") == "queued":
+            t = RUN_TASKS.pop(run["id"], None)
+            if t:
+                t.cancel()
+            run["status"] = "error"
+            run["error"] = "已被用户手动停止(排队中取消)"
+            run["ended"] = time.time()
+            append_chat(run["agent"], run["project"],
+                        {"role": "assistant", "text": run["error"],
+                         "run_id": run["id"], "status": "error"})
+            publish_run(run)
+            stopped.append(run["id"])
+    return {"stopped": stopped}
+
+
+# ---------------- 空转看门狗 ----------------
+
+_HUMAN_GATE_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒时刻(防刷屏)
+_DAG_RECONCILE_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒补展开 DAG 的时刻
+
+_DONE_STATES = {"done", "passed", "passed_human_override"}
+
+
+def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
+    """读 runs/dag.json,返回 (依赖已满足的非人工待办节点, 依赖已满足的人工签字节点)。
+    nodes 兼容两种落盘格式:列表 [{id,...}](demo)与字典 {task_id: {...}}(sample)。"""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    if not dag_path.is_file():
+        return [], []
+    try:
+        nodes = json.loads(dag_path.read_text())["nodes"]
+    except Exception:
+        return [], []
+    if isinstance(nodes, dict):
+        # 以字典键为准(depends_on 引用的锚),防内层残留 id 字段覆盖
+        nodes = [{**v, "id": k} for k, v in nodes.items()]
+    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
+    runnable, human_waiting = [], []
+    for n in nodes:
+        if n.get("state") in _DONE_STATES:
+            continue
+        if not all(d in done for d in (n.get("depends_on") or [])):
+            continue
+        (human_waiting if n.get("human") else runnable).append(n["id"])
+    return runnable, human_waiting
+
+
+def _dag_missing_episodes(proj: str) -> list[str]:
+    """episode_plan.json 已规划、但 dag.json 没有任何对应 epNN 节点的分集。
+    模板节点被首集耗尽后,后续集的工单会游离于 DAG 之外(前科:sample ep02),
+    看门狗据此把「DAG 与现实脱节」本身当作唤醒事件,让总制片先补展开再派单。"""
+    plan_path = PROJECTS_DIR / proj / "story" / "episode_plan.json"
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    if not (plan_path.is_file() and dag_path.is_file()):
+        return []
+    try:
+        planned = {e["ep"] for e in json.loads(plan_path.read_text())["episodes"]}
+        nodes = json.loads(dag_path.read_text())["nodes"]
+    except Exception:
+        return []
+    ids = list(nodes.keys()) if isinstance(nodes, dict) else \
+        [n.get("id", "") for n in nodes]
+    covered: set[str] = set()
+    for nid in ids:
+        covered.update(re.findall(r"ep\d+", nid))
+    return sorted(planned - covered)
+
+
+PRUNE_RUN_TTL = 86400      # 终态 run 保留 24h(dispatch --wait-all 上限 4h 的 6 倍裕量,
+                           # 淘汰后 GET /api/runs/{id} 404 会被 dispatch 当 pending 干等)
+PRUNE_RUN_MAX = 1000       # 终态 run 数量上限,超出按 ended 从旧到新删
+
+
+def prune_runs_confirms():
+    """内存中 RUNS/CONFIRMS 的定期淘汰;只删终态,绝不动 queued/running。"""
+    now = time.time()
+    dead = [rid for rid, r in RUNS.items()
+            if r.get("status") in ("done", "error")
+            and now - (r.get("ended") or now) > PRUNE_RUN_TTL]
+    finals = sorted((rid for rid, r in RUNS.items()
+                     if r.get("status") in ("done", "error")),
+                    key=lambda rid: RUNS[rid].get("ended") or 0)
+    over = len(finals) - PRUNE_RUN_MAX
+    if over > 0:
+        dead.extend(finals[:over])
+    for rid in set(dead):
+        RUNS.pop(rid, None)
+    # 已答复的不能立删:dispatch 每 2s 轮询 /api/confirm/{cid},404 会落到默认答案;
+    # 统一按年龄淘汰(发起方自身 deadline = created + timeout)
+    gone = [cid for cid, c in CONFIRMS.items()
+            if now - c.get("created", now) > c.get("timeout", 0) + 600]
+    for cid in gone:
+        CONFIRMS.pop(cid, None)
+    if dead or gone:
+        print(f"[prune] 淘汰 run {len(set(dead))} 条 / confirm {len(gone)} 条", flush=True)
+
+
+async def idle_watchdog():
+    """空转看门狗:实测单日曾有 ~3.5h 完全无活动(调度器停摆/等人工无人接续)。
+    流水线仍有可跑任务、却无任务在跑且无待确认项时,自动唤醒总制片续派;
+    只剩人工签字节点时,转为本机通知提醒用户。"""
+    orch = next(iter(DISPATCHERS))
+    while True:
+        try:   # 闲置时间可在设置弹窗调整,每轮实时读取,改动无需重启
+            idle_s = int(STATE.get("watchdog_idle_minutes", 5)) * 60
+        except (TypeError, ValueError):
+            idle_s = IDLE_CHECK_INTERVAL
+        await asyncio.sleep(max(60, idle_s))
+        try:
+            prune_runs_confirms()   # 同一事件循环内同步执行,与 api_runs/遍历天然互斥
+            now = time.time()
+            wd = STATE.get("watchdog", {})   # {project: bool};缺省关闭
+            if not any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir()):
+                continue                     # 没有项目开启看门狗,免探用量
+            # 用量阈值门控:总制片生效引擎的会话用量超阈值则本轮全部不唤醒(配额是账号级)
+            eng = agent_model_config(orch).get("engine") or "claude"
+            used = await asyncio.to_thread(engine_usage_percent, eng)
+            th = int(STATE.get("watchdog_threshold", 80))
+            if used is not None and used >= th:
+                print(f"[watchdog] {eng} 会话用量 {used:.0f}% ≥ 阈值 {th}%,本轮跳过",
+                      flush=True)
+                continue
+            # 有未答复的确认项时先不打扰(确认项无项目归属,作为全局闸门)
+            pending_confirm = any(
+                c["answer"] is None and now - c["created"] < c["timeout"]
+                for c in CONFIRMS.values())
+            for proj_dir in sorted(PROJECTS_DIR.iterdir()):
+                if not proj_dir.is_dir() or proj_dir.name.startswith("."):
+                    continue
+                proj = proj_dir.name
+                if not wd.get(proj, False):   # 该项目看门狗默认关闭,逐项目独立开关
+                    continue
+                # 逐项目独立判断:该项目仍有任务在跑就跳过(不受其它项目影响)
+                if any(r.get("status") in ("queued", "running")
+                       and r.get("project") == proj for r in RUNS.values()):
+                    continue
+                if pending_confirm:
+                    continue
+                runnable, human_waiting = _dag_runnable(proj)
+                if runnable:
+                    msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"
+                           f"但 runs/dag.json 仍有依赖已满足的待办节点(如:{', '.join(runnable[:6])}"
+                           f"{' 等' if len(runnable) > 6 else ''})。"
+                           "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
+                    await api_chat({"agent": orch, "message": msg,
+                                    "project": proj, "source": "watchdog"})
+                    print(f"[watchdog] 唤醒 {orch}:{proj} 待办 {len(runnable)} 项", flush=True)
+                    continue   # 各项目独立唤醒,不再一轮只唤醒一个
+                # DAG 覆盖率兜底:无可跑节点 ≠ 只等人工——若 episode_plan 里
+                # 有分集在 DAG 中完全没有节点,说明 DAG 未按集展开/未同步,
+                # 唤醒总制片先修 DAG(每项目至多 1 次/小时,防止修复失败刷屏)
+                missing = _dag_missing_episodes(proj)
+                if missing and now - _DAG_RECONCILE_NOTIFIED.get(proj, 0) > 3600:
+                    _DAG_RECONCILE_NOTIFIED[proj] = now
+                    msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json 已无可跑节点,"
+                           f"但 story/episode_plan.json 规划的分集 {', '.join(missing[:6])}"
+                           f"{' 等' if len(missing) > 6 else ''} 在 DAG 中没有任何节点,"
+                           "疑似模板节点被首集耗尽、后续集未按集展开。"
+                           "请按 WORKFLOW.md §3.1「DAG 按集动态展开」把缺失分集展开为 "
+                           "pX-*-epNN 节点(含每集闸门),并依据 runs/ 既往工单回填 state/run_id,"
+                           "完成后继续按 DAG 与派单守则推进;若该分集确已完结或另有安排,"
+                           "在 DAG 中补记节点状态后简要说明。")
+                    await api_chat({"agent": orch, "message": msg,
+                                    "project": proj, "source": "watchdog"})
+                    print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
+                          f"{', '.join(missing)}", flush=True)
+                    continue
+                if human_waiting and now - _HUMAN_GATE_NOTIFIED.get(proj, 0) > 3600:
+                    _HUMAN_GATE_NOTIFIED[proj] = now
+                    notify_user(f"项目 {proj} 流水线停在人工签字点:{', '.join(human_waiting[:3])},等你确认")
+        except Exception as e:  # noqa: BLE001
+            print(f"[watchdog] 异常(忽略):{e}\n{traceback.format_exc()}", flush=True)
+
+
+@app.post("/api/open-folder")
+async def api_open_folder(body: dict):
+    """在 Finder 中打开当前项目目录(产物更新「📂 打开目录」按钮)。"""
+    project = safe_slug(body.get("project"))
+    path = PROJECTS_DIR / project
+    if not path.is_dir():
+        raise HTTPException(404, f"项目目录不存在: {project}")
+    subprocess.Popen(["open", str(path)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True, "path": str(path)}
+
+
+@app.get("/api/watchdog/threshold")
+async def api_watchdog_threshold_get():
+    return {"threshold": int(STATE.get("watchdog_threshold", 80)),
+            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+
+
+@app.post("/api/watchdog/threshold")
+async def api_watchdog_threshold_set(body: dict):
+    """自动运行设置(设置菜单「自动运行」):threshold=用量阈值(总制片生效
+    引擎的会话用量达到该百分比时,看门狗本轮不自动唤醒);idle_minutes=闲置
+    时间(巡检间隔,分钟)。两项均可选,只更新给出的项;持久化,重启后保持。"""
+    if body.get("threshold") is not None:
+        try:
+            th = int(body.get("threshold"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "threshold 必须是整数") from None
+        if not 1 <= th <= 100:
+            raise HTTPException(400, "threshold 必须在 1-100 之间")
+        STATE["watchdog_threshold"] = th
+    if body.get("idle_minutes") is not None:
+        try:
+            im = int(body.get("idle_minutes"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "idle_minutes 必须是整数") from None
+        if not 1 <= im <= 720:
+            raise HTTPException(400, "idle_minutes 必须在 1-720 之间")
+        STATE["watchdog_idle_minutes"] = im
+    save_state(STATE)
+    return {"threshold": int(STATE.get("watchdog_threshold", 80)),
+            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+
+
+@app.get("/api/usage")
+async def api_usage():
+    """claude/codex 当前会话(5h 窗口)已用百分比;取不到为 null(设置弹窗显示用)。"""
+    codex, claude = await asyncio.gather(
+        asyncio.to_thread(engine_usage_percent, "codex"),
+        asyncio.to_thread(engine_usage_percent, "claude"))
+    orch = next(iter(DISPATCHERS))
+    return {"codex": {"used": codex}, "claude": {"used": claude},
+            "gate_engine": agent_model_config(orch).get("engine") or "claude"}
+
+
+@app.get("/api/watchdog")
+async def api_watchdog_get(project: str = ""):
+    """按项目查看空转看门狗开关(缺省关闭)。不带 project 时返回全部映射。"""
+    wd = STATE.get("watchdog", {})
+    if project:
+        proj = safe_slug(project)
+        return {"project": proj, "enabled": bool(wd.get(proj, False))}
+    return {"watchdog": wd}
+
+
+@app.post("/api/watchdog")
+async def api_watchdog_set(body: dict):
+    """按项目切换空转看门狗开关(运行面板 🤖 按钮);逐项目独立、缺省关闭,
+    状态持久化,重启后保持。"""
+    proj = safe_slug(body.get("project"))
+    wd = STATE.setdefault("watchdog", {})
+    wd[proj] = bool(body.get("enabled"))
+    save_state(STATE)
+    return {"project": proj, "enabled": wd[proj]}
+
+
+@app.get("/api/events")
+async def api_events():
+    q = HUB.subscribe()
+
+    async def gen():
+        try:
+            yield 'data: {"type":"hello"}\n\n'
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            HUB.unsubscribe(q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})
+
+
+if __name__ == "__main__":
+    print(f"VideoAgents Agent Console → http://{HOST}:{PORT}")
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

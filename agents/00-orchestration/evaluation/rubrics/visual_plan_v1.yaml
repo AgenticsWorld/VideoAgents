@@ -1,0 +1,19 @@
+# visual_plan_v1 — 分镜/镜头规划类产物评分表
+# 适用:storyboard, shot-planning, composition, camera-movement, blocking, continuity-planning
+rubric: visual_plan_v1
+threshold: 80
+dimensions:
+  - name: 叙事清晰
+    weight: 30
+    check: 镜头序列能讲清剧本内容;信息镜头不缺(谁/在哪/干什么)
+  - name: 视觉多样性
+    weight: 20
+    check: 景别/角度有节奏变化,无长串同景别;重点场次有设计感
+  - name: 可生成性
+    weight: 30
+    check: 每镜可被视频生成模型实现(运镜在支持清单内、单镜时长在模型能力内、构图可用 prompt 表达)
+    anchors: { 95: 全部可直接生成, 80: "<=10% 需降级处理且已标注", 60: 大量镜头超出能力 }
+  - name: 规范
+    weight: 20
+    check: 镜号唯一、时长合计达标、角色/场景 ID 合法、连续性字段齐
+feedback_required: true

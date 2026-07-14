@@ -1,0 +1,43 @@
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+webui/genconfig.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Project inputs and generated artifacts
+data/projects/*
+!data/projects/.gitkeep
+runs/
+qa/evidence/
+
+# Runtime state
+webui/chats/
+webui/runs/
+webui/state.json
+webui/server.log
+
+# Python
+.venv/
+venv/
+webui/.venv-deepagents/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local Claude worktrees
+.claude/worktrees/

@@ -1,0 +1,20 @@
+# visual_gen_v1 — 图像/视频生成产物评分表
+# 适用:image-generation(keyframes), video-generation(clips), upscale 后终版
+rubric: visual_gen_v1
+threshold: 80
+dimensions:
+  - name: 与设计稿匹配
+    weight: 35
+    check: 对照 storyboard/composition/camera.json 逐项核对(构图、景别、运镜、画面内容)
+    anchors: { 95: 逐项吻合, 80: 次要偏差(背景细节), 60: 构图或内容跑偏 }
+  - name: 技术质量
+    weight: 30
+    check: 无肢体畸变/多指、无闪烁抖动、无运动伪影、主体不漂移、分辨率/fps/时长合规
+  - name: 角色一致
+    weight: 25
+    check: 人脸相似度>=0.85(对人设三视图);服装/发型与该时间点设定一致
+  - name: 无违禁
+    weight: 10
+    check: 不含 style.json 负面清单元素;不触发平台内容红线
+feedback_required: true
+notes: 本 rubric 大部分维度可自动化(人脸相似度、畸变检测),evaluation 汇总机检分+模型评分

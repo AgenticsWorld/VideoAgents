@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>分镜预览 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px}
+header a.back:hover{color:var(--accent)}
+header .spacer{flex:1}
+input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+header select:hover{border-color:var(--accent)}
+#eps{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);overflow-x:auto;flex:none}
+#eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#main{flex:1;display:flex;min-height:0}
+#content{flex:1;overflow-y:auto;padding:20px 26px}
+#nav{width:240px;flex:none;border-left:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:8px 6px 20px}
+#nav .ttl{font-size:11px;color:var(--dim);padding:2px 8px 6px}
+#nav .nv{display:flex;align-items:center;gap:4px;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:3px 8px;font-size:12px;color:var(--text);cursor:pointer}
+#nav .nv .lb{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#nav .nv .bd{flex:none;font-size:10px;color:var(--dim);white-space:nowrap}
+#nav .nv:hover{background:var(--panel2)}
+#nav .nv.sc{font-weight:600;margin-top:6px;color:var(--accent)}
+#nav .nv.g{padding-left:24px;color:var(--purple);font-size:11.5px}
+#nav .nv.on{background:var(--panel2);outline:1px solid var(--border)}
+@media(max-width:900px){#nav{display:none}}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+h2.title{font-size:20px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
+.summary{color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px}
+.doc{border:1px solid var(--border);border-radius:10px;margin:14px 0;overflow:hidden}
+.doc>h3{background:var(--panel);padding:9px 14px;font-size:13.5px;cursor:pointer;user-select:none}
+.doc>h3::before{content:'▾ ';color:var(--dim)}
+.doc.closed>h3::before{content:'▸ '}
+.doc.closed>.body{display:none}
+.doc>.body{padding:14px 18px;background:var(--panel2);max-height:60vh;overflow-y:auto}
+.doc pre{white-space:pre-wrap;word-break:break-word;font:13px/1.7 inherit;color:#c8d0e0}
+.scene{margin:26px 0 10px;border-left:3px solid var(--accent);padding-left:12px}
+.scene h3{font-size:16px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.scene h3 .tag{font-size:11.5px;color:var(--dim);font-weight:400}
+.scene .beat{color:var(--dim);font-size:12.5px;margin-top:3px;max-width:1100px}
+.shot{display:flex;flex-wrap:wrap;gap:16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;margin:10px 0}
+.shot .media{display:flex;gap:8px;flex-wrap:wrap;flex:none;max-width:42%}
+.shot .media img{height:210px;border-radius:6px;cursor:zoom-in;display:block}
+.shot .clips{flex:none;display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;padding-left:14px;border-left:1px dashed var(--border);max-width:46%;align-content:flex-start}
+.shot .clips video{height:210px;border-radius:6px;background:#000;display:block}
+.shot .clips .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
+.shot .clips .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.shot .clipslabel{width:100%;font-size:11px;color:var(--dim);margin-bottom:2px}
+.shot .media .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
+.shot .media .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.editbtn{font-size:10.5px;padding:0 6px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.editbtn:hover{color:var(--accent);border-color:var(--accent)}
+.shot .info{flex:1;min-width:220px}
+.shot .r1{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.shot .sid{font-weight:600;color:var(--accent)}
+.shot .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
+.shot .content{margin:6px 0 4px}
+.shot .dlg{color:var(--yellow);font-size:13px;margin:4px 0}
+.shot .cam{color:var(--dim);font-size:12.5px}
+.shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
+.stats{color:var(--dim);font-size:12.5px;margin:8px 0}
+.grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:hidden}
+.grp>.ghead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:var(--panel);padding:8px 12px}
+.grp>.ghead .gid{font-weight:600;color:var(--purple)}
+.grp>.ghead .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
+.grp>.ghead .link{font-size:11px;color:var(--dim)}
+.grp>.gmedia{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--border)}
+.grp>.gmedia .anchors{display:flex;gap:8px;flex-wrap:wrap}
+.grp>.gmedia .anchors img{height:120px;border-radius:6px;cursor:zoom-in;display:block}
+.grp>.gmedia video{height:210px;border-radius:6px;background:#000;display:block}
+.grp>.gmedia .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
+.grp>.gmedia .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.grp>.gmedia .blabel{font-size:11px;color:var(--dim);width:100%}
+.grp>.gshots{padding:4px 10px 8px}
+.grp>.gshots .shot{background:var(--bg)}
+.gnote{border-top:1px solid var(--border);background:var(--panel2);padding:7px 12px;font-size:13px;line-height:1.6;color:var(--green)}
+.gnote .glabel{color:var(--dim);font-size:11px;margin-right:6px}
+#gn-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#gn-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:520px;max-width:92vw}
+#gn-modal textarea{width:100%;height:110px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font:13px/1.6 inherit;resize:vertical;margin:10px 0}
+#gn-modal .actions{display:flex;gap:8px;justify-content:flex-end}
+.narr{border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;background:var(--panel2);padding:7px 12px;margin:8px 0;font-size:13px;line-height:1.6}
+.narr .nid{color:var(--yellow);font-weight:600;margin-right:6px}
+.narr .nest{color:var(--dim);font-size:11px;margin-left:6px}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
+#lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+#sk-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#sk-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;max-width:420px;text-align:center}
+#sk-modal .qr{background:#fff;border-radius:8px;padding:10px;margin:12px auto;width:240px;height:240px}
+#sk-modal .qr svg{width:100%;height:100%}
+#sk-modal .url{font-size:11px;color:var(--dim);word-break:break-all;margin:6px 0}
+#sk-modal .st{font-size:13px;color:var(--yellow);margin:8px 0;min-height:20px}
+#sk-modal button{margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 控制台</a>
+  <h1>🎬 分镜预览</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<div id="eps"></div>
+<div id="main">
+  <div id="content"><div class="empty">加载中…</div></div>
+  <nav id="nav"></nav>
+</div>
+<div id="lightbox"><img alt=""></div>
+<div id="gn-modal"><div class="box">
+  <h3>📝 组注释 — <span id="gn-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">导演意图注释:保存后以 Director's note 句注入本组 video_prompt(重出生效);清空保存=移除注入</div>
+  <textarea id="gn-text" placeholder="例:整组节奏放慢;福瓦德全程不看镜头;钱袋始终在画面左下角可见"></textarea>
+  <div class="err" id="gn-err" style="color:var(--red);font-size:12px"></div>
+  <div class="actions"><button id="gn-cancel">取消</button><button id="gn-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
+</div></div>
+<div id="sk-modal"><div class="box">
+  <h3>🎨 手绘分镜 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">手机扫码打开画布(同一局域网);黑白线稿标注空间关系,配文字说明后提交,自动注入本组 prompt</div>
+  <div class="qr" id="sk-qr"></div>
+  <div class="url" id="sk-url"></div>
+  <div class="st" id="sk-st">等待手机提交…</div>
+  <button id="sk-close">关闭</button>
+</div></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let EP='';
+
+// 图片/视频 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留
+const LOAD_T=Date.now();
+const bust=u=>u.includes('?')?u:u+'?v='+LOAD_T;
+
+function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
+$('#lightbox').onclick=()=>$('#lightbox').style.display='none';
+
+// ✏️ 修改:跳转总制片界面,把修改对象预填进「输入工作指令」框。
+// data-url=具体媒体文件路径;data-loc=结构化位置元数据(分镜/生成组/旁白等无单一文件的对象)
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.editbtn');
+  if(!b||(!b.dataset.url&&!b.dataset.loc))return;
+  const proj=$('#project').value.trim()||'demo';
+  const subject=b.dataset.loc
+    ||'data/projects/'+b.dataset.url.split('?')[0].replace(/^\/projects\//,'');
+  location.href='/?project='+encodeURIComponent(proj)
+    +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'));
+});
+
+// 🎨 手绘分镜:发起会话→二维码→轮询新线稿
+let skPoll=null,skCount=0;
+async function openSketch(grp){
+  const proj=$('#project').value.trim()||'demo';
+  $('#sk-grp').textContent=grp;
+  $('#sk-st').textContent='正在创建会话…';
+  $('#sk-qr').innerHTML='';$('#sk-url').textContent='';
+  $('#sk-modal').style.display='flex';
+  try{
+    const r=await fetch('/api/draw-session',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    const d=await r.json();
+    $('#sk-qr').innerHTML=d.qr_svg;
+    $('#sk-url').textContent=d.url;
+    $('#sk-st').textContent='等待手机提交…(会话 30 分钟有效)';
+    const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(grp);
+    skCount=(await (await fetch('/api/sketches?'+q)).json()).length;
+    clearInterval(skPoll);
+    skPoll=setInterval(async()=>{
+      try{
+        const list=await (await fetch('/api/sketches?'+q)).json();
+        if(list.length>skCount){
+          skCount=list.length;
+          $('#sk-st').textContent=I18N.f('✅ 已收到 {n} 张线稿并注入 prompt,重出本组即生效',{n:list.length});
+          load(true);
+        }
+      }catch(e){}
+    },3000);
+  }catch(e){$('#sk-st').textContent='会话创建失败:'+e.message}
+}
+// 📝 组注释:编辑弹窗,保存即注入/替换/清除 prompt 中的 Director's note 句
+let GN_GRP='';
+function openNote(grp){
+  GN_GRP=grp;
+  $('#gn-grp').textContent=grp;
+  $('#gn-err').textContent='';
+  const g=(LAST_DATA&&LAST_DATA.generation_groups||[]).find(x=>x.group_id===grp)||{};
+  $('#gn-text').value=g.user_note||'';
+  $('#gn-modal').style.display='flex';
+  $('#gn-text').focus();
+}
+$('#gn-cancel').onclick=()=>$('#gn-modal').style.display='none';
+$('#gn-ok').onclick=async()=>{
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/grpnote',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:GN_GRP,text:$('#gn-text').value})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    $('#gn-modal').style.display='none';
+    load(true);
+  }catch(e){$('#gn-err').textContent='保存失败:'+e.message}
+};
+
+document.addEventListener('click',async e=>{
+  const gb=e.target.closest('.gnotebtn');
+  if(gb)return openNote(gb.dataset.grp);
+  const sb=e.target.closest('.sketchbtn');
+  if(sb)return openSketch(sb.dataset.grp);
+  const del=e.target.closest('.skdel');
+  if(del){
+    if(!confirm('删除该线稿并回滚 prompt 注入?'))return;
+    const proj=$('#project').value.trim()||'demo';
+    const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)
+      +'&grp='+encodeURIComponent(del.dataset.grp)+'&name='+encodeURIComponent(del.dataset.name);
+    const r=await fetch('/api/sketch?'+q,{method:'DELETE'});
+    if(!r.ok)alert('删除失败:'+((await r.json()).detail||r.status));
+    load(true);
+  }
+});
+$('#sk-close').onclick=()=>{$('#sk-modal').style.display='none';clearInterval(skPoll)};
+// SSE:手机提交线稿事件到达即就地刷新(保持滚动位置),弹窗关着也生效
+try{
+  const es=new EventSource('/api/events');
+  es.onmessage=e=>{
+    try{
+      const ev=JSON.parse(e.data);
+      if(ev.type==='sketch'&&ev.project===($('#project').value.trim()||'demo'))load(true);
+    }catch(_){}
+  };
+}catch(_){}
+
+function renderEps(episodes){
+  const box=$('#eps');box.innerHTML='';
+  episodes.forEach(e=>{
+    const b=document.createElement('button');
+    b.className=e.ep===EP?'on':'';
+    b.textContent=e.ep+(e.title?' · '+e.title:'');
+    b.onclick=()=>{EP=e.ep;load()};
+    box.appendChild(b);
+  });
+}
+
+function shotCard(s,grp){
+  const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
+    {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
+  const imgs=(s.keyframes||[]).map(k=>
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></div></div>`);
+  const vids=(s.clips||[]).map(c=>
+    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
+  const chars=(s.characters||[]).join('、');
+  return `<div class="shot">
+    <div class="media">${imgs.join('')||'<div class="nomedia">(暂无关键帧)</div>'}</div>
+    <div class="info">
+      <div class="r1"><span class="sid">${esc(s.shot_id)}</span>
+        ${s.duration_s?`<span class="tag">${esc(s.duration_s)}s</span>`:''}
+        ${s.size?`<span class="tag">${esc(s.size)}</span>`:''}
+        ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+        <button class="editbtn" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发消息给总制片">✏️ 修改</button></div>
+      <div class="content">${esc(s.content||'')}</div>
+      ${s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:''}
+      ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
+    </div>
+    ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
+  </div>`;
+}
+
+const aid=s=>String(s??'').replace(/[^\w-]/g,'_');
+
+function groupCard(g,inner){
+  const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
+  const chars=(g.characters_union||[]).join('、');
+  const gloc=I18N.f('生成组 {ep}/{gid}(镜 {range}{sc};数据 directing/{ep}/shot_list.json 中 generation_groups group_id={gid},组视频 prompt assets/prompts/{ep}/{gid}.json,组视频 assets/clips/{ep}/{gid}.mp4)',
+    {ep:EP,gid:g.group_id,range,sc:g.scene_id?I18N.f(' · 场景 {s}',{s:g.scene_id}):''});
+  const sketches=(g.sketches||[]).map(k=>
+    `<div><img src="${esc(k.url)}" loading="lazy" onclick="zoom(this.src)" style="background:#fff">
+      <div class="cap" title="${esc(k.text)}"><span class="fn">🎨 ${esc(k.text||k.name)}</span>
+      <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
+  const anchors=(g.anchors||[]).map(k=>
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
+  const vids=(g.clips||[]).map(c=>
+    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段组视频提修改意见">✏️ 修改</button></div></div>`);
+  const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
+  const media=(anchors.length||vids.length||sketches.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
+  return `<div class="grp" id="a-g-${aid(g.group_id)}">
+    <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
+      <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
+      ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
+      ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
+      ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+      ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
+      <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
+      <button class="editbtn sketchbtn" data-grp="${esc(g.group_id)}" title="手机扫码为本组绘制空间线稿">🎨 手绘分镜</button>
+      <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
+    ${media}
+    <div class="gshots">${inner}</div>
+  </div>`;
+}
+
+let LAST_DATA=null;
+function render(d){
+  LAST_DATA=d;
+  renderEps(d.episodes||[]);
+  const box=$('#content');
+  const epi=(d.episodes||[]).find(e=>e.ep===d.ep)||{};
+  const shots=d.shots||[];
+  const ggroups=d.generation_groups||[];
+  let h=`<h2 class="title">${esc(d.ep)} ${esc(d.title||epi.title||'')}<span class="sub">${I18N.f('{n} 个分镜',{n:shots.length})}${ggroups.length?I18N.f(' · {n} 个生成组',{n:ggroups.length}):''}</span></h2>`;
+  if(epi.summary)h+=`<div class="summary">${esc(epi.summary)}</div>`;
+  const total=shots.reduce((a,s)=>a+(+s.duration_s||0),0);
+  const nKf=shots.filter(s=>(s.keyframes||[]).length).length;
+  const nClip=shots.filter(s=>(s.clips||[]).length).length;
+  if(shots.length){
+    h+=`<div class="stats">${I18N.f('总时长 {t}s · 已出关键帧 {kf}/{n} 镜 · 已出视频 {cl}/{n} 镜',
+      {t:Math.round(total),kf:nKf,cl:nClip,n:shots.length})}`;
+    if(ggroups.length){
+      const nGClip=ggroups.filter(g=>(g.clips||[]).length).length;
+      const nAnchor=ggroups.filter(g=>(g.anchors||[]).length).length;
+      h+=I18N.f(' · 生成组:已出锚点包 {a}/{n} · 已出组视频 {c}/{n}',
+        {a:nAnchor,c:nGClip,n:ggroups.length});
+    }
+    h+=`</div>`;
+  }
+  if(d.screenplay)h+=`<div class="doc closed"><h3 onclick="this.parentNode.classList.toggle('closed')">📜 剧本 screenplay.md</h3><div class="body"><pre>${esc(d.screenplay)}</pre></div></div>`;
+  if(d.narration)h+=`<div class="doc closed"><h3 onclick="this.parentNode.classList.toggle('closed')">🎙 旁白 narration.md</h3><div class="body"><pre>${esc(d.narration)}</pre></div></div>`;
+
+  const boards={};(d.board_scenes||[]).forEach(b=>{if(b.scene_no)boards[b.scene_no]=b});
+  // 按 shot_list 顺序分组场次
+  const order=[],groups={};
+  shots.forEach(s=>{
+    const sn=s.scene_no||'?';
+    if(!groups[sn]){groups[sn]=[];order.push(sn)}
+    groups[sn].push(s);
+  });
+  if(!shots.length&&!(d.board_scenes||[]).length){
+    h+='<div class="empty">该集还没有分镜(storyboard / shot_list 未产出)</div>';
+  }
+  // 镜号 → 生成组映射(组内首镜挂整组渲染,其余镜跳过,保持组内相邻)
+  const g1st={},gMember={};
+  ggroups.forEach(g=>{(g.shots||[]).forEach((sid,i)=>{gMember[sid]=g;if(i===0)g1st[sid]=g})});
+  // 旁白对位优先级(§7D ①):① shot_list.narration_anchors 定稿挂点(挂点镜/组精确)
+  // ② narration.md 锚含 grpNNN 时挂该组首镜 ③ beat 前缀匹配第一镜(场景级近似,标"未定稿")
+  // ④ 全不命中回落首场景顶部
+  const finalAnchor={};(d.narration_anchors||[]).forEach(a=>{if(a.narration_id)finalAnchor[a.narration_id]=a});
+  const grpFirstShot=g=>{const sid=g&&(g.shots||[])[0];return sid?shots.find(s=>s.shot_id===sid):null};
+  const narrByShot={},narrSceneTop={};
+  (d.narration_items||[]).forEach(n=>{
+    let hit=null;
+    const fa=finalAnchor[n.id];
+    if(fa){
+      const sid=(fa.anchor_shots||[])[0];
+      if(sid)hit=shots.find(s=>s.shot_id===sid);
+      if(!hit)hit=grpFirstShot(ggroups.find(x=>x.group_id===fa.anchor_group));
+      if(hit)n.pinned=fa; // 定稿挂点命中,展示时标注窗口
+    }
+    if(!hit){
+      const gm=(n.anchor||'').match(/grp\d+/i);
+      if(gm)hit=grpFirstShot(ggroups.find(x=>(x.group_id||'').toLowerCase()===gm[0].toLowerCase()));
+      if(gm&&hit)n.pinned={anchor_group:gm[0]};
+    }
+    if(!hit)hit=shots.find(s=>(s.beat||'').startsWith(n.anchor));
+    if(hit)(narrByShot[hit.shot_id]=narrByShot[hit.shot_id]||[]).push(n);
+    else if(shots.length){const sn=shots[0].scene_no||'?';(narrSceneTop[sn]=narrSceneTop[sn]||[]).push(n)}
+  });
+  const narrBlock=list=>list.map(n=>
+    `<div class="narr">🎙 <span class="nid">${esc(n.id)}</span>${esc(n.text)}<span class="nest">≈${n.est_s}s · ${t('旁白(后期轨,起于本镜位、riding over 后续镜)')} · ${n.pinned
+      ?t('挂点定稿:')+esc(n.pinned.anchor_group||'')+(n.pinned.window_s?esc(I18N.f(' 窗口{w}s',{w:n.pinned.window_s})):'')
+      :esc(I18N.f('⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示',{a:n.anchor}))}</span>
+     <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button></div>`).join('');
+  NAV=[];
+  order.forEach((sn,si)=>{
+    const b=boards[sn]||{};
+    const dur=groups[sn].reduce((a,s)=>a+(+s.duration_s||0),0);
+    const nGrp=new Set(groups[sn].map(s=>gMember[s.shot_id]&&gMember[s.shot_id].group_id).filter(Boolean)).size;
+    NAV.push({cls:'sc',id:`a-sc-${si}`,label:sn,hint:I18N.f('{n} 镜',{n:groups[sn].length})+` · ${Math.round(dur)}s`});
+    h+=`<div class="scene" id="a-sc-${si}"><h3>${esc(sn)}
+        ${b.scene_code?`<span class="tag">${esc(b.scene_code)}</span>`:''}
+        ${b.int_ext?`<span class="tag">${esc(b.int_ext)}</span>`:''}
+        <span class="tag">${I18N.f('{n} 镜',{n:groups[sn].length})}${nGrp?I18N.f(' · {n} 组',{n:nGrp}):''} · ${Math.round(dur)}s</span>
+        ${b.emotion&&b.emotion.type?`<span class="tag">${t('情绪:')}${esc(b.emotion.type)}</span>`:''}</h3>
+      ${b.director_beat_note?`<div class="beat">🎯 ${esc(b.director_beat_note)}</div>`:''}</div>`;
+    if(narrSceneTop[sn])h+=narrBlock(narrSceneTop[sn]);
+    const byId={};groups[sn].forEach(s=>{byId[s.shot_id]=s});
+    groups[sn].forEach(s=>{
+      const g=g1st[s.shot_id];
+      if(g){ // 组内首镜:渲染整组(组内镜卡就地内嵌;旁白卡插在锚定镜之前)
+        // 导航徽标:🎨手稿 📝注释 💬对白 🎙旁白 🎬视频(计数,0 不显示)
+        const gsids=g.shots||[];
+        const nDlg=gsids.filter(sid=>byId[sid]&&byId[sid].dialogue_ref).length;
+        const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
+        const badges=[];
+        if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
+        if(g.user_note)badges.push('📝');
+        if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');
+        if(nNarr)badges.push('🎙'+nNarr);
+        if((g.clips||[]).length)badges.push('🎬'+g.clips.length);
+        NAV.push({cls:'g',id:`a-g-${aid(g.group_id)}`,label:g.group_id,hint:I18N.f('{n} 镜',{n:gsids.length}),badges:badges.join(' ')});
+        h+=groupCard(g,(g.shots||[]).map(sid=>
+          (narrByShot[sid]?narrBlock(narrByShot[sid]):'')+(byId[sid]?shotCard(byId[sid],g.group_id):'')).join(''));
+      }else if(!gMember[s.shot_id]){ // 未入组的镜:平铺(向后兼容旧数据)
+        h+=(narrByShot[s.shot_id]?narrBlock(narrByShot[s.shot_id]):'')+shotCard(s);
+      }
+    });
+  });
+  const prevScroll=box.scrollTop;
+  box.innerHTML=h;
+  $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
+    `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
+  updateNavActive();
+  // 滚动位置记忆:刷新页面回到原位;页内操作(保存注释/删线稿等 load(true))保持原位;切集/切项目回顶
+  const skey='sb-scroll:'+(d.project||'')+':'+(d.ep||'');
+  box.dataset.skey=skey;
+  if(FIRST_RENDER){box.scrollTop=+localStorage.getItem(skey)||0;FIRST_RENDER=false}
+  else if(KEEP_SCROLL){box.scrollTop=prevScroll}
+  else box.scrollTop=0;
+  KEEP_SCROLL=false;
+}
+let FIRST_RENDER=true,KEEP_SCROLL=false,scrollSaveTick=null,NAV=[];
+// 右侧导航:点击平滑滚到对应场次/组
+$('#nav').addEventListener('click',e=>{
+  const b=e.target.closest('.nv');if(!b)return;
+  const el=document.getElementById(b.dataset.t);
+  if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+});
+// 滚动高亮:NAV 顺序即文档顺序,取视口顶端上方最近的锚点
+function updateNavActive(){
+  const box=$('#content'),bt=box.getBoundingClientRect().top;
+  let cur=null;
+  for(const n of NAV){
+    const el=document.getElementById(n.id);
+    if(!el)continue;
+    if(el.getBoundingClientRect().top-bt<=60)cur=n.id;else break;
+  }
+  document.querySelectorAll('#nav .nv').forEach(b=>b.classList.toggle('on',b.dataset.t===cur));
+  const on=document.querySelector('#nav .nv.on');
+  if(on)on.scrollIntoView({block:'nearest'});
+}
+$('#content').addEventListener('scroll',()=>{
+  if(scrollSaveTick)return;
+  scrollSaveTick=requestAnimationFrame(()=>{
+    scrollSaveTick=null;
+    const k=$('#content').dataset.skey;
+    if(k)localStorage.setItem(k,Math.round($('#content').scrollTop));
+    updateNavActive();
+  });
+});
+
+async function load(keep){
+  if(keep)KEEP_SCROLL=true;
+  const proj=$('#project').value.trim()||'demo';
+  history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
+  // keep 模式(页内操作就地更新)不清空内容:清空瞬间滚动条会被浏览器强制归零,"回到原位"随之失效
+  if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  try{
+    const r=await fetch('/api/preview/storyboard?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    const d=await r.json();
+    EP=d.ep||'';
+    if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
+    render(d);
+  }catch(e){$('#content').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`}
+}
+$('#reload').onclick=()=>load(true);
+const _q=new URLSearchParams(location.search);
+EP=_q.get('ep')||'';
+$('#project').value=_q.get('project')
+  ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+load();
+
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>

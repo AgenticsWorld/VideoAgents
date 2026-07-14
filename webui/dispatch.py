@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""dispatch.py — Director 派单工具(也可人工使用)。
+
+用法:
+  python3 webui/dispatch.py "<agent_id>" "<工作指令>" [--project demo] [--wait]
+  python3 webui/dispatch.py --list                # 列出全部 agent_id
+  python3 webui/dispatch.py --runs                # 查看运行状态
+  python3 webui/dispatch.py --status <run_id>     # 查看单个运行(含结果)
+  python3 webui/dispatch.py --wait-all <run_id...> # 等待多个运行全部结束(带进度心跳)
+  python3 webui/dispatch.py --confirm "<问题>" [--timeout 60] [--options 重跑,跳过] [--default 重跑]
+                                                  # 向用户发起确认,阻塞至答复或超时,stdout 输出所选项
+
+零依赖(仅标准库)。通过本机 Web 控制台 API 派单,所以 UI 上能实时看到。
+"""
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.request
+
+PORT = os.environ.get("WEBUI_PORT", "8630")
+BASE = f"http://127.0.0.1:{PORT}"
+PARENT = os.environ.get("WEBUI_RUN_ID")          # 由 server 注入:标记父运行
+DEFAULT_PROJECT = os.environ.get("WEBUI_PROJECT", "demo")
+DEFAULT_ENGINE = os.environ.get("WEBUI_ENGINE", "claude")   # 继承派单方的引擎
+
+
+# macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
+# 本工具只访问本机 webui,用空 ProxyHandler 强制直连,无需调用方 export no_proxy。
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def api(path: str, payload: dict | None = None):
+    req = urllib.request.Request(BASE + path)
+    if payload is not None:
+        req.data = json.dumps(payload).encode()
+        req.add_header("Content-Type", "application/json")
+    with _OPENER.open(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
+def fmt_run(r: dict) -> str:
+    dur = ""
+    if r.get("started"):
+        dur = f" {int((r.get('ended') or time.time()) - r['started'])}s"
+    par = f" ←{r['parent']}" if r.get("parent") else ""
+    return (f"[{r['status']:>7}] {r['id']} {r['agent']}{par}{dur} "
+            f"| {r.get('message', '')[:60]}")
+
+
+def heartbeat(note: str):
+    """把等待进度上报到父运行,UI 上实时可见。无父运行或旧版 server 时静默。"""
+    if not PARENT:
+        return
+    try:
+        api(f"/api/runs/{PARENT}/progress", {"note": note})
+    except Exception:
+        pass
+
+
+def confirm(question: str, timeout: int, options: list[str], default: str):
+    """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。"""
+    resp = api("/api/confirm", {"question": question, "timeout": timeout,
+                                "options": options, "default": default,
+                                "parent": PARENT})
+    cid = resp["confirm_id"]
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(2)
+        try:
+            c = api(f"/api/confirm/{cid}")
+        except Exception:
+            continue
+        if c.get("answer"):
+            heartbeat(f"✅ 用户选择「{c['answer']}」:{question[:100]}")
+            print(c["answer"])
+            return
+        heartbeat(f"❓ 等待用户确认(剩 {int(deadline - time.time())}s):{question[:120]}")
+    heartbeat(f"⏱ 确认超时,采用默认「{default}」:{question[:100]}")
+    print(default)
+
+
+def wait_all(ids: list[str], timeout: int, interval: int = 5):
+    """轮询等待多个 run 全部结束;每轮向父运行发心跳。"""
+    deadline = time.time() + timeout
+    while True:
+        runs = {}
+        for rid in ids:
+            try:
+                runs[rid] = api(f"/api/runs/{rid}")
+            except Exception as e:  # noqa: BLE001
+                runs[rid] = {"id": rid, "agent": "?", "status": "unknown",
+                             "error": str(e)[:120]}
+        pending = [r for r in runs.values()
+                   if r.get("status") not in ("done", "error")]
+        done_n = len(ids) - len(pending)
+        if not pending:
+            heartbeat(f"✅ {done_n}/{len(ids)} 子任务全部完成,正在验收")
+            failed = False
+            for rid in ids:
+                r = runs[rid]
+                print(fmt_run(r))
+                if r.get("files"):
+                    print("  产物:", *r["files"], sep="\n    ")
+                if r.get("result"):
+                    print("  --- 结果 ---")
+                    print("  " + (r["result"][:2000]).replace("\n", "\n  "))
+                if r.get("status") != "done":
+                    failed = True
+                    if r.get("error"):
+                        print("  错误:", r["error"])
+            sys.exit(1 if failed else 0)
+
+        def brief(r):
+            name = (r.get("agent") or "?").split("/")[-1]
+            dur = f" {int(time.time() - r['started'])}s" if r.get("started") else ""
+            return f"{name}({r.get('status')}{dur})"
+
+        note = (f"⏳ 等待子任务 {done_n}/{len(ids)}:"
+                + ", ".join(brief(r) for r in pending))
+        heartbeat(note[:280])
+        if time.time() > deadline:
+            print(f"等待超时({timeout}s),仍未完成:",
+                  ", ".join(r["id"] for r in pending))
+            sys.exit(2)
+        time.sleep(interval)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("agent", nargs="?")
+    ap.add_argument("instruction", nargs="?")
+    ap.add_argument("--project", default=DEFAULT_PROJECT)
+    ap.add_argument("--model", default=None)
+    # 默认 None:未显式指定时走「Agent 级模型配置 > 继承派单方引擎」;
+    # 显式传 --engine/--model 则强制覆盖该成员的 Agent 级配置(force)
+    ap.add_argument("--engine", default=None,
+                    choices=["claude", "codex", "deepagents"])
+    ap.add_argument("--wait", action="store_true")
+    ap.add_argument("--timeout", type=int, default=3600)
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--runs", action="store_true")
+    ap.add_argument("--status", metavar="RUN_ID")
+    ap.add_argument("--wait-all", nargs="+", metavar="RUN_ID", dest="wait_all")
+    ap.add_argument("--confirm", metavar="QUESTION")
+    ap.add_argument("--options", default="重跑,跳过")
+    ap.add_argument("--default", default=None, dest="default_opt")
+    args = ap.parse_args()
+
+    if args.list:
+        for a in api("/api/agents"):
+            mark = " [调度]" if a.get("dispatcher") else ""
+            print(f"{a['id']:<45} {a['name']}{mark}")
+        return
+
+    if args.runs:
+        for r in api("/api/runs"):
+            print(fmt_run(r))
+        return
+
+    if args.confirm:
+        opts = [o.strip() for o in args.options.split(",") if o.strip()]
+        timeout = args.timeout if args.timeout != 3600 else 60   # --confirm 默认 60s
+        confirm(args.confirm, timeout, opts, args.default_opt or opts[0])
+        return
+
+    if args.wait_all:
+        wait_all(args.wait_all, args.timeout)
+        return
+
+    if args.status:
+        r = api(f"/api/runs/{args.status}")
+        print(fmt_run(r))
+        if r.get("files"):
+            print("产物:", *r["files"], sep="\n  ")
+        if r.get("result"):
+            print("--- 结果 ---")
+            print(r["result"][:4000])
+        return
+
+    if not args.agent or not args.instruction:
+        ap.error("需要 <agent_id> 和 <工作指令>,或使用 --list/--runs/--status")
+
+    resp = api("/api/chat", {
+        "agent": args.agent, "message": args.instruction,
+        "project": args.project, "model": args.model,
+        "engine": args.engine or DEFAULT_ENGINE,
+        "force": bool(args.engine or args.model),
+        "source": "director" if PARENT else "cli", "parent": PARENT,
+    })
+    run_id = resp["run_id"]
+    print(f"已派单 run_id={run_id} → {args.agent}")
+
+    if args.wait:
+        deadline = time.time() + args.timeout
+        while time.time() < deadline:
+            time.sleep(5)
+            r = api(f"/api/runs/{run_id}")
+            dur = f" {int(time.time() - r['started'])}s" if r.get("started") else ""
+            heartbeat(f"⏳ 等待 {args.agent}({run_id} {r['status']}{dur})")
+            if r["status"] in ("done", "error"):
+                print(fmt_run(r))
+                if r.get("files"):
+                    print("产物:", *r["files"], sep="\n  ")
+                print("--- 结果 ---")
+                print((r.get("result") or r.get("error") or "")[:4000])
+                sys.exit(0 if r["status"] == "done" else 1)
+        print(f"等待超时({args.timeout}s),任务仍在后台运行,稍后用 --status {run_id} 查询")
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

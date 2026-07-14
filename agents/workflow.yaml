@@ -1,0 +1,341 @@
+# workflow.yaml — 小说→视频流水线 DAG(机器可读)
+# 与 WORKFLOW.md 保持同步;WORKFLOW.md 是人读权威,本文件是 orchestrator 的执行输入。
+# 约定:
+#   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台)
+#   validation.auto      机器校验(schema/指标),不过直接退回
+#   validation.rubric    evaluation Agent 的评分表,阈值默认 80
+#   validation.qa        专项 QA Agent 会签
+#   gate: 闸门任务,全部依赖通过才放行;human: true 表示需用户签字
+
+version: 1
+defaults:
+  eval_threshold: 80
+  max_retries: 3
+  on_fail: escalate_human
+  # 运行记录四件套(细则 WORKFLOW.md §6.1):任务关单前 runs/<task_id>/ 必须齐备,缺一不得置 done/passed
+  run_record: [context.md, result.json, eval.json, meta.json]
+  # 闸门通用机检(WORKFLOW.md §7 闸门放行硬约束):对 g0–g10 一律附加
+  gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
+              qa_hold_requires_waiver, human_checks_executed_or_waived]
+
+phases:
+  - id: p0
+    name: 摄入与立项
+    tasks:
+      - id: p0-init
+        agent: 00-orchestration/workflow-orchestrator
+        outputs: [runs/dag.json]
+        validation: { auto: [dag_acyclic, paths_valid] }
+      - id: p0-version-init
+        agent: 00-orchestration/version
+        depends_on: [p0-init]
+      - id: p0-bible-init
+        agent: 00-orchestration/memory-bible
+        depends_on: [p0-init]
+        outputs: [bible/]
+      - id: p0-parse
+        agent: 01-story/novel-parser
+        depends_on: [p0-init]
+        outputs: [story/structured_story.json]
+        validation:
+          auto: [schema, chapter_coverage_100, speaker_missing_lt_2pct]
+          rubric: extraction_v1
+          threshold: 85
+      - id: g0
+        gate: true
+        depends_on: [p0-parse, p0-bible-init, p0-version-init]
+
+  - id: p1
+    name: 剧情理解
+    depends_on: [g0]
+    tasks:
+      - { id: p1-structure, agent: 01-story/story-structure, outputs: [story/story_graph.json],
+          validation: { auto: [chapter_refs_valid], rubric: analysis_v1, qa: [11-qa/logic-qa] } }
+      - { id: p1-events, agent: 01-story/event, outputs: [story/events.json],
+          validation: { auto: [event_ids_unique, required_fields], rubric: extraction_v1 } }
+      - { id: p1-timeline, agent: 01-story/timeline-story, depends_on: [p1-events],
+          outputs: [story/story_timeline.json],
+          validation: { auto: [no_temporal_conflicts], qa: [11-qa/timeline-qa] } }
+      - { id: g1, gate: true, depends_on: [p1-structure, p1-events, p1-timeline],
+          validation: { auto: [events_mapped_to_graph_and_timeline] } }
+
+  - id: p2
+    name: 世界圣经
+    depends_on: [g1]
+    tasks:
+      - { id: p2-world,      agent: 02-worldbuilding/world,             outputs: [bible/world.json] }
+      - { id: p2-timeline,   agent: 02-worldbuilding/timeline,          outputs: [bible/timeline.json] }
+      - { id: p2-geography,  agent: 02-worldbuilding/geography,         outputs: [bible/geography.json] }
+      - { id: p2-religion,   agent: 02-worldbuilding/religion,          outputs: [bible/religion.json] }
+      - { id: p2-culture,    agent: 02-worldbuilding/culture,           outputs: [bible/culture.json] }
+      - { id: p2-political,  agent: 02-worldbuilding/political,         outputs: [bible/politics.json] }
+      - { id: p2-economy,    agent: 02-worldbuilding/economy,           outputs: [bible/economy.json] }
+      - { id: p2-magic,      agent: 02-worldbuilding/magic-cultivation, outputs: [bible/cultivation.json],
+          validation: { auto: [rank_order_acyclic] } }
+      - { id: p2-dictionary, agent: 02-worldbuilding/dictionary,        outputs: [bible/dictionary.json],
+          validation: { auto: [terms_unique] } }
+      # 共同校验(orchestrator 对 p2-* 统一附加):
+      #   auto: [schema, source_refs_required]; rubric: extraction_v1
+      # cross_refs_valid 覆盖全部 ID 命名空间(ev*/CHAR-*/SCN-*/地名/势力/术语),
+      # 任何引用指向不存在的 ID 即 FAIL(WORKFLOW.md §4 Phase 2)
+      - { id: p2-merge, agent: 00-orchestration/memory-bible,
+          depends_on: [p2-world, p2-timeline, p2-geography, p2-religion, p2-culture,
+                       p2-political, p2-economy, p2-magic, p2-dictionary],
+          outputs: [bible/@v1],
+          validation: { auto: [cross_refs_valid_all_namespaces, dictionary_hit_100pct], qa: [11-qa/world-consistency-qa, 11-qa/timeline-qa] } }
+      - { id: g2, gate: true, human: true, checkpoint: H1-世界圣经确认, depends_on: [p2-merge] }
+
+  - id: p3
+    name: 角色与资产
+    depends_on: [g2]
+    tasks:
+      - { id: p3-char-index, agent: 03-characters/character-manager,
+          outputs: [bible/characters/index.json],
+          validation: { auto: [ids_unique, alias_unambiguous], qa: [11-qa/character-consistency-qa] } }
+      - { id: p3-appearance, agent: 03-characters/appearance, for_each: character, depends_on: [p3-char-index],
+          outputs: ["bible/characters/{id}/appearance.json"], validation: { rubric: extraction_v1 } }
+      - { id: p3-growth, agent: 03-characters/character-growth, for_each: character, depends_on: [p3-appearance],
+          outputs: ["bible/characters/{id}/age_versions.json"], validation: { auto: [timeline_spans_valid] } }
+      - { id: p3-personality, agent: 03-characters/personality, for_each: character, depends_on: [p3-char-index],
+          outputs: ["bible/characters/{id}/personality.json"], validation: { rubric: analysis_v1, qa: [11-qa/logic-qa] } }
+      - { id: p3-relationship, agent: 03-characters/relationship, depends_on: [p3-char-index],
+          outputs: [bible/characters/relationship.json], validation: { auto: [edge_ids_valid] } }
+      - { id: p3-voice, agent: 03-characters/voiceprint, for_each: character,
+          depends_on: [p3-personality, p3-appearance],
+          outputs: ["bible/characters/{id}/voice.json"], validation: { qa: [11-qa/audio-qa] } }
+      - { id: p3-dialogue-style, agent: 03-characters/dialogue-style, for_each: character, depends_on: [p3-char-index],
+          outputs: ["bible/characters/{id}/dialogue_style.json"],
+          validation: { auto: [style_hit_rate_gte_80], rubric: analysis_v1 } }
+      - { id: p3-creature, agent: 04-creatures/creature, outputs: [bible/creatures/creature.json] }
+      - { id: p3-mount, agent: 04-creatures/mount, depends_on: [p3-creature], outputs: [bible/creatures/mount.json] }
+      - { id: p3-scene-index, agent: 05-scenes/scene, outputs: [bible/scenes/index.json],
+          validation: { auto: [ids_unique, geography_refs_valid] } }
+      - { id: p3-environment, agent: 05-scenes/environment, for_each: scene, depends_on: [p3-scene-index],
+          outputs: ["bible/scenes/{id}/environment.json"], validation: { auto: [season_time_consistent] } }
+      - { id: p3-architecture, agent: 05-scenes/architecture, for_each: scene, depends_on: [p3-scene-index],
+          outputs: ["bible/scenes/{id}/architecture.json"], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p3-lighting, agent: 05-scenes/lighting, for_each: scene, depends_on: [p3-environment],
+          outputs: ["bible/scenes/{id}/lighting.json"], validation: { qa: [11-qa/visual-qa] } }
+      - { id: g3, gate: true,
+          depends_on: [p3-appearance, p3-growth, p3-personality, p3-relationship, p3-voice,
+                       p3-dialogue-style, p3-mount, p3-environment, p3-architecture, p3-lighting],
+          validation: { auto: [all_refs_resolve], qa: [11-qa/character-consistency-qa] } }
+
+  - id: p4
+    name: 美术风格
+    depends_on: [g3]
+    # 本阶段全组任务的额外输入:refs/(用户参考图,约定与优先级见 WORKFLOW.md §2)
+    # 用户参考图 > Agent 自行发挥;凡引用须在产物 meta 记 user_refs
+    tasks:
+      - { id: p4-style, agent: 06-art/art-director, outputs: [bible/style.json], validation: { rubric: creative_v1 } }
+      - { id: p4-char-concept, agent: 06-art/character-concept, for_each: character, depends_on: [p4-style],
+          outputs: ["assets/concepts/characters/{id}/"],
+          validation: { auto: [appearance_fields_match], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
+      - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
+          outputs: ["assets/concepts/scenes/{id}/"], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
+          # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref
+          validation: { auto: [plot_props_coverage_100, prop_scale_defined] } }
+      - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json] }
+      - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
+          outputs: [bible/color_script.json], validation: { rubric: creative_v1, qa: [06-art/art-director] } }
+      - { id: p4-aspect, agent: 06-art/aspect-ratio, outputs: [bible/aspect_ratio.json],
+          validation: { auto: [platform_spec_match] } }
+      - { id: g4, gate: true, human: true, checkpoint: H2-美术风格锁定,
+          depends_on: [p4-char-concept, p4-env-concept, p4-prop, p4-costume, p4-color-script, p4-aspect] }
+
+  - id: p5
+    name: 剧本改编          # 与 p4 并行,均依赖 g3
+    depends_on: [g3]
+    tasks:
+      - { id: p5-episode-plan, agent: 01-story/episode-planner, outputs: [story/episode_plan.json],
+          validation: { auto: [events_assigned_once, duration_in_budget], rubric: writing_v1 } }
+      - { id: p5-screenplay, agent: 01-story/screenplay, for_each: episode, depends_on: [p5-episode-plan],
+          outputs: ["story/episodes/{ep}/screenplay.md"],
+          validation: { auto: [id_refs_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
+      - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
+          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }
+      - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
+          outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
+          validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
+      - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
+          outputs: ["story/episodes/{ep}/hooks.json"], validation: { rubric: creative_v1, qa: [human_pick] } }
+      - { id: p5-pacing, agent: 01-story/pacing, for_each: episode, depends_on: [p5-hooks],
+          outputs: ["story/episodes/{ep}/pacing.json"],
+          validation: { auto: [total_duration_pm_10pct], qa: [07-directing/director] } }
+      - { id: g5, gate: true, human: true, checkpoint: H3-第1集剧本确认, depends_on: [p5-pacing] }
+
+  - id: p6
+    name: 导演分镜
+    depends_on: [g4, g5]
+    for_each: episode          # 整个 phase 按集实例化;首集先行(pilot 策略)
+    tasks:
+      - { id: p6-plan, agent: 07-directing/director, outputs: ["directing/{ep}/directing_plan.md"],
+          validation: { rubric: creative_v1, qa: [06-art/art-director] } }
+      - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan],
+          outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)
+          validation: { auto: [scene_coverage_100, every_shot_in_group], rubric: visual_plan_v1 } }
+      - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [p6-storyboard],
+          outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
+          validation: { auto: [duration_sum_pm_10pct, id_refs_valid, shot_ids_unique,
+                               groups_cover_all_shots, group_shots_contiguous_same_scene,
+                               group_duration_4_15_int, group_characters_lte_4,
+                               narration_anchors_cover_all, narration_window_gte_est_x1.15,
+                               group_audio_plan_defined, ambient_only_groups_justified,
+                               dialogue_est_fits_group_x0.7] } }   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
+      - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
+      - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/shots/{shot}/composition.json"], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p6-cinematography, agent: 07-directing/cinematography, depends_on: [p6-plan],
+          outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
+      - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/shots/{shot}/blocking.json"],
+          validation: { auto: [presence_consistent_with_timeline] } }
+      - { id: p6-continuity, agent: 07-directing/continuity-planning,
+          depends_on: [p6-camera, p6-composition, p6-blocking],
+          outputs: ["directing/{ep}/continuity_plan.json"],   # 含 group_transitions(组间衔接检查)
+          validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent],
+                        qa: [11-qa/timeline-qa] } }
+      - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
+          validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
+                        qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·environment-concept·prop 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit] }   # 每集:用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+
+  - id: p7
+    name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)
+    depends_on: [g6]
+    for_each: group              # 按 shot_list.generation_groups 实例化
+    tasks:
+      - { id: p7-prompt, agent: 08-video-gen/prompt,
+          depends_on: [p8-sfx-cues, p8-ambience-cues],     # 每镜音频要素译自 sfx/ambience cue
+          outputs: ["assets/prompts/{ep}/{group}.json"],   # 组级多镜头 prompt;锚点图 prompt 在 {shot}.json
+          validation: { auto: [anchor_checklist_full, prompt_lt_1000_words, refs_match_materials,
+                               no_music_notation, negative_has_no_bgm, prop_scale_token_ok,
+                               prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
+                               nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
+      - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
+          outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5)
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
+                        qa: [11-qa/visual-qa] } }
+      - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
+          condition: group.has_character,
+          validation: { auto: [face_similarity_gte_0.85] } }
+      - { id: p7-video, agent: 08-video-gen/video-generation,
+          depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
+          outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
+          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,
+                               last_frame_saved, boundaries_detected],
+                        rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
+      - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video],
+          condition: defect_assigned,                      # 仅不换语音的音画对齐兜底;口型/语音缺陷默认整组重生成(TTS 换轨重驱口型已废止,§8A 红线)
+          validation: { auto: [av_offset_lt_80ms] } }
+      - { id: p7-animation, agent: 08-video-gen/animation, depends_on: [p7-video],
+          condition: defect_assigned, validation: { auto: [original_defect_recheck] } }
+      - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation],
+          validation: { auto: [target_resolution_ok] } }
+      - { id: g7, gate: true, scope: episode, depends_on: [p7-upscale],
+          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }
+
+  - id: p8
+    name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成,
+    depends_on: [g5, g6]   # sfx/ambience 产文字 cue、voice 产对白组干声锚、narrator 产旁白轨(均先于 p7-video);BGM 后期;旁白混入仍后期(§7D/§8A)
+    for_each: episode
+    tasks:
+      - { id: p8-sfx-cues, agent: 09-audio/sound-effect,
+          outputs: ["assets/audio/sfx/{ep}/audio_cues.json"],
+          validation: { auto: [key_action_cue_coverage_gte_90, no_music_terms] } }
+      - { id: p8-ambience-cues, agent: 09-audio/ambience,
+          outputs: ["assets/audio/ambience/{ep}/ambience_cues.json"],
+          validation: { auto: [every_scene_has_cue, cross_group_text_identical, no_music_terms] } }
+      - { id: p8-voiceprints, agent: 09-audio/voice-generation,
+          # §8A 改版(音色锚,2026-07-09):默认产出=每对白组单条台词干声轨 lines/grpNNN_dialogue.mp3
+          # (角色固定 tts_voice,正常语速,Σ≤15s,与冻结台词逐字一致);仅作组生成 reference_audio 音色锚,
+          # 严禁进成片对白(TTS 配音=严重口型问题);音色样本降为选角存档
+          # §7D ② 对白实测适配:干声实测 ≤ 组时长×0.8,超限回派 dialogue-rewrite 改短台词;
+          # 严禁压 --speed/atempo 硬塞——干声压速只掩盖超长,视频模型生成时照样赶词提速
+          outputs: ["assets/audio/voice/{ep}/lines/", "assets/audio/voice/{ep}/refs/manifest.json"],
+          validation: { auto: [dialogue_group_lines_coverage_100, group_lines_total_le_15s,
+                               lines_text_match_frozen_script, dialogue_fit_le_group_x0.8],
+                        qa: [11-qa/audio-qa] } }
+      - { id: p8-narrator, agent: 09-audio/narrator, outputs: ["assets/audio/narration/{ep}/"],
+          # 先于 p7-video:提前合成正式旁白轨并逐条实测时长(manifest 记挂点/实测),供 §7D 旁白适配检查;
+          # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A)
+          validation: { auto: [speech_rate_in_range, narration_fit_within_window_x0.9,
+                               no_overlap_with_dialogue], qa: [11-qa/audio-qa] } }
+      - { id: p8-music, agent: 09-audio/music, outputs: ["assets/audio/bgm/{ep}/"],
+          # BGM 只在需烘托处落 cue(开场/转折/高潮/收束),不从头铺到尾
+          validation: { auto: [bgm_coverage_30_60pct],
+                        qa: [11-qa/audio-qa, 11-qa/copyright] } }
+      # p8-voice(兜底逐句 TTS patches/ 供 lip-sync 重驱)已废止(2026-07-09,§8A 红线:
+      # TTS 进成片对白=严重口型问题);对白语音/口型缺陷走 p7-video 整组重生成
+      - { id: p8-mix, agent: 09-audio/audio-mixing,
+          depends_on: [p7-video, p8-narrator, p8-music],       # 原生轨来自全部组 clip
+          outputs: ["assets/audio/final/{ep}.wav"],
+          validation: { auto: [lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
+      - { id: g8, gate: true, depends_on: [p8-mix] }
+
+  - id: p9
+    name: 剪辑合成
+    depends_on: [g7, g8]
+    for_each: episode
+    tasks:
+      - { id: p9-edit, agent: 10-editing/edit, outputs: ["edit/{ep}/timeline.json", "edit/{ep}/cut_v1.mp4"],
+          validation: { auto: [duration_pm_5pct, no_black_frames], rubric: edit_v1 } }
+      - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p9-subtitle, agent: 10-editing/subtitle, depends_on: [p9-transition],
+          outputs: ["edit/{ep}/subtitles.srt"],
+          # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板
+          validation: { auto: [sync_lt_200ms, typo_check, line_length_ok, subtitle_style_ok] } }
+      - { id: p9-caption, agent: 10-editing/caption, depends_on: [p9-transition],
+          outputs: ["edit/{ep}/captions.json"], validation: { auto: [dictionary_match_100] } }
+      - { id: p9-title, agent: 10-editing/title, depends_on: [p9-edit],
+          # 下集预告默认不配旁白:文案走字卡/花字,声轨=画面原声+BGM;配音须工单显式指定
+          outputs: ["edit/{ep}/intro_outro/"],
+          validation: { auto: [teaser_no_narration], qa: [06-art/art-director] } }
+      - { id: p9-thumbnail, agent: 10-editing/thumbnail, depends_on: [p9-edit],
+          outputs: ["edit/{ep}/thumbnail_A.png", "edit/{ep}/thumbnail_B.png"],
+          validation: { auto: [aspect_safe_area_ok], qa: [human_pick] } }
+      - { id: g9, gate: true, human_on: first_episode, checkpoint: H4-首集成片确认,
+          depends_on: [p9-subtitle, p9-caption, p9-title, p9-thumbnail] }
+
+  - id: p10
+    name: 终审
+    depends_on: [g9]
+    for_each: episode
+    tasks:
+      - { id: p10-logic,       agent: 11-qa/logic-qa,                 outputs: ["qa/reports/{ep}/logic.json"],       pass: blocker_eq_0 }
+      - { id: p10-consistency, agent: 11-qa/character-consistency-qa, outputs: ["qa/reports/{ep}/consistency.json"], pass: score_gte_85 }
+      - { id: p10-timeline,    agent: 11-qa/timeline-qa,              outputs: ["qa/reports/{ep}/timeline.json"],    pass: conflicts_eq_0 }
+      - { id: p10-world,       agent: 11-qa/world-consistency-qa,     outputs: ["qa/reports/{ep}/world.json"],       pass: blocker_eq_0 }
+      - { id: p10-visual,      agent: 11-qa/visual-qa,                outputs: ["qa/reports/{ep}/visual.json"],      pass: defect_shots_lte_2pct }
+      - { id: p10-audio,       agent: 11-qa/audio-qa,                 outputs: ["qa/reports/{ep}/audio.json"],       pass: all_metrics_ok }
+      - { id: p10-safety,      agent: 11-qa/content-safety,           outputs: ["qa/reports/{ep}/safety.json"],      pass: no_platform_violations }
+      - { id: p10-copyright,   agent: 11-qa/copyright,                outputs: ["qa/reports/{ep}/copyright.json"],   pass: all_assets_licensed }
+      - { id: g10, gate: true, human: true, checkpoint: H5-发布签字,
+          depends_on: [p10-logic, p10-consistency, p10-timeline, p10-world,
+                       p10-visual, p10-audio, p10-safety, p10-copyright] }
+
+  - id: p11
+    name: 发布
+    depends_on: [g10]
+    tasks:
+      - { id: p11-adapt, agent: 12-publishing/platform-adapter, for_each: platform,
+          outputs: ["publish/{platform}/"], validation: { auto: [platform_spec_lint] } }
+      - { id: p11-seo, agent: 12-publishing/seo, depends_on: [p11-adapt],
+          outputs: [publish/seo.json], validation: { auto: [length_ok, banned_words], qa: [human_pick] } }
+      - { id: p11-meta, agent: 12-publishing/metadata, depends_on: [p11-adapt],
+          outputs: [publish/metadata.json], validation: { auto: [schema, required_fields] } }
+      - { id: p11-publish, agent: 12-publishing/publisher, depends_on: [p11-seo, p11-meta],
+          outputs: [publish/receipts/], validation: { auto: [receipt_success] }, max_retries: 2 }
+
+# 贯穿型 Agent(不在 DAG 中显式建任务,由 orchestrator 在派单/收单时自动调用)
+services:
+  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 Context Package
+  - { agent: 00-orchestration/evaluation,  hook: on_submit }         # rubric 评分(产出型任务无 eval 不得关单)
+  - { agent: 00-orchestration/version,     hook: on_artifact_write } # 实时版本化(落盘即登记,禁止事后补录常态化)
+  - { agent: 00-orchestration/memory-bible, hook: on_bible_access }  # Bible 读写仲裁
+  - { agent: 00-orchestration/workflow-orchestrator, hook: on_task_complete }
+    # 收尾钩子(WORKFLOW.md §6.1):校验 run_record 四件套 → 确认产物已实时登记 → 更新 runs/dag.json 节点 state/run_id;
+    # 三步未完成不得关单,dag.json 与 gate 文件、runs/ 产物不一致视为调度缺陷

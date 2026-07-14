@@ -1,0 +1,22 @@
+# writing_v1 — 剧本/旁白/拆集类产物评分表
+# 适用:episode-planner, screenplay, dialogue-rewrite, narration
+rubric: writing_v1
+threshold: 80
+dimensions:
+  - name: 忠实原著
+    weight: 30
+    check: 关键情节/人物动机不偏离;允许为视听化做合理压缩改编,改编点显式标注
+    anchors: { 95: 原著党挑不出硬伤, 80: 改编点均有标注且合理, 60: 关键情节走样 }
+  - name: 戏剧性
+    weight: 25
+    check: 冲突清晰、场与场之间有推进、无注水
+  - name: 对白/旁白自然
+    weight: 20
+    check: 符合角色 dialogue_style;口语顺耳;旁白不复述画面已表达的信息
+  - name: 可拍性
+    weight: 15
+    check: 每场可转化为镜头;无"内心活动无画面"类不可拍段落;引用的角色/场景 ID 合法
+  - name: 格式规范
+    weight: 10
+    check: 剧本格式(场景标题/动作/对白)规范;时长估算字段齐
+feedback_required: true

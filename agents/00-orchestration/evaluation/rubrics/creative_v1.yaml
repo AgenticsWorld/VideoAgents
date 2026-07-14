@@ -1,0 +1,19 @@
+# creative_v1 — 风格/钩子/导演阐述类创意产物评分表
+# 适用:art-director(style.json), color-script, hook, director(directing_plan)
+rubric: creative_v1
+threshold: 80
+dimensions:
+  - name: 契合原著气质
+    weight: 30
+    check: 创意方向与小说题材/基调匹配(仙侠不出赛博霓虹,除非有依据)
+  - name: 独特性
+    weight: 25
+    check: 不是模板化方案;有让人记住的记忆点
+  - name: 可执行性
+    weight: 30
+    check: 在当前生成能力/预算内可落地;给出的参考与负面清单具体可查
+    anchors: { 95: 下游可直接开工零追问, 80: 个别点需澄清, 60: 方案漂亮但做不出来 }
+  - name: 格式规范
+    weight: 15
+    check: 字段齐全;备选方案数量达标(如 hook 需 3 条)
+feedback_required: true

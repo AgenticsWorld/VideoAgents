@@ -1,0 +1,705 @@
+# WORKFLOW.md — 小说 → 视频 多 Agent 流水线总纲
+
+> 输入:一本小说(txt/epub,按章节存放)。
+> 输出:可发布的成片(分集视频 + 字幕 + 封面 + 各平台包)。
+> 团队:83 个 Agent,13 个类别,目录见 `agents/README.md`。
+> 本文档是唯一的流程权威(single source of truth for process);各 Agent 的职责细节见其目录下的 `SOUL.md`。
+
+---
+
+## 1. 核心原则
+
+1. **单一事实源**:所有世界观/角色/场景设定只存在于 Project Bible(`bible/`),由 `memory-bible` 唯一管理。任何 Agent 发现冲突只能上报,不得擅自改 Bible。
+2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
+3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
+4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 3 次,仍不过升级人工。
+5. **上下文按需组装**:Agent 不读全库。`context` Agent 为每个工单裁剪出 Context Package(只含该任务需要的 Bible 片段 + 上游产物)。
+6. **人工确认点(H1–H5 + H3A)不可跳过**:世界圣经、美术风格、首集剧本、**每集分镜(H3A)**、首集成片、发布,均需用户签字;其中分镜确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成。
+7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
+8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
+
+---
+
+## 2. 项目数据布局
+
+每个项目一个工作目录:
+
+```
+data/projects/<slug>/
+├── novel/          # 输入:小说原文(按章节)
+├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)与音乐(music/,见下方约定)
+├── story/          # structured_story.json, story_graph.json, events.json,
+│                   # story_timeline.json, episodes/ep01/screenplay.md ...
+├── bible/          # 世界圣经:world.json, timeline.json, geography.json, religion.json,
+│                   # culture.json, politics.json, economy.json, cultivation.json,
+│                   # dictionary.json, characters/<id>/*.json, creatures/, scenes/,
+│                   # style.json, props.json, costumes.json, color_script.json
+├── directing/      # ep01/directing_plan.md, storyboard.json(含 groups_draft),
+│                   # shot_list.json(含 generation_groups), continuity_plan.json,
+│                   # shots/sh014/{camera,composition,blocking}.json
+├── assets/         # prompts/(镜级锚点图 prompt shNNN.json + 组级视频 prompt grpNNN.json),
+│                   # keyframes/(组参考锚点图), clips/(组 clip grpNNN.mp4 + meta),
+│                   # sketches/(用户手绘分镜 epNN/grpNNN/,经控制台「✏️ 手绘分镜」手机扫码绘制;
+│                   #   2026-07-09 规则:原稿不直接进视频 refs——image-generation 先据手绘稿渲染
+│                   #   风格化图像 anchor_sketch_*.png 入锚点包,组视频以该生成图为参考图;
+│                   #   渲染图默认 [Image N] 软引用、严禁默认作整组 first_frame,硬锁须拆段+批准,见 §7A),
+│                   # audio/{voice,narration,bgm,sfx,ambience}/
+│                   #   voice/casting.json=项目级选角注册表(角色×形态→tts_model+tts_voice,全片唯一事实源),
+│                   #   voice/refs/=项目级音色样本;voice/epNN/ 只放集级产物 lines/ 与 patches/
+│                   #   (2026-07-12 改版:选角登记从 epNN/refs/manifest.json 上收到项目级,治跨集音色漂移)
+├── edit/           # ep01/{timeline.json, cut_v1.mp4, subtitles.srt, captions.json,
+│                   # intro_outro/, thumbnail.png, final.mp4}
+├── qa/             # reports/, defects/(缺陷工单)
+├── publish/        # <platform>/package/, seo.json, metadata.json, receipts/
+├── code/           # 本项目的一次性制作脚本(Agent 为完成任务写的脚本,内嵌本项目创作数据)
+└── runs/           # 工单、Context Package、评分记录、日志(runs/<task_id>/)
+```
+
+**项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(逐镜数据表、批量出图/合成脚本等)
+是项目产物,落 `data/projects/<slug>/code/` 并与其它产物一样用 `.version/vc.py register` 登记;
+**不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`)。脚本内定位仓库根
+用「向上找 modules/」标准头(见根 `code/README.md`),禁止硬编码绝对路径。
+
+### 用户参考目录 refs/(人工输入口)
+
+用户把「希望成片长成什么样」的参考图与希望使用的音乐文件直接丢进本目录,视觉设定类 Agent 与配乐 Agent **必须先查看、优先参考/选用**:
+
+```
+refs/
+├── style/        # 整体视觉风格:画风/渲染质感/色调/构图(截图、画集、他人作品均可)
+├── characters/   # 角色形象参考;按角色建子目录(refs/characters/<角色名或id>/)则定向生效
+├── scenes/       # 场景与世界观:建筑/地貌/氛围参考
+├── props/        # 道具/服装/法宝参考(服装可建 costumes/ 子目录)
+├── music/        # 用户希望使用的音乐文件(BGM 候选,mp3/wav/flac 等)
+├── thumbnail/    # 封面参考:他人爆款封面/构图/版式/文字风格范例(thumbnail Agent 优先参考)
+└── NOTES.md      # 可选:逐图/逐曲说明(哪张图管什么、哪首曲子想用在哪);有则必读
+```
+
+**使用规则**:
+1. **优先级**:用户参考图 > Agent 自行发挥。风格类决策(style.json、色彩、画风)与参考图冲突时,以参考图为准;与文字设定(Bible)冲突时上报用户裁决,不擅自取舍。
+2. **落痕迹**:凡参考了 refs/ 的产物,须在其 meta/prompts.json 里记录所用参考图路径(`user_refs` 字段);art-director 在 style.json 中写明每张风格参考图影响了哪些决策。
+3. **直接注入**:生成图像时把命中的参考图经 `genmedia --ref` 传入(见 §9);角色参考图同时作为 character-concept 三视图和 character-consistency 校正的形象锚点之一。
+4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可放参考图后重跑风格」。
+5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
+6. **用户音乐**:`refs/music/` 有文件时,配乐 Agent(`09-audio/music`)必须先逐曲试听分析(曲风/情绪/节奏/时长),再对照本集情绪曲线自行判断每首曲子适合用在视频的哪些位置(哪些场次/情绪段),优先选用用户音乐,不足的段落才生成补齐;NOTES.md 指定了用途的按指定执行。选用情况(含未选用及原因)写入 cue sheet,`license.source` 记 `user_provided` 并如实标注来源文件路径,版权仍由 `11-qa/copyright` 终审。
+7. **封面参考**:`refs/thumbnail/` 有图时,封面 Agent(`10-editing/thumbnail`)必须先逐图分析可借鉴点(构图/主体占比/文字位置与字重/色彩策略),作为 A/B 版设计的优先依据,并在送选清单 `user_refs` 字段落痕迹;NOTES.md 指定了用法的按指定执行。
+
+---
+
+## 3. 总流程 DAG(阶段视图)
+
+```
+                          小说原文
+                             │
+              ┌──── Phase 0 摄入与立项 ────┐
+              │  orchestrator / version /  │
+              │  memory-bible / novel-parser│
+              └─────────────┬──────────────┘
+                        [G0 闸门]
+                             │
+                 Phase 1 剧情理解(并行)
+            story-structure / event / timeline-story
+                             │
+                        [G1 闸门]
+                             │
+                 Phase 2 世界圣经(9 Agent 并行)
+      world/timeline/geography/religion/culture/political/
+              economy/magic-cultivation/dictionary
+                → memory-bible 合并 → [G2 + H1 人工确认]
+                             │
+                 Phase 3 角色与资产
+     character-manager →(appearance/growth/personality/
+       relationship/voiceprint/dialogue-style 并行)
+     creature/mount;scene →(environment/architecture/lighting)
+                        [G3 闸门]
+                             │
+          ┌──────────────────┴───────────────────┐
+   Phase 4 美术风格                        Phase 5 剧本改编
+   art-director →(character-concept/       episode-planner →(每集:
+   environment-concept/prop/costume/        screenplay→dialogue-rewrite→
+   color-script/aspect-ratio)               narration→hook→pacing)
+   [G4 + H2 人工确认]                       [G5 + H3 人工确认(第1集)]
+          └──────────────────┬───────────────────┘
+                             │(以下按集推进,首集为试点)
+                 Phase 6 导演分镜(每集)
+        director → storyboard → shot-planning →
+        (camera-movement/composition/cinematography/blocking 每镜并行)
+        → continuity-planning   [G6 闸门 + H3A 分镜确认(每集签字)]
+                             │
+          ┌──────────────────┴───────────────────┐
+   Phase 7 视觉生成(每组流水)              Phase 8 音频(每集)
+   prompt → image-generation →              sfx-cue/ambience-cue/音色样本/
+   character-consistency →                  旁白轨(先于 p7-video)→ music(后期)
+   video-generation(组序串行,原生音频)      → audio-mixing(原生轨+BGM+旁白,
+   → lip-sync(兜底)/animation → upscale       依赖全组 p7-video)[G8 闸门]
+   [G7 闸门,人工抽检 10%]
+          └──────────────────┬───────────────────┘
+                 Phase 9 剪辑合成(每集)
+        edit → transition → subtitle/caption → title → thumbnail
+                    [G9 闸门 + H4 首集人工确认]
+                             │
+                 Phase 10 终审(8 个 QA 并行)
+     logic-qa / character-consistency-qa / timeline-qa /
+     world-consistency-qa / visual-qa / audio-qa /
+     content-safety / copyright        [G10 + H5 发布签字]
+                             │
+                 Phase 11 发布
+     platform-adapter →(seo + metadata 并行)→ publisher
+```
+
+调度层 5 个 Agent(orchestrator / memory-bible / context / version / evaluation)贯穿全程,不属于任何单一 Phase。
+
+### 3.1 DAG 按集动态展开(强制)
+
+立项时生成的 dag.json 允许先用**阶段级模板节点**(p0–p11 各一套,不带集号)。但 `story/episode_plan.json` 通过 G5 后,orchestrator 必须**立即把「按集推进」的阶段展开为逐集节点**,此后模板节点不得再承接任何工单:
+
+1. **展开范围**:Phase 5 的每集任务(screenplay/dialogue/narration/hook/pacing)与 Phase 6–10 全部节点,按 `pX-<task>-epNN` 逐集生成;每集自带闸门节点 `g6-epNN`(H3A 分镜签字,human)、`g7-epNN`、`g8-epNN`、`g9-epNN`(H4 仅首集 human)、`g10-epNN`(H5 发布签字,human)。Phase 11 按发布单元展开。集间依赖遵循试点策略(首集全链路过 H4 后,后续集方可批量推进)。
+2. **模板节点处置**:被展开覆盖的模板节点(如 `p6-plan`、`g6`)在展开时置为 `state: expanded` 并在 `note` 里指向逐集节点;**严禁拿单套模板节点跨集复用**——首集跑完把模板标 passed、后续集工单游离于 DAG 之外,会让空转看门狗失明。
+3. **补录回填**:若展开时该集已有既往工单(历史修复场景),按 `runs/<task_id>/` 实际记录回填节点 `state` 与 `run_id`,changelog 标注 `backfill`。
+4. **一致性机检**:episode_plan 中的每个 epNN 在 DAG 中必须至少有一个节点;未完结的 epNN 必须存在可跑或待签节点。任一不满足即视为调度缺陷(同 §6.1 三方不一致)。Web 控制台空转看门狗会对「plan 有集、DAG 无节点」自动告警并唤醒 orchestrator 补展开。
+
+同理,`dynamic_expansion` 的其余维度(shot/组、character、scene、platform)在对应索引产物冻结后按需展开,粒度至少到能让「依赖已满足的待办节点」反映真实前沿为止。
+
+---
+
+## 4. 分阶段明细:发给谁、什么指令、怎么校验
+
+每张表的「校验」列按三道闸展开:**机检**(自动)/ **评分**(evaluation Agent,rubric 阈值 80)/ **QA**(专项审核 Agent 或人工)。
+
+### Phase 0 — 摄入与立项
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| workflow-orchestrator | 为小说 `<slug>` 立项:初始化目录、生成全流程 DAG、登记全部工单 | 小说原文、本文档、workflow.yaml | `<项目目录>/runs/dag.json`、工单队列 | 机检:DAG 无环、每个任务的依赖/产物路径合法 |
+| version | 初始化项目版本库,登记基线 | 项目目录 | 版本库 + changelog | 机检:能记录/回滚任一产物 |
+| memory-bible | 初始化空 Bible 骨架与写入规则 | 项目目录 | `bible/` 骨架 | 机检:骨架 schema 齐全 |
+| novel-parser | 解析全书:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式) | `novel/` | `story/structured_story.json` | 机检:schema 通过;章节覆盖率 100%;对白说话人缺失率 <2%。评分:extraction_v1 ≥85。QA:抽样 3 章人工比对原文 |
+
+**G0 闸门**:structured_story 通过全部校验,后续任务才解锁。
+
+### Phase 1 — 剧情理解(并行)
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| story-structure | 分析全书结构:幕/弧线、主线支线、伏笔与回收点 | structured_story | `story/story_graph.json` | 机检:每个节点引用合法章节。评分:analysis_v1。QA:logic-qa 预审(伏笔无回收须显式标注) |
+| event | 提取事件卡:时间/地点/人物/起因/经过/结果/因果链 | structured_story | `story/events.json` | 机检:人物/地点字段非空、事件 ID 唯一。评分:extraction_v1。QA:因果链断裂清单人工抽查 |
+| timeline-story | 建立叙事顺序 vs 故事时间双轴,标注闪回/插叙 | structured_story、events | `story/story_timeline.json` | 机检:时间轴无矛盾(先死后活类冲突=0)。QA:timeline-qa 预审 |
+
+**G1 闸门**:三者互查通过(事件均能挂上时间轴与结构图)。
+
+### Phase 2 — 世界圣经(9 Agent 并行 → 合并)
+
+统一指令模板:「从 structured_story + events 中抽取你负责的领域设定;**每条设定必须注明原文出处(章节)**;原文没写但制作必需的,标 `inferred: true` 并给推断理由;术语以 dictionary 为准。」
+
+| Agent | 领域 | 输出 | 校验 |
+|---|---|---|---|
+| world | 世界总览、国家、势力 | `bible/world.json` | 共用:机检 schema + 出处字段必填;评分 extraction_v1 ≥80;QA:world-consistency-qa 对 9 份文件交叉审(同一事实两处说法不一 = 缺陷单) |
+| timeline | 世界史、纪年、大事件 | `bible/timeline.json` | 同上 + timeline-qa 审纪年自洽 |
+| geography | 地形、山川、城市布局 | `bible/geography.json` | 同上 + 与 world.json 地名互查 |
+| religion | 宗教、神明、信仰 | `bible/religion.json` | 同上 |
+| culture | 风俗、语言、礼仪 | `bible/culture.json` | 同上 |
+| political | 政体、阵营、外交关系 | `bible/politics.json` | 同上 + 与 world 势力表对齐 |
+| economy | 货币、贸易、物价 | `bible/economy.json` | 同上 |
+| magic-cultivation | 修炼/力量体系、等级、技能 | `bible/cultivation.json` | 同上 + 等级体系单调性检查(境界排序无环) |
+| dictionary | 全库专有名词统一释义 | `bible/dictionary.json` | 机检:词条唯一;QA:其余 8 份文件的术语 100% 能在词典命中 |
+| memory-bible | 将 9 份文件合并为 Bible v1,解决冲突或上报 | 上述 9 份 | `bible/` v1 + changelog | 机检:合并后交叉引用完整——`cross_refs_valid` 必须覆盖**全部 ID 命名空间**(事件 `ev*`、角色 `CHAR-*`、场景 `SCN-*`、地名/势力/术语),任何引用指向不存在的 ID 即 FAIL,禁止只查部分命名空间的空洞通过。QA:world-consistency-qa 终审 |
+
+**G2 闸门 + H1 人工确认**:用户审阅 Bible 摘要并签字。签字后 Bible 进入受控状态(改动需走变更流程)。
+
+### Phase 3 — 角色与资产
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| character-manager | 注册全部角色:唯一 ID、别名/曾用名合并、戏份分级(S/A/B/群演) | structured_story、events | `bible/characters/index.json` | 机检:ID 唯一、别名无二义。QA:character-consistency-qa 抽查重名合并正确性 |
+| appearance | 每个 S/A/B 级角色的外观卡(发色、瞳色、体型、标志物…可直接喂给绘图) | index + 原文出处 | `bible/characters/<id>/appearance.json` | 机检:必填字段齐;评分 extraction_v1;QA:与原文描写冲突 = 缺陷单 |
+| character-growth | 有年龄跨度的角色的分龄形象版本 | appearance、story_timeline | `<id>/age_versions.json` | 机检:每版本挂在合法时间轴区间 |
+| personality | 性格、动机、行为习惯、禁忌 | structured_story | `<id>/personality.json` | 评分 analysis_v1;QA:logic-qa 抽查「性格-行为」矛盾 |
+| relationship | 全角色关系图(类型、强度、随剧情的变化) | events、index | `bible/characters/relationship.json` | 机检:边引用合法 ID;QA:关键关系与原文抽样比对 |
+| voiceprint | 每个有台词角色的声音设定(音色、语速、口音、参考声线) | personality、appearance | `<id>/voice.json` | 机检:字段齐;QA:audio-qa 审「声音-人设」匹配度 |
+| dialogue-style | 每个角色的说话风格卡(口头禅、句式、用词禁区) | structured_story 对白集 | `<id>/dialogue_style.json` | 评分 analysis_v1;QA:用原文台词回测风格卡命中率 ≥80% |
+| creature | 妖兽/动物图鉴(形态、习性、战力) | structured_story | `bible/creatures/creature.json` | 同 appearance 标准 |
+| mount | 坐骑/飞禽设定 | creature | `bible/creatures/mount.json` | 同上 |
+| scene | 注册全部场景:唯一 ID、层级(地域>建筑>房间)、出场章节 | structured_story、geography | `bible/scenes/index.json` | 机检:ID 唯一、挂靠 geography 合法 |
+| environment | 每场景的天气/季节/昼夜可变维度 | scene index、story_timeline | `bible/scenes/<id>/environment.json` | 机检:与时间轴一致(冬天的戏不能是盛夏场景) |
+| architecture | 建筑风格卡(可喂给绘图) | scene、culture | `<id>/architecture.json` | QA:visual-qa 预审风格描述可执行性 |
+| lighting | 每场景基准光照方案(日/夜/室内外) | scene、environment | `<id>/lighting.json` | QA:visual-qa 预审 |
+
+**G3 闸门**:引用完整性全查——所有角色/场景子文件挂在合法 ID 上;character-consistency-qa 出报告。
+
+### Phase 4 — 美术风格(依赖 G3)
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| art-director | 制定全片风格圣经:画风、渲染流派、参考片、负面清单(禁止元素);**先盘点 refs/,风格决策以用户参考图为准并在 style.json 记录对应关系** | Bible、用户偏好、**refs/(用户参考图,§2)** | `bible/style.json` | 评分 creative_v1;**H2 由用户签字锁定** |
+| character-concept | 为 S/A 级角色出人设参考图(prompt + 生成 + 挑选三视图);**refs/characters/ 命中该角色的参考图必须经 --ref 注入并记录** | appearance、style.json、refs/characters/ 与 refs/style/ | `assets/concepts/characters/<id>/` | 机检:与 appearance 字段逐项对照;QA:visual-qa + character-consistency-qa 打分 ≥80 |
+| environment-concept | 关键场景概念图;**refs/scenes/ 命中的参考图经 --ref 注入并记录** | scene、architecture、lighting、style、refs/scenes/ 与 refs/style/ | `assets/concepts/scenes/<id>/` | QA:visual-qa 对照 style.json |
+| prop | 武器/道具/法宝设定卡+参考图;优先参考 refs/props/;**剧情道具必填 `scale` 三字段(canonical_size 数值仲裁/relative_anchor 相对参照/prompt_token 全片唯一英文短语)并出比例锚图 scale_ref_01.png(道具与持有角色同框)**——跨 clip 尺度一致性的源头锚 | structured_story、style、refs/props/ | `bible/props.json` | 机检:关键道具(剧情道具)覆盖率 100%;剧情道具 scale 字段齐 + 比例锚图落盘(prop_scale_defined) |
+| costume | 服装系统(按角色×场合×时期);优先参考 refs/props/costumes/ 与 refs/characters/ | appearance、culture、story_timeline、refs/ | `bible/costumes.json` | QA:continuity 维度预审(换装点明确) |
+| color-script | 全片色彩曲线(每集/每幕的主色调与情绪);色调基准优先取自 refs/style/ | story_graph、episode_plan、refs/style/ | `bible/color_script.json` | 评分 creative_v1;QA:art-director 会签 |
+| aspect-ratio | 决定画幅与分辨率矩阵(横/竖/多平台);**目标平台清单取自「📤 输出设置」发布平台多选(提示词注入,非口述猜测),母版画幅 = 输出设置主画幅(aspect_preset),平台矩阵须覆盖所选平台的全部画幅,与母版不同画幅的平台标裁切/缩放规则** | 「📤 输出设置」发布平台与主画幅 | `bible/aspect_ratio.json` | 机检:所选发布平台 100% 有条目、母版可派生各平台规格 |
+
+**G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒可补充参考图重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
+
+### Phase 5 — 剧本改编(与 Phase 4 并行,依赖 G1/G2/G3)
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| episode-planner | 全书拆集:每集事件范围、目标时长、卡点位置;产出总表 | story_graph、events、pacing 约束、目标平台 | `story/episode_plan.json` | 机检:事件 100% 被分配且不重复;每集时长在预算内。评分 writing_v1 |
+| screenplay(每集) | 把该集事件改写为剧本(场景标题/动作/对白/转场) | episode_plan、structured_story、Bible | `story/episodes/epNN/screenplay.md` | 机检:场景/角色引用合法 ID。评分 writing_v1 ≥80。QA:logic-qa 逐集审 |
+| dialogue-rewrite(每集) | 优化对白:符合各角色 dialogue_style、口语化、时长可控 | screenplay、dialogue_style | 更新 screenplay 的对白层 | 机检:风格卡命中率 ≥80%;单句时长估算 ≤ 配音上限 |
+| narration(每集) | 生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
+| hook(每集) | 设计开头 3 秒钩子与结尾悬念;给出备选 3 条 | screenplay、下一集 episode_plan | `epNN/hooks.json` | 评分 creative_v1;QA:人工从备选中挑选或要求重写 |
+| pacing(每集) | 节奏审定:逐场时长分配、情绪曲线、删减建议 | screenplay、color_script | `epNN/pacing.json` | 机检:总时长 = 预算 ±10%;QA:director 会签 |
+
+**G5 闸门 + H3 人工确认**:第 1 集剧本用户签字后,后续集按同标准批量流转(用户可抽查)。
+
+### Phase 6 — 导演分镜(每集,依赖 G4+G5)
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| director | 撰写本集导演阐述:视觉基调、重点场次处理、镜头语言倾向 | screenplay、pacing、style、color_script | `directing/epNN/directing_plan.md` | 评分 creative_v1;QA:art-director 会签 |
+| storyboard | 分镜设计:逐场拆分镜头草案(画面内容、构图草描);按叙事节拍划分生成组草案 groups_draft(同场景、连续、Σ≤15s、对话轮不跨组) | directing_plan、screenplay | `epNN/storyboard.json`(含 groups_draft) | 机检:剧本场景覆盖率 100%;每镜均入组。评分 visual_plan_v1 |
+| shot-planning | 定稿镜头表:镜号、时长、景别、机位、出场角色/场景 ID、是否对白镜头;定稿生成组 generation_groups;**定稿旁白挂点 narration_anchors 与逐组音频形态 audio_plan(dialogue/narration_over/ambient_only),对无声组(ambient_only)逐组核查纯画面能否讲清叙事,讲不清回派 narration 补写旁白(新版本写回 narration.md)或上报剧本变更加对白(§7D ①);dialogue 组逐组核对台词估时能否装进组时长,超限优先回派 dialogue-rewrite 改短台词(§7D ①)** | storyboard、pacing、narration.md | `epNN/shot_list.json`(含 generation_groups、narration_anchors、逐组 audio_plan) | 机检:Σ镜头时长 = 集时长 ±10%;角色/场景 ID 合法;镜号唯一;组:镜号全覆盖不重叠、同场景连续、Σ∈[4,15] 整数秒、组内出场角色 ≤4;**旁白:条目 100% 有挂点、镜/组引用合法、窗口 ≥ est_duration_s×1.15;组 audio_plan 100% 必填,ambient_only 组必附 silent_rationale(§7D);对白:dialogue 组 Σ台词估时 ≤ 组时长×0.7(§7D ①)** |
+| camera-movement(每镜) | 运镜设计(推拉摇移/手持/稳定器,速度曲线) | shot_list、directing_plan | `shots/<id>/camera.json` | 机检:运镜类型在受支持的生成能力清单内 |
+| composition(每镜) | 构图设计(九宫格位置、前中后景、视线方向) | storyboard、shot_list | `shots/<id>/composition.json` | QA:visual-qa 预审可执行性 |
+| cinematography | 本集镜头语言规范(镜头焦段习惯、色温倾向、景深策略) | directing_plan、style | `epNN/cinematography.json` | QA:art-director 会签 |
+| blocking(每镜) | 人物调度(站位、走位、动作节拍) | shot_list、scene、relationship | `shots/<id>/blocking.json` | 机检:人物在场合法性(该时间点该人物必须在该地点,查 story_timeline) |
+| continuity-planning | 跨镜头连续性检查表:轴线、光线方向、服装/道具状态;组间衔接检查(组边界轴线/光线/服装、尾帧锚链完整) | shot_list + 各镜头设计 | `epNN/continuity_plan.json` | 机检:轴线跳变清单为空或有豁免说明;组衔接表覆盖全部相邻组;QA:timeline-qa 会签 |
+| concept-coverage-audit(art-director,每集) | 汇总 shot_list 本集出场实体 × 所需视图,比对 `concepts/` 与 `props.json` 现货,列缺口清单并回派 character-concept/environment-concept/prop 补齐(§6A) | shot_list、`assets/concepts/`、`bible/props.json`、appearance/environment/props 设定 | `directing/epNN/concept_coverage.json` | 机检 `concept_coverage_ok`:出场实体 × 所需视图 100% 有现货;补出概念图过 visual-qa + character-consistency-qa 常规打分入库 |
+
+> **§6A 概念图覆盖审计(concept coverage audit,每集,G6 前强制,机检 `concept_coverage_ok`)**:Phase 4 只为 S/A 角色与关键场景出概念图,而本集**真正出场的实体以 `shot_list` 为准**——B 级角色、次要地点、本集新出场的剧情道具,其概念图缺口若漏到 p7-image,模型只能凭 appearance/props 文字脑补形象,跨组一致性从源头失守(出图经验见 char-concept / env-concept 笔记)。故 shot-planning 定稿后、H3A 签字前,art-director 执行一次覆盖审计:
+> ① **枚举需求**:从 `shot_list` 汇总本集全部出场实体(角色 `CHAR-*`、场景 `SCN-*`、剧情道具)及每个实体所需视图——角色=三视图 + 剧情所需的关键表情/服装版本;场景=关键概念图 + 按 `environment.json` 的昼夜/季节/光照变体;剧情道具=样式图 + 比例锚图 `scale_ref_01.png`(§Phase 4 prop);
+> ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);
+> ③ **补齐派发**:缺口回派对应概念 Agent——角色缺→character-concept、场景缺→environment-concept、道具缺→prop(道具须一并补齐 `scale` 三字段与比例锚图);补出的概念图经 visual-qa / character-consistency-qa 常规打分入库,与 Phase 4 同标准;
+> ④ **产出清单**:`directing/epNN/concept_coverage.json`(每实体:所需视图、现货路径、缺口状态 `covered | dispatched | filled`),进「分镜设定」预览页供 H3A 审看。
+> **机检 `concept_coverage_ok`**:本集 shot_list 出场实体 × 所需视图 100% 有现货(状态全 `covered`/`filled`)方可发起 H3A 签字;**未过不得派发本集任何 p7-image / p7-video 工单**(与 §7D ① 估时级机检并列为 G6 前置硬闸)。新出场 S/A 主角若 Phase 4 遗漏,其新概念图须在 H3A 预览页**显著标注供用户确认**(等同 H2 风格锁定的每集延伸)。
+
+**G6 闸门 + H3A 分镜确认(每集)**:shot_list(含 generation_groups)机检/QA 通过后,orchestrator 经 confirm 机制向用户发起**分镜签字**——用户在控制台「分镜设定」预览页审看本集分镜脚本、组划分、旁白挂点(含估时级适配结果)、对白组台词估时适配、逐组音频形态与无声组判定、**概念图覆盖审计结果(§6A;含本集新出场实体的补图与遗漏主角标注)**(可用「📝 注释」「✏️ 手绘分镜」预先注入导演意图)后签字;**§6A 概念图覆盖机检(`concept_coverage_ok`)与 §7D ① 估时级机检(旁白挂点/对白台词适配 + 组 audio_plan 齐备 + 无声组判定)未过不得发起签字,签字前不得派发本集任何 p7-* 工单**。签字后 shot_list 冻结,进入生成;签字后改分镜=走变更流程并评估重做成本。
+
+### Phase 7 — 视觉生成(每组流水线,依赖 G6+H3A)
+
+> **§7A 生成组(generation group)范式**:一组同场景相邻镜头一次 Seedance 2.0 多镜头生成。
+> 组内一致性由单次生成天然保证;组间用「上一组尾帧(return_last_frame)作下一组参考锚」续接,
+> 故 video-generation 按组序串行——**串行范围是续接链而非全集**:场景切换处若组首镜不引用前组
+> 尾帧(refs 无尾帧、continuity_from 置 null),链在此断开,**断点两侧的组段可并行生成**
+> (各段独立状态文件;判定与操作细则见 video-generation SOUL.md「实战经验」)。**续接措辞规则**:组首镜与前组尾帧人物阵容一致时用
+> "opening continues from [Image N]"(延续构图);组首镜含前组尾帧中**不存在的角色**时,
+> 改用 "same location and lighting as [Image N], cut to a new <景别>" 并给新角色写入场/走位动作
+> ——否则模型会延续上帧构图,新角色凭空出现(前科:ep01 grp007→grp008)。三种图生模式互斥(首帧/首尾帧/多参考图),组生成走多参考图
+> 模式,keyframe 的角色是**参考锚点**(prompt 内 `[Image N]` 软引用),不再逐镜硬锁首尾帧。
+> **`[Image N]` 编号铁律(2026-07-13)**:N = refs 数组下标 + 1(1-based,refs[0]=[Image 1],
+> 场景概念图/尾帧一律计数)。按 0-based 下标编号是既成事故模式——ep05 整批 57 处错位,
+> `角色@Image2` 全部错指前组续接尾帧,凡尾帧是对方角色的组**说话人互换**,十组返工
+> (前科:ep01 grp017 同因)。机检 `imageref_bound`(prompt 产出后脚本全批核对 + video-generation
+> 开跑前复核):每个 `<角色>@Image N` 的 refs[N-1] 必须含该角色 CHAR id、
+> "continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧;不符=退回重编号,禁直接开跑。
+> 每镜精确时长不可控(模型按剧情定节奏):组总时长是硬约束(±1s),镜级时长是节奏意图;
+> 组 clip 内实际镜头边界由切变检测写入 meta 供剪辑/QA 对位。原生音频(generate_audio)默认开,
+> 对白在组 prompt 用 `{台词}`、对白组干声轨作 reference_audio **音色锚**(仅锚音色,对白语音
+> 与口型由模型原生合成——TTS 严禁用作对白配音,口型问题红线见 §8A),音效/环境声按 cue 文字注入;
+> **BGM 与旁白一律后期**(prompt 禁 `（）` 与音乐描述);lip-sync 仅剩不换语音的对齐兜底。音频范式详见 §8A。
+> 单镜首尾帧模式保留为兜底路径(组生成质量不达标时逐镜重做)。
+>
+> **手绘分镜渲染图的首帧红线(2026-07-09)**:用户手绘分镜经 image-generation 渲染出的
+> `anchor_sketch_*.png` 是**动作参考锚**——手绘描绘的是导演要的决定性瞬间,通常在组中段而非开场,
+> 默认只作多参考图模式的 `[Image N]` 软引用(prompt 写明该瞬间所在 Shot 段与拍点),
+> **严禁默认升级为整组 `--first-frame`**(前科:ep01 grp021/022/028/029 渲染图被硬锁成整组首帧,
+> 视频第 0 帧即手绘构图,起手铺垫全丢、与前组尾帧续接断裂)。软引用反复(≥3 次)不达标需硬锁时,
+> 走**拆段兜底**(orchestrator 批准):组在手绘瞬间处拆成子段,渲染图作后段首帧或前段尾帧再拼接;
+> 仅当手绘就是组首镜开场画面(sketch 标注/用户注释可证,回执 meta 附依据)才允许作整组首帧。
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| prompt(每组) | 组级多镜头视频 prompt(官方 Shot 1:/Shot 2: 结构,**开头内嵌风格锚点 `Overall visual style: ...`、结尾并入 `Global constraints:` 全局负面句**——anchors/negative 字段不会进入生成请求;每镜按运镜/主体动作/空间位置/音频四要素,`[Image N]`/`@` 绑定素材,`{}` 对白;音频要素译自 sfx/ambience cue,禁 `（）` 与音乐描述;**剧情道具首现 Shot 段逐字拼入 props.json 的 `scale.prompt_token`,禁写数值尺寸,Global constraints 并入尺度恒定句**;**按组 audio_plan 注入音频形态:narration_over/ambient_only 组禁 `{}` 台词、Global constraints 必含无对白约束句,narration_over 组开头声明该段配后期旁白、人物不开口,§7D ③**);另出组锚点图的图像 prompt | 组内全部设计文件 + Bible 片段 + continuity 状态表 + audio_cues/ambience_cues + voice 样本清单 | `assets/prompts/epNN/grpNNN.json`(组)+ `<shot>.json`(锚点图) | 机检:必含要素清单(风格锚点/角色锚点/画幅)全命中且 video_prompt 以 `Overall visual style:` 开头;<1000 词;素材引用与 refs 清单一致;禁写色号/元信息;道具尺度锚命中(prop_scale_token_ok);**组内出场剧情道具参考图列入 refs 清单、首现组必含比例锚图 scale_ref_01.png(prop_ref_listed——只有文字 token 没有图,道具样式全靠模型脑补)**;**`@Image N` 绑定命中(imageref_bound,脚本全批执行,§7A 编号铁律):每个 `<角色>@Image N` 的 refs[N-1] 含该角色 CHAR id、continues from 的 [Image N] 指向尾帧/锚帧——1-based,错位=说话人互换(前科 ep01 grp017、ep05 十组)**;**非对白组无 `{}` 且含无对白约束句(nonspeech_group_prompt_ok,§7D ③)** |
+| image-generation(每组) | 组参考锚点包:优先复用角色三视图/场景概念图,必要时补生成组开场锚帧;**道具锚优先取比例锚图 scale_ref_01.png(特写图无比例信息,防跨组尺度漂移)**;**组内有用户手绘分镜的,先据手绘稿渲染风格化图像(anchor_sketch_*.png)入锚点包——原稿严禁直接进视频 refs;渲染图 meta role 记 `action_ref`(参考锚),严禁标注首帧强锚(首帧红线见 §7A)**;**一切新生成锚帧必带所涉实体概念图 --ref 与 style.json 风格锚(§7E ①②)** | prompt、bible 概念图、style.json、用户参考图、手绘分镜(sketches/) | `assets/keyframes/epNN/<grp>/` | 机检:分辨率/画幅合规;锚点 ≤9 张(建议 4–5);**组内出场剧情道具参考图已入锚点包(prop_ref_attached)**;**新生成锚过 repair_ref_anchored(§7E)**。QA:visual-qa ≥80 |
+| character-consistency(每组) | 对锚点包做角色一致性校正;角色特写前置、单人照防「双胞胎」;**校正重生成必带在库三视图 --ref 与 style.json 风格锚(prompt 风格段 + 负面清单),严禁凭文字设定重画形象;所涉概念图缺失=停手上报,不自行补画(§7E)** | 锚点包、concepts 三视图、style.json | 校正后锚点包 | 机检:人脸相似度 ≥0.85(与人设参考图);不达标自动重 roll ≤3 次;**修正重生成过 repair_ref_anchored(§7E)** |
+| video-generation(每组,按组序串行) | 组 prompt+锚点包(+前组尾帧)一次生成多镜头组 clip;开 generate_audio 与 return_last_frame;**手绘渲染图只作 --ref 软引用,`first_frame` 指向 anchor_sketch_*/kf_action_* 而无开场依据/拆段说明=违规配置,开跑前退回(首帧红线见 §7A)**;**开跑前核对 refs 素材完备:组内出场剧情道具无对应参考图=违规配置退回(prop_ref_attached);`@Image N` 绑定复核(imageref_bound,§7A 编号铁律)不符=退回 prompt 重编号,严禁按错位 prompt 开跑**;**局部穿帮缺陷单(repair_mode: v2v_edit)走 V2V 定向修改**(原 clip 作 --ref-video,§9),不整组重 roll;**整组重 roll 先做前向接缝评估(§7C):后组 refs 含本组尾帧的,追加后组首帧软引用 + "ending continues into"** | grpNNN.json、校正锚点包、前组尾帧、角色音色样本(项目级 voice/refs/) | `assets/clips/epNN/grpNNN.mp4` + `grpNNN.meta.json`(含切变边界、尾帧路径、usage) | 机检:组总时长 ±1s、24fps/分辨率合规、有音轨、尾帧落盘。QA:visual-qa 组级打分(V2V 修复版按新组复检,对白组加声学快检;**重 roll 组做双向接缝复检,§7C**) |
+| lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
+| animation | 动作补间/局部重绘修复(按 QA 缺陷单触发;**重绘涉及人物/场景/道具形象的,素材与 prompt 受 §7E 形象红线约束**) | 组 clip、缺陷单 | 修复后组 clip | 复检原缺陷项通过;**涉形象重绘过 repair_ref_anchored(§7E)** |
+| upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)** | 组 clip | 终版组 clip | 机检:目标分辨率、无超分伪影抽检 |
+
+**G7 闸门**:全集生成组 QA 通过率 100%(允许 ≤5% 组人工豁免);**人工抽检每集 10% 组**。
+
+> **§7B 分辨率与成片方式**:Phase 7 的一切视频生成(首次/重 roll/兜底重做)一律按「📤 输出设置」
+> **草稿分辨率**执行(genmedia 层有硬闸门,越档自动压回)。G7 过闸后的终版组 clip 产出**不询问用户,自动按默认路径执行**:
+> - 成片分辨率 = 草稿分辨率:草稿档组 clip 直接定为终版,不派 upscale;
+> - 成片分辨率 ≠ 草稿分辨率:**默认且仅走 upscale(超分)**——草稿档组 clip 由 upscale 超分至成片分辨率,不花生成费,画面与过审版完全一致;**严禁按成片档重新生成**(生成费用高、耗时长,且 Seedance 2.0 无 seed,画面与过审版有随机差异);
+>
+> 唯一例外:QA 判定超分不达标的组,按缺陷兜底走成片档重出(video-generation 用同一 prompt+锚点包按成片分辨率重生成,**重出组须 visual-qa 复检**),不需询问用户。
+
+> **§7C 重 roll 前向接缝规则(2026-07-10)**:尾帧续接链是**单向前向**的——整组重 roll grpN 时,
+> grpN+1 已按 grpN 的**旧尾帧**生成,而新尾帧必然不同(无 seed)——grpN→grpN+1 的前向接缝是盲区。
+> 开跑前必做**边界影响评估**:核对 grpN+1 的 refs 是否真含 grpN 尾帧(唯一可靠判据;仅
+> continuity_from 有值而 refs 无尾帧属元数据冗余,不算续接边界)。不含(硬断点)→ 免处理;含 → 续接边界:
+> ① 重 roll 的 refs **追加 grpN+1 首帧**(从现有 grpN+1.mp4 抽 t=0 帧落盘
+> `assets/clips/epNN/<next_gid>.first_frame.png`),prompt 尾镜写 "ending continues into [Image N]"
+> (与 opening continues from 对称)。目标是**状态对齐**(光线/服装/站位/道具),不是像素复刻——
+> 组边界是硬切,像素级同帧反而似跳剪;② 交付后 visual-qa 对重 roll 组做**双向接缝复检**
+> (与前组尾帧 + 与后组首帧);③ 复检仍明显跳变:优先剪辑级遮蔽(edit/transition 以既有硬切
+> 结构或转场消化),仍不行才经 orchestrator 批准**级联重 roll grpN+1**(以新尾帧作锚,链式成本,最后手段)。
+> **例外**:V2V 定向修改(v2v_edit)保留原画面运动,尾帧近似不变,免边界评估(复检顺带确认尾帧未漂移);
+> 边界是**同一连续动作跨组**(非切镜)时,软引用不够,走拆段/首尾帧硬锁兜底
+> (grpN+1 首帧作重 roll 组尾段的 `--last-frame`,orchestrator 批准)。
+
+> **§7D 旁白/对白适配与组音频形态检查(narration & dialogue fit,2026-07-10;派发 p7-video 前强制)**:旁白是
+> 后期轨,但**旁白挤不进画面、无声组无人交代叙事的问题必须在视频生成前发现**——组 clip 生成后
+> 再扩镜/调组/补旁白 = 整组重 roll 的钱。**对白同理且更隐蔽:组总时长是生成硬约束(±1s),
+> `{}` 台词由模型原生合成——台词超出组时长承载力时,模型会为念完台词强行提速,语速异常、
+> 表演赶戏,只能整组重 roll。超长的解法优先级:改短台词(文本层,最便宜)> 调镜/拆组(分镜
+> 变更)>> 压语速念完(禁止——那是把缺陷烧进成片)。**检查分两级,另有生成侧联动:
+> ① **估时级(H3A 签字前,shot-planning 执行)**:
+>   - 定稿 `narration_anchors`(每条旁白 → 具体镜/组区间 + 可用画面窗口秒数,窗口扣除其中
+>     对白占时),机检窗口 ≥ `est_duration_s`×1.15;不满足在签字前解决(优先调镜时长,画面
+>     装不下再回派 narration 精简);
+>   - **逐组定稿音频形态 `audio_plan ∈ {dialogue, narration_over, ambient_only}`**(有对白镜
+>     =dialogue;无对白但有旁白挂点=narration_over;两者皆无=ambient_only);
+>   - **对白适配(估时级)**:dialogue 组逐组核对台词总估时(取 screenplay 对白层
+>     `est_duration_s`,口径已按角色声线语速),机检 `Σ台词估时 ≤ 组总时长×0.7`(留动作/
+>     反应/停顿空间);超限**优先回派 dialogue-rewrite 改短台词**,其次调镜时长/拆组,
+>     严禁指望模型压语速消化;
+>   - **无声组核查**:每个 ambient_only 组必须逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」
+>     并附理由(`silent_rationale`,如纯动作/氛围/蒙太奇段);讲不清的,默认回派 narration
+>     **补写旁白**(补写条目必须新版本写回 `narration.md` 并重过其机检与估时——narration.md
+>     是旁白唯一事实源,严禁只登记在挂点表),确需加对白的上报 orchestrator 走剧本变更
+>     (动 screenplay 冻结版,成本高,须批准);
+>   - 挂点、audio_plan 与无声组判定一起进「分镜设定」预览页供用户 H3A 审看。
+> ② **实测级(p7-video 派发前,narrator 与 voice-generation 执行)**:narrator 在 p7-video 之前合成正式旁白轨并
+> 逐条实测时长(TTS 语速控制不可靠、换模型即漂移,估时不能代替实测),机检 `narration_fit`:
+> 逐条实测时长 ≤ 挂点窗口×0.9(留呼吸空隙)且不与窗口内对白重叠;超窗默认回派 narration 精简
+> 改稿→重合成复检(文本层修改,锚点不动,不改已冻结 shot_list、不重签 H3A);确需扩镜/调组的
+> 走分镜变更流程并重估成本。**对白侧对称**:voice-generation 按**正常语速**合成对白组干声轨
+> (句间留自然停顿;**严禁压 `--speed`/atempo 把干声塞进时长**——干声压速只掩盖超长,视频
+> 模型生成时照样为念完台词赶词提速),机检 `dialogue_fit`:逐组干声轨实测时长 ≤ 组总时长×0.8;
+> 超限回派 dialogue-rewrite 精简台词→重合成复检(文本层修改,不改冻结 shot_list),确需扩镜/
+> 拆组的走分镜变更流程。**narration_fit 或 dialogue_fit 未通过,orchestrator 不得派发对应组的
+> p7-video 工单**。
+> ③ **生成侧联动(prompt 执行,机检 `nonspeech_group_prompt_ok`)**:`audio_plan` 必须注入组
+> prompt——`narration_over` 与 `ambient_only` 组**严禁出现 `{}` 台词**,Global constraints 必含
+> 无对白约束句(`characters do not speak, no dialogue, no speech`);`narration_over` 组另在
+> prompt 开头声明该段成片配后期旁白(如 `This segment is covered by post-production
+> narration voice-over; characters act silently`),让模型知道叙事由旁白承担、画面纯动作表演
+> ——不注明的话模型会自由发挥替人物配台词,出现怪异语言或无法理解的画面。此类组不传
+> `--audio-ref`(干声锚仅对白组)。
+
+> **§7E 修正阶段形象红线(repair identity red line,2026-07-12)**:一切**修正/校正/返修类**图像与视频
+> 重生成——character-consistency 锚点校正、缺陷单返修、兜底重做、animation 局部重绘、V2V 定向修改
+> 的样式参考——只准**复用既有冻结形象,严禁设计新形象**。前科:一致性校正阶段按文字设定裸 prompt
+> 重生成人物图,无风格锚出图,新形象混入锚点包后整组设计风格跑偏。三条硬规则:
+> ① **必带在库形象锚**:凡修正中调 genmedia 生成含人物/场景/道具的画面,`--ref` 必须包含所涉实体的
+>   **在库概念图**(角色=`assets/concepts/characters/<id>/` 三视图、场景=`concepts/scenes/<id>/`、
+>   道具=`concepts/props/<id>/` 比例锚图)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
+>   开跑前退回;
+> ② **必带风格锚**:修正 prompt 必须命中 `bible/style.json` 风格锚——图像 prompt 含风格段且
+>   `--negative` 带负面清单;视频 prompt 以 `Overall visual style:` 开头。**参考图不能替代风格锚**
+>   (参考图只锚形象,不锚渲染质感/画风),二者缺一即退回;
+> ③ **缺概念图 = 停手上报**:所涉实体在 `concepts/` 无现货(B 级角色/次要地点/新道具漏图)时,
+>   修正 Agent **严禁凭 appearance/props 文字自行补画形象**——上报 orchestrator 按 §6A 缺口流程
+>   改派 06-art 出概念图(过 visual-qa/character-consistency-qa 打分入库,新出场 S/A 主角走 H3A
+>   显著标注确认),入库后再执行修正。
+> 锚点**补生成**(image-generation 出组开场锚帧等新画面)虽非修正,同受 ①② 约束(其缺概念图的
+> 情形已由 §6A 覆盖审计在 H3A 前拦截)。
+> **机检 `repair_ref_anchored`**(修正产物入库前强制):产物 meta 必须记录所用 refs 与风格锚命中
+> 情况——refs 含所涉实体在库概念图路径、prompt 风格锚命中;不满足则产物不得入库、不得作下游锚,
+> version 不予登记。
+
+### Phase 8 — 音频(每集;cue 设计、音色样本与旁白轨先于 Phase 7 组生成,混音在其后)
+
+> **§8A 音频范式(2026-07-09 改版:对白干声=音色锚,一组一说话人)**:音效/环境声由
+> Seedance 2.0 原生随组视频生成——sound-effect 与 ambience 只产**文字 cue**。
+> **红线:TTS 严禁用于对白配音**——把 TTS 音轨当成片对白语音(生成期『原样使用参考
+> 音频人声+口型同步』强绑,或后期换轨/贴片重驱口型)会导致**严重口型问题**(2026-07-09
+> 实证,2026-07-08 的 C′ 干声驱动指令随之废止)。
+> **对白走音色锚**:voice-generation 为每个对白组产出**一条台词干声轨**
+> (`assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3`,该组说话人的全部台词,按角色
+> 固定 tts_voice 合成,时长贴合组时长且 ≤15s),组生成时作唯一 reference_audio,prompt
+> 指令为『音频1仅作说话角色的音色参考,口型/表情/节奏随画面表演自然生成』——对白语音
+> 与口型由模型**原生合成**(口型不受影响),音色被干声锚定,同一角色全片同一 TTS 音色
+> 出锚,**跨组音色更稳**。
+> **选角事实源=项目级 `assets/audio/voice/casting.json`**(2026-07-12 改版:此前选角散在各集
+> epNN/refs/manifest.json,已实际造成跨集音色复用撞车与模型切换漂移):角色×形态(variant)→
+> tts_model+tts_voice 全片唯一登记;合成任何角色语音**前必查表**,表中无条目=先登记再合成,
+> 多形态角色 variant 必填。音色复用豁免(collision_waivers)显式登记依据(同场互斥分析)。
+> **换 TTS 模型=全员重选角受控变更**(音色名跨模型不可移植):整表更新+重出全部样本+评估已
+> 成片漂移,严禁下一集悄悄沿用旧音色名。
+> **实证边界(ep01 grp015 六版声学实测,勿再试)**:①模型自合成对白的音色归属不受任何
+> prompt 写法控制(英文/中文 token/顺序全无效)——干声锚必须传;②方舟 API 不做逐字嵌入
+> (波形互相关≈0,模型是重演绎),但**会稳定模仿第一说话人的参考音色**(±4Hz);③组内第二
+> 说话人失控。故硬约束:**对白组一组只一个说话人**(shot-planning 按说话回合切组;确实
+> 拆不开的标 `multi_speaker: true`,其错配走整组重生成——不做 TTS 贴片/换轨精修,见红线)。
+> 音色样本(voiceprint)保留作选角存档与声学快检参照,一律落**项目级** `assets/audio/voice/refs/`
+> (按 角色[_形态]_voiceprint.mp3 命名;epNN/refs/ 为历史存档,不再新增)。
+> **无对白组严禁模型自编台词**:`audio_plan` 为 narration_over/ambient_only 的组(§7D),组
+> prompt 不写 `{}`、不传 reference_audio,且必含无对白约束句;narration_over 组明示「该段配
+> 后期旁白,人物不开口」——不明示时模型会替人物自由配音,出现怪异语言或与叙事无关的画面。
+> **BGM 与旁白一律后期**:组 prompt 严禁 `（）` 音乐符号与音乐描述,负面词必含
+> "no background music"。旁白不进组视频生成,但其 TTS 合成与逐条时长实测**提前到 p7-video
+> 之前**完成(供 §7D 旁白适配检查;进成片仍由 audio-mixing 后期混入)。
+> 音效 wav / 环境床音降为缺陷兜底贴片(patches/,仅音效/环境,不含对白)。
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
+| ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
+| voice-generation(先于 p7-video) | **每个对白组出台词干声轨**(单条连续轨,按角色固定 tts_voice 以**正常语速**合成,与冻结剧本台词逐字一致;组内 Σ≤15s 且 ≤ 组时长×0.8——超限回派 dialogue-rewrite 改短台词或上报拆组,**严禁压语速硬塞**,§7D ②)——**仅作组生成 reference_audio 音色锚,严禁进成片对白**(§8A 红线);**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver,§8A)并维护之;音色样本存档落项目级 `voice/refs/` | **casting.json**、voice.json、generation_groups、剧本冻结版台词 | `assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3` + `lines_manifest.json`(逐组执行痕迹,含所用 casting 条目)+ 更新 `voice/casting.json` | 机检:对白组干声覆盖 100%、逐组 Σ≤15s、与台词文本一致;**casting_bound:每条干声轨的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记即 FAIL**;**dialogue_fit:逐组实测时长 ≤ 组时长×0.8(§7D ②)**;QA:audio-qa 抽检音色/语速符合 voice.json |
+| narrator(先于 p7-video) | 旁白配音(统一旁白声线,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句) | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;QA:audio-qa |
+| music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
+| audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入 | 组 clips+meta、bgm、narration、patches | `assets/audio/final/epNN.wav` | 机检:响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
+
+**G8 闸门**:final_audio 通过 audio-qa(含:跨组音色一致**且与 casting.json 选角一致(跨集维度)**、关键动作音效实际出声率 ≥90%、原生轨无 BGM 违禁)。
+
+### Phase 9 — 剪辑合成(每集,依赖 G7+G8)
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24。评分 edit_v1 |
+| transition | 转场设计与实施(硬切为主,特殊转场按导演阐述) | cut、directing_plan | 更新 timeline | QA:visual-qa 抽检转场突兀度 |
+| subtitle | 对白/旁白字幕(时轴对齐);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
+| caption | 屏幕文字(地名/时间/招式名等花字) | shot_list、dictionary | `epNN/captions.json` | 机检:术语与 dictionary 100% 一致 |
+| title | 片头/片尾(含下集预告位);**下集预告默认不配旁白**——钩子文案以字卡/花字呈现,声轨仅画面原声+BGM,需配音须工单显式指定(2026-07-10) | style、hooks、episode_plan | `epNN/intro_outro/` | 机检:预告无旁白轨(工单显式要求除外,teaser_no_narration);QA:art-director 会签 |
+| thumbnail | 封面(每平台画幅各一,A/B 两版);**先盘点 refs/thumbnail/ 用户封面参考,优先借鉴其构图/版式/文字风格并落痕迹**(§2 规则 7) | 本集高光帧、style、seo 关键词、refs/thumbnail/ | `epNN/thumbnail_*.png` | 机检:画幅/安全区合规;QA:人工挑选 |
+
+**G9 闸门 + H4**:第 1 集成片用户全片审看签字;后续集按抽检放行。
+
+### Phase 10 — 终审(每集,8 个 QA 并行)
+
+| Agent | 审什么 | 输出 | 通过标准 |
+|---|---|---|---|
+| logic-qa | 成片剧情逻辑、与原著关键情节偏差 | `qa/reports/epNN/logic.json` | 0 个 blocker 级缺陷 |
+| character-consistency-qa | 全片人脸/服装/声音一致性 | `.../consistency.json` | 一致性分 ≥85,无认不出主角的镜头 |
+| timeline-qa | 时间线/季节/年龄自洽 | `.../timeline.json` | 冲突数 = 0 |
+| world-consistency-qa | 画面与 Bible 设定一致(建筑/服饰/体系) | `.../world.json` | blocker = 0 |
+| visual-qa | 画质:畸变、闪烁、伪影、分辨率 | `.../visual.json` | 缺陷镜头 ≤2%,且均非关键镜头 |
+| audio-qa | 音质:响度、爆音、口型偏移 | `.../audio.json` | 全部指标达标 |
+| content-safety | 平台内容红线(暴力/血腥分级等) | `.../safety.json` | 无平台违禁项;分级标签明确 |
+| copyright | 素材/音乐/字体版权链 | `.../copyright.json` | 每项素材有授权来源记录 |
+
+任一 QA 出 blocker → 生成缺陷单(见 §7)→ orchestrator 回派责任 Agent 修复 → 仅重跑受影响链路 → 复审。
+
+**G10 闸门 + H5**:8 份报告全绿,用户签发布字。
+
+### Phase 11 — 发布
+
+| Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
+|---|---|---|---|---|
+| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成** | final.mp4、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台 |
+| seo | 标题(3 备选)/tag/简介,按平台调性 | 剧本、hooks、平台 | `publish/seo.json` | 机检:长度/敏感词合规;QA:人工挑标题 |
+| metadata | 元数据(合集归属、集数、分级、封面绑定) | episode_plan、safety 报告 | `publish/metadata.json` | 机检:schema + 必填齐 |
+| publisher | 定时/立即发布,回收平台回执 | 以上全部 | `publish/receipts/` | 机检:回执状态 = 成功;失败自动重试 2 次后报人工 |
+
+---
+
+## 5. 调度层的运行规则(贯穿全程)
+
+| Agent | 何时被调用 | 职责要点 |
+|---|---|---|
+| workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录四件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
+| context | 每个工单派发前 | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内 |
+| memory-bible | 任何设定读写 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游 |
+| version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
+| evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回;3 次不过升级人工 |
+
+## 6. 工单(Work Order)统一格式
+
+Orchestrator 发给每个 Agent 的指令统一为:
+
+```yaml
+task_id: p7-ep01-grp005-videogen       # 阶段-集-组-工种
+agent: 08-video-gen/video-generation
+project: data/projects/<slug>
+depends_on: [p7-ep01-grp005-imagegen, p7-ep01-grp004-videogen]  # 前组尾帧续接,按组序串行
+attempt: 1            # 第几次尝试(重做时递增,并附上次失败原因)
+context_package: runs/p7-ep01-grp005-videogen/context.md   # context Agent 已裁剪
+instruction: |
+  为第 1 集生成组 grp005(sh006–sh008,Σ15s)生成多镜头组视频。
+  组 prompt 见 grp005.json(Shot 1:/Shot 2:/Shot 3: 结构),锚点包用已校正版,
+  前组尾帧 grp004.last_frame.png 作续接锚;开 generate_audio 与 return_last_frame;
+  禁止出现 style.json 负面清单中的元素。
+inputs:
+  - assets/prompts/ep01/grp005.json
+  - assets/keyframes/ep01/grp005/*.png
+  - assets/clips/ep01/grp004.last_frame.png
+expected_output:
+  path: assets/clips/ep01/grp005.mp4
+  spec: { duration: "15s ±1", resolution: "1920x1080", fps: 24, audio: true }
+acceptance:
+  auto: [duration_check, resolution_check, fps_check, audio_track_check, last_frame_saved]
+  eval_rubric: visual_gen_v1     # 阈值 80
+  qa: [visual-qa]
+max_retries: 3
+on_fail: escalate_human
+```
+
+Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物路径、自检结果、遇到的设定冲突上报)。
+
+### 6.1 运行记录统一 schema(每个任务必备四件套)
+
+`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**:
+
+| 文件 | 写入方 | 内容要求 |
+|---|---|---|
+| `context.md` | context | Context Package(含 token 预算声明) |
+| `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
+| `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本 |
+| `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
+
+**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
+
+**中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
+
+## 7. 质量体系:评分、缺陷单、返工
+
+**Rubric 家族**(evaluation Agent 维护,存 `agents/00-orchestration/evaluation/rubrics/`):
+
+| rubric | 适用 | 维度示例(权重) |
+|---|---|---|
+| extraction_v1 | 设定/事件抽取类 | 忠实原文 40 / 出处可溯 20 / 完整性 25 / 格式 15 |
+| analysis_v1 | 结构/性格分析类 | 证据充分 35 / 洞察深度 25 / 自洽 25 / 格式 15 |
+| writing_v1 | 剧本/旁白类 | 忠实原著 30 / 戏剧性 25 / 对白自然 20 / 可拍性 15 / 格式 10 |
+| creative_v1 | 风格/钩子/导演阐述 | 契合原著气质 30 / 独特性 25 / 可执行 30 / 格式 15 |
+| visual_plan_v1 | 分镜/构图类 | 叙事清晰 30 / 视觉多样性 20 / 可生成性 30 / 规范 20 |
+| visual_gen_v1 | 图像/视频产物 | 与设计稿匹配 35 / 技术质量 30 / 角色一致 25 / 无违禁 10 |
+| edit_v1 | 剪辑产物 | 节奏 35 / 音画配合 30 / 技术规范 20 / 完成度 15 |
+
+**缺陷单格式**(`qa/defects/<id>.json`):
+
+命名强制 `DEF-<phase|epNN>-<domain>-<seq>.json`(如 `DEF-p2-worldqa-0001.json`、`DEF-ep01-visual-0042.json`),**禁止自由命名与 .md 缺陷单**;字段名一律英文,以下字段必填:
+
+```json
+{
+  "defect_id": "DEF-ep01-visual-0042",
+  "severity": "blocker | major | minor",
+  "found_by": "11-qa/visual-qa",
+  "task_id": "qa-ep01-visual",
+  "date": "2026-07-04T18:07:00+08:00",
+  "artifact": "assets/clips/ep01/sh014.mp4 @v2",
+  "violated": "人脸相似度 0.71 < 0.85",
+  "evidence": "qa/evidence/DEF-ep01-visual-0042.png",
+  "assigned_to": "08-video-gen/character-consistency",
+  "status": "open | fixing | verify | closed | waived",
+  "resolution": null,
+  "verified_by": null
+}
+```
+
+生命周期规则:每张缺陷单必须有 `assigned_to`(orchestrator 路由时补齐);`closed` 必须填 `resolution` 与 `verified_by`(修复者不得自证关闭);`waived` 必须挂对应闸门 waiver 记录(见下)。QA 报告中的放行条件(如「某缺陷须在下一阶段前闭环」)由 orchestrator 转为该缺陷单的 `due_gate` 字段并在对应闸门机检强制。
+
+**返工规则**:
+1. 评分 <80 或 QA 缺陷 → 自动退回 + 意见,`attempt+1`,最多 3 次;
+2. 第 3 次仍不过 → 升级人工,附全部尝试与意见;
+3. 缺陷根因在上游(如设定本身错)→ 不许下游打补丁,缺陷单改派上游,orchestrator 按 DAG 标脏并只重跑受影响链路;
+4. **返修中的一切重生成受 §7E 形象红线约束**:只准复用在库概念图作形象锚、prompt 必带 style.json 风格锚,所涉概念图缺失时停手上报补齐——严禁修正环节新造人物/场景/道具形象(机检 repair_ref_anchored);
+5. 通过闸门的版本由 version Agent 冻结,后续修改必须新开版本。
+
+**闸门放行硬约束(G0–G10 通用,含 H1–H5)**:
+1. **缺陷清零机检**:闸门判定前 orchestrator 必须机检本闸门范围内的缺陷单——`status=open|fixing|verify` 的 blocker/major = 0,且所有 `due_gate` 到期缺陷已闭环;否则闸门只能给出 `verdict: PASS_WITH_WAIVER` 或 `HOLD`,不存在「带 open major 直接 PASS」。
+2. **waiver 显式化**:`PASS_WITH_WAIVER` 时 gate JSON 必须逐条列出 `waivers[]`:`{defect_id, reason, signed_by, follow_up}`(follow_up = 后续闭环安排或永久豁免声明);被豁免的缺陷单状态改为 `waived` 并回链该 gate 文件。
+3. **QA 建议不可静默推翻**:任一会签 QA 报告 `recommendation` 为暂缓/hold 时,闸门不得直接 signed;人工坚持放行的,按 waiver 流程记录推翻理由与签字人。
+4. **人工检查项不可自我豁免**:gate 定义中的人工 QA 项未执行时闸门不得 PASS;确需跳过的走 waiver 记录。
+5. **升级裁决与闸门分离**:单任务的人工升级裁决(如三次不过后选择接受)只解锁该任务,不等同于闸门/H 点签字;其接受的残留问题必须转成缺陷单进入闸门机检范围。
+6. **禁止事后补票**:阶段任务与评分必须在闸门判定前完成;`eval_mode: retroactive` 仅限一次性历史修复,常态流程出现即为调度缺陷。
+7. **gate JSON 统一 schema**:`{phase, gate, checkpoint, decided_by, decided_at(完整 ISO 8601 +08:00,取实际决策时刻), verdict: PASS|PASS_WITH_WAIVER|HOLD, status, waivers[], qa_reports[], inputs, note}`。
+
+## 8. 人工确认点汇总
+
+| 点位 | 时机 | 用户确认什么 |
+|---|---|---|
+| H1 | G2 后 | 世界圣经摘要(设定理解对不对) |
+| H2 | G4 后 | 美术风格 + 主角人设图(风格锁定) |
+| H3 | G5 后 | 第 1 集剧本 |
+| H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D) |
+| H4 | G9 后 | 第 1 集成片(试点集全片审看) |
+| H5 | G10 后 | 发布签字 |
+
+> 成片方式**不设人工确认点**:G7 后终版组 clip 自动走默认路径(成片分辨率与草稿档不同时仅 upscale 超分,严禁成片档重生成;见 §7B)。
+
+**试点集策略**:第 1 集全流程走通并经 H4 签字后,后续集才批量并行,以免风格/质量问题被放大到全季。
+
+## 9. 生成模型调用(genmedia 统一模块)
+
+图像/视频生成的**渠道与模型由用户在 Web 控制台「🎨 生成模型」页配置**(落盘 `webui/genconfig.json`),
+生成类 Agent 一律通过统一模块调用,**不自行挑选模型、不直连各家 API**:
+
+> **Agent 级模型配置**:每个 Agent 可在控制台(对话页「模型」按钮)单独配置执行引擎/文字模型
+> 及图像/视频渠道,落盘 `webui/agentmodels.json`,优先级高于顶栏全局设置;未单独配置时按分类默认
+> (机械活→claude·sonnet;分析/评分→codex·gpt-5.5;创作核心→claude·opus)。
+> 派单时该配置自动生效;总制片显式传 `--engine`/`--model`(如赛马换引擎)才会强制覆盖。
+
+```bash
+# 查看当前生效渠道与模型(接工单后先跑一次,把结果记入产物 meta)
+python3 modules/genmedia.py info
+
+# 生成图像(关键帧/概念图/参考图)
+python3 modules/genmedia.py image \
+  --prompt "<英文正向 prompt>" --negative "<负面词>" \
+  --output assets/keyframes/ep01/sh014/first_01.png \
+  --aspect 16:9 \                       # 或 --size 1280x720 精确尺寸
+  --ref assets/concepts/characters/c003/front.png \  # 参考图可多张(角色三视图/场景概念图)
+  --n 4                                 # 候选张数,>1 时自动加 _01.._04 后缀
+
+# 生成视频(组 clip;Seedance 2.0 多镜头多参考图模式,默认路径)
+python3 modules/genmedia.py video \
+  --prompt "<组级多镜头 prompt:Shot 1:.../Shot 2:...,素材按 [Image N] 引用,{对白}>" \
+  --output assets/clips/ep01/grp005.mp4 \
+  --ref assets/keyframes/ep01/grp005/anchor_char_c001.png \
+        assets/keyframes/ep01/grp005/anchor_scene.png \
+        assets/clips/ep01/grp004.last_frame.png \  # 前组尾帧续接锚(首组无此项)
+  --audio-ref assets/audio/voice/ep01/lines/grp005_dialogue.mp3 \  # 对白组干声轨,仅作音色锚(§8A:严禁写"原样使用人声/口型同步"类指令)
+  --generate-audio on \
+  --return-last-frame assets/clips/ep01/grp005.last_frame.png \
+  --duration 15 --aspect 16:9 --resolution <按「输出设置」草稿/成片档>
+# 注意:--ref(≤9 张,建议 4–5)与 --first-frame/--last-frame 互斥;
+#      Seedance 2.0 时长须 [4,15] 整数秒或 -1(模型自定),不支持 --seed。
+
+# 生成视频(单镜首尾帧图生视频;兜底路径,组生成不达标时逐镜重做)
+python3 modules/genmedia.py video \
+  --prompt "<视频 prompt,含运镜描述>" \
+  --output assets/clips/ep01/sh014.mp4 \
+  --first-frame assets/keyframes/ep01/sh014/first_01.png \
+  --last-frame  assets/keyframes/ep01/sh014/last_01.png \
+  --duration 4 --aspect 16:9 --resolution <按「输出设置」草稿/成片档>
+
+# V2V 定向修改(局部穿帮修复;Seedance 2.0 编辑能力,video-generation 按 repair_mode:
+# v2v_edit 缺陷单执行——服饰/道具/元素级穿帮优先走此路,成本远低于整组重 roll)
+python3 modules/genmedia.py video \
+  --prompt "将视频1中<穿帮对象与改法>,其余画面、人物动作、运镜、节奏与声音保持完全不变" \
+  --output assets/clips/ep01/grp012.mp4 \
+  --ref-video assets/clips/ep01/archive/grp012_<时间戳>/grp012.mp4 \
+  --ref <正确样式参考图,可选;涉人物/场景/道具形象时必须取 assets/concepts/ 在库概念图,严禁临时新生成样式图(§7E)> \
+  --generate-audio on --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
+# 注意:--ref-video ≤3 个、单个 2-15s 且总时长 ≤15s、单文件 ≤45MB,与首尾帧互斥;
+#      方舟要求 reference_video 为公网 URL:参考视频自动上传对象存储换预签名链接,
+#      需先在 Web 控制台「设置 → 文件托管」配好存储渠道(火山 TOS/阿里 OSS/腾讯 COS/
+#      S3 兼容,生效=选中标签页;SDK 按需装 tos/oss2/cos-python-sdk-v5/boto3);
+#      素材引用一律「视频n/图片n」序号;输入视频秒数计费(含视频输入档);
+#      输出是整段重渲染——visual-qa 复检必做,对白组另跑声学快检(音色漂移即回退整组重 roll)。
+
+# 生成音乐(BGM;music Agent 后期专用,严禁在组视频 prompt 里生成音乐)
+python3 modules/genmedia.py music \
+  --prompt "<英文音乐描述:曲风/情绪/乐器/节奏,Lyria 3 Pro 可含歌词>" \
+  --output assets/audio/bgm/ep01/ep01_bgm_02.mp3
+# 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名。
+
+# TTS 干声(narrator 旁白后期轨、voice-generation 对白组干声锚/音色样本——干声仅作 reference_audio 音色锚,严禁进成片对白,§8A 红线;
+#          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A)
+python3 modules/genmedia.py tts \
+  --text "<旁白/台词文本>" \
+  --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
+  [--voice <音色,旁白全季固定>] [--speed 1.0] \
+  [--instructions "<语气/情绪指令,仅 OpenAI 系模型生效>"]
+```
+
+Python 内调用(批量循环时省进程开销):`from modules.genmedia import generate_image, generate_video, generate_music, generate_tts`。
+
+| 渠道(按配置自动路由) | 图像 | 视频 | 音乐 | TTS | 说明 |
+|---|---|---|---|---|---|
+| OpenRouter | ✓ | ✓ | ✓ | ✓ | 云端;视频异步轮询;音乐流式返回(Lyria 3 Pro 整曲 / Clip 30s);TTS 走 /audio/speech 字节流 |
+| Ideogram | ✓ | — | — | — | 云端 |
+| 火山引擎(方舟) | ✓ | ✓ | — | — | 云端;图像 Seedream 系列同步返回,视频异步任务自动轮询 |
+| BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0 为 dreamina-seedance-2-0-*) |
+| ComfyUI | ✓ | ✓ | — | — | 本地;视频必须在设置页配好 API 格式工作流 JSON,占位符见模块头注释 |
+
+**生成类 Agent 的纪律**:
+1. 每次生成把「渠道/模型(`info` 输出)、seed、prompt、参考图」写入产物 `meta.json`,保证可复现;
+2. 换 seed 重 roll 用 `--seed`;候选批量用 `--n`,不要自己写循环脚本拼文件名;
+3. 生成失败(未配 Key、渠道超时、内容拦截)**如实写入回执并上报,严禁伪造或占位产物**;
+4. 模型能力不满足工单要求(如运镜类型不支持)→ 上报 orchestrator,不擅自降级替换。

@@ -1,0 +1,21 @@
+# extraction_v1 — 设定/事件抽取类产物评分表
+# 适用:novel-parser, event, Phase 2 全部世界设定, appearance, creature 等「从原文抽取」型产物
+rubric: extraction_v1
+threshold: 80        # 低于此分退回重做(附意见),novel-parser 特殊要求 85
+dimensions:
+  - name: 忠实原文
+    weight: 40
+    check: 每条信息与原文一致,无臆造;改写不改变事实
+    anchors: { 95: 抽样零错误, 80: 仅个别措辞偏差且不影响制作, 60: 出现事实性错误 }
+  - name: 出处可溯
+    weight: 20
+    check: 每条设定标注章节出处;推断项标 inferred:true 并附理由
+    anchors: { 95: 100% 可溯, 80: ">=95% 可溯且缺失项非关键", 60: 大量无出处 }
+  - name: 完整性
+    weight: 25
+    check: 领域内该抽的都抽了(以抽样章节回查为准)
+    anchors: { 95: 回查无遗漏, 80: 遗漏仅次要信息, 60: 遗漏主线相关信息 }
+  - name: 格式规范
+    weight: 15
+    check: schema 通过、ID/引用合法、字段命名符合约定
+feedback_required: true   # <80 时必须逐维度给出可执行的修改意见

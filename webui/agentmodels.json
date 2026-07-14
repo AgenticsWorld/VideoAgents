@@ -1,0 +1,8 @@
+{
+  "08-video-gen/video-generation": {
+    "engine": "claude",
+    "model": "opus",
+    "image_provider": "",
+    "video_provider": ""
+  }
+}
