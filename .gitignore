@@ -15,6 +15,7 @@ runs/
 qa/evidence/
 
 # Runtime state
+webui/agentmodels.json
 webui/chats/
 webui/runs/
 webui/state.json

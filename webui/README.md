@@ -32,6 +32,7 @@ Git.
 - `webui/chats/`: conversation records
 - `webui/runs/`: complete execution event logs
 - `webui/state.json`: resumable session and watchdog state
+- `webui/agentmodels.json`: per-agent model overrides saved from the UI
 - `data/projects/<slug>/`: project source files and generated artifacts
 
 All of these paths are ignored by Git.
