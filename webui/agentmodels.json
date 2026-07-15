@@ -4,5 +4,11 @@
     "model": "opus",
     "image_provider": "",
     "video_provider": ""
+  },
+  "08-video-gen/prompt": {
+    "engine": "claude",
+    "model": "opus",
+    "image_provider": "",
+    "video_provider": ""
   }
 }
