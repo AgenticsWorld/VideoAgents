@@ -113,7 +113,7 @@ def safe_slug(name, default: str = "demo") -> str:
 def safe_agent(agent: str) -> str:
     """agent id 白名单校验(恒为「类别/名字」两段),防路径遍历。"""
     if not re.fullmatch(r"[\w\-]+/[\w\-]+", agent or ""):
-        raise HTTPException(400, f"非法 agent id: {agent}")
+        raise HTTPException(400, f"Invalid agent id: {agent}")
     return agent
 
 
@@ -156,7 +156,7 @@ async def _lan_guard(request: Request, call_next):
     if host not in ("127.0.0.1", "::1", "localhost"):
         p = request.url.path
         if not any(p.startswith(x) for x in LAN_ALLOWED_PREFIXES):
-            return JSONResponse({"detail": "局域网客户端仅可访问手绘分镜页"}, status_code=403)
+            return JSONResponse({"detail": "LAN clients may only access the sketch page"}, status_code=403)
     return await call_next(request)
 
 # ---------------- 状态 ----------------
@@ -407,49 +407,49 @@ def _validate_duration(d: dict):
         mx = float(d.get("shot_max_s", 8))
         assert ep > 0 and 0 < mn <= mx
     except (TypeError, ValueError, AssertionError):
-        raise HTTPException(400, "时长设置不合法:每集时长需 >0;分镜时长需 0<下限≤上限") from None
+        raise HTTPException(400, "Invalid duration settings: episode duration must be > 0; shot duration must satisfy 0 < min <= max") from None
 
 
 def _validate_output(o: dict):
     if o.get("aspect_preset") not in (*OUTPUT_ASPECTS, "custom"):
-        raise HTTPException(400, f"output.aspect_preset 必须是 {(*OUTPUT_ASPECTS, 'custom')}")
+        raise HTTPException(400, f"output.aspect_preset must be one of {(*OUTPUT_ASPECTS, 'custom')}")
     if o.get("aspect_preset") == "custom" and \
             not re.match(r"^\d+\s*:\s*\d+$", o.get("aspect_custom") or ""):
-        raise HTTPException(400, "自定义画幅格式须为 宽:高,如 21:9")
+        raise HTTPException(400, "Custom aspect ratio must be width:height, e.g. 21:9")
     if o.get("language") not in OUTPUT_LANGS:
-        raise HTTPException(400, f"output.language 必须是 {OUTPUT_LANGS}")
+        raise HTTPException(400, f"output.language must be one of {OUTPUT_LANGS}")
     for key in ("draft_resolution", "final_resolution"):
         if o.get(key) and o[key] not in VIDEO_RESOLUTIONS:
-            raise HTTPException(400, f"output.{key} 必须是 {VIDEO_RESOLUTIONS}")
+            raise HTTPException(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
-            raise HTTPException(400, "output.platforms 须为非空数组(至少选一个发布平台)")
+            raise HTTPException(400, "output.platforms must be a non-empty array (select at least one platform)")
         bad = [p for p in pf if p not in OUTPUT_PLATFORMS]
         if bad:
-            raise HTTPException(400, f"output.platforms 含未知平台 {bad},合法值 {tuple(OUTPUT_PLATFORMS)}")
+            raise HTTPException(400, f"output.platforms contains unknown platform {bad}; valid values: {tuple(OUTPUT_PLATFORMS)}")
 
 
 def _validate_packaging(p: dict):
     for k in ("intro_enabled", "outro_enabled", "teaser_enabled"):
         if k in p and not isinstance(p[k], bool):
-            raise HTTPException(400, f"packaging.{k} 须为布尔值")
+            raise HTTPException(400, f"packaging.{k} must be a boolean")
     for k in ("intro_notes", "outro_notes"):
         if k in p:
             if not isinstance(p[k], str):
-                raise HTTPException(400, f"packaging.{k} 须为字符串")
+                raise HTTPException(400, f"packaging.{k} must be a string")
             if len(p[k]) > 2000:
-                raise HTTPException(400, "片头/片尾要求文本过长(≤2000 字)")
+                raise HTTPException(400, "Intro/outro requirement text too long (max 2000 chars)")
 
 
 def _validate_review(r: dict):
     for k, v in (r or {}).items():
         if k not in REVIEW_DIMENSIONS:
-            raise HTTPException(400, f"未知审核维度: {k}(可选 {sorted(REVIEW_DIMENSIONS)})")
+            raise HTTPException(400, f"Unknown review dimension: {k} (valid: {sorted(REVIEW_DIMENSIONS)})")
         try:
             assert 0 <= int(v) <= 100
         except (TypeError, ValueError, AssertionError):
-            raise HTTPException(400, f"审核力度不合法:{REVIEW_DIMENSIONS[k][0]} 须为 0-100 整数") from None
+            raise HTTPException(400, f"Invalid review strength: {REVIEW_DIMENSIONS[k][0]} must be an integer 0-100") from None
 
 
 # ---------------- Agent 级模型配置(引擎/文字模型/图像/视频渠道) ----------------
@@ -1339,7 +1339,7 @@ def _draw_session(token: str) -> dict:
     s = DRAW_SESSIONS.get(token)
     if not s or s["expires"] < time.time():
         DRAW_SESSIONS.pop(token, None)
-        raise HTTPException(404, "手绘会话不存在或已过期,请在分镜预览页重新发起")
+        raise HTTPException(404, "Sketch session not found or expired; start a new one from the storyboard preview page")
     return s
 
 
@@ -1370,7 +1370,7 @@ async def api_draw_session(body: dict):
     ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
     grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
     if not _grp_prompt_path(project, ep, grp).is_file():
-        raise HTTPException(404, f"组 prompt 不存在:{project}/{ep}/{grp}")
+        raise HTTPException(404, f"Group prompt not found: {project}/{ep}/{grp}")
     token = uuid.uuid4().hex
     DRAW_SESSIONS[token] = {"project": project, "ep": ep, "grp": grp,
                             "expires": time.time() + DRAW_TTL_S}
@@ -1399,7 +1399,7 @@ def _sketch_inject(project: str, ep: str, grp: str, ref_rel: str, text: str) -> 
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
     if len(refs) >= MAX_SKETCH_REFS:
-        raise HTTPException(400, f"该组 refs 已达 {MAX_SKETCH_REFS} 张上限,无法再注入线稿")
+        raise HTTPException(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot inject more sketches")
     refs.append(ref_rel)
     n = len(refs)
     sent = SKETCH_GUIDE_TMPL.format(n=n, text=text.strip())
@@ -1424,14 +1424,14 @@ async def api_draw_submit(token: str, body: dict):
     text = (body.get("text") or "").strip()
     img = body.get("image") or ""
     if not text:
-        raise HTTPException(400, "必须填写文字说明(线稿表达什么空间关系)")
+        raise HTTPException(400, "A text note is required (describe the spatial relationship the sketch expresses)")
     if img.startswith("data:image/png;base64,"):
         img = img.split(",", 1)[1]
     try:
         raw = base64.b64decode(img)
         assert raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) < 8 * 1024 * 1024
     except Exception:
-        raise HTTPException(400, "图片须为 PNG(base64),且小于 8MB") from None
+        raise HTTPException(400, "Image must be PNG (base64) and smaller than 8MB") from None
     project, ep, grp = s["project"], s["ep"], s["grp"]
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
@@ -1476,7 +1476,7 @@ async def api_grpnote_set(body: dict):
     text = (body.get("text") or "").strip()
     pf = _grp_prompt_path(project, ep, grp)
     if not pf.is_file():
-        raise HTTPException(404, f"组 prompt 不存在:{project}/{ep}/{grp}")
+        raise HTTPException(404, f"Group prompt not found: {project}/{ep}/{grp}")
     d = json.loads(pf.read_text())
     vp = d["video_prompt"]
     old = _grpnote_get(project, ep, grp)
@@ -1521,7 +1521,7 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
     ref_rel, sent = meta.get("ref_path"), meta.get("prompt_sentence")
     if ref_rel and d.get("refs"):
         if d["refs"][-1] != ref_rel:
-            raise HTTPException(400, "该线稿不是 refs 末位,先删除更晚注入的线稿(避免 [Image N] 编号错位)")
+            raise HTTPException(400, "This sketch is not the last ref; delete later-injected sketches first (to keep [Image N] numbering aligned)")
         d["refs"].pop()
         if sent and sent in d["video_prompt"]:
             d["video_prompt"] = d["video_prompt"].replace(sent, "", 1)
@@ -1543,7 +1543,7 @@ def _read_json_safe(p: Path):
 def _proj_base(project: str) -> Path:
     base = PROJECTS_DIR / safe_slug(project)
     if not base.is_dir():
-        raise HTTPException(404, f"项目不存在: {project}")
+        raise HTTPException(404, f"Project not found: {project}")
     return base
 
 
@@ -2137,22 +2137,22 @@ async def api_genconfig_set(body: dict):
     for kind in ("image", "video", "music", "tts", "deepagents"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
-            raise HTTPException(400, f"{kind}.provider 必须是 {sorted(allowed)}")
+            raise HTTPException(400, f"{kind}.provider must be one of {sorted(allowed)}")
     if cfg.get("agentmodel_mode") not in AM_MODES:
-        raise HTTPException(400, f"agentmodel_mode 必须是 {AM_MODES}")
+        raise HTTPException(400, f"agentmodel_mode must be one of {AM_MODES}")
     if cfg.get("ui_language") not in ("", *UI_LANG_NAMES):
-        raise HTTPException(400, f"ui_language 必须是 {sorted(UI_LANG_NAMES)} 或空")
+        raise HTTPException(400, f"ui_language must be one of {sorted(UI_LANG_NAMES)} or empty")
     storage = cfg.get("storage") or {}
     allowed_st = set(DEFAULT_GENCONFIG["storage"]) - {"provider"}
     if storage.get("provider") not in allowed_st:
-        raise HTTPException(400, f"storage.provider 必须是 {sorted(allowed_st)}")
+        raise HTTPException(400, f"storage.provider must be one of {sorted(allowed_st)}")
     for name, pc in storage.items():
         if not isinstance(pc, dict):
             continue
         try:
             pc["url_expires"] = int(pc.get("url_expires") or 86400)
         except (TypeError, ValueError):
-            raise HTTPException(400, f"storage.{name}.url_expires 必须是秒数(整数)")
+            raise HTTPException(400, f"storage.{name}.url_expires must be seconds (integer)")
     save_genconfig(cfg)
     lang_only = set(body) <= {"ui_language"}
     if lang_only and not old.get("ui_language"):
@@ -2183,7 +2183,7 @@ async def api_brief_set(body: dict):
     """保存主要构想到 data/projects/<项目>/brief.md;清空即移除该设定。"""
     project = safe_slug(body.get("project"))
     if not (PROJECTS_DIR / project).is_dir():
-        raise HTTPException(404, f"项目不存在: {project}")
+        raise HTTPException(404, f"Project not found: {project}")
     brief = str(body.get("brief") or "").strip()
     p = PROJECTS_DIR / project / "brief.md"
     old = p.read_text().strip() if p.is_file() else ""
@@ -2246,7 +2246,7 @@ OPENROUTER_TTS_MODELS = [
 async def api_openrouter_models(modality: str = "image", refresh: bool = False):
     """列出 OpenRouter 目录里的模型(image/video/music/tts/text,带 10 分钟缓存)。"""
     if modality not in ("image", "video", "music", "tts", "text"):
-        raise HTTPException(400, "modality 必须是 image / video / music / tts / text")
+        raise HTTPException(400, "modality must be one of image / video / music / tts / text")
     if modality == "tts":
         # TTS 模型无公开目录端点(/audio/speech 专用),返回内置清单;自定义 ID 走前端「自定义…」
         return {"models": [{"id": i, "name": n} for i, n in OPENROUTER_TTS_MODELS], "cached": True}
@@ -2259,7 +2259,7 @@ async def api_openrouter_models(modality: str = "image", refresh: bool = False):
     try:
         data = await asyncio.to_thread(_http_get_json, url)
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"拉取 OpenRouter 模型列表失败:{e}") from e
+        raise HTTPException(502, f"Failed to fetch OpenRouter model list: {e}") from e
     models = []
     for m in data.get("data", []):
         if m.get("id") == "openrouter/auto":
@@ -2280,7 +2280,7 @@ async def api_test_openrouter(body: dict):
     """验证 OpenRouter API Key(GET /api/v1/key)。"""
     key = (body.get("api_key") or "").strip()
     if not key:
-        raise HTTPException(400, "api_key 不能为空")
+        raise HTTPException(400, "api_key must not be empty")
     try:
         data = await asyncio.to_thread(
             _http_get_json, "https://openrouter.ai/api/v1/key",
@@ -2290,7 +2290,7 @@ async def api_test_openrouter(body: dict):
                 "usage": d.get("usage"), "limit": d.get("limit")}
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return {"ok": False, "error": "Key 无效(401)"}
+            return {"ok": False, "error": "Invalid key (401)"}
         return {"ok": False, "error": f"HTTP {e.code}"}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:200]}
@@ -2302,14 +2302,14 @@ async def api_deepagents_models():
     da = resolve_deepagents()
     base = (da.get("base_url") or "").rstrip("/")
     if not base:
-        raise HTTPException(400, "未配置 deepagents base_url")
+        raise HTTPException(400, "deepagents base_url is not configured")
     headers = {}
     if da.get("api_key"):
         headers["Authorization"] = f"Bearer {da['api_key']}"
     try:
         data = await asyncio.to_thread(_http_get_json, base + "/models", headers, 8)
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"连接 {base} 失败:{str(e)[:200]}") from e
+        raise HTTPException(502, f"Failed to connect to {base}: {str(e)[:200]}") from e
     models = sorted(m.get("id") for m in data.get("data", []) if m.get("id"))
     return {"models": models, "base_url": base}
 
@@ -2319,7 +2319,7 @@ async def api_test_deepagents(body: dict):
     """测试 OpenAI 兼容端点连通性,返回模型列表。"""
     base = (body.get("base_url") or "").strip().rstrip("/")
     if not re.match(r"^https?://", base):
-        raise HTTPException(400, "base_url 需以 http(s):// 开头")
+        raise HTTPException(400, "base_url must start with http(s)://")
     headers = {}
     if body.get("api_key"):
         headers["Authorization"] = f"Bearer {body['api_key']}"
@@ -2336,11 +2336,11 @@ async def api_test_comfyui(body: dict):
     """测试本地 ComfyUI 连接,顺带返回可用 checkpoint 列表。"""
     url = (body.get("url") or "").strip().rstrip("/")
     if not re.match(r"^https?://", url):
-        raise HTTPException(400, "url 需以 http(s):// 开头")
+        raise HTTPException(400, "url must start with http(s)://")
     try:
         stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", None, 6)
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"连接失败:{str(e)[:200]}"}
+        return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
     checkpoints = []
     try:
         info = await asyncio.to_thread(
@@ -2377,7 +2377,7 @@ async def api_agentmodels():
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
     if not (AGENTS_DIR / agent / "SOUL.md").is_file():
-        raise HTTPException(404, f"未知 agent: {agent}")
+        raise HTTPException(404, f"Unknown agent: {agent}")
     overrides = load_agentmodels()
     if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
         overrides.pop(agent, None)
@@ -2388,11 +2388,11 @@ async def api_agentmodels_set(body: dict):
              "image_provider": str(cfg.get("image_provider") or ""),
              "video_provider": str(cfg.get("video_provider") or "")}
         if c["engine"] not in AM_ENGINES:
-            raise HTTPException(400, f"engine 必须是 {AM_ENGINES}(空=跟随全局)")
+            raise HTTPException(400, f"engine must be one of {AM_ENGINES} (empty = follow global)")
         if c["image_provider"] not in AM_IMAGE_PROVIDERS:
-            raise HTTPException(400, f"image_provider 必须是 {AM_IMAGE_PROVIDERS}")
+            raise HTTPException(400, f"image_provider must be one of {AM_IMAGE_PROVIDERS}")
         if c["video_provider"] not in AM_VIDEO_PROVIDERS:
-            raise HTTPException(400, f"video_provider 必须是 {AM_VIDEO_PROVIDERS}")
+            raise HTTPException(400, f"video_provider must be one of {AM_VIDEO_PROVIDERS}")
         if not c["engine"]:
             c["model"] = ""                     # 引擎跟随全局时模型无意义
         overrides[agent] = c
@@ -2420,9 +2420,9 @@ async def api_projects_create(body: dict):
     并自动派总制片完成初始化(整理文本结构,完成后提醒用户放参考图)。"""
     name = (body.get("name") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9]+", name):
-        raise HTTPException(400, "项目名称只能使用英文字母和数字")
+        raise HTTPException(400, "Project name may only contain ASCII letters and digits")
     if (PROJECTS_DIR / name).exists():
-        raise HTTPException(400, f"项目已存在: {name}")
+        raise HTTPException(400, f"Project already exists: {name}")
     # 向导初始设置(输出/时长/审核/片头片尾):先校验后建目录,校验失败不留下半成品项目
     # 新建项目的审核力度默认全 0(不审核),向导/调用方显式给值则覆盖
     settings = body.get("settings") or {}
@@ -2494,7 +2494,7 @@ def _git_env():
 def _version_dir(base: Path) -> Path:
     vdir = base / ".version"
     if not (vdir / "changelog.jsonl").is_file():
-        raise HTTPException(404, f"该项目无版本库: {base.name}")
+        raise HTTPException(404, f"Project has no version repository: {base.name}")
     return vdir
 
 
@@ -2606,18 +2606,18 @@ async def api_versions_clone(body: dict):
     commit = (body.get("snapshot_commit") or "").strip().lower()
     task_id = (body.get("task_id") or "").strip()
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise HTTPException(400, "snapshot_commit 必须是 40 位十六进制 git commit")
+        raise HTTPException(400, "snapshot_commit must be a 40-char hex git commit")
     gitdir = str(vdir / "repo.git")
     env = _git_env()
     r = subprocess.run(["git", "--git-dir", gitdir, "cat-file", "-e",
                         commit + "^{commit}"], env=env, capture_output=True)
     if r.returncode:
-        raise HTTPException(400, f"该提交不存在于 {project} 的版本库: {commit[:12]}")
+        raise HTTPException(400, f"Commit not found in the repository of {project}: {commit[:12]}")
 
     with CLONE_LOCK:
         job = CLONE_JOBS.get(project)
         if job and job.get("state") == "running":
-            raise HTTPException(409, f"已有克隆任务进行中: {job.get('new_name')}")
+            raise HTTPException(409, f"A clone job is already in progress: {job.get('new_name')}")
         # 新名 = 源名-提交时间(如 sample-20260712-215704);重名追加 -2/-3
         ct = subprocess.run(["git", "--git-dir", gitdir, "show", "-s",
                              "--format=%cI", commit],
@@ -2651,15 +2651,15 @@ async def api_projects_delete(body: dict):
     base = _proj_base(project)
     confirm = (body.get("confirm") or "").strip()
     if confirm != base.name:
-        raise HTTPException(400, "输入的项目名称与要删除的项目不一致")
+        raise HTTPException(400, "Entered project name does not match the project to delete")
     job = CLONE_JOBS.get(project)
     if job and job.get("state") == "running":
-        raise HTTPException(409, "该项目正有克隆任务进行中,完成后再删除")
+        raise HTTPException(409, "A clone job is in progress for this project; delete it after the job finishes")
     live = [r for r in RUNS.values()
             if r.get("project") == project
             and r.get("status") in ("queued", "running")]
     if live:
-        raise HTTPException(409, f"该项目有 {len(live)} 个任务排队/运行中,请先停止再删除")
+        raise HTTPException(409, f"Project has {len(live)} tasks queued or running; stop them before deleting")
     await asyncio.to_thread(shutil.rmtree, base)
     remain = sorted([d.name for d in PROJECTS_DIR.iterdir()
                      if d.is_dir() and not d.name.startswith(".")])
@@ -2729,7 +2729,7 @@ async def api_confirm_create(body: dict):
     """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。"""
     q = (body.get("question") or "").strip()
     if not q:
-        raise HTTPException(400, "question 不能为空")
+        raise HTTPException(400, "question must not be empty")
     options = [str(o)[:40] for o in (body.get("options") or ["重跑", "跳过"])][:4]
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
          "default": str(body.get("default") or options[0])[:40],
@@ -2778,9 +2778,9 @@ async def api_chat(body: dict):
     source = body.get("source", "user")
     parent = body.get("parent") or None
     if not message:
-        raise HTTPException(400, "message 不能为空")
+        raise HTTPException(400, "message must not be empty")
     if not (AGENTS_DIR / agent / "SOUL.md").is_file():
-        raise HTTPException(404, f"未知 agent: {agent}")
+        raise HTTPException(404, f"Unknown agent: {agent}")
     # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
     if not body.get("force"):
         am = agent_model_config(agent)
@@ -2788,7 +2788,7 @@ async def api_chat(body: dict):
             engine = am["engine"]
             model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
     if engine not in ENGINES:
-        raise HTTPException(400, f"engine 必须是 {ENGINES}")
+        raise HTTPException(400, f"engine must be one of {ENGINES}")
     ensure_project(project)
 
     agents = {a["id"]: a for a in list_agents()}
@@ -3012,7 +3012,7 @@ async def api_open_folder(body: dict):
     project = safe_slug(body.get("project"))
     path = PROJECTS_DIR / project
     if not path.is_dir():
-        raise HTTPException(404, f"项目目录不存在: {project}")
+        raise HTTPException(404, f"Project directory not found: {project}")
     subprocess.Popen(["open", str(path)],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {"ok": True, "path": str(path)}
@@ -3033,17 +3033,17 @@ async def api_watchdog_threshold_set(body: dict):
         try:
             th = int(body.get("threshold"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "threshold 必须是整数") from None
+            raise HTTPException(400, "threshold must be an integer") from None
         if not 1 <= th <= 100:
-            raise HTTPException(400, "threshold 必须在 1-100 之间")
+            raise HTTPException(400, "threshold must be between 1 and 100")
         STATE["watchdog_threshold"] = th
     if body.get("idle_minutes") is not None:
         try:
             im = int(body.get("idle_minutes"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "idle_minutes 必须是整数") from None
+            raise HTTPException(400, "idle_minutes must be an integer") from None
         if not 1 <= im <= 720:
-            raise HTTPException(400, "idle_minutes 必须在 1-720 之间")
+            raise HTTPException(400, "idle_minutes must be between 1 and 720")
         STATE["watchdog_idle_minutes"] = im
     save_state(STATE)
     return {"threshold": int(STATE.get("watchdog_threshold", 80)),
