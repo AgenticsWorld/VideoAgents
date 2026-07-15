@@ -1,5 +1,7 @@
 # VideoAgents
 
+**Video creation for everyone — a fully automated Agent Team that delivers finished video for about $3 per minute.**
+
 [中文说明](README.zh-CN.md)
 
 VideoAgents is an open-source, file-based multi-agent production system for
