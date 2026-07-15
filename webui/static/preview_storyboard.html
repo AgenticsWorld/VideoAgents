@@ -352,18 +352,22 @@ function render(d){
   if(d.narration)h+=`<div class="doc closed"><h3 onclick="this.parentNode.classList.toggle('closed')">🎙 旁白 narration.md</h3><div class="body"><pre>${esc(d.narration)}</pre></div></div>`;
 
   const boards={};(d.board_scenes||[]).forEach(b=>{if(b.scene_no)boards[b.scene_no]=b});
-  // 按 shot_list 顺序分组场次
-  const order=[],groups={};
+  // 按 shot_list 顺序切分场次块:同一场次在片中多次出现(回闪/插叙)时拆成多块,
+  // 而不是全局归堆——归堆会把后段的组吸到前段,破坏 grp 的播放顺序
+  const blocks=[];
   shots.forEach(s=>{
     const sn=s.scene_no||'?';
-    if(!groups[sn]){groups[sn]=[];order.push(sn)}
-    groups[sn].push(s);
+    const last=blocks[blocks.length-1];
+    if(last&&last.sn===sn)last.shots.push(s);
+    else blocks.push({sn,shots:[s]});
   });
+  const snParts={};blocks.forEach(b=>{snParts[b.sn]=(snParts[b.sn]||0)+1});
   if(!shots.length&&!(d.board_scenes||[]).length){
     h+='<div class="empty">该集还没有分镜(storyboard / shot_list 未产出)</div>';
   }
   // 镜号 → 生成组映射(组内首镜挂整组渲染,其余镜跳过,保持组内相邻)
-  const g1st={},gMember={};
+  const g1st={},gMember={},byId={};
+  shots.forEach(s=>{byId[s.shot_id]=s});
   ggroups.forEach(g=>{(g.shots||[]).forEach((sid,i)=>{gMember[sid]=g;if(i===0)g1st[sid]=g})});
   // 旁白对位优先级(§7D ①):① shot_list.narration_anchors 定稿挂点(挂点镜/组精确)
   // ② narration.md 锚含 grpNNN 时挂该组首镜 ③ beat 前缀匹配第一镜(场景级近似,标"未定稿")
@@ -395,20 +399,24 @@ function render(d){
       :esc(I18N.f('⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示',{a:n.anchor}))}</span>
      <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button></div>`).join('');
   NAV=[];
-  order.forEach((sn,si)=>{
+  const snSeen={};
+  blocks.forEach((blk,si)=>{
+    const sn=blk.sn,bshots=blk.shots;
     const b=boards[sn]||{};
-    const dur=groups[sn].reduce((a,s)=>a+(+s.duration_s||0),0);
-    const nGrp=new Set(groups[sn].map(s=>gMember[s.shot_id]&&gMember[s.shot_id].group_id).filter(Boolean)).size;
-    NAV.push({cls:'sc',id:`a-sc-${si}`,label:sn,hint:I18N.f('{n} 镜',{n:groups[sn].length})+` · ${Math.round(dur)}s`});
-    h+=`<div class="scene" id="a-sc-${si}"><h3>${esc(sn)}
+    const dur=bshots.reduce((a,s)=>a+(+s.duration_s||0),0);
+    const nGrp=new Set(bshots.map(s=>gMember[s.shot_id]&&gMember[s.shot_id].group_id).filter(Boolean)).size;
+    // 同一场次拆成多块时标出 段号/总段数,避免看起来像重复场次
+    const seq=(snSeen[sn]=(snSeen[sn]||0)+1);
+    const part=snParts[sn]>1?` ${seq}/${snParts[sn]}`:'';
+    NAV.push({cls:'sc',id:`a-sc-${si}`,label:sn+part,hint:I18N.f('{n} 镜',{n:bshots.length})+` · ${Math.round(dur)}s`});
+    h+=`<div class="scene" id="a-sc-${si}"><h3>${esc(sn+part)}
         ${b.scene_code?`<span class="tag">${esc(b.scene_code)}</span>`:''}
         ${b.int_ext?`<span class="tag">${esc(b.int_ext)}</span>`:''}
-        <span class="tag">${I18N.f('{n} 镜',{n:groups[sn].length})}${nGrp?I18N.f(' · {n} 组',{n:nGrp}):''} · ${Math.round(dur)}s</span>
+        <span class="tag">${I18N.f('{n} 镜',{n:bshots.length})}${nGrp?I18N.f(' · {n} 组',{n:nGrp}):''} · ${Math.round(dur)}s</span>
         ${b.emotion&&b.emotion.type?`<span class="tag">${t('情绪:')}${esc(b.emotion.type)}</span>`:''}</h3>
       ${b.director_beat_note?`<div class="beat">🎯 ${esc(b.director_beat_note)}</div>`:''}</div>`;
-    if(narrSceneTop[sn])h+=narrBlock(narrSceneTop[sn]);
-    const byId={};groups[sn].forEach(s=>{byId[s.shot_id]=s});
-    groups[sn].forEach(s=>{
+    if(narrSceneTop[sn]&&seq===1)h+=narrBlock(narrSceneTop[sn]);
+    bshots.forEach(s=>{
       const g=g1st[s.shot_id];
       if(g){ // 组内首镜:渲染整组(组内镜卡就地内嵌;旁白卡插在锚定镜之前)
         // 导航徽标:🎨手稿 📝注释 💬对白 🎙旁白 🎬视频(计数,0 不显示)
