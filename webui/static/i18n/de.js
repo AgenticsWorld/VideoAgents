@@ -229,6 +229,8 @@ window.I18N_DICT = {
 "分镜时长(秒)": "Shot-Dauer (Sekunden)",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Für die Shot-Dauer muss gelten: 0 < Untergrenze ≤ Obergrenze",
 "分镜预览": "Storyboard-Vorschau",
+"分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Storyboard-Vorschau: Pro Episode: Drehbuch + Storyboard + Keyframes + generierte Videos",
+"视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Videovorschau: Pro Episode: final-Video + thumbnail + Review-Feedback",
 "分镜预览 · Agentics：VideoAgents": "Storyboard-Vorschau · Agentics: VideoAgents",
 "切换失败:": "Wechsel fehlgeschlagen:",
 "切换预览页": "Vorschauseite wechseln",

@@ -229,6 +229,8 @@ window.I18N_DICT = {
 "分镜时长(秒)": "Thời lượng phân cảnh (giây)",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Thời lượng phân cảnh phải thỏa 0 < giới hạn dưới ≤ giới hạn trên",
 "分镜预览": "Xem trước phân cảnh",
+"分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Xem trước phân cảnh: Kịch bản mỗi tập + phân cảnh + keyframe + video tạo sinh",
+"视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Xem trước video: Video final mỗi tập + ảnh bìa thumbnail + phản hồi vấn đề kiểm duyệt",
 "分镜预览 · Agentics：VideoAgents": "Xem trước phân cảnh · Agentics: VideoAgents",
 "切换失败:": "Chuyển đổi thất bại:",
 "切换预览页": "Chuyển trang xem trước",

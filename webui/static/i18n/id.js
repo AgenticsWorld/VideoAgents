@@ -229,6 +229,8 @@ window.I18N_DICT = {
 "分镜时长(秒)": "Durasi shot (detik)",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Durasi shot harus memenuhi 0 < batas bawah ≤ batas atas",
 "分镜预览": "Pratinjau Storyboard",
+"分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Pratinjau Storyboard: Naskah tiap episode + storyboard + keyframe + video hasil generasi",
+"视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Pratinjau Video: Video final cut tiap episode + thumbnail sampul + umpan balik masalah review",
 "分镜预览 · Agentics：VideoAgents": "Pratinjau Storyboard · Agentics: VideoAgents",
 "切换失败:": "Gagal beralih:",
 "切换预览页": "Beralih halaman pratinjau",

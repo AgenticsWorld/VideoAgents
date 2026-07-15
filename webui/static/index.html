@@ -136,6 +136,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dd-sub:hover .dd-sub-menu{display:block}
 .dd-sub:hover>a{background:var(--panel);color:var(--accent)}
 .dd-sub-menu a.on{color:var(--green)}
+/* 分镜/视频预览独立入口(顶栏图标,新 tab 打开);预览设定产物按钮同风格 */
+a.hdr-icon{display:flex;align-items:center;background:var(--panel2);color:var(--accent);border:1px solid var(--border);border-radius:6px;padding:5px 9px;line-height:1}
+a.hdr-icon:hover{border-color:var(--accent)}
+#preview-btn{display:flex;align-items:center;color:var(--accent)}
 .empty{color:var(--dim);text-align:center;margin-top:40px;font-size:13px}
 </style>
 </head>
@@ -160,15 +164,15 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
   <select id="vid-provider" title="视频生成生效渠道(各渠道参数在 🎨 生成模型 页配置)"></select>
   <div id="conn" title="实时连接状态"></div>
   <div id="preview-menu">
-    <button id="preview-btn" title="预览设定产物">🖼️</button>
+    <button id="preview-btn" title="预览设定产物"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><circle cx="9" cy="9.5" r="1.8" fill="var(--panel2)"/><path d="M5.5 17l4.5-5 2.8 3.1 2.2-2.5 3.5 4.4z" fill="var(--panel2)"/></svg></button>
     <div class="dropdown"><div class="dropdown-box">
       <a href="/preview/characters" class="pv" title="人物设定文字 + 概念图">人物预览</a>
       <a href="/preview/scenes" class="pv" title="场景设定文字 + 概念图">场景预览</a>
       <a href="/preview/props" class="pv" title="道具设定卡 + 参考图(特写/比例锚图)">道具预览</a>
-      <a href="/preview/storyboard" class="pv" title="每集剧本 + 分镜 + 关键帧 + 生成视频">分镜预览</a>
-      <a href="/preview/videos" class="pv" title="每集成片 final 视频 + 封面 thumbnail + 审核问题反馈">视频预览</a>
     </div></div>
   </div>
+  <a href="/preview/storyboard" class="pv hdr-icon" target="_blank" title="分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/><path d="M6.5 7.5h7M6.5 10h4.5" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="3" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/><rect x="13" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/></svg></a>
+  <a href="/preview/videos" class="pv hdr-icon" target="_blank" title="视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M10 8.5 16 12l-6 3.5z" fill="var(--panel2)"/></svg></a>
   <div id="proj-settings-menu">
     <button id="proj-settings-btn" title="项目设置(仅当前项目生效)">🎛️</button>
     <div class="dropdown"><div class="dropdown-box">
@@ -801,8 +805,8 @@ async function openDurModal(){
   $('#dur-modal').style.display='flex';
 }
 $('#menu-duration').onclick=e=>{e.preventDefault();openDurModal()};
-// 预览页链接:点击时带上当前项目参数
-document.querySelectorAll('#preview-menu a.pv').forEach(a=>a.addEventListener('click',()=>{
+// 预览页链接(下拉菜单 + 顶栏独立入口):点击时带上当前项目参数
+document.querySelectorAll('a.pv').forEach(a=>a.addEventListener('click',()=>{
   a.href=a.pathname+'?project='+encodeURIComponent($('#project').value.trim()||'demo');
 }));
 $('#dur-cancel').onclick=()=>$('#dur-modal').style.display='none';

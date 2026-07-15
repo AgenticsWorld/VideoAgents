@@ -229,6 +229,8 @@ window.I18N_DICT = {
 "分镜时长(秒)": "Duración de plano (segundos)",
 "分镜时长需满足 0 < 下限 ≤ 上限": "La duración de plano debe cumplir 0 < mínimo ≤ máximo",
 "分镜预览": "Vista previa del storyboard",
+"分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Vista previa del storyboard: Guion por episodio + storyboard + fotogramas clave + vídeo generado",
+"视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Vista previa de vídeo: Vídeo final por episodio + miniatura thumbnail + comentarios de problemas de revisión",
 "分镜预览 · Agentics：VideoAgents": "Vista previa del storyboard · Agentics: VideoAgents",
 "切换失败:": "Error al cambiar:",
 "切换预览页": "Cambiar de página de vista previa",
