@@ -187,18 +187,18 @@ GENCONFIG_PATH = WEBUI_DIR / "genconfig.json"
 DEFAULT_GENCONFIG = {
     "image": {
         "provider": "openrouter",   # openrouter | ideogram | volcengine | byteplus | comfyui
-        "openrouter": {"api_key": "", "model": "google/gemini-3.1-flash-image",
+        "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        "volcengine": {"api_key": "", "model": "doubao-seedream-4-5-251128",
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-260128",
                        "custom_model": ""},
-        "byteplus": {"api_key": "", "model": "seedream-4-5-251128",
+        "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
                      "custom_model": ""},
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
-        "openrouter": {"api_key": "", "model": "kwaivgi/kling-v3.0-pro",
+        "provider": "openrouter",   # openrouter | volcengine | byteplus | comfyui
+        "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
                        "custom_model": ""},
