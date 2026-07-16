@@ -2851,9 +2851,7 @@ async def api_stop_all():
 
 _HUMAN_GATE_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒时刻(防刷屏)
 _DAG_RECONCILE_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒补展开 DAG 的时刻
-_DAG_INVALID_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒修复 DAG 结构的时刻
-
-from dagcheck import dag_errors   # noqa: E402  结构机检与 CLI(webui/dagcheck.py)共用一份规则
+_DAG_INVALID_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒修复 DAG 的时刻
 
 _DONE_STATES = {"done", "passed", "passed_human_override"}
 
@@ -2979,23 +2977,21 @@ async def idle_watchdog():
                     continue
                 if pending_confirm:
                     continue
-                # DAG 结构机检:结构损坏时唤醒总制片修复(每项目至多 1 次/小时);
-                # 已提醒过的轮次照常走容错解析,不让一个陈旧错误拖停自动派单
+                # DAG 缺失/解析不出任何节点时不再静默失明:唤醒总制片核对
+                # (至多 1 次/小时)。格式规范与写入时自检见 WORKFLOW.md §3.2。
                 dag_path = proj_dir / "runs" / "dag.json"
-                if dag_path.is_file():
-                    errs = dag_errors(dag_path)
-                    if errs and now - _DAG_INVALID_NOTIFIED.get(proj, 0) > 3600:
+                if not dag_path.is_file() or not _dag_load_nodes(dag_path):
+                    if now - _DAG_INVALID_NOTIFIED.get(proj, 0) > 3600:
                         _DAG_INVALID_NOTIFIED[proj] = now
-                        msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json 未通过结构机检:"
-                               f"{';'.join(errs[:5])}{' 等' if len(errs) > 5 else ''}。"
-                               f"请按 WORKFLOW.md §3.2 规范格式修复(自检命令:"
-                               f"python3 webui/dagcheck.py --project {proj} --strict),"
-                               "修复并自检通过后继续按 DAG 推进。")
+                        state = "不存在" if not dag_path.is_file() else "无法解析或没有任何节点"
+                        msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json {state},"
+                               "看门狗无法判断待办前沿。请按 WORKFLOW.md §3.2 规范格式补齐/修复"
+                               f"(自检:python3 webui/dagcheck.py --project {proj} --strict),"
+                               "然后继续按 DAG 推进。")
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog"})
-                        print(f"[watchdog] 唤醒 {orch}:{proj} DAG 结构错误 {len(errs)} 项",
-                              flush=True)
-                        continue
+                        print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
+                    continue
                 runnable, human_waiting = _dag_runnable(proj)
                 if runnable:
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"

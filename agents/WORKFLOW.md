@@ -196,7 +196,7 @@ refs/
 | `human` |  | `true` 表示人工签字节点;签字后可扩展为裁决记录对象(`decision`/`signed_by`/`signed_at`) |
 | `run_id` / `outputs` / `gate` / `note` |  | 收尾钩子回填的运行 id、产物路径、闸门结果、备注 |
 
-**机检(强制)**:立项生成 DAG 后、以及每次修改 dag.json 后,必须运行 `python3 webui/dagcheck.py --project <slug> --strict` 并通过,才算完成(校验:结构合规、id 唯一、state 合法、依赖引用存在、无环)。Web 控制台空转看门狗持续做同一校验,发现结构损坏会唤醒 orchestrator 修复。存量旧格式项目只读兼容,但任何**重写/新建**的 dag.json 一律按本节格式。
+**机检(强制)**:立项生成 DAG 后、以及每次修改 dag.json 后,必须运行 `python3 webui/dagcheck.py --project <slug> --strict` 并通过,才算完成(校验:结构合规、id 唯一、state 合法、依赖引用存在、无环)。机检责任在**写入方**(orchestrator);Web 控制台空转看门狗不做结构校验,仅在 dag.json 缺失或解析不出任何节点时唤醒 orchestrator 修复。存量旧格式项目只读兼容,但任何**重写/新建**的 dag.json 一律按本节格式。
 
 ---
 
