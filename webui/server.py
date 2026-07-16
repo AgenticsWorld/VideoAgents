@@ -2851,23 +2851,34 @@ async def api_stop_all():
 
 _HUMAN_GATE_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒时刻(防刷屏)
 _DAG_RECONCILE_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒补展开 DAG 的时刻
+_DAG_INVALID_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒修复 DAG 结构的时刻
+
+from dagcheck import dag_errors   # noqa: E402  结构机检与 CLI(webui/dagcheck.py)共用一份规则
 
 _DONE_STATES = {"done", "passed", "passed_human_override"}
 
 
+def _dag_load_nodes(dag_path) -> list[dict]:
+    """读 dag.json 并归一化为 [{id, ...}] 列表。兼容三种落盘格式:
+    nodes 列表 [{id,...}](demo)、nodes 字典 {task_id: {...}}(sample)、
+    tasks 列表 [{task_id,...}](orchestrator 实际产出,见 tothemoon)。"""
+    try:
+        doc = json.loads(dag_path.read_text())
+        nodes = doc.get("nodes") or doc.get("tasks") or []
+    except Exception:
+        return []
+    if isinstance(nodes, dict):
+        # 以字典键为准(depends_on 引用的锚),防内层残留 id 字段覆盖
+        return [{**v, "id": k} for k, v in nodes.items()]
+    return [{**n, "id": n.get("id") or n.get("task_id", "")} for n in nodes]
+
+
 def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
-    """读 runs/dag.json,返回 (依赖已满足的非人工待办节点, 依赖已满足的人工签字节点)。
-    nodes 兼容两种落盘格式:列表 [{id,...}](demo)与字典 {task_id: {...}}(sample)。"""
+    """读 runs/dag.json,返回 (依赖已满足的非人工待办节点, 依赖已满足的人工签字节点)。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
     if not dag_path.is_file():
         return [], []
-    try:
-        nodes = json.loads(dag_path.read_text())["nodes"]
-    except Exception:
-        return [], []
-    if isinstance(nodes, dict):
-        # 以字典键为准(depends_on 引用的锚),防内层残留 id 字段覆盖
-        nodes = [{**v, "id": k} for k, v in nodes.items()]
+    nodes = _dag_load_nodes(dag_path)
     done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
     runnable, human_waiting = [], []
     for n in nodes:
@@ -2889,11 +2900,9 @@ def _dag_missing_episodes(proj: str) -> list[str]:
         return []
     try:
         planned = {e["ep"] for e in json.loads(plan_path.read_text())["episodes"]}
-        nodes = json.loads(dag_path.read_text())["nodes"]
     except Exception:
         return []
-    ids = list(nodes.keys()) if isinstance(nodes, dict) else \
-        [n.get("id", "") for n in nodes]
+    ids = [n["id"] for n in _dag_load_nodes(dag_path)]
     covered: set[str] = set()
     for nid in ids:
         covered.update(re.findall(r"ep\d+", nid))
@@ -2970,6 +2979,23 @@ async def idle_watchdog():
                     continue
                 if pending_confirm:
                     continue
+                # DAG 结构机检:结构损坏时唤醒总制片修复(每项目至多 1 次/小时);
+                # 已提醒过的轮次照常走容错解析,不让一个陈旧错误拖停自动派单
+                dag_path = proj_dir / "runs" / "dag.json"
+                if dag_path.is_file():
+                    errs = dag_errors(dag_path)
+                    if errs and now - _DAG_INVALID_NOTIFIED.get(proj, 0) > 3600:
+                        _DAG_INVALID_NOTIFIED[proj] = now
+                        msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json 未通过结构机检:"
+                               f"{';'.join(errs[:5])}{' 等' if len(errs) > 5 else ''}。"
+                               f"请按 WORKFLOW.md §3.2 规范格式修复(自检命令:"
+                               f"python3 webui/dagcheck.py --project {proj} --strict),"
+                               "修复并自检通过后继续按 DAG 推进。")
+                        await api_chat({"agent": orch, "message": msg,
+                                        "project": proj, "source": "watchdog"})
+                        print(f"[watchdog] 唤醒 {orch}:{proj} DAG 结构错误 {len(errs)} 项",
+                              flush=True)
+                        continue
                 runnable, human_waiting = _dag_runnable(proj)
                 if runnable:
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"

@@ -160,6 +160,44 @@ refs/
 
 同理,`dynamic_expansion` 的其余维度(shot/组、character、scene、platform)在对应索引产物冻结后按需展开,粒度至少到能让「依赖已满足的待办节点」反映真实前沿为止。
 
+### 3.2 dag.json 规范格式(强制)
+
+`runs/dag.json` 由 orchestrator 生成与维护,**必须严格按以下结构落盘,不得增改键名**(历史项目曾出现 `nodes` 字典、`tasks`+`task_id` 等自创变体,导致空转看门狗解析失败、自动运行静默失明):
+
+```json
+{
+  "project": "<slug>",
+  "workflow_version": 1,
+  "generated_by": "00-orchestration/workflow-orchestrator",
+  "generated_at": "<ISO8601>",
+  "nodes": [
+    {
+      "id": "p1-structure",
+      "agent": "01-story/story-structure",
+      "state": "pending",
+      "depends_on": ["g0"],
+      "human": false,
+      "run_id": null,
+      "outputs": ["story/story_graph.json"],
+      "gate": null,
+      "note": ""
+    }
+  ]
+}
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `nodes` | ✓ | **列表**,顶层唯一的节点容器(不是 `tasks`,不是字典) |
+| `id` | ✓ | 节点唯一标识,`depends_on` 引用的锚(不是 `task_id`) |
+| `state` | ✓ | 枚举:`pending / dispatched / running / failed / blocked / done / passed / passed_human_override / expanded / template / skipped / cancelled / waived` |
+| `depends_on` | ✓ | 依赖节点 id 列表(可为空 `[]`);**每个引用必须存在于 DAG 中且无环** |
+| `agent` |  | 承接的执行 Agent(闸门节点可为 null) |
+| `human` |  | `true` 表示人工签字节点;签字后可扩展为裁决记录对象(`decision`/`signed_by`/`signed_at`) |
+| `run_id` / `outputs` / `gate` / `note` |  | 收尾钩子回填的运行 id、产物路径、闸门结果、备注 |
+
+**机检(强制)**:立项生成 DAG 后、以及每次修改 dag.json 后,必须运行 `python3 webui/dagcheck.py --project <slug> --strict` 并通过,才算完成(校验:结构合规、id 唯一、state 合法、依赖引用存在、无环)。Web 控制台空转看门狗持续做同一校验,发现结构损坏会唤醒 orchestrator 修复。存量旧格式项目只读兼容,但任何**重写/新建**的 dag.json 一律按本节格式。
+
 ---
 
 ## 4. 分阶段明细:发给谁、什么指令、怎么校验
