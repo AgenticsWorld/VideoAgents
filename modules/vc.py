@@ -12,6 +12,8 @@
   python3 .version/vc.py diff <artifact> <vA> <vB>
   python3 .version/vc.py rollback <artifact> <vN> --task-id T --attempt N [--reason R]
   python3 .version/vc.py freeze --tag TAG --task-id T <artifact-or-dir...>
+  python3 .version/vc.py tag-add --tag TAG --task-id T --reason R <artifact-or-dir...>
+  python3 .version/vc.py unlock <artifact-or-dir...> --task-id T --reason R
 新项目接入:python3 modules/vc.py install data/projects/<slug>(写薄壳 + init)。
 所有 artifact 路径均相对 .version/ 的上级目录(即项目根 data/projects/<slug>/)。
 """
@@ -244,6 +246,90 @@ def cmd_freeze(a):
           f"{a.tag.replace('@','-at-').replace('/','_')});工作区文件已设只读")
 
 
+def cmd_tag_add(a):
+    """把已登记产物的当前版本追加冻结进一个已存在的标签(与 freeze 的『标签不可
+    已存在』约束互补,专治『同一发布批次的文件因故迟到,需补入已冻结的标签』场景):
+    要求标签必须已存在(freeze 首创、tag-add 追加);每个 artifact 的当前版本被
+    标记 frozen=true 并写保护;若某 artifact 已在该标签下则跳过、不重复登记。"""
+    m = load_manifest()
+    if a.tag not in m["tags"]:
+        sys.exit(f"错误:标签 {a.tag} 不存在,tag-add 仅用于追加进已存在的标签(首创请用 freeze)")
+    targets = []
+    for t in a.artifacts:
+        p = rel(t)
+        fp = os.path.join(ROOT, p)
+        if os.path.isdir(fp):
+            targets += [q for q in m["artifacts"] if q == p or q.startswith(p + "/")]
+        else:
+            targets.append(p)
+    targets = sorted(set(targets))
+    tag_entry = m["tags"][a.tag]
+    already = {x["artifact"] for x in tag_entry["artifacts"]}
+    added, skipped = [], []
+    for p in targets:
+        entry = m["artifacts"].get(p)
+        if not entry or not entry["history"]:
+            sys.exit(f"错误:{p} 未登记,无法追加进标签")
+        rec = entry["history"][-1]
+        if p in already:
+            skipped.append(p)
+            continue
+        rec["frozen"] = True
+        rec["tag"] = a.tag
+        os.chmod(os.path.join(ROOT, p), 0o444)
+        added.append({"artifact": p, "version": rec["version"], "commit": rec["commit"]})
+        append_changelog({"artifact": p, "version": rec["version"], "task_id": a.task_id,
+                          "attempt": 1, "reason": a.reason, "frozen": True,
+                          "tag": a.tag, "commit": rec["commit"], "timestamp": now(),
+                          "note": f"tag-add:追加进已存在标签 {a.tag}(非首创冻结)"})
+    tag_entry["artifacts"].extend(added)
+    save_manifest(m)
+    print(f"已追加 {len(added)} 个产物进已存在标签 {a.tag};跳过 {len(skipped)} 个(已在该标签下)")
+    for x in added:
+        print(f"  {x['artifact']} @{x['version']}")
+    for p in skipped:
+        print(f"  跳过: {p}(已在标签 {a.tag} 下)")
+
+
+def cmd_unlock(a):
+    """受控解冻:对已冻结产物解除工作区只读位,供后续 Agent 替换内容；
+    不修改历史版本记录（该版本的 frozen=true 标签仍如实保留，替换后必须
+    调用 register 生成新版本，新版本默认不冻结，需另行 freeze 才会再次只读）。"""
+    m = load_manifest()
+    targets = []
+    for t in a.artifacts:
+        p = rel(t)
+        fp = os.path.join(ROOT, p)
+        if os.path.isdir(fp):
+            targets += [q for q in m["artifacts"] if q == p or q.startswith(p + "/")]
+        else:
+            targets.append(p)
+    targets = sorted(set(targets))
+    unlocked, skipped = [], []
+    for p in targets:
+        entry = m["artifacts"].get(p)
+        if not entry or not entry["history"]:
+            sys.exit(f"错误:{p} 未登记,无法解锁")
+        rec = entry["history"][-1]
+        fp = os.path.join(ROOT, p)
+        if not rec.get("frozen"):
+            skipped.append(p)
+            continue
+        if os.path.exists(fp) and not os.access(fp, os.W_OK):
+            os.chmod(fp, os.stat(fp).st_mode | stat.S_IWUSR)
+        unlocked.append({"artifact": p, "version": rec["version"], "tag": rec.get("tag")})
+        append_changelog({"type": "controlled_unlock", "artifact": p, "version": rec["version"],
+                          "tag": rec.get("tag"), "task_id": a.task_id, "reason": a.reason,
+                          "timestamp": now(),
+                          "note": "工作区只读位已解除以便受控替换;该版本历史记录 frozen=true 保持不变;"
+                                  "替换完成后必须调用 register 生成新版本(默认不冻结),如需重新只读须另行 freeze"})
+    print(f"已解锁 {len(unlocked)} 个产物(工作区转为可写);跳过 {len(skipped)} 个(当前未处于冻结状态)")
+    for u in unlocked:
+        print(f"  {u['artifact']} @{u['version']}(原 tag={u['tag']})")
+    for p in skipped:
+        print(f"  跳过: {p}(未冻结)")
+
+
 def cmd_log(a):
     m = load_manifest()
     arts = [rel(a.artifact)] if a.artifact else sorted(m["artifacts"])
@@ -290,6 +376,17 @@ def main(argv=None, vdir=None):
     s.add_argument("--task-id", required=True)
     s.add_argument("--reason", default=None)
     s.set_defaults(fn=cmd_freeze)
+    s = sub.add_parser("tag-add")
+    s.add_argument("artifacts", nargs="+")
+    s.add_argument("--tag", required=True)
+    s.add_argument("--task-id", required=True)
+    s.add_argument("--reason", required=True)
+    s.set_defaults(fn=cmd_tag_add)
+    s = sub.add_parser("unlock")
+    s.add_argument("artifacts", nargs="+")
+    s.add_argument("--task-id", required=True)
+    s.add_argument("--reason", required=True)
+    s.set_defaults(fn=cmd_unlock)
     s = sub.add_parser("log")
     s.add_argument("artifact", nargs="?")
     s.set_defaults(fn=cmd_log)

@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python3 webui/dispatch.py:*)",
+      "Bash(python webui/dispatch.py:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
