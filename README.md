@@ -45,6 +45,19 @@ python webui/server.py
 Open <http://127.0.0.1:8630>. Select or create a project in the top bar, then
 configure an execution engine and any generation providers you need.
 
+For unattended pipelines, start the console in full-auto mode so agents on the
+`claude` engine can run shell commands without approval prompts (the `codex`
+and `deepagents` engines already run unattended):
+
+```bash
+make run-auto   # VIDEOAGENTS_PERMISSION_MODE=bypassPermissions python webui/server.py
+```
+
+This lets agents execute any command, so use it only on a trusted machine. The
+orchestration-layer guardrails (the `orchestrator_guard` hook and the runtime
+check in `modules/genmedia.py`) are independent of the permission mode and stay
+active.
+
 Optional integrations can be installed as extras:
 
 ```bash

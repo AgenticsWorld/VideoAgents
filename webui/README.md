@@ -15,6 +15,22 @@ python webui/server.py
 
 Open <http://127.0.0.1:8630>.
 
+For unattended pipelines, start in full-auto mode (`make run-auto` from the
+repository root):
+
+```bash
+VIDEOAGENTS_PERMISSION_MODE=bypassPermissions python webui/server.py
+```
+
+With the default `acceptEdits` mode, headless `claude -p` agents silently deny
+any Bash command that is not allowlisted in `.claude/settings.json` and fall
+back to asking the user for approval. `bypassPermissions` removes those
+prompts; agents can then run arbitrary commands, so use it only on a trusted
+machine. The orchestration-layer guardrails (`orchestrator_guard` hook and the
+`modules/genmedia.py` runtime check) do not depend on the permission mode and
+remain active. The `codex` and `deepagents` engines are unaffected — they
+never prompt for approval.
+
 At least one execution engine is required to run agents:
 
 - `claude`: Claude CLI using `claude -p`

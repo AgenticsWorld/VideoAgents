@@ -38,6 +38,17 @@ python webui/server.py
 
 浏览器打开 <http://127.0.0.1:8630>，在顶部选择或创建项目，再配置执行引擎与所需生成服务。
 
+如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行
+命令时不再弹审批（`codex` 与 `deepagents` 引擎本就免审批）：
+
+```bash
+make run-auto   # 即 VIDEOAGENTS_PERMISSION_MODE=bypassPermissions python webui/server.py
+```
+
+该模式下 Agent 可执行任意命令，请仅在可信机器上使用。调度层越界防护
+（`orchestrator_guard` hook 与 `modules/genmedia.py` 运行时守卫）与权限模式
+无关，依然生效。
+
 可选集成：
 
 ```bash
