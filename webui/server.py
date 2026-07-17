@@ -1287,7 +1287,7 @@ async def versions_page():
 
 
 # ---------------- 预览页(人物/场景/分镜预览) ----------------
-PREVIEW_PAGES = ("characters", "scenes", "props", "storyboard", "videos")
+PREVIEW_PAGES = ("characters", "scenes", "props", "worldview", "storyboard", "videos")
 IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
@@ -1693,6 +1693,36 @@ def _preview_scenes(project: str):
 @app.get("/api/preview/scenes")
 async def api_preview_scenes(project: str = "demo"):
     return await asyncio.to_thread(_preview_scenes, project)
+
+
+def _preview_worldview(project: str):
+    """世界观设定聚合:bible/ 根下的 JSON(+README.md)。characters/creatures/scenes
+    是子目录,天然不在扫描范围(各有独立预览页);新增的根级 JSON 自动出现。"""
+    base = _proj_base(project)
+    bdir = base / "bible"
+    sections = []
+    if bdir.is_dir():
+        for p in sorted(bdir.iterdir()):
+            if not p.is_file() or p.name.startswith("."):
+                continue
+            sec = {"id": p.stem, "file": p.name,
+                   "size": p.stat().st_size, "mtime": p.stat().st_mtime}
+            if p.suffix.lower() == ".json":
+                sec["data"] = _read_json_safe(p)
+            elif p.suffix.lower() == ".md":
+                try:
+                    sec["text"] = p.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+            else:
+                continue
+            sections.append(sec)
+    return {"project": base.name, "sections": sections}
+
+
+@app.get("/api/preview/worldview")
+async def api_preview_worldview(project: str = "demo"):
+    return await asyncio.to_thread(_preview_worldview, project)
 
 
 def _preview_storyboard(project: str, ep: str):
