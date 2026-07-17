@@ -1056,41 +1056,44 @@ async def execute_run(run: dict, message: str, model: str | None):
                              "run_id": run["id"], "status": "error"})
                 publish_run(run)
                 return
-            cmd = [DEEPAGENTS_PY, str(ROOT / "modules" / "deepagents_runner.py"),
-                   "--model", use_model,
-                   "--base-url", da["base_url"],
-                   "--api-key", da["api_key"]]
-        elif engine == "codex":
-            # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
-            base = [CODEX_BIN, "exec", "--json", "--skip-git-repo-check",
-                    "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
+            da_cmd = [DEEPAGENTS_PY, str(ROOT / "modules" / "deepagents_runner.py"),
+                      "--model", use_model,
+                      "--base-url", da["base_url"],
+                      "--api-key", da["api_key"]]
+
+        def make_cmd(sid: str | None) -> list[str]:
+            """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
+            if engine == "deepagents":
+                return da_cmd
+            if engine == "codex":
+                # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
+                base = [CODEX_BIN, "exec", "--json", "--skip-git-repo-check",
+                        "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
+                if model:
+                    base += ["-c", f"model={model}"]
+                if sid:
+                    return base + ["resume", sid, message]
+                return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "kimi":
+                # kimi 兼容 claude -p 用法,但无 --append-system-prompt:首轮把角色说明拼进
+                # prompt;续轮走 -r resume(会话已带上下文)。-p 非交互模式固定 auto 权限,
+                # 与 --yolo/--auto 互斥,无需也不能传权限参数
+                base = [KIMI_BIN, "--output-format", "stream-json"]
+                if model:
+                    base += ["-m", model]
+                if sid:
+                    return base + ["-r", sid, "-p", message]
+                return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            c = [CLAUDE_BIN, "-p", message,
+                 "--output-format", "stream-json", "--verbose",
+                 "--append-system-prompt", role,
+                 "--permission-mode", PERMISSION_MODE,
+                 "--max-turns", MAX_TURNS]
             if model:
-                base += ["-c", f"model={model}"]
-            if session_id:
-                cmd = base + ["resume", session_id, message]
-            else:
-                cmd = base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
-        elif engine == "kimi":
-            # kimi 兼容 claude -p 用法,但无 --append-system-prompt:首轮把角色说明拼进
-            # prompt;续轮走 -r resume(会话已带上下文)。-p 非交互模式固定 auto 权限,
-            # 与 --yolo/--auto 互斥,无需也不能传权限参数
-            base = [KIMI_BIN, "--output-format", "stream-json"]
-            if model:
-                base += ["-m", model]
-            if session_id:
-                cmd = base + ["-r", session_id, "-p", message]
-            else:
-                cmd = base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
-        else:
-            cmd = [CLAUDE_BIN, "-p", message,
-                   "--output-format", "stream-json", "--verbose",
-                   "--append-system-prompt", role,
-                   "--permission-mode", PERMISSION_MODE,
-                   "--max-turns", MAX_TURNS]
-            if model:
-                cmd += ["--model", model]
-            if session_id:
-                cmd += ["--resume", session_id]
+                c += ["--model", model]
+            if sid:
+                c += ["--resume", sid]
+            return c
 
         env = {**os.environ,
                "WEBUI_RUN_ID": run["id"], "WEBUI_PORT": str(PORT),
@@ -1106,47 +1109,63 @@ async def execute_run(run: dict, message: str, model: str | None):
         proc = None
         stderr_task = None
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, cwd=ROOT, env=env, limit=STREAM_LIMIT,
-                start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            RUN_PROCS[run["id"]] = proc
-            # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
-            stderr_task = asyncio.create_task(proc.stderr.read())
             deadline = time.time() + run_timeout
+            session_retried = False
             while True:
-                if time.time() > deadline:
-                    raise TimeoutError(f"运行超过 {run_timeout}s")
-                raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
-                                             timeout=max(1, deadline - time.time()))
-                if not raw:
-                    break
-                line = raw.decode("utf-8", "replace").strip()
-                if not line:
-                    continue
-                log_f.write(line + "\n")
-                log_f.flush()
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                if engine == "codex":
-                    handle_codex_event(run, obj)
-                elif engine == "kimi":
-                    handle_kimi_event(run, obj)
-                elif engine == "deepagents":
-                    handle_deepagents_event(run, obj)
+                proc = await asyncio.create_subprocess_exec(
+                    *make_cmd(session_id), cwd=ROOT, env=env, limit=STREAM_LIMIT,
+                    start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                RUN_PROCS[run["id"]] = proc
+                # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
+                stderr_task = asyncio.create_task(proc.stderr.read())
+                while True:
+                    if time.time() > deadline:
+                        raise TimeoutError(f"运行超过 {run_timeout}s")
+                    raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
+                                                 timeout=max(1, deadline - time.time()))
+                    if not raw:
+                        break
+                    line = raw.decode("utf-8", "replace").strip()
+                    if not line:
+                        continue
+                    log_f.write(line + "\n")
+                    log_f.flush()
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    if engine == "codex":
+                        handle_codex_event(run, obj)
+                    elif engine == "kimi":
+                        handle_kimi_event(run, obj)
+                    elif engine == "deepagents":
+                        handle_deepagents_event(run, obj)
+                    else:
+                        handle_claude_event(run, obj)
+                await proc.wait()
+                stderr = (await stderr_task).decode("utf-8", "replace").strip()
+                if proc.returncode != 0 and not run.get("result"):
+                    # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
+                    # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
+                    if (session_id and not session_retried and re.search(
+                            r"no conversation found|session[^\n]{0,80}not found"
+                            r"|thread[^\n]{0,40}not found",
+                            f"{run.get('error') or ''} {stderr}", re.I)):
+                        session_retried = True
+                        session_id = None
+                        run.pop("error", None)
+                        run["session_reset"] = True
+                        STATE["sessions"].pop(session_key, None)
+                        save_state(STATE)
+                        continue
+                    run["status"] = "error"
+                    # 引擎事件流里报过错(如 deepagents 的 error 事件)则保留原始信息
+                    run["error"] = (run.get("error") or stderr
+                                    or f"{engine} 退出码 {proc.returncode}")[:500]
                 else:
-                    handle_claude_event(run, obj)
-            await proc.wait()
-            stderr = (await stderr_task).decode("utf-8", "replace").strip()
-            if proc.returncode != 0 and not run.get("result"):
-                run["status"] = "error"
-                # 引擎事件流里报过错(如 deepagents 的 error 事件)则保留原始信息
-                run["error"] = (run.get("error") or stderr
-                                or f"{engine} 退出码 {proc.returncode}")[:500]
-            else:
-                run["status"] = "done"
+                    run["status"] = "done"
+                break
         except (TimeoutError, asyncio.TimeoutError):
             run["status"] = "error"
             run["error"] = f"超时({run_timeout}s),进程已终止"
@@ -1236,8 +1255,9 @@ def handle_kimi_event(run: dict, obj: dict):
     末尾 meta {"role":"meta","type":"session.resume_hint","session_id":...}。"""
     role_ = obj.get("role")
     if role_ == "assistant":
-        txt = obj.get("content") or ""
-        if txt:
+        # content 实测为字符串;若未来版本改成 claude 式 blocks 列表,跳过而非让整个 run 报错
+        txt = obj.get("content")
+        if isinstance(txt, str) and txt:
             run["text"] = run.get("text", "") + txt
             run["result"] = txt          # kimi 无独立 result 事件,取最后一条 assistant 文本
             HUB.publish({"type": "text", "run_id": run["id"],
