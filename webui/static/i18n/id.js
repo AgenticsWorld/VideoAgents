@@ -798,5 +798,11 @@ window.I18N_DICT = {
 "cat·音频": "Audio",
 "cat·剪辑": "Editing",
 "cat·审核": "QA",
-"cat·发布": "Publikasi"
+"cat·发布": "Publikasi",
+"未检测到 {bin} 命令": "Perintah {bin} tidak ditemukan",
+"引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:": "Engine \"{label}\" menjalankan tugas Agent lewat perintah {bin} di mesin ini, jadi {cli} harus dipasang dulu. Panduan pemasangan:",
+"安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Setelah terpasang, klik \"Periksa ulang\"; untuk sementara Anda juga bisa beralih ke engine lain.",
+"稍后再说": "Nanti saja",
+"重新检测": "Periksa ulang",
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Perintah {bin} masih tidak ditemukan; jika baru dipasang, mulai ulang layanan ini agar PATH berlaku"
 };

@@ -798,5 +798,11 @@ window.I18N_DICT = {
 "cat·音频": "Audio",
 "cat·剪辑": "Editing",
 "cat·审核": "QA",
-"cat·发布": "Publishing"
+"cat·发布": "Publishing",
+"未检测到 {bin} 命令": "Command {bin} not found",
+"引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:": "The {label} engine runs agent tasks via the local {bin} command, so {cli} must be installed first. Installation guide:",
+"安装完成后点击「重新检测」;也可暂时换用其他引擎。": "After installing, click \"Re-check\"; you can also switch to another engine for now.",
+"稍后再说": "Later",
+"重新检测": "Re-check",
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Still can't find the {bin} command; if you just installed it, restart this service so PATH takes effect"
 };

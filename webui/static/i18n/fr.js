@@ -798,5 +798,11 @@ window.I18N_DICT = {
 "cat·音频": "Audio",
 "cat·剪辑": "Montage",
 "cat·审核": "QA",
-"cat·发布": "Publication"
+"cat·发布": "Publication",
+"未检测到 {bin} 命令": "Commande {bin} introuvable",
+"引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:": "Le moteur « {label} » exécute les tâches des agents via la commande locale {bin} ; il faut donc d'abord installer {cli}. Guide d'installation :",
+"安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Après l'installation, cliquez sur « Revérifier » ; vous pouvez aussi passer temporairement à un autre moteur.",
+"稍后再说": "Plus tard",
+"重新检测": "Revérifier",
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "La commande {bin} reste introuvable ; si vous venez de l'installer, redémarrez ce service pour que le PATH prenne effet"
 };

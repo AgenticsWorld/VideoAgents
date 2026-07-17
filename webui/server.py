@@ -2413,6 +2413,18 @@ async def api_soul(agent: str):
     return {"agent": agent, "soul": p.read_text()}
 
 
+@app.get("/api/enginecheck")
+async def api_enginecheck(engine: str):
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex 时前端调用)。
+    deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
+    bins = {"claude": CLAUDE_BIN, "codex": CODEX_BIN}
+    if engine not in bins:
+        return {"engine": engine, "available": True, "bin": ""}
+    path = await asyncio.to_thread(shutil.which, bins[engine])
+    return {"engine": engine, "available": bool(path),
+            "bin": bins[engine], "path": path or ""}
+
+
 @app.get("/api/projects")
 async def api_projects():
     return sorted([d.name for d in PROJECTS_DIR.iterdir()

@@ -798,5 +798,11 @@ window.I18N_DICT = {
 "cat·音频": "Audio",
 "cat·剪辑": "Schnitt",
 "cat·审核": "QA",
-"cat·发布": "Veröffentlichung"
+"cat·发布": "Veröffentlichung",
+"未检测到 {bin} 命令": "Befehl {bin} nicht gefunden",
+"引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:": "Die Engine „{label}“ führt Agent-Aufgaben über den lokalen Befehl {bin} aus; daher muss zuerst {cli} installiert werden. Installationsanleitung:",
+"安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Nach der Installation auf „Erneut prüfen“ klicken; vorerst kann auch eine andere Engine verwendet werden.",
+"稍后再说": "Später",
+"重新检测": "Erneut prüfen",
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Der Befehl {bin} wurde weiterhin nicht gefunden; falls gerade installiert, diesen Dienst neu starten, damit PATH wirksam wird"
 };

@@ -255,6 +255,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions"><button id="da-m-cancel">取消</button><button class="primary" id="da-m-ok">确定</button></div>
   </div>
 </div>
+<div id="eng-modal" class="modal">
+  <div class="box">
+    <h3 id="eng-title"></h3>
+    <div class="note" id="eng-note"></div>
+    <div class="err" id="eng-err"></div>
+    <div class="actions"><button id="eng-close">稍后再说</button><button class="primary" id="eng-recheck">重新检测</button></div>
+  </div>
+</div>
 <div id="am-modal" class="modal">
   <div class="box">
     <h3>🧠 Agent 模型配置 — <span id="am-agent" style="color:var(--accent)"></span></h3>
@@ -734,6 +742,32 @@ async function openDaModal(auto=false){
   $('#da-modal').style.display='flex';
   $('#da-m-model').focus();
 }
+/* ---------- 引擎 CLI 检测(顶栏切到 claudecode/codex 时确认命令已安装,缺失则引导安装) ---------- */
+const ENGINE_CLI={
+  claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart'},
+  codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
+};
+async function checkEngineCli(engine){
+  const info=ENGINE_CLI[engine];if(!info)return;
+  try{if((await api('/api/enginecheck?engine='+engine)).available)return}
+  catch(e){return}   // 检测接口异常不打扰用户,真缺命令时派单日志会报错
+  $('#eng-title').textContent='⚠️ '+I18N.f('未检测到 {bin} 命令',{bin:info.bin});
+  $('#eng-note').innerHTML=
+    I18N.f('引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:',
+           {label:info.label,bin:info.bin,cli:info.cli})
+    +`<br><a href="${info.url}" target="_blank">${info.url}</a><br>`
+    +t('安装完成后点击「重新检测」;也可暂时换用其他引擎。');
+  $('#eng-err').textContent='';
+  $('#eng-modal').style.display='flex';
+}
+$('#eng-close').onclick=()=>$('#eng-modal').style.display='none';
+$('#eng-recheck').onclick=async()=>{
+  const engine=$('#engine').value,info=ENGINE_CLI[engine];
+  let ok=true;
+  if(info){ok=false;try{ok=(await api('/api/enginecheck?engine='+engine)).available}catch(e){}}
+  if(ok){$('#eng-modal').style.display='none';return}
+  $('#eng-err').textContent=I18N.f('仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效',{bin:info.bin});
+};
 /* ---------- 主要构想弹窗(编辑当前项目 brief.md) ---------- */
 async function openBriefModal(){
   $('#brief-err').textContent='';
@@ -1365,6 +1399,7 @@ function liveBox(runId){
   $('#engine').onchange=()=>{
     populateModels($('#engine').value);savePrefs();
     if($('#engine').value==='deepagents')openDaModal(true);
+    checkEngineCli($('#engine').value);
   };
   $('#model').onchange=()=>{
     if($('#model').value==='__edit'){$('#model').value='';openDaModal();return}
@@ -1373,6 +1408,7 @@ function liveBox(runId){
   };
   $('#model-custom').oninput=savePrefs;
   await restorePrefs();
+  checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
   // 预览页「✏️ 修改」跳转:?project=xx&compose=预填指令(选中总制片并填入输入框)
   const qp=new URLSearchParams(location.search);
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}

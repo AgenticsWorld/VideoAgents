@@ -798,5 +798,11 @@ window.I18N_DICT = {
 "cat·音频": "Âm thanh",
 "cat·剪辑": "Dựng phim",
 "cat·审核": "QA",
-"cat·发布": "Phát hành"
+"cat·发布": "Phát hành",
+"未检测到 {bin} 命令": "Không tìm thấy lệnh {bin}",
+"引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:": "Engine \"{label}\" chạy các tác vụ Agent qua lệnh {bin} trên máy, nên cần cài {cli} trước. Hướng dẫn cài đặt:",
+"安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Sau khi cài xong, bấm \"Kiểm tra lại\"; bạn cũng có thể tạm chuyển sang engine khác.",
+"稍后再说": "Để sau",
+"重新检测": "Kiểm tra lại",
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Vẫn không tìm thấy lệnh {bin}; nếu vừa cài xong, hãy khởi động lại dịch vụ này để PATH có hiệu lực"
 };
