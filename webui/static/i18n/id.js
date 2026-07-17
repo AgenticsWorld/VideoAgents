@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Emosi:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Final cut {f} · Thumbnail {t} · Tiket review {d} · Token video terpakai {vt} · Token bahasa terpakai {lt}",
 "成片分辨率": "Resolusi final cut",
+"内嵌字幕": "Subtitle tertanam",
+"启用后成片自动烧录字幕进画面": "Jika diaktifkan, subtitle otomatis dibakar ke dalam final cut",
 "成片源": "Sumber final cut",
 "截至该批次": "hingga batch ini",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "Semua Agent mengikuti setelan engine/model global di top bar (default)",

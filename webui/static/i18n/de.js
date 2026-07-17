@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Stimmung:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Final Cut {f} · Thumbnail {t} · Review-Tickets {d} · Verbrauchte Video-tokens {vt} · Verbrauchte Sprach-tokens {lt}",
 "成片分辨率": "Final-Cut-Auflösung",
+"内嵌字幕": "Eingebrannte Untertitel",
+"启用后成片自动烧录字幕进画面": "Wenn aktiviert, werden Untertitel automatisch in den Final Cut eingebrannt",
 "成片源": "Final-Cut-Quelle",
 "截至该批次": "Bis zu diesem Batch",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "Alle Agents folgen der globalen Engine-/Modelleinstellung in der Topbar (Standard)",

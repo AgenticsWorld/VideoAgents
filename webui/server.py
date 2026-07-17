@@ -251,9 +251,11 @@ DEFAULT_GENCONFIG = {
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
     # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
-    #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配
+    #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
+    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
+               "subtitle_burn_in": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立
     "review": {k: 60 for k in (
@@ -421,6 +423,8 @@ def _validate_output(o: dict):
     for key in ("draft_resolution", "final_resolution"):
         if o.get(key) and o[key] not in VIDEO_RESOLUTIONS:
             raise HTTPException(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
+    if "subtitle_burn_in" in o and not isinstance(o["subtitle_burn_in"], bool):
+        raise HTTPException(400, "output.subtitle_burn_in must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -775,6 +779,13 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     out = ps.get("output") or {}
     draft_res = out.get("draft_resolution") or "480p"
     final_res = out.get("final_resolution") or "480p"
+    burn_in = (
+        "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt 后,由 edit 在封装终版时"
+        "把字幕烧录进画面(ffmpeg subtitles 滤镜等),烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
+        "(小字号贴底、≤2 行、白字黑描边、禁大面积底板);orchestrator 排期须把该烧录步骤纳入本集必做项,"
+        "platform-adapter 发布物料一律基于烧录版母版"
+        if out.get("subtitle_burn_in") else
+        "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂 subtitles.srt 交付,发布期按平台字幕清单处理")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -825,6 +836,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/视频生成模型的英文 prompt 不受此限
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
+- 内嵌字幕:{burn_in}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 控制台「🔍 审核设置」按项目配置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)

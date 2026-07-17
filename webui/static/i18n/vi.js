@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Cảm xúc:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Thành phẩm {f} · ảnh bìa {t} · phiếu kiểm duyệt {d} · tokens video đã dùng {vt} · tokens ngôn ngữ đã dùng {lt}",
 "成片分辨率": "Độ phân giải thành phẩm",
+"内嵌字幕": "Phụ đề gắn cứng",
+"启用后成片自动烧录字幕进画面": "Khi bật, phụ đề sẽ tự động được gắn cứng vào thành phẩm",
 "成片源": "Nguồn thành phẩm",
 "截至该批次": "tính đến đợt này",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "Mọi Agent theo thiết lập engine/mô hình toàn cục trên top bar (mặc định)",

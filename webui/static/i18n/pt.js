@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Emoção:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Final cut {f} · thumbnail {t} · tickets de revisão {d} · tokens de vídeo consumidos {vt} · tokens de linguagem consumidos {lt}",
 "成片分辨率": "Resolução do final cut",
+"内嵌字幕": "Legendas embutidas",
+"启用后成片自动烧录字幕进画面": "Quando ativado, as legendas são embutidas automaticamente no final cut",
 "成片源": "Fonte do final cut",
 "截至该批次": "até este lote",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "Todos os Agents seguem a configuração global de engine/modelo da barra superior (padrão)",

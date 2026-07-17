@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Mood:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Final cut {f} · thumbnail {t} · review tickets {d} · video tokens used {vt} · language tokens used {lt}",
 "成片分辨率": "Final-cut resolution",
+"内嵌字幕": "Burned-in subtitles",
+"启用后成片自动烧录字幕进画面": "When enabled, subtitles are automatically burned into the final cut",
 "成片源": "Final-cut source",
 "截至该批次": "up to this batch",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "All agents follow the top bar's global engine/model settings (default)",

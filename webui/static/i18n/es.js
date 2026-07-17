@@ -331,6 +331,8 @@ window.I18N_DICT = {
 "情绪:": "Emoción:",
 "成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}": "Corte final {f} · miniatura {t} · tickets de revisión {d} · tokens de vídeo consumidos {vt} · tokens de lenguaje consumidos {lt}",
 "成片分辨率": "Resolución del corte final",
+"内嵌字幕": "Subtítulos incrustados",
+"启用后成片自动烧录字幕进画面": "Al activarlo, los subtítulos se incrustan automáticamente en el corte final",
 "成片源": "Fuente del corte final",
 "截至该批次": "hasta este lote",
 "所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)": "Todos los Agents siguen el motor/modelo global de la barra superior (por defecto)",
