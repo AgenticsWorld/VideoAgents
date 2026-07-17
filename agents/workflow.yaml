@@ -261,9 +261,10 @@ phases:
                         qa: [11-qa/audio-qa] } }
       - { id: p8-narrator, agent: 09-audio/narrator, outputs: ["assets/audio/narration/{ep}/"],
           # 先于 p7-video:提前合成正式旁白轨并逐条实测时长(manifest 记挂点/实测),供 §7D 旁白适配检查;
-          # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A)
+          # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A);
+          # 交付前 code/check_narration_sync.py --stamp 把当前 narration_anchors 指纹盖进 manifest(§8B ①)
           validation: { auto: [speech_rate_in_range, narration_fit_within_window_x0.9,
-                               no_overlap_with_dialogue], qa: [11-qa/audio-qa] } }
+                               no_overlap_with_dialogue, narration_anchor_sync], qa: [11-qa/audio-qa] } }
       - { id: p8-music, agent: 09-audio/music, outputs: ["assets/audio/bgm/{ep}/"],
           # BGM 只在需烘托处落 cue(开场/转折/高潮/收束),不从头铺到尾
           validation: { auto: [bgm_coverage_30_60pct],
@@ -273,7 +274,9 @@ phases:
       - { id: p8-mix, agent: 09-audio/audio-mixing,
           depends_on: [p7-video, p8-narrator, p8-music],       # 原生轨来自全部组 clip
           outputs: ["assets/audio/final/{ep}.wav"],
-          validation: { auto: [lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
+          # 铺旁白前必跑 code/check_narration_sync.py(只检):指纹失配=shot_list 挂点已改版,停手上报
+          # 回派 narrator 重签/重合成,严禁按旧 narration_track 人工连续铺排(§8B ②,前科 DEF-ep05-audio-0005)
+          validation: { auto: [narration_anchor_sync, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
       - { id: g8, gate: true, depends_on: [p8-mix] }
 
   - id: p9
@@ -282,7 +285,8 @@ phases:
     for_each: episode
     tasks:
       - { id: p9-edit, agent: 10-editing/edit, outputs: ["edit/{ep}/timeline.json", "edit/{ep}/cut_v1.mp4"],
-          validation: { auto: [duration_pm_5pct, no_black_frames], rubric: edit_v1 } }
+          # 封装前重验 code/check_narration_sync.py(§8B ②):final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报
+          validation: { auto: [narration_anchor_sync, duration_pm_5pct, no_black_frames], rubric: edit_v1 } }
       - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit], validation: { qa: [11-qa/visual-qa] } }
       - { id: p9-subtitle, agent: 10-editing/subtitle, depends_on: [p9-transition],
           outputs: ["edit/{ep}/subtitles.srt"],

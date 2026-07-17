@@ -479,17 +479,37 @@ refs/
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
 | voice-generation(先于 p7-video) | **每个对白组出台词干声轨**(单条连续轨,按角色固定 tts_voice 以**正常语速**合成,与冻结剧本台词逐字一致;组内 Σ≤15s 且 ≤ 组时长×0.8——超限回派 dialogue-rewrite 改短台词或上报拆组,**严禁压语速硬塞**,§7D ②)——**仅作组生成 reference_audio 音色锚,严禁进成片对白**(§8A 红线);**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver,§8A)并维护之;音色样本存档落项目级 `voice/refs/` | **casting.json**、voice.json、generation_groups、剧本冻结版台词 | `assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3` + `lines_manifest.json`(逐组执行痕迹,含所用 casting 条目)+ 更新 `voice/casting.json` | 机检:对白组干声覆盖 100%、逐组 Σ≤15s、与台词文本一致;**casting_bound:每条干声轨的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记即 FAIL**;**dialogue_fit:逐组实测时长 ≤ 组时长×0.8(§7D ②)**;QA:audio-qa 抽检音色/语速符合 voice.json |
-| narrator(先于 p7-video) | 旁白配音(统一旁白声线,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句) | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;QA:audio-qa |
+| narrator(先于 p7-video) | 旁白配音(统一旁白声线,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
-| audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入 | 组 clips+meta、bgm、narration、patches | `assets/audio/final/epNN.wav` | 机检:响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
+| audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
-**G8 闸门**:final_audio 通过 audio-qa(含:跨组音色一致**且与 casting.json 选角一致(跨集维度)**、关键动作音效实际出声率 ≥90%、原生轨无 BGM 违禁)。
+> **§8B 旁白挂点同步(narration anchor sync,2026-07-17;前科 DEF-ep05-audio-0005)**:旁白挂点的
+> **唯一事实源是 `directing/epNN/shot_list.json` 的 `narration_anchors`**;narrator 的 manifest
+> (`narration_track.json`)只是它的下游快照——两者一旦脱钩,混音会按旧挂点/旧组号铺轨,成片
+> 音频总时长看似对齐、逐条旁白却全部错位(ep05 实际发生:shot_list 挂点改版后,混音仍读旧
+> narration_track,把 N-03 起人工连续铺排、后段保留旧组号)。防线三条,机检统一为
+> `narration_anchor_sync`(`code/check_narration_sync.py`):
+> ① **产出侧盖章**:narrator 交付 manifest 前跑 `--stamp --task-id <id>`,把当前
+>   `narration_anchors` 规范化 JSON 的 sha256 指纹写入 `anchor_sync` 块(逐段挂点组/编号/窗口
+>   核对全过才盖得上),再 vc register 登记;**无指纹的旁白轨一律视为过期产物**。逐段 anchor
+>   必须含可机读的 `grpNNN` 引用且与定稿 `anchor_group` 一致——只写场景名的自由文本挂点不可
+>   用于铺轨,机检直接 FAIL。
+> ② **消费侧重验**:audio-mixing 铺轨前、10-editing/edit 封装前**必跑只检模式**;指纹失配说明
+>   shot_list 已改版,**停手上报 orchestrator 回派 narrator 重签(挂点未变仅需 --stamp 重盖+
+>   窗口重验)或重合成,严禁按旧轨继续**。混音脚本的旁白摆位必须逐条取自「当前 shot_list 挂点
+>   × manifest 实测时长」,不得内嵌手抄的挂点表。
+> ③ **变更即失效**:shot_list 冻结后凡走变更流程产生新版本且触及 `narration_anchors` 或
+>   `generation_groups`,orchestrator 必须将本集 p8-narrator(重签/重合成)、p8-mix、p9-edit
+>   标脏重跑(§7 缺陷路由同款「只重跑受影响链路」);指纹机制保证即使漏标,下游开工自检也会
+>   拦住。
+
+**G8 闸门**:final_audio 通过 audio-qa(含:**narration_anchor_sync 通过(§8B)**、跨组音色一致**且与 casting.json 选角一致(跨集维度)**、关键动作音效实际出声率 ≥90%、原生轨无 BGM 违禁)。
 
 ### Phase 9 — 剪辑合成(每集,依赖 G7+G8)
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24。评分 edit_v1 |
+| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24。评分 edit_v1 |
 | transition | 转场设计与实施(硬切为主,特殊转场按导演阐述) | cut、directing_plan | 更新 timeline | QA:visual-qa 抽检转场突兀度 |
 | subtitle | 对白/旁白字幕(时轴对齐);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
 | caption | 屏幕文字(地名/时间/招式名等花字) | shot_list、dictionary | `epNN/captions.json` | 机检:术语与 dictionary 100% 一致 |

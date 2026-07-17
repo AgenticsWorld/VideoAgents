@@ -12,7 +12,7 @@
 ## 职责
 
 1. **粗剪**:严格按 `shot_list.json` 的 generation_groups 组序装配 `assets/clips/epNN/` 下的终版组 clip(grpNNN.mp4),建立本集时间线基底;组内镜头对位用 `grpNNN.meta.json` 的 boundary_map(切变检测边界),需要镜级微调(裁切/变速)时以边界秒数为入出点基准。
-2. **对齐音频**:以 `assets/audio/final/epNN.wav`(final_audio)为基准轨,逐镜对齐对白/旁白/音效的入出点,消除音画错位。
+2. **对齐音频**:以 `assets/audio/final/epNN.wav`(final_audio)为基准轨,逐镜对齐对白/旁白/音效的入出点,消除音画错位。**封装前先跑 `python3 code/check_narration_sync.py --project <slug> --ep epNN`(§8B ②)**——final_audio 所据旁白轨与当前 shot_list 挂点失配(指纹不符/无指纹),说明音频是按旧分镜混的,**停手上报 orchestrator 重跑 p8-narrator/p8-mix,不封装**(前科 DEF-ep05-audio-0005:音频总时长对齐、逐条旁白却全按旧挂点错位)。
 3. **精剪**:按 `story/episodes/epNN/pacing.json` 的逐场时长分配与情绪曲线做裁切、变速(慢放/加速),落实删减建议,使成片时长收敛到预算 ±5%。
 4. **落盘产物**:输出 `edit/epNN/timeline.json`(逐条 clip 的入出点、变速率、音频偏移)与 `edit/epNN/cut_v1.mp4`。
 5. **自检并回执**:逐帧扫描黑帧/跳帧,核对时长预算,把自检结果写入 `<项目目录>/runs/<task_id>/result.json`;发现镜头素材与 shot_list 不符时上报 orchestrator,不擅自跳过镜头。
@@ -67,6 +67,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
+- **narration_anchor_sync(§8B,封装前置)**:`code/check_narration_sync.py` 全 PASS,旁白轨与当前 shot_list 挂点同步;
 - 成片时长 = 集预算 ±5%(`duration_pm_5pct`);
 - 无黑帧/跳帧(`no_black_frames`);
 - timeline.json 中每个 group_id 均能在 generation_groups 命中,组序无遗漏、无重复;镜级条目的 in/out 落在该组 boundary_map 区间内;

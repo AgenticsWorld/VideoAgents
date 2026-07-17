@@ -17,6 +17,7 @@
 4. 输出 `assets/audio/narration/epNN/` 分段 wav + `manifest.json`(段落-落点映射)。
 5. 自检:语速逐段测量、段间音色/响度一致,统一采样率与电平规范后交付。
 6. **旁白适配自检(§7D ②,p7-video 前强制)**:逐段用**实际音频时长**(TTS 语速控制不可靠、换模型即漂移,估时不能代替实测)比对 `shot_list.narration_anchors` 的画面窗口——实测时长 ≤ 窗口×0.9 且不与窗口内对白重叠;超窗段落如实写入回执并上报 orchestrator 回派 `01-story/narration` 精简改稿(锚点不动),改稿后重合成复检,**不自行删句、不靠压语速硬塞**。
+7. **挂点同步盖章(§8B ①,交付前强制)**:manifest 逐段 `anchor` 必须含可机读的 `grpNNN` 引用且与 `narration_anchors` 定稿的 `anchor_group` 一致(只写场景名的自由文本挂点机检 FAIL);交付前跑 `python3 code/check_narration_sync.py --project <slug> --ep epNN --stamp --task-id <task_id>`,把当前挂点指纹写入 manifest 的 `anchor_sync` 块后再 vc register——**无指纹的旁白轨下游一律视为过期,不得铺轨**;shot_list 挂点改版后被回派重签时,若挂点未变仅需重盖章+窗口重验,不必重合成音频。
 
 ## 生成工具(必用)
 
@@ -58,12 +59,18 @@ python3 modules/genmedia.py tts \
 {
   "voice_profile": "narrator_main_v1",
   "segments": [
-    { "seg_id": "ep01_nar_03", "anchor": { "scene": "scn_qingyun_gate", "shot": "sh012" },
+    { "seg_id": "ep01_nar_03", "num": "N-03",
+      "anchor": { "scene": "scn_qingyun_gate", "shot": "sh012", "group": "grp004" },
       "duration_s": 6.4, "window_s": 8.6, "fit_ok": true,
       "speech_rate_cps": 4.2, "file": "ep01_nar_03.wav" }
-  ]
+  ],
+  "anchor_sync": { "shot_list": "directing/ep01/shot_list.json",
+                   "narration_anchors_sha256": "<--stamp 写入,§8B ①>",
+                   "anchor_count": 24, "stamped_by_task": "p8-ep01-narrator" }
 }
 ```
+逐段 `num` 与 `anchor.group` 必须与 `narration_anchors` 定稿逐一对应;`anchor_sync` 由
+`code/check_narration_sync.py --stamp` 写入,手写无效(内容核对不过盖不上章)。
 
 ## 接受的工作指令(Work Order)
 
@@ -85,6 +92,7 @@ instruction: |
 - 语速在设定区间(speech_rate_in_range),逐段测量、无一越界。
 - 旁白稿段落覆盖率 100%;manifest 落点引用的场/镜 ID 合法。
 - **narration_fit(§7D ②)**:逐段实测 `duration_s` ≤ 挂点窗口 `window_s`×0.9,且不与窗口内对白重叠;任一段超窗即整单不过(上报回派 narration 改稿,不得自行删句/压语速硬塞)。
+- **narration_anchor_sync(§8B)**:`python3 code/check_narration_sync.py --project <slug> --ep epNN` 全 PASS——段落编号与挂点定稿双向一致、逐段挂点组=定稿 `anchor_group`、manifest 已盖当前挂点指纹;无指纹/指纹失配即整单不过。
 
 **评分(evaluation Agent)**:
 - 本工位在 WORKFLOW.md Phase 8 表中未单列 rubric,以机检 + QA 为准:`11-qa/audio-qa` 审声线统一、吐字清晰、段间无音色跳变。
