@@ -20,6 +20,7 @@ webui/chats/
 webui/runs/
 webui/state.json
 webui/server.log
+agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 
 # Python
 .venv/
