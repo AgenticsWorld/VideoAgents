@@ -571,6 +571,7 @@ $('#project').onchange=async()=>{
   }
   savePrefs();
   initWatchdog();   // 自动运行逐项目独立:切项目刷新 🤖 开关状态
+  renderRuns();renderAgents();   // 运行面板/左侧状态只显示当前项目的任务
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
@@ -718,7 +719,7 @@ async function initGenProviders(){
     };
   }
 }
-const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>['queued','running'].includes(r.status)).map(r=>r.agent));
+const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- deepagents 本地模型配置弹窗(OpenRouter 渠道在 🎨 生成模型 页配置) ---------- */
 async function openDaModal(auto=false){
@@ -1245,7 +1246,8 @@ $('#btn-watchdog').onclick=async()=>{
 /* ---------- 运行面板 ---------- */
 function renderRuns(){
   const box=$('#runs');
-  const runs=Object.values(RUNS).sort((a,b)=>b.created-a.created).slice(0,50);
+  const runs=Object.values(RUNS).filter(r=>r.project===curProj())
+    .sort((a,b)=>b.created-a.created).slice(0,50);
   if(!runs.length){box.innerHTML='<div class="empty">暂无运行</div>';return}
   const open=new Set([...box.querySelectorAll('.run.open')].map(x=>x.dataset.id));
   box.innerHTML='';
