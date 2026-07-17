@@ -106,6 +106,11 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .narr{border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;background:var(--panel2);padding:7px 12px;margin:8px 0;font-size:13px;line-height:1.6}
 .narr .nid{color:var(--yellow);font-weight:600;margin-right:6px}
 .narr .nest{color:var(--dim);font-size:11px;margin-left:6px}
+.narr .aud,.mus .aud{display:flex;align-items:center;gap:6px;margin-top:6px}
+.narr audio,.mus audio{display:block;width:min(440px,100%);height:32px}
+.mus{border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;background:var(--panel2);padding:7px 12px;margin:8px 0;font-size:13px;line-height:1.6}
+.mus .mid{color:var(--green);font-weight:600;margin-right:6px}
+.mus .mest{color:var(--dim);font-size:11px;margin-left:6px}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 #sk-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
@@ -397,7 +402,30 @@ function render(d){
     `<div class="narr">🎙 <span class="nid">${esc(n.id)}</span>${esc(n.text)}<span class="nest">≈${n.est_s}s · ${t('旁白(后期轨,起于本镜位、riding over 后续镜)')} · ${n.pinned
       ?t('挂点定稿:')+esc(n.pinned.anchor_group||'')+(n.pinned.window_s?esc(I18N.f(' 窗口{w}s',{w:n.pinned.window_s})):'')
       :esc(I18N.f('⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示',{a:n.anchor}))}</span>
-     <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button></div>`).join('');
+     <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button>${
+      n.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(n.audio))}"></audio><button class="editbtn" data-url="${esc(n.audio)}" title="对这段旁白配音提修改意见,发消息给总制片">✏️ 修改</button></span>`:''}</div>`).join('');
+  // 配乐 cue 对位:beat_ref 首个命中镜 → 挂该镜前;退回 scene 中 SCN-xxxx 匹配场景首镜;再退集首
+  const musByShot={},musTop=[];
+  (d.bgm_cues||[]).forEach(c=>{
+    let hit=null;
+    for(const b of (c.beat_ref||[])){
+      hit=shots.find(s=>(s.beat||'')===b||String(s.beat||'').startsWith(b+'-'));
+      if(hit)break;
+    }
+    if(!hit){
+      const m=String(c.scene||'').match(/SCN-\d+/);
+      if(m)hit=shots.find(s=>String(s.scene_id||'')===m[0]||String(s.scene_no||'')===m[0]);
+    }
+    if(hit)(musByShot[hit.shot_id]=musByShot[hit.shot_id]||[]).push(c);
+    else musTop.push(c);
+  });
+  const musBlock=(list,top)=>list.map(c=>
+    `<div class="mus">🎵 <span class="mid">${esc(c.cue_id)}</span>${esc(c.mood||'')}<span class="mest">${
+       c.in_s!=null&&c.out_s!=null?esc(c.in_s+'s–'+c.out_s+'s')+' · ':''}${
+       top?t('⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首'):t('BGM(后期配乐轨,起于本镜位)')}${c.loop_fill?' · loop':''}</span>
+     <button class="editbtn" data-loc="${esc(I18N.f('配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})',{ep:EP,cid:c.cue_id,sc:c.scene||''}))}" title="${t('对这条配乐提修改意见,发消息给总制片')}">✏️ 修改</button>${
+      c.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(c.audio))}"></audio><button class="editbtn" data-url="${esc(c.audio)}" title="对这段配乐音频提修改意见,发消息给总制片">✏️ 修改</button></span>`:`<span class="mest">${t('(音频未生成)')}</span>`}</div>`).join('');
+  if(musTop.length)h+=musBlock(musTop,true);
   NAV=[];
   const snSeen={};
   blocks.forEach((blk,si)=>{
@@ -423,17 +451,19 @@ function render(d){
         const gsids=g.shots||[];
         const nDlg=gsids.filter(sid=>byId[sid]&&byId[sid].dialogue_ref).length;
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
+        const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];
         if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
         if(g.user_note)badges.push('📝');
         if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');
         if(nNarr)badges.push('🎙'+nNarr);
+        if(nMus)badges.push('🎵'+nMus);
         if((g.clips||[]).length)badges.push('🎬'+g.clips.length);
         NAV.push({cls:'g',id:`a-g-${aid(g.group_id)}`,label:g.group_id,hint:I18N.f('{n} 镜',{n:gsids.length}),badges:badges.join(' ')});
         h+=groupCard(g,(g.shots||[]).map(sid=>
-          (narrByShot[sid]?narrBlock(narrByShot[sid]):'')+(byId[sid]?shotCard(byId[sid],g.group_id):'')).join(''));
+          (musByShot[sid]?musBlock(musByShot[sid]):'')+(narrByShot[sid]?narrBlock(narrByShot[sid]):'')+(byId[sid]?shotCard(byId[sid],g.group_id):'')).join(''));
       }else if(!gMember[s.shot_id]){ // 未入组的镜:平铺(向后兼容旧数据)
-        h+=(narrByShot[s.shot_id]?narrBlock(narrByShot[s.shot_id]):'')+shotCard(s);
+        h+=(musByShot[s.shot_id]?musBlock(musByShot[s.shot_id]):'')+(narrByShot[s.shot_id]?narrBlock(narrByShot[s.shot_id]):'')+shotCard(s);
       }
     });
   });

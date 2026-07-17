@@ -804,5 +804,16 @@ window.I18N_DICT = {
 "安装完成后点击「重新检测」;也可暂时换用其他引擎。": "After installing, click \"Re-check\"; you can also switch to another engine for now.",
 "稍后再说": "Later",
 "重新检测": "Re-check",
-"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Still can't find the {bin} command; if you just installed it, restart this service so PATH takes effect"
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Still can't find the {bin} command; if you just installed it, restart this service so PATH takes effect",
+"主音色": "Primary voice",
+"(音色样本未生成)": "(voice sample not generated yet)",
+"(音频未生成)": "(audio not generated yet)",
+"BGM(后期配乐轨,起于本镜位)": "BGM (post-production music track; enters at this shot)",
+"⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首": "⚠ Not mapped to any shot; listed at the top of the episode in cue_sheet order",
+"对这条配乐提修改意见,发消息给总制片": "Give revision notes on this music cue; sends a message to the Producer",
+"配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})": "Music cue {ep}/{cid} (scene: {sc}; data: entry {cid} in assets/audio/bgm/{ep}/cue_sheet.json)",
+"音色 {cid}/{v}(选角 assets/audio/voice/casting.json 条目 char_id={cid},音色样本 {vp})": "Voice {cid}/{v} (casting: entry char_id={cid} in assets/audio/voice/casting.json; voiceprint sample {vp})",
+"对这个音色提修改意见,发消息给总制片": "Give revision notes on this voice; sends a message to the Producer",
+"对这段旁白配音提修改意见,发消息给总制片": "Give revision notes on this narration audio; sends a message to the Producer",
+"对这段配乐音频提修改意见,发消息给总制片": "Give revision notes on this music audio; sends a message to the Producer"
 };

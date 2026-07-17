@@ -804,5 +804,16 @@ window.I18N_DICT = {
 "安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Setelah terpasang, klik \"Periksa ulang\"; untuk sementara Anda juga bisa beralih ke engine lain.",
 "稍后再说": "Nanti saja",
 "重新检测": "Periksa ulang",
-"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Perintah {bin} masih tidak ditemukan; jika baru dipasang, mulai ulang layanan ini agar PATH berlaku"
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Perintah {bin} masih tidak ditemukan; jika baru dipasang, mulai ulang layanan ini agar PATH berlaku",
+"主音色": "Suara utama",
+"(音色样本未生成)": "(sampel suara belum dibuat)",
+"(音频未生成)": "(audio belum dibuat)",
+"BGM(后期配乐轨,起于本镜位)": "BGM (trek musik pascaproduksi; masuk mulai shot ini)",
+"⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首": "⚠ Tidak terpetakan ke shot mana pun; ditampilkan di awal episode sesuai urutan cue_sheet",
+"对这条配乐提修改意见,发消息给总制片": "Beri masukan revisi untuk cue musik ini; mengirim pesan ke Produser",
+"配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})": "Cue musik {ep}/{cid} (scene: {sc}; data: entri {cid} di assets/audio/bgm/{ep}/cue_sheet.json)",
+"音色 {cid}/{v}(选角 assets/audio/voice/casting.json 条目 char_id={cid},音色样本 {vp})": "Suara {cid}/{v} (casting: entri char_id={cid} di assets/audio/voice/casting.json; sampel suara {vp})",
+"对这个音色提修改意见,发消息给总制片": "Beri masukan revisi untuk suara ini; mengirim pesan ke Produser",
+"对这段旁白配音提修改意见,发消息给总制片": "Beri masukan revisi untuk audio narasi ini; mengirim pesan ke Produser",
+"对这段配乐音频提修改意见,发消息给总制片": "Beri masukan revisi untuk audio musik ini; mengirim pesan ke Produser"
 };

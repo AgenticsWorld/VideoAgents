@@ -1290,6 +1290,7 @@ async def versions_page():
 PREVIEW_PAGES = ("characters", "scenes", "props", "storyboard", "videos")
 IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
+AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
 # 项目产物静态文件(图片/视频,StaticFiles 自带 Range 支持,视频可拖进度条)
 app.mount("/projects", StaticFiles(directory=str(PROJECTS_DIR)), name="projects")
@@ -1564,6 +1565,47 @@ def _asset_urls(base: Path, adir: Path, exts: tuple) -> list[dict]:
                      f"?v={int(f.stat().st_mtime)}")} for f in files]
 
 
+def _audio_url(base: Path, f: Path) -> str | None:
+    """项目内单个音频文件 → 带 mtime 版本参数的 /projects URL;不存在返回 None。"""
+    try:
+        if not f.is_file() or f.suffix.lower() not in AUDIO_EXTS:
+            return None
+        return (f"/projects/{base.name}/{f.relative_to(base)}"
+                f"?v={int(f.stat().st_mtime)}")
+    except (OSError, ValueError):
+        return None
+
+
+def _character_voices(base: Path) -> dict[str, list[dict]]:
+    """音色试听聚合:assets/audio/voice/casting.json(选角事实源)按 char_id 归组,
+    refs/ 下未登记进 casting 的 <CHAR-ID>[_<variant>]_voiceprint 音频兜底补入。"""
+    vdir = base / "assets" / "audio" / "voice"
+    casting = _read_json_safe(vdir / "casting.json") or {}
+    voices: dict[str, list[dict]] = {}
+    for c in casting.get("castings", []):
+        if not (isinstance(c, dict) and c.get("char_id")):
+            continue
+        vp = c.get("voiceprint")
+        voices.setdefault(c["char_id"], []).append({
+            "variant": c.get("variant") or "",
+            "tts_model": c.get("tts_model") or "",
+            "tts_voice": c.get("tts_voice") or "",
+            "status": c.get("status") or "",
+            "url": _audio_url(base, base / vp) if vp else None})
+    rdir = vdir / "refs"
+    if rdir.is_dir():
+        seen = {v["url"].split("?")[0]
+                for vs in voices.values() for v in vs if v["url"]}
+        for f in sorted(rdir.iterdir()):
+            m = re.match(r"([^_]+)(?:_(.+))?_voiceprint$", f.stem)
+            url = _audio_url(base, f)
+            if m and url and url.split("?")[0] not in seen:
+                voices.setdefault(m.group(1), []).append({
+                    "variant": m.group(2) or "", "tts_model": "",
+                    "tts_voice": "", "status": "", "url": url})
+    return voices
+
+
 def _preview_characters(project: str):
     """人物设定聚合:bible/characters/* 文字 + assets/concepts/characters/* 概念图。"""
     base = _proj_base(project)
@@ -1577,6 +1619,7 @@ def _preview_characters(project: str):
         if d.is_dir():
             ids |= {x.name for x in d.iterdir()
                     if x.is_dir() and not x.name.startswith(".")}
+    voices = _character_voices(base)
     chars = []
     for cid in sorted(ids):
         docs = {}
@@ -1586,6 +1629,7 @@ def _preview_characters(project: str):
         meta = info.get(cid) or {}
         chars.append({"id": cid, "name": meta.get("canonical_name") or cid,
                       "meta": meta, "docs": docs,
+                      "voices": voices.get(cid, []),
                       "images": _asset_urls(base, adir / cid, IMG_EXTS)})
     return {"project": base.name, "characters": chars}
 
@@ -1689,6 +1733,16 @@ def _preview_storyboard(project: str, ep: str):
             r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)"
             r"\s*\|[^\]]*\]\s*\n(.+)$",
             data["narration"], re.M)]
+    # 旁白音频对位:narration/<ep>/manifest.json(早期集)或 narration_track.json
+    # 的 segments[].num(N-xx)→ file;manifest 缺失时按 <ep>_nar_<xx>.mp3 命名兜底
+    ndir = base / "assets" / "audio" / "narration" / ep
+    nman = (_read_json_safe(ndir / "manifest.json")
+            or _read_json_safe(ndir / "narration_track.json") or {})
+    nfile = {s["num"]: s.get("file") for s in nman.get("segments", [])
+             if isinstance(s, dict) and s.get("num")}
+    for it in data["narration_items"]:
+        rel = nfile.get(it["id"]) or f"{ep}_nar_{it['id'].split('-')[-1]}.mp3"
+        it["audio"] = _audio_url(base, ndir / rel)
     sb = _read_json_safe(base / "directing" / ep / "storyboard.json") or {}
     data["title"] = sb.get("title") or (plan_eps.get(ep) or {}).get("title", "")
     data["board_scenes"] = [
@@ -1756,6 +1810,15 @@ def _preview_storyboard(project: str, ep: str):
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
         })
     data["generation_groups"] = groups
+    # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 beat_ref/scene 对位试听
+    bdir = base / "assets" / "audio" / "bgm" / ep
+    cs = _read_json_safe(bdir / "cue_sheet.json") or {}
+    data["bgm_cues"] = [
+        {k: c.get(k) for k in ("cue_id", "in_s", "out_s", "scene",
+                               "beat_ref", "mood", "loop_fill")} | {
+            "audio": (_audio_url(base, bdir / c["file"])
+                      if isinstance(c.get("file"), str) else None)}
+        for c in (cs.get("cues") or []) if isinstance(c, dict)]
     return data
 
 

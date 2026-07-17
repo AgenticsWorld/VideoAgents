@@ -804,5 +804,16 @@ window.I18N_DICT = {
 "安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Sau khi cài xong, bấm \"Kiểm tra lại\"; bạn cũng có thể tạm chuyển sang engine khác.",
 "稍后再说": "Để sau",
 "重新检测": "Kiểm tra lại",
-"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Vẫn không tìm thấy lệnh {bin}; nếu vừa cài xong, hãy khởi động lại dịch vụ này để PATH có hiệu lực"
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Vẫn không tìm thấy lệnh {bin}; nếu vừa cài xong, hãy khởi động lại dịch vụ này để PATH có hiệu lực",
+"主音色": "Giọng chính",
+"(音色样本未生成)": "(chưa tạo mẫu giọng)",
+"(音频未生成)": "(chưa tạo âm thanh)",
+"BGM(后期配乐轨,起于本镜位)": "BGM (track nhạc hậu kỳ; bắt đầu từ cảnh quay này)",
+"⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首": "⚠ Chưa khớp với cảnh quay nào; hiển thị ở đầu tập theo thứ tự cue_sheet",
+"对这条配乐提修改意见,发消息给总制片": "Góp ý chỉnh sửa cue nhạc này; gửi tin nhắn cho Nhà sản xuất",
+"配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})": "Cue nhạc {ep}/{cid} (scene: {sc}; dữ liệu: mục {cid} trong assets/audio/bgm/{ep}/cue_sheet.json)",
+"音色 {cid}/{v}(选角 assets/audio/voice/casting.json 条目 char_id={cid},音色样本 {vp})": "Giọng {cid}/{v} (casting: mục char_id={cid} trong assets/audio/voice/casting.json; mẫu giọng {vp})",
+"对这个音色提修改意见,发消息给总制片": "Góp ý chỉnh sửa giọng này; gửi tin nhắn cho Nhà sản xuất",
+"对这段旁白配音提修改意见,发消息给总制片": "Góp ý chỉnh sửa đoạn thuyết minh này; gửi tin nhắn cho Nhà sản xuất",
+"对这段配乐音频提修改意见,发消息给总制片": "Góp ý chỉnh sửa đoạn nhạc này; gửi tin nhắn cho Nhà sản xuất"
 };

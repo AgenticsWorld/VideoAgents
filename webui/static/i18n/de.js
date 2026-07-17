@@ -804,5 +804,16 @@ window.I18N_DICT = {
 "安装完成后点击「重新检测」;也可暂时换用其他引擎。": "Nach der Installation auf „Erneut prüfen“ klicken; vorerst kann auch eine andere Engine verwendet werden.",
 "稍后再说": "Später",
 "重新检测": "Erneut prüfen",
-"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Der Befehl {bin} wurde weiterhin nicht gefunden; falls gerade installiert, diesen Dienst neu starten, damit PATH wirksam wird"
+"仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效": "Der Befehl {bin} wurde weiterhin nicht gefunden; falls gerade installiert, diesen Dienst neu starten, damit PATH wirksam wird",
+"主音色": "Hauptstimme",
+"(音色样本未生成)": "(Stimmprobe noch nicht generiert)",
+"(音频未生成)": "(Audio noch nicht generiert)",
+"BGM(后期配乐轨,起于本镜位)": "BGM (Postproduktions-Musikspur; setzt bei dieser Einstellung ein)",
+"⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首": "⚠ Keiner Einstellung zugeordnet; wird in cue_sheet-Reihenfolge am Episodenanfang angezeigt",
+"对这条配乐提修改意见,发消息给总制片": "Änderungswünsche zu diesem Musik-Cue geben; sendet eine Nachricht an den Produzenten",
+"配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})": "Musik-Cue {ep}/{cid} (scene: {sc}; Daten: Eintrag {cid} in assets/audio/bgm/{ep}/cue_sheet.json)",
+"音色 {cid}/{v}(选角 assets/audio/voice/casting.json 条目 char_id={cid},音色样本 {vp})": "Stimme {cid}/{v} (Casting: Eintrag char_id={cid} in assets/audio/voice/casting.json; Stimmprobe {vp})",
+"对这个音色提修改意见,发消息给总制片": "Änderungswünsche zu dieser Stimme geben; sendet eine Nachricht an den Produzenten",
+"对这段旁白配音提修改意见,发消息给总制片": "Änderungswünsche zu diesem Erzähler-Audio geben; sendet eine Nachricht an den Produzenten",
+"对这段配乐音频提修改意见,发消息给总制片": "Änderungswünsche zu diesem Musik-Audio geben; sendet eine Nachricht an den Produzenten"
 };
