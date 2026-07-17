@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "Đạo cụ",
 "到总制片界面对该设定文件提修改意见": "Gửi ý kiến chỉnh sửa cho tệp thiết lập này trong giao diện Tổng chế tác",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "Nhân vật {name}({id}; tài liệu thiết lập bible/characters/{id}/, đăng ký bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập nhân vật này; gửi tin nhắn cho Tổng chế tác",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "Bối cảnh {name}({id}; tài liệu thiết lập bible/scenes/{id}/, đăng ký bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập bối cảnh này; gửi tin nhắn cho Tổng chế tác",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Đạo cụ {name}({id}; thẻ thiết lập id={id} trong bible/props.json)",
+"对这个道具的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập đạo cụ này; gửi tin nhắn cho Tổng chế tác",
 };

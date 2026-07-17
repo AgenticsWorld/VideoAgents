@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "Props",
 "到总制片界面对该设定文件提修改意见": "Give revision notes on this config file in the Producer view",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "Character {name} ({id}; profile docs bible/characters/{id}/, registry bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "Give revision notes on this character's profile; sends a message to the Producer",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "Scene {name} ({id}; profile docs bible/scenes/{id}/, registry bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "Give revision notes on this scene's profile; sends a message to the Producer",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Prop {name} ({id}; card id={id} in bible/props.json)",
+"对这个道具的设定提修改意见,发消息给总制片": "Give revision notes on this prop's profile; sends a message to the Producer",
 };

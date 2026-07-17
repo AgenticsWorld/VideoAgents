@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "Properti",
 "到总制片界面对该设定文件提修改意见": "Berikan catatan revisi untuk file konfigurasi ini di tampilan Produser",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "Karakter {name} ({id}; dokumen bible/characters/{id}/, registri bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "Berikan catatan revisi untuk karakter ini; mengirim pesan ke Produser",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "Adegan {name} ({id}; dokumen bible/scenes/{id}/, registri bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "Berikan catatan revisi untuk adegan ini; mengirim pesan ke Produser",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Properti {name} ({id}; kartu id={id} di bible/props.json)",
+"对这个道具的设定提修改意见,发消息给总制片": "Berikan catatan revisi untuk properti ini; mengirim pesan ke Produser",
 };

@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "الأدوات",
 "到总制片界面对该设定文件提修改意见": "تقديم ملاحظات تعديل على ملف الإعداد هذا في واجهة المنتج",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "الشخصية {name} ({id}؛ وثائق الإعداد bible/characters/{id}/، السجل bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "تقديم ملاحظات تعديل على إعداد هذه الشخصية؛ يرسل رسالة إلى المنتج",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "المشهد {name} ({id}؛ وثائق الإعداد bible/scenes/{id}/، السجل bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "تقديم ملاحظات تعديل على إعداد هذا المشهد؛ يرسل رسالة إلى المنتج",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "الأداة {name} ({id}؛ بطاقة id={id} في bible/props.json)",
+"对这个道具的设定提修改意见,发消息给总制片": "تقديم ملاحظات تعديل على إعداد هذه الأداة؛ يرسل رسالة إلى المنتج",
 };

@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "소품",
 "到总制片界面对该设定文件提修改意见": "총괄 프로듀서 화면에서 이 설정 파일에 수정 의견 제출",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "인물 {name}({id}; 설정 문서 bible/characters/{id}/, 등록 bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "이 인물 설정에 수정 의견 제출(총괄 프로듀서에게 메시지 전송)",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "장면 {name}({id}; 설정 문서 bible/scenes/{id}/, 등록 bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "이 장면 설정에 수정 의견 제출(총괄 프로듀서에게 메시지 전송)",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "소품 {name}({id}; bible/props.json의 id={id} 설정 카드)",
+"对这个道具的设定提修改意见,发消息给总制片": "이 소품 설정에 수정 의견 제출(총괄 프로듀서에게 메시지 전송)",
 };

@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "小道具",
 "到总制片界面对该设定文件提修改意见": "総制作画面でこの設定ファイルに修正意見を出す",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "人物 {name}({id};設定文書 bible/characters/{id}/、登録 bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "このキャラクターの設定に修正意見を出す(総制作へメッセージ送信)",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "シーン {name}({id};設定文書 bible/scenes/{id}/、登録 bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "このシーンの設定に修正意見を出す(総制作へメッセージ送信)",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "小道具 {name}({id};bible/props.json 内 id={id} の設定カード)",
+"对这个道具的设定提修改意见,发消息给总制片": "この小道具の設定に修正意見を出す(総制作へメッセージ送信)",
 };

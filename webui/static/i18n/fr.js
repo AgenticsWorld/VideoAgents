@@ -843,4 +843,10 @@ window.I18N_DICT = {
 "说明文档": "README",
 "道具": "Accessoires",
 "到总制片界面对该设定文件提修改意见": "Donner des notes de révision sur ce fichier de configuration dans la vue Producteur",
+"人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)": "Personnage {name} ({id} ; documents bible/characters/{id}/, registre bible/characters/index.json)",
+"对这个人物的设定提修改意见,发消息给总制片": "Donner des notes de révision sur ce personnage ; envoie un message au Producteur",
+"场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)": "Scène {name} ({id} ; documents bible/scenes/{id}/, registre bible/scenes/index.json)",
+"对这个场景的设定提修改意见,发消息给总制片": "Donner des notes de révision sur cette scène ; envoie un message au Producteur",
+"道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Accessoire {name} ({id} ; fiche id={id} dans bible/props.json)",
+"对这个道具的设定提修改意见,发消息给总制片": "Donner des notes de révision sur cet accessoire ; envoie un message au Producteur",
 };

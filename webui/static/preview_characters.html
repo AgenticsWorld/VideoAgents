@@ -140,7 +140,8 @@ function renderDetail(c){
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
   let h=`<h2 class="title">${esc(c.name)}<span class="id">${esc(c.id)}</span>`
     +(m.tier?`<span class="badge">tier ${esc(m.tier)}</span>`:'')
-    +(m.kind?`<span class="badge" style="border-color:var(--dim);color:var(--dim)">${esc(m.kind)}</span>`:'')+`</h2>`;
+    +(m.kind?`<span class="badge" style="border-color:var(--dim);color:var(--dim)">${esc(m.kind)}</span>`:'')
+    +`<button class="editbtn" data-loc="${esc(I18N.f('人物 {name}({id};设定文档 bible/characters/{id}/,登记 bible/characters/index.json)',{name:c.name,id:c.id}))}" title="对这个人物的设定提修改意见,发消息给总制片">✏️ 修改</button></h2>`;
   const ml=[];
   if(aliases.length)ml.push(t('别名:')+aliases.join('、'));
   if(m.first_appearance)ml.push(t('首次登场:')+(m.first_appearance.chapter||JSON.stringify(m.first_appearance)));

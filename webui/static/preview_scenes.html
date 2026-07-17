@@ -136,7 +136,8 @@ function renderDetail(s){
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
   let h=`<h2 class="title">${esc(s.name)}<span class="id">${esc(s.id)}</span>`
     +(m.level?`<span class="badge">${esc(m.level)}</span>`:'')
-    +(m.key_scene?`<span class="badge" style="border-color:var(--yellow);color:var(--yellow)">关键场景</span>`:'')+`</h2>`;
+    +(m.key_scene?`<span class="badge" style="border-color:var(--yellow);color:var(--yellow)">关键场景</span>`:'')
+    +`<button class="editbtn" data-loc="${esc(I18N.f('场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)',{name:s.name,id:s.id}))}" title="对这个场景的设定提修改意见,发消息给总制片">✏️ 修改</button></h2>`;
   const ml=[];
   if(aliases.length)ml.push(t('别名:')+aliases.join('、'));
   if(m.parent)ml.push(t('父级:')+m.parent);
@@ -166,13 +167,16 @@ const bust=u=>u.includes('?')?u:u+'?v='+LOAD_T;
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
-// ✏️ 修改:跳转总制片界面,把该文件路径预填进「输入工作指令」框
+// ✏️ 修改:跳转总制片界面,把修改对象预填进「输入工作指令」框。
+// data-url=具体媒体文件路径;data-loc=结构化位置元数据(场景设定等无单一文件的对象)
 document.addEventListener('click',e=>{
-  const b=e.target.closest('.editbtn');if(!b)return;
+  const b=e.target.closest('.editbtn');
+  if(!b||(!b.dataset.url&&!b.dataset.loc))return;
   const proj=$('#project').value.trim()||'demo';
-  const path='data/projects/'+b.dataset.url.split('?')[0].replace(/^\/projects\//,'');
+  const subject=b.dataset.loc
+    ||'data/projects/'+b.dataset.url.split('?')[0].replace(/^\/projects\//,'');
   location.href='/?project='+encodeURIComponent(proj)
-    +'&compose='+encodeURIComponent(t('修改 ')+path+'\n'+t('修改意见:'));
+    +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'));
 });
 
 async function load(){
