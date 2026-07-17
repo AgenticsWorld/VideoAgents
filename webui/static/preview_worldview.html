@@ -54,6 +54,8 @@ h2.title .id{color:var(--dim);font-size:13px;font-weight:400}
 .doc.closed>h3::before{content:'▸ '}
 .doc.closed>.body{display:none}
 .doc>.body{padding:12px 16px;background:var(--panel2)}
+.editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.editbtn:hover{color:var(--accent);border-color:var(--accent)}
 dl.kv{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 14px}
 dl.kv>dt{color:var(--dim);font-size:12.5px;word-break:break-all}
 dl.kv>dd{min-width:0;word-break:break-word}
@@ -131,7 +133,7 @@ function renderList(){
 
 function renderDetail(s){
   const box=$('#detail');
-  let h=`<h2 class="title">${icon(s)} ${esc(label(s))}<span class="id">${esc(s.file)}</span></h2>`;
+  let h=`<h2 class="title">${icon(s)} ${esc(label(s))}<span class="id">${esc(s.file)}</span><button class="editbtn" data-file="${esc(s.file)}" title="${esc(t('到总制片界面对该设定文件提修改意见'))}">✏️ ${esc(t('修改'))}</button></h2>`;
   h+=`<div class="meta-line">${esc((s.size/1024).toFixed(1))} KB · ${t('更新于:')}${esc(new Date(s.mtime*1000).toLocaleString())}</div>`;
   if(s.text!==undefined){
     h+=`<pre class="md">${esc(s.text)}</pre>`;
@@ -154,6 +156,15 @@ function renderDetail(s){
   }
   box.innerHTML=h;box.scrollTop=0;
 }
+
+// ✏️ 修改:跳转总制片界面,把该设定文件路径预填进「输入工作指令」框
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.editbtn');if(!b)return;
+  const proj=$('#project').value.trim()||'demo';
+  const path='data/projects/'+proj+'/bible/'+b.dataset.file;
+  location.href='/?project='+encodeURIComponent(proj)
+    +'&compose='+encodeURIComponent(t('修改 ')+path+'\n'+t('修改意见:'));
+});
 
 async function load(){
   const proj=$('#project').value.trim()||'demo';

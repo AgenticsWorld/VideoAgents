@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Änderungsprotokoll",
 "说明文档": "README",
 "道具": "Requisiten",
+"到总制片界面对该设定文件提修改意见": "Im Produzenten-View Änderungswünsche zu dieser Konfigurationsdatei geben",
 };

@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Nhật ký thay đổi",
 "说明文档": "README",
 "道具": "Đạo cụ",
+"到总制片界面对该设定文件提修改意见": "Gửi ý kiến chỉnh sửa cho tệp thiết lập này trong giao diện Tổng chế tác",
 };

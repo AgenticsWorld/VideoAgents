@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Changelog",
 "说明文档": "README",
 "道具": "Props",
+"到总制片界面对该设定文件提修改意见": "Give revision notes on this config file in the Producer view",
 };

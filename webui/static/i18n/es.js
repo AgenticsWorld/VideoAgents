@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Registro de cambios",
 "说明文档": "README",
 "道具": "Utilería",
+"到总制片界面对该设定文件提修改意见": "Dar notas de revisión sobre este archivo de configuración en la vista del Productor",
 };

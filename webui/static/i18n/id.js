@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Riwayat perubahan",
 "说明文档": "README",
 "道具": "Properti",
+"到总制片界面对该设定文件提修改意见": "Berikan catatan revisi untuk file konfigurasi ini di tampilan Produser",
 };

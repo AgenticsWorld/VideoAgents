@@ -842,4 +842,5 @@ window.I18N_DICT = {
 "修订记录": "Journal des modifications",
 "说明文档": "README",
 "道具": "Accessoires",
+"到总制片界面对该设定文件提修改意见": "Donner des notes de révision sur ce fichier de configuration dans la vue Producteur",
 };
