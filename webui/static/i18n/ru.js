@@ -26,7 +26,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", подождите (обновите страницу, чтобы увидеть прогресс)",
 "0=不审核": "0 = без проверки",
 "100=最严格审核": "100 = максимально строгая проверка",
-"Agent 执行引擎:claude -p / codex exec / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Движок выполнения Agent: claude -p / codex exec / deepagents (локальные модели, напр. LM Studio, или OpenRouter — настраиваются на странице 🎨 Генеративные модели)",
+"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Движок выполнения Agent: claude -p / codex exec / kimi -p / deepagents (локальные модели, напр. LM Studio, или OpenRouter — настраиваются на странице 🎨 Генеративные модели)",
 "Auto(官方自动选版)": "Auto (официальный автоматический выбор версии)",
 "BGM 由 music Agent 后期生成(不进 Seedance 组视频);目前走 OpenRouter": "BGM генерирует Agent music на пост-этапе (не входит в групповые видео Seedance); сейчас через OpenRouter",
 "BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,": "BytePlus ModelArk API генерации изображений (зарубежный регион ap-southeast-1, серия Seedream,",

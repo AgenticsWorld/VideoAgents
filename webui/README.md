@@ -28,13 +28,14 @@ back to asking the user for approval. `bypassPermissions` removes those
 prompts; agents can then run arbitrary commands, so use it only on a trusted
 machine. The orchestration-layer guardrails (`orchestrator_guard` hook and the
 `modules/genmedia.py` runtime check) do not depend on the permission mode and
-remain active. The `codex` and `deepagents` engines are unaffected — they
-never prompt for approval.
+remain active. The `codex`, `kimi`, and `deepagents` engines are unaffected —
+they never prompt for approval.
 
 At least one execution engine is required to run agents:
 
 - `claude`: Claude CLI using `claude -p`
 - `codex`: Codex CLI using `codex exec --json`
+- `kimi`: Kimi Code CLI using `kimi -p --output-format stream-json`
 - `deepagents`: an OpenAI-compatible endpoint through the optional DeepAgents
   environment
 
@@ -63,6 +64,7 @@ All of these paths are ignored by Git.
 | `VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE` | disabled | Allow reading the local Claude OAuth credential for the usage display |
 | `CLAUDE_BIN` | `claude` | Claude CLI executable |
 | `CODEX_BIN` | `codex` | Codex CLI executable |
+| `KIMI_BIN` | `kimi` | Kimi Code CLI executable |
 | `DEEPAGENTS_PY` | `webui/.venv-deepagents/bin/python` | DeepAgents Python executable |
 
 Setting `VIDEOAGENTS_HOST=0.0.0.0` enables LAN access for the tokenized mobile

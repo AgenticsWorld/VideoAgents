@@ -47,10 +47,23 @@ HOST = os.environ.get("VIDEOAGENTS_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VIDEOAGENTS_PORT", "8630"))
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+
+
+def _default_kimi_bin() -> str:
+    # kimi 官方安装脚本默认装到 ~/.kimi-code/bin,该目录通常由交互式 shell 的 rc 文件
+    # 加进 PATH;从 IDE/launchd/bash 等环境启动本服务时 PATH 可能不含它,回退绝对路径
+    found = shutil.which("kimi")
+    if found:
+        return found
+    fallback = Path.home() / ".kimi-code" / "bin" / "kimi"
+    return str(fallback) if fallback.is_file() else "kimi"
+
+
+KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
 # deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
 DEEPAGENTS_PY = os.environ.get(
     "DEEPAGENTS_PY", str(Path(__file__).resolve().parent / ".venv-deepagents" / "bin" / "python"))
-ENGINES = ("claude", "codex", "deepagents")   # 执行引擎:claude -p / codex exec / deepagents runner
+ENGINES = ("claude", "codex", "kimi", "deepagents")   # 执行引擎:claude -p / codex exec / kimi -p / deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
@@ -495,7 +508,7 @@ AM_MODE_MODELS = {
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "deepagents")      # "" = 跟随全局
+AM_ENGINES = ("", "claude", "codex", "kimi", "deepagents")      # "" = 跟随全局
 AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "comfyui")
 AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
 
@@ -906,7 +919,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 webui/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
+  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
 - 查看全部 agent_id:`python3 webui/dispatch.py --list`
 - 查看运行状态:`python3 webui/dispatch.py --runs`;查看单个:`python3 webui/dispatch.py --status <run_id>`
 
@@ -931,7 +944,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex)
+8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex|kimi)
    或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
     return p
 
@@ -952,8 +965,8 @@ def tool_summary(name: str, inp: dict) -> tuple[str, str | None]:
         return f"⚙ Bash: {cmd}", None
     if name in ("Glob", "Grep"):
         return f"🔍 {name}: {inp.get('pattern', '')}", None
-    if name == "Task":
-        return f"🤖 Task: {inp.get('description', '')}", None
+    if name in ("Task", "Agent"):        # claude 子代理工具叫 Task,kimi 叫 Agent
+        return f"🤖 {name}: {inp.get('description', '')}", None
     return f"🔧 {name}", None
 
 
@@ -1057,6 +1070,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                 cmd = base + ["resume", session_id, message]
             else:
                 cmd = base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+        elif engine == "kimi":
+            # kimi 兼容 claude -p 用法,但无 --append-system-prompt:首轮把角色说明拼进
+            # prompt;续轮走 -r resume(会话已带上下文)。-p 非交互模式固定 auto 权限,
+            # 与 --yolo/--auto 互斥,无需也不能传权限参数
+            base = [KIMI_BIN, "--output-format", "stream-json"]
+            if model:
+                base += ["-m", model]
+            if session_id:
+                cmd = base + ["-r", session_id, "-p", message]
+            else:
+                cmd = base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
         else:
             cmd = [CLAUDE_BIN, "-p", message,
                    "--output-format", "stream-json", "--verbose",
@@ -1108,6 +1132,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                     continue
                 if engine == "codex":
                     handle_codex_event(run, obj)
+                elif engine == "kimi":
+                    handle_kimi_event(run, obj)
                 elif engine == "deepagents":
                     handle_deepagents_event(run, obj)
                 else:
@@ -1200,6 +1226,39 @@ def handle_codex_event(run: dict, obj: dict):
             (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
     elif t in ("turn.failed", "error"):
         run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
+
+
+def handle_kimi_event(run: dict, obj: dict):
+    """解析 kimi -p --output-format stream-json 的 JSONL 事件。
+
+    事件形态(实测 0.26):assistant 文本 {"role":"assistant","content":...};
+    工具调用 {"role":"assistant","tool_calls":[{"function":{"name",...,"arguments":<JSON字符串>}}]};
+    末尾 meta {"role":"meta","type":"session.resume_hint","session_id":...}。"""
+    role_ = obj.get("role")
+    if role_ == "assistant":
+        txt = obj.get("content") or ""
+        if txt:
+            run["text"] = run.get("text", "") + txt
+            run["result"] = txt          # kimi 无独立 result 事件,取最后一条 assistant 文本
+            HUB.publish({"type": "text", "run_id": run["id"],
+                         "agent": run["agent"], "text": txt})
+        for tc in obj.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            try:
+                inp = json.loads(fn.get("arguments") or "{}")
+            except Exception:
+                inp = {}
+            desc, fp = tool_summary(fn.get("name", "?"), inp)
+            run.setdefault("activity", []).append(desc)
+            if fp:
+                run.setdefault("files", []).append(fp)
+                HUB.publish({"type": "file", "run_id": run["id"],
+                             "agent": run["agent"], "path": fp})
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": desc})
+            publish_run(run)
+    elif role_ == "meta" and obj.get("type") == "session.resume_hint":
+        run["session_id"] = obj.get("session_id")
 
 
 def handle_deepagents_event(run: dict, obj: dict):
@@ -2520,9 +2579,9 @@ async def api_soul(agent: str):
 
 @app.get("/api/enginecheck")
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
-    bins = {"claude": CLAUDE_BIN, "codex": CODEX_BIN}
+    bins = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
     if engine not in bins:
         return {"engine": engine, "available": True, "bin": ""}
     path = await asyncio.to_thread(shutil.which, bins[engine])

@@ -26,7 +26,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", espera un momento (actualiza la página para ver el progreso)",
 "0=不审核": "0 = sin revisión",
 "100=最严格审核": "100 = revisión más estricta",
-"Agent 执行引擎:claude -p / codex exec / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Motor de ejecución del Agent: claude -p / codex exec / deepagents (modelos locales como LM Studio, u OpenRouter; se configuran en la página 🎨 Modelos generativos)",
+"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Motor de ejecución del Agent: claude -p / codex exec / kimi -p / deepagents (modelos locales como LM Studio, u OpenRouter; se configuran en la página 🎨 Modelos generativos)",
 "Auto(官方自动选版)": "Auto (selección oficial automática de versión)",
 "BGM 由 music Agent 后期生成(不进 Seedance 组视频);目前走 OpenRouter": "La BGM la genera el Agent music en posproducción (no entra en los vídeos de grupo de Seedance); actualmente vía OpenRouter",
 "BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,": "API de generación de imágenes de BytePlus ModelArk (región internacional ap-southeast-1, serie Seedream,",

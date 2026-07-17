@@ -26,7 +26,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", 잠시 기다려 주세요(새로고침하면 진행 상황이 갱신됩니다)",
 "0=不审核": "0=검수 안 함",
 "100=最严格审核": "100=가장 엄격한 검수",
-"Agent 执行引擎:claude -p / codex exec / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Agent 실행 엔진: claude -p / codex exec / deepagents(LM Studio 등 로컬 모델 또는 OpenRouter, 🎨 생성 모델 페이지에서 설정)",
+"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Agent 실행 엔진: claude -p / codex exec / kimi -p / deepagents(LM Studio 등 로컬 모델 또는 OpenRouter, 🎨 생성 모델 페이지에서 설정)",
 "Auto(官方自动选版)": "Auto(공식 자동 버전 선택)",
 "BGM 由 music Agent 后期生成(不进 Seedance 组视频);目前走 OpenRouter": "BGM은 music Agent가 후반 단계에서 생성합니다(Seedance 그룹 비디오에 포함되지 않음). 현재 OpenRouter 사용",
 "BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,": "BytePlus ModelArk 이미지 생성 API(해외 리전 ap-southeast-1, Seedream 시리즈, ",

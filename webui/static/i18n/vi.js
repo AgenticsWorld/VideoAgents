@@ -26,7 +26,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", vui lòng chờ (làm mới để cập nhật tiến độ)",
 "0=不审核": "0=không kiểm duyệt",
 "100=最严格审核": "100=kiểm duyệt nghiêm ngặt nhất",
-"Agent 执行引擎:claude -p / codex exec / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Engine thực thi Agent: claude -p / codex exec / deepagents (mô hình cục bộ như LM Studio, hoặc OpenRouter, cấu hình tại trang 🎨 Mô hình tạo sinh)",
+"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Engine thực thi Agent: claude -p / codex exec / kimi -p / deepagents (mô hình cục bộ như LM Studio, hoặc OpenRouter, cấu hình tại trang 🎨 Mô hình tạo sinh)",
 "Auto(官方自动选版)": "Auto (bản chính thức tự chọn phiên bản)",
 "BGM 由 music Agent 后期生成(不进 Seedance 组视频);目前走 OpenRouter": "BGM do Agent music tạo ở hậu kỳ (không đưa vào video nhóm Seedance); hiện dùng OpenRouter",
 "BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,": "API tạo ảnh BytePlus ModelArk (khu vực quốc tế ap-southeast-1, dòng Seedream,",

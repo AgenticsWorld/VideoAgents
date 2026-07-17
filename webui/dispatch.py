@@ -149,7 +149,7 @@ def main():
     # 默认 None:未显式指定时走「Agent 级模型配置 > 继承派单方引擎」;
     # 显式传 --engine/--model 则强制覆盖该成员的 Agent 级配置(force)
     ap.add_argument("--engine", default=None,
-                    choices=["claude", "codex", "deepagents"])
+                    choices=["claude", "codex", "kimi", "deepagents"])
     ap.add_argument("--wait", action="store_true")
     ap.add_argument("--timeout", type=int, default=3600)
     ap.add_argument("--list", action="store_true")
