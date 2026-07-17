@@ -113,6 +113,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 /* 用户确认弹窗(重跑/跳过) */
 #confirms{position:fixed;top:56px;right:16px;z-index:100;display:flex;flex-direction:column;gap:10px;max-width:380px}
 .confirm-box{background:var(--panel2);border:1px solid var(--yellow);border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.confirm-box.sign{border-color:var(--red)}
+.confirm-box.sign .cd{color:var(--red)}
 .confirm-box .q{font-size:13px;line-height:1.5;margin-bottom:10px;word-break:break-all}
 .confirm-box .row{display:flex;align-items:center;gap:8px}
 .confirm-box .cd{margin-left:auto;color:var(--dim);font-size:12px;flex:none}
@@ -1311,24 +1313,30 @@ function connect(){
   };
 }
 
-/* ---------- 用户确认(重跑/跳过) ---------- */
+/* ---------- 用户确认(重跑类:倒计时自动默认;签字类:保留至用户操作) ---------- */
 function showConfirm(c){
   if(document.querySelector(`.confirm-box[data-id="${c.id}"]`))return;
   let box=$('#confirms');
   if(!box){box=document.createElement('div');box.id='confirms';document.body.appendChild(box)}
-  const d=document.createElement('div');d.className='confirm-box';d.dataset.id=c.id;
-  const q=document.createElement('div');q.className='q';q.textContent='❓ '+c.question;d.appendChild(q);
+  const sign=c.kind==='sign';
+  const d=document.createElement('div');d.className='confirm-box'+(sign?' sign':'');d.dataset.id=c.id;
+  const q=document.createElement('div');q.className='q';q.textContent=(sign?'✍️ ':'❓ ')+c.question;d.appendChild(q);
   const row=document.createElement('div');row.className='row';
-  let left=c.remaining??c.timeout??60;
   const timer=document.createElement('span');timer.className='cd';
-  const tick=()=>timer.textContent=I18N.f('{s}s 后默认「{d}」',{s:left,d:t(c.default||'重跑')});tick();
-  const iv=setInterval(()=>{left--;if(left<=0){clearInterval(iv);d.remove()}else tick()},1000);
-  (c.options||['重跑','跳过']).forEach(o=>{
-    const b=document.createElement('button');b.textContent=o;
-    if(o===(c.default||'重跑'))b.className='primary';
+  let iv=null;
+  if(sign){
+    timer.textContent=t('等待签字,不会自动确认');
+  }else{
+    let left=c.remaining??c.timeout??60;
+    const tick=()=>timer.textContent=I18N.f('{s}s 后默认「{d}」',{s:left,d:t(c.default||'重跑')});tick();
+    iv=setInterval(()=>{left--;if(left<=0){clearInterval(iv);d.remove()}else tick()},1000);
+  }
+  (c.options||(sign?['签字','暂缓']:['重跑','跳过'])).forEach(o=>{
+    const b=document.createElement('button');b.textContent=t(o);
+    if(o===(c.default||(sign?'签字':'重跑')))b.className='primary';
     b.onclick=async e=>{e.stopPropagation();
       try{await api('/api/confirm/'+c.id+'/answer',{answer:o})}catch(err){}
-      clearInterval(iv);d.remove()};
+      if(iv)clearInterval(iv);d.remove()};
     row.appendChild(b);
   });
   row.appendChild(timer);d.appendChild(row);box.appendChild(d);

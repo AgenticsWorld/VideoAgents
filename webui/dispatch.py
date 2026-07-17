@@ -8,7 +8,12 @@
   python3 webui/dispatch.py --status <run_id>     # 查看单个运行(含结果)
   python3 webui/dispatch.py --wait-all <run_id...> # 等待多个运行全部结束(带进度心跳)
   python3 webui/dispatch.py --confirm "<问题>" [--timeout 60] [--options 重跑,跳过] [--default 重跑]
-                                                  # 向用户发起确认,阻塞至答复或超时,stdout 输出所选项
+                                                  # 重跑类确认:阻塞至答复或超时(弹窗至多 60s 自动落默认),stdout 输出所选项
+  python3 webui/dispatch.py --confirm "<H 门说明>" --sign [--timeout 14400]
+                                                  # 签字类确认(H1-H5/H3A 人工签字点专用):弹窗不倒计时、
+                                                  # 永不自动确认,保留到用户点「签字」;本命令等待至答复或
+                                                  # --timeout(默认 4h),超时 stdout 输出「未签字」——超时不是
+                                                  # 通过,应把任务记为等待人工后正常结束,弹窗仍保留
 
 零依赖(仅标准库)。通过本机 Web 控制台 API 派单,所以 UI 上能实时看到。
 """
@@ -59,10 +64,13 @@ def heartbeat(note: str):
         pass
 
 
-def confirm(question: str, timeout: int, options: list[str], default: str):
-    """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。"""
+def confirm(question: str, timeout: int, options: list[str], default: str,
+            sign: bool = False):
+    """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。
+    sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。"""
     resp = api("/api/confirm", {"question": question, "timeout": timeout,
                                 "options": options, "default": default,
+                                "kind": "sign" if sign else "confirm",
                                 "parent": PARENT})
     cid = resp["confirm_id"]
     deadline = time.time() + timeout
@@ -76,7 +84,12 @@ def confirm(question: str, timeout: int, options: list[str], default: str):
             heartbeat(f"✅ 用户选择「{c['answer']}」:{question[:100]}")
             print(c["answer"])
             return
-        heartbeat(f"❓ 等待用户确认(剩 {int(deadline - time.time())}s):{question[:120]}")
+        heartbeat(("✍️ 等待用户签字" if sign else "❓ 等待用户确认")
+                  + f"(剩 {int(deadline - time.time())}s):{question[:120]}")
+    if sign:
+        heartbeat(f"⏱ 等待签字超时,弹窗保留,任务转入等待人工:{question[:100]}")
+        print("未签字")
+        return
     heartbeat(f"⏱ 确认超时,采用默认「{default}」:{question[:100]}")
     print(default)
 
@@ -144,7 +157,9 @@ def main():
     ap.add_argument("--status", metavar="RUN_ID")
     ap.add_argument("--wait-all", nargs="+", metavar="RUN_ID", dest="wait_all")
     ap.add_argument("--confirm", metavar="QUESTION")
-    ap.add_argument("--options", default="重跑,跳过")
+    ap.add_argument("--sign", action="store_true",
+                    help="签字类确认:弹窗不自动确认,等用户点「签字」")
+    ap.add_argument("--options", default=None)
     ap.add_argument("--default", default=None, dest="default_opt")
     args = ap.parse_args()
 
@@ -160,9 +175,12 @@ def main():
         return
 
     if args.confirm:
-        opts = [o.strip() for o in args.options.split(",") if o.strip()]
-        timeout = args.timeout if args.timeout != 3600 else 60   # --confirm 默认 60s
-        confirm(args.confirm, timeout, opts, args.default_opt or opts[0])
+        raw = args.options or ("签字,暂缓" if args.sign else "重跑,跳过")
+        opts = [o.strip() for o in raw.split(",") if o.strip()]
+        # 默认等待:重跑类 60s(弹窗同步倒计时);签字类 4h(弹窗不倒计时,超时弹窗仍保留)
+        timeout = args.timeout if args.timeout != 3600 else (14400 if args.sign else 60)
+        confirm(args.confirm, timeout, opts, args.default_opt or opts[0],
+                sign=args.sign)
         return
 
     if args.wait_all:

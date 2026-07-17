@@ -911,10 +911,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
    命令输出「重跑」→ 正常重新派单;输出「跳过」→ 不再重跑,把该问题记入
    data/projects/<project>/qa/defects/ 并在最终汇报中说明跳过原因。首次派单不需要确认,只有重跑需要
-5. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
-6. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
+5. 【人工签字点必须用 --sign】H1-H5 与每集 H3A 等人工签字闸门,必须用签字类确认:
+   `python3 webui/dispatch.py --confirm "【H1 <闸门名>】<要点与放行影响>" --sign`
+   弹窗按钮为「签字/暂缓」,不倒计时、永不自动确认,保留到用户操作;命令默认最多等 4 小时。
+   输出「签字」→ 闸门通过,走冻结流程;「暂缓」或「未签字」(等待超时)→ 记为等待人工,
+   继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认(60s 自动默认)代替签字
+6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
+7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-7. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex)
+8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex)
    或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
     return p
 
@@ -2719,34 +2724,42 @@ def notify_user(text: str):
 
 
 def confirm_public(c: dict) -> dict:
-    remaining = max(0, int(c["created"] + c["timeout"] - time.time()))
+    remaining = (None if c["timeout"] is None else
+                 max(0, int(c["created"] + c["timeout"] - time.time())))
     return {k: c[k] for k in ("id", "question", "options", "default",
-                              "timeout", "parent", "answer")} | {"remaining": remaining}
+                              "timeout", "parent", "answer", "kind")} | {"remaining": remaining}
 
 
 @app.post("/api/confirm")
 async def api_confirm_create(body: dict):
-    """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。"""
+    """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。
+    kind=confirm(默认,重跑类):至多 60s 后自动落默认答案;
+    kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。"""
     q = (body.get("question") or "").strip()
     if not q:
         raise HTTPException(400, "question must not be empty")
-    options = [str(o)[:40] for o in (body.get("options") or ["重跑", "跳过"])][:4]
+    kind = "sign" if body.get("kind") == "sign" else "confirm"
+    fallback = ["签字", "暂缓"] if kind == "sign" else ["重跑", "跳过"]
+    options = [str(o)[:40] for o in (body.get("options") or fallback)][:4]
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
          "default": str(body.get("default") or options[0])[:40],
-         "timeout": min(600, max(5, int(body.get("timeout") or 60))),
-         "parent": body.get("parent"), "created": time.time(), "answer": None}
+         "timeout": None if kind == "sign" else
+         min(60, max(5, int(body.get("timeout") or 60))),
+         "kind": kind, "parent": body.get("parent"),
+         "created": time.time(), "answer": None}
     CONFIRMS[c["id"]] = c
     HUB.publish({"type": "confirm", **confirm_public(c)})
-    notify_user(f"需要你确认:{q}")
+    notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
     return {"confirm_id": c["id"]}
 
 
 @app.get("/api/confirms")
 async def api_confirms():
-    """未答复且未超时的确认项(前端刷新页面后恢复弹窗用)。"""
+    """未答复且未超时的确认项(前端刷新页面后恢复弹窗用);签字类不超时。"""
     now = time.time()
     return [confirm_public(c) for c in CONFIRMS.values()
-            if c["answer"] is None and now - c["created"] < c["timeout"]]
+            if c["answer"] is None and
+            (c["timeout"] is None or now - c["created"] < c["timeout"])]
 
 
 @app.get("/api/confirm/{cid}")
@@ -2764,6 +2777,7 @@ async def api_confirm_answer(cid: str, body: dict):
         raise HTTPException(404, "no such confirm")
     if c["answer"] is None:
         c["answer"] = str(body.get("answer") or "")[:40] or c["default"]
+        c["answered"] = time.time()
         HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
     return {"ok": True, "answer": c["answer"]}
 
@@ -2927,9 +2941,13 @@ def prune_runs_confirms():
     for rid in set(dead):
         RUNS.pop(rid, None)
     # 已答复的不能立删:dispatch 每 2s 轮询 /api/confirm/{cid},404 会落到默认答案;
-    # 统一按年龄淘汰(发起方自身 deadline = created + timeout)
+    # 重跑类按年龄淘汰(发起方自身 deadline = created + timeout);
+    # 签字类(timeout=None)未答复永不淘汰,答复后保留 10 分钟供发起方轮询读取
     gone = [cid for cid, c in CONFIRMS.items()
-            if now - c.get("created", now) > c.get("timeout", 0) + 600]
+            if (c.get("timeout") is not None
+                and now - c.get("created", now) > (c.get("timeout") or 0) + 600)
+            or (c.get("timeout") is None and c.get("answered")
+                and now - c["answered"] > 600)]
     for cid in gone:
         CONFIRMS.pop(cid, None)
     if dead or gone:
@@ -2961,10 +2979,20 @@ async def idle_watchdog():
                 print(f"[watchdog] {eng} 会话用量 {used:.0f}% ≥ 阈值 {th}%,本轮跳过",
                       flush=True)
                 continue
-            # 有未答复的确认项时先不打扰(确认项无项目归属,作为全局闸门)
-            pending_confirm = any(
-                c["answer"] is None and now - c["created"] < c["timeout"]
-                for c in CONFIRMS.values())
+            # 有未答复的确认项时先不打扰。能通过父运行定位项目的只闸对应项目
+            # (签字类永不超时,若当全局闸门,一个没人签的弹窗会冻结全部项目的
+            # 自动运行);定位不到项目的按全局闸门处理。签字类每小时本机提醒一次
+            pending = [c for c in CONFIRMS.values()
+                       if c["answer"] is None and
+                       (c["timeout"] is None or now - c["created"] < c["timeout"])]
+            _cproj = lambda c: (RUNS.get(c.get("parent") or "") or {}).get("project")  # noqa: E731
+            confirm_global = any(_cproj(c) is None for c in pending)
+            confirm_projs = {_cproj(c) for c in pending} - {None}
+            for c in pending:
+                if c.get("kind") == "sign" \
+                        and now - c.get("notified", c["created"]) > 3600:
+                    c["notified"] = now
+                    notify_user(f"签字待处理:{c['question'][:80]}")
             for proj_dir in sorted(PROJECTS_DIR.iterdir()):
                 if not proj_dir.is_dir() or proj_dir.name.startswith("."):
                     continue
@@ -2975,7 +3003,7 @@ async def idle_watchdog():
                 if any(r.get("status") in ("queued", "running")
                        and r.get("project") == proj for r in RUNS.values()):
                     continue
-                if pending_confirm:
+                if confirm_global or proj in confirm_projs:
                     continue
                 # DAG 缺失/解析不出任何节点时不再静默失明:唤醒总制片核对
                 # (至多 1 次/小时)。格式规范与写入时自检见 WORKFLOW.md §3.2。
