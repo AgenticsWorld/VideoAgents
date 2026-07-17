@@ -42,7 +42,7 @@ python webui/server.py
 命令时不再弹审批（`codex` 与 `deepagents` 引擎本就免审批）：
 
 ```bash
-make run-auto   # 即 VIDEOAGENTS_PERMISSION_MODE=bypassPermissions python webui/server.py
+make run-auto
 ```
 
 该模式下 Agent 可执行任意命令，请仅在可信机器上使用。调度层越界防护

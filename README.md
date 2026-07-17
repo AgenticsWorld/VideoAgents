@@ -50,7 +50,7 @@ For unattended pipelines, start the console in full-auto mode so agents on the
 and `deepagents` engines already run unattended):
 
 ```bash
-make run-auto   # VIDEOAGENTS_PERMISSION_MODE=bypassPermissions python webui/server.py
+make run-auto
 ```
 
 This lets agents execute any command, so use it only on a trusted machine. The
