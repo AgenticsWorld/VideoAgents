@@ -1852,7 +1852,7 @@ def _preview_storyboard(project: str, ep: str):
          "est_s": float(m.group(3)), "text": m.group(4).strip()}
         for m in re.finditer(
             r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)"
-            r"\s*\|[^\]]*\]\s*\n(.+)$",
+            r"(?:\s*\|.*)?\]\s*\n(.+)$",
             data["narration"], re.M)]
     # 旁白音频对位:narration/<ep>/manifest.json(早期集)或 narration_track.json
     # 的 segments[].num(N-xx)→ file;manifest 缺失时按 <ep>_nar_<xx>.mp3 命名兜底
