@@ -1887,12 +1887,15 @@ def _preview_storyboard(project: str, ep: str):
             if isinstance(dr, dict) and dr.get("order") is not None:
                 drafts[(sc.get("scene_no"), dr["order"])] = dr
 
+    def _shot_draft(s: dict) -> dict:
+        m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
+        return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
+
     def _shot_content(s: dict) -> str:
         if s.get("content"):
             return s["content"]
-        m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
-        dr = drafts.get((m.group(1), int(m.group(2)))) if m else None
-        return (dr or {}).get("content") or (dr or {}).get("subject_action") or ""
+        dr = _shot_draft(s)
+        return dr.get("content") or dr.get("subject_action") or ""
 
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
@@ -1907,6 +1910,7 @@ def _preview_storyboard(project: str, ep: str):
             "camera_position", "characters", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
+            "dialogue_ref": s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref"),
             "content": _shot_content(s),
             "keyframes": _asset_urls(base, kroot / sid, IMG_EXTS),
             "clips": [c for c in clips
