@@ -12,7 +12,7 @@
 ## 职责
 
 1. **提取文本源**:以剧本文本为唯一文字依据——对白取 `story/episodes/epNN/screenplay.md`(dialogue-rewrite 优化后的对白层),旁白取 `story/episodes/epNN/narration.md`;不听音频"猜词"。
-2. **时轴对齐**:对照 `assets/audio/final/epNN.wav` 与 transition 更新后的 `edit/epNN/timeline.json`,逐句强制对齐,起止时刻偏差 <200ms。
+2. **时轴对齐**:对照 `assets/audio/final/epNN.wav` 与 transition 更新后的 `edit/epNN/timeline.json`,逐句强制对齐,起止时刻偏差 <200ms。**时基约定:我的 SRT 以正片(cut)0 秒为基准,不含片头**——成片 final.mp4 在正片前接入片头后,由 `edit` 在终版封装时把我的 SRT 整体平移片头实测时长生成 `subtitles_final.srt`(成片基准);下游烧录/发布必须用成片基准版,不得拿我的正片基准 SRT 直接配 final.mp4。
 3. **断行与切分**:按平台单行字数上限断行、按语气停顿切分长句;单条字幕停留时长符合可读性(不快闪、不滞留跨镜头)。
 4. **错别字与术语检查**:全量拼写/错别字检查;专有名词(人名/地名/招式)逐一对照 `bible/dictionary.json`,不得出现词典外的变体写法。
 5. **字幕样式规范(烧录样式的唯一权威,下游烧录方必须遵守)**:字幕以"最小遮挡画面"为第一原则——
@@ -46,7 +46,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 字幕文件 | `edit/epNN/subtitles.srt` | 标准 SRT;UTF-8;序号连续;时间码 `HH:MM:SS,mmm` |
+| 字幕文件 | `edit/epNN/subtitles.srt` | 标准 SRT;UTF-8;序号连续;时间码 `HH:MM:SS,mmm`;**正片 0 秒基准(不含片头;成片基准版 subtitles_final.srt 由 edit 终版封装时生成)** |
 
 关键字段/结构约定:
 ```
@@ -90,5 +90,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`transition`(定稿时轴,最怕它改时间线不出新版本)、`audio-mixing`(final_audio)、`screenplay`/`narration`(文本源)。
-- **下游**:G9/H4 的人工审看直接读我的字幕;`12-publishing/platform-adapter` 按平台打包我的 SRT,最怕我行长超限或时间码非法导致平台 lint 失败。
+- **下游**:G9/H4 的人工审看直接读我的字幕;`edit` 终版封装时把我的 SRT 平移片头时长生成成片基准版;`12-publishing/platform-adapter` 按平台打包**成片基准版**(subtitles_final.srt),最怕我行长超限或时间码非法导致平台 lint 失败。
 - **需对齐的伙伴**:`10-editing/caption`(分工线:说出来的归我,画面上标注的归他;同屏避让位置需协商)、`02-worldbuilding/dictionary`(术语写法唯一来源)。

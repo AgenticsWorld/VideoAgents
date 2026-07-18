@@ -47,8 +47,10 @@ data/projects/<slug>/
 │                   #   voice/casting.json=项目级选角注册表(角色×形态→tts_model+tts_voice,全片唯一事实源),
 │                   #   voice/refs/=项目级音色样本;voice/epNN/ 只放集级产物 lines/ 与 patches/
 │                   #   (2026-07-12 改版:选角登记从 epNN/refs/manifest.json 上收到项目级,治跨集音色漂移)
-├── edit/           # ep01/{timeline.json, cut_v1.mp4, subtitles.srt, captions.json,
-│                   # intro_outro/, thumbnail.png, final.mp4}
+├── edit/           # ep01/{timeline.json, cut_v1.mp4, subtitles.srt, subtitles_final.srt,
+│                   # captions.json, intro_outro/, thumbnail.png, final.mp4}
+│                   #   subtitles.srt=正片(cut)0 秒基准;subtitles_final.srt=成片基准
+│                   #   (接入片头后整体 +intro 实测时长,烧录/发布一律用 final 版)
 ├── qa/             # reports/, defects/(缺陷工单)
 ├── publish/        # <platform>/package/, seo.json, metadata.json, receipts/
 ├── code/           # 本项目的一次性制作脚本(Agent 为完成任务写的脚本,内嵌本项目创作数据)
@@ -509,14 +511,14 @@ refs/
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24。评分 edit_v1 |
+| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装**;**终版封装(G9)接入片头后必须产出成片基准字幕 `subtitles_final.srt`:把 subtitle 的正片基准 SRT 整体 +片头实际时长(ffprobe intro.mp4 实测,与 placement.json 交叉核对),烧录/发布一律用 final 版,严禁正片基准 SRT 直接配 final.mp4(2026-07-18 前科:thedoor ep01–06 发布包字幕整体偏早一个片头时长)** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24;**subtitle_offset_ok(终版封装时):final.mp4 含片头 ⇒ 交付字幕首句时间码 = 正片基准首句 + intro 实测时长(±200ms)**。评分 edit_v1 |
 | transition | 转场设计与实施(硬切为主,特殊转场按导演阐述) | cut、directing_plan | 更新 timeline | QA:visual-qa 抽检转场突兀度 |
-| subtitle | 对白/旁白字幕(时轴对齐);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
+| subtitle | 对白/旁白字幕(时轴对齐,**正片 0 秒基准,不含片头**;成片基准版由 edit 终版封装时平移生成);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
 | caption | 屏幕文字(地名/时间/招式名等花字) | shot_list、dictionary | `epNN/captions.json` | 机检:术语与 dictionary 100% 一致 |
 | title | 片头/片尾(含下集预告位);**下集预告默认不配旁白**——钩子文案以字卡/花字呈现,声轨仅画面原声+BGM,需配音须工单显式指定(2026-07-10) | style、hooks、episode_plan | `epNN/intro_outro/` | 机检:预告无旁白轨(工单显式要求除外,teaser_no_narration);QA:art-director 会签 |
 | thumbnail | 封面(每平台画幅各一,A/B 两版);**先盘点 refs/thumbnail/ 用户封面参考,优先借鉴其构图/版式/文字风格并落痕迹**(§2 规则 7) | 本集高光帧、style、seo 关键词、refs/thumbnail/ | `epNN/thumbnail_*.png` | 机检:画幅/安全区合规;QA:人工挑选 |
 
-**G9 闸门 + H4**:第 1 集成片用户全片审看签字;后续集按抽检放行。
+**G9 闸门 + H4**:第 1 集成片用户全片审看签字;后续集按抽检放行。**总装产物命名固定**:成片必须落盘为 `edit/epNN/final.mp4`(或含 `final` 的变体名,如 `epNN_final.mp4`)、成片基准字幕为 `edit/epNN/subtitles_final.srt`——Web 视频预览页与 platform-adapter 均按 `final` 名索引,orchestrator 开总装工单时 outputs 必须写此规范名,严禁 `master.mp4` 等别名(前科 2026-07-18:tothemoon p9-master-ep01 产出 master.mp4,视频预览页索引不到 ep01 成片)。
 
 ### Phase 10 — 终审(每集,8 个 QA 并行)
 
@@ -539,7 +541,7 @@ refs/
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成** | final.mp4、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台 |
+| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成;字幕一律取成片基准 `subtitles_final.srt`,严禁用正片基准 subtitles.srt 随 final.mp4 打包** | final.mp4、subtitles_final.srt、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台;**字幕时基抽检:首句时间码与母版音频对齐(±200ms)** |
 | seo | 标题(3 备选)/tag/简介,按平台调性 | 剧本、hooks、平台 | `publish/seo.json` | 机检:长度/敏感词合规;QA:人工挑标题 |
 | metadata | 元数据(合集归属、集数、分级、封面绑定) | episode_plan、safety 报告 | `publish/metadata.json` | 机检:schema + 必填齐 |
 | publisher | 定时/立即发布,回收平台回执 | 以上全部 | `publish/receipts/` | 机检:回执状态 = 成功;失败自动重试 2 次后报人工 |

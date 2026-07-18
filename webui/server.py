@@ -795,12 +795,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     draft_res = out.get("draft_resolution") or "480p"
     final_res = out.get("final_resolution") or "480p"
     burn_in = (
-        "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt 后,由 edit 在封装终版时"
-        "把字幕烧录进画面(ffmpeg subtitles 滤镜等),烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
+        "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt(正片 0 秒基准)后,由 edit 在封装终版时"
+        "先按片头实测时长(ffprobe intro.mp4)整体平移生成成片基准 subtitles_final.srt,再把**平移后的字幕**"
+        "烧录进画面(ffmpeg subtitles 滤镜等)——final.mp4 含片头时严禁直接烧正片基准 SRT,否则字幕整体偏早;"
+        "烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
         "(小字号贴底、≤2 行、白字黑描边、禁大面积底板);orchestrator 排期须把该烧录步骤纳入本集必做项,"
         "platform-adapter 发布物料一律基于烧录版母版"
         if out.get("subtitle_burn_in") else
-        "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂 subtitles.srt 交付,发布期按平台字幕清单处理")
+        "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
+        " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -2221,23 +2224,28 @@ def _preview_videos(project: str, ep: str):
     data["llm_tokens"] = _ep_llm_tokens(project, ep)
     edir = base / "edit" / ep
 
-    def _files(match: str, exts: tuple) -> list[dict]:
+    def _files(match: tuple, exts: tuple) -> list[dict]:
         if not edir.is_dir():
             return []
         out = []
+        seen_inodes = set()
         for f in sorted(edir.rglob("*")):
             if not (f.is_file() and f.suffix.lower() in exts
-                    and match in f.name.lower()):
+                    and any(m in f.name.lower() for m in match)):
                 continue
             st = f.stat()
+            if st.st_ino in seen_inodes:   # final.mp4 可能是 master.mp4 的硬链接,去重
+                continue
+            seen_inodes.add(st.st_ino)
             out.append({"name": str(f.relative_to(edir)),
                         "size_mb": round(st.st_size / 1048576, 1),
                         "url": (f"/projects/{base.name}/{f.relative_to(base)}"
                                 f"?v={int(st.st_mtime)}")})
         return out
 
-    data["finals"] = _files("final", VIDEO_EXTS)
-    data["thumbnails"] = _files("thumb", IMG_EXTS)
+    # 规范名是 final.mp4(WORKFLOW §2);兼容个别工单跑偏产出的 master.mp4 总装母版
+    data["finals"] = _files(("final", "master"), VIDEO_EXTS)
+    data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
 
     # 审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要

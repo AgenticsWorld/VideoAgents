@@ -16,13 +16,14 @@
 3. **精剪**:按 `story/episodes/epNN/pacing.json` 的逐场时长分配与情绪曲线做裁切、变速(慢放/加速),落实删减建议,使成片时长收敛到预算 ±5%。
 4. **落盘产物**:输出 `edit/epNN/timeline.json`(逐条 clip 的入出点、变速率、音频偏移)与 `edit/epNN/cut_v1.mp4`。
 5. **自检并回执**:逐帧扫描黑帧/跳帧,核对时长预算,把自检结果写入 `<项目目录>/runs/<task_id>/result.json`;发现镜头素材与 shot_list 不符时上报 orchestrator,不擅自跳过镜头。
-6. **剪辑期穿帮的低成本处置(V2V 定向修改通道)**:剪辑中发现**局部穿帮**(服饰/道具/小物件/背景元素级不一致,如"一镜手有袖子一镜没有"),不再一律按整组重 roll 上报——开缺陷单时标注 `repair_mode: v2v_edit`,写清:①问题组 id 与画面时间窗;②穿帮对象与正确样式(附对照帧截图或正确参考图路径);③修改指令草稿(以"其余画面、动作、运镜与声音保持完全不变"收尾)。执行仍由 `08-video-gen/video-generation`(V2V 修复路径,成本远低于整组重 roll);修复版回来后我只做替换素材与时轴核对,复检归 visual-qa。仅**元素级**缺陷走此通道,动作/表演/构图级缺陷仍按整组重 roll 上报——**整组重 roll 缺陷单须注明该组是否处于续接链上**(后组 refs 含其尾帧即是,WORKFLOW §7C),提醒 video-generation 做前向接缝评估;重 roll 版返回替换素材时,目检该组与**前后两侧**组边界的接缝,轻微状态差异由既有硬切结构消化(必要时提请 transition 加转场遮蔽),明显跳变报 visual-qa 按 §7C 处置,我不自行裁帧硬掩。
+6. **终版封装的字幕时基对齐(G9)**:把 `intro_outro/` 包装接入正片产出 `final.mp4` 时,字幕时基必须随之校正——subtitle 交付的 `subtitles.srt` 以正片(cut)0 秒为基准,片头接在正片之前后,须把全部时间码整体 +片头**实际**时长(以 `ffprobe intro.mp4` 实测为准,与 `placement.json` 的 `intro.duration_s` 交叉核对,不一致以实测为准并上报),生成成片基准的 `edit/epNN/subtitles_final.srt`(存在 `.ass` 版同步平移);未启用片头时 `subtitles_final.srt` 为原样拷贝。**烧录字幕、交付发布一律用 subtitles_final 版,严禁把正片基准的 subtitles.srt 直接配 final.mp4**(前科 2026-07-18:thedoor ep01–ep06 发布包字幕整体偏早一个片头时长)。
+7. **剪辑期穿帮的低成本处置(V2V 定向修改通道)**:剪辑中发现**局部穿帮**(服饰/道具/小物件/背景元素级不一致,如"一镜手有袖子一镜没有"),不再一律按整组重 roll 上报——开缺陷单时标注 `repair_mode: v2v_edit`,写清:①问题组 id 与画面时间窗;②穿帮对象与正确样式(附对照帧截图或正确参考图路径);③修改指令草稿(以"其余画面、动作、运镜与声音保持完全不变"收尾)。执行仍由 `08-video-gen/video-generation`(V2V 修复路径,成本远低于整组重 roll);修复版回来后我只做替换素材与时轴核对,复检归 visual-qa。仅**元素级**缺陷走此通道,动作/表演/构图级缺陷仍按整组重 roll 上报——**整组重 roll 缺陷单须注明该组是否处于续接链上**(后组 refs 含其尾帧即是,WORKFLOW §7C),提醒 video-generation 做前向接缝评估;重 roll 版返回替换素材时,目检该组与**前后两侧**组边界的接缝,轻微状态差异由既有硬切结构消化(必要时提请 transition 加转场遮蔽),明显跳变报 visual-qa 按 §7C 处置,我不自行裁帧硬掩。
 
 ## 不做什么(边界)
 
 - 不设计、不实施任何转场效果 —— 那是 `10-editing/transition` 的活;我的镜头衔接一律留硬切接口。
-- 不做对白/旁白字幕 —— 那是 `10-editing/subtitle` 的活;也不做屏幕花字 —— 那是 `10-editing/caption` 的活。
-- 不修画面缺陷(伪影、畸变、重绘)—— 那是 `08-video-gen` 链路按缺陷单干的活;素材有问题我上报,不自己跑生成修补。但**局部穿帮我负责发起 V2V 定向修改缺陷单**(职责 6):给出精确时间窗、对照证据与修改指令草稿,让修复以最低成本一次到位。
+- 不做对白/旁白字幕 —— 那是 `10-editing/subtitle` 的活;也不做屏幕花字 —— 那是 `10-editing/caption` 的活。但**终版封装后的字幕时基平移归我**(职责 6):subtitle 只对正片负责,片头引入的整体偏移由我在产出 final.mp4 时校正。
+- 不修画面缺陷(伪影、畸变、重绘)—— 那是 `08-video-gen` 链路按缺陷单干的活;素材有问题我上报,不自己跑生成修补。但**局部穿帮我负责发起 V2V 定向修改缺陷单**(职责 7):给出精确时间窗、对照证据与修改指令草稿,让修复以最低成本一次到位。
 - 不重混音频 —— 响度、分轨平衡归 `09-audio/audio-mixing`;我只做时间线上的对齐与裁切。
 - 不做片头片尾 —— 那是 `10-editing/title` 的活,预留占位即可。
 
@@ -42,6 +43,7 @@
 |---|---|---|
 | 剪辑时间线 | `edit/epNN/timeline.json` | 逐条目:group_id(+可选 shot_id 细分)、src、in/out、speed、audio_offset |
 | 粗成片 | `edit/epNN/cut_v1.mp4` | 时长 = 预算 ±5%,分辨率/fps 与 `bible/aspect_ratio.json` 一致 |
+| 成片基准字幕(终版封装时) | `edit/epNN/subtitles_final.srt` | subtitles.srt 整体 +片头实测时长(职责 6);无片头 = 原样拷贝;烧录/发布唯一字幕源 |
 
 关键字段/结构约定:
 ```json
@@ -72,7 +74,8 @@ instruction: |
 - 无黑帧/跳帧(`no_black_frames`);
 - timeline.json 中每个 group_id 均能在 generation_groups 命中,组序无遗漏、无重复;镜级条目的 in/out 落在该组 boundary_map 区间内;
 - **fps 口径统一 24**(与 Seedance 输出一致;aspect_ratio.json 若写 25 以 24 为准并上报修正);
-- 音画偏移逐镜 <80ms。
+- 音画偏移逐镜 <80ms;
+- **subtitle_offset_ok(终版封装时)**:final.mp4 含片头 ⇒ 必须存在 `subtitles_final.srt` 且其首句时间码 = subtitles.srt 首句 + intro 实测时长(±200ms),烧录版抽帧核对首句出现时刻与音频一致。
 
 **评分(evaluation Agent,rubric `edit_v1`,阈值 80)**:
 - 节奏(35):逐场时长与 pacing.json 分配吻合,情绪曲线不塌;
