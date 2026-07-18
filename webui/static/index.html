@@ -1414,7 +1414,7 @@ function liveBox(runId){
   try{AGENT_MODELS=await api('/api/agentmodels');AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
   renderAmMode();
   (await api('/api/runs')).forEach(r=>RUNS[r.id]=r);
-  renderAgents();renderRuns();connect();
+  connect();   // 首次 renderAgents/renderRuns 延后到项目下拉框恢复之后,否则 curProj() 回退 demo 导致按项目过滤为空
   try{(await api('/api/confirms')).forEach(showConfirm)}catch(e){}
   $('#search').oninput=renderAgents;
   $('#engine').onchange=()=>{
@@ -1433,6 +1433,7 @@ function liveBox(runId){
   // 预览页「✏️ 修改」跳转:?project=xx&compose=预填指令(选中总制片并填入输入框)
   const qp=new URLSearchParams(location.search);
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}
+  renderAgents();renderRuns();
   initWatchdog();   // 等项目下拉框就绪后再查,否则 curProj() 回退 demo 导致误显示「已停」
   initGenProviders();
   // 运行面板计时刷新由顶部的条件 setInterval 统一负责(仅有任务在跑时重绘)
