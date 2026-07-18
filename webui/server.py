@@ -500,6 +500,8 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "02-worldbuilding/timeline": "low",                 # 编年史索引
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
+    "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
+    "08-video-gen/video-generation": "high",            # 视频生成主力
 }
 AM_MODE_MODELS = {
     "smart_claude": {"high": {"engine": "claude", "model": "opus"},
