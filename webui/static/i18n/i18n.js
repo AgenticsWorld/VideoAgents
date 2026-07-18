@@ -25,10 +25,10 @@
     return 'en';
   }
 
-  var lang = null, first = false;
+  var lang = null;
   try { lang = localStorage.getItem('webui_lang'); } catch (e) { /* ignore */ }
   if (!LANGS[lang]) {                      // 仅第一次打开时按浏览器判断
-    lang = detect(); first = true;
+    lang = detect();
     try { localStorage.setItem('webui_lang', lang); } catch (e) { /* ignore */ }
   }
 
@@ -140,13 +140,17 @@
     document.addEventListener('DOMContentLoaded', start);
   } else { start(); }
 
-  // 首次打开:把自动判断的语言同步到服务端(agent 对话输出语言跟随),仅在服务端尚未设置时
-  if (first && location.pathname === '/') {
+  // 打开控制台时把界面语言同步到服务端(agent 对话/汇报语言跟随):
+  // 服务端未设置或与本地不一致(如曾被其他浏览器的首访自动判定写成别的语言)都以本地为准写回,
+  // 保证用户看到的界面语言 = agent 汇报语言
+  if (location.pathname === '/') {
     fetch('/api/genconfig').then(function (r) { return r.json(); }).then(function (cfg) {
-      if (!cfg.ui_language) {
+      if (cfg.ui_language !== lang) {
+        var project = 'demo';
+        try { project = JSON.parse(localStorage.getItem('webui_prefs') || '{}').project || 'demo'; } catch (e) { /* ignore */ }
         return fetch('/api/genconfig', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ui_language: lang }),
+          body: JSON.stringify({ ui_language: lang, project: project }),
         });
       }
     }).catch(function () { /* ignore */ });
