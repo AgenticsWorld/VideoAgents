@@ -44,6 +44,8 @@
 
 ## 输出
 
+> **文件命名红线(2026-07-20)**:本节所有产物的文件名与目录名仅用英文字母、数字及 `-`/`_`/`.`,禁止中文等非 ASCII 字符;实体用 ID/英文 slug 入名(WORKFLOW.md §1 原则 9,机检 ascii_filename)。
+
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 字幕文件 | `edit/epNN/subtitles.srt` | 标准 SRT;UTF-8;序号连续;时间码 `HH:MM:SS,mmm`;**正片 0 秒基准(不含片头;成片基准版 subtitles_final.srt 由 edit 终版封装时生成)** |

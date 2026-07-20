@@ -54,6 +54,8 @@ python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negativ
 
 ## 输出
 
+> **文件命名红线(2026-07-20)**:本节所有产物的文件名与目录名仅用英文字母、数字及 `-`/`_`/`.`,禁止中文等非 ASCII 字符;实体用 ID/英文 slug 入名(WORKFLOW.md §1 原则 9,机检 ascii_filename)。
+
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 组锚点包 | `assets/keyframes/epNN/<grp>/` | `anchor_char_<id>.png`、`anchor_scene.png`、`anchor_opening_01..0n.png`、`anchor_sketch_01..0n.png`(手绘分镜渲染图),分辨率=画幅锚点 |

@@ -36,6 +36,8 @@
 
 ## 输出
 
+> **文件命名红线(2026-07-20)**:本节所有产物的文件名与目录名仅用英文字母、数字及 `-`/`_`/`.`,禁止中文等非 ASCII 字符;实体用 ID/英文 slug 入名(WORKFLOW.md §1 原则 9,机检 ascii_filename)。
+
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 审核报告 | `qa/reports/epNN/consistency.json` | 整集一致性分、逐角色分项(face/costume/voice)、缺陷单索引 |

@@ -39,6 +39,8 @@
 
 ## 输出
 
+> **文件命名红线(2026-07-20)**:本节所有产物的文件名与目录名仅用英文字母、数字及 `-`/`_`/`.`,禁止中文等非 ASCII 字符;实体用 ID/英文 slug 入名(WORKFLOW.md §1 原则 9,机检 ascii_filename)。
+
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 角色 Voice 样本 | `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` | 10–15s 平静中性内容纯人声,统一采样率;项目级,跨集复用 |

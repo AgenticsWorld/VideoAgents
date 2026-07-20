@@ -33,6 +33,8 @@
 
 ## 输出
 
+> **文件命名红线(2026-07-20)**:本节所有产物的文件名与目录名仅用英文字母、数字及 `-`/`_`/`.`,禁止中文等非 ASCII 字符;实体用 ID/英文 slug 入名(WORKFLOW.md §1 原则 9,机检 ascii_filename)。
+
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 环境声 cue 清单 | `assets/audio/ambience/epNN/ambience_cues.json` | 场景 ID ↔ 英文环境声描述 ↔ 覆盖组/镜头区间 |
