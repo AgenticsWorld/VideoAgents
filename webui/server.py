@@ -2468,7 +2468,8 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
            "除非与新配置冲突。若无受影响任务,简要确认记录后结束,不要额外派活。")
     try:
         await api_chat({"agent": orch, "message": msg, "project": project,
-                        "source": "settings"})
+                        "source": "settings",
+                        "engine": agent_model_config(orch).get("engine") or "claude"})
     except Exception as e:  # noqa: BLE001
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
@@ -2908,7 +2909,8 @@ async def api_projects_create(body: dict):
         "希望使用的音乐放入 refs/music/(约定见该目录 README.md);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
     await api_chat({"agent": orch, "message": "\n".join(msg),
-                    "project": name, "source": "user"})
+                    "project": name, "source": "user",
+                    "engine": agent_model_config(orch).get("engine") or "claude"})
     return {"ok": True, "name": name}
 
 
