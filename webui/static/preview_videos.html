@@ -33,7 +33,8 @@ button{background:var(--panel2);color:var(--text);border:1px solid var(--border)
 button:hover{border-color:var(--accent)}
 header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
 header select:hover{border-color:var(--accent)}
-#eps{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);overflow-x:auto;flex:none}
+#eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
+#eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
 #content{flex:1;overflow-y:auto;padding:20px 26px}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
@@ -127,7 +128,8 @@ function renderEps(episodes){
   episodes.forEach(e=>{
     const b=document.createElement('button');
     b.className=e.ep===EP?'on':'';
-    b.textContent=e.ep+(e.title?' · '+e.title:'');
+    b.textContent=e.ep;                 // 入口只显示集号,集名挂 tooltip
+    if(e.title)b.title=e.title;
     b.onclick=()=>{EP=e.ep;load()};
     box.appendChild(b);
   });
@@ -214,7 +216,8 @@ function render(d){
     :defects.filter(x=>(x.eps||[]).includes(d.ep));
   const vtok=d.video_tokens==null?'—':Number(d.video_tokens).toLocaleString('en-US');
   const ltok=d.llm_tokens==null?'—':Number(d.llm_tokens).toLocaleString('en-US');
-  let h=`<h2 class="title">${esc(d.ep)}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}',{f:finals.length,t:thumbs.length,d:defects.length,vt:vtok,lt:ltok}))}</span></h2>`;
+  const epTitle=((d.episodes||[]).find(e=>e.ep===d.ep)||{}).title||'';
+  let h=`<h2 class="title">${esc(d.ep)}${epTitle?' '+esc(epTitle):''}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}',{f:finals.length,t:thumbs.length,d:defects.length,vt:vtok,lt:ltok}))}</span></h2>`;
 
   h+=`<h3 class="sec">▶ 成片视频(final)<span class="n">${esc(I18N.f('{n} 个 · edit/{ep}/',{n:finals.length,ep:d.ep}))}</span></h3>`;
   h+=finals.length?`<div class="vids">${finals.map(f=>
