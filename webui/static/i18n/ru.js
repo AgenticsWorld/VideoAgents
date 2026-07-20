@@ -917,4 +917,9 @@ window.I18N_DICT = {
 "未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key": "Не настроено: укажите Kimi API Key в ⚙️ Настройки → Потребление ресурсов",
 "未开启": "Выкл.",
 "余额": "Баланс",
+"🎬 导演计划 directing_plan.md": "🎬 Режиссёрский план directing_plan.md",
+"剧本 {ep}(文件 story/episodes/{ep}/screenplay.md)": "Сценарий {ep} (файл story/episodes/{ep}/screenplay.md)",
+"旁白 {ep}(文件 story/episodes/{ep}/narration.md)": "Закадровый текст {ep} (файл story/episodes/{ep}/narration.md)",
+"导演计划 {ep}(文件 directing/{ep}/directing_plan.md)": "Режиссёрский план {ep} (файл directing/{ep}/directing_plan.md)",
+"对该文档提修改意见,发消息给总制片": "Оставьте замечания по этому документу; сообщение уйдёт продюсеру",
 };

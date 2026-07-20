@@ -917,4 +917,9 @@ window.I18N_DICT = {
 "未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key": "Chưa cấu hình: nhập Kimi API Key trong ⚙️ Cài đặt → Tiêu thụ tài nguyên",
 "未开启": "Chưa bật",
 "余额": "Số dư",
+"🎬 导演计划 directing_plan.md": "🎬 Kế hoạch đạo diễn directing_plan.md",
+"剧本 {ep}(文件 story/episodes/{ep}/screenplay.md)": "Kịch bản {ep} (tệp story/episodes/{ep}/screenplay.md)",
+"旁白 {ep}(文件 story/episodes/{ep}/narration.md)": "Lời dẫn {ep} (tệp story/episodes/{ep}/narration.md)",
+"导演计划 {ep}(文件 directing/{ep}/directing_plan.md)": "Kế hoạch đạo diễn {ep} (tệp directing/{ep}/directing_plan.md)",
+"对该文档提修改意见,发消息给总制片": "Góp ý sửa đổi cho tài liệu này; gửi tin nhắn tới Nhà sản xuất",
 };

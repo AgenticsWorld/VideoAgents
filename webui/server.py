@@ -1994,6 +1994,7 @@ def _preview_storyboard(project: str, ep: str):
 
     data["screenplay"] = _read_text(f"story/episodes/{ep}/screenplay.md")
     data["narration"] = _read_text(f"story/episodes/{ep}/narration.md")
+    data["directing_plan"] = _read_text(f"directing/{ep}/directing_plan.md")
     # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
     data["narration_items"] = [
         {"id": m.group(1), "anchor": m.group(2).strip(),
