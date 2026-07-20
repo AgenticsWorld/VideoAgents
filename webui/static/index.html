@@ -97,7 +97,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .file-item .who{color:var(--dim)}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
-/* 配置弹窗(deepagents 模型 / 时长设置) */
+/* 配置弹窗(时长设置等) */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
 .modal .box{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;width:440px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
 .modal h3{font-size:14px;font-weight:600}
@@ -246,17 +246,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div id="files"></div>
   </div>
 </main>
-<div id="da-modal" class="modal">
-  <div class="box">
-    <h3>🧩 deepagents 本地模型配置</h3>
-    <div class="row"><label>模型 name</label><input type="text" id="da-m-model" placeholder="如 llama-3.3-70b-instruct"></div>
-    <div class="row"><label>Base URL</label><input type="text" id="da-m-url" placeholder="http://127.0.0.1:1234/v1"></div>
-    <div class="row"><label>API Key</label><input type="text" id="da-m-key" placeholder="lm-studio(本地端点随意填)"></div>
-    <div class="note">此处配置「本地模型」渠道:OpenAI 兼容端点均可(LM Studio / Ollama / vLLM…)。LM Studio 先 <b>lms server start</b>,模型 name 填 LM Studio 里的模型标识;OpenRouter 渠道及生效渠道切换在 <a href="/models">🎨 生成模型</a> 页「语言模型DeepAgents」</div>
-    <div class="err" id="da-m-err"></div>
-    <div class="actions"><button id="da-m-cancel">取消</button><button class="primary" id="da-m-ok">确定</button></div>
-  </div>
-</div>
 <div id="eng-modal" class="modal">
   <div class="box">
     <h3 id="eng-title"></h3>
@@ -527,17 +516,20 @@ const MODEL_OPTIONS={
   kimi:[['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
-  deepagents:[['','自定义模型'],['__edit','⚙ 配置…']],   // 本地模型经弹窗配置,OpenRouter 在 🎨 生成模型 页;均存 genconfig
+  deepagents:[['local','本地模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置
 };
+let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,initGenProviders/切引擎时同步)
 function populateModels(engine){
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
     const o=document.createElement('option'); o.value=v; o.textContent=label; sel.appendChild(o);
   });
-  sel.value=MODEL_OPTIONS[engine][0][0];
+  sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
+  sel.title=engine==='deepagents'?'deepagents 生效渠道:本地模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置':'';
   $('#model-custom').style.display='none';
 }
 function getModel(){
+  if($('#engine').value==='deepagents')return '';   // 下拉是生效渠道开关,模型取生效渠道的 genconfig 配置
   const v=$('#model').value;
   return v==='__custom' ? $('#model-custom').value.trim() : v;
 }
@@ -740,22 +732,22 @@ async function initGenProviders(){
       }catch(e){alert('切换失败:'+e.message);sel.value=cfg[kind].provider}
     };
   }
+  syncDaSelect(cfg);   // deepagents 生效渠道同步到顶栏语言模型下拉
 }
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
-/* ---------- deepagents 本地模型配置弹窗(OpenRouter 渠道在 🎨 生成模型 页配置) ---------- */
-async function openDaModal(auto=false){
-  $('#da-m-err').textContent='';
-  let da={};
-  try{da=(await api('/api/genconfig')).deepagents||{}}catch(e){}
-  if(auto&&da.provider==='openrouter')return;   // 生效渠道为 OpenRouter:无需弹本地端点配置
-  const lo=da.local||{};
-  $('#da-m-model').value=lo.model||'';
-  $('#da-m-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
-  $('#da-m-key').value=lo.api_key||'lm-studio';
-  $('#da-modal').style.display='flex';
-  $('#da-m-model').focus();
+/* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
+function syncDaSelect(cfg){
+  const da=cfg.deepagents||{};
+  DA_PROVIDER=da.provider==='openrouter'?'openrouter':'local';
+  if($('#engine').value!=='deepagents')return;
+  const sel=$('#model');
+  sel.value=DA_PROVIDER;
+  const models={local:(da.local||{}).model||'',
+                openrouter:(da.openrouter||{}).custom_model||(da.openrouter||{}).model||''};
+  [...sel.options].forEach(o=>{const m=models[o.value];o.title=m?`${t(o.textContent)} · ${m}`:''});
 }
+async function syncDaProvider(){try{syncDaSelect(await api('/api/genconfig'))}catch(e){}}
 /* ---------- 引擎 CLI 检测(顶栏切到 claudecode/codex/kimi 时确认命令已安装,缺失则引导安装) ---------- */
 const ENGINE_CLI={
   claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart'},
@@ -985,18 +977,6 @@ $('#wdt-ok').onclick=async()=>{
     await api('/api/watchdog/threshold',{threshold:v,idle_minutes:idle});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
-};
-
-$('#da-m-cancel').onclick=()=>$('#da-modal').style.display='none';
-$('#da-m-ok').onclick=async()=>{
-  const model=$('#da-m-model').value.trim(), url=$('#da-m-url').value.trim();
-  if(!model){$('#da-m-err').textContent='请填写模型 name';return}
-  if(!/^https?:\/\//.test(url)){$('#da-m-err').textContent='Base URL 需以 http(s):// 开头';return}
-  try{
-    await api('/api/genconfig',{deepagents:{local:{model,base_url:url,api_key:$('#da-m-key').value.trim()}},project:$('#project').value.trim()||'demo'});
-    $('#da-modal').style.display='none';
-    if($('#engine').value==='deepagents'){populateModels('deepagents');savePrefs()}
-  }catch(e){$('#da-m-err').textContent='保存失败:'+e.message}
 };
 
 async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
@@ -1419,11 +1399,20 @@ function liveBox(runId){
   $('#search').oninput=renderAgents;
   $('#engine').onchange=()=>{
     populateModels($('#engine').value);savePrefs();
-    if($('#engine').value==='deepagents')openDaModal(true);
+    if($('#engine').value==='deepagents')syncDaProvider();
     checkEngineCli($('#engine').value);
   };
-  $('#model').onchange=()=>{
-    if($('#model').value==='__edit'){$('#model').value='';openDaModal();return}
+  $('#model').onchange=async()=>{
+    if($('#engine').value==='deepagents'){   // 下拉即生效渠道开关:写回 genconfig(与图像/视频渠道同逻辑)
+      const sel=$('#model'),prev=DA_PROVIDER;
+      try{
+        syncDaSelect((await api('/api/genconfig',{deepagents:{provider:sel.value},project:$('#project').value.trim()||'demo'})).config);
+        sel.style.borderColor='var(--green)';
+        setTimeout(()=>sel.style.borderColor='',1200);
+      }catch(e){alert('切换失败:'+e.message);sel.value=prev}
+      savePrefs();
+      return;
+    }
     $('#model-custom').style.display = $('#model').value==='__custom'?'':'none';
     savePrefs();
   };
