@@ -850,7 +850,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Änderungswünsche zur Szene geben; sendet eine Nachricht an den Produzenten",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Requisite {name} ({id}; Karte id={id} in bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Änderungswünsche zur Requisite geben; sendet eine Nachricht an den Produzenten",
-"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓(目前仅 OpenRouter,默认勾选)": "BGM wird vom music-Agent in der Postproduktion erzeugt (nicht Teil der Seedance-Gruppenvideos); aktiver Kanal = mit ✓ markierter Tab (derzeit nur OpenRouter, standardmäßig ausgewählt)",
 "旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Erzählung/Charakter-Stimmproben/Fallback-Synchronisation werden per TTS erzeugt (BGM läuft über die Musikgenerierung); aktiver Kanal = mit ✓ markierter Tab; zum Auswählen auf den Kreis klicken, wirksam nach dem Speichern",
 "设为生效渠道(保存后生效)": "Als aktiven Kanal festlegen (wirksam nach dem Speichern)",
 "音色库": "Stimmenbibliothek",
@@ -890,4 +889,9 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · neu, sehr ausdrucksstark (Emotion über [audio tags] im Text)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 Sprachen, geringe Latenz",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · am schnellsten/günstigsten",
+"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "BGM wird vom music-Agent in der Postproduktion erzeugt (nicht Teil der Seedance-Gruppenvideos); aktiver Kanal = mit ✓ markierter Tab; zum Auswählen auf den Kreis klicken, wirksam nach dem Speichern",
+"强制纯音乐(无人声,适合 BGM)": "Instrumental erzwingen (ohne Gesang — für BGM geeignet)",
+");与 TTS 的 ElevenLabs Key 通用,可分别填;music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "); der Key ist mit dem TTS-ElevenLabs-Key austauschbar (oder getrennt eintragen); der music-Agent kann die Länge per --duration festlegen (3–600 s; ohne Angabe entscheidet das Modell nach dem Prompt); Ausgabe nur .mp3/.opus",
+"Eleven Music v1(官方默认)": "Eleven Music v1 (offizieller Standard)",
+"Eleven Music v2(最新)": "Eleven Music v2 (neueste)",
 };

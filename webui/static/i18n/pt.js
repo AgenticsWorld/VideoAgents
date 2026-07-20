@@ -850,7 +850,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Dar notas de revisão sobre esta cena; envia uma mensagem ao Produtor",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Adereço {name} ({id}; ficha id={id} em bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Dar notas de revisão sobre este adereço; envia uma mensagem ao Produtor",
-"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓(目前仅 OpenRouter,默认勾选)": "A BGM é gerada na pós-produção pelo agente music (fora dos vídeos de grupo do Seedance); canal ativo = aba marcada com ✓ (por ora apenas OpenRouter, marcada por padrão)",
 "旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Narração/amostras de voz de personagens/dublagem de reserva são geradas por TTS (a BGM passa pela geração de música); canal ativo = aba marcada com ✓; clique no círculo para selecionar, vale após salvar",
 "设为生效渠道(保存后生效)": "Definir como canal ativo (vale após salvar)",
 "音色库": "Biblioteca de vozes",
@@ -890,4 +889,9 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · mais recente, muito expressivo (controle a emoção com [audio tags] no texto)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 idiomas, baixa latência",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · mais rápido/barato",
+"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "A BGM é gerada na pós-produção pelo agente music (fora dos vídeos de grupo do Seedance); canal ativo = aba marcada com ✓; clique no círculo para selecionar, vale após salvar",
+"强制纯音乐(无人声,适合 BGM)": "Forçar instrumental (sem vocais; ideal para BGM)",
+");与 TTS 的 ElevenLabs Key 通用,可分别填;music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "); a chave é a mesma do ElevenLabs de TTS (ou configure separadamente); o agente music pode definir a duração com --duration (3–600 s; se omitido, o modelo decide pelo prompt); saída apenas .mp3/.opus",
+"Eleven Music v1(官方默认)": "Eleven Music v1 (padrão oficial)",
+"Eleven Music v2(最新)": "Eleven Music v2 (mais recente)",
 };

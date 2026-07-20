@@ -748,8 +748,10 @@ python3 modules/genmedia.py video \
 # 生成音乐(BGM;music Agent 后期专用,严禁在组视频 prompt 里生成音乐)
 python3 modules/genmedia.py music \
   --prompt "<英文音乐描述:曲风/情绪/乐器/节奏,Lyria 3 Pro 可含歌词>" \
-  --output assets/audio/bgm/ep01/ep01_bgm_02.mp3
-# 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名。
+  --output assets/audio/bgm/ep01/ep01_bgm_02.mp3 \
+  [--duration <秒>]                     # 仅 elevenlabs(Eleven Music)渠道生效,3–600s,可按 cue 时长精确出段;省略=模型自定
+# openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名
+# (openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus,force_instrumental 由「生成模型」页配置,默认纯音乐)。
 
 # TTS 干声(narrator 旁白后期轨、voice-generation 角色 voiceprint 样本——样本仅作 reference_audio 嗓音特点锚,严禁进成片对白,§8A 红线;
 #          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A)

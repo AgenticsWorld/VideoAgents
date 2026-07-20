@@ -850,7 +850,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập bối cảnh này; gửi tin nhắn cho Tổng chế tác",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Đạo cụ {name}({id}; thẻ thiết lập id={id} trong bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập đạo cụ này; gửi tin nhắn cho Tổng chế tác",
-"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓(目前仅 OpenRouter,默认勾选)": "BGM do music Agent tạo ở hậu kỳ (không nằm trong video nhóm Seedance); kênh hiệu lực = tab được đánh dấu ✓ (hiện chỉ có OpenRouter, chọn mặc định)",
 "旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Lời dẫn/mẫu giọng nhân vật/lồng tiếng dự phòng do TTS tạo (BGM đi qua tạo nhạc); kênh hiệu lực = tab đánh dấu ✓, bấm vòng tròn để chọn, có hiệu lực sau khi lưu",
 "设为生效渠道(保存后生效)": "Đặt làm kênh hiệu lực (có hiệu lực sau khi lưu)",
 "音色库": "Thư viện giọng",
@@ -890,4 +889,9 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · mới nhất, biểu cảm mạnh (điều khiển cảm xúc bằng [audio tag] trong văn bản)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 ngôn ngữ, độ trễ thấp",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · nhanh nhất/rẻ nhất",
+"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "BGM do music Agent tạo ở hậu kỳ (không nằm trong video nhóm Seedance); kênh hiệu lực = tab đánh dấu ✓, bấm vòng tròn để chọn, có hiệu lực sau khi lưu",
+"强制纯音乐(无人声,适合 BGM)": "Buộc thuần nhạc cụ (không giọng hát, hợp với BGM)",
+");与 TTS 的 ElevenLabs Key 通用,可分别填;music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "); dùng chung Key ElevenLabs với TTS (hoặc điền riêng); music Agent có thể chỉ định độ dài nhạc bằng --duration (3–600 giây, bỏ qua = mô hình tự quyết theo prompt); chỉ xuất .mp3/.opus",
+"Eleven Music v1(官方默认)": "Eleven Music v1 (mặc định chính thức)",
+"Eleven Music v2(最新)": "Eleven Music v2 (mới nhất)",
 };

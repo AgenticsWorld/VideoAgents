@@ -220,9 +220,12 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "music": {
-        "provider": "openrouter",   # 目前仅 openrouter(Lyria 3 系列)
+        "provider": "openrouter",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
+        # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
+        "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
+                       "force_instrumental": True},
     },
     "tts": {
         "provider": "openrouter",   # openrouter | volcengine(豆包语音) | elevenlabs
@@ -913,7 +916,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 1920x1080] [--ref 参考图...] [--n 4] [--seed N]`
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
-- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3>`(模型由「🎨 生成模型」页音乐生成配置;Lyria 3 Pro 出完整歌曲、Lyria 3 Clip 出 30s 片段/Loop)
+- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段,默认纯音乐)
 - TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs;--voice 语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id;instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 

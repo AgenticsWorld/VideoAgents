@@ -850,7 +850,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Dar notas de revisión sobre esta escena; envía un mensaje al Productor",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Utilería {name} ({id}; ficha id={id} en bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Dar notas de revisión sobre esta utilería; envía un mensaje al Productor",
-"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓(目前仅 OpenRouter,默认勾选)": "La BGM la genera el agente music en posproducción (no entra en los vídeos de grupo de Seedance); canal activo = pestaña marcada con ✓ (por ahora solo OpenRouter, marcada por defecto)",
 "旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "La narración/muestras de voz de personajes/doblaje de respaldo se generan con TTS (la BGM va por generación de música); canal activo = pestaña marcada con ✓; haz clic en el círculo para seleccionar, surte efecto tras guardar",
 "设为生效渠道(保存后生效)": "Establecer como canal activo (surte efecto tras guardar)",
 "音色库": "Biblioteca de voces",
@@ -890,4 +889,9 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · más reciente, muy expresivo (controla la emoción con [audio tags] en el texto)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 idiomas, baja latencia",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · el más rápido/económico",
+"BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "La BGM la genera el agente music en posproducción (no entra en los vídeos de grupo de Seedance); canal activo = pestaña marcada con ✓; haz clic en el círculo para seleccionar, surte efecto tras guardar",
+"强制纯音乐(无人声,适合 BGM)": "Forzar instrumental (sin voces; ideal para BGM)",
+");与 TTS 的 ElevenLabs Key 通用,可分别填;music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "); la clave es común con la de TTS de ElevenLabs (o configúralas por separado); el agente music puede fijar la duración con --duration (3–600 s; si se omite, el modelo decide según el prompt); salida solo .mp3/.opus",
+"Eleven Music v1(官方默认)": "Eleven Music v1 (predeterminado oficial)",
+"Eleven Music v2(最新)": "Eleven Music v2 (más reciente)",
 };

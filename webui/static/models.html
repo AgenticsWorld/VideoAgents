@@ -79,7 +79,7 @@ button:disabled{opacity:.5;cursor:default}
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓(目前仅 OpenRouter,默认勾选)</span></h2>
+    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
@@ -231,9 +231,14 @@ const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
   image:{providers:['openrouter','volcengine','byteplus','comfyui']},
   video:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  music:{providers:['openrouter']},
+  music:{providers:['openrouter','elevenlabs']},
   tts:{providers:['openrouter','volcengine','elevenlabs']},
 };
+/* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
+const EL_MUSIC_MODELS=[
+  ['music_v1','Eleven Music v1(官方默认)'],
+  ['music_v2','Eleven Music v2(最新)'],
+];
 /* 豆包语音 openspeech v3:model = X-Api-Resource-Id 档位;S_ 开头克隆音色自动切 seed-icl-2.0 */
 const VOLC_TTS_MODELS=[
   ['seed-tts-2.0','Doubao-Seed-TTS 2.0(最新,深度语义理解/指令式情感控制)'],
@@ -369,6 +374,18 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint'},kind==='image'
       ?'BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,<a href="https://docs.byteplus.com/en/docs/ModelArk/1541523" target="_blank">文档</a>);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;更新的模型可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
       :'BytePlus ModelArk 视频生成 API(海外区 ap-southeast-1,Seedance 系列,<a href="https://docs.byteplus.com/en/docs/ModelArk/1520757" target="_blank">文档</a>);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;模型 ID 也可填「推理接入点 ep-…」'));
+  }else if(p==='elevenlabs'&&kind==='music'){
+    d.appendChild(keyRow('music-el-key','ElevenLabs API Key(xi-api-key)'));
+    d.appendChild(modelRow('music-el-model','music-el-custom'));
+    const ir=el('div',{className:'row'});
+    ir.appendChild(el('label',{},''));
+    const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer'});
+    const cb=el('input',{type:'checkbox',id:'music-el-instr'});
+    lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
+    ir.appendChild(lb);d.appendChild(ir);
+    d.appendChild(el('div',{className:'hint'},
+      'Eleven Music(<a href="https://elevenlabs.io/docs/api-reference/music/compose" target="_blank">API 文档</a>);与 TTS 的 ElevenLabs Key 通用,可分别填;'
+      +'music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus'));
   }else if(p==='elevenlabs'){
     d.appendChild(keyRow('tts-el-key','ElevenLabs API Key(xi-api-key)'));
     d.appendChild(modelRow('tts-el-model','tts-el-custom'));
@@ -585,6 +602,12 @@ function loadIntoForm(){
         sel.value=c.comfyui.checkpoint;
       }
     }
+    if(kind==='music'){
+      const elm=c.elevenlabs||{};
+      $('#music-el-key').value=elm.api_key||'';
+      fillSelect($('#music-el-model'),EL_MUSIC_MODELS,elm.model,elm.custom_model);
+      $('#music-el-instr').checked=elm.force_instrumental!==false;
+    }
     if(kind==='tts'){
       $('#tts-or-voice').value=c.openrouter.voice||'eve';
       $('#tts-volc-appid').value=c.volcengine?.app_id||'';
@@ -635,6 +658,10 @@ function collect(){
     if(SECTIONS[kind].providers.includes('byteplus'))
       c.byteplus={api_key:$(`#${kind}-bp-key`).value.trim(),
         ...pickModel(`#${kind}-bp-model`,`#${kind}-bp-custom`)};
+    if(kind==='music')
+      c.elevenlabs={api_key:$('#music-el-key').value.trim(),
+        ...pickModel('#music-el-model','#music-el-custom'),
+        force_instrumental:$('#music-el-instr').checked};
     if(kind==='tts'){
       c.openrouter.voice=$('#tts-or-voice').value.trim()||'eve';
       c.volcengine.app_id=$('#tts-volc-appid').value.trim();

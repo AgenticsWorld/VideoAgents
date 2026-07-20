@@ -42,6 +42,8 @@ Python:
         / comfyui(本地,需配置 API 格式工作流 JSON)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
+        / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
+        省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
@@ -784,6 +786,32 @@ def _music_openrouter(cfg, prompt, output):
     return _save(b"".join(chunks), output)
 
 
+# ---------------- 音乐:ElevenLabs(POST /v1/music,Eleven Music) ----------------
+# body {prompt, model_id, music_length_ms?, force_instrumental};响应为音频字节流。
+# music_length_ms ∈ [3000, 600000],省略则模型按 prompt 自定时长。
+
+EL_MUSIC_FORMATS = {".mp3": "mp3_44100_192", ".opus": "opus_48000_128"}
+
+
+def _music_elevenlabs(cfg, prompt, output, duration_s=None):
+    fmt = EL_MUSIC_FORMATS.get(Path(output).suffix.lower())
+    if not fmt:
+        raise RuntimeError("ElevenLabs 音乐输出仅支持 .mp3 / .opus 扩展名")
+    body = {"prompt": prompt, "model_id": cfg["model"],
+            "force_instrumental": bool(cfg.get("force_instrumental", True))}
+    if duration_s:
+        body["music_length_ms"] = max(3000, min(600000, round(duration_s * 1000)))
+    data = _request(f"https://api.elevenlabs.io/v1/music?output_format={fmt}",
+                    json.dumps(body).encode(),
+                    {"Content-Type": "application/json", "xi-api-key": cfg["api_key"]},
+                    timeout=MUSIC_TIMEOUT)
+    if not data:
+        raise RuntimeError(f"ElevenLabs 音乐返回空音频(model={cfg['model']})")
+    if data[:1] == b"{":
+        raise RuntimeError(f"ElevenLabs 音乐生成失败:{data.decode('utf-8', 'replace')[:400]}")
+    return _save(data, output)
+
+
 # ---------------- TTS 旁白:OpenRouter(/api/v1/audio/speech) ----------------
 # OpenAI 兼容 Speech 接口:POST 后直接返回原始音频字节流(非 JSON)。
 # response_format 仅 mp3 / pcm;OpenAI 系模型可经 provider.options.openai.instructions
@@ -992,16 +1020,22 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     return fn(cfg, text, output, voice, speed, instructions)
 
 
-def generate_music(prompt: str, output: str) -> str:
+def generate_music(prompt: str, output: str, duration_s: float | None = None) -> str:
     """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 webui/genconfig.json 的 music 段。
 
-    输出格式按 output 扩展名(mp3/wav/flac/opus,默认 mp3)。时长由模型决定:
-    Lyria 3 Pro 为完整歌曲,Lyria 3 Clip 为 30s 片段/Loop。
+    输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus)。
+    duration_s 仅 elevenlabs 生效(music_length_ms,3–600s;省略=模型按 prompt 自定);
+    openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
     """
     _forbid_dispatch_layer("音乐")
     cfg = get_config("music")
+    if cfg["provider"] == "elevenlabs":
+        return _music_elevenlabs(cfg, prompt, output, duration_s)
     if cfg["provider"] != "openrouter":
-        raise RuntimeError(f"音乐生成目前仅支持 openrouter 渠道,当前配置为 {cfg['provider']}")
+        raise RuntimeError(f"音乐生成不支持渠道 {cfg['provider']}(可选 openrouter / elevenlabs)")
+    if duration_s:
+        print("[genmedia] openrouter 音乐渠道不支持 --duration,已忽略(时长由模型决定)",
+              file=sys.stderr)
     return _music_openrouter(cfg, prompt, output)
 
 
@@ -1070,7 +1104,7 @@ def _cmd_music(args):
         print(f"[dry-run] music via {cfg['provider']} model={cfg.get('model') or '-'}"
               f" format={MUSIC_FORMATS.get(Path(args.output).suffix.lower(), 'mp3')} → {args.output}")
         return
-    out = generate_music(args.prompt, args.output)
+    out = generate_music(args.prompt, args.output, args.duration)
     print(f"已生成: {out}")
 
 
@@ -1134,7 +1168,9 @@ def main():
 
     pm = sub.add_parser("music", help="生成音乐(BGM)")
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
-    pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus)")
+    pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus)")
+    pm.add_argument("--duration", type=float, default=None,
+                    help="目标时长秒(仅 elevenlabs 渠道生效,3–600;省略=模型按 prompt 自定)")
     pm.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()
