@@ -3446,7 +3446,8 @@ async def idle_watchdog():
                                f"(自检:python3 webui/dagcheck.py --project {proj} --strict),"
                                "然后继续按 DAG 推进。")
                         await api_chat({"agent": orch, "message": msg,
-                                        "project": proj, "source": "watchdog"})
+                                        "project": proj, "source": "watchdog",
+                                        "engine": eng})
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
                 runnable, human_waiting = _dag_runnable(proj)
@@ -3456,7 +3457,8 @@ async def idle_watchdog():
                            f"{' 等' if len(runnable) > 6 else ''})。"
                            "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
                     await api_chat({"agent": orch, "message": msg,
-                                    "project": proj, "source": "watchdog"})
+                                    "project": proj, "source": "watchdog",
+                                    "engine": eng})
                     print(f"[watchdog] 唤醒 {orch}:{proj} 待办 {len(runnable)} 项", flush=True)
                     continue   # 各项目独立唤醒,不再一轮只唤醒一个
                 # DAG 覆盖率兜底:无可跑节点 ≠ 只等人工——若 episode_plan 里
@@ -3474,7 +3476,8 @@ async def idle_watchdog():
                            "完成后继续按 DAG 与派单守则推进;若该分集确已完结或另有安排,"
                            "在 DAG 中补记节点状态后简要说明。")
                     await api_chat({"agent": orch, "message": msg,
-                                    "project": proj, "source": "watchdog"})
+                                    "project": proj, "source": "watchdog",
+                                    "engine": eng})
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue
