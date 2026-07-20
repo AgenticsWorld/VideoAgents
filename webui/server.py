@@ -225,9 +225,16 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
     },
     "tts": {
-        "provider": "openrouter",   # 目前仅 openrouter(POST /api/v1/audio/speech)
+        "provider": "openrouter",   # openrouter | volcengine(豆包语音) | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
+        # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=语音技术控制台的
+        # App ID + Access Token(非方舟 ARK Key);model 即 X-Api-Resource-Id 档位
+        "volcengine": {"app_id": "", "api_key": "", "model": "seed-tts-2.0",
+                       "custom_model": "", "voice": ""},
+        # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
+        "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
+                       "custom_model": "", "voice": ""},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
@@ -907,7 +914,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3>`(模型由「🎨 生成模型」页音乐生成配置;Lyria 3 Pro 出完整歌曲、Lyria 3 Clip 出 30s 片段/Loop)
-- TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(模型与默认音色由「🎨 生成模型」页 TTS语音模型配置;instructions 仅 OpenAI 系模型生效)
+- TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs;--voice 语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id;instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
@@ -1047,8 +1054,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             use_model = model or da["model"]
             err = None
             if not use_model:
-                err = ("deepagents 引擎未选择模型:请在顶栏选择语言模型,"
-                       "或在 🎨 生成模型 页「语言模型DeepAgents」配置默认模型")
+                err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
+                       "「语言模型DeepAgents」为生效渠道(本地模型/OpenRouter)配置模型")
             elif da["provider"] == "openrouter" and not da["api_key"]:
                 err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
                        "请在 🎨 生成模型 页「语言模型DeepAgents → OpenRouter」填写")
@@ -2476,6 +2483,82 @@ async def api_openrouter_models(modality: str = "image", refresh: bool = False):
     models.sort(key=lambda x: x["id"] or "")
     _OPENROUTER_CACHE[modality] = (time.time(), models)
     return {"models": models, "cached": False}
+
+
+# ---------------- ElevenLabs 音色(设置页 TTS → ElevenLabs 用) ----------------
+
+def _elevenlabs_json(url: str, api_key: str, payload: dict | None = None) -> dict:
+    """带 xi-api-key 的 ElevenLabs API 调用(payload 非空则 POST)。"""
+    headers = {"xi-api-key": api_key}
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")[:300]
+        raise HTTPException(502, f"ElevenLabs HTTP {e.code}: {body}") from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"ElevenLabs request failed: {e}") from e
+
+
+def _elevenlabs_norm(v: dict) -> dict:
+    """账号音色(labels 子对象)与 Voice Library 音色(平铺字段)归一成同一形状。"""
+    labels = v.get("labels") or {}
+    return {"voice_id": v.get("voice_id") or "",
+            "name": v.get("name") or "",
+            "gender": v.get("gender") or labels.get("gender") or "",
+            "age": v.get("age") or labels.get("age") or "",
+            "language": v.get("language") or labels.get("language") or "",
+            "descriptive": v.get("descriptive") or labels.get("descriptive")
+                or v.get("description") or "",
+            "category": v.get("category") or "",
+            "preview_url": v.get("preview_url") or "",
+            "public_owner_id": v.get("public_owner_id") or ""}
+
+
+@app.post("/api/elevenlabs/voices")
+async def api_elevenlabs_voices(body: dict):
+    """列音色:scope=mine 账号内音色(可直接用于合成);scope=library 搜 Voice
+    Library 公共音色(需先「加入我的音色」才能合成)。Key 用请求体的(未保存也可试)。"""
+    key = str((body or {}).get("api_key") or "").strip()
+    if not key:
+        raise HTTPException(400, "api_key required")
+    search = str((body or {}).get("search") or "").strip()
+    if (body or {}).get("scope") == "library":
+        q = {"page_size": "50"}
+        if search:
+            q["search"] = search
+        url = "https://api.elevenlabs.io/v1/shared-voices?" + urllib.parse.urlencode(q)
+        d = await asyncio.to_thread(_elevenlabs_json, url, key)
+        return {"voices": [_elevenlabs_norm(v) for v in d.get("voices") or []]}
+    d = await asyncio.to_thread(_elevenlabs_json,
+                                "https://api.elevenlabs.io/v1/voices", key)
+    voices = [_elevenlabs_norm(v) for v in d.get("voices") or []]
+    if search:
+        s = search.lower()
+        voices = [v for v in voices
+                  if s in (v["name"] + v["descriptive"] + v["language"]).lower()]
+    return {"voices": voices}
+
+
+@app.post("/api/elevenlabs/voices/add")
+async def api_elevenlabs_voice_add(body: dict):
+    """把 Voice Library 公共音色加入账号(加入后其 voice_id 才能用于 TTS 合成)。"""
+    key = str((body or {}).get("api_key") or "").strip()
+    owner = str((body or {}).get("public_owner_id") or "").strip()
+    vid = str((body or {}).get("voice_id") or "").strip()
+    if not (key and owner and vid):
+        raise HTTPException(400, "api_key / public_owner_id / voice_id required")
+    name = str((body or {}).get("name") or "").strip() or vid
+    d = await asyncio.to_thread(
+        _elevenlabs_json,
+        f"https://api.elevenlabs.io/v1/voices/add/{urllib.parse.quote(owner)}"
+        f"/{urllib.parse.quote(vid)}", key, {"new_name": name})
+    return {"ok": True, "voice_id": d.get("voice_id") or vid, "name": name}
 
 
 @app.post("/api/test/openrouter")

@@ -44,6 +44,11 @@ Python:
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
+        / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
+        凭证=控制台语音技术的 App ID + Access Token,非方舟 ARK Key;
+        音色为 speaker 名,S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
+        / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
+        可在「生成模型」页从 Voice Library 搜索并一键加入账号)
 
 ComfyUI 自定义工作流占位符(文本替换):
   字符串位: "{{PROMPT}}" "{{NEGATIVE}}" "{{CHECKPOINT}}" "{{FIRST_FRAME}}" "{{LAST_FRAME}}"
@@ -69,7 +74,8 @@ CONFIG_PATH = ROOT / "webui" / "genconfig.json"
 
 # 配置里 Key 为空时的环境变量兜底
 ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
-            "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY"}
+            "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY",
+            "elevenlabs": "ELEVENLABS_API_KEY"}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -807,6 +813,86 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
     return _save(data, output)
 
 
+# ---------------- TTS:火山引擎 豆包语音(openspeech v3 单向流式) ----------------
+# 凭证是控制台「语音技术」的 App ID + Access Token(与方舟 ARK Key 不同体系)。
+# X-Api-Resource-Id 即模型档(seed-tts-2.0 / seed-tts-1.0 / 克隆 seed-icl-2.0);
+# 响应为 NDJSON:每行 {"code":0,"data":"<base64 音频分片>"},结束行 code=20000000。
+
+def _tts_volcengine(cfg, text, output, voice, speed, instructions):
+    app_id = str(cfg.get("app_id") or "").strip()
+    if not app_id:
+        raise RuntimeError("火山 TTS 未配置 App ID(「🎨 生成模型」页 TTS → 火山引擎 填入)")
+    speaker = voice or cfg.get("voice") or ""
+    if not speaker:
+        raise RuntimeError("火山 TTS 未指定音色:--voice 传 speaker 名,"
+                           "或在「🎨 生成模型」页配置默认音色(见豆包语音「音色列表」文档)")
+    resource = "seed-icl-2.0" if speaker.startswith("S_") else (cfg["model"] or "seed-tts-2.0")
+    audio_params = {"format": "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm",
+                    "sample_rate": 24000}
+    if speed and speed != 1.0:
+        # speech_rate ∈ [-50,100]:0=常速,100=2 倍速,-50=0.5 倍速
+        audio_params["speech_rate"] = max(-50, min(100, round((speed - 1) * 100)))
+    req_params = {"text": text, "speaker": speaker, "audio_params": audio_params}
+    if instructions:
+        req_params["additions"] = json.dumps(
+            {"context_texts": [instructions]}, ensure_ascii=False)
+    data = _request("https://openspeech.bytedance.com/api/v3/tts/unidirectional",
+                    json.dumps({"user": {"uid": "videoagents"},
+                                "req_params": req_params}).encode(),
+                    {"Content-Type": "application/json",
+                     "X-Api-App-Id": app_id,
+                     "X-Api-Access-Key": cfg["api_key"],
+                     "X-Api-Resource-Id": resource},
+                    timeout=TTS_TIMEOUT)
+    chunks = []
+    for line in data.decode("utf-8", "replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        code = obj.get("code", 0)
+        if code == 0 and obj.get("data"):
+            chunks.append(base64.b64decode(obj["data"]))
+        elif code not in (0, 20000000):
+            raise RuntimeError(f"火山 TTS 失败(code={code}):"
+                               f"{obj.get('message') or json.dumps(obj, ensure_ascii=False)[:300]}")
+    if not chunks:
+        raise RuntimeError(f"火山 TTS 返回空音频(speaker={speaker},resource={resource}):"
+                           f"{data.decode('utf-8', 'replace')[:300]}")
+    return _save(b"".join(chunks), output)
+
+
+# ---------------- TTS:ElevenLabs(POST /v1/text-to-speech/{voice_id}) ----------------
+# voice 传 voice_id(Voice Library 的音色须先加入自己账号,「生成模型」页可搜索+一键加入);
+# instructions 不支持(v3 系模型的情绪走文本内 [audio tag],由上游在 text 里写)。
+
+def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
+    vid = voice or cfg.get("voice") or ""
+    if not vid:
+        raise RuntimeError("ElevenLabs TTS 未指定音色:--voice 传 voice_id,"
+                           "或在「🎨 生成模型」页拉取/搜索音色后设为默认")
+    fmt = "mp3_44100_128" if Path(output).suffix.lower() == ".mp3" else "pcm_24000"
+    body = {"text": text, "model_id": cfg["model"]}
+    if speed and speed != 1.0:
+        body["voice_settings"] = {"speed": speed}
+    if instructions:
+        print("[genmedia] ElevenLabs 不支持 instructions 参数,已忽略"
+              "(情绪用 v3 模型的文内 [audio tag])", file=sys.stderr)
+    data = _request(f"https://api.elevenlabs.io/v1/text-to-speech/{vid}"
+                    f"?output_format={fmt}",
+                    json.dumps(body).encode(),
+                    {"Content-Type": "application/json", "xi-api-key": cfg["api_key"]},
+                    timeout=TTS_TIMEOUT)
+    if not data:
+        raise RuntimeError(f"ElevenLabs TTS 返回空音频(model={cfg['model']},voice={vid})")
+    if data[:1] == b"{":
+        raise RuntimeError(f"ElevenLabs TTS 失败:{data.decode('utf-8', 'replace')[:400]}")
+    return _save(data, output)
+
+
 # ---------------- 对外 API ----------------
 
 def generate_image(prompt: str, output: str, negative: str = "",
@@ -892,13 +978,18 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 webui/genconfig.json 的 tts 段。
 
     输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。voice 缺省用配置页
-    默认音色;instructions 仅 OpenAI 系模型生效(语气/情绪指令)。
+    默认音色(openrouter=音色名 / volcengine=speaker 名 / elevenlabs=voice_id);
+    instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
+    情绪指令,elevenlabs 不支持(忽略)。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
-    if cfg["provider"] != "openrouter":
-        raise RuntimeError(f"TTS 目前仅支持 openrouter 渠道,当前配置为 {cfg['provider']}")
-    return _tts_openrouter(cfg, text, output, voice, speed, instructions)
+    fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
+          "elevenlabs": _tts_elevenlabs}.get(cfg["provider"])
+    if not fn:
+        raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
+                           "(可选 openrouter / volcengine / elevenlabs)")
+    return fn(cfg, text, output, voice, speed, instructions)
 
 
 def generate_music(prompt: str, output: str) -> str:
