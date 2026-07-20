@@ -21,15 +21,15 @@
    - **用户组注释(assets/notes/epNN/grpNNN.json)**:用户在控制台分镜页写的导演注释,由 webui 以 `Director's note (user instruction, must follow): ...` 句注入 video_prompt(Global constraints 之前)——重写组 prompt 时**必须原句保留**;与我的翻译或设计文件冲突时以注释为准并在 notes 记录;
    - 特殊符号:对白 `{台词}`(台词取剧本冻结版,一字不改)、字幕 `【】`(本流程字幕走下游,不用)、**音乐符号 `（）` 严禁使用**——BGM/配乐一律后期(music agent),prompt 里不得出现任何音乐/配乐描述;
    - **按组 audio_plan 注入音频形态(§7D ③,2026-07-10)**:shot_list 每组带 `audio_plan`,是我的硬输入——
-     - `dialogue` 组:`{台词}` + 干声音色锚(见下条);
+     - `dialogue` 组:`{台词}` + 逐角色 Voice 样本锚(见下条);
      - `narration_over` 组(无对白、成片配后期旁白):**严禁出现 `{}` 台词**、不传 audio_refs;prompt 开头(Overall visual style 句之后)声明 `This segment is covered by post-production narration voice-over; characters act silently, no one speaks.`,让模型知道叙事由旁白承担、画面纯动作表演;
      - `ambient_only` 组(有意留白):同样**严禁 `{}`**、不传 audio_refs,音频要素只写音效/环境声;
      - 两类非对白组的 Global constraints 句均必含 `characters do not speak, no dialogue, no speech`——不写的话模型会替人物自由配音,出现怪异语言或无法理解的画面(§7D ③ 机检 nonspeech_group_prompt_ok);
    - **双人对话组三件套(2026-07-15 ep06 grp003-015 实证,缺一易翻车)**:①refs 必须含**组内每个出场角色**(含只露背影/虚焦前景的听者)的形象图并 `@Image N` 绑定——只带说话人图时听者会被脑补成不存在的人物;正文加 Identity lock 句(exactly N characters...every person on screen including anyone seen from behind must match one of these reference images; no third character);②**沉默方也要显式 staging**(位置+朝向+listens in silence, mouth closed throughout)——只写说话人时模型会自行安排对方入画并可能令其开口;③单说话人组写 Voice rule 点名台词归属(all N lines spoken by 某某 alone; 对方 does not speak a single word)。**§7A 反向案例**:前组尾帧含本组不该存在的角色(时间跳跃/穿门,如 ep06 grp002 店主→grp003 二十年前)时,禁用 "opening continues from",改 "same location and lighting as [Image N], cut to a new shot" + 明令该角色 must not appear + 补易混角色的形象区分句;
-   - 龙套角色(无音色样本)的声音特征用文字写入(从 voice.json 翻译:如 "elderly male, raspy low voice, northwestern accent");主要角色靠 reference_audio 锚,prompt 只写情绪语气;
-   - **对白组走音色锚(§8A 改版范式,2026-07-09)**:`audio_refs` = voice-generation 的**单条对白干声轨**(`assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3`,一组仅此一条),**不再传音色样本**;Shot 1 前写固定指令句(中文):`音频1是本组说话角色的声音音色参考。角色开口时用与音频1相同的音色说出台词；口型、表情、节奏随画面表演自然生成。`;`{台词}` 文本与干声**逐字一致**(干声同时给节奏参考)。
-     **红线(2026-07-09 实证)**:严禁写『原样使用音频1人声作为对白语音/口型与音频完全同步』类强绑指令——把 TTS 干声当配音成品强迫口型对齐外部音轨会导致**严重口型问题**;干声仅锚音色,口型由模型原生表演,不受影响,跨组音色更稳。
-     历史依据(DEF-p7-video-voice-binding):不传干声、让模型参考音色样本自行配音时,音色归属不受任何 prompt 写法控制(grp015 四版声学实测:顺序/英文 [Audio N]/中文『音频N』全无效)——干声锚必须传;模型稳定模仿第一说话人音色(±4Hz)但不逐字嵌入,多说话人组第二人失控——组划分层已约束一组一说话人。对白组产出后仍须过声学快检(`<项目目录>/code/voice_f0_check.py`,参照用该组干声文件);
+   - 龙套角色(无 voiceprint 样本)的声音特征用文字写入(从 voice.json 翻译:如 "elderly male, raspy low voice, northwestern accent");主要角色靠 reference_audio 锚,prompt 只写情绪语气;
+   - **对白组走人物 Voice 样本锚(§8A 改版范式,2026-07-20)**:`audio_refs` = **组内每个说话角色各自的 voiceprint 样本**(项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`,经 casting.json/manifest 索引;**按组时间线选对年龄形态的 variant 样本**),≤3 段(Seedance 上限);Shot 1 前**逐角色**写绑定指令句(中文,每个说话角色一句):`音频N是<角色>的嗓音特点参考（仅音色，不是本段台词的朗读）。<角色>开口时用与音频N一致的音色说出台词；口型、表情、节奏随画面表演自然生成。`;`[Audio N]`/`@Audio N` 序号 1-based 与 audio_refs 数组严格对应(同 [Image N] 编号铁律);台词一律 `{}` 文本注入。**组内说话人 ≤3 是分镜组设计层的硬约束**(shot-planning 机检 speakers_le_3,§8A):我这里发现说话人 >3 = 上游切组违规,**退回 shot-planning 拆组,严禁自行取舍挂锚**(只挂部分说话人=未挂锚角色音色无保障)。
+     **红线(2026-07-09 实证,继续有效)**:严禁写『原样使用音频N人声作为对白语音/口型与音频完全同步』类强绑指令——把 TTS 音轨当配音成品强迫口型对齐外部音轨会导致**严重口型问题**;样本仅锚嗓音特点,口型由模型原生表演。
+     历史沿革与风险对策:2026-07-09~07-20 曾用"每组单条台词干声轨"范式——**已废止**(单干声只含一个嗓音,多说话人组第二人失控,手测实证 tothemoon ep01 grp012);更早的失败教训(DEF-p7-video-voice-binding:两条样本齐传但未做逐角色显式绑定,第二说话人漂移)转化为本范式的硬机检——**逐角色绑定句缺一即退回(audioref_bound)**,且对白组产出后逐说话人过声学快检(`<项目目录>/code/voice_f0_check.py`,参照各角色自己的 voiceprint 样本),错配=整组重生成;
    - **剧情道具尺度锚(跨组防尺度漂移)**:组内出现 `bible/props.json` 剧情道具时,该道具**首次出现的 Shot 段必须逐字拼入其 `scale.prompt_token`**(全片唯一写法,严禁自行另译/改写——跨组一致靠逐字复用,同环境声 cue 纪律);`canonical_size` 的数值**严禁进 prompt**(数值属模型无效信息;前科 DEF-p7-visual-0004:黄绢 40cm 两秒膨成 1.2m)。剧情道具在场的组,Global constraints 句并入 `all props keep constant size relative to characters throughout`;
    - 总长 **<1000 词**;时长/画幅等 API 参数不写进 prompt 正文(genmedia 负责拼接);
    - **禁写色号、字段名、元信息**(如 "#C1A062"、"motion class"——模型会把它们渲染成画面文字,已有前科 DEF-p7-visual-0003);同一内容句**只写一遍,严禁复述**。
@@ -56,7 +56,7 @@
 | 07-directing/blocking | 人物调度(站位/动作节拍) | `directing/epNN/shots/<shot>/blocking.json` |
 | 07-directing/shot-planning | 组定义(镜序/总时长/角色/对白)+ 每镜景别 + 逐组 audio_plan(音频形态,§7D ③ 硬输入) | `directing/epNN/shot_list.json`(generation_groups) |
 | 07-directing/continuity-planning | 组内逐镜状态表 + 组间衔接(尾帧锚) | `directing/epNN/continuity_plan.json` |
-| 09-audio/voice-generation | 角色音色样本清单(主要角色锚/龙套文字描述) | `assets/audio/voice/epNN/refs/manifest.json` |
+| 09-audio/voice-generation | 角色 Voice 样本库清单(说话人挂锚选样/龙套文字描述)+ 选角注册表 | `assets/audio/voice/refs/manifest.json`、`assets/audio/voice/casting.json`(项目级) |
 | 09-audio/sound-effect | 逐镜音效 cue | `assets/audio/sfx/epNN/audio_cues.json` |
 | 09-audio/ambience | 逐场景环境声 cue | `assets/audio/ambience/epNN/ambience_cues.json` |
 | 03-characters/voiceprint | 龙套角色声音文字描述来源 | `bible/characters/<id>/voice.json` |
@@ -87,12 +87,13 @@
     "assets/keyframes/epNN/grp005/anchor_scene.png",
     "assets/clips/epNN/grp004.last_frame.png"
   ],
-  "audio_refs": ["assets/audio/voice/epNN/refs/c003_voiceprint.mp3"],
+  "audio_refs": ["assets/audio/voice/refs/CHAR-0003_voiceprint.mp3",
+                 "assets/audio/voice/refs/CHAR-0004_voiceprint.mp3"],
   "negative": ["style.json 负面清单项", "通用畸变负面词", "no duplicate/twin characters"],
   "anchors": { "style": ["..."], "character": { "<char_id>": "..." }, "aspect": "16:9@1920x1080" }
 }
 ```
-注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 1 场景 + 前组尾帧);`audio_refs`:对白组=单条对白干声轨(`lines/grpNNN_dialogue.mp3`,时长≤15s 且贴合组时长;方舟 r2v 硬限总时长 15.2s,超限直接 InvalidParameter);
+注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 1 场景 + 前组尾帧);`audio_refs`:对白组=组内每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;单段 2–15s,方舟对参考音频有总时长硬限,超限直接 InvalidParameter);
 prompt 内 `[Image N]`/`[Audio N]` 序号必须与数组顺序严格一致(genmedia 按此顺序发送):**1-based,N = 下标 + 1,refs[0]=[Image 1]——按 0-based 下标编号是既成事故模式(ep05 全批错位,说话人互换),自查口诀:`@Image N` 指向的 refs[N-1] 路径里必须能看到该角色自己的 CHAR id**。
 
 ## 接受的工作指令(Work Order)
@@ -120,7 +121,7 @@ instruction: |
 - **组结构机检**:Shot 段数 = 组内镜数;`[Image N]`/`[Audio N]` 引用与数组序号一一对应;**每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色自己的 CHAR id;"opening continues from [Image N]" 的 refs[N-1] 必须是 `*.last_frame.png` 或锚帧图**(错位=两角色互换、各说对方台词——**二犯**:ep01 grp017、2026-07-13 ep05 整批 0-based 错位十组返工)。**此项为 imageref_bound,必须以脚本逐条执行(纯字符串核对,几行 python 即可),批产出后跑一遍全批,禁止依赖人眼抽查——ep05 事故即机检规则早已在册但未实际执行**;总长 <1000 词;无色号/字段名等元信息;无复述句;对白镜台词已用 `{}` 包裹且与剧本一致。
 - **道具尺度机检**(`prop_scale_token_ok`):组内出场的每个剧情道具,其 `scale.prompt_token` 在 video_prompt 中逐字命中;prompt 正文无 cm/米等数值尺寸;剧情道具在场时 Global constraints 含尺度恒定句。
 - **道具参考图机检**(`prop_ref_listed`):组内出场的每个剧情道具,其参考图必须列入 refs 素材清单并有 `[Image N]` 可绑定(该道具首现组必含比例锚图 `scale_ref_01.png`)——只有文字 token 没有图,道具样式全靠模型脑补,跨组必漂;video-generation 开跑前会按 prop_ref_attached 再核一遍,缺图直接退回。
-- **音频机检**:无 `（）` 符号、无音乐/配乐字样(负面词表除外);组内关键动作的 audio_cues 全部译入对应 Shot 段;同场景各组环境声描述一字不差;negative 含 "no background music";对白组 audio_refs 必须是该组 `lines/grpNNN_dialogue.mp3` 且 `{台词}` 与干声文本逐字一致;Shot 1 前含固定中文指令句(音频1是...音色参考...口型随画面表演自然生成);**严禁出现『原样使用...人声』『与音频完全同步』等把干声当配音成品的强绑措辞**(口型问题根源)。
+- **音频机检**:无 `（）` 符号、无音乐/配乐字样(负面词表除外);组内关键动作的 audio_cues 全部译入对应 Shot 段;同场景各组环境声描述一字不差;negative 含 "no background music";**对白组 audioref_bound(§8A 2026-07-20)**:组内每个说话角色在 audio_refs 有各自 voiceprint 样本(说话人 >3 =上游切组违规,退回 shot-planning,speakers_le_3)、audio_refs[N-1] 文件名含该角色 CHAR id、年龄形态 variant 与本组时间线一致,且 Shot 1 前**逐角色**含绑定指令句(音频N是<角色>的嗓音特点参考...非本段台词的朗读...口型随画面表演自然生成)——缺任一角色的样本或绑定句即退回;**严禁出现『原样使用...人声』『与音频完全同步』等把参考音频当配音成品的强绑措辞**(口型问题根源)。
 - **非对白组机检(nonspeech_group_prompt_ok,§7D ③)**:audio_plan 为 narration_over/ambient_only 的组——video_prompt 无任何 `{}`;audio_refs 为空;Global constraints 含 `characters do not speak, no dialogue, no speech`;narration_over 组另含后期旁白声明句(This segment is covered by post-production narration voice-over...)。任一不满足直接退回。
 
 **评分(evaluation Agent)**:

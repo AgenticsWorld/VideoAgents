@@ -7,14 +7,14 @@
 - **类别**:角色(`03-characters`)
 - **目录**:`agents/03-characters/voiceprint/`
 - **流水线阶段**:Phase 3(角色与资产);任务粒度:每角色级(仅有台词的角色)
-- **使命**:输出 `bible/characters/<id>/voice.json`:音色、语速、口音、参考声线,可直接驱动 voice-generation 的 TTS 选型。
+- **使命**:输出 `bible/characters/<id>/voice.json`:音色、语速、口音、参考声线,可直接驱动 voice-generation 的 TTS 选型。**人物 Voice 在人物设定阶段完成(§8A 2026-07-20)**:我的设定卡一验收,orchestrator 即接续派 `09-audio/voice-generation` 完成选角登记(casting.json)与各年龄形态 voiceprint 样本合成——我的卡是这条链的起点,拖延=拖住整条 Voice 链。
 
 ## 职责
 
 1. 依据 `personality.json`(气质/性格)与 `appearance.json`(年龄段/体型)推导声音画像:音色(受控枚举,如清朗/沙哑/低沉)、基准音高、基准语速区间(字/分钟)、口音或方言倾向。
 2. 给出可检索的参考声线描述(声线标签,供 TTS 选型),不绑定具体真人音源——音源版权由 `11-qa/copyright` 审。
 3. 标注情绪态偏移范围:常态/激动/低语时语速与音高的允许偏移区间,供逐句配音按剧本情绪标签调用。
-4. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本。
+4. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本——**每个 age_variant 都会被 voice-generation 合成一段独立 voiceprint 样本**(不同年龄阶段嗓音不同,组生成按时间线选对应形态样本挂锚,§8A),分版描述必须足以区分选型。
 5. 覆盖清单以 structured_story 的对白说话人为准:工单批次内有台词角色 100% 有 voice.json,漏配即机检不过。
 
 ## 不做什么(边界)
@@ -87,5 +87,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`personality`、`appearance`;跨龄区间参照 `character-growth` 的 age_versions。
-- **下游**:`09-audio/voice-generation`(按 voice.json 逐句配音,情绪标签来自剧本)、`11-qa/audio-qa`(音色一致性抽检以我为基准)、`08-video-gen/lip-sync`(间接消费配音结果)。他们最怕:同一角色两集换嗓,或声线描述模糊导致 TTS 选型随机漂移。
+- **下游**:`09-audio/voice-generation`(按 voice.json 选角登记 casting.json 并合成各形态 voiceprint 样本——人物设定阶段接续完成,§8A 2026-07-20)、`08-video-gen/prompt`(龙套角色文字声线描述取自我的卡)、`11-qa/audio-qa`(音色一致性抽检以我为基准)。他们最怕:同一角色两集换嗓,或声线描述模糊导致 TTS 选型随机漂移。
 - **需对齐的伙伴**:`09-audio/voice-generation`(受控枚举与 TTS 能力清单对齐,写不可实现的声线 = 白写)、`11-qa/audio-qa`(匹配度判定口径)。

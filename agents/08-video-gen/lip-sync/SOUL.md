@@ -31,7 +31,7 @@
 |---|---|---|
 | 08-video-gen/video-generation | 组视频 + meta(boundary_map 定位) | `assets/clips/epNN/grpNNN.mp4` + `.meta.json` |
 | 11-qa/visual-qa | 口型缺陷单(圈定组/镜段/时间码) | `qa/defects/DEF-*.json` |
-| 09-audio/voice-generation | 组干声轨(仅作偏移测量参照,严禁作替换音源) | `assets/audio/voice/epNN/lines/` |
+| 09-audio/voice-generation | 说话角色 voiceprint 样本(仅作音色参照,严禁作替换音源;§8A 2026-07-20) | `assets/audio/voice/refs/` |
 | 07-directing/shot-planning | 对白镜头标记、出场角色 | `directing/epNN/shot_list.json` |
 | 07-directing/blocking | 说话人站位(多人镜头定位嘴) | `directing/epNN/shots/<shot>/blocking.json` |
 

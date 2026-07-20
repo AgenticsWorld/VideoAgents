@@ -255,7 +255,7 @@ refs/
 | character-growth | 有年龄跨度的角色的分龄形象版本 | appearance、story_timeline | `<id>/age_versions.json` | 机检:每版本挂在合法时间轴区间 |
 | personality | 性格、动机、行为习惯、禁忌 | structured_story | `<id>/personality.json` | 评分 analysis_v1;QA:logic-qa 抽查「性格-行为」矛盾 |
 | relationship | 全角色关系图(类型、强度、随剧情的变化) | events、index | `bible/characters/relationship.json` | 机检:边引用合法 ID;QA:关键关系与原文抽样比对 |
-| voiceprint | 每个有台词角色的声音设定(音色、语速、口音、参考声线) | personality、appearance | `<id>/voice.json` | 机检:字段齐;QA:audio-qa 审「声音-人设」匹配度 |
+| voiceprint | 每个有台词角色的声音设定(音色、语速、口音、参考声线;跨龄角色按 age_versions 分版)——**设定卡完成即触发选角落地:orchestrator 随后派 09-audio/voice-generation 登记 casting.json 并合成该角色×各年龄形态的 voiceprint 样本(§8A 2026-07-20,人物 Voice 在人物设定阶段完成,不等到集级)** | personality、appearance | `<id>/voice.json`(下游链产 casting 条目 + `voice/refs/` 样本) | 机检:字段齐;QA:audio-qa 审「声音-人设」匹配度 |
 | dialogue-style | 每个角色的说话风格卡(口头禅、句式、用词禁区) | structured_story 对白集 | `<id>/dialogue_style.json` | 评分 analysis_v1;QA:用原文台词回测风格卡命中率 ≥80% |
 | creature | 妖兽/动物图鉴(形态、习性、战力) | structured_story | `bible/creatures/creature.json` | 同 appearance 标准 |
 | mount | 坐骑/飞禽设定 | creature | `bible/creatures/mount.json` | 同上 |
@@ -299,7 +299,7 @@ refs/
 |---|---|---|---|---|
 | director | 撰写本集导演阐述:视觉基调、重点场次处理、镜头语言倾向 | screenplay、pacing、style、color_script | `directing/epNN/directing_plan.md` | 评分 creative_v1;QA:art-director 会签 |
 | storyboard | 分镜设计:逐场拆分镜头草案(画面内容、构图草描);按叙事节拍划分生成组草案 groups_draft(同场景、连续、Σ≤15s、对话轮不跨组) | directing_plan、screenplay | `epNN/storyboard.json`(含 groups_draft) | 机检:剧本场景覆盖率 100%;每镜均入组。评分 visual_plan_v1 |
-| shot-planning | 定稿镜头表:镜号、时长、景别、机位、出场角色/场景 ID、是否对白镜头;定稿生成组 generation_groups;**定稿旁白挂点 narration_anchors 与逐组音频形态 audio_plan(dialogue/narration_over/ambient_only),对无声组(ambient_only)逐组核查纯画面能否讲清叙事,讲不清回派 narration 补写旁白(新版本写回 narration.md)或上报剧本变更加对白(§7D ①);dialogue 组逐组核对台词估时能否装进组时长,超限优先回派 dialogue-rewrite 改短台词(§7D ①)** | storyboard、pacing、narration.md | `epNN/shot_list.json`(含 generation_groups、narration_anchors、逐组 audio_plan) | 机检:Σ镜头时长 = 集时长 ±10%;角色/场景 ID 合法;镜号唯一;组:镜号全覆盖不重叠、同场景连续、Σ∈[4,15] 整数秒、组内出场角色 ≤4;**旁白:条目 100% 有挂点、镜/组引用合法、窗口 ≥ est_duration_s×1.15;组 audio_plan 100% 必填,ambient_only 组必附 silent_rationale(§7D);对白:dialogue 组 Σ台词估时 ≤ 组时长×0.7(§7D ①)** |
+| shot-planning | 定稿镜头表:镜号、时长、景别、机位、出场角色/场景 ID、是否对白镜头;定稿生成组 generation_groups;**定稿旁白挂点 narration_anchors 与逐组音频形态 audio_plan(dialogue/narration_over/ambient_only),对无声组(ambient_only)逐组核查纯画面能否讲清叙事,讲不清回派 narration 补写旁白(新版本写回 narration.md)或上报剧本变更加对白(§7D ①);dialogue 组逐组核对台词估时能否装进组时长,超限优先回派 dialogue-rewrite 改短台词(§7D ①);**对话场景切组时组内说话人 ≤3(Seedance reference_audio 上限 3 段,§8A 设计层硬约束)——说话人多的群戏按说话回合拆组** | storyboard、pacing、narration.md | `epNN/shot_list.json`(含 generation_groups、narration_anchors、逐组 audio_plan、dialogue 组 speakers) | 机检:Σ镜头时长 = 集时长 ±10%;角色/场景 ID 合法;镜号唯一;组:镜号全覆盖不重叠、同场景连续、Σ∈[4,15] 整数秒、组内出场角色 ≤4;**speakers_le_3:dialogue 组说话人数 ≤3(§8A,超限=FAIL 必须拆组)**;**旁白:条目 100% 有挂点、镜/组引用合法、窗口 ≥ est_duration_s×1.15;组 audio_plan 100% 必填,ambient_only 组必附 silent_rationale(§7D);对白:dialogue 组 Σ台词估时 ≤ 组时长×0.7(§7D ①)** |
 | camera-movement(每镜) | 运镜设计(推拉摇移/手持/稳定器,速度曲线) | shot_list、directing_plan | `shots/<id>/camera.json` | 机检:运镜类型在受支持的生成能力清单内 |
 | composition(每镜) | 构图设计(九宫格位置、前中后景、视线方向) | storyboard、shot_list | `shots/<id>/composition.json` | QA:visual-qa 预审可执行性 |
 | cinematography | 本集镜头语言规范(镜头焦段习惯、色温倾向、景深策略) | directing_plan、style | `epNN/cinematography.json` | QA:art-director 会签 |
@@ -335,8 +335,10 @@ refs/
 > "continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧;不符=退回重编号,禁直接开跑。
 > 每镜精确时长不可控(模型按剧情定节奏):组总时长是硬约束(±1s),镜级时长是节奏意图;
 > 组 clip 内实际镜头边界由切变检测写入 meta 供剪辑/QA 对位。原生音频(generate_audio)默认开,
-> 对白在组 prompt 用 `{台词}`、对白组干声轨作 reference_audio **音色锚**(仅锚音色,对白语音
-> 与口型由模型原生合成——TTS 严禁用作对白配音,口型问题红线见 §8A),音效/环境声按 cue 文字注入;
+> 对白在组 prompt 用 `{台词}`、对白组把**每个说话角色各自的 voiceprint 样本**(项目级
+> `voice/refs/`,按年龄形态选 variant 版;≤3 段=Seedance 上限)挂 reference_audio,prompt 逐角色
+> 显式绑定 `<角色>@Audio N`(样本仅提供该角色嗓音特点,**非台词朗读**;对白语音与口型由模型
+> 原生合成——TTS 严禁用作对白配音,口型问题红线见 §8A),音效/环境声按 cue 文字注入;
 > **BGM 与旁白一律后期**(prompt 禁 `（）` 与音乐描述);lip-sync 仅剩不换语音的对齐兜底。音频范式详见 §8A。
 > 单镜首尾帧模式保留为兜底路径(组生成质量不达标时逐镜重做)。
 >
@@ -350,10 +352,10 @@ refs/
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| prompt(每组) | 组级多镜头视频 prompt(官方 Shot 1:/Shot 2: 结构,**开头内嵌风格锚点 `Overall visual style: ...`、结尾并入 `Global constraints:` 全局负面句**——anchors/negative 字段不会进入生成请求;每镜按运镜/主体动作/空间位置/音频四要素,`[Image N]`/`@` 绑定素材,`{}` 对白;音频要素译自 sfx/ambience cue,禁 `（）` 与音乐描述;**剧情道具首现 Shot 段逐字拼入 props.json 的 `scale.prompt_token`,禁写数值尺寸,Global constraints 并入尺度恒定句**;**按组 audio_plan 注入音频形态:narration_over/ambient_only 组禁 `{}` 台词、Global constraints 必含无对白约束句,narration_over 组开头声明该段配后期旁白、人物不开口,§7D ③**);另出组锚点图的图像 prompt | 组内全部设计文件 + Bible 片段 + continuity 状态表 + audio_cues/ambience_cues + voice 样本清单 | `assets/prompts/epNN/grpNNN.json`(组)+ `<shot>.json`(锚点图) | 机检:必含要素清单(风格锚点/角色锚点/画幅)全命中且 video_prompt 以 `Overall visual style:` 开头;<1000 词;素材引用与 refs 清单一致;禁写色号/元信息;道具尺度锚命中(prop_scale_token_ok);**组内出场剧情道具参考图列入 refs 清单、首现组必含比例锚图 scale_ref_01.png(prop_ref_listed——只有文字 token 没有图,道具样式全靠模型脑补)**;**`@Image N` 绑定命中(imageref_bound,脚本全批执行,§7A 编号铁律):每个 `<角色>@Image N` 的 refs[N-1] 含该角色 CHAR id、continues from 的 [Image N] 指向尾帧/锚帧——1-based,错位=说话人互换(前科 ep01 grp017、ep05 十组)**;**非对白组无 `{}` 且含无对白约束句(nonspeech_group_prompt_ok,§7D ③)** |
+| prompt(每组) | 组级多镜头视频 prompt(官方 Shot 1:/Shot 2: 结构,**开头内嵌风格锚点 `Overall visual style: ...`、结尾并入 `Global constraints:` 全局负面句**——anchors/negative 字段不会进入生成请求;每镜按运镜/主体动作/空间位置/音频四要素,`[Image N]`/`@` 绑定素材,`{}` 对白;音频要素译自 sfx/ambience cue,禁 `（）` 与音乐描述;**剧情道具首现 Shot 段逐字拼入 props.json 的 `scale.prompt_token`,禁写数值尺寸,Global constraints 并入尺度恒定句**;**按组 audio_plan 注入音频形态:narration_over/ambient_only 组禁 `{}` 台词、Global constraints 必含无对白约束句,narration_over 组开头声明该段配后期旁白、人物不开口,§7D ③**;**对白组 audio_refs=组内每个说话角色的 voiceprint 样本(≤3 段,按年龄形态选 variant 版),prompt 逐角色写 `<角色>@Audio N` 绑定句——样本仅锚嗓音特点、非台词朗读,§8A;发现说话人 >3 =上游切组违规,退回 shot-planning 拆组(speakers_le_3),不得自行取舍挂锚**);另出组锚点图的图像 prompt | 组内全部设计文件 + Bible 片段 + continuity 状态表 + audio_cues/ambience_cues + casting.json/voiceprint 样本库 | `assets/prompts/epNN/grpNNN.json`(组)+ `<shot>.json`(锚点图) | 机检:必含要素清单(风格锚点/角色锚点/画幅)全命中且 video_prompt 以 `Overall visual style:` 开头;<1000 词;素材引用与 refs 清单一致;禁写色号/元信息;道具尺度锚命中(prop_scale_token_ok);**对白组 audioref_bound:每个说话角色有 `@Audio N` 绑定且 audio_refs[N-1] 样本文件名含该角色 CHAR id(年龄形态与本组时间线一致)**;**组内出场剧情道具参考图列入 refs 清单、首现组必含比例锚图 scale_ref_01.png(prop_ref_listed——只有文字 token 没有图,道具样式全靠模型脑补)**;**`@Image N` 绑定命中(imageref_bound,脚本全批执行,§7A 编号铁律):每个 `<角色>@Image N` 的 refs[N-1] 含该角色 CHAR id、continues from 的 [Image N] 指向尾帧/锚帧——1-based,错位=说话人互换(前科 ep01 grp017、ep05 十组)**;**非对白组无 `{}` 且含无对白约束句(nonspeech_group_prompt_ok,§7D ③)** |
 | image-generation(每组) | 组参考锚点包:优先复用角色三视图/场景概念图,必要时补生成组开场锚帧;**道具锚优先取比例锚图 scale_ref_01.png(特写图无比例信息,防跨组尺度漂移)**;**组内有用户手绘分镜的,先据手绘稿渲染风格化图像(anchor_sketch_*.png)入锚点包——原稿严禁直接进视频 refs;渲染图 meta role 记 `action_ref`(参考锚),严禁标注首帧强锚(首帧红线见 §7A)**;**一切新生成锚帧必带所涉实体概念图 --ref 与 style.json 风格锚(§7E ①②)** | prompt、bible 概念图、style.json、用户参考图、手绘分镜(sketches/) | `assets/keyframes/epNN/<grp>/` | 机检:分辨率/画幅合规;锚点 ≤9 张(建议 4–5);**组内出场剧情道具参考图已入锚点包(prop_ref_attached)**;**新生成锚过 repair_ref_anchored(§7E)**。QA:visual-qa ≥80 |
 | character-consistency(每组) | 对锚点包做角色一致性校正;角色特写前置、单人照防「双胞胎」;**校正重生成必带在库三视图 --ref 与 style.json 风格锚(prompt 风格段 + 负面清单),严禁凭文字设定重画形象;所涉概念图缺失=停手上报,不自行补画(§7E)** | 锚点包、concepts 三视图、style.json | 校正后锚点包 | 机检:人脸相似度 ≥0.85(与人设参考图);不达标自动重 roll ≤3 次;**修正重生成过 repair_ref_anchored(§7E)** |
-| video-generation(每组,按组序串行) | 组 prompt+锚点包(+前组尾帧)一次生成多镜头组 clip;开 generate_audio 与 return_last_frame;**手绘渲染图只作 --ref 软引用,`first_frame` 指向 anchor_sketch_*/kf_action_* 而无开场依据/拆段说明=违规配置,开跑前退回(首帧红线见 §7A)**;**开跑前核对 refs 素材完备:组内出场剧情道具无对应参考图=违规配置退回(prop_ref_attached);`@Image N` 绑定复核(imageref_bound,§7A 编号铁律)不符=退回 prompt 重编号,严禁按错位 prompt 开跑**;**局部穿帮缺陷单(repair_mode: v2v_edit)走 V2V 定向修改**(原 clip 作 --ref-video,§9),不整组重 roll;**整组重 roll 先做前向接缝评估(§7C):后组 refs 含本组尾帧的,追加后组首帧软引用 + "ending continues into"** | grpNNN.json、校正锚点包、前组尾帧、角色音色样本(项目级 voice/refs/) | `assets/clips/epNN/grpNNN.mp4` + `grpNNN.meta.json`(含切变边界、尾帧路径、usage) | 机检:组总时长 ±1s、24fps/分辨率合规、有音轨、尾帧落盘。QA:visual-qa 组级打分(V2V 修复版按新组复检,对白组加声学快检;**重 roll 组做双向接缝复检,§7C**) |
+| video-generation(每组,按组序串行) | 组 prompt+锚点包(+前组尾帧)一次生成多镜头组 clip;开 generate_audio 与 return_last_frame;**手绘渲染图只作 --ref 软引用,`first_frame` 指向 anchor_sketch_*/kf_action_* 而无开场依据/拆段说明=违规配置,开跑前退回(首帧红线见 §7A)**;**开跑前核对 refs 素材完备:组内出场剧情道具无对应参考图=违规配置退回(prop_ref_attached);`@Image N` 绑定复核(imageref_bound,§7A 编号铁律)不符=退回 prompt 重编号,严禁按错位 prompt 开跑**;**局部穿帮缺陷单(repair_mode: v2v_edit)走 V2V 定向修改**(原 clip 作 --ref-video,§9),不整组重 roll;**整组重 roll 先做前向接缝评估(§7C):后组 refs 含本组尾帧的,追加后组首帧软引用 + "ending continues into"**;**对白组开跑前复核 audioref_bound(每个说话角色的 voiceprint 样本在 audio_refs 且 `@Audio N` 绑定正确,§8A)不符=退回 prompt** | grpNNN.json、校正锚点包、前组尾帧、说话角色 voiceprint 样本(项目级 voice/refs/,casting.json 索引) | `assets/clips/epNN/grpNNN.mp4` + `grpNNN.meta.json`(含切变边界、尾帧路径、usage) | 机检:组总时长 ±1s、24fps/分辨率合规、有音轨、尾帧落盘。QA:visual-qa 组级打分(V2V 修复版按新组复检,对白组加**逐说话人**声学快检——参照各自 voiceprint 样本,错配=整组重 roll;**重 roll 组做双向接缝复检,§7C**) |
 | lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
 | animation | 动作补间/局部重绘修复(按 QA 缺陷单触发;**重绘涉及人物/场景/道具形象的,素材与 prompt 受 §7E 形象红线约束**) | 组 clip、缺陷单 | 修复后组 clip | 复检原缺陷项通过;**涉形象重绘过 repair_ref_anchored(§7E)** |
 | upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)** | 组 clip | 终版组 clip | 机检:目标分辨率、无超分伪影抽检 |
@@ -403,23 +405,22 @@ refs/
 >     是旁白唯一事实源,严禁只登记在挂点表),确需加对白的上报 orchestrator 走剧本变更
 >     (动 screenplay 冻结版,成本高,须批准);
 >   - 挂点、audio_plan 与无声组判定一起进「分镜设定」预览页供用户 H3A 审看。
-> ② **实测级(p7-video 派发前,narrator 与 voice-generation 执行)**:narrator 在 p7-video 之前合成正式旁白轨并
+> ② **实测级(p7-video 派发前,narrator 执行)**:narrator 在 p7-video 之前合成正式旁白轨并
 > 逐条实测时长(TTS 语速控制不可靠、换模型即漂移,估时不能代替实测),机检 `narration_fit`:
 > 逐条实测时长 ≤ 挂点窗口×0.9(留呼吸空隙)且不与窗口内对白重叠;超窗默认回派 narration 精简
 > 改稿→重合成复检(文本层修改,锚点不动,不改已冻结 shot_list、不重签 H3A);确需扩镜/调组的
-> 走分镜变更流程并重估成本。**对白侧对称**:voice-generation 按**正常语速**合成对白组干声轨
-> (句间留自然停顿;**严禁压 `--speed`/atempo 把干声塞进时长**——干声压速只掩盖超长,视频
-> 模型生成时照样为念完台词赶词提速),机检 `dialogue_fit`:逐组干声轨实测时长 ≤ 组总时长×0.8;
-> 超限回派 dialogue-rewrite 精简台词→重合成复检(文本层修改,不改冻结 shot_list),确需扩镜/
-> 拆组的走分镜变更流程。**narration_fit 或 dialogue_fit 未通过,orchestrator 不得派发对应组的
-> p7-video 工单**。
+> 走分镜变更流程并重估成本。**对白侧**:自 §8A 2026-07-20 改版起**不再合成组级干声、无干声实测
+> 环节**——对白时长闸门就是 ① 的估时级机检(`Σ台词估时 ≤ 组总时长×0.7`,est_duration_s 口径已
+> 按角色声线语速);超限回派 dialogue-rewrite 精简台词(文本层修改,不改冻结 shot_list),确需
+> 扩镜/拆组的走分镜变更流程,**严禁指望模型压语速消化**。**narration_fit 或 ① 的对白估时机检
+> 未通过,orchestrator 不得派发对应组的 p7-video 工单**。
 > ③ **生成侧联动(prompt 执行,机检 `nonspeech_group_prompt_ok`)**:`audio_plan` 必须注入组
 > prompt——`narration_over` 与 `ambient_only` 组**严禁出现 `{}` 台词**,Global constraints 必含
 > 无对白约束句(`characters do not speak, no dialogue, no speech`);`narration_over` 组另在
 > prompt 开头声明该段成片配后期旁白(如 `This segment is covered by post-production
 > narration voice-over; characters act silently`),让模型知道叙事由旁白承担、画面纯动作表演
 > ——不注明的话模型会自由发挥替人物配台词,出现怪异语言或无法理解的画面。此类组不传
-> `--audio-ref`(干声锚仅对白组)。
+> `--audio-ref`(voiceprint 音色锚仅对白组)。
 
 > **§7E 修正阶段形象红线(repair identity red line,2026-07-12)**:一切**修正/校正/返修类**图像与视频
 > 重生成——character-consistency 锚点校正、缺陷单返修、兜底重做、animation 局部重绘、V2V 定向修改
@@ -444,30 +445,40 @@ refs/
 
 ### Phase 8 — 音频(每集;cue 设计、音色样本与旁白轨先于 Phase 7 组生成,混音在其后)
 
-> **§8A 音频范式(2026-07-09 改版:对白干声=音色锚,一组一说话人)**:音效/环境声由
-> Seedance 2.0 原生随组视频生成——sound-effect 与 ambience 只产**文字 cue**。
-> **红线:TTS 严禁用于对白配音**——把 TTS 音轨当成片对白语音(生成期『原样使用参考
+> **§8A 音频范式(2026-07-20 改版:人物 Voice 样本范式——逐角色 voiceprint 挂锚 + prompt 显式绑定)**:
+> 音效/环境声由 Seedance 2.0 原生随组视频生成——sound-effect 与 ambience 只产**文字 cue**。
+> **红线(不变):TTS 严禁用于对白配音**——把 TTS 音轨当成片对白语音(生成期『原样使用参考
 > 音频人声+口型同步』强绑,或后期换轨/贴片重驱口型)会导致**严重口型问题**(2026-07-09
-> 实证,2026-07-08 的 C′ 干声驱动指令随之废止)。
-> **对白走音色锚**:voice-generation 为每个对白组产出**一条台词干声轨**
-> (`assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3`,该组说话人的全部台词,按角色
-> 固定 tts_voice 合成,时长贴合组时长且 ≤15s),组生成时作唯一 reference_audio,prompt
-> 指令为『音频1仅作说话角色的音色参考,口型/表情/节奏随画面表演自然生成』——对白语音
-> 与口型由模型**原生合成**(口型不受影响),音色被干声锚定,同一角色全片同一 TTS 音色
-> 出锚,**跨组音色更稳**。
-> **选角事实源=项目级 `assets/audio/voice/casting.json`**(2026-07-12 改版:此前选角散在各集
-> epNN/refs/manifest.json,已实际造成跨集音色复用撞车与模型切换漂移):角色×形态(variant)→
-> tts_model+tts_voice 全片唯一登记;合成任何角色语音**前必查表**,表中无条目=先登记再合成,
-> 多形态角色 variant 必填。音色复用豁免(collision_waivers)显式登记依据(同场互斥分析)。
+> 实证);reference_audio 一律只作**嗓音特点参考**,对白语音与口型由模型原生合成。
+> **人物 Voice 前置到人物设定阶段(Phase 3)**:每个有台词角色在人物设定时就完成
+> ① `voice.json` 声纹设定(03-characters/voiceprint,含年龄形态分版)→ ② 选角登记
+> `casting.json` → ③ **voiceprint 样本合成**(09-audio/voice-generation,每角色×年龄形态一段
+> 10–15s 平静中性内容纯人声干声,落项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`)。
+> **同一角色不同年龄阶段嗓音不同**:voice.json 的 age_variants 有分版的,逐 variant 出样本;
+> 组生成挂锚时按该组时间线选对应形态的样本。
+> **对白组挂逐角色 Voice 锚(2026-07-20,废止组级干声)**:~~每组一条台词干声轨
+> `lines/grpNNN_dialogue.mp3`~~ 不再产出——单干声只含一个人的嗓音,多说话人组第二人音色
+> 失控(手测实证:tothemoon ep01 grp012)。现行做法:组 audio_refs = **组内每个说话角色各自的
+> voiceprint 样本**(≤3 段=Seedance 2.0 reference_audio 上限——**因此分镜组设计层就约束
+> 组内说话人 ≤3**:shot-planning 硬机检 speakers_le_3,说话人多的群戏按说话回合拆组;
+> 漏网到 prompt/video-generation 层的 >3 组=上游违规,退回 shot-planning 拆组,**不得自行
+> 取舍挂锚**);prompt **逐角色显式绑定**
+> `<角色>@Audio N`,指令句写明『音频N是<角色>的嗓音特点参考(仅音色,非本段台词的朗读);
+> <角色>开口时用与音频N一致的音色说台词』。台词本身仍以 `{}` 文本注入,由模型原生合成。
+> **选角事实源=项目级 `assets/audio/voice/casting.json`**(2026-07-12 改版,继续有效):角色×形态
+> (variant)→ tts_model+tts_voice 全片唯一登记;合成任何角色语音**前必查表**,表中无条目=先登记
+> 再合成,多形态角色 variant 必填。音色复用豁免(collision_waivers)显式登记依据(同场互斥分析);
+> **同组两说话人严禁共用同一 tts_voice 出样本**(同场互斥是 waiver 前提)。
 > **换 TTS 模型=全员重选角受控变更**(音色名跨模型不可移植):整表更新+重出全部样本+评估已
 > 成片漂移,严禁下一集悄悄沿用旧音色名。
-> **实证边界(ep01 grp015 六版声学实测,勿再试)**:①模型自合成对白的音色归属不受任何
-> prompt 写法控制(英文/中文 token/顺序全无效)——干声锚必须传;②方舟 API 不做逐字嵌入
-> (波形互相关≈0,模型是重演绎),但**会稳定模仿第一说话人的参考音色**(±4Hz);③组内第二
-> 说话人失控。故硬约束:**对白组一组只一个说话人**(shot-planning 按说话回合切组;确实
-> 拆不开的标 `multi_speaker: true`,其错配走整组重生成——不做 TTS 贴片/换轨精修,见红线)。
-> 音色样本(voiceprint)保留作选角存档与声学快检参照,一律落**项目级** `assets/audio/voice/refs/`
-> (按 角色[_形态]_voiceprint.mp3 命名;epNN/refs/ 为历史存档,不再新增)。
+> **已知风险与对策(历史实测,2026-07-09 thedoor)**:早期曾实测两条声纹样本齐传时模型只稳定
+> 模仿第一段、第二说话人漂移(当时 prompt 未做逐角色 `@Audio N` 显式绑定)——因此本范式
+> **强制**:①逐角色绑定句缺一即机检退回(audioref_bound);②交付后**逐说话人**声学快检
+> (`code/voice_f0_check.py`,参照各角色自己的 voiceprint 样本),任一说话人音色错配=开缺陷单
+> **整组重生成**(调整 audio_refs 顺序/绑定措辞后重 roll),不做 TTS 贴片/换轨精修(见红线);
+> ③多说话人组反复(≥3 次)错配的,上报 orchestrator 回退「按说话回合拆组、一组一说话人」的
+> 保守切法(shot-planning 仍保留该偏好)。方舟不逐字嵌入参考音频(波形互相关≈0,模型重演绎),
+> 样本内容说什么无所谓,嗓音特点才是锚的对象。
 > **无对白组严禁模型自编台词**:`audio_plan` 为 narration_over/ambient_only 的组(§7D),组
 > prompt 不写 `{}`、不传 reference_audio,且必含无对白约束句;narration_over 组明示「该段配
 > 后期旁白,人物不开口」——不明示时模型会替人物自由配音,出现怪异语言或与叙事无关的画面。
@@ -480,7 +491,7 @@ refs/
 |---|---|---|---|---|
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
-| voice-generation(先于 p7-video) | **每个对白组出台词干声轨**(单条连续轨,按角色固定 tts_voice 以**正常语速**合成,与冻结剧本台词逐字一致;组内 Σ≤15s 且 ≤ 组时长×0.8——超限回派 dialogue-rewrite 改短台词或上报拆组,**严禁压语速硬塞**,§7D ②)——**仅作组生成 reference_audio 音色锚,严禁进成片对白**(§8A 红线);**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver,§8A)并维护之;音色样本存档落项目级 `voice/refs/` | **casting.json**、voice.json、generation_groups、剧本冻结版台词 | `assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3` + `lines_manifest.json`(逐组执行痕迹,含所用 casting 条目)+ 更新 `voice/casting.json` | 机检:对白组干声覆盖 100%、逐组 Σ≤15s、与台词文本一致;**casting_bound:每条干声轨的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记即 FAIL**;**dialogue_fit:逐组实测时长 ≤ 组时长×0.8(§7D ②)**;QA:audio-qa 抽检音色/语速符合 voice.json |
+| voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(10–15s 平静中性内容纯人声干声,按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[10,15]s、纯人声;**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
 | narrator(先于 p7-video) | 旁白配音(统一旁白声线,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
@@ -703,7 +714,8 @@ python3 modules/genmedia.py video \
   --ref assets/keyframes/ep01/grp005/anchor_char_c001.png \
         assets/keyframes/ep01/grp005/anchor_scene.png \
         assets/clips/ep01/grp004.last_frame.png \  # 前组尾帧续接锚(首组无此项)
-  --audio-ref assets/audio/voice/ep01/lines/grp005_dialogue.mp3 \  # 对白组干声轨,仅作音色锚(§8A:严禁写"原样使用人声/口型同步"类指令)
+  --audio-ref assets/audio/voice/refs/CHAR-0001_voiceprint.mp3 \
+              assets/audio/voice/refs/CHAR-0002_voiceprint.mp3 \  # 对白组=每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;prompt 逐角色 @Audio N 绑定,仅锚嗓音特点,§8A:严禁写"原样使用人声/口型同步"类指令)
   --generate-audio on \
   --return-last-frame assets/clips/ep01/grp005.last_frame.png \
   --duration 15 --aspect 16:9 --resolution <按「输出设置」草稿/成片档>
@@ -739,7 +751,7 @@ python3 modules/genmedia.py music \
   --output assets/audio/bgm/ep01/ep01_bgm_02.mp3
 # 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名。
 
-# TTS 干声(narrator 旁白后期轨、voice-generation 对白组干声锚/音色样本——干声仅作 reference_audio 音色锚,严禁进成片对白,§8A 红线;
+# TTS 干声(narrator 旁白后期轨、voice-generation 角色 voiceprint 样本——样本仅作 reference_audio 嗓音特点锚,严禁进成片对白,§8A 红线;
 #          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A)
 python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \

@@ -13,7 +13,7 @@
 
 1. 以 `grpNNN.json` 的组级多镜头 video_prompt 为内容约束、校正后锚点包(按 refs 顺序)为参考图,一次生成组视频;continuity 的 group_transitions 标注 `anchor: last_frame` 时,把前组尾帧列入参考图(refs 已含,核对存在)。**开跑前核对 refs 素材完备:组内出场的剧情道具(`bible/props.json`)必须有对应参考图在 refs(prop_ref_attached)——缺图=违规配置退回重派,只有文字 token 模型会脑补道具样式,跨组必漂**。**开跑前另核 `@Image N` 绑定(imageref_bound 复核,2026-07-13):video_prompt 内每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色 CHAR id、"continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧——[Image N] 是 1-based(refs[0]=[Image 1],场景图也计数),错位=说话人互换(前科 ep01 grp017、ep05 十组),不符=违规配置退回 prompt 重编号,严禁按错位 prompt 直接开跑**。
 2. 时长对齐组 `total_duration_s`(±1s;多镜头模式下**组内每镜实际时长由模型定**,不逐镜卡表);fps 24 与分辨率按工单 spec。
-3. **开原生音频**(`--generate-audio on`):对白已在 prompt 用 `{}`,对白组的**单条台词干声轨**经 `--audio-ref` 传入作**音色锚**(§8A,见实战经验——干声只锚音色,对白语音与口型由模型原生生成,严禁当配音成品强绑口型);**开尾帧返回**(`--return-last-frame`)供下一组续接。
+3. **开原生音频**(`--generate-audio on`):对白已在 prompt 用 `{}`,对白组把**组内每个说话角色各自的 voiceprint 样本**(≤3 段)经 `--audio-ref` 传入作**嗓音特点锚**(§8A 2026-07-20,见实战经验——样本只锚嗓音,对白语音与口型由模型原生生成,严禁当配音成品强绑口型)。**开跑前复核 audioref_bound**:每个说话角色在 audio_refs 有各自样本(文件名含其 CHAR id,年龄形态与本组时间线一致)且 prompt 有逐角色 `@Audio N` 绑定句——缺样本/缺绑定/错位=违规配置退回 prompt,严禁开跑;**开尾帧返回**(`--return-last-frame`)供下一组续接。
 4. 生成后跑**切变边界检测**,把组内实际镜头边界写入 `grpNNN.meta.json`(供剪辑/QA/字幕对位):
    `ffmpeg -i grpNNN.mp4 -vf "select='gt(scene,0.3)',metadata=print" -f null - 2>&1 | grep pts_time`
    边界数应 = 组内镜数-1(±1 容忍,模型可能合并或加切);同时 ffprobe 核时长/fps/音轨。
@@ -53,7 +53,7 @@ python3 modules/genmedia.py info     # 先看当前渠道/模型,记入回执 me
 python3 modules/genmedia.py video --prompt "<grpNNN.json 的 video_prompt>" \
   --output assets/clips/epNN/grpNNN.mp4 \
   --ref <校正后锚点包...> [<前组尾帧>] \
-  --audio-ref <对白组台词干声轨 lines/grpNNN_dialogue.mp3> \
+  --audio-ref <说话角色1样本 voice/refs/CHAR-xxxx_voiceprint.mp3> [<说话角色2样本> <说话角色3样本>] \
   --generate-audio on \
   --return-last-frame assets/clips/epNN/grpNNN.last_frame.png \
   --duration <组 total_duration_s,4–15 整数> --aspect 16:9 --resolution <「输出设置」草稿档>
@@ -92,12 +92,12 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
   - **递交钱币/手部特写**构图(grp027 尾帧及其 t≥6s 各帧全部被拒)——续接锚改取同 clip 内**构图不同的早段帧**(ffmpeg 抽帧逐帧探测,grp027 t=2s 帧过审),场景连续性保留、精确尾帧续接降级并记 notes。
 - 换锚后必须同步更新 keyframes 锚点包映射(meta.json 的 source 字段),否则 refs 解析断链。
 
-### 对白组音色锚范式(§8A 改版,2026-07-09)
+### 对白组人物 Voice 样本范式(§8A 改版,2026-07-20)
 
-- **历史结论(勿回退)**:让模型『参考音色样本自行配音』时,多角色音色归属不受任何 prompt 写法控制——ep01 grp015 四版声学实测,audio_refs 顺序、英文 [Audio N]、官方中文『音频N』token 全部无效(模型内容驱动,确定性但不可扭),四版白花 ~22 元;后期换轨方案用户判不自然,弃用。
-- **红线(2026-07-09 实证):TTS 干声不是配音成品**——prompt 写『原样使用参考音频人声+口型同步』强迫口型对齐外部 TTS 音轨,会导致**严重口型问题**(2026-07-08 的 C′ 范式已废止);任何形式的 TTS 对白配音(生成期强绑、后期换轨/贴片)都禁止。
-- **现行范式(音色锚)**:对白组的 `--audio-ref` 仍传 voice-generation 的**单条对白干声轨**(`lines/grpNNN_dialogue.mp3`),但 prompt 指令改为『音频1仅作说话角色的音色参考,口型/表情/节奏随画面表演自然生成』——模型原生合成对白语音与口型(口型不受影响),音色被干声稳定锚定(±4Hz,模仿第一说话人),同一角色跨组用同一固定 TTS 音色出锚,**跨组音色更稳**。实证边界不变:方舟不逐字嵌入干声(波形互相关≈0)、组内第二说话人失控——组划分层保证一组一说话人;`multi_speaker: true` 的组产出后若快检错配,开缺陷单整组重生成(不做 TTS 贴片精修)。
-- **交付前声学快检仍强制**:`python3 <项目目录>/code/voice_f0_check.py <clip> --seg 起:止:期望CHAR ...`,参照用该组干声文件(段划分按 meta 切变边界+shot_list 对白归属);不过检开缺陷单上报(勿盲目重 roll)。
+- **现行范式(逐角色 Voice 锚)**:对白组的 `--audio-ref` 传**组内每个说话角色各自的 voiceprint 样本**(项目级 `voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`,按年龄形态选 variant 版,≤3 段=Seedance 上限);prompt 由 prompt agent **逐角色**写绑定句『音频N是<角色>的嗓音特点参考(仅音色,非本段台词的朗读),<角色>开口时用与音频N一致的音色』——样本只提供嗓音特点,对白语音与口型由模型原生合成。同一角色同一形态全片同一样本,跨组跨集音色稳。
+- **历史沿革(两次教训,勿简单回退)**:①2026-07-09 前两条样本齐传但 prompt 未做逐角色显式绑定,第二说话人漂移(ep01 grp015 四版声学实测,当时结论"音色归属不受 prompt 控制");②2026-07-09~07-20 的"每组单条台词干声轨"范式随之而生——**已废止**:单干声只含 first_speaker 一个嗓音,多说话人组第二人音色照样失控(手测实证:tothemoon ep01 grp012)。现行范式=样本齐传 **+ 逐角色显式绑定 + 逐说话人快检兜底**;多说话人组反复(≥3 次)错配的,上报 orchestrator 回退「按说话回合拆组、一组一说话人」保守切法。
+- **红线(2026-07-09 实证,继续有效):TTS 音轨不是配音成品**——prompt 写『原样使用参考音频人声+口型同步』强迫口型对齐外部 TTS 音轨,会导致**严重口型问题**;任何形式的 TTS 对白配音(生成期强绑、后期换轨/贴片)都禁止。方舟不逐字嵌入参考音频(波形互相关≈0,模型重演绎),样本内容与台词无关。
+- **交付前逐说话人声学快检强制**:`python3 <项目目录>/code/voice_f0_check.py <clip> --seg 起:止:期望CHAR ...`,参照用**各角色自己的 voiceprint 样本**(段划分按 meta 切变边界+shot_list 对白归属);任一说话人错配开缺陷单整组重生成(调 audio_refs 顺序/绑定措辞后重 roll,勿盲目原样重试)。
 
 ### 手绘分镜渲染前置(2026-07-09 规则)
 
@@ -135,7 +135,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
 | 后组现有 clip(仅整组重 roll 且后组 refs 含本组尾帧时) | 后组首帧(前向接缝软锚,自抽 t=0 帧,§7C) | `assets/clips/epNN/<next_grp>.first_frame.png` |
 | 07-directing/shot-planning | 组定义(镜序/总时长/组序链) | `directing/epNN/shot_list.json`(generation_groups) |
 | 07-directing/continuity-planning | 组间衔接表(是否传尾帧锚) | `directing/epNN/continuity_plan.json`(group_transitions) |
-| 09-audio/voice | 对白组台词干声轨(reference_audio 音色锚,不进成片) | `assets/audio/voice/epNN/lines/grpNNN_dialogue.mp3` |
+| 09-audio/voice-generation | 说话角色 voiceprint 样本(reference_audio 嗓音特点锚,不进成片;casting.json/manifest 索引) | `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` |
 | 08-video-gen/image-generation | 手绘分镜渲染图(用户手绘稿经图生渲染,已入锚点包) | `assets/keyframes/epNN/<grp>/anchor_sketch_*.png` |
 
 ## 输出
@@ -208,6 +208,6 @@ expected_output:
 
 ## 上下游协作
 
-- **上游**:`prompt`(组级 video_prompt)、`character-consistency`(校正锚点包)、`shot-planning`(组定义)、`continuity-planning`(组间衔接)、前组本工位(尾帧)、`09-audio/voice`(对白组干声轨,音色锚)。
+- **上游**:`prompt`(组级 video_prompt)、`character-consistency`(校正锚点包)、`shot-planning`(组定义)、`continuity-planning`(组间衔接)、前组本工位(尾帧)、`09-audio/voice-generation`(说话角色 voiceprint 样本,嗓音特点锚)。
 - **下游**:下一组本工位(等我的尾帧)、`lip-sync`/`animation`(缺陷兜底)、`upscale`(超分)、`10-editing/edit`(按组序剪辑,靠我的 boundary_map 对位)。他们最怕我组时长超差、尾帧漏落盘(下一组断锚)、boundary_map 缺失(剪辑无法对位)。
 - **需对齐的伙伴**:`11-qa/visual-qa`(组级打分维度口径)、`09-audio/audio-mixing`(原生音轨与 BGM/旁白的混音电平口径)。
