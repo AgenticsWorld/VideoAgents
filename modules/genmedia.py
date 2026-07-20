@@ -63,6 +63,7 @@ import json
 import mimetypes
 import os
 import random
+import subprocess
 import sys
 import time
 import urllib.error
@@ -518,6 +519,20 @@ def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, se
 
 MAX_VIDEO_REFS = 9        # 方舟 reference_image 上限
 MAX_AUDIO_REFS = 3        # 方舟 reference_audio 上限
+MAX_AUDIO_TOTAL_S = 15.2  # 方舟 r2v reference_audio 总时长硬限(超限任务创建即 400 InvalidParameter;
+                          # 实证:tothemoon 2026-07-20 两段 ~12s 样本合计 24.1s 被拒——voiceprint 规格 ≤5s/段,§8A)
+
+
+def _audio_duration_s(path: str) -> float | None:
+    """ffprobe 实测音频时长(秒);ffprobe 不可用/失败返回 None(跳过预检,交由方舟侧拒绝)。"""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=30)
+        return float(out.stdout.strip())
+    except Exception:
+        return None
 MAX_VIDEOIN_REFS = 3      # 方舟 reference_video 上限(单个 2-15s,总时长 ≤15s)
 MAX_VIDEOIN_BYTES = 45 * 1024 * 1024  # 参考视频 data URL 内联上限(base64 膨胀后仍须 <64MB 请求体)
 
@@ -540,6 +555,21 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         raise RuntimeError(f"参考图最多 {MAX_VIDEO_REFS} 张,收到 {len(refs)}")
     if audio_refs and len(audio_refs) > MAX_AUDIO_REFS:
         raise RuntimeError(f"参考音频最多 {MAX_AUDIO_REFS} 段,收到 {len(audio_refs)}")
+    if audio_refs:
+        # audioref_total_le_15s 前置机检(§7A):总时长超限方舟必拒,提交前拦下并给出修法
+        durs = [_audio_duration_s(p) for p in audio_refs]
+        if any(d is None for d in durs):
+            print("[genmedia] 无法实测参考音频时长(ffprobe 不可用?),"
+                  f"跳过 audioref_total_le_15s 预检(方舟硬限总时长 {MAX_AUDIO_TOTAL_S}s)",
+                  file=sys.stderr)
+        elif sum(durs) > MAX_AUDIO_TOTAL_S:
+            detail = "、".join(f"{Path(p).name}={d:.1f}s"
+                               for p, d in zip(audio_refs, durs))
+            raise RuntimeError(
+                f"参考音频总时长 {sum(durs):.1f}s 超过方舟硬限 {MAX_AUDIO_TOTAL_S}s"
+                f"(audioref_total_le_15s,§7A):{detail}。"
+                "请截短样本后重试(voiceprint 规格 ≤5s/段,§8A;可用 "
+                "ffmpeg -i in.mp3 -t 4.9 -c copy out.mp3 截断)")
     if video_refs:
         if not is_v2:
             raise RuntimeError("参考视频(--ref-video,V2V 编辑/延长)仅 Seedance 2.0 系列支持")

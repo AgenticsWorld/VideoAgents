@@ -11,9 +11,9 @@
 
 ## 职责
 
-1. 以 `grpNNN.json` 的组级多镜头 video_prompt 为内容约束、校正后锚点包(按 refs 顺序)为参考图,一次生成组视频;continuity 的 group_transitions 标注 `anchor: last_frame` 时,把前组尾帧列入参考图(refs 已含,核对存在)。**开跑前核对 refs 素材完备:组内出场的剧情道具(`bible/props.json`)必须有对应参考图在 refs(prop_ref_attached)——缺图=违规配置退回重派,只有文字 token 模型会脑补道具样式,跨组必漂**。**开跑前另核 `@Image N` 绑定(imageref_bound 复核,2026-07-13):video_prompt 内每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色 CHAR id、"continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧——[Image N] 是 1-based(refs[0]=[Image 1],场景图也计数),错位=说话人互换(前科 ep01 grp017、ep05 十组),不符=违规配置退回 prompt 重编号,严禁按错位 prompt 直接开跑**。
+1. 以 `grpNNN.json` 的组级多镜头 video_prompt 为内容约束、校正后锚点包(按 refs 顺序)为参考图,一次生成组视频;continuity 的 group_transitions 标注 `anchor: last_frame` 时,把前组尾帧列入参考图(refs 已含,核对存在)。**开跑前核对 refs 素材完备:组内出场的剧情道具(`bible/props.json`)必须有对应参考图在 refs(prop_ref_attached)——缺图=违规配置退回重派,只有文字 token 模型会脑补道具样式,跨组必漂**。**开跑前另核 `@Image N` 绑定(imageref_bound 复核,2026-07-13):video_prompt 内每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色 CHAR id、"continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧——[Image N] 是 1-based(refs[0]=[Image 1],场景图也计数),错位=说话人互换(前科 ep01 grp017、ep05 十组),不符=违规配置退回 prompt 重编号,严禁按错位 prompt 直接开跑**。**开跑前再核组时段锚(lighting_scheme_bound 复核,2026-07-20):`grpNNN.json` 必须带 `time_of_day`/`lighting_scheme_id` 且与 shot_list 组字段一致,video_prompt 光照描述与 time_of_day 昼夜相容(深夜/夜/凌晨组出现 sunlight/golden hour 类日光词=违规配置)——缺字段或矛盾退回 prompt,严禁开跑(前科:tothemoon ep01 grp011 深夜病房整段白天金光进成片)**。
 2. 时长对齐组 `total_duration_s`(±1s;多镜头模式下**组内每镜实际时长由模型定**,不逐镜卡表);fps 24 与分辨率按工单 spec。
-3. **开原生音频**(`--generate-audio on`):对白已在 prompt 用 `{}`,对白组把**组内每个说话角色各自的 voiceprint 样本**(≤3 段)经 `--audio-ref` 传入作**嗓音特点锚**(§8A 2026-07-20,见实战经验——样本只锚嗓音,对白语音与口型由模型原生生成,严禁当配音成品强绑口型)。**开跑前复核 audioref_bound**:每个说话角色在 audio_refs 有各自样本(文件名含其 CHAR id,年龄形态与本组时间线一致)且 prompt 有逐角色 `@Audio N` 绑定句——缺样本/缺绑定/错位=违规配置退回 prompt,严禁开跑;**开尾帧返回**(`--return-last-frame`)供下一组续接。
+3. **开原生音频**(`--generate-audio on`):对白已在 prompt 用 `{}`,对白组把**组内每个说话角色各自的 voiceprint 样本**(≤3 段)经 `--audio-ref` 传入作**嗓音特点锚**(§8A 2026-07-20,见实战经验——样本只锚嗓音,对白语音与口型由模型原生生成,严禁当配音成品强绑口型)。**开跑前复核 audioref_bound**:每个说话角色在 audio_refs 有各自样本(文件名含其 CHAR id,年龄形态与本组时间线一致)且 prompt 有逐角色 `@Audio N` 绑定句——缺样本/缺绑定/错位=违规配置退回 prompt,严禁开跑;**开跑前复核 audioref_total_le_15s(§7A)**:ffprobe 实测 audio_refs 总时长 ≤15.2s(方舟硬限,超限任务创建即 400 InvalidParameter,不计费但白跑;前科:tothemoon 2026-07-20 两段 ~12s 旧规格样本合计 24.1s 被拒)——超限时**先把超长样本截短再跑**(`ffmpeg -i in.mp3 -t 4.9 -c copy out.mp3`,截断件落 refs/ 覆盖并在 meta 记录,原件归档;根治=报 voice-generation 按 ≤5s 规格重出),genmedia 提交前也会硬校验同一约束;**开尾帧返回**(`--return-last-frame`)供下一组续接。
 4. 生成后跑**切变边界检测**,把组内实际镜头边界写入 `grpNNN.meta.json`(供剪辑/QA/字幕对位):
    `ffmpeg -i grpNNN.mp4 -vf "select='gt(scene,0.3)',metadata=print" -f null - 2>&1 | grep pts_time`
    边界数应 = 组内镜数-1(±1 容忍,模型可能合并或加切);同时 ffprobe 核时长/fps/音轨。
@@ -98,6 +98,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
 - **历史沿革(两次教训,勿简单回退)**:①2026-07-09 前两条样本齐传但 prompt 未做逐角色显式绑定,第二说话人漂移(ep01 grp015 四版声学实测,当时结论"音色归属不受 prompt 控制");②2026-07-09~07-20 的"每组单条台词干声轨"范式随之而生——**已废止**:单干声只含 first_speaker 一个嗓音,多说话人组第二人音色照样失控(手测实证:tothemoon ep01 grp012)。现行范式=样本齐传 **+ 逐角色显式绑定 + 逐说话人快检兜底**;多说话人组反复(≥3 次)错配的,上报 orchestrator 回退「按说话回合拆组、一组一说话人」保守切法。
 - **红线(2026-07-09 实证,继续有效):TTS 音轨不是配音成品**——prompt 写『原样使用参考音频人声+口型同步』强迫口型对齐外部 TTS 音轨,会导致**严重口型问题**;任何形式的 TTS 对白配音(生成期强绑、后期换轨/贴片)都禁止。方舟不逐字嵌入参考音频(波形互相关≈0,模型重演绎),样本内容与台词无关。
 - **交付前逐说话人声学快检强制**:`python3 <项目目录>/code/voice_f0_check.py <clip> --seg 起:止:期望CHAR ...`,参照用**各角色自己的 voiceprint 样本**(段划分按 meta 切变边界+shot_list 对白归属);任一说话人错配开缺陷单整组重生成(调 audio_refs 顺序/绑定措辞后重 roll,勿盲目原样重试)。
+- **audio_ref 总时长硬限 15.2s(2026-07-20 实测)**:方舟 r2v 对 reference_audio **总时长**卡 15.2s,超限在任务创建时即 400 InvalidParameter(不计费,但拒因不点名是音频)——两段 ~12s 旧规格样本合计 24.1s 首提即被拒。开跑前 ffprobe 实测总时长(audioref_total_le_15s,genmedia 也会硬校验);超限先截短(`ffmpeg -t 4.9 -c copy`)再跑,并报 voice-generation 按 ≤5s/段 规格重出根治。
 
 ### 手绘分镜渲染前置(2026-07-09 规则)
 

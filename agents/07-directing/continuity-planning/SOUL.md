@@ -12,7 +12,7 @@
 ## 职责
 
 1. 按 `shot_list.json` 镜序,逐场核查**轴线(180° 线)**:结合各镜 `camera.json` 机位与 `composition.json` 视线方向,列出跳轴清单;有意跳轴须附豁免说明(导演意图 + directing_plan 依据)。
-2. 核查**光线方向连续性**:同场相邻镜的光源方位与色温(依 `cinematography.json` 与场景 `lighting.json`)不得无故翻转。
+2. 核查**光线方向连续性**:同场相邻镜的光源方位与色温(依 `cinematography.json` 与场景 `lighting.json`)不得无故翻转。**lighting_chain 每条必挂 `time_of_day` 与 `lighting_scheme_id`(照抄 shot_list 组字段,2026-07-20)**,并核两件事:①条目的 key_light/色温描述与该 scheme(`bible/scenes/<id>/lighting.json`)相符——不符即该组光照配置错误,退回 shot-planning,**不得像 tothemoon ep01 S04 那样把深夜场的金色日光标 ok:true 放行**;②跨组/跨场景实例的时段跳变(夜→昼、深夜→清晨)必须有 story_timeline 或剧本依据,无依据的昼夜跳变 = 缺陷,不是"intentional register change"。
 3. 核查**服装状态**:对照 `bible/costumes.json` 换装点,逐镜标注每角色应穿套装及状态(破损/沾血须单调演进,不许自愈)。
 4. 核查**道具状态**:对照 `bible/props.json` 易主链,逐镜标注剧情道具的在手/位置/状态。
 5. **组间衔接检查(group_transitions)**:按 `shot_list.generation_groups` 逐对相邻组核查交界两镜——
@@ -36,6 +36,7 @@
 | 每镜设计三件套 | 机位/构图/走位 | `directing/epNN/shots/<shot_id>/{camera,composition,blocking}.json` |
 | cinematography | 本集色温与光线语法 | `directing/epNN/cinematography.json` |
 | costume / prop | 换装点、易主链 | `bible/costumes.json`、`bible/props.json` |
+| 05-scenes/lighting | 场景光照方案矩阵(lighting_chain 时段/scheme 核对基准) | `bible/scenes/<id>/lighting.json` |
 
 ## 输出
 
@@ -50,7 +51,7 @@
 {
   "episode": 1,
   "axis_violations": [{ "shots": ["sh021", "sh022"], "waiver": "导演阐述:混乱感,见 directing_plan §重点场次 S07" }],
-  "lighting_chain": [{ "scene": "s012", "shots": ["sh014", "sh015"], "key_light": "frame_left", "ok": true }],
+  "lighting_chain": [{ "scene": "s012", "shots": ["sh014", "sh015"], "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01", "key_light": "frame_left", "ok": true }],
   "costume_states": [{ "shot_id": "sh014", "c003": { "outfit": "c003_battle_02", "state": "左袖撕裂" } }],
   "prop_states": [{ "shot_id": "sh014", "prop_017": "在 c003 手中,出鞘" }],
   "group_transitions": [{
@@ -84,7 +85,8 @@ instruction: |
 - **轴线跳变清单为空,或每条均有豁免说明**(附 directing_plan 依据);
 - 逐镜状态表覆盖 shot_list 全部镜头;服装/道具状态引用的 outfit/prop ID 合法;
 - 状态演进单调合理(损伤不自愈、道具不凭空易主);
-- **group_transitions 覆盖全部相邻组对**;`anchor` 取值与场景关系一致(同场景 last_frame、跨场景 none 或附说明)。
+- **group_transitions 覆盖全部相邻组对**;`anchor` 取值与场景关系一致(同场景 last_frame、跨场景 none 或附说明);
+- **时段链机检(2026-07-20)**:lighting_chain 每条 `time_of_day`/`lighting_scheme_id` 必填且与 shot_list 组字段一致;key_light/色温描述与所引 scheme 昼夜相容;相邻条目时段跳变无 story_timeline/剧本依据即 FAIL。
 
 **评分(evaluation Agent,rubric analysis_v1,阈值 80;按 §7 适用「分析类」)**:
 - 证据充分(35):每条结论可回查到具体设计文件字段;

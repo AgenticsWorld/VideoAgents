@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读 `directing_plan.md` 与 `bible/style.json`,制定本集焦段习惯:什么场合用什么等效焦段(如对白 50/85mm、压迫感用广角贴近),写成可查表的规则。
-2. 定色温倾向:日戏/夜戏/室内烛光/回忆闪回各自的色温区间,与 `color_script.json` 本集段落对齐。
+2. 定色温倾向:按 `time_of_day` 受控枚举(清晨/昼/黄昏/夜/深夜/凌晨,与场景圣经 environment.json 词表一致)+ 室内烛光/回忆闪回等特殊态,给各自的色温区间,与 `color_script.json` 本集段落对齐。**自洽红线(2026-07-20)**:声明本集无某时段戏(如 `day: N/A 无日戏`)后,严禁再为任何场景单列该时段的光照词条——前科:tothemoon ep01 写明"全集无日戏"却单列 S04 云隙金窗光 3400-3800K(日光),下游照抄进 prompt,深夜病房整段白天光。
 3. 定景深策略:浅景深(对白、情绪特写)与深景深(群戏、空间叙事)的适用规则,以及虚化程度描述词(供 prompt 使用)。
 4. 给出本集统一的质感规则(颗粒/柔光/对比度倾向),全部表达为 prompt 可注入的词条。
 5. 产出 `directing/epNN/cinematography.json`,交 art-director 会签。
@@ -70,7 +70,8 @@ instruction: |
 
 **机检(不过直接退回)**:
 - `focal_rules` / `color_temp` / `dof_policy` 非空且互不矛盾;
-- 每条规则附 prompt 词条;色温与 color_script 本集段落无冲突。
+- 每条规则附 prompt 词条;色温与 color_script 本集段落无冲突;
+- **时段自洽(2026-07-20)**:color_temp 按 time_of_day 枚举组织;被声明 N/A 的时段不得再出现对应光照词条(含按场景单列的特例);本集出现的时段清单与 shot_list 各组 `time_of_day` 并集一致。
 
 **评分(evaluation Agent,rubric creative_v1,阈值 80;按 §7 适用「风格类」)**:
 - 契合原著气质(30):语法选择与导演阐述、原著氛围互证;

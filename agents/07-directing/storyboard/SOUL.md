@@ -12,18 +12,19 @@
 ## 职责
 
 1. 逐场通读 `screenplay.md`,对照 `directing_plan.md` 的场次处理方案,把每场拆成镜头草案序列。
-2. 每镜写清:画面内容(谁在做什么、看向哪)、构图草描(视角/大致布局)、景别与时长**建议**(仅供 shot-planning 参考;建议值必须落在「用户全局时长设定 · 单个分镜时长范围」内,未注入时默认 4–8 秒)、对应的剧本动作/对白行。
-3. 保证叙事连贯:镜与镜之间的因果与视线逻辑成立,重点场次按导演阐述给足镜头密度。
-4. **划分生成组草案(groups_draft)**:把相邻镜头按叙事节拍打包,分组原则——
+2. **每场标注结构化时段 `time_of_day`(2026-07-20)**:受控枚举(清晨/昼/黄昏/夜/深夜/凌晨,与场景圣经 `environment.json` 的 day_night 词表一致),依据剧本时间与该场景 `index.json` 的 time_variants 定值——时段是独立字段,不许只藏在 `location` 散文里;场内一切光照描写(color_ref/sketch/content)必须与 time_of_day 昼夜相容,**"深夜"场配"云隙金窗光"这类日光描写 = 机检退回**(前科:tothemoon ep01 S04 病房 location 写深夜、color_ref 写金色日光,整段白天光进了成片)。
+3. 每镜写清:画面内容(谁在做什么、看向哪)、构图草描(视角/大致布局)、景别与时长**建议**(仅供 shot-planning 参考;建议值必须落在「用户全局时长设定 · 单个分镜时长范围」内,未注入时默认 4–8 秒)、对应的剧本动作/对白行。
+4. 保证叙事连贯:镜与镜之间的因果与视线逻辑成立,重点场次按导演阐述给足镜头密度。
+5. **划分生成组草案(groups_draft)**:把相邻镜头按叙事节拍打包,分组原则——
    - 同一场景、storyboard 顺序连续;
    - 组内时长建议之和 ≤15 秒(Seedance 单次生成上限;若用户全局设定注入了组上限则以注入值为准);
    - **节拍完整**:一个动作-反应节拍、一轮对话问答尽量装进同一组,不在节拍中间断组;
    - 对白轮不跨组切断(问句与答句同组);
    - 组内出场角色合计尽量 ≤4(生成模型参考人物 >4 时稳定性下降,超了要拆);
    - 每一镜必须且只属于一个组;单镜成组允许(如超长独立镜头)。
-5. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
-6. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。
-7. 发现剧本不可拍(如同场人物凭空出现)时上报 orchestrator,不自行改剧情。
+6. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
+7. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。
+8. 发现剧本不可拍(如同场人物凭空出现)时上报 orchestrator,不自行改剧情。
 
 ## 不做什么(边界)
 
@@ -38,6 +39,7 @@
 |---|---|---|
 | director | 本集导演阐述(基调、重点场次、语言倾向) | `directing/epNN/directing_plan.md` |
 | screenplay | 本集剧本(场景/动作/对白/转场) | `story/episodes/epNN/screenplay.md` |
+| 05-scenes/scene | 场景时段变体清单(每场 time_of_day 定值依据) | `bible/scenes/index.json`(time_variants) |
 
 ## 输出
 
@@ -52,6 +54,7 @@
 {
   "scenes": [{
     "scene_no": "S03", "screenplay_ref": "S03",
+    "scene_id": "SCN-0012", "time_of_day": "深夜",
     "shots_draft": [{
       "order": 1, "content": "林昭推门,逆光剪影,看向殿内",
       "sketch": "低角度,门框做前景框住人物",
@@ -88,7 +91,8 @@ instruction: |
 **机检(不过直接退回)**:
 - **剧本场景覆盖率 100%**(coverage 对照表逐场核对);
 - 每镜 `content` 非空;`screenplay_ref` / `dialogue_ref` 引用在剧本中存在;
-- **每镜均入组**:groups_draft 覆盖本场全部 shots_draft,不重不漏;组内 order 连续;`duration_hint_sum_s` ≤15。
+- **每镜均入组**:groups_draft 覆盖本场全部 shots_draft,不重不漏;组内 order 连续;`duration_hint_sum_s` ≤15;
+- **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80)**:
 - 叙事清晰(30):不看剧本也能从镜头序列读懂剧情;

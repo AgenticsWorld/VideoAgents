@@ -20,6 +20,7 @@
    - 组内出场角色合集 ≤4,超了拆组并回报 storyboard 备案;
    - **对白组说话人纪律(§8A 2026-07-20 更新:人物 Voice 样本范式)**:组生成把每个说话角色各自的 voiceprint 样本挂 reference_audio 并在 prompt 逐角色显式绑定,多说话人组因此**允许**——但**组内说话人 ≤3 是设计层硬约束**(机检 `speakers_le_3`,超限=FAIL):Seedance 2.0 的 reference_audio 每次最多 3 段,说话人 >3 就有角色挂不上锚、音色无保障,**切组时就必须把说话人多的群戏按说话回合拆开**,不留给下游取舍;dialogue 组一律标注 `speakers`(按台词量排序)供 prompt/voice-generation 选锚,并供下游逐说话人音色快检盯防——快检反复(≥3 次)错配的组,回退**按说话回合切组、一组一说话人**的保守切法(对方反应镜可入组但不开口);
    - 时长语义:**组总时长是生成硬约束(±1s 机检),镜级 duration_s 是节奏意图**——多镜头生成时模型按剧情定各镜实际长度;
+   - **每组钉死时段与光照方案(2026-07-20)**:必填 `time_of_day`(受控枚举:清晨/昼/黄昏/夜/深夜/凌晨,继承 storyboard 场块字段)与 `lighting_scheme_id`(从该组场景 `bible/scenes/<scene_id>/lighting.json` 的 schemes 中选 `condition.time_of_day` 与组 time_of_day 一致的方案 ID,如 `LGT-0012-01`)——这是下游 prompt 取光照描述的唯一依据,**没有这两个字段,导演层随手从场景光照矩阵错取白天方案就无人能拦**(前科:tothemoon ep01 S04 深夜病房错配清晨/黄昏日光方案,grp011 金色云隙光进成片);该场景 lighting.json 无匹配时段方案时上报 orchestrator 回派 `05-scenes/lighting` 补方案,严禁就近凑一套;
    - 给每组记录 `continuity_from`(前一组 group_id,首组为 null),供视频生成按组序串行取前组尾帧。
 5. **定稿旁白挂点(narration_anchors,WORKFLOW.md §7D ①)**:把 `narration.md` 每条旁白落到具体镜/组区间,算出可用画面窗口秒数(窗口扣除其中对白占时);窗口 ≥ 该条 `est_duration_s`×1.15 才算装得下——不满足优先调镜时长消化,画面确实装不下再上报 orchestrator 回派 narration 精简文本。这是 H3A 签字的前置机检:旁白挤不进画面的问题必须在视频生成前解决,组 clip 生成后再扩镜=整组重 roll。
 6. **对白适配核查(估时级,§7D ①)**:dialogue 组逐组核对台词总估时(取 screenplay 对白层 `est_duration_s`,口径已按角色声线语速)能否装进组时长,机检 `Σ台词估时 ≤ 组总时长×0.7`(留动作/反应/停顿空间)。**组总时长是生成硬约束——台词超出承载力时,视频模型会为念完台词强行提速,语速异常且只能整组重 roll**。超限的解法优先级:上报 orchestrator 回派 dialogue-rewrite **改短台词**(文本层,最便宜)> 调镜时长/拆组;严禁指望模型压语速消化。
@@ -42,6 +43,7 @@
 | pacing | 逐场时长分配、删减建议、集时长预算 | `story/episodes/epNN/pacing.json` |
 | narration | 本集旁白稿(每条带场景锚点与 est_duration_s) | `story/episodes/epNN/narration.md` |
 | character-manager / scene | 合法 ID 清单 | `bible/characters/index.json`、`bible/scenes/index.json` |
+| 05-scenes/lighting | 场景光照方案矩阵(组 lighting_scheme_id 选取来源) | `bible/scenes/<id>/lighting.json`(schemes[].condition.time_of_day) |
 
 ## 输出
 
@@ -63,6 +65,7 @@
   }],
   "generation_groups": [{
     "group_id": "grp005", "scene_id": "s012",
+    "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01",
     "shots": ["sh014", "sh015", "sh016"],
     "total_duration_s": 12,
     "characters_union": ["c003", "c007"], "has_dialogue": true,
@@ -108,6 +111,7 @@ instruction: |
 - **角色/场景 ID 全部合法**(在两份 index.json 中存在);
 - **镜号唯一**且连续可排序;每镜 `storyboard_ref` 可回溯;`is_dialogue` 必填;
 - **生成组机检**:组覆盖全部镜号不重不漏;组内镜号连续且同 scene_id;`total_duration_s` ∈ [4,15] 整数且 = Σ组内 duration_s;`characters_union` ≤4;`continuity_from` 链完整(首组 null,其余指向前一组);
+- **时段锚机检(time_anchor_ok,2026-07-20)**:每组 `time_of_day` 必填且在受控枚举内、与 storyboard 对应场块一致;`lighting_scheme_id` 必填、在该组场景 lighting.json 的 schemes 中存在、且该方案 `condition.time_of_day` 与组 time_of_day 一致;同场景同时段的多个组必须取同一 scheme;
 - **旁白挂点机检(§7D ①)**:narration.md 条目 100% 有挂点;挂点镜/组引用合法;可用画面窗口(扣除对白占时)≥ `est_duration_s`×1.15;
 - **组音频形态机检(§7D ①)**:每组 `audio_plan` 必填且与 has_dialogue/挂点事实一致;ambient_only 组必附 `silent_rationale`(无理由的无声组=待核查,不得进 H3A)。
 - **对白适配机检(§7D ①,dialogue_est_fits_group_x0.7)**:dialogue 组 Σ台词估时 ≤ 组总时长×0.7;超限未处理(改短台词/调镜/拆组)不得进 H3A。
