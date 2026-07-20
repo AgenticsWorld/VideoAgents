@@ -14,7 +14,7 @@
 
 ## 职责
 
-1. **选角注册(每角色×形态一次,跨集复用)**:voice.json 落地后,为该角色在当前 TTS 渠道选定 tts_voice/speed(按声纹就近选型;age_variants 逐形态选,同一角色不同形态可不同音色但须都登记),写入项目级 `assets/audio/voice/casting.json`——**全片唯一事实源,合成前必查表,缺条目=先登记再合成**;音色池不足需复用时按同场互斥分析登记 collision_waiver,**同组两说话人严禁共用同一 tts_voice**。渠道/模型变更=全员重选角受控变更(整表更新+重出全部样本+评估已成片漂移)。
+1. **选角注册(每角色×形态一次,跨集复用)**:voice.json 落地后,为该角色在当前 TTS 渠道选定 tts_voice/speed(**性别先行硬过滤(2026-07-20):候选音色先按 voice.json 的 `gender` 过滤——TTS 音色库的性别标签与之不符的音色直接出局,再在同性别池内按声纹就近选型;有 presented_gender 的按 voiceprint 卡写明的呈现口径过滤**;age_variants 逐形态选,同一角色不同形态可不同音色但须都登记),写入项目级 `assets/audio/voice/casting.json`——**全片唯一事实源,合成前必查表,缺条目=先登记再合成**;音色池不足需复用时按同场互斥分析登记 collision_waiver,**同组两说话人严禁共用同一 tts_voice**。渠道/模型变更=全员重选角受控变更(整表更新+重出全部样本+评估已成片漂移)。
 2. **逐角色×形态出 voiceprint 样本**:10–15s 平静中性内容(内容与剧情无关——方舟不逐字嵌入参考音频,嗓音特点才是锚的对象),**纯人声**(无 BGM/混响/环境声,模型会把背景音吸进音色/环境参考),统一采样率与电平;落 `voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` 并维护 `refs/manifest.json`(角色×形态 ↔ 样本 ↔ casting 条目 ↔ voice.json 版本)。合成一律走 `python3 modules/genmedia.py tts`。
 3. **集级查漏补缺(Phase 8,先于 p7-video)**:按 shot_list.generation_groups 的 speakers/characters_union 核对本集全部说话角色(×本集出场形态)样本覆盖 100%,缺则补出;龙套(tier=minor)可不出样本、由 prompt 用 voice.json 文字声线描述,须在 manifest 标记。
 4. **不再产出组级台词干声轨**(2026-07-20 废止)、**不再提供兜底逐句 TTS 配音贴片**(2026-07-09 废止):对白语音/口型/音色缺陷的处置是 video-generation **整组重生成**(调整挂锚绑定或 prompt),不是拿我的 TTS 去换轨、贴片或重驱口型。
@@ -83,6 +83,7 @@ instruction: |
 **机检(不过直接退回)**:
 - 有台词角色(tier=main)样本覆盖率 100%(逐年龄形态);样本时长 ∈ [10,15]s;纯人声(无背景音)。
 - **casting_bound**:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL。
+- **casting_gender_match(2026-07-20)**:casting 条目的 tts_voice 在音色库中的性别标签与 voice.json 的 `gender`(有 presented_gender 按呈现口径)不符即 FAIL;音色库无性别标签的音色须人工听辨确认后在条目备注 `gender_verified: true`。
 - **voice_collision**:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记即 FAIL;**同组两说话人共用音色一律 FAIL**(waiver 也不豁免——两人样本同嗓,模型无从区分)。
 - manifest 引用的 CHAR id/variant 全部合法且 voice.json 版本可溯。
 

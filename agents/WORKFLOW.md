@@ -251,7 +251,7 @@ refs/
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
 | character-manager | 注册全部角色:唯一 ID、别名/曾用名合并、戏份分级(S/A/B/群演) | structured_story、events | `bible/characters/index.json` | 机检:ID 唯一、别名无二义。QA:character-consistency-qa 抽查重名合并正确性 |
-| appearance | 每个 S/A/B 级角色的外观卡(发色、瞳色、体型、标志物…可直接喂给绘图) | index + 原文出处 | `bible/characters/<id>/appearance.json` | 机检:必填字段齐;评分 extraction_v1;QA:与原文描写冲突 = 缺陷单 |
+| appearance | 每个 S/A/B 级角色的外观卡(性别、发色、瞳色、体型、标志物…可直接喂给绘图;gender 必填「男/女」,原文未写也须推断定值,易装角色另附 presented_gender) | index + 原文出处 | `bible/characters/<id>/appearance.json` | 机检:必填字段齐(含 gender);评分 extraction_v1;QA:与原文描写冲突 = 缺陷单 |
 | character-growth | 有年龄跨度的角色的分龄形象版本 | appearance、story_timeline | `<id>/age_versions.json` | 机检:每版本挂在合法时间轴区间 |
 | personality | 性格、动机、行为习惯、禁忌 | structured_story | `<id>/personality.json` | 评分 analysis_v1;QA:logic-qa 抽查「性格-行为」矛盾 |
 | relationship | 全角色关系图(类型、强度、随剧情的变化) | events、index | `bible/characters/relationship.json` | 机检:边引用合法 ID;QA:关键关系与原文抽样比对 |

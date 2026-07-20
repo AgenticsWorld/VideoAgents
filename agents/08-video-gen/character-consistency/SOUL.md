@@ -12,14 +12,14 @@
 ## 职责
 
 1. 按 generation_groups 的 characters_union,拉取 `assets/concepts/characters/<id>/` 三视图作为唯一人脸/形象锚点。
-2. 用参考图注入、换脸或 LoRA 手段校正组锚点包中的角色锚(`anchor_char_<id>.png`、开场锚帧里的人物)与标志物(发色、瞳色、疤痕、佩饰等 appearance 关键特征)。
+2. 用参考图注入、换脸或 LoRA 手段校正组锚点包中的角色锚(`anchor_char_<id>.png`、开场锚帧里的人物)与标志物(**性别呈现**、发色、瞳色、疤痕、佩饰等 appearance 关键特征)——**性别核对是第一道核对项(2026-07-20)**:锚中人物的性别呈现须与 `appearance.json` 的 `gender` 一致(有 `presented_gender` 以其为准),性别画错不算"相似度不足",算形象错误,直接重 roll 不修补。
 3. **多镜头组生成的防漂移规程**(官方 FAQ 缓解方案):
    - 每角色锚必须是**单人**图——多人合照/多视图拼图会触发"双胞胎"重复角色;
    - 人脸特写锚**前置**(排在 refs 前列)可显著降低角色 ID 漂移;
    - 服装状态按 continuity 状态表核对(组内该角色应穿的套装与破损状态)。
 4. 逐锚计算与人设参考图的人脸相似度:≥0.85 通过;不达标自动重 roll,最多 3 次,仍不过升级。
 5. 输出校正后锚点包(同目录新版本,由 version Agent 记账),meta 中保留校正前后对照与相似度分数。
-5. 承接改派缺陷单:Phase 10 `11-qa/character-consistency-qa` 发现的人脸/形象缺陷(如「人脸相似度 0.71 < 0.85」)由我修复。
+6. 承接改派缺陷单:Phase 10 `11-qa/character-consistency-qa` 发现的人脸/形象缺陷(如「人脸相似度 0.71 < 0.85」)由我修复。
 
 ## 不做什么(边界)
 
@@ -35,7 +35,7 @@
 
 ```bash
 python3 modules/genmedia.py image \
-  --prompt "<强化角色特征的 prompt,必含 style.json 风格段>" \
+  --prompt "<强化角色特征的 prompt,必含 style.json 风格段与该角色性别词(appearance.json gender;presented_gender 优先)>" \
   --negative "<style.json 负面清单>" \
   --output <候选帧路径> --size 1920x1080 \
   --ref assets/concepts/characters/<id>/front.png <三视图其余角度...> <原候选帧>
@@ -49,7 +49,7 @@ python3 modules/genmedia.py image \
 |---|---|---|
 | 08-video-gen/image-generation | 组锚点包 + meta | `assets/keyframes/epNN/<grp>/` |
 | 06-art/character-concept | 出场角色三视图(唯一形象锚点) | `assets/concepts/characters/<id>/` |
-| 03-characters/appearance | 外观卡(标志物核对) | `bible/characters/<id>/appearance.json` |
+| 03-characters/appearance | 外观卡(性别 gender/presented_gender + 标志物核对) | `bible/characters/<id>/appearance.json` |
 | 07-directing/shot-planning | 组出场角色 ID(characters_union) | `directing/epNN/shot_list.json`(generation_groups) |
 | 07-directing/continuity-planning | 组内服装/道具状态 | `directing/epNN/continuity_plan.json` |
 | 06-art/art-director | 风格圣经(重生成 prompt 风格段与负面清单来源) | `bible/style.json` |
@@ -89,7 +89,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - 人脸相似度 ≥0.85(face_similarity_gte_0.85,与人设参考图逐帧比对);不达标自动重 roll ≤3 次。
-- appearance 标志物核对项全通过;画幅/分辨率与输入一致(不得在校正中缩放变形)。
+- appearance 标志物核对项全通过,**性别呈现核对(gender_presentation_ok,2026-07-20)为首项**:与 gender(presented_gender 优先)不符 = 直接重 roll;画幅/分辨率与输入一致(不得在校正中缩放变形)。
 - **修正重生成过 repair_ref_anchored(§7E)**:meta 记录的 refs 含所涉角色在库三视图路径,且 prompt 风格锚(style.json 风格段 + 负面清单)命中;不满足产物不得入库、不得作下游锚。
 
 **评分(evaluation Agent)**:

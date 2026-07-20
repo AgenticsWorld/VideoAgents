@@ -34,7 +34,7 @@
    - 总长 **<1000 词**;时长/画幅等 API 参数不写进 prompt 正文(genmedia 负责拼接);
    - **禁写色号、字段名、元信息**(如 "#C1A062"、"motion class"——模型会把它们渲染成画面文字,已有前科 DEF-p7-visual-0003);同一内容句**只写一遍,严禁复述**。
 3. 生成组锚点图的图像 prompt(开场锚帧/补充场景锚,按 image-generation 需要),落镜级 `<shot>.json` 的 image_prompt。
-4. 注入三类锚点:风格锚点(style.json 关键词)、角色锚点(appearance 关键字段 + concept 三视图引用)、画幅锚点(aspect_ratio.json)。
+4. 注入三类锚点:风格锚点(style.json 关键词)、角色锚点(appearance 关键字段 + concept 三视图引用)、画幅锚点(aspect_ratio.json)。**角色锚点必含性别词(2026-07-20)**:video_prompt 与 image_prompt 中每个出场角色的描述都显式带 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面呈现口径),不得只靠参考图与中性描述让模型猜——下游 image-generation 机检 gender_in_prompt 会退回缺性别词的锚帧 prompt。
    **风格锚点必须以文字内嵌进 video_prompt 开头**(固定格式 `Overall visual style: <style.json 关键词串>. Shot 1: ...`)——下游 video-generation 只把 `video_prompt` 字段发给生成模型,`anchors.style` 仅是结构化记录、**不会进入请求**;漏内嵌整组画风跑偏(前科:ep01 grp001 成片丢失粗描边厚涂,DEF 记录见 grp001.json notes)。
 5. 编写负面词表:style.json 负面清单(禁止元素)+ 通用畸变负面词(多指、肢体畸变等)+ 防重复角色约束(组内多参考图时结尾加"禁止出现重复/双胞胎角色")+ **"no background music, no musical score"**(音乐一律后期)。
    `negative` 字段同样**不会进入生成请求**(genmedia 视频通路无负面词通道):全局通用项须在 video_prompt 结尾并入一句 `Global constraints: no watermark, no subtitles or on-screen text, no modern objects, no background music or musical score.`;镜头级关键禁项(如"画面中不得出现哈里发")写进对应 Shot 段正文。`negative` 字段保留作 QA 对照清单。

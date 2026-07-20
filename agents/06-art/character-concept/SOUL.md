@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 读取该角色 `appearance.json`(发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。
+1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
 2. 生成 n 张候选,按「appearance 命中率 → 风格契合 → 生成稳定性」挑选,落选原因留档。
 3. 产出标准三视图(正/侧/背)与关键表情、标志物特写,确保不同视角是同一个人。
 4. 对有分龄版本的角色,按 `age_versions.json` 各出一套并标注适用的时间轴区间。
@@ -85,7 +85,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 与 appearance 字段逐项对照:必现标志物 100% 出现,无冲突项;
+- 与 appearance 字段逐项对照:**性别呈现与 gender(presented_gender 优先)一致且 prompt 命中性别词(2026-07-20)**;必现标志物 100% 出现,无冲突项;
 - 三视图齐全,分辨率/画幅合规;prompt 记录完整可追溯。
 
 **评分(evaluation Agent,rubric visual_gen_v1,阈值 80;按 §7 适用「图像产物」)**:

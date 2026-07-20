@@ -11,11 +11,12 @@
 
 ## 职责
 
-1. 依据 `personality.json`(气质/性格)与 `appearance.json`(年龄段/体型)推导声音画像:音色(受控枚举,如清朗/沙哑/低沉)、基准音高、基准语速区间(字/分钟)、口音或方言倾向。
-2. 给出可检索的参考声线描述(声线标签,供 TTS 选型),不绑定具体真人音源——音源版权由 `11-qa/copyright` 审。
-3. 标注情绪态偏移范围:常态/激动/低语时语速与音高的允许偏移区间,供逐句配音按剧本情绪标签调用。
-4. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本——**每个 age_variant 都会被 voice-generation 合成一段独立 voiceprint 样本**(不同年龄阶段嗓音不同,组生成按时间线选对应形态样本挂锚,§8A),分版描述必须足以区分选型。
-5. 覆盖清单以 structured_story 的对白说话人为准:工单批次内有台词角色 100% 有 voice.json,漏配即机检不过。
+1. 依据 `personality.json`(气质/性格)与 `appearance.json`(**性别**、年龄段/体型)推导声音画像:音色(受控枚举,如清朗/沙哑/低沉)、基准音高、基准语速区间(字/分钟)、口音或方言倾向。
+2. **性别硬约束(2026-07-20)**:声纹卡必须回填 `gender`(照抄 appearance.json,不得自定),timbre/pitch/reference_style 与 gender 一致——男角配女声或反之(无易装设定依据)= 机检退回,不靠文字描述碰运气。角色有 `presented_gender` 时:常态声线按对外呈现口径设定(如女扮男装压低音区),须在 `reference_style` 写明伪装处理方式,并在 `emotion_range` 或备注中给出「身份揭露/独处」场景的真声偏移口径。
+3. 给出可检索的参考声线描述(声线标签,供 TTS 选型),不绑定具体真人音源——音源版权由 `11-qa/copyright` 审。
+4. 标注情绪态偏移范围:常态/激动/低语时语速与音高的允许偏移区间,供逐句配音按剧本情绪标签调用。
+5. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本——**每个 age_variant 都会被 voice-generation 合成一段独立 voiceprint 样本**(不同年龄阶段嗓音不同,组生成按时间线选对应形态样本挂锚,§8A),分版描述必须足以区分选型。
+6. 覆盖清单以 structured_story 的对白说话人为准:工单批次内有台词角色 100% 有 voice.json,漏配即机检不过。
 
 ## 不做什么(边界)
 
@@ -28,7 +29,7 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | 03-characters/personality | 性格档案(气质、习惯) | `bible/characters/<id>/personality.json` |
-| 03-characters/appearance | 外观卡(年龄段、体型) | `bible/characters/<id>/appearance.json` |
+| 03-characters/appearance | 外观卡(**性别 gender/presented_gender**、年龄段、体型) | `bible/characters/<id>/appearance.json` |
 | 00-orchestration/context | 原文中对嗓音的直接描写(如有) | `<项目目录>/runs/<task_id>/context.md` |
 
 ## 输出
@@ -41,6 +42,7 @@
 ```json
 {
   "character_id": "CHAR-0001",
+  "gender": "男",
   "timbre": "清朗偏冷", "pitch": "中低",
   "speed_cpm": [200, 240],
   "accent": "官话标准音,无方言",
@@ -68,7 +70,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 字段齐:timbre / pitch / speed_cpm / accent / reference_style 必填;
+- 字段齐:**gender** / timbre / pitch / speed_cpm / accent / reference_style 必填;`gender` 与 appearance.json 一致(gender_match,2026-07-20),音色性别与之匹配(有 presented_gender 的按呈现口径核对);
 - `character_id` 在 index.json 中合法(G3);
 - 原文有嗓音描写的,卡内取值不得与之冲突(有 source_chapter 佐证);
 - 有 age_versions 的角色,age_variants 区间与其一致。

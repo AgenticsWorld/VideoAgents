@@ -11,11 +11,12 @@
 
 ## 职责
 
-1. 从 Context Package 提供的原文出处段落中抽取角色外观:发色、发型、瞳色、肤色、身高体型、基准年龄段、疤痕/纹身/佩饰等标志物、惯常衣着基调。
+1. 从 Context Package 提供的原文出处段落中抽取角色外观:**性别**、发色、发型、瞳色、肤色、身高体型、基准年龄段、疤痕/纹身/佩饰等标志物、惯常衣着基调。
 2. 每个字段注明原文出处章节;原文没写但绘图必需的字段(如瞳色),标 `inferred: true` 并给推断理由(依据种族/文化/同类描写)。
-3. 把模糊文学描写量化成可执行取值(「高大」→ 身高区间;「面容清冷」→ 面部特征枚举),字段值使用受控词表,避免绘图歧义。
-4. 检出原文前后矛盾的描写(前文黑发后文白发且无剧情解释),不擅自取舍,上报 `memory-bible` 仲裁。
-5. 按 index.json 的 ID 建档,一角色一卡;卡内只写「基准年龄段」形象,年龄差分留给 character-growth。
+3. **性别必须定值(2026-07-20)**:`gender` 受控词表仅「男/女」,是声音选型与形象生成的一致性硬锚,**不允许留空或写"不明"**——原文未明写时依据称谓(他/她、兄/姐)、姓名、社会角色等推断并标 `inferred + reason`;女扮男装等「对外呈现性别 ≠ 生理性别」的设定,另加可选字段 `presented_gender`(男/女)并注明出处章节与生效范围,`gender` 仍写生理性别。
+4. 把模糊文学描写量化成可执行取值(「高大」→ 身高区间;「面容清冷」→ 面部特征枚举),字段值使用受控词表,避免绘图歧义。
+5. 检出原文前后矛盾的描写(前文黑发后文白发且无剧情解释),不擅自取舍,上报 `memory-bible` 仲裁。
+6. 按 index.json 的 ID 建档,一角色一卡;卡内只写「基准年龄段」形象,年龄差分留给 character-growth。
 
 ## 不做什么(边界)
 
@@ -41,6 +42,9 @@
 ```json
 {
   "character_id": "CHAR-0001",
+  "gender": "女",
+  "presented_gender": "男",
+  "gender_note": { "source_chapter": 3, "reason": "presented_gender 仅女扮男装等易装设定填写,注明出处与生效范围;无此设定则省略该字段与本条 note" },
   "hair": { "color": "黑", "style": "束发", "source_chapter": 2 },
   "eyes": { "color": "褐", "inferred": true, "reason": "原文未写,按族群默认" },
   "build": { "height_range_cm": [180, 185], "body_type": "精瘦" },
@@ -67,7 +71,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 必填字段(hair / eyes / build / marks / base_age_range / default_outfit_tone)齐全;
+- 必填字段(**gender** / hair / eyes / build / marks / base_age_range / default_outfit_tone)齐全;`gender` 取值仅限「男/女」,空值或"不明"直接退回;`presented_gender`(如有)取值同词表;
 - 每个字段有 `source_chapter` 或 `inferred + reason`,二者必居其一;
 - `character_id` 在 index.json 中合法(G3 引用完整性)。
 
