@@ -25,6 +25,7 @@ import urllib.request
 import uuid
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 import uvicorn
@@ -1526,7 +1527,8 @@ async def versions_page():
 
 
 # ---------------- 预览页(人物/场景/分镜预览) ----------------
-PREVIEW_PAGES = ("characters", "scenes", "props", "worldview", "storyboard", "videos")
+PREVIEW_PAGES = ("characters", "scenes", "props", "worldview", "storyboard", "videos",
+                 "workflow")
 IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
@@ -2431,6 +2433,194 @@ def _preview_videos(project: str, ep: str):
 @app.get("/api/preview/videos")
 async def api_preview_videos(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_videos, project, ep)
+
+
+# ---------------- 工作流预览(DAG 可视化) ----------------
+# 页面 preview_workflow.html:把 runs/dag.json 展开成阶段泳道图,标注状态/依赖/
+# 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻 + webui/runs/<run_id>.jsonl
+# 的 total_cost_usd)给未完成任务估时估价。估价口径只含 LLM agent 会话成本,
+# 不含生成侧(Seedance 等)API 计费。
+
+_WF_TERMINAL_SKIP = {"skipped", "cancelled", "waived"}   # 不再执行,也不进剩余预估
+
+
+def _wf_phase_of(n: dict) -> str:
+    """节点所属阶段:优先落盘 phase 字段;否则按 id 前缀 pN-/gN 推断;加派的
+    自由任务(如 ep06-costume-blue-arbitration)归入 extra。"""
+    if n.get("phase"):
+        return str(n["phase"])
+    m = re.match(r"^[pg](\d+)\b", n.get("id") or "")
+    return f"p{m.group(1)}" if m else "extra"
+
+
+def _wf_family_of(n: dict, by_id: dict) -> str:
+    """扇出实例归并键:沿 expanded_from 链回溯到根;无该字段(tothemoon 旧格式)
+    则按 for_each_instance 从 id 里剥掉实例段(p6-plan-ep01 → p6-plan)。"""
+    nid = n.get("id") or ""
+    seen = {nid}
+    cur = n
+    while cur.get("expanded_from") and cur["expanded_from"] not in seen:
+        nid = cur["expanded_from"]
+        seen.add(nid)
+        cur = by_id.get(nid) or {"id": nid}
+    inst = cur.get("for_each_instance") if cur is n else None
+    if isinstance(inst, str) and inst:
+        # 实例段可能是 ep01 / ep05/grp015 之类,取各段依次从尾部剥离
+        for part in reversed(re.split(r"[/,]", inst)):
+            part = part.strip()
+            if part and nid.endswith("-" + part):
+                nid = nid[: -len(part) - 1]
+    return nid
+
+
+def _wf_run_stats(run_id: str | None) -> tuple[float | None, float | None]:
+    """从 webui/runs/<run_id>.jsonl 末尾的 result 事件取 (duration_s, cost_usd)。
+    会话日志会按 TTL 清理,查不到属正常。"""
+    if not run_id or not re.fullmatch(r"[\w.\-]+", run_id):
+        return None, None
+    p = RUNS_DIR / f"{run_id}.jsonl"
+    if not p.is_file():
+        return None, None
+    try:
+        with open(p, "rb") as f:
+            f.seek(max(0, p.stat().st_size - 16384))
+            tail = f.read().decode("utf-8", "replace")
+    except Exception:
+        return None, None
+    for line in reversed(tail.splitlines()):
+        if '"type":"result"' not in line and '"type": "result"' not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        dur = obj.get("duration_ms")
+        cost = obj.get("total_cost_usd")
+        return ((dur / 1000) if isinstance(dur, (int, float)) else None,
+                cost if isinstance(cost, (int, float)) else None)
+    return None, None
+
+
+def _wf_meta_duration(base: Path, task_id: str) -> float | None:
+    """runs/<task_id>/meta.json 的 started_at/ended_at → 秒。"""
+    meta = _read_json_safe(base / "runs" / task_id / "meta.json")
+    if not isinstance(meta, dict):
+        return None
+    try:
+        t0 = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(str(meta["ended_at"]).replace("Z", "+00:00"))
+        s = (t1 - t0).total_seconds()
+        return s if 0 < s < 86400 * 7 else None
+    except Exception:
+        return None
+
+
+def _preview_workflow(project: str):
+    base = _proj_base(project)
+    dag_path = base / "runs" / "dag.json"
+    if not dag_path.is_file():
+        return {"project": base.name, "nodes": [], "summary": None}
+    raw = _dag_load_nodes(dag_path)
+    by_id = {n["id"]: n for n in raw if n.get("id")}
+
+    nodes = []
+    for n in raw:
+        if not n.get("id"):
+            continue
+        state = n.get("state") or "pending"
+        nid = n["id"]
+        dur, cost = _wf_meta_duration(base, nid), None
+        rdur, rcost = _wf_run_stats(n.get("run_id"))
+        dur = dur if dur is not None else rdur
+        cost = rcost
+        note = next((str(n[k]) for k in ("note", "orch_note", "skip_reason",
+                                         "fail_reason", "pilot_note") if n.get(k)), "")
+        nodes.append({
+            "id": nid, "phase": _wf_phase_of(n), "state": state,
+            "family": _wf_family_of(n, by_id),
+            "depends_on": [d for d in (n.get("depends_on") or [])
+                           if isinstance(d, str)],
+            "agent": n.get("agent"), "gate": bool(n.get("gate")),
+            "human": bool(n.get("human")), "checkpoint": n.get("checkpoint"),
+            "for_each": n.get("for_each"),
+            "for_each_instance": n.get("for_each_instance"),
+            "outputs": n.get("outputs") or [], "attempt": n.get("attempt"),
+            "run_id": n.get("run_id"), "note": note[:400],
+            "duration_s": round(dur) if dur is not None else None,
+            "cost_usd": round(cost, 4) if cost is not None else None,
+        })
+
+    # 估时估价:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
+    def _avg(rows, key):
+        vals = [r[key] for r in rows if r[key] is not None]
+        return (sum(vals) / len(vals)) if vals else None
+
+    done_rows = [r for r in nodes if r["state"] in _DONE_STATES]
+    fam_rows: dict[str, list] = {}
+    ag_rows: dict[str, list] = {}
+    ph_rows: dict[str, list] = {}
+    for r in done_rows:
+        fam_rows.setdefault(r["family"], []).append(r)
+        if r["agent"]:
+            ag_rows.setdefault(r["agent"], []).append(r)
+        ph_rows.setdefault(r["phase"], []).append(r)
+
+    for r in nodes:
+        if r["state"] in _DONE_STATES or r["state"] in _WF_TERMINAL_SKIP \
+                or r["state"] in ("expanded", "template"):
+            continue
+        for key, out in (("duration_s", "est_duration_s"), ("cost_usd", "est_cost_usd")):
+            for basis, rows in (("family", fam_rows.get(r["family"])),
+                                ("agent", ag_rows.get(r["agent"])),
+                                ("phase", ph_rows.get(r["phase"])),
+                                ("overall", done_rows)):
+                v = _avg(rows or [], key)
+                if v is not None:
+                    r[out] = round(v) if key == "duration_s" else round(v, 4)
+                    r[out.replace("_s", "").replace("_usd", "") + "_basis"] = basis
+                    break
+
+    # 汇总:已花费(实际)/ 剩余(估)/ 关键路径(剩余任务沿依赖的最长估时链)
+    remaining = [r for r in nodes
+                 if r["state"] not in _DONE_STATES
+                 and r["state"] not in _WF_TERMINAL_SKIP
+                 and r["state"] not in ("expanded", "template")]
+    node_map = {r["id"]: r for r in nodes}
+    memo: dict[str, float] = {}
+
+    def _cp(nid: str, stack: frozenset) -> float:
+        if nid in memo:
+            return memo[nid]
+        r = node_map.get(nid)
+        if r is None or nid in stack:
+            return 0.0
+        own = 0.0
+        if r["state"] not in _DONE_STATES and r["state"] not in _WF_TERMINAL_SKIP:
+            own = float(r.get("est_duration_s") or 0)
+        best = 0.0
+        for d in r["depends_on"]:
+            best = max(best, _cp(d, stack | {nid}))
+        memo[nid] = own + best
+        return memo[nid]
+
+    critical_s = max((_cp(r["id"], frozenset()) for r in remaining), default=0.0)
+    summary = {
+        "total": len(nodes),
+        "spent_duration_s": round(sum(r["duration_s"] or 0 for r in nodes)),
+        "spent_cost_usd": round(sum(r["cost_usd"] or 0 for r in nodes), 2),
+        "remaining_count": len(remaining),
+        "remaining_est_duration_s": round(sum(r.get("est_duration_s") or 0
+                                              for r in remaining)),
+        "remaining_est_cost_usd": round(sum(r.get("est_cost_usd") or 0
+                                            for r in remaining), 2),
+        "critical_path_s": round(critical_s),
+    }
+    return {"project": base.name, "nodes": nodes, "summary": summary}
+
+
+@app.get("/api/preview/workflow")
+async def api_preview_workflow(project: str = "demo"):
+    return await asyncio.to_thread(_preview_workflow, project)
 
 
 @app.get("/api/genconfig")
