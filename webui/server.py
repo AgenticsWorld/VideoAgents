@@ -9,6 +9,8 @@
 启动:python3 webui/server.py   →  http://127.0.0.1:8630
 """
 import asyncio
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -568,16 +570,24 @@ _OPENROUTER_CACHE: dict = {}          # modality -> (ts, models)
 _OPENROUTER_TTL = 600
 
 
-# ---------------- 引擎会话用量探测(watchdog 阈值门控用,参考 CodexBar) ----------------
-# codex:本地 ~/.codex/sessions/**/*.jsonl 会记录 rate_limits.primary.used_percent(5h 窗口)。
-# claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour.utilization;
+# ---------------- 引擎会话用量探测(watchdog 阈值门控 + 资源消耗面板,参考 CodexBar) ----------------
+# codex:本地 ~/.codex/sessions/**/*.jsonl 会记录 rate_limits(primary=5h 窗口,secondary=周窗口)。
+# claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour/seven_day.utilization;
 #   token 读取顺序 env CLAUDE_CODE_OAUTH_TOKEN → macOS Keychain → ~/.claude/.credentials.json,
 #   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
+# kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配),
+#   usage=周配额,limits[](300min 窗口)=5h 会话配额。
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-_USAGE_CACHE: dict = {}               # engine -> (ts, percent|None)
-_USAGE_TTL = {"claude": 180, "codex": 30}   # claude 探针接口限流激进,≥180s 才安全
+KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
+_USAGE_CACHE: dict = {}               # engine -> (ts, {"session":pct|None,"weekly":pct|None})
+_USAGE_TTL = {"claude": 180, "codex": 30, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全
 _CLAUDE_VERSION: str | None = None
+
+
+def resource_cfg() -> dict:
+    """⚙️ 设置 → 资源消耗 的持久化配置(webui/state.json)。"""
+    return STATE.get("resources") or {}
 
 
 def _find_rate_limits(d):
@@ -598,17 +608,18 @@ def _find_rate_limits(d):
     return None
 
 
-def _codex_usage_percent() -> float | None:
-    """最近 codex session 里最后一次 rate_limits.primary.used_percent(5h 窗口)。
+def _codex_usage_full() -> dict:
+    """最近 codex session 里最后一次 rate_limits:primary=5h 会话,secondary=周窗口。
 
     读数是被动扒 session 文件的,codex 不跑就不会有新读数;若最新读数所在文件
-    距今已超 5h(窗口必然已滚过),旧百分比只会误导,视为过期返回 None。
+    距今已超 5h(会话窗口必然已滚过),旧百分比只会误导,session 视为过期返回 None。
     """
+    empty = {"session": None, "weekly": None}
     try:
         files = sorted(CODEX_SESSIONS_DIR.rglob("*.jsonl"),
                        key=lambda p: p.stat().st_mtime, reverse=True)[:8]
     except OSError:
-        return None
+        return empty
     for f in files:                          # 新→旧,取第一个有读数的文件里最后一条
         last = None
         try:
@@ -622,17 +633,21 @@ def _codex_usage_percent() -> float | None:
                     except ValueError:
                         continue
                     if rl and isinstance(rl["primary"].get("used_percent"), (int, float)):
-                        last = float(rl["primary"]["used_percent"])
+                        last = rl
         except OSError:
             continue
         if last is not None:
-            return None if time.time() - mtime > 5 * 3600 else last
-    return None
+            sec = last.get("secondary") or {}
+            weekly = sec.get("used_percent")
+            stale = time.time() - mtime > 5 * 3600
+            return {"session": None if stale else float(last["primary"]["used_percent"]),
+                    "weekly": float(weekly) if isinstance(weekly, (int, float)) else None}
+    return empty
 
 
 def _claude_oauth_token() -> str | None:
     """Claude Code 的 OAuth access token;过期或读不到返回 None(不做 refresh)。"""
-    if not CLAUDE_USAGE_PROBE_ENABLED:
+    if not claude_probe_enabled():
         return None
     env = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     if env:
@@ -677,11 +692,17 @@ def _claude_version() -> str:
     return _CLAUDE_VERSION
 
 
-def _claude_usage_percent() -> float | None:
-    """OAuth 探针取 claude 5h 窗口 utilization;任何异常返回 None。"""
+def claude_probe_enabled() -> bool:
+    """Claude 用量探针开关:env VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 或 ⚙️ 资源消耗 设置。"""
+    return CLAUDE_USAGE_PROBE_ENABLED or bool(resource_cfg().get("claude_probe"))
+
+
+def _claude_usage_full() -> dict:
+    """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;任何异常返回 None。"""
+    empty = {"session": None, "weekly": None}
     token = _claude_oauth_token()
     if not token:
-        return None
+        return empty
     try:
         data = _http_get_json(CLAUDE_USAGE_URL, headers={
             "Authorization": f"Bearer {token}",
@@ -689,22 +710,134 @@ def _claude_usage_percent() -> float | None:
             "User-Agent": f"claude-code/{_claude_version()}",
             "Content-Type": "application/json",
         })
-        pct = (data.get("five_hour") or {}).get("utilization")
-        return float(pct) if isinstance(pct, (int, float)) else None
+
+        def pct(win):
+            v = (data.get(win) or {}).get("utilization")
+            return float(v) if isinstance(v, (int, float)) else None
+        return {"session": pct("five_hour"), "weekly": pct("seven_day")}
+    except Exception:
+        return empty
+
+
+def _kimi_usage_full() -> dict:
+    """Kimi Code 官方用量接口:usage=周配额,limits[](300min 窗口)=5h 会话配额。
+    未配 Key/接口异常返回 None(资源消耗面板显示未知)。"""
+    empty = {"session": None, "weekly": None}
+    key = (resource_cfg().get("kimi_api_key") or "").strip()
+    if not key:
+        return empty
+    try:
+        data = _http_get_json(KIMI_USAGE_URL, headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        })
+
+        def pct(d):
+            try:
+                limit, used = float(d.get("limit")), float(d.get("used"))
+                return max(0.0, min(100.0, used / limit * 100)) if limit > 0 else None
+            except (TypeError, ValueError):
+                return None
+        session = None
+        for it in data.get("limits") or []:
+            detail = it.get("detail") or {}
+            if pct(detail) is not None:
+                session = pct(detail)
+                break
+        return {"session": session, "weekly": pct(data.get("usage") or {})}
+    except Exception:
+        return empty
+
+
+def engine_usage_full(engine: str) -> dict:
+    """该引擎 {session: 5h 窗口已用%, weekly: 周窗口已用%};取不到为 None。带 TTL 缓存。"""
+    if engine not in _USAGE_TTL:
+        return {"session": None, "weekly": None}
+    ts, full = _USAGE_CACHE.get(engine, (0, None))
+    if full is not None and time.time() - ts < _USAGE_TTL[engine]:
+        return full
+    full = {"claude": _claude_usage_full, "codex": _codex_usage_full,
+            "kimi": _kimi_usage_full}[engine]()
+    _USAGE_CACHE[engine] = (time.time(), full)
+    return full
+
+
+def engine_usage_percent(engine: str) -> float | None:
+    """该引擎当前会话(5h 窗口)已用百分比;不支持的引擎/取不到返回 None(watchdog 门控用)。"""
+    return engine_usage_full(engine).get("session")
+
+
+# ---------------- 账户余额探测(资源消耗面板) ----------------
+_BALANCE_CACHE: dict = {}             # provider -> (ts, result|None)
+_BALANCE_TTL = 600
+
+
+def _openrouter_balance() -> dict | None:
+    """OpenRouter 账户余额:GET /api/v1/credits(Management/Provisioning Key),
+    余额 = total_credits - total_usage(USD)。未配 Key/异常返回 None。"""
+    key = (resource_cfg().get("openrouter_key") or "").strip()
+    if not key:
+        return None
+    try:
+        d = (_http_get_json("https://openrouter.ai/api/v1/credits",
+                            headers={"Authorization": f"Bearer {key}"})).get("data") or {}
+        credits, usage = float(d.get("total_credits")), float(d.get("total_usage"))
+        return {"balance": round(credits - usage, 4), "currency": "USD"}
     except Exception:
         return None
 
 
-def engine_usage_percent(engine: str) -> float | None:
-    """该引擎当前会话(5h 窗口)已用百分比;不支持的引擎/取不到返回 None。带 TTL 缓存。"""
-    if engine not in ("claude", "codex"):
+def _volc_signed_get(ak: str, sk: str, action: str, version: str,
+                     service: str = "billing", region: str = "cn-north-1",
+                     host: str = "open.volcengineapi.com") -> dict:
+    """火山引擎 OpenAPI GET 调用(HMAC-SHA256 签名,同官方 SDK Signer)。"""
+    query = urllib.parse.urlencode(sorted({"Action": action, "Version": version}.items()))
+    xdate = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    payload_hash = hashlib.sha256(b"").hexdigest()
+    headers = {"host": host, "x-date": xdate, "x-content-sha256": payload_hash}
+    signed = ";".join(sorted(headers))
+    canon = "\n".join(["GET", "/", query,
+                       "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
+                       signed, payload_hash])
+    scope = f"{xdate[:8]}/{region}/{service}/request"
+    sts = "\n".join(["HMAC-SHA256", xdate, scope,
+                     hashlib.sha256(canon.encode()).hexdigest()])
+
+    def h(key: bytes, msg: str) -> bytes:
+        return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+    k_sign = h(h(h(h(sk.encode(), xdate[:8]), region), service), "request")
+    sig = hmac.new(k_sign, sts.encode(), hashlib.sha256).hexdigest()
+    return _http_get_json(f"https://{host}/?{query}", headers={
+        "Authorization": (f"HMAC-SHA256 Credential={ak}/{scope}, "
+                          f"SignedHeaders={signed}, Signature={sig}"),
+        "X-Date": xdate, "X-Content-Sha256": payload_hash,
+    })
+
+
+def _volc_balance() -> dict | None:
+    """火山引擎账户可用余额(QueryBalanceAcct,CNY);未开启/未配 AK/SK/异常返回 None。"""
+    cfg = resource_cfg()
+    ak, sk = (cfg.get("volc_ak") or "").strip(), (cfg.get("volc_sk") or "").strip()
+    if not (cfg.get("volc_enabled") and ak and sk):
         return None
-    ts, pct = _USAGE_CACHE.get(engine, (0, None))
-    if time.time() - ts < _USAGE_TTL[engine]:
-        return pct
-    pct = _claude_usage_percent() if engine == "claude" else _codex_usage_percent()
-    _USAGE_CACHE[engine] = (time.time(), pct)
-    return pct
+    try:
+        r = _volc_signed_get(ak, sk, "QueryBalanceAcct", "2022-01-01").get("Result") or {}
+        return {"balance": float(r.get("AvailableBalance")), "currency": "CNY"}
+    except Exception:
+        return None
+
+
+def provider_balance(provider: str) -> dict | None:
+    """openrouter/volc 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
+    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance}.get(provider)
+    if not fn:
+        return None
+    ts, res = _BALANCE_CACHE.get(provider, (0, None))
+    if time.time() - ts < _BALANCE_TTL:
+        return res
+    res = fn()
+    _BALANCE_CACHE[provider] = (time.time(), res)
+    return res
 
 
 class Hub:
@@ -3354,7 +3487,7 @@ async def idle_watchdog():
 
 @app.post("/api/open-folder")
 async def api_open_folder(body: dict):
-    """在 Finder 中打开当前项目目录(产物更新「📂 打开目录」按钮)。"""
+    """在 Finder 中打开当前项目目录(顶栏 📂 文件夹按钮)。"""
     project = safe_slug(body.get("project"))
     path = PROJECTS_DIR / project
     if not path.is_dir():
@@ -3405,6 +3538,59 @@ async def api_usage():
     orch = next(iter(DISPATCHERS))
     return {"codex": {"used": codex}, "claude": {"used": claude},
             "gate_engine": agent_model_config(orch).get("engine") or "claude"}
+
+
+@app.get("/api/resources/config")
+async def api_resources_config_get():
+    """⚙️ 资源消耗 设置(本地单机控制台,Key 明文存 webui/state.json、不外传)。"""
+    cfg = resource_cfg()
+    return {"claude_probe": bool(cfg.get("claude_probe")),
+            "claude_probe_env": CLAUDE_USAGE_PROBE_ENABLED,
+            "kimi_api_key": cfg.get("kimi_api_key") or "",
+            "openrouter_key": cfg.get("openrouter_key") or "",
+            "volc_enabled": bool(cfg.get("volc_enabled")),
+            "volc_ak": cfg.get("volc_ak") or "",
+            "volc_sk": cfg.get("volc_sk") or ""}
+
+
+@app.post("/api/resources/config")
+async def api_resources_config_set(body: dict):
+    """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
+    cfg = STATE.setdefault("resources", {})
+    for k in ("claude_probe", "volc_enabled"):
+        if body.get(k) is not None:
+            cfg[k] = bool(body[k])
+    for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
+        if body.get(k) is not None:
+            if not isinstance(body[k], str) or len(body[k]) > 500:
+                raise HTTPException(400, f"{k} must be a string (≤500 chars)")
+            cfg[k] = body[k].strip()
+    save_state(STATE)
+    _USAGE_CACHE.clear()
+    _BALANCE_CACHE.clear()
+    return await api_resources_config_get()
+
+
+@app.get("/api/resources")
+async def api_resources(fresh: bool = False):
+    """资源消耗面板聚合数据:三引擎 session/weekly 用量 + 已配置渠道的账户余额。
+    全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存强制重测);取不到的读数为 null。"""
+    if fresh:
+        _USAGE_CACHE.clear()
+        _BALANCE_CACHE.clear()
+    cu, co, ki, orb, vb = await asyncio.gather(
+        asyncio.to_thread(engine_usage_full, "claude"),
+        asyncio.to_thread(engine_usage_full, "codex"),
+        asyncio.to_thread(engine_usage_full, "kimi"),
+        asyncio.to_thread(provider_balance, "openrouter"),
+        asyncio.to_thread(provider_balance, "volc"))
+    cfg = resource_cfg()
+    return {"claude": {**cu, "enabled": claude_probe_enabled()},
+            "codex": {**co, "enabled": True},
+            "kimi": {**ki, "enabled": bool((cfg.get("kimi_api_key") or "").strip())},
+            "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
+                           **(orb or {})},
+            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}
 
 
 @app.get("/api/watchdog")

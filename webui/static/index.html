@@ -68,13 +68,29 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 /* 右栏 */
 #right{width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
 #right h2{font-size:12px;color:var(--dim);letter-spacing:1px;padding:10px 14px 4px}
-#runs-head,#files-head{display:flex;align-items:center;gap:5px;padding:8px 10px 2px}
-#runs-head h2,#files-head h2{padding:0;margin-right:auto}
-#runs-head button,#files-head button{font-size:11px;padding:2px 7px;border-radius:5px;white-space:nowrap}
+#runs-head,#res-head{display:flex;align-items:center;gap:5px;padding:8px 10px 2px}
+#runs-head h2,#res-head h2{padding:0;margin-right:auto}
+#runs-head button,#res-head button{font-size:11px;padding:2px 7px;border-radius:5px;white-space:nowrap}
 #btn-watchdog.on{color:var(--green);border-color:var(--green)}
 #btn-watchdog.off{color:var(--red);border-color:var(--red)}
 #runs{flex:3;overflow-y:auto;padding:0 10px}
-#files{flex:2;overflow-y:auto;padding:0 14px 14px;border-top:1px solid var(--border)}
+/* 资源消耗面板(右栏下半):三引擎 Session/Weekly 用量进度条 + 账户余额 */
+#resources{flex:2;overflow-y:auto;padding:2px 14px 14px;border-top:1px solid var(--border)}
+.res-eng{margin-top:9px}
+.res-eng .nm{font-size:12.5px;font-weight:600}
+.res-eng .hint{font-size:11px;color:var(--dim);margin-left:6px}
+.res-line{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:11.5px}
+.res-line .lb{width:52px;flex:none;color:var(--dim)}
+.res-line .pct{width:40px;flex:none;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+.res-bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.res-bar i{display:block;height:100%;border-radius:3px;background:var(--green);transition:width .4s}
+.res-bar i.warn{background:var(--yellow)}
+.res-bar i.hot{background:var(--red)}
+.res-bal{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12.5px;border-top:1px dashed var(--border);padding-top:8px}
+.res-bal .nm{font-weight:600}
+.res-bal .amt{margin-left:auto;color:var(--green);font-variant-numeric:tabular-nums}
+.res-bal .amt.unknown{color:var(--dim)}
+#res-updated{font-size:10.5px;color:var(--dim);margin-top:10px;text-align:right}
 .run{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:8px 2px;font-size:12.5px;cursor:pointer}
 .run .r1{display:flex;align-items:center;gap:7px}
 .run .st{width:8px;height:8px;border-radius:50%;flex:none}
@@ -93,8 +109,6 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .run .logbtn{color:var(--dim);cursor:pointer;flex:none;padding:0 3px;border-radius:4px}
 .run .logbtn:hover{color:var(--text);background:var(--border)}
 .run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;flex:none}
-.file-item{font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:3px 0;color:#a8d8b9;word-break:break-all}
-.file-item .who{color:var(--dim)}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
 /* 配置弹窗(时长设置等) */
@@ -177,6 +191,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   </div>
   <a href="/preview/storyboard" class="pv hdr-icon" target="_blank" title="分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/><path d="M6.5 7.5h7M6.5 10h4.5" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="3" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/><rect x="13" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/></svg></a>
   <a href="/preview/videos" class="pv hdr-icon" target="_blank" title="视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M10 8.5 16 12l-6 3.5z" fill="var(--panel2)"/></svg></a>
+  <a href="#" id="open-dir" class="hdr-icon" title="在 Finder 中打开当前项目目录"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.1a2.5 2.5 0 0 1 1.77.73L12.6 6H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" fill="currentColor"/><path d="M3 10h18v1.8H3z" fill="var(--panel2)"/></svg></a>
   <div id="proj-settings-menu">
     <button id="proj-settings-btn" title="项目设置(仅当前项目生效)">🎛️</button>
     <div class="dropdown"><div class="dropdown-box">
@@ -202,6 +217,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
@@ -239,11 +255,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <button id="btn-watchdog" title="自动运行开关:开启后流水线空闲时自动发送状态检查消息">🤖 …</button>
     </div>
     <div id="runs"><div class="empty">暂无运行</div></div>
-    <div id="files-head">
-      <h2>产物更新</h2>
-      <button id="btn-open-dir" title="在 Finder 中打开当前项目目录">📂 打开目录</button>
+    <div id="res-head">
+      <h2>资源消耗</h2>
+      <button id="btn-res-refresh" title="立即刷新用量与余额(平时每 10 分钟自动刷新)">⟳ 刷新</button>
     </div>
-    <div id="files"></div>
+    <div id="resources"><div class="empty">读取中…</div></div>
   </div>
 </main>
 <div id="eng-modal" class="modal">
@@ -495,6 +511,32 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
+  </div>
+</div>
+<div id="res-modal" class="modal">
+  <div class="box" style="width:540px">
+    <h3>📊 资源消耗 设置</h3>
+    <div class="row"><label>Claude 用量检查</label>
+      <input type="checkbox" id="res-claude" style="flex:none">
+      <span class="note" style="flex:1">开启后经 OAuth 探针读取 Claude Code 会话用量;首次读取需在 macOS 钥匙串弹窗点「始终允许」</span></div>
+    <div class="note" id="res-claude-env" style="display:none">已由环境变量 VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 强制开启,此开关不生效</div>
+    <div class="row"><label>Kimi API Key</label>
+      <input type="password" id="res-kimi" placeholder="sk-…(留空则不检查 KimiCode 使用量)" autocomplete="off"></div>
+    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--accent)">kimi.com/code/console</a></div>
+    <div class="row"><label>OpenRouter Key</label>
+      <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
+    <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--accent)">openrouter.ai/settings/management-keys</a></div>
+    <div class="row"><label>火山引擎余额</label>
+      <input type="checkbox" id="res-volc" style="flex:none">
+      <span class="note" style="flex:1">开启后用 AK/SK 自动查询账户可用余额(QueryBalanceAcct)</span></div>
+    <div class="row res-volc-row"><label>Access Key</label>
+      <input type="password" id="res-volc-ak" placeholder="火山引擎 Access Key ID" autocomplete="off"></div>
+    <div class="row res-volc-row"><label>Secret Key</label>
+      <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
+    <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--accent)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
+    <div class="err" id="res-err"></div>
+    <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
   </div>
 </div>
 <script>
@@ -979,6 +1021,75 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
+/* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
+function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll('.res-volc-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-volc').onchange=resVolcRows;
+async function openResModal(){
+  $('#res-err').textContent='';
+  try{
+    const c=await api('/api/resources/config');
+    $('#res-claude').checked=!!(c.claude_probe||c.claude_probe_env);
+    $('#res-claude').disabled=!!c.claude_probe_env;    // env 强制开启时开关只读
+    $('#res-claude-env').style.display=c.claude_probe_env?'':'none';
+    $('#res-kimi').value=c.kimi_api_key||'';
+    $('#res-or').value=c.openrouter_key||'';
+    $('#res-volc').checked=!!c.volc_enabled;
+    $('#res-volc-ak').value=c.volc_ak||'';
+    $('#res-volc-sk').value=c.volc_sk||'';
+  }catch(e){$('#res-err').textContent='读取失败:'+e.message}
+  resVolcRows();
+  $('#res-modal').style.display='flex';
+}
+$('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
+$('#res-cancel').onclick=()=>$('#res-modal').style.display='none';
+$('#res-ok').onclick=async()=>{
+  if($('#res-volc').checked&&!($('#res-volc-ak').value.trim()&&$('#res-volc-sk').value.trim())){
+    $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
+  try{
+    await api('/api/resources/config',{
+      claude_probe:$('#res-claude').checked,
+      kimi_api_key:$('#res-kimi').value.trim(),
+      openrouter_key:$('#res-or').value.trim(),
+      volc_enabled:$('#res-volc').checked,
+      volc_ak:$('#res-volc-ak').value.trim(),
+      volc_sk:$('#res-volc-sk').value.trim()});
+    $('#res-modal').style.display='none';
+    renderResources(true);                             // 保存后立即用新配置刷新面板
+  }catch(e){$('#res-err').textContent='保存失败:'+e.message}
+};
+
+// 右栏资源消耗面板:三引擎 Session/Weekly 用量进度条 + 已配置渠道账户余额
+function resLine(label,v){
+  const known=typeof v==='number';
+  const w=known?Math.max(0,Math.min(100,v)):0;
+  const cls=w>=85?'hot':w>=60?'warn':'';
+  return `<div class="res-line"><span class="lb">${label}</span><div class="res-bar"><i class="${cls}" style="width:${w}%"></i></div><span class="pct">${known?Math.round(v)+'%':t('未知')}</span></div>`;
+}
+async function renderResources(fresh){
+  const box=$('#resources');
+  let r;
+  try{r=await api('/api/resources'+(fresh?'?fresh=1':''))}
+  catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
+  const HINTS={claude:'未开启:在 ⚙️ 设置 → 资源消耗 打开 Claude 用量检查',
+               kimi:'未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key'};
+  let h='';
+  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
+    const e=r[k]||{};
+    h+=`<div class="res-eng"><span class="nm">${label}</span>${e.enabled?'':`<span class="hint" title="${esc(t(HINTS[k]||''))}">${t('未开启')}</span>`}${resLine('Session',e.session)}${resLine('Weekly',e.weekly)}</div>`;
+  }
+  const bal=(name,b,sym)=>{
+    const known=typeof b.balance==='number';
+    return `<div class="res-bal"><span class="nm">${name}</span><span class="amt${known?'':' unknown'}">${known?sym+b.balance.toFixed(2):t('未知')}</span></div>`;
+  };
+  if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
+  if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
+  h+=`<div id="res-updated">${t('更新于:')}${new Date().toLocaleTimeString()}</div>`;
+  box.innerHTML=h;
+}
+$('#btn-res-refresh').onclick=()=>{$('#resources').innerHTML='<div class="empty">'+t('读取中…')+'</div>';renderResources(true)};
+renderResources();
+setInterval(renderResources,600000);                   // 每 10 分钟自动刷新
+
 async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
 
 /* ---------- Agent 列表 ---------- */
@@ -1253,9 +1364,10 @@ $('#btn-continue').onclick=async()=>{
     selectAgent(d.id);   // 跳到总制片对话看进展
   }catch(e){alert('发送失败:'+e.message)}
 };
-$('#btn-open-dir').onclick=async()=>{
+$('#open-dir').onclick=async e=>{
+  e.preventDefault();
   try{await api('/api/open-folder',{project:$('#project').value.trim()||'demo'})}
-  catch(e){alert('打开失败:'+e.message)}
+  catch(e2){alert('打开失败:'+e2.message)}
 };
 let WATCHDOG_ON=false;   // 逐项目独立、缺省关闭
 function renderWatchdog(){
@@ -1304,14 +1416,6 @@ function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>'
 // running 状态下每 3s 重绘,让耗时实时跳动
 setInterval(()=>{if(Object.values(RUNS).some(r=>['queued','running'].includes(r.status)))renderRuns()},3000);
 
-function addFile(agent,path){
-  const box=$('#files');
-  const d=document.createElement('div');d.className='file-item';
-  d.innerHTML=`${esc(path)} <span class="who">— ${esc(agent.split('/')[1]||agent)}</span>`;
-  box.prepend(d);
-  while(box.children.length>60)box.lastChild.remove();
-}
-
 /* ---------- SSE ---------- */
 function connect(){
   const es=new EventSource('/api/events');
@@ -1344,7 +1448,6 @@ function connect(){
         $('#messages').scrollTop=$('#messages').scrollHeight;
       }
     }
-    else if(ev.type==='file')addFile(ev.agent,ev.path);
     else if(ev.type==='confirm')showConfirm(ev);
     else if(ev.type==='confirm_done')removeConfirm(ev.id);
   };
