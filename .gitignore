@@ -43,3 +43,6 @@ dist/
 
 # Local Claude worktrees
 .claude/worktrees/
+
+# 本地测试(不随仓库分发)
+tests/
