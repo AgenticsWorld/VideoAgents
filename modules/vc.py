@@ -183,7 +183,10 @@ def _find(m, artifact, vstr):
 def cmd_show(a):
     m = load_manifest()
     p, rec = _find(m, a.artifact, a.version)
-    sys.stdout.write(git("show", f"{rec['commit']}:{p}"))
+    # 原样字节输出:git() 封装会 strip 末尾换行,导出文件会少 1 字节导致 sha256 假性不一致
+    blob = subprocess.run(["git", "--git-dir", GITDIR, "show", f"{rec['commit']}:{p}"],
+                          cwd=ROOT, check=True, capture_output=True).stdout
+    sys.stdout.buffer.write(blob)
 
 
 def cmd_diff(a):
