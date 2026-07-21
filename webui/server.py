@@ -108,14 +108,17 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 REFS_README = """# refs/ — 用户参考目录
 
-把「希望成片长成什么样」的参考图和希望使用的音乐丢进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2):
+把「希望成片长成什么样」的参考图和希望使用的音乐放进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2)。
+**推荐用 Web 控制台顶栏「预览设定产物」菜单的【参考图】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
 
 - `style/`      整体视觉风格:画风/渲染质感/色调/构图
-- `characters/` 角色形象;按角色建子目录(如 characters/林昭/)可定向到该角色
+- `characters/` 角色形象;按角色建子目录(如 characters/linzhao/)可定向到该角色
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音乐文件(BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
-- `NOTES.md`    可选:逐图/逐曲说明哪张图管什么、哪首曲子想用在哪(有则 Agent 必读)
+- `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
+- `NOTES.md`    逐图/逐曲注释:哪张图管什么、哪首曲子想用在哪(有则 Agent 必读)。
+                注释在【参考图】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
 
 规则:用户参考素材 > Agent 自行发挥;与文字设定冲突时 Agent 会上报你裁决;目录为空不影响流程。
 """
@@ -143,7 +146,7 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "characters", "scenes", "props", "music"):
+    for sub in ("style", "characters", "scenes", "props", "music", "thumbnail"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -1071,7 +1074,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户会把风格/角色/场景/道具参考图放在 {proj_rel}/refs/(style/ characters/ scenes/ props/),希望使用的音乐文件放在 {proj_rel}/refs/music/(有 NOTES.md 必读):
+用户通过 Web 控制台「参考图」页把风格/角色/场景/道具/封面参考图与希望使用的音乐按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/),并逐文件填写注释:
+- **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
@@ -1543,8 +1547,8 @@ async def versions_page():
 
 
 # ---------------- 预览页(人物/场景/分镜预览) ----------------
-PREVIEW_PAGES = ("characters", "scenes", "props", "worldview", "storyboard", "videos",
-                 "workflow")
+PREVIEW_PAGES = ("refs", "characters", "scenes", "props", "worldview", "storyboard",
+                 "videos", "workflow")
 IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
@@ -2778,6 +2782,154 @@ async def api_brief_set(body: dict):
     return {"ok": True, "project": project, "brief": brief, "style": style}
 
 
+# ---------------- 参考图页(refs/ 分类预览、上传、逐图注释) ----------------
+REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail")
+REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
+AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
+REF_NOTES_BEGIN = "<!-- BEGIN webui-refs-notes 本块由控制台「参考图」页自动生成,勿手改;手写内容请放本块之外 -->"
+REF_NOTES_END = "<!-- END webui-refs-notes -->"
+MAX_REF_UPLOAD = 100 * 1024 * 1024
+
+
+def _load_ref_notes(refs: Path) -> dict:
+    data = _read_json_safe(refs / "annotations.json")
+    return data if isinstance(data, dict) else {}
+
+
+def _write_ref_notes_md(refs: Path, notes: dict):
+    """annotations.json → NOTES.md 自动块(仅重写标记内内容,标记外的手写内容保留)。"""
+    lines = []
+    for rel in sorted(notes):
+        v = notes[rel]
+        note = str(v.get("note") if isinstance(v, dict) else v or "").strip()
+        if note:
+            lines.append(f"- `{rel}`:" + note.replace("\n", "\n  "))
+    block = REF_NOTES_BEGIN + "\n" + ("\n".join(lines) or "(暂无注释)") + "\n" + REF_NOTES_END
+    p = refs / "NOTES.md"
+    if p.is_file():
+        txt = p.read_text()
+        if REF_NOTES_BEGIN in txt and REF_NOTES_END in txt:
+            head, rest = txt.split(REF_NOTES_BEGIN, 1)
+            _, tail = rest.split(REF_NOTES_END, 1)
+            txt = head + block + tail
+        else:
+            txt = txt.rstrip() + "\n\n" + block + "\n"
+    else:
+        txt = "# refs/ 逐图注释(哪张图管什么、哪首曲子想用在哪)\n\n" + block + "\n"
+    p.write_text(txt)
+
+
+@app.get("/api/refs")
+async def api_refs_list(project: str = "demo"):
+    """参考图页数据:refs/ 按分类列出文件(含子目录)、预览 URL 与注释。"""
+    base = _proj_base(project)
+    refs = base / "refs"
+    notes = _load_ref_notes(refs)
+
+    def entry(f: Path) -> dict:
+        rel = str(f.relative_to(refs))
+        ext = f.suffix.lower()
+        st = f.stat()
+        v = notes.get(rel)
+        return {"path": rel, "name": f.name,
+                "url": f"/projects/{base.name}/refs/{rel}?v={int(st.st_mtime)}",
+                "is_image": ext in IMG_EXTS, "is_audio": ext in AUDIO_EXTS,
+                "size": st.st_size,
+                "note": str(v.get("note") if isinstance(v, dict) else v or "").strip()}
+
+    def listing(d: Path, recursive: bool) -> list:
+        if not d.is_dir():
+            return []
+        files = (f for f in (d.rglob("*") if recursive else d.glob("*"))
+                 if f.is_file() and not f.name.startswith(".")
+                 and f.name not in REF_SKIP_FILES)
+        return [entry(f) for f in sorted(files, key=lambda f: str(f).lower())]
+
+    cats = [{"key": c, "files": listing(refs / c, True)} for c in REF_CATEGORIES]
+    root = listing(refs, False)          # 散放在 refs/ 根的文件 = 整体风格参考
+    if root:
+        cats.append({"key": "", "files": root})
+    return {"project": base.name, "categories": cats}
+
+
+@app.post("/api/refs/upload")
+async def api_refs_upload(request: Request, project: str = "demo",
+                          category: str = "style", subdir: str = "",
+                          filename: str = "ref"):
+    """参考图页上传:请求体即文件原始字节(避免 multipart 依赖)。
+    文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、props/costumes 等定向子目录。"""
+    base = _proj_base(project)
+    if category not in REF_CATEGORIES:
+        raise HTTPException(400, f"category must be one of {REF_CATEGORIES}")
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "empty upload body")
+    if len(data) > MAX_REF_UPLOAD:
+        raise HTTPException(400, "file too large (>100MB)")
+    stem, ext = os.path.splitext(filename)
+    ext = re.sub(r"[^a-z0-9.]", "", ext.lower())[:10]
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem).strip("._-")
+    stem = re.sub(r"_{2,}", "_", stem)[:80] or "ref"
+    sub = re.sub(r"[^A-Za-z0-9._-]", "_", subdir).strip("._-")[:60]
+    d = (base / "refs" / category / sub) if sub else (base / "refs" / category)
+    d.mkdir(parents=True, exist_ok=True)
+    p, i = d / f"{stem}{ext}", 1
+    while p.exists():
+        p, i = d / f"{stem}_{i}{ext}", i + 1
+    p.write_bytes(data)
+    rel = str(p.relative_to(base / "refs"))
+    return {"ok": True, "project": base.name, "path": rel,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+@app.post("/api/refs/note")
+async def api_refs_note(body: dict):
+    """保存/编辑参考图注释:写 refs/annotations.json 并同步 NOTES.md 自动块
+    (NOTES.md 是 workflow 既有约定的「有则必读」文件,视觉/配乐 Agent 由此读到逐图注释)。"""
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    rel = str(body.get("path") or "").strip().strip("/")
+    if not rel or any(part in ("", ".", "..") for part in rel.split("/")):
+        raise HTTPException(400, "invalid path")
+    target = refs / rel
+    if not target.is_file():
+        raise HTTPException(404, f"No such ref file: {rel}")
+    note = str(body.get("note") or "").strip()
+    notes = _load_ref_notes(refs)
+    if note:
+        notes[rel] = {"note": note,
+                      "updated": datetime.now().isoformat(timespec="seconds")}
+    else:
+        notes.pop(rel, None)
+    atomic_write_json(refs / "annotations.json", notes)
+    _write_ref_notes_md(refs, notes)
+    return {"ok": True, "project": base.name, "path": rel, "note": note}
+
+
+@app.post("/api/refs/delete")
+async def api_refs_delete(body: dict):
+    """删除参考文件:移除文件与其注释(annotations.json + NOTES.md 同步),空子目录顺带清掉。"""
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    rel = str(body.get("path") or "").strip().strip("/")
+    if not rel or any(part in ("", ".", "..") for part in rel.split("/")):
+        raise HTTPException(400, "invalid path")
+    target = refs / rel
+    if not target.is_file():
+        raise HTTPException(404, f"No such ref file: {rel}")
+    target.unlink()
+    # 清理删空的子目录(保留分类目录与 refs/ 本身)
+    d = target.parent
+    while d != refs and d.parent != refs and not any(d.iterdir()):
+        d.rmdir()
+        d = d.parent
+    notes = _load_ref_notes(refs)
+    if notes.pop(rel, None) is not None:
+        atomic_write_json(refs / "annotations.json", notes)
+        _write_ref_notes_md(refs, notes)
+    return {"ok": True, "project": base.name, "path": rel}
+
+
 @app.get("/api/projconfig")
 async def api_projconfig_get(project: str = "demo"):
     """项目级设置(输出设置/时长设置/审核设置),每个项目独立。"""
@@ -3200,9 +3352,9 @@ async def api_projects_create(body: dict):
             f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
-        "完成以上工作后只做汇报,并【提醒用户】:可以把觉得值得参考的图放入 "
-        f"data/projects/{name}/refs/(style/ characters/ scenes/ props/),"
-        "希望使用的音乐放入 refs/music/(约定见该目录 README.md);"
+        "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考图】页,"
+        "按分类(视觉风格/角色/场景/道具/音乐/封面)上传参考图与希望使用的音乐,并可为每个文件添加注释说明用途"
+        "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
     await api_chat({"agent": orch, "message": "\n".join(msg),
                     "project": name, "source": "user",
