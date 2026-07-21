@@ -1,0 +1,28 @@
+{
+  "name": "derivative-fiction",
+  "version": "1.0.0",
+  "description": "基于既有世界圣经/角色/资产的衍生小说创作团队:企划→大纲→文风→章节规划→写作→润色→QA→发布",
+  "categories": {
+    "13-derivative-fiction": "衍生创作"
+  },
+  "agents": [
+    {"id": "13-derivative-fiction/derivative-planner"},
+    {"id": "13-derivative-fiction/novel-outline"},
+    {"id": "13-derivative-fiction/prose-style"},
+    {"id": "13-derivative-fiction/chapter-planner"},
+    {"id": "13-derivative-fiction/prose-writer"},
+    {"id": "13-derivative-fiction/line-editor"},
+    {"id": "11-qa/prose-qa"},
+    {"id": "12-publishing/novel-release"}
+  ],
+  "workflows": ["workflows/novel.yaml"],
+  "outputs_ns": "derivative",
+  "requires": {
+    "artifacts": [
+      "bible/world.json",
+      "bible/dictionary.json",
+      "bible/characters/index.json"
+    ],
+    "plugins": []
+  }
+}

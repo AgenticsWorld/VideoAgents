@@ -11,6 +11,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 ## 主要能力
 
 - 83 个 Agent，分属 13 个制作部门
+- 声明式 Agent 插件机制：复制目录即扩展新工位与业务流程（内置衍生小说创作插件 `plugins/derivative-fiction/`）
 - 剧情、美术、分镜、成片和发布环节的人工确认闸门
 - 文件化产物、项目内版本管理和可审计 QA 记录
 - 支持 Claude CLI、Codex CLI 和 OpenAI 兼容的 DeepAgents 引擎

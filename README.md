@@ -17,6 +17,7 @@ workspace and are not committed by default.
 ## Highlights
 
 - 83 focused agents organized into 13 production departments
+- Declarative agent plugins: drop a directory into `plugins/` to add new roles and workflows (ships with the `plugins/derivative-fiction/` derivative-novel team)
 - Human approval gates for story, art direction, storyboards, cuts, and release
 - File-based artifacts with per-project versioning and auditable QA records
 - Claude CLI, Codex CLI, and OpenAI-compatible DeepAgents execution engines

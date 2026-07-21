@@ -42,3 +42,10 @@
 - 新增 Agent:建目录 + SOUL.md,并在 `workflow.yaml` 挂上任务节点,更新本表。
 - 修改职责边界:同时改双方 SOUL.md 的「不做什么」,避免真空或重叠。
 - rubric 演进:存放于 `00-orchestration/evaluation/rubrics/`,版本号后缀(`_v2`)。
+
+## 插件扩展
+
+主流程之外的业务(如衍生小说创作)不进本目录,做成**声明式插件**放仓库根 `plugins/<name>/`:
+plugin.json(manifest)+ agents/…/SOUL.md(同一模板)+ 可选 workflows/*.yaml(独立 DAG)。
+复制目录即安装,启停在 Web 控制台 ⚙️ 设置 →「插件」页;机制与纪律见 `WORKFLOW.md` §10,
+编写规范见 `plugins/README.md`。首个官方插件:`plugins/derivative-fiction/`(衍生小说创作团队)。

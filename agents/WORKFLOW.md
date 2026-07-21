@@ -2,7 +2,7 @@
 
 > 输入:一本小说(txt/epub,按章节存放)。
 > 输出:可发布的成片(分集视频 + 字幕 + 封面 + 各平台包)。
-> 团队:83 个 Agent,13 个类别,目录见 `agents/README.md`。
+> 团队:83 个 Agent,13 个类别,目录见 `agents/README.md`;可经插件扩展新工位与业务流程(§10,如衍生小说创作插件 `plugins/derivative-fiction/`)。
 > 本文档是唯一的流程权威(single source of truth for process);各 Agent 的职责细节见其目录下的 `SOUL.md`。
 
 ---
@@ -784,3 +784,56 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 2. 换 seed 重 roll 用 `--seed`;候选批量用 `--n`,不要自己写循环脚本拼文件名;
 3. 生成失败(未配 Key、渠道超时、内容拦截)**如实写入回执并上报,严禁伪造或占位产物**;
 4. 模型能力不满足工单要求(如运镜类型不支持)→ 上报 orchestrator,不擅自降级替换。
+
+## 10. Agent 插件机制(团队扩展)
+
+内置 83 个 Agent 覆盖「小说→视频」主流程;主流程之外的衍生业务(如基于世界圣经的衍生小说创作)
+通过**声明式插件**扩展团队,不改内核。插件不含任何可执行代码——SOUL.md 即身份、YAML 即流程,
+与内置 Agent 享受完全相同的派单/评审/闸门待遇。编写规范详见 `plugins/README.md`。
+
+### 10.1 插件包格式
+
+```
+plugins/<plugin-name>/
+├── plugin.json            # manifest(JSON,服务端零 yaml 依赖;字段见下)
+├── README.md              # 插件说明(建议)
+├── agents/
+│   └── <NN-category>/<name>/SOUL.md   # 沿用 agents/_TEMPLATE.md 骨架,零新约定
+└── workflows/<name>.yaml  # 可选:插件独立流程 DAG(与 agents/workflow.yaml 同构)
+```
+
+`plugin.json` 核心字段:`name`(须与目录名一致)、`version`、`description`、
+`categories`(新类别注册:`{"13-derivative-fiction": "衍生创作"}`,编号沿用 13+ 段避让内置 00–12)、
+`agents`(成员清单:`[{"id": "13-derivative-fiction/prose-writer", "stateless": false, "dispatcher": false}]`;
+也可把成员放进内置类别如 `11-qa/`,前缀规则照常生效)、
+`workflows`(流程 DAG 文件相对路径)、`outputs_ns`(产物命名空间,如 `derivative`——插件产物一律写
+`data/projects/<slug>/<outputs_ns>/` 内,runs/、qa/defects/ 等通用记录不受限)、
+`requires.artifacts`(前置产物声明,如需正史 `bible/` 冻结)。
+
+### 10.2 发现、启停与生效
+
+- **复制目录进 `plugins/` 即安装**(或 Web 控制台 ⚙️ 设置 →「插件」页上传 zip);默认启用,
+  启停在「插件」页操作。manifest 校验不过(id 撞名/缺 SOUL.md/JSON 损坏)的插件整体不注册,错误在「插件」页可见。
+- 启用后:成员出现在控制台左侧列表(按类别编号归组),可对话、可被 orchestrator 派单;
+  系统提示词自动注入其插件身份(所属插件、流程文件、产物命名空间);
+  orchestrator 的系统提示词自动获得「已启用插件」清单与调度纪律。
+- **agent id 全局唯一**:与内置团队或其他插件撞名的成员会被拒绝注册(错误可见),先到先得。
+
+### 10.3 插件流程的调度纪律
+
+1. 插件 `workflows/*.yaml` 与主 `workflow.yaml` **同等地位**:机器可读 DAG,约定(for_each 扇出、
+   validation 三道闸、gate/human)完全一致;节点 id 用插件自己的前缀(如 `nv0-premise`),不与主流程冲突。
+2. orchestrator 接到插件业务后,把插件 DAG 节点**并入项目 `runs/dag.json` 统一跟踪**
+   (可与主流程共存),改完照常 `dagcheck.py --strict`。
+3. 工单格式 §6、运行记录四件套 §6.1、评分与缺陷单 §7、文件名 ASCII 红线(§1 原则 9)对插件任务同等生效;
+   人工签字点用 `--sign`,与 H1–H5 同规格。
+4. `requires.artifacts` 未满足时先补主流程对应阶段,不得硬跑。
+5. 插件若产生新设定,**不得写入正史 `bible/`**——写自己命名空间下的 `bible-delta/`,
+   升格进正史必须走 memory-bible 仲裁 + 用户签字(见 memory-bible SOUL.md「衍生分支圣经」)。
+
+### 10.4 安全红线
+
+- SOUL.md 会**逐字注入模型系统提示词**,插件即提示词注入面——**安装第三方插件前必须人工审阅全部内容**。
+- 插件是纯声明式的(plugin.json + SOUL.md + workflows YAML),**不允许包含可执行代码**;
+  Agent 运行期为完成任务写的一次性脚本照常落项目 `code/`,与内置成员同规。
+- 产物越出 `outputs_ns` 命名空间写入(尤其改写正史 bible/、其他插件命名空间)按调度缺陷处理。

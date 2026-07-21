@@ -11,6 +11,7 @@
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -23,6 +24,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zipfile
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime
@@ -199,6 +201,151 @@ def save_state(state: dict):
 
 
 STATE = load_state()
+
+# ---------------- Agent 插件机制(声明式,详见 WORKFLOW.md §10 与 plugins/README.md) ----------------
+# 插件 = plugins/<name>/ 目录:plugin.json(manifest)+ agents/<类别>/<名字>/SOUL.md
+# (+ 可选 workflows/*.yaml 独立流程 DAG)。纯声明式——插件不含可执行代码,SOUL.md 即身份,
+# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认启用),
+# 启停状态记 state.json 的 plugins_disabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
+PLUGINS_DIR = ROOT / "plugins"
+PLUGIN_MANIFEST = "plugin.json"
+MAX_PLUGIN_UPLOAD = 50 * 1024 * 1024
+_PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][\w\-]{0,59}")
+_AGENT_ID_RE = re.compile(r"[\w\-]+/[\w\-]+")     # 与 safe_agent 同口径:恒为「类别/名字」两段
+_PLUGINS_CACHE: tuple[float, list] = (0.0, [])
+_PLUGINS_CACHE_TTL = 30.0
+
+
+def _read_plugin_manifest(pdir: Path) -> dict:
+    """读取并规范化单个插件的 manifest;所有问题写入 errors(有 errors 的插件不注册 Agent)。"""
+    info = {"name": pdir.name, "version": "", "description": "", "path": str(pdir),
+            "categories": {}, "agents": [], "workflows": [], "outputs_ns": "",
+            "requires": {}, "errors": []}
+    try:
+        m = json.loads((pdir / PLUGIN_MANIFEST).read_text())
+    except FileNotFoundError:
+        info["errors"].append(f"缺少 {PLUGIN_MANIFEST}")
+        return info
+    except Exception as e:  # noqa: BLE001
+        info["errors"].append(f"{PLUGIN_MANIFEST} 解析失败:{e}")
+        return info
+    if not isinstance(m, dict):
+        info["errors"].append(f"{PLUGIN_MANIFEST} 顶层必须是 JSON 对象")
+        return info
+    if m.get("name") and m["name"] != pdir.name:
+        info["errors"].append(f"manifest name({m['name']})与目录名({pdir.name})不一致")
+    info["version"] = str(m.get("version") or "")
+    info["description"] = str(m.get("description") or "")
+    info["outputs_ns"] = str(m.get("outputs_ns") or "").strip().strip("/")
+    info["requires"] = m.get("requires") if isinstance(m.get("requires"), dict) else {}
+    cats = m.get("categories") or {}
+    if not isinstance(cats, dict):
+        info["errors"].append("categories 必须是 {类别目录名: 显示名} 对象")
+    else:
+        for k, v in cats.items():
+            if not re.fullmatch(r"[\w\-]+", str(k)):
+                info["errors"].append(f"非法类别名:{k}")
+            else:
+                info["categories"][str(k)] = str(v)
+    for a in (m.get("agents") or []):
+        a = {"id": a} if isinstance(a, str) else (a if isinstance(a, dict) else {})
+        aid = str(a.get("id") or "")
+        if not _AGENT_ID_RE.fullmatch(aid):
+            info["errors"].append(f"非法 agent id(须为「类别/名字」两段):{aid or '(空)'}")
+            continue
+        if not (pdir / "agents" / aid / "SOUL.md").is_file():
+            info["errors"].append(f"缺少 agents/{aid}/SOUL.md")
+            continue
+        info["agents"].append({"id": aid, "stateless": bool(a.get("stateless")),
+                               "dispatcher": bool(a.get("dispatcher"))})
+    if not info["agents"] and not info["errors"]:
+        info["errors"].append("manifest 未声明任何 agents")
+    for w in (m.get("workflows") or []):
+        w = str(w).strip().strip("/")
+        if ".." in w.split("/") or not w.endswith((".yaml", ".yml")):
+            info["errors"].append(f"非法 workflow 路径:{w}")
+        elif not (pdir / w).is_file():
+            info["errors"].append(f"缺少 workflow 文件:{w}")
+        else:
+            info["workflows"].append(w)
+    return info
+
+
+def list_plugins(refresh: bool = False) -> list[dict]:
+    """扫描 plugins/ 下全部插件(含 manifest 校验结果与启停状态);默认 30s 缓存。"""
+    global _PLUGINS_CACHE
+    if not refresh and time.time() < _PLUGINS_CACHE[0]:
+        return _PLUGINS_CACHE[1]
+    plugins, seen = [], {}                        # seen: agent id -> 插件名(跨插件撞名检测)
+    if PLUGINS_DIR.is_dir():
+        for pdir in sorted(PLUGINS_DIR.iterdir()):
+            if not pdir.is_dir() or not _PLUGIN_NAME_RE.fullmatch(pdir.name):
+                continue
+            info = _read_plugin_manifest(pdir)
+            kept = []
+            for a in info["agents"]:
+                if (AGENTS_DIR / a["id"] / "SOUL.md").is_file():
+                    info["errors"].append(f"agent id 与内置团队冲突:{a['id']}")
+                elif a["id"] in seen:
+                    info["errors"].append(f"agent id 与插件 {seen[a['id']]} 冲突:{a['id']}")
+                else:
+                    seen[a["id"]] = pdir.name
+                    kept.append(a)
+            info["agents"] = kept
+            info["enabled"] = pdir.name not in set(STATE.get("plugins_disabled") or [])
+            info["active"] = info["enabled"] and not info["errors"]   # 有 errors 的插件不注册
+            plugins.append(info)
+    _PLUGINS_CACHE = (time.time() + _PLUGINS_CACHE_TTL, plugins)
+    return plugins
+
+
+def active_plugins() -> list[dict]:
+    return [p for p in list_plugins() if p["active"]]
+
+
+def _expire_agent_caches():
+    global _PLUGINS_CACHE, _AGENTS_CACHE
+    _PLUGINS_CACHE = (0.0, [])
+    _AGENTS_CACHE = (0.0, [])
+
+
+def plugin_of_agent(agent_id: str) -> dict | None:
+    """agent id 归属的已启用插件(内置 Agent 返回 None)。"""
+    for p in active_plugins():
+        if any(a["id"] == agent_id for a in p["agents"]):
+            return p
+    return None
+
+
+def agent_dir(agent_id: str) -> Path | None:
+    """agent id → 目录解析:内置团队优先,其次已启用插件;非法/未知 id 返回 None(防路径遍历)。"""
+    if not _AGENT_ID_RE.fullmatch(agent_id or ""):
+        return None
+    d = AGENTS_DIR / agent_id
+    if (d / "SOUL.md").is_file():
+        return d
+    p = plugin_of_agent(agent_id)
+    if p:
+        d = Path(p["path"]) / "agents" / agent_id
+        if (d / "SOUL.md").is_file():
+            return d
+    return None
+
+
+def all_category_names() -> dict[str, str]:
+    """内置类别 ∪ 已启用插件注册的类别(内置同名优先)。"""
+    cats = dict(CATEGORY_NAMES)
+    for p in active_plugins():
+        for k, v in p["categories"].items():
+            cats.setdefault(k, v)
+    return cats
+
+
+def is_dispatcher_agent(agent_id: str) -> bool:
+    if agent_id in DISPATCHERS:
+        return True
+    p = plugin_of_agent(agent_id)
+    return bool(p and any(a["id"] == agent_id and a["dispatcher"] for a in p["agents"]))
 
 # ---------------- 生成模型配置(图像/视频) ----------------
 GENCONFIG_PATH = WEBUI_DIR / "genconfig.json"
@@ -894,33 +1041,43 @@ def list_agents(refresh: bool = False) -> list[dict]:
     global _AGENTS_CACHE
     if not refresh and time.time() < _AGENTS_CACHE[0]:
         return _AGENTS_CACHE[1]
+    if refresh:
+        list_plugins(refresh=True)
+    cats = all_category_names()
     agents = []
+
+    def _add(soul: Path, aid: str, plugin: str | None):
+        title, tagline = aid.split("/")[-1], ""
+        try:
+            for line in soul.read_text().splitlines()[:8]:
+                m = re.match(r"^#\s*SOUL\.md\s*[—\-]+\s*(.+)$", line.strip())
+                if m:
+                    title = m.group(1).strip()
+                elif line.strip().startswith(">") and not tagline:
+                    tagline = line.strip().lstrip("> ").strip()
+        except Exception:
+            pass
+        cat = aid.split("/")[0]
+        agents.append({
+            "id": aid,
+            "name": title,
+            "tagline": tagline,
+            "category": cat,
+            "category_name": cats.get(cat, cat),
+            "dispatcher": is_dispatcher_agent(aid),
+            "plugin": plugin,
+        })
+
     for cat_dir in sorted(AGENTS_DIR.iterdir()):
         if not cat_dir.is_dir() or cat_dir.name not in CATEGORY_NAMES:
             continue
         for a_dir in sorted(cat_dir.iterdir()):
-            soul = a_dir / "SOUL.md"
-            if not soul.is_file():
-                continue
-            title, tagline = a_dir.name, ""
-            try:
-                for line in soul.read_text().splitlines()[:8]:
-                    m = re.match(r"^#\s*SOUL\.md\s*[—\-]+\s*(.+)$", line.strip())
-                    if m:
-                        title = m.group(1).strip()
-                    elif line.strip().startswith(">") and not tagline:
-                        tagline = line.strip().lstrip("> ").strip()
-            except Exception:
-                pass
-            aid = f"{cat_dir.name}/{a_dir.name}"
-            agents.append({
-                "id": aid,
-                "name": title,
-                "tagline": tagline,
-                "category": cat_dir.name,
-                "category_name": CATEGORY_NAMES[cat_dir.name],
-                "dispatcher": aid in DISPATCHERS,
-            })
+            if (a_dir / "SOUL.md").is_file():
+                _add(a_dir / "SOUL.md", f"{cat_dir.name}/{a_dir.name}", None)
+    for p in active_plugins():
+        for a in p["agents"]:
+            _add(Path(p["path"]) / "agents" / a["id"] / "SOUL.md", a["id"], p["name"])
+    agents.sort(key=lambda a: a["id"])           # 插件 Agent 按类别编号归入既有分组顺序
     _AGENTS_CACHE = (time.time() + _AGENTS_CACHE_TTL, agents)
     return agents
 
@@ -948,7 +1105,7 @@ def _fmt_num(x) -> str:
 
 
 def build_role_prompt(agent_id: str, project: str) -> str:
-    soul = (AGENTS_DIR / agent_id / "SOUL.md").read_text()
+    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text()
     proj_rel = f"data/projects/{project}"
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
@@ -1027,6 +1184,18 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
 - **70-89 严格**:分数合格线上调 5 分、比例上限减半;blocker/major 均拦;minor 也要开缺陷单
 - **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵"""
+    plug = plugin_of_agent(agent_id)
+    if plug:
+        wf_list = "、".join(f"plugins/{plug['name']}/{w}" for w in plug["workflows"]) \
+            or "(无独立 workflow,并入主流程)"
+        ns_line = (f"\n- 产物命名空间:{proj_rel}/{plug['outputs_ns']}/ —— 除非工单显式指定其他路径,"
+                   f"你的落盘产物一律写入该命名空间(runs/、qa/defects/ 等通用运行记录不受此限)"
+                   if plug["outputs_ns"] else "")
+        p += f"""
+
+## 你来自插件「{plug['name']}」{('—— ' + plug['description']) if plug['description'] else ''}
+- 本插件目录:plugins/{plug['name']}/;插件流程权威文件:{wf_list}(需要时自行阅读){ns_line}
+- 团队通用纪律对插件成员同等生效:工单格式(WORKFLOW.md §6)、运行记录四件套(§6.1)、质量三道闸与缺陷单(§7)、文件名 ASCII 红线(§1 原则 9)、Bible 冲突只上报不擅改"""
     if agent_id in PACKAGING_AGENTS:
         pk = ps.get("packaging") or {}
 
@@ -1080,7 +1249,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
-    if agent_id in DISPATCHERS:
+    if is_dispatcher_agent(agent_id):
         p += f"""
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
@@ -1115,6 +1284,21 @@ def build_role_prompt(agent_id: str, project: str) -> str:
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex|kimi)
    或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
+        plugs = active_plugins()
+        if plugs:
+            lines = []
+            for pl in plugs:
+                wf = "、".join(f"plugins/{pl['name']}/{w}" for w in pl["workflows"]) or "(无独立 workflow)"
+                lines.append(
+                    f"- **{pl['name']}**{('(' + pl['description'] + ')') if pl['description'] else ''}:"
+                    f"成员 {'、'.join(a['id'] for a in pl['agents'])};流程 DAG:{wf}"
+                    + (f";产物命名空间 {pl['outputs_ns']}/" if pl["outputs_ns"] else ""))
+            p += "\n\n## 已启用插件(扩展工位,派单方式与内置成员完全相同)\n" + "\n".join(lines) + f"""
+插件调度纪律:
+- 用户要求做某插件覆盖的业务时,先读该插件的 workflows/*.yaml(与 agents/workflow.yaml 同等地位的机器可读 DAG),
+  把其节点并入 {proj_rel}/runs/dag.json 统一跟踪(插件 DAG 自带 id 前缀,不与主流程冲突;改完照常跑 dagcheck --strict)
+- 插件任务同样走工单格式 §6、四件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
+- 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑"""
     return p
 
 # ---------------- 运行 claude -p ----------------
@@ -1171,14 +1355,17 @@ async def read_jsonl_line(stream: asyncio.StreamReader) -> bytes:
 
 
 def is_stateless_agent(agent_id: str) -> bool:
-    return agent_id in STATELESS_AGENTS or agent_id.startswith(STATELESS_PREFIXES)
+    if agent_id in STATELESS_AGENTS or agent_id.startswith(STATELESS_PREFIXES):
+        return True
+    p = plugin_of_agent(agent_id)                # 插件 Agent 可在 manifest 声明 stateless
+    return bool(p and any(a["id"] == agent_id and a["stateless"] for a in p["agents"]))
 
 
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
     # 调度型 Agent 要等整条流水线,超时放宽
-    run_timeout = RUN_TIMEOUT * (4 if agent_id in DISPATCHERS else 1)
-    is_dispatcher = agent_id in DISPATCHERS
+    run_timeout = RUN_TIMEOUT * (4 if is_dispatcher_agent(agent_id) else 1)
+    is_dispatcher = is_dispatcher_agent(agent_id)
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
@@ -3231,6 +3418,100 @@ async def api_agents(refresh: bool = False):
     return list_agents(refresh=refresh)
 
 
+# ---------------- Agent 插件管理 ----------------
+
+
+@app.get("/api/plugins")
+async def api_plugins():
+    return list_plugins(refresh=True)
+
+
+@app.post("/api/plugins/toggle")
+async def api_plugins_toggle(body: dict):
+    name = str(body.get("name") or "")
+    if name not in {p["name"] for p in list_plugins(refresh=True)}:
+        raise HTTPException(404, f"no such plugin: {name}")
+    disabled = set(STATE.get("plugins_disabled") or [])
+    if body.get("enabled"):
+        disabled.discard(name)
+    else:
+        disabled.add(name)
+    STATE["plugins_disabled"] = sorted(disabled)
+    save_state(STATE)
+    _expire_agent_caches()
+    return {"ok": True, "plugins": list_plugins(refresh=True)}
+
+
+@app.post("/api/plugins/upload")
+async def api_plugins_upload(request: Request):
+    """安装插件包:请求体即 zip 原始字节(与 refs 上传同口径,免 multipart 依赖)。
+    zip 根可以直接是插件内容(含 plugin.json),也可以套一层同名目录;
+    解压前做路径穿越拦截,同名插件已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "empty upload body")
+    if len(data) > MAX_PLUGIN_UPLOAD:
+        raise HTTPException(400, "plugin package too large (>50MB)")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        names = [n for n in zf.namelist() if not n.endswith("/")]
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"invalid zip: {e}")
+    # 定位 plugin.json:取层级最浅的一个,其所在目录即插件根
+    manifests = sorted((n for n in names if Path(n).name == PLUGIN_MANIFEST),
+                       key=lambda n: n.count("/"))
+    if not manifests:
+        raise HTTPException(400, f"zip 内找不到 {PLUGIN_MANIFEST}")
+    prefix = manifests[0][: -len(PLUGIN_MANIFEST)]          # ""(根)或 "xxx/"
+    try:
+        m = json.loads(zf.read(manifests[0]))
+        name = str(m.get("name") or "").strip() or Path(prefix.rstrip("/")).name
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"{PLUGIN_MANIFEST} 解析失败:{e}")
+    if not _PLUGIN_NAME_RE.fullmatch(name or ""):
+        raise HTTPException(400, f"非法插件名:{name!r}")
+    target = PLUGINS_DIR / name
+    if target.exists():
+        raise HTTPException(409, f"插件 {name} 已存在;请先删除旧版再安装")
+    PLUGINS_DIR.mkdir(exist_ok=True)
+    extracted = 0
+    for n in names:
+        if not n.startswith(prefix):
+            continue
+        rel = n[len(prefix):]
+        if not rel:
+            continue
+        dest = (target / rel).resolve()
+        if not str(dest).startswith(str(target.resolve()) + os.sep):
+            shutil.rmtree(target, ignore_errors=True)
+            raise HTTPException(400, f"zip 含路径穿越条目:{n}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(zf.read(n))
+        extracted += 1
+    if not extracted:
+        raise HTTPException(400, "zip 内没有可解压的插件文件")
+    _expire_agent_caches()
+    info = next((p for p in list_plugins(refresh=True) if p["name"] == name), None)
+    return {"ok": True, "name": name, "files": extracted, "plugin": info}
+
+
+@app.post("/api/plugins/delete")
+async def api_plugins_delete(body: dict):
+    name = str(body.get("name") or "")
+    if not _PLUGIN_NAME_RE.fullmatch(name):
+        raise HTTPException(400, f"非法插件名:{name!r}")
+    target = PLUGINS_DIR / name
+    if not (target.is_dir() and (target / PLUGIN_MANIFEST).exists()):
+        raise HTTPException(404, f"no such plugin: {name}")
+    shutil.rmtree(target)
+    disabled = set(STATE.get("plugins_disabled") or [])
+    disabled.discard(name)
+    STATE["plugins_disabled"] = sorted(disabled)
+    save_state(STATE)
+    _expire_agent_caches()
+    return {"ok": True, "plugins": list_plugins(refresh=True)}
+
+
 @app.get("/api/agentmodels")
 async def api_agentmodels():
     """全部 Agent 的模型配置:mode=「Agent模型」策略;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
@@ -3244,7 +3525,7 @@ async def api_agentmodels():
 @app.post("/api/agentmodels")
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
-    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+    if not agent_dir(agent):
         raise HTTPException(404, f"Unknown agent: {agent}")
     overrides = load_agentmodels()
     if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
@@ -3270,10 +3551,10 @@ async def api_agentmodels_set(body: dict):
 
 @app.get("/api/soul")
 async def api_soul(agent: str):
-    p = AGENTS_DIR / safe_agent(agent) / "SOUL.md"
-    if not p.is_file():
+    d = agent_dir(safe_agent(agent))
+    if not d:
         raise HTTPException(404, "no such agent")
-    return {"agent": agent, "soul": p.read_text()}
+    return {"agent": agent, "soul": (d / "SOUL.md").read_text()}
 
 
 @app.get("/api/enginecheck")
@@ -3672,7 +3953,7 @@ async def api_chat(body: dict):
     parent = body.get("parent") or None
     if not message:
         raise HTTPException(400, "message must not be empty")
-    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+    if not agent_dir(agent):
         raise HTTPException(404, f"Unknown agent: {agent}")
     # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
     if not body.get("force"):
