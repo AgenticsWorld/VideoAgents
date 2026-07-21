@@ -239,7 +239,8 @@ const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
   ['music_v2','Eleven Music v2(最新)'],
 ];
-/* 豆包语音 openspeech v3:model = X-Api-Resource-Id 档位;S_ 开头克隆音色自动切 seed-icl-2.0 */
+/* 新版豆包语音 openspeech v3(X-Api-Key 单头鉴权):model = X-Api-Resource-Id 档位;
+   S_ 开头克隆音色自动切 seed-icl-2.0 */
 const VOLC_TTS_MODELS=[
   ['seed-tts-2.0','Doubao-Seed-TTS 2.0(最新,深度语义理解/指令式情感控制)'],
   ['seed-tts-1.0','Doubao-Seed-TTS 1.0'],
@@ -346,22 +347,35 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint'},
       'Key 在 <a href="https://ideogram.ai/manage-api" target="_blank">ideogram.ai/manage-api</a> 生成'));
   }else if(p==='volcengine'&&kind==='tts'){
-    const ar=el('div',{className:'row'});
-    ar.appendChild(el('label',{},'App ID'));
-    ar.appendChild(el('input',{type:'text',id:'tts-volc-appid',placeholder:'语音技术控制台的应用 App ID(纯数字)'}));
-    d.appendChild(ar);
-    const kr=keyRow('tts-volc-key','语音技术控制台的 Access Token(非方舟 ARK Key)');
-    kr.querySelector('label').textContent='Access Token';
-    d.appendChild(kr);
+    d.appendChild(keyRow('tts-volc-key','新版控制台「API Key 管理」创建的 API Key'));
     d.appendChild(modelRow('tts-volc-model','tts-volc-custom'));
     const vr=el('div',{className:'row'});
     vr.appendChild(el('label',{},'默认音色'));
     vr.appendChild(el('input',{type:'text',id:'tts-volc-voice',placeholder:'speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…'}));
     d.appendChild(vr);
+    // 音色库:ListSpeakers 全量拉取 + 关键词过滤 + 试听 + 设为默认
+    const sr=el('div',{className:'row'});
+    sr.appendChild(el('label',{},'音色库'));
+    const fi=el('input',{type:'text',id:'tts-volc-search',placeholder:'关键词过滤(名称/性别/年龄/标签/语言)'});
+    fi.oninput=()=>{if(VOLC_LIB.length)volcRenderLib()};
+    sr.appendChild(fi);
+    const lb=el('button',{},'拉取音色库');
+    lb.onclick=volcLoadLib;
+    sr.appendChild(lb);d.appendChild(sr);
+    const lr=el('div',{className:'row'});
+    lr.appendChild(el('label',{},''));
+    const lsel=el('select',{id:'tts-volc-lib'});
+    lr.appendChild(lsel);
+    const pb=el('button',{},'▶ 试听');
+    pb.onclick=volcPreviewLib;
+    const ab=el('button',{},'✓ 设为默认音色');
+    ab.onclick=volcSetDefault;
+    lr.appendChild(pb);lr.appendChild(ab);d.appendChild(lr);
+    d.appendChild(el('div',{className:'status',id:'tts-volc-status'}));
     d.appendChild(el('div',{className:'hint'},
-      '豆包语音合成大模型(openspeech v3 单向流式,<a href="https://www.volcengine.com/docs/6561/1257543" target="_blank">API 文档</a>);'
-      +'凭证在 <a href="https://console.volcengine.com/speech/app" target="_blank">语音技术控制台</a> 的应用里(App ID + Access Token,与方舟 ARK Key 不同体系);'
-      +'音色 speaker 名见 <a href="https://www.volcengine.com/docs/6561/1257544" target="_blank">音色列表</a>(2.0 音色需开通豆包语音 2.0);Agent 可用 --voice 按角色覆盖'));
+      '新版豆包语音合成大模型(openspeech v3 单向流式,<a href="https://www.volcengine.com/docs/6561/1598757" target="_blank">API 文档</a>);'
+      +'API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」;'
+      +'音色在控制台「<a href="https://console.volcengine.com/speech/new/voices" target="_blank">音色库</a>」试听/开通,克隆音色 S_ 开头自动切声音复刻 2.0'));
   }else if(p==='volcengine'){
     d.appendChild(keyRow(`${kind}-volc-key`,'火山方舟 ARK API Key'));
     d.appendChild(modelRow(`${kind}-volc-model`,`${kind}-volc-custom`));
@@ -569,6 +583,52 @@ async function elAddLib(){
   }catch(e){elStatus('✗ '+e.message,false)}
 }
 
+/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 在 ⚙️ 设置 → 资源消耗 配置) ---------- */
+let VOLC_LIB=[];  // 最近一次拉取的音色库(试听/设默认时按下标取)
+let VOLC_AUDIO=null;
+const volcVoiceLabel=v=>[v.name,v.gender,v.age,...(v.labels||[]).slice(0,2),
+  (v.languages||[]).join('/'),v.voice_type].filter(Boolean).join(' · ');
+function volcStatus(msg,ok){const st=$('#tts-volc-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
+function volcRenderLib(){
+  const kw=$('#tts-volc-search').value.trim().toLowerCase();
+  const sel=$('#tts-volc-lib');sel.innerHTML='';
+  VOLC_LIB.forEach((v,i)=>{
+    const hay=[v.name,v.gender,v.age,v.description,v.voice_type,
+      ...(v.labels||[]),...(v.languages||[]),...(v.emotions||[])].join(' ').toLowerCase();
+    if(kw&&!kw.split(/\s+/).every(w=>hay.includes(w)))return;
+    sel.appendChild(el('option',{value:String(i),textContent:volcVoiceLabel(v)}));
+  });
+}
+async function volcLoadLib(){
+  volcStatus(t('拉取音色库中…'));
+  try{
+    const m=$('#tts-volc-model').value;
+    const r=await api('/api/volc/speakers',
+      {resource_id:m===CUSTOM?$('#tts-volc-custom').value.trim():m});
+    VOLC_LIB=r.speakers||[];
+    volcRenderLib();
+    volcStatus(VOLC_LIB.length
+      ?I18N.f('✓ 音色库共 {n} 个音色(可关键词过滤,选中后试听/设为默认)',{n:VOLC_LIB.length})
+      :t('音色库为空(先在控制台开通音色)'),!!VOLC_LIB.length);
+  }catch(e){volcStatus('✗ '+e.message,false)}
+}
+function volcSel(){return VOLC_LIB[+$('#tts-volc-lib').value]}
+function volcPreviewLib(){
+  const v=volcSel();
+  if(!v)return volcStatus(t('✗ 先拉取并选中一个音色'),false);
+  if(!v.trial_url)return volcStatus(t('该音色无试听样本'),false);
+  if(VOLC_AUDIO){VOLC_AUDIO.pause();VOLC_AUDIO=null}
+  VOLC_AUDIO=new Audio(v.trial_url);VOLC_AUDIO.play();
+  volcStatus(I18N.f('▶ 试听 {name}',{name:v.name}),true);
+}
+function volcSetDefault(){
+  const v=volcSel();
+  if(!v)return volcStatus(t('✗ 先拉取并选中一个音色'),false);
+  $('#tts-volc-voice').value=v.voice_type;
+  volcStatus(I18N.f('✓ 已设为默认音色:{name}(记得点「保存设置」)',
+    {name:v.name+' · '+v.voice_type}),true);
+}
+
 /* ---------- 装载 / 收集 ---------- */
 function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
@@ -610,7 +670,6 @@ function loadIntoForm(){
     }
     if(kind==='tts'){
       $('#tts-or-voice').value=c.openrouter.voice||'eve';
-      $('#tts-volc-appid').value=c.volcengine?.app_id||'';
       $('#tts-volc-voice').value=c.volcengine?.voice||'';
       const elc=c.elevenlabs||{};
       $('#tts-el-key').value=elc.api_key||'';
@@ -664,7 +723,7 @@ function collect(){
         force_instrumental:$('#music-el-instr').checked};
     if(kind==='tts'){
       c.openrouter.voice=$('#tts-or-voice').value.trim()||'eve';
-      c.volcengine.app_id=$('#tts-volc-appid').value.trim();
+      c.volcengine.app_id='';   // 旧版控制台凭证字段,保存即清掉存量
       c.volcengine.voice=$('#tts-volc-voice').value.trim();
       const ev=$('#tts-el-voice').value;
       c.elevenlabs={api_key:$('#tts-el-key').value.trim(),

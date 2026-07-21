@@ -234,9 +234,10 @@ DEFAULT_GENCONFIG = {
         "provider": "openrouter",   # openrouter | volcengine(豆包语音) | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
-        # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=语音技术控制台的
-        # App ID + Access Token(非方舟 ARK Key);model 即 X-Api-Resource-Id 档位
-        "volcengine": {"app_id": "", "api_key": "", "model": "seed-tts-2.0",
+        # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
+        # 「API Key 管理」的 API Key(X-Api-Key 单头鉴权,非方舟 ARK Key;旧版
+        # App ID + Access Token 已废弃);model 即 X-Api-Resource-Id 档位
+        "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
@@ -788,16 +789,22 @@ def _openrouter_balance() -> dict | None:
         return None
 
 
-def _volc_signed_get(ak: str, sk: str, action: str, version: str,
-                     service: str = "billing", region: str = "cn-north-1",
-                     host: str = "open.volcengineapi.com") -> dict:
-    """火山引擎 OpenAPI GET 调用(HMAC-SHA256 签名,同官方 SDK Signer)。"""
+def _volc_signed_call(ak: str, sk: str, action: str, version: str,
+                      body: dict | None = None,
+                      service: str = "billing", region: str = "cn-north-1",
+                      host: str = "open.volcengineapi.com") -> dict:
+    """火山引擎 OpenAPI 调用(HMAC-SHA256 签名,同官方 SDK Signer);
+    body 为 None 走 GET,否则 POST JSON。"""
+    method = "GET" if body is None else "POST"
+    payload = b"" if body is None else json.dumps(body).encode()
     query = urllib.parse.urlencode(sorted({"Action": action, "Version": version}.items()))
     xdate = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    payload_hash = hashlib.sha256(b"").hexdigest()
+    payload_hash = hashlib.sha256(payload).hexdigest()
     headers = {"host": host, "x-date": xdate, "x-content-sha256": payload_hash}
+    if body is not None:
+        headers["content-type"] = "application/json; charset=utf-8"
     signed = ";".join(sorted(headers))
-    canon = "\n".join(["GET", "/", query,
+    canon = "\n".join([method, "/", query,
                        "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
                        signed, payload_hash])
     scope = f"{xdate[:8]}/{region}/{service}/request"
@@ -808,11 +815,18 @@ def _volc_signed_get(ak: str, sk: str, action: str, version: str,
         return hmac.new(key, msg.encode(), hashlib.sha256).digest()
     k_sign = h(h(h(h(sk.encode(), xdate[:8]), region), service), "request")
     sig = hmac.new(k_sign, sts.encode(), hashlib.sha256).hexdigest()
-    return _http_get_json(f"https://{host}/?{query}", headers={
+    req_headers = {
         "Authorization": (f"HMAC-SHA256 Credential={ak}/{scope}, "
                           f"SignedHeaders={signed}, Signature={sig}"),
         "X-Date": xdate, "X-Content-Sha256": payload_hash,
-    })
+    }
+    if body is None:
+        return _http_get_json(f"https://{host}/?{query}", headers=req_headers)
+    req_headers["Content-Type"] = "application/json; charset=utf-8"
+    req = urllib.request.Request(f"https://{host}/?{query}", data=payload,
+                                 headers=req_headers, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
 
 
 def _volc_balance() -> dict | None:
@@ -822,7 +836,7 @@ def _volc_balance() -> dict | None:
     if not (cfg.get("volc_enabled") and ak and sk):
         return None
     try:
-        r = _volc_signed_get(ak, sk, "QueryBalanceAcct", "2022-01-01").get("Result") or {}
+        r = _volc_signed_call(ak, sk, "QueryBalanceAcct", "2022-01-01").get("Result") or {}
         return {"balance": float(r.get("AvailableBalance")), "currency": "CNY"}
     except Exception:
         return None
@@ -2887,6 +2901,67 @@ async def api_elevenlabs_voice_add(body: dict):
         f"https://api.elevenlabs.io/v1/voices/add/{urllib.parse.quote(owner)}"
         f"/{urllib.parse.quote(vid)}", key, {"new_name": name})
     return {"ok": True, "voice_id": d.get("voice_id") or vid, "name": name}
+
+
+_VOLC_SPEAKERS_CACHE: dict = {}       # resource_id -> (ts, speakers)
+_VOLC_SPEAKERS_TTL = 600
+
+
+def _volc_list_speakers(ak: str, sk: str, resource_id: str) -> list[dict]:
+    """分页拉全新版豆包语音控制台「音色库」音色(ListSpeakers,Service=speech_saas_prod)。"""
+    out, page = [], 1
+    while True:
+        r = _volc_signed_call(ak, sk, "ListSpeakers", "2025-05-20",
+                              {"ResourceIDs": [resource_id], "Page": page, "Limit": 100},
+                              service="speech_saas_prod", region="cn-beijing")
+        err = (r.get("ResponseMetadata") or {}).get("Error") or {}
+        if err:
+            raise RuntimeError(f"{err.get('Code')}: {err.get('Message')}")
+        res = r.get("Result") or {}
+        batch = res.get("Speakers") or []
+        for v in batch:
+            out.append({
+                "voice_type": v.get("VoiceType") or "",
+                "name": v.get("Name") or "",
+                "gender": v.get("Gender") or "",
+                "age": v.get("Age") or "",
+                "labels": (v.get("NormalLabels") or []) + (v.get("SpecialLabels") or []),
+                "languages": [x.get("Language") for x in (v.get("Languages") or [])
+                              if x.get("Language")],
+                "emotions": [e.get("Value") for e in (v.get("Emotions") or [])
+                             if e.get("Value")],
+                "description": v.get("Description") or "",
+                "trial_url": v.get("TrialURL") or v.get("ShortTrialURL") or "",
+                "resource_id": v.get("ResourceID") or resource_id})
+        total = int(res.get("Total") or 0)
+        if not batch or len(out) >= total or page >= 20:
+            return out
+        page += 1
+
+
+@app.post("/api/volc/speakers")
+async def api_volc_speakers(body: dict):
+    """新版豆包语音「音色库」列表(ListSpeakers,10 分钟缓存)。走火山 OpenAPI
+    AK/SK 签名(与余额查询同凭证,在 ⚙️ 设置 → 资源消耗 配置),非语音 API Key。"""
+    resource_id = str((body or {}).get("resource_id") or "seed-tts-2.0").strip()
+    if resource_id not in ("seed-tts-2.0", "seed-tts-1.0"):
+        resource_id = "seed-tts-2.0"   # 克隆/自定义档没有公共音色库,回落 2.0
+    cfg = resource_cfg()
+    ak, sk = (cfg.get("volc_ak") or "").strip(), (cfg.get("volc_sk") or "").strip()
+    if not (ak and sk):
+        raise HTTPException(400, "需先在 ⚙️ 设置 → 资源消耗 配置火山 AK/SK")
+    ts, cached = _VOLC_SPEAKERS_CACHE.get(resource_id, (0, None))
+    if cached is not None and time.time() - ts < _VOLC_SPEAKERS_TTL:
+        return {"speakers": cached}
+    try:
+        speakers = await asyncio.to_thread(_volc_list_speakers, ak, sk, resource_id)
+    except urllib.error.HTTPError as e:
+        raise HTTPException(502, f"ListSpeakers HTTP {e.code}:"
+                                 f"{e.read().decode('utf-8', 'replace')[:300]}")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"ListSpeakers 调用失败:{e}")
+    _VOLC_SPEAKERS_CACHE[resource_id] = (time.time(), speakers)
+    return {"speakers": speakers}
 
 
 @app.post("/api/test/openrouter")

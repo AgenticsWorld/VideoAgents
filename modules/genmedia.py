@@ -47,8 +47,8 @@ Python:
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
-        凭证=控制台语音技术的 App ID + Access Token,非方舟 ARK Key;
-        音色为 speaker 名,S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
+        凭证=新版语音技术控制台「API Key 管理」的 API Key,非方舟 ARK Key;
+        音色为 speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
         可在「生成模型」页从 Voice Library 搜索并一键加入账号)
 
@@ -872,14 +872,16 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
 
 
 # ---------------- TTS:火山引擎 豆包语音(openspeech v3 单向流式) ----------------
-# 凭证是控制台「语音技术」的 App ID + Access Token(与方舟 ARK Key 不同体系)。
+# 凭证是新版语音技术控制台「API Key 管理」的 API Key(X-Api-Key 单头鉴权,与方舟
+# ARK Key 不同体系;旧版 App ID + Access Token 双头已废弃)。
 # X-Api-Resource-Id 即模型档(seed-tts-2.0 / seed-tts-1.0 / 克隆 seed-icl-2.0);
 # 响应为 NDJSON:每行 {"code":0,"data":"<base64 音频分片>"},结束行 code=20000000。
 
 def _tts_volcengine(cfg, text, output, voice, speed, instructions):
-    app_id = str(cfg.get("app_id") or "").strip()
-    if not app_id:
-        raise RuntimeError("火山 TTS 未配置 App ID(「🎨 生成模型」页 TTS → 火山引擎 填入)")
+    api_key = str(cfg.get("api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("火山 TTS 未配置 API Key(新版语音技术控制台「API Key 管理」"
+                           "创建,「🎨 生成模型」页 TTS → 火山引擎 填入)")
     speaker = voice or cfg.get("voice") or ""
     if not speaker:
         raise RuntimeError("火山 TTS 未指定音色:--voice 传 speaker 名,"
@@ -898,8 +900,7 @@ def _tts_volcengine(cfg, text, output, voice, speed, instructions):
                     json.dumps({"user": {"uid": "videoagents"},
                                 "req_params": req_params}).encode(),
                     {"Content-Type": "application/json",
-                     "X-Api-App-Id": app_id,
-                     "X-Api-Access-Key": cfg["api_key"],
+                     "X-Api-Key": api_key,
                      "X-Api-Resource-Id": resource},
                     timeout=TTS_TIMEOUT)
     chunks = []
