@@ -178,14 +178,14 @@
   "id": "1779094923823_style",
   "name": "高品质动画渲染风格",
   "category": "3D",
-  "prompt": "这是一张3D渲染风格（影视级CG概念艺术风格）图片，3DCG渲染风格，3D",
+  "prompt": "3D渲染风格（影视级CG概念艺术风格），3DCG渲染风格，3D",
   "image": "images/style026.webp"
  },
  {
   "id": "1779094923846_style",
   "name": "3D风格化渲染",
   "category": "3D",
-  "prompt": "3D角色（风格化渲染），3D风格化，展示了，3D",
+  "prompt": "3D角色（风格化渲染），3D风格化，3D",
   "image": "images/style027.webp"
  },
  {
@@ -269,7 +269,7 @@
   "id": "1779094923843_style",
   "name": "欧美风格化3D渲染",
   "category": "3D",
-  "prompt": "3D角色（欧美风格化3D渲染），欧美风格化3D渲染风格，展示了，3D",
+  "prompt": "3D角色（欧美风格化3D渲染），欧美风格化3D渲染风格，3D",
   "image": "images/style039.webp"
  },
  {
@@ -283,14 +283,14 @@
   "id": "1779094923784_style",
   "name": "二次元概念艺术风格",
   "category": "2D",
-  "prompt": "2D anime character (concept art style），2D",
+  "prompt": "2D anime character (concept art style），二次元概念艺术风格，2D",
   "image": "images/style041.webp"
  },
  {
   "id": "1779094923812_style",
   "name": "3D国风高清渲染风格",
   "category": "3D",
-  "prompt": "该图片展示了一幅3D高清渲染风格，3D",
+  "prompt": "3D国风高清渲染风格，3D",
   "image": "images/style042.webp"
  },
  {
@@ -353,7 +353,7 @@
   "id": "1779094923821_style",
   "name": "美国卡通3D渲染风格",
   "category": "3D",
-  "prompt": "3D 渲染的奇幻风格，图片中，3D",
+  "prompt": "3D 渲染的奇幻风格，3D",
   "image": "images/style051.webp"
  },
  {
@@ -367,7 +367,7 @@
   "id": "1779094923827_style",
   "name": "3D真实感PBR渲染风格",
   "category": "3D",
-  "prompt": "这是一张3D渲染风格（写实PBR渲染）风格图片，3D",
+  "prompt": "3D渲染风格（写实PBR渲染）风格，3D",
   "image": "images/style053.webp"
  },
  {
@@ -381,14 +381,14 @@
   "id": "1779094923825_style",
   "name": "3D人物(简约卡通风）",
   "category": "3D",
-  "prompt": "3D角色（美式卡通3D渲染风格），图片展示了，3D",
+  "prompt": "3D角色（美式卡通3D渲染风格），3D",
   "image": "images/style055.webp"
  },
  {
   "id": "1779094923803_style",
   "name": "3D卡通动画风格",
   "category": "3D",
-  "prompt": "图片展示了3D卡通渲染风格。3D卡通，3D",
+  "prompt": "3D卡通渲染风格。3D卡通，3D",
   "image": "images/style056.webp"
  },
  {
@@ -472,7 +472,7 @@
   "id": "1779094923810_style",
   "name": "3D光泽乳胶渲染风格",
   "category": "3D",
-  "prompt": "3D角色（高清渲染风格），3D乳胶渲染风格，展示了，3D",
+  "prompt": "3D角色（高清渲染风格），3D乳胶渲染风格，3D",
   "image": "images/style068.webp"
  },
  {
@@ -507,7 +507,7 @@
   "id": "1779094923809_style",
   "name": "3D西方卡通风格",
   "category": "3D",
-  "prompt": "图片展示了3D卡通渲染风格，3D",
+  "prompt": "3D西方卡通渲染风格，3D",
   "image": "images/style073.webp"
  },
  {
