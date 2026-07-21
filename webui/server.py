@@ -1051,10 +1051,12 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     if brief:
         p += f"""
 
-## 用户主创构想(项目 {proj_rel}/brief.md,全片最高创作前提)
-以下构想约束题材类型、画面风格、叙事取舍等全部环节;你的任何决策与其冲突时,以构想为准或上报用户裁决:
+## 用户设计构想(项目 {proj_rel}/brief.md,全片最高创作前提)
+以下构想约束题材类型、叙事取舍等全部环节;其中「设计风格」一节(如有)是全片画面视觉风格的权威定义,
+风格设定(style.json)、概念图、关键帧、视频生成等一切视觉产出及其 prompt 必须与之一致;
+你的任何决策与构想冲突时,以构想为准或上报用户裁决:
 
-{brief[:2000]}"""
+{brief[:3000]}"""
     if agent_id.split("/")[0] in MEDIA_CATEGORIES:
         p += f"""
 
@@ -2716,39 +2718,64 @@ async def api_genconfig_set(body: dict):
 
 
 BRIEF_HEADER = "# 主创构想"
+BRIEF_SECTION = "## 主要构想"
+STYLE_SECTION = "## 设计风格"
+
+
+def parse_brief(text: str) -> tuple:
+    """brief.md 正文 → (主要构想, 设计风格)。兼容旧格式(无小节标题=全文即主要构想)。"""
+    text = (text or "").strip()
+    if text.startswith(BRIEF_HEADER):
+        text = text[len(BRIEF_HEADER):].strip()
+    style = ""
+    if STYLE_SECTION in text:
+        text, style = text.split(STYLE_SECTION, 1)
+        style = style.strip()
+    brief = text.strip()
+    if brief.startswith(BRIEF_SECTION):
+        brief = brief[len(BRIEF_SECTION):].strip()
+    return brief, style
+
+
+def format_brief(brief: str, style: str) -> str:
+    """(主要构想, 设计风格) → brief.md 全文;两者皆空返回 ''(表示应删除文件)。"""
+    parts = [BRIEF_HEADER]
+    if brief:
+        parts.append(f"{BRIEF_SECTION}\n\n{brief}")
+    if style:
+        parts.append(f"{STYLE_SECTION}\n\n{style}")
+    return "\n\n".join(parts) + "\n" if len(parts) > 1 else ""
 
 
 @app.get("/api/brief")
 async def api_brief_get(project: str = "demo"):
-    """当前项目的主要构想(brief.md 正文,不含标题行)。"""
+    """当前项目的设计构想:brief.md 的主要构想 + 设计风格两个字段。"""
     p = PROJECTS_DIR / safe_slug(project) / "brief.md"
-    text = ""
-    if p.is_file():
-        text = p.read_text().strip()
-        if text.startswith(BRIEF_HEADER):
-            text = text[len(BRIEF_HEADER):].strip()
-    return {"project": project, "brief": text}
+    brief, style = parse_brief(p.read_text() if p.is_file() else "")
+    return {"project": project, "brief": brief, "style": style}
 
 
 @app.post("/api/brief")
 async def api_brief_set(body: dict):
-    """保存主要构想到 data/projects/<项目>/brief.md;清空即移除该设定。"""
+    """保存设计构想(主要构想+设计风格)到 data/projects/<项目>/brief.md;两者皆清空即移除该设定。"""
     project = safe_slug(body.get("project"))
     if not (PROJECTS_DIR / project).is_dir():
         raise HTTPException(404, f"Project not found: {project}")
     brief = str(body.get("brief") or "").strip()
+    style = str(body.get("style") or "").strip()
     p = PROJECTS_DIR / project / "brief.md"
     old = p.read_text().strip() if p.is_file() else ""
-    if brief:
-        p.write_text(f"{BRIEF_HEADER}\n\n{brief}\n")
+    text = format_brief(brief, style)
+    if text:
+        p.write_text(text)
     elif p.is_file():
         p.unlink()
     new = p.read_text().strip() if p.is_file() else ""
     if new != old:
-        await _notify_settings_change(project, "主要构想", [
-            f"brief.md 已更新,最新全文:\n{brief[:1200]}" if brief
-            else "brief.md 已清空(移除主创构想设定)"])
-    return {"ok": True, "project": project, "brief": brief}
+        await _notify_settings_change(project, "设计构想", [
+            f"brief.md 已更新,最新全文:\n{new[:1500]}" if new
+            else "brief.md 已清空(移除主创构想与设计风格设定)"])
+    return {"ok": True, "project": project, "brief": brief, "style": style}
 
 
 @app.get("/api/projconfig")
@@ -3140,12 +3167,14 @@ async def api_projects_create(body: dict):
         json.dumps(cfg, ensure_ascii=False, indent=2))
     novel = (body.get("novel") or "").strip()
     brief = (body.get("brief") or "").strip()
+    style = (body.get("style") or "").strip()
     if novel:
         nd = PROJECTS_DIR / name / "novel"
         nd.mkdir(parents=True, exist_ok=True)
         (nd / "original.txt").write_text(novel)
-    if brief:
-        (PROJECTS_DIR / name / "brief.md").write_text(f"# 主创构想\n\n{brief}\n")
+    brief_text = format_brief(brief, style)
+    if brief_text:
+        (PROJECTS_DIR / name / "brief.md").write_text(brief_text)
 
     # 交给总制片完成初始化;完成后提醒用户放参考图,不自行启动后续流水线
     orch = next(iter(DISPATCHERS))
@@ -3158,10 +3187,11 @@ async def api_projects_create(body: dict):
             "工作量大时派单给 01-story/novel-parser 执行")
     else:
         msg.append("2) 用户暂未导入小说文本:在汇报中提醒用户把小说原文放入 novel/ 目录")
-    if brief:
+    if brief_text:
         msg.append(
-            "3) 用户主创构想已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
-            "是后续全部工作的最高创作前提):请通读,并在汇报中简要复述你的理解以便用户纠偏")
+            "3) 用户设计构想(主要构想 + 设计风格)已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
+            "是后续全部工作的最高创作前提,其中设计风格约束全部画面视觉产出):"
+            "请通读,并在汇报中简要复述你的理解以便用户纠偏")
     if cfg is not None:
         aspect, aspect_name, lang = resolve_output(cfg)
         dur = cfg["duration"]

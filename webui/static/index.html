@@ -124,6 +124,22 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
+/* 风格库选择弹窗(设计风格字段) */
+#style-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.style-chip{border-radius:16px;padding:4px 14px;cursor:pointer;font-size:13px;background:var(--panel);border:1px solid var(--border);user-select:none}
+.style-chip:hover{border-color:var(--accent)}
+.style-chip.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#style-search{margin-left:auto;width:170px}
+[dir="rtl"] #style-search{margin-left:0;margin-right:auto}
+#style-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;overflow-y:auto;max-height:58vh;padding:2px}
+.style-card{position:relative;border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;aspect-ratio:3/2;background:var(--panel)}
+.style-card:hover{border-color:var(--accent)}
+.style-card.on{border-color:var(--green)}
+.style-card img{width:100%;height:100%;object-fit:cover;display:block}
+.style-card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:12px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.style-card .cat{position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:1px 5px}
+.style-card.custom{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--dim);text-align:center;font-size:12.5px;padding:8px}
+.style-card.custom:hover{border-color:var(--accent);color:var(--text)}
 /* 用户确认弹窗(重跑/跳过) */
 #confirms{position:fixed;top:56px;right:16px;z-index:100;display:flex;flex-direction:column;gap:10px;max-width:380px}
 .confirm-box{background:var(--panel2);border:1px solid var(--yellow);border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
@@ -197,7 +213,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <button id="proj-settings-btn" title="项目设置(仅当前项目生效)">🎛️</button>
     <div class="dropdown"><div class="dropdown-box">
       <a href="#" id="menu-versions" title="倒序查看全部版本登记批次;可从任一历史提交克隆出全新项目,或删除项目">版本管理</a>
-      <a href="#" id="menu-brief">主要构想</a>
+      <a href="#" id="menu-brief">设计构想</a>
       <a href="#" id="menu-output">输出设置</a>
       <a href="#" id="menu-duration">时长设置</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
@@ -306,8 +322,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">小说文本</label>
         <textarea id="np-novel" style="height:150px" placeholder="粘贴小说原文(可留空,之后手动放入 novel/ 目录)"></textarea></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
-        <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、画面走漫画风还是写实真人、目标受众、改编取舍……"></textarea></div>
-      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你把参考图放入 refs/。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+        <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">设计风格</label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+          <button type="button" id="np-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
+          <textarea id="np-style" style="height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
+        </div></div>
+      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想与设计风格会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你把参考图放入 refs/。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
     </div>
     <div class="np-step" data-step="2" style="display:none">
       <div class="row"><label>输出画幅</label>
@@ -395,12 +416,28 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="brief-modal" class="modal">
   <div class="box" style="width:580px">
-    <h3>🧭 主要构想 — <span id="brief-proj" style="color:var(--accent)"></span></h3>
+    <h3>🧭 设计构想 — <span id="brief-proj" style="color:var(--accent)"></span></h3>
     <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
-      <textarea id="brief-text" style="height:170px" placeholder="如:剧情片还是纪录片、画面走漫画风还是写实真人、目标受众、改编取舍……"></textarea></div>
-    <div class="note">构想保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提。保存后对之后派发的任务生效;清空保存则移除该设定</div>
+      <textarea id="brief-text" style="height:130px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
+    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">设计风格</label>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+        <button type="button" id="brief-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
+        <textarea id="brief-style" style="height:100px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
+      </div></div>
+    <div class="note">构想与风格保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提;设计风格约束全部画面视觉产出。保存后对之后派发的任务生效;全部清空保存则移除该设定</div>
     <div class="err" id="brief-err"></div>
     <div class="actions"><button id="brief-cancel">取消</button><button class="primary" id="brief-ok">保存</button></div>
+  </div>
+</div>
+<div id="style-modal" class="modal">
+  <div class="box" style="width:880px;max-width:94vw">
+    <h3>🎨 风格库</h3>
+    <div id="style-filter">
+      <span id="style-cats" style="display:flex;gap:8px;flex-wrap:wrap"></span>
+      <input type="text" id="style-search" placeholder="搜索风格…">
+    </div>
+    <div id="style-grid"></div>
+    <div class="actions"><button id="style-cancel">取消</button></div>
   </div>
 </div>
 <div id="out-modal" class="modal">
@@ -672,7 +709,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
 }
 function openNpModal(){
   npInitOnce();
-  $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';
+  $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   npResetDefaults();
   npShowStep(1);
   $('#np-modal').style.display='flex';
@@ -725,7 +762,7 @@ async function npCreate(){
   $('#np-err').textContent='';
   try{
     await api('/api/projects',{name,novel:$('#np-novel').value,brief:$('#np-brief').value,
-      settings:npCollectSettings()});
+      style:$('#np-style').value,settings:npCollectSettings()});
     await initProjects(name);
     savePrefs();
     $('#np-modal').style.display='none';
@@ -818,14 +855,15 @@ $('#eng-recheck').onclick=async()=>{
   if(ok){$('#eng-modal').style.display='none';return}
   $('#eng-err').textContent=I18N.f('仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效',{bin:info.bin});
 };
-/* ---------- 主要构想弹窗(编辑当前项目 brief.md) ---------- */
+/* ---------- 设计构想弹窗(编辑当前项目 brief.md:主要构想 + 设计风格) ---------- */
 async function openBriefModal(){
   $('#brief-err').textContent='';
   $('#brief-proj').textContent=curProj();
-  $('#brief-text').value='';
+  $('#brief-text').value='';$('#brief-style').value='';
   try{
     const r=await api('/api/brief?project='+encodeURIComponent(curProj()));
     $('#brief-text').value=r.brief||'';
+    $('#brief-style').value=r.style||'';
   }catch(e){$('#brief-err').textContent='读取失败:'+e.message}
   $('#brief-modal').style.display='flex';
   $('#brief-text').focus();
@@ -835,10 +873,66 @@ $('#menu-brief').onclick=e=>{e.preventDefault();openBriefModal()};
 $('#brief-cancel').onclick=()=>$('#brief-modal').style.display='none';
 $('#brief-ok').onclick=async()=>{
   try{
-    await api('/api/brief',{project:curProj(),brief:$('#brief-text').value});
+    await api('/api/brief',{project:curProj(),brief:$('#brief-text').value,
+      style:$('#brief-style').value});
     $('#brief-modal').style.display='none';
   }catch(e){$('#brief-err').textContent='保存失败:'+e.message}
 };
+
+/* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
+let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';
+async function loadStyleLib(){
+  if(!STYLE_LIB){
+    const r=await fetch('/static/styles/style_library.json');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    STYLE_LIB=await r.json();
+  }
+  return STYLE_LIB;
+}
+function styleChipsRender(){
+  const bar=$('#style-cats');bar.innerHTML='';
+  ['全部',...new Set(STYLE_LIB.map(s=>s.category))].forEach(cat=>{
+    const c=document.createElement('span');
+    c.className='style-chip'+(cat===STYLE_CAT?' on':'');
+    c.textContent=t(cat);
+    c.onclick=()=>{STYLE_CAT=cat;styleChipsRender();styleGridRender()};
+    bar.appendChild(c);
+  });
+}
+function styleGridRender(){
+  const grid=$('#style-grid');grid.innerHTML='';
+  const kw=$('#style-search').value.trim().toLowerCase();
+  const cur=($(STYLE_TARGET).value||'').trim();
+  // 第一个卡片:自定义(关闭弹窗,回到设计风格输入框自行填写)
+  const c=document.createElement('div');
+  c.className='style-card custom'+(cur&&!STYLE_LIB.some(s=>s.prompt===cur)?' on':'');
+  c.textContent=t('自定义风格提示词');
+  c.onclick=()=>{$('#style-modal').style.display='none';$(STYLE_TARGET).focus()};
+  grid.appendChild(c);
+  STYLE_LIB.filter(s=>(STYLE_CAT==='全部'||s.category===STYLE_CAT)
+      &&(!kw||s.name.toLowerCase().includes(kw)||s.prompt.toLowerCase().includes(kw)))
+    .forEach(s=>{
+      const d=document.createElement('div');
+      d.className='style-card'+(cur===s.prompt?' on':'');
+      d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
+        +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
+      d.title=s.prompt;
+      d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+      grid.appendChild(d);
+    });
+}
+async function openStyleModal(targetSel){
+  STYLE_TARGET=targetSel;
+  try{await loadStyleLib()}
+  catch(e){alert(t('风格库加载失败:')+e.message);return}
+  $('#style-search').value='';
+  styleChipsRender();styleGridRender();
+  $('#style-modal').style.display='flex';
+}
+$('#np-style-pick').onclick=()=>openStyleModal('#np-style');
+$('#brief-style-pick').onclick=()=>openStyleModal('#brief-style');
+$('#style-cancel').onclick=()=>$('#style-modal').style.display='none';
+$('#style-search').oninput=()=>styleGridRender();
 
 /* ---------- 输出设置弹窗(画幅/语言) ---------- */
 const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Español','français','Deutsch','Indonesia','Português','русский','عربي'];

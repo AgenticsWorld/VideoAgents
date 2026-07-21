@@ -1,0 +1,660 @@
+[
+ {
+  "id": "1780651424491_style",
+  "name": "复古科幻原子朋克",
+  "category": "真人",
+  "prompt": "60年代复古科幻原子朋克美学，复古未来主义影像风格，真人写实风格，摄影作品，画面具有60年代复古科幻质感，色调以复古暖橙、海盐蓝、高对比低饱和胶片色彩为主，带明显胶片颗粒、轻微复古胶片柔光和自然日光光晕。光影上使用自然日光、强直射日光和清晰投影，画面明暗对比强烈，高光不过曝，暗部保留完整细节，明暗过渡自然，整体呈现自然立体、怀旧、精致的原子朋克电影感。",
+  "image": "images/style001.webp"
+ },
+ {
+  "id": "1780580870934_style",
+  "name": "宫斗权谋冷峻风格",
+  "category": "真人",
+  "prompt": "宫廷权谋剧影像风格，古装宫斗冷峻摄影风格，真人写实风格，摄影作品，画面庄重克制，空间秩序感强，色调以低饱和金棕、暗红、冷灰、深木色为主，光影上使用低调照明、烛光感、侧光和深阴影，构图端正严整，整体具有宫廷权力压迫感和古装权谋剧质感。",
+  "image": "images/style002.webp"
+ },
+ {
+  "id": "1780575862644_style",
+  "name": "国产悬疑冷调",
+  "category": "真人",
+  "prompt": "国产现实悬疑剧影像风格，冷调现实主义摄影风格，真人写实风格，摄影作品，整体氛围紧张压抑，色调以低饱和、冷灰、暗绿色调为主，光影上使用低调照明、环境光、深阴影，构图克制，画面具有真实城市悬疑剧质感。",
+  "image": "images/style003.webp"
+ },
+ {
+  "id": "1780575862643_style",
+  "name": "古偶唯美柔光",
+  "category": "真人",
+  "prompt": "精品古装偶像剧影像风格，古偶剧柔光摄影风格，真人写实风格，摄影作品，画面柔和唯美，色调以暖白、淡金、浅青、低饱和粉色为主，光影上使用柔光、逆光、轻微辉光、浅景深，构图端正精致，整体具有古装爱情剧的精致梦幻感。",
+  "image": "images/style004.webp"
+ },
+ {
+  "id": "1780575862642_style",
+  "name": "日式青春胶片",
+  "category": "真人",
+  "prompt": "参考电影为《情书》，岩井俊二式日式青春电影影像风格，90年代日式胶片摄影风格，真人写实风格，摄影作品，画面清透、柔和、带有回忆感，具有明显胶片颗粒、轻微噪点、柔焦质感和低对比影调，色调以低饱和、冷白、淡蓝、浅绿、柔灰为主，光影上使用自然光、逆光、窗光、轻微过曝、柔和高光和空气感眩光，构图轻盈留白，带有手持摄影般的生活化瞬间感，整体氛围纯净、忧伤、朦胧、诗意。",
+  "image": "images/style005.webp"
+ },
+ {
+  "id": "1780575862641_style",
+  "name": "日式生活自然",
+  "category": "真人",
+  "prompt": "日式生活剧影像风格，自然主义摄影风格，真人写实风格，摄影作品，真实生活质感，画面安静克制，构图留白，色调以低饱和、淡青灰、冷绿色调为主，光影上使用自然光、窗光、环境光、柔和阴影，强调真实空间和日常气息。",
+  "image": "images/style006.webp"
+ },
+ {
+  "id": "1780575862640_style",
+  "name": "韩剧都市柔光",
+  "category": "真人",
+  "prompt": "韩国都市爱情剧影像风格，韩剧柔光摄影风格，真人写实风格，摄影作品，画面干净精致，色调以低饱和、柔和冷暖平衡为主，光影上使用柔光、环境光、浅景深，整体氛围细腻、浪漫、克制。",
+  "image": "images/style007.webp"
+ },
+ {
+  "id": "1780575862639_style",
+  "name": "国产都市写实",
+  "category": "真人",
+  "prompt": "现代国产都市电视剧影像风格，生活化都市剧摄影风格，真人写实风格，摄影作品，画面自然克制，真实生活质感，色调以中性暖调、低饱和为主，光影上使用自然光、柔和室内光，构图规整，整体质感接近国产现实题材都市剧。",
+  "image": "images/style008.webp"
+ },
+ {
+  "id": "1780580870935_style",
+  "name": "武侠江湖写实摄影风格",
+  "category": "真人",
+  "prompt": "武侠江湖剧影像风格，古装动作写实摄影风格，真人写实风格，摄影作品，画面具有江湖气和动作感，色调以低饱和青灰、墨绿、土黄、冷暖对比为主，光影上使用自然光、侧光、逆光和环境阴影，构图开阔有纵深，粗粝真实的武侠剧质感。",
+  "image": "images/style009.webp"
+ },
+ {
+  "id": "1779094923802_style",
+  "name": "90年代写实电影风格",
+  "category": "真人",
+  "prompt": "1990s realistic cinematic film photography style，1990s，真人写实风格，摄影作品",
+  "image": "images/style010.webp"
+ },
+ {
+  "id": "1779094923757_style",
+  "name": "复古叙事电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Titane》，真人写实风格，摄影作品，整体风格包含混乱感，色调以低调、暖调、黄色辉光、冷蓝光为主，光影上使用低调照明。",
+  "image": "images/style011.webp"
+ },
+ {
+  "id": "1779094923765_style",
+  "name": "美式复古好莱坞",
+  "category": "真人",
+  "prompt": "参考电影为《Demons》，真人写实风格，摄影作品，整体风格包含复古，色调以低调、去饱和为主，光影上使用柔光。",
+  "image": "images/style012.webp"
+ },
+ {
+  "id": "1779094923777_style",
+  "name": "霓虹赛博电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Mind》，真人写实风格，摄影作品，整体风格包含粗粝、复古，色调以低调、霓虹色调、暖调为主，光影上使用逆光、轮廓光。",
+  "image": "images/style013.webp"
+ },
+ {
+  "id": "1779094923813_style",
+  "name": "90 年代中国农村电影风格",
+  "category": "真人",
+  "prompt": "90s Chinese rural cinematic style，真人写实风格，摄影作品",
+  "image": "images/style014.webp"
+ },
+ {
+  "id": "1779094923774_style",
+  "name": "中式暖调蓝辉风格",
+  "category": "真人",
+  "prompt": "参考电影为《OneHourPhoto》，真人写实风格，摄影作品，色调以暖调和蓝辉光为主，营造出戏剧性的明暗对比",
+  "image": "images/style015.webp"
+ },
+ {
+  "id": "1779094923776_style",
+  "name": "老式工业影视风格",
+  "category": "真人",
+  "prompt": "参考电影为《NineteenEighty-Four》，真人写实风格，摄影作品，整体风格包含复古、工业感，色调以低调、微弱amber辉光为主。",
+  "image": "images/style016.webp"
+ },
+ {
+  "id": "1779094923794_style",
+  "name": "日本黑白胶片摄影风格",
+  "category": "真人",
+  "prompt": "Japanese black and white film photography style，black and white，真人写实风格，摄影作品",
+  "image": "images/style017.webp"
+ },
+ {
+  "id": "1779094923778_style",
+  "name": "韩国冷淡风电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《MemoriesMurder》，真人写实风格，摄影作品，整体风格包含紧张、粗粝，色调以去饱和、低饱和柔和色调、低调为主，光影上使用环境光、柔和阴影。",
+  "image": "images/style018.webp"
+ },
+ {
+  "id": "1779094923775_style",
+  "name": "荒野电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《OnceUponTime在West》，真人写实风格，摄影作品，整体风格包含紧张，色调以低饱和、棕色色调、单色调、暖调为主",
+  "image": "images/style019.webp"
+ },
+ {
+  "id": "1779094923779_style",
+  "name": "橙黄色电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Kubi》，真人写实风格，摄影作品，整体风格包含紧张、混乱感，色调以橙黄色为主。",
+  "image": "images/style020.webp"
+ },
+ {
+  "id": "1779094923782_style",
+  "name": "复古战争电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《300》，真人写实风格，摄影作品，整体风格包含粗粝，色调以高对比、低调、去饱和、单色调为主，光影上使用主光、逆光、戏剧性阴影、伦勃朗式布光。",
+  "image": "images/style021.webp"
+ },
+ {
+  "id": "1779094923781_style",
+  "name": "恐怖电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《AutopsyJaneDoe》，真人写实风格，摄影作品，整体风格包含紧张，色调以单色调、肉色调为主，光影上使用戏剧性阴影。",
+  "image": "images/style022.webp"
+ },
+ {
+  "id": "1779094923795_style",
+  "name": "复古电影摄影风格",
+  "category": "真人",
+  "prompt": "Retro film photography style，真人写实风格，摄影作品，Retro，人物肖像，摄影作品",
+  "image": "images/style023.webp"
+ },
+ {
+  "id": "1779094923780_style",
+  "name": "美式复古怪异影视风格",
+  "category": "真人",
+  "prompt": "参考电影为《HumanHighway》，真人写实风格，摄影作品，整体风格包含怪异、复古、超现实主义、末世感，色调以单色调、高饱和、霓虹色调为主。",
+  "image": "images/style024.webp"
+ },
+ {
+  "id": "1779094923773_style",
+  "name": "荒诞高调白色色调电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《SlackBay》，真人写实风格，摄影作品，整体风格包含怪诞、超现实、黑色幽默，色调以high-key、高饱和为主，光影上使用natural light。",
+  "image": "images/style025.webp"
+ },
+ {
+  "id": "1779094923823_style",
+  "name": "高品质动画渲染风格",
+  "category": "3D",
+  "prompt": "这是一张3D渲染风格（影视级CG概念艺术风格）图片，3DCG渲染风格，3D",
+  "image": "images/style026.webp"
+ },
+ {
+  "id": "1779094923846_style",
+  "name": "3D风格化渲染",
+  "category": "3D",
+  "prompt": "3D角色（风格化渲染），3D风格化，展示了，3D",
+  "image": "images/style027.webp"
+ },
+ {
+  "id": "1779094923768_style",
+  "name": "蓝橙色调影视风格",
+  "category": "真人",
+  "prompt": "参考电影为《Wanted》，真人写实风格，摄影作品，色调以蓝色调、暖调为主，光影上使用低调照明。",
+  "image": "images/style028.webp"
+ },
+ {
+  "id": "1779094923772_style",
+  "name": "工业电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Substance》，真人写实风格，摄影作品，人物肖像，色调以高饱和Monochromatic、高调、白色调为主，光影上使用Key Light。",
+  "image": "images/style029.webp"
+ },
+ {
+  "id": "1779094923760_style",
+  "name": "美式经济上行风格",
+  "category": "真人",
+  "prompt": "参考电影为《Pain&Gain》，真人写实风格，摄影作品，色调以高饱和为主。",
+  "image": "images/style030.webp"
+ },
+ {
+  "id": "1779094923767_style",
+  "name": "90年代港片风格",
+  "category": "真人",
+  "prompt": "参考电影为《FlowersShanghai》，色调以暖调、黄色辉光为主，真人写实风格，摄影作品，色调以暖调、黄色辉光为主。",
+  "image": "images/style031.webp"
+ },
+ {
+  "id": "1779094923770_style",
+  "name": "科技感电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《TrueLies》，真人写实风格，摄影作品，人物肖像，整体风格包含紧张，色调以低调、冷调为主，光影上使用主光。",
+  "image": "images/style032.webp"
+ },
+ {
+  "id": "1779094923761_style",
+  "name": "悬疑电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Nun》，真人写实风格，摄影作品，色调以去饱和为主",
+  "image": "images/style033.webp"
+ },
+ {
+  "id": "1779094923764_style",
+  "name": "希腊神话电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《FlashGordon》，真人写实风格，摄影作品，整体风格包含超现实，色调以柔和蓝辉光为主。",
+  "image": "images/style034.webp"
+ },
+ {
+  "id": "1779094923771_style",
+  "name": "美式复古影视风格",
+  "category": "真人",
+  "prompt": "参考电影为《Tron》，真人写实风格，摄影作品，整体风格包含复古，色调以低调、高饱和、霓虹色调为主，光影上使用轮廓光。",
+  "image": "images/style035.webp"
+ },
+ {
+  "id": "1779094923766_style",
+  "name": "好莱坞黑白电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《男人WhoWasn》，真人写实风格，摄影作品，色调以高对比、单色调、低调为主，光影上使用伦勃朗式布光、深阴影。",
+  "image": "images/style036.webp"
+ },
+ {
+  "id": "1779094923850_style",
+  "name": "3D卡通微缩景观",
+  "category": "3D",
+  "prompt": "3D渲染风格（卡通微缩景观）的单个场景，3D",
+  "image": "images/style037.webp"
+ },
+ {
+  "id": "1779094923826_style",
+  "name": "3D西方卡通风格的绘制",
+  "category": "3D",
+  "prompt": "美式奇幻插画风格，3D西方卡通风格的绘制，3D",
+  "image": "images/style038.webp"
+ },
+ {
+  "id": "1779094923843_style",
+  "name": "欧美风格化3D渲染",
+  "category": "3D",
+  "prompt": "3D角色（欧美风格化3D渲染），欧美风格化3D渲染风格，展示了，3D",
+  "image": "images/style039.webp"
+ },
+ {
+  "id": "1779094923806_style",
+  "name": "3D数字雕刻风格",
+  "category": "3D",
+  "prompt": "3D 渲染的角色（具有电影般的写实风格），3D高精渲染风格，3D",
+  "image": "images/style040.webp"
+ },
+ {
+  "id": "1779094923784_style",
+  "name": "二次元概念艺术风格",
+  "category": "2D",
+  "prompt": "2D anime character (concept art style），2D",
+  "image": "images/style041.webp"
+ },
+ {
+  "id": "1779094923812_style",
+  "name": "3D国风高清渲染风格",
+  "category": "3D",
+  "prompt": "该图片展示了一幅3D高清渲染风格，3D",
+  "image": "images/style042.webp"
+ },
+ {
+  "id": "1779094923758_style",
+  "name": "紫色色调电影风格",
+  "category": "真人",
+  "prompt": "参考电影为《Thin红Line》，真人写实风格，摄影作品，色调以紫色色调为主。",
+  "image": "images/style043.webp"
+ },
+ {
+  "id": "1779094923847_style",
+  "name": "3D美式卡通游戏美术",
+  "category": "3D",
+  "prompt": "3D卡通渲染风格，3D渲染风格，3D拟人化，3D",
+  "image": "images/style044.webp"
+ },
+ {
+  "id": "1779094923841_style",
+  "name": "3D盲盒涂装风",
+  "category": "3D",
+  "prompt": "3D盲盒涂装风、皮克斯3D动画风格，3D",
+  "image": "images/style045.webp"
+ },
+ {
+  "id": "1779094923845_style",
+  "name": "动漫三渲二风格",
+  "category": "3D",
+  "prompt": "三渲二二次元卡通风格，3D 立体卡通风格绘制，3D",
+  "image": "images/style046.webp"
+ },
+ {
+  "id": "1779094923801_style",
+  "name": "超现实3D渲染风格",
+  "category": "3D",
+  "prompt": "超现实3D渲染风格，高清写实渲染，3D建模，3D",
+  "image": "images/style047.webp"
+ },
+ {
+  "id": "1779094923842_style",
+  "name": "UE5写实渲染",
+  "category": "3D",
+  "prompt": "写实CG渲染，3D高清渲染，3D",
+  "image": "images/style048.webp"
+ },
+ {
+  "id": "1779094923848_style",
+  "name": "国风3D高清渲染风格",
+  "category": "3D",
+  "prompt": "国漫3D渲染风格，高清3D渲染，3D",
+  "image": "images/style049.webp"
+ },
+ {
+  "id": "1779094923849_style",
+  "name": "3D卡通渲染风格",
+  "category": "3D",
+  "prompt": "皮克斯的 3D 动画风格，该画面呈现了，3D",
+  "image": "images/style050.webp"
+ },
+ {
+  "id": "1779094923821_style",
+  "name": "美国卡通3D渲染风格",
+  "category": "3D",
+  "prompt": "3D 渲染的奇幻风格，图片中，3D",
+  "image": "images/style051.webp"
+ },
+ {
+  "id": "1779094923822_style",
+  "name": "3D厚涂风格",
+  "category": "3D",
+  "prompt": "3D渲染风格，原画CG风格，3D",
+  "image": "images/style052.webp"
+ },
+ {
+  "id": "1779094923827_style",
+  "name": "3D真实感PBR渲染风格",
+  "category": "3D",
+  "prompt": "这是一张3D渲染风格（写实PBR渲染）风格图片，3D",
+  "image": "images/style053.webp"
+ },
+ {
+  "id": "1779094923844_style",
+  "name": "3D游戏渲染风格",
+  "category": "3D",
+  "prompt": "3D游戏渲染风格，3D高清渲染，3D",
+  "image": "images/style054.webp"
+ },
+ {
+  "id": "1779094923825_style",
+  "name": "3D人物(简约卡通风）",
+  "category": "3D",
+  "prompt": "3D角色（美式卡通3D渲染风格），图片展示了，3D",
+  "image": "images/style055.webp"
+ },
+ {
+  "id": "1779094923803_style",
+  "name": "3D卡通动画风格",
+  "category": "3D",
+  "prompt": "图片展示了3D卡通渲染风格。3D卡通，3D",
+  "image": "images/style056.webp"
+ },
+ {
+  "id": "1779094923816_style",
+  "name": "美国游戏概念艺术风格",
+  "category": "2D",
+  "prompt": "2D anime character (American game concept art style), Overwatch fan art style，美国游戏概念艺术风格，2D",
+  "image": "images/style057.webp"
+ },
+ {
+  "id": "1779094923790_style",
+  "name": "复古Y2K奇幻风格",
+  "category": "3D",
+  "prompt": "Extrasensory world portraiture, Y2K retro surrealist style，3D",
+  "image": "images/style058.webp"
+ },
+ {
+  "id": "1779094923834_style",
+  "name": "日系平涂插画风格",
+  "category": "2D",
+  "prompt": "日系赛璐珞，日系平涂插画风格，2D",
+  "image": "images/style059.webp"
+ },
+ {
+  "id": "1779094923838_style",
+  "name": "插画蒸汽波风格",
+  "category": "2D",
+  "prompt": "80年代复古动漫插画蒸汽波风格，插画蒸汽波风格，2D",
+  "image": "images/style060.webp"
+ },
+ {
+  "id": "1779094923808_style",
+  "name": "3D魔幻角色扮演游戏",
+  "category": "3D",
+  "prompt": "暗黑哥特风写实CG渲染，高清3D渲染，3D",
+  "image": "images/style061.webp"
+ },
+ {
+  "id": "1779094923836_style",
+  "name": "赛博朋克数字插画风格",
+  "category": "2D",
+  "prompt": "赛博朋克数字插画风格，2D",
+  "image": "images/style062.webp"
+ },
+ {
+  "id": "1779094923817_style",
+  "name": "游戏概念艺术风格",
+  "category": "2D",
+  "prompt": "2D anime-style character (game concept art style），2D",
+  "image": "images/style063.webp"
+ },
+ {
+  "id": "1779094923828_style",
+  "name": "国漫二次元常用风格",
+  "category": "2D",
+  "prompt": "二次元动漫风格（百妖谱风格），2D",
+  "image": "images/style064.webp"
+ },
+ {
+  "id": "1779094923799_style",
+  "name": "粘土动画风格",
+  "category": "3D",
+  "prompt": "粘土动画风格，3D",
+  "image": "images/style065.webp"
+ },
+ {
+  "id": "1779094923807_style",
+  "name": "3D加强版卡通渲染风格",
+  "category": "3D",
+  "prompt": "3D卡通渲染风格，整体具有平滑细腻的3D建模质感，3D",
+  "image": "images/style066.webp"
+ },
+ {
+  "id": "1779094923805_style",
+  "name": "3D中国奇幻动画",
+  "category": "3D",
+  "prompt": "3D渲染风格，画面展示，3D",
+  "image": "images/style067.webp"
+ },
+ {
+  "id": "1779094923810_style",
+  "name": "3D光泽乳胶渲染风格",
+  "category": "3D",
+  "prompt": "3D角色（高清渲染风格），3D乳胶渲染风格，展示了，3D",
+  "image": "images/style068.webp"
+ },
+ {
+  "id": "1779094923811_style",
+  "name": "3D果冻状塑料风格",
+  "category": "3D",
+  "prompt": "3D Jelly-like plastic style，3D，渐变天空",
+  "image": "images/style069.webp"
+ },
+ {
+  "id": "1779094923833_style",
+  "name": "达利风格",
+  "category": "2D",
+  "prompt": "萨尔瓦多·达利风格的超现实主义写实风格，2D",
+  "image": "images/style070.webp"
+ },
+ {
+  "id": "1779094923798_style",
+  "name": "定格动画风格",
+  "category": "3D",
+  "prompt": "定格动画风格，3D",
+  "image": "images/style071.webp"
+ },
+ {
+  "id": "1779094923792_style",
+  "name": "黑白水墨风格",
+  "category": "2D",
+  "prompt": "Ghost of Tsushima black and white ink conceptual illustration style，黑白水墨风格，2D",
+  "image": "images/style072.webp"
+ },
+ {
+  "id": "1779094923809_style",
+  "name": "3D西方卡通风格",
+  "category": "3D",
+  "prompt": "图片展示了3D卡通渲染风格，3D",
+  "image": "images/style073.webp"
+ },
+ {
+  "id": "1779094923793_style",
+  "name": "高清3D真实渲染风格",
+  "category": "3D",
+  "prompt": "High-definition 3D realistic rendering style，3D",
+  "image": "images/style074.webp"
+ },
+ {
+  "id": "1779094923814_style",
+  "name": "美国漫画动画插画风格",
+  "category": "2D",
+  "prompt": "American comic animation illustration style，2D",
+  "image": "images/style075.webp"
+ },
+ {
+  "id": "1779094923840_style",
+  "name": "复古肌理迷幻插画风格",
+  "category": "2D",
+  "prompt": "复古肌理迷幻插画风格，2D",
+  "image": "images/style076.webp"
+ },
+ {
+  "id": "1779094923839_style",
+  "name": "儿童蜡笔手绘插画风",
+  "category": "2D",
+  "prompt": "西方扁平插画风格，2D",
+  "image": "images/style077.webp"
+ },
+ {
+  "id": "1779094923815_style",
+  "name": "黑白二维漫画动画风格",
+  "category": "2D",
+  "prompt": "Black and white 2D graphic novel animation style (Persepolis IP style），黑白二维漫画动画风格，2D",
+  "image": "images/style078.webp"
+ },
+ {
+  "id": "1779094923835_style",
+  "name": "高质量2D热血漫风格",
+  "category": "2D",
+  "prompt": "高质量2D热血漫风格，2D",
+  "image": "images/style079.webp"
+ },
+ {
+  "id": "1779094923831_style",
+  "name": "大友克洋风格",
+  "category": "2D",
+  "prompt": "经典的大友克洋（Akira）二次元动漫风格，2D",
+  "image": "images/style080.webp"
+ },
+ {
+  "id": "1779094923818_style",
+  "name": "暗色调厚涂风格插画",
+  "category": "2D",
+  "prompt": "2D Hand-drawn Character (Dark Impasto Illustration Style），2D",
+  "image": "images/style081.webp"
+ },
+ {
+  "id": "1779094923830_style",
+  "name": "手冢治虫时代卡通画风",
+  "category": "2D",
+  "prompt": "手冢治虫时代卡通画风，2D",
+  "image": "images/style082.webp"
+ },
+ {
+  "id": "1779094923832_style",
+  "name": "上美画风",
+  "category": "2D",
+  "prompt": "二次元动漫风格（上海美术电影制片厂风格），2D",
+  "image": "images/style083.webp"
+ },
+ {
+  "id": "1779094923819_style",
+  "name": "中国神话风格",
+  "category": "2D",
+  "prompt": "2D hand-drawn character, Chinese mythology style，中国神话风格，描金线条插画，2D",
+  "image": "images/style084.webp"
+ },
+ {
+  "id": "1779094923800_style",
+  "name": "二维卡通插画风格",
+  "category": "2D",
+  "prompt": "Stylized 2D cartoon illustration style，2D",
+  "image": "images/style085.webp"
+ },
+ {
+  "id": "1779094923786_style",
+  "name": "黑暗原画概念风格",
+  "category": "2D",
+  "prompt": "Black Myth Wukong style, dark fantasy original art thick impasto style，2D",
+  "image": "images/style086.webp"
+ },
+ {
+  "id": "1779094923797_style",
+  "name": "皮影戏插画风格",
+  "category": "2D",
+  "prompt": "Shadow puppetry illustration style，皮影戏插画风格，2D",
+  "image": "images/style087.webp"
+ },
+ {
+  "id": "1779094923788_style",
+  "name": "美式黑暗插画风格",
+  "category": "2D",
+  "prompt": "美国漫画风格，欧美漫画风格，2D",
+  "image": "images/style088.webp"
+ },
+ {
+  "id": "1779094923787_style",
+  "name": "黑暗奇幻插画风格",
+  "category": "2D",
+  "prompt": "黑暗奇幻插画风格，美式复古原画风格，2D",
+  "image": "images/style089.webp"
+ },
+ {
+  "id": "1779094923785_style",
+  "name": "暗黑漫画风格",
+  "category": "2D",
+  "prompt": "2D anime character (dark manga style），2D",
+  "image": "images/style090.webp"
+ },
+ {
+  "id": "1779094923791_style",
+  "name": "简洁插画风格",
+  "category": "2D",
+  "prompt": "Flat modern illustration style，2D",
+  "image": "images/style091.webp"
+ },
+ {
+  "id": "1779094923796_style",
+  "name": "复古半色调暗色调哥特风格",
+  "category": "2D",
+  "prompt": "Retro halftone dark gothic illustration style，2D",
+  "image": "images/style092.webp"
+ },
+ {
+  "id": "1779094923789_style",
+  "name": "东方水墨画风",
+  "category": "2D",
+  "prompt": "Eastern ink decorative illustration style，2D",
+  "image": "images/style093.webp"
+ },
+ {
+  "id": "1779094923783_style",
+  "name": "像素风",
+  "category": "2D",
+  "prompt": "16-bit retro pixel art style，2D",
+  "image": "images/style094.webp"
+ }
+]
