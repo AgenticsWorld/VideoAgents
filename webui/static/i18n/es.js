@@ -865,7 +865,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Dar notas de revisión sobre esta escena; envía un mensaje al Productor",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Utilería {name} ({id}; ficha id={id} en bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Dar notas de revisión sobre esta utilería; envía un mensaje al Productor",
-"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "La narración/muestras de voz de personajes/doblaje de respaldo se generan con TTS (la BGM va por generación de música); canal activo = pestaña marcada con ✓; haz clic en el círculo para seleccionar, surte efecto tras guardar",
+"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效;选中渠道的「默认音色」即旁白声线": "La narración/muestras de voz de personajes/doblaje de respaldo se generan con TTS (la BGM va por generación de música); canal activo = pestaña marcada con ✓; haz clic en el círculo para seleccionar, surte efecto tras guardar; la “voz por defecto” del canal seleccionado es la voz de narración",
 "设为生效渠道(保存后生效)": "Establecer como canal activo (surte efecto tras guardar)",
 "音色库": "Biblioteca de voces",
 "speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…": "nombre de speaker, p. ej. zh_female_…_bigtts / voz clonada S_…",

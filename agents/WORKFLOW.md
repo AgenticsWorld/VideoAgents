@@ -498,7 +498,7 @@ refs/
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
 | voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声——≤5s/段是方舟 audio_ref 总时长 15.2s 硬限的配额(3 段满配 ≤15s,§8A 2026-07-20 实证),按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[3,5]s、纯人声(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
-| narrator(先于 p7-video) | 旁白配音(统一旁白声线,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
+| narrator(先于 p7-video) | 旁白配音(声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
@@ -764,7 +764,7 @@ python3 modules/genmedia.py music \
 python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
-  [--voice <音色,旁白全季固定>] [--speed 1.0] \
+  [--voice <音色;旁白不传——自动用「生成模型」页生效渠道的「默认音色」,角色配音按 casting 传>] [--speed 1.0] \
   [--instructions "<语气/情绪指令,仅 OpenAI 系模型生效>"]
 ```
 

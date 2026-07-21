@@ -865,7 +865,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Änderungswünsche zur Szene geben; sendet eine Nachricht an den Produzenten",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Requisite {name} ({id}; Karte id={id} in bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Änderungswünsche zur Requisite geben; sendet eine Nachricht an den Produzenten",
-"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Erzählung/Charakter-Stimmproben/Fallback-Synchronisation werden per TTS erzeugt (BGM läuft über die Musikgenerierung); aktiver Kanal = mit ✓ markierter Tab; zum Auswählen auf den Kreis klicken, wirksam nach dem Speichern",
+"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效;选中渠道的「默认音色」即旁白声线": "Erzählung/Charakter-Stimmproben/Fallback-Synchronisation werden per TTS erzeugt (BGM läuft über die Musikgenerierung); aktiver Kanal = mit ✓ markierter Tab; zum Auswählen auf den Kreis klicken, wirksam nach dem Speichern; die „Standardstimme“ des gewählten Kanals ist die Erzählerstimme",
 "设为生效渠道(保存后生效)": "Als aktiven Kanal festlegen (wirksam nach dem Speichern)",
 "音色库": "Stimmenbibliothek",
 "speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…": "Speaker-Name, z. B. zh_female_…_bigtts / geklonte Stimme S_…",

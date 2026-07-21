@@ -865,7 +865,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Berikan catatan revisi untuk adegan ini; mengirim pesan ke Produser",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Properti {name} ({id}; kartu id={id} di bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Berikan catatan revisi untuk properti ini; mengirim pesan ke Produser",
-"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Narasi/sampel suara karakter/sulih suara cadangan dibuat oleh TTS (BGM lewat pembuatan musik); kanal aktif = tab bercentang ✓, klik lingkaran untuk memilih, berlaku setelah disimpan",
+"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效;选中渠道的「默认音色」即旁白声线": "Narasi/sampel suara karakter/sulih suara cadangan dibuat oleh TTS (BGM lewat pembuatan musik); kanal aktif = tab bercentang ✓, klik lingkaran untuk memilih, berlaku setelah disimpan; “suara default” dari saluran terpilih menjadi suara narasi",
 "设为生效渠道(保存后生效)": "Jadikan kanal aktif (berlaku setelah disimpan)",
 "音色库": "Pustaka suara",
 "speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…": "nama speaker, mis. zh_female_…_bigtts / suara kloning S_…",

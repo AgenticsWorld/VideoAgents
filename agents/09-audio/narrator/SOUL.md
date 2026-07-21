@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取 `story/episodes/epNN/narration.md`,按段落与标注的落点(场次/镜头位置)切分旁白句。
-2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型/默认音色由用户在控制台「🎨 生成模型」页 TTS 旁白生成配置,不自行挑模型、不直连 API);声线在立项/风格阶段确定后全季固定同一 `--voice`,语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感",仅 OpenAI 系模型生效),语速用 `--speed` 稳定控制在设定区间。
+2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型由用户在控制台「🎨 生成模型」页 TTS语音模型配置,不自行挑模型、不直连 API);**旁白声线 = 生效 TTS 渠道配置的「默认音色」:合成时不传 `--voice`**,由模块自动取该默认音色,天然全季统一(用户在设置页改默认音色即换旁白声线);仅当工单显式指定声线时才传 `--voice` 覆盖。语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感",仅 OpenAI 系模型生效),语速用 `--speed` 稳定控制在设定区间。
 3. 专有名词读音以 `bible/dictionary.json` 词条为准,生僻词注音后合成,全季读音一致。
 4. 输出 `assets/audio/narration/epNN/` 分段 wav + `manifest.json`(段落-落点映射)。
 5. 自检:语速逐段测量、段间音色/响度一致,统一采样率与电平规范后交付。
@@ -26,7 +26,8 @@ python3 modules/genmedia.py info    # 先看当前 TTS 渠道/模型,记入 mani
 python3 modules/genmedia.py tts \
   --text "<旁白段落文本>" \
   --output assets/audio/narration/epNN/ep01_narr_003.mp3 \
-  [--voice <全季固定声线>] [--speed 1.0] [--instructions "<语气指令>"]
+  [--speed 1.0] [--instructions "<语气指令>"]
+# 不传 --voice:声线自动用生效渠道的「默认音色」(设置页配置);仅工单显式指定时才传 --voice 覆盖
 ```
 
 逐段调用;失败(未配 Key/超时)如实写回执上报,严禁伪造或占位产物。详见 WORKFLOW.md §9。
@@ -45,7 +46,7 @@ python3 modules/genmedia.py tts \
 | 01-story/narration | 本集旁白稿(第三人称统一,每条带锚点/est_duration_s) | `story/episodes/epNN/narration.md` |
 | 07-directing/shot-planning | 旁白挂点定稿(挂点镜/组 + 可用画面窗口) | `directing/epNN/shot_list.json` 的 `narration_anchors` |
 | 02-worldbuilding/dictionary | 专有名词释义与读音基准 | `bible/dictionary.json` |
-| 项目设定 | 统一旁白声线与语速区间 | 立项配置(Context Package 提供) |
+| 项目设定 | 语速区间(旁白声线=「🎨 生成模型」页生效 TTS 渠道的「默认音色」,不在工单里传) | 立项配置(Context Package 提供) |
 
 ## 输出
 

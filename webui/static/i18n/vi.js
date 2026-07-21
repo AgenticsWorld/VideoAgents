@@ -865,7 +865,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập bối cảnh này; gửi tin nhắn cho Tổng chế tác",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Đạo cụ {name}({id}; thẻ thiết lập id={id} trong bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập đạo cụ này; gửi tin nhắn cho Tổng chế tác",
-"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效": "Lời dẫn/mẫu giọng nhân vật/lồng tiếng dự phòng do TTS tạo (BGM đi qua tạo nhạc); kênh hiệu lực = tab đánh dấu ✓, bấm vòng tròn để chọn, có hiệu lực sau khi lưu",
+"旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效;选中渠道的「默认音色」即旁白声线": "Lời dẫn/mẫu giọng nhân vật/lồng tiếng dự phòng do TTS tạo (BGM đi qua tạo nhạc); kênh hiệu lực = tab đánh dấu ✓, bấm vòng tròn để chọn, có hiệu lực sau khi lưu; “giọng mặc định” của kênh được chọn chính là giọng thuyết minh",
 "设为生效渠道(保存后生效)": "Đặt làm kênh hiệu lực (có hiệu lực sau khi lưu)",
 "音色库": "Thư viện giọng",
 "speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…": "tên speaker, ví dụ zh_female_…_bigtts / giọng nhân bản S_…",
