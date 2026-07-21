@@ -4,8 +4,33 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-21
+
+### Added
+
+- Reference images page: upload, preview, and annotate visual/character/scene/prop/music/cover references; annotations sync to `refs/NOTES.md` and are read by visual and music agents.
+- Design brief split into main concept + design style, with a built-in style library picker (94 curated styles across live-action/3D/2D categories).
+- Workflow preview page: `runs/dag.json` rendered as stage swimlanes with dependency lines, fan-out aggregation, gate/sign-off markers, and remaining time/cost estimates.
+- Worldview preview page, plus preview enhancements across characters/scenes/props/storyboard: inline ✏️ edit-request buttons, audio players for voices/narration/music, and a collapsible directing plan block.
+- TTS channels: Volcano Doubao Seed-TTS 2.0 and ElevenLabs, with voice library search/audition and one-click default voice; narrator voice now follows the active channel's default voice.
+- Music generation via ElevenLabs Eleven Music with per-cue duration control.
+- Publishing skills: semi-automated draft upload to YouTube, Douyin, Xiaohongshu, TikTok, and Bilibili (final publish click stays manual).
+- Resource usage panel: session/weekly usage across the three engines plus OpenRouter/Volcano balances; engine CLI detection with install guidance; Kimi Code engine support.
+- Idle watchdog that wakes the orchestrator when the pipeline stalls, with per-project switches and usage-threshold gating.
+- Sign-off confirm dialogs that never auto-confirm, separate from ordinary retry confirms.
+- Optional subtitle burn-in for final renders.
+- Character gender field with hard constraints through voiceprint/casting/keyframe consistency checks; per-character voiceprint anchoring for TTS.
+- ASCII-only output filename rule enforced across all 83 agents.
+- UI language auto-alignment between browser and server, with agent reports following the UI language; i18n maintained across 11 languages.
+
+### Changed
+
+- Volcano TTS authentication migrated to the new console's single `X-Api-Key` header (legacy App ID + Access Token removed).
+- Final-render subtitles standardized on `subtitles_final.srt` (intro-offset corrected); master assembly naming locked down.
+
 ### Fixed
 
+- Final subtitle timing offset caused by intro length; watchdog engine fallback now uses the orchestrator's configured engine.
 - Made the test import path explicit for pytest 9 and GitHub-hosted runners.
 - Updated GitHub Actions to their Node.js 24 releases.
 
