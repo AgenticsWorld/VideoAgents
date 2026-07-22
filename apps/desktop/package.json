@@ -97,7 +97,9 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.video"
+      "category": "public.app-category.video",
+      "hardenedRuntime": true,
+      "notarize": true
     },
     "win": {
       "target": [
