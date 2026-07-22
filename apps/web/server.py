@@ -30,6 +30,8 @@ START_API = os.environ.get("VIDEOAGENTS_START_API", "" if os.environ.get("VIDEOA
     "1", "true", "yes", "on"
 }
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
+API_PROCESS: subprocess.Popen[bytes] | None = None
+API_START_LOCK: asyncio.Lock | None = None
 
 HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -48,38 +50,69 @@ def _health() -> bool:
         return False
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    process: subprocess.Popen[bytes] | None = None
-    if START_API and not await asyncio.to_thread(_health):
-        env = {
-            **os.environ,
-            "VIDEOAGENTS_HOST": "127.0.0.1",
-            "VIDEOAGENTS_PORT": str(API_PORT),
-            "VIDEOAGENTS_PUBLIC_PORT": str(WEB_PORT),
-        }
-        process = subprocess.Popen(
-            [sys.executable, "-m", "services.api"], cwd=ROOT, env=env,
+def _api_env() -> dict[str, str]:
+    return {
+        **os.environ,
+        "VIDEOAGENTS_HOST": "127.0.0.1",
+        "VIDEOAGENTS_PORT": str(API_PORT),
+        "VIDEOAGENTS_PUBLIC_PORT": str(WEB_PORT),
+    }
+
+
+def _api_lock() -> asyncio.Lock:
+    global API_START_LOCK
+    if API_START_LOCK is None:
+        API_START_LOCK = asyncio.Lock()
+    return API_START_LOCK
+
+
+async def _ensure_api_ready() -> None:
+    """Start or restart the local API service used by the Web proxy."""
+    global API_PROCESS
+    if not START_API:
+        return
+    if API_PROCESS and API_PROCESS.poll() is None and await asyncio.to_thread(_health):
+        return
+    async with _api_lock():
+        if API_PROCESS and API_PROCESS.poll() is None and await asyncio.to_thread(_health):
+            return
+        if API_PROCESS and API_PROCESS.poll() is None:
+            API_PROCESS.terminate()
+            try:
+                await asyncio.to_thread(API_PROCESS.wait, 5)
+            except subprocess.TimeoutExpired:
+                API_PROCESS.kill()
+        elif API_PROCESS and API_PROCESS.returncode is not None:
+            print(f"VideoAgents API exited with code {API_PROCESS.returncode}; restarting", flush=True)
+        API_PROCESS = subprocess.Popen(
+            [sys.executable, "-m", "services.api"], cwd=ROOT, env=_api_env(),
             stdout=None, stderr=None,
         )
         for _ in range(60):
             if await asyncio.to_thread(_health):
-                break
-            if process.poll() is not None:
-                raise RuntimeError(f"API service exited with code {process.returncode}")
+                return
+            if API_PROCESS.poll() is not None:
+                code = API_PROCESS.returncode
+                API_PROCESS = None
+                raise RuntimeError(f"API service exited with code {code}")
             await asyncio.sleep(0.5)
-        else:
-            process.terminate()
-            raise RuntimeError(f"API service did not become ready at {API_ORIGIN}")
+        API_PROCESS.terminate()
+        raise RuntimeError(f"API service did not become ready at {API_ORIGIN}")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await _ensure_api_ready()
     try:
         yield
     finally:
-        if process and process.poll() is None:
-            process.terminate()
+        global API_PROCESS
+        if API_PROCESS and API_PROCESS.poll() is None:
+            API_PROCESS.terminate()
             try:
-                await asyncio.to_thread(process.wait, 5)
+                await asyncio.to_thread(API_PROCESS.wait, 5)
             except subprocess.TimeoutExpired:
-                process.kill()
+                API_PROCESS.kill()
 
 
 app = FastAPI(title="VideoAgents Web", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -107,6 +140,10 @@ def _upstream_chunk(upstream, size: int = 64 * 1024) -> bytes:
 
 @app.api_route("/api/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_api(path: str, request: Request):
+    try:
+        await _ensure_api_ready()
+    except RuntimeError as error:
+        return JSONResponse({"detail": f"API service unavailable: {error}"}, status_code=502)
     query = f"?{request.url.query}" if request.url.query else ""
     url = f"{API_ORIGIN}/api/v1/{path}{query}"
     body = await request.body()
