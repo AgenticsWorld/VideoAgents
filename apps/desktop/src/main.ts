@@ -113,6 +113,8 @@ async function ensureWebServer(): Promise<void> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopExecutablePath(),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,

@@ -1129,7 +1129,9 @@ def _fmt_num(x) -> str:
 
 
 def build_role_prompt(agent_id: str, project: str) -> str:
-    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text()
+    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
+        encoding="utf-8"
+    )
     proj_rel = f"data/projects/{project}"
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
@@ -1154,7 +1156,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     try:
         bp = PROJECTS_DIR / project / "brief.md"
         if bp.is_file():
-            brief = bp.read_text().strip()
+            brief = bp.read_text(encoding="utf-8").strip()
     except Exception:
         brief = ""
     rv = ps.get("review") or {}
@@ -1405,7 +1407,20 @@ async def execute_run(run: dict, message: str, model: str | None):
         publish_run(run)
 
         engine = run.get("engine", "claude")
-        role = build_role_prompt(agent_id, run["project"])
+        try:
+            role = build_role_prompt(agent_id, run["project"])
+        except Exception as error:  # noqa: BLE001
+            # Prompt construction happens before the CLI process and its JSONL log
+            # are created. Always finish the run here so an encoding/configuration
+            # error cannot leave the UI stuck in the "running" state forever.
+            run["status"] = "error"
+            run["error"] = f"\u6784\u5efa Agent \u63d0\u793a\u8bcd\u5931\u8d25\uff1a{error}"[:500]
+            run["ended"] = time.time()
+            append_chat(agent_id, run["project"],
+                        {"role": "assistant", "text": run["error"],
+                         "run_id": run["id"], "status": "error"})
+            publish_run(run)
+            return
         session_key = f"{engine}::{agent_id}::{run['project']}"
         session_id = None if is_stateless else STATE["sessions"].get(session_key)
         # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
