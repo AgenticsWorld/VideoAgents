@@ -61,6 +61,25 @@ def find_python(directory: Path) -> Path:
     return min(matches, key=lambda path: len(path.parts))
 
 
+def is_junction(path: Path) -> bool:
+    """Return whether *path* is a Windows directory junction.
+
+    pathlib only exposes is_junction on Python 3.12+ and Windows.  uv uses a
+    junction for its major/minor CPython alias there, while Unix uses a symlink.
+    """
+    check = getattr(path, "is_junction", None)
+    return bool(check and check())
+
+
+def remove_python_aliases(python_store: Path) -> None:
+    """Remove uv's absolute top-level aliases before relocating the runtime."""
+    for candidate in python_store.iterdir():
+        if is_junction(candidate):
+            candidate.rmdir()
+        elif candidate.is_symlink():
+            candidate.unlink()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -104,9 +123,7 @@ def main() -> None:
     )
     run(str(python), "-c", "import fastapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
     version = run(str(python), "-c", "import platform; print(platform.python_version())", env=env)
-    for candidate in python_store.iterdir():
-        if candidate.is_symlink():
-            candidate.unlink()
+    remove_python_aliases(python_store)
     manifest = {
         "schema": SCHEMA,
         "version": args.version or f"cpython-{version}-{lock_hash[:12]}",

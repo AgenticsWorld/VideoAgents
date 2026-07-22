@@ -27,8 +27,25 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_junction(path: Path) -> bool:
+    check = getattr(path, "is_junction", None)
+    return bool(check and check())
+
+
+def runtime_paths(root: Path):
+    """Yield runtime entries without descending into symlinks or junctions."""
+    for source in sorted(root.iterdir()):
+        yield source
+        if source.is_dir() and not source.is_symlink() and not is_junction(source):
+            yield from runtime_paths(source)
+
+
 def add_path(archive: zipfile.ZipFile, source: Path, relative: Path) -> None:
     name = relative.as_posix()
+    if is_junction(source):
+        # Windows uv aliases target the absolute staging directory and must not
+        # be distributed. The real versioned CPython directory is also present.
+        return
     if source.is_symlink():
         info = zipfile.ZipInfo(name)
         info.create_system = 3
@@ -61,7 +78,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     package = output_dir / filename
     with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-        for source in sorted(runtime.rglob("*")):
+        for source in runtime_paths(runtime):
             add_path(archive, source, source.relative_to(runtime))
     metadata = {
         "schema": 1,
