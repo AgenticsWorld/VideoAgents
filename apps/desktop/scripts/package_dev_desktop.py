@@ -40,7 +40,7 @@ def main() -> None:
     parser.add_argument("--public-base", default=PUBLIC_BASE)
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    filename = f"video-agents-{args.platform}.zip"
+    filename = f"video-agents-{args.platform}-v{APP_VERSION}.zip"
     package = OUTPUT / filename
     if args.platform == "mac":
         source = newest("*.zip")
