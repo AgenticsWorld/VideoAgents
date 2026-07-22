@@ -29,6 +29,9 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+!apps/desktop/build/
+!apps/desktop/build/icon.icns
+!apps/desktop/build/icon.png
 
 # JavaScript and desktop build products
 node_modules/

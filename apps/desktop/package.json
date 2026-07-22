@@ -97,6 +97,7 @@
         "dmg",
         "zip"
       ],
+      "icon": "build/icon.icns",
       "category": "public.app-category.video",
       "hardenedRuntime": true,
       "notarize": true
