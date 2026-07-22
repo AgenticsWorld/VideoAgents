@@ -17,7 +17,7 @@ if str(MODULES_DIR) not in sys.path:
 def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):
     """统一入参。返回 (args, proj_root)。
 
-    --project 缺省取 WEBUI_PROJECT 环境变量(webui 派单时注入),再退回 demo;
+    --project 缺省取 VIDEOAGENTS_PROJECT 环境变量(runtime 派单时注入),再退回 demo;
     --out-root 指定后产物写到该目录下(验证对拍走 scratch,不覆盖在库交付物);
     configure(ap) 可给脚本追加自有参数。
     无参调用与旧脚本硬编码 demo/ep01 的行为完全等价。
@@ -25,8 +25,8 @@ def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):
     ap = argparse.ArgumentParser(description=desc)
     if configure:
         configure(ap)
-    ap.add_argument("--project", default=os.environ.get("WEBUI_PROJECT", "demo"),
-                    help="项目名(data/projects/<project>),缺省 $WEBUI_PROJECT 或 demo")
+    ap.add_argument("--project", default=os.environ.get("VIDEOAGENTS_PROJECT", "demo"),
+                    help="项目名(data/projects/<project>),缺省 $VIDEOAGENTS_PROJECT 或 demo")
     if ep:
         ap.add_argument("--ep", default="ep01", help="集号,缺省 ep01")
     ap.add_argument("--out-root", default=None,

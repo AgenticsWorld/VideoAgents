@@ -22,7 +22,7 @@ service. Agents may read and write project files and may execute local commands.
 - Never expose the Web console directly to the public Internet.
 - Keep `VIDEOAGENTS_PERMISSION_MODE=acceptEdits` for untrusted inputs.
 - Treat novels, reference files, prompts, and model output as untrusted content.
-- Store provider keys only in `webui/genconfig.json` or a secret manager.
+- Store provider keys only in `data/.videoagents/genconfig.json` or a secret manager.
 - Do not commit `data/`, runtime logs, chat histories, or configuration files.
 - Run the application under a dedicated OS account or container when processing
   untrusted projects.

@@ -1,0 +1,120 @@
+{
+  "name": "@videoagents/desktop",
+  "private": true,
+  "version": "1.0.0",
+  "author": "AgenticsWorld",
+  "description": "VideoAgents desktop client",
+  "main": "dist/main.js",
+  "scripts": {
+    "prebuild": "node ../../scripts/require-node.mjs",
+    "dev": "npm run build && electron .",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "node scripts/package.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "extract-zip": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3",
+    "typescript": "^5.7.3"
+  },
+  "build": {
+    "appId": "world.agentics.videoagents",
+    "productName": "VideoAgents",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build-info.json",
+        "to": "build-info.json"
+      },
+      {
+        "from": "../web",
+        "to": "backend/apps/web",
+        "filter": [
+          "server.py",
+          "__init__.py",
+          "static/**/*"
+        ]
+      },
+      {
+        "from": "../../services",
+        "to": "backend/services",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../../modules",
+        "to": "backend/modules",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../../agents",
+        "to": "backend/agents",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../../code",
+        "to": "backend/code",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../../.claude",
+        "to": "backend/.claude",
+        "filter": [
+          "settings.json",
+          "hooks/**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AgenticsWorld",
+        "repo": "VideoAgents"
+      }
+    ]
+  }
+}

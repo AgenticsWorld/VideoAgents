@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """deepagents 引擎 runner —— 用 OpenAI 兼容端点(如 LM Studio 本地模型)驱动 deepagents。
 
-由 webui/server.py 以子进程方式调用(解释器:webui/.venv-deepagents/bin/python):
+由 services/runtime/core.py 以子进程方式调用(解释器由 DEEPAGENTS_PY 指定):
   runner --model <id> --base-url <url> --api-key <key>
   系统提示词与工作指令经环境变量 DA_SYSTEM / DA_PROMPT 传入(避免超长 argv)。
 

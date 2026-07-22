@@ -9,7 +9,7 @@ turning long-form fiction into episodic video. It defines 83 specialized agents
 across story adaptation, worldbuilding, characters, art direction, directing,
 media generation, audio, editing, quality assurance, and publishing.
 
-The repository includes a local Web console, a machine-readable workflow DAG,
+The repository includes the original HTML/CSS WebUI, an Electron shell, an open FastAPI service, a machine-readable workflow DAG,
 agent role specifications, media-provider adapters, and reusable validation
 tools. Project inputs and generated media stay in a local `data/projects/`
 workspace and are not committed by default.
@@ -22,10 +22,13 @@ workspace and are not committed by default.
 - Claude CLI, Codex CLI, and OpenAI-compatible DeepAgents execution engines
 - Configurable image, video, music, TTS, and object-storage providers
 - A multilingual local Web console with preview and storyboard tools
+- The same original static WebUI shared by browsers and Electron
+- Versioned `/api/v1`, OpenAPI, durable run state, and resumable SSE events
 
 ## Requirements
 
 - Python 3.10 or newer
+- Node.js 22.12 or newer only for Electron development and packaging
 - At least one agent engine: Claude CLI, Codex CLI, or an OpenAI-compatible model
 - FFmpeg for media inspection, audio processing, and editing workflows
 - Provider credentials only for the generation services you choose to use
@@ -39,11 +42,32 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
-python webui/server.py
+python apps/web/check.py
+python apps/web/server.py
 ```
 
-Open <http://127.0.0.1:8630>. Select or create a project in the top bar, then
+After installation, the equivalent `videoagents-web` command is also available. Use `videoagents-api` when only the open API service is needed.
+
+Open <http://127.0.0.1:8630>. API documentation is at
+<http://127.0.0.1:8630/api/v1/docs>. Select or create a project in the top bar, then
 configure an execution engine and any generation providers you need.
+
+Use `npm run dev:web` to start the Python Web gateway and `npm ci && npm run dev:desktop` for the
+desktop shell. Electron starts the same gateway by default or proxies the remote API
+specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
+without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents.json`
+and downloads the matching package. Claude, Codex, FFmpeg, models, and GPU environments remain
+optional external installations.
+
+Before desktop development, make sure `node --version` meets `.nvmrc`; with nvm, run `nvm use` first. Run `npm ci` again after switching Node major versions so an incomplete Electron installation from the old runtime is not reused.
+
+The equivalent Makefile targets are `make desktop-install`, `make desktop-dev` (or `make desktop-run`) for development, and `make desktop-build` for compilation. `make desktop-runtime` creates a separately distributable Python ZIP using the current short Git hash under `apps/desktop/.runtime-packages/`. `make desktop` creates the client-only artifacts under `apps/desktop/release/`.
+
+The Python runtime and Electron application are versioned independently. Runtimes are installed under the user data directory at `python-runtimes/versions/<version>/` and selected through `active.json`. Startup never checks for updates when a valid runtime exists; the index is read only on first installation or when the user chooses the manual Python update menu item. Package size, SHA-256, platform, architecture, version, and executable containment are validated before activation. `VIDEOAGENTS_PYTHON` remains an explicit development and diagnostics override.
+
+Desktop packages produced from `dev` are also identified by the short Git hash and published at the stable URLs `packages/video-agents-mac.zip` (Universal) and `packages/video-agents-win.zip` (containing the NSIS installer). A Dev client reads the same index on every launch and prompts only when `desktop.mac/win.version` differs from its embedded hash. On approval it verifies and downloads the ZIP, then replaces the macOS app or silently runs the Windows upgrade after the current process exits. The Release channel remains separate from this Dev S3 update channel.
+
+Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never reads an Apple developer certificate from the macOS Keychain and performs no signing or notarization. Release signing is enabled only in GitHub Actions when `CSC_LINK` and the Apple secrets are explicitly supplied.
 
 For unattended pipelines, start the console in full-auto mode so agents on the
 `claude` engine can run shell commands without approval prompts (the `codex`
@@ -75,19 +99,24 @@ manager.
 agents/          Agent role specifications, workflow documentation, and DAG
 code/            Repository-level validation and utility scripts
 modules/         Media, audio, versioning, and DeepAgents adapters
-webui/           Local FastAPI console and browser interface
+services/api/    Independently runnable Python API service, schemas, and runtime state
+services/runtime/ Agent scheduling, project services, providers, and runtime tools
+apps/web/        Original static WebUI plus Python static server/API reverse proxy
+apps/desktop/    Electron shell, Python Web lifecycle, packaging, and updates
 tests/           Repository integrity and security-default tests
-data/projects/   Local project inputs and generated artifacts (gitignored)
+data/projects/   Video project resources, inputs, and generated artifacts
 ```
 
 `agents/WORKFLOW.md` is the human-readable process authority.
 `agents/workflow.yaml` is the orchestrator's machine-readable input.
 
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component relationships,
+directory decisions, the future role of `packages/`, and inline scheduler versus worker trade-offs.
+
 ## Configuration
 
-The Web console stores provider settings in `webui/genconfig.json`. That file
-can contain API keys and is excluded from Git. Runtime logs, conversations,
-session state, project sources, and generated media are also excluded.
+Runtime configuration and SQLite control state live in `data/.videoagents/`;
+project media remains in `data/projects/`. Both can contain private data and are excluded from Git.
 
 Public-release security defaults are deliberately conservative:
 

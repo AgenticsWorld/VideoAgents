@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>版本管理 — Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px}
+select:focus{outline:none;border-color:var(--accent)}
+main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:14px}
+.notice{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px}
+.batch-head{display:flex;align-items:flex-start;gap:12px}
+.batch-main{flex:1;min-width:0;cursor:pointer}
+.batch-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+.batch-meta .tid{color:var(--accent);font-family:ui-monospace,Menlo,monospace}
+.badge{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim);white-space:nowrap}
+.badge.frozen{color:var(--yellow);border-color:var(--yellow)}
+.reason{margin-top:4px;font-size:13px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card.open .reason{display:block}
+.files{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;font-size:12px;font-family:ui-monospace,Menlo,monospace;color:var(--dim);max-height:260px;overflow:auto}
+.card.open .files{display:block}
+.files div{white-space:nowrap}
+.files .v{color:var(--purple)}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button.clone{color:var(--accent)}
+#global-status{display:none;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--panel2)}
+#global-status.show{display:block}
+#global-status .ok{color:var(--green)}
+#global-status .err{color:var(--red)}
+#global-status a{color:var(--accent)}
+.empty{color:var(--dim);text-align:center;padding:40px 0}
+.card.danger{border-color:#7f1d1d}
+.card.danger h3{font-size:13px;color:var(--red);margin-bottom:6px}
+.card.danger p{font-size:12px;color:var(--dim);margin-bottom:10px}
+.danger-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.danger-row input{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:200px}
+.danger-row input:focus{outline:none;border-color:var(--red)}
+button.red{background:#b91c1c;border-color:#b91c1c;color:#fff;font-weight:600}
+button.red:hover{background:#dc2626;border-color:#dc2626}
+button.red:disabled{background:var(--panel2);border-color:var(--border);color:var(--dim);font-weight:400}
+#del-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;align-items:center;justify-content:center}
+#del-modal .box{background:var(--panel);border:1px solid #7f1d1d;border-radius:12px;padding:20px 22px;max-width:420px;display:flex;flex-direction:column;gap:12px}
+#del-modal .box h3{font-size:14px;color:var(--red)}
+#del-modal .box p{font-size:13px;color:var(--text)}
+#del-modal .box .sub{font-size:12px;color:var(--dim)}
+#del-modal .btns{display:flex;gap:10px;justify-content:flex-end}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>🧬 版本管理</h1>
+  <span class="badge" title="每个提交批次都是当时全部已登记产物的完整快照;克隆出全新项目,不影响源项目">从任一历史提交克隆全新项目</span>
+  <div class="spacer"></div>
+  <label style="font-size:12px;color:var(--dim)">项目</label>
+  <select id="project"></select>
+</header>
+<main>
+  <div class="notice">
+    每行是一个任务批次的产物落盘(版本管理 Agent 登记);「克隆」会把<b>截至该批次</b>的全部已登记产物
+    (含 settings.json / brief.md / runs/dag.json 等当时版本)导出为一个全新项目,版本历史重置为 v1 基线。
+    注意:runs/ 下的任务回执大多未登记进版本库,克隆项目续跑前 orchestrator 可能需补认;
+    大项目克隆将占用数百 MB ~ 数 GB 磁盘。
+  </div>
+  <div id="global-status"></div>
+  <div id="list"><div class="empty">加载中…</div></div>
+  <div class="card danger">
+    <h3>⚠️ 危险操作:删除当前项目</h3>
+    <p>将永久删除项目 <b id="del-proj-name"></b> 的整个目录(全部产物、版本库、运行记录),<b style="color:var(--red)">不可恢复</b>。请输入项目名称以解锁删除按钮。</p>
+    <div class="danger-row">
+      <input id="del-confirm" placeholder="输入项目名称" autocomplete="off">
+      <button class="red" id="del-btn" disabled>删除项目</button>
+    </div>
+  </div>
+</main>
+<div id="del-modal">
+  <div class="box">
+    <h3>⚠️ 确认删除项目</h3>
+    <p>即将永久删除项目 <b id="del-modal-name"></b> 的全部文件。</p>
+    <p class="sub">此操作不可恢复:产物、嵌入式版本库(repo.git)、运行记录将一并删除。删除后自动跳转到第一个项目。</p>
+    <div class="btns">
+      <button id="del-cancel">取消</button>
+      <button class="red" id="del-ok">确认删除</button>
+    </div>
+  </div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+async function api(p,body,method='POST'){const o=body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmtTime(ts){return (ts||'').replace('T',' ').replace(/\+.*$/,'')}
+
+const curProj=()=>$('#project').value;
+let CLONING=false;
+
+async function initProjects(){
+  let list=[];try{list=await api('/api/v1/projects')}catch(e){}
+  if(!list.length)list=['demo'];
+  const sel=$('#project');sel.innerHTML='';
+  list.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o)});
+  const want=(new URLSearchParams(location.search).get('project'))
+    ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project);
+  sel.value=list.includes(want)?want:list[0];
+  sel.onchange=()=>{loadList();refreshDanger()};
+}
+
+/* ---------- 危险操作:删除当前项目(输入项目名解锁 → 红色确认弹窗) ---------- */
+function refreshDanger(){
+  $('#del-proj-name').textContent=curProj();
+  $('#del-confirm').value='';
+  $('#del-btn').disabled=true;
+}
+$('#del-confirm').oninput=()=>{
+  $('#del-btn').disabled=$('#del-confirm').value.trim()!==curProj();
+};
+$('#del-btn').onclick=()=>{
+  if($('#del-confirm').value.trim()!==curProj())return;
+  $('#del-modal-name').textContent=curProj();
+  $('#del-modal').style.display='flex';
+};
+$('#del-cancel').onclick=()=>$('#del-modal').style.display='none';
+$('#del-ok').onclick=async()=>{
+  const proj=curProj();
+  const btn=$('#del-ok');btn.disabled=true;btn.textContent='删除中…';
+  try{
+    const r=await api('/api/v1/projects/'+encodeURIComponent(proj),{confirmation:$('#del-confirm').value.trim()},'DELETE');
+    // 更新本地偏好并跳到第一个项目的控制台
+    try{
+      const p=JSON.parse(localStorage.getItem('webui_prefs')||'{}');
+      p.project=r.next||'';localStorage.setItem('webui_prefs',JSON.stringify(p));
+    }catch(e){}
+    location.href=r.next?('/?project='+encodeURIComponent(r.next)):'/';
+  }catch(e){
+    $('#del-modal').style.display='none';
+    showStatus(`<span class="err">✗ ${t('删除失败:')}${esc(e.message)}</span>`);
+  }finally{btn.disabled=false;btn.textContent='确认删除'}
+};
+
+async function loadList(){
+  const box=$('#list');box.innerHTML='<div class="empty">加载中…</div>';
+  let data;
+  try{data=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/versions')}
+  catch(e){box.innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
+  const batches=data.batches||[];
+  if(!batches.length){box.innerHTML='<div class="empty">该项目还没有版本登记</div>';return}
+  box.innerHTML='';
+  batches.forEach(b=>{
+    const card=document.createElement('div');card.className='card';
+    const tags=b.frozen_tags.map(t=>`<span class="badge frozen">🔒 ${esc(t)}</span>`).join('');
+    card.innerHTML=`
+      <div class="batch-head">
+        <div class="batch-main" title="点击展开/收起文件明细">
+          <div class="batch-meta">
+            <span>${esc(fmtTime(b.timestamp))}</span>
+            <span class="tid">${esc(b.task_id)}</span>
+            <span class="badge">${esc(I18N.f('{n} 个文件',{n:b.files.length}))}</span>${tags}
+          </div>
+          <div class="reason">${esc(b.reason)||'<i>(无说明)</i>'}</div>
+          <div class="files">${b.files.map(f=>`<div>${esc(f.artifact)} <span class="v">@${esc(f.version)}</span></div>`).join('')}</div>
+        </div>
+        <button class="clone">克隆</button>
+      </div>`;
+    card.querySelector('.batch-main').onclick=()=>card.classList.toggle('open');
+    card.querySelector('button.clone').onclick=ev=>{ev.stopPropagation();doClone(b)};
+    box.appendChild(card);
+  });
+  setButtons(!CLONING);
+}
+
+function setButtons(enabled){
+  document.querySelectorAll('button.clone').forEach(x=>x.disabled=!enabled);
+}
+function showStatus(html){const g=$('#global-status');g.innerHTML=html;g.classList.add('show')}
+
+async function doClone(b){
+  if(CLONING)return;
+  const src=curProj();
+  const msg=I18N.f('基于该提交克隆全新项目?\n\n源项目:{src}\n提交时间:{ts}\n任务:{task}\n快照内容:截至该批次的全部已登记产物(含当时的 dag.json 等配置)\n\n将创建新项目「{src}-提交时间」,大项目可能占用数百 MB ~ 数 GB 磁盘,且需要几分钟登记基线。',
+    {src,ts:fmtTime(b.timestamp),task:b.task_id});
+  if(!confirm(msg))return;
+  let name;
+  try{
+    const r=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone',{snapshot_commit:b.snapshot_commit,task_id:b.task_id});
+    name=r.name;
+  }catch(e){showStatus(`<span class="err">✗ ${t('克隆启动失败:')}${esc(e.message)}</span>`);return}
+  CLONING=true;setButtons(false);
+  showStatus(`${t('⏳ 正在克隆 →')} <b>${esc(name)}</b> …`);
+  const timer=setInterval(async()=>{
+    let st;
+    try{st=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone')}
+    catch(e){return}
+    if(st.state==='running'){
+      const [n,total]=st.progress||[0,0];
+      showStatus(`${t('⏳ 正在克隆 →')} <b>${esc(name)}</b>:${esc(st.step)}${total?` ${n}/${total}`:''}`);
+    }else{
+      clearInterval(timer);CLONING=false;setButtons(true);
+      if(st.state==='done'){
+        showStatus(`<span class="ok">✓ 克隆完成:</span><b>${esc(name)}</b> `
+          +`<a href="/?project=${encodeURIComponent(name)}">→ 在控制台打开</a>`);
+      }else{
+        showStatus(`<span class="err">✗ ${t('克隆失败:')}${esc(st.error||t('未知错误'))}</span>`);
+      }
+    }
+  },2000);
+}
+
+(async()=>{
+  await initProjects();
+  refreshDanger();
+  await loadList();
+  // 页面打开时若已有克隆在跑(如刷新页面),恢复轮询提示
+  try{
+    const st=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/versions/clone');
+    if(st.state==='running'){CLONING=true;setButtons(false);
+      showStatus(`${t('⏳ 已有克隆任务进行中 →')} <b>${esc(st.new_name)}</b>${t(',请稍候(刷新可更新进度)')}`)}
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

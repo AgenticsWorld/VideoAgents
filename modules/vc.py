@@ -17,8 +17,10 @@
 新项目接入:python3 modules/vc.py install data/projects/<slug>(写薄壳 + init)。
 所有 artifact 路径均相对 .version/ 的上级目录(即项目根 data/projects/<slug>/)。
 """
-import argparse, hashlib, json, os, stat, subprocess, sys
+import argparse, hashlib, json, os, stat, sys
 from datetime import datetime, timezone
+
+import pygit2
 
 # 由 main(vdir=...) 初始化;缺省取本文件所在目录(直接把本文件拷进 .version/ 也能独立工作)
 VDIR = ROOT = GITDIR = MANIFEST = CHANGELOG = None
@@ -53,12 +55,15 @@ def now():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-def git(*args, check=True, capture=True):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    cmd = ["git", "--git-dir", GITDIR] + list(args)
-    r = subprocess.run(cmd, cwd=ROOT, env=env, check=check,
-                       capture_output=capture, text=True)
-    return r.stdout.strip() if capture else ""
+def repository():
+    return pygit2.Repository(GITDIR)
+
+
+def _tree_entry(tree, path):
+    obj = tree
+    for part in path.split("/"):
+        obj = repository()[obj[part].id]
+    return obj
 
 
 def sha256(path):
@@ -100,12 +105,17 @@ def rel(p):
 def cmd_init(_):
     os.makedirs(GITDIR, exist_ok=True)
     if not os.path.exists(os.path.join(GITDIR, "HEAD")):
-        subprocess.run(["git", "--git-dir", GITDIR, "init", "-q"],
-                       cwd=ROOT, check=True)
-    git("config", "core.worktree", ROOT)
-    git("config", "core.bare", "false")
-    git("config", "user.name", "version-agent")
-    git("config", "user.email", "version-agent@novel2video.local")
+        pygit2.init_repository(
+            GITDIR,
+            bare=False,
+            workdir_path=ROOT,
+            initial_head="main",
+            flags=(pygit2.enums.RepositoryInitFlag.MKPATH
+                   | pygit2.enums.RepositoryInitFlag.NO_DOTGIT_DIR),
+        )
+    repo = repository()
+    repo.config["user.name"] = "version-agent"
+    repo.config["user.email"] = "version-agent@videoagents.local"
     with open(os.path.join(GITDIR, "info", "exclude"), "w") as f:
         f.write(".version/\n")
     if not os.path.exists(MANIFEST):
@@ -146,11 +156,16 @@ def _register_one(m, path, task_id, attempt, reason, tag=None):
     # 冻结的是历史版本(git 对象 + 标签),新写入永远走新版本号,绝不触碰旧版
     if not os.access(fp, os.W_OK):
         os.chmod(fp, os.stat(fp).st_mode | stat.S_IWUSR)
-    git("add", "-f", "--", p)
+    repo = repository()
+    index = repo.index
+    index.add(p)
+    index.write()
     ver = entry["current"] + 1
     msg = f"{p} @v{ver} | task={task_id} attempt={attempt} | {reason}"
-    git("commit", "-q", "--allow-empty", "-m", msg, "--", p)
-    commit = git("rev-parse", "HEAD")
+    tree = index.write_tree()
+    parents = [] if repo.head_is_unborn else [repo.head.target]
+    signature = pygit2.Signature("version-agent", "version-agent@videoagents.local")
+    commit = str(repo.create_commit("HEAD", signature, signature, msg, tree, parents))
     rec = {"artifact": p, "version": f"v{ver}", "task_id": task_id,
            "attempt": attempt, "reason": reason, "frozen": False,
            "tag": tag, "commit": commit, "sha256": digest, "timestamp": now()}
@@ -183,14 +198,17 @@ def _find(m, artifact, vstr):
 def cmd_show(a):
     m = load_manifest()
     p, rec = _find(m, a.artifact, a.version)
-    sys.stdout.write(git("show", f"{rec['commit']}:{p}"))
+    commit = repository()[pygit2.Oid(hex=rec["commit"])]
+    blob = _tree_entry(commit.tree, p)
+    sys.stdout.buffer.write(blob.data)
 
 
 def cmd_diff(a):
     m = load_manifest()
     p, r1 = _find(m, a.artifact, a.v1)
     _, r2 = _find(m, a.artifact, a.v2)
-    out = git("diff", r1["commit"], r2["commit"], "--", p, check=False)
+    repo = repository()
+    out = repo.diff(repo[r1["commit"]], repo[r2["commit"]], paths=[p]).patch
     print(out if out else f"{p}: {a.v1} 与 {a.v2} 内容一致")
 
 
@@ -198,8 +216,8 @@ def cmd_rollback(a):
     m = load_manifest()
     p, rec = _find(m, a.artifact, a.version)
     fp = os.path.join(ROOT, p)
-    blob = subprocess.run(["git", "--git-dir", GITDIR, "show", f"{rec['commit']}:{p}"],
-                          cwd=ROOT, check=True, capture_output=True).stdout
+    commit = repository()[pygit2.Oid(hex=rec["commit"])]
+    blob = _tree_entry(commit.tree, p).data
     if os.path.exists(fp) and not os.access(fp, os.W_OK):
         os.chmod(fp, os.stat(fp).st_mode | stat.S_IWUSR)
     with open(fp, "wb") as f:
@@ -239,7 +257,10 @@ def cmd_freeze(a):
         append_changelog({"artifact": p, "version": rec["version"], "task_id": a.task_id,
                           "attempt": 1, "reason": reason, "frozen": True,
                           "tag": a.tag, "commit": rec["commit"], "timestamp": now()})
-    git("tag", a.tag.replace("@", "-at-").replace("/", "_"), frozen[-1]["commit"])
+    tag_name = a.tag.replace("@", "-at-").replace("/", "_")
+    repository().create_reference(
+        f"refs/tags/{tag_name}", pygit2.Oid(hex=frozen[-1]["commit"])
+    )
     m["tags"][a.tag] = {"frozen_at": now(), "task_id": a.task_id, "artifacts": frozen}
     save_manifest(m)
     print(f"已冻结 {len(frozen)} 个产物 → 标签 {a.tag}(git tag: "

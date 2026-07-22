@@ -2,7 +2,6 @@
 .env
 .env.*
 !.env.example
-webui/genconfig.json
 *.pem
 *.key
 *.p12
@@ -15,17 +14,13 @@ runs/
 qa/evidence/
 
 # Runtime state
-webui/agentmodels.json
-webui/chats/
-webui/runs/
-webui/state.json
-webui/server.log
+data/.videoagents/
 agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 
 # Python
 .venv/
 venv/
-webui/.venv-deepagents/
+.venv-deepagents/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -34,6 +29,16 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+
+# JavaScript and desktop build products
+node_modules/
+apps/desktop/dist/
+apps/desktop/release/
+apps/desktop/.runtime/
+apps/desktop/.runtime.staging/
+apps/desktop/.uv-cache/
+apps/desktop/.runtime-packages/
+apps/desktop/.desktop-packages/
 
 # Editors and operating systems
 .DS_Store

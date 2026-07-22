@@ -1,13 +1,13 @@
 import asyncio
 
 import pytest
-from fastapi import HTTPException
 
-from webui import server
+from services.api.__main__ import DEFAULT_HOST
+from services.runtime import core as server
 
 
 def test_public_release_security_defaults():
-    assert server.HOST == "127.0.0.1"
+    assert DEFAULT_HOST == "127.0.0.1"
     assert server.PERMISSION_MODE == "acceptEdits"
     assert server.CLAUDE_USAGE_PROBE_ENABLED is False
     assert server._claude_oauth_token() is None
@@ -24,5 +24,5 @@ def test_agent_catalog_is_available():
 
 
 def test_agent_path_validation_rejects_traversal():
-    with pytest.raises(HTTPException):
+    with pytest.raises(server.ServiceError):
         server.safe_agent("../server")

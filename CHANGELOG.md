@@ -4,6 +4,16 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-21
+
+### Changed
+
+- Preserved the original HTML/CSS WebUI under `apps/web/static`, migrated its JavaScript directly to the typed `/api/v1` FastAPI surface, and retained no legacy API adapter.
+- Added a Python Web gateway shared by URL and Electron clients for static pages and same-origin API proxying; Electron supports local or remote Python services and consumes GitHub Release updates.
+- Persisted runs, approvals, and replayable event sequences in SQLite while retaining the established creative execution core and `data/projects/` resource model.
+- Migrated project asset history and version-clone operations from system Git commands to `pygit2`.
+- Added GitHub Actions packaging for macOS x64/arm64 and Windows x64 clients without bundling third-party execution environments.
+
 ## [1.0.0] - 2026-07-21
 
 ### Added

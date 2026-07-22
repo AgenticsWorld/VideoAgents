@@ -7,13 +7,21 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENTS = ROOT / "agents"
+GENERATED_PARTS = {
+    ".git", ".venv", ".runtime", ".runtime.staging", ".runtime-packages", ".uv-cache",
+    "node_modules", "dist", "release",
+}
+
+
+def is_generated(path: Path) -> bool:
+    return bool(GENERATED_PARTS.intersection(path.parts))
 
 
 def test_python_sources_parse():
     files = [
         path
         for path in ROOT.rglob("*.py")
-        if ".git" not in path.parts and ".venv" not in path.parts
+        if not is_generated(path)
     ]
     assert files
     for path in files:
@@ -22,7 +30,7 @@ def test_python_sources_parse():
 
 def test_json_and_yaml_files_parse():
     for path in ROOT.rglob("*.json"):
-        if ".git" not in path.parts:
+        if not is_generated(path):
             json.loads(path.read_text(encoding="utf-8"))
     for path in [AGENTS / "workflow.yaml", ROOT / "CITATION.cff"]:
         assert yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -64,7 +72,7 @@ def test_release_tree_has_no_private_project_artifacts():
         "data/projects/" + "thedoor",
     )
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if not path.is_file() or is_generated(path):
             continue
         try:
             text = path.read_text(encoding="utf-8")

@@ -167,7 +167,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
 
 **usage 字段(计费记录,必须保留)**:genmedia 每次成功生成会把方舟返回的计费明细直接落到
 `grpNNN.meta.json` 的 `usage` 字段(含 `completion_tokens`/`total_tokens`/`task_id` 等),并在
-`assets/clips/epNN/usage_ledger.jsonl` 追加一行累计台账(webui 分集 token 统计的权威来源,勿删勿改)。
+`assets/clips/epNN/usage_ledger.jsonl` 追加一行累计台账(API 分集 token 统计的权威来源,勿删勿改)。
 你在生成后补写/重写 meta.json 时**必须先读出已有 `usage` 字段原样保留**,不得用占位 note 覆盖;
 重出组把旧版挪入 archive 时,台账文件留在原目录不动(累计口径包含重roll)。
 

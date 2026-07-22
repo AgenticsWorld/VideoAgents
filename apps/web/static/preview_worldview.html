@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>世界观预览 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px}
+header a.back:hover{color:var(--accent)}
+header .spacer{flex:1}
+input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+header select:hover{border-color:var(--accent)}
+main{flex:1;display:flex;min-height:0}
+#list{width:270px;border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column}
+#search{margin:10px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
+#items{flex:1;overflow-y:auto;padding-bottom:20px}
+.item{padding:8px 14px;cursor:pointer;border-left:2px solid transparent;display:flex;align-items:center;gap:8px}
+.item:hover{background:var(--panel2)}
+.item.active{background:var(--panel2);border-left-color:var(--accent)}
+.item .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .id{color:var(--dim);font-size:11px;margin-left:auto;flex:none}
+.badge{font-size:10px;border:1px solid var(--purple);color:var(--purple);border-radius:4px;padding:0 5px;flex:none}
+#detail{flex:1;overflow-y:auto;padding:22px 26px}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+h2.title{font-size:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h2.title .id{color:var(--dim);font-size:13px;font-weight:400}
+.meta-line{color:var(--dim);font-size:13px;margin:6px 0 4px}
+.doc{border:1px solid var(--border);border-radius:10px;margin:14px 0;overflow:hidden}
+.doc>h3{background:var(--panel);padding:9px 14px;font-size:13.5px;cursor:pointer;user-select:none}
+.doc>h3::before{content:'▾ ';color:var(--dim)}
+.doc.closed>h3::before{content:'▸ '}
+.doc.closed>.body{display:none}
+.doc>.body{padding:12px 16px;background:var(--panel2)}
+.editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.editbtn:hover{color:var(--accent);border-color:var(--accent)}
+dl.kv{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 14px}
+dl.kv>dt{color:var(--dim);font-size:12.5px;word-break:break-all}
+dl.kv>dd{min-width:0;word-break:break-word}
+dl.kv dl.kv{margin:2px 0 6px;padding-left:10px;border-left:1px solid var(--border)}
+ul.arr{padding-left:18px}
+ul.arr>li{margin:2px 0}
+ul.arr>li>dl.kv{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:6px 0}
+pre.md{white-space:pre-wrap;word-break:break-word;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:14px 0}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 控制台</a>
+  <h1>🌍 世界观预览</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<main>
+  <div id="list">
+    <input id="search" placeholder="搜索板块或内容…">
+    <div id="items"></div>
+  </div>
+  <div id="detail"><div class="empty">加载中…</div></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let DATA=[], CUR=null;
+const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent','oid']);
+/* 已知板块:图标 + 中文名 + 排序;bible 根新增的 JSON 会以文件名兜底出现在末尾 */
+const SEC={
+  world:['🌍','世界观总纲'], geography:['🗺️','地理'], politics:['🏛️','政治'],
+  culture:['🎎','文化'], cultivation:['⚔️','修炼体系'], economy:['💰','经济'],
+  religion:['⛩️','宗教'], dictionary:['📖','术语词典'], timeline:['🕰️','时间线'],
+  style:['🎨','美术风格'], color_script:['🎬','色彩脚本'], costumes:['👘','服饰'],
+  aspect_ratio:['📐','画幅规范'], props:['🗡️','道具'], changelog:['📝','修订记录'],
+  README:['📄','说明文档'],
+};
+const SEC_ORDER=Object.keys(SEC);
+const icon=s=>(SEC[s.id]||['📦'])[0];
+const label=s=>t((SEC[s.id]||[,s.id])[1]);
+
+function jrender(v){
+  if(v===null||v===undefined||v==='')return '<span style="color:var(--dim)">—</span>';
+  if(Array.isArray(v)){
+    if(!v.length)return '<span style="color:var(--dim)">(空)</span>';
+    if(v.every(x=>typeof x!=='object'||x===null))return esc(v.join('、'));
+    return '<ul class="arr">'+v.map(x=>'<li>'+jrender(x)+'</li>').join('')+'</ul>';
+  }
+  if(typeof v==='object'){
+    const ks=Object.keys(v).filter(k=>!NOISE.has(k));
+    if(!ks.length)return '<span style="color:var(--dim)">(空)</span>';
+    return '<dl class="kv">'+ks.map(k=>`<dt>${esc(k)}</dt><dd>${jrender(v[k])}</dd>`).join('')+'</dl>';
+  }
+  return esc(String(v));
+}
+
+function renderList(){
+  const q=$('#search').value.trim().toLowerCase();
+  const box=$('#items');box.innerHTML='';
+  DATA.filter(s=>!q||s.id.toLowerCase().includes(q)||label(s).toLowerCase().includes(q)
+      ||(s._blob||'').includes(q))
+    .forEach(s=>{
+      const d=document.createElement('div');
+      d.className='item'+(CUR===s.id?' active':'');
+      d.innerHTML=`<span>${icon(s)}</span><span class="nm">${esc(label(s))}</span>`
+        +`<span class="id">${esc(s.file)}</span>`;
+      d.onclick=()=>{CUR=s.id;renderList();renderDetail(s)};
+      box.appendChild(d);
+    });
+  if(!box.children.length)box.innerHTML='<div class="empty">没有匹配的板块</div>';
+}
+
+function renderDetail(s){
+  const box=$('#detail');
+  let h=`<h2 class="title">${icon(s)} ${esc(label(s))}<span class="id">${esc(s.file)}</span><button class="editbtn" data-file="${esc(s.file)}" title="${esc(t('到总制片界面对该设定文件提修改意见'))}">✏️ ${esc(t('修改'))}</button></h2>`;
+  h+=`<div class="meta-line">${esc((s.size/1024).toFixed(1))} KB · ${t('更新于:')}${esc(new Date(s.mtime*1000).toLocaleString())}</div>`;
+  if(s.text!==undefined){
+    h+=`<pre class="md">${esc(s.text)}</pre>`;
+  }else if(s.data===null||s.data===undefined){
+    h+=`<div class="empty">${t('该文件不是有效 JSON,无法结构化显示')}</div>`;
+  }else if(Array.isArray(s.data)){
+    h+=`<div class="doc"><h3 onclick="this.parentNode.classList.toggle('closed')">${esc(label(s))} <span style="color:var(--dim);font-weight:400">${esc(I18N.f('共 {n} 条',{n:s.data.length}))}</span></h3><div class="body">${jrender(s.data)}</div></div>`;
+  }else{
+    const d=s.data, ks=Object.keys(d).filter(k=>!NOISE.has(k));
+    // 顶层标量字段归入「基本信息」;对象/数组字段各成一个可折叠板块
+    const flat=ks.filter(k=>typeof d[k]!=='object'||d[k]===null);
+    const deep=ks.filter(k=>typeof d[k]==='object'&&d[k]!==null);
+    if(flat.length)
+      h+=`<div class="doc"><h3 onclick="this.parentNode.classList.toggle('closed')">${t('基础信息')}</h3><div class="body"><dl class="kv">${flat.map(k=>`<dt>${esc(k)}</dt><dd>${jrender(d[k])}</dd>`).join('')}</dl></div></div>`;
+    deep.forEach(k=>{
+      const n=Array.isArray(d[k])?` <span style="color:var(--dim);font-weight:400">${esc(I18N.f('共 {n} 条',{n:d[k].length}))}</span>`:'';
+      h+=`<div class="doc"><h3 onclick="this.parentNode.classList.toggle('closed')">${esc(k)}${n}</h3><div class="body">${jrender(d[k])}</div></div>`;
+    });
+    if(!flat.length&&!deep.length)h+=`<div class="empty">(空)</div>`;
+  }
+  box.innerHTML=h;box.scrollTop=0;
+}
+
+// ✏️ 修改:跳转总制片界面,把该设定文件路径预填进「输入工作指令」框
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.editbtn');if(!b)return;
+  const proj=$('#project').value.trim()||'demo';
+  const path='data/projects/'+proj+'/bible/'+b.dataset.file;
+  location.href='/?project='+encodeURIComponent(proj)
+    +'&compose='+encodeURIComponent(t('修改 ')+path+'\n'+t('修改意见:'));
+});
+
+async function load(){
+  const proj=$('#project').value.trim()||'demo';
+  history.replaceState(null,'','?project='+encodeURIComponent(proj));
+  $('#detail').innerHTML='<div class="empty">加载中…</div>';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/worldview');
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    DATA=(await r.json()).sections;
+  }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
+  DATA.forEach(s=>s._blob=JSON.stringify(s.data??s.text??'').toLowerCase());
+  DATA.sort((a,b)=>{
+    const ia=SEC_ORDER.indexOf(a.id),ib=SEC_ORDER.indexOf(b.id);
+    return (ia<0?SEC_ORDER.length:ia)-(ib<0?SEC_ORDER.length:ib)||a.id.localeCompare(b.id);
+  });
+  const keep=DATA.find(s=>s.id===CUR);
+  CUR=(keep||DATA[0]||{}).id||null;
+  renderList();
+  if(CUR)renderDetail(DATA.find(s=>s.id===CUR));
+  else $('#detail').innerHTML='<div class="empty">该项目还没有世界观设定(bible 目录为空)</div>';
+}
+$('#reload').onclick=load;
+$('#search').oninput=renderList;
+$('#project').value=new URLSearchParams(location.search).get('project')
+  ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+load();
+
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考图'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>
