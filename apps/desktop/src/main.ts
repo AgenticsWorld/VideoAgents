@@ -283,5 +283,5 @@ app.whenReady().then(async () => {
   dialog.showErrorBox('VideoAgents 启动失败', message)
   app.quit()
 })
-app.on('window-all-closed', () => {if(process.platform!=='darwin')app.quit()})
+app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => webServer?.kill())
