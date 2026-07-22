@@ -63,6 +63,7 @@ import json
 import mimetypes
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -1072,6 +1073,24 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None) ->
 
 # ---------------- CLI ----------------
 
+def _check_id_digits(*paths):
+    """grpsh_id_3digits 前置机检:输出路径里的组/镜编号必须三位零填充
+    (grp001/sh001,与 shot_list 的 group_id/shot_id 逐字符一致,WORKFLOW.md §7A)。
+    模型写盘时位数偶发漂移(grp01.mp4 对 group_id=grp001),webui 预览与后续机检
+    全部对不上号,提交前拦下并给出正名。"""
+    for path in paths:
+        if not path:
+            continue
+        p = Path(path)
+        for part in (*p.parent.parts, p.stem):
+            m = re.match(r"^(grp|sh)(\d+)", part)
+            if m and len(m.group(2)) != 3 and int(m.group(2)) < 1000:
+                fixed = f"{m.group(1)}{int(m.group(2)):03d}{part[m.end():]}"
+                raise RuntimeError(
+                    f"输出路径段 {part!r} 编号位数不合规(grpsh_id_3digits):"
+                    f" grp/sh 编号固定三位零填充,应为 {fixed!r}(完整路径 {path})")
+
+
 def _cmd_info(_args):
     for kind in ("image", "video", "music", "tts"):
         try:
@@ -1084,6 +1103,7 @@ def _cmd_info(_args):
 
 
 def _cmd_image(args):
+    _check_id_digits(args.output)
     if args.dry_run:
         cfg = get_config("image")
         print(f"[dry-run] image via {cfg['provider']}"
@@ -1100,6 +1120,7 @@ def _cmd_image(args):
 
 
 def _cmd_video(args):
+    _check_id_digits(args.output, args.return_last_frame)
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
     if args.dry_run:
         cfg = get_config("video")
