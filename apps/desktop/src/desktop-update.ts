@@ -60,7 +60,8 @@ function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact 
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('桌面更新包与索引来源不一致')
   } else {
     const expected = process.platform === 'darwin'
-      ? `${DEFAULT_BASE}video-agents-mac.zip` : `${DEFAULT_BASE}video-agents-win.zip`
+      ? `${DEFAULT_BASE}video-agents-mac-v${artifact.version}.zip`
+      : `${DEFAULT_BASE}video-agents-win-v${artifact.version}.zip`
     if (url.href !== expected) throw new Error('桌面更新包 URL 不属于受信任的 S3 路径')
   }
   return artifact as DesktopArtifact
