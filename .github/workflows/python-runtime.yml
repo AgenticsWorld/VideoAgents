@@ -140,9 +140,9 @@ jobs:
             aws s3 cp "$package" "s3://agentics-prod/packages/python/$(basename "$package")" \
               --content-type application/zip --cache-control "public,max-age=31536000,immutable"
           done
-          aws s3 cp desktop-artifacts/video-agents-mac.zip s3://agentics-prod/packages/video-agents-mac.zip \
-            --content-type application/zip --cache-control "no-cache, no-store, must-revalidate"
-          aws s3 cp desktop-artifacts/video-agents-win.zip s3://agentics-prod/packages/video-agents-win.zip \
-            --content-type application/zip --cache-control "no-cache, no-store, must-revalidate"
+          find desktop-artifacts -type f -name 'video-agents-*.zip' -print0 | while IFS= read -r -d '' package; do
+            aws s3 cp "$package" "s3://agentics-prod/packages/$(basename "$package")" \
+              --content-type application/zip --cache-control "no-cache, no-store, must-revalidate"
+          done
           aws s3 cp runtime-artifacts/video-agents.json s3://agentics-prod/packages/video-agents.json \
             --content-type application/json --cache-control "no-cache, no-store, must-revalidate"
