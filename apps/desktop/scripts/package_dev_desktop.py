@@ -15,6 +15,7 @@ DESKTOP = Path(__file__).resolve().parents[1]
 RELEASE = DESKTOP / "release"
 OUTPUT = DESKTOP / ".desktop-packages"
 PUBLIC_BASE = "https://s3.agentics.world/packages/"
+APP_VERSION = json.loads((DESKTOP / "package.json").read_text(encoding="utf-8"))["version"]
 
 
 def sha256(path: Path) -> str:
@@ -35,7 +36,7 @@ def newest(pattern: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", choices=["mac", "win"], required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--build-hash", required=True)
     parser.add_argument("--public-base", default=PUBLIC_BASE)
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -51,7 +52,8 @@ def main() -> None:
     metadata = {
         "schema": 1,
         "platform": args.platform,
-        "version": args.version,
+        "version": APP_VERSION,
+        "buildHash": args.build_hash,
         "url": f"{args.public_base.rstrip('/')}/{filename}",
         "sha256": sha256(package),
         "size": package.stat().st_size,

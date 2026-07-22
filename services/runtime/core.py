@@ -1741,6 +1741,49 @@ def _proj_base(project: str) -> Path:
     return base
 
 
+_NUM_ID_RE = re.compile(r"^([A-Za-z]+)0*(\d+)")
+
+
+def _num_id_key(token: str) -> tuple[str, int] | None:
+    """grp001/grp01/grp1 → ("grp", 1)。规范是三位零填充(WORKFLOW.md §7A),
+    但生成 agent 写盘时位数偶发漂移(grp01.mp4 对 group_id=grp001),
+    预览对位按 前缀词+编号数值 容错,不要求逐字符相同。"""
+    m = _NUM_ID_RE.match(token or "")
+    return (m.group(1).lower(), int(m.group(2))) if m else None
+
+
+def _id_name_match(cid: str, name: str, any_segment: bool = False) -> bool:
+    """资产相对路径 name 是否属于镜/组编号 cid。保留原逐字符前缀规则,
+    另按 _num_id_key 数值容错;any_segment 时子目录段也参与(镜级 clips
+    历史上允许 archive/sh001_x.mp4 这类归档路径命中)。"""
+    key = _num_id_key(cid)
+    segs = name.split("/") if any_segment else name.split("/")[:1]
+    return any(seg.startswith(cid) or (key is not None and _num_id_key(seg) == key)
+               for seg in segs)
+
+
+def _id_dir(root: Path, cid: str) -> Path:
+    """root/cid 目录;不存在时按编号数值找同义目录(keyframes/grp01 ≙ grp001)。"""
+    d = root / cid
+    key = _num_id_key(cid)
+    if not d.is_dir() and key is not None and root.is_dir():
+        for sub in sorted(root.iterdir()):
+            if sub.is_dir() and _num_id_key(sub.name) == key:
+                return sub
+    return d
+
+
+def _id_file(adir: Path, cid: str, suffix: str) -> Path:
+    """adir/cid+suffix 文件;不存在时按编号数值找同义文件(grp01.meta.json ≙ grp001)。"""
+    f = adir / f"{cid}{suffix}"
+    key = _num_id_key(cid)
+    if not f.is_file() and key is not None and adir.is_dir():
+        for p in sorted(adir.glob(f"*{suffix}")):
+            if _num_id_key(p.name) == key:
+                return p
+    return f
+
+
 def _asset_urls(base: Path, adir: Path, exts: tuple) -> list[dict]:
     """目录下(含子目录)的媒体文件 → [{name, url}],按文件名排序。"""
     if not adir.is_dir():
@@ -2006,9 +2049,9 @@ def _preview_storyboard(project: str, ep: str):
             "scene_no": s.get("scene_no") or s.get("scene_id"),
             "dialogue_ref": s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref"),
             "content": _shot_content(s),
-            "keyframes": _asset_urls(base, kroot / sid, IMG_EXTS),
+            "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips
-                      if sid and (c["name"].startswith(sid) or f"/{sid}" in f"/{c['name']}")],
+                      if sid and _id_name_match(sid, c["name"], any_segment=True)],
         })
     data["shots"] = shots
     # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、
@@ -2018,12 +2061,12 @@ def _preview_storyboard(project: str, ep: str):
         if not isinstance(g, dict):
             continue
         gid = g.get("group_id") or ""
-        meta = _read_json_safe(croot / f"{gid}.meta.json") or {}
+        meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
-            "anchors": _asset_urls(base, kroot / gid, IMG_EXTS),
-            "clips": [c for c in clips if gid and c["name"].startswith(gid)],
+            "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
+            "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),

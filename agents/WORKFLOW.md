@@ -335,6 +335,11 @@ refs/
 > (前科:ep01 grp017 同因)。机检 `imageref_bound`(prompt 产出后脚本全批核对 + video-generation
 > 开跑前复核):每个 `<角色>@Image N` 的 refs[N-1] 必须含该角色 CHAR id、
 > "continues from [Image N]" 的 refs[N-1] 必须是尾帧/锚帧;不符=退回重编号,禁直接开跑。
+> **产物文件名编号铁律(2026-07-22)**:`grp`/`sh` 编号一律三位零填充(`grp001.mp4`、`sh001.json`),
+> 文件名与目录名同 shot_list 的 group_id/shot_id **逐字符一致**——写成两位(`grp01.mp4`)
+> 预览与各机检全部对不上号。genmedia image/video 提交前硬校验 `grpsh_id_3digits`:
+> 输出路径里 grp/sh 编号非三位直接拒单并给出正名;webui 预览读侧另按 前缀+编号数值
+> 容错(grp01 ≙ grp001)兜底存量漂移文件,但容错只保预览可见,新产物一律写正名。
 > 每镜精确时长不可控(模型按剧情定节奏):组总时长是硬约束(±1s),镜级时长是节奏意图;
 > 组 clip 内实际镜头边界由切变检测写入 meta 供剪辑/QA 对位。原生音频(generate_audio)默认开,
 > 对白在组 prompt 用 `{台词}`、对白组把**每个说话角色各自的 voiceprint 样本**(项目级

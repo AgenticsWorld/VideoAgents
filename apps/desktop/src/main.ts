@@ -206,8 +206,8 @@ async function checkDevDesktopUpdate(): Promise<boolean> {
   if (!artifact) return true
   const options: MessageBoxOptions = {
     type: 'info', title: '发现 VideoAgents Dev 更新',
-    message: `发现新版本 ${artifact.version}，当前版本 ${build.version}。`,
-    detail: '是否立即下载并自动安装？',
+    message: `发现 VideoAgents ${artifact.version} 的新 Dev 构建。`,
+    detail: `最新构建 ${artifact.buildHash}，当前构建 ${build.buildHash}。是否立即下载并自动安装？`,
     buttons: ['下载并更新', '暂不更新'], defaultId: 0, cancelId: 1,
   }
   const answer = window

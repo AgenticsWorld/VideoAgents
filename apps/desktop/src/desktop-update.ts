@@ -17,10 +17,12 @@ export interface BuildInfo {
   schema: 1
   channel: 'local' | 'dev' | 'release'
   version: string
+  buildHash: string
 }
 
 export interface DesktopArtifact {
   version: string
+  buildHash: string
   url: string
   sha256: string
   size: number
@@ -32,21 +34,22 @@ interface DesktopIndex {
 }
 
 export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildInfo {
-  if (!packaged) return {schema: 1, channel: 'local', version: 'development'}
+  if (!packaged) return {schema: 1, channel: 'local', version: '1.0.1', buildHash: 'development'}
   try {
     const value = JSON.parse(readFileSync(path.join(resourcesPath, 'build-info.json'), 'utf8')) as BuildInfo
     if (value.schema === 1 && ['local', 'dev', 'release'].includes(value.channel)
-        && typeof value.version === 'string') return value
+        && typeof value.version === 'string' && typeof value.buildHash === 'string') return value
   } catch (error) {
     console.warn(`[desktop-updater] build-info.json 不可用：${String(error)}`)
   }
-  return {schema: 1, channel: 'local', version: 'unknown'}
+  return {schema: 1, channel: 'local', version: '1.0.1', buildHash: 'unknown'}
 }
 
 function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact {
   if (!value || typeof value !== 'object') throw new Error('桌面更新索引缺少当前平台制品')
   const artifact = value as Partial<DesktopArtifact>
-  if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
+  if (artifact.version !== '1.0.1' || typeof artifact.buildHash !== 'string'
+      || !SAFE_VERSION.test(artifact.buildHash)
       || typeof artifact.url !== 'string' || !/^[a-f0-9]{64}$/i.test(artifact.sha256 || '')
       || typeof artifact.size !== 'number' || artifact.size <= 0 || artifact.size > 2 * 1024 * 1024 * 1024) {
     throw new Error('桌面更新索引格式无效')
@@ -74,7 +77,7 @@ export async function fetchDevDesktopUpdate(build: BuildInfo): Promise<DesktopAr
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (index.schema !== 1 || !platform) throw new Error('桌面更新索引或平台无效')
   const artifact = validateArtifact(index.desktop?.[platform], source)
-  return artifact.version === build.version ? undefined : artifact
+  return artifact.buildHash === build.buildHash ? undefined : artifact
 }
 
 async function download(
@@ -122,8 +125,8 @@ export async function downloadAndApplyDesktopUpdate(
   onProgress: (progress: RuntimeProgress) => void,
 ): Promise<void> {
   const root = path.join(userData, 'app-updates')
-  const archive = path.join(root, `${artifact.version}.zip.part`)
-  const staging = path.join(root, `staging-${artifact.version}`)
+  const archive = path.join(root, `${artifact.buildHash}.zip.part`)
+  const staging = path.join(root, `staging-${artifact.buildHash}`)
   mkdirSync(root, {recursive: true})
   rmSync(archive, {force: true})
   rmSync(staging, {recursive: true, force: true})

@@ -70,11 +70,11 @@ jobs:
           python-version: "3.12"
       - name: Set dev version
         shell: bash
-        run: echo "DEV_VERSION=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+        run: echo "DEV_BUILD_HASH=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - run: npm ci
       - name: Write dev build metadata
         shell: bash
-        run: python apps/desktop/scripts/write_build_info.py --channel dev --version "$DEV_VERSION"
+        run: python apps/desktop/scripts/write_build_info.py --channel dev --version 1.0.1 --build-hash "$DEV_BUILD_HASH"
       - run: npm run build:desktop
       - name: Package desktop
         run: npm exec --workspace @videoagents/desktop electron-builder -- ${{ matrix.args }} --publish never
@@ -82,7 +82,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Normalize desktop package
         shell: bash
-        run: python apps/desktop/scripts/package_dev_desktop.py --platform ${{ matrix.platform }} --version "$DEV_VERSION"
+        run: python apps/desktop/scripts/package_dev_desktop.py --platform ${{ matrix.platform }} --build-hash "$DEV_BUILD_HASH"
       - uses: actions/upload-artifact@v4
         with:
           name: dev-desktop-${{ matrix.platform }}

@@ -4,7 +4,12 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-07-21
+## [1.0.1] - 2026-07-22
+
+### Added
+
+- `run.sh` one-command launcher, equivalent to `make run-auto` (no make required); auto-detects `python`/`python3` and passes arguments through to the server.
+- Hard validation `grpsh_id_3digits` on media generation: output paths whose grp/sh numbers are not 3-digit zero-padded (e.g. `grp01` vs `grp001`) are rejected with the corrected name, preventing filename drift that broke previews and machine checks.
 
 ### Changed
 
@@ -13,6 +18,11 @@ All notable public changes to VideoAgents are documented here.
 - Persisted runs, approvals, and replayable event sequences in SQLite while retaining the established creative execution core and `data/projects/` resource model.
 - Migrated project asset history and version-clone operations from system Git commands to `pygit2`.
 - Added GitHub Actions packaging for macOS x64/arm64 and Windows x64 clients without bundling third-party execution environments.
+- Style library: all 85 live-action prompts expanded from short tags into full style descriptions (era/genre positioning, palette, lighting, film texture, contrast, composition and mood); garbled movie-name entries normalized.
+
+### Fixed
+
+- Preview pages now tolerantly match legacy drifted asset filenames by prefix word + numeric ID (`grp01` matches `grp001`), so existing assets stay visible while new outputs are always written with canonical names.
 
 ## [1.0.0] - 2026-07-21
 
