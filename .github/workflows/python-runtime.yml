@@ -1,0 +1,148 @@
+name: Dev packages
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: videoagents-dev-packages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+          - os: macos-14
+            artifact: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.30"
+      - name: Set runtime version
+        shell: bash
+        run: echo "RUNTIME_VERSION=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+      - name: Build runtime
+        shell: bash
+        run: |
+          python apps/desktop/scripts/build_runtime.py --version "$RUNTIME_VERSION" --force
+          python apps/desktop/scripts/package_runtime.py --version "$RUNTIME_VERSION"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-runtime-${{ matrix.artifact }}
+          path: apps/desktop/.runtime-packages/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            args: --mac zip --arm64
+          - os: windows-latest
+            platform: win
+            args: --win nsis --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Set dev version
+        shell: bash
+        run: echo "DEV_BUILD_HASH=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Write dev build metadata
+        shell: bash
+        run: python apps/desktop/scripts/write_build_info.py --channel dev --version 1.0.2 --build-hash "$DEV_BUILD_HASH"
+      - run: npm run build:desktop
+      - name: Prepare Apple API key
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          test -n "$APPLE_API_KEY_CONTENT"
+          key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_KEY_CONTENT" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
+      - name: Package desktop
+        run: npm exec --workspace @videoagents/desktop electron-builder -- ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && 'true' || 'false' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.platform == 'mac' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+      - name: Normalize desktop package
+        shell: bash
+        run: python apps/desktop/scripts/package_dev_desktop.py --platform ${{ matrix.platform }} --build-hash "$DEV_BUILD_HASH"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dev-desktop-${{ matrix.platform }}
+          path: apps/desktop/.desktop-packages/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: [build, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: python-runtime-*
+          path: runtime-artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dev-desktop-*
+          path: desktop-artifacts
+          merge-multiple: true
+      - uses: aws-actions/configure-aws-credentials@v6.1.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: Read current package index
+        shell: bash
+        run: aws s3 cp s3://agentics-prod/packages/video-agents.json runtime-artifacts/video-agents.json || true
+      - name: Update package index
+        run: python apps/desktop/scripts/update_runtime_index.py --index runtime-artifacts/video-agents.json --artifacts runtime-artifacts --desktop-artifacts desktop-artifacts
+      - name: Publish runtime packages
+        shell: bash
+        run: |
+          find runtime-artifacts -type f -name '*.zip' -print0 | while IFS= read -r -d '' package; do
+            aws s3 cp "$package" "s3://agentics-prod/packages/python/$(basename "$package")" \
+              --content-type application/zip --cache-control "public,max-age=31536000,immutable"
+          done
+          find desktop-artifacts -type f -name 'video-agents-*.zip' -print0 | while IFS= read -r -d '' package; do
+            aws s3 cp "$package" "s3://agentics-prod/packages/$(basename "$package")" \
+              --content-type application/zip --cache-control "no-cache, no-store, must-revalidate"
+          done
+          aws s3 cp runtime-artifacts/video-agents.json s3://agentics-prod/packages/video-agents.json \
+            --content-type application/json --cache-control "no-cache, no-store, must-revalidate"

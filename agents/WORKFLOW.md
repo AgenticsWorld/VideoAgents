@@ -200,7 +200,7 @@ refs/
 | `human` |  | `true` 表示人工签字节点;签字后可扩展为裁决记录对象(`decision`/`signed_by`/`signed_at`) |
 | `run_id` / `outputs` / `gate` / `note` |  | 收尾钩子回填的运行 id、产物路径、闸门结果、备注 |
 
-**机检(强制)**:立项生成 DAG 后、以及每次修改 dag.json 后,必须运行 `python3 webui/dagcheck.py --project <slug> --strict` 并通过,才算完成(校验:结构合规、id 唯一、state 合法、依赖引用存在、无环)。机检责任在**写入方**(orchestrator);Web 控制台空转看门狗不做结构校验,仅在 dag.json 缺失或解析不出任何节点时唤醒 orchestrator 修复。存量旧格式项目只读兼容,但任何**重写/新建**的 dag.json 一律按本节格式。
+**机检(强制)**:立项生成 DAG 后、以及每次修改 dag.json 后,必须运行 `python3 services/runtime/dagcheck.py --project <slug> --strict` 并通过,才算完成(校验:结构合规、id 唯一、state 合法、依赖引用存在、无环)。机检责任在**写入方**(orchestrator);自动运行看门狗不做结构校验,仅在 dag.json 缺失或解析不出任何节点时唤醒 orchestrator 修复。存量旧格式项目只读兼容,但任何**重写/新建**的 dag.json 一律按本节格式。
 
 ---
 
@@ -699,11 +699,11 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 
 ## 9. 生成模型调用(genmedia 统一模块)
 
-图像/视频生成的**渠道与模型由用户在 Web 控制台「🎨 生成模型」页配置**(落盘 `webui/genconfig.json`),
+图像/视频生成的**渠道与模型由用户在 Web 客户端「生成服务」页配置**(落盘 `data/.videoagents/genconfig.json`),
 生成类 Agent 一律通过统一模块调用,**不自行挑选模型、不直连各家 API**:
 
 > **Agent 级模型配置**:每个 Agent 可在控制台(对话页「模型」按钮)单独配置执行引擎/文字模型
-> 及图像/视频渠道,落盘 `webui/agentmodels.json`,优先级高于顶栏全局设置;未单独配置时按分类默认
+> 及图像/视频渠道,落盘 `data/.videoagents/agentmodels.json`,优先级高于全局设置;未单独配置时按分类默认
 > (机械活→claude·sonnet;分析/评分→codex·gpt-5.5;创作核心→claude·opus)。
 > 派单时该配置自动生效;总制片显式传 `--engine`/`--model`(如赛马换引擎)才会强制覆盖。
 

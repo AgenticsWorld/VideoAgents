@@ -1,8 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 webui/dispatch.py:*)",
-      "Bash(python webui/dispatch.py:*)"
+      "Bash(python3 services/runtime/dispatch.py:*)",
+      "Bash(python services/runtime/dispatch.py:*)"
     ]
   },
   "hooks": {

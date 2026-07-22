@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """genmedia.py — 统一图像/视频/音乐生成模块(零第三方依赖;仅 --ref-video 需装所选对象存储的 SDK)。
 
-渠道与模型在 Web 控制台「🎨 生成模型」页配置(落盘 webui/genconfig.json),
+渠道与模型在 Web 客户端「生成服务」页配置(落盘 data/.videoagents/genconfig.json),
 本模块按配置自动路由到对应渠道;Agent 只管出 prompt 与产物路径,不挑模型。
 
 CLI:
@@ -74,7 +74,13 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "webui" / "genconfig.json"
+DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
+RUNTIME_DIR = Path(os.environ.get(
+    "VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents"
+)).expanduser().resolve()
+CONFIG_PATH = Path(os.environ.get(
+    "VIDEOAGENTS_CONFIG_PATH", RUNTIME_DIR / "genconfig.json"
+)).expanduser().resolve()
 
 # 配置里 Key 为空时的环境变量兜底
 ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
@@ -91,26 +97,26 @@ COMFY_TIMEOUT = 1800
 
 # ---------------- 配置 ----------------
 
-AGENTMODELS_PATH = ROOT / "webui" / "agentmodels.json"
+AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
 
 def _forbid_dispatch_layer(kind: str) -> None:
     """调度层守卫:00-orchestration 各 Agent(总制片/context/evaluation 等)只派单
-    不生成,禁止直接调用生成能力(SOUL.md 边界)。WEBUI_AGENT 由 server 注入运行
+    不生成,禁止直接调用生成能力(SOUL.md 边界)。VIDEOAGENTS_AGENT 由 runtime 注入运行
     环境并传递到全部子进程,所以总制片自己写 driver 脚本绕道也拦得住;对 codex /
     deepagents 引擎(没有 PreToolUse hook)这里是唯一的机制级硬拦截。"""
-    agent = os.environ.get("WEBUI_AGENT", "")
+    agent = os.environ.get("VIDEOAGENTS_AGENT", "")
     if agent.startswith("00-orchestration/"):
         raise SystemExit(
             f"[genmedia] 拒绝执行:{agent} 属调度层,只派单不生成,禁止直接生成{kind}。"
-            "正确做法:生成工单并通过 webui/dispatch.py 派发给对应执行 Agent"
+            "正确做法:生成工单并通过 services/runtime/dispatch.py 派发给对应执行 Agent"
             "(图像=06-art、视频=08-video-gen、旁白/对白/BGM=09-audio)。")
 
 
 def _agent_provider_override(kind: str) -> str:
-    """Agent 级渠道覆盖:server 在运行环境注入 WEBUI_AGENT,若该 Agent 在
-    webui/agentmodels.json 里单独配置了 image/video 渠道,则优先于全局 provider。"""
-    agent = os.environ.get("WEBUI_AGENT", "")
+    """Agent 级渠道覆盖:runtime 在运行环境注入 VIDEOAGENTS_AGENT,若该 Agent 在
+    data/.videoagents/agentmodels.json 里单独配置了 image/video 渠道,则优先于全局 provider。"""
+    agent = os.environ.get("VIDEOAGENTS_AGENT", "")
     if not agent:
         return ""
     try:
@@ -653,7 +659,7 @@ def _record_video_usage(output, task_id, cfg, usage, resolution, duration):
     """成功生成后把方舟查询接口返回的 usage 落盘,双写:
     ① 同名 .meta.json 的 usage 字段(合并写,已有内容保留;下游 agent 重写 meta 时应保留该字段)
     ② 输出目录 usage_ledger.jsonl 追加一行累计台账——重roll/覆盖/删档都不丢历史,
-       是分集 token 消耗统计(webui /preview/videos)的权威数据源。
+       是分集 token 消耗统计(API videos preview)的权威数据源。
     落盘失败只告警不中断:视频本体已保存,计费记录不应影响产出。"""
     rec = {"file": Path(output).name, "task_id": task_id,
            "provider": cfg.get("provider"), "model": cfg.get("model"),
@@ -958,7 +964,7 @@ def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
 def generate_image(prompt: str, output: str, negative: str = "",
                    refs: list[str] | None = None, aspect: str = "",
                    size: str = "", seed: int | None = None) -> str:
-    """生成一张图,返回保存的绝对路径。渠道/模型按 webui/genconfig.json。"""
+    """生成一张图,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。"""
     _forbid_dispatch_layer("图像")
     cfg = get_config("image")
     if size:
@@ -976,11 +982,11 @@ def generate_image(prompt: str, output: str, negative: str = "",
 
 
 def _resolution_gate(resolution: str) -> str:
-    """webui 派单链路的视频分辨率闸门:按项目「📤 输出设置」的草稿/成片两档强制约束,
+    """API 派单链路的视频分辨率闸门:按项目输出设置的草稿/成片两档强制约束,
     防止 Agent 工单跑偏高分辨率烧钱(分辨率与费用平方级相关)。
     仅允许草稿档与成片档;空值取草稿档;其余一律压到草稿档并记 stderr。
-    非 webui 派单环境(无 WEBUI_PROJECT)不干预,手工调用照传。"""
-    proj = os.environ.get("WEBUI_PROJECT", "")
+    非服务派单环境(无 VIDEOAGENTS_PROJECT)不干预,手工调用照传。"""
+    proj = os.environ.get("VIDEOAGENTS_PROJECT", "")
     if not proj:
         return resolution
     try:
@@ -1008,7 +1014,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None) -> str:
-    """生成一段视频,返回保存的绝对路径。渠道/模型按 webui/genconfig.json。
+    """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.0
     多镜头组生成)专用,仅火山引擎/BytePlus 渠道支持;refs 与 first/last_frame 互斥。
@@ -1035,7 +1041,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
                  instructions: str = "") -> str:
-    """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 webui/genconfig.json 的 tts 段。
+    """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
 
     输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。voice 缺省用配置页
     默认音色(openrouter=音色名 / volcengine=speaker 名 / elevenlabs=voice_id);
@@ -1053,7 +1059,7 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
 
 
 def generate_music(prompt: str, output: str, duration_s: float | None = None) -> str:
-    """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 webui/genconfig.json 的 music 段。
+    """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 music 段。
 
     输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus)。
     duration_s 仅 elevenlabs 生效(music_length_ms,3–600s;省略=模型按 prompt 自定);
@@ -1172,7 +1178,7 @@ def _cmd_tts(args):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="统一图像/视频/音乐生成(渠道按 webui/genconfig.json)")
+    ap = argparse.ArgumentParser(description="统一图像/视频/音乐生成(渠道按 data/.videoagents/genconfig.json)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("info", help="查看当前生效渠道与模型")
 

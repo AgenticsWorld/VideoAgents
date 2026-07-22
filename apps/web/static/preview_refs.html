@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>参考图 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px}
+header a.back:hover{color:var(--accent)}
+header .spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+header select:hover{border-color:var(--accent)}
+input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit}
+#content{flex:1;overflow-y:auto;padding:16px 22px 40px}
+.pagenote{color:var(--dim);font-size:12.5px;margin-bottom:14px;max-width:1100px}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+/* 分类分区 */
+.cat{border:1px solid var(--border);border-radius:12px;margin-bottom:16px;background:var(--panel);overflow:hidden}
+.cat.dragover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.cat-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.cat-head h3{font-size:14px;display:flex;align-items:center;gap:7px}
+.cat-head .key{color:var(--dim);font-size:12px;font-weight:400;font-family:ui-monospace,Menlo,monospace}
+.cat-head .cnt{color:var(--dim);font-size:11.5px;font-weight:400;border:1px solid var(--border);border-radius:9px;padding:0 7px}
+.cat-head .desc{color:var(--dim);font-size:12px;flex:1;min-width:120px}
+.cat-head input.subdir{width:150px;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;padding:14px}
+.grid .none{grid-column:1/-1;color:var(--dim);font-size:12.5px;text-align:center;padding:14px 0;border:1px dashed var(--border);border-radius:8px}
+/* 文件卡片 */
+.card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card .thumb{height:140px;background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:zoom-in;overflow:hidden}
+.card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.card .thumb .fico{font-size:44px;cursor:default}
+.card audio{width:100%;height:30px;margin-top:2px}
+.card .fn{font-size:11.5px;color:var(--dim);padding:6px 9px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,monospace}
+.card .note-box{padding:5px 9px 9px;font-size:12.5px;display:flex;flex-direction:column;gap:6px;flex:1}
+.card .note-txt{white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.card .note-txt.none{color:var(--dim);font-style:italic}
+.card .note-row{display:flex;align-items:flex-start;gap:6px}
+.card .note-row .note-txt{flex:1}
+.editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.editbtn:hover{color:var(--accent);border-color:var(--accent)}
+.card textarea{width:100%;min-height:64px;resize:vertical;font-size:12.5px}
+.card .ed-acts{display:flex;justify-content:flex-end;gap:6px}
+.card .ed-acts button{font-size:11.5px;padding:2px 10px}
+.err{color:var(--red);font-size:12.5px;padding:0 14px 10px}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
+#lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 控制台</a>
+  <h1>🖼 参考图</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<div id="content"><div class="empty">加载中…</div></div>
+<input type="file" id="fileinp" multiple style="display:none">
+<div id="lightbox"><img alt=""></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const proj=()=>$('#project').value.trim()||'demo';
+let DATA=null,UP_CAT=null;
+
+/* 分类展示元数据:图标/名称/说明;''=散放在 refs/ 根目录的文件 */
+const CAT_META={
+  style:['🎨','视觉风格','整体画风/渲染质感/色调/构图参考'],
+  characters:['👤','角色','角色形象参考;填子目录(角色名或 id)可定向到该角色'],
+  scenes:['🏔','场景','场景与世界观:建筑/地貌/氛围参考'],
+  props:['🗡','道具','道具/法宝参考;服装可填 costumes 子目录'],
+  music:['🎵','音乐','希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)'],
+  thumbnail:['🖼','封面','封面参考:他人爆款封面的构图/版式/文字风格范例'],
+  '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
+};
+const SUBDIR_CATS=new Set(['characters','props']);
+const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':n+' B';
+
+function noteBoxHtml(f){
+  const txt=f.note
+    ?`<span class="note-txt">${esc(f.note)}</span>`
+    :`<span class="note-txt none">${esc(t('(未添加注释)'))}</span>`;
+  return `<div class="note-row">${txt}<button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>`;
+}
+function cardHtml(f){
+  let thumb;
+  if(f.is_image)thumb=`<div class="thumb"><img loading="lazy" src="${esc(f.url)}" alt=""></div>`;
+  else if(f.is_audio)thumb=`<div class="thumb"><span class="fico">🎵</span></div><audio controls preload="none" src="${esc(f.url)}"></audio>`;
+  else thumb=`<div class="thumb"><span class="fico">📄</span></div>`;
+  return `<figure class="card" data-path="${esc(f.path)}">${thumb}
+    <div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>
+    <div class="note-box">${noteBoxHtml(f)}</div></figure>`;
+}
+function render(){
+  const box=$('#content');
+  const cats=DATA.categories;
+  box.innerHTML=`<div class="pagenote">${esc(t('参考素材保存在项目 refs/ 目录,视觉/配乐 Agent 工作前必查、优先参考。给每个文件添加注释(哪张图管什么、哪首曲子想用在哪)会写入 refs/NOTES.md,相关 Agent 必读并按注释执行。也可拖拽文件到分类区域直接上传。'))}</div>`
+    +cats.map(c=>{
+      const [ico,nm,desc]=CAT_META[c.key]||['📁',c.key,''];
+      const sub=SUBDIR_CATS.has(c.key)
+        ?`<input type="text" class="subdir" placeholder="${esc(t('子目录(可选)'))}" title="${esc(t('填写后上传到该子目录,如角色名(仅英文数字)'))}">`:'';
+      const up=c.key!==''
+        ?`${sub}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
+      return `<div class="cat" data-cat="${esc(c.key)}">
+        <div class="cat-head"><h3>${ico} ${esc(t(nm))} <span class="key">${c.key?esc(c.key)+'/':'refs/'}</span><span class="cnt">${c.files.length}</span></h3>
+          <span class="desc">${esc(t(desc))}</span>${up}</div>
+        <div class="err"></div>
+        <div class="grid">${c.files.map(cardHtml).join('')||`<div class="none">${esc(t('暂无文件,点击上传或拖拽文件至此'))}</div>`}</div>
+      </div>`;
+    }).join('');
+}
+
+async function load(){
+  history.replaceState(null,'','?project='+encodeURIComponent(proj()));
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/references');
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    DATA=await r.json();
+    render();
+  }catch(e){$('#content').innerHTML=`<div class="empty">${esc(t('加载失败:'))}${esc(e.message)}</div>`}
+}
+
+/* ---------- 上传:按钮选文件或拖拽到分类区域;请求体即文件字节 ---------- */
+async function upload(cat,sub,files,errBox){
+  if(!files.length)return;
+  errBox.textContent='';
+  const btn=document.querySelector(`.upbtn[data-cat="${CSS.escape(cat)}"]`);
+  const old=btn?btn.textContent:'';
+  if(btn){btn.disabled=true}
+  try{
+    let done=0;
+    for(const f of files){
+      if(btn)btn.textContent=I18N.f('上传中 {done}/{total}…',{done:done+1,total:files.length});
+      const q=new URLSearchParams({project:proj(),category:cat,subdir:sub||'',filename:f.name});
+      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/references?'+q,{method:'POST',body:f});
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      done++;
+    }
+  }catch(e){errBox.textContent=t('上传失败:')+e.message}
+  if(btn){btn.disabled=false;btn.textContent=old}
+  await load();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.upbtn');
+  if(!b)return;
+  UP_CAT=b.dataset.cat;
+  $('#fileinp').click();
+});
+$('#fileinp').onchange=()=>{
+  const files=[...$('#fileinp').files];
+  $('#fileinp').value='';
+  if(!files.length||UP_CAT===null)return;
+  const sec=document.querySelector(`.cat[data-cat="${CSS.escape(UP_CAT)}"]`);
+  const sub=sec.querySelector('.subdir')?.value.trim()||'';
+  upload(UP_CAT,sub,files,sec.querySelector('.err'));
+};
+document.addEventListener('dragover',e=>{
+  const sec=e.target.closest?.('.cat');
+  document.querySelectorAll('.cat.dragover').forEach(x=>x!==sec&&x.classList.remove('dragover'));
+  if(sec&&sec.dataset.cat!==''){e.preventDefault();sec.classList.add('dragover')}
+});
+document.addEventListener('dragleave',e=>{
+  const sec=e.target.closest?.('.cat');
+  if(sec&&!sec.contains(e.relatedTarget))sec.classList.remove('dragover');
+});
+document.addEventListener('drop',e=>{
+  const sec=e.target.closest?.('.cat');
+  if(!sec||sec.dataset.cat==='')return;
+  e.preventDefault();sec.classList.remove('dragover');
+  const files=[...e.dataTransfer.files];
+  const sub=sec.querySelector('.subdir')?.value.trim()||'';
+  upload(sec.dataset.cat,sub,files,sec.querySelector('.err'));
+});
+
+/* ---------- 逐文件注释:行内编辑,保存进 annotations.json + NOTES.md ---------- */
+function findFile(path){
+  for(const c of DATA.categories){const f=c.files.find(x=>x.path===path);if(f)return f}
+  return null;
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.notebtn');
+  if(!b)return;
+  const card=b.closest('.card'),path=card.dataset.path,f=findFile(path);
+  const box=card.querySelector('.note-box');
+  box.innerHTML=`<textarea placeholder="${esc(t('如:主角青年时期发型以这张为准;这首曲子想用在决战段……'))}">${esc(f.note)}</textarea>
+    <div class="ed-acts"><button class="ed-cancel">${esc(t('取消'))}</button><button class="primary ed-save">${esc(t('保存'))}</button></div>`;
+  const ta=box.querySelector('textarea');ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
+  box.querySelector('.ed-cancel').onclick=()=>{box.innerHTML=noteBoxHtml(f)};
+  box.querySelector('.ed-save').onclick=async()=>{
+    const btn=box.querySelector('.ed-save');btn.disabled=true;
+    try{
+      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/references/note',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({project:proj(),path,note:ta.value})});
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      f.note=(await r.json()).note;
+      box.innerHTML=noteBoxHtml(f);
+    }catch(err){alert(t('注释保存失败:')+err.message);btn.disabled=false}
+  };
+});
+
+/* ---------- 删除文件(注释一并移除) ---------- */
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.delbtn');
+  if(!b)return;
+  const card=b.closest('.card'),path=card.dataset.path,f=findFile(path);
+  if(!confirm(I18N.f('删除 {name}?该操作不可恢复,其注释一并移除',{name:f?f.name:path})))return;
+  b.disabled=true;
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/references/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj(),path})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    await load();
+  }catch(err){alert(t('删除失败:')+err.message);b.disabled=false}
+});
+
+/* ---------- 图片放大 ---------- */
+document.addEventListener('click',e=>{
+  const img=e.target.closest('.thumb img');
+  if(!img)return;
+  $('#lightbox img').src=img.src;$('#lightbox').style.display='flex';
+});
+$('#lightbox').onclick=()=>$('#lightbox').style.display='none';
+
+$('#reload').onclick=load;
+$('#project').value=new URLSearchParams(location.search).get('project')
+  ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+load();
+
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考图'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=proj();location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>

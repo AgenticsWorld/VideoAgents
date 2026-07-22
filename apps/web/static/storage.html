@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>文件托管 — Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2)}
+.tab{flex:1;padding:9px 10px;text-align:center;cursor:pointer;font-size:13px;color:var(--dim);border-bottom:2px solid transparent;user-select:none;display:flex;align-items:center;justify-content:center;gap:6px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent);background:var(--panel)}
+.panel{display:none;padding:16px;flex-direction:column;gap:14px}
+.panel.show{display:flex}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:110px;color:var(--dim);font-size:13px;flex:none}
+input[type=text],input[type=password],select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:180px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600;padding:8px 26px}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--dim);margin-left:120px}
+.hint a{color:var(--accent)}
+.status{font-size:12px;margin-left:120px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
+#savebar{display:flex;align-items:center;gap:14px;justify-content:flex-end}
+#save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
+#save-status.show{opacity:1}
+.pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>📦 文件托管</h1>
+  <span class="pill">对象存储托管:V2V 参考视频(--ref-video)经预签名 URL 传给方舟</span>
+  <div class="spacer"></div>
+</header>
+<main>
+  <div class="card" id="card-storage">
+    <h2>📦 存储渠道 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <div class="tabs" id="storage-tabs"></div>
+    <div id="storage-panels"></div>
+  </div>
+  <div id="savebar">
+    <span id="save-status">✓ 已保存</span>
+    <button class="primary" id="save">保存设置</button>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
+function keyRow(id,placeholder,label){
+  const d=el('div',{className:'row'});
+  d.appendChild(el('label',{},label||'API Key'));
+  const inp=el('input',{type:'password',id,placeholder:placeholder||''});
+  const show=el('button',{},'显示');
+  show.onclick=()=>{const pw=inp.type==='password';inp.type=pw?'text':'password';show.textContent=pw?'隐藏':'显示'};
+  d.appendChild(inp);d.appendChild(show);
+  return d;
+}
+
+let CFG=null;
+let STORAGE_PROVIDER='tos';
+const STORAGE_META={
+  tos:{label:'火山引擎 TOS',ak:'AccessKey',sk:'SecretKey',
+    akPh:'火山引擎 IAM AccessKey(非 ark- API Key)',skPh:'火山引擎 IAM SecretKey',
+    bucketPh:'TOS 存储桶名(建议 cn-beijing 私有桶)',endpointPh:'tos-cn-beijing.volces.com',regionPh:'cn-beijing',
+    hint:'与方舟同账号同区域,拉取最快(推荐)。私有 bucket + IAM AK/SK 在 <a href="https://console.volcengine.com/tos" target="_blank">TOS 控制台</a> 创建;建议给前缀配 7 天生命周期自动清理。依赖 <code>pip install tos</code>'},
+  oss:{label:'阿里云 OSS',ak:'AccessKey ID',sk:'AccessKey Secret',
+    akPh:'阿里云 RAM AccessKey ID',skPh:'阿里云 RAM AccessKey Secret',
+    bucketPh:'OSS 存储桶名',endpointPh:'oss-cn-beijing.aliyuncs.com',regionPh:'(可留空,Endpoint 已含地域)',
+    hint:'RAM 用户 AK/SK 在阿里云「RAM 访问控制」创建;Endpoint 填 bucket 所在地域(建议北京,离方舟近)。依赖 <code>pip install oss2</code>'},
+  cos:{label:'腾讯云 COS',ak:'SecretId',sk:'SecretKey',
+    akPh:'腾讯云 CAM SecretId',skPh:'腾讯云 CAM SecretKey',
+    bucketPh:'桶名需含 APPID 后缀,如 mybucket-1250000000',endpointPh:'(留空,按 Region 自动)',regionPh:'ap-beijing',
+    hint:'SecretId/SecretKey 在腾讯云「CAM 密钥管理」创建;Bucket 名必须带 APPID 后缀。依赖 <code>pip install cos-python-sdk-v5</code>'},
+  s3:{label:'S3 兼容',ak:'Access Key',sk:'Secret Key',
+    akPh:'Access Key ID',skPh:'Secret Access Key',
+    bucketPh:'桶名',endpointPh:'AWS 官方留空;R2 填 https://<账户ID>.r2.cloudflarestorage.com',regionPh:'us-east-1(R2 填 auto)',
+    hint:'通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖 <code>pip install boto3</code>'},
+};
+const STORAGE_PROVIDERS=Object.keys(STORAGE_META);
+
+function buildStorage(){
+  const tabs=$('#storage-tabs'),panels=$('#storage-panels');
+  STORAGE_PROVIDERS.forEach(p=>{
+    const m=STORAGE_META[p];
+    const t=el('div',{className:'tab',id:`tab-storage-${p}`},m.label);
+    t.onclick=()=>showStoragePanel(p);
+    tabs.appendChild(t);
+    const d=el('div',{className:'panel',id:`panel-storage-${p}`});
+    d.appendChild(keyRow(`st-${p}-ak`,m.akPh,m.ak));
+    d.appendChild(keyRow(`st-${p}-sk`,m.skPh,m.sk));
+    [['bucket','Bucket',m.bucketPh],['endpoint','Endpoint',m.endpointPh],
+     ['region','Region',m.regionPh],['prefix','对象前缀','genmedia-refs/'],
+     ['expires','链接有效期(秒)','86400']].forEach(([f,label,ph])=>{
+      const r=el('div',{className:'row'});
+      r.appendChild(el('label',{},label));
+      r.appendChild(el('input',{type:'text',id:`st-${p}-${f}`,placeholder:ph}));
+      d.appendChild(r);
+    });
+    d.appendChild(el('div',{className:'hint'},
+      '<span>方舟要求 reference_video 为公网 URL(base64 内联被拒):V2V 修复时参考视频自动上传对象存储并生成预签名链接,桶保持私有。</span><span>'+m.hint+'</span>'));
+    panels.appendChild(d);
+  });
+}
+
+function showStoragePanel(p){
+  STORAGE_PROVIDER=p;
+  STORAGE_PROVIDERS.forEach(x=>{
+    const t=$(`#tab-storage-${x}`);
+    t.classList.toggle('active',x===p);
+    t.textContent=(x===p?'✅ ':'')+window.t(STORAGE_META[x].label);   // ✅ = 生效渠道(保存后)
+    $(`#panel-storage-${x}`).classList.toggle('show',x===p);
+  });
+}
+
+function loadIntoForm(){
+  const stg=CFG.storage||{};
+  STORAGE_PROVIDERS.forEach(p=>{
+    const c=stg[p]||{};
+    $(`#st-${p}-ak`).value=c.access_key||'';
+    $(`#st-${p}-sk`).value=c.secret_key||'';
+    $(`#st-${p}-bucket`).value=c.bucket||'';
+    $(`#st-${p}-endpoint`).value=c.endpoint||(p==='tos'?'tos-cn-beijing.volces.com':p==='oss'?'oss-cn-beijing.aliyuncs.com':'');
+    $(`#st-${p}-region`).value=c.region||(p==='tos'?'cn-beijing':p==='cos'?'ap-beijing':p==='s3'?'us-east-1':'');
+    $(`#st-${p}-prefix`).value=c.prefix||'genmedia-refs/';
+    $(`#st-${p}-expires`).value=c.url_expires||86400;
+  });
+  showStoragePanel(STORAGE_PROVIDERS.includes(stg.provider)?stg.provider:'tos');
+}
+
+function collect(){
+  // 只提交 storage 块:后端 /api/v1/config/generation 深合并,不影响其他设置
+  const storage={provider:STORAGE_PROVIDER};
+  STORAGE_PROVIDERS.forEach(p=>{
+    storage[p]={access_key:$(`#st-${p}-ak`).value.trim(),
+      secret_key:$(`#st-${p}-sk`).value.trim(),
+      endpoint:$(`#st-${p}-endpoint`).value.trim(),
+      region:$(`#st-${p}-region`).value.trim(),
+      bucket:$(`#st-${p}-bucket`).value.trim(),
+      prefix:$(`#st-${p}-prefix`).value.trim()||'genmedia-refs/',
+      url_expires:Number($(`#st-${p}-expires`).value)||86400};
+  });
+  return {storage};
+}
+
+$('#save').onclick=async()=>{
+  const btn=$('#save');btn.disabled=true;btn.textContent='保存中…';
+  try{
+    const proj=(new URLSearchParams(location.search).get('project'))
+      ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+    const r=await api('/api/v1/config/generation',Object.assign(collect(),{project:proj}));
+    CFG=r.config;
+    const st=$('#save-status');st.textContent='✓ 已保存';st.classList.add('show');
+    setTimeout(()=>st.classList.remove('show'),2500);
+  }catch(e){
+    const st=$('#save-status');st.textContent='✗ 保存失败:'+e.message;
+    st.style.color='var(--red)';st.classList.add('show');
+  }finally{btn.disabled=false;btn.textContent='保存设置'}
+};
+
+(async()=>{
+  buildStorage();
+  CFG=await api('/api/v1/config/generation');
+  loadIntoForm();
+})();
+</script>
+</body>
+</html>

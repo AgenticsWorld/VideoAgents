@@ -1,0 +1,14 @@
+{
+  "name": "videoagents-product",
+  "private": true,
+  "version": "1.0.2",
+  "workspaces": ["apps/desktop"],
+  "scripts": {
+    "dev:web": "node apps/web/run-server.mjs",
+    "build:web": "node apps/web/run-check.mjs",
+    "dev:desktop": "npm run dev --workspace @videoagents/desktop",
+    "build:desktop": "npm run build:web && npm run build --workspace @videoagents/desktop",
+    "typecheck": "npm run typecheck --workspace @videoagents/desktop"
+  },
+  "engines": {"node": ">=22.12"}
+}
