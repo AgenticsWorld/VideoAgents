@@ -597,6 +597,39 @@ const $=s=>document.querySelector(s);
 let AGENTS=[], CURRENT=null, RUNS={}, LIVE={}; // LIVE[run_id] = 当前流式 DOM 节点
 let AGENT_MODELS={defaults:{},overrides:{}};   // Agent 级模型配置(/api/v1/agents/models)
 let AM_MODE='global';                          // 「Agent模型」策略(设置菜单子菜单)
+
+function uiConfirm(message){
+  return new Promise(resolve=>{
+    const modal=document.createElement('div');
+    modal.className='modal';modal.style.display='flex';modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.innerHTML='<div class="box"><h3></h3><div class="actions"><button class="cancel"></button><button class="primary ok"></button></div></div>';
+    modal.querySelector('h3').textContent=message;
+    const cancel=modal.querySelector('.cancel'),ok=modal.querySelector('.ok');
+    cancel.textContent=t('\u53d6\u6d88');ok.textContent=t('\u786e\u5b9a');
+    const finish=value=>{document.removeEventListener('keydown',onKey);modal.remove();resolve(value)};
+    const onKey=e=>{if(e.key==='Escape')finish(false)};
+    cancel.onclick=()=>finish(false);ok.onclick=()=>finish(true);
+    modal.onclick=e=>{if(e.target===modal)finish(false)};
+    document.addEventListener('keydown',onKey);document.body.appendChild(modal);
+    setTimeout(()=>ok.focus(),0);
+  });
+}
+
+function uiAlert(message){
+  return new Promise(resolve=>{
+    const modal=document.createElement('div');
+    modal.className='modal';modal.style.display='flex';modal.setAttribute('role','alertdialog');
+    modal.setAttribute('aria-modal','true');
+    modal.innerHTML='<div class="box"><h3></h3><div class="actions"><button class="primary ok"></button></div></div>';
+    modal.querySelector('h3').textContent=message;
+    const ok=modal.querySelector('.ok');ok.textContent=t('\u786e\u5b9a');
+    const finish=()=>{document.removeEventListener('keydown',onKey);modal.remove();resolve()};
+    const onKey=e=>{if(e.key==='Escape'||e.key==='Enter')finish()};
+    ok.onclick=finish;document.addEventListener('keydown',onKey);document.body.appendChild(modal);
+    setTimeout(()=>ok.focus(),0);
+  });
+}
 const AM_MODE_LABELS={global:'跟随全局',smart_claude:'智能claudecode',smart_codex:'智能codex'};
 
 const MODEL_OPTIONS={
@@ -832,7 +865,7 @@ async function initGenProviders(){
         cfg=(await api('/api/v1/config/generation',{[kind]:{provider:sel.value},project:$('#project').value.trim()||'demo'})).config;
         sel.style.borderColor='var(--green)';
         setTimeout(()=>sel.style.borderColor='',1200);
-      }catch(e){alert('切换失败:'+e.message);sel.value=cfg[kind].provider}
+      }catch(e){await uiAlert('切换失败:'+e.message);sel.value=cfg[kind].provider}
     };
   }
   syncDaSelect(cfg);   // deepagents 生效渠道同步到顶栏语言模型下拉
@@ -947,7 +980,7 @@ function styleGridRender(){
 async function openStyleModal(targetSel){
   STYLE_TARGET=targetSel;
   try{await loadStyleLib()}
-  catch(e){alert(t('风格库加载失败:')+e.message);return}
+  catch(e){await uiAlert(t('风格库加载失败:')+e.message);return}
   $('#style-search').value='';
   styleChipsRender();styleGridRender();
   $('#style-modal').style.display='flex';
@@ -1203,7 +1236,7 @@ function plugRow(p){
   };
   const del=d.querySelector('.plug-del');
   if(del)del.onclick=async()=>{
-    if(!confirm(I18N.f('删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复',{name:p.name})))return;
+    if(!await uiConfirm(I18N.f('删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复',{name:p.name})))return;
     $('#plug-err').textContent='';
     try{
       const r=await api('/api/v1/plugins/'+encodeURIComponent(p.name)+'/delete',{name:p.name});
@@ -1419,7 +1452,7 @@ document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
     AGENT_MODELS=await api('/api/v1/agents/models');   // 策略变了,全部 defaults 刷新
     AM_MODE=AGENT_MODELS.mode||m;
     renderAmMode();updateModelBtn();
-  }catch(err){alert('切换失败:'+err.message)}
+  }catch(err){await uiAlert('切换失败:'+err.message)}
 });
 
 /* ---------- Agent 级模型配置弹窗 ---------- */
@@ -1526,27 +1559,27 @@ $('#btn-soul').onclick=async()=>{
 /* ---------- 运行面板按钮:停止/继续/自动运行 ---------- */
 $('#btn-stop').onclick=async()=>{
   const n=Object.values(RUNS).filter(r=>['queued','running'].includes(r.status)).length;
-  if(!n){alert('当前没有排队/运行中的任务');return}
-  if(!confirm(I18N.f('停止全部 {n} 个排队/运行中的任务?',{n})))return;
+  if(!n){await uiAlert('当前没有排队/运行中的任务');return}
+  if(!await uiConfirm(I18N.f('停止全部 {n} 个排队/运行中的任务?',{n})))return;
   try{
     const r=await api('/api/v1/runs/cancel',{});
     console.log('stopped:',r.stopped);
-  }catch(e){alert('停止失败:'+e.message)}
+  }catch(e){await uiAlert('停止失败:'+e.message)}
 };
 $('#btn-continue').onclick=async()=>{
   const d=AGENTS.find(a=>a.dispatcher);
-  if(!d){alert('未找到总制片');return}
+  if(!d){await uiAlert('未找到总制片');return}
   try{
     await api('/api/v1/runs',{agent:d.id,message:'继续执行',
       project:$('#project').value.trim()||'demo',
       model:getModel(),engine:$('#engine').value});
     selectAgent(d.id);   // 跳到总制片对话看进展
-  }catch(e){alert('发送失败:'+e.message)}
+  }catch(e){await uiAlert('发送失败:'+e.message)}
 };
 $('#open-dir').onclick=async e=>{
   e.preventDefault();
   try{await api('/actions/open-project-folder',{project:$('#project').value.trim()||'demo'})}
-  catch(e2){alert('打开失败:'+e2.message)}
+  catch(e2){await uiAlert('打开失败:'+e2.message)}
 };
 let WATCHDOG_ON=false;   // 逐项目独立、缺省关闭
 function renderWatchdog(){
@@ -1566,7 +1599,7 @@ $('#btn-watchdog').onclick=async()=>{
   try{
     WATCHDOG_ON=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/watchdog',{project:curProj(),enabled:!WATCHDOG_ON})).enabled;
     renderWatchdog();
-  }catch(e){alert('切换失败:'+e.message)}
+  }catch(e){await uiAlert('切换失败:'+e.message)}
 };
 
 /* ---------- 运行面板 ---------- */
@@ -1691,7 +1724,7 @@ function liveBox(runId){
         syncDaSelect((await api('/api/v1/config/generation',{deepagents:{provider:sel.value},project:$('#project').value.trim()||'demo'})).config);
         sel.style.borderColor='var(--green)';
         setTimeout(()=>sel.style.borderColor='',1200);
-      }catch(e){alert('切换失败:'+e.message);sel.value=prev}
+      }catch(e){await uiAlert('切换失败:'+e.message);sel.value=prev}
       savePrefs();
       return;
     }
