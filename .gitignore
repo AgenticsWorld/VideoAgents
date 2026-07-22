@@ -13,6 +13,7 @@ data/projects/*
 !data/projects/.gitkeep
 runs/
 qa/evidence/
+tests/
 
 # Runtime state
 webui/agentmodels.json
