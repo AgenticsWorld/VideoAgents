@@ -19,9 +19,6 @@ jobs:
           - os: windows-latest
             args: --win --x64
             artifact: windows-x64
-          - os: macos-13
-            args: --mac --x64
-            artifact: macos-x64
           - os: macos-14
             args: --mac --arm64
             artifact: macos-arm64

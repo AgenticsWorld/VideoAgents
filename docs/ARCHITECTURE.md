@@ -106,9 +106,9 @@ Codex 参数中的 `--skip-git-repo-check` 只是第三方 CLI 的运行选项�
 
 - Web：没有 Node 编译步骤；`python apps/web/check.py`（或 `npm run build:web`）校验静态资源完整性及 API 路径，运行入口为 `videoagents-web`。
 - Desktop：`npm run build:desktop` 编译 Electron 主进程；`electron-builder` 只将 Electron、Web 网关和业务后端生成 macOS DMG/ZIP、Windows NSIS/portable，不包含 Python。
-- Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。`dev` 分支 push 会分别构建 macOS arm64/x64 与 Windows x64，并上传到 `s3://agentics-prod/packages/python/`。
-- Dev Desktop：产品版本固定为 `1.0.1`；同一次 `dev` workflow 构建 macOS Universal ZIP 和 Windows NSIS，再规范化为 `packages/video-agents-mac.zip` 与 `packages/video-agents-win.zip`。短 hash 作为独立的 `buildHash`，与 `version`、URL、大小和 SHA-256 一起写入索引的 `desktop.mac`/`desktop.win`。
-- GitHub Actions：Pull Request 验证类型和构建；`v*` 标签分别构建 macOS x64、macOS arm64 和 Windows x64，并上传 Release 资产。
+- Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。`dev` 分支 push 只构建 macOS arm64 与 Windows x64，并上传到 `s3://agentics-prod/packages/python/`。
+- Dev Desktop：产品版本固定为 `1.0.1`；同一次 `dev` workflow 构建 macOS arm64 ZIP 和 Windows x64 NSIS，再规范化为 `packages/video-agents-mac.zip` 与 `packages/video-agents-win.zip`。短 hash 作为独立的 `buildHash`，与 `version`、URL、大小和 SHA-256 一起写入索引的 `desktop.mac`/`desktop.win`。
+- GitHub Actions：Pull Request 验证类型和构建；`v*` 标签分别构建 macOS arm64 和 Windows x64，并上传 Release 资产。
 - 发布工作流支持可选签名密钥：macOS 使用 `MAC_CSC_LINK`/`MAC_CSC_KEY_PASSWORD` 及 Apple notarization secrets，Windows 使用 `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD`。未配置时仍可产出无签名测试包；面向普通用户发布及 macOS 自动更新时应配置签名。
 - 客户端安装包不包含 Python。首次启动若没有可用环境，客户端读取 `https://s3.agentics.world/packages/video-agents.json`，选择 `python.mac.<arch>` 或 `python.win.<arch>`，下载 `packages/python/macos-python-<version>-<arch>.zip` 或 Windows 对应包。
 - 独立运行时安装到用户数据目录 `python-runtimes/versions/<version>/`，由 `active.json` 选择。已有可用环境时启动不访问远程索引；只有首次安装或桌面菜单手动更新才检查。下载后必须通过大小、SHA-256、平台、架构、版本和目录越界校验。
