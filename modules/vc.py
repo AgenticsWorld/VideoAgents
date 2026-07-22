@@ -198,6 +198,7 @@ def _find(m, artifact, vstr):
 def cmd_show(a):
     m = load_manifest()
     p, rec = _find(m, a.artifact, a.version)
+    # pygit2 exposes the stored blob bytes directly, preserving trailing newlines.
     commit = repository()[pygit2.Oid(hex=rec["commit"])]
     blob = _tree_entry(commit.tree, p)
     sys.stdout.buffer.write(blob.data)

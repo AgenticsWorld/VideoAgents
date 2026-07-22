@@ -11,6 +11,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 ## 主要能力
 
 - 83 个 Agent，分属 13 个制作部门
+- 声明式 Agent 插件机制：扩展新工位与业务流程；内置衍生小说、双书融合两个官方插件，上传插件保存在可写的运行时数据目录
 - 剧情、美术、分镜、成片和发布环节的人工确认闸门
 - 文件化产物、项目内版本管理和可审计 QA 记录
 - 支持 Claude CLI、Codex CLI 和 OpenAI 兼容的 DeepAgents 引擎
@@ -52,7 +53,7 @@ WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客�
 
 Python 运行时与 Electron 应用完全分开版本化。运行时写入用户数据目录的 `python-runtimes/versions/<version>/`，通过 `active.json` 激活。已有可用环境时启动过程不会访问版本索引；仅首次缺少环境，或用户从桌面菜单选择“检查并更新 Python 环境”时才检查最新版本。下载过程校验大小、SHA-256、平台、架构、版本和可执行路径。开发/诊断时仍可用 `VIDEOAGENTS_PYTHON` 显式覆盖。
 
-`dev` 分支的桌面产品版本始终保持 `1.0.1`，短 Git hash 只写入 `buildHash`，并发布为固定地址 `packages/video-agents-mac.zip`（Apple Silicon arm64）与 `packages/video-agents-win.zip`（Windows x64，包含 NSIS 安装器）。Dev 客户端每次启动读取同一个 JSON；仅当 `desktop.mac/win.buildHash` 与自身构建 hash 不同时询问用户。确认后自动校验、下载并在退出当前进程后替换 macOS `.app` 或静默运行 Windows 升级安装器。正式 Release 渠道仍与 Dev S3 更新通道隔离。
+`dev` 分支的桌面产品版本始终保持 `1.0.2`，短 Git hash 只写入 `buildHash`，并发布为固定地址 `packages/video-agents-mac.zip`（Apple Silicon arm64）与 `packages/video-agents-win.zip`（Windows x64，包含 NSIS 安装器）。Dev 客户端每次启动读取同一个 JSON；仅当 `desktop.mac/win.buildHash` 与自身构建 hash 不同时询问用户。确认后自动校验、下载并在退出当前进程后替换 macOS `.app` 或静默运行 Windows 升级安装器。正式 Release 渠道仍与 Dev S3 更新通道隔离。
 
 macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。
 

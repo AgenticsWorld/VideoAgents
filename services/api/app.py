@@ -24,10 +24,12 @@ from .schemas import (
     DrawSessionCreate,
     DrawSubmit,
     GenerationConfigUpdate,
+    GlobalModelUpdate,
     HealthResponse,
     ProjectConfigUpdate,
     ProjectCreate,
     ProjectDelete,
+    PluginUpdate,
     ProviderProbe,
     ReferenceDelete,
     ReferenceNote,
@@ -254,6 +256,26 @@ async def agents(refresh: bool = False) -> list[dict[str, Any]]:
     return await core.api_agents(refresh)
 
 
+@api.get("/plugins", tags=["plugins"])
+async def plugins() -> list[dict[str, Any]]:
+    return await core.api_plugins()
+
+
+@api.post("/plugins", status_code=201, tags=["plugins"])
+async def install_plugin(request: Request) -> dict[str, Any]:
+    return await core.api_plugins_upload(await request.body())
+
+
+@api.put("/plugins/{name}", tags=["plugins"])
+async def update_plugin(name: str, body: PluginUpdate) -> dict[str, Any]:
+    return await core.api_plugins_toggle({"name": name, "enabled": body.enabled})
+
+
+@api.delete("/plugins/{name}", tags=["plugins"])
+async def delete_plugin(name: str) -> dict[str, Any]:
+    return await core.api_plugins_delete({"name": name})
+
+
 @api.get("/agents/models", tags=["agents"])
 async def agent_models() -> dict[str, Any]:
     return await core.api_agentmodels()
@@ -324,6 +346,16 @@ async def answer_approval(approval_id: str, body: ApprovalAnswer) -> dict[str, A
 @api.get("/config/generation", tags=["configuration"])
 async def generation_config() -> dict[str, Any]:
     return _redact(await core.api_genconfig_get())
+
+
+@api.get("/config/global-model", tags=["configuration"])
+async def global_model() -> dict[str, Any]:
+    return await core.api_globalmodel_get()
+
+
+@api.put("/config/global-model", tags=["configuration"])
+async def set_global_model(body: GlobalModelUpdate) -> dict[str, Any]:
+    return await core.api_globalmodel_set(_body(body))
 
 
 @api.patch("/config/generation", tags=["configuration"])

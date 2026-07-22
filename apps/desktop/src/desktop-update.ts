@@ -34,7 +34,7 @@ interface DesktopIndex {
 }
 
 export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildInfo {
-  if (!packaged) return {schema: 1, channel: 'local', version: '1.0.1', buildHash: 'development'}
+  if (!packaged) return {schema: 1, channel: 'local', version: '1.0.2', buildHash: 'development'}
   try {
     const value = JSON.parse(readFileSync(path.join(resourcesPath, 'build-info.json'), 'utf8')) as BuildInfo
     if (value.schema === 1 && ['local', 'dev', 'release'].includes(value.channel)
@@ -42,13 +42,13 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
   } catch (error) {
     console.warn(`[desktop-updater] build-info.json 不可用：${String(error)}`)
   }
-  return {schema: 1, channel: 'local', version: '1.0.1', buildHash: 'unknown'}
+  return {schema: 1, channel: 'local', version: '1.0.2', buildHash: 'unknown'}
 }
 
 function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact {
   if (!value || typeof value !== 'object') throw new Error('桌面更新索引缺少当前平台制品')
   const artifact = value as Partial<DesktopArtifact>
-  if (artifact.version !== '1.0.1' || typeof artifact.buildHash !== 'string'
+  if (artifact.version !== '1.0.2' || typeof artifact.buildHash !== 'string'
       || !SAFE_VERSION.test(artifact.buildHash)
       || typeof artifact.url !== 'string' || !/^[a-f0-9]{64}$/i.test(artifact.sha256 || '')
       || typeof artifact.size !== 'number' || artifact.size <= 0 || artifact.size > 2 * 1024 * 1024 * 1024) {

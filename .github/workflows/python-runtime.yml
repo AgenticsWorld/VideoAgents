@@ -73,7 +73,7 @@ jobs:
       - run: npm ci
       - name: Write dev build metadata
         shell: bash
-        run: python apps/desktop/scripts/write_build_info.py --channel dev --version 1.0.1 --build-hash "$DEV_BUILD_HASH"
+        run: python apps/desktop/scripts/write_build_info.py --channel dev --version 1.0.2 --build-hash "$DEV_BUILD_HASH"
       - run: npm run build:desktop
       - name: Prepare Apple API key
         if: matrix.platform == 'mac'

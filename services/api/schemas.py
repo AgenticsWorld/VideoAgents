@@ -59,11 +59,20 @@ class AgentModelUpdate(ApiModel):
     reset: bool = False
 
 
+class GlobalModelUpdate(ApiModel):
+    engine: Literal["", "claude", "codex", "kimi", "deepagents"] = ""
+    model: str = ""
+
+
+class PluginUpdate(ApiModel):
+    enabled: bool
+
+
 class RunCreate(ApiModel):
     agent: str
     message: str = Field(min_length=1)
     project: str = "demo"
-    engine: Literal["claude", "codex", "kimi", "deepagents"] = "claude"
+    engine: Literal["claude", "codex", "kimi", "deepagents"] | None = None
     model: str | None = None
     force: bool = False
     source: str = "user"
