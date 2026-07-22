@@ -615,14 +615,21 @@ function getModel(){
   return v==='__custom' ? $('#model-custom').value.trim() : v;
 }
 
-/* ---------- 顶栏选择持久化(引擎/语言模型/项目,存 localStorage;图像/视频渠道由服务端 genconfig 持久化) ---------- */
+/* ---------- 顶栏选择持久化(引擎/语言模型/项目,存 localStorage;图像/视频渠道由服务端 genconfig 持久化;
+   引擎/模型另同步一份服务端副本 /api/globalmodel:服务端自发对话(设置变更通知/看门狗/项目初始化)
+   看不到 localStorage,global 模式靠它跟随顶栏,否则回退 claude ---------- */
 const PREFS_KEY='webui_prefs';
 function loadPrefs(){try{return JSON.parse(localStorage.getItem(PREFS_KEY)||'{}')}catch(e){return{}}}
+let _gmSyncTimer;
 function savePrefs(){
   localStorage.setItem(PREFS_KEY,JSON.stringify({
     engine:$('#engine').value, model:$('#model').value,
     model_custom:$('#model-custom').value, project:$('#project').value,
   }));
+  clearTimeout(_gmSyncTimer);   // 防抖:model-custom 逐键触发,合并为停顿后一次同步
+  _gmSyncTimer=setTimeout(()=>{
+    api('/api/globalmodel',{engine:$('#engine').value,model:getModel()}).catch(()=>{});
+  },400);
 }
 async function restorePrefs(){
   const p=loadPrefs();
@@ -635,6 +642,7 @@ async function restorePrefs(){
   }
   if(p.model_custom)$('#model-custom').value=p.model_custom;
   await initProjects(p.project);
+  savePrefs();   // 开屏把本浏览器的顶栏选择同步到服务端副本(换浏览器/首次同步兜底)
 }
 
 /* ---------- 项目下拉(自动读取 data/projects/ 目录) ---------- */

@@ -556,6 +556,26 @@ def agent_model_config(agent_id: str) -> dict:
     return ov if isinstance(ov, dict) else default_agent_model(agent_id)
 
 
+def global_model_pref() -> dict:
+    """顶栏全局引擎/模型的服务端副本(前端 savePrefs 时经 /api/globalmodel 同步)。
+    顶栏选择本体存浏览器 localStorage,服务端自发对话(设置变更通知/看门狗唤醒/
+    项目初始化)没有浏览器上下文,靠这份副本跟随顶栏全局。"""
+    p = STATE.get("global_model") or {}
+    eng = str(p.get("engine") or "").lower()
+    return {"engine": eng if eng in ENGINES else "",
+            "model": str(p.get("model") or "").strip()}
+
+
+def agent_effective_model(agent_id: str) -> dict:
+    """服务端自发对话的生效引擎/模型:Agent 级配置(UI 覆盖或智能策略)优先;
+    global 模式(engine 为空=跟随全局)回退顶栏全局的服务端副本;仍取不到才回退 claude。"""
+    am = agent_model_config(agent_id)
+    if am.get("engine"):
+        return {"engine": am["engine"], "model": am.get("model") or ""}
+    gp = global_model_pref()
+    return {"engine": gp["engine"] or "claude", "model": gp["model"]}
+
+
 # macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
 # 本机服务(ComfyUI/LM Studio)强制直连,外网 URL 维持默认代理行为。
 _DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -2721,9 +2741,10 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
            "在派单工单里注明以最新配置为准;已按旧配置产出且已过审的产物不重做,"
            "除非与新配置冲突。若无受影响任务,简要确认记录后结束,不要额外派活。")
     try:
+        gm = agent_effective_model(orch)
         await api_chat({"agent": orch, "message": msg, "project": project,
                         "source": "settings",
-                        "engine": agent_model_config(orch).get("engine") or "claude"})
+                        "engine": gm["engine"], "model": gm["model"]})
     except Exception as e:  # noqa: BLE001
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
@@ -3284,6 +3305,25 @@ async def api_agentmodels():
             "overrides": load_agentmodels()}
 
 
+@app.get("/api/globalmodel")
+async def api_globalmodel_get():
+    return {"global_model": global_model_pref()}
+
+
+@app.post("/api/globalmodel")
+async def api_globalmodel_set(body: dict):
+    """顶栏全局引擎/模型的服务端副本:前端每次切换顶栏选择时同步写入 STATE。
+    localStorage 只有该浏览器可见,没有这份副本时服务端自发对话只能硬编码回退
+    claude(global 模式下不跟随顶栏)。多浏览器场景后写者生效。"""
+    eng = str(body.get("engine") or "").lower()
+    if eng and eng not in ENGINES:
+        raise HTTPException(400, f"engine must be one of {ENGINES}")
+    STATE["global_model"] = {"engine": eng,
+                             "model": str(body.get("model") or "").strip()}
+    save_state(STATE)
+    return {"ok": True, "global_model": global_model_pref()}
+
+
 @app.post("/api/agentmodels")
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
@@ -3399,9 +3439,10 @@ async def api_projects_create(body: dict):
         "按分类(视觉风格/角色/场景/道具/音乐/封面)上传参考图与希望使用的音乐,并可为每个文件添加注释说明用途"
         "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
+    gm = agent_effective_model(orch)
     await api_chat({"agent": orch, "message": "\n".join(msg),
                     "project": name, "source": "user",
-                    "engine": agent_model_config(orch).get("engine") or "claude"})
+                    "engine": gm["engine"], "model": gm["model"]})
     return {"ok": True, "name": name}
 
 
@@ -3710,7 +3751,11 @@ async def api_chat(body: dict):
     message = (body.get("message") or "").strip()
     project = safe_slug(body.get("project"))
     model = body.get("model") or None
-    engine = (body.get("engine") or "claude").lower()
+    engine = (body.get("engine") or "").lower()
+    if not engine:      # 调用方未指定引擎:回退顶栏全局的服务端副本,而非硬编码 claude
+        gp = global_model_pref()
+        engine = gp["engine"] or "claude"
+        model = model or gp["model"] or None
     source = body.get("source", "user")
     parent = body.get("parent") or None
     if not message:
@@ -3894,7 +3939,8 @@ async def idle_watchdog():
             if not any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir()):
                 continue                     # 没有项目开启看门狗,免探用量
             # 用量阈值门控:总制片生效引擎的会话用量超阈值则本轮全部不唤醒(配额是账号级)
-            eng = agent_model_config(orch).get("engine") or "claude"
+            gm = agent_effective_model(orch)
+            eng, mdl = gm["engine"], gm["model"]
             used = await asyncio.to_thread(engine_usage_percent, eng)
             th = int(STATE.get("watchdog_threshold", 80))
             if used is not None and used >= th:
@@ -3940,7 +3986,7 @@ async def idle_watchdog():
                                "然后继续按 DAG 推进。")
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog",
-                                        "engine": eng})
+                                        "engine": eng, "model": mdl})
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
                 runnable, human_waiting = _dag_runnable(proj)
@@ -3951,7 +3997,7 @@ async def idle_watchdog():
                            "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
-                                    "engine": eng})
+                                    "engine": eng, "model": mdl})
                     print(f"[watchdog] 唤醒 {orch}:{proj} 待办 {len(runnable)} 项", flush=True)
                     continue   # 各项目独立唤醒,不再一轮只唤醒一个
                 # DAG 覆盖率兜底:无可跑节点 ≠ 只等人工——若 episode_plan 里
@@ -3970,7 +4016,7 @@ async def idle_watchdog():
                            "在 DAG 中补记节点状态后简要说明。")
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
-                                    "engine": eng})
+                                    "engine": eng, "model": mdl})
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue
@@ -4033,7 +4079,7 @@ async def api_usage():
         asyncio.to_thread(engine_usage_percent, "claude"))
     orch = next(iter(DISPATCHERS))
     return {"codex": {"used": codex}, "claude": {"used": claude},
-            "gate_engine": agent_model_config(orch).get("engine") or "claude"}
+            "gate_engine": agent_effective_model(orch)["engine"]}
 
 
 @app.get("/api/resources/config")
