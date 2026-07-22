@@ -40,10 +40,11 @@ jobs:
         run: |
           python apps/desktop/scripts/build_runtime.py --version "$RUNTIME_VERSION" --force
           python apps/desktop/scripts/package_runtime.py --version "$RUNTIME_VERSION"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-runtime-${{ matrix.artifact }}
           path: apps/desktop/.runtime-packages/*
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
 
@@ -83,10 +84,11 @@ jobs:
       - name: Normalize desktop package
         shell: bash
         run: python apps/desktop/scripts/package_dev_desktop.py --platform ${{ matrix.platform }} --build-hash "$DEV_BUILD_HASH"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dev-desktop-${{ matrix.platform }}
           path: apps/desktop/.desktop-packages/*
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
 
@@ -95,12 +97,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: python-runtime-*
           path: runtime-artifacts
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dev-desktop-*
           path: desktop-artifacts
