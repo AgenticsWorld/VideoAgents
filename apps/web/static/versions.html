@@ -112,7 +112,7 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 </div>
 <script>
 const $=s=>document.querySelector(s);
-async function api(p,body,method='POST'){const o=body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtTime(ts){return (ts||'').replace('T',' ').replace(/\+.*$/,'')}
 
@@ -149,7 +149,7 @@ $('#del-ok').onclick=async()=>{
   const proj=curProj();
   const btn=$('#del-ok');btn.disabled=true;btn.textContent='删除中…';
   try{
-    const r=await api('/api/v1/projects/'+encodeURIComponent(proj),{confirmation:$('#del-confirm').value.trim()},'DELETE');
+    const r=await api('/api/v1/projects/'+encodeURIComponent(proj),{project:proj,confirm:$('#del-confirm').value.trim()});
     // 更新本地偏好并跳到第一个项目的控制台
     try{
       const p=JSON.parse(localStorage.getItem('webui_prefs')||'{}');
@@ -206,7 +206,7 @@ async function doClone(b){
   if(!confirm(msg))return;
   let name;
   try{
-    const r=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone',{snapshot_commit:b.snapshot_commit,task_id:b.task_id});
+    const r=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone',{project:src,snapshot_commit:b.snapshot_commit,task_id:b.task_id});
     name=r.name;
   }catch(e){showStatus(`<span class="err">✗ ${t('克隆启动失败:')}${esc(e.message)}</span>`);return}
   CLONING=true;setButtons(false);

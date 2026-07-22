@@ -37,7 +37,9 @@ def install_runtime_store(store: RuntimeStore) -> None:
             approval = core.CONFIRMS.get(str(event.get("id")))
             if approval:
                 store.upsert_approval(approval)
-        sequence = store.append_event(event)
-        original_publish({**event, "sequence": sequence})
+        store.append_event(event)
+        # Persistence is an API-service implementation detail.  Live WebUI
+        # events keep the original server.py payload exactly unchanged.
+        original_publish(event)
 
     core.HUB.publish = publish

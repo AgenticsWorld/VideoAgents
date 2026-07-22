@@ -7,7 +7,7 @@
 迁移遵循两个边界：
 
 1. 视频创作领域保持稳定。`agents/`、`modules/`、`code/` 及 `data/` 不因产品外壳重构而改名或搬迁。
-2. 产品接口重新定义。所有对外能力只通过有类型、可生成 OpenAPI 的 `/api/v1` 暴露，旧 `/api/*` 路径直接返回 404。
+2. 产品接口使用 `/api/v1` 暴露，旧 `/api/*` 路径直接返回 404；除 URL 外，WebUI 沿用原服务的请求方法、请求体和响应行为。
 
 ## 运行架构
 
@@ -26,7 +26,7 @@ flowchart LR
 
 浏览器模式下，`apps/web/server.py` 原样提供原 WebUI 静态资源，并把 `/api/v1` 反向代理到独立的 `services/api`，因此请求天然同源，不需要 CORS。Electron 不实现第二套静态服务或代理，只负责启动同一个 Python Web 网关并打开其 URL；也可让该网关代理 `VIDEOAGENTS_API_URL` 指定的远程 API。
 
-`apps/web/static` 是从旧 `webui/static` 完整迁入的唯一界面源码。HTML 结构、CSS、图片与多语言资源不再经过 Vue/Vite 重建，仅将页面 JavaScript 的请求改为正式 `/api/v1` 定义。浏览器和 Electron 消费同一 URL 服务，体验不会因客户端分叉。
+`apps/web/static` 是从旧 `webui/static` 完整迁入的唯一界面源码。HTML 结构、CSS、图片与多语言资源不再经过 Vue/Vite 重建，仅修改页面 JavaScript 使用的 API URL；请求方法、请求体、响应处理、轮询和 SSE 行为保持原样。浏览器和 Electron 消费同一 URL 服务，体验不会因客户端分叉。
 
 ## 目录职责
 
@@ -78,10 +78,10 @@ tests/             Python 产品接口、领域完整性和版本管理测试
 
 - 唯一公开前缀：`/api/v1`。
 - OpenAPI：`/api/v1/openapi.json`，交互文档：`/api/v1/docs`。
-- 请求/响应使用 Pydantic Schema 描述；客户端不再调用 Python 内部函数或旧路由。
-- 运行、人工确认和事件序列持久化到 SQLite；SSE 支持 `Last-Event-ID`/`after` 断线续传。
+- WebUI 通信契约沿用原 `webui/server.py`：读取使用 GET，状态变更使用 POST（线稿删除仍使用原 DELETE），请求体与响应结构保持不变，只有 URL 迁移到 `/api/v1`。
+- 运行、人工确认和事件记录持久化到 SQLite；SSE 与原 WebUI 一样只推送当前连接后的实时事件，持久化字段不会注入前端事件载荷。
+- `apps/web/server.py` 使用非缓冲读取转发 SSE。不能使用等待填满固定缓冲区的 `read(size)`，否则运行、聊天和线稿事件会滞留到刷新页面后才通过普通 GET 显示。
 - `data/projects/` 始终是视频项目的资源目录，不会迁入数据库。SQLite 只存控制面状态，不存小说、图片、音视频或剪辑工程资产。
-- 生成服务密钥读取时会被清空显示，提交空值不会覆盖现有密钥。
 
 ## 调度器与独立 Worker 的取舍
 

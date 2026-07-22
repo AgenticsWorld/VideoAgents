@@ -18,7 +18,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 - 可配置图像、视频、音乐、TTS 与对象存储服务
 - 多语言本地 Web 控制台、资产预览和手机手绘分镜
 - 浏览器与 Electron 共用原 WebUI 的同一套静态页面
-- 版本化 `/api/v1`、OpenAPI、持久运行状态与 SSE 断线续传
+- 版本化 `/api/v1`、OpenAPI、持久运行状态与实时 SSE 通知
 
 ## 环境要求
 

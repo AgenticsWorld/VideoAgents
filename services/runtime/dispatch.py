@@ -38,15 +38,13 @@ DEFAULT_ENGINE = os.environ.get("VIDEOAGENTS_ENGINE", "claude")   # 继承派单
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def api(path: str, payload: dict | None = None, method: str | None = None):
+def api(path: str, payload: dict | None = None):
     req = urllib.request.Request(API + path)
     if API_TOKEN:
         req.add_header("Authorization", f"Bearer {API_TOKEN}")
     if payload is not None:
         req.data = json.dumps(payload).encode()
         req.add_header("Content-Type", "application/json")
-    if method:
-        req.method = method
     with _OPENER.open(req, timeout=30) as r:
         return json.loads(r.read().decode())
 
@@ -65,7 +63,7 @@ def heartbeat(note: str):
     if not PARENT:
         return
     try:
-        api(f"/runs/{PARENT}/progress", {"note": note}, method="PUT")
+        api(f"/runs/{PARENT}/progress", {"note": note})
     except Exception:
         pass
 
@@ -78,7 +76,7 @@ def confirm(question: str, timeout: int, options: list[str], default: str,
                                 "options": options, "default": default,
                                 "kind": "sign" if sign else "confirm",
                                 "parent": PARENT})
-    cid = resp["approval_id"]
+    cid = resp["confirm_id"]
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(2)

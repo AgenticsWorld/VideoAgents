@@ -93,6 +93,18 @@ def _upstream_request(method: str, url: str, headers: dict[str, str], body: byte
         return error
 
 
+def _upstream_chunk(upstream, size: int = 64 * 1024) -> bytes:
+    """Read one available HTTP chunk without waiting to fill ``size``.
+
+    ``HTTPResponse.read(size)`` attempts to fill the requested buffer.  That
+    stalls low-volume, long-lived SSE responses in the Web proxy until tens of
+    kilobytes have accumulated.  ``read1`` performs at most one socket read,
+    so each event/heartbeat can reach the browser immediately.
+    """
+    read1 = getattr(upstream, "read1", None)
+    return read1(size) if read1 else upstream.read(size)
+
+
 @app.api_route("/api/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_api(path: str, request: Request):
     query = f"?{request.url.query}" if request.url.query else ""
@@ -112,7 +124,7 @@ async def proxy_api(path: str, request: Request):
 
     async def chunks():
         while True:
-            chunk = await asyncio.to_thread(upstream.read, 64 * 1024)
+            chunk = await asyncio.to_thread(_upstream_chunk, upstream)
             if not chunk:
                 break
             yield chunk

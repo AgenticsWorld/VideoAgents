@@ -784,11 +784,8 @@ async function npCreate(){
   btn.disabled=skip.disabled=true;btn.textContent='创建中…';
   $('#np-err').textContent='';
   try{
-    const settings=npCollectSettings();
     await api('/api/v1/projects',{name,novel:$('#np-novel').value,brief:$('#np-brief').value,
-      style:$('#np-style').value,...settings.duration});
-    await api('/api/v1/projects/'+encodeURIComponent(name)+'/config',{
-      output:settings.output,review:settings.review,packaging:settings.packaging});
+      style:$('#np-style').value,settings:npCollectSettings()});
     await initProjects(name);
     savePrefs();
     $('#np-modal').style.display='none';
@@ -899,7 +896,7 @@ $('#menu-brief').onclick=e=>{e.preventDefault();openBriefModal()};
 $('#brief-cancel').onclick=()=>$('#brief-modal').style.display='none';
 $('#brief-ok').onclick=async()=>{
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{brief:$('#brief-text').value,
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),brief:$('#brief-text').value,
       style:$('#brief-style').value});
     $('#brief-modal').style.display='none';
   }catch(e){$('#brief-err').textContent='保存失败:'+e.message}
@@ -994,7 +991,7 @@ $('#out-ok').onclick=async()=>{
   const platforms=[...document.querySelectorAll('.out-platform:checked')].map(c=>c.value);
   if(!platforms.length){$('#out-err').textContent='至少选择一个发布平台';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
       subtitle_burn_in:$('#out-burnin').checked,platforms}});
     $('#out-modal').style.display='none';
@@ -1024,7 +1021,7 @@ $('#dur-ok').onclick=async()=>{
   if(!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{duration:{episode_minutes:ep,shot_min_s:mn,shot_max_s:mx}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:ep,shot_min_s:mn,shot_max_s:mx}});
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
 };
@@ -1069,7 +1066,7 @@ $('#rev-ok').onclick=async()=>{
     review[k]=v;
   }
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{review});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),review});
     $('#rev-modal').style.display='none';
   }catch(e){$('#rev-err').textContent='保存失败:'+e.message}
 };
@@ -1100,7 +1097,7 @@ $('#pkg-ok').onclick=async()=>{
   const intro=$('#pkg-intro-text').value,outro=$('#pkg-outro-text').value;
   if(intro.length>2000||outro.length>2000){$('#pkg-err').textContent='片头/片尾要求文本过长(≤2000 字)';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{packaging:{
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),packaging:{
       intro_enabled:$('#pkg-intro-on').checked,intro_notes:intro,
       outro_enabled:$('#pkg-outro-on').checked,outro_notes:outro,
       teaser_enabled:$('#pkg-teaser-on').checked}});
@@ -1200,7 +1197,7 @@ function plugRow(p){
   d.querySelector('.plug-toggle').onclick=async()=>{
     $('#plug-err').textContent='';
     try{
-      const r=await api('/api/v1/plugins/'+encodeURIComponent(p.name),{enabled:!p.enabled});
+      const r=await api('/api/v1/plugins/'+encodeURIComponent(p.name),{name:p.name,enabled:!p.enabled});
       renderPlugins(r.plugins);plugRefreshAgents();
     }catch(e){$('#plug-err').textContent=t('保存失败:')+e.message}
   };
@@ -1209,9 +1206,7 @@ function plugRow(p){
     if(!confirm(I18N.f('删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复',{name:p.name})))return;
     $('#plug-err').textContent='';
     try{
-      const response=await fetch('/api/v1/plugins/'+encodeURIComponent(p.name),{method:'DELETE'});
-      if(!response.ok)throw new Error((await response.json().catch(()=>({}))).detail||response.status);
-      const r=await response.json();
+      const r=await api('/api/v1/plugins/'+encodeURIComponent(p.name)+'/delete',{name:p.name});
       renderPlugins(r.plugins);plugRefreshAgents();
     }catch(e){$('#plug-err').textContent=t('删除失败:')+e.message}
   };
@@ -1274,13 +1269,7 @@ $('#btn-res-refresh').onclick=()=>{$('#resources').innerHTML='<div class="empty"
 renderResources();
 setInterval(renderResources,600000);                   // 每 10 分钟自动刷新
 
-function apiMethod(p,body){
-  if(body===undefined)return 'GET';
-  if(p==='/api/v1/config/generation'||p==='/api/v1/resources/config'||p==='/api/v1/watchdog/policy'||p.endsWith('/config'))return 'PATCH';
-  if(p.endsWith('/brief')||p.endsWith('/watchdog')||p==='/api/v1/agents/models'||p==='/api/v1/config/global-model'||p.startsWith('/api/v1/plugins/'))return 'PUT';
-  return 'POST';
-}
-async function api(p,body){const o=body===undefined?{}:{method:apiMethod(p,body),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
+async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
 
 /* ---------- Agent 列表 ---------- */
 // SOUL.md 标题是「中文名(English Name)」双语:按界面语言只显示一种。
@@ -1575,7 +1564,7 @@ async function initWatchdog(){
 }
 $('#btn-watchdog').onclick=async()=>{
   try{
-    WATCHDOG_ON=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/watchdog',{enabled:!WATCHDOG_ON})).enabled;
+    WATCHDOG_ON=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/watchdog',{project:curProj(),enabled:!WATCHDOG_ON})).enabled;
     renderWatchdog();
   }catch(e){alert('切换失败:'+e.message)}
 };

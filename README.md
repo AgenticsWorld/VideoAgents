@@ -24,7 +24,7 @@ workspace and are not committed by default.
 - Configurable image, video, music, TTS, and object-storage providers
 - A multilingual local Web console with preview and storyboard tools
 - The same original static WebUI shared by browsers and Electron
-- Versioned `/api/v1`, OpenAPI, durable run state, and resumable SSE events
+- Versioned `/api/v1`, OpenAPI, durable run state, and real-time SSE events
 
 ## Requirements
 
