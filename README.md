@@ -67,6 +67,8 @@ The Python runtime and Electron application are versioned independently. Runtime
 
 Desktop packages produced from `dev` retain product version `1.0.1`; the short Git hash is stored separately as `buildHash`. They are published at the stable URLs `packages/video-agents-mac.zip` (Apple Silicon arm64) and `packages/video-agents-win.zip` (Windows x64, containing the NSIS installer). A Dev client reads the same index on every launch and prompts only when `desktop.mac/win.buildHash` differs from its embedded build hash. On approval it verifies and downloads the ZIP, then replaces the macOS app or silently runs the Windows upgrade after the current process exits. The Release channel remains separate from this Dev S3 update channel.
 
+When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, Volta, and pnpm locations. Existing `claude`, `codex`, and `kimi` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client.
+
 Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never reads an Apple developer certificate from the macOS Keychain and performs no signing or notarization. Release signing is enabled only in GitHub Actions when `CSC_LINK` and the Apple secrets are explicitly supplied.
 
 For unattended pipelines, start the console in full-auto mode so agents on the

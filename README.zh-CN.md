@@ -54,6 +54,8 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 `dev` 分支的桌面产品版本始终保持 `1.0.1`，短 Git hash 只写入 `buildHash`，并发布为固定地址 `packages/video-agents-mac.zip`（Apple Silicon arm64）与 `packages/video-agents-win.zip`（Windows x64，包含 NSIS 安装器）。Dev 客户端每次启动读取同一个 JSON；仅当 `desktop.mac/win.buildHash` 与自身构建 hash 不同时询问用户。确认后自动校验、下载并在退出当前进程后替换 macOS `.app` 或静默运行 Windows 升级安装器。正式 Release 渠道仍与 Dev S3 更新通道隔离。
 
+macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。
+
 本地 `make desktop` 默认设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，不会读取 macOS Keychain 中的 Apple 开发者证书，也不会签名或公证。正式发布签名只由 GitHub Actions 在显式提供 `CSC_LINK`、Apple ID 等 secrets 时启用。
 
 如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行

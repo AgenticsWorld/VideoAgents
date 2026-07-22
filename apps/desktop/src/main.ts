@@ -11,6 +11,7 @@ import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
   downloadAndApplyDesktopUpdate, fetchDevDesktopUpdate, readBuildInfo,
 } from './desktop-update'
+import {desktopExecutablePath} from './shell-environment'
 
 let webServer: ChildProcess | undefined
 const webPort = process.env.VIDEOAGENTS_WEB_PORT || '8630'
@@ -111,6 +112,7 @@ async function ensureWebServer(): Promise<void> {
   console.log(`[runtime] ${activeRuntime.source}: ${activeRuntime.manifest?.version || activeRuntime.python}`)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    PATH: desktopExecutablePath(),
     PYTHONNOUSERSITE: '1',
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
