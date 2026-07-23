@@ -14,8 +14,12 @@ DAG 结构损坏时唤醒总制片修复,而不是解析失败后静默失明(�
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 
 # 节点 state 合法枚举(与 WORKFLOW.md §3.2 一致;runtime _DONE_STATES 是其子集)
 STATES = {"pending", "dispatched", "running", "failed", "blocked", "done",
@@ -120,7 +124,7 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true", help="警告也视为失败(新写入的 DAG 必须全绿)")
     args = ap.parse_args()
     if args.project:
-        path = Path(__file__).resolve().parents[2] / "data" / "projects" / args.project / "runs" / "dag.json"
+        path = DATA_DIR / "projects" / args.project / "runs" / "dag.json"
     elif args.path:
         path = Path(args.path)
     else:

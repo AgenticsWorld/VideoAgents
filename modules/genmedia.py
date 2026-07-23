@@ -990,7 +990,7 @@ def _resolution_gate(resolution: str) -> str:
     if not proj:
         return resolution
     try:
-        st = json.loads((ROOT / "data" / "projects" / proj / "settings.json").read_text())
+        st = json.loads((DATA_DIR / "projects" / proj / "settings.json").read_text())
         out = st.get("output") or {}
     except Exception:
         out = {}
