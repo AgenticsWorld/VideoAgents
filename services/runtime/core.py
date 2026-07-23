@@ -1310,7 +1310,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 services/runtime/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
+  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
 - 查看运行状态:`python3 services/runtime/dispatch.py --runs`;查看单个:`python3 services/runtime/dispatch.py --status <run_id>`
 
@@ -1335,8 +1335,10 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex|kimi)
-   或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
+8. 【赛马仅限用户明确指令】严禁自行发起并行赛马(换执行引擎或改派多个 Agent 并行重做同一任务、择优交付)。
+   多次返工仍不过就照常升级人工;确有必要时可在 --confirm 征询或升级说明中向用户**建议**赛马,
+   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi)或改派职责相近的 Agent
+   并行重做、先达标者交付"""
         plugs = active_plugins()
         if plugs:
             lines = []

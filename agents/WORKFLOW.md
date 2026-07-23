@@ -705,7 +705,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 > **Agent 级模型配置**:每个 Agent 可在控制台(对话页「模型」按钮)单独配置执行引擎/文字模型
 > 及图像/视频渠道,落盘 `data/.videoagents/agentmodels.json`,优先级高于全局设置;未单独配置时按分类默认
 > (机械活→claude·sonnet;分析/评分→codex·gpt-5.5;创作核心→claude·opus)。
-> 派单时该配置自动生效;总制片显式传 `--engine`/`--model`(如赛马换引擎)才会强制覆盖。
+> 派单时该配置自动生效;总制片显式传 `--engine`/`--model`(如用户明确下令赛马时换引擎)才会强制覆盖。
 
 ```bash
 # 查看当前生效渠道与模型(接工单后先跑一次,把结果记入产物 meta)
