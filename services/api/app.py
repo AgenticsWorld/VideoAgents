@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core
+from services.runtime import core, wechat
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -51,10 +51,12 @@ async def lifespan(_: FastAPI):
         install_runtime_store(STORE)
         _bridge_installed = True
     watchdog = asyncio.create_task(core.idle_watchdog())
+    wechat_relay = asyncio.create_task(wechat.relay_loop())
     try:
         yield
     finally:
         watchdog.cancel()
+        wechat_relay.cancel()
 
 
 app = FastAPI(
@@ -424,6 +426,26 @@ async def sketches(project: str, ep: str, grp: str) -> list[dict[str, Any]]:
 @api.delete("/projects/{project}/storyboard/{ep}/{grp}/sketches/{name}", tags=["storyboard"])
 async def delete_sketch(project: str, ep: str, grp: str, name: str) -> dict[str, Any]:
     return await core.api_sketch_delete(project, ep, grp, name)
+
+
+@api.get("/wechat/status", tags=["wechat"])
+async def wechat_status() -> dict[str, Any]:
+    return await wechat.api_wechat_status()
+
+
+@api.post("/wechat/bind", tags=["wechat"])
+async def wechat_bind(body: dict[str, Any]) -> dict[str, Any]:
+    return await wechat.api_wechat_bind_start()
+
+
+@api.get("/wechat/bind", tags=["wechat"])
+async def wechat_bind_poll(qrcode: str = "") -> dict[str, Any]:
+    return await wechat.api_wechat_bind_poll(qrcode)
+
+
+@api.post("/wechat/unbind", tags=["wechat"])
+async def wechat_unbind(body: dict[str, Any]) -> dict[str, Any]:
+    return await wechat.api_wechat_unbind()
 
 
 @api.get("/events", tags=["events"])

@@ -225,6 +225,11 @@ async def versions():
     return _page("versions.html")
 
 
+@app.get("/clawbot")
+async def clawbot():
+    return _page("clawbot.html")
+
+
 @app.get("/preview/{page}")
 async def preview(page: str):
     if page not in PREVIEW_FILES:

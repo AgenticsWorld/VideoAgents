@@ -234,6 +234,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
+      <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
       <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
@@ -1407,7 +1408,7 @@ function fmtTs(ts){
 function appendMsg(role,text,meta={}){
   const m=$('#messages'); const empty=m.querySelector('.empty'); if(empty)empty.remove();
   const d=document.createElement('div'); d.className='msg '+role;
-  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知'};
+  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
   if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
