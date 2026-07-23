@@ -1154,11 +1154,19 @@ def _fmt_num(x) -> str:
     return str(int(f)) if f == int(f) else str(f)
 
 
+def project_prompt_path(project: str) -> str:
+    """Return the persistent project path used in CLI-agent instructions."""
+    return (PROJECTS_DIR / safe_slug(project)).resolve().as_posix()
+
+
 def build_role_prompt(agent_id: str, project: str) -> str:
     soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
         encoding="utf-8"
     )
-    proj_rel = f"data/projects/{project}"
+    # Dispatched agents run with ROOT as their cwd so they can access bundled
+    # code and workflow files. A relative data/projects path would therefore
+    # write into the installation directory instead of VIDEOAGENTS_DATA_DIR.
+    proj_rel = project_prompt_path(project)
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
     out = ps.get("output") or {}

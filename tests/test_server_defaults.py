@@ -39,3 +39,12 @@ def test_official_plugins_are_available():
 def test_agent_path_validation_rejects_traversal():
     with pytest.raises(server.ServiceError):
         server.safe_agent("../server")
+
+
+def test_project_prompt_path_uses_persistent_projects_dir(tmp_path, monkeypatch):
+    persistent_projects = tmp_path / "persistent data" / "projects"
+    monkeypatch.setattr(server, "PROJECTS_DIR", persistent_projects)
+
+    assert server.project_prompt_path("guitusaopao") == (
+        persistent_projects / "guitusaopao"
+    ).resolve().as_posix()
