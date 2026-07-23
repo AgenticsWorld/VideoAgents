@@ -451,7 +451,7 @@ DEFAULT_GENCONFIG = {
     },
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
-    # 「Agent模型」策略(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
+    # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
@@ -594,7 +594,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 
 
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
-# 生成模型/Agent模型 为全局配置(genconfig.json/agentmodels.json);
+# 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging", "versioning")
 
@@ -677,7 +677,7 @@ def _validate_review(r: dict):
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
-# 「Agent模型」策略(genconfig.agentmodel_mode,设置菜单「Agent模型」子菜单切换):
+# 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
@@ -719,7 +719,7 @@ AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
-    """按「Agent模型」策略给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
+    """按「模型策略」给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
     if mode is None:
         mode = load_genconfig().get("agentmodel_mode") or "global"
     tier = AM_AGENT_TIERS.get(agent_id) \
@@ -737,7 +737,7 @@ def load_agentmodels() -> dict:
 
 
 def agent_model_config(agent_id: str) -> dict:
-    """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「Agent模型」策略默认。"""
+    """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「模型策略」默认。"""
     ov = load_agentmodels().get(agent_id)
     return ov if isinstance(ov, dict) else default_agent_model(agent_id)
 
@@ -3649,7 +3649,7 @@ async def api_plugins_delete(body: dict):
 
 
 async def api_agentmodels():
-    """全部 Agent 的模型配置:mode=「Agent模型」策略;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
+    """全部 Agent 的模型配置:mode=「模型策略」;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
     mode = load_genconfig().get("agentmodel_mode") or "global"
     return {"mode": mode,
             "defaults": {a["id"]: default_agent_model(a["id"], mode)
@@ -3716,7 +3716,7 @@ async def api_agentmodels_set(body: dict):
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
     overrides = load_agentmodels()
-    if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
+    if body.get("reset"):                       # 删除覆盖,回到「模型策略」默认
         overrides.pop(agent, None)
     else:
         cfg = body.get("config") or {}

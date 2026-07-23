@@ -159,7 +159,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dropdown-box a:hover{background:var(--panel);color:var(--accent)}
 .dropdown-box a:first-child{border-radius:8px 8px 0 0}
 .dropdown-box a:last-child{border-radius:0 0 8px 8px}
-/* 二级子菜单(Agent模型):悬停向左弹出 */
+/* 二级子菜单(模型策略):悬停向左弹出 */
 .dd-sub{position:relative}
 .dd-sub-menu{display:none;position:absolute;right:100%;top:-1px;min-width:160px}
 /* RTL(阿拉伯语):设置按钮在屏幕左侧,下拉与二级子菜单改为向右弹出,否则出屏无法选择 */
@@ -225,22 +225,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <button id="settings-btn" title="全局设置">⚙️</button>
     <div class="dropdown"><div class="dropdown-box">
       <div class="dd-sub">
-        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ Agent模型</a>
+        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ 模型策略</a>
         <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
           <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
-          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">智能claudecode</a>
-          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">智能codex</a>
+          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">Claude 智能分配</a>
+          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
-      <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
       <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
-      <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
+      </div>
+      <div class="dd-sub">
+        <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
+        <div class="dd-sub-menu dropdown-box">
+          <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
+          <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
+        </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
@@ -323,7 +328,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">保存后仅对该 Agent 生效,优先级高于右上角全局设置(总制片显式 --engine/--model 派单除外);图像/视频各渠道参数在 🎨 生成模型 页配置</div>
     <div class="err" id="am-err"></div>
     <div class="actions">
-      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「Agent模型」策略默认" style="margin-right:auto">恢复策略默认</button>
+      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「模型策略」默认" style="margin-right:auto">恢复策略默认</button>
       <button id="am-cancel">取消</button>
       <button class="primary" id="am-ok">保存</button>
     </div>
@@ -597,7 +602,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 const $=s=>document.querySelector(s);
 let AGENTS=[], CURRENT=null, RUNS={}, LIVE={}; // LIVE[run_id] = 当前流式 DOM 节点
 let AGENT_MODELS={defaults:{},overrides:{}};   // Agent 级模型配置(/api/v1/agents/models)
-let AM_MODE='global';                          // 「Agent模型」策略(设置菜单子菜单)
+let AM_MODE='global';                          // 「模型策略」(设置菜单子菜单)
 
 function uiConfirm(message){
   return new Promise(resolve=>{
@@ -631,7 +636,7 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'智能claudecode',smart_codex:'智能codex'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配'};
 
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['sonnet','sonnet'],['claude-fable-5','fable-5'],
@@ -1443,7 +1448,7 @@ $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.pre
   }
 })();
 
-/* ---------- 设置菜单:Agent模型 策略 ---------- */
+/* ---------- 设置菜单:模型策略 ---------- */
 function renderAmMode(){
   document.querySelectorAll('#am-mode-menu a').forEach(a=>{
     const on=a.dataset.ammode===AM_MODE;
@@ -1491,7 +1496,7 @@ function updateModelBtn(){
   if(!CURRENT)return;
   $('#btn-models').textContent=t('模型')+' · '+amLabel(CURRENT);
   $('#btn-models').title=(AGENT_MODELS.overrides[CURRENT]?t('该 Agent 已单独配置')
-    :I18N.f('「Agent模型」策略默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
+    :I18N.f('「模型策略」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
     +t('(点击修改;优先级高于右上角全局)');
 }
 function amPopulateModels(engine,selected){
@@ -1523,7 +1528,7 @@ function openAmModal(){
   amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
   amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
-  $('#am-note').textContent=I18N.f('该 Agent 策略默认(Agent模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
+  $('#am-note').textContent=I18N.f('该 Agent 策略默认(模型策略:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
   $('#am-modal').style.display='flex';
