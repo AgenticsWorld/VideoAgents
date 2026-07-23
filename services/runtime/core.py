@@ -213,8 +213,8 @@ STATE = load_state()
 # ---------------- Agent 插件机制(声明式,详见 WORKFLOW.md §10 与 plugins/README.md) ----------------
 # 插件 = plugins/<name>/ 目录:plugin.json(manifest)+ agents/<类别>/<名字>/SOUL.md
 # (+ 可选 workflows/*.yaml 独立流程 DAG)。纯声明式——插件不含可执行代码,SOUL.md 即身份,
-# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认启用),
-# 启停状态记 state.json 的 plugins_disabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
+# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认停用,须在
+# 「插件」页手动启用),启用名单记 state.json 的 plugins_enabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
 BUNDLED_PLUGINS_DIR = ROOT / "plugins"
 PLUGINS_DIR = Path(os.environ.get(
     "VIDEOAGENTS_PLUGINS_DIR", DATA_DIR / "plugins"
@@ -313,7 +313,7 @@ def list_plugins(refresh: bool = False) -> list[dict]:
                     seen[a["id"]] = pdir.name
                     kept.append(a)
             info["agents"] = kept
-            info["enabled"] = pdir.name not in set(STATE.get("plugins_disabled") or [])
+            info["enabled"] = pdir.name in set(STATE.get("plugins_enabled") or [])
             info["active"] = info["enabled"] and not info["errors"]   # 有 errors 的插件不注册
             plugins.append(info)
     _PLUGINS_CACHE = (time.time() + _PLUGINS_CACHE_TTL, plugins)
@@ -3550,12 +3550,12 @@ async def api_plugins_toggle(body: dict):
     name = str(body.get("name") or "")
     if name not in {p["name"] for p in list_plugins(refresh=True)}:
         raise ServiceError(404, f"no such plugin: {name}")
-    disabled = set(STATE.get("plugins_disabled") or [])
+    enabled = set(STATE.get("plugins_enabled") or [])
     if body.get("enabled"):
-        disabled.discard(name)
+        enabled.add(name)
     else:
-        disabled.add(name)
-    STATE["plugins_disabled"] = sorted(disabled)
+        enabled.discard(name)
+    STATE["plugins_enabled"] = sorted(enabled)
     save_state(STATE)
     _expire_agent_caches()
     return {"ok": True, "plugins": list_plugins(refresh=True)}
@@ -3640,9 +3640,9 @@ async def api_plugins_delete(body: dict):
     except ValueError as exc:
         raise ServiceError(400, "plugin path is outside the user plugin directory") from exc
     shutil.rmtree(target)
-    disabled = set(STATE.get("plugins_disabled") or [])
-    disabled.discard(name)
-    STATE["plugins_disabled"] = sorted(disabled)
+    enabled = set(STATE.get("plugins_enabled") or [])
+    enabled.discard(name)
+    STATE["plugins_enabled"] = sorted(enabled)
     save_state(STATE)
     _expire_agent_caches()
     return {"ok": True, "plugins": list_plugins(refresh=True)}

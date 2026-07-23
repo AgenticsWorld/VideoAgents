@@ -298,7 +298,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="plug-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🧩 Agent 插件</h3>
-    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
+    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
     <div id="plug-list" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"><div class="empty">读取中…</div></div>
     <div class="err" id="plug-err"></div>
     <div class="actions">

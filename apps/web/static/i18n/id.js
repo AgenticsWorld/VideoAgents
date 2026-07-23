@@ -1022,7 +1022,7 @@ window.I18N_DICT = {
 "插件": "Plugin",
 "Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)": "Plugin Agent: salin direktori plugin ke plugins/ (atau unggah zip) untuk memasang; memperluas tim dengan posisi dan alur kerja baru (mis. novel turunan)",
 "🧩 Agent 插件": "🧩 Plugin Agent",
-"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Plugin adalah direktori plugins/<nama>/ (plugin.json + agents/…/SOUL.md, opsional workflows/*.yaml DAG). Salin direktori ke plugins/ atau unggah zip untuk memasang; setelah diaktifkan, Agent-nya muncul di daftar kiri dan dapat ditugaskan oleh Produser. Panduan penulisan: plugins/README.md. Tinjau isi plugin sebelum memasang: SOUL.md disuntikkan ke prompt model",
+"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Plugin adalah direktori plugins/<nama>/ (plugin.json + agents/…/SOUL.md, opsional workflows/*.yaml DAG). Salin direktori ke plugins/ atau unggah zip untuk memasang; plugin yang baru dipasang nonaktif secara default — setelah diaktifkan di halaman ini, Agent-nya muncul di daftar kiri dan dapat ditugaskan oleh Produser. Panduan penulisan: plugins/README.md. Tinjau isi plugin sebelum memasang: SOUL.md disuntikkan ke prompt model",
 "⬆ 安装插件包(zip)": "⬆ Pasang paket plugin (zip)",
 "无效": "tidak valid",
 "已启用": "aktif",

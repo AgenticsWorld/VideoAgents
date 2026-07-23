@@ -1022,7 +1022,7 @@ window.I18N_DICT = {
 "插件": "プラグイン",
 "Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)": "Agent プラグイン:plugins/ にディレクトリをコピー(または zip をアップロード)するだけでインストール。新しい職位とワークフロー(派生小説など)でチームを拡張",
 "🧩 Agent 插件": "🧩 Agent プラグイン",
-"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "プラグインは plugins/<名前>/ ディレクトリ(plugin.json + agents/…/SOUL.md、任意の workflows/*.yaml DAG)。plugins/ にコピーするか zip をアップロードすればインストール完了。有効化するとその Agent が左のリストに現れ、総合プロデューサーから派遣できます。作成ガイド:plugins/README.md。インストール前に内容を確認してください:SOUL.md はモデルのプロンプトに注入されます",
+"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "プラグインは plugins/<名前>/ ディレクトリ(plugin.json + agents/…/SOUL.md、任意の workflows/*.yaml DAG)。plugins/ にコピーするか zip をアップロードすればインストール完了。新規インストールのプラグインはデフォルトで無効です。本ページで有効化するとその Agent が左のリストに現れ、総合プロデューサーから派遣できます。作成ガイド:plugins/README.md。インストール前に内容を確認してください:SOUL.md はモデルのプロンプトに注入されます",
 "⬆ 安装插件包(zip)": "⬆ プラグインパッケージをインストール(zip)",
 "无效": "無効",
 "已启用": "有効",

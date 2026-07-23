@@ -1022,7 +1022,7 @@ window.I18N_DICT = {
 "插件": "Plugins",
 "Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)": "Agent-Plugins: Plugin-Verzeichnis nach plugins/ kopieren (oder zip hochladen) — fertig installiert; erweitert das Team um neue Rollen und Workflows (z. B. abgeleitete Romane)",
 "🧩 Agent 插件": "🧩 Agent-Plugins",
-"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Ein Plugin ist ein Verzeichnis plugins/<Name>/ (plugin.json + agents/…/SOUL.md, optional workflows/*.yaml DAGs). Verzeichnis nach plugins/ kopieren oder zip hochladen; nach dem Aktivieren erscheinen seine Agents in der linken Liste und können vom Produzenten beauftragt werden. Leitfaden: plugins/README.md. Prüfen Sie den Inhalt vor der Installation: SOUL.md wird in Modell-Prompts injiziert",
+"插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Ein Plugin ist ein Verzeichnis plugins/<Name>/ (plugin.json + agents/…/SOUL.md, optional workflows/*.yaml DAGs). Verzeichnis nach plugins/ kopieren oder zip hochladen; neu installierte Plugins sind standardmäßig deaktiviert — erst nach dem Aktivieren auf dieser Seite erscheinen seine Agents in der linken Liste und können vom Produzenten beauftragt werden. Leitfaden: plugins/README.md. Prüfen Sie den Inhalt vor der Installation: SOUL.md wird in Modell-Prompts injiziert",
 "⬆ 安装插件包(zip)": "⬆ Plugin-Paket installieren (zip)",
 "无效": "ungültig",
 "已启用": "aktiviert",
