@@ -41,10 +41,13 @@ PREVIEW_FILES = {
     "refs", "characters", "props", "scenes", "storyboard", "videos", "workflow", "worldview",
 }
 
+# 直连本机 API,绕过系统/环境代理(macOS 上 urllib 会自动读取系统代理设置)。
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 def _health() -> bool:
     try:
-        with urllib.request.urlopen(f"{API_ORIGIN}/api/v1/health", timeout=0.8) as response:
+        with _DIRECT_OPENER.open(f"{API_ORIGIN}/api/v1/health", timeout=0.8) as response:
             return response.status == 200
     except (OSError, urllib.error.URLError):
         return False
@@ -121,7 +124,7 @@ app = FastAPI(title="VideoAgents Web", docs_url=None, redoc_url=None, openapi_ur
 def _upstream_request(method: str, url: str, headers: dict[str, str], body: bytes):
     request = urllib.request.Request(url, data=body or None, headers=headers, method=method)
     try:
-        return urllib.request.urlopen(request, timeout=None)
+        return _DIRECT_OPENER.open(request, timeout=None)
     except urllib.error.HTTPError as error:
         return error
 
