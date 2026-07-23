@@ -8,7 +8,7 @@ window.I18N_DICT = {
 "音色库为空(先在控制台开通音色)": "Pustaka suara kosong (aktifkan suara di konsol terlebih dahulu)",
 "✗ 先拉取并选中一个音色": "✗ Muat pustaka dan pilih satu suara terlebih dahulu",
 "✓ 已设为默认音色:{name}(记得点「保存设置」)": "✓ Dijadikan suara default: {name} (jangan lupa klik “Simpan Setelan”)",
-"✗ 需先在 ⚙️ 设置 → 资源消耗 配置火山 AK/SK": "✗ Konfigurasikan AK/SK Volcengine di ⚙️ Setelan → Konsumsi sumber daya terlebih dahulu",
+"✗ 需先在 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」配置 AccessKey/SecretKey": "✗ Konfigurasikan AccessKey/SecretKey di ⚙️ Setelan → Hosting File → Provider Penyimpanan “Volcengine TOS” terlebih dahulu",
 "新版豆包语音合成大模型(openspeech v3 单向流式,": "Model besar sintesis suara Doubao versi baru (openspeech v3 streaming satu arah, ",
 ");API Key 在新版语音技术控制台「": "); buat API Key di “",
 "API Key 管理": "Manajemen API Key",

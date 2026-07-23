@@ -8,7 +8,7 @@ window.I18N_DICT = {
 "音色库为空(先在控制台开通音色)": "Voice library is empty (enable voices in the console first)",
 "✗ 先拉取并选中一个音色": "✗ Fetch the library and select a voice first",
 "✓ 已设为默认音色:{name}(记得点「保存设置」)": "✓ Set as default voice: {name} (remember to click “Save Settings”)",
-"✗ 需先在 ⚙️ 设置 → 资源消耗 配置火山 AK/SK": "✗ Configure the Volcengine AK/SK in ⚙️ Settings → Resource Usage first",
+"✗ 需先在 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」配置 AccessKey/SecretKey": "✗ Configure the AccessKey/SecretKey under ⚙️ Settings → File Hosting → Storage Provider “Volcengine TOS” first",
 "新版豆包语音合成大模型(openspeech v3 单向流式,": "New-version Doubao speech-synthesis large model (openspeech v3 unidirectional streaming, ",
 ");API Key 在新版语音技术控制台「": "); create the API Key under “",
 "API Key 管理": "API Key management",

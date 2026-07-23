@@ -3403,14 +3403,18 @@ def _volc_list_speakers(ak: str, sk: str, resource_id: str) -> list[dict]:
 
 async def api_volc_speakers(body: dict):
     """新版豆包语音「音色库」列表(ListSpeakers,10 分钟缓存)。走火山 OpenAPI
-    AK/SK 签名(与余额查询同凭证,在 ⚙️ 设置 → 资源消耗 配置),非语音 API Key。"""
+    AK/SK 签名(凭证绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」的
+    AccessKey/SecretKey,空时回退环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY),
+    非语音 API Key。"""
     resource_id = str((body or {}).get("resource_id") or "seed-tts-2.0").strip()
     if resource_id not in ("seed-tts-2.0", "seed-tts-1.0"):
         resource_id = "seed-tts-2.0"   # 克隆/自定义档没有公共音色库,回落 2.0
-    cfg = resource_cfg()
-    ak, sk = (cfg.get("volc_ak") or "").strip(), (cfg.get("volc_sk") or "").strip()
+    tos = (load_genconfig().get("storage") or {}).get("tos") or {}
+    ak = (tos.get("access_key") or os.environ.get("TOS_ACCESS_KEY", "")).strip()
+    sk = (tos.get("secret_key") or os.environ.get("TOS_SECRET_KEY", "")).strip()
     if not (ak and sk):
-        raise ServiceError(400, "需先在 ⚙️ 设置 → 资源消耗 配置火山 AK/SK")
+        raise ServiceError(400, "需先在 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」"
+                                "配置 AccessKey/SecretKey")
     ts, cached = _VOLC_SPEAKERS_CACHE.get(resource_id, (0, None))
     if cached is not None and time.time() - ts < _VOLC_SPEAKERS_TTL:
         return {"speakers": cached}

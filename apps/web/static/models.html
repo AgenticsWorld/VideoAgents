@@ -583,7 +583,7 @@ async function elAddLib(){
   }catch(e){elStatus('✗ '+e.message,false)}
 }
 
-/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 在 ⚙️ 设置 → 资源消耗 配置) ---------- */
+/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」) ---------- */
 let VOLC_LIB=[];  // 最近一次拉取的音色库(试听/设默认时按下标取)
 let VOLC_AUDIO=null;
 const volcVoiceLabel=v=>[v.name,v.gender,v.age,...(v.labels||[]).slice(0,2),
