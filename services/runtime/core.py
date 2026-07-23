@@ -3643,6 +3643,43 @@ async def api_globalmodel_set(body: dict):
     return {"ok": True, "global_model": global_model_pref()}
 
 
+def ui_prefs_pref() -> dict:
+    prefs = STATE.get("ui_prefs") or {}
+    gm = global_model_pref()
+    return {
+        "engine": str(prefs.get("engine") or gm["engine"] or ""),
+        "model": str(prefs.get("model") or gm["model"] or ""),
+        "model_custom": str(prefs.get("model_custom") or ""),
+        "project": str(prefs.get("project") or ""),
+    }
+
+
+async def api_uiprefs_get():
+    return {"prefs": ui_prefs_pref()}
+
+
+async def api_uiprefs_set(body: dict):
+    """浏览器顶栏偏好。桌面端使用随机端口时 localStorage 会换 origin,
+    因此项目/引擎/模型需要另存一份到用户数据目录的 STATE。"""
+    eng = str(body.get("engine") or "").lower()
+    if eng and eng not in ENGINES:
+        raise ServiceError(400, f"engine must be one of {ENGINES}")
+    project = safe_slug(body.get("project", ""))
+    prefs = {
+        "engine": eng,
+        "model": str(body.get("model") or "").strip(),
+        "model_custom": str(body.get("model_custom") or "").strip(),
+        "project": project,
+    }
+    STATE["ui_prefs"] = prefs
+    STATE["global_model"] = {
+        "engine": eng,
+        "model": str(body.get("effective_model") or body.get("model") or "").strip(),
+    }
+    save_state(STATE)
+    return {"ok": True, "prefs": ui_prefs_pref(), "global_model": global_model_pref()}
+
+
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
     if not agent_dir(agent):

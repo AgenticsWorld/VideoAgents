@@ -662,30 +662,37 @@ function getModel(){
   return v==='__custom' ? $('#model-custom').value.trim() : v;
 }
 
-/* ---------- 顶栏选择持久化(引擎/语言模型/项目,存 localStorage;图像/视频渠道由服务端 genconfig 持久化;
-   引擎/模型另同步一份服务端副本 /api/v1/config/global-model:服务端自发对话(设置变更通知/看门狗/项目初始化)
-   看不到 localStorage,global 模式靠它跟随顶栏,否则回退 claude ---------- */
+/* ---------- 顶栏选择持久化(引擎/语言模型/项目,存 localStorage + 服务端 STATE;
+   桌面端随机端口会换 origin,重开 APP 时 localStorage 可能不可见,服务端副本负责恢复。 ---------- */
 const PREFS_KEY='webui_prefs';
 function loadPrefs(){try{return JSON.parse(localStorage.getItem(PREFS_KEY)||'{}')}catch(e){return{}}}
 let _gmSyncTimer;
 function savePrefs(){
-  localStorage.setItem(PREFS_KEY,JSON.stringify({
+  const prefs={
     engine:$('#engine').value, model:$('#model').value,
     model_custom:$('#model-custom').value, project:$('#project').value,
-  }));
+  };
+  localStorage.setItem(PREFS_KEY,JSON.stringify(prefs));
   clearTimeout(_gmSyncTimer);   // 防抖:model-custom 逐键触发,合并为停顿后一次同步
   _gmSyncTimer=setTimeout(()=>{
-    api('/api/v1/config/global-model',{engine:$('#engine').value,model:getModel()}).catch(()=>{});
+    api('/api/v1/config/ui-prefs',{...prefs,effective_model:getModel()}).catch(()=>{});
   },400);
 }
 async function restorePrefs(){
   const p=loadPrefs();
+  if(!p.engine&&!p.model&&!p.project){
+    try{Object.assign(p,(await api('/api/v1/config/ui-prefs')).prefs||{})}catch(e){}
+  }
   if(p.engine==='codex'&&p.model==='gpt-5.5')p.model='gpt-5.6-sol'; // 旧默认一次性迁移
   if(p.engine&&MODEL_OPTIONS[p.engine])$('#engine').value=p.engine;
   populateModels($('#engine').value);
   if(p.model&&[...$('#model').options].some(o=>o.value===p.model)){
     $('#model').value=p.model;
     $('#model-custom').style.display=p.model==='__custom'?'':'none';
+  }else if(p.model&&$('#engine').value!=='deepagents'&&[...$('#model').options].some(o=>o.value==='__custom')){
+    $('#model').value='__custom';
+    $('#model-custom').value=p.model;
+    $('#model-custom').style.display='';
   }
   if(p.model_custom)$('#model-custom').value=p.model_custom;
   await initProjects(p.project);

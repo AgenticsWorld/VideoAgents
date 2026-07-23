@@ -296,6 +296,16 @@ async def set_global_model(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_globalmodel_set(body)
 
 
+@api.get("/config/ui-prefs", tags=["configuration"])
+async def ui_prefs() -> dict[str, Any]:
+    return await core.api_uiprefs_get()
+
+
+@api.post("/config/ui-prefs", tags=["configuration"])
+async def set_ui_prefs(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_uiprefs_set(body)
+
+
 @api.post("/config/generation", tags=["configuration"])
 async def set_generation_config(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_genconfig_set(body)

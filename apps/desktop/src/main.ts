@@ -165,6 +165,7 @@ async function ensureWebServer(): Promise<void> {
     PYTHONNOUSERSITE: '1',
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
+    VIDEOAGENTS_PERMISSION_MODE: process.env.VIDEOAGENTS_PERMISSION_MODE || 'bypassPermissions',
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,
     VIDEOAGENTS_API_PORT: apiPort,
