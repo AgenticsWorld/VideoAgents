@@ -48,3 +48,4 @@ apps/desktop/.desktop-packages/
 
 # Local Claude worktrees
 .claude/worktrees/
+/webui
