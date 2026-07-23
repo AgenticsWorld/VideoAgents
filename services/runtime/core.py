@@ -72,6 +72,29 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
+CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
+CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code"}
+CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN"}
+
+
+def resolve_cli_executable(engine: str) -> str | None:
+    """Resolve the CLI to the exact path used to launch it.
+
+    Windows CreateProcess does not expand a bare command such as ``claude``
+    to the npm-generated ``claude.cmd`` shim, even when a shell can find it.
+    """
+    configured = CLI_BINS.get(engine)
+    return shutil.which(configured) if configured else None
+
+
+def cli_not_found_error(engine: str) -> str:
+    configured = CLI_BINS.get(engine, engine)
+    label = CLI_LABELS.get(engine, engine)
+    env_var = CLI_ENV_VARS.get(engine, "对应的环境变量")
+    return (f"无法启动 {label}：未找到命令“{configured}”。"
+            f"请确认已安装 {label} 并将其加入 PATH，"
+            f"或通过 {env_var} 配置可执行文件的完整路径。")
+
 # deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
 DEEPAGENTS_PY = os.environ.get(
     "DEEPAGENTS_PY", str(ROOT / ".venv-deepagents" / "bin" / "python"))
@@ -858,7 +881,10 @@ def _claude_version() -> str:
     if _CLAUDE_VERSION is None:
         _CLAUDE_VERSION = "2.1.0"            # 探测失败的回退值
         try:
-            r = subprocess.run([CLAUDE_BIN, "--version"],
+            executable = resolve_cli_executable("claude")
+            if not executable:
+                return _CLAUDE_VERSION
+            r = subprocess.run([executable, "--version"],
                                capture_output=True, text=True, timeout=10)
             m = re.search(r"(\d+\.\d+\.\d+)", r.stdout or "")
             if m:
@@ -1129,7 +1155,9 @@ def _fmt_num(x) -> str:
 
 
 def build_role_prompt(agent_id: str, project: str) -> str:
-    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text()
+    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
+        encoding="utf-8"
+    )
     proj_rel = f"data/projects/{project}"
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
@@ -1154,7 +1182,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     try:
         bp = PROJECTS_DIR / project / "brief.md"
         if bp.is_file():
-            brief = bp.read_text().strip()
+            brief = bp.read_text(encoding="utf-8").strip()
     except Exception:
         brief = ""
     rv = ps.get("review") or {}
@@ -1405,7 +1433,32 @@ async def execute_run(run: dict, message: str, model: str | None):
         publish_run(run)
 
         engine = run.get("engine", "claude")
-        role = build_role_prompt(agent_id, run["project"])
+        cli_executable = None
+        if engine in CLI_BINS:
+            cli_executable = resolve_cli_executable(engine)
+            if not cli_executable:
+                run["status"] = "error"
+                run["error"] = cli_not_found_error(engine)[:500]
+                run["ended"] = time.time()
+                append_chat(agent_id, run["project"],
+                            {"role": "assistant", "text": run["error"],
+                             "run_id": run["id"], "status": "error"})
+                publish_run(run)
+                return
+        try:
+            role = build_role_prompt(agent_id, run["project"])
+        except Exception as error:  # noqa: BLE001
+            # Prompt construction happens before the CLI process and its JSONL log
+            # are created. Always finish the run here so an encoding/configuration
+            # error cannot leave the UI stuck in the "running" state forever.
+            run["status"] = "error"
+            run["error"] = f"\u6784\u5efa Agent \u63d0\u793a\u8bcd\u5931\u8d25\uff1a{error}"[:500]
+            run["ended"] = time.time()
+            append_chat(agent_id, run["project"],
+                        {"role": "assistant", "text": run["error"],
+                         "run_id": run["id"], "status": "error"})
+            publish_run(run)
+            return
         session_key = f"{engine}::{agent_id}::{run['project']}"
         session_id = None if is_stateless else STATE["sessions"].get(session_key)
         # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
@@ -1443,34 +1496,45 @@ async def execute_run(run: dict, message: str, model: str | None):
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
 
+        def codex_stdin(sid: str | None) -> bytes | None:
+            if engine != "codex":
+                return None
+            prompt = message if sid else f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"
+            return prompt.encode("utf-8")
+
         def make_cmd(sid: str | None) -> list[str]:
             """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
             if engine == "deepagents":
                 return da_cmd
             if engine == "codex":
                 # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
-                base = [CODEX_BIN, "exec", "--json", "--skip-git-repo-check",
+                base = [cli_executable, "exec", "--json", "--skip-git-repo-check",
                         "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
                 if model:
                     base += ["-c", f"model={model}"]
+                # Codex reads the prompt from stdin. This avoids Windows'
+                # process command-line length limit for large Agent prompts.
                 if sid:
-                    return base + ["resume", sid, message]
-                return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+                    return base + ["resume", sid, "-"]
+                return base + ["-"]
             if engine == "kimi":
                 # kimi 兼容 claude -p 用法,但无 --append-system-prompt:首轮把角色说明拼进
                 # prompt;续轮走 -r resume(会话已带上下文)。-p 非交互模式固定 auto 权限,
                 # 与 --yolo/--auto 互斥,无需也不能传权限参数
-                base = [KIMI_BIN, "--output-format", "stream-json"]
+                base = [cli_executable, "--output-format", "stream-json"]
                 if model:
                     base += ["-m", model]
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
-            c = [CLAUDE_BIN, "-p", message,
-                 "--output-format", "stream-json", "--verbose",
-                 "--append-system-prompt", role,
-                 "--permission-mode", PERMISSION_MODE,
-                 "--max-turns", MAX_TURNS]
+            c = [cli_executable, "-p", message,
+                 "--output-format", "stream-json", "--verbose"]
+            if claude_prompt_file:
+                c += ["--append-system-prompt-file", str(claude_prompt_file)]
+            else:
+                c += ["--append-system-prompt", role]
+            c += ["--permission-mode", PERMISSION_MODE,
+                  "--max-turns", MAX_TURNS]
             if model:
                 c += ["--model", model]
             if sid:
@@ -1487,18 +1551,35 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_SYSTEM"] = role
             env["DA_PROMPT"] = message
 
-        log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w")
+        # Windows has a short process command-line limit. Agent role prompts can
+        # exceed it, so pass Claude's long system prompt through a UTF-8 file.
+        # Keep the existing argv behavior on macOS/Linux for compatibility with
+        # older Claude CLI releases that may not support the file option.
+        claude_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
+                              if os.name == "nt" and engine == "claude" else None)
+        log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w", encoding="utf-8")
         proc = None
         stderr_task = None
         try:
+            if claude_prompt_file:
+                claude_prompt_file.write_text(role, encoding="utf-8")
             deadline = time.time() + run_timeout
             session_retried = False
             while True:
+                stdin_payload = codex_stdin(session_id)
                 proc = await asyncio.create_subprocess_exec(
                     *make_cmd(session_id), cwd=ROOT, env=env, limit=STREAM_LIMIT,
                     start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
+                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None else None),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 RUN_PROCS[run["id"]] = proc
+                if stdin_payload is not None and proc.stdin:
+                    proc.stdin.write(stdin_payload)
+                    try:
+                        await proc.stdin.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                    proc.stdin.close()
                 # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
                 stderr_task = asyncio.create_task(proc.stderr.read())
                 while True:
@@ -1553,6 +1634,25 @@ async def execute_run(run: dict, message: str, model: str | None):
             run["error"] = f"超时({run_timeout}s),进程已终止"
             if proc:
                 proc.kill()
+        except FileNotFoundError as error:
+            run["status"] = "error"
+            if engine in CLI_BINS:
+                run["error"] = cli_not_found_error(engine)[:500]
+            else:
+                missing = error.filename or DEEPAGENTS_PY
+                run["error"] = (f"无法启动 DeepAgents Python 运行环境："
+                                f"未找到“{missing}”。请检查 DEEPAGENTS_PY 配置。")[:500]
+            if proc:
+                proc.kill()
+        except OSError as error:
+            run["status"] = "error"
+            if getattr(error, "winerror", None) == 206:
+                run["error"] = (f"无法启动 {CLI_LABELS.get(engine, engine)}："
+                                "传给进程的命令行过长。请更新 VideoAgents 后重试。")
+            else:
+                run["error"] = f"启动 {CLI_LABELS.get(engine, engine)} 失败：{error}"[:500]
+            if proc:
+                proc.kill()
         except Exception as e:  # noqa: BLE001
             run["status"] = "error"
             run["error"] = str(e)[:500]
@@ -1564,6 +1664,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             if stderr_task and not stderr_task.done():
                 stderr_task.cancel()
             log_f.close()
+            if claude_prompt_file:
+                claude_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
@@ -3541,6 +3643,43 @@ async def api_globalmodel_set(body: dict):
     return {"ok": True, "global_model": global_model_pref()}
 
 
+def ui_prefs_pref() -> dict:
+    prefs = STATE.get("ui_prefs") or {}
+    gm = global_model_pref()
+    return {
+        "engine": str(prefs.get("engine") or gm["engine"] or ""),
+        "model": str(prefs.get("model") or gm["model"] or ""),
+        "model_custom": str(prefs.get("model_custom") or ""),
+        "project": str(prefs.get("project") or ""),
+    }
+
+
+async def api_uiprefs_get():
+    return {"prefs": ui_prefs_pref()}
+
+
+async def api_uiprefs_set(body: dict):
+    """浏览器顶栏偏好。桌面端使用随机端口时 localStorage 会换 origin,
+    因此项目/引擎/模型需要另存一份到用户数据目录的 STATE。"""
+    eng = str(body.get("engine") or "").lower()
+    if eng and eng not in ENGINES:
+        raise ServiceError(400, f"engine must be one of {ENGINES}")
+    project = safe_slug(body.get("project", ""))
+    prefs = {
+        "engine": eng,
+        "model": str(body.get("model") or "").strip(),
+        "model_custom": str(body.get("model_custom") or "").strip(),
+        "project": project,
+    }
+    STATE["ui_prefs"] = prefs
+    STATE["global_model"] = {
+        "engine": eng,
+        "model": str(body.get("effective_model") or body.get("model") or "").strip(),
+    }
+    save_state(STATE)
+    return {"ok": True, "prefs": ui_prefs_pref(), "global_model": global_model_pref()}
+
+
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
     if not agent_dir(agent):
@@ -3577,12 +3716,11 @@ async def api_soul(agent: str):
 async def api_enginecheck(engine: str):
     """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
-    bins = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
-    if engine not in bins:
+    if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
-    path = await asyncio.to_thread(shutil.which, bins[engine])
+    path = await asyncio.to_thread(resolve_cli_executable, engine)
     return {"engine": engine, "available": bool(path),
-            "bin": bins[engine], "path": path or ""}
+            "bin": CLI_BINS[engine], "path": path or ""}
 
 
 async def api_projects():

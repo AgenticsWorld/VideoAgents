@@ -56,7 +56,7 @@ configure an execution engine and any generation providers you need.
 Use `npm run dev:web` to start the Python Web gateway and `npm ci && npm run dev:desktop` for the
 desktop shell. Electron starts the same gateway by default or proxies the remote API
 specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
-without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents.json`
+without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents/metadata.json`
 and downloads the matching package. Claude, Codex, FFmpeg, models, and GPU environments remain
 optional external installations.
 
@@ -66,7 +66,7 @@ The equivalent Makefile targets are `make desktop-install`, `make desktop-dev` (
 
 The Python runtime and Electron application are versioned independently. Runtimes are installed under the user data directory at `python-runtimes/versions/<version>/` and selected through `active.json`. Startup never checks for updates when a valid runtime exists; the index is read only on first installation or when the user chooses the manual Python update menu item. Package size, SHA-256, platform, architecture, version, and executable containment are validated before activation. `VIDEOAGENTS_PYTHON` remains an explicit development and diagnostics override.
 
-Desktop packages produced from `dev` retain product version `1.0.2`; the short Git hash is stored separately as `buildHash`. They are published as `packages/video-agents-mac-v1.0.2.zip` (Apple Silicon arm64) and `packages/video-agents-win-v1.0.2.zip` (Windows x64, containing the NSIS installer). A Dev client reads the same index on every launch and prompts only when `desktop.mac/win.buildHash` differs from its embedded build hash. On approval it verifies and downloads the versioned ZIP referenced by the index, then replaces the macOS app or silently runs the Windows upgrade after the current process exits. The Release channel remains separate from this Dev S3 update channel.
+Desktop and Python packages are produced only when a `v*` tag points to a commit on `main`. The tag version is embedded in both package types and published under `packages/video-agents/`: Python runtimes in `python/`, versioned desktop ZIPs in `mac/` and `win/`, and `metadata.json` as the shared update index. Each desktop directory also exposes `VideoAgents.zip` as the latest package. Release clients read this metadata on launch and offer an update when its desktop version is newer.
 
 When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, Volta, and pnpm locations. Existing `claude`, `codex`, and `kimi` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client.
 

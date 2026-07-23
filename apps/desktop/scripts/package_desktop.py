@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize dev desktop artifacts and emit S3 index metadata."""
+"""Normalize a release desktop artifact and emit S3 metadata."""
 
 from __future__ import annotations
 
@@ -14,8 +14,7 @@ from pathlib import Path
 DESKTOP = Path(__file__).resolve().parents[1]
 RELEASE = DESKTOP / "release"
 OUTPUT = DESKTOP / ".desktop-packages"
-PUBLIC_BASE = "https://s3.agentics.world/packages/"
-APP_VERSION = json.loads((DESKTOP / "package.json").read_text(encoding="utf-8"))["version"]
+PUBLIC_BASE = "https://s3.agentics.world/packages/video-agents/"
 
 
 def sha256(path: Path) -> str:
@@ -36,11 +35,12 @@ def newest(pattern: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", choices=["mac", "win"], required=True)
+    parser.add_argument("--version", required=True)
     parser.add_argument("--build-hash", required=True)
     parser.add_argument("--public-base", default=PUBLIC_BASE)
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    filename = f"video-agents-{args.platform}-v{APP_VERSION}.zip"
+    filename = f"VideoAgents-{args.version}.zip"
     package = OUTPUT / filename
     if args.platform == "mac":
         source = newest("*.zip")
@@ -52,9 +52,10 @@ def main() -> None:
     metadata = {
         "schema": 1,
         "platform": args.platform,
-        "version": APP_VERSION,
+        "version": args.version,
         "buildHash": args.build_hash,
-        "url": f"{args.public_base.rstrip('/')}/{filename}",
+        "filename": filename,
+        "url": f"{args.public_base.rstrip('/')}/{args.platform}/{filename}",
         "sha256": sha256(package),
         "size": package.stat().st_size,
     }

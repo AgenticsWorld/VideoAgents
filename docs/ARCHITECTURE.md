@@ -106,15 +106,15 @@ Codex 参数中的 `--skip-git-repo-check` 只是第三方 CLI 的运行选项�
 
 - Web：没有 Node 编译步骤；`python apps/web/check.py`（或 `npm run build:web`）校验静态资源完整性及 API 路径，运行入口为 `videoagents-web`。
 - Desktop：`npm run build:desktop` 编译 Electron 主进程；`electron-builder` 只将 Electron、Web 网关和业务后端生成 macOS DMG/ZIP、Windows NSIS/portable，不包含 Python。
-- Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。`dev` 分支 push 只构建 macOS arm64 与 Windows x64，并上传到 `s3://agentics-prod/packages/python/`。
+- Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。正式发布时 macOS arm64 与 Windows x64 环境使用 tag 版本，并上传到 `s3://agentics-prod/packages/video-agents/python/`。
 - Agent 插件：官方声明式插件随服务端发布在 `backend/plugins/`；用户上传插件写入 `VIDEOAGENTS_DATA_DIR/plugins/`，不会修改只读的 Desktop App。插件通过 `/api/v1/plugins` 安装、启停和删除，动态注册的 Agent 与工作流继续使用同一运行状态、审批和事件 API。
-- Dev Desktop：产品版本固定为 `1.0.2`；同一次 `dev` workflow 构建 macOS arm64 ZIP 和 Windows x64 NSIS，再规范化为 `packages/video-agents-mac-v1.0.2.zip` 与 `packages/video-agents-win-v1.0.2.zip`。短 hash 作为独立的 `buildHash`，与 `version`、URL、大小和 SHA-256 一起写入索引的 `desktop.mac`/`desktop.win`。
-- GitHub Actions：Pull Request 验证类型和构建；`v*` 标签分别构建 macOS arm64 和 Windows x64，并上传 Release 资产。
+- Desktop Release：`v*` tag 指向 `main` 中的提交时，同一工作流构建 macOS arm64 ZIP 和 Windows x64 NSIS，并规范化为 `mac/VideoAgents-<version>.zip` 与 `win/VideoAgents-<version>.zip`；两个目录中的 `VideoAgents.zip` 始终覆盖为最新版。
+- GitHub Actions：Pull Request 由 CI 验证；`desktop.yaml` 只由 `main` 提交上的 `v*` tag 触发，构建 macOS/Windows 桌面端及对应 Python 环境，并向 GitHub Release 上传 4 个可区分平台的 ZIP 资产。
 - 发布工作流支持可选签名密钥：macOS 使用 `MAC_CSC_LINK`/`MAC_CSC_KEY_PASSWORD` 及 Apple notarization secrets，Windows 使用 `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD`。未配置时仍可产出无签名测试包；面向普通用户发布及 macOS 自动更新时应配置签名。
-- 客户端安装包不包含 Python。首次启动若没有可用环境，客户端读取 `https://s3.agentics.world/packages/video-agents.json`，选择 `python.mac.<arch>` 或 `python.win.<arch>`，下载 `packages/python/macos-python-<version>-<arch>.zip` 或 Windows 对应包。
+- 客户端安装包不包含 Python。首次启动若没有可用环境，客户端读取 `https://s3.agentics.world/packages/video-agents/metadata.json`，选择 `python.mac.<arch>` 或 `python.win.<arch>`，下载 `packages/video-agents/python/macos-python-<version>-<arch>.zip` 或 Windows 对应包。
 - 独立运行时安装到用户数据目录 `python-runtimes/versions/<version>/`，由 `active.json` 选择。已有可用环境时启动不访问远程索引；只有首次安装或桌面菜单手动更新才检查。下载后必须通过大小、SHA-256、平台、架构、版本和目录越界校验。
-- GitHub Actions 只由 `dev` 分支 push 触发 Python 与 Dev Desktop 发布，使用 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY` 和 `us-west-2` 更新 `agentics-prod/packages/video-agents.json`；更新时保留该 JSON 中其他产品字段，先上传制品再切换索引。
-- 只有嵌入 `channel=dev` 的客户端每次启动检查 `desktop.buildHash`。构建 hash 不同时先询问用户；确认后校验下载包，退出当前程序，再由独立 helper 更新 macOS `.app` 或启动 Windows NSIS，避免覆盖运行中程序。产品版本始终显示 `1.0.2`，正式 Release 不消费 Dev 更新记录。
-- 应用更新由 Electron updater 消费 GitHub Release。Python 运行时可以不更新 Electron 而单独切换版本；后端业务源码仍随应用发布，避免运行时依赖与业务协议漂移。API 大版本通过 URL 前缀演进。
+- GitHub Actions 不再由 `dev` push 触发打包。tag 发布使用 production environment 的 AWS 凭据和 `us-west-2`，先上传不可变的 Python/桌面版本包与两个桌面 latest 包，最后切换 `agentics-prod/packages/video-agents/metadata.json`。
+- Release 客户端每次启动检查 `metadata.json` 的 `desktop` 版本。发现更高版本时先询问用户；确认后校验下载包，退出当前程序，再由独立 helper 更新 macOS `.app` 或启动 Windows NSIS，避免覆盖运行中程序。
+- Python 运行时可以不更新 Electron 而单独切换版本；后端业务源码仍随应用发布，避免运行时依赖与业务协议漂移。API 大版本通过 URL 前缀演进。
 
 本阶段不提供 Docker 或 `deploy/` 目录。远程访问时直接运行 Python 服务，并由可信网络或外部网关负责 TLS；由于本版本不实现账户权限系统，不应把服务裸露到公网。

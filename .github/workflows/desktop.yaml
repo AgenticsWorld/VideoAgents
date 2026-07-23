@@ -1,0 +1,240 @@
+name: Desktop release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: videoagents-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      build_hash: ${{ steps.release.outputs.build_hash }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tag and release version
+        id: release
+        shell: bash
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          tag_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          git merge-base --is-ancestor "$tag_commit" origin/main || {
+            echo "Tag ${GITHUB_REF_NAME} does not point to a commit on main" >&2
+            exit 1
+          }
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Tag ${GITHUB_REF_NAME} is not a supported release version" >&2
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build_hash=${tag_commit:0:7}" >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: prepare
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+          - os: macos-14
+            artifact: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.30"
+      - name: Build Python runtime
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          python apps/desktop/scripts/build_runtime.py --version "$RELEASE_VERSION" --force
+          python apps/desktop/scripts/package_runtime.py --version "$RELEASE_VERSION"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-runtime-${{ matrix.artifact }}
+          path: apps/desktop/.runtime-packages/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  desktop:
+    needs: prepare
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            args: --mac zip --arm64
+          - os: windows-latest
+            platform: win
+            args: --win nsis --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Set release version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_HASH: ${{ needs.prepare.outputs.build_hash }}
+        run: |
+          npm version "$RELEASE_VERSION" --workspace @videoagents/desktop --no-git-tag-version --allow-same-version
+          python apps/desktop/scripts/write_build_info.py \
+            --channel release --version "$RELEASE_VERSION" --build-hash "$BUILD_HASH"
+      - run: npm run build:desktop
+      - name: Prepare Apple API key
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          test -n "$APPLE_API_KEY_CONTENT"
+          key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_KEY_CONTENT" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
+      - name: Package desktop
+        run: npm exec --workspace @videoagents/desktop electron-builder -- ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && 'true' || 'false' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.platform == 'mac' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+      - name: Normalize desktop package
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_HASH: ${{ needs.prepare.outputs.build_hash }}
+        run: |
+          python apps/desktop/scripts/package_desktop.py \
+            --platform "${{ matrix.platform }}" \
+            --version "$RELEASE_VERSION" \
+            --build-hash "$BUILD_HASH"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: apps/desktop/.desktop-packages/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [prepare, python, desktop]
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: python-runtime-*
+          path: runtime-artifacts
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          path: desktop-artifacts
+      - name: Build metadata
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          python apps/desktop/scripts/update_runtime_index.py \
+            --index publish/metadata.json \
+            --artifacts runtime-artifacts \
+            --desktop-artifacts desktop-artifacts \
+            --version "$RELEASE_VERSION"
+      - name: Prepare four GitHub release assets
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p release-assets
+          cp "desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip" \
+            "release-assets/VideoAgents-mac-${RELEASE_VERSION}.zip"
+          cp "desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip" \
+            "release-assets/VideoAgents-win-${RELEASE_VERSION}.zip"
+          cp runtime-artifacts/python-runtime-macos-arm64/*.zip release-assets/
+          cp runtime-artifacts/python-runtime-windows-x64/*.zip release-assets/
+          asset_count="$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')"
+          test "$asset_count" = 4
+      - name: Publish GitHub release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/*.zip \
+              --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          fi
+      - uses: aws-actions/configure-aws-credentials@v6.1.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: Publish production packages
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          for package in runtime-artifacts/python-runtime-*/*.zip; do
+            aws s3 cp "$package" \
+              "s3://agentics-prod/packages/video-agents/python/$(basename "$package")" \
+              --content-type application/zip \
+              --cache-control "public,max-age=31536000,immutable"
+          done
+
+          mac_package="desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip"
+          win_package="desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip"
+          aws s3 cp "$mac_package" \
+            "s3://agentics-prod/packages/video-agents/mac/VideoAgents-${RELEASE_VERSION}.zip" \
+            --content-type application/zip \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp "$win_package" \
+            "s3://agentics-prod/packages/video-agents/win/VideoAgents-${RELEASE_VERSION}.zip" \
+            --content-type application/zip \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp "$mac_package" \
+            "s3://agentics-prod/packages/video-agents/mac/VideoAgents.zip" \
+            --content-type application/zip \
+            --cache-control "no-cache, no-store, must-revalidate"
+          aws s3 cp "$win_package" \
+            "s3://agentics-prod/packages/video-agents/win/VideoAgents.zip" \
+            --content-type application/zip \
+            --cache-control "no-cache, no-store, must-revalidate"
+          aws s3 cp publish/metadata.json \
+            s3://agentics-prod/packages/video-agents/metadata.json \
+            --content-type application/json \
+            --cache-control "no-cache, no-store, must-revalidate"

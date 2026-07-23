@@ -1,23 +1,40 @@
 import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, shell} from 'electron'
 import type {MessageBoxOptions} from 'electron'
-import {autoUpdater} from 'electron-updater'
-import {ChildProcess, spawn} from 'node:child_process'
+import {ChildProcess, spawn, spawnSync} from 'node:child_process'
 import {existsSync, mkdirSync} from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
+import net from 'node:net'
 import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
 import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
-  downloadAndApplyDesktopUpdate, fetchDevDesktopUpdate, readBuildInfo,
+  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo,
 } from './desktop-update'
 import {desktopExecutablePath} from './shell-environment'
 
 let webServer: ChildProcess | undefined
-const webPort = process.env.VIDEOAGENTS_WEB_PORT || '8630'
-const webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || `http://127.0.0.1:${webPort}`
+let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
+let apiPort = process.env.VIDEOAGENTS_API_PORT || ''
+let webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || ''
 let window: BrowserWindow | undefined
+let mainWindowWasCreated = false
 let activeRuntime: PythonRuntime | undefined
+
+function stopWebServerTree(): void {
+  const server = webServer
+  webServer = undefined
+  if (!server || server.pid === undefined || server.exitCode !== null) return
+  if (process.platform === 'win32') {
+    const result = spawnSync(
+      'taskkill.exe', ['/pid', String(server.pid), '/t', '/f'],
+      {stdio: 'ignore', windowsHide: true},
+    )
+    if (result.error) console.warn(`[web] failed to stop backend process tree: ${String(result.error)}`)
+    return
+  }
+  server.kill('SIGTERM')
+}
 let runtimeProgressWindow: BrowserWindow | undefined
 let runtimeUpdateInProgress = false
 
@@ -29,6 +46,34 @@ function webRoot(): string {
 
 function backendRoot(): string {
   return app.isPackaged ? path.join(process.resourcesPath, 'backend') : path.resolve(webRoot(), '../..')
+}
+
+async function findAvailablePort(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : undefined
+      server.close(error => {
+        if (error) reject(error)
+        else if (port) resolve(String(port))
+        else reject(new Error('未能分配本地端口'))
+      })
+    })
+  })
+}
+
+async function ensureLocalPorts(): Promise<void> {
+  if (process.env.VIDEOAGENTS_WEB_URL) return
+  if (!webPort) webPort = await findAvailablePort()
+  if (!apiPort) {
+    do {
+      apiPort = await findAvailablePort()
+    } while (apiPort === webPort)
+  }
+  webOrigin = `http://127.0.0.1:${webPort}`
 }
 
 async function requestOk(url: string): Promise<boolean> {
@@ -101,6 +146,7 @@ async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
 }
 
 async function ensureWebServer(): Promise<void> {
+  await ensureLocalPorts()
   if (await healthy()) return
   if (process.env.VIDEOAGENTS_WEB_URL) throw new Error(`Web 服务不可用：${webOrigin}`)
 
@@ -113,12 +159,15 @@ async function ensureWebServer(): Promise<void> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopExecutablePath(),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
+    VIDEOAGENTS_PERMISSION_MODE: process.env.VIDEOAGENTS_PERMISSION_MODE || 'bypassPermissions',
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,
-    VIDEOAGENTS_API_PORT: process.env.VIDEOAGENTS_API_PORT || '8640',
+    VIDEOAGENTS_API_PORT: apiPort,
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
     cwd: backend,
@@ -144,6 +193,7 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false, contextIsolation: true, sandbox: true
     }
   })
+  mainWindowWasCreated = true
   window.webContents.setWindowOpenHandler(({url}) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return {action:'deny'}
@@ -171,6 +221,7 @@ async function updatePythonRuntimeManually(): Promise<void> {
       message: `Python 环境已更新到 ${result.artifact.version}，应用将重新启动。`,
     })
     app.relaunch()
+    stopWebServerTree()
     app.exit(0)
   } catch (error) {
     closeRuntimeProgress()
@@ -201,21 +252,20 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function checkDevDesktopUpdate(): Promise<boolean> {
+async function checkDesktopUpdate(): Promise<void> {
   const build = readBuildInfo(process.resourcesPath, app.isPackaged)
-  if (build.channel !== 'dev') return false
-  const artifact = await fetchDevDesktopUpdate(build)
-  if (!artifact) return true
+  const artifact = await fetchDesktopUpdate(build)
+  if (!artifact) return
   const options: MessageBoxOptions = {
-    type: 'info', title: '发现 VideoAgents Dev 更新',
-    message: `发现 VideoAgents ${artifact.version} 的新 Dev 构建。`,
-    detail: `最新构建 ${artifact.buildHash}，当前构建 ${build.buildHash}。是否立即下载并自动安装？`,
+    type: 'info', title: '发现 VideoAgents 更新',
+    message: `发现 VideoAgents ${artifact.version} 新版本。`,
+    detail: `当前版本 ${build.version}。是否立即下载并自动安装？`,
     buttons: ['下载并更新', '暂不更新'], defaultId: 0, cancelId: 1,
   }
   const answer = window
     ? await dialog.showMessageBox(window, options)
     : await dialog.showMessageBox(options)
-  if (answer.response !== 0) return true
+  if (answer.response !== 0) return
   await showRuntimeProgress('正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。')
   try {
     const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
@@ -229,7 +279,6 @@ async function checkDevDesktopUpdate(): Promise<boolean> {
     const message = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox('VideoAgents 更新失败', message)
   }
-  return true
 }
 
 ipcMain.on('desktop:version', event => {event.returnValue = app.getVersion()})
@@ -238,7 +287,7 @@ ipcMain.handle('desktop:open-external', async (_event, value: unknown) => {
   await shell.openExternal(value)
 })
 ipcMain.handle('desktop:restart-backend', async () => {
-  webServer?.kill(); webServer=undefined; await ensureWebServer(); window?.reload()
+  stopWebServerTree(); await ensureWebServer(); window?.reload()
 })
 ipcMain.handle('desktop:runtime-info', () => ({
   source: activeRuntime?.source,
@@ -249,6 +298,7 @@ ipcMain.handle('desktop:activate-runtime', (_event, version: unknown) => {
   if (typeof version !== 'string') throw new Error('Python 运行时版本号无效')
   const manifest = activatePythonRuntime(app.getPath('userData'), version)
   app.relaunch()
+  stopWebServerTree()
   app.exit(0)
   return manifest
 })
@@ -267,14 +317,8 @@ app.whenReady().then(async () => {
   installApplicationMenu()
   await createWindow()
   if (app.isPackaged) {
-    void checkDevDesktopUpdate().then(isDev => {
-      if (!isDev) {
-        void autoUpdater.checkForUpdatesAndNotify().catch(error => {
-          console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
-        })
-      }
-    }).catch(error => {
-      console.warn(`[dev-updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
+    void checkDesktopUpdate().catch(error => {
+      console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
     })
   }
 }).catch(error => {
@@ -283,5 +327,9 @@ app.whenReady().then(async () => {
   dialog.showErrorBox('VideoAgents 启动失败', message)
   app.quit()
 })
-app.on('window-all-closed', () => {if(process.platform!=='darwin')app.quit()})
-app.on('before-quit', () => webServer?.kill())
+app.on('window-all-closed', () => {
+  // Closing the first-launch runtime progress window briefly leaves no windows.
+  // Keep the app alive until the actual main window has been created.
+  if (mainWindowWasCreated) app.quit()
+})
+app.on('before-quit', stopWebServerTree)
