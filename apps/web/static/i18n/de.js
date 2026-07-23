@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Aufheben fehlgeschlagen:",
 "◂ 高级": "◂ Erweitert",
 "不常用的进阶功能": "Selten genutzte erweiterte Funktionen",
+"防止系统休眠": "System-Ruhezustand verhindern",
+"当前系统不支持(仅 macOS/Windows)": "Auf diesem System nicht unterstützt (nur macOS/Windows)",
+"✓ 防休眠生效中": "✓ Ruhezustand-Verhinderung aktiv",
+"未生效(没有项目开启自动运行)": "Nicht aktiv (kein Projekt hat Auto-Run aktiviert)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "System-Ruhezustand verhindern: Solange aktiviert und mindestens ein Projekt Auto-Run eingeschaltet hat, wird der Leerlauf-Ruhezustand verhindert (das Display schaltet sich normal ab; Zuklapp-Ruhezustand und manuelles Herunterfahren werden nicht blockiert, beim Beenden der App automatisch freigegeben). Nur macOS/Windows.",
 };

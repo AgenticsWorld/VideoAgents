@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Unlink failed:",
 "◂ 高级": "◂ Advanced",
 "不常用的进阶功能": "Less-used advanced features",
+"防止系统休眠": "Prevent system sleep",
+"当前系统不支持(仅 macOS/Windows)": "Not supported on this system (macOS/Windows only)",
+"✓ 防休眠生效中": "✓ Sleep prevention active",
+"未生效(没有项目开启自动运行)": "Not active (no project has auto-run enabled)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "Prevent system sleep: while enabled, as long as any project has auto-run on, the system is kept from idle sleep (the display still turns off; lid-close sleep and manual shutdown are not blocked, and it is released automatically when the app exits). macOS/Windows only.",
 };

@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Falha ao desvincular:",
 "◂ 高级": "◂ Avançado",
 "不常用的进阶功能": "Recursos avançados pouco usados",
+"防止系统休眠": "Impedir a suspensão do sistema",
+"当前系统不支持(仅 macOS/Windows)": "Não suportado neste sistema (apenas macOS/Windows)",
+"✓ 防休眠生效中": "✓ Prevenção de suspensão ativa",
+"未生效(没有项目开启自动运行)": "Inativo (nenhum projeto tem a execução automática ligada)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "Impedir a suspensão do sistema: enquanto ativado, se algum projeto tiver a execução automática ligada, o sistema não entra em suspensão por inatividade (a tela apaga normalmente; a suspensão ao fechar a tampa e o desligamento manual não são bloqueados, liberado automaticamente ao sair do aplicativo). Apenas macOS/Windows.",
 };

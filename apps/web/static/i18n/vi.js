@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Hủy liên kết thất bại:",
 "◂ 高级": "◂ Nâng cao",
 "不常用的进阶功能": "Các tính năng nâng cao ít dùng",
+"防止系统休眠": "Ngăn hệ thống ngủ",
+"当前系统不支持(仅 macOS/Windows)": "Hệ thống hiện tại không hỗ trợ (chỉ macOS/Windows)",
+"✓ 防休眠生效中": "✓ Đang ngăn ngủ",
+"未生效(没有项目开启自动运行)": "Chưa kích hoạt (không dự án nào bật tự động chạy)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "Ngăn hệ thống ngủ: khi bật, chỉ cần có dự án đang bật tự động chạy thì hệ thống sẽ không ngủ do nhàn rỗi (màn hình vẫn tắt bình thường; không chặn ngủ khi gập máy và tắt máy thủ công, tự giải phóng khi thoát ứng dụng). Chỉ hỗ trợ macOS/Windows.",
 };

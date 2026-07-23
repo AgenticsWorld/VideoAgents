@@ -4290,6 +4290,74 @@ def prune_runs_confirms():
         print(f"[prune] 淘汰 run {len(set(dead))} 条 / confirm {len(gone)} 条", flush=True)
 
 
+# ---------------- 防休眠(自动运行开启期间保持系统唤醒;macOS/Windows) ----------------
+# macOS:caffeinate -i 子进程(-w 随本进程退出自动释放,强杀也不残留);
+# Windows:SetThreadExecutionState 线程级声明,进程退出由系统自动清除。
+# 均只防"闲置自动睡眠":屏幕照常熄灭,不拦合盖睡眠与手动关机/重启。
+_KEEPAWAKE_PROC: subprocess.Popen | None = None
+_KEEPAWAKE_WIN_ON = False
+_ES_CONTINUOUS = 0x80000000
+_ES_SYSTEM_REQUIRED = 0x00000001
+
+
+def keepawake_supported() -> bool:
+    return sys.platform == "darwin" or os.name == "nt"
+
+
+def keepawake_active() -> bool:
+    if sys.platform == "darwin":
+        return _KEEPAWAKE_PROC is not None and _KEEPAWAKE_PROC.poll() is None
+    return _KEEPAWAKE_WIN_ON
+
+
+def _ensure_awake():
+    global _KEEPAWAKE_PROC, _KEEPAWAKE_WIN_ON
+    if sys.platform == "darwin":
+        if _KEEPAWAKE_PROC is None or _KEEPAWAKE_PROC.poll() is not None:
+            _KEEPAWAKE_PROC = subprocess.Popen(
+                ["caffeinate", "-i", "-w", str(os.getpid())],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("[keepawake] 防休眠已开启(caffeinate)", flush=True)
+    elif os.name == "nt":
+        if not _KEEPAWAKE_WIN_ON:
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED)
+            _KEEPAWAKE_WIN_ON = True
+            print("[keepawake] 防休眠已开启(SetThreadExecutionState)", flush=True)
+
+
+def _release_awake():
+    global _KEEPAWAKE_PROC, _KEEPAWAKE_WIN_ON
+    if _KEEPAWAKE_PROC is not None:
+        if _KEEPAWAKE_PROC.poll() is None:
+            _KEEPAWAKE_PROC.terminate()
+        _KEEPAWAKE_PROC = None
+        print("[keepawake] 防休眠已释放", flush=True)
+    if _KEEPAWAKE_WIN_ON:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
+        _KEEPAWAKE_WIN_ON = False
+        print("[keepawake] 防休眠已释放", flush=True)
+
+
+def sync_keepawake():
+    """按当前状态声明/释放防休眠:任一项目开启自动运行且设置未关 → 保持唤醒。
+    幂等,caffeinate 意外退出会被拉起;watchdog 每轮与相关设置保存时调用。
+    Windows 的声明按线程记账,恒在事件循环线程里调用(勿丢线程池)。"""
+    if not keepawake_supported():
+        return
+    try:
+        wd = STATE.get("watchdog", {})
+        on = any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir())
+        if on and bool(STATE.get("watchdog_keepawake", True)):
+            _ensure_awake()
+        else:
+            _release_awake()
+    except Exception as e:  # noqa: BLE001
+        print(f"[keepawake] 同步失败(忽略):{e}", flush=True)
+
+
 async def idle_watchdog():
     """空转看门狗:实测单日曾有 ~3.5h 完全无活动(调度器停摆/等人工无人接续)。
     流水线仍有可跑任务、却无任务在跑且无待确认项时,自动唤醒总制片续派;
@@ -4303,6 +4371,7 @@ async def idle_watchdog():
         await asyncio.sleep(max(60, idle_s))
         try:
             prune_runs_confirms()   # 同一事件循环内同步执行,与 api_runs/遍历天然互斥
+            sync_keepawake()        # 每轮校准防休眠状态(兼作 caffeinate 自愈)
             now = time.time()
             wd = STATE.get("watchdog", {})   # {project: bool};缺省关闭
             if not any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir()):
@@ -4398,7 +4467,10 @@ async def idle_watchdog():
 
 async def api_watchdog_threshold_get():
     return {"threshold": int(STATE.get("watchdog_threshold", 80)),
-            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5)),
+            "keep_awake": bool(STATE.get("watchdog_keepawake", True)),
+            "keep_awake_supported": keepawake_supported(),
+            "keep_awake_active": keepawake_active()}
 
 
 async def api_watchdog_threshold_set(body: dict):
@@ -4421,9 +4493,11 @@ async def api_watchdog_threshold_set(body: dict):
         if not 1 <= im <= 720:
             raise ServiceError(400, "idle_minutes must be between 1 and 720")
         STATE["watchdog_idle_minutes"] = im
+    if body.get("keep_awake") is not None:
+        STATE["watchdog_keepawake"] = bool(body.get("keep_awake"))
     save_state(STATE)
-    return {"threshold": int(STATE.get("watchdog_threshold", 80)),
-            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+    sync_keepawake()    # 立即生效,不等下一轮巡检
+    return await api_watchdog_threshold_get()
 
 
 async def api_usage():
@@ -4502,4 +4576,5 @@ async def api_watchdog_set(body: dict):
     wd = STATE.setdefault("watchdog", {})
     wd[proj] = bool(body.get("enabled"))
     save_state(STATE)
+    sync_keepawake()    # 开/关项目自动运行随手校准防休眠
     return {"project": proj, "enabled": wd[proj]}

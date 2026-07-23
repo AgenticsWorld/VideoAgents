@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Gagal memutus tautan:",
 "◂ 高级": "◂ Lanjutan",
 "不常用的进阶功能": "Fitur lanjutan yang jarang dipakai",
+"防止系统休眠": "Cegah sistem tidur",
+"当前系统不支持(仅 macOS/Windows)": "Tidak didukung di sistem ini (hanya macOS/Windows)",
+"✓ 防休眠生效中": "✓ Pencegahan tidur aktif",
+"未生效(没有项目开启自动运行)": "Tidak aktif (tidak ada proyek dengan auto-run menyala)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "Cegah sistem tidur: selama diaktifkan, asalkan ada proyek dengan auto-run menyala, sistem tidak akan tidur karena idle (layar tetap mati seperti biasa; tidur saat menutup laptop dan mematikan manual tidak dicegah, dilepas otomatis saat aplikasi keluar). Hanya macOS/Windows.",
 };

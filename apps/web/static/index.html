@@ -567,7 +567,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
     </div>
+    <div class="row"><label>防止系统休眠</label>
+      <input type="checkbox" id="wdt-awake" style="width:auto">
+      <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
     <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
+    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
   </div>
@@ -1159,6 +1164,13 @@ async function openWdtModal(){
     const w=await api('/api/v1/watchdog/policy');
     $('#wdt-range').value=w.threshold;$('#wdt-num').value=w.threshold;
     $('#wdt-idle').value=w.idle_minutes||5;
+    $('#wdt-awake').checked=!!w.keep_awake;
+    $('#wdt-awake').disabled=!w.keep_awake_supported;
+    const st=$('#wdt-awake-st');
+    if(!w.keep_awake_supported){st.textContent=t('当前系统不支持(仅 macOS/Windows)');st.style.color='var(--dim)'}
+    else if(w.keep_awake_active){st.textContent=t('✓ 防休眠生效中');st.style.color='var(--green)'}
+    else if(w.keep_awake){st.textContent=t('未生效(没有项目开启自动运行)');st.style.color='var(--dim)'}
+    else st.textContent='';
   }catch(e){$('#wdt-range').value=80;$('#wdt-num').value=80;$('#wdt-idle').value=5}
   $('#wdt-modal').style.display='flex';
   api('/api/v1/resources/usage').then(u=>{                       // 用量探测慢,异步填充不挡弹窗
@@ -1180,7 +1192,7 @@ $('#wdt-ok').onclick=async()=>{
   const idle=parseInt($('#wdt-idle').value);
   if(!(idle>=1&&idle<=720)){$('#wdt-err').textContent='闲置时间需为 1-720 的整数(分钟)';return}
   try{
-    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle});
+    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle,keep_awake:$('#wdt-awake').checked});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };

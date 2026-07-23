@@ -1070,4 +1070,9 @@ window.I18N_DICT = {
 "解绑失败:": "Échec de la déliaison :",
 "◂ 高级": "◂ Avancé",
 "不常用的进阶功能": "Fonctions avancées peu utilisées",
+"防止系统休眠": "Empêcher la mise en veille du système",
+"当前系统不支持(仅 macOS/Windows)": "Non pris en charge sur ce système (macOS/Windows uniquement)",
+"✓ 防休眠生效中": "✓ Anti-veille actif",
+"未生效(没有项目开启自动运行)": "Inactif (aucun projet n'a l'exécution automatique activée)",
+"防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。": "Empêcher la mise en veille : tant que l'option est activée et qu'au moins un projet a l'exécution automatique, le système ne se met pas en veille par inactivité (l'écran s'éteint normalement ; la veille à la fermeture du capot et l'arrêt manuel ne sont pas bloqués, libération automatique à la fermeture de l'application). macOS/Windows uniquement.",
 };
