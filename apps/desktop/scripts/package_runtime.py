@@ -15,7 +15,7 @@ from pathlib import Path
 DESKTOP = Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME = DESKTOP / ".runtime"
 DEFAULT_OUTPUT = DESKTOP / ".runtime-packages"
-PUBLIC_BASE = "https://s3.agentics.world/packages/python/"
+PUBLIC_BASE = "https://s3.agentics.world/packages/video-agents/python/"
 PLATFORM_NAMES = {"darwin": "macos", "win32": "windows"}
 
 

@@ -9,8 +9,8 @@ import {pipeline} from 'node:stream/promises'
 import extract from 'extract-zip'
 import {RuntimeProgress} from './runtime-download'
 
-const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents.json'
-const DEFAULT_BASE = 'https://s3.agentics.world/packages/'
+const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents/metadata.json'
+const DEFAULT_BASE = 'https://s3.agentics.world/packages/video-agents/'
 const SAFE_VERSION = /^[A-Za-z0-9._-]+$/
 
 export interface BuildInfo {
@@ -48,8 +48,8 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
 function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact {
   if (!value || typeof value !== 'object') throw new Error('桌面更新索引缺少当前平台制品')
   const artifact = value as Partial<DesktopArtifact>
-  if (artifact.version !== '1.0.2' || typeof artifact.buildHash !== 'string'
-      || !SAFE_VERSION.test(artifact.buildHash)
+  if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
+      || typeof artifact.buildHash !== 'string' || !SAFE_VERSION.test(artifact.buildHash)
       || typeof artifact.url !== 'string' || !/^[a-f0-9]{64}$/i.test(artifact.sha256 || '')
       || typeof artifact.size !== 'number' || artifact.size <= 0 || artifact.size > 2 * 1024 * 1024 * 1024) {
     throw new Error('桌面更新索引格式无效')
@@ -59,16 +59,30 @@ function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact 
   if (configured) {
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('桌面更新包与索引来源不一致')
   } else {
-    const expected = process.platform === 'darwin'
-      ? `${DEFAULT_BASE}video-agents-mac-v${artifact.version}.zip`
-      : `${DEFAULT_BASE}video-agents-win-v${artifact.version}.zip`
+    const platform = process.platform === 'darwin' ? 'mac' : 'win'
+    const expected = `${DEFAULT_BASE}${platform}/VideoAgents-${artifact.version}.zip`
     if (url.href !== expected) throw new Error('桌面更新包 URL 不属于受信任的 S3 路径')
   }
   return artifact as DesktopArtifact
 }
 
-export async function fetchDevDesktopUpdate(build: BuildInfo): Promise<DesktopArtifact | undefined> {
-  if (build.channel !== 'dev') return undefined
+function versionParts(version: string): number[] | undefined {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version)
+  return match ? match.slice(1).map(Number) : undefined
+}
+
+function isNewerVersion(candidate: string, current: string): boolean {
+  const candidateParts = versionParts(candidate)
+  const currentParts = versionParts(current)
+  if (!candidateParts || !currentParts) return false
+  for (let index = 0; index < candidateParts.length; index += 1) {
+    if (candidateParts[index] !== currentParts[index]) return candidateParts[index] > currentParts[index]
+  }
+  return false
+}
+
+export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopArtifact | undefined> {
+  if (!['dev', 'release'].includes(build.channel)) return undefined
   const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
   const response = await fetch(source, {redirect: 'error', cache: 'no-store'})
   if (!response.ok) throw new Error(`桌面更新索引请求失败：HTTP ${response.status}`)
@@ -78,7 +92,10 @@ export async function fetchDevDesktopUpdate(build: BuildInfo): Promise<DesktopAr
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (index.schema !== 1 || !platform) throw new Error('桌面更新索引或平台无效')
   const artifact = validateArtifact(index.desktop?.[platform], source)
-  return artifact.buildHash === build.buildHash ? undefined : artifact
+  if (build.channel === 'dev') {
+    return artifact.buildHash === build.buildHash ? undefined : artifact
+  }
+  return isNewerVersion(artifact.version, build.version) ? artifact : undefined
 }
 
 async function download(
