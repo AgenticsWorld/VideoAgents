@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import time
+import re
 import urllib.request
 
 PORT = os.environ.get("VIDEOAGENTS_PORT", "8630")
@@ -31,6 +32,14 @@ API_TOKEN = os.environ.get("VIDEOAGENTS_API_TOKEN", "")
 PARENT = os.environ.get("VIDEOAGENTS_RUN_ID")          # 由 runtime 注入:标记父运行
 DEFAULT_PROJECT = os.environ.get("VIDEOAGENTS_PROJECT", "demo")
 DEFAULT_ENGINE = os.environ.get("VIDEOAGENTS_ENGINE", "claude")   # 继承派单方的引擎
+
+
+
+def project_slug(value: str) -> str:
+    """Argparse validator: --project accepts a slug, never a path."""
+    if not value or len(value) > 80 or not re.fullmatch(r"[\w-]+", value):
+        raise argparse.ArgumentTypeError("--project must be a project name, not a directory path")
+    return value
 
 
 # macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
@@ -148,7 +157,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("agent", nargs="?")
     ap.add_argument("instruction", nargs="?")
-    ap.add_argument("--project", default=DEFAULT_PROJECT)
+    ap.add_argument("--project", default=DEFAULT_PROJECT, type=project_slug)
     ap.add_argument("--model", default=None)
     # 默认 None:未显式指定时走「Agent 级模型配置 > 继承派单方引擎」;
     # 显式传 --engine/--model 则强制覆盖该成员的 Agent 级配置(force)
