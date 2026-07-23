@@ -31,3 +31,19 @@ def test_business_artifact_versions_use_pygit2(tmp_path):
     ))
     assert artifact.read_text() == "v1"
     assert vc.load_manifest()["artifacts"]["artifact.txt"]["current"] == 3
+
+
+def test_show_preserves_blob_bytes_including_trailing_newline(tmp_path, capsysbinary):
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_bytes(b"line one\nline two\n")
+    vc._init_paths(str(tmp_path / ".version"))
+    vc.cmd_init(Namespace())
+    vc.cmd_register(Namespace(
+        artifacts=["artifact.txt"], task_id="first", attempt=1,
+        reason="first", tag=None,
+    ))
+    capsysbinary.readouterr()
+
+    vc.cmd_show(Namespace(artifact="artifact.txt", version="v1"))
+
+    assert capsysbinary.readouterr().out == b"line one\nline two\n"

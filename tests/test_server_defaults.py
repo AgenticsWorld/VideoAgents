@@ -15,12 +15,25 @@ def test_public_release_security_defaults():
 
 def test_agent_catalog_is_available():
     agents = asyncio.run(server.api_agents(refresh=True))
-    assert len(agents) == 83
+    core_agents = [agent for agent in agents if not agent.get("plugin")]
+    assert len(core_agents) == 83
     assert {agent["id"] for agent in agents} >= {
         "00-orchestration/workflow-orchestrator",
         "07-directing/director",
         "11-qa/copyright",
+        "13-derivative-fiction/prose-writer",
+        "14-fusion/fusion-planner",
     }
+
+
+def test_official_plugins_are_available():
+    plugins = server.list_plugins(refresh=True)
+    by_name = {plugin["name"]: plugin for plugin in plugins}
+    assert by_name["derivative-fiction"]["active"]
+    assert by_name["fusion-fiction"]["active"]
+    assert by_name["derivative-fiction"]["builtin"]
+    assert server.agent_dir("13-derivative-fiction/prose-writer")
+    assert server.is_stateless_agent("11-qa/prose-qa")
 
 
 def test_agent_path_validation_rejects_traversal():

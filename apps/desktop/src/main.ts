@@ -1,7 +1,7 @@
 import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, shell} from 'electron'
 import type {MessageBoxOptions} from 'electron'
 import {autoUpdater} from 'electron-updater'
-import {ChildProcess, spawn} from 'node:child_process'
+import {ChildProcess, spawn, spawnSync} from 'node:child_process'
 import {existsSync, mkdirSync} from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
@@ -17,7 +17,23 @@ let webServer: ChildProcess | undefined
 const webPort = process.env.VIDEOAGENTS_WEB_PORT || '8630'
 const webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || `http://127.0.0.1:${webPort}`
 let window: BrowserWindow | undefined
+let mainWindowWasCreated = false
 let activeRuntime: PythonRuntime | undefined
+
+function stopWebServerTree(): void {
+  const server = webServer
+  webServer = undefined
+  if (!server || server.pid === undefined || server.exitCode !== null) return
+  if (process.platform === 'win32') {
+    const result = spawnSync(
+      'taskkill.exe', ['/pid', String(server.pid), '/t', '/f'],
+      {stdio: 'ignore', windowsHide: true},
+    )
+    if (result.error) console.warn(`[web] failed to stop backend process tree: ${String(result.error)}`)
+    return
+  }
+  server.kill('SIGTERM')
+}
 let runtimeProgressWindow: BrowserWindow | undefined
 let runtimeUpdateInProgress = false
 
@@ -113,6 +129,8 @@ async function ensureWebServer(): Promise<void> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopExecutablePath(),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
@@ -144,6 +162,7 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false, contextIsolation: true, sandbox: true
     }
   })
+  mainWindowWasCreated = true
   window.webContents.setWindowOpenHandler(({url}) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return {action:'deny'}
@@ -171,6 +190,7 @@ async function updatePythonRuntimeManually(): Promise<void> {
       message: `Python 环境已更新到 ${result.artifact.version}，应用将重新启动。`,
     })
     app.relaunch()
+    stopWebServerTree()
     app.exit(0)
   } catch (error) {
     closeRuntimeProgress()
@@ -238,7 +258,7 @@ ipcMain.handle('desktop:open-external', async (_event, value: unknown) => {
   await shell.openExternal(value)
 })
 ipcMain.handle('desktop:restart-backend', async () => {
-  webServer?.kill(); webServer=undefined; await ensureWebServer(); window?.reload()
+  stopWebServerTree(); await ensureWebServer(); window?.reload()
 })
 ipcMain.handle('desktop:runtime-info', () => ({
   source: activeRuntime?.source,
@@ -249,6 +269,7 @@ ipcMain.handle('desktop:activate-runtime', (_event, version: unknown) => {
   if (typeof version !== 'string') throw new Error('Python 运行时版本号无效')
   const manifest = activatePythonRuntime(app.getPath('userData'), version)
   app.relaunch()
+  stopWebServerTree()
   app.exit(0)
   return manifest
 })
@@ -283,5 +304,9 @@ app.whenReady().then(async () => {
   dialog.showErrorBox('VideoAgents 启动失败', message)
   app.quit()
 })
-app.on('window-all-closed', () => {if(process.platform!=='darwin')app.quit()})
-app.on('before-quit', () => webServer?.kill())
+app.on('window-all-closed', () => {
+  // Closing the first-launch runtime progress window briefly leaves no windows.
+  // Keep the app alive until the actual main window has been created.
+  if (mainWindowWasCreated) app.quit()
+})
+app.on('before-quit', stopWebServerTree)

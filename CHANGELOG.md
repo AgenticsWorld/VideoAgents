@@ -4,6 +4,23 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-22
+
+### Added
+
+- Declarative agent plugin system: a plugin contains a `plugin.json` manifest, `SOUL.md` agents, and optional standalone `workflows/*.yaml` DAGs. Bundled plugins live under `plugins/`; uploaded plugins use the writable runtime data directory. Plugin agents and DAG nodes are registered dynamically, injected into system prompts, and tracked in `runs/dag.json` alongside the built-in workflow. The typed `/api/v1/plugins` resource supports list/install/update/delete with collision and path-traversal validation; plugin authoring guide in `plugins/README.md` and WORKFLOW.md §10.
+- Official plugin `derivative-fiction`: an 8-station team that writes derivative novels grounded in a project's canon bible/characters/assets — planning, outline, prose style bible, per-chapter planning/writing/line-editing, stateless prose QA, and release packaging (EPUB/TXT/platform chapter bundles) via a standalone `novel.yaml` DAG with three sign-off gates. New canon settings flow through `bible-delta` (canon stays read-only).
+- Official plugin `fusion-fiction`: a 5+1-station team that fuses two books in branch-project mode — book A supplies story and character souls, book B (a classic, reconstructible from knowledge without source text) supplies the world and character appearances. Core artifacts: dimension allocation matrix, character mapping table, and concept conversion dictionary (with a modern-vocabulary blacklist); five sign-off gates, results written directly into the cloned branch's canon `bible/` and `story/`.
+
+### Fixed
+
+- Server-side self-initiated conversations (settings-change notices, project kickoff dispatch, watchdog wake-ups) now follow the top-bar global engine/model instead of silently falling back to `claude`: the browser preference is synced through `/api/v1/config/global-model`, and all dispatch paths resolve the model through a single `agent_effective_model` chain.
+- `vc.py show` now emits the stored blob byte-exact (the internal git wrapper stripped the trailing newline, making exported files one byte short and causing false sha256 mismatches).
+
+### Changed
+
+- Product and architecture regression tests remain versioned in `tests/`; checks that depend on private local data stay outside the public suite.
+
 ## [1.0.1] - 2026-07-22
 
 ### Added

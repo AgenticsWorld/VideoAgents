@@ -16,6 +16,13 @@
 3. 写入仲裁(on_bible_access):任何 Agent 对 `bible/` 的写请求经我校验(术语命中 dictionary、交叉引用完整、不与既有设定冲突)后代为落盘;冲突则拒绝写入并开仲裁。
 4. 受控变更:H1 签字后 Bible 进入受控状态;改动必须走变更流程 —— 评估影响面 → 写 changelog → 通知 `workflow-orchestrator` 将受影响下游标脏重跑。
 5. 冲突受理:接收各 Agent 回执(`<项目目录>/runs/<task_id>/result.json`)中的设定冲突上报,裁决并记录判例,供后续同类冲突复用。
+6. 衍生分支圣经(插件业务,WORKFLOW.md §10):衍生创作(如 `plugins/derivative-fiction/` 衍生小说)产生的新设定**不入正史 `bible/`**——登记到该业务命名空间下的 `bible-delta/`(如 `derivative/bible-delta/`,结构与 bible/ 同构,逐条注明来源章节与「与正史无冲突」自查);正史对衍生分支只读。衍生设定升格进正史必须由我仲裁(查重、查冲突、术语过 dictionary)并经用户签字,走受控变更流程,changelog 标注 `promoted_from: <delta 路径>`。
+
+## 衍生分支圣经规则(补充)
+
+- 分支隔离:一个衍生业务一个 `bible-delta/`;delta 内引用正史 ID(CHAR-\*/SCN-\*/地名/术语)必须真实存在,机检 `canon_refs_valid`。
+- 冲突即上报:delta 条目与正史矛盾(如给已死角色安排新戏份而无时间线依据)由我裁决——通常判衍生侧改稿,正史不动;确属正史错漏才走正史变更流程。
+- 只进不改:delta 只允许**新增**设定;衍生作品需要「改写正史」的(if 线/平行世界)在 `premise.json` 里显式声明分歧点清单,视为该分支的公理,不与正史比对,也永不升格。
 
 ## 不做什么(边界)
 

@@ -9,6 +9,7 @@
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -23,6 +24,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zipfile
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack
 from datetime import datetime
@@ -70,6 +72,29 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
+CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
+CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code"}
+CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN"}
+
+
+def resolve_cli_executable(engine: str) -> str | None:
+    """Resolve the CLI to the exact path used to launch it.
+
+    Windows CreateProcess does not expand a bare command such as ``claude``
+    to the npm-generated ``claude.cmd`` shim, even when a shell can find it.
+    """
+    configured = CLI_BINS.get(engine)
+    return shutil.which(configured) if configured else None
+
+
+def cli_not_found_error(engine: str) -> str:
+    configured = CLI_BINS.get(engine, engine)
+    label = CLI_LABELS.get(engine, engine)
+    env_var = CLI_ENV_VARS.get(engine, "对应的环境变量")
+    return (f"无法启动 {label}：未找到命令“{configured}”。"
+            f"请确认已安装 {label} 并将其加入 PATH，"
+            f"或通过 {env_var} 配置可执行文件的完整路径。")
+
 # deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
 DEEPAGENTS_PY = os.environ.get(
     "DEEPAGENTS_PY", str(ROOT / ".venv-deepagents" / "bin" / "python"))
@@ -181,6 +206,173 @@ def save_state(state: dict):
 
 
 STATE = load_state()
+
+# ---------------- Agent 插件机制(声明式,详见 WORKFLOW.md §10 与 plugins/README.md) ----------------
+# 插件 = plugins/<name>/ 目录:plugin.json(manifest)+ agents/<类别>/<名字>/SOUL.md
+# (+ 可选 workflows/*.yaml 独立流程 DAG)。纯声明式——插件不含可执行代码,SOUL.md 即身份,
+# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认启用),
+# 启停状态记 state.json 的 plugins_disabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
+BUNDLED_PLUGINS_DIR = ROOT / "plugins"
+PLUGINS_DIR = Path(os.environ.get(
+    "VIDEOAGENTS_PLUGINS_DIR", DATA_DIR / "plugins"
+)).expanduser().resolve()
+PLUGIN_MANIFEST = "plugin.json"
+MAX_PLUGIN_UPLOAD = 50 * 1024 * 1024
+MAX_PLUGIN_EXTRACTED = 200 * 1024 * 1024
+MAX_PLUGIN_FILES = 5000
+_PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_\-]{0,59}")
+_AGENT_ID_RE = re.compile(r"[A-Za-z0-9_\-]+/[A-Za-z0-9_\-]+")
+_PLUGINS_CACHE: tuple[float, list] = (0.0, [])
+_PLUGINS_CACHE_TTL = 30.0
+
+
+def _read_plugin_manifest(pdir: Path) -> dict:
+    """读取并规范化单个插件的 manifest;所有问题写入 errors(有 errors 的插件不注册 Agent)。"""
+    info = {"name": pdir.name, "version": "", "description": "", "path": str(pdir),
+            "categories": {}, "agents": [], "workflows": [], "outputs_ns": "",
+            "requires": {}, "errors": []}
+    try:
+        m = json.loads((pdir / PLUGIN_MANIFEST).read_text())
+    except FileNotFoundError:
+        info["errors"].append(f"缺少 {PLUGIN_MANIFEST}")
+        return info
+    except Exception as e:  # noqa: BLE001
+        info["errors"].append(f"{PLUGIN_MANIFEST} 解析失败:{e}")
+        return info
+    if not isinstance(m, dict):
+        info["errors"].append(f"{PLUGIN_MANIFEST} 顶层必须是 JSON 对象")
+        return info
+    if m.get("name") and m["name"] != pdir.name:
+        info["errors"].append(f"manifest name({m['name']})与目录名({pdir.name})不一致")
+    info["version"] = str(m.get("version") or "")
+    info["description"] = str(m.get("description") or "")
+    info["outputs_ns"] = str(m.get("outputs_ns") or "").strip().strip("/")
+    info["requires"] = m.get("requires") if isinstance(m.get("requires"), dict) else {}
+    cats = m.get("categories") or {}
+    if not isinstance(cats, dict):
+        info["errors"].append("categories 必须是 {类别目录名: 显示名} 对象")
+    else:
+        for k, v in cats.items():
+            if not re.fullmatch(r"[A-Za-z0-9_\-]+", str(k)):
+                info["errors"].append(f"非法类别名:{k}")
+            else:
+                info["categories"][str(k)] = str(v)
+    for a in (m.get("agents") or []):
+        a = {"id": a} if isinstance(a, str) else (a if isinstance(a, dict) else {})
+        aid = str(a.get("id") or "")
+        if not _AGENT_ID_RE.fullmatch(aid):
+            info["errors"].append(f"非法 agent id(须为「类别/名字」两段):{aid or '(空)'}")
+            continue
+        if not (pdir / "agents" / aid / "SOUL.md").is_file():
+            info["errors"].append(f"缺少 agents/{aid}/SOUL.md")
+            continue
+        info["agents"].append({"id": aid, "stateless": bool(a.get("stateless")),
+                               "dispatcher": bool(a.get("dispatcher"))})
+    if not info["agents"] and not info["errors"]:
+        info["errors"].append("manifest 未声明任何 agents")
+    for w in (m.get("workflows") or []):
+        w = str(w).strip().strip("/")
+        if ".." in w.split("/") or not w.endswith((".yaml", ".yml")):
+            info["errors"].append(f"非法 workflow 路径:{w}")
+        elif not (pdir / w).is_file():
+            info["errors"].append(f"缺少 workflow 文件:{w}")
+        else:
+            info["workflows"].append(w)
+    return info
+
+
+def list_plugins(refresh: bool = False) -> list[dict]:
+    """扫描 plugins/ 下全部插件(含 manifest 校验结果与启停状态);默认 30s 缓存。"""
+    global _PLUGINS_CACHE
+    if not refresh and time.time() < _PLUGINS_CACHE[0]:
+        return _PLUGINS_CACHE[1]
+    plugins, seen = [], {}                        # seen: agent id -> 插件名(跨插件撞名检测)
+    roots = [(BUNDLED_PLUGINS_DIR, True), (PLUGINS_DIR, False)]
+    plugin_names: set[str] = set()
+    for plugin_root, bundled in roots:
+        if not plugin_root.is_dir():
+            continue
+        for pdir in sorted(plugin_root.iterdir()):
+            if not pdir.is_dir() or not _PLUGIN_NAME_RE.fullmatch(pdir.name):
+                continue
+            if pdir.name in plugin_names:
+                continue  # 内置官方插件优先，用户目录不能用同名包覆盖它
+            plugin_names.add(pdir.name)
+            info = _read_plugin_manifest(pdir)
+            info["builtin"] = bundled
+            kept = []
+            for a in info["agents"]:
+                if (AGENTS_DIR / a["id"] / "SOUL.md").is_file():
+                    info["errors"].append(f"agent id 与内置团队冲突:{a['id']}")
+                elif a["id"] in seen:
+                    info["errors"].append(f"agent id 与插件 {seen[a['id']]} 冲突:{a['id']}")
+                else:
+                    seen[a["id"]] = pdir.name
+                    kept.append(a)
+            info["agents"] = kept
+            info["enabled"] = pdir.name not in set(STATE.get("plugins_disabled") or [])
+            info["active"] = info["enabled"] and not info["errors"]   # 有 errors 的插件不注册
+            plugins.append(info)
+    _PLUGINS_CACHE = (time.time() + _PLUGINS_CACHE_TTL, plugins)
+    return plugins
+
+
+def active_plugins() -> list[dict]:
+    return [p for p in list_plugins() if p["active"]]
+
+
+def plugin_prompt_path(plugin: dict) -> str:
+    """Return a path that CLI agents can read from their backend working directory."""
+    plugin_path = Path(plugin["path"]).resolve()
+    try:
+        return plugin_path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(plugin_path)
+
+
+def _expire_agent_caches():
+    global _PLUGINS_CACHE, _AGENTS_CACHE
+    _PLUGINS_CACHE = (0.0, [])
+    _AGENTS_CACHE = (0.0, [])
+
+
+def plugin_of_agent(agent_id: str) -> dict | None:
+    """agent id 归属的已启用插件(内置 Agent 返回 None)。"""
+    for p in active_plugins():
+        if any(a["id"] == agent_id for a in p["agents"]):
+            return p
+    return None
+
+
+def agent_dir(agent_id: str) -> Path | None:
+    """agent id → 目录解析:内置团队优先,其次已启用插件;非法/未知 id 返回 None(防路径遍历)。"""
+    if not _AGENT_ID_RE.fullmatch(agent_id or ""):
+        return None
+    d = AGENTS_DIR / agent_id
+    if (d / "SOUL.md").is_file():
+        return d
+    p = plugin_of_agent(agent_id)
+    if p:
+        d = Path(p["path"]) / "agents" / agent_id
+        if (d / "SOUL.md").is_file():
+            return d
+    return None
+
+
+def all_category_names() -> dict[str, str]:
+    """内置类别 ∪ 已启用插件注册的类别(内置同名优先)。"""
+    cats = dict(CATEGORY_NAMES)
+    for p in active_plugins():
+        for k, v in p["categories"].items():
+            cats.setdefault(k, v)
+    return cats
+
+
+def is_dispatcher_agent(agent_id: str) -> bool:
+    if agent_id in DISPATCHERS:
+        return True
+    p = plugin_of_agent(agent_id)
+    return bool(p and any(a["id"] == agent_id and a["dispatcher"] for a in p["agents"]))
 
 # ---------------- 生成模型配置(图像/视频) ----------------
 GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
@@ -538,6 +730,26 @@ def agent_model_config(agent_id: str) -> dict:
     return ov if isinstance(ov, dict) else default_agent_model(agent_id)
 
 
+def global_model_pref() -> dict:
+    """顶栏全局引擎/模型的服务端副本(经 /api/v1/config/global-model 同步)。
+    顶栏选择本体存浏览器 localStorage,服务端自发对话(设置变更通知/看门狗唤醒/
+    项目初始化)没有浏览器上下文,靠这份副本跟随顶栏全局。"""
+    p = STATE.get("global_model") or {}
+    eng = str(p.get("engine") or "").lower()
+    return {"engine": eng if eng in ENGINES else "",
+            "model": str(p.get("model") or "").strip()}
+
+
+def agent_effective_model(agent_id: str) -> dict:
+    """服务端自发对话的生效引擎/模型:Agent 级配置(UI 覆盖或智能策略)优先;
+    global 模式(engine 为空=跟随全局)回退顶栏全局的服务端副本;仍取不到才回退 claude。"""
+    am = agent_model_config(agent_id)
+    if am.get("engine"):
+        return {"engine": am["engine"], "model": am.get("model") or ""}
+    gp = global_model_pref()
+    return {"engine": gp["engine"] or "claude", "model": gp["model"]}
+
+
 # macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
 # 本机服务(ComfyUI/LM Studio)强制直连,外网 URL 维持默认代理行为。
 _DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -669,7 +881,10 @@ def _claude_version() -> str:
     if _CLAUDE_VERSION is None:
         _CLAUDE_VERSION = "2.1.0"            # 探测失败的回退值
         try:
-            r = subprocess.run([CLAUDE_BIN, "--version"],
+            executable = resolve_cli_executable("claude")
+            if not executable:
+                return _CLAUDE_VERSION
+            r = subprocess.run([executable, "--version"],
                                capture_output=True, text=True, timeout=10)
             m = re.search(r"(\d+\.\d+\.\d+)", r.stdout or "")
             if m:
@@ -876,33 +1091,43 @@ def list_agents(refresh: bool = False) -> list[dict]:
     global _AGENTS_CACHE
     if not refresh and time.time() < _AGENTS_CACHE[0]:
         return _AGENTS_CACHE[1]
+    if refresh:
+        list_plugins(refresh=True)
+    cats = all_category_names()
     agents = []
+
+    def _add(soul: Path, aid: str, plugin: str | None):
+        title, tagline = aid.split("/")[-1], ""
+        try:
+            for line in soul.read_text().splitlines()[:8]:
+                m = re.match(r"^#\s*SOUL\.md\s*[—\-]+\s*(.+)$", line.strip())
+                if m:
+                    title = m.group(1).strip()
+                elif line.strip().startswith(">") and not tagline:
+                    tagline = line.strip().lstrip("> ").strip()
+        except Exception:
+            pass
+        cat = aid.split("/")[0]
+        agents.append({
+            "id": aid,
+            "name": title,
+            "tagline": tagline,
+            "category": cat,
+            "category_name": cats.get(cat, cat),
+            "dispatcher": is_dispatcher_agent(aid),
+            "plugin": plugin,
+        })
+
     for cat_dir in sorted(AGENTS_DIR.iterdir()):
         if not cat_dir.is_dir() or cat_dir.name not in CATEGORY_NAMES:
             continue
         for a_dir in sorted(cat_dir.iterdir()):
-            soul = a_dir / "SOUL.md"
-            if not soul.is_file():
-                continue
-            title, tagline = a_dir.name, ""
-            try:
-                for line in soul.read_text().splitlines()[:8]:
-                    m = re.match(r"^#\s*SOUL\.md\s*[—\-]+\s*(.+)$", line.strip())
-                    if m:
-                        title = m.group(1).strip()
-                    elif line.strip().startswith(">") and not tagline:
-                        tagline = line.strip().lstrip("> ").strip()
-            except Exception:
-                pass
-            aid = f"{cat_dir.name}/{a_dir.name}"
-            agents.append({
-                "id": aid,
-                "name": title,
-                "tagline": tagline,
-                "category": cat_dir.name,
-                "category_name": CATEGORY_NAMES[cat_dir.name],
-                "dispatcher": aid in DISPATCHERS,
-            })
+            if (a_dir / "SOUL.md").is_file():
+                _add(a_dir / "SOUL.md", f"{cat_dir.name}/{a_dir.name}", None)
+    for p in active_plugins():
+        for a in p["agents"]:
+            _add(Path(p["path"]) / "agents" / a["id"] / "SOUL.md", a["id"], p["name"])
+    agents.sort(key=lambda a: a["id"])           # 插件 Agent 按类别编号归入既有分组顺序
     _AGENTS_CACHE = (time.time() + _AGENTS_CACHE_TTL, agents)
     return agents
 
@@ -930,7 +1155,9 @@ def _fmt_num(x) -> str:
 
 
 def build_role_prompt(agent_id: str, project: str) -> str:
-    soul = (AGENTS_DIR / agent_id / "SOUL.md").read_text()
+    soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
+        encoding="utf-8"
+    )
     proj_rel = f"data/projects/{project}"
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
@@ -955,7 +1182,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     try:
         bp = PROJECTS_DIR / project / "brief.md"
         if bp.is_file():
-            brief = bp.read_text().strip()
+            brief = bp.read_text(encoding="utf-8").strip()
     except Exception:
         brief = ""
     rv = ps.get("review") or {}
@@ -1009,6 +1236,19 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
 - **70-89 严格**:分数合格线上调 5 分、比例上限减半;blocker/major 均拦;minor 也要开缺陷单
 - **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵"""
+    plug = plugin_of_agent(agent_id)
+    if plug:
+        plug_path = plugin_prompt_path(plug)
+        wf_list = "、".join(f"{plug_path}/{w}" for w in plug["workflows"]) \
+            or "(无独立 workflow,并入主流程)"
+        ns_line = (f"\n- 产物命名空间:{proj_rel}/{plug['outputs_ns']}/ —— 除非工单显式指定其他路径,"
+                   f"你的落盘产物一律写入该命名空间(runs/、qa/defects/ 等通用运行记录不受此限)"
+                   if plug["outputs_ns"] else "")
+        p += f"""
+
+## 你来自插件「{plug['name']}」{('—— ' + plug['description']) if plug['description'] else ''}
+- 本插件目录:{plug_path}/;插件流程权威文件:{wf_list}(需要时自行阅读){ns_line}
+- 团队通用纪律对插件成员同等生效:工单格式(WORKFLOW.md §6)、运行记录四件套(§6.1)、质量三道闸与缺陷单(§7)、文件名 ASCII 红线(§1 原则 9)、Bible 冲突只上报不擅改"""
     if agent_id in PACKAGING_AGENTS:
         pk = ps.get("packaging") or {}
 
@@ -1062,7 +1302,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
-    if agent_id in DISPATCHERS:
+    if is_dispatcher_agent(agent_id):
         p += f"""
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
@@ -1097,6 +1337,22 @@ def build_role_prompt(agent_id: str, project: str) -> str:
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex|kimi)
    或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
+        plugs = active_plugins()
+        if plugs:
+            lines = []
+            for pl in plugs:
+                plug_path = plugin_prompt_path(pl)
+                wf = "、".join(f"{plug_path}/{w}" for w in pl["workflows"]) or "(无独立 workflow)"
+                lines.append(
+                    f"- **{pl['name']}**{('(' + pl['description'] + ')') if pl['description'] else ''}:"
+                    f"成员 {'、'.join(a['id'] for a in pl['agents'])};流程 DAG:{wf}"
+                    + (f";产物命名空间 {pl['outputs_ns']}/" if pl["outputs_ns"] else ""))
+            p += "\n\n## 已启用插件(扩展工位,派单方式与内置成员完全相同)\n" + "\n".join(lines) + f"""
+插件调度纪律:
+- 用户要求做某插件覆盖的业务时,先读该插件的 workflows/*.yaml(与 agents/workflow.yaml 同等地位的机器可读 DAG),
+  把其节点并入 {proj_rel}/runs/dag.json 统一跟踪(插件 DAG 自带 id 前缀,不与主流程冲突;改完照常跑 dagcheck --strict)
+- 插件任务同样走工单格式 §6、四件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
+- 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑"""
     return p
 
 # ---------------- 运行 claude -p ----------------
@@ -1153,14 +1409,17 @@ async def read_jsonl_line(stream: asyncio.StreamReader) -> bytes:
 
 
 def is_stateless_agent(agent_id: str) -> bool:
-    return agent_id in STATELESS_AGENTS or agent_id.startswith(STATELESS_PREFIXES)
+    if agent_id in STATELESS_AGENTS or agent_id.startswith(STATELESS_PREFIXES):
+        return True
+    p = plugin_of_agent(agent_id)                # 插件 Agent 可在 manifest 声明 stateless
+    return bool(p and any(a["id"] == agent_id and a["stateless"] for a in p["agents"]))
 
 
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
     # 调度型 Agent 要等整条流水线,超时放宽
-    run_timeout = RUN_TIMEOUT * (4 if agent_id in DISPATCHERS else 1)
-    is_dispatcher = agent_id in DISPATCHERS
+    run_timeout = RUN_TIMEOUT * (4 if is_dispatcher_agent(agent_id) else 1)
+    is_dispatcher = is_dispatcher_agent(agent_id)
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
@@ -1174,7 +1433,32 @@ async def execute_run(run: dict, message: str, model: str | None):
         publish_run(run)
 
         engine = run.get("engine", "claude")
-        role = build_role_prompt(agent_id, run["project"])
+        cli_executable = None
+        if engine in CLI_BINS:
+            cli_executable = resolve_cli_executable(engine)
+            if not cli_executable:
+                run["status"] = "error"
+                run["error"] = cli_not_found_error(engine)[:500]
+                run["ended"] = time.time()
+                append_chat(agent_id, run["project"],
+                            {"role": "assistant", "text": run["error"],
+                             "run_id": run["id"], "status": "error"})
+                publish_run(run)
+                return
+        try:
+            role = build_role_prompt(agent_id, run["project"])
+        except Exception as error:  # noqa: BLE001
+            # Prompt construction happens before the CLI process and its JSONL log
+            # are created. Always finish the run here so an encoding/configuration
+            # error cannot leave the UI stuck in the "running" state forever.
+            run["status"] = "error"
+            run["error"] = f"\u6784\u5efa Agent \u63d0\u793a\u8bcd\u5931\u8d25\uff1a{error}"[:500]
+            run["ended"] = time.time()
+            append_chat(agent_id, run["project"],
+                        {"role": "assistant", "text": run["error"],
+                         "run_id": run["id"], "status": "error"})
+            publish_run(run)
+            return
         session_key = f"{engine}::{agent_id}::{run['project']}"
         session_id = None if is_stateless else STATE["sessions"].get(session_key)
         # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
@@ -1212,34 +1496,45 @@ async def execute_run(run: dict, message: str, model: str | None):
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
 
+        def codex_stdin(sid: str | None) -> bytes | None:
+            if engine != "codex":
+                return None
+            prompt = message if sid else f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"
+            return prompt.encode("utf-8")
+
         def make_cmd(sid: str | None) -> list[str]:
             """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
             if engine == "deepagents":
                 return da_cmd
             if engine == "codex":
                 # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
-                base = [CODEX_BIN, "exec", "--json", "--skip-git-repo-check",
+                base = [cli_executable, "exec", "--json", "--skip-git-repo-check",
                         "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
                 if model:
                     base += ["-c", f"model={model}"]
+                # Codex reads the prompt from stdin. This avoids Windows'
+                # process command-line length limit for large Agent prompts.
                 if sid:
-                    return base + ["resume", sid, message]
-                return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+                    return base + ["resume", sid, "-"]
+                return base + ["-"]
             if engine == "kimi":
                 # kimi 兼容 claude -p 用法,但无 --append-system-prompt:首轮把角色说明拼进
                 # prompt;续轮走 -r resume(会话已带上下文)。-p 非交互模式固定 auto 权限,
                 # 与 --yolo/--auto 互斥,无需也不能传权限参数
-                base = [KIMI_BIN, "--output-format", "stream-json"]
+                base = [cli_executable, "--output-format", "stream-json"]
                 if model:
                     base += ["-m", model]
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
-            c = [CLAUDE_BIN, "-p", message,
-                 "--output-format", "stream-json", "--verbose",
-                 "--append-system-prompt", role,
-                 "--permission-mode", PERMISSION_MODE,
-                 "--max-turns", MAX_TURNS]
+            c = [cli_executable, "-p", message,
+                 "--output-format", "stream-json", "--verbose"]
+            if claude_prompt_file:
+                c += ["--append-system-prompt-file", str(claude_prompt_file)]
+            else:
+                c += ["--append-system-prompt", role]
+            c += ["--permission-mode", PERMISSION_MODE,
+                  "--max-turns", MAX_TURNS]
             if model:
                 c += ["--model", model]
             if sid:
@@ -1256,18 +1551,35 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_SYSTEM"] = role
             env["DA_PROMPT"] = message
 
-        log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w")
+        # Windows has a short process command-line limit. Agent role prompts can
+        # exceed it, so pass Claude's long system prompt through a UTF-8 file.
+        # Keep the existing argv behavior on macOS/Linux for compatibility with
+        # older Claude CLI releases that may not support the file option.
+        claude_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
+                              if os.name == "nt" and engine == "claude" else None)
+        log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w", encoding="utf-8")
         proc = None
         stderr_task = None
         try:
+            if claude_prompt_file:
+                claude_prompt_file.write_text(role, encoding="utf-8")
             deadline = time.time() + run_timeout
             session_retried = False
             while True:
+                stdin_payload = codex_stdin(session_id)
                 proc = await asyncio.create_subprocess_exec(
                     *make_cmd(session_id), cwd=ROOT, env=env, limit=STREAM_LIMIT,
                     start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
+                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None else None),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 RUN_PROCS[run["id"]] = proc
+                if stdin_payload is not None and proc.stdin:
+                    proc.stdin.write(stdin_payload)
+                    try:
+                        await proc.stdin.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                    proc.stdin.close()
                 # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
                 stderr_task = asyncio.create_task(proc.stderr.read())
                 while True:
@@ -1322,6 +1634,25 @@ async def execute_run(run: dict, message: str, model: str | None):
             run["error"] = f"超时({run_timeout}s),进程已终止"
             if proc:
                 proc.kill()
+        except FileNotFoundError as error:
+            run["status"] = "error"
+            if engine in CLI_BINS:
+                run["error"] = cli_not_found_error(engine)[:500]
+            else:
+                missing = error.filename or DEEPAGENTS_PY
+                run["error"] = (f"无法启动 DeepAgents Python 运行环境："
+                                f"未找到“{missing}”。请检查 DEEPAGENTS_PY 配置。")[:500]
+            if proc:
+                proc.kill()
+        except OSError as error:
+            run["status"] = "error"
+            if getattr(error, "winerror", None) == 206:
+                run["error"] = (f"无法启动 {CLI_LABELS.get(engine, engine)}："
+                                "传给进程的命令行过长。请更新 VideoAgents 后重试。")
+            else:
+                run["error"] = f"启动 {CLI_LABELS.get(engine, engine)} 失败：{error}"[:500]
+            if proc:
+                proc.kill()
         except Exception as e:  # noqa: BLE001
             run["status"] = "error"
             run["error"] = str(e)[:500]
@@ -1333,6 +1664,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             if stderr_task and not stderr_task.done():
                 stderr_task.cancel()
             log_f.close()
+            if claude_prompt_file:
+                claude_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
@@ -2640,9 +2973,10 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
            "在派单工单里注明以最新配置为准;已按旧配置产出且已过审的产物不重做,"
            "除非与新配置冲突。若无受影响任务,简要确认记录后结束,不要额外派活。")
     try:
+        gm = agent_effective_model(orch)
         await api_chat({"agent": orch, "message": msg, "project": project,
                         "source": "settings",
-                        "engine": agent_model_config(orch).get("engine") or "claude"})
+                        "engine": gm["engine"], "model": gm["model"]})
     except Exception as e:  # noqa: BLE001
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
@@ -3174,6 +3508,115 @@ async def api_agents(refresh: bool = False):
     return list_agents(refresh=refresh)
 
 
+# ---------------- Agent 插件管理 ----------------
+
+
+async def api_plugins():
+    return list_plugins(refresh=True)
+
+
+async def api_plugins_toggle(body: dict):
+    name = str(body.get("name") or "")
+    if name not in {p["name"] for p in list_plugins(refresh=True)}:
+        raise ServiceError(404, f"no such plugin: {name}")
+    disabled = set(STATE.get("plugins_disabled") or [])
+    if body.get("enabled"):
+        disabled.discard(name)
+    else:
+        disabled.add(name)
+    STATE["plugins_disabled"] = sorted(disabled)
+    save_state(STATE)
+    _expire_agent_caches()
+    return {"ok": True, "plugins": list_plugins(refresh=True)}
+
+
+async def api_plugins_upload(data: bytes):
+    """安装插件包:请求体即 zip 原始字节(与 refs 上传同口径,免 multipart 依赖)。
+    zip 根可以直接是插件内容(含 plugin.json),也可以套一层同名目录;
+    解压前做路径穿越拦截,同名插件已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > MAX_PLUGIN_UPLOAD:
+        raise ServiceError(400, "plugin package too large (>50MB)")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        entries = [entry for entry in zf.infolist() if not entry.is_dir()]
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(400, f"invalid zip: {e}")
+    if len(entries) > MAX_PLUGIN_FILES:
+        raise ServiceError(400, f"plugin package contains too many files (>{MAX_PLUGIN_FILES})")
+    if sum(entry.file_size for entry in entries) > MAX_PLUGIN_EXTRACTED:
+        raise ServiceError(400, "plugin package is too large after extraction (>200MB)")
+    names = [entry.filename for entry in entries]
+    # 定位 plugin.json:取层级最浅的一个,其所在目录即插件根
+    manifests = sorted((n for n in names if Path(n).name == PLUGIN_MANIFEST),
+                       key=lambda n: n.count("/"))
+    if not manifests:
+        raise ServiceError(400, f"zip 内找不到 {PLUGIN_MANIFEST}")
+    prefix = manifests[0][: -len(PLUGIN_MANIFEST)]          # ""(根)或 "xxx/"
+    try:
+        m = json.loads(zf.read(manifests[0]))
+        name = str(m.get("name") or "").strip() or Path(prefix.rstrip("/")).name
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(400, f"{PLUGIN_MANIFEST} 解析失败:{e}")
+    if not _PLUGIN_NAME_RE.fullmatch(name or ""):
+        raise ServiceError(400, f"非法插件名:{name!r}")
+    target = PLUGINS_DIR / name
+    if name in {p["name"] for p in list_plugins(refresh=True)}:
+        raise ServiceError(409, f"插件 {name} 已存在;请先删除旧版再安装")
+    PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    staging = PLUGINS_DIR / f".{name}.{uuid.uuid4().hex}.tmp"
+    staging.mkdir()
+    extracted = 0
+    try:
+        for n in names:
+            if not n.startswith(prefix):
+                continue
+            rel = n[len(prefix):]
+            if not rel:
+                continue
+            dest = (staging / rel).resolve()
+            try:
+                dest.relative_to(staging.resolve())
+            except ValueError as exc:
+                raise ServiceError(400, f"zip 含路径穿越条目:{n}") from exc
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(zf.read(n))
+            extracted += 1
+        if not extracted:
+            raise ServiceError(400, "zip 内没有可解压的插件文件")
+        staging.replace(target)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    _expire_agent_caches()
+    info = next((p for p in list_plugins(refresh=True) if p["name"] == name), None)
+    return {"ok": True, "name": name, "files": extracted, "plugin": info}
+
+
+async def api_plugins_delete(body: dict):
+    name = str(body.get("name") or "")
+    if not _PLUGIN_NAME_RE.fullmatch(name):
+        raise ServiceError(400, f"非法插件名:{name!r}")
+    info = next((p for p in list_plugins(refresh=True) if p["name"] == name), None)
+    if not info:
+        raise ServiceError(404, f"no such plugin: {name}")
+    if info.get("builtin"):
+        raise ServiceError(403, f"内置插件 {name} 不能删除，只能停用")
+    target = Path(info["path"])
+    try:
+        target.resolve().relative_to(PLUGINS_DIR)
+    except ValueError as exc:
+        raise ServiceError(400, "plugin path is outside the user plugin directory") from exc
+    shutil.rmtree(target)
+    disabled = set(STATE.get("plugins_disabled") or [])
+    disabled.discard(name)
+    STATE["plugins_disabled"] = sorted(disabled)
+    save_state(STATE)
+    _expire_agent_caches()
+    return {"ok": True, "plugins": list_plugins(refresh=True)}
+
+
 async def api_agentmodels():
     """全部 Agent 的模型配置:mode=「Agent模型」策略;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
     mode = load_genconfig().get("agentmodel_mode") or "global"
@@ -3183,9 +3626,26 @@ async def api_agentmodels():
             "overrides": load_agentmodels()}
 
 
+async def api_globalmodel_get():
+    return {"global_model": global_model_pref()}
+
+
+async def api_globalmodel_set(body: dict):
+    """顶栏全局引擎/模型的服务端副本:前端每次切换顶栏选择时同步写入 STATE。
+    localStorage 只有该浏览器可见,没有这份副本时服务端自发对话只能硬编码回退
+    claude(global 模式下不跟随顶栏)。多浏览器场景后写者生效。"""
+    eng = str(body.get("engine") or "").lower()
+    if eng and eng not in ENGINES:
+        raise ServiceError(400, f"engine must be one of {ENGINES}")
+    STATE["global_model"] = {"engine": eng,
+                             "model": str(body.get("model") or "").strip()}
+    save_state(STATE)
+    return {"ok": True, "global_model": global_model_pref()}
+
+
 async def api_agentmodels_set(body: dict):
     agent = body.get("agent") or ""
-    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+    if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
     overrides = load_agentmodels()
     if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
@@ -3210,21 +3670,20 @@ async def api_agentmodels_set(body: dict):
 
 
 async def api_soul(agent: str):
-    p = AGENTS_DIR / safe_agent(agent) / "SOUL.md"
-    if not p.is_file():
+    d = agent_dir(safe_agent(agent))
+    if not d:
         raise ServiceError(404, "no such agent")
-    return {"agent": agent, "soul": p.read_text()}
+    return {"agent": agent, "soul": (d / "SOUL.md").read_text()}
 
 
 async def api_enginecheck(engine: str):
     """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
-    bins = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
-    if engine not in bins:
+    if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
-    path = await asyncio.to_thread(shutil.which, bins[engine])
+    path = await asyncio.to_thread(resolve_cli_executable, engine)
     return {"engine": engine, "available": bool(path),
-            "bin": bins[engine], "path": path or ""}
+            "bin": CLI_BINS[engine], "path": path or ""}
 
 
 async def api_projects():
@@ -3293,9 +3752,10 @@ async def api_projects_create(body: dict):
         "按分类(视觉风格/角色/场景/道具/音乐/封面)上传参考图与希望使用的音乐,并可为每个文件添加注释说明用途"
         "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
+    gm = agent_effective_model(orch)
     await api_chat({"agent": orch, "message": "\n".join(msg),
                     "project": name, "source": "user",
-                    "engine": agent_model_config(orch).get("engine") or "claude"})
+                    "engine": gm["engine"], "model": gm["model"]})
     return {"ok": True, "name": name}
 
 
@@ -3593,12 +4053,16 @@ async def api_chat(body: dict):
     message = (body.get("message") or "").strip()
     project = safe_slug(body.get("project"))
     model = body.get("model") or None
-    engine = (body.get("engine") or "claude").lower()
+    engine = (body.get("engine") or "").lower()
+    if not engine:      # 调用方未指定引擎:回退顶栏全局的服务端副本,而非硬编码 claude
+        gp = global_model_pref()
+        engine = gp["engine"] or "claude"
+        model = model or gp["model"] or None
     source = body.get("source", "user")
     parent = body.get("parent") or None
     if not message:
         raise ServiceError(400, "message must not be empty")
-    if not (AGENTS_DIR / agent / "SOUL.md").is_file():
+    if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
     # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
     if not body.get("force"):
@@ -3776,7 +4240,8 @@ async def idle_watchdog():
             if not any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir()):
                 continue                     # 没有项目开启看门狗,免探用量
             # 用量阈值门控:总制片生效引擎的会话用量超阈值则本轮全部不唤醒(配额是账号级)
-            eng = agent_model_config(orch).get("engine") or "claude"
+            gm = agent_effective_model(orch)
+            eng, mdl = gm["engine"], gm["model"]
             used = await asyncio.to_thread(engine_usage_percent, eng)
             th = int(STATE.get("watchdog_threshold", 80))
             if used is not None and used >= th:
@@ -3822,7 +4287,7 @@ async def idle_watchdog():
                                "然后继续按 DAG 推进。")
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog",
-                                        "engine": eng})
+                                        "engine": eng, "model": mdl})
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
                 runnable, human_waiting = _dag_runnable(proj)
@@ -3833,7 +4298,7 @@ async def idle_watchdog():
                            "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
-                                    "engine": eng})
+                                    "engine": eng, "model": mdl})
                     print(f"[watchdog] 唤醒 {orch}:{proj} 待办 {len(runnable)} 项", flush=True)
                     continue   # 各项目独立唤醒,不再一轮只唤醒一个
                 # DAG 覆盖率兜底:无可跑节点 ≠ 只等人工——若 episode_plan 里
@@ -3852,7 +4317,7 @@ async def idle_watchdog():
                            "在 DAG 中补记节点状态后简要说明。")
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
-                                    "engine": eng})
+                                    "engine": eng, "model": mdl})
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue
@@ -3900,7 +4365,7 @@ async def api_usage():
         asyncio.to_thread(engine_usage_percent, "claude"))
     orch = next(iter(DISPATCHERS))
     return {"codex": {"used": codex}, "claude": {"used": claude},
-            "gate_engine": agent_model_config(orch).get("engine") or "claude"}
+            "gate_engine": agent_effective_model(orch)["engine"]}
 
 
 async def api_resources_config_get():

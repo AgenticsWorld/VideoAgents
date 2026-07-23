@@ -149,7 +149,7 @@
         var project = 'demo';
         try { project = JSON.parse(localStorage.getItem('webui_prefs') || '{}').project || 'demo'; } catch (e) { /* ignore */ }
         return fetch('/api/v1/config/generation', {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ui_language: lang, project: project }),
         });
       }
@@ -163,7 +163,7 @@
       if (!LANGS[code] || code === lang) return Promise.resolve();
       try { localStorage.setItem('webui_lang', code); } catch (e) { /* ignore */ }
       return fetch('/api/v1/config/generation', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ui_language: code, project: project || 'demo' }),
       }).catch(function () { /* 服务端不可达也允许本地切换 */ })
         .then(function () { location.reload(); });

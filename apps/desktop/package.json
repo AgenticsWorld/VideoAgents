@@ -1,7 +1,7 @@
 {
   "name": "@videoagents/desktop",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "AgenticsWorld",
   "description": "VideoAgents desktop client",
   "main": "dist/main.js",
@@ -74,6 +74,13 @@
         ]
       },
       {
+        "from": "../../plugins",
+        "to": "backend/plugins",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "../../code",
         "to": "backend/code",
         "filter": [
@@ -97,6 +104,7 @@
         "dmg",
         "zip"
       ],
+      "icon": "build/icon.icns",
       "category": "public.app-category.video",
       "hardenedRuntime": true,
       "notarize": true

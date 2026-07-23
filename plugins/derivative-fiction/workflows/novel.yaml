@@ -1,0 +1,103 @@
+# novel.yaml — 衍生小说创作流水线 DAG(derivative-fiction 插件;机器可读)
+# 与 agents/workflow.yaml 同构;约定与调度纪律见 agents/WORKFLOW.md §10。
+# 节点 id 前缀 nv/gn,不与主流程 p*/g* 冲突;orchestrator 把本 DAG 节点并入项目 runs/dag.json 统一跟踪。
+# 前置(plugin.json requires):正史 bible/ 已产出并过 H1;正史对本流程只读,
+# 新增设定一律写 derivative/bible-delta/(memory-bible SOUL「衍生分支圣经」)。
+
+version: 1
+plugin: derivative-fiction
+defaults:
+  eval_threshold: 80
+  max_retries: 3
+  on_fail: escalate_human
+  run_record: [context.md, result.json, eval.json, meta.json]
+  gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
+              qa_hold_requires_waiver, human_checks_executed_or_waived]
+
+phases:
+  - id: nv0
+    name: 衍生立项
+    tasks:
+      - id: nv0-premise
+        agent: 13-derivative-fiction/derivative-planner
+        outputs: [derivative/premise.json]
+        # canon_refs_valid:引用的正史 ID(CHAR-*/SCN-*/地名/势力/术语)必须真实存在;
+        # divergence 声明的分歧点(if 线)视为本分支公理,不再与正史比对
+        validation:
+          auto: [schema, canon_refs_valid, timeline_anchor_defined, forbidden_zones_listed]
+          rubric: creative_v1
+          qa: [11-qa/world-consistency-qa]
+      - { id: gn0, gate: true, depends_on: [nv0-premise] }
+
+  - id: nv1
+    name: 架构与文风          # 两任务并行,均依赖 gn0
+    depends_on: [gn0]
+    tasks:
+      - { id: nv1-outline, agent: 13-derivative-fiction/novel-outline,
+          outputs: [derivative/outline.json],
+          validation: { auto: [schema, canon_refs_valid, arc_per_main_character],
+                        rubric: writing_v1, qa: [11-qa/logic-qa] } }
+      - { id: nv1-style, agent: 13-derivative-fiction/prose-style,
+          outputs: [derivative/prose_style.md],
+          validation: { rubric: creative_v1 } }
+      - { id: gn1, gate: true, human: true, checkpoint: DH1-衍生企划与大纲确认,
+          depends_on: [nv1-outline, nv1-style] }
+
+  - id: nv2
+    name: 章节规划
+    depends_on: [gn1]
+    tasks:
+      - id: nv2-chapters
+        agent: 13-derivative-fiction/chapter-planner
+        outputs: [derivative/chapters_plan.json]
+        # beats_assigned_once:大纲节拍 100% 分配到章且不重复(对账 outline.beats 全量)
+        validation:
+          auto: [schema, beats_assigned_once, chapter_length_budget_defined, hook_point_per_chapter]
+          rubric: writing_v1
+          qa: [01-story/hook]         # 断章钩子顾问会签(复用内置剧情组)
+      - { id: gn2, gate: true, depends_on: [nv2-chapters] }
+
+  - id: nv3
+    name: 章节写作            # 试点章策略:首章走通并过 DH2 后,其余章方可批量并行
+    depends_on: [gn2]
+    for_each: chapter          # 按 chapters_plan.json 实例化(nv3-draft-chNNN / nv3-edit-chNNN)
+    tasks:
+      - { id: nv3-draft, agent: 13-derivative-fiction/prose-writer,
+          outputs: ["derivative/chapters/{ch}.md"],
+          validation: { auto: [chapter_length_in_budget, pov_matches_prose_style,
+                               canon_refs_valid, new_canon_logged_to_delta],
+                        rubric: writing_v1 } }
+      - { id: nv3-edit, agent: 13-derivative-fiction/line-editor, depends_on: [nv3-draft],
+          outputs: ["derivative/chapters/{ch}.md"],   # 润色版以新版本落同路径(version 管理)
+          validation: { auto: [no_plot_change, length_delta_lte_15pct],
+                        rubric: writing_v1, qa: [11-qa/prose-qa] } }
+      - { id: gn3, gate: true, scope: book, human_on: first_chapter,
+          checkpoint: DH2-首章试读确认, depends_on: [nv3-edit] }
+
+  - id: nv4
+    name: 全书终审
+    depends_on: [gn3]
+    tasks:
+      - { id: nv4-logic, agent: 11-qa/logic-qa,
+          outputs: [qa/reports/derivative/logic.json],  pass: blocker_eq_0 }
+      - { id: nv4-world, agent: 11-qa/world-consistency-qa,
+          outputs: [qa/reports/derivative/world.json],  pass: blocker_eq_0 }
+      - { id: nv4-char, agent: 11-qa/character-consistency-qa,
+          outputs: [qa/reports/derivative/character.json], pass: score_gte_85 }
+      - { id: nv4-prose, agent: 11-qa/prose-qa,          # 全书抽检 + 跨章一致(与逐章会签不同粒度)
+          outputs: [qa/reports/derivative/prose.json],  pass: score_gte_80 }
+      - { id: nv4-delta, agent: 00-orchestration/memory-bible,
+          outputs: [derivative/bible-delta/audit.json],  # delta 登记完整、canon 引用合法、零正史污染
+          validation: { auto: [delta_entries_sourced, canon_refs_valid, canon_untouched] } }
+      - { id: gn4, gate: true, human: true, checkpoint: DH3-衍生小说发布签字,
+          depends_on: [nv4-logic, nv4-world, nv4-char, nv4-prose, nv4-delta] }
+
+  - id: nv5
+    name: 发布
+    depends_on: [gn4]
+    tasks:
+      - { id: nv5-release, agent: 12-publishing/novel-release,
+          outputs: [derivative/publish/],
+          validation: { auto: [format_lint, chapters_complete, ascii_filename] } }
+
+# 贯穿型服务与主流程一致(context/evaluation/version/memory-bible/orchestrator 钩子),见 agents/workflow.yaml services 段

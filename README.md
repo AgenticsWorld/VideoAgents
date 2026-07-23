@@ -17,13 +17,14 @@ workspace and are not committed by default.
 ## Highlights
 
 - 83 focused agents organized into 13 production departments
+- Declarative agent plugins add new roles and workflows; official derivative-fiction and fusion-fiction teams are bundled, while uploaded plugins live in the writable runtime data directory
 - Human approval gates for story, art direction, storyboards, cuts, and release
 - File-based artifacts with per-project versioning and auditable QA records
 - Claude CLI, Codex CLI, and OpenAI-compatible DeepAgents execution engines
 - Configurable image, video, music, TTS, and object-storage providers
 - A multilingual local Web console with preview and storyboard tools
 - The same original static WebUI shared by browsers and Electron
-- Versioned `/api/v1`, OpenAPI, durable run state, and resumable SSE events
+- Versioned `/api/v1`, OpenAPI, durable run state, and real-time SSE events
 
 ## Requirements
 
@@ -65,7 +66,7 @@ The equivalent Makefile targets are `make desktop-install`, `make desktop-dev` (
 
 The Python runtime and Electron application are versioned independently. Runtimes are installed under the user data directory at `python-runtimes/versions/<version>/` and selected through `active.json`. Startup never checks for updates when a valid runtime exists; the index is read only on first installation or when the user chooses the manual Python update menu item. Package size, SHA-256, platform, architecture, version, and executable containment are validated before activation. `VIDEOAGENTS_PYTHON` remains an explicit development and diagnostics override.
 
-Desktop packages produced from `dev` retain product version `1.0.1`; the short Git hash is stored separately as `buildHash`. They are published at the stable URLs `packages/video-agents-mac.zip` (Apple Silicon arm64) and `packages/video-agents-win.zip` (Windows x64, containing the NSIS installer). A Dev client reads the same index on every launch and prompts only when `desktop.mac/win.buildHash` differs from its embedded build hash. On approval it verifies and downloads the ZIP, then replaces the macOS app or silently runs the Windows upgrade after the current process exits. The Release channel remains separate from this Dev S3 update channel.
+Desktop packages produced from `dev` retain product version `1.0.2`; the short Git hash is stored separately as `buildHash`. They are published as `packages/video-agents-mac-v1.0.2.zip` (Apple Silicon arm64) and `packages/video-agents-win-v1.0.2.zip` (Windows x64, containing the NSIS installer). A Dev client reads the same index on every launch and prompts only when `desktop.mac/win.buildHash` differs from its embedded build hash. On approval it verifies and downloads the versioned ZIP referenced by the index, then replaces the macOS app or silently runs the Windows upgrade after the current process exits. The Release channel remains separate from this Dev S3 update channel.
 
 When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, Volta, and pnpm locations. Existing `claude`, `codex`, and `kimi` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client.
 

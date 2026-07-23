@@ -7,7 +7,7 @@
 迁移遵循两个边界：
 
 1. 视频创作领域保持稳定。`agents/`、`modules/`、`code/` 及 `data/` 不因产品外壳重构而改名或搬迁。
-2. 产品接口重新定义。所有对外能力只通过有类型、可生成 OpenAPI 的 `/api/v1` 暴露，旧 `/api/*` 路径直接返回 404。
+2. 产品接口使用 `/api/v1` 暴露，旧 `/api/*` 路径直接返回 404；除 URL 外，WebUI 沿用原服务的请求方法、请求体和响应行为。
 
 ## 运行架构
 
@@ -26,7 +26,7 @@ flowchart LR
 
 浏览器模式下，`apps/web/server.py` 原样提供原 WebUI 静态资源，并把 `/api/v1` 反向代理到独立的 `services/api`，因此请求天然同源，不需要 CORS。Electron 不实现第二套静态服务或代理，只负责启动同一个 Python Web 网关并打开其 URL；也可让该网关代理 `VIDEOAGENTS_API_URL` 指定的远程 API。
 
-`apps/web/static` 是从旧 `webui/static` 完整迁入的唯一界面源码。HTML 结构、CSS、图片与多语言资源不再经过 Vue/Vite 重建，仅将页面 JavaScript 的请求改为正式 `/api/v1` 定义。浏览器和 Electron 消费同一 URL 服务，体验不会因客户端分叉。
+`apps/web/static` 是从旧 `webui/static` 完整迁入的唯一界面源码。HTML 结构、CSS、图片与多语言资源不再经过 Vue/Vite 重建，仅修改页面 JavaScript 使用的 API URL；请求方法、请求体、响应处理、轮询和 SSE 行为保持原样。浏览器和 Electron 消费同一 URL 服务，体验不会因客户端分叉。
 
 ## 目录职责
 
@@ -78,10 +78,10 @@ tests/             Python 产品接口、领域完整性和版本管理测试
 
 - 唯一公开前缀：`/api/v1`。
 - OpenAPI：`/api/v1/openapi.json`，交互文档：`/api/v1/docs`。
-- 请求/响应使用 Pydantic Schema 描述；客户端不再调用 Python 内部函数或旧路由。
-- 运行、人工确认和事件序列持久化到 SQLite；SSE 支持 `Last-Event-ID`/`after` 断线续传。
+- WebUI 通信契约沿用原 `webui/server.py`：读取使用 GET，状态变更使用 POST（线稿删除仍使用原 DELETE），请求体与响应结构保持不变，只有 URL 迁移到 `/api/v1`。
+- 运行、人工确认和事件记录持久化到 SQLite；SSE 与原 WebUI 一样只推送当前连接后的实时事件，持久化字段不会注入前端事件载荷。
+- `apps/web/server.py` 使用非缓冲读取转发 SSE。不能使用等待填满固定缓冲区的 `read(size)`，否则运行、聊天和线稿事件会滞留到刷新页面后才通过普通 GET 显示。
 - `data/projects/` 始终是视频项目的资源目录，不会迁入数据库。SQLite 只存控制面状态，不存小说、图片、音视频或剪辑工程资产。
-- 生成服务密钥读取时会被清空显示，提交空值不会覆盖现有密钥。
 
 ## 调度器与独立 Worker 的取舍
 
@@ -107,13 +107,14 @@ Codex 参数中的 `--skip-git-repo-check` 只是第三方 CLI 的运行选项�
 - Web：没有 Node 编译步骤；`python apps/web/check.py`（或 `npm run build:web`）校验静态资源完整性及 API 路径，运行入口为 `videoagents-web`。
 - Desktop：`npm run build:desktop` 编译 Electron 主进程；`electron-builder` 只将 Electron、Web 网关和业务后端生成 macOS DMG/ZIP、Windows NSIS/portable，不包含 Python。
 - Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。`dev` 分支 push 只构建 macOS arm64 与 Windows x64，并上传到 `s3://agentics-prod/packages/python/`。
-- Dev Desktop：产品版本固定为 `1.0.1`；同一次 `dev` workflow 构建 macOS arm64 ZIP 和 Windows x64 NSIS，再规范化为 `packages/video-agents-mac.zip` 与 `packages/video-agents-win.zip`。短 hash 作为独立的 `buildHash`，与 `version`、URL、大小和 SHA-256 一起写入索引的 `desktop.mac`/`desktop.win`。
+- Agent 插件：官方声明式插件随服务端发布在 `backend/plugins/`；用户上传插件写入 `VIDEOAGENTS_DATA_DIR/plugins/`，不会修改只读的 Desktop App。插件通过 `/api/v1/plugins` 安装、启停和删除，动态注册的 Agent 与工作流继续使用同一运行状态、审批和事件 API。
+- Dev Desktop：产品版本固定为 `1.0.2`；同一次 `dev` workflow 构建 macOS arm64 ZIP 和 Windows x64 NSIS，再规范化为 `packages/video-agents-mac-v1.0.2.zip` 与 `packages/video-agents-win-v1.0.2.zip`。短 hash 作为独立的 `buildHash`，与 `version`、URL、大小和 SHA-256 一起写入索引的 `desktop.mac`/`desktop.win`。
 - GitHub Actions：Pull Request 验证类型和构建；`v*` 标签分别构建 macOS arm64 和 Windows x64，并上传 Release 资产。
 - 发布工作流支持可选签名密钥：macOS 使用 `MAC_CSC_LINK`/`MAC_CSC_KEY_PASSWORD` 及 Apple notarization secrets，Windows 使用 `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD`。未配置时仍可产出无签名测试包；面向普通用户发布及 macOS 自动更新时应配置签名。
 - 客户端安装包不包含 Python。首次启动若没有可用环境，客户端读取 `https://s3.agentics.world/packages/video-agents.json`，选择 `python.mac.<arch>` 或 `python.win.<arch>`，下载 `packages/python/macos-python-<version>-<arch>.zip` 或 Windows 对应包。
 - 独立运行时安装到用户数据目录 `python-runtimes/versions/<version>/`，由 `active.json` 选择。已有可用环境时启动不访问远程索引；只有首次安装或桌面菜单手动更新才检查。下载后必须通过大小、SHA-256、平台、架构、版本和目录越界校验。
 - GitHub Actions 只由 `dev` 分支 push 触发 Python 与 Dev Desktop 发布，使用 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY` 和 `us-west-2` 更新 `agentics-prod/packages/video-agents.json`；更新时保留该 JSON 中其他产品字段，先上传制品再切换索引。
-- 只有嵌入 `channel=dev` 的客户端每次启动检查 `desktop.buildHash`。构建 hash 不同时先询问用户；确认后校验下载包，退出当前程序，再由独立 helper 更新 macOS `.app` 或启动 Windows NSIS，避免覆盖运行中程序。产品版本始终显示 `1.0.1`，正式 Release 不消费 Dev 更新记录。
+- 只有嵌入 `channel=dev` 的客户端每次启动检查 `desktop.buildHash`。构建 hash 不同时先询问用户；确认后校验下载包，退出当前程序，再由独立 helper 更新 macOS `.app` 或启动 Windows NSIS，避免覆盖运行中程序。产品版本始终显示 `1.0.2`，正式 Release 不消费 Dev 更新记录。
 - 应用更新由 Electron updater 消费 GitHub Release。Python 运行时可以不更新 Electron 而单独切换版本；后端业务源码仍随应用发布，避免运行时依赖与业务协议漂移。API 大版本通过 URL 前缀演进。
 
 本阶段不提供 Docker 或 `deploy/` 目录。远程访问时直接运行 Python 服务，并由可信网络或外部网关负责 TLS；由于本版本不实现账户权限系统，不应把服务裸露到公网。

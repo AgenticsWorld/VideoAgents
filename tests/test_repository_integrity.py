@@ -63,6 +63,47 @@ def test_workflow_references_existing_agents():
     assert referenced == known
 
 
+def test_plugins_are_well_formed():
+    known_core = {
+        str(path.parent.relative_to(AGENTS))
+        for path in AGENTS.glob("*/*/SOUL.md")
+    }
+    seen_plugin_ids: set[str] = set()
+    manifests = sorted((ROOT / "plugins").glob("*/plugin.json"))
+    assert {path.parent.name for path in manifests} >= {
+        "derivative-fiction", "fusion-fiction",
+    }
+    for manifest_path in manifests:
+        plugin_dir = manifest_path.parent
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["name"] == plugin_dir.name
+        ids = [item["id"] if isinstance(item, dict) else item for item in manifest["agents"]]
+        assert ids
+        for agent_id in ids:
+            assert (plugin_dir / "agents" / agent_id / "SOUL.md").is_file()
+            assert agent_id not in known_core
+            assert agent_id not in seen_plugin_ids
+            seen_plugin_ids.add(agent_id)
+        for workflow_path in manifest.get("workflows", []):
+            workflow = yaml.safe_load((plugin_dir / workflow_path).read_text(encoding="utf-8"))
+            referenced: set[str] = set()
+
+            def collect(value):
+                if isinstance(value, dict):
+                    for key, child in value.items():
+                        if key == "agent" and isinstance(child, str):
+                            referenced.add(child)
+                        if key == "qa" and isinstance(child, list):
+                            referenced.update(item for item in child if isinstance(item, str) and "/" in item)
+                        collect(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        collect(child)
+
+            collect(workflow)
+            assert not referenced - known_core - set(ids)
+
+
 def test_release_tree_has_no_private_project_artifacts():
     assert not (ROOT / "runs").exists()
     assert not (ROOT / "qa" / "evidence").exists()
