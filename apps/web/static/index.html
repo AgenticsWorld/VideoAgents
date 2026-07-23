@@ -394,7 +394,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="4" style="display:none">
       <div id="npr-rows"></div>
-      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度</div>
+      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -516,7 +516,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
     <div id="rev-rows"></div>
-    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
   </div>

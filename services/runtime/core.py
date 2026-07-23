@@ -109,13 +109,16 @@ RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
-# 无状态服务型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
-# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)
+# 无状态服务型/扇出型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
+# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)。
+# 08-video-gen 为组级扇出工位(prompt/imagegen/videogen…每组一单,2026-07-23 纳入):
+# 组间依赖由 DAG depends_on 表达,不靠会话串行,同 agent 并发是 Phase 7 吞吐关键
 STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation"}
-STATELESS_PREFIXES = ("11-qa/",)
+STATELESS_PREFIXES = ("11-qa/", "08-video-gen/")
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
-# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token)
-CHAT_RESUME_LIMIT = 512 * 1024
+# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
+# 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
+CHAT_RESUME_LIMIT = 128 * 1024
 # 总制片(仅 workflow-orchestrator 一个,不随 DISPATCHERS 扩员生效)单独调低:
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
@@ -461,8 +464,9 @@ DEFAULT_GENCONFIG = {
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
-    # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立
-    "review": {k: 60 for k in (
+    # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
+    # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效
+    "review": {k: 0 for k in (
         "audio_quality", "character_consistency", "content_safety", "copyright",
         "logic", "timeline", "visual_quality", "worldview")},
     # 片头片尾设置(设置菜单「片头片尾」):三段包装的开关 + 片头/片尾自由文本要求,按项目独立
@@ -1187,11 +1191,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         brief = ""
     rv = ps.get("review") or {}
     review_lines = "\n".join(
-        f"- {label}(负责:{qa_agent}):{int(rv.get(key, 60))}"
+        f"- {label}(负责:{qa_agent}):{int(rv.get(key, 0))}"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items())
     # 当前 Agent 本身是某维度的 QA 时,单独点名其力度,避免它按 SOUL.md 固定阈值照旧执行
     own_review = "\n".join(
-        f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 60))},"
+        f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 0))},"
         f"按下方换算规则执行,而非 SOUL.md 固定阈值**"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items() if qa_agent == agent_id)
     if own_review:
@@ -1228,14 +1232,18 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
-各维度审核力度 0-100(默认 60=按文档既有阈值执行),当前项目取值:
+各维度审核力度 0-100(默认 0=不审核,用户在设置中调高才生效),当前项目取值:
 {review_lines}{own_review}
 力度换算规则(QA Agent 审核打分、orchestrator 派单与判闸门、evaluation 评分一律遵守):
 - **0:跳过该维度** —— orchestrator 不派该维度 QA 单;QA 被派到也不检查、不开缺陷单,报告只写 `"skipped": true`;闸门按通过处理
 - **1-39 宽松**:只拦 blocker;SOUL.md 中的分数合格线下调 10 分、比例上限翻倍;major/minor 记录在报告中但不拦、不强制返工
 - **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
 - **70-89 严格**:分数合格线上调 5 分、比例上限减半;blocker/major 均拦;minor 也要开缺陷单
-- **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵"""
+- **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵
+- **草稿迭代期一律按 0 执行(2026-07-23)**:上表力度只在 G0–G10 闸门判定前的闸门级审核生效——
+  草稿/迭代/返工阶段的逐单环节,orchestrator 不派各维度 QA 单,QA 被派到也按 0 处理;
+  判每个 G 闸门前,orchestrator 按上表力度对该闸门范围的产物统一补派 QA 审核(力度 0 的维度不补派),
+  缺陷清零机检照常。本条只约束各维度 QA 审核,evaluation 对工单的 acceptance 验收评分不受影响"""
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
