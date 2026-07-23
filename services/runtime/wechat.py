@@ -36,8 +36,11 @@ OUT_TEXT_LIMIT = 3000      # 微信单条文本上限裕量,超长截断并提�
 LONG_POLL_TIMEOUT_S = 45
 API_TIMEOUT_S = 15
 
-# 收发循环运行状态(设置页展示;不含敏感信息)
-RELAY: dict = {"last_error": "", "last_in": 0.0, "last_out": 0.0}
+# 收发循环运行状态(设置页展示;不含敏感信息)。
+# err_in/err_out 分通道记录,成功后各自清零;瞬时网络抖动(长轮询 SSL 断连等)
+# 会自动重试,连续 _ERR_IN_THRESHOLD 次失败才对用户展示,避免误解为不可用。
+RELAY: dict = {"err_in": "", "err_out": "", "last_in": 0.0, "last_out": 0.0}
+_ERR_IN_THRESHOLD = 3
 _WAKE = asyncio.Event()    # 绑定确认后立刻唤醒收循环,不等下一轮轮询
 
 
@@ -97,7 +100,8 @@ async def api_wechat_status():
         "contact": _contact_label(cfg),
         # ready=已能反向推送(微信端发过消息,拿到了 context_token)
         "ready": bool(cfg.get("context_token") and _contact_label(cfg)["user_id"]),
-        "relay": dict(RELAY),
+        "relay": {"last_error": RELAY["err_in"] or RELAY["err_out"],
+                  "last_in": RELAY["last_in"], "last_out": RELAY["last_out"]},
     }
 
 
@@ -148,14 +152,14 @@ async def api_wechat_bind_poll(qrcode: str):
         save_cfg({"bot_token": tok, "baseurl": (st.get("baseurl") or "").strip(),
                   "bound_at": time.time(), "contact": {}, "context_token": "",
                   "get_updates_buf": ""})
-        RELAY["last_error"] = ""
+        RELAY["err_in"] = RELAY["err_out"] = ""
         _WAKE.set()
     return {"status": status}
 
 
 async def api_wechat_unbind():
     save_cfg({})
-    RELAY["last_error"] = ""
+    RELAY["err_in"] = RELAY["err_out"] = ""
     return {"ok": True}
 
 
@@ -196,6 +200,7 @@ async def _forward_inbound(m: dict):
 
 
 async def _inbound_loop():
+    fails = 0
     while True:
         cfg = load_cfg()
         tok = cfg.get("bot_token")
@@ -215,13 +220,24 @@ async def _inbound_loop():
         except TimeoutError:
             continue                      # 长轮询无消息超时,正常重试
         except urllib.error.HTTPError as e:
-            RELAY["last_error"] = f"getupdates HTTP {e.code}"
-            await asyncio.sleep(30 if e.code in (401, 403) else 5)
+            if e.code in (401, 403):      # 凭证问题,自动重试无望,立即提示
+                RELAY["err_in"] = f"getupdates HTTP {e.code},绑定可能已失效,请尝试重新绑定"
+                await asyncio.sleep(30)
+            else:
+                fails += 1
+                if fails >= _ERR_IN_THRESHOLD:
+                    RELAY["err_in"] = f"getupdates 持续失败(HTTP {e.code})"
+                await asyncio.sleep(5)
             continue
         except Exception as e:  # noqa: BLE001
-            RELAY["last_error"] = f"getupdates 失败:{e}"
+            # 长轮询偶发 SSL 断连/网络抖动属正常,自动重试;连续多次失败才提示
+            fails += 1
+            if fails >= _ERR_IN_THRESHOLD:
+                RELAY["err_in"] = f"getupdates 持续失败:{e}"
             await asyncio.sleep(5)
             continue
+        fails = 0
+        RELAY["err_in"] = ""
 
         cfg = load_cfg()                  # 轮询期间可能已解绑
         if cfg.get("bot_token") != tok:
@@ -247,7 +263,7 @@ async def _inbound_loop():
             try:
                 await _forward_inbound(m)
             except Exception as e:  # noqa: BLE001
-                RELAY["last_error"] = f"转发微信消息给总制片失败:{e}"
+                RELAY["err_in"] = f"转发微信消息给总制片失败:{e}"
         if changed:
             save_cfg(cfg)
 
@@ -285,6 +301,7 @@ async def _send_to_wechat(text: str):
         {"msg": msg, "base_info": {"channel_version": CHANNEL_VERSION}},
         cfg["bot_token"], API_TIMEOUT_S)
     RELAY["last_out"] = time.time()
+    RELAY["err_out"] = ""
 
 
 async def _outbound_loop():
@@ -303,7 +320,8 @@ async def _outbound_loop():
             try:
                 await _send_to_wechat(f"{head}\n{text}")
             except Exception as e:  # noqa: BLE001
-                RELAY["last_error"] = f"推送到微信失败:{e}"
+                # 发送失败意味着这条消息丢了,值得提示;下次发送成功自动清除
+                RELAY["err_out"] = f"推送到微信失败:{e}"
     finally:
         core.HUB.unsubscribe(q)
 
