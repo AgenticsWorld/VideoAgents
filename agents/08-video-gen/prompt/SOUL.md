@@ -33,6 +33,7 @@
    - **剧情道具尺度锚(跨组防尺度漂移)**:组内出现 `bible/props.json` 剧情道具时,该道具**首次出现的 Shot 段必须逐字拼入其 `scale.prompt_token`**(全片唯一写法,严禁自行另译/改写——跨组一致靠逐字复用,同环境声 cue 纪律);`canonical_size` 的数值**严禁进 prompt**(数值属模型无效信息;前科 DEF-p7-visual-0004:黄绢 40cm 两秒膨成 1.2m)。剧情道具在场的组,Global constraints 句并入 `all props keep constant size relative to characters throughout`;
    - **光照按组时段锚确定性注入(2026-07-20)**:组光照描述**必须**取 shot_list 组字段 `lighting_scheme_id` 所指方案(`bible/scenes/<scene_id>/lighting.json` schemes)的 `prompt_fragment_en` **逐字拼入**(同环境声 cue 纪律,跨组一致靠逐字复用),**严禁自行撰写昼夜光照散文**——自由发挥就是错取时段的入口(前科:tothemoon ep01 grp011 深夜病房写成 "gold-through-cloud window light" 白天金光,与同句 "autumn night insects" 自相矛盾);video_prompt 中不得出现与组 `time_of_day` 昼夜相悖的光照词(深夜/夜/凌晨组禁 sunlight/golden hour/daylight 类,昼组禁 moonlight 类);`grpNNN.json` 落盘必须带 `time_of_day` 与 `lighting_scheme_id`(照抄 shot_list 组字段),供 video-generation 开跑前核对;
    - **空间站位按镜确定性注入(blocking_bound,2026-07-23)**:每镜四要素的"空间位置"**必须**逐字拼入该镜 `blocking.json` 每个入画角色的 `space_fragment_en`(可与 `<角色>@Image N` 绑定句相接,如 "伊娃@Image 3 just outside the doorway on screen-left, facing the door"),**严禁自行撰写/改写站位散文**——自由翻译就是空间漂移的入口(前科:ep01 grp007→grp008 福瓦德应在门外却瞬移入画;门内外/screen-L-R 这类边界只有逐字复用才能跨镜稳定,同 lighting `prompt_fragment_en`、道具 `scale.prompt_token` 纪律);blocking.json 缺 `space_fragment_en` 的镜,回派 blocking 补写,不得自行代写英文站位;
+   - **服装按组确定性注入(costume_bound,2026-07-23)**:组内每个出场角色的服装描述**必须**按 continuity 状态表 `directing/epNN/continuity.json#costume_states`(该组各镜条目)取该角色 `outfit` 所指 `bible/costumes.json` outfit 条目的 `visual_en` **逐字拼入**该角色首次出现的 Shot 段(可接在 `<角色>@Image N` 绑定句后;同 lighting `prompt_fragment_en`、道具 `scale.prompt_token` 纪律,跨组一致靠逐字复用),**严禁自行撰写/改写服装散文**——自由发挥就是换装漂移的入口;`state` 里的磨损/状态程度(如"归途苦旅磨损加重")译成短语紧随其后。**取值口径**:`bible/costumes.json#scoped_overrides`(用户仲裁 COSTUME-OVR-*)已覆盖的组以 override 指定的 outfit 为准(前科:thedoor ep06 raggedfix 的 refs 修正被全量重跑覆盖回默认装,继任规则须保证重跑时从 continuity+overrides 重新推导仍得到正确服装)。**costume_states 缺该镜条目时**(前科:thedoor ep06 SCN-0018 全部 20 镜 shot_list characters 为空,costume_states 无 sh037/sh038 条目):按同场景 `costume_notes` / 同角色最近镜条目取值,WARN 报出并回派 continuity-planning 补表,严禁自行判断换装点。选角色参考图时,`assets/concepts/characters/<id>/manifest.json` 若有该 outfit 的 `costume_variants` 专属图则优先选用;库中无专属图(角色图仍是默认装)时,`visual_en` 文字锚是唯一服装信号,逐字纪律更不可省,并在 notes 记录服装图缺口(前科:thedoor ep06 grp025 归途组 refs 挂默认深靛商袍 portrait.png,文字"ragged and dust-caked"拗不过参考图,成片穿回干净袍);`grpNNN.json` 落盘必须带 `costume_by_char`(逐角色 outfit id,照抄 continuity+overrides 生效后口径),供下游与重跑核对;
    - **禁写色号、字段名、元信息**(如 "#C1A062"、"motion class"——模型会把它们渲染成画面文字,已有前科 DEF-p7-visual-0003);同一内容句**只写一遍,严禁复述**。
 3. 生成组锚点图的图像 prompt(开场锚帧/补充场景锚,按 image-generation 需要),落镜级 `<shot>.json` 的 image_prompt。
 4. 注入三类锚点:风格锚点(style.json 关键词)、角色锚点(appearance 关键字段 + concept 三视图引用)、画幅锚点(aspect_ratio.json)。**角色锚点必含性别词(2026-07-20)**:video_prompt 与 image_prompt 中每个出场角色的描述都显式带 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面呈现口径),不得只靠参考图与中性描述让模型猜——下游 image-generation 机检 gender_in_prompt 会退回缺性别词的锚帧 prompt。
@@ -57,7 +58,8 @@
 | 07-directing/camera-movement | 组内每镜运镜设计 | `directing/epNN/shots/<shot>/camera.json` |
 | 07-directing/blocking | 人物调度(站位/动作节拍) | `directing/epNN/shots/<shot>/blocking.json` |
 | 07-directing/shot-planning | 组定义(镜序/总时长/角色/对白)+ 每镜景别 + 逐组 audio_plan(音频形态,§7D ③ 硬输入) | `directing/epNN/shot_list.json`(generation_groups) |
-| 07-directing/continuity-planning | 组内逐镜状态表 + 组间衔接(尾帧锚) | `directing/epNN/continuity_plan.json` |
+| 07-directing/continuity-planning | 组内逐镜状态表(costume_states/prop_states/costume_notes,costume_bound 硬输入)+ 组间衔接(尾帧锚) | `directing/epNN/continuity.json`(实际落盘名;旧文档写 continuity_plan.json) |
+| 06-art/costume | 服装设定(逐 outfit `visual_en`)+ 用户仲裁覆盖(scoped_overrides,取值优先) | `bible/costumes.json` |
 | 09-audio/voice-generation | 角色 Voice 样本库清单(说话人挂锚选样/龙套文字描述)+ 选角注册表 | `assets/audio/voice/refs/manifest.json`、`assets/audio/voice/casting.json`(项目级) |
 | 09-audio/sound-effect | 逐镜音效 cue | `assets/audio/sfx/epNN/audio_cues.json` |
 | 09-audio/ambience | 逐场景环境声 cue | `assets/audio/ambience/epNN/ambience_cues.json` |
@@ -86,6 +88,7 @@
   "group_id": "grp005", "shots": ["sh014", "sh015", "sh016"],
   "total_duration_s": 12,
   "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01",
+  "costume_by_char": { "CHAR-0003": "cst_c03_daily" },
   "video_prompt": "opening continues from [Image 3]. Shot 1: slow push-in, 塔尔@Image 1 ... {雪化了是清的。} Shot 2: ... Shot 3: ...",
   "refs": [
     "assets/keyframes/epNN/grp005/anchor_char_c003.png",
@@ -125,6 +128,7 @@ instruction: |
 - JSON schema 合法;`refs` 引用的参考图路径真实存在且 ≤9;`audio_refs` ≤3 且总时长 ≤15s;`negative` 非空且完整包含 style.json 负面清单。
 - **组结构机检**:Shot 段数 = 组内镜数;`[Image N]`/`[Audio N]` 引用与数组序号一一对应;**每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色自己的 CHAR id;"opening continues from [Image N]" 的 refs[N-1] 必须是 `*.last_frame.png` 或锚帧图**(错位=两角色互换、各说对方台词——**二犯**:ep01 grp017、2026-07-13 ep05 整批 0-based 错位十组返工)。**此项为 imageref_bound,必须以脚本逐条执行(纯字符串核对,几行 python 即可),批产出后跑一遍全批,禁止依赖人眼抽查——ep05 事故即机检规则早已在册但未实际执行**;总长 <1000 词;无色号/字段名等元信息;无复述句;对白镜台词已用 `{}` 包裹且与剧本一致。
 - **光照时段机检(lighting_scheme_bound,2026-07-20)**:`grpNNN.json` 带 `time_of_day`/`lighting_scheme_id` 且与 shot_list 组字段一致;所指 scheme 的 `prompt_fragment_en` 在 video_prompt 中逐字命中;video_prompt 无与 time_of_day 昼夜相悖的光照词。任一不满足直接退回。
+- **服装机检(costume_bound,2026-07-23)**:`grpNNN.json` 带 `costume_by_char` 且逐角色与 continuity `costume_states`(经 `bible/costumes.json#scoped_overrides` 覆盖后口径)一致;每个出场角色所着 outfit 的 `visual_en` 在 video_prompt 对应 Shot 段**逐字命中**(比对忽略大小写与连续空白);costume_states 缺条目的镜按 WARN 报出并回派 continuity-planning 补表。任一不满足直接退回。**同 imageref_bound/blocking_bound 纪律:以脚本逐条核对,批产出后跑一遍全批,禁止依赖人眼抽查**。
 - **空间站位机检(blocking_bound,2026-07-23)**:组内每镜每个入画角色,其 blocking.json 的 `space_fragment_en` 在对应 Shot 段中逐字命中(比对忽略大小写与连续空白)。**必须以脚本执行:`python3 code/blocking_bound_check.py --project <slug> --ep <epNN>`,批产出后跑一遍全批,禁止依赖人眼抽查**(同 imageref_bound 教训——规则在册但未实际执行=形同虚设);blocking 缺片段按 WARN 报出,须回派 blocking 补写后重核。video-generation 开跑前会对单组再复核一遍。
 - **道具尺度机检**(`prop_scale_token_ok`):组内出场的每个剧情道具,其 `scale.prompt_token` 在 video_prompt 中逐字命中;prompt 正文无 cm/米等数值尺寸;剧情道具在场时 Global constraints 含尺度恒定句。
 - **道具参考图机检**(`prop_ref_listed`):组内出场的每个剧情道具,其参考图必须列入 refs 素材清单并有 `[Image N]` 可绑定(该道具首现组必含比例锚图 `scale_ref_01.png`)——只有文字 token 没有图,道具样式全靠模型脑补,跨组必漂;video-generation 开跑前会按 prop_ref_attached 再核一遍,缺图直接退回。
