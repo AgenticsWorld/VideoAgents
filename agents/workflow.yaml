@@ -235,8 +235,8 @@ phases:
           condition: defect_assigned, validation: { auto: [original_defect_recheck] } }
       - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation],
           validation: { auto: [target_resolution_ok] } }
-      - { id: g7, gate: true, scope: episode, depends_on: [p7-upscale],
-          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }
+      - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale],
+          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「视频预览」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
 
   - id: p8
     name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成,
