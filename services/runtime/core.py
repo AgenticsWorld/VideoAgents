@@ -473,6 +473,9 @@ DEFAULT_GENCONFIG = {
     "packaging": {"intro_enabled": True, "intro_notes": "",
                   "outro_enabled": True, "outro_notes": "",
                   "teaser_enabled": True},
+    # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
+    # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
+    "versioning": {"enabled": False},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定
     "ui_language": "",
@@ -593,7 +596,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
 # 生成模型/Agent模型 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
-PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging")
+PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging", "versioning")
 
 
 def project_settings_path(project: str) -> Path:
@@ -652,6 +655,11 @@ def _validate_packaging(p: dict):
                 raise ServiceError(400, f"packaging.{k} must be a string")
             if len(p[k]) > 2000:
                 raise ServiceError(400, "Intro/outro requirement text too long (max 2000 chars)")
+
+
+def _validate_versioning(v: dict):
+    if "enabled" in v and not isinstance(v["enabled"], bool):
+        raise ServiceError(400, "versioning.enabled must be a boolean")
 
 
 def _validate_review(r: dict):
@@ -1244,6 +1252,12 @@ def build_role_prompt(agent_id: str, project: str) -> str:
   草稿/迭代/返工阶段的逐单环节,orchestrator 不派各维度 QA 单,QA 被派到也按 0 处理;
   判每个 G 闸门前,orchestrator 按上表力度对该闸门范围的产物统一补派 QA 审核(力度 0 的维度不补派),
   缺陷清零机检照常。本条只约束各维度 QA 审核,evaluation 对工单的 acceptance 验收评分不受影响"""
+    p += ("\n\n## 用户版本管理设定(Web 客户端「版本管理」页开关,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 的版本化要求)\n"
+          + ("- 版本管理:**开启** —— 照常执行既有版本化纪律:任务关单时通知 00-orchestration/version 登记产物,闸门通过后下达冻结指令"
+             if (ps.get("versioning") or {}).get("enabled") else
+             "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
+             "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
+             "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -3235,7 +3249,8 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
-                       "review": "审核设置", "packaging": "片头片尾"}
+                       "review": "审核设置", "packaging": "片头片尾",
+                       "versioning": "版本管理"}
 
 
 async def api_projconfig_set(body: dict):
@@ -3248,6 +3263,7 @@ async def api_projconfig_set(body: dict):
     _validate_output(cfg.get("output") or {})
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
+    _validate_versioning(cfg.get("versioning") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))

@@ -1035,4 +1035,7 @@ window.I18N_DICT = {
 "安装失败:": "Falha na instalação: ",
 "删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复": "Excluir o plugin {name}? Seu diretório será removido do disco (artefatos já gerados nos projetos são mantidos). Esta ação não pode ser desfeita",
 "cat·衍生创作": "Criação derivada",
+"是否启用版本管理": "Ativar o gerenciamento de versões",
+"默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效": "Desligado por padrão: o workflow não emite ordens de trabalho para o agente de gerenciamento de versões (registro de artefatos por lote e congelamento de gates são pulados); ao ativar, vale para as tarefas emitidas depois, com registro/congelamento como de costume. Vale apenas para o projeto atual",
+"✓ 已保存,对之后派发的任务生效": "✓ Salvo; vale para as tarefas emitidas depois",
 };

@@ -1035,4 +1035,7 @@ window.I18N_DICT = {
 "安装失败:": "Cài đặt thất bại: ",
 "删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复": "Xóa plugin {name}? Thư mục sẽ bị xóa khỏi đĩa (sản phẩm đã tạo trong dự án được giữ lại). Không thể hoàn tác",
 "cat·衍生创作": "Sáng tác phái sinh",
+"是否启用版本管理": "Bật quản lý phiên bản",
+"默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效": "Mặc định tắt: Workflow không phát lệnh công việc cho agent quản lý phiên bản (bỏ qua đăng ký sản phẩm theo lô và đóng băng cổng); khi bật sẽ áp dụng cho các tác vụ phát sau đó, đăng ký/đóng băng như bình thường. Chỉ áp dụng cho dự án hiện tại",
+"✓ 已保存,对之后派发的任务生效": "✓ Đã lưu, áp dụng cho các tác vụ phát sau",
 };

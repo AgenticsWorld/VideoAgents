@@ -1035,4 +1035,7 @@ window.I18N_DICT = {
 "安装失败:": "Install failed: ",
 "删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复": "Delete plugin {name}? Its directory will be removed from disk (artifacts already generated in projects are kept). This cannot be undone",
 "cat·衍生创作": "Derivative Fiction",
+"是否启用版本管理": "Enable version management",
+"默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效": "Off by default: the workflow does not dispatch work orders to the version-management agent (per-batch artifact registration and gate freezing are skipped); once enabled it applies to tasks dispatched afterwards, with registration/freezing as usual. Applies to the current project only",
+"✓ 已保存,对之后派发的任务生效": "✓ Saved; applies to tasks dispatched afterwards",
 };

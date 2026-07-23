@@ -1035,4 +1035,7 @@ window.I18N_DICT = {
 "安装失败:": "Installation fehlgeschlagen: ",
 "删除插件 {name}?插件目录将从磁盘移除(项目内已生成的产物保留),该操作不可恢复": "Plugin {name} löschen? Das Verzeichnis wird von der Festplatte entfernt (bereits erzeugte Artefakte in Projekten bleiben erhalten). Nicht rückgängig machbar",
 "cat·衍生创作": "Abgeleitete Kreation",
+"是否启用版本管理": "Versionsverwaltung aktivieren",
+"默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效": "Standardmäßig aus: Der Workflow erteilt dem Versionsverwaltungs-Agent keine Arbeitsaufträge (Artefakt-Registrierung pro Batch und Gate-Einfrieren entfallen); nach dem Aktivieren gilt es für danach erteilte Aufgaben, mit Registrierung/Einfrieren wie üblich. Gilt nur für das aktuelle Projekt",
+"✓ 已保存,对之后派发的任务生效": "✓ Gespeichert; gilt für danach erteilte Aufgaben",
 };
