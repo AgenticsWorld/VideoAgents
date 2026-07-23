@@ -5,6 +5,7 @@ import {ChildProcess, spawn, spawnSync} from 'node:child_process'
 import {existsSync, mkdirSync} from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
+import net from 'node:net'
 import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
 import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
@@ -14,8 +15,9 @@ import {
 import {desktopExecutablePath} from './shell-environment'
 
 let webServer: ChildProcess | undefined
-const webPort = process.env.VIDEOAGENTS_WEB_PORT || '8630'
-const webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || `http://127.0.0.1:${webPort}`
+let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
+let apiPort = process.env.VIDEOAGENTS_API_PORT || ''
+let webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || ''
 let window: BrowserWindow | undefined
 let mainWindowWasCreated = false
 let activeRuntime: PythonRuntime | undefined
@@ -45,6 +47,34 @@ function webRoot(): string {
 
 function backendRoot(): string {
   return app.isPackaged ? path.join(process.resourcesPath, 'backend') : path.resolve(webRoot(), '../..')
+}
+
+async function findAvailablePort(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : undefined
+      server.close(error => {
+        if (error) reject(error)
+        else if (port) resolve(String(port))
+        else reject(new Error('未能分配本地端口'))
+      })
+    })
+  })
+}
+
+async function ensureLocalPorts(): Promise<void> {
+  if (process.env.VIDEOAGENTS_WEB_URL) return
+  if (!webPort) webPort = await findAvailablePort()
+  if (!apiPort) {
+    do {
+      apiPort = await findAvailablePort()
+    } while (apiPort === webPort)
+  }
+  webOrigin = `http://127.0.0.1:${webPort}`
 }
 
 async function requestOk(url: string): Promise<boolean> {
@@ -117,6 +147,7 @@ async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
 }
 
 async function ensureWebServer(): Promise<void> {
+  await ensureLocalPorts()
   if (await healthy()) return
   if (process.env.VIDEOAGENTS_WEB_URL) throw new Error(`Web 服务不可用：${webOrigin}`)
 
@@ -136,7 +167,7 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_DATA_DIR: dataRoot,
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,
-    VIDEOAGENTS_API_PORT: process.env.VIDEOAGENTS_API_PORT || '8640',
+    VIDEOAGENTS_API_PORT: apiPort,
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
     cwd: backend,
