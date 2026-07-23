@@ -94,10 +94,10 @@
   "audio_refs": ["assets/audio/voice/refs/CHAR-0003_voiceprint.mp3",
                  "assets/audio/voice/refs/CHAR-0004_voiceprint.mp3"],
   "negative": ["style.json 负面清单项", "通用畸变负面词", "no duplicate/twin characters"],
-  "anchors": { "style": ["..."], "character": { "<char_id>": "..." }, "aspect": "16:9@1920x1080" }
+  "anchors": { "style": ["..."], "character": { "<char_id>": "..." }, "aspect": "16:9@2560x1440" }
 }
 ```
-注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 1 场景 + 前组尾帧);`audio_refs`:对白组=组内每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;**实测总时长 ≤15.2s=方舟硬限,机检 audioref_total_le_15s——样本规格 ≤5s/段(§8A),发现超长样本先报 voice-generation 重出/截短,超限提交任务创建即 400 InvalidParameter,前科 tothemoon 2026-07-20 两段 ~12s 合计 24.1s 被拒**);
+注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 1 场景 + 前组尾帧),且每张须 ≥3,686,400 像素=火山视频接口硬限(anchors.aspect 分辨率一律 16:9=2560x1440 / 9:16=1440x2560,严禁按视频草稿分辨率降档;前科 2026-07-23:854x480 被拒);`audio_refs`:对白组=组内每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;**实测总时长 ≤15.2s=方舟硬限,机检 audioref_total_le_15s——样本规格 ≤5s/段(§8A),发现超长样本先报 voice-generation 重出/截短,超限提交任务创建即 400 InvalidParameter,前科 tothemoon 2026-07-20 两段 ~12s 合计 24.1s 被拒**);
 prompt 内 `[Image N]`/`[Audio N]` 序号必须与数组顺序严格一致(genmedia 按此顺序发送):**1-based,N = 下标 + 1,refs[0]=[Image 1]——按 0-based 下标编号是既成事故模式(ep05 全批错位,说话人互换),自查口诀:`@Image N` 指向的 refs[N-1] 路径里必须能看到该角色自己的 CHAR id**。
 
 ## 接受的工作指令(Work Order)

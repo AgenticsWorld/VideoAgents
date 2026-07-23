@@ -715,7 +715,7 @@ python3 modules/genmedia.py info
 python3 modules/genmedia.py image \
   --prompt "<英文正向 prompt>" --negative "<负面词>" \
   --output assets/keyframes/ep01/sh014/first_01.png \
-  --aspect 16:9 \                       # 或 --size 1280x720 精确尺寸
+  --aspect 16:9 \                       # 或 --size 2560x1440 精确尺寸(供视频参考的图须 ≥3,686,400 像素=火山硬限)
   --ref assets/concepts/characters/c003/front.png \  # 参考图可多张(角色三视图/场景概念图)
   --n 4                                 # 候选张数,>1 时自动加 _01.._04 后缀
 
@@ -732,6 +732,8 @@ python3 modules/genmedia.py video \
   --return-last-frame assets/clips/ep01/grp005.last_frame.png \
   --duration 15 --aspect 16:9 --resolution <按「输出设置」草稿/成片档>
 # 注意:--ref(≤9 张,建议 4–5)与 --first-frame/--last-frame 互斥;
+#      参考图/首尾帧每张须 ≥3,686,400 像素=火山硬限(16:9 最小 2560x1440、9:16 为 1440x2560;
+#      2026-07-23 实测 854x480 提交即拒)——锚点图严禁按视频草稿分辨率(480p 等)出小图;
 #      Seedance 2.0 时长须 [4,15] 整数秒或 -1(模型自定),不支持 --seed。
 
 # 生成视频(单镜首尾帧图生视频;兜底路径,组生成不达标时逐镜重做)
