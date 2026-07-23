@@ -162,6 +162,15 @@ def safe_slug(name, default: str = "demo") -> str:
     return re.sub(r"[^\w\-]", "-", str(name or default))
 
 
+
+
+def require_project_slug(name) -> str:
+    """Accept a project name, never a relative or absolute filesystem path."""
+    value = str(name or "")
+    if not value or len(value) > 80 or not re.fullmatch(r"[\w-]+", value):
+        raise ServiceError(400, "project must be a name, not a directory path")
+    return value
+
 def safe_agent(agent: str) -> str:
     """agent id 白名单校验(恒为「类别/名字」两段),防路径遍历。"""
     if not re.fullmatch(r"[\w\-]+/[\w\-]+", agent or ""):
@@ -1154,11 +1163,19 @@ def _fmt_num(x) -> str:
     return str(int(f)) if f == int(f) else str(f)
 
 
+def project_prompt_path(project: str) -> str:
+    """Return the persistent project path used in CLI-agent instructions."""
+    return (PROJECTS_DIR / safe_slug(project)).resolve().as_posix()
+
+
 def build_role_prompt(agent_id: str, project: str) -> str:
     soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
         encoding="utf-8"
     )
-    proj_rel = f"data/projects/{project}"
+    # Dispatched agents run with ROOT as their cwd so they can access bundled
+    # code and workflow files. A relative data/projects path would therefore
+    # write into the installation directory instead of VIDEOAGENTS_DATA_DIR.
+    proj_rel = project_prompt_path(project)
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
     out = ps.get("output") or {}
@@ -1309,6 +1326,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 services/runtime/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
+- IMPORTANT: `--project` accepts only the project slug (`{project}`), never `data/projects/...` or an absolute directory path.
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
   显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
@@ -4018,7 +4036,7 @@ async def api_run_progress(run_id: str, body: dict):
 # ---------------- 用户确认(重跑/跳过等) ----------------
 
 
-def notify_user(text: str):
+def _notify_user_macos(text: str):
     """macOS 本机通知(失败静默):人工确认/签字等待是全天最大空转来源,主动喊人。"""
     try:
         subprocess.Popen(
@@ -4026,6 +4044,37 @@ def notify_user(text: str):
              f'display notification {json.dumps(text[:120], ensure_ascii=False)} '
              f'with title "VideoAgents" sound name "Glass"'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+def notify_user(text: str):
+    """Send a native macOS/Windows notification; fail silently."""
+    message = text[:120]
+    try:
+        if os.name == "nt":
+            payload = base64.b64encode(message.encode("utf-8")).decode("ascii")
+            script = f"""
+$message = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$null = [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
+$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template)
+$nodes = $xml.GetElementsByTagName('text')
+$null = $nodes.Item(0).AppendChild($xml.CreateTextNode('VideoAgents'))
+$null = $nodes.Item(1).AppendChild($xml.CreateTextNode($message))
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('VideoAgents').Show($toast)
+""".strip()
+            encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+            subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-NonInteractive",
+                 "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                 "-EncodedCommand", encoded],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        elif sys.platform == "darwin":
+            _notify_user_macos(message)
     except Exception:
         pass
 
@@ -4088,7 +4137,7 @@ async def api_confirm_answer(cid: str, body: dict):
 async def api_chat(body: dict):
     agent = safe_agent(body.get("agent", ""))
     message = (body.get("message") or "").strip()
-    project = safe_slug(body.get("project"))
+    project = require_project_slug(body.get("project"))
     model = body.get("model") or None
     engine = (body.get("engine") or "").lower()
     if not engine:      # 调用方未指定引擎:回退顶栏全局的服务端副本,而非硬编码 claude
@@ -4132,6 +4181,24 @@ async def api_chat(body: dict):
 def _kill_proc_tree(proc):
     """杀整个进程组(claude/codex 及其派生的 bash/dispatch 子进程)。"""
     import signal
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["taskkill.exe", "/pid", str(proc.pid), "/t", "/f"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if result.returncode == 0:
+                return
+        except OSError:
+            pass
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return
+
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except Exception:
