@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 立项(p0-init):为小说 `<slug>` 初始化 `data/projects/<slug>/` 目录,读 `workflow.yaml` 生成 `<项目目录>/runs/dag.json`,按 `for_each` 维度(episode/shot/character/scene/platform)扇出任务实例,登记全部工单。**dag.json 必须严格按 WORKFLOW.md §3.2 的规范结构落盘(顶层 `nodes` 列表、节点用 `id`,禁止自创 `tasks`/`task_id` 等变体)**;生成后与每次修改后必须运行 `python3 services/runtime/dagcheck.py --project <slug> --strict` 自检通过,否则不得视为完成。
+1. 立项(p0-init):为小说 `<slug>` 初始化 `data/projects/<slug>/` 目录,读 `workflow.yaml` 生成 `<项目目录>/runs/dag.json`,按 `for_each` 维度(chapter_batch/episode/shot/character/scene/platform)扇出任务实例,登记全部工单(chapter_batch 待 p0-scan 产出 `story/chapter_manifest.json` 并通过校验后展开为 `p0-parse-bNN`)。**dag.json 必须严格按 WORKFLOW.md §3.2 的规范结构落盘(顶层 `nodes` 列表、节点用 `id`,禁止自创 `tasks`/`task_id` 等变体)**;生成后与每次修改后必须运行 `python3 services/runtime/dagcheck.py --project <slug> --strict` 自检通过,否则不得视为完成。
 2. 派单:依赖满足即解锁任务,按 WORKFLOW.md §6 统一格式生成工单;派发前触发 `context`(hook: before_dispatch)组装 Context Package,并把 `acceptance`(auto / eval_rubric / qa)按 workflow.yaml 填全。
 3. 跟踪与重试:收 `<项目目录>/runs/<task_id>/result.json` 回执;机检或评分不过则 `attempt+1` 附上次失败原因退回,最多 `max_retries: 3`(publisher 特例为 2),仍不过按 `on_fail: escalate_human` 升级人工。
 4. **收尾钩子(on_task_complete)**:每个任务关单时依次 (a) 校验 `<项目目录>/runs/<task_id>/` 四件套齐备(context.md / result.json / eval.json / meta.json,见 WORKFLOW.md §6.1),meta.json 由我写入(run_id、attempt、model、实际 tokens、起止 ISO 时间戳、输入 sha256、产物版本);(b) 确认 version 已实时登记全部产物;(c) 更新 `<项目目录>/runs/dag.json` 对应节点 `state`/`run_id`。三步未完成不得关单;dag.json 与 gate 文件、runs/ 产物不一致是我的调度缺陷。
@@ -67,7 +67,8 @@ agent: 00-orchestration/workflow-orchestrator
 instruction: |
   为小说 <slug> 立项:初始化 data/projects/<slug>/ 目录结构,
   按 workflow.yaml 生成全流程 DAG(runs/dag.json),登记全部工单;
-  episode / shot 级任务待 episode_plan / shot_list 产出后再扇出实例化。
+  chapter_batch / episode / shot 级任务待 chapter_manifest / episode_plan /
+  shot_list 产出后再扇出实例化。
 ```
 
 ## 质量标准(Definition of Done)

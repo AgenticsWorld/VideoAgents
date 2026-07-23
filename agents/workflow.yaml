@@ -1,7 +1,8 @@
 # workflow.yaml — 小说→视频流水线 DAG(机器可读)
 # 与 WORKFLOW.md 保持同步;WORKFLOW.md 是人读权威,本文件是 orchestrator 的执行输入。
 # 约定:
-#   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台)
+#   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台,
+#             chapter_batch=每章节批——p0 解析扇出,批清单来自 story/chapter_manifest.json)
 #   validation.auto      机器校验(schema/指标),不过直接退回
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
@@ -33,17 +34,33 @@ phases:
         agent: 00-orchestration/memory-bible
         depends_on: [p0-init]
         outputs: [bible/]
-      - id: p0-parse
+      # p0 解析走「分章 map + 全局 merge」(2026-07-23 改版,治整本单任务上下文溢出):
+      # scan 产章节批清单 → parse 按批并行结构化 → merge 机械拼装出总表。
+      # 不设字数阈值分支——短篇就是少数几批,统一走这条路;粒度由 scan 的分批逻辑控制。
+      - id: p0-scan
         agent: 01-story/novel-parser
         depends_on: [p0-init]
-        outputs: [story/structured_story.json]
+        outputs: [story/chapter_manifest.json]
         validation:
-          auto: [schema, chapter_coverage_100, speaker_missing_lt_2pct]
+          auto: [schema, chapter_files_coverage_100, batch_word_count_in_range]
+      - id: p0-parse
+        agent: 01-story/novel-parser
+        for_each: chapter_batch      # 按 chapter_manifest.batches 实例化(p0-parse-bNN)
+        depends_on: [p0-scan]
+        outputs: ["story/structured_story/"]   # 本批各章分片 chNNN.json,每章一文件
+        validation:
+          auto: [schema, batch_chapter_coverage_100, speaker_missing_lt_2pct]
           rubric: extraction_v1
           threshold: 85
+      - id: p0-merge
+        agent: 01-story/novel-parser
+        depends_on: [p0-parse]
+        outputs: [story/structured_story.json]   # 下游契约不变:仍产总表;分片保留供按章裁剪
+        validation:
+          auto: [schema, chapter_coverage_100, ids_unique_across_shards, speaker_missing_lt_2pct]
       - id: g0
         gate: true
-        depends_on: [p0-parse, p0-bible-init, p0-version-init]
+        depends_on: [p0-merge, p0-bible-init, p0-version-init]
 
   - id: p1
     name: 剧情理解

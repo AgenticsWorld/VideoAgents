@@ -29,8 +29,9 @@
 data/projects/<slug>/
 ├── novel/          # 输入:小说原文(按章节)
 ├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)与音乐(music/,见下方约定)
-├── story/          # structured_story.json, story_graph.json, events.json,
-│                   # story_timeline.json, episodes/ep01/screenplay.md ...
+├── story/          # chapter_manifest.json(章节批清单), structured_story.json(总表),
+│                   # structured_story/(chNNN.json 章节分片,供按章裁剪), story_graph.json,
+│                   # events.json, story_timeline.json, episodes/ep01/screenplay.md ...
 ├── bible/          # 世界圣经:world.json, timeline.json, geography.json, religion.json,
 │                   # culture.json, politics.json, economy.json, cultivation.json,
 │                   # dictionary.json, characters/<id>/*.json, creatures/, scenes/,
@@ -162,7 +163,7 @@ refs/
 3. **补录回填**:若展开时该集已有既往工单(历史修复场景),按 `runs/<task_id>/` 实际记录回填节点 `state` 与 `run_id`,changelog 标注 `backfill`。
 4. **一致性机检**:episode_plan 中的每个 epNN 在 DAG 中必须至少有一个节点;未完结的 epNN 必须存在可跑或待签节点。任一不满足即视为调度缺陷(同 §6.1 三方不一致)。Web 控制台空转看门狗会对「plan 有集、DAG 无节点」自动告警并唤醒 orchestrator 补展开。
 
-同理,`dynamic_expansion` 的其余维度(shot/组、character、scene、platform)在对应索引产物冻结后按需展开,粒度至少到能让「依赖已满足的待办节点」反映真实前沿为止。
+同理,`dynamic_expansion` 的其余维度(chapter_batch、shot/组、character、scene、platform)在对应索引产物冻结后按需展开(chapter_batch 在 `story/chapter_manifest.json` 通过 p0-scan 校验后展开为 `p0-parse-bNN`),粒度至少到能让「依赖已满足的待办节点」反映真实前沿为止。
 
 ### 3.2 dag.json 规范格式(强制)
 
@@ -215,7 +216,11 @@ refs/
 | workflow-orchestrator | 为小说 `<slug>` 立项:初始化目录、生成全流程 DAG、登记全部工单 | 小说原文、本文档、workflow.yaml | `<项目目录>/runs/dag.json`、工单队列 | 机检:DAG 无环、每个任务的依赖/产物路径合法 |
 | version | 初始化项目版本库,登记基线 | 项目目录 | 版本库 + changelog | 机检:能记录/回滚任一产物 |
 | memory-bible | 初始化空 Bible 骨架与写入规则 | 项目目录 | `bible/` 骨架 | 机检:骨架 schema 齐全 |
-| novel-parser | 解析全书:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式) | `novel/` | `story/structured_story.json` | 机检:schema 通过;章节覆盖率 100%;对白说话人缺失率 <2%。评分:extraction_v1 ≥85。QA:抽样 3 章人工比对原文 |
+| novel-parser(p0-scan) | 扫描 `novel/` 章节文件并分批:整章归组,每批 1–1.5 万字,短章合并、超长章独立成批,**不拆章** | `novel/`(仅目录与字数,不读正文) | `story/chapter_manifest.json` | 机检:schema;章节文件覆盖率 100%;批字数在目标区间 |
+| novel-parser(p0-parse,每章节批并行) | 解析本批章节:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式);跨批指代判不准标 UNKNOWN | 本批章节原文、chapter_manifest | `story/structured_story/chNNN.json`(每章一分片) | 机检:分片 schema;本批章节覆盖率 100%;说话人缺失率 <2%。评分:extraction_v1 ≥85(按批)。QA:抽样 3 章人工比对原文 |
+| novel-parser(p0-merge) | 按 manifest 顺序把分片机械拼装为总表;只拼装校验不改写,分片缺漏退回对应批 | 全部章节分片、chapter_manifest | `story/structured_story.json`(下游契约不变;分片保留) | 机检:总表 schema;全书章节覆盖率 100%(章数+总字数与 `novel/` 对账);ID 全局唯一;全书 UNKNOWN <2% |
+
+> 分章 map + 全局 merge(2026-07-23 改版):治整本单任务「原文+产物」上下文溢出;不设字数阈值分支,短篇即少数几批,统一走此路,粒度由 p0-scan 分批逻辑控制。
 
 **G0 闸门**:structured_story 通过全部校验,后续任务才解锁。
 
