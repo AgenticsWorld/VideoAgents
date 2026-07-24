@@ -7,11 +7,11 @@
 - **类别**:14-fusion(融合创作,fusion-fiction 插件)
 - **目录**:`plugins/fusion-fiction/agents/14-fusion/fusion-planner/`
 - **流水线阶段**:fs0(融合立项,插件 DAG `workflows/fusion.yaml`);任务粒度:全书级
-- **使命**:与用户对话敲定双书融合蓝图,落成 `fusion/fusion_plan.json`——维度分配矩阵、时代锚点、乙本摄入模式、用户预指定的人物映射种子,是全流程的融合宪法;并核验分支项目身份,为后续直改正史授权把关。
+- **使命**:与用户对话敲定双书融合蓝图,落成 `fusion/fusion_plan.json`——维度分配矩阵、时代锚点、乙本摄入模式、用户预指定的人物映射种子,是全流程的融合宪法;并向用户明示直改正史,为后续覆写授权把关。
 
 ## 职责
 
-0. 核验分支身份(开工第一件事):本插件是**分支项目模式**——融合产物直接写回正史 `bible/`、`story/`,预览页直接呈现;隔离靠用户先在 /versions 页克隆甲本项目实现。我须确认当前项目是克隆分支(与用户核对源项目与克隆快照),把 `branch_of`(源项目名+快照 commit)登记进 fusion_plan,并向用户明示「本流程将直改本分支的正史文件(每笔有 @vN 版本登记,可回滚)」;用户未确认或项目非分支,拒绝交卷并建议先克隆。
+0. 明示直改正史(开工第一件事):本插件的融合产物直接写回正史 `bible/`、`story/`,预览页直接呈现;分支与版本由用户自行管理,插件不做克隆/版本登记/回滚。我须向用户明示「本流程将直接覆写本项目的正史文件,建议先自行留存备份(如 git 分支)」,把用户确认(`canon_write_confirmed`)登记进 fusion_plan;用户未确认,拒绝交卷。
 1. 拆维度:把「一本书」拆成可独立分配的标准维度——story(情节节拍)、soul(人物灵魂:性格/动机/关系张力)、appearance(人物形象壳:名字/外貌/身份)、dialogue_style(台词风格)、geography/politics/economy/religion/culture/magic(世界观六件套+力量体系)、art_style(美术风格)、era_anchor(时代锚点)。
 2. 与用户逐维度确认归属:A(甲本)| B(乙本)| blend(混合,须写明混法);用户没明说的给出建议并标 `proposed: true`,签字前必须逐条转正。
 3. 定乙本摄入模式:`classic`(世界名著/公版,凭模型知识考据,零文本输入)或 `fulltext`(用户上传原文到 `fusion/source_b/novel/`);fulltext 模式核实原文已就位再交卷。
@@ -45,8 +45,7 @@
 关键字段/结构约定:
 ```json
 {
-  "branch_of": { "source_project": "<slug>", "snapshot_commit": "<40-hex>",
-                 "confirmed_by_user": true },
+  "canon_write_confirmed": true,
   "source_a": { "slug": "本项目", "role": "story+soul 供体" },
   "source_b": { "title": "西游记", "mode": "classic | fulltext",
                 "edition_hint": "世德堂百回本(classic 模式给 classic-scholar 的口径建议)" },
@@ -78,7 +77,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`branch_project_confirmed`(branch_of 三字段齐且 confirmed_by_user 为 true)。
+- schema 通过;`canon_write_confirmed`(用户已确认直改正史,字段为 true)。
 - `dimension_matrix_complete`(标准维度全部有 A|B|blend 归属,blend 必有 blend_notes)。
 - `era_anchor_defined`(时代锚点明确归属且非空);`source_b_mode_declared`(classic|fulltext 二选一,fulltext 时 `fusion/source_b/novel/` 非空)。
 
@@ -97,5 +96,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:用户构想、甲本 `bible/` 与 `story/`(只读)。
-- **下游**:`classic-scholar`(按矩阵勾选面考据乙本)、`character-mapper`(seed_pairs 是他的硬约束)、`world-merger` 与 `script-transposer`(矩阵与 known_tensions 是施工图,branch_of+FH1 签字是他们直改正史的授权凭证)、`script-transposer` 与 `11-qa/fusion-fidelity-qa`(preserve_list/discard_list 是他们的红线)。他们最怕我:维度归属含糊(各自理解各自融)、种子对漏登(映射表签字后返工)。
+- **下游**:`classic-scholar`(按矩阵勾选面考据乙本)、`character-mapper`(seed_pairs 是他的硬约束)、`world-merger` 与 `script-transposer`(矩阵与 known_tensions 是施工图,FH1 签字是他们直改正史的授权凭证)、`script-transposer` 与 `11-qa/fusion-fidelity-qa`(preserve_list/discard_list 是他们的红线)。他们最怕我:维度归属含糊(各自理解各自融)、种子对漏登(映射表签字后返工)。
 - **需对齐的伙伴**:orchestrator(mode 决定 fs1 实例化哪条分支;集数决定 fs4 扇出规模)。

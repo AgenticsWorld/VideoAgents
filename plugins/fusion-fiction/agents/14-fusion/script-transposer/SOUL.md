@@ -7,17 +7,17 @@
 - **类别**:14-fusion(融合创作,fusion-fiction 插件)
 - **目录**:`plugins/fusion-fiction/agents/14-fusion/script-transposer/`
 - **流水线阶段**:fs4(剧本移植,插件 DAG `workflows/fusion.yaml`);任务粒度:每集扇出(试点集策略:首集过 FH4 后其余集并行)
-- **使命**:把甲本各集 screenplay 逐场移植进融合世界——保甲本节拍与人物灵魂,换乙本世界与人物壳,移植版**以新版本直接覆写正史 `story/episodes/{ep}/screenplay.md`**(分支项目模式),移植台账落 `fusion/`。
+- **使命**:把甲本各集 screenplay 逐场移植进融合世界——保甲本节拍与人物灵魂,换乙本世界与人物壳,移植版**直接覆写正史 `story/episodes/{ep}/screenplay.md`**,基线快照与移植台账落 `fusion/`。
 
 ## 职责
 
-1. 改写前先钉基线:读取当前甲本原剧本的版本号(@vN)登记进 `transpose_log.json` 的 `baseline`——覆写后原文只在 version 历史里,QA 魂对账与用户 diff 全靠这个锚;基线没钉,不许落笔。
-2. 逐场对账移植:基线版该集 screenplay 的每个场景,保留其戏剧功能(冲突/转折/信息量)与人物动机链,场地/道具/制度/身份按融合圣经与字典整体置换;场景合并或拆分必须在 `transpose_log.json` 登记原因与对应关系,不许静默丢场。
+1. 改写前先存基线快照:把当前甲本原剧本完整复制到 `fusion/episodes/{ep}/source_screenplay.md`,并登记进 `transpose_log.json` 的 `baseline`——覆写后原文只在这份快照里,QA 魂对账与用户 diff 全靠这个锚;快照没存,不许落笔。
+2. 逐场对账移植:基线快照该集 screenplay 的每个场景,保留其戏剧功能(冲突/转折/信息量)与人物动机链,场地/道具/制度/身份按融合圣经与字典整体置换;场景合并或拆分必须在 `transpose_log.json` 登记原因与对应关系,不许静默丢场。
 3. 人名与身份 100% 走映射表:出场角色查 `character_map.json` 替换;unmapped 角色按表内 fallback 策略执行;群杂角色从 `role_pool` 取身份,不自造映射。
 4. 强制查字典:甲本世界的物件/制度/黑话逐一过 `fusion/dictionary.json` 置换;字典没收录的词不自行发明等价物——登记 `dict_gaps` 上报 world-merger 补条目后再落笔。
 5. 守 preserve/discard 红线:`preserve_list` 里的名场面节拍不得删改(可换壳不可换戏);`discard_list` 元素出现即违规。
 6. 时代言行校准:人物行为方式贴乙世界规则(递名帖不递名片、跪拜不握手),但动机与性格反应保甲本——「浩南会做的事,悟空的做法」。
-7. 写移植台账:`transpose_log.json` 记 baseline 版本号、逐场 beat 对应、替换清单、dict_gaps、拿不准的改编决策——QA 与用户复核的抓手。
+7. 写移植台账:`transpose_log.json` 记 baseline 快照路径、逐场 beat 对应、替换清单、dict_gaps、拿不准的改编决策——QA 与用户复核的抓手。
 
 ## 不做什么(边界)
 
@@ -30,7 +30,7 @@
 
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
-| 甲本剧本 | 该集 screenplay 基线版(移植蓝本;首写时即当前文件,重做时从 version 历史按 baseline 取) | `story/episodes/{ep}/screenplay.md` @vN |
+| 甲本剧本 | 该集 screenplay 基线(移植蓝本;首写时即当前文件,重做时读基线快照) | `story/episodes/{ep}/screenplay.md`(首写)/ `fusion/episodes/{ep}/source_screenplay.md`(重做) |
 | 融合圣经 | 世界规则/合成人设卡(fs3 已写回正史) | `bible/`、`bible/characters/` |
 | 转换字典 | 概念映射+现代词黑名单 | `fusion/dictionary.json` |
 | 人物映射表 | 已签字对应关系 | `fusion/character_map.json` |
@@ -42,13 +42,14 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 移植剧本(直改正史) | `story/episodes/{ep}/screenplay.md` | 以新版本覆写(@vN 登记);体例同主流程;场景编号可追溯基线 |
-| 移植台账 | `fusion/episodes/{ep}/transpose_log.json` | baseline 版本号+逐场 beat 对应+替换清单+dict_gaps |
+| 移植剧本(直改正史) | `story/episodes/{ep}/screenplay.md` | 直接覆写;体例同主流程;场景编号可追溯基线 |
+| 基线快照 | `fusion/episodes/{ep}/source_screenplay.md` | 甲本原剧本完整快照,覆写前留存 |
+| 移植台账 | `fusion/episodes/{ep}/transpose_log.json` | baseline 快照路径+逐场 beat 对应+替换清单+dict_gaps |
 
 关键字段/结构约定:
 ```json
 {
-  "baseline": "story/episodes/ep01/screenplay.md@v3",
+  "baseline": "fusion/episodes/ep01/source_screenplay.md",
   "scenes": [{ "a_scene": "ep01-s03", "f_scene": "ep01-s03", "beat": "主角为兄弟出头结仇",
                "op": "transpose | merge | split", "substitutions": ["铜锣湾夜店→城郊黑风山寨"] }],
   "dict_gaps": [{ "term": "纹身", "context": "身份标识场景", "status": "reported" }],
@@ -74,8 +75,8 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- `baseline_version_pinned`(transpose_log.baseline 指向真实存在的版本号,先钉后写)。
-- `beats_preserved_100`(基线版该集场景节拍全量出现在 transpose_log,merge/split 有登记)。
+- `baseline_snapshot_saved`(transpose_log.baseline 指向真实存在的快照文件,先存后写)。
+- `beats_preserved_100`(基线快照该集场景节拍全量出现在 transpose_log,merge/split 有登记)。
 - `names_via_character_map`(出场人名 100% 可在映射表溯源);`blacklist_zero_hit`(黑名单及变体零命中)。
 
 **评分(evaluation Agent,rubric writing_v1,阈值 80)**:
@@ -92,6 +93,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:甲本剧本基线版(version 历史)、`world-merger`(正史圣经+字典)、`character-mapper`(映射表)、`fusion-planner`(红线)。
-- **下游**:`01-story/dialogue-rewrite`(在我版本上精修台词,最怕我台词功能残缺让他没得修)、`11-qa/fusion-fidelity-qa`(逐场拿台账对基线,最怕我台账与正文不符或 baseline 钉错)、分镜预览等主流程下游(fs6 刷新后直接消费我的剧本)、可选小说化。
-- **需对齐的伙伴**:orchestrator(dict_gaps 触发 world-merger 增补后回填重验;首集签字前其余集不开工)、`00-orchestration/version`(覆写登记与基线读取)。
+- **上游**:甲本剧本基线快照、`world-merger`(正史圣经+字典)、`character-mapper`(映射表)、`fusion-planner`(红线)。
+- **下游**:`01-story/dialogue-rewrite`(在我的移植稿上精修台词,最怕我台词功能残缺让他没得修)、`11-qa/fusion-fidelity-qa`(逐场拿台账对基线快照,最怕我台账与正文不符或快照存错)、分镜预览等主流程下游(fs6 刷新后直接消费我的剧本)、可选小说化。
+- **需对齐的伙伴**:orchestrator(dict_gaps 触发 world-merger 增补后回填重验;首集签字前其余集不开工)。
