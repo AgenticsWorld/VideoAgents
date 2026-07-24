@@ -3,14 +3,14 @@
 # 节点 id 前缀 fs/gf,不与主流程 p*/g*、derivative-fiction nv*/gn* 冲突;
 # orchestrator 把本 DAG 节点并入项目 runs/dag.json 统一跟踪。
 #
-# ⚠️ 分支项目模式(本插件的特殊授权,覆盖 §10.3.5 的命名空间默认纪律):
-#   本流程**只能在融合分支项目里运行**——用户先在 /versions 页对甲本项目某快照点「克隆」,
-#   得到 <slug>-<时间戳> 分支项目,融合流程在分支里把产物**直接写回正史路径**
-#   (bible/、story/episodes/),让人物/世界观/场景/分镜等全部预览页直接呈现融合结果;
-#   甲本原项目零改动,隔离由克隆保证。
-#   安全托底:fs0 必须核实并登记分支身份(branch_of),FH1 签字项含「确认在分支项目直改正史」;
-#   每次正史改写走 version 服务登记新版本(@vN),可在 /versions 页 diff 与回滚;
-#   fusion/ 仅存过程件(矩阵/映射表/字典/台账/乙本档案)。
+# ⚠️ 直改正史(本插件的特殊授权,覆盖 §10.3.5 的命名空间默认纪律):
+#   融合流程把产物**直接写回正史路径**(bible/、story/episodes/),
+#   让人物/世界观/场景/分镜等全部预览页直接呈现融合结果。
+#   分支与版本由用户自行管理(插件不做克隆/版本登记/回滚,建议开工前自行留存备份如 git 分支);
+#   FH1 签字项含「确认直改本项目正史」;
+#   剧本覆写前 script-transposer 先存甲本原剧本快照(fusion/episodes/{ep}/source_screenplay.md),
+#   QA 魂对账与用户对照以该快照为基线;
+#   fusion/ 仅存过程件(矩阵/映射表/字典/台账/基线快照/乙本档案)。
 #
 # 前置(plugin.json requires):甲本已跑完主流程 p0–p3 与 p5(bible/ 冻结、各集 screenplay 就绪)。
 # 乙本原文(全文模式)由用户放 fusion/source_b/novel/(按章节,格式同主流程 novel/);名著模式留空。
@@ -32,16 +32,16 @@ phases:
       - id: fs0-plan
         agent: 14-fusion/fusion-planner
         outputs: [fusion/fusion_plan.json]
-        # branch_project_confirmed:当前项目为克隆分支(branch_of 登记源项目与克隆快照 commit),
-        #   与用户明确确认「在本分支直改正史」;非分支项目一律拒绝开工;
+        # canon_write_confirmed:与用户明确确认「本流程直改本项目正史(bible/、story/),
+        #   版本管理自理」,确认登记进 fusion_plan;未确认一律拒绝开工;
         # dimension_matrix_complete:全部维度(story/soul/appearance/dialogue_style/geography/
         #   politics/economy/religion/culture/magic/art_style/era_anchor)各有归属 A|B|blend;
         # source_b_mode_declared:乙本摄入模式 classic|fulltext 二选一,fulltext 须确认原文已就位
         validation:
-          auto: [schema, branch_project_confirmed, dimension_matrix_complete,
+          auto: [schema, canon_write_confirmed, dimension_matrix_complete,
                  era_anchor_defined, source_b_mode_declared]
           rubric: creative_v1
-      - { id: gf0, gate: true, human: true, checkpoint: FH1-融合蓝图与分支确认签字,
+      - { id: gf0, gate: true, human: true, checkpoint: FH1-融合蓝图签字,
           depends_on: [fs0-plan] }
 
   - id: fs1
@@ -103,40 +103,41 @@ phases:
         # 正史改写范围:矩阵标 B|blend 的维度文件(geography/politics/economy/religion/culture/
         #   cultivation/world…)、合成人设卡(bible/characters/<id>/ 魂字段保甲本、壳字段换乙本,
         #   index.json 人名同步)、术语并入 bible/dictionary.json;标 A 的维度文件不动。
-        # versions_registered_per_file:每个被改写的正史文件均经 version 服务登记新版本(@vN);
+        # rewrite_manifest_present:被改写的正史文件清单(含来源标注)完整记入 result.json;
         # dimension_matrix_applied:每个维度产物可溯源到矩阵声明的来源(A|B|blend);
         # blacklist_nonempty:fusion/dictionary.json 含现代词黑名单(时代错位扫描词表);
         # fused_cards_per_mapping:character_map 每条 locked|suggested 映射对应一张合成人设卡
         validation:
-          auto: [schema, versions_registered_per_file, dimension_matrix_applied,
+          auto: [schema, rewrite_manifest_present, dimension_matrix_applied,
                  canon_refs_valid, blacklist_nonempty, fused_cards_per_mapping]
           rubric: creative_v1
           qa: [11-qa/world-consistency-qa]
       - { id: gf3, gate: true, human: true, checkpoint: FH3-融合圣经与转换字典签字,
           depends_on: [fs3-merge] }
-        # 签字前即可在预览页(世界观/人物)直接查看融合结果;不满意可退回或在 /versions 回滚
+        # 签字前即可在预览页(世界观/人物)直接查看融合结果;不满意可退回重做
 
   - id: fs4
-    name: 剧本移植            # ★ 直改正史:移植版以新版本覆盖 story/episodes/{ep}/screenplay.md;
+    name: 剧本移植            # ★ 直改正史:移植版直接覆写 story/episodes/{ep}/screenplay.md;
     depends_on: [gf3]         # 试点集策略:首集走通并过 FH4 后,其余集方可批量并行
     for_each: episode          # 按甲本 story/episode_plan.json 实例化(fs4-transpose-epNN / fs4-dialogue-epNN)
     tasks:
       - id: fs4-transpose
         agent: 14-fusion/script-transposer
-        outputs: ["story/episodes/{ep}/screenplay.md", "fusion/episodes/{ep}/transpose_log.json"]
-        # baseline_version_pinned:改写前甲本原剧本版本号(@vN)登记进 transpose_log,
-        #   QA 魂对账与用户 diff 均以该基线为准(正史被覆盖后基线从 version 历史取);
-        # beats_preserved_100:对账基线版场景节拍全量保留(合并/拆分须在 transpose_log 登记);
+        outputs: ["story/episodes/{ep}/screenplay.md", "fusion/episodes/{ep}/source_screenplay.md",
+                  "fusion/episodes/{ep}/transpose_log.json"]
+        # baseline_snapshot_saved:改写前把甲本原剧本完整快照存 fusion/episodes/{ep}/source_screenplay.md
+        #   并登记进 transpose_log.baseline,QA 魂对账与用户 diff 均以该快照为准;
+        # beats_preserved_100:对账基线快照场景节拍全量保留(合并/拆分须在 transpose_log 登记);
         # names_via_character_map:出场人名 100% 走映射表(unmapped 角色按表内 fallback 策略);
         # blacklist_zero_hit:现代词黑名单零命中
         validation:
-          auto: [baseline_version_pinned, beats_preserved_100, names_via_character_map,
+          auto: [baseline_snapshot_saved, beats_preserved_100, names_via_character_map,
                  blacklist_zero_hit]
           rubric: writing_v1
       - id: fs4-dialogue
         agent: 01-story/dialogue-rewrite
         depends_on: [fs4-transpose]
-        outputs: ["story/episodes/{ep}/screenplay.md"]   # 台词打磨版以新版本落同路径(version 管理)
+        outputs: ["story/episodes/{ep}/screenplay.md"]   # 台词打磨版直接覆写同路径
         validation:
           auto: [no_plot_change, blacklist_zero_hit]
           rubric: writing_v1
@@ -154,7 +155,7 @@ phases:
           outputs: [qa/reports/fusion/world.json],     pass: blocker_eq_0 }
       - { id: fs5-char,     agent: 11-qa/character-consistency-qa,   # 对照合成人设卡
           outputs: [qa/reports/fusion/character.json], pass: score_gte_85 }
-      - { id: fs5-fidelity, agent: 11-qa/fusion-fidelity-qa,     # 全剧粒度:甲魂保真(基线取 version 历史)+乙壳完整
+      - { id: fs5-fidelity, agent: 11-qa/fusion-fidelity-qa,     # 全剧粒度:甲魂保真(基线取 fusion/episodes/ 快照)+乙壳完整
           outputs: [qa/reports/fusion/fidelity.json],  pass: score_gte_80 }
       - { id: fs5-copyright, agent: 11-qa/copyright,             # 甲本多为在版权作品,融合产物风险必审
           outputs: [qa/reports/fusion/copyright.json], pass: all_assets_licensed }
@@ -176,4 +177,4 @@ phases:
       - { id: fs6-handoff, agent: 00-orchestration/workflow-orchestrator,
           outputs: [fusion/novelize_brief.json] }
 
-# 贯穿型服务与主流程一致(context/evaluation/version/memory-bible/orchestrator 钩子),见 agents/workflow.yaml services 段
+# 贯穿型服务与主流程一致(context/evaluation/memory-bible/orchestrator 钩子),见 agents/workflow.yaml services 段

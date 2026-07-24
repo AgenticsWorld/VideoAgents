@@ -159,7 +159,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dropdown-box a:hover{background:var(--panel);color:var(--accent)}
 .dropdown-box a:first-child{border-radius:8px 8px 0 0}
 .dropdown-box a:last-child{border-radius:0 0 8px 8px}
-/* 二级子菜单(Agent模型):悬停向左弹出 */
+/* 二级子菜单(模型策略):悬停向左弹出 */
 .dd-sub{position:relative}
 .dd-sub-menu{display:none;position:absolute;right:100%;top:-1px;min-width:160px}
 /* RTL(阿拉伯语):设置按钮在屏幕左侧,下拉与二级子菜单改为向右弹出,否则出屏无法选择 */
@@ -225,21 +225,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <button id="settings-btn" title="全局设置">⚙️</button>
     <div class="dropdown"><div class="dropdown-box">
       <div class="dd-sub">
-        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ Agent模型</a>
+        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ 模型策略</a>
         <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
           <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
-          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">智能claudecode</a>
-          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">智能codex</a>
+          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">Claude 智能分配</a>
+          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
       <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
-      <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
+      </div>
+      <div class="dd-sub">
+        <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
+        <div class="dd-sub-menu dropdown-box">
+          <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
+          <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
+        </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
@@ -292,7 +298,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="plug-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🧩 Agent 插件</h3>
-    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
+    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
     <div id="plug-list" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"><div class="empty">读取中…</div></div>
     <div class="err" id="plug-err"></div>
     <div class="actions">
@@ -322,7 +328,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">保存后仅对该 Agent 生效,优先级高于右上角全局设置(总制片显式 --engine/--model 派单除外);图像/视频各渠道参数在 🎨 生成模型 页配置</div>
     <div class="err" id="am-err"></div>
     <div class="actions">
-      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「Agent模型」策略默认" style="margin-right:auto">恢复策略默认</button>
+      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「模型策略」默认" style="margin-right:auto">恢复策略默认</button>
       <button id="am-cancel">取消</button>
       <button class="primary" id="am-ok">保存</button>
     </div>
@@ -394,7 +400,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="4" style="display:none">
       <div id="npr-rows"></div>
-      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度</div>
+      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -516,7 +522,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
     <div id="rev-rows"></div>
-    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
   </div>
@@ -561,7 +567,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
     </div>
+    <div class="row"><label>防止系统休眠</label>
+      <input type="checkbox" id="wdt-awake" style="width:auto">
+      <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
     <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
+    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
   </div>
@@ -596,7 +607,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 const $=s=>document.querySelector(s);
 let AGENTS=[], CURRENT=null, RUNS={}, LIVE={}; // LIVE[run_id] = 当前流式 DOM 节点
 let AGENT_MODELS={defaults:{},overrides:{}};   // Agent 级模型配置(/api/v1/agents/models)
-let AM_MODE='global';                          // 「Agent模型」策略(设置菜单子菜单)
+let AM_MODE='global';                          // 「模型策略」(设置菜单子菜单)
 
 function uiConfirm(message){
   return new Promise(resolve=>{
@@ -630,7 +641,7 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'智能claudecode',smart_codex:'智能codex'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配'};
 
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['sonnet','sonnet'],['claude-fable-5','fable-5'],
@@ -1153,6 +1164,13 @@ async function openWdtModal(){
     const w=await api('/api/v1/watchdog/policy');
     $('#wdt-range').value=w.threshold;$('#wdt-num').value=w.threshold;
     $('#wdt-idle').value=w.idle_minutes||5;
+    $('#wdt-awake').checked=!!w.keep_awake;
+    $('#wdt-awake').disabled=!w.keep_awake_supported;
+    const st=$('#wdt-awake-st');
+    if(!w.keep_awake_supported){st.textContent=t('当前系统不支持(仅 macOS/Windows)');st.style.color='var(--dim)'}
+    else if(w.keep_awake_active){st.textContent=t('✓ 防休眠生效中');st.style.color='var(--green)'}
+    else if(w.keep_awake){st.textContent=t('未生效(没有项目开启自动运行)');st.style.color='var(--dim)'}
+    else st.textContent='';
   }catch(e){$('#wdt-range').value=80;$('#wdt-num').value=80;$('#wdt-idle').value=5}
   $('#wdt-modal').style.display='flex';
   api('/api/v1/resources/usage').then(u=>{                       // 用量探测慢,异步填充不挡弹窗
@@ -1174,7 +1192,7 @@ $('#wdt-ok').onclick=async()=>{
   const idle=parseInt($('#wdt-idle').value);
   if(!(idle>=1&&idle<=720)){$('#wdt-err').textContent='闲置时间需为 1-720 的整数(分钟)';return}
   try{
-    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle});
+    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle,keep_awake:$('#wdt-awake').checked});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
@@ -1310,6 +1328,16 @@ renderResources();
 setInterval(renderResources,600000);                   // 每 10 分钟自动刷新
 
 async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
+function currentWebPort(){return location.port||({http:'80',https:'443'}[location.protocol.replace(':','')]||'')}
+async function updateConnTitle(connected){
+  const base=connected?t('实时连接状态'):'连接断开';
+  let text=base+` · Web:${currentWebPort()||'?'}`;
+  try{
+    const info=await api('/api/v1/runtime');
+    text=base+` · Web:${info.web?.port||currentWebPort()||'?'} · API:${info.api?.port||info.api?.origin||'?'}`;
+  }catch(e){}
+  $('#conn').title=text;
+}
 
 /* ---------- Agent 列表 ---------- */
 // SOUL.md 标题是「中文名(English Name)」双语:按界面语言只显示一种。
@@ -1407,7 +1435,7 @@ function fmtTs(ts){
 function appendMsg(role,text,meta={}){
   const m=$('#messages'); const empty=m.querySelector('.empty'); if(empty)empty.remove();
   const d=document.createElement('div'); d.className='msg '+role;
-  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知'};
+  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
   if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
@@ -1442,7 +1470,7 @@ $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.pre
   }
 })();
 
-/* ---------- 设置菜单:Agent模型 策略 ---------- */
+/* ---------- 设置菜单:模型策略 ---------- */
 function renderAmMode(){
   document.querySelectorAll('#am-mode-menu a').forEach(a=>{
     const on=a.dataset.ammode===AM_MODE;
@@ -1490,7 +1518,7 @@ function updateModelBtn(){
   if(!CURRENT)return;
   $('#btn-models').textContent=t('模型')+' · '+amLabel(CURRENT);
   $('#btn-models').title=(AGENT_MODELS.overrides[CURRENT]?t('该 Agent 已单独配置')
-    :I18N.f('「Agent模型」策略默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
+    :I18N.f('「模型策略」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
     +t('(点击修改;优先级高于右上角全局)');
 }
 function amPopulateModels(engine,selected){
@@ -1522,7 +1550,7 @@ function openAmModal(){
   amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
   amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
-  $('#am-note').textContent=I18N.f('该 Agent 策略默认(Agent模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
+  $('#am-note').textContent=I18N.f('该 Agent 策略默认(模型策略:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
   $('#am-modal').style.display='flex';
@@ -1638,8 +1666,8 @@ setInterval(()=>{if(Object.values(RUNS).some(r=>['queued','running'].includes(r.
 /* ---------- SSE ---------- */
 function connect(){
   const es=new EventSource('/api/v1/events');
-  es.onopen=()=>$('#conn').classList.add('ok');
-  es.onerror=()=>{$('#conn').classList.remove('ok');es.close();setTimeout(connect,2000)};
+  es.onopen=()=>{$('#conn').classList.add('ok');updateConnTitle(true)};
+  es.onerror=()=>{$('#conn').classList.remove('ok');updateConnTitle(false);es.close();setTimeout(connect,2000)};
   es.onmessage=e=>{
     const ev=JSON.parse(e.data);
     if(ev.type==='run'){RUNS[ev.run.id]=ev.run;renderRuns();renderAgents()}

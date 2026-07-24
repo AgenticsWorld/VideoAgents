@@ -109,13 +109,16 @@ RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
-# 无状态服务型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
-# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)
+# 无状态服务型/扇出型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
+# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)。
+# 08-video-gen 为组级扇出工位(prompt/imagegen/videogen…每组一单,2026-07-23 纳入):
+# 组间依赖由 DAG depends_on 表达,不靠会话串行,同 agent 并发是 Phase 7 吞吐关键
 STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation"}
-STATELESS_PREFIXES = ("11-qa/",)
+STATELESS_PREFIXES = ("11-qa/", "08-video-gen/")
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
-# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token)
-CHAT_RESUME_LIMIT = 512 * 1024
+# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
+# 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
+CHAT_RESUME_LIMIT = 128 * 1024
 # 总制片(仅 workflow-orchestrator 一个,不随 DISPATCHERS 扩员生效)单独调低:
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
@@ -161,6 +164,15 @@ def safe_slug(name, default: str = "demo") -> str:
     """项目名统一清洗:非 [字母数字_-] 一律替换为 '-'。"""
     return re.sub(r"[^\w\-]", "-", str(name or default))
 
+
+
+
+def require_project_slug(name) -> str:
+    """Accept a project name, never a relative or absolute filesystem path."""
+    value = str(name or "")
+    if not value or len(value) > 80 or not re.fullmatch(r"[\w-]+", value):
+        raise ServiceError(400, "project must be a name, not a directory path")
+    return value
 
 def safe_agent(agent: str) -> str:
     """agent id 白名单校验(恒为「类别/名字」两段),防路径遍历。"""
@@ -210,8 +222,8 @@ STATE = load_state()
 # ---------------- Agent 插件机制(声明式,详见 WORKFLOW.md §10 与 plugins/README.md) ----------------
 # 插件 = plugins/<name>/ 目录:plugin.json(manifest)+ agents/<类别>/<名字>/SOUL.md
 # (+ 可选 workflows/*.yaml 独立流程 DAG)。纯声明式——插件不含可执行代码,SOUL.md 即身份,
-# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认启用),
-# 启停状态记 state.json 的 plugins_disabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
+# 派单/评审/闸门与内置 Agent 同等待遇;复制目录进 plugins/ 即安装(默认停用,须在
+# 「插件」页手动启用),启用名单记 state.json 的 plugins_enabled 列表。manifest 用 JSON:服务端零 yaml 依赖。
 BUNDLED_PLUGINS_DIR = ROOT / "plugins"
 PLUGINS_DIR = Path(os.environ.get(
     "VIDEOAGENTS_PLUGINS_DIR", DATA_DIR / "plugins"
@@ -310,7 +322,7 @@ def list_plugins(refresh: bool = False) -> list[dict]:
                     seen[a["id"]] = pdir.name
                     kept.append(a)
             info["agents"] = kept
-            info["enabled"] = pdir.name not in set(STATE.get("plugins_disabled") or [])
+            info["enabled"] = pdir.name in set(STATE.get("plugins_enabled") or [])
             info["active"] = info["enabled"] and not info["errors"]   # 有 errors 的插件不注册
             plugins.append(info)
     _PLUGINS_CACHE = (time.time() + _PLUGINS_CACHE_TTL, plugins)
@@ -448,7 +460,7 @@ DEFAULT_GENCONFIG = {
     },
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
-    # 「Agent模型」策略(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
+    # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
@@ -461,14 +473,18 @@ DEFAULT_GENCONFIG = {
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
-    # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立
-    "review": {k: 60 for k in (
+    # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
+    # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效
+    "review": {k: 0 for k in (
         "audio_quality", "character_consistency", "content_safety", "copyright",
         "logic", "timeline", "visual_quality", "worldview")},
     # 片头片尾设置(设置菜单「片头片尾」):三段包装的开关 + 片头/片尾自由文本要求,按项目独立
     "packaging": {"intro_enabled": True, "intro_notes": "",
                   "outro_enabled": True, "outro_notes": "",
                   "teaser_enabled": True},
+    # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
+    # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
+    "versioning": {"enabled": False},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定
     "ui_language": "",
@@ -587,9 +603,9 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 
 
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
-# 生成模型/Agent模型 为全局配置(genconfig.json/agentmodels.json);
+# 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
-PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging")
+PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging", "versioning")
 
 
 def project_settings_path(project: str) -> Path:
@@ -650,6 +666,11 @@ def _validate_packaging(p: dict):
                 raise ServiceError(400, "Intro/outro requirement text too long (max 2000 chars)")
 
 
+def _validate_versioning(v: dict):
+    if "enabled" in v and not isinstance(v["enabled"], bool):
+        raise ServiceError(400, "versioning.enabled must be a boolean")
+
+
 def _validate_review(r: dict):
     for k, v in (r or {}).items():
         if k not in REVIEW_DIMENSIONS:
@@ -665,7 +686,7 @@ def _validate_review(r: dict):
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
-# 「Agent模型」策略(genconfig.agentmodel_mode,设置菜单「Agent模型」子菜单切换):
+# 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
@@ -707,7 +728,7 @@ AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
-    """按「Agent模型」策略给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
+    """按「模型策略」给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
     if mode is None:
         mode = load_genconfig().get("agentmodel_mode") or "global"
     tier = AM_AGENT_TIERS.get(agent_id) \
@@ -725,7 +746,7 @@ def load_agentmodels() -> dict:
 
 
 def agent_model_config(agent_id: str) -> dict:
-    """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「Agent模型」策略默认。"""
+    """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「模型策略」默认。"""
     ov = load_agentmodels().get(agent_id)
     return ov if isinstance(ov, dict) else default_agent_model(agent_id)
 
@@ -1154,11 +1175,19 @@ def _fmt_num(x) -> str:
     return str(int(f)) if f == int(f) else str(f)
 
 
+def project_prompt_path(project: str) -> str:
+    """Return the persistent project path used in CLI-agent instructions."""
+    return (PROJECTS_DIR / safe_slug(project)).resolve().as_posix()
+
+
 def build_role_prompt(agent_id: str, project: str) -> str:
     soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
         encoding="utf-8"
     )
-    proj_rel = f"data/projects/{project}"
+    # Dispatched agents run with ROOT as their cwd so they can access bundled
+    # code and workflow files. A relative data/projects path would therefore
+    # write into the installation directory instead of VIDEOAGENTS_DATA_DIR.
+    proj_rel = project_prompt_path(project)
     ps = load_project_settings(project)   # 输出/时长为项目级设置
     aspect, aspect_name, out_lang = resolve_output(ps)
     out = ps.get("output") or {}
@@ -1187,11 +1216,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         brief = ""
     rv = ps.get("review") or {}
     review_lines = "\n".join(
-        f"- {label}(负责:{qa_agent}):{int(rv.get(key, 60))}"
+        f"- {label}(负责:{qa_agent}):{int(rv.get(key, 0))}"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items())
     # 当前 Agent 本身是某维度的 QA 时,单独点名其力度,避免它按 SOUL.md 固定阈值照旧执行
     own_review = "\n".join(
-        f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 60))},"
+        f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 0))},"
         f"按下方换算规则执行,而非 SOUL.md 固定阈值**"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items() if qa_agent == agent_id)
     if own_review:
@@ -1228,14 +1257,24 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
-各维度审核力度 0-100(默认 60=按文档既有阈值执行),当前项目取值:
+各维度审核力度 0-100(默认 0=不审核,用户在设置中调高才生效),当前项目取值:
 {review_lines}{own_review}
 力度换算规则(QA Agent 审核打分、orchestrator 派单与判闸门、evaluation 评分一律遵守):
 - **0:跳过该维度** —— orchestrator 不派该维度 QA 单;QA 被派到也不检查、不开缺陷单,报告只写 `"skipped": true`;闸门按通过处理
 - **1-39 宽松**:只拦 blocker;SOUL.md 中的分数合格线下调 10 分、比例上限翻倍;major/minor 记录在报告中但不拦、不强制返工
 - **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
 - **70-89 严格**:分数合格线上调 5 分、比例上限减半;blocker/major 均拦;minor 也要开缺陷单
-- **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵"""
+- **90-100 最严格**:分数合格线上调 10 分(上限 100)、比例类指标按 0 容忍;任何级别缺陷均拦并开单,吹毛求疵
+- **草稿迭代期一律按 0 执行(2026-07-23)**:上表力度只在 G0–G10 闸门判定前的闸门级审核生效——
+  草稿/迭代/返工阶段的逐单环节,orchestrator 不派各维度 QA 单,QA 被派到也按 0 处理;
+  判每个 G 闸门前,orchestrator 按上表力度对该闸门范围的产物统一补派 QA 审核(力度 0 的维度不补派),
+  缺陷清零机检照常。本条只约束各维度 QA 审核,evaluation 对工单的 acceptance 验收评分不受影响"""
+    p += ("\n\n## 用户版本管理设定(Web 客户端「版本管理」页开关,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 的版本化要求)\n"
+          + ("- 版本管理:**开启** —— 照常执行既有版本化纪律:任务关单时通知 00-orchestration/version 登记产物,闸门通过后下达冻结指令"
+             if (ps.get("versioning") or {}).get("enabled") else
+             "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
+             "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
+             "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -1288,7 +1327,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 生成模型调用(环境已配置好)
 图像/视频生成一律通过统一模块 modules/genmedia.py(渠道与模型已由用户在 Web 客户端配置,勿自行挑模型或直连各家 API):
 - 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
-- 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 1920x1080] [--ref 参考图...] [--n 4] [--seed N]`
+- 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
+  (供视频参考的图——锚点/--ref/--first-frame/--last-frame——每张必须 ≥3,686,400 像素=火山硬限,16:9 用 2560x1440、9:16 用 1440x2560;小图提交即拒,严禁按视频草稿分辨率出小图)
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段,默认纯音乐)
@@ -1309,8 +1349,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 services/runtime/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
+- IMPORTANT: `--project` accepts only the project slug (`{project}`), never `data/projects/...` or an absolute directory path.
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅赛马换引擎等场景使用)
+  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
 - 查看运行状态:`python3 services/runtime/dispatch.py --runs`;查看单个:`python3 services/runtime/dispatch.py --status <run_id>`
 
@@ -1335,8 +1376,10 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-8. 【两败即赛马】同一任务第 2 次返工仍未过,第 3 次尝试改为并行赛马:换执行引擎(--engine claude|codex|kimi)
-   或改派职责相近的 Agent 并行重做一份,先达标者交付,同时照常走人工升级——不要在同一条路上串行耗死"""
+8. 【赛马仅限用户明确指令】严禁自行发起并行赛马(换执行引擎或改派多个 Agent 并行重做同一任务、择优交付)。
+   多次返工仍不过就照常升级人工;确有必要时可在 --confirm 征询或升级说明中向用户**建议**赛马,
+   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi)或改派职责相近的 Agent
+   并行重做、先达标者交付"""
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -3224,7 +3267,8 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
-                       "review": "审核设置", "packaging": "片头片尾"}
+                       "review": "审核设置", "packaging": "片头片尾",
+                       "versioning": "版本管理"}
 
 
 async def api_projconfig_set(body: dict):
@@ -3237,6 +3281,7 @@ async def api_projconfig_set(body: dict):
     _validate_output(cfg.get("output") or {})
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
+    _validate_versioning(cfg.get("versioning") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
@@ -3403,14 +3448,18 @@ def _volc_list_speakers(ak: str, sk: str, resource_id: str) -> list[dict]:
 
 async def api_volc_speakers(body: dict):
     """新版豆包语音「音色库」列表(ListSpeakers,10 分钟缓存)。走火山 OpenAPI
-    AK/SK 签名(与余额查询同凭证,在 ⚙️ 设置 → 资源消耗 配置),非语音 API Key。"""
+    AK/SK 签名(凭证绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」的
+    AccessKey/SecretKey,空时回退环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY),
+    非语音 API Key。"""
     resource_id = str((body or {}).get("resource_id") or "seed-tts-2.0").strip()
     if resource_id not in ("seed-tts-2.0", "seed-tts-1.0"):
         resource_id = "seed-tts-2.0"   # 克隆/自定义档没有公共音色库,回落 2.0
-    cfg = resource_cfg()
-    ak, sk = (cfg.get("volc_ak") or "").strip(), (cfg.get("volc_sk") or "").strip()
+    tos = (load_genconfig().get("storage") or {}).get("tos") or {}
+    ak = (tos.get("access_key") or os.environ.get("TOS_ACCESS_KEY", "")).strip()
+    sk = (tos.get("secret_key") or os.environ.get("TOS_SECRET_KEY", "")).strip()
     if not (ak and sk):
-        raise ServiceError(400, "需先在 ⚙️ 设置 → 资源消耗 配置火山 AK/SK")
+        raise ServiceError(400, "需先在 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」"
+                                "配置 AccessKey/SecretKey")
     ts, cached = _VOLC_SPEAKERS_CACHE.get(resource_id, (0, None))
     if cached is not None and time.time() - ts < _VOLC_SPEAKERS_TTL:
         return {"speakers": cached}
@@ -3519,12 +3568,12 @@ async def api_plugins_toggle(body: dict):
     name = str(body.get("name") or "")
     if name not in {p["name"] for p in list_plugins(refresh=True)}:
         raise ServiceError(404, f"no such plugin: {name}")
-    disabled = set(STATE.get("plugins_disabled") or [])
+    enabled = set(STATE.get("plugins_enabled") or [])
     if body.get("enabled"):
-        disabled.discard(name)
+        enabled.add(name)
     else:
-        disabled.add(name)
-    STATE["plugins_disabled"] = sorted(disabled)
+        enabled.discard(name)
+    STATE["plugins_enabled"] = sorted(enabled)
     save_state(STATE)
     _expire_agent_caches()
     return {"ok": True, "plugins": list_plugins(refresh=True)}
@@ -3609,16 +3658,16 @@ async def api_plugins_delete(body: dict):
     except ValueError as exc:
         raise ServiceError(400, "plugin path is outside the user plugin directory") from exc
     shutil.rmtree(target)
-    disabled = set(STATE.get("plugins_disabled") or [])
-    disabled.discard(name)
-    STATE["plugins_disabled"] = sorted(disabled)
+    enabled = set(STATE.get("plugins_enabled") or [])
+    enabled.discard(name)
+    STATE["plugins_enabled"] = sorted(enabled)
     save_state(STATE)
     _expire_agent_caches()
     return {"ok": True, "plugins": list_plugins(refresh=True)}
 
 
 async def api_agentmodels():
-    """全部 Agent 的模型配置:mode=「Agent模型」策略;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
+    """全部 Agent 的模型配置:mode=「模型策略」;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
     mode = load_genconfig().get("agentmodel_mode") or "global"
     return {"mode": mode,
             "defaults": {a["id"]: default_agent_model(a["id"], mode)
@@ -3685,7 +3734,7 @@ async def api_agentmodels_set(body: dict):
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
     overrides = load_agentmodels()
-    if body.get("reset"):                       # 删除覆盖,回到「Agent模型」策略默认
+    if body.get("reset"):                       # 删除覆盖,回到「模型策略」默认
         overrides.pop(agent, None)
     else:
         cfg = body.get("config") or {}
@@ -4018,7 +4067,7 @@ async def api_run_progress(run_id: str, body: dict):
 # ---------------- 用户确认(重跑/跳过等) ----------------
 
 
-def notify_user(text: str):
+def _notify_user_macos(text: str):
     """macOS 本机通知(失败静默):人工确认/签字等待是全天最大空转来源,主动喊人。"""
     try:
         subprocess.Popen(
@@ -4026,6 +4075,37 @@ def notify_user(text: str):
              f'display notification {json.dumps(text[:120], ensure_ascii=False)} '
              f'with title "VideoAgents" sound name "Glass"'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+def notify_user(text: str):
+    """Send a native macOS/Windows notification; fail silently."""
+    message = text[:120]
+    try:
+        if os.name == "nt":
+            payload = base64.b64encode(message.encode("utf-8")).decode("ascii")
+            script = f"""
+$message = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$null = [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
+$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template)
+$nodes = $xml.GetElementsByTagName('text')
+$null = $nodes.Item(0).AppendChild($xml.CreateTextNode('VideoAgents'))
+$null = $nodes.Item(1).AppendChild($xml.CreateTextNode($message))
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('VideoAgents').Show($toast)
+""".strip()
+            encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+            subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-NonInteractive",
+                 "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                 "-EncodedCommand", encoded],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        elif sys.platform == "darwin":
+            _notify_user_macos(message)
     except Exception:
         pass
 
@@ -4088,7 +4168,7 @@ async def api_confirm_answer(cid: str, body: dict):
 async def api_chat(body: dict):
     agent = safe_agent(body.get("agent", ""))
     message = (body.get("message") or "").strip()
-    project = safe_slug(body.get("project"))
+    project = require_project_slug(body.get("project"))
     model = body.get("model") or None
     engine = (body.get("engine") or "").lower()
     if not engine:      # 调用方未指定引擎:回退顶栏全局的服务端副本,而非硬编码 claude
@@ -4132,6 +4212,24 @@ async def api_chat(body: dict):
 def _kill_proc_tree(proc):
     """杀整个进程组(claude/codex 及其派生的 bash/dispatch 子进程)。"""
     import signal
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["taskkill.exe", "/pid", str(proc.pid), "/t", "/f"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if result.returncode == 0:
+                return
+        except OSError:
+            pass
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return
+
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except Exception:
@@ -4259,6 +4357,74 @@ def prune_runs_confirms():
         print(f"[prune] 淘汰 run {len(set(dead))} 条 / confirm {len(gone)} 条", flush=True)
 
 
+# ---------------- 防休眠(自动运行开启期间保持系统唤醒;macOS/Windows) ----------------
+# macOS:caffeinate -i 子进程(-w 随本进程退出自动释放,强杀也不残留);
+# Windows:SetThreadExecutionState 线程级声明,进程退出由系统自动清除。
+# 均只防"闲置自动睡眠":屏幕照常熄灭,不拦合盖睡眠与手动关机/重启。
+_KEEPAWAKE_PROC: subprocess.Popen | None = None
+_KEEPAWAKE_WIN_ON = False
+_ES_CONTINUOUS = 0x80000000
+_ES_SYSTEM_REQUIRED = 0x00000001
+
+
+def keepawake_supported() -> bool:
+    return sys.platform == "darwin" or os.name == "nt"
+
+
+def keepawake_active() -> bool:
+    if sys.platform == "darwin":
+        return _KEEPAWAKE_PROC is not None and _KEEPAWAKE_PROC.poll() is None
+    return _KEEPAWAKE_WIN_ON
+
+
+def _ensure_awake():
+    global _KEEPAWAKE_PROC, _KEEPAWAKE_WIN_ON
+    if sys.platform == "darwin":
+        if _KEEPAWAKE_PROC is None or _KEEPAWAKE_PROC.poll() is not None:
+            _KEEPAWAKE_PROC = subprocess.Popen(
+                ["caffeinate", "-i", "-w", str(os.getpid())],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("[keepawake] 防休眠已开启(caffeinate)", flush=True)
+    elif os.name == "nt":
+        if not _KEEPAWAKE_WIN_ON:
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED)
+            _KEEPAWAKE_WIN_ON = True
+            print("[keepawake] 防休眠已开启(SetThreadExecutionState)", flush=True)
+
+
+def _release_awake():
+    global _KEEPAWAKE_PROC, _KEEPAWAKE_WIN_ON
+    if _KEEPAWAKE_PROC is not None:
+        if _KEEPAWAKE_PROC.poll() is None:
+            _KEEPAWAKE_PROC.terminate()
+        _KEEPAWAKE_PROC = None
+        print("[keepawake] 防休眠已释放", flush=True)
+    if _KEEPAWAKE_WIN_ON:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
+        _KEEPAWAKE_WIN_ON = False
+        print("[keepawake] 防休眠已释放", flush=True)
+
+
+def sync_keepawake():
+    """按当前状态声明/释放防休眠:任一项目开启自动运行且设置未关 → 保持唤醒。
+    幂等,caffeinate 意外退出会被拉起;watchdog 每轮与相关设置保存时调用。
+    Windows 的声明按线程记账,恒在事件循环线程里调用(勿丢线程池)。"""
+    if not keepawake_supported():
+        return
+    try:
+        wd = STATE.get("watchdog", {})
+        on = any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir())
+        if on and bool(STATE.get("watchdog_keepawake", True)):
+            _ensure_awake()
+        else:
+            _release_awake()
+    except Exception as e:  # noqa: BLE001
+        print(f"[keepawake] 同步失败(忽略):{e}", flush=True)
+
+
 async def idle_watchdog():
     """空转看门狗:实测单日曾有 ~3.5h 完全无活动(调度器停摆/等人工无人接续)。
     流水线仍有可跑任务、却无任务在跑且无待确认项时,自动唤醒总制片续派;
@@ -4272,6 +4438,7 @@ async def idle_watchdog():
         await asyncio.sleep(max(60, idle_s))
         try:
             prune_runs_confirms()   # 同一事件循环内同步执行,与 api_runs/遍历天然互斥
+            sync_keepawake()        # 每轮校准防休眠状态(兼作 caffeinate 自愈)
             now = time.time()
             wd = STATE.get("watchdog", {})   # {project: bool};缺省关闭
             if not any(wd.get(d.name) for d in PROJECTS_DIR.iterdir() if d.is_dir()):
@@ -4367,7 +4534,10 @@ async def idle_watchdog():
 
 async def api_watchdog_threshold_get():
     return {"threshold": int(STATE.get("watchdog_threshold", 80)),
-            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5)),
+            "keep_awake": bool(STATE.get("watchdog_keepawake", True)),
+            "keep_awake_supported": keepawake_supported(),
+            "keep_awake_active": keepawake_active()}
 
 
 async def api_watchdog_threshold_set(body: dict):
@@ -4390,9 +4560,11 @@ async def api_watchdog_threshold_set(body: dict):
         if not 1 <= im <= 720:
             raise ServiceError(400, "idle_minutes must be between 1 and 720")
         STATE["watchdog_idle_minutes"] = im
+    if body.get("keep_awake") is not None:
+        STATE["watchdog_keepawake"] = bool(body.get("keep_awake"))
     save_state(STATE)
-    return {"threshold": int(STATE.get("watchdog_threshold", 80)),
-            "idle_minutes": int(STATE.get("watchdog_idle_minutes", 5))}
+    sync_keepawake()    # 立即生效,不等下一轮巡检
+    return await api_watchdog_threshold_get()
 
 
 async def api_usage():
@@ -4471,4 +4643,5 @@ async def api_watchdog_set(body: dict):
     wd = STATE.setdefault("watchdog", {})
     wd[proj] = bool(body.get("enabled"))
     save_state(STATE)
+    sync_keepawake()    # 开/关项目自动运行随手校准防休眠
     return {"project": proj, "enabled": wd[proj]}

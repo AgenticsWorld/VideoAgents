@@ -61,7 +61,7 @@ def test_plugin_and_global_model_resources_are_versioned(monkeypatch):
 def test_plugin_install_toggle_and_delete_use_writable_runtime_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "PLUGINS_DIR", tmp_path)
     monkeypatch.setattr(core, "save_state", lambda state: None)
-    monkeypatch.setitem(core.STATE, "plugins_disabled", list(core.STATE.get("plugins_disabled") or []))
+    monkeypatch.setitem(core.STATE, "plugins_enabled", list(core.STATE.get("plugins_enabled") or []))
     core._expire_agent_caches()
     package = io.BytesIO()
     manifest = {
@@ -80,6 +80,13 @@ def test_plugin_install_toggle_and_delete_use_writable_runtime_directory(tmp_pat
             installed = client.post("/api/v1/plugins", content=package.getvalue())
             assert installed.status_code == 200
             assert (tmp_path / "test-plugin" / "plugin.json").is_file()
+            assert installed.json()["plugin"]["enabled"] is False  # 新装插件默认停用
+            enabled = client.post(
+                "/api/v1/plugins/test-plugin",
+                json={"name": "test-plugin", "enabled": True},
+            )
+            assert enabled.status_code == 200
+            assert next(p for p in enabled.json()["plugins"] if p["name"] == "test-plugin")["enabled"]
             disabled = client.post(
                 "/api/v1/plugins/test-plugin",
                 json={"name": "test-plugin", "enabled": False},

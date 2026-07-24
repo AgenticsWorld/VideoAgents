@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>ClawBot 微信 — Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+main{max-width:680px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.card .body{padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:110px;color:var(--dim);font-size:13px;flex:none}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600;padding:8px 26px}
+button.danger:hover{border-color:var(--red);color:var(--red)}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--dim)}
+.status{font-size:13px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
+.status.warn{color:var(--yellow)}
+.pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+#qr-box{display:none;flex-direction:column;align-items:center;gap:10px;padding:8px 0}
+#qr{width:240px;height:240px;background:#fff;border-radius:10px;padding:10px;display:flex;align-items:center;justify-content:center}
+#qr svg,#qr img{width:100%;height:100%}
+.contact{display:flex;align-items:center;gap:12px}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.contact .name{font-size:15px;font-weight:600}
+.contact .sub{font-size:12px;color:var(--dim)}
+ul.how{padding-left:18px;font-size:13px;color:var(--dim);display:flex;flex-direction:column;gap:6px}
+ul.how b{color:var(--text);font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>💬 ClawBot 微信</h1>
+  <span class="pill">扫码绑定微信,在微信里与总制片互发消息</span>
+  <div class="spacer"></div>
+</header>
+<main>
+  <div class="card">
+    <h2>🔗 绑定状态</h2>
+    <div class="body" id="bind-body">
+      <div class="status" id="bind-loading">加载中…</div>
+
+      <!-- 未绑定视图 -->
+      <div id="v-unbound" style="display:none;flex-direction:column;gap:14px">
+        <div class="hint">尚未绑定微信。点击下方按钮生成二维码,用微信扫码并确认后即完成绑定。</div>
+        <div class="row"><button class="primary" id="btn-bind">生成绑定二维码</button>
+          <span class="status" id="bind-st"></span></div>
+        <div id="qr-box">
+          <div id="qr"></div>
+          <div class="status warn" id="qr-st">请用微信扫码并确认绑定…</div>
+        </div>
+      </div>
+
+      <!-- 已绑定视图 -->
+      <div id="v-bound" style="display:none;flex-direction:column;gap:14px">
+        <div class="contact">
+          <div class="avatar">💬</div>
+          <div>
+            <div class="name" id="c-name"></div>
+            <div class="sub" id="c-sub"></div>
+          </div>
+        </div>
+        <div class="row"><label>互通状态</label><span class="status" id="c-ready"></span></div>
+        <div class="row" id="row-err" style="display:none"><label>最近错误</label><span class="status err" id="c-err"></span></div>
+        <div class="row"><label></label>
+          <button class="danger" id="btn-unbind">解除绑定</button>
+          <span class="status" id="unbind-st"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📖 使用说明</h2>
+    <div class="body">
+      <ul class="how">
+        <li>绑定后,你在微信里发的消息会作为给总制片的指令进入当前项目的对话,与在控制台输入完全等效。</li>
+        <li>总制片的回复会同步推送到微信;系统自动消息(设置变更通知、自动运行巡检等)也会一并推送。</li>
+        <li>受微信机器人协议限制,绑定后需先在微信里给机器人发一条消息,系统才能开始向你反向推送。</li>
+        <li>消息进入哪个项目,取决于控制台顶栏当前选中的项目。</li>
+        <li>仅支持文本互通;语音有转写文本时按文本处理,图片/文件暂不透传。</li>
+      </ul>
+    </div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+function fmtTs(ts){const d=new Date(ts*1000),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`}
+
+let qrPoll=null,stPoll=null;
+
+function show(el,on){el.style.display=on?'flex':'none'}
+
+async function refresh(){
+  let st;
+  try{st=await api('/api/v1/wechat/status')}
+  catch(e){$('#bind-loading').textContent=t('加载失败:')+e.message;$('#bind-loading').className='status err';return}
+  $('#bind-loading').style.display='none';
+  show($('#v-unbound'),!st.bound);
+  show($('#v-bound'),st.bound);
+  if(!st.bound)return;
+  const c=st.contact||{};
+  $('#c-name').textContent=c.name||(c.user_id?t('微信用户 ')+c.user_id.slice(0,8):t('微信已绑定'));
+  $('#c-sub').textContent=(st.bound_at?I18N.f('绑定于 {ts}',{ts:fmtTs(st.bound_at)}):'')+
+    (c.user_id?'  ·  ID: '+c.user_id.slice(0,16):'');
+  const r=$('#c-ready');
+  if(st.ready){r.textContent=t('✓ 已互通,可双向收发消息');r.className='status ok'}
+  else{r.textContent=t('等待微信端首条消息——请先在微信里给机器人随便发一句话,之后系统即可向你推送');r.className='status warn'}
+  const err=(st.relay||{}).last_error||'';
+  $('#row-err').style.display=err?'flex':'none';
+  $('#c-err').textContent=err;
+}
+
+$('#btn-bind').onclick=async()=>{
+  const btn=$('#btn-bind');btn.disabled=true;$('#bind-st').textContent='';
+  try{
+    const d=await api('/api/v1/wechat/bind',{});
+    const qr=$('#qr');
+    if(d.qr_img){qr.innerHTML='';const img=new Image();img.src=d.qr_img;qr.appendChild(img)}
+    else qr.innerHTML=d.qr_svg||'';
+    $('#qr-box').style.display='flex';
+    $('#qr-st').textContent=t('请用微信扫码并确认绑定…');$('#qr-st').className='status warn';
+    if(qrPoll)clearInterval(qrPoll);
+    qrPoll=setInterval(async()=>{
+      try{
+        const s=await api('/api/v1/wechat/bind?qrcode='+encodeURIComponent(d.qrcode));
+        if(s.status==='confirmed'){
+          clearInterval(qrPoll);qrPoll=null;
+          $('#qr-st').textContent=t('✓ 绑定成功');$('#qr-st').className='status ok';
+          setTimeout(refresh,600);
+        }else if(s.status==='scanned'){
+          $('#qr-st').textContent=t('已扫码,请在微信里确认…');
+        }else if(s.status==='expired'||s.status==='cancelled'){
+          clearInterval(qrPoll);qrPoll=null;
+          $('#qr-st').textContent=t('二维码已失效,请重新生成');$('#qr-st').className='status err';
+        }
+      }catch(e){/* 单次查询失败继续轮询 */}
+    },2000);
+  }catch(e){$('#bind-st').textContent=t('生成失败:')+e.message;$('#bind-st').className='status err'}
+  finally{btn.disabled=false}
+};
+
+$('#btn-unbind').onclick=async()=>{
+  if(!confirm(t('确定解除微信绑定?解绑后微信端将不再收到任何消息。')))return;
+  const btn=$('#btn-unbind');btn.disabled=true;
+  try{await api('/api/v1/wechat/unbind',{});$('#unbind-st').textContent=t('✓ 已解绑');
+    $('#unbind-st').className='status ok';setTimeout(refresh,400)}
+  catch(e){$('#unbind-st').textContent=t('解绑失败:')+e.message;$('#unbind-st').className='status err'}
+  finally{btn.disabled=false}
+};
+
+refresh();
+stPoll=setInterval(refresh,5000);   // 绑定后联系人/互通状态随首条消息自动出现
+</script>
+</body>
+</html>
