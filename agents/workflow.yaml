@@ -233,12 +233,13 @@ phases:
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
                                nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
-          outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5)
-          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
+          outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
+                               prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
                         qa: [11-qa/visual-qa] } }
       - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
           condition: group.has_character,
-          validation: { auto: [face_similarity_gte_0.85] } }
+          validation: { auto: [face_similarity_gte_0.85] } }   # 仅校新生成锚;复用锚(source=reuse:)与概念图同源免校,reuse-only 组直接放行(§7A 2026-07-24)
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],

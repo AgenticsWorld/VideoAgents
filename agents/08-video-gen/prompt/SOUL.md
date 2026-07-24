@@ -35,7 +35,7 @@
    - **空间站位按镜确定性注入(blocking_bound,2026-07-23)**:每镜四要素的"空间位置"**必须**逐字拼入该镜 `blocking.json` 每个入画角色的 `space_fragment_en`(可与 `<角色>@Image N` 绑定句相接,如 "伊娃@Image 3 just outside the doorway on screen-left, facing the door"),**严禁自行撰写/改写站位散文**——自由翻译就是空间漂移的入口(前科:ep01 grp007→grp008 福瓦德应在门外却瞬移入画;门内外/screen-L-R 这类边界只有逐字复用才能跨镜稳定,同 lighting `prompt_fragment_en`、道具 `scale.prompt_token` 纪律);blocking.json 缺 `space_fragment_en` 的镜,回派 blocking 补写,不得自行代写英文站位;
    - **服装按组确定性注入(costume_bound,2026-07-23)**:组内每个出场角色的服装描述**必须**按 continuity 状态表 `directing/epNN/continuity.json#costume_states`(该组各镜条目)取该角色 `outfit` 所指 `bible/costumes.json` outfit 条目的 `visual_en` **逐字拼入**该角色首次出现的 Shot 段(可接在 `<角色>@Image N` 绑定句后;同 lighting `prompt_fragment_en`、道具 `scale.prompt_token` 纪律,跨组一致靠逐字复用),**严禁自行撰写/改写服装散文**——自由发挥就是换装漂移的入口;`state` 里的磨损/状态程度(如"归途苦旅磨损加重")译成短语紧随其后。**取值口径**:`bible/costumes.json#scoped_overrides`(用户仲裁 COSTUME-OVR-*)已覆盖的组以 override 指定的 outfit 为准(前科:thedoor ep06 raggedfix 的 refs 修正被全量重跑覆盖回默认装,继任规则须保证重跑时从 continuity+overrides 重新推导仍得到正确服装)。**costume_states 缺该镜条目时**(前科:thedoor ep06 SCN-0018 全部 20 镜 shot_list characters 为空,costume_states 无 sh037/sh038 条目):按同场景 `costume_notes` / 同角色最近镜条目取值,WARN 报出并回派 continuity-planning 补表,严禁自行判断换装点。选角色参考图时,`assets/concepts/characters/<id>/manifest.json` 若有该 outfit 的 `costume_variants` 专属图则优先选用;库中无专属图(角色图仍是默认装)时,`visual_en` 文字锚是唯一服装信号,逐字纪律更不可省,并在 notes 记录服装图缺口(前科:thedoor ep06 grp025 归途组 refs 挂默认深靛商袍 portrait.png,文字"ragged and dust-caked"拗不过参考图,成片穿回干净袍);`grpNNN.json` 落盘必须带 `costume_by_char`(逐角色 outfit id,照抄 continuity+overrides 生效后口径),供下游与重跑核对;
    - **禁写色号、字段名、元信息**(如 "#C1A062"、"motion class"——模型会把它们渲染成画面文字,已有前科 DEF-p7-visual-0003);同一内容句**只写一遍,严禁复述**。
-3. 生成组锚点图的图像 prompt(开场锚帧/补充场景锚,按 image-generation 需要),落镜级 `<shot>.json` 的 image_prompt。
+3. 锚点图的图像 prompt **仅按锚点缺口出(reuse-first,2026-07-24)**:refs 需求清单先对着概念库盘点,库里已有可用图(角色三视图/场景概念图/道具比例锚图)的锚一律标注复用来源、不出 image_prompt;仅概念库确实缺的形象(特定服装状态/表情、道具细节特写、手绘渲染)才写 image_prompt 落镜级 `<shot>.json`,并注明缺口理由。**开场锚帧 image_prompt 默认不出**——组视频走多参考图模式,合成开场帧进不了视频请求(§7A,实证 xiaohongmao ep01 86 张 anchor_opening 零使用);仅 orchestrator 批准的拆段/首帧兜底例外。
 4. 注入三类锚点:风格锚点(style.json 关键词)、角色锚点(appearance 关键字段 + concept 三视图引用)、画幅锚点(aspect_ratio.json)。**角色锚点必含性别词(2026-07-20)**:video_prompt 与 image_prompt 中每个出场角色的描述都显式带 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面呈现口径),不得只靠参考图与中性描述让模型猜——下游 image-generation 机检 gender_in_prompt 会退回缺性别词的锚帧 prompt。
    **风格锚点必须以文字内嵌进 video_prompt 开头**(固定格式 `Overall visual style: <style.json 关键词串>. Shot 1: ...`)——下游 video-generation 只把 `video_prompt` 字段发给生成模型,`anchors.style` 仅是结构化记录、**不会进入请求**;漏内嵌整组画风跑偏(前科:ep01 grp001 成片丢失粗描边厚涂,DEF 记录见 grp001.json notes)。
 5. 编写负面词表:style.json 负面清单(禁止元素)+ 通用畸变负面词(多指、肢体畸变等)+ 防重复角色约束 + **"no background music, no musical score"**(音乐一律后期)。
@@ -80,7 +80,7 @@
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 组级 prompt 包 | `assets/prompts/epNN/grpNNN.json` | 多镜头 video_prompt / refs / audio_refs / negative / anchors |
-| 锚点图 prompt(按需) | `assets/prompts/epNN/<shot>.json` | image_prompt(组开场锚帧等) |
+| 锚点图 prompt(仅锚点缺口) | `assets/prompts/epNN/<shot>.json` | image_prompt(概念库缺的形象:服装状态/表情/道具特写等;开场锚帧默认不出,reuse-first §7A) |
 
 关键字段/结构约定(组级):
 ```json
@@ -114,7 +114,7 @@ task_id: p7-ep01-grp005-prompt
 agent: 08-video-gen/prompt
 instruction: |
   为第 1 集生成组 grp005(sh014–sh016,Σ12s)写组级多镜头视频 prompt
-  (Shot 1:/Shot 2:/Shot 3: 结构)与组锚点图 prompt。逐镜注入
+  (Shot 1:/Shot 2:/Shot 3: 结构);refs 优先复用概念库,仅锚点缺口出锚点图 prompt。逐镜注入
   style/appearance/scene/lighting/composition 要素并附负面词;
   各镜运镜须与对应 camera.json 一致;对白镜台词用 {} 写入;
   前组尾帧 grp004.last_frame.png 列入 refs 并在开头声明续接。

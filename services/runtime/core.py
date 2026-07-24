@@ -486,7 +486,8 @@ DEFAULT_GENCONFIG = {
     # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
     "versioning": {"enabled": False},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
-    # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定
+    # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
+    # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
     "ui_language": "",
 }
 
@@ -498,10 +499,15 @@ UI_LANG_NAMES = {
 }
 
 
+def ui_lang_code(cfg: dict | None = None) -> str:
+    """全局界面语言代码:以 state.json 的 ui_lang 为准(按全局保存,桌面端换随机
+    端口后浏览器 localStorage 失效也能恢复);旧版只存 genconfig,读取回落无感迁移。"""
+    return str(STATE.get("ui_lang") or (cfg or load_genconfig()).get("ui_language") or "")
+
+
 def resolve_ui_language(cfg: dict | None = None) -> str:
-    """genconfig -> 界面语言名称(未设置回落中文,与历史行为一致)。"""
-    code = (cfg or load_genconfig()).get("ui_language") or "zh"
-    return UI_LANG_NAMES.get(code, "中文")
+    """界面语言名称(未设置回落中文,与历史行为一致)。"""
+    return UI_LANG_NAMES.get(ui_lang_code(cfg) or "zh", "中文")
 
 # 审核维度:key -> (名称, 负责的 QA Agent)(审核设置弹窗与提示词注入共用,顺序即展示顺序)
 REVIEW_DIMENSIONS = {
@@ -2983,7 +2989,9 @@ async def api_preview_workflow(project: str = "demo"):
 
 
 async def api_genconfig_get():
-    return load_genconfig()
+    cfg = load_genconfig()
+    cfg["ui_language"] = ui_lang_code(cfg)   # 语言以 state.json 为准(旧版存 genconfig)
+    return cfg
 
 
 def _flat_diff(old, new, prefix="") -> list[str]:
@@ -3050,6 +3058,10 @@ async def api_genconfig_set(body: dict):
         except (TypeError, ValueError):
             raise ServiceError(400, f"storage.{name}.url_expires must be seconds (integer)")
     save_genconfig(cfg)
+    if "ui_language" in body:
+        # 界面语言按全局持久化到 state.json(genconfig 键双写,兼容旧版回读)
+        STATE["ui_lang"] = cfg.get("ui_language") or ""
+        save_state(STATE)
     lang_only = set(body) <= {"ui_language"}
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
@@ -3700,6 +3712,7 @@ def ui_prefs_pref() -> dict:
         "model": str(prefs.get("model") or gm["model"] or ""),
         "model_custom": str(prefs.get("model_custom") or ""),
         "project": str(prefs.get("project") or ""),
+        "lang": ui_lang_code(),   # 界面语言:i18n.js 首访/换 origin 时凭此恢复
     }
 
 
