@@ -4,6 +4,29 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-24
+
+### Added
+
+- WeChat ClawBot integration: bind an account by scanning a QR code on the new `clawbot.html` page and exchange messages with the chief producer directly from WeChat; channel implementation in `services/runtime/wechat.py`, speaker credentials rebound to the TOS file-hosting channel AK/SK.
+- `blocking_bound` machine check: each scene's blocking (staging) fragment is injected verbatim into generation prompts and validated by `code/blocking_bound_check.py`, preventing character spatial drift within a scene.
+- `costume_bound` deterministic injection: the continuity costume state is copied verbatim into image/video prompts, preventing wardrobe drift across shots.
+- Identity lock extended to all groups: prevents three-view character reference images from duplicating the character as a second person in frame; when the cast changes across a group boundary, the seam shot must switch composition so new characters cannot appear mid-shot out of nowhere.
+- H3B visual-generation sign-off gate in the default workflow (g7): each episode's group clips are reviewed before entering editing.
+- System sleep prevention on macOS/Windows while auto-run is active.
+- Version management page gains an enable toggle (default off); when disabled, no version-management tickets are dispatched.
+- Settings menu reorganized: new "Advanced" submenu, "Agent Model" renamed to "Model Strategy"; the Web UI now displays the actual serving port.
+
+### Changed
+
+- p0 novel parsing switched to chapter-level map+merge: batched scanning, per-chapter fan-out parsing, and mechanical merging, so large novels no longer bottleneck on a single parse pass.
+- fusion-fiction plugin simplified: branch-project cloning and version management removed (users manage versions themselves); the soul reconciliation baseline is stored as a snapshot.
+- Plugins are now disabled by default after installation and must be enabled manually on the Plugins page.
+- Review intensity defaults to 0 with no review during the draft phase; the per-session fuse is lowered and the stateless station pool expanded.
+- Racing (parallel competitive generation) now runs only on explicit user instruction, never automatically.
+- Volcano video generation: input image minimum pixel hard limit (≥3,686,400 px per image, e.g. 2560x1440 for 16:9) consolidated into prompts.
+- Desktop/runtime hardening: local API calls bypass system and environment proxies; installer names include the version; macOS notarization; Intel macOS release builds dropped; Windows runtime junction packaging and Node 24 artifact workflows fixed.
+
 ## [1.0.2] - 2026-07-22
 
 ### Added
