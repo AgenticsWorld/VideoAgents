@@ -17,6 +17,10 @@ qa/evidence/
 data/.videoagents/
 agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 
+# Local-only test suite (since v1.0.4); only the versioned CI smoke test is tracked
+/tests/*
+!/tests/test_smoke.py
+
 # Python
 .venv/
 venv/
