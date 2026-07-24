@@ -17,9 +17,6 @@ qa/evidence/
 data/.videoagents/
 agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 
-# Local-only tests (moved out of version control, run locally)
-tests/
-
 # Python
 .venv/
 venv/
