@@ -1,6 +1,5 @@
 import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, shell} from 'electron'
 import type {MessageBoxOptions} from 'electron'
-import {autoUpdater} from 'electron-updater'
 import {ChildProcess, spawn, spawnSync} from 'node:child_process'
 import {existsSync, mkdirSync} from 'node:fs'
 import http from 'node:http'
@@ -10,7 +9,7 @@ import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
 import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
-  downloadAndApplyDesktopUpdate, fetchDevDesktopUpdate, readBuildInfo,
+  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo,
 } from './desktop-update'
 import {desktopExecutablePath} from './shell-environment'
 
@@ -253,21 +252,20 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function checkDevDesktopUpdate(): Promise<boolean> {
+async function checkDesktopUpdate(): Promise<void> {
   const build = readBuildInfo(process.resourcesPath, app.isPackaged)
-  if (build.channel !== 'dev') return false
-  const artifact = await fetchDevDesktopUpdate(build)
-  if (!artifact) return true
+  const artifact = await fetchDesktopUpdate(build)
+  if (!artifact) return
   const options: MessageBoxOptions = {
-    type: 'info', title: '发现 VideoAgents Dev 更新',
-    message: `发现 VideoAgents ${artifact.version} 的新 Dev 构建。`,
-    detail: `最新构建 ${artifact.buildHash}，当前构建 ${build.buildHash}。是否立即下载并自动安装？`,
+    type: 'info', title: '发现 VideoAgents 更新',
+    message: `发现 VideoAgents ${artifact.version} 新版本。`,
+    detail: `当前版本 ${build.version}。是否立即下载并自动安装？`,
     buttons: ['下载并更新', '暂不更新'], defaultId: 0, cancelId: 1,
   }
   const answer = window
     ? await dialog.showMessageBox(window, options)
     : await dialog.showMessageBox(options)
-  if (answer.response !== 0) return true
+  if (answer.response !== 0) return
   await showRuntimeProgress('正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。')
   try {
     const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
@@ -281,7 +279,6 @@ async function checkDevDesktopUpdate(): Promise<boolean> {
     const message = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox('VideoAgents 更新失败', message)
   }
-  return true
 }
 
 ipcMain.on('desktop:version', event => {event.returnValue = app.getVersion()})
@@ -320,14 +317,8 @@ app.whenReady().then(async () => {
   installApplicationMenu()
   await createWindow()
   if (app.isPackaged) {
-    void checkDevDesktopUpdate().then(isDev => {
-      if (!isDev) {
-        void autoUpdater.checkForUpdatesAndNotify().catch(error => {
-          console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
-        })
-      }
-    }).catch(error => {
-      console.warn(`[dev-updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
+    void checkDesktopUpdate().catch(error => {
+      console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
     })
   }
 }).catch(error => {

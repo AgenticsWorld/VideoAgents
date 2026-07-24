@@ -8,8 +8,8 @@ import {
   activatePythonRuntime, loadPythonRuntime, PythonRuntime, runtimeStore,
 } from './runtime'
 
-const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents.json'
-const DEFAULT_PACKAGE_PREFIX = 'https://s3.agentics.world/packages/python/'
+const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents/metadata.json'
+const DEFAULT_PACKAGE_PREFIX = 'https://s3.agentics.world/packages/video-agents/python/'
 const SAFE_VERSION = /^[A-Za-z0-9._-]+$/
 
 export interface RuntimeArtifact {

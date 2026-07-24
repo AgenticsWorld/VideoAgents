@@ -45,7 +45,7 @@ python apps/web/server.py
 
 浏览器打开 <http://127.0.0.1:8630>，在顶部选择或创建项目，再配置执行引擎与所需生成服务。API 文档位于 <http://127.0.0.1:8630/api/v1/docs>。
 
-WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客户端开发使用 `npm ci && npm run dev:desktop`。桌面客户端默认启动同一个 Web 网关，也可通过 `VIDEOAGENTS_API_URL=https://host` 反向代理远程 API。发布安装包不包含 Python；首次启动且本机没有可用环境时，客户端从 `https://s3.agentics.world/packages/video-agents.json` 读取当前平台版本并下载安装。Claude、Codex、FFmpeg、模型和 GPU 环境仍按需独立安装。
+WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客户端开发使用 `npm ci && npm run dev:desktop`。桌面客户端默认启动同一个 Web 网关，也可通过 `VIDEOAGENTS_API_URL=https://host` 反向代理远程 API。发布安装包不包含 Python；首次启动且本机没有可用环境时，客户端从 `https://s3.agentics.world/packages/video-agents/metadata.json` 读取当前平台版本并下载安装。Claude、Codex、FFmpeg、模型和 GPU 环境仍按需独立安装。
 
 桌面开发前请确认 `node --version` 不低于 `.nvmrc` 指定的版本；使用 nvm 时先执行 `nvm use`。切换 Node 大版本后必须重新执行 `npm ci`，避免保留由旧 Node 生成的不完整 Electron 安装。
 
@@ -53,7 +53,7 @@ WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客�
 
 Python 运行时与 Electron 应用完全分开版本化。运行时写入用户数据目录的 `python-runtimes/versions/<version>/`，通过 `active.json` 激活。已有可用环境时启动过程不会访问版本索引；仅首次缺少环境，或用户从桌面菜单选择“检查并更新 Python 环境”时才检查最新版本。下载过程校验大小、SHA-256、平台、架构、版本和可执行路径。开发/诊断时仍可用 `VIDEOAGENTS_PYTHON` 显式覆盖。
 
-`dev` 分支的桌面产品版本始终保持 `1.0.2`，短 Git hash 只写入 `buildHash`，安装包发布为 `packages/video-agents-mac-v1.0.2.zip`（Apple Silicon arm64）与 `packages/video-agents-win-v1.0.2.zip`（Windows x64，包含 NSIS 安装器）。Dev 客户端每次启动读取同一个 JSON；仅当 `desktop.mac/win.buildHash` 与自身构建 hash 不同时询问用户。确认后自动校验、下载索引指定的带版本号安装包，并在退出当前进程后替换 macOS `.app` 或静默运行 Windows 升级安装器。正式 Release 渠道仍与 Dev S3 更新通道隔离。
+仅当 `v*` tag 指向 `main` 中的提交时，工作流才构建桌面端与 Python 环境；两类包统一使用 tag 版本号并发布到 `packages/video-agents/`。Python 环境位于 `python/`，macOS 与 Windows 的带版本桌面 ZIP 分别位于 `mac/` 和 `win/`，共享更新索引为 `metadata.json`；两个桌面目录还会用 `VideoAgents.zip` 覆盖发布最新版本。Release 客户端每次启动读取该 metadata，发现更高桌面版本后提示下载并自动安装。
 
 macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。
 
