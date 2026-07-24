@@ -4,7 +4,9 @@
  * 原文(中文)即词典 key:词典缺失的条目自动回退显示中文,不会空白
  * 机制:DOM 文本节点/​title/placeholder/alt 属性按词典精确替换;以「:」「:」或空格结尾的
  *      key 作为前缀规则匹配动态拼接串;MutationObserver 覆盖 JS 异步渲染的内容
- * 语言选择:localStorage.webui_lang;首次打开按浏览器语言自动判断;控制台 ⚙️ 设置菜单可改
+ * 语言选择:localStorage.webui_lang,并按全局保存到服务端 state.json;本地无记录时
+ *      (首次打开/桌面端换随机端口换 origin)先从服务端恢复,再按浏览器语言自动判断;
+ *      控制台 ⚙️ 设置菜单可改
  */
 (function () {
   'use strict';
@@ -27,8 +29,14 @@
 
   var lang = null;
   try { lang = localStorage.getItem('webui_lang'); } catch (e) { /* ignore */ }
-  if (!LANGS[lang]) {                      // 仅第一次打开时按浏览器判断
-    lang = detect();
+  if (!LANGS[lang]) {                      // 本地无记录:首次打开,或桌面端换随机端口后换了 origin
+    try {                                  // 先恢复 state.json 按全局保存的选择(同步请求,保证首屏词典就绪)
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/api/v1/config/ui-prefs', false);
+      xhr.send();
+      if (xhr.status === 200) lang = (JSON.parse(xhr.responseText).prefs || {}).lang;
+    } catch (e) { /* ignore */ }
+    if (!LANGS[lang]) lang = detect();     // 服务端也没存过:按浏览器语言判断
     try { localStorage.setItem('webui_lang', lang); } catch (e) { /* ignore */ }
   }
 
