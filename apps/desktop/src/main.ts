@@ -94,11 +94,12 @@ async function healthy(): Promise<boolean> {
 async function showRuntimeProgress(
   title = '正在准备 VideoAgents',
   note = '首次启动需要下载一次，之后不会自动更新。',
+  windowTitle = 'VideoAgents Python 环境',
 ): Promise<void> {
   if (runtimeProgressWindow && !runtimeProgressWindow.isDestroyed()) return
   runtimeProgressWindow = new BrowserWindow({
     width: 520, height: 230, resizable: false, minimizable: false, maximizable: false,
-    closable: false, title: 'VideoAgents Python 环境', backgroundColor: '#111318',
+    closable: false, title: windowTitle, backgroundColor: '#111318',
     webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true},
   })
   const html = `<!doctype html><meta charset="utf-8"><style>
@@ -266,7 +267,9 @@ async function checkDesktopUpdate(): Promise<void> {
     ? await dialog.showMessageBox(window, options)
     : await dialog.showMessageBox(options)
   if (answer.response !== 0) return
-  await showRuntimeProgress('正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。')
+  await showRuntimeProgress(
+    '正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。', 'VideoAgents 更新',
+  )
   try {
     const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
     await downloadAndApplyDesktopUpdate(
