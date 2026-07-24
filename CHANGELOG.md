@@ -4,6 +4,19 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-24
+
+### Changed
+
+- Group anchor packs are now reuse-first: concept-library images (character three-views, scene concepts, prop scale refs) are reused directly as Seedance 2.0 reference images, and groups fully covered by the library generate zero new images (`generation_channel: reuse-only`). Per-group composed opening anchor frames (`anchor_opening`) are no longer produced by default — the multi-reference video mode is mutually exclusive with first-frame input, so composed openings never entered video requests (evidence: 86 such frames across one episode, none used); they remain allowed only as an orchestrator-approved first-frame/split fallback. Gap-fill anchor generation (missing costume state, expression, prop close-up) must record a `gap_reason`, enforced by the new `reuse_first_ok` machine check.
+- Reused anchors skip character-consistency correction and visual-QA composition scoring (their source concept images were already reviewed at library intake); `reuse-only` groups pass straight through, saving generation quota and QA time.
+- The prompt station emits anchor-image prompts only for genuine concept-library gaps instead of routinely scripting an opening frame per group.
+- `tests/` removed from version control (local-only from now on).
+
+### Fixed
+
+- UI language preference is now saved globally in `state.json` (dual-written with genconfig for backward compatibility, read preferring state; the ui-prefs API returns it and the browser restores from the server before auto-detection) — fixes the desktop app reverting to browser-detected language after each randomized-port restart.
+
 ## [1.0.3] - 2026-07-24
 
 ### Added
