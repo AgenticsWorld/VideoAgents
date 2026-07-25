@@ -9,6 +9,7 @@
 import asyncio
 import hashlib
 import hmac
+import importlib.util
 import io
 import json
 import os
@@ -95,9 +96,23 @@ def cli_not_found_error(engine: str) -> str:
             f"请确认已安装 {label} 并将其加入 PATH，"
             f"或通过 {env_var} 配置可执行文件的完整路径。")
 
-# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
-DEEPAGENTS_PY = os.environ.get(
-    "DEEPAGENTS_PY", str(ROOT / ".venv-deepagents" / "bin" / "python"))
+# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型)。解释器按优先级解析:
+# DEEPAGENTS_PY 环境变量 → 项目根 .venv-deepagents(deepagents 需 Python ≥3.11,
+# 主环境为 3.10 时用 make install-deepagents 建)→ 当前解释器(已装 [deepagents] extra 时)
+DEEPAGENTS_PY_DEFAULT = str(ROOT / ".venv-deepagents" / "bin" / "python")
+
+
+def deepagents_python() -> str:
+    env = os.environ.get("DEEPAGENTS_PY")
+    if env:
+        return env
+    for rel in ("bin/python", "Scripts/python.exe"):
+        cand = ROOT / ".venv-deepagents" / rel
+        if cand.exists():
+            return str(cand)
+    if importlib.util.find_spec("deepagents") is not None:
+        return sys.executable
+    return DEEPAGENTS_PY_DEFAULT
 ENGINES = ("claude", "codex", "kimi", "deepagents")   # 执行引擎:claude -p / codex exec / kimi -p / deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
@@ -1540,7 +1555,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                              "run_id": run["id"], "status": "error"})
                 publish_run(run)
                 return
-            da_cmd = [DEEPAGENTS_PY, str(ROOT / "modules" / "deepagents_runner.py"),
+            da_cmd = [deepagents_python(), str(ROOT / "modules" / "deepagents_runner.py"),
                       "--model", use_model,
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
@@ -1688,9 +1703,12 @@ async def execute_run(run: dict, message: str, model: str | None):
             if engine in CLI_BINS:
                 run["error"] = cli_not_found_error(engine)[:500]
             else:
-                missing = error.filename or DEEPAGENTS_PY
+                missing = error.filename or deepagents_python()
                 run["error"] = (f"无法启动 DeepAgents Python 运行环境："
-                                f"未找到“{missing}”。请检查 DEEPAGENTS_PY 配置。")[:500]
+                                f"未找到“{missing}”。请在项目根目录运行 "
+                                f"make install-deepagents 创建专用环境；或在当前环境执行 "
+                                f"pip install -e \".[deepagents]\"（需 Python ≥3.11）；"
+                                f"或设置 DEEPAGENTS_PY 指向已安装 deepagents 的解释器。")[:500]
             if proc:
                 proc.kill()
         except OSError as error:

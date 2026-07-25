@@ -13,10 +13,12 @@ stdout 输出 JSONL 事件(server.handle_deepagents_event 解析):
   {"type":"error","message":...}
 """
 import argparse
+import ipaddress
 import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -55,8 +57,23 @@ def main():
     from deepagents import create_deep_agent
     from deepagents.backends import LocalShellBackend
 
+    # 本地/内网端点(LM Studio 等)强制直连:macOS 系统代理(如 Surge 6152)会劫持
+    # localhost 请求并返回 HTML 错误页;远端渠道仍走环境代理设置
+    client_kw = {}
+    host = urlparse(args.base_url).hostname or ""
+    try:
+        local = ipaddress.ip_address(host).is_loopback or \
+            ipaddress.ip_address(host).is_private
+    except ValueError:
+        local = host == "localhost"
+    if local:
+        import httpx
+        client_kw = {"http_client": httpx.Client(trust_env=False),
+                     "http_async_client": httpx.AsyncClient(trust_env=False)}
+
     model = ChatOpenAI(model=args.model, base_url=args.base_url,
-                       api_key=args.api_key, timeout=600, max_retries=1)
+                       api_key=args.api_key, timeout=600, max_retries=1,
+                       **client_kw)
     # LocalShellBackend = 真实文件系统读写 + shell 执行,root 为工作区根目录
     backend = LocalShellBackend(root_dir=str(ROOT), virtual_mode=False,
                                 inherit_env=True, timeout=600)
