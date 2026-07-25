@@ -644,7 +644,7 @@ function uiAlert(message){
 const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配'};
 
 const MODEL_OPTIONS={
-  claude:[['claude-opus-5','opus-5'],['opus','opus(最新)'],['sonnet','sonnet'],
+  claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
           ['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
@@ -1493,7 +1493,7 @@ document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
 
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
-  claude:[['','默认(CLI配置)'],['claude-opus-5','opus-5'],['opus','opus(最新)'],
+  claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['claude-opus-5','opus-5'],
           ['sonnet','sonnet'],['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
