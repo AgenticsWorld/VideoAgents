@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Holder/ownership chain",
 "挂点定稿:": "Attachment point finalized:",
 "指派": "Assign",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Auto-select the claude model by agent task complexity: creative core→opus, others→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Auto-select the claude model by agent task complexity: creative core→opus-5, others→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Auto-select the codex model by agent task complexity: creative core→gpt-5.6-sol, others→gpt-5.6-terra",
 "推断字段": "Inferred fields",
 "提交": "Submit",

@@ -709,7 +709,7 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
 # 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
-#   smart_claude 按任务复杂度自动选 claude 模型(high→opus low→sonnet)
+#   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 AM_MODES = ("global", "smart_claude", "smart_codex")
 
@@ -737,7 +737,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "08-video-gen/video-generation": "high",            # 视频生成主力
 }
 AM_MODE_MODELS = {
-    "smart_claude": {"high": {"engine": "claude", "model": "opus"},
+    "smart_claude": {"high": {"engine": "claude", "model": "claude-opus-5"},
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},

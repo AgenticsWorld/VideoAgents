@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Pemilik/rantai perpindahan kepemilikan",
 "挂点定稿:": "Titik kait final:",
 "指派": "Tugaskan",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Pilih model claude otomatis menurut kompleksitas tugas Agent: inti kreatif→opus lainnya→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Pilih model claude otomatis menurut kompleksitas tugas Agent: inti kreatif→opus-5 lainnya→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Pilih model codex otomatis menurut kompleksitas tugas Agent: inti kreatif→gpt-5.6-sol lainnya→gpt-5.6-terra",
 "推断字段": "Field hasil inferensi",
 "提交": "Kirim",

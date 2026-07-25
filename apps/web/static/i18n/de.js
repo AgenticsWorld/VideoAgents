@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Besitzer/Besitzwechsel-Kette",
 "挂点定稿:": "Ankerpunkt final:",
 "指派": "Zuweisen",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Wählt das claude-Modell automatisch nach Aufgabenkomplexität: kreativer Kern → opus, Rest → sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Wählt das claude-Modell automatisch nach Aufgabenkomplexität: kreativer Kern → opus, Rest → sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Wählt das codex-Modell automatisch nach Aufgabenkomplexität: kreativer Kern → gpt-5.6-sol, Rest → gpt-5.6-terra",
 "推断字段": "Abgeleitete Felder",
 "提交": "Absenden",

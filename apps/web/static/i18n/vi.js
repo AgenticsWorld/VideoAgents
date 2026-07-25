@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Người nắm giữ/chuỗi đổi chủ",
 "挂点定稿:": "Chốt điểm gắn:",
 "指派": "Chỉ định",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Tự chọn mô hình claude theo độ phức tạp nhiệm vụ của Agent: lõi sáng tác→opus, còn lại→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Tự chọn mô hình claude theo độ phức tạp nhiệm vụ của Agent: lõi sáng tác→opus-5, còn lại→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Tự chọn mô hình codex theo độ phức tạp nhiệm vụ của Agent: lõi sáng tác→gpt-5.6-sol, còn lại→gpt-5.6-terra",
 "推断字段": "Trường suy luận",
 "提交": "Gửi",

@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Propietario/cadena de traspasos",
 "挂点定稿:": "Punto de anclaje definitivo:",
 "指派": "Asignar",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Selecciona automáticamente el modelo claude según la complejidad de la tarea del Agent: núcleo creativo→opus, resto→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Selecciona automáticamente el modelo claude según la complejidad de la tarea del Agent: núcleo creativo→opus-5, resto→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Selecciona automáticamente el modelo codex según la complejidad de la tarea del Agent: núcleo creativo→gpt-5.6-sol, resto→gpt-5.6-terra",
 "推断字段": "Campos inferidos",
 "提交": "Enviar",

@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "Portador/cadeia de posse",
 "挂点定稿:": "Ponto de fixação finalizado:",
 "指派": "Atribuir",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Escolhe o modelo claude automaticamente pela complexidade da tarefa do Agent: núcleo criativo → opus, demais → sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Escolhe o modelo claude automaticamente pela complexidade da tarefa do Agent: núcleo criativo → opus, demais → sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Escolhe o modelo codex automaticamente pela complexidade da tarefa do Agent: núcleo criativo → gpt-5.6-sol, demais → gpt-5.6-terra",
 "推断字段": "Campos inferidos",
 "提交": "Enviar",

@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "소유자/소유권 이전 이력",
 "挂点定稿:": "연결 지점 확정:",
 "指派": "지정",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Agent 작업 복잡도에 따라 claude 모델 자동 선택: 창작 핵심→opus 나머지→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Agent 작업 복잡도에 따라 claude 모델 자동 선택: 창작 핵심→opus-5 나머지→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Agent 작업 복잡도에 따라 codex 모델 자동 선택: 창작 핵심→gpt-5.6-sol 나머지→gpt-5.6-terra",
 "推断字段": "추론 필드",
 "提交": "제출",

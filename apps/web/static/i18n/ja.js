@@ -399,7 +399,7 @@ window.I18N_DICT = {
 "持有者/易主链": "所有者/所有権の変遷",
 "挂点定稿:": "アタッチ位置確定:",
 "指派": "アサイン",
-"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet": "Agent のタスク複雑度に応じて claude モデルを自動選択:創作コア→opus、その他→sonnet",
+"按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet": "Agent のタスク複雑度に応じて claude モデルを自動選択:創作コア→opus-5、その他→sonnet",
 "按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Agent のタスク複雑度に応じて codex モデルを自動選択:創作コア→gpt-5.6-sol、その他→gpt-5.6-terra",
 "推断字段": "推定フィールド",
 "提交": "送信",
