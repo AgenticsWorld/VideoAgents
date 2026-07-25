@@ -102,7 +102,6 @@ window.I18N_DICT = {
 "Seedream 4.5(文/图生图/多图融合)": "Seedream 4.5 (texto/imagem para imagem/fusão de múltiplas imagens)",
 "Seedream 5.0 Lite(轻量版)": "Seedream 5.0 Lite (versão leve)",
 "Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)": "Seedream 5.0 Pro (mais recente, texto/imagem para imagem/múltiplas referências, saída ≥ 1280×720)",
-"Seedream 5.0(已从在售列表下架,暂仍可调用)": "Seedream 5.0 (retirado do catálogo de venda, mas ainda pode ser chamado)",
 "Seedream 5.0(文/图生图/多参考图/组图)": "Seedream 5.0 (texto/imagem para imagem/múltiplas referências/lotes de imagens)",
 "Sora 2 Pro · 故事理解/镜头语言,创意短片": "Sora 2 Pro · compreensão narrativa/linguagem de câmera, curtas criativos",
 "TOS 存储桶名(建议 cn-beijing 私有桶)": "Nome do bucket TOS (recomenda-se bucket privado em cn-beijing)",
