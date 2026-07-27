@@ -726,7 +726,6 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/context": "low",                  # context 打包 = 机械活
     "00-orchestration/version": "low",                  # 版本快照 = 机械活
     "00-orchestration/evaluation": "low",               # 评分
-    "01-story/novel-parser": "low",                     # 解析
     "01-story/event": "low",                            # 事件抽取索引
     "01-story/timeline-story": "low",                   # 时间线索引
     "02-worldbuilding/dictionary": "low",               # 词典索引
