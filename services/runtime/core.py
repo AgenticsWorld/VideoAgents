@@ -715,10 +715,11 @@ AM_MODES = ("global", "smart_claude", "smart_codex")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
-    "00-orchestration": "high", "01-story": "high", "02-worldbuilding": "high",
-    "03-characters": "high", "04-creatures": "high", "05-scenes": "high",
+    "00-orchestration": "high", "01-story": "high",
+    "03-characters": "high", "05-scenes": "high",
     "06-art": "high", "07-directing": "high",
     "11-qa": "low",
+    "02-worldbuilding": "low", "04-creatures": "low",
     "08-video-gen": "low", "09-audio": "low", "10-editing": "low",
     "12-publishing": "low",
 }
@@ -728,8 +729,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/evaluation": "low",               # 评分
     "01-story/event": "low",                            # 事件抽取索引
     "01-story/timeline-story": "low",                   # 时间线索引
-    "02-worldbuilding/dictionary": "low",               # 词典索引
-    "02-worldbuilding/timeline": "low",                 # 编年史索引
+    "02-worldbuilding/world": "high",                   # 世界观总纲 = 创作核心
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
