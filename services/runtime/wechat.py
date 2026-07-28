@@ -124,11 +124,21 @@ def _qr_payload(qrcode_img_content: str, qrcode: str) -> dict:
 
 async def api_wechat_bind_start():
     """生成绑定二维码;前端展示后轮询 bind 状态。"""
-    try:
-        d = await asyncio.to_thread(
-            _get_json, "ilink/bot/get_bot_qrcode", {"bot_type": 3}, API_TIMEOUT_S)
-    except (OSError, urllib.error.URLError) as e:
-        raise core.ServiceError(502, f"请求微信绑定二维码失败:{e}") from None
+    # 偶发 SSL EOF(代理/网络抖动被对端断连)重试两次再报错
+    d = None
+    err: Exception | None = None
+    for attempt in range(3):
+        try:
+            d = await asyncio.to_thread(
+                _get_json, "ilink/bot/get_bot_qrcode", {"bot_type": 3}, API_TIMEOUT_S)
+            err = None
+            break
+        except (OSError, urllib.error.URLError) as e:
+            err = e
+            if attempt < 2:
+                await asyncio.sleep(1)
+    if err is not None:
+        raise core.ServiceError(502, f"请求微信绑定二维码失败:{err}") from None
     qrcode = (d.get("qrcode") or "").strip()
     if not qrcode:
         raise core.ServiceError(502, f"get_bot_qrcode 未返回 qrcode:{d}")
