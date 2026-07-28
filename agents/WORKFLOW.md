@@ -14,7 +14,7 @@
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 3 次,仍不过升级人工。
 5. **上下文按需组装**:Agent 不读全库。`context` Agent 为每个工单裁剪出 Context Package(只含该任务需要的 Bible 片段 + 上游产物)。
-6. **人工确认点(H1–H5 + H3A/H3B)不可跳过**:世界圣经、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
+6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
 8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
 9. **输出文件命名仅限英文与数字(2026-07-20)**:所有 Agent 落盘的文件名与目录名只准使用英文字母(a-z/A-Z)、数字(0-9)及分隔符 `-`/`_`/`.`,**禁止中文及其他任何非 ASCII 字符**——中文文件名在 ffmpeg/对象存储预签名 URL/跨平台路径处理中随时炸链。角色/场景等实体一律用 ID 或拼音/英文 slug 入文件名(如 `CHAR-0001_voiceprint.mp3`,不是 `林风_声纹.mp3`);机检项 ascii_filename,命中非 ASCII 文件名直接退回。本条只限**文件名**,文件内容(JSON 字段值、字幕、剧本)不受限。用户放入 `novel/`、`refs/` 的输入文件不强制,但引用时应先规范化改名。
@@ -116,7 +116,7 @@ refs/
      character-manager →(appearance/growth/personality/
        relationship/voiceprint/dialogue-style 并行)
      creature/mount;scene →(environment/architecture/lighting)
-                        [G3 闸门]
+                  [G3 + H1A 人工确认]
                              │
           ┌──────────────────┴───────────────────┐
    Phase 4 美术风格                        Phase 5 剧本改编
@@ -207,7 +207,7 @@ refs/
 
 ## 4. 分阶段明细:发给谁、什么指令、怎么校验
 
-每张表的「校验」列按三道闸展开:**机检**(自动)/ **评分**(evaluation Agent,rubric 阈值 80)/ **QA**(专项审核 Agent 或人工)。
+每张表的「校验」列按三道闸展开:**机检**(自动)/ **评分**(evaluation Agent,rubric 阈值 80——实际以项目「审核设置·质量评委」为准,0=跳过评分不派 evaluation 单)/ **QA**(专项审核 Agent 或人工)。
 
 ### Phase 0 — 摄入与立项
 
@@ -271,7 +271,7 @@ refs/
 | architecture | 建筑风格卡(可喂给绘图) | scene、culture | `<id>/architecture.json` | QA:visual-qa 预审风格描述可执行性 |
 | lighting | 每场景基准光照方案(日/夜/室内外) | scene、environment | `<id>/lighting.json` | QA:visual-qa 预审 |
 
-**G3 闸门**:引用完整性全查——所有角色/场景子文件挂在合法 ID 上;character-consistency-qa 出报告。
+**G3 闸门 + H1A 人工确认**:引用完整性全查——所有角色/场景子文件挂在合法 ID 上;character-consistency-qa 出报告;机检/QA 通过后,用户审看角色/生物/场景设定并签字,未签字不进 Phase 4/5。
 
 ### Phase 4 — 美术风格(依赖 G3)
 
@@ -588,7 +588,7 @@ refs/
 | context | 每个工单派发前 | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内 |
 | memory-bible | 任何设定读写 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游 |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
-| evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回;3 次不过升级人工 |
+| evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
 
 ## 6. 工单(Work Order)统一格式
 
@@ -631,7 +631,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 |---|---|---|
 | `context.md` | context | Context Package(含 token 预算声明) |
 | `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
-| `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本 |
+| `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
 **任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
@@ -696,6 +696,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 | 点位 | 时机 | 用户确认什么 |
 |---|---|---|
 | H1 | G2 后 | 世界圣经摘要(设定理解对不对) |
+| H1A | G3 后 | 角色与资产设定:角色形象/性格/关系/声音、生物、场景环境(进美术与剧本前锁定) |
 | H2 | G4 后 | 美术风格 + 主角人设图(风格锁定) |
 | H3 | G5 后 | 第 1 集剧本 |
 | H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D) |

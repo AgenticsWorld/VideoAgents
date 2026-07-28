@@ -136,6 +136,31 @@ function findFile(root: string, predicate: (name: string) => boolean): string | 
   return undefined
 }
 
+async function extractDesktopArchive(archive: string, staging: string): Promise<void> {
+  // Electron 的 extract-zip 在部分 macOS App 包（Framework 内含符号链接）上会停在
+  // 解压阶段而不抛错。ditto 是系统原生的 App/DMG 解包工具，可正确保留链接和权限。
+  if (process.platform === 'darwin') {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('/usr/bin/ditto', ['-x', '-k', archive, staging], {stdio: 'ignore'})
+      child.once('error', reject)
+      child.once('close', code => {
+        if (code === 0) resolve()
+        else reject(new Error(`macOS 更新包解压失败：ditto 退出码 ${code ?? 'unknown'}`))
+      })
+    })
+    return
+  }
+
+  let uncompressedSize = 0
+  await extract(archive, {
+    dir: staging,
+    onEntry: entry => {
+      uncompressedSize += entry.uncompressedSize
+      if (uncompressedSize > 3 * 1024 * 1024 * 1024) throw new Error('桌面更新包解压后体积异常')
+    },
+  })
+}
+
 export async function downloadAndApplyDesktopUpdate(
   userData: string,
   currentAppPath: string,
@@ -151,14 +176,7 @@ export async function downloadAndApplyDesktopUpdate(
   await download(artifact, archive, onProgress)
   onProgress({phase: 'extracting', message: '正在准备应用更新…'})
   mkdirSync(staging, {recursive: true})
-  let uncompressedSize = 0
-  await extract(archive, {
-    dir: staging,
-    onEntry: entry => {
-      uncompressedSize += entry.uncompressedSize
-      if (uncompressedSize > 3 * 1024 * 1024 * 1024) throw new Error('桌面更新包解压后体积异常')
-    },
-  })
+  await extractDesktopArchive(archive, staging)
   rmSync(archive, {force: true})
 
   if (process.platform === 'darwin') {

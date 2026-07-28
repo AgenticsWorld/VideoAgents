@@ -33,6 +33,8 @@ main{flex:1;display:flex;min-height:0}
 #sidebar{width:290px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
 #search{margin:10px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
 #agent-list{flex:1;overflow-y:auto;padding-bottom:20px}
+#app-ver{flex:none;padding:6px 14px 8px;border-top:1px solid var(--border);font-size:11px;color:var(--dim)}
+#app-ver:empty{display:none}
 .cat{padding:7px 14px 3px;font-size:11px;color:var(--dim);letter-spacing:1px;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px}
 .cat:hover{color:var(--text)}
 .cat .tri{flex:none;font-size:9px;width:10px;text-align:center}
@@ -102,12 +104,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .run .tm{margin-left:auto;color:var(--dim);flex:none}
 .run .msg2{color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .prog{color:var(--yellow);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.run .acts{display:none;margin-top:6px;border-top:1px dashed var(--border);padding-top:5px}
-.run.open .acts{display:block}
-.run .acts div{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .parent{color:var(--purple)}
-.run .logbtn{color:var(--dim);cursor:pointer;flex:none;padding:0 3px;border-radius:4px}
-.run .logbtn:hover{color:var(--text);background:var(--border)}
+.run .err2{color:var(--red);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;flex:none}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
@@ -228,7 +226,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ 模型策略</a>
         <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
           <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
-          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">Claude 智能分配</a>
+          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
           <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
         </div>
       </div>
@@ -255,6 +253,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div id="sidebar">
     <input id="search" placeholder="搜索 Agent…">
     <div id="agent-list"></div>
+    <div id="app-ver"></div>
   </div>
   <div id="chat">
     <div id="chat-head">
@@ -400,7 +399,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="4" style="display:none">
       <div id="npr-rows"></div>
-      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
+      <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -522,7 +521,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
     <div id="rev-rows"></div>
-    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
   </div>
@@ -644,7 +643,8 @@ function uiAlert(message){
 const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配'};
 
 const MODEL_OPTIONS={
-  claude:[['opus','opus(最新)'],['sonnet','sonnet'],['claude-fable-5','fable-5'],
+  claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
+          ['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
@@ -776,7 +776,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
-  REVIEW_DIMS.forEach(([k])=>{$(`#npr-${k}`).value=0;$(`#npr-${k}-num`).value=0});   // 新建项目审核力度默认全 0(不审核)
+  REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度默认全 0(不审核);质量评委默认 60
   $('#npp-intro-on').checked=true;$('#npp-outro-on').checked=true;$('#npp-teaser-on').checked=true;
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
   nppToggleRows();
@@ -1078,11 +1078,14 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 审核设置弹窗(各维度审核力度 0-100,按项目独立) ---------- */
+// evaluation=质量评委(00-orchestration/evaluation)验收合格线:默认 60,0=跳过不派单;其余维度为审核力度,默认 0
 const REVIEW_DIMS=[
+  ['evaluation','质量评委'],
   ['audio_quality','音频质量审核'],['character_consistency','角色一致性审核'],
   ['content_safety','内容安全'],['copyright','版权审核'],
   ['logic','逻辑审核'],['timeline','时间线审核'],
   ['visual_quality','画面质量审核'],['worldview','世界观审核']];
+const REV_DEFAULT=k=>k==='evaluation'?60:0;
 function buildRevRows(boxSel='#rev-rows',prefix='rev'){   // 审核设置弹窗与新建向导第4步共用
   $(boxSel).innerHTML=REVIEW_DIMS.map(([k,label])=>`
     <div class="row"><label>${label}</label>
@@ -1492,8 +1495,8 @@ document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
 
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
-  claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['sonnet','sonnet'],
-          ['claude-fable-5','fable-5'],
+  claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['claude-opus-5','opus-5'],
+          ['sonnet','sonnet'],['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
   codex:[['','默认'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
@@ -1643,19 +1646,17 @@ function renderRuns(){
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
     .sort((a,b)=>b.created-a.created).slice(0,50);
   if(!runs.length){box.innerHTML='<div class="empty">暂无运行</div>';return}
-  const open=new Set([...box.querySelectorAll('.run.open')].map(x=>x.dataset.id));
   box.innerHTML='';
   runs.forEach(r=>{
-    const d=document.createElement('div'); d.className='run'+(open.has(r.id)?' open':''); d.dataset.id=r.id;
+    const d=document.createElement('div'); d.className='run'; d.dataset.id=r.id;
     const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
-    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span><span class="logbtn" title="展开/收起执行日志">▤</span></div>
+    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span></div>
       <div class="msg2">${par}${esc(r.message||'')}</div>
       ${r.status==='running'&&r.progress?`<div class="prog">${esc(r.progress)}</div>`:''}
-      <div class="acts">${(r.activity||[]).map(a=>`<div>${esc(a)}</div>`).join('')||'<div>(暂无活动)</div>'}${r.error?`<div style="color:var(--red)">${esc(r.error)}</div>`:''}</div>`;
+      ${r.error?`<div class="err2">${esc(r.error)}</div>`:''}`;
     d.onclick=()=>selectAgent(r.agent);                       // 点卡片 → 打开该 Agent 对话
-    d.querySelector('.logbtn').onclick=e=>{e.stopPropagation();d.classList.toggle('open')};
     box.appendChild(d);
   });
 }
@@ -1775,6 +1776,8 @@ function liveBox(runId){
   renderAgents();renderRuns();
   initWatchdog();   // 等项目下拉框就绪后再查,否则 curProj() 回退 demo 导致误显示「已停」
   initGenProviders();
+  // 左下角版本号:来自 API health 的 __version__,随 release 升版自动变化
+  api('/api/v1/health').then(h=>{if(h.version)$('#app-ver').textContent='v'+h.version}).catch(()=>{});
   // 运行面板计时刷新由顶部的条件 setInterval 统一负责(仅有任务在跑时重绘)
   // 默认选中总制片
   const d=AGENTS.find(a=>a.dispatcher);
