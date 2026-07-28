@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
-from collections import defaultdict, deque
+from collections import deque
 from contextlib import AsyncExitStack
 from datetime import datetime
 from pathlib import Path
@@ -125,11 +125,20 @@ STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(s
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # 无状态服务型/扇出型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
-# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_LOCKS 串成一列)。
+# 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_SEMS 串成一列)。
 # 08-video-gen 为组级扇出工位(prompt/imagegen/videogen…每组一单,2026-07-23 纳入):
-# 组间依赖由 DAG depends_on 表达,不靠会话串行,同 agent 并发是 Phase 7 吞吐关键
-STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation"}
-STATELESS_PREFIXES = ("11-qa/", "08-video-gen/")
+# 组间依赖由 DAG depends_on 表达,不靠会话串行,同 agent 并发是 Phase 7 吞吐关键。
+# 05-scenes 为场景级扇出工位(environment/architecture/lighting 每场景一单,2026-07-28 纳入):
+# 大项目场景数可达 70+,同 agent 串行会拖垮 Phase 3。
+# 03-characters(appearance/personality…每角色一单)、06-art(char-concept 每角色/
+# env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入
+STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
+                    "01-story/novel-parser"}
+STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
+                      "03-characters/", "06-art/")
+# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
+# 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
+AGENT_CONCURRENCY_DEFAULT = 5
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
@@ -218,7 +227,26 @@ RUN_TASKS: dict[str, asyncio.Task] = {}          # run_id -> execute_run 任务(
 RUN_PROCS: dict[str, asyncio.subprocess.Process] = {}  # run_id -> 子进程(停止运行用)
 CONFIRMS: dict[str, dict] = {}                   # confirm_id -> 待用户确认项
 SEM = asyncio.Semaphore(MAX_CONCURRENT)
-AGENT_LOCKS: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+# 每 agent 并发闸:agent_id -> (创建时的额度, 信号量)。额度被用户调整后按需重建;
+# 旧信号量由仍持有它的 run 自然释放后回收,切换瞬间总并发可能短暂超出新额度(可接受)
+AGENT_SEMS: dict[str, tuple[int, asyncio.Semaphore]] = {}
+
+
+def agent_concurrency() -> int:
+    """无状态 agent 的同 agent 并发额度(1..MAX_CONCURRENT,越界钳制)。"""
+    try:
+        n = int(STATE.get("agent_concurrency", AGENT_CONCURRENCY_DEFAULT))
+    except (TypeError, ValueError):
+        n = AGENT_CONCURRENCY_DEFAULT
+    return max(1, min(n, MAX_CONCURRENT))
+
+
+def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
+    cached = AGENT_SEMS.get(agent_id)
+    if cached is None or cached[0] != limit:
+        cached = (limit, asyncio.Semaphore(limit))
+        AGENT_SEMS[agent_id] = cached
+    return cached[1]
 
 
 def load_state() -> dict:
@@ -1506,9 +1534,10 @@ async def execute_run(run: dict, message: str, model: str | None):
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
         if not is_dispatcher:
             await stack.enter_async_context(SEM)
-        # 无状态服务型 agent 每次全新会话,允许同 agent 并发;其余仍串行保护会话
-        if not is_stateless:
-            await stack.enter_async_context(AGENT_LOCKS[agent_id])
+        # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
+        # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)
+        limit = agent_concurrency() if is_stateless else 1
+        await stack.enter_async_context(agent_sem(agent_id, limit))
         run["status"] = "running"
         run["started"] = time.time()
         publish_run(run)
@@ -4613,6 +4642,27 @@ async def api_watchdog_threshold_set(body: dict):
     save_state(STATE)
     sync_keepawake()    # 立即生效,不等下一轮巡检
     return await api_watchdog_threshold_get()
+
+
+async def api_agent_concurrency_get():
+    return {"agent_concurrency": agent_concurrency(),
+            "default": AGENT_CONCURRENCY_DEFAULT,
+            "max": MAX_CONCURRENT}
+
+
+async def api_agent_concurrency_set(body: dict):
+    """并发数量设置(设置菜单「高级→并发数量」):无状态扇出型 Agent(05-scenes/
+    08-video-gen/11-qa/eval 等)的同 agent 并发额度;有状态 Agent 恒为 1,
+    全局仍受 MAX_CONCURRENT 总闸。持久化,立即对后续排队的运行生效。"""
+    try:
+        n = int(body.get("agent_concurrency"))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "agent_concurrency must be an integer") from None
+    if not 1 <= n <= MAX_CONCURRENT:
+        raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
+    STATE["agent_concurrency"] = n
+    save_state(STATE)
+    return await api_agent_concurrency_get()
 
 
 async def api_usage():

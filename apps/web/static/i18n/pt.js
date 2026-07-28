@@ -1,4 +1,10 @@
 window.I18N_DICT = {
+"并发数量": "Concorrência",
+"扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Limite de tickets que um mesmo Agent fan-out (ativos de cena/geração de vídeo/revisão etc.) pode executar ao mesmo tempo",
+"🚦 并发数量 设置": "🚦 Configurações de concorrência",
+"每 Agent 并发额度": "Cota de concorrência por Agent",
+"扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。": "Limite de tickets que o mesmo Agent fan-out (postos que processam um ticket por cena/grupo, como ativos de cena, geração de vídeo, revisão e pontuação de aceitação) pode executar simultaneamente; padrão 5. Agents criativos sempre rodam em série para proteger a continuidade da sessão e não são afetados; todas as execuções ainda passam pelo portão global de 8 slots de processo. Cada concorrência = um processo CLI real do modelo — aumentar o valor acelera proporcionalmente o consumo de cota e favorece quedas de proxy em alta concorrência; aumente gradualmente. Configuração global; após salvar vale imediatamente para os tickets enfileirados em seguida.",
+"并发额度需为 1-{max} 的整数": "A cota de concorrência deve ser um inteiro entre 1 e {max}",
 "新版控制台「API Key 管理」创建的 API Key": "API Key criada em “Gerenciamento de API Key” do novo console",
 "关键词过滤(名称/性别/年龄/标签/语言)": "Filtro por palavras-chave (nome/gênero/idade/etiquetas/idioma)",
 "拉取音色库": "Carregar biblioteca de vozes",

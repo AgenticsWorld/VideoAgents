@@ -1,4 +1,10 @@
 window.I18N_DICT = {
+"并发数量": "Concurrency",
+"扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Max tickets a single fan-out agent (scene assets/video gen/QA, etc.) can run at the same time",
+"🚦 并发数量 设置": "🚦 Concurrency Settings",
+"每 Agent 并发额度": "Per-agent concurrency",
+"扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。": "Cap on how many tickets the same fan-out agent (per-scene/per-group stations such as scene assets, video generation, QA and acceptance scoring) can run at once; default 5. Creative agents always run serially to protect session continuity and are not affected; all runs still pass the global gate of 8 process slots. Each concurrent slot is a real model CLI process — raising this burns quota proportionally faster and makes proxy disconnects more likely under high concurrency, so increase gradually. Global setting; takes effect immediately for subsequently queued tickets.",
+"并发额度需为 1-{max} 的整数": "Concurrency must be an integer between 1 and {max}",
 "新版控制台「API Key 管理」创建的 API Key": "API Key created under “API Key management” in the new console",
 "关键词过滤(名称/性别/年龄/标签/语言)": "Keyword filter (name/gender/age/labels/language)",
 "拉取音色库": "Fetch voice library",

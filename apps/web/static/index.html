@@ -243,6 +243,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
           <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
+          <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
         </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
@@ -574,6 +575,18 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
+  </div>
+</div>
+<div id="conc-modal" class="modal">
+  <div class="box">
+    <h3>🚦 并发数量 设置</h3>
+    <div class="row"><label>每 Agent 并发额度</label>
+      <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
+      <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
+    </div>
+    <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。</div>
+    <div class="err" id="conc-err"></div>
+    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -1198,6 +1211,34 @@ $('#wdt-ok').onclick=async()=>{
     await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle,keep_awake:$('#wdt-awake').checked});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 并发数量弹窗(设置菜单「高级」) ---------- */
+let concMax=8;
+async function openConcModal(){
+  $('#conc-err').textContent='';
+  try{
+    const c=await api('/api/v1/config/concurrency');
+    concMax=c.max||8;
+    $('#conc-range').max=concMax;$('#conc-num').max=concMax;
+    $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5}
+  $('#conc-modal').style.display='flex';
+}
+$('#menu-concurrency').onclick=e=>{e.preventDefault();openConcModal()};
+$('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
+$('#conc-num').oninput=()=>{
+  const v=parseInt($('#conc-num').value);
+  if(v>=1&&v<=concMax)$('#conc-range').value=v;
+};
+$('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
+$('#conc-ok').onclick=async()=>{
+  const v=parseInt($('#conc-num').value);
+  if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
+  try{
+    await api('/api/v1/config/concurrency',{agent_concurrency:v});
+    $('#conc-modal').style.display='none';
+  }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */

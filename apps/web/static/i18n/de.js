@@ -1,4 +1,10 @@
 window.I18N_DICT = {
+"并发数量": "Parallelität",
+"扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Obergrenze der Tickets, die ein Fan-out-Agent (Szenen-Assets/Videogenerierung/Prüfung usw.) gleichzeitig ausführen darf",
+"🚦 并发数量 设置": "🚦 Parallelität – Einstellungen",
+"每 Agent 并发额度": "Parallelitätskontingent je Agent",
+"扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。": "Obergrenze der Tickets, die derselbe Fan-out-Agent (Stationen mit einem Ticket je Szene/Gruppe wie Szenen-Assets, Videogenerierung, Prüfung, Abnahmebewertung) gleichzeitig ausführen darf; Standard 5. Kreative Agents laufen zum Schutz der Sitzungskontinuität stets seriell und sind nicht betroffen; alle Läufe unterliegen weiterhin dem globalen Tor von 8 Prozess-Slots. Jede Parallelität = ein echter Modell-CLI-Prozess – ein höherer Wert beschleunigt den Kontingentverbrauch entsprechend und erhöht bei hoher Parallelität Proxy-Abbrüche, daher schrittweise erhöhen. Globale Einstellung; wirkt nach dem Speichern sofort für danach eingereihte Tickets.",
+"并发额度需为 1-{max} 的整数": "Das Parallelitätskontingent muss eine ganze Zahl zwischen 1 und {max} sein",
 "新版控制台「API Key 管理」创建的 API Key": "API Key, erstellt unter „API-Key-Verwaltung“ der neuen Konsole",
 "关键词过滤(名称/性别/年龄/标签/语言)": "Stichwortfilter (Name/Geschlecht/Alter/Labels/Sprache)",
 "拉取音色库": "Stimmbibliothek laden",

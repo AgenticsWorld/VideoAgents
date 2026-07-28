@@ -1,4 +1,10 @@
 window.I18N_DICT = {
+"并发数量": "Số luồng song song",
+"扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Giới hạn số phiếu mà một Agent dạng fan-out (tài sản bối cảnh/tạo video/kiểm duyệt, v.v.) có thể chạy cùng lúc",
+"🚦 并发数量 设置": "🚦 Cài đặt số luồng song song",
+"每 Agent 并发额度": "Hạn mức song song mỗi Agent",
+"扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。": "Giới hạn số phiếu mà cùng một Agent dạng fan-out (các vị trí xử lý một phiếu cho mỗi bối cảnh/nhóm như tài sản bối cảnh, tạo video, kiểm duyệt, chấm nghiệm thu) có thể chạy đồng thời; mặc định là 5. Agent sáng tạo luôn chạy tuần tự để bảo vệ tính liên tục của phiên nên không chịu ảnh hưởng; toàn bộ vẫn qua cổng tổng 8 khe tiến trình toàn cục. Mỗi luồng song song = một tiến trình CLI mô hình thật — tăng giá trị sẽ tiêu hao hạn mức nhanh tương ứng và dễ đứt kết nối proxy khi song song cao, nên tăng dần từng bước. Cài đặt toàn cục, lưu xong có hiệu lực ngay với các phiếu xếp hàng sau đó.",
+"并发额度需为 1-{max} 的整数": "Hạn mức song song phải là số nguyên từ 1 đến {max}",
 "新版控制台「API Key 管理」创建的 API Key": "API Key tạo trong “Quản lý API Key” của console phiên bản mới",
 "关键词过滤(名称/性别/年龄/标签/语言)": "Lọc theo từ khóa (tên/giới tính/tuổi/nhãn/ngôn ngữ)",
 "拉取音色库": "Tải thư viện giọng",

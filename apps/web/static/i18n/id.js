@@ -1,4 +1,10 @@
 window.I18N_DICT = {
+"并发数量": "Jumlah paralel",
+"扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Batas tiket yang dapat dijalankan bersamaan oleh satu Agent fan-out (aset adegan/pembuatan video/pemeriksaan, dll.)",
+"🚦 并发数量 设置": "🚦 Pengaturan jumlah paralel",
+"每 Agent 并发额度": "Kuota paralel per Agent",
+"扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。": "Batas tiket yang dapat dijalankan bersamaan oleh Agent fan-out yang sama (pos yang memproses satu tiket per adegan/grup seperti aset adegan, pembuatan video, pemeriksaan, penilaian penerimaan); bawaan 5. Agent kreatif selalu berjalan berurutan demi menjaga kesinambungan sesi dan tidak terpengaruh; semua eksekusi tetap melewati gerbang global 8 slot proses. Setiap paralel = satu proses CLI model sungguhan — menaikkan nilai mempercepat konsumsi kuota secara sebanding dan memperbesar kemungkinan putus proxy saat paralel tinggi, jadi naikkan bertahap. Pengaturan global; setelah disimpan langsung berlaku untuk tiket yang mengantre berikutnya.",
+"并发额度需为 1-{max} 的整数": "Kuota paralel harus bilangan bulat antara 1 dan {max}",
 "新版控制台「API Key 管理」创建的 API Key": "API Key yang dibuat di “Manajemen API Key” konsol versi baru",
 "关键词过滤(名称/性别/年龄/标签/语言)": "Filter kata kunci (nama/gender/usia/label/bahasa)",
 "拉取音色库": "Muat pustaka suara",
