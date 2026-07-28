@@ -1,7 +1,7 @@
 {
   "name": "videoagents-product",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "workspaces": ["apps/desktop"],
   "scripts": {
     "dev:web": "node apps/web/run-server.mjs",
