@@ -4,6 +4,25 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-28
+
+### Added
+
+- Quality-judge slider in review settings (0-100, default 60, listed first): the value is the evaluation acceptance threshold below which verdicts become "must fix as instructed"; 0 disables evaluation tickets entirely (no scoring for the whole run). Synced to the new-project wizard; prompt injection covers the three states and names `own_review` explicitly.
+- H1A "characters & assets confirmation" human sign-off gate added to the default workflow's g3 gate, between H1 and H2; WORKFLOW.md hard rules, flowchart, gate notes and H-point summary table updated.
+- The console footer now shows the serving version (read from the API health `__version__`), so release bumps surface automatically in the UI.
+- Character/scene/prop preview galleries collect subdirectories (e.g. `candidates`) into folder cards opened on click, keeping drafts out of the final-image grid.
+
+### Changed
+
+- claude engine wired to `opus-5`: the top-bar default is the "opus (latest)" alias with `opus-5` as the second choice; the smart-assignment high tier resolves to it (`smart_claude` → opus-5, `smart_codex` → gpt-5.6-sol).
+- Smart-assignment tiers rebalanced: `novel-parser` promoted to the high-complexity tier (back to the 01-story category default); the whole 02-worldbuilding and 04-creatures categories demoted to the low tier, with `world` kept high as the creative core.
+- Run panel cards no longer embed an activity-log expander; errors are shown inline in red instead.
+
+### Fixed
+
+- deepagents engine: interpreter auto-discovery, and local endpoints connect directly instead of going through the system proxy.
+
 ## [1.0.4] - 2026-07-24
 
 ### Changed
