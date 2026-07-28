@@ -403,7 +403,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="4" style="display:none">
       <div id="npr-rows"></div>
-      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
+      <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -525,7 +525,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
     <div id="rev-rows"></div>
-    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
   </div>
@@ -780,7 +780,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
-  REVIEW_DIMS.forEach(([k])=>{$(`#npr-${k}`).value=0;$(`#npr-${k}-num`).value=0});   // 新建项目审核力度默认全 0(不审核)
+  REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度默认全 0(不审核);质量评委默认 60
   $('#npp-intro-on').checked=true;$('#npp-outro-on').checked=true;$('#npp-teaser-on').checked=true;
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
   nppToggleRows();
@@ -1082,11 +1082,14 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 审核设置弹窗(各维度审核力度 0-100,按项目独立) ---------- */
+// evaluation=质量评委(00-orchestration/evaluation)验收合格线:默认 60,0=跳过不派单;其余维度为审核力度,默认 0
 const REVIEW_DIMS=[
+  ['evaluation','质量评委'],
   ['audio_quality','音频质量审核'],['character_consistency','角色一致性审核'],
   ['content_safety','内容安全'],['copyright','版权审核'],
   ['logic','逻辑审核'],['timeline','时间线审核'],
   ['visual_quality','画面质量审核'],['worldview','世界观审核']];
+const REV_DEFAULT=k=>k==='evaluation'?60:0;
 function buildRevRows(boxSel='#rev-rows',prefix='rev'){   // 审核设置弹窗与新建向导第4步共用
   $(boxSel).innerHTML=REVIEW_DIMS.map(([k,label])=>`
     <div class="row"><label>${label}</label>

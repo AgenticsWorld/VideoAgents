@@ -207,7 +207,7 @@ refs/
 
 ## 4. 分阶段明细:发给谁、什么指令、怎么校验
 
-每张表的「校验」列按三道闸展开:**机检**(自动)/ **评分**(evaluation Agent,rubric 阈值 80)/ **QA**(专项审核 Agent 或人工)。
+每张表的「校验」列按三道闸展开:**机检**(自动)/ **评分**(evaluation Agent,rubric 阈值 80——实际以项目「审核设置·质量评委」为准,0=跳过评分不派 evaluation 单)/ **QA**(专项审核 Agent 或人工)。
 
 ### Phase 0 — 摄入与立项
 
@@ -588,7 +588,7 @@ refs/
 | context | 每个工单派发前 | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内 |
 | memory-bible | 任何设定读写 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游 |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
-| evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回;3 次不过升级人工 |
+| evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
 
 ## 6. 工单(Work Order)统一格式
 
@@ -631,7 +631,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 |---|---|---|
 | `context.md` | context | Context Package(含 token 预算声明) |
 | `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
-| `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本 |
+| `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
 **任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
