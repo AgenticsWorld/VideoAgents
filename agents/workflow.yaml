@@ -133,7 +133,7 @@ phases:
           outputs: ["bible/scenes/{id}/architecture.json"], validation: { qa: [11-qa/visual-qa] } }
       - { id: p3-lighting, agent: 05-scenes/lighting, for_each: scene, depends_on: [p3-environment],
           outputs: ["bible/scenes/{id}/lighting.json"], validation: { qa: [11-qa/visual-qa] } }
-      - { id: g3, gate: true,
+      - { id: g3, gate: true, human: true, checkpoint: H1A-角色与资产确认,
           depends_on: [p3-appearance, p3-growth, p3-personality, p3-relationship, p3-voice,
                        p3-dialogue-style, p3-mount, p3-environment, p3-architecture, p3-lighting],
           validation: { auto: [all_refs_resolve], qa: [11-qa/character-consistency-qa] } }

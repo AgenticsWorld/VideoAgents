@@ -9,6 +9,7 @@
 import asyncio
 import hashlib
 import hmac
+import importlib.util
 import io
 import json
 import os
@@ -95,9 +96,23 @@ def cli_not_found_error(engine: str) -> str:
             f"请确认已安装 {label} 并将其加入 PATH，"
             f"或通过 {env_var} 配置可执行文件的完整路径。")
 
-# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型),专用 venv 解释器
-DEEPAGENTS_PY = os.environ.get(
-    "DEEPAGENTS_PY", str(ROOT / ".venv-deepagents" / "bin" / "python"))
+# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型)。解释器按优先级解析:
+# DEEPAGENTS_PY 环境变量 → 项目根 .venv-deepagents(deepagents 需 Python ≥3.11,
+# 主环境为 3.10 时用 make install-deepagents 建)→ 当前解释器(已装 [deepagents] extra 时)
+DEEPAGENTS_PY_DEFAULT = str(ROOT / ".venv-deepagents" / "bin" / "python")
+
+
+def deepagents_python() -> str:
+    env = os.environ.get("DEEPAGENTS_PY")
+    if env:
+        return env
+    for rel in ("bin/python", "Scripts/python.exe"):
+        cand = ROOT / ".venv-deepagents" / rel
+        if cand.exists():
+            return str(cand)
+    if importlib.util.find_spec("deepagents") is not None:
+        return sys.executable
+    return DEEPAGENTS_PY_DEFAULT
 ENGINES = ("claude", "codex", "kimi", "deepagents")   # 执行引擎:claude -p / codex exec / kimi -p / deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
@@ -474,10 +489,12 @@ DEFAULT_GENCONFIG = {
                "subtitle_burn_in": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
-    # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效
-    "review": {k: 0 for k in (
+    # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
+    # evaluation=质量评委(00-orchestration/evaluation)验收「必须照改」合格线,
+    # 默认 60(较其 SOUL.md 固定 80 放宽),0=跳过质量评委(orchestrator 不派 evaluation 工单)
+    "review": {"evaluation": 60, **{k: 0 for k in (
         "audio_quality", "character_consistency", "content_safety", "copyright",
-        "logic", "timeline", "visual_quality", "worldview")},
+        "logic", "timeline", "visual_quality", "worldview")}},
     # 片头片尾设置(设置菜单「片头片尾」):三段包装的开关 + 片头/片尾自由文本要求,按项目独立
     "packaging": {"intro_enabled": True, "intro_notes": "",
                   "outro_enabled": True, "outro_notes": "",
@@ -679,12 +696,13 @@ def _validate_versioning(v: dict):
 
 def _validate_review(r: dict):
     for k, v in (r or {}).items():
-        if k not in REVIEW_DIMENSIONS:
-            raise ServiceError(400, f"Unknown review dimension: {k} (valid: {sorted(REVIEW_DIMENSIONS)})")
+        if k != "evaluation" and k not in REVIEW_DIMENSIONS:
+            raise ServiceError(400, f"Unknown review dimension: {k} (valid: {sorted(REVIEW_DIMENSIONS)} + evaluation)")
         try:
             assert 0 <= int(v) <= 100
         except (TypeError, ValueError, AssertionError):
-            raise ServiceError(400, f"Invalid review strength: {REVIEW_DIMENSIONS[k][0]} must be an integer 0-100") from None
+            label = "质量评委" if k == "evaluation" else REVIEW_DIMENSIONS[k][0]
+            raise ServiceError(400, f"Invalid review strength: {label} must be an integer 0-100") from None
 
 
 # ---------------- Agent 级模型配置(引擎/文字模型/图像/视频渠道) ----------------
@@ -694,16 +712,17 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
 # 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
-#   smart_claude 按任务复杂度自动选 claude 模型(high→opus low→sonnet)
+#   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 AM_MODES = ("global", "smart_claude", "smart_codex")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
-    "00-orchestration": "high", "01-story": "high", "02-worldbuilding": "high",
-    "03-characters": "high", "04-creatures": "high", "05-scenes": "high",
+    "00-orchestration": "high", "01-story": "high",
+    "03-characters": "high", "05-scenes": "high",
     "06-art": "high", "07-directing": "high",
     "11-qa": "low",
+    "02-worldbuilding": "low", "04-creatures": "low",
     "08-video-gen": "low", "09-audio": "low", "10-editing": "low",
     "12-publishing": "low",
 }
@@ -711,18 +730,16 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/context": "low",                  # context 打包 = 机械活
     "00-orchestration/version": "low",                  # 版本快照 = 机械活
     "00-orchestration/evaluation": "low",               # 评分
-    "01-story/novel-parser": "low",                     # 解析
     "01-story/event": "low",                            # 事件抽取索引
     "01-story/timeline-story": "low",                   # 时间线索引
-    "02-worldbuilding/dictionary": "low",               # 词典索引
-    "02-worldbuilding/timeline": "low",                 # 编年史索引
+    "02-worldbuilding/world": "high",                   # 世界观总纲 = 创作核心
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
 }
 AM_MODE_MODELS = {
-    "smart_claude": {"high": {"engine": "claude", "model": "opus"},
+    "smart_claude": {"high": {"engine": "claude", "model": "claude-opus-5"},
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
@@ -1221,6 +1238,17 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     except Exception:
         brief = ""
     rv = ps.get("review") or {}
+    try:
+        ev = max(0, min(100, int(rv.get("evaluation", 60))))
+    except (TypeError, ValueError):
+        ev = 60
+    eval_line = (
+        f"- 质量评委(负责:00-orchestration/evaluation):{ev} —— 该值是 evaluation 对工单验收评分的"
+        f"「必须照着改」合格线,替代其 SOUL.md 固定的 80 分:评分低于 {ev} 分的工单,意见必须具体到能照着改并返工重验"
+        if ev else
+        "- 质量评委(负责:00-orchestration/evaluation):0 —— **跳过质量评委**:orchestrator 全流程不派"
+        " 00-orchestration/evaluation 任何工单,任务关单免 evaluation 验收评分,闸门不因缺验收评分而 HOLD;"
+        "evaluation 被派到也只说明开关已关闭并结单,不做评分")
     review_lines = "\n".join(
         f"- {label}(负责:{qa_agent}):{int(rv.get(key, 0))}"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items())
@@ -1229,6 +1257,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         f"- **你就是「{label}」的负责 QA,本项目该维度力度:{int(rv.get(key, 0))},"
         f"按下方换算规则执行,而非 SOUL.md 固定阈值**"
         for key, (label, qa_agent) in REVIEW_DIMENSIONS.items() if qa_agent == agent_id)
+    if agent_id == "00-orchestration/evaluation" and ev:
+        own_review += (f"\n- **你就是质量评委,本项目「必须照着改」合格线:{ev} 分,"
+                       f"以此替代 SOUL.md 固定的 80 分**")
     if own_review:
         own_review = "\n" + own_review
     ui_lang = resolve_ui_language()
@@ -1263,9 +1294,10 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
+{eval_line}
 各维度审核力度 0-100(默认 0=不审核,用户在设置中调高才生效),当前项目取值:
 {review_lines}{own_review}
-力度换算规则(QA Agent 审核打分、orchestrator 派单与判闸门、evaluation 评分一律遵守):
+力度换算规则(QA Agent 审核打分、orchestrator 派单与判闸门一律遵守;质量评委按上方设定单独执行,不适用本换算):
 - **0:跳过该维度** —— orchestrator 不派该维度 QA 单;QA 被派到也不检查、不开缺陷单,报告只写 `"skipped": true`;闸门按通过处理
 - **1-39 宽松**:只拦 blocker;SOUL.md 中的分数合格线下调 10 分、比例上限翻倍;major/minor 记录在报告中但不拦、不强制返工
 - **40-69 常规**:严格按 SOUL.md / WORKFLOW.md 既有阈值与闸门线执行
@@ -1274,7 +1306,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - **草稿迭代期一律按 0 执行(2026-07-23)**:上表力度只在 G0–G10 闸门判定前的闸门级审核生效——
   草稿/迭代/返工阶段的逐单环节,orchestrator 不派各维度 QA 单,QA 被派到也按 0 处理;
   判每个 G 闸门前,orchestrator 按上表力度对该闸门范围的产物统一补派 QA 审核(力度 0 的维度不补派),
-  缺陷清零机检照常。本条只约束各维度 QA 审核,evaluation 对工单的 acceptance 验收评分不受影响"""
+  缺陷清零机检照常。本条只约束各维度 QA 审核;evaluation 对工单的 acceptance 验收评分按上方「质量评委」设定执行"""
     p += ("\n\n## 用户版本管理设定(Web 客户端「版本管理」页开关,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 的版本化要求)\n"
           + ("- 版本管理:**开启** —— 照常执行既有版本化纪律:任务关单时通知 00-orchestration/version 登记产物,闸门通过后下达冻结指令"
              if (ps.get("versioning") or {}).get("enabled") else
@@ -1540,7 +1572,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                              "run_id": run["id"], "status": "error"})
                 publish_run(run)
                 return
-            da_cmd = [DEEPAGENTS_PY, str(ROOT / "modules" / "deepagents_runner.py"),
+            da_cmd = [deepagents_python(), str(ROOT / "modules" / "deepagents_runner.py"),
                       "--model", use_model,
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
@@ -1688,9 +1720,12 @@ async def execute_run(run: dict, message: str, model: str | None):
             if engine in CLI_BINS:
                 run["error"] = cli_not_found_error(engine)[:500]
             else:
-                missing = error.filename or DEEPAGENTS_PY
+                missing = error.filename or deepagents_python()
                 run["error"] = (f"无法启动 DeepAgents Python 运行环境："
-                                f"未找到“{missing}”。请检查 DEEPAGENTS_PY 配置。")[:500]
+                                f"未找到“{missing}”。请在项目根目录运行 "
+                                f"make install-deepagents 创建专用环境；或在当前环境执行 "
+                                f"pip install -e \".[deepagents]\"（需 Python ≥3.11）；"
+                                f"或设置 DEEPAGENTS_PY 指向已安装 deepagents 的解释器。")[:500]
             if proc:
                 proc.kill()
         except OSError as error:
@@ -3802,7 +3837,7 @@ async def api_projects_create(body: dict):
     # 新建项目的审核力度默认全 0(不审核),向导/调用方显式给值则覆盖
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
-    base["review"] = {k: 0 for k in REVIEW_DIMENSIONS}
+    base["review"] = {"evaluation": 60, **{k: 0 for k in REVIEW_DIMENSIONS}}
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
