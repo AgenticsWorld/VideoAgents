@@ -388,6 +388,26 @@ async def set_watchdog_policy(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_watchdog_threshold_set(body)
 
 
+@api.get("/config/concurrency", tags=["automation"])
+async def agent_concurrency() -> dict[str, Any]:
+    return await core.api_agent_concurrency_get()
+
+
+@api.post("/config/concurrency", tags=["automation"])
+async def set_agent_concurrency(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_agent_concurrency_set(body)
+
+
+@api.get("/config/agent-memory", tags=["automation"])
+async def agent_memory() -> dict[str, Any]:
+    return await core.api_agent_memory_get()
+
+
+@api.post("/config/agent-memory", tags=["automation"])
+async def set_agent_memory(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_agent_memory_set(body)
+
+
 @api.get("/projects/{project}/watchdog", tags=["automation"])
 async def watchdog(project: str) -> dict[str, Any]:
     return await core.api_watchdog_get(project)
