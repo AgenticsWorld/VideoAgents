@@ -1,4 +1,11 @@
 window.I18N_DICT = {
+"Agent记忆": "Agent Memory",
+"开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)": "Turn agents' cross-turn conversation memory (session resume) on or off; on by default",
+"🧠 Agent记忆 设置": "🧠 Agent Memory Settings",
+"对话记忆": "Conversation memory",
+"开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。": "When on, creative agents resume their previous session on each run, so multi-turn conversations keep continuous memory; a session whose history exceeds 128KB is automatically restarted to prevent bloat (stateless fan-out agents always start a fresh session per ticket and are unaffected). When off, every agent — including the Producer — starts a fresh session on each run/message; cross-ticket information travels only through on-disk artifacts (bible, ticket records, etc.), which saves tokens significantly but drops conversational continuity. Global setting; takes effect immediately for subsequent runs. Re-enabling resumes from the most recent session.",
+"✓ 会话恢复生效中": "✓ Session resume active",
+"已关闭:每次运行全新会话": "Off: every run starts a fresh session",
 "并发数量": "Concurrency",
 "扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Max tickets a single fan-out agent (scene assets/video gen/QA, etc.) can run at the same time",
 "🚦 并发数量 设置": "🚦 Concurrency Settings",

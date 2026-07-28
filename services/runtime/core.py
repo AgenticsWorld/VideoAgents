@@ -139,6 +139,11 @@ STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
 # 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
+# Agent 对话记忆缺省值(设置菜单「高级→Agent记忆」可关,存 state.json):
+# 开启=有状态 agent 按 engine::agent::project 恢复上次会话(下方 CHAT_RESUME_LIMIT
+# 128KB 保险丝仍生效);关闭=所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
+# 关闭期间 session_id 照常回存,重新开启后从最近一次会话继续
+AGENT_MEMORY_DEFAULT = True
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
@@ -247,6 +252,11 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
         cached = (limit, asyncio.Semaphore(limit))
         AGENT_SEMS[agent_id] = cached
     return cached[1]
+
+
+def agent_memory_enabled() -> bool:
+    """Agent 对话记忆总开关(设置菜单「高级→Agent记忆」)。"""
+    return bool(STATE.get("agent_memory", AGENT_MEMORY_DEFAULT))
 
 
 def load_state() -> dict:
@@ -1570,7 +1580,9 @@ async def execute_run(run: dict, message: str, model: str | None):
             publish_run(run)
             return
         session_key = f"{engine}::{agent_id}::{run['project']}"
-        session_id = None if is_stateless else STATE["sessions"].get(session_key)
+        # 记忆开关关闭时所有 agent 全新会话(session_id 仍照常回存,重新开启即恢复)
+        session_id = (None if is_stateless or not agent_memory_enabled()
+                      else STATE["sessions"].get(session_key))
         # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
         if session_id:
             resume_limit = (ORCHESTRATOR_RESUME_LIMIT if agent_id == ORCHESTRATOR_AGENT
@@ -4663,6 +4675,22 @@ async def api_agent_concurrency_set(body: dict):
     STATE["agent_concurrency"] = n
     save_state(STATE)
     return await api_agent_concurrency_get()
+
+
+async def api_agent_memory_get():
+    return {"agent_memory": agent_memory_enabled(),
+            "resume_limit_kb": CHAT_RESUME_LIMIT // 1024}
+
+
+async def api_agent_memory_set(body: dict):
+    """Agent记忆设置(设置菜单「高级→Agent记忆」):开启=有状态 Agent 恢复上次
+    会话(128KB 保险丝仍生效);关闭=所有 Agent 每次运行全新会话。持久化,
+    立即对后续运行生效;关闭期间会话号照常回存,重新开启后从最近一次会话继续。"""
+    if body.get("agent_memory") is None:
+        raise ServiceError(400, "agent_memory must be a boolean")
+    STATE["agent_memory"] = bool(body["agent_memory"])
+    save_state(STATE)
+    return await api_agent_memory_get()
 
 
 async def api_usage():

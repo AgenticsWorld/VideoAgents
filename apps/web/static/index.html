@@ -244,6 +244,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
           <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
           <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
+          <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
         </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
@@ -587,6 +588,18 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。</div>
     <div class="err" id="conc-err"></div>
     <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
+  </div>
+</div>
+<div id="mem-modal" class="modal">
+  <div class="box">
+    <h3>🧠 Agent记忆 设置</h3>
+    <div class="row"><label>对话记忆</label>
+      <input type="checkbox" id="mem-on" style="width:auto">
+      <span id="mem-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="note">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
+    <div class="err" id="mem-err"></div>
+    <div class="actions"><button id="mem-cancel">取消</button><button class="primary" id="mem-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -1239,6 +1252,27 @@ $('#conc-ok').onclick=async()=>{
     await api('/api/v1/config/concurrency',{agent_concurrency:v});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- Agent记忆弹窗(设置菜单「高级」) ---------- */
+function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
+$('#mem-on').onchange=memSt;
+async function openMemModal(){
+  $('#mem-err').textContent='';
+  try{
+    const m=await api('/api/v1/config/agent-memory');
+    $('#mem-on').checked=!!m.agent_memory;
+  }catch(e){$('#mem-on').checked=true}
+  memSt();
+  $('#mem-modal').style.display='flex';
+}
+$('#menu-memory').onclick=e=>{e.preventDefault();openMemModal()};
+$('#mem-cancel').onclick=()=>$('#mem-modal').style.display='none';
+$('#mem-ok').onclick=async()=>{
+  try{
+    await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
+    $('#mem-modal').style.display='none';
+  }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */

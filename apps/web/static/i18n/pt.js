@@ -1,4 +1,11 @@
 window.I18N_DICT = {
+"Agent记忆": "Memória do Agent",
+"开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)": "Liga ou desliga a memória conversacional entre turnos dos Agents (retomada de sessão); ligada por padrão",
+"🧠 Agent记忆 设置": "🧠 Configurações de memória do Agent",
+"对话记忆": "Memória conversacional",
+"开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。": "Quando ligada, os Agents criativos retomam a sessão anterior a cada execução, mantendo memória contínua nas conversas de vários turnos; se o histórico de uma sessão passar de 128KB, uma nova sessão é aberta automaticamente para evitar inchaço (Agents fan-out sem estado já iniciam sessão nova por ticket e não são afetados). Quando desligada, todos os Agents — inclusive o Produtor — começam sessão nova a cada execução/mensagem; as informações entre tickets trafegam apenas pelos artefatos em disco (bible, registros de tickets etc.), o que economiza muitos tokens mas quebra a continuidade da conversa. Configuração global; após salvar vale imediatamente para as próximas execuções. Ao religar, retoma da sessão mais recente.",
+"✓ 会话恢复生效中": "✓ Retomada de sessão ativa",
+"已关闭:每次运行全新会话": "Desligada: cada execução inicia sessão nova",
 "并发数量": "Concorrência",
 "扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Limite de tickets que um mesmo Agent fan-out (ativos de cena/geração de vídeo/revisão etc.) pode executar ao mesmo tempo",
 "🚦 并发数量 设置": "🚦 Configurações de concorrência",

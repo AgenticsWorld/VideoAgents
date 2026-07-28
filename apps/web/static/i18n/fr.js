@@ -1,4 +1,11 @@
 window.I18N_DICT = {
+"Agent记忆": "Mémoire des Agents",
+"开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)": "Active ou désactive la mémoire conversationnelle inter-tours des Agents (reprise de session) ; activée par défaut",
+"🧠 Agent记忆 设置": "🧠 Réglages de mémoire des Agents",
+"对话记忆": "Mémoire conversationnelle",
+"开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。": "Quand elle est activée, les Agents créatifs reprennent leur session précédente à chaque exécution : les conversations multi-tours gardent une mémoire continue ; au-delà de 128KB d'historique, une nouvelle session s'ouvre automatiquement pour éviter l'inflation (les Agents fan-out sans état démarrent déjà une session neuve par ticket et ne sont pas concernés). Désactivée, tous les Agents — Producteur compris — repartent d'une session neuve à chaque exécution/message ; les informations entre tickets ne transitent que par les artefacts sur disque (bible, dossiers de tickets, etc.), ce qui économise beaucoup de tokens mais rompt la continuité conversationnelle. Réglage global ; prend effet immédiatement pour les exécutions suivantes. En la réactivant, on reprend depuis la session la plus récente.",
+"✓ 会话恢复生效中": "✓ Reprise de session active",
+"已关闭:每次运行全新会话": "Désactivée : session neuve à chaque exécution",
 "并发数量": "Concurrence",
 "扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Nombre maximal de tickets qu'un même Agent de type fan-out (décors/génération vidéo/contrôle, etc.) peut exécuter en même temps",
 "🚦 并发数量 设置": "🚦 Réglages de concurrence",

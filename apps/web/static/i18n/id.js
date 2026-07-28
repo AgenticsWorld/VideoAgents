@@ -1,4 +1,11 @@
 window.I18N_DICT = {
+"Agent记忆": "Memori Agent",
+"开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)": "Nyalakan atau matikan memori percakapan lintas giliran Agent (pemulihan sesi); bawaan menyala",
+"🧠 Agent记忆 设置": "🧠 Pengaturan memori Agent",
+"对话记忆": "Memori percakapan",
+"开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。": "Saat menyala, Agent kreatif melanjutkan sesi sebelumnya di setiap eksekusi sehingga percakapan multi-giliran punya ingatan berkesinambungan; riwayat satu sesi yang melebihi 128KB otomatis membuka sesi baru untuk mencegah pembengkakan (Agent fan-out tanpa status memang memulai sesi baru per tiket dan tidak terpengaruh). Saat dimatikan, semua Agent — termasuk Produser — memulai sesi baru di setiap eksekusi/pesan; informasi antar tiket hanya mengalir lewat artefak di disk (bible, arsip tiket, dll.), sangat menghemat token tetapi konteks percakapan tidak lagi berlanjut. Pengaturan global; setelah disimpan langsung berlaku untuk eksekusi berikutnya. Menyalakan kembali akan melanjutkan dari sesi terbaru.",
+"✓ 会话恢复生效中": "✓ Pemulihan sesi aktif",
+"已关闭:每次运行全新会话": "Mati: setiap eksekusi memulai sesi baru",
 "并发数量": "Jumlah paralel",
 "扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Batas tiket yang dapat dijalankan bersamaan oleh satu Agent fan-out (aset adegan/pembuatan video/pemeriksaan, dll.)",
 "🚦 并发数量 设置": "🚦 Pengaturan jumlah paralel",

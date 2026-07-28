@@ -1,4 +1,11 @@
 window.I18N_DICT = {
+"Agent记忆": "Bộ nhớ Agent",
+"开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)": "Bật hoặc tắt bộ nhớ hội thoại xuyên lượt của Agent (khôi phục phiên); mặc định bật",
+"🧠 Agent记忆 设置": "🧠 Cài đặt bộ nhớ Agent",
+"对话记忆": "Bộ nhớ hội thoại",
+"开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。": "Khi bật, Agent sáng tạo tiếp nối phiên trước ở mỗi lần chạy nên hội thoại nhiều lượt có trí nhớ liên tục; lịch sử một phiên vượt 128KB sẽ tự mở phiên mới để chống phình to (Agent fan-out không trạng thái vốn mỗi phiếu một phiên mới nên không bị ảnh hưởng). Khi tắt, mọi Agent — kể cả Tổng chế tác — đều bắt đầu phiên mới ở mỗi lần chạy/phát ngôn; thông tin giữa các phiếu chỉ truyền qua sản phẩm ghi đĩa (bible, hồ sơ phiếu, v.v.), tiết kiệm đáng kể token nhưng ngữ cảnh hội thoại không còn liền mạch. Cài đặt toàn cục, lưu xong có hiệu lực ngay với các lần chạy sau; bật lại sẽ tiếp nối từ phiên gần nhất.",
+"✓ 会话恢复生效中": "✓ Khôi phục phiên đang hoạt động",
+"已关闭:每次运行全新会话": "Đã tắt: mỗi lần chạy là phiên mới",
 "并发数量": "Số luồng song song",
 "扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限": "Giới hạn số phiếu mà một Agent dạng fan-out (tài sản bối cảnh/tạo video/kiểm duyệt, v.v.) có thể chạy cùng lúc",
 "🚦 并发数量 设置": "🚦 Cài đặt số luồng song song",
