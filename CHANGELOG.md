@@ -4,6 +4,22 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-28
+
+### Added
+
+- "Concurrency" dialog under Settings → Advanced (slider + number box, 1-8, default 5): per-agent concurrency quota for stateless fan-out agents. Stateful creative agents always stay serial to protect session continuity, and every run still passes the global 8-process gate. Persisted in `state.json` via the new `GET/POST /api/v1/config/concurrency`; takes effect immediately for subsequently queued tickets.
+- "Agent Memory" toggle under Settings → Advanced (default on): when turned off, every agent — including the Producer — starts a fresh session per run, and cross-ticket information travels only through on-disk artifacts; session ids keep being recorded while off, so re-enabling resumes from the most recent session. New `GET/POST /api/v1/config/agent-memory`.
+
+### Changed
+
+- Same-agent execution gate upgraded from a boolean mutex to per-agent semaphores, and the stateless fan-out set expanded: the `05-scenes/`, `03-characters/` and `06-art/` prefixes plus `01-story/novel-parser` now start a fresh session per ticket and may run in parallel up to the concurrency quota — per-scene/per-character fan-outs (e.g. 70 `p3-environment` tickets on a large project) no longer serialize behind one agent lock.
+- Refreshed desktop app icon.
+
+### Fixed
+
+- Desktop auto-update no longer gets stuck mid-update (download/install flow hardened).
+
 ## [1.0.5] - 2026-07-28
 
 ### Added
