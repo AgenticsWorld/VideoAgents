@@ -276,6 +276,7 @@ window.I18N_DICT = {
 "停止全部 {n} 个排队/运行中的任务?": "Alle {n} wartenden/laufenden Aufgaben stoppen?",
 "停止全部排队/运行中的任务": "Alle wartenden/laufenden Aufgaben stoppen",
 "停止失败:": "Stoppen fehlgeschlagen:",
+"停止此任务": "Diese Aufgabe stoppen",
 "光照设定": "Beleuchtungssetting",
 "克隆": "Klonen",
 "克隆启动失败:": "Klonstart fehlgeschlagen:",

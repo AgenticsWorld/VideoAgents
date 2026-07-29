@@ -263,6 +263,11 @@ async def cancel_runs() -> dict[str, Any]:
     return await core.api_stop_all()
 
 
+@api.post("/runs/{run_id}/cancel", tags=["runs"])
+async def cancel_run(run_id: str) -> dict[str, Any]:
+    return await core.api_stop_run(run_id)
+
+
 @api.get("/approvals", tags=["approvals"])
 async def approvals() -> list[dict[str, Any]]:
     return await core.api_confirms()

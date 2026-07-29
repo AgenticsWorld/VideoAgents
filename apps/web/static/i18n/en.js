@@ -276,6 +276,7 @@ window.I18N_DICT = {
 "停止全部 {n} 个排队/运行中的任务?": "Stop all {n} queued/running tasks?",
 "停止全部排队/运行中的任务": "Stop all queued/running tasks",
 "停止失败:": "Stop failed:",
+"停止此任务": "Stop this task",
 "光照设定": "Lighting design",
 "克隆": "Clone",
 "克隆启动失败:": "Failed to start clone:",

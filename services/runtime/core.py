@@ -4329,29 +4329,41 @@ def _kill_proc_tree(proc):
             pass
 
 
+def _stop_run(run) -> bool:
+    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。"""
+    if run.get("status") == "running":
+        run["error"] = "已被用户手动停止"
+        proc = RUN_PROCS.get(run["id"])
+        if proc and proc.returncode is None:
+            _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
+        return True
+    if run.get("status") == "queued":
+        t = RUN_TASKS.pop(run["id"], None)
+        if t:
+            t.cancel()
+        run["status"] = "error"
+        run["error"] = "已被用户手动停止(排队中取消)"
+        run["ended"] = time.time()
+        append_chat(run["agent"], run["project"],
+                    {"role": "assistant", "text": run["error"],
+                     "run_id": run["id"], "status": "error"})
+        publish_run(run)
+        return True
+    return False
+
+
 async def api_stop_all():
     """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
-    stopped = []
-    for run in list(RUNS.values()):
-        if run.get("status") == "running":
-            run["error"] = "已被用户手动停止"
-            proc = RUN_PROCS.get(run["id"])
-            if proc and proc.returncode is None:
-                _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
-            stopped.append(run["id"])
-        elif run.get("status") == "queued":
-            t = RUN_TASKS.pop(run["id"], None)
-            if t:
-                t.cancel()
-            run["status"] = "error"
-            run["error"] = "已被用户手动停止(排队中取消)"
-            run["ended"] = time.time()
-            append_chat(run["agent"], run["project"],
-                        {"role": "assistant", "text": run["error"],
-                         "run_id": run["id"], "status": "error"})
-            publish_run(run)
-            stopped.append(run["id"])
+    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
     return {"stopped": stopped}
+
+
+async def api_stop_run(run_id: str):
+    """停止单个排队/运行中的任务(运行条目行内「⏹」按钮)。"""
+    run = RUNS.get(run_id)
+    if not run:
+        raise ServiceError(404, f"run not found: {run_id}")
+    return {"stopped": [run_id] if _stop_run(run) else []}
 
 
 # ---------------- 空转看门狗 ----------------

@@ -102,6 +102,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .st.error{background:var(--red)}
 .run .ag{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .tm{margin-left:auto;color:var(--dim);flex:none}
+.run .run-stop{flex:none;font-size:10px;line-height:15px;padding:0 5px;border-radius:4px;color:var(--red)}
+.run .run-stop:hover{border-color:var(--red)}
 .run .msg2{color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .prog{color:var(--yellow);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .parent{color:var(--purple)}
@@ -1727,11 +1729,16 @@ function renderRuns(){
     const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
-    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span></div>
+    const stoppable=['queued','running'].includes(r.status);
+    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
       <div class="msg2">${par}${esc(r.message||'')}</div>
       ${r.status==='running'&&r.progress?`<div class="prog">${esc(r.progress)}</div>`:''}
       ${r.error?`<div class="err2">${esc(r.error)}</div>`:''}`;
     d.onclick=()=>selectAgent(r.agent);                       // 点卡片 → 打开该 Agent 对话
+    const sb=d.querySelector('.run-stop');
+    if(sb)sb.onclick=async e=>{e.stopPropagation();sb.disabled=true;
+      try{await api('/api/v1/runs/'+encodeURIComponent(r.id)+'/cancel',{})}
+      catch(err){sb.disabled=false;await uiAlert('停止失败:'+err.message)}};
     box.appendChild(d);
   });
 }
