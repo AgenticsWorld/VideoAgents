@@ -443,6 +443,11 @@ async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
 
 
+@api.post("/storyboard/refs", tags=["storyboard"])
+async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpref_add(body)
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])
 async def sketches(project: str, ep: str, grp: str) -> list[dict[str, Any]]:
     return await core.api_sketches(project, ep, grp)

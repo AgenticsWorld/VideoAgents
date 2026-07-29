@@ -122,6 +122,29 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .mus .mest{color:var(--dim);font-size:11px;margin-left:6px}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+#ar-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#ar-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:780px;max-width:94vw;height:80vh;display:flex;flex-direction:column}
+#ar-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
+#ar-modal .hint{color:var(--dim);font-size:12.5px;margin-top:6px}
+#ar-modal .cats{display:flex;gap:8px;margin:10px 0 8px;flex:none}
+#ar-modal .cats button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#ar-modal .body{flex:1;min-height:0;display:flex;gap:10px}
+#ar-modal .assets{width:180px;flex:none;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:4px;align-content:flex-start}
+#ar-modal .assets .ast{display:flex;align-items:center;gap:6px;text-align:left;border:none;background:none;border-radius:6px;padding:4px 8px;font-size:12.5px;flex:none}
+#ar-modal .assets .ast .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ar-modal .assets .ast .n{flex:none;font-size:10.5px;color:var(--dim)}
+#ar-modal .assets .ast:hover{background:var(--panel2)}
+#ar-modal .assets .ast.on{background:var(--panel2);outline:1px solid var(--accent)}
+#ar-modal .imgs{flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:8px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
+#ar-modal .imgs .ph{color:var(--dim);font-size:12.5px;margin:auto}
+#ar-modal .imgs .cell{position:relative;cursor:pointer;border:2px solid transparent;border-radius:8px;flex:none}
+#ar-modal .imgs .cell img{height:110px;display:block;border-radius:6px}
+#ar-modal .imgs .cell.sel{border-color:var(--accent)}
+#ar-modal .imgs .cell.used{opacity:.45;cursor:default}
+#ar-modal .imgs .cell .uk{position:absolute;left:4px;bottom:4px;font-size:10px;background:rgba(0,0,0,.65);color:var(--green);border-radius:4px;padding:0 4px;white-space:nowrap}
+#ar-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
+#ar-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
+#ar-modal #ar-ok:disabled{opacity:.5;cursor:default}
 #sk-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #sk-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;max-width:420px;text-align:center}
 #sk-modal .qr{background:#fff;border-radius:8px;padding:10px;margin:12px auto;width:240px;height:240px}
@@ -158,6 +181,21 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(只读;要修改请用 📝 注释 或 🎨 手绘分镜)</div>
   <pre id="pv-text"></pre>
   <div class="actions"><span class="meta"><span id="pv-bytes"></span><span id="pv-meta"></span></span><button id="pv-copy">复制</button><button id="pv-close">关闭</button></div>
+</div></div>
+<div id="ar-modal"><div class="box">
+  <h3>🖼 添加参考图 — <span id="ar-grp" style="color:var(--purple)"></span><span class="cnt" id="ar-count"></span></h3>
+  <div class="hint">按分类选择资产,点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型</div>
+  <div class="cats" id="ar-cats">
+    <button data-cat="characters" class="on">👤 人物</button>
+    <button data-cat="scenes">🏔 场景</button>
+    <button data-cat="props">🗡 道具</button>
+  </div>
+  <div class="body">
+    <div class="assets" id="ar-assets"></div>
+    <div class="imgs" id="ar-imgs"></div>
+  </div>
+  <div class="err" id="ar-err"></div>
+  <div class="actions"><button id="ar-cancel">关闭</button><button id="ar-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">➕ 加入参考图</button></div>
 </div></div>
 <div id="sk-modal"><div class="box">
   <h3>🎨 手绘分镜 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
@@ -248,6 +286,92 @@ $('#gn-ok').onclick=async()=>{
   }catch(e){$('#gn-err').textContent='保存失败:'+e.message}
 };
 
+// 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
+const AR_MAX=9;
+let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_CACHE={};
+const arRel=u=>decodeURIComponent(u.split('?')[0]).replace(/^\/api\/v1\/projects\/[^/]+\/artifacts\//,'');
+async function openRefpick(grp){
+  AR_GRP=grp;AR_SEL='';AR_CACHE={};AR_REFS=[];
+  $('#ar-grp').textContent=grp;
+  $('#ar-count').textContent='';$('#ar-err').textContent='';
+  $('#ar-assets').innerHTML='';
+  $('#ar-imgs').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
+  $('#ar-modal').style.display='flex';
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
+      +encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'.json?v='+Date.now());
+    if(!r.ok)throw new Error(r.status===404?t('该组 prompt 文件尚未生成'):r.status);
+    AR_REFS=(await r.json()).refs||[];
+  }catch(e){$('#ar-imgs').innerHTML='';$('#ar-err').textContent=t('加载失败:')+e.message;return}
+  arCount();
+  arLoadCat(AR_CAT);
+}
+function arCount(){
+  const el=$('#ar-count');
+  el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX});
+  el.style.color=AR_REFS.length>=AR_MAX?'var(--red)':'var(--dim)';
+  arOkState();
+}
+function arOkState(){$('#ar-ok').disabled=!AR_SEL||AR_REFS.length>=AR_MAX}
+async function arLoadCat(cat){
+  AR_CAT=cat;AR_SEL='';arOkState();
+  document.querySelectorAll('#ar-cats button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
+  $('#ar-assets').innerHTML='';
+  $('#ar-imgs').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    if(!AR_CACHE[cat]){
+      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      const d=await r.json();
+      AR_CACHE[cat]=(d.characters||d.scenes||d.props||[]).filter(a=>(a.images||[]).length);
+    }
+    const list=AR_CACHE[cat];
+    if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
+    $('#ar-assets').innerHTML=list.map((a,i)=>
+      `<button class="ast" data-i="${i}" title="${esc(a.id)}"><span class="nm">${esc(a.name||a.id)}</span><span class="n">${a.images.length}</span></button>`).join('');
+    arShowAsset(0);
+  }catch(e){$('#ar-imgs').innerHTML='';$('#ar-err').textContent=t('加载失败:')+e.message}
+}
+function arShowAsset(i){
+  AR_SEL='';arOkState();
+  document.querySelectorAll('#ar-assets .ast').forEach(b=>b.classList.toggle('on',+b.dataset.i===i));
+  const a=(AR_CACHE[AR_CAT]||[])[i];if(!a)return;
+  $('#ar-imgs').innerHTML=a.images.map(im=>{
+    const rel=arRel(im.url),used=AR_REFS.includes(rel);
+    return `<div class="cell${used?' used':''}" data-rel="${esc(rel)}" title="${esc(im.name)}"><img src="${esc(bust(im.url))}" loading="lazy">${used?`<span class="uk">✓ ${t('已在参考图')}</span>`:''}</div>`;
+  }).join('')||'<div class="ph">'+t('(该资产暂无图片)')+'</div>';
+}
+$('#ar-cats').addEventListener('click',e=>{const b=e.target.closest('button');if(b)arLoadCat(b.dataset.cat)});
+$('#ar-assets').addEventListener('click',e=>{const b=e.target.closest('.ast');if(b)arShowAsset(+b.dataset.i)});
+$('#ar-imgs').addEventListener('click',e=>{
+  const c=e.target.closest('.cell');
+  if(!c||c.classList.contains('used'))return;
+  AR_SEL=c.dataset.rel;
+  document.querySelectorAll('#ar-imgs .cell').forEach(x=>x.classList.toggle('sel',x===c));
+  arOkState();
+});
+$('#ar-imgs').addEventListener('dblclick',e=>{const im=e.target.closest('.cell img');if(im)zoom(im.src)});
+$('#ar-cancel').onclick=()=>$('#ar-modal').style.display='none';
+$('#ar-ok').onclick=async()=>{
+  if(!AR_SEL||AR_REFS.length>=AR_MAX)return;
+  $('#ar-err').textContent='';
+  $('#ar-ok').disabled=true;
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/storyboard/refs',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:AR_GRP,ref:AR_SEL})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    AR_REFS.push(AR_SEL);AR_SEL='';
+    arCount();
+    const cur=document.querySelector('#ar-assets .ast.on');   // 重绘网格,刚加入的图标记「已在参考图」
+    if(cur)arShowAsset(+cur.dataset.i);
+    load(true);
+  }catch(e){$('#ar-err').textContent=t('加入失败:')+e.message;arOkState()}
+};
+
 // 📄 Prompt:查看本组传给视频生成模型的文字 prompt(assets/prompts/<ep>/<grp>.json 的 video_prompt)
 // 各视频模型 prompt 字节上限,按 model id 子串匹配(生成时 genmedia 还会在末尾追加
 // --resolution/--dur/--ratio 等约 30-50 字节;数字口径以方舟实际为准,不符可在此修正)
@@ -300,6 +424,8 @@ $('#pv-copy').onclick=async()=>{
 document.addEventListener('click',async e=>{
   const pb=e.target.closest('.promptbtn');
   if(pb)return openPrompt(pb.dataset.grp);
+  const rb=e.target.closest('.refpickbtn');
+  if(rb)return openRefpick(rb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
   if(gb)return openNote(gb.dataset.grp);
   const sb=e.target.closest('.sketchbtn');
@@ -389,6 +515,7 @@ function groupCard(g,inner){
       ${chars?`<span class="tag">${esc(chars)}</span>`:''}
       ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
+      <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn sketchbtn" data-grp="${esc(g.group_id)}" title="手机扫码为本组绘制空间线稿">🎨 手绘分镜</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>

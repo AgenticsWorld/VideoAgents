@@ -2186,6 +2186,45 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
     return {"deleted": name}
 
 
+# ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
+ASSET_REF_PREFIXES = ("assets/concepts/characters/",
+                      "assets/concepts/scenes/",
+                      "assets/concepts/props/")
+
+
+async def api_grpref_add(body: dict):
+    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型);
+    与手绘线稿共用 MAX_SKETCH_REFS=9 的方舟多参考图上限,满则拒绝。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    ref = (body.get("ref") or "").strip().lstrip("/")
+    base = _proj_base(project)
+    pf = _grp_prompt_path(project, ep, grp)
+    if not pf.is_file():
+        raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
+    target = (base / ref).resolve()
+    try:
+        target.relative_to(base.resolve())
+    except ValueError:
+        raise ServiceError(400, "invalid ref path") from None
+    if not target.is_file() or target.suffix.lower() not in IMG_EXTS:
+        raise ServiceError(404, f"Ref image not found: {ref}")
+    d = json.loads(pf.read_text())
+    refs = d.setdefault("refs", [])
+    if ref in refs:
+        raise ServiceError(400, "This image is already in the group's refs")
+    if len(refs) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    refs.append(ref)
+    d.setdefault("notes", []).append(
+        f"用户从资产库加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    return {"ref": ref, "refs": len(refs)}
+
+
 def _read_json_safe(p: Path):
     try:
         return json.loads(p.read_text())
