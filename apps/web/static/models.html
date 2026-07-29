@@ -256,7 +256,7 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 
 /* 音乐/TTS 无顶栏切换入口,生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
 const CHK_KINDS=new Set(['music','tts']);
-const SEL_PROVIDER={music:'openrouter',tts:'openrouter'};
+const SEL_PROVIDER={music:'elevenlabs',tts:'volcengine'};
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);

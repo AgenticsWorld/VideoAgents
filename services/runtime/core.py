@@ -444,7 +444,7 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "openrouter",   # openrouter | ideogram | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | comfyui
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -455,7 +455,7 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "video": {
-        "provider": "openrouter",   # openrouter | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
@@ -465,7 +465,7 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "music": {
-        "provider": "openrouter",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
+        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -473,7 +473,7 @@ DEFAULT_GENCONFIG = {
                        "force_instrumental": True},
     },
     "tts": {
-        "provider": "openrouter",   # openrouter | volcengine(豆包语音) | elevenlabs
+        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
