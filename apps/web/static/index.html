@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -613,10 +614,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note" id="res-claude-env" style="display:none">已由环境变量 VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 强制开启,此开关不生效</div>
     <div class="row"><label>Kimi API Key</label>
       <input type="password" id="res-kimi" placeholder="sk-…(留空则不检查 KimiCode 使用量)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--accent)">kimi.com/code/console</a></div>
+    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--accent)">openrouter.ai/settings/management-keys</a></div>
+    <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
     <div class="row"><label>火山引擎余额</label>
       <input type="checkbox" id="res-volc" style="flex:none">
       <span class="note" style="flex:1">开启后用 AK/SK 自动查询账户可用余额(QueryBalanceAcct)</span></div>
@@ -624,7 +625,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="password" id="res-volc-ak" placeholder="火山引擎 Access Key ID" autocomplete="off"></div>
     <div class="row res-volc-row"><label>Secret Key</label>
       <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
-    <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--accent)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
