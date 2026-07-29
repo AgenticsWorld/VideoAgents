@@ -263,6 +263,11 @@ async def cancel_runs() -> dict[str, Any]:
     return await core.api_stop_all()
 
 
+@api.post("/runs/{run_id}/cancel", tags=["runs"])
+async def cancel_run(run_id: str) -> dict[str, Any]:
+    return await core.api_stop_run(run_id)
+
+
 @api.get("/approvals", tags=["approvals"])
 async def approvals() -> list[dict[str, Any]]:
     return await core.api_confirms()
@@ -436,6 +441,11 @@ async def submit_draw(token: str, body: dict[str, Any]) -> dict[str, Any]:
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
+
+
+@api.post("/storyboard/refs", tags=["storyboard"])
+async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpref_add(body)
 
 
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])

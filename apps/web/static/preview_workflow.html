@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc; --cyan:#22d3ee; --orange:#fb923c;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600}
@@ -105,7 +106,7 @@ dl.kv>dd{min-width:0;word-break:break-all}
 .member .note{color:var(--dim);font-size:11px;margin-top:3px;white-space:pre-wrap}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
 .deps{font-size:11.5px;color:var(--dim);word-break:break-all}
-.deps a{color:var(--accent);cursor:pointer;text-decoration:none}
+.deps a{color:var(--link);cursor:pointer;text-decoration:none}
 </style>
 </head>
 <body>

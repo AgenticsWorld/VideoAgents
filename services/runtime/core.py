@@ -444,7 +444,7 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "openrouter",   # openrouter | ideogram | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | comfyui
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -455,7 +455,7 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "video": {
-        "provider": "openrouter",   # openrouter | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
@@ -465,7 +465,7 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "music": {
-        "provider": "openrouter",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
+        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -473,7 +473,7 @@ DEFAULT_GENCONFIG = {
                        "force_instrumental": True},
     },
     "tts": {
-        "provider": "openrouter",   # openrouter | volcengine(豆包语音) | elevenlabs
+        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -1326,7 +1326,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
-- 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/视频生成模型的英文 prompt 不受此限
+- 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/音乐生成模型的英文 prompt 不受此限
+- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`@Image N` 引用,机检与注释注入代码依赖这些英文锚点)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -2183,6 +2184,45 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
     png.unlink(missing_ok=True)
     png.with_suffix(".json").unlink(missing_ok=True)
     return {"deleted": name}
+
+
+# ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
+ASSET_REF_PREFIXES = ("assets/concepts/characters/",
+                      "assets/concepts/scenes/",
+                      "assets/concepts/props/")
+
+
+async def api_grpref_add(body: dict):
+    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型);
+    与手绘线稿共用 MAX_SKETCH_REFS=9 的方舟多参考图上限,满则拒绝。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    ref = (body.get("ref") or "").strip().lstrip("/")
+    base = _proj_base(project)
+    pf = _grp_prompt_path(project, ep, grp)
+    if not pf.is_file():
+        raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
+    target = (base / ref).resolve()
+    try:
+        target.relative_to(base.resolve())
+    except ValueError:
+        raise ServiceError(400, "invalid ref path") from None
+    if not target.is_file() or target.suffix.lower() not in IMG_EXTS:
+        raise ServiceError(404, f"Ref image not found: {ref}")
+    d = json.loads(pf.read_text())
+    refs = d.setdefault("refs", [])
+    if ref in refs:
+        raise ServiceError(400, "This image is already in the group's refs")
+    if len(refs) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    refs.append(ref)
+    d.setdefault("notes", []).append(
+        f"用户从资产库加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    return {"ref": ref, "refs": len(refs)}
 
 
 def _read_json_safe(p: Path):
@@ -4328,29 +4368,41 @@ def _kill_proc_tree(proc):
             pass
 
 
+def _stop_run(run) -> bool:
+    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。"""
+    if run.get("status") == "running":
+        run["error"] = "已被用户手动停止"
+        proc = RUN_PROCS.get(run["id"])
+        if proc and proc.returncode is None:
+            _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
+        return True
+    if run.get("status") == "queued":
+        t = RUN_TASKS.pop(run["id"], None)
+        if t:
+            t.cancel()
+        run["status"] = "error"
+        run["error"] = "已被用户手动停止(排队中取消)"
+        run["ended"] = time.time()
+        append_chat(run["agent"], run["project"],
+                    {"role": "assistant", "text": run["error"],
+                     "run_id": run["id"], "status": "error"})
+        publish_run(run)
+        return True
+    return False
+
+
 async def api_stop_all():
     """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
-    stopped = []
-    for run in list(RUNS.values()):
-        if run.get("status") == "running":
-            run["error"] = "已被用户手动停止"
-            proc = RUN_PROCS.get(run["id"])
-            if proc and proc.returncode is None:
-                _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
-            stopped.append(run["id"])
-        elif run.get("status") == "queued":
-            t = RUN_TASKS.pop(run["id"], None)
-            if t:
-                t.cancel()
-            run["status"] = "error"
-            run["error"] = "已被用户手动停止(排队中取消)"
-            run["ended"] = time.time()
-            append_chat(run["agent"], run["project"],
-                        {"role": "assistant", "text": run["error"],
-                         "run_id": run["id"], "status": "error"})
-            publish_run(run)
-            stopped.append(run["id"])
+    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
     return {"stopped": stopped}
+
+
+async def api_stop_run(run_id: str):
+    """停止单个排队/运行中的任务(运行条目行内「⏹」按钮)。"""
+    run = RUNS.get(run_id)
+    if not run:
+        raise ServiceError(404, f"run not found: {run_id}")
+    return {"stopped": [run_id] if _stop_run(run) else []}
 
 
 # ---------------- 空转看门狗 ----------------
