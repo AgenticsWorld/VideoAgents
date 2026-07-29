@@ -4,6 +4,25 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-07-29
+
+### Added
+
+- Storyboard preview: per-group "🖼 Image" button — browse concept-library assets by character/scene/prop category and pick an image to add to the group's reference images (refs). Shares the 9-image cap with hand-drawn sketches (enforced on both frontend and backend); images already in refs are greyed out to prevent duplicates. New backend `POST /storyboard/refs` (`core.api_grpref_add`) validates the `assets/concepts/` prefix and guards against path traversal. All 11 language dictionaries updated.
+- Storyboard preview: per-generation-group "📄 Prompt" button — popup showing the group's video prompt and byte usage.
+- Run panel: inline "⏹" button on each run entry to stop that single agent (queued or running) without affecting other runs; new backend `POST /runs/{run_id}/cancel`.
+
+### Changed
+
+- Fresh-install provider defaults: image/video/TTS now default to Volcano Engine and music generation to ElevenLabs (`DEFAULT_GENCONFIG` provider defaults plus the `models.html` initial fallback). Existing installs' `genconfig.json` is unaffected.
+- Generation model settings: the active channel for music generation and TTS voice models now follows the selected tab (✅ marker), matching the file-hosting storage channel UX; the per-tab check circles were removed. All 11 language dictionaries updated.
+- Video prompt body language now follows the user's UI language instead of defaulting to English.
+- WebUI link color switched to high-contrast orange (`--link: #fb923c`) with a new global `a` fallback rule — unstyled links no longer fall back to the browser's default dark blue, which was hard to read on dark backgrounds; explicit link rules (e.g. `.hint a`) updated to match, navigation/icons/menus untouched.
+
+### Fixed
+
+- WeChat binding: fetching the bind QR code now retries up to 2 times on transient network/SSL EOF errors (proxy hiccups causing peer disconnects) before reporting failure.
+
 ## [1.0.6] - 2026-07-28
 
 ### Added
