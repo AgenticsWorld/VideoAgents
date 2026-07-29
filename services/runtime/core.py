@@ -131,11 +131,14 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # 05-scenes 为场景级扇出工位(environment/architecture/lighting 每场景一单,2026-07-28 纳入):
 # 大项目场景数可达 70+,同 agent 串行会拖垮 Phase 3。
 # 03-characters(appearance/personality…每角色一单)、06-art(char-concept 每角色/
-# env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入
+# env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入。
+# 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
+# prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
 STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
                     "01-story/novel-parser"}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
-                      "03-characters/", "06-art/")
+                      "03-characters/", "06-art/",
+                      "13-derivative-fiction/line-editor")
 # 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
