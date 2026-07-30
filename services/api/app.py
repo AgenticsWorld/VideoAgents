@@ -100,6 +100,16 @@ async def delete_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_delete(body)
 
 
+@api.post("/projects/{project}/copy", tags=["projects"])
+async def copy_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_projects_copy(body)
+
+
+@api.get("/projects/{project}/copy", tags=["projects"])
+async def copy_project_status(project: str) -> dict[str, Any]:
+    return await core.api_projects_copy_status(project)
+
+
 @api.get("/projects/{project}/brief", tags=["projects"])
 async def get_brief(project: str) -> dict[str, Any]:
     return await core.api_brief_get(project)

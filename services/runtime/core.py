@@ -4190,6 +4190,76 @@ async def api_versions_clone_status(project: str = "demo"):
     return CLONE_JOBS.get(safe_slug(project)) or {"state": "idle"}
 
 
+# ---------------- 完整复制项目(版本管理页顶部「复制项目」板块) ----------------
+# 与「版本克隆」不同:不走版本库快照,而是把项目目录原样整份复制
+# (含 runs/、.version/ 嵌入式版本库、未登记文件),版本历史随目录一并带走。
+COPY_JOBS: dict = {}                     # 源项目名 → 最近一次复制任务状态
+COPY_LOCK = threading.Lock()
+
+
+def _copy_worker(project: str, src: Path, name: str):
+    job = COPY_JOBS[project]
+    tmp = PROJECTS_DIR / f".copy-tmp-{name}"     # . 开头:复制期间不被 /api/projects 列出
+    try:
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        job["step"] = "统计文件"
+        total = sum(1 for f in src.rglob("*") if f.is_file())
+        job["step"] = "复制文件"
+        job["progress"] = [0, total]
+        done = 0
+
+        def _cp(s, d, *, follow_symlinks=True):
+            nonlocal done
+            shutil.copy2(s, d, follow_symlinks=follow_symlinks)
+            done += 1
+            job["progress"] = [min(done, total), total]
+
+        shutil.copytree(src, tmp, symlinks=True, copy_function=_cp)
+        # 嵌入式版本库随目录复制,manifest project 字段改为新名
+        mpath = tmp / ".version" / "manifest.json"
+        if mpath.is_file():
+            try:
+                m = json.loads(mpath.read_text())
+                m["project"] = name
+                mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+            except Exception:
+                pass                             # manifest 损坏不阻断复制
+        os.rename(tmp, PROJECTS_DIR / name)      # 原子上线
+        job["step"] = "完成"
+        job["state"] = "done"
+    except Exception as e:
+        job["state"] = "error"
+        job["error"] = str(e)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+async def api_projects_copy(body: dict):
+    project = safe_slug(body.get("project"))
+    base = _proj_base(project)
+    name = (body.get("name") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) or len(name) > 80:
+        raise ServiceError(
+            400, "New project name may only contain ASCII letters, digits, '-' and '_', "
+                 "start with a letter or digit, and be at most 80 chars")
+    if (PROJECTS_DIR / name).exists():
+        raise ServiceError(400, f"Project already exists: {name}")
+    with COPY_LOCK:
+        job = COPY_JOBS.get(project)
+        if job and job.get("state") == "running":
+            raise ServiceError(409, f"A copy job is already in progress: {job.get('new_name')}")
+        COPY_JOBS[project] = {"state": "running", "step": "准备",
+                              "progress": [0, 0], "new_name": name,
+                              "source": project, "error": None}
+        threading.Thread(target=_copy_worker, args=(project, base, name),
+                         daemon=True).start()
+    return {"ok": True, "name": name}
+
+
+async def api_projects_copy_status(project: str = "demo"):
+    return COPY_JOBS.get(safe_slug(project)) or {"state": "idle"}
+
+
 async def api_projects_delete(body: dict):
     """删除整个项目目录(版本管理页「危险操作」):前端已两重确认,
     后端再校验一次 confirm 必须与项目名完全一致,防误调。"""
@@ -4201,6 +4271,9 @@ async def api_projects_delete(body: dict):
     job = CLONE_JOBS.get(project)
     if job and job.get("state") == "running":
         raise ServiceError(409, "A clone job is in progress for this project; delete it after the job finishes")
+    job = COPY_JOBS.get(project)
+    if job and job.get("state") == "running":
+        raise ServiceError(409, "A copy job is in progress for this project; delete it after the job finishes")
     live = [r for r in RUNS.values()
             if r.get("project") == project
             and r.get("status") in ("queued", "running")]
