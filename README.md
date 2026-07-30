@@ -93,6 +93,11 @@ python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
 
+The deepagents engine requires Python 3.11 or newer. If your main environment
+runs Python 3.10, use `make install-deepagents` instead to create a dedicated
+`.venv-deepagents` that the runtime discovers automatically; alternatively set
+`DEEPAGENTS_PY` to any interpreter that has deepagents installed.
+
 FFmpeg must be installed separately with your operating system's package
 manager.
 

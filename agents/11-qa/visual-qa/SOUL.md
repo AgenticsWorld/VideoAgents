@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. **锚点包自动打分(Phase 7)**:对 `assets/keyframes/epNN/<grp>/` 逐张打分——构图与 composition.json 的匹配度、肢体畸变检测(手指/关节/五官),≥80 放行。
+1. **锚点包自动打分(Phase 7)**:对 `assets/keyframes/epNN/<grp>/` 逐张打分——构图与 composition.json 的匹配度、肢体畸变检测(手指/关节/五官),≥80 放行。**复用锚(meta source=`reuse:`)免构图/畸变打分**(其源头概念图入库时已过审),只核完整性与分辨率合规;`generation_channel: reuse-only` 组整包快速放行(2026-07-24,reuse-first §7A)。
 2. **组 clip 打分(Phase 7)**:对 `assets/clips/epNN/grpNNN.mp4` 打分——**组级维度**:
    - 组内跨镜一致性(角色形象/服装/场景在各镜间稳定——组生成的核心验收项,对照 continuity 状态表);
    - 切镜合理性(切镜位置与组内镜序/节拍一致;boundary_map 边界数 = 镜数-1 ±1;切点无跳帧);

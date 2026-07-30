@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -33,6 +34,8 @@ main{flex:1;display:flex;min-height:0}
 #sidebar{width:290px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
 #search{margin:10px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
 #agent-list{flex:1;overflow-y:auto;padding-bottom:20px}
+#app-ver{flex:none;padding:6px 14px 8px;border-top:1px solid var(--border);font-size:11px;color:var(--dim)}
+#app-ver:empty{display:none}
 .cat{padding:7px 14px 3px;font-size:11px;color:var(--dim);letter-spacing:1px;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px}
 .cat:hover{color:var(--text)}
 .cat .tri{flex:none;font-size:9px;width:10px;text-align:center}
@@ -100,14 +103,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .st.error{background:var(--red)}
 .run .ag{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .tm{margin-left:auto;color:var(--dim);flex:none}
+.run .run-stop{flex:none;font-size:10px;line-height:15px;padding:0 5px;border-radius:4px;color:var(--red)}
+.run .run-stop:hover{border-color:var(--red)}
 .run .msg2{color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .prog{color:var(--yellow);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.run .acts{display:none;margin-top:6px;border-top:1px dashed var(--border);padding-top:5px}
-.run.open .acts{display:block}
-.run .acts div{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .parent{color:var(--purple)}
-.run .logbtn{color:var(--dim);cursor:pointer;flex:none;padding:0 3px;border-radius:4px}
-.run .logbtn:hover{color:var(--text);background:var(--border)}
+.run .err2{color:var(--red);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;flex:none}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
@@ -159,7 +160,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dropdown-box a:hover{background:var(--panel);color:var(--accent)}
 .dropdown-box a:first-child{border-radius:8px 8px 0 0}
 .dropdown-box a:last-child{border-radius:0 0 8px 8px}
-/* 二级子菜单(Agent模型):悬停向左弹出 */
+/* 二级子菜单(模型策略):悬停向左弹出 */
 .dd-sub{position:relative}
 .dd-sub-menu{display:none;position:absolute;right:100%;top:-1px;min-width:160px}
 /* RTL(阿拉伯语):设置按钮在屏幕左侧,下拉与二级子菜单改为向右弹出,否则出屏无法选择 */
@@ -225,21 +226,29 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <button id="settings-btn" title="全局设置">⚙️</button>
     <div class="dropdown"><div class="dropdown-box">
       <div class="dd-sub">
-        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ Agent模型</a>
+        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ 模型策略</a>
         <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
           <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
-          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus 其余→sonnet">智能claudecode</a>
-          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">智能codex</a>
+          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
+          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
       <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
-      <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
+      </div>
+      <div class="dd-sub">
+        <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
+        <div class="dd-sub-menu dropdown-box">
+          <a href="/clawbot" title="微信 ClawBot:扫码绑定微信后,可在微信里与总制片互发消息,并同步收到系统自动通知">ClawBot 微信</a>
+          <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
+          <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
+          <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
+        </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
@@ -249,6 +258,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div id="sidebar">
     <input id="search" placeholder="搜索 Agent…">
     <div id="agent-list"></div>
+    <div id="app-ver"></div>
   </div>
   <div id="chat">
     <div id="chat-head">
@@ -292,7 +302,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="plug-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🧩 Agent 插件</h3>
-    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装,启用后其 Agent 出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
+    <div class="note">插件 = plugins/&lt;名字&gt;/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词</div>
     <div id="plug-list" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"><div class="empty">读取中…</div></div>
     <div class="err" id="plug-err"></div>
     <div class="actions">
@@ -322,7 +332,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">保存后仅对该 Agent 生效,优先级高于右上角全局设置(总制片显式 --engine/--model 派单除外);图像/视频各渠道参数在 🎨 生成模型 页配置</div>
     <div class="err" id="am-err"></div>
     <div class="actions">
-      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「Agent模型」策略默认" style="margin-right:auto">恢复策略默认</button>
+      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「模型策略」默认" style="margin-right:auto">恢复策略默认</button>
       <button id="am-cancel">取消</button>
       <button class="primary" id="am-ok">保存</button>
     </div>
@@ -394,7 +404,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="4" style="display:none">
       <div id="npr-rows"></div>
-      <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度</div>
+      <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -516,7 +526,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
     <div id="rev-rows"></div>
-    <div class="note">审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 60)。约束对应审核/评审 Agent 的把关尺度。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
   </div>
@@ -561,9 +571,38 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
     </div>
+    <div class="row"><label>防止系统休眠</label>
+      <input type="checkbox" id="wdt-awake" style="width:auto">
+      <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
     <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
+    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
+  </div>
+</div>
+<div id="conc-modal" class="modal">
+  <div class="box">
+    <h3>🚦 并发数量 设置</h3>
+    <div class="row"><label>每 Agent 并发额度</label>
+      <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
+      <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
+    </div>
+    <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。</div>
+    <div class="err" id="conc-err"></div>
+    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
+  </div>
+</div>
+<div id="mem-modal" class="modal">
+  <div class="box">
+    <h3>🧠 Agent记忆 设置</h3>
+    <div class="row"><label>对话记忆</label>
+      <input type="checkbox" id="mem-on" style="width:auto">
+      <span id="mem-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="note">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
+    <div class="err" id="mem-err"></div>
+    <div class="actions"><button id="mem-cancel">取消</button><button class="primary" id="mem-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -575,10 +614,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note" id="res-claude-env" style="display:none">已由环境变量 VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 强制开启,此开关不生效</div>
     <div class="row"><label>Kimi API Key</label>
       <input type="password" id="res-kimi" placeholder="sk-…(留空则不检查 KimiCode 使用量)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--accent)">kimi.com/code/console</a></div>
+    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--accent)">openrouter.ai/settings/management-keys</a></div>
+    <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
     <div class="row"><label>火山引擎余额</label>
       <input type="checkbox" id="res-volc" style="flex:none">
       <span class="note" style="flex:1">开启后用 AK/SK 自动查询账户可用余额(QueryBalanceAcct)</span></div>
@@ -586,7 +625,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="password" id="res-volc-ak" placeholder="火山引擎 Access Key ID" autocomplete="off"></div>
     <div class="row res-volc-row"><label>Secret Key</label>
       <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
-    <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--accent)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
@@ -596,7 +635,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 const $=s=>document.querySelector(s);
 let AGENTS=[], CURRENT=null, RUNS={}, LIVE={}; // LIVE[run_id] = 当前流式 DOM 节点
 let AGENT_MODELS={defaults:{},overrides:{}};   // Agent 级模型配置(/api/v1/agents/models)
-let AM_MODE='global';                          // 「Agent模型」策略(设置菜单子菜单)
+let AM_MODE='global';                          // 「模型策略」(设置菜单子菜单)
 
 function uiConfirm(message){
   return new Promise(resolve=>{
@@ -630,10 +669,11 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'智能claudecode',smart_codex:'智能codex'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配'};
 
 const MODEL_OPTIONS={
-  claude:[['opus','opus(最新)'],['sonnet','sonnet'],['claude-fable-5','fable-5'],
+  claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
+          ['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
@@ -765,7 +805,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
-  REVIEW_DIMS.forEach(([k])=>{$(`#npr-${k}`).value=0;$(`#npr-${k}-num`).value=0});   // 新建项目审核力度默认全 0(不审核)
+  REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度默认全 0(不审核);质量评委默认 60
   $('#npp-intro-on').checked=true;$('#npp-outro-on').checked=true;$('#npp-teaser-on').checked=true;
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
   nppToggleRows();
@@ -1067,11 +1107,14 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 审核设置弹窗(各维度审核力度 0-100,按项目独立) ---------- */
+// evaluation=质量评委(00-orchestration/evaluation)验收合格线:默认 60,0=跳过不派单;其余维度为审核力度,默认 0
 const REVIEW_DIMS=[
+  ['evaluation','质量评委'],
   ['audio_quality','音频质量审核'],['character_consistency','角色一致性审核'],
   ['content_safety','内容安全'],['copyright','版权审核'],
   ['logic','逻辑审核'],['timeline','时间线审核'],
   ['visual_quality','画面质量审核'],['worldview','世界观审核']];
+const REV_DEFAULT=k=>k==='evaluation'?60:0;
 function buildRevRows(boxSel='#rev-rows',prefix='rev'){   // 审核设置弹窗与新建向导第4步共用
   $(boxSel).innerHTML=REVIEW_DIMS.map(([k,label])=>`
     <div class="row"><label>${label}</label>
@@ -1153,6 +1196,13 @@ async function openWdtModal(){
     const w=await api('/api/v1/watchdog/policy');
     $('#wdt-range').value=w.threshold;$('#wdt-num').value=w.threshold;
     $('#wdt-idle').value=w.idle_minutes||5;
+    $('#wdt-awake').checked=!!w.keep_awake;
+    $('#wdt-awake').disabled=!w.keep_awake_supported;
+    const st=$('#wdt-awake-st');
+    if(!w.keep_awake_supported){st.textContent=t('当前系统不支持(仅 macOS/Windows)');st.style.color='var(--dim)'}
+    else if(w.keep_awake_active){st.textContent=t('✓ 防休眠生效中');st.style.color='var(--green)'}
+    else if(w.keep_awake){st.textContent=t('未生效(没有项目开启自动运行)');st.style.color='var(--dim)'}
+    else st.textContent='';
   }catch(e){$('#wdt-range').value=80;$('#wdt-num').value=80;$('#wdt-idle').value=5}
   $('#wdt-modal').style.display='flex';
   api('/api/v1/resources/usage').then(u=>{                       // 用量探测慢,异步填充不挡弹窗
@@ -1174,9 +1224,58 @@ $('#wdt-ok').onclick=async()=>{
   const idle=parseInt($('#wdt-idle').value);
   if(!(idle>=1&&idle<=720)){$('#wdt-err').textContent='闲置时间需为 1-720 的整数(分钟)';return}
   try{
-    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle});
+    await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle,keep_awake:$('#wdt-awake').checked});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 并发数量弹窗(设置菜单「高级」) ---------- */
+let concMax=8;
+async function openConcModal(){
+  $('#conc-err').textContent='';
+  try{
+    const c=await api('/api/v1/config/concurrency');
+    concMax=c.max||8;
+    $('#conc-range').max=concMax;$('#conc-num').max=concMax;
+    $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5}
+  $('#conc-modal').style.display='flex';
+}
+$('#menu-concurrency').onclick=e=>{e.preventDefault();openConcModal()};
+$('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
+$('#conc-num').oninput=()=>{
+  const v=parseInt($('#conc-num').value);
+  if(v>=1&&v<=concMax)$('#conc-range').value=v;
+};
+$('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
+$('#conc-ok').onclick=async()=>{
+  const v=parseInt($('#conc-num').value);
+  if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
+  try{
+    await api('/api/v1/config/concurrency',{agent_concurrency:v});
+    $('#conc-modal').style.display='none';
+  }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- Agent记忆弹窗(设置菜单「高级」) ---------- */
+function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
+$('#mem-on').onchange=memSt;
+async function openMemModal(){
+  $('#mem-err').textContent='';
+  try{
+    const m=await api('/api/v1/config/agent-memory');
+    $('#mem-on').checked=!!m.agent_memory;
+  }catch(e){$('#mem-on').checked=true}
+  memSt();
+  $('#mem-modal').style.display='flex';
+}
+$('#menu-memory').onclick=e=>{e.preventDefault();openMemModal()};
+$('#mem-cancel').onclick=()=>$('#mem-modal').style.display='none';
+$('#mem-ok').onclick=async()=>{
+  try{
+    await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
+    $('#mem-modal').style.display='none';
+  }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
@@ -1310,6 +1409,16 @@ renderResources();
 setInterval(renderResources,600000);                   // 每 10 分钟自动刷新
 
 async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json()).detail||r.status);return r.json()}
+function currentWebPort(){return location.port||({http:'80',https:'443'}[location.protocol.replace(':','')]||'')}
+async function updateConnTitle(connected){
+  const base=connected?t('实时连接状态'):'连接断开';
+  let text=base+` · Web:${currentWebPort()||'?'}`;
+  try{
+    const info=await api('/api/v1/runtime');
+    text=base+` · Web:${info.web?.port||currentWebPort()||'?'} · API:${info.api?.port||info.api?.origin||'?'}`;
+  }catch(e){}
+  $('#conn').title=text;
+}
 
 /* ---------- Agent 列表 ---------- */
 // SOUL.md 标题是「中文名(English Name)」双语:按界面语言只显示一种。
@@ -1407,7 +1516,7 @@ function fmtTs(ts){
 function appendMsg(role,text,meta={}){
   const m=$('#messages'); const empty=m.querySelector('.empty'); if(empty)empty.remove();
   const d=document.createElement('div'); d.className='msg '+role;
-  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知'};
+  const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
   if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
@@ -1442,7 +1551,7 @@ $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.pre
   }
 })();
 
-/* ---------- 设置菜单:Agent模型 策略 ---------- */
+/* ---------- 设置菜单:模型策略 ---------- */
 function renderAmMode(){
   document.querySelectorAll('#am-mode-menu a').forEach(a=>{
     const on=a.dataset.ammode===AM_MODE;
@@ -1464,8 +1573,8 @@ document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
 
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
-  claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['sonnet','sonnet'],
-          ['claude-fable-5','fable-5'],
+  claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['claude-opus-5','opus-5'],
+          ['sonnet','sonnet'],['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
   codex:[['','默认'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
@@ -1490,7 +1599,7 @@ function updateModelBtn(){
   if(!CURRENT)return;
   $('#btn-models').textContent=t('模型')+' · '+amLabel(CURRENT);
   $('#btn-models').title=(AGENT_MODELS.overrides[CURRENT]?t('该 Agent 已单独配置')
-    :I18N.f('「Agent模型」策略默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
+    :I18N.f('「模型策略」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
     +t('(点击修改;优先级高于右上角全局)');
 }
 function amPopulateModels(engine,selected){
@@ -1522,7 +1631,7 @@ function openAmModal(){
   amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
   amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
-  $('#am-note').textContent=I18N.f('该 Agent 策略默认(Agent模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
+  $('#am-note').textContent=I18N.f('该 Agent 策略默认(模型策略:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
   $('#am-modal').style.display='flex';
@@ -1615,19 +1724,22 @@ function renderRuns(){
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
     .sort((a,b)=>b.created-a.created).slice(0,50);
   if(!runs.length){box.innerHTML='<div class="empty">暂无运行</div>';return}
-  const open=new Set([...box.querySelectorAll('.run.open')].map(x=>x.dataset.id));
   box.innerHTML='';
   runs.forEach(r=>{
-    const d=document.createElement('div'); d.className='run'+(open.has(r.id)?' open':''); d.dataset.id=r.id;
+    const d=document.createElement('div'); d.className='run'; d.dataset.id=r.id;
     const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
-    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span><span class="logbtn" title="展开/收起执行日志">▤</span></div>
+    const stoppable=['queued','running'].includes(r.status);
+    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
       <div class="msg2">${par}${esc(r.message||'')}</div>
       ${r.status==='running'&&r.progress?`<div class="prog">${esc(r.progress)}</div>`:''}
-      <div class="acts">${(r.activity||[]).map(a=>`<div>${esc(a)}</div>`).join('')||'<div>(暂无活动)</div>'}${r.error?`<div style="color:var(--red)">${esc(r.error)}</div>`:''}</div>`;
+      ${r.error?`<div class="err2">${esc(r.error)}</div>`:''}`;
     d.onclick=()=>selectAgent(r.agent);                       // 点卡片 → 打开该 Agent 对话
-    d.querySelector('.logbtn').onclick=e=>{e.stopPropagation();d.classList.toggle('open')};
+    const sb=d.querySelector('.run-stop');
+    if(sb)sb.onclick=async e=>{e.stopPropagation();sb.disabled=true;
+      try{await api('/api/v1/runs/'+encodeURIComponent(r.id)+'/cancel',{})}
+      catch(err){sb.disabled=false;await uiAlert('停止失败:'+err.message)}};
     box.appendChild(d);
   });
 }
@@ -1638,8 +1750,8 @@ setInterval(()=>{if(Object.values(RUNS).some(r=>['queued','running'].includes(r.
 /* ---------- SSE ---------- */
 function connect(){
   const es=new EventSource('/api/v1/events');
-  es.onopen=()=>$('#conn').classList.add('ok');
-  es.onerror=()=>{$('#conn').classList.remove('ok');es.close();setTimeout(connect,2000)};
+  es.onopen=()=>{$('#conn').classList.add('ok');updateConnTitle(true)};
+  es.onerror=()=>{$('#conn').classList.remove('ok');updateConnTitle(false);es.close();setTimeout(connect,2000)};
   es.onmessage=e=>{
     const ev=JSON.parse(e.data);
     if(ev.type==='run'){RUNS[ev.run.id]=ev.run;renderRuns();renderAgents()}
@@ -1747,6 +1859,8 @@ function liveBox(runId){
   renderAgents();renderRuns();
   initWatchdog();   // 等项目下拉框就绪后再查,否则 curProj() 回退 demo 导致误显示「已停」
   initGenProviders();
+  // 左下角版本号:来自 API health 的 __version__,随 release 升版自动变化
+  api('/api/v1/health').then(h=>{if(h.version)$('#app-ver').textContent='v'+h.version}).catch(()=>{});
   // 运行面板计时刷新由顶部的条件 setInterval 统一负责(仅有任务在跑时重绘)
   // 默认选中总制片
   const d=AGENTS.find(a=>a.dispatcher);

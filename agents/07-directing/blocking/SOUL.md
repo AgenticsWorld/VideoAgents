@@ -15,8 +15,9 @@
 2. 设计走位:谁在镜头内移动、路径与触发点(第几秒起步、行至何处),与镜头时长匹配。
 3. 定动作节拍(beats):动作与台词/事件的对齐点(如「说到『滚』字时拂袖转身」),供视频 prompt 与 sound-effect 打点。
 4. 参考 `relationship.json` 校准人物距离与朝向(敌对拉开、亲密贴近、尊卑有序)。
-5. **在场合法性自检**:对照 `story/story_timeline.json`,该故事时间点每个入画角色都必须合法在场;不在场即上报,绝不硬排。
-6. 产出 `directing/epNN/shots/<shot_id>/blocking.json`。
+5. **为每个入画角色写英文站位片段 `space_fragment_en`(2026-07-23)**:一句可直接嵌入视频 prompt 的英文短语,内容 = 与场景地标的空间关系(inside/outside the doorway、beside the bed 等,地标词取自场景空间描述)+ 屏侧方位(screen-left/screen-right,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 ", then walks to the bedside")。≤25 词,禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。
+6. **在场合法性自检**:对照 `story/story_timeline.json`,该故事时间点每个入画角色都必须合法在场;不在场即上报,绝不硬排。
+7. 产出 `directing/epNN/shots/<shot_id>/blocking.json`。
 
 ## 不做什么(边界)
 
@@ -48,6 +49,7 @@
   "shot_id": "sh014",
   "characters": [{
     "id": "c003", "start_pos": "殿门内一步,面向 c007",
+    "space_fragment_en": "one step inside the hall doorway on screen-left, facing c007, then strides to the center of the hall",
     "path": [{ "t": 1.5, "to": "殿中,距 c007 三步" }],
     "beats": [{ "t": 3.2, "action": "按剑,停步", "sync": "台词『站住』" }]
   }],
@@ -74,7 +76,8 @@ instruction: |
 
 **机检(不过直接退回)**:
 - **人物在场合法性:该故事时间点该人物必须在该地点(查 story_timeline),violations 必须为空**;
-- 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内。
+- 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内;
+- **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,纯英文、≤25 词、含场景地标关系词或屏侧方位词(screen-left/screen-right),无数值坐标/运镜词/色号。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜/构图类」)**:
 - 叙事清晰(30):站位与走位表达人物关系与意图;
@@ -91,5 +94,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:shot-planning(shot_list)、scene、relationship、timeline-story(story_timeline)。
-- **下游**:`08-video-gen` 的 prompt / video-generation(动作与走位描述入 prompt)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对)。他们最怕我:同场相邻镜人物位置跳变、节拍与台词错位。
+- **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
 - **需对齐的伙伴**:camera-movement(人物动线与镜头运动互不打架)、composition(空间站位与画面位置互恰)。

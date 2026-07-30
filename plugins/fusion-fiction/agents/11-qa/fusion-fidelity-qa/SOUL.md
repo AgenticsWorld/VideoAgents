@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 魂保真审核(对照甲本基线):按 `transpose_log.baseline` 从 version 历史取甲本原剧本 @vN(分支项目模式下正史已被覆写,当前文件不是基线),逐场比对台账声称的 beat 对应是否真实成立——戏剧功能是否等价、人物动机链是否原样过河、preserve_list 名场面是否只换壳未换戏;台账写了不等于做到,以正文为准。
+1. 魂保真审核(对照甲本基线):按 `transpose_log.baseline` 读甲本原剧本快照 `fusion/episodes/{ep}/source_screenplay.md`(正史已被覆写,当前文件不是基线),逐场比对台账声称的 beat 对应是否真实成立——戏剧功能是否等价、人物动机链是否原样过河、preserve_list 名场面是否只换壳未换戏;台账写了不等于做到,以正文为准。
 2. 壳完整审核(对照融合圣经):言行/制度/物件是否贴融合世界规则,黑名单之外的隐性时代错位(思维方式、度量衡、称谓体系)靠我人工级排查——机检词表抓不到的穿帮是我的主责。
 3. 映射纪律审核:人物言行是否符合合成人设卡(浩南之魂+悟空之形,两头都要像);出场角色是否越过 character_map(私造对应/张冠李戴)。
 4. 跨集一致(全书口径,fs5-fidelity):同一概念的字典置换全剧统一(前集「朴刀」后集「砍刀」即缺陷)、合成人设跨集不漂移、阵营关系演进与甲本主线同步。
@@ -29,7 +29,7 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | 移植剧本 | 待审正文(已覆写正史)+移植台账 | `story/episodes/{ep}/screenplay.md` 当前版、`fusion/episodes/{ep}/transpose_log.json` |
-| 甲本剧本基线 | 魂对账基准——按 transpose_log.baseline 从 version 历史取指定 @vN,不拿当前文件当基线 | `story/episodes/{ep}/screenplay.md@vN` |
+| 甲本剧本基线 | 魂对账基准——按 transpose_log.baseline 读覆写前留存的快照,不拿当前文件当基线 | `fusion/episodes/{ep}/source_screenplay.md` |
 | 融合产物 | 壳对账基准(fs3 已写回正史) | `bible/`、`fusion/dictionary.json`、`fusion/character_map.json`、`fusion/fusion_plan.json` |
 
 ## 输出

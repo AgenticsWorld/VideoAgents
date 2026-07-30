@@ -1,7 +1,8 @@
 # workflow.yaml — 小说→视频流水线 DAG(机器可读)
 # 与 WORKFLOW.md 保持同步;WORKFLOW.md 是人读权威,本文件是 orchestrator 的执行输入。
 # 约定:
-#   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台)
+#   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台,
+#             chapter_batch=每章节批——p0 解析扇出,批清单来自 story/chapter_manifest.json)
 #   validation.auto      机器校验(schema/指标),不过直接退回
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
@@ -33,17 +34,33 @@ phases:
         agent: 00-orchestration/memory-bible
         depends_on: [p0-init]
         outputs: [bible/]
-      - id: p0-parse
+      # p0 解析走「分章 map + 全局 merge」(2026-07-23 改版,治整本单任务上下文溢出):
+      # scan 产章节批清单 → parse 按批并行结构化 → merge 机械拼装出总表。
+      # 不设字数阈值分支——短篇就是少数几批,统一走这条路;粒度由 scan 的分批逻辑控制。
+      - id: p0-scan
         agent: 01-story/novel-parser
         depends_on: [p0-init]
-        outputs: [story/structured_story.json]
+        outputs: [story/chapter_manifest.json]
         validation:
-          auto: [schema, chapter_coverage_100, speaker_missing_lt_2pct]
+          auto: [schema, chapter_files_coverage_100, batch_word_count_in_range]
+      - id: p0-parse
+        agent: 01-story/novel-parser
+        for_each: chapter_batch      # 按 chapter_manifest.batches 实例化(p0-parse-bNN)
+        depends_on: [p0-scan]
+        outputs: ["story/structured_story/"]   # 本批各章分片 chNNN.json,每章一文件
+        validation:
+          auto: [schema, batch_chapter_coverage_100, speaker_missing_lt_2pct]
           rubric: extraction_v1
           threshold: 85
+      - id: p0-merge
+        agent: 01-story/novel-parser
+        depends_on: [p0-parse]
+        outputs: [story/structured_story.json]   # 下游契约不变:仍产总表;分片保留供按章裁剪
+        validation:
+          auto: [schema, chapter_coverage_100, ids_unique_across_shards, speaker_missing_lt_2pct]
       - id: g0
         gate: true
-        depends_on: [p0-parse, p0-bible-init, p0-version-init]
+        depends_on: [p0-merge, p0-bible-init, p0-version-init]
 
   - id: p1
     name: 剧情理解
@@ -116,7 +133,7 @@ phases:
           outputs: ["bible/scenes/{id}/architecture.json"], validation: { qa: [11-qa/visual-qa] } }
       - { id: p3-lighting, agent: 05-scenes/lighting, for_each: scene, depends_on: [p3-environment],
           outputs: ["bible/scenes/{id}/lighting.json"], validation: { qa: [11-qa/visual-qa] } }
-      - { id: g3, gate: true,
+      - { id: g3, gate: true, human: true, checkpoint: H1A-角色与资产确认,
           depends_on: [p3-appearance, p3-growth, p3-personality, p3-relationship, p3-voice,
                        p3-dialogue-style, p3-mount, p3-environment, p3-architecture, p3-lighting],
           validation: { auto: [all_refs_resolve], qa: [11-qa/character-consistency-qa] } }
@@ -216,12 +233,13 @@ phases:
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
                                nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
-          outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5)
-          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
+          outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
+                               prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
                         qa: [11-qa/visual-qa] } }
       - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
           condition: group.has_character,
-          validation: { auto: [face_similarity_gte_0.85] } }
+          validation: { auto: [face_similarity_gte_0.85] } }   # 仅校新生成锚;复用锚(source=reuse:)与概念图同源免校,reuse-only 组直接放行(§7A 2026-07-24)
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
@@ -235,8 +253,8 @@ phases:
           condition: defect_assigned, validation: { auto: [original_defect_recheck] } }
       - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation],
           validation: { auto: [target_resolution_ok] } }
-      - { id: g7, gate: true, scope: episode, depends_on: [p7-upscale],
-          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }
+      - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale],
+          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「视频预览」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
 
   - id: p8
     name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成,

@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600}
@@ -55,6 +56,14 @@ h2.title .id{color:var(--dim);font-size:13px;font-weight:400}
 .gallery img{height:230px;max-width:380px;object-fit:contain;border-radius:6px;cursor:zoom-in;display:block}
 .gallery figcaption{font-size:11px;color:var(--dim);margin-top:4px;max-width:380px;display:flex;align-items:center;justify-content:center;gap:6px}
 .gallery figcaption .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gallery figure.folder{cursor:pointer}
+.gallery figure.folder:hover{border-color:var(--accent)}
+.gallery figure.folder img{cursor:pointer}
+.fthumb{position:relative}
+.fthumb .fmask{position:absolute;inset:0;background:rgba(15,17,23,.42);display:flex;align-items:center;justify-content:center;font-size:46px;border-radius:6px}
+.fcnt{color:var(--dim);flex:none}
+.foldbar{display:flex;align-items:center;gap:10px;margin:16px 0 -6px;font-size:13px}
+.foldbar .fname{font-weight:600}
 .editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .doc{border:1px solid var(--border);border-radius:10px;margin:14px 0;overflow:hidden}
@@ -93,7 +102,7 @@ ul.arr>li{margin:2px 0}
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let DATA=[], CUR=null;
+let DATA=[], CUR=null, FOLDER=null;
 const DOC_NAMES={architecture:'建筑/空间结构',environment:'环境设定',lighting:'光照设定'};
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent']);
 
@@ -124,7 +133,7 @@ function renderList(){
         +(s.meta.level?`<span class="badge">${esc(s.meta.level)}</span>`:'')
         +(s.images.length?`<span class="badge pic">${esc(I18N.f('图{n}',{n:s.images.length}))}</span>`:'')
         +`<span class="id">${esc(s.id)}</span>`;
-      d.onclick=()=>{CUR=s.id;renderList();renderDetail(s)};
+      d.onclick=()=>{CUR=s.id;FOLDER=null;renderList();renderDetail(s)};
       box.appendChild(d);
     });
   if(!box.children.length)box.innerHTML='<div class="empty">没有匹配的场景</div>';
@@ -145,9 +154,30 @@ function renderDetail(s){
   if(m.frequency)ml.push(t('频次:')+m.frequency);
   if(ml.length)h+=`<div class="meta-line">${esc(ml.join('  ·  '))}</div>`;
   if(m.notes)h+=`<div class="notes">${esc(m.notes)}</div>`;
-  if(s.images.length){
-    h+='<div class="gallery">'+s.images.map(im=>
-      `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(im.name)}"><span class="fn">${esc(im.name)}</span><button class="editbtn" data-url="${esc(im.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></figcaption></figure>`).join('')+'</div>';
+  // 图库分组:场景目录根下的图直接展示;candidates/ 等子目录收成文件夹卡片,点击进入
+  const rootImgs=[],folders={};
+  s.images.forEach(im=>{
+    const i=im.name.indexOf('/');
+    if(i>0){const d=im.name.slice(0,i);(folders[d]=folders[d]||[]).push(im)}
+    else rootImgs.push(im);
+  });
+  if(FOLDER&&!folders[FOLDER])FOLDER=null;
+  const fig=(im,strip)=>{
+    const nm=strip?im.name.slice(strip.length+1):im.name;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></figcaption></figure>`;
+  };
+  if(FOLDER){
+    const ims=folders[FOLDER];
+    h+=`<div class="foldbar"><button onclick="closeFolder()">${t('← 返回')}</button><span class="fname">📁 ${esc(FOLDER)}</span><span class="fcnt">${esc(I18N.f('{n} 张',{n:ims.length}))}</span></div>`;
+    h+='<div class="gallery">'+ims.map(im=>fig(im,FOLDER)).join('')+'</div>';
+  }else if(s.images.length){
+    h+='<div class="gallery">'+rootImgs.map(im=>fig(im)).join('')
+      +Object.keys(folders).sort().map(d=>{
+        const ims=folders[d];
+        return `<figure class="folder" data-d="${esc(d)}" onclick="openFolder(this.dataset.d)" title="${esc(d)}">`
+          +`<div class="fthumb"><img src="${esc(bust(ims[0].url))}" loading="lazy"><div class="fmask">📁</div></div>`
+          +`<figcaption><span class="fn">📁 ${esc(d)}</span><span class="fcnt">${esc(I18N.f('{n} 张',{n:ims.length}))}</span></figcaption></figure>`;
+      }).join('')+'</div>';
   }else{
     h+='<div class="meta-line">(暂无概念图)</div>';
   }
@@ -163,6 +193,9 @@ function renderDetail(s){
 // 图片 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留
 const LOAD_T=Date.now();
 const bust=u=>u.includes('?')?u:u+'?v='+LOAD_T;
+
+function openFolder(name){FOLDER=name;const s=DATA.find(x=>x.id===CUR);if(s)renderDetail(s)}
+function closeFolder(){openFolder(null)}
 
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';

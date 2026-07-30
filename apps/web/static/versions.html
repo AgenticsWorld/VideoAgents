@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
 header h1{font-size:15px;font-weight:600}
@@ -53,7 +54,7 @@ button.clone{color:var(--accent)}
 #global-status.show{display:block}
 #global-status .ok{color:var(--green)}
 #global-status .err{color:var(--red)}
-#global-status a{color:var(--accent)}
+#global-status a{color:var(--link)}
 .empty{color:var(--dim);text-align:center;padding:40px 0}
 .card.danger{border-color:#7f1d1d}
 .card.danger h3{font-size:13px;color:var(--red);margin-bottom:6px}
@@ -82,6 +83,14 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
   <select id="project"></select>
 </header>
 <main>
+  <div class="card" id="ver-toggle-card">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+      <input type="checkbox" id="ver-enabled" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+      <b>是否启用版本管理</b>
+      <span id="ver-status" style="font-size:12px"></span>
+    </label>
+    <div style="font-size:12px;color:var(--dim);margin-top:6px">默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效</div>
+  </div>
   <div class="notice">
     每行是一个任务批次的产物落盘(版本管理 Agent 登记);「克隆」会把<b>截至该批次</b>的全部已登记产物
     (含 settings.json / brief.md / runs/dag.json 等当时版本)导出为一个全新项目,版本历史重置为 v1 基线。
@@ -127,8 +136,28 @@ async function initProjects(){
   const want=(new URLSearchParams(location.search).get('project'))
     ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project);
   sel.value=list.includes(want)?want:list[0];
-  sel.onchange=()=>{loadList();refreshDanger()};
+  sel.onchange=()=>{loadList();refreshDanger();loadVerToggle()};
 }
+
+/* ---------- 版本管理开关(项目级设置 versioning.enabled,默认关) ---------- */
+async function loadVerToggle(){
+  const st=$('#ver-status');st.textContent='';
+  try{
+    const cfg=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config');
+    $('#ver-enabled').checked=!!(cfg.versioning&&cfg.versioning.enabled);
+  }catch(e){st.textContent='✗ '+esc(e.message);st.style.color='var(--red)'}
+}
+$('#ver-enabled').onchange=async()=>{
+  const st=$('#ver-status');st.textContent=t('保存中…');st.style.color='var(--dim)';
+  try{
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',
+      {project:curProj(),versioning:{enabled:$('#ver-enabled').checked}});
+    st.textContent=t('✓ 已保存,对之后派发的任务生效');st.style.color='var(--green)';
+  }catch(e){
+    st.textContent='✗ '+esc(e.message);st.style.color='var(--red)';
+    $('#ver-enabled').checked=!$('#ver-enabled').checked;   // 保存失败回滚显示
+  }
+};
 
 /* ---------- 危险操作:删除当前项目(输入项目名解锁 → 红色确认弹窗) ---------- */
 function refreshDanger(){
@@ -233,6 +262,7 @@ async function doClone(b){
 (async()=>{
   await initProjects();
   refreshDanger();
+  loadVerToggle();
   await loadList();
   // 页面打开时若已有克隆在跑(如刷新页面),恢复轮询提示
   try{

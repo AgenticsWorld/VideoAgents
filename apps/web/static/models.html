@@ -18,10 +18,11 @@ if(!window.I18N){
 <style>
 :root{
   --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
-  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --green:#4ade80;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
   --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
 header h1{font-size:15px;font-weight:600}
@@ -36,9 +37,6 @@ main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-dire
 .tab{flex:1;padding:9px 10px;text-align:center;cursor:pointer;font-size:13px;color:var(--dim);border-bottom:2px solid transparent;user-select:none;display:flex;align-items:center;justify-content:center;gap:6px}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent);background:var(--panel)}
-.tab .chk{width:15px;height:15px;border:1px solid var(--dim);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;line-height:1;color:transparent;flex:none}
-.tab .chk:hover{border-color:var(--accent)}
-.tab .chk.on{background:var(--green);border-color:var(--green);color:#0b1020}
 .panel{display:none;padding:16px;flex-direction:column;gap:14px}
 .panel.show{display:flex}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -50,7 +48,7 @@ button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600;padding:8px 26px}
 button:disabled{opacity:.5;cursor:default}
 .hint{font-size:12px;color:var(--dim);margin-left:120px}
-.hint a{color:var(--accent)}
+.hint a{color:var(--link)}
 .status{font-size:12px;margin-left:120px}
 .status.ok{color:var(--green)}
 .status.err{color:var(--red)}
@@ -79,12 +77,12 @@ button:disabled{opacity:.5;cursor:default}
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效</span></h2>
+    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=标签页上勾选的 ✓,点圈勾选、保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
@@ -184,7 +182,7 @@ const IDEOGRAM_MODELS=[['V_3','V 3(最新)'],['AUTO','Auto(官方自动选版)']
    下架但仍可调用(退市过渡期,建议迁移 Pro);Pro 出图面积须 ≥921600px(1280×720 起) */
 const VOLC_IMAGE_MODELS=[
   ['doubao-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
-  ['doubao-seedream-5-0-260128','Seedream 5.0(已从在售列表下架,暂仍可调用)'],
+  ['doubao-seedream-5-0-260128','Seedream 5.0'],
   ['doubao-seedream-5-0-lite-260128','Seedream 5.0 Lite(轻量版)'],
   ['doubao-seedream-4-5-251128','Seedream 4.5(文/图生图/多图融合)'],
   ['doubao-seedream-4-0-250828','Seedream 4.0(文/图生图)'],
@@ -256,23 +254,14 @@ const EL_TTS_MODELS=[
 /* ---------- 构建 UI ---------- */
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
-/* 音乐/TTS 无顶栏切换入口,生效渠道用标签页上的 ✓ 勾选(点勾选圈选择,点标签只查看) */
+/* 音乐/TTS 无顶栏切换入口,生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
 const CHK_KINDS=new Set(['music','tts']);
-const SEL_PROVIDER={music:'openrouter',tts:'openrouter'};
-function setProviderChk(kind,p){
-  SEL_PROVIDER[kind]=p;
-  SECTIONS[kind].providers.forEach(x=>$(`#chk-${kind}-${x}`).classList.toggle('on',x===p));
-}
+const SEL_PROVIDER={music:'elevenlabs',tts:'volcengine'};
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);
   SECTIONS[kind].providers.forEach(p=>{
     const tb=el('div',{className:'tab',id:`tab-${kind}-${p}`},PROVIDER_META[p].label);
-    if(CHK_KINDS.has(kind)){
-      const c=el('span',{className:'chk',id:`chk-${kind}-${p}`,title:t('设为生效渠道(保存后生效)')},'✓');
-      c.onclick=e=>{e.stopPropagation();setProviderChk(kind,p)};
-      tb.appendChild(c);
-    }
     tb.onclick=()=>showPanel(kind,p);
     tabs.appendChild(tb);
     panels.appendChild(buildPanel(kind,p));
@@ -499,8 +488,12 @@ function showTextPanel(p){
 }
 
 function showPanel(kind,p){
+  if(CHK_KINDS.has(kind))SEL_PROVIDER[kind]=p;
   SECTIONS[kind].providers.forEach(x=>{
-    $(`#tab-${kind}-${x}`).classList.toggle('active',x===p);
+    const tb=$(`#tab-${kind}-${x}`);
+    tb.classList.toggle('active',x===p);
+    if(CHK_KINDS.has(kind))   // ✅ = 生效渠道(保存后),与文件托管存储渠道一致
+      tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
     $(`#panel-${kind}-${x}`).classList.toggle('show',x===p);
   });
 }
@@ -583,7 +576,7 @@ async function elAddLib(){
   }catch(e){elStatus('✗ '+e.message,false)}
 }
 
-/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 在 ⚙️ 设置 → 资源消耗 配置) ---------- */
+/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」) ---------- */
 let VOLC_LIB=[];  // 最近一次拉取的音色库(试听/设默认时按下标取)
 let VOLC_AUDIO=null;
 const volcVoiceLabel=v=>[v.name,v.gender,v.age,...(v.labels||[]).slice(0,2),
@@ -678,7 +671,6 @@ function loadIntoForm(){
     }
     const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
     showPanel(kind,eff);
-    if(CHK_KINDS.has(kind))setProviderChk(kind,eff);
     loadOpenRouterModels(kind);
   }
   const da=CFG.deepagents||{},lo=da.local||{},or=da.openrouter||{};

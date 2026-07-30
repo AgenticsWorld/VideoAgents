@@ -78,6 +78,10 @@ python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
 
+deepagents 引擎需要 Python ≥3.11。若主环境是 3.10，请改用
+`make install-deepagents` 创建专用的 `.venv-deepagents`（运行时自动发现）；
+也可设置 `DEEPAGENTS_PY` 指向任意已安装 deepagents 的解释器。
+
 FFmpeg 需要通过操作系统包管理器单独安装。
 
 ## 目录结构

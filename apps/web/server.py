@@ -121,6 +121,14 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="VideoAgents Web", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 
+@app.get("/api/v1/runtime")
+async def runtime_info():
+    return {
+        "web": {"host": WEB_HOST, "port": WEB_PORT, "origin": f"http://{WEB_HOST}:{WEB_PORT}"},
+        "api": {"port": API_PORT, "origin": API_ORIGIN},
+    }
+
+
 def _upstream_request(method: str, url: str, headers: dict[str, str], body: bytes):
     request = urllib.request.Request(url, data=body or None, headers=headers, method=method)
     try:
@@ -223,6 +231,11 @@ async def storage():
 @app.get("/versions")
 async def versions():
     return _page("versions.html")
+
+
+@app.get("/clawbot")
+async def clawbot():
+    return _page("clawbot.html")
 
 
 @app.get("/preview/{page}")

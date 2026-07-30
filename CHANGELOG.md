@@ -4,6 +4,96 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-07-29
+
+### Added
+
+- Storyboard preview: per-group "🖼 Image" button — browse concept-library assets by character/scene/prop category and pick an image to add to the group's reference images (refs). Shares the 9-image cap with hand-drawn sketches (enforced on both frontend and backend); images already in refs are greyed out to prevent duplicates. New backend `POST /storyboard/refs` (`core.api_grpref_add`) validates the `assets/concepts/` prefix and guards against path traversal. All 11 language dictionaries updated.
+- Storyboard preview: per-generation-group "📄 Prompt" button — popup showing the group's video prompt and byte usage.
+- Run panel: inline "⏹" button on each run entry to stop that single agent (queued or running) without affecting other runs; new backend `POST /runs/{run_id}/cancel`.
+
+### Changed
+
+- Fresh-install provider defaults: image/video/TTS now default to Volcano Engine and music generation to ElevenLabs (`DEFAULT_GENCONFIG` provider defaults plus the `models.html` initial fallback). Existing installs' `genconfig.json` is unaffected.
+- Generation model settings: the active channel for music generation and TTS voice models now follows the selected tab (✅ marker), matching the file-hosting storage channel UX; the per-tab check circles were removed. All 11 language dictionaries updated.
+- Video prompt body language now follows the user's UI language instead of defaulting to English.
+- WebUI link color switched to high-contrast orange (`--link: #fb923c`) with a new global `a` fallback rule — unstyled links no longer fall back to the browser's default dark blue, which was hard to read on dark backgrounds; explicit link rules (e.g. `.hint a`) updated to match, navigation/icons/menus untouched.
+
+### Fixed
+
+- WeChat binding: fetching the bind QR code now retries up to 2 times on transient network/SSL EOF errors (proxy hiccups causing peer disconnects) before reporting failure.
+
+## [1.0.6] - 2026-07-28
+
+### Added
+
+- "Concurrency" dialog under Settings → Advanced (slider + number box, 1-8, default 5): per-agent concurrency quota for stateless fan-out agents. Stateful creative agents always stay serial to protect session continuity, and every run still passes the global 8-process gate. Persisted in `state.json` via the new `GET/POST /api/v1/config/concurrency`; takes effect immediately for subsequently queued tickets.
+- "Agent Memory" toggle under Settings → Advanced (default on): when turned off, every agent — including the Producer — starts a fresh session per run, and cross-ticket information travels only through on-disk artifacts; session ids keep being recorded while off, so re-enabling resumes from the most recent session. New `GET/POST /api/v1/config/agent-memory`.
+
+### Changed
+
+- Same-agent execution gate upgraded from a boolean mutex to per-agent semaphores, and the stateless fan-out set expanded: the `05-scenes/`, `03-characters/` and `06-art/` prefixes plus `01-story/novel-parser` now start a fresh session per ticket and may run in parallel up to the concurrency quota — per-scene/per-character fan-outs (e.g. 70 `p3-environment` tickets on a large project) no longer serialize behind one agent lock.
+- Refreshed desktop app icon.
+
+### Fixed
+
+- Desktop auto-update no longer gets stuck mid-update (download/install flow hardened).
+
+## [1.0.5] - 2026-07-28
+
+### Added
+
+- Quality-judge slider in review settings (0-100, default 60, listed first): the value is the evaluation acceptance threshold below which verdicts become "must fix as instructed"; 0 disables evaluation tickets entirely (no scoring for the whole run). Synced to the new-project wizard; prompt injection covers the three states and names `own_review` explicitly.
+- H1A "characters & assets confirmation" human sign-off gate added to the default workflow's g3 gate, between H1 and H2; WORKFLOW.md hard rules, flowchart, gate notes and H-point summary table updated.
+- The console footer now shows the serving version (read from the API health `__version__`), so release bumps surface automatically in the UI.
+- Character/scene/prop preview galleries collect subdirectories (e.g. `candidates`) into folder cards opened on click, keeping drafts out of the final-image grid.
+
+### Changed
+
+- claude engine wired to `opus-5`: the top-bar default is the "opus (latest)" alias with `opus-5` as the second choice; the smart-assignment high tier resolves to it (`smart_claude` → opus-5, `smart_codex` → gpt-5.6-sol).
+- Smart-assignment tiers rebalanced: `novel-parser` promoted to the high-complexity tier (back to the 01-story category default); the whole 02-worldbuilding and 04-creatures categories demoted to the low tier, with `world` kept high as the creative core.
+- Run panel cards no longer embed an activity-log expander; errors are shown inline in red instead.
+
+### Fixed
+
+- deepagents engine: interpreter auto-discovery, and local endpoints connect directly instead of going through the system proxy.
+
+## [1.0.4] - 2026-07-24
+
+### Changed
+
+- Group anchor packs are now reuse-first: concept-library images (character three-views, scene concepts, prop scale refs) are reused directly as Seedance 2.0 reference images, and groups fully covered by the library generate zero new images (`generation_channel: reuse-only`). Per-group composed opening anchor frames (`anchor_opening`) are no longer produced by default — the multi-reference video mode is mutually exclusive with first-frame input, so composed openings never entered video requests (evidence: 86 such frames across one episode, none used); they remain allowed only as an orchestrator-approved first-frame/split fallback. Gap-fill anchor generation (missing costume state, expression, prop close-up) must record a `gap_reason`, enforced by the new `reuse_first_ok` machine check.
+- Reused anchors skip character-consistency correction and visual-QA composition scoring (their source concept images were already reviewed at library intake); `reuse-only` groups pass straight through, saving generation quota and QA time.
+- The prompt station emits anchor-image prompts only for genuine concept-library gaps instead of routinely scripting an opening frame per group.
+- `tests/` removed from version control (local-only from now on).
+
+### Fixed
+
+- UI language preference is now saved globally in `state.json` (dual-written with genconfig for backward compatibility, read preferring state; the ui-prefs API returns it and the browser restores from the server before auto-detection) — fixes the desktop app reverting to browser-detected language after each randomized-port restart.
+
+## [1.0.3] - 2026-07-24
+
+### Added
+
+- WeChat ClawBot integration: bind an account by scanning a QR code on the new `clawbot.html` page and exchange messages with the chief producer directly from WeChat; channel implementation in `services/runtime/wechat.py`, speaker credentials rebound to the TOS file-hosting channel AK/SK.
+- `blocking_bound` machine check: each scene's blocking (staging) fragment is injected verbatim into generation prompts and validated by `code/blocking_bound_check.py`, preventing character spatial drift within a scene.
+- `costume_bound` deterministic injection: the continuity costume state is copied verbatim into image/video prompts, preventing wardrobe drift across shots.
+- Identity lock extended to all groups: prevents three-view character reference images from duplicating the character as a second person in frame; when the cast changes across a group boundary, the seam shot must switch composition so new characters cannot appear mid-shot out of nowhere.
+- H3B visual-generation sign-off gate in the default workflow (g7): each episode's group clips are reviewed before entering editing.
+- System sleep prevention on macOS/Windows while auto-run is active.
+- Version management page gains an enable toggle (default off); when disabled, no version-management tickets are dispatched.
+- Settings menu reorganized: new "Advanced" submenu, "Agent Model" renamed to "Model Strategy"; the Web UI now displays the actual serving port.
+
+### Changed
+
+- p0 novel parsing switched to chapter-level map+merge: batched scanning, per-chapter fan-out parsing, and mechanical merging, so large novels no longer bottleneck on a single parse pass.
+- fusion-fiction plugin simplified: branch-project cloning and version management removed (users manage versions themselves); the soul reconciliation baseline is stored as a snapshot.
+- Plugins are now disabled by default after installation and must be enabled manually on the Plugins page.
+- Review intensity defaults to 0 with no review during the draft phase; the per-session fuse is lowered and the stateless station pool expanded.
+- Racing (parallel competitive generation) now runs only on explicit user instruction, never automatically.
+- Volcano video generation: input image minimum pixel hard limit (≥3,686,400 px per image, e.g. 2560x1440 for 16:9) consolidated into prompts.
+- Desktop/runtime hardening: local API calls bypass system and environment proxies; installer names include the version; macOS notarization; Intel macOS release builds dropped; Windows runtime junction packaging and Node 24 artifact workflows fixed.
+
 ## [1.0.2] - 2026-07-22
 
 ### Added
