@@ -168,11 +168,13 @@ jobs:
       - name: Build metadata
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          MINIMUM_DESKTOP_VERSION: ${{ vars.MINIMUM_DESKTOP_VERSION || '1.0.0' }}
         run: |
           python apps/desktop/scripts/update_runtime_index.py \
             --index publish/metadata.json \
             --artifacts runtime-artifacts \
             --desktop-artifacts desktop-artifacts \
+            --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
             --version "$RELEASE_VERSION"
       - name: Prepare four GitHub release assets
         shell: bash

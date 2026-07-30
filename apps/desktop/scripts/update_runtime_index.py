@@ -5,8 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def version_tuple(value: str) -> tuple[int, int, int]:
+    if not VERSION.fullmatch(value):
+        raise SystemExit(f"Invalid desktop version: {value}")
+    return tuple(map(int, value.split(".")))  # type: ignore[return-value]
 
 
 def main() -> None:
@@ -14,6 +24,7 @@ def main() -> None:
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument("--desktop-artifacts", type=Path)
+    parser.add_argument("--minimum-desktop-version", default="1.0.0")
     parser.add_argument("--version", required=True)
     parser.add_argument("--public-base", help="Override package URL prefix, useful for staging tests")
     args = parser.parse_args()
@@ -35,6 +46,10 @@ def main() -> None:
         python.setdefault(platform, {})[arch] = metadata
     if args.desktop_artifacts:
         desktop = document.setdefault("desktop", {})
+        minimum_version = args.minimum_desktop_version
+        if version_tuple(minimum_version) > version_tuple(args.version):
+            raise SystemExit("Minimum desktop version cannot be newer than the release version")
+        desktop["minimumVersion"] = minimum_version
         desktop_files = sorted(args.desktop_artifacts.rglob("*.metadata.json"))
         if not desktop_files:
             raise SystemExit("No desktop metadata files found")

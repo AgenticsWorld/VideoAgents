@@ -9,7 +9,8 @@ import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
 import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
-  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo,
+  cacheRequiredDesktopUpdate, clearCachedRequiredDesktopUpdate, DesktopArtifact, DesktopUpdate,
+  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo, readCachedRequiredDesktopUpdate,
 } from './desktop-update'
 import {desktopExecutablePath} from './shell-environment'
 
@@ -37,6 +38,8 @@ function stopWebServerTree(): void {
 }
 let runtimeProgressWindow: BrowserWindow | undefined
 let runtimeUpdateInProgress = false
+let requiredDesktopUpdateActive = false
+let requiredDesktopUpdateCanQuit = false
 
 function webRoot(): string {
   const packaged = path.join(process.resourcesPath, 'backend', 'apps', 'web')
@@ -253,14 +256,19 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function checkDesktopUpdate(): Promise<void> {
-  const build = readBuildInfo(process.resourcesPath, app.isPackaged)
-  const artifact = await fetchDesktopUpdate(build)
-  if (!artifact) return
+async function applyDesktopUpdate(artifact: DesktopArtifact): Promise<void> {
+  const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
+  await downloadAndApplyDesktopUpdate(
+    app.getPath('userData'), currentAppPath, artifact, updateRuntimeProgress,
+  )
+}
+
+async function offerDesktopUpdate(update: DesktopUpdate, currentVersion: string): Promise<void> {
+  const {artifact} = update
   const options: MessageBoxOptions = {
     type: 'info', title: '发现 VideoAgents 更新',
     message: `发现 VideoAgents ${artifact.version} 新版本。`,
-    detail: `当前版本 ${build.version}。是否立即下载并自动安装？`,
+    detail: `当前版本 ${currentVersion}。是否立即下载并自动安装？`,
     buttons: ['下载并更新', '暂不更新'], defaultId: 0, cancelId: 1,
   }
   const answer = window
@@ -271,16 +279,50 @@ async function checkDesktopUpdate(): Promise<void> {
     '正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。', 'VideoAgents 更新',
   )
   try {
-    const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
-    await downloadAndApplyDesktopUpdate(
-      app.getPath('userData'), currentAppPath, artifact, updateRuntimeProgress,
-    )
+    await applyDesktopUpdate(artifact)
     closeRuntimeProgress()
     app.quit()
   } catch (error) {
     closeRuntimeProgress()
     const message = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox('VideoAgents 更新失败', message)
+  }
+}
+
+async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: string): Promise<never> {
+  const {artifact, minimumVersion} = update
+  requiredDesktopUpdateActive = true
+  Menu.setApplicationMenu(null)
+  let lastError = ''
+  while (true) {
+    await dialog.showMessageBox({
+      type: lastError ? 'error' : 'warning',
+      title: '必须更新 VideoAgents',
+      message: lastError ? '更新失败，请重试' : '当前版本已停止支持',
+      detail: lastError
+        ? `${lastError}\n\n当前版本 ${currentVersion}，最低可用版本 ${minimumVersion}。`
+        : `当前版本 ${currentVersion} 低于最低可用版本 ${minimumVersion}。`
+          + ` 必须更新到 ${artifact.version} 后才能继续使用。`,
+      buttons: ['立即更新'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    })
+    await showRuntimeProgress(
+      '正在强制更新 VideoAgents',
+      '更新完成并重新启动前，不能使用应用的其他功能。',
+      'VideoAgents 必须更新',
+    )
+    try {
+      await applyDesktopUpdate(artifact)
+      closeRuntimeProgress()
+      requiredDesktopUpdateCanQuit = true
+      app.quit()
+      await new Promise<never>(() => {})
+    } catch (error) {
+      closeRuntimeProgress()
+      lastError = error instanceof Error ? error.message : String(error)
+    }
   }
 }
 
@@ -317,10 +359,26 @@ ipcMain.handle('desktop:open-project-folder', async (_event, project: unknown) =
 })
 
 app.whenReady().then(async () => {
+  const build = readBuildInfo(process.resourcesPath, app.isPackaged)
+  const userData = app.getPath('userData')
+  let desktopUpdate = readCachedRequiredDesktopUpdate(userData, build)
+  if (app.isPackaged) {
+    try {
+      const fetchedUpdate = await fetchDesktopUpdate(build)
+      desktopUpdate = fetchedUpdate
+      clearCachedRequiredDesktopUpdate(userData)
+      if (fetchedUpdate?.required) cacheRequiredDesktopUpdate(userData, fetchedUpdate)
+    } catch (error) {
+      console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (desktopUpdate?.required) {
+    await enforceDesktopUpdate(desktopUpdate, build.version)
+  }
   installApplicationMenu()
   await createWindow()
-  if (app.isPackaged) {
-    void checkDesktopUpdate().catch(error => {
+  if (desktopUpdate) {
+    void offerDesktopUpdate(desktopUpdate, build.version).catch(error => {
       console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
     })
   }
@@ -335,4 +393,7 @@ app.on('window-all-closed', () => {
   // Keep the app alive until the actual main window has been created.
   if (mainWindowWasCreated) app.quit()
 })
-app.on('before-quit', stopWebServerTree)
+app.on('before-quit', event => {
+  if (requiredDesktopUpdateActive && !requiredDesktopUpdateCanQuit) event.preventDefault()
+  stopWebServerTree()
+})
