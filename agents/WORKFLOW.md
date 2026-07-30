@@ -285,6 +285,8 @@ refs/
 | color-script | 全片色彩曲线(每集/每幕的主色调与情绪);色调基准优先取自 refs/style/ | story_graph、episode_plan、refs/style/ | `bible/color_script.json` | 评分 creative_v1;QA:art-director 会签 |
 | aspect-ratio | 决定画幅与分辨率矩阵(横/竖/多平台);**目标平台清单取自「📤 输出设置」发布平台多选(提示词注入,非口述猜测),母版画幅 = 输出设置主画幅(aspect_preset),平台矩阵须覆盖所选平台的全部画幅,与母版不同画幅的平台标裁切/缩放规则** | 「📤 输出设置」发布平台与主画幅 | `bible/aspect_ratio.json` | 机检:所选发布平台 100% 有条目、母版可派生各平台规格 |
 
+> **概念图目录卫生(candidates 留档,2026-07-30)**:`assets/concepts/{characters,scenes,props}/<id>/` 主目录仅保留**最终采用的最新版本**图与 prompts.json/selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档,不删除以备追溯。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计现货比对、§7E 修正取锚),弃用图混在主目录会被误取注入;`candidates/` 不计入 §6A 现货。三个概念 Agent(character-concept/environment-concept/prop,含 §6A 回派补图)出图挑选后即归位,重 roll 替换定稿时旧图先移入 `candidates/` 再落新图。
+
 **G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考图】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
 
 ### Phase 5 — 剧本改编(与 Phase 4 并行,依赖 G1/G2/G3)
@@ -316,7 +318,7 @@ refs/
 
 > **§6A 概念图覆盖审计(concept coverage audit,每集,G6 前强制,机检 `concept_coverage_ok`)**:Phase 4 只为 S/A 角色与关键场景出概念图,而本集**真正出场的实体以 `shot_list` 为准**——B 级角色、次要地点、本集新出场的剧情道具,其概念图缺口若漏到 p7-image,模型只能凭 appearance/props 文字脑补形象,跨组一致性从源头失守(出图经验见 char-concept / env-concept 笔记)。故 shot-planning 定稿后、H3A 签字前,art-director 执行一次覆盖审计:
 > ① **枚举需求**:从 `shot_list` 汇总本集全部出场实体(角色 `CHAR-*`、场景 `SCN-*`、剧情道具)及每个实体所需视图——角色=三视图 + 剧情所需的关键表情/服装版本;场景=关键概念图 + 按 `environment.json` 的昼夜/季节/光照变体;剧情道具=样式图 + 比例锚图 `scale_ref_01.png`(§Phase 4 prop);
-> ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);
+> ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);各 `<id>/candidates/` 子目录为弃用候选留档(§Phase 4 目录卫生),**不计入现货**;
 > ③ **补齐派发**:缺口回派对应概念 Agent——角色缺→character-concept、场景缺→environment-concept、道具缺→prop(道具须一并补齐 `scale` 三字段与比例锚图);补出的概念图经 visual-qa / character-consistency-qa 常规打分入库,与 Phase 4 同标准;
 > ④ **产出清单**:`directing/epNN/concept_coverage.json`(每实体:所需视图、现货路径、缺口状态 `covered | dispatched | filled`),进「分镜设定」预览页供 H3A 审看。
 > **机检 `concept_coverage_ok`**:本集 shot_list 出场实体 × 所需视图 100% 有现货(状态全 `covered`/`filled`)方可发起 H3A 签字;**未过不得派发本集任何 p7-image / p7-video 工单**(与 §7D ① 估时级机检并列为 G6 前置硬闸)。新出场 S/A 主角若 Phase 4 遗漏,其新概念图须在 H3A 预览页**显著标注供用户确认**(等同 H2 风格锁定的每集延伸)。
@@ -445,7 +447,7 @@ refs/
 > 重生成人物图,无风格锚出图,新形象混入锚点包后整组设计风格跑偏。三条硬规则:
 > ① **必带在库形象锚**:凡修正中调 genmedia 生成含人物/场景/道具的画面,`--ref` 必须包含所涉实体的
 >   **在库概念图**(角色=`assets/concepts/characters/<id>/` 三视图、场景=`concepts/scenes/<id>/`、
->   道具=`concepts/props/<id>/` 比例锚图)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
+>   道具=`concepts/props/<id>/` 比例锚图;一律取主目录定稿,严禁取 `candidates/` 弃用候选)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
 >   开跑前退回;
 > ② **必带风格锚**:修正 prompt 必须命中 `bible/style.json` 风格锚——图像 prompt 含风格段且
 >   `--negative` 带负面清单;视频 prompt 以 `Overall visual style:` 开头。**参考图不能替代风格锚**
