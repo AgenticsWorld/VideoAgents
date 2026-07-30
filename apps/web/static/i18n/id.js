@@ -1113,4 +1113,9 @@ window.I18N_DICT = {
 "已在参考图": "Sudah ada di referensi",
 "(该分类暂无资产图片)": "(Belum ada gambar aset di kategori ini)",
 "(该资产暂无图片)": "(Aset ini belum punya gambar)",
+"⬆ 本地上传": "⬆ Unggah lokal",
+"从本地上传一张图片,直接加入本组参考图": "Unggah gambar dari komputer dan langsung tambahkan ke gambar referensi grup ini",
+"上传中…": "Mengunggah…",
+"✅ 已上传并加入参考图": "✅ Terunggah dan ditambahkan ke referensi",
+"参考图已满(9 张),不能再添加": "Referensi sudah penuh (9 gambar); tidak bisa menambah lagi",
 };

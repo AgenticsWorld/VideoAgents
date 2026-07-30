@@ -1113,4 +1113,9 @@ window.I18N_DICT = {
 "已在参考图": "Already in references",
 "(该分类暂无资产图片)": "(No asset images in this category yet)",
 "(该资产暂无图片)": "(This asset has no images yet)",
+"⬆ 本地上传": "⬆ Upload",
+"从本地上传一张图片,直接加入本组参考图": "Upload an image from your computer and add it directly to this group's reference images",
+"上传中…": "Uploading…",
+"✅ 已上传并加入参考图": "✅ Uploaded and added to references",
+"参考图已满(9 张),不能再添加": "References are full (9 images); cannot add more",
 };

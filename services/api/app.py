@@ -448,6 +448,18 @@ async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpref_add(body)
 
 
+@api.post("/storyboard/refs/upload", tags=["storyboard"])
+async def storyboard_ref_upload(
+    request: Request,
+    project: str = "",
+    ep: str = "",
+    grp: str = "",
+    filename: str = "",
+) -> dict[str, Any]:
+    data = await request.body()
+    return await core.api_grpref_upload(data, project, ep, grp, filename)
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])
 async def sketches(project: str, ep: str, grp: str) -> list[dict[str, Any]]:
     return await core.api_sketches(project, ep, grp)

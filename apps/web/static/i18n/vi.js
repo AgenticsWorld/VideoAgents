@@ -1113,4 +1113,9 @@ window.I18N_DICT = {
 "已在参考图": "Đã có trong ảnh tham chiếu",
 "(该分类暂无资产图片)": "(Phân loại này chưa có ảnh tài sản)",
 "(该资产暂无图片)": "(Tài sản này chưa có ảnh)",
+"⬆ 本地上传": "⬆ Tải lên từ máy",
+"从本地上传一张图片,直接加入本组参考图": "Tải một ảnh từ máy tính lên và thêm thẳng vào ảnh tham chiếu của nhóm này",
+"上传中…": "Đang tải lên…",
+"✅ 已上传并加入参考图": "✅ Đã tải lên và thêm vào ảnh tham chiếu",
+"参考图已满(9 张),不能再添加": "Ảnh tham chiếu đã đầy (9 ảnh); không thể thêm nữa",
 };

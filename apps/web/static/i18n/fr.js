@@ -1113,4 +1113,9 @@ window.I18N_DICT = {
 "已在参考图": "Déjà dans les références",
 "(该分类暂无资产图片)": "(Aucune image d'élément dans cette catégorie pour l'instant)",
 "(该资产暂无图片)": "(Cet élément n'a pas encore d'images)",
+"⬆ 本地上传": "⬆ Importer en local",
+"从本地上传一张图片,直接加入本组参考图": "Importer une image depuis votre ordinateur et l'ajouter directement aux références de ce groupe",
+"上传中…": "Import en cours…",
+"✅ 已上传并加入参考图": "✅ Importée et ajoutée aux références",
+"参考图已满(9 张),不能再添加": "Les références sont au complet (9 images) ; impossible d'en ajouter",
 };

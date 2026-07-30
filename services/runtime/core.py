@@ -2195,17 +2195,38 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/props/")
 
 
-async def api_grpref_add(body: dict):
-    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型);
-    与手绘线稿共用 MAX_SKETCH_REFS=9 的方舟多参考图上限,满则拒绝。"""
-    project = safe_slug(body.get("project") or "")
-    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
-    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
-    ref = (body.get("ref") or "").strip().lstrip("/")
+def _grpref_append(pf: Path, ref: str, src: str) -> int:
+    """向组 prompt 的 refs 追加一张参考图(共用 MAX_SKETCH_REFS=9 的方舟多参考图上限);
+    返回追加后的 refs 数量。"""
+    d = json.loads(pf.read_text())
+    refs = d.setdefault("refs", [])
+    if ref in refs:
+        raise ServiceError(400, "This image is already in the group's refs")
+    if len(refs) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    refs.append(ref)
+    d.setdefault("notes", []).append(
+        f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    return len(refs)
+
+
+def _grpref_ctx(body_or_kw: dict) -> tuple[str, str, str, Path, Path]:
+    """清洗 project/ep/grp 并定位组 prompt 文件(不存在=404)。"""
+    project = safe_slug(body_or_kw.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body_or_kw.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body_or_kw.get("grp") or "")
     base = _proj_base(project)
     pf = _grp_prompt_path(project, ep, grp)
     if not pf.is_file():
         raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    return project, ep, grp, base, pf
+
+
+async def api_grpref_add(body: dict):
+    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型)。"""
+    project, ep, grp, base, pf = _grpref_ctx(body)
+    ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
         raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
     target = (base / ref).resolve()
@@ -2215,17 +2236,45 @@ async def api_grpref_add(body: dict):
         raise ServiceError(400, "invalid ref path") from None
     if not target.is_file() or target.suffix.lower() not in IMG_EXTS:
         raise ServiceError(404, f"Ref image not found: {ref}")
-    d = json.loads(pf.read_text())
-    refs = d.setdefault("refs", [])
-    if ref in refs:
-        raise ServiceError(400, "This image is already in the group's refs")
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
-    refs.append(ref)
-    d.setdefault("notes", []).append(
-        f"用户从资产库加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
-    atomic_write_json(pf, d)
-    return {"ref": ref, "refs": len(refs)}
+    return {"ref": ref, "refs": _grpref_append(pf, ref, "从资产库")}
+
+
+MAX_GRPREF_UPLOAD = 30 * 1024 * 1024
+# 常见图片格式魔数(与 IMG_EXTS 对应;webp 的 RIFF 头另验 WEBP 标记)
+_IMG_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg",
+              b"RIFF": ".webp", b"GIF8": ".gif"}
+
+
+async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
+    """本地上传一张图片并直接加入组 refs:落盘 assets/uploads/<ep>/<grp>/,
+    请求体即文件原始字节(与参考图页上传同法,避免 multipart 依赖)。"""
+    project, ep, grp, base, pf = _grpref_ctx(
+        {"project": project, "ep": ep, "grp": grp})
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > MAX_GRPREF_UPLOAD:
+        raise ServiceError(400, "file too large (>30MB)")
+    ext = next((v for k, v in _IMG_MAGIC.items() if data.startswith(k)), None)
+    if ext == ".webp" and data[8:12] != b"WEBP":
+        ext = None
+    if not ext:
+        raise ServiceError(400, "file must be a png/jpg/webp/gif image")
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(filename)[0]).strip("._-")
+    stem = re.sub(r"_{2,}", "_", stem)[:80] or "upload"
+    d = base / "assets" / "uploads" / ep / grp
+    d.mkdir(parents=True, exist_ok=True)
+    p, i = d / f"{stem}{ext}", 1
+    while p.exists():
+        p, i = d / f"{stem}_{i}{ext}", i + 1
+    p.write_bytes(data)
+    ref = str(p.relative_to(base))
+    try:
+        n = _grpref_append(pf, ref, "从本地上传")
+    except ServiceError:
+        p.unlink(missing_ok=True)
+        raise
+    return {"ref": ref, "refs": n,
+            "url": f"/projects/{base.name}/{ref}?v={int(p.stat().st_mtime)}"}
 
 
 def _read_json_safe(p: Path):

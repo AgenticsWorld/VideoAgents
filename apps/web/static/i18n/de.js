@@ -1113,4 +1113,9 @@ window.I18N_DICT = {
 "已在参考图": "Bereits in den Referenzen",
 "(该分类暂无资产图片)": "(Noch keine Asset-Bilder in dieser Kategorie)",
 "(该资产暂无图片)": "(Dieses Asset hat noch keine Bilder)",
+"⬆ 本地上传": "⬆ Lokal hochladen",
+"从本地上传一张图片,直接加入本组参考图": "Ein Bild vom Computer hochladen und direkt den Referenzbildern dieser Gruppe hinzufügen",
+"上传中…": "Wird hochgeladen…",
+"✅ 已上传并加入参考图": "✅ Hochgeladen und zu den Referenzen hinzugefügt",
+"参考图已满(9 张),不能再添加": "Referenzbilder voll (9 Bilder); es kann nichts mehr hinzugefügt werden",
 };
