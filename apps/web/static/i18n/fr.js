@@ -1041,6 +1041,8 @@ window.I18N_DICT = {
 "实例(共 {n} 个)": "Instances ({n} au total)",
 "第 {n} 次尝试": "tentative n°{n}",
 "调整工作流任务:": "Ajuster la tâche du workflow : ",
+"对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)": "Envoyer un avis de modification sur l'ensemble du workflow au producteur exécutif (qui éditera runs/dag.json)",
+"调整整个工作流(编辑 runs/dag.json):": "Ajuster l'ensemble du workflow (éditer runs/dag.json) : ",
 "依赖": "Dépendances",
 "阶段": "Phase",
 "产出": "Sorties",

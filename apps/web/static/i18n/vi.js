@@ -1041,6 +1041,8 @@ window.I18N_DICT = {
 "实例(共 {n} 个)": "Phiên bản (tổng {n})",
 "第 {n} 次尝试": "lần thử thứ {n}",
 "调整工作流任务:": "Điều chỉnh tác vụ quy trình: ",
+"对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)": "Gửi ý kiến chỉnh sửa toàn bộ quy trình cho Tổng chế tác (người sẽ sửa runs/dag.json)",
+"调整整个工作流(编辑 runs/dag.json):": "Điều chỉnh toàn bộ quy trình (sửa runs/dag.json): ",
 "依赖": "Phụ thuộc",
 "阶段": "Giai đoạn",
 "产出": "Sản phẩm",
