@@ -1528,17 +1528,32 @@ function appendMsg(role,text,meta={}){
   m.appendChild(d); m.scrollTop=m.scrollHeight; return d;
 }
 
+/* ---------- 输入框草稿持久化 ----------
+   工作指令常常很长(点单要写清音频/文本/风格/阶段),编辑到一半去设置页或预览页
+   查个配置再回来是常态——那些是独立页面,回来即整页重载,不存就丢。
+   只存本地不上服务端(草稿是私有编辑态,与 webui_prefs 的顶栏选择不同)。 */
+const DRAFT_KEY='webui_draft';
+function saveDraft(){
+  try{const v=$('#input').value;
+    v?localStorage.setItem(DRAFT_KEY,v):localStorage.removeItem(DRAFT_KEY)}catch(e){}
+}
+function loadDraft(){try{return localStorage.getItem(DRAFT_KEY)||''}catch(e){return''}}
+
 /* ---------- 发送 ---------- */
 async function send(){
   const t=$('#input').value.trim(); if(!t||!CURRENT)return;
-  $('#input').value='';
+  $('#input').value='';saveDraft();
   try{
     await api('/api/v1/runs',{agent:CURRENT,message:t,project:$('#project').value.trim()||'demo',
       model:getModel(),engine:$('#engine').value});
-  }catch(e){appendMsg('assistant','发送失败:'+e.message,{status:'error'})}
+  }catch(e){
+    $('#input').value=t;saveDraft();   // 发送失败把内容还给用户,不能只留一条错误提示
+    appendMsg('assistant','发送失败:'+e.message,{status:'error'})
+  }
 }
 $('#send').onclick=send;
 $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send()}});
+$('#input').addEventListener('input',saveDraft);
 
 /* ---------- 设置菜单:界面语言(语言名是各语言自称,不翻译) ---------- */
 (function(){
@@ -1867,11 +1882,16 @@ function liveBox(runId){
   // 默认选中总制片
   const d=AGENTS.find(a=>a.dispatcher);
   if(d)selectAgent(d.id);
+  const inp=$('#input');
   if(qp.get('compose')){
-    const inp=$('#input');
     inp.value=qp.get('compose');
+    saveDraft();                        // 预填也存草稿:填完又跑去别处看一眼不至于丢
     inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);
     history.replaceState(null,'','/');   // 清掉参数,防刷新重复预填
+  }else{
+    // 恢复上次未发送的草稿(compose 预填优先,不覆盖)。不抢焦点——回来未必是为了接着打字
+    const d=loadDraft();
+    if(d){inp.value=d;inp.setSelectionRange(d.length,d.length)}
   }
 })();
 </script>
