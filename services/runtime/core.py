@@ -131,11 +131,14 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # 05-scenes 为场景级扇出工位(environment/architecture/lighting 每场景一单,2026-07-28 纳入):
 # 大项目场景数可达 70+,同 agent 串行会拖垮 Phase 3。
 # 03-characters(appearance/personality…每角色一单)、06-art(char-concept 每角色/
-# env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入
+# env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入。
+# 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
+# prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
 STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
                     "01-story/novel-parser"}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
-                      "03-characters/", "06-art/")
+                      "03-characters/", "06-art/",
+                      "13-derivative-fiction/line-editor")
 # 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
@@ -752,7 +755,8 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
-AM_MODES = ("global", "smart_claude", "smart_codex")
+#   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -781,6 +785,8 @@ AM_MODE_MODELS = {
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
+    "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
+                   "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "deepagents")      # "" = 跟随全局
@@ -1327,7 +1333,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/音乐生成模型的英文 prompt 不受此限
-- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`@Image N` 引用,机检与注释注入代码依赖这些英文锚点)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
+- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -1968,26 +1974,49 @@ AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
 # ---------------- 手绘分镜(手机扫码为生成组绘制空间线稿) ----------------
 # 流程:桌面在分镜预览页对某组发起会话 → 手机扫码打开 /draw/<token> 全屏画布 →
-# 提交线稿+文字说明 → 落盘 assets/sketches/epNN/grpNNN/ 并自动补丁 grpNNN.json
-# (refs 追加 + video_prompt 注入 Spatial layout guide 句),重出该组即生效。
+# 提交线稿+文字说明 → 落盘 assets/sketches/epNN/grpNNN/(仅存档,不入 refs 不注入
+# prompt)→ 后台以线稿为构图底、既有组参考图为形象锚、按项目风格(bible/style.json)
+# 生成一张成图 → 成图落 assets/uploads/ 并加入组 refs,SSE sketchgen 事件通知桌面。
 DRAW_SESSIONS: dict[str, dict] = {}      # token -> {project, ep, grp, expires}
 DRAW_TTL_S = 1800
-SKETCH_GUIDE_TMPL = (
-    " Spatial layout guide: follow the composition sketched in [Image {n}] — a rough "
-    "user-drawn black-and-white line draft; use it ONLY for spatial arrangement and "
-    "object positions, never for art style or rendering. It indicates: {text}.")
 
 
 def _lan_ip() -> str:
+    """取本机真实局域网 IP(手机扫码用)。开代理(Surge/Clash 增强模式 TUN)时默认路由
+    走虚拟网卡,朝公网探测会拿到 Fake-IP 段地址(如 198.18.0.1)——先朝私网段探测
+    (TUN 通常对局域网段直连不接管),并过滤虚拟网卡常用段;VIDEOAGENTS_LAN_IP 可强制指定。"""
+    import ipaddress
     import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+    override = os.environ.get("VIDEOAGENTS_LAN_IP", "").strip()
+    if override:
+        return override
+
+    def real_lan(ip: str) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        if not a.is_private or a.is_loopback or a.is_link_local:
+            return False
+        # 代理/VPN 虚拟网卡常用段:Fake-IP 198.18.0.0/15、CGNAT(Tailscale 等)100.64.0.0/10
+        return not (a in ipaddress.ip_network("198.18.0.0/15")
+                    or a in ipaddress.ip_network("100.64.0.0/10"))
+
+    cands = []
+    for probe in ("192.168.255.255", "10.255.255.255", "172.31.255.255", "8.8.8.8"):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((probe, 80))          # UDP connect 不发包,仅查路由表选源地址
+            cands.append(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+    try:                                    # 主机名解析兜底(macOS 通常解析到局域网地址)
+        cands += [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
     except Exception:
-        return "127.0.0.1"
+        pass
+    return (next((ip for ip in cands if real_lan(ip)), None)
+            or next((ip for ip in cands if not ip.startswith("127.")), "127.0.0.1"))
 
 
 def _qr_svg(data: str) -> str:
@@ -2050,32 +2079,86 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-def _sketch_inject(project: str, ep: str, grp: str, ref_rel: str, text: str) -> tuple[int, str]:
-    """把手绘线稿注入组 prompt:refs 追加 + Spatial layout guide 句(置于 Global constraints 前)。"""
-    pf = _grp_prompt_path(project, ep, grp)
-    d = json.loads(pf.read_text())
-    refs = d.setdefault("refs", [])
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot inject more sketches")
-    refs.append(ref_rel)
-    n = len(refs)
-    sent = SKETCH_GUIDE_TMPL.format(n=n, text=text.strip())
-    vp = d["video_prompt"]
-    k = vp.rfind(" Global constraints:")
-    d["video_prompt"] = (vp[:k] + sent + vp[k:]) if k != -1 else vp + sent
-    d["video_prompt_word_count"] = len(d["video_prompt"].split())
-    d.setdefault("notes", []).append(
-        f"手绘分镜注入:{ref_rel} 作 [Image {n}](用户手机绘制的空间线稿,说明:{text.strip()[:80]});"
-        f"重出本组时生效。由 storyboard service 自动补丁。")
-    atomic_write_json(pf, d)
-    return n, sent
-
-
 MAX_SKETCH_REFS = 9   # 方舟多参考图上限
 
 
+SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
+SKETCHGEN_PROMPT_TMPL = (
+    "Image 1 is a rough black-and-white hand-drawn layout sketch by the director. "
+    "Generate one polished final frame that follows the sketch's spatial composition "
+    "(subject placement, relative positions, framing) exactly; use the sketch ONLY for "
+    "layout, never for art style or rendering. The remaining reference images are the "
+    "project's official character/scene/prop designs — keep their identity, appearance "
+    "and outfits strictly consistent.")
+
+
+def _sketchgen_size(aspect: str) -> str:
+    """按项目画幅算成图尺寸:成图会随重出作为视频参考图,须满足火山视频输入图
+    最小像素 3,686,400(16:9 → 2560x1440);边长向上取 8 的倍数。"""
+    try:
+        rw, rh = (int(x) for x in aspect.split(":"))
+    except Exception:
+        rw, rh = 16, 9
+    w = -(-int((3_686_400 * rw / rh) ** 0.5) // 8) * 8
+    h = -(-(w * rh) // (rw * 8)) * 8
+    return f"{w}x{h}"
+
+
+def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
+    """后台线程:genmedia 子进程生图(线稿+组 refs 作参考,项目风格串入 prompt),
+    成图加入组 refs;进度经 SKETCHGEN_JOBS + SSE sketchgen 事件对外。"""
+    job = SKETCHGEN_JOBS[f"{project}/{ep}/{grp}"]
+    base = _proj_base(project)
+    try:
+        pf = _grp_prompt_path(project, ep, grp)
+        d = json.loads(pf.read_text())
+        refs = [str(png)] + [str(base / r) for r in (d.get("refs") or [])
+                             if (base / r).is_file()][:MAX_SKETCH_REFS - 1]
+        st = _read_json_safe(base / "bible" / "style.json") or {}
+        prompt = SKETCHGEN_PROMPT_TMPL
+        if text.strip():
+            prompt += f" Director's note: {text.strip()}"
+        style = str(st.get("style_anchor_string_en") or "").strip()
+        if style:
+            prompt += f" Overall visual style: {style}"
+        aspect, _, _ = resolve_output(load_project_settings(project))
+        out_dir = base / "assets" / "uploads" / ep / grp
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out, i = out_dir / f"{png.stem}_final.png", 1
+        while out.exists():
+            out, i = out_dir / f"{png.stem}_final_{i}.png", i + 1
+        cmd = [sys.executable, str(ROOT / "modules" / "genmedia.py"), "image",
+               "--prompt", prompt, "--output", str(out),
+               "--size", _sketchgen_size(aspect), "--ref", *refs]
+        neg = str(st.get("negative_prompt_string_en") or "").strip()
+        if neg:
+            cmd += ["--negative", neg]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        if r.returncode != 0 or not out.is_file():
+            raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:]
+                               or f"genmedia exit {r.returncode}")
+        ref = str(out.relative_to(base))
+        n = _grpref_append(pf, ref, "从手绘生成")
+        job.update(status="done", ref=ref, refs=n,   # 直出 artifacts 路由(此链路不经 _artifact_urls 改写)
+                   url=f"/api/v1/projects/{base.name}/artifacts/{ref}?v={int(out.stat().st_mtime)}")
+    except Exception as e:
+        job.update(status="failed", error=str(e)[:500])
+    HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
+                 "status": job["status"], "src": job.get("src", ""),
+                 "error": job.get("error", "")})
+
+
+async def api_sketchgen_status(project: str, ep: str, grp: str):
+    """桌面轮询手绘生成任务状态(SSE 之外的兜底)。"""
+    ep = re.sub(r"[^\w\-]", "", ep)
+    grp = re.sub(r"[^\w\-]", "", grp)
+    return SKETCHGEN_JOBS.get(f"{safe_slug(project)}/{ep}/{grp}") or {"status": "idle"}
+
+
 async def api_draw_submit(token: str, body: dict):
-    """手机提交线稿:PNG dataURL + 文字说明。落盘 + 注入组 prompt + SSE 通知桌面。"""
+    """手机提交线稿:PNG dataURL + 文字说明。线稿仅存档(不入 refs 不注入 prompt),
+    后台以线稿为构图底、既有组参考图为形象锚、按项目风格生成一张成图并加入组 refs;
+    进度经 SSE sketchgen 事件 + /storyboard/sketchgen 轮询对外。"""
     s = _draw_session(token)
     text = (body.get("text") or "").strip()
     img = body.get("image") or ""
@@ -2089,26 +2172,30 @@ async def api_draw_submit(token: str, body: dict):
     except Exception:
         raise ServiceError(400, "Image must be PNG (base64) and smaller than 8MB") from None
     project, ep, grp = s["project"], s["ep"], s["grp"]
+    key = f"{project}/{ep}/{grp}"
+    if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
+        raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
+    pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
+    if len(pd.get("refs") or []) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
-    while (d / f"sketch_{n:02d}.png").exists():
+    while (d / f"gen_src_{n:02d}.png").exists():
         n += 1
-    png = d / f"sketch_{n:02d}.png"
+    png = d / f"gen_src_{n:02d}.png"
     png.write_bytes(raw)
-    ref_rel = f"assets/sketches/{ep}/{grp}/{png.name}"
-    try:
-        image_n, sent = _sketch_inject(project, ep, grp, ref_rel, text)
-    except ServiceError:
-        png.unlink(missing_ok=True)
-        raise
     atomic_write_json(png.with_suffix(".json"), {
         "text": text, "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "ref_path": ref_rel, "image_n": image_n, "prompt_sentence": sent,
-        "source": "user_hand_drawn(api /draw-sessions)"})
-    HUB.publish({"type": "sketch", "project": project, "ep": ep, "grp": grp,
-                 "name": png.name})
-    return {"saved": png.name, "image_n": image_n}
+        "source": "user_hand_drawn(api /draw-sessions)",
+        "purpose": "sketchgen 构图底稿(不入 refs;成图另存 assets/uploads/ 并加入组 refs)"})
+    SKETCHGEN_JOBS[key] = {"status": "running", "src": png.name,
+                           "started_at": time.time(), "text": text[:120]}
+    threading.Thread(target=_sketchgen_worker, args=(project, ep, grp, png, text),
+                     daemon=True).start()
+    HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
+                 "status": "running", "src": png.name})
+    return {"saved": png.name, "generating": True}
 
 
 # ---------------- 组注释(用户对生成组的导演意图注释,注入组 prompt) ----------------
@@ -2192,17 +2279,38 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/props/")
 
 
-async def api_grpref_add(body: dict):
-    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型);
-    与手绘线稿共用 MAX_SKETCH_REFS=9 的方舟多参考图上限,满则拒绝。"""
-    project = safe_slug(body.get("project") or "")
-    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
-    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
-    ref = (body.get("ref") or "").strip().lstrip("/")
+def _grpref_append(pf: Path, ref: str, src: str) -> int:
+    """向组 prompt 的 refs 追加一张参考图(共用 MAX_SKETCH_REFS=9 的方舟多参考图上限);
+    返回追加后的 refs 数量。"""
+    d = json.loads(pf.read_text())
+    refs = d.setdefault("refs", [])
+    if ref in refs:
+        raise ServiceError(400, "This image is already in the group's refs")
+    if len(refs) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    refs.append(ref)
+    d.setdefault("notes", []).append(
+        f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    return len(refs)
+
+
+def _grpref_ctx(body_or_kw: dict) -> tuple[str, str, str, Path, Path]:
+    """清洗 project/ep/grp 并定位组 prompt 文件(不存在=404)。"""
+    project = safe_slug(body_or_kw.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body_or_kw.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body_or_kw.get("grp") or "")
     base = _proj_base(project)
     pf = _grp_prompt_path(project, ep, grp)
     if not pf.is_file():
         raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    return project, ep, grp, base, pf
+
+
+async def api_grpref_add(body: dict):
+    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型)。"""
+    project, ep, grp, base, pf = _grpref_ctx(body)
+    ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
         raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
     target = (base / ref).resolve()
@@ -2212,17 +2320,83 @@ async def api_grpref_add(body: dict):
         raise ServiceError(400, "invalid ref path") from None
     if not target.is_file() or target.suffix.lower() not in IMG_EXTS:
         raise ServiceError(404, f"Ref image not found: {ref}")
+    return {"ref": ref, "refs": _grpref_append(pf, ref, "从资产库")}
+
+
+MAX_GRPREF_UPLOAD = 30 * 1024 * 1024
+# 常见图片格式魔数(与 IMG_EXTS 对应;webp 的 RIFF 头另验 WEBP 标记)
+_IMG_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg",
+              b"RIFF": ".webp", b"GIF8": ".gif"}
+
+
+async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
+    """本地上传一张图片并直接加入组 refs:落盘 assets/uploads/<ep>/<grp>/,
+    请求体即文件原始字节(与参考图页上传同法,避免 multipart 依赖)。"""
+    project, ep, grp, base, pf = _grpref_ctx(
+        {"project": project, "ep": ep, "grp": grp})
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > MAX_GRPREF_UPLOAD:
+        raise ServiceError(400, "file too large (>30MB)")
+    ext = next((v for k, v in _IMG_MAGIC.items() if data.startswith(k)), None)
+    if ext == ".webp" and data[8:12] != b"WEBP":
+        ext = None
+    if not ext:
+        raise ServiceError(400, "file must be a png/jpg/webp/gif image")
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(filename)[0]).strip("._-")
+    stem = re.sub(r"_{2,}", "_", stem)[:80] or "upload"
+    d = base / "assets" / "uploads" / ep / grp
+    d.mkdir(parents=True, exist_ok=True)
+    p, i = d / f"{stem}{ext}", 1
+    while p.exists():
+        p, i = d / f"{stem}_{i}{ext}", i + 1
+    p.write_bytes(data)
+    ref = str(p.relative_to(base))
+    try:
+        n = _grpref_append(pf, ref, "从本地上传")
+    except ServiceError:
+        p.unlink(missing_ok=True)
+        raise
+    return {"ref": ref, "refs": n,
+            "url": f"/projects/{base.name}/{ref}?v={int(p.stat().st_mtime)}"}
+
+
+def _grpref_user_added(d: dict, ref: str) -> bool:
+    """该 ref 是否由用户经「添加参考图」加入(资产选图/本地上传)——
+    以 _grpref_append 落的 note 锚「加入组参考图:<ref>(」判定;
+    流水线锚点与手绘线稿注入不落此 note,判 False。"""
+    return any(f"加入组参考图:{ref}(" in str(n) for n in d.get("notes") or [])
+
+
+async def api_grpref_delete(body: dict):
+    """从组 refs 移除一张用户手动加入的参考图(重出本组生效)。
+    仅限用户加入的 ref,且其后不得残留非用户加入的 ref——线稿注入句按 [Image N]
+    序号引用 refs 位置,删中间会错位(与线稿删除的末位约束同理);
+    本地上传的图一并删除落盘文件。"""
+    project, ep, grp, base, pf = _grpref_ctx(body)
+    ref = (body.get("ref") or "").strip().lstrip("/")
     d = json.loads(pf.read_text())
-    refs = d.setdefault("refs", [])
-    if ref in refs:
-        raise ServiceError(400, "This image is already in the group's refs")
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
-    refs.append(ref)
+    refs = d.get("refs") or []
+    if ref not in refs:
+        raise ServiceError(404, f"Ref not in this group's refs: {ref}")
+    if not _grpref_user_added(d, ref):
+        raise ServiceError(400, "Only user-added refs (asset pick / local upload) can be removed here; delete sketches via the group card instead")
+    i = refs.index(ref)
+    if not all(_grpref_user_added(d, r) for r in refs[i + 1:]):
+        raise ServiceError(400, "A pipeline/sketch ref comes after this one; delete that first (to keep [Image N] numbering aligned)")
+    refs.pop(i)
     d.setdefault("notes", []).append(
-        f"用户从资产库加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
+        f"用户移除组参考图:{ref}(原 refs 第 {i + 1} 张);重出本组时生效。由 storyboard service 自动补丁。")
     atomic_write_json(pf, d)
-    return {"ref": ref, "refs": len(refs)}
+    if ref.startswith(f"assets/uploads/{ep}/{grp}/"):
+        p = (base / ref).resolve()
+        try:
+            p.relative_to(base.resolve())
+        except ValueError:
+            p = None
+        if p:
+            p.unlink(missing_ok=True)
+    return {"deleted": ref, "refs": len(refs)}
 
 
 def _read_json_safe(p: Path):
@@ -2560,10 +2734,20 @@ def _preview_storyboard(project: str, ep: str):
             continue
         gid = g.get("group_id") or ""
         meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
+        # 用户经「添加参考图」手动加入的组参考图(组 prompt json 的 refs,notes 锚判定;
+        # 流水线锚点包另走 anchors,线稿另走 sketches)
+        pd = _read_json_safe(_grp_prompt_path(base.name, ep, gid)) or {}
+        user_refs = []
+        for r in (pd.get("refs") or []):
+            f = base / r
+            if _grpref_user_added(pd, r) and f.is_file():
+                user_refs.append({"ref": r, "name": f.name,
+                                  "url": f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
+            "user_refs": user_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
@@ -4138,6 +4322,76 @@ async def api_versions_clone_status(project: str = "demo"):
     return CLONE_JOBS.get(safe_slug(project)) or {"state": "idle"}
 
 
+# ---------------- 完整复制项目(版本管理页顶部「复制项目」板块) ----------------
+# 与「版本克隆」不同:不走版本库快照,而是把项目目录原样整份复制
+# (含 runs/、.version/ 嵌入式版本库、未登记文件),版本历史随目录一并带走。
+COPY_JOBS: dict = {}                     # 源项目名 → 最近一次复制任务状态
+COPY_LOCK = threading.Lock()
+
+
+def _copy_worker(project: str, src: Path, name: str):
+    job = COPY_JOBS[project]
+    tmp = PROJECTS_DIR / f".copy-tmp-{name}"     # . 开头:复制期间不被 /api/projects 列出
+    try:
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        job["step"] = "统计文件"
+        total = sum(1 for f in src.rglob("*") if f.is_file())
+        job["step"] = "复制文件"
+        job["progress"] = [0, total]
+        done = 0
+
+        def _cp(s, d, *, follow_symlinks=True):
+            nonlocal done
+            shutil.copy2(s, d, follow_symlinks=follow_symlinks)
+            done += 1
+            job["progress"] = [min(done, total), total]
+
+        shutil.copytree(src, tmp, symlinks=True, copy_function=_cp)
+        # 嵌入式版本库随目录复制,manifest project 字段改为新名
+        mpath = tmp / ".version" / "manifest.json"
+        if mpath.is_file():
+            try:
+                m = json.loads(mpath.read_text())
+                m["project"] = name
+                mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+            except Exception:
+                pass                             # manifest 损坏不阻断复制
+        os.rename(tmp, PROJECTS_DIR / name)      # 原子上线
+        job["step"] = "完成"
+        job["state"] = "done"
+    except Exception as e:
+        job["state"] = "error"
+        job["error"] = str(e)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+async def api_projects_copy(body: dict):
+    project = safe_slug(body.get("project"))
+    base = _proj_base(project)
+    name = (body.get("name") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) or len(name) > 80:
+        raise ServiceError(
+            400, "New project name may only contain ASCII letters, digits, '-' and '_', "
+                 "start with a letter or digit, and be at most 80 chars")
+    if (PROJECTS_DIR / name).exists():
+        raise ServiceError(400, f"Project already exists: {name}")
+    with COPY_LOCK:
+        job = COPY_JOBS.get(project)
+        if job and job.get("state") == "running":
+            raise ServiceError(409, f"A copy job is already in progress: {job.get('new_name')}")
+        COPY_JOBS[project] = {"state": "running", "step": "准备",
+                              "progress": [0, 0], "new_name": name,
+                              "source": project, "error": None}
+        threading.Thread(target=_copy_worker, args=(project, base, name),
+                         daemon=True).start()
+    return {"ok": True, "name": name}
+
+
+async def api_projects_copy_status(project: str = "demo"):
+    return COPY_JOBS.get(safe_slug(project)) or {"state": "idle"}
+
+
 async def api_projects_delete(body: dict):
     """删除整个项目目录(版本管理页「危险操作」):前端已两重确认,
     后端再校验一次 confirm 必须与项目名完全一致,防误调。"""
@@ -4149,6 +4403,9 @@ async def api_projects_delete(body: dict):
     job = CLONE_JOBS.get(project)
     if job and job.get("state") == "running":
         raise ServiceError(409, "A clone job is in progress for this project; delete it after the job finishes")
+    job = COPY_JOBS.get(project)
+    if job and job.get("state") == "running":
+        raise ServiceError(409, "A copy job is in progress for this project; delete it after the job finishes")
     live = [r for r in RUNS.values()
             if r.get("project") == project
             and r.get("status") in ("queued", "running")]

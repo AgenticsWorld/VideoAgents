@@ -100,6 +100,16 @@ async def delete_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_delete(body)
 
 
+@api.post("/projects/{project}/copy", tags=["projects"])
+async def copy_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_projects_copy(body)
+
+
+@api.get("/projects/{project}/copy", tags=["projects"])
+async def copy_project_status(project: str) -> dict[str, Any]:
+    return await core.api_projects_copy_status(project)
+
+
 @api.get("/projects/{project}/brief", tags=["projects"])
 async def get_brief(project: str) -> dict[str, Any]:
     return await core.api_brief_get(project)
@@ -438,6 +448,11 @@ async def submit_draw(token: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_draw_submit(token, body)
 
 
+@api.get("/storyboard/sketchgen", tags=["storyboard"])
+async def sketchgen_status(project: str = "", ep: str = "", grp: str = "") -> dict[str, Any]:
+    return await core.api_sketchgen_status(project, ep, grp)
+
+
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
@@ -446,6 +461,23 @@ async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
 @api.post("/storyboard/refs", tags=["storyboard"])
 async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpref_add(body)
+
+
+@api.post("/storyboard/refs/delete", tags=["storyboard"])
+async def storyboard_ref_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpref_delete(body)
+
+
+@api.post("/storyboard/refs/upload", tags=["storyboard"])
+async def storyboard_ref_upload(
+    request: Request,
+    project: str = "",
+    ep: str = "",
+    grp: str = "",
+    filename: str = "",
+) -> dict[str, Any]:
+    data = await request.body()
+    return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])

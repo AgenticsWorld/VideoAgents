@@ -24,6 +24,11 @@ ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(os.environ.get("VIDEOAGENTS_WEB_STATIC", Path(__file__).parent / "static")).resolve()
 WEB_HOST = os.environ.get("VIDEOAGENTS_WEB_HOST", os.environ.get("VIDEOAGENTS_HOST", "127.0.0.1"))
 WEB_PORT = int(os.environ.get("VIDEOAGENTS_WEB_PORT", os.environ.get("VIDEOAGENTS_PORT", "8630")))
+# 手绘画布 LAN 侧车:控制台默认只绑 127.0.0.1 不暴露局域网,手机扫码画布单独起一个
+# 0.0.0.0 监听,仅含 /draw/<token> 页、draw-sessions 两个 token 门控接口与静态资源。
+# VIDEOAGENTS_DRAW_PORT=0 可禁用。
+DRAW_HOST = os.environ.get("VIDEOAGENTS_DRAW_HOST", "0.0.0.0")
+DRAW_PORT = int(os.environ.get("VIDEOAGENTS_DRAW_PORT", str(WEB_PORT + 1)))
 API_PORT = int(os.environ.get("VIDEOAGENTS_API_PORT", "8640"))
 API_ORIGIN = os.environ.get("VIDEOAGENTS_API_URL", f"http://127.0.0.1:{API_PORT}").rstrip("/")
 START_API = os.environ.get("VIDEOAGENTS_START_API", "" if os.environ.get("VIDEOAGENTS_API_URL") else "1").lower() in {
@@ -58,7 +63,7 @@ def _api_env() -> dict[str, str]:
         **os.environ,
         "VIDEOAGENTS_HOST": "127.0.0.1",
         "VIDEOAGENTS_PORT": str(API_PORT),
-        "VIDEOAGENTS_PUBLIC_PORT": str(WEB_PORT),
+        "VIDEOAGENTS_PUBLIC_PORT": str(DRAW_PORT or WEB_PORT),   # 手绘二维码 URL 用的端口
     }
 
 
@@ -252,9 +257,32 @@ async def draw(token: str):
     return _page("draw.html")
 
 
+draw_app = FastAPI(title="VideoAgents Draw", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@draw_app.get("/draw/{token}")
+async def draw_lan(token: str):
+    return await draw(token)
+
+
+@draw_app.api_route("/api/v1/draw-sessions/{token}", methods=["GET", "POST"])
+async def draw_sessions_lan(token: str, request: Request):
+    if not re.fullmatch(r"[0-9a-f]{32}", token):
+        raise HTTPException(404, "Sketch session not found")
+    return await proxy_api(f"draw-sessions/{token}", request)
+
+
+draw_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 def main() -> None:
     if not STATIC_DIR.is_dir():
         raise SystemExit(f"Static directory does not exist: {STATIC_DIR}")
+    if DRAW_PORT:
+        import threading
+        cfg = uvicorn.Config(draw_app, host=DRAW_HOST, port=DRAW_PORT, log_level="warning")
+        threading.Thread(target=uvicorn.Server(cfg).run, daemon=True, name="draw-lan").start()
+        print(f"VideoAgents Draw canvas (LAN) → http://{DRAW_HOST}:{DRAW_PORT}/draw/<token>")
     print(f"VideoAgents WebUI → http://{WEB_HOST}:{WEB_PORT} (API: {API_ORIGIN})")
     uvicorn.run(app, host=WEB_HOST, port=WEB_PORT, log_level="info")
 
