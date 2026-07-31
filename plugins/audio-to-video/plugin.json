@@ -1,0 +1,22 @@
+{
+  "name": "audio-to-video",
+  "version": "1.0.0",
+  "description": "音频配画团队:用户给一段讲述音频(MP3)与对应文本,给音频配上视频画面——母带即成片声轨(零重编码),画面按实测时长整秒切分去适配音频,累计漂移恒为 0。与主流程方向相反(主流程是画面固定、旁白 TTS 压缩适配;本流程音频固定、画面适配)。产物直写正史路径,现有预览页零改动呈现",
+  "categories": {
+    "15-audio-video": "音频配画"
+  },
+  "agents": [
+    {"id": "15-audio-video/audio-ingest"},
+    {"id": "15-audio-video/transcript-aligner"},
+    {"id": "15-audio-video/era-researcher"},
+    {"id": "15-audio-video/visual-scripter"},
+    {"id": "15-audio-video/timeline-planner"},
+    {"id": "11-qa/av-sync-qa", "stateless": true}
+  ],
+  "workflows": ["workflows/audiovideo.yaml"],
+  "outputs_ns": "av",
+  "requires": {
+    "artifacts": [],
+    "plugins": []
+  }
+}

@@ -788,6 +788,10 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
+    # audio-to-video 插件:类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
+    # 其中两个创作型工位需高档(其余三个是测量/算术活,low 即可)
+    "15-audio-video/era-researcher": "high",            # 时代考据 = 创作+史料判断
+    "15-audio-video/visual-scripter": "high",           # 逐段画面设计 = 创作核心
 }
 AM_MODE_MODELS = {
     "smart_claude": {"high": {"engine": "claude", "model": "claude-opus-5"},
