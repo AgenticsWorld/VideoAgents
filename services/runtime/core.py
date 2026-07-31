@@ -1982,15 +1982,41 @@ DRAW_TTL_S = 1800
 
 
 def _lan_ip() -> str:
+    """取本机真实局域网 IP(手机扫码用)。开代理(Surge/Clash 增强模式 TUN)时默认路由
+    走虚拟网卡,朝公网探测会拿到 Fake-IP 段地址(如 198.18.0.1)——先朝私网段探测
+    (TUN 通常对局域网段直连不接管),并过滤虚拟网卡常用段;VIDEOAGENTS_LAN_IP 可强制指定。"""
+    import ipaddress
     import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+    override = os.environ.get("VIDEOAGENTS_LAN_IP", "").strip()
+    if override:
+        return override
+
+    def real_lan(ip: str) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        if not a.is_private or a.is_loopback or a.is_link_local:
+            return False
+        # 代理/VPN 虚拟网卡常用段:Fake-IP 198.18.0.0/15、CGNAT(Tailscale 等)100.64.0.0/10
+        return not (a in ipaddress.ip_network("198.18.0.0/15")
+                    or a in ipaddress.ip_network("100.64.0.0/10"))
+
+    cands = []
+    for probe in ("192.168.255.255", "10.255.255.255", "172.31.255.255", "8.8.8.8"):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((probe, 80))          # UDP connect 不发包,仅查路由表选源地址
+            cands.append(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+    try:                                    # 主机名解析兜底(macOS 通常解析到局域网地址)
+        cands += [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
     except Exception:
-        return "127.0.0.1"
+        pass
+    return (next((ip for ip in cands if real_lan(ip)), None)
+            or next((ip for ip in cands if not ip.startswith("127.")), "127.0.0.1"))
 
 
 def _qr_svg(data: str) -> str:
