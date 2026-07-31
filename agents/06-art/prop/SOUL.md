@@ -18,7 +18,7 @@
    - `relative_anchor`:与身体/常见物的相对参照(如"约成人两掌宽;双手端持,单手难平举")——尺寸的"模型语言"中文底稿;
    - `prompt_token`:可直接拼进 video_prompt 的英文短语(如 `a large salver about two hand-spans wide, held with both hands`)——**下游 prompt Agent 逐字复用,全片唯一写法**,不得每组另译。
    原文无尺寸依据的按时代/材质常识推断,标 `inferred` 并给理由。
-4. 为剧情道具生成参考图(prompt + 挑选),图存 `assets/concepts/props/<id>/`,卡内记录相对路径。**剧情道具在特写图(main)之外必须加一张「比例锚图」(`scale_ref_01.png`)**:道具与持有角色(用其人设参考图作 --ref)同框,持握/摆放方式体现 `relative_anchor` 的比例关系——参考图对尺度的约束力远强于文字,组锚点包应优先采用比例图(见 image-generation 约定)。
+4. 为剧情道具生成参考图(prompt + 挑选),图存 `assets/concepts/props/<id>/`,卡内记录相对路径;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。**剧情道具在特写图(main)之外必须加一张「比例锚图」(`scale_ref_01.png`)**:道具与持有角色(用其人设参考图作 --ref)同框,持握/摆放方式体现 `relative_anchor` 的比例关系——参考图对尺度的约束力远强于文字,组锚点包应优先采用比例图(见 image-generation 约定)。
 5. 汇总为 `bible/props.json`,并给出「剧情道具覆盖清单」供机检核对覆盖率。
 6. 发现道具描写前后矛盾(如剑鞘颜色两说)时上报,不自行取舍。
 
@@ -68,6 +68,8 @@ python3 modules/genmedia.py image \
 |---|---|---|
 | 道具总库 | `bible/props.json` | 设定卡数组 + 剧情道具覆盖清单 |
 | 参考图 | `assets/concepts/props/<id>/` | 参考图 + prompts.json |
+
+> **主目录只放定稿(2026-07-30)**:`<id>/` 主目录仅保留最终采用的最新版本图(main + scale_ref 比例锚图)与 prompts.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档。下游按主目录整目录取图作道具锚(p7-image 锚点包、§6A 覆盖审计、§7E 修正取锚),弃用图混在主目录会被误注入。重 roll 替换定稿时,旧图先移入 `candidates/` 再落新图;`candidates/` 不计入 §6A 现货。
 
 关键字段/结构约定:
 ```json
