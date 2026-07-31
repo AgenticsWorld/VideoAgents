@@ -1974,14 +1974,11 @@ AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
 # ---------------- 手绘分镜(手机扫码为生成组绘制空间线稿) ----------------
 # 流程:桌面在分镜预览页对某组发起会话 → 手机扫码打开 /draw/<token> 全屏画布 →
-# 提交线稿+文字说明 → 落盘 assets/sketches/epNN/grpNNN/ 并自动补丁 grpNNN.json
-# (refs 追加 + video_prompt 注入 Spatial layout guide 句),重出该组即生效。
+# 提交线稿+文字说明 → 落盘 assets/sketches/epNN/grpNNN/(仅存档,不入 refs 不注入
+# prompt)→ 后台以线稿为构图底、既有组参考图为形象锚、按项目风格(bible/style.json)
+# 生成一张成图 → 成图落 assets/uploads/ 并加入组 refs,SSE sketchgen 事件通知桌面。
 DRAW_SESSIONS: dict[str, dict] = {}      # token -> {project, ep, grp, expires}
 DRAW_TTL_S = 1800
-SKETCH_GUIDE_TMPL = (
-    " Spatial layout guide: follow the composition sketched in [Image {n}] — a rough "
-    "user-drawn black-and-white line draft; use it ONLY for spatial arrangement and "
-    "object positions, never for art style or rendering. It indicates: {text}.")
 
 
 def _lan_ip() -> str:
@@ -2056,32 +2053,86 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-def _sketch_inject(project: str, ep: str, grp: str, ref_rel: str, text: str) -> tuple[int, str]:
-    """把手绘线稿注入组 prompt:refs 追加 + Spatial layout guide 句(置于 Global constraints 前)。"""
-    pf = _grp_prompt_path(project, ep, grp)
-    d = json.loads(pf.read_text())
-    refs = d.setdefault("refs", [])
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot inject more sketches")
-    refs.append(ref_rel)
-    n = len(refs)
-    sent = SKETCH_GUIDE_TMPL.format(n=n, text=text.strip())
-    vp = d["video_prompt"]
-    k = vp.rfind(" Global constraints:")
-    d["video_prompt"] = (vp[:k] + sent + vp[k:]) if k != -1 else vp + sent
-    d["video_prompt_word_count"] = len(d["video_prompt"].split())
-    d.setdefault("notes", []).append(
-        f"手绘分镜注入:{ref_rel} 作 [Image {n}](用户手机绘制的空间线稿,说明:{text.strip()[:80]});"
-        f"重出本组时生效。由 storyboard service 自动补丁。")
-    atomic_write_json(pf, d)
-    return n, sent
-
-
 MAX_SKETCH_REFS = 9   # 方舟多参考图上限
 
 
+SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
+SKETCHGEN_PROMPT_TMPL = (
+    "Image 1 is a rough black-and-white hand-drawn layout sketch by the director. "
+    "Generate one polished final frame that follows the sketch's spatial composition "
+    "(subject placement, relative positions, framing) exactly; use the sketch ONLY for "
+    "layout, never for art style or rendering. The remaining reference images are the "
+    "project's official character/scene/prop designs — keep their identity, appearance "
+    "and outfits strictly consistent.")
+
+
+def _sketchgen_size(aspect: str) -> str:
+    """按项目画幅算成图尺寸:成图会随重出作为视频参考图,须满足火山视频输入图
+    最小像素 3,686,400(16:9 → 2560x1440);边长向上取 8 的倍数。"""
+    try:
+        rw, rh = (int(x) for x in aspect.split(":"))
+    except Exception:
+        rw, rh = 16, 9
+    w = -(-int((3_686_400 * rw / rh) ** 0.5) // 8) * 8
+    h = -(-(w * rh) // (rw * 8)) * 8
+    return f"{w}x{h}"
+
+
+def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
+    """后台线程:genmedia 子进程生图(线稿+组 refs 作参考,项目风格串入 prompt),
+    成图加入组 refs;进度经 SKETCHGEN_JOBS + SSE sketchgen 事件对外。"""
+    job = SKETCHGEN_JOBS[f"{project}/{ep}/{grp}"]
+    base = _proj_base(project)
+    try:
+        pf = _grp_prompt_path(project, ep, grp)
+        d = json.loads(pf.read_text())
+        refs = [str(png)] + [str(base / r) for r in (d.get("refs") or [])
+                             if (base / r).is_file()][:MAX_SKETCH_REFS - 1]
+        st = _read_json_safe(base / "bible" / "style.json") or {}
+        prompt = SKETCHGEN_PROMPT_TMPL
+        if text.strip():
+            prompt += f" Director's note: {text.strip()}"
+        style = str(st.get("style_anchor_string_en") or "").strip()
+        if style:
+            prompt += f" Overall visual style: {style}"
+        aspect, _, _ = resolve_output(load_project_settings(project))
+        out_dir = base / "assets" / "uploads" / ep / grp
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out, i = out_dir / f"{png.stem}_final.png", 1
+        while out.exists():
+            out, i = out_dir / f"{png.stem}_final_{i}.png", i + 1
+        cmd = [sys.executable, str(ROOT / "modules" / "genmedia.py"), "image",
+               "--prompt", prompt, "--output", str(out),
+               "--size", _sketchgen_size(aspect), "--ref", *refs]
+        neg = str(st.get("negative_prompt_string_en") or "").strip()
+        if neg:
+            cmd += ["--negative", neg]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        if r.returncode != 0 or not out.is_file():
+            raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:]
+                               or f"genmedia exit {r.returncode}")
+        ref = str(out.relative_to(base))
+        n = _grpref_append(pf, ref, "从手绘生成")
+        job.update(status="done", ref=ref, refs=n,   # 直出 artifacts 路由(此链路不经 _artifact_urls 改写)
+                   url=f"/api/v1/projects/{base.name}/artifacts/{ref}?v={int(out.stat().st_mtime)}")
+    except Exception as e:
+        job.update(status="failed", error=str(e)[:500])
+    HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
+                 "status": job["status"], "src": job.get("src", ""),
+                 "error": job.get("error", "")})
+
+
+async def api_sketchgen_status(project: str, ep: str, grp: str):
+    """桌面轮询手绘生成任务状态(SSE 之外的兜底)。"""
+    ep = re.sub(r"[^\w\-]", "", ep)
+    grp = re.sub(r"[^\w\-]", "", grp)
+    return SKETCHGEN_JOBS.get(f"{safe_slug(project)}/{ep}/{grp}") or {"status": "idle"}
+
+
 async def api_draw_submit(token: str, body: dict):
-    """手机提交线稿:PNG dataURL + 文字说明。落盘 + 注入组 prompt + SSE 通知桌面。"""
+    """手机提交线稿:PNG dataURL + 文字说明。线稿仅存档(不入 refs 不注入 prompt),
+    后台以线稿为构图底、既有组参考图为形象锚、按项目风格生成一张成图并加入组 refs;
+    进度经 SSE sketchgen 事件 + /storyboard/sketchgen 轮询对外。"""
     s = _draw_session(token)
     text = (body.get("text") or "").strip()
     img = body.get("image") or ""
@@ -2095,26 +2146,30 @@ async def api_draw_submit(token: str, body: dict):
     except Exception:
         raise ServiceError(400, "Image must be PNG (base64) and smaller than 8MB") from None
     project, ep, grp = s["project"], s["ep"], s["grp"]
+    key = f"{project}/{ep}/{grp}"
+    if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
+        raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
+    pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
+    if len(pd.get("refs") or []) >= MAX_SKETCH_REFS:
+        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
-    while (d / f"sketch_{n:02d}.png").exists():
+    while (d / f"gen_src_{n:02d}.png").exists():
         n += 1
-    png = d / f"sketch_{n:02d}.png"
+    png = d / f"gen_src_{n:02d}.png"
     png.write_bytes(raw)
-    ref_rel = f"assets/sketches/{ep}/{grp}/{png.name}"
-    try:
-        image_n, sent = _sketch_inject(project, ep, grp, ref_rel, text)
-    except ServiceError:
-        png.unlink(missing_ok=True)
-        raise
     atomic_write_json(png.with_suffix(".json"), {
         "text": text, "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "ref_path": ref_rel, "image_n": image_n, "prompt_sentence": sent,
-        "source": "user_hand_drawn(api /draw-sessions)"})
-    HUB.publish({"type": "sketch", "project": project, "ep": ep, "grp": grp,
-                 "name": png.name})
-    return {"saved": png.name, "image_n": image_n}
+        "source": "user_hand_drawn(api /draw-sessions)",
+        "purpose": "sketchgen 构图底稿(不入 refs;成图另存 assets/uploads/ 并加入组 refs)"})
+    SKETCHGEN_JOBS[key] = {"status": "running", "src": png.name,
+                           "started_at": time.time(), "text": text[:120]}
+    threading.Thread(target=_sketchgen_worker, args=(project, ep, grp, png, text),
+                     daemon=True).start()
+    HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
+                 "status": "running", "src": png.name})
+    return {"saved": png.name, "generating": True}
 
 
 # ---------------- 组注释(用户对生成组的导演意图注释,注入组 prompt) ----------------

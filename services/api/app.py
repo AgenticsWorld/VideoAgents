@@ -448,6 +448,11 @@ async def submit_draw(token: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_draw_submit(token, body)
 
 
+@api.get("/storyboard/sketchgen", tags=["storyboard"])
+async def sketchgen_status(project: str = "", ep: str = "", grp: str = "") -> dict[str, Any]:
+    return await core.api_sketchgen_status(project, ep, grp)
+
+
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)

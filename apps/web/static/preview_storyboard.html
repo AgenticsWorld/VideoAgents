@@ -135,8 +135,12 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .cur .ccell .cdel:hover{background:var(--red)}
 #ar-modal .cats{display:flex;gap:8px;margin:10px 0 8px;flex:none}
 #ar-modal .cats button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
-#ar-modal #ar-up{margin-left:auto}
+#ar-modal #ar-sketch{margin-left:auto}
 #ar-modal #ar-up:disabled{opacity:.5;cursor:default}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#ar-modal .cur .ccell.genp{width:56px;height:56px;display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);border-radius:6px}
+#ar-modal .cur .ccell.genp .spin{margin:0}
 #ar-modal .body{flex:1;min-height:0;display:flex;gap:10px}
 #ar-modal .assets{width:180px;flex:none;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:4px;align-content:flex-start}
 #ar-modal .assets .ast{display:flex;align-items:center;gap:6px;text-align:left;border:none;background:none;border-radius:6px;padding:4px 8px;font-size:12.5px;flex:none}
@@ -187,7 +191,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="pv-modal"><div class="box">
   <h3>📄 组视频 Prompt — <span id="pv-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(只读;要修改请用 📝 注释 或 🎨 手绘分镜)</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(只读;要修改请用 📝 注释)</div>
   <pre id="pv-text"></pre>
   <div class="actions"><span class="meta"><span id="pv-bytes"></span><span id="pv-meta"></span></span><button id="pv-copy">复制</button><button id="pv-close">关闭</button></div>
 </div></div>
@@ -199,6 +203,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
     <button data-cat="props">🗡 道具</button>
+    <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
   </div>
@@ -210,8 +215,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <div class="actions"><button id="ar-cancel">关闭</button><button id="ar-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">➕ 加入参考图</button></div>
 </div></div>
 <div id="sk-modal"><div class="box">
-  <h3>🎨 手绘分镜 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">手机扫码打开画布(同一局域网);黑白线稿标注空间关系,配文字说明后提交,自动注入本组 prompt</div>
+  <h3>🎨 手绘参考图 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">手机扫码打开画布(同一局域网);画构图线稿并配文字说明,提交后结合本组已有参考图与项目风格生成最终参考图,自动加入本组</div>
   <div class="qr" id="sk-qr"></div>
   <div class="url" id="sk-url"></div>
   <div class="st" id="sk-st">等待手机提交…</div>
@@ -241,8 +246,26 @@ document.addEventListener('click',e=>{
     +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'));
 });
 
-// 🎨 手绘分镜:发起会话→二维码→轮询新线稿
-let skPoll=null,skCount=0;
+// 🎨 手绘参考图:发起会话→二维码→手机提交线稿后服务端后台生图(线稿为构图底、
+// 组 refs 为形象锚、项目风格串入 prompt),成图自动加入组 refs;
+// 桌面经 SSE sketchgen 事件 + 3s 轮询 /storyboard/sketchgen 跟进度
+let skPoll=null,SG_SEEN='';
+function sgApply(grp,st){
+  const running=st.status==='running';
+  if(grp===AR_GRP&&AR_GEN!==running){AR_GEN=running;if($('#ar-modal').style.display==='flex')arCur()}
+  if($('#sk-modal').style.display==='flex'&&$('#sk-grp').textContent===grp){
+    if(running)$('#sk-st').innerHTML='<span class="spin"></span>'+esc(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'));
+    else if(st.status==='done')$('#sk-st').textContent=t('✅ 已生成并加入本组参考图');
+    else if(st.status==='failed')$('#sk-st').textContent=t('生成失败:')+(st.error||'');
+  }
+  const seen=grp+':'+(st.src||'');
+  if(st.status==='done'&&SG_SEEN!==seen){
+    SG_SEEN=seen;
+    if(grp===AR_GRP&&$('#ar-modal').style.display==='flex'){arReload();arMsg(t('✅ 已生成并加入本组参考图'),true)}
+    load(true);
+  }
+  if(st.status==='failed'&&grp===AR_GRP&&$('#ar-modal').style.display==='flex')arMsg(t('生成失败:')+(st.error||''));
+}
 async function openSketch(grp){
   const proj=$('#project').value.trim()||'demo';
   $('#sk-grp').textContent=grp;
@@ -259,18 +282,9 @@ async function openSketch(grp){
     $('#sk-url').textContent=d.url;
     $('#sk-st').textContent='等待手机提交…(会话 30 分钟有效)';
     const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(grp);
-    const sketches='/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'/sketches';
-    skCount=(await (await fetch(sketches)).json()).length;
     clearInterval(skPoll);
     skPoll=setInterval(async()=>{
-      try{
-        const list=await (await fetch(sketches)).json();
-        if(list.length>skCount){
-          skCount=list.length;
-          $('#sk-st').textContent=I18N.f('✅ 已收到 {n} 张线稿并注入 prompt,重出本组即生效',{n:list.length});
-          load(true);
-        }
-      }catch(e){}
+      try{sgApply(grp,await (await fetch('/api/v1/storyboard/sketchgen?'+q)).json())}catch(e){}
     },3000);
   }catch(e){$('#sk-st').textContent='会话创建失败:'+e.message}
 }
@@ -300,11 +314,11 @@ $('#gn-ok').onclick=async()=>{
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
 const AR_MAX=9;
-let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={};
+let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={},AR_GEN=false;
 const arRel=u=>decodeURIComponent(u.split('?')[0]).replace(/^\/api\/v1\/projects\/[^/]+\/artifacts\//,'');
 function arMsg(txt,ok){const e=$('#ar-err');e.textContent=txt;e.style.color=ok?'var(--green)':'var(--red)'}
 async function openRefpick(grp){
-  AR_GRP=grp;AR_SEL='';AR_CACHE={};AR_REFS=[];AR_NOTES=[];
+  AR_GRP=grp;AR_SEL='';AR_CACHE={};AR_REFS=[];AR_NOTES=[];AR_GEN=false;
   $('#ar-grp').textContent=grp;
   $('#ar-count').textContent='';arMsg('');
   $('#ar-assets').innerHTML='';
@@ -320,6 +334,26 @@ async function openRefpick(grp){
   }catch(e){$('#ar-imgs').innerHTML='';arMsg(t('加载失败:')+e.message);return}
   arCount();arCur();
   arLoadCat(AR_CAT);
+  // 打开时补查一次手绘生成状态(生成中重开弹窗时恢复等待动画)
+  try{
+    const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(grp);
+    sgApply(grp,await (await fetch('/api/v1/storyboard/sketchgen?'+q)).json());
+  }catch(e){}
+}
+// 就地刷新弹窗内 refs/notes(手绘生成完成后同步新图,不重置分类/选中态)
+async function arReload(){
+  if($('#ar-modal').style.display!=='flex'||!AR_GRP)return;
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
+      +encodeURIComponent(EP)+'/'+encodeURIComponent(AR_GRP)+'.json?v='+Date.now());
+    if(!r.ok)return;
+    const j=await r.json();
+    AR_REFS=j.refs||[];AR_NOTES=j.notes||[];
+    arCount();arCur();
+    const cur=document.querySelector('#ar-assets .ast.on');
+    if(cur)arShowAsset(+cur.dataset.i);
+  }catch(e){}
 }
 // 本组当前参考图条:带序号缩略图;用户手动加入的(资产选图/本地上传,按 notes 锚判定,
 // 与后端 _grpref_user_added 同规则)带 🗑 可删;流水线锚点/线稿注入的不可在此删,
@@ -332,7 +366,8 @@ function arCur(){
     return `<div class="ccell" title="[Image ${i+1}] ${esc(r)}${del?'':' · '+t('流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)')}">
       <img src="/api/v1/projects/${encodeURIComponent(proj)}/artifacts/${esc(r)}?v=${LOAD_T}" loading="lazy" onclick="zoom(this.src)"><span class="ck">${i+1}</span>${
       del?`<button class="cdel" data-ref="${esc(r)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button>`:''}</div>`;
-  }).join(''):'<span class="clabel">'+t('(暂无参考图)')+'</span>');
+  }).join(''):'<span class="clabel">'+t('(暂无参考图)')+'</span>')
+  +(AR_GEN?`<div class="ccell genp" title="${t('正在基于手绘生成最终的参考图…(约 1-2 分钟)')}"><span class="spin"></span></div>`:'');
 }
 $('#ar-cur').addEventListener('click',async e=>{
   const b=e.target.closest('.cdel');
@@ -419,6 +454,12 @@ $('#ar-ok').onclick=async()=>{
     load(true);
   }catch(e){arMsg(t('加入失败:')+e.message);arOkState()}
 };
+// 🎨 手绘参考图:弹窗内发起手绘会话(基于线稿+已有参考图+项目风格生成成图入 refs)
+$('#ar-sketch').onclick=()=>{
+  if(AR_REFS.length>=AR_MAX){arMsg(t('参考图已满(9 张),不能再添加'));return}
+  if(AR_GEN){arMsg(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'),true);return}
+  openSketch(AR_GRP);
+};
 // ⬆ 本地上传:文件原始字节直传(与参考图页上传同法),落盘 assets/uploads/<ep>/<grp>/ 并直接加入 refs
 $('#ar-up').onclick=()=>{
   if(AR_REFS.length>=AR_MAX){arMsg(t('参考图已满(9 张),不能再添加'));return}
@@ -502,8 +543,6 @@ document.addEventListener('click',async e=>{
   if(rb)return openRefpick(rb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
   if(gb)return openNote(gb.dataset.grp);
-  const sb=e.target.closest('.sketchbtn');
-  if(sb)return openSketch(sb.dataset.grp);
   const ud=e.target.closest('.urdel');
   if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
     if(!confirm(I18N.f('确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)',{ref:ud.dataset.ref})))return;
@@ -527,13 +566,16 @@ document.addEventListener('click',async e=>{
   }
 });
 $('#sk-close').onclick=()=>{$('#sk-modal').style.display='none';clearInterval(skPoll)};
-// SSE:手机提交线稿事件到达即就地刷新(保持滚动位置),弹窗关着也生效
+// SSE:手绘生成进度事件到达即更新等待动画/结果(弹窗关着也刷新页面);
+// 3s 轮询作 SSE 兜底(sgApply 有防重复,双通道不冲突)
 try{
   const es=new EventSource('/api/v1/events');
   es.onmessage=e=>{
     try{
       const ev=JSON.parse(e.data);
-      if(ev.type==='sketch'&&ev.project===($('#project').value.trim()||'demo'))load(true);
+      if(ev.project!==($('#project').value.trim()||'demo'))return;
+      if(ev.type==='sketchgen')sgApply(ev.grp,ev);
+      else if(ev.type==='sketch')load(true);
     }catch(_){}
   };
 }catch(_){}
@@ -606,7 +648,6 @@ function groupCard(g,inner){
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
-      <button class="editbtn sketchbtn" data-grp="${esc(g.group_id)}" title="手机扫码为本组绘制空间线稿">🎨 手绘分镜</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
