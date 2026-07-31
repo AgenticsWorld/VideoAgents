@@ -30,6 +30,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+messaging = [
+  "lark-oapi>=1.4",
+]
 deepagents = [
   "deepagents>=0.2",
   "langchain-openai>=0.3",

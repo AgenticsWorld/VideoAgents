@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
-from . import core
+from . import channels, core
 
 ILINK_BASE_URL = "https://ilinkai.weixin.qq.com"
 CHANNEL_VERSION = "1.0.2"
@@ -197,15 +197,7 @@ async def _forward_inbound(m: dict):
     text = _msg_text(m).strip()
     if not text:
         return
-    orch = core.ORCHESTRATOR_AGENT
-    proj = core.ui_prefs_pref()["project"]
-    if not proj:
-        projs = await core.api_projects()
-        proj = projs[0] if projs else "demo"
-    gm = core.agent_effective_model(orch)
-    await core.api_chat({"agent": orch, "message": text, "project": proj,
-                         "source": "wechat",
-                         "engine": gm["engine"], "model": gm["model"]})
+    await channels.forward_inbound("wechat", text)
     RELAY["last_in"] = time.time()
 
 
@@ -280,25 +272,11 @@ async def _inbound_loop():
 
 # ---------------- 发:总制片/系统 → 微信 ----------------
 
-_SRC_PREFIX = {"settings": "⚙️ 设置变更", "watchdog": "🤖 自动运行"}
-
-
-def _outbound_prefix(ev: dict) -> str | None:
-    """哪些聊天事件推回微信:总制片的回复 + 系统自动发给总制片的消息。
-    微信侧转发进来的(wechat)与网页端用户手输的(user)不回推,避免回声。"""
-    role, src = ev.get("role"), ev.get("source") or ""
-    if role == "assistant":
-        return "🎬 总制片"
-    if role == "user" and src not in ("user", "wechat"):
-        return _SRC_PREFIX.get(src, "📣 系统")
-    return None
-
-
-async def _send_to_wechat(text: str):
+async def _send_to_wechat(text: str) -> bool:
     cfg = load_cfg()
     uid = (cfg.get("contact") or {}).get("user_id")
     if not (cfg.get("bot_token") and cfg.get("context_token") and uid):
-        return                            # 未绑定,或微信端还没发过首条消息拿不到 context_token
+        return False                      # 未绑定,或微信端还没发过首条消息拿不到 context_token
     if len(text) > OUT_TEXT_LIMIT:
         text = text[:OUT_TEXT_LIMIT] + "\n……(超长截断,全文见控制台)"
     msg = {"from_user_id": "", "to_user_id": uid,
@@ -310,32 +288,11 @@ async def _send_to_wechat(text: str):
         _post_json, cfg.get("baseurl") or "", "ilink/bot/sendmessage",
         {"msg": msg, "base_info": {"channel_version": CHANNEL_VERSION}},
         cfg["bot_token"], API_TIMEOUT_S)
-    RELAY["last_out"] = time.time()
-    RELAY["err_out"] = ""
-
-
-async def _outbound_loop():
-    q = core.HUB.subscribe()
-    try:
-        while True:
-            ev = await q.get()
-            if ev.get("type") != "chat" or ev.get("agent") != core.ORCHESTRATOR_AGENT:
-                continue
-            prefix = _outbound_prefix(ev)
-            text = (ev.get("text") or "").strip()
-            if not prefix or not text:
-                continue
-            proj = ev.get("project") or ""
-            head = f"{prefix} · {proj}" if proj else prefix
-            try:
-                await _send_to_wechat(f"{head}\n{text}")
-            except Exception as e:  # noqa: BLE001
-                # 发送失败意味着这条消息丢了,值得提示;下次发送成功自动清除
-                RELAY["err_out"] = f"推送到微信失败:{e}"
-    finally:
-        core.HUB.unsubscribe(q)
+    return True
 
 
 async def relay_loop():
     """后台常驻:收发两条循环(services.api lifespan 启动)。"""
-    await asyncio.gather(_inbound_loop(), _outbound_loop())
+    await asyncio.gather(
+        _inbound_loop(),
+        channels.outbound_loop("wechat", _send_to_wechat, RELAY))
