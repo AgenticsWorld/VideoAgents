@@ -279,7 +279,8 @@ async function openSketch(grp){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     $('#sk-qr').innerHTML=d.qr_svg;
-    $('#sk-url').textContent=d.url;
+    // 显式 http:// 链接:桌面端点击直达,避免地址栏手输被浏览器自动升级成 https(服务无 TLS)
+    $('#sk-url').innerHTML=`<a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a>`;
     $('#sk-st').textContent='等待手机提交…(会话 30 分钟有效)';
     const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(grp);
     clearInterval(skPoll);
