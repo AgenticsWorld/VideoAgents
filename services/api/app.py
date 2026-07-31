@@ -458,6 +458,11 @@ async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpref_add(body)
 
 
+@api.post("/storyboard/refs/delete", tags=["storyboard"])
+async def storyboard_ref_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpref_delete(body)
+
+
 @api.post("/storyboard/refs/upload", tags=["storyboard"])
 async def storyboard_ref_upload(
     request: Request,

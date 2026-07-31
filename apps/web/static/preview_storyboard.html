@@ -126,6 +126,13 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:780px;max-width:94vw;height:80vh;display:flex;flex-direction:column}
 #ar-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
 #ar-modal .hint{color:var(--dim);font-size:12.5px;margin-top:6px}
+#ar-modal .cur{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;flex:none}
+#ar-modal .cur .clabel{font-size:11.5px;color:var(--dim)}
+#ar-modal .cur .ccell{position:relative;flex:none}
+#ar-modal .cur .ccell img{height:56px;display:block;border-radius:6px;cursor:zoom-in}
+#ar-modal .cur .ccell .ck{position:absolute;left:2px;bottom:2px;font-size:9.5px;line-height:1.4;background:rgba(0,0,0,.65);color:#c8d0e0;border-radius:3px;padding:0 3px}
+#ar-modal .cur .ccell .cdel{position:absolute;right:2px;top:2px;font-size:10px;line-height:1;background:rgba(0,0,0,.65);border:none;border-radius:4px;padding:2px 3px;cursor:pointer}
+#ar-modal .cur .ccell .cdel:hover{background:var(--red)}
 #ar-modal .cats{display:flex;gap:8px;margin:10px 0 8px;flex:none}
 #ar-modal .cats button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
 #ar-modal #ar-up{margin-left:auto}
@@ -187,6 +194,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 <div id="ar-modal"><div class="box">
   <h3>🖼 添加参考图 — <span id="ar-grp" style="color:var(--purple)"></span><span class="cnt" id="ar-count"></span></h3>
   <div class="hint">按分类选择资产,点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型</div>
+  <div class="cur" id="ar-cur"></div>
   <div class="cats" id="ar-cats">
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
@@ -292,11 +300,11 @@ $('#gn-ok').onclick=async()=>{
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
 const AR_MAX=9;
-let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_CACHE={};
+let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={};
 const arRel=u=>decodeURIComponent(u.split('?')[0]).replace(/^\/api\/v1\/projects\/[^/]+\/artifacts\//,'');
 function arMsg(txt,ok){const e=$('#ar-err');e.textContent=txt;e.style.color=ok?'var(--green)':'var(--red)'}
 async function openRefpick(grp){
-  AR_GRP=grp;AR_SEL='';AR_CACHE={};AR_REFS=[];
+  AR_GRP=grp;AR_SEL='';AR_CACHE={};AR_REFS=[];AR_NOTES=[];
   $('#ar-grp').textContent=grp;
   $('#ar-count').textContent='';arMsg('');
   $('#ar-assets').innerHTML='';
@@ -307,11 +315,45 @@ async function openRefpick(grp){
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
       +encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'.json?v='+Date.now());
     if(!r.ok)throw new Error(r.status===404?t('该组 prompt 文件尚未生成'):r.status);
-    AR_REFS=(await r.json()).refs||[];
+    const j=await r.json();
+    AR_REFS=j.refs||[];AR_NOTES=j.notes||[];
   }catch(e){$('#ar-imgs').innerHTML='';arMsg(t('加载失败:')+e.message);return}
-  arCount();
+  arCount();arCur();
   arLoadCat(AR_CAT);
 }
+// 本组当前参考图条:带序号缩略图;用户手动加入的(资产选图/本地上传,按 notes 锚判定,
+// 与后端 _grpref_user_added 同规则)带 🗑 可删;流水线锚点/线稿注入的不可在此删,
+// 且手动图之后若还有线稿也暂不可删(线稿按 [Image N] 序号引用 refs 位置,删中间会错位)
+const arAdded=r=>AR_NOTES.some(n=>String(n).includes('加入组参考图:'+r+'('));
+function arCur(){
+  const proj=$('#project').value.trim()||'demo';
+  $('#ar-cur').innerHTML='<span class="clabel">'+t('本组当前参考图:')+'</span>'+(AR_REFS.length?AR_REFS.map((r,i)=>{
+    const del=arAdded(r)&&AR_REFS.slice(i+1).every(arAdded);
+    return `<div class="ccell" title="[Image ${i+1}] ${esc(r)}${del?'':' · '+t('流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)')}">
+      <img src="/api/v1/projects/${encodeURIComponent(proj)}/artifacts/${esc(r)}?v=${LOAD_T}" loading="lazy" onclick="zoom(this.src)"><span class="ck">${i+1}</span>${
+      del?`<button class="cdel" data-ref="${esc(r)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button>`:''}</div>`;
+  }).join(''):'<span class="clabel">'+t('(暂无参考图)')+'</span>');
+}
+$('#ar-cur').addEventListener('click',async e=>{
+  const b=e.target.closest('.cdel');
+  if(!b)return;
+  const ref=b.dataset.ref;
+  if(!confirm(I18N.f('确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)',{ref})))return;
+  arMsg('');
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/storyboard/refs/delete',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:AR_GRP,ref})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    AR_REFS=AR_REFS.filter(x=>x!==ref);
+    arCount();arCur();
+    const cur=document.querySelector('#ar-assets .ast.on');   // 重绘网格,去掉「已在参考图」标记
+    if(cur)arShowAsset(+cur.dataset.i);
+    arMsg(t('✅ 已删除参考图'),true);
+    load(true);
+  }catch(e){arMsg(t('删除失败:')+e.message)}
+});
 function arCount(){
   const el=$('#ar-count');
   el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX});
@@ -369,8 +411,9 @@ $('#ar-ok').onclick=async()=>{
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({project:proj,ep:EP,grp:AR_GRP,ref:AR_SEL})});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    AR_NOTES.push('加入组参考图:'+AR_SEL+'(');   // 客户端补判定锚,新图即时可删(服务端 note 同锚)
     AR_REFS.push(AR_SEL);AR_SEL='';
-    arCount();
+    arCount();arCur();
     const cur=document.querySelector('#ar-assets .ast.on');   // 重绘网格,刚加入的图标记「已在参考图」
     if(cur)arShowAsset(+cur.dataset.i);
     load(true);
@@ -394,8 +437,9 @@ $('#ar-file').onchange=async()=>{
     const r=await fetch('/api/v1/storyboard/refs/upload?'+q,{method:'POST',body:f});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||r.status);
+    AR_NOTES.push('加入组参考图:'+d.ref+'(');   // 客户端补判定锚,新图即时可删(服务端 note 同锚)
     AR_REFS.push(d.ref);
-    arCount();
+    arCount();arCur();
     arMsg(t('✅ 已上传并加入参考图'),true);
     load(true);
   }catch(e){arMsg(t('上传失败:')+e.message)}
@@ -460,6 +504,17 @@ document.addEventListener('click',async e=>{
   if(gb)return openNote(gb.dataset.grp);
   const sb=e.target.closest('.sketchbtn');
   if(sb)return openSketch(sb.dataset.grp);
+  const ud=e.target.closest('.urdel');
+  if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
+    if(!confirm(I18N.f('确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)',{ref:ud.dataset.ref})))return;
+    const proj=$('#project').value.trim()||'demo';
+    const r=await fetch('/api/v1/storyboard/refs/delete',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:ud.dataset.grp,ref:ud.dataset.ref})});
+    if(!r.ok)alert(t('删除失败:')+((await r.json()).detail||r.status));
+    load(true);
+    return;
+  }
   const del=e.target.closest('.skdel');
   if(del){
     if(!confirm('删除该线稿并回滚 prompt 注入?'))return;
@@ -530,13 +585,17 @@ function groupCard(g,inner){
     `<div><img src="${esc(k.url)}" loading="lazy" onclick="zoom(this.src)" style="background:#fff">
       <div class="cap" title="${esc(k.text)}"><span class="fn">🎨 ${esc(k.text||k.name)}</span>
       <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
+  const urefs=(g.user_refs||[]).map(k=>
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
+      <div class="cap" title="${esc(k.ref)}"><span class="fn">🖼 ${esc(k.name)}</span>
+      <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
   const vids=(g.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段组视频提修改意见">✏️ 修改</button></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  const media=(anchors.length||vids.length||sketches.length)?
-    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
+  const media=(anchors.length||vids.length||sketches.length||urefs.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
   return `<div class="grp" id="a-g-${aid(g.group_id)}">
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
@@ -685,6 +744,7 @@ function render(d){
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
         const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];
+        if((g.user_refs||[]).length)badges.push('🖼'+g.user_refs.length);
         if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
         if(g.user_note)badges.push('📝');
         if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');

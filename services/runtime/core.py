@@ -2280,6 +2280,44 @@ async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filena
             "url": f"/projects/{base.name}/{ref}?v={int(p.stat().st_mtime)}"}
 
 
+def _grpref_user_added(d: dict, ref: str) -> bool:
+    """该 ref 是否由用户经「添加参考图」加入(资产选图/本地上传)——
+    以 _grpref_append 落的 note 锚「加入组参考图:<ref>(」判定;
+    流水线锚点与手绘线稿注入不落此 note,判 False。"""
+    return any(f"加入组参考图:{ref}(" in str(n) for n in d.get("notes") or [])
+
+
+async def api_grpref_delete(body: dict):
+    """从组 refs 移除一张用户手动加入的参考图(重出本组生效)。
+    仅限用户加入的 ref,且其后不得残留非用户加入的 ref——线稿注入句按 [Image N]
+    序号引用 refs 位置,删中间会错位(与线稿删除的末位约束同理);
+    本地上传的图一并删除落盘文件。"""
+    project, ep, grp, base, pf = _grpref_ctx(body)
+    ref = (body.get("ref") or "").strip().lstrip("/")
+    d = json.loads(pf.read_text())
+    refs = d.get("refs") or []
+    if ref not in refs:
+        raise ServiceError(404, f"Ref not in this group's refs: {ref}")
+    if not _grpref_user_added(d, ref):
+        raise ServiceError(400, "Only user-added refs (asset pick / local upload) can be removed here; delete sketches via the group card instead")
+    i = refs.index(ref)
+    if not all(_grpref_user_added(d, r) for r in refs[i + 1:]):
+        raise ServiceError(400, "A pipeline/sketch ref comes after this one; delete that first (to keep [Image N] numbering aligned)")
+    refs.pop(i)
+    d.setdefault("notes", []).append(
+        f"用户移除组参考图:{ref}(原 refs 第 {i + 1} 张);重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    if ref.startswith(f"assets/uploads/{ep}/{grp}/"):
+        p = (base / ref).resolve()
+        try:
+            p.relative_to(base.resolve())
+        except ValueError:
+            p = None
+        if p:
+            p.unlink(missing_ok=True)
+    return {"deleted": ref, "refs": len(refs)}
+
+
 def _read_json_safe(p: Path):
     try:
         return json.loads(p.read_text())
@@ -2615,10 +2653,20 @@ def _preview_storyboard(project: str, ep: str):
             continue
         gid = g.get("group_id") or ""
         meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
+        # 用户经「添加参考图」手动加入的组参考图(组 prompt json 的 refs,notes 锚判定;
+        # 流水线锚点包另走 anchors,线稿另走 sketches)
+        pd = _read_json_safe(_grp_prompt_path(base.name, ep, gid)) or {}
+        user_refs = []
+        for r in (pd.get("refs") or []):
+            f = base / r
+            if _grpref_user_added(pd, r) and f.is_file():
+                user_refs.append({"ref": r, "name": f.name,
+                                  "url": f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
+            "user_refs": user_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
