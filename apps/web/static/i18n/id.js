@@ -1125,7 +1125,7 @@ window.I18N_DICT = {
 "本组当前参考图:": "Referensi saat ini:",
 "删除这张参考图(重出本组生效)": "Hapus gambar referensi ini (berlaku saat grup dibuat ulang)",
 "流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)": "Disisipkan oleh pipeline (jangkar) atau sketsa; tidak bisa dihapus di sini (hapus sketsa di kartu grup)",
-"确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)": "Hapus gambar referensi ini?\n{ref}\n(berlaku saat grup dibuat ulang)",
+"确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)": "Hapus gambar referensi ini?\n{ref}\n(berlaku saat grup dibuat ulang)",
 "✅ 已删除参考图": "✅ Gambar referensi dihapus",
 "📋 复制项目": "📋 Salin Proyek",
 "复制项目": "Salin proyek",

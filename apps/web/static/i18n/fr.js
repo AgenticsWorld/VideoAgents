@@ -1125,7 +1125,7 @@ window.I18N_DICT = {
 "本组当前参考图:": "Références actuelles :",
 "删除这张参考图(重出本组生效)": "Supprimer cette image de référence (prend effet à la régénération du groupe)",
 "流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)": "Injectée par le pipeline (ancre) ou un croquis ; suppression impossible ici (supprimez les croquis sur la carte du groupe)",
-"确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)": "Supprimer cette image de référence ?\n{ref}\n(prend effet à la régénération du groupe)",
+"确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)": "Supprimer cette image de référence ?\n{ref}\n(prend effet à la régénération du groupe)",
 "✅ 已删除参考图": "✅ Image de référence supprimée",
 "📋 复制项目": "📋 Copier le projet",
 "复制项目": "Copier le projet",

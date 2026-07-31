@@ -374,7 +374,7 @@ $('#ar-cur').addEventListener('click',async e=>{
   const b=e.target.closest('.cdel');
   if(!b)return;
   const ref=b.dataset.ref;
-  if(!confirm(I18N.f('确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)',{ref})))return;
+  if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref})))return;
   arMsg('');
   const proj=$('#project').value.trim()||'demo';
   try{
@@ -546,7 +546,7 @@ document.addEventListener('click',async e=>{
   if(gb)return openNote(gb.dataset.grp);
   const ud=e.target.closest('.urdel');
   if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
-    if(!confirm(I18N.f('确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)',{ref:ud.dataset.ref})))return;
+    if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref:ud.dataset.ref})))return;
     const proj=$('#project').value.trim()||'demo';
     const r=await fetch('/api/v1/storyboard/refs/delete',{method:'POST',
       headers:{'Content-Type':'application/json'},

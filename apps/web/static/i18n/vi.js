@@ -1125,7 +1125,7 @@ window.I18N_DICT = {
 "本组当前参考图:": "Ảnh tham chiếu hiện tại:",
 "删除这张参考图(重出本组生效)": "Xóa ảnh tham chiếu này (có hiệu lực khi tạo lại nhóm)",
 "流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)": "Do pipeline (ảnh neo) hoặc phác thảo chèn vào; không thể xóa ở đây (xóa phác thảo trên thẻ nhóm)",
-"确认删除这张参考图?\n{ref}\n(删除后随本组重出生效)": "Xóa ảnh tham chiếu này?\n{ref}\n(có hiệu lực khi tạo lại nhóm)",
+"确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)": "Xóa ảnh tham chiếu này?\n{ref}\n(có hiệu lực khi tạo lại nhóm)",
 "✅ 已删除参考图": "✅ Đã xóa ảnh tham chiếu",
 "📋 复制项目": "📋 Sao chép dự án",
 "复制项目": "Sao chép dự án",
