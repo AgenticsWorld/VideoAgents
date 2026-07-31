@@ -34,7 +34,6 @@ window.I18N_DICT = {
 "(当前生效)": "(Aktif saat ini)",
 "(无说明)": "(Tanpa keterangan)",
 "(暂无 bible 设定文档)": "(Belum ada dokumen setting bible)",
-"(暂无关键帧)": "(Belum ada keyframe)",
 "(暂无参考图)": "(Belum ada gambar referensi)",
 "(暂无概念图)": "(Belum ada gambar konsep)",
 "(点击修改;优先级高于右上角全局)": "(Klik untuk mengubah; prioritas di atas setelan global kanan atas)",

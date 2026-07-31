@@ -34,7 +34,6 @@ window.I18N_DICT = {
 "(当前生效)": "(em vigor)",
 "(无说明)": "(sem descrição)",
 "(暂无 bible 设定文档)": "(ainda não há documento de worldbuilding bible)",
-"(暂无关键帧)": "(ainda não há keyframes)",
 "(暂无参考图)": "(ainda não há imagens de referência)",
 "(暂无概念图)": "(ainda não há arte conceitual)",
 "(点击修改;优先级高于右上角全局)": "(clique para alterar; tem prioridade sobre a configuração global no canto superior direito)",

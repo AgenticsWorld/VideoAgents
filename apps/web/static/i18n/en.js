@@ -34,7 +34,6 @@ window.I18N_DICT = {
 "(当前生效)": "(Currently active)",
 "(无说明)": "(No description)",
 "(暂无 bible 设定文档)": "(No bible documents yet)",
-"(暂无关键帧)": "(No keyframes yet)",
 "(暂无参考图)": "(No reference images yet)",
 "(暂无概念图)": "(No concept art yet)",
 "(点击修改;优先级高于右上角全局)": "(Click to edit; overrides the global setting at the top right)",

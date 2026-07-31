@@ -559,7 +559,7 @@ function shotCard(s,grp){
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
   const chars=(s.characters||[]).join('、');
   return `<div class="shot">
-    <div class="media">${imgs.join('')||'<div class="nomedia">(暂无关键帧)</div>'}</div>
+    ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
     <div class="info">
       <div class="r1"><span class="sid">${esc(s.shot_id)}</span>
         ${s.duration_s?`<span class="tag">${esc(s.duration_s)}s</span>`:''}

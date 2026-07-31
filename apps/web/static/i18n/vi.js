@@ -34,7 +34,6 @@ window.I18N_DICT = {
 "(当前生效)": "(Đang có hiệu lực)",
 "(无说明)": "(Không có mô tả)",
 "(暂无 bible 设定文档)": "(Chưa có tài liệu thiết lập bible)",
-"(暂无关键帧)": "(Chưa có keyframe)",
 "(暂无参考图)": "(Chưa có ảnh tham chiếu)",
 "(暂无概念图)": "(Chưa có ảnh concept)",
 "(点击修改;优先级高于右上角全局)": "(Nhấn để sửa; ưu tiên cao hơn thiết lập toàn cục ở góc trên bên phải)",
