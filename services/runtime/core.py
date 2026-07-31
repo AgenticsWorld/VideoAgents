@@ -755,7 +755,8 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
-AM_MODES = ("global", "smart_claude", "smart_codex")
+#   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -784,6 +785,8 @@ AM_MODE_MODELS = {
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
+    "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
+                   "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "deepagents")      # "" = 跟随全局
