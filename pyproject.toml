@@ -21,6 +21,7 @@ classifiers = [
 ]
 dependencies = [
   "fastapi>=0.115,<1",
+  "lark-oapi>=1.4,<2",
   "numpy>=1.24,<3",
   "pygit2>=1.17,<2",
   "PyYAML>=6,<7",
@@ -30,9 +31,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-messaging = [
-  "lark-oapi>=1.4",
-]
 deepagents = [
   "deepagents>=0.2",
   "langchain-openai>=0.3",

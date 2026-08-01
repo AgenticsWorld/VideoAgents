@@ -121,7 +121,7 @@ def main() -> None:
         uv, "pip", "install", "--python", str(python), "--system",
         "--break-system-packages", "--requirements", str(LOCK), env=env,
     )
-    run(str(python), "-c", "import fastapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
+    run(str(python), "-c", "import fastapi,lark_oapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
     version = run(str(python), "-c", "import platform; print(platform.python_version())", env=env)
     remove_python_aliases(python_store)
     manifest = {
