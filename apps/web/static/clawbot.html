@@ -121,6 +121,7 @@ ul.how b,ol.how b{color:var(--text);font-weight:600}
         <ol class="how">
           <li>在应用后台开启「机器人」能力;</li>
           <li>「事件与回调」里把订阅方式设为「使用长连接接收事件」,并订阅「接收消息 im.message.receive_v1」事件;</li>
+          <li>「回调订阅」同样设为「使用长连接接收回调」——签字/确认卡片的按钮回传依赖它;</li>
           <li>开通「获取与发送单聊、群组消息」等 im:message 权限,并发布应用版本。</li>
         </ol>
         <div class="row"><label>App ID</label><input type="text" id="fs-app-id" placeholder="cli_xxxxxxxxxxxxxxxx"></div>

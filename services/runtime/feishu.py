@@ -7,11 +7,15 @@
   (无需公网回调地址),跑在独立子进程 feishu_bridge.py 里,退出自动重启;
   仅单聊文本,转发给总制片(source="feishu")
 - 发:订阅 HUB 聊天事件,经 im/v1/messages(receive_id_type=open_id)推回
+- 确认/签字卡片:订阅 HUB confirm 事件,把 dispatch.py --confirm 发起的
+  确认/签字以互动卡片(msg_type=interactive)推到飞书,按钮点击经同一条
+  长连接回传(card.action.trigger,桥进程透传),落到 api_confirm_answer,
+  与网页弹窗同源同答案;答复/超时后 PATCH 卡片收尾,防止旧按钮残留
 
 前置条件(设置页有说明):应用需开启机器人能力、以「长连接」方式订阅
-「接收消息 im.message.receive_v1」事件,并开通 im:message 收发权限;
-绑定后需在飞书里先给机器人发一条消息,系统才知道该推送给谁。
-lark-oapi 未安装时绑定被拒并提示 pip install lark-oapi。
+「接收消息 im.message.receive_v1」事件与「回调订阅」(卡片按钮回传依赖
+后者),并开通 im:message 收发权限;绑定后需在飞书里先给机器人发一条
+消息,系统才知道该推送给谁。lark-oapi 未安装时绑定被拒并提示 pip install。
 """
 
 from __future__ import annotations
@@ -60,14 +64,14 @@ def save_cfg(cfg: dict):
 # ---------------- 飞书 HTTP(阻塞式,线程里跑) ----------------
 
 def _post_json(domain: str, path: str, body: dict, token: str | None,
-               timeout: float) -> dict:
+               timeout: float, method: str = "POST") -> dict:
     url = (domain or DEFAULT_DOMAIN).rstrip("/") + path
     headers = {"Content-Type": "application/json; charset=utf-8"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
         url, data=json.dumps(body, ensure_ascii=False).encode(),
-        headers=headers, method="POST")
+        headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
@@ -157,14 +161,19 @@ async def _handle_event(ev: dict):
             return                        # 解绑竞态窗口内的残留事件
         c = cfg.setdefault("contact", {})
         if ev.get("open_id") and ev["open_id"] != c.get("open_id"):
+            first_contact = not c.get("open_id")
             c["open_id"] = ev["open_id"]
             save_cfg(cfg)
+            if first_contact:             # 刚拿到推送对象:把等着的确认/签字补推过去
+                asyncio.create_task(_sync_pending_confirms())
         try:
             await channels.forward_inbound("feishu", ev.get("text") or "")
             RELAY["last_in"] = time.time()
             RELAY["err_in"] = ""
         except Exception as e:  # noqa: BLE001
             RELAY["err_in"] = f"转发飞书消息给总制片失败:{e}"
+    elif t == "card":
+        await _handle_card_click(ev)
     elif t == "fatal" and ev.get("error") == "sdk_missing":
         RELAY["err_in"] = "未安装飞书 SDK:请在服务端执行 pip install lark-oapi"
 
@@ -262,8 +271,165 @@ async def _send_to_feishu(text: str) -> bool:
     return True
 
 
+# ---------------- 确认/签字卡片:HUB confirm 事件 ↔ 飞书互动卡片 ----------------
+# dispatch.py --confirm 发起的确认(重跑类)与签字(H 门)以互动卡片推到飞书,
+# 按钮 value 带 confirm_id+option,点击经长连接回传后落 api_confirm_answer,
+# 与网页弹窗同一份答案;答复/超时后 PATCH 卡片移除按钮,防止旧按钮残留误点。
+
+_CARDS: dict[str, dict] = {}   # confirm_id -> {message_id, question, default}
+
+
+def _card(header: str, template: str, question: str,
+          actions: list | None = None, note: str = "") -> dict:
+    els: list = [{"tag": "div", "text": {"tag": "plain_text", "content": question}}]
+    if actions:
+        els.append({"tag": "action", "actions": actions})
+    if note:
+        els.append({"tag": "note",
+                    "elements": [{"tag": "plain_text", "content": note}]})
+    return {"config": {"wide_screen_mode": True},
+            "header": {"template": template,
+                       "title": {"tag": "plain_text", "content": header}},
+            "elements": els}
+
+
+def _confirm_card(ev: dict) -> dict:
+    sign = ev.get("kind") == "sign"
+    proj = (core.RUNS.get(ev.get("parent") or "") or {}).get("project") or ""
+    head = ("✍️ 等你签字" if sign else "❓ 等你确认") + (f" · {proj}" if proj else "")
+    note = ("签字类不超时;建议先在控制台核对相关产物再签。" if sign else
+            f"{ev.get('remaining') or ev.get('timeout') or 60}s 内未选择将按默认"
+            f"「{ev.get('default') or ''}」处理。")
+    actions = [{"tag": "button", "text": {"tag": "plain_text", "content": o},
+                "type": "primary" if o == (ev.get("default") or "") else "default",
+                "value": {"confirm_id": ev.get("id") or "", "option": o}}
+               for o in (ev.get("options") or [])]
+    return _card(head, "orange" if sign else "blue",
+                 ev.get("question") or "", actions, note)
+
+
+async def _card_request(path: str, body: dict, method: str = "POST") -> dict:
+    cfg = load_cfg()
+    token = await _tenant_token(cfg)
+    d = await asyncio.to_thread(
+        _post_json, cfg.get("domain") or DEFAULT_DOMAIN, path, body,
+        token, API_TIMEOUT_S, method)
+    if d.get("code") != 0:
+        raise RuntimeError(f"{path} code={d.get('code')}:{d.get('msg') or d}")
+    return d
+
+
+async def _push_confirm_card(ev: dict):
+    """新确认项 → 发互动卡片。未绑定/联系人未就绪时静默跳过(网页弹窗仍在)。"""
+    cid = ev.get("id") or ""
+    cfg = load_cfg()
+    open_id = (cfg.get("contact") or {}).get("open_id")
+    if not (cid and cfg.get("app_id") and open_id) or cid in _CARDS:
+        return
+    _CARDS[cid] = {"message_id": "", "question": ev.get("question") or "",
+                   "default": ev.get("default") or ""}   # 先占位防并发重复推
+    try:
+        d = await _card_request(
+            "/open-apis/im/v1/messages?receive_id_type=open_id",
+            {"receive_id": open_id, "msg_type": "interactive",
+             "content": json.dumps(_confirm_card(ev), ensure_ascii=False),
+             "uuid": "va-cfm-" + cid})
+        _CARDS[cid]["message_id"] = (d.get("data") or {}).get("message_id") or ""
+        RELAY["last_out"] = time.time()
+        RELAY["err_out"] = ""
+    except Exception as e:  # noqa: BLE001
+        _CARDS.pop(cid, None)
+        RELAY["err_out"] = f"推送确认卡片失败:{e}"
+        return
+    remaining = ev.get("remaining")
+    if remaining is not None:             # 重跑类:到点未答就把卡片改为超时态
+        asyncio.create_task(_expire_card_later(cid, int(remaining) + 2))
+
+
+async def _patch_card(message_id: str, card: dict):
+    await _card_request(f"/open-apis/im/v1/messages/{message_id}",
+                        {"content": json.dumps(card, ensure_ascii=False)},
+                        method="PATCH")
+
+
+async def _finish_confirm_card(cid: str, answer: str):
+    """已答复(飞书点按/网页弹窗任一入口)→ 卡片改为终态、移除按钮。"""
+    c = _CARDS.pop(cid, None)
+    if not (c and c["message_id"]):
+        return
+    try:
+        await _patch_card(c["message_id"],
+                          _card("✅ 已处理", "green", c["question"],
+                                note=f"已选「{answer}」。"))
+    except Exception as e:  # noqa: BLE001
+        RELAY["err_out"] = f"更新确认卡片失败:{e}"
+
+
+async def _expire_card_later(cid: str, delay: int):
+    await asyncio.sleep(max(1, delay))
+    c = _CARDS.pop(cid, None)             # 已答复的先被 finish 弹掉,这里自然空
+    if not (c and c["message_id"]):
+        return
+    try:
+        await _patch_card(c["message_id"],
+                          _card("⏱ 已超时", "grey", c["question"],
+                                note=f"超时未选择,已按默认「{c['default']}」处理。"))
+    except Exception as e:  # noqa: BLE001
+        RELAY["err_out"] = f"更新确认卡片失败:{e}"
+
+
+async def _handle_card_click(ev: dict):
+    """桥进程透传的按钮点击 → 落 api_confirm_answer(与网页弹窗同源)。"""
+    cfg = load_cfg()
+    if not cfg.get("app_id"):
+        return
+    bound = (cfg.get("contact") or {}).get("open_id")
+    if bound and ev.get("open_id") and ev["open_id"] != bound:
+        return                            # 单聊机器人本只此一人,防御性校验
+    cid = ev.get("confirm_id") or ""
+    try:
+        await core.api_confirm_answer(cid, {"answer": ev.get("option") or ""})
+        RELAY["last_in"] = time.time()
+    except core.ServiceError:             # 确认项已被清理:把残留卡片改为失效态
+        c = _CARDS.pop(cid, None)
+        mid = (c or {}).get("message_id") or ev.get("message_id") or ""
+        if mid:
+            try:
+                await _patch_card(mid, _card(
+                    "🚫 已失效", "grey", (c or {}).get("question") or "",
+                    note="该确认项已失效(可能已在控制台处理或已超时)。"))
+            except Exception as e:  # noqa: BLE001
+                RELAY["err_out"] = f"更新确认卡片失败:{e}"
+
+
+async def _sync_pending_confirms():
+    """把仍在等待的确认项补推为卡片(绑定/首次建立联系人晚于确认项出现时)。"""
+    try:
+        for c in await core.api_confirms():
+            await _push_confirm_card(c)
+    except Exception as e:  # noqa: BLE001
+        RELAY["err_out"] = f"补推确认卡片失败:{e}"
+
+
+async def _confirm_loop():
+    """订阅 HUB:新确认项发卡片,答复后收尾卡片。"""
+    q = core.HUB.subscribe()
+    await _sync_pending_confirms()
+    try:
+        while True:
+            ev = await q.get()
+            if ev.get("type") == "confirm":
+                await _push_confirm_card(ev)
+            elif ev.get("type") == "confirm_done":
+                await _finish_confirm_card(ev.get("id") or "",
+                                           ev.get("answer") or "")
+    finally:
+        core.HUB.unsubscribe(q)
+
+
 async def relay_loop():
-    """后台常驻:收发两条循环(services.api lifespan 启动)。"""
+    """后台常驻:收、发、确认卡片三条循环(services.api lifespan 启动)。"""
     await asyncio.gather(
         _inbound_loop(),
-        channels.outbound_loop("feishu", _send_to_feishu, RELAY))
+        channels.outbound_loop("feishu", _send_to_feishu, RELAY),
+        _confirm_loop())

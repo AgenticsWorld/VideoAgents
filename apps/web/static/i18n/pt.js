@@ -1092,6 +1092,7 @@ window.I18N_DICT = {
 "尚未绑定飞书。请先在飞书开放平台创建「企业自建应用」并完成以下配置,再把应用凭证填到下方:": "Nenhum Feishu vinculado ainda. Crie primeiro um “app próprio” na Feishu Open Platform, conclua a configuração abaixo e depois insira as credenciais do app:",
 "在应用后台开启「机器人」能力;": "Ative a capacidade de “Bot” no console do app;",
 "「事件与回调」里把订阅方式设为「使用长连接接收事件」,并订阅「接收消息 im.message.receive_v1」事件;": "Em “Eventos e callbacks”, defina o modo de assinatura como “receber eventos por conexão longa” e assine o evento “mensagem recebida im.message.receive_v1”;",
+"「回调订阅」同样设为「使用长连接接收回调」——签字/确认卡片的按钮回传依赖它;": "Defina também a “assinatura de callbacks” para “receber callbacks por conexão longa” — os botões dos cartões de assinatura/confirmação dependem disso;",
 "开通「获取与发送单聊、群组消息」等 im:message 权限,并发布应用版本。": "Conceda as permissões im:message, como “obter e enviar mensagens diretas e de grupo”, e publique uma versão do app.",
 "平台": "Plataforma",
 "飞书(open.feishu.cn)": "Feishu (open.feishu.cn)",
