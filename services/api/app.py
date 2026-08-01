@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, wechat
+from services.runtime import core, feishu, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -51,12 +51,14 @@ async def lifespan(_: FastAPI):
         install_runtime_store(STORE)
         _bridge_installed = True
     watchdog = asyncio.create_task(core.idle_watchdog())
-    wechat_relay = asyncio.create_task(wechat.relay_loop())
+    relays = [asyncio.create_task(m.relay_loop())
+              for m in (wechat, feishu, whatsapp)]
     try:
         yield
     finally:
         watchdog.cancel()
-        wechat_relay.cancel()
+        for task in relays:
+            task.cancel()
 
 
 app = FastAPI(
@@ -508,6 +510,36 @@ async def wechat_bind_poll(qrcode: str = "") -> dict[str, Any]:
 @api.post("/wechat/unbind", tags=["wechat"])
 async def wechat_unbind(body: dict[str, Any]) -> dict[str, Any]:
     return await wechat.api_wechat_unbind()
+
+
+@api.get("/feishu/status", tags=["feishu"])
+async def feishu_status() -> dict[str, Any]:
+    return await feishu.api_feishu_status()
+
+
+@api.post("/feishu/bind", tags=["feishu"])
+async def feishu_bind(body: dict[str, Any]) -> dict[str, Any]:
+    return await feishu.api_feishu_bind(body)
+
+
+@api.post("/feishu/unbind", tags=["feishu"])
+async def feishu_unbind(body: dict[str, Any]) -> dict[str, Any]:
+    return await feishu.api_feishu_unbind()
+
+
+@api.get("/whatsapp/status", tags=["whatsapp"])
+async def whatsapp_status() -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_status()
+
+
+@api.post("/whatsapp/bind", tags=["whatsapp"])
+async def whatsapp_bind(body: dict[str, Any]) -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_bind()
+
+
+@api.post("/whatsapp/unbind", tags=["whatsapp"])
+async def whatsapp_unbind(body: dict[str, Any]) -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_unbind()
 
 
 @api.get("/events", tags=["events"])
