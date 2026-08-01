@@ -13,7 +13,7 @@
 2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 3 次,仍不过升级人工。
-5. **上下文按需组装**:Agent 不读全库。`context` Agent 为每个工单裁剪出 Context Package(只含该任务需要的 Bible 片段 + 上游产物)。
+5. **上下文按需组装**:Agent 不读全库。Context Package 分两级(2026-08-01,教训:每单必调 context Agent 一次约 4 分钟,shixibook 310 张工单调了 395 次):**full 包**由 `context` Agent 裁剪(该任务需要的 Bible 片段 + 上游产物 + 缺陷历史),仅限三类工单——① `attempt > 1` 重做单(必须附上次失败原因与 evaluation 逐条意见);② 需裁剪 Bible 片段的工单(涉及角色/场景/风格/世界观设定锚点的创作与生成类任务);③ 需聚合缺陷历史的工单(qa/defects 存在与该产物/该 Agent 相关的 open 缺陷)。其余工单走 **inline 轻量包**:orchestrator 派单时把输入文件路径清单 + 硬约束直接写进工单 `instruction`/`inputs`,`context_package: inline`,不调用 context Agent。
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
 8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
@@ -587,8 +587,8 @@ refs/
 | Agent | 何时被调用 | 职责要点 |
 |---|---|---|
 | workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录四件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
-| context | 每个工单派发前 | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内 |
-| memory-bible | 任何设定读写 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游 |
+| context | 仅 full 包工单派发前(§1 原则 5 三类:重做单 / 需裁剪 Bible 片段 / 需聚合缺陷历史) | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内;其余工单走 inline 轻量包,由 orchestrator 在工单本体内联,不调用本 Agent |
+| memory-bible | 任何设定**写入**与冲突上报 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游。**读取受控版免仲裁**:任何 Agent 直读 `bible/` 当前受控版无需经过本 Agent |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
 | evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
 
@@ -602,7 +602,7 @@ agent: 08-video-gen/video-generation
 project: data/projects/<slug>
 depends_on: [p7-ep01-grp005-imagegen, p7-ep01-grp004-videogen]  # 前组尾帧续接,按组序串行
 attempt: 1            # 第几次尝试(重做时递增,并附上次失败原因)
-context_package: runs/p7-ep01-grp005-videogen/context.md   # context Agent 已裁剪
+context_package: runs/p7-ep01-grp005-videogen/context.md   # full 包:context Agent 已裁剪;inline 轻量包工单此处填 inline(§1 原则 5)
 instruction: |
   为第 1 集生成组 grp005(sh006–sh008,Σ15s)生成多镜头组视频。
   组 prompt 见 grp005.json(Shot 1:/Shot 2:/Shot 3: 结构),锚点包用已校正版,
@@ -625,18 +625,20 @@ on_fail: escalate_human
 
 Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物路径、自检结果、遇到的设定冲突上报)。
 
+**inline 工单的上下文约定**:工单 `context_package: inline` 时,执行 Agent 以工单本体的 `instruction`/`inputs` 为完整上下文,不得因缺 `runs/<task_id>/context.md` 拒单,也不得自行读全库补料(缺料照旧走回执上报);各 Agent SOUL 输入表中的「Context Package / context.md」行在 inline 工单下即指工单本体,无需另有文件。
+
 ### 6.1 运行记录统一 schema(每个任务必备四件套)
 
-`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**:
+`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**(唯一豁免:inline 轻量包工单免 `context.md`,以工单本体的 `instruction`/`inputs` 充当上下文记录,前提是工单 `context_package: inline`;full 包工单缺 `context.md` 照旧不得关单):
 
 | 文件 | 写入方 | 内容要求 |
 |---|---|---|
-| `context.md` | context | Context Package(含 token 预算声明) |
+| `context.md` | context | Context Package(含 token 预算声明);**仅 full 包工单必备**(§1 原则 5),inline 工单免 |
 | `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
 | `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
-**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
+**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备(inline 工单按上文豁免 `context.md`);(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 
