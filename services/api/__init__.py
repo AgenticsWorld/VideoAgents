@@ -1,3 +1,3 @@
 """Public API service for VideoAgents clients."""
 
-__version__ = "1.0.9"
+__version__ = "1.0.10"

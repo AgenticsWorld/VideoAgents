@@ -4,6 +4,21 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-08-01
+
+### Added
+
+- Plugin flows can suspend the main DAG's audiovisual branch when they start (`main_dag_on_start.skip`): the derivative-novel plugin declares voiceprint/lighting design (p3-voice, p3-lighting), every p4–p11 stage node and gates g4–g10, and starting a novel marks them `skipped` (with a recorded reason) so scheduling doesn't wander into audiovisual nodes irrelevant to text-only work. The skip only applies when none of the listed nodes have started; a project with any node already dispatched or running is treated as active video production and left untouched. Skipped is suspension, not abandonment — nodes restore to pending whenever video production resumes, and gates treat skipped dependencies as satisfied.
+
+### Changed
+
+- Feishu setup page: the unbound hint is now a single sentence linking to the Feishu Open Platform to create a "Feishu agent application" — the new app template ships with bot capability, long-connection event subscription, callback subscription and message permissions, so the old four-step manual walkthrough was removed. All 11 language dictionaries updated.
+
+### Fixed
+
+- The Feishu SDK (`lark-oapi`) is now a core dependency and is bundled into the desktop runtime package — binding Feishu no longer fails with "Feishu SDK not installed" on standard installs and desktop builds.
+- Dispatched tasks with no explicit model and no agent-level override now inherit the top bar's global model choice (when its engine matches the task's engine). Previously such tasks silently ran on the engine CLI's default model — the top-bar selection never took effect — and the run panel badge showed only the engine name without a model.
+
 ## [1.0.9] - 2026-08-01
 
 ### Added
