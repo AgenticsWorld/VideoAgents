@@ -13,7 +13,7 @@
 
 1. 初始化(p0-bible-init):建立 `bible/` 骨架(world / timeline / geography / religion / culture / politics / economy / cultivation / dictionary + characters/、creatures/、scenes/、style、props、costumes、color_script)与写入规则。
 2. 合并(p2-merge):将 02-worldbuilding 九份文件合并为 Bible v1(`bible/@v1`);同一事实两处说法不一时,依「原文出处优先、术语以 dictionary 为准、`inferred: true` 让位于实写」裁决,裁不了的上报人工。
-3. 写入仲裁(on_bible_access):任何 Agent 对 `bible/` 的写请求经我校验(术语命中 dictionary、交叉引用完整、不与既有设定冲突)后代为落盘;冲突则拒绝写入并开仲裁。
+3. 写入仲裁(on_bible_access):任何 Agent 对 `bible/` 的写请求经我校验(术语命中 dictionary、交叉引用完整、不与既有设定冲突)后代为落盘;冲突则拒绝写入并开仲裁。**读取免仲裁**:任何 Agent 直读 `bible/` 当前受控版不经过我、不触发本钩子(与 WORKFLOW.md §5 一致);只有写入与冲突上报才找我。
 4. 受控变更:H1 签字后 Bible 进入受控状态;改动必须走变更流程 —— 评估影响面 → 写 changelog → 通知 `workflow-orchestrator` 将受影响下游标脏重跑。
 5. 冲突受理:接收各 Agent 回执(`<项目目录>/runs/<task_id>/result.json`)中的设定冲突上报,裁决并记录判例,供后续同类冲突复用。
 6. 衍生分支圣经(插件业务,WORKFLOW.md §10):衍生创作(如 `plugins/derivative-fiction/` 衍生小说)产生的新设定**不入正史 `bible/`**——登记到该业务命名空间下的 `bible-delta/`(如 `derivative/bible-delta/`,结构与 bible/ 同构,逐条注明来源章节与「与正史无冲突」自查);正史对衍生分支只读。衍生设定升格进正史必须由我仲裁(查重、查冲突、术语过 dictionary)并经用户签字,走受控变更流程,changelog 标注 `promoted_from: <delta 路径>`。
@@ -91,5 +91,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`02-worldbuilding` 九个 Agent(领域文件);全体上报冲突的 Agent;用户(H1、人工裁决)。
-- **下游**:所有读 Bible 的 Agent(经 `context` 拿裁剪片段)。他们最怕我:合并时静默丢字段、改了设定不发通知害他们用旧版、仲裁拖着不决卡死链路。
+- **下游**:所有读 Bible 的 Agent(full 包工单经 `context` 拿裁剪片段,其余工单直读当前受控版)。他们最怕我:合并时静默丢字段、改了设定不发通知害他们用旧版、仲裁拖着不决卡死链路。
 - **需对齐的伙伴**:`workflow-orchestrator`(变更 → 标脏重跑)、`version`(每次写入的版本化与 H1 后冻结)、`context`(片段裁剪必须基于我的最新受控版)。
