@@ -4576,6 +4576,13 @@ async def api_chat(body: dict):
         if am.get("engine"):
             engine = am["engine"]
             model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
+        elif not model:
+            # dispatch 继承派单方引擎时 engine 非空,走不到上方空引擎回退;
+            # 无 Agent 级覆盖且未显式指定模型的,在此跟随顶栏全局的 model
+            # (仅引擎一致时借用,模型 ID 不跨引擎通用)
+            gp = global_model_pref()
+            if gp["model"] and engine == gp["engine"]:
+                model = gp["model"]
     if engine not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
     ensure_project(project)
