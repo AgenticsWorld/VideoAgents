@@ -54,6 +54,10 @@ plugins/<plugin-name>/
    输入输出路径、示例工单、DoD、上下游——orchestrator/context 靠这些机械定位信息。
 2. **workflow DAG 与主流程同构**:phases/tasks/depends_on/for_each/validation(auto+rubric+qa)/gate,
    节点 id 用插件自有前缀(如 `nv0-`),不与主流程 `p0-`–`p11-`、`g0`–`g10` 冲突。
+   可选顶层 `main_dag_on_start.skip`:声明与本插件业务无关的主流程节点清单(支持 `p4-*` 前缀通配),
+   orchestrator 并入插件 DAG 时将其中**全部未开工**的节点置 `skipped` 挂起,免入无效分支、可随时恢复
+   (条件白名单与恢复语义见 WORKFLOW.md §10.3 第 6 条;derivative-fiction 已用,
+   fusion-fiction 直改正史喂回主流程故不适用)。
 3. **产物只写自己的命名空间**(`outputs_ns`);新设定写 `<outputs_ns>/bible-delta/`,
    严禁触碰正史 `bible/`(升格走 memory-bible 仲裁 + 用户签字)。
 4. **复用优先**:评分用既有 rubric 家族(writing_v1/creative_v1/analysis_v1…),

@@ -852,6 +852,20 @@ plugins/<plugin-name>/
 4. `requires.artifacts` 未满足时先补主流程对应阶段,不得硬跑。
 5. 插件若产生新设定,**不得写入正史 `bible/`**——写自己命名空间下的 `bible-delta/`,
    升格进正史必须走 memory-bible 仲裁 + 用户签字(见 memory-bible SOUL.md「衍生分支圣经」)。
+6. **主流程分支联动跳过(`main_dag_on_start.skip`,可选声明)**:插件流程 YAML 可声明顶层
+   `main_dag_on_start.skip`——与本插件业务无关的主流程节点清单(`p4-*` 为前缀通配,匹配含按集
+   展开后的一切以 `p4-` 开头的节点;闸门 `g4` 等为精确 id)。orchestrator 在把插件 DAG 节点并入
+   `runs/dag.json` 的**同一次改动**中执行,条件白名单:
+   - **仅当清单内主流程节点全部处于未开工状态(pending/template/blocked)** 才执行:命中节点
+     state 置 `skipped`,并写 `skip_reason`(注明插件名与「可恢复」);
+   - 清单内**存在任一已开工节点**(dispatched/running/failed/done/passed/passed_human_override/expanded)
+     即视为该分支业务进行中,**一个也不跳**,仅在汇报中说明;
+   - 用户在同一指令中明确要求同时推进被跳分支(如「小说和视频都做」)时,不执行跳过。
+   `skipped` 是挂起不是放弃:用户其后要求推进对应业务(如视频成片)时,orchestrator 把这些节点
+   恢复 `pending` 重新排产。闸门判定时 skipped 依赖视为已满足(如 g3 不因 p3-voice/p3-lighting
+   被跳过而阻塞签字)。每次改动照常 `dagcheck.py --strict`。首个使用方:derivative-fiction
+   (小说只依赖正史 bible/,跳过 p3-voice/p3-lighting 与 p4–p11 全部视听制作节点);
+   fusion-fiction 直改正史喂回视频主流程,**不适用**本机制。
 
 ### 10.4 安全红线
 

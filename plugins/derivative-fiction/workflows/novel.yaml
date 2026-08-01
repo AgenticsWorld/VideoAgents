@@ -14,6 +14,33 @@ defaults:
   gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
               qa_hold_requires_waiver, human_checks_executed_or_waived]
 
+# 并入主 DAG 时的联动处理(语义与执行纪律见 WORKFLOW.md §10.3 第 6 条)。
+# orchestrator 在把 nv*/gn* 节点并入 runs/dag.json 的同一次改动中执行:
+# 小说创作只依赖正史 bible/(文字设定),下列主流程节点均为视听制作专用,
+# 全部未开工(pending/template/blocked)时整组置 skipped(写 skip_reason 含插件名),
+# 免得后续排产误入与小说无关的分支;清单内存在任一已开工节点则视为视频制作进行中,一个也不跳。
+# skipped 是挂起不是放弃:用户其后要求制作视频时恢复 pending 重新排产。
+# g3(H1A)照常判定,skipped 依赖(p3-voice/p3-lighting)视为已满足。
+main_dag_on_start:
+  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g4–g10 为闸门节点精确 id
+    - p3-voice         # 声纹选角(TTS 配音用)
+    - p3-lighting      # 灯光设计(出图用)
+    - p4-*             # 美术风格
+    - p5-*             # 剧本改编(逐集剧本,视频专用;小说大纲走本流程 nv1-outline)
+    - p6-*             # 导演分镜
+    - p7-*             # 视觉生成
+    - p8-*             # 音频
+    - p9-*             # 剪辑合成
+    - p10-*            # 成片终审
+    - p11-*            # 视频发布
+    - g4               # H2-美术风格锁定
+    - g5               # H3-第1集剧本确认
+    - g6               # H3A-分镜确认
+    - g7               # H3B-视觉生成确认
+    - g8
+    - g9               # H4-首集成片确认
+    - g10              # H5-发布签字
+
 phases:
   - id: nv0
     name: 衍生立项
