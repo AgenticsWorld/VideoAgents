@@ -48,3 +48,11 @@ data/projects/<slug>/derivative/
 
 主流程 `bible/` 已产出并过 H1(正史冻结):`world.json`、`dictionary.json`、`characters/index.json`。
 无既有项目时也可先跑主流程 Phase 0–2 只建圣经,再用本插件创作。
+
+## 与主流程视听分支的联动(main_dag_on_start.skip)
+
+小说创作只依赖正史 bible/ 的文字设定。开工衍生小说时,orchestrator 会把主流程中**尚未开工**的
+视听制作专用节点(`p3-voice` 声纹、`p3-lighting` 灯光、`p4`–`p11` 全部阶段及其闸门 g4–g10)
+置为 `skipped` 挂起,避免排产误入与小说无关的分支;若其中任一节点已开工(视频制作进行中)则一个也不跳。
+挂起可恢复:之后要做视频时,orchestrator 把这些节点恢复 `pending` 重新排产。
+声明见 `workflows/novel.yaml` 顶层 `main_dag_on_start`,语义见 `agents/WORKFLOW.md` §10.3 第 6 条。
