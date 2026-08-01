@@ -1478,7 +1478,10 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求做某插件覆盖的业务时,先读该插件的 workflows/*.yaml(与 agents/workflow.yaml 同等地位的机器可读 DAG),
   把其节点并入 {proj_rel}/runs/dag.json 统一跟踪(插件 DAG 自带 id 前缀,不与主流程冲突;改完照常跑 dagcheck --strict)
 - 插件任务同样走工单格式 §6、四件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
-- 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑"""
+- 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑
+- 插件流程 YAML 若声明顶层 main_dag_on_start.skip(与该插件业务无关的主流程节点清单),并入节点的同一次改动中
+  按 WORKFLOW.md §10.3 第 6 条执行:清单节点全部未开工(pending/template/blocked)才整组置 skipped 并写 skip_reason,
+  存在任一已开工节点则一个不跳;闸门判定时 skipped 依赖视为已满足;用户其后要求推进被跳分支时恢复 pending 重新排产"""
     return p
 
 # ---------------- 运行 claude -p ----------------
@@ -4573,6 +4576,13 @@ async def api_chat(body: dict):
         if am.get("engine"):
             engine = am["engine"]
             model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
+        elif not model:
+            # dispatch 继承派单方引擎时 engine 非空,走不到上方空引擎回退;
+            # 无 Agent 级覆盖且未显式指定模型的,在此跟随顶栏全局的 model
+            # (仅引擎一致时借用,模型 ID 不跨引擎通用)
+            gp = global_model_pref()
+            if gp["model"] and engine == gp["engine"]:
+                model = gp["model"]
     if engine not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
     ensure_project(project)
