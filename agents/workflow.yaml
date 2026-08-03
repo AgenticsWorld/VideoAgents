@@ -236,7 +236,7 @@ phases:
                                nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
-          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等(像素下限硬限另论);reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
                                prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
                         qa: [11-qa/visual-qa] } }
       - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
@@ -245,7 +245,7 @@ phases:
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
-          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,
+          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
       - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video],
