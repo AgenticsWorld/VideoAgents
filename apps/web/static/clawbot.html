@@ -283,14 +283,15 @@ async function refreshFs(){
   show($('#fs-unbound'),!st.bound);
   show($('#fs-bound'),st.bound);
   if(!st.bound){
-    if(!st.sdk){$('#fs-bind-st').textContent=t('未安装飞书 SDK:需先在服务端执行 pip install lark-oapi');
+    if(!st.sdk){$('#fs-bind-st').textContent=st.sdk_error||t('飞书 SDK 加载失败');
       $('#fs-bind-st').className='status warn'}
     return;
   }
   fill('fs',st,'飞书已绑定','飞书用户 ');
   if(st.app_id)$('#fs-c-sub').textContent+='  ·  '+st.app_id;
   const r=$('#fs-c-ready');
-  if(st.ready){r.textContent=t('✓ 已互通,可双向收发消息');r.className='status ok'}
+  if(!st.sdk){r.textContent=st.sdk_error||t('飞书 SDK 加载失败');r.className='status err'}
+  else if(st.ready){r.textContent=t('✓ 已互通,可双向收发消息');r.className='status ok'}
   else{r.textContent=t('等待飞书端首条消息——请先在飞书里给机器人随便发一句话,之后系统即可向你推送');r.className='status warn'}
 }
 
