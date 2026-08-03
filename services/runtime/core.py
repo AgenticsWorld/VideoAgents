@@ -100,6 +100,10 @@ def cli_not_found_error(engine: str) -> str:
 # DEEPAGENTS_PY 环境变量 → 项目根 .venv-deepagents(deepagents 需 Python ≥3.11,
 # 主环境为 3.10 时用 make install-deepagents 建)→ 当前解释器(已装 [deepagents] extra 时)
 DEEPAGENTS_PY_DEFAULT = str(ROOT / ".venv-deepagents" / "bin" / "python")
+# deepagents 会话续接(Agent记忆):LangGraph SqliteSaver 检查点库,thread_id 即
+# 会话 id,与 claude --resume 同语义走 STATE["sessions"] 回存/恢复;续接一个已
+# 不存在的 thread 只得到空历史(等效新会话)不报错,无需失效回退重试
+DEEPAGENTS_SESSIONS_DB = RUNTIME_DIR / "deepagents_sessions.sqlite"
 
 
 def deepagents_python() -> str:
@@ -151,6 +155,11 @@ AGENT_MEMORY_DEFAULT = True
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
 CHAT_RESUME_LIMIT = 128 * 1024
+# deepagents 引擎单独调低:该保险丝量的是 chats/*.jsonl(只有用户/助手文本),
+# 而 deepagents 检查点历史含全部工具消息(DAG 查询输出、read_file 全文),
+# 真实会话体量被严重低估;且 OpenAI 兼容端点 resume=每轮重发全史,本地模型
+# 上下文窗口小、OpenRouter 渠道无厂商 prompt cache 兜底,须更早换新会话
+DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 # 总制片(仅 workflow-orchestrator 一个,不随 DISPATCHERS 扩员生效)单独调低:
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
@@ -1595,7 +1604,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                       else STATE["sessions"].get(session_key))
         # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
         if session_id:
-            resume_limit = (ORCHESTRATOR_RESUME_LIMIT if agent_id == ORCHESTRATOR_AGENT
+            resume_limit = (DEEPAGENTS_RESUME_LIMIT if engine == "deepagents"
+                            else ORCHESTRATOR_RESUME_LIMIT if agent_id == ORCHESTRATOR_AGENT
                             else CHAT_RESUME_LIMIT)
             try:
                 if chat_path(agent_id, run["project"]).stat().st_size > resume_limit:
@@ -1627,6 +1637,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                       "--model", use_model,
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
+            # 有状态 agent 启用检查点(会话续接);记忆开关关闭时 session_id 为
+            # None,runner 仍新开会话并回报 id,照常回存——与 claude/codex 语义
+            # 一致(关闭期间照存,重新开启后从最近一次会话继续)
+            if not is_stateless:
+                da_cmd += ["--checkpoint-db", str(DEEPAGENTS_SESSIONS_DB)]
 
         def codex_stdin(sid: str | None) -> bytes | None:
             if engine != "codex":
@@ -1637,7 +1652,7 @@ async def execute_run(run: dict, message: str, model: str | None):
         def make_cmd(sid: str | None) -> list[str]:
             """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
             if engine == "deepagents":
-                return da_cmd
+                return da_cmd + (["--thread-id", sid] if sid else [])
             if engine == "codex":
                 # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
                 base = [cli_executable, "exec", "--json", "--skip-git-repo-check",
@@ -1903,7 +1918,9 @@ def handle_kimi_event(run: dict, obj: dict):
 def handle_deepagents_event(run: dict, obj: dict):
     """解析 deepagents_runner 的 JSONL 事件。"""
     t = obj.get("type")
-    if t == "text":
+    if t == "session":
+        run["session_id"] = obj.get("session_id")
+    elif t == "text":
         txt = obj.get("text") or ""
         if txt:
             run["text"] = run.get("text", "") + txt
