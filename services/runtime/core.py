@@ -2140,7 +2140,7 @@ def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
         if r.returncode != 0 or not out.is_file():
             raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:]
                                or f"genmedia exit {r.returncode}")
-        ref = str(out.relative_to(base))
+        ref = out.relative_to(base).as_posix()
         n = _grpref_append(pf, ref, "从手绘生成")
         job.update(status="done", ref=ref, refs=n,   # 直出 artifacts 路由(此链路不经 _artifact_urls 改写)
                    url=f"/api/v1/projects/{base.name}/artifacts/{ref}?v={int(out.stat().st_mtime)}")
@@ -2354,7 +2354,7 @@ async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filena
     while p.exists():
         p, i = d / f"{stem}_{i}{ext}", i + 1
     p.write_bytes(data)
-    ref = str(p.relative_to(base))
+    ref = p.relative_to(base).as_posix()
     try:
         n = _grpref_append(pf, ref, "从本地上传")
     except ServiceError:
@@ -2466,8 +2466,8 @@ def _asset_urls(base: Path, adir: Path, exts: tuple) -> list[dict]:
     files = sorted(f for f in adir.rglob("*")
                    if f.is_file() and f.suffix.lower() in exts)
     # URL 带 mtime 版本参数,文件被覆写后浏览器不会命中旧缓存
-    return [{"name": str(f.relative_to(adir)),
-             "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+    return [{"name": f.relative_to(adir).as_posix(),
+             "url": (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
                      f"?v={int(f.stat().st_mtime)}")} for f in files]
 
 
@@ -2476,7 +2476,7 @@ def _audio_url(base: Path, f: Path) -> str | None:
     try:
         if not f.is_file() or f.suffix.lower() not in AUDIO_EXTS:
             return None
-        return (f"/projects/{base.name}/{f.relative_to(base)}"
+        return (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
                 f"?v={int(f.stat().st_mtime)}")
     except (OSError, ValueError):
         return None
@@ -2998,11 +2998,11 @@ def _ep_publish_info(base: Path, ep: str):
                     continue
                 st = f.stat()
                 ext = f.suffix.lower()
-                files.append({"name": str(f.relative_to(pkg)),
+                files.append({"name": f.relative_to(pkg).as_posix(),
                               "size_mb": round(st.st_size / 1048576, 1),
                               "kind": ("video" if ext in VIDEO_EXTS
                                        else "image" if ext in IMG_EXTS else "file"),
-                              "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+                              "url": (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
                                       f"?v={int(st.st_mtime)}")})
         info["platforms"].append({
             "platform": d.name,
@@ -3053,9 +3053,9 @@ def _preview_videos(project: str, ep: str):
             if st.st_ino in seen_inodes:   # final.mp4 可能是 master.mp4 的硬链接,去重
                 continue
             seen_inodes.add(st.st_ino)
-            out.append({"name": str(f.relative_to(edir)),
+            out.append({"name": f.relative_to(edir).as_posix(),
                         "size_mb": round(st.st_size / 1048576, 1),
-                        "url": (f"/projects/{base.name}/{f.relative_to(base)}"
+                        "url": (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
                                 f"?v={int(st.st_mtime)}")})
         return out
 
@@ -3477,7 +3477,7 @@ async def api_refs_list(project: str = "demo"):
     notes = _load_ref_notes(refs)
 
     def entry(f: Path) -> dict:
-        rel = str(f.relative_to(refs))
+        rel = f.relative_to(refs).as_posix()
         ext = f.suffix.lower()
         st = f.stat()
         v = notes.get(rel)
@@ -3525,7 +3525,7 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     while p.exists():
         p, i = d / f"{stem}_{i}{ext}", i + 1
     p.write_bytes(data)
-    rel = str(p.relative_to(base / "refs"))
+    rel = p.relative_to(base / "refs").as_posix()
     return {"ok": True, "project": base.name, "path": rel,
             "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
@@ -4248,9 +4248,9 @@ def _clone_worker(project: str, gitdir: str, commit: str, task_id: str,
         if r.returncode:
             raise RuntimeError(f"vc.py install 失败: {(r.stderr or r.stdout)[-500:]}")
 
-        files = sorted(str(f.relative_to(tmp)) for f in tmp.rglob("*")
+        files = sorted(f.relative_to(tmp).as_posix() for f in tmp.rglob("*")
                        if f.is_file()
-                       and not str(f.relative_to(tmp)).startswith(".version/"))
+                       and not f.relative_to(tmp).as_posix().startswith(".version/"))
         total = len(files)
         job["step"] = "登记 v1 基线"
         job["progress"] = [0, total]
