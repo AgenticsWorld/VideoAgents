@@ -47,6 +47,41 @@
 
 version: 1
 plugin: audio-to-video
+
+# 主流程分支联动跳过(WORKFLOW.md §10 规则 6)。本插件是**自起流程**:输入是音频不是小说,
+# 主 DAG 从解析到发布几乎整条不适用——世界圣经由 av1-era 轻量考据替代、剧本由 av2-script
+# 替代、分镜由 av2-timeline 替代、音频阶段更是绝不能跑(母带即声轨)。
+# 全部未开工(pending/template/blocked)时整组置 skipped(写 skip_reason 含插件名);
+# 清单内存在任一已开工节点则视为视频制作进行中,一个也不跳。
+# skipped 是挂起不是放弃:用户其后要求按主流程做视频时恢复 pending 重新排产。
+# ⚠️ 刻意不含 p0-init 与 g0:项目创建时 orchestrator 已跑过项目初始化(状态 done),
+#    把已开工节点列进清单会触发「一个也不跳」的白名单条件,导致整组跳过失效。
+main_dag_on_start:
+  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g1–g10 为闸门节点精确 id
+    - p0-scan          # 小说分章扫描——本流程输入是音频
+    - p0-parse-*       # 小说分章解析
+    - p1-*             # 剧情理解(结构/事件/时间线)
+    - p2-*             # 世界圣经九维——由 av1-era 轻量时代考据替代
+    - p3-*             # 角色与资产——由 av1-era + av1-charconcept 在本流程内完成
+    - p4-*             # 美术风格——由 av1-style/color/aspect 在本流程内完成
+    - p5-*             # 剧本改编——由 av2-script 画面编剧替代
+    - p6-*             # 导演分镜——由 av2-timeline 整秒切分替代
+    - p7-*             # 视觉生成——由 av3-* 完成(--generate-audio off)
+    - p8-*             # ★音频——母带即成片声轨,绝不跑 TTS 旁白与混音
+    - p9-*             # 剪辑合成——由 av4-edit 完成
+    - p10-*            # 成片终审——由 av5-* 完成
+    - p11-*            # 视频发布——按需另点单
+    - g1
+    - g2               # H1-世界圣经确认
+    - g3               # H1A-角色与资产确认
+    - g4               # H2-美术风格锁定
+    - g5               # H3-第1集剧本确认
+    - g6               # H3A-分镜确认
+    - g7               # H3B-视觉生成确认
+    - g8
+    - g9               # H4-首集成片确认
+    - g10              # H5-发布签字
+
 defaults:
   eval_threshold: 80
   max_retries: 3
