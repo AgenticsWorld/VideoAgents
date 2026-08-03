@@ -1724,7 +1724,7 @@ $('#btn-watchdog').onclick=async()=>{
 function renderRuns(){
   const box=$('#runs');
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
-    .sort((a,b)=>b.created-a.created).slice(0,50);
+    .sort((a,b)=>b.created-a.created).slice(0,100);
   if(!runs.length){box.innerHTML='<div class="empty">暂无运行</div>';return}
   box.innerHTML='';
   runs.forEach(r=>{
