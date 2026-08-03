@@ -417,7 +417,7 @@ window.I18N_DICT = {
 "搜索场景…": "Buscar cenários…",
 "搜索角色…": "Buscar personagens…",
 "搜索道具…": "Buscar adereços…",
-"Agentics：VideoAgents": "Agentics: VideoAgents",
+"数码体: VideoAgents": "Agentics: VideoAgents",
 "文件托管": "Hospedagem de arquivos",
 "文件托管 — Agentics：VideoAgents": "Hospedagem de arquivos — Agentics: VideoAgents",
 "文本": "Texto",

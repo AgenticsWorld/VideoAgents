@@ -417,7 +417,7 @@ window.I18N_DICT = {
 "搜索场景…": "Cari scene…",
 "搜索角色…": "Cari karakter…",
 "搜索道具…": "Cari prop…",
-"Agentics：VideoAgents": "Agentics: VideoAgents",
+"数码体: VideoAgents": "Agentics: VideoAgents",
 "文件托管": "Hosting File",
 "文件托管 — Agentics：VideoAgents": "Hosting File — Agentics: VideoAgents",
 "文本": "Teks",
