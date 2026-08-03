@@ -4,6 +4,55 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-08-01
+
+### Added
+
+- Plugin flows can suspend the main DAG's audiovisual branch when they start (`main_dag_on_start.skip`): the derivative-novel plugin declares voiceprint/lighting design (p3-voice, p3-lighting), every p4–p11 stage node and gates g4–g10, and starting a novel marks them `skipped` (with a recorded reason) so scheduling doesn't wander into audiovisual nodes irrelevant to text-only work. The skip only applies when none of the listed nodes have started; a project with any node already dispatched or running is treated as active video production and left untouched. Skipped is suspension, not abandonment — nodes restore to pending whenever video production resumes, and gates treat skipped dependencies as satisfied.
+
+### Changed
+
+- Feishu setup page: the unbound hint is now a single sentence linking to the Feishu Open Platform to create a "Feishu agent application" — the new app template ships with bot capability, long-connection event subscription, callback subscription and message permissions, so the old four-step manual walkthrough was removed. All 11 language dictionaries updated.
+
+### Fixed
+
+- The Feishu SDK (`lark-oapi`) is now a core dependency and is bundled into the desktop runtime package — binding Feishu no longer fails with "Feishu SDK not installed" on standard installs and desktop builds.
+- Dispatched tasks with no explicit model and no agent-level override now inherit the top bar's global model choice (when its engine matches the task's engine). Previously such tasks silently ran on the engine CLI's default model — the top-bar selection never took effect — and the run panel badge showed only the engine name without a model.
+
+## [1.0.9] - 2026-08-01
+
+### Added
+
+- Phone messaging channels: the Advanced menu's "ClawBot WeChat" page became "Phone Messages" with three channels — ClawBot WeChat (flow unchanged), Feishu/Lark and WhatsApp. Feishu binds with app credentials and receives messages over the official SDK's WebSocket long connection (no public callback URL needed); WhatsApp connects your own account as a linked device (Baileys multi-device), using self-chat as the command channel — messages from other people are never read or forwarded. Inbound texts go to the chief producer; its replies and system messages are pushed back to every bound channel, and user commands arriving from one channel are mirrored to the others with a source label so all endpoints see the same conversation.
+- Feishu interactive sign-off cards: confirmations and human-gate sign-offs raised by agents (`dispatch.py --confirm` / `--sign`) are now also pushed to the bound Feishu account as interactive cards with buttons. Tapping a button answers the same approval as the web popup (either endpoint wins, the other closes); cards are finalized after answering — buttons removed and replaced by the chosen answer — and time-outs / stale approvals render as expired cards. Requires enabling the long-connection callback subscription in the Feishu developer console (setup page updated, all 11 language dictionaries +1 entry).
+
+### Changed
+
+- Agent workflow spec: Context Packages are now two-tier. The context agent assembles a full package only for three kinds of work orders — retries (`attempt > 1`), tasks that need Bible slicing, and tasks that need defect-history aggregation; every other order inlines its context (input paths + hard constraints) in the work order itself and skips the context agent entirely. Previously the spec mandated a context-agent call before every dispatch (~4 minutes per call measured; 395 calls for 310 work orders on one project). The four-file run-record check exempts `context.md` for inline orders, and Bible reads no longer go through memory-bible arbitration (writes and conflict reports only).
+
+## [1.0.8] - 2026-07-31
+
+### Added
+
+- "Smart Kimi" model policy (`smart_kimi`): routes each agent to a Kimi model by task complexity — creative-core agents to K3, the rest to K2.7 Coding.
+- Hand-drawn reference images, revamped: phone-submitted sketches with annotations now generate a finished image through the configured image engine before entering the group's reference images, instead of feeding raw line art directly into refs and the prompt; the entry point moved into the "Add reference image" dialog.
+- "Add reference image" dialog: local upload (magic-number validated png/jpg/webp/gif, ASCII-sanitized filenames) alongside asset-library selection.
+- Reference image management: the dialog shows the group's current refs as a thumbnail strip with [Image N] badges and click-to-zoom; user-added images can be removed with a confirmation prompt, and group cards show the refs too.
+- Version management page: "Copy project" section — duplicate the whole current project directory as a new project with name validation.
+- Workflow preview: "✏️ Edit" button next to the critical path — prefills a chief-producer message for adjusting the entire workflow (`runs/dag.json`).
+- Concept art archiving convention: superseded candidates, intermediate attempts and test images move to a `candidates/` subdirectory; the main directory keeps only the finalized latest versions.
+- Production packages are published to Aliyun OSS.
+
+### Changed
+
+- Video prompt spec aligned with the official Seedance 2.0 prompt guide: per-character subject definitions up front with `[Image N]` anchors (bare names afterwards), one camera move per shot (new machine check `one_move_per_shot`), the full official twin-prevention constraint, `[Audio N]` voice anchors with mandatory timbre phrases, `<>`-wrapped sound cues, quantified action-writing rules, and reference-image ordering guidance (character images first, single-view preferred).
+- `line-editor` became a stateless fan-out station (one order per chapter, concurrent); `prose-writer` stays stateful and serial.
+- Storyboard preview: removed the "(no keyframe)" placeholder — the media column is simply omitted when a group has no keyframes.
+
+### Fixed
+
+- Phone QR access to the hand-drawn canvas: LAN IP detection no longer returns proxy virtual-NIC addresses (Surge/Clash TUN fake-IP range filtered, private-subnet probing first, `VIDEOAGENTS_LAN_IP` override); a new LAN sidecar listener serves only the draw page, its token-gated session API and static assets while the console stays loopback-only; the session URL under the QR code is now a clickable explicit `http://` link so browsers don't auto-upgrade a hand-typed address to unreachable HTTPS.
+
 ## [1.0.7] - 2026-07-29
 
 ### Added

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, wechat
+from services.runtime import core, feishu, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -51,12 +51,14 @@ async def lifespan(_: FastAPI):
         install_runtime_store(STORE)
         _bridge_installed = True
     watchdog = asyncio.create_task(core.idle_watchdog())
-    wechat_relay = asyncio.create_task(wechat.relay_loop())
+    relays = [asyncio.create_task(m.relay_loop())
+              for m in (wechat, feishu, whatsapp)]
     try:
         yield
     finally:
         watchdog.cancel()
-        wechat_relay.cancel()
+        for task in relays:
+            task.cancel()
 
 
 app = FastAPI(
@@ -98,6 +100,16 @@ async def create_project(body: dict[str, Any]) -> dict[str, Any]:
 @api.post("/projects/{project}", tags=["projects"])
 async def delete_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_delete(body)
+
+
+@api.post("/projects/{project}/copy", tags=["projects"])
+async def copy_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_projects_copy(body)
+
+
+@api.get("/projects/{project}/copy", tags=["projects"])
+async def copy_project_status(project: str) -> dict[str, Any]:
+    return await core.api_projects_copy_status(project)
 
 
 @api.get("/projects/{project}/brief", tags=["projects"])
@@ -438,6 +450,11 @@ async def submit_draw(token: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_draw_submit(token, body)
 
 
+@api.get("/storyboard/sketchgen", tags=["storyboard"])
+async def sketchgen_status(project: str = "", ep: str = "", grp: str = "") -> dict[str, Any]:
+    return await core.api_sketchgen_status(project, ep, grp)
+
+
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
@@ -446,6 +463,23 @@ async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
 @api.post("/storyboard/refs", tags=["storyboard"])
 async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpref_add(body)
+
+
+@api.post("/storyboard/refs/delete", tags=["storyboard"])
+async def storyboard_ref_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpref_delete(body)
+
+
+@api.post("/storyboard/refs/upload", tags=["storyboard"])
+async def storyboard_ref_upload(
+    request: Request,
+    project: str = "",
+    ep: str = "",
+    grp: str = "",
+    filename: str = "",
+) -> dict[str, Any]:
+    data = await request.body()
+    return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])
@@ -476,6 +510,36 @@ async def wechat_bind_poll(qrcode: str = "") -> dict[str, Any]:
 @api.post("/wechat/unbind", tags=["wechat"])
 async def wechat_unbind(body: dict[str, Any]) -> dict[str, Any]:
     return await wechat.api_wechat_unbind()
+
+
+@api.get("/feishu/status", tags=["feishu"])
+async def feishu_status() -> dict[str, Any]:
+    return await feishu.api_feishu_status()
+
+
+@api.post("/feishu/bind", tags=["feishu"])
+async def feishu_bind(body: dict[str, Any]) -> dict[str, Any]:
+    return await feishu.api_feishu_bind(body)
+
+
+@api.post("/feishu/unbind", tags=["feishu"])
+async def feishu_unbind(body: dict[str, Any]) -> dict[str, Any]:
+    return await feishu.api_feishu_unbind()
+
+
+@api.get("/whatsapp/status", tags=["whatsapp"])
+async def whatsapp_status() -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_status()
+
+
+@api.post("/whatsapp/bind", tags=["whatsapp"])
+async def whatsapp_bind(body: dict[str, Any]) -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_bind()
+
+
+@api.post("/whatsapp/unbind", tags=["whatsapp"])
+async def whatsapp_unbind(body: dict[str, Any]) -> dict[str, Any]:
+    return await whatsapp.api_whatsapp_unbind()
 
 
 @api.get("/events", tags=["events"])

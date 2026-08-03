@@ -152,6 +152,9 @@ jobs:
     needs: [prepare, python, desktop]
     environment: production
     runs-on: ubuntu-latest
+    env:
+      OSS_ENDPOINT: oss-cn-shanghai.aliyuncs.com
+      OSS_PACKAGES_BUCKET: shumati-pro
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -206,7 +209,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
-      - name: Publish production packages
+      - name: Publish production packages to S3
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
@@ -240,3 +243,37 @@ jobs:
             s3://agentics-prod/packages/video-agents/metadata.json \
             --content-type application/json \
             --cache-control "no-cache, no-store, must-revalidate"
+      - name: Setup ossutil
+        uses: yizhoumo/setup-ossutil@v2
+        with:
+          endpoint: ${{ env.OSS_ENDPOINT }}
+          access-key-id: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+      - name: Publish production packages to OSS
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          for package in runtime-artifacts/python-runtime-*/*.zip; do
+            ossutil cp -f "$package" \
+              "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/python/$(basename "$package")" \
+              --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
+          done
+
+          mac_package="desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip"
+          win_package="desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip"
+          ossutil cp -f "$mac_package" \
+            "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/mac/VideoAgents-${RELEASE_VERSION}.zip" \
+            --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
+          ossutil cp -f "$win_package" \
+            "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/win/VideoAgents-${RELEASE_VERSION}.zip" \
+            --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
+          ossutil cp -f "$mac_package" \
+            "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/mac/VideoAgents.zip" \
+            --meta="Content-Type:application/zip#Cache-Control:no-cache, no-store, must-revalidate"
+          ossutil cp -f "$win_package" \
+            "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/win/VideoAgents.zip" \
+            --meta="Content-Type:application/zip#Cache-Control:no-cache, no-store, must-revalidate"
+          ossutil cp -f publish/metadata.json \
+            "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/metadata.json" \
+            --meta="Content-Type:application/json#Cache-Control:no-cache, no-store, must-revalidate"

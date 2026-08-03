@@ -13,7 +13,7 @@
 2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 3 次,仍不过升级人工。
-5. **上下文按需组装**:Agent 不读全库。`context` Agent 为每个工单裁剪出 Context Package(只含该任务需要的 Bible 片段 + 上游产物)。
+5. **上下文按需组装**:Agent 不读全库。Context Package 分两级(2026-08-01,教训:每单必调 context Agent 一次约 4 分钟,shixibook 310 张工单调了 395 次):**full 包**由 `context` Agent 裁剪(该任务需要的 Bible 片段 + 上游产物 + 缺陷历史),仅限三类工单——① `attempt > 1` 重做单(必须附上次失败原因与 evaluation 逐条意见);② 需裁剪 Bible 片段的工单(涉及角色/场景/风格/世界观设定锚点的创作与生成类任务);③ 需聚合缺陷历史的工单(qa/defects 存在与该产物/该 Agent 相关的 open 缺陷)。其余工单走 **inline 轻量包**:orchestrator 派单时把输入文件路径清单 + 硬约束直接写进工单 `instruction`/`inputs`,`context_package: inline`,不调用 context Agent。
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
 8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
@@ -285,6 +285,8 @@ refs/
 | color-script | 全片色彩曲线(每集/每幕的主色调与情绪);色调基准优先取自 refs/style/ | story_graph、episode_plan、refs/style/ | `bible/color_script.json` | 评分 creative_v1;QA:art-director 会签 |
 | aspect-ratio | 决定画幅与分辨率矩阵(横/竖/多平台);**目标平台清单取自「📤 输出设置」发布平台多选(提示词注入,非口述猜测),母版画幅 = 输出设置主画幅(aspect_preset),平台矩阵须覆盖所选平台的全部画幅,与母版不同画幅的平台标裁切/缩放规则** | 「📤 输出设置」发布平台与主画幅 | `bible/aspect_ratio.json` | 机检:所选发布平台 100% 有条目、母版可派生各平台规格 |
 
+> **概念图目录卫生(candidates 留档,2026-07-30)**:`assets/concepts/{characters,scenes,props}/<id>/` 主目录仅保留**最终采用的最新版本**图与 prompts.json/selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档,不删除以备追溯。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计现货比对、§7E 修正取锚),弃用图混在主目录会被误取注入;`candidates/` 不计入 §6A 现货。三个概念 Agent(character-concept/environment-concept/prop,含 §6A 回派补图)出图挑选后即归位,重 roll 替换定稿时旧图先移入 `candidates/` 再落新图。
+
 **G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考图】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
 
 ### Phase 5 — 剧本改编(与 Phase 4 并行,依赖 G1/G2/G3)
@@ -316,7 +318,7 @@ refs/
 
 > **§6A 概念图覆盖审计(concept coverage audit,每集,G6 前强制,机检 `concept_coverage_ok`)**:Phase 4 只为 S/A 角色与关键场景出概念图,而本集**真正出场的实体以 `shot_list` 为准**——B 级角色、次要地点、本集新出场的剧情道具,其概念图缺口若漏到 p7-image,模型只能凭 appearance/props 文字脑补形象,跨组一致性从源头失守(出图经验见 char-concept / env-concept 笔记)。故 shot-planning 定稿后、H3A 签字前,art-director 执行一次覆盖审计:
 > ① **枚举需求**:从 `shot_list` 汇总本集全部出场实体(角色 `CHAR-*`、场景 `SCN-*`、剧情道具)及每个实体所需视图——角色=三视图 + 剧情所需的关键表情/服装版本;场景=关键概念图 + 按 `environment.json` 的昼夜/季节/光照变体;剧情道具=样式图 + 比例锚图 `scale_ref_01.png`(§Phase 4 prop);
-> ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);
+> ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);各 `<id>/candidates/` 子目录为弃用候选留档(§Phase 4 目录卫生),**不计入现货**;
 > ③ **补齐派发**:缺口回派对应概念 Agent——角色缺→character-concept、场景缺→environment-concept、道具缺→prop(道具须一并补齐 `scale` 三字段与比例锚图);补出的概念图经 visual-qa / character-consistency-qa 常规打分入库,与 Phase 4 同标准;
 > ④ **产出清单**:`directing/epNN/concept_coverage.json`(每实体:所需视图、现货路径、缺口状态 `covered | dispatched | filled`),进「分镜设定」预览页供 H3A 审看。
 > **机检 `concept_coverage_ok`**:本集 shot_list 出场实体 × 所需视图 100% 有现货(状态全 `covered`/`filled`)方可发起 H3A 签字;**未过不得派发本集任何 p7-image / p7-video 工单**(与 §7D ① 估时级机检并列为 G6 前置硬闸)。新出场 S/A 主角若 Phase 4 遗漏,其新概念图须在 H3A 预览页**显著标注供用户确认**(等同 H2 风格锁定的每集延伸)。
@@ -369,7 +371,7 @@ refs/
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| prompt(每组) | 组级多镜头视频 prompt(官方 Shot 1:/Shot 2: 结构,**开头内嵌风格锚点 `Overall visual style: ...`、结尾并入 `Global constraints:` 全局负面句**——anchors/negative 字段不会进入生成请求;**正文散文语言跟随用户界面语言、不必英文(2026-07-29)——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`)、上游逐字拼入英文片段、固定英文约束句、台词不受此影响,细则见 prompt SOUL.md**;**凡 refs 含角色图的组(含单人组)正文必写 Identity lock 句(exactly N... must match one of the reference images; no extra or duplicate person),Global constraints 必含 no duplicate or twin characters——三视图参考天然带复制诱因,防重复句只留 negative=没写(2026-07-23,前科 tothemoon ep01 grp026 双伊娃)**;每镜按运镜/主体动作/空间位置/音频四要素,`[Image N]`/`@` 绑定素材,`{}` 对白;音频要素译自 sfx/ambience cue,禁 `（）` 与音乐描述;**剧情道具首现 Shot 段逐字拼入 props.json 的 `scale.prompt_token`,禁写数值尺寸,Global constraints 并入尺度恒定句**;**按组 audio_plan 注入音频形态:narration_over/ambient_only 组禁 `{}` 台词、Global constraints 必含无对白约束句,narration_over 组开头声明该段配后期旁白、人物不开口,§7D ③**;**光照按组时段锚确定性注入(2026-07-20):逐字拼入组 lighting_scheme_id 所指 scheme 的 prompt_fragment_en,严禁自写昼夜光照散文;grpNNN.json 落盘带 time_of_day/lighting_scheme_id**;**空间站位按镜确定性注入(2026-07-23):每镜空间位置句逐字拼入该镜 blocking.json 各入画角色的 space_fragment_en,严禁自写站位散文——门内外/屏侧只有逐字复用才跨镜稳定(前科 ep01 grp007→grp008 门外角色瞬移入画);blocking 缺片段回派补写,不得代写**;**对白组 audio_refs=组内每个说话角色的 voiceprint 样本(≤3 段,按年龄形态选 variant 版),prompt 逐角色写 `<角色>@Audio N` 绑定句——样本仅锚嗓音特点、非台词朗读,§8A;发现说话人 >3 =上游切组违规,退回 shot-planning 拆组(speakers_le_3),不得自行取舍挂锚**);锚点图 image_prompt 仅按锚点缺口出(reuse-first:概念库能覆盖的锚不出 image_prompt,开场锚帧默认不出,2026-07-24) | 组内全部设计文件 + Bible 片段 + continuity 状态表 + audio_cues/ambience_cues + casting.json/voiceprint 样本库 | `assets/prompts/epNN/grpNNN.json`(组)+ `<shot>.json`(锚点图) | 机检:必含要素清单(风格锚点/角色锚点/画幅)全命中且 video_prompt 以 `Overall visual style:` 开头;<1000 词;素材引用与 refs 清单一致;禁写色号/元信息;道具尺度锚命中(prop_scale_token_ok);**对白组 audioref_bound:每个说话角色有 `@Audio N` 绑定且 audio_refs[N-1] 样本文件名含该角色 CHAR id(年龄形态与本组时间线一致)**;**audioref_total_le_15s:audio_refs 实测总时长 ≤15.2s(方舟硬限,超限任务创建即 400;genmedia 提交前同样硬校验)**;**组内出场剧情道具参考图列入 refs 清单、首现组必含比例锚图 scale_ref_01.png(prop_ref_listed——只有文字 token 没有图,道具样式全靠模型脑补)**;**`@Image N` 绑定命中(imageref_bound,脚本全批执行,§7A 编号铁律):每个 `<角色>@Image N` 的 refs[N-1] 含该角色 CHAR id、continues from 的 [Image N] 指向尾帧/锚帧——1-based,错位=说话人互换(前科 ep01 grp017、ep05 十组)**;**非对白组无 `{}` 且含无对白约束句(nonspeech_group_prompt_ok,§7D ③)**;**lighting_scheme_bound:time_of_day/lighting_scheme_id 与 shot_list 一致、scheme 的 prompt_fragment_en 逐字命中、无与时段昼夜相悖的光照词(2026-07-20;video-generation 开跑前复核,缺失/矛盾禁开跑)**;**blocking_bound:组内每镜每入画角色的 blocking space_fragment_en 在对应 Shot 段逐字命中(忽略大小写/连续空白),脚本 `code/blocking_bound_check.py` 全批执行,禁人眼抽查;video-generation 开跑前单组复核,未命中禁开跑(2026-07-23)** |
+| prompt(每组) | 组级多镜头视频 prompt(官方 Shot 1:/Shot 2: 结构,**开头内嵌风格锚点 `Overall visual style: ...`、结尾并入 `Global constraints:` 全局负面句**——anchors/negative 字段不会进入生成请求;**正文散文语言跟随用户界面语言、不必英文(2026-07-29)——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`)、上游逐字拼入英文片段、固定英文约束句、台词不受此影响,细则见 prompt SOUL.md**;**凡 refs 含角色图的组(含单人组)正文必写 Identity lock 句(exactly N... must match one of the reference images; no extra or duplicate person),Global constraints 必含 no duplicate or twin characters(2026-07-31 起扩展为官方双胞胎约束完整版长句,见 prompt SOUL.md)——三视图参考天然带复制诱因,防重复句只留 negative=没写(2026-07-23,前科 tothemoon ep01 grp026 双伊娃)**;每镜按运镜/主体动作/空间位置/音频四要素,**一镜一运镜:运镜句只写 camera.json 的单一运镜术语,禁复合/矛盾运镜(2026-07-31 官方)**;**主体定义前置:`Shot 1:` 前逐角色写 `<角色>@Image N:<性别词+2–3 稳定特征>` 定义句,Shot 段内只用裸角色名、禁复述外观串;refs 建议 4–5 张重要性前置(角色图最前),角色图优先单人单视角、忌三视图整图(2026-07-31 官方)**;`[Image N]`/`@` 绑定素材,`{}` 对白;音频要素译自 sfx/ambience cue,**cue 用 `<>` 包裹(官方音效符号)**,禁 `（）` 与音乐描述;**剧情道具首现 Shot 段逐字拼入 props.json 的 `scale.prompt_token`,禁写数值尺寸,Global constraints 并入尺度恒定句**;**按组 audio_plan 注入音频形态:narration_over/ambient_only 组禁 `{}` 台词、Global constraints 必含无对白约束句,narration_over 组开头声明该段配后期旁白、人物不开口,§7D ③**;**光照按组时段锚确定性注入(2026-07-20):逐字拼入组 lighting_scheme_id 所指 scheme 的 prompt_fragment_en,严禁自写昼夜光照散文;grpNNN.json 落盘带 time_of_day/lighting_scheme_id**;**空间站位按镜确定性注入(2026-07-23):每镜空间位置句逐字拼入该镜 blocking.json 各入画角色的 space_fragment_en,严禁自写站位散文——门内外/屏侧只有逐字复用才跨镜稳定(前科 ep01 grp007→grp008 门外角色瞬移入画);blocking 缺片段回派补写,不得代写**;**对白组 audio_refs=组内每个说话角色的 voiceprint 样本(≤3 段,按年龄形态选 variant 版),prompt 逐角色写 `<角色>@Audio N` 绑定句(音频锚点写 `[Audio N]`,绑定句含 voice.json 音色特征短语,2026-07-31)——样本仅锚嗓音特点、非台词朗读,§8A;发现说话人 >3 =上游切组违规,退回 shot-planning 拆组(speakers_le_3),不得自行取舍挂锚**);锚点图 image_prompt 仅按锚点缺口出(reuse-first:概念库能覆盖的锚不出 image_prompt,开场锚帧默认不出,2026-07-24) | 组内全部设计文件 + Bible 片段 + continuity 状态表 + audio_cues/ambience_cues + casting.json/voiceprint 样本库 | `assets/prompts/epNN/grpNNN.json`(组)+ `<shot>.json`(锚点图) | 机检:必含要素清单(风格锚点/角色锚点/画幅)全命中且 video_prompt 以 `Overall visual style:` 开头;<1000 词;素材引用与 refs 清单一致;禁写色号/元信息;道具尺度锚命中(prop_scale_token_ok);**对白组 audioref_bound:每个说话角色有 `@Audio N` 绑定且 audio_refs[N-1] 样本文件名含该角色 CHAR id(年龄形态与本组时间线一致)**;**audioref_total_le_15s:audio_refs 实测总时长 ≤15.2s(方舟硬限,超限任务创建即 400;genmedia 提交前同样硬校验)**;**组内出场剧情道具参考图列入 refs 清单、首现组必含比例锚图 scale_ref_01.png(prop_ref_listed——只有文字 token 没有图,道具样式全靠模型脑补)**;**`@Image N` 绑定命中(imageref_bound,脚本全批执行,§7A 编号铁律):每个 `<角色>@Image N` 的 refs[N-1] 含该角色 CHAR id、continues from 的 [Image N] 指向尾帧/锚帧——1-based,错位=说话人互换(前科 ep01 grp017、ep05 十组)**;**非对白组无 `{}` 且含无对白约束句(nonspeech_group_prompt_ok,§7D ③)**;**lighting_scheme_bound:time_of_day/lighting_scheme_id 与 shot_list 一致、scheme 的 prompt_fragment_en 逐字命中、无与时段昼夜相悖的光照词(2026-07-20;video-generation 开跑前复核,缺失/矛盾禁开跑)**;**blocking_bound:组内每镜每入画角色的 blocking space_fragment_en 在对应 Shot 段逐字命中(忽略大小写/连续空白),脚本 `code/blocking_bound_check.py` 全批执行,禁人眼抽查;video-generation 开跑前单组复核,未命中禁开跑(2026-07-23)** |
 | image-generation(每组) | 组参考锚点包:**reuse-first(2026-07-24)——一律优先复用角色三视图/场景概念图/道具比例锚图,概念库全覆盖即零新生成(meta 记 `generation_channel: reuse-only`);组开场合成锚帧(anchor_opening)默认禁出**——组生成走多参考图模式且与首帧互斥,合成开场帧进不了视频请求(实证:xiaohongmao ep01 28 组落盘 86 张 anchor_opening,进入 Seedance 请求 0 张,纯沉没成本;tothemoon ep01 全程 reuse-only 质量不降),仅 orchestrator 批准的拆段/首帧兜底(§7A 首帧红线)例外;补生成仅限概念库缺口(特定服装状态/表情/道具细节特写、手绘分镜渲染),新生成锚 meta 必记 `gap_reason`(概念库缺什么、为何非生成不可);**道具锚优先取比例锚图 scale_ref_01.png(特写图无比例信息,防跨组尺度漂移)**;**组内有用户手绘分镜的,先据手绘稿渲染风格化图像(anchor_sketch_*.png)入锚点包——原稿严禁直接进视频 refs;渲染图 meta role 记 `action_ref`(参考锚),严禁标注首帧强锚(首帧红线见 §7A)**;**一切新生成锚帧必带所涉实体概念图 --ref 与 style.json 风格锚(§7E ①②)** | prompt、bible 概念图、style.json、用户参考图、手绘分镜(sketches/) | `assets/keyframes/epNN/<grp>/` | 机检:分辨率/画幅合规;锚点 ≤9 张(建议 4–5);**reuse_first_ok(2026-07-24):概念库已有可用图的锚不得新生成、新生成锚 meta 必记 gap_reason、anchor_opening 无兜底批准记录不得存在**;**组内出场剧情道具参考图已入锚点包(prop_ref_attached)**;**新生成锚过 repair_ref_anchored(§7E)**。QA:visual-qa ≥80 |
 | character-consistency(每组) | 对锚点包做角色一致性校正;**复用锚(meta source=`reuse:`)与在库概念图同源,免校正——仅校新生成锚,reuse-only 组直接放行(2026-07-24)**;角色特写前置、单人照防「双胞胎」;**校正重生成必带在库三视图 --ref 与 style.json 风格锚(prompt 风格段 + 负面清单),严禁凭文字设定重画形象;所涉概念图缺失=停手上报,不自行补画(§7E)** | 锚点包、concepts 三视图、style.json | 校正后锚点包 | 机检:人脸相似度 ≥0.85(与人设参考图;仅新生成锚,复用锚免检);不达标自动重 roll ≤3 次;**修正重生成过 repair_ref_anchored(§7E)** |
 | video-generation(每组,按组序串行) | 组 prompt+锚点包(+前组尾帧)一次生成多镜头组 clip;开 generate_audio 与 return_last_frame;**手绘渲染图只作 --ref 软引用,`first_frame` 指向 anchor_sketch_*/kf_action_* 而无开场依据/拆段说明=违规配置,开跑前退回(首帧红线见 §7A)**;**开跑前核对 refs 素材完备:组内出场剧情道具无对应参考图=违规配置退回(prop_ref_attached);`@Image N` 绑定复核(imageref_bound,§7A 编号铁律)不符=退回 prompt 重编号,严禁按错位 prompt 开跑**;**局部穿帮缺陷单(repair_mode: v2v_edit)走 V2V 定向修改**(原 clip 作 --ref-video,§9),不整组重 roll;**整组重 roll 先做前向接缝评估(§7C):后组 refs 含本组尾帧的,追加后组首帧软引用 + "ending continues into"**;**对白组开跑前复核 audioref_bound(每个说话角色的 voiceprint 样本在 audio_refs 且 `@Audio N` 绑定正确,§8A)与 audioref_total_le_15s(实测总时长 ≤15.2s,超长样本先截短 ffmpeg -t 4.9 再跑并记 meta)不符=退回/修正后再开跑** | grpNNN.json、校正锚点包、前组尾帧、说话角色 voiceprint 样本(项目级 voice/refs/,casting.json 索引) | `assets/clips/epNN/grpNNN.mp4` + `grpNNN.meta.json`(含切变边界、尾帧路径、usage) | 机检:组总时长 ±1s、24fps/分辨率合规、有音轨、尾帧落盘。QA:visual-qa 组级打分(V2V 修复版按新组复检,对白组加**逐说话人**声学快检——参照各自 voiceprint 样本,错配=整组重 roll;**重 roll 组做双向接缝复检,§7C**) |
@@ -445,7 +447,7 @@ refs/
 > 重生成人物图,无风格锚出图,新形象混入锚点包后整组设计风格跑偏。三条硬规则:
 > ① **必带在库形象锚**:凡修正中调 genmedia 生成含人物/场景/道具的画面,`--ref` 必须包含所涉实体的
 >   **在库概念图**(角色=`assets/concepts/characters/<id>/` 三视图、场景=`concepts/scenes/<id>/`、
->   道具=`concepts/props/<id>/` 比例锚图)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
+>   道具=`concepts/props/<id>/` 比例锚图;一律取主目录定稿,严禁取 `candidates/` 弃用候选)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
 >   开跑前退回;
 > ② **必带风格锚**:修正 prompt 必须命中 `bible/style.json` 风格锚——图像 prompt 含风格段且
 >   `--negative` 带负面清单;视频 prompt 以 `Overall visual style:` 开头。**参考图不能替代风格锚**
@@ -484,8 +486,8 @@ refs/
 > 组内说话人 ≤3**:shot-planning 硬机检 speakers_le_3,说话人多的群戏按说话回合拆组;
 > 漏网到 prompt/video-generation 层的 >3 组=上游违规,退回 shot-planning 拆组,**不得自行
 > 取舍挂锚**);prompt **逐角色显式绑定**
-> `<角色>@Audio N`,指令句写明『音频N是<角色>的嗓音特点参考(仅音色,非本段台词的朗读);
-> <角色>开口时用与音频N一致的音色说台词』。台词本身仍以 `{}` 文本注入,由模型原生合成。
+> `<角色>@Audio N`,指令句写明『[Audio N] 是<角色>的嗓音特点参考(<音色特征短语,取自 voice.json,2026-07-31>;仅音色,非本段台词的朗读);
+> <角色>开口时用与 [Audio N] 一致的音色说台词』。台词本身仍以 `{}` 文本注入,由模型原生合成。
 > **选角事实源=项目级 `assets/audio/voice/casting.json`**(2026-07-12 改版,继续有效):角色×形态
 > (variant)→ tts_model+tts_voice 全片唯一登记;合成任何角色语音**前必查表**,表中无条目=先登记
 > 再合成,多形态角色 variant 必填。音色复用豁免(collision_waivers)显式登记依据(同场互斥分析);
@@ -585,8 +587,8 @@ refs/
 | Agent | 何时被调用 | 职责要点 |
 |---|---|---|
 | workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录四件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
-| context | 每个工单派发前 | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内 |
-| memory-bible | 任何设定读写 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游 |
+| context | 仅 full 包工单派发前(§1 原则 5 三类:重做单 / 需裁剪 Bible 片段 / 需聚合缺陷历史) | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内;其余工单走 inline 轻量包,由 orchestrator 在工单本体内联,不调用本 Agent |
+| memory-bible | 任何设定**写入**与冲突上报 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游。**读取受控版免仲裁**:任何 Agent 直读 `bible/` 当前受控版无需经过本 Agent |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
 | evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
 
@@ -600,7 +602,7 @@ agent: 08-video-gen/video-generation
 project: data/projects/<slug>
 depends_on: [p7-ep01-grp005-imagegen, p7-ep01-grp004-videogen]  # 前组尾帧续接,按组序串行
 attempt: 1            # 第几次尝试(重做时递增,并附上次失败原因)
-context_package: runs/p7-ep01-grp005-videogen/context.md   # context Agent 已裁剪
+context_package: runs/p7-ep01-grp005-videogen/context.md   # full 包:context Agent 已裁剪;inline 轻量包工单此处填 inline(§1 原则 5)
 instruction: |
   为第 1 集生成组 grp005(sh006–sh008,Σ15s)生成多镜头组视频。
   组 prompt 见 grp005.json(Shot 1:/Shot 2:/Shot 3: 结构),锚点包用已校正版,
@@ -623,18 +625,20 @@ on_fail: escalate_human
 
 Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物路径、自检结果、遇到的设定冲突上报)。
 
+**inline 工单的上下文约定**:工单 `context_package: inline` 时,执行 Agent 以工单本体的 `instruction`/`inputs` 为完整上下文,不得因缺 `runs/<task_id>/context.md` 拒单,也不得自行读全库补料(缺料照旧走回执上报);各 Agent SOUL 输入表中的「Context Package / context.md」行在 inline 工单下即指工单本体,无需另有文件。
+
 ### 6.1 运行记录统一 schema(每个任务必备四件套)
 
-`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**:
+`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**(唯一豁免:inline 轻量包工单免 `context.md`,以工单本体的 `instruction`/`inputs` 充当上下文记录,前提是工单 `context_package: inline`;full 包工单缺 `context.md` 照旧不得关单):
 
 | 文件 | 写入方 | 内容要求 |
 |---|---|---|
-| `context.md` | context | Context Package(含 token 预算声明) |
+| `context.md` | context | Context Package(含 token 预算声明);**仅 full 包工单必备**(§1 原则 5),inline 工单免 |
 | `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
 | `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
-**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
+**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备(inline 工单按上文豁免 `context.md`);(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 
@@ -848,6 +852,20 @@ plugins/<plugin-name>/
 4. `requires.artifacts` 未满足时先补主流程对应阶段,不得硬跑。
 5. 插件若产生新设定,**不得写入正史 `bible/`**——写自己命名空间下的 `bible-delta/`,
    升格进正史必须走 memory-bible 仲裁 + 用户签字(见 memory-bible SOUL.md「衍生分支圣经」)。
+6. **主流程分支联动跳过(`main_dag_on_start.skip`,可选声明)**:插件流程 YAML 可声明顶层
+   `main_dag_on_start.skip`——与本插件业务无关的主流程节点清单(`p4-*` 为前缀通配,匹配含按集
+   展开后的一切以 `p4-` 开头的节点;闸门 `g4` 等为精确 id)。orchestrator 在把插件 DAG 节点并入
+   `runs/dag.json` 的**同一次改动**中执行,条件白名单:
+   - **仅当清单内主流程节点全部处于未开工状态(pending/template/blocked)** 才执行:命中节点
+     state 置 `skipped`,并写 `skip_reason`(注明插件名与「可恢复」);
+   - 清单内**存在任一已开工节点**(dispatched/running/failed/done/passed/passed_human_override/expanded)
+     即视为该分支业务进行中,**一个也不跳**,仅在汇报中说明;
+   - 用户在同一指令中明确要求同时推进被跳分支(如「小说和视频都做」)时,不执行跳过。
+   `skipped` 是挂起不是放弃:用户其后要求推进对应业务(如视频成片)时,orchestrator 把这些节点
+   恢复 `pending` 重新排产。闸门判定时 skipped 依赖视为已满足(如 g3 不因 p3-voice/p3-lighting
+   被跳过而阻塞签字)。每次改动照常 `dagcheck.py --strict`。首个使用方:derivative-fiction
+   (小说只依赖正史 bible/,跳过 p3-voice/p3-lighting 与 p4–p11 全部视听制作节点);
+   fusion-fiction 直改正史喂回视频主流程,**不适用**本机制。
 
 ### 10.4 安全红线
 

@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
-2. 生成 n 张候选,按「appearance 命中率 → 风格契合 → 生成稳定性」挑选,落选原因留档。
+2. 生成 n 张候选,按「appearance 命中率 → 风格契合 → 生成稳定性」挑选,落选原因留档;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。
 3. 产出标准三视图(正/侧/背)与关键表情、标志物特写,确保不同视角是同一个人。
 4. 对有分龄版本的角色,按 `age_versions.json` 各出一套并标注适用的时间轴区间。
 5. 落盘 prompt 记录与逐字段对照表(selection.json),供重 roll 与追溯。
@@ -58,6 +58,8 @@ python3 modules/genmedia.py image --prompt "<side view...>" --ref .../front.png 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 人设参考图包 | `assets/concepts/characters/<id>/` | 三视图 + 表情/细节特写 + prompts.json + selection.json |
+
+> **主目录只放定稿(2026-07-30)**:`<id>/` 主目录仅保留最终采用的最新版本图与 prompts.json、selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计、§7E 修正取锚),弃用图混在主目录会被误注入。重 roll 替换定稿时,旧图先移入 `candidates/` 再落新图;`candidates/` 不计入 §6A 现货。
 
 关键字段/结构约定:
 ```json

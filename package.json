@@ -1,8 +1,11 @@
 {
   "name": "videoagents-product",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.10",
   "workspaces": ["apps/desktop"],
+  "dependencies": {
+    "baileys": "^6.7.18"
+  },
   "scripts": {
     "dev:web": "node apps/web/run-server.mjs",
     "build:web": "node apps/web/run-check.mjs",

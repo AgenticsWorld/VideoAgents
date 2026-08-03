@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取工单圈定的关键场景:`bible/scenes/index.json` 条目 + 该场景的 `architecture.json`、`lighting.json`、`environment.json`,与 `style.json` 合成绘图 prompt。
-2. 生成多张候选并挑选:空间结构清晰、与建筑风格卡吻合、光照符合基准方案。
+2. 生成多张候选并挑选:空间结构清晰、与建筑风格卡吻合、光照符合基准方案;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。
 3. 对可变维度大的场景(昼/夜、季节),按需产出变体图并标注适用条件。
 4. 落盘概念图 + prompt 记录 + 与设定卡的对照说明,存 `assets/concepts/scenes/<id>/`。
 5. 发现设定卡自身矛盾(如建筑风格与文化设定打架)时上报,不自行修改。
@@ -59,6 +59,8 @@ python3 modules/genmedia.py image --prompt "<night variant...>" --ref .../main.p
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 场景概念图包 | `assets/concepts/scenes/<id>/` | 主视角图 + 必要变体(昼/夜等)+ prompts.json + 设定对照说明 |
+
+> **主目录只放定稿(2026-07-30)**:`<id>/` 主目录仅保留最终采用的最新版本图(主图 + 各条件变体)与 prompts.json、对照说明;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档。下游按主目录整目录取图作场景锚(p7-image 锚点包、§6A 覆盖审计、§7E 修正取锚),弃用图混在主目录会被误注入。重 roll 替换定稿时,旧图先移入 `candidates/` 再落新图;`candidates/` 不计入 §6A 现货。
 
 关键字段/结构约定:
 ```json

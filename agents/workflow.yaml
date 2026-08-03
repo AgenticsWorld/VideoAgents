@@ -354,10 +354,10 @@ phases:
 
 # 贯穿型 Agent(不在 DAG 中显式建任务,由 orchestrator 在派单/收单时自动调用)
 services:
-  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 Context Package
+  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 full 包 Context Package——仅限三类工单:重做单/需裁剪 Bible 片段/需聚合缺陷历史(WORKFLOW.md §1 原则 5);其余工单 inline 轻量包,orchestrator 内联,不触发本钩子
   - { agent: 00-orchestration/evaluation,  hook: on_submit }         # rubric 评分(产出型任务无 eval 不得关单)
   - { agent: 00-orchestration/version,     hook: on_artifact_write } # 实时版本化(落盘即登记,禁止事后补录常态化)
-  - { agent: 00-orchestration/memory-bible, hook: on_bible_access }  # Bible 读写仲裁
+  - { agent: 00-orchestration/memory-bible, hook: on_bible_access }  # Bible 写入仲裁与冲突受理;读取受控版免仲裁,不触发本钩子
   - { agent: 00-orchestration/workflow-orchestrator, hook: on_task_complete }
     # 收尾钩子(WORKFLOW.md §6.1):校验 run_record 四件套 → 确认产物已实时登记 → 更新 runs/dag.json 节点 state/run_id;
     # 三步未完成不得关单,dag.json 与 gate 文件、runs/ 产物不一致视为调度缺陷
