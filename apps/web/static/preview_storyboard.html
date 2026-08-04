@@ -632,13 +632,18 @@ function groupCard(g,inner){
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
       <div class="cap" title="${esc(k.ref)}"><span class="fn">🖼 ${esc(k.name)}</span>
       <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
+  // 流水线/agent 直连写入组 refs 的参考图(概念图等):只展示不可删,删除接口本就仅限用户添加的
+  const prefs=(g.pipeline_refs||[]).map(k=>
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
+      <div class="cap" title="${esc(k.ref)}"><span class="fn">📎 ${esc(k.name)}</span>
+      <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
   const vids=(g.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段组视频提修改意见">✏️ 修改</button></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  const media=(anchors.length||vids.length||sketches.length||urefs.length)?
-    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
+  const media=(anchors.length||vids.length||sketches.length||urefs.length||prefs.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
   return `<div class="grp" id="a-g-${aid(g.group_id)}">
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
@@ -786,7 +791,8 @@ function render(d){
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
         const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];
-        if((g.user_refs||[]).length)badges.push('🖼'+g.user_refs.length);
+        const nRefs=(g.user_refs||[]).length+(g.pipeline_refs||[]).length;
+        if(nRefs)badges.push('🖼'+nRefs);
         if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
         if(g.user_note)badges.push('📝');
         if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');

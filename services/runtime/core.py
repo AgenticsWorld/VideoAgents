@@ -2565,7 +2565,8 @@ def _preview_props(project: str):
     """道具设定聚合:bible/props.json 设定卡 + assets/concepts/props/* 参考图。"""
     base = _proj_base(project)
     doc = _read_json_safe(base / "bible" / "props.json") or {}
-    cards = {p.get("id"): p for p in doc.get("props", [])
+    # 兼容两种数组键:平台约定 props;部分项目自建 schema 写成 entries
+    cards = {p.get("id"): p for p in (doc.get("props") or doc.get("entries") or [])
              if isinstance(p, dict) and p.get("id")}
     adir = base / "assets" / "concepts" / "props"
     ids = set(cards)
@@ -2754,20 +2755,36 @@ def _preview_storyboard(project: str, ep: str):
             continue
         gid = g.get("group_id") or ""
         meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
-        # 用户经「添加参考图」手动加入的组参考图(组 prompt json 的 refs,notes 锚判定;
-        # 流水线锚点包另走 anchors,线稿另走 sketches)
+        # 组参考图(组 prompt json 的 refs)分两列:用户经「添加参考图」手动加入的
+        # (notes 锚判定,可删)入 user_refs;流水线/agent 直连写入的(如概念图路径)
+        # 入 pipeline_refs——指向本组锚点包目录的 ref 已由 anchors 扫描覆盖,跳过防重
         pd = _read_json_safe(_grp_prompt_path(base.name, ep, gid)) or {}
-        user_refs = []
+        user_refs, pipeline_refs = [], []
+        kf_prefix = f"assets/keyframes/{ep}/{gid}/"
+        # 有的流水线把 refs 逐字节复制进锚点包(anchor_*.png),按文件尺寸比对
+        # 跳过这类副本,防止组卡片同图双显;尺寸不同的(概念图→生成锚点图)照常展示
+        kdir = _id_dir(kroot, gid)
+        anchor_sizes = ({p.stat().st_size for p in kdir.iterdir()
+                         if p.is_file() and p.suffix.lower() in IMG_EXTS}
+                        if kdir.is_dir() else set())
         for r in (pd.get("refs") or []):
             f = base / r
-            if _grpref_user_added(pd, r) and f.is_file():
-                user_refs.append({"ref": r, "name": f.name,
-                                  "url": f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"})
+            if not f.is_file():
+                continue
+            url = f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"
+            if _grpref_user_added(pd, r):
+                user_refs.append({"ref": r, "name": f.name, "url": url})
+            elif (not r.startswith(kf_prefix)
+                  and f.stat().st_size not in anchor_sizes):
+                # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
+                pipeline_refs.append({"ref": r, "url": url,
+                                      "name": "/".join(r.split("/")[-2:])})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
+            "pipeline_refs": pipeline_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
