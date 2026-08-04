@@ -15,7 +15,7 @@
 2. 建立境界等级表:每个境界的名称、别称、在体系内的 `order`(整数,严格递增)、突破条件、寿元/能力增益、小阶(前期/巅峰)。
 3. 抽取技能/功法/神通:名称、所属体系、施展的境界门槛、原文描述的效果与代价、已知使用者(留角色挂接位)。
 4. 抽取修炼资源:丹药、灵脉、秘境机缘的**功效机制**(价格归 economy,只互引 id)。
-5. 每条注明原文出处(章节);原文未明说的境界排序(如两体系战力对比),标 `inferred: true` 并给推断依据(以交手结果为证据)。
+5. 每条注明原文出处(章节);原文未明说的境界排序(如两体系战力对比),标 `inferred: true` 并给推断依据(以交手结果为证据)。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 6. 自跑境界单调性检查(`rank_order_acyclic`):排序无环、无并列歧义,再提交。
 
 ## 不做什么(边界)
@@ -72,7 +72,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - `rank_order_acyclic`:同一 `system_ref` 内 `order` 严格单调、无环、无重复;`aliases` 与其他境界不冲突。
 - `skills[].min_rank` / `system_ref` 引用可解析;跨体系对比只允许出现在 `cross_system`,不得篡改 `order`。
 

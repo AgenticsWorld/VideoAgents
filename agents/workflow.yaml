@@ -13,7 +13,9 @@ defaults:
   eval_threshold: 80
   max_retries: 3
   on_fail: escalate_human
-  # 运行记录四件套(细则 WORKFLOW.md §6.1):任务关单前 runs/<task_id>/ 必须齐备,缺一不得置 done/passed
+  # 运行记录四件套(细则 WORKFLOW.md §6.1):任务关单前 runs/<task_id>/ 必须齐备,缺一不得置 done/passed。
+  # 唯一豁免:context_package: inline 的工单免 context.md,工单本体即上下文记录(§1 原则 5 分级);
+  # 本行不构成「每单必调 context Agent」的依据——full/inline 判定只看 §1 原则 5 白名单
   run_record: [context.md, result.json, eval.json, meta.json]
   # 闸门通用机检(WORKFLOW.md §7 闸门放行硬约束):对 g0–g10 一律附加
   gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
@@ -92,14 +94,17 @@ phases:
       - { id: p2-dictionary, agent: 02-worldbuilding/dictionary,        outputs: [bible/dictionary.json],
           validation: { auto: [terms_unique] } }
       # 共同校验(orchestrator 对 p2-* 统一附加):
-      #   auto: [schema, source_refs_required]; rubric: extraction_v1
+      #   auto: [schema, source_refs_required, no_unknown_placeholder]; rubric: extraction_v1
+      # no_unknown_placeholder(WORKFLOW.md §1 原则 10):制作必需字段值禁 UNKNOWN/未知/待定/TBD/留空——
+      # 原文与上游均无依据时 Agent 须自行发挥设计定值并标 inferred:true+reason 后继续,占位即退回;
+      # 剧情刻意不揭示的悬念如实记「原文刻意未揭示」不算占位,但同实体制作字段仍须定值
       # cross_refs_valid 覆盖全部 ID 命名空间(ev*/CHAR-*/SCN-*/地名/势力/术语),
       # 任何引用指向不存在的 ID 即 FAIL(WORKFLOW.md §4 Phase 2)
       - { id: p2-merge, agent: 00-orchestration/memory-bible,
           depends_on: [p2-world, p2-timeline, p2-geography, p2-religion, p2-culture,
                        p2-political, p2-economy, p2-magic, p2-dictionary],
           outputs: [bible/@v1],
-          validation: { auto: [cross_refs_valid_all_namespaces, dictionary_hit_100pct], qa: [11-qa/world-consistency-qa, 11-qa/timeline-qa] } }
+          validation: { auto: [cross_refs_valid_all_namespaces, dictionary_hit_100pct, no_unknown_placeholder], qa: [11-qa/world-consistency-qa, 11-qa/timeline-qa] } }
       - { id: g2, gate: true, human: true, checkpoint: H1-世界圣经确认, depends_on: [p2-merge] }
 
   - id: p3
@@ -136,7 +141,7 @@ phases:
       - { id: g3, gate: true, human: true, checkpoint: H1A-角色与资产确认,
           depends_on: [p3-appearance, p3-growth, p3-personality, p3-relationship, p3-voice,
                        p3-dialogue-style, p3-mount, p3-environment, p3-architecture, p3-lighting],
-          validation: { auto: [all_refs_resolve], qa: [11-qa/character-consistency-qa] } }
+          validation: { auto: [all_refs_resolve, no_unknown_placeholder], qa: [11-qa/character-consistency-qa] } }
 
   - id: p4
     name: 美术风格
@@ -152,8 +157,9 @@ phases:
           outputs: ["assets/concepts/scenes/{id}/"], validation: { qa: [11-qa/visual-qa] } }
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
           # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref
-          validation: { auto: [plot_props_coverage_100, prop_scale_defined] } }
-      - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json] }
+          validation: { auto: [plot_props_coverage_100, prop_scale_defined, no_unknown_placeholder] } }
+      - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json],
+          validation: { auto: [no_unknown_placeholder] } }
       - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
           outputs: [bible/color_script.json], validation: { rubric: creative_v1, qa: [06-art/art-director] } }
       - { id: p4-aspect, agent: 06-art/aspect-ratio, outputs: [bible/aspect_ratio.json],
@@ -234,7 +240,7 @@ phases:
                                nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
-          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等(像素下限硬限另论);reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
                                prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
                         qa: [11-qa/visual-qa] } }
       - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
@@ -243,7 +249,7 @@ phases:
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
-          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,
+          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
       - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video],
@@ -354,7 +360,7 @@ phases:
 
 # 贯穿型 Agent(不在 DAG 中显式建任务,由 orchestrator 在派单/收单时自动调用)
 services:
-  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 full 包 Context Package——仅限三类工单:重做单/需裁剪 Bible 片段/需聚合缺陷历史(WORKFLOW.md §1 原则 5);其余工单 inline 轻量包,orchestrator 内联,不触发本钩子
+  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 full 包 Context Package——仅限三类工单:重做单/需跨文件摘要裁剪(能列明确路径清单进 inputs 的不算,创作类不例外)/需聚合缺陷历史(WORKFLOW.md §1 原则 5);其余工单 inline 轻量包,orchestrator 内联,不触发本钩子
   - { agent: 00-orchestration/evaluation,  hook: on_submit }         # rubric 评分(产出型任务无 eval 不得关单)
   - { agent: 00-orchestration/version,     hook: on_artifact_write } # 实时版本化(落盘即登记,禁止事后补录常态化)
   - { agent: 00-orchestration/memory-bible, hook: on_bible_access }  # Bible 写入仲裁与冲突受理;读取受控版免仲裁,不触发本钩子

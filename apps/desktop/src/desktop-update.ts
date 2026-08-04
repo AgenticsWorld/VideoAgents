@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto'
 import {
-  createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs'
 import path from 'node:path'
 import {spawn} from 'node:child_process'
@@ -18,6 +18,8 @@ export interface BuildInfo {
   channel: 'local' | 'dev' | 'release'
   version: string
   buildHash: string
+  /** 构建期 runtime-requirements.lock 的 sha256;与已装运行时清单比对,不一致时启动自动更新运行时 */
+  requirementsSha256?: string
 }
 
 export interface DesktopArtifact {
@@ -28,9 +30,25 @@ export interface DesktopArtifact {
   size: number
 }
 
+export interface DesktopUpdate {
+  artifact: DesktopArtifact
+  required: boolean
+  minimumVersion?: string
+}
+
+interface CachedRequiredUpdate {
+  schema: 1
+  minimumVersion: string
+  artifact: DesktopArtifact
+}
+
 interface DesktopIndex {
   schema: 1
-  desktop?: {mac?: DesktopArtifact, win?: DesktopArtifact}
+  desktop?: {
+    minimumVersion?: string
+    mac?: DesktopArtifact
+    win?: DesktopArtifact
+  }
 }
 
 export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildInfo {
@@ -38,7 +56,12 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
   try {
     const value = JSON.parse(readFileSync(path.join(resourcesPath, 'build-info.json'), 'utf8')) as BuildInfo
     if (value.schema === 1 && ['local', 'dev', 'release'].includes(value.channel)
-        && typeof value.version === 'string' && typeof value.buildHash === 'string') return value
+        && typeof value.version === 'string' && typeof value.buildHash === 'string') {
+      if (value.requirementsSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(value.requirementsSha256)) {
+        delete value.requirementsSha256
+      }
+      return value
+    }
   } catch (error) {
     console.warn(`[desktop-updater] build-info.json 不可用：${String(error)}`)
   }
@@ -81,10 +104,14 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return false
 }
 
-export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopArtifact | undefined> {
+export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopUpdate | undefined> {
   if (!['dev', 'release'].includes(build.channel)) return undefined
   const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
-  const response = await fetch(source, {redirect: 'error', cache: 'no-store'})
+  const response = await fetch(source, {
+    redirect: 'error',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10_000),
+  })
   if (!response.ok) throw new Error(`桌面更新索引请求失败：HTTP ${response.status}`)
   const text = await response.text()
   if (text.length > 1024 * 1024) throw new Error('桌面更新索引文件过大')
@@ -92,10 +119,72 @@ export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopArtif
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (index.schema !== 1 || !platform) throw new Error('桌面更新索引或平台无效')
   const artifact = validateArtifact(index.desktop?.[platform], source)
-  if (build.channel === 'dev') {
-    return artifact.buildHash === build.buildHash ? undefined : artifact
+  const minimumVersion = index.desktop?.minimumVersion
+  if (minimumVersion !== undefined && !versionParts(minimumVersion)) {
+    throw new Error('桌面更新索引的最低可用版本无效')
   }
-  return isNewerVersion(artifact.version, build.version) ? artifact : undefined
+  if (minimumVersion && isNewerVersion(minimumVersion, artifact.version)) {
+    throw new Error('桌面更新索引的最低可用版本高于最新安装包版本')
+  }
+  if (build.channel === 'dev') {
+    return artifact.buildHash === build.buildHash
+      ? undefined
+      : {artifact, required: false}
+  }
+  if (!isNewerVersion(artifact.version, build.version)) return undefined
+  return {
+    artifact,
+    required: Boolean(minimumVersion && isNewerVersion(minimumVersion, build.version)),
+    minimumVersion,
+  }
+}
+
+function requiredUpdateCachePath(userData: string): string {
+  return path.join(userData, 'app-updates', 'required-update.json')
+}
+
+export function readCachedRequiredDesktopUpdate(
+  userData: string,
+  build: BuildInfo,
+): DesktopUpdate | undefined {
+  if (build.channel !== 'release') return undefined
+  const cache = requiredUpdateCachePath(userData)
+  if (!existsSync(cache)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(cache, 'utf8')) as Partial<CachedRequiredUpdate>
+    if (value.schema !== 1 || !value.minimumVersion || !versionParts(value.minimumVersion)) {
+      throw new Error('强制更新缓存格式无效')
+    }
+    const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
+    const artifact = validateArtifact(value.artifact, source)
+    if (isNewerVersion(value.minimumVersion, artifact.version)) {
+      throw new Error('强制更新缓存的最低版本高于安装包版本')
+    }
+    if (!isNewerVersion(value.minimumVersion, build.version)
+        || !isNewerVersion(artifact.version, build.version)) return undefined
+    return {artifact, required: true, minimumVersion: value.minimumVersion}
+  } catch (error) {
+    console.warn(`[desktop-updater] 强制更新缓存不可用：${String(error)}`)
+    return undefined
+  }
+}
+
+export function cacheRequiredDesktopUpdate(userData: string, update: DesktopUpdate): void {
+  if (!update.required || !update.minimumVersion) return
+  const destination = requiredUpdateCachePath(userData)
+  const temporary = `${destination}.${process.pid}.tmp`
+  mkdirSync(path.dirname(destination), {recursive: true})
+  const value: CachedRequiredUpdate = {
+    schema: 1,
+    minimumVersion: update.minimumVersion,
+    artifact: update.artifact,
+  }
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {encoding: 'utf8', mode: 0o600})
+  renameSync(temporary, destination)
+}
+
+export function clearCachedRequiredDesktopUpdate(userData: string): void {
+  rmSync(requiredUpdateCachePath(userData), {force: true})
 }
 
 async function download(
