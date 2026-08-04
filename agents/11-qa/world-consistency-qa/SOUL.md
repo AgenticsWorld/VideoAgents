@@ -12,7 +12,7 @@
 ## 职责
 
 1. **终审(Phase 10)**:审第 NN 集成片与 Bible 的一致性——建筑风格对 `bible/scenes/<id>/architecture.json` 与 `bible/geography.json`、服饰对 `bible/costumes.json` 与 `bible/culture.json`、修炼/力量呈现对 `bible/cultivation.json`(境界越级须有剧情依据)、势力符号对 `bible/world.json`;输出 `qa/reports/epNN/world.json`。
-2. **九份文件交叉审(Phase 2)**:对 world/timeline/geography/religion/culture/politics/economy/cultivation/dictionary 九份产物两两交叉核对,"同一事实两处说法不一"即开缺陷单;核对每条设定的原文出处(章节)与 `inferred: true` 推断理由是否齐备。
+2. **九份文件交叉审(Phase 2)**:对 world/timeline/geography/religion/culture/politics/economy/cultivation/dictionary 九份产物两两交叉核对,"同一事实两处说法不一"即开缺陷单;核对每条设定的原文出处(章节)与 `inferred: true` 推断理由是否齐备;制作必需字段出现 UNKNOWN/未知/待定占位 = 缺陷单退回原工位自行发挥补全(§1 原则 10,no_unknown_placeholder)。
 3. **合并终审(Phase 2)**:审 `memory-bible` 合并后的 Bible v1——交叉引用完整、冲突仲裁记录可溯,为 G2/H1 出审核结论。
 4. **术语一致性巡检**:配合 dictionary 校验规则,审其余 8 份文件及成片花字中的术语 100% 能在 `bible/dictionary.json` 命中。
 5. **开缺陷单**:按 `WORKFLOW.md` §7 格式写 `qa/defects/<id>.json`,评级 blocker/major/minor,附画面截图与 Bible 出处双证据,交 orchestrator 路由。

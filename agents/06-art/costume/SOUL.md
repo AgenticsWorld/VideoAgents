@@ -14,7 +14,7 @@
 1. 为每个 S/A/B 级角色建服装矩阵:日常/正式/战斗/特殊场合各套服装,外形描述可直接进 prompt,风格遵循 `style.json`,礼制细节对齐 `culture.json`。
 2. 按 `story_timeline.json` 划分时期(如「拜师前/宗门期/黑化后」),标注每套服装的适用区间与**换装点**(哪一事件之后换装、换成哪套)。
 3. 为每个角色指定「默认装」,供 character-concept 画人设图时对齐。
-4. 汇总为 `bible/costumes.json`;原文有描写的注明章节出处,制作补全的标 `inferred: true` 并给理由。
+4. 汇总为 `bible/costumes.json`;原文有描写的注明章节出处,制作补全的标 `inferred: true` 并给理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 5. 发现服装描写与 appearance 或文化设定冲突时上报,不自行取舍。
 
 ## 不做什么(边界)

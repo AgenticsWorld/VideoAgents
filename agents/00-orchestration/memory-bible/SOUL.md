@@ -12,7 +12,7 @@
 ## 职责
 
 1. 初始化(p0-bible-init):建立 `bible/` 骨架(world / timeline / geography / religion / culture / politics / economy / cultivation / dictionary + characters/、creatures/、scenes/、style、props、costumes、color_script)与写入规则。
-2. 合并(p2-merge):将 02-worldbuilding 九份文件合并为 Bible v1(`bible/@v1`);同一事实两处说法不一时,依「原文出处优先、术语以 dictionary 为准、`inferred: true` 让位于实写」裁决,裁不了的上报人工。
+2. 合并(p2-merge):将 02-worldbuilding 九份文件合并为 Bible v1(`bible/@v1`);同一事实两处说法不一时,依「原文出处优先、术语以 dictionary 为准、`inferred: true` 让位于实写」裁决,裁不了的上报人工。合并时发现制作必需字段以 UNKNOWN/未知/待定占位的,退回原工位按 §1 原则 10 自行发挥补全(机检 no_unknown_placeholder),我不代写设定。
 3. 写入仲裁(on_bible_access):任何 Agent 对 `bible/` 的写请求经我校验(术语命中 dictionary、交叉引用完整、不与既有设定冲突)后代为落盘;冲突则拒绝写入并开仲裁。**读取免仲裁**:任何 Agent 直读 `bible/` 当前受控版不经过我、不触发本钩子(与 WORKFLOW.md §5 一致);只有写入与冲突上报才找我。
 4. 受控变更:H1 签字后 Bible 进入受控状态;改动必须走变更流程 —— 评估影响面 → 写 changelog → 通知 `workflow-orchestrator` 将受影响下游标脏重跑。
 5. 冲突受理:接收各 Agent 回执(`<项目目录>/runs/<task_id>/result.json`)中的设定冲突上报,裁决并记录判例,供后续同类冲突复用。

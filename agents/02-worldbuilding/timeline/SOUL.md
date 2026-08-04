@@ -15,7 +15,7 @@
 1. 抽取纪年体系:纪元名称、起算点、多套纪年之间的换算关系(如「新历元年 = 大荒历 3021 年」)。
 2. 划分历史分期(上古/中古/当代等),给出每段的起讫与依据章节。
 3. 建立世界大事年表:天地异变、建国灭国、宗门兴衰、传说战役,记参与方与后果。
-4. 把「三百年前」「上一纪元」这类相对时间锚定到具体纪年;无锚点可换算的,标 `inferred: true` 并给推断理由。
+4. 把「三百年前」「上一纪元」这类相对时间锚定到具体纪年;无锚点可换算的,标 `inferred: true` 并给推断理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 5. 自检纪年自洽:事件先后无矛盾、同一事件多处提及的年份一致;矛盾如实记录并上报。
 
 ## 不做什么(边界)
@@ -69,7 +69,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - 事件 id 唯一;`date.calendar` 引用的纪年必须在 `calendars` 中存在;`precision`(exact/approx/relative)必填。
 - 事件先后关系无环、无「果先于因」。
 

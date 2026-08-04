@@ -15,7 +15,7 @@
 2. 抽取国家清单:名称、都城、疆域概述、统治者称谓、存续状态(现存/已亡,亡于哪章)。
 3. 抽取势力清单:宗门/家族/军团/商会等,记类型、从属(挂靠哪国)、总部所在、兴衰状态。
 4. 写世界历史脉络的**粗线条概述**(几段式,只到「曾发生过什么大格局变动」),精确编年交给 timeline。
-5. 每条设定注明原文出处(章节);原文没写但制作必需的标 `inferred: true` 并给推断理由。
+5. 每条设定注明原文出处(章节);原文没写但制作必需的标 `inferred: true` 并给推断理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 6. 发现两处原文对同一国家/势力说法不一时,如实并列记录并上报 `memory-bible`,不自行取舍。
 
 ## 不做什么(边界)
@@ -70,7 +70,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条设定含章节出处,或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条设定含章节出处,或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - `nations[].id` / `factions[].id` 唯一;`allegiance` 引用的国家 id 必须在本文件内存在。
 - 已亡国家/覆灭势力必须带 `status` 与发生章节,不得默认「现存」。
 

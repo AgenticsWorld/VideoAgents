@@ -15,7 +15,7 @@
 2. 抽取礼仪规范:尊卑称谓、拜师礼、见面礼、朝堂礼、江湖规矩——记「什么场合、谁对谁、做什么、违反的后果」。
 3. 抽取语言与文字:通用语/方言/古文字、书写载体(竹简/玉简)、命名习惯(姓氏结构、道号规则)。
 4. 抽取世俗禁忌与阶层文化差异(平民 vs 修士 vs 贵族的生活方式差异)。
-5. 每条设定注明原文出处(章节);原文没写但制作必需的(如群演的市井行为),标 `inferred: true` 并给推断理由。
+5. 每条设定注明原文出处(章节);原文没写但制作必需的(如群演的市井行为),标 `inferred: true` 并给推断理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 
 ## 不做什么(边界)
 
@@ -70,7 +70,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - 条目 id 唯一;`region_refs` 能在 `geography.json` 命中。
 - 礼仪条目四要素(场合/双方/动作/后果)必填,缺项退回。
 

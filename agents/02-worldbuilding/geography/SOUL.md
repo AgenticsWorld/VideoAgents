@@ -14,7 +14,7 @@
 1. 抽取自然地理:山脉、河流、湖海、秘境、险地,记地形特征、气候带与相对方位。
 2. 抽取聚落:城市/村镇/宗门驻地,记归属国家(引用 world.json 的 nation id)、规模、城内布局(城门/主街/坊市/地标)。
 3. 建立相对方位网:A 在 B 的什么方向、原文提及的路程(「三日马程」),形成可互查的空间关系表。
-4. 每条设定注明原文出处(章节);原文只给氛围没给方位的,标 `inferred: true` 并给推断理由(如「按行程推断在西侧」)。
+4. 每条设定注明原文出处(章节);原文只给氛围没给方位的,标 `inferred: true` 并给推断理由(如「按行程推断在西侧」)。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 5. 与 `bible/world.json` 做地名互查:我这里的每个地名能对上 world 的国家/势力,world 提到的地名我这里有条目。
 
 ## 不做什么(边界)
@@ -69,7 +69,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - 地名 id 唯一;`nation_ref` 能在 `world.json` 命中;与 world.json 地名互查双向无悬空。
 - `spatial_relations` 无自相矛盾(A 在 B 北 且 B 在 A 北 = 退回)。
 

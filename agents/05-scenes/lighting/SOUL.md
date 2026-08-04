@@ -16,6 +16,7 @@
 3. 室内场景依据 architecture 的开窗/开口信息定自然光入射逻辑;夜景列人造与特殊光源清单(灯笼、长明灯、阵法辉光)。
 4. 原文明写的特殊剧情光(「血月当空」)记出处章节,单列为该章节区间的覆盖方案。
 5. 全部字段用受控枚举输出,保证 `08-video-gen/prompt` 可直接注入、`07-directing/continuity-planning` 可查光线方向连续性。
+6. 原文对某场景全无光照描写时,按 environment 环境态与 architecture 开窗/开口信息自行发挥设计基准方案并标 `inferred: true`,继续往后执行,禁止 UNKNOWN/待定占位;剧情设定的感知悬念(如密室角色不知昼夜)如实记为剧情事实,但光源/色温/对比度等制作字段仍须定值(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 
 ## 不做什么(边界)
 
