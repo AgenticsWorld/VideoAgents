@@ -4,7 +4,29 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
-## [1.0.10] - 2026-08-01
+## [1.0.11] - 2026-08-04
+
+### Added
+
+- deepagents engine session memory: the runner gained `--checkpoint-db` / `--thread-id`, persisting conversation history (including tool results) across processes via LangGraph SqliteSaver — aligning deepagents with the claude/codex session-resume semantics. Stateful agents now keep context across dispatches; a fuse resets sessions whose history exceeds 32KB (OpenAI-compatible endpoints resend the full history each turn with no vendor prompt cache). `make install-deepagents` now also installs `langgraph-checkpoint-sqlite`.
+- Desktop forced updates: the runtime index can declare a `minimumVersion`; app builds older than it are required to update before continuing (the requirement is cached so it also applies offline).
+- Desktop app upgrades now carry the Python runtime along: the build embeds the requirements-lock hash, and when the installed runtime's hash no longer matches, the app checks the runtime index once and auto-downloads the newer runtime package — old users no longer keep a stale cached runtime that's missing newly added dependencies. Any check/download failure falls back to the existing runtime without blocking startup.
+- Storyboard preview: group cards now also display reference images written into the group prompt by the pipeline or agents (concept art, chained tail frames…), marked 📎 and counted in the navigation badge — previously only keyframe anchor packs and user-added refs were shown. User-added refs keep their 🖼 marker and remain the only removable kind; refs pointing into the group's own anchor pack and byte-identical copies of anchor-pack images are skipped to avoid duplicates.
+
+### Changed
+
+- New-project wizard defaults trimmed to a minimal production config: no publish platform preselected (at least one must still be chosen), output language follows the current UI language, quality reviewers default to 0 (skip review), and intro/outro/next-episode-preview are unchecked.
+- Aspect-ratio machine checks relaxed to directional: 16:9 / 9:16 describe the general format, and engine-native near-ratio output (e.g. 864x496 draft renders) passes instead of failing a strict width×9 = height×16 equality — no more per-group user waivers for engine rounding. The ≥3,686,400-pixel floor for video reference images is unchanged.
+- Run panel caps the agent list at the 100 most recent entries.
+- Agent workflow spec: production-required fields may no longer ship as UNKNOWN placeholders. Design-layer stations (worldbuilding, characters, scenes, art) that find no basis in the source text or upstream Bible must invent a self-consistent value, mark it `inferred: true` with a design rationale, and continue; a new `no_unknown_placeholder` machine check bounces UNKNOWN/TBD placeholders. Fact-extraction stations still mark UNKNOWN (it stays the downstream fill-me signal), and filling per this rule no longer costs faithfulness points in scoring.
+- Agent workflow spec: context-package scheduling tightened again — inline work orders are exempted from the `context.md` run-record requirement in the machine-readable yaml itself, the full-package whitelist narrowed (creative work alone no longer justifies a full package when input paths can be listed explicitly), and duplicate packaging is banned (unexpired packages are reused; fan-out batches share a base package plus per-instance increments).
+
+### Fixed
+
+- Windows: preview pages no longer scramble assets in subfolders — all relative paths in asset/audio/ref URLs are POSIX-normalized (backslash paths broke subfolder grouping in character/scene/prop previews and image loading; hand-drawn/uploaded refs persisted into group prompts are now written with forward slashes at the source).
+- Windows: Feishu SDK modules are imported via shortened paths, fixing failures from the 260-character path limit.
+- Prop preview: asset documents whose array key is `entries` instead of `props` now render their cards.
+- Version page: the suggested name for a copied project is now date-only (no time-of-day suffix).
 
 ### Added
 
