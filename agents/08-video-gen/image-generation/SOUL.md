@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. **优先复用**:角色锚点直接取 `06-art/character-concept` 三视图(优先单人正面特写——官方 FAQ:多视图拼图易触发"双胞胎",人物锚要单人单图)、场景锚点直接取 `06-art/environment-concept` 概念图;能复用就不新生成,省额度也省一致性风险。**道具锚(组内出场剧情道具)优先取该道具的比例锚图** `assets/concepts/props/<id>/scale_ref_01.png`(道具与角色同框,自带尺度参照)而非 1:1 特写图——特写图无比例信息是跨组尺度漂移的成因之一;仅当组内需要道具细节特写镜头时才补充特写锚,且两者可并存(各占一个 [Image N] 位)。**概念库覆盖组内全部所需锚时,本组零新生成,meta 记 `generation_channel: reuse-only`(2026-07-24 定为常态:tothemoon ep01 全程 reuse-only,成片质量不降)。**
+1. **优先复用**:角色锚点直接取 `06-art/character-concept` 的**单张整版三视图 sheet**(`assets/concepts/characters/<id>/sheet.png`,2026-08-04 二订:一角色一张,不裁切;多视角同框的"双胞胎"诱因由 prompt 工位 Identity lock 句+防重复长句硬约束兜住)、场景锚点直接取 `06-art/environment-concept` 概念图;能复用就不新生成,省额度也省一致性风险。**道具锚(组内出场剧情道具)优先取该道具的比例锚图** `assets/concepts/props/<id>/scale_ref_01.png`(道具与角色同框,自带尺度参照)而非 1:1 特写图——特写图无比例信息是跨组尺度漂移的成因之一;仅当组内需要道具细节特写镜头时才补充特写锚,且两者可并存(各占一个 [Image N] 位)。**概念库覆盖组内全部所需锚时,本组零新生成,meta 记 `generation_channel: reuse-only`(2026-07-24 定为常态:tothemoon ep01 全程 reuse-only,成片质量不降)。**
 2. **按需补生成(仅限概念库缺口)**:组 prompt 需要而概念库确实没有的锚(特定服装状态/表情的角色照、道具细节特写、手绘分镜渲染),按 `<shot>.json` 的 image_prompt 生成 n 张候选,meta 必记 `gap_reason`(概念库缺什么、为何非生成不可——机检 reuse_first_ok 核对);命名 `anchor_char_<id>.png` / `anchor_scene.png` / `anchor_expression_<slug>.png` 等,落 `assets/keyframes/epNN/<grp>/`。**组开场合成锚帧(anchor_opening)默认禁出(2026-07-24)**:组视频走多参考图模式且与 `--first-frame` 互斥,预先合成的开场画面进不了视频请求——实证 xiaohongmao ep01 28 组落盘 86 张 anchor_opening,进入 Seedance 请求 0 张,纯沉没成本(生成费 + 一致性校验 + 重 roll 时间全白花);仅 orchestrator 批准的拆段/首帧兜底(§7A 首帧红线)才允许出开场帧,meta 附批准依据。**一切新生成锚帧受 §7E 形象红线约束**:`--ref` 必挂画面所涉实体的在库概念图(角色三视图/场景概念图/道具比例锚图),prompt 必含 style.json 风格段、`--negative` 必带负面清单——裸 prompt 出图 = 模型自行设计新形象,机检 repair_ref_anchored 退回;**画面含人物时 prompt 还必须显式带该角色性别词(2026-07-20)**:取 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面画的是对外呈现形象),仅靠参考图不写性别词,图像模型会在中性描述下自行猜性别,是跨组形象漂移源;所涉实体概念图缺失属 §6A 覆盖审计漏网,停手上报 orchestrator,严禁凭文字设定顶上。
 3. **手绘分镜渲染前置(2026-07-09 规则)**:组内有用户手绘分镜(`assets/sketches/epNN/grpNNN/`)时,**必须先据手绘稿生成一张风格化图像**——手绘稿作 `--ref` 构图参考,叠加该组角色三视图/场景概念图,style 锚点入 prompt,产出 `anchor_sketch_01..0n.png` 候选入锚点包(meta 记 `source: "sketch:<手绘稿路径>"`);**进视频生成参考图的是这张生成图,原始手绘稿严禁直接作视频 ref**。依据(ep01 实证):线稿直接软引用([Image N])视频模型反复画不对,图像模型能画出视频模型画不出的构图。**渲染图的身份是动作参考锚(软引用),不是首帧(2026-07-09 同日补充)**:手绘稿画的是导演要的某个决定性瞬间,通常在组中段而非开场;meta 的 role 一律记 `action_ref`,严禁标注成 `first_frame`/`action_strong_anchor` 等首帧强锚字样交付下游(前科:ep01 grp021/022/028/029 渲染图被当整组 first_frame,视频一开场即手绘那一幕,起手铺垫全丢、与前组尾帧续接断裂)。渲染图升级 `first_frame` 硬锁仅限两个条件同时成立:① orchestrator 批准的兜底;② 该瞬间恰为该段开场画面——组首镜开场(sketch 标注/用户注释可证),或按瞬间拆段后子段的开头(渲染图作后段首帧或前段尾帧);瞬间在组中段时必须先拆段,不得硬锁成整组第 0 帧。
 4. 锚点包总数 ≤9(官方上限;建议 4–5,素材过多会导致特征优先级混乱);组内出场角色每人至少一张可辨识锚。
@@ -68,7 +68,7 @@ python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negativ
   "generation_channel": "reuse-first(1 张缺口补生成;概念库全覆盖时写 reuse-only)",
   "anchors": [
     { "file": "anchor_char_c003.png", "role": "character", "char_id": "c003",
-      "source": "reuse:assets/concepts/characters/c003/front.png" },
+      "source": "reuse:assets/concepts/characters/c003/sheet.png" },
     { "file": "anchor_expression_admonition.png", "role": "character", "char_id": "c004",
       "source": "generated", "gap_reason": "概念库无 c004 训诫表情特写,组 prompt Shot 2 需要",
       "seed": 1234, "self_check": { "composition_ok": true, "limb_artifact": false } }
@@ -87,7 +87,7 @@ task_id: p7-ep01-grp005-imagegen
 agent: 08-video-gen/image-generation
 instruction: |
   为第 1 集生成组 grp005(sh014–sh016)备齐参考锚点包:
-  角色 c003/c007 各一张单人锚(复用三视图正面)、场景 s012 一张(复用概念图)、
+  角色 c003/c007 各一张形象锚(复用整版三视图 sheet.png)、场景 s012 一张(复用概念图)、
   道具 prop_001 比例锚图一张(复用 scale_ref_01.png);概念库全覆盖则 reuse-only 零新生成,
   仅当组 prompt 需要而概念库缺的形象(按 <shot>.json image_prompt)才补生成候选并记 gap_reason。
   分辨率 2560x1440(16:9),总数 ≤5 张。
