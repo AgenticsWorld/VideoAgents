@@ -220,6 +220,7 @@ window.I18N_DICT = {
 "根目录散图": "Archivos en la raíz",
 "整体画风/渲染质感/色调/构图参考": "Referencias de estilo general / textura de render / paleta / composición",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Referencias de aspecto de personajes; indica una subcarpeta (nombre o id del personaje) para dirigirla a ese personaje",
+"使用云端视频模型,请勿上传真人参考图,生成的真人参考图也不行": "Se usan modelos de video en la nube — no subas imágenes de referencia de personas reales; tampoco se permiten imágenes de personas reales generadas por IA",
 "场景与世界观:建筑/地貌/氛围参考": "Escenas y worldbuilding: arquitectura / terreno / atmósfera",
 "道具/法宝参考;服装可填 costumes 子目录": "Referencias de props / artefactos; el vestuario puede ir en la subcarpeta costumes",
 "希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Archivos de música que quieres usar (candidatos a BGM; el Agent de música los prioriza)",

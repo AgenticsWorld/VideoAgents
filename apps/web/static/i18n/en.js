@@ -220,6 +220,7 @@ window.I18N_DICT = {
 "根目录散图": "Root files",
 "整体画风/渲染质感/色调/构图参考": "Overall art style / rendering texture / palette / composition references",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Character look references; fill in a subfolder (character name or id) to target that character",
+"使用云端视频模型,请勿上传真人参考图,生成的真人参考图也不行": "Cloud video models are used — do not upload reference images of real people; AI-generated real-person images are not allowed either",
 "场景与世界观:建筑/地貌/氛围参考": "Scenes & worldbuilding: architecture / terrain / atmosphere references",
 "道具/法宝参考;服装可填 costumes 子目录": "Prop / artifact references; costumes can go in a costumes subfolder",
 "希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Music files you want used (BGM candidates; the music agent picks them first)",

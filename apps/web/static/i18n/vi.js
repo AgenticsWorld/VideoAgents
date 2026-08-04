@@ -220,6 +220,7 @@ window.I18N_DICT = {
 "根目录散图": "Tệp ở thư mục gốc",
 "整体画风/渲染质感/色调/构图参考": "Tham chiếu phong cách tổng thể / chất liệu render / tông màu / bố cục",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Tham chiếu ngoại hình nhân vật; điền thư mục con (tên hoặc id nhân vật) để nhắm đúng nhân vật đó",
+"使用云端视频模型,请勿上传真人参考图,生成的真人参考图也不行": "Sử dụng mô hình video đám mây — không tải lên ảnh tham khảo người thật; ảnh người thật do AI tạo ra cũng không được phép",
 "场景与世界观:建筑/地貌/氛围参考": "Bối cảnh và thế giới quan: kiến trúc / địa hình / không khí",
 "道具/法宝参考;服装可填 costumes 子目录": "Tham chiếu đạo cụ / pháp bảo; trang phục để trong thư mục con costumes",
 "希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Tệp nhạc muốn dùng (ứng viên BGM, Agent âm nhạc ưu tiên chọn)",

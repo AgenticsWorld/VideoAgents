@@ -220,6 +220,7 @@ window.I18N_DICT = {
 "根目录散图": "Berkas di akar",
 "整体画风/渲染质感/色调/构图参考": "Referensi gaya keseluruhan / tekstur render / palet warna / komposisi",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Referensi tampilan karakter; isi subfolder (nama atau id karakter) agar tertuju ke karakter itu",
+"使用云端视频模型,请勿上传真人参考图,生成的真人参考图也不行": "Model video cloud digunakan — jangan unggah gambar referensi orang sungguhan; gambar orang sungguhan hasil AI juga tidak diperbolehkan",
 "场景与世界观:建筑/地貌/氛围参考": "Adegan & worldbuilding: arsitektur / medan / atmosfer",
 "道具/法宝参考;服装可填 costumes 子目录": "Referensi properti / pusaka; kostum bisa di subfolder costumes",
 "希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Berkas musik yang ingin dipakai (kandidat BGM; Agent musik memprioritaskannya)",
