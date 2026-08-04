@@ -366,7 +366,7 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     text = prompt + (f"\n避免出现:{negative}" if negative else "")
     body = {"model": cfg["model"], "prompt": text,
             "size": f"{width}x{height}",
-            "response_format": "b64_json", "watermark": False}
+            "response_format": "url", "watermark": False}
     if seed is not None:
         body["seed"] = seed
     if refs:
