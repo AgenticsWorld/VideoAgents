@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 import platform
 import shutil
 import subprocess
@@ -68,7 +69,12 @@ def is_junction(path: Path) -> bool:
     junction for its major/minor CPython alias there, while Unix uses a symlink.
     """
     check = getattr(path, "is_junction", None)
-    return bool(check and check())
+    if check and check():
+        return True
+    try:
+        return bool(path.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (AttributeError, OSError):
+        return False
 
 
 def remove_python_aliases(python_store: Path) -> None:
@@ -92,7 +98,11 @@ def main() -> None:
     if existing.is_file() and not args.force:
         manifest = json.loads(existing.read_text(encoding="utf-8"))
         executable = output / manifest.get("executable", "")
-        if manifest.get("requirementsSha256") == lock_hash and executable.is_file():
+        if (
+            manifest.get("requirementsSha256") == lock_hash
+            and executable.is_file()
+            and Path(manifest.get("executable", "")).parts[:1] == ("py",)
+        ):
             if args.version and manifest.get("version") != args.version:
                 manifest["version"] = args.version
                 existing.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -121,9 +131,16 @@ def main() -> None:
         uv, "pip", "install", "--python", str(python), "--system",
         "--break-system-packages", "--requirements", str(LOCK), env=env,
     )
-    run(str(python), "-c", "import fastapi,lark_oapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
     version = run(str(python), "-c", "import platform; print(platform.python_version())", env=env)
     remove_python_aliases(python_store)
+    distribution = python_store / python.relative_to(python_store).parts[0]
+    executable_in_distribution = python.relative_to(distribution)
+    # uv's long distribution name can push lark-oapi beyond Windows MAX_PATH.
+    compact_distribution = staging / "py"
+    distribution.rename(compact_distribution)
+    python = compact_distribution / executable_in_distribution
+    # Validate after the final internal relocation.
+    run(str(python), "-c", "import fastapi,lark_oapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
     manifest = {
         "schema": SCHEMA,
         "version": args.version or f"cpython-{version}-{lock_hash[:12]}",

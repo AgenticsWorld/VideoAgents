@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
+import functools
 import json
 import os
 import sys
@@ -46,8 +46,22 @@ _WAKE = asyncio.Event()                   # 绑定/解绑后立刻唤醒收循�
 _TOKEN = {"v": "", "exp": 0.0, "key": ""}  # tenant_access_token 缓存
 
 
+@functools.lru_cache(maxsize=1)
+def _sdk_status() -> tuple[bool, str]:
+    """Import the SDK once; finding its package is not enough on Windows."""
+    try:
+        import lark_oapi  # noqa: F401, PLC0415
+    except Exception as exc:  # noqa: BLE001
+        return False, f"飞书 SDK 加载失败: {type(exc).__name__}: {exc}"
+    return True, ""
+
+
 def _sdk_ok() -> bool:
-    return importlib.util.find_spec("lark_oapi") is not None
+    return _sdk_status()[0]
+
+
+def _sdk_error() -> str:
+    return _sdk_status()[1]
 
 
 def load_cfg() -> dict:
@@ -114,7 +128,8 @@ async def api_feishu_status():
         # ready=已能反向推送(飞书端发过消息,拿到了 open_id)
         "ready": bool(_contact_label(cfg)["user_id"]),
         "sdk": _sdk_ok(),
-        "relay": {"last_error": RELAY["err_in"] or RELAY["err_out"],
+        "sdk_error": _sdk_error(),
+        "relay": {"last_error": _sdk_error() or RELAY["err_in"] or RELAY["err_out"],
                   "last_in": RELAY["last_in"], "last_out": RELAY["last_out"]},
     }
 
@@ -127,8 +142,7 @@ async def api_feishu_bind(body: dict):
     if not app_id or not app_secret:
         raise core.ServiceError(400, "App ID 与 App Secret 均不能为空")
     if not _sdk_ok():
-        raise core.ServiceError(
-            400, "未安装飞书 SDK:请先在服务端执行 pip install lark-oapi 再绑定")
+        raise core.ServiceError(400, _sdk_error())
     try:
         d = await asyncio.to_thread(_fetch_tenant_token, domain, app_id, app_secret)
     except (OSError, urllib.error.URLError) as e:
@@ -208,8 +222,7 @@ async def _inbound_loop():
             if proc is None or proc.returncode is not None or creds != cur:
                 await _kill(proc)
                 if not _sdk_ok():
-                    RELAY["err_in"] = ("未安装飞书 SDK:请在服务端执行 "
-                                       "pip install lark-oapi")
+                    RELAY["err_in"] = _sdk_error()
                     proc, cur = None, None
                     await asyncio.sleep(30)
                     continue

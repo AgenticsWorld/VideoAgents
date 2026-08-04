@@ -29,7 +29,12 @@ def sha256(path: Path) -> str:
 
 def is_junction(path: Path) -> bool:
     check = getattr(path, "is_junction", None)
-    return bool(check and check())
+    if check and check():
+        return True
+    try:
+        return bool(path.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (AttributeError, OSError):
+        return False
 
 
 def runtime_paths(root: Path):
