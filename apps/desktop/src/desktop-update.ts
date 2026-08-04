@@ -18,6 +18,8 @@ export interface BuildInfo {
   channel: 'local' | 'dev' | 'release'
   version: string
   buildHash: string
+  /** 构建期 runtime-requirements.lock 的 sha256;与已装运行时清单比对,不一致时启动自动更新运行时 */
+  requirementsSha256?: string
 }
 
 export interface DesktopArtifact {
@@ -54,7 +56,12 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
   try {
     const value = JSON.parse(readFileSync(path.join(resourcesPath, 'build-info.json'), 'utf8')) as BuildInfo
     if (value.schema === 1 && ['local', 'dev', 'release'].includes(value.channel)
-        && typeof value.version === 'string' && typeof value.buildHash === 'string') return value
+        && typeof value.version === 'string' && typeof value.buildHash === 'string') {
+      if (value.requirementsSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(value.requirementsSha256)) {
+        delete value.requirementsSha256
+      }
+      return value
+    }
   } catch (error) {
     console.warn(`[desktop-updater] build-info.json 不可用：${String(error)}`)
   }

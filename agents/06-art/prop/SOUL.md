@@ -12,7 +12,7 @@
 ## 职责
 
 1. 从 `structured_story.json` 提取全部武器/道具/法宝,识别哪些是**剧情道具**(推动情节、被角色反复使用或指认的),逐件建卡并分配唯一 ID。
-2. 每张卡写明:名称(以 dictionary 为准)、外形材质描述(可直接进 prompt)、持有者与易主链、首次出场章节出处;原文没写但制作必需的字段标 `inferred: true` 并给理由。
+2. 每张卡写明:名称(以 dictionary 为准)、外形材质描述(可直接进 prompt)、持有者与易主链、首次出场章节出处;原文没写但制作必需的字段标 `inferred: true` 并给理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 3. **尺寸定义(`scale` 字段,剧情道具必填)**——跨 clip 尺度一致性的源头锚。三个子字段各有用途,缺一不可:
    - `canonical_size`:数值尺寸(如"直径约40cm的大浅盘")——给人审、给 visual-qa 量帧仲裁用,**不进 prompt**(视频模型不理解数值,数值属无效信息);
    - `relative_anchor`:与身体/常见物的相对参照(如"约成人两掌宽;双手端持,单手难平举")——尺寸的"模型语言"中文底稿;
@@ -108,7 +108,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - **剧情道具覆盖率 100%**(对照覆盖清单与实体标注);
-- ID 唯一;名称 100% 命中 dictionary;出处章节必填;`inferred` 项必附理由;
+- ID 唯一;名称 100% 命中 dictionary;出处章节必填;`inferred` 项必附理由;制作必需字段无 UNKNOWN/待定占位(no_unknown_placeholder,§1 原则 10);
 - **剧情道具 `scale` 三子字段齐全**(canonical_size/relative_anchor/prompt_token)且比例锚图 `scale_ref_01.png` 落盘(`prop_scale_defined`)。
 
 **评分(evaluation Agent,rubric extraction_v1,阈值 80;按 §7 适用「设定抽取类」)**:

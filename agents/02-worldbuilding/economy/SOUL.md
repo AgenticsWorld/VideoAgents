@@ -15,7 +15,7 @@
 2. 建立物价样本库:原文每次明确报价(一顿饭、一柄剑、一颗丹药)都收录为 `price_samples`,带章节出处——这是校验剧本报价的底册。
 3. 抽取贸易格局:商路(引用 geography 的城市/路线)、大宗商品、商会与垄断方(引用 world 的 faction id)。
 4. 抽取经济规则:悬赏体系、拍卖行规则、宗门俸禄/任务报酬制度。
-5. 每条注明原文出处(章节);原文没给的兑换率/物价基准,标 `inferred: true` 并给推断依据(用已知样本插值,写明算法)。
+5. 每条注明原文出处(章节);原文没给的兑换率/物价基准,标 `inferred: true` 并给推断依据(用已知样本插值,写明算法)。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 
 ## 不做什么(边界)
 
@@ -71,7 +71,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - 货币 id 唯一;`exchange_rates` 引用的货币均已定义;`route_refs`/`controller_ref` 可在 geography/world 命中。
 - 每个 `price_sample` 必须带交易情境(`context`:零售/拍卖/黑市),裸价格退回。
 

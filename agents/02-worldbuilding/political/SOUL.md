@@ -15,7 +15,7 @@
 2. 抽取阵营版图:每个势力(引用 `world.json` 的 faction/nation id)属于哪个阵营,从哪一章开始、因何事件站队。
 3. 抽取外交关系:同盟/敌对/朝贡/中立,**按剧情阶段记录变化区间**(第 X–Y 章为同盟,Z 章破裂),不是只记终态。
 4. 抽取政治规则:官职品级、律法要点、势力间的默契红线(如「不得屠城」)。
-5. 每条设定注明原文出处(章节);推断的暗盟/幕后关系标 `inferred: true` 并给推断理由(证据链)。
+5. 每条设定注明原文出处(章节);推断的暗盟/幕后关系标 `inferred: true` 并给推断理由(证据链)。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。原文刻意不揭示的幕后势力(悬念)如实记「原文刻意未揭示」,不算占位。
 
 ## 不做什么(边界)
 
@@ -71,7 +71,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - 与 world 势力表对齐:`entity_ref` / `faction_ref` / 关系双方 100% 能在 `world.json` 命中,零悬空。
 - `relations[].phases` 章节区间不重叠、不留空洞(未知期显式标 `unknown`)。
 

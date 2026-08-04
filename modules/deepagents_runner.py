@@ -3,9 +3,14 @@
 
 由 services/runtime/core.py 以子进程方式调用(解释器由 DEEPAGENTS_PY 指定):
   runner --model <id> --base-url <url> --api-key <key>
+         [--checkpoint-db <sqlite>] [--thread-id <id>]
   系统提示词与工作指令经环境变量 DA_SYSTEM / DA_PROMPT 传入(避免超长 argv)。
+  --checkpoint-db 给出时启用 LangGraph SqliteSaver 会话续接(Agent记忆):
+  消息历史(含工具结果)按 thread_id 持久化;--thread-id 缺省则新开会话并生成 id。
+  续接一个不存在的 thread_id 只得到空历史(全新会话),不报错。
 
 stdout 输出 JSONL 事件(server.handle_deepagents_event 解析):
+  {"type":"session","session_id":...}   本次会话 thread_id(仅启用检查点时)
   {"type":"text","text":...}        assistant 文本增量
   {"type":"tool","name":...,"input":{...}}   工具调用
   {"type":"usage","input_tokens":N,"output_tokens":N}
@@ -44,6 +49,8 @@ def main():
     ap.add_argument("--base-url", required=True)
     ap.add_argument("--api-key", default="lm-studio")
     ap.add_argument("--recursion-limit", type=int, default=100)
+    ap.add_argument("--checkpoint-db", default=None)
+    ap.add_argument("--thread-id", default=None)
     args = ap.parse_args()
 
     system = os.environ.get("DA_SYSTEM") or ""
@@ -77,7 +84,22 @@ def main():
     # LocalShellBackend = 真实文件系统读写 + shell 执行,root 为工作区根目录
     backend = LocalShellBackend(root_dir=str(ROOT), virtual_mode=False,
                                 inherit_env=True, timeout=600)
-    agent = create_deep_agent(model=model, system_prompt=system, backend=backend)
+    # 会话续接(Agent记忆):SqliteSaver 按 thread_id 跨进程持久化消息历史。
+    # 仅在启用时才传 checkpointer 参数,保证无记忆路径与旧版 deepagents 兼容
+    config = {"recursion_limit": args.recursion_limit}
+    agent_kw = {}
+    if args.checkpoint_db:
+        import sqlite3
+        import uuid
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        # SqliteSaver 内部自带锁串行化访问,跨线程复用连接须关 check_same_thread
+        conn = sqlite3.connect(args.checkpoint_db, check_same_thread=False)
+        agent_kw["checkpointer"] = SqliteSaver(conn)
+        thread_id = args.thread_id or uuid.uuid4().hex
+        config["configurable"] = {"thread_id": thread_id}
+        emit({"type": "session", "session_id": thread_id})
+    agent = create_deep_agent(model=model, system_prompt=system, backend=backend,
+                              **agent_kw)
 
     last_text = ""
     in_tok = out_tok = 0
@@ -85,7 +107,7 @@ def main():
         for upd in agent.stream(
                 {"messages": [{"role": "user", "content": prompt}]},
                 stream_mode="updates",
-                config={"recursion_limit": args.recursion_limit}):
+                config=config):
             for _node, data in (upd or {}).items():
                 for m in (data or {}).get("messages", []) or []:
                     if not isinstance(m, AIMessage):

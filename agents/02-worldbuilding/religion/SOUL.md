@@ -15,7 +15,7 @@
 2. 抽取宗教组织:教义要点、神职层级(教皇/祭司/信徒)、戒律禁忌、与哪些势力绑定(引用 world.json 的 faction id)。
 3. 抽取仪式与信仰实践:祭祀、祈祷、成年礼等,记流程要点、时间(节期)、地点(引用 geography 圣地)。
 4. 抽取信仰分布:哪些地区/人群信什么,教派之间的教义分歧与敌对(事实层)。
-5. 每条设定注明原文出处(章节);原文没写但制作必需的(如祭祀服色),标 `inferred: true` 并给推断理由。
+5. 每条设定注明原文出处(章节);原文没写但制作必需的(如祭祀服色),标 `inferred: true` 并给推断理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 
 ## 不做什么(边界)
 
@@ -70,7 +70,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`。
+- schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
 - `deities[].id` / `religions[].id` 唯一;`deity_refs`、`bound_factions`、`holy_sites` 引用可解析。
 - 每个神明必须有 `existence` 标注(传说/实际登场),不得留空。
 

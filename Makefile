@@ -16,7 +16,7 @@ DEEPAGENTS_PYTHON ?= $(shell command -v python3.12 2>/dev/null || command -v pyt
 install-deepagents:
 	$(DEEPAGENTS_PYTHON) -m venv .venv-deepagents
 	.venv-deepagents/bin/python -m pip install --upgrade pip
-	.venv-deepagents/bin/python -m pip install "deepagents>=0.2" "langchain-openai>=0.3"
+	.venv-deepagents/bin/python -m pip install "deepagents>=0.2" "langchain-openai>=0.3" "langgraph-checkpoint-sqlite>=2"
 
 run:
 	$(PYTHON) apps/web/server.py

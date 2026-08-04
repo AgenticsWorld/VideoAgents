@@ -7,7 +7,7 @@ import https from 'node:https'
 import net from 'node:net'
 import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
-import {installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
+import {fetchLatestRuntimeArtifact, installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
   cacheRequiredDesktopUpdate, clearCachedRequiredDesktopUpdate, DesktopArtifact, DesktopUpdate,
   downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo, readCachedRequiredDesktopUpdate,
@@ -132,8 +132,9 @@ function closeRuntimeProgress(): void {
 }
 
 async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
+  let installed: PythonRuntime | undefined
   try {
-    return resolvePythonRuntime({
+    installed = resolvePythonRuntime({
       packaged: app.isPackaged,
       userData: app.getPath('userData'),
       developmentRoot: backend,
@@ -141,9 +142,34 @@ async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
   } catch (error) {
     if (!app.isPackaged || process.env.VIDEOAGENTS_PYTHON) throw error
   }
+  if (installed) {
+    // 已装运行时的依赖清单与本次 app 构建期望不一致(app 升级带出了新依赖):
+    // 自动更新运行时,老用户升级 app 后不再卡在旧 Python 环境缺包。
+    // 更新检查/下载失败(离线、索引不可达)沿用现有运行时,不阻断启动。
+    const expected = readBuildInfo(process.resourcesPath, app.isPackaged).requirementsSha256
+    const actual = installed.manifest?.requirementsSha256
+    if (installed.source !== 'user' || !expected || !actual || expected === actual) return installed
+    try {
+      const latest = await fetchLatestRuntimeArtifact()
+      if (latest.version === installed.manifest?.version) {
+        console.warn('[runtime] 依赖清单与 app 期望不一致,但索引暂无更新的运行时,沿用现有运行时')
+        return installed
+      }
+      console.log(`[runtime] 依赖清单过期(${actual.slice(0, 12)} → ${expected.slice(0, 12)}),自动更新运行时到 ${latest.version}`)
+    } catch (error) {
+      console.warn(`[runtime] 运行时更新检查失败,沿用现有运行时:${String(error)}`)
+      return installed
+    }
+  }
   await showRuntimeProgress()
   try {
     return (await installLatestPythonRuntime(app.getPath('userData'), updateRuntimeProgress)).runtime
+  } catch (error) {
+    if (installed) {
+      console.warn(`[runtime] 运行时自动更新失败,沿用现有运行时:${String(error)}`)
+      return installed
+    }
+    throw error
   } finally {
     closeRuntimeProgress()
   }
