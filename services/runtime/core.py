@@ -4548,11 +4548,24 @@ def confirm_public(c: dict) -> dict:
 async def api_confirm_create(body: dict):
     """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。
     kind=confirm(默认,重跑类):至多 60s 后自动落默认答案;
-    kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。"""
+    kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。
+    签字类同题去重:等待方(dispatch.py)超时退出后重发同一签字时,复用原 confirm_id
+    接回原弹窗,避免重复弹窗、且用户点旧弹窗即刻生效;若同题刚被答复(竞态窗口内
+    用户已点过),直接返回原 id 让新等待方首轮轮询即取到答案,免用户白点。"""
     q = (body.get("question") or "").strip()
     if not q:
         raise ServiceError(400, "question must not be empty")
     kind = "sign" if body.get("kind") == "sign" else "confirm"
+    if kind == "sign":
+        dups = [o for o in CONFIRMS.values()
+                if o["kind"] == "sign" and o["question"] == q[:500]]
+        pending = next((o for o in dups if o["answer"] is None), None)
+        if pending:
+            return {"confirm_id": pending["id"]}
+        fresh = max((o for o in dups if o.get("answered")),
+                    key=lambda o: o["answered"], default=None)
+        if fresh and time.time() - fresh["answered"] < 600:
+            return {"confirm_id": fresh["id"]}
     fallback = ["签字", "暂缓"] if kind == "sign" else ["重跑", "跳过"]
     options = [str(o)[:40] for o in (body.get("options") or fallback)][:4]
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
