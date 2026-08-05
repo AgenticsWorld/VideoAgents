@@ -192,10 +192,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">语言模型</label>
   <select id="model"></select>
   <input type="text" id="model-custom" style="width:130px;display:none" placeholder="输入模型ID">
-  <label style="color:var(--dim);font-size:12px">图像模型</label>
-  <select id="img-provider" title="图像生成生效渠道(各渠道参数在 🎨 生成模型 页配置)"></select>
-  <label style="color:var(--dim);font-size:12px">视频模型</label>
-  <select id="vid-provider" title="视频生成生效渠道(各渠道参数在 🎨 生成模型 页配置)"></select>
   <div id="conn" title="实时连接状态"></div>
   <div id="preview-menu">
     <button id="preview-btn" title="预览设定产物"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><circle cx="9" cy="9.5" r="1.8" fill="var(--panel2)"/><path d="M5.5 17l4.5-5 2.8 3.1 2.2-2.5 3.5 4.4z" fill="var(--panel2)"/></svg></button>
@@ -687,7 +683,7 @@ const MODEL_OPTIONS={
         ['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置
 };
-let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,initGenProviders/切引擎时同步)
+let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 function populateModels(engine){
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -892,33 +888,11 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
   await npCreate();
 };
 
-/* ---------- 图像/视频生效渠道切换 ---------- */
+/* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
   image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
   video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['comfyui','ComfyUI']],
 };
-async function initGenProviders(){
-  let cfg; try{cfg=await api('/api/v1/config/generation')}catch(e){return}
-  for(const [kind,selId] of [['image','#img-provider'],['video','#vid-provider']]){
-    const sel=$(selId); sel.innerHTML='';
-    GEN_PROVIDERS[kind].forEach(([v,label])=>{
-      const pc=cfg[kind][v]||{};
-      const model=pc.custom_model||pc.model||(v==='comfyui'?(pc.checkpoint||'本地'):'');
-      const o=document.createElement('option');
-      o.value=v; o.textContent=label; o.title=model?`${t(label)} · ${model}`:t(label);
-      sel.appendChild(o);
-    });
-    sel.value=cfg[kind].provider;
-    sel.onchange=async()=>{
-      try{
-        cfg=(await api('/api/v1/config/generation',{[kind]:{provider:sel.value},project:$('#project').value.trim()||'demo'})).config;
-        sel.style.borderColor='var(--green)';
-        setTimeout(()=>sel.style.borderColor='',1200);
-      }catch(e){await uiAlert('切换失败:'+e.message);sel.value=cfg[kind].provider}
-    };
-  }
-  syncDaSelect(cfg);   // deepagents 生效渠道同步到顶栏语言模型下拉
-}
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
@@ -1860,7 +1834,7 @@ function liveBox(runId){
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}
   renderAgents();renderRuns();
   initWatchdog();   // 等项目下拉框就绪后再查,否则 curProj() 回退 demo 导致误显示「已停」
-  initGenProviders();
+  syncDaProvider();   // deepagents 生效渠道同步到顶栏语言模型下拉
   // 左下角版本号:来自 API health 的 __version__,随 release 升版自动变化
   api('/api/v1/health').then(h=>{if(h.version)$('#app-ver').textContent='v'+h.version}).catch(()=>{});
   // 运行面板计时刷新由顶部的条件 setInterval 统一负责(仅有任务在跑时重绘)
