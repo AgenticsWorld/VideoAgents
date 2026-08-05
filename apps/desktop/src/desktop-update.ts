@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto'
 import {
-  createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync,
+  appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync,
   writeFileSync,
 } from 'node:fs'
 import path from 'node:path'
@@ -9,7 +9,6 @@ import {Readable, Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
 import extract from 'extract-zip'
 import {RuntimeProgress} from './runtime-download'
-import {windowsUpdateHelperScript} from './windows-update-helper'
 
 const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents/metadata.json'
 const DEFAULT_BASE = 'https://s3.agentics.world/packages/video-agents/'
@@ -227,25 +226,6 @@ function findFile(root: string, predicate: (name: string) => boolean): string | 
   return undefined
 }
 
-async function waitForWindowsUpdaterReady(
-  readyPath: string,
-  helperProcess: ChildProcess,
-  timeoutMs = 10_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!existsSync(readyPath)) {
-    if (helperProcess.exitCode !== null || helperProcess.signalCode !== null) {
-      const result = helperProcess.exitCode === null ? `信号 ${helperProcess.signalCode}` : `退出码 ${helperProcess.exitCode}`
-      throw new Error(`Windows 更新助手启动失败：${result}`)
-    }
-    if (Date.now() >= deadline) {
-      helperProcess.kill()
-      throw new Error('Windows 更新助手启动超时，应用不会退出。请重试更新。')
-    }
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
-}
-
 async function extractDesktopArchive(archive: string, staging: string): Promise<void> {
   // Electron 的 extract-zip 在部分 macOS App 包（Framework 内含符号链接）上会停在
   // 解压阶段而不抛错。ditto 是系统原生的 App/DMG 解包工具，可正确保留链接和权限。
@@ -310,38 +290,22 @@ export async function downloadAndApplyDesktopUpdate(
     if (!existsSync(installer) || !lstatSync(installer).isFile()) {
       throw new Error('Windows 更新包中没有 VideoAgents-Setup.exe')
     }
-    const helper = path.join(root, 'apply-windows-update.ps1')
+    const installDir = path.resolve(currentAppPath)
     const log = path.join(root, 'update-windows.log')
-    const ready = path.join(root, 'update-windows.ready')
-    const state = path.join(root, 'update-windows-state.json')
-    rmSync(ready, {force: true})
-    rmSync(state, {force: true})
-    // Windows PowerShell 5.1 requires a BOM to decode the Chinese updater UI as UTF-8.
-    writeFileSync(helper, `\uFEFF${windowsUpdateHelperScript()}`, {encoding: 'utf8', mode: 0o600})
-    const helperProcess = spawn('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Sta', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
-      '-File', helper,
-      '-PidToWait', String(process.pid),
-      '-Installer', installer,
-      '-LogPath', log,
-      '-ReadyPath', ready,
-      '-StatePath', state,
-      '-StagingPath', staging,
-    ], {detached: true, stdio: 'ignore', windowsHide: true})
-    await new Promise<void>((resolve, reject) => {
-      helperProcess.once('spawn', resolve)
-      helperProcess.once('error', reject)
+    const args = ['--updated', `/D=${installDir}`]
+    appendFileSync(log, `[${new Date().toISOString()}] Starting NSIS installer: ${installer}\n`)
+    appendFileSync(log, `[${new Date().toISOString()}] Install directory: ${installDir}\n`)
+    const installerProcess = spawn(installer, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
     })
-    try {
-      onProgress({phase: 'activating', message: '正在启动 Windows 更新助手…'})
-      await waitForWindowsUpdaterReady(ready, helperProcess)
-    } finally {
-      rmSync(ready, {force: true})
-    }
-    helperProcess.unref()
-    onProgress({phase: 'activating', message: '安装窗口已打开，应用即将关闭并自动重启…'})
-    // Let the independently rendered helper take focus before Electron exits.
-    await new Promise(resolve => setTimeout(resolve, 300))
+    installerProcess.once('error', error => {
+      try { appendFileSync(log, `[${new Date().toISOString()}] Installer spawn failed: ${String(error)}\n`) } catch {}
+    })
+    appendFileSync(log, `[${new Date().toISOString()}] Installer started, pid=${installerProcess.pid ?? 'unknown'}\n`)
+    installerProcess.unref()
+    onProgress({phase: 'activating', message: '安装程序已启动，应用即将关闭并自动重启…'})
     return
   }
   throw new Error(`不支持桌面自更新的平台：${process.platform}`)

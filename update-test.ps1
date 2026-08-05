@@ -1,9 +1,4 @@
-/**
- * Windows PowerShell 5.1 updater UI. It runs outside Electron so the progress
- * window stays visible while NSIS replaces the application files.
- */
-export function windowsUpdateHelperScript(): string {
-  return String.raw`param(
+﻿param(
   [int]$PidToWait,
   [string]$Installer,
   [string]$LogPath,
@@ -227,6 +222,4 @@ try {
 } catch {
   try { Write-UpdateLog "Updater crashed: $($_.Exception.Message)" } catch {}
   exit 1
-}
-`
 }

@@ -46,7 +46,7 @@ def main() -> None:
         source = newest("*.zip")
         shutil.copyfile(source, package)
     else:
-        installer = newest("*.exe")
+        installer = newest("*Setup*.exe")
         with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
             archive.write(installer, "VideoAgents-Setup.exe")
     metadata = {
