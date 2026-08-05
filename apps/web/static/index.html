@@ -1364,11 +1364,11 @@ async function renderResources(fresh){
   let r;
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
-  const HINTS={claude:'未开启:在 ⚙️ 设置 → 资源消耗 打开 Claude 用量检查',
-               kimi:'未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key'};
+  const HINTS={kimi:'未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key'};
   let h='';
   for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
     const e=r[k]||{};
+    if(k==='claude'&&!e.enabled)continue;   // Claude 用量检查未开启则整行不显示(⚙️ 设置 → 资源消耗 开启后回来)
     h+=`<div class="res-eng"><span class="nm">${label}</span>${e.enabled?'':`<span class="hint" title="${esc(t(HINTS[k]||''))}">${t('未开启')}</span>`}${resLine('Session',e.session)}${resLine('Weekly',e.weekly)}</div>`;
   }
   const bal=(name,b,sym)=>{

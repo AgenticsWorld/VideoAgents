@@ -971,7 +971,6 @@ window.I18N_DICT = {
 "获取 Key:": "Obtén la clave aquí:",
 "配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传": "El uso/saldo configurado se muestra en el panel «Consumo de recursos» a la derecha y se actualiza cada 10 minutos; todas las claves se guardan solo en el webui/state.json local y nunca se suben",
 "开启火山引擎余额检查需同时填写 Access Key 与 Secret Key": "Para activar el saldo de Volcengine hay que rellenar el Access Key y el Secret Key",
-"未开启:在 ⚙️ 设置 → 资源消耗 打开 Claude 用量检查": "Desactivado: activa la comprobación de uso de Claude en ⚙️ Ajustes → Consumo de recursos",
 "未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key": "Sin configurar: introduce la Kimi API Key en ⚙️ Ajustes → Consumo de recursos",
 "未开启": "Desactivado",
 "余额": "Saldo",

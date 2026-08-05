@@ -971,7 +971,6 @@ window.I18N_DICT = {
 "获取 Key:": "Key hier abrufen:",
 "配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传": "Konfigurierte Nutzung/Guthaben erscheinen im Panel „Ressourcenverbrauch“ rechts und werden alle 10 Minuten automatisch aktualisiert; alle Keys werden nur lokal in webui/state.json gespeichert und nie hochgeladen",
 "开启火山引擎余额检查需同时填写 Access Key 与 Secret Key": "Für die Volcengine-Guthabenprüfung müssen Access Key und Secret Key beide ausgefüllt sein",
-"未开启:在 ⚙️ 设置 → 资源消耗 打开 Claude 用量检查": "Aus: Claude-Nutzungsprüfung unter ⚙️ Einstellungen → Ressourcenverbrauch aktivieren",
 "未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key": "Nicht konfiguriert: Kimi API Key unter ⚙️ Einstellungen → Ressourcenverbrauch eintragen",
 "未开启": "Aus",
 "余额": "Guthaben",

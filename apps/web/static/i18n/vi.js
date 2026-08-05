@@ -971,7 +971,6 @@ window.I18N_DICT = {
 "获取 Key:": "Lấy Key tại đây:",
 "配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传": "Mức dùng/số dư đã cấu hình hiển thị ở bảng \"Mức tiêu thụ tài nguyên\" bên phải, tự làm mới mỗi 10 phút; mọi Key chỉ lưu cục bộ trong webui/state.json, không tải lên",
 "开启火山引擎余额检查需同时填写 Access Key 与 Secret Key": "Bật kiểm tra số dư Volcengine cần điền cả Access Key và Secret Key",
-"未开启:在 ⚙️ 设置 → 资源消耗 打开 Claude 用量检查": "Chưa bật: bật kiểm tra mức dùng Claude trong ⚙️ Cài đặt → Tiêu thụ tài nguyên",
 "未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key": "Chưa cấu hình: nhập Kimi API Key trong ⚙️ Cài đặt → Tiêu thụ tài nguyên",
 "未开启": "Chưa bật",
 "余额": "Số dư",
