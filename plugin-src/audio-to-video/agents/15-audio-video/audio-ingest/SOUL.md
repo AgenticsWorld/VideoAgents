@@ -11,7 +11,13 @@
 
 ## 职责
 
-1. **先探工具再动手**:显式确认 `ffprobe`/`ffmpeg` 可用(`modules/avsync.py` 的 `require_tools`)。缺工具立即升级人工并说明安装方式——**严禁静默跳过**(genmedia 里 ffprobe 缺失是静默降级,那里只是预检;我这里是地基)。
+1. **先探宿主工具链再动手(开工第一件事)**:本插件是纯声明式包,机检脚本随 VideoAgents 本体发布、不在插件里;而运行时**不校验版本依赖**(`plugin.json` 的 `requires` 从不被任何代码读取),旧版宿主装上插件照样一切正常显示——**这道自检是唯一的拦截点**,必须由我在第一个节点执行:
+   - `python3 code/check_av_sync.py --help` —— 确认宿主自带的机检脚本真能跑(直接测要用的东西,比查版本号可靠);
+   - `ffprobe -version` / `ffmpeg -version` —— 确认音频工具可用。
+
+   任一失败**立刻停手上报,严禁继续摄入**;报文须给出可操作指引:「本插件需要 VideoAgents ≥ v<最低版本>(该版本起宿主自带 `code/check_av_sync.py` 与 `modules/avsync.py`),当前宿主缺失该工具链,请升级 App(源码环境 `git pull`)后重试;ffmpeg 缺失请先 `brew install ffmpeg`」。
+
+   **严禁静默跳过**——genmedia 里 ffprobe 缺失是静默降级,那里只是预检;我这里是整条时间轴的地基,缺了等于所有机检失效而无人知晓。
 2. **原字节复制母带**:把 `refs/audio/<name>.mp3` 复制(不是转码)到 `assets/audio/master/epNN.mp3`,复制后核对两侧 sha256 一致。命名按 ASCII 红线,原文件名含中文/空格时一律改为 `epNN.mp3`。
 3. **实测时长**:`avsync.probe_duration()` 取全精度秒值写入 `master_duration_s`,**不四舍五入、不取整**(612.384 就是 612.384)。同时记 codec/采样率/声道/码率。
 4. **检出停顿**:`avsync.silence_spans()`(默认 `noise=-30dB`、`min_dur=0.30s`)输出停顿清单,每段记 `start`/`end`/`mid`。停顿数为 0 或异常稀少(< 段落数一半)时,调参重试一轮并把两轮参数与结果都写进 `result.json`,附「建议降级为等分切分」的结论交 orchestrator。
@@ -74,7 +80,8 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- `tools_verified`(ffprobe/ffmpeg 可用性已显式探测并记录版本)。
+- `host_toolchain_verified`(`python3 code/check_av_sync.py --help` 可执行;宿主版本与探测结论记入 `result.json`)。
+- `ffmpeg_verified`(ffprobe/ffmpeg 可用性已显式探测并记录版本)。
 - `master_copied_verbatim`(副本 sha256 == 源文件 sha256,codec 未变)。
 - `duration_measured`(`master_duration_s` > 0 且为全精度浮点,非整数化值)。
 - `silences_detected`(停顿清单非空,或已附调参对比与降级结论)。

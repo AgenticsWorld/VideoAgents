@@ -12,21 +12,48 @@
 | 声轨来源 | TTS 旁白 + 模型原生对白 + 后期混音 | **用户母带,零重编码** |
 | 时长事实源 | `settings.json` 的集预算 | **ffprobe 实测的母带时长** |
 
-## 依赖两个仓库级文件(重要)
+---
 
-插件是纯声明式的(§10.4 不允许含可执行代码),但时间轴精度不能交给 LLM 每个项目
-现写一遍脚本。故本插件**依赖两个随仓库发布的文件**:
+## ⚠️ 安装前必读:前置要求
 
-| 文件 | 作用 |
+| 要求 | 说明 |
 |---|---|
-| `modules/avsync.py` | 时间轴原语:实测时长、停顿检出、字数估时、边界吸附、整秒切分、逐帧校验 |
-| `code/check_av_sync.py` | 机检 `av_sync`:分 timeline/clips/final 三阶段共 15 项;`--stamp` 盖章 |
+| **VideoAgents ≥ v\<最低版本\>** | 该版本起宿主自带 `modules/avsync.py` 与 `code/check_av_sync.py`。桌面端**升级 App 即可**;源码环境 `git pull` |
+| **ffmpeg / ffprobe 可用** | `brew install ffmpeg`(macOS)。整条时间轴靠它实测,不可缺 |
+| **至少一个 agent 引擎** | Claude CLI / Codex CLI / Kimi / DeepAgents,任选其一并已登录 |
+| 生成服务凭据 | 图像/视频渠道的 API Key(在「生成模型」设置页配) |
 
-⚠️ 把 `plugins/audio-to-video/` 单独拷到没有这两个文件的环境,插件会注册成功但
-**所有时间检查退化为 LLM 目测**。请确认目标环境的 VideoAgents 版本包含它们。
+**为什么插件包里没有那两个 `.py`**:插件是纯声明式的(`WORKFLOW.md` §10.4 明确不允许包含可执行代码),
+机检脚本随 VideoAgents 本体发布,和内置流程的 `check_narration_sync.py` 同性质。
 
-外部依赖:**ffmpeg / ffprobe 必须可用**(`brew install ffmpeg`)。摄入阶段会显式探测,
-缺失即升级人工——不做静默降级。
+> 🚨 **版本不足时不会在安装环节报错。** 运行时不校验版本依赖(`plugin.json` 的 `requires`
+> 字段从不被读取),所以旧版宿主上插件照样能装、能启用、显示一切正常。
+> 真正的拦截点在流程的**第一个节点** `av0-ingest`——它开工先跑
+> `python3 code/check_av_sync.py --help`,不通就停下并提示升级。
+> 也就是说:装上没报错 ≠ 能用,**以第一个节点的结论为准**。
+
+## 安装
+
+1. ⚙️ 设置 → 高级 → **插件** → 「安装插件包」→ 上传 `audio-to-video-<版本>.zip`
+2. 安装后**默认停用**,在同一页面点**启用**
+3. 确认卡片显示 6 个 agent、workflow 路径,且 errors 为空
+
+命令行等价方式(请求体即 zip 原始字节,非 multipart):
+
+```bash
+curl -X POST --data-binary @audio-to-video-1.0.0.zip http://127.0.0.1:8630/api/v1/plugins
+```
+
+## 升级与卸载
+
+**没有原地升级** —— 同名安装一律 409。升级须三步,且**会丢启用状态**:
+
+1. 「插件」页删除旧版(或 `POST /api/v1/plugins/audio-to-video/delete`)
+2. 上传新版 zip —— 回到**停用**态
+3. 手动**重新启用**
+
+卸载只移除插件目录。**项目内已生成的产物全部保留** —— `data/projects/<slug>/av/`
+的过程件,以及已写入正史的 `bible/`、`story/`、`directing/`、`assets/`、`edit/` 都不受影响。
 
 ## 流程
 
@@ -133,12 +160,11 @@ MP3 装进 MP4 时,容器必然重写 gapless/编码器延迟元数据,**整流 
 `video-generation` 会再检一遍并被明确指示「缺字段或矛盾退回 prompt,严禁开跑」。
 所以「轻量」只针对**世界观**(不跑主流程 Phase 2 的九个 agent),美术/场景该建的还得建。
 
-## 用法
+## 用法(插件已启用后)
 
-1. **启用**:⚙️ 设置 →「插件」页 → `audio-to-video` → 启用(装后默认停用)
-2. **放素材**:MP3 放 `refs/audio/`(或「参考图」预览页上传);文本放 `refs/`
-3. **选风格**:菜单「设计构想」→「设计风格」→ 🎨 风格库(94 预设)。**不用新建 UI**
-4. **点单**给总制片:
+1. **放素材**:MP3 放 `refs/audio/`(或「参考图」预览页上传);文本放 `refs/`
+2. **选风格**:菜单「设计构想」→「设计风格」→ 🎨 风格库(94 预设)。**不用新建 UI**
+3. **点单**给总制片:
 
 ```
 启动 audio-to-video 流程:音频 refs/audio/qin_history.mp3,文本 refs/qin_history.txt,
@@ -174,12 +200,17 @@ python3 services/runtime/dispatch.py "00-orchestration/workflow-orchestrator" \
 
 ## 自检命令
 
+在宿主根目录执行(这些脚本随 VideoAgents 本体发布,不在插件包内):
+
 ```bash
+python3 code/check_av_sync.py --help                                      # 装完先跑这条:验宿主工具链
 python3 code/check_av_sync.py --project <slug> --ep ep01                  # 自动判阶段
 python3 code/check_av_sync.py --project <slug> --ep ep01 --require final  # 成片终审
 python3 code/check_generation_groups.py --project <slug> --ep ep01 --skip-7d
 python3 services/runtime/dagcheck.py --project <slug> --strict
 ```
+
+第一条报 `No such file or directory` 即宿主版本不足,升级后再用。
 
 ## v1 不做
 
