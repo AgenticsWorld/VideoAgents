@@ -572,7 +572,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="checkbox" id="wdt-awake" style="width:auto">
       <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
     </div>
+    <div class="row"><label>常任指令</label>
+      <textarea id="wdt-orders" style="height:64px" placeholder="在 ep01-ep10 剧本全部完成前,不派设定类工单"></textarea>
+    </div>
     <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
+    <div class="note">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
     <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
@@ -1180,6 +1184,10 @@ async function openWdtModal(){
     else if(w.keep_awake){st.textContent=t('未生效(没有项目开启自动运行)');st.style.color='var(--dim)'}
     else st.textContent='';
   }catch(e){$('#wdt-range').value=80;$('#wdt-num').value=80;$('#wdt-idle').value=5}
+  try{   // 常任指令按项目独立,读当前项目的
+    const o=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/watchdog');
+    $('#wdt-orders').value=o.orders||'';
+  }catch(e){$('#wdt-orders').value=''}
   $('#wdt-modal').style.display='flex';
   api('/api/v1/resources/usage').then(u=>{                       // 用量探测慢,异步填充不挡弹窗
     const fmt=v=>v==null?t('未知'):Math.round(v)+'%';
@@ -1199,8 +1207,11 @@ $('#wdt-ok').onclick=async()=>{
   if(!(v>=1&&v<=100)){$('#wdt-err').textContent='阈值需为 1-100 的整数';return}
   const idle=parseInt($('#wdt-idle').value);
   if(!(idle>=1&&idle<=720)){$('#wdt-err').textContent='闲置时间需为 1-720 的整数(分钟)';return}
+  const orders=$('#wdt-orders').value.trim();
+  if(orders.length>2000){$('#wdt-err').textContent='常任指令不能超过 2000 字';return}
   try{
     await api('/api/v1/watchdog/policy',{threshold:v,idle_minutes:idle,keep_awake:$('#wdt-awake').checked});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/watchdog',{project:curProj(),orders});
     $('#wdt-modal').style.display='none';
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };

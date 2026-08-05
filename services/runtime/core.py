@@ -4938,6 +4938,14 @@ async def idle_watchdog():
                     continue
                 if confirm_global or proj in confirm_projs:
                     continue
+                # 常任指令:用户为该项目设定的长期约束(设置菜单「自动运行」编辑),
+                # 随每条唤醒消息附带——总制片引擎会话被 reset 后口头指令会全部丢失,
+                # 这里保证约束在每次自动唤醒时都重新进入上下文
+                orders = str(STATE.get("watchdog_orders", {}).get(proj) or "").strip()
+                orders_note = ("\n[常任指令]" + orders +
+                               "\n(用户设定的长期约束,始终有效;与 DAG 待办冲突时以"
+                               "常任指令为准,受限节点暂不派发,只推进不受限部分。)"
+                               ) if orders else ""
                 # DAG 缺失/解析不出任何节点时不再静默失明:唤醒总制片核对
                 # (至多 1 次/小时)。格式规范与写入时自检见 WORKFLOW.md §3.2。
                 dag_path = proj_dir / "runs" / "dag.json"
@@ -4948,7 +4956,7 @@ async def idle_watchdog():
                         msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json {state},"
                                "看门狗无法判断待办前沿。请按 WORKFLOW.md §3.2 规范格式补齐/修复"
                                f"(自检:python3 services/runtime/dagcheck.py --project {proj} --strict),"
-                               "然后继续按 DAG 推进。")
+                               "然后继续按 DAG 推进。" + orders_note)
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog",
                                         "engine": eng, "model": mdl})
@@ -4959,7 +4967,8 @@ async def idle_watchdog():
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"
                            f"但 runs/dag.json 仍有依赖已满足的待办节点(如:{', '.join(runnable[:6])}"
                            f"{' 等' if len(runnable) > 6 else ''})。"
-                           "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
+                           "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。"
+                           + orders_note)
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
@@ -4978,7 +4987,7 @@ async def idle_watchdog():
                            "请按 WORKFLOW.md §3.1「DAG 按集动态展开」把缺失分集展开为 "
                            "pX-*-epNN 节点(含每集闸门),并依据 runs/ 既往工单回填 state/run_id,"
                            "完成后继续按 DAG 与派单守则推进;若该分集确已完结或另有安排,"
-                           "在 DAG 中补记节点状态后简要说明。")
+                           "在 DAG 中补记节点状态后简要说明。" + orders_note)
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
@@ -5125,20 +5134,31 @@ async def api_resources(fresh: bool = False):
 
 
 async def api_watchdog_get(project: str = ""):
-    """按项目查看空转看门狗开关(缺省关闭)。不带 project 时返回全部映射。"""
+    """按项目查看空转看门狗开关(缺省关闭)与常任指令。不带 project 时返回全部映射。"""
     wd = STATE.get("watchdog", {})
     if project:
         proj = safe_slug(project)
-        return {"project": proj, "enabled": bool(wd.get(proj, False))}
+        return {"project": proj, "enabled": bool(wd.get(proj, False)),
+                "orders": str(STATE.get("watchdog_orders", {}).get(proj) or "")}
     return {"watchdog": wd}
 
 
 async def api_watchdog_set(body: dict):
-    """按项目切换空转看门狗开关(运行面板 🤖 按钮);逐项目独立、缺省关闭,
-    状态持久化,重启后保持。"""
+    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/飞书 /auto),
+    orders=常任指令(设置菜单「自动运行」,随每条唤醒消息附带,空串清除)。
+    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。"""
     proj = safe_slug(body.get("project"))
-    wd = STATE.setdefault("watchdog", {})
-    wd[proj] = bool(body.get("enabled"))
+    if body.get("enabled") is not None:
+        STATE.setdefault("watchdog", {})[proj] = bool(body.get("enabled"))
+    if body.get("orders") is not None:
+        orders = str(body.get("orders")).strip()
+        if len(orders) > 2000:
+            raise ServiceError(400, "orders must be at most 2000 characters")
+        od = STATE.setdefault("watchdog_orders", {})
+        if orders:
+            od[proj] = orders
+        else:
+            od.pop(proj, None)
     save_state(STATE)
     sync_keepawake()    # 开/关项目自动运行随手校准防休眠
-    return {"project": proj, "enabled": wd[proj]}
+    return await api_watchdog_get(proj)
