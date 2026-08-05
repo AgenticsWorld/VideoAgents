@@ -11,6 +11,9 @@
   确认/签字以互动卡片(msg_type=interactive)推到飞书,按钮点击经同一条
   长连接回传(card.action.trigger,桥进程透传),落到 api_confirm_answer,
   与网页弹窗同源同答案;答复/超时后 PATCH 卡片收尾,防止旧按钮残留
+- /auto 指令:单聊发 /auto 在本地拦截(不经总制片、不耗引擎配额),回自动
+  运行状态卡片或直接按项目开关空转看门狗;卡片按钮与确认卡片走同一条
+  长连接回传,与网页运行面板 🤖 按钮同一入口(api_watchdog_set)
 
 前置条件(设置页有说明):应用需开启机器人能力、以「长连接」方式订阅
 「接收消息 im.message.receive_v1」事件与「回调订阅」(卡片按钮回传依赖
@@ -180,8 +183,17 @@ async def _handle_event(ev: dict):
             save_cfg(cfg)
             if first_contact:             # 刚拿到推送对象:把等着的确认/签字补推过去
                 asyncio.create_task(_sync_pending_confirms())
+        text = (ev.get("text") or "").strip()
+        if text and text.split()[0].lower() == "/auto":
+            try:                          # 本地指令:不经总制片,配额耗尽时也可用
+                await _handle_auto_command(text)
+                RELAY["last_in"] = time.time()
+                RELAY["err_in"] = ""
+            except Exception as e:  # noqa: BLE001
+                RELAY["err_in"] = f"处理 /auto 指令失败:{e}"
+            return
         try:
-            await channels.forward_inbound("feishu", ev.get("text") or "")
+            await channels.forward_inbound("feishu", text)
             RELAY["last_in"] = time.time()
             RELAY["err_in"] = ""
         except Exception as e:  # noqa: BLE001
@@ -392,13 +404,17 @@ async def _expire_card_later(cid: str, delay: int):
 
 
 async def _handle_card_click(ev: dict):
-    """桥进程透传的按钮点击 → 落 api_confirm_answer(与网页弹窗同源)。"""
+    """桥进程透传的按钮点击:确认卡片落 api_confirm_answer(与网页弹窗同源),
+    无 confirm_id 的泛化控制卡片(如 /auto)按 value.action 分发。"""
     cfg = load_cfg()
     if not cfg.get("app_id"):
         return
     bound = (cfg.get("contact") or {}).get("open_id")
     if bound and ev.get("open_id") and ev["open_id"] != bound:
         return                            # 单聊机器人本只此一人,防御性校验
+    if not ev.get("confirm_id"):
+        await _handle_action_click(ev)
+        return
     cid = ev.get("confirm_id") or ""
     try:
         await core.api_confirm_answer(cid, {"answer": ev.get("option") or ""})
@@ -438,6 +454,113 @@ async def _confirm_loop():
                                            ev.get("answer") or "")
     finally:
         core.HUB.unsubscribe(q)
+
+
+# ---------------- /auto 指令:自动运行(空转看门狗)远程开关 ----------------
+# 手机端发 /auto 走本地确定性路径,不经总制片(零引擎配额,配额耗尽/停摆时
+# 恰恰最需要远程开关)。/auto 回状态卡片,每项目一行 + 开/关按钮;按钮 value
+# 带目标态而非 toggle(幂等,连点/点旧卡片都不会来回翻转),点击经桥进程透传
+# 落 api_watchdog_set(与网页 🤖 按钮同一入口),再 PATCH 卡片刷成最新全量状态。
+
+_AUTO_USAGE = ("指令:\n/auto — 状态卡片(带开关按钮)\n"
+               "/auto on|off [项目] — 开/关该项目(缺省当前项目)\n"
+               "/auto off all — 关闭全部项目")
+
+
+async def _wd_card() -> dict:
+    """自动运行状态卡片:每项目一行 + 幂等开关按钮,note 附全局参数。"""
+    projects = await core.api_projects()
+    wd = (await core.api_watchdog_get()).get("watchdog") or {}
+    th = await core.api_watchdog_threshold_get()
+    els: list = []
+    for p in projects:
+        on = bool(wd.get(p))
+        els.append({
+            "tag": "div",
+            "text": {"tag": "lark_md",
+                     "content": f"**{p}**:{'🟢 开启' if on else '⚪ 关闭'}"},
+            "extra": {"tag": "button",
+                      "text": {"tag": "plain_text",
+                               "content": "关闭" if on else "开启"},
+                      "type": "danger" if on else "primary",
+                      "value": {"action": "wd_set", "project": p,
+                                "enabled": not on,
+                                "toast": f"已{'关闭' if on else '开启'} {p}"}}})
+    if not projects:
+        els.append({"tag": "div",
+                    "text": {"tag": "plain_text", "content": "(还没有项目)"}})
+    els.append({"tag": "note", "elements": [{
+        "tag": "plain_text",
+        "content": (f"用量阈值 {th['threshold']}% · 闲置 {th['idle_minutes']} 分钟"
+                    " · 发 /auto 可再次查看")}]})
+    return {"config": {"wide_screen_mode": True},
+            "header": {"template": "blue",
+                       "title": {"tag": "plain_text", "content": "🤖 自动运行"}},
+            "elements": els}
+
+
+async def _send_wd_card():
+    cfg = load_cfg()
+    open_id = (cfg.get("contact") or {}).get("open_id")
+    if not (cfg.get("app_id") and open_id):
+        return
+    await _card_request(
+        "/open-apis/im/v1/messages?receive_id_type=open_id",
+        {"receive_id": open_id, "msg_type": "interactive",
+         "content": json.dumps(await _wd_card(), ensure_ascii=False),
+         "uuid": "va-wd-" + uuid.uuid4().hex})
+    RELAY["last_out"] = time.time()
+    RELAY["err_out"] = ""
+
+
+async def _handle_auto_command(text: str):
+    """/auto 文本指令入口(_handle_event 已确保首词为 /auto)。"""
+    parts = text.split()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    if not sub:
+        await _send_wd_card()
+        return
+    if sub not in ("on", "off") or len(parts) > 3:
+        await _send_to_feishu(f"无法识别的指令「{text}」。{_AUTO_USAGE}")
+        return
+    projects = await core.api_projects()
+    if not projects:
+        await _send_to_feishu("还没有任何项目,先在控制台创建项目。")
+        return
+    target = parts[2] if len(parts) > 2 else ""
+    if sub == "off" and target == "all":
+        for p in projects:
+            await core.api_watchdog_set({"project": p, "enabled": False})
+        await _send_to_feishu(f"🤖 已关闭全部 {len(projects)} 个项目的自动运行。")
+        return
+    if not target:                        # 缺省当前项目,与 forward_inbound 同逻辑
+        target = core.ui_prefs_pref()["project"] or projects[0]
+    if target not in projects:
+        await _send_to_feishu(
+            f"项目「{target}」不存在。现有项目:{', '.join(projects)}。{_AUTO_USAGE}")
+        return
+    await core.api_watchdog_set({"project": target, "enabled": sub == "on"})
+    await _send_to_feishu(
+        f"🤖 已{'开启' if sub == 'on' else '关闭'}项目 {target} 的自动运行。")
+
+
+async def _handle_action_click(ev: dict):
+    """泛化卡片按钮(value 无 confirm_id):目前仅自动运行开关(action=wd_set)。
+    点击后无论开关是否落地(项目可能已删除),都把卡片 PATCH 成最新全量状态。"""
+    v = ev.get("value") or {}
+    if v.get("action") != "wd_set":
+        return
+    try:
+        proj = str(v.get("project") or "")
+        if proj in await core.api_projects():
+            await core.api_watchdog_set({"project": proj,
+                                         "enabled": bool(v.get("enabled"))})
+        RELAY["last_in"] = time.time()
+        mid = ev.get("message_id") or ""
+        if mid:
+            await _patch_card(mid, await _wd_card())
+    except Exception as e:  # noqa: BLE001
+        RELAY["err_out"] = f"处理自动运行卡片点击失败:{e}"
 
 
 async def relay_loop():
