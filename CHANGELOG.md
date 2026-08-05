@@ -4,6 +4,26 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-08-05
+
+### Added
+
+- audio-to-video plugin: builds a picture track for narration audio (podcasts, audiobooks, storytelling) with the timeline locked to the audio — ingest/transcript alignment, era research, timeline planning and visual scripting stations plus an A/V-sync QA gate. Ships as a standalone installable plugin package (moved out of the built-in set) with a host-toolchain preflight, and suspends the main DAG's audiovisual branch on start via the `main_dag_on_start.skip` mechanism from v1.0.10.
+- `scripts/package_plugin.py` (`make plugin-package`): declarative plugin packaging driven by the plugin's own manifest.
+
+### Changed
+
+- WebUI: the active image/video generation channel is now chosen on the 🎨 generation-models page — the active tab is the active channel, applied on save — matching how music/TTS/file hosting already work; the two top-bar dropdowns were removed. Provider hint texts were trimmed, with recharge/console links added for OpenRouter and Volcano Ark. All 11 language dictionaries updated.
+- Resource-usage panel: when Claude usage checking is disabled, the claudecode row is hidden entirely instead of showing an empty "not enabled" bar; enabling it in settings refreshes the panel immediately.
+- genmedia: Volcano Ark image generation now requests URL responses and downloads the image, avoiding oversized base64 response bodies.
+- Agent workflow spec: the character-concept station now delivers a single character sheet per character (2560x1440 five-panel layout — full-body front/side/back plus two close-ups) as the one anchor file consumed downstream, generated one image at a time with defect-driven targeted re-rolls instead of multi-candidate batches; user review feedback is the only driver for revisions.
+
+### Fixed
+
+- Console input drafts are no longer lost when switching pages or refreshing, and a failed send returns the typed content to the box.
+- Desktop: upgrading the Python environment no longer hangs.
+- CI: the WebUI legacy-API-path check no longer misfires on external `https://` links inside hint texts (an ElevenLabs link had broken the main-branch build); the link itself now points to the correct ElevenLabs API-keys page.
+
 ## [1.0.11] - 2026-08-04
 
 ### Added

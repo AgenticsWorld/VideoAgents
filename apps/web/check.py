@@ -24,6 +24,8 @@ def main() -> None:
     legacy: list[str] = []
     for page in [*STATIC.glob("*.html"), *STATIC.rglob("*.js")]:
         text = page.read_text(encoding="utf-8")
+        # External links are not application requests; only relative paths count.
+        text = re.sub(r"https?://[^\s'\"<>]+", "", text)
         if re.search(r"/api/(?!v1(?:/|['\"]))", text):
             legacy.append(page.name)
     if legacy:

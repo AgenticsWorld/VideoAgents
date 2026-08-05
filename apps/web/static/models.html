@@ -385,7 +385,7 @@ function buildPanel(kind,p){
     lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
     ir.appendChild(lb);d.appendChild(ir);
     d.appendChild(el('div',{className:'hint'},
-      '<a href="https://elevenlabs.io/app/api/api-keys" target="_blank">Eleven Music</a>;'
+      '<a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">Eleven Music</a>;'
       +'可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus'));
   }else if(p==='elevenlabs'){
     d.appendChild(keyRow('tts-el-key','ElevenLabs API Key(xi-api-key)'));
