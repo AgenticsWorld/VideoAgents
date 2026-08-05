@@ -67,12 +67,12 @@ button:disabled{opacity:.5;cursor:default}
 </header>
 <main>
   <div class="card" id="card-image">
-    <h2>🖼 图像生成 <span class="cur">各渠道可同时配置保存;生效渠道在控制台顶栏「图像模型」随时切换</span></h2>
+    <h2>🖼 图像生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="image-tabs"></div>
     <div id="image-panels"></div>
   </div>
   <div class="card" id="card-video">
-    <h2>🎬 视频生成 <span class="cur">各渠道可同时配置保存;生效渠道在控制台顶栏「视频模型」随时切换</span></h2>
+    <h2>🎬 视频生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="video-tabs"></div>
     <div id="video-panels"></div>
   </div>
@@ -254,9 +254,8 @@ const EL_TTS_MODELS=[
 /* ---------- 构建 UI ---------- */
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
-/* 音乐/TTS 无顶栏切换入口,生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const CHK_KINDS=new Set(['music','tts']);
-const SEL_PROVIDER={music:'elevenlabs',tts:'volcengine'};
+/* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
+const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'elevenlabs',tts:'volcengine'};
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);
@@ -362,21 +361,20 @@ function buildPanel(kind,p){
     lr.appendChild(pb);lr.appendChild(ab);d.appendChild(lr);
     d.appendChild(el('div',{className:'status',id:'tts-volc-status'}));
     d.appendChild(el('div',{className:'hint'},
-      '新版豆包语音合成大模型(openspeech v3 单向流式,<a href="https://www.volcengine.com/docs/6561/1598757" target="_blank">API 文档</a>);'
-      +'API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」;'
+      'API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」;'
       +'音色在控制台「<a href="https://console.volcengine.com/speech/new/voices" target="_blank">音色库</a>」试听/开通,克隆音色 S_ 开头自动切声音复刻 2.0'));
   }else if(p==='volcengine'){
     d.appendChild(keyRow(`${kind}-volc-key`,'火山方舟 ARK API Key'));
     d.appendChild(modelRow(`${kind}-volc-model`,`${kind}-volc-custom`));
     d.appendChild(el('div',{className:'hint'},kind==='image'
-      ?'火山方舟图片生成 API(Seedream 系列,<a href="https://www.volcengine.com/docs/82379/1541523" target="_blank">文档</a>);更新的模型(如 Seedream 5.0 lite)可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
-      :'火山方舟视频生成 API(<a href="https://www.volcengine.com/docs/82379/1520757" target="_blank">文档</a>);模型 ID 也可填「推理接入点 ep-…」'));
+      ?'<a href="https://console.volcengine.com/ark/" target="_blank">火山方舟</a>图片生成 API(Seedream 系列);更新的模型(如 Seedream 5.0 lite)可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
+      :'<a href="https://console.volcengine.com/ark/" target="_blank">火山方舟</a>视频生成 API;模型 ID 也可填「推理接入点 ep-…」'));
   }else if(p==='byteplus'){
     d.appendChild(keyRow(`${kind}-bp-key`,'BytePlus ModelArk API Key'));
     d.appendChild(modelRow(`${kind}-bp-model`,`${kind}-bp-custom`));
     d.appendChild(el('div',{className:'hint'},kind==='image'
-      ?'BytePlus ModelArk 图片生成 API(海外区 ap-southeast-1,Seedream 系列,<a href="https://docs.byteplus.com/en/docs/ModelArk/1541523" target="_blank">文档</a>);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;更新的模型可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
-      :'BytePlus ModelArk 视频生成 API(海外区 ap-southeast-1,Seedance 系列,<a href="https://docs.byteplus.com/en/docs/ModelArk/1520757" target="_blank">文档</a>);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;模型 ID 也可填「推理接入点 ep-…」'));
+      ?'BytePlus ModelArk 图片生成 API(海外区,Seedream 系列);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;更新的模型可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
+      :'BytePlus ModelArk 视频生成 API(海外区,Seedance 系列);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;模型 ID 也可填「推理接入点 ep-…」'));
   }else if(p==='elevenlabs'&&kind==='music'){
     d.appendChild(keyRow('music-el-key','ElevenLabs API Key(xi-api-key)'));
     d.appendChild(modelRow('music-el-model','music-el-custom'));
@@ -387,8 +385,8 @@ function buildPanel(kind,p){
     lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
     ir.appendChild(lb);d.appendChild(ir);
     d.appendChild(el('div',{className:'hint'},
-      'Eleven Music(<a href="https://elevenlabs.io/docs/api-reference/music/compose" target="_blank">API 文档</a>);与 TTS 的 ElevenLabs Key 通用,可分别填;'
-      +'music Agent 可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus'));
+      '<a href="https://elevenlabs.io/app/api/api-keys" target="_blank">Eleven Music</a>;'
+      +'可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus'));
   }else if(p==='elevenlabs'){
     d.appendChild(keyRow('tts-el-key','ElevenLabs API Key(xi-api-key)'));
     d.appendChild(modelRow('tts-el-model','tts-el-custom'));
@@ -488,12 +486,12 @@ function showTextPanel(p){
 }
 
 function showPanel(kind,p){
-  if(CHK_KINDS.has(kind))SEL_PROVIDER[kind]=p;
+  SEL_PROVIDER[kind]=p;
   SECTIONS[kind].providers.forEach(x=>{
     const tb=$(`#tab-${kind}-${x}`);
     tb.classList.toggle('active',x===p);
-    if(CHK_KINDS.has(kind))   // ✅ = 生效渠道(保存后),与文件托管存储渠道一致
-      tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
+    // ✅ = 生效渠道(保存后),与文件托管存储渠道一致
+    tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
     $(`#panel-${kind}-${x}`).classList.toggle('show',x===p);
   });
 }
@@ -513,8 +511,9 @@ async function loadOpenRouterModels(kind,refresh=false){
     const opts=[...rec.map(([v,l])=>[v,'⭐ '+l]),
                 ...r.models.filter(m=>!recIds.has(m.id)).map(m=>[m.id,m.name])];
     fillSelect(sel,opts,saved.model,saved.custom_model);
-    hint.textContent=I18N.f('OpenRouter {kind}生成目录共 {n} 个模型(⭐ 为推荐);也可选「自定义…」手填模型 ID',
-      {kind:t(KIND_LABEL[kind]),n:r.models.length});
+    hint.innerHTML=I18N.f('{or} {kind}生成目录共 {n} 个模型(⭐ 为推荐);也可选「自定义…」手填模型 ID',
+      {or:'<a href="https://openrouter.ai/settings/credits" target="_blank">OpenRouter</a>',
+       kind:t(KIND_LABEL[kind]),n:r.models.length});
   }catch(e){
     // 拉取失败时仍可用内置推荐列表
     fillSelect(sel,rec.map(([v,l])=>[v,'⭐ '+l]),saved.model,saved.custom_model);
@@ -693,7 +692,6 @@ function pickModel(selId,customId){
 function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
-    // 不提交 provider:生效渠道由控制台顶栏的「图像/视频模型」下拉切换
     const c={openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
@@ -722,8 +720,8 @@ function collect(){
         ...pickModel('#tts-el-model','#tts-el-custom'),
         voice:ev===CUSTOM?$('#tts-el-voice-custom').value.trim():ev};
     }
-    // 音乐/TTS 生效渠道 = 标签页上勾选的 ✓(image/video 走控制台顶栏切换,不提交)
-    if(CHK_KINDS.has(kind))c.provider=SEL_PROVIDER[kind];
+    // 生效渠道 = 当前选中的标签页(✅)
+    c.provider=SEL_PROVIDER[kind];
     out[kind]=c;
   }
   // 生效渠道 = 当前选中的标签页(本地模型/OpenRouter)

@@ -12,10 +12,10 @@
 ## 职责
 
 1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
-2. 生成 n 张候选,按「appearance 命中率 → 风格契合 → 生成稳定性」挑选,落选原因留档;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。
-3. 产出标准三视图(正/侧/背)与关键表情、标志物特写,确保不同视角是同一个人。
-4. 对有分龄版本的角色,按 `age_versions.json` 各出一套并标注适用的时间轴区间。
-5. 落盘 prompt 记录与逐字段对照表(selection.json),供重 roll 与追溯。
+2. **整图单次生成、单张直出(2026-08-04 三订)**:按五格版式模板生成整版 character sheet(全身三视图 + 两格头肩特写同框),**`--n 1` 只出一张,禁出多张候选赛马挑选**(10days003 CHAR-0003 前科:多候选整批不满足风格,张张白花钱);出图后自检「五格版式 → appearance 逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**——用户指出问题后按反馈逐条定向重出,不自行多版猜测,主目录始终只有当前定稿(见「输出」)。
+3. **定稿 sheet 单张即交付锚点,不裁切子图(2026-08-04 二订)**:下游(p7 prompt refs、character-consistency 比对、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考——整图同框天然保证各视角是同一个人,单张即含全身三视图 + 头肩特写;2560×1440 恰达视频参考像素下限(≥3,686,400,WORKFLOW.md §9),不得低于此尺寸。整图多视角同框带复制诱因,由 prompt 工位的 Identity lock 句 + 防重复长句硬约束兜住(其 SOUL.md 职责 2)。
+4. 对有分龄版本的角色,按 `age_versions.json` **每个年龄版本各出一张整图**(`sheet_<tag>.png`)并标注适用的时间轴区间;剧情需要的额外表情/服装版本同样整图出,不逐视角散出。
+5. 落盘 prompt 记录与逐字段对照表(selection.json:appearance 对照 + 历次重 roll 的缺陷原因/用户反馈),供重 roll 与追溯。
 
 ## 不做什么(边界)
 
@@ -30,17 +30,28 @@
 
 ```bash
 python3 modules/genmedia.py info     # 当前渠道/模型记入 prompts.json
-python3 modules/genmedia.py image --prompt "<按 appearance+style.json 组织的 prompt>" \
-  --output assets/concepts/characters/<id>/front_01.png --aspect 3:4 --n 4
-# 三视图后两视角:把已选定的正面图作为 --ref 传入,保证同一人
-python3 modules/genmedia.py image --prompt "<side view...>" --ref .../front.png --output .../side_01.png --n 4
+# 整图单次生成(2026-08-04 三订):五格版式模板固定作第一张 --ref(版式锚),
+# 一次生成全身三视图 + 两格头肩特写;--n 1 单张直出,禁多候选赛马;
+# 用户参考图排在模板之后;自检/用户反馈不过时按缺陷定向重生成(旧图先移入 candidates/)
+python3 modules/genmedia.py image \
+  --prompt "<版式句(五格内容与模板一一对应)+ 按 appearance+style.json 组织的角色要素>" \
+  --ref agents/06-art/character-concept/templates/character_sheet_template.png \
+  --output assets/concepts/characters/<id>/sheet.png --size 2560x1440 --n 1
 ```
 
 详见 WORKFLOW.md §9;失败如实上报,不伪造产物。
 
+### 整图版式模板(2026-08-04)
+
+- **模板**:`agents/06-art/character-concept/templates/character_sheet_template.png`(2560×1440,随平台分发);五格语义见同目录 `character_sheet_template.json`——左三格全身正/侧/背,右上头肩特写正面(中性表情),右下头肩特写 3/4 侧(可带剧情关键表情)。
+- **prompt 必写版式句**:开头声明 "five-panel character reference sheet following the reference layout: three full-body views (front / side / back) left to right, front head-and-shoulders close-up top right, three-quarter close-up bottom right; the exact same character, outfit and proportions in every panel; plain background"(散文语言按 WORKFLOW.md 语言约定,五格内容须与模板格位一一对应)。
+- **尺寸**:`--size 2560x1440` 起(模板原生,恰达视频参考像素下限);当前渠道支持更高 16:9 档(如方舟 4096x2304)时可用高档,严禁低于 2560×1440。
+- **版式自检**:五格齐全、每格恰含一个完整视角、五格互为同一人同一装;版式明显偏离模板(缺格/串格/多人)即自检失败,旧图移入 `candidates/` 后定向重生成一张,不并行多出。
+- **例外(条件回退)**:仅当当前图像渠道不支持参考图注入(纯文生图,`--ref` 不可用)时,先按版式句纯文生图尝试整版 sheet;版式仍命不中再退回逐视角出图旧流程(先出正面,再以正面图作 `--ref` 出侧/背与特写),末了用 `ffmpeg -filter_complex hstack` 把三视图拼成单张 `sheet.png` 交付,保持下游单文件契约;prompts.json 记录回退原因。
+
 ## 用户参考图(优先注入)
 
-出图前先查 `refs/characters/<角色名或id>/`(模糊匹配)与 `refs/style/`:命中的角色参考图**必须**随三视图生成经 `--ref` 注入,并写入 prompts.json 的 `user_refs`;与 appearance 文字描述冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
+出图前先查 `refs/characters/<角色名或id>/`(模糊匹配)与 `refs/style/`:命中的角色参考图**必须**随整图生成经 `--ref` 注入(排在版式模板之后),并写入 prompts.json 的 `user_refs`;与 appearance 文字描述冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
 
 ## 输入
 
@@ -57,17 +68,20 @@ python3 modules/genmedia.py image --prompt "<side view...>" --ref .../front.png 
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 人设参考图包 | `assets/concepts/characters/<id>/` | 三视图 + 表情/细节特写 + prompts.json + selection.json |
+| 人设参考图包 | `assets/concepts/characters/<id>/` | 定稿 `sheet.png`(+ 分龄/表情/服装版本 `sheet_<tag>.png`)+ prompts.json + selection.json |
+
+> **一角色一张 sheet,不裁切子图(2026-08-04 二订)**:定稿整版 sheet 直接落主目录,就是下游取用的形象锚本体;禁止再裁切出 front/side/back 等单视角散图入主目录(多文件旧契约废止)。
 
 > **主目录只放定稿(2026-07-30)**:`<id>/` 主目录仅保留最终采用的最新版本图与 prompts.json、selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计、§7E 修正取锚),弃用图混在主目录会被误注入。重 roll 替换定稿时,旧图先移入 `candidates/` 再落新图;`candidates/` 不计入 §6A 现货。
 
 关键字段/结构约定:
 ```json
 {
-  "turnaround": ["front.png", "side.png", "back.png"],
-  "expressions": ["..."],
-  "prompts": "prompts.json(每张图的生成参数)",
-  "selection": { "appearance_field_hits": { "发色": true, "标志物": true }, "rejected": [] }
+  "sheet": "sheet.png(整版定稿,唯一形象锚:全身正/侧/背 + 两格头肩特写同框)",
+  "variants": ["sheet_age2.png", "sheet_battle_outfit.png"],
+  "prompts": "prompts.json(每张整图的生成参数)",
+  "selection": { "appearance_field_hits": { "发色": true, "标志物": true },
+                 "rerolls": [ { "reason": "自检缺陷或用户反馈原文", "replaced": "candidates/..." } ] }
 }
 ```
 
@@ -90,7 +104,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - 与 appearance 字段逐项对照:**性别呈现与 gender(presented_gender 优先)一致且 prompt 命中性别词(2026-07-20)**;必现标志物 100% 出现,无冲突项;
-- 三视图齐全,分辨率/画幅合规;prompt 记录完整可追溯。
+- **sheet 五格版式齐全**(全身正/侧/背 + 两格头肩特写,五格同一人同一装)、**sheet ≥3,686,400 像素**(2560×1440 起,进视频参考硬限)、**主目录无 front/side/back 等单视角散图**(单文件契约);prompt 记录完整可追溯。
 
 **评分(evaluation Agent,rubric visual_gen_v1,阈值 80;按 §7 适用「图像产物」)**:
 - 与设计稿匹配(35):appearance 逐项命中;
@@ -100,7 +114,7 @@ instruction: |
 
 ## 校验与返工
 
-- 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 与 character-consistency-qa 打分 ≥80**;主角人设图随 H2 一并交用户确认。
+- 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 与 character-consistency-qa 打分 ≥80**;主角人设图随 H2 一并交用户确认。**用户检查有意见时,按反馈逐条定向重出一张再交检(2026-08-04 三订)**——反馈原文记入 selection.json 的 rerolls,不自行多版猜测、不赛马。
 - 不过时:带意见退回重做(最多 3 次)→ 升级人工;若根因是 appearance 设定本身有误,缺陷单改派上游,我不打补丁。
 - 发现设定冲突:上报 `memory-bible`,禁止擅自改 Bible。
 

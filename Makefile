@@ -1,5 +1,6 @@
 .PHONY: install install-dev install-deepagents run api run-auto web-dev web-build \
-	desktop desktop-install desktop-run desktop-dev desktop-build desktop-runtime desktop-package test
+	desktop desktop-install desktop-run desktop-dev desktop-build desktop-runtime desktop-package \
+	plugin-package test
 
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUNTIME_VERSION ?= $(shell git rev-parse --short HEAD)
@@ -56,6 +57,13 @@ desktop-runtime:
 
 desktop-package: desktop-build
 	npm run package --workspace @videoagents/desktop
+
+# 声明式 Agent 插件打包(产出 dist/<name>-<version>.zip,可在控制台「插件」页上传安装)。
+# 打包脚本会拒绝任何 .py/.sh 进包——插件是纯声明式的(WORKFLOW.md §10.4),
+# 机检脚本随本体发布在 modules/ 与 code/。
+PLUGIN ?= plugin-src/audio-to-video
+plugin-package:
+	$(PYTHON) scripts/package_plugin.py $(PLUGIN)
 
 test:
 	$(PYTHON) -m pytest

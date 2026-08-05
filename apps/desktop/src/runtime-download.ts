@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {spawn} from 'node:child_process'
 import {createWriteStream, existsSync, mkdirSync, renameSync, rmSync} from 'node:fs'
 import path from 'node:path'
 import {Readable, Transform} from 'node:stream'
@@ -11,6 +12,7 @@ import {
 const DEFAULT_INDEX_URL = 'https://s3.agentics.world/packages/video-agents/metadata.json'
 const DEFAULT_PACKAGE_PREFIX = 'https://s3.agentics.world/packages/video-agents/python/'
 const SAFE_VERSION = /^[A-Za-z0-9._-]+$/
+const MACOS_EXTRACT_TIMEOUT_MS = 15 * 60 * 1000
 
 export interface RuntimeArtifact {
   version: string
@@ -102,6 +104,43 @@ async function downloadArtifact(
   }
 }
 
+async function extractRuntimeArchive(archive: string, staging: string): Promise<void> {
+  // extract-zip 在部分 macOS 运行时包（venv 内含符号链接）上会无限停在解压阶段。
+  // 使用系统 ditto 保留链接与权限；设置上限以便网络盘/磁盘异常时能给用户明确错误。
+  if (process.platform === 'darwin') {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('/usr/bin/ditto', ['-x', '-k', archive, staging], {stdio: 'ignore'})
+      let settled = false
+      const finish = (error?: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        if (error) reject(error)
+        else resolve()
+      }
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL')
+        finish(new Error('Python 环境解压超时（15 分钟）。请检查可用磁盘空间后重试。'))
+      }, MACOS_EXTRACT_TIMEOUT_MS)
+      child.once('error', error => finish(error))
+      child.once('close', code => {
+        if (code === 0) finish()
+        else finish(new Error(`Python 环境解压失败：ditto 退出码 ${code ?? 'unknown'}`))
+      })
+    })
+    return
+  }
+
+  let uncompressedSize = 0
+  await extract(archive, {
+    dir: staging,
+    onEntry: entry => {
+      uncompressedSize += entry.uncompressedSize
+      if (uncompressedSize > 2 * 1024 * 1024 * 1024) throw new Error('Python 环境包解压后体积异常')
+    },
+  })
+}
+
 export async function installLatestPythonRuntime(
   userData: string,
   onProgress: (progress: RuntimeProgress) => void = () => undefined,
@@ -134,14 +173,7 @@ export async function installLatestPythonRuntime(
     await downloadArtifact(artifact, archive, onProgress)
     onProgress({phase: 'extracting', message: '正在安装 Python 环境…'})
     mkdirSync(staging, {recursive: true})
-    let uncompressedSize = 0
-    await extract(archive, {
-      dir: staging,
-      onEntry: entry => {
-        uncompressedSize += entry.uncompressedSize
-        if (uncompressedSize > 2 * 1024 * 1024 * 1024) throw new Error('Python 环境包解压后体积异常')
-      },
-    })
+    await extractRuntimeArchive(archive, staging)
     const runtime = loadPythonRuntime(staging)
     if (runtime.manifest?.version !== artifact.version) throw new Error('Python 环境包版本与索引不一致')
     onProgress({phase: 'activating', message: '正在启用 Python 环境…'})

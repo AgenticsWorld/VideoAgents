@@ -38,7 +38,7 @@ python3 modules/genmedia.py image \
   --prompt "<强化角色特征的 prompt,必含 style.json 风格段与该角色性别词(appearance.json gender;presented_gender 优先)>" \
   --negative "<style.json 负面清单>" \
   --output <候选帧路径> --size 2560x1440 \   # 16:9 最小合规;校正图要回锚点包进视频参考,须 ≥3,686,400 像素(火山硬限;9:16 用 1440x2560)
-  --ref assets/concepts/characters/<id>/front.png <三视图其余角度...> <原候选帧>
+  --ref assets/concepts/characters/<id>/sheet.png <原候选帧>   # sheet 单张即全套视角(2026-08-04 二订)
 ```
 
 **§7E 形象红线(重生成硬约束)**:`--ref` 必含在库三视图与被修原图,prompt 必含 style.json 风格段、`--negative` 必带负面清单——**参考图只锚形象、锚不住画风,裸 prompt 或缺风格锚出图 = 重新设计人物,机检 repair_ref_anchored 直接退回**。详见 WORKFLOW.md §9;校正参数与所用参考图记入 meta,保证可复现。
