@@ -1991,7 +1991,7 @@ def handle_claude_event(run: dict, obj: dict):
         run["turns"] = obj.get("num_turns")
 
 # ---------------- 预览数据(人物/场景/分镜预览) ----------------
-IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
@@ -2350,7 +2350,8 @@ async def api_grpref_add(body: dict):
 MAX_GRPREF_UPLOAD = 30 * 1024 * 1024
 # 常见图片格式魔数(与 IMG_EXTS 对应;webp 的 RIFF 头另验 WEBP 标记)
 _IMG_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg",
-              b"RIFF": ".webp", b"GIF8": ".gif"}
+              b"RIFF": ".webp", b"GIF8": ".gif", b"BM": ".bmp",
+              b"II*\x00": ".tif", b"MM\x00*": ".tif"}
 
 
 async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
@@ -2366,7 +2367,7 @@ async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filena
     if ext == ".webp" and data[8:12] != b"WEBP":
         ext = None
     if not ext:
-        raise ServiceError(400, "file must be a png/jpg/webp/gif image")
+        raise ServiceError(400, "file must be a png/jpg/webp/gif/bmp/tiff image")
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(filename)[0]).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "upload"
     d = base / "assets" / "uploads" / ep / grp
