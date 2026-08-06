@@ -60,6 +60,7 @@ PORT = int(os.environ.get("VIDEOAGENTS_PORT", "8630"))
 PUBLIC_PORT = int(os.environ.get("VIDEOAGENTS_PUBLIC_PORT", str(PORT)))
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+PI_BIN = os.environ.get("PI_BIN", "pi")
 
 
 def _default_kimi_bin() -> str:
@@ -73,9 +74,12 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
-CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
-CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code"}
-CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN"}
+CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
+            "pi": PI_BIN}
+CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
+              "pi": "Pi Coding Agent"}
+CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
+                "pi": "PI_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -117,7 +121,7 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "deepagents")   # 执行引擎:claude -p / codex exec / kimi -p / deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
@@ -802,7 +806,7 @@ AM_MODE_MODELS = {
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "deepagents")      # "" = 跟随全局
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "deepagents")      # "" = 跟随全局
 AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "comfyui")
 AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
 
@@ -1447,7 +1451,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
 - IMPORTANT: `--project` accepts only the project slug (`{project}`), never `data/projects/...` or an absolute directory path.
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
+  显式传 `--engine claude|codex|kimi|pi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
 - 查看运行状态:`python3 services/runtime/dispatch.py --runs`;查看单个:`python3 services/runtime/dispatch.py --status <run_id>`
 
@@ -1474,7 +1478,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【赛马仅限用户明确指令】严禁自行发起并行赛马(换执行引擎或改派多个 Agent 并行重做同一任务、择优交付)。
    多次返工仍不过就照常升级人工;确有必要时可在 --confirm 征询或升级说明中向用户**建议**赛马,
-   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi)或改派职责相近的 Agent
+   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi|pi)或改派职责相近的 Agent
    并行重做、先达标者交付"""
         plugs = active_plugins()
         if plugs:
@@ -1505,16 +1509,17 @@ def tool_summary(name: str, inp: dict) -> tuple[str, str | None]:
     fp = inp.get("file_path") or inp.get("path")
     if fp:
         fp = rel_path(fp)
-    if name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+    normalized = name.lower()
+    if normalized in ("write", "edit", "multiedit", "notebookedit"):
         return f"✎ {name}: {fp}", fp
-    if name == "Read":
+    if normalized == "read":
         return f"📖 Read: {fp}", None
-    if name == "Bash":
+    if normalized == "bash":
         cmd = (inp.get("command") or "")[:160]
         return f"⚙ Bash: {cmd}", None
-    if name in ("Glob", "Grep"):
+    if normalized in ("glob", "grep"):
         return f"🔍 {name}: {inp.get('pattern', '')}", None
-    if name in ("Task", "Agent"):        # claude 子代理工具叫 Task,kimi 叫 Agent
+    if normalized in ("task", "agent"):        # claude 子代理工具叫 Task,kimi 叫 Agent
         return f"🤖 {name}: {inp.get('description', '')}", None
     return f"🔧 {name}", None
 
@@ -1678,6 +1683,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "pi":
+                # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
+                # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
+                base = [cli_executable, "--mode", "json", "--approve",
+                        "--append-system-prompt", str(system_prompt_file)]
+                if model:
+                    base += ["--model", model]
+                if sid:
+                    base += ["--session", sid]
+                return base + [message]
             c = [cli_executable, "-p", message,
                  "--output-format", "stream-json", "--verbose"]
             if claude_prompt_file:
@@ -1703,17 +1718,18 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_PROMPT"] = message
 
         # Windows has a short process command-line limit. Agent role prompts can
-        # exceed it, so pass Claude's long system prompt through a UTF-8 file.
-        # Keep the existing argv behavior on macOS/Linux for compatibility with
-        # older Claude CLI releases that may not support the file option.
-        claude_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
-                              if os.name == "nt" and engine == "claude" else None)
+        # exceed it, so pass Pi's prompt (and Claude's on Windows) through a UTF-8
+        # file. Keep Claude's argv behavior elsewhere for older CLI compatibility.
+        system_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
+                              if engine == "pi" or (os.name == "nt" and engine == "claude")
+                              else None)
+        claude_prompt_file = system_prompt_file if engine == "claude" else None
         log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w", encoding="utf-8")
         proc = None
         stderr_task = None
         try:
-            if claude_prompt_file:
-                claude_prompt_file.write_text(role, encoding="utf-8")
+            if system_prompt_file:
+                system_prompt_file.write_text(role, encoding="utf-8")
             deadline = time.time() + run_timeout
             session_retried = False
             while True:
@@ -1753,13 +1769,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_codex_event(run, obj)
                     elif engine == "kimi":
                         handle_kimi_event(run, obj)
+                    elif engine == "pi":
+                        handle_pi_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
                 await proc.wait()
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
-                if proc.returncode != 0 and not run.get("result"):
+                failed = ((proc.returncode != 0 and not run.get("result"))
+                          or (engine == "pi" and bool(run.get("error"))))
+                if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
                     if (session_id and not session_retried and re.search(
@@ -1785,6 +1805,12 @@ async def execute_run(run: dict, message: str, model: str | None):
             run["error"] = f"超时({run_timeout}s),进程已终止"
             if proc:
                 proc.kill()
+        except asyncio.CancelledError:
+            run["status"] = "error"
+            run["error"] = run.get("error") or "服务关闭，任务已停止"
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)
+            raise
         except FileNotFoundError as error:
             run["status"] = "error"
             if engine in CLI_BINS:
@@ -1818,8 +1844,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             if stderr_task and not stderr_task.done():
                 stderr_task.cancel()
             log_f.close()
-            if claude_prompt_file:
-                claude_prompt_file.unlink(missing_ok=True)
+            if system_prompt_file:
+                system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
@@ -1917,6 +1943,75 @@ def handle_kimi_event(run: dict, obj: dict):
             publish_run(run)
     elif role_ == "meta" and obj.get("type") == "session.resume_hint":
         run["session_id"] = obj.get("session_id")
+
+
+def _pi_message_text(message: dict) -> str:
+    """Extract visible assistant text from a pi message."""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "".join(str(block.get("text") or "") for block in content
+                   if isinstance(block, dict) and block.get("type") == "text")
+
+
+def handle_pi_event(run: dict, obj: dict):
+    """解析 pi --mode json 的 JsonAgentSessionEvent JSONL 事件。"""
+    event = obj.get("type")
+    if event == "session":
+        run["session_id"] = obj.get("id")
+        return
+    if event == "message_start" and (obj.get("message") or {}).get("role") == "assistant":
+        run["_pi_message_text"] = ""
+        return
+    if event == "message_update":
+        update = obj.get("assistantMessageEvent") or {}
+        if update.get("type") == "text_delta":
+            delta = update.get("delta") or ""
+            if delta:
+                run["_pi_message_text"] = run.get("_pi_message_text", "") + delta
+                run["text"] = run.get("text", "") + delta
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": delta})
+        return
+    if event == "message_end":
+        message = obj.get("message") or {}
+        if message.get("role") != "assistant":
+            return
+        text = _pi_message_text(message)
+        streamed = run.get("_pi_message_text", "")
+        if text:
+            # JSON mode normally emits deltas; publish only a missing suffix (or the
+            # full message for implementations that emit message_end only).
+            missing = text[len(streamed):] if text.startswith(streamed) else ("" if streamed else text)
+            if missing:
+                run["text"] = run.get("text", "") + missing
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": missing})
+            run["result"] = text
+        usage = message.get("usage") or {}
+        total = usage.get("totalTokens")
+        if not isinstance(total, (int, float)):
+            total = sum(usage.get(k) or 0 for k in ("input", "output", "cacheRead", "cacheWrite"))
+        run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
+        if message.get("stopReason") in ("error", "aborted"):
+            reason = message.get("stopReason")
+            run["error"] = str(message.get("errorMessage") or f"pi request {reason}")[:500]
+        return
+    if event == "tool_execution_start":
+        desc, fp = tool_summary(str(obj.get("toolName") or "?"), obj.get("args") or {})
+        run.setdefault("activity", []).append(desc)
+        if fp:
+            run.setdefault("files", []).append(fp)
+            HUB.publish({"type": "file", "run_id": run["id"],
+                         "agent": run["agent"], "path": fp})
+        HUB.publish({"type": "tool", "run_id": run["id"],
+                     "agent": run["agent"], "desc": desc})
+        publish_run(run)
+        return
+    if event == "error":
+        run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
 
 
 def handle_deepagents_event(run: dict, obj: dict):
@@ -2852,8 +2947,9 @@ _LLM_INDEX_LOCK = threading.Lock()
 
 def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
-    三种情形:claude stream-json 末尾 result.usage(整个 run 的累计);codex exec
-    末尾 turn.completed.usage;无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
+    claude stream-json 末尾 result.usage(整个 run 的累计);codex exec 末尾
+    turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
+    无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
     try:
         with open(path, "rb") as fh:
             fh.seek(0, 2)
@@ -2905,6 +3001,15 @@ def _parse_run_usage(path: Path):
                         tin += int(u.get("input_tokens") or 0)
                         tout += int(u.get("output_tokens") or 0)
                         found = True
+                elif t == "message_end":       # pi:每轮模型调用(含工具往返)各一条
+                    m = d.get("message") or {}
+                    u = m.get("usage")
+                    if m.get("role") == "assistant" and isinstance(u, dict):
+                        tin += (int(u.get("input") or 0)
+                                + int(u.get("cacheRead") or 0)
+                                + int(u.get("cacheWrite") or 0))
+                        tout += int(u.get("output") or 0)
+                        found = True
     except OSError:
         return None
     for u in by_id.values():
@@ -2955,7 +3060,7 @@ def _ep_llm_tokens(project: str, ep: str):
     """该集语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
     派单记录(run_id→工单文本)归集。工单文本提到多集时 token 均分到各集(避免重复
     计数);未提到任何 epNN 的全局任务(bible/世界观/角色等)不归入任何一集。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/deepagents)。"""
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
         return None
@@ -4109,6 +4214,71 @@ async def api_agentmodels_set(body: dict):
     return {"ok": True, "effective": agent_model_config(agent)}
 
 
+_PI_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_PI_MODELS_TTL = 30
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _parse_pi_models_table(output: str) -> list[dict]:
+    """Parse the stable, whitespace-separated table emitted by pi --list-models."""
+    models: list[dict] = []
+    header_seen = False
+    for raw in output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw).strip()
+        if not line:
+            continue
+        fields = re.split(r"\s{2,}", line)
+        if len(fields) >= 2 and fields[0] == "provider" and fields[1] == "model":
+            header_seen = True
+            continue
+        if not header_seen or len(fields) < 2:
+            continue
+        provider, model = fields[0].strip(), fields[1].strip()
+        if not provider or not model:
+            continue
+        full_id = f"{provider}/{model}"
+        models.append({"id": full_id, "name": model, "provider": provider,
+                       "model": model,
+                       "context": fields[2] if len(fields) > 2 else "",
+                       "max_output": fields[3] if len(fields) > 3 else "",
+                       "thinking": fields[4] == "yes" if len(fields) > 4 else None,
+                       "images": fields[5] == "yes" if len(fields) > 5 else None})
+    return models
+
+
+async def api_pi_models(refresh: bool = False):
+    """列出当前 pi 登录凭证实际可用的模型，供全部语言模型选择器复用。"""
+    global _PI_MODELS_CACHE
+    ts, cached = _PI_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _PI_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "pi")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("pi"))
+    env = {**os.environ, "NO_COLOR": "1", "PI_SKIP_VERSION_CHECK": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "--approve", "--list-models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 pi 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 pi 模型列表失败:{detail[:300]}")
+    models = _parse_pi_models_table(output)
+    plain_output = _ANSI_ESCAPE_RE.sub("", output)
+    no_models = re.search(r"no models|/login|api key", plain_output, re.I)
+    if not models and "provider" not in plain_output and not no_models:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"pi 未返回可用模型:{detail[:300]}")
+    _PI_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -4117,7 +4287,7 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
@@ -4700,6 +4870,31 @@ async def api_stop_all():
     """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
     stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
     return {"stopped": stopped}
+
+
+async def shutdown_runtime(timeout: float = 4) -> None:
+    """Boundedly stop Agent tasks/process groups and release OS resources."""
+    tasks = list(RUN_TASKS.values())
+    await api_stop_all()
+
+    active = [task for task in tasks if not task.done()]
+    if active:
+        _, pending = await asyncio.wait(active, timeout=timeout)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    # Defensive fallback for a task that failed before removing its process.
+    procs = list(RUN_PROCS.values())
+    for proc in procs:
+        if proc.returncode is None:
+            _kill_proc_tree(proc)
+    if procs:
+        await asyncio.gather(*(proc.wait() for proc in procs), return_exceptions=True)
+    RUN_PROCS.clear()
+    RUN_TASKS.clear()
+    _release_awake()
 
 
 async def api_stop_run(run_id: str):

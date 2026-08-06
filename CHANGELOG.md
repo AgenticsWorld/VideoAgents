@@ -4,6 +4,20 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Pi execution engine: run Agents through the local `pi` CLI with JSON event streaming, session resume, per-run model selection, and dynamic language-model menus populated from the models available to the current Pi login.
+
+### Changed
+
+- Standardized local development and CI/desktop packaging on Node.js 24.19.0 through `.nvmrc`; GitHub Actions now reads the same version file instead of independently pinning Node 22.
+
+### Fixed
+
+- Pi streaming replies no longer render one token per vertical line while a run is active; consecutive text deltas are coalesced into one live text block while preserving tool-event ordering.
+- Long engine/model identifiers in the run panel now truncate with a tooltip instead of pushing durations and per-run stop buttons under the scrollbar.
+- `make run` now exits cleanly on the first Ctrl+C even while the browser's SSE stream is open; shutdown also reaps the managed API, draw sidecar, active Agent process groups, messaging relays, and keep-awake helper, with a bounded timeout fallback.
+
 ## [1.0.12] - 2026-08-05
 
 ### Added
