@@ -1,9 +1,10 @@
 import {createHash} from 'node:crypto'
 import {
-  createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync,
+  writeFileSync,
 } from 'node:fs'
 import path from 'node:path'
-import {spawn} from 'node:child_process'
+import {ChildProcess, spawn} from 'node:child_process'
 import {Readable, Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
 import extract from 'extract-zip'
@@ -285,15 +286,26 @@ export async function downloadAndApplyDesktopUpdate(
   }
 
   if (process.platform === 'win32') {
-    const installer = findFile(staging, name => name.toLowerCase().endsWith('.exe'))
-    if (!installer || !existsSync(installer)) throw new Error('Windows 更新包中没有安装程序')
-    const helper = path.join(root, 'apply-windows-update.ps1')
-    writeFileSync(helper, `param([int]$PidToWait, [string]$Installer)\ntry { Wait-Process -Id $PidToWait -Timeout 120 -ErrorAction SilentlyContinue } catch {}\nStart-Process -FilePath $Installer -ArgumentList '/S'\n`)
-    const helperProcess = spawn('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
-      '-File', helper, '-PidToWait', String(process.pid), '-Installer', installer,
-    ], {detached: true, stdio: 'ignore', windowsHide: true})
-    helperProcess.unref()
+    const installer = path.join(staging, 'VideoAgents-Setup.exe')
+    if (!existsSync(installer) || !lstatSync(installer).isFile()) {
+      throw new Error('Windows 更新包中没有 VideoAgents-Setup.exe')
+    }
+    const installDir = path.resolve(currentAppPath)
+    const log = path.join(root, 'update-windows.log')
+    const args = ['--updated', `/D=${installDir}`]
+    appendFileSync(log, `[${new Date().toISOString()}] Starting NSIS installer: ${installer}\n`)
+    appendFileSync(log, `[${new Date().toISOString()}] Install directory: ${installDir}\n`)
+    const installerProcess = spawn(installer, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    })
+    installerProcess.once('error', error => {
+      try { appendFileSync(log, `[${new Date().toISOString()}] Installer spawn failed: ${String(error)}\n`) } catch {}
+    })
+    appendFileSync(log, `[${new Date().toISOString()}] Installer started, pid=${installerProcess.pid ?? 'unknown'}\n`)
+    installerProcess.unref()
+    onProgress({phase: 'activating', message: '安装程序已启动，应用即将关闭并自动重启…'})
     return
   }
   throw new Error(`不支持桌面自更新的平台：${process.platform}`)
