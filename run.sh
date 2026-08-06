@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 全自动模式启动脚本,等价 `make run-auto`(无需安装 make 亦可一键启动)。
-# claude 引擎免审批执行命令(codex/deepagents 本就免审批);
+# claude 引擎免审批执行命令(codex/pi/deepagents 本就免审批);
 # 调度层越界防护(orchestrator_guard hook + genmedia 守卫)不受权限模式影响,依然生效。
 # 用法: ./run.sh [server 参数...]   可用 PYTHON=... 指定解释器。
 set -euo pipefail

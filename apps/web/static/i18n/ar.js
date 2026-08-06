@@ -49,7 +49,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": "، يُرجى الانتظار (حدّث الصفحة لتحديث التقدم)",
 "0=不审核": "0 = بدون مراجعة",
 "100=最严格审核": "100 = أقصى صرامة في المراجعة",
-"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "محرك تنفيذ Agent: claude -p / codex exec / kimi -p / deepagents (نماذج محلية مثل LM Studio، أو OpenRouter، تُضبط في صفحة 🎨 نماذج التوليد)",
+"Agent 执行引擎:claude / codex / kimi / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "محرك تنفيذ Agent: claude / codex / kimi / pi / deepagents (نماذج محلية مثل LM Studio، أو OpenRouter، تُضبط في صفحة 🎨 نماذج التوليد)",
 "Auto(官方自动选版)": "Auto (اختيار تلقائي رسمي للإصدار)",
 "BytePlus ModelArk 图片生成 API(海外区,Seedream 系列);Key 在": "BytePlus ModelArk API لتوليد الصور (المنطقة الدولية، سلسلة Seedream)؛ يوجد Key في",
 "BytePlus ModelArk 视频生成 API(海外区,Seedance 系列);Key 在": "BytePlus ModelArk API لتوليد الفيديو (المنطقة الدولية، سلسلة Seedance)؛ يوجد Key في",

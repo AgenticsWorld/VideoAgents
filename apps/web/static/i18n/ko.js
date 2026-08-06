@@ -49,7 +49,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", 잠시 기다려 주세요(새로고침하면 진행 상황이 갱신됩니다)",
 "0=不审核": "0=검수 안 함",
 "100=最严格审核": "100=가장 엄격한 검수",
-"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Agent 실행 엔진: claude -p / codex exec / kimi -p / deepagents(LM Studio 등 로컬 모델 또는 OpenRouter, 🎨 생성 모델 페이지에서 설정)",
+"Agent 执行引擎:claude / codex / kimi / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Agent 실행 엔진: claude / codex / kimi / pi / deepagents(LM Studio 등 로컬 모델 또는 OpenRouter, 🎨 생성 모델 페이지에서 설정)",
 "Auto(官方自动选版)": "Auto(공식 자동 버전 선택)",
 "BytePlus ModelArk 图片生成 API(海外区,Seedream 系列);Key 在": "BytePlus ModelArk 이미지 생성 API(해외 리전, Seedream 시리즈); Key는",
 "BytePlus ModelArk 视频生成 API(海外区,Seedance 系列);Key 在": "BytePlus ModelArk 비디오 생성 API(해외 리전, Seedance 시리즈); Key는",

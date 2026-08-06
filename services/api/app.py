@@ -26,6 +26,13 @@ from .state import RuntimeStore
 ROOT = Path(__file__).resolve().parents[2]
 STORE = RuntimeStore(core.RUNTIME_DIR / "runtime.sqlite3")
 _bridge_installed = False
+_shutdown_event: asyncio.Event | None = None
+
+
+def request_shutdown() -> None:
+    """Wake long-lived responses before Uvicorn starts draining connections."""
+    if _shutdown_event is not None:
+        _shutdown_event.set()
 
 
 def _body(model: Any, **extra: Any) -> dict[str, Any]:
@@ -46,7 +53,8 @@ def _artifact_urls(value: Any, project: str) -> Any:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global _bridge_installed
+    global _bridge_installed, _shutdown_event
+    _shutdown_event = asyncio.Event()
     if not _bridge_installed:
         install_runtime_store(STORE)
         _bridge_installed = True
@@ -65,9 +73,12 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        request_shutdown()
         watchdog.cancel()
         for task in relays:
             task.cancel()
+        await asyncio.gather(watchdog, *relays, return_exceptions=True)
+        await core.shutdown_runtime()
 
 
 app = FastAPI(
@@ -344,6 +355,11 @@ async def engine_availability(engine: str) -> dict[str, Any]:
     return await core.api_enginecheck(engine)
 
 
+@api.get("/engines/pi/models", tags=["configuration"])
+async def pi_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_pi_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -554,15 +570,32 @@ async def whatsapp_unbind(body: dict[str, Any]) -> dict[str, Any]:
 @api.get("/events", tags=["events"])
 async def events() -> StreamingResponse:
     queue = core.HUB.subscribe()
+    shutdown = _shutdown_event or asyncio.Event()
 
     async def stream():
         try:
             yield 'data: {"type":"hello"}\n\n'
-            while True:
+            while not shutdown.is_set():
+                event_task = asyncio.create_task(queue.get())
+                stop_task = asyncio.create_task(shutdown.wait())
+                waiters = {event_task, stop_task}
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                    done, _ = await asyncio.wait(
+                        waiters, timeout=15,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    pending = {task for task in waiters if not task.done()}
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+                if stop_task in done:
+                    break
+                if event_task in done:
+                    event = event_task.result()
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                except asyncio.TimeoutError:
+                else:
                     yield ": ping\n\n"
         finally:
             core.HUB.unsubscribe(queue)

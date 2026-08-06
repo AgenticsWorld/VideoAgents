@@ -49,7 +49,7 @@ window.I18N_DICT = {
 ",请稍候(刷新可更新进度)": ", подождите (обновите страницу, чтобы увидеть прогресс)",
 "0=不审核": "0 = без проверки",
 "100=最严格审核": "100 = максимально строгая проверка",
-"Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Движок выполнения Agent: claude -p / codex exec / kimi -p / deepagents (локальные модели, напр. LM Studio, или OpenRouter — настраиваются на странице 🎨 Генеративные модели)",
+"Agent 执行引擎:claude / codex / kimi / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)": "Движок выполнения Agent: claude / codex / kimi / pi / deepagents (локальные модели, напр. LM Studio, или OpenRouter — настраиваются на странице 🎨 Генеративные модели)",
 "Auto(官方自动选版)": "Auto (официальный автоматический выбор версии)",
 "BytePlus ModelArk 图片生成 API(海外区,Seedream 系列);Key 在": "BytePlus ModelArk API генерации изображений (зарубежный регион, серия Seedream); Key создаётся в",
 "BytePlus ModelArk 视频生成 API(海外区,Seedance 系列);Key 在": "BytePlus ModelArk API генерации видео (зарубежный регион, серия Seedance); Key создаётся в",

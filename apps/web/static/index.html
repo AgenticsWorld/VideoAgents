@@ -101,7 +101,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .st.queued{background:var(--dim)}
 .st.done{background:var(--green)}
 .st.error{background:var(--red)}
-.run .ag{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run .ag{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex-shrink:1}
 .run .tm{margin-left:auto;color:var(--dim);flex:none}
 .run .run-stop{flex:none;font-size:10px;line-height:15px;padding:0 5px;border-radius:4px;color:var(--red)}
 .run .run-stop:hover{border-color:var(--red)}
@@ -109,7 +109,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .run .prog{color:var(--yellow);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .parent{color:var(--purple)}
 .run .err2{color:var(--red);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;flex:none}
+.run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
 /* 配置弹窗(时长设置等) */
@@ -183,10 +183,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude -p / codex exec / kimi -p / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimi / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimi</option>
+    <option value="pi">pi</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
@@ -318,6 +319,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="claude">claudecode</option>
         <option value="codex">codex</option>
         <option value="kimi">kimi</option>
+        <option value="pi">pi</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -685,18 +687,41 @@ const MODEL_OPTIONS={
   kimi:[['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
+  pi:[['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
-function populateModels(engine){
+let PI_MODEL_ERROR='';
+async function loadPiModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/pi/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
+    MODEL_OPTIONS.pi=[['','默认(CLI配置)'],...dynamic,['__custom','自定义…']];
+    AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],...dynamic,['__custom','自定义…']];
+    PI_MODEL_ERROR='';
+  }catch(e){
+    PI_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
+  }
+}
+async function populateModels(engine,selected=null){
+  if(engine==='pi')await loadPiModelOptions();
+  if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
     const o=document.createElement('option'); o.value=v; o.textContent=label; sel.appendChild(o);
   });
-  sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
-  sel.title=engine==='deepagents'?'deepagents 生效渠道:本地模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置':'';
-  $('#model-custom').style.display='none';
+  const values=MODEL_OPTIONS[engine].map(x=>x[0]);
+  if(selected!==null&&values.includes(selected))sel.value=selected;
+  else if(selected&&values.includes('__custom')){
+    sel.value='__custom';$('#model-custom').value=selected;
+  }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
+  sel.title=engine==='deepagents'
+    ?'deepagents 生效渠道:本地模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置'
+    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型'):'';
+  $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
   if($('#engine').value==='deepagents')return DA_MODEL;
@@ -727,7 +752,7 @@ async function restorePrefs(){
   }
   if(p.engine==='codex'&&p.model==='gpt-5.5')p.model='gpt-5.6-sol'; // 旧默认一次性迁移
   if(p.engine&&MODEL_OPTIONS[p.engine])$('#engine').value=p.engine;
-  populateModels($('#engine').value);
+  await populateModels($('#engine').value,p.model||null);
   if(p.model&&[...$('#model').options].some(o=>o.value===p.model)){
     $('#model').value=p.model;
     $('#model-custom').style.display=p.model==='__custom'?'':'none';
@@ -913,11 +938,12 @@ function syncDaSelect(cfg){
   [...sel.options].forEach(o=>{const m=models[o.value];o.title=m?`${t(o.textContent)} · ${m}`:''});
 }
 async function syncDaProvider(){try{syncDaSelect(await api('/api/v1/config/generation'))}catch(e){}}
-/* ---------- 引擎 CLI 检测(顶栏切到 claudecode/codex/kimi 时确认命令已安装,缺失则引导安装) ---------- */
+/* ---------- 引擎 CLI 检测(顶栏切到 claudecode/codex/kimi/pi 时确认命令已安装,缺失则引导安装) ---------- */
 const ENGINE_CLI={
   claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart'},
   codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimi',url:'https://www.kimi.com/code'},
+  pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -1478,6 +1504,20 @@ function scrollToActiveAgent(){
   if(er.top<lr.top+26||er.bottom>lr.bottom)el.scrollIntoView({block:'center'});
 }
 
+// 连续流式 delta 必须合并进同一个块。pi 通常按 token 发很小的 delta；若每个
+// delta 都创建 div，块级布局会把分词逐个竖排。工具活动插入后再建立新文本块，
+// 从而仍保持「模型文字 → 工具 → 后续文字」的事件顺序。
+function appendLiveText(container,text){
+  if(!text)return;
+  let target=container.lastElementChild;
+  if(!target||!target.classList.contains('livetext')){
+    target=document.createElement('div');target.className='livetext';container.appendChild(target);
+  }
+  const tail=target.lastChild;
+  if(tail&&tail.nodeType===3)tail.appendData(text);
+  else target.appendChild(document.createTextNode(text));
+}
+
 // 该 agent 有运行中的 run 时,从 server 状态重建聊天里的实时进度框(切换/刷新后不丢)
 async function restoreLive(id){
   const act=Object.values(RUNS).filter(r=>r.agent===id&&r.project===curProj()
@@ -1490,9 +1530,7 @@ async function restoreLive(id){
     (full.activity||[]).forEach(a=>{
       const c=document.createElement('span');c.className='toolchip';c.textContent=a;d.appendChild(c);
     });
-    if(full.text){
-      const t=document.createElement('div');t.className='livetext';t.textContent=full.text;d.appendChild(t);
-    }
+    appendLiveText(d,full.text);
     $('#messages').scrollTop=$('#messages').scrollHeight;
   }
 }
@@ -1589,6 +1627,7 @@ const AM_MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['__custom','自定义…']],
+  pi:[['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -1606,9 +1645,11 @@ function updateModelBtn(){
     :I18N.f('「模型策略」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
     +t('(点击修改;优先级高于右上角全局)');
 }
-function amPopulateModels(engine,selected){
+async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
+  if(engine==='pi')await loadPiModelOptions();
+  if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{
     const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o)});
@@ -1625,23 +1666,23 @@ function amFillProvider(sel,options,val){
   options.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o)});
   sel.value=[...sel.options].some(o=>o.value===val)?val:'';
 }
-function openAmModal(){
+async function openAmModal(){
   if(!CURRENT)return;
   $('#am-err').textContent='';
   $('#am-agent').textContent=CURRENT;
   const c=amEffective(CURRENT);
   $('#am-engine').value=c.engine||'';
-  amPopulateModels(c.engine||'',c.model||'');
+  $('#am-modal').style.display='flex';
+  await amPopulateModels(c.engine||'',c.model||'');
   amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
   amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
   $('#am-note').textContent=I18N.f('该 Agent 策略默认(模型策略:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
-  $('#am-modal').style.display='flex';
 }
 $('#btn-models').onclick=openAmModal;
-$('#am-engine').onchange=()=>amPopulateModels($('#am-engine').value,'');
+$('#am-engine').onchange=async()=>await amPopulateModels($('#am-engine').value,'');
 $('#am-model').onchange=()=>{
   $('#am-model-custom').style.display=$('#am-model').value==='__custom'?'':'none'};
 $('#am-cancel').onclick=()=>$('#am-modal').style.display='none';
@@ -1735,7 +1776,8 @@ function renderRuns(){
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);
-    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${r.engine?`<span class="eng">${r.engine}${r.model?' · '+esc(r.model):''}</span>`:''}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
+    const engLabel=r.engine?(r.engine+(r.model?' · '+r.model:'')):'';
+    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${engLabel?`<span class="eng" title="${esc(engLabel)}">${esc(engLabel)}</span>`:''}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
       <div class="msg2">${par}${esc(r.message||'')}</div>
       ${r.status==='running'&&r.progress?`<div class="prog">${esc(r.progress)}</div>`:''}
       ${r.error?`<div class="err2">${esc(r.error)}</div>`:''}`;
@@ -1773,7 +1815,7 @@ function connect(){
     }
     else if(ev.type==='text'&&ev.agent===CURRENT&&runProj(ev.run_id)===curProj()){
       const d=liveBox(ev.run_id);
-      const t=document.createElement('div');t.className='livetext';t.textContent=ev.text;d.appendChild(t);
+      appendLiveText(d,ev.text);
       $('#messages').scrollTop=$('#messages').scrollHeight;
     }
     else if(ev.type==='tool'){
@@ -1835,8 +1877,8 @@ function liveBox(runId){
   connect();   // 首次 renderAgents/renderRuns 延后到项目下拉框恢复之后,否则 curProj() 回退 demo 导致按项目过滤为空
   try{(await api('/api/v1/approvals')).forEach(showConfirm)}catch(e){}
   $('#search').oninput=renderAgents;
-  $('#engine').onchange=()=>{
-    populateModels($('#engine').value);savePrefs();
+  $('#engine').onchange=async()=>{
+    await populateModels($('#engine').value);savePrefs();
     if($('#engine').value==='deepagents')syncDaProvider();
     checkEngineCli($('#engine').value);
   };
