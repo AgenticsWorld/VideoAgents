@@ -73,7 +73,6 @@ make run-auto
 可选集成：
 
 ```bash
-python -m pip install -e ".[deepagents]"
 python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
@@ -81,6 +80,31 @@ python -m pip install -e ".[dev]"
 deepagents 引擎需要 Python ≥3.11。若主环境是 3.10，请改用
 `make install-deepagents` 创建专用的 `.venv-deepagents`（运行时自动发现）；
 也可设置 `DEEPAGENTS_PY` 指向任意已安装 deepagents 的解释器。
+
+如需为该独立环境指定 Python 解释器：
+
+```bash
+make install-deepagents DEEPAGENTS_PYTHON=python3.11
+```
+
+如果通过 asdf 管理 Python，可显式选择已安装的 3.11 版本：
+
+```bash
+ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
+```
+
+DeepAgents 默认按 128000 token 上下文运行，单次输出上限 8192 token，图递归上限为 250
+（调度类 Agent 为 500）。runner 还会为系统提示词和工具 schema 预留 16384 token，首轮输入
+超限直接拒绝；约 48000 个估算 token 时压缩历史，只保留约 8000 个估算 token；每次 shell 工具输出最多返回 24000
+字节。为避免无界扫描和递归放大上下文，`glob` 工具与自动泛用子 Agent 默认关闭。
+只有当本地推理服务实际配置了相同或更大的上下文窗口时，才覆盖下面的值：
+
+```bash
+DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
+```
+
+还可调整 `DEEPAGENTS_RECURSION_LIMIT` 与 `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES`；提高任一值都会
+增加运行时间或上下文压力。
 
 FFmpeg 需要通过操作系统包管理器单独安装。
 

@@ -88,7 +88,6 @@ active.
 Optional integrations can be installed as extras:
 
 ```bash
-python -m pip install -e ".[deepagents]"
 python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
@@ -97,6 +96,34 @@ The deepagents engine requires Python 3.11 or newer. If your main environment
 runs Python 3.10, use `make install-deepagents` instead to create a dedicated
 `.venv-deepagents` that the runtime discovers automatically; alternatively set
 `DEEPAGENTS_PY` to any interpreter that has deepagents installed.
+
+To choose a specific interpreter for that dedicated environment:
+
+```bash
+make install-deepagents DEEPAGENTS_PYTHON=python3.11
+```
+
+When using asdf, select an installed Python 3.11 version explicitly:
+
+```bash
+ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
+```
+
+DeepAgents defaults to a 128,000-token context window, an 8,192-token output cap,
+and a graph recursion limit of 250 (500 for dispatcher agents). The runner
+reserves 16,384 tokens for prompt and tool-schema overhead, rejects an oversized
+first request, summarizes at 48,000 estimated tokens, keeps 8,000 tokens, and caps each shell
+tool result at 24,000 bytes. The `glob` tool and automatic general-purpose
+subagent are disabled to prevent unbounded scans and recursive context growth.
+Override the model window only when the model server is configured with the
+same or larger value:
+
+```bash
+DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
+```
+
+`DEEPAGENTS_RECURSION_LIMIT` and `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES` can also be
+adjusted; raising either increases runtime or context pressure.
 
 FFmpeg must be installed separately with your operating system's package
 manager.

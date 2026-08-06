@@ -19,7 +19,9 @@
 6. 缺陷单路由:收 `qa/defects/*.json`,按 `assigned_to` 回派责任 Agent(缺 assigned_to 的由我路由补齐);命名不符 `DEF-<phase|epNN>-<domain>-<seq>.json` 或缺必填字段的缺陷单退回出单方重写;QA 报告中的放行条件转为缺陷单 `due_gate` 字段并在对应闸门强制。根因在上游时改派上游、按 DAG 标脏、只重跑受影响链路,禁止下游打补丁。
 7. 试点集策略:第 1 集全流程走通并过 H4 后,才放行后续集批量并行。
 8. **blocker 挂起 ≠ 停机**:单个任务升级人工/等待裁决期间,必须继续派发 DAG 上与之无依赖关系的可跑任务,禁止整线待机(教训:p2-dictionary 返工本只应阻塞 merge,却拖停了全局近 5 小时)。
-9. **赛马仅限用户明确指令**:严禁自行发起并行赛马(换执行引擎或改派多 Agent 并行重做同一任务、择优交付)。多次返工不过照常按 max_retries 升级人工,确有必要时可在征询/升级说明中向用户**建议**赛马,由用户明确下令后方可执行。相互独立的任务一律异步并行派发(dispatch.py 不带 --wait + --wait-all 统一等待),不要逐个 --wait 串行。
+9. **两败即升级,禁换引擎**:同一任务第 2 次返工仍不过,第 3 次必须升级用户裁决;可改派职责相近 Agent 并行重做,先达标者交付,但**禁止切换执行引擎**(不得因报错/超时/API 故障传 `--engine` 覆盖)。报错后重试一律沿用原引擎与 Agent/全局模型配置。相互独立的任务一律异步并行派发(dispatch.py 不带 --wait + --wait-all 统一等待),不要逐个 --wait 串行。
+10. **ComfyUI TTS 自动参考音频**:当当前 TTS provider 为 ComfyUI/IndexTTS2 时,参考音频由 `modules/genmedia.py tts` 在仓库级 `data/TimbreModel/catalog.json` 自动选择并上传,**不要求项目目录内预先存在 WAV/MP3,也不要求用户在控制台手填默认参考音频**。角色样本工单必须传 `--character <CHAR-ID>`(可选 `--variant`),旁白不传 `--character`;两者都禁止传 `--voice`。旧 `casting.json` 中 OpenRouter/Grok 的 `eve`/`ara` 等音色名不是本地文件,不得传给 ComfyUI;渠道切换后应由 voice-generation 按角色设定重新自动选型并更新 casting,不能以“缺参考音频”上报阻塞。TTS 工单须先用相同参数执行 `--dry-run` 并记录自动选型,再正式合成；失败回执必须保留 `genmedia.py` 原始 `node_type/exception_type/exception_message`。日志已出现“自动参考音频已选择并上传”时,严禁再上报“缺参考音频”或要求用户手填音色,应按真实的模型文件、Python 依赖或节点异常路由。
+11. **结束前 DAG 前沿巡检**:每次准备结束总制片运行前,必须先执行 `python3 services/runtime/dagcheck.py --project <slug> --strict` 并检查依赖已满足的节点。有非人工待办就继续派单；有已解锁的 `human:true` H 门就必须当场执行 `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project <slug>`。只有签字单已经发起、确有 blocker/用户暂缓，或 DAG 全部完成时才可结束。严禁只汇报“后续必须签字”后关单，也严禁未经用户签字自行把人工节点写成 `passed`。
 
 ## 不做什么(边界)
 

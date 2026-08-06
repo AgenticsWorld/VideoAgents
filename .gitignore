@@ -58,6 +58,8 @@ apps/desktop/.desktop-packages/
 # Local Claude worktrees
 .claude/worktrees/
 /webui
-
 plugins/fusion-fiction
 plugins/audio-to-video
+conversation_history/
+data/TimbreModel/
+Users/
