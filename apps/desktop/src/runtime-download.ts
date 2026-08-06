@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto'
 import {spawn} from 'node:child_process'
-import {createWriteStream, existsSync, mkdirSync, renameSync, rmSync} from 'node:fs'
+import {createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync} from 'node:fs'
 import path from 'node:path'
 import {Readable, Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
@@ -20,6 +20,11 @@ export interface RuntimeArtifact {
   sha256: string
   size: number
   pythonVersion?: string
+}
+
+interface RuntimeBuildInfo {
+  updateIndexUrl?: string
+  packageBaseUrl?: string
 }
 
 interface RuntimeIndex {
@@ -43,11 +48,32 @@ export interface RuntimeInstallResult {
   downloaded: boolean
 }
 
-function indexUrl(): string {
-  return process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
+function packagedBuildInfo(): RuntimeBuildInfo | undefined {
+  try {
+    const value = JSON.parse(readFileSync(path.join(process.resourcesPath, 'build-info.json'), 'utf8')) as RuntimeBuildInfo
+    const validUrl = (url: unknown): url is string => {
+      if (typeof url !== 'string') return false
+      try {
+        const parsed = new URL(url)
+        return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+      } catch {
+        return false
+      }
+    }
+    if (!validUrl(value.updateIndexUrl)) delete value.updateIndexUrl
+    if (!validUrl(value.packageBaseUrl)) delete value.packageBaseUrl
+    else if (!value.packageBaseUrl.endsWith('/')) value.packageBaseUrl += '/'
+    return value
+  } catch {
+    return undefined
+  }
 }
 
-function validateArtifact(value: unknown, sourceIndex: string): RuntimeArtifact {
+function indexUrl(build = packagedBuildInfo()): string {
+  return process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || build?.updateIndexUrl || DEFAULT_INDEX_URL
+}
+
+function validateArtifact(value: unknown, sourceIndex: string, build?: RuntimeBuildInfo): RuntimeArtifact {
   if (!value || typeof value !== 'object') throw new Error('运行时索引缺少当前平台制品')
   const artifact = value as Partial<RuntimeArtifact>
   if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
@@ -59,14 +85,15 @@ function validateArtifact(value: unknown, sourceIndex: string): RuntimeArtifact 
   const configuredIndex = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL
   if (configuredIndex) {
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('运行时制品与索引来源不一致')
-  } else if (!url.href.startsWith(DEFAULT_PACKAGE_PREFIX)) {
-    throw new Error('运行时制品 URL 不属于受信任的 S3 路径')
+  } else if (!url.href.startsWith(`${build?.packageBaseUrl || DEFAULT_PACKAGE_PREFIX.replace(/python\/$/, '')}python/`)) {
+    throw new Error('运行时制品 URL 不属于当前发布源的受信任路径')
   }
   return artifact as RuntimeArtifact
 }
 
 export async function fetchLatestRuntimeArtifact(): Promise<RuntimeArtifact> {
-  const source = indexUrl()
+  const build = packagedBuildInfo()
+  const source = indexUrl(build)
   const response = await fetch(source, {redirect: 'error', cache: 'no-store'})
   if (!response.ok) throw new Error(`运行时索引请求失败：HTTP ${response.status}`)
   const text = await response.text()
@@ -75,7 +102,7 @@ export async function fetchLatestRuntimeArtifact(): Promise<RuntimeArtifact> {
   if (index.schema !== 1 || !index.python) throw new Error('运行时索引格式无效')
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (!platform) throw new Error(`暂不支持的平台：${process.platform}`)
-  return validateArtifact(index.python[platform]?.[process.arch], source)
+  return validateArtifact(index.python[platform]?.[process.arch], source, build)
 }
 
 async function downloadArtifact(
