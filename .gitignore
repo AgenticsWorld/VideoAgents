@@ -60,6 +60,7 @@ apps/desktop/.desktop-packages/
 /webui
 plugins/fusion-fiction
 plugins/audio-to-video
+plugins/mashup
 conversation_history/
 data/TimbreModel/
 Users/
