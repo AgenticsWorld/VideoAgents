@@ -1,0 +1,34 @@
+{
+  "1": {
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "{{REF_AUDIO}}"
+    }
+  },
+  "2": {
+    "class_type": "IndexTTS2BaseNode",
+    "inputs": {
+      "text": "{{TEXT}}",
+      "reference_audio": ["1", 0],
+      "mode": "Auto",
+      "do_sample_mode": "on",
+      "temperature": 0.8,
+      "top_p": 0.8,
+      "top_k": 30,
+      "num_beams": 3,
+      "repetition_penalty": 10.0,
+      "length_penalty": 0.0,
+      "max_mel_tokens": 1500,
+      "max_tokens_per_sentence": 120,
+      "seed": "{{SEED}}"
+    }
+  },
+  "3": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": ["2", 0],
+      "filename_prefix": "videoagents/indextts2-tts",
+      "quality": "320k"
+    }
+  }
+}

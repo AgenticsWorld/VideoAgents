@@ -1,0 +1,193 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan2.1_fun_camera_v1.1_14B_bf16.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "shift": 8.0
+    }
+  },
+  "3": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    }
+  },
+  "4": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "clip_vision_h.safetensors"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{FIRST_FRAME}}"
+    }
+  },
+  "7": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": [
+        "5",
+        0
+      ],
+      "image": [
+        "6",
+        0
+      ],
+      "crop": "none"
+    }
+  },
+  "8": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{PROMPT}}",
+      "clip": [
+        "3",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "overexposure, static, blurred details, subtitles, paintings, still image, gray cast, worst quality, low quality, JPEG artifacts, deformed anatomy, fused fingers, cluttered background, unnatural motion, 3D render, photorealism, watermark, logo, text, extra animals, humans, duplicate characters, modern stadium, track lanes, trophies, medals, sneakers, clothing on animals, handheld shake, aerial drone, crash zoom, neon, blood, guns",
+      "clip": [
+        "3",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "WanCameraEmbedding",
+    "inputs": {
+      "camera_pose": "Pan Right",
+      "width": 832,
+      "height": 480,
+      "length": "{{FRAMES}}",
+      "speed": 0.35
+    }
+  },
+  "11": {
+    "class_type": "WanCameraImageToVideo",
+    "inputs": {
+      "positive": [
+        "8",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "vae": [
+        "4",
+        0
+      ],
+      "clip_vision_output": [
+        "7",
+        0
+      ],
+      "start_image": [
+        "6",
+        0
+      ],
+      "camera_conditions": [
+        "10",
+        0
+      ],
+      "width": [
+        "10",
+        1
+      ],
+      "height": [
+        "10",
+        2
+      ],
+      "length": [
+        "10",
+        3
+      ],
+      "batch_size": 1
+    }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "{{SEED}}",
+      "steps": 20,
+      "cfg": 6.0,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "2",
+        0
+      ],
+      "positive": [
+        "11",
+        0
+      ],
+      "negative": [
+        "11",
+        1
+      ],
+      "latent_image": [
+        "11",
+        2
+      ]
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "vae": [
+        "4",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "13",
+        0
+      ],
+      "fps": 16.0
+    }
+  },
+  "15": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "14",
+        0
+      ],
+      "filename_prefix": "videoagents/wan2.1-fun-camera-v1.1-14b-bf16",
+      "format": "mp4",
+      "codec": "h264"
+    }
+  }
+}

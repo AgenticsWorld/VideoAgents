@@ -27,7 +27,8 @@ CLI:
 
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
-      [--voice eve] [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
+      [--character CHAR-0001] [--variant child] [--project demo] \
+      [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
 
 Python:
   from modules.genmedia import generate_image, generate_video, generate_music, \
@@ -44,6 +45,7 @@ Python:
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
         省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
+        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/AUDIO_MODELS.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
@@ -51,10 +53,19 @@ Python:
         音色为 speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
         可在「生成模型」页从 Voice Library 搜索并一键加入账号)
+        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
+        根据角色设定从 data/TimbreModel 自动选择参考音频)
 
 ComfyUI 自定义工作流占位符(文本替换):
   字符串位: "{{PROMPT}}" "{{NEGATIVE}}" "{{CHECKPOINT}}" "{{FIRST_FRAME}}" "{{LAST_FRAME}}"
-  数值位(不要加引号): {{WIDTH}} {{HEIGHT}} {{SEED}} {{DURATION}}
+            "{{TEXT}}" "{{LYRICS}}" "{{VOICE}}" "{{REF_AUDIO}}"
+  数值位: "{{WIDTH}}" "{{HEIGHT}}" "{{SEED}}" "{{DURATION}}" "{{FRAMES}}"
+          "{{LTX_FRAMES}}" "{{SPEED}}"
+  占位符独占整个字符串时会保留注入值的类型；旧版不加引号的数值模板仍兼容。
+  FRAMES 按 16fps 将 DURATION 换算为 Wan 视频所需的 4n+1 帧数。
+  LTX_FRAMES 按 24fps 换算为 LTX 视频所需的 8n+1 帧数。
+  音乐/TTS 以 SaveAudio/SaveAudioMP3 落盘;DURATION 为秒,TEXT 为 TTS 文本,
+  REF_AUDIO 为已上传到 ComfyUI input 的参考音频文件名。
 """
 import argparse
 import base64
@@ -73,6 +84,11 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+try:
+    from modules.timbre_selector import select_timbre
+except ModuleNotFoundError:  # python modules/genmedia.py ...
+    from timbre_selector import select_timbre
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 RUNTIME_DIR = Path(os.environ.get(
@@ -90,9 +106,22 @@ ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
 
+H3_DEFAULTS = {
+    "unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+    "weight_dtype": "default", "clip_device": "default",
+    "sampler": "res_multistep", "scheduler": "simple", "steps": 20,
+    "ref_image_size": "match", "fps": 24,
+}
+H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
+
 VIDEO_POLL_INTERVAL = 10
 VIDEO_TIMEOUT = 1800
 COMFY_TIMEOUT = 1800
+COMFY_QUEUE_SUBMIT_GRACE = 30
+COMFY_QUEUE_DISAPPEAR_GRACE = 15
 
 
 # ---------------- 配置 ----------------
@@ -387,10 +416,10 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
 # ---------------- ComfyUI 通用 ----------------
 
 def _comfy_upload(base: str, path: str) -> str:
-    """上传输入图,返回服务器端文件名。"""
+    """上传输入文件到 ComfyUI input 目录,返回服务器端文件名(图/音频通用)。"""
     p = Path(path)
     if not p.is_file():
-        raise RuntimeError(f"输入图不存在: {path}")
+        raise RuntimeError(f"输入文件不存在: {path}")
     boundary = uuid.uuid4().hex
     mime = mimetypes.guess_type(p.name)[0] or "image/png"
     body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; "
@@ -403,37 +432,303 @@ def _comfy_upload(base: str, path: str) -> str:
     return resp["name"]
 
 
+def _comfy_video_frame_count(duration: float | None, fps: int = 16) -> int:
+    """Convert seconds to the nearest Wan-compatible 4n+1 frame count."""
+    seconds = duration if duration is not None and duration > 0 else 5
+    return max(1, round(seconds * fps / 4) * 4 + 1)
+
+
+def _comfy_ltx_video_frame_count(duration: float | None, fps: int = 24) -> int:
+    """Convert seconds to the nearest LTX-compatible 8n+1 frame count."""
+    seconds = duration if duration is not None and duration > 0 else 5
+    return max(1, round(seconds * fps / 8) * 8 + 1)
+
+
+def _comfy_h3_frame_count(duration: float | None, fps: int = 24) -> int:
+    """MiniMax H3 requires a 17n+5 frame count at its configured output FPS."""
+    seconds = duration if duration is not None and duration > 0 else 5
+    frames = max(5, round(seconds * fps))
+    return frames + (5 - frames % 17) % 17
+
+
+def _resolve_comfy_workflow_path(wf_path: str) -> Path:
+    """Resolve a workflow path, including configs saved before ``comfy/`` moved.
+
+    ComfyUI templates are repository resources rather than runtime data.  Keep
+    the old ``data/comfy/`` spelling readable so existing user settings do not
+    break when the templates move beside ``data/``.
+    """
+    path = Path(wf_path)
+    if path.is_absolute():
+        return path
+    primary = ROOT / path
+    legacy_prefix = "data/comfy/"
+    if str(path).replace("\\", "/").startswith(legacy_prefix):
+        migrated = ROOT / "comfy" / str(path).replace("\\", "/")[len(legacy_prefix):]
+        if migrated.is_file():
+            return migrated
+    return primary
+
+
+def _h3_reference_tags(prompt: str) -> str:
+    """Translate project reference tags to MiniMax-H3's documented syntax.
+
+    Prompt packages use the provider-neutral ``@Image 1`` notation.  H3's
+    ReferenceToVideo node binds dynamic sockets through ``<Picture 1>`` (and
+    analogous Audio/Video tags), so translate only direct reference markers at
+    the ComfyUI H3 boundary.
+    """
+    def replace(match: re.Match[str]) -> str:
+        kind = match.group(1).lower()
+        target = {"image": "Picture", "picture": "Picture",
+                  "audio": "Audio", "video": "Video"}[kind]
+        return f"<{target} {match.group(2)}>"
+
+    return re.sub(r"@(?:\s*)?(image|picture|audio|video)\s*(\d+)", replace,
+                  prompt, flags=re.IGNORECASE)
+
+
+def _h3_settings() -> dict:
+    """Return the single supported MiniMax H3 runtime configuration."""
+    settings = dict(H3_DEFAULTS)
+    try:
+        settings["fps"] = int(settings["fps"])
+        settings["steps"] = int(settings["steps"])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("ComfyUI MiniMax-H3 配置的 fps/steps 必须为整数") from exc
+    if settings["fps"] <= 0 or settings["steps"] <= 0:
+        raise RuntimeError("ComfyUI MiniMax-H3 配置的 fps/steps 必须大于 0")
+    return settings
+
+
+def _h3_dimensions(aspect: str, resolution: str, default_short_side: int = 480) -> tuple[int, int]:
+    """Map VideoAgents output settings to H3's 32-pixel latent grid."""
+    ratio_text = aspect or "16:9"
+    try:
+        numerator, denominator = (float(x.strip()) for x in ratio_text.split(":", 1))
+        ratio = numerator / denominator
+        if ratio <= 0:
+            raise ValueError
+    except (TypeError, ValueError, ZeroDivisionError):
+        ratio = 16 / 9
+    resolution_sides = {"360p": 360, "480p": 480, "720p": 720, "1080p": 1080}
+    if resolution == "4k":
+        raise RuntimeError("MiniMax-H3 本地 Base 工作流不支持 4k;"
+                           "请先按草稿档生成，再走现有 upscale 成片流程")
+    short_side = resolution_sides.get(resolution, default_short_side)
+    short_side = max(32, round(short_side / 32) * 32)
+    if ratio >= 1:
+        return max(32, round(short_side * ratio / 32) * 32), short_side
+    return short_side, max(32, round(short_side / ratio / 32) * 32)
+
+
+def _is_h3_ref2va_workflow(cfg: dict) -> bool:
+    wf_path = (cfg.get("workflow") or "").strip()
+    if not wf_path:
+        return False
+    path = _resolve_comfy_workflow_path(wf_path)
+    try:
+        workflow = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
+               for node in workflow.values())
+
+
+def _comfy_h3_validate_components(base: str, settings: dict) -> None:
+    """Fail before upload when the selected H3 component files are not installed."""
+    unet_info = _get_json(f"{base}/object_info/UNETLoader")
+    clip_info = _get_json(f"{base}/object_info/CLIPLoader")
+    try:
+        unets = set(unet_info["UNETLoader"]["input"]["required"]["unet_name"][0])
+        text_encoders = set(clip_info["CLIPLoader"]["input"]["required"]["clip_name"][0])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("ComfyUI 未返回可用的 H3 模型清单，无法安全提交任务") from exc
+    missing = []
+    if settings["unet"] not in unets:
+        missing.append(f"UNet={settings['unet']}")
+    if settings["text_encoder"] not in text_encoders:
+        missing.append(f"text encoder={settings['text_encoder']}")
+    if not missing:
+        return
+    mode_hint = ""
+    if ("minimax_h3_fl2va_pruned_int8_convrot.safetensors" in unets
+            and settings["unet"].startswith("minimax_h3_ref2va_")):
+        mode_hint = (
+            " 已检测到 fl2va pruned，但当前工作流是 Ref2VA 多参考模式；"
+            "FL2VA 权重不能替代 ref2va 权重。"
+        )
+    raise RuntimeError(
+        "ComfyUI 缺少 MiniMax-H3 Ref2VA 所选组件: " + ", ".join(missing) + "."
+        + mode_hint + " 请从 Comfy-Org/MiniMax-H3 安装对应文件后重启 ComfyUI。"
+    )
+
+
+def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str]) -> None:
+    """Attach only submitted refs to H3's dynamic Ref2VA sockets."""
+    if len(image_names) > MAX_VIDEO_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考图最多 {MAX_VIDEO_REFS} 张,收到 {len(image_names)}")
+    if len(audio_names) > MAX_AUDIO_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考音频最多 {MAX_AUDIO_REFS} 段,收到 {len(audio_names)}")
+    if audio_names and not image_names:
+        raise RuntimeError("MiniMax-H3 参考音频必须与至少一张参考图一起使用")
+    target = next((node for node in workflow.values()
+                   if isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE), None)
+    if target is None:
+        raise RuntimeError("MiniMax-H3 工作流缺少 MiniMaxH3ReferenceToVideo 节点")
+    node_ids = [int(key) for key in workflow if str(key).isdigit()]
+    next_id = max(node_ids, default=0) + 1
+    inputs = target.setdefault("inputs", {})
+    for index, name in enumerate(image_names):
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        inputs[f"ref_images.ref_image_{index}"] = [node_id, 0]
+    for index, name in enumerate(audio_names):
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": "LoadAudio", "inputs": {"audio": name}}
+        inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
+
+
+def _extract_last_frame(video_path: str, frame_path: str) -> None:
+    """H3 muxes audio/video locally; derive the continuity anchor from its finished MP4."""
+    target = Path(frame_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-sseof", "-0.1", "-i", video_path,
+         "-frames:v", "1", str(target)],
+        capture_output=True, text=True, timeout=90)
+    if result.returncode or not target.is_file() or target.stat().st_size == 0:
+        detail = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(f"MiniMax-H3 成片已生成但尾帧提取失败:{detail}")
+
+
+def _comfy_execution_error(status: dict) -> str:
+    """Extract the actionable node error without burying it in ComfyUI history JSON."""
+    for message in status.get("messages") or []:
+        if not isinstance(message, list) or len(message) < 2 or message[0] != "execution_error":
+            continue
+        detail = message[1] if isinstance(message[1], dict) else {}
+        parts = []
+        if detail.get("node_id"):
+            parts.append(f"node_id={detail['node_id']}")
+        if detail.get("node_type"):
+            parts.append(f"node_type={detail['node_type']}")
+        if detail.get("exception_type"):
+            parts.append(f"exception_type={detail['exception_type']}")
+        if detail.get("exception_message"):
+            exception_message = str(detail["exception_message"]).strip()
+            parts.append(f"exception_message={exception_message}")
+            if "ACE-Step-v1-3.5B" in exception_message:
+                parts.append(
+                    "hint=ACE-Step 节点按 ComfyUI 安装目录的 models/TTS 查找，"
+                    "请把共享模型目录映射到该目录并重启 ComfyUI;"
+                    "仅下载到 HuggingFace cache 或 extra_model_paths.yaml 的其他目录不够"
+                )
+            if ("hostbuf_file_reader_read failed" in exception_message
+                    or "HostBuffer.read_file_slice failed" in exception_message):
+                parts.append(
+                    "hint=MiniMax-H3 int8 权重在 ComfyUI async-offload/prefetch 读取失败;"
+                    "停止重试，先核对 minimax_h3_ref2va_pruned_int8_convrot.safetensors 的 SHA256/"
+                    "实际读取路径并更新 ComfyUI 与 comfy-aimdo；64G 主机先用 "
+                    "--disable-pinned-memory --disable-async-offload 作一次诊断重试，"
+                    "并确认宿主机 RAM/VRAM 没有被其他任务占用"
+                )
+        if parts:
+            return ", ".join(parts)
+        return json.dumps(message, ensure_ascii=False)[:1200]
+    return "ComfyUI history 未提供 execution_error 详情"
+
+
+def _comfy_queue_contains(queue: dict, prompt_id: str) -> bool:
+    """Whether a prompt is still listed by ComfyUI as pending or running."""
+    for name in ("queue_pending", "queue_running"):
+        for item in queue.get(name) or []:
+            # Queue entries are positional lists in current ComfyUI, but preserve
+            # compatibility with custom queue serializers.
+            if prompt_id in json.dumps(item, ensure_ascii=False):
+                return True
+    return False
+
+
 def _comfy_run(base: str, workflow: dict, output: str, want_video: bool) -> str:
-    """提交工作流,轮询完成,下载首个产物到 output。"""
-    resp = _post_json(base + "/prompt", {"prompt": workflow, "client_id": uuid.uuid4().hex})
+    """提交工作流,轮询完成,下载首个产物到 output。
+
+    want_video=True 优先选视频扩展名;want_video=False 时若 output 是音频扩展名
+    则优先选音频产物,否则按图片处理(兼容旧调用)。
+    """
+    audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
+    video_exts = (".mp4", ".webm", ".gif", ".webp")
+    want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
+    try:
+        resp = _post_json(base + "/prompt", {"prompt": workflow, "client_id": uuid.uuid4().hex})
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"ComfyUI 服务不可达，未能提交任务:{base}") from exc
     pid = resp.get("prompt_id")
     if not pid:
         raise RuntimeError(f"ComfyUI 提交失败:{json.dumps(resp)[:400]}")
     deadline = time.time() + COMFY_TIMEOUT
+    queue_missing_since = None
+    seen_in_queue = False
     while time.time() < deadline:
         time.sleep(2)
-        hist = _get_json(f"{base}/history/{pid}").get(pid)
+        try:
+            hist = _get_json(f"{base}/history/{pid}").get(pid)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError(
+                f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
+            ) from exc
         if not hist:
+            try:
+                queue = _get_json(f"{base}/queue")
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                raise RuntimeError(
+                    f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
+                ) from exc
+            if _comfy_queue_contains(queue, pid):
+                seen_in_queue = True
+                queue_missing_since = None
+                continue
+            if queue_missing_since is None:
+                queue_missing_since = time.time()
+            grace = (COMFY_QUEUE_DISAPPEAR_GRACE if seen_in_queue
+                     else COMFY_QUEUE_SUBMIT_GRACE)
+            if time.time() - queue_missing_since >= grace:
+                state = ("执行中的任务已从队列消失" if seen_in_queue
+                         else "已提交任务未出现在队列")
+                raise RuntimeError(
+                    f"ComfyUI {state}且未写入 history；服务可能已重启、任务被取消，"
+                    f"或队列异常丢失(prompt_id={pid})"
+                )
             continue
         status = hist.get("status") or {}
         if status.get("status_str") == "error":
-            msgs = [m for m in status.get("messages", []) if m[0] == "execution_error"]
-            raise RuntimeError(f"ComfyUI 执行出错:{json.dumps(msgs)[:600]}")
+            raise RuntimeError(f"ComfyUI 执行出错:{_comfy_execution_error(status)}")
         outputs = hist.get("outputs") or {}
         files = []
         for node_out in outputs.values():
-            for key in ("images", "gifs", "videos"):
+            # 收集全部已知媒体键,之后按目标扩展名排序。部分自定义音频节点会把
+            # 产物放在 images/preview 键,只按键名判断会漏掉或拿错文件。
+            for key in ("images", "gifs", "video", "videos", "audio", "audios"):
                 files += node_out.get(key) or []
         if files:
-            pick = next((f for f in files
-                         if want_video == f["filename"].lower().endswith((".mp4", ".webm", ".gif", ".webp"))),
-                        files[0])
+            def _rank(f):
+                name = f.get("filename", "").lower()
+                if want_audio:
+                    return 0 if name.endswith(audio_exts) else 1
+                if want_video:
+                    return 0 if name.endswith(video_exts) else 1
+                return 0 if name.endswith((".png", ".jpg", ".jpeg", ".webp")) else 1
+            pick = sorted(files, key=_rank)[0]
             q = urllib.parse.urlencode({"filename": pick["filename"],
                                         "subfolder": pick.get("subfolder", ""),
                                         "type": pick.get("type", "output")})
             return _save(_request(f"{base}/view?{q}", timeout=300), output)
         if status.get("completed"):
-            raise RuntimeError("ComfyUI 已完成但无文件产物(工作流缺 SaveImage/SaveVideo 节点?)")
+            need = ("SaveAudio/SaveAudioMP3" if want_audio
+                    else "SaveVideo" if want_video else "SaveImage/SaveVideo")
+            raise RuntimeError(f"ComfyUI 已完成但无文件产物(工作流缺 {need} 节点?)")
     raise RuntimeError(f"ComfyUI 超时({COMFY_TIMEOUT}s)")
 
 
@@ -441,20 +736,51 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
     """加载配置的工作流模板并做占位符替换;图像无模板时用内置 txt2img。"""
     wf_path = (cfg.get("workflow") or "").strip()
     if wf_path:
-        p = Path(wf_path)
-        if not p.is_absolute():
-            p = ROOT / p
+        p = _resolve_comfy_workflow_path(wf_path)
         if not p.is_file():
             raise RuntimeError(f"配置的 ComfyUI 工作流不存在: {wf_path}")
         text = p.read_text()
+        try:
+            workflow = json.loads(text)
+        except json.JSONDecodeError:
+            # Backward compatibility for templates with unquoted numeric placeholders.
+            workflow = None
+        if workflow is not None:
+            def replace_tokens(value):
+                if isinstance(value, dict):
+                    return {k: replace_tokens(v) for k, v in value.items()}
+                if isinstance(value, list):
+                    return [replace_tokens(v) for v in value]
+                if not isinstance(value, str):
+                    return value
+                for k, v in tokens.items():
+                    marker = "{{%s}}" % k
+                    if value == marker:
+                        return v
+                    if marker in value:
+                        value = value.replace(marker, str(v))
+                return value
+
+            workflow = replace_tokens(workflow)
+            missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}",
+                                                  json.dumps(workflow))))
+            if missing:
+                raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
+            return workflow
         for k, v in tokens.items():
             if isinstance(v, str):
                 text = text.replace("{{%s}}" % k, json.dumps(v)[1:-1])  # 转义后嵌入字符串位
             else:
                 text = text.replace("{{%s}}" % k, str(v))
+        missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
+        if missing:
+            raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
         return json.loads(text)
     if kind == "video":
         raise RuntimeError("ComfyUI 视频生成必须在「🎨 生成模型」页配置工作流 JSON(API 格式)")
+    if kind in ("music", "tts"):
+        raise RuntimeError(f"ComfyUI {kind} 必须在「🎨 生成模型」页配置工作流 JSON"
+                           f"(推荐 comfy/{'ace-step-v1-music' if kind=='music' else 'indextts2-tts'}-api.json)")
     ckpt = (cfg.get("checkpoint") or "").strip()
     if not ckpt:
         raise RuntimeError("ComfyUI 未配置 checkpoint(「🎨 生成模型」页测试连接后选择)")
@@ -475,12 +801,25 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
 
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     base = cfg["url"].rstrip("/")
+    negative_mode = cfg.get("negative_mode") or "conditioning"
+    if negative and negative_mode == "append_exclusions":
+        prompt = f"{prompt}\nExclude from the image: {negative}"
+        negative = ""
+    elif negative and negative_mode == "unsupported":
+        raise RuntimeError("当前 ComfyUI 图片工作流不支持 negative prompt")
     tokens = {"PROMPT": prompt, "NEGATIVE": negative or "",
               "WIDTH": width, "HEIGHT": height, "SEED": seed,
               "CHECKPOINT": cfg.get("checkpoint") or ""}
+    workflow_cfg = cfg
     if refs:
+        if len(refs) > 1:
+            raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref")
+        ref_workflow = (cfg.get("ref_workflow") or "").strip()
+        if not ref_workflow:
+            raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
         tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0])
-    wf = _comfy_workflow(cfg, tokens, "image")
+        workflow_cfg = {**cfg, "workflow": ref_workflow}
+    wf = _comfy_workflow(workflow_cfg, tokens, "image")
     return _comfy_run(base, wf, output, want_video=False)
 
 
@@ -763,10 +1102,41 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid}")
 
 
-def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output):
+def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
+                   refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
+                   video_refs=None):
     base = cfg["url"].rstrip("/")
+    h3 = _is_h3_ref2va_workflow(cfg)
+    if h3:
+        if first or last or video_refs:
+            raise RuntimeError("当前 MiniMax-H3 Ref2VA 工作流支持多图/音频参考;"
+                               "首尾帧与 --ref-video 请使用对应 H3 FL2VA/视频参考工作流")
+        if generate_audio is False:
+            raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
+        settings = _h3_settings()
+        _comfy_h3_validate_components(base, settings)
+        prompt = _h3_reference_tags(prompt)
+        width, height = _h3_dimensions(aspect, resolution)
+        tokens = {
+            "PROMPT": prompt, "SEED": seed, "WIDTH": width, "HEIGHT": height,
+            "FPS": settings["fps"], "H3_FRAMES": _comfy_h3_frame_count(duration, settings["fps"]),
+            "H3_UNET": settings["unet"], "H3_TEXT_ENCODER": settings["text_encoder"],
+            "H3_VIDEO_VAE": settings["video_vae"], "H3_AUDIO_VAE": settings["audio_vae"],
+            "H3_WEIGHT_DTYPE": settings["weight_dtype"], "H3_CLIP_DEVICE": settings["clip_device"],
+            "H3_SAMPLER": settings["sampler"], "H3_SCHEDULER": settings["scheduler"],
+            "H3_STEPS": settings["steps"], "H3_REF_IMAGE_SIZE": settings["ref_image_size"],
+        }
+        wf = _comfy_workflow(cfg, tokens, "video")
+        _add_h3_references(wf, [_comfy_upload(base, path) for path in refs or []],
+                           [_comfy_upload(base, path) for path in audio_refs or []])
+        saved = _comfy_run(base, wf, output, want_video=True)
+        if return_last_frame:
+            _extract_last_frame(saved, return_last_frame)
+        return saved
     tokens = {"PROMPT": prompt, "NEGATIVE": "", "SEED": seed,
               "DURATION": duration or 5, "WIDTH": 0, "HEIGHT": 0,
+              "FRAMES": _comfy_video_frame_count(duration),
+              "LTX_FRAMES": _comfy_ltx_video_frame_count(duration),
               "CHECKPOINT": cfg.get("checkpoint") or ""}
     if aspect in ASPECT_SIZES:
         tokens["WIDTH"], tokens["HEIGHT"] = ASPECT_SIZES[aspect]
@@ -847,6 +1217,31 @@ def _music_elevenlabs(cfg, prompt, output, duration_s=None):
     if data[:1] == b"{":
         raise RuntimeError(f"ElevenLabs 音乐生成失败:{data.decode('utf-8', 'replace')[:400]}")
     return _save(data, output)
+
+
+# ---------------- 音乐:ComfyUI(本地,推荐 ACE-Step 工作流) ----------------
+# 占位符:PROMPT / LYRICS(默认 [Instrumental]) / DURATION 秒 / SEED
+# 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/ace-step-v1-music-api.json。
+
+def _music_comfyui(cfg, prompt, output, duration_s=None):
+    base = (cfg.get("url") or "").rstrip("/")
+    if not base:
+        raise RuntimeError("ComfyUI 音乐渠道未配置服务地址(「🎨 生成模型」页 Music → ComfyUI)")
+    if not (cfg.get("workflow") or "").strip():
+        raise RuntimeError("ComfyUI 音乐生成必须在「🎨 生成模型」页配置工作流 JSON"
+                           "(推荐 comfy/ace-step-v1-music-api.json)")
+    duration = max(1.0, min(240.0, float(duration_s))) if duration_s and duration_s > 0 else 30.0
+    # ACE-Step 纯音乐用 [Instrumental];若配置 force_instrumental=false 且未给歌词,
+    # 仍走 instrumental,避免空歌词触发节点 assert。
+    lyrics = (cfg.get("lyrics") or "").strip() or "[Instrumental]"
+    tokens = {
+        "PROMPT": prompt,
+        "LYRICS": lyrics,
+        "DURATION": duration,
+        "SEED": random.randint(0, 2**31 - 1),
+    }
+    wf = _comfy_workflow(cfg, tokens, "music")
+    return _comfy_run(base, wf, output, want_video=False)
 
 
 # ---------------- TTS 旁白:OpenRouter(/api/v1/audio/speech) ----------------
@@ -959,6 +1354,73 @@ def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
     return _save(data, output)
 
 
+# ---------------- TTS:ComfyUI(本地,推荐 IndexTTS-2 工作流) ----------------
+# 占位符:TEXT / REF_AUDIO(参考音频文件名) / SEED / SPEED
+# 默认根据角色内容从 data/TimbreModel 自动选择参考音频;voice 仅保留真实本地文件覆盖。
+# 工作流须以 SaveAudio/SaveAudioMP3 落盘,见 comfy/indextts2-tts-api.json。
+
+
+def _resolve_tts_reference(cfg, text, output, voice="", character="", variant="",
+                           project="", instructions="") -> dict:
+    if voice:
+        raw = Path(voice)
+        candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, ROOT / raw]
+        manual = next((path.resolve() for path in candidates if path.is_file()), None)
+        if manual:
+            return {"path": str(manual), "file": manual.name, "score": None,
+                    "reason": "explicit local file", "character": character or "manual",
+                    "variant": variant or "default", "profile": {}}
+        print(f"[genmedia] 忽略非本地音频 --voice={voice!r},改用 TimbreModel 自动选型",
+              file=sys.stderr)
+    return select_timbre(
+        text=text,
+        output=output,
+        character=character,
+        variant=variant,
+        project=project,
+        instructions=instructions,
+        timbre_dir=cfg.get("timbre_dir") or "data/TimbreModel",
+        catalog_path=cfg.get("timbre_catalog") or "data/TimbreModel/catalog.json",
+    )
+
+
+def _tts_comfyui(cfg, text, output, voice, speed, instructions,
+                 character="", variant="", project=""):
+    base = (cfg.get("url") or "").rstrip("/")
+    if not base:
+        raise RuntimeError("ComfyUI TTS 渠道未配置服务地址(「🎨 生成模型」页 TTS → ComfyUI)")
+    if not (cfg.get("workflow") or "").strip():
+        raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
+                           "(推荐 comfy/indextts2-tts-api.json)")
+    selection = _resolve_tts_reference(
+        cfg, text, output, voice, character, variant, project, instructions)
+    ref = selection["path"]
+    print("[genmedia] 自动音色:"
+          f"{selection['character']}/{selection['variant']} → {selection['file']}"
+          f" (score={selection['score']}, {selection['reason']})", file=sys.stderr)
+    if instructions:
+        print("[genmedia] ComfyUI TTS 不支持 instructions 参数,已忽略"
+              "(情绪请用工作流内 Emotion 节点或改 prompt 文本)", file=sys.stderr)
+    ref_audio = _comfy_upload(base, ref)
+    tokens = {
+        "TEXT": text,
+        "PROMPT": text,  # 兼容把文本写在 PROMPT 位的工作流
+        "REF_AUDIO": ref_audio,
+        "VOICE": ref_audio,
+        "SEED": random.randint(0, 2**31 - 1),
+        "SPEED": float(speed) if speed else 1.0,
+    }
+    wf = _comfy_workflow(cfg, tokens, "tts")
+    try:
+        return _comfy_run(base, wf, output, want_video=False)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "ComfyUI TTS 后端执行失败"
+            f"(自动参考音频已选择并上传:{selection['file']});"
+            f"必须按以下原始错误分类,不得改写为缺少参考音频:{exc}"
+        ) from exc
+
+
 # ---------------- 对外 API ----------------
 
 def generate_image(prompt: str, output: str, negative: str = "",
@@ -1031,6 +1493,10 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                           resolution, aspect, seed, output,
                           refs, audio_refs, generate_audio, return_last_frame,
                           video_refs)
+    if cfg["provider"] == "comfyui" and _is_h3_ref2va_workflow(cfg):
+        return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
+                              resolution, aspect, seed, output, refs, audio_refs,
+                              generate_audio, return_last_frame, video_refs)
     if refs or audio_refs or video_refs or return_last_frame or generate_audio is not None:
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
@@ -1040,21 +1506,27 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
 
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
-                 instructions: str = "") -> str:
+                 instructions: str = "", character: str = "", variant: str = "",
+                 project: str = "") -> str:
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
 
-    输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。voice 缺省用配置页
-    默认音色(openrouter=音色名 / volcengine=speaker 名 / elevenlabs=voice_id);
+    输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。ComfyUI 渠道按
+    character(省略时从 output 的 CHAR-ID 推断)读取项目 voice/personality/appearance,
+    从 data/TimbreModel 自动选择参考音频;旁白不传 character。voice 在 ComfyUI
+    渠道仅保留真实本地音频文件的兼容覆盖;其他渠道语义保持不变。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
-    情绪指令,elevenlabs 不支持(忽略)。
+    情绪指令,elevenlabs/comfyui 不支持(忽略)。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
     fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
-          "elevenlabs": _tts_elevenlabs}.get(cfg["provider"])
+          "elevenlabs": _tts_elevenlabs, "comfyui": _tts_comfyui}.get(cfg["provider"])
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
-                           "(可选 openrouter / volcengine / elevenlabs)")
+                           "(可选 openrouter / volcengine / elevenlabs / comfyui)")
+    if cfg["provider"] == "comfyui":
+        return fn(cfg, text, output, voice, speed, instructions,
+                  character, variant, project)
     return fn(cfg, text, output, voice, speed, instructions)
 
 
@@ -1062,15 +1534,19 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None) ->
     """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 music 段。
 
     输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus)。
-    duration_s 仅 elevenlabs 生效(music_length_ms,3–600s;省略=模型按 prompt 自定);
+    duration_s:elevenlabs 生效(music_length_ms,3–600s);comfyui 注入 DURATION 占位符
+    (默认 30s);openrouter 省略=模型按 prompt 自定。
     openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
     """
     _forbid_dispatch_layer("音乐")
     cfg = get_config("music")
     if cfg["provider"] == "elevenlabs":
         return _music_elevenlabs(cfg, prompt, output, duration_s)
+    if cfg["provider"] == "comfyui":
+        return _music_comfyui(cfg, prompt, output, duration_s)
     if cfg["provider"] != "openrouter":
-        raise RuntimeError(f"音乐生成不支持渠道 {cfg['provider']}(可选 openrouter / elevenlabs)")
+        raise RuntimeError(f"音乐生成不支持渠道 {cfg['provider']}"
+                           "(可选 openrouter / elevenlabs / comfyui)")
     if duration_s:
         print("[genmedia] openrouter 音乐渠道不支持 --duration,已忽略(时长由模型决定)",
               file=sys.stderr)
@@ -1169,11 +1645,18 @@ def _cmd_music(args):
 def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
+        voice = args.voice or cfg.get("voice") or "eve"
+        if cfg["provider"] == "comfyui":
+            selected = _resolve_tts_reference(
+                cfg, args.text, args.output, args.voice, args.character,
+                args.variant, args.project, args.instructions)
+            voice = f"auto:{selected['file']} ({selected['reason']})"
         print(f"[dry-run] tts via {cfg['provider']} model={cfg.get('model') or '-'}"
-              f" voice={args.voice or cfg.get('voice') or 'eve'}"
+              f" voice={voice}"
               f" format={'mp3' if Path(args.output).suffix.lower()=='.mp3' else 'pcm'} → {args.output}")
         return
-    out = generate_tts(args.text, args.output, args.voice, args.speed, args.instructions)
+    out = generate_tts(args.text, args.output, args.voice, args.speed, args.instructions,
+                       args.character, args.variant, args.project)
     print(f"已生成: {out}")
 
 
@@ -1219,16 +1702,24 @@ def main():
     pt = sub.add_parser("tts", help="TTS 旁白/语音合成")
     pt.add_argument("--text", required=True, help="要合成的文本(旁白/台词)")
     pt.add_argument("--output", required=True, help="输出音频路径(.mp3;其他扩展名为 pcm 裸流)")
-    pt.add_argument("--voice", default="", help="音色(缺省用配置页默认;各模型音色不同)")
+    pt.add_argument("--character", default="",
+                    help="角色 ID(如 CHAR-0001);省略时从输出文件名推断,旁白留空")
+    pt.add_argument("--variant", default="", help="年龄/形态版本(如 child;可选)")
+    pt.add_argument("--project", default=(os.environ.get("VIDEOAGENTS_PROJECT")
+                                           or os.environ.get("WEBUI_PROJECT", "")),
+                    help="项目名或项目目录;Agent 环境通常自动注入")
+    pt.add_argument("--voice", default="",
+                    help="兼容覆盖:ComfyUI 仅接受真实本地音频文件;通常不要传")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
-    pt.add_argument("--instructions", default="", help="语气/情绪指令(仅 OpenAI 系模型生效)")
+    pt.add_argument("--instructions", default="", help="语气/情绪指令(仅 OpenAI 系模型生效;comfyui 忽略)")
     pt.add_argument("--dry-run", action="store_true")
 
     pm = sub.add_parser("music", help="生成音乐(BGM)")
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
     pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus)")
     pm.add_argument("--duration", type=float, default=None,
-                    help="目标时长秒(仅 elevenlabs 渠道生效,3–600;省略=模型按 prompt 自定)")
+                    help="目标时长秒(elevenlabs:3–600;comfyui:注入 DURATION,默认 30;"
+                         "openrouter 忽略;省略=模型/工作流默认)")
     pm.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()

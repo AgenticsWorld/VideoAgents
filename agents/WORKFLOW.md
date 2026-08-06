@@ -492,7 +492,7 @@ refs/
 > `<角色>@Audio N`,指令句写明『[Audio N] 是<角色>的嗓音特点参考(<音色特征短语,取自 voice.json,2026-07-31>;仅音色,非本段台词的朗读);
 > <角色>开口时用与 [Audio N] 一致的音色说台词』。台词本身仍以 `{}` 文本注入,由模型原生合成。
 > **选角事实源=项目级 `assets/audio/voice/casting.json`**(2026-07-12 改版,继续有效):角色×形态
-> (variant)→ tts_model+tts_voice 全片唯一登记;合成任何角色语音**前必查表**,表中无条目=先登记
+> (variant)→ tts_model+tts_voice 全片唯一登记;ComfyUI 的 tts_voice 是自动选择出的 TimbreModel 文件名,合成任何角色语音**前必查表**,表中无条目=先登记
 > 再合成,多形态角色 variant 必填。音色复用豁免(collision_waivers)显式登记依据(同场互斥分析);
 > **同组两说话人严禁共用同一 tts_voice 出样本**(同场互斥是 waiver 前提)。
 > **换 TTS 模型=全员重选角受控变更**(音色名跨模型不可移植):整表更新+重出全部样本+评估已
@@ -517,8 +517,8 @@ refs/
 |---|---|---|---|---|
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
-| voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声——≤5s/段是方舟 audio_ref 总时长 15.2s 硬限的配额(3 段满配 ≤15s,§8A 2026-07-20 实证),按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[3,5]s、纯人声(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
-| narrator(先于 p7-video) | 旁白配音(声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice,后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
+| voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声,按 voice.json 声纹自动选型);调用 `genmedia tts --character <CHAR-ID> [--variant ...]`,禁止手填 `--voice`;样本仅作组生成 reference_audio 嗓音锚,严禁进成片对白;维护 casting/manifest,集级核对覆盖率 | **casting.json**、voice.json(含 age_variants)、generation_groups | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + manifest/casting | 机检:样本覆盖 100%、时长 ∈[3,5]s、纯人声;casting 记录自动选中的 TimbreModel 文件;同组说话人不得共用音色;QA:audio-qa |
+| narrator(先于 p7-video) | 旁白配音(ComfyUI 根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`,后期轨;在 p7-video 前合成并实测时长);交付前盖 narration_anchors 指纹 | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/` | 机检:narration_fit、narration_anchor_sync;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
@@ -697,6 +697,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 5. **升级裁决与闸门分离**:单任务的人工升级裁决(如三次不过后选择接受)只解锁该任务,不等同于闸门/H 点签字;其接受的残留问题必须转成缺陷单进入闸门机检范围。
 6. **禁止事后补票**:阶段任务与评分必须在闸门判定前完成;`eval_mode: retroactive` 仅限一次性历史修复,常态流程出现即为调度缺陷。
 7. **gate JSON 统一 schema**:`{phase, gate, checkpoint, decided_by, decided_at(完整 ISO 8601 +08:00,取实际决策时刻), verdict: PASS|PASS_WITH_WAIVER|HOLD, status, waivers[], qa_reports[], inputs, note}`。
+8. **人工签字必须先建单**:`human:true` 节点依赖全部完成后,orchestrator 必须立即执行 `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project <slug>`；未收到明确「签字」不得把节点写成 `passed`。每次总制片运行结束前必须检查 DAG 前沿，有已解锁人工节点却没有签字单时不得仅以文字汇报后关单。运行时会为漏单补建相同语义的永久签字单作为兜底，但只建单、不自动放行；用户签字后仍由 orchestrator 重做本节机检、落 gate JSON 并派 version 冻结。
 
 ## 8. 人工确认点汇总
 
@@ -723,7 +724,8 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 > **Agent 级模型配置**:每个 Agent 可在控制台(对话页「模型」按钮)单独配置执行引擎/文字模型
 > 及图像/视频渠道,落盘 `data/.videoagents/agentmodels.json`,优先级高于全局设置;未单独配置时按分类默认
 > (机械活→claude·sonnet;分析/评分→codex·gpt-5.5;创作核心→claude·opus)。
-> 派单时该配置自动生效;总制片显式传 `--engine`/`--model`(如用户明确下令赛马时换引擎)才会强制覆盖。
+> 派单时该配置自动生效。**报错/返工禁止切换执行引擎**;总制片不得用 `--engine` 覆盖成员引擎
+> (服务端会忽略换引擎请求)。同引擎内如需指定模型可用 `--model`。
 
 ```bash
 # 查看当前生效渠道与模型(接工单后先跑一次,把结果记入产物 meta)
@@ -781,7 +783,7 @@ python3 modules/genmedia.py video \
 python3 modules/genmedia.py music \
   --prompt "<英文音乐描述:曲风/情绪/乐器/节奏,Lyria 3 Pro 可含歌词>" \
   --output assets/audio/bgm/ep01/ep01_bgm_02.mp3 \
-  [--duration <秒>]                     # 仅 elevenlabs(Eleven Music)渠道生效,3–600s,可按 cue 时长精确出段;省略=模型自定
+  [--duration <秒>]                     # elevenlabs:3–600s;comfyui(ACE-Step):1–240s;openrouter 忽略
 # openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名
 # (openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus,force_instrumental 由「生成模型」页配置,默认纯音乐)。
 
@@ -790,8 +792,9 @@ python3 modules/genmedia.py music \
 python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
-  [--voice <音色;旁白不传——自动用「生成模型」页生效渠道的「默认音色」,角色配音按 casting 传>] [--speed 1.0] \
+  [--character <CHAR-ID;角色音色样本必传,旁白不传>] [--variant <年龄形态>] [--speed 1.0] \
   [--instructions "<语气/情绪指令,仅 OpenAI 系模型生效>"]
+# ComfyUI TTS 会读取项目角色设定并从仓库级 data/TimbreModel 自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
 ```
 
 Python 内调用(批量循环时省进程开销):`from modules.genmedia import generate_image, generate_video, generate_music, generate_tts`。

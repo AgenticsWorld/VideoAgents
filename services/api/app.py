@@ -50,6 +50,15 @@ async def lifespan(_: FastAPI):
     if not _bridge_installed:
         install_runtime_store(STORE)
         _bridge_installed = True
+    # 服务停机期间 DAG 可能被外部 Agent 更新；启动即补核对一次，不依赖自动运行开关。
+    # ensure 只创建持久签字单，不会把人工 gate 自动置为 passed。
+    for project_dir in sorted(core.PROJECTS_DIR.iterdir()):
+        if not project_dir.is_dir() or project_dir.name.startswith("."):
+            continue
+        try:
+            await core.ensure_human_gate_approvals(project_dir.name)
+        except Exception as error:  # noqa: BLE001
+            print(f"[approval] 启动核对 {project_dir.name} 失败(忽略):{error}", flush=True)
     watchdog = asyncio.create_task(core.idle_watchdog())
     relays = [asyncio.create_task(m.relay_loop())
               for m in (wechat, feishu, whatsapp)]

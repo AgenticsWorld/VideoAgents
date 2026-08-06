@@ -82,7 +82,7 @@ button:disabled{opacity:.5;cursor:default}
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线;ComfyUI 可根据角色设定自动匹配本地音色</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
@@ -229,8 +229,8 @@ const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
   image:{providers:['openrouter','volcengine','byteplus','comfyui']},
   video:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  music:{providers:['openrouter','elevenlabs']},
-  tts:{providers:['openrouter','volcengine','elevenlabs']},
+  music:{providers:['openrouter','elevenlabs','comfyui']},
+  tts:{providers:['openrouter','volcengine','elevenlabs','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
@@ -448,10 +448,28 @@ function buildPanel(kind,p){
     cr.appendChild(sel);d.appendChild(cr);
     const wr=el('div',{className:'row'});
     wr.appendChild(el('label',{},'工作流 JSON'));
-    wr.appendChild(el('input',{type:'text',id:`${kind}-comfy-wf`,placeholder:'可选:API 格式工作流文件路径,如 data/comfy/i2v.json'}));
+    wr.appendChild(el('input',{type:'text',id:`${kind}-comfy-wf`,placeholder:'可选:API 格式工作流文件路径,如 comfy/i2v.json'}));
     d.appendChild(wr);
+    if(kind==='image'){
+      const rr=el('div',{className:'row'});
+      rr.appendChild(el('label',{},'参考图工作流 JSON'));
+      rr.appendChild(el('input',{type:'text',id:'image-comfy-ref-wf',
+        placeholder:'可选:传 --ref 时使用的 API 工作流路径'}));
+      d.appendChild(rr);
+    }
     d.appendChild(el('div',{className:'hint'},
       '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint'));
+    if(kind==='music'){
+      d.appendChild(el('div',{className:'hint'},
+        '可选模板: <code>comfy/ace-step-v1-music-api.json</code> (ACE-Step 3.5B);'
+        +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长;模型下载见 <code>comfy/AUDIO_MODELS.md</code>'));
+    }
+    if(kind==='tts'){
+      d.appendChild(el('div',{className:'hint'},
+        '可选模板: <code>comfy/indextts2-tts-api.json</code> (IndexTTS-2);'
+        +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色;'
+        +'模型下载见 <code>comfy/AUDIO_MODELS.md</code>'));
+    }
   }
   return d;
 }
@@ -648,6 +666,7 @@ function loadIntoForm(){
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
       $(`#${kind}-comfy-wf`).value=c.comfyui.workflow||'';
+      if(kind==='image')$('#image-comfy-ref-wf').value=c.comfyui.ref_workflow||'';
       if(c.comfyui.checkpoint){
         const sel=$(`#${kind}-comfy-ckpt`);
         sel.appendChild(el('option',{value:c.comfyui.checkpoint,textContent:c.comfyui.checkpoint}));
@@ -697,7 +716,14 @@ function collect(){
     if(SECTIONS[kind].providers.includes('comfyui'))
       c.comfyui={url:$(`#${kind}-comfy-url`).value.trim(),
                workflow:$(`#${kind}-comfy-wf`).value.trim(),
-               checkpoint:$(`#${kind}-comfy-ckpt`).value};
+               checkpoint:$(`#${kind}-comfy-ckpt`).value,
+               ...(kind==='image'?{
+                 ref_workflow:$('#image-comfy-ref-wf').value.trim(),
+                 negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
+               ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
+               ...(kind==='tts'?{voice:'',ref_audio:'',
+                 timbre_dir:'data/TimbreModel',
+                 timbre_catalog:'data/TimbreModel/catalog.json'}:{})};
     if(SECTIONS[kind].providers.includes('ideogram'))
       c.ideogram={api_key:$(`#${kind}-ideo-key`).value.trim(),
         ...pickModel(`#${kind}-ideo-model`,`#${kind}-ideo-custom`)};
