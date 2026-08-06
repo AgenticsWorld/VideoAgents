@@ -330,7 +330,7 @@ window.I18N_DICT = {
 "取消": "Hủy",
 "只看本集": "Chỉ xem tập này",
 "可跨机访问);「测试连接」会列出可用 checkpoint": "có thể truy cập từ máy khác); “Kiểm tra kết nối” sẽ liệt kê các checkpoint khả dụng",
-"可选:API 格式工作流文件路径,如 data/comfy/i2v.json": "Tùy chọn: đường dẫn tệp workflow định dạng API, ví dụ data/comfy/i2v.json",
+"可选:API 格式工作流文件路径,如 comfy/i2v.json": "Tùy chọn: đường dẫn tệp workflow định dạng API, ví dụ comfy/i2v.json",
 "台词风格": "Phong cách lời thoại",
 "各项目独立开关,缺省关闭;闲置时间/用量阈值在 ⚙️ 全局设置 → 自动运行": "Bật/tắt độc lập theo từng dự án, mặc định tắt; thời gian nhàn rỗi/ngưỡng mức dùng tại ⚙️ Cài đặt toàn cục → Tự động chạy",
 "后续步骤按当前值(未改即默认)保存,立即创建项目": "Các bước sau sẽ lưu theo giá trị hiện tại (chưa sửa tức là mặc định), tạo dự án ngay",

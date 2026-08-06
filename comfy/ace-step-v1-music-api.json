@@ -1,0 +1,67 @@
+{
+  "1": {
+    "class_type": "ACEModelLoader",
+    "inputs": {
+      "dcae_checkpoint": "music_dcae_f8c8",
+      "vocoder_checkpoint": "music_vocoder",
+      "ace_step_checkpoint": "ace_step_transformer",
+      "text_encoder_checkpoint": "umt5-base",
+      "cpu_offload": false,
+      "torch_compile": false
+    }
+  },
+  "2": {
+    "class_type": "MultiLinePromptACES",
+    "inputs": {
+      "multi_line_prompt": "{{PROMPT}}"
+    }
+  },
+  "3": {
+    "class_type": "MultiLineLyrics",
+    "inputs": {
+      "multi_line_prompt": "{{LYRICS}}"
+    }
+  },
+  "4": {
+    "class_type": "GenerationParameters",
+    "inputs": {
+      "audio_duration": "{{DURATION}}",
+      "infer_step": 60,
+      "guidance_scale": 15.0,
+      "scheduler_type": "euler",
+      "cfg_type": "apg",
+      "omega_scale": 10.0,
+      "seed": "{{SEED}}",
+      "guidance_interval": 0.5,
+      "guidance_interval_decay": 0.0,
+      "min_guidance_scale": 3,
+      "use_erg_tag": true,
+      "use_erg_lyric": false,
+      "use_erg_diffusion": true,
+      "oss_steps": "",
+      "guidance_scale_text": 0.0,
+      "guidance_scale_lyric": 0.0
+    }
+  },
+  "5": {
+    "class_type": "ACEStepGen",
+    "inputs": {
+      "models": ["1", 0],
+      "prompt": ["2", 0],
+      "lyrics": ["3", 0],
+      "parameters": ["4", 0],
+      "negative_prompt": "",
+      "ref_audio_strength": 0.5,
+      "overlapped_decode": false,
+      "delicious_song": "None"
+    }
+  },
+  "6": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": ["5", 0],
+      "filename_prefix": "videoagents/ace-step-music",
+      "quality": "320k"
+    }
+  }
+}

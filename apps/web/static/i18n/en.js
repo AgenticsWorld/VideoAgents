@@ -330,7 +330,7 @@ window.I18N_DICT = {
 "取消": "Cancel",
 "只看本集": "This episode only",
 "可跨机访问);「测试连接」会列出可用 checkpoint": "for cross-machine access); \"Test Connection\" lists the available checkpoints",
-"可选:API 格式工作流文件路径,如 data/comfy/i2v.json": "Optional: path to an API-format workflow file, e.g. data/comfy/i2v.json",
+"可选:API 格式工作流文件路径,如 comfy/i2v.json": "Optional: path to an API-format workflow file, e.g. comfy/i2v.json",
 "台词风格": "Dialogue style",
 "各项目独立开关,缺省关闭;闲置时间/用量阈值在 ⚙️ 全局设置 → 自动运行": "Per-project toggle, off by default; idle interval/usage thresholds are in ⚙️ Global Settings → Auto-Run",
 "后续步骤按当前值(未改即默认)保存,立即创建项目": "Save the remaining steps with current values (defaults if unchanged) and create the project immediately",

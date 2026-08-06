@@ -45,13 +45,18 @@ def shot_segments(video_prompt: str, n_shots: int):
 def check_group(pf: Path, proj_root: Path, ep: str, strict: bool):
     pj = json.loads(pf.read_text())
     gid = pj.get("group_id", pf.stem)
-    shots = pj.get("shots", [])
+    raw_shots = pj.get("shots", [])
+    # 兼容 video_prompt_group_v2: shots 可能是 [{"shot_id": "sh063", ...}]，也可能是旧版 ["sh063"]。
+    shots = [s.get("shot_id") if isinstance(s, dict) else s for s in raw_shots]
     vp = pj.get("video_prompt", "")
     errs, warns = [], []
     segs = shot_segments(vp, len(shots))
     if segs is None and shots:
         warns.append(f"{gid}: Shot 段数与镜数({len(shots)})不符,降级为全文匹配")
     for i, shot_id in enumerate(shots, start=1):
+        if not shot_id:
+            warns.append(f"{gid}: shots[{i-1}] 缺 shot_id,跳过")
+            continue
         bf = proj_root / "directing" / ep / "shots" / shot_id / "blocking.json"
         if not bf.is_file():
             warns.append(f"{gid}/{shot_id}: 无 blocking.json,跳过")

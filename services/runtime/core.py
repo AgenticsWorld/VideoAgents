@@ -464,7 +464,8 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
                      "custom_model": ""},
-        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "",
+                    "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": ""},
     },
     "video": {
         "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
@@ -483,6 +484,10 @@ DEFAULT_GENCONFIG = {
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
+        # ComfyUI 工作流按用户选择配置;模板说明见 comfy/AUDIO_MODELS.md。
+        "comfyui": {"url": "http://127.0.0.1:8188",
+                    "workflow": "",
+                    "checkpoint": "", "lyrics": "[Instrumental]"},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | elevenlabs
@@ -496,6 +501,11 @@ DEFAULT_GENCONFIG = {
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
                        "custom_model": "", "voice": ""},
+        # ComfyUI:本地 TTS,按角色内容自动选本地参考音频;工作流由用户选择。
+        "comfyui": {"url": "http://127.0.0.1:8188",
+                    "workflow": "",
+                    "checkpoint": "", "timbre_dir": "data/TimbreModel",
+                    "timbre_catalog": "data/TimbreModel/catalog.json"},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
@@ -605,7 +615,7 @@ OUTPUT_PLATFORMS = {
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
 # 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持,方舟 API 取小写)
-VIDEO_RESOLUTIONS = ("480p", "720p", "1080p", "4k")
+VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 
 
 def resolve_output(cfg: dict) -> tuple[str, str, str]:
@@ -641,6 +651,22 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
+def _migrate_comfy_workflow_paths(config: dict) -> None:
+    """Keep configurations saved before templates moved from data/ usable."""
+    for kind in ("image", "video", "music", "tts"):
+        comfy = config.get(kind, {}).get("comfyui")
+        if not isinstance(comfy, dict):
+            continue
+        for key in ("workflow", "ref_workflow"):
+            value = comfy.get(key)
+            if isinstance(value, str) and value.startswith("data/comfy/"):
+                comfy[key] = "comfy/" + value[len("data/comfy/"):]
+        # H3 uses the built-in compatible model/sampler settings. Older UI
+        # versions persisted this advanced object; discard it on load.
+        if kind == "video":
+            comfy.pop("h3", None)
+
+
 def load_genconfig() -> dict:
     try:
         saved = json.loads(GENCONFIG_PATH.read_text())
@@ -650,6 +676,7 @@ def load_genconfig() -> dict:
     if isinstance(da, dict) and "provider" not in da and "local" not in da:
         # 旧版扁平格式(base_url/api_key/model 直挂 deepagents)→ 迁移为 local 渠道
         saved["deepagents"] = {"provider": "local", "local": da}
+    _migrate_comfy_workflow_paths(saved)
     return _merge(DEFAULT_GENCONFIG, saved)
 
 
@@ -756,7 +783,8 @@ def _validate_review(r: dict):
 
 
 # ---------------- Agent 级模型配置(引擎/文字模型/图像/视频渠道) ----------------
-# 每个 Agent 可单独指定,优先级:dispatch 显式 --engine/--model(force)> Agent 级配置 > 顶栏全局。
+# 每个 Agent 可单独指定,优先级:Agent 级配置 > 父运行引擎 > 顶栏全局。
+# force/--engine 不得切换执行引擎(报错/返工禁换引擎);同引擎内 --model 仍可覆盖。
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
@@ -837,8 +865,13 @@ def global_model_pref() -> dict:
     项目初始化)没有浏览器上下文,靠这份副本跟随顶栏全局。"""
     p = STATE.get("global_model") or {}
     eng = str(p.get("engine") or "").lower()
+    model = str(p.get("model") or "").strip()
+    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/openrouter)。旧 UI 会把
+    # 渠道名写入 global_model，导致它覆盖 genconfig 中的真实模型 ID。
+    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
+        model = resolve_deepagents()["model"]
     return {"engine": eng if eng in ENGINES else "",
-            "model": str(p.get("model") or "").strip()}
+            "model": model}
 
 
 def agent_effective_model(agent_id: str) -> dict:
@@ -1427,8 +1460,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
   (供视频参考的图——锚点/--ref/--first-frame/--last-frame——每张必须 ≥3,686,400 像素=火山硬限,16:9 用 2560x1440、9:16 用 1440x2560;小图提交即拒,严禁按视频草稿分辨率出小图)
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
-- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段,默认纯音乐)
-- TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs;**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按角色传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id;instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略)
+- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3;ElevenLabs Eleven Music:--duration 3–600s;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
+- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(ComfyUI 根据项目 voice/personality/appearance 从 `data/TimbreModel` 自动选参考音频:角色传 `--character`,旁白留空;禁止手填 `--voice`;其他云渠道仍兼容其原生音色参数)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
@@ -1442,14 +1475,21 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         p += f"""
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
+媒体工单配置认知:
+- ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 从仓库级 `data/TimbreModel/catalog.json` 自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
+- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`
+- TTS 从云渠道切到 ComfyUI 后,旧 casting 的 `eve`/`ara` 等云音色名不得传给 ComfyUI;派 voice-generation 自动重选并更新 casting。工单必须先用相同参数执行 `--dry-run` 记录自动选型,再正式合成；失败回执逐字保留 `node_type/exception_type/exception_message`,不得把 Python 依赖/模型/节点异常改写成缺参考音频。日志出现“自动参考音频已选择并上传”后严禁要求用户手填音色
+
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 services/runtime/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
 - IMPORTANT: `--project` accepts only the project slug (`{project}`), never `data/projects/...` or an absolute directory path.
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
+  默认不要传 `--engine`(报错/返工也禁止切换引擎);仅 `--model <id>` 可在**同一引擎内**覆盖模型
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
 - 查看运行状态:`python3 services/runtime/dispatch.py --runs`;查看单个:`python3 services/runtime/dispatch.py --status <run_id>`
+- `--wait-all` 的 run_id **只能**使用你刚才异步派单后 stdout 返回的子任务 run_id;
+  严禁传当前总制片自身的 `WEBUI_RUN_ID`/当前 `--status` ID。没有已派出的子任务时不要调用 `--wait-all`
 
 派单守则:
 1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
@@ -1472,10 +1512,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-8. 【赛马仅限用户明确指令】严禁自行发起并行赛马(换执行引擎或改派多个 Agent 并行重做同一任务、择优交付)。
-   多次返工仍不过就照常升级人工;确有必要时可在 --confirm 征询或升级说明中向用户**建议**赛马,
-   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi)或改派职责相近的 Agent
-   并行重做、先达标者交付"""
+8. 【两败即升级,禁换引擎】同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;
+   可改派职责相近 Agent 并行重做(先达标者交付),但**禁止切换执行引擎**(不得传 --engine 覆盖,
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/deepagents 中的另一个)。
+   报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
+9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
+   `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
+   有非人工待办就继续派单;有已解锁 `human:true` 的 H 门就必须当场执行
+   `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project {project}`。
+   只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
+   严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -1620,7 +1666,10 @@ async def execute_run(run: dict, message: str, model: str | None):
 
         if engine == "deepagents":
             da = resolve_deepagents()
-            use_model = model or da["model"]
+            requested_model = str(model or "").strip()
+            # 兼容修复前已落盘/传入的渠道占位值，绝不把 local/openrouter 发给模型端点。
+            use_model = (da["model"] if not requested_model
+                         or requested_model == da["provider"] else requested_model)
             err = None
             if not use_model:
                 err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
@@ -1695,12 +1744,22 @@ async def execute_run(run: dict, message: str, model: str | None):
         env = {**os.environ,
                "VIDEOAGENTS_RUN_ID": run["id"], "VIDEOAGENTS_PORT": str(PORT),
                "VIDEOAGENTS_PROJECT": run["project"], "VIDEOAGENTS_ENGINE": engine,
-               "VIDEOAGENTS_AGENT": agent_id}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
+               "VIDEOAGENTS_AGENT": agent_id,
+               "VIDEOAGENTS_WORKSPACE_ROOT": str(ROOT),
+               "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
+               # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
+               "WEBUI_PROJECT": run["project"]}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
         if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
             env["DA_SYSTEM"] = role
             env["DA_PROMPT"] = message
+            # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
+            # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
+            if "DEEPAGENTS_RECURSION_LIMIT" not in env:
+                env["DEEPAGENTS_RECURSION_LIMIT"] = (
+                    "500" if agent_id in DISPATCHERS else "250"
+                )
 
         # Windows has a short process command-line limit. Agent role prompts can
         # exceed it, so pass Claude's long system prompt through a UTF-8 file.
@@ -1831,6 +1890,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                         {"role": "assistant", "text": reply,
                          "run_id": run["id"], "status": run["status"]})
             publish_run(run)
+            # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
+            # 人工闸门静默留在 DAG 中。这里只补建签字单，绝不自动改 gate state。
+            try:
+                await ensure_human_gate_approvals(run["project"], parent=run["id"])
+            except Exception as e:  # noqa: BLE001
+                print(f"[approval] 运行结束闸门核对失败(不影响运行回执):{e}", flush=True)
 
 
 def rel_path(p: str) -> str:
@@ -3882,7 +3947,7 @@ async def api_test_deepagents(body: dict):
 
 
 async def api_test_comfyui(body: dict):
-    """测试本地 ComfyUI 连接,顺带返回可用 checkpoint 列表。"""
+    """测试 ComfyUI 连接，并检查关键自定义节点是否可见。"""
     url = (body.get("url") or "").strip().rstrip("/")
     if not re.match(r"^https?://", url):
         raise ServiceError(400, "url must start with http(s)://")
@@ -3900,11 +3965,22 @@ async def api_test_comfyui(body: dict):
             checkpoints = ckpt[0]
     except Exception:  # noqa: BLE001
         pass
+    custom_nodes = {}
+    for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
+        try:
+            info = await asyncio.to_thread(
+                _http_get_json, url + "/object_info/" + node_type, None, 6)
+            custom_nodes[node_type] = bool(info.get(node_type))
+        except Exception:  # noqa: BLE001
+            custom_nodes[node_type] = False
     sysinfo = (stats.get("system") or {})
     return {"ok": True,
             "version": sysinfo.get("comfyui_version") or sysinfo.get("os") or "unknown",
             "devices": [d.get("name") for d in stats.get("devices") or []],
-            "checkpoints": checkpoints}
+            "checkpoints": checkpoints, "custom_nodes": custom_nodes,
+            "ace_step_ready": all(custom_nodes.get(n) for n in
+                                    ("ACEModelLoader", "ACEStepGen")),
+            "minimax_h3_ready": custom_nodes.get("MiniMaxH3ReferenceToVideo", False)}
 
 
 async def api_agents(refresh: bool = False):
@@ -4040,8 +4116,10 @@ async def api_globalmodel_set(body: dict):
     eng = str(body.get("engine") or "").lower()
     if eng and eng not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
-    STATE["global_model"] = {"engine": eng,
-                             "model": str(body.get("model") or "").strip()}
+    model = str(body.get("model") or "").strip()
+    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
+        model = resolve_deepagents()["model"]
+    STATE["global_model"] = {"engine": eng, "model": model}
     save_state(STATE)
     return {"ok": True, "global_model": global_model_pref()}
 
@@ -4076,10 +4154,13 @@ async def api_uiprefs_set(body: dict):
         "project": project,
     }
     STATE["ui_prefs"] = prefs
-    STATE["global_model"] = {
-        "engine": eng,
-        "model": str(body.get("effective_model") or body.get("model") or "").strip(),
-    }
+    effective_model = str(body.get("effective_model") or "").strip()
+    if eng == "deepagents" and (not effective_model
+                                 or effective_model in ("local", "openrouter")):
+        effective_model = resolve_deepagents()["model"]
+    elif not effective_model:
+        effective_model = str(body.get("model") or "").strip()
+    STATE["global_model"] = {"engine": eng, "model": effective_model}
     save_state(STATE)
     return {"ok": True, "prefs": ui_prefs_pref(), "global_model": global_model_pref()}
 
@@ -4541,8 +4622,12 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 def confirm_public(c: dict) -> dict:
     remaining = (None if c["timeout"] is None else
                  max(0, int(c["created"] + c["timeout"] - time.time())))
-    return {k: c[k] for k in ("id", "question", "options", "default",
-                              "timeout", "parent", "answer", "kind")} | {"remaining": remaining}
+    public = {k: c[k] for k in ("id", "question", "options", "default",
+                                "timeout", "parent", "answer", "kind")}
+    for key in ("project", "gate_id", "checkpoint"):
+        if c.get(key):
+            public[key] = c[key]
+    return public | {"remaining": remaining}
 
 
 async def api_confirm_create(body: dict):
@@ -4572,8 +4657,13 @@ async def api_confirm_create(body: dict):
          "default": str(body.get("default") or options[0])[:40],
          "timeout": None if kind == "sign" else
          min(60, max(5, int(body.get("timeout") or 60))),
-         "kind": kind, "parent": body.get("parent"),
+         "kind": kind, "parent": parent,
          "created": time.time(), "answer": None}
+    if project:
+        c["project"] = project
+    if gate_id:
+        c.update({"gate_id": gate_id, "checkpoint": checkpoint,
+                  "origin": body.get("origin") or "dispatch"})
     CONFIRMS[c["id"]] = c
     HUB.publish({"type": "confirm", **confirm_public(c)})
     notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
@@ -4602,6 +4692,16 @@ async def api_confirm_answer(cid: str, body: dict):
     if c["answer"] is None:
         c["answer"] = str(body.get("answer") or "")[:40] or c["default"]
         c["answered"] = time.time()
+        if (c.get("kind") == "sign" and c.get("gate_id")
+                and c["answer"] == "签字"):
+            c["continuation_attempted"] = time.time()
+            try:
+                continuation = await _continue_signed_gate(c)
+                if continuation:
+                    c["continuation_run_id"] = continuation
+            except Exception as e:  # noqa: BLE001
+                c["continuation_error"] = str(e)[:300]
+                print(f"[approval] 签字后唤醒总制片失败(审批已保留):{e}", flush=True)
         HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
     return {"ok": True, "answer": c["answer"]}
 
@@ -4622,13 +4722,28 @@ async def api_chat(body: dict):
         raise ServiceError(400, "message must not be empty")
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
-    # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
-    if not body.get("force"):
-        am = agent_model_config(agent)
+    # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
+    # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
+    am = agent_model_config(agent)
+    parent_engine = ""
+    if parent and parent in RUNS:
+        parent_engine = str(RUNS[parent].get("engine") or "").lower()
+    natural_engine = (am.get("engine")
+                      or parent_engine
+                      or global_model_pref()["engine"]
+                      or "claude")
+    if natural_engine not in ENGINES:
+        natural_engine = "claude"
+    if body.get("force"):
+        if engine != natural_engine:
+            engine = natural_engine
+    else:
         if am.get("engine"):
             engine = am["engine"]
             model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
-        elif not model:
+        elif parent_engine in ENGINES:
+            engine = parent_engine
+        if not model:
             # dispatch 继承派单方引擎时 engine 非空,走不到上方空引擎回退;
             # 无 Agent 级覆盖且未显式指定模型的,在此跟随顶栏全局的 model
             # (仅引擎一致时借用,模型 ID 不跨引擎通用)
@@ -4761,8 +4876,145 @@ def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
             continue
         if not all(d in done for d in (n.get("depends_on") or [])):
             continue
-        (human_waiting if n.get("human") else runnable).append(n["id"])
+        if n.get("human"):
+            # expanded/template 只是待实例化骨架，blocked 是用户明确暂缓；只有
+            # pending 人工节点能够发起新的签字。
+            if n.get("state") == "pending":
+                human_waiting.append(n["id"])
+        else:
+            runnable.append(n["id"])
     return runnable, human_waiting
+
+
+def _gate_checkpoint(node: dict) -> str:
+    gate = node.get("gate")
+    if isinstance(gate, dict) and gate.get("checkpoint"):
+        return str(gate["checkpoint"])
+    return str(node.get("checkpoint") or node.get("id") or "人工闸门")
+
+
+def _ready_human_gates(proj: str) -> list[dict]:
+    """返回依赖均完成、状态仍为 pending 的人工闸门节点。"""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    if not dag_path.is_file():
+        return []
+    nodes = _dag_load_nodes(dag_path)
+    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
+    return [n for n in nodes
+            if n.get("id") and n.get("human") and n.get("state") == "pending"
+            and all(dep in done for dep in (n.get("depends_on") or []))]
+
+
+def _sign_gate_binding(proj: str, question: str,
+                       requested_gate_id: str | None = None) -> tuple[str, str] | None:
+    """把 dispatch.py 的签字问题绑定到当前已解锁闸门，供持久化去重。"""
+    ready = _ready_human_gates(proj)
+    if requested_gate_id:
+        for node in ready:
+            if node["id"] == requested_gate_id:
+                return node["id"], _gate_checkpoint(node)
+        return None
+    normalized = re.sub(r"[\s_｜|]+", "", question).lower()
+    # 优先匹配完整 checkpoint/id，避免 H3 误命中 H3A/H3B。
+    matches = [node for node in ready
+               if re.sub(r"[\s_｜|]+", "", _gate_checkpoint(node)).lower()
+               in normalized]
+    if len(matches) == 1:
+        node = matches[0]
+        return node["id"], _gate_checkpoint(node)
+    matches = []
+    for node in ready:
+        checkpoint = _gate_checkpoint(node)
+        tokens = (node["id"], checkpoint.split("-", 1)[0])
+        if any(re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])",
+                         question, re.I) for token in tokens if token):
+            matches.append(node)
+    if len(matches) == 1:
+        node = matches[0]
+        return node["id"], _gate_checkpoint(node)
+    if len(ready) == 1:
+        node = ready[0]
+        return node["id"], _gate_checkpoint(node)
+    return None
+
+
+def _approval_project(c: dict) -> str | None:
+    project = c.get("project")
+    if project and re.fullmatch(r"[\w-]{1,80}", str(project)):
+        return str(project)
+    return (RUNS.get(c.get("parent") or "") or {}).get("project")
+
+
+async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> list[str]:
+    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。"""
+    created = []
+    for node in _ready_human_gates(proj):
+        gate_id = node["id"]
+        existing = [c for c in CONFIRMS.values()
+                    if c.get("kind") == "sign" and _approval_project(c) == proj
+                    and c.get("gate_id") == gate_id]
+        if existing:
+            # 服务若恰在签字落盘后、续跑派单前退出，重启后由核对钩子补唤醒。
+            signed = next((c for c in reversed(existing)
+                           if c.get("answer") == "签字"), None)
+            if signed and time.time() - signed.get("continuation_attempted", 0) > 3600:
+                continuation = RUNS.get(signed.get("continuation_run_id") or "")
+                if not continuation or continuation.get("status") == "error":
+                    signed["continuation_attempted"] = time.time()
+                    try:
+                        run_id = await _continue_signed_gate(signed)
+                        if run_id:
+                            signed["continuation_run_id"] = run_id
+                        HUB.publish({"type": "confirm_done", "id": signed["id"],
+                                     "answer": signed["answer"]})
+                    except Exception as e:  # noqa: BLE001
+                        signed["continuation_error"] = str(e)[:300]
+            continue
+        checkpoint = _gate_checkpoint(node)
+        result = await api_confirm_create({
+            "question": (f"【{checkpoint}｜项目 {proj}】前置任务已完成。"
+                         "请审阅对应产物后签字；签字后由总制片复核闸门并冻结版本，"
+                         "暂缓则保持阻塞。"),
+            "kind": "sign", "options": ["签字", "暂缓"], "default": "签字",
+            "project": proj, "gate_id": gate_id, "parent": parent,
+            "origin": "runtime_gate_guard",
+        })
+        created.append(result["confirm_id"])
+        print(f"[approval] 已为 {proj}:{gate_id} 创建永久签字单 {result['confirm_id']}",
+              flush=True)
+    return created
+
+
+async def _continue_signed_gate(c: dict) -> str | None:
+    """签字后恢复总制片；仍在等待 dispatch.py 的父运行会自行继续。"""
+    parent = RUNS.get(c.get("parent") or "")
+    if parent and parent.get("status") in ("queued", "running"):
+        return None
+    proj = str(c["project"])
+    checkpoint = c.get("checkpoint") or c["gate_id"]
+    message = (
+        f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
+        f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
+        "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
+        "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG 并派 version 冻结。"
+        "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
+    )
+    result = await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message,
+                             "project": proj, "source": "approval",
+                             "parent": c.get("parent")})
+    return result["run_id"]
+
+
+def _linked_gate_still_open(c: dict) -> bool:
+    """已答复的绑定签字单在 gate 真正关单前保留，供重启恢复和去重。"""
+    proj, gate_id = _approval_project(c), c.get("gate_id")
+    if not (proj and gate_id):
+        return False
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    for node in _dag_load_nodes(dag_path) if dag_path.is_file() else []:
+        if node.get("id") == gate_id:
+            return node.get("state") not in _DONE_STATES
+    return False
 
 
 def _dag_missing_episodes(proj: str) -> list[str]:
@@ -4810,6 +5062,7 @@ def prune_runs_confirms():
             if (c.get("timeout") is not None
                 and now - c.get("created", now) > (c.get("timeout") or 0) + 600)
             or (c.get("timeout") is None and c.get("answered")
+                and not _linked_gate_still_open(c)
                 and now - c["answered"] > 600)]
     for cid in gone:
         CONFIRMS.pop(cid, None)
@@ -4918,9 +5171,8 @@ async def idle_watchdog():
             pending = [c for c in CONFIRMS.values()
                        if c["answer"] is None and
                        (c["timeout"] is None or now - c["created"] < c["timeout"])]
-            _cproj = lambda c: (RUNS.get(c.get("parent") or "") or {}).get("project")  # noqa: E731
-            confirm_global = any(_cproj(c) is None for c in pending)
-            confirm_projs = {_cproj(c) for c in pending} - {None}
+            confirm_global = any(_approval_project(c) is None for c in pending)
+            confirm_projs = {_approval_project(c) for c in pending} - {None}
             for c in pending:
                 if c.get("kind") == "sign" \
                         and now - c.get("notified", c["created"]) > 3600:
@@ -4994,9 +5246,18 @@ async def idle_watchdog():
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue
-                if human_waiting and now - _HUMAN_GATE_NOTIFIED.get(proj, 0) > 3600:
-                    _HUMAN_GATE_NOTIFIED[proj] = now
-                    notify_user(f"项目 {proj} 流水线停在人工签字点:{', '.join(human_waiting[:3])},等你确认")
+                if human_waiting:
+                    created = await ensure_human_gate_approvals(proj)
+                    answered = any(c.get("kind") == "sign"
+                                   and _approval_project(c) == proj
+                                   and c.get("gate_id") in human_waiting
+                                   and c.get("answer") is not None
+                                   for c in CONFIRMS.values())
+                    if (not created and not answered
+                            and now - _HUMAN_GATE_NOTIFIED.get(proj, 0) > 3600):
+                        _HUMAN_GATE_NOTIFIED[proj] = now
+                        notify_user(f"项目 {proj} 流水线停在人工签字点:"
+                                    f"{', '.join(human_waiting[:3])},等你确认")
         except Exception as e:  # noqa: BLE001
             print(f"[watchdog] 异常(忽略):{e}\n{traceback.format_exc()}", flush=True)
 

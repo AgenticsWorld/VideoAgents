@@ -688,6 +688,7 @@ const MODEL_OPTIONS={
   deepagents:[['local','本地模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
+let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
 function populateModels(engine){
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -698,7 +699,7 @@ function populateModels(engine){
   $('#model-custom').style.display='none';
 }
 function getModel(){
-  if($('#engine').value==='deepagents')return '';   // 下拉是生效渠道开关,模型取生效渠道的 genconfig 配置
+  if($('#engine').value==='deepagents')return DA_MODEL;
   const v=$('#model').value;
   return v==='__custom' ? $('#model-custom').value.trim() : v;
 }
@@ -908,6 +909,7 @@ function syncDaSelect(cfg){
   sel.value=DA_PROVIDER;
   const models={local:(da.local||{}).model||'',
                 openrouter:(da.openrouter||{}).custom_model||(da.openrouter||{}).model||''};
+  DA_MODEL=models[DA_PROVIDER]||'';
   [...sel.options].forEach(o=>{const m=models[o.value];o.title=m?`${t(o.textContent)} · ${m}`:''});
 }
 async function syncDaProvider(){try{syncDaSelect(await api('/api/v1/config/generation'))}catch(e){}}
@@ -1019,7 +1021,7 @@ $('#style-search').oninput=()=>styleGridRender();
 
 /* ---------- 输出设置弹窗(画幅/语言) ---------- */
 const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Español','français','Deutsch','Indonesia','Português','русский','عربي'];
-const OUT_RESOLUTIONS=['480p','720p','1080p','4k'];
+const OUT_RESOLUTIONS=['360p','480p','720p','1080p','4k'];
 async function openOutModal(){
   $('#out-err').textContent='';
   $('#out-proj').textContent=curProj();

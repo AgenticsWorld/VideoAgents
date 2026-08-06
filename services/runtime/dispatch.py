@@ -78,13 +78,13 @@ def heartbeat(note: str):
 
 
 def confirm(question: str, timeout: int, options: list[str], default: str,
-            sign: bool = False):
+            sign: bool = False, project: str = DEFAULT_PROJECT):
     """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。
     sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。"""
     resp = api("/approvals", {"question": question, "timeout": timeout,
                                 "options": options, "default": default,
                                 "kind": "sign" if sign else "confirm",
-                                "parent": PARENT})
+                                "parent": PARENT, "project": project})
     cid = resp["confirm_id"]
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -109,6 +109,15 @@ def confirm(question: str, timeout: int, options: list[str], default: str,
 
 def wait_all(ids: list[str], timeout: int, interval: int = 5):
     """轮询等待多个 run 全部结束;每轮向父运行发心跳。"""
+    if PARENT and PARENT in ids:
+        msg = (
+            f"拒绝自等待:当前运行 {PARENT} 不能作为自己的子任务。"
+            "--wait-all 只接受派单命令返回的子任务 run_id;"
+            "如果尚未派出子任务,不要调用 --wait-all。"
+        )
+        print(msg, file=sys.stderr)
+        raise SystemExit(64)
+
     deadline = time.time() + timeout
     while True:
         runs = {}
@@ -193,7 +202,7 @@ def main():
         # 默认等待:重跑类 60s(弹窗同步倒计时);签字类 4h(弹窗不倒计时,超时弹窗仍保留)
         timeout = args.timeout if args.timeout != 3600 else (14400 if args.sign else 60)
         confirm(args.confirm, timeout, opts, args.default_opt or opts[0],
-                sign=args.sign)
+                sign=args.sign, project=args.project)
         return
 
     if args.wait_all:

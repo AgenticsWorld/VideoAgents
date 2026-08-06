@@ -114,6 +114,12 @@ All notable public changes to VideoAgents are documented here.
 
 - WeChat binding: fetching the bind QR code now retries up to 2 times on transient network/SSL EOF errors (proxy hiccups causing peer disconnects) before reporting failure.
 
+### Fixed
+
+- deepagents: raise the default LangGraph `recursion_limit` from 50 to 250 (500 for dispatchers) so multi-tool runs no longer fail with `GraphRecursionError` mid-task.
+- deepagents: use one real host-path view for filesystem tools and shell execution, with explicit workspace/project roots, so absolute project paths no longer alternate between virtual `/data` paths and nested workspace mirrors.
+- orchestrator/dispatch: after errors or rework, do not switch execution engines; force `--engine` overrides are ignored.
+
 ## [1.0.6] - 2026-07-28
 
 ### Added
