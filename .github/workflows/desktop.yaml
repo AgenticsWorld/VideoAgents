@@ -83,9 +83,19 @@ jobs:
         include:
           - os: macos-14
             platform: mac
+            distribution: s3
             args: --mac zip --arm64
           - os: windows-latest
             platform: win
+            distribution: s3
+            args: --win nsis --x64
+          - os: macos-14
+            platform: mac
+            distribution: oss
+            args: --mac zip --arm64
+          - os: windows-latest
+            platform: win
+            distribution: oss
             args: --win nsis --x64
     runs-on: ${{ matrix.os }}
     steps:
@@ -103,10 +113,21 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           BUILD_HASH: ${{ needs.prepare.outputs.build_hash }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+          S3_PUBLIC_BASE: ${{ vars.S3_PUBLIC_BASE || 'https://s3.agentics.world/packages/video-agents' }}
+          OSS_PUBLIC_BASE: ${{ vars.OSS_PUBLIC_BASE || 'https://cdn.shumati.cn/packages/video-agents' }}
         run: |
           npm version "$RELEASE_VERSION" --workspace @videoagents/desktop --no-git-tag-version --allow-same-version
+          if [ "$DISTRIBUTION" = "oss" ]; then
+            update_index="$OSS_PUBLIC_BASE/metadata.json"
+            package_base="$OSS_PUBLIC_BASE"
+          else
+            update_index="$S3_PUBLIC_BASE/metadata.json"
+            package_base="$S3_PUBLIC_BASE"
+          fi
           python apps/desktop/scripts/write_build_info.py \
-            --channel release --version "$RELEASE_VERSION" --build-hash "$BUILD_HASH"
+            --channel release --version "$RELEASE_VERSION" --build-hash "${BUILD_HASH}-${DISTRIBUTION}" \
+            --distribution "$DISTRIBUTION" --update-index-url "$update_index" --package-base-url "$package_base"
       - run: npm run build:desktop
       - name: Prepare Apple API key
         if: matrix.platform == 'mac'
@@ -135,14 +156,15 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           BUILD_HASH: ${{ needs.prepare.outputs.build_hash }}
+          DISTRIBUTION: ${{ matrix.distribution }}
         run: |
           python apps/desktop/scripts/package_desktop.py \
             --platform "${{ matrix.platform }}" \
             --version "$RELEASE_VERSION" \
-            --build-hash "$BUILD_HASH"
+            --build-hash "${BUILD_HASH}-${DISTRIBUTION}"
       - uses: actions/upload-artifact@v7
         with:
-          name: desktop-${{ matrix.platform }}
+          name: desktop-${{ matrix.distribution }}-${{ matrix.platform }}
           path: apps/desktop/.desktop-packages/*
           include-hidden-files: true
           if-no-files-found: error
@@ -155,6 +177,8 @@ jobs:
     env:
       OSS_ENDPOINT: oss-cn-shanghai.aliyuncs.com
       OSS_PACKAGES_BUCKET: shumati-pro
+      S3_PUBLIC_BASE: ${{ vars.S3_PUBLIC_BASE || 'https://s3.agentics.world/packages/video-agents' }}
+      OSS_PUBLIC_BASE: ${{ vars.OSS_PUBLIC_BASE || 'https://cdn.shumati.cn/packages/video-agents' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -168,31 +192,43 @@ jobs:
         with:
           pattern: desktop-*
           path: desktop-artifacts
-      - name: Build metadata
+      - name: Build distribution metadata
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           MINIMUM_DESKTOP_VERSION: ${{ vars.MINIMUM_DESKTOP_VERSION || '1.0.0' }}
         run: |
           python apps/desktop/scripts/update_runtime_index.py \
-            --index publish/metadata.json \
+            --index publish/s3/metadata.json \
             --artifacts runtime-artifacts \
-            --desktop-artifacts desktop-artifacts \
+            --desktop-artifacts desktop-artifacts/desktop-s3-mac \
+            --desktop-artifacts desktop-artifacts/desktop-s3-win \
             --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
-            --version "$RELEASE_VERSION"
-      - name: Prepare four GitHub release assets
+            --version "$RELEASE_VERSION" \
+            --public-base "$S3_PUBLIC_BASE"
+          python apps/desktop/scripts/update_runtime_index.py \
+            --index publish/oss/metadata.json \
+            --artifacts runtime-artifacts \
+            --desktop-artifacts desktop-artifacts/desktop-oss-mac \
+            --desktop-artifacts desktop-artifacts/desktop-oss-win \
+            --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
+            --version "$RELEASE_VERSION" \
+            --public-base "$OSS_PUBLIC_BASE"
+      - name: Prepare six GitHub release assets
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p release-assets
-          cp "desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip" \
-            "release-assets/VideoAgents-mac-${RELEASE_VERSION}.zip"
-          cp "desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip" \
-            "release-assets/VideoAgents-win-${RELEASE_VERSION}.zip"
+          for distribution in s3 oss; do
+            cp "desktop-artifacts/desktop-${distribution}-mac/VideoAgents-${RELEASE_VERSION}.zip" \
+              "release-assets/VideoAgents-mac-${distribution}-${RELEASE_VERSION}.zip"
+            cp "desktop-artifacts/desktop-${distribution}-win/VideoAgents-${RELEASE_VERSION}.zip" \
+              "release-assets/VideoAgents-win-${distribution}-${RELEASE_VERSION}.zip"
+          done
           cp runtime-artifacts/python-runtime-macos-arm64/*.zip release-assets/
           cp runtime-artifacts/python-runtime-windows-x64/*.zip release-assets/
           asset_count="$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')"
-          test "$asset_count" = 4
+          test "$asset_count" = 6
       - name: Publish GitHub release assets
         shell: bash
         env:
@@ -221,8 +257,8 @@ jobs:
               --cache-control "public,max-age=31536000,immutable"
           done
 
-          mac_package="desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip"
-          win_package="desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip"
+          mac_package="desktop-artifacts/desktop-s3-mac/VideoAgents-${RELEASE_VERSION}.zip"
+          win_package="desktop-artifacts/desktop-s3-win/VideoAgents-${RELEASE_VERSION}.zip"
           aws s3 cp "$mac_package" \
             "s3://agentics-prod/packages/video-agents/mac/VideoAgents-${RELEASE_VERSION}.zip" \
             --content-type application/zip \
@@ -239,7 +275,7 @@ jobs:
             "s3://agentics-prod/packages/video-agents/win/VideoAgents.zip" \
             --content-type application/zip \
             --cache-control "no-cache, no-store, must-revalidate"
-          aws s3 cp publish/metadata.json \
+          aws s3 cp publish/s3/metadata.json \
             s3://agentics-prod/packages/video-agents/metadata.json \
             --content-type application/json \
             --cache-control "no-cache, no-store, must-revalidate"
@@ -260,8 +296,8 @@ jobs:
               --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
           done
 
-          mac_package="desktop-artifacts/desktop-mac/VideoAgents-${RELEASE_VERSION}.zip"
-          win_package="desktop-artifacts/desktop-win/VideoAgents-${RELEASE_VERSION}.zip"
+          mac_package="desktop-artifacts/desktop-oss-mac/VideoAgents-${RELEASE_VERSION}.zip"
+          win_package="desktop-artifacts/desktop-oss-win/VideoAgents-${RELEASE_VERSION}.zip"
           ossutil cp -f "$mac_package" \
             "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/mac/VideoAgents-${RELEASE_VERSION}.zip" \
             --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
@@ -274,6 +310,6 @@ jobs:
           ossutil cp -f "$win_package" \
             "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/win/VideoAgents.zip" \
             --meta="Content-Type:application/zip#Cache-Control:no-cache, no-store, must-revalidate"
-          ossutil cp -f publish/metadata.json \
+          ossutil cp -f publish/oss/metadata.json \
             "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/metadata.json" \
             --meta="Content-Type:application/json#Cache-Control:no-cache, no-store, must-revalidate"

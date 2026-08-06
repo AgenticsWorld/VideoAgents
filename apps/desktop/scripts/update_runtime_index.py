@@ -23,10 +23,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
-    parser.add_argument("--desktop-artifacts", type=Path)
+    parser.add_argument("--desktop-artifacts", type=Path, action="append")
     parser.add_argument("--minimum-desktop-version", default="1.0.0")
     parser.add_argument("--version", required=True)
-    parser.add_argument("--public-base", help="Override package URL prefix, useful for staging tests")
+    parser.add_argument("--public-base", help="Package URL prefix for this distribution")
     args = parser.parse_args()
     document = {"schema": 1, "python": {}}
     python = document["python"]
@@ -42,7 +42,7 @@ def main() -> None:
         arch = metadata.pop("arch")
         filename = metadata.pop("filename", None)
         if args.public_base and filename:
-            metadata["url"] = f"{args.public_base.rstrip('/')}/{filename}"
+            metadata["url"] = f"{args.public_base.rstrip('/')}/python/{filename}"
         python.setdefault(platform, {})[arch] = metadata
     if args.desktop_artifacts:
         desktop = document.setdefault("desktop", {})
@@ -50,7 +50,11 @@ def main() -> None:
         if version_tuple(minimum_version) > version_tuple(args.version):
             raise SystemExit("Minimum desktop version cannot be newer than the release version")
         desktop["minimumVersion"] = minimum_version
-        desktop_files = sorted(args.desktop_artifacts.rglob("*.metadata.json"))
+        desktop_files = sorted(
+            metadata_file
+            for artifact_dir in args.desktop_artifacts
+            for metadata_file in artifact_dir.rglob("*.metadata.json")
+        )
         if not desktop_files:
             raise SystemExit("No desktop metadata files found")
         for metadata_file in desktop_files:
@@ -59,7 +63,11 @@ def main() -> None:
                 raise SystemExit(f"Desktop version does not match release tag: {metadata_file}")
             metadata.pop("schema", None)
             platform = metadata.pop("platform")
-            metadata.pop("filename", None)
+            if platform in desktop:
+                raise SystemExit(f"Duplicate desktop metadata for {platform}: {metadata_file}")
+            filename = metadata.pop("filename", None)
+            if args.public_base and filename:
+                metadata["url"] = f"{args.public_base.rstrip('/')}/{platform}/{filename}"
             desktop[platform] = metadata
     document["updatedAt"] = datetime.now(timezone.utc).isoformat()
     args.index.parent.mkdir(parents=True, exist_ok=True)

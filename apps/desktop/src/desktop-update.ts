@@ -18,6 +18,10 @@ export interface BuildInfo {
   channel: 'local' | 'dev' | 'release'
   version: string
   buildHash: string
+  /** 构建时固定的发布源；安装后更新始终沿用此来源。 */
+  distribution?: 's3' | 'oss'
+  updateIndexUrl?: string
+  packageBaseUrl?: string
   /** 构建期 runtime-requirements.lock 的 sha256;与已装运行时清单比对,不一致时启动自动更新运行时 */
   requirementsSha256?: string
 }
@@ -60,6 +64,15 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
       if (value.requirementsSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(value.requirementsSha256)) {
         delete value.requirementsSha256
       }
+      if (value.distribution !== 's3' && value.distribution !== 'oss') delete value.distribution
+      if (typeof value.updateIndexUrl !== 'string' || !validHttpUrl(value.updateIndexUrl)) {
+        delete value.updateIndexUrl
+      }
+      if (typeof value.packageBaseUrl !== 'string' || !validHttpUrl(value.packageBaseUrl)) {
+        delete value.packageBaseUrl
+      } else if (!value.packageBaseUrl.endsWith('/')) {
+        value.packageBaseUrl += '/'
+      }
       return value
     }
   } catch (error) {
@@ -68,7 +81,24 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
   return {schema: 1, channel: 'local', version: '1.0.2', buildHash: 'unknown'}
 }
 
-function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact {
+function validHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function updateIndexUrl(build?: BuildInfo): string {
+  return process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || build?.updateIndexUrl || DEFAULT_INDEX_URL
+}
+
+function packageBaseUrl(build?: BuildInfo): string {
+  return build?.packageBaseUrl || DEFAULT_BASE
+}
+
+function validateArtifact(value: unknown, sourceIndex: string, build?: BuildInfo): DesktopArtifact {
   if (!value || typeof value !== 'object') throw new Error('桌面更新索引缺少当前平台制品')
   const artifact = value as Partial<DesktopArtifact>
   if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
@@ -83,8 +113,8 @@ function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact 
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('桌面更新包与索引来源不一致')
   } else {
     const platform = process.platform === 'darwin' ? 'mac' : 'win'
-    const expected = `${DEFAULT_BASE}${platform}/VideoAgents-${artifact.version}.zip`
-    if (url.href !== expected) throw new Error('桌面更新包 URL 不属于受信任的 S3 路径')
+    const expected = `${packageBaseUrl(build)}${platform}/VideoAgents-${artifact.version}.zip`
+    if (url.href !== expected) throw new Error('桌面更新包 URL 不属于当前发布源的受信任路径')
   }
   return artifact as DesktopArtifact
 }
@@ -106,7 +136,7 @@ function isNewerVersion(candidate: string, current: string): boolean {
 
 export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopUpdate | undefined> {
   if (!['dev', 'release'].includes(build.channel)) return undefined
-  const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
+  const source = updateIndexUrl(build)
   const response = await fetch(source, {
     redirect: 'error',
     cache: 'no-store',
@@ -118,7 +148,7 @@ export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopUpdat
   const index = JSON.parse(text) as DesktopIndex
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (index.schema !== 1 || !platform) throw new Error('桌面更新索引或平台无效')
-  const artifact = validateArtifact(index.desktop?.[platform], source)
+  const artifact = validateArtifact(index.desktop?.[platform], source, build)
   const minimumVersion = index.desktop?.minimumVersion
   if (minimumVersion !== undefined && !versionParts(minimumVersion)) {
     throw new Error('桌面更新索引的最低可用版本无效')
@@ -155,8 +185,8 @@ export function readCachedRequiredDesktopUpdate(
     if (value.schema !== 1 || !value.minimumVersion || !versionParts(value.minimumVersion)) {
       throw new Error('强制更新缓存格式无效')
     }
-    const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
-    const artifact = validateArtifact(value.artifact, source)
+    const source = updateIndexUrl(build)
+    const artifact = validateArtifact(value.artifact, source, build)
     if (isNewerVersion(value.minimumVersion, artifact.version)) {
       throw new Error('强制更新缓存的最低版本高于安装包版本')
     }
