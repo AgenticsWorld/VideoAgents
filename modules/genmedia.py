@@ -28,6 +28,7 @@ CLI:
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
       [--character CHAR-0001] [--variant child] [--project demo] \
+      [--voice <音色;仅云渠道,旁白缺省用配置页默认音色>] \
       [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
 
 Python:
@@ -1510,12 +1511,13 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
                  project: str = "") -> str:
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
 
-    输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。ComfyUI 渠道按
-    character(省略时从 output 的 CHAR-ID 推断)读取项目 voice/personality/appearance,
-    从 data/TimbreModel 自动选择参考音频;旁白不传 character。voice 在 ComfyUI
-    渠道仅保留真实本地音频文件的兼容覆盖;其他渠道语义保持不变。
+    输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。云渠道 voice 缺省用
+    配置页默认音色(openrouter=音色名 / volcengine=speaker 名 / elevenlabs=voice_id)。
+    ComfyUI 渠道按 character(省略时从 output 的 CHAR-ID 推断)读取项目
+    voice/personality/appearance,从 data/TimbreModel 自动选择参考音频;旁白不传
+    character;voice 仅保留真实本地音频文件的兼容覆盖。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
-    情绪指令,elevenlabs/comfyui 不支持(忽略)。
+    情绪指令,elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
@@ -1709,9 +1711,13 @@ def main():
                                            or os.environ.get("WEBUI_PROJECT", "")),
                     help="项目名或项目目录;Agent 环境通常自动注入")
     pt.add_argument("--voice", default="",
-                    help="兼容覆盖:ComfyUI 仅接受真实本地音频文件;通常不要传")
+                    help="音色(云渠道:缺省用配置页默认,openrouter=音色名/火山=speaker 名/"
+                         "elevenlabs=voice_id,角色配音按 casting 传;"
+                         "ComfyUI:仅接受真实本地音频文件的兼容覆盖,通常不要传)")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
-    pt.add_argument("--instructions", default="", help="语气/情绪指令(仅 OpenAI 系模型生效;comfyui 忽略)")
+    pt.add_argument("--instructions", default="",
+                    help="语气/情绪指令(OpenAI 系模型生效,火山注入情绪指令;"
+                         "comfyui 参与音色自动匹配、不注入合成)")
     pt.add_argument("--dry-run", action="store_true")
 
     pm = sub.add_parser("music", help="生成音乐(BGM)")
