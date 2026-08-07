@@ -38,24 +38,36 @@ Python:
 渠道:
   图像: openrouter(chat completions, modalities=image) / ideogram
         / volcengine(方舟 images/generations,Seedream 系列)
-        / byteplus(海外 ModelArk,与方舟同构 API) / comfyui(本地)
+        / byteplus(海外 ModelArk,与方舟同构 API)
+        / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
+        / comfyui(本地)
   视频: openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
+        / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
+        两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
+        多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
         / comfyui(本地,需配置 API 格式工作流 JSON)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
         省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
+        / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
+        force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
         凭证=新版语音技术控制台「API Key 管理」的 API Key,非方舟 ARK Key;
         音色为 speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
+        / minimax(POST /v1/t2a_v2,Speech 2.8 系列;音色为 voice_id,
+        可在「生成模型」页拉取音色库选择)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
         可在「生成模型」页从 Voice Library 搜索并一键加入账号)
         / comfyui(本地,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
         根据角色设定从 data/TimbreModel 自动选择参考音频)
+
+  minimax 各能力共用「接口区域」配置(api_base):海外版 api.minimax.io 与
+  国内版 api.minimaxi.com 账号与 Key 不互通,须与 Key 来源平台一致。
 
 ComfyUI 自定义工作流占位符(文本替换):
   字符串位: "{{PROMPT}}" "{{NEGATIVE}}" "{{CHECKPOINT}}" "{{FIRST_FRAME}}" "{{LAST_FRAME}}"
@@ -102,7 +114,7 @@ CONFIG_PATH = Path(os.environ.get(
 # 配置里 Key 为空时的环境变量兜底
 ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
             "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY",
-            "elevenlabs": "ELEVENLABS_API_KEY"}
+            "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY"}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -412,6 +424,53 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     if data[0].get("url"):
         return _request(data[0]["url"], timeout=300)
     raise RuntimeError(f"方舟返回格式异常:{json.dumps(data[0])[:400]}")
+
+
+# ---------------- MiniMax 云端通用(图像/视频/音乐/TTS 共用) ----------------
+
+# 海外版与国内版账号/Key 不互通,「生成模型」页「接口区域」落 api_base;两平台 API 同构
+MINIMAX_DEFAULT_BASE = "https://api.minimax.io"
+
+
+def _minimax_base(cfg) -> str:
+    return (cfg.get("api_base") or MINIMAX_DEFAULT_BASE).rstrip("/")
+
+
+def _minimax_post(cfg, path: str, payload: dict, timeout: int = 300) -> dict:
+    """MiniMax API POST:HTTP 200 也可能业务失败,统一校验 base_resp.status_code。"""
+    resp = _post_json(_minimax_base(cfg) + path, payload,
+                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=timeout)
+    base = resp.get("base_resp") or {}
+    if base.get("status_code"):
+        raise RuntimeError(
+            f"MiniMax {path} 失败(code={base['status_code']}):"
+            f"{base.get('status_msg') or json.dumps(resp, ensure_ascii=False)[:300]}")
+    return resp
+
+
+# ---------------- 图像:MiniMax(POST /v1/image_generation,Image-01) ----------------
+
+def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
+    text = prompt + (f"\n避免出现:{negative}" if negative else "")
+    body = {"model": cfg["model"], "prompt": text,
+            "aspect_ratio": _closest_aspect(width, height),
+            "response_format": "url"}   # Image-01 无 seed 参数,seed 入参不生效
+    if refs:
+        if len(refs) > 1:
+            raise RuntimeError("MiniMax 图像每次仅支持 1 张参考图(subject_reference),"
+                               f"收到 {len(refs)}")
+        body["subject_reference"] = [{"type": "character",
+                                      "image_file": _file_to_data_url(refs[0])}]
+    resp = _minimax_post(cfg, "/v1/image_generation", body)
+    data = resp.get("data") or {}
+    urls = data.get("image_urls") or []
+    if urls:
+        return _request(urls[0], timeout=300)
+    b64 = data.get("image_base64") or []
+    if b64:
+        return base64.b64decode(b64[0])
+    raise RuntimeError(f"MiniMax 未返回图像(model={cfg['model']}):"
+                       f"{json.dumps(resp, ensure_ascii=False)[:400]}")
 
 
 # ---------------- ComfyUI 通用 ----------------
@@ -1103,6 +1162,115 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid}")
 
 
+# ---------------- 视频:MiniMax(POST /v2/video_generation,MiniMax-H3) ----------------
+
+# H3 分辨率仅 768P/2K 两档;项目「输出设置」档位(360p..4k)就近映射,避免与现有
+# draft/final 分辨率闸门(_resolution_gate)冲突:草稿档一律 768P,1080p/4k 走 2K
+MINIMAX_RESOLUTION_MAP = {"360p": "768P", "480p": "768P", "720p": "768P",
+                          "1080p": "2K", "4k": "2K", "768p": "768P", "2k": "2K"}
+MINIMAX_VIDEO_RATIOS = ("21:9", "16:9", "4:3", "1:1", "3:4", "9:16")
+MINIMAX_MAX_VIDEO_REFS = 9   # H3 reference_image 上限
+
+
+def _minimax_video_resolution(resolution: str) -> str:
+    if not resolution:
+        return "768P"
+    mapped = MINIMAX_RESOLUTION_MAP.get(resolution.lower())
+    if not mapped:
+        raise RuntimeError(f"MiniMax-H3 分辨率仅 768P/2K 两档,无法映射 {resolution}"
+                           f"(可映射档位:{'/'.join(sorted(MINIMAX_RESOLUTION_MAP))})")
+    if mapped.lower() != resolution.lower():
+        print(f"[genmedia] MiniMax-H3 分辨率仅 768P/2K,{resolution} 已就近映射为 {mapped}",
+              file=sys.stderr)
+    return mapped
+
+
+def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
+                   refs=None, audio_refs=None, gen_audio=None, return_last_frame="",
+                   video_refs=None):
+    if refs and (first or last):
+        raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
+    if video_refs and (first or last):
+        raise RuntimeError("参考视频(--ref-video)与首帧/尾帧是互斥模式,不能同时传")
+    if refs and len(refs) > MINIMAX_MAX_VIDEO_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考图最多 {MINIMAX_MAX_VIDEO_REFS} 张,收到 {len(refs)}")
+    if gen_audio is False:
+        print("[genmedia] MiniMax-H3 原生音画同生,不支持关闭 generate_audio,已忽略",
+              file=sys.stderr)
+    d = int(round(duration)) if duration else 5
+    if duration and d != duration:
+        print(f"[genmedia] MiniMax-H3 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
+    if not 4 <= d <= 15:
+        raise RuntimeError(f"MiniMax-H3 时长须在 [4,15] 整数秒,收到 {d}")
+    content = [{"type": "text", "text": prompt}]
+    for path, role in ((first, "first_frame"), (last, "last_frame")):
+        if path:
+            content.append({"type": "image_url", "role": role,
+                            "image_url": {"url": _file_to_data_url(path)}})
+    for path in refs or []:
+        content.append({"type": "image_url", "role": "reference_image",
+                        "image_url": {"url": _file_to_data_url(path)}})
+    for path in video_refs or []:
+        # 参考视频体积大,内联 base64 易超请求体上限,与方舟同策略走对象存储预签名 URL
+        content.append({"type": "video_url", "role": "reference_video",
+                        "video_url": {"url": _storage_upload_url(path)}})
+    for path in audio_refs or []:
+        content.append({"type": "audio_url", "role": "reference_audio",
+                        "audio_url": {"url": _file_to_data_url(path)}})
+    body = {"model": cfg["model"], "content": content,
+            "resolution": _minimax_video_resolution(resolution), "duration": d}
+    has_media = len(content) > 1
+    if aspect and aspect in MINIMAX_VIDEO_RATIOS:
+        body["ratio"] = aspect
+    elif aspect and not has_media:
+        raise RuntimeError(f"MiniMax-H3 文生视频画幅仅支持 "
+                           f"{'/'.join(MINIMAX_VIDEO_RATIOS)},收到 {aspect}")
+    elif aspect:
+        print(f"[genmedia] MiniMax-H3 不支持画幅 {aspect},按参考素材自适应(adaptive)",
+              file=sys.stderr)
+    elif not has_media:
+        body["ratio"] = "16:9"   # 文生视频 ratio 必填且不能 adaptive
+    task = _minimax_post(cfg, "/v2/video_generation", body)
+    tid = task.get("task_id")
+    if not tid:
+        raise RuntimeError(f"MiniMax 视频任务创建失败:"
+                           f"{json.dumps(task, ensure_ascii=False)[:400]}")
+    print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    query_url = f"{_minimax_base(cfg)}/v2/query/video_generation/{tid}"
+    started = time.time()
+    deadline = started + VIDEO_TIMEOUT
+    last_status, last_beat = "", started
+    while time.time() < deadline:
+        time.sleep(VIDEO_POLL_INTERVAL)
+        try:
+            st = _get_json(query_url, headers)
+        except Exception as e:
+            # 轮询瞬时失败不中止:任务已在 MiniMax 侧运行,中止会诱发上层重试重复计费
+            print(f"[genmedia] 轮询失败({e}),{VIDEO_POLL_INTERVAL}s 后重试",
+                  file=sys.stderr, flush=True)
+            continue
+        status = st.get("status")
+        now = time.time()
+        if status != last_status or now - last_beat >= 60:
+            print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
+                  file=sys.stderr, flush=True)
+            last_status, last_beat = status, now
+        if status == "succeeded":
+            url = (st.get("content") or {}).get("url")
+            if not url:
+                raise RuntimeError(f"MiniMax 任务成功但无视频 URL:{json.dumps(st)[:400]}")
+            saved = _save(_request(url, timeout=600), output)
+            if return_last_frame:
+                # H3 无 last_frame 返回参数,续接锚从成片本地抽取
+                _extract_last_frame(saved, return_last_frame)
+            return saved
+        if status in ("failed", "cancelled"):
+            raise RuntimeError(f"MiniMax 视频生成失败:"
+                               f"{json.dumps(st, ensure_ascii=False)[:400]}")
+    raise RuntimeError(f"MiniMax 视频超时({VIDEO_TIMEOUT}s),task={tid}")
+
+
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
                    video_refs=None):
@@ -1220,6 +1388,35 @@ def _music_elevenlabs(cfg, prompt, output, duration_s=None):
     return _save(data, output)
 
 
+# ---------------- 音乐:MiniMax(POST /v1/music_generation,Music 系列) ----------------
+# force_instrumental(「生成模型」页配置,默认纯音乐)走 is_instrumental;关闭时开
+# lyrics_optimizer,由模型按 prompt 自动写词演唱。音频以 hex 编码随响应返回。
+
+MM_MUSIC_FORMATS = {".mp3": "mp3", ".wav": "wav"}
+
+
+def _music_minimax(cfg, prompt, output, duration_s=None):
+    fmt = MM_MUSIC_FORMATS.get(Path(output).suffix.lower())
+    if not fmt:
+        raise RuntimeError("MiniMax 音乐输出仅支持 .mp3 / .wav 扩展名")
+    if duration_s:
+        print("[genmedia] MiniMax 音乐渠道不支持 --duration,已忽略(时长由模型决定)",
+              file=sys.stderr)
+    body = {"model": cfg["model"], "prompt": prompt[:2000],
+            "output_format": "hex",
+            "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": fmt}}
+    if cfg.get("force_instrumental", True):
+        body["is_instrumental"] = True
+    else:
+        body["lyrics_optimizer"] = True   # 无独立歌词入参,按 prompt 自动写词
+    resp = _minimax_post(cfg, "/v1/music_generation", body, timeout=MUSIC_TIMEOUT)
+    audio_hex = (resp.get("data") or {}).get("audio") or ""
+    if not audio_hex:
+        raise RuntimeError(f"MiniMax 未返回音频(model={cfg['model']}):"
+                           f"{json.dumps(resp, ensure_ascii=False)[:400]}")
+    return _save(bytes.fromhex(audio_hex), output)
+
+
 # ---------------- 音乐:ComfyUI(本地,推荐 ACE-Step 工作流) ----------------
 # 占位符:PROMPT / LYRICS(默认 [Instrumental]) / DURATION 秒 / SEED
 # 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/music-ace-step-v1-api.json。
@@ -1325,6 +1522,36 @@ def _tts_volcengine(cfg, text, output, voice, speed, instructions):
         raise RuntimeError(f"火山 TTS 返回空音频(speaker={speaker},resource={resource}):"
                            f"{data.decode('utf-8', 'replace')[:300]}")
     return _save(b"".join(chunks), output)
+
+
+# ---------------- TTS:MiniMax(POST /v1/t2a_v2,Speech 系列) ----------------
+# 音色为 voice_id(「生成模型」页可拉取音色库选择,克隆音色需先在平台创建);
+# instructions 不支持自由文本(官方仅 emotion 枚举,不做不可靠的自动映射)。
+
+def _tts_minimax(cfg, text, output, voice, speed, instructions):
+    vid = voice or cfg.get("voice") or ""
+    if not vid:
+        raise RuntimeError("MiniMax TTS 未指定音色:--voice 传 voice_id,"
+                           "或在「🎨 生成模型」页拉取音色库设为默认")
+    voice_setting = {"voice_id": vid}
+    if speed and speed != 1.0:
+        voice_setting["speed"] = max(0.5, min(2.0, float(speed)))
+    if instructions:
+        print("[genmedia] MiniMax TTS 不支持自由文本 instructions,已忽略"
+              "(情绪仅官方 emotion 枚举,可通过文本措辞/标点控制语气)", file=sys.stderr)
+    fmt = "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm"
+    audio_setting = {"sample_rate": 24000, "format": fmt, "channel": 1}
+    if fmt == "mp3":
+        audio_setting["bitrate"] = 128000
+    body = {"model": cfg["model"], "text": text,
+            "voice_setting": voice_setting, "audio_setting": audio_setting,
+            "language_boost": "auto", "output_format": "hex"}
+    resp = _minimax_post(cfg, "/v1/t2a_v2", body, timeout=TTS_TIMEOUT)
+    audio_hex = (resp.get("data") or {}).get("audio") or ""
+    if not audio_hex:
+        raise RuntimeError(f"MiniMax TTS 返回空音频(model={cfg['model']},voice={vid}):"
+                           f"{json.dumps(resp, ensure_ascii=False)[:300]}")
+    return _save(bytes.fromhex(audio_hex), output)
 
 
 # ---------------- TTS:ElevenLabs(POST /v1/text-to-speech/{voice_id}) ----------------
@@ -1441,6 +1668,8 @@ def generate_image(prompt: str, output: str, negative: str = "",
         return _save(_image_ideogram(cfg, prompt, negative, refs, width, height, seed), output)
     if cfg["provider"] in ("volcengine", "byteplus"):
         return _save(_image_ark(cfg, prompt, negative, refs, width, height, seed), output)
+    if cfg["provider"] == "minimax":
+        return _save(_image_minimax(cfg, prompt, negative, refs, width, height, seed), output)
     return _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output)
 
 
@@ -1480,7 +1709,10 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.0
-    多镜头组生成)专用,仅火山引擎/BytePlus 渠道支持;refs 与 first/last_frame 互斥。
+    多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)渠道支持;refs 与
+    first/last_frame 互斥。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
+    映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
+    return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
     video_refs 为 V2V 编辑/延长模式(Seedance 2.0):传待修改/待延长的原视频
     (≤3 个,单个 2-15s 且总时长 ≤15s),prompt 用「视频n/图片n」序号引用素材,
     典型用法是局部穿帮修复(定向修改,其余画面保持不变);与 first/last_frame 互斥。
@@ -1494,6 +1726,11 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                           resolution, aspect, seed, output,
                           refs, audio_refs, generate_audio, return_last_frame,
                           video_refs)
+    if cfg["provider"] == "minimax":
+        return _video_minimax(cfg, prompt, first_frame, last_frame, duration,
+                              resolution, aspect, seed, output,
+                              refs, audio_refs, generate_audio, return_last_frame,
+                              video_refs)
     if cfg["provider"] == "comfyui" and _is_h3_ref2va_workflow(cfg):
         return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
                               resolution, aspect, seed, output, refs, audio_refs,
@@ -1512,20 +1749,22 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
 
     输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。云渠道 voice 缺省用
-    配置页默认音色(openrouter=音色名 / volcengine=speaker 名 / elevenlabs=voice_id)。
+    配置页默认音色(openrouter=音色名 / volcengine=speaker 名 /
+    minimax=voice_id / elevenlabs=voice_id)。
     ComfyUI 渠道按 character(省略时从 output 的 CHAR-ID 推断)读取项目
     voice/personality/appearance,从 data/TimbreModel 自动选择参考音频;旁白不传
     character;voice 仅保留真实本地音频文件的兼容覆盖。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
-    情绪指令,elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
+    情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
     fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
-          "elevenlabs": _tts_elevenlabs, "comfyui": _tts_comfyui}.get(cfg["provider"])
+          "minimax": _tts_minimax, "elevenlabs": _tts_elevenlabs,
+          "comfyui": _tts_comfyui}.get(cfg["provider"])
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
-                           "(可选 openrouter / volcengine / elevenlabs / comfyui)")
+                           "(可选 openrouter / volcengine / minimax / elevenlabs / comfyui)")
     if cfg["provider"] == "comfyui":
         return fn(cfg, text, output, voice, speed, instructions,
                   character, variant, project)
@@ -1535,20 +1774,23 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
 def generate_music(prompt: str, output: str, duration_s: float | None = None) -> str:
     """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 music 段。
 
-    输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus)。
+    输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus;
+    minimax:mp3/wav)。
     duration_s:elevenlabs 生效(music_length_ms,3–600s);comfyui 注入 DURATION 占位符
-    (默认 30s);openrouter 省略=模型按 prompt 自定。
+    (默认 30s);openrouter/minimax 省略或忽略=模型按 prompt 自定。
     openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
     """
     _forbid_dispatch_layer("音乐")
     cfg = get_config("music")
     if cfg["provider"] == "elevenlabs":
         return _music_elevenlabs(cfg, prompt, output, duration_s)
+    if cfg["provider"] == "minimax":
+        return _music_minimax(cfg, prompt, output, duration_s)
     if cfg["provider"] == "comfyui":
         return _music_comfyui(cfg, prompt, output, duration_s)
     if cfg["provider"] != "openrouter":
         raise RuntimeError(f"音乐生成不支持渠道 {cfg['provider']}"
-                           "(可选 openrouter / elevenlabs / comfyui)")
+                           "(可选 openrouter / elevenlabs / minimax / comfyui)")
     if duration_s:
         print("[genmedia] openrouter 音乐渠道不支持 --duration,已忽略(时长由模型决定)",
               file=sys.stderr)
@@ -1712,7 +1954,7 @@ def main():
                     help="项目名或项目目录;Agent 环境通常自动注入")
     pt.add_argument("--voice", default="",
                     help="音色(云渠道:缺省用配置页默认,openrouter=音色名/火山=speaker 名/"
-                         "elevenlabs=voice_id,角色配音按 casting 传;"
+                         "minimax=voice_id/elevenlabs=voice_id,角色配音按 casting 传;"
                          "ComfyUI:仅接受真实本地音频文件的兼容覆盖,通常不要传)")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
     pt.add_argument("--instructions", default="",
@@ -1722,10 +1964,10 @@ def main():
 
     pm = sub.add_parser("music", help="生成音乐(BGM)")
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
-    pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus)")
+    pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus;minimax 仅 .mp3/.wav)")
     pm.add_argument("--duration", type=float, default=None,
                     help="目标时长秒(elevenlabs:3–600;comfyui:注入 DURATION,默认 30;"
-                         "openrouter 忽略;省略=模型/工作流默认)")
+                         "openrouter/minimax 忽略;省略=模型/工作流默认)")
     pm.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()

@@ -6,6 +6,7 @@ All notable public changes to VideoAgents are documented here.
 
 ### Added
 
+- MiniMax generation provider across all four media types, each as a new tab placed before ComfyUI on the 🎨 generation-models page: image (Image-01, single subject-reference image), video (MiniMax-H3 only — the project resolution tiers are mapped onto H3's two-tier 768P/2K ladder automatically, duration 4–15 integer seconds, first/last frame plus multi-reference image/audio/video modes, native audio-video co-generation, continuity anchor extracted locally from the finished clip), music (Music 3.0/2.6 with the same force-instrumental toggle as Eleven Music; auto-written lyrics when disabled), and TTS (Speech 2.8 family with a voice-library browser backed by `get_voice`). A per-tab API-region selector covers the non-interchangeable global (api.minimax.io) and China (api.minimaxi.com) platforms, `MINIMAX_API_KEY` works as the environment fallback, and MiniMax is selectable in per-agent image/video provider overrides.
 - Pi execution engine: run Agents through the local `pi` CLI with JSON event streaming, session resume, per-run model selection, and dynamic language-model menus populated from the models available to the current Pi login.
 
 ### Changed

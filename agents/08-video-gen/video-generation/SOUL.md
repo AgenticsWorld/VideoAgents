@@ -78,7 +78,10 @@ python3 modules/genmedia.py video \
 ```
 
 云端渠道为异步任务,模块内部自动轮询到完成;--ref 与 --first/last-frame 互斥;
-Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额度熔断/未配 Key)
+Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 minimax(MiniMax-H3)时:
+--resolution 照传项目档位,模块自动就近映射到 768P/2K 两档;--duration 4–15 整数秒;
+原生音画同生(--generate-audio off 不生效);--ref-video 需先在「设置 → 文件托管」配置
+对象存储(经预签名 URL 传入)。失败(超时/拦截/额度熔断/未配 Key)
 如实写回执上报,严禁占位产物。详见 WORKFLOW.md §9。
 
 ## 实战经验(踩坑档案,ep01 实测)

@@ -460,7 +460,7 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | minimax | comfyui
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -468,33 +468,44 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
                      "custom_model": ""},
+        # MiniMax:api_base 按「接口区域」二选一(海外 api.minimax.io/国内 api.minimaxi.com,
+        # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "image-01", "custom_model": ""},
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": ""},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
+        # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "MiniMax-H3", "custom_model": ""},
         "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
     },
     "music": {
-        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
+        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
+        # MiniMax Music:force_instrumental 同上;关闭时按 prompt 自动写词演唱
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "music-3.0", "custom_model": "",
+                    "force_instrumental": True},
         # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
         "comfyui": {"url": "http://127.0.0.1:8188",
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]"},
     },
     "tts": {
-        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | elevenlabs
+        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -502,6 +513,9 @@ DEFAULT_GENCONFIG = {
         # App ID + Access Token 已废弃);model 即 X-Api-Resource-Id 档位
         "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
+        # MiniMax Speech:voice 存 voice_id(设置页可拉取音色库选择)
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "speech-2.8-hd", "custom_model": "", "voice": ""},
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
                        "custom_model": "", "voice": ""},
@@ -835,8 +849,8 @@ AM_MODE_MODELS = {
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "deepagents")      # "" = 跟随全局
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -4070,6 +4084,54 @@ async def api_volc_speakers(body: dict):
         raise ServiceError(502, f"ListSpeakers 调用失败:{e}")
     _VOLC_SPEAKERS_CACHE[resource_id] = (time.time(), speakers)
     return {"speakers": speakers}
+
+
+# ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
+
+_MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
+
+
+async def api_minimax_voices(body: dict):
+    """MiniMax get_voice 音色列表(系统音色 + 账号内克隆/生成音色)。Key 用请求体的
+    (未保存也可试);api_base 须与 Key 来源平台一致(海外/国内两平台不互通)。"""
+    key = str((body or {}).get("api_key") or "").strip()
+    if not key:
+        raise ServiceError(400, "api_key required")
+    base = str((body or {}).get("api_base") or _MINIMAX_BASES[0]).strip().rstrip("/")
+    if base not in _MINIMAX_BASES:
+        raise ServiceError(400, f"api_base must be one of {list(_MINIMAX_BASES)}")
+
+    def call():
+        req = urllib.request.Request(
+            base + "/v1/get_voice",
+            data=json.dumps({"voice_type": "all"}).encode(),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {key}"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+
+    try:
+        d = await asyncio.to_thread(call)
+    except urllib.error.HTTPError as e:
+        raise ServiceError(502, f"MiniMax get_voice HTTP {e.code}:"
+                                f"{e.read().decode('utf-8', 'replace')[:300]}")
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"MiniMax get_voice 调用失败:{e}")
+    err = d.get("base_resp") or {}
+    if err.get("status_code"):
+        raise ServiceError(502, f"MiniMax get_voice 失败(code={err['status_code']}):"
+                                f"{err.get('status_msg') or ''}")
+    voices = []
+    for group, tag in (("system_voice", "系统"), ("voice_cloning", "克隆"),
+                       ("voice_generation", "生成")):
+        for v in d.get(group) or []:
+            desc = v.get("description")
+            if isinstance(desc, list):
+                desc = " / ".join(str(x) for x in desc if x)
+            voices.append({"voice_id": v.get("voice_id") or "",
+                           "name": v.get("voice_name") or v.get("voice_id") or "",
+                           "category": tag, "description": str(desc or "")})
+    return {"voices": voices}
 
 
 async def api_test_openrouter(body: dict):

@@ -236,20 +236,46 @@ const BP_VIDEO_MODELS=[
   ['seedance-1-0-pro-fast-251015','Seedance 1.0 Pro Fast(文/图生视频)'],
 ];
 
+/* MiniMax 开放平台:海外版 platform.minimax.io 与国内版 platform.minimaxi.com
+   账号与 Key 不互通,「接口区域」选与 Key 来源一致的域名 */
+const MINIMAX_BASES=[
+  ['https://api.minimax.io','海外版(minimax.io)'],
+  ['https://api.minimaxi.com','国内版(minimaxi.com)'],
+];
+const MINIMAX_IMAGE_MODELS=[
+  ['image-01','Image-01(文/图生图,单角色参考图)'],
+];
+const MINIMAX_VIDEO_MODELS=[
+  ['MiniMax-H3','MiniMax H3(多模态生视频,768P/2K,4-15秒)'],
+];
+const MINIMAX_MUSIC_MODELS=[
+  ['music-3.0','Music 3.0(最新,人声更自然)'],
+  ['music-2.6','Music 2.6'],
+  ['music-3.0-free','Music 3.0 Free(免费档,3次/分钟)'],
+  ['music-2.6-free','Music 2.6 Free(免费档,3次/分钟)'],
+];
+const MINIMAX_TTS_MODELS=[
+  ['speech-2.8-hd','Speech 2.8 HD(最新,40 语种/7 情绪)'],
+  ['speech-2.8-turbo','Speech 2.8 Turbo(低延迟)'],
+  ['speech-2.6-hd','Speech 2.6 HD'],
+  ['speech-02-hd','Speech 02 HD'],
+];
+
 const PROVIDER_META={
   openrouter:{label:'OpenRouter'},
   ideogram:{label:'Ideogram'},
   volcengine:{label:'火山引擎'},
   byteplus:{label:'BytePlus'},
+  minimax:{label:'MiniMax'},
   comfyui:{label:'ComfyUI(本地)'},
   elevenlabs:{label:'ElevenLabs'},
 };
 const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
-  image:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  video:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  music:{providers:['openrouter','elevenlabs','comfyui']},
-  tts:{providers:['openrouter','volcengine','elevenlabs','comfyui']},
+  image:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  video:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  music:{providers:['openrouter','elevenlabs','minimax','comfyui']},
+  tts:{providers:['openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
@@ -303,6 +329,15 @@ function modelRow(selId,customId){
   const custom=el('input',{type:'text',id:customId,placeholder:'输入模型 ID',style:'display:none'});
   sel.onchange=()=>{custom.style.display=sel.value===CUSTOM?'':'none'};
   d.appendChild(sel);d.appendChild(custom);
+  return d;
+}
+
+function mmBaseRow(kind){
+  const d=el('div',{className:'row'});
+  d.appendChild(el('label',{},'接口区域'));
+  const sel=el('select',{id:`${kind}-mm-base`});
+  MINIMAX_BASES.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  d.appendChild(sel);
   return d;
 }
 
@@ -440,6 +475,53 @@ function buildPanel(kind,p){
       'Key 在 <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">elevenlabs.io 控制台</a> 生成(音色库 API 免费档不可用);'
       +'「默认音色」用账号内音色的 voice_id;<a href="https://elevenlabs.io/app/voice-library" target="_blank">Voice Library</a> 的公共音色须先「加入」到账号才能合成,'
       +'上面搜索选中后点「➕ 加入并设为默认」一步完成;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+  }else if(p==='minimax'&&kind==='tts'){
+    d.appendChild(keyRow('tts-mm-key','MiniMax API Key'));
+    d.appendChild(mmBaseRow('tts'));
+    d.appendChild(modelRow('tts-mm-model','tts-mm-custom'));
+    const vr=el('div',{className:'row'});
+    vr.appendChild(el('label',{},'默认音色'));
+    vr.appendChild(el('input',{type:'text',id:'tts-mm-voice',placeholder:'voice_id,如 Chinese (Mandarin)_Reliable_Executive'}));
+    d.appendChild(vr);
+    // 音色库:get_voice 拉取(系统+账号内克隆/生成音色)+ 关键词过滤 + 设为默认(接口无试听样本)
+    const sr=el('div',{className:'row'});
+    sr.appendChild(el('label',{},'音色库'));
+    const fi=el('input',{type:'text',id:'tts-mm-search',placeholder:'关键词过滤(名称/语言/voice_id)'});
+    fi.oninput=()=>{if(MM_LIB.length)mmRenderLib()};
+    sr.appendChild(fi);
+    const lb=el('button',{},'拉取音色库');
+    lb.onclick=mmLoadLib;
+    sr.appendChild(lb);d.appendChild(sr);
+    const lr=el('div',{className:'row'});
+    lr.appendChild(el('label',{},''));
+    const lsel=el('select',{id:'tts-mm-lib'});
+    lr.appendChild(lsel);
+    const ab=el('button',{},'✓ 设为默认音色');
+    ab.onclick=mmSetDefault;
+    lr.appendChild(ab);d.appendChild(lr);
+    d.appendChild(el('div',{className:'status',id:'tts-mm-status'}));
+    d.appendChild(el('div',{className:'hint'},
+      'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
+      +'克隆音色需先在平台创建;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+  }else if(p==='minimax'){
+    d.appendChild(keyRow(`${kind}-mm-key`,'MiniMax API Key'));
+    d.appendChild(mmBaseRow(kind));
+    d.appendChild(modelRow(`${kind}-mm-model`,`${kind}-mm-custom`));
+    if(kind==='music'){
+      const ir=el('div',{className:'row'});
+      ir.appendChild(el('label',{},''));
+      const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer'});
+      const cb=el('input',{type:'checkbox',id:'music-mm-instr'});
+      lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
+      ir.appendChild(lb);d.appendChild(ir);
+    }
+    const intro=kind==='image'
+      ?'MiniMax 图片生成 API(Image-01,文/图生图,参考图仅 1 张);'
+      :kind==='video'
+      ?'MiniMax 视频生成 API(MiniMax-H3,音画同生,支持首尾帧/多参考图/参考音视频);分辨率仅 768P/2K 两档:「输出设置」的 360p/480p/720p 自动映射 768P,1080p/4k 映射 2K;时长 4-15 整数秒;'
+      :'MiniMax 音乐生成 API(Music 系列);取消「强制纯音乐」时按 prompt 自动写词演唱;输出仅 .mp3/.wav;';
+    d.appendChild(el('div',{className:'hint'},
+      intro+'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
     const ur=el('div',{className:'row'});
     ur.appendChild(el('label',{},'服务地址'));
@@ -768,6 +850,41 @@ function volcSetDefault(){
     {name:v.name+' · '+v.voice_type}),true);
 }
 
+/* ---------- MiniMax 音色库(get_voice;系统+账号内克隆/生成音色,接口无试听样本) ---------- */
+let MM_LIB=[];  // 最近一次拉取的音色库(设默认时按下标取)
+const mmVoiceLabel=v=>[v.name,v.category,v.description].filter(Boolean).join(' · ')
+  +(v.voice_id&&v.voice_id!==v.name?' · '+v.voice_id:'');
+function mmStatus(msg,ok){const st=$('#tts-mm-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
+function mmRenderLib(){
+  const kw=$('#tts-mm-search').value.trim().toLowerCase();
+  const sel=$('#tts-mm-lib');sel.innerHTML='';
+  MM_LIB.forEach((v,i)=>{
+    const hay=[v.name,v.voice_id,v.category,v.description].join(' ').toLowerCase();
+    if(kw&&!kw.split(/\s+/).every(w=>hay.includes(w)))return;
+    sel.appendChild(el('option',{value:String(i),textContent:mmVoiceLabel(v)}));
+  });
+}
+async function mmLoadLib(){
+  if(!$('#tts-mm-key').value.trim())return mmStatus(t('✗ 先填 API Key'),false);
+  mmStatus(t('拉取音色库中…'));
+  try{
+    const r=await api('/api/v1/providers/minimax/voices',
+      {api_key:$('#tts-mm-key').value.trim(),api_base:$('#tts-mm-base').value});
+    MM_LIB=r.voices||[];
+    mmRenderLib();
+    mmStatus(MM_LIB.length
+      ?I18N.f('✓ 音色库共 {n} 个音色(可关键词过滤,选中后设为默认)',{n:MM_LIB.length})
+      :t('音色库为空(先在平台开通/创建音色)'),!!MM_LIB.length);
+  }catch(e){mmStatus('✗ '+e.message,false)}
+}
+function mmSetDefault(){
+  const v=MM_LIB[+$('#tts-mm-lib').value];
+  if(!v)return mmStatus(t('✗ 先拉取并选中一个音色'),false);
+  $('#tts-mm-voice').value=v.voice_id;
+  mmStatus(I18N.f('✓ 已设为默认音色:{name}(记得点「保存设置」)',
+    {name:v.name+' · '+v.voice_id}),true);
+}
+
 /* ---------- 装载 / 收集 ---------- */
 function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
@@ -791,6 +908,16 @@ function loadIntoForm(){
       $(`#${kind}-bp-key`).value=c.byteplus.api_key||'';
       fillSelect($(`#${kind}-bp-model`),kind==='image'?BP_IMAGE_MODELS:BP_VIDEO_MODELS,
                  c.byteplus.model,c.byteplus.custom_model);
+    }
+    if(SECTIONS[kind].providers.includes('minimax')&&c.minimax){
+      $(`#${kind}-mm-key`).value=c.minimax.api_key||'';
+      $(`#${kind}-mm-base`).value=c.minimax.api_base||MINIMAX_BASES[0][0];
+      fillSelect($(`#${kind}-mm-model`),
+                 kind==='image'?MINIMAX_IMAGE_MODELS:kind==='video'?MINIMAX_VIDEO_MODELS:
+                 kind==='music'?MINIMAX_MUSIC_MODELS:MINIMAX_TTS_MODELS,
+                 c.minimax.model,c.minimax.custom_model);
+      if(kind==='music')$('#music-mm-instr').checked=c.minimax.force_instrumental!==false;
+      if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
@@ -862,6 +989,13 @@ function collect(){
     if(SECTIONS[kind].providers.includes('byteplus'))
       c.byteplus={api_key:$(`#${kind}-bp-key`).value.trim(),
         ...pickModel(`#${kind}-bp-model`,`#${kind}-bp-custom`)};
+    if(SECTIONS[kind].providers.includes('minimax')){
+      c.minimax={api_key:$(`#${kind}-mm-key`).value.trim(),
+        api_base:$(`#${kind}-mm-base`).value,
+        ...pickModel(`#${kind}-mm-model`,`#${kind}-mm-custom`)};
+      if(kind==='music')c.minimax.force_instrumental=$('#music-mm-instr').checked;
+      if(kind==='tts')c.minimax.voice=$('#tts-mm-voice').value.trim();
+    }
     if(kind==='music')
       c.elevenlabs={api_key:$('#music-el-key').value.trim(),
         ...pickModel('#music-el-model','#music-el-custom'),

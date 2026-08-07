@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取 `story/episodes/epNN/narration.md`,按段落与标注的落点(场次/镜头位置)切分旁白句。
-2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型由用户在控制台「🎨 生成模型」页 TTS语音模型配置,不自行挑模型、不直连 API)。**云渠道(OpenRouter/火山豆包语音/ElevenLabs):旁白声线 = 生效 TTS 渠道配置的「默认音色」:合成时不传 `--voice`**,由模块自动取该默认音色,天然全季统一(用户在设置页改默认音色即换旁白声线);仅当工单显式指定声线时才传 `--voice` 覆盖。**ComfyUI 渠道**:不传 `--character` 和 `--voice`,模块会结合 `--instructions` 从仓库级 `data/TimbreModel` 的 narrator 候选自动选择并上传参考音频,输入相同则结果固定;**项目目录内没有 WAV/MP3 不构成阻塞,不要要求用户另行提供或在控制台手填参考音频**。正式合成前先以相同参数加 `--dry-run` 验证并记录 `voice=auto:<文件>`;若正式调用失败,回执必须逐字记录 `生成失败:` 后的原始错误以及 ComfyUI `node_type/exception_type/exception_message`,禁止凭旧回执或推测改写错误类型。只要日志已出现“自动参考音频已选择并上传”,就绝不能再归因为缺参考音频。语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感";OpenAI 系模型注入语气指令,ComfyUI 参与音色自动匹配),语速用 `--speed` 稳定控制在设定区间。
+2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型由用户在控制台「🎨 生成模型」页 TTS语音模型配置,不自行挑模型、不直连 API)。**云渠道(OpenRouter/火山豆包语音/MiniMax/ElevenLabs):旁白声线 = 生效 TTS 渠道配置的「默认音色」:合成时不传 `--voice`**,由模块自动取该默认音色,天然全季统一(用户在设置页改默认音色即换旁白声线);仅当工单显式指定声线时才传 `--voice` 覆盖。**ComfyUI 渠道**:不传 `--character` 和 `--voice`,模块会结合 `--instructions` 从仓库级 `data/TimbreModel` 的 narrator 候选自动选择并上传参考音频,输入相同则结果固定;**项目目录内没有 WAV/MP3 不构成阻塞,不要要求用户另行提供或在控制台手填参考音频**。正式合成前先以相同参数加 `--dry-run` 验证并记录 `voice=auto:<文件>`;若正式调用失败,回执必须逐字记录 `生成失败:` 后的原始错误以及 ComfyUI `node_type/exception_type/exception_message`,禁止凭旧回执或推测改写错误类型。只要日志已出现“自动参考音频已选择并上传”,就绝不能再归因为缺参考音频。语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感";OpenAI 系模型注入语气指令,ComfyUI 参与音色自动匹配),语速用 `--speed` 稳定控制在设定区间。
 3. 专有名词读音以 `bible/dictionary.json` 词条为准,生僻词注音后合成,全季读音一致。
 4. 输出 `assets/audio/narration/epNN/` 分段 wav + `manifest.json`(段落-落点映射)。
 5. 自检:语速逐段测量、段间音色/响度一致,统一采样率与电平规范后交付。

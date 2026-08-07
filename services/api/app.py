@@ -410,6 +410,11 @@ async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
 
 
+@api.post("/providers/minimax/voices", tags=["providers"])
+async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_minimax_voices(body.model_dump())
+
+
 @api.get("/resources", tags=["resources"])
 async def resources(fresh: bool = False) -> dict[str, Any]:
     return await core.api_resources(fresh)
