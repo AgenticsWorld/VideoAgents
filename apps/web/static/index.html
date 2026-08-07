@@ -1895,12 +1895,16 @@ function liveBox(runId){
 
 /* ---------- 初始化 ---------- */
 (async()=>{
-  AGENTS=await api('/api/v1/agents');
-  try{AGENT_MODELS=await api('/api/v1/agents/models');AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
+  // 四个启动请求并行发出;消费顺序与失败语义不变(agents 失败仍中止初始化,models/approvals 失败仍忽略)
+  const pAgents=api('/api/v1/agents'),pModels=api('/api/v1/agents/models'),
+        pRuns=api('/api/v1/runs'),pApprovals=api('/api/v1/approvals');
+  [pModels,pRuns,pApprovals].forEach(p=>p.catch(()=>{}));   // pAgents 抛出中止时其余不留未处理 rejection
+  AGENTS=await pAgents;
+  try{AGENT_MODELS=await pModels;AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
   renderAmMode();
-  (await api('/api/v1/runs')).forEach(r=>RUNS[r.id]=r);
+  (await pRuns).forEach(r=>RUNS[r.id]=r);
   connect();   // 首次 renderAgents/renderRuns 延后到项目下拉框恢复之后,否则 curProj() 回退 demo 导致按项目过滤为空
-  try{(await api('/api/v1/approvals')).forEach(showConfirm)}catch(e){}
+  try{(await pApprovals).forEach(showConfirm)}catch(e){}
   $('#search').oninput=renderAgents;
   $('#engine').onchange=async()=>{
     await populateModels($('#engine').value);savePrefs();

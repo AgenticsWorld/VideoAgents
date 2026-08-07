@@ -115,10 +115,17 @@ def _register_upstream(upstream: object) -> None:
 def _close_upstream(upstream: object) -> None:
     with UPSTREAMS_LOCK:
         UPSTREAMS.discard(upstream)
-    try:
-        upstream.close()  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001 - shutdown cleanup must be best-effort
-        pass
+
+    def _close() -> None:
+        try:
+            upstream.close()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - shutdown cleanup must be best-effort
+            pass
+
+    # close() 会阻塞在并发 read1() 后面,直到上游吐出下一个 chunk(SSE 空闲时是
+    # 15s 心跳);而本函数会在事件循环线程上被调用(chunks() 的 finally),同步关闭
+    # 等于把 8630 上所有请求冻结到心跳为止,故丢守护线程慢慢关。
+    threading.Thread(target=_close, name="upstream-close", daemon=True).start()
 
 
 def _begin_shutdown() -> None:

@@ -932,7 +932,7 @@ CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
 _USAGE_CACHE: dict = {}               # engine -> (ts, {"session":pct|None,"weekly":pct|None})
-_USAGE_TTL = {"claude": 180, "codex": 30, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全
+_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
 _CLAUDE_VERSION: str | None = None
 
 
