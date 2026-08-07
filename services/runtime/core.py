@@ -488,7 +488,7 @@ DEFAULT_GENCONFIG = {
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
-        # ComfyUI 工作流按用户选择配置;模板说明见 comfy/AUDIO_MODELS.md。
+        # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
         "comfyui": {"url": "http://127.0.0.1:8188",
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]"},
@@ -4088,6 +4088,34 @@ async def api_test_comfyui(body: dict):
             "ace_step_ready": all(custom_nodes.get(n) for n in
                                     ("ACEModelLoader", "ACEStepGen")),
             "minimax_h3_ready": custom_nodes.get("MiniMaxH3ReferenceToVideo", False)}
+
+
+COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts")
+
+
+async def api_comfy_workflows():
+    """列出 comfy/ 目录中按文件名前缀分类的 API 工作流 JSON(image-/video-/music-/tts-),
+    并标注是否有同名 .md 说明文档。"""
+    out = {kind: [] for kind in COMFY_WORKFLOW_KINDS}
+    comfy_dir = ROOT / "comfy"
+    if comfy_dir.is_dir():
+        for path in sorted(comfy_dir.glob("*.json")):
+            kind = path.name.split("-", 1)[0]
+            if kind in out:
+                out[kind].append({"path": f"comfy/{path.name}",
+                                  "doc": path.with_suffix(".md").is_file()})
+    return {"workflows": out}
+
+
+async def api_comfy_workflow_doc(name: str):
+    """返回 comfy 工作流同名 .md 说明文档的内容。name 只取文件名,不允许目录穿越。"""
+    base = Path(str(name or "")).name
+    if not re.fullmatch(r"[A-Za-z0-9._-]+\.(json|md)", base):
+        raise ServiceError(400, f"invalid workflow name: {name!r}")
+    doc = (ROOT / "comfy" / base).with_suffix(".md")
+    if not doc.is_file():
+        raise ServiceError(404, f"no doc for workflow: {base}")
+    return {"name": doc.name, "markdown": doc.read_text(encoding="utf-8")}
 
 
 async def api_agents(refresh: bool = False):

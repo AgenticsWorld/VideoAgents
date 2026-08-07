@@ -375,6 +375,16 @@ async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_comfyui(body.model_dump())
 
 
+@api.get("/comfy/workflows", tags=["providers"])
+async def comfy_workflows() -> dict[str, Any]:
+    return await core.api_comfy_workflows()
+
+
+@api.get("/comfy/workflows/doc", tags=["providers"])
+async def comfy_workflow_doc(name: str) -> dict[str, Any]:
+    return await core.api_comfy_workflow_doc(name)
+
+
 @api.get("/providers/deepagents/models", tags=["providers"])
 async def deepagents_models() -> dict[str, Any]:
     return await core.api_deepagents_models()

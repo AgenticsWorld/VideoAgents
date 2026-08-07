@@ -56,6 +56,25 @@ button:disabled{opacity:.5;cursor:default}
 #save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
 #save-status.show{opacity:1}
 .pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+/* ComfyUI 工作流 .md 说明弹窗 */
+#wfdoc-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;padding:24px}
+#wfdoc-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;max-width:780px;width:100%;max-height:85vh;display:flex;flex-direction:column}
+#wfdoc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+#wfdoc-title{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wfdoc-body{padding:16px;overflow:auto;font-size:13px;line-height:1.7}
+#wfdoc-body h1{font-size:17px;margin:8px 0}
+#wfdoc-body h2{font-size:15px;margin:16px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px}
+#wfdoc-body h3{font-size:14px;margin:12px 0 4px}
+#wfdoc-body h4{font-size:13px;margin:10px 0 4px}
+#wfdoc-body p{margin:6px 0}
+#wfdoc-body pre{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;margin:8px 0;font-size:12px;line-height:1.5}
+#wfdoc-body code{background:var(--panel2);border-radius:4px;padding:1px 5px;font-size:12px}
+#wfdoc-body pre code{background:none;padding:0}
+#wfdoc-body ul{margin:6px 0 6px 20px}
+#wfdoc-body table{border-collapse:collapse;margin:8px 0;width:100%}
+#wfdoc-body th,#wfdoc-body td{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
+#wfdoc-body th{background:var(--panel2)}
+#wfdoc-body hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 </style>
 </head>
 <body>
@@ -446,32 +465,142 @@ function buildPanel(kind,p){
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
     sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
     cr.appendChild(sel);d.appendChild(cr);
-    const wr=el('div',{className:'row'});
-    wr.appendChild(el('label',{},'工作流 JSON'));
-    wr.appendChild(el('input',{type:'text',id:`${kind}-comfy-wf`,placeholder:'可选:API 格式工作流文件路径,如 comfy/i2v.json'}));
-    d.appendChild(wr);
-    if(kind==='image'){
-      const rr=el('div',{className:'row'});
-      rr.appendChild(el('label',{},'参考图工作流 JSON'));
-      rr.appendChild(el('input',{type:'text',id:'image-comfy-ref-wf',
-        placeholder:'可选:传 --ref 时使用的 API 工作流路径'}));
-      d.appendChild(rr);
-    }
+    d.appendChild(wfRow(kind,`${kind}-comfy-wf`,'工作流 JSON'));
+    if(kind==='image')d.appendChild(wfRow(kind,'image-comfy-ref-wf','参考图工作流 JSON'));
     d.appendChild(el('div',{className:'hint'},
-      '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint'));
+      '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
+      +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
     if(kind==='music'){
       d.appendChild(el('div',{className:'hint'},
-        '可选模板: <code>comfy/ace-step-v1-music-api.json</code> (ACE-Step 3.5B);'
-        +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长;模型下载见 <code>comfy/AUDIO_MODELS.md</code>'));
+        '推荐 <code>comfy/music-ace-step-v1-api.json</code> (ACE-Step 3.5B);'
+        +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长'));
     }
     if(kind==='tts'){
       d.appendChild(el('div',{className:'hint'},
-        '可选模板: <code>comfy/indextts2-tts-api.json</code> (IndexTTS-2);'
-        +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色;'
-        +'模型下载见 <code>comfy/AUDIO_MODELS.md</code>'));
+        '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
+        +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
     }
   }
   return d;
+}
+
+/* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
+/* comfy/ 目录工作流清单(按文件名前缀 image-/video-/music-/tts- 分类),初始化时拉取 */
+let COMFY_WFS={image:[],video:[],music:[],tts:[]};
+
+function wfRow(kind,id,label){
+  const d=el('div',{className:'row'});
+  d.appendChild(el('label',{},label));
+  const sel=el('select',{id});
+  const custom=el('input',{type:'text',id:`${id}-custom`,
+    placeholder:'自定义工作流路径,如 comfy/my.json',style:'display:none'});
+  sel.onchange=()=>{custom.style.display=sel.value===CUSTOM?'':'none'};
+  d.appendChild(sel);d.appendChild(custom);
+  const db=el('button',{title:'查看同名 .md 说明文档'},'📖');
+  db.onclick=()=>showWfDoc(sel,custom);
+  d.appendChild(db);
+  return d;
+}
+
+function fillWfSelect(id,kind,value){
+  const opts=[['','(留空/不使用)'],
+    ...(COMFY_WFS[kind]||[]).map(w=>[w.path,w.path.replace(/^comfy\//,'')])];
+  fillSelect($('#'+id),opts,value,'');
+}
+
+function pickWf(id){
+  const v=$('#'+id).value;
+  return v===CUSTOM?$(`#${id}-custom`).value.trim():v;
+}
+
+let WFDOC_OVERLAY=null;
+function wfDocModal(){
+  if(WFDOC_OVERLAY)return WFDOC_OVERLAY;
+  const ov=el('div',{id:'wfdoc-overlay'});
+  const box=el('div',{id:'wfdoc-box'});
+  const head=el('div',{id:'wfdoc-head'});
+  head.appendChild(el('div',{id:'wfdoc-title'}));
+  const close=el('button',{},'✕');
+  close.onclick=()=>ov.style.display='none';
+  head.appendChild(close);
+  box.appendChild(head);
+  box.appendChild(el('div',{id:'wfdoc-body'}));
+  ov.appendChild(box);
+  ov.onclick=e=>{if(e.target===ov)ov.style.display='none'};
+  document.body.appendChild(ov);
+  WFDOC_OVERLAY=ov;
+  return ov;
+}
+
+/* 轻量 Markdown 渲染(标题/代码块/表格/列表/链接/行内代码,覆盖 comfy/*.md 用到的语法) */
+function mdRender(md){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline=s=>esc(s)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,txt,u)=>/^https?:/.test(u)
+      ?`<a href="${u}" target="_blank" rel="noopener">${txt}</a>`:txt)
+    .replace(/&lt;(https?:[^&\s]+)&gt;/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const lines=md.split('\n'),out=[];let i=0;
+  while(i<lines.length){
+    const L=lines[i];
+    if(/^```/.test(L)){
+      const buf=[];i++;
+      while(i<lines.length&&!/^```/.test(lines[i]))buf.push(lines[i++]);
+      i++;out.push('<pre><code>'+esc(buf.join('\n'))+'</code></pre>');continue;
+    }
+    const h=L.match(/^(#{1,4})\s+(.*)/);
+    if(h){const n=h[1].length;out.push(`<h${n}>${inline(h[2])}</h${n}>`);i++;continue}
+    if(/^---+\s*$/.test(L)){out.push('<hr>');i++;continue}
+    if(/^\|/.test(L)){
+      const rows=[];
+      while(i<lines.length&&/^\|/.test(lines[i]))rows.push(lines[i++]);
+      let html='<table>',first=true;
+      for(const r of rows){
+        if(/^[\s|:\-]+$/.test(r))continue;  // 表头分隔行
+        const tag=first?'th':'td';first=false;
+        const tds=r.replace(/^\s*\||\|\s*$/g,'').split('|').map(c=>inline(c.trim()));
+        html+='<tr>'+tds.map(c=>`<${tag}>${c}</${tag}>`).join('')+'</tr>';
+      }
+      out.push(html+'</table>');continue;
+    }
+    if(/^[-*]\s+/.test(L)){
+      let html='<ul>';
+      while(i<lines.length&&/^[-*]\s+/.test(lines[i])){
+        let item=lines[i++].replace(/^[-*]\s+/,'');
+        while(i<lines.length&&/^\s+\S/.test(lines[i]))item+=' '+lines[i++].trim();
+        html+='<li>'+inline(item)+'</li>';
+      }
+      out.push(html+'</ul>');continue;
+    }
+    if(!L.trim()){i++;continue}
+    let para=L;i++;
+    while(i<lines.length&&lines[i].trim()&&!/^(#{1,4}\s|```|\||[-*]\s|---)/.test(lines[i]))
+      para+=' '+lines[i++];
+    out.push('<p>'+inline(para)+'</p>');
+  }
+  return out.join('\n');
+}
+
+async function showWfDoc(sel,custom){
+  const path=sel.value===CUSTOM?custom.value.trim():sel.value;
+  const ov=wfDocModal();
+  const title=ov.querySelector('#wfdoc-title'),body=ov.querySelector('#wfdoc-body');
+  ov.style.display='flex';
+  if(!path){
+    title.textContent=t('工作流说明');
+    body.textContent=t('先在下拉列表选择一个工作流');
+    return;
+  }
+  title.textContent=path.replace(/^comfy\//,'');
+  body.textContent=t('加载中…');
+  try{
+    const r=await api('/api/v1/comfy/workflows/doc?name='+encodeURIComponent(path));
+    title.textContent=r.name;
+    body.innerHTML=mdRender(r.markdown);
+  }catch(e){
+    body.textContent=t('未找到该工作流的说明文档')+'('+e.message+')';
+  }
 }
 
 /* ---------- deepagents 语言模型(本地 OpenAI 兼容端点 / OpenRouter) ---------- */
@@ -665,8 +794,8 @@ function loadIntoForm(){
     }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
-      $(`#${kind}-comfy-wf`).value=c.comfyui.workflow||'';
-      if(kind==='image')$('#image-comfy-ref-wf').value=c.comfyui.ref_workflow||'';
+      fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
+      if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
       if(c.comfyui.checkpoint){
         const sel=$(`#${kind}-comfy-ckpt`);
         sel.appendChild(el('option',{value:c.comfyui.checkpoint,textContent:c.comfyui.checkpoint}));
@@ -715,10 +844,10 @@ function collect(){
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
       c.comfyui={url:$(`#${kind}-comfy-url`).value.trim(),
-               workflow:$(`#${kind}-comfy-wf`).value.trim(),
+               workflow:pickWf(`${kind}-comfy-wf`),
                checkpoint:$(`#${kind}-comfy-ckpt`).value,
                ...(kind==='image'?{
-                 ref_workflow:$('#image-comfy-ref-wf').value.trim(),
+                 ref_workflow:pickWf('image-comfy-ref-wf'),
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',
@@ -778,7 +907,12 @@ $('#save').onclick=async()=>{
 /* ---------- 初始化 ---------- */
 (async()=>{
   buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();
-  CFG=await api('/api/v1/config/generation');
+  const [cfg,wfs]=await Promise.all([
+    api('/api/v1/config/generation'),
+    api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),
+  ]);
+  CFG=cfg;
+  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[]},wfs.workflows||{});
   loadIntoForm();
 })();
 </script>

@@ -46,7 +46,7 @@ Python:
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
         省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
-        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/AUDIO_MODELS.md)
+        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
@@ -1222,7 +1222,7 @@ def _music_elevenlabs(cfg, prompt, output, duration_s=None):
 
 # ---------------- 音乐:ComfyUI(本地,推荐 ACE-Step 工作流) ----------------
 # 占位符:PROMPT / LYRICS(默认 [Instrumental]) / DURATION 秒 / SEED
-# 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/ace-step-v1-music-api.json。
+# 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/music-ace-step-v1-api.json。
 
 def _music_comfyui(cfg, prompt, output, duration_s=None):
     base = (cfg.get("url") or "").rstrip("/")
@@ -1230,7 +1230,7 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
         raise RuntimeError("ComfyUI 音乐渠道未配置服务地址(「🎨 生成模型」页 Music → ComfyUI)")
     if not (cfg.get("workflow") or "").strip():
         raise RuntimeError("ComfyUI 音乐生成必须在「🎨 生成模型」页配置工作流 JSON"
-                           "(推荐 comfy/ace-step-v1-music-api.json)")
+                           "(推荐 comfy/music-ace-step-v1-api.json)")
     duration = max(1.0, min(240.0, float(duration_s))) if duration_s and duration_s > 0 else 30.0
     # ACE-Step 纯音乐用 [Instrumental];若配置 force_instrumental=false 且未给歌词,
     # 仍走 instrumental,避免空歌词触发节点 assert。
@@ -1358,7 +1358,7 @@ def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
 # ---------------- TTS:ComfyUI(本地,推荐 IndexTTS-2 工作流) ----------------
 # 占位符:TEXT / REF_AUDIO(参考音频文件名) / SEED / SPEED
 # 默认根据角色内容从 data/TimbreModel 自动选择参考音频;voice 仅保留真实本地文件覆盖。
-# 工作流须以 SaveAudio/SaveAudioMP3 落盘,见 comfy/indextts2-tts-api.json。
+# 工作流须以 SaveAudio/SaveAudioMP3 落盘,见 comfy/tts-indextts2-api.json。
 
 
 def _resolve_tts_reference(cfg, text, output, voice="", character="", variant="",
@@ -1392,7 +1392,7 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
         raise RuntimeError("ComfyUI TTS 渠道未配置服务地址(「🎨 生成模型」页 TTS → ComfyUI)")
     if not (cfg.get("workflow") or "").strip():
         raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
-                           "(推荐 comfy/indextts2-tts-api.json)")
+                           "(推荐 comfy/tts-indextts2-api.json)")
     selection = _resolve_tts_reference(
         cfg, text, output, voice, character, variant, project, instructions)
     ref = selection["path"]
