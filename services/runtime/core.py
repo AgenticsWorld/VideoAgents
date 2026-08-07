@@ -927,6 +927,24 @@ def resource_cfg() -> dict:
     return STATE.get("resources") or {}
 
 
+def _parse_reset_ts(v):
+    """重置时间统一为 epoch 秒:接受 ISO 字符串 / epoch 秒 / epoch 毫秒,解析不了返回 None。
+    小数秒归一为 6 位:kimi 返回 9 位纳秒(如 …13.716839300Z),而 Python 3.10 的
+    fromisoformat 只认 3/6 位,不归一会解析失败。"""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)) and v > 0:
+        return float(v) / 1000 if v > 1e12 else float(v)
+    if isinstance(v, str) and v.strip():
+        s = v.strip().replace("Z", "+00:00")
+        s = re.sub(r"\.(\d+)", lambda m: "." + m.group(1)[:6].ljust(6, "0"), s, count=1)
+        try:
+            return datetime.fromisoformat(s).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def _find_rate_limits(d):
     """在 codex session 事件 JSON 里递归找非空 rate_limits 对象。"""
     if isinstance(d, dict):
@@ -950,15 +968,18 @@ def _codex_usage_full() -> dict:
 
     读数是被动扒 session 文件的,codex 不跑就不会有新读数;若最新读数所在文件
     距今已超 5h(会话窗口必然已滚过),旧百分比只会误导,session 视为过期返回 None。
+    重置时间:窗口对象带 resets_at 直接用;只有 resets_in_seconds 则以事件时间戳
+    (缺失退回文件 mtime)为基准换算,已过期的重置时间不再返回。
     """
-    empty = {"session": None, "weekly": None}
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     try:
         files = sorted(CODEX_SESSIONS_DIR.rglob("*.jsonl"),
                        key=lambda p: p.stat().st_mtime, reverse=True)[:8]
     except OSError:
         return empty
     for f in files:                          # 新→旧,取第一个有读数的文件里最后一条
-        last = None
+        last, last_ts = None, 0.0
         try:
             mtime = f.stat().st_mtime
             with open(f, errors="replace") as fh:
@@ -966,19 +987,29 @@ def _codex_usage_full() -> dict:
                     if '"rate_limits"' not in line:
                         continue
                     try:
-                        rl = _find_rate_limits(json.loads(line))
+                        obj = json.loads(line)
                     except ValueError:
                         continue
+                    rl = _find_rate_limits(obj)
                     if rl and isinstance(rl["primary"].get("used_percent"), (int, float)):
                         last = rl
+                        last_ts = _parse_reset_ts(obj.get("timestamp")) or mtime
         except OSError:
             continue
         if last is not None:
             sec = last.get("secondary") or {}
             weekly = sec.get("used_percent")
             stale = time.time() - mtime > 5 * 3600
+
+            def reset_at(win):
+                at = _parse_reset_ts(win.get("resets_at"))
+                if at is None and isinstance(win.get("resets_in_seconds"), (int, float)):
+                    at = last_ts + float(win["resets_in_seconds"])
+                return at if at and at > time.time() else None
             return {"session": None if stale else float(last["primary"]["used_percent"]),
-                    "weekly": float(weekly) if isinstance(weekly, (int, float)) else None}
+                    "weekly": float(weekly) if isinstance(weekly, (int, float)) else None,
+                    "session_resets_at": None if stale else reset_at(last["primary"]),
+                    "weekly_resets_at": reset_at(sec)}
     return empty
 
 
@@ -1037,9 +1068,27 @@ def claude_probe_enabled() -> bool:
     return CLAUDE_USAGE_PROBE_ENABLED or bool(resource_cfg().get("claude_probe"))
 
 
+def codex_probe_enabled() -> bool:
+    """Codex 用量检查开关(⚙️ 资源消耗 设置);历史无此键时默认开启(保持旧行为)。"""
+    v = resource_cfg().get("codex_probe")
+    return True if v is None else bool(v)
+
+
+def kimi_probe_enabled() -> bool:
+    """KimiCode 用量检查开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key 判定
+    (老配置只填了 Key 没有开关,升级后面板行为不变)。"""
+    cfg = resource_cfg()
+    v = cfg.get("kimi_probe")
+    if v is None:
+        return bool((cfg.get("kimi_api_key") or "").strip())
+    return bool(v)
+
+
 def _claude_usage_full() -> dict:
-    """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;任何异常返回 None。"""
-    empty = {"session": None, "weekly": None}
+    """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;窗口对象自带
+    resets_at(ISO)即重置时间;任何异常返回 None。"""
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     token = _claude_oauth_token()
     if not token:
         return empty
@@ -1051,18 +1100,26 @@ def _claude_usage_full() -> dict:
             "Content-Type": "application/json",
         })
 
-        def pct(win):
-            v = (data.get(win) or {}).get("utilization")
-            return float(v) if isinstance(v, (int, float)) else None
-        return {"session": pct("five_hour"), "weekly": pct("seven_day")}
+        def win(name):
+            d = data.get(name) or {}
+            v = d.get("utilization")
+            return (float(v) if isinstance(v, (int, float)) else None,
+                    _parse_reset_ts(d.get("resets_at")))
+        s, sr = win("five_hour")
+        w, wr = win("seven_day")
+        return {"session": s, "weekly": w,
+                "session_resets_at": sr, "weekly_resets_at": wr}
     except Exception:
         return empty
 
 
 def _kimi_usage_full() -> dict:
     """Kimi Code 官方用量接口:usage=周配额,limits[](300min 窗口)=5h 会话配额。
+    重置时间实测字段名为驼峰 resetTime(ISO 带 9 位小数秒,参考 CodexBar docs/kimi.md),
+    另按常见命名兼容扫描;取不到为 None。
     未配 Key/接口异常返回 None(资源消耗面板显示未知)。"""
-    empty = {"session": None, "weekly": None}
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     key = (resource_cfg().get("kimi_api_key") or "").strip()
     if not key:
         return empty
@@ -1078,21 +1135,36 @@ def _kimi_usage_full() -> dict:
                 return max(0.0, min(100.0, used / limit * 100)) if limit > 0 else None
             except (TypeError, ValueError):
                 return None
-        session = None
+
+        def reset_ts(*dicts):
+            for d in dicts:
+                for k in ("resetTime", "resetAt", "resets_at", "reset_at",
+                          "reset_time", "resets_time", "end_time", "expires_at"):
+                    ts = _parse_reset_ts(d.get(k))
+                    if ts and ts > time.time():
+                        return ts
+            return None
+        session, session_reset = None, None
         for it in data.get("limits") or []:
             detail = it.get("detail") or {}
             if pct(detail) is not None:
                 session = pct(detail)
+                session_reset = reset_ts(detail, it)
                 break
-        return {"session": session, "weekly": pct(data.get("usage") or {})}
+        usage = data.get("usage") or {}
+        return {"session": session, "weekly": pct(usage),
+                "session_resets_at": session_reset,
+                "weekly_resets_at": reset_ts(usage)}
     except Exception:
         return empty
 
 
 def engine_usage_full(engine: str) -> dict:
-    """该引擎 {session: 5h 窗口已用%, weekly: 周窗口已用%};取不到为 None。带 TTL 缓存。"""
+    """该引擎 {session: 5h 窗口已用%, weekly: 周窗口已用%, *_resets_at: 窗口重置
+    epoch 秒};取不到为 None。带 TTL 缓存。"""
     if engine not in _USAGE_TTL:
-        return {"session": None, "weekly": None}
+        return {"session": None, "weekly": None,
+                "session_resets_at": None, "weekly_resets_at": None}
     ts, full = _USAGE_CACHE.get(engine, (0, None))
     if full is not None and time.time() - ts < _USAGE_TTL[engine]:
         return full
@@ -5583,6 +5655,8 @@ async def api_resources_config_get():
     cfg = resource_cfg()
     return {"claude_probe": bool(cfg.get("claude_probe")),
             "claude_probe_env": CLAUDE_USAGE_PROBE_ENABLED,
+            "codex_probe": codex_probe_enabled(),
+            "kimi_probe": kimi_probe_enabled(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
@@ -5593,7 +5667,7 @@ async def api_resources_config_get():
 async def api_resources_config_set(body: dict):
     """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
     cfg = STATE.setdefault("resources", {})
-    for k in ("claude_probe", "volc_enabled"):
+    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled"):
         if body.get(k) is not None:
             cfg[k] = bool(body[k])
     for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
@@ -5608,21 +5682,29 @@ async def api_resources_config_set(body: dict):
 
 
 async def api_resources(fresh: bool = False):
-    """资源消耗面板聚合数据:三引擎 session/weekly 用量 + 已配置渠道的账户余额。
-    全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存强制重测);取不到的读数为 null。"""
+    """资源消耗面板聚合数据:三引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
+    只探测已开启用量检查的引擎,全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存
+    强制重测);取不到的读数为 null。"""
     if fresh:
         _USAGE_CACHE.clear()
         _BALANCE_CACHE.clear()
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
+
+    async def usage(engine, on):
+        return await asyncio.to_thread(engine_usage_full, engine) if on else dict(empty)
+    claude_on, codex_on, kimi_on = (
+        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled())
     cu, co, ki, orb, vb = await asyncio.gather(
-        asyncio.to_thread(engine_usage_full, "claude"),
-        asyncio.to_thread(engine_usage_full, "codex"),
-        asyncio.to_thread(engine_usage_full, "kimi"),
+        usage("claude", claude_on),
+        usage("codex", codex_on),
+        usage("kimi", kimi_on),
         asyncio.to_thread(provider_balance, "openrouter"),
         asyncio.to_thread(provider_balance, "volc"))
     cfg = resource_cfg()
-    return {"claude": {**cu, "enabled": claude_probe_enabled()},
-            "codex": {**co, "enabled": True},
-            "kimi": {**ki, "enabled": bool((cfg.get("kimi_api_key") or "").strip())},
+    return {"claude": {**cu, "enabled": claude_on},
+            "codex": {**co, "enabled": codex_on},
+            "kimi": {**ki, "enabled": kimi_on},
             "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
                            **(orb or {})},
             "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}

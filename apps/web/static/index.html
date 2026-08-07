@@ -89,6 +89,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .res-bar i{display:block;height:100%;border-radius:3px;background:var(--green);transition:width .4s}
 .res-bar i.warn{background:var(--yellow)}
 .res-bar i.hot{background:var(--red)}
+.res-reset{margin:1px 48px 0 60px;font-size:10px;color:var(--dim);line-height:1.3}
 .res-bal{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12.5px;border-top:1px dashed var(--border);padding-top:8px}
 .res-bal .nm{font-weight:600}
 .res-bal .amt{margin-left:auto;color:var(--green);font-variant-numeric:tabular-nums}
@@ -234,7 +235,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
@@ -615,9 +616,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="checkbox" id="res-claude" style="flex:none">
       <span class="note" style="flex:1">开启后经 OAuth 探针读取 Claude Code 会话用量;首次读取需在 macOS 钥匙串弹窗点「始终允许」</span></div>
     <div class="note" id="res-claude-env" style="display:none">已由环境变量 VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 强制开启,此开关不生效</div>
-    <div class="row"><label>Kimi API Key</label>
-      <input type="password" id="res-kimi" placeholder="sk-…(留空则不检查 KimiCode 使用量)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
+    <div class="row"><label>Codex 用量检查</label>
+      <input type="checkbox" id="res-codex" style="flex:none">
+      <span class="note" style="flex:1">开启后从本地 Codex CLI 会话文件读取 5 小时/周窗口用量读数(Codex 跑过才有读数)</span></div>
+    <div class="row"><label>KimiCode 用量检查</label>
+      <input type="checkbox" id="res-kimi-on" style="flex:none">
+      <span class="note" style="flex:1">开启后用下方 API Key 查询 KimiCode 会话/周用量</span></div>
+    <div class="row res-kimi-row"><label>Kimi API Key</label>
+      <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
+    <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
     <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
@@ -1296,6 +1303,8 @@ $('#mem-ok').onclick=async()=>{
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
 function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll('.res-volc-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-volc').onchange=resVolcRows;
+function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-kimi-on').onchange=resKimiRows;
 async function openResModal(){
   $('#res-err').textContent='';
   try{
@@ -1303,13 +1312,15 @@ async function openResModal(){
     $('#res-claude').checked=!!(c.claude_probe||c.claude_probe_env);
     $('#res-claude').disabled=!!c.claude_probe_env;    // env 强制开启时开关只读
     $('#res-claude-env').style.display=c.claude_probe_env?'':'none';
+    $('#res-codex').checked=!!c.codex_probe;
+    $('#res-kimi-on').checked=!!c.kimi_probe;
     $('#res-kimi').value=c.kimi_api_key||'';
     $('#res-or').value=c.openrouter_key||'';
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
     $('#res-volc-sk').value=c.volc_sk||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();
+  resVolcRows();resKimiRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1317,9 +1328,13 @@ $('#res-cancel').onclick=()=>$('#res-modal').style.display='none';
 $('#res-ok').onclick=async()=>{
   if($('#res-volc').checked&&!($('#res-volc-ak').value.trim()&&$('#res-volc-sk').value.trim())){
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
+  if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
+    $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
   try{
     await api('/api/v1/resources/config',{
       claude_probe:$('#res-claude').checked,
+      codex_probe:$('#res-codex').checked,
+      kimi_probe:$('#res-kimi-on').checked,
       kimi_api_key:$('#res-kimi').value.trim(),
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
@@ -1391,25 +1406,35 @@ $('#plug-file').onchange=async()=>{
   }catch(e){$('#plug-err').textContent=t('安装失败:')+e.message}
 };
 
-// 右栏资源消耗面板:三引擎 Session/Weekly 用量进度条 + 已配置渠道账户余额
-function resLine(label,v){
+// 右栏资源消耗面板:三引擎 Session/Weekly 用量进度条(下缀窗口重置时间)+ 已配置渠道账户余额
+function fmtReset(ts){                      // epoch 秒 → 「4h 15m 后重置」;取不到/已过期不显示
+  if(typeof ts!=='number')return '';
+  const s=(ts*1000-Date.now())/1000;
+  if(s<=0)return '';
+  const d=Math.floor(s/86400),hh=Math.floor(s%86400/3600),mm=Math.floor(s%3600/60);
+  const txt=d>0?`${d}d ${hh}h`:hh>0?`${hh}h ${mm}m`:`${mm}m`;
+  return I18N.f(t('{t} 后重置'),{t:txt});
+}
+function resLine(label,v,resetTs){
   const known=typeof v==='number';
   const w=known?Math.max(0,Math.min(100,v)):0;
   const cls=w>=85?'hot':w>=60?'warn':'';
-  return `<div class="res-line"><span class="lb">${label}</span><div class="res-bar"><i class="${cls}" style="width:${w}%"></i></div><span class="pct">${known?Math.round(v)+'%':t('未知')}</span></div>`;
+  const reset=fmtReset(resetTs);
+  return `<div class="res-line"><span class="lb">${label}</span><div class="res-bar"><i class="${cls}" style="width:${w}%"></i></div><span class="pct">${known?Math.round(v)+'%':t('未知')}</span></div>`
+    +(reset?`<div class="res-reset">${reset}</div>`:'');
 }
 async function renderResources(fresh){
   const box=$('#resources');
   let r;
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
-  const HINTS={kimi:'未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key'};
   let h='';
   for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
     const e=r[k]||{};
-    if(k==='claude'&&!e.enabled)continue;   // Claude 用量检查未开启则整行不显示(⚙️ 设置 → 资源消耗 开启后回来)
-    h+=`<div class="res-eng"><span class="nm">${label}</span>${e.enabled?'':`<span class="hint" title="${esc(t(HINTS[k]||''))}">${t('未开启')}</span>`}${resLine('Session',e.session)}${resLine('Weekly',e.weekly)}</div>`;
+    if(!e.enabled)continue;                 // 用量检查未开启则整段不显示(⚙️ 设置 → 资源消耗 开启后回来)
+    h+=`<div class="res-eng"><span class="nm">${label}</span>${resLine('Session',e.session,e.session_resets_at)}${resLine('Weekly',e.weekly,e.weekly_resets_at)}</div>`;
   }
+  if(!h)h=`<div class="empty" style="font-size:11.5px">${t('未开启任何用量检查:在 ⚙️ 设置 → 资源消耗 开启')}</div>`;
   const bal=(name,b,sym)=>{
     const known=typeof b.balance==='number';
     return `<div class="res-bal"><span class="nm">${name}</span><span class="amt${known?'':' unknown'}">${known?sym+b.balance.toFixed(2):t('未知')}</span></div>`;
