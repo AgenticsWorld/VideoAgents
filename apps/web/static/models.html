@@ -284,7 +284,7 @@ const PROVIDER_META={
   volcengine:{label:'火山引擎'},
   byteplus:{label:'BytePlus'},
   minimax:{label:'MiniMax'},
-  comfyui:{label:'ComfyUI(本地)'},
+  comfyui:{label:'ComfyUI'},
   elevenlabs:{label:'ElevenLabs'},
 };
 const SECTIONS={
@@ -540,13 +540,21 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint'},
       intro+'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
-    const ur=el('div',{className:'row'});
-    ur.appendChild(el('label',{},'服务地址'));
-    ur.appendChild(el('input',{type:'text',id:`${kind}-comfy-url`,placeholder:'http://127.0.0.1:8188'}));
+    // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构)
+    const mr=el('div',{className:'row'});
+    mr.appendChild(el('label',{},'运行方式'));
+    const msel=el('select',{id:`${kind}-comfy-mode`});
+    [['local','本地'],['cloud','云端(Comfy Cloud)']].forEach(([v,l])=>
+      msel.appendChild(el('option',{value:v,textContent:t(l)})));
+    msel.onchange=()=>comfyModeUI(kind);
+    mr.appendChild(msel);
     const tb=el('button',{},'测试连接');
     tb.onclick=async()=>{
       const st=$(`#${kind}-comfy-status`);st.className='status';st.textContent='连接中…';
-      const r=await api('/api/v1/providers/comfyui/test',{url:$(`#${kind}-comfy-url`).value.trim()}).catch(e=>({ok:false,error:e.message}));
+      const r=await api('/api/v1/providers/comfyui/test',{
+        mode:$(`#${kind}-comfy-mode`).value,
+        url:$(`#${kind}-comfy-url`).value.trim(),
+        api_key:$(`#${kind}-comfy-cloudkey`).value.trim()}).catch(e=>({ok:false,error:e.message}));
       if(r.ok){
         st.className='status ok';
         st.textContent=I18N.f('✓ 已连接({v})· {n} 个 checkpoint',
@@ -557,18 +565,29 @@ function buildPanel(kind,p){
         if(cur)sel.value=cur;
       }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
     };
-    ur.appendChild(tb);d.appendChild(ur);
+    mr.appendChild(tb);d.appendChild(mr);
+    const ur=el('div',{className:'row',id:`${kind}-comfy-url-row`});
+    ur.appendChild(el('label',{},'服务地址'));
+    ur.appendChild(el('input',{type:'text',id:`${kind}-comfy-url`,placeholder:'http://127.0.0.1:8188'}));
+    d.appendChild(ur);
+    const kr=keyRow(`${kind}-comfy-cloudkey`,'Comfy Cloud API Key');
+    kr.id=`${kind}-comfy-cloudkey-row`;kr.style.display='none';
+    d.appendChild(kr);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
     const cr=el('div',{className:'row'});
     cr.appendChild(el('label',{},'Checkpoint'));
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
     sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
     cr.appendChild(sel);d.appendChild(cr);
-    d.appendChild(wfRow(kind,`${kind}-comfy-wf`,'工作流 JSON'));
-    if(kind==='image')d.appendChild(wfRow(kind,'image-comfy-ref-wf','参考图工作流 JSON'));
-    d.appendChild(el('div',{className:'hint'},
+    d.appendChild(wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图工作流':'工作流 JSON'));
+    if(kind==='image')d.appendChild(wfRow(kind,'image-comfy-ref-wf','图生图工作流'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},
       '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
       +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-cloud`,style:'display:none'},
+      '工作流在 <a href="https://cloud.comfy.org/" target="_blank">Comfy Cloud</a> 官方云端执行,无需本地部署;'
+      +'API Key 在 <a href="https://platform.comfy.org" target="_blank">platform.comfy.org</a> 创建(需 Comfy Cloud 订阅,与网页版共用月度额度,免费档无 API 权限);'
+      +'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准'));
     if(kind==='music'){
       d.appendChild(el('div',{className:'hint'},
         '推荐 <code>comfy/music-ace-step-v1-api.json</code> (ACE-Step 3.5B);'
@@ -581,6 +600,15 @@ function buildPanel(kind,p){
     }
   }
   return d;
+}
+
+/* ComfyUI 运行方式切换:本地=服务地址,云端=Comfy Cloud API Key,提示随之切换 */
+function comfyModeUI(kind){
+  const cloud=$(`#${kind}-comfy-mode`).value==='cloud';
+  $(`#${kind}-comfy-url-row`).style.display=cloud?'none':'';
+  $(`#${kind}-comfy-cloudkey-row`).style.display=cloud?'':'none';
+  $(`#${kind}-comfy-hint-local`).style.display=cloud?'none':'';
+  $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -950,6 +978,9 @@ function loadIntoForm(){
       if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
+      $(`#${kind}-comfy-mode`).value=c.comfyui.mode==='cloud'?'cloud':'local';
+      $(`#${kind}-comfy-cloudkey`).value=c.comfyui.cloud_api_key||'';
+      comfyModeUI(kind);
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
       fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
       if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
@@ -1003,7 +1034,9 @@ function collect(){
     const c={openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
-      c.comfyui={url:$(`#${kind}-comfy-url`).value.trim(),
+      c.comfyui={mode:$(`#${kind}-comfy-mode`).value,
+               cloud_api_key:$(`#${kind}-comfy-cloudkey`).value.trim(),
+               url:$(`#${kind}-comfy-url`).value.trim(),
                workflow:pickWf(`${kind}-comfy-wf`),
                checkpoint:$(`#${kind}-comfy-ckpt`).value,
                ...(kind==='image'?{

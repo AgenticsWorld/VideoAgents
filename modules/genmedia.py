@@ -40,20 +40,20 @@ Python:
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
-        / comfyui(本地)
+        / comfyui(本地或 Comfy Cloud 云端)
   视频: openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
-        / comfyui(本地,需配置 API 格式工作流 JSON)
+        / comfyui(本地/云端,需配置 API 格式工作流 JSON)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
         省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
-        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
+        / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
@@ -63,7 +63,7 @@ Python:
         可在「生成模型」页拉取音色库选择)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
         可在「生成模型」页从 Voice Library 搜索并一键加入账号)
-        / comfyui(本地,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
+        / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
         根据角色设定从 data/TimbreModel 自动选择参考音频)
 
   minimax 各能力共用「接口区域」配置(api_base):海外版 api.minimax.io 与
@@ -478,7 +478,29 @@ def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
 
 # ---------------- ComfyUI 通用 ----------------
 
-def _comfy_upload(base: str, path: str) -> str:
+# Comfy Cloud(官方云端):与本地 ComfyUI 同构 API(/prompt /history /queue /view
+# /upload/image /object_info 均在 /api 前缀下),X-API-Key 单头鉴权。
+COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
+
+
+def _comfy_endpoint(cfg) -> tuple[str, dict]:
+    """ComfyUI 渠道生效端点:mode=cloud 固定 Comfy Cloud,否则用配置的本地 url。
+
+    返回 (base, headers);headers 须随该渠道全部 HTTP 请求发送。
+    """
+    if (cfg.get("mode") or "local") == "cloud":
+        key = (cfg.get("cloud_api_key") or "").strip()
+        if not key:
+            raise RuntimeError("ComfyUI 云端(Comfy Cloud)未配置 API Key:"
+                               "请在「🎨 生成模型」页 ComfyUI 渠道选「云端」并填写")
+        return COMFY_CLOUD_URL, {"X-API-Key": key}
+    base = (cfg.get("url") or "").rstrip("/")
+    if not base:
+        raise RuntimeError("ComfyUI 渠道未配置服务地址(「🎨 生成模型」页 ComfyUI 渠道)")
+    return base, {}
+
+
+def _comfy_upload(base: str, path: str, headers: dict | None = None) -> str:
     """上传输入文件到 ComfyUI input 目录,返回服务器端文件名(图/音频通用)。"""
     p = Path(path)
     if not p.is_file():
@@ -491,7 +513,8 @@ def _comfy_upload(base: str, path: str) -> str:
         + (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue"
            f"\r\n--{boundary}--\r\n").encode()
     resp = json.loads(_request(base + "/upload/image", body,
-                               {"Content-Type": f"multipart/form-data; boundary={boundary}"}))
+                               {"Content-Type": f"multipart/form-data; boundary={boundary}",
+                                **(headers or {})}))
     return resp["name"]
 
 
@@ -598,10 +621,11 @@ def _is_h3_ref2va_workflow(cfg: dict) -> bool:
                for node in workflow.values())
 
 
-def _comfy_h3_validate_components(base: str, settings: dict) -> None:
+def _comfy_h3_validate_components(base: str, settings: dict,
+                                  headers: dict | None = None) -> None:
     """Fail before upload when the selected H3 component files are not installed."""
-    unet_info = _get_json(f"{base}/object_info/UNETLoader")
-    clip_info = _get_json(f"{base}/object_info/CLIPLoader")
+    unet_info = _get_json(f"{base}/object_info/UNETLoader", headers)
+    clip_info = _get_json(f"{base}/object_info/CLIPLoader", headers)
     try:
         unets = set(unet_info["UNETLoader"]["input"]["required"]["unet_name"][0])
         text_encoders = set(clip_info["CLIPLoader"]["input"]["required"]["clip_name"][0])
@@ -715,7 +739,8 @@ def _comfy_queue_contains(queue: dict, prompt_id: str) -> bool:
     return False
 
 
-def _comfy_run(base: str, workflow: dict, output: str, want_video: bool) -> str:
+def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
+               headers: dict | None = None) -> str:
     """提交工作流,轮询完成,下载首个产物到 output。
 
     want_video=True 优先选视频扩展名;want_video=False 时若 output 是音频扩展名
@@ -725,7 +750,8 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool) -> str:
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     try:
-        resp = _post_json(base + "/prompt", {"prompt": workflow, "client_id": uuid.uuid4().hex})
+        resp = _post_json(base + "/prompt", {"prompt": workflow, "client_id": uuid.uuid4().hex},
+                          headers)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise RuntimeError(f"ComfyUI 服务不可达，未能提交任务:{base}") from exc
     pid = resp.get("prompt_id")
@@ -737,14 +763,14 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool) -> str:
     while time.time() < deadline:
         time.sleep(2)
         try:
-            hist = _get_json(f"{base}/history/{pid}").get(pid)
+            hist = _get_json(f"{base}/history/{pid}", headers).get(pid)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(
                 f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
             ) from exc
         if not hist:
             try:
-                queue = _get_json(f"{base}/queue")
+                queue = _get_json(f"{base}/queue", headers)
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 raise RuntimeError(
                     f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
@@ -787,7 +813,8 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool) -> str:
             q = urllib.parse.urlencode({"filename": pick["filename"],
                                         "subfolder": pick.get("subfolder", ""),
                                         "type": pick.get("type", "output")})
-            return _save(_request(f"{base}/view?{q}", timeout=300), output)
+            # Comfy Cloud 的 /view 返回 302 → 签名 URL,urllib 自动跟随
+            return _save(_request(f"{base}/view?{q}", headers=headers, timeout=300), output)
         if status.get("completed"):
             need = ("SaveAudio/SaveAudioMP3" if want_audio
                     else "SaveVideo" if want_video else "SaveImage/SaveVideo")
@@ -863,7 +890,7 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
 
 
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
-    base = cfg["url"].rstrip("/")
+    base, hdrs = _comfy_endpoint(cfg)
     negative_mode = cfg.get("negative_mode") or "conditioning"
     if negative and negative_mode == "append_exclusions":
         prompt = f"{prompt}\nExclude from the image: {negative}"
@@ -880,10 +907,10 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
         ref_workflow = (cfg.get("ref_workflow") or "").strip()
         if not ref_workflow:
             raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
-        tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0])
+        tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
         workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
-    return _comfy_run(base, wf, output, want_video=False)
+    return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
 # ---------------- 视频:OpenRouter ----------------
@@ -1359,7 +1386,7 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
                    video_refs=None):
-    base = cfg["url"].rstrip("/")
+    base, hdrs = _comfy_endpoint(cfg)
     h3 = _is_h3_ref2va_workflow(cfg)
     if h3:
         if first or last or video_refs:
@@ -1368,7 +1395,7 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
-        _comfy_h3_validate_components(base, settings)
+        _comfy_h3_validate_components(base, settings, hdrs)
         prompt = _h3_reference_tags(prompt)
         width, height = _h3_dimensions(aspect, resolution)
         tokens = {
@@ -1381,9 +1408,9 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
             "H3_STEPS": settings["steps"], "H3_REF_IMAGE_SIZE": settings["ref_image_size"],
         }
         wf = _comfy_workflow(cfg, tokens, "video")
-        _add_h3_references(wf, [_comfy_upload(base, path) for path in refs or []],
-                           [_comfy_upload(base, path) for path in audio_refs or []])
-        saved = _comfy_run(base, wf, output, want_video=True)
+        _add_h3_references(wf, [_comfy_upload(base, path, hdrs) for path in refs or []],
+                           [_comfy_upload(base, path, hdrs) for path in audio_refs or []])
+        saved = _comfy_run(base, wf, output, want_video=True, headers=hdrs)
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
@@ -1395,11 +1422,11 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
     if aspect in ASPECT_SIZES:
         tokens["WIDTH"], tokens["HEIGHT"] = ASPECT_SIZES[aspect]
     if first:
-        tokens["FIRST_FRAME"] = _comfy_upload(base, first)
+        tokens["FIRST_FRAME"] = _comfy_upload(base, first, hdrs)
     if last:
-        tokens["LAST_FRAME"] = _comfy_upload(base, last)
+        tokens["LAST_FRAME"] = _comfy_upload(base, last, hdrs)
     wf = _comfy_workflow(cfg, tokens, "video")
-    return _comfy_run(base, wf, output, want_video=True)
+    return _comfy_run(base, wf, output, want_video=True, headers=hdrs)
 
 
 # ---------------- 音乐:OpenRouter(Lyria 3 系列) ----------------
@@ -1507,9 +1534,7 @@ def _music_minimax(cfg, prompt, output, duration_s=None):
 # 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/music-ace-step-v1-api.json。
 
 def _music_comfyui(cfg, prompt, output, duration_s=None):
-    base = (cfg.get("url") or "").rstrip("/")
-    if not base:
-        raise RuntimeError("ComfyUI 音乐渠道未配置服务地址(「🎨 生成模型」页 Music → ComfyUI)")
+    base, hdrs = _comfy_endpoint(cfg)
     if not (cfg.get("workflow") or "").strip():
         raise RuntimeError("ComfyUI 音乐生成必须在「🎨 生成模型」页配置工作流 JSON"
                            "(推荐 comfy/music-ace-step-v1-api.json)")
@@ -1524,7 +1549,7 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
         "SEED": random.randint(0, 2**31 - 1),
     }
     wf = _comfy_workflow(cfg, tokens, "music")
-    return _comfy_run(base, wf, output, want_video=False)
+    return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
 # ---------------- TTS 旁白:OpenRouter(/api/v1/audio/speech) ----------------
@@ -1699,9 +1724,7 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
 
 def _tts_comfyui(cfg, text, output, voice, speed, instructions,
                  character="", variant="", project=""):
-    base = (cfg.get("url") or "").rstrip("/")
-    if not base:
-        raise RuntimeError("ComfyUI TTS 渠道未配置服务地址(「🎨 生成模型」页 TTS → ComfyUI)")
+    base, hdrs = _comfy_endpoint(cfg)
     if not (cfg.get("workflow") or "").strip():
         raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
                            "(推荐 comfy/tts-indextts2-api.json)")
@@ -1714,7 +1737,7 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
     if instructions:
         print("[genmedia] ComfyUI TTS 不支持 instructions 参数,已忽略"
               "(情绪请用工作流内 Emotion 节点或改 prompt 文本)", file=sys.stderr)
-    ref_audio = _comfy_upload(base, ref)
+    ref_audio = _comfy_upload(base, ref, hdrs)
     tokens = {
         "TEXT": text,
         "PROMPT": text,  # 兼容把文本写在 PROMPT 位的工作流
@@ -1725,7 +1748,7 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
     }
     wf = _comfy_workflow(cfg, tokens, "tts")
     try:
-        return _comfy_run(base, wf, output, want_video=False)
+        return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
     except RuntimeError as exc:
         raise RuntimeError(
             "ComfyUI TTS 后端执行失败"

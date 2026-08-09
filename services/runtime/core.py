@@ -472,7 +472,8 @@ DEFAULT_GENCONFIG = {
         # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
         "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
                     "model": "image-01", "custom_model": ""},
-        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "",
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": ""},
     },
     "video": {
@@ -486,7 +487,8 @@ DEFAULT_GENCONFIG = {
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
         "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
                     "model": "MiniMax-H3", "custom_model": ""},
-        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "", "checkpoint": ""},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -500,7 +502,7 @@ DEFAULT_GENCONFIG = {
                     "model": "music-3.0", "custom_model": "",
                     "force_instrumental": True},
         # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
-        "comfyui": {"url": "http://127.0.0.1:8188",
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]"},
     },
@@ -520,7 +522,7 @@ DEFAULT_GENCONFIG = {
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
                        "custom_model": "", "voice": ""},
         # ComfyUI:本地 TTS,按角色内容自动选本地参考音频;工作流由用户选择。
-        "comfyui": {"url": "http://127.0.0.1:8188",
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json"},
@@ -4294,19 +4296,38 @@ async def api_test_deepagents(body: dict):
             "models": sorted(m.get("id") for m in data.get("data", []) if m.get("id"))}
 
 
+COMFY_CLOUD_API = "https://cloud.comfy.org/api"
+
+
 async def api_test_comfyui(body: dict):
-    """测试 ComfyUI 连接，并检查关键自定义节点是否可见。"""
-    url = (body.get("url") or "").strip().rstrip("/")
-    if not re.match(r"^https?://", url):
-        raise ServiceError(400, "url must start with http(s)://")
+    """测试 ComfyUI 连接(本地或 Comfy Cloud 云端),并检查关键自定义节点是否可见。"""
+    cloud = (body.get("mode") or "local").strip() == "cloud"
+    if cloud:
+        key = (body.get("api_key") or "").strip()
+        if not key:
+            return {"ok": False, "error": "Comfy Cloud API Key 未填写"}
+        url = COMFY_CLOUD_API
+        headers = {"X-API-Key": key}
+    else:
+        url = (body.get("url") or "").strip().rstrip("/")
+        if not re.match(r"^https?://", url):
+            raise ServiceError(400, "url must start with http(s)://")
+        headers = None
     try:
-        stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", None, 6)
+        stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", headers, 6)
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        if not cloud:
+            return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        # Comfy Cloud 未必提供 /system_stats,退回 /queue 验证连通与鉴权
+        try:
+            await asyncio.to_thread(_http_get_json, url + "/queue", headers, 8)
+            stats = {}
+        except Exception as e2:  # noqa: BLE001
+            return {"ok": False, "error": f"Connection failed: {str(e2)[:200]}"}
     checkpoints = []
     try:
         info = await asyncio.to_thread(
-            _http_get_json, url + "/object_info/CheckpointLoaderSimple", None, 6)
+            _http_get_json, url + "/object_info/CheckpointLoaderSimple", headers, 6)
         req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
         ckpt = req.get("ckpt_name") or [[]]
         if isinstance(ckpt[0], list):
@@ -4317,13 +4338,14 @@ async def api_test_comfyui(body: dict):
     for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
         try:
             info = await asyncio.to_thread(
-                _http_get_json, url + "/object_info/" + node_type, None, 6)
+                _http_get_json, url + "/object_info/" + node_type, headers, 6)
             custom_nodes[node_type] = bool(info.get(node_type))
         except Exception:  # noqa: BLE001
             custom_nodes[node_type] = False
     sysinfo = (stats.get("system") or {})
     return {"ok": True,
-            "version": sysinfo.get("comfyui_version") or sysinfo.get("os") or "unknown",
+            "version": sysinfo.get("comfyui_version") or sysinfo.get("os")
+                       or ("Comfy Cloud" if cloud else "unknown"),
             "devices": [d.get("name") for d in stats.get("devices") or []],
             "checkpoints": checkpoints, "custom_nodes": custom_nodes,
             "ace_step_ready": all(custom_nodes.get(n) for n in
