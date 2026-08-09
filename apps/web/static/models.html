@@ -439,7 +439,7 @@ function buildPanel(kind,p){
     d.appendChild(modelRow('music-el-model','music-el-custom'));
     const ir=el('div',{className:'row'});
     ir.appendChild(el('label',{},''));
-    const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer'});
+    const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer;width:auto'});
     const cb=el('input',{type:'checkbox',id:'music-el-instr'});
     lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
     ir.appendChild(lb);d.appendChild(ir);
@@ -515,7 +515,7 @@ function buildPanel(kind,p){
     if(kind==='music'){
       const ir=el('div',{className:'row'});
       ir.appendChild(el('label',{},''));
-      const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer'});
+      const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer;width:auto'});
       const cb=el('input',{type:'checkbox',id:'music-mm-instr'});
       lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
       ir.appendChild(lb);d.appendChild(ir);
