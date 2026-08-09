@@ -45,8 +45,9 @@ main{flex:1;display:flex;min-height:0}
 #flow{flex:1;overflow:auto;padding:16px 20px 60px}
 #canvas{position:relative;min-width:600px}
 #edges{position:absolute;inset:0;pointer-events:none;overflow:visible}
-/* 图例 */
-#legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--dim);font-size:11.5px;margin-bottom:12px}
+/* 图例:与汇总条一样固定在滚动区外,始终可见 */
+#legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--dim);font-size:11.5px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+#legend:empty{display:none}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
 /* 阶段泳道 */
 .phase{border:1px solid var(--border);border-radius:12px;margin:0 0 18px;background:var(--panel)}
@@ -119,6 +120,7 @@ dl.kv>dd{min-width:0;word-break:break-all}
   <button id="reload">刷新</button>
 </header>
 <div id="summary"></div>
+<div id="legend"></div>
 <main>
   <div id="flow"><div id="canvas"><div class="empty">加载中…</div></div></div>
   <div id="detail"></div>
@@ -149,6 +151,7 @@ function fmtDur(s){
   return (s/3600).toFixed(1)+'h';
 }
 const fmtCost=c=>!c?'':'$'+(c>=10?c.toFixed(1):c.toFixed(2));   // 0/缺失都不显示(会话日志过期后查不到费用属正常)
+const fmtM=v=>v==null?'—':(v/1e6).toFixed(4)+'M';               // token 数按百万(M)为单位,保留 4 位小数
 
 /* 单节点显示状态(叠加"等待签字"派生态:human 节点依赖全通过但未签) */
 function nodeState(n,doneSet){
@@ -288,10 +291,10 @@ function render(){
         <span class="prog">${done}/${exec.length}</span><span class="est">${esc(est)}</span></h3>
       <div class="ph-body">${rows.map(r=>`<div class="lvl">${r.map(chipHtml).join('')}</div>`).join('')}</div></div>`;
   }
-  $('#canvas').innerHTML=`<svg id="edges"></svg><div id="legend">${
-    ['done','running','dispatched','waitsign','pending','partial','failed','blocked','skipped','template']
+  $('#legend').innerHTML=['done','running','dispatched','waitsign','pending','partial','failed','blocked','skipped','template']
     .map(s=>`<span><span class="dot" style="background:${SCOLOR[s]}"></span>${t(SLABEL[s])}</span>`).join('')
-  }<span>✍️=${t('需签字')} · ✔=${t('实际')} · ≈=${t('预估')}</span></div>`+h
+    +`<span>✍️=${t('需签字')} · ✔=${t('实际')} · ≈=${t('预估')}</span>`;
+  $('#canvas').innerHTML=`<svg id="edges"></svg>`+h
     +(order.length?'':`<div class="empty">${t('该项目还没有 runs/dag.json(尚未立项)')}</div>`);
   renderSummary();
   requestAnimationFrame(drawEdges);
@@ -314,6 +317,9 @@ function renderSummary(){
     +(blocked?`<span class="st" style="color:var(--orange)">⛔ <b>${blocked}</b> ${t('受阻')}</span>`:'')
     +signs.map(m=>`<span class="sig" data-key="${esc(m.family)}" title="${esc(m.id)}">✍️ ${esc(m.checkpoint||m.id)}</span>`).join('')
     +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.spent_cost_usd)||''}</b></span></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗视频tokens')} <b>${fmtM(s.video_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗图片tokens')} <b>${fmtM(s.image_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
     +`<span class="st" title="${esc(t('按历史均值预估;仅 LLM 会话成本,不含生成侧 API 计费'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.remaining_est_cost_usd)||''}</b></span> (${s.remaining_count} ${t('个任务')})</span>`
     +`<span class="st" title="${esc(t('剩余任务沿依赖链的最长估时(并行推进下的理论最短完成时间)'))}">${t('关键路径:')}<b>${fmtDur(s.critical_path_s)||'—'}</b></span>`
     +`<button class="editbtn" id="wfEdit" title="${esc(t('对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)'))}">✏️ ${esc(t('修改'))}</button>`;
@@ -415,10 +421,10 @@ async function load(){
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/workflow');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     DATA=await r.json();
-  }catch(e){$('#canvas').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`;$('#summary').innerHTML='';return}
+  }catch(e){$('#canvas').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`;$('#summary').innerHTML='';$('#legend').innerHTML='';return}
   if(!DATA.nodes.length){
     $('#canvas').innerHTML=`<div class="empty">${t('该项目还没有 runs/dag.json(尚未立项)')}</div>`;
-    $('#summary').innerHTML='';return;
+    $('#summary').innerHTML='';$('#legend').innerHTML='';return;
   }
   render();renderDetail();
 }

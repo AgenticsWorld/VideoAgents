@@ -406,6 +406,7 @@ def _ark_base(cfg) -> str:
 
 
 def _image_ark(cfg, prompt, negative, refs, width, height, seed):
+    """返回 (图像字节, usage dict);usage 供调用方落台账,响应无 usage 时为空 dict。"""
     text = prompt + (f"\n避免出现:{negative}" if negative else "")
     body = {"model": cfg["model"], "prompt": text,
             "size": f"{width}x{height}",
@@ -420,10 +421,11 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     data = resp.get("data") or []
     if not data:
         raise RuntimeError(f"方舟未返回图像:{json.dumps(resp, ensure_ascii=False)[:400]}")
+    usage = resp.get("usage") if isinstance(resp.get("usage"), dict) else {}
     if data[0].get("b64_json"):
-        return base64.b64decode(data[0]["b64_json"])
+        return base64.b64decode(data[0]["b64_json"]), usage
     if data[0].get("url"):
-        return _request(data[0]["url"], timeout=300)
+        return _request(data[0]["url"], timeout=300), usage
     raise RuntimeError(f"方舟返回格式异常:{json.dumps(data[0])[:400]}")
 
 
@@ -1117,11 +1119,31 @@ def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None) ->
     return ""
 
 
+def _record_image_usage(output, cfg, usage, width, height):
+    """图像生成成功后把接口返回的 usage 追加到输出目录 usage_ledger.jsonl(镜像
+    _record_video_usage 的台账机制,kind=image 供工作流预览按图/视频分桶统计)。
+    方舟图像 usage 无 completion_tokens,以 output_tokens 对齐口径。
+    落盘失败只告警不中断:图像本体已保存,计费记录不应影响产出。"""
+    rec = {"file": Path(output).name, "kind": "image",
+           "provider": cfg.get("provider"), "model": cfg.get("model"),
+           "size": f"{width}x{height}",
+           "completion_tokens": usage.get("output_tokens"),
+           "total_tokens": usage.get("total_tokens"),
+           "generated_images": usage.get("generated_images"),
+           "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    try:
+        ledger = Path(output).parent / "usage_ledger.jsonl"
+        with open(ledger, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[genmedia] usage 台账写入失败(不影响产出):{e}", file=sys.stderr)
+
+
 def _record_video_usage(output, task_id, cfg, usage, resolution, duration):
     """成功生成后把方舟查询接口返回的 usage 落盘,双写:
     ① 同名 .meta.json 的 usage 字段(合并写,已有内容保留;下游 agent 重写 meta 时应保留该字段)
     ② 输出目录 usage_ledger.jsonl 追加一行累计台账——重roll/覆盖/删档都不丢历史,
-       是分集 token 消耗统计(API videos preview)的权威数据源。
+       是项目级 token 消耗统计(工作流预览 API workflow preview)的权威数据源。
     落盘失败只告警不中断:视频本体已保存,计费记录不应影响产出。"""
     rec = {"file": Path(output).name, "task_id": task_id,
            "provider": cfg.get("provider"), "model": cfg.get("model"),
@@ -1730,7 +1752,11 @@ def generate_image(prompt: str, output: str, negative: str = "",
     if cfg["provider"] == "ideogram":
         return _save(_image_ideogram(cfg, prompt, negative, refs, width, height, seed), output)
     if cfg["provider"] in ("volcengine", "byteplus"):
-        return _save(_image_ark(cfg, prompt, negative, refs, width, height, seed), output)
+        data, usage = _image_ark(cfg, prompt, negative, refs, width, height, seed)
+        saved = _save(data, output)
+        if usage.get("output_tokens") or usage.get("total_tokens"):
+            _record_image_usage(output, cfg, usage, width, height)
+        return saved
     if cfg["provider"] == "minimax":
         return _save(_image_minimax(cfg, prompt, negative, refs, width, height, seed), output)
     return _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output)

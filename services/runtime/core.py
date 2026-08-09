@@ -3127,40 +3127,64 @@ async def api_preview_storyboard(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_storyboard, project, ep)
 
 
-def _ep_video_tokens(base, ep: str):
-    """该集视频模型 token 累计消耗。权威来源是 assets/clips/<ep>/usage_ledger.jsonl
-    (genmedia 每次成功生成追加一行,含重roll,覆盖/删档不丢);台账未覆盖的组再补
-    meta.json 里的 usage.completion_tokens(避免与台账重复:按文件名去重)。
-    无任何记录返回 None(历史生成未落 usage,前端显示 —)。"""
-    cdir = base / "assets" / "clips" / ep
-    if not cdir.is_dir():
-        return None
-    total, in_ledger, found = 0, set(), False
-    ledger = cdir / "usage_ledger.jsonl"
-    if ledger.is_file():
+def _project_media_tokens(base: Path):
+    """项目级生成侧 token 累计消耗,返回 (video_tokens, image_tokens)。权威来源是
+    项目内所有 usage_ledger.jsonl(genmedia 每次成功生成追加一行,含重roll/探针/
+    候选,覆盖/删档不丢);台账未覆盖的成片再补 assets/clips/*/ meta.json 里的
+    usage.completion_tokens(按同目录文件名去重)。候选晋级后同一次生成可能同时
+    出现在 runs/ 台账与 clips meta,按 task_id 全局去重防止重复计数。
+    图片/视频按台账 kind 字段或文件后缀分桶;无任何记录的桶返回 None(前端显示 —)。"""
+    vid = img = 0
+    vfound = ifound = False
+    seen_tasks: set[str] = set()
+    ledger_files: dict[Path, set[str]] = {}
+    for ledger in base.rglob("usage_ledger.jsonl"):
         try:
             lines = ledger.read_text(encoding="utf-8").splitlines()
         except Exception:
-            lines = []
+            continue
+        names = ledger_files.setdefault(ledger.parent, set())
         for ln in lines:
             try:
                 rec = json.loads(ln)
             except Exception:
                 continue
-            in_ledger.add(str(rec.get("file") or ""))
+            names.add(str(rec.get("file") or ""))
+            tid = str(rec.get("task_id") or "")
+            if tid:
+                if tid in seen_tasks:
+                    continue
+                seen_tasks.add(tid)
             t = rec.get("completion_tokens") or rec.get("total_tokens")
-            if isinstance(t, (int, float)):
-                total += int(t)
-                found = True
-    for mf in cdir.glob("*.meta.json"):
-        if mf.name[:-len(".meta.json")] + ".mp4" in in_ledger:
-            continue
-        u = (_read_json_safe(mf) or {}).get("usage") or {}
-        t = u.get("completion_tokens")
-        if isinstance(t, (int, float)):
-            total += int(t)
-            found = True
-    return total if found else None
+            if not isinstance(t, (int, float)):
+                continue
+            ext = Path(str(rec.get("file") or "")).suffix.lower()
+            if rec.get("kind") == "image" or ext in IMG_EXTS:
+                img += int(t)
+                ifound = True
+            else:
+                vid += int(t)
+                vfound = True
+    clips = base / "assets" / "clips"
+    if clips.is_dir():
+        for cdir in clips.iterdir():
+            if not cdir.is_dir():
+                continue
+            names = ledger_files.get(cdir, set())
+            for mf in cdir.glob("*.meta.json"):
+                if mf.name[:-len(".meta.json")] + ".mp4" in names:
+                    continue
+                u = (_read_json_safe(mf) or {}).get("usage") or {}
+                tid = str(u.get("task_id") or "")
+                if tid and tid in seen_tasks:
+                    continue
+                t = u.get("completion_tokens")
+                if isinstance(t, (int, float)):
+                    if tid:
+                        seen_tasks.add(tid)
+                    vid += int(t)
+                    vfound = True
+    return (vid if vfound else None), (img if ifound else None)
 
 
 _LLM_INDEX_LOCK = threading.Lock()
@@ -3277,16 +3301,16 @@ def _llm_usage_index() -> dict:
         return cache
 
 
-def _ep_llm_tokens(project: str, ep: str):
-    """该集语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
-    派单记录(run_id→工单文本)归集。工单文本提到多集时 token 均分到各集(避免重复
-    计数);未提到任何 epNN 的全局任务(bible/世界观/角色等)不归入任何一集。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。"""
+def _project_llm_tokens(project: str):
+    """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
+    派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。
+    无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
         return None
     idx = _llm_usage_index()
-    total, found = 0.0, False
+    run_ids = set()
     for cf in cdir.glob("*.jsonl"):
         try:
             lines = cf.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -3297,17 +3321,15 @@ def _ep_llm_tokens(project: str, ep: str):
                 r = json.loads(ln)
             except Exception:
                 continue
-            if r.get("role") != "user" or not r.get("run_id"):
-                continue
-            eps = set(re.findall(r"ep\d+", str(r.get("text") or "").lower()))
-            if ep not in eps:
-                continue
-            u = idx.get(str(r["run_id"]))
-            if not u:
-                continue
-            total += (u.get("in", 0) + u.get("out", 0)) / len(eps)
+            if r.get("role") == "user" and r.get("run_id"):
+                run_ids.add(str(r["run_id"]))
+    total, found = 0, False
+    for rid in run_ids:
+        u = idx.get(rid)
+        if u:
+            total += u.get("in", 0) + u.get("out", 0)
             found = True
-    return int(total) if found else None
+    return total if found else None
 
 
 def _ep_publish_info(base: Path, ep: str):
@@ -3400,8 +3422,6 @@ def _preview_videos(project: str, ep: str):
     if not ep:
         return data
     ep = re.sub(r"[^\w\-]", "", ep)
-    data["video_tokens"] = _ep_video_tokens(base, ep)
-    data["llm_tokens"] = _ep_llm_tokens(project, ep)
     edir = base / "edit" / ep
 
     def _files(match: tuple, exts: tuple) -> list[dict]:
@@ -3637,10 +3657,14 @@ def _preview_workflow(project: str):
         return memo[nid]
 
     critical_s = max((_cp(r["id"], frozenset()) for r in remaining), default=0.0)
+    video_tok, image_tok = _project_media_tokens(base)
     summary = {
         "total": len(nodes),
         "spent_duration_s": round(sum(r["duration_s"] or 0 for r in nodes)),
         "spent_cost_usd": round(sum(r["cost_usd"] or 0 for r in nodes), 2),
+        "video_tokens": video_tok,
+        "image_tokens": image_tok,
+        "llm_tokens": _project_llm_tokens(project),
         "remaining_count": len(remaining),
         "remaining_est_duration_s": round(sum(r.get("est_duration_s") or 0
                                               for r in remaining)),

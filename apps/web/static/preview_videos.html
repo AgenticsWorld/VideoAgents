@@ -215,10 +215,8 @@ function render(d){
   // 只看本集 = 工单标注了当前集;通用工单 = 未从 defect_id/task_id/artifact 识别出任何 epNN
   const shown=SHOW_GENERIC?defects.filter(x=>!(x.eps||[]).length)
     :defects.filter(x=>(x.eps||[]).includes(d.ep));
-  const vtok=d.video_tokens==null?'—':Number(d.video_tokens).toLocaleString('en-US');
-  const ltok=d.llm_tokens==null?'—':Number(d.llm_tokens).toLocaleString('en-US');
   const epTitle=((d.episodes||[]).find(e=>e.ep===d.ep)||{}).title||'';
-  let h=`<h2 class="title">${esc(d.ep)}${epTitle?' '+esc(epTitle):''}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}',{f:finals.length,t:thumbs.length,d:defects.length,vt:vtok,lt:ltok}))}</span></h2>`;
+  let h=`<h2 class="title">${esc(d.ep)}${epTitle?' '+esc(epTitle):''}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d}',{f:finals.length,t:thumbs.length,d:defects.length}))}</span></h2>`;
 
   h+=`<h3 class="sec">▶ 成片视频(final)<span class="n">${esc(I18N.f('{n} 个 · edit/{ep}/',{n:finals.length,ep:d.ep}))}</span></h3>`;
   h+=finals.length?`<div class="vids">${finals.map(f=>
