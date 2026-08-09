@@ -20,8 +20,10 @@ import re
 import shutil
 import subprocess
 
-MIN_GROUP_S = 4          # Seedance 2.0 硬下限
-MAX_GROUP_S = 14         # 硬上限 15,留 1s 给模型 ±1s 交付公差
+MIN_GROUP_S = 4          # Seedance 2.x 硬下限
+MAX_GROUP_S = 14         # 默认硬上限 15(Seedance 2.0)留 1s 交付公差;项目「分镜组设置」
+                         # max_group_s 调高时(如 Seedance 2.5 最高 30),调用方应传
+                         # max_s=max_group_s-1 覆盖(check_av_sync 已按项目设置读取)
 FPS = 24                 # 仓库画布 fps(edit 机检口径)
 FRAME_S = 1.0 / FPS
 

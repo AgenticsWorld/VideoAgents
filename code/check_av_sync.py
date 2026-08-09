@@ -64,12 +64,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args                                   # noqa: E402
 
 import avsync                                                    # noqa: E402
-from avsync import (FRAME_S, MAX_GROUP_S, MIN_GROUP_S, canonical_sha256,
+from avsync import (FRAME_S, MIN_GROUP_S, canonical_sha256,
                     file_sha256)
 
 STAGES = ("timeline", "clips", "final")
 DUR_TOL_S = 0.10             # 成片总长容差
-HARD_MAX_GROUP_S = 15        # Seedance 2.0 绝对上限(check_generation_groups 同口径)
+HARD_MAX_GROUP_S = 15        # 默认=Seedance 2.0 绝对上限(check_generation_groups 同口径);
+                             # 实际以项目「分镜组设置」shot_group.max_group_s 为准(main 里读取)
+
+
+def project_max_group_s(proj: Path) -> int:
+    """项目「分镜组设置」的生成组时长上限(settings.json shot_group.max_group_s,
+    4-30;读不到回落 HARD_MAX_GROUP_S=15 的 Seedance 2.0 口径)。"""
+    try:
+        st = json.loads((proj / "settings.json").read_text())
+        v = int(round(float((st.get("shot_group") or {})["max_group_s"])))
+        return v if 4 <= v <= 30 else HARD_MAX_GROUP_S
+    except Exception:
+        return HARD_MAX_GROUP_S
 
 
 def audio_map_fingerprint(am: dict) -> str:
@@ -104,6 +116,8 @@ def main():
 
     args, proj = parse_args(__doc__, configure=configure)
     ep = args.ep
+    hard_max = project_max_group_s(proj)   # 项目「分镜组设置」组时长上限(回落 15)
+    span_max = hard_max - 1                # 留 1s 交付公差(与 avsync.MAX_GROUP_S=14 同理)
     checks: list[tuple[str, bool]] = []
 
     def check(name: str, ok: bool, detail: str = ""):
@@ -187,8 +201,8 @@ def main():
         spans.append(span)
         if abs((float(a_out) - float(a_in)) - span) > 1e-6:
             bad_range.append(f"{gid}(av_span_s {span} ≠ audio_out−audio_in {float(a_out) - float(a_in):g})")
-        if not (MIN_GROUP_S - 1e-9 <= span <= MAX_GROUP_S + 1e-9):
-            bad_range.append(f"{gid}(span {span} ∉ [{MIN_GROUP_S},{MAX_GROUP_S}])")
+        if not (MIN_GROUP_S - 1e-9 <= span <= span_max + 1e-9):
+            bad_range.append(f"{gid}(span {span} ∉ [{MIN_GROUP_S},{span_max}])")
         is_last = (gi == len(groups) - 1)
         if not is_last and abs(span - round(span)) > 1e-6:
             bad_range.append(f"{gid}(非末组 span {span} 非整数秒)")
@@ -196,8 +210,8 @@ def main():
         td = g.get("total_duration_s")
         if not isinstance(td, int) or isinstance(td, bool):
             bad_int.append(f"{gid}(total_duration_s={td!r} 非整数)")
-        elif not (MIN_GROUP_S <= td <= HARD_MAX_GROUP_S):
-            bad_int.append(f"{gid}(total_duration_s {td} ∉ [{MIN_GROUP_S},{HARD_MAX_GROUP_S}])")
+        elif not (MIN_GROUP_S <= td <= hard_max):
+            bad_int.append(f"{gid}(total_duration_s {td} ∉ [{MIN_GROUP_S},{hard_max}])")
         else:
             real = sum(float(shots_by_id[sid]["duration_s"])
                        for sid in (g.get("shots") or []) if sid in shots_by_id)
@@ -212,7 +226,7 @@ def main():
           f"Σspan {cover:.3f}s vs 母带 {total}s(容差 1 帧 {FRAME_S:.4f}s)"
           + ("" if ok_cover else " —— 画面未精确铺满音频,必然出现漂移或黑屏"))
     check("span_in_range", not bad_range, "; ".join(bad_range) or
-          f"全部 {len(spans)} 组 span ∈[{MIN_GROUP_S},{MAX_GROUP_S}],非末组均整数秒")
+          f"全部 {len(spans)} 组 span ∈[{MIN_GROUP_S},{span_max}],非末组均整数秒")
     check("duration_int_consistent", not bad_int, "; ".join(bad_int) or
           "全部组 total_duration_s 为整数且与 Σ子镜头一致")
 

@@ -34,7 +34,8 @@ import re
 import sys
 from pathlib import Path
 
-MAX_GROUP_S = 15
+MAX_GROUP_S = 15              # 默认=Seedance 2.0 单次生成上限;实际以项目「分镜组设置」
+                              # settings.json 的 shot_group.max_group_s 为准(main 里覆盖,4-30)
 MIN_GROUP_S = 4
 MAX_CHARS = 4
 WINDOW_FACTOR = 1.15          # §7D ①:窗口 ≥ est_duration_s×1.15
@@ -42,6 +43,17 @@ AUDIO_PLANS = ("dialogue", "narration_over", "ambient_only")
 # narration.md 条目头:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]
 NARR_ITEM_RE = re.compile(
     r"^\[(N-\d+)\s*\|\s*anchor:\s*[^|\]]+\|\s*est_duration_s:\s*([\d.]+)", re.M)
+
+
+def project_max_group_s(shot_list_path: Path) -> int:
+    """项目「分镜组设置」的生成组时长上限:directing/epNN/shot_list.json →
+    项目根 settings.json 的 shot_group.max_group_s;读不到回落 15(Seedance 2.0 口径)。"""
+    try:
+        st = json.loads((shot_list_path.resolve().parents[2] / "settings.json").read_text())
+        v = int(round(float((st.get("shot_group") or {})["max_group_s"])))
+        return v if 4 <= v <= 30 else 15
+    except Exception:
+        return 15
 
 
 def derive_narration_path(shot_list_path: Path) -> Path | None:
@@ -235,6 +247,8 @@ def main():
 
     path = Path(args.shot_list)
     data = json.loads(path.read_text())
+    global MAX_GROUP_S
+    MAX_GROUP_S = project_max_group_s(path)
 
     if args.propose:
         groups = propose_groups(data.get("shots") or [])

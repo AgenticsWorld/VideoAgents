@@ -395,7 +395,8 @@ def _closest_aspect(width: int, height: int) -> str:
 # ---------------- 图像:方舟同构渠道(火山引擎 / BytePlus,Seedream 系列) ----------------
 
 # volcengine=火山方舟国内区;byteplus=字节海外 ModelArk(ap-southeast-1),两者 API 同构,
-# 仅域名与模型 ID 前缀不同(doubao-seedream-* vs seedream-*/dreamina-seedance-*)
+# 仅域名与模型 ID 前缀不同(doubao-seedream-* vs seedream-*/dreamina-seedance-*;
+# Seedance 2.5 为 doubao-seedance-2-5-260628 vs dreamina-seedance-2-5-260628)
 ARK_API_BASES = {"volcengine": "https://ark.cn-beijing.volces.com/api/v3",
                  "byteplus": "https://ark.ap-southeast.bytepluses.com/api/v3"}
 
@@ -923,10 +924,18 @@ def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, se
 
 # ---------------- 视频:方舟同构渠道(火山引擎 / BytePlus,Seedance 系列) ----------------
 
-MAX_VIDEO_REFS = 9        # 方舟 reference_image 上限
-MAX_AUDIO_REFS = 3        # 方舟 reference_audio 上限
+MAX_VIDEO_REFS = 9        # 方舟 reference_image 上限(Seedance 2.0 系列)
+MAX_AUDIO_REFS = 3        # 方舟 reference_audio 上限(Seedance 2.0 系列)
 MAX_AUDIO_TOTAL_S = 15.2  # 方舟 r2v reference_audio 总时长硬限(超限任务创建即 400 InvalidParameter;
                           # 实证:tothemoon 2026-07-20 两段 ~12s 样本合计 24.1s 被拒——voiceprint 规格 ≤5s/段,§8A)
+# Seedance 2.5(doubao-seedance-2-5-* / dreamina-seedance-2-5-*)放宽后的上限
+# (官方教程 docs.volcengine.com/docs/82379/2607688:30图+10视频+10音频,
+#  参考音/视频总时长各 ≤30s,单段 [2,30]s;时长 [4,30] 或 -1;分辨率仅 480p/720p)
+V25_MAX_VIDEO_REFS = 30
+V25_MAX_AUDIO_REFS = 10
+V25_MAX_AUDIO_TOTAL_S = 30.2
+V25_MAX_VIDEOIN_REFS = 10
+V25_MAX_VIDEOIN_TOTAL_S = 30.2
 
 
 def _audio_duration_s(path: str) -> float | None:
@@ -939,12 +948,28 @@ def _audio_duration_s(path: str) -> float | None:
         return float(out.stdout.strip())
     except Exception:
         return None
-MAX_VIDEOIN_REFS = 3      # 方舟 reference_video 上限(单个 2-15s,总时长 ≤15s)
+MAX_VIDEOIN_REFS = 3      # 方舟 reference_video 上限(Seedance 2.0:单个 2-15s,总时长 ≤15s)
 MAX_VIDEOIN_BYTES = 45 * 1024 * 1024  # 参考视频 data URL 内联上限(base64 膨胀后仍须 <64MB 请求体)
 
 
+def _seedance_gen(model: str) -> float:
+    """Seedance 主版本号:2.5 / 2.0(其余 2.x 按 2.0 口径)/ 0(1.x 或非 Seedance)。
+    大小写不敏感,并兼容 seedance-2.5 点号写法(容错自定义 model id)。"""
+    m = (model or "").lower()
+    if "seedance-2-5" in m or "seedance-2.5" in m:
+        return 2.5
+    return 2.0 if "seedance-2" in m else 0.0
+
+
 def _is_seedance2(model: str) -> bool:
-    return "seedance-2" in (model or "")
+    return _seedance_gen(model) >= 2.0
+
+
+# Seedance 2.5 任务类型触发词(官方文档口径):视频编辑/视频延长任务对 ratio(仅
+# adaptive)与 duration(编辑仅 -1)有硬约束,违规异步报错 TaskTypeConstraint。
+# 意图最终由模型判定,此处仅作提交前的保守预警/参数修正,不拦截。
+_V25_EDIT_RE = re.compile(r"编辑视频|删除|去掉|删掉|修改|替换|改成|增加|加上")
+_V25_EXTEND_RE = re.compile(r"向前延长|向后延长|延续|续写")
 
 
 def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
@@ -954,51 +979,89 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。"""
     to_url = to_url or _file_to_data_url
     video_to_url = video_to_url or to_url
-    is_v2 = _is_seedance2(cfg["model"])
+    gen = _seedance_gen(cfg["model"])
+    is_v2 = gen >= 2.0
+    is_v25 = gen >= 2.5
+    # 按模型代际取参考素材上限(2.5 全面放宽:30图/10视频/10音频,总时长各 ≤30s)
+    max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
+    max_arefs = V25_MAX_AUDIO_REFS if is_v25 else MAX_AUDIO_REFS
+    max_atotal = V25_MAX_AUDIO_TOTAL_S if is_v25 else MAX_AUDIO_TOTAL_S
+    max_vrefs = V25_MAX_VIDEOIN_REFS if is_v25 else MAX_VIDEOIN_REFS
+    ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
     if refs and (first or last):
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
-    if refs and len(refs) > MAX_VIDEO_REFS:
-        raise RuntimeError(f"参考图最多 {MAX_VIDEO_REFS} 张,收到 {len(refs)}")
-    if audio_refs and len(audio_refs) > MAX_AUDIO_REFS:
-        raise RuntimeError(f"参考音频最多 {MAX_AUDIO_REFS} 段,收到 {len(audio_refs)}")
+    if refs and len(refs) > max_refs:
+        raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)}")
+    if audio_refs and len(audio_refs) > max_arefs:
+        raise RuntimeError(f"参考音频最多 {max_arefs} 段({ver_name}),收到 {len(audio_refs)}")
     if audio_refs:
-        # audioref_total_le_15s 前置机检(§7A):总时长超限方舟必拒,提交前拦下并给出修法
+        # 参考音频总时长前置机检(§7A audioref_total_le_15s;2.5 放宽至 30s):
+        # 总时长超限方舟必拒,提交前拦下并给出修法
         durs = [_audio_duration_s(p) for p in audio_refs]
         if any(d is None for d in durs):
             print("[genmedia] 无法实测参考音频时长(ffprobe 不可用?),"
-                  f"跳过 audioref_total_le_15s 预检(方舟硬限总时长 {MAX_AUDIO_TOTAL_S}s)",
+                  f"跳过总时长预检(方舟硬限总时长 {max_atotal}s)",
                   file=sys.stderr)
-        elif sum(durs) > MAX_AUDIO_TOTAL_S:
+        elif sum(durs) > max_atotal:
             detail = "、".join(f"{Path(p).name}={d:.1f}s"
                                for p, d in zip(audio_refs, durs))
             raise RuntimeError(
-                f"参考音频总时长 {sum(durs):.1f}s 超过方舟硬限 {MAX_AUDIO_TOTAL_S}s"
-                f"(audioref_total_le_15s,§7A):{detail}。"
+                f"参考音频总时长 {sum(durs):.1f}s 超过方舟硬限 {max_atotal}s"
+                f"({ver_name};§7A):{detail}。"
                 "请截短样本后重试(voiceprint 规格 ≤5s/段,§8A;可用 "
                 "ffmpeg -i in.mp3 -t 4.9 -c copy out.mp3 截断)")
     if video_refs:
         if not is_v2:
-            raise RuntimeError("参考视频(--ref-video,V2V 编辑/延长)仅 Seedance 2.0 系列支持")
+            raise RuntimeError("参考视频(--ref-video,V2V 编辑/延长)仅 Seedance 2.x 系列支持")
         if first or last:
             raise RuntimeError("参考视频(--ref-video)与首帧/尾帧是互斥模式,不能同时传")
-        if len(video_refs) > MAX_VIDEOIN_REFS:
-            raise RuntimeError(f"参考视频最多 {MAX_VIDEOIN_REFS} 个,收到 {len(video_refs)}")
+        if len(video_refs) > max_vrefs:
+            raise RuntimeError(f"参考视频最多 {max_vrefs} 个({ver_name}),收到 {len(video_refs)}")
         for v in video_refs:
             p = Path(v)
             if p.is_file() and p.stat().st_size > MAX_VIDEOIN_BYTES:
                 raise RuntimeError(f"参考视频 {v} 超过 {MAX_VIDEOIN_BYTES // 1024 // 1024}MB"
                                    "(方舟参考视频单文件上限),请先压缩")
+        # 参考视频总时长预检(2.0 ≤15s / 2.5 ≤30s;ffprobe 不可用则跳过交方舟拒绝)
+        vmax = V25_MAX_VIDEOIN_TOTAL_S if is_v25 else 15.2
+        vdurs = [_audio_duration_s(str(v)) for v in video_refs
+                 if Path(str(v)).is_file()]
+        if len(vdurs) == len(video_refs) and all(d is not None for d in vdurs) \
+                and sum(vdurs) > vmax:
+            raise RuntimeError(
+                f"参考视频总时长 {sum(vdurs):.1f}s 超过方舟硬限 {vmax}s({ver_name}),请先截短")
+    # Seedance 2.5 特殊任务约束(官方文档:违规将异步报错 TaskTypeConstraint):
+    # 首帧/首尾帧任务 ratio 仅支持 adaptive → 自动改写;编辑/延长意图仅预警不拦截
+    if is_v25 and aspect and aspect != "adaptive":
+        if first or last:
+            print(f"[genmedia] Seedance 2.5 首帧/首尾帧任务仅支持 ratio=adaptive"
+                  f"(输出自动与首帧图同比),已忽略 --aspect {aspect}", file=sys.stderr)
+            aspect = "adaptive"
+        elif video_refs and (_V25_EDIT_RE.search(prompt) or _V25_EXTEND_RE.search(prompt)):
+            print(f"[genmedia] Seedance 2.5 视频编辑/延长任务仅支持 ratio=adaptive"
+                  f"(输出自动与输入视频同比),已忽略 --aspect {aspect}", file=sys.stderr)
+            aspect = "adaptive"
+    if is_v25 and video_refs and _V25_EDIT_RE.search(prompt) \
+            and duration is not None and duration != -1:
+        print(f"[genmedia] 提示词疑似视频编辑任务:Seedance 2.5 编辑任务 duration 仅支持 -1"
+              f"(自动与输入视频等长),当前 --duration {duration:g} 若被判定为编辑将异步报错",
+              file=sys.stderr)
+    if is_v25 and resolution and resolution not in ("480p", "720p"):
+        print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
+              file=sys.stderr)
+        resolution = "720p"
     text = prompt
     if resolution:
         text += f" --resolution {resolution}"
     if duration:
         if is_v2:
-            # Seedance 2.0 只收 [4,15] 整数或 -1(模型自定时长)
+            # Seedance 2.x 只收整数秒或 -1(模型自定时长):2.0 为 [4,15],2.5 为 [4,30]
+            dmax = 30 if is_v25 else 15
             d = int(round(duration))
             if d != duration:
-                print(f"[genmedia] Seedance 2.0 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
-            if d != -1 and not 4 <= d <= 15:
-                raise RuntimeError(f"Seedance 2.0 时长须在 [4,15] 秒或 -1,收到 {d}")
+                print(f"[genmedia] {ver_name} 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
+            if d != -1 and not 4 <= d <= dmax:
+                raise RuntimeError(f"{ver_name} 时长须在 [4,{dmax}] 秒或 -1,收到 {d}")
             text += f" --dur {d}"
         else:
             text += f" --dur {duration:g}"
@@ -1006,7 +1069,7 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         text += f" --ratio {aspect}"
     if seed is not None:
         if is_v2:
-            print("[genmedia] Seedance 2.0 不支持 seed,已忽略", file=sys.stderr)
+            print(f"[genmedia] {ver_name} 不支持 seed,已忽略", file=sys.stderr)
         else:
             text += f" --seed {seed}"
     content = [{"type": "text", "text": text}]
@@ -1708,14 +1771,18 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    video_refs: list[str] | None = None) -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
-    refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.0
+    refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
     多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)渠道支持;refs 与
     first/last_frame 互斥。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
     return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
-    video_refs 为 V2V 编辑/延长模式(Seedance 2.0):传待修改/待延长的原视频
-    (≤3 个,单个 2-15s 且总时长 ≤15s),prompt 用「视频n/图片n」序号引用素材,
-    典型用法是局部穿帮修复(定向修改,其余画面保持不变);与 first/last_frame 互斥。
+    video_refs 为 V2V 编辑/延长模式(Seedance 2.x):传待修改/待延长的原视频
+    (2.0:≤3 个,单个 2-15s 且总时长 ≤15s;2.5:≤10 个,单个 2-30s 且总时长
+    ≤30s),prompt 用「视频n/图片n」序号引用素材,典型用法是局部穿帮修复
+    (定向修改,其余画面保持不变);与 first/last_frame 互斥。
+    Seedance 2.5(doubao-seedance-2-5-* / dreamina-seedance-2-5-*)差异:时长上限
+    30s、参考素材 30图+10视频+10音频、分辨率仅 480p/720p(越档自动压 720p)、
+    支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
     cfg = get_config("video")
@@ -1926,19 +1993,23 @@ def main():
     pv.add_argument("--first-frame", default="", help="首帧图路径(图生视频)")
     pv.add_argument("--last-frame", default="", help="尾帧图路径")
     pv.add_argument("--duration", type=float, default=None,
-                    help="时长(秒);Seedance 2.0 为 [4,15] 整数或 -1(模型自定)")
+                    help="时长(秒);Seedance 2.0 为 [4,15] 整数或 -1(模型自定),"
+                         "Seedance 2.5 为 [4,30] 整数或 -1(单段最长 30s 直出)")
     pv.add_argument("--resolution", default="", help="如 720p / 1080p")
     pv.add_argument("--aspect", default="", help="画幅,如 16:9")
     pv.add_argument("--seed", type=int, default=None)
     pv.add_argument("--ref-video", nargs="+", default=None,
-                    help="参考视频路径(≤3 个;V2V 编辑/延长,Seedance 2.0 专用,"
+                    help="参考视频路径(2.0 ≤3 个/总时长≤15s,2.5 ≤10 个/总时长≤30s;"
+                         "V2V 编辑/延长,Seedance 2.x 专用,"
                          "prompt 用「视频n」序号引用;与首尾帧互斥)")
     pv.add_argument("--ref", nargs="+", default=None,
-                    help="参考图路径(可多张,≤9;多模态参考/多镜头组模式,与首尾帧互斥)")
+                    help="参考图路径(可多张,2.0 ≤9 / 2.5 ≤30;"
+                         "多模态参考/多镜头组模式,与首尾帧互斥)")
     pv.add_argument("--audio-ref", nargs="+", default=None,
-                    help="参考音频路径(≤3 段,总时长 ≤15s;如角色 TTS 音色样本)")
+                    help="参考音频路径(2.0 ≤3 段/总时长≤15s,2.5 ≤10 段/总时长≤30s;"
+                         "如角色 TTS 音色样本)")
     pv.add_argument("--generate-audio", choices=["on", "off", ""], default="",
-                    help="原生音频开关(Seedance 2.0;缺省沿用模型默认 on)")
+                    help="原生音频开关(Seedance 2.x;缺省沿用模型默认 on)")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")

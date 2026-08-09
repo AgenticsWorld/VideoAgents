@@ -553,6 +553,12 @@ DEFAULT_GENCONFIG = {
     },
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
+    # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
+    # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
+    # 10视频/10音频),默认值按 2.0 的保守口径;注入 Agent 系统提示词约束分组与
+    # prompt 组装,模型侧硬限另由 genmedia 按 model id 强制校验
+    "shot_group": {"max_group_s": 15, "max_ref_images": 9,
+                   "max_ref_videos": 1, "max_ref_audios": 2},
     # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
@@ -632,7 +638,8 @@ OUTPUT_PLATFORMS = {
 }
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
-# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持,方舟 API 取小写)
+# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
+# genmedia 越档自动压回;方舟 API 取小写)
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 
 
@@ -723,7 +730,8 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
-PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging", "versioning")
+PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
+                         "packaging", "versioning")
 
 
 def project_settings_path(project: str) -> Path:
@@ -748,6 +756,19 @@ def _validate_duration(d: dict):
         assert ep > 0 and 0 < mn <= mx
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid duration settings: episode duration must be > 0; shot duration must satisfy 0 < min <= max") from None
+
+
+def _validate_shot_group(g: dict):
+    """分镜组设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
+    try:
+        gs = float(g.get("max_group_s", 15))
+        ni = int(g.get("max_ref_images", 9))
+        nv = int(g.get("max_ref_videos", 1))
+        na = int(g.get("max_ref_audios", 2))
+        assert 4 <= gs <= 30 and 0 <= ni <= 30 and 0 <= nv <= 10 and 0 <= na <= 10
+    except (TypeError, ValueError, AssertionError):
+        raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
+                                "max_ref_images 0-30; max_ref_videos 0-10; max_ref_audios 0-10") from None
 
 
 def _validate_output(o: dict):
@@ -1447,6 +1468,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
     shot_min = _fmt_num(dur.get("shot_min_s") or 4)
     shot_max = _fmt_num(dur.get("shot_max_s") or 8)
+    sg = ps.get("shot_group") or {}
+    sg_max = _fmt_num(sg.get("max_group_s") or 15)
+    sg_img = int(sg.get("max_ref_images", 9))
+    sg_vid = int(sg.get("max_ref_videos", 1))
+    sg_aud = int(sg.get("max_ref_audios", 2))
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -1464,7 +1490,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、节奏(pacing)、剪辑(edit)一律以此为基准
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
-- 生成组(generation group)总时长上限:15 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤15s(Seedance 2.0 单次生成上限,见 WORKFLOW.md §7A)
+- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
+- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -2351,7 +2378,17 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-MAX_SKETCH_REFS = 9   # 方舟多参考图上限
+MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「分镜组设置」调整)
+
+
+def max_group_ref_images(project: str) -> int:
+    """每组参考图数量上限:项目「分镜组设置」max_ref_images(Seedance 2.5 最高 30),
+    读不到回落 MAX_SKETCH_REFS=9(Seedance 2.0 口径)。"""
+    try:
+        sg = load_project_settings(project).get("shot_group") or {}
+        return max(0, min(30, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
+    except Exception:
+        return MAX_SKETCH_REFS
 
 
 SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
@@ -2448,8 +2485,9 @@ async def api_draw_submit(token: str, body: dict):
     if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
         raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
     pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
-    if len(pd.get("refs") or []) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    ref_cap = max_group_ref_images(project)
+    if len(pd.get("refs") or []) >= ref_cap:
+        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
@@ -2552,14 +2590,16 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
-    """向组 prompt 的 refs 追加一张参考图(共用 MAX_SKETCH_REFS=9 的方舟多参考图上限);
-    返回追加后的 refs 数量。"""
+    """向组 prompt 的 refs 追加一张参考图(上限=项目「分镜组设置」max_ref_images,
+    回落 MAX_SKETCH_REFS=9 的方舟 Seedance 2.0 口径);返回追加后的 refs 数量。"""
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
     if ref in refs:
         raise ServiceError(400, "This image is already in the group's refs")
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    # pf = <project>/assets/prompts/<ep>/<grp>.json → parents[3] 即项目根
+    ref_cap = max_group_ref_images(pf.parents[3].name)
+    if len(refs) >= ref_cap:
+        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
     refs.append(ref)
     d.setdefault("notes", []).append(
         f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
@@ -3879,6 +3919,7 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
+                       "shot_group": "分镜组设置",
                        "review": "审核设置", "packaging": "片头片尾",
                        "versioning": "版本管理"}
 
@@ -3890,6 +3931,7 @@ async def api_projconfig_set(body: dict):
                  {k: v for k, v in (body or {}).items()
                   if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg.get("duration") or {})
+    _validate_shot_group(cfg.get("shot_group") or {})
     _validate_output(cfg.get("output") or {})
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
@@ -4563,6 +4605,7 @@ async def api_projects_create(body: dict):
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
+    _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])
     _validate_review(cfg["review"])
     _validate_packaging(cfg["packaging"])

@@ -16,7 +16,7 @@
 5. **上下文按需组装**:Agent 不读全库。Context Package 分两级(2026-08-01,教训:每单必调 context Agent 一次约 4 分钟,shixibook 310 张工单调了 395 次):**full 包**由 `context` Agent 裁剪(该任务需要的 Bible 片段 + 上游产物 + 缺陷历史),仅限三类工单——① `attempt > 1` 重做单(必须附上次失败原因与 evaluation 逐条意见);② 需**跨文件摘要裁剪**的工单——所需上下文**无法用明确文件路径清单表达**、必须摘要/裁剪进 token 预算时才算;「创作类/涉及设定」本身不是升 full 的理由,所需 Bible 与上游文件能以明确路径列进 `inputs` 的(执行 Agent 直读当前受控版),一律 inline(2026-08-02 教训:衍生小说链 52 单全按「创作类需裁剪」升 full,白名单形同虚设);③ 需聚合缺陷历史的工单(qa/defects 存在与该产物/该 Agent 相关的 open 缺陷)。其余工单走 **inline 轻量包**:orchestrator 派单时把输入文件路径清单 + 硬约束直接写进工单 `instruction`/`inputs`,`context_package: inline`,不调用 context Agent。**打包防重复**:同一工单已有未过期 `context.md` 时禁止重新打包,重打仅限 attempt 递增或 inputs 实质变更,且优先增量更新而非整包重建;章节/镜头/场景级扇出任务若确需 full,共享一份批次底包(如 `runs/<批次>-base/context.md`),逐实例只补该实例的增量,禁止逐实例复制同质全量包(2026-08-02 教训:nv3 二十三章草稿同刻各打一份近似全量包)。
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
-8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
+8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤项目「分镜组设置」的组时长上限,整数秒;默认 15s=Seedance 2.0 单次生成上限,仅当视频模型为 Seedance 2.5 且用户调高该设置时最高 30s——本文档余下部分出现的 15s 组上限示例值均指该设置的默认值,以系统提示词注入的项目实际设置为准),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
 9. **输出文件命名仅限英文与数字(2026-07-20)**:所有 Agent 落盘的文件名与目录名只准使用英文字母(a-z/A-Z)、数字(0-9)及分隔符 `-`/`_`/`.`,**禁止中文及其他任何非 ASCII 字符**——中文文件名在 ffmpeg/对象存储预签名 URL/跨平台路径处理中随时炸链。角色/场景等实体一律用 ID 或拼音/英文 slug 入文件名(如 `CHAR-0001_voiceprint.mp3`,不是 `林风_声纹.mp3`);机检项 ascii_filename,命中非 ASCII 文件名直接退回。本条只限**文件名**,文件内容(JSON 字段值、字幕、剧本)不受限。用户放入 `novel/`、`refs/` 的输入文件不强制,但引用时应先规范化改名。
 10. **制作必需字段禁 UNKNOWN,缺失自行发挥补全(2026-08-04)**:输入文本对出场人物/场景/道具没有具体描述是常态(短篇尤甚;10days003 前科:世界观/场景/道具卡大量 `UNKNOWN` 占位,下游概念图与 prompt 无锚可依)。分层处理——**事实抽取层**(01-story:novel-parser/event)判不准照旧如实标 UNKNOWN,那是留给设定层的补全信号,不是终值;**设定/设计层**(02-worldbuilding、03-characters、04-creatures、05-scenes、06-art)凡产出制作必需字段(绘图/视频生成/配音要直接消费的外观、材质、光照、色彩、尺寸、声线等规格),遇原文与上游均无依据(含上游标 UNKNOWN)时,**先自行发挥设计出定值,再继续往后执行**:设计须与已有 Bible/style.json/题材惯例自洽,标 `inferred: true` + `reason`(写明设计依据),不得以信息缺失为由留白、停摆、上报或退单。**机检 `no_unknown_placeholder`**:设定层产物的制作必需字段值出现 UNKNOWN/未知/待定/TBD/N-A 或留空即退回。两条边界:① 原文或 Bible 已有定值的字段禁止发挥,以原文为准(原则 1);② 剧情悬念(原文**刻意不揭示**的信息,如幕后黑手身份、密室角色感知不到时间)不算信息缺失——如实记为剧情事实并写明「原文刻意未揭示」,但同一实体的制作必需字段仍须给出定值呈现方案(谜面也要能画出来)。自主设计随 H1/H1A/H2 签字转正,与原文抽取的设定同等受控;后文发现原文依据与之冲突,上报 memory-bible 走变更流程。
 
@@ -760,6 +760,12 @@ python3 modules/genmedia.py video \
 #      (colored pencil 风格重绘脸部,身体与背景保留原图质感)后替换重提;sheet 的彩铅化
 #      改造回派 character-concept(细则见其 SOUL.md),正常流程不做此处理;
 #      Seedance 2.0 时长须 [4,15] 整数秒或 -1(模型自定),不支持 --seed。
+#      【仅当视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】:
+#      时长放宽为 [4,30] 整数秒或 -1(单段 30s 直出);参考上限 30图/10视频/10音频,
+#      参考音频与参考视频总时长各 ≤30s;支持纯音频参考(无需搭配图/视频);分辨率仅
+#      480p/720p(1080p/4k genmedia 自动压 720p);首帧/首尾帧任务 ratio 仅 adaptive
+#      (genmedia 自动改写,输出与首帧图同比)。组时长与参考数量的**取用上限仍以项目
+#      「分镜组设置」为准**,不得因模型能力放宽而超出该设置。
 
 # 生成视频(单镜首尾帧图生视频;兜底路径,组生成不达标时逐镜重做)
 python3 modules/genmedia.py video \
@@ -777,7 +783,10 @@ python3 modules/genmedia.py video \
   --ref-video assets/clips/ep01/archive/grp012_<时间戳>/grp012.mp4 \
   --ref <正确样式参考图,可选;涉人物/场景/道具形象时必须取 assets/concepts/ 在库概念图,严禁临时新生成样式图(§7E)> \
   --generate-audio on --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
-# 注意:--ref-video ≤3 个、单个 2-15s 且总时长 ≤15s、单文件 ≤45MB,与首尾帧互斥;
+# 注意:--ref-video ≤3 个、单个 2-15s 且总时长 ≤15s、单文件 ≤45MB,与首尾帧互斥
+#      (仅当视频模型为 Seedance 2.5 时放宽:≤10 个、单个 2-30s 且总时长 ≤30s;且 2.5 的
+#      视频编辑任务 ratio 仅支持 adaptive、duration 仅支持 -1(自动与输入视频等长),
+#      视频延长任务 ratio 仅支持 adaptive,违规将异步报错 InvalidParameter.TaskTypeConstraint);
 #      方舟要求 reference_video 为公网 URL:参考视频自动上传对象存储换预签名链接,
 #      需先在 Web 控制台「设置 → 文件托管」配好存储渠道(火山 TOS/阿里 OSS/腾讯 COS/
 #      S3 兼容,生效=选中标签页;SDK 按需装 tos/oss2/cos-python-sdk-v5/boto3);
@@ -810,7 +819,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 | OpenRouter | ✓ | ✓ | ✓ | ✓ | 云端;视频异步轮询;音乐流式返回(Lyria 3 Pro 整曲 / Clip 30s);TTS 走 /audio/speech 字节流 |
 | Ideogram | ✓ | — | — | — | 云端 |
 | 火山引擎(方舟) | ✓ | ✓ | — | — | 云端;图像 Seedream 系列同步返回,视频异步任务自动轮询 |
-| BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0 为 dreamina-seedance-2-0-*) |
+| BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0/2.5 为 dreamina-seedance-2-*) |
 | ComfyUI | ✓ | ✓ | — | — | 本地;视频必须在设置页配好 API 格式工作流 JSON,占位符见模块头注释 |
 
 **生成类 Agent 的纪律**:
