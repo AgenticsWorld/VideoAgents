@@ -86,29 +86,30 @@ button:disabled{opacity:.5;cursor:default}
 </header>
 <main>
   <div class="card" id="card-image">
-    <h2>🖼 图像生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🖼 图像模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="image-tabs"></div>
     <div id="image-panels"></div>
   </div>
   <div class="card" id="card-video">
-    <h2>🎬 视频生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🎬 视频模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="video-tabs"></div>
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🎵 音乐模型 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线;ComfyUI 可根据角色设定自动匹配本地音色</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
   <div class="card" id="card-text">
-    <h2>🧩 语言模型DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页,保存后生效</span></h2>
+    <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="text-tabs">
       <div class="tab active" id="tab-text-local">本地模型</div>
+      <div class="tab" id="tab-text-cloud">云端模型</div>
       <div class="tab" id="tab-text-openrouter">OpenRouter</div>
     </div>
     <div class="panel show" id="panel-text-local">
@@ -121,6 +122,17 @@ button:disabled{opacity:.5;cursor:default}
       <div class="row" id="da-key-row"></div>
       <div class="row" id="da-model-row"></div>
       <div class="hint">OpenAI 兼容端点(LM Studio / Ollama / vLLM…)。LM Studio:先 <code>lms server start</code>(默认端口 1234);「测试连接」会列出端点上已加载/可用的模型。API Key 本地端点一般随意填(如 lm-studio)</div>
+    </div>
+    <div class="panel" id="panel-text-cloud">
+      <div class="row">
+        <label>Base URL</label>
+        <input type="text" id="dc-url" placeholder="https://api.deepseek.com">
+        <button id="dc-test">测试连接</button>
+      </div>
+      <div class="status" id="dc-status"></div>
+      <div class="row" id="dc-key-row"></div>
+      <div class="row" id="dc-model-row"></div>
+      <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
     </div>
     <div id="panel-text-openrouter"></div>
   </div>
@@ -690,31 +702,44 @@ async function showWfDoc(sel,custom){
   }
 }
 
-/* ---------- deepagents 语言模型(本地 OpenAI 兼容端点 / OpenRouter) ---------- */
+/* ---------- deepagents 语言模型(本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
 let TEXT_PROVIDER='local';
+const TEXT_TABS={local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
+/* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
+const CLOUD_MODELS=[['deepseek-v4-flash','deepseek-v4-flash'],['deepseek-v4-pro','deepseek-v4-pro']];
+function wireDaTest(prefix,savedModel){
+  $(`#${prefix}-test`).onclick=async()=>{
+    const st=$(`#${prefix}-status`);st.className='status';st.textContent='连接中…';
+    const r=await api('/api/v1/providers/deepagents/test',{base_url:$(`#${prefix}-url`).value.trim(),
+      api_key:$(`#${prefix}-key`).value.trim()}).catch(e=>({ok:false,error:e.message}));
+    if(r.ok){
+      st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
+      fillSelect($(`#${prefix}-model`),r.models.map(m=>[m,m]),
+                 savedModel()||$(`#${prefix}-model`).value,'');
+    }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
+  };
+}
 function buildDeepagents(){
   $('#da-key-row').replaceWith(keyRow('da-key','lm-studio(本地端点可随意填)'));
   $('#da-model-row').replaceWith(modelRow('da-model','da-custom'));
   $('#da-model').parentElement.querySelector('label').textContent='默认模型';
-  $('#da-test').onclick=async()=>{
-    const st=$('#da-status');st.className='status';st.textContent='连接中…';
-    const r=await api('/api/v1/providers/deepagents/test',{base_url:$('#da-url').value.trim(),
-      api_key:$('#da-key').value.trim()}).catch(e=>({ok:false,error:e.message}));
-    if(r.ok){
-      st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
-      fillSelect($('#da-model'),r.models.map(m=>[m,m]),
-                 CFG.deepagents?.local?.model||$('#da-model').value,'');
-    }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
-  };
+  $('#dc-key-row').replaceWith(keyRow('dc-key','sk-…(DeepSeek 开放平台创建;其他 OpenAI 兼容服务商 Key 亦可)'));
+  $('#dc-model-row').replaceWith(modelRow('dc-model','dc-custom'));
+  $('#dc-model').parentElement.querySelector('label').textContent='默认模型';
+  wireDaTest('da',()=>CFG.deepagents?.local?.model);
+  wireDaTest('dc',()=>CFG.deepagents?.cloud?.model);
   // OpenRouter 面板复用图像/视频的 openrouter 构建逻辑(ids: text-or-*)
   $('#panel-text-openrouter').replaceWith(buildPanel('text','openrouter'));
-  ['local','openrouter'].forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
+  Object.keys(TEXT_TABS).forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
 }
 
 function showTextPanel(p){
   TEXT_PROVIDER=p;
-  ['local','openrouter'].forEach(x=>{
-    $(`#tab-text-${x}`).classList.toggle('active',x===p);
+  Object.keys(TEXT_TABS).forEach(x=>{
+    const tb=$(`#tab-text-${x}`);
+    tb.classList.toggle('active',x===p);
+    // ✅ = 生效渠道(保存后),与图像/视频等板块的渠道标签一致
+    tb.textContent=(x===p?'✅ ':'')+window.t(TEXT_TABS[x]);
     $(`#panel-text-${x}`).classList.toggle('show',x===p);
   });
 }
@@ -952,14 +977,17 @@ function loadIntoForm(){
     showPanel(kind,eff);
     loadOpenRouterModels(kind);
   }
-  const da=CFG.deepagents||{},lo=da.local||{},or=da.openrouter||{};
+  const da=CFG.deepagents||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
   $('#da-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
   $('#da-key').value=lo.api_key||'';
   fillSelect($('#da-model'),lo.model?[[lo.model,lo.model]]:[],lo.model,'');
+  $('#dc-url').value=cl.base_url||'https://api.deepseek.com';
+  $('#dc-key').value=cl.api_key||'';
+  fillSelect($('#dc-model'),CLOUD_MODELS,cl.model||CLOUD_MODELS[0][0],cl.custom_model);
   $('#text-or-key').value=or.api_key||'';
   fillSelect($('#text-or-model'),
     or.model&&!or.custom_model?[[or.model,or.model]]:[],or.model,or.custom_model);
-  showTextPanel(da.provider==='openrouter'?'openrouter':'local');
+  showTextPanel(['cloud','openrouter'].includes(da.provider)?da.provider:'local');
   loadOpenRouterModels('text');
 }
 
@@ -1018,11 +1046,14 @@ function collect(){
     c.provider=SEL_PROVIDER[kind];
     out[kind]=c;
   }
-  // 生效渠道 = 当前选中的标签页(本地模型/OpenRouter)
+  // 生效渠道 = 当前选中的标签页(本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     local:{base_url:$('#da-url').value.trim(),
       api_key:$('#da-key').value.trim(),
       model:pickModel('#da-model','#da-custom').model},
+    cloud:{base_url:$('#dc-url').value.trim(),
+      api_key:$('#dc-key').value.trim(),
+      ...pickModel('#dc-model','#dc-custom')},
     openrouter:{api_key:$('#text-or-key').value.trim(),
       ...pickModel('#text-or-model','#text-or-custom')}};
   return out;

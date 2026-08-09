@@ -526,11 +526,15 @@ DEFAULT_GENCONFIG = {
                     "timbre_catalog": "data/TimbreModel/catalog.json"},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
+    # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
-        "provider": "local",   # local | openrouter
+        "provider": "local",   # local | cloud | openrouter
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
+        "cloud": {"base_url": "https://api.deepseek.com",
+                  "api_key": "", "model": "deepseek-v4-flash",
+                  "custom_model": ""},
         "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
                        "custom_model": ""},
     },
@@ -728,6 +732,7 @@ SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
 
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
+DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
@@ -738,6 +743,12 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
         return {"provider": "openrouter", "base_url": DEEPAGENTS_OPENROUTER_URL,
                 "api_key": o.get("api_key") or "",
                 "model": o.get("model") or o.get("custom_model") or ""}
+    if (da.get("provider") or "local") == "cloud":
+        c = da.get("cloud") or {}
+        return {"provider": "cloud",
+                "base_url": c.get("base_url") or DEEPAGENTS_CLOUD_URL,
+                "api_key": c.get("api_key") or "",
+                "model": c.get("model") or c.get("custom_model") or ""}
     lo = da.get("local") or {}
     return {"provider": "local",
             "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
@@ -923,9 +934,9 @@ def global_model_pref() -> dict:
     p = STATE.get("global_model") or {}
     eng = str(p.get("engine") or "").lower()
     model = str(p.get("model") or "").strip()
-    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/openrouter)。旧 UI 会把
+    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/cloud/openrouter)。旧 UI 会把
     # 渠道名写入 global_model，导致它覆盖 genconfig 中的真实模型 ID。
-    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
+    if eng == "deepagents" and (not model or model in ("local", "cloud", "openrouter")):
         model = resolve_deepagents()["model"]
     return {"engine": eng if eng in ENGINES else "",
             "model": model}
@@ -1820,10 +1831,13 @@ async def execute_run(run: dict, message: str, model: str | None):
             err = None
             if not use_model:
                 err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
-                       "「语言模型DeepAgents」为生效渠道(本地模型/OpenRouter)配置模型")
+                       "「语言模型/DeepAgents」为生效渠道(本地模型/云端模型/OpenRouter)配置模型")
             elif da["provider"] == "openrouter" and not da["api_key"]:
                 err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
-                       "请在 🎨 生成模型 页「语言模型DeepAgents → OpenRouter」填写")
+                       "请在 🎨 生成模型 页「语言模型/DeepAgents → OpenRouter」填写")
+            elif da["provider"] == "cloud" and not da["api_key"]:
+                err = ("deepagents 引擎当前生效渠道为云端模型,但未配置 API Key:"
+                       "请在 🎨 生成模型 页「语言模型/DeepAgents → 云端模型」填写")
             if err:
                 run["status"] = "error"
                 run["error"] = err
