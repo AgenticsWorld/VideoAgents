@@ -709,6 +709,24 @@ def save_genconfig(cfg: dict):
     atomic_write_json(GENCONFIG_PATH, cfg)
 
 
+def active_video_model(cfg: dict | None = None) -> str:
+    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    pc = v.get(v.get("provider") or "volcengine") or {}
+    return str(pc.get("custom_model") or pc.get("model") or "")
+
+
+def is_seedance25(model: str) -> bool:
+    """Seedance 2.5 判定(与 genmedia._seedance_gen 同口径:大小写不敏感,兼容点号写法)。"""
+    m = (model or "").lower()
+    return "seedance-2-5" in m or "seedance-2.5" in m
+
+
+# Seedance 2.5 官方提示词优化 skill(sd25-pe):仅当生效视频模型为 2.5 时注入
+# 加载指令给 prompt agent;文件经官方 .well-known 索引下载并 sha256 校验后随仓库安装
+SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
+
+
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 
@@ -1558,6 +1576,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()):
+        p += f"""
+
+## Seedance 2.5 提示词优化 Skill(仅当生效视频模型为 Seedance 2.5 时注入,当前已生效)
+当前项目的视频生成模型是 Seedance 2.5。撰写或优化组级 video_prompt 前,**先阅读官方提示词优化技能并按其方法执行**:
+- Skill 文件:{SD25_PE_SKILL}(官方 sd25-pe,已随仓库安装,直接 Read 全文)
+- 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
     if brief:
         p += f"""
 
@@ -1575,7 +1602,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
 - 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
   (供视频参考的图——锚点/--ref/--first-frame/--last-frame——每张必须 ≥3,686,400 像素=火山硬限,16:9 用 2560x1440、9:16 用 1440x2560;小图提交即拒,严禁按视频草稿分辨率出小图)
-- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
+- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
 - TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。ComfyUI:根据项目 voice/personality/appearance 从 `data/TimbreModel` 自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
