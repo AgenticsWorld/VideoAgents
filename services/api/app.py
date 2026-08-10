@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, wechat, whatsapp
+from services.runtime import core, feishu, media_push, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -69,7 +69,7 @@ async def lifespan(_: FastAPI):
             print(f"[approval] 启动核对 {project_dir.name} 失败(忽略):{error}", flush=True)
     watchdog = asyncio.create_task(core.idle_watchdog())
     relays = [asyncio.create_task(m.relay_loop())
-              for m in (wechat, feishu, whatsapp)]
+              for m in (wechat, feishu, whatsapp, media_push)]
     try:
         yield
     finally:

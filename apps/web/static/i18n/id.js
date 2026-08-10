@@ -1139,6 +1139,7 @@ window.I18N_DICT = {
 "飞书用户 ": "Pengguna Feishu ",
 "未安装飞书 SDK:需先在服务端执行 pip install lark-oapi": "SDK Feishu belum terpasang: jalankan dulu pip install lark-oapi di server",
 "绑定后需在飞书里先给机器人发一条消息(搜索应用名即可找到),系统才能开始向你反向推送。": "Setelah tertaut, kirim dulu satu pesan ke bot di Feishu (cari nama aplikasinya) sebelum sistem dapat mengirim pesan balik kepada Anda.",
+"推送图片/视频还需在应用权限里开通 im:resource;之后新完成的人物/场景/道具主图与分镜组视频会自动推送到飞书。": "Pengiriman gambar/video juga memerlukan izin im:resource pada aplikasi; setelah itu gambar utama karakter/adegan/properti serta video grup storyboard yang baru selesai akan otomatis dikirim ke Feishu.",
 "尚未绑定 WhatsApp。点击下方按钮生成二维码,用手机 WhatsApp 把本系统添加为「已连接的设备」。": "Belum ada WhatsApp yang tertaut. Klik tombol di bawah untuk membuat kode QR, lalu tambahkan sistem ini sebagai “perangkat tertaut” di WhatsApp ponsel Anda.",
 "打开手机 WhatsApp → 设置 → 已连接的设备 → 连接设备,扫描上方二维码": "Buka WhatsApp di ponsel → Setelan → Perangkat tertaut → Tautkan perangkat, lalu pindai kode QR di atas",
 "正在生成二维码…": "Membuat kode QR…",
