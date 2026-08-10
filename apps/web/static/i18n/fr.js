@@ -1222,8 +1222,6 @@ window.I18N_DICT = {
 "RunningHub 国内(.cn)": "RunningHub Chine (.cn)",
 "RunningHub 国际(.ai)": "RunningHub International (.ai)",
 "云端工作流": "Workflow cloud",
-"云端文生图工作流": "Workflow cloud texte → image",
-"云端图生图工作流": "Workflow cloud image → image",
 "添加工作流": "Ajouter un workflow",
 "验证并添加": "Vérifier et ajouter",
 "移除": "Retirer",

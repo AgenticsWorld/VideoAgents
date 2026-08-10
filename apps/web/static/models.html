@@ -586,18 +586,12 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
     // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
     const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
-    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':'云端工作流'));
+    rw.appendChild(el('label',{},'云端工作流'));
     const rsel=el('select',{id:`${kind}-comfy-rhwf`});
     rw.appendChild(rsel);
     const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
     rmb.onclick=()=>rhRemoveWf(kind);
     rw.appendChild(rmb);d.appendChild(rw);
-    if(kind==='image'){
-      const rw2=el('div',{className:'row',id:'image-comfy-rhrefwf-row',style:'display:none'});
-      rw2.appendChild(el('label',{},'云端图生图工作流'));
-      rw2.appendChild(el('select',{id:'image-comfy-rhrefwf'}));
-      d.appendChild(rw2);
-    }
     const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
     ar.appendChild(el('label',{},'添加工作流'));
     ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhadd`,
@@ -660,20 +654,14 @@ function comfyModeUI(kind){
   $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-ckpt-row`).style.display=rh?'none':'';
   $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
-  if(kind==='image'){
-    $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
-    $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
-  }
+  if(kind==='image')$('#image-comfy-ref-wf-row').style.display=rh?'none':'';
   $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
   $(`#${kind}-comfy-hint-rh-cn`).style.display=m==='rh_cn'?'':'none';
   $(`#${kind}-comfy-hint-rh-ai`).style.display=m==='rh_ai'?'':'none';
   const ex=$(`#${kind}-comfy-hint-extra`);if(ex)ex.style.display=rh?'none':'';
   // 收藏按站点过滤(.cn/.ai 账号不互通),切换运行方式后重建下拉
-  if(rh){
-    fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
-    if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
-  }
+  if(rh)fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
 }
 
 /* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
@@ -706,7 +694,6 @@ async function rhAddWf(kind){
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
   RH_WFS[kind].push({id:r.id,note,site:mode});
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,r.id);
-  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
   $(`#${kind}-comfy-rhadd`).value='';$(`#${kind}-comfy-rhnote`).value='';
   st.className='status ok';
   st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
@@ -719,7 +706,6 @@ function rhRemoveWf(kind){
   const mode=$(`#${kind}-comfy-mode`).value;
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
-  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -1096,7 +1082,6 @@ function loadIntoForm(){
       RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
       comfyModeUI(kind);
       fillRhWfSelect(kind,`${kind}-comfy-rhwf`,c.comfyui.rh_workflow_id||'');
-      if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',c.comfyui.rh_ref_workflow_id||'');
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
       fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
       if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
@@ -1160,7 +1145,6 @@ function collect(){
                rh_workflows:RH_WFS[kind]||[],
                ...(kind==='image'?{
                  ref_workflow:pickWf('image-comfy-ref-wf'),
-                 rh_ref_workflow_id:$('#image-comfy-rhrefwf').value,
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',

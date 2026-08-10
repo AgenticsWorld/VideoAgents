@@ -1103,21 +1103,16 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
               "CHECKPOINT": cfg.get("checkpoint") or ""}
     workflow_cfg = cfg
     if refs:
+        if rh:
+            raise RuntimeError("ComfyUI RunningHub 模式不支持图生图(参考图),"
+                               "请切换本地/Comfy Cloud 运行方式或其他图片渠道")
         if len(refs) > 1:
             raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref")
-        if rh:
-            ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
-            if not ref_id:
-                raise RuntimeError("ComfyUI 图片渠道未配置 RunningHub 图生图工作流"
-                                   "(「🎨 生成模型」页验证并添加后选择)")
-            workflow_cfg = {**cfg, "rh_workflow_id": ref_id}
-            tokens["FIRST_FRAME"] = _rh_upload(cfg, refs[0])
-        else:
-            ref_workflow = (cfg.get("ref_workflow") or "").strip()
-            if not ref_workflow:
-                raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
-            tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
-            workflow_cfg = {**cfg, "workflow": ref_workflow}
+        ref_workflow = (cfg.get("ref_workflow") or "").strip()
+        if not ref_workflow:
+            raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
+        tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
+        workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
     if rh:
         return _rh_run(workflow_cfg, wf, output, want_video=False)
