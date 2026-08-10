@@ -881,6 +881,7 @@ def _validate_review(r: dict):
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
 # 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
+# 切换任一策略都会同时清空 agentmodels.json 里全部 Agent 级单独配置。
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
@@ -3797,6 +3798,9 @@ async def api_genconfig_set(body: dict):
         except (TypeError, ValueError):
             raise ServiceError(400, f"storage.{name}.url_expires must be seconds (integer)")
     save_genconfig(cfg)
+    if "agentmodel_mode" in body:
+        # 切换「模型策略」= 全部 Agent 按新策略走:同时清空 Agent 级单独配置
+        atomic_write_json(AGENTMODELS_PATH, {})
     if "ui_language" in body:
         # 界面语言按全局持久化到 state.json(genconfig 键双写,兼容旧版回读)
         STATE["ui_lang"] = cfg.get("ui_language") or ""
