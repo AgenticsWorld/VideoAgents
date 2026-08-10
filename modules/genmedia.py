@@ -95,6 +95,7 @@ ComfyUI 自定义工作流占位符(文本替换):
 """
 import argparse
 import base64
+import gzip
 import hashlib
 import json
 import mimetypes
@@ -208,7 +209,10 @@ def _request(url: str, data: bytes | None = None, headers: dict | None = None,
     req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read()
+            body = r.read()
+            if r.headers.get("Content-Encoding") == "gzip":
+                body = gzip.decompress(body)
+            return body
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:800]
         raise RuntimeError(f"HTTP {e.code} {url}\n{body}") from e
@@ -812,11 +816,14 @@ def _is_h3_ref2va_workflow(cfg: dict) -> bool:
 def _comfy_h3_validate_components(base: str, settings: dict,
                                   headers: dict | None = None) -> None:
     """Fail before upload when the selected H3 component files are not installed."""
-    unet_info = _get_json(f"{base}/object_info/UNETLoader", headers)
-    clip_info = _get_json(f"{base}/object_info/CLIPLoader", headers)
+    # Comfy Cloud 无单节点 /object_info/<节点> 端点(404: "Use /api/object_info
+    # instead"),仅支持全量;本地同样兼容全量,统一一次取回。全量约 9MB,明文长流
+    # 易被代理掐断(IncompleteRead),请求 gzip 压到约 0.7MB
+    info = _get_json(f"{base}/object_info",
+                     {"Accept-Encoding": "gzip", **(headers or {})}, timeout=120)
     try:
-        unets = set(unet_info["UNETLoader"]["input"]["required"]["unet_name"][0])
-        text_encoders = set(clip_info["CLIPLoader"]["input"]["required"]["clip_name"][0])
+        unets = set(info["UNETLoader"]["input"]["required"]["unet_name"][0])
+        text_encoders = set(info["CLIPLoader"]["input"]["required"]["clip_name"][0])
     except (KeyError, IndexError, TypeError) as exc:
         raise RuntimeError("ComfyUI 未返回可用的 H3 模型清单，无法安全提交任务") from exc
     missing = []

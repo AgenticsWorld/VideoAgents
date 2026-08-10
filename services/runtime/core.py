@@ -7,6 +7,7 @@
 - 全部运行状态 / 工具活动由 API 服务对外发布。
 """
 import asyncio
+import gzip
 import hashlib
 import hmac
 import importlib.util
@@ -1030,7 +1031,10 @@ def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
     with opener(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+        body = r.read()
+        if r.headers.get("Content-Encoding") == "gzip":
+            body = gzip.decompress(body)
+        return json.loads(body.decode("utf-8", "replace"))
 
 
 def _http_post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 20):
@@ -4442,9 +4446,20 @@ async def api_test_comfyui(body: dict):
             stats = {}
         except Exception as e2:  # noqa: BLE001
             return {"ok": False, "error": f"Connection failed: {str(e2)[:200]}"}
+    all_info = None
+    if cloud:
+        # Comfy Cloud 无单节点 /object_info/<节点> 端点(404: "Use /api/object_info
+        # instead"),只能全量拉取;本地仍走单节点端点省流量。全量约 9MB,明文长流
+        # 易被代理掐断(IncompleteRead),请求 gzip 压到约 0.7MB
+        try:
+            all_info = await asyncio.to_thread(
+                _http_get_json, url + "/object_info",
+                {"Accept-Encoding": "gzip", **headers}, 30)
+        except Exception:  # noqa: BLE001
+            all_info = {}
     checkpoints = []
     try:
-        info = await asyncio.to_thread(
+        info = all_info if cloud else await asyncio.to_thread(
             _http_get_json, url + "/object_info/CheckpointLoaderSimple", headers, 6)
         req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
         ckpt = req.get("ckpt_name") or [[]]
@@ -4455,7 +4470,7 @@ async def api_test_comfyui(body: dict):
     custom_nodes = {}
     for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
         try:
-            info = await asyncio.to_thread(
+            info = all_info if cloud else await asyncio.to_thread(
                 _http_get_json, url + "/object_info/" + node_type, headers, 6)
             custom_nodes[node_type] = bool(info.get(node_type))
         except Exception:  # noqa: BLE001
