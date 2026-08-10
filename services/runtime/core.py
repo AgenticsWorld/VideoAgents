@@ -479,7 +479,7 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
-                    "rh_api_key": "", "rh_workflow_id": "",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_ref_workflow_id": "",
                     "rh_workflows": []},
     },
     "video": {
