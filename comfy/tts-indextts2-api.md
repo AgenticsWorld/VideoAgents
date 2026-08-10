@@ -54,9 +54,12 @@ not selected by voice name:
 
 - Reference audio is no longer entered manually on the config page. ComfyUI TTS
   reads the project character's `voice.json`, `personality.json`, and
-  `appearance.json`, hard-filters by gender against
-  `data/TimbreModel/catalog.json`, automatically picks reference audio by age,
-  pitch, and voice-quality tags, then uploads it as `REF_AUDIO`
+  `appearance.json`, hard-filters by gender against the bundled catalog
+  `modules/timbre_catalog.json` (which indexes the remote audio library
+  [ComfyUI-Index-TTS/TimbreModel](https://github.com/chenpipi0807/ComfyUI-Index-TTS/tree/main/TimbreModel)),
+  automatically picks reference audio by age, pitch, and voice-quality tags,
+  downloads the selected file on first use into the local cache
+  `data/TimbreModel/`, then uploads it as `REF_AUDIO`
 - Character voiceprints: call `genmedia tts --character CHAR-0001
   [--variant child]`; if the output filename already contains `CHAR-0001`, the
   character ID can be inferred automatically
@@ -161,8 +164,10 @@ python <ComfyUI>/custom_nodes/ComfyUI-Index-TTS/TTS2_download.py
 IndexTTS-2 是**参考音频克隆**模型,不像云端 TTS 用音色名选声线:
 
 - 不再在配置页手填参考音频。ComfyUI TTS 会读取项目角色的 `voice.json`、
-  `personality.json`、`appearance.json`,从 `data/TimbreModel/catalog.json` 性别硬过滤并按
-  年龄、音高、声线标签自动选取参考音频,然后上传为 `REF_AUDIO`
+  `personality.json`、`appearance.json`,按内置音色目录 `modules/timbre_catalog.json`
+  (索引远端 [ComfyUI-Index-TTS/TimbreModel](https://github.com/chenpipi0807/ComfyUI-Index-TTS/tree/main/TimbreModel)
+  音频库)性别硬过滤并按年龄、音高、声线标签自动选取参考音频,首次使用自动下载缓存到
+  `data/TimbreModel/`,然后上传为 `REF_AUDIO`
 - 角色 voiceprint:调用 `genmedia tts --character CHAR-0001 [--variant child]`;若输出文件名
   已含 `CHAR-0001`,可自动推断角色 ID
 - 旁白:不传 `--character`/`--voice`,用 `--instructions` 描述风格;模块从 catalog 中标为

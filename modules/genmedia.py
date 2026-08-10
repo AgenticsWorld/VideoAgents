@@ -64,7 +64,7 @@ Python:
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
         可在「生成模型」页从 Voice Library 搜索并一键加入账号)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
-        根据角色设定从 data/TimbreModel 自动选择参考音频)
+        根据角色设定从内置音色目录自动选择参考音频,远端音频按需下载缓存)
 
   minimax 各能力共用「接口区域」配置(api_base):海外版 api.minimax.io 与
   国内版 api.minimaxi.com 账号与 Key 不互通,须与 Key 来源平台一致。
@@ -1694,7 +1694,8 @@ def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
 
 # ---------------- TTS:ComfyUI(本地,推荐 IndexTTS-2 工作流) ----------------
 # 占位符:TEXT / REF_AUDIO(参考音频文件名) / SEED / SPEED
-# 默认根据角色内容从 data/TimbreModel 自动选择参考音频;voice 仅保留真实本地文件覆盖。
+# 默认根据角色内容从内置音色目录自动选择参考音频(远端库按需下载缓存到 data/TimbreModel);
+# voice 仅保留真实本地文件覆盖。
 # 工作流须以 SaveAudio/SaveAudioMP3 落盘,见 comfy/tts-indextts2-api.json。
 
 
@@ -1868,8 +1869,9 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     配置页默认音色(openrouter=音色名 / volcengine=speaker 名 /
     minimax=voice_id / elevenlabs=voice_id)。
     ComfyUI 渠道按 character(省略时从 output 的 CHAR-ID 推断)读取项目
-    voice/personality/appearance,从 data/TimbreModel 自动选择参考音频;旁白不传
-    character;voice 仅保留真实本地音频文件的兼容覆盖。
+    voice/personality/appearance,按 modules/timbre_catalog.json 索引的远端
+    ComfyUI-Index-TTS/TimbreModel 音频库自动选择参考音频(首次使用下载缓存到
+    data/TimbreModel/);旁白不传 character;voice 仅保留真实本地音频文件的兼容覆盖。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
     情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
     """

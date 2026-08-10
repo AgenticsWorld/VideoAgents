@@ -1619,7 +1619,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
-- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。ComfyUI:根据项目 voice/personality/appearance 从 `data/TimbreModel` 自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
+- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
@@ -1634,7 +1634,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
 媒体工单配置认知:
-- ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 从仓库级 `data/TimbreModel/catalog.json` 自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
+- ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 按内置音色目录 `modules/timbre_catalog.json`(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
 - voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`
 - TTS 从云渠道切到 ComfyUI 后,旧 casting 的 `eve`/`ara` 等云音色名不得传给 ComfyUI;派 voice-generation 自动重选并更新 casting。工单必须先用相同参数执行 `--dry-run` 记录自动选型,再正式合成；失败回执逐字保留 `node_type/exception_type/exception_message`,不得把 Python 依赖/模型/节点异常改写成缺参考音频。日志出现“自动参考音频已选择并上传”后严禁要求用户手填音色
 

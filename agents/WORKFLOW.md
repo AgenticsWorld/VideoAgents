@@ -810,7 +810,7 @@ python3 modules/genmedia.py tts \
   [--character <CHAR-ID;ComfyUI 角色音色样本必传,旁白不传>] [--variant <年龄形态>] \
   [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;ComfyUI 禁止手填>] \
   [--speed 1.0] [--instructions "<语气/情绪指令;OpenAI 系模型生效,火山注入情绪指令,ComfyUI 参与音色匹配>"]
-# ComfyUI TTS 会读取项目角色设定并从仓库级 data/TimbreModel 自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
+# ComfyUI TTS 会读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
 ```
 
 Python 内调用(批量循环时省进程开销):`from modules.genmedia import generate_image, generate_video, generate_music, generate_tts`。
