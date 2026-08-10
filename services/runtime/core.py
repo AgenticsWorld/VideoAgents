@@ -734,6 +734,27 @@ def is_seedance25(model: str) -> bool:
 SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
 
 
+def is_minimax_h3(model: str) -> bool:
+    """MiniMax H3 判定(命中 minimax-h3 / MiniMax: H3 / MiniMax-H3 等写法,大小写不敏感)。"""
+    m = re.sub(r"[\s_:]+", "-", (model or "").lower())
+    return "minimax-h3" in m
+
+
+def is_minimax_h3_active(cfg: dict | None = None) -> bool:
+    """生效视频渠道是否 MiniMax H3:OpenRouter/MiniMax 等按模型 id 关键字,
+    ComfyUI 渠道按所选工作流文件名(如 comfy/video-minimax-h3-ref2va-api.json)。"""
+    cfg = cfg or load_genconfig()
+    v = cfg.get("video") or {}
+    if (v.get("provider") or "volcengine") == "comfyui":
+        return is_minimax_h3((v.get("comfyui") or {}).get("workflow") or "")
+    return is_minimax_h3(active_video_model(cfg))
+
+
+# MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频渠道为 H3 时注入
+# 加载指令给 prompt agent;经 npx skills add MiniMax-AI/MiniMax-H3 安装后随仓库分发
+H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
+
+
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 
@@ -1599,6 +1620,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
+        p += f"""
+
+## MiniMax H3 提示词写作 Skill(仅当生效视频渠道为 MiniMax H3 时注入,当前已生效)
+当前项目的视频生成走 MiniMax H3(OpenRouter/MiniMax API 或 ComfyUI H3 工作流)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+- Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
+- 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
+- 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
+- **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
     if brief:
         p += f"""
 
