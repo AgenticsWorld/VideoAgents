@@ -1494,6 +1494,22 @@ MINIMAX_RESOLUTION_MAP = {"360p": "768P", "480p": "768P", "720p": "768P",
 MINIMAX_VIDEO_RATIOS = ("21:9", "16:9", "4:3", "1:1", "3:4", "9:16")
 MINIMAX_MAX_VIDEO_REFS = 9   # H3 reference_image 上限
 
+# H3 校验 data URI 时由 MIME 子类型反推扩展名做白名单匹配,mimetypes 的标准值会被拒
+# (audio/mpeg→".mpeg"、audio/x-wav→".x-wav"),须显式映射为「子类型=扩展名」的写法
+MINIMAX_AUDIO_MIME = {".mp3": "audio/mp3", ".wav": "audio/wav", ".m4a": "audio/m4a",
+                      ".aac": "audio/aac", ".flac": "audio/flac", ".ogg": "audio/ogg"}
+
+
+def _minimax_audio_data_url(path: str) -> str:
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f"参考音频不存在: {path}")
+    mime = MINIMAX_AUDIO_MIME.get(p.suffix.lower())
+    if not mime:
+        raise RuntimeError(f"MiniMax-H3 参考音频扩展名不受支持: {p.name}"
+                           f"(支持 {'/'.join(sorted(MINIMAX_AUDIO_MIME))}),请先转码为 .mp3/.wav")
+    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+
 
 def _minimax_video_resolution(resolution: str) -> str:
     if not resolution:
@@ -1580,7 +1596,7 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
                         "video_url": {"url": _storage_upload_url(path)}})
     for path in audio_refs or []:
         content.append({"type": "audio_url", "role": "reference_audio",
-                        "audio_url": {"url": _file_to_data_url(path)}})
+                        "audio_url": {"url": _minimax_audio_data_url(path)}})
     body = {"model": cfg["model"], "content": content,
             "resolution": _minimax_video_resolution(resolution), "duration": d}
     has_media = len(content) > 1
