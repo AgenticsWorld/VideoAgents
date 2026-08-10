@@ -312,11 +312,11 @@ function renderSummary(){
     +(blocked?`<span class="st" style="color:var(--orange)">⛔ <b>${blocked}</b> ${t('受阻')}</span>`:'')
     +signs.map(m=>`<span class="sig" data-key="${esc(m.family)}" title="${esc(m.id)}">✍️ ${esc(m.checkpoint||m.id)}</span>`).join('')
     +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b></span>`
-    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗视频tokens')} <b>${fmtM(s.video_tokens)}</b></span>`
-    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗图片tokens')} <b>${fmtM(s.image_tokens)}</b></span>`
-    +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
     +`<span class="st" title="${esc(t('按历史均值预估'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> (${s.remaining_count} ${t('个任务')})</span>`
     +`<span class="st" title="${esc(t('剩余任务沿依赖链的最长估时(并行推进下的理论最短完成时间)'))}">${t('关键路径:')}<b>${fmtDur(s.critical_path_s)||'—'}</b></span>`
+    +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗视频tokens')} <b>${fmtM(s.video_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗图片tokens')} <b>${fmtM(s.image_tokens)}</b></span>`
     +`<button class="editbtn" id="wfEdit" title="${esc(t('对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)'))}">✏️ ${esc(t('修改'))}</button>`;
 }
 
