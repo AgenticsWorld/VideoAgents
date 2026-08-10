@@ -215,10 +215,8 @@ function render(d){
   // 只看本集 = 工单标注了当前集;通用工单 = 未从 defect_id/task_id/artifact 识别出任何 epNN
   const shown=SHOW_GENERIC?defects.filter(x=>!(x.eps||[]).length)
     :defects.filter(x=>(x.eps||[]).includes(d.ep));
-  const vtok=d.video_tokens==null?'—':Number(d.video_tokens).toLocaleString('en-US');
-  const ltok=d.llm_tokens==null?'—':Number(d.llm_tokens).toLocaleString('en-US');
   const epTitle=((d.episodes||[]).find(e=>e.ep===d.ep)||{}).title||'';
-  let h=`<h2 class="title">${esc(d.ep)}${epTitle?' '+esc(epTitle):''}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d} · 消耗视频tokens {vt} · 消耗语言tokens {lt}',{f:finals.length,t:thumbs.length,d:defects.length,vt:vtok,lt:ltok}))}</span></h2>`;
+  let h=`<h2 class="title">${esc(d.ep)}${epTitle?' '+esc(epTitle):''}<span class="sub">${esc(I18N.f('成片 {f} · 封面 {t} · 审核工单 {d}',{f:finals.length,t:thumbs.length,d:defects.length}))}</span></h2>`;
 
   h+=`<h3 class="sec">▶ 成片视频(final)<span class="n">${esc(I18N.f('{n} 个 · edit/{ep}/',{n:finals.length,ep:d.ep}))}</span></h3>`;
   h+=finals.length?`<div class="vids">${finals.map(f=>
@@ -275,7 +273,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考图'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

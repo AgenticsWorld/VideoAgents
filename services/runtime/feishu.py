@@ -14,11 +14,15 @@
 - /auto 指令:单聊发 /auto 在本地拦截(不经总制片、不耗引擎配额),回自动
   运行状态卡片或直接按项目开关空转看门狗;卡片按钮与确认卡片走同一条
   长连接回传,与网页运行面板 🤖 按钮同一入口(api_watchdog_set)
+- 素材推送:media_push 监视循环发现新完成的人物/场景/道具主图或分镜组
+  视频后调 push_image/push_video,经 im/v1/images / im/v1/files 上传,
+  再以富文本图片(post)/可播放视频(media)消息推送
 
 前置条件(设置页有说明):应用需开启机器人能力、以「长连接」方式订阅
 「接收消息 im.message.receive_v1」事件与「回调订阅」(卡片按钮回传依赖
-后者),并开通 im:message 收发权限;绑定后需在飞书里先给机器人发一条
-消息,系统才知道该推送给谁。lark-oapi 未安装时绑定被拒并提示 pip install。
+后者),并开通 im:message 收发权限(素材图片/视频推送还需 im:resource);
+绑定后需在飞书里先给机器人发一条消息,系统才知道该推送给谁。
+lark-oapi 未安装时绑定被拒并提示 pip install。
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 from . import channels, core
 
@@ -293,6 +298,97 @@ async def _send_to_feishu(text: str) -> bool:
         token, API_TIMEOUT_S)
     if d.get("code") != 0:
         raise RuntimeError(f"im/v1/messages code={d.get('code')}:{d.get('msg') or d}")
+    return True
+
+
+# ---------------- 素材推送:图片/视频消息(media_push 监视循环调用) ----------------
+
+IMG_MAX_BYTES = 10 * 1024 * 1024          # im/v1/images 单张上限
+VID_MAX_BYTES = 30 * 1024 * 1024          # im/v1/files 单个上限
+UPLOAD_TIMEOUT_S = 120
+
+
+def _post_multipart(domain: str, path: str, token: str, fields: dict,
+                    file_field: str, filename: str, data: bytes,
+                    timeout: float) -> dict:
+    url = (domain or DEFAULT_DOMAIN).rstrip("/") + path
+    boundary = "----va" + uuid.uuid4().hex
+    buf = bytearray()
+    for k, v in fields.items():
+        buf += (f"--{boundary}\r\nContent-Disposition: form-data; "
+                f'name="{k}"\r\n\r\n{v}\r\n').encode()
+    buf += (f"--{boundary}\r\nContent-Disposition: form-data; "
+            f'name="{file_field}"; filename="{filename}"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n").encode()
+    buf += data
+    buf += f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(
+        url, data=bytes(buf),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}",
+                 "Authorization": f"Bearer {token}"},
+        method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+async def _upload_media(cfg: dict, kind: str, path: str) -> str:
+    """上传图片/视频换取消息 key。kind: image|video。"""
+    p = Path(path)
+    token = await _tenant_token(cfg)
+    if kind == "image":
+        api, fields, field = "/open-apis/im/v1/images", {"image_type": "message"}, "image"
+    else:
+        api, fields, field = ("/open-apis/im/v1/files",
+                              {"file_type": "mp4", "file_name": p.name}, "file")
+    d = await asyncio.to_thread(
+        _post_multipart, cfg.get("domain") or DEFAULT_DOMAIN, api, token,
+        fields, field, p.name, p.read_bytes(), UPLOAD_TIMEOUT_S)
+    key = (d.get("data") or {}).get("image_key" if kind == "image" else "file_key")
+    if d.get("code") != 0 or not key:
+        raise RuntimeError(f"{api} code={d.get('code')}:{d.get('msg') or d}"
+                           "(若为权限错误,请在飞书开放平台为应用开通 im:resource)")
+    return key
+
+
+async def push_image(path: str, caption: str) -> bool:
+    """新完成概念图 → 富文本消息(标题带说明,正文图片)。未绑定返回 False。"""
+    cfg = load_cfg()
+    open_id = (cfg.get("contact") or {}).get("open_id")
+    if not (cfg.get("app_id") and open_id):
+        return False
+    if Path(path).stat().st_size > IMG_MAX_BYTES:
+        return await _send_to_feishu(f"{caption}\n(图片超过 10MB 无法直传,请在控制台查看)")
+    key = await _upload_media(cfg, "image", path)
+    await _card_request(
+        "/open-apis/im/v1/messages?receive_id_type=open_id",
+        {"receive_id": open_id, "msg_type": "post",
+         "content": json.dumps(
+             {"zh_cn": {"title": caption,
+                        "content": [[{"tag": "img", "image_key": key}]]}},
+             ensure_ascii=False),
+         "uuid": "va-media-" + uuid.uuid4().hex})
+    RELAY["last_out"] = time.time()
+    RELAY["err_out"] = ""
+    return True
+
+
+async def push_video(path: str, caption: str) -> bool:
+    """新完成分镜组视频 → 文本说明 + 可播放视频消息。未绑定返回 False。"""
+    cfg = load_cfg()
+    open_id = (cfg.get("contact") or {}).get("open_id")
+    if not (cfg.get("app_id") and open_id):
+        return False
+    if Path(path).stat().st_size > VID_MAX_BYTES:
+        return await _send_to_feishu(f"{caption}\n(视频超过 30MB 无法直传,请在控制台查看)")
+    key = await _upload_media(cfg, "video", path)
+    await _send_to_feishu(caption)
+    await _card_request(
+        "/open-apis/im/v1/messages?receive_id_type=open_id",
+        {"receive_id": open_id, "msg_type": "media",
+         "content": json.dumps({"file_key": key}, ensure_ascii=False),
+         "uuid": "va-media-" + uuid.uuid4().hex})
+    RELAY["last_out"] = time.time()
+    RELAY["err_out"] = ""
     return True
 
 

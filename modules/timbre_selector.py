@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
+import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -14,7 +17,12 @@ DATA_DIR = Path(
 ).expanduser().resolve()
 DEFAULT_TIMBRE_DIR = DATA_DIR / "TimbreModel"
 DEFAULT_CATALOG = DEFAULT_TIMBRE_DIR / "catalog.json"
+# 音色库不再随仓库携带音频文件:内置目录索引远端
+# https://github.com/chenpipi0807/ComfyUI-Index-TTS/tree/main/TimbreModel,
+# 选中的参考音频按需下载并缓存到 data/TimbreModel/。
+BUNDLED_CATALOG = Path(__file__).resolve().parent / "timbre_catalog.json"
 AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
+DOWNLOAD_TIMEOUT = 300
 
 
 def _strings(value):
@@ -156,16 +164,46 @@ def load_catalog(timbre_dir: str | Path = "",
     directory = _resolve_config_path(timbre_dir, DEFAULT_TIMBRE_DIR)
     catalog = _resolve_config_path(catalog_path, directory / "catalog.json")
     data = _load_json(catalog)
+    if not data.get("entries"):
+        catalog = BUNDLED_CATALOG
+        data = _load_json(catalog)
+    remote_base = str(data.get("remote_base") or "").rstrip("/")
     entries = []
     for item in data.get("entries") or []:
         if not isinstance(item, dict) or not item.get("file"):
             continue
-        path = directory / str(item["file"])
-        if path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES:
-            entries.append({**item, "path": path})
+        name = str(item["file"])
+        path = directory / name
+        if path.suffix.lower() not in AUDIO_SUFFIXES:
+            continue
+        url = str(item.get("url") or "")
+        if not url and remote_base:
+            url = f"{remote_base}/{quote(name)}"
+        if path.is_file() or url:
+            entries.append({**item, "path": path, "url": url})
     if not entries:
         raise RuntimeError(f"音色目录没有可用索引:{catalog}")
     return directory, entries
+
+
+def _ensure_audio(entry: dict) -> Path:
+    path = entry["path"]
+    if path.is_file():
+        return path
+    url = entry.get("url")
+    if not url:
+        raise RuntimeError(f"参考音频缺失且无远端来源:{path}")
+    print(f"[timbre] 下载参考音频:{entry['file']}{path}", file=sys.stderr)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".part")
+    try:
+        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as resp:
+            tmp.write_bytes(resp.read())
+        tmp.replace(path)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(f"下载参考音频失败:{url}{exc}") from exc
+    return path
 
 
 def select_timbre(text: str, output: str, character: str = "", variant: str = "",
@@ -229,7 +267,7 @@ def select_timbre(text: str, output: str, character: str = "", variant: str = ""
         raise RuntimeError(f"TimbreModel 中没有匹配性别的音色(character={character or 'narrator'})")
     score, _, selected, reasons = sorted(ranked, key=lambda row: (-row[0], row[1]))[0]
     return {
-        "path": str(selected["path"]),
+        "path": str(_ensure_audio(selected)),
         "file": selected["file"],
         "score": score,
         "reason": ", ".join(reasons) or "catalog priority",

@@ -4,19 +4,48 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.13] - 2026-08-10
+
 ### Added
 
+- MiniMax generation provider across all four media types, each as a new tab placed before ComfyUI on the 🎨 generation-models page: image (Image-01, single subject-reference image), video (MiniMax-H3 only — the project resolution tiers are mapped onto H3's two-tier 768P/2K ladder automatically, duration 4–15 integer seconds, first/last frame plus multi-reference image/audio/video modes, native audio-video co-generation, continuity anchor extracted locally from the finished clip), music (Music 3.0/2.6 with the same force-instrumental toggle as Eleven Music; auto-written lyrics when disabled), and TTS (Speech 2.8 family with a voice-library browser backed by `get_voice`). A per-tab API-region selector covers the non-interchangeable global (api.minimax.io) and China (api.minimaxi.com) platforms, `MINIMAX_API_KEY` works as the environment fallback, and MiniMax is selectable in per-agent image/video provider overrides.
+- ComfyUI channel cloud execution: besides the local server, every ComfyUI tab (image/video/music/TTS) can now run on Comfy Cloud (cloud.comfy.org, X-API-Key, same API surface passed through) or on RunningHub's hosted platform — China (.cn) and International (.ai) sites with non-interchangeable keys. RunningHub workflows are added by pasting a workflow ID or page link (verified, cached locally, reported with node/placeholder/H3 details), driven through the existing `{{TOKEN}}` placeholder pipeline with automatic input upload, status polling and result download; the connection test reports account balance and concurrent-task count.
+- Seedance 2.5 video models in both the Volcano Ark and BytePlus/Dreamina dropdowns, with a project-level storyboard-group settings block and generation-aware parameter validation in genmedia; the official `sd25-pe` prompt-writing skill ships with the repo and is injected into the prompt agent only when a 2.5 model is selected.
+- MiniMax H3 prompt-writing skill: the official `h3-prompt-writing` skill (base + reference-to-video guides) is injected into the prompt agent only when an H3 channel is active.
+- Video upscaling via MiniMax Regenerate-2K: a new upscale-agent skill plus a `genmedia upscale` subcommand — H3 768P-output preflight (fps/audio/dimensions/frame-count), fixed 2K output rescaled to the delivery profile in post, `--source-task-id` shortcut that skips re-uploading the source, and >45MB sources routed through presigned object storage.
 - Pi execution engine: run Agents through the local `pi` CLI with JSON event streaming, session resume, per-run model selection, and dynamic language-model menus populated from the models available to the current Pi login.
+- DeepAgents cloud model channel: the language-model page gained a third channel tab (default DeepSeek endpoint, v4-flash/pro) wired to the top-bar model dropdown and backend model resolution.
+- Feishu asset push: finished concept art (characters/scenes/props) and clips are pushed automatically to the bound Feishu chat as captioned images and playable videos; oversized files degrade to a text notice, the pushed ledger survives restarts, and regenerated files are pushed again.
+- Feishu `/auto` command: toggle per-project auto-run from chat — a status card with one row and an on/off button per project, plus `/auto on|off [project]` and `/auto off all`. Handled locally without engine quota, so it keeps working when engines are exhausted or stalled.
+- Reference panel revamped from "reference images" to "reference files": a new text category, a copy-project-relative-path button on every file card, and the music category re-scoped as "audio" (background-track candidates the music agent picks up first). Accepted image formats extended with bmp/tiff to match Seedance's official list.
+- Resource-usage panel: Codex and KimiCode usage checking gained on/off switches, and usage bars now show when the quota window resets.
+- Workflow preview: the "spent" row now includes project-level video/image/language token consumption, and Volcano Ark image generation records usage to the ledger.
+- Voice library moved to a remote catalog: a built-in 58-voice catalog (gender/age/pitch/tags metadata) backs the timbre selector, and selected voices are downloaded on first use into the local cache with atomic writes — no bundled audio needed.
+- Bundled local ComfyUI media workflows, renamed and categorized with bilingual documentation, a console dropdown selector and a documentation popup.
+- Host-side footage module for the mashup plugin: footage ingestion and integrity checking.
+- Character sheets rejected by real-face review can now be salvaged conditionally: the face is rendered in colored pencil while body and background keep their original texture.
+- Watchdog wake-up messages now carry the project's standing instructions.
+- Desktop packaging and updater now distinguish distribution sources across build info, the runtime index and runtime downloads.
 
 ### Changed
 
 - Standardized local development and CI/desktop packaging on Node.js 24.19.0 through `.nvmrc`; GitHub Actions now reads the same version file instead of independently pinning Node 22.
+- Generation-models page copy reworked: sections renamed to "×× models", and the language-model / DeepAgents channel tabs show a ✅ marker on the active channel.
+- Seedance 2.0 dropdown labels now note the intended use — Fast "suited to animation", Mini "suited to advertising" — on both the Volcano and Dreamina channels.
+- Workflow preview no longer shows money estimates anywhere (only claude-engine sessions report a USD cost and session logs are TTL-cleaned, so the figures were inevitably incomplete and misleading); duration statistics remain.
+- Confirmation/signature popups moved from the top-right to the bottom-right corner; multiple popups still stack upward.
 
 ### Fixed
 
 - Pi streaming replies no longer render one token per vertical line while a run is active; consecutive text deltas are coalesced into one live text block while preserving tool-event ordering.
 - Long engine/model identifiers in the run panel now truncate with a tooltip instead of pushing durations and per-run stop buttons under the scrollbar.
 - `make run` now exits cleanly on the first Ctrl+C even while the browser's SSE stream is open; shutdown also reaps the managed API, draw sidecar, active Agent process groups, messaging relays, and keep-awake helper, with a bounded timeout fallback.
+- Page loads no longer stall for seconds: SSE disconnect cleanup was moved off the event loop, codex usage caching got a matching TTL, and startup requests are issued in parallel.
+- Signature confirmations no longer re-pop after the waiting dispatcher times out: re-asking the same question reuses the unanswered confirm, so clicking the original popup takes effect immediately, and an answer given within 10 minutes is back-filled to the new waiter.
+- Preview sidebar entries (characters/scenes/props/worldview) no longer squeeze long names down to a single character: name and badge share the first line, the id moves to its own smaller second line.
+- Workflow preview durations: the meta.json end time is accepted under both `ended_at` and `finished_at` (both spellings exist in stored runs), restoring durations for tasks that only wrote `finished_at`.
+- Windows desktop updates: fixed updates failing to install or not being applied after download.
+- CI: `npm ci` no longer fails on a lock-file desync — sharp's 26 platform packages and `@emnapi/runtime` (pulled in by the baileys dependency) were missing from `package-lock.json`.
 
 ## [1.0.12] - 2026-08-05
 

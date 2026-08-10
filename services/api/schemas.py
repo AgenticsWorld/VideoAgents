@@ -152,6 +152,8 @@ class VersionClone(ApiModel):
 class ResourceConfigUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     claude_probe: bool | None = None
+    codex_probe: bool | None = None
+    kimi_probe: bool | None = None
     kimi_api_key: str | None = Field(default=None, max_length=500)
     openrouter_key: str | None = Field(default=None, max_length=500)
     volc_enabled: bool | None = None

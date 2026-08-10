@@ -1,0 +1,549 @@
+#!/usr/bin/env python3
+"""footage.py — 现成素材检索/下载/切片原语(mashup 混剪插件的宿主工具链;零第三方依赖)。
+
+依赖外部命令:yt-dlp(检索与下载)、ffmpeg/ffprobe(探测/抽帧/切片)、node(yt-dlp 的
+JS runtime,缺失时部分 YouTube 视频 403)。装机自检用 `doctor` 子命令,任何 Agent
+使用本模块前先跑它——插件 plugin.json 的 requires 字段从不被运行时读取,
+doctor 是唯一拦截点。
+
+成本阶梯(设计约束,Agent 按此顺序花流量):
+  search(纯元数据,零视频流量) → preview ≤360p(几 MB) → fetch 1080p 区间(几十 MB)。
+  正片流量只许花在已经视觉确认过的候选上;严禁整片下载超过 --max-duration 的源。
+
+CLI(全部子命令输出 JSON 到 stdout,便于 Agent 解析;失败 exit 非 0):
+  python3 modules/footage.py doctor
+  python3 modules/footage.py search --query "..." [--provider youtube|pexels|pixabay]
+      [--limit 8] [--min-duration 5] [--max-duration 1200]
+  python3 modules/footage.py preview --url <URL> --out <mp4> [--max-height 360]
+      [--section 60-120]
+  python3 modules/footage.py montage --input <video> --out <jpg> [--tiles 4x3]
+  python3 modules/footage.py frame --input <video> --at <秒> --out <jpg>
+  python3 modules/footage.py probe --input <video>
+  python3 modules/footage.py fetch --url <URL> --out <mp4> [--section 128-142]
+      [--pad 3] [--max-height 1080]
+  python3 modules/footage.py cut --input <video> --out <mp4> --in-point 131.0
+      --duration 4.2 [--fps 24] [--width 1920] [--height 1080] [--crop-x center]
+  python3 modules/footage.py concat --list <concat.txt> --out <mp4>
+  python3 modules/footage.py mux --video <mp4> --audio <母带> --out <mp4>
+
+Python:
+  from modules.footage import search_youtube, search_pexels, search_pixabay, \
+      probe_video, download_preview, download_source, extract_montage, cut_clip
+
+要点:
+  - search 结果统一 schema:{provider, id, url, title, duration_s, uploader,
+    view_count, license, width, height};license 拿不到时为 "unknown"
+    (版权责任由用户在 MH1 签字自担,本模块不做过滤,只如实登记)。
+  - youtube 检索标题含 Videohive/Envato/Nimia/CinemaStock/Motion Array/
+    Storyblocks/Artgrid/Shutterstock/Pond5 的候选大概率是带水印预览片,
+    结果标 watermark_risk=true 供 scout 降权,但不删除(仍由 curator 看帧定夺)。
+  - pexels/pixabay 需 API Key:环境变量 PEXELS_API_KEY / PIXABAY_API_KEY,
+    或 data/.videoagents/footageconfig.json 的 pexels_api_key / pixabay_api_key。
+  - fetch --section 自动前后各垫 --pad 秒(yt-dlp 区间下载切在关键帧,不垫会丢头尾);
+    直链 URL(pexels/pixabay 的 .mp4)整文件下载,忽略 --section。
+  - cut 输出零公差:帧数恒 == round(duration*fps),统一 scale+crop 到目标宽高、
+    setsar=1、去音轨(-an);素材反正要转码归一,精确到帧是白捡的。
+  - mux 封装铁律:-c:v copy -c:a copy,**严禁 -shortest**(会静默截断音频末帧
+    且总长检查仍 PASS);要求视频时长 >= 音频,不满足直接报错。
+机检入口见 code/check_footage.py。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+DEFAULT_FPS = 24          # 与 modules/avsync.py 的 FPS 约定一致
+DEFAULT_W, DEFAULT_H = 1920, 1080
+PREVIEW_HEIGHT = 360
+FETCH_HEIGHT = 1080
+SECTION_PAD_S = 3.0       # 区间下载关键帧对齐余量
+STOCK_WATERMARK_HINTS = ("videohive", "envato", "nimia", "cinemastock",
+                         "motion array", "storyblocks", "artgrid",
+                         "shutterstock", "pond5", "istock", "getty")
+_CONFIG_PATH = Path(os.environ.get("VIDEOAGENTS_DATA_DIR",
+                    Path(__file__).resolve().parents[1] / "data")) / ".videoagents" / "footageconfig.json"
+
+
+class FootageError(RuntimeError):
+    pass
+
+
+def _run(cmd: list[str], timeout: int = 600) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def tool_available(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def require_tools(*names: str) -> None:
+    """缺工具即抛错,不做静默降级(同 avsync.require_tools 口径)。"""
+    missing = [n for n in names if not tool_available(n)]
+    if missing:
+        raise FootageError(
+            f"缺少外部命令:{', '.join(missing)}。yt-dlp: pipx install yt-dlp;"
+            f" ffmpeg: brew install ffmpeg; node: brew install node")
+
+
+_YTDLP_JS_FLAG: bool | None = None
+
+
+def _ytdlp_base() -> list[str]:
+    """yt-dlp 基础参数;2025.11+ 版本需 JS runtime 否则部分视频 403,自动探测一次。"""
+    global _YTDLP_JS_FLAG
+    if _YTDLP_JS_FLAG is None:
+        r = _run(["yt-dlp", "--help"], timeout=60)
+        _YTDLP_JS_FLAG = "--js-runtimes" in (r.stdout or "") and tool_available("node")
+    cmd = ["yt-dlp", "--no-playlist", "--no-warnings"]
+    if _YTDLP_JS_FLAG:
+        cmd += ["--js-runtimes", "node"]
+    return cmd
+
+
+def _config() -> dict:
+    try:
+        return json.loads(_CONFIG_PATH.read_text())
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _api_key(provider: str) -> str:
+    env = {"pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}[provider]
+    key = os.environ.get(env) or str(_config().get(f"{provider}_api_key") or "")
+    if not key:
+        raise FootageError(
+            f"{provider} 需要 API Key:设环境变量 {env} 或写入 {_CONFIG_PATH}"
+            f" 的 {provider}_api_key 字段(免费申请:pexels.com/api / pixabay.com/api/docs)")
+    return key
+
+
+# ---------------- 检索(纯元数据,零视频流量) ----------------
+
+def search_youtube(query: str, limit: int = 8,
+                   min_duration: float = 5, max_duration: float = 1200) -> list[dict]:
+    """yt-dlp ytsearch 元数据检索。时长过滤挡掉超短废片与合集/直播录像。"""
+    require_tools("yt-dlp")
+    r = _run(_ytdlp_base() + [f"ytsearch{max(limit * 2, limit + 4)}:{query}",
+                              "--flat-playlist", "--print",
+                              "%(id)s\t%(duration)s\t%(view_count)s\t%(channel)s\t%(license)s\t%(title)s"],
+             timeout=180)
+    if r.returncode != 0:
+        raise FootageError(f"yt-dlp 检索失败:{(r.stderr or '').strip()[-300:]}")
+    out = []
+    for line in (r.stdout or "").strip().splitlines():
+        parts = line.split("\t")
+        if len(parts) < 6:
+            continue
+        vid, dur, views, channel, lic, title = parts[0], parts[1], parts[2], parts[3], parts[4], "\t".join(parts[5:])
+        try:
+            dur_s = float(dur)
+        except ValueError:
+            continue
+        if not (min_duration <= dur_s <= max_duration):
+            continue
+        low = title.lower()
+        out.append({
+            "provider": "youtube", "id": vid,
+            "url": f"https://www.youtube.com/watch?v={vid}",
+            "title": title, "duration_s": dur_s, "uploader": channel,
+            "view_count": int(views) if views.isdigit() else None,
+            "license": lic if lic not in ("NA", "none", "") else "unknown",
+            "width": None, "height": None,
+            "watermark_risk": any(h in low for h in STOCK_WATERMARK_HINTS),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _get_json(url: str, headers: dict | None = None, timeout: int = 60) -> dict:
+    req = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def search_pexels(query: str, limit: int = 8, **_: object) -> list[dict]:
+    """Pexels 视频检索(CC0 类许可,可免费商用);直链 mp4 可直接 fetch。"""
+    data = _get_json(
+        "https://api.pexels.com/videos/search?" + urllib.parse.urlencode(
+            {"query": query, "per_page": limit}),
+        headers={"Authorization": _api_key("pexels")})
+    out = []
+    for v in data.get("videos", []):
+        files = sorted((f for f in v.get("video_files", []) if f.get("height")),
+                       key=lambda f: f["height"], reverse=True)
+        best = files[0] if files else {}
+        out.append({
+            "provider": "pexels", "id": str(v.get("id")), "url": v.get("url"),
+            "title": (v.get("url") or "").rstrip("/").rsplit("/", 1)[-1].replace("-", " "),
+            "duration_s": float(v.get("duration") or 0),
+            "uploader": (v.get("user") or {}).get("name"),
+            "view_count": None, "license": "Pexels License(free, no attribution required)",
+            "width": best.get("width"), "height": best.get("height"),
+            "file_url": best.get("link"), "watermark_risk": False,
+        })
+    return out
+
+
+def search_pixabay(query: str, limit: int = 8, **_: object) -> list[dict]:
+    """Pixabay 视频检索(Content License,可免费商用);直链 mp4 可直接 fetch。"""
+    data = _get_json(
+        "https://pixabay.com/api/videos/?" + urllib.parse.urlencode(
+            {"key": _api_key("pixabay"), "q": query, "per_page": max(limit, 3)}))
+    out = []
+    for v in data.get("hits", [])[:limit]:
+        files = v.get("videos") or {}
+        best = files.get("large") or files.get("medium") or files.get("small") or {}
+        out.append({
+            "provider": "pixabay", "id": str(v.get("id")), "url": v.get("pageURL"),
+            "title": ", ".join((v.get("tags") or "").split(",")[:4]),
+            "duration_s": float(v.get("duration") or 0),
+            "uploader": v.get("user"), "view_count": v.get("views"),
+            "license": "Pixabay Content License(free, no attribution required)",
+            "width": best.get("width"), "height": best.get("height"),
+            "file_url": best.get("url"), "watermark_risk": False,
+        })
+    return out
+
+
+SEARCH_PROVIDERS = {"youtube": search_youtube, "pexels": search_pexels,
+                    "pixabay": search_pixabay}
+
+
+# ---------------- 探测与抽帧 ----------------
+
+def probe_video(path: str) -> dict:
+    """ffprobe 实测:duration_s/width/height/fps/nb_frames/has_audio/sar。失败即抛错。"""
+    require_tools("ffprobe")
+    r = _run(["ffprobe", "-v", "quiet", "-show_entries",
+              "format=duration:stream=codec_type,width,height,r_frame_rate,nb_frames,sample_aspect_ratio",
+              "-of", "json", str(path)], timeout=120)
+    if r.returncode != 0 or not r.stdout:
+        raise FootageError(f"ffprobe 失败:{path}")
+    j = json.loads(r.stdout)
+    info = {"duration_s": float(j["format"]["duration"]), "has_audio": False,
+            "width": None, "height": None, "fps": None, "nb_frames": None, "sar": None}
+    for s in j.get("streams", []):
+        if s.get("codec_type") == "audio":
+            info["has_audio"] = True
+        elif s.get("codec_type") == "video" and info["width"] is None:
+            info["width"], info["height"] = s.get("width"), s.get("height")
+            num, _, den = (s.get("r_frame_rate") or "0/1").partition("/")
+            info["fps"] = round(float(num) / float(den or 1), 3) if float(den or 1) else None
+            info["nb_frames"] = int(s["nb_frames"]) if str(s.get("nb_frames", "")).isdigit() else None
+            info["sar"] = s.get("sample_aspect_ratio")
+    return info
+
+
+def count_frames(path: str) -> int:
+    """逐帧精确计数(-count_frames,比 nb_frames 元数据可信;机检口径)。"""
+    require_tools("ffprobe")
+    r = _run(["ffprobe", "-v", "quiet", "-select_streams", "v:0", "-count_frames",
+              "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", str(path)],
+             timeout=300)
+    out = (r.stdout or "").strip().split(",")[-1]
+    if not out.isdigit():
+        raise FootageError(f"帧计数失败:{path}")
+    return int(out)
+
+
+def extract_montage(src: str, out_jpg: str, tiles: str = "4x3", tile_w: int = 320) -> str:
+    """全片均匀抽帧拼一张网格图(curator 看内容分布/查水印硬切的主要凭据)。"""
+    require_tools("ffmpeg", "ffprobe")
+    cols, rows = (int(x) for x in tiles.lower().split("x"))
+    n = cols * rows
+    dur = probe_video(src)["duration_s"]
+    Path(out_jpg).parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf",
+              f"fps={n / dur},scale={tile_w}:-2,tile={cols}x{rows}",
+              "-frames:v", "1", str(out_jpg)], timeout=300)
+    if r.returncode != 0 or not Path(out_jpg).exists():
+        raise FootageError(f"抽帧拼图失败:{(r.stderr or '').strip()[-200:]}")
+    return out_jpg
+
+
+def extract_frame(src: str, at_s: float, out_jpg: str, width: int = 960) -> str:
+    """取单帧(curator 把选中画面存 keyframes 作组锚点图给预览页展示)。"""
+    require_tools("ffmpeg")
+    Path(out_jpg).parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["ffmpeg", "-y", "-v", "error", "-ss", str(at_s), "-i", str(src),
+              "-vf", f"scale={width}:-2", "-frames:v", "1", str(out_jpg)], timeout=120)
+    if r.returncode != 0 or not Path(out_jpg).exists():
+        raise FootageError(f"取帧失败:{(r.stderr or '').strip()[-200:]}")
+    return out_jpg
+
+
+# ---------------- 下载 ----------------
+
+def _parse_section(section: str) -> tuple[float, float]:
+    m = re.fullmatch(r"([\d.]+)-([\d.]+)", section.strip().lstrip("*"))
+    if not m or float(m.group(2)) <= float(m.group(1)):
+        raise FootageError(f"--section 须为 <起>-<止> 秒(止>起),得到:{section}")
+    return float(m.group(1)), float(m.group(2))
+
+
+def _download_direct(url: str, out: Path, timeout: int = 600) -> None:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp, open(out, "wb") as f:  # noqa: S310
+        shutil.copyfileobj(resp, f)
+
+
+def _ytdlp_download(url: str, out: Path, max_height: int,
+                    section: str | None, pad: float) -> None:
+    cmd = _ytdlp_base() + ["-S", f"res:{max_height}", "--force-overwrites",
+                           "-o", str(out), url]
+    if section:
+        a, b = _parse_section(section)
+        cmd += ["--download-sections", f"*{max(0.0, a - pad)}-{b + pad}"]
+    r = _run(cmd, timeout=1200)
+    if not out.exists():
+        # yt-dlp 可能按实际容器改扩展名(.webm/.mkv),按 stem 找回并转封装到目标名
+        got = sorted(out.parent.glob(out.stem + ".*"))
+        got = [g for g in got if g.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov")]
+        if got:
+            r2 = _run(["ffmpeg", "-y", "-v", "error", "-i", str(got[0]),
+                       "-c", "copy", str(out)], timeout=600)
+            if r2.returncode == 0 and out.exists():
+                got[0].unlink(missing_ok=True)
+                return
+            raise FootageError(f"下载产物转封装失败:{got[0].name}")
+        raise FootageError(f"下载失败:{(r.stderr or '').strip()[-300:]}")
+
+
+def download_preview(url: str, out: str, max_height: int = PREVIEW_HEIGHT,
+                     section: str | None = None) -> dict:
+    """低清预览下载(选片核验用,几 MB 级)。"""
+    require_tools("yt-dlp", "ffmpeg")
+    p = Path(out)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    _ytdlp_download(url, p, max_height, section, pad=SECTION_PAD_S)
+    return {"path": str(p), **probe_video(str(p))}
+
+
+def download_source(url: str, out: str, max_height: int = FETCH_HEIGHT,
+                    section: str | None = None, pad: float = SECTION_PAD_S) -> dict:
+    """正片下载。YouTube 传 --section 只下所需区间(前后垫 pad 秒);
+    pexels/pixabay 的直链 mp4 整文件下载(本就是短素材)。"""
+    require_tools("ffmpeg")
+    p = Path(out)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if url.lower().split("?")[0].endswith((".mp4", ".webm", ".mov")):
+        _download_direct(url, p)
+        if not p.exists() or p.stat().st_size == 0:
+            raise FootageError(f"直链下载失败:{url}")
+    else:
+        require_tools("yt-dlp")
+        _ytdlp_download(url, p, max_height, section, pad)
+    info = probe_video(str(p))
+    return {"path": str(p), "section": section, "pad_s": pad if section else 0, **info}
+
+
+# ---------------- 切片与封装 ----------------
+
+def frames_for_beat(t_in: float, t_out: float, fps: int = DEFAULT_FPS) -> int:
+    """镜的帧数按**累计取整**:round(t_out*fps) - round(t_in*fps)。
+
+    逐镜 round(dur*fps) 的舍入误差会累积(13 镜实测即多 1 帧),累计取整使
+    全片帧数恒 == round(total*fps),零漂移在数学上成立。机检与切片同用此口径。
+    """
+    return round(t_out * fps) - round(t_in * fps)
+
+
+def cut_clip(src: str, out: str, in_point: float, duration: float,
+             fps: int = DEFAULT_FPS, width: int = DEFAULT_W, height: int = DEFAULT_H,
+             crop_x: str = "center", frames: int | None = None) -> dict:
+    """精剪归一化,一次转码完成四件事:精确入点、零公差帧数、规格归一、去音轨。
+
+    帧数缺省 round(duration*fps);**多镜拼片必须显式传 frames**(用
+    frames_for_beat 的累计取整口径,否则逐镜舍入累积破坏零漂移)。
+    scale 短边铺满后 crop 到目标宽高(crop_x: center|left|right,
+    预览时标了主体偏移用后两者);setsar=1;-an。
+    """
+    require_tools("ffmpeg", "ffprobe")
+    frames = frames if frames is not None else round(duration * fps)
+    if frames <= 0:
+        raise FootageError(f"时长非法:{duration}")
+    src_info = probe_video(src)
+    if in_point + duration > src_info["duration_s"] + 0.05:
+        raise FootageError(
+            f"入点+时长({in_point}+{duration})超出素材长度 {src_info['duration_s']:.2f}s;"
+            f"回退 curator 重定 rough_in/rough_out")
+    xpos = {"center": "(iw-ow)/2", "left": "0", "right": "iw-ow"}[crop_x]
+    vf = (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+          f"crop={width}:{height}:{xpos}:(ih-oh)/2,fps={fps},setsar=1")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["ffmpeg", "-y", "-v", "error", "-ss", str(in_point), "-i", str(src),
+              "-vf", vf, "-frames:v", str(frames), "-c:v", "libx264", "-crf", "18",
+              "-preset", "medium", "-pix_fmt", "yuv420p", "-an", str(out)],
+             timeout=900)
+    if r.returncode != 0:
+        raise FootageError(f"切片失败:{(r.stderr or '').strip()[-300:]}")
+    got = count_frames(out)
+    if got != frames:
+        raise FootageError(f"切片帧数不符:want {frames} got {got}(源素材尾部不足?)")
+    return {"path": out, "frames": frames, "duration_s": round(frames / fps, 6),
+            "width": width, "height": height, "fps": fps}
+
+
+def concat_clips(list_file: str, out: str) -> dict:
+    """concat demuxer 无损拼接(要求各 clip 由 cut_clip 产出:同编码同参数)。"""
+    require_tools("ffmpeg")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+              "-i", str(list_file), "-c", "copy", str(out)], timeout=600)
+    if r.returncode != 0:
+        raise FootageError(f"拼接失败:{(r.stderr or '').strip()[-300:]}")
+    return {"path": out, **probe_video(out)}
+
+
+def mux_master(video: str, audio: str, out: str) -> dict:
+    """成片封装:视频流 + 母带音频流逐字节拷贝。**不加 -shortest**(铁律)。
+
+    要求视频时长 >= 音频时长(timeline 数学上应恰等;短了说明切片缺帧,直接报错
+    而不是让 -shortest 静默截音频)。多出的视频尾由零漂移时间轴保证不存在。
+    """
+    require_tools("ffmpeg", "ffprobe")
+    vd, ad = probe_video(video)["duration_s"], probe_video(audio)["duration_s"]
+    if vd + 0.05 < ad:
+        raise FootageError(
+            f"视频({vd:.3f}s)短于母带({ad:.3f}s),缺帧;回查 clips 数量与各组帧数,"
+            f"严禁用 -shortest 掩盖")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-i", str(audio),
+              "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "copy",
+              str(out)], timeout=600)
+    if r.returncode != 0:
+        raise FootageError(f"封装失败:{(r.stderr or '').strip()[-300:]}")
+    return {"path": out, **probe_video(out)}
+
+
+# ---------------- doctor ----------------
+
+def doctor() -> dict:
+    """装机自检:外部命令、yt-dlp 版本与 JS runtime、检索连通性(一次真实元数据检索)。"""
+    rep: dict = {"ok": True, "checks": {}}
+
+    def _c(name: str, ok: bool, detail: str = ""):
+        rep["checks"][name] = {"ok": bool(ok), "detail": detail}
+        rep["ok"] = rep["ok"] and bool(ok)
+
+    for t in ("yt-dlp", "ffmpeg", "ffprobe"):
+        _c(f"tool_{t}", tool_available(t), shutil.which(t) or "未安装")
+    _c("tool_node", tool_available("node"),
+       shutil.which("node") or "未装 node:部分 YouTube 视频将 403(yt-dlp JS runtime)")
+    if tool_available("yt-dlp"):
+        v = (_run(["yt-dlp", "--version"], timeout=60).stdout or "").strip()
+        _c("ytdlp_version", bool(v), v)
+        try:
+            hits = search_youtube("nature b-roll", limit=1)
+            _c("youtube_search", bool(hits), f"{len(hits)} 条结果")
+        except Exception as e:  # noqa: BLE001
+            _c("youtube_search", False, str(e)[-200:])
+    for prov in ("pexels", "pixabay"):
+        try:
+            _api_key(prov)
+            _c(f"{prov}_key", True, "已配置")
+        except FootageError:
+            rep["checks"][f"{prov}_key"] = {
+                "ok": True, "detail": "未配置(可选;CC0 兜底通道不可用)"}
+    return rep
+
+
+# ---------------- CLI ----------------
+
+def _emit(obj: object) -> None:
+    print(json.dumps(obj, ensure_ascii=False, indent=1))
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("doctor")
+    s = sub.add_parser("search")
+    s.add_argument("--query", required=True)
+    s.add_argument("--provider", default="youtube", choices=sorted(SEARCH_PROVIDERS))
+    s.add_argument("--limit", type=int, default=8)
+    s.add_argument("--min-duration", type=float, default=5)
+    s.add_argument("--max-duration", type=float, default=1200)
+    s = sub.add_parser("preview")
+    s.add_argument("--url", required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--max-height", type=int, default=PREVIEW_HEIGHT)
+    s.add_argument("--section", default=None)
+    s = sub.add_parser("montage")
+    s.add_argument("--input", required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--tiles", default="4x3")
+    s = sub.add_parser("frame")
+    s.add_argument("--input", required=True)
+    s.add_argument("--at", type=float, required=True)
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("probe")
+    s.add_argument("--input", required=True)
+    s = sub.add_parser("fetch")
+    s.add_argument("--url", required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--section", default=None)
+    s.add_argument("--pad", type=float, default=SECTION_PAD_S)
+    s.add_argument("--max-height", type=int, default=FETCH_HEIGHT)
+    s = sub.add_parser("cut")
+    s.add_argument("--input", required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--in-point", type=float, required=True)
+    s.add_argument("--duration", type=float, required=True)
+    s.add_argument("--fps", type=int, default=DEFAULT_FPS)
+    s.add_argument("--width", type=int, default=DEFAULT_W)
+    s.add_argument("--height", type=int, default=DEFAULT_H)
+    s.add_argument("--crop-x", default="center", choices=["center", "left", "right"])
+    s.add_argument("--frames", type=int, default=None,
+                   help="显式帧数(累计取整口径 frames_for_beat;多镜拼片必传)")
+    s = sub.add_parser("concat")
+    s.add_argument("--list", required=True, dest="list_file")
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("mux")
+    s.add_argument("--video", required=True)
+    s.add_argument("--audio", required=True)
+    s.add_argument("--out", required=True)
+    a = ap.parse_args(argv)
+    try:
+        if a.cmd == "doctor":
+            rep = doctor()
+            _emit(rep)
+            return 0 if rep["ok"] else 1
+        if a.cmd == "search":
+            _emit(SEARCH_PROVIDERS[a.provider](a.query, limit=a.limit,
+                                               min_duration=a.min_duration,
+                                               max_duration=a.max_duration))
+        elif a.cmd == "preview":
+            _emit(download_preview(a.url, a.out, a.max_height, a.section))
+        elif a.cmd == "montage":
+            _emit({"path": extract_montage(a.input, a.out, a.tiles)})
+        elif a.cmd == "frame":
+            _emit({"path": extract_frame(a.input, a.at, a.out)})
+        elif a.cmd == "probe":
+            _emit(probe_video(a.input))
+        elif a.cmd == "fetch":
+            _emit(download_source(a.url, a.out, a.max_height, a.section, a.pad))
+        elif a.cmd == "cut":
+            _emit(cut_clip(a.input, a.out, a.in_point, a.duration,
+                           a.fps, a.width, a.height, a.crop_x, a.frames))
+        elif a.cmd == "concat":
+            _emit(concat_clips(a.list_file, a.out))
+        elif a.cmd == "mux":
+            _emit(mux_master(a.video, a.audio, a.out))
+        return 0
+    except FootageError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

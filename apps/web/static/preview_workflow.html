@@ -39,14 +39,14 @@ header select:hover{border-color:var(--accent)}
 #summary .bar>i{display:block;height:100%;background:var(--green)}
 #summary .st{color:var(--dim)}
 #summary .st b{color:var(--text);font-weight:600}
-#summary .money b{color:var(--yellow)}
 #summary .sig{color:var(--yellow);border:1px solid var(--yellow);border-radius:5px;padding:0 7px;cursor:pointer}
 main{flex:1;display:flex;min-height:0}
 #flow{flex:1;overflow:auto;padding:16px 20px 60px}
 #canvas{position:relative;min-width:600px}
 #edges{position:absolute;inset:0;pointer-events:none;overflow:visible}
-/* 图例 */
-#legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--dim);font-size:11.5px;margin-bottom:12px}
+/* 图例:与汇总条一样固定在滚动区外,始终可见 */
+#legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--dim);font-size:11.5px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+#legend:empty{display:none}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
 /* 阶段泳道 */
 .phase{border:1px solid var(--border);border-radius:12px;margin:0 0 18px;background:var(--panel)}
@@ -68,7 +68,6 @@ main{flex:1;display:flex;min-height:0}
 .nodechip .nm .tid{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nodechip .ag{color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nodechip .tc{color:var(--dim);font-size:11px;display:flex;gap:8px;flex-wrap:wrap}
-.nodechip .tc .money{color:var(--yellow)}
 .nodechip .mini{height:5px;border-radius:3px;background:var(--bg);margin:4px 0 3px;overflow:hidden;display:flex}
 .nodechip .mini>i{display:block;height:100%}
 .badge{font-size:10px;border-radius:4px;padding:0 4px;flex:none;border:1px solid var(--border);color:var(--dim)}
@@ -119,6 +118,7 @@ dl.kv>dd{min-width:0;word-break:break-all}
   <button id="reload">刷新</button>
 </header>
 <div id="summary"></div>
+<div id="legend"></div>
 <main>
   <div id="flow"><div id="canvas"><div class="empty">加载中…</div></div></div>
   <div id="detail"></div>
@@ -148,7 +148,7 @@ function fmtDur(s){
   if(s<3600)return Math.floor(s/60)+'m'+(s%60?String(s%60).padStart(2,'0')+'s':'');
   return (s/3600).toFixed(1)+'h';
 }
-const fmtCost=c=>!c?'':'$'+(c>=10?c.toFixed(1):c.toFixed(2));   // 0/缺失都不显示(会话日志过期后查不到费用属正常)
+const fmtM=v=>v==null?'—':(v/1e6).toFixed(4)+'M';               // token 数按百万(M)为单位,保留 4 位小数
 
 /* 单节点显示状态(叠加"等待签字"派生态:human 节点依赖全通过但未签) */
 function nodeState(n,doneSet){
@@ -197,11 +197,9 @@ function buildUnits(){
       :has('dispatched')?'dispatched':has('blocked')?'blocked'
       :st.every(x=>x==='done'||x==='skipped')?(st.some(x=>x==='done')?'done':'skipped')
       :has('done')?'partial':'pending';
-    // 时间/价格:实际 Σ + 剩余估 Σ
+    // 时间:实际 Σ + 剩余估 Σ
     u.actDur=u.exec.reduce((a,m)=>a+(m.duration_s||0),0);
-    u.actCost=u.exec.reduce((a,m)=>a+(m.cost_usd||0),0);
     u.estDur=u.exec.reduce((a,m)=>a+(m.est_duration_s||0),0);
-    u.estCost=u.exec.reduce((a,m)=>a+(m.est_cost_usd||0),0);
     u.doneCnt=st.filter(x=>x==='done'||x==='skipped').length;
   }
 }
@@ -245,8 +243,8 @@ function chipHtml(u){
     mini=`<div class="mini">${seg(c.done,'var(--green)')}${seg(c.skipped,'#3a4152')}${seg((c.running||0)+(c.dispatched||0),'var(--accent)')}${seg(c.failed,'var(--red)')}${seg(c.blocked,'var(--orange)')}${seg(c.waitsign,'var(--yellow)')}</div>`;
   }
   const tc=[];
-  if(u.actDur||u.actCost)tc.push(`<span title="${esc(t('已发生的实际耗时/费用'))}">✔ ${fmtDur(u.actDur)||'—'}${u.actCost?` <span class="money">${fmtCost(u.actCost)}</span>`:''}</span>`);
-  if(u.estDur||u.estCost)tc.push(`<span title="${esc(t('剩余部分按历史均值预估(仅 LLM 会话成本,不含生成侧 API 计费)'))}">≈ ${fmtDur(u.estDur)||'—'}${u.estCost?` <span class="money">${fmtCost(u.estCost)}</span>`:''}</span>`);
+  if(u.actDur)tc.push(`<span title="${esc(t('已发生的实际耗时'))}">✔ ${fmtDur(u.actDur)}</span>`);
+  if(u.estDur)tc.push(`<span title="${esc(t('剩余部分按历史均值预估'))}">≈ ${fmtDur(u.estDur)}</span>`);
   const ag=u.agent?`<div class="ag" title="${esc(u.agent)}">${esc(u.agent.split('/').pop())}</div>`:'';
   const prog=multi?` <span style="color:var(--dim);font-weight:400">${u.doneCnt}/${n}</span>`:'';
   return `<div class="nodechip s-${u.state}${SEL===u.key?' sel':''}" data-key="${esc(u.key)}" title="${esc(SLABEL[u.state]?t(SLABEL[u.state]):u.state)}">
@@ -275,12 +273,12 @@ function render(){
     const exec=units.flatMap(u=>u.exec);
     const done=exec.filter(m=>m._st==='done'||m._st==='skipped').length;
     const allDone=exec.length>0&&done===exec.length;
-    const estD=units.reduce((a,u)=>a+u.estDur,0), estC=units.reduce((a,u)=>a+u.estCost,0);
-    const actD=units.reduce((a,u)=>a+u.actDur,0), actC=units.reduce((a,u)=>a+u.actCost,0);
+    const estD=units.reduce((a,u)=>a+u.estDur,0);
+    const actD=units.reduce((a,u)=>a+u.actDur,0);
     // 首次渲染:全部完成的阶段默认折叠;之后保持用户的开合选择
     const isClosed=first?allDone:closed.has(ph);
-    const est=[actD||actC?`✔ ${fmtDur(actD)} ${fmtCost(actC)||''}`:'',
-               estD||estC?`≈ ${t('剩余')} ${fmtDur(estD)} ${fmtCost(estC)||''}`:''].filter(Boolean).join(' · ');
+    const est=[actD?`✔ ${fmtDur(actD)}`:'',
+               estD?`≈ ${t('剩余')} ${fmtDur(estD)}`:''].filter(Boolean).join(' · ');
     const rows=levelize(units);
     h+=`<div class="phase${isClosed?' closed':''}" data-ph="${esc(ph)}">
       <h3 onclick="this.parentNode.classList.toggle('closed');drawEdges()">
@@ -288,10 +286,10 @@ function render(){
         <span class="prog">${done}/${exec.length}</span><span class="est">${esc(est)}</span></h3>
       <div class="ph-body">${rows.map(r=>`<div class="lvl">${r.map(chipHtml).join('')}</div>`).join('')}</div></div>`;
   }
-  $('#canvas').innerHTML=`<svg id="edges"></svg><div id="legend">${
-    ['done','running','dispatched','waitsign','pending','partial','failed','blocked','skipped','template']
+  $('#legend').innerHTML=['done','running','dispatched','waitsign','pending','partial','failed','blocked','skipped','template']
     .map(s=>`<span><span class="dot" style="background:${SCOLOR[s]}"></span>${t(SLABEL[s])}</span>`).join('')
-  }<span>✍️=${t('需签字')} · ✔=${t('实际')} · ≈=${t('预估')}</span></div>`+h
+    +`<span>✍️=${t('需签字')} · ✔=${t('实际')} · ≈=${t('预估')}</span>`;
+  $('#canvas').innerHTML=`<svg id="edges"></svg>`+h
     +(order.length?'':`<div class="empty">${t('该项目还没有 runs/dag.json(尚未立项)')}</div>`);
   renderSummary();
   requestAnimationFrame(drawEdges);
@@ -313,9 +311,12 @@ function renderSummary(){
     +(failed?`<span class="st" style="color:var(--red)">✖ <b>${failed}</b> ${t('失败')}</span>`:'')
     +(blocked?`<span class="st" style="color:var(--orange)">⛔ <b>${blocked}</b> ${t('受阻')}</span>`:'')
     +signs.map(m=>`<span class="sig" data-key="${esc(m.family)}" title="${esc(m.id)}">✍️ ${esc(m.checkpoint||m.id)}</span>`).join('')
-    +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.spent_cost_usd)||''}</b></span></span>`
-    +`<span class="st" title="${esc(t('按历史均值预估;仅 LLM 会话成本,不含生成侧 API 计费'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.remaining_est_cost_usd)||''}</b></span> (${s.remaining_count} ${t('个任务')})</span>`
+    +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b></span>`
+    +`<span class="st" title="${esc(t('按历史均值预估'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> (${s.remaining_count} ${t('个任务')})</span>`
     +`<span class="st" title="${esc(t('剩余任务沿依赖链的最长估时(并行推进下的理论最短完成时间)'))}">${t('关键路径:')}<b>${fmtDur(s.critical_path_s)||'—'}</b></span>`
+    +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗视频tokens')} <b>${fmtM(s.video_tokens)}</b></span>`
+    +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗图片tokens')} <b>${fmtM(s.image_tokens)}</b></span>`
     +`<button class="editbtn" id="wfEdit" title="${esc(t('对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)'))}">✏️ ${esc(t('修改'))}</button>`;
 }
 
@@ -361,8 +362,8 @@ function renderDetail(){
       ${kv('Agent',esc(u.agent))}
       ${kv(t('阶段'),esc(u.phase+' '+t(PHASE_NAMES[u.phase]||'')))}
       ${kv(t('签字点'),esc(u.checkpoint))}
-      ${kv(t('实际'),u.actDur||u.actCost?esc(`${fmtDur(u.actDur)||'—'} ${fmtCost(u.actCost)||''}`):'')}
-      ${kv(t('预估'),u.estDur||u.estCost?esc(`${fmtDur(u.estDur)||'—'} ${fmtCost(u.estCost)||''}`)+` <span style="color:var(--dim)">(${t('按历史均值')})</span>`:'')}
+      ${kv(t('实际'),u.actDur?esc(fmtDur(u.actDur)):'')}
+      ${kv(t('预估'),u.estDur?esc(fmtDur(u.estDur))+` <span style="color:var(--dim)">(${t('按历史均值')})</span>`:'')}
       ${kv(t('依赖'),u.deps.length?`<span class="deps">${u.deps.map(d=>`<a data-key="${esc(d)}">${esc(d)}</a>`).join('、')}</span>`:'')}
       ${kv(t('产出'),esc((u.base||u.members[0]).outputs.join('、')))}
     </dl>
@@ -371,8 +372,8 @@ function renderDetail(){
     ${members.map(m=>`<div class="member">
       <div class="row1"><span class="dot" style="background:${SCOLOR[m._st]}"></span><span class="tid">${esc(m.id)}</span>${editBtn(m.id)}</div>
       <div class="meta">${esc(t(SLABEL[m._st]||m.state))}${m.attempt>1?` · ${esc(I18N.f(t('第 {n} 次尝试'),{n:m.attempt}))}`:''}
-        ${m.duration_s?` · ✔ ${fmtDur(m.duration_s)}`:''}${m.cost_usd?` ${fmtCost(m.cost_usd)}`:''}
-        ${m.est_duration_s?` · ≈ ${fmtDur(m.est_duration_s)}`:''}${m.est_cost_usd?` ≈${fmtCost(m.est_cost_usd)}`:''}</div>
+        ${m.duration_s?` · ✔ ${fmtDur(m.duration_s)}`:''}
+        ${m.est_duration_s?` · ≈ ${fmtDur(m.est_duration_s)}`:''}</div>
       ${m.note?`<div class="note">${esc(m.note)}</div>`:''}</div>`).join('')}`;
 }
 
@@ -415,10 +416,10 @@ async function load(){
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/workflow');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     DATA=await r.json();
-  }catch(e){$('#canvas').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`;$('#summary').innerHTML='';return}
+  }catch(e){$('#canvas').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`;$('#summary').innerHTML='';$('#legend').innerHTML='';return}
   if(!DATA.nodes.length){
     $('#canvas').innerHTML=`<div class="empty">${t('该项目还没有 runs/dag.json(尚未立项)')}</div>`;
-    $('#summary').innerHTML='';return;
+    $('#summary').innerHTML='';$('#legend').innerHTML='';return;
   }
   render();renderDetail();
 }
@@ -431,7 +432,7 @@ load();
 TIMER=setInterval(()=>{if(!document.hidden)load()},10000);   // 任务状态自动刷新
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考图'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

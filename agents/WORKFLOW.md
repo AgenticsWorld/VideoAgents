@@ -16,7 +16,7 @@
 5. **上下文按需组装**:Agent 不读全库。Context Package 分两级(2026-08-01,教训:每单必调 context Agent 一次约 4 分钟,shixibook 310 张工单调了 395 次):**full 包**由 `context` Agent 裁剪(该任务需要的 Bible 片段 + 上游产物 + 缺陷历史),仅限三类工单——① `attempt > 1` 重做单(必须附上次失败原因与 evaluation 逐条意见);② 需**跨文件摘要裁剪**的工单——所需上下文**无法用明确文件路径清单表达**、必须摘要/裁剪进 token 预算时才算;「创作类/涉及设定」本身不是升 full 的理由,所需 Bible 与上游文件能以明确路径列进 `inputs` 的(执行 Agent 直读当前受控版),一律 inline(2026-08-02 教训:衍生小说链 52 单全按「创作类需裁剪」升 full,白名单形同虚设);③ 需聚合缺陷历史的工单(qa/defects 存在与该产物/该 Agent 相关的 open 缺陷)。其余工单走 **inline 轻量包**:orchestrator 派单时把输入文件路径清单 + 硬约束直接写进工单 `instruction`/`inputs`,`context_package: inline`,不调用 context Agent。**打包防重复**:同一工单已有未过期 `context.md` 时禁止重新打包,重打仅限 attempt 递增或 inputs 实质变更,且优先增量更新而非整包重建;章节/镜头/场景级扇出任务若确需 full,共享一份批次底包(如 `runs/<批次>-base/context.md`),逐实例只补该实例的增量,禁止逐实例复制同质全量包(2026-08-02 教训:nv3 二十三章草稿同刻各打一份近似全量包)。
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 4–8 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。
-8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤15 秒整数),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
+8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤项目「分镜组设置」的组时长上限,整数秒;默认 15s=Seedance 2.0 单次生成上限,仅当视频模型为 Seedance 2.5 且用户调高该设置时最高 30s——本文档余下部分出现的 15s 组上限示例值均指该设置的默认值,以系统提示词注入的项目实际设置为准),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
 9. **输出文件命名仅限英文与数字(2026-07-20)**:所有 Agent 落盘的文件名与目录名只准使用英文字母(a-z/A-Z)、数字(0-9)及分隔符 `-`/`_`/`.`,**禁止中文及其他任何非 ASCII 字符**——中文文件名在 ffmpeg/对象存储预签名 URL/跨平台路径处理中随时炸链。角色/场景等实体一律用 ID 或拼音/英文 slug 入文件名(如 `CHAR-0001_voiceprint.mp3`,不是 `林风_声纹.mp3`);机检项 ascii_filename,命中非 ASCII 文件名直接退回。本条只限**文件名**,文件内容(JSON 字段值、字幕、剧本)不受限。用户放入 `novel/`、`refs/` 的输入文件不强制,但引用时应先规范化改名。
 10. **制作必需字段禁 UNKNOWN,缺失自行发挥补全(2026-08-04)**:输入文本对出场人物/场景/道具没有具体描述是常态(短篇尤甚;10days003 前科:世界观/场景/道具卡大量 `UNKNOWN` 占位,下游概念图与 prompt 无锚可依)。分层处理——**事实抽取层**(01-story:novel-parser/event)判不准照旧如实标 UNKNOWN,那是留给设定层的补全信号,不是终值;**设定/设计层**(02-worldbuilding、03-characters、04-creatures、05-scenes、06-art)凡产出制作必需字段(绘图/视频生成/配音要直接消费的外观、材质、光照、色彩、尺寸、声线等规格),遇原文与上游均无依据(含上游标 UNKNOWN)时,**先自行发挥设计出定值,再继续往后执行**:设计须与已有 Bible/style.json/题材惯例自洽,标 `inferred: true` + `reason`(写明设计依据),不得以信息缺失为由留白、停摆、上报或退单。**机检 `no_unknown_placeholder`**:设定层产物的制作必需字段值出现 UNKNOWN/未知/待定/TBD/N-A 或留空即退回。两条边界:① 原文或 Bible 已有定值的字段禁止发挥,以原文为准(原则 1);② 剧情悬念(原文**刻意不揭示**的信息,如幕后黑手身份、密室角色感知不到时间)不算信息缺失——如实记为剧情事实并写明「原文刻意未揭示」,但同一实体的制作必需字段仍须给出定值呈现方案(谜面也要能画出来)。自主设计随 H1/H1A/H2 签字转正,与原文抽取的设定同等受控;后文发现原文依据与之冲突,上报 memory-bible 走变更流程。
 
@@ -29,7 +29,7 @@
 ```
 data/projects/<slug>/
 ├── novel/          # 输入:小说原文(按章节)
-├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)与音乐(music/,见下方约定)
+├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)、音乐与文本资料(见下方约定)
 ├── story/          # chapter_manifest.json(章节批清单), structured_story.json(总表),
 │                   # structured_story/(chNNN.json 章节分片,供按章裁剪), story_graph.json,
 │                   # events.json, story_timeline.json, episodes/ep01/screenplay.md ...
@@ -67,7 +67,7 @@ data/projects/<slug>/
 
 ### 用户参考目录 refs/(人工输入口)
 
-用户把「希望成片长成什么样」的参考图与希望使用的音乐文件放进本目录(入口:Web 控制台顶栏「预览设定产物」菜单 →【参考图】页,按分类上传并逐文件填写注释;需要引导用户补参考素材时,一律指引其进该页面,不要让用户手动开文件夹),视觉设定类 Agent 与配乐 Agent **必须先查看、优先参考/选用**:
+用户把「希望成片长成什么样」的参考图、希望使用的音频与文本资料放进本目录(入口:Web 控制台顶栏「预览设定产物」菜单 →【参考文件】页,按分类上传并逐文件填写注释;需要引导用户补参考素材时,一律指引其进该页面,不要让用户手动开文件夹),视觉设定类 Agent 与配乐 Agent **必须先查看、优先参考/选用**:
 
 ```
 refs/
@@ -75,9 +75,10 @@ refs/
 ├── characters/   # 角色形象参考;按角色建子目录(refs/characters/<角色名或id>/)则定向生效
 ├── scenes/       # 场景与世界观:建筑/地貌/氛围参考
 ├── props/        # 道具/服装/法宝参考(服装可建 costumes/ 子目录)
-├── music/        # 用户希望使用的音乐文件(BGM 候选,mp3/wav/flac 等)
+├── music/        # 用户希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等)
 ├── thumbnail/    # 封面参考:他人爆款封面/构图/版式/文字风格范例(thumbnail Agent 优先参考)
-└── NOTES.md      # 逐图/逐曲注释(哪张图管什么、哪首曲子想用在哪);有则必读——用户在【参考图】页逐文件填写,
+├── text/         # 文本资料:设定/文案等文本文件(txt/md 等),相关 Agent 参考使用
+└── NOTES.md      # 逐文件注释(哪个文件管什么、想用在哪);有则必读——用户在【参考文件】页逐文件填写,
                   # 自动写入本文件标记块(机器可读版 annotations.json);用户手写内容(标记块外)同样有效
 ```
 
@@ -85,7 +86,7 @@ refs/
 1. **优先级**:用户参考图 > Agent 自行发挥。风格类决策(style.json、色彩、画风)与参考图冲突时,以参考图为准;与文字设定(Bible)冲突时上报用户裁决,不擅自取舍。
 2. **落痕迹**:凡参考了 refs/ 的产物,须在其 meta/prompts.json 里记录所用参考图路径(`user_refs` 字段);art-director 在 style.json 中写明每张风格参考图影响了哪些决策。
 3. **直接注入**:生成图像时把命中的参考图经 `genmedia --ref` 传入(见 §9);角色参考图同时作为 character-concept 三视图和 character-consistency 校正的形象锚点之一。
-4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可从预览菜单进入【参考图】页上传参考图后重跑风格」。
+4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可从预览菜单进入【参考文件】页上传参考图后重跑风格」。
 5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
 6. **用户音乐**:`refs/music/` 有文件时,配乐 Agent(`09-audio/music`)必须先逐曲试听分析(曲风/情绪/节奏/时长),再对照本集情绪曲线自行判断每首曲子适合用在视频的哪些位置(哪些场次/情绪段),优先选用用户音乐,不足的段落才生成补齐;NOTES.md 指定了用途的按指定执行。选用情况(含未选用及原因)写入 cue sheet,`license.source` 记 `user_provided` 并如实标注来源文件路径,版权仍由 `11-qa/copyright` 终审。
 7. **封面参考**:`refs/thumbnail/` 有图时,封面 Agent(`10-editing/thumbnail`)必须先逐图分析可借鉴点(构图/主体占比/文字位置与字重/色彩策略),作为 A/B 版设计的优先依据,并在送选清单 `user_refs` 字段落痕迹;NOTES.md 指定了用法的按指定执行。
@@ -290,7 +291,7 @@ refs/
 
 > **概念图目录卫生(candidates 留档,2026-07-30)**:`assets/concepts/{characters,scenes,props}/<id>/` 主目录仅保留**最终采用的最新版本**图与 prompts.json/selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档,不删除以备追溯。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计现货比对、§7E 修正取锚),弃用图混在主目录会被误取注入;`candidates/` 不计入 §6A 现货。三个概念 Agent(character-concept/environment-concept/prop,含 §6A 回派补图)出图挑选后即归位,重 roll 替换定稿时旧图先移入 `candidates/` 再落新图。
 
-**G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考图】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
+**G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考文件】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
 
 ### Phase 5 — 剧本改编(与 Phase 4 并行,依赖 G1/G2/G3)
 
@@ -517,8 +518,8 @@ refs/
 |---|---|---|---|---|
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜英文音频描述(打斗/门/脚步…) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景英文描述,同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
-| voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声,按 voice.json 声纹自动选型);调用 `genmedia tts --character <CHAR-ID> [--variant ...]`,禁止手填 `--voice`;样本仅作组生成 reference_audio 嗓音锚,严禁进成片对白;维护 casting/manifest,集级核对覆盖率 | **casting.json**、voice.json(含 age_variants)、generation_groups | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + manifest/casting | 机检:样本覆盖 100%、时长 ∈[3,5]s、纯人声;casting 记录自动选中的 TimbreModel 文件;同组说话人不得共用音色;QA:audio-qa |
-| narrator(先于 p7-video) | 旁白配音(ComfyUI 根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`,后期轨;在 p7-video 前合成并实测时长);交付前盖 narration_anchors 指纹 | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/` | 机检:narration_fit、narration_anchor_sync;QA:audio-qa |
+| voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声——≤5s/段是方舟 audio_ref 总时长 15.2s 硬限的配额(3 段满配 ≤15s,§8A 2026-07-20 实证),按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;ComfyUI 渠道调用 `genmedia tts --character <CHAR-ID> [--variant ...]` 自动选型、禁止手填 `--voice`,casting 记录自动选中的 TimbreModel 文件;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[3,5]s、纯人声(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
+| narrator(先于 p7-video) | 旁白配音(云渠道:声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice;ComfyUI:根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`;后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
@@ -735,6 +736,7 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 > (机械活→claude·sonnet;分析/评分→codex·gpt-5.5;创作核心→claude·opus)。
 > 派单时该配置自动生效。**报错/返工禁止切换执行引擎**;总制片不得用 `--engine` 覆盖成员引擎
 > (服务端会忽略换引擎请求)。同引擎内如需指定模型可用 `--model`。
+> **赛马(改派多 Agent 并行重做同一任务、择优交付)仅限用户明确下令,严禁自行发起**,且赛马同样不换引擎。
 
 ```bash
 # 查看当前生效渠道与模型(接工单后先跑一次,把结果记入产物 meta)
@@ -763,7 +765,17 @@ python3 modules/genmedia.py video \
 # 注意:--ref(≤9 张,建议 4–5)与 --first-frame/--last-frame 互斥;
 #      参考图/首尾帧每张须 ≥3,686,400 像素=火山硬限(16:9 最小 2560x1440、9:16 为 1440x2560;
 #      2026-07-23 实测 854x480 提交即拒)——锚点图严禁按视频草稿分辨率(480p 等)出小图;
+#      真人脸审核拒收(条件处置):部分视频渠道审核拒绝含真实人脸(photoreal face)的参考图——
+#      仅当排查定位到被拒图为含人脸的角色 sheet/锚点图时,对图中所有人物的**脸部做彩铅化**
+#      (colored pencil 风格重绘脸部,身体与背景保留原图质感)后替换重提;sheet 的彩铅化
+#      改造回派 character-concept(细则见其 SOUL.md),正常流程不做此处理;
 #      Seedance 2.0 时长须 [4,15] 整数秒或 -1(模型自定),不支持 --seed。
+#      【仅当视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】:
+#      时长放宽为 [4,30] 整数秒或 -1(单段 30s 直出);参考上限 30图/10视频/10音频,
+#      参考音频与参考视频总时长各 ≤30s;支持纯音频参考(无需搭配图/视频);分辨率仅
+#      480p/720p(1080p/4k genmedia 自动压 720p);首帧/首尾帧任务 ratio 仅 adaptive
+#      (genmedia 自动改写,输出与首帧图同比)。组时长与参考数量的**取用上限仍以项目
+#      「分镜组设置」为准**,不得因模型能力放宽而超出该设置。
 
 # 生成视频(单镜首尾帧图生视频;兜底路径,组生成不达标时逐镜重做)
 python3 modules/genmedia.py video \
@@ -781,7 +793,10 @@ python3 modules/genmedia.py video \
   --ref-video assets/clips/ep01/archive/grp012_<时间戳>/grp012.mp4 \
   --ref <正确样式参考图,可选;涉人物/场景/道具形象时必须取 assets/concepts/ 在库概念图,严禁临时新生成样式图(§7E)> \
   --generate-audio on --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
-# 注意:--ref-video ≤3 个、单个 2-15s 且总时长 ≤15s、单文件 ≤45MB,与首尾帧互斥;
+# 注意:--ref-video ≤3 个、单个 2-15s 且总时长 ≤15s、单文件 ≤45MB,与首尾帧互斥
+#      (仅当视频模型为 Seedance 2.5 时放宽:≤10 个、单个 2-30s 且总时长 ≤30s;且 2.5 的
+#      视频编辑任务 ratio 仅支持 adaptive、duration 仅支持 -1(自动与输入视频等长),
+#      视频延长任务 ratio 仅支持 adaptive,违规将异步报错 InvalidParameter.TaskTypeConstraint);
 #      方舟要求 reference_video 为公网 URL:参考视频自动上传对象存储换预签名链接,
 #      需先在 Web 控制台「设置 → 文件托管」配好存储渠道(火山 TOS/阿里 OSS/腾讯 COS/
 #      S3 兼容,生效=选中标签页;SDK 按需装 tos/oss2/cos-python-sdk-v5/boto3);
@@ -792,7 +807,7 @@ python3 modules/genmedia.py video \
 python3 modules/genmedia.py music \
   --prompt "<英文音乐描述:曲风/情绪/乐器/节奏,Lyria 3 Pro 可含歌词>" \
   --output assets/audio/bgm/ep01/ep01_bgm_02.mp3 \
-  [--duration <秒>]                     # elevenlabs:3–600s;comfyui(ACE-Step):1–240s;openrouter 忽略
+  [--duration <秒>]                     # elevenlabs(Eleven Music):3–600s,可按 cue 时长精确出段;comfyui(ACE-Step):1–240s;openrouter 忽略;省略=模型自定
 # openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名
 # (openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus,force_instrumental 由「生成模型」页配置,默认纯音乐)。
 
@@ -801,9 +816,10 @@ python3 modules/genmedia.py music \
 python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
-  [--character <CHAR-ID;角色音色样本必传,旁白不传>] [--variant <年龄形态>] [--speed 1.0] \
-  [--instructions "<语气/情绪指令,仅 OpenAI 系模型生效>"]
-# ComfyUI TTS 会读取项目角色设定并从仓库级 data/TimbreModel 自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
+  [--character <CHAR-ID;ComfyUI 角色音色样本必传,旁白不传>] [--variant <年龄形态>] \
+  [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;ComfyUI 禁止手填>] \
+  [--speed 1.0] [--instructions "<语气/情绪指令;OpenAI 系模型生效,火山注入情绪指令,ComfyUI 参与音色匹配>"]
+# ComfyUI TTS 会读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
 ```
 
 Python 内调用(批量循环时省进程开销):`from modules.genmedia import generate_image, generate_video, generate_music, generate_tts`。
@@ -813,7 +829,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 | OpenRouter | ✓ | ✓ | ✓ | ✓ | 云端;视频异步轮询;音乐流式返回(Lyria 3 Pro 整曲 / Clip 30s);TTS 走 /audio/speech 字节流 |
 | Ideogram | ✓ | — | — | — | 云端 |
 | 火山引擎(方舟) | ✓ | ✓ | — | — | 云端;图像 Seedream 系列同步返回,视频异步任务自动轮询 |
-| BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0 为 dreamina-seedance-2-0-*) |
+| BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0/2.5 为 dreamina-seedance-2-*) |
 | ComfyUI | ✓ | ✓ | — | — | 本地;视频必须在设置页配好 API 格式工作流 JSON,占位符见模块头注释 |
 
 **生成类 Agent 的纪律**:

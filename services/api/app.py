@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, wechat, whatsapp
+from services.runtime import core, feishu, media_push, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -69,7 +69,7 @@ async def lifespan(_: FastAPI):
             print(f"[approval] 启动核对 {project_dir.name} 失败(忽略):{error}", flush=True)
     watchdog = asyncio.create_task(core.idle_watchdog())
     relays = [asyncio.create_task(m.relay_loop())
-              for m in (wechat, feishu, whatsapp)]
+              for m in (wechat, feishu, whatsapp, media_push)]
     try:
         yield
     finally:
@@ -375,6 +375,21 @@ async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_comfyui(body.model_dump())
 
 
+@api.post("/providers/runninghub/workflow", tags=["providers"])
+async def rh_workflow_verify(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_rh_workflow_verify(body.model_dump())
+
+
+@api.get("/comfy/workflows", tags=["providers"])
+async def comfy_workflows() -> dict[str, Any]:
+    return await core.api_comfy_workflows()
+
+
+@api.get("/comfy/workflows/doc", tags=["providers"])
+async def comfy_workflow_doc(name: str) -> dict[str, Any]:
+    return await core.api_comfy_workflow_doc(name)
+
+
 @api.get("/providers/deepagents/models", tags=["providers"])
 async def deepagents_models() -> dict[str, Any]:
     return await core.api_deepagents_models()
@@ -398,6 +413,11 @@ async def add_elevenlabs_voice(body: ProviderProbe) -> dict[str, Any]:
 @api.post("/providers/volcengine/speakers", tags=["providers"])
 async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
+
+
+@api.post("/providers/minimax/voices", tags=["providers"])
+async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_minimax_voices(body.model_dump())
 
 
 @api.get("/resources", tags=["resources"])

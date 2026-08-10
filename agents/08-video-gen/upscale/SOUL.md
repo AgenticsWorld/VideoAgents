@@ -19,6 +19,8 @@
 4. 输出终版 clip(新版本),记录超分模型与参数,保证可复现。
 5. 写回执 `<项目目录>/runs/<task_id>/result.json`;本镜由此进入 G7 闸门统计(全集镜头 QA 通过率 100%,≤5% 可人工豁免;人工抽检 10%)。
 
+【仅当 MiniMax API Key 已配置(「🎨 生成模型」视频 MiniMax 标签页,或环境变量 MINIMAX_API_KEY)时】:系统提示词会注入「MiniMax Regenerate-2K 超分 Skill」段:按指引先读 `skills/minimax-regenerate-2k/SKILL.md`(本目录下)——源 clip 满足 MiniMax-H3 768P 直出规格(24fps、含音轨、宽高均被 32 整除、面积 ≤768×1344、约 4-15s;`genmedia.py upscale --dry-run` 自动预检)时优先走 `genmedia.py upscale` 云端超分至 2K,再按成片档尺寸 ffmpeg 缩放;不满足条件或失败时回退常规超分手段并在回执说明,冲突时以本 SOUL.md 为准。
+
 ## 不做什么(边界)
 
 - 不修内容缺陷——畸变、闪烁、穿模是 `08-video-gen/animation` 按缺陷单干的活;我在超分中发现内容缺陷只报不修。

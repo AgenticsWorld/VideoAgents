@@ -89,6 +89,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .res-bar i{display:block;height:100%;border-radius:3px;background:var(--green);transition:width .4s}
 .res-bar i.warn{background:var(--yellow)}
 .res-bar i.hot{background:var(--red)}
+.res-reset{margin:1px 48px 0 60px;font-size:10px;color:var(--dim);line-height:1.3}
 .res-bal{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12.5px;border-top:1px dashed var(--border);padding-top:8px}
 .res-bal .nm{font-weight:600}
 .res-bal .amt{margin-left:auto;color:var(--green);font-variant-numeric:tabular-nums}
@@ -183,10 +184,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimi / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
-    <option value="kimi">kimi</option>
+    <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
     <option value="deepagents">deepagents</option>
   </select>
@@ -197,7 +198,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div id="preview-menu">
     <button id="preview-btn" title="预览设定产物"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><circle cx="9" cy="9.5" r="1.8" fill="var(--panel2)"/><path d="M5.5 17l4.5-5 2.8 3.1 2.2-2.5 3.5 4.4z" fill="var(--panel2)"/></svg></button>
     <div class="dropdown"><div class="dropdown-box">
-      <a href="/preview/refs" class="pv" title="用户参考素材:refs/ 分类预览、上传参考图与音乐、逐文件注释(注释写入 NOTES.md,视觉/配乐 Agent 必读)">参考图</a>
+      <a href="/preview/refs" class="pv" title="用户参考素材:refs/ 分类预览、上传参考图/音乐/文本、逐文件注释(注释写入 NOTES.md,视觉/配乐 Agent 必读)">参考文件</a>
       <a href="/preview/worldview" class="pv" title="世界观设定:地理/政治/文化/修炼等 bible 配置结构化预览">世界观预览</a>
       <a href="/preview/characters" class="pv" title="人物设定文字 + 概念图">人物预览</a>
       <a href="/preview/scenes" class="pv" title="场景设定文字 + 概念图">场景预览</a>
@@ -215,6 +216,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="#" id="menu-brief">设计构想</a>
       <a href="#" id="menu-output">输出设置</a>
       <a href="#" id="menu-duration">时长设置</a>
+      <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">分镜组设置</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
       <a href="#" id="menu-packaging" title="片头/片尾/下集预告 开关与制作要求,按项目独立">片头片尾</a>
     </div></div>
@@ -223,7 +225,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <button id="settings-btn" title="全局设置">⚙️</button>
     <div class="dropdown"><div class="dropdown-box">
       <div class="dd-sub">
-        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略">◂ 模型策略</a>
+        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略(切换策略会清除全部 Agent 级单独配置)">◂ 模型策略</a>
         <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
           <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
           <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
@@ -234,7 +236,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
@@ -318,7 +320,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="">跟随全局(右上角)</option>
         <option value="claude">claudecode</option>
         <option value="codex">codex</option>
-        <option value="kimi">kimi</option>
+        <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
         <option value="deepagents">deepagents</option>
       </select></div>
@@ -352,7 +354,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <button type="button" id="np-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
           <textarea id="np-style" style="height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
         </div></div>
-      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想与设计风格会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考图」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想与设计风格会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
     </div>
     <div class="np-step" data-step="2" style="display:none">
       <div class="row"><label>输出画幅</label>
@@ -405,10 +407,17 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
     <div class="np-step" data-step="4" style="display:none">
+      <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="15"></div>
+      <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="9"></div>
+      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="1"></div>
+      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="2"></div>
+      <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
+    </div>
+    <div class="np-step" data-step="5" style="display:none">
       <div id="npr-rows"></div>
       <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审</div>
     </div>
-    <div class="np-step" data-step="5" style="display:none">
+    <div class="np-step" data-step="6" style="display:none">
       <div class="row"><label>片头(intro)</label>
         <input type="checkbox" id="npp-intro-on" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后每集制作片头</span></div>
@@ -527,6 +536,18 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions"><button id="dur-cancel">取消</button><button class="primary" id="dur-ok">确定</button></div>
   </div>
 </div>
+<div id="sg-modal" class="modal">
+  <div class="box">
+    <h3>🎬 分镜组设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
+    <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
+    <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
+    <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="1"></div>
+    <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="2"></div>
+    <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="err" id="sg-err"></div>
+    <div class="actions"><button id="sg-cancel">取消</button><button class="primary" id="sg-ok">确定</button></div>
+  </div>
+</div>
 <div id="rev-modal" class="modal">
   <div class="box">
     <h3>🔍 审核设置 — <span id="rev-proj" style="color:var(--accent)"></span></h3>
@@ -621,9 +642,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="checkbox" id="res-claude" style="flex:none">
       <span class="note" style="flex:1">开启后经 OAuth 探针读取 Claude Code 会话用量;首次读取需在 macOS 钥匙串弹窗点「始终允许」</span></div>
     <div class="note" id="res-claude-env" style="display:none">已由环境变量 VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 强制开启,此开关不生效</div>
-    <div class="row"><label>Kimi API Key</label>
-      <input type="password" id="res-kimi" placeholder="sk-…(留空则不检查 KimiCode 使用量)" autocomplete="off"></div>
-    <div class="note" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
+    <div class="row"><label>Codex 用量检查</label>
+      <input type="checkbox" id="res-codex" style="flex:none">
+      <span class="note" style="flex:1">开启后从本地 Codex CLI 会话文件读取 5 小时/周窗口用量读数(Codex 跑过才有读数)</span></div>
+    <div class="row"><label>KimiCode 用量检查</label>
+      <input type="checkbox" id="res-kimi-on" style="flex:none">
+      <span class="note" style="flex:1">开启后用下方 API Key 查询 KimiCode 会话/周用量</span></div>
+    <div class="row res-kimi-row"><label>Kimi API Key</label>
+      <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
+    <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
     <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
@@ -694,7 +721,7 @@ const MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
-  deepagents:[['local','本地模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置
+  deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
@@ -725,7 +752,7 @@ async function populateModels(engine,selected=null){
     sel.value='__custom';$('#model-custom').value=selected;
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
-    ?'deepagents 生效渠道:本地模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型DeepAgents」配置'
+    ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
@@ -803,8 +830,8 @@ $('#project').onchange=async()=>{
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
-/* ---------- 新建项目向导(基础信息→输出设置→时长设置→审核设置→片头片尾) ---------- */
-const NP_STEP_NAMES=['基础信息','输出设置','时长设置','审核设置','片头片尾'];
+/* ---------- 新建项目向导(基础信息→输出设置→时长设置→分镜组设置→审核设置→片头片尾) ---------- */
+const NP_STEP_NAMES=['基础信息','输出设置','时长设置','分镜组设置','审核设置','片头片尾'];
 let NP_STEP=1;
 function npShowStep(n){
   NP_STEP=n;
@@ -840,6 +867,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
+  $('#npsg-maxs').value=15;$('#npsg-imgs').value=9;$('#npsg-vids').value=1;$('#npsg-auds').value=2;   // 分镜组默认按 Seedance 2.0 保守口径
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
@@ -865,11 +893,14 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
     if(!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
   }else if(n===4){
+    return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
+      parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
+  }else if(n===5){
     for(const [k,label] of REVIEW_DIMS){
       const v=parseInt($(`#npr-${k}-num`).value);
       if(!(v>=0&&v<=100))return I18N.f('{label}力度须为 0-100 整数',{label:t(label)});
     }
-  }else if(n===5){
+  }else if(n===6){
     if($('#npp-intro-text').value.length>2000||$('#npp-outro-text').value.length>2000)
       return '片头/片尾要求文本过长(≤2000 字)';
   }
@@ -887,6 +918,10 @@ function npCollectSettings(){
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value)},
+    shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
+      max_ref_images:parseInt($('#npsg-imgs').value),
+      max_ref_videos:parseInt($('#npsg-vids').value),
+      max_ref_audios:parseInt($('#npsg-auds').value)},
     review,
     packaging:{intro_enabled:$('#npp-intro-on').checked,intro_notes:$('#npp-intro-text').value,
       outro_enabled:$('#npp-outro-on').checked,outro_notes:$('#npp-outro-text').value,
@@ -928,19 +963,20 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['comfyui','ComfyUI']],
+  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
-/* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
+/* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/云端模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
 function syncDaSelect(cfg){
   const da=cfg.deepagents||{};
-  DA_PROVIDER=da.provider==='openrouter'?'openrouter':'local';
+  DA_PROVIDER=['cloud','openrouter'].includes(da.provider)?da.provider:'local';
   if($('#engine').value!=='deepagents')return;
   const sel=$('#model');
   sel.value=DA_PROVIDER;
   const models={local:(da.local||{}).model||'',
+                cloud:(da.cloud||{}).custom_model||(da.cloud||{}).model||'',
                 openrouter:(da.openrouter||{}).custom_model||(da.openrouter||{}).model||''};
   DA_MODEL=models[DA_PROVIDER]||'';
   [...sel.options].forEach(o=>{const m=models[o.value];o.title=m?`${t(o.textContent)} · ${m}`:''});
@@ -950,7 +986,7 @@ async function syncDaProvider(){try{syncDaSelect(await api('/api/v1/config/gener
 const ENGINE_CLI={
   claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart'},
   codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
-  kimi:{bin:'kimi',cli:'Kimi Code',label:'kimi',url:'https://www.kimi.com/code'},
+  kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
 };
 async function checkEngineCli(engine){
@@ -1121,6 +1157,39 @@ $('#dur-ok').onclick=async()=>{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:ep,shot_min_s:mn,shot_max_s:mx}});
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 分镜组设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
+function sgValidate(gs,ni,nv,na){   // 返回错误文案,''=通过(与服务端 _validate_shot_group 同口径)
+  if(!(gs>=4&&gs<=30))return '最大分镜组时长需为 4-30 的数值';
+  if(!(Number.isInteger(ni)&&ni>=0&&ni<=30))return '最大参考图数量需为 0-30 的整数';
+  if(!(Number.isInteger(nv)&&nv>=0&&nv<=10))return '最大参考视频数量需为 0-10 的整数';
+  if(!(Number.isInteger(na)&&na>=0&&na<=10))return '最大参考音频数量需为 0-10 的整数';
+  return '';
+}
+async function openSgModal(){
+  $('#sg-err').textContent='';
+  $('#sg-proj').textContent=curProj();
+  try{
+    const g=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).shot_group||{};
+    $('#sg-maxs').value=g.max_group_s??15;
+    $('#sg-imgs').value=g.max_ref_images??9;
+    $('#sg-vids').value=g.max_ref_videos??1;
+    $('#sg-auds').value=g.max_ref_audios??2;
+  }catch(e){}
+  $('#sg-modal').style.display='flex';
+}
+$('#menu-shotgroup').onclick=e=>{e.preventDefault();openSgModal()};
+$('#sg-cancel').onclick=()=>$('#sg-modal').style.display='none';
+$('#sg-ok').onclick=async()=>{
+  const gs=parseFloat($('#sg-maxs').value),ni=parseInt($('#sg-imgs').value),
+        nv=parseInt($('#sg-vids').value),na=parseInt($('#sg-auds').value);
+  const err=sgValidate(gs,ni,nv,na);
+  if(err){$('#sg-err').textContent=err;return}
+  try{
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),shot_group:{max_group_s:gs,max_ref_images:ni,max_ref_videos:nv,max_ref_audios:na}});
+    $('#sg-modal').style.display='none';
+  }catch(e){$('#sg-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 审核设置弹窗(各维度审核力度 0-100,按项目独立) ---------- */
@@ -1305,6 +1374,8 @@ $('#mem-ok').onclick=async()=>{
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
 function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll('.res-volc-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-volc').onchange=resVolcRows;
+function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-kimi-on').onchange=resKimiRows;
 async function openResModal(){
   $('#res-err').textContent='';
   try{
@@ -1312,13 +1383,15 @@ async function openResModal(){
     $('#res-claude').checked=!!(c.claude_probe||c.claude_probe_env);
     $('#res-claude').disabled=!!c.claude_probe_env;    // env 强制开启时开关只读
     $('#res-claude-env').style.display=c.claude_probe_env?'':'none';
+    $('#res-codex').checked=!!c.codex_probe;
+    $('#res-kimi-on').checked=!!c.kimi_probe;
     $('#res-kimi').value=c.kimi_api_key||'';
     $('#res-or').value=c.openrouter_key||'';
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
     $('#res-volc-sk').value=c.volc_sk||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();
+  resVolcRows();resKimiRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1326,9 +1399,13 @@ $('#res-cancel').onclick=()=>$('#res-modal').style.display='none';
 $('#res-ok').onclick=async()=>{
   if($('#res-volc').checked&&!($('#res-volc-ak').value.trim()&&$('#res-volc-sk').value.trim())){
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
+  if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
+    $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
   try{
     await api('/api/v1/resources/config',{
       claude_probe:$('#res-claude').checked,
+      codex_probe:$('#res-codex').checked,
+      kimi_probe:$('#res-kimi-on').checked,
       kimi_api_key:$('#res-kimi').value.trim(),
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
@@ -1400,25 +1477,35 @@ $('#plug-file').onchange=async()=>{
   }catch(e){$('#plug-err').textContent=t('安装失败:')+e.message}
 };
 
-// 右栏资源消耗面板:三引擎 Session/Weekly 用量进度条 + 已配置渠道账户余额
-function resLine(label,v){
+// 右栏资源消耗面板:三引擎 Session/Weekly 用量进度条(下缀窗口重置时间)+ 已配置渠道账户余额
+function fmtReset(ts){                      // epoch 秒 → 「4h 15m 后重置」;取不到/已过期不显示
+  if(typeof ts!=='number')return '';
+  const s=(ts*1000-Date.now())/1000;
+  if(s<=0)return '';
+  const d=Math.floor(s/86400),hh=Math.floor(s%86400/3600),mm=Math.floor(s%3600/60);
+  const txt=d>0?`${d}d ${hh}h`:hh>0?`${hh}h ${mm}m`:`${mm}m`;
+  return I18N.f(t('{t} 后重置'),{t:txt});
+}
+function resLine(label,v,resetTs){
   const known=typeof v==='number';
   const w=known?Math.max(0,Math.min(100,v)):0;
   const cls=w>=85?'hot':w>=60?'warn':'';
-  return `<div class="res-line"><span class="lb">${label}</span><div class="res-bar"><i class="${cls}" style="width:${w}%"></i></div><span class="pct">${known?Math.round(v)+'%':t('未知')}</span></div>`;
+  const reset=fmtReset(resetTs);
+  return `<div class="res-line"><span class="lb">${label}</span><div class="res-bar"><i class="${cls}" style="width:${w}%"></i></div><span class="pct">${known?Math.round(v)+'%':t('未知')}</span></div>`
+    +(reset?`<div class="res-reset">${reset}</div>`:'');
 }
 async function renderResources(fresh){
   const box=$('#resources');
   let r;
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
-  const HINTS={kimi:'未配置:在 ⚙️ 设置 → 资源消耗 填写 Kimi API Key'};
   let h='';
   for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
     const e=r[k]||{};
-    if(k==='claude'&&!e.enabled)continue;   // Claude 用量检查未开启则整行不显示(⚙️ 设置 → 资源消耗 开启后回来)
-    h+=`<div class="res-eng"><span class="nm">${label}</span>${e.enabled?'':`<span class="hint" title="${esc(t(HINTS[k]||''))}">${t('未开启')}</span>`}${resLine('Session',e.session)}${resLine('Weekly',e.weekly)}</div>`;
+    if(!e.enabled)continue;                 // 用量检查未开启则整段不显示(⚙️ 设置 → 资源消耗 开启后回来)
+    h+=`<div class="res-eng"><span class="nm">${label}</span>${resLine('Session',e.session,e.session_resets_at)}${resLine('Weekly',e.weekly,e.weekly_resets_at)}</div>`;
   }
+  if(!h)h=`<div class="empty" style="font-size:11.5px">${t('未开启任何用量检查:在 ⚙️ 设置 → 资源消耗 开启')}</div>`;
   const bal=(name,b,sym)=>{
     const known=typeof b.balance==='number';
     return `<div class="res-bal"><span class="nm">${name}</span><span class="amt${known?'':' unknown'}">${known?sym+b.balance.toFixed(2):t('未知')}</span></div>`;
@@ -1613,7 +1700,10 @@ function renderAmMode(){
 document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
   e.preventDefault();
   const m=a.dataset.ammode;
-  if(m===AM_MODE)return;
+  const ovN=Object.keys(AGENT_MODELS.overrides||{}).length;
+  if(m===AM_MODE&&!ovN)return;   // 同策略且存在单独配置时,重复点击仍执行清除
+  if(ovN&&!await uiConfirm(I18N.f('切到「{m}」将清除 {n} 个 Agent 的单独模型配置,继续?',
+    {m:t(AM_MODE_LABELS[m]),n:ovN})))return;
   try{
     await api('/api/v1/config/generation',{agentmodel_mode:m,project:$('#project').value.trim()||'demo'});
     AGENT_MODELS=await api('/api/v1/agents/models');   // 策略变了,全部 defaults 刷新
@@ -1879,12 +1969,16 @@ function liveBox(runId){
 
 /* ---------- 初始化 ---------- */
 (async()=>{
-  AGENTS=await api('/api/v1/agents');
-  try{AGENT_MODELS=await api('/api/v1/agents/models');AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
+  // 四个启动请求并行发出;消费顺序与失败语义不变(agents 失败仍中止初始化,models/approvals 失败仍忽略)
+  const pAgents=api('/api/v1/agents'),pModels=api('/api/v1/agents/models'),
+        pRuns=api('/api/v1/runs'),pApprovals=api('/api/v1/approvals');
+  [pModels,pRuns,pApprovals].forEach(p=>p.catch(()=>{}));   // pAgents 抛出中止时其余不留未处理 rejection
+  AGENTS=await pAgents;
+  try{AGENT_MODELS=await pModels;AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
   renderAmMode();
-  (await api('/api/v1/runs')).forEach(r=>RUNS[r.id]=r);
+  (await pRuns).forEach(r=>RUNS[r.id]=r);
   connect();   // 首次 renderAgents/renderRuns 延后到项目下拉框恢复之后,否则 curProj() 回退 demo 导致按项目过滤为空
-  try{(await api('/api/v1/approvals')).forEach(showConfirm)}catch(e){}
+  try{(await pApprovals).forEach(showConfirm)}catch(e){}
   $('#search').oninput=renderAgents;
   $('#engine').onchange=async()=>{
     await populateModels($('#engine').value);savePrefs();
