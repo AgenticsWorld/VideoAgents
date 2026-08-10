@@ -548,9 +548,12 @@ DEFAULT_GENCONFIG = {
     # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
     #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
     # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面
+    # caption_enabled=花字(默认关):开启后 caption Agent 在关键节点设计花字+配套音效,
+    #   超分后的终版组 clip 上烧录副本,另封装花字版成片 final_caption.mp4
+    #   (a:0=声轨+SFX 预混、a:1=声轨存档;干净版 final.mp4 照常产出,双版本并列,WORKFLOW.md §9A)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
-               "subtitle_burn_in": False,
+               "subtitle_burn_in": False, "caption_enabled": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -604,6 +607,11 @@ REVIEW_DIMENSIONS = {
 
 # 片头片尾设定的注入对象:包装制作(title)、占位(edit)、预告文案上游(hook)+ 调度(派单时写入工单)
 PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS
+
+# 花字设定的详细纪律注入对象:设计与烧录(caption)、花字版封装(edit)、发布物料(platform-adapter)
+# + 调度(排产 condition 判定与工单撰写);其余 Agent 只收一行开关状态(WORKFLOW.md §9A)
+CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
+                  "12-publishing/platform-adapter"} | DISPATCHERS
 
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 OUTPUT_ASPECTS = {"youtube": ("16:9", "YouTube 横屏"), "douyin": ("9:16", "抖音竖屏")}
@@ -749,6 +757,8 @@ def _validate_output(o: dict):
             raise ServiceError(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
     if "subtitle_burn_in" in o and not isinstance(o["subtitle_burn_in"], bool):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
+    if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
+        raise ServiceError(400, "output.caption_enabled must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -1320,6 +1330,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
         " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
+    caption_line = (
+        "**开启** —— caption Agent 在关键叙事节点设计花字+配套音效(WORKFLOW.md §9A),"
+        "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
+        "另封装花字版成片 edit/{ep}/final_caption.mp4(a:0=声轨+SFX 预混、a:1=声轨存档);"
+        "干净版 final.mp4 照常产出,双版本并列;渲染/封装只准宿主 CLI code/render_captions.py,"
+        "机检 code/check_captions.py 三阶段"
+        if out.get("caption_enabled") else
+        "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
+        "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -1386,6 +1405,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
+- 花字:{caption_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
@@ -1445,6 +1465,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id in CAPTION_AGENTS and out.get("caption_enabled"):
+        p += """
+
+## 用户花字设定(Web 客户端「输出设置」花字开关,当前项目已开启;详细规范 WORKFLOW.md §9A)
+- 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v2**——全集 ≤4 个 style_presets(font_id 引用 data/fonts/manifest.json,优先 CJK 字体);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入底部字幕安全区。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
+- 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;产物是 assets/clips_caption/ 副本,原组 clip 永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
+- 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,用 clips_caption 副本替换对应组按同一 EDL 重拼,SFX 轨与封装走 `render_captions.py sfx-track` + `mux`——**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest
+- 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
+- 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
+- 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
     if brief:
         p += f"""
 
@@ -2895,6 +2925,8 @@ def _preview_storyboard(project: str, ep: str):
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
+    # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
+    cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
     shots = []
     for s in (sl.get("shots") or []):
         if not isinstance(s, dict):
@@ -2951,6 +2983,8 @@ def _preview_storyboard(project: str, ep: str):
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
+            "caption_clips": [c for c in cap_clips
+                              if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),

@@ -246,10 +246,23 @@ phases:
       - { id: av2-continuity, agent: 07-directing/continuity-planning,
           depends_on: [av2-timeline], outputs: ["directing/{ep}/continuity.json"] }
         # ★必需:prompt 的 costume_bound 读 continuity.json#costume_states
+      - id: av2-caption
+        agent: 10-editing/caption
+        depends_on: [av2-timeline]
+        condition: caption_enabled     # 「📤 输出设置」花字开关,默认关;关=不派发,ga2 不因缺我而 HOLD
+        outputs: ["edit/{ep}/captions.json"]
+        # 花字设计(schema v2):文案只取 av/beat_track.json 母带原文(无词典项目的
+        # caption_text_from_source 口径);字体/音效从宿主 data/fonts|sfx manifest 挑选;
+        # 交付前 code/check_captions.py --require design 全 PASS
+        validation:
+          auto: [caption_schema_v2, caption_groups_valid, caption_time_consistent,
+                 caption_assets_resolved, caption_text_from_source, ascii_filename]
+          rubric: creative_v1
       - { id: ga2, gate: true, human: true, checkpoint: AVH3-画面规划与分镜确认,
-          depends_on: [av2-continuity] }
-        # 签字前可在「分镜预览」页直接看逐组画面与时间轴;不满意退回 av2-script 重做
-        # (退回 av2-script 不动时间轴,不需重签 AVH1)
+          depends_on: [av2-continuity, av2-caption] }
+        # 签字前可在「分镜预览」页直接看逐组画面与时间轴(含各组「✨ 花字」设计);
+        # 不满意退回 av2-script 重做(退回 av2-script 不动时间轴,不需重签 AVH1)
+        # condition 关闭而未派发的依赖(av2-caption)视同满足,不 HOLD(同主流程 §7B p7-upscale/g7 先例)
 
   - id: av3
     name: 视觉生成          # 组序串行(前组尾帧作续接锚);复用主流程工位,零改动
@@ -286,9 +299,16 @@ phases:
           rubric: visual_gen_v1
       - { id: av3-consistency, agent: 08-video-gen/character-consistency,
           depends_on: [av3-video], outputs: ["qa/reports/{ep}/consistency_{group}.json"] }
+      - { id: av3-upscale, agent: 08-video-gen/upscale, depends_on: [av3-consistency],
+          condition: final_ne_draft_resolution,    # §7B:成片分辨率≠草稿档才派,不询问用户;相同=草稿档即终版
+          validation: { auto: [target_resolution_ok, clip_silent, clip_ge_span] } }
+        # 原地覆盖 assets/clips/{ep}/{group}.mp4 新版本;fps/时长/画幅不变;
+        # 本流程组 clip 无声,超分不得引入音轨(clip_silent 复检)。
+        # 花字开启的项目:超分后才烧花字(av4-caption-render),低分辨率上烧字无法发布
       - { id: ga3, gate: true, scope: episode, human: true,
-          checkpoint: AVH4-视觉生成确认, depends_on: [av3-consistency] }
+          checkpoint: AVH4-视觉生成确认, depends_on: [av3-upscale] }
         # 签字前在「视频预览」页逐组审看;整集组片段齐备且 av_sync --require clips 通过方可放行
+        # condition 关闭而未派发的依赖(av3-upscale)视同满足,不 HOLD——链上前置 av3-consistency 必须完成
 
   - id: av4
     name: 剪辑与封装
@@ -321,7 +341,32 @@ phases:
           outputs: ["edit/{ep}/title/"] }
       - { id: av4-thumb, agent: 10-editing/thumbnail, depends_on: [av4-edit],
           outputs: ["edit/{ep}/thumbnail_01.png"] }
-      - { id: ga4, gate: true, depends_on: [av4-subtitle, av4-title, av4-thumb] }
+      - id: av4-caption-render
+        agent: 10-editing/caption
+        depends_on: [av4-edit]        # ga3 已过(终版/超分后组 clip 就绪);排在 edit 后避免与拼装抢素材版本
+        condition: caption_enabled
+        outputs: ["assets/clips_caption/{ep}/"]
+        # 逐组烧录:只准 python3 code/render_captions.py render(禁止自写花字滤镜);
+        # 原组 clip 永不改动;回执幂等——单组返工只重渲该组
+        validation:
+          auto: [caption_toolchain_verified, captions_rendered_all,
+                 caption_render_spec_ok, caption_clip_audio_intact, ascii_filename]
+      - id: av4-caption-final
+        agent: 10-editing/edit
+        depends_on: [av4-edit, av4-caption-render]
+        condition: caption_enabled
+        outputs: ["edit/{ep}/final_caption.mp4", "edit/{ep}/caption_sfx.m4a"]
+        # 花字版成片:视频=clips_caption 副本替换对应组按同一 EDL 重拼;
+        # 音轨(2026-08-08 定):a:0=母带+SFX 预混(开箱即听)、a:1=母带流拷贝(存档轨);
+        # SFX 轨与封装只准走宿主 CLI(render_captions.py sfx-track + mux);严禁 -shortest;
+        # 干净版 final.mp4 与其机检不受影响
+        validation:
+          auto: [caption_final_duration_match, caption_premix_present,
+                 final_caption_master_frames_intact, no_black_frames]
+          rubric: edit_v1
+      - { id: ga4, gate: true, depends_on: [av4-subtitle, av4-title, av4-thumb,
+                                            av4-caption-final] }
+        # condition 关闭而未派发的依赖(av4-caption-final)视同满足,不 HOLD
 
   - id: av5
     name: 终审
@@ -351,8 +396,10 @@ phases:
       - { id: ga5, gate: true, human: true, checkpoint: AVH5-成片签字,
           depends_on: [av5-avsync, av5-visual, av5-world, av5-safety,
                        av5-copyright, av5-audio] }
-        # 放行前必须:code/check_av_sync.py --require final 全 PASS
-        # 人工抽查:开头/中段/结尾三点,确认画面对应该时刻讲述内容,且片尾声画不脱节
+        # 放行前必须:code/check_av_sync.py --require final 全 PASS(干净版);
+        # 花字开启时另须 code/check_captions.py --require final 全 PASS(花字版)
+        # 人工抽查:开头/中段/结尾三点,确认画面对应该时刻讲述内容,且片尾声画不脱节;
+        # 花字版加抽三点:花字入出与讲述节点对应、音效到位不刺耳、不压字幕安全区
 
 # 贯穿型服务与主流程一致(context/evaluation/memory-bible/version/orchestrator 钩子),
 # 见 agents/workflow.yaml services 段。

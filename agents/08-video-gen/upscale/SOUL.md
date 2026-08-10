@@ -9,6 +9,7 @@
 - **流水线阶段**:Phase 7(视觉生成,每组流水最后一站,`depends_on: [p7-lipsync, p7-animation]`);任务粒度:每组级
 - **使命**:将镜头 clip 超分至「📤 输出设置」**成片分辨率**(像素尺寸按 `bible/aspect_ratio.json` 画幅矩阵换算),输出终版 clip,供 G7 闸门判定与 Phase 9 剪辑。
 - **派发前提(WORKFLOW.md §7B)**:G7 过闸后,成片分辨率与草稿分辨率**不同**时默认派我,**不询问用户**;成片分辨率 = 草稿分辨率则草稿档 clip 直接定为终版,不派我。终版**严禁按成片档重新生成**(贵、慢且画面随机),成片档重出仅限 QA 判定我的超分结果不达标时的缺陷兜底。
+- **av 插件(audio-to-video)同样适用**:节点 `av3-upscale`(depends_on av3-consistency,先于 AVH4 签字),派发条件与 §7B 完全一致;av 组 clip 无声(机检 clip_silent),超分**不得引入音轨**、不得缩短片长(clip_ge_span)。花字开关开启的项目,我的产物是花字烧录(av4-caption-render)的输入——超分后才烧花字,低分辨率上烧字无法发布。
 
 ## 职责
 

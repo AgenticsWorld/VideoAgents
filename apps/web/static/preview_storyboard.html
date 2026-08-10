@@ -112,6 +112,14 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #pv-modal .actions{display:flex;gap:8px;align-items:center}
 #pv-modal .actions button{flex:none;white-space:nowrap}
 #pv-modal .meta{color:var(--dim);font-size:11.5px;margin-right:auto}
+#cp-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#cp-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:680px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column}
+#cp-modal .cp-list{overflow:auto;margin:10px 0;max-height:60vh}
+#cp-modal .cp-item{border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:10px 12px;margin:8px 0}
+#cp-modal .cp-text{font-size:16px;font-weight:700;margin-bottom:6px}
+#cp-modal .cp-meta{color:var(--dim);font-size:12px;line-height:1.8}
+#cp-modal .cp-meta b{color:var(--text);font-weight:600}
+#cp-modal .actions{display:flex;gap:8px;justify-content:flex-end}
 .narr{border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;background:var(--panel2);padding:7px 12px;margin:8px 0;font-size:13px;line-height:1.6}
 .narr .nid{color:var(--yellow);font-weight:600;margin-right:6px}
 .narr .nest{color:var(--dim);font-size:11px;margin-left:6px}
@@ -188,6 +196,12 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <textarea id="gn-text" placeholder="例:整组节奏放慢;福瓦德全程不看镜头;钱袋始终在画面左下角可见"></textarea>
   <div class="err" id="gn-err" style="color:var(--red);font-size:12px"></div>
   <div class="actions"><button id="gn-cancel">取消</button><button id="gn-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
+</div></div>
+<div id="cp-modal"><div class="box">
+  <h3>✨ 组花字设计 — <span id="cp-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">花字 Agent 的设计产物(只读;要修改请用 📝 注释或对话反馈)</div>
+  <div class="cp-list" id="cp-list"></div>
+  <div class="actions"><button id="cp-close">关闭</button></div>
 </div></div>
 <div id="pv-modal"><div class="box">
   <h3>📄 组视频 Prompt — <span id="pv-grp" style="color:var(--purple)"></span></h3>
@@ -499,6 +513,39 @@ async function videoModel(){
   const p=v[v.provider||'volcengine']||{};
   return p.custom_model||p.model||'';
 }
+const CAP_TYPE_LABELS={headline:'大标题',keyword:'关键词',location:'地名',time:'时间',skill:'招式',faction:'势力',other:'其他'};
+const CAP_ANIM_LABELS={pop_bounce:'弹入回弹',pop:'弹入',fade:'淡入淡出',slide_up:'上滑入',slide_down:'下滑入',slide_left:'左滑入',slide_right:'右滑入',none:'无'};
+async function openCaption(grp){
+  const proj=$('#project').value.trim()||'demo';
+  $('#cp-grp').textContent=grp;
+  $('#cp-list').innerHTML='<div class="cp-meta">'+t('加载中…')+'</div>';
+  $('#cp-modal').style.display='flex';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)
+      +'/artifacts/edit/'+encodeURIComponent(EP)+'/captions.json?v='+Date.now());
+    if(!r.ok)throw new Error(r.status===404?t('本集花字尚未设计(花字开关未开或未到设计环节)'):r.status);
+    const d=await r.json();
+    const caps=(d.captions||[]).filter(c=>c.group_id===grp);
+    if(!caps.length){$('#cp-list').innerHTML='<div class="cp-meta">'+t('本组暂无花字设计')+'</div>';return}
+    const presets=d.style_presets||{};
+    $('#cp-list').innerHTML=caps.map(c=>{
+      const ref=c.style_ref||'';
+      const p=ref.startsWith('preset:')?(presets[ref.slice(7)]||{}):{};
+      const st={...p,...(c.style_override||{})};
+      const ai=(c.animation||{}).in||{},ao=(c.animation||{}).out||{};
+      const sfx=c.sfx||null;
+      const rows=[
+        `<b>${t('类型')}</b> ${esc(t(CAP_TYPE_LABELS[c.type]||c.type||''))} · <b>${t('位置')}</b> ${esc(c.position||'')}`,
+        `<b>${t('组内时刻')}</b> ${esc(c.local_start)}s – ${esc(c.local_end)}s`+(c.start!=null?` <span style="opacity:.7">(${t('集级')} ${esc(c.start)}s)</span>`:''),
+        `<b>${t('样式')}</b> ${esc(ref)}`+(st.font_id?` · <b>${t('字体')}</b> ${esc(st.font_id)}`:'')+(st.size_pct?` · <b>${t('字号')}</b> ${esc(st.size_pct)}%`:'')+(st.color?` · <span style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;background:${esc(st.color)}"></span> ${esc(st.color)}`:''),
+        `<b>${t('动画')}</b> ${esc(t(CAP_ANIM_LABELS[ai.type]||ai.type||'—'))} ${ai.duration_s?esc(ai.duration_s)+'s':''} → ${esc(t(CAP_ANIM_LABELS[ao.type]||ao.type||'—'))} ${ao.duration_s?esc(ao.duration_s)+'s':''}`,
+        sfx?`<b>${t('音效')}</b> 🔊 ${esc(sfx.sfx_id)} · ${esc(sfx.gain_db??'-6')}dB`+(sfx.offset_s?` · ${t('偏移')} ${esc(sfx.offset_s)}s`:''):`<b>${t('音效')}</b> —`,
+      ];
+      return `<div class="cp-item"><div class="cp-text">${esc(c.text||'')}</div><div class="cp-meta">${rows.join('<br>')}</div></div>`;
+    }).join('');
+  }catch(e){$('#cp-list').innerHTML='<div class="cp-meta">'+esc(String(e.message||e))+'</div>'}
+}
+$('#cp-close').onclick=()=>{$('#cp-modal').style.display='none'};
 async function openPrompt(grp){
   const proj=$('#project').value.trim()||'demo';
   $('#pv-grp').textContent=grp;
@@ -542,6 +589,8 @@ document.addEventListener('click',async e=>{
   if(pb)return openPrompt(pb.dataset.grp);
   const rb=e.target.closest('.refpickbtn');
   if(rb)return openRefpick(rb.dataset.grp);
+  const cb=e.target.closest('.capbtn');
+  if(cb)return openCaption(cb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
   if(gb)return openNote(gb.dataset.grp);
   const ud=e.target.closest('.urdel');
@@ -641,9 +690,11 @@ function groupCard(g,inner){
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
   const vids=(g.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段组视频提修改意见">✏️ 修改</button></div></div>`);
+  const capvids=(g.caption_clips||[]).map(c=>
+    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  const media=(anchors.length||vids.length||sketches.length||urefs.length||prefs.length)?
-    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${bounds}</div>`:'';
+  const media=(anchors.length||vids.length||capvids.length||sketches.length||urefs.length||prefs.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${capvids.join('')}${bounds}</div>`:'';
   return `<div class="grp" id="a-g-${aid(g.group_id)}">
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
@@ -653,6 +704,7 @@ function groupCard(g,inner){
       ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
+      <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}

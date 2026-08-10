@@ -317,7 +317,23 @@ phases:
           # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板
           validation: { auto: [sync_lt_200ms, typo_check, line_length_ok, subtitle_style_ok] } }
       - { id: p9-caption, agent: 10-editing/caption, depends_on: [p9-transition],
-          outputs: ["edit/{ep}/captions.json"], validation: { auto: [dictionary_match_100] } }
+          condition: caption_enabled,   # 「📤 输出设置」花字开关,默认关;关=不派发,g9 不因缺我而 HOLD
+          outputs: ["edit/{ep}/captions.json"],
+          # schema v2(样式预设/动画/sfx/组内时间);交付前 code/check_captions.py --require design
+          validation: { auto: [dictionary_match_100, caption_schema_v2, caption_groups_valid,
+                               caption_time_consistent, caption_assets_resolved] } }
+      - { id: p9-caption-render, agent: 10-editing/caption, depends_on: [p9-caption],
+          condition: caption_enabled, outputs: ["assets/clips_caption/{ep}/"],
+          # 终版(超分后)组 clip 上逐组烧录副本,原 clip 不动;只准宿主 CLI render_captions.py
+          validation: { auto: [caption_toolchain_verified, captions_rendered_all,
+                               caption_render_spec_ok, caption_clip_audio_intact] } }
+      - { id: p9-caption-final, agent: 10-editing/edit, depends_on: [p9-caption-render, p9-title],
+          condition: caption_enabled,
+          outputs: ["edit/{ep}/final_caption.mp4", "edit/{ep}/caption_sfx.m4a"],
+          # 花字版成片:clips_caption 副本替换重拼;a:0=混音轨+SFX 预混、a:1=混音轨流拷贝存档;
+          # 严禁 -shortest;干净版 final.mp4 照旧产出,双版本并列
+          validation: { auto: [caption_final_duration_match, caption_premix_present,
+                               no_black_frames], rubric: edit_v1 } }
       - { id: p9-title, agent: 10-editing/title, depends_on: [p9-edit],
           # 下集预告默认不配旁白:文案走字卡/花字,声轨=画面原声+BGM;配音须工单显式指定
           outputs: ["edit/{ep}/intro_outro/"],
@@ -326,7 +342,9 @@ phases:
           outputs: ["edit/{ep}/thumbnail_A.png", "edit/{ep}/thumbnail_B.png"],
           validation: { auto: [aspect_safe_area_ok], qa: [human_pick] } }
       - { id: g9, gate: true, human_on: first_episode, checkpoint: H4-首集成片确认,
-          depends_on: [p9-subtitle, p9-caption, p9-title, p9-thumbnail] }
+          depends_on: [p9-subtitle, p9-caption, p9-title, p9-thumbnail, p9-caption-final] }
+        # caption_enabled=false 时 p9-caption/p9-caption-render/p9-caption-final 均未派发,
+        # 视同满足,G9 不 HOLD(同 §7B p7-upscale/g7 先例)
 
   - id: p10
     name: 终审
