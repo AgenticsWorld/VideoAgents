@@ -87,6 +87,9 @@ ComfyUI 自定义工作流占位符(文本替换):
             "{{TEXT}}" "{{LYRICS}}" "{{VOICE}}" "{{REF_AUDIO}}"
   数值位: "{{WIDTH}}" "{{HEIGHT}}" "{{SEED}}" "{{DURATION}}" "{{FRAMES}}"
           "{{LTX_FRAMES}}" "{{SPEED}}"
+  Seedance 云工作流(ByteDance2ReferenceNode,专用分支注入):"{{RESOLUTION}}"
+          "{{RATIO}}" "{{GENERATE_AUDIO}}";参考图不走占位符,动态挂
+          model.reference_images.image_N(1 起编号)
   占位符独占整个字符串时会保留注入值的类型；旧版不加引号的数值模板仍兼容。
   FRAMES 按 16fps 将 DURATION 换算为 Wan 视频所需的 4n+1 帧数。
   LTX_FRAMES 按 24fps 换算为 LTX 视频所需的 8n+1 帧数。
@@ -143,6 +146,8 @@ H3_DEFAULTS = {
     "ref_image_size": "match", "fps": 24,
 }
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
+# Comfy Cloud 的 Seedance 2.x 付费 API 节点(r2v);model 输入选版本("Seedance 2.0/2.5")
+SEEDANCE_REFERENCE_NODE = "ByteDance2ReferenceNode"
 
 VIDEO_POLL_INTERVAL = 10
 VIDEO_TIMEOUT = 1800
@@ -792,25 +797,39 @@ def _h3_dimensions(aspect: str, resolution: str, default_short_side: int = 480) 
     return short_side, max(32, round(short_side / ratio / 32) * 32)
 
 
-def _is_h3_ref2va_workflow(cfg: dict) -> bool:
+def _comfy_configured_workflow(cfg: dict) -> dict | None:
+    """读取配置的工作流 JSON 用于节点类型判定(RunningHub 为缓存/拉取的云端工作流);
+    配置不全或不可读时返回 None,可读的配置错误留给后续 _comfy_workflow/_rh_run 报出。"""
     if _comfy_is_rh(cfg):
-        # RunningHub:按缓存/拉取的云端工作流 JSON 判定;配置不全或拉取失败时不按 H3
-        # 处理,由后续 _comfy_workflow/_rh_run 报出可读的配置错误
         try:
-            workflow = json.loads(_rh_workflow_text(cfg))
+            return json.loads(_rh_workflow_text(cfg))
         except (RuntimeError, json.JSONDecodeError):
-            return False
-    else:
-        wf_path = (cfg.get("workflow") or "").strip()
-        if not wf_path:
-            return False
-        path = _resolve_comfy_workflow_path(wf_path)
-        try:
-            workflow = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return False
+            return None
+    wf_path = (cfg.get("workflow") or "").strip()
+    if not wf_path:
+        return None
+    try:
+        return json.loads(
+            _resolve_comfy_workflow_path(wf_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _is_h3_ref2va_workflow(cfg: dict) -> bool:
+    workflow = _comfy_configured_workflow(cfg) or {}
     return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
                for node in workflow.values())
+
+
+def _seedance_cloud_workflow_gen(cfg: dict) -> float:
+    """配置的工作流含 ByteDance2ReferenceNode 时返回其 Seedance 版本(2.5/2.0),否则 0。
+    版本取节点 model 输入的字面量("Seedance 2.5"),非方舟 model id,不走 _seedance_gen。"""
+    workflow = _comfy_configured_workflow(cfg) or {}
+    for node in workflow.values():
+        if isinstance(node, dict) and node.get("class_type") == SEEDANCE_REFERENCE_NODE:
+            model = str((node.get("inputs") or {}).get("model") or "")
+            return 2.5 if "2.5" in model else 2.0
+    return 0.0
 
 
 def _comfy_h3_validate_components(base: str, settings: dict,
@@ -871,6 +890,25 @@ def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list
         next_id += 1
         workflow[node_id] = {"class_type": "LoadAudio", "inputs": {"audio": name}}
         inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
+
+
+def _add_seedance_references(workflow: dict, image_names: list[str]) -> None:
+    """把已上传的参考图动态挂到 ByteDance2ReferenceNode 的 reference_images 接口。
+    与 H3 同款约定:模板不含静态 LoadImage,只挂实际提交的参考图;编号从 1 起
+    (对齐 Comfy Cloud 导出件的 model.reference_images.image_1 写法)。"""
+    target = next((node for node in workflow.values()
+                   if isinstance(node, dict)
+                   and node.get("class_type") == SEEDANCE_REFERENCE_NODE), None)
+    if target is None:
+        raise RuntimeError("Seedance 云工作流缺少 ByteDance2ReferenceNode 节点")
+    node_ids = [int(key) for key in workflow if str(key).isdigit()]
+    next_id = max(node_ids, default=0) + 1
+    inputs = target.setdefault("inputs", {})
+    for index, name in enumerate(image_names):
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        inputs[f"model.reference_images.image_{index + 1}"] = [node_id, 0]
 
 
 def _extract_last_frame(video_path: str, frame_path: str) -> None:
@@ -1771,6 +1809,56 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
+    sd_gen = _seedance_cloud_workflow_gen(cfg)
+    if sd_gen:
+        is_v25 = sd_gen >= 2.5
+        ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
+        if not rh and (cfg.get("mode") or "local") != "cloud":
+            raise RuntimeError(f"{ver_name} 工作流用的 ByteDance2ReferenceNode 是 "
+                               "Comfy Cloud 付费 API 节点,本地 ComfyUI 无法执行;"
+                               "请把 ComfyUI 运行方式切到 Comfy Cloud")
+        if first or last or video_refs:
+            raise RuntimeError(f"当前 {ver_name} 云工作流是参考图生视频(r2v)模板,"
+                               "不支持首尾帧与 --ref-video;这些模式请另建对应工作流"
+                               "或改用方舟(火山引擎/BytePlus)渠道")
+        if audio_refs:
+            raise RuntimeError(f"{ver_name} 云节点(ByteDance2ReferenceNode)未暴露"
+                               "参考音频接口;需要 --audio-ref 请改用方舟"
+                               "(火山引擎/BytePlus)渠道")
+        max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
+        if refs and len(refs) > max_refs:
+            raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)}")
+        if is_v25 and resolution and resolution not in ("480p", "720p"):
+            print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
+                  file=sys.stderr)
+            resolution = "720p"
+        if not is_v25 and resolution and resolution not in ("480p", "720p", "1080p"):
+            fixed = "480p" if resolution == "360p" else "1080p"
+            print(f"[genmedia] Seedance 2.0 云节点分辨率档位 480p/720p/1080p,"
+                  f"{resolution} 已改为 {fixed}", file=sys.stderr)
+            resolution = fixed
+        ratio = aspect or "adaptive"
+        if ratio != "adaptive" and ratio not in ASPECT_SIZES:
+            print(f"[genmedia] {ver_name} 不支持比例 {ratio},已改用 adaptive(跟随参考图)",
+                  file=sys.stderr)
+            ratio = "adaptive"
+        # Seedance 2.x 只收整数秒或 -1(模型自定时长):2.0 为 [4,15],2.5 为 [4,30]
+        d = int(round(duration)) if duration else 5
+        if duration and d != duration:
+            print(f"[genmedia] {ver_name} 时长需整数,{duration:g} 取整为 {d}", file=sys.stderr)
+        dmax = 30 if is_v25 else 15
+        if d != -1 and not 4 <= d <= dmax:
+            raise RuntimeError(f"{ver_name} 时长须在 [4,{dmax}] 秒或 -1,收到 {d}")
+        tokens = {"PROMPT": prompt, "SEED": seed, "DURATION": d,
+                  "RESOLUTION": resolution or "720p", "RATIO": ratio,
+                  "GENERATE_AUDIO": True if generate_audio is None else bool(generate_audio)}
+        wf = _comfy_workflow(cfg, tokens, "video")
+        _add_seedance_references(wf, [upload(path) for path in refs or []])
+        saved = (_rh_run(cfg, wf, output, want_video=True) if rh
+                 else _comfy_run(base, wf, output, want_video=True, headers=hdrs))
+        if return_last_frame:
+            _extract_last_frame(saved, return_last_frame)
+        return saved
     tokens = {"PROMPT": prompt, "NEGATIVE": "", "SEED": seed,
               "DURATION": duration or 5, "WIDTH": 0, "HEIGHT": 0,
               "FRAMES": _comfy_video_frame_count(duration),
@@ -2190,7 +2278,8 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
-    多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)渠道支持;refs 与
+    多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)及 ComfyUI(H3 Ref2VA /
+    Seedance 云工作流,后者不支持 audio_refs)渠道支持;refs 与
     first/last_frame 互斥。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
     return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
@@ -2216,7 +2305,8 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                               resolution, aspect, seed, output,
                               refs, audio_refs, generate_audio, return_last_frame,
                               video_refs)
-    if cfg["provider"] == "comfyui" and _is_h3_ref2va_workflow(cfg):
+    if cfg["provider"] == "comfyui" and (_is_h3_ref2va_workflow(cfg)
+                                         or _seedance_cloud_workflow_gen(cfg)):
         return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
                               resolution, aspect, seed, output, refs, audio_refs,
                               generate_audio, return_last_frame, video_refs)
