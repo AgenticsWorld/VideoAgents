@@ -29,7 +29,7 @@
 ```
 data/projects/<slug>/
 ├── novel/          # 输入:小说原文(按章节)
-├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)与音乐(music/,见下方约定)
+├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)、音乐与文本资料(见下方约定)
 ├── story/          # chapter_manifest.json(章节批清单), structured_story.json(总表),
 │                   # structured_story/(chNNN.json 章节分片,供按章裁剪), story_graph.json,
 │                   # events.json, story_timeline.json, episodes/ep01/screenplay.md ...
@@ -67,7 +67,7 @@ data/projects/<slug>/
 
 ### 用户参考目录 refs/(人工输入口)
 
-用户把「希望成片长成什么样」的参考图与希望使用的音乐文件放进本目录(入口:Web 控制台顶栏「预览设定产物」菜单 →【参考图】页,按分类上传并逐文件填写注释;需要引导用户补参考素材时,一律指引其进该页面,不要让用户手动开文件夹),视觉设定类 Agent 与配乐 Agent **必须先查看、优先参考/选用**:
+用户把「希望成片长成什么样」的参考图、希望使用的音乐与文本资料放进本目录(入口:Web 控制台顶栏「预览设定产物」菜单 →【参考文件】页,按分类上传并逐文件填写注释;需要引导用户补参考素材时,一律指引其进该页面,不要让用户手动开文件夹),视觉设定类 Agent 与配乐 Agent **必须先查看、优先参考/选用**:
 
 ```
 refs/
@@ -77,7 +77,8 @@ refs/
 ├── props/        # 道具/服装/法宝参考(服装可建 costumes/ 子目录)
 ├── music/        # 用户希望使用的音乐文件(BGM 候选,mp3/wav/flac 等)
 ├── thumbnail/    # 封面参考:他人爆款封面/构图/版式/文字风格范例(thumbnail Agent 优先参考)
-└── NOTES.md      # 逐图/逐曲注释(哪张图管什么、哪首曲子想用在哪);有则必读——用户在【参考图】页逐文件填写,
+├── text/         # 文本资料:设定/文案等文本文件(txt/md 等),相关 Agent 参考使用
+└── NOTES.md      # 逐文件注释(哪个文件管什么、想用在哪);有则必读——用户在【参考文件】页逐文件填写,
                   # 自动写入本文件标记块(机器可读版 annotations.json);用户手写内容(标记块外)同样有效
 ```
 
@@ -85,7 +86,7 @@ refs/
 1. **优先级**:用户参考图 > Agent 自行发挥。风格类决策(style.json、色彩、画风)与参考图冲突时,以参考图为准;与文字设定(Bible)冲突时上报用户裁决,不擅自取舍。
 2. **落痕迹**:凡参考了 refs/ 的产物,须在其 meta/prompts.json 里记录所用参考图路径(`user_refs` 字段);art-director 在 style.json 中写明每张风格参考图影响了哪些决策。
 3. **直接注入**:生成图像时把命中的参考图经 `genmedia --ref` 传入(见 §9);角色参考图同时作为 character-concept 三视图和 character-consistency 校正的形象锚点之一。
-4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可从预览菜单进入【参考图】页上传参考图后重跑风格」。
+4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可从预览菜单进入【参考文件】页上传参考图后重跑风格」。
 5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
 6. **用户音乐**:`refs/music/` 有文件时,配乐 Agent(`09-audio/music`)必须先逐曲试听分析(曲风/情绪/节奏/时长),再对照本集情绪曲线自行判断每首曲子适合用在视频的哪些位置(哪些场次/情绪段),优先选用用户音乐,不足的段落才生成补齐;NOTES.md 指定了用途的按指定执行。选用情况(含未选用及原因)写入 cue sheet,`license.source` 记 `user_provided` 并如实标注来源文件路径,版权仍由 `11-qa/copyright` 终审。
 7. **封面参考**:`refs/thumbnail/` 有图时,封面 Agent(`10-editing/thumbnail`)必须先逐图分析可借鉴点(构图/主体占比/文字位置与字重/色彩策略),作为 A/B 版设计的优先依据,并在送选清单 `user_refs` 字段落痕迹;NOTES.md 指定了用法的按指定执行。
@@ -290,7 +291,7 @@ refs/
 
 > **概念图目录卫生(candidates 留档,2026-07-30)**:`assets/concepts/{characters,scenes,props}/<id>/` 主目录仅保留**最终采用的最新版本**图与 prompts.json/selection.json;落选候选、中间尝试、测试图(文件名含 candidate/attempt/test 或被新版替换的旧图)一律移入 `<id>/candidates/` 子目录留档,不删除以备追溯。下游按主目录整目录取图作形象锚(p7-image 锚点包、§6A 覆盖审计现货比对、§7E 修正取锚),弃用图混在主目录会被误取注入;`candidates/` 不计入 §6A 现货。三个概念 Agent(character-concept/environment-concept/prop,含 §6A 回派补图)出图挑选后即归位,重 roll 替换定稿时旧图先移入 `candidates/` 再落新图。
 
-**G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考图】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
+**G4 闸门 + H2 人工确认**:风格锁定。H2 时向用户展示「参考图 → 风格决策」对照(refs/ 为空则提醒用户可从预览菜单【参考文件】页上传参考图后重跑)。此后所有画面产物以 style.json 为准,改风格 = 走变更流程并评估重做成本。
 
 ### Phase 5 — 剧本改编(与 Phase 4 并行,依赖 G1/G2/G3)
 

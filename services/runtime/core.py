@@ -189,8 +189,8 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 REFS_README = """# refs/ — 用户参考目录
 
-把「希望成片长成什么样」的参考图和希望使用的音乐放进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2)。
-**推荐用 Web 客户端【项目预览 → 参考素材】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
+把「希望成片长成什么样」的参考图、希望使用的音乐和文本资料放进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2)。
+**推荐用 Web 客户端【项目预览 → 参考文件】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
 
 - `style/`      整体视觉风格:画风/渲染质感/色调/构图
 - `characters/` 角色形象;按角色建子目录(如 characters/linzhao/)可定向到该角色
@@ -198,8 +198,9 @@ REFS_README = """# refs/ — 用户参考目录
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音乐文件(BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
-- `NOTES.md`    逐图/逐曲注释:哪张图管什么、哪首曲子想用在哪(有则 Agent 必读)。
-                注释在【参考图】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
+- `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
+- `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
+                注释在【参考文件】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
 
 规则:用户参考素材 > Agent 自行发挥;与文字设定冲突时 Agent 会上报你裁决;目录为空不影响流程。
 """
@@ -1622,7 +1623,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考素材」页把风格/角色/场景/道具/封面参考图与希望使用的音乐按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/角色/场景/道具/封面参考图、希望使用的音乐与文本资料按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
@@ -2687,7 +2688,7 @@ _IMG_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg",
 
 async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
     """本地上传一张图片并直接加入组 refs:落盘 assets/uploads/<ep>/<grp>/,
-    请求体即文件原始字节(与参考图页上传同法,避免 multipart 依赖)。"""
+    请求体即文件原始字节(与参考文件页上传同法,避免 multipart 依赖)。"""
     project, ep, grp, base, pf = _grpref_ctx(
         {"project": project, "ep": ep, "grp": grp})
     if not data:
@@ -3837,11 +3838,11 @@ async def api_brief_set(body: dict):
     return {"ok": True, "project": project, "brief": brief, "style": style}
 
 
-# ---------------- 参考图页(refs/ 分类预览、上传、逐图注释) ----------------
-REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail")
+# ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
+REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail", "text")
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
-REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考素材」页自动生成,勿手改;手写内容请放本块之外 -->"
+REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
 
@@ -3875,7 +3876,7 @@ def _write_ref_notes_md(refs: Path, notes: dict):
 
 
 async def api_refs_list(project: str = "demo"):
-    """参考图页数据:refs/ 按分类列出文件(含子目录)、预览 URL 与注释。"""
+    """参考文件页数据:refs/ 按分类列出文件(含子目录)、预览 URL 与注释。"""
     base = _proj_base(project)
     refs = base / "refs"
     notes = _load_ref_notes(refs)
@@ -3909,7 +3910,7 @@ async def api_refs_list(project: str = "demo"):
 async def api_refs_upload(data: bytes, project: str = "demo",
                           category: str = "style", subdir: str = "",
                           filename: str = "ref"):
-    """参考图页上传:请求体即文件原始字节(避免 multipart 依赖)。
+    """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖)。
     文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、props/costumes 等定向子目录。"""
     base = _proj_base(project)
     if category not in REF_CATEGORIES:
@@ -3935,7 +3936,7 @@ async def api_refs_upload(data: bytes, project: str = "demo",
 
 
 async def api_refs_note(body: dict):
-    """保存/编辑参考图注释:写 refs/annotations.json 并同步 NOTES.md 自动块
+    """保存/编辑参考文件注释:写 refs/annotations.json 并同步 NOTES.md 自动块
     (NOTES.md 是 workflow 既有约定的「有则必读」文件,视觉/配乐 Agent 由此读到逐图注释)。"""
     base = _proj_base(body.get("project"))
     refs = base / "refs"
@@ -4734,8 +4735,8 @@ async def api_projects_create(body: dict):
             f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
-        "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考图】页,"
-        "按分类(视觉风格/角色/场景/道具/音乐/封面)上传参考图与希望使用的音乐,并可为每个文件添加注释说明用途"
+        "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"
+        "按分类(视觉风格/角色/场景/道具/音乐/封面/文本)上传参考图、希望使用的音乐与文本资料,并可为每个文件添加注释说明用途"
         "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
     gm = agent_effective_model(orch)
