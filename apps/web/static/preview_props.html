@@ -38,11 +38,12 @@ main{flex:1;display:flex;min-height:0}
 #list{width:270px;border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column}
 #search{margin:10px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
 #items{flex:1;overflow-y:auto;padding-bottom:20px}
-.item{padding:8px 14px;cursor:pointer;border-left:2px solid transparent;display:flex;align-items:center;gap:8px}
+.item{padding:7px 14px;cursor:pointer;border-left:2px solid transparent}
 .item:hover{background:var(--panel2)}
 .item.active{background:var(--panel2);border-left-color:var(--accent)}
-.item .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .id{color:var(--dim);font-size:11px;margin-left:auto;flex:none}
+.item .row1{display:flex;align-items:center;gap:6px;min-width:0}
+.item .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .id{display:block;color:var(--dim);font-size:11px;line-height:1.4;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:10px;border:1px solid var(--purple);color:var(--purple);border-radius:4px;padding:0 5px;flex:none}
 .badge.pic{border-color:var(--green);color:var(--green)}
 .badge.key{border-color:var(--yellow);color:var(--yellow)}
@@ -130,10 +131,10 @@ function renderList(){
     .forEach(p=>{
       const d=document.createElement('div');
       d.className='item'+(CUR===p.id?' active':'');
-      d.innerHTML=`<span class="nm">${esc(p.name)}</span>`
+      d.innerHTML=`<div class="row1"><span class="nm">${esc(p.name)}</span>`
         +(p.card.is_plot_prop||p.card.key_prop?`<span class="badge key">剧情</span>`:'')
         +(p.images.length?`<span class="badge pic">${esc(I18N.f('图{n}',{n:p.images.length}))}</span>`:'')
-        +`<span class="id">${esc(p.id)}</span>`;
+        +`</div><span class="id">${esc(p.id)}</span>`;
       d.onclick=()=>{CUR=p.id;FOLDER=null;renderList();renderDetail(p)};
       box.appendChild(d);
     });
