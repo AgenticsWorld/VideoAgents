@@ -231,7 +231,7 @@ window.I18N_DICT = {
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Referencias de aspecto de personajes; indica una subcarpeta (nombre o id del personaje) para dirigirla a ese personaje",
 "场景与世界观:建筑/地貌/氛围参考": "Escenas y worldbuilding: arquitectura / terreno / atmósfera",
 "道具/法宝参考;服装可填 costumes 子目录": "Referencias de props / artefactos; el vestuario puede ir en la subcarpeta costumes",
-"希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Archivos de música que quieres usar (candidatos a BGM; el Agent de música los prioriza)",
+"希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Archivos de audio que quieres usar (pista de fondo; candidatos a BGM; el Agent de música los prioriza)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Referencias de miniaturas: ejemplos de composición / maquetación / tipografía de portadas populares",
 "设定/文案等文本资料,相关 Agent 参考使用": "Materiales de texto (lore, textos, etc.) como referencia para los Agents pertinentes",
 "复制在项目中的相对路径": "Copiar la ruta relativa dentro del proyecto",

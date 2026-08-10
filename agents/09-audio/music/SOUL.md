@@ -54,7 +54,7 @@ python3 modules/genmedia.py music \
 | 06-art/color-script | 全片/本集情绪色彩曲线 | `bible/color_script.json` |
 | 01-story/pacing | 逐场时长分配与情绪曲线 | `story/episodes/epNN/pacing.json` |
 | 06-art/art-director | 全片风格基调(曲风参照) | `bible/style.json` |
-| **用户(人工输入口)** | 希望使用的音乐文件(BGM 候选,优先选用)+ 可选逐曲说明 | `refs/music/`(mp3/wav/flac 等)、`refs/NOTES.md` |
+| **用户(人工输入口)** | 希望使用的音频文件(背景音轨,BGM 候选,优先选用)+ 可选逐曲说明 | `refs/music/`(mp3/wav/flac 等)、`refs/NOTES.md` |
 
 ## 输出
 

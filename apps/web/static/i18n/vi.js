@@ -231,7 +231,7 @@ window.I18N_DICT = {
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Tham chiếu ngoại hình nhân vật; điền thư mục con (tên hoặc id nhân vật) để nhắm đúng nhân vật đó",
 "场景与世界观:建筑/地貌/氛围参考": "Bối cảnh và thế giới quan: kiến trúc / địa hình / không khí",
 "道具/法宝参考;服装可填 costumes 子目录": "Tham chiếu đạo cụ / pháp bảo; trang phục để trong thư mục con costumes",
-"希望使用的音乐文件(BGM 候选,配乐 Agent 优先选用)": "Tệp nhạc muốn dùng (ứng viên BGM, Agent âm nhạc ưu tiên chọn)",
+"希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Tệp âm thanh muốn dùng (nhạc nền, ứng viên BGM, Agent âm nhạc ưu tiên chọn)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Tham chiếu ảnh bìa: ví dụ bố cục / trình bày / kiểu chữ từ các bìa nổi tiếng",
 "设定/文案等文本资料,相关 Agent 参考使用": "Tư liệu văn bản như thiết lập/nội dung chữ, để các Agent liên quan tham khảo",
 "复制在项目中的相对路径": "Sao chép đường dẫn tương đối trong dự án",
