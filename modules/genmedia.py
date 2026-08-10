@@ -25,6 +25,16 @@ CLI:
   需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
+  python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
+      --prompt "<该组原始 video_prompt>" [--source-task-id <任务id>] [--dry-run]
+
+  超分(MiniMax Regenerate-2K):固定输出 2K,凭证共用「生成模型」页视频 MiniMax 的
+  Key/接口区域(与生效视频渠道无关,环境变量 MINIMAX_API_KEY 兜底)。base_video 模式
+  的源视频须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积
+  ≤768×1344、107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);
+  或 --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
+  按 output_seconds 计费。
+
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
       [--character CHAR-0001] [--variant child] [--project demo] \
@@ -32,8 +42,8 @@ CLI:
       [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
 
 Python:
-  from modules.genmedia import generate_image, generate_video, generate_music, \
-      generate_tts, get_config
+  from modules.genmedia import generate_image, generate_video, generate_upscale, \
+      generate_music, generate_tts, get_config
 
 渠道:
   图像: openrouter(chat completions, modalities=image) / ideogram
@@ -47,6 +57,8 @@ Python:
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON)
+  超分: minimax(POST /v2/video_regeneration,Regenerate-2K 异步任务;模型固定
+        MiniMax-H3,分辨率固定 2K;仅此一个渠道)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
@@ -1297,6 +1309,47 @@ def _minimax_video_resolution(resolution: str) -> str:
     return mapped
 
 
+def _minimax_video_task(cfg, path: str, body: dict, output: str) -> str:
+    """提交 MiniMax 异步视频任务并轮询到完成,下载产物到 output(生成与超分共用)。"""
+    task = _minimax_post(cfg, path, body)
+    tid = task.get("task_id")
+    if not tid:
+        raise RuntimeError(f"MiniMax 视频任务创建失败:"
+                           f"{json.dumps(task, ensure_ascii=False)[:400]}")
+    print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    query_url = f"{_minimax_base(cfg)}/v2/query/video_generation/{tid}"
+    started = time.time()
+    deadline = started + VIDEO_TIMEOUT
+    last_status, last_beat = "", started
+    while time.time() < deadline:
+        time.sleep(VIDEO_POLL_INTERVAL)
+        try:
+            st = _get_json(query_url, headers)
+        except Exception as e:
+            # 轮询瞬时失败不中止:任务已在 MiniMax 侧运行,中止会诱发上层重试重复计费
+            print(f"[genmedia] 轮询失败({e}),{VIDEO_POLL_INTERVAL}s 后重试",
+                  file=sys.stderr, flush=True)
+            continue
+        # regeneration 查询响应包一层 task 对象,生成任务为扁平结构,两种形态都兼容
+        st = st.get("task") or st
+        status = st.get("status")
+        now = time.time()
+        if status != last_status or now - last_beat >= 60:
+            print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
+                  file=sys.stderr, flush=True)
+            last_status, last_beat = status, now
+        if status == "succeeded":
+            url = (st.get("content") or {}).get("url")
+            if not url:
+                raise RuntimeError(f"MiniMax 任务成功但无视频 URL:{json.dumps(st)[:400]}")
+            return _save(_request(url, timeout=600), output)
+        if status in ("failed", "cancelled"):
+            raise RuntimeError(f"MiniMax 视频任务失败:"
+                               f"{json.dumps(st, ensure_ascii=False)[:400]}")
+    raise RuntimeError(f"MiniMax 视频超时({VIDEO_TIMEOUT}s),task={tid}")
+
+
 def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, gen_audio=None, return_last_frame="",
                    video_refs=None):
@@ -1342,45 +1395,116 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
               file=sys.stderr)
     elif not has_media:
         body["ratio"] = "16:9"   # 文生视频 ratio 必填且不能 adaptive
-    task = _minimax_post(cfg, "/v2/video_generation", body)
-    tid = task.get("task_id")
-    if not tid:
-        raise RuntimeError(f"MiniMax 视频任务创建失败:"
-                           f"{json.dumps(task, ensure_ascii=False)[:400]}")
-    print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
-    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
-    query_url = f"{_minimax_base(cfg)}/v2/query/video_generation/{tid}"
-    started = time.time()
-    deadline = started + VIDEO_TIMEOUT
-    last_status, last_beat = "", started
-    while time.time() < deadline:
-        time.sleep(VIDEO_POLL_INTERVAL)
-        try:
-            st = _get_json(query_url, headers)
-        except Exception as e:
-            # 轮询瞬时失败不中止:任务已在 MiniMax 侧运行,中止会诱发上层重试重复计费
-            print(f"[genmedia] 轮询失败({e}),{VIDEO_POLL_INTERVAL}s 后重试",
-                  file=sys.stderr, flush=True)
-            continue
-        status = st.get("status")
-        now = time.time()
-        if status != last_status or now - last_beat >= 60:
-            print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
-                  file=sys.stderr, flush=True)
-            last_status, last_beat = status, now
-        if status == "succeeded":
-            url = (st.get("content") or {}).get("url")
-            if not url:
-                raise RuntimeError(f"MiniMax 任务成功但无视频 URL:{json.dumps(st)[:400]}")
-            saved = _save(_request(url, timeout=600), output)
-            if return_last_frame:
-                # H3 无 last_frame 返回参数,续接锚从成片本地抽取
-                _extract_last_frame(saved, return_last_frame)
-            return saved
-        if status in ("failed", "cancelled"):
-            raise RuntimeError(f"MiniMax 视频生成失败:"
-                               f"{json.dumps(st, ensure_ascii=False)[:400]}")
-    raise RuntimeError(f"MiniMax 视频超时({VIDEO_TIMEOUT}s),task={tid}")
+    saved = _minimax_video_task(cfg, "/v2/video_generation", body, output)
+    if return_last_frame:
+        # H3 无 last_frame 返回参数,续接锚从成片本地抽取
+        _extract_last_frame(saved, return_last_frame)
+    return saved
+
+
+# ---------------- 超分:MiniMax(POST /v2/video_regeneration,Regenerate-2K) ----------------
+
+# /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
+# 直出成片规格,不合规提交即拒——提交前用 ffprobe 预检拦下并给出修法
+MINIMAX_UPSCALE_MODEL = "MiniMax-H3"
+MINIMAX_UPSCALE_MIN_FRAMES = 107     # 约 4s @24fps
+MINIMAX_UPSCALE_MAX_FRAMES = 362     # 约 15s @24fps
+MINIMAX_UPSCALE_MAX_AREA = 768 * 1344   # 1,032,192 px
+
+
+def _minimax_upscale_config() -> dict:
+    """超分共用「生成模型」页视频段的 MiniMax 凭证(api_key/api_base),与生效视频
+    渠道无关——只要 MiniMax Key 已配置(或设环境变量 MINIMAX_API_KEY)即可用。"""
+    try:
+        pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("minimax") or {})
+    except Exception:
+        pc = {}
+    pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS["minimax"], "")
+    if not pc["api_key"]:
+        raise RuntimeError("超分渠道 minimax 未配置 API Key(Web 控制台「🎨 生成模型」"
+                           "视频生成的 MiniMax 标签页填入,或设环境变量 MINIMAX_API_KEY)")
+    return {"provider": "minimax", **pc}
+
+
+def _probe_video_meta(path: str) -> dict | None:
+    """ffprobe 实测视频规格(宽高/fps/帧数/有无音轨);ffprobe 不可用/失败返回 None
+    (跳过预检,交由 MiniMax 侧拒绝)。"""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error",
+             "-show_entries", "stream=codec_type,width,height,r_frame_rate,nb_frames",
+             "-show_entries", "format=duration", "-of", "json", path],
+            capture_output=True, text=True, timeout=30)
+        info = json.loads(out.stdout)
+        meta = {"has_audio": False, "width": 0, "height": 0, "fps": 0.0, "frames": 0}
+        for s in info.get("streams") or []:
+            if s.get("codec_type") == "audio":
+                meta["has_audio"] = True
+            elif s.get("codec_type") == "video":
+                meta["width"] = int(s.get("width") or 0)
+                meta["height"] = int(s.get("height") or 0)
+                num, _, den = (s.get("r_frame_rate") or "0/1").partition("/")
+                meta["fps"] = float(num) / float(den) if den and float(den) else 0.0
+                meta["frames"] = int(s.get("nb_frames") or 0)
+        if not meta["frames"] and meta["fps"]:
+            dur = float((info.get("format") or {}).get("duration") or 0)
+            meta["frames"] = int(round(dur * meta["fps"]))
+        return meta if meta["width"] else None
+    except Exception:
+        return None
+
+
+def _minimax_upscale_precheck(path: str) -> None:
+    """Regenerate-2K 源视频规格预检(须为 MiniMax-H3 768P 直出成片口径):
+    含音轨、24fps、宽高均被 32 整除、面积 ≤768×1344、107-362 帧(约 4-15s)。"""
+    meta = _probe_video_meta(path)
+    if meta is None:
+        print("[genmedia] 无法实测源视频规格(ffprobe 不可用?),跳过预检,"
+              "不合规将被 MiniMax 侧拒绝", file=sys.stderr)
+        return
+    w, h = meta["width"], meta["height"]
+    problems = []
+    if not meta["has_audio"]:
+        problems.append("缺少音轨(源视频必须含音频)")
+    if round(meta["fps"]) != 24:
+        problems.append(f"帧率 {meta['fps']:.2f}fps ≠ 24fps")
+    if w % 32 or h % 32:
+        problems.append(f"分辨率 {w}x{h} 宽高须均被 32 整除")
+    if w * h > MINIMAX_UPSCALE_MAX_AREA:
+        problems.append(f"面积 {w}x{h}={w * h}px 超过 {MINIMAX_UPSCALE_MAX_AREA}px(768×1344)")
+    if meta["frames"] and not \
+            MINIMAX_UPSCALE_MIN_FRAMES <= meta["frames"] <= MINIMAX_UPSCALE_MAX_FRAMES:
+        problems.append(f"帧数 {meta['frames']} 不在 [{MINIMAX_UPSCALE_MIN_FRAMES},"
+                        f"{MINIMAX_UPSCALE_MAX_FRAMES}](约 4-15s @24fps)")
+    if problems:
+        raise RuntimeError(
+            f"源视频 {Path(path).name} 不满足 Regenerate-2K 输入规格"
+            f"(须为 MiniMax-H3 768P 直出成片):{';'.join(problems)}。"
+            "该超分渠道仅适用 H3 768P 生成的 clip,不合规请回退常规超分手段")
+
+
+def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
+                     output: str) -> str:
+    if source_task_id:
+        if input_video:
+            raise RuntimeError("--input 与 --source-task-id 互斥:传任务 id 时无需源视频")
+        body = {"model": MINIMAX_UPSCALE_MODEL, "source_task_id": source_task_id,
+                "resolution": "2K"}
+    else:
+        p = Path(input_video or "")
+        if not input_video or not p.is_file():
+            raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
+        if not prompt:
+            raise RuntimeError("base_video 模式必须传 --prompt(该组生成时的原始 video_prompt)")
+        _minimax_upscale_precheck(str(p))
+        # 请求体上限 64MB:小文件 base64 内联,大文件与参考视频同策略走对象存储预签名 URL
+        url = _storage_upload_url(str(p)) if p.stat().st_size > MAX_VIDEOIN_BYTES \
+            else _file_to_data_url(str(p))
+        body = {"model": MINIMAX_UPSCALE_MODEL, "resolution": "2K",
+                "content": [{"type": "text", "text": prompt},
+                            {"type": "video_url", "role": "base_video",
+                             "video_url": {"url": url}}]}
+    return _minimax_video_task(cfg, "/v2/video_regeneration", body, output)
 
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -1860,6 +1984,20 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
 
 
+def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
+                     source_task_id: str = "") -> str:
+    """视频超分(MiniMax Regenerate-2K),返回保存的绝对路径。固定输出 2K 档。
+
+    仅 minimax 渠道:凭证共用「生成模型」页视频 MiniMax 的 Key/接口区域,与生效
+    视频渠道无关。base_video 模式传 input_video + prompt(该组原始 video_prompt),
+    源视频须为 MiniMax-H3 768P 直出成片规格(提交前 ffprobe 预检);source_task_id
+    模式传 7 天内 succeeded 的 MiniMax 生成任务 id,免传源视频。按 output_seconds 计费。
+    """
+    _forbid_dispatch_layer("超分")
+    cfg = _minimax_upscale_config()
+    return _upscale_minimax(cfg, input_video, prompt, source_task_id, output)
+
+
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
                  instructions: str = "", character: str = "", variant: str = "",
                  project: str = "") -> str:
@@ -1994,6 +2132,20 @@ def _cmd_video(args):
     print(f"已生成: {out}")
 
 
+def _cmd_upscale(args):
+    _check_id_digits(args.output)
+    if args.dry_run:
+        cfg = _minimax_upscale_config()
+        if args.input and not args.source_task_id:
+            _minimax_upscale_precheck(args.input)
+            print(f"[dry-run] 源视频 {args.input} 通过 Regenerate-2K 输入规格预检")
+        print(f"[dry-run] upscale via minimax model={MINIMAX_UPSCALE_MODEL}"
+              f" resolution=2K api_base={_minimax_base(cfg)} → {args.output}")
+        return
+    out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id)
+    print(f"已生成: {out}")
+
+
 def _cmd_music(args):
     if args.dry_run:
         cfg = get_config("music")
@@ -2065,6 +2217,17 @@ def main():
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")
 
+    pu = sub.add_parser("upscale", help="视频超分(MiniMax Regenerate-2K,固定输出 2K)")
+    pu.add_argument("--input", default="",
+                    help="源视频路径(须为 MiniMax-H3 768P 直出成片规格:24fps/含音轨/"
+                         "宽高均被32整除/面积≤768×1344/约4-15s;与 --source-task-id 二选一)")
+    pu.add_argument("--output", required=True, help="输出 mp4 路径")
+    pu.add_argument("--prompt", default="",
+                    help="该组生成时的原始 video_prompt(base_video 模式必填)")
+    pu.add_argument("--source-task-id", default="",
+                    help="7 天内 succeeded 的 MiniMax 生成任务 id(免传源视频,与 --input 互斥)")
+    pu.add_argument("--dry-run", action="store_true")
+
     pt = sub.add_parser("tts", help="TTS 旁白/语音合成")
     pt.add_argument("--text", required=True, help="要合成的文本(旁白/台词)")
     pt.add_argument("--output", required=True, help="输出音频路径(.mp3;其他扩展名为 pcm 裸流)")
@@ -2095,7 +2258,7 @@ def main():
     args = ap.parse_args()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
-         "music": _cmd_music, "tts": _cmd_tts}[args.cmd](args)
+         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts}[args.cmd](args)
     except RuntimeError as e:
         print(f"生成失败: {e}", file=sys.stderr)
         sys.exit(1)

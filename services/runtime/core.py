@@ -755,6 +755,18 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
 H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
 
 
+def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
+    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填 API Key
+    (或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关(genmedia 超分凭证同口径)。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    key = str((v.get("minimax") or {}).get("api_key") or "").strip()
+    return bool(key or os.environ.get("MINIMAX_API_KEY", "").strip())
+
+
+# MiniMax Regenerate-2K 超分 skill:仅当 MiniMax Key 已配置时注入加载指令给 upscale agent
+MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2k/SKILL.md"
+
+
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 
@@ -1631,6 +1643,18 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
+    if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available():
+        p += f"""
+
+## MiniMax Regenerate-2K 超分 Skill(仅当 MiniMax API Key 已配置时注入,当前已生效)
+MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅读技能文件并按其判定条件与流程执行**:
+- Skill 文件:{MINIMAX_UPSCALE_SKILL}(直接 Read 全文)
+- 适用条件(两条都满足才走本 skill,否则按 SOUL.md 常规超分手段执行并在回执说明):
+  1. MiniMax 已配置(本段出现即满足);
+  2. 源 clip 满足 API 输入规格——MiniMax-H3 768P 直出成片口径(24fps、含音轨、宽高均被 32 整除、面积 ≤768×1344、约 4-15s);`upscale` 命令提交前会用 ffprobe 自动预检,不合规会明确报错,可先 `--dry-run` 只跑预检
+- 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
+- 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
+- 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
     if brief:
         p += f"""
 
