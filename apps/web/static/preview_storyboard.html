@@ -205,7 +205,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="props">🗡 道具</button>
     <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
-    <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
+    <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
   </div>
   <div class="body">
     <div class="assets" id="ar-assets"></div>
@@ -314,7 +314,16 @@ $('#gn-ok').onclick=async()=>{
 };
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
-const AR_MAX=9;
+let AR_MAX=9;   // 每组参考图上限:项目「分镜组设置」max_ref_images(打开弹窗时拉取,回落 9=Seedance 2.0 口径)
+let AR_MAX_LOADED=false;
+async function arLoadMax(proj){
+  if(AR_MAX_LOADED)return;
+  try{
+    const g=(await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/config')).json()).shot_group||{};
+    if(Number.isInteger(g.max_ref_images))AR_MAX=g.max_ref_images;
+    AR_MAX_LOADED=true;
+  }catch(_){}
+}
 let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={},AR_GEN=false;
 const arRel=u=>decodeURIComponent(u.split('?')[0]).replace(/^\/api\/v1\/projects\/[^/]+\/artifacts\//,'');
 function arMsg(txt,ok){const e=$('#ar-err');e.textContent=txt;e.style.color=ok?'var(--green)':'var(--red)'}
@@ -326,6 +335,7 @@ async function openRefpick(grp){
   $('#ar-imgs').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
   $('#ar-modal').style.display='flex';
   const proj=$('#project').value.trim()||'demo';
+  await arLoadMax(proj);
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
       +encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'.json?v='+Date.now());
@@ -457,13 +467,13 @@ $('#ar-ok').onclick=async()=>{
 };
 // 🎨 手绘参考图:弹窗内发起手绘会话(基于线稿+已有参考图+项目风格生成成图入 refs)
 $('#ar-sketch').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(t('参考图已满(9 张),不能再添加'));return}
+  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
   if(AR_GEN){arMsg(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'),true);return}
   openSketch(AR_GRP);
 };
 // ⬆ 本地上传:文件原始字节直传(与参考图页上传同法),落盘 assets/uploads/<ep>/<grp>/ 并直接加入 refs
 $('#ar-up').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(t('参考图已满(9 张),不能再添加'));return}
+  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
   $('#ar-file').click();
 };
 $('#ar-file').onchange=async()=>{
@@ -515,7 +525,7 @@ async function openPrompt(grp){
     const p=d.video_prompt||'';
     $('#pv-text').textContent=p||t('(video_prompt 为空)');
     const bytes=new TextEncoder().encode(p).length,chars=[...p].length;
-    const lim=(PROMPT_BYTE_LIMITS.find(([k])=>model.includes(k))||[])[1];
+    const lim=(PROMPT_BYTE_LIMITS.find(([k])=>model.toLowerCase().includes(k))||[])[1];   // 大小写不敏感,容错手填自定义 model id
     const bEl=$('#pv-bytes');
     bEl.textContent=lim
       ?I18N.f('已用 {b} 字节 / 上限 {m} 字节({model}) · {c} 字符',{b:bytes,m:lim,model,c:chars})
@@ -873,7 +883,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考图'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

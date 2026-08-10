@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, wechat, whatsapp
+from services.runtime import core, feishu, media_push, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -26,6 +26,13 @@ from .state import RuntimeStore
 ROOT = Path(__file__).resolve().parents[2]
 STORE = RuntimeStore(core.RUNTIME_DIR / "runtime.sqlite3")
 _bridge_installed = False
+_shutdown_event: asyncio.Event | None = None
+
+
+def request_shutdown() -> None:
+    """Wake long-lived responses before Uvicorn starts draining connections."""
+    if _shutdown_event is not None:
+        _shutdown_event.set()
 
 
 def _body(model: Any, **extra: Any) -> dict[str, Any]:
@@ -46,19 +53,32 @@ def _artifact_urls(value: Any, project: str) -> Any:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global _bridge_installed
+    global _bridge_installed, _shutdown_event
+    _shutdown_event = asyncio.Event()
     if not _bridge_installed:
         install_runtime_store(STORE)
         _bridge_installed = True
+    # 服务停机期间 DAG 可能被外部 Agent 更新；启动即补核对一次，不依赖自动运行开关。
+    # ensure 只创建持久签字单，不会把人工 gate 自动置为 passed。
+    for project_dir in sorted(core.PROJECTS_DIR.iterdir()):
+        if not project_dir.is_dir() or project_dir.name.startswith("."):
+            continue
+        try:
+            await core.ensure_human_gate_approvals(project_dir.name)
+        except Exception as error:  # noqa: BLE001
+            print(f"[approval] 启动核对 {project_dir.name} 失败(忽略):{error}", flush=True)
     watchdog = asyncio.create_task(core.idle_watchdog())
     relays = [asyncio.create_task(m.relay_loop())
-              for m in (wechat, feishu, whatsapp)]
+              for m in (wechat, feishu, whatsapp, media_push)]
     try:
         yield
     finally:
+        request_shutdown()
         watchdog.cancel()
         for task in relays:
             task.cancel()
+        await asyncio.gather(watchdog, *relays, return_exceptions=True)
+        await core.shutdown_runtime()
 
 
 app = FastAPI(
@@ -335,6 +355,11 @@ async def engine_availability(engine: str) -> dict[str, Any]:
     return await core.api_enginecheck(engine)
 
 
+@api.get("/engines/pi/models", tags=["configuration"])
+async def pi_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_pi_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -348,6 +373,21 @@ async def test_openrouter(body: ProviderProbe) -> dict[str, Any]:
 @api.post("/providers/comfyui/test", tags=["providers"])
 async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_comfyui(body.model_dump())
+
+
+@api.post("/providers/runninghub/workflow", tags=["providers"])
+async def rh_workflow_verify(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_rh_workflow_verify(body.model_dump())
+
+
+@api.get("/comfy/workflows", tags=["providers"])
+async def comfy_workflows() -> dict[str, Any]:
+    return await core.api_comfy_workflows()
+
+
+@api.get("/comfy/workflows/doc", tags=["providers"])
+async def comfy_workflow_doc(name: str) -> dict[str, Any]:
+    return await core.api_comfy_workflow_doc(name)
 
 
 @api.get("/providers/deepagents/models", tags=["providers"])
@@ -373,6 +413,11 @@ async def add_elevenlabs_voice(body: ProviderProbe) -> dict[str, Any]:
 @api.post("/providers/volcengine/speakers", tags=["providers"])
 async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
+
+
+@api.post("/providers/minimax/voices", tags=["providers"])
+async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_minimax_voices(body.model_dump())
 
 
 @api.get("/resources", tags=["resources"])
@@ -545,15 +590,32 @@ async def whatsapp_unbind(body: dict[str, Any]) -> dict[str, Any]:
 @api.get("/events", tags=["events"])
 async def events() -> StreamingResponse:
     queue = core.HUB.subscribe()
+    shutdown = _shutdown_event or asyncio.Event()
 
     async def stream():
         try:
             yield 'data: {"type":"hello"}\n\n'
-            while True:
+            while not shutdown.is_set():
+                event_task = asyncio.create_task(queue.get())
+                stop_task = asyncio.create_task(shutdown.wait())
+                waiters = {event_task, stop_task}
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                    done, _ = await asyncio.wait(
+                        waiters, timeout=15,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    pending = {task for task in waiters if not task.done()}
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+                if stop_task in done:
+                    break
+                if event_task in done:
+                    event = event_task.result()
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                except asyncio.TimeoutError:
+                else:
                     yield ": ping\n\n"
         finally:
             core.HUB.unsubscribe(queue)

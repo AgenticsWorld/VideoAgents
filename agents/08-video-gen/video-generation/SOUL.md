@@ -78,7 +78,10 @@ python3 modules/genmedia.py video \
 ```
 
 云端渠道为异步任务,模块内部自动轮询到完成;--ref 与 --first/last-frame 互斥;
-Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额度熔断/未配 Key)
+Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 minimax(MiniMax-H3)时:
+--resolution 照传项目档位,模块自动就近映射到 768P/2K 两档;--duration 4–15 整数秒;
+原生音画同生(--generate-audio off 不生效);--ref-video 需先在「设置 → 文件托管」配置
+对象存储(经预签名 URL 传入)。失败(超时/拦截/额度熔断/未配 Key)
 如实写回执上报,严禁占位产物。详见 WORKFLOW.md §9。
 
 ## 实战经验(踩坑档案,ep01 实测)
@@ -90,6 +93,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
 - **已知误伤雷区**(内容完全无害也会被确定性拒,同 payload 重试无效):
   - 单人**全身**图(ep01 当时的三视图 front.png;2026-08-04 二订后角色锚为整版 sheet.png,含全身格同属此雷区,遇拒同样按探测法定位)——手部/体态参照改用过审记录良好的姿态图(pose_penitent.png 类);portrait 胸像从未被拒;
   - **递交钱币/手部特写**构图(grp027 尾帧及其 t≥6s 各帧全部被拒)——续接锚改取同 clip 内**构图不同的早段帧**(ffmpeg 抽帧逐帧探测,grp027 t=2s 帧过审),场景连续性保留、精确尾帧续接降级并记 notes。
+- **真人脸拒收(条件处置,彩铅化)**:部分视频渠道审核拒绝含**真实人脸(photoreal face)**的参考图。仅当按上述探测法定位到被拒图为含人脸的角色 sheet/锚点图时:上报 orchestrator 回派 `06-art/character-concept`,对 sheet 里**所有人物的脸部做彩铅化**(colored pencil 风格重绘脸部,**身体与背景保留原图质感**,细则见其 SOUL.md);拿到彩铅化版后更新锚点包映射再重新提交。正常流程不做此处理,不得自行改图。
 - 换锚后必须同步更新 keyframes 锚点包映射(meta.json 的 source 字段),否则 refs 解析断链。
 
 ### 对白组人物 Voice 样本范式(§8A 改版,2026-07-20)
@@ -99,6 +103,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。失败(超时/拦截/额
 - **红线(2026-07-09 实证,继续有效):TTS 音轨不是配音成品**——prompt 写『原样使用参考音频人声+口型同步』强迫口型对齐外部 TTS 音轨,会导致**严重口型问题**;任何形式的 TTS 对白配音(生成期强绑、后期换轨/贴片)都禁止。方舟不逐字嵌入参考音频(波形互相关≈0,模型重演绎),样本内容与台词无关。
 - **交付前逐说话人声学快检强制**:`python3 <项目目录>/code/voice_f0_check.py <clip> --seg 起:止:期望CHAR ...`,参照用**各角色自己的 voiceprint 样本**(段划分按 meta 切变边界+shot_list 对白归属);任一说话人错配开缺陷单整组重生成(调 audio_refs 顺序/绑定措辞后重 roll,勿盲目原样重试)。
 - **audio_ref 总时长硬限 15.2s(2026-07-20 实测)**:方舟 r2v 对 reference_audio **总时长**卡 15.2s,超限在任务创建时即 400 InvalidParameter(不计费,但拒因不点名是音频)——两段 ~12s 旧规格样本合计 24.1s 首提即被拒。开跑前 ffprobe 实测总时长(audioref_total_le_15s,genmedia 也会硬校验);超限先截短(`ffmpeg -t 4.9 -c copy`)再跑,并报 voice-generation 按 ≤5s/段 规格重出根治。
+- **【仅当项目视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】**:模型硬限放宽——时长 [4,30] 整数秒或 -1(单段 30s 直出)、refs ≤30、audio_refs ≤10(总时长 ≤30s)、参考视频 ≤10(总时长 ≤30s),支持纯音频参考;分辨率仅 480p/720p(1080p/4k genmedia 自动压 720p);视频编辑任务 ratio 仅 adaptive、duration 仅 -1,视频延长与首帧/首尾帧任务 ratio 仅 adaptive(首帧任务 genmedia 自动改写为 adaptive),违规将异步报错 InvalidParameter.TaskTypeConstraint。每组时长与参考数量的取用上限仍以系统提示词注入的项目「分镜组设置」为准。
 
 ### 手绘分镜渲染前置(2026-07-09 规则)
 

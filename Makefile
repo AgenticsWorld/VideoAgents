@@ -4,9 +4,17 @@
 
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUNTIME_VERSION ?= $(shell git rev-parse --short HEAD)
+DEEPAGENTS_PYTHON ?= $(shell command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || echo python3)
+DEEPAGENTS_VENV ?= .venv-deepagents
 
 install:
 	$(PYTHON) -m pip install -e .
+
+install-deepagents:
+	@$(DEEPAGENTS_PYTHON) -c 'import sys; assert sys.version_info >= (3, 11), "DeepAgents requires Python 3.11+"'
+	$(DEEPAGENTS_PYTHON) -m venv $(DEEPAGENTS_VENV)
+	$(DEEPAGENTS_VENV)/bin/python -m pip install --upgrade pip
+	$(DEEPAGENTS_VENV)/bin/python -m pip install -e ".[deepagents]"
 
 install-dev:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -25,7 +33,7 @@ run:
 api:
 	$(PYTHON) -m services.api
 
-# 全自动模式:claude 引擎免审批执行命令(codex/deepagents 本就免审批)。
+# 全自动模式:claude 引擎免审批执行命令(codex/pi/deepagents 本就免审批)。
 # 调度层越界防护(orchestrator_guard hook + genmedia 守卫)不受权限模式影响,依然生效。
 run-auto:
 	VIDEOAGENTS_PERMISSION_MODE=bypassPermissions $(PYTHON) apps/web/server.py

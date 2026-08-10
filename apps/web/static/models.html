@@ -56,6 +56,25 @@ button:disabled{opacity:.5;cursor:default}
 #save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
 #save-status.show{opacity:1}
 .pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+/* ComfyUI 工作流 .md 说明弹窗 */
+#wfdoc-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;padding:24px}
+#wfdoc-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;max-width:780px;width:100%;max-height:85vh;display:flex;flex-direction:column}
+#wfdoc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+#wfdoc-title{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wfdoc-body{padding:16px;overflow:auto;font-size:13px;line-height:1.7}
+#wfdoc-body h1{font-size:17px;margin:8px 0}
+#wfdoc-body h2{font-size:15px;margin:16px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px}
+#wfdoc-body h3{font-size:14px;margin:12px 0 4px}
+#wfdoc-body h4{font-size:13px;margin:10px 0 4px}
+#wfdoc-body p{margin:6px 0}
+#wfdoc-body pre{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;margin:8px 0;font-size:12px;line-height:1.5}
+#wfdoc-body code{background:var(--panel2);border-radius:4px;padding:1px 5px;font-size:12px}
+#wfdoc-body pre code{background:none;padding:0}
+#wfdoc-body ul{margin:6px 0 6px 20px}
+#wfdoc-body table{border-collapse:collapse;margin:8px 0;width:100%}
+#wfdoc-body th,#wfdoc-body td{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
+#wfdoc-body th{background:var(--panel2)}
+#wfdoc-body hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 </style>
 </head>
 <body>
@@ -67,17 +86,17 @@ button:disabled{opacity:.5;cursor:default}
 </header>
 <main>
   <div class="card" id="card-image">
-    <h2>🖼 图像生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🖼 图像模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="image-tabs"></div>
     <div id="image-panels"></div>
   </div>
   <div class="card" id="card-video">
-    <h2>🎬 视频生成 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🎬 视频模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
     <div class="tabs" id="video-tabs"></div>
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐生成 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🎵 音乐模型 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
@@ -87,9 +106,10 @@ button:disabled{opacity:.5;cursor:default}
     <div id="tts-panels"></div>
   </div>
   <div class="card" id="card-text">
-    <h2>🧩 语言模型DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页,保存后生效</span></h2>
+    <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="text-tabs">
       <div class="tab active" id="tab-text-local">本地模型</div>
+      <div class="tab" id="tab-text-cloud">云端模型</div>
       <div class="tab" id="tab-text-openrouter">OpenRouter</div>
     </div>
     <div class="panel show" id="panel-text-local">
@@ -102,6 +122,17 @@ button:disabled{opacity:.5;cursor:default}
       <div class="row" id="da-key-row"></div>
       <div class="row" id="da-model-row"></div>
       <div class="hint">OpenAI 兼容端点(LM Studio / Ollama / vLLM…)。LM Studio:先 <code>lms server start</code>(默认端口 1234);「测试连接」会列出端点上已加载/可用的模型。API Key 本地端点一般随意填(如 lm-studio)</div>
+    </div>
+    <div class="panel" id="panel-text-cloud">
+      <div class="row">
+        <label>Base URL</label>
+        <input type="text" id="dc-url" placeholder="https://api.deepseek.com">
+        <button id="dc-test">测试连接</button>
+      </div>
+      <div class="status" id="dc-status"></div>
+      <div class="row" id="dc-key-row"></div>
+      <div class="row" id="dc-model-row"></div>
+      <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
     </div>
     <div id="panel-text-openrouter"></div>
   </div>
@@ -188,10 +219,13 @@ const VOLC_IMAGE_MODELS=[
   ['doubao-seedream-4-0-250828','Seedream 4.0(文/图生图)'],
 ];
 /* 2026-07-11 API 探测验证:6 个 ID 全部在售可用;官方价格页仍标 1.5 Pro 即将下线 */
+/* 2026-08-09 新增 Seedance 2.5(单段 30s 直出/参考上限 30图+10视频+10音频/仅 480p·720p);
+   默认选项保持 2.0 不变,选用 2.5 前请先到「项目设置 → 分镜组设置」调大组时长与参考上限 */
 const VOLC_MODELS=[
-  ['doubao-seedance-2-0-260128','Seedance 2.0(最新,音画同生,多模态生视频,最高4K)'],
-  ['doubao-seedance-2-0-fast-260128','Seedance 2.0 Fast(音画同生,快速版,480p/720p)'],
-  ['doubao-seedance-2-0-mini-260615','Seedance 2.0 Mini(音画同生,轻量版,480p/720p)'],
+  ['doubao-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p)'],
+  ['doubao-seedance-2-0-260128','Seedance 2.0(音画同生,多模态生视频,最高4K)'],
+  ['doubao-seedance-2-0-fast-260128','Seedance 2.0 Fast(适合动画,音画同生,快速版,480p/720p)'],
+  ['doubao-seedance-2-0-mini-260615','Seedance 2.0 Mini(适合广告,音画同生,轻量版,480p/720p)'],
   ['doubao-seedance-1-5-pro-251215','Seedance 1.5 Pro(音画同生,即将下线)'],
   ['doubao-seedance-1-0-pro-250528','Seedance 1.0 Pro(文/图生视频)'],
   ['doubao-seedance-1-0-pro-fast-251015','Seedance 1.0 Pro Fast(文/图生视频)'],
@@ -208,13 +242,40 @@ const BP_IMAGE_MODELS=[
   ['seedream-4-0-250828','Seedream 4.0(文/图生图)'],
 ];
 /* 2026-07-11 API 探测验证:6 个 ID 全部可用 */
+/* 2026-08-09 新增 Seedance 2.5(与 2.0 同规律:dreamina- 前缀+日期后缀);默认选项保持 2.0 不变 */
 const BP_VIDEO_MODELS=[
-  ['dreamina-seedance-2-0-260128','Seedance 2.0(最新,音画同生,多模态生视频,最高4K)'],
-  ['dreamina-seedance-2-0-fast-260128','Seedance 2.0 Fast(音画同生,快速版,480p/720p)'],
-  ['dreamina-seedance-2-0-mini-260615','Seedance 2.0 Mini(音画同生,轻量版,480p/720p)'],
+  ['dreamina-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p)'],
+  ['dreamina-seedance-2-0-260128','Seedance 2.0(音画同生,多模态生视频,最高4K)'],
+  ['dreamina-seedance-2-0-fast-260128','Seedance 2.0 Fast(适合动画,音画同生,快速版,480p/720p)'],
+  ['dreamina-seedance-2-0-mini-260615','Seedance 2.0 Mini(适合广告,音画同生,轻量版,480p/720p)'],
   ['seedance-1-5-pro-251215','Seedance 1.5 Pro(音画同生)'],
   ['seedance-1-0-pro-250528','Seedance 1.0 Pro(文/图生视频)'],
   ['seedance-1-0-pro-fast-251015','Seedance 1.0 Pro Fast(文/图生视频)'],
+];
+
+/* MiniMax 开放平台:海外版 platform.minimax.io 与国内版 platform.minimaxi.com
+   账号与 Key 不互通,「接口区域」选与 Key 来源一致的域名 */
+const MINIMAX_BASES=[
+  ['https://api.minimax.io','海外版(minimax.io)'],
+  ['https://api.minimaxi.com','国内版(minimaxi.com)'],
+];
+const MINIMAX_IMAGE_MODELS=[
+  ['image-01','Image-01(文/图生图,单角色参考图)'],
+];
+const MINIMAX_VIDEO_MODELS=[
+  ['MiniMax-H3','MiniMax H3(多模态生视频,768P/2K,4-15秒)'],
+];
+const MINIMAX_MUSIC_MODELS=[
+  ['music-3.0','Music 3.0(最新,人声更自然)'],
+  ['music-2.6','Music 2.6'],
+  ['music-3.0-free','Music 3.0 Free(免费档,3次/分钟)'],
+  ['music-2.6-free','Music 2.6 Free(免费档,3次/分钟)'],
+];
+const MINIMAX_TTS_MODELS=[
+  ['speech-2.8-hd','Speech 2.8 HD(最新,40 语种/7 情绪)'],
+  ['speech-2.8-turbo','Speech 2.8 Turbo(低延迟)'],
+  ['speech-2.6-hd','Speech 2.6 HD'],
+  ['speech-02-hd','Speech 02 HD'],
 ];
 
 const PROVIDER_META={
@@ -222,15 +283,16 @@ const PROVIDER_META={
   ideogram:{label:'Ideogram'},
   volcengine:{label:'火山引擎'},
   byteplus:{label:'BytePlus'},
-  comfyui:{label:'ComfyUI(本地)'},
+  minimax:{label:'MiniMax'},
+  comfyui:{label:'ComfyUI'},
   elevenlabs:{label:'ElevenLabs'},
 };
 const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
-  image:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  video:{providers:['openrouter','volcengine','byteplus','comfyui']},
-  music:{providers:['openrouter','elevenlabs']},
-  tts:{providers:['openrouter','volcengine','elevenlabs']},
+  image:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  video:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  music:{providers:['openrouter','elevenlabs','minimax','comfyui']},
+  tts:{providers:['openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
@@ -284,6 +346,15 @@ function modelRow(selId,customId){
   const custom=el('input',{type:'text',id:customId,placeholder:'输入模型 ID',style:'display:none'});
   sel.onchange=()=>{custom.style.display=sel.value===CUSTOM?'':'none'};
   d.appendChild(sel);d.appendChild(custom);
+  return d;
+}
+
+function mmBaseRow(kind){
+  const d=el('div',{className:'row'});
+  d.appendChild(el('label',{},'接口区域'));
+  const sel=el('select',{id:`${kind}-mm-base`});
+  MINIMAX_BASES.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  d.appendChild(sel);
   return d;
 }
 
@@ -380,7 +451,7 @@ function buildPanel(kind,p){
     d.appendChild(modelRow('music-el-model','music-el-custom'));
     const ir=el('div',{className:'row'});
     ir.appendChild(el('label',{},''));
-    const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer'});
+    const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer;width:auto'});
     const cb=el('input',{type:'checkbox',id:'music-el-instr'});
     lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
     ir.appendChild(lb);d.appendChild(ir);
@@ -421,15 +492,77 @@ function buildPanel(kind,p){
       'Key 在 <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">elevenlabs.io 控制台</a> 生成(音色库 API 免费档不可用);'
       +'「默认音色」用账号内音色的 voice_id;<a href="https://elevenlabs.io/app/voice-library" target="_blank">Voice Library</a> 的公共音色须先「加入」到账号才能合成,'
       +'上面搜索选中后点「➕ 加入并设为默认」一步完成;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+  }else if(p==='minimax'&&kind==='tts'){
+    d.appendChild(keyRow('tts-mm-key','MiniMax API Key'));
+    d.appendChild(mmBaseRow('tts'));
+    d.appendChild(modelRow('tts-mm-model','tts-mm-custom'));
+    const vr=el('div',{className:'row'});
+    vr.appendChild(el('label',{},'默认音色'));
+    vr.appendChild(el('input',{type:'text',id:'tts-mm-voice',placeholder:'voice_id,如 Chinese (Mandarin)_Reliable_Executive'}));
+    d.appendChild(vr);
+    // 音色库:get_voice 拉取(系统+账号内克隆/生成音色)+ 关键词过滤 + 设为默认(接口无试听样本)
+    const sr=el('div',{className:'row'});
+    sr.appendChild(el('label',{},'音色库'));
+    const fi=el('input',{type:'text',id:'tts-mm-search',placeholder:'关键词过滤(名称/语言/voice_id)'});
+    fi.oninput=()=>{if(MM_LIB.length)mmRenderLib()};
+    sr.appendChild(fi);
+    const lb=el('button',{},'拉取音色库');
+    lb.onclick=mmLoadLib;
+    sr.appendChild(lb);d.appendChild(sr);
+    const lr=el('div',{className:'row'});
+    lr.appendChild(el('label',{},''));
+    const lsel=el('select',{id:'tts-mm-lib'});
+    lr.appendChild(lsel);
+    const ab=el('button',{},'✓ 设为默认音色');
+    ab.onclick=mmSetDefault;
+    lr.appendChild(ab);d.appendChild(lr);
+    d.appendChild(el('div',{className:'status',id:'tts-mm-status'}));
+    d.appendChild(el('div',{className:'hint'},
+      'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
+      +'克隆音色需先在平台创建;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+  }else if(p==='minimax'){
+    d.appendChild(keyRow(`${kind}-mm-key`,'MiniMax API Key'));
+    d.appendChild(mmBaseRow(kind));
+    d.appendChild(modelRow(`${kind}-mm-model`,`${kind}-mm-custom`));
+    if(kind==='music'){
+      const ir=el('div',{className:'row'});
+      ir.appendChild(el('label',{},''));
+      const lb=el('label',{style:'display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px;cursor:pointer;width:auto'});
+      const cb=el('input',{type:'checkbox',id:'music-mm-instr'});
+      lb.appendChild(cb);lb.appendChild(document.createTextNode(t('强制纯音乐(无人声,适合 BGM)')));
+      ir.appendChild(lb);d.appendChild(ir);
+    }
+    const intro=kind==='image'
+      ?'MiniMax 图片生成 API(Image-01,文/图生图,参考图仅 1 张);'
+      :kind==='video'
+      ?'MiniMax 视频生成 API(MiniMax-H3,音画同生,支持首尾帧/多参考图/参考音视频);分辨率仅 768P/2K 两档:「输出设置」的 360p/480p/720p 自动映射 768P,1080p/4k 映射 2K;时长 4-15 整数秒;'
+      :'MiniMax 音乐生成 API(Music 系列);取消「强制纯音乐」时按 prompt 自动写词演唱;输出仅 .mp3/.wav;';
+    d.appendChild(el('div',{className:'hint'},
+      intro+'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
-    const ur=el('div',{className:'row'});
-    ur.appendChild(el('label',{},'服务地址'));
-    ur.appendChild(el('input',{type:'text',id:`${kind}-comfy-url`,placeholder:'http://127.0.0.1:8188'}));
+    // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构)
+    // / RunningHub 国内(.cn)/国际(.ai) 第三方云托管(私有 REST,工作流存云端工作区)
+    const mr=el('div',{className:'row'});
+    mr.appendChild(el('label',{},'运行方式'));
+    const msel=el('select',{id:`${kind}-comfy-mode`});
+    [['local','本地'],['cloud','云端(Comfy Cloud)'],
+     ['rh_cn','RunningHub 国内(.cn)'],['rh_ai','RunningHub 国际(.ai)']].forEach(([v,l])=>
+      msel.appendChild(el('option',{value:v,textContent:t(l)})));
+    msel.onchange=()=>comfyModeUI(kind);
+    mr.appendChild(msel);
     const tb=el('button',{},'测试连接');
     tb.onclick=async()=>{
+      const mode=$(`#${kind}-comfy-mode`).value;
       const st=$(`#${kind}-comfy-status`);st.className='status';st.textContent='连接中…';
-      const r=await api('/api/v1/providers/comfyui/test',{url:$(`#${kind}-comfy-url`).value.trim()}).catch(e=>({ok:false,error:e.message}));
-      if(r.ok){
+      const r=await api('/api/v1/providers/comfyui/test',{
+        mode,url:$(`#${kind}-comfy-url`).value.trim(),
+        api_key:(mode==='cloud'?$(`#${kind}-comfy-cloudkey`):$(`#${kind}-comfy-rhkey`)).value.trim()})
+        .catch(e=>({ok:false,error:e.message}));
+      if(r.ok&&r.runninghub){
+        st.className='status ok';
+        st.textContent=I18N.f('✓ Key 有效 · 余额 {c} RH 币 · 运行中任务 {n}',
+          {c:r.remain_coins??'?',n:r.current_tasks??'?'});
+      }else if(r.ok){
         st.className='status ok';
         st.textContent=I18N.f('✓ 已连接({v})· {n} 个 checkpoint',
           {v:r.version+(r.devices?.length?' · '+r.devices.join(', '):''),n:r.checkpoints.length});
@@ -439,48 +572,313 @@ function buildPanel(kind,p){
         if(cur)sel.value=cur;
       }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
     };
-    ur.appendChild(tb);d.appendChild(ur);
+    mr.appendChild(tb);d.appendChild(mr);
+    const ur=el('div',{className:'row',id:`${kind}-comfy-url-row`});
+    ur.appendChild(el('label',{},'服务地址'));
+    ur.appendChild(el('input',{type:'text',id:`${kind}-comfy-url`,placeholder:'http://127.0.0.1:8188'}));
+    d.appendChild(ur);
+    const kr=keyRow(`${kind}-comfy-cloudkey`,'Comfy Cloud API Key');
+    kr.id=`${kind}-comfy-cloudkey-row`;kr.style.display='none';
+    d.appendChild(kr);
+    const rk=keyRow(`${kind}-comfy-rhkey`,'RunningHub API Key');
+    rk.id=`${kind}-comfy-rhkey-row`;rk.style.display='none';
+    d.appendChild(rk);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
-    const cr=el('div',{className:'row'});
+    // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
+    const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
+    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':'云端工作流'));
+    const rsel=el('select',{id:`${kind}-comfy-rhwf`});
+    rw.appendChild(rsel);
+    const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
+    rmb.onclick=()=>rhRemoveWf(kind);
+    rw.appendChild(rmb);d.appendChild(rw);
+    if(kind==='image'){
+      const rw2=el('div',{className:'row',id:'image-comfy-rhrefwf-row',style:'display:none'});
+      rw2.appendChild(el('label',{},'云端图生图工作流'));
+      rw2.appendChild(el('select',{id:'image-comfy-rhrefwf'}));
+      d.appendChild(rw2);
+    }
+    const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
+    ar.appendChild(el('label',{},'添加工作流'));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhadd`,
+      placeholder:t('工作流 ID 或页面链接')}));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhnote`,
+      placeholder:t('备注名(可选)'),style:'max-width:130px'}));
+    const ab=el('button',{},'验证并添加');
+    ab.onclick=()=>rhAddWf(kind);
+    ar.appendChild(ab);d.appendChild(ar);
+    const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
     cr.appendChild(el('label',{},'Checkpoint'));
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
     sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
     cr.appendChild(sel);d.appendChild(cr);
-    const wr=el('div',{className:'row'});
-    wr.appendChild(el('label',{},'工作流 JSON'));
-    wr.appendChild(el('input',{type:'text',id:`${kind}-comfy-wf`,placeholder:'可选:API 格式工作流文件路径,如 data/comfy/i2v.json'}));
-    d.appendChild(wr);
-    d.appendChild(el('div',{className:'hint'},
-      '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint'));
+    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图工作流':'工作流 JSON');
+    wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
+    if(kind==='image'){
+      const wr2=wfRow(kind,'image-comfy-ref-wf','图生图工作流');
+      wr2.id='image-comfy-ref-wf-row';d.appendChild(wr2);
+    }
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},
+      '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
+      +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-cloud`,style:'display:none'},
+      '工作流在 <a href="https://cloud.comfy.org/" target="_blank">Comfy Cloud</a> 官方云端执行,无需本地部署;'
+      +'API Key 在 <a href="https://platform.comfy.org" target="_blank">platform.comfy.org</a> 创建(需 Comfy Cloud 订阅,与网页版共用月度额度,免费档无 API 权限);'
+      +'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-cn`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.cn/workspace" target="_blank">RunningHub 国内站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
+      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-ai`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.ai/workspace" target="_blank">RunningHub 国际站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
+      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
+    if(kind==='music'){
+      d.appendChild(el('div',{className:'hint',id:'music-comfy-hint-extra'},
+        '推荐 <code>comfy/music-ace-step-v1-api.json</code> (ACE-Step 3.5B);'
+        +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长'));
+    }
+    if(kind==='tts'){
+      d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-extra'},
+        '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
+        +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
+    }
   }
   return d;
 }
 
-/* ---------- deepagents 语言模型(本地 OpenAI 兼容端点 / OpenRouter) ---------- */
+/* ComfyUI 运行方式切换:本地=服务地址,Comfy Cloud=云端 Key,RunningHub=RH Key+云端工作流收藏 */
+function comfyModeUI(kind){
+  const m=$(`#${kind}-comfy-mode`).value;
+  const cloud=m==='cloud',rh=m==='rh_cn'||m==='rh_ai';
+  $(`#${kind}-comfy-url-row`).style.display=(cloud||rh)?'none':'';
+  $(`#${kind}-comfy-cloudkey-row`).style.display=cloud?'':'none';
+  $(`#${kind}-comfy-rhkey-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhwf-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-ckpt-row`).style.display=rh?'none':'';
+  $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
+  if(kind==='image'){
+    $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
+    $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
+  }
+  $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
+  $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
+  $(`#${kind}-comfy-hint-rh-cn`).style.display=m==='rh_cn'?'':'none';
+  $(`#${kind}-comfy-hint-rh-ai`).style.display=m==='rh_ai'?'':'none';
+  const ex=$(`#${kind}-comfy-hint-extra`);if(ex)ex.style.display=rh?'none':'';
+  // 收藏按站点过滤(.cn/.ai 账号不互通),切换运行方式后重建下拉
+  if(rh){
+    fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
+    if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  }
+}
+
+/* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
+let RH_WFS={image:[],video:[],music:[],tts:[]};
+
+function fillRhWfSelect(kind,id,value){
+  const mode=$(`#${kind}-comfy-mode`).value;
+  // 仅 RunningHub 模式按站点过滤(.cn/.ai 不互通);其他模式保留全部选项,
+  // 避免隐藏状态下保存把已选工作流 ID 意外清空
+  const site=(mode==='rh_cn'||mode==='rh_ai')?mode:null;
+  const sel=$('#'+id);sel.innerHTML='';
+  sel.appendChild(el('option',{value:'',textContent:t('(未选择)')}));
+  (RH_WFS[kind]||[]).filter(w=>!site||!w.site||w.site===site).forEach(w=>
+    sel.appendChild(el('option',{value:String(w.id),
+      textContent:(w.note?w.note+' · ':'')+w.id})));
+  sel.value=value&&[...sel.options].some(o=>o.value===String(value))?String(value):'';
+}
+
+async function rhAddWf(kind){
+  const st=$(`#${kind}-comfy-status`);
+  const mode=$(`#${kind}-comfy-mode`).value;
+  const input=$(`#${kind}-comfy-rhadd`).value.trim();
+  if(!input){st.className='status err';st.textContent='✗ '+t('请先填写工作流 ID 或页面链接');return}
+  st.className='status';st.textContent=t('验证中…');
+  const r=await api('/api/v1/providers/runninghub/workflow',{
+    mode,api_key:$(`#${kind}-comfy-rhkey`).value.trim(),workflow:input})
+    .catch(e=>({ok:false,error:e.message}));
+  if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('验证失败'));return}
+  const note=$(`#${kind}-comfy-rhnote`).value.trim();
+  RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
+  RH_WFS[kind].push({id:r.id,note,site:mode});
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,r.id);
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  $(`#${kind}-comfy-rhadd`).value='';$(`#${kind}-comfy-rhnote`).value='';
+  st.className='status ok';
+  st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
+    +(r.tokens?.length?' · '+t('占位符:')+r.tokens.join(', ')
+      :' · '+t('未检测到占位符,请在工作流节点中写入 {{PROMPT}} 等输入位后重新验证'));
+}
+
+function rhRemoveWf(kind){
+  const sel=$(`#${kind}-comfy-rhwf`);const v=sel.value;if(!v)return;
+  const mode=$(`#${kind}-comfy-mode`).value;
+  RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+}
+
+/* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
+/* comfy/ 目录工作流清单(按文件名前缀 image-/video-/music-/tts- 分类),初始化时拉取 */
+let COMFY_WFS={image:[],video:[],music:[],tts:[]};
+
+function wfRow(kind,id,label){
+  const d=el('div',{className:'row'});
+  d.appendChild(el('label',{},label));
+  const sel=el('select',{id});
+  const custom=el('input',{type:'text',id:`${id}-custom`,
+    placeholder:'自定义工作流路径,如 comfy/my.json',style:'display:none'});
+  sel.onchange=()=>{custom.style.display=sel.value===CUSTOM?'':'none'};
+  d.appendChild(sel);d.appendChild(custom);
+  const db=el('button',{title:'查看同名 .md 说明文档'},'📖');
+  db.onclick=()=>showWfDoc(sel,custom);
+  d.appendChild(db);
+  return d;
+}
+
+function fillWfSelect(id,kind,value){
+  const opts=[['','(留空/不使用)'],
+    ...(COMFY_WFS[kind]||[]).map(w=>[w.path,w.path.replace(/^comfy\//,'')])];
+  fillSelect($('#'+id),opts,value,'');
+}
+
+function pickWf(id){
+  const v=$('#'+id).value;
+  return v===CUSTOM?$(`#${id}-custom`).value.trim():v;
+}
+
+let WFDOC_OVERLAY=null;
+function wfDocModal(){
+  if(WFDOC_OVERLAY)return WFDOC_OVERLAY;
+  const ov=el('div',{id:'wfdoc-overlay'});
+  const box=el('div',{id:'wfdoc-box'});
+  const head=el('div',{id:'wfdoc-head'});
+  head.appendChild(el('div',{id:'wfdoc-title'}));
+  const close=el('button',{},'✕');
+  close.onclick=()=>ov.style.display='none';
+  head.appendChild(close);
+  box.appendChild(head);
+  box.appendChild(el('div',{id:'wfdoc-body'}));
+  ov.appendChild(box);
+  ov.onclick=e=>{if(e.target===ov)ov.style.display='none'};
+  document.body.appendChild(ov);
+  WFDOC_OVERLAY=ov;
+  return ov;
+}
+
+/* 轻量 Markdown 渲染(标题/代码块/表格/列表/链接/行内代码,覆盖 comfy/*.md 用到的语法) */
+function mdRender(md){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline=s=>esc(s)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,txt,u)=>/^https?:/.test(u)
+      ?`<a href="${u}" target="_blank" rel="noopener">${txt}</a>`:txt)
+    .replace(/&lt;(https?:[^&\s]+)&gt;/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const lines=md.split('\n'),out=[];let i=0;
+  while(i<lines.length){
+    const L=lines[i];
+    if(/^```/.test(L)){
+      const buf=[];i++;
+      while(i<lines.length&&!/^```/.test(lines[i]))buf.push(lines[i++]);
+      i++;out.push('<pre><code>'+esc(buf.join('\n'))+'</code></pre>');continue;
+    }
+    const h=L.match(/^(#{1,4})\s+(.*)/);
+    if(h){const n=h[1].length;out.push(`<h${n}>${inline(h[2])}</h${n}>`);i++;continue}
+    if(/^---+\s*$/.test(L)){out.push('<hr>');i++;continue}
+    if(/^\|/.test(L)){
+      const rows=[];
+      while(i<lines.length&&/^\|/.test(lines[i]))rows.push(lines[i++]);
+      let html='<table>',first=true;
+      for(const r of rows){
+        if(/^[\s|:\-]+$/.test(r))continue;  // 表头分隔行
+        const tag=first?'th':'td';first=false;
+        const tds=r.replace(/^\s*\||\|\s*$/g,'').split('|').map(c=>inline(c.trim()));
+        html+='<tr>'+tds.map(c=>`<${tag}>${c}</${tag}>`).join('')+'</tr>';
+      }
+      out.push(html+'</table>');continue;
+    }
+    if(/^[-*]\s+/.test(L)){
+      let html='<ul>';
+      while(i<lines.length&&/^[-*]\s+/.test(lines[i])){
+        let item=lines[i++].replace(/^[-*]\s+/,'');
+        while(i<lines.length&&/^\s+\S/.test(lines[i]))item+=' '+lines[i++].trim();
+        html+='<li>'+inline(item)+'</li>';
+      }
+      out.push(html+'</ul>');continue;
+    }
+    if(!L.trim()){i++;continue}
+    let para=L;i++;
+    while(i<lines.length&&lines[i].trim()&&!/^(#{1,4}\s|```|\||[-*]\s|---)/.test(lines[i]))
+      para+=' '+lines[i++];
+    out.push('<p>'+inline(para)+'</p>');
+  }
+  return out.join('\n');
+}
+
+async function showWfDoc(sel,custom){
+  const path=sel.value===CUSTOM?custom.value.trim():sel.value;
+  const ov=wfDocModal();
+  const title=ov.querySelector('#wfdoc-title'),body=ov.querySelector('#wfdoc-body');
+  ov.style.display='flex';
+  if(!path){
+    title.textContent=t('工作流说明');
+    body.textContent=t('先在下拉列表选择一个工作流');
+    return;
+  }
+  title.textContent=path.replace(/^comfy\//,'');
+  body.textContent=t('加载中…');
+  try{
+    const r=await api('/api/v1/comfy/workflows/doc?name='+encodeURIComponent(path));
+    title.textContent=r.name;
+    body.innerHTML=mdRender(r.markdown);
+  }catch(e){
+    body.textContent=t('未找到该工作流的说明文档')+'('+e.message+')';
+  }
+}
+
+/* ---------- deepagents 语言模型(本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
 let TEXT_PROVIDER='local';
+const TEXT_TABS={local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
+/* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
+const CLOUD_MODELS=[['deepseek-v4-flash','deepseek-v4-flash'],['deepseek-v4-pro','deepseek-v4-pro']];
+function wireDaTest(prefix,savedModel){
+  $(`#${prefix}-test`).onclick=async()=>{
+    const st=$(`#${prefix}-status`);st.className='status';st.textContent='连接中…';
+    const r=await api('/api/v1/providers/deepagents/test',{base_url:$(`#${prefix}-url`).value.trim(),
+      api_key:$(`#${prefix}-key`).value.trim()}).catch(e=>({ok:false,error:e.message}));
+    if(r.ok){
+      st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
+      fillSelect($(`#${prefix}-model`),r.models.map(m=>[m,m]),
+                 savedModel()||$(`#${prefix}-model`).value,'');
+    }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
+  };
+}
 function buildDeepagents(){
   $('#da-key-row').replaceWith(keyRow('da-key','lm-studio(本地端点可随意填)'));
   $('#da-model-row').replaceWith(modelRow('da-model','da-custom'));
   $('#da-model').parentElement.querySelector('label').textContent='默认模型';
-  $('#da-test').onclick=async()=>{
-    const st=$('#da-status');st.className='status';st.textContent='连接中…';
-    const r=await api('/api/v1/providers/deepagents/test',{base_url:$('#da-url').value.trim(),
-      api_key:$('#da-key').value.trim()}).catch(e=>({ok:false,error:e.message}));
-    if(r.ok){
-      st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
-      fillSelect($('#da-model'),r.models.map(m=>[m,m]),
-                 CFG.deepagents?.local?.model||$('#da-model').value,'');
-    }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
-  };
+  $('#dc-key-row').replaceWith(keyRow('dc-key','sk-…(DeepSeek 开放平台创建;其他 OpenAI 兼容服务商 Key 亦可)'));
+  $('#dc-model-row').replaceWith(modelRow('dc-model','dc-custom'));
+  $('#dc-model').parentElement.querySelector('label').textContent='默认模型';
+  wireDaTest('da',()=>CFG.deepagents?.local?.model);
+  wireDaTest('dc',()=>CFG.deepagents?.cloud?.model);
   // OpenRouter 面板复用图像/视频的 openrouter 构建逻辑(ids: text-or-*)
   $('#panel-text-openrouter').replaceWith(buildPanel('text','openrouter'));
-  ['local','openrouter'].forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
+  Object.keys(TEXT_TABS).forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
 }
 
 function showTextPanel(p){
   TEXT_PROVIDER=p;
-  ['local','openrouter'].forEach(x=>{
-    $(`#tab-text-${x}`).classList.toggle('active',x===p);
+  Object.keys(TEXT_TABS).forEach(x=>{
+    const tb=$(`#tab-text-${x}`);
+    tb.classList.toggle('active',x===p);
+    // ✅ = 生效渠道(保存后),与图像/视频等板块的渠道标签一致
+    tb.textContent=(x===p?'✅ ':'')+window.t(TEXT_TABS[x]);
     $(`#panel-text-${x}`).classList.toggle('show',x===p);
   });
 }
@@ -621,6 +1019,41 @@ function volcSetDefault(){
     {name:v.name+' · '+v.voice_type}),true);
 }
 
+/* ---------- MiniMax 音色库(get_voice;系统+账号内克隆/生成音色,接口无试听样本) ---------- */
+let MM_LIB=[];  // 最近一次拉取的音色库(设默认时按下标取)
+const mmVoiceLabel=v=>[v.name,v.category,v.description].filter(Boolean).join(' · ')
+  +(v.voice_id&&v.voice_id!==v.name?' · '+v.voice_id:'');
+function mmStatus(msg,ok){const st=$('#tts-mm-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
+function mmRenderLib(){
+  const kw=$('#tts-mm-search').value.trim().toLowerCase();
+  const sel=$('#tts-mm-lib');sel.innerHTML='';
+  MM_LIB.forEach((v,i)=>{
+    const hay=[v.name,v.voice_id,v.category,v.description].join(' ').toLowerCase();
+    if(kw&&!kw.split(/\s+/).every(w=>hay.includes(w)))return;
+    sel.appendChild(el('option',{value:String(i),textContent:mmVoiceLabel(v)}));
+  });
+}
+async function mmLoadLib(){
+  if(!$('#tts-mm-key').value.trim())return mmStatus(t('✗ 先填 API Key'),false);
+  mmStatus(t('拉取音色库中…'));
+  try{
+    const r=await api('/api/v1/providers/minimax/voices',
+      {api_key:$('#tts-mm-key').value.trim(),api_base:$('#tts-mm-base').value});
+    MM_LIB=r.voices||[];
+    mmRenderLib();
+    mmStatus(MM_LIB.length
+      ?I18N.f('✓ 音色库共 {n} 个音色(可关键词过滤,选中后设为默认)',{n:MM_LIB.length})
+      :t('音色库为空(先在平台开通/创建音色)'),!!MM_LIB.length);
+  }catch(e){mmStatus('✗ '+e.message,false)}
+}
+function mmSetDefault(){
+  const v=MM_LIB[+$('#tts-mm-lib').value];
+  if(!v)return mmStatus(t('✗ 先拉取并选中一个音色'),false);
+  $('#tts-mm-voice').value=v.voice_id;
+  mmStatus(I18N.f('✓ 已设为默认音色:{name}(记得点「保存设置」)',
+    {name:v.name+' · '+v.voice_id}),true);
+}
+
 /* ---------- 装载 / 收集 ---------- */
 function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
@@ -645,9 +1078,28 @@ function loadIntoForm(){
       fillSelect($(`#${kind}-bp-model`),kind==='image'?BP_IMAGE_MODELS:BP_VIDEO_MODELS,
                  c.byteplus.model,c.byteplus.custom_model);
     }
+    if(SECTIONS[kind].providers.includes('minimax')&&c.minimax){
+      $(`#${kind}-mm-key`).value=c.minimax.api_key||'';
+      $(`#${kind}-mm-base`).value=c.minimax.api_base||MINIMAX_BASES[0][0];
+      fillSelect($(`#${kind}-mm-model`),
+                 kind==='image'?MINIMAX_IMAGE_MODELS:kind==='video'?MINIMAX_VIDEO_MODELS:
+                 kind==='music'?MINIMAX_MUSIC_MODELS:MINIMAX_TTS_MODELS,
+                 c.minimax.model,c.minimax.custom_model);
+      if(kind==='music')$('#music-mm-instr').checked=c.minimax.force_instrumental!==false;
+      if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
+    }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
+      $(`#${kind}-comfy-mode`).value=['local','cloud','rh_cn','rh_ai'].includes(c.comfyui.mode)
+        ?c.comfyui.mode:'local';
+      $(`#${kind}-comfy-cloudkey`).value=c.comfyui.cloud_api_key||'';
+      $(`#${kind}-comfy-rhkey`).value=c.comfyui.rh_api_key||'';
+      RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
+      comfyModeUI(kind);
+      fillRhWfSelect(kind,`${kind}-comfy-rhwf`,c.comfyui.rh_workflow_id||'');
+      if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',c.comfyui.rh_ref_workflow_id||'');
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
-      $(`#${kind}-comfy-wf`).value=c.comfyui.workflow||'';
+      fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
+      if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
       if(c.comfyui.checkpoint){
         const sel=$(`#${kind}-comfy-ckpt`);
         sel.appendChild(el('option',{value:c.comfyui.checkpoint,textContent:c.comfyui.checkpoint}));
@@ -672,14 +1124,17 @@ function loadIntoForm(){
     showPanel(kind,eff);
     loadOpenRouterModels(kind);
   }
-  const da=CFG.deepagents||{},lo=da.local||{},or=da.openrouter||{};
+  const da=CFG.deepagents||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
   $('#da-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
   $('#da-key').value=lo.api_key||'';
   fillSelect($('#da-model'),lo.model?[[lo.model,lo.model]]:[],lo.model,'');
+  $('#dc-url').value=cl.base_url||'https://api.deepseek.com';
+  $('#dc-key').value=cl.api_key||'';
+  fillSelect($('#dc-model'),CLOUD_MODELS,cl.model||CLOUD_MODELS[0][0],cl.custom_model);
   $('#text-or-key').value=or.api_key||'';
   fillSelect($('#text-or-model'),
     or.model&&!or.custom_model?[[or.model,or.model]]:[],or.model,or.custom_model);
-  showTextPanel(da.provider==='openrouter'?'openrouter':'local');
+  showTextPanel(['cloud','openrouter'].includes(da.provider)?da.provider:'local');
   loadOpenRouterModels('text');
 }
 
@@ -695,9 +1150,22 @@ function collect(){
     const c={openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
-      c.comfyui={url:$(`#${kind}-comfy-url`).value.trim(),
-               workflow:$(`#${kind}-comfy-wf`).value.trim(),
-               checkpoint:$(`#${kind}-comfy-ckpt`).value};
+      c.comfyui={mode:$(`#${kind}-comfy-mode`).value,
+               cloud_api_key:$(`#${kind}-comfy-cloudkey`).value.trim(),
+               url:$(`#${kind}-comfy-url`).value.trim(),
+               workflow:pickWf(`${kind}-comfy-wf`),
+               checkpoint:$(`#${kind}-comfy-ckpt`).value,
+               rh_api_key:$(`#${kind}-comfy-rhkey`).value.trim(),
+               rh_workflow_id:$(`#${kind}-comfy-rhwf`).value,
+               rh_workflows:RH_WFS[kind]||[],
+               ...(kind==='image'?{
+                 ref_workflow:pickWf('image-comfy-ref-wf'),
+                 rh_ref_workflow_id:$('#image-comfy-rhrefwf').value,
+                 negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
+               ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
+               ...(kind==='tts'?{voice:'',ref_audio:'',
+                 timbre_dir:'data/TimbreModel',
+                 timbre_catalog:'data/TimbreModel/catalog.json'}:{})};
     if(SECTIONS[kind].providers.includes('ideogram'))
       c.ideogram={api_key:$(`#${kind}-ideo-key`).value.trim(),
         ...pickModel(`#${kind}-ideo-model`,`#${kind}-ideo-custom`)};
@@ -707,6 +1175,13 @@ function collect(){
     if(SECTIONS[kind].providers.includes('byteplus'))
       c.byteplus={api_key:$(`#${kind}-bp-key`).value.trim(),
         ...pickModel(`#${kind}-bp-model`,`#${kind}-bp-custom`)};
+    if(SECTIONS[kind].providers.includes('minimax')){
+      c.minimax={api_key:$(`#${kind}-mm-key`).value.trim(),
+        api_base:$(`#${kind}-mm-base`).value,
+        ...pickModel(`#${kind}-mm-model`,`#${kind}-mm-custom`)};
+      if(kind==='music')c.minimax.force_instrumental=$('#music-mm-instr').checked;
+      if(kind==='tts')c.minimax.voice=$('#tts-mm-voice').value.trim();
+    }
     if(kind==='music')
       c.elevenlabs={api_key:$('#music-el-key').value.trim(),
         ...pickModel('#music-el-model','#music-el-custom'),
@@ -724,11 +1199,14 @@ function collect(){
     c.provider=SEL_PROVIDER[kind];
     out[kind]=c;
   }
-  // 生效渠道 = 当前选中的标签页(本地模型/OpenRouter)
+  // 生效渠道 = 当前选中的标签页(本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     local:{base_url:$('#da-url').value.trim(),
       api_key:$('#da-key').value.trim(),
       model:pickModel('#da-model','#da-custom').model},
+    cloud:{base_url:$('#dc-url').value.trim(),
+      api_key:$('#dc-key').value.trim(),
+      ...pickModel('#dc-model','#dc-custom')},
     openrouter:{api_key:$('#text-or-key').value.trim(),
       ...pickModel('#text-or-model','#text-or-custom')}};
   return out;
@@ -752,7 +1230,12 @@ $('#save').onclick=async()=>{
 /* ---------- 初始化 ---------- */
 (async()=>{
   buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();
-  CFG=await api('/api/v1/config/generation');
+  const [cfg,wfs]=await Promise.all([
+    api('/api/v1/config/generation'),
+    api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),
+  ]);
+  CFG=cfg;
+  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[]},wfs.workflows||{});
   loadIntoForm();
 })();
 </script>

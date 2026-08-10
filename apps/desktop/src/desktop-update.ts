@@ -1,9 +1,10 @@
 import {createHash} from 'node:crypto'
 import {
-  createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync,
+  writeFileSync,
 } from 'node:fs'
 import path from 'node:path'
-import {spawn} from 'node:child_process'
+import {ChildProcess, spawn} from 'node:child_process'
 import {Readable, Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
 import extract from 'extract-zip'
@@ -18,6 +19,10 @@ export interface BuildInfo {
   channel: 'local' | 'dev' | 'release'
   version: string
   buildHash: string
+  /** 构建时固定的发布源；安装后更新始终沿用此来源。 */
+  distribution?: 's3' | 'oss'
+  updateIndexUrl?: string
+  packageBaseUrl?: string
   /** 构建期 runtime-requirements.lock 的 sha256;与已装运行时清单比对,不一致时启动自动更新运行时 */
   requirementsSha256?: string
 }
@@ -60,6 +65,15 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
       if (value.requirementsSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(value.requirementsSha256)) {
         delete value.requirementsSha256
       }
+      if (value.distribution !== 's3' && value.distribution !== 'oss') delete value.distribution
+      if (typeof value.updateIndexUrl !== 'string' || !validHttpUrl(value.updateIndexUrl)) {
+        delete value.updateIndexUrl
+      }
+      if (typeof value.packageBaseUrl !== 'string' || !validHttpUrl(value.packageBaseUrl)) {
+        delete value.packageBaseUrl
+      } else if (!value.packageBaseUrl.endsWith('/')) {
+        value.packageBaseUrl += '/'
+      }
       return value
     }
   } catch (error) {
@@ -68,7 +82,24 @@ export function readBuildInfo(resourcesPath: string, packaged: boolean): BuildIn
   return {schema: 1, channel: 'local', version: '1.0.2', buildHash: 'unknown'}
 }
 
-function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact {
+function validHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function updateIndexUrl(build?: BuildInfo): string {
+  return process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || build?.updateIndexUrl || DEFAULT_INDEX_URL
+}
+
+function packageBaseUrl(build?: BuildInfo): string {
+  return build?.packageBaseUrl || DEFAULT_BASE
+}
+
+function validateArtifact(value: unknown, sourceIndex: string, build?: BuildInfo): DesktopArtifact {
   if (!value || typeof value !== 'object') throw new Error('桌面更新索引缺少当前平台制品')
   const artifact = value as Partial<DesktopArtifact>
   if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
@@ -83,8 +114,8 @@ function validateArtifact(value: unknown, sourceIndex: string): DesktopArtifact 
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('桌面更新包与索引来源不一致')
   } else {
     const platform = process.platform === 'darwin' ? 'mac' : 'win'
-    const expected = `${DEFAULT_BASE}${platform}/VideoAgents-${artifact.version}.zip`
-    if (url.href !== expected) throw new Error('桌面更新包 URL 不属于受信任的 S3 路径')
+    const expected = `${packageBaseUrl(build)}${platform}/VideoAgents-${artifact.version}.zip`
+    if (url.href !== expected) throw new Error('桌面更新包 URL 不属于当前发布源的受信任路径')
   }
   return artifact as DesktopArtifact
 }
@@ -106,7 +137,7 @@ function isNewerVersion(candidate: string, current: string): boolean {
 
 export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopUpdate | undefined> {
   if (!['dev', 'release'].includes(build.channel)) return undefined
-  const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
+  const source = updateIndexUrl(build)
   const response = await fetch(source, {
     redirect: 'error',
     cache: 'no-store',
@@ -118,7 +149,7 @@ export async function fetchDesktopUpdate(build: BuildInfo): Promise<DesktopUpdat
   const index = JSON.parse(text) as DesktopIndex
   const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
   if (index.schema !== 1 || !platform) throw new Error('桌面更新索引或平台无效')
-  const artifact = validateArtifact(index.desktop?.[platform], source)
+  const artifact = validateArtifact(index.desktop?.[platform], source, build)
   const minimumVersion = index.desktop?.minimumVersion
   if (minimumVersion !== undefined && !versionParts(minimumVersion)) {
     throw new Error('桌面更新索引的最低可用版本无效')
@@ -155,8 +186,8 @@ export function readCachedRequiredDesktopUpdate(
     if (value.schema !== 1 || !value.minimumVersion || !versionParts(value.minimumVersion)) {
       throw new Error('强制更新缓存格式无效')
     }
-    const source = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || DEFAULT_INDEX_URL
-    const artifact = validateArtifact(value.artifact, source)
+    const source = updateIndexUrl(build)
+    const artifact = validateArtifact(value.artifact, source, build)
     if (isNewerVersion(value.minimumVersion, artifact.version)) {
       throw new Error('强制更新缓存的最低版本高于安装包版本')
     }
@@ -285,15 +316,26 @@ export async function downloadAndApplyDesktopUpdate(
   }
 
   if (process.platform === 'win32') {
-    const installer = findFile(staging, name => name.toLowerCase().endsWith('.exe'))
-    if (!installer || !existsSync(installer)) throw new Error('Windows 更新包中没有安装程序')
-    const helper = path.join(root, 'apply-windows-update.ps1')
-    writeFileSync(helper, `param([int]$PidToWait, [string]$Installer)\ntry { Wait-Process -Id $PidToWait -Timeout 120 -ErrorAction SilentlyContinue } catch {}\nStart-Process -FilePath $Installer -ArgumentList '/S'\n`)
-    const helperProcess = spawn('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
-      '-File', helper, '-PidToWait', String(process.pid), '-Installer', installer,
-    ], {detached: true, stdio: 'ignore', windowsHide: true})
-    helperProcess.unref()
+    const installer = path.join(staging, 'VideoAgents-Setup.exe')
+    if (!existsSync(installer) || !lstatSync(installer).isFile()) {
+      throw new Error('Windows 更新包中没有 VideoAgents-Setup.exe')
+    }
+    const installDir = path.resolve(currentAppPath)
+    const log = path.join(root, 'update-windows.log')
+    const args = ['--updated', `/D=${installDir}`]
+    appendFileSync(log, `[${new Date().toISOString()}] Starting NSIS installer: ${installer}\n`)
+    appendFileSync(log, `[${new Date().toISOString()}] Install directory: ${installDir}\n`)
+    const installerProcess = spawn(installer, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    })
+    installerProcess.once('error', error => {
+      try { appendFileSync(log, `[${new Date().toISOString()}] Installer spawn failed: ${String(error)}\n`) } catch {}
+    })
+    appendFileSync(log, `[${new Date().toISOString()}] Installer started, pid=${installerProcess.pid ?? 'unknown'}\n`)
+    installerProcess.unref()
+    onProgress({phase: 'activating', message: '安装程序已启动，应用即将关闭并自动重启…'})
     return
   }
   throw new Error(`不支持桌面自更新的平台：${process.platform}`)

@@ -60,6 +60,7 @@ PORT = int(os.environ.get("VIDEOAGENTS_PORT", "8630"))
 PUBLIC_PORT = int(os.environ.get("VIDEOAGENTS_PUBLIC_PORT", str(PORT)))
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+PI_BIN = os.environ.get("PI_BIN", "pi")
 
 
 def _default_kimi_bin() -> str:
@@ -73,9 +74,12 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
-CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN}
-CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code"}
-CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN"}
+CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
+            "pi": PI_BIN}
+CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
+              "pi": "Pi Coding Agent"}
+CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
+                "pi": "PI_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -117,7 +121,7 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "deepagents")   # 执行引擎:claude -p / codex exec / kimi -p / deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
@@ -185,17 +189,18 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 REFS_README = """# refs/ — 用户参考目录
 
-把「希望成片长成什么样」的参考图和希望使用的音乐放进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2)。
-**推荐用 Web 客户端【项目预览 → 参考素材】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
+把「希望成片长成什么样」的参考图、希望使用的音频和文本资料放进来,相关 Agent 会优先参考/选用(约定见 agents/WORKFLOW.md §2)。
+**推荐用 Web 客户端【项目预览 → 参考文件】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
 
 - `style/`      整体视觉风格:画风/渲染质感/色调/构图
 - `characters/` 角色形象;按角色建子目录(如 characters/linzhao/)可定向到该角色
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `props/`      道具/法宝;服装放 props/costumes/
-- `music/`      希望使用的音乐文件(BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
+- `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
-- `NOTES.md`    逐图/逐曲注释:哪张图管什么、哪首曲子想用在哪(有则 Agent 必读)。
-                注释在【参考图】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
+- `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
+- `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
+                注释在【参考文件】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
 
 规则:用户参考素材 > Agent 自行发挥;与文字设定冲突时 Agent 会上报你裁决;目录为空不影响流程。
 """
@@ -456,7 +461,7 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | minimax | comfyui
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -464,28 +469,52 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
                      "custom_model": ""},
-        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+        # MiniMax:api_base 按「接口区域」二选一(海外 api.minimax.io/国内 api.minimaxi.com,
+        # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "image-01", "custom_model": ""},
+        # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
+        # 账号与 Key 不互通);rh_workflows 为工作区工作流收藏 [{id, note, site}]
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "",
+                    "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_ref_workflow_id": "",
+                    "rh_workflows": []},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | comfyui
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
-        "comfyui": {"url": "http://127.0.0.1:8188", "workflow": "", "checkpoint": ""},
+        # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "MiniMax-H3", "custom_model": ""},
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "", "checkpoint": "",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     "music": {
-        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)
+        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
+        # MiniMax Music:force_instrumental 同上;关闭时按 prompt 自动写词演唱
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "music-3.0", "custom_model": "",
+                    "force_instrumental": True},
+        # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "",
+                    "checkpoint": "", "lyrics": "[Instrumental]",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     "tts": {
-        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | elevenlabs
+        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -493,16 +522,29 @@ DEFAULT_GENCONFIG = {
         # App ID + Access Token 已废弃);model 即 X-Api-Resource-Id 档位
         "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
+        # MiniMax Speech:voice 存 voice_id(设置页可拉取音色库选择)
+        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+                    "model": "speech-2.8-hd", "custom_model": "", "voice": ""},
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
                        "custom_model": "", "voice": ""},
+        # ComfyUI:本地 TTS,按角色内容自动选本地参考音频;工作流由用户选择。
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "",
+                    "checkpoint": "", "timbre_dir": "data/TimbreModel",
+                    "timbre_catalog": "data/TimbreModel/catalog.json",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
+    # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
-        "provider": "local",   # local | openrouter
+        "provider": "local",   # local | cloud | openrouter
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
+        "cloud": {"base_url": "https://api.deepseek.com",
+                  "api_key": "", "model": "deepseek-v4-flash",
+                  "custom_model": ""},
         "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
                        "custom_model": ""},
     },
@@ -525,6 +567,12 @@ DEFAULT_GENCONFIG = {
     },
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
+    # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
+    # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
+    # 10视频/10音频),默认值按 2.0 的保守口径;注入 Agent 系统提示词约束分组与
+    # prompt 组装,模型侧硬限另由 genmedia 按 model id 强制校验
+    "shot_group": {"max_group_s": 15, "max_ref_images": 9,
+                   "max_ref_videos": 1, "max_ref_audios": 2},
     # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
@@ -604,8 +652,9 @@ OUTPUT_PLATFORMS = {
 }
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
-# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持,方舟 API 取小写)
-VIDEO_RESOLUTIONS = ("480p", "720p", "1080p", "4k")
+# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
+# genmedia 越档自动压回;方舟 API 取小写)
+VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 
 
 def resolve_output(cfg: dict) -> tuple[str, str, str]:
@@ -641,6 +690,22 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
+def _migrate_comfy_workflow_paths(config: dict) -> None:
+    """Keep configurations saved before templates moved from data/ usable."""
+    for kind in ("image", "video", "music", "tts"):
+        comfy = config.get(kind, {}).get("comfyui")
+        if not isinstance(comfy, dict):
+            continue
+        for key in ("workflow", "ref_workflow"):
+            value = comfy.get(key)
+            if isinstance(value, str) and value.startswith("data/comfy/"):
+                comfy[key] = "comfy/" + value[len("data/comfy/"):]
+        # H3 uses the built-in compatible model/sampler settings. Older UI
+        # versions persisted this advanced object; discard it on load.
+        if kind == "video":
+            comfy.pop("h3", None)
+
+
 def load_genconfig() -> dict:
     try:
         saved = json.loads(GENCONFIG_PATH.read_text())
@@ -650,6 +715,7 @@ def load_genconfig() -> dict:
     if isinstance(da, dict) and "provider" not in da and "local" not in da:
         # 旧版扁平格式(base_url/api_key/model 直挂 deepagents)→ 迁移为 local 渠道
         saved["deepagents"] = {"provider": "local", "local": da}
+    _migrate_comfy_workflow_paths(saved)
     return _merge(DEFAULT_GENCONFIG, saved)
 
 
@@ -657,7 +723,81 @@ def save_genconfig(cfg: dict):
     atomic_write_json(GENCONFIG_PATH, cfg)
 
 
+def active_video_model(cfg: dict | None = None) -> str:
+    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    pc = v.get(v.get("provider") or "volcengine") or {}
+    return str(pc.get("custom_model") or pc.get("model") or "")
+
+
+def is_seedance25(model: str) -> bool:
+    """Seedance 2.5 判定(与 genmedia._seedance_gen 同口径:大小写不敏感,兼容点号写法)。"""
+    m = (model or "").lower()
+    return "seedance-2-5" in m or "seedance-2.5" in m
+
+
+# Seedance 2.5 官方提示词优化 skill(sd25-pe):仅当生效视频模型为 2.5 时注入
+# 加载指令给 prompt agent;文件经官方 .well-known 索引下载并 sha256 校验后随仓库安装
+SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
+
+
+def is_minimax_h3(model: str) -> bool:
+    """MiniMax H3 判定(命中 minimax-h3 / MiniMax: H3 / MiniMax-H3 等写法,大小写不敏感)。"""
+    m = re.sub(r"[\s_:]+", "-", (model or "").lower())
+    return "minimax-h3" in m
+
+
+# RunningHub(第三方云托管 ComfyUI):.cn/.ai 双站同构,账号与 Key 不互通;
+# 工作流 JSON 经 getJsonApiFormat 拉取后缓存,genmedia 运行时同读该目录
+RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
+RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
+
+
+def _rh_cached_workflow(comfy: dict, wf_id: str = "") -> str:
+    """读 RunningHub 工作流本地缓存文本;缓存缺失返回空串(不发起网络请求)。"""
+    wf_id = str(wf_id or comfy.get("rh_workflow_id") or "").strip()
+    mode = comfy.get("mode") or ""
+    if mode not in RH_BASES or not wf_id:
+        return ""
+    try:
+        return (RH_CACHE_DIR / f"{mode}-{wf_id}.json").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def is_minimax_h3_active(cfg: dict | None = None) -> bool:
+    """生效视频渠道是否 MiniMax H3:OpenRouter/MiniMax 等按模型 id 关键字,
+    ComfyUI 本地/Comfy Cloud 按所选工作流文件名(如 comfy/video-minimax-h3-ref2va-api.json),
+    RunningHub 运行方式按缓存的云端工作流 JSON 是否含 MiniMaxH3ReferenceToVideo 节点。"""
+    cfg = cfg or load_genconfig()
+    v = cfg.get("video") or {}
+    if (v.get("provider") or "volcengine") == "comfyui":
+        comfy = v.get("comfyui") or {}
+        if (comfy.get("mode") or "local") in RH_BASES:
+            return "MiniMaxH3ReferenceToVideo" in _rh_cached_workflow(comfy)
+        return is_minimax_h3(comfy.get("workflow") or "")
+    return is_minimax_h3(active_video_model(cfg))
+
+
+# MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频渠道为 H3 时注入
+# 加载指令给 prompt agent;经 npx skills add MiniMax-AI/MiniMax-H3 安装后随仓库分发
+H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
+
+
+def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
+    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填 API Key
+    (或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关(genmedia 超分凭证同口径)。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    key = str((v.get("minimax") or {}).get("api_key") or "").strip()
+    return bool(key or os.environ.get("MINIMAX_API_KEY", "").strip())
+
+
+# MiniMax Regenerate-2K 超分 skill:仅当 MiniMax Key 已配置时注入加载指令给 upscale agent
+MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2k/SKILL.md"
+
+
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
+DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
@@ -668,6 +808,12 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
         return {"provider": "openrouter", "base_url": DEEPAGENTS_OPENROUTER_URL,
                 "api_key": o.get("api_key") or "",
                 "model": o.get("model") or o.get("custom_model") or ""}
+    if (da.get("provider") or "local") == "cloud":
+        c = da.get("cloud") or {}
+        return {"provider": "cloud",
+                "base_url": c.get("base_url") or DEEPAGENTS_CLOUD_URL,
+                "api_key": c.get("api_key") or "",
+                "model": c.get("model") or c.get("custom_model") or ""}
     lo = da.get("local") or {}
     return {"provider": "local",
             "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
@@ -678,7 +824,8 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
-PROJECT_SETTINGS_KEYS = ("output", "duration", "review", "packaging", "versioning")
+PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
+                         "packaging", "versioning")
 
 
 def project_settings_path(project: str) -> Path:
@@ -703,6 +850,19 @@ def _validate_duration(d: dict):
         assert ep > 0 and 0 < mn <= mx
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid duration settings: episode duration must be > 0; shot duration must satisfy 0 < min <= max") from None
+
+
+def _validate_shot_group(g: dict):
+    """分镜组设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
+    try:
+        gs = float(g.get("max_group_s", 15))
+        ni = int(g.get("max_ref_images", 9))
+        nv = int(g.get("max_ref_videos", 1))
+        na = int(g.get("max_ref_audios", 2))
+        assert 4 <= gs <= 30 and 0 <= ni <= 30 and 0 <= nv <= 10 and 0 <= na <= 10
+    except (TypeError, ValueError, AssertionError):
+        raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
+                                "max_ref_images 0-30; max_ref_videos 0-10; max_ref_audios 0-10") from None
 
 
 def _validate_output(o: dict):
@@ -756,11 +916,13 @@ def _validate_review(r: dict):
 
 
 # ---------------- Agent 级模型配置(引擎/文字模型/图像/视频渠道) ----------------
-# 每个 Agent 可单独指定,优先级:dispatch 显式 --engine/--model(force)> Agent 级配置 > 顶栏全局。
+# 每个 Agent 可单独指定,优先级:Agent 级配置 > 父运行引擎 > 顶栏全局。
+# force/--engine 不得切换执行引擎(报错/返工禁换引擎);同引擎内 --model 仍可覆盖。
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
 # 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
+# 切换任一策略都会同时清空 agentmodels.json 里全部 Agent 级单独配置。
 #   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
@@ -802,9 +964,9 @@ AM_MODE_MODELS = {
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "deepagents")      # "" = 跟随全局
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "comfyui")
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "deepagents")      # "" = 跟随全局
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -837,8 +999,13 @@ def global_model_pref() -> dict:
     项目初始化)没有浏览器上下文,靠这份副本跟随顶栏全局。"""
     p = STATE.get("global_model") or {}
     eng = str(p.get("engine") or "").lower()
+    model = str(p.get("model") or "").strip()
+    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/cloud/openrouter)。旧 UI 会把
+    # 渠道名写入 global_model，导致它覆盖 genconfig 中的真实模型 ID。
+    if eng == "deepagents" and (not model or model in ("local", "cloud", "openrouter")):
+        model = resolve_deepagents()["model"]
     return {"engine": eng if eng in ENGINES else "",
-            "model": str(p.get("model") or "").strip()}
+            "model": model}
 
 
 def agent_effective_model(agent_id: str) -> dict:
@@ -866,6 +1033,17 @@ def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def _http_post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 20):
+    """阻塞式 HTTP POST JSON(在线程里跑),返回解析后的 JSON。"""
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json",
+                                          **(headers or {})})
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
+    with opener(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
 _OPENROUTER_CACHE: dict = {}          # modality -> (ts, models)
 _OPENROUTER_TTL = 600
 
@@ -881,13 +1059,31 @@ CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
 _USAGE_CACHE: dict = {}               # engine -> (ts, {"session":pct|None,"weekly":pct|None})
-_USAGE_TTL = {"claude": 180, "codex": 30, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全
+_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
 _CLAUDE_VERSION: str | None = None
 
 
 def resource_cfg() -> dict:
     """设置 → 资源消耗的持久化配置(data/.videoagents/state.json)。"""
     return STATE.get("resources") or {}
+
+
+def _parse_reset_ts(v):
+    """重置时间统一为 epoch 秒:接受 ISO 字符串 / epoch 秒 / epoch 毫秒,解析不了返回 None。
+    小数秒归一为 6 位:kimi 返回 9 位纳秒(如 …13.716839300Z),而 Python 3.10 的
+    fromisoformat 只认 3/6 位,不归一会解析失败。"""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)) and v > 0:
+        return float(v) / 1000 if v > 1e12 else float(v)
+    if isinstance(v, str) and v.strip():
+        s = v.strip().replace("Z", "+00:00")
+        s = re.sub(r"\.(\d+)", lambda m: "." + m.group(1)[:6].ljust(6, "0"), s, count=1)
+        try:
+            return datetime.fromisoformat(s).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def _find_rate_limits(d):
@@ -913,15 +1109,18 @@ def _codex_usage_full() -> dict:
 
     读数是被动扒 session 文件的,codex 不跑就不会有新读数;若最新读数所在文件
     距今已超 5h(会话窗口必然已滚过),旧百分比只会误导,session 视为过期返回 None。
+    重置时间:窗口对象带 resets_at 直接用;只有 resets_in_seconds 则以事件时间戳
+    (缺失退回文件 mtime)为基准换算,已过期的重置时间不再返回。
     """
-    empty = {"session": None, "weekly": None}
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     try:
         files = sorted(CODEX_SESSIONS_DIR.rglob("*.jsonl"),
                        key=lambda p: p.stat().st_mtime, reverse=True)[:8]
     except OSError:
         return empty
     for f in files:                          # 新→旧,取第一个有读数的文件里最后一条
-        last = None
+        last, last_ts = None, 0.0
         try:
             mtime = f.stat().st_mtime
             with open(f, errors="replace") as fh:
@@ -929,19 +1128,29 @@ def _codex_usage_full() -> dict:
                     if '"rate_limits"' not in line:
                         continue
                     try:
-                        rl = _find_rate_limits(json.loads(line))
+                        obj = json.loads(line)
                     except ValueError:
                         continue
+                    rl = _find_rate_limits(obj)
                     if rl and isinstance(rl["primary"].get("used_percent"), (int, float)):
                         last = rl
+                        last_ts = _parse_reset_ts(obj.get("timestamp")) or mtime
         except OSError:
             continue
         if last is not None:
             sec = last.get("secondary") or {}
             weekly = sec.get("used_percent")
             stale = time.time() - mtime > 5 * 3600
+
+            def reset_at(win):
+                at = _parse_reset_ts(win.get("resets_at"))
+                if at is None and isinstance(win.get("resets_in_seconds"), (int, float)):
+                    at = last_ts + float(win["resets_in_seconds"])
+                return at if at and at > time.time() else None
             return {"session": None if stale else float(last["primary"]["used_percent"]),
-                    "weekly": float(weekly) if isinstance(weekly, (int, float)) else None}
+                    "weekly": float(weekly) if isinstance(weekly, (int, float)) else None,
+                    "session_resets_at": None if stale else reset_at(last["primary"]),
+                    "weekly_resets_at": reset_at(sec)}
     return empty
 
 
@@ -1000,9 +1209,27 @@ def claude_probe_enabled() -> bool:
     return CLAUDE_USAGE_PROBE_ENABLED or bool(resource_cfg().get("claude_probe"))
 
 
+def codex_probe_enabled() -> bool:
+    """Codex 用量检查开关(⚙️ 资源消耗 设置);历史无此键时默认开启(保持旧行为)。"""
+    v = resource_cfg().get("codex_probe")
+    return True if v is None else bool(v)
+
+
+def kimi_probe_enabled() -> bool:
+    """KimiCode 用量检查开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key 判定
+    (老配置只填了 Key 没有开关,升级后面板行为不变)。"""
+    cfg = resource_cfg()
+    v = cfg.get("kimi_probe")
+    if v is None:
+        return bool((cfg.get("kimi_api_key") or "").strip())
+    return bool(v)
+
+
 def _claude_usage_full() -> dict:
-    """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;任何异常返回 None。"""
-    empty = {"session": None, "weekly": None}
+    """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;窗口对象自带
+    resets_at(ISO)即重置时间;任何异常返回 None。"""
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     token = _claude_oauth_token()
     if not token:
         return empty
@@ -1014,18 +1241,26 @@ def _claude_usage_full() -> dict:
             "Content-Type": "application/json",
         })
 
-        def pct(win):
-            v = (data.get(win) or {}).get("utilization")
-            return float(v) if isinstance(v, (int, float)) else None
-        return {"session": pct("five_hour"), "weekly": pct("seven_day")}
+        def win(name):
+            d = data.get(name) or {}
+            v = d.get("utilization")
+            return (float(v) if isinstance(v, (int, float)) else None,
+                    _parse_reset_ts(d.get("resets_at")))
+        s, sr = win("five_hour")
+        w, wr = win("seven_day")
+        return {"session": s, "weekly": w,
+                "session_resets_at": sr, "weekly_resets_at": wr}
     except Exception:
         return empty
 
 
 def _kimi_usage_full() -> dict:
     """Kimi Code 官方用量接口:usage=周配额,limits[](300min 窗口)=5h 会话配额。
+    重置时间实测字段名为驼峰 resetTime(ISO 带 9 位小数秒,参考 CodexBar docs/kimi.md),
+    另按常见命名兼容扫描;取不到为 None。
     未配 Key/接口异常返回 None(资源消耗面板显示未知)。"""
-    empty = {"session": None, "weekly": None}
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
     key = (resource_cfg().get("kimi_api_key") or "").strip()
     if not key:
         return empty
@@ -1041,21 +1276,36 @@ def _kimi_usage_full() -> dict:
                 return max(0.0, min(100.0, used / limit * 100)) if limit > 0 else None
             except (TypeError, ValueError):
                 return None
-        session = None
+
+        def reset_ts(*dicts):
+            for d in dicts:
+                for k in ("resetTime", "resetAt", "resets_at", "reset_at",
+                          "reset_time", "resets_time", "end_time", "expires_at"):
+                    ts = _parse_reset_ts(d.get(k))
+                    if ts and ts > time.time():
+                        return ts
+            return None
+        session, session_reset = None, None
         for it in data.get("limits") or []:
             detail = it.get("detail") or {}
             if pct(detail) is not None:
                 session = pct(detail)
+                session_reset = reset_ts(detail, it)
                 break
-        return {"session": session, "weekly": pct(data.get("usage") or {})}
+        usage = data.get("usage") or {}
+        return {"session": session, "weekly": pct(usage),
+                "session_resets_at": session_reset,
+                "weekly_resets_at": reset_ts(usage)}
     except Exception:
         return empty
 
 
 def engine_usage_full(engine: str) -> dict:
-    """该引擎 {session: 5h 窗口已用%, weekly: 周窗口已用%};取不到为 None。带 TTL 缓存。"""
+    """该引擎 {session: 5h 窗口已用%, weekly: 周窗口已用%, *_resets_at: 窗口重置
+    epoch 秒};取不到为 None。带 TTL 缓存。"""
     if engine not in _USAGE_TTL:
-        return {"session": None, "weekly": None}
+        return {"session": None, "weekly": None,
+                "session_resets_at": None, "weekly_resets_at": None}
     ts, full = _USAGE_CACHE.get(engine, (0, None))
     if full is not None and time.time() - ts < _USAGE_TTL[engine]:
         return full
@@ -1324,6 +1574,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
     shot_min = _fmt_num(dur.get("shot_min_s") or 4)
     shot_max = _fmt_num(dur.get("shot_max_s") or 8)
+    sg = ps.get("shot_group") or {}
+    sg_max = _fmt_num(sg.get("max_group_s") or 15)
+    sg_img = int(sg.get("max_ref_images", 9))
+    sg_vid = int(sg.get("max_ref_videos", 1))
+    sg_aud = int(sg.get("max_ref_audios", 2))
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -1341,7 +1596,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、节奏(pacing)、剪辑(edit)一律以此为基准
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
-- 生成组(generation group)总时长上限:15 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤15s(Seedance 2.0 单次生成上限,见 WORKFLOW.md §7A)
+- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
+- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -1408,6 +1664,37 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()):
+        p += f"""
+
+## Seedance 2.5 提示词优化 Skill(仅当生效视频模型为 Seedance 2.5 时注入,当前已生效)
+当前项目的视频生成模型是 Seedance 2.5。撰写或优化组级 video_prompt 前,**先阅读官方提示词优化技能并按其方法执行**:
+- Skill 文件:{SD25_PE_SKILL}(官方 sd25-pe,已随仓库安装,直接 Read 全文)
+- 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
+        p += f"""
+
+## MiniMax H3 提示词写作 Skill(仅当生效视频渠道为 MiniMax H3 时注入,当前已生效)
+当前项目的视频生成走 MiniMax H3(OpenRouter/MiniMax API 或 ComfyUI H3 工作流)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+- Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
+- 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
+- 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
+- **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
+    if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available():
+        p += f"""
+
+## MiniMax Regenerate-2K 超分 Skill(仅当 MiniMax API Key 已配置时注入,当前已生效)
+MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅读技能文件并按其判定条件与流程执行**:
+- Skill 文件:{MINIMAX_UPSCALE_SKILL}(直接 Read 全文)
+- 适用条件(两条都满足才走本 skill,否则按 SOUL.md 常规超分手段执行并在回执说明):
+  1. MiniMax 已配置(本段出现即满足);
+  2. 源 clip 满足 API 输入规格——MiniMax-H3 768P 直出成片口径(24fps、含音轨、宽高均被 32 整除、面积 ≤768×1344、约 4-15s);`upscale` 命令提交前会用 ffprobe 自动预检,不合规会明确报错,可先 `--dry-run` 只跑预检
+- 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
+- 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
+- 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
     if brief:
         p += f"""
 
@@ -1425,14 +1712,14 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
 - 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
   (供视频参考的图——锚点/--ref/--first-frame/--last-frame——每张必须 ≥3,686,400 像素=火山硬限,16:9 用 2560x1440、9:16 用 1440x2560;小图提交即拒,严禁按视频草稿分辨率出小图)
-- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–15整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
+- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
-- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段,默认纯音乐)
-- TTS 旁白/配音(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--voice <音色>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs;**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按角色传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id;instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略)
+- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
+- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考素材」页把风格/角色/场景/道具/封面参考图与希望使用的音乐按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/角色/场景/道具/封面参考图、希望使用的音频与文本资料按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
@@ -1442,14 +1729,21 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         p += f"""
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
+媒体工单配置认知:
+- ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 按内置音色目录 `modules/timbre_catalog.json`(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
+- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`
+- TTS 从云渠道切到 ComfyUI 后,旧 casting 的 `eve`/`ara` 等云音色名不得传给 ComfyUI;派 voice-generation 自动重选并更新 casting。工单必须先用相同参数执行 `--dry-run` 记录自动选型,再正式合成；失败回执逐字保留 `node_type/exception_type/exception_message`,不得把 Python 依赖/模型/节点异常改写成缺参考音频。日志出现“自动参考音频已选择并上传”后严禁要求用户手填音色
+
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
 - 同步派单(阻塞至完成并返回结果摘要):`python3 services/runtime/dispatch.py "<agent_id>" "<工作指令>" --project {project} --wait`
 - 异步派单(立即返回 run_id):同上去掉 `--wait`
 - IMPORTANT: `--project` accepts only the project slug (`{project}`), never `data/projects/...` or an absolute directory path.
 - 引擎/模型默认用该成员自己的模型配置(用户在控制台按 Agent 配置,未配置则继承你的引擎);
-  显式传 `--engine claude|codex|kimi` / `--model <id>` 会强制覆盖其配置(仅用户明确下令赛马等场景使用)
+  默认不要传 `--engine`(报错/返工也禁止切换引擎);仅 `--model <id>` 可在**同一引擎内**覆盖模型
 - 查看全部 agent_id:`python3 services/runtime/dispatch.py --list`
 - 查看运行状态:`python3 services/runtime/dispatch.py --runs`;查看单个:`python3 services/runtime/dispatch.py --status <run_id>`
+- `--wait-all` 的 run_id **只能**使用你刚才异步派单后 stdout 返回的子任务 run_id;
+  严禁传当前总制片自身的 `WEBUI_RUN_ID`/当前 `--status` ID。没有已派出的子任务时不要调用 `--wait-all`
 
 派单守则:
 1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
@@ -1472,10 +1766,18 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
-8. 【赛马仅限用户明确指令】严禁自行发起并行赛马(换执行引擎或改派多个 Agent 并行重做同一任务、择优交付)。
-   多次返工仍不过就照常升级人工;确有必要时可在 --confirm 征询或升级说明中向用户**建议**赛马,
-   只有用户明确下达赛马指令后,才可换执行引擎(--engine claude|codex|kimi)或改派职责相近的 Agent
-   并行重做、先达标者交付"""
+8. 【赛马仅限用户明确指令,禁换引擎】严禁自行发起并行赛马(改派多个 Agent 并行重做同一任务、
+   择优交付)。同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;确有必要时可在
+   --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
+   Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/deepagents 中的另一个)。
+   报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
+9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
+   `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
+   有非人工待办就继续派单;有已解锁 `human:true` 的 H 门就必须当场执行
+   `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project {project}`。
+   只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
+   严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -1505,16 +1807,17 @@ def tool_summary(name: str, inp: dict) -> tuple[str, str | None]:
     fp = inp.get("file_path") or inp.get("path")
     if fp:
         fp = rel_path(fp)
-    if name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+    normalized = name.lower()
+    if normalized in ("write", "edit", "multiedit", "notebookedit"):
         return f"✎ {name}: {fp}", fp
-    if name == "Read":
+    if normalized == "read":
         return f"📖 Read: {fp}", None
-    if name == "Bash":
+    if normalized == "bash":
         cmd = (inp.get("command") or "")[:160]
         return f"⚙ Bash: {cmd}", None
-    if name in ("Glob", "Grep"):
+    if normalized in ("glob", "grep"):
         return f"🔍 {name}: {inp.get('pattern', '')}", None
-    if name in ("Task", "Agent"):        # claude 子代理工具叫 Task,kimi 叫 Agent
+    if normalized in ("task", "agent"):        # claude 子代理工具叫 Task,kimi 叫 Agent
         return f"🤖 {name}: {inp.get('description', '')}", None
     return f"🔧 {name}", None
 
@@ -1620,14 +1923,20 @@ async def execute_run(run: dict, message: str, model: str | None):
 
         if engine == "deepagents":
             da = resolve_deepagents()
-            use_model = model or da["model"]
+            requested_model = str(model or "").strip()
+            # 兼容修复前已落盘/传入的渠道占位值，绝不把 local/openrouter 发给模型端点。
+            use_model = (da["model"] if not requested_model
+                         or requested_model == da["provider"] else requested_model)
             err = None
             if not use_model:
                 err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
-                       "「语言模型DeepAgents」为生效渠道(本地模型/OpenRouter)配置模型")
+                       "「语言模型/DeepAgents」为生效渠道(本地模型/云端模型/OpenRouter)配置模型")
             elif da["provider"] == "openrouter" and not da["api_key"]:
                 err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
-                       "请在 🎨 生成模型 页「语言模型DeepAgents → OpenRouter」填写")
+                       "请在 🎨 生成模型 页「语言模型/DeepAgents → OpenRouter」填写")
+            elif da["provider"] == "cloud" and not da["api_key"]:
+                err = ("deepagents 引擎当前生效渠道为云端模型,但未配置 API Key:"
+                       "请在 🎨 生成模型 页「语言模型/DeepAgents → 云端模型」填写")
             if err:
                 run["status"] = "error"
                 run["error"] = err
@@ -1678,6 +1987,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "pi":
+                # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
+                # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
+                base = [cli_executable, "--mode", "json", "--approve",
+                        "--append-system-prompt", str(system_prompt_file)]
+                if model:
+                    base += ["--model", model]
+                if sid:
+                    base += ["--session", sid]
+                return base + [message]
             c = [cli_executable, "-p", message,
                  "--output-format", "stream-json", "--verbose"]
             if claude_prompt_file:
@@ -1695,25 +2014,36 @@ async def execute_run(run: dict, message: str, model: str | None):
         env = {**os.environ,
                "VIDEOAGENTS_RUN_ID": run["id"], "VIDEOAGENTS_PORT": str(PORT),
                "VIDEOAGENTS_PROJECT": run["project"], "VIDEOAGENTS_ENGINE": engine,
-               "VIDEOAGENTS_AGENT": agent_id}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
+               "VIDEOAGENTS_AGENT": agent_id,
+               "VIDEOAGENTS_WORKSPACE_ROOT": str(ROOT),
+               "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
+               # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
+               "WEBUI_PROJECT": run["project"]}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
         if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
             env["DA_SYSTEM"] = role
             env["DA_PROMPT"] = message
+            # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
+            # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
+            if "DEEPAGENTS_RECURSION_LIMIT" not in env:
+                env["DEEPAGENTS_RECURSION_LIMIT"] = (
+                    "500" if agent_id in DISPATCHERS else "250"
+                )
 
         # Windows has a short process command-line limit. Agent role prompts can
-        # exceed it, so pass Claude's long system prompt through a UTF-8 file.
-        # Keep the existing argv behavior on macOS/Linux for compatibility with
-        # older Claude CLI releases that may not support the file option.
-        claude_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
-                              if os.name == "nt" and engine == "claude" else None)
+        # exceed it, so pass Pi's prompt (and Claude's on Windows) through a UTF-8
+        # file. Keep Claude's argv behavior elsewhere for older CLI compatibility.
+        system_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
+                              if engine == "pi" or (os.name == "nt" and engine == "claude")
+                              else None)
+        claude_prompt_file = system_prompt_file if engine == "claude" else None
         log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w", encoding="utf-8")
         proc = None
         stderr_task = None
         try:
-            if claude_prompt_file:
-                claude_prompt_file.write_text(role, encoding="utf-8")
+            if system_prompt_file:
+                system_prompt_file.write_text(role, encoding="utf-8")
             deadline = time.time() + run_timeout
             session_retried = False
             while True:
@@ -1753,13 +2083,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_codex_event(run, obj)
                     elif engine == "kimi":
                         handle_kimi_event(run, obj)
+                    elif engine == "pi":
+                        handle_pi_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
                 await proc.wait()
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
-                if proc.returncode != 0 and not run.get("result"):
+                failed = ((proc.returncode != 0 and not run.get("result"))
+                          or (engine == "pi" and bool(run.get("error"))))
+                if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
                     if (session_id and not session_retried and re.search(
@@ -1785,6 +2119,12 @@ async def execute_run(run: dict, message: str, model: str | None):
             run["error"] = f"超时({run_timeout}s),进程已终止"
             if proc:
                 proc.kill()
+        except asyncio.CancelledError:
+            run["status"] = "error"
+            run["error"] = run.get("error") or "服务关闭，任务已停止"
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)
+            raise
         except FileNotFoundError as error:
             run["status"] = "error"
             if engine in CLI_BINS:
@@ -1818,8 +2158,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             if stderr_task and not stderr_task.done():
                 stderr_task.cancel()
             log_f.close()
-            if claude_prompt_file:
-                claude_prompt_file.unlink(missing_ok=True)
+            if system_prompt_file:
+                system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
@@ -1831,6 +2171,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                         {"role": "assistant", "text": reply,
                          "run_id": run["id"], "status": run["status"]})
             publish_run(run)
+            # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
+            # 人工闸门静默留在 DAG 中。这里只补建签字单，绝不自动改 gate state。
+            try:
+                await ensure_human_gate_approvals(run["project"], parent=run["id"])
+            except Exception as e:  # noqa: BLE001
+                print(f"[approval] 运行结束闸门核对失败(不影响运行回执):{e}", flush=True)
 
 
 def rel_path(p: str) -> str:
@@ -1919,6 +2265,75 @@ def handle_kimi_event(run: dict, obj: dict):
         run["session_id"] = obj.get("session_id")
 
 
+def _pi_message_text(message: dict) -> str:
+    """Extract visible assistant text from a pi message."""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "".join(str(block.get("text") or "") for block in content
+                   if isinstance(block, dict) and block.get("type") == "text")
+
+
+def handle_pi_event(run: dict, obj: dict):
+    """解析 pi --mode json 的 JsonAgentSessionEvent JSONL 事件。"""
+    event = obj.get("type")
+    if event == "session":
+        run["session_id"] = obj.get("id")
+        return
+    if event == "message_start" and (obj.get("message") or {}).get("role") == "assistant":
+        run["_pi_message_text"] = ""
+        return
+    if event == "message_update":
+        update = obj.get("assistantMessageEvent") or {}
+        if update.get("type") == "text_delta":
+            delta = update.get("delta") or ""
+            if delta:
+                run["_pi_message_text"] = run.get("_pi_message_text", "") + delta
+                run["text"] = run.get("text", "") + delta
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": delta})
+        return
+    if event == "message_end":
+        message = obj.get("message") or {}
+        if message.get("role") != "assistant":
+            return
+        text = _pi_message_text(message)
+        streamed = run.get("_pi_message_text", "")
+        if text:
+            # JSON mode normally emits deltas; publish only a missing suffix (or the
+            # full message for implementations that emit message_end only).
+            missing = text[len(streamed):] if text.startswith(streamed) else ("" if streamed else text)
+            if missing:
+                run["text"] = run.get("text", "") + missing
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": missing})
+            run["result"] = text
+        usage = message.get("usage") or {}
+        total = usage.get("totalTokens")
+        if not isinstance(total, (int, float)):
+            total = sum(usage.get(k) or 0 for k in ("input", "output", "cacheRead", "cacheWrite"))
+        run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
+        if message.get("stopReason") in ("error", "aborted"):
+            reason = message.get("stopReason")
+            run["error"] = str(message.get("errorMessage") or f"pi request {reason}")[:500]
+        return
+    if event == "tool_execution_start":
+        desc, fp = tool_summary(str(obj.get("toolName") or "?"), obj.get("args") or {})
+        run.setdefault("activity", []).append(desc)
+        if fp:
+            run.setdefault("files", []).append(fp)
+            HUB.publish({"type": "file", "run_id": run["id"],
+                         "agent": run["agent"], "path": fp})
+        HUB.publish({"type": "tool", "run_id": run["id"],
+                     "agent": run["agent"], "desc": desc})
+        publish_run(run)
+        return
+    if event == "error":
+        run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
+
+
 def handle_deepagents_event(run: dict, obj: dict):
     """解析 deepagents_runner 的 JSONL 事件。"""
     t = obj.get("type")
@@ -1991,7 +2406,7 @@ def handle_claude_event(run: dict, obj: dict):
         run["turns"] = obj.get("num_turns")
 
 # ---------------- 预览数据(人物/场景/分镜预览) ----------------
-IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff")
 VIDEO_EXTS = (".mp4", ".webm", ".mov")
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
@@ -2103,7 +2518,17 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-MAX_SKETCH_REFS = 9   # 方舟多参考图上限
+MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「分镜组设置」调整)
+
+
+def max_group_ref_images(project: str) -> int:
+    """每组参考图数量上限:项目「分镜组设置」max_ref_images(Seedance 2.5 最高 30),
+    读不到回落 MAX_SKETCH_REFS=9(Seedance 2.0 口径)。"""
+    try:
+        sg = load_project_settings(project).get("shot_group") or {}
+        return max(0, min(30, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
+    except Exception:
+        return MAX_SKETCH_REFS
 
 
 SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
@@ -2200,8 +2625,9 @@ async def api_draw_submit(token: str, body: dict):
     if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
         raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
     pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
-    if len(pd.get("refs") or []) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    ref_cap = max_group_ref_images(project)
+    if len(pd.get("refs") or []) >= ref_cap:
+        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
@@ -2304,14 +2730,16 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
-    """向组 prompt 的 refs 追加一张参考图(共用 MAX_SKETCH_REFS=9 的方舟多参考图上限);
-    返回追加后的 refs 数量。"""
+    """向组 prompt 的 refs 追加一张参考图(上限=项目「分镜组设置」max_ref_images,
+    回落 MAX_SKETCH_REFS=9 的方舟 Seedance 2.0 口径);返回追加后的 refs 数量。"""
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
     if ref in refs:
         raise ServiceError(400, "This image is already in the group's refs")
-    if len(refs) >= MAX_SKETCH_REFS:
-        raise ServiceError(400, f"This group already has the maximum of {MAX_SKETCH_REFS} refs; cannot add more")
+    # pf = <project>/assets/prompts/<ep>/<grp>.json → parents[3] 即项目根
+    ref_cap = max_group_ref_images(pf.parents[3].name)
+    if len(refs) >= ref_cap:
+        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
     refs.append(ref)
     d.setdefault("notes", []).append(
         f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
@@ -2350,12 +2778,13 @@ async def api_grpref_add(body: dict):
 MAX_GRPREF_UPLOAD = 30 * 1024 * 1024
 # 常见图片格式魔数(与 IMG_EXTS 对应;webp 的 RIFF 头另验 WEBP 标记)
 _IMG_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg",
-              b"RIFF": ".webp", b"GIF8": ".gif"}
+              b"RIFF": ".webp", b"GIF8": ".gif", b"BM": ".bmp",
+              b"II*\x00": ".tif", b"MM\x00*": ".tif"}
 
 
 async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
     """本地上传一张图片并直接加入组 refs:落盘 assets/uploads/<ep>/<grp>/,
-    请求体即文件原始字节(与参考图页上传同法,避免 multipart 依赖)。"""
+    请求体即文件原始字节(与参考文件页上传同法,避免 multipart 依赖)。"""
     project, ep, grp, base, pf = _grpref_ctx(
         {"project": project, "ep": ep, "grp": grp})
     if not data:
@@ -2366,7 +2795,7 @@ async def api_grpref_upload(data: bytes, project: str, ep: str, grp: str, filena
     if ext == ".webp" and data[8:12] != b"WEBP":
         ext = None
     if not ext:
-        raise ServiceError(400, "file must be a png/jpg/webp/gif image")
+        raise ServiceError(400, "file must be a png/jpg/webp/gif/bmp/tiff image")
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(filename)[0]).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "upload"
     d = base / "assets" / "uploads" / ep / grp
@@ -2811,40 +3240,64 @@ async def api_preview_storyboard(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_storyboard, project, ep)
 
 
-def _ep_video_tokens(base, ep: str):
-    """该集视频模型 token 累计消耗。权威来源是 assets/clips/<ep>/usage_ledger.jsonl
-    (genmedia 每次成功生成追加一行,含重roll,覆盖/删档不丢);台账未覆盖的组再补
-    meta.json 里的 usage.completion_tokens(避免与台账重复:按文件名去重)。
-    无任何记录返回 None(历史生成未落 usage,前端显示 —)。"""
-    cdir = base / "assets" / "clips" / ep
-    if not cdir.is_dir():
-        return None
-    total, in_ledger, found = 0, set(), False
-    ledger = cdir / "usage_ledger.jsonl"
-    if ledger.is_file():
+def _project_media_tokens(base: Path):
+    """项目级生成侧 token 累计消耗,返回 (video_tokens, image_tokens)。权威来源是
+    项目内所有 usage_ledger.jsonl(genmedia 每次成功生成追加一行,含重roll/探针/
+    候选,覆盖/删档不丢);台账未覆盖的成片再补 assets/clips/*/ meta.json 里的
+    usage.completion_tokens(按同目录文件名去重)。候选晋级后同一次生成可能同时
+    出现在 runs/ 台账与 clips meta,按 task_id 全局去重防止重复计数。
+    图片/视频按台账 kind 字段或文件后缀分桶;无任何记录的桶返回 None(前端显示 —)。"""
+    vid = img = 0
+    vfound = ifound = False
+    seen_tasks: set[str] = set()
+    ledger_files: dict[Path, set[str]] = {}
+    for ledger in base.rglob("usage_ledger.jsonl"):
         try:
             lines = ledger.read_text(encoding="utf-8").splitlines()
         except Exception:
-            lines = []
+            continue
+        names = ledger_files.setdefault(ledger.parent, set())
         for ln in lines:
             try:
                 rec = json.loads(ln)
             except Exception:
                 continue
-            in_ledger.add(str(rec.get("file") or ""))
+            names.add(str(rec.get("file") or ""))
+            tid = str(rec.get("task_id") or "")
+            if tid:
+                if tid in seen_tasks:
+                    continue
+                seen_tasks.add(tid)
             t = rec.get("completion_tokens") or rec.get("total_tokens")
-            if isinstance(t, (int, float)):
-                total += int(t)
-                found = True
-    for mf in cdir.glob("*.meta.json"):
-        if mf.name[:-len(".meta.json")] + ".mp4" in in_ledger:
-            continue
-        u = (_read_json_safe(mf) or {}).get("usage") or {}
-        t = u.get("completion_tokens")
-        if isinstance(t, (int, float)):
-            total += int(t)
-            found = True
-    return total if found else None
+            if not isinstance(t, (int, float)):
+                continue
+            ext = Path(str(rec.get("file") or "")).suffix.lower()
+            if rec.get("kind") == "image" or ext in IMG_EXTS:
+                img += int(t)
+                ifound = True
+            else:
+                vid += int(t)
+                vfound = True
+    clips = base / "assets" / "clips"
+    if clips.is_dir():
+        for cdir in clips.iterdir():
+            if not cdir.is_dir():
+                continue
+            names = ledger_files.get(cdir, set())
+            for mf in cdir.glob("*.meta.json"):
+                if mf.name[:-len(".meta.json")] + ".mp4" in names:
+                    continue
+                u = (_read_json_safe(mf) or {}).get("usage") or {}
+                tid = str(u.get("task_id") or "")
+                if tid and tid in seen_tasks:
+                    continue
+                t = u.get("completion_tokens")
+                if isinstance(t, (int, float)):
+                    if tid:
+                        seen_tasks.add(tid)
+                    vid += int(t)
+                    vfound = True
+    return (vid if vfound else None), (img if ifound else None)
 
 
 _LLM_INDEX_LOCK = threading.Lock()
@@ -2852,8 +3305,9 @@ _LLM_INDEX_LOCK = threading.Lock()
 
 def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
-    三种情形:claude stream-json 末尾 result.usage(整个 run 的累计);codex exec
-    末尾 turn.completed.usage;无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
+    claude stream-json 末尾 result.usage(整个 run 的累计);codex exec 末尾
+    turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
+    无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
     try:
         with open(path, "rb") as fh:
             fh.seek(0, 2)
@@ -2905,6 +3359,15 @@ def _parse_run_usage(path: Path):
                         tin += int(u.get("input_tokens") or 0)
                         tout += int(u.get("output_tokens") or 0)
                         found = True
+                elif t == "message_end":       # pi:每轮模型调用(含工具往返)各一条
+                    m = d.get("message") or {}
+                    u = m.get("usage")
+                    if m.get("role") == "assistant" and isinstance(u, dict):
+                        tin += (int(u.get("input") or 0)
+                                + int(u.get("cacheRead") or 0)
+                                + int(u.get("cacheWrite") or 0))
+                        tout += int(u.get("output") or 0)
+                        found = True
     except OSError:
         return None
     for u in by_id.values():
@@ -2951,16 +3414,16 @@ def _llm_usage_index() -> dict:
         return cache
 
 
-def _ep_llm_tokens(project: str, ep: str):
-    """该集语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
-    派单记录(run_id→工单文本)归集。工单文本提到多集时 token 均分到各集(避免重复
-    计数);未提到任何 epNN 的全局任务(bible/世界观/角色等)不归入任何一集。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/deepagents)。"""
+def _project_llm_tokens(project: str):
+    """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
+    派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。
+    无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
         return None
     idx = _llm_usage_index()
-    total, found = 0.0, False
+    run_ids = set()
     for cf in cdir.glob("*.jsonl"):
         try:
             lines = cf.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -2971,17 +3434,15 @@ def _ep_llm_tokens(project: str, ep: str):
                 r = json.loads(ln)
             except Exception:
                 continue
-            if r.get("role") != "user" or not r.get("run_id"):
-                continue
-            eps = set(re.findall(r"ep\d+", str(r.get("text") or "").lower()))
-            if ep not in eps:
-                continue
-            u = idx.get(str(r["run_id"]))
-            if not u:
-                continue
-            total += (u.get("in", 0) + u.get("out", 0)) / len(eps)
+            if r.get("role") == "user" and r.get("run_id"):
+                run_ids.add(str(r["run_id"]))
+    total, found = 0, False
+    for rid in run_ids:
+        u = idx.get(rid)
+        if u:
+            total += u.get("in", 0) + u.get("out", 0)
             found = True
-    return int(total) if found else None
+    return total if found else None
 
 
 def _ep_publish_info(base: Path, ep: str):
@@ -3074,8 +3535,6 @@ def _preview_videos(project: str, ep: str):
     if not ep:
         return data
     ep = re.sub(r"[^\w\-]", "", ep)
-    data["video_tokens"] = _ep_video_tokens(base, ep)
-    data["llm_tokens"] = _ep_llm_tokens(project, ep)
     edir = base / "edit" / ep
 
     def _files(match: tuple, exts: tuple) -> list[dict]:
@@ -3144,9 +3603,10 @@ async def api_preview_videos(project: str = "demo", ep: str = ""):
 
 # ---------------- 工作流预览(DAG 可视化) ----------------
 # 页面 preview_workflow.html:把 runs/dag.json 展开成阶段泳道图,标注状态/依赖/
-# 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻 + data/.videoagents/runs/<run_id>.jsonl
-# 的 total_cost_usd)给未完成任务估时估价。估价口径只含 LLM agent 会话成本,
-# 不含生成侧(Seedance 等)API 计费。
+# 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻,兜底
+# data/.videoagents/runs/<run_id>.jsonl 的 duration_ms)给未完成任务估时。
+# 金额不再统计:成本数据只有 claude 引擎会话上报(codex 等无美元口径),
+# 且会话日志按 TTL 清理,数字必然不完整,展示反而误导。
 
 _WF_TERMINAL_SKIP = {"skipped", "cancelled", "waived"}   # 不再执行,也不进剩余预估
 
@@ -3180,20 +3640,20 @@ def _wf_family_of(n: dict, by_id: dict) -> str:
     return nid
 
 
-def _wf_run_stats(run_id: str | None) -> tuple[float | None, float | None]:
-    """从 data/.videoagents/runs/<run_id>.jsonl 末尾的 result 事件取 (duration_s, cost_usd)。
-    会话日志会按 TTL 清理,查不到属正常。"""
+def _wf_run_stats(run_id: str | None) -> float | None:
+    """从 data/.videoagents/runs/<run_id>.jsonl 末尾的 result 事件取 duration_s
+    (claude/kimi 引擎的 stream-json 才有该事件)。会话日志会按 TTL 清理,查不到属正常。"""
     if not run_id or not re.fullmatch(r"[\w.\-]+", run_id):
-        return None, None
+        return None
     p = RUNS_DIR / f"{run_id}.jsonl"
     if not p.is_file():
-        return None, None
+        return None
     try:
         with open(p, "rb") as f:
             f.seek(max(0, p.stat().st_size - 16384))
             tail = f.read().decode("utf-8", "replace")
     except Exception:
-        return None, None
+        return None
     for line in reversed(tail.splitlines()):
         if '"type":"result"' not in line and '"type": "result"' not in line:
             continue
@@ -3202,20 +3662,20 @@ def _wf_run_stats(run_id: str | None) -> tuple[float | None, float | None]:
         except Exception:
             continue
         dur = obj.get("duration_ms")
-        cost = obj.get("total_cost_usd")
-        return ((dur / 1000) if isinstance(dur, (int, float)) else None,
-                cost if isinstance(cost, (int, float)) else None)
-    return None, None
+        return (dur / 1000) if isinstance(dur, (int, float)) else None
+    return None
 
 
 def _wf_meta_duration(base: Path, task_id: str) -> float | None:
-    """runs/<task_id>/meta.json 的 started_at/ended_at → 秒。"""
+    """runs/<task_id>/meta.json 的 started_at → ended_at/finished_at → 秒。
+    结束字段两种写法并存(WORKFLOW.md §6.1 规约 finished_at,存量多为 ended_at)。"""
     meta = _read_json_safe(base / "runs" / task_id / "meta.json")
     if not isinstance(meta, dict):
         return None
+    ended = meta.get("ended_at") or meta.get("finished_at")
     try:
         t0 = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00"))
-        t1 = datetime.fromisoformat(str(meta["ended_at"]).replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(str(ended).replace("Z", "+00:00"))
         s = (t1 - t0).total_seconds()
         return s if 0 < s < 86400 * 7 else None
     except Exception:
@@ -3236,10 +3696,9 @@ def _preview_workflow(project: str):
             continue
         state = n.get("state") or "pending"
         nid = n["id"]
-        dur, cost = _wf_meta_duration(base, nid), None
-        rdur, rcost = _wf_run_stats(n.get("run_id"))
-        dur = dur if dur is not None else rdur
-        cost = rcost
+        dur = _wf_meta_duration(base, nid)
+        if dur is None:
+            dur = _wf_run_stats(n.get("run_id"))
         note = next((str(n[k]) for k in ("note", "orch_note", "skip_reason",
                                          "fail_reason", "pilot_note") if n.get(k)), "")
         nodes.append({
@@ -3254,12 +3713,11 @@ def _preview_workflow(project: str):
             "outputs": n.get("outputs") or [], "attempt": n.get("attempt"),
             "run_id": n.get("run_id"), "note": note[:400],
             "duration_s": round(dur) if dur is not None else None,
-            "cost_usd": round(cost, 4) if cost is not None else None,
         })
 
-    # 估时估价:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
-    def _avg(rows, key):
-        vals = [r[key] for r in rows if r[key] is not None]
+    # 估时:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
+    def _avg(rows):
+        vals = [r["duration_s"] for r in rows if r["duration_s"] is not None]
         return (sum(vals) / len(vals)) if vals else None
 
     done_rows = [r for r in nodes if r["state"] in _DONE_STATES]
@@ -3276,16 +3734,15 @@ def _preview_workflow(project: str):
         if r["state"] in _DONE_STATES or r["state"] in _WF_TERMINAL_SKIP \
                 or r["state"] in ("expanded", "template"):
             continue
-        for key, out in (("duration_s", "est_duration_s"), ("cost_usd", "est_cost_usd")):
-            for basis, rows in (("family", fam_rows.get(r["family"])),
-                                ("agent", ag_rows.get(r["agent"])),
-                                ("phase", ph_rows.get(r["phase"])),
-                                ("overall", done_rows)):
-                v = _avg(rows or [], key)
-                if v is not None:
-                    r[out] = round(v) if key == "duration_s" else round(v, 4)
-                    r[out.replace("_s", "").replace("_usd", "") + "_basis"] = basis
-                    break
+        for basis, rows in (("family", fam_rows.get(r["family"])),
+                            ("agent", ag_rows.get(r["agent"])),
+                            ("phase", ph_rows.get(r["phase"])),
+                            ("overall", done_rows)):
+            v = _avg(rows or [])
+            if v is not None:
+                r["est_duration_s"] = round(v)
+                r["est_duration_basis"] = basis
+                break
 
     # 汇总:已花费(实际)/ 剩余(估)/ 关键路径(剩余任务沿依赖的最长估时链)
     remaining = [r for r in nodes
@@ -3311,15 +3768,16 @@ def _preview_workflow(project: str):
         return memo[nid]
 
     critical_s = max((_cp(r["id"], frozenset()) for r in remaining), default=0.0)
+    video_tok, image_tok = _project_media_tokens(base)
     summary = {
         "total": len(nodes),
         "spent_duration_s": round(sum(r["duration_s"] or 0 for r in nodes)),
-        "spent_cost_usd": round(sum(r["cost_usd"] or 0 for r in nodes), 2),
+        "video_tokens": video_tok,
+        "image_tokens": image_tok,
+        "llm_tokens": _project_llm_tokens(project),
         "remaining_count": len(remaining),
         "remaining_est_duration_s": round(sum(r.get("est_duration_s") or 0
                                               for r in remaining)),
-        "remaining_est_cost_usd": round(sum(r.get("est_cost_usd") or 0
-                                            for r in remaining), 2),
         "critical_path_s": round(critical_s),
     }
     return {"project": base.name, "nodes": nodes, "summary": summary}
@@ -3399,6 +3857,9 @@ async def api_genconfig_set(body: dict):
         except (TypeError, ValueError):
             raise ServiceError(400, f"storage.{name}.url_expires must be seconds (integer)")
     save_genconfig(cfg)
+    if "agentmodel_mode" in body:
+        # 切换「模型策略」= 全部 Agent 按新策略走:同时清空 Agent 级单独配置
+        atomic_write_json(AGENTMODELS_PATH, {})
     if "ui_language" in body:
         # 界面语言按全局持久化到 state.json(genconfig 键双写,兼容旧版回读)
         STATE["ui_lang"] = cfg.get("ui_language") or ""
@@ -3471,11 +3932,11 @@ async def api_brief_set(body: dict):
     return {"ok": True, "project": project, "brief": brief, "style": style}
 
 
-# ---------------- 参考图页(refs/ 分类预览、上传、逐图注释) ----------------
-REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail")
+# ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
+REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail", "text")
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
-REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考素材」页自动生成,勿手改;手写内容请放本块之外 -->"
+REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
 
@@ -3509,7 +3970,7 @@ def _write_ref_notes_md(refs: Path, notes: dict):
 
 
 async def api_refs_list(project: str = "demo"):
-    """参考图页数据:refs/ 按分类列出文件(含子目录)、预览 URL 与注释。"""
+    """参考文件页数据:refs/ 按分类列出文件(含子目录)、预览 URL 与注释。"""
     base = _proj_base(project)
     refs = base / "refs"
     notes = _load_ref_notes(refs)
@@ -3543,7 +4004,7 @@ async def api_refs_list(project: str = "demo"):
 async def api_refs_upload(data: bytes, project: str = "demo",
                           category: str = "style", subdir: str = "",
                           filename: str = "ref"):
-    """参考图页上传:请求体即文件原始字节(避免 multipart 依赖)。
+    """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖)。
     文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、props/costumes 等定向子目录。"""
     base = _proj_base(project)
     if category not in REF_CATEGORIES:
@@ -3569,7 +4030,7 @@ async def api_refs_upload(data: bytes, project: str = "demo",
 
 
 async def api_refs_note(body: dict):
-    """保存/编辑参考图注释:写 refs/annotations.json 并同步 NOTES.md 自动块
+    """保存/编辑参考文件注释:写 refs/annotations.json 并同步 NOTES.md 自动块
     (NOTES.md 是 workflow 既有约定的「有则必读」文件,视觉/配乐 Agent 由此读到逐图注释)。"""
     base = _proj_base(body.get("project"))
     refs = base / "refs"
@@ -3620,6 +4081,7 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
+                       "shot_group": "分镜组设置",
                        "review": "审核设置", "packaging": "片头片尾",
                        "versioning": "版本管理"}
 
@@ -3631,6 +4093,7 @@ async def api_projconfig_set(body: dict):
                  {k: v for k, v in (body or {}).items()
                   if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg.get("duration") or {})
+    _validate_shot_group(cfg.get("shot_group") or {})
     _validate_output(cfg.get("output") or {})
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
@@ -3827,6 +4290,54 @@ async def api_volc_speakers(body: dict):
     return {"speakers": speakers}
 
 
+# ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
+
+_MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
+
+
+async def api_minimax_voices(body: dict):
+    """MiniMax get_voice 音色列表(系统音色 + 账号内克隆/生成音色)。Key 用请求体的
+    (未保存也可试);api_base 须与 Key 来源平台一致(海外/国内两平台不互通)。"""
+    key = str((body or {}).get("api_key") or "").strip()
+    if not key:
+        raise ServiceError(400, "api_key required")
+    base = str((body or {}).get("api_base") or _MINIMAX_BASES[0]).strip().rstrip("/")
+    if base not in _MINIMAX_BASES:
+        raise ServiceError(400, f"api_base must be one of {list(_MINIMAX_BASES)}")
+
+    def call():
+        req = urllib.request.Request(
+            base + "/v1/get_voice",
+            data=json.dumps({"voice_type": "all"}).encode(),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {key}"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+
+    try:
+        d = await asyncio.to_thread(call)
+    except urllib.error.HTTPError as e:
+        raise ServiceError(502, f"MiniMax get_voice HTTP {e.code}:"
+                                f"{e.read().decode('utf-8', 'replace')[:300]}")
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"MiniMax get_voice 调用失败:{e}")
+    err = d.get("base_resp") or {}
+    if err.get("status_code"):
+        raise ServiceError(502, f"MiniMax get_voice 失败(code={err['status_code']}):"
+                                f"{err.get('status_msg') or ''}")
+    voices = []
+    for group, tag in (("system_voice", "系统"), ("voice_cloning", "克隆"),
+                       ("voice_generation", "生成")):
+        for v in d.get(group) or []:
+            desc = v.get("description")
+            if isinstance(desc, list):
+                desc = " / ".join(str(x) for x in desc if x)
+            voices.append({"voice_id": v.get("voice_id") or "",
+                           "name": v.get("voice_name") or v.get("voice_id") or "",
+                           "category": tag, "description": str(desc or "")})
+    return {"voices": voices}
+
+
 async def api_test_openrouter(body: dict):
     """验证 OpenRouter API Key(GET /api/v1/key)。"""
     key = (body.get("api_key") or "").strip()
@@ -3880,30 +4391,156 @@ async def api_test_deepagents(body: dict):
             "models": sorted(m.get("id") for m in data.get("data", []) if m.get("id"))}
 
 
+COMFY_CLOUD_API = "https://cloud.comfy.org/api"
+
+
 async def api_test_comfyui(body: dict):
-    """测试本地 ComfyUI 连接,顺带返回可用 checkpoint 列表。"""
-    url = (body.get("url") or "").strip().rstrip("/")
-    if not re.match(r"^https?://", url):
-        raise ServiceError(400, "url must start with http(s)://")
+    """测试 ComfyUI 连接(本地/Comfy Cloud/RunningHub),并检查关键自定义节点是否可见。
+
+    RunningHub 运行方式改测 accountStatus:验证 API Key 并回显余额与并发任务数
+    (无原生 /system_stats、/object_info 可探)。"""
+    mode = (body.get("mode") or "local").strip()
+    if mode in RH_BASES:
+        key = (body.get("api_key") or "").strip()
+        if not key:
+            return {"ok": False, "error": "RunningHub API Key 未填写"}
+        base = RH_BASES[mode]
+        try:
+            resp = await asyncio.to_thread(
+                _http_post_json, base + "/uc/openapi/accountStatus",
+                {"apikey": key, "apiKey": key},
+                {"Authorization": f"Bearer {key}"}, 15)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        if resp.get("code") != 0:
+            return {"ok": False,
+                    "error": f"code={resp.get('code')}: {str(resp.get('msg'))[:200]}"}
+        data = resp.get("data") or {}
+        return {"ok": True, "runninghub": True,
+                "remain_coins": data.get("remainCoins"),
+                "current_tasks": data.get("currentTaskCounts")}
+    cloud = mode == "cloud"
+    if cloud:
+        key = (body.get("api_key") or "").strip()
+        if not key:
+            return {"ok": False, "error": "Comfy Cloud API Key 未填写"}
+        url = COMFY_CLOUD_API
+        headers = {"X-API-Key": key}
+    else:
+        url = (body.get("url") or "").strip().rstrip("/")
+        if not re.match(r"^https?://", url):
+            raise ServiceError(400, "url must start with http(s)://")
+        headers = None
     try:
-        stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", None, 6)
+        stats = await asyncio.to_thread(_http_get_json, url + "/system_stats", headers, 6)
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        if not cloud:
+            return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        # Comfy Cloud 未必提供 /system_stats,退回 /queue 验证连通与鉴权
+        try:
+            await asyncio.to_thread(_http_get_json, url + "/queue", headers, 8)
+            stats = {}
+        except Exception as e2:  # noqa: BLE001
+            return {"ok": False, "error": f"Connection failed: {str(e2)[:200]}"}
     checkpoints = []
     try:
         info = await asyncio.to_thread(
-            _http_get_json, url + "/object_info/CheckpointLoaderSimple", None, 6)
+            _http_get_json, url + "/object_info/CheckpointLoaderSimple", headers, 6)
         req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
         ckpt = req.get("ckpt_name") or [[]]
         if isinstance(ckpt[0], list):
             checkpoints = ckpt[0]
     except Exception:  # noqa: BLE001
         pass
+    custom_nodes = {}
+    for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
+        try:
+            info = await asyncio.to_thread(
+                _http_get_json, url + "/object_info/" + node_type, headers, 6)
+            custom_nodes[node_type] = bool(info.get(node_type))
+        except Exception:  # noqa: BLE001
+            custom_nodes[node_type] = False
     sysinfo = (stats.get("system") or {})
     return {"ok": True,
-            "version": sysinfo.get("comfyui_version") or sysinfo.get("os") or "unknown",
+            "version": sysinfo.get("comfyui_version") or sysinfo.get("os")
+                       or ("Comfy Cloud" if cloud else "unknown"),
             "devices": [d.get("name") for d in stats.get("devices") or []],
-            "checkpoints": checkpoints}
+            "checkpoints": checkpoints, "custom_nodes": custom_nodes,
+            "ace_step_ready": all(custom_nodes.get(n) for n in
+                                    ("ACEModelLoader", "ACEStepGen")),
+            "minimax_h3_ready": custom_nodes.get("MiniMaxH3ReferenceToVideo", False)}
+
+
+COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts")
+
+
+async def api_comfy_workflows():
+    """列出 comfy/ 目录中按文件名前缀分类的 API 工作流 JSON(image-/video-/music-/tts-),
+    并标注是否有同名 .md 说明文档。"""
+    out = {kind: [] for kind in COMFY_WORKFLOW_KINDS}
+    comfy_dir = ROOT / "comfy"
+    if comfy_dir.is_dir():
+        for path in sorted(comfy_dir.glob("*.json")):
+            kind = path.name.split("-", 1)[0]
+            if kind in out:
+                out[kind].append({"path": f"comfy/{path.name}",
+                                  "doc": path.with_suffix(".md").is_file()})
+    return {"workflows": out}
+
+
+async def api_comfy_workflow_doc(name: str):
+    """返回 comfy 工作流同名 .md 说明文档的内容。name 只取文件名,不允许目录穿越。"""
+    base = Path(str(name or "")).name
+    if not re.fullmatch(r"[A-Za-z0-9._-]+\.(json|md)", base):
+        raise ServiceError(400, f"invalid workflow name: {name!r}")
+    doc = (ROOT / "comfy" / base).with_suffix(".md")
+    if not doc.is_file():
+        raise ServiceError(404, f"no doc for workflow: {base}")
+    return {"name": doc.name, "markdown": doc.read_text(encoding="utf-8")}
+
+
+# 网页端工作流详情链接里的数字 ID(如 https://www.runninghub.cn/workflow/19041520…)
+_RH_WF_ID_RE = re.compile(r"(\d{6,})")
+
+
+async def api_rh_workflow_verify(body: dict):
+    """验证 RunningHub 工作流:按 ID(或工作区页面链接)经 getJsonApiFormat 拉取
+    JSON,写入本地缓存(genmedia 运行时同读),并回报检测到的 {{TOKEN}} 占位符,
+    供设置页「验证并添加」收藏。官方 OpenAPI 无工作区列表接口,收藏列表由此累积。"""
+    mode = (body.get("mode") or "").strip()
+    if mode not in RH_BASES:
+        raise ServiceError(400, f"mode must be one of {sorted(RH_BASES)}")
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        return {"ok": False, "error": "RunningHub API Key 未填写"}
+    raw = str(body.get("workflow") or "").strip()
+    m = _RH_WF_ID_RE.search(raw)
+    if not m:
+        return {"ok": False, "error": "未能识别工作流 ID(纯数字,或粘贴工作流页面链接)"}
+    wf_id = m.group(1)
+    try:
+        resp = await asyncio.to_thread(
+            _http_post_json, RH_BASES[mode] + "/api/openapi/getJsonApiFormat",
+            {"apiKey": key, "workflowId": wf_id},
+            {"Authorization": f"Bearer {key}"}, 30)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+    text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+    if not text:
+        return {"ok": False,
+                "error": f"code={resp.get('code')}: {str(resp.get('msg'))[:200]}"}
+    try:
+        workflow = json.loads(text)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "工作流 JSON 解析失败(接口返回异常内容)"}
+    RH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    (RH_CACHE_DIR / f"{mode}-{wf_id}.json").write_text(text, encoding="utf-8")
+    tokens = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
+    h3 = any(isinstance(n, dict) and n.get("class_type") == "MiniMaxH3ReferenceToVideo"
+             for n in workflow.values()) if isinstance(workflow, dict) else False
+    return {"ok": True, "id": wf_id, "tokens": tokens,
+            "node_count": len(workflow) if isinstance(workflow, dict) else 0,
+            "minimax_h3": h3}
 
 
 async def api_agents(refresh: bool = False):
@@ -4039,8 +4676,10 @@ async def api_globalmodel_set(body: dict):
     eng = str(body.get("engine") or "").lower()
     if eng and eng not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
-    STATE["global_model"] = {"engine": eng,
-                             "model": str(body.get("model") or "").strip()}
+    model = str(body.get("model") or "").strip()
+    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
+        model = resolve_deepagents()["model"]
+    STATE["global_model"] = {"engine": eng, "model": model}
     save_state(STATE)
     return {"ok": True, "global_model": global_model_pref()}
 
@@ -4075,10 +4714,13 @@ async def api_uiprefs_set(body: dict):
         "project": project,
     }
     STATE["ui_prefs"] = prefs
-    STATE["global_model"] = {
-        "engine": eng,
-        "model": str(body.get("effective_model") or body.get("model") or "").strip(),
-    }
+    effective_model = str(body.get("effective_model") or "").strip()
+    if eng == "deepagents" and (not effective_model
+                                 or effective_model in ("local", "openrouter")):
+        effective_model = resolve_deepagents()["model"]
+    elif not effective_model:
+        effective_model = str(body.get("model") or "").strip()
+    STATE["global_model"] = {"engine": eng, "model": effective_model}
     save_state(STATE)
     return {"ok": True, "prefs": ui_prefs_pref(), "global_model": global_model_pref()}
 
@@ -4109,6 +4751,71 @@ async def api_agentmodels_set(body: dict):
     return {"ok": True, "effective": agent_model_config(agent)}
 
 
+_PI_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_PI_MODELS_TTL = 30
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _parse_pi_models_table(output: str) -> list[dict]:
+    """Parse the stable, whitespace-separated table emitted by pi --list-models."""
+    models: list[dict] = []
+    header_seen = False
+    for raw in output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw).strip()
+        if not line:
+            continue
+        fields = re.split(r"\s{2,}", line)
+        if len(fields) >= 2 and fields[0] == "provider" and fields[1] == "model":
+            header_seen = True
+            continue
+        if not header_seen or len(fields) < 2:
+            continue
+        provider, model = fields[0].strip(), fields[1].strip()
+        if not provider or not model:
+            continue
+        full_id = f"{provider}/{model}"
+        models.append({"id": full_id, "name": model, "provider": provider,
+                       "model": model,
+                       "context": fields[2] if len(fields) > 2 else "",
+                       "max_output": fields[3] if len(fields) > 3 else "",
+                       "thinking": fields[4] == "yes" if len(fields) > 4 else None,
+                       "images": fields[5] == "yes" if len(fields) > 5 else None})
+    return models
+
+
+async def api_pi_models(refresh: bool = False):
+    """列出当前 pi 登录凭证实际可用的模型，供全部语言模型选择器复用。"""
+    global _PI_MODELS_CACHE
+    ts, cached = _PI_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _PI_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "pi")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("pi"))
+    env = {**os.environ, "NO_COLOR": "1", "PI_SKIP_VERSION_CHECK": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "--approve", "--list-models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 pi 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 pi 模型列表失败:{detail[:300]}")
+    models = _parse_pi_models_table(output)
+    plain_output = _ANSI_ESCAPE_RE.sub("", output)
+    no_models = re.search(r"no models|/login|api key", plain_output, re.I)
+    if not models and "provider" not in plain_output and not no_models:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"pi 未返回可用模型:{detail[:300]}")
+    _PI_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -4117,7 +4824,7 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
@@ -4147,6 +4854,7 @@ async def api_projects_create(body: dict):
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
+    _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])
     _validate_review(cfg["review"])
     _validate_packaging(cfg["packaging"])
@@ -4188,8 +4896,8 @@ async def api_projects_create(body: dict):
             f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
-        "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考图】页,"
-        "按分类(视觉风格/角色/场景/道具/音乐/封面)上传参考图与希望使用的音乐,并可为每个文件添加注释说明用途"
+        "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"
+        "按分类(视觉风格/角色/场景/道具/音频/封面/文本)上传参考图、希望使用的音频与文本资料,并可为每个文件添加注释说明用途"
         "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
     gm = agent_effective_model(orch)
@@ -4540,26 +5248,57 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 def confirm_public(c: dict) -> dict:
     remaining = (None if c["timeout"] is None else
                  max(0, int(c["created"] + c["timeout"] - time.time())))
-    return {k: c[k] for k in ("id", "question", "options", "default",
-                              "timeout", "parent", "answer", "kind")} | {"remaining": remaining}
+    public = {k: c[k] for k in ("id", "question", "options", "default",
+                                "timeout", "parent", "answer", "kind")}
+    for key in ("project", "gate_id", "checkpoint"):
+        if c.get(key):
+            public[key] = c[key]
+    return public | {"remaining": remaining}
 
 
 async def api_confirm_create(body: dict):
     """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。
     kind=confirm(默认,重跑类):至多 60s 后自动落默认答案;
-    kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。"""
+    kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。
+    签字类同题去重:等待方(dispatch.py)超时退出后重发同一签字时,复用原 confirm_id
+    接回原弹窗,避免重复弹窗、且用户点旧弹窗即刻生效;若同题刚被答复(竞态窗口内
+    用户已点过),直接返回原 id 让新等待方首轮轮询即取到答案,免用户白点。"""
     q = (body.get("question") or "").strip()
     if not q:
         raise ServiceError(400, "question must not be empty")
     kind = "sign" if body.get("kind") == "sign" else "confirm"
+    parent = body.get("parent")
+    project = body.get("project") or (RUNS.get(parent or "") or {}).get("project")
+    if project:
+        project = require_project_slug(project)
+    gate_id = checkpoint = None
+    if kind == "sign" and project:
+        binding = _sign_gate_binding(project, q, body.get("gate_id"))
+        if binding:
+            gate_id, checkpoint = binding
+    if kind == "sign":
+        dups = [o for o in CONFIRMS.values()
+                if o["kind"] == "sign" and o["question"] == q[:500]]
+        pending = next((o for o in dups if o["answer"] is None), None)
+        if pending:
+            return {"confirm_id": pending["id"]}
+        fresh = max((o for o in dups if o.get("answered")),
+                    key=lambda o: o["answered"], default=None)
+        if fresh and time.time() - fresh["answered"] < 600:
+            return {"confirm_id": fresh["id"]}
     fallback = ["签字", "暂缓"] if kind == "sign" else ["重跑", "跳过"]
     options = [str(o)[:40] for o in (body.get("options") or fallback)][:4]
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
          "default": str(body.get("default") or options[0])[:40],
          "timeout": None if kind == "sign" else
          min(60, max(5, int(body.get("timeout") or 60))),
-         "kind": kind, "parent": body.get("parent"),
+         "kind": kind, "parent": parent,
          "created": time.time(), "answer": None}
+    if project:
+        c["project"] = project
+    if gate_id:
+        c.update({"gate_id": gate_id, "checkpoint": checkpoint,
+                  "origin": body.get("origin") or "dispatch"})
     CONFIRMS[c["id"]] = c
     HUB.publish({"type": "confirm", **confirm_public(c)})
     notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
@@ -4588,6 +5327,16 @@ async def api_confirm_answer(cid: str, body: dict):
     if c["answer"] is None:
         c["answer"] = str(body.get("answer") or "")[:40] or c["default"]
         c["answered"] = time.time()
+        if (c.get("kind") == "sign" and c.get("gate_id")
+                and c["answer"] == "签字"):
+            c["continuation_attempted"] = time.time()
+            try:
+                continuation = await _continue_signed_gate(c)
+                if continuation:
+                    c["continuation_run_id"] = continuation
+            except Exception as e:  # noqa: BLE001
+                c["continuation_error"] = str(e)[:300]
+                print(f"[approval] 签字后唤醒总制片失败(审批已保留):{e}", flush=True)
         HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
     return {"ok": True, "answer": c["answer"]}
 
@@ -4608,13 +5357,28 @@ async def api_chat(body: dict):
         raise ServiceError(400, "message must not be empty")
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
-    # Agent 级模型配置覆盖顶栏全局;dispatch 显式 --engine/--model(force=true)最优先
-    if not body.get("force"):
-        am = agent_model_config(agent)
+    # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
+    # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
+    am = agent_model_config(agent)
+    parent_engine = ""
+    if parent and parent in RUNS:
+        parent_engine = str(RUNS[parent].get("engine") or "").lower()
+    natural_engine = (am.get("engine")
+                      or parent_engine
+                      or global_model_pref()["engine"]
+                      or "claude")
+    if natural_engine not in ENGINES:
+        natural_engine = "claude"
+    if body.get("force"):
+        if engine != natural_engine:
+            engine = natural_engine
+    else:
         if am.get("engine"):
             engine = am["engine"]
             model = am.get("model") or None     # 引擎被覆盖时,模型也取该 Agent 的配置
-        elif not model:
+        elif parent_engine in ENGINES:
+            engine = parent_engine
+        if not model:
             # dispatch 继承派单方引擎时 engine 非空,走不到上方空引擎回退;
             # 无 Agent 级覆盖且未显式指定模型的,在此跟随顶栏全局的 model
             # (仅引擎一致时借用,模型 ID 不跨引擎通用)
@@ -4702,6 +5466,31 @@ async def api_stop_all():
     return {"stopped": stopped}
 
 
+async def shutdown_runtime(timeout: float = 4) -> None:
+    """Boundedly stop Agent tasks/process groups and release OS resources."""
+    tasks = list(RUN_TASKS.values())
+    await api_stop_all()
+
+    active = [task for task in tasks if not task.done()]
+    if active:
+        _, pending = await asyncio.wait(active, timeout=timeout)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    # Defensive fallback for a task that failed before removing its process.
+    procs = list(RUN_PROCS.values())
+    for proc in procs:
+        if proc.returncode is None:
+            _kill_proc_tree(proc)
+    if procs:
+        await asyncio.gather(*(proc.wait() for proc in procs), return_exceptions=True)
+    RUN_PROCS.clear()
+    RUN_TASKS.clear()
+    _release_awake()
+
+
 async def api_stop_run(run_id: str):
     """停止单个排队/运行中的任务(运行条目行内「⏹」按钮)。"""
     run = RUNS.get(run_id)
@@ -4747,8 +5536,145 @@ def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
             continue
         if not all(d in done for d in (n.get("depends_on") or [])):
             continue
-        (human_waiting if n.get("human") else runnable).append(n["id"])
+        if n.get("human"):
+            # expanded/template 只是待实例化骨架，blocked 是用户明确暂缓；只有
+            # pending 人工节点能够发起新的签字。
+            if n.get("state") == "pending":
+                human_waiting.append(n["id"])
+        else:
+            runnable.append(n["id"])
     return runnable, human_waiting
+
+
+def _gate_checkpoint(node: dict) -> str:
+    gate = node.get("gate")
+    if isinstance(gate, dict) and gate.get("checkpoint"):
+        return str(gate["checkpoint"])
+    return str(node.get("checkpoint") or node.get("id") or "人工闸门")
+
+
+def _ready_human_gates(proj: str) -> list[dict]:
+    """返回依赖均完成、状态仍为 pending 的人工闸门节点。"""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    if not dag_path.is_file():
+        return []
+    nodes = _dag_load_nodes(dag_path)
+    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
+    return [n for n in nodes
+            if n.get("id") and n.get("human") and n.get("state") == "pending"
+            and all(dep in done for dep in (n.get("depends_on") or []))]
+
+
+def _sign_gate_binding(proj: str, question: str,
+                       requested_gate_id: str | None = None) -> tuple[str, str] | None:
+    """把 dispatch.py 的签字问题绑定到当前已解锁闸门，供持久化去重。"""
+    ready = _ready_human_gates(proj)
+    if requested_gate_id:
+        for node in ready:
+            if node["id"] == requested_gate_id:
+                return node["id"], _gate_checkpoint(node)
+        return None
+    normalized = re.sub(r"[\s_｜|]+", "", question).lower()
+    # 优先匹配完整 checkpoint/id，避免 H3 误命中 H3A/H3B。
+    matches = [node for node in ready
+               if re.sub(r"[\s_｜|]+", "", _gate_checkpoint(node)).lower()
+               in normalized]
+    if len(matches) == 1:
+        node = matches[0]
+        return node["id"], _gate_checkpoint(node)
+    matches = []
+    for node in ready:
+        checkpoint = _gate_checkpoint(node)
+        tokens = (node["id"], checkpoint.split("-", 1)[0])
+        if any(re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])",
+                         question, re.I) for token in tokens if token):
+            matches.append(node)
+    if len(matches) == 1:
+        node = matches[0]
+        return node["id"], _gate_checkpoint(node)
+    if len(ready) == 1:
+        node = ready[0]
+        return node["id"], _gate_checkpoint(node)
+    return None
+
+
+def _approval_project(c: dict) -> str | None:
+    project = c.get("project")
+    if project and re.fullmatch(r"[\w-]{1,80}", str(project)):
+        return str(project)
+    return (RUNS.get(c.get("parent") or "") or {}).get("project")
+
+
+async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> list[str]:
+    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。"""
+    created = []
+    for node in _ready_human_gates(proj):
+        gate_id = node["id"]
+        existing = [c for c in CONFIRMS.values()
+                    if c.get("kind") == "sign" and _approval_project(c) == proj
+                    and c.get("gate_id") == gate_id]
+        if existing:
+            # 服务若恰在签字落盘后、续跑派单前退出，重启后由核对钩子补唤醒。
+            signed = next((c for c in reversed(existing)
+                           if c.get("answer") == "签字"), None)
+            if signed and time.time() - signed.get("continuation_attempted", 0) > 3600:
+                continuation = RUNS.get(signed.get("continuation_run_id") or "")
+                if not continuation or continuation.get("status") == "error":
+                    signed["continuation_attempted"] = time.time()
+                    try:
+                        run_id = await _continue_signed_gate(signed)
+                        if run_id:
+                            signed["continuation_run_id"] = run_id
+                        HUB.publish({"type": "confirm_done", "id": signed["id"],
+                                     "answer": signed["answer"]})
+                    except Exception as e:  # noqa: BLE001
+                        signed["continuation_error"] = str(e)[:300]
+            continue
+        checkpoint = _gate_checkpoint(node)
+        result = await api_confirm_create({
+            "question": (f"【{checkpoint}｜项目 {proj}】前置任务已完成。"
+                         "请审阅对应产物后签字；签字后由总制片复核闸门并冻结版本，"
+                         "暂缓则保持阻塞。"),
+            "kind": "sign", "options": ["签字", "暂缓"], "default": "签字",
+            "project": proj, "gate_id": gate_id, "parent": parent,
+            "origin": "runtime_gate_guard",
+        })
+        created.append(result["confirm_id"])
+        print(f"[approval] 已为 {proj}:{gate_id} 创建永久签字单 {result['confirm_id']}",
+              flush=True)
+    return created
+
+
+async def _continue_signed_gate(c: dict) -> str | None:
+    """签字后恢复总制片；仍在等待 dispatch.py 的父运行会自行继续。"""
+    parent = RUNS.get(c.get("parent") or "")
+    if parent and parent.get("status") in ("queued", "running"):
+        return None
+    proj = str(c["project"])
+    checkpoint = c.get("checkpoint") or c["gate_id"]
+    message = (
+        f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
+        f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
+        "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
+        "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG 并派 version 冻结。"
+        "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
+    )
+    result = await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message,
+                             "project": proj, "source": "approval",
+                             "parent": c.get("parent")})
+    return result["run_id"]
+
+
+def _linked_gate_still_open(c: dict) -> bool:
+    """已答复的绑定签字单在 gate 真正关单前保留，供重启恢复和去重。"""
+    proj, gate_id = _approval_project(c), c.get("gate_id")
+    if not (proj and gate_id):
+        return False
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    for node in _dag_load_nodes(dag_path) if dag_path.is_file() else []:
+        if node.get("id") == gate_id:
+            return node.get("state") not in _DONE_STATES
+    return False
 
 
 def _dag_missing_episodes(proj: str) -> list[str]:
@@ -4796,6 +5722,7 @@ def prune_runs_confirms():
             if (c.get("timeout") is not None
                 and now - c.get("created", now) > (c.get("timeout") or 0) + 600)
             or (c.get("timeout") is None and c.get("answered")
+                and not _linked_gate_still_open(c)
                 and now - c["answered"] > 600)]
     for cid in gone:
         CONFIRMS.pop(cid, None)
@@ -4904,9 +5831,8 @@ async def idle_watchdog():
             pending = [c for c in CONFIRMS.values()
                        if c["answer"] is None and
                        (c["timeout"] is None or now - c["created"] < c["timeout"])]
-            _cproj = lambda c: (RUNS.get(c.get("parent") or "") or {}).get("project")  # noqa: E731
-            confirm_global = any(_cproj(c) is None for c in pending)
-            confirm_projs = {_cproj(c) for c in pending} - {None}
+            confirm_global = any(_approval_project(c) is None for c in pending)
+            confirm_projs = {_approval_project(c) for c in pending} - {None}
             for c in pending:
                 if c.get("kind") == "sign" \
                         and now - c.get("notified", c["created"]) > 3600:
@@ -4924,6 +5850,14 @@ async def idle_watchdog():
                     continue
                 if confirm_global or proj in confirm_projs:
                     continue
+                # 常任指令:用户为该项目设定的长期约束(设置菜单「自动运行」编辑),
+                # 随每条唤醒消息附带——总制片引擎会话被 reset 后口头指令会全部丢失,
+                # 这里保证约束在每次自动唤醒时都重新进入上下文
+                orders = str(STATE.get("watchdog_orders", {}).get(proj) or "").strip()
+                orders_note = ("\n[常任指令]" + orders +
+                               "\n(用户设定的长期约束,始终有效;与 DAG 待办冲突时以"
+                               "常任指令为准,受限节点暂不派发,只推进不受限部分。)"
+                               ) if orders else ""
                 # DAG 缺失/解析不出任何节点时不再静默失明:唤醒总制片核对
                 # (至多 1 次/小时)。格式规范与写入时自检见 WORKFLOW.md §3.2。
                 dag_path = proj_dir / "runs" / "dag.json"
@@ -4934,7 +5868,7 @@ async def idle_watchdog():
                         msg = (f"[自动运行·状态检查] 项目 {proj} 的 runs/dag.json {state},"
                                "看门狗无法判断待办前沿。请按 WORKFLOW.md §3.2 规范格式补齐/修复"
                                f"(自检:python3 services/runtime/dagcheck.py --project {proj} --strict),"
-                               "然后继续按 DAG 推进。")
+                               "然后继续按 DAG 推进。" + orders_note)
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog",
                                         "engine": eng, "model": mdl})
@@ -4945,7 +5879,8 @@ async def idle_watchdog():
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"
                            f"但 runs/dag.json 仍有依赖已满足的待办节点(如:{', '.join(runnable[:6])}"
                            f"{' 等' if len(runnable) > 6 else ''})。"
-                           "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。")
+                           "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。"
+                           + orders_note)
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
@@ -4964,16 +5899,25 @@ async def idle_watchdog():
                            "请按 WORKFLOW.md §3.1「DAG 按集动态展开」把缺失分集展开为 "
                            "pX-*-epNN 节点(含每集闸门),并依据 runs/ 既往工单回填 state/run_id,"
                            "完成后继续按 DAG 与派单守则推进;若该分集确已完结或另有安排,"
-                           "在 DAG 中补记节点状态后简要说明。")
+                           "在 DAG 中补记节点状态后简要说明。" + orders_note)
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue
-                if human_waiting and now - _HUMAN_GATE_NOTIFIED.get(proj, 0) > 3600:
-                    _HUMAN_GATE_NOTIFIED[proj] = now
-                    notify_user(f"项目 {proj} 流水线停在人工签字点:{', '.join(human_waiting[:3])},等你确认")
+                if human_waiting:
+                    created = await ensure_human_gate_approvals(proj)
+                    answered = any(c.get("kind") == "sign"
+                                   and _approval_project(c) == proj
+                                   and c.get("gate_id") in human_waiting
+                                   and c.get("answer") is not None
+                                   for c in CONFIRMS.values())
+                    if (not created and not answered
+                            and now - _HUMAN_GATE_NOTIFIED.get(proj, 0) > 3600):
+                        _HUMAN_GATE_NOTIFIED[proj] = now
+                        notify_user(f"项目 {proj} 流水线停在人工签字点:"
+                                    f"{', '.join(human_waiting[:3])},等你确认")
         except Exception as e:  # noqa: BLE001
             print(f"[watchdog] 异常(忽略):{e}\n{traceback.format_exc()}", flush=True)
 
@@ -5065,6 +6009,8 @@ async def api_resources_config_get():
     cfg = resource_cfg()
     return {"claude_probe": bool(cfg.get("claude_probe")),
             "claude_probe_env": CLAUDE_USAGE_PROBE_ENABLED,
+            "codex_probe": codex_probe_enabled(),
+            "kimi_probe": kimi_probe_enabled(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
@@ -5075,7 +6021,7 @@ async def api_resources_config_get():
 async def api_resources_config_set(body: dict):
     """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
     cfg = STATE.setdefault("resources", {})
-    for k in ("claude_probe", "volc_enabled"):
+    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled"):
         if body.get(k) is not None:
             cfg[k] = bool(body[k])
     for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
@@ -5090,41 +6036,60 @@ async def api_resources_config_set(body: dict):
 
 
 async def api_resources(fresh: bool = False):
-    """资源消耗面板聚合数据:三引擎 session/weekly 用量 + 已配置渠道的账户余额。
-    全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存强制重测);取不到的读数为 null。"""
+    """资源消耗面板聚合数据:三引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
+    只探测已开启用量检查的引擎,全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存
+    强制重测);取不到的读数为 null。"""
     if fresh:
         _USAGE_CACHE.clear()
         _BALANCE_CACHE.clear()
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
+
+    async def usage(engine, on):
+        return await asyncio.to_thread(engine_usage_full, engine) if on else dict(empty)
+    claude_on, codex_on, kimi_on = (
+        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled())
     cu, co, ki, orb, vb = await asyncio.gather(
-        asyncio.to_thread(engine_usage_full, "claude"),
-        asyncio.to_thread(engine_usage_full, "codex"),
-        asyncio.to_thread(engine_usage_full, "kimi"),
+        usage("claude", claude_on),
+        usage("codex", codex_on),
+        usage("kimi", kimi_on),
         asyncio.to_thread(provider_balance, "openrouter"),
         asyncio.to_thread(provider_balance, "volc"))
     cfg = resource_cfg()
-    return {"claude": {**cu, "enabled": claude_probe_enabled()},
-            "codex": {**co, "enabled": True},
-            "kimi": {**ki, "enabled": bool((cfg.get("kimi_api_key") or "").strip())},
+    return {"claude": {**cu, "enabled": claude_on},
+            "codex": {**co, "enabled": codex_on},
+            "kimi": {**ki, "enabled": kimi_on},
             "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
                            **(orb or {})},
             "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}
 
 
 async def api_watchdog_get(project: str = ""):
-    """按项目查看空转看门狗开关(缺省关闭)。不带 project 时返回全部映射。"""
+    """按项目查看空转看门狗开关(缺省关闭)与常任指令。不带 project 时返回全部映射。"""
     wd = STATE.get("watchdog", {})
     if project:
         proj = safe_slug(project)
-        return {"project": proj, "enabled": bool(wd.get(proj, False))}
+        return {"project": proj, "enabled": bool(wd.get(proj, False)),
+                "orders": str(STATE.get("watchdog_orders", {}).get(proj) or "")}
     return {"watchdog": wd}
 
 
 async def api_watchdog_set(body: dict):
-    """按项目切换空转看门狗开关(运行面板 🤖 按钮);逐项目独立、缺省关闭,
-    状态持久化,重启后保持。"""
+    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/飞书 /auto),
+    orders=常任指令(设置菜单「自动运行」,随每条唤醒消息附带,空串清除)。
+    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。"""
     proj = safe_slug(body.get("project"))
-    wd = STATE.setdefault("watchdog", {})
-    wd[proj] = bool(body.get("enabled"))
+    if body.get("enabled") is not None:
+        STATE.setdefault("watchdog", {})[proj] = bool(body.get("enabled"))
+    if body.get("orders") is not None:
+        orders = str(body.get("orders")).strip()
+        if len(orders) > 2000:
+            raise ServiceError(400, "orders must be at most 2000 characters")
+        od = STATE.setdefault("watchdog_orders", {})
+        if orders:
+            od[proj] = orders
+        else:
+            od.pop(proj, None)
     save_state(STATE)
     sync_keepawake()    # 开/关项目自动运行随手校准防休眠
-    return {"project": proj, "enabled": wd[proj]}
+    return await api_watchdog_get(proj)

@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import urllib.error
 import urllib.request
 from contextlib import asynccontextmanager
@@ -37,6 +38,11 @@ START_API = os.environ.get("VIDEOAGENTS_START_API", "" if os.environ.get("VIDEOA
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 API_PROCESS: subprocess.Popen[bytes] | None = None
 API_START_LOCK: asyncio.Lock | None = None
+API_STOP_REQUESTED = False
+DRAW_SERVER: uvicorn.Server | None = None
+DRAW_THREAD: threading.Thread | None = None
+UPSTREAMS: set[object] = set()
+UPSTREAMS_LOCK = threading.Lock()
 
 HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -74,9 +80,75 @@ def _api_lock() -> asyncio.Lock:
     return API_START_LOCK
 
 
+def _request_api_stop() -> None:
+    """Ask the managed API child to shut down without blocking a signal handler."""
+    global API_STOP_REQUESTED
+    proc = API_PROCESS
+    if proc and proc.poll() is None and not API_STOP_REQUESTED:
+        API_STOP_REQUESTED = True
+        proc.terminate()
+
+
+async def _stop_api_process(timeout: float = 5) -> None:
+    """Stop and reap the managed API process, with a bounded hard-stop fallback."""
+    global API_PROCESS, API_STOP_REQUESTED
+    proc = API_PROCESS
+    if not proc:
+        return
+    if proc.poll() is None:
+        _request_api_stop()
+        try:
+            await asyncio.to_thread(proc.wait, timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            await asyncio.to_thread(proc.wait)
+    if API_PROCESS is proc:
+        API_PROCESS = None
+        API_STOP_REQUESTED = False
+
+
+def _register_upstream(upstream: object) -> None:
+    with UPSTREAMS_LOCK:
+        UPSTREAMS.add(upstream)
+
+
+def _close_upstream(upstream: object) -> None:
+    with UPSTREAMS_LOCK:
+        UPSTREAMS.discard(upstream)
+
+    def _close() -> None:
+        try:
+            upstream.close()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - shutdown cleanup must be best-effort
+            pass
+
+    # close() 会阻塞在并发 read1() 后面,直到上游吐出下一个 chunk(SSE 空闲时是
+    # 15s 心跳);而本函数会在事件循环线程上被调用(chunks() 的 finally),同步关闭
+    # 等于把 8630 上所有请求冻结到心跳为止,故丢守护线程慢慢关。
+    threading.Thread(target=_close, name="upstream-close", daemon=True).start()
+
+
+def _begin_shutdown() -> None:
+    """Stop producers so long-lived proxy streams reach EOF naturally."""
+    if DRAW_SERVER is not None:
+        DRAW_SERVER.should_exit = True
+    # HTTPResponse.close() can block behind a concurrent read1().  Signal
+    # handlers must never call it directly: stopping the managed API wakes its
+    # SSE generators, which lets the proxy readers observe EOF and close safely.
+    _request_api_stop()
+
+
+class _WebServer(uvicorn.Server):
+    """Notify managed services before Uvicorn begins draining connections."""
+
+    def handle_exit(self, sig, frame) -> None:
+        _begin_shutdown()
+        super().handle_exit(sig, frame)
+
+
 async def _ensure_api_ready() -> None:
     """Start or restart the local API service used by the Web proxy."""
-    global API_PROCESS
+    global API_PROCESS, API_STOP_REQUESTED
     if not START_API:
         return
     if API_PROCESS and API_PROCESS.poll() is None and await asyncio.to_thread(_health):
@@ -85,17 +157,15 @@ async def _ensure_api_ready() -> None:
         if API_PROCESS and API_PROCESS.poll() is None and await asyncio.to_thread(_health):
             return
         if API_PROCESS and API_PROCESS.poll() is None:
-            API_PROCESS.terminate()
-            try:
-                await asyncio.to_thread(API_PROCESS.wait, 5)
-            except subprocess.TimeoutExpired:
-                API_PROCESS.kill()
+            await _stop_api_process()
         elif API_PROCESS and API_PROCESS.returncode is not None:
             print(f"VideoAgents API exited with code {API_PROCESS.returncode}; restarting", flush=True)
+        popen_options = {"start_new_session": True} if os.name != "nt" else {}
         API_PROCESS = subprocess.Popen(
             [sys.executable, "-m", "services.api"], cwd=ROOT, env=_api_env(),
-            stdout=None, stderr=None,
+            stdout=None, stderr=None, **popen_options,
         )
+        API_STOP_REQUESTED = False
         for _ in range(60):
             if await asyncio.to_thread(_health):
                 return
@@ -114,13 +184,8 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
-        global API_PROCESS
-        if API_PROCESS and API_PROCESS.poll() is None:
-            API_PROCESS.terminate()
-            try:
-                await asyncio.to_thread(API_PROCESS.wait, 5)
-            except subprocess.TimeoutExpired:
-                API_PROCESS.kill()
+        _begin_shutdown()
+        await _stop_api_process()
 
 
 app = FastAPI(title="VideoAgents Web", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -170,21 +235,25 @@ async def proxy_api(path: str, request: Request):
         upstream = await asyncio.to_thread(_upstream_request, request.method, url, headers, body)
     except (OSError, urllib.error.URLError) as error:
         return JSONResponse({"detail": f"API service unavailable: {error}"}, status_code=502)
+    _register_upstream(upstream)
 
     response_headers = {
         key: value for key, value in upstream.headers.items() if key.lower() not in HOP_HEADERS
     }
 
     async def chunks():
-        while True:
-            chunk = await asyncio.to_thread(_upstream_chunk, upstream)
-            if not chunk:
-                break
-            yield chunk
+        try:
+            while True:
+                chunk = await asyncio.to_thread(_upstream_chunk, upstream)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            _close_upstream(upstream)
 
     return StreamingResponse(
         chunks(), status_code=upstream.status, headers=response_headers,
-        background=BackgroundTask(upstream.close),
+        background=BackgroundTask(_close_upstream, upstream),
     )
 
 
@@ -276,15 +345,34 @@ draw_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 def main() -> None:
+    global DRAW_SERVER, DRAW_THREAD
     if not STATIC_DIR.is_dir():
         raise SystemExit(f"Static directory does not exist: {STATIC_DIR}")
     if DRAW_PORT:
-        import threading
-        cfg = uvicorn.Config(draw_app, host=DRAW_HOST, port=DRAW_PORT, log_level="warning")
-        threading.Thread(target=uvicorn.Server(cfg).run, daemon=True, name="draw-lan").start()
+        cfg = uvicorn.Config(
+            draw_app, host=DRAW_HOST, port=DRAW_PORT, log_level="warning",
+            timeout_graceful_shutdown=5,
+        )
+        DRAW_SERVER = uvicorn.Server(cfg)
+        DRAW_THREAD = threading.Thread(
+            target=DRAW_SERVER.run, daemon=True, name="draw-lan")
+        DRAW_THREAD.start()
         print(f"VideoAgents Draw canvas (LAN) → http://{DRAW_HOST}:{DRAW_PORT}/draw/<token>")
     print(f"VideoAgents WebUI → http://{WEB_HOST}:{WEB_PORT} (API: {API_ORIGIN})")
-    uvicorn.run(app, host=WEB_HOST, port=WEB_PORT, log_level="info")
+    config = uvicorn.Config(
+        app, host=WEB_HOST, port=WEB_PORT, log_level="info",
+        timeout_graceful_shutdown=5,
+    )
+    try:
+        _WebServer(config).run()
+    except KeyboardInterrupt:
+        # Uvicorn restores and re-raises the captured SIGINT after a graceful
+        # drain; the command-line runner normally suppresses this traceback.
+        pass
+    finally:
+        _begin_shutdown()
+        if DRAW_THREAD and DRAW_THREAD.is_alive():
+            DRAW_THREAD.join(timeout=5)
 
 
 if __name__ == "__main__":

@@ -283,7 +283,7 @@ function installApplicationMenu(): void {
 }
 
 async function applyDesktopUpdate(artifact: DesktopArtifact): Promise<void> {
-  const currentAppPath = path.resolve(process.resourcesPath, '..', '..')
+  const currentAppPath = path.resolve(process.resourcesPath, '..')
   await downloadAndApplyDesktopUpdate(
     app.getPath('userData'), currentAppPath, artifact, updateRuntimeProgress,
   )
@@ -307,7 +307,12 @@ async function offerDesktopUpdate(update: DesktopUpdate, currentVersion: string)
   try {
     await applyDesktopUpdate(artifact)
     closeRuntimeProgress()
-    app.quit()
+    if (process.platform === 'win32') {
+      stopWebServerTree()
+      app.exit(0)
+    } else {
+      app.quit()
+    }
   } catch (error) {
     closeRuntimeProgress()
     const message = error instanceof Error ? error.message : String(error)
@@ -321,7 +326,7 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
   Menu.setApplicationMenu(null)
   let lastError = ''
   while (true) {
-    await dialog.showMessageBox({
+    const answer = await dialog.showMessageBox({
       type: lastError ? 'error' : 'warning',
       title: '必须更新 VideoAgents',
       message: lastError ? '更新失败，请重试' : '当前版本已停止支持',
@@ -329,11 +334,17 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
         ? `${lastError}\n\n当前版本 ${currentVersion}，最低可用版本 ${minimumVersion}。`
         : `当前版本 ${currentVersion} 低于最低可用版本 ${minimumVersion}。`
           + ` 必须更新到 ${artifact.version} 后才能继续使用。`,
-      buttons: ['立即更新'],
+      buttons: ['立即更新', '退出应用'],
       defaultId: 0,
-      cancelId: 0,
+      cancelId: 1,
       noLink: true,
     })
+    if (answer.response !== 0) {
+      requiredDesktopUpdateCanQuit = true
+      stopWebServerTree()
+      app.exit(0)
+      await new Promise<never>(() => {})
+    }
     await showRuntimeProgress(
       '正在强制更新 VideoAgents',
       '更新完成并重新启动前，不能使用应用的其他功能。',
@@ -343,7 +354,12 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
       await applyDesktopUpdate(artifact)
       closeRuntimeProgress()
       requiredDesktopUpdateCanQuit = true
-      app.quit()
+      if (process.platform === 'win32') {
+        stopWebServerTree()
+        app.exit(0)
+      } else {
+        app.quit()
+      }
       await new Promise<never>(() => {})
     } catch (error) {
       closeRuntimeProgress()

@@ -70,46 +70,7 @@ ul.how b,ol.how b{color:var(--text);font-weight:600}
 </header>
 <main>
 
-  <!-- ============ 板块一:ClawBot 微信 ============ -->
-  <div class="card">
-    <h2>💬 ClawBot 微信</h2>
-    <div class="body">
-      <div class="status" id="wx-loading">加载中…</div>
-
-      <!-- 未绑定视图 -->
-      <div class="v" id="wx-unbound">
-        <div class="hint">尚未绑定微信。点击下方按钮生成二维码,用微信扫码并确认后即完成绑定。</div>
-        <div class="row"><button class="primary" id="wx-btn-bind">生成绑定二维码</button>
-          <span class="status" id="wx-bind-st"></span></div>
-        <div class="qr-box" id="wx-qr-box">
-          <div class="qr" id="wx-qr"></div>
-          <div class="status warn" id="wx-qr-st">请用微信扫码并确认绑定…</div>
-        </div>
-      </div>
-
-      <!-- 已绑定视图 -->
-      <div class="v" id="wx-bound">
-        <div class="contact">
-          <div class="avatar">💬</div>
-          <div>
-            <div class="name" id="wx-c-name"></div>
-            <div class="sub" id="wx-c-sub"></div>
-          </div>
-        </div>
-        <div class="row"><label>互通状态</label><span class="status" id="wx-c-ready"></span></div>
-        <div class="row" id="wx-row-err" style="display:none"><label>最近错误</label><span class="status err" id="wx-c-err"></span></div>
-        <div class="row"><label></label>
-          <button class="danger" id="wx-btn-unbind">解除绑定</button>
-          <span class="status" id="wx-unbind-st"></span></div>
-      </div>
-
-      <ul class="how">
-        <li>受微信机器人协议限制,绑定后需先在微信里给机器人发一条消息,系统才能开始向你反向推送。</li>
-      </ul>
-    </div>
-  </div>
-
-  <!-- ============ 板块二:飞书 ============ -->
+  <!-- ============ 板块一:飞书 ============ -->
   <div class="card">
     <h2>✈️ 飞书</h2>
     <div class="body">
@@ -147,6 +108,46 @@ ul.how b,ol.how b{color:var(--text);font-weight:600}
 
       <ul class="how">
         <li>绑定后需在飞书里先给机器人发一条消息(搜索应用名即可找到),系统才能开始向你反向推送。</li>
+        <li>推送图片/视频还需在应用权限里开通 im:resource;之后新完成的人物/场景/道具主图与分镜组视频会自动推送到飞书。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ 板块二:ClawBot 微信 ============ -->
+  <div class="card">
+    <h2>💬 ClawBot 微信</h2>
+    <div class="body">
+      <div class="status" id="wx-loading">加载中…</div>
+
+      <!-- 未绑定视图 -->
+      <div class="v" id="wx-unbound">
+        <div class="hint">尚未绑定微信。点击下方按钮生成二维码,用微信扫码并确认后即完成绑定。</div>
+        <div class="row"><button class="primary" id="wx-btn-bind">生成绑定二维码</button>
+          <span class="status" id="wx-bind-st"></span></div>
+        <div class="qr-box" id="wx-qr-box">
+          <div class="qr" id="wx-qr"></div>
+          <div class="status warn" id="wx-qr-st">请用微信扫码并确认绑定…</div>
+        </div>
+      </div>
+
+      <!-- 已绑定视图 -->
+      <div class="v" id="wx-bound">
+        <div class="contact">
+          <div class="avatar">💬</div>
+          <div>
+            <div class="name" id="wx-c-name"></div>
+            <div class="sub" id="wx-c-sub"></div>
+          </div>
+        </div>
+        <div class="row"><label>互通状态</label><span class="status" id="wx-c-ready"></span></div>
+        <div class="row" id="wx-row-err" style="display:none"><label>最近错误</label><span class="status err" id="wx-c-err"></span></div>
+        <div class="row"><label></label>
+          <button class="danger" id="wx-btn-unbind">解除绑定</button>
+          <span class="status" id="wx-unbind-st"></span></div>
+      </div>
+
+      <ul class="how">
+        <li>受微信机器人协议限制,绑定后需先在微信里给机器人发一条消息,系统才能开始向你反向推送。</li>
       </ul>
     </div>
   </div>

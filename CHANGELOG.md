@@ -4,6 +4,21 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- MiniMax generation provider across all four media types, each as a new tab placed before ComfyUI on the 🎨 generation-models page: image (Image-01, single subject-reference image), video (MiniMax-H3 only — the project resolution tiers are mapped onto H3's two-tier 768P/2K ladder automatically, duration 4–15 integer seconds, first/last frame plus multi-reference image/audio/video modes, native audio-video co-generation, continuity anchor extracted locally from the finished clip), music (Music 3.0/2.6 with the same force-instrumental toggle as Eleven Music; auto-written lyrics when disabled), and TTS (Speech 2.8 family with a voice-library browser backed by `get_voice`). A per-tab API-region selector covers the non-interchangeable global (api.minimax.io) and China (api.minimaxi.com) platforms, `MINIMAX_API_KEY` works as the environment fallback, and MiniMax is selectable in per-agent image/video provider overrides.
+- Pi execution engine: run Agents through the local `pi` CLI with JSON event streaming, session resume, per-run model selection, and dynamic language-model menus populated from the models available to the current Pi login.
+
+### Changed
+
+- Standardized local development and CI/desktop packaging on Node.js 24.19.0 through `.nvmrc`; GitHub Actions now reads the same version file instead of independently pinning Node 22.
+
+### Fixed
+
+- Pi streaming replies no longer render one token per vertical line while a run is active; consecutive text deltas are coalesced into one live text block while preserving tool-event ordering.
+- Long engine/model identifiers in the run panel now truncate with a tooltip instead of pushing durations and per-run stop buttons under the scrollbar.
+- `make run` now exits cleanly on the first Ctrl+C even while the browser's SSE stream is open; shutdown also reaps the managed API, draw sidecar, active Agent process groups, messaging relays, and keep-awake helper, with a bounded timeout fallback.
+
 ## [1.0.12] - 2026-08-05
 
 ### Added
@@ -113,6 +128,12 @@ All notable public changes to VideoAgents are documented here.
 ### Fixed
 
 - WeChat binding: fetching the bind QR code now retries up to 2 times on transient network/SSL EOF errors (proxy hiccups causing peer disconnects) before reporting failure.
+
+### Fixed
+
+- deepagents: raise the default LangGraph `recursion_limit` from 50 to 250 (500 for dispatchers) so multi-tool runs no longer fail with `GraphRecursionError` mid-task.
+- deepagents: use one real host-path view for filesystem tools and shell execution, with explicit workspace/project roots, so absolute project paths no longer alternate between virtual `/data` paths and nested workspace mirrors.
+- orchestrator/dispatch: after errors or rework, do not switch execution engines; force `--engine` overrides are ignored.
 
 ## [1.0.6] - 2026-07-28
 

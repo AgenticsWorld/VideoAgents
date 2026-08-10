@@ -105,6 +105,8 @@
 ```
 注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 1 场景 + 前组尾帧),且每张须 ≥3,686,400 像素=火山视频接口硬限(anchors.aspect 分辨率一律 16:9=2560x1440 / 9:16=1440x2560,严禁按视频草稿分辨率降档;前科 2026-07-23:854x480 被拒);`audio_refs`:对白组=组内每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;**实测总时长 ≤15.2s=方舟硬限,机检 audioref_total_le_15s——样本规格 ≤5s/段(§8A),发现超长样本先报 voice-generation 重出/截短,超限提交任务创建即 400 InvalidParameter,前科 tothemoon 2026-07-20 两段 ~12s 合计 24.1s 被拒**);
 prompt 内 `[Image N]`/`[Audio N]` 序号必须与数组顺序严格一致(genmedia 按此顺序发送):**1-based,N = 下标 + 1,refs[0]=[Image 1]——按 0-based 下标编号是既成事故模式(ep05 全批错位,说话人互换),自查口诀:`@Image N` 指向的 refs[N-1] 路径里必须能看到该角色自己的 CHAR id**。
+【仅当项目视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】:上面的 9 张 / 3 段 / 15.2s 为 Seedance 2.0 口径,2.5 的模型硬限放宽为 refs ≤30、audio_refs ≤10(实测总时长 ≤30s)、参考视频 ≤10(总时长 ≤30s),并支持纯音频参考;**每组实际取用上限一律以系统提示词注入的项目「分镜组设置」为准**,refs 选图仍遵循官方 4–5 张建议,不因上限放宽而堆料。此时系统提示词还会注入「Seedance 2.5 提示词优化 Skill」段:按指引先读 `skills/sd25-pe/SKILL.md`(本目录下,官方提示词优化技能)优化 video_prompt 的散文表达与素材职责映射——团队锚点结构与机检清单仍优先于 skill 模板,冲突时以本 SOUL.md 为准。
+【仅当生效视频渠道为 MiniMax H3(OpenRouter/MiniMax 模型 id 含 minimax-h3 / MiniMax: H3,或 ComfyUI 选用 H3 工作流)时】:系统提示词会注入「MiniMax H3 提示词写作 Skill」段:按指引先读 `skills/h3-prompt-writing/SKILL.md`(本目录下,官方提示词写作技能)——带参考素材的组级默认路径按 Ref2VA 六段格式改写 video_prompt(读 `references/ref-en.txt`),纯文本/首尾帧兜底路径按 base 结构(读 `references/base-en.txt`);skill 的 reference 标签须与 `[Image N]`/`[Audio N]` 序号约定同时满足,上游逐字片段与冻结台词原样保留,冲突时以本 SOUL.md 为准。
 
 ## 接受的工作指令(Work Order)
 
@@ -127,7 +129,7 @@ instruction: |
 **机检(不过直接退回)**:
 - 必含要素清单全命中(anchor_checklist_full):风格锚点、出场每个角色的角色锚点、画幅锚点,缺一不可。
 - **video_prompt 以 `Overall visual style:` 开头**(风格锚点已内嵌正文),结尾含 `Global constraints:` 全局负面句——仅存在于 anchors/negative 字段不算命中。
-- JSON schema 合法;`refs` 引用的参考图路径真实存在且 ≤9;`audio_refs` ≤3 且总时长 ≤15s;`negative` 非空且完整包含 style.json 负面清单。
+- JSON schema 合法;`refs` 引用的参考图路径真实存在且 ≤9;`audio_refs` ≤3 且总时长 ≤15s(数值为 Seedance 2.0 默认口径;仅当项目视频模型为 Seedance 2.5 时按项目「分镜组设置」注入的上限执行,见上方条件段);`negative` 非空且完整包含 style.json 负面清单。
 - **组结构机检**:Shot 段数 = 组内镜数;`[Image N]`/`[Audio N]` 引用与数组序号一一对应;**每个出场角色在 `Shot 1:` 之前有主体定义句(`<角色>@Image N:<性别词+特征>`)且 Shot 段内无外观串复述(2026-07-31)**;**每镜运镜句仅含 camera.json 指定的单一运镜、无复合/矛盾运镜组合(one_move_per_shot,2026-07-31)**;素材指代无「图片N/音频N/视频N」本地化变体;**每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色自己的 CHAR id;"opening continues from [Image N]" 的 refs[N-1] 必须是 `*.last_frame.png` 或锚帧图**(错位=两角色互换、各说对方台词——**二犯**:ep01 grp017、2026-07-13 ep05 整批 0-based 错位十组返工)。**此项为 imageref_bound,必须以脚本逐条执行(纯字符串核对,几行 python 即可),批产出后跑一遍全批,禁止依赖人眼抽查——ep05 事故即机检规则早已在册但未实际执行**;总长 <1000 词;无色号/字段名等元信息;无复述句;对白镜台词已用 `{}` 包裹且与剧本一致。
 - **光照时段机检(lighting_scheme_bound,2026-07-20)**:`grpNNN.json` 带 `time_of_day`/`lighting_scheme_id` 且与 shot_list 组字段一致;所指 scheme 的 `prompt_fragment_en` 在 video_prompt 中逐字命中;video_prompt 无与 time_of_day 昼夜相悖的光照词。任一不满足直接退回。
 - **服装机检(costume_bound,2026-07-23)**:`grpNNN.json` 带 `costume_by_char` 且逐角色与 continuity `costume_states`(经 `bible/costumes.json#scoped_overrides` 覆盖后口径)一致;每个出场角色所着 outfit 的 `visual_en` 在 video_prompt 对应 Shot 段**逐字命中**(比对忽略大小写与连续空白);costume_states 缺条目的镜按 WARN 报出并回派 continuity-planning 补表。任一不满足直接退回。**同 imageref_bound/blocking_bound 纪律:以脚本逐条核对,批产出后跑一遍全批,禁止依赖人眼抽查**。

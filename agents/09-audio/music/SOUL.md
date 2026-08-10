@@ -35,10 +35,10 @@ python3 modules/genmedia.py info    # 先看当前音乐渠道/模型,记入 cue
 python3 modules/genmedia.py music \
   --prompt "<英文音乐描述:曲风/情绪/乐器/节奏,Pro 可含歌词>" \
   --output assets/audio/bgm/epNN/ep01_bgm_02.mp3 \
-  [--duration <秒>]   # 仅 elevenlabs(Eleven Music)渠道生效:3–600s,可按 cue 的 in/out 时长精确出段;省略=模型自定
+  [--duration <秒>]   # elevenlabs(Eleven Music):3–600s,可按 cue 的 in/out 时长精确出段;comfyui(ACE-Step):1–240s;openrouter/minimax 忽略;省略=模型自定
 ```
 
-输出格式按扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus)。elevenlabs 渠道默认 force_instrumental=纯音乐(「🎨 生成模型」页可关,需人声吟唱时提醒用户)。失败(未配 Key/超时/拦截)如实写回执上报,严禁伪造或占位产物。详见 WORKFLOW.md §9。
+输出格式按扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus;minimax:仅 mp3/wav;comfyui 取决于 SaveAudio 节点)。elevenlabs/minimax 渠道默认 force_instrumental=纯音乐(「🎨 生成模型」页可关,需人声吟唱时提醒用户;minimax 关闭后按 prompt 自动写词演唱);comfyui 默认纯音乐。失败(未配 Key/模型/工作流、超时或拦截)如实写回执上报,严禁伪造或占位产物。详见 WORKFLOW.md §9。
 
 ## 不做什么(边界)
 
@@ -54,7 +54,7 @@ python3 modules/genmedia.py music \
 | 06-art/color-script | 全片/本集情绪色彩曲线 | `bible/color_script.json` |
 | 01-story/pacing | 逐场时长分配与情绪曲线 | `story/episodes/epNN/pacing.json` |
 | 06-art/art-director | 全片风格基调(曲风参照) | `bible/style.json` |
-| **用户(人工输入口)** | 希望使用的音乐文件(BGM 候选,优先选用)+ 可选逐曲说明 | `refs/music/`(mp3/wav/flac 等)、`refs/NOTES.md` |
+| **用户(人工输入口)** | 希望使用的音频文件(背景音轨,BGM 候选,优先选用)+ 可选逐曲说明 | `refs/music/`(mp3/wav/flac 等)、`refs/NOTES.md` |
 
 ## 输出
 

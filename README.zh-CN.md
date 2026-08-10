@@ -45,7 +45,7 @@ python apps/web/server.py
 
 浏览器打开 <http://127.0.0.1:8630>，在顶部选择或创建项目，再配置执行引擎与所需生成服务。API 文档位于 <http://127.0.0.1:8630/api/v1/docs>。
 
-WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客户端开发使用 `npm ci && npm run dev:desktop`。桌面客户端默认启动同一个 Web 网关，也可通过 `VIDEOAGENTS_API_URL=https://host` 反向代理远程 API。发布安装包不包含 Python；首次启动且本机没有可用环境时，客户端从 `https://s3.agentics.world/packages/video-agents/metadata.json` 读取当前平台版本并下载安装。Claude、Codex、FFmpeg、模型和 GPU 环境仍按需独立安装。
+WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客户端开发使用 `npm ci && npm run dev:desktop`。桌面客户端默认启动同一个 Web 网关，也可通过 `VIDEOAGENTS_API_URL=https://host` 反向代理远程 API。发布安装包不包含 Python；首次启动且本机没有可用环境时，客户端从 `https://s3.agentics.world/packages/video-agents/metadata.json` 读取当前平台版本并下载安装。Claude、Codex、Kimi、Pi、FFmpeg、模型和 GPU 环境仍按需独立安装。
 
 桌面开发前请确认 `node --version` 不低于 `.nvmrc` 指定的版本；使用 nvm 时先执行 `nvm use`。切换 Node 大版本后必须重新执行 `npm ci`，避免保留由旧 Node 生成的不完整 Electron 安装。
 
@@ -55,12 +55,12 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 仅当 `v*` tag 指向 `main` 中的提交时，工作流才构建桌面端与 Python 环境；两类包统一使用 tag 版本号并发布到 `packages/video-agents/`。Python 环境位于 `python/`，macOS 与 Windows 的带版本桌面 ZIP 分别位于 `mac/` 和 `win/`，共享更新索引为 `metadata.json`；两个桌面目录还会用 `VideoAgents.zip` 覆盖发布最新版本。Release 客户端启动时先读取该 metadata：高于当前版本但仍受支持时提示可选更新；低于其中的 `desktop.minimumVersion` 时，在创建主窗口和启动本地后端之前进入不可跳过的强制更新流程。发布任务从 GitHub Actions 的 `MINIMUM_DESKTOP_VERSION` environment/repository variable 读取该值，未配置时默认为 `1.0.0`；格式错误或最低版本高于本次 release 版本时，发布任务会失败。
 
-macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。
+macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。
 
 本地 `make desktop` 默认设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，不会读取 macOS Keychain 中的 Apple 开发者证书，也不会签名或公证。正式发布签名只由 GitHub Actions 在显式提供 `CSC_LINK`、Apple ID 等 secrets 时启用。
 
 如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行
-命令时不再弹审批（`codex` 与 `deepagents` 引擎本就免审批）：
+命令时不再弹审批（`codex`、`pi` 与 `deepagents` 引擎本就免审批）：
 
 ```bash
 make run-auto
@@ -73,7 +73,6 @@ make run-auto
 可选集成：
 
 ```bash
-python -m pip install -e ".[deepagents]"
 python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
@@ -81,6 +80,31 @@ python -m pip install -e ".[dev]"
 deepagents 引擎需要 Python ≥3.11。若主环境是 3.10，请改用
 `make install-deepagents` 创建专用的 `.venv-deepagents`（运行时自动发现）；
 也可设置 `DEEPAGENTS_PY` 指向任意已安装 deepagents 的解释器。
+
+如需为该独立环境指定 Python 解释器：
+
+```bash
+make install-deepagents DEEPAGENTS_PYTHON=python3.11
+```
+
+如果通过 asdf 管理 Python，可显式选择已安装的 3.11 版本：
+
+```bash
+ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
+```
+
+DeepAgents 默认按 128000 token 上下文运行，单次输出上限 8192 token，图递归上限为 250
+（调度类 Agent 为 500）。runner 还会为系统提示词和工具 schema 预留 16384 token，首轮输入
+超限直接拒绝；约 48000 个估算 token 时压缩历史，只保留约 8000 个估算 token；每次 shell 工具输出最多返回 24000
+字节。为避免无界扫描和递归放大上下文，`glob` 工具与自动泛用子 Agent 默认关闭。
+只有当本地推理服务实际配置了相同或更大的上下文窗口时，才覆盖下面的值：
+
+```bash
+DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
+```
+
+还可调整 `DEEPAGENTS_RECURSION_LIMIT` 与 `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES`；提高任一值都会
+增加运行时间或上下文压力。
 
 FFmpeg 需要通过操作系统包管理器单独安装。
 

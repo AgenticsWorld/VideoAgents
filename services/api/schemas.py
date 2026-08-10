@@ -60,7 +60,7 @@ class AgentModelUpdate(ApiModel):
 
 
 class GlobalModelUpdate(ApiModel):
-    engine: Literal["", "claude", "codex", "kimi", "deepagents"] = ""
+    engine: Literal["", "claude", "codex", "kimi", "pi", "deepagents"] = ""
     model: str = ""
 
 
@@ -72,7 +72,7 @@ class RunCreate(ApiModel):
     agent: str
     message: str = Field(min_length=1)
     project: str = "demo"
-    engine: Literal["claude", "codex", "kimi", "deepagents"] | None = None
+    engine: Literal["claude", "codex", "kimi", "pi", "deepagents"] | None = None
     model: str | None = None
     force: bool = False
     source: str = "user"
@@ -152,6 +152,8 @@ class VersionClone(ApiModel):
 class ResourceConfigUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     claude_probe: bool | None = None
+    codex_probe: bool | None = None
+    kimi_probe: bool | None = None
     kimi_api_key: str | None = Field(default=None, max_length=500)
     openrouter_key: str | None = Field(default=None, max_length=500)
     volc_enabled: bool | None = None
