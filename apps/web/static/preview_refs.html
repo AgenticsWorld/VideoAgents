@@ -59,8 +59,7 @@ input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px 
 .card .note-box{padding:5px 9px 9px;font-size:12.5px;display:flex;flex-direction:column;gap:6px;flex:1}
 .card .note-txt{white-space:pre-wrap;word-break:break-word;color:var(--text)}
 .card .note-txt.none{color:var(--dim);font-style:italic}
-.card .note-row{display:flex;align-items:flex-start;gap:6px}
-.card .note-row .note-txt{flex:1}
+.card .note-row{display:flex;align-items:center;gap:6px}
 .editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .card textarea{width:100%;min-height:64px;resize:vertical;font-size:12.5px}
@@ -107,7 +106,7 @@ function noteBoxHtml(f){
   const txt=f.note
     ?`<span class="note-txt">${esc(f.note)}</span>`
     :`<span class="note-txt none">${esc(t('(未添加注释)'))}</span>`;
-  return `<div class="note-row">${txt}<button class="editbtn copybtn" title="${esc(t('复制在项目中的相对路径'))}">📋</button><button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>`;
+  return `<div class="note-row"><button class="editbtn copybtn" title="${esc(t('复制在项目中的相对路径'))}">📋</button><button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>${txt}`;
 }
 function cardHtml(f){
   let thumb;
