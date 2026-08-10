@@ -3603,9 +3603,10 @@ async def api_preview_videos(project: str = "demo", ep: str = ""):
 
 # ---------------- 工作流预览(DAG 可视化) ----------------
 # 页面 preview_workflow.html:把 runs/dag.json 展开成阶段泳道图,标注状态/依赖/
-# 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻 + data/.videoagents/runs/<run_id>.jsonl
-# 的 total_cost_usd)给未完成任务估时估价。估价口径只含 LLM agent 会话成本,
-# 不含生成侧(Seedance 等)API 计费。
+# 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻,兜底
+# data/.videoagents/runs/<run_id>.jsonl 的 duration_ms)给未完成任务估时。
+# 金额不再统计:成本数据只有 claude 引擎会话上报(codex 等无美元口径),
+# 且会话日志按 TTL 清理,数字必然不完整,展示反而误导。
 
 _WF_TERMINAL_SKIP = {"skipped", "cancelled", "waived"}   # 不再执行,也不进剩余预估
 
@@ -3639,20 +3640,20 @@ def _wf_family_of(n: dict, by_id: dict) -> str:
     return nid
 
 
-def _wf_run_stats(run_id: str | None) -> tuple[float | None, float | None]:
-    """从 data/.videoagents/runs/<run_id>.jsonl 末尾的 result 事件取 (duration_s, cost_usd)。
-    会话日志会按 TTL 清理,查不到属正常。"""
+def _wf_run_stats(run_id: str | None) -> float | None:
+    """从 data/.videoagents/runs/<run_id>.jsonl 末尾的 result 事件取 duration_s
+    (claude/kimi 引擎的 stream-json 才有该事件)。会话日志会按 TTL 清理,查不到属正常。"""
     if not run_id or not re.fullmatch(r"[\w.\-]+", run_id):
-        return None, None
+        return None
     p = RUNS_DIR / f"{run_id}.jsonl"
     if not p.is_file():
-        return None, None
+        return None
     try:
         with open(p, "rb") as f:
             f.seek(max(0, p.stat().st_size - 16384))
             tail = f.read().decode("utf-8", "replace")
     except Exception:
-        return None, None
+        return None
     for line in reversed(tail.splitlines()):
         if '"type":"result"' not in line and '"type": "result"' not in line:
             continue
@@ -3661,20 +3662,20 @@ def _wf_run_stats(run_id: str | None) -> tuple[float | None, float | None]:
         except Exception:
             continue
         dur = obj.get("duration_ms")
-        cost = obj.get("total_cost_usd")
-        return ((dur / 1000) if isinstance(dur, (int, float)) else None,
-                cost if isinstance(cost, (int, float)) else None)
-    return None, None
+        return (dur / 1000) if isinstance(dur, (int, float)) else None
+    return None
 
 
 def _wf_meta_duration(base: Path, task_id: str) -> float | None:
-    """runs/<task_id>/meta.json 的 started_at/ended_at → 秒。"""
+    """runs/<task_id>/meta.json 的 started_at → ended_at/finished_at → 秒。
+    结束字段两种写法并存(WORKFLOW.md §6.1 规约 finished_at,存量多为 ended_at)。"""
     meta = _read_json_safe(base / "runs" / task_id / "meta.json")
     if not isinstance(meta, dict):
         return None
+    ended = meta.get("ended_at") or meta.get("finished_at")
     try:
         t0 = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00"))
-        t1 = datetime.fromisoformat(str(meta["ended_at"]).replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(str(ended).replace("Z", "+00:00"))
         s = (t1 - t0).total_seconds()
         return s if 0 < s < 86400 * 7 else None
     except Exception:
@@ -3695,10 +3696,9 @@ def _preview_workflow(project: str):
             continue
         state = n.get("state") or "pending"
         nid = n["id"]
-        dur, cost = _wf_meta_duration(base, nid), None
-        rdur, rcost = _wf_run_stats(n.get("run_id"))
-        dur = dur if dur is not None else rdur
-        cost = rcost
+        dur = _wf_meta_duration(base, nid)
+        if dur is None:
+            dur = _wf_run_stats(n.get("run_id"))
         note = next((str(n[k]) for k in ("note", "orch_note", "skip_reason",
                                          "fail_reason", "pilot_note") if n.get(k)), "")
         nodes.append({
@@ -3713,12 +3713,11 @@ def _preview_workflow(project: str):
             "outputs": n.get("outputs") or [], "attempt": n.get("attempt"),
             "run_id": n.get("run_id"), "note": note[:400],
             "duration_s": round(dur) if dur is not None else None,
-            "cost_usd": round(cost, 4) if cost is not None else None,
         })
 
-    # 估时估价:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
-    def _avg(rows, key):
-        vals = [r[key] for r in rows if r[key] is not None]
+    # 估时:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
+    def _avg(rows):
+        vals = [r["duration_s"] for r in rows if r["duration_s"] is not None]
         return (sum(vals) / len(vals)) if vals else None
 
     done_rows = [r for r in nodes if r["state"] in _DONE_STATES]
@@ -3735,16 +3734,15 @@ def _preview_workflow(project: str):
         if r["state"] in _DONE_STATES or r["state"] in _WF_TERMINAL_SKIP \
                 or r["state"] in ("expanded", "template"):
             continue
-        for key, out in (("duration_s", "est_duration_s"), ("cost_usd", "est_cost_usd")):
-            for basis, rows in (("family", fam_rows.get(r["family"])),
-                                ("agent", ag_rows.get(r["agent"])),
-                                ("phase", ph_rows.get(r["phase"])),
-                                ("overall", done_rows)):
-                v = _avg(rows or [], key)
-                if v is not None:
-                    r[out] = round(v) if key == "duration_s" else round(v, 4)
-                    r[out.replace("_s", "").replace("_usd", "") + "_basis"] = basis
-                    break
+        for basis, rows in (("family", fam_rows.get(r["family"])),
+                            ("agent", ag_rows.get(r["agent"])),
+                            ("phase", ph_rows.get(r["phase"])),
+                            ("overall", done_rows)):
+            v = _avg(rows or [])
+            if v is not None:
+                r["est_duration_s"] = round(v)
+                r["est_duration_basis"] = basis
+                break
 
     # 汇总:已花费(实际)/ 剩余(估)/ 关键路径(剩余任务沿依赖的最长估时链)
     remaining = [r for r in nodes
@@ -3774,15 +3772,12 @@ def _preview_workflow(project: str):
     summary = {
         "total": len(nodes),
         "spent_duration_s": round(sum(r["duration_s"] or 0 for r in nodes)),
-        "spent_cost_usd": round(sum(r["cost_usd"] or 0 for r in nodes), 2),
         "video_tokens": video_tok,
         "image_tokens": image_tok,
         "llm_tokens": _project_llm_tokens(project),
         "remaining_count": len(remaining),
         "remaining_est_duration_s": round(sum(r.get("est_duration_s") or 0
                                               for r in remaining)),
-        "remaining_est_cost_usd": round(sum(r.get("est_cost_usd") or 0
-                                            for r in remaining), 2),
         "critical_path_s": round(critical_s),
     }
     return {"project": base.name, "nodes": nodes, "summary": summary}

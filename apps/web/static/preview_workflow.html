@@ -39,7 +39,6 @@ header select:hover{border-color:var(--accent)}
 #summary .bar>i{display:block;height:100%;background:var(--green)}
 #summary .st{color:var(--dim)}
 #summary .st b{color:var(--text);font-weight:600}
-#summary .money b{color:var(--yellow)}
 #summary .sig{color:var(--yellow);border:1px solid var(--yellow);border-radius:5px;padding:0 7px;cursor:pointer}
 main{flex:1;display:flex;min-height:0}
 #flow{flex:1;overflow:auto;padding:16px 20px 60px}
@@ -69,7 +68,6 @@ main{flex:1;display:flex;min-height:0}
 .nodechip .nm .tid{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nodechip .ag{color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nodechip .tc{color:var(--dim);font-size:11px;display:flex;gap:8px;flex-wrap:wrap}
-.nodechip .tc .money{color:var(--yellow)}
 .nodechip .mini{height:5px;border-radius:3px;background:var(--bg);margin:4px 0 3px;overflow:hidden;display:flex}
 .nodechip .mini>i{display:block;height:100%}
 .badge{font-size:10px;border-radius:4px;padding:0 4px;flex:none;border:1px solid var(--border);color:var(--dim)}
@@ -150,7 +148,6 @@ function fmtDur(s){
   if(s<3600)return Math.floor(s/60)+'m'+(s%60?String(s%60).padStart(2,'0')+'s':'');
   return (s/3600).toFixed(1)+'h';
 }
-const fmtCost=c=>!c?'':'$'+(c>=10?c.toFixed(1):c.toFixed(2));   // 0/缺失都不显示(会话日志过期后查不到费用属正常)
 const fmtM=v=>v==null?'—':(v/1e6).toFixed(4)+'M';               // token 数按百万(M)为单位,保留 4 位小数
 
 /* 单节点显示状态(叠加"等待签字"派生态:human 节点依赖全通过但未签) */
@@ -200,11 +197,9 @@ function buildUnits(){
       :has('dispatched')?'dispatched':has('blocked')?'blocked'
       :st.every(x=>x==='done'||x==='skipped')?(st.some(x=>x==='done')?'done':'skipped')
       :has('done')?'partial':'pending';
-    // 时间/价格:实际 Σ + 剩余估 Σ
+    // 时间:实际 Σ + 剩余估 Σ
     u.actDur=u.exec.reduce((a,m)=>a+(m.duration_s||0),0);
-    u.actCost=u.exec.reduce((a,m)=>a+(m.cost_usd||0),0);
     u.estDur=u.exec.reduce((a,m)=>a+(m.est_duration_s||0),0);
-    u.estCost=u.exec.reduce((a,m)=>a+(m.est_cost_usd||0),0);
     u.doneCnt=st.filter(x=>x==='done'||x==='skipped').length;
   }
 }
@@ -248,8 +243,8 @@ function chipHtml(u){
     mini=`<div class="mini">${seg(c.done,'var(--green)')}${seg(c.skipped,'#3a4152')}${seg((c.running||0)+(c.dispatched||0),'var(--accent)')}${seg(c.failed,'var(--red)')}${seg(c.blocked,'var(--orange)')}${seg(c.waitsign,'var(--yellow)')}</div>`;
   }
   const tc=[];
-  if(u.actDur||u.actCost)tc.push(`<span title="${esc(t('已发生的实际耗时/费用'))}">✔ ${fmtDur(u.actDur)||'—'}${u.actCost?` <span class="money">${fmtCost(u.actCost)}</span>`:''}</span>`);
-  if(u.estDur||u.estCost)tc.push(`<span title="${esc(t('剩余部分按历史均值预估(仅 LLM 会话成本,不含生成侧 API 计费)'))}">≈ ${fmtDur(u.estDur)||'—'}${u.estCost?` <span class="money">${fmtCost(u.estCost)}</span>`:''}</span>`);
+  if(u.actDur)tc.push(`<span title="${esc(t('已发生的实际耗时'))}">✔ ${fmtDur(u.actDur)}</span>`);
+  if(u.estDur)tc.push(`<span title="${esc(t('剩余部分按历史均值预估'))}">≈ ${fmtDur(u.estDur)}</span>`);
   const ag=u.agent?`<div class="ag" title="${esc(u.agent)}">${esc(u.agent.split('/').pop())}</div>`:'';
   const prog=multi?` <span style="color:var(--dim);font-weight:400">${u.doneCnt}/${n}</span>`:'';
   return `<div class="nodechip s-${u.state}${SEL===u.key?' sel':''}" data-key="${esc(u.key)}" title="${esc(SLABEL[u.state]?t(SLABEL[u.state]):u.state)}">
@@ -278,12 +273,12 @@ function render(){
     const exec=units.flatMap(u=>u.exec);
     const done=exec.filter(m=>m._st==='done'||m._st==='skipped').length;
     const allDone=exec.length>0&&done===exec.length;
-    const estD=units.reduce((a,u)=>a+u.estDur,0), estC=units.reduce((a,u)=>a+u.estCost,0);
-    const actD=units.reduce((a,u)=>a+u.actDur,0), actC=units.reduce((a,u)=>a+u.actCost,0);
+    const estD=units.reduce((a,u)=>a+u.estDur,0);
+    const actD=units.reduce((a,u)=>a+u.actDur,0);
     // 首次渲染:全部完成的阶段默认折叠;之后保持用户的开合选择
     const isClosed=first?allDone:closed.has(ph);
-    const est=[actD||actC?`✔ ${fmtDur(actD)} ${fmtCost(actC)||''}`:'',
-               estD||estC?`≈ ${t('剩余')} ${fmtDur(estD)} ${fmtCost(estC)||''}`:''].filter(Boolean).join(' · ');
+    const est=[actD?`✔ ${fmtDur(actD)}`:'',
+               estD?`≈ ${t('剩余')} ${fmtDur(estD)}`:''].filter(Boolean).join(' · ');
     const rows=levelize(units);
     h+=`<div class="phase${isClosed?' closed':''}" data-ph="${esc(ph)}">
       <h3 onclick="this.parentNode.classList.toggle('closed');drawEdges()">
@@ -316,11 +311,11 @@ function renderSummary(){
     +(failed?`<span class="st" style="color:var(--red)">✖ <b>${failed}</b> ${t('失败')}</span>`:'')
     +(blocked?`<span class="st" style="color:var(--orange)">⛔ <b>${blocked}</b> ${t('受阻')}</span>`:'')
     +signs.map(m=>`<span class="sig" data-key="${esc(m.family)}" title="${esc(m.id)}">✍️ ${esc(m.checkpoint||m.id)}</span>`).join('')
-    +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.spent_cost_usd)||''}</b></span></span>`
+    +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b></span>`
     +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗视频tokens')} <b>${fmtM(s.video_tokens)}</b></span>`
     +`<span class="st" title="${esc(t('项目累计,含重roll/探针/候选'))}">${t('消耗图片tokens')} <b>${fmtM(s.image_tokens)}</b></span>`
     +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
-    +`<span class="st" title="${esc(t('按历史均值预估;仅 LLM 会话成本,不含生成侧 API 计费'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> <span class="money"><b>${fmtCost(s.remaining_est_cost_usd)||''}</b></span> (${s.remaining_count} ${t('个任务')})</span>`
+    +`<span class="st" title="${esc(t('按历史均值预估'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> (${s.remaining_count} ${t('个任务')})</span>`
     +`<span class="st" title="${esc(t('剩余任务沿依赖链的最长估时(并行推进下的理论最短完成时间)'))}">${t('关键路径:')}<b>${fmtDur(s.critical_path_s)||'—'}</b></span>`
     +`<button class="editbtn" id="wfEdit" title="${esc(t('对整个工作流提修改意见,发消息给总制片(由其编辑 runs/dag.json)'))}">✏️ ${esc(t('修改'))}</button>`;
 }
@@ -367,8 +362,8 @@ function renderDetail(){
       ${kv('Agent',esc(u.agent))}
       ${kv(t('阶段'),esc(u.phase+' '+t(PHASE_NAMES[u.phase]||'')))}
       ${kv(t('签字点'),esc(u.checkpoint))}
-      ${kv(t('实际'),u.actDur||u.actCost?esc(`${fmtDur(u.actDur)||'—'} ${fmtCost(u.actCost)||''}`):'')}
-      ${kv(t('预估'),u.estDur||u.estCost?esc(`${fmtDur(u.estDur)||'—'} ${fmtCost(u.estCost)||''}`)+` <span style="color:var(--dim)">(${t('按历史均值')})</span>`:'')}
+      ${kv(t('实际'),u.actDur?esc(fmtDur(u.actDur)):'')}
+      ${kv(t('预估'),u.estDur?esc(fmtDur(u.estDur))+` <span style="color:var(--dim)">(${t('按历史均值')})</span>`:'')}
       ${kv(t('依赖'),u.deps.length?`<span class="deps">${u.deps.map(d=>`<a data-key="${esc(d)}">${esc(d)}</a>`).join('、')}</span>`:'')}
       ${kv(t('产出'),esc((u.base||u.members[0]).outputs.join('、')))}
     </dl>
@@ -377,8 +372,8 @@ function renderDetail(){
     ${members.map(m=>`<div class="member">
       <div class="row1"><span class="dot" style="background:${SCOLOR[m._st]}"></span><span class="tid">${esc(m.id)}</span>${editBtn(m.id)}</div>
       <div class="meta">${esc(t(SLABEL[m._st]||m.state))}${m.attempt>1?` · ${esc(I18N.f(t('第 {n} 次尝试'),{n:m.attempt}))}`:''}
-        ${m.duration_s?` · ✔ ${fmtDur(m.duration_s)}`:''}${m.cost_usd?` ${fmtCost(m.cost_usd)}`:''}
-        ${m.est_duration_s?` · ≈ ${fmtDur(m.est_duration_s)}`:''}${m.est_cost_usd?` ≈${fmtCost(m.est_cost_usd)}`:''}</div>
+        ${m.duration_s?` · ✔ ${fmtDur(m.duration_s)}`:''}
+        ${m.est_duration_s?` · ≈ ${fmtDur(m.est_duration_s)}`:''}</div>
       ${m.note?`<div class="note">${esc(m.note)}</div>`:''}</div>`).join('')}`;
 }
 
