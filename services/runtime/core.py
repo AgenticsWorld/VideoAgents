@@ -473,9 +473,13 @@ DEFAULT_GENCONFIG = {
         # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
         "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
                     "model": "image-01", "custom_model": ""},
+        # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
+        # 账号与 Key 不互通);rh_workflows 为工作区工作流收藏 [{id, note, site}]
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
-                    "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": ""},
+                    "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_ref_workflow_id": "",
+                    "rh_workflows": []},
     },
     "video": {
         "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
@@ -489,7 +493,8 @@ DEFAULT_GENCONFIG = {
         "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
                     "model": "MiniMax-H3", "custom_model": ""},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
-                    "workflow": "", "checkpoint": ""},
+                    "workflow": "", "checkpoint": "",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -505,7 +510,8 @@ DEFAULT_GENCONFIG = {
         # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
-                    "checkpoint": "", "lyrics": "[Instrumental]"},
+                    "checkpoint": "", "lyrics": "[Instrumental]",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
@@ -526,7 +532,8 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
-                    "timbre_catalog": "data/TimbreModel/catalog.json"},
+                    "timbre_catalog": "data/TimbreModel/catalog.json",
+                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -740,13 +747,35 @@ def is_minimax_h3(model: str) -> bool:
     return "minimax-h3" in m
 
 
+# RunningHub(第三方云托管 ComfyUI):.cn/.ai 双站同构,账号与 Key 不互通;
+# 工作流 JSON 经 getJsonApiFormat 拉取后缓存,genmedia 运行时同读该目录
+RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
+RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
+
+
+def _rh_cached_workflow(comfy: dict, wf_id: str = "") -> str:
+    """读 RunningHub 工作流本地缓存文本;缓存缺失返回空串(不发起网络请求)。"""
+    wf_id = str(wf_id or comfy.get("rh_workflow_id") or "").strip()
+    mode = comfy.get("mode") or ""
+    if mode not in RH_BASES or not wf_id:
+        return ""
+    try:
+        return (RH_CACHE_DIR / f"{mode}-{wf_id}.json").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     """生效视频渠道是否 MiniMax H3:OpenRouter/MiniMax 等按模型 id 关键字,
-    ComfyUI 渠道按所选工作流文件名(如 comfy/video-minimax-h3-ref2va-api.json)。"""
+    ComfyUI 本地/Comfy Cloud 按所选工作流文件名(如 comfy/video-minimax-h3-ref2va-api.json),
+    RunningHub 运行方式按缓存的云端工作流 JSON 是否含 MiniMaxH3ReferenceToVideo 节点。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
     if (v.get("provider") or "volcengine") == "comfyui":
-        return is_minimax_h3((v.get("comfyui") or {}).get("workflow") or "")
+        comfy = v.get("comfyui") or {}
+        if (comfy.get("mode") or "local") in RH_BASES:
+            return "MiniMaxH3ReferenceToVideo" in _rh_cached_workflow(comfy)
+        return is_minimax_h3(comfy.get("workflow") or "")
     return is_minimax_h3(active_video_model(cfg))
 
 
@@ -998,6 +1027,17 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
     """阻塞式 HTTP GET(在线程里跑),返回解析后的 JSON。"""
     req = urllib.request.Request(url, headers=headers or {})
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
+    with opener(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def _http_post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 20):
+    """阻塞式 HTTP POST JSON(在线程里跑),返回解析后的 JSON。"""
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json",
+                                          **(headers or {})})
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
     with opener(req, timeout=timeout) as r:
@@ -4360,8 +4400,31 @@ COMFY_CLOUD_API = "https://cloud.comfy.org/api"
 
 
 async def api_test_comfyui(body: dict):
-    """测试 ComfyUI 连接(本地或 Comfy Cloud 云端),并检查关键自定义节点是否可见。"""
-    cloud = (body.get("mode") or "local").strip() == "cloud"
+    """测试 ComfyUI 连接(本地/Comfy Cloud/RunningHub),并检查关键自定义节点是否可见。
+
+    RunningHub 运行方式改测 accountStatus:验证 API Key 并回显余额与并发任务数
+    (无原生 /system_stats、/object_info 可探)。"""
+    mode = (body.get("mode") or "local").strip()
+    if mode in RH_BASES:
+        key = (body.get("api_key") or "").strip()
+        if not key:
+            return {"ok": False, "error": "RunningHub API Key 未填写"}
+        base = RH_BASES[mode]
+        try:
+            resp = await asyncio.to_thread(
+                _http_post_json, base + "/uc/openapi/accountStatus",
+                {"apikey": key, "apiKey": key},
+                {"Authorization": f"Bearer {key}"}, 15)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+        if resp.get("code") != 0:
+            return {"ok": False,
+                    "error": f"code={resp.get('code')}: {str(resp.get('msg'))[:200]}"}
+        data = resp.get("data") or {}
+        return {"ok": True, "runninghub": True,
+                "remain_coins": data.get("remainCoins"),
+                "current_tasks": data.get("currentTaskCounts")}
+    cloud = mode == "cloud"
     if cloud:
         key = (body.get("api_key") or "").strip()
         if not key:
@@ -4439,6 +4502,50 @@ async def api_comfy_workflow_doc(name: str):
     if not doc.is_file():
         raise ServiceError(404, f"no doc for workflow: {base}")
     return {"name": doc.name, "markdown": doc.read_text(encoding="utf-8")}
+
+
+# 网页端工作流详情链接里的数字 ID(如 https://www.runninghub.cn/workflow/19041520…)
+_RH_WF_ID_RE = re.compile(r"(\d{6,})")
+
+
+async def api_rh_workflow_verify(body: dict):
+    """验证 RunningHub 工作流:按 ID(或工作区页面链接)经 getJsonApiFormat 拉取
+    JSON,写入本地缓存(genmedia 运行时同读),并回报检测到的 {{TOKEN}} 占位符,
+    供设置页「验证并添加」收藏。官方 OpenAPI 无工作区列表接口,收藏列表由此累积。"""
+    mode = (body.get("mode") or "").strip()
+    if mode not in RH_BASES:
+        raise ServiceError(400, f"mode must be one of {sorted(RH_BASES)}")
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        return {"ok": False, "error": "RunningHub API Key 未填写"}
+    raw = str(body.get("workflow") or "").strip()
+    m = _RH_WF_ID_RE.search(raw)
+    if not m:
+        return {"ok": False, "error": "未能识别工作流 ID(纯数字,或粘贴工作流页面链接)"}
+    wf_id = m.group(1)
+    try:
+        resp = await asyncio.to_thread(
+            _http_post_json, RH_BASES[mode] + "/api/openapi/getJsonApiFormat",
+            {"apiKey": key, "workflowId": wf_id},
+            {"Authorization": f"Bearer {key}"}, 30)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Connection failed: {str(e)[:200]}"}
+    text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+    if not text:
+        return {"ok": False,
+                "error": f"code={resp.get('code')}: {str(resp.get('msg'))[:200]}"}
+    try:
+        workflow = json.loads(text)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "工作流 JSON 解析失败(接口返回异常内容)"}
+    RH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    (RH_CACHE_DIR / f"{mode}-{wf_id}.json").write_text(text, encoding="utf-8")
+    tokens = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
+    h3 = any(isinstance(n, dict) and n.get("class_type") == "MiniMaxH3ReferenceToVideo"
+             for n in workflow.values()) if isinstance(workflow, dict) else False
+    return {"ok": True, "id": wf_id, "tokens": tokens,
+            "node_count": len(workflow) if isinstance(workflow, dict) else 0,
+            "minimax_h3": h3}
 
 
 async def api_agents(refresh: bool = False):

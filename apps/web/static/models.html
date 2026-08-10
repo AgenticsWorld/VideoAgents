@@ -541,21 +541,28 @@ function buildPanel(kind,p){
       intro+'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
     // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构)
+    // / RunningHub 国内(.cn)/国际(.ai) 第三方云托管(私有 REST,工作流存云端工作区)
     const mr=el('div',{className:'row'});
     mr.appendChild(el('label',{},'运行方式'));
     const msel=el('select',{id:`${kind}-comfy-mode`});
-    [['local','本地'],['cloud','云端(Comfy Cloud)']].forEach(([v,l])=>
+    [['local','本地'],['cloud','云端(Comfy Cloud)'],
+     ['rh_cn','RunningHub 国内(.cn)'],['rh_ai','RunningHub 国际(.ai)']].forEach(([v,l])=>
       msel.appendChild(el('option',{value:v,textContent:t(l)})));
     msel.onchange=()=>comfyModeUI(kind);
     mr.appendChild(msel);
     const tb=el('button',{},'测试连接');
     tb.onclick=async()=>{
+      const mode=$(`#${kind}-comfy-mode`).value;
       const st=$(`#${kind}-comfy-status`);st.className='status';st.textContent='连接中…';
       const r=await api('/api/v1/providers/comfyui/test',{
-        mode:$(`#${kind}-comfy-mode`).value,
-        url:$(`#${kind}-comfy-url`).value.trim(),
-        api_key:$(`#${kind}-comfy-cloudkey`).value.trim()}).catch(e=>({ok:false,error:e.message}));
-      if(r.ok){
+        mode,url:$(`#${kind}-comfy-url`).value.trim(),
+        api_key:(mode==='cloud'?$(`#${kind}-comfy-cloudkey`):$(`#${kind}-comfy-rhkey`)).value.trim()})
+        .catch(e=>({ok:false,error:e.message}));
+      if(r.ok&&r.runninghub){
+        st.className='status ok';
+        st.textContent=I18N.f('✓ Key 有效 · 余额 {c} RH 币 · 运行中任务 {n}',
+          {c:r.remain_coins??'?',n:r.current_tasks??'?'});
+      }else if(r.ok){
         st.className='status ok';
         st.textContent=I18N.f('✓ 已连接({v})· {n} 个 checkpoint',
           {v:r.version+(r.devices?.length?' · '+r.devices.join(', '):''),n:r.checkpoints.length});
@@ -573,14 +580,44 @@ function buildPanel(kind,p){
     const kr=keyRow(`${kind}-comfy-cloudkey`,'Comfy Cloud API Key');
     kr.id=`${kind}-comfy-cloudkey-row`;kr.style.display='none';
     d.appendChild(kr);
+    const rk=keyRow(`${kind}-comfy-rhkey`,'RunningHub API Key');
+    rk.id=`${kind}-comfy-rhkey-row`;rk.style.display='none';
+    d.appendChild(rk);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
-    const cr=el('div',{className:'row'});
+    // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
+    const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
+    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':'云端工作流'));
+    const rsel=el('select',{id:`${kind}-comfy-rhwf`});
+    rw.appendChild(rsel);
+    const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
+    rmb.onclick=()=>rhRemoveWf(kind);
+    rw.appendChild(rmb);d.appendChild(rw);
+    if(kind==='image'){
+      const rw2=el('div',{className:'row',id:'image-comfy-rhrefwf-row',style:'display:none'});
+      rw2.appendChild(el('label',{},'云端图生图工作流'));
+      rw2.appendChild(el('select',{id:'image-comfy-rhrefwf'}));
+      d.appendChild(rw2);
+    }
+    const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
+    ar.appendChild(el('label',{},'添加工作流'));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhadd`,
+      placeholder:t('工作流 ID 或页面链接')}));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhnote`,
+      placeholder:t('备注名(可选)'),style:'max-width:130px'}));
+    const ab=el('button',{},'验证并添加');
+    ab.onclick=()=>rhAddWf(kind);
+    ar.appendChild(ab);d.appendChild(ar);
+    const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
     cr.appendChild(el('label',{},'Checkpoint'));
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
     sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
     cr.appendChild(sel);d.appendChild(cr);
-    d.appendChild(wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图工作流':'工作流 JSON'));
-    if(kind==='image')d.appendChild(wfRow(kind,'image-comfy-ref-wf','图生图工作流'));
+    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图工作流':'工作流 JSON');
+    wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
+    if(kind==='image'){
+      const wr2=wfRow(kind,'image-comfy-ref-wf','图生图工作流');
+      wr2.id='image-comfy-ref-wf-row';d.appendChild(wr2);
+    }
     d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},
       '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
       +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
@@ -588,13 +625,23 @@ function buildPanel(kind,p){
       '工作流在 <a href="https://cloud.comfy.org/" target="_blank">Comfy Cloud</a> 官方云端执行,无需本地部署;'
       +'API Key 在 <a href="https://platform.comfy.org" target="_blank">platform.comfy.org</a> 创建(需 Comfy Cloud 订阅,与网页版共用月度额度,免费档无 API 权限);'
       +'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-cn`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.cn/workspace" target="_blank">RunningHub 国内站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
+      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-ai`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.ai/workspace" target="_blank">RunningHub 国际站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
+      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
     if(kind==='music'){
-      d.appendChild(el('div',{className:'hint'},
+      d.appendChild(el('div',{className:'hint',id:'music-comfy-hint-extra'},
         '推荐 <code>comfy/music-ace-step-v1-api.json</code> (ACE-Step 3.5B);'
         +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长'));
     }
     if(kind==='tts'){
-      d.appendChild(el('div',{className:'hint'},
+      d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-extra'},
         '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
         +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
     }
@@ -602,13 +649,77 @@ function buildPanel(kind,p){
   return d;
 }
 
-/* ComfyUI 运行方式切换:本地=服务地址,云端=Comfy Cloud API Key,提示随之切换 */
+/* ComfyUI 运行方式切换:本地=服务地址,Comfy Cloud=云端 Key,RunningHub=RH Key+云端工作流收藏 */
 function comfyModeUI(kind){
-  const cloud=$(`#${kind}-comfy-mode`).value==='cloud';
-  $(`#${kind}-comfy-url-row`).style.display=cloud?'none':'';
+  const m=$(`#${kind}-comfy-mode`).value;
+  const cloud=m==='cloud',rh=m==='rh_cn'||m==='rh_ai';
+  $(`#${kind}-comfy-url-row`).style.display=(cloud||rh)?'none':'';
   $(`#${kind}-comfy-cloudkey-row`).style.display=cloud?'':'none';
-  $(`#${kind}-comfy-hint-local`).style.display=cloud?'none':'';
+  $(`#${kind}-comfy-rhkey-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhwf-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-ckpt-row`).style.display=rh?'none':'';
+  $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
+  if(kind==='image'){
+    $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
+    $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
+  }
+  $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
+  $(`#${kind}-comfy-hint-rh-cn`).style.display=m==='rh_cn'?'':'none';
+  $(`#${kind}-comfy-hint-rh-ai`).style.display=m==='rh_ai'?'':'none';
+  const ex=$(`#${kind}-comfy-hint-extra`);if(ex)ex.style.display=rh?'none':'';
+  // 收藏按站点过滤(.cn/.ai 账号不互通),切换运行方式后重建下拉
+  if(rh){
+    fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
+    if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  }
+}
+
+/* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
+let RH_WFS={image:[],video:[],music:[],tts:[]};
+
+function fillRhWfSelect(kind,id,value){
+  const mode=$(`#${kind}-comfy-mode`).value;
+  // 仅 RunningHub 模式按站点过滤(.cn/.ai 不互通);其他模式保留全部选项,
+  // 避免隐藏状态下保存把已选工作流 ID 意外清空
+  const site=(mode==='rh_cn'||mode==='rh_ai')?mode:null;
+  const sel=$('#'+id);sel.innerHTML='';
+  sel.appendChild(el('option',{value:'',textContent:t('(未选择)')}));
+  (RH_WFS[kind]||[]).filter(w=>!site||!w.site||w.site===site).forEach(w=>
+    sel.appendChild(el('option',{value:String(w.id),
+      textContent:(w.note?w.note+' · ':'')+w.id})));
+  sel.value=value&&[...sel.options].some(o=>o.value===String(value))?String(value):'';
+}
+
+async function rhAddWf(kind){
+  const st=$(`#${kind}-comfy-status`);
+  const mode=$(`#${kind}-comfy-mode`).value;
+  const input=$(`#${kind}-comfy-rhadd`).value.trim();
+  if(!input){st.className='status err';st.textContent='✗ '+t('请先填写工作流 ID 或页面链接');return}
+  st.className='status';st.textContent=t('验证中…');
+  const r=await api('/api/v1/providers/runninghub/workflow',{
+    mode,api_key:$(`#${kind}-comfy-rhkey`).value.trim(),workflow:input})
+    .catch(e=>({ok:false,error:e.message}));
+  if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('验证失败'));return}
+  const note=$(`#${kind}-comfy-rhnote`).value.trim();
+  RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
+  RH_WFS[kind].push({id:r.id,note,site:mode});
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,r.id);
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  $(`#${kind}-comfy-rhadd`).value='';$(`#${kind}-comfy-rhnote`).value='';
+  st.className='status ok';
+  st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
+    +(r.tokens?.length?' · '+t('占位符:')+r.tokens.join(', ')
+      :' · '+t('未检测到占位符,请在工作流节点中写入 {{PROMPT}} 等输入位后重新验证'));
+}
+
+function rhRemoveWf(kind){
+  const sel=$(`#${kind}-comfy-rhwf`);const v=sel.value;if(!v)return;
+  const mode=$(`#${kind}-comfy-mode`).value;
+  RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -978,9 +1089,14 @@ function loadIntoForm(){
       if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
-      $(`#${kind}-comfy-mode`).value=c.comfyui.mode==='cloud'?'cloud':'local';
+      $(`#${kind}-comfy-mode`).value=['local','cloud','rh_cn','rh_ai'].includes(c.comfyui.mode)
+        ?c.comfyui.mode:'local';
       $(`#${kind}-comfy-cloudkey`).value=c.comfyui.cloud_api_key||'';
+      $(`#${kind}-comfy-rhkey`).value=c.comfyui.rh_api_key||'';
+      RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
       comfyModeUI(kind);
+      fillRhWfSelect(kind,`${kind}-comfy-rhwf`,c.comfyui.rh_workflow_id||'');
+      if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',c.comfyui.rh_ref_workflow_id||'');
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
       fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
       if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
@@ -1039,8 +1155,12 @@ function collect(){
                url:$(`#${kind}-comfy-url`).value.trim(),
                workflow:pickWf(`${kind}-comfy-wf`),
                checkpoint:$(`#${kind}-comfy-ckpt`).value,
+               rh_api_key:$(`#${kind}-comfy-rhkey`).value.trim(),
+               rh_workflow_id:$(`#${kind}-comfy-rhwf`).value,
+               rh_workflows:RH_WFS[kind]||[],
                ...(kind==='image'?{
                  ref_workflow:pickWf('image-comfy-ref-wf'),
+                 rh_ref_workflow_id:$('#image-comfy-rhrefwf').value,
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',

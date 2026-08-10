@@ -375,6 +375,11 @@ async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_comfyui(body.model_dump())
 
 
+@api.post("/providers/runninghub/workflow", tags=["providers"])
+async def rh_workflow_verify(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_rh_workflow_verify(body.model_dump())
+
+
 @api.get("/comfy/workflows", tags=["providers"])
 async def comfy_workflows() -> dict[str, Any]:
     return await core.api_comfy_workflows()

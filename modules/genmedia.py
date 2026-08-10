@@ -50,13 +50,14 @@ Python:
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
-        / comfyui(本地或 Comfy Cloud 云端)
+        / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
   视频: openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
-        / comfyui(本地/云端,需配置 API 格式工作流 JSON)
+        / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
+        RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
   超分: minimax(POST /v2/video_regeneration,Regenerate-2K 异步任务;模型固定
         MiniMax-H3,分辨率固定 2K;仅此一个渠道)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
@@ -494,6 +495,173 @@ def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
 # /upload/image /object_info 均在 /api 前缀下),X-API-Key 单头鉴权。
 COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
 
+# RunningHub(第三方云托管 ComfyUI):非原生同构 API,走私有 REST
+# (/task/openapi/create → status 轮询 → outputs 取 fileUrl 下载);工作流须先保存在
+# RunningHub 工作区并跑通,提交时以 workflow 字段整体覆盖云端模板(占位符替换与本地
+# 同一套 {{TOKEN}} 约定)。鉴权 = Authorization Bearer 头 + 请求体 apiKey 双重携带;
+# .cn 与 .ai 双站同构,账号与 Key 不互通。
+RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
+RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
+RH_POLL_INTERVAL = 5
+
+
+def _comfy_is_rh(cfg) -> bool:
+    """ComfyUI 渠道运行方式是否 RunningHub(rh_cn/rh_ai)。"""
+    return (cfg.get("mode") or "local") in RH_BASES
+
+
+def _rh_ctx(cfg) -> tuple[str, str, str]:
+    """RunningHub 生效上下文:返回 (base, api_key, workflow_id),缺配置即报错。"""
+    base = RH_BASES[cfg.get("mode")]
+    key = (cfg.get("rh_api_key") or "").strip() or os.environ.get("RUNNINGHUB_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 ComfyUI 渠道选"
+                           "对应运行方式并填写(或设环境变量 RUNNINGHUB_API_KEY)")
+    wf_id = str(cfg.get("rh_workflow_id") or "").strip()
+    if not wf_id:
+        raise RuntimeError("RunningHub 未选择云端工作流:「🎨 生成模型」页 ComfyUI 渠道"
+                           "粘贴工作区的工作流 ID 验证并添加后选择")
+    return base, key, wf_id
+
+
+def _rh_post(base: str, key: str, path: str, payload: dict, timeout: int = 300) -> dict:
+    """RunningHub OpenAPI POST;网络层错误转为可读 RuntimeError,业务码由调用方判定。"""
+    try:
+        return _post_json(base + path, {"apiKey": key, **payload},
+                          {"Authorization": f"Bearer {key}"}, timeout=timeout)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"RunningHub 服务不可达:{base}{path}") from exc
+
+
+def _rh_upload(cfg, path: str) -> str:
+    """上传输入文件到 RunningHub(≤30MB),返回 fileName(填入 LoadImage/LoadAudio 值位)。"""
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f"输入文件不存在: {path}")
+    if p.stat().st_size > 30 * 1024 * 1024:
+        raise RuntimeError(f"RunningHub 上传限制单文件 30MB,超限: {path}")
+    base, key, _ = _rh_ctx(cfg)
+    boundary = uuid.uuid4().hex
+    mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    parts = []
+    for name, value in (("apiKey", key), ("fileType", "input")):
+        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; "
+                     f"name=\"{name}\"\r\n\r\n{value}\r\n".encode())
+    parts.append((f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
+                  f"filename=\"{p.name}\"\r\nContent-Type: {mime}\r\n\r\n").encode())
+    parts.append(p.read_bytes())
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    resp = json.loads(_request(base + "/task/openapi/upload", b"".join(parts),
+                               {"Content-Type": f"multipart/form-data; boundary={boundary}",
+                                "Authorization": f"Bearer {key}"}, timeout=300))
+    if resp.get("code") != 0 or not (resp.get("data") or {}).get("fileName"):
+        raise RuntimeError(f"RunningHub 上传失败(code={resp.get('code')}):"
+                           f"{str(resp.get('msg'))[:300]}")
+    return resp["data"]["fileName"]
+
+
+def _rh_workflow_text(cfg) -> str:
+    """RunningHub 工作流 JSON 文本:本地缓存优先(设置页验证时写入),缺失则拉取补缓存。"""
+    base, key, wf_id = _rh_ctx(cfg)
+    cache = RH_CACHE_DIR / f"{cfg.get('mode')}-{wf_id}.json"
+    if cache.is_file():
+        return cache.read_text(encoding="utf-8")
+    resp = _rh_post(base, key, "/api/openapi/getJsonApiFormat", {"workflowId": wf_id})
+    text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+    if not text:
+        raise RuntimeError(f"RunningHub 获取工作流 {wf_id} 失败(code={resp.get('code')}):"
+                           f"{str(resp.get('msg'))[:300]}")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(text, encoding="utf-8")
+    return text
+
+
+def _rh_failed_reason(base: str, key: str, task_id: str) -> str:
+    """任务失败后从 outputs 接口尽力取 failedReason(805 响应携带)。"""
+    try:
+        resp = _rh_post(base, key, "/task/openapi/outputs", {"taskId": task_id}, timeout=60)
+    except RuntimeError:
+        return "未能获取失败详情"
+    detail = resp.get("data") or resp.get("msg") or resp
+    return json.dumps(detail, ensure_ascii=False)[:800]
+
+
+def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
+    """RunningHub 建任务,轮询状态,下载首个匹配产物到 output(对应 _comfy_run)。"""
+    audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
+    video_exts = (".mp4", ".webm", ".gif", ".webp")
+    want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
+    base, key, wf_id = _rh_ctx(cfg)
+    resp = _rh_post(base, key, "/task/openapi/create",
+                    {"workflowId": wf_id,
+                     "workflow": json.dumps(workflow, ensure_ascii=False)})
+    if resp.get("code") != 0:
+        raise RuntimeError(f"RunningHub 建任务失败(code={resp.get('code')}):"
+                           f"{str(resp.get('msg'))[:400]}")
+    data = resp.get("data") or {}
+    task_id = data.get("taskId")
+    if not task_id:
+        raise RuntimeError(f"RunningHub 建任务未返回 taskId:{json.dumps(resp)[:400]}")
+    if str(data.get("taskStatus") or "").upper() == "FAILED":
+        raise RuntimeError("RunningHub 工作流校验失败:"
+                           f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
+    deadline = time.time() + COMFY_TIMEOUT
+    while time.time() < deadline:
+        time.sleep(RH_POLL_INTERVAL)
+        st = _rh_post(base, key, "/task/openapi/status", {"taskId": task_id}, timeout=60)
+        status = st.get("data")
+        if isinstance(status, dict):  # 容错:部分版本把状态包在对象里
+            status = status.get("taskStatus") or status.get("status")
+        status = str(status or "").upper()
+        if status in ("SUCCESS",):
+            return _rh_download_output(base, key, task_id, output, want_video, want_audio)
+        if status == "FAILED":
+            raise RuntimeError(f"RunningHub 任务失败(taskId={task_id}):"
+                               f"{_rh_failed_reason(base, key, task_id)}")
+        if status in ("QUEUED", "RUNNING", "CREATE"):
+            continue
+        if st.get("code") != 0:
+            raise RuntimeError(f"RunningHub 状态查询失败(code={st.get('code')}):"
+                               f"{str(st.get('msg'))[:400]}")
+    try:
+        _rh_post(base, key, "/task/openapi/cancel", {"taskId": task_id}, timeout=30)
+    except RuntimeError:
+        pass
+    raise RuntimeError(f"RunningHub 超时({COMFY_TIMEOUT}s,taskId={task_id},已尝试取消)")
+
+
+def _rh_download_output(base: str, key: str, task_id: str, output: str,
+                        want_video: bool, want_audio: bool) -> str:
+    """SUCCESS 后取 outputs 清单,按目标类型择优下载(fileUrl 为公网直链)。"""
+    files = []
+    for _ in range(6):  # SUCCESS 与 outputs 可见之间偶有间隙(804=running),短暂重试
+        resp = _rh_post(base, key, "/task/openapi/outputs", {"taskId": task_id}, timeout=60)
+        if resp.get("code") == 0 and resp.get("data"):
+            files = [f for f in resp["data"] if isinstance(f, dict) and f.get("fileUrl")]
+            if files:
+                break
+        if resp.get("code") not in (0, 804):
+            raise RuntimeError(f"RunningHub 获取产物失败(code={resp.get('code')}):"
+                               f"{str(resp.get('msg'))[:400]}")
+        time.sleep(RH_POLL_INTERVAL)
+    if not files:
+        raise RuntimeError(f"RunningHub 任务成功但无文件产物(taskId={task_id};"
+                           "工作流缺 SaveImage/SaveVideo/SaveAudio 落盘节点?)")
+    audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
+    video_exts = (".mp4", ".webm", ".gif", ".webp")
+
+    def _rank(f):
+        name = (f.get("fileUrl") or "").split("?", 1)[0].lower()
+        ext = "." + str(f.get("fileType") or "").lower().lstrip(".")
+        if want_audio:
+            return 0 if name.endswith(audio_exts) or ext in audio_exts else 1
+        if want_video:
+            return 0 if name.endswith(video_exts) or ext in video_exts else 1
+        return 0 if name.endswith((".png", ".jpg", ".jpeg", ".webp")) else 1
+
+    pick = sorted(files, key=_rank)[0]
+    return _save(_request(pick["fileUrl"], timeout=600), output)
+
 
 def _comfy_endpoint(cfg) -> tuple[str, dict]:
     """ComfyUI 渠道生效端点:mode=cloud 固定 Comfy Cloud,否则用配置的本地 url。
@@ -621,14 +789,22 @@ def _h3_dimensions(aspect: str, resolution: str, default_short_side: int = 480) 
 
 
 def _is_h3_ref2va_workflow(cfg: dict) -> bool:
-    wf_path = (cfg.get("workflow") or "").strip()
-    if not wf_path:
-        return False
-    path = _resolve_comfy_workflow_path(wf_path)
-    try:
-        workflow = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
+    if _comfy_is_rh(cfg):
+        # RunningHub:按缓存/拉取的云端工作流 JSON 判定;配置不全或拉取失败时不按 H3
+        # 处理,由后续 _comfy_workflow/_rh_run 报出可读的配置错误
+        try:
+            workflow = json.loads(_rh_workflow_text(cfg))
+        except (RuntimeError, json.JSONDecodeError):
+            return False
+    else:
+        wf_path = (cfg.get("workflow") or "").strip()
+        if not wf_path:
+            return False
+        path = _resolve_comfy_workflow_path(wf_path)
+        try:
+            workflow = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
     return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
                for node in workflow.values())
 
@@ -834,50 +1010,60 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
     raise RuntimeError(f"ComfyUI 超时({COMFY_TIMEOUT}s)")
 
 
+def _comfy_fill_workflow(text: str, tokens: dict) -> dict:
+    """工作流 JSON 文本的 {{TOKEN}} 占位符替换;残留占位符视为缺少输入。"""
+    try:
+        workflow = json.loads(text)
+    except json.JSONDecodeError:
+        # Backward compatibility for templates with unquoted numeric placeholders.
+        workflow = None
+    if workflow is not None:
+        def replace_tokens(value):
+            if isinstance(value, dict):
+                return {k: replace_tokens(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [replace_tokens(v) for v in value]
+            if not isinstance(value, str):
+                return value
+            for k, v in tokens.items():
+                marker = "{{%s}}" % k
+                if value == marker:
+                    return v
+                if marker in value:
+                    value = value.replace(marker, str(v))
+            return value
+
+        workflow = replace_tokens(workflow)
+        missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}",
+                                              json.dumps(workflow))))
+        if missing:
+            raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
+        return workflow
+    for k, v in tokens.items():
+        if isinstance(v, str):
+            text = text.replace("{{%s}}" % k, json.dumps(v)[1:-1])  # 转义后嵌入字符串位
+        else:
+            text = text.replace("{{%s}}" % k, str(v))
+    missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
+    if missing:
+        raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
+    return json.loads(text)
+
+
 def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
-    """加载配置的工作流模板并做占位符替换;图像无模板时用内置 txt2img。"""
+    """加载配置的工作流模板并做占位符替换;图像无模板时用内置 txt2img。
+
+    RunningHub 运行方式改用云端工作流(rh_workflow_id 经 getJsonApiFormat 拉取,
+    本地缓存),占位符约定与本地模板完全一致。
+    """
+    if _comfy_is_rh(cfg):
+        return _comfy_fill_workflow(_rh_workflow_text(cfg), tokens)
     wf_path = (cfg.get("workflow") or "").strip()
     if wf_path:
         p = _resolve_comfy_workflow_path(wf_path)
         if not p.is_file():
             raise RuntimeError(f"配置的 ComfyUI 工作流不存在: {wf_path}")
-        text = p.read_text()
-        try:
-            workflow = json.loads(text)
-        except json.JSONDecodeError:
-            # Backward compatibility for templates with unquoted numeric placeholders.
-            workflow = None
-        if workflow is not None:
-            def replace_tokens(value):
-                if isinstance(value, dict):
-                    return {k: replace_tokens(v) for k, v in value.items()}
-                if isinstance(value, list):
-                    return [replace_tokens(v) for v in value]
-                if not isinstance(value, str):
-                    return value
-                for k, v in tokens.items():
-                    marker = "{{%s}}" % k
-                    if value == marker:
-                        return v
-                    if marker in value:
-                        value = value.replace(marker, str(v))
-                return value
-
-            workflow = replace_tokens(workflow)
-            missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}",
-                                                  json.dumps(workflow))))
-            if missing:
-                raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
-            return workflow
-        for k, v in tokens.items():
-            if isinstance(v, str):
-                text = text.replace("{{%s}}" % k, json.dumps(v)[1:-1])  # 转义后嵌入字符串位
-            else:
-                text = text.replace("{{%s}}" % k, str(v))
-        missing = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
-        if missing:
-            raise RuntimeError(f"ComfyUI 工作流缺少输入:{', '.join(missing)}")
-        return json.loads(text)
+        return _comfy_fill_workflow(p.read_text(), tokens)
     if kind == "video":
         raise RuntimeError("ComfyUI 视频生成必须在「🎨 生成模型」页配置工作流 JSON(API 格式)")
     if kind in ("music", "tts"):
@@ -902,7 +1088,10 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
 
 
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
-    base, hdrs = _comfy_endpoint(cfg)
+    rh = _comfy_is_rh(cfg)
+    base = hdrs = None
+    if not rh:
+        base, hdrs = _comfy_endpoint(cfg)
     negative_mode = cfg.get("negative_mode") or "conditioning"
     if negative and negative_mode == "append_exclusions":
         prompt = f"{prompt}\nExclude from the image: {negative}"
@@ -916,12 +1105,22 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     if refs:
         if len(refs) > 1:
             raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref")
-        ref_workflow = (cfg.get("ref_workflow") or "").strip()
-        if not ref_workflow:
-            raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
-        tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
-        workflow_cfg = {**cfg, "workflow": ref_workflow}
+        if rh:
+            ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
+            if not ref_id:
+                raise RuntimeError("ComfyUI 图片渠道未配置 RunningHub 图生图工作流"
+                                   "(「🎨 生成模型」页验证并添加后选择)")
+            workflow_cfg = {**cfg, "rh_workflow_id": ref_id}
+            tokens["FIRST_FRAME"] = _rh_upload(cfg, refs[0])
+        else:
+            ref_workflow = (cfg.get("ref_workflow") or "").strip()
+            if not ref_workflow:
+                raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
+            tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
+            workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
+    if rh:
+        return _rh_run(workflow_cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
@@ -1510,7 +1709,14 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
                    video_refs=None):
-    base, hdrs = _comfy_endpoint(cfg)
+    rh = _comfy_is_rh(cfg)
+    base = hdrs = None
+    if not rh:
+        base, hdrs = _comfy_endpoint(cfg)
+
+    def upload(path):
+        return _rh_upload(cfg, path) if rh else _comfy_upload(base, path, hdrs)
+
     h3 = _is_h3_ref2va_workflow(cfg)
     if h3:
         if first or last or video_refs:
@@ -1519,7 +1725,10 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
-        _comfy_h3_validate_components(base, settings, hdrs)
+        if not rh:
+            # RunningHub 无 /object_info 组件预检;节点/模型缺失由建任务 promptTips
+            # 或任务失败详情报出
+            _comfy_h3_validate_components(base, settings, hdrs)
         prompt = _h3_reference_tags(prompt)
         width, height = _h3_dimensions(aspect, resolution)
         tokens = {
@@ -1532,9 +1741,10 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
             "H3_STEPS": settings["steps"], "H3_REF_IMAGE_SIZE": settings["ref_image_size"],
         }
         wf = _comfy_workflow(cfg, tokens, "video")
-        _add_h3_references(wf, [_comfy_upload(base, path, hdrs) for path in refs or []],
-                           [_comfy_upload(base, path, hdrs) for path in audio_refs or []])
-        saved = _comfy_run(base, wf, output, want_video=True, headers=hdrs)
+        _add_h3_references(wf, [upload(path) for path in refs or []],
+                           [upload(path) for path in audio_refs or []])
+        saved = (_rh_run(cfg, wf, output, want_video=True) if rh
+                 else _comfy_run(base, wf, output, want_video=True, headers=hdrs))
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
@@ -1546,10 +1756,12 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
     if aspect in ASPECT_SIZES:
         tokens["WIDTH"], tokens["HEIGHT"] = ASPECT_SIZES[aspect]
     if first:
-        tokens["FIRST_FRAME"] = _comfy_upload(base, first, hdrs)
+        tokens["FIRST_FRAME"] = upload(first)
     if last:
-        tokens["LAST_FRAME"] = _comfy_upload(base, last, hdrs)
+        tokens["LAST_FRAME"] = upload(last)
     wf = _comfy_workflow(cfg, tokens, "video")
+    if rh:
+        return _rh_run(cfg, wf, output, want_video=True)
     return _comfy_run(base, wf, output, want_video=True, headers=hdrs)
 
 
@@ -1658,10 +1870,13 @@ def _music_minimax(cfg, prompt, output, duration_s=None):
 # 工作流须以 SaveAudio 或 SaveAudioMP3 落盘,见 comfy/music-ace-step-v1-api.json。
 
 def _music_comfyui(cfg, prompt, output, duration_s=None):
-    base, hdrs = _comfy_endpoint(cfg)
-    if not (cfg.get("workflow") or "").strip():
-        raise RuntimeError("ComfyUI 音乐生成必须在「🎨 生成模型」页配置工作流 JSON"
-                           "(推荐 comfy/music-ace-step-v1-api.json)")
+    rh = _comfy_is_rh(cfg)
+    base = hdrs = None
+    if not rh:
+        base, hdrs = _comfy_endpoint(cfg)
+        if not (cfg.get("workflow") or "").strip():
+            raise RuntimeError("ComfyUI 音乐生成必须在「🎨 生成模型」页配置工作流 JSON"
+                               "(推荐 comfy/music-ace-step-v1-api.json)")
     duration = max(1.0, min(240.0, float(duration_s))) if duration_s and duration_s > 0 else 30.0
     # ACE-Step 纯音乐用 [Instrumental];若配置 force_instrumental=false 且未给歌词,
     # 仍走 instrumental,避免空歌词触发节点 assert。
@@ -1673,6 +1888,8 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
         "SEED": random.randint(0, 2**31 - 1),
     }
     wf = _comfy_workflow(cfg, tokens, "music")
+    if rh:
+        return _rh_run(cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
@@ -1849,10 +2066,13 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
 
 def _tts_comfyui(cfg, text, output, voice, speed, instructions,
                  character="", variant="", project=""):
-    base, hdrs = _comfy_endpoint(cfg)
-    if not (cfg.get("workflow") or "").strip():
-        raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
-                           "(推荐 comfy/tts-indextts2-api.json)")
+    rh = _comfy_is_rh(cfg)
+    base = hdrs = None
+    if not rh:
+        base, hdrs = _comfy_endpoint(cfg)
+        if not (cfg.get("workflow") or "").strip():
+            raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
+                               "(推荐 comfy/tts-indextts2-api.json)")
     selection = _resolve_tts_reference(
         cfg, text, output, voice, character, variant, project, instructions)
     ref = selection["path"]
@@ -1862,7 +2082,7 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
     if instructions:
         print("[genmedia] ComfyUI TTS 不支持 instructions 参数,已忽略"
               "(情绪请用工作流内 Emotion 节点或改 prompt 文本)", file=sys.stderr)
-    ref_audio = _comfy_upload(base, ref, hdrs)
+    ref_audio = _rh_upload(cfg, ref) if rh else _comfy_upload(base, ref, hdrs)
     tokens = {
         "TEXT": text,
         "PROMPT": text,  # 兼容把文本写在 PROMPT 位的工作流
@@ -1873,7 +2093,8 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
     }
     wf = _comfy_workflow(cfg, tokens, "tts")
     try:
-        return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
+        return (_rh_run(cfg, wf, output, want_video=False) if rh
+                else _comfy_run(base, wf, output, want_video=False, headers=hdrs))
     except RuntimeError as exc:
         raise RuntimeError(
             "ComfyUI TTS 后端执行失败"
