@@ -354,8 +354,37 @@ function mmBaseRow(kind){
   d.appendChild(el('label',{},'接口区域'));
   const sel=el('select',{id:`${kind}-mm-base`});
   MINIMAX_BASES.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  sel.onchange=()=>mmRegionUI(kind);
   d.appendChild(sel);
   return d;
+}
+
+/* MiniMax 海外版/国内版账号与 Key 不互通:两区域 Key 分别保存(api_key_io/api_key_cn),
+   按「接口区域」只显示并取用对应区域的输入框 */
+function mmKeyRows(kind){
+  const io=keyRow(`${kind}-mm-key-io`,'API Key (minimax.io)');
+  io.id=`${kind}-mm-key-io-row`;
+  const cn=keyRow(`${kind}-mm-key-cn`,'API Key (minimaxi.com)');
+  cn.id=`${kind}-mm-key-cn-row`;cn.style.display='none';
+  return [io,cn];
+}
+
+function mmIsCn(kind){return $(`#${kind}-mm-base`).value.includes('minimaxi.com')}
+
+function mmRegionUI(kind){
+  const cn=mmIsCn(kind);
+  $(`#${kind}-mm-key-io-row`).style.display=cn?'none':'';
+  $(`#${kind}-mm-key-cn-row`).style.display=cn?'':'none';
+}
+
+function mmKey(kind){
+  return $(`#${kind}-mm-key-${mmIsCn(kind)?'cn':'io'}`).value.trim();
+}
+
+/* RunningHub 国内站/国际站账号与 Key 不互通:两站 Key 分别保存
+   (rh_api_key_cn/rh_api_key_ai),按「运行方式」取用对应站点的输入框 */
+function rhKey(kind){
+  return $(`#${kind}-comfy-rhkey-${$(`#${kind}-comfy-mode`).value==='rh_ai'?'ai':'cn'}`).value.trim();
 }
 
 function fillSelect(sel,options,value,customValue){
@@ -493,8 +522,8 @@ function buildPanel(kind,p){
       +'「默认音色」用账号内音色的 voice_id;<a href="https://elevenlabs.io/app/voice-library" target="_blank">Voice Library</a> 的公共音色须先「加入」到账号才能合成,'
       +'上面搜索选中后点「➕ 加入并设为默认」一步完成;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
   }else if(p==='minimax'&&kind==='tts'){
-    d.appendChild(keyRow('tts-mm-key','MiniMax API Key'));
     d.appendChild(mmBaseRow('tts'));
+    mmKeyRows('tts').forEach(r=>d.appendChild(r));
     d.appendChild(modelRow('tts-mm-model','tts-mm-custom'));
     const vr=el('div',{className:'row'});
     vr.appendChild(el('label',{},'默认音色'));
@@ -521,8 +550,8 @@ function buildPanel(kind,p){
       'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
       +'克隆音色需先在平台创建;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
   }else if(p==='minimax'){
-    d.appendChild(keyRow(`${kind}-mm-key`,'MiniMax API Key'));
     d.appendChild(mmBaseRow(kind));
+    mmKeyRows(kind).forEach(r=>d.appendChild(r));
     d.appendChild(modelRow(`${kind}-mm-model`,`${kind}-mm-custom`));
     if(kind==='music'){
       const ir=el('div',{className:'row'});
@@ -556,7 +585,7 @@ function buildPanel(kind,p){
       const st=$(`#${kind}-comfy-status`);st.className='status';st.textContent='连接中…';
       const r=await api('/api/v1/providers/comfyui/test',{
         mode,url:$(`#${kind}-comfy-url`).value.trim(),
-        api_key:(mode==='cloud'?$(`#${kind}-comfy-cloudkey`):$(`#${kind}-comfy-rhkey`)).value.trim()})
+        api_key:mode==='cloud'?$(`#${kind}-comfy-cloudkey`).value.trim():rhKey(kind)})
         .catch(e=>({ok:false,error:e.message}));
       if(r.ok&&r.runninghub){
         st.className='status ok';
@@ -580,9 +609,12 @@ function buildPanel(kind,p){
     const kr=keyRow(`${kind}-comfy-cloudkey`,'Comfy Cloud API Key');
     kr.id=`${kind}-comfy-cloudkey-row`;kr.style.display='none';
     d.appendChild(kr);
-    const rk=keyRow(`${kind}-comfy-rhkey`,'RunningHub API Key');
-    rk.id=`${kind}-comfy-rhkey-row`;rk.style.display='none';
-    d.appendChild(rk);
+    const rkc=keyRow(`${kind}-comfy-rhkey-cn`,'API Key (runninghub.cn)');
+    rkc.id=`${kind}-comfy-rhkey-cn-row`;rkc.style.display='none';
+    d.appendChild(rkc);
+    const rka=keyRow(`${kind}-comfy-rhkey-ai`,'API Key (runninghub.ai)');
+    rka.id=`${kind}-comfy-rhkey-ai-row`;rka.style.display='none';
+    d.appendChild(rka);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
     // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
     const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
@@ -655,7 +687,8 @@ function comfyModeUI(kind){
   const cloud=m==='cloud',rh=m==='rh_cn'||m==='rh_ai';
   $(`#${kind}-comfy-url-row`).style.display=(cloud||rh)?'none':'';
   $(`#${kind}-comfy-cloudkey-row`).style.display=cloud?'':'none';
-  $(`#${kind}-comfy-rhkey-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhkey-cn-row`).style.display=m==='rh_cn'?'':'none';
+  $(`#${kind}-comfy-rhkey-ai-row`).style.display=m==='rh_ai'?'':'none';
   $(`#${kind}-comfy-rhwf-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-ckpt-row`).style.display=rh?'none':'';
@@ -699,7 +732,7 @@ async function rhAddWf(kind){
   if(!input){st.className='status err';st.textContent='✗ '+t('请先填写工作流 ID 或页面链接');return}
   st.className='status';st.textContent=t('验证中…');
   const r=await api('/api/v1/providers/runninghub/workflow',{
-    mode,api_key:$(`#${kind}-comfy-rhkey`).value.trim(),workflow:input})
+    mode,api_key:rhKey(kind),workflow:input})
     .catch(e=>({ok:false,error:e.message}));
   if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('验证失败'));return}
   const note=$(`#${kind}-comfy-rhnote`).value.trim();
@@ -1034,11 +1067,11 @@ function mmRenderLib(){
   });
 }
 async function mmLoadLib(){
-  if(!$('#tts-mm-key').value.trim())return mmStatus(t('✗ 先填 API Key'),false);
+  if(!mmKey('tts'))return mmStatus(t('✗ 先填 API Key'),false);
   mmStatus(t('拉取音色库中…'));
   try{
     const r=await api('/api/v1/providers/minimax/voices',
-      {api_key:$('#tts-mm-key').value.trim(),api_base:$('#tts-mm-base').value});
+      {api_key:mmKey('tts'),api_base:$('#tts-mm-base').value});
     MM_LIB=r.voices||[];
     mmRenderLib();
     mmStatus(MM_LIB.length
@@ -1079,8 +1112,11 @@ function loadIntoForm(){
                  c.byteplus.model,c.byteplus.custom_model);
     }
     if(SECTIONS[kind].providers.includes('minimax')&&c.minimax){
-      $(`#${kind}-mm-key`).value=c.minimax.api_key||'';
+      // 两区域 Key 分别保存;旧版单一 api_key 兜底填入两侧(旧行为即两区域同 Key)
+      $(`#${kind}-mm-key-io`).value=c.minimax.api_key_io||c.minimax.api_key||'';
+      $(`#${kind}-mm-key-cn`).value=c.minimax.api_key_cn||c.minimax.api_key||'';
       $(`#${kind}-mm-base`).value=c.minimax.api_base||MINIMAX_BASES[0][0];
+      mmRegionUI(kind);
       fillSelect($(`#${kind}-mm-model`),
                  kind==='image'?MINIMAX_IMAGE_MODELS:kind==='video'?MINIMAX_VIDEO_MODELS:
                  kind==='music'?MINIMAX_MUSIC_MODELS:MINIMAX_TTS_MODELS,
@@ -1092,7 +1128,9 @@ function loadIntoForm(){
       $(`#${kind}-comfy-mode`).value=['local','cloud','rh_cn','rh_ai'].includes(c.comfyui.mode)
         ?c.comfyui.mode:'local';
       $(`#${kind}-comfy-cloudkey`).value=c.comfyui.cloud_api_key||'';
-      $(`#${kind}-comfy-rhkey`).value=c.comfyui.rh_api_key||'';
+      // 两站 Key 分别保存;旧版单一 rh_api_key 兜底填入两侧(旧行为即两站同 Key)
+      $(`#${kind}-comfy-rhkey-cn`).value=c.comfyui.rh_api_key_cn||c.comfyui.rh_api_key||'';
+      $(`#${kind}-comfy-rhkey-ai`).value=c.comfyui.rh_api_key_ai||c.comfyui.rh_api_key||'';
       RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
       comfyModeUI(kind);
       fillRhWfSelect(kind,`${kind}-comfy-rhwf`,c.comfyui.rh_workflow_id||'');
@@ -1155,7 +1193,8 @@ function collect(){
                url:$(`#${kind}-comfy-url`).value.trim(),
                workflow:pickWf(`${kind}-comfy-wf`),
                checkpoint:$(`#${kind}-comfy-ckpt`).value,
-               rh_api_key:$(`#${kind}-comfy-rhkey`).value.trim(),
+               rh_api_key_cn:$(`#${kind}-comfy-rhkey-cn`).value.trim(),
+               rh_api_key_ai:$(`#${kind}-comfy-rhkey-ai`).value.trim(),
                rh_workflow_id:$(`#${kind}-comfy-rhwf`).value,
                rh_workflows:RH_WFS[kind]||[],
                ...(kind==='image'?{
@@ -1176,7 +1215,8 @@ function collect(){
       c.byteplus={api_key:$(`#${kind}-bp-key`).value.trim(),
         ...pickModel(`#${kind}-bp-model`,`#${kind}-bp-custom`)};
     if(SECTIONS[kind].providers.includes('minimax')){
-      c.minimax={api_key:$(`#${kind}-mm-key`).value.trim(),
+      c.minimax={api_key_io:$(`#${kind}-mm-key-io`).value.trim(),
+        api_key_cn:$(`#${kind}-mm-key-cn`).value.trim(),
         api_base:$(`#${kind}-mm-base`).value,
         ...pickModel(`#${kind}-mm-model`,`#${kind}-mm-custom`)};
       if(kind==='music')c.minimax.force_instrumental=$('#music-mm-instr').checked;

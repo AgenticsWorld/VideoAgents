@@ -197,6 +197,9 @@ def get_config(kind: str) -> dict:
     if ov and isinstance(cfg.get(ov), dict):
         provider = ov
     pc = dict(cfg[provider])
+    if provider == "minimax":
+        # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
+        pc["api_key"] = _minimax_key(pc)
     if provider != "comfyui":
         pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS[provider], "")
         if not pc["api_key"]:
@@ -461,6 +464,13 @@ def _minimax_base(cfg) -> str:
     return (cfg.get("api_base") or MINIMAX_DEFAULT_BASE).rstrip("/")
 
 
+def _minimax_key(pc) -> str:
+    """按「接口区域」(api_base)取对应区域的 Key:国内版 minimaxi.com → api_key_cn,
+    否则海外版 → api_key_io;旧版单一 api_key 兜底(环境变量兜底由调用方处理)。"""
+    field = "api_key_cn" if "minimaxi.com" in str(pc.get("api_base") or "") else "api_key_io"
+    return str(pc.get(field) or pc.get("api_key") or "").strip()
+
+
 def _minimax_post(cfg, path: str, payload: dict, timeout: int = 300) -> dict:
     """MiniMax API POST:HTTP 200 也可能业务失败,统一校验 base_resp.status_code。"""
     resp = _post_json(_minimax_base(cfg) + path, payload,
@@ -521,8 +531,13 @@ def _comfy_is_rh(cfg) -> bool:
 
 def _rh_ctx(cfg) -> tuple[str, str, str]:
     """RunningHub 生效上下文:返回 (base, api_key, workflow_id),缺配置即报错。"""
-    base = RH_BASES[cfg.get("mode")]
-    key = (cfg.get("rh_api_key") or "").strip() or os.environ.get("RUNNINGHUB_API_KEY", "").strip()
+    mode = cfg.get("mode")
+    base = RH_BASES[mode]
+    # .cn/.ai 账号与 Key 不互通,按站点分别保存(rh_api_key_cn/rh_api_key_ai);
+    # 旧版单一 rh_api_key 兜底
+    key = (str(cfg.get(f"rh_api_key_{mode[3:]}") or "").strip()
+           or str(cfg.get("rh_api_key") or "").strip()
+           or os.environ.get("RUNNINGHUB_API_KEY", "").strip())
     if not key:
         raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 ComfyUI 渠道选"
                            "对应运行方式并填写(或设环境变量 RUNNINGHUB_API_KEY)")
@@ -1679,10 +1694,11 @@ def _minimax_upscale_config() -> dict:
         pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("minimax") or {})
     except Exception:
         pc = {}
-    pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS["minimax"], "")
+    pc["api_key"] = _minimax_key(pc) or os.environ.get(ENV_KEYS["minimax"], "")
     if not pc["api_key"]:
         raise RuntimeError("超分渠道 minimax 未配置 API Key(Web 控制台「🎨 生成模型」"
-                           "视频生成的 MiniMax 标签页填入,或设环境变量 MINIMAX_API_KEY)")
+                           "视频生成的 MiniMax 标签页填入当前接口区域的 Key,"
+                           "或设环境变量 MINIMAX_API_KEY)")
     return {"provider": "minimax", **pc}
 
 
