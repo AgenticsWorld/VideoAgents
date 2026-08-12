@@ -119,6 +119,14 @@ try:
 except ModuleNotFoundError:  # python modules/genmedia.py ...
     from timbre_selector import select_timbre
 
+try:  # 诊断事件旁路(设置「高级→诊断数据」,本地落盘不出网);缺席时静默跳过
+    from modules import diagnostics as _diagnostics
+except Exception:
+    try:
+        import diagnostics as _diagnostics
+    except Exception:
+        _diagnostics = None
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 RUNTIME_DIR = Path(os.environ.get(
@@ -2606,12 +2614,38 @@ def main():
     pm.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()
+    t0 = time.time()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
          "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts}[args.cmd](args)
     except RuntimeError as e:
+        _diag_report(args, t0, error=str(e))
         print(f"生成失败: {e}", file=sys.stderr)
         sys.exit(1)
+    else:
+        _diag_report(args, t0)
+
+
+def _diag_report(args, t0: float, error: str = "") -> None:
+    """诊断事件旁路(modules/diagnostics.py):白名单字段本地落盘,错误消息
+    模板化后只存模板与签名,不出网。info/dry-run 不记;渠道/模型 best-effort,
+    读不到(如配置缺失本身就是报错原因)不影响记录。"""
+    if _diagnostics is None or args.cmd == "info" or getattr(args, "dry_run", False):
+        return
+    provider = model = ""
+    try:
+        if args.cmd == "upscale":
+            provider, model = "minimax", MINIMAX_UPSCALE_MODEL
+        else:
+            cfg = get_config(args.cmd)
+            provider = cfg.get("provider", "")
+            model = str(cfg.get("model") or "")
+            if not model and cfg.get("workflow"):   # comfyui:只取工作流文件名,不落路径
+                model = Path(str(cfg["workflow"])).name
+    except Exception:
+        pass
+    _diagnostics.record_gen_event(args.cmd, not error, error, provider, model,
+                                  duration_s=time.time() - t0)
 
 
 if __name__ == "__main__":

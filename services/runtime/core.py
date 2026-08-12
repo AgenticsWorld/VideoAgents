@@ -2209,6 +2209,13 @@ async def execute_run(run: dict, message: str, model: str | None):
                         {"role": "assistant", "text": reply,
                          "run_id": run["id"], "status": run["status"]})
             publish_run(run)
+            try:
+                # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
+                # 白名单字段本地落盘,错误消息模板化、项目名只存哈希;绝不出网
+                from modules.diagnostics import record_run_event
+                record_run_event(run)
+            except Exception:
+                pass
             # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
             # 人工闸门静默留在 DAG 中。这里只补建签字单，绝不自动改 gate state。
             try:
@@ -6041,6 +6048,69 @@ async def api_agent_memory_set(body: dict):
     STATE["agent_memory"] = bool(body["agent_memory"])
     save_state(STATE)
     return await api_agent_memory_get()
+
+
+# ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
+# 本地结构化事件(run 收敛处与 genmedia CLI 出口按「字段白名单」落盘
+# telemetry/outbox,错误消息模板化聚签名)与经验卡(runs/<task_id>/lesson.md,
+# WORKFLOW.md §6.1)的汇总、预览与手动导出。只落盘、只导出,永不自动上传——
+# 导出 zip 由用户自行提交(如 GitHub issue 附件)。实现在 modules/diagnostics.py
+# (genmedia 子进程与本服务共用);懒加载 + 采集端全静默,旁路故障不影响主链路。
+
+
+def _diagnostics():
+    from modules import diagnostics
+    return diagnostics
+
+
+def diagnostics_enabled() -> bool:
+    """诊断采集开关(默认开;仅本地落盘,无任何上传)。"""
+    return bool(STATE.get("diagnostics_enabled", True))
+
+
+async def api_diagnostics_get():
+    d = await asyncio.to_thread(lambda: _diagnostics().summary())
+    d["enabled"] = diagnostics_enabled()   # STATE 为准,避开文件读取的 TTL 缓存
+    return d
+
+
+async def api_diagnostics_set(body: dict):
+    if body.get("diagnostics_enabled") is None:
+        raise ServiceError(400, "diagnostics_enabled must be a boolean")
+    STATE["diagnostics_enabled"] = bool(body["diagnostics_enabled"])
+    save_state(STATE)
+    return {"enabled": diagnostics_enabled()}
+
+
+async def api_diagnostics_lessons():
+    return {"lessons": await asyncio.to_thread(lambda: _diagnostics().scan_lessons())}
+
+
+async def api_diagnostics_clear():
+    return {"ok": True,
+            "removed": await asyncio.to_thread(lambda: _diagnostics().clear_outbox())}
+
+
+async def api_diagnostics_export(body: dict):
+    """构建诊断导出包:事件(可选)+ 聚合摘要 + 用户勾选的经验卡。
+    经验卡路径在 diagnostics 侧对照 scan_lessons() 白名单,防任意文件打包。"""
+    lessons = body.get("lessons") or []
+    if not isinstance(lessons, list) or not all(isinstance(x, str) for x in lessons):
+        raise ServiceError(400, "lessons must be a list of paths")
+    include_events = bool(body.get("include_events", True))
+    path = Path(await asyncio.to_thread(
+        lambda: _diagnostics().build_export(lessons, include_events)))
+    return {"ok": True, "name": path.name, "bytes": path.stat().st_size}
+
+
+def diagnostics_export_path(name: str) -> Path:
+    """导出包下载路径校验:仅放行 telemetry/export 下本服务生成的文件名格式。"""
+    if not re.fullmatch(r"diagnostics-\d{8}-\d{6}\.zip", name or ""):
+        raise ServiceError(400, "invalid export name")
+    p = _diagnostics().EXPORT_DIR / name
+    if not p.is_file():
+        raise ServiceError(404, "export not found")
+    return p
 
 
 async def api_usage():
