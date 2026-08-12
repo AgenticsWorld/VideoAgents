@@ -466,9 +466,10 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-260128",
+        # 默认 Lite:含人脸图片默认可过 Seedance 审核
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-lite-260128",
                        "custom_model": ""},
-        "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
+        "byteplus": {"api_key": "", "model": "seedream-5-0-lite-260128",
                      "custom_model": ""},
         # MiniMax:api_base 按「接口区域」二选一(海外 api.minimax.io/国内 api.minimaxi.com,
         # 两平台账号与 Key 不互通,api_key_io/api_key_cn 按区域分别保存,按 api_base 取用);

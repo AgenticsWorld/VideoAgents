@@ -120,7 +120,7 @@ window.I18N_DICT = {
 "Seedream 4.0(文/图生图)": "Seedream 4.0 (văn bản/ảnh sang ảnh)",
 "Seedream 4.5 · 人像/美学/小文字渲染优秀": "Seedream 4.5 · Chân dung/thẩm mỹ/kết xuất chữ nhỏ xuất sắc",
 "Seedream 4.5(文/图生图/多图融合)": "Seedream 4.5 (văn bản/ảnh sang ảnh/hòa trộn nhiều ảnh)",
-"Seedream 5.0 Lite(轻量版)": "Seedream 5.0 Lite (bản nhẹ)",
+"Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)": "Seedream 5.0 Lite (bản nhẹ; khuyến nghị cho ảnh có khuôn mặt — mặc định qua được kiểm duyệt Seedance)",
 "Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)": "Seedream 5.0 Pro (mới nhất, văn bản/ảnh sang ảnh/nhiều ảnh tham chiếu, ảnh ra ≥1280×720)",
 "Seedream 5.0(文/图生图/多参考图/组图)": "Seedream 5.0 (văn bản/ảnh sang ảnh/nhiều ảnh tham chiếu/bộ ảnh)",
 "Sora 2 Pro · 故事理解/镜头语言,创意短片": "Sora 2 Pro · Hiểu câu chuyện/ngôn ngữ ống kính, phim ngắn sáng tạo",

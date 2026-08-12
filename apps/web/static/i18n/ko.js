@@ -120,7 +120,7 @@ window.I18N_DICT = {
 "Seedream 4.0(文/图生图)": "Seedream 4.0(텍스트/이미지 → 이미지)",
 "Seedream 4.5 · 人像/美学/小文字渲染优秀": "Seedream 4.5 · 인물/미학/작은 글자 렌더링 우수",
 "Seedream 4.5(文/图生图/多图融合)": "Seedream 4.5(텍스트/이미지 → 이미지/다중 이미지 융합)",
-"Seedream 5.0 Lite(轻量版)": "Seedream 5.0 Lite(경량 버전)",
+"Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)": "Seedream 5.0 Lite(경량 버전, 얼굴 포함 이미지에 추천, 기본적으로 Seedance 심사 통과)",
 "Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)": "Seedream 5.0 Pro(최신, 텍스트/이미지 → 이미지/다중 참고 이미지, 출력 ≥1280×720)",
 "Seedream 5.0(文/图生图/多参考图/组图)": "Seedream 5.0(텍스트/이미지 → 이미지/다중 참고 이미지/이미지 세트)",
 "Sora 2 Pro · 故事理解/镜头语言,创意短片": "Sora 2 Pro · 스토리 이해/카메라 연출, 크리에이티브 단편",

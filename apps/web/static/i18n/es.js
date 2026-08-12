@@ -120,7 +120,7 @@ window.I18N_DICT = {
 "Seedream 4.0(文/图生图)": "Seedream 4.0 (texto/imagen a imagen)",
 "Seedream 4.5 · 人像/美学/小文字渲染优秀": "Seedream 4.5 · retratos/estética/excelente renderizado de texto pequeño",
 "Seedream 4.5(文/图生图/多图融合)": "Seedream 4.5 (texto/imagen a imagen/fusión de varias imágenes)",
-"Seedream 5.0 Lite(轻量版)": "Seedream 5.0 Lite (versión ligera)",
+"Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)": "Seedream 5.0 Lite (versión ligera; recomendada para imágenes con rostros — pasa la revisión de Seedance por defecto)",
 "Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)": "Seedream 5.0 Pro (el más reciente, texto/imagen a imagen/varias imágenes de referencia, salida ≥1280×720)",
 "Seedream 5.0(文/图生图/多参考图/组图)": "Seedream 5.0 (texto/imagen a imagen/varias referencias/series de imágenes)",
 "Sora 2 Pro · 故事理解/镜头语言,创意短片": "Sora 2 Pro · comprensión narrativa/lenguaje de cámara, cortos creativos",
