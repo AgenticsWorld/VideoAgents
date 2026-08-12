@@ -108,7 +108,10 @@ def _ytdlp_base() -> list[str]:
     if _YTDLP_JS_FLAG is None:
         r = _run(["yt-dlp", "--help"], timeout=60)
         _YTDLP_JS_FLAG = "--js-runtimes" in (r.stdout or "") and tool_available("node")
-    cmd = ["yt-dlp", "--no-playlist", "--no-warnings"]
+    # socket-timeout/retries:代理出口不稳时连接会无限 stall(2026-08-13 实测挂满
+    # 外层 3600s 超时才被杀),30s 无数据即断开重试,快败快重试
+    cmd = ["yt-dlp", "--no-playlist", "--no-warnings",
+           "--socket-timeout", "30", "--retries", "3"]
     if _YTDLP_JS_FLAG:
         cmd += ["--js-runtimes", "node"]
     return cmd
