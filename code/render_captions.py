@@ -6,6 +6,10 @@
 逐组烧录/SFX 轨/花字版封装一律走本 CLI——幂等回执与机检口径建立在统一编码参数上。
 
 子命令:
+  assets-sync                        从远端素材仓库同步字体/音效到本地缓存并重扫 manifest
+                                     (仓库配置:modules/caption_assets.json 或
+                                     $VIDEOAGENTS_CAPTION_ASSETS_REPO=owner/name[@branch];
+                                     未配置时跳过,继续用本地素材)
   fonts-scan                         扫系统字体 + data/fonts/(外置,gitignored)→ data/fonts/manifest.json
   sfx-scan                           扫 data/sfx/ → data/sfx/manifest.json
   render     --project X --ep epNN [--grp grpNNN ...] [--force]
@@ -74,19 +78,24 @@ def cmd_render(args, proj):
     _require_toolchain()
     fonts = _load_manifest(FONTS_MANIFEST, "fonts")
     data, shot_list = _load_ep_inputs(proj, args.ep)
-    issues = cap.validate_captions(data, shot_list, fonts_manifest=fonts)
+    issues = cap.validate_captions(data, shot_list, fonts_manifest=fonts,
+                                   proj_root=proj)
     if issues:
         print("[FAIL] captions.json 未过 design 校验:")
         for i in issues:
             print("   -", i)
         raise SystemExit(1)
     by_grp = _groups_with_captions(data)
-    targets = args.grp or sorted(by_grp)
+    cards_by_grp = {}
+    for cd in data.get("cards", []) or []:
+        cards_by_grp.setdefault(cd.get("group_id"), []).append(cd)
+    targets = args.grp or sorted(set(by_grp) | set(cards_by_grp))
     presets = data.get("style_presets") or {}
     n_r = n_s = 0
     for grp in targets:
-        caps = by_grp.get(grp)
-        if not caps:
+        caps = by_grp.get(grp) or []
+        cards = cards_by_grp.get(grp) or []
+        if not caps and not cards:
             print(f"[SKIP ] {grp}: 本组无花字,不产副本")
             continue
         clip = proj / "assets" / "clips" / args.ep / f"{grp}.mp4"
@@ -94,7 +103,7 @@ def cmd_render(args, proj):
             raise SystemExit(f"[FAIL] 缺终版组 clip {clip}")
         out = proj / "assets" / "clips_caption" / args.ep / f"{grp}.mp4"
         r = cap.render_group(clip, out, caps, presets, fonts, FONTS_DIR,
-                             force=args.force)
+                             force=args.force, cards=cards, proj_root=proj)
         n_r += r["status"] == "rendered"
         n_s += r["status"] == "skipped"
         print(f"[{'RENDER' if r['status'] == 'rendered' else 'SKIP  '}] {grp} → {r['out']}")
@@ -157,12 +166,26 @@ def cmd_ass_only(args, proj):
 
 
 def main():
-    cmds = {"fonts-scan": None, "sfx-scan": None, "render": cmd_render,
+    cmds = {"fonts-scan": None, "sfx-scan": None, "assets-sync": None,
+            "render": cmd_render,
             "sfx-track": cmd_sfx_track, "mux": cmd_mux, "ass-only": cmd_ass_only}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         raise SystemExit(f"用法:render_captions.py {{{'|'.join(cmds)}}} ...")
     sub = sys.argv.pop(1)
+    if sub == "assets-sync":
+        # 从远端素材仓库(modules/caption_assets.json 或
+        # $VIDEOAGENTS_CAPTION_ASSETS_REPO)同步字体/音效,并重扫两份 manifest
+        r = cap.sync_assets(FONTS_DIR, SFX_DIR)
+        if r.get("skipped"):
+            print(f"[SKIP ] 远端素材库未配置({r['reason']}),继续使用本地素材")
+            return
+        print(f"[SYNC ] {r['repo']}@{r['branch']}:下载 {r['downloaded']},"
+              f"移除 {r['removed']},已有 {r['kept']}")
+        m1 = cap.scan_fonts(FONTS_DIR, FONTS_MANIFEST)
+        m2 = cap.scan_sfx(SFX_DIR, SFX_MANIFEST)
+        print(f"[DONE] manifest 刷新:{len(m1['fonts'])} 个字体面,{len(m2['sfx'])} 条音效")
+        return
     if sub == "fonts-scan":
         m = cap.scan_fonts(FONTS_DIR, FONTS_MANIFEST)
         cjk = sum(1 for f in m["fonts"] if f.get("cjk"))

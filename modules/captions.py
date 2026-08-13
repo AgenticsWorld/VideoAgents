@@ -29,7 +29,7 @@ from avsync import (canonical_sha256, file_sha256, probe_duration,
                     require_tools, _run)
 
 SCHEMA_VERSION = 2
-RENDERER_VERSION = "r2"                       # 渲染逻辑变更即递增 → 旧回执自动过期重渲
+RENDERER_VERSION = "r6"                       # 渲染逻辑变更即递增 → 旧回执自动过期重渲
 X264_ARGS = ["-c:v", "libx264", "-crf", "18", "-preset", "medium",
              "-pix_fmt", "yuv420p"]          # 逐组统一,花字版拼装才能走 concat 流拷贝
 SFX_SR = 48000
@@ -38,9 +38,10 @@ DEFAULT_SFX_GAIN_DB = -6.0                    # 基准:弱于母带人声
 
 CAPTION_TYPES = ("headline", "keyword",       # v2 新增
                  "location", "time", "skill", "faction", "other")   # v1 保留
-ANIM_IN = ("pop_bounce", "pop", "fade", "slide_up", "slide_down",
-           "slide_left", "slide_right", "none")
-ANIM_OUT = ("fade", "none")
+ANIM_IN = ("pop_bounce", "pop", "smash", "fade", "slide_up", "slide_down",
+           "slide_left", "slide_right", "none")   # smash=巨字砸入(300%→100%,带模糊)
+ANIM_OUT = ("fade", "dissolve", "zoom_out", "flash_out", "none")
+# dissolve=淡出缩小;zoom_out=放大冲出镜头(参考片大招①);flash_out=闪白熄灭(大招②)
 
 # position 关键词 → (x 比例, y 比例, ASS \an 锚点)。刻意不提供 bottom 贴底位——
 # 底部是 subtitle 烧录安全区(subtitle SOUL:下边距 2-4%、≤2 行),花字不得进入。
@@ -277,7 +278,8 @@ def load_captions(path: Path) -> dict:
 def validate_captions(data: dict, shot_list: dict,
                       fonts_manifest: dict | None = None,
                       sfx_manifest: dict | None = None,
-                      beat_text: str | None = None) -> list[str]:
+                      beat_text: str | None = None,
+                      proj_root: Path | None = None) -> list[str]:
     """design 段机检核心。返回问题列表(空=通过)。
 
     v1 文件(无 schema_version/group_id)不做静默猜测:直接报错要求升级 v2——
@@ -343,13 +345,43 @@ def validate_captions(data: dict, shot_list: dict,
                 issues.append(f"{tag}: {e}")
         sfx = c.get("sfx")
         if sfx and sfx_manifest is not None:
-            if not any(s["id"] == sfx.get("sfx_id") for s in sfx_manifest.get("sfx", [])):
-                issues.append(f"{tag}: sfx_id {sfx.get('sfx_id')!r} 不在 sfx manifest")
+            for one in (sfx if isinstance(sfx, list) else [sfx]):
+                if not any(s["id"] == one.get("sfx_id") for s in sfx_manifest.get("sfx", [])):
+                    issues.append(f"{tag}: sfx_id {one.get('sfx_id')!r} 不在 sfx manifest")
+        segs = c.get("segments")
+        if segs is not None:
+            joined = "".join(s.get("text", "") for s in segs)
+            if joined != (c.get("text") or ""):
+                issues.append(f"{tag}: segments 拼接({joined!r})≠ text"
+                              "(多色分词只改颜色,文本以 text 为准参与溯源机检)")
         if beat_text is not None:
             for frag in re.findall(r"[\u4e00-\u9fff]{2,}", c.get("text") or ""):
                 if frag not in beat_text:
                     issues.append(f"{tag}: 文本片段「{frag}」不在母带原文中(禁造词,"
                                   "caption_text_from_source)")
+    # 素材图卡(cards,2026-08-10):只允许项目内图片,零外部素材
+    for i, cd in enumerate(data.get("cards", []) or []):
+        tag = cd.get("id") or f"cards[{i}]"
+        grp = groups.get(cd.get("group_id"))
+        if grp is None:
+            issues.append(f"{tag}: group_id {cd.get('group_id')!r} 不在 generation_groups")
+            continue
+        span = float(grp.get("av_span_s") or grp.get("total_duration_s") or 0)
+        ls, le = cd.get("local_start"), cd.get("local_end")
+        if not (isinstance(ls, (int, float)) and isinstance(le, (int, float)) and 0 <= ls < le):
+            issues.append(f"{tag}: local_start/local_end 非法({ls!r}/{le!r})")
+        elif le > span + 0.05:
+            issues.append(f"{tag}: local_end {le} 超出组时长 {span}")
+        img = str(cd.get("image") or "")
+        if not img or img.startswith(("/", "..")):
+            issues.append(f"{tag}: image 必须是项目内相对路径,得到 {img!r}")
+        elif proj_root is not None and not (proj_root / img).is_file():
+            issues.append(f"{tag}: 图卡图片不存在:{img}")
+        sfx = cd.get("sfx")
+        if sfx and sfx_manifest is not None:
+            for one in (sfx if isinstance(sfx, list) else [sfx]):
+                if not any(s["id"] == one.get("sfx_id") for s in sfx_manifest.get("sfx", [])):
+                    issues.append(f"{tag}: sfx_id {one.get('sfx_id')!r} 不在 sfx manifest")
     return issues
 
 
@@ -380,51 +412,105 @@ def _merged_style(cap: dict, presets: dict) -> dict:
     return {**base, **(cap.get("style_override") or {})}
 
 
-def _anim_tags(cap: dict, x: int, y: int, h: int, dur_s: float,
-               an: int = 5) -> str:
-    """入/出动画 → ASS override tags。位置统一用 \\an + \\pos/\\move。
+# ---- 样式引擎 Pro(2026-08-10):逐字排版/双层描边/渐变/底衬/斜竖排/光晕/溶解 ----
+# 设计对标 花字音效demo/后期.mp4:综艺花字语言——每条花字几乎都有双层描边,
+# 大标题用垂直渐变书法体,关键词多色分词、逐字底衬、斜排竖排混用,入场逐字弹跳。
+# 全部在 ASS/libass 内实现(渐变=多条 \clip 色带,底衬=\p1 矢量矩形),保持确定性。
 
-    \\an 必须逐条显式给出:样式行的 Alignment 只是兜底,mid_left/mid_right
-    这类贴边位靠 \\an4/\\an6 以边为锚,漏掉会把文本一半推出画面(实测前科)。
+_FULLWIDTH = re.compile(r"[ᄀ-鿿　-ヿ가-힯＀-￯]")
+
+
+def _char_adv(ch: str, size: int, spacing: float) -> float:
+    """字符步进宽:CJK 全宽 ≈ 字号,拉丁/数字 ≈ 0.55 字号。"""
+    return (size if _FULLWIDTH.match(ch) else size * 0.55) + spacing
+
+
+def _hex_rgb(color: str) -> tuple[int, int, int]:
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", color or "")
+    if not m:
+        return (255, 255, 255)
+    v = m.group(1)
+    return (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
+
+
+def _lerp_hex(c1: str, c2: str, t: float) -> str:
+    a, b = _hex_rgb(c1), _hex_rgb(c2)
+    return "#" + "".join(f"{round(a[i] + (b[i] - a[i]) * t):02X}" for i in range(3))
+
+
+def _grad_bands(grad: dict) -> list[str]:
+    """垂直渐变 → N 条色带(上→下)。bands=4~6 足以以假乱真。"""
+    n = max(2, int(grad.get("bands", 5)))
+    top, bottom = grad.get("top", "#FFFFFF"), grad.get("bottom", "#888888")
+    return [_lerp_hex(top, bottom, i / (n - 1)) for i in range(n)]
+
+
+def _rot_pt(px: float, py: float, cx: float, cy: float, deg: float) -> tuple[int, int]:
+    import math
+    r = math.radians(deg)
+    dx, dy = px - cx, py - cy
+    return (round(cx + dx * math.cos(r) - dy * math.sin(r)),
+            round(cy + dx * math.sin(r) + dy * math.cos(r)))
+
+
+def _caption_runs(cap: dict) -> list[tuple[str, str | None]]:
+    """展开为 (字符, 分词色) 列表。segments 提供多色分词;无则全 None(用样式填充)。"""
+    segs = cap.get("segments")
+    disp = cap.get("display_text")
+    if segs:
+        return [(ch, s.get("color")) for s in segs for ch in s.get("text", "")]
+    return [(ch, None) for ch in (disp or cap.get("text", ""))]
+
+
+def _entrance_tags(t_in: str, in_ms: int, dur_ms: int, out_kind: str,
+                   out_ms: int, breathe: int) -> str:
+    """单字符的入/驻/出 override 标签(位置标签由调用方拼)。
+
+    入出场力度对标 花字参考.mp4(2026-08-11):smash=巨字带模糊砸入;
+    zoom_out=尾段放大 3 倍冲出镜头;flash_out=尾段闪白后熄灭。
     """
-    anim = cap.get("animation") or {}
-    ain, aout = anim.get("in") or {}, anim.get("out") or {}
-    in_ms = int(float(ain.get("duration_s", 0.3)) * 1000)
-    out_ms = int(float(aout.get("duration_s", 0.25)) * 1000)
-    t_in, t_out = ain.get("type", "fade"), aout.get("type", "fade")
-    tags, pos_tag = [], f"\\an{an}\\pos({x},{y})"
-    off = max(24, int(h * 0.06))
-    if t_in in ("slide_up", "slide_down", "slide_left", "slide_right"):
-        dx = -off if t_in == "slide_right" else off if t_in == "slide_left" else 0
-        dy = -off if t_in == "slide_down" else off if t_in == "slide_up" else 0
-        pos_tag = f"\\an{an}\\move({x + dx},{y + dy},{x},{y},0,{in_ms})"
-    elif t_in == "pop_bounce":
-        k = int(in_ms * 0.6)
-        dur_ms = int(dur_s * 1000)
-        # 落定后持续缓涨到 105%:静止大字是「备注感」的主因,呼吸感是花字的命
-        tags.append(f"\\fscx30\\fscy30\\t(0,{k},\\fscx118\\fscy118)"
-                    f"\\t({k},{in_ms},\\fscx100\\fscy100)"
-                    f"\\t({in_ms},{dur_ms},\\fscx105\\fscy105)")
+    tags = ""
+    if t_in == "pop_bounce":
+        k = max(1, int(in_ms * 0.6))
+        tags += (f"\\fscx24\\fscy24\\t(0,{k},\\fscx116\\fscy116)"
+                 f"\\t({k},{in_ms},\\fscx100\\fscy100)")
     elif t_in == "pop":
-        tags.append(f"\\fscx10\\fscy10\\t(0,{in_ms},\\fscx100\\fscy100)")
-    if t_in in ("slide_up", "slide_down", "slide_left", "slide_right"):
-        dur_ms = int(dur_s * 1000)
-        tags.append(f"\\t({in_ms},{dur_ms},\\fscx103\\fscy103)")   # 关键词同样给轻微呼吸
-    fade_in = in_ms if t_in in ("fade", "slide_up", "slide_down", "slide_left",
-                                "slide_right", "pop_bounce", "pop") else 0
-    fade_out = out_ms if t_out == "fade" else 0
+        tags += f"\\fscx10\\fscy10\\t(0,{in_ms},\\fscx100\\fscy100)"
+    elif t_in == "smash":            # 巨字砸入:300%+模糊 → 急减速落位(accel<1 前快后慢)
+        tags += (f"\\fscx300\\fscy300\\blur4"
+                 f"\\t(0,{in_ms},0.6,\\fscx100\\fscy100\\blur0)")
+    if breathe and dur_ms > in_ms + 400:
+        tags += f"\\t({in_ms},{dur_ms},\\fscx{breathe}\\fscy{breathe})"
+    # 冲击帧必须发生在不透明时(2026-08-11 实测教训):smash 淡入压到 ≤90ms,
+    # 否则巨字期全程半透明,等看清已落位——冲击力被淡入吃掉
+    fade_in = (min(90, in_ms) if t_in == "smash" else in_ms) if t_in != "none" else 0
+    fade_out = out_ms if out_kind in ("fade", "dissolve", "zoom_out") else \
+        max(80, int(out_ms * 0.4)) if out_kind == "flash_out" else 0
     if fade_in or fade_out:
-        tags.append(f"\\fad({fade_in},{fade_out})")
-    return pos_tag + "".join(tags)
+        tags += f"\\fad({fade_in},{fade_out})"
+    out_start = max(0, dur_ms - out_ms)
+    if out_kind == "dissolve":       # 溶解出场:尾段缩小(配合 \fad 淡出)
+        tags += f"\\t({out_start},{dur_ms},\\fscx78\\fscy78)"
+    elif out_kind == "zoom_out":
+        # 放大冲出:缩放窗口(1.6×out)早于淡出窗口(1×out)开跑——
+        # 前 0.6×out 完全不透明地放大到 ~180%,随后边爆边淡,最猛处仍可见
+        zoom_start = max(0, dur_ms - int(out_ms * 1.6))
+        tags += f"\\t({zoom_start},{dur_ms},1.4,\\fscx330\\fscy330)"
+    elif out_kind == "flash_out":    # 闪白:填充/描边急变白 + 轻微涨大,再短促熄灭
+        flash_end = min(dur_ms, out_start + int(out_ms * 0.5))
+        tags += (f"\\t({out_start},{flash_end},\\1c&HFFFFFF&\\3c&HF0F8FF&)"
+                 f"\\t({out_start},{dur_ms},\\fscx108\\fscy108)")
+    return tags
 
 
 def build_group_ass(captions: list[dict], presets: dict, fonts_manifest: dict,
                     width: int, height: int) -> str:
     """一个组的花字 → 完整 ASS 文本(时间用组内 local_start/local_end)。
 
-    3D 立体/渐变的近似:同文本多层 Dialogue 叠印——底层用 shadow.color 逐层偏移
-    模拟挤出体,顶层描边+主色。真渐变 ASS 做不到,验收对照 demo,不达标 v2 走
-    PNG overlay(本期明确不做)。
+    逐字排版引擎:每个字符独立 Dialogue 栈(光晕→底衬→挤出→外描边→渐变/填充),
+    支持 char_stagger_s 逐字错落入场、angle_deg 斜排、vertical 竖排、
+    segments 多色分词、gradient 垂直渐变、stroke2 双层描边、glow 光晕、
+    char_box 逐字底衬、出场 dissolve 溶解缩小。
     """
     styles, events = {}, []
     for cap in sorted(captions, key=lambda c: float(c.get("local_start", 0))):
@@ -432,37 +518,142 @@ def build_group_ass(captions: list[dict], presets: dict, fonts_manifest: dict,
         font = resolve_font(st.get("font_id", ""), fonts_manifest)
         size = max(12, int(height * float(st.get("size_pct", 7)) / 100))
         stroke = st.get("stroke") or {}
-        outline = round(height * float(stroke.get("width_pct", 0.5)) / 100, 1)
-        spacing = round(height * float(st.get("spacing_pct", 0)) / 100, 1)
-        sname = f"S{len(styles)}"
-        key = json.dumps(st, sort_keys=True, ensure_ascii=False)
-        if key in styles:
-            sname = styles[key][0]
+        w1 = round(height * float(stroke.get("width_pct", 0.5)) / 100, 1)
+        inner_col = stroke.get("color", "#000000")
+        stroke2 = st.get("stroke2") or {}
+        w2 = round(height * float(stroke2.get("width_pct", 0)) / 100, 1)
+        outer_col = stroke2.get("color", "#000000")
+        spacing = height * float(st.get("spacing_pct", 0)) / 100
+        # Style 行只承载 字体/字号(描边、颜色全部走 override,避免样式组合爆炸);
+        # 底衬块用 BorderStyle=3 的孪生 Style(不透明底盒随字对齐——\p1 矢量画盒
+        # 会被 libass 按基线错位,2026-08-10 前科),盒色走 \3c、盒垫走 \bord
+        skey = (font["family"], size)
+        if skey in styles:
+            sname = styles[skey][0]
         else:
-            styles[key] = (sname, (
-                f"Style: {sname},{font['family']},{size},"
-                f"{_ass_color(st.get('color', '#FFFFFF'))},&H000000FF,"
-                f"{_ass_color(stroke.get('color', '#000000'))},&H64000000,"
-                f"-1,0,0,0,100,100,{spacing},0,1,{outline},0,5,20,20,20,1"))
-        pos = _POSITION_ALIASES.get(cap.get("position", "center"),
-                                    cap.get("position", "center"))
-        fx, fy, an = POSITIONS.get(pos, POSITIONS["center"])
-        x, y = int(width * fx), int(height * fy)
+            sname = f"S{len(styles)}"
+            styles[skey] = (sname, (
+                f"Style: {sname},{font['family']},{size},&H00FFFFFF,&H000000FF,"
+                f"&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,2,0,5,20,20,20,1\n"
+                f"Style: {sname}B,{font['family']},{size},&H00FFFFFF,&H000000FF,"
+                f"&H00000000,&H64000000,-1,0,0,0,100,100,0,0,3,2,0,5,20,20,20,1"))
+        runs = _caption_runs(cap)
+        if not runs:
+            continue
+        pos_key = _POSITION_ALIASES.get(cap.get("position", "center"),
+                                        cap.get("position", "center"))
+        fx, fy, an = POSITIONS.get(pos_key, POSITIONS["center"])
+        bx, by = width * fx, height * fy
+        vertical = bool(st.get("vertical"))
+        angle = float(st.get("angle_deg", 0))
+        # 布局:字符中心序列(锚点语义:1/4/7 左对齐,2/5/8 居中,3/6/9 右对齐;
+        # 竖排时上/中/下对齐同理作用于 y)
+        advs = [(_char_adv(ch, size, spacing)) for ch, _ in runs]
+        total = sum(advs)
+        align_h = {1: 0, 4: 0, 7: 0, 2: -total / 2, 5: -total / 2, 8: -total / 2,
+                   3: -total, 6: -total, 9: -total}[an]
+        # 垂直方向:上锚(7/8/9)字符中心下移半字高,下锚(1/2/3)上移
+        v_off = size * 0.6 if an in (7, 8, 9) else (-size * 0.6 if an in (1, 2, 3) else 0)
+        centers = []
+        acc = 0.0
+        for adv in advs:
+            if vertical:
+                centers.append((bx, by + align_h + acc + adv / 2 + v_off))
+            else:
+                centers.append((bx + align_h + acc + adv / 2, by + v_off))
+            acc += adv
+        if angle:
+            centers = [_rot_pt(cx, cy, bx, by + v_off, angle) for cx, cy in centers]
+        # 时序
         t0, t1 = float(cap["local_start"]), float(cap["local_end"])
-        text = _esc_text(cap.get("text", ""))
+        anim = cap.get("animation") or {}
+        ain, aout = anim.get("in") or {}, anim.get("out") or {}
+        t_in = ain.get("type", "fade")
+        in_ms = int(float(ain.get("duration_s", 0.3)) * 1000)
+        out_kind = aout.get("type", "fade")
+        out_ms = int(float(aout.get("duration_s", 0.25)) * 1000)
+        stagger = float(st.get("char_stagger_s", 0))
+        breathe = 104 if t_in == "pop_bounce" else (103 if str(t_in).startswith("slide") else 0)
+        # 视觉要素
+        grad = st.get("gradient")
+        bands = _grad_bands(grad) if grad else None
+        glow = st.get("glow")
+        cbox = st.get("char_box")
         shadow = st.get("shadow") or {}
-        layers = max(1, int(st.get("layers", 1)))
+        ex_layers = max(1, int(st.get("layers", 1)))
         depth = max(1, int(height * float(shadow.get("depth_pct", 0.4)) / 100))
-        for li in range(layers - 1, 0, -1):     # 底层(深)→ 上层
-            d = int(depth * li / max(1, layers - 1))
-            tag = _anim_tags(cap, x + d, y + d, height, t1 - t0, an)
-            col = _ass_color(shadow.get("color", "#303030"))
-            # \be1 轻微边缘模糊:多层挤出体不糊成阶梯;\bord 给挤出体一点同色描边填缝
-            events.append(f"Dialogue: {layers - 1 - li},{_ass_time(t0)},{_ass_time(t1)},"
-                          f"{sname},,0,0,0,,{{{tag}\\1c{col}\\3c{col}\\bord1\\be1\\shad0}}{text}")
-        tag = _anim_tags(cap, x, y, height, t1 - t0, an)
-        events.append(f"Dialogue: {layers},{_ass_time(t0)},{_ass_time(t1)},"
-                      f"{sname},,0,0,0,,{{{tag}\\shad0}}{text}")
+        fill_default = st.get("color", "#FFFFFF")
+        slide_off = max(24, int(height * 0.06))
+        for i, ((ch, seg_col), (cx, cy)) in enumerate(zip(runs, centers)):
+            if ch.strip() == "":
+                continue
+            ct0 = t0 + i * stagger
+            dur_ms = max(200, int((t1 - ct0) * 1000))
+            ent = _entrance_tags(t_in, in_ms, dur_ms, out_kind, out_ms, breathe)
+            rot = f"\\frz{-angle:.1f}" if angle else ""
+
+            def _place(px: float, py: float) -> str:
+                if str(t_in).startswith("slide"):
+                    dx = -slide_off if t_in == "slide_right" else \
+                        slide_off if t_in == "slide_left" else 0
+                    dy = -slide_off if t_in == "slide_down" else \
+                        slide_off if t_in == "slide_up" else 0
+                    return (f"\\an5\\move({px + dx:.0f},{py + dy:.0f},"
+                            f"{px:.0f},{py:.0f},0,{in_ms}){rot}")
+                return f"\\an5\\pos({px:.0f},{py:.0f}){rot}"
+
+            row = f"{_ass_time(ct0)},{_ass_time(t1)},{sname},,0,0,0,,"
+            # L0 光晕(柔和外发光)
+            if glow:
+                gw = round(height * float(glow.get("width_pct", 1.2)) / 100, 1)
+                gc = _ass_color(glow.get("color", "#66CCFF"))
+                events.append(
+                    f"Dialogue: 0,{row}{{{_place(cx, cy)}{ent}\\bord{gw + w1 + w2}"
+                    f"\\blur6\\1c{gc}\\3c{gc}\\1a&H80&\\3a&H60&\\shad0}}{_esc_text(ch)}")
+            # L1 逐字底衬块:BorderStyle=3 孪生 Style,\3c=盒色、\bord=盒垫、
+            # \1a 全透明藏字形(盒随字形 bbox 自动对齐);radius 该方案不支持(方角)
+            if cbox:
+                pad = round(size * float(cbox.get("pad_pct", 10)) / 200, 1)
+                bc = _ass_color(cbox.get("color", "#2E7D32"))
+                ba = max(0, min(255, int(cbox.get("alpha", 0))))
+                events.append(
+                    f"Dialogue: 1,{_ass_time(ct0)},{_ass_time(t1)},{sname}B,,0,0,0,,"
+                    f"{{{_place(cx, cy)}{ent}\\bord{pad}\\3c{bc}\\3a&H{ba:02X}&"
+                    f"\\1a&HFF&\\shad0}}{_esc_text(ch)}")
+            # L2.. 立体挤出(底层深色偏移副本)
+            for li in range(ex_layers - 1, 0, -1):
+                d = int(depth * li / max(1, ex_layers - 1))
+                col = _ass_color(shadow.get("color", "#303030"))
+                events.append(
+                    f"Dialogue: {2 + ex_layers - 1 - li},{row}"
+                    f"{{{_place(cx + d, cy + d)}{ent}\\1c{col}\\3c{col}"
+                    f"\\bord1\\be1\\shad0}}{_esc_text(ch)}")
+            base_layer = 2 + ex_layers
+            # L 外描边圈(双层描边的外圈)
+            if w2 > 0:
+                oc = _ass_color(outer_col)
+                events.append(
+                    f"Dialogue: {base_layer},{row}{{{_place(cx, cy)}{ent}"
+                    f"\\bord{w1 + w2}\\1c{oc}\\3c{oc}\\shad0}}{_esc_text(ch)}")
+            # L 填充 + 内描边(渐变=多条 \clip 色带;分词色 > 渐变 > 样式色)
+            ic = _ass_color(inner_col)
+            if bands and not seg_col:
+                half_h = size * 0.62 + w1
+                half_w = _char_adv(ch, size, 0) / 2 + w1 + 2
+                n = len(bands)
+                for bi, bcol in enumerate(bands):
+                    y1 = cy - half_h + (2 * half_h) * bi / n
+                    y2 = cy - half_h + (2 * half_h) * (bi + 1) / n + 0.5
+                    events.append(
+                        f"Dialogue: {base_layer + 1 + bi},{row}{{{_place(cx, cy)}{ent}"
+                        f"\\bord{w1}\\1c{_ass_color(bcol)}\\3c{ic}\\shad0"
+                        f"\\clip({cx - half_w:.0f},{y1:.0f},{cx + half_w:.0f},{y2:.0f})}}"
+                        f"{_esc_text(ch)}")
+            else:
+                fc = _ass_color(seg_col or fill_default)
+                events.append(
+                    f"Dialogue: {base_layer + 1},{row}{{{_place(cx, cy)}{ent}"
+                    f"\\bord{w1}\\1c{fc}\\3c{ic}\\shad0}}{_esc_text(ch)}")
     head = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}",
         f"PlayResY: {height}", "WrapStyle: 2", "ScaledBorderAndShadow: yes", "",
@@ -476,7 +667,6 @@ def build_group_ass(captions: list[dict], presets: dict, fonts_manifest: dict,
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     return "\n".join(head + events) + "\n"
-
 
 # ---------------------------------------------------------------- 逐组烧录
 
@@ -570,30 +760,39 @@ def font_effective(font_id: str, fonts_manifest: dict) -> bool:
 
 def render_group(clip_path: Path, out_path: Path, captions: list[dict],
                  presets: dict, fonts_manifest: dict, fonts_dir: Path,
-                 force: bool = False) -> dict:
-    """单组烧录:clip + 该组花字 → 副本。幂等(回执四元组一致即 SKIP)。
+                 force: bool = False, cards: list[dict] | None = None,
+                 proj_root: Path | None = None) -> dict:
+    """单组烧录:clip + 该组花字(+素材图卡)→ 副本。幂等(回执指纹一致即 SKIP)。
 
     fonts_dir 形参保留作兼容,实际 fontsdir 由 _flat_fontsdir 按本组用到的
     字体动态拍平生成(libass fontsdir 不递归,直接传 data/fonts 会漏子目录)。
+    cards(素材图卡,2026-08-10):只用项目内图片(concepts/keyframes),
+    纸质白框 + 淡入淡出 + 轻微上浮,叠在画面上、花字之下;零外部素材零版权风险。
     """
     require_tools("ffmpeg", "ffprobe")
     clip_path, out_path = Path(clip_path), Path(out_path)
+    cards = cards or []
     receipt_path = out_path.with_suffix(".render.json")
     src_sha = file_sha256(str(clip_path))
     cap_hash = canonical_sha256({"captions": captions, "presets": presets})
     f_hash = _fonts_hash(captions, presets, fonts_manifest)
+    cards_hash = canonical_sha256({
+        "cards": cards,
+        "images": {c["image"]: file_sha256(str(proj_root / c["image"]))
+                   for c in cards if proj_root and (proj_root / c["image"]).is_file()}})
     if not force and receipt_path.is_file() and out_path.is_file():
         try:
             old = json.loads(receipt_path.read_text(encoding="utf-8"))
             if (old.get("src_sha256"), old.get("captions_hash"),
-                    old.get("fonts_hash"), old.get("renderer")) == \
-                    (src_sha, cap_hash, f_hash, RENDERER_VERSION):
+                    old.get("fonts_hash"), old.get("cards_hash"),
+                    old.get("renderer")) == \
+                    (src_sha, cap_hash, f_hash, cards_hash, RENDERER_VERSION):
                 return {"status": "skipped", "out": str(out_path)}
         except (json.JSONDecodeError, OSError):
             pass
     info = probe_video_info(str(clip_path))
-    ass_text = build_group_ass(captions, presets, fonts_manifest,
-                               info["width"], info["height"])
+    W, H = info["width"], info["height"]
+    ass_text = build_group_ass(captions, presets, fonts_manifest, W, H)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fonts_dir = _flat_fontsdir(captions, presets, fonts_manifest)
     with tempfile.NamedTemporaryFile("w", suffix=".ass", delete=False,
@@ -601,11 +800,47 @@ def render_group(clip_path: Path, out_path: Path, captions: list[dict],
         tf.write(ass_text)
         ass_path = tf.name
     try:
-        vf = (f"subtitles=filename='{_filter_escape(ass_path)}'"
-              f":fontsdir='{_filter_escape(str(fonts_dir))}'")
+        sub_f = (f"subtitles=filename='{_filter_escape(ass_path)}'"
+                 f":fontsdir='{_filter_escape(str(fonts_dir))}'")
         audio = ["-c:a", "copy"] if info["has_audio"] else ["-an"]   # av 组 clip 保持无声
-        cmd = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(clip_path), "-vf", vf,
-               *X264_ARGS, *audio, str(out_path)]
+        if not cards:
+            cmd = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(clip_path),
+                   "-vf", sub_f, *X264_ARGS, *audio, str(out_path)]
+        else:
+            inputs = ["-i", str(clip_path)]
+            chains, prev = [], "0:v"
+            for i, cd in enumerate(cards):
+                img = proj_root / cd["image"]
+                if not img.is_file():
+                    raise RuntimeError(f"图卡图片不存在:{img}")
+                inputs += ["-loop", "1", "-t", f"{info['duration_s']:.3f}",
+                           "-i", str(img)]
+                ch = max(64, int(H * float(cd.get("size_pct", 34)) / 100))
+                b = max(3, int(H * float(cd.get("frame_pct", 1.1)) / 100))
+                ls, le = float(cd["local_start"]), float(cd["local_end"])
+                pos = _POSITION_ALIASES.get(cd.get("position", "mid_left"),
+                                            cd.get("position", "mid_left"))
+                fx, fy, _ = POSITIONS.get(pos, POSITIONS["mid_left"])
+                cx, cy = W * fx, H * fy
+                # 贴边锚位往画面里收一点,免得白框贴死边缘
+                cx = min(max(cx, W * 0.17), W * 0.83)
+                cy = min(max(cy, H * 0.24), H * 0.76)
+                chains.append(
+                    f"[{i + 1}:v]scale=-2:{ch},pad=iw+{2 * b}:ih+{2 * b}:{b}:{b}:"
+                    f"color=0xF8F3E7,setsar=1,format=rgba,"
+                    f"fade=t=in:st={ls:.3f}:d=0.28:alpha=1,"
+                    f"fade=t=out:st={max(ls, le - 0.25):.3f}:d=0.25:alpha=1[cd{i}]")
+                # 卡片静止,只有淡入淡出(正弦"漂浮"实测是上下抖动,2026-08-11 用户反馈砍掉)
+                chains.append(
+                    f"[{prev}][cd{i}]overlay="
+                    f"x='{cx:.0f}-overlay_w/2':y='{cy:.0f}-overlay_h/2':"
+                    f"enable='between(t,{ls:.3f},{le:.3f})'[v{i}]")
+                prev = f"v{i}"
+            chains.append(f"[{prev}]{sub_f}[outv]")
+            cmd = [ffmpeg_bin(), "-v", "error", "-y", *inputs,
+                   "-filter_complex", ";".join(chains), "-map", "[outv]",
+                   *([] if not info["has_audio"] else ["-map", "0:a"]),
+                   *X264_ARGS, *audio, str(out_path)]
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if p.returncode != 0 or not out_path.is_file():
             raise RuntimeError(f"烧录失败 {clip_path.name}: {(p.stderr or '')[-400:]}")
@@ -620,12 +855,125 @@ def render_group(clip_path: Path, out_path: Path, captions: list[dict],
     receipt = {"schema": "caption.render.v1", "renderer": RENDERER_VERSION,
                "src": str(clip_path),
                "src_sha256": src_sha, "captions_hash": cap_hash,
-               "fonts_hash": f_hash, "captions_count": len(captions),
+               "fonts_hash": f_hash, "cards_hash": cards_hash,
+               "cards_count": len(cards), "captions_count": len(captions),
                "out_sha256": file_sha256(str(out_path)),
                "encoder": " ".join(X264_ARGS)}
     receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=1),
                             encoding="utf-8")
     return {"status": "rendered", "out": str(out_path)}
+
+
+# ---------------------------------------------------------------- 远端素材库同步
+
+_ASSETS_CONFIG = Path(__file__).resolve().parent / "caption_assets.json"
+
+
+def assets_repo() -> tuple[str, str]:
+    """花字素材库远端仓库 (repo, branch)。repo 为空 = 未配置(仅用本地素材)。
+
+    优先级:$VIDEOAGENTS_CAPTION_ASSETS_REPO(owner/name[@branch])>
+    modules/caption_assets.json。仿 TimbreModel 音色库的远端目录模式:
+    素材二进制不进代码仓库,由用户在独立 GitHub 仓库动态维护。
+    """
+    env = os.environ.get("VIDEOAGENTS_CAPTION_ASSETS_REPO", "").strip()
+    if env:
+        repo, _, branch = env.partition("@")
+        return repo.strip(), (branch.strip() or "main")
+    try:
+        cfg = json.loads(_ASSETS_CONFIG.read_text(encoding="utf-8"))
+        return (cfg.get("repo") or "").strip(), (cfg.get("branch") or "main").strip()
+    except (OSError, json.JSONDecodeError):
+        return "", "main"
+
+
+def _http_get(url: str, timeout: int = 120) -> bytes:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "videoagents-captions"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _sync_via_git(repo: str, branch: str, fonts_dir: Path, sfx_dir: Path) -> dict:
+    """assets 同步的 git 回退路径:浅克隆后把 fonts/ sfx/ 整体镜像进 remote/ 缓存。
+
+    remote/ 内容 = 仓库内容的完整镜像(先清后拷,天然实现"远端删本地删");
+    走系统 git(凭证由 credential helper 提供),私有仓库也能同步。
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="capassets_"))
+    p = subprocess.run(["git", "clone", "--depth", "1", "--branch", branch,
+                        f"https://github.com/{repo}.git", str(tmp / "r")],
+                       capture_output=True, text=True, timeout=1800)
+    if p.returncode != 0:
+        raise RuntimeError(f"素材仓库克隆失败 {repo}@{branch}:{(p.stderr or '')[-300:]}")
+    import shutil as _shutil
+    stats = {"downloaded": 0, "removed": 0, "kept": 0}
+    for top, local_root in (("fonts", Path(fonts_dir) / "remote"),
+                            ("sfx", Path(sfx_dir) / "remote")):
+        src = tmp / "r" / top
+        if not src.is_dir():
+            continue
+        if local_root.exists():
+            _shutil.rmtree(local_root)
+        _shutil.copytree(src, local_root)
+        stats["downloaded"] += sum(1 for f in local_root.rglob("*") if f.is_file())
+    _shutil.rmtree(tmp, ignore_errors=True)
+    return {"repo": repo, "branch": branch, "via": "git-clone", **stats}
+
+
+def sync_assets(fonts_dir: Path, sfx_dir: Path) -> dict:
+    """从远端仓库同步 fonts/ 与 sfx/ 到本地缓存目录(remote/ 子目录)。
+
+    - 远端是唯一事实源(用户动态维护):remote/ 子目录内**新增下载、删除移除**;
+      用户手放在 data/fonts|sfx 其他子目录的素材不受影响,两路并存;
+    - 下载 .part 原子落盘;已存在且字节数一致的跳过(trees API 带 blob size);
+    - 仓库未配置时返回 {"skipped": True},调用方继续用本地素材,不报错。
+    """
+    repo, branch = assets_repo()
+    if not repo:
+        return {"skipped": True, "reason": "caption_assets.json 未配置 repo"}
+    tree_url = f"https://api.github.com/repos/{repo}/git/trees/{branch}?recursive=1"
+    try:
+        tree = json.loads(_http_get(tree_url).decode("utf-8"))
+    except Exception:
+        # API 匿名限流 60 次/小时(团队共用出口 IP 极易撞)或私有仓库:
+        # 回退 git 浅克隆(走本机 git 凭证),同步语义与 API 路径一致
+        return _sync_via_git(repo, branch, fonts_dir, sfx_dir)
+    if tree.get("truncated"):
+        raise RuntimeError(f"仓库 {repo} 文件数超出 trees API 上限,需改用分页遍历")
+    wanted = {"fonts": {}, "sfx": {}}
+    for node in tree.get("tree", []):
+        if node.get("type") != "blob":
+            continue
+        path = node.get("path", "")
+        top, _, rest = path.partition("/")
+        if top in wanted and rest and not rest.endswith((".md", ".txt", ".json")):
+            wanted[top][rest] = int(node.get("size") or 0)
+        elif top in wanted and rest:                       # 许可证/说明也带下来
+            wanted[top][rest] = int(node.get("size") or 0)
+    stats = {"downloaded": 0, "removed": 0, "kept": 0}
+    for top, local_root in (("fonts", Path(fonts_dir) / "remote"),
+                            ("sfx", Path(sfx_dir) / "remote")):
+        local_root.mkdir(parents=True, exist_ok=True)
+        for rest, size in wanted[top].items():
+            dst = local_root / rest
+            if dst.is_file() and dst.stat().st_size == size:
+                stats["kept"] += 1
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            raw = (f"https://raw.githubusercontent.com/{repo}/{branch}/"
+                   f"{top}/{rest}")
+            part = dst.with_suffix(dst.suffix + ".part")
+            part.write_bytes(_http_get(raw))
+            part.replace(dst)                               # 原子落盘
+            stats["downloaded"] += 1
+        # 远端已删除的本地同步移除(只清 remote/ 缓存,不碰用户手放目录)
+        for p in sorted(local_root.rglob("*")):
+            if p.is_file() and str(p.relative_to(local_root)) not in wanted[top] \
+                    and not p.name.endswith(".part"):
+                p.unlink()
+                stats["removed"] += 1
+    return {"repo": repo, "branch": branch, **stats}
 
 
 # ---------------------------------------------------------------- SFX 轨 + 预混封装
@@ -637,7 +985,14 @@ def build_sfx_track(data: dict, sfx_manifest: dict, sfx_dir: Path,
     多条 sfx 重叠:amix normalize=0 自然叠加(不整体压低)+ alimiter -1dBTP 防爆音。
     """
     require_tools("ffmpeg")
-    uses = [(c, c["sfx"]) for c in data.get("captions", []) if c.get("sfx")]
+    uses = []                                    # 图卡出场音效与花字同轨(集级 start)
+    for c in list(data.get("captions", [])) + list(data.get("cards", [])):
+        sfx = c.get("sfx")
+        if not sfx:
+            continue
+        # sfx 支持单条 dict 或 list(2026-08-11:大标题 whoosh 前导+落点重音双层)
+        for one in (sfx if isinstance(sfx, list) else [sfx]):
+            uses.append((c, one))
     if not uses:
         raise RuntimeError("captions.json 无任何 sfx 引用,不产 SFX 轨"
                            "(caption_sfx_track 是条件产物,调用方先判空)")
@@ -649,11 +1004,15 @@ def build_sfx_track(data: dict, sfx_manifest: dict, sfx_dir: Path,
         gain = float(sfx.get("gain_db", next(
             (s["gain_db_default"] for s in sfx_manifest["sfx"] if s["id"] == sfx["sfx_id"]),
             DEFAULT_SFX_GAIN_DB)))
+        # 音高微变(±10% 内):同一条素材逐次听感不重复,治"音效单调"的关键
+        pitch = max(0.7, min(1.4, float(sfx.get("pitch", 1.0))))
+        pitch_f = (f"asetrate={int(SFX_SR * pitch)},aresample={SFX_SR},"
+                   if abs(pitch - 1.0) > 0.005 else "")
         inputs += ["-i", str(p)]
         # 注意:sfx 文件是 ffmpeg 的第 0..n-1 号输入(本命令没有别的 -i),
         # anullsrc 底噪是 filter_complex 内的源滤镜,不占输入编号
         filters.append(f"[{i}:a]aresample={SFX_SR},aformat=channel_layouts=stereo,"
-                       f"volume={gain}dB,adelay={t_ms}|{t_ms}[s{i}]")
+                       f"{pitch_f}volume={gain}dB,adelay={t_ms}|{t_ms}[s{i}]")
         mix_in.append(f"[s{i}]")
     filters.insert(0, f"anullsrc=r={SFX_SR}:cl=stereo,atrim=0:{duration_s:.3f}[base]")
     fc = (";".join(filters) + ";" + "".join(mix_in)

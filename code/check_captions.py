@@ -127,7 +127,8 @@ def main():
             bt = json.loads(beat_path.read_text(encoding="utf-8"))
             beat_text = "".join(s.get("text", "") for s in bt.get("segments", []))
         issues = cap.validate_captions(data, shot_list, fonts_manifest=fonts_m,
-                                       sfx_manifest=sfx_m, beat_text=beat_text)
+                                       sfx_manifest=sfx_m, beat_text=beat_text,
+                                       proj_root=proj)
         buckets = {n: [] for n, _ in _BUCKET_PATTERNS}
         buckets["caption_schema_v2"] = []
         for msg in issues:

@@ -543,7 +543,8 @@ async function openCaption(grp){
       const p=ref.startsWith('preset:')?(presets[ref.slice(7)]||{}):{};
       const st={...p,...(c.style_override||{})};
       const ai=(c.animation||{}).in||{},ao=(c.animation||{}).out||{};
-      const sfx=c.sfx||null;
+      const sfxRaw=c.sfx||null;
+      const sfx=Array.isArray(sfxRaw)?(sfxRaw[0]?{...sfxRaw[0],sfx_id:sfxRaw.map(s=>s.sfx_id).join(' + ')}:null):sfxRaw;
       const rows=[
         `<b>${t('类型')}</b> ${esc(t(CAP_TYPE_LABELS[c.type]||c.type||''))} · <b>${t('位置')}</b> ${esc(c.position||'')}`,
         `<b>${t('组内时刻')}</b> ${esc(c.local_start)}s – ${esc(c.local_end)}s`+(c.start!=null?` <span style="opacity:.7">(${t('集级')} ${esc(c.start)}s)</span>`:''),

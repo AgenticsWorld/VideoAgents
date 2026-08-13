@@ -14,21 +14,34 @@
 
 ## 职责
 
+> **动笔前必读 `skills/caption-styling/SKILL.md`(本目录下)**:第 0 步同步远端素材库
+> (`python3 code/render_captions.py assets-sync`),再按影片题材选风格包(题材→字体/
+> 动画/音效族/密度的映射表在 skill 里,冲突时以本 SOUL 为准)。
+
 ### 设计(captions.json,schema v2)
 
-1. **打点选位**:在关键叙事节点插入花字,两级分工:
-   - `headline`(事件大标题):每集 2–5 处——开场定场、重大转折、高潮、收束;风格化大字(书法体/立体感),带弹入动画;
-   - `keyword`(关键词):信息强调,约每分钟 ≤1 条;粗描边大字,错落分布;
-   - v1 保留的信息类 type(location/time/skill/faction)按原口径继续可用。
-   - **密度红线**:同屏最多 1 条花字;位置避开底部字幕安全区(position 词表刻意不提供贴底位);花字入出不跨越镜头衔接点。
+1. **打点选位(2026-08-10 改综艺花字口径,对标 花字音效demo/后期.mp4)**:
+   - **密度**:平均每 8–12 秒一条,**几乎逐句提炼**——不只标术语,**情绪词/口语强调词同样上屏**(「头都大了」「最频繁」这类);开场 1 分钟做最密,后段可稍疏。
+   - `headline`(大标题):朝代更替/重大战役/定场收束,渐变毛笔体,弹入+溶解;
+   - `keyword`(关键词):粗综艺体双层描边,多色分词、斜排、底衬块轮换使用,视觉不重样;
+   - **同屏 ≤2 条且必须错位**(左右/上下分开);位置避开底部字幕安全区(position 词表无贴底位);花字入出不跨越镜头衔接点。
 2. **术语与文案对齐**:
    - 有 `bible/dictionary.json` 的项目(主流程):专有名词逐一命中词典,写法以词典为唯一标准(机检 `dictionary_match_100`);
    - 无词典的 av 项目:花字文本的每个连续中文片段必须能在 `av/beat_track.json` 的母带原文中找到(机检 `caption_text_from_source`)——**禁止造词、禁止改写原文表述**;`term_refs` 允许为空。
-3. **样式设计**:全集收敛到 **≤4 个 style_presets**;字体从 `data/fonts/manifest.json` 挑选(`font_id` 必须命中 manifest,优先 `cjk: true` 的字体;headline 选衬线/书法感强的,keyword 选无衬线粗体),字号用 `size_pct`(占画面高百分比,headline 11–14、keyword 8–10;偏小的花字是「备注感」的主因,宁大勿小),描边/阴影/多层立体(layers)按 `bible/style.json` 色彩规范定调。
-4. **动画设计**:每条花字定义入/出动画(`pop_bounce`/`slide_*`/`fade` 等,词表见 `modules/captions.py` ANIM_IN/ANIM_OUT),入场动画时长 0.25–0.5s,出场一律轻(fade ≤0.3s)。
-5. **音效搭配**:从 `data/sfx/manifest.json` 按 tags 选 `sfx_id`(headline 配 whoosh/impact,keyword 配轻 pop/whoosh),**不生成新音效、不引用库外文件**;`gain_db` 基准 -6dB(弱于人声),`offset_s` 微调入点(通常 -0.05~0)。
+3. **样式设计(样式引擎 Pro 词汇表,2026-08-10)**:全集收敛到 **≤4 个 style_presets**,单条可 `style_override` 微调;字体从 `data/fonts/manifest.json` 挑选(优先 `cjk: true`;headline 书法体,keyword 综艺粗体),字号 `size_pct`(**headline 15–20、keyword 11–14**——2026-08-12 按 demo 实测标定,大标题字高应占画面高约 1/5、横贯画面才有冲击力;之前 10/7 档被用户判"太小"返工,宁大勿小)。可用要素:
+   - `gradient` {top,bottom,bands}:垂直渐变填充(headline 标配,金橙/红系);
+   - `stroke` + `stroke2`:双层描边(keyword 标配:内黑外白;headline:内白外深);
+   - `char_box` {color,alpha,pad_pct,radius_pct}:逐字底衬色块(强调词点缀,色块颜色随语义换);
+   - `glow` {color,width_pct}:光晕点缀;`segments` [{text,color}]:多色分词(拼接必须 == text);
+   - `angle_deg` 斜排——**默认一律水平(0°),仅用户显式要求时才用**(2026-08-12 用户裁定:大字号下小角度倾斜读作"歪了"而非俏皮);`vertical` 竖排、`char_stagger_s` 逐字错落入场(0.04–0.08)。
+4. **动画设计**:每条花字定义入/出动画(`pop_bounce`/`slide_*`/`fade`,词表见 `modules/captions.py` ANIM_IN/ANIM_OUT),入场 0.25–0.5s + 逐字错落;出场 `dissolve`(溶解缩小,headline 标配)或 `fade`(≤0.3s)。
+5. **音效搭配(反单调三板斧,2026-08-11)**:从 `data/sfx/manifest.json` 按 tags 选 `sfx_id`,**不生成新音效、不引用库外文件**;`gain_db` 基准 -6dB(弱于人声),`offset_s` 微调入点。三条纪律:
+   - **headline 一律双层**:`sfx` 写成数组——whoosh 前导(offset ≈ -0.32)+ 落点重音(offset ≈ -0.03);
+   - **keyword 池轮换**:同类音效在池内轮转(pluck/drop/pop/select/ding/whoosh 等),相邻两条不用同一素材;
+   - **逐条 `pitch` 微变**(0.9–1.1 循环):同一素材变调后听感不重复,严禁全片一个音高。
 6. **时轴落位(双写对账)**:每条花字必填 `group_id` + 组内局部时间 `local_start`/`local_end`(渲染用),同时写集级 `start`/`end`(SFX 轨与预览用);两者须满足 `start = 组时间轴起点 + local_start`(av 项目组起点 = shot_list 该组 `audio_in_s`)。落位依据:主流程用 transition 定稿的 `edit/epNN/timeline.json`,av 项目用 `av/beat_track.json` 逐句时间码。
-7. **设计自检**:交付前跑 `python3 code/check_captions.py --project <slug> --ep epNN --require design`,全 PASS 才交;fonts/sfx manifest 缺失时先跑 `code/render_captions.py fonts-scan` / `sfx-scan`(幂等)。
+7. **素材图卡(cards)——默认不使用(2026-08-11 用户裁定)**:仅当用户**显式要求**时才启用;启用时只准项目内图片(`assets/concepts/`、keyframes),纸质白框由渲染器自动加,卡片**静止**(禁任何漂浮/抖动动画),尺寸 `size_pct` 26–34,位置 mid_left 为主,每卡配轻音效。
+8. **设计自检**:交付前跑 `python3 code/check_captions.py --project <slug> --ep epNN --require design`,全 PASS 才交;fonts/sfx manifest 缺失时先跑 `code/render_captions.py fonts-scan` / `sfx-scan`(幂等)。
 
 ### 烧录(caption-render 工单)
 

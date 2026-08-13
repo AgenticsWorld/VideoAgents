@@ -564,7 +564,7 @@ refs/
 > - **设计**(`10-editing/caption`):产 `edit/epNN/captions.json` **schema v2**——全集 ≤4 个 style_presets(font_id 引用 `data/fonts/manifest.json`)、每条花字必填 group_id + 组内 local_start/local_end 与集级 start/end 双写对账、入出动画、`sfx_id` 引用 `data/sfx/manifest.json`(**音效只选库内素材,不逐次生成**)。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入字幕安全区。av 项目无词典时文案必须逐片段命中母带原文(`caption_text_from_source`)。
 > - **烧录**(caption-render 工单):**超分后的终版组 clip** 上逐组烧录**副本** `assets/clips_caption/epNN/grpNNN.mp4`(原 clip 永不改动;回执幂等,单组返工只重渲该组);**只准宿主 CLI `code/render_captions.py`,禁止 Agent 自写花字 ffmpeg 滤镜**。旧宿主无该 CLI 时由首项机检 `caption_toolchain_verified` 明确拦截。
 > - **花字版成片**(caption-final 工单,归 `10-editing/edit`):`edit/epNN/final_caption.mp4` = clips_caption 副本替换对应组按同一 EDL 重拼;**音轨布局:a:0 = 声轨权威 + SFX 预混(AAC,播放器开箱即听;MP4 多音轨是互斥备选流,绝不能指望播放器叠加混播),a:1 = 声轨权威原样流拷贝(存档轨,av 项目零重编码机检 `final_caption_master_frames_intact` 对 a:1 逐帧校验)**。严禁 -shortest。干净版 `final.mp4` 照常产出,与花字版并列(文件名都含 `final`,视频预览页双双收录);干净版既有机检口径不变。
-> - **资产**:字体外置 `data/fonts/`、音效库 `data/sfx/`(均 gitignored,二进制不进仓库);manifest 由 `render_captions.py fonts-scan / sfx-scan` 生成;音效库初始化 `scripts/fetch_sfx.py --synth`(合成 CC0 入门包)或导入用户自备 CC0 素材,license 由 11-qa/copyright 终审核对。
+> - **资产(2026-08-11 改远端仓库制)**:字体/音效的**唯一事实源是独立 GitHub 素材仓库**(配置 `modules/caption_assets.json` 的 `repo`,结构约定顶层 `fonts/` + `sfx/`,用户动态维护),caption 工单第 0 步执行 `render_captions.py assets-sync` 按需拉取到本地缓存 `data/fonts|sfx/remote/`(gitignored,远端删除本地同步移除)并自动重扫 manifest;仓库未配置时降级用本地素材(兜底 `scripts/fetch_sfx.py --synth`);题材→风格包映射见 `agents/10-editing/caption/skills/caption-styling/SKILL.md`;license 由 11-qa/copyright 终审核对。
 > - **机检**:`code/check_captions.py --require design|render|final` 三阶段;发布物料(platform-adapter)默认基于花字版转码(a:0 已含音效,直接转);零重编码承诺仍只对干净版 `final.mp4` 成立。
 
 ### Phase 10 — 终审(每集,8 个 QA 并行)
