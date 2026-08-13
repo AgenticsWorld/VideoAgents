@@ -4,9 +4,20 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-08-13
+
 ### Added
 
-- Virtual Portrait Library (Settings → Advanced): integration with Volcano Ark's private virtual-portrait media-asset library. A dedicated settings page walks through activating the Advanced Creation Package and configuring Volcano Engine IAM Access Key / Secret Key (falling back to the File Hosting TOS credentials when left blank), with an enable/disable toggle; once enabled it lists every asset in the account's library with total count, name search, 50-per-page pagination, thumbnails, review status and irreversible-delete actions. On the Character Preview page every character image gains a one-click Register button with live status (registering is asynchronous: Processing → Active/Failed, tracked in a content-hash ledger so identical files are registered once). During video generation, reference images whose content hash matches an Active library asset are automatically submitted as `asset://<asset-ID>` URIs instead of inline base64 (Seedance 2.x only), which avoids face-reference moderation blocks; the Storyboard Preview marks such references with a 🛡 badge. Also adds a `genmedia upload` subcommand that uploads a local file through the configured object-storage channel and prints a presigned URL.
+- Virtual Portrait Library (Settings → Advanced): integration with Volcano Ark's private virtual-portrait media-asset library. A dedicated settings page walks through activating the Advanced Creation Package and configuring Volcano Engine IAM Access Key / Secret Key (falling back to the File Hosting TOS credentials when left blank), with an enable/disable toggle; once enabled it lists every asset in the account's library with total count, name search, 50-per-page pagination, thumbnails, review status and irreversible-delete actions. On the Character Preview page every character image gains a one-click Register button with live status (registering is asynchronous: Processing → Active/Failed, tracked in a content-hash ledger so identical files are registered once). During video generation, reference images whose content hash matches an Active library asset are automatically submitted as `asset://<asset-ID>` URIs instead of inline base64 (Seedance 2.x only), which avoids face-reference moderation blocks; the Storyboard Preview marks such references with a 🛡 badge. Also adds a `genmedia upload` subcommand that uploads a local file through the configured object-storage channel and prints a presigned URL. All 11 language dictionaries updated.
+- `runninghub-cloud-workflow` skill for the video-generation agent: documents the parameterization mechanics, asset upload and wiring conventions, the honest-reporting rules for parameters that cannot reach the cloud on placeholder-free templates (`--seed`, and `--resolution`/`--aspect`), `promptTips`/`failedReason` troubleshooting, and billing discipline. Injected only when the video channel is ComfyUI on a RunningHub site.
+
+### Changed
+
+- Minor UI copy: the TOS file-hosting hint now links to the Volcano IAM Key Management console for obtaining the AccessKey, and the ComfyUI workflow selector labels were renamed from "workflow JSON" to "workflow API".
+
+### Fixed
+
+- RunningHub placeholder-free cloud workflows regressed to silently running with the template author's demo prompt and default duration (the working implementation had lived only in uncommitted worktree files and was lost to an overwrite). Prompt and duration injection are reimplemented by following the H3 node wiring — the prompt rewrites the upstream text primitive, the duration rewrites the frame-count primitive using the workflow's duration-to-frame-count conversion semantics — and any unrecognizable wiring now fails before submission, so no request is sent and nothing is billed. Reference wiring also detaches all leftover template `ref_images.*`/`ref_audios.*` connections and deletes orphaned loader nodes first, so the author's demo assets can no longer silently blend into production requests when fewer references are submitted than the template has slots.
 
 ## [1.0.14] - 2026-08-13
 
