@@ -287,6 +287,15 @@ export async function downloadAndApplyDesktopUpdate(
   artifact: DesktopArtifact,
   onProgress: (progress: RuntimeProgress) => void,
 ): Promise<void> {
+  if (process.platform === 'darwin') {
+    if (!currentAppPath.endsWith('.app')
+        || !existsSync(path.join(currentAppPath, 'Contents', 'Info.plist'))) {
+      throw new Error(`macOS 应用路径无效，已取消更新：${currentAppPath}`)
+    }
+    if (currentAppPath.includes('/AppTranslocation/')) {
+      throw new Error('请先把 VideoAgents.app 移动到“应用程序”目录，再执行自动更新。')
+    }
+  }
   const root = path.join(userData, 'app-updates')
   const archive = path.join(root, `${artifact.buildHash}.zip.part`)
   const staging = path.join(root, `staging-${artifact.buildHash}`)
@@ -300,9 +309,6 @@ export async function downloadAndApplyDesktopUpdate(
   rmSync(archive, {force: true})
 
   if (process.platform === 'darwin') {
-    if (currentAppPath.includes('/AppTranslocation/')) {
-      throw new Error('请先把 VideoAgents.app 移动到“应用程序”目录，再执行自动更新。')
-    }
     const replacement = findFile(staging, name => name.endsWith('.app'))
     if (!replacement) throw new Error('macOS 更新包中没有 .app')
     const helper = path.join(root, 'apply-macos-update.sh')
