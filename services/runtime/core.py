@@ -480,13 +480,15 @@ DEFAULT_GENCONFIG = {
                     "model": "image-01", "custom_model": ""},
         # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
         # 账号与 Key 不互通,rh_api_key_cn/rh_api_key_ai 按站点分别保存,按 mode 取用);
-        # rh_workflows 为工作区工作流收藏 [{id, note, site}]
+        # rh_workflows 为工作区工作流收藏 [{id, note, site}];
+        # rh_instance_type 为 RunningHub 运行模式(机器规格)standard/plus/ultra,
+        # standard 建任务不传 instanceType 沿用平台默认
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
                     "rh_workflow_id": "", "rh_ref_workflow_id": "",
-                    "rh_workflows": []},
+                    "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
         "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
@@ -503,7 +505,8 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "", "checkpoint": "",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -522,7 +525,8 @@ DEFAULT_GENCONFIG = {
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
@@ -546,7 +550,8 @@ DEFAULT_GENCONFIG = {
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);

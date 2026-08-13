@@ -459,6 +459,8 @@ window.I18N_DICT = {
 "未知错误": "不明なエラー",
 "本地": "ローカル",
 "运行方式": "実行方式",
+"运行模式": "インスタンスタイプ",
+"RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准": "RunningHub のマシングレード:Standard は VRAM 24G、Plus は 48G、Ultra はさらに上位;グレードが高いほど秒単価が高くなります。詳細は RunningHub の料金ページを参照",
 "云端(Comfy Cloud)": "クラウド(Comfy Cloud)",
 "工作流在": "ワークフローは",
 "官方云端执行,无需本地部署;API Key 在": "公式クラウドで実行(ローカル展開不要)。API Key は",

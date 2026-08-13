@@ -459,6 +459,8 @@ window.I18N_DICT = {
 "未知错误": "Erro desconhecido",
 "本地": "Local",
 "运行方式": "Modo de execução",
+"运行模式": "Tipo de instância",
+"RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准": "Níveis de máquina do RunningHub: Standard tem 24G de VRAM, Plus 48G, Ultra mais; níveis superiores custam mais por segundo — consulte a página de preços do RunningHub",
 "云端(Comfy Cloud)": "Nuvem (Comfy Cloud)",
 "工作流在": "Os workflows executam na nuvem oficial do",
 "官方云端执行,无需本地部署;API Key 在": "— sem implantação local; crie a API Key em",

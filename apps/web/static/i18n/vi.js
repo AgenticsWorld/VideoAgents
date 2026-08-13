@@ -459,6 +459,8 @@ window.I18N_DICT = {
 "未知错误": "Lỗi không xác định",
 "本地": "Cục bộ",
 "运行方式": "Chế độ chạy",
+"运行模式": "Loại máy",
+"RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准": "Cấp máy RunningHub: Standard có VRAM 24G, Plus 48G, Ultra cao hơn; cấp càng cao giá mỗi giây càng đắt — xem trang tính phí trên RunningHub",
 "云端(Comfy Cloud)": "Đám mây (Comfy Cloud)",
 "工作流在": "Workflow chạy trên",
 "官方云端执行,无需本地部署;API Key 在": "— đám mây chính thức, không cần triển khai cục bộ; tạo API Key tại",

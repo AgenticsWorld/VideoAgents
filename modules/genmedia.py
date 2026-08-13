@@ -651,9 +651,14 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     base, key, wf_id = _rh_ctx(cfg)
-    resp = _rh_post(base, key, "/task/openapi/create",
-                    {"workflowId": wf_id,
-                     "workflow": json.dumps(workflow, ensure_ascii=False)})
+    payload = {"workflowId": wf_id,
+               "workflow": json.dumps(workflow, ensure_ascii=False)}
+    # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
+    # plus/ultra 等直接透传,按秒单价更高,取值不合法由建任务接口报错(不计费)
+    inst = str(cfg.get("rh_instance_type") or "").strip().lower()
+    if inst and inst != "standard":
+        payload["instanceType"] = inst
+    resp = _rh_post(base, key, "/task/openapi/create", payload)
     if resp.get("code") != 0:
         raise RuntimeError(f"RunningHub 建任务失败(code={resp.get('code')}):"
                            f"{str(resp.get('msg'))[:400]}")
@@ -664,8 +669,9 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     if str(data.get("taskStatus") or "").upper() == "FAILED":
         raise RuntimeError("RunningHub 工作流校验失败:"
                            f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
-    # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印
-    print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}",
+    # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印(非默认机器规格一并回显)
+    print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}"
+          + (f"(instanceType={inst})" if inst and inst != "standard" else ""),
           file=sys.stderr, flush=True)
     deadline = time.time() + COMFY_TIMEOUT
     poll_errors = 0
