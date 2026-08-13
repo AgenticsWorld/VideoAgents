@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>虚拟人像资产库 — Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+main{max-width:960px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+.body{padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:110px;color:var(--dim);font-size:13px;flex:none}
+input[type=text],input[type=password]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:180px}
+input:focus{outline:none;border-color:var(--accent)}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+button.danger{color:var(--red)}
+button.danger:hover{border-color:var(--red)}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--dim)}
+.hint a{color:var(--link)}
+ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+.enbadge{font-size:12px;border-radius:10px;padding:1px 10px;font-weight:600}
+.enbadge.on{color:var(--green);border:1px solid var(--green)}
+.enbadge.off{color:var(--dim);border:1px solid var(--border)}
+#msg{font-size:13px}
+#msg.ok{color:var(--green)}
+#msg.err{color:var(--red)}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.toolbar .total{font-size:13px;color:var(--dim)}
+.toolbar .total b{color:var(--text)}
+#list{display:flex;flex-direction:column}
+.asset{display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid var(--border)}
+.asset:last-child{border-bottom:none}
+.asset img{width:56px;height:56px;object-fit:cover;border-radius:6px;background:var(--panel2);cursor:zoom-in;flex:none}
+.asset .thumb-ph{width:56px;height:56px;border-radius:6px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.asset .info{flex:1;min-width:0}
+.asset .nm{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.asset .aid{font-size:11.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace}
+.asset .tm{font-size:11.5px;color:var(--dim)}
+.st{font-size:11px;border-radius:4px;padding:0 6px;flex:none}
+.st.Active{color:var(--green);border:1px solid var(--green)}
+.st.Processing{color:var(--yellow);border:1px solid var(--yellow)}
+.st.Failed{color:var(--red);border:1px solid var(--red)}
+.pager{display:flex;align-items:center;gap:10px;justify-content:center;padding-top:8px}
+.pager .pg{font-size:13px;color:var(--dim)}
+.empty{color:var(--dim);text-align:center;padding:26px 0}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
+#lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>🧑‍🎨 虚拟人像资产库</h1>
+  <span class="pill">火山方舟私域素材库:入库的人物形象图在生成视频时以资产 URI 提交,规避人脸参考图审核拦截</span>
+  <div class="spacer"></div>
+</header>
+<main>
+  <div class="card">
+    <h2>📋 使用前准备</h2>
+    <div class="body">
+      <ol class="steps">
+        <li>在火山方舟开通 <a href="https://console.volcengine.com/ark/region:cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=mediaAsset&projectName=default" target="_blank" rel="noopener">高级创作权益包</a>(私域虚拟人像素材库的前置条件)。</li>
+        <li>在火山引擎控制台 <a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener">API 访问密钥管理</a> 创建并获取 Access Key / Secret Key(IAM 密钥,非 ark- 开头的方舟 API Key),填入下方并保存。</li>
+        <li>点击「启用」后,可在下方管理已入库的素材;人物预览页每张形象图会出现「入库」按钮,分镜重出时已入库(Active)的参考图自动以资产 URI(asset://素材ID)提交。</li>
+      </ol>
+      <div class="hint">注意:上传入库为异步审核(Processing → Active/Failed),仅 Active 状态的素材可用于视频生成;素材按方舟「项目」隔离,下方 ProjectName 须与「生成模型」页视频生成所用方舟 API Key 所属项目一致(默认 default)。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔑 密钥与开关 <span class="cur" id="en-state"></span></h2>
+    <div class="body" id="cfg-body">
+      <div class="hint">Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。</div>
+      <div class="row" id="row-ak"></div>
+      <div class="row" id="row-sk"></div>
+      <div class="row">
+        <label>ProjectName</label>
+        <input type="text" id="in-project" placeholder="default(须与视频生成 API Key 所属项目一致)">
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:12px">
+        <span id="msg"></span>
+        <button id="btn-save">保存设置</button>
+        <button id="btn-toggle" class="primary">启用</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="card-list" style="display:none">
+    <h2>🗂 已入库素材 <span class="cur">列表来自方舟虚拟人像库(全部素材组);删除不可恢复</span></h2>
+    <div class="body">
+      <div class="toolbar">
+        <span class="total" id="total"></span>
+        <div class="spacer" style="flex:1"></div>
+        <input type="text" id="in-q" placeholder="按素材名称搜索…" style="max-width:240px">
+        <button id="btn-search">搜索</button>
+        <button id="btn-reload">刷新</button>
+      </div>
+      <div id="list"><div class="empty">加载中…</div></div>
+      <div class="pager">
+        <button id="pg-prev">← 上一页</button>
+        <span class="pg" id="pg-info"></span>
+        <button id="pg-next">下一页 →</button>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="lightbox"><img alt=""></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
+function keyRow(box,id,label,placeholder){
+  const d=$(box);
+  d.appendChild(el('label',{},label));
+  const inp=el('input',{type:'password',id,placeholder:placeholder||''});
+  const show=el('button',{},t('显示'));
+  show.onclick=()=>{const pw=inp.type==='password';inp.type=pw?'text':'password';show.textContent=pw?t('隐藏'):t('显示')};
+  d.appendChild(inp);d.appendChild(show);
+}
+keyRow('#row-ak','in-ak','Access Key','火山引擎 IAM AccessKey(非 ark- API Key)');
+keyRow('#row-sk','in-sk','Secret Key','火山引擎 IAM SecretKey');
+
+let CFG=null, PAGE=1, PAGES=1, Q='';
+const PAGE_SIZE=50;
+const PROJ=(new URLSearchParams(location.search).get('project'))
+  ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+
+function av(){return (CFG||{}).avatar_assets||{}}
+function msg(txt,ok){const m=$('#msg');m.textContent=txt||'';m.className=txt?(ok?'ok':'err'):''}
+function renderState(){
+  const on=!!av().enabled;
+  $('#en-state').innerHTML=`<span class="enbadge ${on?'on':'off'}">${on?t('已启用'):t('已停用')}</span>`;
+  const b=$('#btn-toggle');
+  b.textContent=on?t('停用'):t('启用');
+  b.classList.toggle('primary',!on);
+  $('#card-list').style.display=on?'':'none';
+}
+function collect(){
+  return {access_key:$('#in-ak').value.trim(),secret_key:$('#in-sk').value.trim(),
+    project_name:$('#in-project').value.trim()||'default'};
+}
+async function saveCfg(patch,okText){
+  msg(t('保存中…'),true);
+  const r=await api('/api/v1/config/generation',{avatar_assets:Object.assign(collect(),patch||{}),project:PROJ});
+  CFG=r.config||r;
+  msg(okText||t('✓ 已保存'),true);
+  setTimeout(()=>msg(''),2500);
+  renderState();
+}
+$('#btn-save').onclick=async()=>{
+  const b=$('#btn-save');b.disabled=true;
+  try{await saveCfg()}catch(e){msg(t('保存失败:')+e.message)}
+  b.disabled=false;
+};
+$('#btn-toggle').onclick=async()=>{
+  const b=$('#btn-toggle');b.disabled=true;
+  const turnOn=!av().enabled;
+  try{
+    await saveCfg({enabled:turnOn},turnOn?t('✓ 已启用'):t('✓ 已停用'));
+    if(turnOn){PAGE=1;loadList()}
+  }catch(e){msg((turnOn?t('启用失败:'):t('停用失败:'))+e.message)}
+  b.disabled=false;
+};
+
+function fmtTime(s){
+  if(!s)return '';
+  const d=new Date(s);
+  return isNaN(d)?s:d.toLocaleString();
+}
+async function loadList(){
+  $('#list').innerHTML='<div class="empty">'+t('加载中…')+'</div>';
+  $('#total').textContent='';$('#pg-info').textContent='';
+  $('#pg-prev').disabled=$('#pg-next').disabled=true;
+  let d;
+  try{
+    d=await api('/api/v1/avatar-assets/list',{page:PAGE,page_size:PAGE_SIZE,q:Q});
+  }catch(e){
+    $('#list').innerHTML='<div class="empty">'+t('加载失败:')+esc(e.message)+'</div>';
+    return;
+  }
+  PAGES=Math.max(1,Math.ceil((d.total||0)/PAGE_SIZE));
+  $('#total').innerHTML=I18N.f('共 <b>{n}</b> 个素材',{n:d.total||0});
+  $('#pg-info').textContent=I18N.f('第 {p} / {m} 页',{p:PAGE,m:PAGES});
+  $('#pg-prev').disabled=PAGE<=1;
+  $('#pg-next').disabled=PAGE>=PAGES;
+  const items=d.items||[];
+  if(!items.length){
+    $('#list').innerHTML='<div class="empty">'+(Q?t('没有匹配的素材'):t('资产库还没有素材:到「人物预览」页把人物形象图入库,或在方舟控制台上传'))+'</div>';
+    return;
+  }
+  $('#list').innerHTML=items.map(it=>{
+    const img=it.asset_type==='Image'&&it.url
+      ?`<img src="${esc(it.url)}" loading="lazy" onclick="zoom(this.src)" alt="">`
+      :`<div class="thumb-ph">${it.asset_type==='Video'?'🎞':it.asset_type==='Audio'?'🎵':'🖼'}</div>`;
+    return `<div class="asset">
+      ${img}
+      <div class="info">
+        <div class="nm" title="${esc(it.name)}">${esc(it.name)||'<span style="color:var(--dim)">'+t('(未命名)')+'</span>'}</div>
+        <div class="aid" title="${esc(it.id)}">${esc(it.id)}</div>
+        <div class="tm">${esc(fmtTime(it.create_time))}${it.project_name?' · '+esc(it.project_name):''}</div>
+      </div>
+      <span class="st ${esc(it.status)}" title="${esc(it.status)}">${it.status==='Active'?t('可用'):it.status==='Processing'?t('审核中'):it.status==='Failed'?t('失败'):esc(it.status)}</span>
+      <button class="danger delbtn" data-id="${esc(it.id)}" data-nm="${esc(it.name)}">🗑 ${t('删除')}</button>
+    </div>`;
+  }).join('');
+}
+$('#btn-reload').onclick=()=>loadList();
+$('#btn-search').onclick=()=>{Q=$('#in-q').value.trim();PAGE=1;loadList()};
+$('#in-q').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btn-search').click()});
+$('#pg-prev').onclick=()=>{if(PAGE>1){PAGE--;loadList()}};
+$('#pg-next').onclick=()=>{if(PAGE<PAGES){PAGE++;loadList()}};
+$('#list').addEventListener('click',async e=>{
+  const b=e.target.closest('.delbtn');
+  if(!b)return;
+  if(!confirm(I18N.f('确认从虚拟人像库删除该素材?此操作不可恢复。\n{id}{nm}',
+    {id:b.dataset.id,nm:b.dataset.nm?'\n'+b.dataset.nm:''})))return;
+  b.disabled=true;
+  try{
+    await api('/api/v1/avatar-assets/delete',{id:b.dataset.id});
+    loadList();
+  }catch(e2){alert(t('删除失败:')+e2.message);b.disabled=false}
+});
+
+function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
+$('#lightbox').onclick=()=>$('#lightbox').style.display='none';
+
+(async()=>{
+  try{CFG=await api('/api/v1/config/generation')}catch(e){msg(t('加载配置失败:')+e.message);return}
+  const c=av();
+  $('#in-ak').value=c.access_key||'';
+  $('#in-sk').value=c.secret_key||'';
+  $('#in-project').value=c.project_name||'default';
+  renderState();
+  if(c.enabled)loadList();
+})();
+</script>
+</body>
+</html>

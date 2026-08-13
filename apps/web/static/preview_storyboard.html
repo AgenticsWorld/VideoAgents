@@ -133,6 +133,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .cur .ccell .ck{position:absolute;left:2px;bottom:2px;font-size:9.5px;line-height:1.4;background:rgba(0,0,0,.65);color:#c8d0e0;border-radius:3px;padding:0 3px}
 #ar-modal .cur .ccell .cdel{position:absolute;right:2px;top:2px;font-size:10px;line-height:1;background:rgba(0,0,0,.65);border:none;border-radius:4px;padding:2px 3px;cursor:pointer}
 #ar-modal .cur .ccell .cdel:hover{background:var(--red)}
+#ar-modal .cur .ccell .avck{position:absolute;right:2px;bottom:2px;font-size:10px;line-height:1.3;background:rgba(0,0,0,.65);border-radius:3px;padding:0 2px}
+.avmark{font-size:10px;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 4px;flex:none}
 #ar-modal .cats{display:flex;gap:8px;margin:10px 0 8px;flex:none}
 #ar-modal .cats button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
 #ar-modal #ar-sketch{margin-left:auto}
@@ -376,6 +378,7 @@ function arCur(){
     const del=arAdded(r)&&AR_REFS.slice(i+1).every(arAdded);
     return `<div class="ccell" title="[Image ${i+1}] ${esc(r)}${del?'':' · '+t('流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)')}">
       <img src="/api/v1/projects/${encodeURIComponent(proj)}/artifacts/${esc(r)}?v=${LOAD_T}" loading="lazy" onclick="zoom(this.src)"><span class="ck">${i+1}</span>${
+      AV_ST[r]==='Active'?`<span class="avck" title="${esc(t('已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截'))}">🛡</span>`:''}${
       del?`<button class="cdel" data-ref="${esc(r)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button>`:''}</div>`;
   }).join(''):'<span class="clabel">'+t('(暂无参考图)')+'</span>')
   +(AR_GEN?`<div class="ccell genp" title="${t('正在基于手绘生成最终的参考图…(约 1-2 分钟)')}"><span class="spin"></span></div>`:'');
@@ -629,6 +632,35 @@ function shotCard(s,grp){
 
 const aid=s=>String(s??'').replace(/[^\w-]/g,'_');
 
+// ---- 虚拟人像资产库(设置 → 高级):已入库(Active)的参考图打 🛡 标,
+// 重出本组时 genmedia 自动以 asset://<id> 提交,规避人脸参考图审核拦截 ----
+let AV_ST={};   // {ref: status}
+const avMark=ref=>AV_ST[ref]==='Active'
+  ?`<span class="avmark" title="${esc(t('已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截'))}">🛡 ${t('已入库')}</span>`:'';
+async function avSync(){
+  const d=LAST_DATA;
+  if(!d)return;
+  const refs=[...new Set((d.generation_groups||[]).flatMap(g=>
+    [...(g.user_refs||[]),...(g.pipeline_refs||[])].map(k=>k.ref).filter(Boolean)))];
+  if(!refs.length)return;
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/avatar-assets/status',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,refs})});
+    if(!r.ok)return;
+    const j=await r.json();
+    if(!j.enabled)return;
+    const st={};
+    Object.entries(j.status||{}).forEach(([k,v])=>{st[k]=(v||{}).status});
+    if(JSON.stringify(st)!==JSON.stringify(AV_ST)){
+      AV_ST=st;
+      KEEP_SCROLL=true;   // 补打标记的静默重渲染,不动滚动位置
+      render(LAST_DATA);
+    }
+  }catch(e){}
+}
+
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
   const chars=(g.characters_union||[]).join('、');
@@ -640,12 +672,12 @@ function groupCard(g,inner){
       <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
   const urefs=(g.user_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}"><span class="fn">🖼 ${esc(k.name)}</span>
+      <div class="cap" title="${esc(k.ref)}"><span class="fn">🖼 ${esc(k.name)}</span>${avMark(k.ref)}
       <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
   // 流水线/agent 直连写入组 refs 的参考图(概念图等):只展示不可删,删除接口本就仅限用户添加的
   const prefs=(g.pipeline_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}"><span class="fn">📎 ${esc(k.name)}</span>
+      <div class="cap" title="${esc(k.ref)}"><span class="fn">📎 ${esc(k.name)}</span>${avMark(k.ref)}
       <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
@@ -873,6 +905,7 @@ async function load(keep){
     EP=d.ep||'';
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
     render(d);
+    avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)
   }catch(e){$('#content').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`}
 }
 $('#reload').onclick=()=>load(true);

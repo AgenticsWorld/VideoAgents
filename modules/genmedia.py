@@ -369,6 +369,33 @@ def _storage_upload_url(path: str) -> str:
     return url
 
 
+# ---------------- 火山方舟 私域虚拟人像素材库(设置 → 高级 → 虚拟人像资产库) ----------------
+# 台账由 services/runtime/core.py 在入库时落盘:{"assets": {<文件sha256>: {"asset_id", "status", ...}}}
+AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
+
+
+def _avatar_asset_uri(path: str) -> str | None:
+    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>,否则 None。
+
+    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核);
+    按文件内容 sha256 匹配,与图片所在目录无关。"""
+    try:
+        if not (json.loads(CONFIG_PATH.read_text()).get("avatar_assets") or {}).get("enabled"):
+            return None
+        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+    except Exception:
+        return None
+    if not ledger:
+        return None
+    p = Path(path)
+    if not p.is_file():
+        return None
+    ent = ledger.get(hashlib.sha256(p.read_bytes()).hexdigest()) or {}
+    if ent.get("status") == "Active" and ent.get("asset_id"):
+        return f"asset://{ent['asset_id']}"
+    return None
+
+
 # ---------------- 图像:OpenRouter ----------------
 
 def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
@@ -1386,8 +1413,13 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             content.append({"type": "image_url", "role": role,
                             "image_url": {"url": to_url(path)}})
     for path in refs or []:
+        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI)
+        asset_uri = _avatar_asset_uri(path) if is_v2 else None
+        if asset_uri:
+            print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
+                  f"{Path(path).name} → {asset_uri}", file=sys.stderr, flush=True)
         content.append({"type": "image_url", "role": "reference_image",
-                        "image_url": {"url": to_url(path)}})
+                        "image_url": {"url": asset_uri or to_url(path)}})
     for path in video_refs or []:
         content.append({"type": "video_url", "role": "reference_video",
                         "video_url": {"url": video_to_url(path)}})
@@ -2514,6 +2546,11 @@ def _cmd_music(args):
     print(f"已生成: {out}")
 
 
+def _cmd_upload(args):
+    """上传本地文件到对象存储,stdout 只打印预签名 URL(供 core/脚本捕获)。"""
+    print(_storage_upload_url(args.input))
+
+
 def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
@@ -2605,6 +2642,10 @@ def main():
                          "comfyui 参与音色自动匹配、不注入合成)")
     pt.add_argument("--dry-run", action="store_true")
 
+    pup = sub.add_parser("upload", help="上传本地文件到对象存储并打印预签名 URL"
+                                        "(渠道按「设置 → 文件托管」;供需要公网 URL 的 API 使用)")
+    pup.add_argument("--input", required=True, help="本地文件路径")
+
     pm = sub.add_parser("music", help="生成音乐(BGM)")
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
     pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus;minimax 仅 .mp3/.wav)")
@@ -2617,7 +2658,8 @@ def main():
     t0 = time.time()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
-         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts}[args.cmd](args)
+         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts,
+         "upload": _cmd_upload}[args.cmd](args)
     except RuntimeError as e:
         _diag_report(args, t0, error=str(e))
         print(f"生成失败: {e}", file=sys.stderr)
@@ -2630,7 +2672,8 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     """诊断事件旁路(modules/diagnostics.py):白名单字段本地落盘,错误消息
     模板化后只存模板与签名,不出网。info/dry-run 不记;渠道/模型 best-effort,
     读不到(如配置缺失本身就是报错原因)不影响记录。"""
-    if _diagnostics is None or args.cmd == "info" or getattr(args, "dry_run", False):
+    if _diagnostics is None or args.cmd in ("info", "upload") \
+            or getattr(args, "dry_run", False):
         return
     provider = model = ""
     try:

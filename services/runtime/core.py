@@ -13,6 +13,7 @@ import hmac
 import importlib.util
 import io
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -577,6 +578,15 @@ DEFAULT_GENCONFIG = {
                "endpoint": "", "region": "us-east-1",
                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
     },
+    # 虚拟人像资产库(设置 → 高级):火山方舟私域虚拟人像素材库。启用后人物概念图可
+    # 一键入库,生成视频时已入库(Active)的参考图自动改用 asset://<id> 提交,规避
+    # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退文件托管
+    # TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
+    # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
+    # 上传时自动创建的素材组,记录后复用
+    "avatar_assets": {"enabled": False, "access_key": "", "secret_key": "",
+                      "project_name": "default", "group_id": "",
+                      "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
@@ -4334,6 +4344,275 @@ async def api_volc_speakers(body: dict):
         raise ServiceError(502, f"ListSpeakers 调用失败:{e}")
     _VOLC_SPEAKERS_CACHE[resource_id] = (time.time(), speakers)
     return {"speakers": speakers}
+
+
+# ---------------- 火山方舟 私域虚拟人像素材库(设置 → 高级 → 虚拟人像资产库) ----------------
+# 台账 avatar_assets.json:{"assets": {<文件sha256>: {asset_id,status,group_id,...}},
+# "files": {"<绝对路径>|<mtime_ns>|<size>": <sha256>}}(files 为免重复哈希的缓存)。
+# genmedia 生成视频时同读该台账:已入库(Active)的参考图改用 asset://<id> 提交,
+# 规避 Seedance 对含人脸参考图的审核拦截。
+AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
+_AVATAR_ARK_HOST = "ark.cn-beijing.volcengineapi.com"
+_AVATAR_API_VERSION = "2024-01-01"
+
+
+def _avatar_cfg() -> dict:
+    return load_genconfig().get("avatar_assets") or {}
+
+
+def _avatar_keys(cfg: dict) -> tuple[str, str]:
+    """资产库 AK/SK:本页配置优先,留空回退文件托管 TOS 的 AK/SK 或环境变量。"""
+    ak = str(cfg.get("access_key") or "").strip()
+    sk = str(cfg.get("secret_key") or "").strip()
+    if not (ak and sk):
+        tos = (load_genconfig().get("storage") or {}).get("tos") or {}
+        ak = ak or (tos.get("access_key") or os.environ.get("TOS_ACCESS_KEY", "")).strip()
+        sk = sk or (tos.get("secret_key") or os.environ.get("TOS_SECRET_KEY", "")).strip()
+    if not (ak and sk):
+        raise ServiceError(400, "需先配置火山引擎 Access Key/Secret Key"
+                                "(⚙️ 设置 → 高级 → 虚拟人像资产库)")
+    return ak, sk
+
+
+def _avatar_call(action: str, body: dict) -> dict:
+    """方舟素材资产(Assets)OpenAPI 调用(AK/SK V4 签名,Service=ark);
+    返回 Result,业务/HTTP 错误统一抛 ServiceError。"""
+    ak, sk = _avatar_keys(_avatar_cfg())
+    try:
+        r = _volc_signed_call(ak, sk, action, _AVATAR_API_VERSION, body,
+                              service="ark", region="cn-beijing",
+                              host=_AVATAR_ARK_HOST)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:500]
+        try:
+            err = (json.loads(detail).get("ResponseMetadata") or {}).get("Error") or {}
+            if err:
+                detail = f"{err.get('Code')}: {err.get('Message')}"
+        except Exception:
+            pass
+        raise ServiceError(502, f"{action} HTTP {e.code}:{detail}") from None
+    except ServiceError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"{action} 调用失败:{e}") from None
+    err = (r.get("ResponseMetadata") or {}).get("Error") or {}
+    if err:
+        raise ServiceError(502, f"{action} 失败:{err.get('Code')}: {err.get('Message')}")
+    return r.get("Result") or {}
+
+
+def _avatar_ledger() -> dict:
+    try:
+        d = json.loads(AVATAR_LEDGER_PATH.read_text())
+    except Exception:
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    d.setdefault("assets", {})
+    d.setdefault("files", {})
+    return d
+
+
+def _avatar_ledger_save(d: dict):
+    files = d.get("files") or {}
+    if len(files) > 5000:   # 哈希缓存只增不减,超限丢最旧的一半
+        d["files"] = dict(list(files.items())[-2500:])
+    atomic_write_json(AVATAR_LEDGER_PATH, d)
+
+
+def _avatar_digest(p: Path, led: dict) -> str:
+    """文件内容 sha256(带 mtime/size 缓存,避免预览页反复全量读图)。"""
+    st = p.stat()
+    fkey = f"{p}|{st.st_mtime_ns}|{st.st_size}"
+    dig = led["files"].get(fkey)
+    if not dig:
+        dig = hashlib.sha256(p.read_bytes()).hexdigest()
+        led["files"][fkey] = dig
+    return dig
+
+
+def _avatar_ref_path(project: str, ref: str) -> Path:
+    """清洗并定位项目内图片(仅允许项目目录内的图片文件)。"""
+    base = _proj_base(safe_slug(project))
+    ref = (ref or "").strip().lstrip("/")
+    if not ref or ".." in ref.split("/"):
+        raise ServiceError(400, "invalid ref path")
+    p = (base / ref).resolve()
+    try:
+        p.relative_to(base.resolve())
+    except ValueError:
+        raise ServiceError(400, "invalid ref path") from None
+    if not p.is_file() or p.suffix.lower() not in IMG_EXTS:
+        raise ServiceError(404, f"Image not found: {ref}")
+    return p
+
+
+async def _avatar_group_id(cfg: dict) -> str:
+    """素材组 Id:已记录的直接用,否则 CreateAssetGroup 自动创建并写回 genconfig。"""
+    gid = str(cfg.get("group_id") or "").strip()
+    if gid:
+        return gid
+    name = str(cfg.get("group_name") or "").strip() or "VideoAgents"
+    res = await asyncio.to_thread(
+        _avatar_call, "CreateAssetGroup",
+        {"Name": name, "Description": "VideoAgents character images (auto-created)",
+         "ProjectName": cfg.get("project_name") or "default"})
+    gid = str(res.get("Id") or "").strip()
+    if not gid:
+        raise ServiceError(502, f"CreateAssetGroup 未返回素材组 Id:{res}")
+    full = load_genconfig()
+    full.setdefault("avatar_assets", {})["group_id"] = gid
+    save_genconfig(full)
+    return gid
+
+
+def _avatar_source_url(p: Path) -> str:
+    """本地图片 → CreateAsset 可访问的 URL:优先经「文件托管」对象存储出预签名 URL
+    (genmedia upload 子进程,与参考视频同链路);未配置托管时回退 data: base64
+    内联尝试,若方舟拒收由上层给出配置托管的提示。"""
+    r = subprocess.run([sys.executable, str(ROOT / "modules" / "genmedia.py"),
+                        "upload", "--input", str(p)],
+                       capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    if r.returncode == 0:
+        out = (r.stdout or "").strip()
+        url = out.splitlines()[-1].strip() if out else ""
+        if url.startswith("http"):
+            return url
+    mime = mimetypes.guess_type(p.name)[0] or "image/png"
+    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+
+
+async def api_avatar_upload(body: dict):
+    """把项目内一张人物图片上传入虚拟人像库(CreateAsset,异步审核:Processing →
+    Active/Failed);按文件内容 sha256 幂等,已入库(Active/Processing)直接返回现状。"""
+    cfg = _avatar_cfg()
+    if not cfg.get("enabled"):
+        raise ServiceError(400, "虚拟人像资产库未启用(⚙️ 设置 → 高级 → 虚拟人像资产库)")
+    project = safe_slug(body.get("project") or "")
+    p = _avatar_ref_path(project, body.get("ref") or "")
+    if p.stat().st_size > 30 * 1024 * 1024:
+        raise ServiceError(400, "图片超过 30MB(方舟单张图片素材上限)")
+    led = _avatar_ledger()
+    dig = _avatar_digest(p, led)
+    ent = led["assets"].get(dig) or {}
+    if ent.get("asset_id") and ent.get("status") in ("Active", "Processing"):
+        _avatar_ledger_save(led)
+        return {"asset_id": ent["asset_id"], "status": ent["status"], "existing": True}
+    gid = await _avatar_group_id(cfg)
+    url = await asyncio.to_thread(_avatar_source_url, p)
+    name = f"{project}-{p.stem}"[:80]
+    try:
+        res = await asyncio.to_thread(
+            _avatar_call, "CreateAsset",
+            {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
+             "ProjectName": cfg.get("project_name") or "default"})
+    except ServiceError as e:
+        if url.startswith("data:"):
+            raise ServiceError(e.status_code, f"{e.detail}(当前以 base64 内联提交;"
+                               "若方舟要求公网 URL,请先在 ⚙️ 设置 → 文件托管 配置"
+                               "对象存储后重试)") from None
+        raise
+    aid = str(res.get("Id") or "").strip()
+    if not aid:
+        raise ServiceError(502, f"CreateAsset 未返回素材 Id:{res}")
+    led["assets"][dig] = {"asset_id": aid, "status": "Processing", "group_id": gid,
+                          "name": name, "source": str(p),
+                          "uploaded_at": int(time.time())}
+    _avatar_ledger_save(led)
+    return {"asset_id": aid, "status": "Processing"}
+
+
+async def api_avatar_status(body: dict):
+    """查询项目内一批图片的入库状态:{ref: {asset_id, status}}。Processing 的条目
+    顺带经 GetAsset 刷新(单条目 5s 节流);未启用时只返回 enabled 标记。"""
+    cfg = _avatar_cfg()
+    out = {"enabled": bool(cfg.get("enabled")), "status": {}}
+    if not out["enabled"]:
+        return out
+    project = safe_slug(body.get("project") or "")
+    refs = [str(r) for r in (body.get("refs") or []) if r][:500]
+    led = _avatar_ledger()
+    before = json.dumps(led, sort_keys=True)
+    now = time.time()
+    for ref in refs:
+        try:
+            p = _avatar_ref_path(project, ref)
+        except ServiceError:
+            continue
+        ent = led["assets"].get(_avatar_digest(p, led))
+        if not ent or not ent.get("asset_id"):
+            continue
+        if ent.get("status") == "Processing" and now - (ent.get("checked_at") or 0) > 5:
+            ent["checked_at"] = int(now)
+            try:
+                res = await asyncio.to_thread(
+                    _avatar_call, "GetAsset",
+                    {"Id": ent["asset_id"],
+                     "ProjectName": cfg.get("project_name") or "default"})
+                ent["status"] = res.get("Status") or ent["status"]
+            except ServiceError:
+                pass
+        out["status"][ref] = {"asset_id": ent["asset_id"], "status": ent.get("status")}
+    if json.dumps(led, sort_keys=True) != before:
+        _avatar_ledger_save(led)
+    return out
+
+
+async def api_avatar_list(body: dict):
+    """虚拟人像库资产列表(ListAssets):分页 + 名称模糊搜索,返回账号内全部图片
+    素材与总数;顺带把结果里的状态同步回本地台账(预览页「已入库」标记保鲜)。"""
+    body = body or {}
+    try:
+        page = max(1, int(body.get("page") or 1))
+        size = min(100, max(1, int(body.get("page_size") or 50)))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "page/page_size must be integers") from None
+    filt: dict = {"GroupType": "AIGC"}
+    q = str(body.get("q") or "").strip()
+    if q:
+        filt["Name"] = q
+    res = await asyncio.to_thread(
+        _avatar_call, "ListAssets",
+        {"Filter": filt, "PageNumber": page, "PageSize": size})
+    items = [{"id": it.get("Id") or "", "name": it.get("Name") or "",
+              "asset_type": it.get("AssetType") or "",
+              "status": it.get("Status") or "", "url": it.get("URL") or "",
+              "group_id": it.get("GroupId") or "",
+              "project_name": it.get("ProjectName") or "",
+              "create_time": it.get("CreateTime") or "",
+              "last_inference_time": it.get("LastInferenceTime") or ""}
+             for it in (res.get("Items") or [])]
+    led = _avatar_ledger()
+    by_id = {it["id"]: it["status"] for it in items if it["id"]}
+    changed = False
+    for ent in led["assets"].values():
+        st = by_id.get(ent.get("asset_id"))
+        if st and st != ent.get("status"):
+            ent["status"] = st
+            changed = True
+    if changed:
+        _avatar_ledger_save(led)
+    return {"items": items, "total": int(res.get("TotalCount") or 0),
+            "page": page, "page_size": size}
+
+
+async def api_avatar_delete(body: dict):
+    """删除虚拟人像库中的一个素材(DeleteAsset,不可恢复);同步清掉本地台账里
+    指向该素材的条目(人物预览的「已入库」标记随之消失)。"""
+    aid = str((body or {}).get("id") or "").strip()
+    if not aid:
+        raise ServiceError(400, "id is required")
+    cfg = _avatar_cfg()
+    await asyncio.to_thread(
+        _avatar_call, "DeleteAsset",
+        {"Id": aid, "ProjectName": cfg.get("project_name") or "default"})
+    led = _avatar_ledger()
+    stale = [k for k, v in led["assets"].items() if v.get("asset_id") == aid]
+    for k in stale:
+        led["assets"].pop(k, None)
+    if stale:
+        _avatar_ledger_save(led)
+    return {"deleted": aid}
 
 
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
