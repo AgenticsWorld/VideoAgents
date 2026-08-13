@@ -244,10 +244,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
+          <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
           <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
           <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
+          <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
         </div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
@@ -665,6 +667,29 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
+  </div>
+</div>
+<div id="diag-modal" class="modal">
+  <div class="box" style="width:600px">
+    <h3>🩺 诊断数据</h3>
+    <div class="row"><label>本地采集</label>
+      <input type="checkbox" id="diag-on" style="width:auto">
+      <span id="diag-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="note">开启时在运行结束与生成结束处按字段白名单记录结构化事件(引擎/Agent/渠道/状态/时长/脱敏后的错误模板),只写入本机 data/.videoagents/telemetry/,不含提示词、项目内容、文件路径与 API Key,永不自动上传。「导出诊断包」生成一个 zip(事件 + 环境摘要 + 下方勾选的经验卡),由你自行提交给开发者(如 GitHub issue 附件),用于改进产品。</div>
+    <div id="diag-stats" class="note">读取中…</div>
+    <div class="row"><label>经验卡</label>
+      <span class="note" style="flex:1">任务闭环时沉淀的机制性教训(各项目 runs/&lt;task_id&gt;/lesson.md);默认全部不导出,逐张预览、勾选后才会进入诊断包</span></div>
+    <div id="diag-lessons" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
+    <div class="row"><label>包含事件</label>
+      <input type="checkbox" id="diag-inc-events" checked style="width:auto">
+      <span class="note" style="flex:1">诊断包中包含已采集的结构化事件文件</span></div>
+    <div class="err" id="diag-err"></div>
+    <div class="actions">
+      <button id="diag-clear" style="margin-right:auto">🗑 清空事件</button>
+      <button id="diag-export">⬇ 导出诊断包</button>
+      <button id="diag-close" class="primary">关闭</button>
+    </div>
   </div>
 </div>
 <script>
@@ -1369,6 +1394,67 @@ $('#mem-ok').onclick=async()=>{
     await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
     $('#mem-modal').style.display='none';
   }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
+let DIAG_LESSONS=[];
+function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
+function diagStats(d){
+  let s=I18N.f('已采集 {n} 条事件,占用 {kb} KB',{n:d.total_events,kb:(d.outbox_bytes/1024).toFixed(1)});
+  if(d.latest_ts)s+=' · '+t('最近:')+esc(d.latest_ts);
+  if(d.top_errors&&d.top_errors.length)
+    s+='<br>'+t('高频错误:')+'<br>'+d.top_errors.slice(0,3)
+      .map(e=>`· ${esc(e.template)||e.signature} ×${e.count}`).join('<br>');
+  $('#diag-stats').innerHTML=s;
+}
+function diagLessonRow(c,i){
+  const d=document.createElement('div');
+  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px';
+  const meta=[c.project,c.meta.category,c.meta.provider,c.meta.date].filter(Boolean).map(esc).join(' · ');
+  d.innerHTML=`<label style="display:flex;gap:8px;align-items:baseline;cursor:pointer">
+      <input type="checkbox" class="diag-pick" data-i="${i}" style="width:auto">
+      <span style="flex:1">${esc(c.title)} <span style="color:var(--dim);font-size:12px">${meta}</span></span></label>
+    <details style="margin-top:4px"><summary style="cursor:pointer;color:var(--dim);font-size:12px">${t('预览全文')}</summary>
+      <pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(c.body)}</pre></details>`;
+  return d;
+}
+async function openDiagModal(){
+  $('#diag-err').textContent='';
+  $('#diag-modal').style.display='flex';
+  try{
+    const d=await api('/api/v1/diagnostics');
+    $('#diag-on').checked=!!d.enabled;
+    diagStats(d);
+  }catch(e){$('#diag-on').checked=true;$('#diag-err').textContent='读取失败:'+e.message}
+  diagSt();
+  try{
+    DIAG_LESSONS=(await api('/api/v1/diagnostics/lessons')).lessons||[];
+    const box=$('#diag-lessons');box.innerHTML='';
+    if(!DIAG_LESSONS.length)box.innerHTML=`<div class="empty">${t('暂无经验卡(任务闭环时按 WORKFLOW.md §6.1 沉淀 lesson.md)')}</div>`;
+    DIAG_LESSONS.forEach((c,i)=>box.appendChild(diagLessonRow(c,i)));
+  }catch(e){}
+}
+$('#menu-diag').onclick=e=>{e.preventDefault();openDiagModal()};
+$('#diag-close').onclick=()=>$('#diag-modal').style.display='none';
+$('#diag-on').onchange=async()=>{
+  diagSt();
+  try{await api('/api/v1/config/diagnostics',{diagnostics_enabled:$('#diag-on').checked})}
+  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
+};
+$('#diag-clear').onclick=async()=>{
+  if(!confirm(t('清空本机已采集的事件文件?(不影响经验卡)')))return;
+  try{
+    await api('/api/v1/diagnostics/clear',{});
+    const d=await api('/api/v1/diagnostics');diagStats(d);
+  }catch(e){$('#diag-err').textContent=e.message}
+};
+$('#diag-export').onclick=async()=>{
+  $('#diag-err').textContent='';
+  const picked=[...document.querySelectorAll('.diag-pick:checked')].map(el=>DIAG_LESSONS[+el.dataset.i].path);
+  try{
+    const r=await api('/api/v1/diagnostics/export',{lessons:picked,include_events:$('#diag-inc-events').checked});
+    location.href='/api/v1/diagnostics/export/'+encodeURIComponent(r.name);   // 浏览器直接下载 zip
+  }catch(e){$('#diag-err').textContent='导出失败:'+e.message}
 };
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */

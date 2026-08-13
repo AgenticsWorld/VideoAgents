@@ -312,6 +312,11 @@ async def clawbot():
     return _page("clawbot.html")
 
 
+@app.get("/avatars")
+async def avatars():
+    return _page("avatars.html")
+
+
 @app.get("/preview/{page}")
 async def preview(page: str):
     if page not in PREVIEW_FILES:

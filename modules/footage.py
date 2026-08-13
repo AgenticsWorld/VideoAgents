@@ -25,6 +25,9 @@ CLI(全部子命令输出 JSON 到 stdout,便于 Agent 解析;失败 exit 非 0)
       --duration 4.2 [--fps 24] [--width 1920] [--height 1080] [--crop-x center]
   python3 modules/footage.py concat --list <concat.txt> --out <mp4>
   python3 modules/footage.py mux --video <mp4> --audio <母带> --out <mp4>
+  python3 modules/footage.py ledger --sources mashup/sources.json --provider youtube
+      --id <vid> [--file <path>] [--sha256 auto|<hex>] [--used-by-add grpNNN]
+      [--mark unavailable]
 
 Python:
   from modules.footage import search_youtube, search_pexels, search_pixabay, \
@@ -45,6 +48,9 @@ Python:
     setsar=1、去音轨(-an);素材反正要转码归一,精确到帧是白捡的。
   - mux 封装铁律:-c:v copy -c:a copy,**严禁 -shortest**(会静默截断音频末帧
     且总长检查仍 PASS);要求视频时长 >= 音频,不满足直接报错。
+  - ledger 是台账 sources.json 的**唯一合法写入口**(mx2 clip-cutter 全量并发,
+    多进程读-改-写同一 JSON 必然互相覆盖丢更新):flock 独占锁 + 临时文件原子替换;
+    只更新已存在条目(file/sha256/used_by 追加/状态标记),条目登记归 curator/merge。
 机检入口见 code/check_footage.py。
 """
 from __future__ import annotations
@@ -102,7 +108,10 @@ def _ytdlp_base() -> list[str]:
     if _YTDLP_JS_FLAG is None:
         r = _run(["yt-dlp", "--help"], timeout=60)
         _YTDLP_JS_FLAG = "--js-runtimes" in (r.stdout or "") and tool_available("node")
-    cmd = ["yt-dlp", "--no-playlist", "--no-warnings"]
+    # socket-timeout/retries:代理出口不稳时连接会无限 stall(2026-08-13 实测挂满
+    # 外层 3600s 超时才被杀),30s 无数据即断开重试,快败快重试
+    cmd = ["yt-dlp", "--no-playlist", "--no-warnings",
+           "--socket-timeout", "30", "--retries", "3"]
     if _YTDLP_JS_FLAG:
         cmd += ["--js-runtimes", "node"]
     return cmd
@@ -425,6 +434,60 @@ def mux_master(video: str, audio: str, out: str) -> dict:
     return {"path": out, **probe_video(out)}
 
 
+# ---------------- 台账(并发安全) ----------------
+
+def _file_sha256(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def ledger_update(sources: str, provider: str, source_id: str,
+                  file: str | None = None, sha256: str | None = None,
+                  used_by_add: str | None = None, mark: str | None = None) -> dict:
+    """并发安全地更新 sources.json 的单个源条目(flock 独占锁 + 原子替换写)。
+
+    条目必须已存在(登记归 curator/merge,本原语只补录);sha256 传 "auto" 时
+    对 --file 现算。返回更新后的条目。
+    """
+    import fcntl
+    p = Path(sources)
+    if not p.exists():
+        raise FootageError(f"台账不存在:{p}(条目登记归 curator;merge 单是否已跑?)")
+    if sha256 == "auto":
+        if not file:
+            raise FootageError('--sha256 auto 需要同时给 --file')
+        sha256 = _file_sha256(file)
+    lock_fd = os.open(str(p) + ".lock", os.O_CREAT | os.O_RDWR)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        data = json.loads(p.read_text())
+        hit = next((s for s in (data.get("sources") or [])
+                    if s.get("provider") == provider
+                    and str(s.get("id")) == str(source_id)), None)
+        if hit is None:
+            raise FootageError(
+                f"台账无此源:{provider}:{source_id}(条目登记归 curator/merge,本命令只补录)")
+        if file is not None:
+            hit["file"] = file
+        if sha256 is not None:
+            hit["sha256"] = sha256
+        if used_by_add and used_by_add not in (hit.get("used_by") or []):
+            hit.setdefault("used_by", []).append(used_by_add)
+        if mark is not None:
+            hit["status"] = mark
+        tmp = Path(str(p) + ".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        os.replace(tmp, p)
+        return hit
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+
+
 # ---------------- doctor ----------------
 
 def doctor() -> dict:
@@ -512,6 +575,14 @@ def main(argv=None) -> int:
     s.add_argument("--video", required=True)
     s.add_argument("--audio", required=True)
     s.add_argument("--out", required=True)
+    s = sub.add_parser("ledger")
+    s.add_argument("--sources", required=True)
+    s.add_argument("--provider", required=True)
+    s.add_argument("--id", required=True, dest="source_id")
+    s.add_argument("--file", default=None)
+    s.add_argument("--sha256", default=None, help='十六进制,或 "auto"(对 --file 现算)')
+    s.add_argument("--used-by-add", default=None, dest="used_by_add")
+    s.add_argument("--mark", default=None, help="源状态标记,如 unavailable")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "doctor":
@@ -539,6 +610,9 @@ def main(argv=None) -> int:
             _emit(concat_clips(a.list_file, a.out))
         elif a.cmd == "mux":
             _emit(mux_master(a.video, a.audio, a.out))
+        elif a.cmd == "ledger":
+            _emit(ledger_update(a.sources, a.provider, a.source_id,
+                                a.file, a.sha256, a.used_by_add, a.mark))
         return 0
     except FootageError as e:
         print(f"[ERROR] {e}", file=sys.stderr)

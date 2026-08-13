@@ -4,6 +4,42 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-08-13
+
+### Added
+
+- Virtual Portrait Library (Settings → Advanced): integration with Volcano Ark's private virtual-portrait media-asset library. A dedicated settings page walks through activating the Advanced Creation Package and configuring Volcano Engine IAM Access Key / Secret Key (falling back to the File Hosting TOS credentials when left blank), with an enable/disable toggle; once enabled it lists every asset in the account's library with total count, name search, 50-per-page pagination, thumbnails, review status and irreversible-delete actions. On the Character Preview page every character image gains a one-click Register button with live status (registering is asynchronous: Processing → Active/Failed, tracked in a content-hash ledger so identical files are registered once). During video generation, reference images whose content hash matches an Active library asset are automatically submitted as `asset://<asset-ID>` URIs instead of inline base64 (Seedance 2.x only), which avoids face-reference moderation blocks; the Storyboard Preview marks such references with a 🛡 badge. Also adds a `genmedia upload` subcommand that uploads a local file through the configured object-storage channel and prints a presigned URL. All 11 language dictionaries updated.
+- `runninghub-cloud-workflow` skill for the video-generation agent: documents the parameterization mechanics, asset upload and wiring conventions, the honest-reporting rules for parameters that cannot reach the cloud on placeholder-free templates (`--seed`, and `--resolution`/`--aspect`), `promptTips`/`failedReason` troubleshooting, and billing discipline. Injected only when the video channel is ComfyUI on a RunningHub site.
+
+### Changed
+
+- Minor UI copy: the TOS file-hosting hint now links to the Volcano IAM Key Management console for obtaining the AccessKey, and the ComfyUI workflow selector labels were renamed from "workflow JSON" to "workflow API".
+
+### Fixed
+
+- RunningHub placeholder-free cloud workflows regressed to silently running with the template author's demo prompt and default duration (the working implementation had lived only in uncommitted worktree files and was lost to an overwrite). Prompt and duration injection are reimplemented by following the H3 node wiring — the prompt rewrites the upstream text primitive, the duration rewrites the frame-count primitive using the workflow's duration-to-frame-count conversion semantics — and any unrecognizable wiring now fails before submission, so no request is sent and nothing is billed. Reference wiring also detaches all leftover template `ref_images.*`/`ref_audios.*` connections and deletes orphaned loader nodes first, so the author's demo assets can no longer silently blend into production requests when fewer references are submitted than the template has slots.
+
+## [1.0.14] - 2026-08-13
+
+### Added
+
+- Diagnostics data (Settings → Advanced → Diagnostics): agent issues and lessons collected after distribution can be manually exported as a diagnostics package for the developers — local collection only, manual export only, never uploaded automatically. A single privacy boundary module enforces a field whitelist at the entry point (prompts, project content, file paths and API keys can never get in), error messages are templated into 200-char patterns with 16-char signatures so identical failures cluster across machines, and project names are stored as 12-char hashes. Two collection points cover run-level events (engine/agent/status/duration/error signature) and generation-level events (kind/provider/model/outcome/duration). Optional per-run lesson cards (`runs/*/lesson.md`, written only under strict conditions) can be previewed and individually selected — none are exported by default. The export zip carries a versioned manifest, event files, an aggregated summary, and the selected lesson cards.
+- Seedance 2.x reference-to-video on Comfy Cloud: two bundled workflow templates (Seedance 2.5 and 2.0, built on the paid ByteDance2ReferenceNode API node, Comfy Cloud only) wired into a dedicated genmedia branch — reference images uploaded per item and attached dynamically, all validation performed before anything is billed (local-ComfyUI rejection, unsupported input modes, reference-count caps of 9/30, integer duration ranges, resolution clamping, ratio fallback), audio generation on by default, and the continuity last-frame extracted locally from the finished clip.
+- `sd20-prompt-writing` skill: the official Doubao Seedance 2.0 prompt-writing guide ships with the repo (quick-reference entry plus a fully reorganized reference including formulas, worked examples and a 12-item troubleshooting section), structured to match the existing `h3-prompt-writing` skill.
+
+### Changed
+
+- MiniMax and RunningHub API keys are now stored separately per interface region/site (the global and China platforms use non-interchangeable accounts and keys; a shared single key field could silently overwrite one side when switching region or run mode). Existing single-key configs are migrated automatically into both slots with unchanged behavior, and the settings page shows the key field matching the selected region/run mode.
+- Default Volcano Ark / BytePlus image model switched to Seedream 5.0 Lite, whose output containing faces passes Seedance review by default; the dropdown labels note this recommendation.
+- The audio-to-video plugin's source tree was removed from the repository — it ships solely as a standalone installable plugin package (as introduced in v1.0.12).
+
+### Fixed
+
+- MiniMax-H3 reference audio no longer rejected with error 2013: audio MIME types are now mapped explicitly (mp3/wav/m4a/aac/flac/ogg) instead of relying on `mimetypes` guesses (`.mp3` → `audio/mpeg` fell outside H3's whitelist), and unsupported extensions fail fast with a transcode hint rather than sending a request that is guaranteed to be refused.
+- Comfy Cloud component preflight and connection test no longer break on the missing per-node `object_info` endpoint (Cloud returns 404 and only supports the full listing): the preflight now performs a single full fetch, and gzip transfer encoding shrinks the ~9.4 MB plaintext response to ~0.7 MB, which also stops local proxies from truncating the stream mid-body.
+- Clip-cutter concurrent-overwrite hazard fixed: the host footage module gained an atomic JSON write primitive and all plugin-side writes are forced through it.
+- Footage downloads no longer stall indefinitely on unstable proxy exits: yt-dlp now runs with a 30-second socket timeout and 3 retries, failing fast instead of hanging until the outer one-hour timeout kills it.
+
 ## [1.0.13] - 2026-08-10
 
 ### Added

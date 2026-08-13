@@ -182,6 +182,10 @@ async function ensureWebServer(): Promise<void> {
 
   const dataRoot = process.env.VIDEOAGENTS_DATA_DIR || path.join(app.getPath('userData'), 'data')
   mkdirSync(path.join(dataRoot, 'projects'), {recursive: true})
+  // macOS 会校验整个已签名的 .app。Python 若在 Resources/backend 写入
+  // __pycache__，会使应用在下次启动时因签名失效而被 Gatekeeper 拒绝。
+  const pythonCacheRoot = path.join(dataRoot, 'python-cache')
+  mkdirSync(pythonCacheRoot, {recursive: true})
   const root = webRoot()
   const backend = backendRoot()
   activeRuntime = await ensurePythonRuntime(backend)
@@ -192,6 +196,7 @@ async function ensureWebServer(): Promise<void> {
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',
+    PYTHONPYCACHEPREFIX: pythonCacheRoot,
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
     VIDEOAGENTS_PERMISSION_MODE: process.env.VIDEOAGENTS_PERMISSION_MODE || 'bypassPermissions',

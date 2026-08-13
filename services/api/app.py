@@ -415,6 +415,26 @@ async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
 
 
+@api.post("/avatar-assets/list", tags=["avatar-assets"])
+async def avatar_assets_list(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_list(body)
+
+
+@api.post("/avatar-assets/delete", tags=["avatar-assets"])
+async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_delete(body)
+
+
+@api.post("/avatar-assets/upload", tags=["avatar-assets"])
+async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_upload(body)
+
+
+@api.post("/avatar-assets/status", tags=["avatar-assets"])
+async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_status(body)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())
@@ -468,6 +488,38 @@ async def agent_memory() -> dict[str, Any]:
 @api.post("/config/agent-memory", tags=["automation"])
 async def set_agent_memory(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_memory_set(body)
+
+
+@api.get("/diagnostics", tags=["diagnostics"])
+async def diagnostics_summary() -> dict[str, Any]:
+    return await core.api_diagnostics_get()
+
+
+@api.post("/config/diagnostics", tags=["diagnostics"])
+async def set_diagnostics(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_diagnostics_set(body)
+
+
+@api.get("/diagnostics/lessons", tags=["diagnostics"])
+async def diagnostics_lessons() -> dict[str, Any]:
+    return await core.api_diagnostics_lessons()
+
+
+@api.post("/diagnostics/clear", tags=["diagnostics"])
+async def diagnostics_clear() -> dict[str, Any]:
+    return await core.api_diagnostics_clear()
+
+
+@api.post("/diagnostics/export", tags=["diagnostics"])
+async def diagnostics_export(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_diagnostics_export(body)
+
+
+@api.get("/diagnostics/export/{name}", tags=["diagnostics"])
+async def diagnostics_export_download(name: str) -> FileResponse:
+    # 仓库首个出站文件下载端点:文件名格式白名单 + 仅限 telemetry/export 目录
+    path = core.diagnostics_export_path(name)
+    return FileResponse(path, media_type="application/zip", filename=name)
 
 
 @api.get("/projects/{project}/watchdog", tags=["automation"])
