@@ -288,7 +288,9 @@ function installApplicationMenu(): void {
 }
 
 async function applyDesktopUpdate(artifact: DesktopArtifact): Promise<void> {
-  const currentAppPath = path.resolve(process.resourcesPath, '..')
+  const currentAppPath = process.platform === 'darwin'
+    ? path.resolve(process.resourcesPath, '..', '..')
+    : path.resolve(process.resourcesPath, '..')
   await downloadAndApplyDesktopUpdate(
     app.getPath('userData'), currentAppPath, artifact, updateRuntimeProgress,
   )
