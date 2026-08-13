@@ -664,10 +664,26 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     if str(data.get("taskStatus") or "").upper() == "FAILED":
         raise RuntimeError("RunningHub 工作流校验失败:"
                            f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
+    # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印
+    print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}",
+          file=sys.stderr, flush=True)
     deadline = time.time() + COMFY_TIMEOUT
+    poll_errors = 0
     while time.time() < deadline:
         time.sleep(RH_POLL_INTERVAL)
-        st = _rh_post(base, key, "/task/openapi/status", {"taskId": task_id}, timeout=60)
+        try:
+            st = _rh_post(base, key, "/task/openapi/status", {"taskId": task_id}, timeout=60)
+        except RuntimeError:
+            # 轮询窗口长,代理/网络瞬断不该丢掉远端仍在跑且已计费的任务;
+            # 连续多次不可达才放弃(_rh_post 仅在网络层错误抛 RuntimeError)
+            poll_errors += 1
+            if poll_errors >= 3:
+                raise RuntimeError(
+                    f"RunningHub 状态轮询连续 {poll_errors} 次网络不可达"
+                    f"(taskId={task_id});任务可能仍在云端执行,"
+                    "请先到 RunningHub 网页端核对再决定重投,防止双份计费")
+            continue
+        poll_errors = 0
         status = st.get("data")
         if isinstance(status, dict):  # 容错:部分版本把状态包在对象里
             status = status.get("taskStatus") or status.get("status")
@@ -1268,6 +1284,175 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
     }
 
 
+IMAGE_SAMPLER_CLASSES = ("KSampler", "KSamplerAdvanced", "SamplerCustom", "SamplerCustomAdvanced")
+
+
+def _image_primary_sampler(workflow: dict) -> dict:
+    """定位图像工作流的主采样器:不(传递地)依赖其他采样器产物的那一个。
+
+    云端模板常带二段式精修/放大链(第二个采样器拿第一段产物当参考),画面内容
+    由主采样器的 conditioning 决定,prompt/negative/seed 直绑只认主采样器,
+    精修链的增强提示词保持模板原值。
+    """
+    samplers = {nid: node for nid, node in workflow.items()
+                if isinstance(node, dict) and node.get("class_type") in IMAGE_SAMPLER_CLASSES}
+
+    def reaches_other_sampler(start: str) -> bool:
+        seen, stack = {start}, [start]
+        while stack:
+            node = workflow.get(stack.pop())
+            if not isinstance(node, dict):
+                continue
+            for value in (node.get("inputs") or {}).values():
+                if not _node_link(value) or str(value[0]) in seen:
+                    continue
+                up = str(value[0])
+                seen.add(up)
+                if up in samplers:
+                    return True
+                stack.append(up)
+        return False
+
+    primary = [nid for nid in samplers if not reaches_other_sampler(nid)]
+    if len(primary) != 1:
+        raise RuntimeError(
+            f"RunningHub 图像工作流无法定位唯一主采样器(KSampler 系候选 {len(primary)} 个),"
+            "无法直绑本次参数;请精简模板或改用 {{PROMPT}} 等占位符")
+    return samplers[primary[0]]
+
+
+def _image_cond_text_slot(workflow: dict, sampler: dict, side: str):
+    """顺主采样器 positive/negative conditioning 连线找文本编码节点。
+
+    返回 (节点 inputs, 文本键, 节点id);途经单输入 conditioning 透传节点
+    (FluxGuidance/ReferenceLatent 等)继续下探。ConditioningZeroOut 表示该侧
+    文本被零化(模板不用这侧文本),返回 None 由调用方定性。
+    """
+    inputs = sampler.get("inputs") or {}
+    link = inputs.get(side)
+    if link is None and _node_link(inputs.get("guider")):
+        # SamplerCustomAdvanced:conditioning 藏在 guider 节点
+        # (CFGGuider 有 positive/negative,BasicGuider 只有 conditioning=正面)
+        guider = (workflow.get(str(inputs["guider"][0])) or {}).get("inputs") or {}
+        link = guider.get(side)
+        if link is None and side == "positive":
+            link = guider.get("conditioning")
+    for _ in range(24):
+        if not _node_link(link):
+            return None
+        nid = str(link[0])
+        node = workflow.get(nid)
+        if not isinstance(node, dict) or node.get("class_type") == "ConditioningZeroOut":
+            return None
+        node_inputs = node.setdefault("inputs", {})
+        for text_key in ("text", "prompt"):
+            value = node_inputs.get(text_key)
+            if isinstance(value, str) or _node_link(value):
+                return node_inputs, text_key, nid
+        link = node_inputs.get("conditioning")
+    return None
+
+
+def _rh_resolve_text_slot(workflow: dict, node_inputs: dict, text_key: str):
+    """把编码节点的文本位解析为实际写入位置 (容器 inputs, 键)。
+
+    字面值位就地覆写;连线则改写上游文本 primitive(value/text/string 值位,
+    与 H3 同款);上游不可识别(如图像反推、字符串拼装节点)时退回编码节点断链
+    覆写字面值——text/prompt 位本身就是标准文本位,断开的上游分支不再进执行图。
+    """
+    value = node_inputs.get(text_key)
+    if _node_link(value):
+        linked = (workflow.get(str(value[0])) or {}).setdefault("inputs", {})
+        for key in ("value", "text", "string"):
+            if isinstance(linked.get(key), str):
+                return linked, key
+    return node_inputs, text_key
+
+
+def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
+    """种子直绑:采样器种子字面值位,或经 noise 连线的 RandomNoise 类节点。
+    定位不到只如实提醒不报错——种子不注入只影响重跑变化,不产生错误内容。"""
+    inputs = sampler.setdefault("inputs", {})
+    candidates = [(inputs, ("seed", "noise_seed"))]
+    if _node_link(inputs.get("noise")):
+        upstream = (workflow.get(str(inputs["noise"][0])) or {}).setdefault("inputs", {})
+        candidates.append((upstream, ("noise_seed", "seed", "value")))
+    for container, keys in candidates:
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                container[key] = seed
+                return
+    print("[genmedia] RunningHub 图像工作流未定位到种子位,--seed 未注入(按模板内种子出图)",
+          file=sys.stderr)
+
+
+def _apply_rh_image_reference(workflow: dict, file_name: str) -> None:
+    """把已上传的 --ref 绑进图生图模板唯一的 LoadImage 输入图节点。"""
+    loads = [node for node in workflow.values()
+             if isinstance(node, dict) and node.get("class_type") == "LoadImage"]
+    if len(loads) != 1:
+        raise RuntimeError(
+            f"RunningHub 图生图工作流须恰好 1 个 LoadImage 输入图节点(找到 {len(loads)} 个),"
+            "无法定位 --ref 绑定位;请精简模板或改用 {{FIRST_FRAME}} 占位符")
+    loads[0].setdefault("inputs", {})["image"] = file_name
+
+
+def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: str,
+                             ref_name: str | None, seed) -> None:
+    """RunningHub 图像云工作流的无占位符直绑兜底(与视频 H3 同款语义)。
+
+    云端工作区导出件常无 {{TOKEN}} 占位符而是作者演示字面值,占位符替换空转,
+    演示提示词/演示图会静默混入生产请求;对缺对应占位符的模板顺主采样器连线
+    直接绑定本次参数,prompt/ref 定位不到一律提交前报错不发请求不计费。
+    带占位符的模板逐项跳过兜底,行为不变。
+    """
+    sampler_cache = []
+
+    def sampler() -> dict:
+        if not sampler_cache:
+            sampler_cache.append(_image_primary_sampler(workflow))
+        return sampler_cache[0]
+
+    prompt_target = None
+    if "{{PROMPT}}" not in raw:
+        slot = _image_cond_text_slot(workflow, sampler(), "positive")
+        if slot is None:
+            raise RuntimeError(
+                "RunningHub 图像工作流顺 positive 连线未找到可写文本位(text/prompt),"
+                "无法注入本次提示词;请把模板提示词改接文本节点或改用 {{PROMPT}} 占位符")
+        container, key = _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        container[key] = prompt
+        prompt_target = (id(container), key)
+    if negative and "{{NEGATIVE}}" not in raw:
+        slot = _image_cond_text_slot(workflow, sampler(), "negative")
+        target = None if slot is None else _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        if target is None or (id(target[0]), target[1]) == prompt_target:
+            raise RuntimeError(
+                "当前 RunningHub 图像工作流无独立负面文本位,--negative 无法注入;"
+                "请在「🎨 生成模型」页把 ComfyUI 负面模式改为「并入正面提示词」"
+                "(append_exclusions),或改用带 {{NEGATIVE}} 占位符的模板")
+        target[0][target[1]] = negative
+    if seed is not None and "{{SEED}}" not in raw:
+        _apply_rh_image_seed(workflow, sampler(), seed)
+    if "{{WIDTH}}" not in raw and "{{HEIGHT}}" not in raw:
+        print("[genmedia] RunningHub 图像工作流无分辨率占位符,--aspect/--size 不进云端,"
+              "按模板内分辨率节点出图", file=sys.stderr)
+    if ref_name:
+        if "{{FIRST_FRAME}}" not in raw:
+            _apply_rh_image_reference(workflow, ref_name)
+        return
+    # 无 --ref:文生图模板残留被引用的 LoadImage 会把作者演示图静默混入
+    # (H3 残留素材同款纪律);未被引用的孤儿节点不进执行图,不拦
+    referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                  for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    if any(isinstance(node, dict) and node.get("class_type") == "LoadImage"
+           and nid in referenced for nid, node in workflow.items()):
+        raise RuntimeError(
+            "RunningHub 文生图工作流含在用的 LoadImage 输入图节点,作者演示图会混入生产请求;"
+            "该模板请配置为图生图工作流搭配 --ref 使用,或改选纯文生图模板")
+
+
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None
@@ -1301,6 +1486,9 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
             workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
     if rh:
+        # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
+        _apply_rh_image_bindings(_rh_workflow_text(workflow_cfg), wf, prompt,
+                                 negative, tokens.get("FIRST_FRAME"), seed)
         return _rh_run(workflow_cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
