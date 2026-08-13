@@ -1456,9 +1456,44 @@ def _volc_balance() -> dict | None:
         return None
 
 
+def _rh_balance() -> dict | None:
+    """RunningHub 账户余额(accountStatus):RH 币 + 钱包余额;.ai/.cn 账号不互通,
+    按站点分别查询,只查填了 Key 的站点。未开启/一个 Key 都没配返回 None;
+    单站点查询失败该站点读数为 null(面板显示「未知」),不影响另一站点。"""
+    cfg = resource_cfg()
+    keys = {s: (cfg.get(f"rh_key_{s}") or "").strip() for s in ("ai", "cn")}
+    if not (cfg.get("rh_enabled") and any(keys.values())):
+        return None
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    out = {}
+    for site, key in keys.items():
+        if not key:
+            continue
+        try:
+            resp = _http_post_json(
+                RH_BASES[f"rh_{site}"] + "/uc/openapi/accountStatus",
+                {"apikey": key, "apiKey": key},
+                {"Authorization": f"Bearer {key}"}, 15)
+            if resp.get("code") != 0:
+                raise ValueError(str(resp.get("msg")))
+            d = resp.get("data") or {}
+            out[site] = {"coins": num(d.get("remainCoins")),
+                         "balance": num(d.get("remainMoney")),
+                         "currency": str(d.get("currency") or "")}
+        except Exception:
+            out[site] = {"coins": None, "balance": None, "currency": ""}
+    return out
+
+
 def provider_balance(provider: str) -> dict | None:
-    """openrouter/volc 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
-    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance}.get(provider)
+    """openrouter/volc/runninghub 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
+    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance,
+          "runninghub": _rh_balance}.get(provider)
     if not fn:
         return None
     ts, res = _BALANCE_CACHE.get(provider, (0, None))
@@ -6437,16 +6472,20 @@ async def api_resources_config_get():
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
             "volc_ak": cfg.get("volc_ak") or "",
-            "volc_sk": cfg.get("volc_sk") or ""}
+            "volc_sk": cfg.get("volc_sk") or "",
+            "rh_enabled": bool(cfg.get("rh_enabled")),
+            "rh_key_ai": cfg.get("rh_key_ai") or "",
+            "rh_key_cn": cfg.get("rh_key_cn") or ""}
 
 
 async def api_resources_config_set(body: dict):
     """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
     cfg = STATE.setdefault("resources", {})
-    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled"):
+    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled", "rh_enabled"):
         if body.get(k) is not None:
             cfg[k] = bool(body[k])
-    for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
+    for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk",
+              "rh_key_ai", "rh_key_cn"):
         if body.get(k) is not None:
             if not isinstance(body[k], str) or len(body[k]) > 500:
                 raise ServiceError(400, f"{k} must be a string (≤500 chars)")
@@ -6471,19 +6510,23 @@ async def api_resources(fresh: bool = False):
         return await asyncio.to_thread(engine_usage_full, engine) if on else dict(empty)
     claude_on, codex_on, kimi_on = (
         claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled())
-    cu, co, ki, orb, vb = await asyncio.gather(
+    cu, co, ki, orb, vb, rb = await asyncio.gather(
         usage("claude", claude_on),
         usage("codex", codex_on),
         usage("kimi", kimi_on),
         asyncio.to_thread(provider_balance, "openrouter"),
-        asyncio.to_thread(provider_balance, "volc"))
+        asyncio.to_thread(provider_balance, "volc"),
+        asyncio.to_thread(provider_balance, "runninghub"))
     cfg = resource_cfg()
+    rh_keys = any((cfg.get(k) or "").strip() for k in ("rh_key_ai", "rh_key_cn"))
     return {"claude": {**cu, "enabled": claude_on},
             "codex": {**co, "enabled": codex_on},
             "kimi": {**ki, "enabled": kimi_on},
             "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
                            **(orb or {})},
-            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}
+            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})},
+            "runninghub": {"configured": bool(cfg.get("rh_enabled") and rh_keys),
+                           "sites": rb or {}}}
 
 
 async def api_watchdog_get(project: str = ""):

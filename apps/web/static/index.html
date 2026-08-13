@@ -236,7 +236,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎/RunningHub 余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
@@ -658,6 +658,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-volc-row"><label>Secret Key</label>
       <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
     <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="row"><label>RunningHub 余额</label>
+      <input type="checkbox" id="res-rh" style="flex:none">
+      <span class="note" style="flex:1">开启后用 API Key 查询 RH 币与钱包余额;.ai 与 .cn 账号不互通,分别填写,留空的站点不查</span></div>
+    <div class="row res-rh-row"><label>.ai API Key</label>
+      <input type="password" id="res-rh-ai" placeholder="runninghub.ai API Key" autocomplete="off"></div>
+    <div class="row res-rh-row"><label>.cn API Key</label>
+      <input type="password" id="res-rh-cn" placeholder="runninghub.cn API Key" autocomplete="off"></div>
+    <div class="note res-rh-row" style="margin-top:-6px">获取 Key:<a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.ai</a> / <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.cn</a> <span>API 服务页</span></div>
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
@@ -1453,6 +1461,8 @@ function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll
 $('#res-volc').onchange=resVolcRows;
 function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-kimi-on').onchange=resKimiRows;
+function resRhRows(){const on=$('#res-rh').checked;document.querySelectorAll('.res-rh-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-rh').onchange=resRhRows;
 async function openResModal(){
   $('#res-err').textContent='';
   try{
@@ -1467,8 +1477,11 @@ async function openResModal(){
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
     $('#res-volc-sk').value=c.volc_sk||'';
+    $('#res-rh').checked=!!c.rh_enabled;
+    $('#res-rh-ai').value=c.rh_key_ai||'';
+    $('#res-rh-cn').value=c.rh_key_cn||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();resKimiRows();
+  resVolcRows();resKimiRows();resRhRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1478,6 +1491,8 @@ $('#res-ok').onclick=async()=>{
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
   if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
     $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
+  if($('#res-rh').checked&&!($('#res-rh-ai').value.trim()||$('#res-rh-cn').value.trim())){
+    $('#res-err').textContent=t('开启 RunningHub 余额检查需至少填写一个站点的 API Key');return}
   try{
     await api('/api/v1/resources/config',{
       claude_probe:$('#res-claude').checked,
@@ -1487,7 +1502,10 @@ $('#res-ok').onclick=async()=>{
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
       volc_ak:$('#res-volc-ak').value.trim(),
-      volc_sk:$('#res-volc-sk').value.trim()});
+      volc_sk:$('#res-volc-sk').value.trim(),
+      rh_enabled:$('#res-rh').checked,
+      rh_key_ai:$('#res-rh-ai').value.trim(),
+      rh_key_cn:$('#res-rh-cn').value.trim()});
     $('#res-modal').style.display='none';
     renderResources(true);                             // 保存后立即用新配置刷新面板
   }catch(e){$('#res-err').textContent='保存失败:'+e.message}
@@ -1589,6 +1607,17 @@ async function renderResources(fresh){
   };
   if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
   if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
+  if(r.runninghub&&r.runninghub.configured){
+    // 每个已配置站点一行:RH 币 + 钱包余额(币种符号按接口返回的 currency)
+    for(const [site,s] of Object.entries(r.runninghub.sites||{})){
+      const sym={CNY:'¥',USD:'$'}[s.currency]||(s.currency?s.currency+' ':'');
+      const known=typeof s.coins==='number';
+      const amt=known
+        ?`${Math.round(s.coins)} ${t('RH 币')}`+(typeof s.balance==='number'?` · ${sym}${s.balance.toFixed(2)}`:'')
+        :t('未知');
+      h+=`<div class="res-bal"><span class="nm">RunningHub.${site}</span><span class="amt${known?'':' unknown'}">${amt}</span></div>`;
+    }
+  }
   h+=`<div id="res-updated">${t('更新于:')}${new Date().toLocaleTimeString()}</div>`;
   box.innerHTML=h;
 }
