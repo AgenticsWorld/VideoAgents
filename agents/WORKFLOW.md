@@ -644,6 +644,8 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 
 **任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备(inline 工单按上文豁免 `context.md`);(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
+**可选第五件:经验卡 `lesson.md`(2026-08-12,默认不写)**。仅当**同时满足**以下全部条件时,orchestrator 在收尾钩子随四件套补写 `runs/<task_id>/lesson.md`:① 该任务经历了缺陷单闭环(status: resolved)或 attempt ≥ 3 后才通过;② 教训是**机制性的**(工具用法/渠道参数/流程约束,换一个项目仍然成立),与本项目情节、人物、文本内容无关;③ 现有 SOUL.md/WORKFLOW.md 尚无同款条目。三条有一条不满足就**不写**——常规任务、内容性返工(写得不好重写)、已有规约覆盖的旧坑,一律不产出经验卡。格式:frontmatter(`title`/`category`(provider|workflow|tooling)/`severity`/`provider`/`model`/`agents`/`date`/`evidence`(run_id 或缺陷 ID))+ 正文两节「现象与根因」「怎么做才对」;**正文禁止引用项目原文、人物名与情节**,禁止出现绝对路径与 API Key。用途:设置菜单「高级→诊断数据」会扫描各项目 `runs/*/lesson.md` 供用户逐张预览勾选、打包进诊断导出 zip 手动提交给开发者(见 `modules/diagnostics.py`;永不自动上传),用于沉淀回 SOUL/WORKFLOW 规约。
+
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 
 ## 7. 质量体系:评分、缺陷单、返工

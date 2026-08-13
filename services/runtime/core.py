@@ -7,6 +7,7 @@
 - 全部运行状态 / 工具活动由 API 服务对外发布。
 """
 import asyncio
+import gzip
 import hashlib
 import hmac
 import importlib.util
@@ -465,20 +466,25 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-260128",
+        # 默认 Lite:含人脸图片默认可过 Seedance 审核
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-lite-260128",
                        "custom_model": ""},
-        "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
+        "byteplus": {"api_key": "", "model": "seedream-5-0-lite-260128",
                      "custom_model": ""},
         # MiniMax:api_base 按「接口区域」二选一(海外 api.minimax.io/国内 api.minimaxi.com,
-        # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        # 两平台账号与 Key 不互通,api_key_io/api_key_cn 按区域分别保存,按 api_base 取用);
+        # 图像/视频/音乐/TTS 四段各自独立保存
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "image-01", "custom_model": ""},
         # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
-        # 账号与 Key 不互通);rh_workflows 为工作区工作流收藏 [{id, note, site}]
+        # 账号与 Key 不互通,rh_api_key_cn/rh_api_key_ai 按站点分别保存,按 mode 取用);
+        # rh_workflows 为工作区工作流收藏 [{id, note, site}]
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_ref_workflow_id": "",
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_ref_workflow_id": "",
                     "rh_workflows": []},
     },
     "video": {
@@ -490,11 +496,13 @@ DEFAULT_GENCONFIG = {
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "MiniMax-H3", "custom_model": ""},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "", "checkpoint": "",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": []},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -504,14 +512,16 @@ DEFAULT_GENCONFIG = {
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
         # MiniMax Music:force_instrumental 同上;关闭时按 prompt 自动写词演唱
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "music-3.0", "custom_model": "",
                     "force_instrumental": True},
         # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": []},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
@@ -523,7 +533,8 @@ DEFAULT_GENCONFIG = {
         "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
         # MiniMax Speech:voice 存 voice_id(设置页可拉取音色库选择)
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "speech-2.8-hd", "custom_model": "", "voice": ""},
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
@@ -533,7 +544,8 @@ DEFAULT_GENCONFIG = {
                     "workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": []},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -690,12 +702,28 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
-def _migrate_comfy_workflow_paths(config: dict) -> None:
-    """Keep configurations saved before templates moved from data/ usable."""
+def _split_legacy_key(cfg: dict, legacy_field: str, site_fields: tuple[str, str]) -> None:
+    """旧版单一 API Key(两区域/站点共用)→ 按区域分别保存:旧行为即两侧同 Key,
+    迁移把旧值填入两侧空位并移除旧字段(下次保存落盘即完成迁移)。"""
+    legacy = str(cfg.pop(legacy_field, "") or "").strip()
+    if legacy:
+        for field in site_fields:
+            if not str(cfg.get(field) or "").strip():
+                cfg[field] = legacy
+
+
+def _migrate_genconfig(config: dict) -> None:
+    """Keep configurations saved by older versions usable(comfy 模板路径迁出 data/;
+    MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     for kind in ("image", "video", "music", "tts"):
-        comfy = config.get(kind, {}).get("comfyui")
+        section = config.get(kind, {})
+        mm = section.get("minimax")
+        if isinstance(mm, dict):
+            _split_legacy_key(mm, "api_key", ("api_key_io", "api_key_cn"))
+        comfy = section.get("comfyui")
         if not isinstance(comfy, dict):
             continue
+        _split_legacy_key(comfy, "rh_api_key", ("rh_api_key_cn", "rh_api_key_ai"))
         for key in ("workflow", "ref_workflow"):
             value = comfy.get(key)
             if isinstance(value, str) and value.startswith("data/comfy/"):
@@ -715,7 +743,7 @@ def load_genconfig() -> dict:
     if isinstance(da, dict) and "provider" not in da and "local" not in da:
         # 旧版扁平格式(base_url/api_key/model 直挂 deepagents)→ 迁移为 local 渠道
         saved["deepagents"] = {"provider": "local", "local": da}
-    _migrate_comfy_workflow_paths(saved)
+    _migrate_genconfig(saved)
     return _merge(DEFAULT_GENCONFIG, saved)
 
 
@@ -784,11 +812,19 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
 H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
 
 
+def minimax_region_key(mm: dict) -> str:
+    """MiniMax 按「接口区域」(api_base)取对应区域的 Key:国内版 minimaxi.com →
+    api_key_cn,否则海外版 → api_key_io;旧版单一 api_key 兜底(genmedia 同口径)。"""
+    field = "api_key_cn" if "minimaxi.com" in str(mm.get("api_base") or "") else "api_key_io"
+    return str(mm.get(field) or mm.get("api_key") or "").strip()
+
+
 def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
-    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填 API Key
-    (或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关(genmedia 超分凭证同口径)。"""
+    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填当前
+    接口区域的 API Key(或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关
+    (genmedia 超分凭证同口径)。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    key = str((v.get("minimax") or {}).get("api_key") or "").strip()
+    key = minimax_region_key(v.get("minimax") or {})
     return bool(key or os.environ.get("MINIMAX_API_KEY", "").strip())
 
 
@@ -1030,7 +1066,10 @@ def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
     with opener(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+        body = r.read()
+        if r.headers.get("Content-Encoding") == "gzip":
+            body = gzip.decompress(body)
+        return json.loads(body.decode("utf-8", "replace"))
 
 
 def _http_post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 20):
@@ -2171,6 +2210,13 @@ async def execute_run(run: dict, message: str, model: str | None):
                         {"role": "assistant", "text": reply,
                          "run_id": run["id"], "status": run["status"]})
             publish_run(run)
+            try:
+                # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
+                # 白名单字段本地落盘,错误消息模板化、项目名只存哈希;绝不出网
+                from modules.diagnostics import record_run_event
+                record_run_event(run)
+            except Exception:
+                pass
             # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
             # 人工闸门静默留在 DAG 中。这里只补建签字单，绝不自动改 gate state。
             try:
@@ -4442,9 +4488,20 @@ async def api_test_comfyui(body: dict):
             stats = {}
         except Exception as e2:  # noqa: BLE001
             return {"ok": False, "error": f"Connection failed: {str(e2)[:200]}"}
+    all_info = None
+    if cloud:
+        # Comfy Cloud 无单节点 /object_info/<节点> 端点(404: "Use /api/object_info
+        # instead"),只能全量拉取;本地仍走单节点端点省流量。全量约 9MB,明文长流
+        # 易被代理掐断(IncompleteRead),请求 gzip 压到约 0.7MB
+        try:
+            all_info = await asyncio.to_thread(
+                _http_get_json, url + "/object_info",
+                {"Accept-Encoding": "gzip", **headers}, 30)
+        except Exception:  # noqa: BLE001
+            all_info = {}
     checkpoints = []
     try:
-        info = await asyncio.to_thread(
+        info = all_info if cloud else await asyncio.to_thread(
             _http_get_json, url + "/object_info/CheckpointLoaderSimple", headers, 6)
         req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
         ckpt = req.get("ckpt_name") or [[]]
@@ -4455,7 +4512,7 @@ async def api_test_comfyui(body: dict):
     custom_nodes = {}
     for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
         try:
-            info = await asyncio.to_thread(
+            info = all_info if cloud else await asyncio.to_thread(
                 _http_get_json, url + "/object_info/" + node_type, headers, 6)
             custom_nodes[node_type] = bool(info.get(node_type))
         except Exception:  # noqa: BLE001
@@ -5992,6 +6049,69 @@ async def api_agent_memory_set(body: dict):
     STATE["agent_memory"] = bool(body["agent_memory"])
     save_state(STATE)
     return await api_agent_memory_get()
+
+
+# ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
+# 本地结构化事件(run 收敛处与 genmedia CLI 出口按「字段白名单」落盘
+# telemetry/outbox,错误消息模板化聚签名)与经验卡(runs/<task_id>/lesson.md,
+# WORKFLOW.md §6.1)的汇总、预览与手动导出。只落盘、只导出,永不自动上传——
+# 导出 zip 由用户自行提交(如 GitHub issue 附件)。实现在 modules/diagnostics.py
+# (genmedia 子进程与本服务共用);懒加载 + 采集端全静默,旁路故障不影响主链路。
+
+
+def _diagnostics():
+    from modules import diagnostics
+    return diagnostics
+
+
+def diagnostics_enabled() -> bool:
+    """诊断采集开关(默认开;仅本地落盘,无任何上传)。"""
+    return bool(STATE.get("diagnostics_enabled", True))
+
+
+async def api_diagnostics_get():
+    d = await asyncio.to_thread(lambda: _diagnostics().summary())
+    d["enabled"] = diagnostics_enabled()   # STATE 为准,避开文件读取的 TTL 缓存
+    return d
+
+
+async def api_diagnostics_set(body: dict):
+    if body.get("diagnostics_enabled") is None:
+        raise ServiceError(400, "diagnostics_enabled must be a boolean")
+    STATE["diagnostics_enabled"] = bool(body["diagnostics_enabled"])
+    save_state(STATE)
+    return {"enabled": diagnostics_enabled()}
+
+
+async def api_diagnostics_lessons():
+    return {"lessons": await asyncio.to_thread(lambda: _diagnostics().scan_lessons())}
+
+
+async def api_diagnostics_clear():
+    return {"ok": True,
+            "removed": await asyncio.to_thread(lambda: _diagnostics().clear_outbox())}
+
+
+async def api_diagnostics_export(body: dict):
+    """构建诊断导出包:事件(可选)+ 聚合摘要 + 用户勾选的经验卡。
+    经验卡路径在 diagnostics 侧对照 scan_lessons() 白名单,防任意文件打包。"""
+    lessons = body.get("lessons") or []
+    if not isinstance(lessons, list) or not all(isinstance(x, str) for x in lessons):
+        raise ServiceError(400, "lessons must be a list of paths")
+    include_events = bool(body.get("include_events", True))
+    path = Path(await asyncio.to_thread(
+        lambda: _diagnostics().build_export(lessons, include_events)))
+    return {"ok": True, "name": path.name, "bytes": path.stat().st_size}
+
+
+def diagnostics_export_path(name: str) -> Path:
+    """导出包下载路径校验:仅放行 telemetry/export 下本服务生成的文件名格式。"""
+    if not re.fullmatch(r"diagnostics-\d{8}-\d{6}\.zip", name or ""):
+        raise ServiceError(400, "invalid export name")
+    p = _diagnostics().EXPORT_DIR / name
+    if not p.is_file():
+        raise ServiceError(404, "export not found")
+    return p
 
 
 async def api_usage():
