@@ -1288,7 +1288,7 @@ IMAGE_SAMPLER_CLASSES = ("KSampler", "KSamplerAdvanced", "SamplerCustom", "Sampl
 
 
 def _image_primary_sampler(workflow: dict) -> dict:
-    """定位图像工作流的主采样器:不(传递地)依赖其他采样器产物的那一个。
+    """定位工作流的主采样器:不(传递地)依赖其他采样器产物的那一个(图像/音乐共用)。
 
     云端模板常带二段式精修/放大链(第二个采样器拿第一段产物当参考),画面内容
     由主采样器的 conditioning 决定,prompt/negative/seed 直绑只认主采样器,
@@ -1316,17 +1316,19 @@ def _image_primary_sampler(workflow: dict) -> dict:
     primary = [nid for nid in samplers if not reaches_other_sampler(nid)]
     if len(primary) != 1:
         raise RuntimeError(
-            f"RunningHub 图像工作流无法定位唯一主采样器(KSampler 系候选 {len(primary)} 个),"
+            f"RunningHub 工作流无法定位唯一主采样器(KSampler 系候选 {len(primary)} 个),"
             "无法直绑本次参数;请精简模板或改用 {{PROMPT}} 等占位符")
     return samplers[primary[0]]
 
 
-def _image_cond_text_slot(workflow: dict, sampler: dict, side: str):
+def _image_cond_text_slot(workflow: dict, sampler: dict, side: str,
+                          text_keys: tuple = ("text", "prompt")):
     """顺主采样器 positive/negative conditioning 连线找文本编码节点。
 
     返回 (节点 inputs, 文本键, 节点id);途经单输入 conditioning 透传节点
     (FluxGuidance/ReferenceLatent 等)继续下探。ConditioningZeroOut 表示该侧
     文本被零化(模板不用这侧文本),返回 None 由调用方定性。
+    音乐分支传 text_keys=("tags",...) 复用同一走线(ACE 风格位叫 tags)。
     """
     inputs = sampler.get("inputs") or {}
     link = inputs.get(side)
@@ -1345,7 +1347,7 @@ def _image_cond_text_slot(workflow: dict, sampler: dict, side: str):
         if not isinstance(node, dict) or node.get("class_type") == "ConditioningZeroOut":
             return None
         node_inputs = node.setdefault("inputs", {})
-        for text_key in ("text", "prompt"):
+        for text_key in text_keys:
             value = node_inputs.get(text_key)
             if isinstance(value, str) or _node_link(value):
                 return node_inputs, text_key, nid
@@ -1363,7 +1365,7 @@ def _rh_resolve_text_slot(workflow: dict, node_inputs: dict, text_key: str):
     value = node_inputs.get(text_key)
     if _node_link(value):
         linked = (workflow.get(str(value[0])) or {}).setdefault("inputs", {})
-        for key in ("value", "text", "string"):
+        for key in ("value", "text", "string", "prompt"):
             if isinstance(linked.get(key), str):
                 return linked, key
     return node_inputs, text_key
@@ -1383,7 +1385,7 @@ def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 container[key] = seed
                 return
-    print("[genmedia] RunningHub 图像工作流未定位到种子位,--seed 未注入(按模板内种子出图)",
+    print("[genmedia] RunningHub 工作流未定位到采样器种子位,seed 未注入(按模板内种子生成)",
           file=sys.stderr)
 
 
@@ -1451,6 +1453,149 @@ def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: st
         raise RuntimeError(
             "RunningHub 文生图工作流含在用的 LoadImage 输入图节点,作者演示图会混入生产请求;"
             "该模板请配置为图生图工作流搭配 --ref 使用,或改选纯文生图模板")
+
+
+def _rh_bind_number(workflow: dict, inputs: dict, key: str, value) -> bool:
+    """数值位直绑:字面值就地覆写;连线则改写上游数值 primitive 的 value 位。"""
+    slot = inputs.get(key)
+    if isinstance(slot, (int, float)) and not isinstance(slot, bool):
+        inputs[key] = value
+        return True
+    if _node_link(slot):
+        linked = (workflow.get(str(slot[0])) or {}).setdefault("inputs", {})
+        if isinstance(linked.get("value"), (int, float)) \
+                and not isinstance(linked.get("value"), bool):
+            linked["value"] = value
+            return True
+    return False
+
+
+def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
+                             duration: float, seed, lyrics_configured: bool) -> None:
+    """RunningHub 音乐云工作流的无占位符直绑兜底(与图像分支同款语义)。
+
+    风格提示词绑主采样器 positive 连线上的音频文本编码节点(ACE 系的 tags 位,
+    兜底 text/prompt),歌词绑同节点 lyrics 位(模板演示歌词不得混入,未配歌词
+    时按 [Instrumental] 覆写);时长绑编码节点 duration 位与各节点 seconds 位
+    (ACE 两处常同连一个 Float primitive);prompt/时长定位不到提交前报错
+    不发请求不计费。带占位符模板逐项跳过,兜底幂等。
+    """
+    cache: dict = {}
+
+    def encode_slot():
+        if "slot" not in cache:
+            cache["sampler"] = _image_primary_sampler(workflow)
+            cache["slot"] = _image_cond_text_slot(
+                workflow, cache["sampler"], "positive", ("tags", "text", "prompt"))
+        return cache["slot"]
+
+    def encode_slot_soft():
+        # prompt 之外的项缺位时,锚点定位失败不该硬报错(由各项自行定性)
+        try:
+            return encode_slot()
+        except RuntimeError:
+            return None
+
+    if "{{PROMPT}}" not in raw:
+        slot = encode_slot()
+        if slot is None:
+            raise RuntimeError(
+                "RunningHub 音乐工作流顺 positive 连线未找到风格文本位(tags/text/prompt),"
+                "无法注入本次风格提示词;请把模板改接文本节点或改用 {{PROMPT}} 占位符")
+        container, key = _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        container[key] = prompt
+    if "{{LYRICS}}" not in raw:
+        slot = encode_slot_soft()
+        value = slot[0].get("lyrics") if slot else None
+        if isinstance(value, str) or _node_link(value):
+            container, key = _rh_resolve_text_slot(workflow, slot[0], "lyrics")
+            container[key] = lyrics
+        elif lyrics_configured:
+            raise RuntimeError(
+                "RunningHub 音乐工作流未找到 lyrics 歌词位,配置的歌词无法注入;"
+                "请改用带歌词输入的 ACE 工作流或 {{LYRICS}} 占位符")
+    if "{{DURATION}}" not in raw:
+        # 编码节点 duration 与 latent seconds 常同连一个 Float primitive,分别尝试即可
+        slot = encode_slot_soft()
+        bound = bool(slot) and _rh_bind_number(workflow, slot[0], "duration", duration)
+        for node in workflow.values():
+            if isinstance(node, dict) and "seconds" in (node.get("inputs") or {}):
+                bound = _rh_bind_number(workflow, node["inputs"], "seconds", duration) or bound
+        if not bound:
+            raise RuntimeError(
+                "RunningHub 音乐工作流未定位到时长位(duration/seconds 数值或其上游 primitive),"
+                "无法注入时长,模板默认时长会照单计费;请改模板或用 {{DURATION}} 占位符")
+    if seed is not None and "{{SEED}}" not in raw:
+        slot = encode_slot_soft()
+        if cache.get("sampler") is None:
+            print("[genmedia] RunningHub 工作流未定位到采样器种子位,seed 未注入(按模板内种子生成)",
+                  file=sys.stderr)
+        else:
+            _apply_rh_image_seed(workflow, cache["sampler"], seed)
+            if slot:  # ACE 编码节点自带音频码生成种子,一并绑定保证重跑有变化
+                _rh_bind_number(workflow, slot[0], "seed", seed)
+
+
+def _rh_tts_generate_node(workflow: dict) -> dict:
+    """TTS 生成节点定位:从 SaveAudio*/PreviewAudio 落盘节点顺 audio/samples 连线
+    上溯到第一个带 text 输入的节点(TTS 工作流通常无采样器,主采样器锚点不适用)。"""
+    sinks = sorted((node for node in workflow.values() if isinstance(node, dict)
+                    and str(node.get("class_type") or "").startswith(("SaveAudio", "PreviewAudio"))),
+                   key=lambda n: 0 if str(n.get("class_type")).startswith("SaveAudio") else 1)
+    for sink in sinks:
+        link = (sink.get("inputs") or {}).get("audio")
+        for _ in range(16):
+            if not _node_link(link):
+                break
+            node = workflow.get(str(link[0]))
+            if not isinstance(node, dict):
+                break
+            inputs = node.setdefault("inputs", {})
+            value = inputs.get("text")
+            if isinstance(value, str) or _node_link(value):
+                return node
+            link = inputs.get("audio") or inputs.get("samples")
+    raise RuntimeError(
+        "RunningHub TTS 工作流未定位到带 text 输入的生成节点(从 SaveAudio 顺 audio 连线上溯),"
+        "无法注入本次台词;请检查模板接线或改用 {{TEXT}} 占位符")
+
+
+def _apply_rh_tts_bindings(raw: str, workflow: dict, text: str, ref_audio: str,
+                           seed, speed) -> None:
+    """RunningHub TTS 云工作流的无占位符直绑兜底(与图像分支同款语义)。
+
+    台词绑生成节点 text 位(字面值/上游文本 primitive,演示台词不得混入);
+    自动选择并上传的参考音色绑模板唯一 LoadAudio(0/多个提交前报错,防止
+    静默用作者演示音色出声);seed 绑生成节点;speed 无对应输入位时如实
+    stderr 记录。带占位符模板逐项跳过,兜底幂等。
+    """
+    cache: list = []
+
+    def gen_node() -> dict:
+        if not cache:
+            cache.append(_rh_tts_generate_node(workflow))
+        return cache[0]
+
+    if "{{TEXT}}" not in raw and "{{PROMPT}}" not in raw:
+        container, key = _rh_resolve_text_slot(workflow, gen_node()["inputs"], "text")
+        container[key] = text
+    if "{{REF_AUDIO}}" not in raw and "{{VOICE}}" not in raw:
+        loads = [node for node in workflow.values()
+                 if isinstance(node, dict) and node.get("class_type") == "LoadAudio"]
+        if len(loads) != 1:
+            raise RuntimeError(
+                f"RunningHub TTS 工作流须恰好 1 个 LoadAudio 参考音频节点(找到 {len(loads)} 个),"
+                "无法定位音色绑定位,已选参考音色进不去会静默用模板演示音色;"
+                "请精简模板或改用 {{REF_AUDIO}} 占位符")
+        loads[0].setdefault("inputs", {})["audio"] = ref_audio
+    if seed is not None and "{{SEED}}" not in raw:
+        if not _rh_bind_number(workflow, gen_node()["inputs"], "seed", seed):
+            print("[genmedia] RunningHub TTS 工作流未定位到种子位,seed 未注入(按模板内种子出声)",
+                  file=sys.stderr)
+    if speed and float(speed) != 1.0 and "{{SPEED}}" not in raw:
+        if not _rh_bind_number(workflow, gen_node()["inputs"], "speed", float(speed)):
+            print("[genmedia] RunningHub TTS 工作流无 speed 输入位,--speed 未注入(按模板语速出声)",
+                  file=sys.stderr)
 
 
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
@@ -2335,6 +2480,10 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
     }
     wf = _comfy_workflow(cfg, tokens, "music")
     if rh:
+        # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
+        _apply_rh_music_bindings(_rh_workflow_text(cfg), wf, prompt, lyrics,
+                                 duration, tokens["SEED"],
+                                 bool((cfg.get("lyrics") or "").strip()))
         return _rh_run(cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
@@ -2538,6 +2687,10 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
         "SPEED": float(speed) if speed else 1.0,
     }
     wf = _comfy_workflow(cfg, tokens, "tts")
+    if rh:
+        # 直绑兜底报错留在 try 外:属提交前配置问题,不得包装成「后端执行失败」
+        _apply_rh_tts_bindings(_rh_workflow_text(cfg), wf, text, ref_audio,
+                               tokens["SEED"], speed)
     try:
         return (_rh_run(cfg, wf, output, want_video=False) if rh
                 else _comfy_run(base, wf, output, want_video=False, headers=hdrs))
