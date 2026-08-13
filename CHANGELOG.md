@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Virtual Portrait Library (Settings → Advanced): integration with Volcano Ark's private virtual-portrait media-asset library. A dedicated settings page walks through activating the Advanced Creation Package and configuring Volcano Engine IAM Access Key / Secret Key (falling back to the File Hosting TOS credentials when left blank), with an enable/disable toggle; once enabled it lists every asset in the account's library with total count, name search, 50-per-page pagination, thumbnails, review status and irreversible-delete actions. On the Character Preview page every character image gains a one-click Register button with live status (registering is asynchronous: Processing → Active/Failed, tracked in a content-hash ledger so identical files are registered once). During video generation, reference images whose content hash matches an Active library asset are automatically submitted as `asset://<asset-ID>` URIs instead of inline base64 (Seedance 2.x only), which avoids face-reference moderation blocks; the Storyboard Preview marks such references with a 🛡 badge. Also adds a `genmedia upload` subcommand that uploads a local file through the configured object-storage channel and prints a presigned URL.
+
 ## [1.0.14] - 2026-08-13
 
 ### Added

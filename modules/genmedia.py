@@ -369,6 +369,33 @@ def _storage_upload_url(path: str) -> str:
     return url
 
 
+# ---------------- 火山方舟 私域虚拟人像素材库(设置 → 高级 → 虚拟人像资产库) ----------------
+# 台账由 services/runtime/core.py 在入库时落盘:{"assets": {<文件sha256>: {"asset_id", "status", ...}}}
+AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
+
+
+def _avatar_asset_uri(path: str) -> str | None:
+    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>,否则 None。
+
+    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核);
+    按文件内容 sha256 匹配,与图片所在目录无关。"""
+    try:
+        if not (json.loads(CONFIG_PATH.read_text()).get("avatar_assets") or {}).get("enabled"):
+            return None
+        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+    except Exception:
+        return None
+    if not ledger:
+        return None
+    p = Path(path)
+    if not p.is_file():
+        return None
+    ent = ledger.get(hashlib.sha256(p.read_bytes()).hexdigest()) or {}
+    if ent.get("status") == "Active" and ent.get("asset_id"):
+        return f"asset://{ent['asset_id']}"
+    return None
+
+
 # ---------------- 图像:OpenRouter ----------------
 
 def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
@@ -888,6 +915,82 @@ def _comfy_h3_validate_components(base: str, settings: dict,
     )
 
 
+def _node_link(value) -> bool:
+    """ComfyUI 输入值是否节点连线([node_id, output_index])而非字面量。"""
+    return (isinstance(value, list) and len(value) == 2
+            and isinstance(value[1], int) and not isinstance(value[1], bool))
+
+
+def _h3_node(workflow: dict) -> dict:
+    target = next((node for node in workflow.values()
+                   if isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE), None)
+    if target is None:
+        raise RuntimeError("MiniMax-H3 工作流缺少 MiniMaxH3ReferenceToVideo 节点")
+    return target
+
+
+def _apply_h3_prompt(workflow: dict, prompt: str) -> None:
+    """Bind the request prompt through the Ref2VA-linked text primitive.
+
+    Some exported RunningHub workflows contain a creator's demonstration text
+    instead of a {{PROMPT}} token.  The reference node link is authoritative,
+    so replace that linked primitive rather than letting the demo prompt leak
+    into a production request.
+    """
+    inputs = _h3_node(workflow).setdefault("inputs", {})
+    slot = inputs.get("prompt")
+    if not _node_link(slot):
+        inputs["prompt"] = prompt  # 字面值位(本地模板 {{PROMPT}} 填充后即此形态)
+        return
+    linked = (workflow.get(str(slot[0])) or {}).setdefault("inputs", {})
+    for key in ("value", "text", "string"):
+        if isinstance(linked.get(key), str):
+            linked[key] = prompt
+            return
+    raise RuntimeError(
+        "MiniMax-H3 工作流的 prompt 输入连到无法识别的节点(非 value/text/string 文本位),"
+        "无法注入本次提示词;请把云端模板的 prompt 改接文本 primitive 或改用 {{PROMPT}} 占位符")
+
+
+def _apply_h3_duration(workflow: dict, duration: float | None) -> None:
+    """Bind requested seconds through Ref2VA's linked PrimitiveFloat duration node.
+
+    RunningHub workflow exports commonly keep this value as a literal (rather
+    than a {{DURATION}} token).  Patch only the node feeding the Ref2VA length
+    expression so a group request is not silently rendered at the template's
+    default duration.
+    """
+    if duration is None or duration <= 0:
+        return
+    inputs = _h3_node(workflow).setdefault("inputs", {})
+    slot = inputs.get("length")
+    if not _node_link(slot):
+        # 字面值位 = 帧数语义(本地模板 {{H3_FRAMES}} 填充后即此形态)
+        inputs["length"] = _comfy_h3_frame_count(duration)
+        return
+    upstream = (workflow.get(str(slot[0])) or {}).setdefault("inputs", {})
+    if isinstance(upstream.get("value"), (int, float)) \
+            and not isinstance(upstream.get("value"), bool):
+        # length 直连数值 primitive,无秒→帧换算节点,按帧数语义填
+        upstream["value"] = _comfy_h3_frame_count(duration)
+        return
+    # length ← 换算表达式(秒×fps 对齐 17n+5)← 秒数 primitive:只改喂表达式的秒数位
+    seconds_nodes = []
+    for value in upstream.values():
+        if not _node_link(value):
+            continue
+        node = (workflow.get(str(value[0])) or {}).get("inputs") or {}
+        if isinstance(node.get("value"), (int, float)) \
+                and not isinstance(node.get("value"), bool):
+            seconds_nodes.append(node)
+    if len(seconds_nodes) != 1:
+        raise RuntimeError(
+            "MiniMax-H3 工作流的 length 连线无法定位唯一的时长 primitive"
+            f"(候选 {len(seconds_nodes)} 个),无法注入 --duration;"
+            "请把云端模板的时长改为单一 PrimitiveFloat 喂换算表达式,或改用 {{H3_FRAMES}} 占位符")
+    seconds_nodes[0]["value"] = float(duration)
+
+
 def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str]) -> None:
     """Attach only submitted refs to H3's dynamic Ref2VA sockets."""
     if len(image_names) > MAX_VIDEO_REFS:
@@ -896,13 +999,23 @@ def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list
         raise RuntimeError(f"MiniMax-H3 参考音频最多 {MAX_AUDIO_REFS} 段,收到 {len(audio_names)}")
     if audio_names and not image_names:
         raise RuntimeError("MiniMax-H3 参考音频必须与至少一张参考图一起使用")
-    target = next((node for node in workflow.values()
-                   if isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE), None)
-    if target is None:
-        raise RuntimeError("MiniMax-H3 工作流缺少 MiniMaxH3ReferenceToVideo 节点")
+    target = _h3_node(workflow)
+    inputs = target.setdefault("inputs", {})
+    # 先拆掉模板遗留的全部参考连线:云端导出件常带作者的演示素材,提交槽位数少于
+    # 模板时残留连线会把演示图/音频静默混入生产请求;拆线后不再被引用的
+    # LoadImage/LoadAudio 节点一并删除(其文件只存在于模板作者账号,留着会校验失败)
+    stale_ids = []
+    for key in [k for k in inputs if k.startswith(("ref_images.", "ref_audios."))]:
+        link = inputs.pop(key)
+        if _node_link(link):
+            stale_ids.append(str(link[0]))
+    referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                  for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    for nid in stale_ids:
+        if nid not in referenced:
+            workflow.pop(nid, None)
     node_ids = [int(key) for key in workflow if str(key).isdigit()]
     next_id = max(node_ids, default=0) + 1
-    inputs = target.setdefault("inputs", {})
     for index, name in enumerate(image_names):
         node_id = str(next_id)
         next_id += 1
@@ -1386,8 +1499,13 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             content.append({"type": "image_url", "role": role,
                             "image_url": {"url": to_url(path)}})
     for path in refs or []:
+        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI)
+        asset_uri = _avatar_asset_uri(path) if is_v2 else None
+        if asset_uri:
+            print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
+                  f"{Path(path).name} → {asset_uri}", file=sys.stderr, flush=True)
         content.append({"type": "image_url", "role": "reference_image",
-                        "image_url": {"url": to_url(path)}})
+                        "image_url": {"url": asset_uri or to_url(path)}})
     for path in video_refs or []:
         content.append({"type": "video_url", "role": "reference_video",
                         "video_url": {"url": video_to_url(path)}})
@@ -1826,6 +1944,11 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
             "H3_STEPS": settings["steps"], "H3_REF_IMAGE_SIZE": settings["ref_image_size"],
         }
         wf = _comfy_workflow(cfg, tokens, "video")
+        # 云端导出件(尤其 RunningHub 工作区模板)常无 {{TOKEN}} 占位符而是作者演示
+        # 字面值,占位符替换会空转;顺 H3 节点连线直接绑定本次 prompt 与时长,
+        # 防止演示提示词/模板默认时长静默混入生产请求(占位符模板下为幂等覆写)
+        _apply_h3_prompt(wf, prompt)
+        _apply_h3_duration(wf, duration)
         _add_h3_references(wf, [upload(path) for path in refs or []],
                            [upload(path) for path in audio_refs or []])
         saved = (_rh_run(cfg, wf, output, want_video=True) if rh
@@ -2514,6 +2637,11 @@ def _cmd_music(args):
     print(f"已生成: {out}")
 
 
+def _cmd_upload(args):
+    """上传本地文件到对象存储,stdout 只打印预签名 URL(供 core/脚本捕获)。"""
+    print(_storage_upload_url(args.input))
+
+
 def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
@@ -2605,6 +2733,10 @@ def main():
                          "comfyui 参与音色自动匹配、不注入合成)")
     pt.add_argument("--dry-run", action="store_true")
 
+    pup = sub.add_parser("upload", help="上传本地文件到对象存储并打印预签名 URL"
+                                        "(渠道按「设置 → 文件托管」;供需要公网 URL 的 API 使用)")
+    pup.add_argument("--input", required=True, help="本地文件路径")
+
     pm = sub.add_parser("music", help="生成音乐(BGM)")
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
     pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus;minimax 仅 .mp3/.wav)")
@@ -2617,7 +2749,8 @@ def main():
     t0 = time.time()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
-         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts}[args.cmd](args)
+         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts,
+         "upload": _cmd_upload}[args.cmd](args)
     except RuntimeError as e:
         _diag_report(args, t0, error=str(e))
         print(f"生成失败: {e}", file=sys.stderr)
@@ -2630,7 +2763,8 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     """诊断事件旁路(modules/diagnostics.py):白名单字段本地落盘,错误消息
     模板化后只存模板与签名,不出网。info/dry-run 不记;渠道/模型 best-effort,
     读不到(如配置缺失本身就是报错原因)不影响记录。"""
-    if _diagnostics is None or args.cmd == "info" or getattr(args, "dry_run", False):
+    if _diagnostics is None or args.cmd in ("info", "upload") \
+            or getattr(args, "dry_run", False):
         return
     provider = model = ""
     try:
