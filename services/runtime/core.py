@@ -842,6 +842,20 @@ def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
 MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2k/SKILL.md"
 
 
+# RunningHub 云端工作流参数化调用 skill:仅当视频渠道为 ComfyUI RunningHub 运行方式时
+# 注入加载指令给 video-generation agent
+RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
+                          "runninghub-cloud-workflow/SKILL.md")
+
+
+def is_runninghub_video_active(cfg: dict | None = None) -> bool:
+    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    comfy = v.get("comfyui") or {}
+    return ((v.get("provider") or "volcengine") == "comfyui"
+            and (comfy.get("mode") or "local") in RH_BASES)
+
+
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 
@@ -1744,6 +1758,15 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active():
+        p += f"""
+
+## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)
+当前项目的视频生成走 RunningHub 云托管 ComfyUI 工作流。执行视频生成工单前,**先阅读技能文件,理解参数如何进入云端工作流再提交**:
+- Skill 文件:{RUNNINGHUB_VIDEO_SKILL}(直接 Read 全文)
+- 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
+- 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
+- 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
     if brief:
         p += f"""
 
