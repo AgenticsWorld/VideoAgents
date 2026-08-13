@@ -644,10 +644,10 @@ function buildPanel(kind,p){
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
     sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
     cr.appendChild(sel);d.appendChild(cr);
-    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图工作流':'工作流 JSON');
+    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图API':'工作流 API');
     wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
     if(kind==='image'){
-      const wr2=wfRow(kind,'image-comfy-ref-wf','图生图工作流');
+      const wr2=wfRow(kind,'image-comfy-ref-wf','图生图API');
       wr2.id='image-comfy-ref-wf-row';d.appendChild(wr2);
     }
     d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},

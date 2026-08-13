@@ -415,6 +415,26 @@ async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
 
 
+@api.post("/avatar-assets/list", tags=["avatar-assets"])
+async def avatar_assets_list(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_list(body)
+
+
+@api.post("/avatar-assets/delete", tags=["avatar-assets"])
+async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_delete(body)
+
+
+@api.post("/avatar-assets/upload", tags=["avatar-assets"])
+async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_upload(body)
+
+
+@api.post("/avatar-assets/status", tags=["avatar-assets"])
+async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_status(body)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())
