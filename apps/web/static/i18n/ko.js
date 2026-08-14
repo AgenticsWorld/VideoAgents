@@ -1096,6 +1096,7 @@ window.I18N_DICT = {
 "🧩 Agent 插件": "🧩 Agent 플러그인",
 "插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "플러그인은 plugins/<이름>/ 디렉터리입니다(plugin.json + agents/…/SOUL.md, 선택적 workflows/*.yaml DAG). plugins/에 복사하거나 zip을 업로드하면 설치됩니다. 새로 설치된 플러그인은 기본적으로 비활성 상태이며, 이 페이지에서 활성화하면 해당 Agent가 왼쪽 목록에 나타나고 총괄 프로듀서가 파견할 수 있습니다. 작성 가이드: plugins/README.md. 설치 전 내용을 검토하세요: SOUL.md는 모델 프롬프트에 주입됩니다",
 "⬆ 安装插件包(zip)": "⬆ 플러그인 패키지 설치(zip)",
+"🔗 插件仓库": "🔗 플러그인 저장소",
 "无效": "무효",
 "已启用": "활성",
 "已停用": "비활성",
