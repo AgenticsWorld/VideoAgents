@@ -4,6 +4,12 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- OpenCode execution engine (`opencode` in the top-bar engine selector, default model DeepSeek V4 Pro): runs agents through `opencode run --format json --auto` with persistent `--session` continuation, streams text/tool/token events into the run panel, and counts token usage per model call. The language-model menus are populated dynamically from `opencode models` (with a static DeepSeek V4 Pro/Flash fallback covering both the Zen `opencode/` and the Go-subscription `opencode-go/` channels), and `OPENCODE_BIN` overrides the executable (`~/.opencode/bin` is probed automatically, including by the desktop client).
+- DeepSeek Smart Assignment model strategy (Settings → Model Strategy): creative-core agents run on `opencode/deepseek-v4-pro`, all other agents on `opencode/deepseek-v4-flash`, using the same task-complexity tiers as the existing Claude/Codex/Kimi smart strategies.
+- OpenCode Go usage in the Resource Usage panel: a new toggle in Settings → Resource Usage queries the OpenCode Go subscription quota (5-hour/weekly windows) via the official console endpoint, using either a configured API Key or, when left blank, the local opencode login credential. All 11 language dictionaries updated.
+
 ## [1.0.15] - 2026-08-13
 
 ### Added

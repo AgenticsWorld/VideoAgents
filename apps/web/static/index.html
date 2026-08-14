@@ -190,11 +190,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
+    <option value="opencode">opencode</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
@@ -237,12 +238,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
           <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
           <a href="#" data-ammode="smart_kimi" title="按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding">Kimi 智能分配</a>
+          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">DeepSeek 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎/RunningHub 余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi/OpenCode Go 用量检查与 OpenRouter/火山引擎/RunningHub 余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
@@ -330,6 +332,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="codex">codex</option>
         <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
+        <option value="opencode">opencode</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -657,6 +660,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-kimi-row"><label>Kimi API Key</label>
       <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
     <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
+    <div class="row"><label>OpenCode Go 用量</label>
+      <input type="checkbox" id="res-oc-on" style="flex:none">
+      <span class="note" style="flex:1">开启后查询 OpenCode Go 订阅用量(5 小时/周窗口);API Key 留空时自动读取本机 opencode 登录凭证</span></div>
+    <div class="row res-oc-row"><label>OpenCode API Key</label>
+      <input type="password" id="res-oc" placeholder="留空则用本机 opencode 登录凭证" autocomplete="off"></div>
+    <div class="note res-oc-row" style="margin-top:-6px">获取 OpenCode Go 用量;Key 在此查看:<a href="https://opencode.ai/auth" target="_blank" rel="noopener" style="color:var(--link)">opencode.ai/auth</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
     <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
@@ -742,8 +751,16 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'DeepSeek 智能分配'};
 
+// opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
+// Zen 按量渠道 opencode/,OpenCode Go 订阅渠道 opencode-go/,动态列表反映实际可用集
+const OPENCODE_STATIC=[
+  ['opencode/deepseek-v4-pro','DeepSeek V4 Pro'],
+  ['opencode/deepseek-v4-flash','DeepSeek V4 Flash'],
+  ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro (Go)'],
+  ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash (Go)'],
+];
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
           ['claude-fable-5','fable-5'],
@@ -758,6 +775,7 @@ const MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -776,8 +794,27 @@ async function loadPiModelOptions(refresh=false){
     AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
   }
 }
+let OPENCODE_MODEL_ERROR='';
+async function loadOpencodeModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/opencode/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
+    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项)
+    const i=dynamic.findIndex(([v])=>/^opencode(-go)?\/deepseek-v4-pro$/.test(v));
+    if(i>0)dynamic.unshift(...dynamic.splice(i,1));
+    const list=dynamic.length?dynamic:OPENCODE_STATIC;
+    MODEL_OPTIONS.opencode=[...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    OPENCODE_MODEL_ERROR='';
+  }catch(e){
+    OPENCODE_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.opencode=[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
+  }
+}
 async function populateModels(engine,selected=null){
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -790,7 +827,8 @@ async function populateModels(engine,selected=null){
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
     ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
-    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型'):'';
+    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
+    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
@@ -1023,6 +1061,7 @@ const ENGINE_CLI={
   codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
+  opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -1480,6 +1519,8 @@ function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll
 $('#res-volc').onchange=resVolcRows;
 function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-kimi-on').onchange=resKimiRows;
+function resOcRows(){const on=$('#res-oc-on').checked;document.querySelectorAll('.res-oc-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-oc-on').onchange=resOcRows;
 function resRhRows(){const on=$('#res-rh').checked;document.querySelectorAll('.res-rh-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-rh').onchange=resRhRows;
 async function openResModal(){
@@ -1492,6 +1533,8 @@ async function openResModal(){
     $('#res-codex').checked=!!c.codex_probe;
     $('#res-kimi-on').checked=!!c.kimi_probe;
     $('#res-kimi').value=c.kimi_api_key||'';
+    $('#res-oc-on').checked=!!c.opencode_probe;
+    $('#res-oc').value=c.opencode_api_key||'';
     $('#res-or').value=c.openrouter_key||'';
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
@@ -1500,7 +1543,7 @@ async function openResModal(){
     $('#res-rh-ai').value=c.rh_key_ai||'';
     $('#res-rh-cn').value=c.rh_key_cn||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();resKimiRows();resRhRows();
+  resVolcRows();resKimiRows();resOcRows();resRhRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1518,6 +1561,8 @@ $('#res-ok').onclick=async()=>{
       codex_probe:$('#res-codex').checked,
       kimi_probe:$('#res-kimi-on').checked,
       kimi_api_key:$('#res-kimi').value.trim(),
+      opencode_probe:$('#res-oc-on').checked,
+      opencode_api_key:$('#res-oc').value.trim(),
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
       volc_ak:$('#res-volc-ak').value.trim(),
@@ -1614,7 +1659,7 @@ async function renderResources(fresh){
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
   let h='';
-  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
+  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode'],['opencode','OpenCode Go']]){
     const e=r[k]||{};
     if(!e.enabled)continue;                 // 用量检查未开启则整段不显示(⚙️ 设置 → 资源消耗 开启后回来)
     h+=`<div class="res-eng"><span class="nm">${label}</span>${resLine('Session',e.session,e.session_resets_at)}${resLine('Weekly',e.weekly,e.weekly_resets_at)}</div>`;
@@ -1852,6 +1897,7 @@ const AM_MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -1873,6 +1919,7 @@ async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{
