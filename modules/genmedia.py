@@ -151,10 +151,11 @@ H3_DEFAULTS = {
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
     "weight_dtype": "default", "clip_device": "default",
     "sampler": "res_multistep", "scheduler": "simple", "steps": 20,
-    # ref_image_size=max:参考图短边 ≤2048 不压缩直进模型(match 会压到与输出同像素
-    # 面积,480p 草稿档下人脸参考只剩几十像素,是脸部不一致的主因之一);参考 token
-    # 全程陪跑采样,max 更慢更贵,属画质优先的取舍
-    "ref_image_size": "max", "fps": 24,
+    # ref_image_size 默认 match(参考图压到与输出同像素面积,速度/成本优先);
+    # 单次请求可用 --ref-image-size max 改为短边 ≤2048 不压缩直进模型(480p 草稿档
+    # 下 match 会把人脸参考压到只剩几十像素,是脸部不一致的主因之一;但参考 token
+    # 全程陪跑采样,max 更慢更贵,按组按需取舍)
+    "ref_image_size": "match", "fps": 24,
 }
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
 # Comfy Cloud 的 Seedance 2.x 付费 API 节点(r2v);model 输入选版本("Seedance 2.0/2.5")
@@ -2259,7 +2260,7 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
-                   video_refs=None):
+                   video_refs=None, ref_image_size=""):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None
     if not rh:
@@ -2276,6 +2277,8 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
+        if ref_image_size:
+            settings["ref_image_size"] = ref_image_size
         if not rh:
             # RunningHub 无 /object_info 组件预检;节点/模型缺失由建任务 promptTips
             # 或任务失败详情报出
@@ -2305,6 +2308,9 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
+    if ref_image_size:
+        raise RuntimeError("--ref-image-size 仅 MiniMax-H3 Ref2VA 工作流支持"
+                           "(控制参考图是否压缩到输出像素面积),当前工作流请去掉该参数")
     sd_gen = _seedance_cloud_workflow_gen(cfg)
     if sd_gen:
         is_v25 = sd_gen >= 2.5
@@ -2778,8 +2784,13 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    audio_refs: list[str] | None = None,
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
-                   video_refs: list[str] | None = None) -> str:
+                   video_refs: list[str] | None = None,
+                   ref_image_size: str = "") -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
+
+    ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
+    与输出同像素面积);max=短边 ≤2048 不压缩直进模型,人脸/身份保真更好但更慢更贵,
+    建议仅对脸部一致性要求高的组按需指定。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
     多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)及 ComfyUI(H3 Ref2VA /
@@ -2797,6 +2808,9 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """
     _forbid_dispatch_layer("视频")
     cfg = get_config("video")
+    if ref_image_size and cfg["provider"] != "comfyui":
+        raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
+                           f"当前渠道 {cfg['provider']} 请去掉该参数")
     resolution = _resolution_gate(resolution)
     seed = seed if seed is not None else random.randint(1, 2**31)
     if cfg["provider"] in ("volcengine", "byteplus"):
@@ -2813,12 +2827,17 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                                          or _seedance_cloud_workflow_gen(cfg)):
         return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
                               resolution, aspect, seed, output, refs, audio_refs,
-                              generate_audio, return_last_frame, video_refs)
+                              generate_audio, return_last_frame, video_refs,
+                              ref_image_size=ref_image_size)
     if refs or audio_refs or video_refs or return_last_frame or generate_audio is not None:
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
                            "请在生成模型页切换到火山引擎/BytePlus 或改用首尾帧模式")
     fn = {"openrouter": _video_openrouter, "comfyui": _video_comfyui}[cfg["provider"]]
+    if fn is _video_comfyui:
+        # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
+        return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,
+                  seed, output, ref_image_size=ref_image_size)
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
 
 
@@ -2966,7 +2985,7 @@ def _cmd_video(args):
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,
                          args.duration, args.resolution, args.aspect, args.seed,
                          args.ref, args.audio_ref, gen_audio, args.return_last_frame,
-                         video_refs=args.ref_video)
+                         video_refs=args.ref_video, ref_image_size=args.ref_image_size)
     print(f"已生成: {out}")
 
 
@@ -3056,6 +3075,9 @@ def main():
                          "如角色 TTS 音色样本)")
     pv.add_argument("--generate-audio", choices=["on", "off", ""], default="",
                     help="原生音频开关(Seedance 2.x;缺省沿用模型默认 on)")
+    pv.add_argument("--ref-image-size", choices=["match", "max"], default="",
+                    help="参考图尺寸策略(仅 MiniMax-H3 Ref2VA):默认 match 压到与输出"
+                         "同像素面积;max 短边 ≤2048 不压缩,身份保真更好但更慢更贵")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")
