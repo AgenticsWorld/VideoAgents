@@ -254,6 +254,7 @@ window.I18N_DICT = {
 "🎨 选择风格库": "🎨 Choose from Style Library",
 "🎨 风格库": "🎨 Style Library",
 "自定义风格提示词": "Custom style prompt",
+"放大查看": "Enlarge",
 "全部": "All",
 "真人": "Live-action",
 "搜索风格…": "Search styles…",

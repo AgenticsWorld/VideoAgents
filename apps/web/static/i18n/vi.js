@@ -254,6 +254,7 @@ window.I18N_DICT = {
 "🎨 选择风格库": "🎨 Chọn từ thư viện phong cách",
 "🎨 风格库": "🎨 Thư viện phong cách",
 "自定义风格提示词": "Prompt phong cách tùy chỉnh",
+"放大查看": "Phóng to",
 "全部": "Tất cả",
 "真人": "Người thật",
 "搜索风格…": "Tìm phong cách…",

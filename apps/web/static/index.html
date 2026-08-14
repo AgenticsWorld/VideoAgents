@@ -140,6 +140,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .style-card img{width:100%;height:100%;object-fit:cover;display:block}
 .style-card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:12px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .style-card .cat{position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:1px 5px}
+.style-card .zoom{position:absolute;top:6px;left:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;cursor:zoom-in;opacity:.75}
+.style-card .zoom:hover{opacity:1;background:rgba(0,0,0,.85)}
+#style-zoom{z-index:210;flex-direction:column;cursor:zoom-out}
+#style-zoom img{max-width:min(1100px,92vw);max-height:80vh;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.7);display:block}
+#style-zoom .zoom-cap{margin-top:10px;max-width:92vw;color:#fff;font-size:13px;text-align:center}
+#style-zoom .zoom-cap .cat{color:var(--dim);margin-left:6px;font-size:12px}
 .style-card.custom{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--dim);text-align:center;font-size:12.5px;padding:8px}
 .style-card.custom:hover{border-color:var(--accent);color:var(--text)}
 /* 用户确认弹窗(重跑/跳过) */
@@ -474,6 +480,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div id="style-grid"></div>
     <div class="actions"><button id="style-cancel">取消</button></div>
   </div>
+</div>
+<div id="style-zoom" class="modal">
+  <img id="style-zoom-img" src="" alt="">
+  <div class="zoom-cap"><span id="style-zoom-nm"></span><span class="cat" id="style-zoom-cat"></span></div>
 </div>
 <div id="out-modal" class="modal">
   <div class="box">
@@ -1095,12 +1105,21 @@ function styleGridRender(){
       const d=document.createElement('div');
       d.className='style-card'+(cur===s.prompt?' on':'');
       d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
+        +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
         +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
       d.title=s.prompt;
       d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+      d.querySelector('.zoom').onclick=ev=>{ev.stopPropagation();styleZoomShow(s)};
       grid.appendChild(d);
     });
 }
+function styleZoomShow(s){
+  $('#style-zoom-img').src='/static/styles/'+s.image;
+  $('#style-zoom-nm').textContent=s.name;
+  $('#style-zoom-cat').textContent=t(s.category);
+  $('#style-zoom').style.display='flex';
+}
+$('#style-zoom').onclick=()=>$('#style-zoom').style.display='none';
 async function openStyleModal(targetSel){
   STYLE_TARGET=targetSel;
   try{await loadStyleLib()}

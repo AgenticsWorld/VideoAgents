@@ -254,6 +254,7 @@ window.I18N_DICT = {
 "🎨 选择风格库": "🎨 Choisir dans la bibliothèque de styles",
 "🎨 风格库": "🎨 Bibliothèque de styles",
 "自定义风格提示词": "Prompt de style personnalisé",
+"放大查看": "Agrandir",
 "全部": "Tous",
 "真人": "Prises de vue réelles",
 "搜索风格…": "Rechercher un style…",
