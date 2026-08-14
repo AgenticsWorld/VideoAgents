@@ -46,8 +46,9 @@ python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
    - `--duration` 顺 `length` 连线改写喂秒→帧换算表达式的时长 primitive(直连数值位则按 17n+5 帧数语义填),模板默认时长不会静默生效;
    - 连线形态不可识别时**提交前报错**(不发请求、不计费),按报错提示改模板或加占位符。
    - `--ref-image-size` 覆写 Ref2VA 节点同名输入:默认/不传=match(参考图压到与输出同
-     像素面积,速度/成本优先);**仅当工单明确要求高身份保真(如人脸与参考图不一致的
-     重出单)时**传 `max`(短边 ≤2048 不压缩直进模型,更慢更贵,勿全量默认使用)。
+     像素面积,速度/成本优先);`max`(短边 ≤2048 不压缩直进模型,身份保真更好但更慢
+     更贵)**仅当用户/工单原文明确写了「ref-image-size max」时照传;agent 严禁自行
+     决定切换**——即便判断人脸与参考图不一致,也只能在回执中建议,由用户决定。
 4. **参考素材**:`--ref`/`--audio-ref` 逐个经 `/task/openapi/upload` 上传(**单文件 ≤30MB**),返回 fileName 后动态新增 `LoadImage`/`LoadAudio` 节点接到 `ref_images.ref_image_N` / `ref_audios.ref_audio_N`(0 起,顺序=命令行顺序=prompt 内 `[Image N]`/`[Audio N]` 序号-1)。模板作者遗留的演示素材连线与节点会被**全部清除**,只提交本单素材。
 5. **提交与取回**:`create` 整体覆盖提交 → `/task/openapi/status` 5s 轮询(QUEUED/RUNNING/SUCCESS/FAILED)→ SUCCESS 后 `/task/openapi/outputs` 取 `fileUrl` 公网直链下载到 `--output`;`--return-last-frame` 由本地 ffmpeg 从成片抽尾帧,不占云端节点。
 
