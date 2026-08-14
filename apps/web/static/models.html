@@ -639,6 +639,15 @@ function buildPanel(kind,p){
     const ab=el('button',{},'验证并添加');
     ab.onclick=()=>rhAddWf(kind);
     ar.appendChild(ab);d.appendChild(ar);
+    // RunningHub 运行模式(机器规格):standard 不传 instanceType 沿用平台默认
+    const ir=el('div',{className:'row',id:`${kind}-comfy-rhinst-row`,style:'display:none'});
+    ir.appendChild(el('label',{},'运行模式'));
+    const isel=el('select',{id:`${kind}-comfy-rhinst`});
+    [['standard','Standard'],['plus','Plus'],['ultra','Ultra']].forEach(([v,l])=>
+      isel.appendChild(el('option',{value:v,textContent:l})));
+    ir.appendChild(isel);d.appendChild(ir);
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-rhinst-hint`,style:'display:none'},
+      'RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准'));
     const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
     cr.appendChild(el('label',{},'Checkpoint'));
     const sel=el('select',{id:`${kind}-comfy-ckpt`});
@@ -693,6 +702,8 @@ function comfyModeUI(kind){
   $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-ckpt-row`).style.display=rh?'none':'';
   $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
+  $(`#${kind}-comfy-rhinst-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhinst-hint`).style.display=rh?'':'none';
   if(kind==='image'){
     $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
     $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
@@ -1134,6 +1145,8 @@ function loadIntoForm(){
       RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
       comfyModeUI(kind);
       fillRhWfSelect(kind,`${kind}-comfy-rhwf`,c.comfyui.rh_workflow_id||'');
+      $(`#${kind}-comfy-rhinst`).value=['standard','plus','ultra'].includes(c.comfyui.rh_instance_type)
+        ?c.comfyui.rh_instance_type:'standard';
       if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',c.comfyui.rh_ref_workflow_id||'');
       $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
       fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
@@ -1197,6 +1210,7 @@ function collect(){
                rh_api_key_ai:$(`#${kind}-comfy-rhkey-ai`).value.trim(),
                rh_workflow_id:$(`#${kind}-comfy-rhwf`).value,
                rh_workflows:RH_WFS[kind]||[],
+               rh_instance_type:$(`#${kind}-comfy-rhinst`).value||'standard',
                ...(kind==='image'?{
                  ref_workflow:pickWf('image-comfy-ref-wf'),
                  rh_ref_workflow_id:$('#image-comfy-rhrefwf').value,
@@ -1259,8 +1273,21 @@ $('#save').onclick=async()=>{
       ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
     const r=await api('/api/v1/config/generation',Object.assign(collect(),{project:proj}));
     CFG=r.config;
-    const st=$('#save-status');st.textContent='✓ 已保存';st.classList.add('show');
-    setTimeout(()=>st.classList.remove('show'),2500);
+    const st=$('#save-status');st.style.color='';
+    // RunningHub 工作流缓存已随保存同步云端最新版(genmedia 提交走本地缓存整包);
+    // 同步失败=提交仍沿用旧缓存,须醒目提示
+    const rf=r.rh_cache_refresh||[];
+    const errs=rf.filter(x=>x.status==='error');
+    const upd=rf.filter(x=>x.status==='updated'||x.status==='created').length;
+    if(errs.length){
+      st.textContent='⚠ '+I18N.f('已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}',
+        {n:errs.length,ids:errs.map(x=>x.id+' '+(x.detail||'')).join('; ')});
+      st.style.color='var(--red)';
+    }else{
+      st.textContent='✓ 已保存'+(upd?' · '+I18N.f('已同步 {n} 个 RunningHub 云端工作流缓存',{n:upd}):'');
+    }
+    st.classList.add('show');
+    setTimeout(()=>st.classList.remove('show'),errs.length?8000:2500);
   }catch(e){
     const st=$('#save-status');st.textContent='✗ 保存失败:'+e.message;
     st.style.color='var(--red)';st.classList.add('show');

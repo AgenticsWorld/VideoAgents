@@ -140,6 +140,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .style-card img{width:100%;height:100%;object-fit:cover;display:block}
 .style-card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:12px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .style-card .cat{position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:1px 5px}
+.style-card .zoom{position:absolute;top:6px;left:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;cursor:zoom-in;opacity:.75}
+.style-card .zoom:hover{opacity:1;background:rgba(0,0,0,.85)}
+#style-zoom{z-index:210;flex-direction:column;cursor:zoom-out}
+#style-zoom img{max-width:min(1100px,92vw);max-height:80vh;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.7);display:block}
+#style-zoom .zoom-cap{margin-top:10px;max-width:92vw;color:#fff;font-size:13px;text-align:center}
+#style-zoom .zoom-cap .cat{color:var(--dim);margin-left:6px;font-size:12px}
 .style-card.custom{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--dim);text-align:center;font-size:12.5px;padding:8px}
 .style-card.custom:hover{border-color:var(--accent);color:var(--text)}
 /* 用户确认弹窗(重跑/跳过) */
@@ -184,11 +190,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
+    <option value="opencode">opencode</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
@@ -231,26 +238,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
           <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
           <a href="#" data-ammode="smart_kimi" title="按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding">Kimi 智能分配</a>
+          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">DeepSeek 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
-      <div class="dd-sub">
-        <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
-        <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
-      </div>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi/OpenCode Go 用量检查与 OpenRouter/火山引擎/RunningHub 余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
           <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
           <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
         </div>
+      </div>
+      <div class="dd-sub">
+        <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
+        <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
@@ -309,7 +317,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="err" id="plug-err"></div>
     <div class="actions">
       <input type="file" id="plug-file" accept=".zip" style="display:none">
-      <button id="plug-upload" style="margin-right:auto">⬆ 安装插件包(zip)</button>
+      <button id="plug-upload">⬆ 安装插件包(zip)</button>
+      <a href="https://github.com/AgenticsWorld/VideoAgents-Plugins" target="_blank" rel="noopener" style="align-self:center;margin-right:auto;color:var(--link)">🔗 插件仓库</a>
       <button id="plug-close" class="primary">关闭</button>
     </div>
   </div>
@@ -324,6 +333,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="codex">codex</option>
         <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
+        <option value="opencode">opencode</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -474,6 +484,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div id="style-grid"></div>
     <div class="actions"><button id="style-cancel">取消</button></div>
   </div>
+</div>
+<div id="style-zoom" class="modal">
+  <img id="style-zoom-img" src="" alt="">
+  <div class="zoom-cap"><span id="style-zoom-nm"></span><span class="cat" id="style-zoom-cat"></span></div>
 </div>
 <div id="out-modal" class="modal">
   <div class="box">
@@ -647,6 +661,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-kimi-row"><label>Kimi API Key</label>
       <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
     <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
+    <div class="row"><label>OpenCode Go 用量</label>
+      <input type="checkbox" id="res-oc-on" style="flex:none">
+      <span class="note" style="flex:1">开启后查询 OpenCode Go 订阅用量(5 小时/周窗口);API Key 留空时自动读取本机 opencode 登录凭证</span></div>
+    <div class="row res-oc-row"><label>OpenCode API Key</label>
+      <input type="password" id="res-oc" placeholder="留空则用本机 opencode 登录凭证" autocomplete="off"></div>
+    <div class="note res-oc-row" style="margin-top:-6px">获取 OpenCode Go 用量;Key 在此查看:<a href="https://opencode.ai/auth" target="_blank" rel="noopener" style="color:var(--link)">opencode.ai/auth</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
     <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
@@ -658,6 +678,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-volc-row"><label>Secret Key</label>
       <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
     <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="row"><label>RunningHub 余额</label>
+      <input type="checkbox" id="res-rh" style="flex:none">
+      <span class="note" style="flex:1">开启后用 API Key 查询 RH 币与钱包余额;.ai 与 .cn 账号不互通,分别填写,留空的站点不查</span></div>
+    <div class="row res-rh-row"><label>.ai API Key</label>
+      <input type="password" id="res-rh-ai" placeholder="runninghub.ai API Key" autocomplete="off"></div>
+    <div class="row res-rh-row"><label>.cn API Key</label>
+      <input type="password" id="res-rh-cn" placeholder="runninghub.cn API Key" autocomplete="off"></div>
+    <div class="note res-rh-row" style="margin-top:-6px">获取 Key:<a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.ai</a> / <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.cn</a> <span>API 服务页</span></div>
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
@@ -724,8 +752,16 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'DeepSeek 智能分配'};
 
+// opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
+// OpenCode Go 订阅渠道 opencode-go/(实测生效),Zen 按量渠道 opencode/,动态列表反映实际可用集
+const OPENCODE_STATIC=[
+  ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro'],
+  ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash'],
+  ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
+  ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
+];
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
           ['claude-fable-5','fable-5'],
@@ -740,6 +776,7 @@ const MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -758,8 +795,28 @@ async function loadPiModelOptions(refresh=false){
     AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
   }
 }
+let OPENCODE_MODEL_ERROR='';
+async function loadOpencodeModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/opencode/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
+    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项),Go 渠道优先
+    const i=['opencode-go/deepseek-v4-pro','opencode/deepseek-v4-pro']
+      .map(id=>dynamic.findIndex(([v])=>v===id)).find(x=>x>=0)??-1;
+    if(i>0)dynamic.unshift(...dynamic.splice(i,1));
+    const list=dynamic.length?dynamic:OPENCODE_STATIC;
+    MODEL_OPTIONS.opencode=[...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    OPENCODE_MODEL_ERROR='';
+  }catch(e){
+    OPENCODE_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.opencode=[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
+  }
+}
 async function populateModels(engine,selected=null){
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -772,7 +829,8 @@ async function populateModels(engine,selected=null){
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
     ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
-    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型'):'';
+    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
+    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
@@ -1005,6 +1063,7 @@ const ENGINE_CLI={
   codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
+  opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -1087,12 +1146,21 @@ function styleGridRender(){
       const d=document.createElement('div');
       d.className='style-card'+(cur===s.prompt?' on':'');
       d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
+        +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
         +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
       d.title=s.prompt;
       d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+      d.querySelector('.zoom').onclick=ev=>{ev.stopPropagation();styleZoomShow(s)};
       grid.appendChild(d);
     });
 }
+function styleZoomShow(s){
+  $('#style-zoom-img').src='/static/styles/'+s.image;
+  $('#style-zoom-nm').textContent=s.name;
+  $('#style-zoom-cat').textContent=t(s.category);
+  $('#style-zoom').style.display='flex';
+}
+$('#style-zoom').onclick=()=>$('#style-zoom').style.display='none';
 async function openStyleModal(targetSel){
   STYLE_TARGET=targetSel;
   try{await loadStyleLib()}
@@ -1453,6 +1521,10 @@ function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll
 $('#res-volc').onchange=resVolcRows;
 function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-kimi-on').onchange=resKimiRows;
+function resOcRows(){const on=$('#res-oc-on').checked;document.querySelectorAll('.res-oc-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-oc-on').onchange=resOcRows;
+function resRhRows(){const on=$('#res-rh').checked;document.querySelectorAll('.res-rh-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-rh').onchange=resRhRows;
 async function openResModal(){
   $('#res-err').textContent='';
   try{
@@ -1463,12 +1535,17 @@ async function openResModal(){
     $('#res-codex').checked=!!c.codex_probe;
     $('#res-kimi-on').checked=!!c.kimi_probe;
     $('#res-kimi').value=c.kimi_api_key||'';
+    $('#res-oc-on').checked=!!c.opencode_probe;
+    $('#res-oc').value=c.opencode_api_key||'';
     $('#res-or').value=c.openrouter_key||'';
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
     $('#res-volc-sk').value=c.volc_sk||'';
+    $('#res-rh').checked=!!c.rh_enabled;
+    $('#res-rh-ai').value=c.rh_key_ai||'';
+    $('#res-rh-cn').value=c.rh_key_cn||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();resKimiRows();
+  resVolcRows();resKimiRows();resOcRows();resRhRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1478,16 +1555,23 @@ $('#res-ok').onclick=async()=>{
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
   if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
     $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
+  if($('#res-rh').checked&&!($('#res-rh-ai').value.trim()||$('#res-rh-cn').value.trim())){
+    $('#res-err').textContent=t('开启 RunningHub 余额检查需至少填写一个站点的 API Key');return}
   try{
     await api('/api/v1/resources/config',{
       claude_probe:$('#res-claude').checked,
       codex_probe:$('#res-codex').checked,
       kimi_probe:$('#res-kimi-on').checked,
       kimi_api_key:$('#res-kimi').value.trim(),
+      opencode_probe:$('#res-oc-on').checked,
+      opencode_api_key:$('#res-oc').value.trim(),
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
       volc_ak:$('#res-volc-ak').value.trim(),
-      volc_sk:$('#res-volc-sk').value.trim()});
+      volc_sk:$('#res-volc-sk').value.trim(),
+      rh_enabled:$('#res-rh').checked,
+      rh_key_ai:$('#res-rh-ai').value.trim(),
+      rh_key_cn:$('#res-rh-cn').value.trim()});
     $('#res-modal').style.display='none';
     renderResources(true);                             // 保存后立即用新配置刷新面板
   }catch(e){$('#res-err').textContent='保存失败:'+e.message}
@@ -1577,7 +1661,7 @@ async function renderResources(fresh){
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
   let h='';
-  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
+  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode'],['opencode','OpenCode Go']]){
     const e=r[k]||{};
     if(!e.enabled)continue;                 // 用量检查未开启则整段不显示(⚙️ 设置 → 资源消耗 开启后回来)
     h+=`<div class="res-eng"><span class="nm">${label}</span>${resLine('Session',e.session,e.session_resets_at)}${resLine('Weekly',e.weekly,e.weekly_resets_at)}</div>`;
@@ -1589,6 +1673,17 @@ async function renderResources(fresh){
   };
   if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
   if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
+  if(r.runninghub&&r.runninghub.configured){
+    // 每个已配置站点一行:RH 币 + 钱包余额(币种符号按接口返回的 currency)
+    for(const [site,s] of Object.entries(r.runninghub.sites||{})){
+      const sym={CNY:'¥',USD:'$'}[s.currency]||(s.currency?s.currency+' ':'');
+      const known=typeof s.coins==='number';
+      const amt=known
+        ?`${Math.round(s.coins)} ${t('RH 币')}`+(typeof s.balance==='number'?` · ${sym}${s.balance.toFixed(2)}`:'')
+        :t('未知');
+      h+=`<div class="res-bal"><span class="nm">RunningHub.${site}</span><span class="amt${known?'':' unknown'}">${amt}</span></div>`;
+    }
+  }
   h+=`<div id="res-updated">${t('更新于:')}${new Date().toLocaleTimeString()}</div>`;
   box.innerHTML=h;
 }
@@ -1804,6 +1899,7 @@ const AM_MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -1825,6 +1921,7 @@ async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{

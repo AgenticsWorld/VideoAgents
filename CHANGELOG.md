@@ -4,6 +4,30 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-08-14
+
+### Added
+
+- Plugin repository link in the Agent Plugins dialog: a "🔗 插件仓库" entry next to the "Install plugin package (zip)" button opens the official plugin collection at github.com/AgenticsWorld/VideoAgents-Plugins in a new tab. All 11 language dictionaries updated.
+- OpenCode execution engine (`opencode` in the top-bar engine selector, default model DeepSeek V4 Pro): runs agents through `opencode run --format json --auto` with persistent `--session` continuation, streams text/tool/token events into the run panel, and counts token usage per model call. The language-model menus are populated dynamically from `opencode models` (with a static DeepSeek V4 Pro/Flash fallback covering both the Zen `opencode/` and the Go-subscription `opencode-go/` channels), and `OPENCODE_BIN` overrides the executable (`~/.opencode/bin` is probed automatically, including by the desktop client).
+- DeepSeek Smart Assignment model strategy (Settings → Model Strategy): creative-core agents run on `opencode-go/deepseek-v4-pro`, all other agents on `opencode-go/deepseek-v4-flash` (the OpenCode Go subscription channel), using the same task-complexity tiers as the existing Claude/Codex/Kimi smart strategies.
+- OpenCode Go usage in the Resource Usage panel: a new toggle in Settings → Resource Usage queries the OpenCode Go subscription quota (5-hour/weekly windows) via the official console endpoint, using either a configured API Key or, when left blank, the local opencode login credential. All 11 language dictionaries updated.
+- RunningHub account balance in the Resource Usage panel: a new toggle with separate API keys for the .ai and .cn sites (the two accounts are not interchangeable; keys are stored locally, independent of the generation-models page), showing remaining RH coins and money per configured site with the usual 10-minute cache and force-refresh.
+- RunningHub placeholder-free direct binding extended from video to the image, music and TTS ComfyUI branches: cloud workflow exports without `{{TOKEN}}` placeholders previously let the template author's demo prompts, lyrics, images and voices silently blend into billed production requests. The prompt/negative/seed/reference image (image), style prompt/lyrics/duration/seed (music) and line text/reference voice/seed (TTS) are now bound by following the node wiring, with every unresolvable case failing before submission so nothing is billed. Task submission also prints the RunningHub taskId immediately for billing reconciliation, and status polling tolerates up to 3 transient network drops before giving up with a check-the-web-console warning.
+- RunningHub instance type selector: each media type's ComfyUI section gains a Standard/Plus/Ultra run-mode dropdown (Standard keeps the previous behavior; other tiers are passed through to task creation and echoed in the submission log).
+- Style library grew by 58 animation styles (52 2D / 6 3D, 94 → 152 total), and every style card gains a zoom button for full-size preview.
+
+### Changed
+
+- Saving Settings → Generation Models now auto-syncs the local caches of every currently selected RunningHub workflow (image main/reference, video, music, TTS) to the latest cloud version. Previously the cache never expired, so edits made in the RunningHub web editor (e.g. swapping the diffusion model) silently did not take effect until the cache file was deleted by hand. Sync failures do not block saving — submissions keep using the old cache and the save status shows a prominent warning; when a cloud workflow's content actually changed, the producer agent is notified to update dependent agents. All 11 language dictionaries updated.
+- MiniMax H3 Ref2VA reference-image sizing is now selectable per request: `genmedia.py video` gains `--ref-image-size match|max` (default stays `match`, which downscales references to the generation's pixel area; `max` passes short edge ≤2048 through untouched for better identity fidelity at higher time/cost). The chosen value is force-applied to RunningHub cloud workflows at submission time, and non-H3 channels/workflows reject the flag instead of silently ignoring it.
+- Character reference sheet template redesigned from five panels to four: the two stacked head-and-shoulders close-ups on the right are merged into a single full-height large close-up (three full-body views front/side/back on the left are unchanged). Template PNG, panel semantics JSON, the character-concept agent's layout prompt/self-check contract and WORKFLOW.md updated accordingly.
+- Settings menu reorganized: Plugins is promoted from the Advanced submenu to a top-level item right below Resource Usage, and the Advanced submenu now sits above Interface Language.
+
+### Fixed
+
+- Desktop auto-update failures: `__pycache__`/`*.pyc` are excluded from the packaged plugins, and the Python bytecode cache is redirected outside the app bundle (`PYTHONPYCACHEPREFIX`) — on macOS, bytecode written inside the signed .app invalidated the signature and Gatekeeper refused the next launch. The updater also resolves the correct .app root on macOS, validates the application path before downloading, and rejects App-Translocation launches up front with a move-to-Applications hint.
+
 ## [1.0.15] - 2026-08-13
 
 ### Added

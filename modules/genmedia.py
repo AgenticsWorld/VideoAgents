@@ -151,6 +151,10 @@ H3_DEFAULTS = {
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
     "weight_dtype": "default", "clip_device": "default",
     "sampler": "res_multistep", "scheduler": "simple", "steps": 20,
+    # ref_image_size 默认 match(参考图压到与输出同像素面积,速度/成本优先);
+    # 单次请求可用 --ref-image-size max 改为短边 ≤2048 不压缩直进模型(480p 草稿档
+    # 下 match 会把人脸参考压到只剩几十像素,是脸部不一致的主因之一;但参考 token
+    # 全程陪跑采样,max 更慢更贵,按组按需取舍)
     "ref_image_size": "match", "fps": 24,
 }
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
@@ -651,9 +655,14 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     base, key, wf_id = _rh_ctx(cfg)
-    resp = _rh_post(base, key, "/task/openapi/create",
-                    {"workflowId": wf_id,
-                     "workflow": json.dumps(workflow, ensure_ascii=False)})
+    payload = {"workflowId": wf_id,
+               "workflow": json.dumps(workflow, ensure_ascii=False)}
+    # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
+    # plus/ultra 等直接透传,按秒单价更高,取值不合法由建任务接口报错(不计费)
+    inst = str(cfg.get("rh_instance_type") or "").strip().lower()
+    if inst and inst != "standard":
+        payload["instanceType"] = inst
+    resp = _rh_post(base, key, "/task/openapi/create", payload)
     if resp.get("code") != 0:
         raise RuntimeError(f"RunningHub 建任务失败(code={resp.get('code')}):"
                            f"{str(resp.get('msg'))[:400]}")
@@ -664,10 +673,27 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     if str(data.get("taskStatus") or "").upper() == "FAILED":
         raise RuntimeError("RunningHub 工作流校验失败:"
                            f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
+    # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印(非默认机器规格一并回显)
+    print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}"
+          + (f"(instanceType={inst})" if inst and inst != "standard" else ""),
+          file=sys.stderr, flush=True)
     deadline = time.time() + COMFY_TIMEOUT
+    poll_errors = 0
     while time.time() < deadline:
         time.sleep(RH_POLL_INTERVAL)
-        st = _rh_post(base, key, "/task/openapi/status", {"taskId": task_id}, timeout=60)
+        try:
+            st = _rh_post(base, key, "/task/openapi/status", {"taskId": task_id}, timeout=60)
+        except RuntimeError:
+            # 轮询窗口长,代理/网络瞬断不该丢掉远端仍在跑且已计费的任务;
+            # 连续多次不可达才放弃(_rh_post 仅在网络层错误抛 RuntimeError)
+            poll_errors += 1
+            if poll_errors >= 3:
+                raise RuntimeError(
+                    f"RunningHub 状态轮询连续 {poll_errors} 次网络不可达"
+                    f"(taskId={task_id});任务可能仍在云端执行,"
+                    "请先到 RunningHub 网页端核对再决定重投,防止双份计费")
+            continue
+        poll_errors = 0
         status = st.get("data")
         if isinstance(status, dict):  # 容错:部分版本把状态包在对象里
             status = status.get("taskStatus") or status.get("status")
@@ -991,6 +1017,12 @@ def _apply_h3_duration(workflow: dict, duration: float | None) -> None:
     seconds_nodes[0]["value"] = float(duration)
 
 
+def _apply_h3_ref_image_size(workflow: dict, ref_image_size: str) -> None:
+    """覆写 Ref2VA 节点的 ref_image_size 为内置默认(云端导出件常是作者写死的字面值,
+    占位符替换空转;该输入是 combo 字面量位,直接赋值即幂等覆写)。"""
+    _h3_node(workflow).setdefault("inputs", {})["ref_image_size"] = ref_image_size
+
+
 def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str]) -> None:
     """Attach only submitted refs to H3's dynamic Ref2VA sockets."""
     if len(image_names) > MAX_VIDEO_REFS:
@@ -1268,6 +1300,320 @@ def _comfy_workflow(cfg, tokens: dict, kind: str) -> dict:
     }
 
 
+IMAGE_SAMPLER_CLASSES = ("KSampler", "KSamplerAdvanced", "SamplerCustom", "SamplerCustomAdvanced")
+
+
+def _image_primary_sampler(workflow: dict) -> dict:
+    """定位工作流的主采样器:不(传递地)依赖其他采样器产物的那一个(图像/音乐共用)。
+
+    云端模板常带二段式精修/放大链(第二个采样器拿第一段产物当参考),画面内容
+    由主采样器的 conditioning 决定,prompt/negative/seed 直绑只认主采样器,
+    精修链的增强提示词保持模板原值。
+    """
+    samplers = {nid: node for nid, node in workflow.items()
+                if isinstance(node, dict) and node.get("class_type") in IMAGE_SAMPLER_CLASSES}
+
+    def reaches_other_sampler(start: str) -> bool:
+        seen, stack = {start}, [start]
+        while stack:
+            node = workflow.get(stack.pop())
+            if not isinstance(node, dict):
+                continue
+            for value in (node.get("inputs") or {}).values():
+                if not _node_link(value) or str(value[0]) in seen:
+                    continue
+                up = str(value[0])
+                seen.add(up)
+                if up in samplers:
+                    return True
+                stack.append(up)
+        return False
+
+    primary = [nid for nid in samplers if not reaches_other_sampler(nid)]
+    if len(primary) != 1:
+        raise RuntimeError(
+            f"RunningHub 工作流无法定位唯一主采样器(KSampler 系候选 {len(primary)} 个),"
+            "无法直绑本次参数;请精简模板或改用 {{PROMPT}} 等占位符")
+    return samplers[primary[0]]
+
+
+def _image_cond_text_slot(workflow: dict, sampler: dict, side: str,
+                          text_keys: tuple = ("text", "prompt")):
+    """顺主采样器 positive/negative conditioning 连线找文本编码节点。
+
+    返回 (节点 inputs, 文本键, 节点id);途经单输入 conditioning 透传节点
+    (FluxGuidance/ReferenceLatent 等)继续下探。ConditioningZeroOut 表示该侧
+    文本被零化(模板不用这侧文本),返回 None 由调用方定性。
+    音乐分支传 text_keys=("tags",...) 复用同一走线(ACE 风格位叫 tags)。
+    """
+    inputs = sampler.get("inputs") or {}
+    link = inputs.get(side)
+    if link is None and _node_link(inputs.get("guider")):
+        # SamplerCustomAdvanced:conditioning 藏在 guider 节点
+        # (CFGGuider 有 positive/negative,BasicGuider 只有 conditioning=正面)
+        guider = (workflow.get(str(inputs["guider"][0])) or {}).get("inputs") or {}
+        link = guider.get(side)
+        if link is None and side == "positive":
+            link = guider.get("conditioning")
+    for _ in range(24):
+        if not _node_link(link):
+            return None
+        nid = str(link[0])
+        node = workflow.get(nid)
+        if not isinstance(node, dict) or node.get("class_type") == "ConditioningZeroOut":
+            return None
+        node_inputs = node.setdefault("inputs", {})
+        for text_key in text_keys:
+            value = node_inputs.get(text_key)
+            if isinstance(value, str) or _node_link(value):
+                return node_inputs, text_key, nid
+        link = node_inputs.get("conditioning")
+    return None
+
+
+def _rh_resolve_text_slot(workflow: dict, node_inputs: dict, text_key: str):
+    """把编码节点的文本位解析为实际写入位置 (容器 inputs, 键)。
+
+    字面值位就地覆写;连线则改写上游文本 primitive(value/text/string 值位,
+    与 H3 同款);上游不可识别(如图像反推、字符串拼装节点)时退回编码节点断链
+    覆写字面值——text/prompt 位本身就是标准文本位,断开的上游分支不再进执行图。
+    """
+    value = node_inputs.get(text_key)
+    if _node_link(value):
+        linked = (workflow.get(str(value[0])) or {}).setdefault("inputs", {})
+        for key in ("value", "text", "string", "prompt"):
+            if isinstance(linked.get(key), str):
+                return linked, key
+    return node_inputs, text_key
+
+
+def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
+    """种子直绑:采样器种子字面值位,或经 noise 连线的 RandomNoise 类节点。
+    定位不到只如实提醒不报错——种子不注入只影响重跑变化,不产生错误内容。"""
+    inputs = sampler.setdefault("inputs", {})
+    candidates = [(inputs, ("seed", "noise_seed"))]
+    if _node_link(inputs.get("noise")):
+        upstream = (workflow.get(str(inputs["noise"][0])) or {}).setdefault("inputs", {})
+        candidates.append((upstream, ("noise_seed", "seed", "value")))
+    for container, keys in candidates:
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                container[key] = seed
+                return
+    print("[genmedia] RunningHub 工作流未定位到采样器种子位,seed 未注入(按模板内种子生成)",
+          file=sys.stderr)
+
+
+def _apply_rh_image_reference(workflow: dict, file_name: str) -> None:
+    """把已上传的 --ref 绑进图生图模板唯一的 LoadImage 输入图节点。"""
+    loads = [node for node in workflow.values()
+             if isinstance(node, dict) and node.get("class_type") == "LoadImage"]
+    if len(loads) != 1:
+        raise RuntimeError(
+            f"RunningHub 图生图工作流须恰好 1 个 LoadImage 输入图节点(找到 {len(loads)} 个),"
+            "无法定位 --ref 绑定位;请精简模板或改用 {{FIRST_FRAME}} 占位符")
+    loads[0].setdefault("inputs", {})["image"] = file_name
+
+
+def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: str,
+                             ref_name: str | None, seed) -> None:
+    """RunningHub 图像云工作流的无占位符直绑兜底(与视频 H3 同款语义)。
+
+    云端工作区导出件常无 {{TOKEN}} 占位符而是作者演示字面值,占位符替换空转,
+    演示提示词/演示图会静默混入生产请求;对缺对应占位符的模板顺主采样器连线
+    直接绑定本次参数,prompt/ref 定位不到一律提交前报错不发请求不计费。
+    带占位符的模板逐项跳过兜底,行为不变。
+    """
+    sampler_cache = []
+
+    def sampler() -> dict:
+        if not sampler_cache:
+            sampler_cache.append(_image_primary_sampler(workflow))
+        return sampler_cache[0]
+
+    prompt_target = None
+    if "{{PROMPT}}" not in raw:
+        slot = _image_cond_text_slot(workflow, sampler(), "positive")
+        if slot is None:
+            raise RuntimeError(
+                "RunningHub 图像工作流顺 positive 连线未找到可写文本位(text/prompt),"
+                "无法注入本次提示词;请把模板提示词改接文本节点或改用 {{PROMPT}} 占位符")
+        container, key = _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        container[key] = prompt
+        prompt_target = (id(container), key)
+    if negative and "{{NEGATIVE}}" not in raw:
+        slot = _image_cond_text_slot(workflow, sampler(), "negative")
+        target = None if slot is None else _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        if target is None or (id(target[0]), target[1]) == prompt_target:
+            raise RuntimeError(
+                "当前 RunningHub 图像工作流无独立负面文本位,--negative 无法注入;"
+                "请在「🎨 生成模型」页把 ComfyUI 负面模式改为「并入正面提示词」"
+                "(append_exclusions),或改用带 {{NEGATIVE}} 占位符的模板")
+        target[0][target[1]] = negative
+    if seed is not None and "{{SEED}}" not in raw:
+        _apply_rh_image_seed(workflow, sampler(), seed)
+    if "{{WIDTH}}" not in raw and "{{HEIGHT}}" not in raw:
+        print("[genmedia] RunningHub 图像工作流无分辨率占位符,--aspect/--size 不进云端,"
+              "按模板内分辨率节点出图", file=sys.stderr)
+    if ref_name:
+        if "{{FIRST_FRAME}}" not in raw:
+            _apply_rh_image_reference(workflow, ref_name)
+        return
+    # 无 --ref:文生图模板残留被引用的 LoadImage 会把作者演示图静默混入
+    # (H3 残留素材同款纪律);未被引用的孤儿节点不进执行图,不拦
+    referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                  for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    if any(isinstance(node, dict) and node.get("class_type") == "LoadImage"
+           and nid in referenced for nid, node in workflow.items()):
+        raise RuntimeError(
+            "RunningHub 文生图工作流含在用的 LoadImage 输入图节点,作者演示图会混入生产请求;"
+            "该模板请配置为图生图工作流搭配 --ref 使用,或改选纯文生图模板")
+
+
+def _rh_bind_number(workflow: dict, inputs: dict, key: str, value) -> bool:
+    """数值位直绑:字面值就地覆写;连线则改写上游数值 primitive 的 value 位。"""
+    slot = inputs.get(key)
+    if isinstance(slot, (int, float)) and not isinstance(slot, bool):
+        inputs[key] = value
+        return True
+    if _node_link(slot):
+        linked = (workflow.get(str(slot[0])) or {}).setdefault("inputs", {})
+        if isinstance(linked.get("value"), (int, float)) \
+                and not isinstance(linked.get("value"), bool):
+            linked["value"] = value
+            return True
+    return False
+
+
+def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
+                             duration: float, seed, lyrics_configured: bool) -> None:
+    """RunningHub 音乐云工作流的无占位符直绑兜底(与图像分支同款语义)。
+
+    风格提示词绑主采样器 positive 连线上的音频文本编码节点(ACE 系的 tags 位,
+    兜底 text/prompt),歌词绑同节点 lyrics 位(模板演示歌词不得混入,未配歌词
+    时按 [Instrumental] 覆写);时长绑编码节点 duration 位与各节点 seconds 位
+    (ACE 两处常同连一个 Float primitive);prompt/时长定位不到提交前报错
+    不发请求不计费。带占位符模板逐项跳过,兜底幂等。
+    """
+    cache: dict = {}
+
+    def encode_slot():
+        if "slot" not in cache:
+            cache["sampler"] = _image_primary_sampler(workflow)
+            cache["slot"] = _image_cond_text_slot(
+                workflow, cache["sampler"], "positive", ("tags", "text", "prompt"))
+        return cache["slot"]
+
+    def encode_slot_soft():
+        # prompt 之外的项缺位时,锚点定位失败不该硬报错(由各项自行定性)
+        try:
+            return encode_slot()
+        except RuntimeError:
+            return None
+
+    if "{{PROMPT}}" not in raw:
+        slot = encode_slot()
+        if slot is None:
+            raise RuntimeError(
+                "RunningHub 音乐工作流顺 positive 连线未找到风格文本位(tags/text/prompt),"
+                "无法注入本次风格提示词;请把模板改接文本节点或改用 {{PROMPT}} 占位符")
+        container, key = _rh_resolve_text_slot(workflow, slot[0], slot[1])
+        container[key] = prompt
+    if "{{LYRICS}}" not in raw:
+        slot = encode_slot_soft()
+        value = slot[0].get("lyrics") if slot else None
+        if isinstance(value, str) or _node_link(value):
+            container, key = _rh_resolve_text_slot(workflow, slot[0], "lyrics")
+            container[key] = lyrics
+        elif lyrics_configured:
+            raise RuntimeError(
+                "RunningHub 音乐工作流未找到 lyrics 歌词位,配置的歌词无法注入;"
+                "请改用带歌词输入的 ACE 工作流或 {{LYRICS}} 占位符")
+    if "{{DURATION}}" not in raw:
+        # 编码节点 duration 与 latent seconds 常同连一个 Float primitive,分别尝试即可
+        slot = encode_slot_soft()
+        bound = bool(slot) and _rh_bind_number(workflow, slot[0], "duration", duration)
+        for node in workflow.values():
+            if isinstance(node, dict) and "seconds" in (node.get("inputs") or {}):
+                bound = _rh_bind_number(workflow, node["inputs"], "seconds", duration) or bound
+        if not bound:
+            raise RuntimeError(
+                "RunningHub 音乐工作流未定位到时长位(duration/seconds 数值或其上游 primitive),"
+                "无法注入时长,模板默认时长会照单计费;请改模板或用 {{DURATION}} 占位符")
+    if seed is not None and "{{SEED}}" not in raw:
+        slot = encode_slot_soft()
+        if cache.get("sampler") is None:
+            print("[genmedia] RunningHub 工作流未定位到采样器种子位,seed 未注入(按模板内种子生成)",
+                  file=sys.stderr)
+        else:
+            _apply_rh_image_seed(workflow, cache["sampler"], seed)
+            if slot:  # ACE 编码节点自带音频码生成种子,一并绑定保证重跑有变化
+                _rh_bind_number(workflow, slot[0], "seed", seed)
+
+
+def _rh_tts_generate_node(workflow: dict) -> dict:
+    """TTS 生成节点定位:从 SaveAudio*/PreviewAudio 落盘节点顺 audio/samples 连线
+    上溯到第一个带 text 输入的节点(TTS 工作流通常无采样器,主采样器锚点不适用)。"""
+    sinks = sorted((node for node in workflow.values() if isinstance(node, dict)
+                    and str(node.get("class_type") or "").startswith(("SaveAudio", "PreviewAudio"))),
+                   key=lambda n: 0 if str(n.get("class_type")).startswith("SaveAudio") else 1)
+    for sink in sinks:
+        link = (sink.get("inputs") or {}).get("audio")
+        for _ in range(16):
+            if not _node_link(link):
+                break
+            node = workflow.get(str(link[0]))
+            if not isinstance(node, dict):
+                break
+            inputs = node.setdefault("inputs", {})
+            value = inputs.get("text")
+            if isinstance(value, str) or _node_link(value):
+                return node
+            link = inputs.get("audio") or inputs.get("samples")
+    raise RuntimeError(
+        "RunningHub TTS 工作流未定位到带 text 输入的生成节点(从 SaveAudio 顺 audio 连线上溯),"
+        "无法注入本次台词;请检查模板接线或改用 {{TEXT}} 占位符")
+
+
+def _apply_rh_tts_bindings(raw: str, workflow: dict, text: str, ref_audio: str,
+                           seed, speed) -> None:
+    """RunningHub TTS 云工作流的无占位符直绑兜底(与图像分支同款语义)。
+
+    台词绑生成节点 text 位(字面值/上游文本 primitive,演示台词不得混入);
+    自动选择并上传的参考音色绑模板唯一 LoadAudio(0/多个提交前报错,防止
+    静默用作者演示音色出声);seed 绑生成节点;speed 无对应输入位时如实
+    stderr 记录。带占位符模板逐项跳过,兜底幂等。
+    """
+    cache: list = []
+
+    def gen_node() -> dict:
+        if not cache:
+            cache.append(_rh_tts_generate_node(workflow))
+        return cache[0]
+
+    if "{{TEXT}}" not in raw and "{{PROMPT}}" not in raw:
+        container, key = _rh_resolve_text_slot(workflow, gen_node()["inputs"], "text")
+        container[key] = text
+    if "{{REF_AUDIO}}" not in raw and "{{VOICE}}" not in raw:
+        loads = [node for node in workflow.values()
+                 if isinstance(node, dict) and node.get("class_type") == "LoadAudio"]
+        if len(loads) != 1:
+            raise RuntimeError(
+                f"RunningHub TTS 工作流须恰好 1 个 LoadAudio 参考音频节点(找到 {len(loads)} 个),"
+                "无法定位音色绑定位,已选参考音色进不去会静默用模板演示音色;"
+                "请精简模板或改用 {{REF_AUDIO}} 占位符")
+        loads[0].setdefault("inputs", {})["audio"] = ref_audio
+    if seed is not None and "{{SEED}}" not in raw:
+        if not _rh_bind_number(workflow, gen_node()["inputs"], "seed", seed):
+            print("[genmedia] RunningHub TTS 工作流未定位到种子位,seed 未注入(按模板内种子出声)",
+                  file=sys.stderr)
+    if speed and float(speed) != 1.0 and "{{SPEED}}" not in raw:
+        if not _rh_bind_number(workflow, gen_node()["inputs"], "speed", float(speed)):
+            print("[genmedia] RunningHub TTS 工作流无 speed 输入位,--speed 未注入(按模板语速出声)",
+                  file=sys.stderr)
+
+
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None
@@ -1301,6 +1647,9 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
             workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
     if rh:
+        # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
+        _apply_rh_image_bindings(_rh_workflow_text(workflow_cfg), wf, prompt,
+                                 negative, tokens.get("FIRST_FRAME"), seed)
         return _rh_run(workflow_cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
@@ -1911,7 +2260,7 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
                    refs=None, audio_refs=None, generate_audio=None, return_last_frame="",
-                   video_refs=None):
+                   video_refs=None, ref_image_size=""):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None
     if not rh:
@@ -1928,6 +2277,8 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
+        if ref_image_size:
+            settings["ref_image_size"] = ref_image_size
         if not rh:
             # RunningHub 无 /object_info 组件预检;节点/模型缺失由建任务 promptTips
             # 或任务失败详情报出
@@ -1949,6 +2300,7 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         # 防止演示提示词/模板默认时长静默混入生产请求(占位符模板下为幂等覆写)
         _apply_h3_prompt(wf, prompt)
         _apply_h3_duration(wf, duration)
+        _apply_h3_ref_image_size(wf, settings["ref_image_size"])
         _add_h3_references(wf, [upload(path) for path in refs or []],
                            [upload(path) for path in audio_refs or []])
         saved = (_rh_run(cfg, wf, output, want_video=True) if rh
@@ -1956,6 +2308,9 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
+    if ref_image_size:
+        raise RuntimeError("--ref-image-size 仅 MiniMax-H3 Ref2VA 工作流支持"
+                           "(控制参考图是否压缩到输出像素面积),当前工作流请去掉该参数")
     sd_gen = _seedance_cloud_workflow_gen(cfg)
     if sd_gen:
         is_v25 = sd_gen >= 2.5
@@ -2147,6 +2502,10 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
     }
     wf = _comfy_workflow(cfg, tokens, "music")
     if rh:
+        # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
+        _apply_rh_music_bindings(_rh_workflow_text(cfg), wf, prompt, lyrics,
+                                 duration, tokens["SEED"],
+                                 bool((cfg.get("lyrics") or "").strip()))
         return _rh_run(cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
@@ -2350,6 +2709,10 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
         "SPEED": float(speed) if speed else 1.0,
     }
     wf = _comfy_workflow(cfg, tokens, "tts")
+    if rh:
+        # 直绑兜底报错留在 try 外:属提交前配置问题,不得包装成「后端执行失败」
+        _apply_rh_tts_bindings(_rh_workflow_text(cfg), wf, text, ref_audio,
+                               tokens["SEED"], speed)
     try:
         return (_rh_run(cfg, wf, output, want_video=False) if rh
                 else _comfy_run(base, wf, output, want_video=False, headers=hdrs))
@@ -2421,8 +2784,13 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    audio_refs: list[str] | None = None,
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
-                   video_refs: list[str] | None = None) -> str:
+                   video_refs: list[str] | None = None,
+                   ref_image_size: str = "") -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
+
+    ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
+    与输出同像素面积);max=短边 ≤2048 不压缩直进模型,人脸/身份保真更好但更慢更贵,
+    建议仅对脸部一致性要求高的组按需指定。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
     多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)及 ComfyUI(H3 Ref2VA /
@@ -2440,6 +2808,9 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """
     _forbid_dispatch_layer("视频")
     cfg = get_config("video")
+    if ref_image_size and cfg["provider"] != "comfyui":
+        raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
+                           f"当前渠道 {cfg['provider']} 请去掉该参数")
     resolution = _resolution_gate(resolution)
     seed = seed if seed is not None else random.randint(1, 2**31)
     if cfg["provider"] in ("volcengine", "byteplus"):
@@ -2456,12 +2827,17 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                                          or _seedance_cloud_workflow_gen(cfg)):
         return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
                               resolution, aspect, seed, output, refs, audio_refs,
-                              generate_audio, return_last_frame, video_refs)
+                              generate_audio, return_last_frame, video_refs,
+                              ref_image_size=ref_image_size)
     if refs or audio_refs or video_refs or return_last_frame or generate_audio is not None:
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
                            "请在生成模型页切换到火山引擎/BytePlus 或改用首尾帧模式")
     fn = {"openrouter": _video_openrouter, "comfyui": _video_comfyui}[cfg["provider"]]
+    if fn is _video_comfyui:
+        # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
+        return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,
+                  seed, output, ref_image_size=ref_image_size)
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
 
 
@@ -2609,7 +2985,7 @@ def _cmd_video(args):
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,
                          args.duration, args.resolution, args.aspect, args.seed,
                          args.ref, args.audio_ref, gen_audio, args.return_last_frame,
-                         video_refs=args.ref_video)
+                         video_refs=args.ref_video, ref_image_size=args.ref_image_size)
     print(f"已生成: {out}")
 
 
@@ -2699,6 +3075,9 @@ def main():
                          "如角色 TTS 音色样本)")
     pv.add_argument("--generate-audio", choices=["on", "off", ""], default="",
                     help="原生音频开关(Seedance 2.x;缺省沿用模型默认 on)")
+    pv.add_argument("--ref-image-size", choices=["match", "max"], default="",
+                    help="参考图尺寸策略(仅 MiniMax-H3 Ref2VA):默认 match 压到与输出"
+                         "同像素面积;max 短边 ≤2048 不压缩,身份保真更好但更慢更贵")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")

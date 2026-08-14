@@ -76,12 +76,25 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
+
+
+def _default_opencode_bin() -> str:
+    # opencode 官方安装脚本默认装到 ~/.opencode/bin,同 kimi:从 IDE/launchd 等
+    # 非交互环境启动本服务时 PATH 可能不含该目录,回退绝对路径
+    found = shutil.which("opencode")
+    if found:
+        return found
+    fallback = Path.home() / ".opencode" / "bin" / "opencode"
+    return str(fallback) if fallback.is_file() else "opencode"
+
+
+OPENCODE_BIN = os.environ.get("OPENCODE_BIN") or _default_opencode_bin()
 CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
-            "pi": PI_BIN}
+            "pi": PI_BIN, "opencode": OPENCODE_BIN}
 CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
-              "pi": "Pi Coding Agent"}
+              "pi": "Pi Coding Agent", "opencode": "OpenCode"}
 CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
-                "pi": "PI_BIN"}
+                "pi": "PI_BIN", "opencode": "OPENCODE_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -123,7 +136,7 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "pi", "deepagents")   # 执行引擎:CLI 或 deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
@@ -480,13 +493,15 @@ DEFAULT_GENCONFIG = {
                     "model": "image-01", "custom_model": ""},
         # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
         # 账号与 Key 不互通,rh_api_key_cn/rh_api_key_ai 按站点分别保存,按 mode 取用);
-        # rh_workflows 为工作区工作流收藏 [{id, note, site}]
+        # rh_workflows 为工作区工作流收藏 [{id, note, site}];
+        # rh_instance_type 为 RunningHub 运行模式(机器规格)standard/plus/ultra,
+        # standard 建任务不传 instanceType 沿用平台默认
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
                     "rh_workflow_id": "", "rh_ref_workflow_id": "",
-                    "rh_workflows": []},
+                    "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
         "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
@@ -503,7 +518,8 @@ DEFAULT_GENCONFIG = {
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "", "checkpoint": "",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -522,7 +538,8 @@ DEFAULT_GENCONFIG = {
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
@@ -546,7 +563,8 @@ DEFAULT_GENCONFIG = {
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -987,7 +1005,8 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
-AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi")
+#   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_deepseek")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -1022,9 +1041,13 @@ AM_MODE_MODELS = {
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
+    # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
+    # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
+    "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
+                       "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4-flash"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "deepagents")      # "" = 跟随全局
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局
 AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
 AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
 
@@ -1118,11 +1141,15 @@ _OPENROUTER_TTL = 600
 #   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
 # kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配),
 #   usage=周配额,limits[](300min 窗口)=5h 会话配额。
+# opencode:OpenCode Go 订阅用量 GET opencode.ai/zen/go/v1/usage(额度按美元计,
+#   5 小时/周/月三窗口,面板取 5h→Session、周→Weekly);Key 在设置里配,留空自动读
+#   本机 opencode 登录凭证 auth.json。
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
+OPENCODE_USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
 _USAGE_CACHE: dict = {}               # engine -> (ts, {"session":pct|None,"weekly":pct|None})
-_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
+_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180, "opencode": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
 _CLAUDE_VERSION: str | None = None
 
 
@@ -1288,6 +1315,96 @@ def kimi_probe_enabled() -> bool:
     return bool(v)
 
 
+def opencode_probe_enabled() -> bool:
+    """OpenCode Go 订阅用量检查开关(⚙️ 资源消耗 设置);默认关闭。"""
+    return bool(resource_cfg().get("opencode_probe"))
+
+
+def _opencode_data_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME", "").strip()
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "opencode"
+
+
+def _opencode_go_key() -> str | None:
+    """OpenCode Go API Key:设置里配置的优先;留空时读本机 opencode 登录凭证
+    (auth.json 里 provider 名含 opencode 的条目,常见字段名逐个尝试)。"""
+    key = (resource_cfg().get("opencode_api_key") or "").strip()
+    if key:
+        return key
+    try:
+        auth = json.loads((_opencode_data_dir() / "auth.json").read_text())
+    except Exception:
+        return None
+    if not isinstance(auth, dict):
+        return None
+    for name, ent in auth.items():
+        if "opencode" in str(name).lower() and isinstance(ent, dict):
+            for k in ("key", "apiKey", "api_key", "token", "access"):
+                v = ent.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    return None
+
+
+def _opencode_usage_full() -> dict:
+    """OpenCode Go 订阅用量:5h 窗口→session,周窗口→weekly(月窗口不上面板)。
+    官方未公开该接口的响应字段(控制台同源接口,无 Key 时 401 AuthError),按常见
+    命名宽松解析:utilization/percent 直读,used+limit(美元额度)换算;窗口名与
+    重置时间字段逐个尝试,解析不到/未配 Key 一律返回 None(面板显示未知)。"""
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
+    key = _opencode_go_key()
+    if not key:
+        return empty
+    try:
+        data = _http_get_json(OPENCODE_USAGE_URL,
+                              headers={"Authorization": f"Bearer {key}"})
+    except Exception:
+        return empty
+
+    def pct(d):
+        if not isinstance(d, dict):
+            return None
+        for k in ("utilization", "used_percent", "percent", "percentage"):
+            v = d.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                return max(0.0, min(100.0, float(v)))
+        used = next((float(d[k]) for k in ("used", "usage", "spent", "cost")
+                     if isinstance(d.get(k), (int, float))), None)
+        limit = next((float(d[k]) for k in ("limit", "quota", "total", "cap")
+                      if isinstance(d.get(k), (int, float)) and float(d[k]) > 0),
+                     None)
+        if used is not None and limit:
+            return max(0.0, min(100.0, used / limit * 100))
+        return None
+
+    def reset_ts(d):
+        if not isinstance(d, dict):
+            return None
+        for k in ("resets_at", "resetAt", "reset_at", "resetTime", "reset_time",
+                  "resets_in", "expires_at", "end_time", "endsAt"):
+            ts = _parse_reset_ts(d.get(k))
+            if ts and ts > time.time():
+                return ts
+        return None
+
+    def window(*names):
+        scopes = [data] + [data.get(k) for k in ("usage", "limits", "windows", "data")]
+        for scope in scopes:
+            if not isinstance(scope, dict):
+                continue
+            for n in names:
+                d = scope.get(n)
+                if isinstance(d, dict) and (pct(d) is not None or reset_ts(d)):
+                    return d
+        return None
+    s = window("five_hour", "fiveHour", "5h", "session", "hour")
+    w = window("seven_day", "sevenDay", "week", "weekly", "7d")
+    return {"session": pct(s), "weekly": pct(w),
+            "session_resets_at": reset_ts(s), "weekly_resets_at": reset_ts(w)}
+
+
 def _claude_usage_full() -> dict:
     """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;窗口对象自带
     resets_at(ISO)即重置时间;任何异常返回 None。"""
@@ -1373,7 +1490,7 @@ def engine_usage_full(engine: str) -> dict:
     if full is not None and time.time() - ts < _USAGE_TTL[engine]:
         return full
     full = {"claude": _claude_usage_full, "codex": _codex_usage_full,
-            "kimi": _kimi_usage_full}[engine]()
+            "kimi": _kimi_usage_full, "opencode": _opencode_usage_full}[engine]()
     _USAGE_CACHE[engine] = (time.time(), full)
     return full
 
@@ -1456,9 +1573,44 @@ def _volc_balance() -> dict | None:
         return None
 
 
+def _rh_balance() -> dict | None:
+    """RunningHub 账户余额(accountStatus):RH 币 + 钱包余额;.ai/.cn 账号不互通,
+    按站点分别查询,只查填了 Key 的站点。未开启/一个 Key 都没配返回 None;
+    单站点查询失败该站点读数为 null(面板显示「未知」),不影响另一站点。"""
+    cfg = resource_cfg()
+    keys = {s: (cfg.get(f"rh_key_{s}") or "").strip() for s in ("ai", "cn")}
+    if not (cfg.get("rh_enabled") and any(keys.values())):
+        return None
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    out = {}
+    for site, key in keys.items():
+        if not key:
+            continue
+        try:
+            resp = _http_post_json(
+                RH_BASES[f"rh_{site}"] + "/uc/openapi/accountStatus",
+                {"apikey": key, "apiKey": key},
+                {"Authorization": f"Bearer {key}"}, 15)
+            if resp.get("code") != 0:
+                raise ValueError(str(resp.get("msg")))
+            d = resp.get("data") or {}
+            out[site] = {"coins": num(d.get("remainCoins")),
+                         "balance": num(d.get("remainMoney")),
+                         "currency": str(d.get("currency") or "")}
+        except Exception:
+            out[site] = {"coins": None, "balance": None, "currency": ""}
+    return out
+
+
 def provider_balance(provider: str) -> dict | None:
-    """openrouter/volc 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
-    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance}.get(provider)
+    """openrouter/volc/runninghub 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
+    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance,
+          "runninghub": _rh_balance}.get(provider)
     if not fn:
         return None
     ts, res = _BALANCE_CACHE.get(provider, (0, None))
@@ -1842,7 +1994,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    择优交付)。同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
-   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/deepagents 中的另一个)。
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
    `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
@@ -2059,6 +2211,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "opencode":
+                # opencode run 原生 JSON 事件流与持久会话,但无 --append-system-prompt:
+                # 首轮把角色说明拼进 prompt;续轮走 --session(会话已带上下文)。
+                # --auto 放行未显式拒绝的工具权限(非交互运行必需)
+                base = [cli_executable, "run", "--format", "json", "--auto"]
+                if model:
+                    base += ["-m", model]
+                if sid:
+                    return base + ["--session", sid, message]
+                return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "pi":
                 # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
@@ -2157,6 +2319,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_kimi_event(run, obj)
                     elif engine == "pi":
                         handle_pi_event(run, obj)
+                    elif engine == "opencode":
+                        handle_opencode_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
@@ -2411,6 +2575,51 @@ def handle_pi_event(run: dict, obj: dict):
         return
     if event == "error":
         run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
+
+
+def handle_opencode_event(run: dict, obj: dict):
+    """解析 opencode run --format json 的 JSONL 事件(实测 1.18)。
+
+    每条事件顶层带 sessionID;text 事件的 part.text 是完成的文本块(非增量);
+    工具调用 tool_use 事件 part.tool=工具名、part.state.input=参数(文件参数是
+    驼峰 filePath);step_finish 每次模型调用一条,part.tokens 计 token
+    (total 已含 cache read/reasoning;cost 免费模型恒为 0,不采)。"""
+    sid = obj.get("sessionID")
+    if sid:
+        run["session_id"] = sid
+    t = obj.get("type")
+    part = obj.get("part") or {}
+    if t == "text":
+        txt = part.get("text") or ""
+        if txt:
+            run["text"] = run.get("text", "") + txt
+            run["result"] = txt          # opencode 无独立 result 事件,取最后一个文本块
+            HUB.publish({"type": "text", "run_id": run["id"],
+                         "agent": run["agent"], "text": txt})
+    elif t == "tool_use":
+        inp = (part.get("state") or {}).get("input") or {}
+        if isinstance(inp.get("filePath"), str) and "file_path" not in inp:
+            inp = {**inp, "file_path": inp["filePath"]}
+        desc, fp = tool_summary(str(part.get("tool") or "?"), inp)
+        run.setdefault("activity", []).append(desc)
+        if fp:
+            run.setdefault("files", []).append(fp)
+            HUB.publish({"type": "file", "run_id": run["id"],
+                         "agent": run["agent"], "path": fp})
+        HUB.publish({"type": "tool", "run_id": run["id"],
+                     "agent": run["agent"], "desc": desc})
+        publish_run(run)
+    elif t == "step_finish":
+        tok = part.get("tokens") or {}
+        total = tok.get("total")
+        if not isinstance(total, (int, float)):
+            cache = tok.get("cache") or {}
+            total = sum(int(v or 0) for v in (
+                tok.get("input"), tok.get("output"), tok.get("reasoning"),
+                cache.get("read"), cache.get("write")))
+        run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
+    elif t == "error":
+        run["error"] = str(obj.get("error") or part.get("error") or obj)[:500]
 
 
 def handle_deepagents_event(run: dict, obj: dict):
@@ -3386,6 +3595,7 @@ def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
     claude stream-json 末尾 result.usage(整个 run 的累计);codex exec 末尾
     turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
+    opencode 的每个 step_finish 各带一次调用用量(part.tokens);
     无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
     try:
         with open(path, "rb") as fh:
@@ -3447,6 +3657,16 @@ def _parse_run_usage(path: Path):
                                 + int(u.get("cacheWrite") or 0))
                         tout += int(u.get("output") or 0)
                         found = True
+                elif t == "step_finish":       # opencode:每次模型调用各一条
+                    tok = (d.get("part") or {}).get("tokens")
+                    if isinstance(tok, dict):
+                        cache = tok.get("cache") or {}
+                        tin += (int(tok.get("input") or 0)
+                                + int(cache.get("read") or 0)
+                                + int(cache.get("write") or 0))
+                        tout += (int(tok.get("output") or 0)
+                                 + int(tok.get("reasoning") or 0))
+                        found = True
     except OSError:
         return None
     for u in by_id.values():
@@ -3496,7 +3716,7 @@ def _llm_usage_index() -> dict:
 def _project_llm_tokens(project: str):
     """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
     派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/deepagents)。
     无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
@@ -3910,6 +4130,62 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
 
+async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
+    """把各类别当前选中的 RunningHub 工作流本地缓存同步为云端最新版(保存设置时调用)。
+
+    genmedia 提交走本地缓存的工作流 JSON 整包且缓存不过期:用户在 RunningHub 网页端
+    改过工作流(如换扩散模型)后,不重拉缓存改动就不会生效。刷新失败不阻断保存
+    (提交沿用旧缓存),逐条结果返回给设置页回显。"""
+    jobs = {}
+    for kind in ("image", "video", "music", "tts"):
+        comfy = (cfg.get(kind) or {}).get("comfyui") or {}
+        mode = str(comfy.get("mode") or "")
+        if mode not in RH_BASES:
+            continue
+        key = (str(comfy.get(f"rh_api_key_{mode[3:]}") or "").strip()
+               or str(comfy.get("rh_api_key") or "").strip())
+        if not key:
+            continue
+        for field in ("rh_workflow_id", "rh_ref_workflow_id"):
+            wf_id = str(comfy.get(field) or "").strip()
+            if wf_id:
+                jobs.setdefault((mode, wf_id), key)
+    if not jobs:
+        return []
+
+    async def sync(mode: str, wf_id: str, key: str) -> dict:
+        item = {"id": wf_id, "mode": mode}
+        try:
+            resp = await asyncio.to_thread(
+                _http_post_json, RH_BASES[mode] + "/api/openapi/getJsonApiFormat",
+                {"apiKey": key, "workflowId": wf_id},
+                {"Authorization": f"Bearer {key}"}, 30)
+            text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+            if not text:
+                raise RuntimeError(f"code={resp.get('code')}: {str(resp.get('msg'))[:120]}")
+            new_wf = json.loads(text)  # 接口偶发回异常内容,坏 JSON 不落缓存
+            cache = RH_CACHE_DIR / f"{mode}-{wf_id}.json"
+            old = cache.read_text(encoding="utf-8") if cache.is_file() else None
+            try:
+                old_wf = json.loads(old) if old is not None else None
+            except json.JSONDecodeError:
+                old_wf = None
+            if old_wf == new_wf and old_wf is not None:
+                # 语义比较:接口偶发序列化抖动(键序/空白),字节不同不代表工作流变了
+                item["status"] = "unchanged"
+            else:
+                RH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache.write_text(text, encoding="utf-8")
+                # created=首次缓存(genmedia 本就会现拉,不算行为变化);updated=覆盖旧版
+                item["status"] = "updated" if old_wf is not None else "created"
+        except Exception as e:  # noqa: BLE001
+            item["status"] = "error"
+            item["detail"] = str(e)[:200]
+        return item
+
+    return list(await asyncio.gather(*(sync(m, w, k) for (m, w), k in jobs.items())))
+
+
 async def api_genconfig_set(body: dict):
     body = dict(body or {})
     # project 仅用于「设置变更」通知的会话归属(genconfig 本身是全局配置),不落盘
@@ -3947,9 +4223,16 @@ async def api_genconfig_set(body: dict):
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
         return {"ok": True, "config": cfg}
+    # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
+    # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
+    rh_refresh = [] if lang_only else await _refresh_rh_wf_caches(cfg)
+    changes = _flat_diff(old, cfg)
+    # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
+    changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
+                for it in rh_refresh if it["status"] == "updated"]
     await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
-                                  _flat_diff(old, cfg))
-    return {"ok": True, "config": cfg}
+                                  changes)
+    return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 
 BRIEF_HEADER = "# 主创构想"
@@ -5175,6 +5458,45 @@ async def api_pi_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_OPENCODE_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_OPENCODE_MODELS_TTL = 30
+
+
+async def api_opencode_models(refresh: bool = False):
+    """列出当前 opencode 登录凭证实际可用的模型(`opencode models` 一行一个
+    provider/model),供全部语言模型选择器复用。未登录时只有免费模型属正常。"""
+    global _OPENCODE_MODELS_CACHE
+    ts, cached = _OPENCODE_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _OPENCODE_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "opencode")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("opencode"))
+    env = {**os.environ, "NO_COLOR": "1", "OPENCODE_DISABLE_AUTOUPDATE": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 opencode 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 opencode 模型列表失败:{detail[:300]}")
+    models = []
+    for raw in output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw).strip()
+        m = re.fullmatch(r"([\w.-]+)/(\S+)", line)
+        if m:
+            models.append({"id": line, "name": m.group(2),
+                           "provider": m.group(1), "model": m.group(2)})
+    _OPENCODE_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -5183,7 +5505,7 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
@@ -6434,19 +6756,26 @@ async def api_resources_config_get():
             "codex_probe": codex_probe_enabled(),
             "kimi_probe": kimi_probe_enabled(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
+            "opencode_probe": opencode_probe_enabled(),
+            "opencode_api_key": cfg.get("opencode_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
             "volc_ak": cfg.get("volc_ak") or "",
-            "volc_sk": cfg.get("volc_sk") or ""}
+            "volc_sk": cfg.get("volc_sk") or "",
+            "rh_enabled": bool(cfg.get("rh_enabled")),
+            "rh_key_ai": cfg.get("rh_key_ai") or "",
+            "rh_key_cn": cfg.get("rh_key_cn") or ""}
 
 
 async def api_resources_config_set(body: dict):
     """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
     cfg = STATE.setdefault("resources", {})
-    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled"):
+    for k in ("claude_probe", "codex_probe", "kimi_probe", "opencode_probe",
+              "volc_enabled", "rh_enabled"):
         if body.get(k) is not None:
             cfg[k] = bool(body[k])
-    for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
+    for k in ("kimi_api_key", "opencode_api_key", "openrouter_key", "volc_ak",
+              "volc_sk", "rh_key_ai", "rh_key_cn"):
         if body.get(k) is not None:
             if not isinstance(body[k], str) or len(body[k]) > 500:
                 raise ServiceError(400, f"{k} must be a string (≤500 chars)")
@@ -6458,7 +6787,7 @@ async def api_resources_config_set(body: dict):
 
 
 async def api_resources(fresh: bool = False):
-    """资源消耗面板聚合数据:三引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
+    """资源消耗面板聚合数据:四引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
     只探测已开启用量检查的引擎,全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存
     强制重测);取不到的读数为 null。"""
     if fresh:
@@ -6469,21 +6798,28 @@ async def api_resources(fresh: bool = False):
 
     async def usage(engine, on):
         return await asyncio.to_thread(engine_usage_full, engine) if on else dict(empty)
-    claude_on, codex_on, kimi_on = (
-        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled())
-    cu, co, ki, orb, vb = await asyncio.gather(
+    claude_on, codex_on, kimi_on, opencode_on = (
+        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled(),
+        opencode_probe_enabled())
+    cu, co, ki, oc, orb, vb, rb = await asyncio.gather(
         usage("claude", claude_on),
         usage("codex", codex_on),
         usage("kimi", kimi_on),
+        usage("opencode", opencode_on),
         asyncio.to_thread(provider_balance, "openrouter"),
-        asyncio.to_thread(provider_balance, "volc"))
+        asyncio.to_thread(provider_balance, "volc"),
+        asyncio.to_thread(provider_balance, "runninghub"))
     cfg = resource_cfg()
+    rh_keys = any((cfg.get(k) or "").strip() for k in ("rh_key_ai", "rh_key_cn"))
     return {"claude": {**cu, "enabled": claude_on},
             "codex": {**co, "enabled": codex_on},
             "kimi": {**ki, "enabled": kimi_on},
+            "opencode": {**oc, "enabled": opencode_on},
             "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
                            **(orb or {})},
-            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}
+            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})},
+            "runninghub": {"configured": bool(cfg.get("rh_enabled") and rh_keys),
+                           "sites": rb or {}}}
 
 
 async def api_watchdog_get(project: str = ""):

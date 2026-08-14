@@ -31,7 +31,7 @@ RunningHub(.cn 国内站 / .ai 国际站,账号与 API Key 不互通)是第三�
 python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
   --output <路径.mp4> --ref <锚点图...> [--audio-ref <音色样本...>] \
   --duration <秒> --aspect 16:9 --resolution <档位> \
-  [--generate-audio on] [--return-last-frame tail.png] --dry-run
+  [--generate-audio on] [--return-last-frame tail.png] [--ref-image-size max] --dry-run
 # 通过后去掉 --dry-run 正式提交
 ```
 
@@ -39,12 +39,16 @@ python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
 
 ## 参数如何进入云端工作流(机制)
 
-1. **模板来源**:所选 `rh_workflow_id` 的 JSON(API 格式)经 `/api/openapi/getJsonApiFormat` 拉取,缓存在 `data/.videoagents/rh_workflows/{mode}-{id}.json`(设置页「验证并添加」时写入,运行时缓存优先)。用户在 RunningHub 网页端改了模板后须在设置页重新验证刷新缓存,否则提交的仍是旧结构。
+1. **模板来源**:所选 `rh_workflow_id` 的 JSON(API 格式)经 `/api/openapi/getJsonApiFormat` 拉取,缓存在 `data/.videoagents/rh_workflows/{mode}-{id}.json`(设置页「验证并添加」时写入,运行时缓存优先)。设置页每次「保存设置」会自动把当前选中工作流的缓存同步为云端最新版;用户在 RunningHub 网页端改了模板后,重新保存设置(或重新验证)即可刷新,未保存前提交的仍是旧结构。
 2. **占位符替换**:模板中的 `{{TOKEN}}` 占位符(PROMPT/SEED/WIDTH/HEIGHT/H3_FRAMES 等,与本地 `comfy/*.json` 同一套约定)先做整树替换。工作区导出件通常**没有占位符**、全是作者演示字面值——此时替换空转,靠下面两步兜住。
 3. **H3 Ref2VA 直绑**(模板含 `MiniMaxH3ReferenceToVideo` 节点时):
    - `--prompt` 顺 H3 节点 `prompt` 连线改写其上游文本 primitive(或字面值位),作者的演示提示词不会漏进生产请求;
    - `--duration` 顺 `length` 连线改写喂秒→帧换算表达式的时长 primitive(直连数值位则按 17n+5 帧数语义填),模板默认时长不会静默生效;
    - 连线形态不可识别时**提交前报错**(不发请求、不计费),按报错提示改模板或加占位符。
+   - `--ref-image-size` 覆写 Ref2VA 节点同名输入:默认/不传=match(参考图压到与输出同
+     像素面积,速度/成本优先);`max`(短边 ≤2048 不压缩直进模型,身份保真更好但更慢
+     更贵)**仅当用户/工单原文明确写了「ref-image-size max」时照传;agent 严禁自行
+     决定切换**——即便判断人脸与参考图不一致,也只能在回执中建议,由用户决定。
 4. **参考素材**:`--ref`/`--audio-ref` 逐个经 `/task/openapi/upload` 上传(**单文件 ≤30MB**),返回 fileName 后动态新增 `LoadImage`/`LoadAudio` 节点接到 `ref_images.ref_image_N` / `ref_audios.ref_audio_N`(0 起,顺序=命令行顺序=prompt 内 `[Image N]`/`[Audio N]` 序号-1)。模板作者遗留的演示素材连线与节点会被**全部清除**,只提交本单素材。
 5. **提交与取回**:`create` 整体覆盖提交 → `/task/openapi/status` 5s 轮询(QUEUED/RUNNING/SUCCESS/FAILED)→ SUCCESS 后 `/task/openapi/outputs` 取 `fileUrl` 公网直链下载到 `--output`;`--return-last-frame` 由本地 ffmpeg 从成片抽尾帧,不占云端节点。
 
