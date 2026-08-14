@@ -10,6 +10,11 @@ All notable public changes to VideoAgents are documented here.
 - DeepSeek Smart Assignment model strategy (Settings → Model Strategy): creative-core agents run on `opencode-go/deepseek-v4-pro`, all other agents on `opencode-go/deepseek-v4-flash` (the OpenCode Go subscription channel), using the same task-complexity tiers as the existing Claude/Codex/Kimi smart strategies.
 - OpenCode Go usage in the Resource Usage panel: a new toggle in Settings → Resource Usage queries the OpenCode Go subscription quota (5-hour/weekly windows) via the official console endpoint, using either a configured API Key or, when left blank, the local opencode login credential. All 11 language dictionaries updated.
 
+### Changed
+
+- Character reference sheet template redesigned from five panels to four: the two stacked head-and-shoulders close-ups on the right are merged into a single full-height large close-up (three full-body views front/side/back on the left are unchanged). Template PNG, panel semantics JSON, the character-concept agent's layout prompt/self-check contract and WORKFLOW.md updated accordingly.
+- Settings menu reorganized: Plugins is promoted from the Advanced submenu to a top-level item right below Resource Usage, and the Advanced submenu now sits above Interface Language.
+
 ## [1.0.15] - 2026-08-13
 
 ### Added
