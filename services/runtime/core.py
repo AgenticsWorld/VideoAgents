@@ -4130,6 +4130,62 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
 
+async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
+    """把各类别当前选中的 RunningHub 工作流本地缓存同步为云端最新版(保存设置时调用)。
+
+    genmedia 提交走本地缓存的工作流 JSON 整包且缓存不过期:用户在 RunningHub 网页端
+    改过工作流(如换扩散模型)后,不重拉缓存改动就不会生效。刷新失败不阻断保存
+    (提交沿用旧缓存),逐条结果返回给设置页回显。"""
+    jobs = {}
+    for kind in ("image", "video", "music", "tts"):
+        comfy = (cfg.get(kind) or {}).get("comfyui") or {}
+        mode = str(comfy.get("mode") or "")
+        if mode not in RH_BASES:
+            continue
+        key = (str(comfy.get(f"rh_api_key_{mode[3:]}") or "").strip()
+               or str(comfy.get("rh_api_key") or "").strip())
+        if not key:
+            continue
+        for field in ("rh_workflow_id", "rh_ref_workflow_id"):
+            wf_id = str(comfy.get(field) or "").strip()
+            if wf_id:
+                jobs.setdefault((mode, wf_id), key)
+    if not jobs:
+        return []
+
+    async def sync(mode: str, wf_id: str, key: str) -> dict:
+        item = {"id": wf_id, "mode": mode}
+        try:
+            resp = await asyncio.to_thread(
+                _http_post_json, RH_BASES[mode] + "/api/openapi/getJsonApiFormat",
+                {"apiKey": key, "workflowId": wf_id},
+                {"Authorization": f"Bearer {key}"}, 30)
+            text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+            if not text:
+                raise RuntimeError(f"code={resp.get('code')}: {str(resp.get('msg'))[:120]}")
+            new_wf = json.loads(text)  # 接口偶发回异常内容,坏 JSON 不落缓存
+            cache = RH_CACHE_DIR / f"{mode}-{wf_id}.json"
+            old = cache.read_text(encoding="utf-8") if cache.is_file() else None
+            try:
+                old_wf = json.loads(old) if old is not None else None
+            except json.JSONDecodeError:
+                old_wf = None
+            if old_wf == new_wf and old_wf is not None:
+                # 语义比较:接口偶发序列化抖动(键序/空白),字节不同不代表工作流变了
+                item["status"] = "unchanged"
+            else:
+                RH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache.write_text(text, encoding="utf-8")
+                # created=首次缓存(genmedia 本就会现拉,不算行为变化);updated=覆盖旧版
+                item["status"] = "updated" if old_wf is not None else "created"
+        except Exception as e:  # noqa: BLE001
+            item["status"] = "error"
+            item["detail"] = str(e)[:200]
+        return item
+
+    return list(await asyncio.gather(*(sync(m, w, k) for (m, w), k in jobs.items())))
+
+
 async def api_genconfig_set(body: dict):
     body = dict(body or {})
     # project 仅用于「设置变更」通知的会话归属(genconfig 本身是全局配置),不落盘
@@ -4167,9 +4223,16 @@ async def api_genconfig_set(body: dict):
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
         return {"ok": True, "config": cfg}
+    # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
+    # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
+    rh_refresh = [] if lang_only else await _refresh_rh_wf_caches(cfg)
+    changes = _flat_diff(old, cfg)
+    # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
+    changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
+                for it in rh_refresh if it["status"] == "updated"]
     await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
-                                  _flat_diff(old, cfg))
-    return {"ok": True, "config": cfg}
+                                  changes)
+    return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 
 BRIEF_HEADER = "# 主创构想"

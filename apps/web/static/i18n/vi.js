@@ -197,6 +197,8 @@ window.I18N_DICT = {
 "✓ Key 有效": "✓ Key hợp lệ",
 "✓ 克隆完成:": "✓ Nhân bản hoàn tất:",
 "✓ 已保存": "✓ Đã lưu",
+"已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}": "Đã lưu, nhưng {n} bộ nhớ đệm workflow RunningHub đồng bộ thất bại (tác vụ gửi đi sẽ vẫn dùng bộ nhớ đệm cũ): {ids}",
+"已同步 {n} 个 RunningHub 云端工作流缓存": "Đã đồng bộ {n} bộ nhớ đệm workflow đám mây RunningHub",
 "✓ 已连接 · {n} 个模型": "✓ Đã kết nối · {n} mô hình",
 "✓ 已连接({v})· {n} 个 checkpoint": "✓ Đã kết nối ({v}) · {n} checkpoint",
 "✓ 已选定": "✓ Đã chọn",

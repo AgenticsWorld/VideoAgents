@@ -1273,8 +1273,21 @@ $('#save').onclick=async()=>{
       ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
     const r=await api('/api/v1/config/generation',Object.assign(collect(),{project:proj}));
     CFG=r.config;
-    const st=$('#save-status');st.textContent='✓ 已保存';st.classList.add('show');
-    setTimeout(()=>st.classList.remove('show'),2500);
+    const st=$('#save-status');st.style.color='';
+    // RunningHub 工作流缓存已随保存同步云端最新版(genmedia 提交走本地缓存整包);
+    // 同步失败=提交仍沿用旧缓存,须醒目提示
+    const rf=r.rh_cache_refresh||[];
+    const errs=rf.filter(x=>x.status==='error');
+    const upd=rf.filter(x=>x.status==='updated'||x.status==='created').length;
+    if(errs.length){
+      st.textContent='⚠ '+I18N.f('已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}',
+        {n:errs.length,ids:errs.map(x=>x.id+' '+(x.detail||'')).join('; ')});
+      st.style.color='var(--red)';
+    }else{
+      st.textContent='✓ 已保存'+(upd?' · '+I18N.f('已同步 {n} 个 RunningHub 云端工作流缓存',{n:upd}):'');
+    }
+    st.classList.add('show');
+    setTimeout(()=>st.classList.remove('show'),errs.length?8000:2500);
   }catch(e){
     const st=$('#save-status');st.textContent='✗ 保存失败:'+e.message;
     st.style.color='var(--red)';st.classList.add('show');

@@ -197,6 +197,8 @@ window.I18N_DICT = {
 "✓ Key 有效": "✓ Key válida",
 "✓ 克隆完成:": "✓ Clonación completada:",
 "✓ 已保存": "✓ Guardado",
+"已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}": "Guardado, pero falló la sincronización de {n} caché(s) de flujo de trabajo de RunningHub (los envíos seguirán usando la caché antigua): {ids}",
+"已同步 {n} 个 RunningHub 云端工作流缓存": "Se sincronizaron {n} caché(s) de flujos de trabajo en la nube de RunningHub",
 "✓ 已连接 · {n} 个模型": "✓ Conectado · {n} modelos",
 "✓ 已连接({v})· {n} 个 checkpoint": "✓ Conectado ({v}) · {n} checkpoints",
 "✓ 已选定": "✓ Seleccionado",
