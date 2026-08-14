@@ -1041,10 +1041,10 @@ AM_MODE_MODELS = {
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
-    # DeepSeek 经 opencode 引擎调用;Zen 渠道模型 ID(OpenCode Go 订阅渠道为
-    # opencode-go/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
-    "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode/deepseek-v4-pro"},
-                       "low": {"engine": "opencode", "model": "opencode/deepseek-v4-flash"}},
+    # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
+    # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
+    "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
+                       "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4-flash"}},
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局

@@ -122,15 +122,15 @@ def test_opencode_engine_strategy_and_event_stream(monkeypatch):
     from services.runtime import core
 
     assert GlobalModelUpdate(engine="opencode",
-                             model="opencode/deepseek-v4-pro").engine == "opencode"
+                             model="opencode-go/deepseek-v4-pro").engine == "opencode"
     assert RunCreate(agent="00-orchestration/context", message="hello",
                      engine="opencode").engine == "opencode"
     assert "opencode" in core.ENGINES and "opencode" in core.AM_ENGINES
     assert "smart_deepseek" in core.AM_MODES
     assert core.default_agent_model("01-story/x", "smart_deepseek")["model"] \
-        == "opencode/deepseek-v4-pro"
+        == "opencode-go/deepseek-v4-pro"
     assert core.default_agent_model("11-qa/x", "smart_deepseek")["model"] \
-        == "opencode/deepseek-v4-flash"
+        == "opencode-go/deepseek-v4-flash"
 
     published = []
 

@@ -754,12 +754,12 @@ function uiAlert(message){
 const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'DeepSeek 智能分配'};
 
 // opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
-// Zen 按量渠道 opencode/,OpenCode Go 订阅渠道 opencode-go/,动态列表反映实际可用集
+// OpenCode Go 订阅渠道 opencode-go/(实测生效),Zen 按量渠道 opencode/,动态列表反映实际可用集
 const OPENCODE_STATIC=[
-  ['opencode/deepseek-v4-pro','DeepSeek V4 Pro'],
-  ['opencode/deepseek-v4-flash','DeepSeek V4 Flash'],
-  ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro (Go)'],
-  ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash (Go)'],
+  ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro'],
+  ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash'],
+  ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
+  ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
 ];
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
@@ -799,8 +799,9 @@ async function loadOpencodeModelOptions(refresh=false){
   try{
     const r=await api('/api/v1/engines/opencode/models'+(refresh?'?refresh=true':''));
     const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
-    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项)
-    const i=dynamic.findIndex(([v])=>/^opencode(-go)?\/deepseek-v4-pro$/.test(v));
+    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项),Go 渠道优先
+    const i=['opencode-go/deepseek-v4-pro','opencode/deepseek-v4-pro']
+      .map(id=>dynamic.findIndex(([v])=>v===id)).find(x=>x>=0)??-1;
     if(i>0)dynamic.unshift(...dynamic.splice(i,1));
     const list=dynamic.length?dynamic:OPENCODE_STATIC;
     MODEL_OPTIONS.opencode=[...list,['','默认(CLI配置)'],['__custom','自定义…']];
