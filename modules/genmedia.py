@@ -151,7 +151,10 @@ H3_DEFAULTS = {
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
     "weight_dtype": "default", "clip_device": "default",
     "sampler": "res_multistep", "scheduler": "simple", "steps": 20,
-    "ref_image_size": "match", "fps": 24,
+    # ref_image_size=max:参考图短边 ≤2048 不压缩直进模型(match 会压到与输出同像素
+    # 面积,480p 草稿档下人脸参考只剩几十像素,是脸部不一致的主因之一);参考 token
+    # 全程陪跑采样,max 更慢更贵,属画质优先的取舍
+    "ref_image_size": "max", "fps": 24,
 }
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
 # Comfy Cloud 的 Seedance 2.x 付费 API 节点(r2v);model 输入选版本("Seedance 2.0/2.5")
@@ -1011,6 +1014,12 @@ def _apply_h3_duration(workflow: dict, duration: float | None) -> None:
             f"(候选 {len(seconds_nodes)} 个),无法注入 --duration;"
             "请把云端模板的时长改为单一 PrimitiveFloat 喂换算表达式,或改用 {{H3_FRAMES}} 占位符")
     seconds_nodes[0]["value"] = float(duration)
+
+
+def _apply_h3_ref_image_size(workflow: dict, ref_image_size: str) -> None:
+    """覆写 Ref2VA 节点的 ref_image_size 为内置默认(云端导出件常是作者写死的字面值,
+    占位符替换空转;该输入是 combo 字面量位,直接赋值即幂等覆写)。"""
+    _h3_node(workflow).setdefault("inputs", {})["ref_image_size"] = ref_image_size
 
 
 def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str]) -> None:
@@ -2288,6 +2297,7 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         # 防止演示提示词/模板默认时长静默混入生产请求(占位符模板下为幂等覆写)
         _apply_h3_prompt(wf, prompt)
         _apply_h3_duration(wf, duration)
+        _apply_h3_ref_image_size(wf, settings["ref_image_size"])
         _add_h3_references(wf, [upload(path) for path in refs or []],
                            [upload(path) for path in audio_refs or []])
         saved = (_rh_run(cfg, wf, output, want_video=True) if rh
