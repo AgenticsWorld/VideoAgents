@@ -221,6 +221,7 @@ REFS_README = """# refs/ — 用户参考目录
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
+- `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
 - `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
@@ -261,7 +262,7 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "characters", "scenes", "props", "music", "thumbnail"):
+    for sub in ("style", "thumbnail", "characters", "scenes", "props", "music", "video"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -1993,11 +1994,12 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/角色/场景/道具/封面参考图、希望使用的音频与文本资料按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/道具参考图、希望使用的音频、参考视频与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ props/ music/ video/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
+- 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
         p += f"""
@@ -4358,9 +4360,10 @@ async def api_brief_set(body: dict):
 
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
-REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail", "text")
+REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "props", "music", "video", "text")
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
+REF_VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
 REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
@@ -4408,6 +4411,7 @@ async def api_refs_list(project: str = "demo"):
         return {"path": rel, "name": f.name,
                 "url": f"/projects/{base.name}/refs/{rel}?v={int(st.st_mtime)}",
                 "is_image": ext in IMG_EXTS, "is_audio": ext in AUDIO_EXTS,
+                "is_video": ext in REF_VIDEO_EXTS,
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip()}
 

@@ -78,6 +78,7 @@ refs/
 ├── scenes/       # 场景与世界观:建筑/地貌/氛围参考
 ├── props/        # 道具/服装/法宝参考(服装可建 costumes/ 子目录)
 ├── music/        # 用户希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等)
+├── video/        # 参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考
 ├── thumbnail/    # 封面参考:他人爆款封面/构图/版式/文字风格范例(thumbnail Agent 优先参考)
 ├── text/         # 文本资料:设定/文案等文本文件(txt/md 等),相关 Agent 参考使用
 └── NOTES.md      # 逐文件注释(哪个文件管什么、想用在哪);有则必读——用户在【参考文件】页逐文件填写,
@@ -92,6 +93,7 @@ refs/
 5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
 6. **用户音乐**:`refs/music/` 有文件时,配乐 Agent(`09-audio/music`)必须先逐曲试听分析(曲风/情绪/节奏/时长),再对照本集情绪曲线自行判断每首曲子适合用在视频的哪些位置(哪些场次/情绪段),优先选用用户音乐,不足的段落才生成补齐;NOTES.md 指定了用途的按指定执行。选用情况(含未选用及原因)写入 cue sheet,`license.source` 记 `user_provided` 并如实标注来源文件路径,版权仍由 `11-qa/copyright` 终审。
 7. **封面参考**:`refs/thumbnail/` 有图时,封面 Agent(`10-editing/thumbnail`)必须先逐图分析可借鉴点(构图/主体占比/文字位置与字重/色彩策略),作为 A/B 版设计的优先依据,并在送选清单 `user_refs` 字段落痕迹;NOTES.md 指定了用法的按指定执行。
+8. **参考视频**:`refs/video/` 有文件时,视频生成类 Agent(`08-video-gen/*`)必须先逐段查看分析可借鉴点(动作/运镜/节奏/转场),按 NOTES.md 注释对位到相应镜头/生成组;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入(Seedance 2.x 等,受该模型的数量/时长上限约束),不支持时作为提示词描述的依据;所用路径记入产物 meta/prompts.json 的 `user_refs` 字段。
 
 ---
 

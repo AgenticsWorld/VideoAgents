@@ -240,6 +240,7 @@ window.I18N_DICT = {
 "道具/法宝参考;服装可填 costumes 子目录": "Referencias de props / artefactos; el vestuario puede ir en la subcarpeta costumes",
 "希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Archivos de audio que quieres usar (pista de fondo; candidatos a BGM; el Agent de música los prioriza)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Referencias de miniaturas: ejemplos de composición / maquetación / tipografía de portadas populares",
+"参考视频:动作/运镜/节奏/转场范例,视频生成 Agent 优先参考(支持的模型经 --ref-video 注入)": "Vídeos de referencia: ejemplos de movimiento / cámara / ritmo / transiciones; los agentes de generación de vídeo los consultan primero (inyectados con --ref-video en modelos compatibles)",
 "设定/文案等文本资料,相关 Agent 参考使用": "Materiales de texto (lore, textos, etc.) como referencia para los Agents pertinentes",
 "复制在项目中的相对路径": "Copiar la ruta relativa dentro del proyecto",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Los archivos sueltos en la raíz de refs/ se tratan como referencias de estilo general",
