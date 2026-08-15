@@ -31,6 +31,7 @@ API = BASE + "/api/v1"
 API_TOKEN = os.environ.get("VIDEOAGENTS_API_TOKEN", "")
 PARENT = os.environ.get("VIDEOAGENTS_RUN_ID")          # 由 runtime 注入:标记父运行
 DEFAULT_PROJECT = os.environ.get("VIDEOAGENTS_PROJECT", "demo")
+WAIT_TIMEOUT_DEFAULT = 7200          # --wait/--wait-all 默认等待上限(秒),与运行超时缺省 2h 对齐
 DEFAULT_ENGINE = os.environ.get("VIDEOAGENTS_ENGINE", "claude")   # 继承派单方的引擎
 
 
@@ -173,7 +174,8 @@ def main():
     ap.add_argument("--engine", default=None,
                     choices=["claude", "codex", "kimi", "pi", "opencode", "deepagents"])
     ap.add_argument("--wait", action="store_true")
-    ap.add_argument("--timeout", type=int, default=3600)
+    # 等待类默认 7200s(与运行超时缺省 2h 对齐);--confirm 未显式指定时按类别取默认(见下)
+    ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--runs", action="store_true")
     ap.add_argument("--status", metavar="RUN_ID")
@@ -200,13 +202,13 @@ def main():
         raw = args.options or ("签字,暂缓" if args.sign else "重跑,跳过")
         opts = [o.strip() for o in raw.split(",") if o.strip()]
         # 默认等待:重跑类 60s(弹窗同步倒计时);签字类 4h(弹窗不倒计时,超时弹窗仍保留)
-        timeout = args.timeout if args.timeout != 3600 else (14400 if args.sign else 60)
+        timeout = args.timeout if args.timeout is not None else (14400 if args.sign else 60)
         confirm(args.confirm, timeout, opts, args.default_opt or opts[0],
                 sign=args.sign, project=args.project)
         return
 
     if args.wait_all:
-        wait_all(args.wait_all, args.timeout)
+        wait_all(args.wait_all, args.timeout or WAIT_TIMEOUT_DEFAULT)
         return
 
     if args.status:
@@ -233,7 +235,8 @@ def main():
     print(f"已派单 run_id={run_id} → {args.agent}")
 
     if args.wait:
-        deadline = time.time() + args.timeout
+        wait_timeout = args.timeout or WAIT_TIMEOUT_DEFAULT
+        deadline = time.time() + wait_timeout
         while time.time() < deadline:
             time.sleep(5)
             r = api(f"/runs/{run_id}")
@@ -246,7 +249,7 @@ def main():
                 print("--- 结果 ---")
                 print((r.get("result") or r.get("error") or "")[:4000])
                 sys.exit(0 if r["status"] == "done" else 1)
-        print(f"等待超时({args.timeout}s),任务仍在后台运行,稍后用 --status {run_id} 查询")
+        print(f"等待超时({wait_timeout}s),任务仍在后台运行,稍后用 --status {run_id} 查询")
         sys.exit(2)
 
 

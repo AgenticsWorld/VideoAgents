@@ -143,7 +143,16 @@ CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
 ).lower() in {"1", "true", "yes"}
 MAX_TURNS = "100"
 MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
-RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
+# 单次运行超时缺省值(秒;设置菜单「高级→并发和超时」可调,存 state.json):
+# 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
+# 要等整条流水线,取 4 倍。到点连派生子进程一起杀,run 记为 error
+RUN_TIMEOUT_DEFAULT = 7200
+RUN_TIMEOUT_MIN, RUN_TIMEOUT_MAX = 600, 24 * 3600
+# 无输出超时缺省值(秒;同一弹窗可调,0=关闭):引擎事件流连续静默超过该时长即判死。
+# 比墙钟更早识别挂死,又不误伤「跑得慢但在正常干活」的长批量任务;调度型 Agent 大部分
+# 时间在 --wait-all 里静默等子任务,不受此项约束
+IDLE_TIMEOUT_DEFAULT = 1800
+IDLE_TIMEOUT_MAX = 6 * 3600
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
@@ -162,7 +171,7 @@ STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
-# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
+# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发和超时」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
 # Agent 对话记忆缺省值(设置菜单「高级→Agent记忆」可关,存 state.json):
@@ -276,6 +285,24 @@ def agent_concurrency() -> int:
     except (TypeError, ValueError):
         n = AGENT_CONCURRENCY_DEFAULT
     return max(1, min(n, MAX_CONCURRENT))
+
+
+def run_timeout_setting() -> int:
+    """单次运行墙钟超时(秒,RUN_TIMEOUT_MIN..RUN_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("run_timeout", RUN_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = RUN_TIMEOUT_DEFAULT
+    return max(RUN_TIMEOUT_MIN, min(n, RUN_TIMEOUT_MAX))
+
+
+def idle_timeout_setting() -> int:
+    """无输出超时(秒,0=关闭,上限 IDLE_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("idle_timeout", IDLE_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = IDLE_TIMEOUT_DEFAULT
+    return max(0, min(n, IDLE_TIMEOUT_MAX))
 
 
 def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
@@ -1972,10 +1999,10 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 派单守则:
 1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
 2. 有依赖关系的任务用 --wait 串行;相互独立的任务异步并行派发,之后用
-   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 3600` 一次性等待全部完成
+   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 7200` 一次性等待全部完成
    (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
    严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
-   等待类命令记得给 Bash 工具设置足够大的 timeout(如 3600000 毫秒)
+   等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
 3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 3 次)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
@@ -2086,9 +2113,10 @@ def is_stateless_agent(agent_id: str) -> bool:
 
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
-    # 调度型 Agent 要等整条流水线,超时放宽
-    run_timeout = RUN_TIMEOUT * (4 if is_dispatcher_agent(agent_id) else 1)
     is_dispatcher = is_dispatcher_agent(agent_id)
+    # 调度型 Agent 要等整条流水线,墙钟超时放宽 4 倍;它大部分时间静默等子任务,不设无输出超时
+    run_timeout = run_timeout_setting() * (4 if is_dispatcher else 1)
+    idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
@@ -2297,13 +2325,25 @@ async def execute_run(run: dict, message: str, model: str | None):
                     proc.stdin.close()
                 # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
                 stderr_task = asyncio.create_task(proc.stderr.read())
+                last_output = time.time()
                 while True:
-                    if time.time() > deadline:
+                    now = time.time()
+                    if now > deadline:
                         raise TimeoutError(f"运行超过 {run_timeout}s")
-                    raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
-                                                 timeout=max(1, deadline - time.time()))
+                    wait = deadline - now
+                    if idle_timeout:
+                        wait = min(wait, last_output + idle_timeout - now)
+                    try:
+                        raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
+                                                     timeout=max(1, wait))
+                    except asyncio.TimeoutError:
+                        if idle_timeout and time.time() - last_output >= idle_timeout:
+                            raise TimeoutError(
+                                f"连续 {idle_timeout}s 无输出") from None
+                        continue
                     if not raw:
                         break
+                    last_output = time.time()
                     line = raw.decode("utf-8", "replace").strip()
                     if not line:
                         continue
@@ -2350,11 +2390,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 else:
                     run["status"] = "done"
                 break
-        except (TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.TimeoutError) as error:
             run["status"] = "error"
-            run["error"] = f"超时({run_timeout}s),进程已终止"
-            if proc:
-                proc.kill()
+            run["error"] = f"超时({str(error) or f'运行超过 {run_timeout}s'}),进程已终止"
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)     # 连派生的 yt-dlp/ffmpeg/dispatch 子进程一起杀
         except asyncio.CancelledError:
             run["status"] = "error"
             run["error"] = run.get("error") or "服务关闭，任务已停止"
@@ -6641,20 +6681,51 @@ async def api_watchdog_threshold_set(body: dict):
 async def api_agent_concurrency_get():
     return {"agent_concurrency": agent_concurrency(),
             "default": AGENT_CONCURRENCY_DEFAULT,
-            "max": MAX_CONCURRENT}
+            "max": MAX_CONCURRENT,
+            "run_timeout": run_timeout_setting(),
+            "run_timeout_default": RUN_TIMEOUT_DEFAULT,
+            "run_timeout_min": RUN_TIMEOUT_MIN,
+            "run_timeout_max": RUN_TIMEOUT_MAX,
+            "idle_timeout": idle_timeout_setting(),
+            "idle_timeout_default": IDLE_TIMEOUT_DEFAULT,
+            "idle_timeout_max": IDLE_TIMEOUT_MAX}
 
 
 async def api_agent_concurrency_set(body: dict):
-    """并发数量设置(设置菜单「高级→并发数量」):无状态扇出型 Agent(05-scenes/
-    08-video-gen/11-qa/eval 等)的同 agent 并发额度;有状态 Agent 恒为 1,
-    全局仍受 MAX_CONCURRENT 总闸。持久化,立即对后续排队的运行生效。"""
-    try:
-        n = int(body.get("agent_concurrency"))
-    except (TypeError, ValueError):
-        raise ServiceError(400, "agent_concurrency must be an integer") from None
-    if not 1 <= n <= MAX_CONCURRENT:
-        raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
-    STATE["agent_concurrency"] = n
+    """并发和超时设置(设置菜单「高级→并发和超时」),三项均可选、可单独提交:
+    - agent_concurrency:无状态扇出型 Agent(05-scenes/08-video-gen/11-qa/eval 等)的
+      同 agent 并发额度;有状态 Agent 恒为 1,全局仍受 MAX_CONCURRENT 总闸
+    - run_timeout:单次运行墙钟超时(秒,调度型 Agent 自动 4 倍)
+    - idle_timeout:引擎事件流无输出超时(秒,0=关闭;调度型 Agent 不受约束)
+    持久化,立即对后续启动的运行生效(在跑的运行沿用启动时的取值)。"""
+    updates: dict[str, int] = {}
+    if body.get("agent_concurrency") is not None:
+        try:
+            n = int(body.get("agent_concurrency"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "agent_concurrency must be an integer") from None
+        if not 1 <= n <= MAX_CONCURRENT:
+            raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
+        updates["agent_concurrency"] = n
+    if body.get("run_timeout") is not None:
+        try:
+            n = int(body.get("run_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "run_timeout must be an integer (seconds)") from None
+        if not RUN_TIMEOUT_MIN <= n <= RUN_TIMEOUT_MAX:
+            raise ServiceError(400, f"run_timeout must be between {RUN_TIMEOUT_MIN} and {RUN_TIMEOUT_MAX} seconds")
+        updates["run_timeout"] = n
+    if body.get("idle_timeout") is not None:
+        try:
+            n = int(body.get("idle_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "idle_timeout must be an integer (seconds, 0 disables)") from None
+        if not 0 <= n <= IDLE_TIMEOUT_MAX:
+            raise ServiceError(400, f"idle_timeout must be between 0 and {IDLE_TIMEOUT_MAX} seconds")
+        updates["idle_timeout"] = n
+    if not updates:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout")
+    STATE.update(updates)
     save_state(STATE)
     return await api_agent_concurrency_get()
 
