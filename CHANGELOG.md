@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- RunningHub submissions now prune inert "island" nodes from the workflow before task creation: note/template text nodes left in the cloud workflow by its author (e.g. `JjkText` blocks holding multi-kilobyte prompt-writing templates) were submitted verbatim with every billed request. A node is removed only when it has no downstream consumers, no incoming node links (pure literals) and is not a Save/Preview output node; pruned node ids are echoed in the submission log. Verified against a captured production payload: the three H3 template nodes are dropped (−16.6K characters) while the execution graph is untouched.
+
 ## [1.0.18] - 2026-08-14
 
 ### Added

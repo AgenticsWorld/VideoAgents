@@ -649,12 +649,39 @@ def _rh_failed_reason(base: str, key: str, task_id: str) -> str:
     return json.dumps(detail, ensure_ascii=False)[:800]
 
 
+def _rh_prune_inert_nodes(workflow: dict) -> list[str]:
+    """剪除不参与执行的孤岛节点(创作者留在工作流里的备注/模板文本,如 JjkText)。
+
+    RH 提交以 workflow 整包文本覆盖云端模板,这类节点会把大段无关模板内容
+    (曾实测三份共 ~20KB 的 H3 提示词模板)原样带进每次请求。判定取交集从严:
+    输出无任何下游消费、输入无任何节点连线(纯字面量)、且非 Save/Preview 类
+    落盘节点——三者同时成立才剪,连着线的一律不动。返回被剪节点 id 列表。"""
+    consumed = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    pruned = []
+    for nid, node in list(workflow.items()):
+        if not isinstance(node, dict) or nid in consumed:
+            continue
+        cls = str(node.get("class_type") or "").lower()
+        if "save" in cls or "preview" in cls:
+            continue
+        if any(_node_link(value) for value in (node.get("inputs") or {}).values()):
+            continue
+        workflow.pop(nid)
+        pruned.append(nid)
+    return pruned
+
+
 def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     """RunningHub 建任务,轮询状态,下载首个匹配产物到 output(对应 _comfy_run)。"""
     audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     base, key, wf_id = _rh_ctx(cfg)
+    pruned = _rh_prune_inert_nodes(workflow)
+    if pruned:
+        print(f"[genmedia] RunningHub 提交前剪除 {len(pruned)} 个孤岛节点:"
+              + ",".join(pruned), file=sys.stderr, flush=True)
     payload = {"workflowId": wf_id,
                "workflow": json.dumps(workflow, ensure_ascii=False)}
     # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
