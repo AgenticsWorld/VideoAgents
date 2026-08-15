@@ -50,6 +50,8 @@ data/projects/<slug>/
 │                   #   voice/casting.json=项目级选角注册表(角色×形态→tts_model+tts_voice,全片唯一事实源),
 │                   #   voice/refs/=项目级音色样本;voice/epNN/ 只放集级产物 lines/ 与 patches/
 │                   #   (2026-07-12 改版:选角登记从 epNN/refs/manifest.json 上收到项目级,治跨集音色漂移)
+│                   #   voice/epNN/dub/grpNNN/=后期配音逐句 TTS + dub_manifest.json(仅项目「对白配音=后期配音」,§8C;
+│                   #   clips/epNN/grpNNN.native_audio.wav 为替换前的原生轨备份)
 ├── edit/           # ep01/{timeline.json, cut_v1.mp4, subtitles.srt, subtitles_final.srt,
 │                   # captions.json, intro_outro/, thumbnail.png, final.mp4}
 │                   #   subtitles.srt=正片(cut)0 秒基准;subtitles_final.srt=成片基准
@@ -138,7 +140,8 @@ refs/
    prompt → image-generation →              sfx-cue/ambience-cue/音色样本/
    character-consistency →                  旁白轨(先于 p7-video)→ music(后期)
    video-generation(组序串行,原生音频)      → audio-mixing(原生轨+BGM+旁白,
-   → lip-sync(兜底)/animation → upscale       依赖全组 p7-video)[G8 闸门]
+   → [dub 后期配音,仅设置开启 §8C]            依赖全组 p7-video)[G8 闸门]
+   → lip-sync(兜底)/animation → upscale
    [G7 闸门 + H3B 视觉生成确认(每集签字),人工抽检 10%]
           └──────────────────┬───────────────────┘
                  Phase 9 剪辑合成(每集)
@@ -363,6 +366,9 @@ refs/
 > 显式绑定 `<角色>@Audio N`(样本仅提供该角色嗓音特点,**非台词朗读**;对白语音与口型由模型
 > 原生合成——TTS 严禁用作对白配音,口型问题红线见 §8A),音效/环境声按 cue 文字注入;
 > **BGM 与旁白一律后期**(prompt 禁 `（）` 与音乐描述);lip-sync 仅剩不换语音的对齐兜底。音频范式详见 §8A。
+> **对白配音方式由项目「输出设置→对白配音」决定(角色提示词「用户输出设定」段注入,权威)**:视频原声
+> (默认)=上述原生范式、全流程不做对白 TTS;后期配音=组 clip 交付后每个对白组必派 `p7-dub`,按画面开口
+> 时段用角色声线 TTS 替换对白轨(§8C),画面/时长不变,upscale/edit/mix 一律取配音后 clip。
 > 单镜首尾帧模式保留为兜底路径(组生成质量不达标时逐镜重做)。
 >
 > **手绘分镜渲染图的首帧红线(2026-07-09)**:用户手绘分镜经 image-generation 渲染出的
@@ -379,7 +385,8 @@ refs/
 | image-generation(每组) | 组参考锚点包:**reuse-first(2026-07-24)——一律优先复用角色三视图/场景概念图/道具比例锚图,概念库全覆盖即零新生成(meta 记 `generation_channel: reuse-only`);组开场合成锚帧(anchor_opening)默认禁出**——组生成走多参考图模式且与首帧互斥,合成开场帧进不了视频请求(实证:xiaohongmao ep01 28 组落盘 86 张 anchor_opening,进入 Seedance 请求 0 张,纯沉没成本;tothemoon ep01 全程 reuse-only 质量不降),仅 orchestrator 批准的拆段/首帧兜底(§7A 首帧红线)例外;补生成仅限概念库缺口(特定服装状态/表情/道具细节特写、手绘分镜渲染),新生成锚 meta 必记 `gap_reason`(概念库缺什么、为何非生成不可);**道具锚优先取比例锚图 scale_ref_01.png(特写图无比例信息,防跨组尺度漂移)**;**组内有用户手绘分镜的,先据手绘稿渲染风格化图像(anchor_sketch_*.png)入锚点包——原稿严禁直接进视频 refs;渲染图 meta role 记 `action_ref`(参考锚),严禁标注首帧强锚(首帧红线见 §7A)**;**一切新生成锚帧必带所涉实体概念图 --ref 与 style.json 风格锚(§7E ①②)** | prompt、bible 概念图、style.json、用户参考图、手绘分镜(sketches/) | `assets/keyframes/epNN/<grp>/` | 机检:分辨率/画幅合规(**画幅 16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等;像素下限硬限 ≥3,686,400 另论**);锚点 ≤9 张(建议 4–5);**reuse_first_ok(2026-07-24):概念库已有可用图的锚不得新生成、新生成锚 meta 必记 gap_reason、anchor_opening 无兜底批准记录不得存在**;**组内出场剧情道具参考图已入锚点包(prop_ref_attached)**;**新生成锚过 repair_ref_anchored(§7E)**。QA:visual-qa ≥80 |
 | character-consistency(每组) | 对锚点包做角色一致性校正;**复用锚(meta source=`reuse:`)与在库概念图同源,免校正——仅校新生成锚,reuse-only 组直接放行(2026-07-24)**;角色特写前置、单人照防「双胞胎」;**校正重生成必带在库三视图 --ref 与 style.json 风格锚(prompt 风格段 + 负面清单),严禁凭文字设定重画形象;所涉概念图缺失=停手上报,不自行补画(§7E)** | 锚点包、concepts 三视图、style.json | 校正后锚点包 | 机检:人脸相似度 ≥0.85(与人设参考图;仅新生成锚,复用锚免检);不达标自动重 roll ≤3 次;**修正重生成过 repair_ref_anchored(§7E)** |
 | video-generation(每组,按组序串行) | 组 prompt+锚点包(+前组尾帧)一次生成多镜头组 clip;开 generate_audio 与 return_last_frame;**手绘渲染图只作 --ref 软引用,`first_frame` 指向 anchor_sketch_*/kf_action_* 而无开场依据/拆段说明=违规配置,开跑前退回(首帧红线见 §7A)**;**开跑前核对 refs 素材完备:组内出场剧情道具无对应参考图=违规配置退回(prop_ref_attached);`@Image N` 绑定复核(imageref_bound,§7A 编号铁律)不符=退回 prompt 重编号,严禁按错位 prompt 开跑**;**局部穿帮缺陷单(repair_mode: v2v_edit)走 V2V 定向修改**(原 clip 作 --ref-video,§9),不整组重 roll;**整组重 roll 先做前向接缝评估(§7C):后组 refs 含本组尾帧的,追加后组首帧软引用 + "ending continues into"**;**对白组开跑前复核 audioref_bound(每个说话角色的 voiceprint 样本在 audio_refs 且 `@Audio N` 绑定正确,§8A)与 audioref_total_le_15s(实测总时长 ≤15.2s,超长样本先截短 ffmpeg -t 4.9 再跑并记 meta)不符=退回/修正后再开跑** | grpNNN.json、校正锚点包、前组尾帧、说话角色 voiceprint 样本(项目级 voice/refs/,casting.json 索引) | `assets/clips/epNN/grpNNN.mp4` + `grpNNN.meta.json`(含切变边界、尾帧路径、usage) | 机检:组总时长 ±1s、24fps/分辨率合规(**画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例即合规,如 480p 档 864x496;不得因非严格 16:9/9:16 判失败或索要用户豁免,2026-08-03 Thedouble2 前科**)、有音轨、尾帧落盘。QA:visual-qa 组级打分(V2V 修复版按新组复检,对白组加**逐说话人**声学快检——参照各自 voiceprint 样本,错配=整组重 roll;**重 roll 组做双向接缝复检,§7C**) |
-| lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
+| voice-generation(p7-dub,**仅项目「对白配音=后期配音」**,每对白组,p7-video 后) | **后期配音(§8C)**:`python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN` 一站式——从组 clip 原生轨实测每句台词开口起止(silencedetect,按 shot_list `dialogue_lines` 顺序对位;原生轨杂音重、自动检测不可靠时先 `--detect-only` 目检/听审再 `--segments` 手工给定),按 casting.json 该角色×形态条目(形态按组 audio_refs 样本名推断)TTS 逐句合成**冻结版台词一字不改**,语速 ±25% + atempo ±10% 贴合开口时长、起点对齐开口起点,原生轨在开口时段压低(-26dB,保留环境声/音效)叠上 TTS,画面流原样封装回 `grpNNN.mp4`(时长/fps/分辨率不变,原生轨备份 `.native_audio.wav`,重跑幂等);语速上限内仍装不下的句子记 overflow **上报回派 dialogue-rewrite 改短或整组重生成,严禁硬塞/剪画面**;视频原声模式脚本自动拒跑 | 组 clip+meta、shot_list dialogue_lines、casting.json、组 prompt audio_refs | `assets/audio/voice/epNN/dub/grpNNN/{lNN_<CHAR>.mp3,.fit.wav,dub_manifest.json}` + 组 clip 新版本(meta 追加 dialogue_voice 段) | 机检:dub_lines_text_match_frozen_script、dub_speaker_casting_bound(缺 casting 条目=FAIL)、dub_fit_ok(每句 fit_ratio ∈[0.9,1.1] 且无 overflow)、clip_duration_unchanged/video_stream_unchanged、av_offset_lt_80ms;QA:audio-qa 听审音色与 voice.json 相符、开口/闭口与语音起止贴合(明显对不上=开缺陷单,回派重测时段或整组重生成) |
+| lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线);后期配音模式下对 p7-dub 交付的 clip 做同样的整体时移对齐兜底(仍不重驱口型画面,§8C) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
 | animation | 动作补间/局部重绘修复(按 QA 缺陷单触发;**重绘涉及人物/场景/道具形象的,素材与 prompt 受 §7E 形象红线约束**) | 组 clip、缺陷单 | 修复后组 clip | 复检原缺陷项通过;**涉形象重绘过 repair_ref_anchored(§7E)** |
 | upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)** | 组 clip | 终版组 clip | 机检:目标分辨率、无超分伪影抽检 |
 
@@ -473,6 +480,10 @@ refs/
 > **红线(不变):TTS 严禁用于对白配音**——把 TTS 音轨当成片对白语音(生成期『原样使用参考
 > 音频人声+口型同步』强绑,或后期换轨/贴片重驱口型)会导致**严重口型问题**(2026-07-09
 > 实证);reference_audio 一律只作**嗓音特点参考**,对白语音与口型由模型原生合成。
+> **红线的适用范围=项目「输出设置→对白配音=视频原声」(默认)**。用户把该项设为**后期配音**时,
+> 即明确选择用 TTS 后期配对白并接受口型只能尽量贴合的取舍——此时红线由用户设置显式解除,
+> 对白轨按 §8C 由 p7-dub 替换;但**仍禁止用 TTS 干声重驱/重绘口型画面**(只换音轨、以时段贴合)。
+> 当前项目取哪种方式以角色提示词「用户输出设定→对白配音」注入为准,任何 Agent 不得自行切换。
 > **人物 Voice 前置到人物设定阶段(Phase 3)**:每个有台词角色在人物设定时就完成
 > ① `voice.json` 声纹设定(03-characters/voiceprint,含年龄形态分版)→ ② 选角登记
 > `casting.json` → ③ **voiceprint 样本合成**(09-audio/voice-generation,每角色×年龄形态一段
@@ -513,6 +524,28 @@ refs/
 > "no background music"。旁白不进组视频生成,但其 TTS 合成与逐条时长实测**提前到 p7-video
 > 之前**完成(供 §7D 旁白适配检查;进成片仍由 audio-mixing 后期混入)。
 > 音效 wav / 环境床音降为缺陷兜底贴片(patches/,仅音效/环境,不含对白)。
+
+> **§8C 对白后期配音(dubbing,2026-08-15;项目「输出设置→对白配音=后期配音」时生效)**:
+> **前置不变**:分镜/prompt/组生成与视频原声模式完全一致——对白组照写 `{}` 台词、照挂逐角色
+> voiceprint 音色锚、人物开口表演由模型原生生成(原生对白语音就是**开口时段的时间依据**,也是
+> 说话人对位的参照);§7D 对白估时闸门、speakers_le_3、audioref_bound 等全部照旧。
+> **p7-dub(09-audio/voice-generation,每个 audio_plan=dialogue 的组,p7-video 交付后必派)**:
+> ① 台词事实源=`shot_list.json` 组内各镜 `dialogue_lines`(speaker/text,冻结版一字不改;
+>   `dialogue_tail_from` 反打镜不重复挂);② 开口时段=组 clip 原生轨语音区间(silencedetect,
+>   按台词顺序对位;区间多则合并、少则按台词字数比例拆;自动检测不可靠时 `--detect-only` 目检/
+>   听审后 `--segments` 手工给定);③ 逐句 TTS 按 `casting.json` 该角色×形态条目(形态按组
+>   audio_refs 样本名 `<CHAR>_<variant>_voiceprint` 推断,可 `--variant` 覆盖;缺条目=先登记再
+>   合成,dub_speaker_casting_bound),ComfyUI 渠道传 `--character/--variant` 自动选型、云渠道传
+>   casting 的 voice;④ 口型贴合=语速 ±25% 重合成 + atempo ±10% 微调、起点对齐开口起点;
+>   **装不下的句子记 overflow 上报**(回派 dialogue-rewrite 改短→重配,或整组重生成),严禁
+>   硬塞、拉长画面或剪画面;⑤ 混轨=原生轨开口时段压低 -26dB(环境声/音效保留)叠 TTS(电平
+>   对齐原生开口段),画面流 `-c:v copy` 封装回 `grpNNN.mp4`(时长/fps/分辨率不变),原生轨首次
+>   替换前备份 `grpNNN.native_audio.wav`,重跑以备份为源(幂等)。统一走 `code/dub_group.py`,
+>   产物 `assets/audio/voice/epNN/dub/grpNNN/`,meta.json 追加 `dialogue_voice` 段。
+> **下游**:p7-lipsync(仅整体时移对齐兜底,不重驱口型)、p7-upscale、H3B 审看、p9-edit、
+> p8-mix 一律取配音后 clip;p8-mix 不再另铺对白;audio-qa 听审音色与 voice.json 相符、
+> 开口/闭口与语音起止贴合,明显对不上=开缺陷单回派 p7-dub 重测时段(手工 segments)或整组重生成。
+> **视频原声模式(默认)不派 p7-dub、`dub_group.py` 自动拒跑**,§8A 红线全额生效。
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
@@ -805,7 +838,8 @@ python3 modules/genmedia.py music \
 # (openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus,force_instrumental 由「生成模型」页配置,默认纯音乐)。
 
 # TTS 干声(narrator 旁白后期轨、voice-generation 角色 voiceprint 样本——样本仅作 reference_audio 嗓音特点锚,严禁进成片对白,§8A 红线;
-#          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A)
+#          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A;
+#          项目「对白配音=后期配音」时的对白逐句 TTS 不直接调本命令,统一走 code/dub_group.py(内部调 generate_tts 并按开口时段贴合,§8C))
 python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \

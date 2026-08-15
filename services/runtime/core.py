@@ -648,10 +648,13 @@ DEFAULT_GENCONFIG = {
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
     # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
     #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
-    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面
+    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面;
+    # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
+    #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
+    #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
-               "subtitle_burn_in": False,
+               "subtitle_burn_in": False, "dialogue_voice": "native",
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -722,6 +725,8 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 # 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
 # genmedia 越档自动压回;方舟 API 取小写)
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
+# 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
+DIALOGUE_VOICE_MODES = ("native", "dubbing")
 
 
 def resolve_output(cfg: dict) -> tuple[str, str, str]:
@@ -983,6 +988,8 @@ def _validate_output(o: dict):
             raise ServiceError(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
     if "subtitle_burn_in" in o and not isinstance(o["subtitle_burn_in"], bool):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
+    if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
+        raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -1775,6 +1782,21 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
         " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
+    dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
+    dialogue_voice = (
+        "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
+        "组视频仍按对白组常规生成(prompt 照写 `{}` 台词、挂 voiceprint 音色锚,人物开口表演由模型原生生成——"
+        "画面开口时段就是配音的时间依据);**每个对白组(audio_plan=dialogue)在 p7-video 交付后必派 p7-dub**"
+        "(负责:09-audio/voice-generation):从组 clip 原生音轨实测每句台词的开口起止(说话人按 shot_list "
+        "dialogue_lines 顺序对位),按 casting.json 该角色的 tts_model/tts_voice、voice.json 声线用 TTS 逐句合成冻结版台词"
+        "(`python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`,内部走 genmedia tts),"
+        "以语速(--speed,±25% 内)贴合开口时长、起点对齐开口起点,替换该组 clip 的对白轨(画面流不变、时长不变;"
+        "原生轨备份 `.native_audio.wav`),产物 `assets/audio/voice/epNN/dub/grpNNN/`;p7-lipsync 只在其后做不换语音的"
+        "对齐兜底(av_offset_lt_80ms);upscale/edit/mix 一律取配音后的组 clip。**§8A「TTS 严禁进成片对白」红线在本模式下"
+        "由用户设置显式解除**,但仍禁止用 TTS 干声重驱/重绘口型画面(仅换音轨、以时段贴合)"
+        if dubbing else
+        "视频原声(native,默认)—— 成片对白语音就是视频模型随组 clip 原生合成的语音,**全流程不做任何对白 TTS**"
+        "(不派 p7-dub,严禁 TTS 音轨进成片对白——§8A 红线);voiceprint 样本照常出、只作生成期 reference_audio 音色锚")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -1847,6 +1869,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
+- 对白配音:{dialogue_voice}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)

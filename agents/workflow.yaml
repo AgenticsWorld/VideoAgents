@@ -252,18 +252,27 @@ phases:
           validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
-      - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video],
-          condition: defect_assigned,                      # 仅不换语音的音画对齐兜底;口型/语音缺陷默认整组重生成(TTS 换轨重驱口型已废止,§8A 红线)
+      - { id: p7-dub, agent: 09-audio/voice-generation, depends_on: [p7-video],
+          condition: "output.dialogue_voice == dubbing and group.audio_plan == dialogue",   # 项目「输出设置→对白配音=后期配音」时每个对白组必派;视频原声(默认)不派、严禁 TTS 进成片对白(§8A)
+          # §8C 后期配音:组 clip 原生轨实测每句台词开口起止(说话人按 shot_list dialogue_lines 顺序对位),按 casting.json 角色声线
+          # TTS 逐句合成冻结版台词,语速(±25%)+atempo(±10%)贴合开口时长、起点对齐开口起点,替换 clip 对白轨(原生轨压低保留环境声/音效,
+          # 画面流 -c:v copy、时长不变;原生轨备份 grpNNN.native_audio.wav);统一走 code/dub_group.py;装不下的句子记 overflow 上报,不硬塞
+          outputs: ["assets/audio/voice/{ep}/dub/{group}/dub_manifest.json", "assets/clips/{ep}/{group}.mp4"],
+          validation: { auto: [dub_lines_text_match_frozen_script, dub_speaker_casting_bound, dub_fit_ok,
+                               clip_duration_unchanged, video_stream_unchanged, av_offset_lt_80ms],
+                        qa: [11-qa/audio-qa] } }
+      - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video, p7-dub],
+          condition: defect_assigned,                      # 仅不换语音的音画对齐兜底;口型/语音缺陷默认整组重生成(TTS 换轨重驱口型已废止,§8A 红线);后期配音模式下对配音后 clip 做同样的对齐兜底(§8C)
           validation: { auto: [av_offset_lt_80ms] } }
       - { id: p7-animation, agent: 08-video-gen/animation, depends_on: [p7-video],
           condition: defect_assigned, validation: { auto: [original_defect_recheck] } }
-      - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation],
+      - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation, p7-dub],   # 后期配音模式:超分取配音后的组 clip
           validation: { auto: [target_resolution_ok] } }
       - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale],
           validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「视频预览」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
 
   - id: p8
-    name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成,
+    name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成(视频原声,默认);项目「对白配音=后期配音」时对白轨由 p7-dub 按开口时段 TTS 替换(§8C),
     depends_on: [g5, g6]   # sfx/ambience 产文字 cue、voice 产对白组干声锚、narrator 产旁白轨(均先于 p7-video);BGM 后期;旁白混入仍后期(§7D/§8A)
     for_each: episode
     tasks:
@@ -296,7 +305,7 @@ phases:
       # p8-voice(兜底逐句 TTS patches/ 供 lip-sync 重驱)已废止(2026-07-09,§8A 红线:
       # TTS 进成片对白=严重口型问题);对白语音/口型缺陷走 p7-video 整组重生成
       - { id: p8-mix, agent: 09-audio/audio-mixing,
-          depends_on: [p7-video, p8-narrator, p8-music],       # 原生轨来自全部组 clip
+          depends_on: [p7-video, p7-dub, p8-narrator, p8-music],       # 原生轨来自全部组 clip(后期配音模式下即配音后 clip,§8C)
           outputs: ["assets/audio/final/{ep}.wav"],
           # 铺旁白前必跑 code/check_narration_sync.py(只检):指纹失配=shot_list 挂点已改版,停手上报
           # 回派 narrator 重签/重合成,严禁按旧 narration_track 人工连续铺排(§8B ②,前科 DEF-ep05-audio-0005)
