@@ -475,6 +475,16 @@ async def set_watchdog_policy(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_watchdog_threshold_set(body)
 
 
+@api.get("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_get() -> dict[str, Any]:
+    return await core.api_agent_advanced_get()
+
+
+@api.post("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_agent_advanced_set(body)
+
+
 @api.get("/config/concurrency", tags=["automation"])
 async def agent_concurrency() -> dict[str, Any]:
     return await core.api_agent_concurrency_get()

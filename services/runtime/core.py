@@ -143,7 +143,7 @@ CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
 ).lower() in {"1", "true", "yes"}
 MAX_TURNS = "100"
 MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
-# 单次运行超时缺省值(秒;设置菜单「高级→并发和超时」可调,存 state.json):
+# 单次运行超时缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
 # 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
 # 要等整条流水线,取 4 倍。到点连派生子进程一起杀,run 记为 error
 RUN_TIMEOUT_DEFAULT = 7200
@@ -171,14 +171,20 @@ STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
-# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发和超时」可调,存 state.json);
+# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
-# Agent 对话记忆缺省值(设置菜单「高级→Agent记忆」可关,存 state.json):
+# Agent 对话记忆缺省值(设置菜单「高级→Agent 高级设置」可关,存 state.json):
 # 开启=有状态 agent 按 engine::agent::project 恢复上次会话(下方 CHAT_RESUME_LIMIT
 # 128KB 保险丝仍生效);关闭=所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
 # 关闭期间 session_id 照常回存,重新开启后从最近一次会话继续
 AGENT_MEMORY_DEFAULT = True
+# Agent 自动重跑/重 roll 次数上限缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 验收/评分/QA 不过自动带意见退回重做、媒体生成机检不达标自动重 roll 的次数上限,
+# 达到上限仍不过升级用户裁决;0=不自动重跑(首次不过即升级人工)。经 build_role_prompt
+# 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
+MAX_RETRIES_DEFAULT = 3
+MAX_RETRIES_MAX = 10
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
@@ -319,8 +325,17 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
 
 
 def agent_memory_enabled() -> bool:
-    """Agent 对话记忆总开关(设置菜单「高级→Agent记忆」)。"""
+    """Agent 对话记忆总开关(设置菜单「高级→Agent 高级设置」)。"""
     return bool(STATE.get("agent_memory", AGENT_MEMORY_DEFAULT))
+
+
+def max_retries_setting() -> int:
+    """Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,越界钳制;设置菜单「高级→Agent 高级设置」)。"""
+    try:
+        n = int(STATE.get("max_retries", MAX_RETRIES_DEFAULT))
+    except (TypeError, ValueError):
+        n = MAX_RETRIES_DEFAULT
+    return max(0, min(n, MAX_RETRIES_MAX))
 
 
 def load_state() -> dict:
@@ -1898,6 +1913,13 @@ def build_role_prompt(agent_id: str, project: str) -> str:
              "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
              "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
              "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
+    max_retries = max_retries_setting()
+    p += ("\n\n## 用户重跑次数设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中写死的「最多 3 次」「≤3 次」「max_retries: 3」)\n"
+          f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll,"
+          f"同一任务/同一产物累计最多 {max_retries} 次"
+          + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做)" if max_retries == 0 else
+             f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
+          + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -2033,7 +2055,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
    严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
    等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
-3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 3 次)
+3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
@@ -2050,7 +2072,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【赛马仅限用户明确指令,禁换引擎】严禁自行发起并行赛马(改派多个 Agent 并行重做同一任务、
-   择优交付)。同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;确有必要时可在
+   择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
    不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/deepagents 中的另一个)。
@@ -6740,6 +6762,45 @@ async def api_watchdog_threshold_set(body: dict):
     return await api_watchdog_threshold_get()
 
 
+async def api_agent_advanced_get():
+    """Agent 高级设置(设置菜单「高级→Agent 高级设置」)汇总读:并发/超时 + 对话记忆 + 重跑次数。"""
+    d = await api_agent_concurrency_get()
+    d.update(await api_agent_memory_get())
+    d.update({"max_retries": max_retries_setting(),
+              "max_retries_default": MAX_RETRIES_DEFAULT,
+              "max_retries_max": MAX_RETRIES_MAX})
+    return d
+
+
+async def api_agent_advanced_set(body: dict):
+    """Agent 高级设置合并提交,各字段均可选、可单独提交:
+    - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
+    - agent_memory:同 api_agent_memory_set
+    - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
+      经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效"""
+    updates: dict = {}
+    if body.get("max_retries") is not None:
+        try:
+            n = int(body.get("max_retries"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "max_retries must be an integer") from None
+        if not 0 <= n <= MAX_RETRIES_MAX:
+            raise ServiceError(400, f"max_retries must be between 0 and {MAX_RETRIES_MAX}")
+        updates["max_retries"] = n
+    if body.get("agent_memory") is not None:
+        updates["agent_memory"] = bool(body["agent_memory"])
+    conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
+            if body.get(k) is not None}
+    if not updates and not conc:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory / max_retries")
+    if conc:
+        await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
+    if updates:
+        STATE.update(updates)
+        save_state(STATE)
+    return await api_agent_advanced_get()
+
+
 async def api_agent_concurrency_get():
     return {"agent_concurrency": agent_concurrency(),
             "default": AGENT_CONCURRENCY_DEFAULT,
@@ -6754,7 +6815,7 @@ async def api_agent_concurrency_get():
 
 
 async def api_agent_concurrency_set(body: dict):
-    """并发和超时设置(设置菜单「高级→并发和超时」),三项均可选、可单独提交:
+    """并发和超时设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容),三项均可选、可单独提交:
     - agent_concurrency:无状态扇出型 Agent(05-scenes/08-video-gen/11-qa/eval 等)的
       同 agent 并发额度;有状态 Agent 恒为 1,全局仍受 MAX_CONCURRENT 总闸
     - run_timeout:单次运行墙钟超时(秒,调度型 Agent 自动 4 倍)
@@ -6798,7 +6859,7 @@ async def api_agent_memory_get():
 
 
 async def api_agent_memory_set(body: dict):
-    """Agent记忆设置(设置菜单「高级→Agent记忆」):开启=有状态 Agent 恢复上次
+    """Agent记忆设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容):开启=有状态 Agent 恢复上次
     会话(128KB 保险丝仍生效);关闭=所有 Agent 每次运行全新会话。持久化,
     立即对后续运行生效;关闭期间会话号照常回存,重新开启后从最近一次会话继续。"""
     if body.get("agent_memory") is None:

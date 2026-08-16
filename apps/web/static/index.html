@@ -123,6 +123,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .row input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;min-width:0}
 .modal textarea{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font:inherit;font-size:13px;resize:vertical;min-width:0}
 .modal .note{font-size:12px;color:var(--dim)}
+.modal .info-btn{flex:none;width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:11px;line-height:16px;text-align:center;cursor:pointer;padding:0;margin-left:auto}
+.modal .info-btn:hover,.modal .info-btn.on{color:var(--text);border-color:var(--text)}
+.modal .info-note{display:none;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:-6px}
+.modal .info-note.on{display:block}
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
@@ -251,8 +255,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-concurrency" title="扇出型 Agent 同一 Agent 可同时运行的工单数上限,以及单次运行的超时/无输出超时">并发和超时</a>
-          <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆开关、自动重跑次数上限">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
         </div>
       </div>
@@ -618,50 +621,47 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-idle" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-idle">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
     <div class="row"><label>防止系统休眠</label>
       <input type="checkbox" id="wdt-awake" style="width:auto">
       <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-awake" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-awake">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="row"><label>常任指令</label>
       <textarea id="wdt-orders" style="height:64px" placeholder="在 ep01-ep10 剧本全部完成前,不派设定类工单"></textarea>
-    </div>
-    <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
-    <div class="note">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
-    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
+    <button type="button" class="info-btn" data-info="wdt-info-orders" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-orders">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
   </div>
 </div>
 <div id="conc-modal" class="modal">
-  <div class="box">
-    <h3>🚦 并发和超时 设置</h3>
+  <div class="box" style="width:560px">
+    <h3>⚙️ Agent 高级设置</h3>
     <div class="row"><label>每 Agent 并发额度</label>
       <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
       <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
-    </div>
-    <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
+    <button type="button" class="info-btn" data-info="conc-info-conc" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
     <div class="row"><label>运行超时(分钟)</label>
       <input type="number" id="conc-rt" min="10" max="1440" step="10" style="width:90px">
     </div>
     <div class="row"><label>无输出超时(分钟)</label>
       <input type="number" id="conc-it" min="0" max="360" step="5" style="width:90px">
-    </div>
-    <div class="note">运行超时:单个工单从启动算起的墙钟上限,默认 120 分钟(总制片要等整条流水线,自动放宽 4 倍),到点连同派生子进程一起终止并记为出错,是回收挂死进程的最后防线。无输出超时:引擎连续多长时间没有任何事件输出即判定挂死并终止,默认 30 分钟,填 0 关闭;比墙钟更早识别 API 长连接不返回、代理断流等假死,又不会误伤跑得慢但在正常干活的长批量任务(总制片大部分时间静默等子任务,不受此项约束)。注意单次工具调用期间引擎不会有事件输出,该值须大于工单里最长的一次工具调用。均为全局设置,保存后对后续启动的工单生效。</div>
-    <div class="err" id="conc-err"></div>
-    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
-  </div>
-</div>
-<div id="mem-modal" class="modal">
-  <div class="box">
-    <h3>🧠 Agent记忆 设置</h3>
+    <button type="button" class="info-btn" data-info="conc-info-timeout" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-timeout">运行超时:单个工单从启动算起的墙钟上限,默认 120 分钟(总制片要等整条流水线,自动放宽 4 倍),到点连同派生子进程一起终止并记为出错,是回收挂死进程的最后防线。无输出超时:引擎连续多长时间没有任何事件输出即判定挂死并终止,默认 30 分钟,填 0 关闭;比墙钟更早识别 API 长连接不返回、代理断流等假死,又不会误伤跑得慢但在正常干活的长批量任务(总制片大部分时间静默等子任务,不受此项约束)。注意单次工具调用期间引擎不会有事件输出,该值须大于工单里最长的一次工具调用。均为全局设置,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>重跑次数</label>
+      <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="checkbox" id="mem-on" style="width:auto">
       <span id="mem-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
-    <div class="note">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
-    <div class="err" id="mem-err"></div>
-    <div class="actions"><button id="mem-cancel">取消</button><button class="primary" id="mem-ok">保存</button></div>
+    <button type="button" class="info-btn" data-info="conc-info-mem" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-mem">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
+    <div class="err" id="conc-err"></div>
+    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -1428,12 +1428,14 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 并发和超时弹窗(设置菜单「高级」) ---------- */
-let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360;
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 对话记忆) ---------- */
+let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10;
+function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
+$('#mem-on').onchange=memSt;
 async function openConcModal(){
   $('#conc-err').textContent='';
   try{
-    const c=await api('/api/v1/config/concurrency');
+    const c=await api('/api/v1/config/agent-advanced');
     concMax=c.max||8;
     $('#conc-range').max=concMax;$('#conc-num').max=concMax;
     $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
@@ -1442,10 +1444,15 @@ async function openConcModal(){
     $('#conc-rt').min=concRtMin;$('#conc-rt').max=concRtMax;$('#conc-it').max=concItMax;
     $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
     $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30}
+    concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
+    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#mem-on').checked=c.agent_memory==null?true:!!c.agent_memory;
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#mem-on').checked=true}
+  memSt();
   $('#conc-modal').style.display='flex';
 }
-$('#menu-concurrency').onclick=e=>{e.preventDefault();openConcModal()};
+$('#menu-agent-adv').onclick=e=>{e.preventDefault();openConcModal()};
+document.querySelectorAll('.modal .info-btn').forEach(b=>b.onclick=()=>{const n=$('#'+b.dataset.info);n.classList.toggle('on');b.classList.toggle('on',n.classList.contains('on'))});
 $('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
 $('#conc-num').oninput=()=>{
   const v=parseInt($('#conc-num').value);
@@ -1455,34 +1462,14 @@ $('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
 $('#conc-ok').onclick=async()=>{
   const v=parseInt($('#conc-num').value);
   if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
-  const rt=parseInt($('#conc-rt').value),it=parseInt($('#conc-it').value);
+  const rt=parseInt($('#conc-rt').value),it=parseInt($('#conc-it').value),retry=parseInt($('#conc-retry').value);
   if(!(rt>=concRtMin&&rt<=concRtMax)){$('#conc-err').textContent=I18N.f('运行超时需为 {min}-{max} 的整数(分钟)',{min:concRtMin,max:concRtMax});return}
   if(!(it>=0&&it<=concItMax)){$('#conc-err').textContent=I18N.f('无输出超时需为 0-{max} 的整数(分钟,0=关闭)',{max:concItMax});return}
+  if(!(retry>=0&&retry<=concRetryMax)){$('#conc-err').textContent=I18N.f('重跑次数需为 0-{max} 的整数(0=不自动重跑)',{max:concRetryMax});return}
   try{
-    await api('/api/v1/config/concurrency',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory:$('#mem-on').checked});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
-};
-
-/* ---------- Agent记忆弹窗(设置菜单「高级」) ---------- */
-function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
-$('#mem-on').onchange=memSt;
-async function openMemModal(){
-  $('#mem-err').textContent='';
-  try{
-    const m=await api('/api/v1/config/agent-memory');
-    $('#mem-on').checked=!!m.agent_memory;
-  }catch(e){$('#mem-on').checked=true}
-  memSt();
-  $('#mem-modal').style.display='flex';
-}
-$('#menu-memory').onclick=e=>{e.preventDefault();openMemModal()};
-$('#mem-cancel').onclick=()=>$('#mem-modal').style.display='none';
-$('#mem-ok').onclick=async()=>{
-  try{
-    await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
-    $('#mem-modal').style.display='none';
-  }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
