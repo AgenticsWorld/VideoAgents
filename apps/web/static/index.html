@@ -1844,7 +1844,7 @@ function appendMsg(role,text,meta={}){
   const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot',feishu:'✈️ 来自飞书',whatsapp:'🟢 来自 WhatsApp'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
-  if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
+  if(role==='assistant'&&meta.status==='error')parts.push(meta.stopped==='user'?'<span style="color:var(--dim)">⏹ 已手动停止</span>':'<span style="color:var(--red)">⚠ 运行出错</span>');
   if(meta.ts)parts.push(fmtTs(meta.ts));
   const head=parts.length?'<div class="meta">'+parts.join(' · ')+'</div>':'';
   d.innerHTML=head; d.appendChild(document.createTextNode(text||''));

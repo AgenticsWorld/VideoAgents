@@ -191,6 +191,7 @@ window.I18N_DICT = {
 "⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)": "⚠ Lấy danh sách trực tuyến thất bại: {msg} (đã hiển thị đề xuất tích hợp; lát sau nhấn “Làm mới danh sách” để thử lại)",
 "⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示": "⚠ Neo cấp bối cảnh ({a}), điểm gắn chưa chốt, hiển thị gần đúng theo shot đầu của beat",
 "⚠ 运行出错": "⚠ Lỗi khi chạy",
+"⏹ 已手动停止": "⏹ Đã dừng thủ công",
 "⚠️ 危险操作:删除当前项目": "⚠️ Thao tác nguy hiểm: xóa dự án hiện tại",
 "⚠️ 确认删除项目": "⚠️ Xác nhận xóa dự án",
 "⛓ 续接 {g} 尾帧": "⛓ Nối tiếp khung cuối của {g}",

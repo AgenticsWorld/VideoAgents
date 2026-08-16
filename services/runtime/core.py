@@ -192,6 +192,10 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
 # 只在新会话首轮注入 SOUL,更需要尽早重开
+# 运行面板手动停止的统一错误文案:core/dispatch.py/前端/agent 提示词都按这句字面识别
+STOPPED_BY_USER_MSG = "已被用户手动停止"
+# stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
+STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 ORCHESTRATOR_RESUME_LIMIT = 128 * 1024
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
@@ -2102,7 +2106,7 @@ def run_public(run: dict) -> dict:
     """给前端的运行摘要(不带大文本)。"""
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
-        "created", "started", "ended", "cost", "turns", "error",
+        "created", "started", "ended", "cost", "turns", "error", "stopped",
         "engine", "model", "tokens", "progress") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -2394,6 +2398,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine == "pi" and bool(run.get("error"))))
+                if run.get("stopped"):
+                    # 用户在运行面板手动停止(或服务关闭):不走会话失效重试,不让引擎的
+                    # aborted/退出码信息覆盖「手动停止」结论(下游总制片据此免于追查错误原因)
+                    run["status"] = "error"
+                    run["error"] = STOPPED_MSGS.get(run["stopped"], STOPPED_BY_USER_MSG)
+                    break
                 if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
@@ -2468,9 +2478,24 @@ async def execute_run(run: dict, message: str, model: str | None):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
             reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
-            append_chat(agent_id, run["project"],
-                        {"role": "assistant", "text": reply,
-                         "run_id": run["id"], "status": run["status"]})
+            chat_entry = {"role": "assistant", "text": reply,
+                          "run_id": run["id"], "status": run["status"]}
+            if run.get("stopped"):
+                # 对话记录里明确标注「手动停止」,而不是只留下被截断的半截输出+error 状态,
+                # 否则后续 agent(尤其总制片)读到会误判为程序错误去追查原因
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                how = ("被用户在运行面板手动停止" if run["stopped"] == "user"
+                       else "因服务关闭/重启被中断")
+                reply = (f"⏹ {run['error']}(运行 {dur}s 后{how},"
+                         "非程序错误,无需追查失败原因;是否重派由用户决定)"
+                         + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run["status"] == "error" and run.get("error") and reply != run["error"]:
+                # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
+                reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
+                chat_entry["text"] = reply
+            append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
             try:
                 # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
@@ -6185,10 +6210,15 @@ def _kill_proc_tree(proc):
             pass
 
 
-def _stop_run(run) -> bool:
-    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。"""
+def _stop_run(run, by: str = "user") -> bool:
+    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。
+    by: "user"(运行面板 ⏹)或 "shutdown"(服务关闭连带停止)。"""
+    msg = STOPPED_MSGS.get(by, STOPPED_BY_USER_MSG)
     if run.get("status") == "running":
-        run["error"] = "已被用户手动停止"
+        # stopped 标记随 run_public/对话记录/dispatch.py 输出一路透传:
+        # 下游 agent 看到的是「用户手动停止」而不是一条来历不明的 error
+        run["stopped"] = by
+        run["error"] = msg
         proc = RUN_PROCS.get(run["id"])
         if proc and proc.returncode is None:
             _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
@@ -6198,26 +6228,28 @@ def _stop_run(run) -> bool:
         if t:
             t.cancel()
         run["status"] = "error"
-        run["error"] = "已被用户手动停止(排队中取消)"
+        run["stopped"] = by
+        run["error"] = f"{msg}(排队中取消)"
         run["ended"] = time.time()
         append_chat(run["agent"], run["project"],
-                    {"role": "assistant", "text": run["error"],
-                     "run_id": run["id"], "status": "error"})
+                    {"role": "assistant",
+                     "text": f"⏹ {run['error']},非程序错误,无需追查失败原因;是否重派由用户决定",
+                     "run_id": run["id"], "status": "error", "stopped": by})
         publish_run(run)
         return True
     return False
 
 
-async def api_stop_all():
-    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
-    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
+async def api_stop_all(by: str = "user"):
+    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮;服务关闭时 by="shutdown")。"""
+    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run, by)]
     return {"stopped": stopped}
 
 
 async def shutdown_runtime(timeout: float = 4) -> None:
     """Boundedly stop Agent tasks/process groups and release OS resources."""
     tasks = list(RUN_TASKS.values())
-    await api_stop_all()
+    await api_stop_all(by="shutdown")
 
     active = [task for task in tasks if not task.done()]
     if active:

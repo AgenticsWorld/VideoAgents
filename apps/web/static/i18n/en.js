@@ -191,6 +191,7 @@ window.I18N_DICT = {
 "⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)": "⚠ Failed to fetch the online list: {msg} (showing built-in recommendations; click \"Refresh List\" later to retry)",
 "⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示": "⚠ Scene-level anchor ({a}); attachment point not finalized, shown approximately at the beat's first shot",
 "⚠ 运行出错": "⚠ Run error",
+"⏹ 已手动停止": "⏹ Stopped manually",
 "⚠️ 危险操作:删除当前项目": "⚠️ Danger zone: delete the current project",
 "⚠️ 确认删除项目": "⚠️ Confirm Project Deletion",
 "⛓ 续接 {g} 尾帧": "⛓ Continue from {g}'s last frame",

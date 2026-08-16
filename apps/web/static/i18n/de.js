@@ -191,6 +191,7 @@ window.I18N_DICT = {
 "⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)": "⚠ Abruf der Online-Liste fehlgeschlagen: {msg} (integrierte Empfehlungen werden angezeigt; später über „Liste aktualisieren“ erneut versuchen)",
 "⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示": "⚠ Anchor auf Szenenebene ({a}), Ankerpunkt nicht final, näherungsweise am ersten Shot des Beats angezeigt",
 "⚠ 运行出错": "⚠ Fehler bei der Ausführung",
+"⏹ 已手动停止": "⏹ Manuell gestoppt",
 "⚠️ 危险操作:删除当前项目": "⚠️ Gefährliche Aktion: aktuelles Projekt löschen",
 "⚠️ 确认删除项目": "⚠️ Projektlöschung bestätigen",
 "⛓ 续接 {g} 尾帧": "⛓ An letzten Frame von {g} anschließen",

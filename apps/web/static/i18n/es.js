@@ -191,6 +191,7 @@ window.I18N_DICT = {
 "⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)": "⚠ Error al obtener la lista en línea: {msg} (se muestran las recomendaciones integradas; pulsa «Actualizar lista» más tarde para reintentar)",
 "⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示": "⚠ Ancla a nivel de escenario ({a}); punto de anclaje sin definir, se muestra de forma aproximada en el primer plano del beat",
 "⚠ 运行出错": "⚠ Error de ejecución",
+"⏹ 已手动停止": "⏹ Detenido manualmente",
 "⚠️ 危险操作:删除当前项目": "⚠️ Operación peligrosa: eliminar el proyecto actual",
 "⚠️ 确认删除项目": "⚠️ Confirmar eliminación del proyecto",
 "⛓ 续接 {g} 尾帧": "⛓ Continuar desde el último fotograma de {g}",

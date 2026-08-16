@@ -191,6 +191,7 @@ window.I18N_DICT = {
 "⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)": "⚠ Gagal mengambil daftar online: {msg} (rekomendasi bawaan ditampilkan; klik \"Segarkan Daftar\" nanti untuk mencoba lagi)",
 "⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示": "⚠ Anchor level scene ({a}), titik kait belum final, ditampilkan sebagai perkiraan menurut shot pertama beat",
 "⚠ 运行出错": "⚠ Terjadi kesalahan saat berjalan",
+"⏹ 已手动停止": "⏹ Dihentikan manual",
 "⚠️ 危险操作:删除当前项目": "⚠️ Operasi berbahaya: hapus proyek saat ini",
 "⚠️ 确认删除项目": "⚠️ Konfirmasi hapus proyek",
 "⛓ 续接 {g} 尾帧": "⛓ Menyambung frame terakhir {g}",

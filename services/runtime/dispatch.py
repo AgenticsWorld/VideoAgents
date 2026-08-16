@@ -64,8 +64,14 @@ def fmt_run(r: dict) -> str:
     if r.get("started"):
         dur = f" {int((r.get('ended') or time.time()) - r['started'])}s"
     par = f" ←{r['parent']}" if r.get("parent") else ""
+    # 用户在运行面板手动停止的任务:status 仍是 error,但标签直接标出,免得被当成程序错误去追查
+    tag = ""
+    if r.get("stopped") == "user":
+        tag = " ⏹已被用户手动停止(非错误,无需追查原因)"
+    elif r.get("stopped"):
+        tag = " ⏹服务关闭/重启时被中断(非错误,无需追查原因)"
     return (f"[{r['status']:>7}] {r['id']} {r['agent']}{par}{dur} "
-            f"| {r.get('message', '')[:60]}")
+            f"| {r.get('message', '')[:60]}{tag}")
 
 
 def heartbeat(note: str):
@@ -144,7 +150,11 @@ def wait_all(ids: list[str], timeout: int, interval: int = 5):
                     print("  " + (r["result"][:2000]).replace("\n", "\n  "))
                 if r.get("status") != "done":
                     failed = True
-                    if r.get("error"):
+                    if r.get("stopped"):
+                        print("  ⏹ 该任务" + ("被用户在运行面板手动停止" if r["stopped"] == "user"
+                                            else "因服务关闭/重启被中断")
+                              + ",非程序错误,无需追查失败原因;是否重派由用户决定")
+                    elif r.get("error"):
                         print("  错误:", r["error"])
             sys.exit(1 if failed else 0)
 
@@ -219,6 +229,8 @@ def main():
         if r.get("result"):
             print("--- 结果 ---")
             print(r["result"][:4000])
+        if r.get("status") == "error" and r.get("error"):
+            print("错误:", r["error"])
         return
 
     if not args.agent or not args.instruction:
@@ -248,6 +260,12 @@ def main():
                     print("产物:", *r["files"], sep="\n  ")
                 print("--- 结果 ---")
                 print((r.get("result") or r.get("error") or "")[:4000])
+                if r.get("stopped"):
+                    print("⏹ 该任务" + ("被用户在运行面板手动停止" if r["stopped"] == "user"
+                                      else "因服务关闭/重启被中断")
+                          + ",非程序错误,无需追查失败原因;是否重派由用户决定")
+                elif r["status"] == "error" and r.get("error") and r.get("result"):
+                    print("错误:", r["error"])
                 sys.exit(0 if r["status"] == "done" else 1)
         print(f"等待超时({wait_timeout}s),任务仍在后台运行,稍后用 --status {run_id} 查询")
         sys.exit(2)
