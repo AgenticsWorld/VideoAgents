@@ -547,7 +547,7 @@ function buildPanel(kind,p){
     lr.appendChild(ab);d.appendChild(lr);
     d.appendChild(el('div',{className:'status',id:'tts-mm-status'}));
     d.appendChild(el('div',{className:'hint'},
-      'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
+      'Key 在 <a href="https://platform.minimax.io/console/access" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/console/access" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
       +'克隆音色需先在平台创建;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
   }else if(p==='minimax'){
     d.appendChild(mmBaseRow(kind));
@@ -567,7 +567,7 @@ function buildPanel(kind,p){
       ?'MiniMax 视频生成 API(MiniMax-H3,音画同生,支持首尾帧/多参考图/参考音视频);分辨率仅 768P/2K 两档:「输出设置」的 360p/480p/720p 自动映射 768P,1080p/4k 映射 2K;时长 4-15 整数秒;'
       :'MiniMax 音乐生成 API(Music 系列);取消「强制纯音乐」时按 prompt 自动写词演唱;输出仅 .mp3/.wav;';
     d.appendChild(el('div',{className:'hint'},
-      intro+'Key 在 <a href="https://platform.minimax.io/" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
+      intro+'Key 在 <a href="https://platform.minimax.io/console/access" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/console/access" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
     // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构)
     // / RunningHub 国内(.cn)/国际(.ai) 第三方云托管(私有 REST,工作流存云端工作区)
