@@ -51,6 +51,11 @@
 }
 ```
 
+**体量与交付方式**:单份 `composition.json` 只写本镜特有的构图定值(上表字段 + 本镜确需的补充字段);画幅/坐标系/安全区/输入清单等
+跨镜共用说明**不逐份复制**(引用 `bible/aspect_ratio.json`、cinematography.json 路径即可,共用口径至多在回执 result.json 写一份)。
+批处理工单(一单 N 镜)逐份**直接写出 JSON**,一次做完;禁止先写 Python 生成脚本再跑、禁止 2–3 镜一批拆多轮
+(WORKFLOW.md §2「静态数据产物直接落盘」;前科 2026-08-16 archigram ep01:13 镜写 7 个 gen 脚本共 190KB 分 6 批,单份 20KB 近半为复制的共用说明,耗时 3712s 为 camera/blocking 单的 4 倍)。
+
 ## 接受的工作指令(Work Order)
 
 工单统一格式见 `WORKFLOW.md` §6。我关心的字段:`instruction`(任务描述)、`inputs`、`expected_output`、`acceptance`。

@@ -62,10 +62,20 @@ data/projects/<slug>/
 └── runs/           # 工单、Context Package、评分记录、日志(runs/<task_id>/)
 ```
 
-**项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(逐镜数据表、批量出图/合成脚本等)
+**项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(批量出图/合成、机检、媒体处理等**确有计算或外部调用**的脚本)
 是项目产物,落 `data/projects/<slug>/code/` 并与其它产物一样用 `.version/vc.py register` 登记;
-**不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`)。脚本内定位仓库根
+**不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`),也**不要**散落在 `runs/<task_id>/`
+(那里只放运行记录四件套 + 可选 lesson.md,§6.1)。脚本内定位仓库根
 用「向上找 modules/」标准头(见根 `code/README.md`),禁止硬编码绝对路径。
+
+**静态数据产物直接落盘,禁止「写脚本去写 JSON」(2026-08-16)**:JSON/MD/YAML 类设计产物(每镜 camera/composition/blocking、
+shot_list、cue 表、prompt 组包等)的内容全部来自 Agent 自己的判断,没有任何需要程序计算的部分——一律用文件写入工具**逐份直接写出最终文件**;
+严禁先把数据写成 Python dict/字面量脚本再执行脚本落盘(等于同一内容输出两遍,还多一轮读改跑),严禁为此分批写多个 `gen_*.py`。
+只有产物确需计算(时长/坐标推导、扫描目录、调 genmedia/ffmpeg、跨文件机检)时才写脚本,且落 `code/`。
+批处理工单(for_each 一次执行 N 份)同样逐份直写、一次做完,不按 2–3 份一批拆多轮。**同批产物间的共用说明(输入清单、坐标系定义、
+画幅/安全区约定等)不得逐份复制进每个文件**——写在 SOUL/上游文件里的引用路径即可,或至多在回执 result.json 写一份;
+单份产物只含 SOUL 输出表规定的字段与本实例特有的值(前科 2026-08-16 archigram p6-composition-ep01:13 镜先写 7 个 gen 脚本共 190KB
+分 6 批跑,单份 20KB 中近半是逐份复制的共用说明,耗时 3712s = 同批 camera/blocking 单的 4 倍,产物合格但方法选贵了)。
 
 ### 用户参考目录 refs/(人工输入口)
 
@@ -665,6 +675,10 @@ on_fail: escalate_human
 ```
 
 Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物路径、自检结果、遇到的设定冲突上报)。
+
+**交付方式纪律(执行 Agent)**:工单要的是产物文件本身——JSON/MD 类设计产物直接逐份写出终稿,不写「生成脚本」再跑(§2「静态数据产物直接落盘」);
+批处理工单一次做完不拆批;确需脚本(计算/媒体处理/机检)才写,落项目 `code/`,`runs/<task_id>/` 只放运行记录。
+orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「直接逐份落 JSON,不要写生成脚本、不要分批」。
 
 **inline 工单的上下文约定**:工单 `context_package: inline` 时,执行 Agent 以工单本体的 `instruction`/`inputs` 为完整上下文,不得因缺 `runs/<task_id>/context.md` 拒单,也不得自行读全库补料(缺料照旧走回执上报);各 Agent SOUL 输入表中的「Context Package / context.md」行在 inline 工单下即指工单本体,无需另有文件。
 
