@@ -2067,6 +2067,12 @@ $('#btn-watchdog').onclick=async()=>{
 };
 
 /* ---------- 运行面板 ---------- */
+function fmtRunDur(sec){
+  sec=Math.max(0,Math.round(sec));
+  if(sec<60)return sec+'s';
+  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return (h?h+'h':'')+m+'m'+s+'s';
+}
 function renderRuns(){
   const box=$('#runs');
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
@@ -2075,7 +2081,7 @@ function renderRuns(){
   box.innerHTML='';
   runs.forEach(r=>{
     const d=document.createElement('div'); d.className='run'; d.dataset.id=r.id;
-    const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
+    const dur=r.started?fmtRunDur((r.ended||Date.now()/1000)-r.started):'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);
