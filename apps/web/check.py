@@ -30,7 +30,7 @@ def main() -> None:
             legacy.append(page.name)
     if legacy:
         raise SystemExit("Legacy API paths remain in: " + ", ".join(legacy))
-    if len(list((STATIC / "styles" / "images").glob("*.webp"))) != 94:
+    if len(list((STATIC / "styles" / "images").glob("*.webp"))) != 152:
         raise SystemExit("The original style image library is incomplete")
     print("WebUI static package is complete; all application requests use /api/v1.")
 

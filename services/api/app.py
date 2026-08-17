@@ -360,6 +360,11 @@ async def pi_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_pi_models(refresh)
 
 
+@api.get("/engines/opencode/models", tags=["configuration"])
+async def opencode_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_opencode_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -468,6 +473,16 @@ async def watchdog_policy() -> dict[str, Any]:
 @api.post("/watchdog/policy", tags=["automation"])
 async def set_watchdog_policy(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_watchdog_threshold_set(body)
+
+
+@api.get("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_get() -> dict[str, Any]:
+    return await core.api_agent_advanced_get()
+
+
+@api.post("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_agent_advanced_set(body)
 
 
 @api.get("/config/concurrency", tags=["automation"])

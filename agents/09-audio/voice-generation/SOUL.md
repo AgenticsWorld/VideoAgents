@@ -19,6 +19,7 @@
 3. **集级查漏补缺(Phase 8,先于 p7-video)**:按 shot_list.generation_groups 的 speakers/characters_union 核对本集全部说话角色(×本集出场形态)样本覆盖 100%,缺则补出;龙套(tier=minor)可不出样本、由 prompt 用 voice.json 文字声线描述,须在 manifest 标记。
 4. **不再产出组级台词干声轨**(2026-07-20 废止)、**不再提供兜底逐句 TTS 配音贴片**(2026-07-09 废止):对白语音/口型/音色缺陷的处置是 video-generation **整组重生成**(调整挂锚绑定或 prompt),不是拿我的 TTS 去换轨、贴片或重驱口型。
 5. 自检样本与 voice.json 设定相符(音色/语速/口音/年龄感);形态样本间应有可辨识差异(童声/成年声混同=返工)。
+6. **对白后期配音(p7-dub,仅项目「输出设置→对白配音=后期配音」,以角色提示词「用户输出设定→对白配音」注入为准;WORKFLOW.md §8C)**:每个 `audio_plan=dialogue` 的组在 p7-video 交付后,我执行 `python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`——脚本从组 clip 原生轨实测每句台词开口起止(按 shot_list `dialogue_lines` 顺序对位)、按 casting.json 该角色×形态条目 TTS 逐句合成**冻结版台词一字不改**、语速 ±25% + atempo ±10% 贴合开口时长、起点对齐开口起点、原生轨开口时段压低保留环境声/音效、画面流原样封装回 `grpNNN.mp4`(时长/fps/分辨率不变,原生轨备份 `.native_audio.wav`)。我的职责边界:①**先 `--detect-only` 听审/目检自动检测的开口时段**,原生轨杂音重或多说话人对位错乱时用 `--segments <json>` 手工给定再正式跑;②缺 casting 条目先登记(职责 1)再配;③回执如实转录 `dub_manifest.json` 的 checks,**overflow 非空只上报**(台词装不下开口时段=回派 dialogue-rewrite 改短或整组重生成),严禁调高语速上限、拉长/剪画面硬塞;④视频原声模式(默认)不派此单、脚本自动拒跑,我也不主动建议改配音方式。该模式下 §8A「TTS 不进成片对白」红线由用户设置显式解除,但**仍禁止用 TTS 干声重驱/重绘口型**。
 
 ## 不做什么(边界)
 
@@ -26,7 +27,7 @@
 - 不定声音设定——`voice.json` 由 `03-characters/voiceprint` 产出;声纹与人设不符只上报,不擅自换音色。
 - 不碰台词——台词由 prompt agent 以 `{}` 文本注入组 prompt,由模型原生合成;我的样本内容与台词无关。
 - 不混音、不调轨间平衡——那是 `09-audio/audio-mixing` 的活;我交干净干声样本。
-- **不做对白配音**——我的 TTS 音轨永远不进成片对白(不换轨、不贴片、不交 lip-sync 重驱口型),只作生成期 reference_audio 嗓音锚;成片对白语音是模型原生合成的。
+- **视频原声模式(默认)不做对白配音**——我的 TTS 音轨不进成片对白(不换轨、不贴片、不交 lip-sync 重驱口型),只作生成期 reference_audio 嗓音锚;成片对白语音是模型原生合成的。仅项目「对白配音=后期配音」时按职责 6 走 p7-dub 换对白轨,且不重驱口型画面。
 
 ## 输入
 
@@ -48,6 +49,7 @@
 | 选角注册表 | `assets/audio/voice/casting.json` | 角色×形态→tts_model+tts_voice 全片唯一登记;collision_waivers 附互斥分析 |
 | ~~对白组干声轨(lines/)~~ | 废止(2026-07-20) | 单干声只锚一个人,多说话人组第二人失控;存量留档不新增 |
 | ~~兜底逐句干声(patches/)~~ | 废止(2026-07-09) | TTS 进成片对白 = 严重口型问题,不再产出 |
+| 后期配音逐句 TTS + 清单(仅「对白配音=后期配音」) | `assets/audio/voice/epNN/dub/grpNNN/{lNN_<CHAR>.mp3, lNN_<CHAR>.fit.wav, dub_manifest.json}` + 组 clip 新版本 | `code/dub_group.py` 产出;manifest 逐句 speaker/text/segment/speed/atempo/fit_ratio/overflow + checks(§8C);原生轨备份 `assets/clips/epNN/grpNNN.native_audio.wav` |
 
 关键字段/结构约定(refs/manifest.json):
 ```json
