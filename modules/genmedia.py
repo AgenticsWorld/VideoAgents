@@ -211,9 +211,25 @@ def get_config(kind: str) -> dict:
     cfg = json.loads(CONFIG_PATH.read_text())[kind]
     provider = cfg["provider"]
     ov = _agent_provider_override(kind)
-    if ov and isinstance(cfg.get(ov), dict):
+    # 「每 Agent 模型配置」的 runninghub/comfyui 与「🎨 生成模型」页的两个标签页同口径:
+    # 存储都在 comfyui 段,靠 mode 区分 —— runninghub ⇒ mode=RunningHub 页所选站点(rh_site),
+    # comfyui ⇒ mode=ComfyUI 页所选本地/云端(comfy_mode);影子字段缺失时按现行 mode 兜底
+    force_mode = ""
+    if ov in ("runninghub", "comfyui") and isinstance(cfg.get("comfyui"), dict):
+        c = cfg["comfyui"]
+        cur = str(c.get("mode") or "local")
+        if ov == "runninghub":
+            site = str(c.get("rh_site") or "")
+            force_mode = site if site in RH_BASES else (cur if cur in RH_BASES else "rh_cn")
+        else:
+            cm = str(c.get("comfy_mode") or "")
+            force_mode = cm if cm in ("local", "cloud") else (cur if cur in ("local", "cloud") else "local")
+        provider = "comfyui"
+    elif ov and isinstance(cfg.get(ov), dict):
         provider = ov
     pc = dict(cfg[provider])
+    if force_mode:
+        pc["mode"] = force_mode
     if provider == "minimax":
         # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
         pc["api_key"] = _minimax_key(pc)
@@ -583,11 +599,11 @@ def _rh_ctx(cfg) -> tuple[str, str, str]:
            or str(cfg.get("rh_api_key") or "").strip()
            or os.environ.get("RUNNINGHUB_API_KEY", "").strip())
     if not key:
-        raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 ComfyUI 渠道选"
-                           "对应运行方式并填写(或设环境变量 RUNNINGHUB_API_KEY)")
+        raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 RunningHub 渠道选"
+                           "对应站点并填写(或设环境变量 RUNNINGHUB_API_KEY)")
     wf_id = str(cfg.get("rh_workflow_id") or "").strip()
     if not wf_id:
-        raise RuntimeError("RunningHub 未选择云端工作流:「🎨 生成模型」页 ComfyUI 渠道"
+        raise RuntimeError("RunningHub 未选择云端工作流:「🎨 生成模型」页 RunningHub 渠道"
                            "粘贴工作区的工作流 ID 验证并添加后选择")
     return base, key, wf_id
 

@@ -927,8 +927,14 @@ RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
                           "runninghub-cloud-workflow/SKILL.md")
 
 
-def is_runninghub_video_active(cfg: dict | None = None) -> bool:
-    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。"""
+def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
+    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
+    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia.get_config 同口径):
+    runninghub ⇒ 是;其他非空覆盖(含 comfyui=本地/云端)⇒ 否;空 ⇒ 按全局判定。"""
+    if agent_id:
+        ov = str(agent_model_config(agent_id).get("video_provider") or "")
+        if ov:
+            return ov == "runninghub"
     v = (cfg or load_genconfig()).get("video") or {}
     comfy = v.get("comfyui") or {}
     return ((v.get("provider") or "volcengine") == "comfyui"
@@ -1113,8 +1119,11 @@ AM_MODE_MODELS = {
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+# runninghub/comfyui 与「🎨 生成模型」页两个标签页同口径(存储同在 comfyui 段,靠 mode 区分,
+# 见 genmedia.get_config):runninghub=RunningHub 页站点,comfyui=ComfyUI 页本地/云端
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax",
+                      "runninghub", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "runninghub", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -2019,7 +2028,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
-    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active():
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id):
         p += f"""
 
 ## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)

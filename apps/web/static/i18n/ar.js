@@ -476,6 +476,7 @@ window.I18N_DICT = {
 "未知错误": "خطأ غير معروف",
 "本地": "محلي",
 "运行方式": "وضع التشغيل",
+"站点": "الموقع",
 "运行模式": "نوع المثيل",
 "RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准": "فئات أجهزة RunningHub: يوفر Standard ذاكرة فيديو 24G و Plus 48G و Ultra أعلى؛ كلما ارتفعت الفئة زاد سعر الثانية — راجع صفحة الأسعار في موقع RunningHub",
 "云端(Comfy Cloud)": "سحابة (Comfy Cloud)",
