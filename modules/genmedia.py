@@ -570,8 +570,12 @@ def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
 
 # ---------------- ComfyUI 通用 ----------------
 
-# Comfy Cloud(官方云端):与本地 ComfyUI 同构 API(/prompt /history /queue /view
-# /upload/image /object_info 均在 /api 前缀下),X-API-Key 单头鉴权。
+# Comfy Cloud(官方云端):与本地 ComfyUI 大体同构 API(/prompt /queue /view /upload/image
+# 均在 /api 前缀下),X-API-Key 单头鉴权。已知差异(「同构」假设已破三次,勿再默认同构):
+#   1) /history/{prompt_id} 不可用(404 "Use /api/jobs/{prompt_id} instead"),
+#      任务状态须轮询 /jobs/{prompt_id}(_comfy_cloud_job);
+#   2) 无单节点 /object_info/{class} (404),只能全量拉取且响应 gzip;
+#   3) /view 返回 302 → 签名 URL。
 COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
 
 # RunningHub(第三方云托管 ComfyUI):非原生同构 API,走私有 REST
@@ -1188,6 +1192,46 @@ def _comfy_queue_contains(queue: dict, prompt_id: str) -> bool:
     return False
 
 
+_CLOUD_JOB_RUNNING = object()  # _comfy_cloud_job 哨兵:任务仍在排队/执行中
+
+
+def _comfy_cloud_job(base: str, pid: str, headers: dict | None):
+    """Comfy Cloud 任务状态:GET /jobs/{prompt_id},归一成本地 /history 条目结构。
+
+    返回值:None = 云端尚无该任务记录(HTTP 404,刚提交尚未入库);
+    _CLOUD_JOB_RUNNING = pending/in_progress;否则为 {"status": {...}, "outputs": {...}},
+    status_str 取 success/error 与本地 history 对齐,execution_error 塞进 messages 供
+    _comfy_execution_error 复用。真机返回体(2026-08 实测):
+    {id, status: pending|in_progress|completed|failed|cancelled, outputs?: {node: {images|...}},
+     execution_error?: {node_id, node_type, exception_type, exception_message, traceback},
+     execution_status: null(与开源版不同,不能依赖), outputs_count, ...}
+    """
+    try:
+        job = _get_json(f"{base}/jobs/{pid}", headers)
+    except RuntimeError as exc:
+        if str(exc).startswith("HTTP 404 "):
+            return None
+        raise
+    state = str(job.get("status") or "").lower()
+    if state in ("pending", "in_progress", "queued", "running"):
+        return _CLOUD_JOB_RUNNING
+    messages = []
+    err = job.get("execution_error")
+    if isinstance(err, dict) and err:
+        messages.append(["execution_error", err])
+    elif state != "completed":
+        messages.append(["execution_error", {
+            "exception_type": state or "unknown",
+            "exception_message": ("任务在 Comfy Cloud 被取消" if state == "cancelled"
+                                  else f"Comfy Cloud 任务状态 {state or '(空)'} 且未附 execution_error")}])
+    ok = state == "completed"
+    return {
+        "status": {"status_str": "success" if ok else "error",
+                   "completed": ok, "messages": messages},
+        "outputs": job.get("outputs") or {},
+    }
+
+
 def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
                headers: dict | None = None) -> str:
     """提交工作流,轮询完成,下载首个产物到 output。
@@ -1209,10 +1253,19 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
     deadline = time.time() + COMFY_TIMEOUT
     queue_missing_since = None
     seen_in_queue = False
+    is_cloud = base.rstrip("/") == COMFY_CLOUD_URL
     while time.time() < deadline:
         time.sleep(2)
         try:
-            hist = _get_json(f"{base}/history/{pid}", headers).get(pid)
+            if is_cloud:
+                # Comfy Cloud 无 /history,状态在 /jobs/{prompt_id}
+                hist = _comfy_cloud_job(base, pid, headers)
+                if hist is _CLOUD_JOB_RUNNING:
+                    seen_in_queue = True
+                    queue_missing_since = None
+                    continue
+            else:
+                hist = _get_json(f"{base}/history/{pid}", headers).get(pid)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(
                 f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
