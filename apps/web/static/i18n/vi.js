@@ -1109,7 +1109,7 @@ window.I18N_DICT = {
 "🧩 Agent 插件": "🧩 Plugin Agent",
 "插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Plugin là thư mục plugins/<tên>/ (plugin.json + agents/…/SOUL.md, tùy chọn workflows/*.yaml DAG). Sao chép thư mục vào plugins/ hoặc tải lên zip để cài đặt; plugin mới cài mặc định bị tắt — khi bật trên trang này, các Agent của nó xuất hiện ở danh sách bên trái và có thể được Tổng chế tác phân công. Hướng dẫn biên soạn: plugins/README.md. Hãy xem xét nội dung plugin trước khi cài: SOUL.md sẽ được đưa vào prompt của mô hình",
 "⬆ 安装插件包(zip)": "⬆ Cài gói plugin (zip)",
-"🔗 插件仓库": "🔗 Kho plugin",
+"🏪 插件仓库": "🏪 Kho plugin",
 "无效": "không hợp lệ",
 "已启用": "đang bật",
 "已停用": "đã tắt",

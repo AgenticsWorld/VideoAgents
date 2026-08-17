@@ -1109,7 +1109,7 @@ window.I18N_DICT = {
 "🧩 Agent 插件": "🧩 Plugins de Agent",
 "插件 = plugins/<名字>/ 目录(plugin.json + agents/…/SOUL.md,可选 workflows/*.yaml 流程 DAG)。复制目录到 plugins/ 或上传 zip 即安装;新装插件默认停用,在本页启用后其 Agent 才出现在左侧列表、可被总制片派单;编写规范见 plugins/README.md。安装前请先审阅插件内容:SOUL.md 会注入模型提示词": "Um plugin é um diretório plugins/<nome>/ (plugin.json + agents/…/SOUL.md, workflows/*.yaml opcionais). Copie o diretório para plugins/ ou envie um zip para instalar; plugins recém-instalados ficam desativados por padrão — ao ativar nesta página, seus Agents aparecem na lista à esquerda e podem receber tarefas do Produtor. Guia de criação: plugins/README.md. Revise o conteúdo antes de instalar: SOUL.md é injetado nos prompts do modelo",
 "⬆ 安装插件包(zip)": "⬆ Instalar pacote de plugin (zip)",
-"🔗 插件仓库": "🔗 Repositório de plugins",
+"🏪 插件仓库": "🏪 Repositório de plugins",
 "无效": "inválido",
 "已启用": "ativado",
 "已停用": "desativado",
