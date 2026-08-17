@@ -597,11 +597,20 @@ refs/
 | edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装**;**终版封装(G9)接入片头后必须产出成片基准字幕 `subtitles_final.srt`:把 subtitle 的正片基准 SRT 整体 +片头实际时长(ffprobe intro.mp4 实测,与 placement.json 交叉核对),烧录/发布一律用 final 版,严禁正片基准 SRT 直接配 final.mp4(2026-07-18 前科:thedoor ep01–06 发布包字幕整体偏早一个片头时长)** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24;**subtitle_offset_ok(终版封装时):final.mp4 含片头 ⇒ 交付字幕首句时间码 = 正片基准首句 + intro 实测时长(±200ms)**。评分 edit_v1 |
 | transition | 转场设计与实施(硬切为主,特殊转场按导演阐述) | cut、directing_plan | 更新 timeline | QA:visual-qa 抽检转场突兀度 |
 | subtitle | 对白/旁白字幕(时轴对齐,**正片 0 秒基准,不含片头**;成片基准版由 edit 终版封装时平移生成);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
-| caption | 屏幕文字(地名/时间/招式名等花字) | shot_list、dictionary | `epNN/captions.json` | 机检:术语与 dictionary 100% 一致 |
+| caption | 花字设计(schema v2:headline 大标题/keyword 关键词/信息类,含字体、动画、配套音效;**仅花字开关开启时派发,见 §9A**)+ 逐组烧录(caption-render 工单,只准宿主 CLI) | shot_list、dictionary、timeline、`data/fonts\|sfx/manifest.json` | `epNN/captions.json` + `assets/clips_caption/epNN/` | 机检:术语与 dictionary 100% 一致 + `code/check_captions.py` design/render 段(schema v2/双写对账/资产命中/副本齐备且规格不变) |
 | title | 片头/片尾(含下集预告位);**下集预告默认不配旁白**——钩子文案以字卡/花字呈现,声轨仅画面原声+BGM,需配音须工单显式指定(2026-07-10) | style、hooks、episode_plan | `epNN/intro_outro/` | 机检:预告无旁白轨(工单显式要求除外,teaser_no_narration);QA:art-director 会签 |
 | thumbnail | 封面(每平台画幅各一,A/B 两版);**先盘点 refs/thumbnail/ 用户封面参考,优先借鉴其构图/版式/文字风格并落痕迹**(§2 规则 7) | 本集高光帧、style、seo 关键词、refs/thumbnail/ | `epNN/thumbnail_*.png` | 机检:画幅/安全区合规;QA:人工挑选 |
 
 **G9 闸门 + H4**:第 1 集成片用户全片审看签字;后续集按抽检放行。**总装产物命名固定**:成片必须落盘为 `edit/epNN/final.mp4`(或含 `final` 的变体名,如 `epNN_final.mp4`)、成片基准字幕为 `edit/epNN/subtitles_final.srt`——Web 视频预览页与 platform-adapter 均按 `final` 名索引,orchestrator 开总装工单时 outputs 必须写此规范名,严禁 `master.mp4` 等别名(前科 2026-07-18:tothemoon p9-master-ep01 产出 master.mp4,视频预览页索引不到 ep01 成片)。
+
+> **§9A 花字与花字音效(2026-08-08 增,项目级开关,默认关)**
+>
+> - **开关**:「📤 输出设置」→ 花字(`settings.json` `output.caption_enabled`)。关闭 = caption 相关节点(主流程 p9-caption/p9-caption-render/p9-caption-final;av 插件 av2-caption/av4-caption-render/av4-caption-final)一律不派发、不建卡,闸门不因未派发而 HOLD(同 §7B p7-upscale/g7 先例);开启后 orchestrator 按 DAG condition 正常排产。
+> - **设计**(`10-editing/caption`):产 `edit/epNN/captions.json` **schema v2**——全集 ≤4 个 style_presets(font_id 引用 `data/fonts/manifest.json`)、每条花字必填 group_id + 组内 local_start/local_end 与集级 start/end 双写对账、入出动画、`sfx_id` 引用 `data/sfx/manifest.json`(**音效只选库内素材,不逐次生成**)。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入字幕安全区。av 项目无词典时文案必须逐片段命中母带原文(`caption_text_from_source`)。
+> - **烧录**(caption-render 工单):**超分后的终版组 clip** 上逐组烧录**副本** `assets/clips_caption/epNN/grpNNN.mp4`(原 clip 永不改动;回执幂等,单组返工只重渲该组);**只准宿主 CLI `code/render_captions.py`,禁止 Agent 自写花字 ffmpeg 滤镜**。旧宿主无该 CLI 时由首项机检 `caption_toolchain_verified` 明确拦截。
+> - **花字版成片**(caption-final 工单,归 `10-editing/edit`):`edit/epNN/final_caption.mp4` = clips_caption 副本替换对应组按同一 EDL 重拼;**音轨布局:a:0 = 声轨权威 + SFX 预混(AAC,播放器开箱即听;MP4 多音轨是互斥备选流,绝不能指望播放器叠加混播),a:1 = 声轨权威原样流拷贝(存档轨,av 项目零重编码机检 `final_caption_master_frames_intact` 对 a:1 逐帧校验)**。严禁 -shortest。干净版 `final.mp4` 照常产出,与花字版并列(文件名都含 `final`,视频预览页双双收录);干净版既有机检口径不变。
+> - **资产(2026-08-11 改远端仓库制)**:字体/音效的**唯一事实源是独立 GitHub 素材仓库**(配置 `modules/caption_assets.json` 的 `repo`,结构约定顶层 `fonts/` + `sfx/`,用户动态维护),caption 工单第 0 步执行 `render_captions.py assets-sync` 按需拉取到本地缓存 `data/fonts|sfx/remote/`(gitignored,远端删除本地同步移除)并自动重扫 manifest;仓库未配置时降级用本地素材(兜底 `scripts/fetch_sfx.py --synth`);题材→风格包映射见 `agents/10-editing/caption/skills/caption-styling/SKILL.md`;license 由 11-qa/copyright 终审核对。
+> - **机检**:`code/check_captions.py --require design|render|final` 三阶段;发布物料(platform-adapter)默认基于花字版转码(a:0 已含音效,直接转);零重编码承诺仍只对干净版 `final.mp4` 成立。
 
 ### Phase 10 — 终审(每集,8 个 QA 并行)
 
