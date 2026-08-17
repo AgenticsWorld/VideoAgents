@@ -24,6 +24,7 @@ dependencies = [
   "fonttools>=4.47,<5",   # 花字:字体 manifest 扫描(name 表 family + cmap CJK 覆盖判定)
   "lark-oapi>=1.4,<2",
   "numpy>=1.24,<3",
+  "playwright>=1.60,<2",  # 花字:HTML 渲染引擎(captions_html.py;首次需 python3 -m playwright install chromium)
   "pygit2>=1.17,<2",
   "PyYAML>=6,<7",
   "qrcode>=7.4,<9",

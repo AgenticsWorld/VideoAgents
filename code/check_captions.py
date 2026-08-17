@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """check_captions.py — 花字与花字音效机检(caption,主流程 p9-caption* 与 av 插件共用)。
 
-事实源:`edit/epNN/captions.json`(schema v2)、`directing/epNN/shot_list.json`、
+事实源:`edit/epNN/captions.json`(schema v3)、`directing/epNN/shot_list.json`、
         `data/fonts|sfx/manifest.json`、终版组 clip 与 clips_caption 副本、花字版成片。
 被检方:caption Agent 的设计产物、render_captions.py 的烧录副本、edit 的花字版封装。
 
@@ -12,7 +12,7 @@
 分阶段(输入不存在的阶段记 SKIP,不算失败;--require 强制要求某阶段就位):
 
   [design] 设计阶段(caption 设计工单交付前必跑)
-    1. caption_schema_v2          schema_version=2、预设收敛 ≤4、字段/枚举合法
+    1. caption_schema_v2          schema_version=3、字段/枚举合法(检查名保持历史沿用)
     2. caption_groups_valid       group_id 命中 shot_list,local 时间落在组时长内
     3. caption_time_consistent    集级 start == 组起点 + local_start(±0.1s,双写对账)
     4. caption_assets_resolved    font_id/sfx_id 全部在 manifest 命中
@@ -21,11 +21,11 @@
     6. ascii_filename             花字产物文件名仅 ASCII(WORKFLOW.md §1 原则 9)
 
   [render] 烧录阶段(av4/p9 caption-render 交付前必跑)
-    7. caption_toolchain_verified 本机 ffmpeg 含 subtitles/libass(旧宿主在此拦住)
-   7a. caption_font_effective     user: 外置字体渲染实效(采样帧 ≠ 回落帧;libass
-                                  未命中 family 时静默回落,规格检查抓不到)
+    7. caption_toolchain_verified playwright + Chromium 可启动(HTML 引擎)
+   7a. caption_glyph_coverage     模版 font:// 可解析 + 花字文本字形全覆盖
+                                  (浏览器缺字形静默回退,libass 时代同款陷阱)
     8. captions_rendered_all      每个含花字的组都有副本+回执,且回执指纹新鲜
-                                  (源 clip sha256 / 花字片段 hash / 字体 hash 三元组一致)
+                                  (v3:源 clip sha / 花字+模版+字体 hash / 引擎版本)
     9. caption_render_spec_ok     副本 宽/高/fps 与源一致,时长差 ≤1 帧
    10. caption_clip_audio_intact  av:副本保持无声;主流程:副本音轨参数与源一致
 
@@ -54,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import DATA_DIR, parse_args                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
+import captions_html as chtml                                     # noqa: E402
 import avsync                                                     # noqa: E402
 
 STAGES = ("design", "render", "final")
@@ -154,18 +155,11 @@ def main():
         if data is not None:
             skip("render", f"{cap_dir} 不存在(未到烧录阶段)")
     else:
-        ok_tc = False
-        try:
-            ok_tc = cap.ffmpeg_has_libass()
-        except RuntimeError as e:
-            check("caption_toolchain_verified", False, str(e))
-        else:
-            check("caption_toolchain_verified", ok_tc,
-                  "" if ok_tc else "ffmpeg 不含 subtitles/libass 滤镜")
+        ok_tc, tc_msg = chtml.chromium_ready()
+        check("caption_toolchain_verified", ok_tc, "" if ok_tc else tc_msg)
         by_grp = {}
         for c in data.get("captions", []):
             by_grp.setdefault(c.get("group_id"), []).append(c)
-        presets = data.get("style_presets") or {}
         fonts_m = json.loads((FONTS_DIR / "manifest.json").read_text(encoding="utf-8")) \
             if (FONTS_DIR / "manifest.json").is_file() else {"fonts": []}
         missing, stale, spec_bad, audio_bad = [], [], [], []
@@ -181,10 +175,10 @@ def main():
                 continue
             try:
                 old = json.loads(receipt.read_text(encoding="utf-8"))
-                fresh = (old.get("src_sha256") == avsync.file_sha256(str(src))
-                         and old.get("captions_hash") == avsync.canonical_sha256(
-                             {"captions": caps, "presets": presets})
-                         and old.get("fonts_hash") == cap._fonts_hash(caps, presets, fonts_m))
+                fresh = (old.get("renderer") == chtml.HTML_RENDERER_VERSION
+                         and old.get("src_sha256") == avsync.file_sha256(str(src))
+                         and old.get("captions_hash")
+                         == chtml._captions_hash_v3(caps, proj, fonts_m))
             except (json.JSONDecodeError, OSError, RuntimeError):
                 fresh = False
             if not fresh:
@@ -205,29 +199,20 @@ def main():
                 if (a["codec"], a["sample_rate"], a["channels"]) != \
                         (b["codec"], b["sample_rate"], b["channels"]):
                     audio_bad.append(f"{grp}(音轨参数变化 {a} → {b})")
-        # 用户外置字体的实效性:libass 找不到 family 会静默回落且规格检查全绿,
-        # 唯一可靠验证是渲一帧对比(2026-08-10 前科:fontsdir 不递归,标题烧成回落字体)
-        user_fids = set()
+        # HTML 引擎的字体实效口径:模版 font:// 可解析 + 字形全覆盖
+        # (浏览器缺字形同样静默回退,渲前逐条预检;引擎渲染时也会再拦一次)
+        glyph_bad = []
         for caps in by_grp.values():
             for c in caps:
-                st = {**presets.get((c.get("style_ref") or "")[7:], {}),
-                      **(c.get("style_override") or {})}
-                fid = st.get("font_id", "")
-                if fid.startswith("user:"):
-                    user_fids.add(fid)
-        if user_fids:
-            bad_fonts = []
-            for fid in sorted(user_fids):
                 try:
-                    if not cap.font_effective(fid, fonts_m):
-                        bad_fonts.append(fid)
+                    files = chtml.template_font_files(
+                        proj, c.get("template_ref") or "", fonts_m)
+                    miss = chtml.glyph_missing(c.get("text") or "", files)
+                    if miss:
+                        glyph_bad.append(f"{c.get('id')}:{miss}")
                 except RuntimeError as e:
-                    bad_fonts.append(f"{fid}({e})")
-            check("caption_font_effective", not bad_fonts,
-                  f"渲染实效未过(libass 未命中,烧的是回落字体):{bad_fonts}"
-                  if bad_fonts else "")
-        else:
-            skip("caption_font_effective", "未使用 user: 外置字体(系统字体由 CoreText 命中)")
+                    glyph_bad.append(f"{c.get('id')}:{e}")
+        check("caption_glyph_coverage", not glyph_bad, "; ".join(glyph_bad[:3]))
         check("captions_rendered_all", not missing and not stale,
               (f"缺副本:{missing[:5]} " if missing else "")
               + (f"回执过期(需重渲):{stale[:5]}" if stale else ""))

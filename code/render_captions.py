@@ -12,20 +12,20 @@
                                      未配置时跳过,继续用本地素材)
   fonts-scan                         扫系统字体 + data/fonts/(外置,gitignored)→ data/fonts/manifest.json
   sfx-scan                           扫 data/sfx/ → data/sfx/manifest.json
+  doctor                             HTML 引擎环境自检(playwright/Chromium/fonttools)
   render     --project X --ep epNN [--grp grpNNN ...] [--force]
                                      逐组烧录:assets/clips/{ep}/{grp}.mp4 + captions.json
                                      → assets/clips_caption/{ep}/{grp}.mp4(原 clip 不动;
-                                     回执四元组一致即 SKIP,--force 强制重渲)
+                                     回执一致即 SKIP,--force 强制重渲)。
+                                     HTML 引擎(captions_html.py;schema v3,模版在
+                                     <项目>/edit/caption_templates/;libass 已退役)
   sfx-track  --project X --ep epNN [--out 相对路径]
                                      captions.json → edit/{ep}/caption_sfx.m4a(集级,时长=母带)
   mux        --project X --ep epNN --video <拼装视频>
                                      花字版封装:a:0=母带+SFX 预混,a:1=母带流拷贝
                                      → edit/{ep}/final_caption.mp4
-  ass-only   --project X --ep epNN --grp grpNNN [--out xx.ass]
-                                     调试:只生成该组 ASS 文本
-
-先决:ffmpeg 编译含 libass(subtitles 滤镜)——每次执行前实测,缺失即失败
-(caption_toolchain_verified;旧宿主在此被明确拦住)。
+先决:playwright + Chromium(render_captions.py doctor 自检;
+caption_toolchain_verified 机检同口径)。
 退出码:成功=0,任一失败=1。
 """
 import json
@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import DATA_DIR, parse_args                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
+import captions_html as chtml                                     # noqa: E402
 
 FONTS_DIR = DATA_DIR / "fonts"
 SFX_DIR = DATA_DIR / "sfx"
@@ -68,16 +69,12 @@ def _groups_with_captions(data: dict) -> dict:
     return by_grp
 
 
-def _require_toolchain():
-    if not cap.ffmpeg_has_libass():
-        raise SystemExit("[FAIL] caption_toolchain_verified:本机 ffmpeg 不含 subtitles/"
-                         "libass 滤镜,无法烧录花字(macOS: brew install ffmpeg)")
-
-
 def cmd_render(args, proj):
-    _require_toolchain()
     fonts = _load_manifest(FONTS_MANIFEST, "fonts")
     data, shot_list = _load_ep_inputs(proj, args.ep)
+    ok, msg = chtml.chromium_ready()
+    if not ok:
+        raise SystemExit(f"[FAIL] caption_toolchain_verified: {msg}")
     issues = cap.validate_captions(data, shot_list, fonts_manifest=fonts,
                                    proj_root=proj)
     if issues:
@@ -86,28 +83,38 @@ def cmd_render(args, proj):
             print("   -", i)
         raise SystemExit(1)
     by_grp = _groups_with_captions(data)
-    cards_by_grp = {}
-    for cd in data.get("cards", []) or []:
-        cards_by_grp.setdefault(cd.get("group_id"), []).append(cd)
-    targets = args.grp or sorted(set(by_grp) | set(cards_by_grp))
-    presets = data.get("style_presets") or {}
+    targets = args.grp or sorted(by_grp)
     n_r = n_s = 0
-    for grp in targets:
-        caps = by_grp.get(grp) or []
-        cards = cards_by_grp.get(grp) or []
-        if not caps and not cards:
-            print(f"[SKIP ] {grp}: 本组无花字,不产副本")
-            continue
-        clip = proj / "assets" / "clips" / args.ep / f"{grp}.mp4"
-        if not clip.is_file():
-            raise SystemExit(f"[FAIL] 缺终版组 clip {clip}")
-        out = proj / "assets" / "clips_caption" / args.ep / f"{grp}.mp4"
-        r = cap.render_group(clip, out, caps, presets, fonts, FONTS_DIR,
-                             force=args.force, cards=cards, proj_root=proj)
-        n_r += r["status"] == "rendered"
-        n_s += r["status"] == "skipped"
-        print(f"[{'RENDER' if r['status'] == 'rendered' else 'SKIP  '}] {grp} → {r['out']}")
+    cache = proj / "assets" / "caption_cache"
+    with chtml.StickerRenderer(cache) as renderer:
+        for grp in targets:
+            caps = by_grp.get(grp) or []
+            if not caps:
+                print(f"[SKIP ] {grp}: 本组无花字,不产副本")
+                continue
+            clip = proj / "assets" / "clips" / args.ep / f"{grp}.mp4"
+            if not clip.is_file():
+                raise SystemExit(f"[FAIL] 缺终版组 clip {clip}")
+            out = proj / "assets" / "clips_caption" / args.ep / f"{grp}.mp4"
+            r = chtml.render_group_html(clip, out, caps, fonts, proj,
+                                        renderer, force=args.force)
+            n_r += r["status"] == "rendered"
+            n_s += r["status"] == "skipped"
+            print(f"[{'RENDER' if r['status'] == 'rendered' else 'SKIP  '}] {grp} → {r['out']}")
     print(f"[DONE] 渲染 {n_r} 组,幂等跳过 {n_s} 组,无花字 {len(targets) - n_r - n_s} 组")
+
+
+def cmd_doctor(args, proj=None):
+    ok, msg = chtml.chromium_ready()
+    print(f"[{'OK  ' if ok else 'FAIL'}] HTML 引擎:{msg}")
+    try:
+        import fontTools                                          # noqa: F401
+        print("[OK  ] fonttools(字形覆盖预检)")
+    except ImportError:
+        ok = False
+        print("[FAIL] 缺 fonttools:pip install fonttools")
+    if not ok:
+        raise SystemExit(1)
 
 
 def cmd_sfx_track(args, proj):
@@ -146,33 +153,17 @@ def cmd_mux(args, proj):
           "a:0=预混 a:1=母带存档)")
 
 
-def cmd_ass_only(args, proj):
-    fonts = _load_manifest(FONTS_MANIFEST, "fonts")
-    data, _ = _load_ep_inputs(proj, args.ep)
-    caps = _groups_with_captions(data).get(args.grp[0] if args.grp else "")
-    if not caps:
-        raise SystemExit(f"[FAIL] 组 {args.grp} 无花字")
-    clip = proj / "assets" / "clips" / args.ep / f"{caps[0]['group_id']}.mp4"
-    info = cap.probe_video_info(str(clip)) if clip.is_file() \
-        else {"width": 864, "height": 496}
-    text = cap.build_group_ass(caps, data.get("style_presets") or {}, fonts,
-                               info["width"], info["height"])
-    out = Path(args.out) if args.out else None
-    if out:
-        out.write_text(text, encoding="utf-8")
-        print(f"[DONE] {out}")
-    else:
-        print(text)
-
-
 def main():
     cmds = {"fonts-scan": None, "sfx-scan": None, "assets-sync": None,
-            "render": cmd_render,
-            "sfx-track": cmd_sfx_track, "mux": cmd_mux, "ass-only": cmd_ass_only}
+            "render": cmd_render, "doctor": None,
+            "sfx-track": cmd_sfx_track, "mux": cmd_mux}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         raise SystemExit(f"用法:render_captions.py {{{'|'.join(cmds)}}} ...")
     sub = sys.argv.pop(1)
+    if sub == "doctor":
+        cmd_doctor(None)
+        return
     if sub == "assets-sync":
         # 从远端素材仓库(modules/caption_assets.json 或
         # $VIDEOAGENTS_CAPTION_ASSETS_REPO)同步字体/音效,并重扫两份 manifest
