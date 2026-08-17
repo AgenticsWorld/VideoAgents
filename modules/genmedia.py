@@ -26,14 +26,18 @@ CLI:
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
   python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
-      --prompt "<该组原始 video_prompt>" [--source-task-id <任务id>] [--dry-run]
+      [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
+      [--resolution 1080p] [--aspect 16:9] [--seed 1234] [--dry-run]
 
-  超分(MiniMax Regenerate-2K):固定输出 2K,凭证共用「生成模型」页视频 MiniMax 的
-  Key/接口区域(与生效视频渠道无关,环境变量 MINIMAX_API_KEY 兜底)。base_video 模式
-  的源视频须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积
-  ≤768×1344、107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);
-  或 --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
-  按 output_seconds 计费。
+  超分:视频配置生效渠道为 ComfyUI 时走 SeedVR2,复用「生成模型」页视频 ComfyUI
+  的连接配置,固定使用 comfy/video-upscale-seedvr2-api.json;目标尺寸由
+  --resolution/--aspect 指定(缺省取项目成片档/16:9),fps、时长和音轨跟随源视频。
+  其他视频渠道走 MiniMax Regenerate-2K:固定输出 2K,凭证共用「生成模型」页视频
+  MiniMax 的 Key/接口区域(环境变量 MINIMAX_API_KEY 兜底)。base_video 模式的源视频
+  须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积≤768×1344、
+  107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);或
+  --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
+  MiniMax 按 output_seconds 计费,SeedVR2 按 ComfyUI 配置计费。
 
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
@@ -58,8 +62,9 @@ Python:
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
-  超分: minimax(POST /v2/video_regeneration,Regenerate-2K 异步任务;模型固定
-        MiniMax-H3,分辨率固定 2K;仅此一个渠道)
+  超分: seedvr2(ComfyUI SeedVR2 视频超分;复用视频 ComfyUI 配置,固定工作流
+        video-upscale-seedvr2-api.json) / minimax(POST /v2/video_regeneration,
+        Regenerate-2K 异步任务;模型固定 MiniMax-H3,分辨率固定 2K)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
@@ -2179,7 +2184,7 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
     return saved
 
 
-# ---------------- 超分:MiniMax(POST /v2/video_regeneration,Regenerate-2K) ----------------
+# ---------------- 超分:MiniMax / ComfyUI SeedVR2 ----------------
 
 # /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
 # 直出成片规格,不合规提交即拒——提交前用 ffprobe 预检拦下并给出修法
@@ -2283,6 +2288,68 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
                             {"type": "video_url", "role": "base_video",
                              "video_url": {"url": url}}]}
     return _minimax_video_task(cfg, "/v2/video_regeneration", body, output)
+
+
+SEEDVR2_WORKFLOW = "comfy/video-upscale-seedvr2-api.json"
+
+
+def _seedvr2_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
+    ratio_text = aspect or "16:9"
+    try:
+        numerator, denominator = (float(x.strip()) for x in ratio_text.split(":", 1))
+        ratio = numerator / denominator
+        if ratio <= 0:
+            raise ValueError
+    except (TypeError, ValueError, ZeroDivisionError):
+        raise RuntimeError(f"超分画幅无效: {aspect or ratio_text},应为如 16:9")
+    short_side = {"360p": 360, "480p": 480, "720p": 720,
+                  "1080p": 1080, "2k": 1440, "4k": 2160}.get(
+                      (resolution or "1080p").lower())
+    if not short_side:
+        raise RuntimeError(f"超分分辨率不支持: {resolution},可选 360p/480p/720p/1080p/2k/4k")
+    if ratio >= 1:
+        width, height = short_side * ratio, short_side
+    else:
+        width, height = short_side, short_side / ratio
+    return max(8, round(width / 8) * 8), max(8, round(height / 8) * 8)
+
+
+def _seedvr2_config() -> dict:
+    """读取「生成模型」页视频段的 ComfyUI 配置,超分工作流使用内置模板。"""
+    try:
+        pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("comfyui") or {})
+    except Exception:
+        pc = {}
+    if not pc:
+        raise RuntimeError("SeedVR2 超分需要先在「🎨 生成模型」页配置视频 ComfyUI 渠道")
+    pc["workflow"] = SEEDVR2_WORKFLOW
+    if _comfy_is_rh(pc):
+        raise RuntimeError("SeedVR2 超分暂不支持 RunningHub,请将视频 ComfyUI 运行方式设为本地或 Comfy Cloud")
+    return {"provider": "comfyui", **pc}
+
+
+def _upscale_default_resolution() -> str:
+    project = os.environ.get("VIDEOAGENTS_PROJECT", "")
+    if project:
+        try:
+            settings = json.loads((DATA_DIR / "projects" / project / "settings.json").read_text())
+            return str((settings.get("output") or {}).get("final_resolution") or "1080p")
+        except Exception:
+            pass
+    return "1080p"
+
+
+def _upscale_seedvr2(cfg, input_video: str, output: str, resolution: str,
+                     aspect: str, seed: int) -> str:
+    p = Path(input_video or "")
+    if not input_video or not p.is_file():
+        raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
+    base, headers = _comfy_endpoint(cfg)
+    uploaded = _comfy_upload(base, str(p), headers)
+    width, height = _seedvr2_dimensions(aspect, resolution)
+    workflow = _comfy_workflow(cfg, {"VIDEO": uploaded, "WIDTH": width,
+                                     "HEIGHT": height, "SEED": seed}, "video")
+    return _comfy_run(base, workflow, output, want_video=True, headers=headers)
 
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -2869,15 +2936,26 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
 
 def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
-                     source_task_id: str = "") -> str:
-    """视频超分(MiniMax Regenerate-2K),返回保存的绝对路径。固定输出 2K 档。
+                     source_task_id: str = "", resolution: str = "",
+                     aspect: str = "", seed: int | None = None) -> str:
+    """视频超分,返回保存的绝对路径。
 
-    仅 minimax 渠道:凭证共用「生成模型」页视频 MiniMax 的 Key/接口区域,与生效
-    视频渠道无关。base_video 模式传 input_video + prompt(该组原始 video_prompt),
-    源视频须为 MiniMax-H3 768P 直出成片规格(提交前 ffprobe 预检);source_task_id
-    模式传 7 天内 succeeded 的 MiniMax 生成任务 id,免传源视频。按 output_seconds 计费。
+    视频配置生效渠道为 comfyui 时使用 SeedVR2 工作流,复用视频 ComfyUI 配置;
+    其他渠道使用 MiniMax Regenerate-2K。SeedVR2 的 resolution/aspect/seed 控制
+    目标尺寸与随机种子,输出视频的 fps、时长和音轨跟随源视频。MiniMax 的
+    base_video 模式传 input_video + prompt,source_task_id 模式传 7 天内 succeeded
+    的任务 id 免传源视频。
     """
     _forbid_dispatch_layer("超分")
+    try:
+        video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+        provider = str(video_cfg.get("provider") or "")
+    except Exception:
+        provider = ""
+    if provider == "comfyui":
+        resolution = resolution or _upscale_default_resolution()
+        return _upscale_seedvr2(_seedvr2_config(), input_video, output, resolution,
+                                aspect, seed if seed is not None else random.randint(1, 2**31))
     cfg = _minimax_upscale_config()
     return _upscale_minimax(cfg, input_video, prompt, source_task_id, output)
 
@@ -3019,6 +3097,19 @@ def _cmd_video(args):
 def _cmd_upscale(args):
     _check_id_digits(args.output)
     if args.dry_run:
+        try:
+            video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+            provider = str(video_cfg.get("provider") or "")
+        except Exception:
+            provider = ""
+        if provider == "comfyui":
+            cfg = _seedvr2_config()
+            resolution = args.resolution or _upscale_default_resolution()
+            width, height = _seedvr2_dimensions(args.aspect, resolution)
+            print(f"[dry-run] upscale via seedvr2 workflow={SEEDVR2_WORKFLOW}"
+                  f" size={width}x{height} seed={args.seed if args.seed is not None else '(random)'}"
+                  f" mode={cfg.get('mode') or 'local'} → {args.output}")
+            return
         cfg = _minimax_upscale_config()
         if args.input and not args.source_task_id:
             _minimax_upscale_precheck(args.input)
@@ -3026,7 +3117,8 @@ def _cmd_upscale(args):
         print(f"[dry-run] upscale via minimax model={MINIMAX_UPSCALE_MODEL}"
               f" resolution=2K api_base={_minimax_base(cfg)} → {args.output}")
         return
-    out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id)
+    out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id,
+                            args.resolution, args.aspect, args.seed)
     print(f"已生成: {out}")
 
 
@@ -3109,15 +3201,17 @@ def main():
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")
 
-    pu = sub.add_parser("upscale", help="视频超分(MiniMax Regenerate-2K,固定输出 2K)")
+    pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
     pu.add_argument("--input", default="",
-                    help="源视频路径(须为 MiniMax-H3 768P 直出成片规格:24fps/含音轨/"
-                         "宽高均被32整除/面积≤768×1344/约4-15s;与 --source-task-id 二选一)")
+                    help="源视频路径;MiniMax 须为 H3 768P 直出规格,与 --source-task-id 二选一")
     pu.add_argument("--output", required=True, help="输出 mp4 路径")
     pu.add_argument("--prompt", default="",
-                    help="该组生成时的原始 video_prompt(base_video 模式必填)")
+                    help="MiniMax base_video 模式所需的原始 video_prompt;SeedVR2 忽略")
     pu.add_argument("--source-task-id", default="",
-                    help="7 天内 succeeded 的 MiniMax 生成任务 id(免传源视频,与 --input 互斥)")
+                    help="MiniMax 7 天内 succeeded 的任务 id(免传源视频,与 --input 互斥;SeedVR2 不使用)")
+    pu.add_argument("--resolution", default="", help="SeedVR2 目标分辨率,如 1080p/4k")
+    pu.add_argument("--aspect", default="", help="SeedVR2 目标画幅,如 16:9")
+    pu.add_argument("--seed", type=int, default=None, help="SeedVR2 随机种子")
     pu.add_argument("--dry-run", action="store_true")
 
     pt = sub.add_parser("tts", help="TTS 旁白/语音合成")
@@ -3175,7 +3269,12 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     provider = model = ""
     try:
         if args.cmd == "upscale":
-            provider, model = "minimax", MINIMAX_UPSCALE_MODEL
+            try:
+                video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+                provider = "seedvr2" if video_cfg.get("provider") == "comfyui" else "minimax"
+            except Exception:
+                provider = "minimax"
+            model = SEEDVR2_WORKFLOW if provider == "seedvr2" else MINIMAX_UPSCALE_MODEL
         else:
             cfg = get_config(args.cmd)
             provider = cfg.get("provider", "")

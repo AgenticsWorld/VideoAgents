@@ -1,0 +1,114 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "{{VIDEO}}"
+    }
+  },
+  "2": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": ["1", 0]
+    }
+  },
+  "3": {
+    "class_type": "ResizeImageMaskNode",
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": "{{WIDTH}}",
+      "resize_type.height": "{{HEIGHT}}",
+      "resize_type.crop": "center",
+      "scale_method": "lanczos",
+      "input": ["2", 0]
+    }
+  },
+  "4": {
+    "class_type": "SeedVR2Preprocess",
+    "inputs": {
+      "resized_images": ["3", 0]
+    }
+  },
+  "5": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "seedvr2_ema_vae_fp16.safetensors"
+    }
+  },
+  "6": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "seedvr2_3b_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "7": {
+    "class_type": "VAEEncodeTiled",
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 128,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "pixels": ["4", 0],
+      "vae": ["5", 0]
+    }
+  },
+  "8": {
+    "class_type": "SeedVR2Conditioning",
+    "inputs": {
+      "model": ["6", 0],
+      "vae_conditioning": ["7", 0]
+    }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "{{SEED}}",
+      "steps": 1,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["6", 0],
+      "positive": ["8", 0],
+      "negative": ["8", 1],
+      "latent_image": ["7", 0]
+    }
+  },
+  "10": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 128,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "samples": ["9", 0],
+      "vae": ["5", 0]
+    }
+  },
+  "11": {
+    "class_type": "SeedVR2PostProcessing",
+    "inputs": {
+      "color_correction_method": "none",
+      "images": ["10", 0],
+      "original_resized_images": ["3", 0]
+    }
+  },
+  "12": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "fps": ["2", 2],
+      "bit_depth": ["2", 3],
+      "images": ["11", 0],
+      "audio": ["2", 1]
+    }
+  },
+  "13": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "filename_prefix": "videoagents/seedvr2-upscale",
+      "format": "mp4",
+      "codec": "h264",
+      "video": ["12", 0]
+    }
+  }
+}
