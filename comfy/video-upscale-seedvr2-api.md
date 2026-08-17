@@ -51,6 +51,31 @@ The ComfyUI URL / Cloud Key / RunningHub settings on this tab are independent
 of `🎬 视频模型`. Switching the video workflow to MiniMax-H3 does not change
 the upscale backend.
 
+**RunningHub**: when the ComfyUI run mode is RunningHub (`rh_cn` / `rh_ai`),
+this local JSON is not used — `genmedia.py upscale` submits the cloud
+workflow selected on the RunningHub tab (`rh_workflow_id`, e.g. a workspace
+copy of a SeedVR2 upscale workflow). Workspace exports usually carry no
+`{{TOKEN}}` placeholders (the author's demo file name / default long side are
+literals), so the tool binds nodes directly, idempotently on top of any
+placeholders that do exist:
+
+| Binding | Node located | Value written |
+|---|---|---|
+| source video | the single `*LoadVideo*` node (`VHS_LoadVideo.video`, `LoadVideo.file`, …) | uploaded `--input` (RunningHub upload cap 30 MB) |
+| target size | the resize node upstream of `SeedVR2Preprocess.resized_images` | `ImageScaleByAspectRatio V2`: `scale_to_length` (or its upstream `Int` primitive) = longest/shortest/width/height side of `WIDTH`×`HEIGHT` per `scale_to_side` — the output keeps the **source** aspect ratio; `ResizeImageMaskNode` / `width`+`height` nodes: both dimensions |
+| seed | the primary KSampler-family sampler | `--seed` (warning only if absent) |
+
+VHS meta-batching (`VHS_BatchManager` + the `meta_batch` links on
+`VHS_LoadVideo` / `VHS_VideoCombine`) is removed on submission: VHS implements
+it by re-queuing the same prompt server-side under new prompt ids, and
+RunningHub only tracks the first one — the task reports SUCCESS after the first
+batch while the file is only finalized by the last requeue, so the output list
+stays empty. The whole clip is processed in one pass instead. Preview-only
+`VHS_VideoCombine` nodes (`save_output: false`) are pruned when a saving one
+exists, so the cloud does not encode twice and the download picks the real
+output. `--dry-run` validates the binding against the cached cloud
+workflow without uploading or creating a task.
+
 ### Runtime Parameters
 
 `genmedia.py upscale` fills the placeholders. Call:
@@ -124,6 +149,25 @@ comfy/upscale-seedvr2-api.json
 
 本标签页的 ComfyUI 地址 / Cloud Key / RunningHub 与 `🎬 视频模型` 完全独立;
 把视频工作流换成 MiniMax-H3 不会改超分后端。
+
+**RunningHub**:ComfyUI 运行方式为 RunningHub(`rh_cn` / `rh_ai`)时不用本地 JSON,
+`genmedia.py upscale` 提交 RunningHub 标签页选中的云端工作流(`rh_workflow_id`,
+如工作区保存的 SeedVR2 超分工作流)。工作区导出件通常**没有 `{{TOKEN}}` 占位符**
+(源视频是作者演示文件名、长边是模板默认值等字面值),工具改为顺节点直绑(有占位符
+时为幂等覆写):
+
+| 绑定项 | 定位节点 | 写入值 |
+|---|---|---|
+| 源视频 | 唯一的 `*LoadVideo*` 节点(`VHS_LoadVideo.video` / `LoadVideo.file` …) | 上传后的 `--input`(RunningHub 单文件上限 30MB) |
+| 目标尺寸 | `SeedVR2Preprocess.resized_images` 上游的缩放节点 | `ImageScaleByAspectRatio V2`:按 `scale_to_side` 把 `WIDTH`×`HEIGHT` 的最长/最短/宽/高边写入 `scale_to_length`(或其上游 `Int` primitive)——输出**画幅跟随源视频**;`ResizeImageMaskNode` / `width`+`height` 类节点:写入宽高 |
+| 种子 | 主采样器(KSampler 系) | `--seed`(定位不到只提醒) |
+
+提交时会拆掉 VHS 元批处理(`VHS_BatchManager` 及 `VHS_LoadVideo` / `VHS_VideoCombine`
+上的 `meta_batch` 连线):VHS 靠服务端把同一提示词以新 prompt_id 反复重排队分批,
+RunningHub 只跟踪首个 prompt——首批跑完就报 SUCCESS 而文件要到末批才落盘,产物清单为空;
+改为整段一次处理。有正式落盘节点时,作者并挂的 `save_output: false` 预览
+`VHS_VideoCombine` 会被剪除,避免云端重复编码、下载错拿预览件。`--dry-run` 只对缓存的云端工作流做直绑校验,
+不上传、不建任务。
 
 ### 运行时参数
 
