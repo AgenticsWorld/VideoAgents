@@ -2382,6 +2382,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_PROMPT"] = message
             # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
             # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
+            # runner 撞上限后会从检查点自动续跑(DEEPAGENTS_MAX_CONTINUATIONS,默认 3 轮)。
             if "DEEPAGENTS_RECURSION_LIMIT" not in env:
                 env["DEEPAGENTS_RECURSION_LIMIT"] = (
                     "500" if agent_id in DISPATCHERS else "250"
@@ -2788,6 +2789,13 @@ def handle_deepagents_event(run: dict, obj: dict):
             run["text"] = run.get("text", "") + txt
             HUB.publish({"type": "text", "run_id": run["id"],
                          "agent": run["agent"], "text": txt})
+    elif t == "notice":   # runner 自身提示(如撞 recursion_limit 自动续跑),不计入产出文本
+        txt = obj.get("text") or ""
+        if txt:
+            run.setdefault("activity", []).append(txt)
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": txt})
+            publish_run(run)
     elif t == "tool":
         name = obj.get("name", "?")
         inp = obj.get("input") or {}
