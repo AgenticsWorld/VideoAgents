@@ -24,6 +24,16 @@
   mux        --project X --ep epNN --video <拼装视频>
                                      花字版封装:a:0=母带+SFX 预混,a:1=母带流拷贝
                                      → edit/{ep}/final_caption.mp4
+  speech-align --project X --ep epNN [--backend auto|interp|whisper|import]
+                                     [--words-json <外部ASR逐词JSON>] [--whisper-model small]
+                                     建集级逐字语音时间轴 edit/{ep}/word_track.json
+                                     (台本:av beat_track / 主流程 subtitles.srt;声轨:母带/final)。
+                                     auto = 装了 faster-whisper 用 whisper,否则 interp。
+  speech-lookup --project X --ep epNN --text "花字文案" [--near 秒]
+                                     查这段文字被念出的起止时间(设计时逐条填 start/end 用)
+  speech-snap  --project X --ep epNN [--dry-run]
+                                     把 captions.json 每条花字的入出点吸附到语音起止
+                                     (speech_free:true 的条目跳过),原地改写并打印变更
 先决:playwright + Chromium(render_captions.py doctor 自检;
 caption_toolchain_verified 机检同口径)。
 退出码:成功=0,任一失败=1。
@@ -37,6 +47,7 @@ from _common import DATA_DIR, parse_args                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
 import captions_html as chtml                                     # noqa: E402
+import speechalign as sa                                          # noqa: E402
 
 FONTS_DIR = DATA_DIR / "fonts"
 SFX_DIR = DATA_DIR / "sfx"
@@ -153,10 +164,116 @@ def cmd_mux(args, proj):
           "a:0=预混 a:1=母带存档)")
 
 
+def cmd_speech_align(args, proj):
+    ep = args.ep
+    found = sa.find_transcript(proj, ep)
+    if found is None:
+        raise SystemExit(f"[FAIL] 缺台本时间码:av/{ep}/beat_track.json | av/beat_track.json | "
+                         f"edit/{ep}/subtitles.srt 都不存在")
+    kind, tpath = found
+    segs = sa.load_segments(kind, tpath)
+    if not segs:
+        raise SystemExit(f"[FAIL] {tpath} 没有可用的逐句时间码")
+    audio = sa.find_audio(proj, ep)
+    if audio is None:
+        print(f"[WARN ] 找不到 {ep} 声轨(assets/audio/master|final/),静音检测/ASR 不可用")
+    backend = args.backend
+    if backend == "auto":
+        try:
+            import faster_whisper  # noqa: F401
+            backend = "whisper" if audio is not None else "interp"
+        except ImportError:
+            backend = "interp"
+    if backend == "interp":
+        words, stats = sa.build_interp(segs, audio)
+        source = "char_rate_interp"
+    elif backend == "whisper":
+        if audio is None:
+            raise SystemExit("[FAIL] whisper 后端需要声轨文件")
+        prompt = "".join(s["text"] for s in segs)[:200]
+        asr = sa.run_whisper(audio, model_size=args.whisper_model,
+                             language=args.language or None, initial_prompt=prompt)
+        words, stats = sa.align_asr_to_transcript(segs, asr, audio)
+        source = "asr_align"
+        stats["asr"] = f"faster-whisper:{args.whisper_model}"
+    elif backend == "import":
+        if not args.words_json:
+            raise SystemExit("[FAIL] --backend import 需要 --words-json <外部ASR逐词JSON>")
+        wp = Path(args.words_json)
+        wp = wp if wp.is_absolute() else proj / wp
+        raw = json.loads(wp.read_text(encoding="utf-8"))
+        items = raw if isinstance(raw, list) else raw.get("words") or raw.get("items") or []
+        asr = sa.normalize_external_words(items)
+        if not asr:
+            raise SystemExit(f"[FAIL] {wp} 里没有 [{{text,start,end}}] 逐词条目")
+        words, stats = sa.align_asr_to_transcript(segs, asr, audio)
+        source = "external_align"
+        stats["asr"] = str(wp.name)
+    else:
+        raise SystemExit(f"[FAIL] 未知后端 {backend!r}")
+    track = sa.assemble(ep, proj, audio, kind, tpath, segs, words, source, stats)
+    out = sa.word_track_path(proj, ep)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(track, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"[DONE] {out}:{len(words)} 个发声单元,台本={kind}:{tpath.name},"
+          f"后端={source},confidence={track['confidence']},stats={stats}")
+    if track["confidence"] == "low":
+        print("       ⚠ 精度偏低(无静音检测/ASR 命中率低);建议装 faster-whisper 或导入外部 ASR 逐词结果")
+
+
+def _load_track(proj, ep):
+    p = sa.word_track_path(proj, ep)
+    if not p.is_file():
+        raise SystemExit(f"[FAIL] 缺 {p}(先跑 render_captions.py speech-align)")
+    track = sa.load_word_track(p)
+    stale = sa.staleness(track, proj, ep)
+    if stale:
+        print("[WARN ] word_track 可能过期:" + "; ".join(stale))
+    return track
+
+
+def cmd_speech_lookup(args, proj):
+    if not args.text:
+        raise SystemExit("[FAIL] speech-lookup 需要 --text")
+    track = _load_track(proj, args.ep)
+    sp = sa.locate(track, args.text, near_s=args.near)
+    if sp is None:
+        raise SystemExit(f"[MISS] 「{args.text}」在语音逐字轨中找不到(核对是否与台本一字不差)")
+    words = track["words"][sp["first"]:sp["last"] + 1]
+    print(f"[HIT ] 「{args.text}」 {sp['start']:.3f} → {sp['end']:.3f}s "
+          f"(时长 {sp['end'] - sp['start']:.2f}s,匹配={sp['match']},候选 {sp['candidates']} 处)")
+    print("       " + " ".join(f"{w['text']}@{w['start']:.2f}" for w in words))
+
+
+def cmd_speech_snap(args, proj):
+    data, shot_list = _load_ep_inputs(proj, args.ep)
+    track = _load_track(proj, args.ep)
+    rep = sa.snap_captions(data, track, shot_list)
+    for r in rep["snapped"]:
+        o, n = r["old"], r["new"]
+        mv = f",{r['moved']}→改挂" if r.get("moved") else ""
+        print(f"[SNAP ] {r['id']}「{r['text']}」 {o[0]}-{o[1]} → {n[0]}-{n[1]} ({r['match']}{mv})")
+    for x in rep["skipped"]:
+        print(f"[SKIP ] {x}")
+    for x in rep["not_found"]:
+        print(f"[MISS ] {x} 语音里找不到——核对文案或标 speech_free:true")
+    if args.dry_run:
+        print(f"[DRY ] 未写回;可吸附 {len(rep['snapped'])} 条,找不到 {len(rep['not_found'])} 条")
+        return
+    cj = proj / "edit" / args.ep / "captions.json"
+    cj.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"[DONE] {cj}:吸附 {len(rep['snapped'])} 条,跳过 {len(rep['skipped'])} 条,"
+          f"找不到 {len(rep['not_found'])} 条")
+    if rep["not_found"]:
+        raise SystemExit(1)
+
+
 def main():
     cmds = {"fonts-scan": None, "sfx-scan": None, "assets-sync": None,
             "render": cmd_render, "doctor": None,
-            "sfx-track": cmd_sfx_track, "mux": cmd_mux}
+            "sfx-track": cmd_sfx_track, "mux": cmd_mux,
+            "speech-align": cmd_speech_align, "speech-lookup": cmd_speech_lookup,
+            "speech-snap": cmd_speech_snap}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         raise SystemExit(f"用法:render_captions.py {{{'|'.join(cmds)}}} ...")
@@ -195,6 +312,14 @@ def main():
         ap.add_argument("--force", action="store_true", help="忽略幂等回执强制重渲")
         ap.add_argument("--video", default=None, help="mux:花字版拼装视频路径")
         ap.add_argument("--out", default=None, help="输出路径(相对项目根)")
+        ap.add_argument("--backend", default="auto", choices=("auto", "interp", "whisper", "import"),
+                        help="speech-align 后端(auto=有 faster-whisper 则 whisper,否则 interp)")
+        ap.add_argument("--words-json", default=None, help="speech-align import:外部 ASR 逐词 JSON")
+        ap.add_argument("--whisper-model", default="small", help="speech-align whisper 模型尺寸")
+        ap.add_argument("--language", default=None, help="speech-align whisper 语言代码(缺省自动)")
+        ap.add_argument("--text", default=None, help="speech-lookup:要定位的花字文案")
+        ap.add_argument("--near", type=float, default=None, help="speech-lookup:参考时刻(秒),多次出现时取最近")
+        ap.add_argument("--dry-run", action="store_true", help="speech-snap:只打印不写回")
 
     args, proj = parse_args(__doc__, configure=configure)
     if sub == "mux" and not args.video:

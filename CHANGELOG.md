@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Captions ("花字") now appear and disappear exactly when their words are spoken. A new per-episode word-level speech timeline `edit/epNN/word_track.json` (schema `wordtrack.v1`, built by `render_captions.py speech-align` from the sentence-level transcript — `av/epNN/beat_track.json` for audio-to-video projects, `edit/epNN/subtitles.srt` for the main pipeline — plus the episode audio) gives every spoken character/word its start/end; backends: `interp` (zero-dependency: sentence timecodes + ffmpeg silence detection + per-character weighting, sentences that fell entirely into silence are merged with their neighbour), `whisper` (optional `faster-whisper` word timestamps aligned to the transcript, transcript stays the text authority) and `import` (external ASR word lists such as Volcengine file-recognition `words[]`, seconds or milliseconds). `speech-lookup --text` prints when a caption's text is spoken; `speech-snap` rewrites every caption's `start/end/local_start/local_end` to the spoken span (moves the caption to the group where the words start, clips at the group end, min 0.25 s), and the new design-stage machine check `caption_speech_aligned` (±0.15 s, fails on a missing/stale word_track; `speech_free: true` exempts non-spoken on-screen annotations in main-pipeline projects only) is wired into workflow.yaml, WORKFLOW.md §9A, the caption SOUL and the caption-styling skill (`modules/speechalign.py`).
+
 ## [1.0.19] - 2026-08-18
 
 ### Added

@@ -326,12 +326,13 @@ phases:
           outputs: ["edit/{ep}/subtitles.srt"],
           # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板
           validation: { auto: [sync_lt_200ms, typo_check, line_length_ok, subtitle_style_ok] } }
-      - { id: p9-caption, agent: 10-editing/caption, depends_on: [p9-transition],
+      - { id: p9-caption, agent: 10-editing/caption, depends_on: [p9-transition, p9-subtitle],   # 需 subtitles.srt 作逐字语音轨台本
           condition: caption_enabled,   # 「📤 输出设置」花字开关,默认关;关=不派发,g9 不因缺我而 HOLD
           outputs: ["edit/{ep}/captions.json"],
-          # schema v2(样式预设/动画/sfx/组内时间);交付前 code/check_captions.py --require design
+          # schema v3(模版/sfx/组内时间);入出点=语音逐字起止(render_captions.py speech-align/snap);
+          # 交付前 code/check_captions.py --require design
           validation: { auto: [dictionary_match_100, caption_schema_v2, caption_groups_valid,
-                               caption_time_consistent, caption_assets_resolved] } }
+                               caption_time_consistent, caption_speech_aligned, caption_assets_resolved] } }
       - { id: p9-caption-render, agent: 10-editing/caption, depends_on: [p9-caption],
           condition: caption_enabled, outputs: ["assets/clips_caption/{ep}/"],
           # 终版(超分后)组 clip 上逐组烧录副本,原 clip 不动;只准宿主 CLI render_captions.py
