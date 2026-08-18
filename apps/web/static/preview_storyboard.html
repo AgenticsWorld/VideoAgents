@@ -115,7 +115,9 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #cp-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #cp-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:680px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column}
 #cp-modal .cp-list{overflow:auto;margin:10px 0;max-height:60vh}
-#cp-modal .cp-item{border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:10px 12px;margin:8px 0}
+#cp-modal .cp-item{border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:10px 12px;margin:8px 0;position:relative}
+#cp-modal .cp-item .cp-edit{position:absolute;top:8px;right:8px}
+#cp-modal .cp-text{padding-right:64px}
 #cp-modal .cp-text{font-size:16px;font-weight:700;margin-bottom:6px}
 #cp-modal .cp-meta{color:var(--dim);font-size:12px;line-height:1.8}
 #cp-modal .cp-meta b{color:var(--text);font-weight:600}
@@ -201,7 +203,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="cp-modal"><div class="box">
   <h3>✨ 组花字设计 — <span id="cp-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">花字 Agent 的设计产物(只读;要修改请用 📝 注释或对话反馈)</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给总制片)</div>
   <div class="cp-list" id="cp-list"></div>
   <div class="actions"><button id="cp-close">关闭</button></div>
 </div></div>
@@ -555,7 +557,9 @@ async function openCaption(grp){
         `<b>${t('动画')}</b> ${esc(t(CAP_ANIM_LABELS[ai.type]||ai.type||'—'))} ${ai.duration_s?esc(ai.duration_s)+'s':''} → ${esc(t(CAP_ANIM_LABELS[ao.type]||ao.type||'—'))} ${ao.duration_s?esc(ao.duration_s)+'s':''}`,
         sfx?`<b>${t('音效')}</b> 🔊 ${esc(sfx.sfx_id)} · ${esc(sfx.gain_db??'-6')}dB`+(sfx.offset_s?` · ${t('偏移')} ${esc(sfx.offset_s)}s`:''):`<b>${t('音效')}</b> —`,
       ];
-      return `<div class="cp-item"><div class="cp-text">${esc(c.text||'')}</div><div class="cp-meta">${rows.join('<br>')}</div></div>`;
+      const cloc=I18N.f('花字 {ep}/{cid}(组 {gid} {s}s–{e}s,位置 {pos},文案「{txt}」;数据 edit/{ep}/captions.json 中 captions id={cid})',
+        {ep:EP,cid:c.id||'',gid:c.group_id||grp,s:c.local_start,e:c.local_end,pos:c.position||'',txt:c.text||''});
+      return `<div class="cp-item"><button class="editbtn cp-edit" data-loc="${esc(cloc)}" title="${t('对这条花字提修改意见,发消息给总制片')}">✏️ ${t('编辑')}</button><div class="cp-text">${esc(c.text||'')}</div><div class="cp-meta">${rows.join('<br>')}</div></div>`;
     }).join('');
   }catch(e){$('#cp-list').innerHTML='<div class="cp-meta">'+esc(String(e.message||e))+'</div>'}
 }
