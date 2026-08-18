@@ -67,6 +67,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .toolchip{display:block;font-size:12px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;padding:1px 0}
 #composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
 #input{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;resize:none;height:64px;font:inherit}
+/* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
+#composer.dispatcher #input{border-color:var(--accent);animation:composer-grow 2s ease-out infinite}
+#composer.dispatcher #input:focus{outline:none}
+@keyframes composer-grow{0%{box-shadow:0 0 0 0 rgba(108,158,248,.55)}70%{box-shadow:0 0 0 7px rgba(108,158,248,0)}100%{box-shadow:0 0 0 0 rgba(108,158,248,0)}}
 #soul-view{display:none;flex:1;overflow-y:auto;padding:18px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#b9c2d6}
 /* 右栏 */
 #right{width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
@@ -123,6 +127,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .row input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;min-width:0}
 .modal textarea{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font:inherit;font-size:13px;resize:vertical;min-width:0}
 .modal .note{font-size:12px;color:var(--dim)}
+.modal .info-btn{flex:none;width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:11px;line-height:16px;text-align:center;cursor:pointer;padding:0;margin-left:auto}
+.modal .info-btn:hover,.modal .info-btn.on{color:var(--text);border-color:var(--text)}
+.modal .info-note{display:none;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:-6px}
+.modal .info-note.on{display:block}
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
@@ -251,8 +259,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
-          <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆开关、自动重跑次数上限">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
         </div>
       </div>
@@ -318,7 +325,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions">
       <input type="file" id="plug-file" accept=".zip" style="display:none">
       <button id="plug-upload">⬆ 安装插件包(zip)</button>
-      <a href="https://github.com/AgenticsWorld/VideoAgents-Plugins" target="_blank" rel="noopener" style="align-self:center;margin-right:auto;color:var(--link)">🔗 插件仓库</a>
+      <a href="https://shumati.cn/videoagents/plugins/" target="_blank" rel="noopener" style="align-self:center;margin-right:auto;color:var(--link)">🏪 插件仓库</a>
       <button id="plug-close" class="primary">关闭</button>
     </div>
   </div>
@@ -404,6 +411,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row"><label>内嵌字幕</label>
         <input type="checkbox" id="npo-burnin" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
+      <div class="row"><label>花字</label>
+        <input type="checkbox" id="npo-caption" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片</span></div>
+      <div class="row"><label>对白配音</label>
+        <select id="npo-dialogue-voice" style="flex:1">
+          <option value="native">视频原声(默认)</option>
+          <option value="dubbing">后期配音</option>
+        </select></div>
+      <div class="note">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
       <div class="note">画幅约束分镜构图/关键帧/视频/成片,发布平台只决定发布阶段的平台清单(不同画幅平台由发布期裁切适配);语言约束剧本/台词/旁白/字幕/配音;草稿分辨率用于迭代/待审版本,成片终稿由超分得到,分辨率越高视频生成费用越高</div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
@@ -527,6 +543,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>内嵌字幕</label>
       <input type="checkbox" id="out-burnin" style="flex:none">
       <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
+    <div class="row"><label>花字</label>
+      <input type="checkbox" id="out-caption" style="flex:none">
+      <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片(final_caption)</span></div>
+    <div class="row"><label>对白配音</label>
+      <select id="out-dialogue-voice" style="flex:1">
+        <option value="native">视频原声(默认)</option>
+        <option value="dubbing">后期配音</option>
+      </select></div>
+    <div class="note">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     <div class="note">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="out-err"></div>
     <div class="actions"><button id="out-cancel">取消</button><button class="primary" id="out-ok">确定</button></div>
@@ -606,43 +631,47 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-idle" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-idle">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
     <div class="row"><label>防止系统休眠</label>
       <input type="checkbox" id="wdt-awake" style="width:auto">
       <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-awake" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-awake">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="row"><label>常任指令</label>
       <textarea id="wdt-orders" style="height:64px" placeholder="在 ep01-ep10 剧本全部完成前,不派设定类工单"></textarea>
-    </div>
-    <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
-    <div class="note">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
-    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
+    <button type="button" class="info-btn" data-info="wdt-info-orders" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-orders">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
   </div>
 </div>
 <div id="conc-modal" class="modal">
-  <div class="box">
-    <h3>🚦 并发数量 设置</h3>
+  <div class="box" style="width:560px">
+    <h3>⚙️ Agent 高级设置</h3>
     <div class="row"><label>每 Agent 并发额度</label>
       <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
       <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
+    <button type="button" class="info-btn" data-info="conc-info-conc" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
+    <div class="row"><label>运行超时(分钟)</label>
+      <input type="number" id="conc-rt" min="10" max="1440" step="10" style="width:90px">
     </div>
-    <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。</div>
-    <div class="err" id="conc-err"></div>
-    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
-  </div>
-</div>
-<div id="mem-modal" class="modal">
-  <div class="box">
-    <h3>🧠 Agent记忆 设置</h3>
+    <div class="row"><label>无输出超时(分钟)</label>
+      <input type="number" id="conc-it" min="0" max="360" step="5" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-timeout" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-timeout">运行超时:单个工单从启动算起的墙钟上限,默认 120 分钟(总制片要等整条流水线,自动放宽 4 倍),到点连同派生子进程一起终止并记为出错,是回收挂死进程的最后防线。无输出超时:引擎连续多长时间没有任何事件输出即判定挂死并终止,默认 30 分钟,填 0 关闭;比墙钟更早识别 API 长连接不返回、代理断流等假死,又不会误伤跑得慢但在正常干活的长批量任务(总制片大部分时间静默等子任务,不受此项约束)。注意单次工具调用期间引擎不会有事件输出,该值须大于工单里最长的一次工具调用。均为全局设置,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>重跑次数</label>
+      <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="checkbox" id="mem-on" style="width:auto">
       <span id="mem-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
-    <div class="note">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
-    <div class="err" id="mem-err"></div>
-    <div class="actions"><button id="mem-cancel">取消</button><button class="primary" id="mem-ok">保存</button></div>
+    <button type="button" class="info-btn" data-info="conc-info-mem" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-mem">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
+    <div class="err" id="conc-err"></div>
+    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -942,6 +971,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
+  $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
   $('#npsg-maxs').value=15;$('#npsg-imgs').value=9;$('#npsg-vids').value=1;$('#npsg-auds').value=2;   // 分镜组默认按 Seedance 2.0 保守口径
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
@@ -990,6 +1020,8 @@ function npCollectSettings(){
       language:$('#npo-lang').value,
       draft_resolution:$('#npo-draft-res').value,final_resolution:$('#npo-final-res').value,
       subtitle_burn_in:$('#npo-burnin').checked,
+      caption_enabled:$('#npo-caption').checked,
+      dialogue_voice:$('#npo-dialogue-voice').value,
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value)},
@@ -1038,8 +1070,9 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
+  // runninghub/comfyui 与生成模型页两个标签页同口径(RunningHub=云端站点,ComfyUI=本地/Comfy Cloud)
+  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
@@ -1177,6 +1210,7 @@ $('#style-search').oninput=()=>styleGridRender();
 /* ---------- 输出设置弹窗(画幅/语言) ---------- */
 const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Español','français','Deutsch','Indonesia','Português','русский','عربي'];
 const OUT_RESOLUTIONS=['360p','480p','720p','1080p','4k'];
+const DIALOGUE_VOICE_MODES=['native','dubbing'];
 async function openOutModal(){
   $('#out-err').textContent='';
   $('#out-proj').textContent=curProj();
@@ -1191,6 +1225,8 @@ async function openOutModal(){
     $('#out-draft-res').value=OUT_RESOLUTIONS.includes(o.draft_resolution)?o.draft_resolution:'480p';
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
     $('#out-burnin').checked=!!o.subtitle_burn_in;
+    $('#out-caption').checked=!!o.caption_enabled;
+    $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
     const pf=Array.isArray(o.platforms)?o.platforms:['youtube','bilibili','tiktok','douyin'];
     document.querySelectorAll('.out-platform').forEach(c=>c.checked=pf.includes(c.value));
   }catch(e){}
@@ -1210,7 +1246,8 @@ $('#out-ok').onclick=async()=>{
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
-      subtitle_burn_in:$('#out-burnin').checked,platforms}});
+      subtitle_burn_in:$('#out-burnin').checked,caption_enabled:$('#out-caption').checked,
+      dialogue_voice:$('#out-dialogue-voice').value,platforms}});
     $('#out-modal').style.display='none';
   }catch(e){$('#out-err').textContent='保存失败:'+e.message}
 };
@@ -1406,19 +1443,31 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 并发数量弹窗(设置菜单「高级」) ---------- */
-let concMax=8;
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 对话记忆) ---------- */
+let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10;
+function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
+$('#mem-on').onchange=memSt;
 async function openConcModal(){
   $('#conc-err').textContent='';
   try{
-    const c=await api('/api/v1/config/concurrency');
+    const c=await api('/api/v1/config/agent-advanced');
     concMax=c.max||8;
     $('#conc-range').max=concMax;$('#conc-num').max=concMax;
     $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5}
+    concRtMin=Math.round((c.run_timeout_min||600)/60);concRtMax=Math.round((c.run_timeout_max||86400)/60);
+    concItMax=Math.round((c.idle_timeout_max||21600)/60);
+    $('#conc-rt').min=concRtMin;$('#conc-rt').max=concRtMax;$('#conc-it').max=concItMax;
+    $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
+    $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
+    concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
+    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#mem-on').checked=c.agent_memory==null?true:!!c.agent_memory;
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#mem-on').checked=true}
+  memSt();
   $('#conc-modal').style.display='flex';
 }
-$('#menu-concurrency').onclick=e=>{e.preventDefault();openConcModal()};
+$('#menu-agent-adv').onclick=e=>{e.preventDefault();openConcModal()};
+document.querySelectorAll('.modal .info-btn').forEach(b=>b.onclick=()=>{const n=$('#'+b.dataset.info);n.classList.toggle('on');b.classList.toggle('on',n.classList.contains('on'))});
 $('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
 $('#conc-num').oninput=()=>{
   const v=parseInt($('#conc-num').value);
@@ -1428,31 +1477,14 @@ $('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
 $('#conc-ok').onclick=async()=>{
   const v=parseInt($('#conc-num').value);
   if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
+  const rt=parseInt($('#conc-rt').value),it=parseInt($('#conc-it').value),retry=parseInt($('#conc-retry').value);
+  if(!(rt>=concRtMin&&rt<=concRtMax)){$('#conc-err').textContent=I18N.f('运行超时需为 {min}-{max} 的整数(分钟)',{min:concRtMin,max:concRtMax});return}
+  if(!(it>=0&&it<=concItMax)){$('#conc-err').textContent=I18N.f('无输出超时需为 0-{max} 的整数(分钟,0=关闭)',{max:concItMax});return}
+  if(!(retry>=0&&retry<=concRetryMax)){$('#conc-err').textContent=I18N.f('重跑次数需为 0-{max} 的整数(0=不自动重跑)',{max:concRetryMax});return}
   try{
-    await api('/api/v1/config/concurrency',{agent_concurrency:v});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory:$('#mem-on').checked});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
-};
-
-/* ---------- Agent记忆弹窗(设置菜单「高级」) ---------- */
-function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
-$('#mem-on').onchange=memSt;
-async function openMemModal(){
-  $('#mem-err').textContent='';
-  try{
-    const m=await api('/api/v1/config/agent-memory');
-    $('#mem-on').checked=!!m.agent_memory;
-  }catch(e){$('#mem-on').checked=true}
-  memSt();
-  $('#mem-modal').style.display='flex';
-}
-$('#menu-memory').onclick=e=>{e.preventDefault();openMemModal()};
-$('#mem-cancel').onclick=()=>$('#mem-modal').style.display='none';
-$('#mem-ok').onclick=async()=>{
-  try{
-    await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
-    $('#mem-modal').style.display='none';
-  }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
@@ -1752,6 +1784,7 @@ function renderAgents(){
 async function selectAgent(id){
   CURRENT=id; const a=AGENTS.find(x=>x.id===id);
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
+  $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
   updateModelBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组
@@ -1814,7 +1847,7 @@ function appendMsg(role,text,meta={}){
   const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot',feishu:'✈️ 来自飞书',whatsapp:'🟢 来自 WhatsApp'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
-  if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
+  if(role==='assistant'&&meta.status==='error')parts.push(meta.stopped==='user'?'<span style="color:var(--dim)">⏹ 已手动停止</span>':'<span style="color:var(--red)">⚠ 运行出错</span>');
   if(meta.ts)parts.push(fmtTs(meta.ts));
   const head=parts.length?'<div class="meta">'+parts.join(' · ')+'</div>':'';
   d.innerHTML=head; d.appendChild(document.createTextNode(text||''));
@@ -2037,6 +2070,12 @@ $('#btn-watchdog').onclick=async()=>{
 };
 
 /* ---------- 运行面板 ---------- */
+function fmtRunDur(sec){
+  sec=Math.max(0,Math.round(sec));
+  if(sec<60)return sec+'s';
+  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return (h?h+'h':'')+m+'m'+s+'s';
+}
 function renderRuns(){
   const box=$('#runs');
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
@@ -2045,7 +2084,7 @@ function renderRuns(){
   box.innerHTML='';
   runs.forEach(r=>{
     const d=document.createElement('div'); d.className='run'; d.dataset.id=r.id;
-    const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
+    const dur=r.started?fmtRunDur((r.ended||Date.now()/1000)-r.started):'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);

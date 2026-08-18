@@ -26,14 +26,21 @@ CLI:
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
   python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
-      --prompt "<该组原始 video_prompt>" [--source-task-id <任务id>] [--dry-run]
+      [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
+      [--resolution 1080p] [--aspect 16:9] [--seed 1234] [--dry-run]
 
-  超分(MiniMax Regenerate-2K):固定输出 2K,凭证共用「生成模型」页视频 MiniMax 的
-  Key/接口区域(与生效视频渠道无关,环境变量 MINIMAX_API_KEY 兜底)。base_video 模式
-  的源视频须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积
-  ≤768×1344、107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);
-  或 --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
-  按 output_seconds 计费。
+  超分:视频配置生效渠道为 ComfyUI 时走 SeedVR2,复用「生成模型」页视频 ComfyUI
+  的连接配置:本地/Comfy Cloud 固定使用 comfy/video-upscale-seedvr2-api.json;
+  RunningHub 运行方式用 RunningHub 渠道选中的云端超分工作流(无占位符时直绑源视频
+  加载节点 + SeedVR2Preprocess 上游缩放节点的目标边长/宽高 + 采样器种子;按边缩放
+  的模板画幅跟随源视频,源视频 ≤30MB)。目标尺寸由 --resolution/--aspect 指定
+  (缺省取项目成片档/16:9),fps、时长和音轨跟随源视频。
+  其他视频渠道走 MiniMax Regenerate-2K:固定输出 2K,凭证共用「生成模型」页视频
+  MiniMax 的 Key/接口区域(环境变量 MINIMAX_API_KEY 兜底)。base_video 模式的源视频
+  须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积≤768×1344、
+  107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);或
+  --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
+  MiniMax 按 output_seconds 计费,SeedVR2 按 ComfyUI 配置计费。
 
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
@@ -58,8 +65,10 @@ Python:
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
-  超分: minimax(POST /v2/video_regeneration,Regenerate-2K 异步任务;模型固定
-        MiniMax-H3,分辨率固定 2K;仅此一个渠道)
+  超分: seedvr2(ComfyUI SeedVR2 视频超分;复用视频 ComfyUI 配置,本地/Cloud 固定
+        工作流 video-upscale-seedvr2-api.json,RunningHub 用选中的云端超分工作流)
+        / minimax(POST /v2/video_regeneration,
+        Regenerate-2K 异步任务;模型固定 MiniMax-H3,分辨率固定 2K)
   音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
@@ -99,6 +108,7 @@ ComfyUI 自定义工作流占位符(文本替换):
 import argparse
 import base64
 import gzip
+import http.client
 import hashlib
 import json
 import mimetypes
@@ -206,9 +216,25 @@ def get_config(kind: str) -> dict:
     cfg = json.loads(CONFIG_PATH.read_text())[kind]
     provider = cfg["provider"]
     ov = _agent_provider_override(kind)
-    if ov and isinstance(cfg.get(ov), dict):
+    # 「每 Agent 模型配置」的 runninghub/comfyui 与「🎨 生成模型」页的两个标签页同口径:
+    # 存储都在 comfyui 段,靠 mode 区分 —— runninghub ⇒ mode=RunningHub 页所选站点(rh_site),
+    # comfyui ⇒ mode=ComfyUI 页所选本地/云端(comfy_mode);影子字段缺失时按现行 mode 兜底
+    force_mode = ""
+    if ov in ("runninghub", "comfyui") and isinstance(cfg.get("comfyui"), dict):
+        c = cfg["comfyui"]
+        cur = str(c.get("mode") or "local")
+        if ov == "runninghub":
+            site = str(c.get("rh_site") or "")
+            force_mode = site if site in RH_BASES else (cur if cur in RH_BASES else "rh_cn")
+        else:
+            cm = str(c.get("comfy_mode") or "")
+            force_mode = cm if cm in ("local", "cloud") else (cur if cur in ("local", "cloud") else "local")
+        provider = "comfyui"
+    elif ov and isinstance(cfg.get(ov), dict):
         provider = ov
     pc = dict(cfg[provider])
+    if force_mode:
+        pc["mode"] = force_mode
     if provider == "minimax":
         # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
         pc["api_key"] = _minimax_key(pc)
@@ -549,8 +575,12 @@ def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
 
 # ---------------- ComfyUI 通用 ----------------
 
-# Comfy Cloud(官方云端):与本地 ComfyUI 同构 API(/prompt /history /queue /view
-# /upload/image /object_info 均在 /api 前缀下),X-API-Key 单头鉴权。
+# Comfy Cloud(官方云端):与本地 ComfyUI 大体同构 API(/prompt /queue /view /upload/image
+# 均在 /api 前缀下),X-API-Key 单头鉴权。已知差异(「同构」假设已破三次,勿再默认同构):
+#   1) /history/{prompt_id} 不可用(404 "Use /api/jobs/{prompt_id} instead"),
+#      任务状态须轮询 /jobs/{prompt_id}(_comfy_cloud_job);
+#   2) 无单节点 /object_info/{class} (404),只能全量拉取且响应 gzip;
+#   3) /view 返回 302 → 签名 URL。
 COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
 
 # RunningHub(第三方云托管 ComfyUI):非原生同构 API,走私有 REST
@@ -578,11 +608,11 @@ def _rh_ctx(cfg) -> tuple[str, str, str]:
            or str(cfg.get("rh_api_key") or "").strip()
            or os.environ.get("RUNNINGHUB_API_KEY", "").strip())
     if not key:
-        raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 ComfyUI 渠道选"
-                           "对应运行方式并填写(或设环境变量 RUNNINGHUB_API_KEY)")
+        raise RuntimeError("RunningHub 未配置 API Key:「🎨 生成模型」页 RunningHub 渠道选"
+                           "对应站点并填写(或设环境变量 RUNNINGHUB_API_KEY)")
     wf_id = str(cfg.get("rh_workflow_id") or "").strip()
     if not wf_id:
-        raise RuntimeError("RunningHub 未选择云端工作流:「🎨 生成模型」页 ComfyUI 渠道"
+        raise RuntimeError("RunningHub 未选择云端工作流:「🎨 生成模型」页 RunningHub 渠道"
                            "粘贴工作区的工作流 ID 验证并添加后选择")
     return base, key, wf_id
 
@@ -649,12 +679,39 @@ def _rh_failed_reason(base: str, key: str, task_id: str) -> str:
     return json.dumps(detail, ensure_ascii=False)[:800]
 
 
+def _rh_prune_inert_nodes(workflow: dict) -> list[str]:
+    """剪除不参与执行的孤岛节点(创作者留在工作流里的备注/模板文本,如 JjkText)。
+
+    RH 提交以 workflow 整包文本覆盖云端模板,这类节点会把大段无关模板内容
+    (曾实测三份共 ~20KB 的 H3 提示词模板)原样带进每次请求。判定取交集从严:
+    输出无任何下游消费、输入无任何节点连线(纯字面量)、且非 Save/Preview 类
+    落盘节点——三者同时成立才剪,连着线的一律不动。返回被剪节点 id 列表。"""
+    consumed = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    pruned = []
+    for nid, node in list(workflow.items()):
+        if not isinstance(node, dict) or nid in consumed:
+            continue
+        cls = str(node.get("class_type") or "").lower()
+        if "save" in cls or "preview" in cls:
+            continue
+        if any(_node_link(value) for value in (node.get("inputs") or {}).values()):
+            continue
+        workflow.pop(nid)
+        pruned.append(nid)
+    return pruned
+
+
 def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
     """RunningHub 建任务,轮询状态,下载首个匹配产物到 output(对应 _comfy_run)。"""
     audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     base, key, wf_id = _rh_ctx(cfg)
+    pruned = _rh_prune_inert_nodes(workflow)
+    if pruned:
+        print(f"[genmedia] RunningHub 提交前剪除 {len(pruned)} 个孤岛节点:"
+              + ",".join(pruned), file=sys.stderr, flush=True)
     payload = {"workflowId": wf_id,
                "workflow": json.dumps(workflow, ensure_ascii=False)}
     # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
@@ -745,7 +802,19 @@ def _rh_download_output(base: str, key: str, task_id: str, output: str,
         return 0 if name.endswith((".png", ".jpg", ".jpeg", ".webp")) else 1
 
     pick = sorted(files, key=_rank)[0]
-    return _save(_request(pick["fileUrl"], timeout=600), output)
+    # 产物是公网直链的大文件(超分 mp4 数十 MB),中途断流(IncompleteRead/超时)只是
+    # 网络抖动;任务已计费成功,重试下载而不是报失败让上层重投双份计费
+    last_exc = None
+    for attempt in range(4):
+        try:
+            return _save(_request(pick["fileUrl"], timeout=600), output)
+        except (http.client.IncompleteRead, TimeoutError, ConnectionError, OSError) as exc:
+            last_exc = exc
+            print(f"[genmedia] RunningHub 产物下载中断({type(exc).__name__}),"
+                  f"第 {attempt + 1}/4 次重试…", file=sys.stderr)
+            time.sleep(RH_POLL_INTERVAL)
+    raise RuntimeError(f"RunningHub 产物下载失败(taskId={task_id},任务已成功,产物直链 "
+                       f"{pick['fileUrl']}):{last_exc}")
 
 
 def _comfy_endpoint(cfg) -> tuple[str, dict]:
@@ -1140,6 +1209,46 @@ def _comfy_queue_contains(queue: dict, prompt_id: str) -> bool:
     return False
 
 
+_CLOUD_JOB_RUNNING = object()  # _comfy_cloud_job 哨兵:任务仍在排队/执行中
+
+
+def _comfy_cloud_job(base: str, pid: str, headers: dict | None):
+    """Comfy Cloud 任务状态:GET /jobs/{prompt_id},归一成本地 /history 条目结构。
+
+    返回值:None = 云端尚无该任务记录(HTTP 404,刚提交尚未入库);
+    _CLOUD_JOB_RUNNING = pending/in_progress;否则为 {"status": {...}, "outputs": {...}},
+    status_str 取 success/error 与本地 history 对齐,execution_error 塞进 messages 供
+    _comfy_execution_error 复用。真机返回体(2026-08 实测):
+    {id, status: pending|in_progress|completed|failed|cancelled, outputs?: {node: {images|...}},
+     execution_error?: {node_id, node_type, exception_type, exception_message, traceback},
+     execution_status: null(与开源版不同,不能依赖), outputs_count, ...}
+    """
+    try:
+        job = _get_json(f"{base}/jobs/{pid}", headers)
+    except RuntimeError as exc:
+        if str(exc).startswith("HTTP 404 "):
+            return None
+        raise
+    state = str(job.get("status") or "").lower()
+    if state in ("pending", "in_progress", "queued", "running"):
+        return _CLOUD_JOB_RUNNING
+    messages = []
+    err = job.get("execution_error")
+    if isinstance(err, dict) and err:
+        messages.append(["execution_error", err])
+    elif state != "completed":
+        messages.append(["execution_error", {
+            "exception_type": state or "unknown",
+            "exception_message": ("任务在 Comfy Cloud 被取消" if state == "cancelled"
+                                  else f"Comfy Cloud 任务状态 {state or '(空)'} 且未附 execution_error")}])
+    ok = state == "completed"
+    return {
+        "status": {"status_str": "success" if ok else "error",
+                   "completed": ok, "messages": messages},
+        "outputs": job.get("outputs") or {},
+    }
+
+
 def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
                headers: dict | None = None) -> str:
     """提交工作流,轮询完成,下载首个产物到 output。
@@ -1161,10 +1270,19 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
     deadline = time.time() + COMFY_TIMEOUT
     queue_missing_since = None
     seen_in_queue = False
+    is_cloud = base.rstrip("/") == COMFY_CLOUD_URL
     while time.time() < deadline:
         time.sleep(2)
         try:
-            hist = _get_json(f"{base}/history/{pid}", headers).get(pid)
+            if is_cloud:
+                # Comfy Cloud 无 /history,状态在 /jobs/{prompt_id}
+                hist = _comfy_cloud_job(base, pid, headers)
+                if hist is _CLOUD_JOB_RUNNING:
+                    seen_in_queue = True
+                    queue_missing_since = None
+                    continue
+            else:
+                hist = _get_json(f"{base}/history/{pid}", headers).get(pid)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(
                 f"ComfyUI 服务不可达，任务可能因服务重启或崩溃而中断(prompt_id={pid})"
@@ -2152,7 +2270,7 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
     return saved
 
 
-# ---------------- 超分:MiniMax(POST /v2/video_regeneration,Regenerate-2K) ----------------
+# ---------------- 超分:MiniMax / ComfyUI SeedVR2 ----------------
 
 # /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
 # 直出成片规格,不合规提交即拒——提交前用 ffprobe 预检拦下并给出修法
@@ -2256,6 +2374,236 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
                             {"type": "video_url", "role": "base_video",
                              "video_url": {"url": url}}]}
     return _minimax_video_task(cfg, "/v2/video_regeneration", body, output)
+
+
+SEEDVR2_WORKFLOW = "comfy/video-upscale-seedvr2-api.json"
+
+
+def _seedvr2_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
+    ratio_text = aspect or "16:9"
+    try:
+        numerator, denominator = (float(x.strip()) for x in ratio_text.split(":", 1))
+        ratio = numerator / denominator
+        if ratio <= 0:
+            raise ValueError
+    except (TypeError, ValueError, ZeroDivisionError):
+        raise RuntimeError(f"超分画幅无效: {aspect or ratio_text},应为如 16:9")
+    short_side = {"360p": 360, "480p": 480, "720p": 720,
+                  "1080p": 1080, "2k": 1440, "4k": 2160}.get(
+                      (resolution or "1080p").lower())
+    if not short_side:
+        raise RuntimeError(f"超分分辨率不支持: {resolution},可选 360p/480p/720p/1080p/2k/4k")
+    if ratio >= 1:
+        width, height = short_side * ratio, short_side
+    else:
+        width, height = short_side, short_side / ratio
+    return max(8, round(width / 8) * 8), max(8, round(height / 8) * 8)
+
+
+def _seedvr2_config() -> dict:
+    """读取「生成模型」页视频段的 ComfyUI 配置,超分工作流使用内置模板。"""
+    try:
+        pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("comfyui") or {})
+    except Exception:
+        pc = {}
+    if not pc:
+        raise RuntimeError("SeedVR2 超分需要先在「🎨 生成模型」页配置视频 ComfyUI 渠道")
+    # 本地 / Comfy Cloud 用内置模板;RunningHub 运行方式改用「🎨 生成模型」页 RunningHub
+    # 渠道选中的云端超分工作流(rh_workflow_id),节点直绑见 _apply_rh_upscale_bindings
+    pc["workflow"] = SEEDVR2_WORKFLOW
+    return {"provider": "comfyui", **pc}
+
+
+def _upscale_default_resolution() -> str:
+    project = os.environ.get("VIDEOAGENTS_PROJECT", "")
+    if project:
+        try:
+            settings = json.loads((DATA_DIR / "projects" / project / "settings.json").read_text())
+            return str((settings.get("output") or {}).get("final_resolution") or "1080p")
+        except Exception:
+            pass
+    return "1080p"
+
+
+def _rh_bind_number_like(workflow: dict, inputs: dict, key: str, value) -> bool:
+    """数值位直绑(含数值字符串):RunningHub 导出的 Int/primitive 节点常把 value 存成
+    "4096" 这类字符串,_rh_bind_number 只认 int/float 会漏绑;这里按原类型回写。"""
+    if _rh_bind_number(workflow, inputs, key, value):
+        return True
+    slot = inputs.get(key)
+    if isinstance(slot, str) and slot.strip().lstrip("-").isdigit():
+        inputs[key] = str(value)
+        return True
+    if _node_link(slot):
+        linked = (workflow.get(str(slot[0])) or {}).setdefault("inputs", {})
+        cur = linked.get("value")
+        if isinstance(cur, str) and cur.strip().lstrip("-").isdigit():
+            linked["value"] = str(value)
+            return True
+    return False
+
+
+def _rh_upscale_video_node(workflow: dict) -> tuple[dict, str]:
+    """定位云端超分工作流唯一的源视频加载节点,返回 (inputs, 文件名键)。
+    兼容 VHS_LoadVideo(video)/ 原生 LoadVideo(file)/ 其他 *LoadVideo* 节点。"""
+    found = []
+    for nid, node in workflow.items():
+        if not isinstance(node, dict):
+            continue
+        cls = str(node.get("class_type") or "")
+        if "loadvideo" not in cls.lower().replace("_", "").replace(" ", ""):
+            continue
+        inputs = node.setdefault("inputs", {})
+        for key in ("video", "file", "video_path", "path"):
+            if isinstance(inputs.get(key), str):
+                found.append((nid, cls, inputs, key))
+                break
+    if len(found) != 1:
+        raise RuntimeError(
+            f"RunningHub 超分工作流须恰好 1 个源视频加载节点(LoadVideo 系,找到 {len(found)} 个),"
+            "无法绑定 --input;请精简云端工作流或改用 {{VIDEO}} 占位符")
+    return found[0][2], found[0][3]
+
+
+def _rh_upscale_resize_node(workflow: dict) -> tuple[str, dict] | None:
+    """定位决定目标尺寸的缩放节点:优先顺 SeedVR2Preprocess.resized_images 上溯,
+    否则按已知缩放节点特征扫描;返回 (节点id, inputs),找不到返回 None。"""
+    def is_resize(inputs: dict) -> bool:
+        return ("scale_to_side" in inputs and "scale_to_length" in inputs) or \
+            ("width" in inputs and "height" in inputs) or \
+            ("resize_type.width" in inputs and "resize_type.height" in inputs)
+
+    for node in workflow.values():
+        if isinstance(node, dict) and node.get("class_type") == "SeedVR2Preprocess":
+            link = (node.get("inputs") or {}).get("resized_images")
+            for _ in range(8):  # 途经纯透传节点继续上溯
+                if not _node_link(link):
+                    break
+                nid = str(link[0])
+                up = workflow.get(nid)
+                if not isinstance(up, dict):
+                    break
+                inputs = up.setdefault("inputs", {})
+                if is_resize(inputs):
+                    return nid, inputs
+                link = inputs.get("image") or inputs.get("images") or inputs.get("input")
+    for nid, node in workflow.items():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.setdefault("inputs", {})
+        cls = str(node.get("class_type") or "").lower()
+        if "scale_to_side" in inputs or (is_resize(inputs) and ("resize" in cls or "scale" in cls)):
+            return nid, inputs
+    return None
+
+
+def _apply_rh_upscale_bindings(workflow: dict, video_name: str, width: int, height: int,
+                               seed) -> dict:
+    """RunningHub 超分云工作流的无占位符直绑兜底(与视频 H3 / 图像分支同款语义)。
+
+    RH 工作区导出件通常没有 {{VIDEO}}/{{WIDTH}} 占位符而是作者演示字面值——源视频是
+    作者的演示文件名、目标长边是模板默认值(如 4096),占位符替换会空转;这里顺节点
+    直接写入本次源视频、目标尺寸与种子(占位符模板下为幂等覆写)。返回本次实际绑定
+    摘要(target 描述)供日志/回执使用。"""
+    inputs, key = _rh_upscale_video_node(workflow)
+    inputs[key] = video_name
+    summary = {"video_key": key}
+
+    resize = _rh_upscale_resize_node(workflow)
+    if resize is None:
+        raise RuntimeError(
+            "RunningHub 超分工作流未定位到目标尺寸缩放节点(SeedVR2Preprocess 上游的 "
+            "ImageScaleByAspectRatio / ResizeImageMaskNode / width+height 类节点),"
+            "--resolution/--aspect 无法注入;请精简云端工作流或改用 {{WIDTH}}/{{HEIGHT}} 占位符")
+    nid, r = resize
+    if "scale_to_side" in r and "scale_to_length" in r:
+        # LayerUtility ImageScaleByAspectRatio V2:按边长缩放,画幅跟随源视频
+        side = str(r.get("scale_to_side") or "").lower()
+        if side == "longest":
+            target = max(width, height)
+        elif side == "shortest":
+            target = min(width, height)
+        elif side == "width":
+            target = width
+        elif side == "height":
+            target = height
+        else:
+            r["scale_to_side"] = "longest"
+            side, target = "longest", max(width, height)
+        if not _rh_bind_number_like(workflow, r, "scale_to_length", target):
+            raise RuntimeError(f"RunningHub 超分工作流节点 {nid} 的 scale_to_length 位不可写"
+                               f"(值 {r.get('scale_to_length')!r}),目标尺寸无法注入")
+        summary["target"] = f"{side}={target}"
+    elif "resize_type.width" in r:
+        r["resize_type"] = "scale dimensions"
+        r["resize_type.width"], r["resize_type.height"] = width, height
+        summary["target"] = f"{width}x{height}"
+    else:
+        ok_w = _rh_bind_number_like(workflow, r, "width", width)
+        ok_h = _rh_bind_number_like(workflow, r, "height", height)
+        if not (ok_w and ok_h):
+            raise RuntimeError(f"RunningHub 超分工作流节点 {nid} 的 width/height 位不可写,"
+                               "目标尺寸无法注入")
+        summary["target"] = f"{width}x{height}"
+
+    if seed is not None:
+        try:
+            _apply_rh_image_seed(workflow, _image_primary_sampler(workflow), seed)
+        except RuntimeError:
+            print("[genmedia] RunningHub 超分工作流未定位到采样器,seed 未注入(按模板内种子生成)",
+                  file=sys.stderr)
+
+    # VHS 元批处理(VHS_BatchManager + LoadVideo/VideoCombine 的 meta_batch)靠服务端
+    # 把同一提示词以新 prompt_id 反复重排队分批处理,RunningHub 只跟踪首个 prompt:
+    # 首批(如 36 帧)跑完即报 SUCCESS 而产物要到末批才落盘,表现为「任务成功但无产物」
+    # (实测 taskId 2089256283901550594)。RH 提交一律拆掉批处理,整段一次处理
+    batch_ids = {nid for nid, node in workflow.items() if isinstance(node, dict)
+                 and node.get("class_type") == "VHS_BatchManager"}
+    if batch_ids:
+        for nid in batch_ids:
+            workflow.pop(nid)
+        for node in workflow.values():
+            inputs = node.get("inputs") if isinstance(node, dict) else None
+            if inputs and _node_link(inputs.get("meta_batch")) \
+                    and str(inputs["meta_batch"][0]) in batch_ids:
+                inputs.pop("meta_batch")
+        summary["unbatched"] = sorted(batch_ids)
+
+    # 作者常并挂一个 save_output=false 的预览合成节点:纯落盘旁路,不影响执行图,
+    # 但云端会重复编码一遍且产物清单里多一份无音轨预览;有正式落盘节点时剪掉
+    combines = {nid: node for nid, node in workflow.items()
+                if isinstance(node, dict) and "videocombine" in
+                str(node.get("class_type") or "").lower()}
+    if any((n.get("inputs") or {}).get("save_output") is not False for n in combines.values()):
+        for nid, node in combines.items():
+            if (node.get("inputs") or {}).get("save_output") is False:
+                workflow.pop(nid)
+                summary.setdefault("pruned_preview", []).append(nid)
+    return summary
+
+
+def _upscale_seedvr2(cfg, input_video: str, output: str, resolution: str,
+                     aspect: str, seed: int) -> str:
+    p = Path(input_video or "")
+    if not input_video or not p.is_file():
+        raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
+    width, height = _seedvr2_dimensions(aspect, resolution)
+    if _comfy_is_rh(cfg):
+        uploaded = _rh_upload(cfg, str(p))
+        workflow = _comfy_workflow(cfg, {"VIDEO": uploaded, "WIDTH": width,
+                                         "HEIGHT": height, "SEED": seed}, "video")
+        summary = _apply_rh_upscale_bindings(workflow, uploaded, width, height, seed)
+        print(f"[genmedia] RunningHub 超分直绑:video={uploaded} target={summary.get('target')}"
+              + (f" 剪除预览合成节点 {summary['pruned_preview']}"
+                 if summary.get("pruned_preview") else "")
+              + (f" 拆除 VHS 元批处理 {summary['unbatched']}(RH 不支持重排队分批)"
+                 if summary.get("unbatched") else ""), file=sys.stderr)
+        return _rh_run(cfg, workflow, output, want_video=True)
+    base, headers = _comfy_endpoint(cfg)
+    uploaded = _comfy_upload(base, str(p), headers)
+    workflow = _comfy_workflow(cfg, {"VIDEO": uploaded, "WIDTH": width,
+                                     "HEIGHT": height, "SEED": seed}, "video")
+    return _comfy_run(base, workflow, output, want_video=True, headers=headers)
 
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -2842,15 +3190,26 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
 
 def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
-                     source_task_id: str = "") -> str:
-    """视频超分(MiniMax Regenerate-2K),返回保存的绝对路径。固定输出 2K 档。
+                     source_task_id: str = "", resolution: str = "",
+                     aspect: str = "", seed: int | None = None) -> str:
+    """视频超分,返回保存的绝对路径。
 
-    仅 minimax 渠道:凭证共用「生成模型」页视频 MiniMax 的 Key/接口区域,与生效
-    视频渠道无关。base_video 模式传 input_video + prompt(该组原始 video_prompt),
-    源视频须为 MiniMax-H3 768P 直出成片规格(提交前 ffprobe 预检);source_task_id
-    模式传 7 天内 succeeded 的 MiniMax 生成任务 id,免传源视频。按 output_seconds 计费。
+    视频配置生效渠道为 comfyui 时使用 SeedVR2 工作流,复用视频 ComfyUI 配置;
+    其他渠道使用 MiniMax Regenerate-2K。SeedVR2 的 resolution/aspect/seed 控制
+    目标尺寸与随机种子,输出视频的 fps、时长和音轨跟随源视频。MiniMax 的
+    base_video 模式传 input_video + prompt,source_task_id 模式传 7 天内 succeeded
+    的任务 id 免传源视频。
     """
     _forbid_dispatch_layer("超分")
+    try:
+        video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+        provider = str(video_cfg.get("provider") or "")
+    except Exception:
+        provider = ""
+    if provider == "comfyui":
+        resolution = resolution or _upscale_default_resolution()
+        return _upscale_seedvr2(_seedvr2_config(), input_video, output, resolution,
+                                aspect, seed if seed is not None else random.randint(1, 2**31))
     cfg = _minimax_upscale_config()
     return _upscale_minimax(cfg, input_video, prompt, source_task_id, output)
 
@@ -2992,6 +3351,27 @@ def _cmd_video(args):
 def _cmd_upscale(args):
     _check_id_digits(args.output)
     if args.dry_run:
+        try:
+            video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+            provider = str(video_cfg.get("provider") or "")
+        except Exception:
+            provider = ""
+        if provider == "comfyui":
+            cfg = _seedvr2_config()
+            resolution = args.resolution or _upscale_default_resolution()
+            width, height = _seedvr2_dimensions(args.aspect, resolution)
+            if _comfy_is_rh(cfg):
+                # 只读校验云端工作流可直绑(不上传、不建任务)
+                wf = json.loads(_rh_workflow_text(cfg))
+                summary = _apply_rh_upscale_bindings(wf, "<uploaded>", width, height, args.seed)
+                print(f"[dry-run] upscale via runninghub workflow={cfg.get('rh_workflow_id')}"
+                      f" site={cfg.get('mode')} target={summary.get('target')}"
+                      f" seed={args.seed if args.seed is not None else '(random)'} → {args.output}")
+                return
+            print(f"[dry-run] upscale via seedvr2 workflow={SEEDVR2_WORKFLOW}"
+                  f" size={width}x{height} seed={args.seed if args.seed is not None else '(random)'}"
+                  f" mode={cfg.get('mode') or 'local'} → {args.output}")
+            return
         cfg = _minimax_upscale_config()
         if args.input and not args.source_task_id:
             _minimax_upscale_precheck(args.input)
@@ -2999,7 +3379,8 @@ def _cmd_upscale(args):
         print(f"[dry-run] upscale via minimax model={MINIMAX_UPSCALE_MODEL}"
               f" resolution=2K api_base={_minimax_base(cfg)} → {args.output}")
         return
-    out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id)
+    out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id,
+                            args.resolution, args.aspect, args.seed)
     print(f"已生成: {out}")
 
 
@@ -3082,15 +3463,17 @@ def main():
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
     pv.add_argument("--dry-run", action="store_true")
 
-    pu = sub.add_parser("upscale", help="视频超分(MiniMax Regenerate-2K,固定输出 2K)")
+    pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
     pu.add_argument("--input", default="",
-                    help="源视频路径(须为 MiniMax-H3 768P 直出成片规格:24fps/含音轨/"
-                         "宽高均被32整除/面积≤768×1344/约4-15s;与 --source-task-id 二选一)")
+                    help="源视频路径;MiniMax 须为 H3 768P 直出规格,与 --source-task-id 二选一")
     pu.add_argument("--output", required=True, help="输出 mp4 路径")
     pu.add_argument("--prompt", default="",
-                    help="该组生成时的原始 video_prompt(base_video 模式必填)")
+                    help="MiniMax base_video 模式所需的原始 video_prompt;SeedVR2 忽略")
     pu.add_argument("--source-task-id", default="",
-                    help="7 天内 succeeded 的 MiniMax 生成任务 id(免传源视频,与 --input 互斥)")
+                    help="MiniMax 7 天内 succeeded 的任务 id(免传源视频,与 --input 互斥;SeedVR2 不使用)")
+    pu.add_argument("--resolution", default="", help="SeedVR2 目标分辨率,如 1080p/4k")
+    pu.add_argument("--aspect", default="", help="SeedVR2 目标画幅,如 16:9")
+    pu.add_argument("--seed", type=int, default=None, help="SeedVR2 随机种子")
     pu.add_argument("--dry-run", action="store_true")
 
     pt = sub.add_parser("tts", help="TTS 旁白/语音合成")
@@ -3148,7 +3531,12 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     provider = model = ""
     try:
         if args.cmd == "upscale":
-            provider, model = "minimax", MINIMAX_UPSCALE_MODEL
+            try:
+                video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+                provider = "seedvr2" if video_cfg.get("provider") == "comfyui" else "minimax"
+            except Exception:
+                provider = "minimax"
+            model = SEEDVR2_WORKFLOW if provider == "seedvr2" else MINIMAX_UPSCALE_MODEL
         else:
             cfg = get_config(args.cmd)
             provider = cfg.get("provider", "")

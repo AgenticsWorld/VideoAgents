@@ -52,7 +52,8 @@ input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px 
 /* 文件卡片 */
 .card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
 .card .thumb{height:140px;background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:zoom-in;overflow:hidden}
-.card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.card .thumb img,.card .thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.card .thumb video{object-fit:contain;background:#000}
 .card .thumb .fico{font-size:44px;cursor:default}
 .card audio{width:100%;height:30px;margin-top:2px}
 .card .fn{font-size:11.5px;color:var(--dim);padding:6px 9px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,monospace}
@@ -91,11 +92,12 @@ let DATA=null,UP_CAT=null;
 /* 分类展示元数据:图标/名称/说明;''=散放在 refs/ 根目录的文件 */
 const CAT_META={
   style:['🎨','视觉风格','整体画风/渲染质感/色调/构图参考'],
+  thumbnail:['🖼','封面','封面参考:他人爆款封面的构图/版式/文字风格范例'],
   characters:['👤','角色','角色形象参考;填子目录(角色名或 id)可定向到该角色'],
   scenes:['🏔','场景','场景与世界观:建筑/地貌/氛围参考'],
   props:['🗡','道具','道具/法宝参考;服装可填 costumes 子目录'],
   music:['🎵','音频','希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)'],
-  thumbnail:['🖼','封面','封面参考:他人爆款封面的构图/版式/文字风格范例'],
+  video:['🎞','视频','参考视频:动作/运镜/节奏/转场范例,视频生成 Agent 优先参考(支持的模型经 --ref-video 注入)'],
   text:['📝','文本','设定/文案等文本资料,相关 Agent 参考使用'],
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
@@ -112,6 +114,7 @@ function cardHtml(f){
   let thumb;
   if(f.is_image)thumb=`<div class="thumb"><img loading="lazy" src="${esc(f.url)}" alt=""></div>`;
   else if(f.is_audio)thumb=`<div class="thumb"><span class="fico">🎵</span></div><audio controls preload="none" src="${esc(f.url)}"></audio>`;
+  else if(f.is_video)thumb=`<div class="thumb"><video controls preload="metadata" src="${esc(f.url)}"></video></div>`;
   else thumb=`<div class="thumb"><span class="fico">📄</span></div>`;
   return `<figure class="card" data-path="${esc(f.path)}">${thumb}
     <div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>

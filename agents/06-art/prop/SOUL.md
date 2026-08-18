@@ -18,7 +18,8 @@
    - `relative_anchor`:与身体/常见物的相对参照(如"约成人两掌宽;双手端持,单手难平举")——尺寸的"模型语言"中文底稿;
    - `prompt_token`:可直接拼进 video_prompt 的英文短语(如 `a large salver about two hand-spans wide, held with both hands`)——**下游 prompt Agent 逐字复用,全片唯一写法**,不得每组另译。
    原文无尺寸依据的按时代/材质常识推断,标 `inferred` 并给理由。
-4. 为剧情道具生成参考图(prompt + 挑选),图存 `assets/concepts/props/<id>/`,卡内记录相对路径;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。**剧情道具在特写图(main)之外必须加一张「比例锚图」(`scale_ref_01.png`)**:道具与持有角色(用其人设参考图作 --ref)同框,持握/摆放方式体现 `relative_anchor` 的比例关系——参考图对尺度的约束力远强于文字,组锚点包应优先采用比例图(见 image-generation 约定)。
+4. 为剧情道具生成参考图(prompt + 挑选),图存 `assets/concepts/props/<id>/`,卡内记录相对路径;落选候选与中间尝试图(candidate/attempt/test 等)一律移入 `<id>/candidates/` 子目录,主目录只留定稿(见「输出」)。**剧情道具在特写图(main)之外必须加一张「比例锚图」(`scale_ref_01.png`)**:道具与**无人尺度参照物**同框(桌面/门框/椅凳/茶杯碗盘/砖石/硬币等按 `relative_anchor` 换算成的常见物),摆放方式体现比例关系——参考图对尺度的约束力远强于文字,组锚点包应优先采用比例图(见 image-generation 约定)。
+   **道具图无人物红线(2026-08-18)**:道具的一切参考图(main 特写、scale_ref 比例锚图、补生成的细节图)**画面中不得出现人物**——含全身/半身/脸、手臂/手掌等身体局部、剪影与背影,也**不得把角色人设图/服装图作 `--ref` 传入**。两个原因:①含人物(尤其真人脸参考)是渠道审核拒图的高发因素;②人物一入画就抢占主体,道具在图中缩成配角(cui3 前科:20+ 张比例锚图全是角色手持小物、人物占 2/3 画面),下游把这张图当道具锚注入时,模型学到的是人不是物——信息稀释。尺度改用参照物表达;身体相对尺寸(及腰/两掌宽等)只留在 `relative_anchor`/`prompt_token` 文字里,由 video prompt 逐字拼入解决。**构图硬要求**:道具为唯一主体、占画面显著面积(建议 ≥1/3),背景干净(素底或与 style.json 相符的简洁环境),negative 必含 `person, human, hand, arm, body, silhouette, face`。
 5. 汇总为 `bible/props.json`,并给出「剧情道具覆盖清单」供机检核对覆盖率。
 6. 发现道具描写前后矛盾(如剑鞘颜色两说)时上报,不自行取舍。
 
@@ -38,13 +39,14 @@
 python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 prompt>" \
   --output assets/concepts/props/<id>/main_01.png --aspect 1:1 --n 2
 
-# 比例锚图(剧情道具必出;尺度锚——道具与持有角色同框,体现 relative_anchor 比例)
+# 比例锚图(剧情道具必出;尺度锚——道具与无人参照物同框,体现 relative_anchor 比例;严禁人物入画/人设图作 ref)
 python3 modules/genmedia.py image \
-  --prompt "<角色手持/身旁道具的全身或半身构图,含 scale.prompt_token 短语>" \
+  --prompt "<道具置于桌面/门边/与茶杯硬币等常见物并置的构图,道具为唯一主体占大幅画面,no person, no hands>" \
   --output assets/concepts/props/<id>/scale_ref_01.png --aspect 16:9 --n 2 \
-  --ref assets/concepts/characters/<持有角色id>/portrait.png \
-        assets/concepts/props/<id>/main_01.png
+  --ref assets/concepts/props/<id>/main_01.png
 ```
+
+> 两张图的 negative_prompt 一律含 `person, human, hand, arm, body, silhouette, face`;`--ref` 只准道具自身定稿图与 `refs/props/` 用户参考图,**禁止**传角色/服装概念图(道具图无人物红线,见职责 4)。
 
 详见 WORKFLOW.md §9;当前渠道/模型(`info` 输出)与 seed 记入 prompts.json。
 
@@ -109,7 +111,8 @@ instruction: |
 **机检(不过直接退回)**:
 - **剧情道具覆盖率 100%**(对照覆盖清单与实体标注);
 - ID 唯一;名称 100% 命中 dictionary;出处章节必填;`inferred` 项必附理由;制作必需字段无 UNKNOWN/待定占位(no_unknown_placeholder,§1 原则 10);
-- **剧情道具 `scale` 三子字段齐全**(canonical_size/relative_anchor/prompt_token)且比例锚图 `scale_ref_01.png` 落盘(`prop_scale_defined`)。
+- **剧情道具 `scale` 三子字段齐全**(canonical_size/relative_anchor/prompt_token)且比例锚图 `scale_ref_01.png` 落盘(`prop_scale_defined`);
+- **道具图无人物**(`prop_image_no_person`):主目录任一参考图出现人物/身体局部,或 prompts.json 的 `generation_refs` 含 `concepts/characters/`、`concepts/costumes/` 路径 → 退回重出(visual-qa 抽检时同项核对)。
 
 **评分(evaluation Agent,rubric extraction_v1,阈值 80;按 §7 适用「设定抽取类」)**:
 - 忠实原文(40):外形/功能描述与原文不冲突;

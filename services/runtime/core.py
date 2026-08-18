@@ -143,7 +143,16 @@ CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
 ).lower() in {"1", "true", "yes"}
 MAX_TURNS = "100"
 MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
-RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
+# 单次运行超时缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
+# 要等整条流水线,取 4 倍。到点连派生子进程一起杀,run 记为 error
+RUN_TIMEOUT_DEFAULT = 7200
+RUN_TIMEOUT_MIN, RUN_TIMEOUT_MAX = 600, 24 * 3600
+# 无输出超时缺省值(秒;同一弹窗可调,0=关闭):引擎事件流连续静默超过该时长即判死。
+# 比墙钟更早识别挂死,又不误伤「跑得慢但在正常干活」的长批量任务;调度型 Agent 大部分
+# 时间在 --wait-all 里静默等子任务,不受此项约束
+IDLE_TIMEOUT_DEFAULT = 1800
+IDLE_TIMEOUT_MAX = 6 * 3600
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
@@ -162,14 +171,20 @@ STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
-# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
+# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
-# Agent 对话记忆缺省值(设置菜单「高级→Agent记忆」可关,存 state.json):
+# Agent 对话记忆缺省值(设置菜单「高级→Agent 高级设置」可关,存 state.json):
 # 开启=有状态 agent 按 engine::agent::project 恢复上次会话(下方 CHAT_RESUME_LIMIT
 # 128KB 保险丝仍生效);关闭=所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
 # 关闭期间 session_id 照常回存,重新开启后从最近一次会话继续
 AGENT_MEMORY_DEFAULT = True
+# Agent 自动重跑/重 roll 次数上限缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 验收/评分/QA 不过自动带意见退回重做、媒体生成机检不达标自动重 roll 的次数上限,
+# 达到上限仍不过升级用户裁决;0=不自动重跑(首次不过即升级人工)。经 build_role_prompt
+# 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
+MAX_RETRIES_DEFAULT = 3
+MAX_RETRIES_MAX = 10
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
@@ -183,6 +198,10 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
 # 只在新会话首轮注入 SOUL,更需要尽早重开
+# 运行面板手动停止的统一错误文案:core/dispatch.py/前端/agent 提示词都按这句字面识别
+STOPPED_BY_USER_MSG = "已被用户手动停止"
+# stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
+STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 ORCHESTRATOR_RESUME_LIMIT = 128 * 1024
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
@@ -212,6 +231,7 @@ REFS_README = """# refs/ — 用户参考目录
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
+- `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
 - `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
@@ -252,7 +272,7 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "characters", "scenes", "props", "music", "thumbnail"):
+    for sub in ("style", "thumbnail", "characters", "scenes", "props", "music", "video"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -278,6 +298,24 @@ def agent_concurrency() -> int:
     return max(1, min(n, MAX_CONCURRENT))
 
 
+def run_timeout_setting() -> int:
+    """单次运行墙钟超时(秒,RUN_TIMEOUT_MIN..RUN_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("run_timeout", RUN_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = RUN_TIMEOUT_DEFAULT
+    return max(RUN_TIMEOUT_MIN, min(n, RUN_TIMEOUT_MAX))
+
+
+def idle_timeout_setting() -> int:
+    """无输出超时(秒,0=关闭,上限 IDLE_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("idle_timeout", IDLE_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = IDLE_TIMEOUT_DEFAULT
+    return max(0, min(n, IDLE_TIMEOUT_MAX))
+
+
 def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
     cached = AGENT_SEMS.get(agent_id)
     if cached is None or cached[0] != limit:
@@ -287,8 +325,17 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
 
 
 def agent_memory_enabled() -> bool:
-    """Agent 对话记忆总开关(设置菜单「高级→Agent记忆」)。"""
+    """Agent 对话记忆总开关(设置菜单「高级→Agent 高级设置」)。"""
     return bool(STATE.get("agent_memory", AGENT_MEMORY_DEFAULT))
+
+
+def max_retries_setting() -> int:
+    """Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,越界钳制;设置菜单「高级→Agent 高级设置」)。"""
+    try:
+        n = int(STATE.get("max_retries", MAX_RETRIES_DEFAULT))
+    except (TypeError, ValueError):
+        n = MAX_RETRIES_DEFAULT
+    return max(0, min(n, MAX_RETRIES_MAX))
 
 
 def load_state() -> dict:
@@ -621,10 +668,17 @@ DEFAULT_GENCONFIG = {
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
     # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
     #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
-    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面
+    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面;
+    # caption_enabled=花字(默认关):开启后 caption Agent 在关键节点设计花字+配套音效,
+    #   超分后的终版组 clip 上烧录副本,另封装花字版成片 final_caption.mp4
+    #   (a:0=声轨+SFX 预混、a:1=声轨存档;干净版 final.mp4 照常产出,双版本并列,WORKFLOW.md §9A)
+    # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
+    #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
+    #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
-               "subtitle_burn_in": False,
+               "subtitle_burn_in": False, "caption_enabled": False,
+               "dialogue_voice": "native",
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -679,6 +733,11 @@ REVIEW_DIMENSIONS = {
 # 片头片尾设定的注入对象:包装制作(title)、占位(edit)、预告文案上游(hook)+ 调度(派单时写入工单)
 PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS
 
+# 花字设定的详细纪律注入对象:设计与烧录(caption)、花字版封装(edit)、发布物料(platform-adapter)
+# + 调度(排产 condition 判定与工单撰写);其余 Agent 只收一行开关状态(WORKFLOW.md §9A)
+CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
+                  "12-publishing/platform-adapter"} | DISPATCHERS
+
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 OUTPUT_ASPECTS = {"youtube": ("16:9", "YouTube 横屏"), "douyin": ("9:16", "抖音竖屏")}
 # 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
@@ -695,6 +754,8 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 # 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
 # genmedia 越档自动压回;方舟 API 取小写)
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
+# 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
+DIALOGUE_VOICE_MODES = ("native", "dubbing")
 
 
 def resolve_output(cfg: dict) -> tuple[str, str, str]:
@@ -866,8 +927,14 @@ RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
                           "runninghub-cloud-workflow/SKILL.md")
 
 
-def is_runninghub_video_active(cfg: dict | None = None) -> bool:
-    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。"""
+def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
+    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
+    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia.get_config 同口径):
+    runninghub ⇒ 是;其他非空覆盖(含 comfyui=本地/云端)⇒ 否;空 ⇒ 按全局判定。"""
+    if agent_id:
+        ov = str(agent_model_config(agent_id).get("video_provider") or "")
+        if ov:
+            return ov == "runninghub"
     v = (cfg or load_genconfig()).get("video") or {}
     comfy = v.get("comfyui") or {}
     return ((v.get("provider") or "volcengine") == "comfyui"
@@ -956,6 +1023,10 @@ def _validate_output(o: dict):
             raise ServiceError(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
     if "subtitle_burn_in" in o and not isinstance(o["subtitle_burn_in"], bool):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
+    if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
+        raise ServiceError(400, "output.caption_enabled must be a boolean")
+    if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
+        raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -1048,8 +1119,11 @@ AM_MODE_MODELS = {
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+# runninghub/comfyui 与「🎨 生成模型」页两个标签页同口径(存储同在 comfyui 段,靠 mode 区分,
+# 见 genmedia.get_config):runninghub=RunningHub 页站点,comfyui=ComfyUI 页本地/云端
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax",
+                      "runninghub", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "runninghub", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1748,6 +1822,30 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
         " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
+    caption_line = (
+        "**开启** —— caption Agent 在关键叙事节点设计花字+配套音效(WORKFLOW.md §9A),"
+        "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
+        "另封装花字版成片 edit/{ep}/final_caption.mp4(a:0=声轨+SFX 预混、a:1=声轨存档);"
+        "干净版 final.mp4 照常产出,双版本并列;渲染/封装只准宿主 CLI code/render_captions.py,"
+        "机检 code/check_captions.py 三阶段"
+        if out.get("caption_enabled") else
+        "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
+        "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
+    dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
+    dialogue_voice = (
+        "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
+        "组视频仍按对白组常规生成(prompt 照写 `{}` 台词、挂 voiceprint 音色锚,人物开口表演由模型原生生成——"
+        "画面开口时段就是配音的时间依据);**每个对白组(audio_plan=dialogue)在 p7-video 交付后必派 p7-dub**"
+        "(负责:09-audio/voice-generation):从组 clip 原生音轨实测每句台词的开口起止(说话人按 shot_list "
+        "dialogue_lines 顺序对位),按 casting.json 该角色的 tts_model/tts_voice、voice.json 声线用 TTS 逐句合成冻结版台词"
+        "(`python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`,内部走 genmedia tts),"
+        "以语速(--speed,±25% 内)贴合开口时长、起点对齐开口起点,替换该组 clip 的对白轨(画面流不变、时长不变;"
+        "原生轨备份 `.native_audio.wav`),产物 `assets/audio/voice/epNN/dub/grpNNN/`;p7-lipsync 只在其后做不换语音的"
+        "对齐兜底(av_offset_lt_80ms);upscale/edit/mix 一律取配音后的组 clip。**§8A「TTS 严禁进成片对白」红线在本模式下"
+        "由用户设置显式解除**,但仍禁止用 TTS 干声重驱/重绘口型画面(仅换音轨、以时段贴合)"
+        if dubbing else
+        "视频原声(native,默认)—— 成片对白语音就是视频模型随组 clip 原生合成的语音,**全流程不做任何对白 TTS**"
+        "(不派 p7-dub,严禁 TTS 音轨进成片对白——§8A 红线);voiceprint 样本照常出、只作生成期 reference_audio 音色锚")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -1804,6 +1902,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 当前项目目录:{proj_rel}/ —— 你的一切工作产物必须写入该目录下的对应子目录(布局见 WORKFLOW.md §2);目录不存在就创建
 - 只做你 SOUL.md 职责内的事;越界的需求要说明应由哪个 Agent 负责,不要代劳
 - 任务回执/评分/日志一律写 {proj_rel}/runs/<task_id>/(项目目录内);**严禁写工作区根 runs/**(文档中省略前缀的 runs/ 均指项目目录内)
+- 交付方式:JSON/MD/YAML 类设计产物**直接逐份写出最终文件**,严禁先写 Python 生成脚本(把数据写成 dict 再跑脚本落盘)、严禁按几份一批拆多轮;一单 N 份的批处理工单一次做完;同批产物的共用说明(输入清单/坐标系/画幅约定等)不逐份复制进每个文件,只写 SOUL 规定字段与本实例特有值。确需脚本(计算/媒体处理/机检/批量调用)才写,落 {proj_rel}/code/,不要放进 runs/<task_id>/(WORKFLOW.md §2)
 - 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
 - 完成后:用{ui_lang}简要汇报做了什么、关键决策,并列出「创建/修改的文件路径」清单
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
@@ -1820,6 +1919,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
+- 花字:{caption_line}
+- 对白配音:{dialogue_voice}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
@@ -1842,6 +1943,13 @@ def build_role_prompt(agent_id: str, project: str) -> str:
              "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
              "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
              "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
+    max_retries = max_retries_setting()
+    p += ("\n\n## 用户重跑次数设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中写死的「最多 3 次」「≤3 次」「max_retries: 3」)\n"
+          f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll,"
+          f"同一任务/同一产物累计最多 {max_retries} 次"
+          + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做)" if max_retries == 0 else
+             f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
+          + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -1879,6 +1987,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id in CAPTION_AGENTS and out.get("caption_enabled"):
+        p += """
+
+## 用户花字设定(Web 客户端「输出设置」花字开关,当前项目已开启;详细规范 WORKFLOW.md §9A)
+- 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v2**——全集 ≤4 个 style_presets(font_id 引用 data/fonts/manifest.json,优先 CJK 字体);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入底部字幕安全区。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
+- 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;产物是 assets/clips_caption/ 副本,原组 clip 永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
+- 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,用 clips_caption 副本替换对应组按同一 EDL 重拼,SFX 轨与封装走 `render_captions.py sfx-track` + `mux`——**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest
+- 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
+- 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
+- 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
     if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()):
         p += f"""
 
@@ -1910,7 +2028,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
-    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active():
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id):
         p += f"""
 
 ## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)
@@ -1943,11 +2061,12 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/角色/场景/道具/封面参考图、希望使用的音频与文本资料按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/道具参考图、希望使用的音频、参考视频与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ props/ music/ video/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
+- 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
         p += f"""
@@ -1972,11 +2091,11 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 派单守则:
 1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
 2. 有依赖关系的任务用 --wait 串行;相互独立的任务异步并行派发,之后用
-   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 3600` 一次性等待全部完成
+   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 7200` 一次性等待全部完成
    (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
    严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
-   等待类命令记得给 Bash 工具设置足够大的 timeout(如 3600000 毫秒)
-3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 3 次)
+   等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
+3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
@@ -1988,10 +2107,12 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    输出「签字」→ 闸门通过,走冻结流程;「暂缓」或「未签字」(等待超时)→ 记为等待人工,
    继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认(60s 自动默认)代替签字
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
+   派 for_each 批处理单(一单交付 N 份 JSON/MD)时,指令末尾必写「直接逐份落 JSON,不要写生成脚本、不要分批;共用说明不逐份复制」
+   (WORKFLOW.md §2「静态数据产物直接落盘」——否则执行方可能先写一堆 gen_*.py 分批跑,耗时/token 数倍于直写)
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【赛马仅限用户明确指令,禁换引擎】严禁自行发起并行赛马(改派多个 Agent 并行重做同一任务、
-   择优交付)。同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;确有必要时可在
+   择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
    不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/deepagents 中的另一个)。
@@ -2050,7 +2171,7 @@ def run_public(run: dict) -> dict:
     """给前端的运行摘要(不带大文本)。"""
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
-        "created", "started", "ended", "cost", "turns", "error",
+        "created", "started", "ended", "cost", "turns", "error", "stopped",
         "engine", "model", "tokens", "progress") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -2086,9 +2207,10 @@ def is_stateless_agent(agent_id: str) -> bool:
 
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
-    # 调度型 Agent 要等整条流水线,超时放宽
-    run_timeout = RUN_TIMEOUT * (4 if is_dispatcher_agent(agent_id) else 1)
     is_dispatcher = is_dispatcher_agent(agent_id)
+    # 调度型 Agent 要等整条流水线,墙钟超时放宽 4 倍;它大部分时间静默等子任务,不设无输出超时
+    run_timeout = run_timeout_setting() * (4 if is_dispatcher else 1)
+    idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
@@ -2297,13 +2419,25 @@ async def execute_run(run: dict, message: str, model: str | None):
                     proc.stdin.close()
                 # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
                 stderr_task = asyncio.create_task(proc.stderr.read())
+                last_output = time.time()
                 while True:
-                    if time.time() > deadline:
+                    now = time.time()
+                    if now > deadline:
                         raise TimeoutError(f"运行超过 {run_timeout}s")
-                    raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
-                                                 timeout=max(1, deadline - time.time()))
+                    wait = deadline - now
+                    if idle_timeout:
+                        wait = min(wait, last_output + idle_timeout - now)
+                    try:
+                        raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
+                                                     timeout=max(1, wait))
+                    except asyncio.TimeoutError:
+                        if idle_timeout and time.time() - last_output >= idle_timeout:
+                            raise TimeoutError(
+                                f"连续 {idle_timeout}s 无输出") from None
+                        continue
                     if not raw:
                         break
+                    last_output = time.time()
                     line = raw.decode("utf-8", "replace").strip()
                     if not line:
                         continue
@@ -2329,6 +2463,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine == "pi" and bool(run.get("error"))))
+                if run.get("stopped"):
+                    # 用户在运行面板手动停止(或服务关闭):不走会话失效重试,不让引擎的
+                    # aborted/退出码信息覆盖「手动停止」结论(下游总制片据此免于追查错误原因)
+                    run["status"] = "error"
+                    run["error"] = STOPPED_MSGS.get(run["stopped"], STOPPED_BY_USER_MSG)
+                    break
                 if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
@@ -2350,11 +2490,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 else:
                     run["status"] = "done"
                 break
-        except (TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.TimeoutError) as error:
             run["status"] = "error"
-            run["error"] = f"超时({run_timeout}s),进程已终止"
-            if proc:
-                proc.kill()
+            run["error"] = f"超时({str(error) or f'运行超过 {run_timeout}s'}),进程已终止"
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)     # 连派生的 yt-dlp/ffmpeg/dispatch 子进程一起杀
         except asyncio.CancelledError:
             run["status"] = "error"
             run["error"] = run.get("error") or "服务关闭，任务已停止"
@@ -2403,9 +2543,24 @@ async def execute_run(run: dict, message: str, model: str | None):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
             reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
-            append_chat(agent_id, run["project"],
-                        {"role": "assistant", "text": reply,
-                         "run_id": run["id"], "status": run["status"]})
+            chat_entry = {"role": "assistant", "text": reply,
+                          "run_id": run["id"], "status": run["status"]}
+            if run.get("stopped"):
+                # 对话记录里明确标注「手动停止」,而不是只留下被截断的半截输出+error 状态,
+                # 否则后续 agent(尤其总制片)读到会误判为程序错误去追查原因
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                how = ("被用户在运行面板手动停止" if run["stopped"] == "user"
+                       else "因服务关闭/重启被中断")
+                reply = (f"⏹ {run['error']}(运行 {dur}s 后{how},"
+                         "非程序错误,无需追查失败原因;是否重派由用户决定)"
+                         + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run["status"] == "error" and run.get("error") and reply != run["error"]:
+                # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
+                reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
+                chat_entry["text"] = reply
+            append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
             try:
                 # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
@@ -3451,6 +3606,8 @@ def _preview_storyboard(project: str, ep: str):
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
+    # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
+    cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
     shots = []
     for s in (sl.get("shots") or []):
         if not isinstance(s, dict):
@@ -3507,6 +3664,8 @@ def _preview_storyboard(project: str, ep: str):
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
+            "caption_clips": [c for c in cap_clips
+                              if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
@@ -4295,9 +4454,10 @@ async def api_brief_set(body: dict):
 
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
-REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail", "text")
+REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "props", "music", "video", "text")
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
+REF_VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
 REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
@@ -4345,6 +4505,7 @@ async def api_refs_list(project: str = "demo"):
         return {"path": rel, "name": f.name,
                 "url": f"/projects/{base.name}/refs/{rel}?v={int(st.st_mtime)}",
                 "is_image": ext in IMG_EXTS, "is_audio": ext in AUDIO_EXTS,
+                "is_video": ext in REF_VIDEO_EXTS,
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip()}
 
@@ -6118,10 +6279,15 @@ def _kill_proc_tree(proc):
             pass
 
 
-def _stop_run(run) -> bool:
-    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。"""
+def _stop_run(run, by: str = "user") -> bool:
+    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。
+    by: "user"(运行面板 ⏹)或 "shutdown"(服务关闭连带停止)。"""
+    msg = STOPPED_MSGS.get(by, STOPPED_BY_USER_MSG)
     if run.get("status") == "running":
-        run["error"] = "已被用户手动停止"
+        # stopped 标记随 run_public/对话记录/dispatch.py 输出一路透传:
+        # 下游 agent 看到的是「用户手动停止」而不是一条来历不明的 error
+        run["stopped"] = by
+        run["error"] = msg
         proc = RUN_PROCS.get(run["id"])
         if proc and proc.returncode is None:
             _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
@@ -6131,26 +6297,28 @@ def _stop_run(run) -> bool:
         if t:
             t.cancel()
         run["status"] = "error"
-        run["error"] = "已被用户手动停止(排队中取消)"
+        run["stopped"] = by
+        run["error"] = f"{msg}(排队中取消)"
         run["ended"] = time.time()
         append_chat(run["agent"], run["project"],
-                    {"role": "assistant", "text": run["error"],
-                     "run_id": run["id"], "status": "error"})
+                    {"role": "assistant",
+                     "text": f"⏹ {run['error']},非程序错误,无需追查失败原因;是否重派由用户决定",
+                     "run_id": run["id"], "status": "error", "stopped": by})
         publish_run(run)
         return True
     return False
 
 
-async def api_stop_all():
-    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
-    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
+async def api_stop_all(by: str = "user"):
+    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮;服务关闭时 by="shutdown")。"""
+    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run, by)]
     return {"stopped": stopped}
 
 
 async def shutdown_runtime(timeout: float = 4) -> None:
     """Boundedly stop Agent tasks/process groups and release OS resources."""
     tasks = list(RUN_TASKS.values())
-    await api_stop_all()
+    await api_stop_all(by="shutdown")
 
     active = [task for task in tasks if not task.done()]
     if active:
@@ -6638,23 +6806,93 @@ async def api_watchdog_threshold_set(body: dict):
     return await api_watchdog_threshold_get()
 
 
+async def api_agent_advanced_get():
+    """Agent 高级设置(设置菜单「高级→Agent 高级设置」)汇总读:并发/超时 + 对话记忆 + 重跑次数。"""
+    d = await api_agent_concurrency_get()
+    d.update(await api_agent_memory_get())
+    d.update({"max_retries": max_retries_setting(),
+              "max_retries_default": MAX_RETRIES_DEFAULT,
+              "max_retries_max": MAX_RETRIES_MAX})
+    return d
+
+
+async def api_agent_advanced_set(body: dict):
+    """Agent 高级设置合并提交,各字段均可选、可单独提交:
+    - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
+    - agent_memory:同 api_agent_memory_set
+    - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
+      经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效"""
+    updates: dict = {}
+    if body.get("max_retries") is not None:
+        try:
+            n = int(body.get("max_retries"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "max_retries must be an integer") from None
+        if not 0 <= n <= MAX_RETRIES_MAX:
+            raise ServiceError(400, f"max_retries must be between 0 and {MAX_RETRIES_MAX}")
+        updates["max_retries"] = n
+    if body.get("agent_memory") is not None:
+        updates["agent_memory"] = bool(body["agent_memory"])
+    conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
+            if body.get(k) is not None}
+    if not updates and not conc:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory / max_retries")
+    if conc:
+        await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
+    if updates:
+        STATE.update(updates)
+        save_state(STATE)
+    return await api_agent_advanced_get()
+
+
 async def api_agent_concurrency_get():
     return {"agent_concurrency": agent_concurrency(),
             "default": AGENT_CONCURRENCY_DEFAULT,
-            "max": MAX_CONCURRENT}
+            "max": MAX_CONCURRENT,
+            "run_timeout": run_timeout_setting(),
+            "run_timeout_default": RUN_TIMEOUT_DEFAULT,
+            "run_timeout_min": RUN_TIMEOUT_MIN,
+            "run_timeout_max": RUN_TIMEOUT_MAX,
+            "idle_timeout": idle_timeout_setting(),
+            "idle_timeout_default": IDLE_TIMEOUT_DEFAULT,
+            "idle_timeout_max": IDLE_TIMEOUT_MAX}
 
 
 async def api_agent_concurrency_set(body: dict):
-    """并发数量设置(设置菜单「高级→并发数量」):无状态扇出型 Agent(05-scenes/
-    08-video-gen/11-qa/eval 等)的同 agent 并发额度;有状态 Agent 恒为 1,
-    全局仍受 MAX_CONCURRENT 总闸。持久化,立即对后续排队的运行生效。"""
-    try:
-        n = int(body.get("agent_concurrency"))
-    except (TypeError, ValueError):
-        raise ServiceError(400, "agent_concurrency must be an integer") from None
-    if not 1 <= n <= MAX_CONCURRENT:
-        raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
-    STATE["agent_concurrency"] = n
+    """并发和超时设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容),三项均可选、可单独提交:
+    - agent_concurrency:无状态扇出型 Agent(05-scenes/08-video-gen/11-qa/eval 等)的
+      同 agent 并发额度;有状态 Agent 恒为 1,全局仍受 MAX_CONCURRENT 总闸
+    - run_timeout:单次运行墙钟超时(秒,调度型 Agent 自动 4 倍)
+    - idle_timeout:引擎事件流无输出超时(秒,0=关闭;调度型 Agent 不受约束)
+    持久化,立即对后续启动的运行生效(在跑的运行沿用启动时的取值)。"""
+    updates: dict[str, int] = {}
+    if body.get("agent_concurrency") is not None:
+        try:
+            n = int(body.get("agent_concurrency"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "agent_concurrency must be an integer") from None
+        if not 1 <= n <= MAX_CONCURRENT:
+            raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
+        updates["agent_concurrency"] = n
+    if body.get("run_timeout") is not None:
+        try:
+            n = int(body.get("run_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "run_timeout must be an integer (seconds)") from None
+        if not RUN_TIMEOUT_MIN <= n <= RUN_TIMEOUT_MAX:
+            raise ServiceError(400, f"run_timeout must be between {RUN_TIMEOUT_MIN} and {RUN_TIMEOUT_MAX} seconds")
+        updates["run_timeout"] = n
+    if body.get("idle_timeout") is not None:
+        try:
+            n = int(body.get("idle_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "idle_timeout must be an integer (seconds, 0 disables)") from None
+        if not 0 <= n <= IDLE_TIMEOUT_MAX:
+            raise ServiceError(400, f"idle_timeout must be between 0 and {IDLE_TIMEOUT_MAX} seconds")
+        updates["idle_timeout"] = n
+    if not updates:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout")
+    STATE.update(updates)
     save_state(STATE)
     return await api_agent_concurrency_get()
 
@@ -6665,7 +6903,7 @@ async def api_agent_memory_get():
 
 
 async def api_agent_memory_set(body: dict):
-    """Agent记忆设置(设置菜单「高级→Agent记忆」):开启=有状态 Agent 恢复上次
+    """Agent记忆设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容):开启=有状态 Agent 恢复上次
     会话(128KB 保险丝仍生效);关闭=所有 Agent 每次运行全新会话。持久化,
     立即对后续运行生效;关闭期间会话号照常回存,重新开启后从最近一次会话继续。"""
     if body.get("agent_memory") is None:

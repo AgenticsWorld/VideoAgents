@@ -129,7 +129,7 @@ def measure_loudness(path: str) -> dict:
     }
 
 
-def audio_frame_md5s(path: str) -> list[str]:
+def audio_frame_md5s(path: str, stream: str = "0:a:0") -> list[str]:
     """逐音频帧 md5(framemd5,packet 级)——验证 mux 后音频帧是否原样拷贝。
 
     为何不用整流 md5:MP3 装进 MP4 时,容器会重写 gapless/编码器延迟元数据,
@@ -142,7 +142,7 @@ def audio_frame_md5s(path: str) -> list[str]:
     """
     require_tools("ffmpeg")
     out = _run(["ffmpeg", "-v", "error", "-i", str(path),
-                "-map", "0:a:0", "-c", "copy", "-f", "framemd5", "-"])
+                "-map", stream, "-c", "copy", "-f", "framemd5", "-"])
     md5s = []
     for line in out.splitlines():
         line = line.strip()
@@ -156,12 +156,14 @@ def audio_frame_md5s(path: str) -> list[str]:
     return md5s
 
 
-def compare_audio_frames(master: str, muxed: str) -> dict:
+def compare_audio_frames(master: str, muxed: str, muxed_stream: str = "0:a:0") -> dict:
     """比对母带与成片的音频帧,返回判定明细。
 
     末帧允许不同(容器 gapless 补齐);其余帧必须逐帧全等,帧数必须相等。
+    muxed_stream 缺省 a:0(干净版成片);花字版成片的母带存档轨在 a:1
+    (a:0 是母带+SFX 预混轨),机检传 "0:a:1"。
     """
-    a, b = audio_frame_md5s(master), audio_frame_md5s(muxed)
+    a, b = audio_frame_md5s(master), audio_frame_md5s(muxed, muxed_stream)
     n = min(len(a), len(b))
     head_diff = [i for i in range(max(n - 1, 0)) if a[i] != b[i]]
     return {
