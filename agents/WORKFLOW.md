@@ -299,7 +299,7 @@ refs/
 | art-director | 制定全片风格圣经:画风、渲染流派、参考片、负面清单(禁止元素);**先盘点 refs/,风格决策以用户参考图为准并在 style.json 记录对应关系** | Bible、用户偏好、**refs/(用户参考图,§2)** | `bible/style.json` | 评分 creative_v1;**H2 由用户签字锁定** |
 | character-concept | 为 S/A 级角色出人设参考图;**整图单次生成、单张即锚(2026-08-04 二订)**:四格版式模板(`agents/06-art/character-concept/templates/character_sheet_template.png`,随平台分发;2026-08-14 版式改版:右侧两格特写并为一格通高大头像)作第一张 `--ref` 一次生成全身三视图+一格头肩大特写同框的整版 sheet,定稿 `<id>/sheet.png` 单张直接作下游视频参考,**不裁切子图**(front/side/back 多文件旧契约废止),替代逐视角多次生成;**`--n 1` 单张直出,禁多候选赛马(2026-08-04 三订,CHAR-0003 前科:多候选整批不满足风格)——自检不过或用户检查有意见时按缺陷/反馈定向重出一张,用户反馈是修改唯一驱动**;整图多视角同框的复制诱因由 p7 prompt 的 Identity lock 句+防重复长句硬约束兜住;**refs/characters/ 命中该角色的参考图必须经 --ref 注入(排在模板后)并记录** | appearance、style.json、refs/characters/ 与 refs/style/ | `assets/concepts/characters/<id>/` | 机检:与 appearance 字段逐项对照;sheet 四格版式齐全、≥3,686,400 像素(2560x1440 起)、主目录无单视角散图;QA:visual-qa + character-consistency-qa 打分 ≥80 |
 | environment-concept | 关键场景概念图;**refs/scenes/ 命中的参考图经 --ref 注入并记录** | scene、architecture、lighting、style、refs/scenes/ 与 refs/style/ | `assets/concepts/scenes/<id>/` | QA:visual-qa 对照 style.json |
-| prop | 武器/道具/法宝设定卡+参考图;优先参考 refs/props/;**剧情道具必填 `scale` 三字段(canonical_size 数值仲裁/relative_anchor 相对参照/prompt_token 全片唯一英文短语)并出比例锚图 scale_ref_01.png(道具与持有角色同框)**——跨 clip 尺度一致性的源头锚 | structured_story、style、refs/props/ | `bible/props.json` | 机检:关键道具(剧情道具)覆盖率 100%;剧情道具 scale 字段齐 + 比例锚图落盘(prop_scale_defined) |
+| prop | 武器/道具/法宝设定卡+参考图;优先参考 refs/props/;**剧情道具必填 `scale` 三字段(canonical_size 数值仲裁/relative_anchor 相对参照/prompt_token 全片唯一英文短语)并出比例锚图 scale_ref_01.png(道具与无人尺度参照物同框)**——跨 clip 尺度一致性的源头锚;**道具图无人物红线(2026-08-18)**:道具全部参考图不得出现人物/身体局部/剪影,`--ref` 禁传角色/服装概念图——含人易触发渠道审核拒图,且人物抢占主体致道具信息稀释(cui3 前科:比例锚图全是角色手持小物),尺度改用桌面/门框/茶杯等参照物表达,身体相对尺寸只留在 relative_anchor/prompt_token 文字 | structured_story、style、refs/props/ | `bible/props.json` | 机检:关键道具(剧情道具)覆盖率 100%;剧情道具 scale 字段齐 + 比例锚图落盘(prop_scale_defined);道具图无人物(prop_image_no_person) |
 | costume | 服装系统(按角色×场合×时期);优先参考 refs/props/costumes/ 与 refs/characters/ | appearance、culture、story_timeline、refs/ | `bible/costumes.json` | QA:continuity 维度预审(换装点明确) |
 | color-script | 全片色彩曲线(每集/每幕的主色调与情绪);色调基准优先取自 refs/style/ | story_graph、episode_plan、refs/style/ | `bible/color_script.json` | 评分 creative_v1;QA:art-director 会签 |
 | aspect-ratio | 决定画幅与分辨率矩阵(横/竖/多平台);**目标平台清单取自「📤 输出设置」发布平台多选(提示词注入,非口述猜测),母版画幅 = 输出设置主画幅(aspect_preset),平台矩阵须覆盖所选平台的全部画幅,与母版不同画幅的平台标裁切/缩放规则** | 「📤 输出设置」发布平台与主画幅 | `bible/aspect_ratio.json` | 机检:所选发布平台 100% 有条目、母版可派生各平台规格 |
@@ -336,9 +336,9 @@ refs/
 | concept-coverage-audit(art-director,每集) | 汇总 shot_list 本集出场实体 × 所需视图,比对 `concepts/` 与 `props.json` 现货,列缺口清单并回派 character-concept/environment-concept/prop 补齐(§6A) | shot_list、`assets/concepts/`、`bible/props.json`、appearance/environment/props 设定 | `directing/epNN/concept_coverage.json` | 机检 `concept_coverage_ok`:出场实体 × 所需视图 100% 有现货;补出概念图过 visual-qa + character-consistency-qa 常规打分入库 |
 
 > **§6A 概念图覆盖审计(concept coverage audit,每集,G6 前强制,机检 `concept_coverage_ok`)**:Phase 4 只为 S/A 角色与关键场景出概念图,而本集**真正出场的实体以 `shot_list` 为准**——B 级角色、次要地点、本集新出场的剧情道具,其概念图缺口若漏到 p7-image,模型只能凭 appearance/props 文字脑补形象,跨组一致性从源头失守(出图经验见 char-concept / env-concept 笔记)。故 shot-planning 定稿后、H3A 签字前,art-director 执行一次覆盖审计:
-> ① **枚举需求**:从 `shot_list` 汇总本集全部出场实体(角色 `CHAR-*`、场景 `SCN-*`、剧情道具)及每个实体所需视图——角色=三视图 + 剧情所需的关键表情/服装版本;场景=关键概念图 + 按 `environment.json` 的昼夜/季节/光照变体;剧情道具=样式图 + 比例锚图 `scale_ref_01.png`(§Phase 4 prop);
+> ① **枚举需求**:从 `shot_list` 汇总本集全部出场实体(角色 `CHAR-*`、场景 `SCN-*`、剧情道具)及每个实体所需视图——角色=三视图 + 剧情所需的关键表情/服装版本;场景=关键概念图 + 按 `environment.json` 的昼夜/季节/光照变体;剧情道具=样式图 + 比例锚图 `scale_ref_01.png`(§Phase 4 prop;两者均无人物入画);
 > ② **比对现有**:逐一核对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列出缺失清单(实体 × 缺失视图);各 `<id>/candidates/` 子目录为弃用候选留档(§Phase 4 目录卫生),**不计入现货**;
-> ③ **补齐派发**:缺口回派对应概念 Agent——角色缺→character-concept、场景缺→environment-concept、道具缺→prop(道具须一并补齐 `scale` 三字段与比例锚图);补出的概念图经 visual-qa / character-consistency-qa 常规打分入库,与 Phase 4 同标准;
+> ③ **补齐派发**:缺口回派对应概念 Agent——角色缺→character-concept、场景缺→environment-concept、道具缺→prop(道具须一并补齐 `scale` 三字段与比例锚图,同守道具图无人物红线);补出的概念图经 visual-qa / character-consistency-qa 常规打分入库,与 Phase 4 同标准;
 > ④ **产出清单**:`directing/epNN/concept_coverage.json`(每实体:所需视图、现货路径、缺口状态 `covered | dispatched | filled`),进「分镜设定」预览页供 H3A 审看。
 > **机检 `concept_coverage_ok`**:本集 shot_list 出场实体 × 所需视图 100% 有现货(状态全 `covered`/`filled`)方可发起 H3A 签字;**未过不得派发本集任何 p7-image / p7-video 工单**(与 §7D ① 估时级机检并列为 G6 前置硬闸)。新出场 S/A 主角若 Phase 4 遗漏,其新概念图须在 H3A 预览页**显著标注供用户确认**(等同 H2 风格锁定的每集延伸)。
 
@@ -470,7 +470,8 @@ refs/
 > 重生成人物图,无风格锚出图,新形象混入锚点包后整组设计风格跑偏。三条硬规则:
 > ① **必带在库形象锚**:凡修正中调 genmedia 生成含人物/场景/道具的画面,`--ref` 必须包含所涉实体的
 >   **在库概念图**(角色=`assets/concepts/characters/<id>/` 三视图、场景=`concepts/scenes/<id>/`、
->   道具=`concepts/props/<id>/` 比例锚图;一律取主目录定稿,严禁取 `candidates/` 弃用候选)及被修产物原图;无 `--ref` 的裸 prompt 重生成 = 违规配置,
+>   道具=`concepts/props/<id>/` 比例锚图;一律取主目录定稿,严禁取 `candidates/` 弃用候选)及被修产物原图;
+>   补生成/重出**道具图**时同守 §Phase 4 道具图无人物红线(画面无人物、`--ref` 不传角色/服装图);无 `--ref` 的裸 prompt 重生成 = 违规配置,
 >   开跑前退回;
 > ② **必带风格锚**:修正 prompt 必须命中 `bible/style.json` 风格锚——图像 prompt 含风格段且
 >   `--negative` 带负面清单;视频 prompt 以 `Overall visual style:` 开头。**参考图不能替代风格锚**

@@ -156,8 +156,9 @@ phases:
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           outputs: ["assets/concepts/scenes/{id}/"], validation: { qa: [11-qa/visual-qa] } }
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
-          # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref
-          validation: { auto: [plot_props_coverage_100, prop_scale_defined, no_unknown_placeholder] } }
+          # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref(与无人参照物同框)
+          # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图(审核风险+信息稀释)
+          validation: { auto: [plot_props_coverage_100, prop_scale_defined, prop_image_no_person, no_unknown_placeholder] } }
       - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json],
           validation: { auto: [no_unknown_placeholder] } }
       - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
