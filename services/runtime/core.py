@@ -858,6 +858,17 @@ def is_seedance25(model: str) -> bool:
 SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
 
 
+def is_seedance20(model: str) -> bool:
+    """Seedance 2.0 系列判定(含 fast/mini 等衍生版;与 genmedia._seedance_gen 同口径:
+    命中 seedance-2 且非 2.5 即按 2.0 口径,大小写不敏感)。"""
+    return "seedance-2" in (model or "").lower() and not is_seedance25(model)
+
+
+# Seedance 2.0 官方提示词写作 skill(sd20-prompt-writing):仅当生效视频模型为
+# 2.0 系列(含 fast/mini)时注入加载指令给 prompt agent;随仓库分发
+SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-prompt-writing/SKILL.md"
+
+
 def is_minimax_h3(model: str) -> bool:
     """MiniMax H3 判定(命中 minimax-h3 / MiniMax: H3 / MiniMax-H3 等写法,大小写不敏感)。"""
     m = re.sub(r"[\s_:]+", "-", (model or "").lower())
@@ -2006,6 +2017,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()):
+        p += f"""
+
+## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
+当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+- Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
+- 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
     if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
         p += f"""
 
