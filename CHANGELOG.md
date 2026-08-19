@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Network Check panel (Settings → Advanced → 网络检测) for diagnosing whether a VPN/proxy actually covers the command-line environment: many VPNs only take over the browser's system proxy while curl/git/pip in the terminal still connect directly, which silently breaks CLI-based agents. A deliberately minimal panel: the current egress IP + geolocation (ip-api.com with an ipinfo.io fallback), a single connectivity column over a fixed site list — baidu.com as a mainland-China baseline (to tell "offline" from "blocked"), google.com / www.youtube.com / openai.com, and, as a real-usability check, the Claude Code install script `https://claude.ai/install.sh` (strict HEAD probe, headers only; only 2xx counts as reachable, so a Cloudflare 403 challenge or region block shows as failure — i.e. whether `curl -fsSL https://claude.ai/install.sh | bash` would be accepted) — and a plain-language verdict (baseline dead → the network itself is down; overseas sites dead → the terminal needs a proxy; all green → the terminal's network is fine). Every probe is issued exactly the way the terminal would run curl (a `curl` subprocess with no forced proxy flags, following the process's default network environment; urllib fallback when curl is absent), with per-site latency shown. Implemented as the standard-library-only `services/runtime/netcheck.py` behind three endpoints — `POST /api/v1/network/probe`, `POST /api/v1/network/ip`, and `GET /api/v1/network/proxy` (API-only local-proxy discovery: system proxy via `scutil`/registry + proxy env vars + a scan of common local proxy ports for Clash/V2Ray/Surge/Privoxy/Astrill/sing-box, returning a ready-made `export https_proxy=…` one-liner); probe targets are a server-side whitelist and proxy parameters must be loopback addresses. All 11 language dictionaries updated.
+
 ## [1.0.19] - 2026-08-18
 
 ### Added

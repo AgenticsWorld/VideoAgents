@@ -261,6 +261,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆开关、自动重跑次数上限">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
+          <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
       </div>
       <div class="dd-sub">
@@ -740,6 +741,26 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <button id="diag-clear" style="margin-right:auto">🗑 清空事件</button>
       <button id="diag-export">⬇ 导出诊断包</button>
       <button id="diag-close" class="primary">关闭</button>
+    </div>
+  </div>
+</div>
+<div id="net-modal" class="modal">
+  <div class="box" style="width:640px">
+    <h3>🌐 网络检测</h3>
+    <div class="note">在后端用 curl 实测各站点——与你在 terminal 里直接执行 curl 完全等价;baidu.com 为国内基线,用于区分「断网」与「被墙」。</div>
+    <div id="net-ip" style="font-size:13px"></div>
+    <table id="net-table" style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 6px;color:var(--dim);font-weight:400">站点</th>
+        <th style="text-align:left;padding:4px 6px;color:var(--dim);font-weight:400">连通性</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note" id="net-verdict" style="display:none;color:var(--text)"></div>
+    <div class="err" id="net-err"></div>
+    <div class="actions">
+      <button id="net-rerun" style="margin-right:auto">↻ 重新检测</button>
+      <button id="net-close" class="primary">关闭</button>
     </div>
   </div>
 </div>
@@ -1547,6 +1568,57 @@ $('#diag-export').onclick=async()=>{
     location.href='/api/v1/diagnostics/export/'+encodeURIComponent(r.name);   // 浏览器直接下载 zip
   }catch(e){$('#diag-err').textContent='导出失败:'+e.message}
 };
+
+/* ---------- 网络检测弹窗(设置菜单「高级」;VPN/代理在命令行环境是否生效) ---------- */
+const NET_TARGETS=[['baidu','baidu.com','(基线)'],['google','google.com',''],['youtube','www.youtube.com',''],['openai','openai.com',''],['claude','claude.ai/install.sh','(Claude Code 安装脚本)']];
+let NET_BUSY=false;
+function netFmt(r){
+  return r.ok?`<span style="color:var(--green)">✓ ${r.total_ms}ms</span>`
+    :`<span style="color:var(--red)">✗ ${esc(t(r.error||'不通'))}</span>`;
+}
+function netIpLine(tag,r){
+  if(!r)return tag+t('检测中…');
+  return r.ok?`${tag}<b>${esc(r.ip)}</b> ${esc(r.location||'')} <span style="color:var(--dim)">${esc(r.isp||'')}</span>`
+    :`${tag}<span style="color:var(--red)">${esc(t(r.error||'查询失败'))}</span>`;
+}
+async function netRun(){
+  if(NET_BUSY)return;NET_BUSY=true;
+  $('#net-err').textContent='';$('#net-verdict').style.display='none';
+  const tb=$('#net-table tbody');tb.innerHTML='';
+  NET_TARGETS.forEach(([k,label,note])=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="padding:4px 6px">${label}${note?` <span style="color:var(--dim);font-size:12px">${t(note)}</span>`:''}</td>
+      <td style="padding:4px 6px" id="net-r-${k}">…</td>`;
+    tb.appendChild(tr);
+  });
+  const tag=t('当前出口 IP:');
+  $('#net-ip').innerHTML=netIpLine(tag,null);
+  const R={};
+  try{
+    const jobs=[];
+    for(const [k] of NET_TARGETS)
+      jobs.push(api('/api/v1/network/probe',{target:k})
+        .then(r=>{R[k]=r;$('#net-r-'+k).innerHTML=netFmt(r)})
+        .catch(e=>{$('#net-r-'+k).innerHTML=netFmt({ok:false,error:e.message})}));
+    jobs.push(api('/api/v1/network/ip',{})
+      .then(r=>{$('#net-ip').innerHTML=netIpLine(tag,r)})
+      .catch(e=>{$('#net-ip').innerHTML=netIpLine(tag,{ok:false,error:e.message})}));
+    await Promise.allSettled(jobs);
+    const abroad=['google','youtube','openai','claude'];
+    const v=$('#net-verdict');
+    if(R.baidu&&!R.baidu.ok){
+      v.textContent=t('判定:基线站点也不通,疑似网络本身断开(与墙/VPN 无关)。');v.style.display='';
+    }else if(abroad.some(k=>!(R[k]&&R[k].ok))){
+      v.textContent=t('判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。');v.style.display='';
+    }else if(NET_TARGETS.every(([k])=>R[k]&&R[k].ok)){
+      v.textContent=t('判定:全部站点可达,terminal 网络正常。');v.style.display='';
+    }
+  }catch(e){$('#net-err').textContent=t('检测失败:')+e.message}
+  NET_BUSY=false;
+}
+$('#menu-net').onclick=e=>{e.preventDefault();$('#net-modal').style.display='flex';netRun()};
+$('#net-close').onclick=()=>$('#net-modal').style.display='none';
+$('#net-rerun').onclick=()=>netRun();
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
 function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll('.res-volc-row').forEach(el=>el.style.display=on?'':'none')}
