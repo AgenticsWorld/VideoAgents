@@ -9,6 +9,7 @@ window.I18N_DICT = {
 "分镜组设置": "Shot Group Settings",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Generation-group duration and per-group reference material caps; must match the selected video generation model's capabilities, per project",
 "🎬 分镜组设置 —": "🎬 Shot Group Settings —",
+"默认值": "Presets",
 "最大分镜组时长(秒)": "Max shot group duration (s)",
 "最大参考图数量": "Max reference images",
 "最大参考视频数量": "Max reference videos",

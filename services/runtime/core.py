@@ -656,10 +656,11 @@ DEFAULT_GENCONFIG = {
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
-    # 10视频/10音频),默认值按 2.0 的保守口径;注入 Agent 系统提示词约束分组与
-    # prompt 组装,模型侧硬限另由 genmedia 按 model id 强制校验
+    # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
+    # 「默认值」按钮一键切换三档);注入 Agent 系统提示词约束分组与 prompt 组装,
+    # 模型侧硬限另由 genmedia 按 model id 强制校验
     "shot_group": {"max_group_s": 15, "max_ref_images": 9,
-                   "max_ref_videos": 1, "max_ref_audios": 2},
+                   "max_ref_videos": 3, "max_ref_audios": 3},
     # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
@@ -1013,8 +1014,8 @@ def _validate_shot_group(g: dict):
     try:
         gs = float(g.get("max_group_s", 15))
         ni = int(g.get("max_ref_images", 9))
-        nv = int(g.get("max_ref_videos", 1))
-        na = int(g.get("max_ref_audios", 2))
+        nv = int(g.get("max_ref_videos", 3))
+        na = int(g.get("max_ref_audios", 3))
         assert 4 <= gs <= 30 and 0 <= ni <= 30 and 0 <= nv <= 10 and 0 <= na <= 10
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
@@ -1901,8 +1902,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
     sg_img = int(sg.get("max_ref_images", 9))
-    sg_vid = int(sg.get("max_ref_videos", 1))
-    sg_aud = int(sg.get("max_ref_audios", 2))
+    sg_vid = int(sg.get("max_ref_videos", 3))
+    sg_aud = int(sg.get("max_ref_audios", 3))
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 

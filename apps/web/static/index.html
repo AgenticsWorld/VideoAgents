@@ -57,6 +57,7 @@ main{flex:1;display:flex;min-height:0}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
 button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+.sg-presets{display:flex;gap:6px;flex-wrap:wrap}.sg-presets button{padding:3px 10px;font-size:12px}.sg-presets button.active{border-color:var(--accent);color:var(--accent);background:transparent}
 #messages{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:88%;border-radius:10px;padding:9px 13px;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:#24406e}
@@ -432,10 +433,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
     <div class="np-step" data-step="4" style="display:none">
+      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="15"></div>
       <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="9"></div>
-      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="1"></div>
-      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="2"></div>
+      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="3"></div>
+      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="3"></div>
       <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
@@ -574,10 +576,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="sg-modal" class="modal">
   <div class="box">
     <h3>🎬 分镜组设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
+    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
-    <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="1"></div>
-    <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="2"></div>
+    <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="3"></div>
+    <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>
     <div class="actions"><button id="sg-cancel">取消</button><button class="primary" id="sg-ok">确定</button></div>
@@ -973,7 +976,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
-  $('#npsg-maxs').value=15;$('#npsg-imgs').value=9;$('#npsg-vids').value=1;$('#npsg-auds').value=2;   // 分镜组默认按 Seedance 2.0 保守口径
+  sgApplyPreset('npsg','sd20');   // 分镜组默认按 Seedance 2.0 口径(15s/9图/3视频/3音频)
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
@@ -1281,6 +1284,32 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 分镜组设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
+// 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框,
+// 手动改值后自动按当前值反查高亮匹配的预设(无匹配则全不高亮)
+const SG_PRESETS={
+  sd20:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // Seedance 2.0 系列(含 fast/mini)
+  sd25:{max_group_s:30,max_ref_images:30,max_ref_videos:10,max_ref_audios:10},  // Seedance 2.5
+  mmh3:{max_group_s:15,max_ref_images:9,max_ref_videos:0,max_ref_audios:2},    // MiniMax Hailuo 3
+};
+const SG_FIELDS={max_group_s:'maxs',max_ref_images:'imgs',max_ref_videos:'vids',max_ref_audios:'auds'};
+function sgSyncPreset(pfx){   // 按四个输入框当前值高亮匹配的预设按钮
+  const cur=Object.fromEntries(Object.entries(SG_FIELDS).map(([k,id])=>[k,parseFloat($('#'+pfx+'-'+id).value)]));
+  document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>{
+    const p=SG_PRESETS[b.dataset.preset];
+    b.classList.toggle('active',Object.keys(SG_FIELDS).every(k=>p[k]===cur[k]));
+  });
+}
+function sgApplyPreset(pfx,key){
+  const p=SG_PRESETS[key];
+  for(const [k,id] of Object.entries(SG_FIELDS))$('#'+pfx+'-'+id).value=p[k];
+  sgSyncPreset(pfx);
+}
+document.querySelectorAll('[data-sg-presets]').forEach(box=>{
+  const pfx=box.dataset.sgPresets;
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>sgApplyPreset(pfx,b.dataset.preset));
+  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>sgSyncPreset(pfx));
+});
+sgSyncPreset('npsg');
 function sgValidate(gs,ni,nv,na){   // 返回错误文案,''=通过(与服务端 _validate_shot_group 同口径)
   if(!(gs>=4&&gs<=30))return '最大分镜组时长需为 4-30 的数值';
   if(!(Number.isInteger(ni)&&ni>=0&&ni<=30))return '最大参考图数量需为 0-30 的整数';
@@ -1295,9 +1324,10 @@ async function openSgModal(){
     const g=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).shot_group||{};
     $('#sg-maxs').value=g.max_group_s??15;
     $('#sg-imgs').value=g.max_ref_images??9;
-    $('#sg-vids').value=g.max_ref_videos??1;
-    $('#sg-auds').value=g.max_ref_audios??2;
+    $('#sg-vids').value=g.max_ref_videos??3;
+    $('#sg-auds').value=g.max_ref_audios??3;
   }catch(e){}
+  sgSyncPreset('sg');
   $('#sg-modal').style.display='flex';
 }
 $('#menu-shotgroup').onclick=e=>{e.preventDefault();openSgModal()};

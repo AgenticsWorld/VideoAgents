@@ -9,6 +9,7 @@ window.I18N_DICT = {
 "分镜组设置": "Ajustes de grupos de generación",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Límites de duración del grupo de generación y de materiales de referencia por grupo; deben coincidir con las capacidades del modelo de vídeo seleccionado, por proyecto",
 "🎬 分镜组设置 —": "🎬 Ajustes de grupos de generación —",
+"默认值": "Valores predeterminados",
 "最大分镜组时长(秒)": "Duración máx. del grupo (s)",
 "最大参考图数量": "Máx. imágenes de referencia",
 "最大参考视频数量": "Máx. vídeos de referencia",

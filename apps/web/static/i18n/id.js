@@ -9,6 +9,7 @@ window.I18N_DICT = {
 "分镜组设置": "Pengaturan Grup Generasi",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Batas durasi grup generasi dan jumlah materi referensi per grup; harus sesuai kemampuan model video yang dipilih, per proyek",
 "🎬 分镜组设置 —": "🎬 Pengaturan Grup Generasi —",
+"默认值": "Nilai default",
 "最大分镜组时长(秒)": "Durasi grup maks (dtk)",
 "最大参考图数量": "Maks gambar referensi",
 "最大参考视频数量": "Maks video referensi",

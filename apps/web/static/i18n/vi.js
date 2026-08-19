@@ -9,6 +9,7 @@ window.I18N_DICT = {
 "分镜组设置": "Cài đặt nhóm tạo sinh",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Giới hạn thời lượng nhóm tạo sinh và số lượng tư liệu tham chiếu mỗi nhóm; phải phù hợp với khả năng của mô hình video đã chọn, riêng cho từng dự án",
 "🎬 分镜组设置 —": "🎬 Cài đặt nhóm tạo sinh —",
+"默认值": "Giá trị mặc định",
 "最大分镜组时长(秒)": "Thời lượng nhóm tối đa (giây)",
 "最大参考图数量": "Số ảnh tham chiếu tối đa",
 "最大参考视频数量": "Số video tham chiếu tối đa",

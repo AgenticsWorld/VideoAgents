@@ -9,6 +9,7 @@ window.I18N_DICT = {
 "分镜组设置": "Shot-Gruppen-Einstellungen",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Obergrenzen für Gruppendauer und Referenzmaterial pro Gruppe; müssen zu den Fähigkeiten des gewählten Videomodells passen, pro Projekt",
 "🎬 分镜组设置 —": "🎬 Shot-Gruppen-Einstellungen —",
+"默认值": "Vorgaben",
 "最大分镜组时长(秒)": "Max. Gruppendauer (s)",
 "最大参考图数量": "Max. Referenzbilder",
 "最大参考视频数量": "Max. Referenzvideos",
