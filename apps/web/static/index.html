@@ -382,7 +382,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="youtube">YouTube 画幅(16:9)</option>
           <option value="douyin">抖音画幅(9:16)</option>
           <option value="custom">自定义画幅…</option>
-        </select></div>
+        </select>
+        <button type="button" class="info-btn" data-info="npo-info-aspect" title="说明">i</button></div>
+      <div class="note info-note" id="npo-info-aspect">画幅约束分镜构图/关键帧/视频/成片,发布平台只决定发布阶段的平台清单(不同画幅平台由发布期裁切适配);语言约束剧本/台词/旁白/字幕/配音;草稿分辨率用于迭代/待审版本,成片终稿由超分得到,分辨率越高视频生成费用越高</div>
       <div class="row" id="npo-custom-row" style="display:none"><label>自定义比例</label>
         <input type="text" id="npo-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
@@ -422,9 +424,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <select id="npo-dialogue-voice" style="flex:1">
           <option value="native">视频原声(默认)</option>
           <option value="dubbing">后期配音</option>
-        </select></div>
-      <div class="note">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
-      <div class="note">画幅约束分镜构图/关键帧/视频/成片,发布平台只决定发布阶段的平台清单(不同画幅平台由发布期裁切适配);语言约束剧本/台词/旁白/字幕/配音;草稿分辨率用于迭代/待审版本,成片终稿由超分得到,分辨率越高视频生成费用越高</div>
+        </select>
+        <button type="button" class="info-btn" data-info="npo-info-voice" title="说明">i</button></div>
+      <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10"></div>
@@ -518,7 +520,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="youtube">YouTube 画幅(16:9)</option>
         <option value="douyin">抖音画幅(9:16)</option>
         <option value="custom">自定义画幅…</option>
-      </select></div>
+      </select>
+      <button type="button" class="info-btn" data-info="out-info-aspect" title="说明">i</button></div>
+    <div class="note info-note" id="out-info-aspect">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="row" id="out-custom-row" style="display:none"><label>自定义比例</label>
       <input type="text" id="out-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
     <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
@@ -558,9 +562,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <select id="out-dialogue-voice" style="flex:1">
         <option value="native">视频原声(默认)</option>
         <option value="dubbing">后期配音</option>
-      </select></div>
-    <div class="note">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
-    <div class="note">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+      </select>
+      <button type="button" class="info-btn" data-info="out-info-voice" title="说明">i</button></div>
+    <div class="note info-note" id="out-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     <div class="err" id="out-err"></div>
     <div class="actions"><button id="out-cancel">取消</button><button class="primary" id="out-ok">确定</button></div>
   </div>
