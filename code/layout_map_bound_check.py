@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_args  # noqa: E402
+from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
@@ -114,6 +114,9 @@ def main():
             ap.add_argument("--strict", action="store_true", help="组缺 blocking_map 也按违规计(新产出批次用)"),
         ),
     )
+    if not spatial_blocking_enabled(proj_root):
+        print(f"[layout_map_bound] {args.project}: skipped: spatial_blocking off(项目输出设置「人物精确空间位置」已关闭,走单张场景概念图流程)-> PASS")
+        sys.exit(0)
     sl_path = proj_root / "directing" / args.ep / "shot_list.json"
     if not sl_path.is_file():
         print(f"VIOLATION 缺 {sl_path}")

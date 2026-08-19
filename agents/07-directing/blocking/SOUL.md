@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 读本镜 `shot_list.json` 条目(出场角色、场景、时长、是否对白镜)与**所属生成组的 `blocking_map`**(storyboard 标注、shot-planning 定稿的组级逐角色 起点/动线/终点,底图为该场景俯视空间布局图 `assets/concepts/scenes/<sid>/layout_top.png`,坐标系为 `layout.json#landmarks`),在该场景空间内定各角色的站位(相对位置/朝向)——**本镜站位必须落在组级动线上**:组首镜各角色在 `start`,组尾镜在 `end`(无移动=start),中间镜按时长比例落在 path 沿线;与 blocking_map 矛盾 = 退回重写,确需改动线的上报 orchestrator 回派 storyboard/shot-planning 改地图,不得自行另排。
+1. 读本镜 `shot_list.json` 条目(出场角色、场景、时长、是否对白镜)与**所属生成组的 `blocking_map`**(仅项目「输出设置 → 人物精确空间位置」开启时存在;关闭时无此字段、本条动线约束不适用,地标词按场景空间描述自拟;storyboard 标注、shot-planning 定稿的组级逐角色 起点/动线/终点,底图为该场景俯视空间布局图 `assets/concepts/scenes/<sid>/layout_top.png`,坐标系为 `layout.json#landmarks`),在该场景空间内定各角色的站位(相对位置/朝向)——**本镜站位必须落在组级动线上**:组首镜各角色在 `start`,组尾镜在 `end`(无移动=start),中间镜按时长比例落在 path 沿线;与 blocking_map 矛盾 = 退回重写,确需改动线的上报 orchestrator 回派 storyboard/shot-planning 改地图,不得自行另排。
 2. 设计走位:谁在镜头内移动、路径与触发点(第几秒起步、行至何处),与镜头时长匹配。
 3. 定动作节拍(beats):动作与台词/事件的对齐点(如「说到『滚』字时拂袖转身」),供视频 prompt 与 sound-effect 打点。
 4. 参考 `relationship.json` 校准人物距离与朝向(敌对拉开、亲密贴近、尊卑有序)。
@@ -79,7 +79,7 @@ instruction: |
 **机检(不过直接退回)**:
 - **人物在场合法性:该故事时间点该人物必须在该地点(查 story_timeline),violations 必须为空**;
 - 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内;
-- **与组级动线一致(blocking_on_map,2026-08-19)**:本镜各角色 start_pos/path 终点与所属组 `blocking_map` 该角色在本镜时点的位置一致(组首镜=start、组尾镜=end);`space_fragment_en` 的地标词在该场景 layout.json `name_en` 中存在;
+- **与组级动线一致(blocking_on_map,2026-08-19,仅开关开启时)**:本镜各角色 start_pos/path 终点与所属组 `blocking_map` 该角色在本镜时点的位置一致(组首镜=start、组尾镜=end);`space_fragment_en` 的地标词在该场景 layout.json `name_en` 中存在;
 - **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,纯英文、≤25 词、含场景地标关系词或屏侧方位词(screen-left/screen-right),无数值坐标/运镜词/色号。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜/构图类」)**:

@@ -11,6 +11,8 @@
 
 ## 职责
 
+> **流程开关(2026-08-19)**:项目「输出设置 → 人物精确空间位置」(`output.spatial_blocking`,默认开)决定本岗产物形态——**开启**:下述布局包三件套流程(职责 2–6、机检 scene_layout_pack_ok);**关闭**:沿用旧流程——只出主视角概念图 `main_01.png`(`--aspect 16:9 --n 4` 择优)+ 昼/夜等变体(以主图作 `--ref` 只改光照),prompts.json 记 `views[]`,不出 layout_top/grid_9views/layout.json、不跑 render_blocking_map.py;§6A 场景所需视图相应=主视角概念图 + 变体。以系统提示词「用户输出设定」段为准。
+
 1. 读取工单圈定的关键场景:`bible/scenes/index.json` 条目 + 该场景的 `architecture.json`、`lighting.json`、`environment.json`,与 `style.json` 合成绘图 prompt。
 2. **先定空间事实,再出图(2026-08-19)**:依 architecture.json 的空间结构先写 `layout.json` 草案——地图朝向(图上方是哪面墙/哪个方位)、≥3 个地标(门/窗/主家具/地形特征等,每个给 `id`、`name_en`、归一化坐标 `xy`∈[0,1]²,x 向右 y 向下)、九格机位语义 `views[tile 1..9]`(每格从哪个地标看向哪里、景别);地标坐标是布局图 prompt 的依据("main door at bottom center, fireplace on the right wall…"),出图后对照实图校正坐标——**layout.json 与图必须一致,它是分镜师标站位、prompt 写地标词的唯一文字事实源**。
 3. **出俯视空间布局图 `layout_top.png`**:正上方俯视(top-down / bird's-eye plan view),整场空间边界与全部地标可辨,**无人物、无文字标注、无箭头**(干净底图,后续由 `code/render_blocking_map.py` 叠加人物动线标注),≥2560x1440;多张候选择优,落选移入 `candidates/`。

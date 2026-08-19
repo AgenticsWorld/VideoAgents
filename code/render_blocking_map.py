@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_args  # noqa: E402
+from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 MIN_PIXELS = 3_686_400          # 火山视频参考图像素硬限(WORKFLOW.md §9)
 LAYOUT_SCHEMA = "scene_layout.v1"
@@ -281,6 +281,9 @@ def main():
             ap.add_argument("--strict", action="store_true", help="组缺 blocking_map 也按违规(新产出批次用)"),
         ),
     )
+    if not spatial_blocking_enabled(proj_root):
+        print(f"[blocking_map] {args.project}: skipped: spatial_blocking off(项目输出设置「人物精确空间位置」已关闭,走单张场景概念图流程)-> PASS")
+        sys.exit(0)
     all_errs, all_warns = [], []
     if args.scene:
         for sid in args.scene:

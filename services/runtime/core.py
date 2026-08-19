@@ -676,10 +676,15 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
+    # spatial_blocking=人物精确空间位置(默认开):开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+
+    #   layout.json,分镜组标注人物起点/动线/终点渲染成动线俯视图,prompt 挂图并逐字注入 route_en,
+    #   机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound);关=沿用单张场景概念图流程
+    #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
                "dialogue_voice": "native",
+               "spatial_blocking": True,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -1039,6 +1044,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.caption_enabled must be a boolean")
     if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
+    if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
+        raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -1843,6 +1850,23 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("caption_enabled") else
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
+    spatial_on = out.get("spatial_blocking", True) is not False
+    spatial_line = (
+        "**开启(默认)—— 场景布局包 + 人物动线标注流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
+        "`layout_top.png` + 9 宫格多角度图 `grid_9views.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口);"
+        "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
+        "shot-planning 继承并跑 `code/render_blocking_map.py` 渲染 `directing/epNN/blocking_maps/grpNNN.png`"
+        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
+        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
+        "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
+        if spatial_on else
+        "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "
+        "`main_*.png` + 昼夜变体(不出 layout_top/grid_9views/layout.json,§6A 场景所需视图=主视角概念图+变体);"
+        "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 render_blocking_map.py;blocking 不受 blocking_on_map 约束"
+        "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
+        "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
+        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
     dialogue_voice = (
         "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
@@ -1933,6 +1957,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
 - 对白配音:{dialogue_voice}
+- 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)

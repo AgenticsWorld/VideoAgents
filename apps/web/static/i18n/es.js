@@ -1377,4 +1377,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Registro fallido (revisión rechazada); clic para reintentar",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Subir a la biblioteca de retratos virtuales de Volcano Ark (revisión asíncrona; surte efecto al pasar a Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Registrado en la biblioteca: al regenerar este grupo se envía como URI de activo, evitando bloqueos de moderación facial",
+"人物精确空间位置": "Posición espacial precisa de personajes",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "Activado = cada escena recibe un plano cenital + hoja 3x3 multiángulo, y cada grupo de planos marca inicio/recorrido/fin de los personajes para que el modelo de vídeo los ubique; Desactivado = flujo clásico de una sola imagen de concepto de escena",
 };

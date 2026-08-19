@@ -155,6 +155,7 @@ phases:
           validation: { auto: [appearance_fields_match], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           # 场景布局包(2026-08-19):俯视空间布局图 layout_top.png + 9 宫格多角度图 grid_9views.png + layout.json(地标坐标/九格机位),替代单张主视角概念图
+          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound 四项机检脚本自动 skipped
           outputs: ["assets/concepts/scenes/{id}/"],
           validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/render_blocking_map.py --scene <id> --check-only
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],

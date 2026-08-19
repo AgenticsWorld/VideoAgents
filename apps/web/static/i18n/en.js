@@ -1389,4 +1389,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Registration failed (review rejected); click to retry",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Upload to the Volcano Ark virtual-portrait library (asynchronous review; takes effect in video generation once Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Registered in the virtual-portrait library: submitted as an asset URI when this group is regenerated, avoiding face-reference moderation blocks",
+"人物精确空间位置": "Precise character positions",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "On = every scene gets a top-down layout map + 3x3 multi-angle sheet, and each shot group marks character start/path/end so the video model can place people; Off = legacy single scene-concept-image flow",
 };
