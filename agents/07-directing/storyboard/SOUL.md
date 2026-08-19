@@ -27,6 +27,7 @@
    - 每组 `groups_draft[]` 写 `scene_refs`(三件路径)与 **`blocking_map`**:组内**每个出场角色**一条,`start`(起始位置)必填、`path`(经过点,可空)与 `end`(终点)在有移动时必填、无移动则只写 start——位置一律引用 `layout.json#landmarks` 的地标 `id`(可附 `xy` 归一化坐标微调、`offset_en` 如 "one step inside"),并写英文动线句 `route_en`(≤40 词,地标词逐字取 layout.json `name_en`;有移动写 "enters through the main door, walks past the long table and stops at the fireplace",无移动写 "stands beside the fireplace facing the door and does not move")——**下游 prompt 逐字拼入、不做翻译**(机检 layout_map_bound);
    - **动线跨组连续**:同场景相邻组,后组每个角色的 `start` 必须等于前组该角色的 `end`(无移动则等于其 start),角色离场/入场要在 route_en 写明从哪个出入口地标进出——这是解决「不同分镜中人物在场景中的位置不连续」的源头约束;
    - 每镜 `shots_draft[]` 挂 `view_tile`(1–9,该镜机位最接近九格图的哪一格,取 layout.json#views;特写/无对应角度可 null 但要在 sketch 说明机位相对哪个地标);
+   - `characters` **数组顺序即图上字母 A/B/C… 顺序**(渲染图与 prompt 的 Map markers 句都按此对应),`label` 只作记录、不上图(渲染字体无中文字形,图例只写字母 = CHAR 编号);
    - 写完跑 `python3 code/render_blocking_map.py --project <slug> --ep epNN --source storyboard`(草案图落 `directing/epNN/blocking_maps/draft/<scene_no>_g<NN>.png`,同时机检地标引用/route_en/连续性),看图核对站位符合叙事再交付。
 8. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。
 9. 发现剧本不可拍(如同场人物凭空出现)时上报 orchestrator,不自行改剧情。

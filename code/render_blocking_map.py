@@ -15,7 +15,9 @@ blocking_map_landmarks_valid / scene_layout_pack_ok)。
     prompt agent 把定稿图列入组 refs,视频模型按图中人物位置标注与动线安排画面(机检
     layout_map_bound,脚本 code/layout_map_bound_check.py)。
 
-图例:每角色一色;● 实心圆 = 起点(圆内字母 A/B/C/D 为角色序号,左上图例映射到角色 id);
+图例:每角色一色;● 实心圆 = 起点(圆内字母 A/B/C/D 为角色序号 = blocking_map.characters 数组顺序,
+      左上图例只写「字母 = 角色编号 CHAR-xxxx」,不写中文名——渲染字体无 CJK 字形;名字↔编号↔字母
+      的对应由 prompt 的 Map markers 句承担,视频模型结合文字与图上字母理解人物位置);
       ■ 实心方块 = 终点;箭头折线 = 动线(经过 path 各点);无移动的角色只画起点圆。
       渲染尺寸 = 布局图原尺寸(布局图 ≥2560x1440,产物天然满足视频参考像素下限)。
 
@@ -238,10 +240,13 @@ def render(layout_png: Path, routes, out_png: Path, title: str):
             d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
                    fill=(255, 255, 255, 255), font=fnt)
     # 图例(左上,半透明底)
+    # 图例只写「字母 = 角色编号」(2026-08-19 二订):渲染字体无 CJK 字形,中文名会成方块;
+    # 名字↔编号↔字母的对应关系改由 prompt 文字承担(Map markers 句,机检 layout_map_bound)
     lines = [f"{title}  |  circle = start, square = end, arrow = path"]
-    for idx, (cid, label, start, path, end) in enumerate(routes):
+    for idx, (cid, _label, start, path, end) in enumerate(routes):
         mv = "moves" if end else "stays"
-        lines.append(f"{LETTERS[idx]} = {label}" + (f" ({cid})" if label != cid else "") + f"  [{mv}]")
+        cid_ascii = cid if cid.isascii() else cid.encode("ascii", "ignore").decode() or f"char{idx+1}"
+        lines.append(f"{LETTERS[idx]} = {cid_ascii}  [{mv}]")
     pad = int(R * 0.6)
     tw = max(d.textbbox((0, 0), t, font=lg_font)[2] for t in lines)
     th = d.textbbox((0, 0), "Ag", font=lg_font)[3]

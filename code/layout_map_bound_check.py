@@ -12,6 +12,9 @@
          "top-down layout map"、引用 9 宫格图的 `[Image M]` 且同句含 "3x3 multi-angle";
          并含"do not render the map"类免责(防止把箭头/字母标记画进成片);
       ④ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
+      ⑤ 图上标记映射句:每个角色按 blocking_map.characters 数组顺序对应字母 A/B/C…,video_prompt 须含
+         "<字母> = <角色名> (<CHAR id>)" 形式的映射(同一逗号/句号段内既有 "A =" 又有该 CHAR id)——
+         俯视图上只画字母 + 编号(渲染字体无 CJK),名字↔编号↔字母靠这句文字告诉视频模型;
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -29,6 +32,7 @@ from _common import parse_args  # noqa: E402
 MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
 DISCLAIM_RE = re.compile(r"do not (render|draw|reproduce) the map", re.I)
+LETTERS = "ABCDEFGH"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母
 
 
 def norm(s: str) -> str:
@@ -84,10 +88,15 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
         tag = f"[Image {grid_idx + 1}]"
         if not any(tag in s and GRID_KEY in s.lower() for s in sents):
             errs.append(f"{gid}: video_prompt 缺 9 宫格绑定句(同句含 {tag} 与 \"{GRID_KEY}\")")
-    # ④ route_en 逐字
+    # ④ route_en 逐字 + ⑤ 字母↔角色映射句
     hay = norm(vp)
-    for ch in bm.get("characters") or []:
+    for idx, ch in enumerate(bm.get("characters") or []):
         cid = ch.get("id", "?")
+        letter = LETTERS[idx] if idx < len(LETTERS) else None
+        if letter and cid != "?":
+            pat = re.compile(r"(?<![A-Za-z])" + letter + r"\s*=\s*[^,;.。;]*" + re.escape(cid))
+            if not pat.search(vp):
+                errs.append(f"{gid}/{cid}: video_prompt 缺图上标记映射 \"{letter} = <角色名> ({cid})\"(Map markers 句)")
         route = ch.get("route_en")
         if not route:
             errs.append(f"{gid}/{cid}: blocking_map 缺 route_en(回派 storyboard 补写)")
