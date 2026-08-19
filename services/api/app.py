@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, media_push, wechat, whatsapp
+from services.runtime import core, feishu, media_push, netcheck, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -535,6 +535,21 @@ async def diagnostics_export_download(name: str) -> FileResponse:
     # 仓库首个出站文件下载端点:文件名格式白名单 + 仅限 telemetry/export 目录
     path = core.diagnostics_export_path(name)
     return FileResponse(path, media_type="application/zip", filename=name)
+
+
+@api.get("/network/proxy", tags=["network"])
+async def network_proxy() -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_proxy)
+
+
+@api.post("/network/probe", tags=["network"])
+async def network_probe(body: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_probe, body)
+
+
+@api.post("/network/ip", tags=["network"])
+async def network_ip(body: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_ip, body)
 
 
 @api.get("/projects/{project}/watchdog", tags=["automation"])
