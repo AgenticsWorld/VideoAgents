@@ -1,7 +1,6 @@
 window.I18N_DICT = {
 "网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性": "Network check: shows the egress IP and its location, and tests real command-line connectivity to google/youtube/claude and other sites",
 "判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。": "Verdict: the network is fine but some overseas sites are unreachable — enable your VPN's TUN (global) mode and re-check; Astrill users: switch the protocol to StealthVPN / OpenVPN / WireGuard.",
-"在后端用 curl 实测各站点——与你在 terminal 里直接执行 curl 完全等价;baidu.com 为国内基线,用于区分「断网」与「被墙」。": "Probes each site with curl from the backend — exactly equivalent to running curl in your terminal; baidu.com is a mainland-China baseline to tell “offline” from “blocked”.",
 "连通性": "Connectivity",
 "当前出口 IP:": "Current egress IP: ",
 "判定:全部站点可达,terminal 网络正常。": "Verdict: all sites reachable — the terminal's network is fine.",

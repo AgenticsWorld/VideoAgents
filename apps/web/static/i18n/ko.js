@@ -1,7 +1,6 @@
 window.I18N_DICT = {
 "网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性": "네트워크 진단: 출구 IP와 위치를 표시하고 명령줄 환경에서 google/youtube/claude 등 사이트 연결을 실측합니다",
 "判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。": "판정: 네트워크는 정상이나 일부 해외 사이트에 연결되지 않습니다 — VPN의 TUN(전역) 모드를 켠 뒤 다시 진단하세요. Astrill 사용자는 프로토콜을 StealthVPN / OpenVPN / WireGuard로 전환하세요.",
-"在后端用 curl 实测各站点——与你在 terminal 里直接执行 curl 完全等价;baidu.com 为国内基线,用于区分「断网」与「被墙」。": "백엔드에서 curl로 각 사이트를 실측합니다 — terminal에서 직접 curl을 실행하는 것과 완전히 같습니다. baidu.com은 중국 내 기준선으로 “네트워크 단절”과 “차단”을 구분합니다.",
 "连通性": "연결성",
 "当前出口 IP:": "현재 출구 IP: ",
 "判定:全部站点可达,terminal 网络正常。": "판정: 모든 사이트에 연결됩니다 — terminal 네트워크가 정상입니다.",
