@@ -3198,7 +3198,8 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 # ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/scenes/",
-                      "assets/concepts/props/")
+                      "assets/concepts/props/",
+                      "directing/")   # directing/epNN/blocking_maps/grpNNN.png 组人物动线俯视图(2026-08-19)
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
@@ -3236,7 +3237,9 @@ async def api_grpref_add(body: dict):
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
-        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/ or directing/<ep>/blocking_maps/")
+    if ref.startswith("directing/") and "/blocking_maps/" not in ref:
+        raise ServiceError(400, "under directing/ only <ep>/blocking_maps/*.png may be added as a ref")
     target = (base / ref).resolve()
     try:
         target.relative_to(base.resolve())
@@ -3686,9 +3689,19 @@ def _preview_storyboard(project: str, ep: str):
                 # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
                 pipeline_refs.append({"ref": r, "url": url,
                                       "name": "/".join(r.split("/")[-2:])})
+        # 组人物动线俯视图(storyboard/shot-planning 的 blocking_map 经 code/render_blocking_map.py
+        # 渲染,2026-08-19):prompt 尚未产出时也要在分镜预览可见(H3A 签字审看站位/动线),
+        # 组 prompt refs 已列入的按普通 pipeline ref 展示,未列入的补插到最前
+        bmap_rel = f"directing/{ep}/blocking_maps/{gid}.png"
+        bmap = base / bmap_rel
+        if gid and bmap.is_file() and all(r["ref"] != bmap_rel for r in pipeline_refs):
+            pipeline_refs.insert(0, {
+                "ref": bmap_rel, "name": f"blocking_map/{gid}.png",
+                "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
+            "blocking_map": g.get("blocking_map"),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,

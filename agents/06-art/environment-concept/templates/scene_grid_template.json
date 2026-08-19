@@ -1,0 +1,24 @@
+{
+  "template": "scene_grid_template.png",
+  "template_size": [2560, 1440],
+  "purpose": "场景 9 宫格多角度概念图版式模板:单次生成一张 3x3 九格 grid_9views.png,九格分别是同一场景空间从九个不同机位/角度看到的分镜级画面,与该场景俯视空间布局图 layout_top.png 严格同一空间(家具/门窗/地标位置一一对应)",
+  "usage": [
+    "先生成 layout_top.png(俯视空间布局图,无人),再以 layout_top.png 作第一张 --ref、本模板作第二张 --ref 生成 grid_9views.png(版式锚);refs/scenes/ 命中的用户参考图排在其后",
+    "九格语义(机位/看向/景别)由 agent 事先写进 layout.json#views(tile 1..9,与格位一一对应),生成 prompt 逐格描述;下游 storyboard 每镜 view_tile 与 prompt 的 [Image N] 格号引用都以 layout.json#views 为准",
+    "尺寸 2560x1440 起(恰达视频参考像素下限 3,686,400,火山硬限,WORKFLOW.md §9),严禁更低;定稿单张即下游场景多角度参考锚,不裁切子图",
+    "格位编号:左上=1、上中=2、右上=3、左中=4、正中=5、右中=6、左下=7、下中=8、右下=9(行优先)"
+  ],
+  "min_pixels": 3686400,
+  "panels": [
+    { "tile": 1, "position": "左上", "content": "layout.json#views[tile=1] 指定的机位/看向/景别" },
+    { "tile": 2, "position": "上中", "content": "layout.json#views[tile=2]" },
+    { "tile": 3, "position": "右上", "content": "layout.json#views[tile=3]" },
+    { "tile": 4, "position": "左中", "content": "layout.json#views[tile=4]" },
+    { "tile": 5, "position": "正中", "content": "layout.json#views[tile=5](建议:场景主视角 establishing 全景)" },
+    { "tile": 6, "position": "右中", "content": "layout.json#views[tile=6]" },
+    { "tile": 7, "position": "左下", "content": "layout.json#views[tile=7]" },
+    { "tile": 8, "position": "下中", "content": "layout.json#views[tile=8]" },
+    { "tile": 9, "position": "右下", "content": "layout.json#views[tile=9]" }
+  ],
+  "recommended_view_set": "覆盖四面墙/四角 + 主入口反打 + 至少一格特写地标(如壁炉/主桌),使任何分镜机位都能在九格中找到最近角度;室外场景按四方位 + 高低机位组织"
+}

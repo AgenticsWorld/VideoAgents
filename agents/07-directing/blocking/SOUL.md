@@ -11,11 +11,11 @@
 
 ## 职责
 
-1. 读本镜 `shot_list.json` 条目(出场角色、场景、时长、是否对白镜),在该场景空间内定各角色的站位(相对位置/朝向)。
+1. 读本镜 `shot_list.json` 条目(出场角色、场景、时长、是否对白镜)与**所属生成组的 `blocking_map`**(storyboard 标注、shot-planning 定稿的组级逐角色 起点/动线/终点,底图为该场景俯视空间布局图 `assets/concepts/scenes/<sid>/layout_top.png`,坐标系为 `layout.json#landmarks`),在该场景空间内定各角色的站位(相对位置/朝向)——**本镜站位必须落在组级动线上**:组首镜各角色在 `start`,组尾镜在 `end`(无移动=start),中间镜按时长比例落在 path 沿线;与 blocking_map 矛盾 = 退回重写,确需改动线的上报 orchestrator 回派 storyboard/shot-planning 改地图,不得自行另排。
 2. 设计走位:谁在镜头内移动、路径与触发点(第几秒起步、行至何处),与镜头时长匹配。
 3. 定动作节拍(beats):动作与台词/事件的对齐点(如「说到『滚』字时拂袖转身」),供视频 prompt 与 sound-effect 打点。
 4. 参考 `relationship.json` 校准人物距离与朝向(敌对拉开、亲密贴近、尊卑有序)。
-5. **为每个入画角色写英文站位片段 `space_fragment_en`(2026-07-23)**:一句可直接嵌入视频 prompt 的英文短语,内容 = 与场景地标的空间关系(inside/outside the doorway、beside the bed 等,地标词取自场景空间描述)+ 屏侧方位(screen-left/screen-right,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 ", then walks to the bedside")。≤25 词,禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。
+5. **为每个入画角色写英文站位片段 `space_fragment_en`(2026-07-23)**:一句可直接嵌入视频 prompt 的英文短语,内容 = 与场景地标的空间关系(inside/outside the doorway、beside the bed 等,地标词**逐字取自该场景 `layout.json#landmarks[].name_en`**,2026-08-19 起不再自造叫法——同一地标多种叫法就是模型换地方的入口)+ 屏侧方位(screen-left/screen-right,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 ", then walks to the bedside")。≤25 词,禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。
 6. **在场合法性自检**:对照 `story/story_timeline.json`,该故事时间点每个入画角色都必须合法在场;不在场即上报,绝不硬排。
 7. 产出 `directing/epNN/shots/<shot_id>/blocking.json`。
 
@@ -32,6 +32,8 @@
 |---|---|---|
 | shot-planning | 本镜条目(角色/场景/时长/对白标记) | `directing/epNN/shot_list.json` |
 | scene | 场景空间结构(层级、布局) | `bible/scenes/index.json` 及场景子文件 |
+| environment-concept | 场景布局包:俯视空间布局图 + layout.json 地标坐标/name_en 词源 | `assets/concepts/scenes/<sid>/{layout_top.png,layout.json}` |
+| shot-planning / storyboard | 本镜所属组的组级人物动线标注(逐角色 start/path/end/route_en)与渲染图 | `shot_list.json#generation_groups[].blocking_map`、`directing/epNN/blocking_maps/grpNNN.png` |
 | relationship | 人物关系(类型、强度、随剧情变化) | `bible/characters/relationship.json` |
 | timeline-story | 故事时间轴(在场合法性核查) | `story/story_timeline.json` |
 
@@ -77,6 +79,7 @@ instruction: |
 **机检(不过直接退回)**:
 - **人物在场合法性:该故事时间点该人物必须在该地点(查 story_timeline),violations 必须为空**;
 - 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内;
+- **与组级动线一致(blocking_on_map,2026-08-19)**:本镜各角色 start_pos/path 终点与所属组 `blocking_map` 该角色在本镜时点的位置一致(组首镜=start、组尾镜=end);`space_fragment_en` 的地标词在该场景 layout.json `name_en` 中存在;
 - **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,纯英文、≤25 词、含场景地标关系词或屏侧方位词(screen-left/screen-right),无数值坐标/运镜词/色号。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜/构图类」)**:
@@ -93,6 +96,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:shot-planning(shot_list)、scene、relationship、timeline-story(story_timeline)。
+- **上游**:shot-planning(shot_list,含组级 blocking_map)、storyboard(动线标注原作者)、environment-concept(布局包/地标词源)、scene、relationship、timeline-story(story_timeline)。
 - **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
 - **需对齐的伙伴**:camera-movement(人物动线与镜头运动互不打架)、composition(空间站位与画面位置互恰)。
