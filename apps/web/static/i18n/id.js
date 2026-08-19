@@ -35,6 +35,7 @@ window.I18N_DICT = {
 "分镜组设置": "Pengaturan Grup Generasi",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Batas durasi grup generasi dan jumlah materi referensi per grup; harus sesuai kemampuan model video yang dipilih, per proyek",
 "🎬 分镜组设置 —": "🎬 Pengaturan Grup Generasi —",
+"默认值": "Nilai default",
 "最大分镜组时长(秒)": "Durasi grup maks (dtk)",
 "最大参考图数量": "Maks gambar referensi",
 "最大参考视频数量": "Maks video referensi",
@@ -1402,4 +1403,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Pendaftaran gagal (tidak lolos tinjauan); klik untuk mencoba lagi",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Unggah ke pustaka potret virtual Volcano Ark (tinjauan asinkron; berlaku setelah Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Terdaftar di pustaka: dikirim sebagai URI aset saat grup ini dibuat ulang, menghindari pemblokiran moderasi wajah",
+"人物精确空间位置": "Posisi spasial karakter presisi",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "Aktif = setiap adegan mendapat peta tampak atas + lembar 3x3 multi-sudut, dan tiap grup shot menandai awal/jalur/akhir karakter agar model video menempatkannya; Nonaktif = alur lama satu gambar konsep adegan",
 };

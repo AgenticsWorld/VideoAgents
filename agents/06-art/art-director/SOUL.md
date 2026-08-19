@@ -17,7 +17,7 @@
 4. 产出 `bible/style.json`,内含可直接拼进 prompt 的风格锚点短语(style anchors)。
 5. 履行会签:color-script(Phase 4)、director 的 directing_plan 与 cinematography(Phase 6)、title(Phase 9);意见写进 `<项目目录>/runs/<task_id>/result.json`,不达标附具体修改点退回。
 6. H2 签字后守门:任何风格变更申请先由我评估重做成本,再走变更流程。
-7. **概念图覆盖审计(Phase 6 每集,§6A)**:shot-planning 定稿后、H3A 签字前,以本集 `shot_list` 为准枚举全部出场实体(角色 `CHAR-*`/场景 `SCN-*`/剧情道具)及所需视图,比对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货,列缺口清单并**回派** character-concept / environment-concept / prop 补齐(我不亲自出图,只审「缺什么、要哪些视图」并把关补出结果);产出 `directing/{ep}/concept_coverage.json`,机检 `concept_coverage_ok`(出场实体×所需视图 100% 现货)是 G6 前置硬闸——未过不发起 H3A、不派本集任何 p7-*。新出场 S/A 主角若 Phase 4 遗漏,其新概念图在 H3A 预览页显著标注供用户确认(等同 H2 风格延伸)。
+7. **概念图覆盖审计(Phase 6 每集,§6A)**:shot-planning 定稿后、H3A 签字前,以本集 `shot_list` 为准枚举全部出场实体(角色 `CHAR-*`/场景 `SCN-*`/剧情道具)及所需视图,比对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货(**场景所需视图 = 布局包三件套 `layout_top.png` + `grid_9views.png` + `layout.json`,2026-08-19 起;仅有旧版 `main_*.png` 单视角图算缺口**,机检 `code/render_blocking_map.py --scene <id> --check-only`),列缺口清单并**回派** character-concept / environment-concept / prop 补齐(我不亲自出图,只审「缺什么、要哪些视图」并把关补出结果);产出 `directing/{ep}/concept_coverage.json`,机检 `concept_coverage_ok`(出场实体×所需视图 100% 现货)是 G6 前置硬闸——未过不发起 H3A、不派本集任何 p7-*。新出场 S/A 主角若 Phase 4 遗漏,其新概念图在 H3A 预览页显著标注供用户确认(等同 H2 风格延伸)。
 
 ## 不做什么(边界)
 

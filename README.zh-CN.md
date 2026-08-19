@@ -104,7 +104,8 @@ DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
 ```
 
 还可调整 `DEEPAGENTS_RECURSION_LIMIT` 与 `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES`；提高任一值都会
-增加运行时间或上下文压力。
+增加运行时间或上下文压力。撞到 recursion_limit 时 runner 会从最后检查点自动续跑，
+最多 `DEEPAGENTS_MAX_CONTINUATIONS`（默认 3）轮，仍未收敛才报错。
 
 FFmpeg 需要通过操作系统包管理器单独安装。
 

@@ -35,6 +35,7 @@ window.I18N_DICT = {
 "分镜组设置": "Cài đặt nhóm tạo sinh",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Giới hạn thời lượng nhóm tạo sinh và số lượng tư liệu tham chiếu mỗi nhóm; phải phù hợp với khả năng của mô hình video đã chọn, riêng cho từng dự án",
 "🎬 分镜组设置 —": "🎬 Cài đặt nhóm tạo sinh —",
+"默认值": "Giá trị mặc định",
 "最大分镜组时长(秒)": "Thời lượng nhóm tối đa (giây)",
 "最大参考图数量": "Số ảnh tham chiếu tối đa",
 "最大参考视频数量": "Số video tham chiếu tối đa",
@@ -1402,4 +1403,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Vào kho thất bại (không qua kiểm duyệt), bấm để thử lại",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Tải lên thư viện chân dung ảo Volcano Ark (kiểm duyệt bất đồng bộ; có hiệu lực khi Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Đã vào thư viện chân dung ảo: khi tạo lại nhóm này sẽ gửi bằng URI tài sản, tránh chặn kiểm duyệt ảnh tham chiếu khuôn mặt",
+"人物精确空间位置": "Vị trí không gian chính xác của nhân vật",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "Bật = mỗi bối cảnh có sơ đồ nhìn từ trên + bảng 3x3 đa góc, mỗi nhóm cảnh đánh dấu điểm bắt đầu/đường đi/kết thúc của nhân vật để mô hình video định vị; Tắt = luồng cũ dùng một ảnh concept bối cảnh",
 };

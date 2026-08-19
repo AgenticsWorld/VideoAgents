@@ -35,6 +35,7 @@ window.I18N_DICT = {
 "分镜组设置": "Configurações de grupos de geração",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Limites de duração do grupo de geração e de materiais de referência por grupo; devem corresponder às capacidades do modelo de vídeo selecionado, por projeto",
 "🎬 分镜组设置 —": "🎬 Configurações de grupos de geração —",
+"默认值": "Predefinições",
 "最大分镜组时长(秒)": "Duração máx. do grupo (s)",
 "最大参考图数量": "Máx. de imagens de referência",
 "最大参考视频数量": "Máx. de vídeos de referência",
@@ -1402,4 +1403,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Falha no registro (revisão reprovada); clique para tentar novamente",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Enviar para a biblioteca de retratos virtuais do Volcano Ark (revisão assíncrona; vale após ficar Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Registrado na biblioteca: enviado como URI de ativo ao regenerar este grupo, evitando bloqueios de moderação facial",
+"人物精确空间位置": "Posição espacial precisa dos personagens",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "Ligado = cada cena recebe um mapa de planta superior + folha 3x3 multiângulo, e cada grupo de planos marca início/trajeto/fim dos personagens para o modelo de vídeo posicioná-los; Desligado = fluxo clássico de imagem única de conceito de cena",
 };

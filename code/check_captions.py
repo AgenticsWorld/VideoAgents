@@ -19,6 +19,11 @@
     5. caption_text_from_source   花字文本片段能在母带原文找到(仅 av 项目,防造词;
                                   有 bible/dictionary.json 的主流程项目仍走 dictionary_match_100)
     6. ascii_filename             花字产物文件名仅 ASCII(WORKFLOW.md §1 原则 9)
+   6a. caption_speech_aligned     花字入出点 == 语音里这段文字被念出的起止(±0.15s;
+                                  依据 edit/epNN/word_track.json 逐字轨,由
+                                  render_captions.py speech-align 生成;speech_free:true
+                                  的画面标注型花字豁免,av 项目不得豁免;有台本时间码
+                                  却缺/过期 word_track 即 FAIL)
 
   [render] 烧录阶段(av4/p9 caption-render 交付前必跑)
     7. caption_toolchain_verified playwright + Chromium 可启动(HTML 引擎)
@@ -56,6 +61,7 @@ from _common import DATA_DIR, parse_args                          # noqa: E402
 import captions as cap                                            # noqa: E402
 import captions_html as chtml                                     # noqa: E402
 import avsync                                                     # noqa: E402
+import speechalign as sa                                          # noqa: E402
 
 STAGES = ("design", "render", "final")
 DUR_TOL_S = 0.10
@@ -144,6 +150,24 @@ def main():
             skip("caption_text_from_source",
                  "存在 bible/dictionary.json(走 dictionary_match_100)" if has_dict
                  else "无 av/beat_track.json(主流程项目)")
+        # 花字入出点与语音逐字起止对齐(2026-08-18 用户裁定:准确匹配这段文字被念出的时段)
+        wt_path = sa.word_track_path(proj, ep)
+        if sa.find_transcript(proj, ep) is None:
+            skip("caption_speech_aligned", f"无台本时间码(av/{ep}/beat_track.json | edit/{ep}/subtitles.srt)")
+        elif not wt_path.is_file():
+            check("caption_speech_aligned", False,
+                  f"缺 {wt_path.relative_to(proj)}(先跑 render_captions.py speech-align)")
+        else:
+            try:
+                track = sa.load_word_track(wt_path)
+                stale = sa.staleness(track, proj, ep)
+                sp_issues = (["word_track 过期:" + "; ".join(stale)] if stale else []) \
+                    + sa.check_speech_alignment(data, track, shot_list,
+                                                allow_speech_free=beat_text is None)
+            except (ValueError, OSError) as e:
+                sp_issues = [f"word_track 无法读取:{e}"]
+            check("caption_speech_aligned", not sp_issues,
+                  (f"({len(sp_issues)} 条)" + "; ".join(sp_issues[:3])) if sp_issues else "")
         bad = [str(p) for p in (cj, proj / "assets" / "clips_caption" / ep)
                if p.exists() and p.name != p.name.encode("ascii", "ignore").decode()]
         bad += avsync_non_ascii(proj / "assets" / "clips_caption" / ep)

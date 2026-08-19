@@ -143,6 +143,9 @@ seek(0);
    offset≈-0.03)、keyword 池轮换(相邻不重样)、逐条 `pitch` 0.9–1.1 微变;
 2. **同屏 ≤2 条且错位**;不入底部字幕安全区(引擎在 0.82H 再兜底收拢一次);
 3. 文案溯源(词典或母带原文)机检口径不变;segments 拼接必须 == text;
+   **入出点 = 这段文字被念出的起止**(2026-08-18):设计前 `render_captions.py speech-align`,
+   逐条 `speech-lookup --text` 取时间或写完 `speech-snap` 吸附;机检 `caption_speech_aligned`
+   ±0.15s。入场动画从 start 起算,所以模版入场要快(≤0.3s 可读),别把入场拖到字念完;
 4. cards 图卡 v3 暂不支持(默认不使用,需求出现时先上报);
 5. 交付前:设计过 `check_captions.py --require design`,烧录过 `--require render`。
 

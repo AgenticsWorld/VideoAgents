@@ -656,10 +656,11 @@ DEFAULT_GENCONFIG = {
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
-    # 10视频/10音频),默认值按 2.0 的保守口径;注入 Agent 系统提示词约束分组与
-    # prompt 组装,模型侧硬限另由 genmedia 按 model id 强制校验
+    # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
+    # 「默认值」按钮一键切换三档);注入 Agent 系统提示词约束分组与 prompt 组装,
+    # 模型侧硬限另由 genmedia 按 model id 强制校验
     "shot_group": {"max_group_s": 15, "max_ref_images": 9,
-                   "max_ref_videos": 1, "max_ref_audios": 2},
+                   "max_ref_videos": 3, "max_ref_audios": 3},
     # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
@@ -675,10 +676,15 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
+    # spatial_blocking=人物精确空间位置(默认开):开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+
+    #   layout.json,分镜组标注人物起点/动线/终点渲染成动线俯视图,prompt 挂图并逐字注入 route_en,
+    #   机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound);关=沿用单张场景概念图流程
+    #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
                "dialogue_voice": "native",
+               "spatial_blocking": True,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -858,6 +864,17 @@ def is_seedance25(model: str) -> bool:
 SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
 
 
+def is_seedance20(model: str) -> bool:
+    """Seedance 2.0 系列判定(含 fast/mini 等衍生版;与 genmedia._seedance_gen 同口径:
+    命中 seedance-2 且非 2.5 即按 2.0 口径,大小写不敏感)。"""
+    return "seedance-2" in (model or "").lower() and not is_seedance25(model)
+
+
+# Seedance 2.0 官方提示词写作 skill(sd20-prompt-writing):仅当生效视频模型为
+# 2.0 系列(含 fast/mini)时注入加载指令给 prompt agent;随仓库分发
+SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-prompt-writing/SKILL.md"
+
+
 def is_minimax_h3(model: str) -> bool:
     """MiniMax H3 判定(命中 minimax-h3 / MiniMax: H3 / MiniMax-H3 等写法,大小写不敏感)。"""
     m = re.sub(r"[\s_:]+", "-", (model or "").lower())
@@ -1002,8 +1019,8 @@ def _validate_shot_group(g: dict):
     try:
         gs = float(g.get("max_group_s", 15))
         ni = int(g.get("max_ref_images", 9))
-        nv = int(g.get("max_ref_videos", 1))
-        na = int(g.get("max_ref_audios", 2))
+        nv = int(g.get("max_ref_videos", 3))
+        na = int(g.get("max_ref_audios", 3))
         assert 4 <= gs <= 30 and 0 <= ni <= 30 and 0 <= nv <= 10 and 0 <= na <= 10
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
@@ -1027,6 +1044,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.caption_enabled must be a boolean")
     if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
+    if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
+        raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -1831,6 +1850,23 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("caption_enabled") else
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
+    spatial_on = out.get("spatial_blocking", True) is not False
+    spatial_line = (
+        "**开启(默认)—— 场景布局包 + 人物动线标注流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
+        "`layout_top.png` + 9 宫格多角度图 `grid_9views.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口);"
+        "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
+        "shot-planning 继承并跑 `code/render_blocking_map.py` 渲染 `directing/epNN/blocking_maps/grpNNN.png`"
+        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
+        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
+        "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
+        if spatial_on else
+        "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "
+        "`main_*.png` + 昼夜变体(不出 layout_top/grid_9views/layout.json,§6A 场景所需视图=主视角概念图+变体);"
+        "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 render_blocking_map.py;blocking 不受 blocking_on_map 约束"
+        "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
+        "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
+        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
     dialogue_voice = (
         "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
@@ -1890,8 +1926,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
     sg_img = int(sg.get("max_ref_images", 9))
-    sg_vid = int(sg.get("max_ref_videos", 1))
-    sg_aud = int(sg.get("max_ref_audios", 2))
+    sg_vid = int(sg.get("max_ref_videos", 3))
+    sg_aud = int(sg.get("max_ref_audios", 3))
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -1921,6 +1957,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
 - 对白配音:{dialogue_voice}
+- 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
@@ -2006,6 +2043,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()):
+        p += f"""
+
+## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
+当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+- Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
+- 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
     if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
         p += f"""
 
@@ -2382,6 +2428,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_PROMPT"] = message
             # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
             # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
+            # runner 撞上限后会从检查点自动续跑(DEEPAGENTS_MAX_CONTINUATIONS,默认 3 轮)。
             if "DEEPAGENTS_RECURSION_LIMIT" not in env:
                 env["DEEPAGENTS_RECURSION_LIMIT"] = (
                     "500" if agent_id in DISPATCHERS else "250"
@@ -2788,6 +2835,13 @@ def handle_deepagents_event(run: dict, obj: dict):
             run["text"] = run.get("text", "") + txt
             HUB.publish({"type": "text", "run_id": run["id"],
                          "agent": run["agent"], "text": txt})
+    elif t == "notice":   # runner 自身提示(如撞 recursion_limit 自动续跑),不计入产出文本
+        txt = obj.get("text") or ""
+        if txt:
+            run.setdefault("activity", []).append(txt)
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": txt})
+            publish_run(run)
     elif t == "tool":
         name = obj.get("name", "?")
         inp = obj.get("input") or {}
@@ -3169,7 +3223,8 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 # ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/scenes/",
-                      "assets/concepts/props/")
+                      "assets/concepts/props/",
+                      "directing/")   # directing/epNN/blocking_maps/grpNNN.png 组人物动线俯视图(2026-08-19)
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
@@ -3207,7 +3262,9 @@ async def api_grpref_add(body: dict):
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
-        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/ or directing/<ep>/blocking_maps/")
+    if ref.startswith("directing/") and "/blocking_maps/" not in ref:
+        raise ServiceError(400, "under directing/ only <ep>/blocking_maps/*.png may be added as a ref")
     target = (base / ref).resolve()
     try:
         target.relative_to(base.resolve())
@@ -3657,9 +3714,19 @@ def _preview_storyboard(project: str, ep: str):
                 # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
                 pipeline_refs.append({"ref": r, "url": url,
                                       "name": "/".join(r.split("/")[-2:])})
+        # 组人物动线俯视图(storyboard/shot-planning 的 blocking_map 经 code/render_blocking_map.py
+        # 渲染,2026-08-19):prompt 尚未产出时也要在分镜预览可见(H3A 签字审看站位/动线),
+        # 组 prompt refs 已列入的按普通 pipeline ref 展示,未列入的补插到最前
+        bmap_rel = f"directing/{ep}/blocking_maps/{gid}.png"
+        bmap = base / bmap_rel
+        if gid and bmap.is_file() and all(r["ref"] != bmap_rel for r in pipeline_refs):
+            pipeline_refs.insert(0, {
+                "ref": bmap_rel, "name": f"blocking_map/{gid}.png",
+                "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
+            "blocking_map": g.get("blocking_map"),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,

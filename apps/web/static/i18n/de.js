@@ -35,6 +35,7 @@ window.I18N_DICT = {
 "分镜组设置": "Shot-Gruppen-Einstellungen",
 "生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立": "Obergrenzen für Gruppendauer und Referenzmaterial pro Gruppe; müssen zu den Fähigkeiten des gewählten Videomodells passen, pro Projekt",
 "🎬 分镜组设置 —": "🎬 Shot-Gruppen-Einstellungen —",
+"默认值": "Vorgaben",
 "最大分镜组时长(秒)": "Max. Gruppendauer (s)",
 "最大参考图数量": "Max. Referenzbilder",
 "最大参考视频数量": "Max. Referenzvideos",
@@ -1402,4 +1403,6 @@ window.I18N_DICT = {
 "入库失败(审核未过),点击重试": "Registrierung fehlgeschlagen (Prüfung abgelehnt); zum Wiederholen klicken",
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "In die Volcano-Ark-Porträt-Bibliothek hochladen (asynchrone Prüfung; wirksam ab Status Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "In der Bibliothek registriert: wird bei Neugenerierung dieser Gruppe als Asset-URI übermittelt und umgeht Gesichtsreferenz-Moderation",
+"人物精确空间位置": "Präzise Figurenpositionen",
+"开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程": "An = jede Szene erhält eine Draufsicht-Karte + 3x3-Mehrwinkel-Tafel, und jede Shot-Gruppe markiert Start/Weg/Ende der Figuren, damit das Videomodell sie platziert; Aus = klassischer Ablauf mit einem einzelnen Szenen-Konzeptbild",
 };
