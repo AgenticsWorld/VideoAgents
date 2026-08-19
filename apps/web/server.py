@@ -157,7 +157,14 @@ async def _ensure_api_ready() -> None:
         if API_PROCESS and API_PROCESS.poll() is None and await asyncio.to_thread(_health):
             return
         if API_PROCESS and API_PROCESS.poll() is None:
-            await _stop_api_process()
+            # Do not terminate a live API during a transient health-check failure.
+            # Terminating it resets in-flight Web-to-API sockets as WinError 10054.
+            for _ in range(5):
+                await asyncio.sleep(0.2)
+                if await asyncio.to_thread(_health):
+                    return
+            print("VideoAgents API health check is transiently unavailable; keeping live process", flush=True)
+            return
         elif API_PROCESS and API_PROCESS.returncode is not None:
             print(f"VideoAgents API exited with code {API_PROCESS.returncode}; restarting", flush=True)
         popen_options = {"start_new_session": True} if os.name != "nt" else {}
