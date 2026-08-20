@@ -6,9 +6,12 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import signal
+import socket
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from contextlib import asynccontextmanager
@@ -146,6 +149,94 @@ class _WebServer(uvicorn.Server):
         super().handle_exit(sig, frame)
 
 
+def _port_listener_pids(port: int) -> list[int]:
+    """仍在监听 port 的进程 PID 列表(尽力而为:POSIX 用 lsof,Windows 用 netstat)。"""
+    try:
+        if os.name == "nt":
+            out = subprocess.run(["netstat", "-ano", "-p", "tcp"],
+                                 capture_output=True, text=True, timeout=10).stdout
+            pids = set()
+            for line in out.splitlines():
+                parts = line.split()
+                if (len(parts) >= 5 and parts[0].upper() == "TCP"
+                        and parts[3].upper() == "LISTENING"
+                        and parts[1].endswith(f":{port}")):
+                    pids.add(int(parts[4]))
+            return sorted(pids)
+        out = subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+                             capture_output=True, text=True, timeout=10).stdout
+        return [int(x) for x in out.split()]
+    except Exception:  # noqa: BLE001 - 找不到就不接管,交给后续健康检查兜底
+        return []
+
+
+def _pid_is_api_service(pid: int) -> bool:
+    """确认该 PID 是 services.api,避免误杀恰好占着端口的无关进程。
+    POSIX 精确核对命令行;Windows 的 tasklist 只有映像名,放宽到 python 进程。"""
+    try:
+        if os.name == "nt":
+            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                                 capture_output=True, text=True, timeout=5).stdout
+            return "python" in out.lower()
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout
+        return "services.api" in out
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _web_port_free() -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind((WEB_HOST, WEB_PORT))
+            return True
+        except OSError:
+            return False
+
+
+def _reclaim_api_port() -> None:
+    """启动时接管 API 端口,保证 make run / run-auto 总能把后端换成新代码。
+
+    server.py 被强杀(关终端/崩溃)时,start_new_session 拉起的 services.api 会
+    以孤儿进程活下来占住端口:下一轮 server.py 新拉的后端 bind 失败秒退,而健康
+    检查打到孤儿上是 200,Web 端便一直代理到旧代码的后端。此处把遗留监听进程
+    温和停掉(TERM→等待→KILL),再交给 _ensure_api_ready 拉起受管的新进程。
+    仅在本进程确定能当上 Web 服务(WEB_PORT 空闲)时才接管,避免第二个实例
+    误杀正常实例的后端;非 services.api 的占端口进程一律不碰,只打印提示。"""
+    if not START_API or not _web_port_free():
+        return
+    stale = _port_listener_pids(API_PORT)
+    if not stale:
+        return
+    for pid in stale:
+        if not _pid_is_api_service(pid):
+            print(f"端口 {API_PORT} 被无关进程 pid {pid} 占用,未接管;"
+                  f"请释放该端口或改设 VIDEOAGENTS_API_PORT", flush=True)
+            continue
+        print(f"重启遗留的 VideoAgents API(pid {pid},端口 {API_PORT})", flush=True)
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, timeout=10)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, subprocess.SubprocessError):
+            continue
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        left = [p for p in _port_listener_pids(API_PORT) if _pid_is_api_service(p)]
+        if not left:
+            return
+        if time.time() > deadline - 3 and os.name != "nt":
+            for pid in left:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        time.sleep(0.5)
+
+
 async def _ensure_api_ready() -> None:
     """Start or restart the local API service used by the Web proxy."""
     global API_PROCESS, API_STOP_REQUESTED
@@ -187,6 +278,7 @@ async def _ensure_api_ready() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await asyncio.to_thread(_reclaim_api_port)
     await _ensure_api_ready()
     try:
         yield
