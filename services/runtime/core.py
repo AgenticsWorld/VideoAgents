@@ -1798,6 +1798,17 @@ def chat_path(agent_id: str, project: str) -> Path:
     return d / (agent_id.replace("/", "__") + ".jsonl")
 
 
+def _clear_agent_sessions(agent_id: str, project: str) -> list[str]:
+    """清掉该 Agent 在项目下全部引擎的会话记录,返回清掉的引擎列表。
+    引擎侧的历史会话文件留在原处,仅解除续接;下一条消息即开全新会话。
+    (用途:/clear 命令、签字过门后的自动瘦身——防会话随项目推进无限膨胀。)"""
+    cleared = [eng for eng in ENGINES
+               if STATE["sessions"].pop(f"{eng}::{agent_id}::{project}", None)]
+    if cleared:
+        save_state(STATE)
+    return cleared
+
+
 def append_chat(agent_id: str, project: str, entry: dict):
     entry["ts"] = time.time()
     with chat_path(agent_id, project).open("a") as f:
@@ -2589,7 +2600,15 @@ async def execute_run(run: dict, message: str, model: str | None):
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
             # "No session found";这种会话也没有值得续接的上下文
-            if (run.get("session_id") and not is_stateless
+            if run.pop("clear_sessions_on_end", None):
+                # 本运行期间用户签字过门(见 _continue_signed_gate):阶段收官,
+                # 不回存本次会话并清掉全部记录,下一条消息即开全新会话
+                _clear_agent_sessions(run["agent"], run["project"])
+                append_chat(run["agent"], run["project"], {
+                    "role": "assistant", "status": "done",
+                    "text": "🧹 签字通过,本轮结束后已自动清理会话记录,"
+                            "下一条消息将开启全新会话。"})
+            elif (run.get("session_id") and not is_stateless
                     and (run.get("result") or run.get("text"))):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
@@ -6274,10 +6293,8 @@ async def api_chat(body: dict):
         # 会话清理命令:不派发运行,清掉该 Agent 在本项目下全部引擎的会话记录,
         # 下一条消息即开全新会话。引擎侧的历史会话文件留在原处,仅解除续接
         # (用途:会话膨胀后续接请求过大被网络掐断、或想甩掉陈旧上下文时手动重置)。
-        cleared = [eng for eng in ENGINES
-                   if STATE["sessions"].pop(f"{eng}::{agent}::{project}", None)]
+        cleared = _clear_agent_sessions(agent, project)
         if cleared:
-            save_state(STATE)
             reply = (f"🧹 已清理会话记录({'、'.join(cleared)}),"
                      "下一条消息将开启全新会话。")
         else:
@@ -6588,15 +6605,28 @@ async def _continue_signed_gate(c: dict) -> str | None:
     """签字后恢复总制片；仍在等待 dispatch.py 的父运行会自行继续。"""
     parent = RUNS.get(c.get("parent") or "")
     if parent and parent.get("status") in ("queued", "running"):
+        # 总制片仍在运行中等签字,会话正在使用不能立刻清;打标记让该运行结束时
+        # 不回存会话并清掉记录(见 execute_run finally),下一轮即全新会话。
+        parent["clear_sessions_on_end"] = True
         return None
     proj = str(c["project"])
     checkpoint = c.get("checkpoint") or c["gate_id"]
+    # 签字过门 = 一个阶段收官:先做 /clear 同款清理再唤醒,复核以全新会话开始,
+    # 防止总制片会话随项目推进无限膨胀(项目状态一律以文件为准,不依赖对话记忆)。
+    cleared = _clear_agent_sessions(ORCHESTRATOR_AGENT, proj)
+    if cleared:
+        append_chat(ORCHESTRATOR_AGENT, proj, {
+            "role": "assistant", "status": "done",
+            "text": (f"🧹 签字通过,已自动清理会话记录({'、'.join(cleared)}),"
+                     "闸门复核将以全新会话开始。")})
     message = (
         f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
         f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
         "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
         "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG 并派 version 冻结。"
         "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
+        "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
+        "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"
     )
     result = await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message,
                              "project": proj, "source": "approval",
