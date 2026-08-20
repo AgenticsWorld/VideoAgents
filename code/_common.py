@@ -37,3 +37,19 @@ def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):
     proj_root = Path(args.out_root) if args.out_root \
         else DATA_DIR / "projects" / args.project
     return args, proj_root
+
+
+def project_output_setting(proj_root: Path, key: str, default=None):
+    """读项目根 settings.json 的 output.<key>(Web 客户端「输出设置」,缺省回落 default)。"""
+    try:
+        import json
+        st = json.loads((Path(proj_root) / "settings.json").read_text())
+        return (st.get("output") or {}).get(key, default)
+    except Exception:
+        return default
+
+
+def spatial_blocking_enabled(proj_root: Path) -> bool:
+    """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开):开=场景布局包 + 动线标注流程;
+    关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
+    return project_output_setting(proj_root, "spatial_blocking", True) is not False

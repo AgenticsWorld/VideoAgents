@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, media_push, wechat, whatsapp
+from services.runtime import core, feishu, media_push, netcheck, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -360,6 +360,11 @@ async def pi_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_pi_models(refresh)
 
 
+@api.get("/engines/opencode/models", tags=["configuration"])
+async def opencode_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_opencode_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -420,6 +425,26 @@ async def volcengine_speakers(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_volc_speakers(body.model_dump())
 
 
+@api.post("/avatar-assets/list", tags=["avatar-assets"])
+async def avatar_assets_list(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_list(body)
+
+
+@api.post("/avatar-assets/delete", tags=["avatar-assets"])
+async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_delete(body)
+
+
+@api.post("/avatar-assets/upload", tags=["avatar-assets"])
+async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_upload(body)
+
+
+@api.post("/avatar-assets/status", tags=["avatar-assets"])
+async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_avatar_status(body)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())
@@ -455,6 +480,16 @@ async def set_watchdog_policy(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_watchdog_threshold_set(body)
 
 
+@api.get("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_get() -> dict[str, Any]:
+    return await core.api_agent_advanced_get()
+
+
+@api.post("/config/agent-advanced", tags=["automation"])
+async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_agent_advanced_set(body)
+
+
 @api.get("/config/concurrency", tags=["automation"])
 async def agent_concurrency() -> dict[str, Any]:
     return await core.api_agent_concurrency_get()
@@ -473,6 +508,53 @@ async def agent_memory() -> dict[str, Any]:
 @api.post("/config/agent-memory", tags=["automation"])
 async def set_agent_memory(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_memory_set(body)
+
+
+@api.get("/diagnostics", tags=["diagnostics"])
+async def diagnostics_summary() -> dict[str, Any]:
+    return await core.api_diagnostics_get()
+
+
+@api.post("/config/diagnostics", tags=["diagnostics"])
+async def set_diagnostics(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_diagnostics_set(body)
+
+
+@api.get("/diagnostics/lessons", tags=["diagnostics"])
+async def diagnostics_lessons() -> dict[str, Any]:
+    return await core.api_diagnostics_lessons()
+
+
+@api.post("/diagnostics/clear", tags=["diagnostics"])
+async def diagnostics_clear() -> dict[str, Any]:
+    return await core.api_diagnostics_clear()
+
+
+@api.post("/diagnostics/export", tags=["diagnostics"])
+async def diagnostics_export(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_diagnostics_export(body)
+
+
+@api.get("/diagnostics/export/{name}", tags=["diagnostics"])
+async def diagnostics_export_download(name: str) -> FileResponse:
+    # 仓库首个出站文件下载端点:文件名格式白名单 + 仅限 telemetry/export 目录
+    path = core.diagnostics_export_path(name)
+    return FileResponse(path, media_type="application/zip", filename=name)
+
+
+@api.get("/network/proxy", tags=["network"])
+async def network_proxy() -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_proxy)
+
+
+@api.post("/network/probe", tags=["network"])
+async def network_probe(body: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_probe, body)
+
+
+@api.post("/network/ip", tags=["network"])
+async def network_ip(body: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(netcheck.api_ip, body)
 
 
 @api.get("/projects/{project}/watchdog", tags=["automation"])

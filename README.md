@@ -57,7 +57,7 @@ Use `npm run dev:web` to start the Python Web gateway and `npm ci && npm run dev
 desktop shell. Electron starts the same gateway by default or proxies the remote API
 specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
 without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents/metadata.json`
-and downloads the matching package. Claude, Codex, Kimi, Pi, FFmpeg, models, and GPU environments remain
+and downloads the matching package. Claude, Codex, Kimi, Pi, OpenCode, FFmpeg, models, and GPU environments remain
 optional external installations.
 
 Before desktop development, make sure `node --version` meets `.nvmrc`; with nvm, run `nvm use` first. Run `npm ci` again after switching Node major versions so an incomplete Electron installation from the old runtime is not reused.
@@ -68,7 +68,7 @@ The Python runtime and Electron application are versioned independently. Runtime
 
 Desktop and Python packages are produced only when a `v*` tag points to a commit on `main`. The tag version is embedded in both package types and published under `packages/video-agents/`: Python runtimes in `python/`, versioned desktop ZIPs in `mac/` and `win/`, and `metadata.json` as the shared update index. Each desktop directory also exposes `VideoAgents.zip` as the latest package. Release clients read this metadata before creating the main window: a newer supported version remains optional, while clients older than `desktop.minimumVersion` enter a non-skippable update flow before the local backend starts. The publish job reads that value from the GitHub Actions environment/repository variable `MINIMUM_DESKTOP_VERSION` and defaults to `1.0.0` when it is unset; publishing fails when the value is invalid or newer than the release version.
 
-When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, and `pi` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login.
+When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, OpenCode, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, `pi`, and `opencode` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login. The `opencode` engine (default model DeepSeek V4 Pro) likewise populates its menus from `opencode models`, and a DeepSeek Smart Assignment model strategy routes creative-core agents to DeepSeek V4 Pro and the rest to DeepSeek V4 Flash.
 
 Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never reads an Apple developer certificate from the macOS Keychain and performs no signing or notarization. Release signing is enabled only in GitHub Actions when `CSC_LINK` and the Apple secrets are explicitly supplied.
 
@@ -123,7 +123,9 @@ DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
 ```
 
 `DEEPAGENTS_RECURSION_LIMIT` and `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES` can also be
-adjusted; raising either increases runtime or context pressure.
+adjusted; raising either increases runtime or context pressure. When the recursion
+limit is hit, the runner resumes from the last checkpoint up to
+`DEEPAGENTS_MAX_CONTINUATIONS` (default 3) times before failing.
 
 FFmpeg must be installed separately with your operating system's package
 manager.

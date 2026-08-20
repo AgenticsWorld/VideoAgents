@@ -115,3 +115,52 @@ def test_api_event_stream_stops_on_shutdown():
             api_app._shutdown_event = None
 
     asyncio.run(probe())
+
+
+def test_opencode_engine_strategy_and_event_stream(monkeypatch):
+    from services.api.schemas import GlobalModelUpdate, RunCreate
+    from services.runtime import core
+
+    assert GlobalModelUpdate(engine="opencode",
+                             model="opencode-go/deepseek-v4-pro").engine == "opencode"
+    assert RunCreate(agent="00-orchestration/context", message="hello",
+                     engine="opencode").engine == "opencode"
+    assert "opencode" in core.ENGINES and "opencode" in core.AM_ENGINES
+    assert "smart_deepseek" in core.AM_MODES
+    assert core.default_agent_model("01-story/x", "smart_deepseek")["model"] \
+        == "opencode-go/deepseek-v4-pro"
+    assert core.default_agent_model("11-qa/x", "smart_deepseek")["model"] \
+        == "opencode-go/deepseek-v4-flash"
+
+    published = []
+
+    class Hub:
+        def publish(self, event):
+            published.append(event)
+
+    monkeypatch.setattr(core, "HUB", Hub())
+    monkeypatch.setattr(core, "publish_run", lambda run: None)
+    run = {"id": "run-1", "agent": "00-orchestration/context"}
+    sid = "ses_0001"
+    core.handle_opencode_event(run, {"type": "step_start", "sessionID": sid,
+                                     "part": {"type": "step-start"}})
+    core.handle_opencode_event(run, {"type": "tool_use", "sessionID": sid, "part": {
+        "type": "tool", "tool": "write",
+        "state": {"status": "completed",
+                  "input": {"filePath": "out.txt", "content": "hi"}}}})
+    core.handle_opencode_event(run, {"type": "step_finish", "sessionID": sid, "part": {
+        "type": "step-finish", "reason": "tool-calls",
+        "tokens": {"total": 100, "input": 60, "output": 30, "reasoning": 5,
+                   "cache": {"write": 0, "read": 5}}, "cost": 0}})
+    core.handle_opencode_event(run, {"type": "text", "sessionID": sid, "part": {
+        "type": "text", "text": "done"}})
+    core.handle_opencode_event(run, {"type": "step_finish", "sessionID": sid, "part": {
+        "type": "step-finish", "reason": "stop",
+        "tokens": {"total": 50, "input": 40, "output": 10, "reasoning": 0,
+                   "cache": {"write": 0, "read": 0}}, "cost": 0}})
+
+    assert run["session_id"] == sid
+    assert run["result"] == "done" and run["tokens"] == 150
+    assert run["files"] == ["out.txt"]
+    assert any(a.startswith("✎ write:") for a in run["activity"])
+    assert any(e.get("type") == "text" and e.get("text") == "done" for e in published)

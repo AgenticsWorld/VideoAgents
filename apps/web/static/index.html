@@ -57,6 +57,7 @@ main{flex:1;display:flex;min-height:0}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
 button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+.sg-presets{display:flex;gap:6px;flex-wrap:wrap}.sg-presets button{padding:3px 10px;font-size:12px}.sg-presets button.active{border-color:var(--accent);color:var(--accent);background:transparent}
 #messages{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:88%;border-radius:10px;padding:9px 13px;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:#24406e}
@@ -67,6 +68,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .toolchip{display:block;font-size:12px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;padding:1px 0}
 #composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
 #input{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;resize:none;height:64px;font:inherit}
+/* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
+#composer.dispatcher #input{border-color:var(--accent);animation:composer-grow 2s ease-out infinite}
+#composer.dispatcher #input:focus{outline:none}
+@keyframes composer-grow{0%{box-shadow:0 0 0 0 rgba(108,158,248,.55)}70%{box-shadow:0 0 0 7px rgba(108,158,248,0)}100%{box-shadow:0 0 0 0 rgba(108,158,248,0)}}
 #soul-view{display:none;flex:1;overflow-y:auto;padding:18px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#b9c2d6}
 /* 右栏 */
 #right{width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
@@ -123,6 +128,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .row input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;min-width:0}
 .modal textarea{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font:inherit;font-size:13px;resize:vertical;min-width:0}
 .modal .note{font-size:12px;color:var(--dim)}
+.modal .info-btn{flex:none;width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:11px;line-height:16px;text-align:center;cursor:pointer;padding:0;margin-left:auto}
+.modal .info-btn:hover,.modal .info-btn.on{color:var(--text);border-color:var(--text)}
+.modal .info-note{display:none;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:-6px}
+.modal .info-note.on{display:block}
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
@@ -140,6 +149,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .style-card img{width:100%;height:100%;object-fit:cover;display:block}
 .style-card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:12px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .style-card .cat{position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:1px 5px}
+.style-card .zoom{position:absolute;top:6px;left:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;cursor:zoom-in;opacity:.75}
+.style-card .zoom:hover{opacity:1;background:rgba(0,0,0,.85)}
+#style-zoom{z-index:210;flex-direction:column;cursor:zoom-out}
+#style-zoom img{max-width:min(1100px,92vw);max-height:80vh;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.7);display:block}
+#style-zoom .zoom-cap{margin-top:10px;max-width:92vw;color:#fff;font-size:13px;text-align:center}
+#style-zoom .zoom-cap .cat{color:var(--dim);margin-left:6px;font-size:12px}
 .style-card.custom{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--dim);text-align:center;font-size:12.5px;padding:8px}
 .style-card.custom:hover{border-color:var(--accent);color:var(--text)}
 /* 用户确认弹窗(重跑/跳过) */
@@ -184,11 +199,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
+    <option value="opencode">opencode</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
@@ -231,24 +247,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
           <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
           <a href="#" data-ammode="smart_kimi" title="按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding">Kimi 智能分配</a>
+          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">DeepSeek 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
-      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi 用量检查与 OpenRouter/火山引擎余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
-      <div class="dd-sub">
-        <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
-        <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
-      </div>
+      <a href="#" id="menu-resources" title="资源消耗设置:Claude/Codex/Kimi/OpenCode Go 用量检查与 OpenRouter/火山引擎/RunningHub 余额查询(右栏资源消耗面板数据来源)">资源消耗</a>
+      <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
+          <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-plugins" title="Agent 插件:复制插件目录到 plugins/(或上传 zip)即安装,为团队扩展新工位与工作流(如衍生小说创作)">插件</a>
-          <a href="#" id="menu-concurrency" title="扇出型 Agent(场景资产/视频生成/审核等)同一 Agent 可同时运行的工单数上限">并发数量</a>
-          <a href="#" id="menu-memory" title="开启或关闭 Agent 的跨轮对话记忆(会话恢复,默认开启)">Agent记忆</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆开关、自动重跑次数上限">Agent 高级设置</a>
+          <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
+          <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
+      </div>
+      <div class="dd-sub">
+        <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
+        <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
       </div>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
@@ -307,7 +326,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="err" id="plug-err"></div>
     <div class="actions">
       <input type="file" id="plug-file" accept=".zip" style="display:none">
-      <button id="plug-upload" style="margin-right:auto">⬆ 安装插件包(zip)</button>
+      <button id="plug-upload">⬆ 安装插件包(zip)</button>
+      <a href="https://shumati.cn/videoagents/plugins/" target="_blank" rel="noopener" style="align-self:center;margin-right:auto;color:var(--link)">🏪 插件仓库</a>
       <button id="plug-close" class="primary">关闭</button>
     </div>
   </div>
@@ -322,6 +342,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="codex">codex</option>
         <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
+        <option value="opencode">opencode</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -362,7 +383,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="youtube">YouTube 画幅(16:9)</option>
           <option value="douyin">抖音画幅(9:16)</option>
           <option value="custom">自定义画幅…</option>
-        </select></div>
+        </select>
+        <button type="button" class="info-btn" data-info="npo-info-aspect" title="说明">i</button></div>
+      <div class="note info-note" id="npo-info-aspect">画幅约束分镜构图/关键帧/视频/成片,发布平台只决定发布阶段的平台清单(不同画幅平台由发布期裁切适配);语言约束剧本/台词/旁白/字幕/配音;草稿分辨率用于迭代/待审版本,成片终稿由超分得到,分辨率越高视频生成费用越高</div>
       <div class="row" id="npo-custom-row" style="display:none"><label>自定义比例</label>
         <input type="text" id="npo-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
@@ -392,7 +415,19 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row"><label>内嵌字幕</label>
         <input type="checkbox" id="npo-burnin" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
-      <div class="note">画幅约束分镜构图/关键帧/视频/成片,发布平台只决定发布阶段的平台清单(不同画幅平台由发布期裁切适配);语言约束剧本/台词/旁白/字幕/配音;草稿分辨率用于迭代/待审版本,成片终稿由超分得到,分辨率越高视频生成费用越高</div>
+      <div class="row"><label>花字</label>
+        <input type="checkbox" id="npo-caption" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片</span></div>
+      <div class="row"><label>人物精确空间位置</label>
+        <input type="checkbox" id="npo-spatial" style="flex:none" checked>
+        <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
+      <div class="row"><label>对白配音</label>
+        <select id="npo-dialogue-voice" style="flex:1">
+          <option value="native">视频原声(默认)</option>
+          <option value="dubbing">后期配音</option>
+        </select>
+        <button type="button" class="info-btn" data-info="npo-info-voice" title="说明">i</button></div>
+      <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10"></div>
@@ -404,10 +439,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
     <div class="np-step" data-step="4" style="display:none">
+      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="15"></div>
       <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="9"></div>
-      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="1"></div>
-      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="2"></div>
+      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="3"></div>
+      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="3"></div>
       <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
@@ -473,6 +509,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions"><button id="style-cancel">取消</button></div>
   </div>
 </div>
+<div id="style-zoom" class="modal">
+  <img id="style-zoom-img" src="" alt="">
+  <div class="zoom-cap"><span id="style-zoom-nm"></span><span class="cat" id="style-zoom-cat"></span></div>
+</div>
 <div id="out-modal" class="modal">
   <div class="box">
     <h3>📤 输出设置 — <span id="out-proj" style="color:var(--accent)"></span></h3>
@@ -481,7 +521,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="youtube">YouTube 画幅(16:9)</option>
         <option value="douyin">抖音画幅(9:16)</option>
         <option value="custom">自定义画幅…</option>
-      </select></div>
+      </select>
+      <button type="button" class="info-btn" data-info="out-info-aspect" title="说明">i</button></div>
+    <div class="note info-note" id="out-info-aspect">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="row" id="out-custom-row" style="display:none"><label>自定义比例</label>
       <input type="text" id="out-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
     <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
@@ -511,7 +553,19 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>内嵌字幕</label>
       <input type="checkbox" id="out-burnin" style="flex:none">
       <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
-    <div class="note">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="row"><label>花字</label>
+      <input type="checkbox" id="out-caption" style="flex:none">
+      <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片(final_caption)</span></div>
+    <div class="row"><label>人物精确空间位置</label>
+      <input type="checkbox" id="out-spatial" style="flex:none" checked>
+      <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
+    <div class="row"><label>对白配音</label>
+      <select id="out-dialogue-voice" style="flex:1">
+        <option value="native">视频原声(默认)</option>
+        <option value="dubbing">后期配音</option>
+      </select>
+      <button type="button" class="info-btn" data-info="out-info-voice" title="说明">i</button></div>
+    <div class="note info-note" id="out-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     <div class="err" id="out-err"></div>
     <div class="actions"><button id="out-cancel">取消</button><button class="primary" id="out-ok">确定</button></div>
   </div>
@@ -533,10 +587,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="sg-modal" class="modal">
   <div class="box">
     <h3>🎬 分镜组设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
+    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
-    <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="1"></div>
-    <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="2"></div>
+    <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="3"></div>
+    <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>
     <div class="actions"><button id="sg-cancel">取消</button><button class="primary" id="sg-ok">确定</button></div>
@@ -590,43 +645,47 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>闲置时间(min)</label>
       <input type="number" id="wdt-idle" min="1" max="720" step="1" style="width:64px">
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-idle" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-idle">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
     <div class="row"><label>防止系统休眠</label>
       <input type="checkbox" id="wdt-awake" style="width:auto">
       <span id="wdt-awake-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
+    <button type="button" class="info-btn" data-info="wdt-info-awake" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-awake">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
     <div class="row"><label>常任指令</label>
       <textarea id="wdt-orders" style="height:64px" placeholder="在 ep01-ep10 剧本全部完成前,不派设定类工单"></textarea>
-    </div>
-    <div class="note">闲置时间:每隔该时长巡检一次,流水线空闲(无任务在跑、无待确认项)才发送状态检查消息,默认 5 分钟。阈值:总制片生效引擎(claude/codex)的 5 小时窗口会话用量达到该值时,本轮不发送;用量读取不到时放行。均为全局设置,对所有项目生效(开关在运行面板 🤖 按钮,按项目独立)</div>
-    <div class="note">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
-    <div class="note">防止系统休眠:开启期间,只要任一项目启用了自动运行,就阻止系统因闲置进入睡眠(屏幕照常熄灭;合盖睡眠与手动关机不拦,退出程序自动恢复)。仅支持 macOS/Windows。</div>
+    <button type="button" class="info-btn" data-info="wdt-info-orders" title="说明">i</button></div>
+    <div class="note info-note" id="wdt-info-orders">常任指令:<b>仅对当前项目生效</b>,自动运行每次唤醒总制片时都随消息附带,总制片会话重开也不丢失;适合放长期约束,建议写成条件式(如「在 ep01-ep10 剧本全部完成前,不派设定类工单」),留空则不附带</div>
     <div class="err" id="wdt-err"></div>
     <div class="actions"><button id="wdt-cancel">取消</button><button class="primary" id="wdt-ok">保存</button></div>
   </div>
 </div>
 <div id="conc-modal" class="modal">
-  <div class="box">
-    <h3>🚦 并发数量 设置</h3>
+  <div class="box" style="width:560px">
+    <h3>⚙️ Agent 高级设置</h3>
     <div class="row"><label>每 Agent 并发额度</label>
       <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
       <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
+    <button type="button" class="info-btn" data-info="conc-info-conc" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
+    <div class="row"><label>运行超时(分钟)</label>
+      <input type="number" id="conc-rt" min="10" max="1440" step="10" style="width:90px">
     </div>
-    <div class="note">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。全局设置,保存后立即对后续排队的工单生效。</div>
-    <div class="err" id="conc-err"></div>
-    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
-  </div>
-</div>
-<div id="mem-modal" class="modal">
-  <div class="box">
-    <h3>🧠 Agent记忆 设置</h3>
+    <div class="row"><label>无输出超时(分钟)</label>
+      <input type="number" id="conc-it" min="0" max="360" step="5" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-timeout" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-timeout">运行超时:单个工单从启动算起的墙钟上限,默认 120 分钟(总制片要等整条流水线,自动放宽 4 倍),到点连同派生子进程一起终止并记为出错,是回收挂死进程的最后防线。无输出超时:引擎连续多长时间没有任何事件输出即判定挂死并终止,默认 30 分钟,填 0 关闭;比墙钟更早识别 API 长连接不返回、代理断流等假死,又不会误伤跑得慢但在正常干活的长批量任务(总制片大部分时间静默等子任务,不受此项约束)。注意单次工具调用期间引擎不会有事件输出,该值须大于工单里最长的一次工具调用。均为全局设置,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>重跑次数</label>
+      <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="checkbox" id="mem-on" style="width:auto">
       <span id="mem-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
-    <div class="note">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
-    <div class="err" id="mem-err"></div>
-    <div class="actions"><button id="mem-cancel">取消</button><button class="primary" id="mem-ok">保存</button></div>
+    <button type="button" class="info-btn" data-info="conc-info-mem" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-mem">开启时,创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过 128KB 自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此开关影响)。关闭后,所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;重新开启后从最近一次会话继续。</div>
+    <div class="err" id="conc-err"></div>
+    <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -645,6 +704,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-kimi-row"><label>Kimi API Key</label>
       <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
     <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
+    <div class="row"><label>OpenCode Go 用量</label>
+      <input type="checkbox" id="res-oc-on" style="flex:none">
+      <span class="note" style="flex:1">开启后查询 OpenCode Go 订阅用量(5 小时/周窗口);API Key 留空时自动读取本机 opencode 登录凭证</span></div>
+    <div class="row res-oc-row"><label>OpenCode API Key</label>
+      <input type="password" id="res-oc" placeholder="留空则用本机 opencode 登录凭证" autocomplete="off"></div>
+    <div class="note res-oc-row" style="margin-top:-6px">获取 OpenCode Go 用量;Key 在此查看:<a href="https://opencode.ai/auth" target="_blank" rel="noopener" style="color:var(--link)">opencode.ai/auth</a></div>
     <div class="row"><label>OpenRouter Key</label>
       <input type="password" id="res-or" placeholder="sk-or-…(Management Key,留空则不查余额)" autocomplete="off"></div>
     <div class="note" style="margin-top:-6px">获取 OpenRouter 账户余额;Management Key 在此创建:<a href="https://openrouter.ai/settings/management-keys" target="_blank" rel="noopener" style="color:var(--link)">openrouter.ai/settings/management-keys</a></div>
@@ -656,9 +721,59 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-volc-row"><label>Secret Key</label>
       <input type="password" id="res-volc-sk" placeholder="火山引擎 Secret Access Key" autocomplete="off"></div>
     <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
+    <div class="row"><label>RunningHub 余额</label>
+      <input type="checkbox" id="res-rh" style="flex:none">
+      <span class="note" style="flex:1">开启后用 API Key 查询 RH 币与钱包余额;.ai 与 .cn 账号不互通,分别填写,留空的站点不查</span></div>
+    <div class="row res-rh-row"><label>.ai API Key</label>
+      <input type="password" id="res-rh-ai" placeholder="runninghub.ai API Key" autocomplete="off"></div>
+    <div class="row res-rh-row"><label>.cn API Key</label>
+      <input type="password" id="res-rh-cn" placeholder="runninghub.cn API Key" autocomplete="off"></div>
+    <div class="note res-rh-row" style="margin-top:-6px">获取 Key:<a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.ai</a> / <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.cn</a> <span>API 服务页</span></div>
     <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
+  </div>
+</div>
+<div id="diag-modal" class="modal">
+  <div class="box" style="width:600px">
+    <h3>🩺 诊断数据</h3>
+    <div class="row"><label>本地采集</label>
+      <input type="checkbox" id="diag-on" style="width:auto">
+      <span id="diag-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="note">开启时在运行结束与生成结束处按字段白名单记录结构化事件(引擎/Agent/渠道/状态/时长/脱敏后的错误模板),只写入本机 data/.videoagents/telemetry/,不含提示词、项目内容、文件路径与 API Key,永不自动上传。「导出诊断包」生成一个 zip(事件 + 环境摘要 + 下方勾选的经验卡),由你自行提交给开发者(如 GitHub issue 附件),用于改进产品。</div>
+    <div id="diag-stats" class="note">读取中…</div>
+    <div class="row"><label>经验卡</label>
+      <span class="note" style="flex:1">任务闭环时沉淀的机制性教训(各项目 runs/&lt;task_id&gt;/lesson.md);默认全部不导出,逐张预览、勾选后才会进入诊断包</span></div>
+    <div id="diag-lessons" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
+    <div class="row"><label>包含事件</label>
+      <input type="checkbox" id="diag-inc-events" checked style="width:auto">
+      <span class="note" style="flex:1">诊断包中包含已采集的结构化事件文件</span></div>
+    <div class="err" id="diag-err"></div>
+    <div class="actions">
+      <button id="diag-clear" style="margin-right:auto">🗑 清空事件</button>
+      <button id="diag-export">⬇ 导出诊断包</button>
+      <button id="diag-close" class="primary">关闭</button>
+    </div>
+  </div>
+</div>
+<div id="net-modal" class="modal">
+  <div class="box" style="width:640px">
+    <h3>🌐 网络检测</h3>
+    <div id="net-ip" style="font-size:13px"></div>
+    <table id="net-table" style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 6px;color:var(--dim);font-weight:400">站点</th>
+        <th style="text-align:left;padding:4px 6px;color:var(--dim);font-weight:400">连通性</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note" id="net-verdict" style="display:none;color:var(--text)"></div>
+    <div class="err" id="net-err"></div>
+    <div class="actions">
+      <button id="net-rerun" style="margin-right:auto">↻ 重新检测</button>
+      <button id="net-close" class="primary">关闭</button>
+    </div>
   </div>
 </div>
 <script>
@@ -699,8 +814,16 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'DeepSeek 智能分配'};
 
+// opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
+// OpenCode Go 订阅渠道 opencode-go/(实测生效),Zen 按量渠道 opencode/,动态列表反映实际可用集
+const OPENCODE_STATIC=[
+  ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro'],
+  ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash'],
+  ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
+  ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
+];
 const MODEL_OPTIONS={
   claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
           ['claude-fable-5','fable-5'],
@@ -715,6 +838,7 @@ const MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -733,8 +857,28 @@ async function loadPiModelOptions(refresh=false){
     AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
   }
 }
+let OPENCODE_MODEL_ERROR='';
+async function loadOpencodeModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/opencode/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
+    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项),Go 渠道优先
+    const i=['opencode-go/deepseek-v4-pro','opencode/deepseek-v4-pro']
+      .map(id=>dynamic.findIndex(([v])=>v===id)).find(x=>x>=0)??-1;
+    if(i>0)dynamic.unshift(...dynamic.splice(i,1));
+    const list=dynamic.length?dynamic:OPENCODE_STATIC;
+    MODEL_OPTIONS.opencode=[...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    OPENCODE_MODEL_ERROR='';
+  }catch(e){
+    OPENCODE_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.opencode=[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
+  }
+}
 async function populateModels(engine,selected=null){
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -747,7 +891,8 @@ async function populateModels(engine,selected=null){
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
     ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
-    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型'):'';
+    :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
+    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
@@ -859,8 +1004,9 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
+  $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
   $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
-  $('#npsg-maxs').value=15;$('#npsg-imgs').value=9;$('#npsg-vids').value=1;$('#npsg-auds').value=2;   // 分镜组默认按 Seedance 2.0 保守口径
+  sgApplyPreset('npsg','sd20');   // 分镜组默认按 Seedance 2.0 口径(15s/9图/3视频/3音频)
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
@@ -907,6 +1053,9 @@ function npCollectSettings(){
       language:$('#npo-lang').value,
       draft_resolution:$('#npo-draft-res').value,final_resolution:$('#npo-final-res').value,
       subtitle_burn_in:$('#npo-burnin').checked,
+      caption_enabled:$('#npo-caption').checked,
+      dialogue_voice:$('#npo-dialogue-voice').value,
+      spatial_blocking:$('#npo-spatial').checked,
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value)},
@@ -955,8 +1104,9 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
+  // runninghub/comfyui 与生成模型页两个标签页同口径(RunningHub=云端站点,ComfyUI=本地/Comfy Cloud)
+  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
@@ -980,6 +1130,7 @@ const ENGINE_CLI={
   codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
+  opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -1062,12 +1213,21 @@ function styleGridRender(){
       const d=document.createElement('div');
       d.className='style-card'+(cur===s.prompt?' on':'');
       d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
+        +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
         +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
       d.title=s.prompt;
       d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+      d.querySelector('.zoom').onclick=ev=>{ev.stopPropagation();styleZoomShow(s)};
       grid.appendChild(d);
     });
 }
+function styleZoomShow(s){
+  $('#style-zoom-img').src='/static/styles/'+s.image;
+  $('#style-zoom-nm').textContent=s.name;
+  $('#style-zoom-cat').textContent=t(s.category);
+  $('#style-zoom').style.display='flex';
+}
+$('#style-zoom').onclick=()=>$('#style-zoom').style.display='none';
 async function openStyleModal(targetSel){
   STYLE_TARGET=targetSel;
   try{await loadStyleLib()}
@@ -1084,6 +1244,7 @@ $('#style-search').oninput=()=>styleGridRender();
 /* ---------- 输出设置弹窗(画幅/语言) ---------- */
 const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Español','français','Deutsch','Indonesia','Português','русский','عربي'];
 const OUT_RESOLUTIONS=['360p','480p','720p','1080p','4k'];
+const DIALOGUE_VOICE_MODES=['native','dubbing'];
 async function openOutModal(){
   $('#out-err').textContent='';
   $('#out-proj').textContent=curProj();
@@ -1098,6 +1259,9 @@ async function openOutModal(){
     $('#out-draft-res').value=OUT_RESOLUTIONS.includes(o.draft_resolution)?o.draft_resolution:'480p';
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
     $('#out-burnin').checked=!!o.subtitle_burn_in;
+    $('#out-caption').checked=!!o.caption_enabled;
+    $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
+    $('#out-spatial').checked=o.spatial_blocking!==false;
     const pf=Array.isArray(o.platforms)?o.platforms:['youtube','bilibili','tiktok','douyin'];
     document.querySelectorAll('.out-platform').forEach(c=>c.checked=pf.includes(c.value));
   }catch(e){}
@@ -1117,7 +1281,8 @@ $('#out-ok').onclick=async()=>{
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
-      subtitle_burn_in:$('#out-burnin').checked,platforms}});
+      subtitle_burn_in:$('#out-burnin').checked,caption_enabled:$('#out-caption').checked,
+      dialogue_voice:$('#out-dialogue-voice').value,spatial_blocking:$('#out-spatial').checked,platforms}});
     $('#out-modal').style.display='none';
   }catch(e){$('#out-err').textContent='保存失败:'+e.message}
 };
@@ -1151,6 +1316,32 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 分镜组设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
+// 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框,
+// 手动改值后自动按当前值反查高亮匹配的预设(无匹配则全不高亮)
+const SG_PRESETS={
+  sd20:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // Seedance 2.0 系列(含 fast/mini)
+  sd25:{max_group_s:30,max_ref_images:30,max_ref_videos:10,max_ref_audios:10},  // Seedance 2.5
+  mmh3:{max_group_s:15,max_ref_images:9,max_ref_videos:0,max_ref_audios:2},    // MiniMax Hailuo 3
+};
+const SG_FIELDS={max_group_s:'maxs',max_ref_images:'imgs',max_ref_videos:'vids',max_ref_audios:'auds'};
+function sgSyncPreset(pfx){   // 按四个输入框当前值高亮匹配的预设按钮
+  const cur=Object.fromEntries(Object.entries(SG_FIELDS).map(([k,id])=>[k,parseFloat($('#'+pfx+'-'+id).value)]));
+  document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>{
+    const p=SG_PRESETS[b.dataset.preset];
+    b.classList.toggle('active',Object.keys(SG_FIELDS).every(k=>p[k]===cur[k]));
+  });
+}
+function sgApplyPreset(pfx,key){
+  const p=SG_PRESETS[key];
+  for(const [k,id] of Object.entries(SG_FIELDS))$('#'+pfx+'-'+id).value=p[k];
+  sgSyncPreset(pfx);
+}
+document.querySelectorAll('[data-sg-presets]').forEach(box=>{
+  const pfx=box.dataset.sgPresets;
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>sgApplyPreset(pfx,b.dataset.preset));
+  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>sgSyncPreset(pfx));
+});
+sgSyncPreset('npsg');
 function sgValidate(gs,ni,nv,na){   // 返回错误文案,''=通过(与服务端 _validate_shot_group 同口径)
   if(!(gs>=4&&gs<=30))return '最大分镜组时长需为 4-30 的数值';
   if(!(Number.isInteger(ni)&&ni>=0&&ni<=30))return '最大参考图数量需为 0-30 的整数';
@@ -1165,9 +1356,10 @@ async function openSgModal(){
     const g=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).shot_group||{};
     $('#sg-maxs').value=g.max_group_s??15;
     $('#sg-imgs').value=g.max_ref_images??9;
-    $('#sg-vids').value=g.max_ref_videos??1;
-    $('#sg-auds').value=g.max_ref_audios??2;
+    $('#sg-vids').value=g.max_ref_videos??3;
+    $('#sg-auds').value=g.max_ref_audios??3;
   }catch(e){}
+  sgSyncPreset('sg');
   $('#sg-modal').style.display='flex';
 }
 $('#menu-shotgroup').onclick=e=>{e.preventDefault();openSgModal()};
@@ -1313,19 +1505,31 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 并发数量弹窗(设置菜单「高级」) ---------- */
-let concMax=8;
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 对话记忆) ---------- */
+let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10;
+function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
+$('#mem-on').onchange=memSt;
 async function openConcModal(){
   $('#conc-err').textContent='';
   try{
-    const c=await api('/api/v1/config/concurrency');
+    const c=await api('/api/v1/config/agent-advanced');
     concMax=c.max||8;
     $('#conc-range').max=concMax;$('#conc-num').max=concMax;
     $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5}
+    concRtMin=Math.round((c.run_timeout_min||600)/60);concRtMax=Math.round((c.run_timeout_max||86400)/60);
+    concItMax=Math.round((c.idle_timeout_max||21600)/60);
+    $('#conc-rt').min=concRtMin;$('#conc-rt').max=concRtMax;$('#conc-it').max=concItMax;
+    $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
+    $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
+    concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
+    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#mem-on').checked=c.agent_memory==null?true:!!c.agent_memory;
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#mem-on').checked=true}
+  memSt();
   $('#conc-modal').style.display='flex';
 }
-$('#menu-concurrency').onclick=e=>{e.preventDefault();openConcModal()};
+$('#menu-agent-adv').onclick=e=>{e.preventDefault();openConcModal()};
+document.querySelectorAll('.modal .info-btn').forEach(b=>b.onclick=()=>{const n=$('#'+b.dataset.info);n.classList.toggle('on');b.classList.toggle('on',n.classList.contains('on'))});
 $('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
 $('#conc-num').oninput=()=>{
   const v=parseInt($('#conc-num').value);
@@ -1335,38 +1539,137 @@ $('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
 $('#conc-ok').onclick=async()=>{
   const v=parseInt($('#conc-num').value);
   if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
+  const rt=parseInt($('#conc-rt').value),it=parseInt($('#conc-it').value),retry=parseInt($('#conc-retry').value);
+  if(!(rt>=concRtMin&&rt<=concRtMax)){$('#conc-err').textContent=I18N.f('运行超时需为 {min}-{max} 的整数(分钟)',{min:concRtMin,max:concRtMax});return}
+  if(!(it>=0&&it<=concItMax)){$('#conc-err').textContent=I18N.f('无输出超时需为 0-{max} 的整数(分钟,0=关闭)',{max:concItMax});return}
+  if(!(retry>=0&&retry<=concRetryMax)){$('#conc-err').textContent=I18N.f('重跑次数需为 0-{max} 的整数(0=不自动重跑)',{max:concRetryMax});return}
   try{
-    await api('/api/v1/config/concurrency',{agent_concurrency:v});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory:$('#mem-on').checked});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- Agent记忆弹窗(设置菜单「高级」) ---------- */
-function memSt(){$('#mem-st').textContent=$('#mem-on').checked?t('✓ 会话恢复生效中'):t('已关闭:每次运行全新会话')}
-$('#mem-on').onchange=memSt;
-async function openMemModal(){
-  $('#mem-err').textContent='';
-  try{
-    const m=await api('/api/v1/config/agent-memory');
-    $('#mem-on').checked=!!m.agent_memory;
-  }catch(e){$('#mem-on').checked=true}
-  memSt();
-  $('#mem-modal').style.display='flex';
+/* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
+let DIAG_LESSONS=[];
+function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
+function diagStats(d){
+  let s=I18N.f('已采集 {n} 条事件,占用 {kb} KB',{n:d.total_events,kb:(d.outbox_bytes/1024).toFixed(1)});
+  if(d.latest_ts)s+=' · '+t('最近:')+esc(d.latest_ts);
+  if(d.top_errors&&d.top_errors.length)
+    s+='<br>'+t('高频错误:')+'<br>'+d.top_errors.slice(0,3)
+      .map(e=>`· ${esc(e.template)||e.signature} ×${e.count}`).join('<br>');
+  $('#diag-stats').innerHTML=s;
 }
-$('#menu-memory').onclick=e=>{e.preventDefault();openMemModal()};
-$('#mem-cancel').onclick=()=>$('#mem-modal').style.display='none';
-$('#mem-ok').onclick=async()=>{
+function diagLessonRow(c,i){
+  const d=document.createElement('div');
+  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px';
+  const meta=[c.project,c.meta.category,c.meta.provider,c.meta.date].filter(Boolean).map(esc).join(' · ');
+  d.innerHTML=`<label style="display:flex;gap:8px;align-items:baseline;cursor:pointer">
+      <input type="checkbox" class="diag-pick" data-i="${i}" style="width:auto">
+      <span style="flex:1">${esc(c.title)} <span style="color:var(--dim);font-size:12px">${meta}</span></span></label>
+    <details style="margin-top:4px"><summary style="cursor:pointer;color:var(--dim);font-size:12px">${t('预览全文')}</summary>
+      <pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(c.body)}</pre></details>`;
+  return d;
+}
+async function openDiagModal(){
+  $('#diag-err').textContent='';
+  $('#diag-modal').style.display='flex';
   try{
-    await api('/api/v1/config/agent-memory',{agent_memory:$('#mem-on').checked});
-    $('#mem-modal').style.display='none';
-  }catch(e){$('#mem-err').textContent='保存失败:'+e.message}
+    const d=await api('/api/v1/diagnostics');
+    $('#diag-on').checked=!!d.enabled;
+    diagStats(d);
+  }catch(e){$('#diag-on').checked=true;$('#diag-err').textContent='读取失败:'+e.message}
+  diagSt();
+  try{
+    DIAG_LESSONS=(await api('/api/v1/diagnostics/lessons')).lessons||[];
+    const box=$('#diag-lessons');box.innerHTML='';
+    if(!DIAG_LESSONS.length)box.innerHTML=`<div class="empty">${t('暂无经验卡(任务闭环时按 WORKFLOW.md §6.1 沉淀 lesson.md)')}</div>`;
+    DIAG_LESSONS.forEach((c,i)=>box.appendChild(diagLessonRow(c,i)));
+  }catch(e){}
+}
+$('#menu-diag').onclick=e=>{e.preventDefault();openDiagModal()};
+$('#diag-close').onclick=()=>$('#diag-modal').style.display='none';
+$('#diag-on').onchange=async()=>{
+  diagSt();
+  try{await api('/api/v1/config/diagnostics',{diagnostics_enabled:$('#diag-on').checked})}
+  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
 };
+$('#diag-clear').onclick=async()=>{
+  if(!confirm(t('清空本机已采集的事件文件?(不影响经验卡)')))return;
+  try{
+    await api('/api/v1/diagnostics/clear',{});
+    const d=await api('/api/v1/diagnostics');diagStats(d);
+  }catch(e){$('#diag-err').textContent=e.message}
+};
+$('#diag-export').onclick=async()=>{
+  $('#diag-err').textContent='';
+  const picked=[...document.querySelectorAll('.diag-pick:checked')].map(el=>DIAG_LESSONS[+el.dataset.i].path);
+  try{
+    const r=await api('/api/v1/diagnostics/export',{lessons:picked,include_events:$('#diag-inc-events').checked});
+    location.href='/api/v1/diagnostics/export/'+encodeURIComponent(r.name);   // 浏览器直接下载 zip
+  }catch(e){$('#diag-err').textContent='导出失败:'+e.message}
+};
+
+/* ---------- 网络检测弹窗(设置菜单「高级」;VPN/代理在命令行环境是否生效) ---------- */
+const NET_TARGETS=[['baidu','baidu.com','(基线)'],['google','google.com',''],['youtube','www.youtube.com',''],['openai','openai.com',''],['claude','claude.ai/install.sh','(Claude Code 安装脚本)']];
+let NET_BUSY=false;
+function netFmt(r){
+  return r.ok?`<span style="color:var(--green)">✓ ${r.total_ms}ms</span>`
+    :`<span style="color:var(--red)">✗ ${esc(t(r.error||'不通'))}</span>`;
+}
+function netIpLine(tag,r){
+  if(!r)return tag+t('检测中…');
+  return r.ok?`${tag}<b>${esc(r.ip)}</b> ${esc(r.location||'')} <span style="color:var(--dim)">${esc(r.isp||'')}</span>`
+    :`${tag}<span style="color:var(--red)">${esc(t(r.error||'查询失败'))}</span>`;
+}
+async function netRun(){
+  if(NET_BUSY)return;NET_BUSY=true;
+  $('#net-err').textContent='';$('#net-verdict').style.display='none';
+  const tb=$('#net-table tbody');tb.innerHTML='';
+  NET_TARGETS.forEach(([k,label,note])=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="padding:4px 6px">${label}${note?` <span style="color:var(--dim);font-size:12px">${t(note)}</span>`:''}</td>
+      <td style="padding:4px 6px" id="net-r-${k}">…</td>`;
+    tb.appendChild(tr);
+  });
+  const tag=t('当前出口 IP:');
+  $('#net-ip').innerHTML=netIpLine(tag,null);
+  const R={};
+  try{
+    const jobs=[];
+    for(const [k] of NET_TARGETS)
+      jobs.push(api('/api/v1/network/probe',{target:k})
+        .then(r=>{R[k]=r;$('#net-r-'+k).innerHTML=netFmt(r)})
+        .catch(e=>{$('#net-r-'+k).innerHTML=netFmt({ok:false,error:e.message})}));
+    jobs.push(api('/api/v1/network/ip',{})
+      .then(r=>{$('#net-ip').innerHTML=netIpLine(tag,r)})
+      .catch(e=>{$('#net-ip').innerHTML=netIpLine(tag,{ok:false,error:e.message})}));
+    await Promise.allSettled(jobs);
+    const abroad=['google','youtube','openai','claude'];
+    const v=$('#net-verdict');
+    if(R.baidu&&!R.baidu.ok){
+      v.textContent=t('判定:基线站点也不通,疑似网络本身断开(与墙/VPN 无关)。');v.style.display='';
+    }else if(abroad.some(k=>!(R[k]&&R[k].ok))){
+      v.textContent=t('判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。');v.style.display='';
+    }else if(NET_TARGETS.every(([k])=>R[k]&&R[k].ok)){
+      v.textContent=t('判定:全部站点可达,terminal 网络正常。');v.style.display='';
+    }
+  }catch(e){$('#net-err').textContent=t('检测失败:')+e.message}
+  NET_BUSY=false;
+}
+$('#menu-net').onclick=e=>{e.preventDefault();$('#net-modal').style.display='flex';netRun()};
+$('#net-close').onclick=()=>$('#net-modal').style.display='none';
+$('#net-rerun').onclick=()=>netRun();
 
 /* ---------- 资源消耗:设置弹窗(设置菜单)+ 右栏面板 ---------- */
 function resVolcRows(){const on=$('#res-volc').checked;document.querySelectorAll('.res-volc-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-volc').onchange=resVolcRows;
 function resKimiRows(){const on=$('#res-kimi-on').checked;document.querySelectorAll('.res-kimi-row').forEach(el=>el.style.display=on?'':'none')}
 $('#res-kimi-on').onchange=resKimiRows;
+function resOcRows(){const on=$('#res-oc-on').checked;document.querySelectorAll('.res-oc-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-oc-on').onchange=resOcRows;
+function resRhRows(){const on=$('#res-rh').checked;document.querySelectorAll('.res-rh-row').forEach(el=>el.style.display=on?'':'none')}
+$('#res-rh').onchange=resRhRows;
 async function openResModal(){
   $('#res-err').textContent='';
   try{
@@ -1377,12 +1680,17 @@ async function openResModal(){
     $('#res-codex').checked=!!c.codex_probe;
     $('#res-kimi-on').checked=!!c.kimi_probe;
     $('#res-kimi').value=c.kimi_api_key||'';
+    $('#res-oc-on').checked=!!c.opencode_probe;
+    $('#res-oc').value=c.opencode_api_key||'';
     $('#res-or').value=c.openrouter_key||'';
     $('#res-volc').checked=!!c.volc_enabled;
     $('#res-volc-ak').value=c.volc_ak||'';
     $('#res-volc-sk').value=c.volc_sk||'';
+    $('#res-rh').checked=!!c.rh_enabled;
+    $('#res-rh-ai').value=c.rh_key_ai||'';
+    $('#res-rh-cn').value=c.rh_key_cn||'';
   }catch(e){$('#res-err').textContent='读取失败:'+e.message}
-  resVolcRows();resKimiRows();
+  resVolcRows();resKimiRows();resOcRows();resRhRows();
   $('#res-modal').style.display='flex';
 }
 $('#menu-resources').onclick=e=>{e.preventDefault();openResModal()};
@@ -1392,16 +1700,23 @@ $('#res-ok').onclick=async()=>{
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
   if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
     $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
+  if($('#res-rh').checked&&!($('#res-rh-ai').value.trim()||$('#res-rh-cn').value.trim())){
+    $('#res-err').textContent=t('开启 RunningHub 余额检查需至少填写一个站点的 API Key');return}
   try{
     await api('/api/v1/resources/config',{
       claude_probe:$('#res-claude').checked,
       codex_probe:$('#res-codex').checked,
       kimi_probe:$('#res-kimi-on').checked,
       kimi_api_key:$('#res-kimi').value.trim(),
+      opencode_probe:$('#res-oc-on').checked,
+      opencode_api_key:$('#res-oc').value.trim(),
       openrouter_key:$('#res-or').value.trim(),
       volc_enabled:$('#res-volc').checked,
       volc_ak:$('#res-volc-ak').value.trim(),
-      volc_sk:$('#res-volc-sk').value.trim()});
+      volc_sk:$('#res-volc-sk').value.trim(),
+      rh_enabled:$('#res-rh').checked,
+      rh_key_ai:$('#res-rh-ai').value.trim(),
+      rh_key_cn:$('#res-rh-cn').value.trim()});
     $('#res-modal').style.display='none';
     renderResources(true);                             // 保存后立即用新配置刷新面板
   }catch(e){$('#res-err').textContent='保存失败:'+e.message}
@@ -1491,7 +1806,7 @@ async function renderResources(fresh){
   try{r=await api('/api/v1/resources'+(fresh?'?fresh=1':''))}
   catch(e){box.innerHTML='<div class="empty">'+t('读取失败')+'</div>';return}
   let h='';
-  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode']]){
+  for(const [k,label] of [['claude','claudecode'],['codex','codex'],['kimi','kimicode'],['opencode','OpenCode Go']]){
     const e=r[k]||{};
     if(!e.enabled)continue;                 // 用量检查未开启则整段不显示(⚙️ 设置 → 资源消耗 开启后回来)
     h+=`<div class="res-eng"><span class="nm">${label}</span>${resLine('Session',e.session,e.session_resets_at)}${resLine('Weekly',e.weekly,e.weekly_resets_at)}</div>`;
@@ -1503,6 +1818,17 @@ async function renderResources(fresh){
   };
   if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
   if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
+  if(r.runninghub&&r.runninghub.configured){
+    // 每个已配置站点一行:RH 币 + 钱包余额(币种符号按接口返回的 currency)
+    for(const [site,s] of Object.entries(r.runninghub.sites||{})){
+      const sym={CNY:'¥',USD:'$'}[s.currency]||(s.currency?s.currency+' ':'');
+      const known=typeof s.coins==='number';
+      const amt=known
+        ?`${Math.round(s.coins)} ${t('RH 币')}`+(typeof s.balance==='number'?` · ${sym}${s.balance.toFixed(2)}`:'')
+        :t('未知');
+      h+=`<div class="res-bal"><span class="nm">RunningHub.${site}</span><span class="amt${known?'':' unknown'}">${amt}</span></div>`;
+    }
+  }
   h+=`<div id="res-updated">${t('更新于:')}${new Date().toLocaleTimeString()}</div>`;
   box.innerHTML=h;
 }
@@ -1571,6 +1897,7 @@ function renderAgents(){
 async function selectAgent(id){
   CURRENT=id; const a=AGENTS.find(x=>x.id===id);
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
+  $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
   updateModelBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组
@@ -1633,7 +1960,7 @@ function appendMsg(role,text,meta={}){
   const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot',feishu:'✈️ 来自飞书',whatsapp:'🟢 来自 WhatsApp'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
-  if(role==='assistant'&&meta.status==='error')parts.push('<span style="color:var(--red)">⚠ 运行出错</span>');
+  if(role==='assistant'&&meta.status==='error')parts.push(meta.stopped==='user'?'<span style="color:var(--dim)">⏹ 已手动停止</span>':'<span style="color:var(--red)">⚠ 运行出错</span>');
   if(meta.ts)parts.push(fmtTs(meta.ts));
   const head=parts.length?'<div class="meta">'+parts.join(' · ')+'</div>':'';
   d.innerHTML=head; d.appendChild(document.createTextNode(text||''));
@@ -1718,6 +2045,7 @@ const AM_MODEL_OPTIONS={
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -1739,6 +2067,7 @@ async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='pi')await loadPiModelOptions();
+  if(engine==='opencode')await loadOpencodeModelOptions();
   if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{
@@ -1854,6 +2183,12 @@ $('#btn-watchdog').onclick=async()=>{
 };
 
 /* ---------- 运行面板 ---------- */
+function fmtRunDur(sec){
+  sec=Math.max(0,Math.round(sec));
+  if(sec<60)return sec+'s';
+  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return (h?h+'h':'')+m+'m'+s+'s';
+}
 function renderRuns(){
   const box=$('#runs');
   const runs=Object.values(RUNS).filter(r=>r.project===curProj())
@@ -1862,7 +2197,7 @@ function renderRuns(){
   box.innerHTML='';
   runs.forEach(r=>{
     const d=document.createElement('div'); d.className='run'; d.dataset.id=r.id;
-    const dur=r.started?Math.round(((r.ended||Date.now()/1000)-r.started))+'s':'';
+    const dur=r.started?fmtRunDur((r.ended||Date.now()/1000)-r.started):'';
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);

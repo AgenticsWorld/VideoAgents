@@ -1,0 +1,4 @@
+{
+  "1": {"class_type": "ByteDance2ReferenceNode", "inputs": {"model": "Seedance 2.5", "model.prompt": "{{PROMPT}}", "model.resolution": "{{RESOLUTION}}", "model.ratio": "{{RATIO}}", "model.duration": "{{DURATION}}", "model.generate_audio": "{{GENERATE_AUDIO}}", "model.video_editing": false, "model.output_format": "mp4", "model.auto_downscale": true, "model.auto_upscale": false, "seed": "{{SEED}}", "watermark": false}},
+  "2": {"class_type": "SaveVideo", "inputs": {"video": ["1", 0], "filename_prefix": "videoagents/seedance2.5-r2v", "format": "auto", "codec": "auto"}}
+}

@@ -7,11 +7,13 @@
 - 全部运行状态 / 工具活动由 API 服务对外发布。
 """
 import asyncio
+import gzip
 import hashlib
 import hmac
 import importlib.util
 import io
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -74,12 +76,25 @@ def _default_kimi_bin() -> str:
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
+
+
+def _default_opencode_bin() -> str:
+    # opencode 官方安装脚本默认装到 ~/.opencode/bin,同 kimi:从 IDE/launchd 等
+    # 非交互环境启动本服务时 PATH 可能不含该目录,回退绝对路径
+    found = shutil.which("opencode")
+    if found:
+        return found
+    fallback = Path.home() / ".opencode" / "bin" / "opencode"
+    return str(fallback) if fallback.is_file() else "opencode"
+
+
+OPENCODE_BIN = os.environ.get("OPENCODE_BIN") or _default_opencode_bin()
 CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
-            "pi": PI_BIN}
+            "pi": PI_BIN, "opencode": OPENCODE_BIN}
 CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
-              "pi": "Pi Coding Agent"}
+              "pi": "Pi Coding Agent", "opencode": "OpenCode"}
 CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
-                "pi": "PI_BIN"}
+                "pi": "PI_BIN", "opencode": "OPENCODE_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -121,14 +136,23 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "pi", "deepagents")   # 执行引擎:CLI 或 deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
 ).lower() in {"1", "true", "yes"}
 MAX_TURNS = "100"
 MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
-RUN_TIMEOUT = 3600                       # 单次运行超时(秒)
+# 单次运行超时缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
+# 要等整条流水线,取 4 倍。到点连派生子进程一起杀,run 记为 error
+RUN_TIMEOUT_DEFAULT = 7200
+RUN_TIMEOUT_MIN, RUN_TIMEOUT_MAX = 600, 24 * 3600
+# 无输出超时缺省值(秒;同一弹窗可调,0=关闭):引擎事件流连续静默超过该时长即判死。
+# 比墙钟更早识别挂死,又不误伤「跑得慢但在正常干活」的长批量任务;调度型 Agent 大部分
+# 时间在 --wait-all 里静默等子任务,不受此项约束
+IDLE_TIMEOUT_DEFAULT = 1800
+IDLE_TIMEOUT_MAX = 6 * 3600
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
@@ -147,14 +171,20 @@ STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
-# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→并发数量」可调,存 state.json);
+# 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
-# Agent 对话记忆缺省值(设置菜单「高级→Agent记忆」可关,存 state.json):
+# Agent 对话记忆缺省值(设置菜单「高级→Agent 高级设置」可关,存 state.json):
 # 开启=有状态 agent 按 engine::agent::project 恢复上次会话(下方 CHAT_RESUME_LIMIT
 # 128KB 保险丝仍生效);关闭=所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
 # 关闭期间 session_id 照常回存,重新开启后从最近一次会话继续
 AGENT_MEMORY_DEFAULT = True
+# Agent 自动重跑/重 roll 次数上限缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 验收/评分/QA 不过自动带意见退回重做、媒体生成机检不达标自动重 roll 的次数上限,
+# 达到上限仍不过升级用户裁决;0=不自动重跑(首次不过即升级人工)。经 build_role_prompt
+# 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
+MAX_RETRIES_DEFAULT = 3
+MAX_RETRIES_MAX = 10
 # 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
 # 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
 # 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
@@ -168,6 +198,10 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 # 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
 # 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
 # 只在新会话首轮注入 SOUL,更需要尽早重开
+# 运行面板手动停止的统一错误文案:core/dispatch.py/前端/agent 提示词都按这句字面识别
+STOPPED_BY_USER_MSG = "已被用户手动停止"
+# stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
+STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 ORCHESTRATOR_RESUME_LIMIT = 128 * 1024
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
@@ -197,6 +231,7 @@ REFS_README = """# refs/ — 用户参考目录
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
+- `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
 - `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
@@ -237,7 +272,7 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "characters", "scenes", "props", "music", "thumbnail"):
+    for sub in ("style", "thumbnail", "characters", "scenes", "props", "music", "video"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -263,6 +298,24 @@ def agent_concurrency() -> int:
     return max(1, min(n, MAX_CONCURRENT))
 
 
+def run_timeout_setting() -> int:
+    """单次运行墙钟超时(秒,RUN_TIMEOUT_MIN..RUN_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("run_timeout", RUN_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = RUN_TIMEOUT_DEFAULT
+    return max(RUN_TIMEOUT_MIN, min(n, RUN_TIMEOUT_MAX))
+
+
+def idle_timeout_setting() -> int:
+    """无输出超时(秒,0=关闭,上限 IDLE_TIMEOUT_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("idle_timeout", IDLE_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = IDLE_TIMEOUT_DEFAULT
+    return max(0, min(n, IDLE_TIMEOUT_MAX))
+
+
 def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
     cached = AGENT_SEMS.get(agent_id)
     if cached is None or cached[0] != limit:
@@ -272,8 +325,17 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
 
 
 def agent_memory_enabled() -> bool:
-    """Agent 对话记忆总开关(设置菜单「高级→Agent记忆」)。"""
+    """Agent 对话记忆总开关(设置菜单「高级→Agent 高级设置」)。"""
     return bool(STATE.get("agent_memory", AGENT_MEMORY_DEFAULT))
+
+
+def max_retries_setting() -> int:
+    """Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,越界钳制;设置菜单「高级→Agent 高级设置」)。"""
+    try:
+        n = int(STATE.get("max_retries", MAX_RETRIES_DEFAULT))
+    except (TypeError, ValueError):
+        n = MAX_RETRIES_DEFAULT
+    return max(0, min(n, MAX_RETRIES_MAX))
 
 
 def load_state() -> dict:
@@ -465,21 +527,28 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-260128",
+        # 默认 Lite:含人脸图片默认可过 Seedance 审核
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-lite-260128",
                        "custom_model": ""},
-        "byteplus": {"api_key": "", "model": "seedream-5-0-260128",
+        "byteplus": {"api_key": "", "model": "seedream-5-0-lite-260128",
                      "custom_model": ""},
         # MiniMax:api_base 按「接口区域」二选一(海外 api.minimax.io/国内 api.minimaxi.com,
-        # 两平台账号与 Key 不互通);图像/视频/音乐/TTS 四段各自独立保存
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        # 两平台账号与 Key 不互通,api_key_io/api_key_cn 按区域分别保存,按 api_base 取用);
+        # 图像/视频/音乐/TTS 四段各自独立保存
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "image-01", "custom_model": ""},
         # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
-        # 账号与 Key 不互通);rh_workflows 为工作区工作流收藏 [{id, note, site}]
+        # 账号与 Key 不互通,rh_api_key_cn/rh_api_key_ai 按站点分别保存,按 mode 取用);
+        # rh_workflows 为工作区工作流收藏 [{id, note, site}];
+        # rh_instance_type 为 RunningHub 运行模式(机器规格)standard/plus/ultra,
+        # standard 建任务不传 instanceType 沿用平台默认
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "ref_workflow": "", "negative_mode": "conditioning", "checkpoint": "",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_ref_workflow_id": "",
-                    "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_ref_workflow_id": "",
+                    "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
         "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
@@ -490,11 +559,14 @@ DEFAULT_GENCONFIG = {
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "MiniMax-H3", "custom_model": ""},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "", "checkpoint": "",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "music": {
         "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
@@ -504,14 +576,17 @@ DEFAULT_GENCONFIG = {
         "elevenlabs": {"api_key": "", "model": "music_v1", "custom_model": "",
                        "force_instrumental": True},
         # MiniMax Music:force_instrumental 同上;关闭时按 prompt 自动写词演唱
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "music-3.0", "custom_model": "",
                     "force_instrumental": True},
         # ComfyUI 工作流按用户选择配置;模板说明见 comfy/music-ace-step-v1-api.md。
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "",
                     "checkpoint": "", "lyrics": "[Instrumental]",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
@@ -523,7 +598,8 @@ DEFAULT_GENCONFIG = {
         "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
         # MiniMax Speech:voice 存 voice_id(设置页可拉取音色库选择)
-        "minimax": {"api_key": "", "api_base": "https://api.minimax.io",
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io",
                     "model": "speech-2.8-hd", "custom_model": "", "voice": ""},
         # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
         "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
@@ -533,7 +609,9 @@ DEFAULT_GENCONFIG = {
                     "workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
-                    "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling v1 固定中国北京接口；
     # ComfyUI 首版只支持本地 InfiniteTalk API 工作流，不走 Cloud/RunningHub。
@@ -574,14 +652,24 @@ DEFAULT_GENCONFIG = {
                "endpoint": "", "region": "us-east-1",
                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
     },
+    # 虚拟人像资产库(设置 → 高级):火山方舟私域虚拟人像素材库。启用后人物概念图可
+    # 一键入库,生成视频时已入库(Active)的参考图自动改用 asset://<id> 提交,规避
+    # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退文件托管
+    # TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
+    # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
+    # 上传时自动创建的素材组,记录后复用
+    "avatar_assets": {"enabled": False, "access_key": "", "secret_key": "",
+                      "project_name": "default", "group_id": "",
+                      "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
-    # 10视频/10音频),默认值按 2.0 的保守口径;注入 Agent 系统提示词约束分组与
-    # prompt 组装,模型侧硬限另由 genmedia 按 model id 强制校验
+    # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
+    # 「默认值」按钮一键切换三档);注入 Agent 系统提示词约束分组与 prompt 组装,
+    # 模型侧硬限另由 genmedia 按 model id 强制校验
     "shot_group": {"max_group_s": 15, "max_ref_images": 9,
-                   "max_ref_videos": 1, "max_ref_audios": 2},
+                   "max_ref_videos": 3, "max_ref_audios": 3},
     # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
     # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
     "agentmodel_mode": "global",
@@ -590,10 +678,22 @@ DEFAULT_GENCONFIG = {
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
     # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
     #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
-    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面
+    # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面;
+    # caption_enabled=花字(默认关):开启后 caption Agent 在关键节点设计花字+配套音效,
+    #   超分后的终版组 clip 上烧录副本,另封装花字版成片 final_caption.mp4
+    #   (a:0=声轨+SFX 预混、a:1=声轨存档;干净版 final.mp4 照常产出,双版本并列,WORKFLOW.md §9A)
+    # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
+    #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
+    #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
+    # spatial_blocking=人物精确空间位置(默认开):开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+
+    #   layout.json,分镜组标注人物起点/动线/终点渲染成动线俯视图,prompt 挂图并逐字注入 route_en,
+    #   机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound);关=沿用单张场景概念图流程
+    #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
-               "subtitle_burn_in": False,
+               "subtitle_burn_in": False, "caption_enabled": False,
+               "dialogue_voice": "native",
+               "spatial_blocking": True,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -648,6 +748,11 @@ REVIEW_DIMENSIONS = {
 # 片头片尾设定的注入对象:包装制作(title)、占位(edit)、预告文案上游(hook)+ 调度(派单时写入工单)
 PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS
 
+# 花字设定的详细纪律注入对象:设计与烧录(caption)、花字版封装(edit)、发布物料(platform-adapter)
+# + 调度(排产 condition 判定与工单撰写);其余 Agent 只收一行开关状态(WORKFLOW.md §9A)
+CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
+                  "12-publishing/platform-adapter"} | DISPATCHERS
+
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 OUTPUT_ASPECTS = {"youtube": ("16:9", "YouTube 横屏"), "douyin": ("9:16", "抖音竖屏")}
 # 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
@@ -664,6 +769,8 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 # 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
 # genmedia 越档自动压回;方舟 API 取小写)
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
+# 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
+DIALOGUE_VOICE_MODES = ("native", "dubbing")
 
 
 def resolve_output(cfg: dict) -> tuple[str, str, str]:
@@ -699,12 +806,28 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
-def _migrate_comfy_workflow_paths(config: dict) -> None:
-    """Keep configurations saved before templates moved from data/ usable."""
+def _split_legacy_key(cfg: dict, legacy_field: str, site_fields: tuple[str, str]) -> None:
+    """旧版单一 API Key(两区域/站点共用)→ 按区域分别保存:旧行为即两侧同 Key,
+    迁移把旧值填入两侧空位并移除旧字段(下次保存落盘即完成迁移)。"""
+    legacy = str(cfg.pop(legacy_field, "") or "").strip()
+    if legacy:
+        for field in site_fields:
+            if not str(cfg.get(field) or "").strip():
+                cfg[field] = legacy
+
+
+def _migrate_genconfig(config: dict) -> None:
+    """Keep configurations saved by older versions usable(comfy 模板路径迁出 data/;
+    MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     for kind in ("image", "video", "music", "tts", "digital_human"):
-        comfy = config.get(kind, {}).get("comfyui")
+        section = config.get(kind, {})
+        mm = section.get("minimax")
+        if isinstance(mm, dict):
+            _split_legacy_key(mm, "api_key", ("api_key_io", "api_key_cn"))
+        comfy = section.get("comfyui")
         if not isinstance(comfy, dict):
             continue
+        _split_legacy_key(comfy, "rh_api_key", ("rh_api_key_cn", "rh_api_key_ai"))
         for key in ("workflow", "ref_workflow"):
             value = comfy.get(key)
             if isinstance(value, str) and value.startswith("data/comfy/"):
@@ -724,7 +847,7 @@ def load_genconfig() -> dict:
     if isinstance(da, dict) and "provider" not in da and "local" not in da:
         # 旧版扁平格式(base_url/api_key/model 直挂 deepagents)→ 迁移为 local 渠道
         saved["deepagents"] = {"provider": "local", "local": da}
-    _migrate_comfy_workflow_paths(saved)
+    _migrate_genconfig(saved)
     return _merge(DEFAULT_GENCONFIG, saved)
 
 
@@ -748,6 +871,17 @@ def is_seedance25(model: str) -> bool:
 # Seedance 2.5 官方提示词优化 skill(sd25-pe):仅当生效视频模型为 2.5 时注入
 # 加载指令给 prompt agent;文件经官方 .well-known 索引下载并 sha256 校验后随仓库安装
 SD25_PE_SKILL = "agents/08-video-gen/prompt/skills/sd25-pe/SKILL.md"
+
+
+def is_seedance20(model: str) -> bool:
+    """Seedance 2.0 系列判定(含 fast/mini 等衍生版;与 genmedia._seedance_gen 同口径:
+    命中 seedance-2 且非 2.5 即按 2.0 口径,大小写不敏感)。"""
+    return "seedance-2" in (model or "").lower() and not is_seedance25(model)
+
+
+# Seedance 2.0 官方提示词写作 skill(sd20-prompt-writing):仅当生效视频模型为
+# 2.0 系列(含 fast/mini)时注入加载指令给 prompt agent;随仓库分发
+SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-prompt-writing/SKILL.md"
 
 
 def is_minimax_h3(model: str) -> bool:
@@ -793,16 +927,44 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
 H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
 
 
+def minimax_region_key(mm: dict) -> str:
+    """MiniMax 按「接口区域」(api_base)取对应区域的 Key:国内版 minimaxi.com →
+    api_key_cn,否则海外版 → api_key_io;旧版单一 api_key 兜底(genmedia 同口径)。"""
+    field = "api_key_cn" if "minimaxi.com" in str(mm.get("api_base") or "") else "api_key_io"
+    return str(mm.get(field) or mm.get("api_key") or "").strip()
+
+
 def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
-    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填 API Key
-    (或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关(genmedia 超分凭证同口径)。"""
+    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填当前
+    接口区域的 API Key(或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关
+    (genmedia 超分凭证同口径)。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    key = str((v.get("minimax") or {}).get("api_key") or "").strip()
+    key = minimax_region_key(v.get("minimax") or {})
     return bool(key or os.environ.get("MINIMAX_API_KEY", "").strip())
 
 
 # MiniMax Regenerate-2K 超分 skill:仅当 MiniMax Key 已配置时注入加载指令给 upscale agent
 MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2k/SKILL.md"
+
+
+# RunningHub 云端工作流参数化调用 skill:仅当视频渠道为 ComfyUI RunningHub 运行方式时
+# 注入加载指令给 video-generation agent
+RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
+                          "runninghub-cloud-workflow/SKILL.md")
+
+
+def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
+    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
+    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia.get_config 同口径):
+    runninghub ⇒ 是;其他非空覆盖(含 comfyui=本地/云端)⇒ 否;空 ⇒ 按全局判定。"""
+    if agent_id:
+        ov = str(agent_model_config(agent_id).get("video_provider") or "")
+        if ov:
+            return ov == "runninghub"
+    v = (cfg or load_genconfig()).get("video") or {}
+    comfy = v.get("comfyui") or {}
+    return ((v.get("provider") or "volcengine") == "comfyui"
+            and (comfy.get("mode") or "local") in RH_BASES)
 
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -866,8 +1028,8 @@ def _validate_shot_group(g: dict):
     try:
         gs = float(g.get("max_group_s", 15))
         ni = int(g.get("max_ref_images", 9))
-        nv = int(g.get("max_ref_videos", 1))
-        na = int(g.get("max_ref_audios", 2))
+        nv = int(g.get("max_ref_videos", 3))
+        na = int(g.get("max_ref_audios", 3))
         assert 4 <= gs <= 30 and 0 <= ni <= 30 and 0 <= nv <= 10 and 0 <= na <= 10
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
@@ -887,6 +1049,12 @@ def _validate_output(o: dict):
             raise ServiceError(400, f"output.{key} must be one of {VIDEO_RESOLUTIONS}")
     if "subtitle_burn_in" in o and not isinstance(o["subtitle_burn_in"], bool):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
+    if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
+        raise ServiceError(400, "output.caption_enabled must be a boolean")
+    if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
+        raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
+    if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
+        raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -936,7 +1104,8 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
-AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi")
+#   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_deepseek")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -971,11 +1140,18 @@ AM_MODE_MODELS = {
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
+    # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
+    # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
+    "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
+                       "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4-flash"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "deepagents")      # "" = 跟随全局
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局
+# runninghub/comfyui 与「🎨 生成模型」页两个标签页同口径(存储同在 comfyui 段,靠 mode 区分,
+# 见 genmedia.get_config):runninghub=RunningHub 页站点,comfyui=ComfyUI 页本地/云端
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax",
+                      "runninghub", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "runninghub", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1039,7 +1215,10 @@ def _http_get_json(url: str, headers: dict | None = None, timeout: int = 20):
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     opener = _DIRECT_OPENER.open if host in _LOOPBACK_HOSTS else urllib.request.urlopen
     with opener(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+        body = r.read()
+        if r.headers.get("Content-Encoding") == "gzip":
+            body = gzip.decompress(body)
+        return json.loads(body.decode("utf-8", "replace"))
 
 
 def _http_post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 20):
@@ -1064,11 +1243,15 @@ _OPENROUTER_TTL = 600
 #   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
 # kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配),
 #   usage=周配额,limits[](300min 窗口)=5h 会话配额。
+# opencode:OpenCode Go 订阅用量 GET opencode.ai/zen/go/v1/usage(额度按美元计,
+#   5 小时/周/月三窗口,面板取 5h→Session、周→Weekly);Key 在设置里配,留空自动读
+#   本机 opencode 登录凭证 auth.json。
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
+OPENCODE_USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
 _USAGE_CACHE: dict = {}               # engine -> (ts, {"session":pct|None,"weekly":pct|None})
-_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
+_USAGE_TTL = {"claude": 180, "codex": 180, "kimi": 180, "opencode": 180}   # claude 探针接口限流激进,≥180s 才安全;codex 探针要 rglob 扫 sessions 目录(秒级),TTL 太短资源面板每开必冷探
 _CLAUDE_VERSION: str | None = None
 
 
@@ -1234,6 +1417,96 @@ def kimi_probe_enabled() -> bool:
     return bool(v)
 
 
+def opencode_probe_enabled() -> bool:
+    """OpenCode Go 订阅用量检查开关(⚙️ 资源消耗 设置);默认关闭。"""
+    return bool(resource_cfg().get("opencode_probe"))
+
+
+def _opencode_data_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME", "").strip()
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "opencode"
+
+
+def _opencode_go_key() -> str | None:
+    """OpenCode Go API Key:设置里配置的优先;留空时读本机 opencode 登录凭证
+    (auth.json 里 provider 名含 opencode 的条目,常见字段名逐个尝试)。"""
+    key = (resource_cfg().get("opencode_api_key") or "").strip()
+    if key:
+        return key
+    try:
+        auth = json.loads((_opencode_data_dir() / "auth.json").read_text())
+    except Exception:
+        return None
+    if not isinstance(auth, dict):
+        return None
+    for name, ent in auth.items():
+        if "opencode" in str(name).lower() and isinstance(ent, dict):
+            for k in ("key", "apiKey", "api_key", "token", "access"):
+                v = ent.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    return None
+
+
+def _opencode_usage_full() -> dict:
+    """OpenCode Go 订阅用量:5h 窗口→session,周窗口→weekly(月窗口不上面板)。
+    官方未公开该接口的响应字段(控制台同源接口,无 Key 时 401 AuthError),按常见
+    命名宽松解析:utilization/percent 直读,used+limit(美元额度)换算;窗口名与
+    重置时间字段逐个尝试,解析不到/未配 Key 一律返回 None(面板显示未知)。"""
+    empty = {"session": None, "weekly": None,
+             "session_resets_at": None, "weekly_resets_at": None}
+    key = _opencode_go_key()
+    if not key:
+        return empty
+    try:
+        data = _http_get_json(OPENCODE_USAGE_URL,
+                              headers={"Authorization": f"Bearer {key}"})
+    except Exception:
+        return empty
+
+    def pct(d):
+        if not isinstance(d, dict):
+            return None
+        for k in ("utilization", "used_percent", "percent", "percentage"):
+            v = d.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                return max(0.0, min(100.0, float(v)))
+        used = next((float(d[k]) for k in ("used", "usage", "spent", "cost")
+                     if isinstance(d.get(k), (int, float))), None)
+        limit = next((float(d[k]) for k in ("limit", "quota", "total", "cap")
+                      if isinstance(d.get(k), (int, float)) and float(d[k]) > 0),
+                     None)
+        if used is not None and limit:
+            return max(0.0, min(100.0, used / limit * 100))
+        return None
+
+    def reset_ts(d):
+        if not isinstance(d, dict):
+            return None
+        for k in ("resets_at", "resetAt", "reset_at", "resetTime", "reset_time",
+                  "resets_in", "expires_at", "end_time", "endsAt"):
+            ts = _parse_reset_ts(d.get(k))
+            if ts and ts > time.time():
+                return ts
+        return None
+
+    def window(*names):
+        scopes = [data] + [data.get(k) for k in ("usage", "limits", "windows", "data")]
+        for scope in scopes:
+            if not isinstance(scope, dict):
+                continue
+            for n in names:
+                d = scope.get(n)
+                if isinstance(d, dict) and (pct(d) is not None or reset_ts(d)):
+                    return d
+        return None
+    s = window("five_hour", "fiveHour", "5h", "session", "hour")
+    w = window("seven_day", "sevenDay", "week", "weekly", "7d")
+    return {"session": pct(s), "weekly": pct(w),
+            "session_resets_at": reset_ts(s), "weekly_resets_at": reset_ts(w)}
+
+
 def _claude_usage_full() -> dict:
     """OAuth 探针取 claude 用量:five_hour=会话,seven_day=周;窗口对象自带
     resets_at(ISO)即重置时间;任何异常返回 None。"""
@@ -1319,7 +1592,7 @@ def engine_usage_full(engine: str) -> dict:
     if full is not None and time.time() - ts < _USAGE_TTL[engine]:
         return full
     full = {"claude": _claude_usage_full, "codex": _codex_usage_full,
-            "kimi": _kimi_usage_full}[engine]()
+            "kimi": _kimi_usage_full, "opencode": _opencode_usage_full}[engine]()
     _USAGE_CACHE[engine] = (time.time(), full)
     return full
 
@@ -1402,9 +1675,44 @@ def _volc_balance() -> dict | None:
         return None
 
 
+def _rh_balance() -> dict | None:
+    """RunningHub 账户余额(accountStatus):RH 币 + 钱包余额;.ai/.cn 账号不互通,
+    按站点分别查询,只查填了 Key 的站点。未开启/一个 Key 都没配返回 None;
+    单站点查询失败该站点读数为 null(面板显示「未知」),不影响另一站点。"""
+    cfg = resource_cfg()
+    keys = {s: (cfg.get(f"rh_key_{s}") or "").strip() for s in ("ai", "cn")}
+    if not (cfg.get("rh_enabled") and any(keys.values())):
+        return None
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    out = {}
+    for site, key in keys.items():
+        if not key:
+            continue
+        try:
+            resp = _http_post_json(
+                RH_BASES[f"rh_{site}"] + "/uc/openapi/accountStatus",
+                {"apikey": key, "apiKey": key},
+                {"Authorization": f"Bearer {key}"}, 15)
+            if resp.get("code") != 0:
+                raise ValueError(str(resp.get("msg")))
+            d = resp.get("data") or {}
+            out[site] = {"coins": num(d.get("remainCoins")),
+                         "balance": num(d.get("remainMoney")),
+                         "currency": str(d.get("currency") or "")}
+        except Exception:
+            out[site] = {"coins": None, "balance": None, "currency": ""}
+    return out
+
+
 def provider_balance(provider: str) -> dict | None:
-    """openrouter/volc 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
-    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance}.get(provider)
+    """openrouter/volc/runninghub 账户余额,带 TTL 缓存;未配置/取不到返回 None。"""
+    fn = {"openrouter": _openrouter_balance, "volc": _volc_balance,
+          "runninghub": _rh_balance}.get(provider)
     if not fn:
         return None
     ts, res = _BALANCE_CACHE.get(provider, (0, None))
@@ -1542,6 +1850,47 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
         " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
+    caption_line = (
+        "**开启** —— caption Agent 在关键叙事节点设计花字+配套音效(WORKFLOW.md §9A),"
+        "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
+        "另封装花字版成片 edit/{ep}/final_caption.mp4(a:0=声轨+SFX 预混、a:1=声轨存档);"
+        "干净版 final.mp4 照常产出,双版本并列;渲染/封装只准宿主 CLI code/render_captions.py,"
+        "机检 code/check_captions.py 三阶段"
+        if out.get("caption_enabled") else
+        "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
+        "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
+    spatial_on = out.get("spatial_blocking", True) is not False
+    spatial_line = (
+        "**开启(默认)—— 场景布局包 + 人物动线标注流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
+        "`layout_top.png` + 9 宫格多角度图 `grid_9views.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口);"
+        "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
+        "shot-planning 继承并跑 `code/render_blocking_map.py` 渲染 `directing/epNN/blocking_maps/grpNNN.png`"
+        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
+        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
+        "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
+        if spatial_on else
+        "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "
+        "`main_*.png` + 昼夜变体(不出 layout_top/grid_9views/layout.json,§6A 场景所需视图=主视角概念图+变体);"
+        "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 render_blocking_map.py;blocking 不受 blocking_on_map 约束"
+        "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
+        "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
+        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
+    dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
+    dialogue_voice = (
+        "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
+        "组视频仍按对白组常规生成(prompt 照写 `{}` 台词、挂 voiceprint 音色锚,人物开口表演由模型原生生成——"
+        "画面开口时段就是配音的时间依据);**每个对白组(audio_plan=dialogue)在 p7-video 交付后必派 p7-dub**"
+        "(负责:09-audio/voice-generation):从组 clip 原生音轨实测每句台词的开口起止(说话人按 shot_list "
+        "dialogue_lines 顺序对位),按 casting.json 该角色的 tts_model/tts_voice、voice.json 声线用 TTS 逐句合成冻结版台词"
+        "(`python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`,内部走 genmedia tts),"
+        "以语速(--speed,±25% 内)贴合开口时长、起点对齐开口起点,替换该组 clip 的对白轨(画面流不变、时长不变;"
+        "原生轨备份 `.native_audio.wav`),产物 `assets/audio/voice/epNN/dub/grpNNN/`;p7-lipsync 只在其后做不换语音的"
+        "对齐兜底(av_offset_lt_80ms);upscale/edit/mix 一律取配音后的组 clip。**§8A「TTS 严禁进成片对白」红线在本模式下"
+        "由用户设置显式解除**,但仍禁止用 TTS 干声重驱/重绘口型画面(仅换音轨、以时段贴合)"
+        if dubbing else
+        "视频原声(native,默认)—— 成片对白语音就是视频模型随组 clip 原生合成的语音,**全流程不做任何对白 TTS**"
+        "(不派 p7-dub,严禁 TTS 音轨进成片对白——§8A 红线);voiceprint 样本照常出、只作生成期 reference_audio 音色锚")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -1586,8 +1935,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
     sg_img = int(sg.get("max_ref_images", 9))
-    sg_vid = int(sg.get("max_ref_videos", 1))
-    sg_aud = int(sg.get("max_ref_audios", 2))
+    sg_vid = int(sg.get("max_ref_videos", 3))
+    sg_aud = int(sg.get("max_ref_audios", 3))
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -1598,6 +1947,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 当前项目目录:{proj_rel}/ —— 你的一切工作产物必须写入该目录下的对应子目录(布局见 WORKFLOW.md §2);目录不存在就创建
 - 只做你 SOUL.md 职责内的事;越界的需求要说明应由哪个 Agent 负责,不要代劳
 - 任务回执/评分/日志一律写 {proj_rel}/runs/<task_id>/(项目目录内);**严禁写工作区根 runs/**(文档中省略前缀的 runs/ 均指项目目录内)
+- 交付方式:JSON/MD/YAML 类设计产物**直接逐份写出最终文件**,严禁先写 Python 生成脚本(把数据写成 dict 再跑脚本落盘)、严禁按几份一批拆多轮;一单 N 份的批处理工单一次做完;同批产物的共用说明(输入清单/坐标系/画幅约定等)不逐份复制进每个文件,只写 SOUL 规定字段与本实例特有值。确需脚本(计算/媒体处理/机检/批量调用)才写,落 {proj_rel}/code/,不要放进 runs/<task_id>/(WORKFLOW.md §2)
 - 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
 - 完成后:用{ui_lang}简要汇报做了什么、关键决策,并列出「创建/修改的文件路径」清单
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
@@ -1614,6 +1964,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
+- 花字:{caption_line}
+- 对白配音:{dialogue_voice}
+- 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
@@ -1636,6 +1989,13 @@ def build_role_prompt(agent_id: str, project: str) -> str:
              "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
              "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
              "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
+    max_retries = max_retries_setting()
+    p += ("\n\n## 用户重跑次数设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中写死的「最多 3 次」「≤3 次」「max_retries: 3」)\n"
+          f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll,"
+          f"同一任务/同一产物累计最多 {max_retries} 次"
+          + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做)" if max_retries == 0 else
+             f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
+          + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -1673,6 +2033,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id in CAPTION_AGENTS and out.get("caption_enabled"):
+        p += """
+
+## 用户花字设定(Web 客户端「输出设置」花字开关,当前项目已开启;详细规范 WORKFLOW.md §9A)
+- 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v2**——全集 ≤4 个 style_presets(font_id 引用 data/fonts/manifest.json,优先 CJK 字体);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入底部字幕安全区。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
+- 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;产物是 assets/clips_caption/ 副本,原组 clip 永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
+- 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,用 clips_caption 副本替换对应组按同一 EDL 重拼,SFX 轨与封装走 `render_captions.py sfx-track` + `mux`——**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest
+- 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
+- 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
+- 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
     if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()):
         p += f"""
 
@@ -1682,6 +2052,15 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()):
+        p += f"""
+
+## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
+当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+- Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
+- 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
     if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
         p += f"""
 
@@ -1704,6 +2083,15 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id):
+        p += f"""
+
+## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)
+当前项目的视频生成走 RunningHub 云托管 ComfyUI 工作流。执行视频生成工单前,**先阅读技能文件,理解参数如何进入云端工作流再提交**:
+- Skill 文件:{RUNNINGHUB_VIDEO_SKILL}(直接 Read 全文)
+- 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
+- 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
+- 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
     if brief:
         p += f"""
 
@@ -1728,11 +2116,12 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/角色/场景/道具/封面参考图、希望使用的音频与文本资料按分类上传到 {proj_rel}/refs/(style/ characters/ scenes/ props/ music/ thumbnail/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/道具参考图、希望使用的音频、参考视频与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ props/ music/ video/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
+- 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
         p += f"""
@@ -1757,11 +2146,11 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 派单守则:
 1. 指令必须具体可执行:输入在哪、产物写到哪个路径、质量标准是什么(对照 agents/WORKFLOW.md §4 各阶段表的「工作指令要点」与「校验」列)
 2. 有依赖关系的任务用 --wait 串行;相互独立的任务异步并行派发,之后用
-   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 3600` 一次性等待全部完成
+   `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 7200` 一次性等待全部完成
    (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
    严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
-   等待类命令记得给 Bash 工具设置足够大的 timeout(如 3600000 毫秒)
-3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 3 次)
+   等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
+3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
@@ -1773,13 +2162,15 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    输出「签字」→ 闸门通过,走冻结流程;「暂缓」或「未签字」(等待超时)→ 记为等待人工,
    继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认(60s 自动默认)代替签字
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
+   派 for_each 批处理单(一单交付 N 份 JSON/MD)时,指令末尾必写「直接逐份落 JSON,不要写生成脚本、不要分批;共用说明不逐份复制」
+   (WORKFLOW.md §2「静态数据产物直接落盘」——否则执行方可能先写一堆 gen_*.py 分批跑,耗时/token 数倍于直写)
 7. 【blocker 挂起 ≠ 停机】某任务升级人工或等待裁决时,必须继续派发 DAG 上与它无依赖关系的
    其他可跑任务,禁止整条流水线待机干等(例:词典返工只应阻塞 merge,不应阻塞剧情理解/QA 预审)
 8. 【赛马仅限用户明确指令,禁换引擎】严禁自行发起并行赛马(改派多个 Agent 并行重做同一任务、
-   择优交付)。同一任务第 2 次返工仍未过,第 3 次必须走 --confirm 升级用户裁决;确有必要时可在
+   择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
-   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/deepagents 中的另一个)。
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
    `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
@@ -1839,7 +2230,7 @@ def run_public(run: dict) -> dict:
     """给前端的运行摘要(不带大文本)。"""
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
-        "created", "started", "ended", "cost", "turns", "error",
+        "created", "started", "ended", "cost", "turns", "error", "stopped",
         "engine", "model", "tokens", "progress") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -1875,9 +2266,10 @@ def is_stateless_agent(agent_id: str) -> bool:
 
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
-    # 调度型 Agent 要等整条流水线,超时放宽
-    run_timeout = RUN_TIMEOUT * (4 if is_dispatcher_agent(agent_id) else 1)
     is_dispatcher = is_dispatcher_agent(agent_id)
+    # 调度型 Agent 要等整条流水线,墙钟超时放宽 4 倍;它大部分时间静默等子任务,不设无输出超时
+    run_timeout = run_timeout_setting() * (4 if is_dispatcher else 1)
+    idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
@@ -2000,6 +2392,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     return base + ["-r", sid, "-p", message]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "opencode":
+                # opencode run 原生 JSON 事件流与持久会话,但无 --append-system-prompt:
+                # 首轮把角色说明拼进 prompt;续轮走 --session(会话已带上下文)。
+                # --auto 放行未显式拒绝的工具权限(非交互运行必需)
+                base = [cli_executable, "run", "--format", "json", "--auto"]
+                if model:
+                    base += ["-m", model]
+                if sid:
+                    return base + ["--session", sid, message]
+                return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "pi":
                 # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
@@ -2039,6 +2441,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             env["DA_PROMPT"] = message
             # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
             # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
+            # runner 撞上限后会从检查点自动续跑(DEEPAGENTS_MAX_CONTINUATIONS,默认 3 轮)。
             if "DEEPAGENTS_RECURSION_LIMIT" not in env:
                 env["DEEPAGENTS_RECURSION_LIMIT"] = (
                     "500" if agent_id in DISPATCHERS else "250"
@@ -2076,13 +2479,25 @@ async def execute_run(run: dict, message: str, model: str | None):
                     proc.stdin.close()
                 # 并发排空 stderr:否则子进程 stderr 写满 OS 管道缓冲会卡死到超时
                 stderr_task = asyncio.create_task(proc.stderr.read())
+                last_output = time.time()
                 while True:
-                    if time.time() > deadline:
+                    now = time.time()
+                    if now > deadline:
                         raise TimeoutError(f"运行超过 {run_timeout}s")
-                    raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
-                                                 timeout=max(1, deadline - time.time()))
+                    wait = deadline - now
+                    if idle_timeout:
+                        wait = min(wait, last_output + idle_timeout - now)
+                    try:
+                        raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
+                                                     timeout=max(1, wait))
+                    except asyncio.TimeoutError:
+                        if idle_timeout and time.time() - last_output >= idle_timeout:
+                            raise TimeoutError(
+                                f"连续 {idle_timeout}s 无输出") from None
+                        continue
                     if not raw:
                         break
+                    last_output = time.time()
                     line = raw.decode("utf-8", "replace").strip()
                     if not line:
                         continue
@@ -2098,6 +2513,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_kimi_event(run, obj)
                     elif engine == "pi":
                         handle_pi_event(run, obj)
+                    elif engine == "opencode":
+                        handle_opencode_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
@@ -2106,6 +2523,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine == "pi" and bool(run.get("error"))))
+                if run.get("stopped"):
+                    # 用户在运行面板手动停止(或服务关闭):不走会话失效重试,不让引擎的
+                    # aborted/退出码信息覆盖「手动停止」结论(下游总制片据此免于追查错误原因)
+                    run["status"] = "error"
+                    run["error"] = STOPPED_MSGS.get(run["stopped"], STOPPED_BY_USER_MSG)
+                    break
                 if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
@@ -2127,11 +2550,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 else:
                     run["status"] = "done"
                 break
-        except (TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.TimeoutError) as error:
             run["status"] = "error"
-            run["error"] = f"超时({run_timeout}s),进程已终止"
-            if proc:
-                proc.kill()
+            run["error"] = f"超时({str(error) or f'运行超过 {run_timeout}s'}),进程已终止"
+            if proc and proc.returncode is None:
+                _kill_proc_tree(proc)     # 连派生的 yt-dlp/ffmpeg/dispatch 子进程一起杀
         except asyncio.CancelledError:
             run["status"] = "error"
             run["error"] = run.get("error") or "服务关闭，任务已停止"
@@ -2180,10 +2603,32 @@ async def execute_run(run: dict, message: str, model: str | None):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
             reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
-            append_chat(agent_id, run["project"],
-                        {"role": "assistant", "text": reply,
-                         "run_id": run["id"], "status": run["status"]})
+            chat_entry = {"role": "assistant", "text": reply,
+                          "run_id": run["id"], "status": run["status"]}
+            if run.get("stopped"):
+                # 对话记录里明确标注「手动停止」,而不是只留下被截断的半截输出+error 状态,
+                # 否则后续 agent(尤其总制片)读到会误判为程序错误去追查原因
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                how = ("被用户在运行面板手动停止" if run["stopped"] == "user"
+                       else "因服务关闭/重启被中断")
+                reply = (f"⏹ {run['error']}(运行 {dur}s 后{how},"
+                         "非程序错误,无需追查失败原因;是否重派由用户决定)"
+                         + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run["status"] == "error" and run.get("error") and reply != run["error"]:
+                # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
+                reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
+                chat_entry["text"] = reply
+            append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
+            try:
+                # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
+                # 白名单字段本地落盘,错误消息模板化、项目名只存哈希;绝不出网
+                from modules.diagnostics import record_run_event
+                record_run_event(run)
+            except Exception:
+                pass
             # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
             # 人工闸门静默留在 DAG 中。这里只补建签字单，绝不自动改 gate state。
             try:
@@ -2347,6 +2792,51 @@ def handle_pi_event(run: dict, obj: dict):
         run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
 
 
+def handle_opencode_event(run: dict, obj: dict):
+    """解析 opencode run --format json 的 JSONL 事件(实测 1.18)。
+
+    每条事件顶层带 sessionID;text 事件的 part.text 是完成的文本块(非增量);
+    工具调用 tool_use 事件 part.tool=工具名、part.state.input=参数(文件参数是
+    驼峰 filePath);step_finish 每次模型调用一条,part.tokens 计 token
+    (total 已含 cache read/reasoning;cost 免费模型恒为 0,不采)。"""
+    sid = obj.get("sessionID")
+    if sid:
+        run["session_id"] = sid
+    t = obj.get("type")
+    part = obj.get("part") or {}
+    if t == "text":
+        txt = part.get("text") or ""
+        if txt:
+            run["text"] = run.get("text", "") + txt
+            run["result"] = txt          # opencode 无独立 result 事件,取最后一个文本块
+            HUB.publish({"type": "text", "run_id": run["id"],
+                         "agent": run["agent"], "text": txt})
+    elif t == "tool_use":
+        inp = (part.get("state") or {}).get("input") or {}
+        if isinstance(inp.get("filePath"), str) and "file_path" not in inp:
+            inp = {**inp, "file_path": inp["filePath"]}
+        desc, fp = tool_summary(str(part.get("tool") or "?"), inp)
+        run.setdefault("activity", []).append(desc)
+        if fp:
+            run.setdefault("files", []).append(fp)
+            HUB.publish({"type": "file", "run_id": run["id"],
+                         "agent": run["agent"], "path": fp})
+        HUB.publish({"type": "tool", "run_id": run["id"],
+                     "agent": run["agent"], "desc": desc})
+        publish_run(run)
+    elif t == "step_finish":
+        tok = part.get("tokens") or {}
+        total = tok.get("total")
+        if not isinstance(total, (int, float)):
+            cache = tok.get("cache") or {}
+            total = sum(int(v or 0) for v in (
+                tok.get("input"), tok.get("output"), tok.get("reasoning"),
+                cache.get("read"), cache.get("write")))
+        run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
+    elif t == "error":
+        run["error"] = str(obj.get("error") or part.get("error") or obj)[:500]
+
+
 def handle_deepagents_event(run: dict, obj: dict):
     """解析 deepagents_runner 的 JSONL 事件。"""
     t = obj.get("type")
@@ -2358,6 +2848,13 @@ def handle_deepagents_event(run: dict, obj: dict):
             run["text"] = run.get("text", "") + txt
             HUB.publish({"type": "text", "run_id": run["id"],
                          "agent": run["agent"], "text": txt})
+    elif t == "notice":   # runner 自身提示(如撞 recursion_limit 自动续跑),不计入产出文本
+        txt = obj.get("text") or ""
+        if txt:
+            run.setdefault("activity", []).append(txt)
+            HUB.publish({"type": "tool", "run_id": run["id"],
+                         "agent": run["agent"], "desc": txt})
+            publish_run(run)
     elif t == "tool":
         name = obj.get("name", "?")
         inp = obj.get("input") or {}
@@ -2739,7 +3236,8 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 # ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/scenes/",
-                      "assets/concepts/props/")
+                      "assets/concepts/props/",
+                      "directing/")   # directing/epNN/blocking_maps/grpNNN.png 组人物动线俯视图(2026-08-19)
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
@@ -2777,7 +3275,9 @@ async def api_grpref_add(body: dict):
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
-        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/")
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/ or directing/<ep>/blocking_maps/")
+    if ref.startswith("directing/") and "/blocking_maps/" not in ref:
+        raise ServiceError(400, "under directing/ only <ep>/blocking_maps/*.png may be added as a ref")
     target = (base / ref).resolve()
     try:
         target.relative_to(base.resolve())
@@ -3176,6 +3676,8 @@ def _preview_storyboard(project: str, ep: str):
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
+    # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
+    cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
     shots = []
     for s in (sl.get("shots") or []):
         if not isinstance(s, dict):
@@ -3225,13 +3727,25 @@ def _preview_storyboard(project: str, ep: str):
                 # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
                 pipeline_refs.append({"ref": r, "url": url,
                                       "name": "/".join(r.split("/")[-2:])})
+        # 组人物动线俯视图(storyboard/shot-planning 的 blocking_map 经 code/render_blocking_map.py
+        # 渲染,2026-08-19):prompt 尚未产出时也要在分镜预览可见(H3A 签字审看站位/动线),
+        # 组 prompt refs 已列入的按普通 pipeline ref 展示,未列入的补插到最前
+        bmap_rel = f"directing/{ep}/blocking_maps/{gid}.png"
+        bmap = base / bmap_rel
+        if gid and bmap.is_file() and all(r["ref"] != bmap_rel for r in pipeline_refs):
+            pipeline_refs.insert(0, {
+                "ref": bmap_rel, "name": f"blocking_map/{gid}.png",
+                "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "has_dialogue", "continuity_from")} | {
+            "blocking_map": g.get("blocking_map"),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
+            "caption_clips": [c for c in cap_clips
+                              if gid and _id_name_match(gid, c["name"])],
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
@@ -3320,6 +3834,7 @@ def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
     claude stream-json 末尾 result.usage(整个 run 的累计);codex exec 末尾
     turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
+    opencode 的每个 step_finish 各带一次调用用量(part.tokens);
     无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
     try:
         with open(path, "rb") as fh:
@@ -3381,6 +3896,16 @@ def _parse_run_usage(path: Path):
                                 + int(u.get("cacheWrite") or 0))
                         tout += int(u.get("output") or 0)
                         found = True
+                elif t == "step_finish":       # opencode:每次模型调用各一条
+                    tok = (d.get("part") or {}).get("tokens")
+                    if isinstance(tok, dict):
+                        cache = tok.get("cache") or {}
+                        tin += (int(tok.get("input") or 0)
+                                + int(cache.get("read") or 0)
+                                + int(cache.get("write") or 0))
+                        tout += (int(tok.get("output") or 0)
+                                 + int(tok.get("reasoning") or 0))
+                        found = True
     except OSError:
         return None
     for u in by_id.values():
@@ -3430,7 +3955,7 @@ def _llm_usage_index() -> dict:
 def _project_llm_tokens(project: str):
     """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
     派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/deepagents)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/deepagents)。
     无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
@@ -3844,6 +4369,62 @@ async def _notify_settings_change(project: str, label: str, changes: list[str]):
         print(f"[settings-notify] 通知总制片失败(忽略):{e}", flush=True)
 
 
+async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
+    """把各类别当前选中的 RunningHub 工作流本地缓存同步为云端最新版(保存设置时调用)。
+
+    genmedia 提交走本地缓存的工作流 JSON 整包且缓存不过期:用户在 RunningHub 网页端
+    改过工作流(如换扩散模型)后,不重拉缓存改动就不会生效。刷新失败不阻断保存
+    (提交沿用旧缓存),逐条结果返回给设置页回显。"""
+    jobs = {}
+    for kind in ("image", "video", "music", "tts"):
+        comfy = (cfg.get(kind) or {}).get("comfyui") or {}
+        mode = str(comfy.get("mode") or "")
+        if mode not in RH_BASES:
+            continue
+        key = (str(comfy.get(f"rh_api_key_{mode[3:]}") or "").strip()
+               or str(comfy.get("rh_api_key") or "").strip())
+        if not key:
+            continue
+        for field in ("rh_workflow_id", "rh_ref_workflow_id"):
+            wf_id = str(comfy.get(field) or "").strip()
+            if wf_id:
+                jobs.setdefault((mode, wf_id), key)
+    if not jobs:
+        return []
+
+    async def sync(mode: str, wf_id: str, key: str) -> dict:
+        item = {"id": wf_id, "mode": mode}
+        try:
+            resp = await asyncio.to_thread(
+                _http_post_json, RH_BASES[mode] + "/api/openapi/getJsonApiFormat",
+                {"apiKey": key, "workflowId": wf_id},
+                {"Authorization": f"Bearer {key}"}, 30)
+            text = (resp.get("data") or {}).get("prompt") if resp.get("code") == 0 else None
+            if not text:
+                raise RuntimeError(f"code={resp.get('code')}: {str(resp.get('msg'))[:120]}")
+            new_wf = json.loads(text)  # 接口偶发回异常内容,坏 JSON 不落缓存
+            cache = RH_CACHE_DIR / f"{mode}-{wf_id}.json"
+            old = cache.read_text(encoding="utf-8") if cache.is_file() else None
+            try:
+                old_wf = json.loads(old) if old is not None else None
+            except json.JSONDecodeError:
+                old_wf = None
+            if old_wf == new_wf and old_wf is not None:
+                # 语义比较:接口偶发序列化抖动(键序/空白),字节不同不代表工作流变了
+                item["status"] = "unchanged"
+            else:
+                RH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache.write_text(text, encoding="utf-8")
+                # created=首次缓存(genmedia 本就会现拉,不算行为变化);updated=覆盖旧版
+                item["status"] = "updated" if old_wf is not None else "created"
+        except Exception as e:  # noqa: BLE001
+            item["status"] = "error"
+            item["detail"] = str(e)[:200]
+        return item
+
+    return list(await asyncio.gather(*(sync(m, w, k) for (m, w), k in jobs.items())))
+
+
 async def api_genconfig_set(body: dict):
     body = dict(body or {})
     # project 仅用于「设置变更」通知的会话归属(genconfig 本身是全局配置),不落盘
@@ -3881,9 +4462,16 @@ async def api_genconfig_set(body: dict):
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
         return {"ok": True, "config": cfg}
+    # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
+    # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
+    rh_refresh = [] if lang_only else await _refresh_rh_wf_caches(cfg)
+    changes = _flat_diff(old, cfg)
+    # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
+    changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
+                for it in rh_refresh if it["status"] == "updated"]
     await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
-                                  _flat_diff(old, cfg))
-    return {"ok": True, "config": cfg}
+                                  changes)
+    return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 
 BRIEF_HEADER = "# 主创构想"
@@ -3946,9 +4534,10 @@ async def api_brief_set(body: dict):
 
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
-REF_CATEGORIES = ("style", "characters", "scenes", "props", "music", "thumbnail", "text")
+REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "props", "music", "video", "text")
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
+REF_VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
 REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
@@ -3996,6 +4585,7 @@ async def api_refs_list(project: str = "demo"):
         return {"path": rel, "name": f.name,
                 "url": f"/projects/{base.name}/refs/{rel}?v={int(st.st_mtime)}",
                 "is_image": ext in IMG_EXTS, "is_audio": ext in AUDIO_EXTS,
+                "is_video": ext in REF_VIDEO_EXTS,
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip()}
 
@@ -4303,6 +4893,275 @@ async def api_volc_speakers(body: dict):
     return {"speakers": speakers}
 
 
+# ---------------- 火山方舟 私域虚拟人像素材库(设置 → 高级 → 虚拟人像资产库) ----------------
+# 台账 avatar_assets.json:{"assets": {<文件sha256>: {asset_id,status,group_id,...}},
+# "files": {"<绝对路径>|<mtime_ns>|<size>": <sha256>}}(files 为免重复哈希的缓存)。
+# genmedia 生成视频时同读该台账:已入库(Active)的参考图改用 asset://<id> 提交,
+# 规避 Seedance 对含人脸参考图的审核拦截。
+AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
+_AVATAR_ARK_HOST = "ark.cn-beijing.volcengineapi.com"
+_AVATAR_API_VERSION = "2024-01-01"
+
+
+def _avatar_cfg() -> dict:
+    return load_genconfig().get("avatar_assets") or {}
+
+
+def _avatar_keys(cfg: dict) -> tuple[str, str]:
+    """资产库 AK/SK:本页配置优先,留空回退文件托管 TOS 的 AK/SK 或环境变量。"""
+    ak = str(cfg.get("access_key") or "").strip()
+    sk = str(cfg.get("secret_key") or "").strip()
+    if not (ak and sk):
+        tos = (load_genconfig().get("storage") or {}).get("tos") or {}
+        ak = ak or (tos.get("access_key") or os.environ.get("TOS_ACCESS_KEY", "")).strip()
+        sk = sk or (tos.get("secret_key") or os.environ.get("TOS_SECRET_KEY", "")).strip()
+    if not (ak and sk):
+        raise ServiceError(400, "需先配置火山引擎 Access Key/Secret Key"
+                                "(⚙️ 设置 → 高级 → 虚拟人像资产库)")
+    return ak, sk
+
+
+def _avatar_call(action: str, body: dict) -> dict:
+    """方舟素材资产(Assets)OpenAPI 调用(AK/SK V4 签名,Service=ark);
+    返回 Result,业务/HTTP 错误统一抛 ServiceError。"""
+    ak, sk = _avatar_keys(_avatar_cfg())
+    try:
+        r = _volc_signed_call(ak, sk, action, _AVATAR_API_VERSION, body,
+                              service="ark", region="cn-beijing",
+                              host=_AVATAR_ARK_HOST)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:500]
+        try:
+            err = (json.loads(detail).get("ResponseMetadata") or {}).get("Error") or {}
+            if err:
+                detail = f"{err.get('Code')}: {err.get('Message')}"
+        except Exception:
+            pass
+        raise ServiceError(502, f"{action} HTTP {e.code}:{detail}") from None
+    except ServiceError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"{action} 调用失败:{e}") from None
+    err = (r.get("ResponseMetadata") or {}).get("Error") or {}
+    if err:
+        raise ServiceError(502, f"{action} 失败:{err.get('Code')}: {err.get('Message')}")
+    return r.get("Result") or {}
+
+
+def _avatar_ledger() -> dict:
+    try:
+        d = json.loads(AVATAR_LEDGER_PATH.read_text())
+    except Exception:
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    d.setdefault("assets", {})
+    d.setdefault("files", {})
+    return d
+
+
+def _avatar_ledger_save(d: dict):
+    files = d.get("files") or {}
+    if len(files) > 5000:   # 哈希缓存只增不减,超限丢最旧的一半
+        d["files"] = dict(list(files.items())[-2500:])
+    atomic_write_json(AVATAR_LEDGER_PATH, d)
+
+
+def _avatar_digest(p: Path, led: dict) -> str:
+    """文件内容 sha256(带 mtime/size 缓存,避免预览页反复全量读图)。"""
+    st = p.stat()
+    fkey = f"{p}|{st.st_mtime_ns}|{st.st_size}"
+    dig = led["files"].get(fkey)
+    if not dig:
+        dig = hashlib.sha256(p.read_bytes()).hexdigest()
+        led["files"][fkey] = dig
+    return dig
+
+
+def _avatar_ref_path(project: str, ref: str) -> Path:
+    """清洗并定位项目内图片(仅允许项目目录内的图片文件)。"""
+    base = _proj_base(safe_slug(project))
+    ref = (ref or "").strip().lstrip("/")
+    if not ref or ".." in ref.split("/"):
+        raise ServiceError(400, "invalid ref path")
+    p = (base / ref).resolve()
+    try:
+        p.relative_to(base.resolve())
+    except ValueError:
+        raise ServiceError(400, "invalid ref path") from None
+    if not p.is_file() or p.suffix.lower() not in IMG_EXTS:
+        raise ServiceError(404, f"Image not found: {ref}")
+    return p
+
+
+async def _avatar_group_id(cfg: dict) -> str:
+    """素材组 Id:已记录的直接用,否则 CreateAssetGroup 自动创建并写回 genconfig。"""
+    gid = str(cfg.get("group_id") or "").strip()
+    if gid:
+        return gid
+    name = str(cfg.get("group_name") or "").strip() or "VideoAgents"
+    res = await asyncio.to_thread(
+        _avatar_call, "CreateAssetGroup",
+        {"Name": name, "Description": "VideoAgents character images (auto-created)",
+         "ProjectName": cfg.get("project_name") or "default"})
+    gid = str(res.get("Id") or "").strip()
+    if not gid:
+        raise ServiceError(502, f"CreateAssetGroup 未返回素材组 Id:{res}")
+    full = load_genconfig()
+    full.setdefault("avatar_assets", {})["group_id"] = gid
+    save_genconfig(full)
+    return gid
+
+
+def _avatar_source_url(p: Path) -> str:
+    """本地图片 → CreateAsset 可访问的 URL:优先经「文件托管」对象存储出预签名 URL
+    (genmedia upload 子进程,与参考视频同链路);未配置托管时回退 data: base64
+    内联尝试,若方舟拒收由上层给出配置托管的提示。"""
+    r = subprocess.run([sys.executable, str(ROOT / "modules" / "genmedia.py"),
+                        "upload", "--input", str(p)],
+                       capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    if r.returncode == 0:
+        out = (r.stdout or "").strip()
+        url = out.splitlines()[-1].strip() if out else ""
+        if url.startswith("http"):
+            return url
+    mime = mimetypes.guess_type(p.name)[0] or "image/png"
+    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+
+
+async def api_avatar_upload(body: dict):
+    """把项目内一张人物图片上传入虚拟人像库(CreateAsset,异步审核:Processing →
+    Active/Failed);按文件内容 sha256 幂等,已入库(Active/Processing)直接返回现状。"""
+    cfg = _avatar_cfg()
+    if not cfg.get("enabled"):
+        raise ServiceError(400, "虚拟人像资产库未启用(⚙️ 设置 → 高级 → 虚拟人像资产库)")
+    project = safe_slug(body.get("project") or "")
+    p = _avatar_ref_path(project, body.get("ref") or "")
+    if p.stat().st_size > 30 * 1024 * 1024:
+        raise ServiceError(400, "图片超过 30MB(方舟单张图片素材上限)")
+    led = _avatar_ledger()
+    dig = _avatar_digest(p, led)
+    ent = led["assets"].get(dig) or {}
+    if ent.get("asset_id") and ent.get("status") in ("Active", "Processing"):
+        _avatar_ledger_save(led)
+        return {"asset_id": ent["asset_id"], "status": ent["status"], "existing": True}
+    gid = await _avatar_group_id(cfg)
+    url = await asyncio.to_thread(_avatar_source_url, p)
+    name = f"{project}-{p.stem}"[:80]
+    try:
+        res = await asyncio.to_thread(
+            _avatar_call, "CreateAsset",
+            {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
+             "ProjectName": cfg.get("project_name") or "default"})
+    except ServiceError as e:
+        if url.startswith("data:"):
+            raise ServiceError(e.status_code, f"{e.detail}(当前以 base64 内联提交;"
+                               "若方舟要求公网 URL,请先在 ⚙️ 设置 → 文件托管 配置"
+                               "对象存储后重试)") from None
+        raise
+    aid = str(res.get("Id") or "").strip()
+    if not aid:
+        raise ServiceError(502, f"CreateAsset 未返回素材 Id:{res}")
+    led["assets"][dig] = {"asset_id": aid, "status": "Processing", "group_id": gid,
+                          "name": name, "source": str(p),
+                          "uploaded_at": int(time.time())}
+    _avatar_ledger_save(led)
+    return {"asset_id": aid, "status": "Processing"}
+
+
+async def api_avatar_status(body: dict):
+    """查询项目内一批图片的入库状态:{ref: {asset_id, status}}。Processing 的条目
+    顺带经 GetAsset 刷新(单条目 5s 节流);未启用时只返回 enabled 标记。"""
+    cfg = _avatar_cfg()
+    out = {"enabled": bool(cfg.get("enabled")), "status": {}}
+    if not out["enabled"]:
+        return out
+    project = safe_slug(body.get("project") or "")
+    refs = [str(r) for r in (body.get("refs") or []) if r][:500]
+    led = _avatar_ledger()
+    before = json.dumps(led, sort_keys=True)
+    now = time.time()
+    for ref in refs:
+        try:
+            p = _avatar_ref_path(project, ref)
+        except ServiceError:
+            continue
+        ent = led["assets"].get(_avatar_digest(p, led))
+        if not ent or not ent.get("asset_id"):
+            continue
+        if ent.get("status") == "Processing" and now - (ent.get("checked_at") or 0) > 5:
+            ent["checked_at"] = int(now)
+            try:
+                res = await asyncio.to_thread(
+                    _avatar_call, "GetAsset",
+                    {"Id": ent["asset_id"],
+                     "ProjectName": cfg.get("project_name") or "default"})
+                ent["status"] = res.get("Status") or ent["status"]
+            except ServiceError:
+                pass
+        out["status"][ref] = {"asset_id": ent["asset_id"], "status": ent.get("status")}
+    if json.dumps(led, sort_keys=True) != before:
+        _avatar_ledger_save(led)
+    return out
+
+
+async def api_avatar_list(body: dict):
+    """虚拟人像库资产列表(ListAssets):分页 + 名称模糊搜索,返回账号内全部图片
+    素材与总数;顺带把结果里的状态同步回本地台账(预览页「已入库」标记保鲜)。"""
+    body = body or {}
+    try:
+        page = max(1, int(body.get("page") or 1))
+        size = min(100, max(1, int(body.get("page_size") or 50)))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "page/page_size must be integers") from None
+    filt: dict = {"GroupType": "AIGC"}
+    q = str(body.get("q") or "").strip()
+    if q:
+        filt["Name"] = q
+    res = await asyncio.to_thread(
+        _avatar_call, "ListAssets",
+        {"Filter": filt, "PageNumber": page, "PageSize": size})
+    items = [{"id": it.get("Id") or "", "name": it.get("Name") or "",
+              "asset_type": it.get("AssetType") or "",
+              "status": it.get("Status") or "", "url": it.get("URL") or "",
+              "group_id": it.get("GroupId") or "",
+              "project_name": it.get("ProjectName") or "",
+              "create_time": it.get("CreateTime") or "",
+              "last_inference_time": it.get("LastInferenceTime") or ""}
+             for it in (res.get("Items") or [])]
+    led = _avatar_ledger()
+    by_id = {it["id"]: it["status"] for it in items if it["id"]}
+    changed = False
+    for ent in led["assets"].values():
+        st = by_id.get(ent.get("asset_id"))
+        if st and st != ent.get("status"):
+            ent["status"] = st
+            changed = True
+    if changed:
+        _avatar_ledger_save(led)
+    return {"items": items, "total": int(res.get("TotalCount") or 0),
+            "page": page, "page_size": size}
+
+
+async def api_avatar_delete(body: dict):
+    """删除虚拟人像库中的一个素材(DeleteAsset,不可恢复);同步清掉本地台账里
+    指向该素材的条目(人物预览的「已入库」标记随之消失)。"""
+    aid = str((body or {}).get("id") or "").strip()
+    if not aid:
+        raise ServiceError(400, "id is required")
+    cfg = _avatar_cfg()
+    await asyncio.to_thread(
+        _avatar_call, "DeleteAsset",
+        {"Id": aid, "ProjectName": cfg.get("project_name") or "default"})
+    led = _avatar_ledger()
+    stale = [k for k, v in led["assets"].items() if v.get("asset_id") == aid]
+    for k in stale:
+        led["assets"].pop(k, None)
+    if stale:
+        _avatar_ledger_save(led)
+    return {"deleted": aid}
+
+
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
 
 _MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
@@ -4507,9 +5366,20 @@ async def api_test_comfyui(body: dict):
             stats = {}
         except Exception as e2:  # noqa: BLE001
             return {"ok": False, "error": f"Connection failed: {str(e2)[:200]}"}
+    all_info = None
+    if cloud:
+        # Comfy Cloud 无单节点 /object_info/<节点> 端点(404: "Use /api/object_info
+        # instead"),只能全量拉取;本地仍走单节点端点省流量。全量约 9MB,明文长流
+        # 易被代理掐断(IncompleteRead),请求 gzip 压到约 0.7MB
+        try:
+            all_info = await asyncio.to_thread(
+                _http_get_json, url + "/object_info",
+                {"Accept-Encoding": "gzip", **headers}, 30)
+        except Exception:  # noqa: BLE001
+            all_info = {}
     checkpoints = []
     try:
-        info = await asyncio.to_thread(
+        info = all_info if cloud else await asyncio.to_thread(
             _http_get_json, url + "/object_info/CheckpointLoaderSimple", headers, 6)
         req = info.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {})
         ckpt = req.get("ckpt_name") or [[]]
@@ -4520,7 +5390,7 @@ async def api_test_comfyui(body: dict):
     custom_nodes = {}
     for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
         try:
-            info = await asyncio.to_thread(
+            info = all_info if cloud else await asyncio.to_thread(
                 _http_get_json, url + "/object_info/" + node_type, headers, 6)
             custom_nodes[node_type] = bool(info.get(node_type))
         except Exception:  # noqa: BLE001
@@ -4881,6 +5751,45 @@ async def api_pi_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_OPENCODE_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_OPENCODE_MODELS_TTL = 30
+
+
+async def api_opencode_models(refresh: bool = False):
+    """列出当前 opencode 登录凭证实际可用的模型(`opencode models` 一行一个
+    provider/model),供全部语言模型选择器复用。未登录时只有免费模型属正常。"""
+    global _OPENCODE_MODELS_CACHE
+    ts, cached = _OPENCODE_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _OPENCODE_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "opencode")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("opencode"))
+    env = {**os.environ, "NO_COLOR": "1", "OPENCODE_DISABLE_AUTOUPDATE": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 opencode 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 opencode 模型列表失败:{detail[:300]}")
+    models = []
+    for raw in output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw).strip()
+        m = re.fullmatch(r"([\w.-]+)/(\S+)", line)
+        if m:
+            models.append({"id": line, "name": m.group(2),
+                           "provider": m.group(1), "model": m.group(2)})
+    _OPENCODE_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -4889,7 +5798,7 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
@@ -5502,10 +6411,15 @@ def _kill_proc_tree(proc):
             pass
 
 
-def _stop_run(run) -> bool:
-    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。"""
+def _stop_run(run, by: str = "user") -> bool:
+    """停止单个 run:running 杀进程组,queued 取消排队;返回是否执行了停止。
+    by: "user"(运行面板 ⏹)或 "shutdown"(服务关闭连带停止)。"""
+    msg = STOPPED_MSGS.get(by, STOPPED_BY_USER_MSG)
     if run.get("status") == "running":
-        run["error"] = "已被用户手动停止"
+        # stopped 标记随 run_public/对话记录/dispatch.py 输出一路透传:
+        # 下游 agent 看到的是「用户手动停止」而不是一条来历不明的 error
+        run["stopped"] = by
+        run["error"] = msg
         proc = RUN_PROCS.get(run["id"])
         if proc and proc.returncode is None:
             _kill_proc_tree(proc)      # execute_run 读到 EOF 后按 error 收尾
@@ -5515,26 +6429,28 @@ def _stop_run(run) -> bool:
         if t:
             t.cancel()
         run["status"] = "error"
-        run["error"] = "已被用户手动停止(排队中取消)"
+        run["stopped"] = by
+        run["error"] = f"{msg}(排队中取消)"
         run["ended"] = time.time()
         append_chat(run["agent"], run["project"],
-                    {"role": "assistant", "text": run["error"],
-                     "run_id": run["id"], "status": "error"})
+                    {"role": "assistant",
+                     "text": f"⏹ {run['error']},非程序错误,无需追查失败原因;是否重派由用户决定",
+                     "run_id": run["id"], "status": "error", "stopped": by})
         publish_run(run)
         return True
     return False
 
 
-async def api_stop_all():
-    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮)。"""
-    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run)]
+async def api_stop_all(by: str = "user"):
+    """停止全部排队/运行中的任务(运行面板「⏹ 停止」按钮;服务关闭时 by="shutdown")。"""
+    stopped = [run["id"] for run in list(RUNS.values()) if _stop_run(run, by)]
     return {"stopped": stopped}
 
 
 async def shutdown_runtime(timeout: float = 4) -> None:
     """Boundedly stop Agent tasks/process groups and release OS resources."""
     tasks = list(RUN_TASKS.values())
-    await api_stop_all()
+    await api_stop_all(by="shutdown")
 
     active = [task for task in tasks if not task.done()]
     if active:
@@ -6022,23 +6938,93 @@ async def api_watchdog_threshold_set(body: dict):
     return await api_watchdog_threshold_get()
 
 
+async def api_agent_advanced_get():
+    """Agent 高级设置(设置菜单「高级→Agent 高级设置」)汇总读:并发/超时 + 对话记忆 + 重跑次数。"""
+    d = await api_agent_concurrency_get()
+    d.update(await api_agent_memory_get())
+    d.update({"max_retries": max_retries_setting(),
+              "max_retries_default": MAX_RETRIES_DEFAULT,
+              "max_retries_max": MAX_RETRIES_MAX})
+    return d
+
+
+async def api_agent_advanced_set(body: dict):
+    """Agent 高级设置合并提交,各字段均可选、可单独提交:
+    - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
+    - agent_memory:同 api_agent_memory_set
+    - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
+      经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效"""
+    updates: dict = {}
+    if body.get("max_retries") is not None:
+        try:
+            n = int(body.get("max_retries"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "max_retries must be an integer") from None
+        if not 0 <= n <= MAX_RETRIES_MAX:
+            raise ServiceError(400, f"max_retries must be between 0 and {MAX_RETRIES_MAX}")
+        updates["max_retries"] = n
+    if body.get("agent_memory") is not None:
+        updates["agent_memory"] = bool(body["agent_memory"])
+    conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
+            if body.get(k) is not None}
+    if not updates and not conc:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory / max_retries")
+    if conc:
+        await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
+    if updates:
+        STATE.update(updates)
+        save_state(STATE)
+    return await api_agent_advanced_get()
+
+
 async def api_agent_concurrency_get():
     return {"agent_concurrency": agent_concurrency(),
             "default": AGENT_CONCURRENCY_DEFAULT,
-            "max": MAX_CONCURRENT}
+            "max": MAX_CONCURRENT,
+            "run_timeout": run_timeout_setting(),
+            "run_timeout_default": RUN_TIMEOUT_DEFAULT,
+            "run_timeout_min": RUN_TIMEOUT_MIN,
+            "run_timeout_max": RUN_TIMEOUT_MAX,
+            "idle_timeout": idle_timeout_setting(),
+            "idle_timeout_default": IDLE_TIMEOUT_DEFAULT,
+            "idle_timeout_max": IDLE_TIMEOUT_MAX}
 
 
 async def api_agent_concurrency_set(body: dict):
-    """并发数量设置(设置菜单「高级→并发数量」):无状态扇出型 Agent(05-scenes/
-    08-video-gen/11-qa/eval 等)的同 agent 并发额度;有状态 Agent 恒为 1,
-    全局仍受 MAX_CONCURRENT 总闸。持久化,立即对后续排队的运行生效。"""
-    try:
-        n = int(body.get("agent_concurrency"))
-    except (TypeError, ValueError):
-        raise ServiceError(400, "agent_concurrency must be an integer") from None
-    if not 1 <= n <= MAX_CONCURRENT:
-        raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
-    STATE["agent_concurrency"] = n
+    """并发和超时设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容),三项均可选、可单独提交:
+    - agent_concurrency:无状态扇出型 Agent(05-scenes/08-video-gen/11-qa/eval 等)的
+      同 agent 并发额度;有状态 Agent 恒为 1,全局仍受 MAX_CONCURRENT 总闸
+    - run_timeout:单次运行墙钟超时(秒,调度型 Agent 自动 4 倍)
+    - idle_timeout:引擎事件流无输出超时(秒,0=关闭;调度型 Agent 不受约束)
+    持久化,立即对后续启动的运行生效(在跑的运行沿用启动时的取值)。"""
+    updates: dict[str, int] = {}
+    if body.get("agent_concurrency") is not None:
+        try:
+            n = int(body.get("agent_concurrency"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "agent_concurrency must be an integer") from None
+        if not 1 <= n <= MAX_CONCURRENT:
+            raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
+        updates["agent_concurrency"] = n
+    if body.get("run_timeout") is not None:
+        try:
+            n = int(body.get("run_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "run_timeout must be an integer (seconds)") from None
+        if not RUN_TIMEOUT_MIN <= n <= RUN_TIMEOUT_MAX:
+            raise ServiceError(400, f"run_timeout must be between {RUN_TIMEOUT_MIN} and {RUN_TIMEOUT_MAX} seconds")
+        updates["run_timeout"] = n
+    if body.get("idle_timeout") is not None:
+        try:
+            n = int(body.get("idle_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "idle_timeout must be an integer (seconds, 0 disables)") from None
+        if not 0 <= n <= IDLE_TIMEOUT_MAX:
+            raise ServiceError(400, f"idle_timeout must be between 0 and {IDLE_TIMEOUT_MAX} seconds")
+        updates["idle_timeout"] = n
+    if not updates:
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout")
+    STATE.update(updates)
     save_state(STATE)
     return await api_agent_concurrency_get()
 
@@ -6049,7 +7035,7 @@ async def api_agent_memory_get():
 
 
 async def api_agent_memory_set(body: dict):
-    """Agent记忆设置(设置菜单「高级→Agent记忆」):开启=有状态 Agent 恢复上次
+    """Agent记忆设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容):开启=有状态 Agent 恢复上次
     会话(128KB 保险丝仍生效);关闭=所有 Agent 每次运行全新会话。持久化,
     立即对后续运行生效;关闭期间会话号照常回存,重新开启后从最近一次会话继续。"""
     if body.get("agent_memory") is None:
@@ -6057,6 +7043,69 @@ async def api_agent_memory_set(body: dict):
     STATE["agent_memory"] = bool(body["agent_memory"])
     save_state(STATE)
     return await api_agent_memory_get()
+
+
+# ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
+# 本地结构化事件(run 收敛处与 genmedia CLI 出口按「字段白名单」落盘
+# telemetry/outbox,错误消息模板化聚签名)与经验卡(runs/<task_id>/lesson.md,
+# WORKFLOW.md §6.1)的汇总、预览与手动导出。只落盘、只导出,永不自动上传——
+# 导出 zip 由用户自行提交(如 GitHub issue 附件)。实现在 modules/diagnostics.py
+# (genmedia 子进程与本服务共用);懒加载 + 采集端全静默,旁路故障不影响主链路。
+
+
+def _diagnostics():
+    from modules import diagnostics
+    return diagnostics
+
+
+def diagnostics_enabled() -> bool:
+    """诊断采集开关(默认开;仅本地落盘,无任何上传)。"""
+    return bool(STATE.get("diagnostics_enabled", True))
+
+
+async def api_diagnostics_get():
+    d = await asyncio.to_thread(lambda: _diagnostics().summary())
+    d["enabled"] = diagnostics_enabled()   # STATE 为准,避开文件读取的 TTL 缓存
+    return d
+
+
+async def api_diagnostics_set(body: dict):
+    if body.get("diagnostics_enabled") is None:
+        raise ServiceError(400, "diagnostics_enabled must be a boolean")
+    STATE["diagnostics_enabled"] = bool(body["diagnostics_enabled"])
+    save_state(STATE)
+    return {"enabled": diagnostics_enabled()}
+
+
+async def api_diagnostics_lessons():
+    return {"lessons": await asyncio.to_thread(lambda: _diagnostics().scan_lessons())}
+
+
+async def api_diagnostics_clear():
+    return {"ok": True,
+            "removed": await asyncio.to_thread(lambda: _diagnostics().clear_outbox())}
+
+
+async def api_diagnostics_export(body: dict):
+    """构建诊断导出包:事件(可选)+ 聚合摘要 + 用户勾选的经验卡。
+    经验卡路径在 diagnostics 侧对照 scan_lessons() 白名单,防任意文件打包。"""
+    lessons = body.get("lessons") or []
+    if not isinstance(lessons, list) or not all(isinstance(x, str) for x in lessons):
+        raise ServiceError(400, "lessons must be a list of paths")
+    include_events = bool(body.get("include_events", True))
+    path = Path(await asyncio.to_thread(
+        lambda: _diagnostics().build_export(lessons, include_events)))
+    return {"ok": True, "name": path.name, "bytes": path.stat().st_size}
+
+
+def diagnostics_export_path(name: str) -> Path:
+    """导出包下载路径校验:仅放行 telemetry/export 下本服务生成的文件名格式。"""
+    if not re.fullmatch(r"diagnostics-\d{8}-\d{6}\.zip", name or ""):
+        raise ServiceError(400, "invalid export name")
+    p = _diagnostics().EXPORT_DIR / name
+    if not p.is_file():
+        raise ServiceError(404, "export not found")
+    return p
 
 
 async def api_usage():
@@ -6077,19 +7126,26 @@ async def api_resources_config_get():
             "codex_probe": codex_probe_enabled(),
             "kimi_probe": kimi_probe_enabled(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
+            "opencode_probe": opencode_probe_enabled(),
+            "opencode_api_key": cfg.get("opencode_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
             "volc_ak": cfg.get("volc_ak") or "",
-            "volc_sk": cfg.get("volc_sk") or ""}
+            "volc_sk": cfg.get("volc_sk") or "",
+            "rh_enabled": bool(cfg.get("rh_enabled")),
+            "rh_key_ai": cfg.get("rh_key_ai") or "",
+            "rh_key_cn": cfg.get("rh_key_cn") or ""}
 
 
 async def api_resources_config_set(body: dict):
     """保存资源消耗设置:只更新给出的字段;保存后清用量/余额缓存立即生效。"""
     cfg = STATE.setdefault("resources", {})
-    for k in ("claude_probe", "codex_probe", "kimi_probe", "volc_enabled"):
+    for k in ("claude_probe", "codex_probe", "kimi_probe", "opencode_probe",
+              "volc_enabled", "rh_enabled"):
         if body.get(k) is not None:
             cfg[k] = bool(body[k])
-    for k in ("kimi_api_key", "openrouter_key", "volc_ak", "volc_sk"):
+    for k in ("kimi_api_key", "opencode_api_key", "openrouter_key", "volc_ak",
+              "volc_sk", "rh_key_ai", "rh_key_cn"):
         if body.get(k) is not None:
             if not isinstance(body[k], str) or len(body[k]) > 500:
                 raise ServiceError(400, f"{k} must be a string (≤500 chars)")
@@ -6101,7 +7157,7 @@ async def api_resources_config_set(body: dict):
 
 
 async def api_resources(fresh: bool = False):
-    """资源消耗面板聚合数据:三引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
+    """资源消耗面板聚合数据:四引擎 session/weekly 用量与重置时间 + 已配置渠道的账户余额。
     只探测已开启用量检查的引擎,全部探测并发跑(各自带 TTL 缓存,fresh=1 清缓存
     强制重测);取不到的读数为 null。"""
     if fresh:
@@ -6112,21 +7168,28 @@ async def api_resources(fresh: bool = False):
 
     async def usage(engine, on):
         return await asyncio.to_thread(engine_usage_full, engine) if on else dict(empty)
-    claude_on, codex_on, kimi_on = (
-        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled())
-    cu, co, ki, orb, vb = await asyncio.gather(
+    claude_on, codex_on, kimi_on, opencode_on = (
+        claude_probe_enabled(), codex_probe_enabled(), kimi_probe_enabled(),
+        opencode_probe_enabled())
+    cu, co, ki, oc, orb, vb, rb = await asyncio.gather(
         usage("claude", claude_on),
         usage("codex", codex_on),
         usage("kimi", kimi_on),
+        usage("opencode", opencode_on),
         asyncio.to_thread(provider_balance, "openrouter"),
-        asyncio.to_thread(provider_balance, "volc"))
+        asyncio.to_thread(provider_balance, "volc"),
+        asyncio.to_thread(provider_balance, "runninghub"))
     cfg = resource_cfg()
+    rh_keys = any((cfg.get(k) or "").strip() for k in ("rh_key_ai", "rh_key_cn"))
     return {"claude": {**cu, "enabled": claude_on},
             "codex": {**co, "enabled": codex_on},
             "kimi": {**ki, "enabled": kimi_on},
+            "opencode": {**oc, "enabled": opencode_on},
             "openrouter": {"configured": bool((cfg.get("openrouter_key") or "").strip()),
                            **(orb or {})},
-            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})}}
+            "volc": {"configured": bool(cfg.get("volc_enabled")), **(vb or {})},
+            "runninghub": {"configured": bool(cfg.get("rh_enabled") and rh_keys),
+                           "sites": rb or {}}}
 
 
 async def api_watchdog_get(project: str = ""):

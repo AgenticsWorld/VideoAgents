@@ -71,6 +71,9 @@ h2.title .id{color:var(--dim);font-size:13px;font-weight:400}
 .foldbar .fname{font-weight:600}
 .editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
+.avst{font-size:11px;color:var(--green);border:1px solid var(--green);border-radius:5px;padding:1px 7px;flex:none}
+.avbtn.proc{color:var(--yellow);border-color:var(--yellow)}
+.avbtn.fail{color:var(--red);border-color:var(--red)}
 .doc{border:1px solid var(--border);border-radius:10px;margin:14px 0;overflow:hidden}
 .doc>h3{background:var(--panel);padding:9px 14px;font-size:13.5px;cursor:pointer;user-select:none}
 .doc>h3::before{content:'▾ ';color:var(--dim)}
@@ -181,7 +184,7 @@ function renderDetail(c){
   if(FOLDER&&!folders[FOLDER])FOLDER=null;
   const fig=(im,strip)=>{
     const nm=strip?im.name.slice(strip.length+1):im.name;
-    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></figcaption></figure>`;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button>${avCtl(im)}</figcaption></figure>`;
   };
   if(FOLDER){
     const ims=folders[FOLDER];
@@ -205,7 +208,67 @@ function renderDetail(c){
     h+='<div class="meta-line">(暂无 bible 设定文档)</div>';
   }
   box.innerHTML=h;box.scrollTop=0;
+  avRefresh(c);
 }
+
+// ---- 虚拟人像资产库(设置 → 高级):启用后每张形象图可一键入库,入库(Active)的
+// 参考图在分镜重出时自动以 asset://<id> 提交,规避人脸参考图审核拦截 ----
+let AV_ENABLED=false, AV_STATUS={};   // AV_STATUS: {rel: {asset_id, status}}
+const AV_TS={};                        // 每角色状态刷新节流
+const avRel=u=>decodeURIComponent(u.split('?')[0]
+  .replace(/^\/api\/v1\/projects\/[^/]+\/artifacts\//,'').replace(/^\/projects\/[^/]+\//,''));
+async function postJson(p,body){
+  const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||r.status);
+  return j;
+}
+function avCtl(im){
+  if(!AV_ENABLED)return '';
+  const rel=avRel(im.url), st=(AV_STATUS[rel]||{}).status;
+  if(st==='Active')return `<span class="avst" title="${esc(t('已入虚拟人像库:生成视频时以资产 URI 提交,规避人脸审核拦截'))}">✓ ${t('已入库')}</span>`;
+  if(st==='Processing')return `<button class="editbtn avbtn proc" data-ref="${esc(rel)}" title="${esc(t('方舟审核中(异步),点击刷新状态'))}">⏳ ${t('审核中')}</button>`;
+  if(st==='Failed')return `<button class="editbtn avbtn fail" data-ref="${esc(rel)}" title="${esc(t('入库失败(审核未过),点击重试'))}">⚠ ${t('重新入库')}</button>`;
+  return `<button class="editbtn avbtn" data-ref="${esc(rel)}" title="${esc(t('上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)'))}">⬆ ${t('入库')}</button>`;
+}
+async function avRefresh(c){
+  if(!AV_ENABLED||!c||!c.images.length)return;
+  const now=Date.now();
+  if(now-(AV_TS[c.id]||0)<3000)return;   // 3s 节流,避免重渲染回环反复请求
+  AV_TS[c.id]=now;
+  const proj=$('#project').value.trim()||'demo';
+  const refs=c.images.map(im=>avRel(im.url));
+  try{
+    const st=(await postJson('/api/v1/avatar-assets/status',{project:proj,refs})).status||{};
+    let changed=false;
+    refs.forEach(r=>{
+      if(JSON.stringify(AV_STATUS[r]||null)!==JSON.stringify(st[r]||null)){
+        changed=true;
+        if(st[r])AV_STATUS[r]=st[r];else delete AV_STATUS[r];
+      }
+    });
+    if(changed&&CUR===c.id)renderDetail(c);
+  }catch(e){}
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.avbtn');
+  if(!b||b.disabled)return;
+  const rel=b.dataset.ref, proj=$('#project').value.trim()||'demo';
+  const st=(AV_STATUS[rel]||{}).status;
+  b.disabled=true;
+  try{
+    if(st==='Processing'){
+      const d=await postJson('/api/v1/avatar-assets/status',{project:proj,refs:[rel]});
+      if((d.status||{})[rel])AV_STATUS[rel]=d.status[rel];
+    }else{
+      b.textContent='⏳ '+t('入库中…');
+      const d=await postJson('/api/v1/avatar-assets/upload',{project:proj,ref:rel});
+      AV_STATUS[rel]={asset_id:d.asset_id,status:d.status};
+    }
+  }catch(err){alert(t('入库失败:')+err.message)}
+  const c=DATA.find(x=>x.id===CUR);
+  if(c)renderDetail(c);
+});
 
 // 图片 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留
 const LOAD_T=Date.now();
@@ -238,6 +301,9 @@ async function load(){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     DATA=(await r.json()).characters;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
+  // 虚拟人像资产库是否启用(未启用则不渲染入库按钮;查询失败按未启用处理)
+  try{AV_ENABLED=!!(await postJson('/api/v1/avatar-assets/status',{project:proj,refs:[]})).enabled}
+  catch(e){AV_ENABLED=false}
   // 有图和有设定的排前面
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   CUR=DATA.length?DATA[0].id:null;

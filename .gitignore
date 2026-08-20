@@ -13,6 +13,12 @@ data/projects/*
 runs/
 qa/evidence/
 
+# 花字外置资源:字体/音效二进制不进仓库(manifest 由 render_captions.py 扫描生成)
+data/fonts/*
+!data/fonts/README.md
+data/sfx/*
+!data/sfx/README.md
+
 # Runtime state
 data/.videoagents/
 # 用户安装的插件(控制台上传 zip 落盘处,PLUGINS_DIR = DATA_DIR/plugins)
@@ -64,3 +70,4 @@ plugins/mashup
 conversation_history/
 data/TimbreModel/
 Users/
+qa/

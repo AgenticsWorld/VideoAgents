@@ -1,7 +1,7 @@
 {
   "name": "@videoagents/desktop",
   "private": true,
-  "version": "1.0.13",
+  "version": "1.0.20",
   "author": "AgenticsWorld",
   "description": "VideoAgents desktop client",
   "main": "dist/main.js",
@@ -77,7 +77,9 @@
         "from": "../../plugins",
         "to": "backend/plugins",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
         ]
       },
       {

@@ -7,7 +7,7 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/audio-mixing/`
 - **流水线阶段**:Phase 8(音频,每集,汇入点:`depends_on: [p7-video(全组), p8-narrator, p8-music]`);任务粒度:每集级
-- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。
+- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线;项目「对白配音=后期配音」时组 clip 的对白轨已由 p7-dub 按开口时段替换为 TTS(§8C),我照常从**配音后 clip** 抽原生轨,不另铺对白、不重配),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。
 
 ## 职责
 
@@ -30,7 +30,7 @@
 
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
-| 08-video-gen/video-generation | 组 clip 原生音轨 + boundary_map | `assets/clips/epNN/grpNNN.mp4` + `.meta.json` |
+| 08-video-gen/video-generation | 组 clip 原生音轨 + boundary_map(后期配音模式下取 p7-dub 交付的配音后 clip,meta 含 `dialogue_voice` 段,§8C) | `assets/clips/epNN/grpNNN.mp4` + `.meta.json` |
 | 09-audio/narrator | 分段旁白 + manifest(**须含 anchor_sync 指纹,§8B**) | `assets/audio/narration/epNN/` |
 | 09-audio/music | BGM + cue sheet | `assets/audio/bgm/epNN/` |
 | 09-audio/sound-effect / ambience | 兜底贴片(仅缺陷单;**仅限音效/环境床,对白 TTS 贴片已废止**——TTS 进成片对白=严重口型问题,§8A 红线) | `assets/audio/{sfx,ambience}/epNN/patches/` |
