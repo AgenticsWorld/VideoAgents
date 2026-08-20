@@ -247,7 +247,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
           <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
           <a href="#" data-ammode="smart_kimi" title="按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding">Kimi 智能分配</a>
-          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">DeepSeek 智能分配</a>
+          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">OpenCode 智能分配</a>
         </div>
       </div>
       <a href="/models">生成模型</a>
@@ -814,7 +814,7 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'DeepSeek 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'OpenCode 智能分配'};
 
 // opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
 // OpenCode Go 订阅渠道 opencode-go/(实测生效),Zen 按量渠道 opencode/,动态列表反映实际可用集

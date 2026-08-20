@@ -503,7 +503,7 @@ window.I18N_DICT = {
 "Claude 智能分配": "Claude Smart Assignment",
 "Codex 智能分配": "Codex Smart Assignment",
 "Kimi 智能分配": "Kimi Smart Assignment",
-"DeepSeek 智能分配": "DeepSeek Smart Assignment",
+"OpenCode 智能分配": "OpenCode Smart Assignment",
 "按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Auto-select the DeepSeek model by agent task complexity (opencode engine): creative core→V4 Pro, others→V4 Flash",
 "暂无运行": "No runs yet",
 "服务地址": "Service URL",

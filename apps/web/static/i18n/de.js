@@ -491,7 +491,7 @@ window.I18N_DICT = {
 "Claude 智能分配": "Claude Smart-Zuweisung",
 "Codex 智能分配": "Codex Smart-Zuweisung",
 "Kimi 智能分配": "Kimi Smart-Zuweisung",
-"DeepSeek 智能分配": "DeepSeek Smart-Zuweisung",
+"OpenCode 智能分配": "OpenCode Smart-Zuweisung",
 "按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Wählt das DeepSeek-Modell automatisch nach Aufgabenkomplexität des Agents (opencode-Engine): Kreativkern→V4 Pro, Rest→V4 Flash",
 "暂无运行": "Keine Läufe",
 "服务地址": "Server-Adresse",

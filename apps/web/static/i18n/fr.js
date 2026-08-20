@@ -491,7 +491,7 @@ window.I18N_DICT = {
 "Claude 智能分配": "Attribution intelligente Claude",
 "Codex 智能分配": "Attribution intelligente Codex",
 "Kimi 智能分配": "Attribution intelligente Kimi",
-"DeepSeek 智能分配": "Attribution intelligente DeepSeek",
+"OpenCode 智能分配": "Attribution intelligente OpenCode",
 "按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Sélection automatique du modèle DeepSeek selon la complexité de la tâche de l'Agent (moteur opencode) : cœur créatif→V4 Pro, autres→V4 Flash",
 "暂无运行": "Aucune exécution",
 "服务地址": "Adresse du service",

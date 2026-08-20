@@ -491,7 +491,7 @@ window.I18N_DICT = {
 "Claude 智能分配": "Phân bổ thông minh Claude",
 "Codex 智能分配": "Phân bổ thông minh Codex",
 "Kimi 智能分配": "Phân bổ thông minh Kimi",
-"DeepSeek 智能分配": "Phân bổ thông minh DeepSeek",
+"OpenCode 智能分配": "Phân bổ thông minh OpenCode",
 "按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Tự động chọn mô hình DeepSeek theo độ phức tạp nhiệm vụ của Agent (engine opencode): lõi sáng tạo→V4 Pro, còn lại→V4 Flash",
 "暂无运行": "Chưa có lần chạy nào",
 "服务地址": "Địa chỉ dịch vụ",
