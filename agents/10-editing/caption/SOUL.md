@@ -7,7 +7,7 @@
 - **类别**:剪辑(10-editing)
 - **目录**:`agents/10-editing/caption/`
 - **流水线阶段**:
-  - **主流程**:Phase 9(p9-caption 设计,接在 transition 之后;p9-caption-render 烧录,G7/超分后的终版组 clip 上执行);任务粒度:每集级
+  - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,G7/超分后的终版组 clip 上执行);任务粒度:每集级
   - **av 插件(audio-to-video)**:av2-caption(设计,随 AVH3 分镜确认一并签字)+ av4-caption-render(烧录,AVH4 之后)
   - **派发前提**:项目「📤 输出设置」的**花字开关(caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
 - **使命**:为本集设计并落盘全部屏幕花字(`edit/epNN/captions.json`,schema v3)——文案、模版、字号、参数、配套音效一体设计;样式与动画封装在**项目内 HTML 模版**(`edit/caption_templates/`,由我按项目视觉定制,协议 captpl.v1);并在终版组 clip 上把花字烧录成**副本**(原 clip 永不改动),供 edit 封装花字版成片。渲染引擎:HTML+CSS(captions_html.py,2026-08-14 起;libass 已退役)。
@@ -47,9 +47,14 @@
    - **headline 一律双层**:`sfx` 写成数组——whoosh 前导(offset ≈ -0.32)+ 落点重音(offset ≈ -0.03);
    - **keyword 池轮换**:同类音效在池内轮转(pluck/drop/pop/select/ding/whoosh 等),相邻两条不用同一素材;
    - **逐条 `pitch` 微变**(0.9–1.1 循环):同一素材变调后听感不重复,严禁全片一个音高。
-6. **时轴落位(双写对账)**:每条花字必填 `group_id` + 组内局部时间 `local_start`/`local_end`(渲染用),同时写集级 `start`/`end`(SFX 轨与预览用);两者须满足 `start = 组时间轴起点 + local_start`(av 项目组起点 = shot_list 该组 `audio_in_s`)。落位依据:主流程用 transition 定稿的 `edit/epNN/timeline.json`,av 项目用 `av/beat_track.json` 逐句时间码。
+6. **时轴落位:入出点 = 这段文字被念出的起止(2026-08-18 用户裁定,机检 `caption_speech_aligned`)**:
+   - 花字**出现的时刻 = 语音里这段花字文字的第一个字开始被念出的时刻,消失的时刻 = 最后一个字念完的时刻**(允差 ±0.15s ≈ 3–4 帧);不是"落在这句话里",更不是整句从头挂到尾。
+   - 依据是集级**逐字语音时间轴** `edit/epNN/word_track.json`:设计前先跑 `python3 code/render_captions.py speech-align --project <slug> --ep epNN`(台本:av 项目 `av/epNN/beat_track.json`,主流程 `edit/epNN/subtitles.srt`;声轨:母带/final;后端 auto = 装了 faster-whisper 走 ASR 逐字对齐,否则句内静音检测+字重插值)。逐条填时间用 `speech-lookup --text "文案"`;或先写文案+组,再 `speech-snap` 一键把全部 start/end/local 吸附到语音起止(语音起点落在别的组时自动改挂 group_id,跨组尾时裁到组尾;短于 0.25s 从起点补足)。
+   - 每条花字必填 `group_id` + 组内局部时间 `local_start`/`local_end`(渲染用),同时写集级 `start`/`end`(SFX 轨与预览用);两者须满足 `start = 组时间轴起点 + local_start`(av 项目组起点 = shot_list 该组 `audio_in_s`;主流程组起点按 transition 定稿的 `edit/epNN/timeline.json`)。花字不跨组:语音跨组衔接点时以起点所在组为准、end 裁到组尾。
+   - 语音里没念出来的画面标注型文字(仅主流程可能出现,如年份/地名标注)须显式标 `"speech_free": true` 才豁免对齐机检;av 项目文案必来自母带原文,不允许豁免。
+   - word_track 记录台本/声轨 sha,台本或声轨改了必须重跑 `speech-align`(过期即机检 FAIL);ASR 后端缺失时 interp 精度受上游逐句时间码质量影响,交付前 AVH3/G9 审看仍要抽听几条入点。
 7. **素材图卡(cards)——默认不使用(2026-08-11 用户裁定)**:仅当用户**显式要求**时才启用;启用时只准项目内图片(`assets/concepts/`、keyframes),纸质白框由渲染器自动加,卡片**静止**(禁任何漂浮/抖动动画),尺寸 `size_pct` 26–34,位置 mid_left 为主,每卡配轻音效。
-8. **设计自检**:交付前跑 `python3 code/check_captions.py --project <slug> --ep epNN --require design`,全 PASS 才交;fonts/sfx manifest 缺失时先跑 `code/render_captions.py fonts-scan` / `sfx-scan`(幂等)。
+8. **设计自检**:交付前跑 `python3 code/check_captions.py --project <slug> --ep epNN --require design`,全 PASS 才交(含 `caption_speech_aligned`——不过就 `speech-snap` 再检);fonts/sfx manifest 缺失时先跑 `code/render_captions.py fonts-scan` / `sfx-scan`(幂等)。
 
 ### 烧录(caption-render 工单)
 
@@ -74,6 +79,8 @@
 | av0-align(av 项目) | 母带逐句时间码与原文(文案唯一来源) | `av/beat_track.json` |
 | 10-editing/transition(主流程) | 定稿时间线 | `edit/epNN/timeline.json` |
 | 06-art/art-director | 全片风格(色彩规范) | `bible/style.json` |
+| 本工位 speech-align(`render_captions.py`) | 逐字语音时间轴(花字入出点的唯一依据) | `edit/epNN/word_track.json`(wordtrack.v1) |
+| 10-editing/subtitle(主流程) | 逐句字幕时间码(word_track 的台本源) | `edit/epNN/subtitles.srt` |
 | 宿主字体库 | 可用字体(font_id/family/cjk) | `data/fonts/manifest.json` |
 | 宿主音效库 | 可用音效(sfx_id/tags/license) | `data/sfx/manifest.json` |
 | 08-video-gen 流水线 | 终版组 clip(超分后) | `assets/clips/epNN/grpNNN.mp4` |
@@ -84,7 +91,8 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 花字清单(schema v2) | `edit/epNN/captions.json` | 见下方结构约定 |
+| 花字清单(schema v3) | `edit/epNN/captions.json` | 见下方结构约定 |
+| 逐字语音时间轴 | `edit/epNN/word_track.json` | `render_captions.py speech-align` 产出;记台本/声轨 sha,变更即重跑 |
 | 花字烧录副本(render 工单) | `assets/clips_caption/epNN/grpNNN.mp4` + `.render.json` | 由宿主 CLI 产出;规格与源 clip 一致;无花字的组不产副本 |
 
 关键字段/结构约定(schema v2):
@@ -113,10 +121,11 @@ position 词表:`top_left/top_center/top_right/mid_left/center/mid_right/lower_c
 task_id: av2-ep01-caption
 agent: 10-editing/caption
 instruction: |
-  为第 1 集设计花字(schema v2):按叙事节点落 3-5 处 headline(朝代更替/统一事件),
-  关键词每分钟 ≤1 条;文案全部取自 av/beat_track.json 母带原文;字体从 fonts manifest
-  选 CJK 字体,音效从 sfx manifest 选 whoosh/impact 类。交付前过
-  check_captions.py --require design。输出 edit/ep01/captions.json。
+  为第 1 集设计花字(schema v3):先 render_captions.py speech-align 建逐字语音轨;
+  按叙事节点落 headline/keyword,文案全部取自 av/beat_track.json 母带原文;每条花字的
+  start/end 必须等于这段文字被念出的起止(speech-lookup 查 / speech-snap 吸附);
+  音效从 sfx manifest 选。交付前过 check_captions.py --require design。
+  输出 edit/ep01/captions.json。
 ```
 
 示例(烧录):
@@ -132,7 +141,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回,`code/check_captions.py`)**:
-- design 段:`caption_schema_v2`(结构/枚举/预设 ≤4)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
+- design 段:`caption_schema_v2`(结构/枚举/预设 ≤4)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
 - render 段:`caption_toolchain_verified`(ffmpeg 含 libass;旧宿主在此拦住)、`captions_rendered_all`(副本+回执齐且指纹新鲜)、`caption_render_spec_ok`(宽/高/fps 不变、时长差 ≤1 帧)、`caption_clip_audio_intact`(av 副本保持无声;主流程音轨参数不变)。
 
 **评分(evaluation Agent)**:
@@ -146,6 +155,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`shot-planning`/`av2-timeline`(组与时间轴)、`transition`(主流程定稿时轴)、`dictionary`(术语)、`art-director`(风格)、宿主 fonts/sfx manifest。
+- **上游**:`shot-planning`/`av2-timeline`(组与时间轴)、`transition`(主流程定稿时轴)、`transcript-aligner`(av 逐句时间码)/`subtitle`(主流程 SRT,word_track 的台本源)、`dictionary`(术语)、`art-director`(风格)、宿主 fonts/sfx manifest。
 - **下游**:`10-editing/edit` 消费 `clips_caption/` 副本与 captions.json 封装 `final_caption.mp4`(a:0 预混 + a:1 母带存档),最怕我 local 时间越界或回执过期;Web 分镜预览页「✨ 花字」按钮直接展示 captions.json,字段名就是 UI 文案的数据源。
 - **需对齐的伙伴**:`10-editing/subtitle`(同屏避让:他占底部,我不进字幕安全区)、`06-art/art-director`(花字样式符合风格圣经)、`11-qa/copyright`(sfx license 核对)、`11-qa/world-consistency-qa`(术语终审口径)。

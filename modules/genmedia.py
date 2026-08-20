@@ -170,6 +170,18 @@ H3_DEFAULTS = {
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
 # Comfy Cloud 的 Seedance 2.x 付费 API 节点(r2v);model 输入选版本("Seedance 2.0/2.5")
 SEEDANCE_REFERENCE_NODE = "ByteDance2ReferenceNode"
+LTX25_DEFAULTS = {
+    "unet": "ltx-2.5-22b-distilled-transformer-bf16.safetensors",
+    "text_encoder": "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+    "video_vae": "ltx-2.5-video-vae-conv-bf16.safetensors",
+    "audio_vae": "ltx-2.5-audio-vae-bf16.safetensors",
+    "weight_dtype": "default", "clip_device": "default", "fps": 24,
+    "cfg": 1.0, "sampler": "euler_ancestral",
+    "sigmas": "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0",
+    "tile_size": 512, "tile_overlap": 64, "temporal_size": 64,
+    "temporal_overlap": 8, "first_strength": 0.85, "last_strength": 0.85,
+    "ref_strength": 0.75,
+}
 
 VIDEO_POLL_INTERVAL = 10
 VIDEO_TIMEOUT = 1800
@@ -921,6 +933,23 @@ def _h3_settings() -> dict:
     return settings
 
 
+def _ltx25_settings() -> dict:
+    settings = dict(LTX25_DEFAULTS)
+    for key in ("fps", "tile_size", "tile_overlap", "temporal_size", "temporal_overlap"):
+        try:
+            settings[key] = int(settings[key])
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"ComfyUI LTX-2.5 配置的 {key} 必须为整数") from exc
+        if settings[key] <= 0:
+            raise RuntimeError(f"ComfyUI LTX-2.5 配置的 {key} 必须大于 0")
+    for key in ("cfg", "first_strength", "last_strength", "ref_strength"):
+        try:
+            settings[key] = float(settings[key])
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"ComfyUI LTX-2.5 配置的 {key} 必须为数字") from exc
+    return settings
+
+
 def _h3_dimensions(aspect: str, resolution: str, default_short_side: int = 480) -> tuple[int, int]:
     """Map VideoAgents output settings to H3's 32-pixel latent grid."""
     ratio_text = aspect or "16:9"
@@ -936,6 +965,24 @@ def _h3_dimensions(aspect: str, resolution: str, default_short_side: int = 480) 
         raise RuntimeError("MiniMax-H3 本地 Base 工作流不支持 4k;"
                            "请先按草稿档生成，再走现有 upscale 成片流程")
     short_side = resolution_sides.get(resolution, default_short_side)
+    short_side = max(32, round(short_side / 32) * 32)
+    if ratio >= 1:
+        return max(32, round(short_side * ratio / 32) * 32), short_side
+    return short_side, max(32, round(short_side / ratio / 32) * 32)
+
+
+def _ltx25_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
+    """Map output settings to LTX's 32-pixel spatial grid."""
+    ratio_text = aspect or "16:9"
+    try:
+        numerator, denominator = (float(x.strip()) for x in ratio_text.split(":", 1))
+        ratio = numerator / denominator
+        if ratio <= 0:
+            raise ValueError
+    except (TypeError, ValueError, ZeroDivisionError):
+        ratio = 16 / 9
+    short_side = {"360p": 360, "480p": 480, "720p": 720,
+                  "1080p": 1080, "2k": 1440, "4k": 2160}.get(resolution, 512)
     short_side = max(32, round(short_side / 32) * 32)
     if ratio >= 1:
         return max(32, round(short_side * ratio / 32) * 32), short_side
@@ -964,6 +1011,14 @@ def _is_h3_ref2va_workflow(cfg: dict) -> bool:
     workflow = _comfy_configured_workflow(cfg) or {}
     return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
                for node in workflow.values())
+
+
+def _is_ltx25_workflow(cfg: dict) -> bool:
+    workflow = _comfy_configured_workflow(cfg) or {}
+    return any(isinstance(node, dict) and node.get("class_type") == "EmptyLTXVLatentVideo"
+               for node in workflow.values()) and any(
+                   isinstance(node, dict) and node.get("class_type") == "LTXVConcatAVLatent"
+                   for node in workflow.values())
 
 
 def _seedance_cloud_workflow_gen(cfg: dict) -> float:
@@ -1146,6 +1201,72 @@ def _add_seedance_references(workflow: dict, image_names: list[str]) -> None:
         next_id += 1
         workflow[node_id] = {"class_type": "LoadImage", "inputs": {"image": name}}
         inputs[f"model.reference_images.image_{index + 1}"] = [node_id, 0]
+
+
+def _add_ltx25_references(workflow: dict, image_names: list[str], first_name: str,
+                          last_name: str, settings: dict, frames: int) -> None:
+    """Attach LTX image inputs at runtime, keeping the API template input-free.
+
+    ``first`` uses the native first-frame condition node. Other reference images
+    and ``last`` use LTXVAddLatentGuide; guides are chained so all supplied
+    images contribute to the same positive/negative conditioning and latent.
+    """
+    if not image_names and not first_name and not last_name:
+        return
+    nodes = [node for node in workflow.values() if isinstance(node, dict)]
+    video_node = next((node for node in nodes
+                       if node.get("class_type") == "EmptyLTXVLatentVideo"), None)
+    concat = next((node for node in nodes
+                   if node.get("class_type") == "LTXVConcatAVLatent"), None)
+    conditioning = next((node for node in nodes
+                         if node.get("class_type") == "LTXVConditioning"), None)
+    guider = next((node for node in nodes if node.get("class_type") == "CFGGuider"), None)
+    vae_ids = [key for key, node in workflow.items()
+               if isinstance(node, dict) and node.get("class_type") == "VAELoader"]
+    if not (video_node and concat and conditioning and guider and vae_ids):
+        raise RuntimeError("LTX-2.5 工作流缺少首尾帧/参考图所需的核心节点")
+    video_id = next(key for key, node in workflow.items() if node is video_node)
+    concat_id = next(key for key, node in workflow.items() if node is concat)
+    conditioning_id = next(key for key, node in workflow.items() if node is conditioning)
+    vae_id = vae_ids[0]
+    numeric_ids = [int(key) for key in workflow if str(key).isdigit()]
+    next_id = max(numeric_ids, default=0) + 1
+
+    def load_image(name: str) -> list:
+        nonlocal next_id
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        return [node_id, 0]
+
+    current_video = [video_id, 0]
+    current_positive, current_negative = [conditioning_id, 0], [conditioning_id, 1]
+
+    if first_name:
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": "LTXVImgToVideoInplace", "inputs": {
+            "vae": [vae_id, 0], "image": load_image(first_name),
+            "latent": current_video, "strength": settings["first_strength"]}}
+        current_video = [node_id, 0]
+
+    # Reference images are identity/keyframe guides at the beginning of the clip.
+    guide_names = [(name, 0, settings["ref_strength"]) for name in image_names]
+    if last_name:
+        guide_names.append((last_name, -1, settings["last_strength"]))
+    for name, frame_idx, strength in guide_names:
+        guide_id = str(next_id)
+        next_id += 1
+        workflow[guide_id] = {"class_type": "LTXVAddGuide", "inputs": {
+            "vae": [vae_id, 0], "positive": current_positive,
+            "negative": current_negative, "latent": current_video,
+            "image": load_image(name), "frame_idx": frame_idx,
+            "strength": strength}}
+        current_positive, current_negative, current_video = [guide_id, 0], [guide_id, 1], [guide_id, 2]
+
+    concat["inputs"]["video_latent"] = current_video
+    guider["inputs"]["positive"] = current_positive
+    guider["inputs"]["negative"] = current_negative
 
 
 def _extract_last_frame(video_path: str, frame_path: str) -> None:
@@ -2656,6 +2777,38 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if return_last_frame:
             _extract_last_frame(saved, return_last_frame)
         return saved
+    ltx25 = _is_ltx25_workflow(cfg)
+    if ltx25:
+        if audio_refs:
+            raise RuntimeError("LTX-2.5 原生工作流支持生成音频;当前模板不接受外部参考音频，"
+                               "请使用 --prompt 描述音频内容")
+        if generate_audio is False:
+            raise RuntimeError("LTX-2.5 音视频联合工作流固定输出原生音频,不支持 --generate-audio off")
+        settings = _ltx25_settings()
+        width, height = _ltx25_dimensions(aspect, resolution)
+        frames = _comfy_ltx_video_frame_count(duration, settings["fps"])
+        tokens = {
+            "PROMPT": prompt, "NEGATIVE": "", "SEED": seed,
+            "WIDTH": width, "HEIGHT": height, "FPS": settings["fps"],
+            "LTX_FRAMES": frames, "LTX_UNET": settings["unet"],
+            "LTX_TEXT_ENCODER": settings["text_encoder"],
+            "LTX_VIDEO_VAE": settings["video_vae"], "LTX_AUDIO_VAE": settings["audio_vae"],
+            "LTX_WEIGHT_DTYPE": settings["weight_dtype"],
+            "LTX_CLIP_DEVICE": settings["clip_device"], "LTX_CFG": settings["cfg"],
+            "LTX_SAMPLER": settings["sampler"], "LTX_SIGMAS": settings["sigmas"],
+            "LTX_TILE_SIZE": settings["tile_size"], "LTX_TILE_OVERLAP": settings["tile_overlap"],
+            "LTX_TEMPORAL_SIZE": settings["temporal_size"],
+            "LTX_TEMPORAL_OVERLAP": settings["temporal_overlap"],
+        }
+        wf = _comfy_workflow(cfg, tokens, "video")
+        _add_ltx25_references(wf, [upload(path) for path in refs or []],
+                              upload(first) if first else "", upload(last) if last else "",
+                              settings, frames)
+        saved = (_rh_run(cfg, wf, output, want_video=True) if rh
+                 else _comfy_run(base, wf, output, want_video=True, headers=hdrs))
+        if return_last_frame:
+            _extract_last_frame(saved, return_last_frame)
+        return saved
     if ref_image_size:
         raise RuntimeError("--ref-image-size 仅 MiniMax-H3 Ref2VA 工作流支持"
                            "(控制参考图是否压缩到输出像素面积),当前工作流请去掉该参数")
@@ -3142,7 +3295,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
     多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)及 ComfyUI(H3 Ref2VA /
-    Seedance 云工作流,后者不支持 audio_refs)渠道支持;refs 与
+    LTX-2.5 / Seedance 云工作流, 只有H3 Ref2VA 支持 audio_refs)渠道支持;refs 与
     first/last_frame 互斥。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
     return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
@@ -3172,7 +3325,8 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                               refs, audio_refs, generate_audio, return_last_frame,
                               video_refs)
     if cfg["provider"] == "comfyui" and (_is_h3_ref2va_workflow(cfg)
-                                         or _seedance_cloud_workflow_gen(cfg)):
+                                         or _seedance_cloud_workflow_gen(cfg)
+                                         or _is_ltx25_workflow(cfg)):
         return _video_comfyui(cfg, prompt, first_frame, last_frame, duration,
                               resolution, aspect, seed, output, refs, audio_refs,
                               generate_audio, return_last_frame, video_refs,

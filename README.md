@@ -123,7 +123,9 @@ DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
 ```
 
 `DEEPAGENTS_RECURSION_LIMIT` and `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES` can also be
-adjusted; raising either increases runtime or context pressure.
+adjusted; raising either increases runtime or context pressure. When the recursion
+limit is hit, the runner resumes from the last checkpoint up to
+`DEEPAGENTS_MAX_CONTINUATIONS` (default 3) times before failing.
 
 FFmpeg must be installed separately with your operating system's package
 manager.

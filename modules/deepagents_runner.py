@@ -33,6 +33,9 @@ DEFAULT_MAX_OUTPUT_TOKENS = 8_192
 # (实测 SelfTest 调度与 p4-costume 等单次 50+ 工具调用后 GraphRecursionError)。
 # 与 webui Claude MAX_TURNS=100 对齐:每轮约 2 个图步,取 250 作为工人默认。
 DEFAULT_RECURSION_LIMIT = 250
+# 撞 recursion_limit 后不直接报错:借 checkpointer 从最后一个检查点续跑(每轮步数计数
+# 器重置),最多自动续跑 N 轮;总步数上限 = recursion_limit × (1+N)。0 关闭续跑。
+DEFAULT_MAX_CONTINUATIONS = 3
 DEFAULT_CONTEXT_HEADROOM = 16_384
 DEFAULT_SUMMARY_TRIGGER_TOKENS = 48_000
 DEFAULT_SUMMARY_KEEP_TOKENS = 8_000
@@ -248,6 +251,10 @@ def main():
         "--max-tool-output-bytes", type=int,
         default=env_int("DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES", DEFAULT_MAX_TOOL_OUTPUT_BYTES),
     )
+    ap.add_argument(
+        "--max-continuations", type=int,
+        default=env_int("DEEPAGENTS_MAX_CONTINUATIONS", DEFAULT_MAX_CONTINUATIONS),
+    )
     ap.add_argument("--checkpoint-db", default=None)
     ap.add_argument("--thread-id", default=None)
     args = ap.parse_args()
@@ -340,27 +347,31 @@ def main():
         ),
     )
     # 会话续接(Agent记忆):SqliteSaver 按 thread_id 跨进程持久化消息历史。
+    # 未指定 --checkpoint-db 时也挂一个内存 checkpointer:撞 recursion_limit 后
+    # 需要从最后检查点续跑,没有 checkpointer 就只能整单报废。
+    import uuid
     config = {"recursion_limit": args.recursion_limit}
     agent_kw = {}
+    thread_id = args.thread_id or uuid.uuid4().hex
     if args.checkpoint_db:
         import sqlite3
-        import uuid
         from langgraph.checkpoint.sqlite import SqliteSaver
         conn = sqlite3.connect(args.checkpoint_db, check_same_thread=False)
         agent_kw["checkpointer"] = SqliteSaver(conn)
-        thread_id = args.thread_id or uuid.uuid4().hex
-        config["configurable"] = {"thread_id": thread_id}
         emit({"type": "session", "session_id": thread_id})
+    else:
+        from langgraph.checkpoint.memory import InMemorySaver
+        agent_kw["checkpointer"] = InMemorySaver()
+    config["configurable"] = {"thread_id": thread_id}
     agent = create_deep_agent(model=model, system_prompt=system, backend=backend,
                               **agent_kw)
 
     last_text = ""
     in_tok = out_tok = 0
-    try:
-        for upd in agent.stream(
-                {"messages": [{"role": "user", "content": prompt}]},
-                stream_mode="updates",
-                config=config):
+
+    def run_stream(inp):
+        nonlocal last_text, in_tok, out_tok
+        for upd in agent.stream(inp, stream_mode="updates", config=config):
             for _node, data in (upd or {}).items():
                 for m in (data or {}).get("messages", []) or []:
                     if not isinstance(m, AIMessage):
@@ -376,17 +387,44 @@ def main():
                     if u:
                         in_tok += u.get("input_tokens") or 0
                         out_tok += u.get("output_tokens") or 0
+
+    def is_recursion_error(e):
+        return ("GraphRecursionError" in type(e).__name__
+                or "recursion" in str(e).lower())
+
+    continuations = 0
+    inp = {"messages": [{"role": "user", "content": prompt}]}
+    try:
+        while True:
+            try:
+                run_stream(inp)
+                break
+            except Exception as e:  # noqa: BLE001
+                if not is_recursion_error(e) or continuations >= args.max_continuations:
+                    raise
+                continuations += 1
+                emit({"type": "notice", "text": (
+                    f"[runner] 达到 recursion_limit={args.recursion_limit},"
+                    f"从最后检查点自动续跑({continuations}/{args.max_continuations})")})
+                # 输入 None = 从当前 thread 的最后检查点继续,步数计数器重置。
+                inp = None
         emit({"type": "usage", "input_tokens": in_tok, "output_tokens": out_tok})
         emit({"type": "result", "text": last_text or "(无输出)"})
     except Exception as e:  # noqa: BLE001
         msg = f"{type(e).__name__}: {e}"
-        if "GraphRecursionError" in type(e).__name__ or "recursion" in str(e).lower():
+        if is_recursion_error(e):
+            total = args.recursion_limit * (1 + continuations)
             msg = (
-                f"{msg} | 当前 recursion_limit={args.recursion_limit}。"
-                " 可用环境变量 DEEPAGENTS_RECURSION_LIMIT 或参数 --recursion-limit 提高;"
-                " 调度类任务建议 >=500。"
+                f"{msg} | recursion_limit={args.recursion_limit},"
+                f"已自动续跑 {continuations} 轮(累计约 {total} 步)仍未收敛。"
+                " 可用 DEEPAGENTS_RECURSION_LIMIT / --recursion-limit 提高单轮上限,"
+                " 或 DEEPAGENTS_MAX_CONTINUATIONS / --max-continuations 增加续跑轮数;"
+                " 也请检查任务是否陷入循环。"
             )
-        emit({"type": "error", "message": msg[:700]})
+            if last_text:
+                msg += f" | 最后输出:{last_text[:200]}"
+        emit({"type": "usage", "input_tokens": in_tok, "output_tokens": out_tok})
+        emit({"type": "error", "message": msg[:900]})
         sys.exit(1)
 
 

@@ -23,6 +23,7 @@
    - **每组钉死时段与光照方案(2026-07-20)**:必填 `time_of_day`(受控枚举:清晨/昼/黄昏/夜/深夜/凌晨,继承 storyboard 场块字段)与 `lighting_scheme_id`(从该组场景 `bible/scenes/<scene_id>/lighting.json` 的 schemes 中选 `condition.time_of_day` 与组 time_of_day 一致的方案 ID,如 `LGT-0012-01`)——这是下游 prompt 取光照描述的唯一依据,**没有这两个字段,导演层随手从场景光照矩阵错取白天方案就无人能拦**(前科:tothemoon ep01 S04 深夜病房错配清晨/黄昏日光方案,grp011 金色云隙光进成片);该场景 lighting.json 无匹配时段方案时上报 orchestrator 回派 `05-scenes/lighting` 补方案,严禁就近凑一套;
    - **组边界人物阵容原则(2026-07-23)**:同场景相邻组切界时,尽量让**组尾镜与下组首镜的出场角色集合一致**(如 solo 反应镜放组头而非组尾)——阵容一致的边界可安全续接;阵容变化的边界是"人物凭空出现"高危点(尾帧锚会把新增角色原地插入近似构图,前科:tothemoon ep01 grp018 尾镜伊娃 solo→grp019 首镜汤米+伊娃,汤米瞬现),无法避免时该边界的首镜构图须与前组尾镜显著不同,由 continuity-planning 核查(boundary_cast_framing);
    - 给每组记录 `continuity_from`(前一组 group_id,首组为 null),供视频生成按组序串行取前组尾帧。
+   - **继承场景布局关联与人物动线标注(2026-08-19)**【开关:仅当项目「输出设置 → 人物精确空间位置」开启(默认开;系统提示词「用户输出设定」段注入,权威)时适用;关闭时沿用单张场景概念图旧流程,本条不适用】:每组照抄 storyboard 对应 `groups_draft` 的 `scene_refs` 与 `blocking_map`(逐角色 start/path/end/route_en),每镜照抄 `view_tile`;**定稿分组与草案不同时**(拆组/并组/调镜)必须按新组边界重新切分动线——拆组:前段 end = 拆点位置、后段 start = 同一位置;并组:首段 start + 末段 end,path 串起中间点;`route_en` 相应改写(地标词仍逐字取该场景 layout.json `name_en`),角色集合必须等于组 `characters_union`(不多人不少人);然后跑 `python3 code/render_blocking_map.py --project <slug> --ep epNN`(按 group_id 渲染定稿动线图 `directing/epNN/blocking_maps/grpNNN.png`,并机检地标引用/route_en/同场景相邻组动线衔接),**动线图是 prompt 组 refs 的必挂素材**(机检 layout_map_bound),缺图 = 下游整组卡住。
 5. **定稿旁白挂点(narration_anchors,WORKFLOW.md §7D ①)**:把 `narration.md` 每条旁白落到具体镜/组区间,算出可用画面窗口秒数(窗口扣除其中对白占时);窗口 ≥ 该条 `est_duration_s`×1.15 才算装得下——不满足优先调镜时长消化,画面确实装不下再上报 orchestrator 回派 narration 精简文本。这是 H3A 签字的前置机检:旁白挤不进画面的问题必须在视频生成前解决,组 clip 生成后再扩镜=整组重 roll。
 6. **对白适配核查(估时级,§7D ①)**:dialogue 组逐组核对台词总估时(取 screenplay 对白层 `est_duration_s`,口径已按角色声线语速)能否装进组时长,机检 `Σ台词估时 ≤ 组总时长×0.7`(留动作/反应/停顿空间)。**组总时长是生成硬约束——台词超出承载力时,视频模型会为念完台词强行提速,语速异常且只能整组重 roll**。超限的解法优先级:上报 orchestrator 回派 dialogue-rewrite **改短台词**(文本层,最便宜)> 调镜时长/拆组;严禁指望模型压语速消化。
 7. **逐组定稿音频形态 audio_plan 与无声组核查(§7D ①)**:每组必填 `audio_plan ∈ {dialogue, narration_over, ambient_only}`(有对白镜=dialogue;无对白但有旁白挂点=narration_over;两者皆无=ambient_only)。**每个 ambient_only 组逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」并写 `silent_rationale`**(纯动作/氛围/蒙太奇等有意留白要说明白);讲不清的上报 orchestrator 回派 narration 补写旁白(补写条目新版本写回 narration.md,narration.md 是旁白唯一事实源),确需加对白的走剧本变更流程。audio_plan 是下游 prompt 的硬输入——非对白组据此写无对白约束,防视频模型自编台词(§7D ③)。
@@ -62,7 +63,7 @@
     "shot_id": "sh014", "scene_id": "s012", "duration_s": 4.0,
     "size": "近景", "camera_position": "殿门内侧,略低机位",
     "characters": ["c003", "c007"], "is_dialogue": true,
-    "storyboard_ref": "S03/order:1"
+    "storyboard_ref": "S03/order:1", "view_tile": 5
   }],
   "generation_groups": [{
     "group_id": "grp005", "scene_id": "s012",
@@ -72,7 +73,12 @@
     "characters_union": ["c003", "c007"], "has_dialogue": true,
     "audio_plan": "dialogue",
     "continuity_from": "grp004",
-    "storyboard_group_ref": "S03/group_order:2"
+    "storyboard_group_ref": "S03/group_order:2",
+    "scene_refs": { "layout_top": "assets/concepts/scenes/s012/layout_top.png", "grid_9views": "assets/concepts/scenes/s012/grid_9views.png", "layout_json": "assets/concepts/scenes/s012/layout.json" },
+    "blocking_map": { "characters": [
+      { "id": "c003", "label": "林昭", "start": { "landmark": "main_door", "offset_en": "one step inside" }, "path": [{ "landmark": "long_table" }], "end": { "landmark": "fireplace" }, "facing_end_en": "facing the fireplace", "route_en": "enters through the main door, walks past the long table and stops at the fireplace" },
+      { "id": "c007", "label": "老执事", "start": { "landmark": "fireplace", "xy": [0.84, 0.46] }, "route_en": "stands beside the fireplace facing the main door and does not move" }
+    ] }
   }, {
     "group_id": "grp006", "scene_id": "s013",
     "shots": ["sh017", "sh018"], "total_duration_s": 9,
@@ -112,6 +118,7 @@ instruction: |
 - **角色/场景 ID 全部合法**(在两份 index.json 中存在);
 - **镜号唯一**且连续可排序;每镜 `storyboard_ref` 可回溯;`is_dialogue` 必填;
 - **生成组机检**:组覆盖全部镜号不重不漏;组内镜号连续且同 scene_id;`total_duration_s` ∈ [4,15] 整数且 = Σ组内 duration_s;`characters_union` ≤4;`continuity_from` 链完整(首组 null,其余指向前一组);
+- **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/render_blocking_map.py --project <slug> --ep epNN --strict`)**:每个有出场角色的组 `blocking_map` 齐全且角色集合 = `characters_union`;位置引用地标在该场景 layout.json 存在;`route_en` 非空纯英文;同场景相邻组各角色 start 接前组 end;每组定稿动线图 `directing/epNN/blocking_maps/grpNNN.png` 已渲染落盘;每镜 `view_tile` ∈ 1–9 或 null。
 - **时段锚机检(time_anchor_ok,2026-07-20)**:每组 `time_of_day` 必填且在受控枚举内、与 storyboard 对应场块一致;`lighting_scheme_id` 必填、在该组场景 lighting.json 的 schemes 中存在、且该方案 `condition.time_of_day` 与组 time_of_day 一致;同场景同时段的多个组必须取同一 scheme;
 - **旁白挂点机检(§7D ①)**:narration.md 条目 100% 有挂点;挂点镜/组引用合法;可用画面窗口(扣除对白占时)≥ `est_duration_s`×1.15;
 - **组音频形态机检(§7D ①)**:每组 `audio_plan` 必填且与 has_dialogue/挂点事实一致;ambient_only 组必附 `silent_rationale`(无理由的无声组=待核查,不得进 H3A)。
@@ -131,6 +138,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:storyboard(草案)、pacing(时长预算与删减建议)、character-manager / scene(ID 权威)。
+- **上游**:storyboard(草案,含 scene_refs / blocking_map / view_tile)、pacing(时长预算与删减建议)、character-manager / scene(ID 权威)、environment-concept(场景布局包 layout.json,重切动线时的地标词源)。
 - **下游**:camera-movement / composition / blocking(每镜设计以我的镜头表为基准)、continuity-planning(检查表按我的镜序与组边界)、`08-video-gen/prompt` 与 `video-generation`(Phase 7 按 generation_groups 实例化,组总时长与组序是生成硬约束)、Phase 8 sound-effect(事件打点)、Phase 9 edit(按组序粗剪)与 caption。他们最怕我:冻结后改镜号/组号、总时长失衡、ID 张冠李戴、组时长超 15s。
 - **需对齐的伙伴**:pacing(预算口径)、orchestrator(冻结与标脏规则)。
