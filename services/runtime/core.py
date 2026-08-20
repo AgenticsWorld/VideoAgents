@@ -569,7 +569,7 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
