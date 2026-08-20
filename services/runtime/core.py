@@ -535,6 +535,15 @@ DEFAULT_GENCONFIG = {
                     "timbre_catalog": "data/TimbreModel/catalog.json",
                     "rh_api_key": "", "rh_workflow_id": "", "rh_workflows": []},
     },
+    # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling v1 固定中国北京接口；
+    # ComfyUI 首版只支持本地 InfiniteTalk API 工作流，不走 Cloud/RunningHub。
+    "digital_human": {
+        "provider": "heygen",  # heygen | klingai | comfyui
+        "heygen": {"api_key": "", "resolution": "720p", "aspect_ratio": "16:9"},
+        "klingai": {"api_key": "", "mode": "std"},
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188",
+                    "workflow": "comfy/digitalhuman-infinitetalk-api.json"},
+    },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
@@ -692,7 +701,7 @@ def _merge(base: dict, override: dict) -> dict:
 
 def _migrate_comfy_workflow_paths(config: dict) -> None:
     """Keep configurations saved before templates moved from data/ usable."""
-    for kind in ("image", "video", "music", "tts"):
+    for kind in ("image", "video", "music", "tts", "digital_human"):
         comfy = config.get(kind, {}).get("comfyui")
         if not isinstance(comfy, dict):
             continue
@@ -1792,6 +1801,10 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 插件调度纪律:
 - 用户要求做某插件覆盖的业务时,先读该插件的 workflows/*.yaml(与 agents/workflow.yaml 同等地位的机器可读 DAG),
   把其节点并入 {proj_rel}/runs/dag.json 统一跟踪(插件 DAG 自带 id 前缀,不与主流程冲突;改完照常跑 dagcheck --strict)
+- orchestrator 只拆单、派单、等待和验收,**禁止直接执行插件成员的生产命令**,也禁止通过改写
+  VIDEOAGENTS_AGENT 冒充成员绕过职责边界;耗时命令必须留在被派发的成员任务内前台完成
+- 工具/命令仍为 in_progress 时对应节点只能保持 running;不得结束任务后声称“后台继续”。外部异步渠道
+  必须按插件 DAG 的最小生成单元派单并保留可恢复回执,等待真实产物与 validation 通过后才能标 done
 - 插件任务同样走工单格式 §6、四件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
 - 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑
 - 插件流程 YAML 若声明顶层 main_dag_on_start.skip(与该插件业务无关的主流程节点清单),并入节点的同一次改动中
@@ -3837,7 +3850,7 @@ async def api_genconfig_set(body: dict):
     project = safe_slug(body.pop("project", None))
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "deepagents"):
+    for kind in ("image", "video", "music", "tts", "digital_human", "deepagents"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
@@ -4394,6 +4407,58 @@ async def api_test_deepagents(body: dict):
 COMFY_CLOUD_API = "https://cloud.comfy.org/api"
 
 
+async def api_test_digitalhuman(body: dict):
+    """测试数字人渠道凭证；Kling 首版固定 api-beijing.klingai.com。"""
+    provider = (body.get("provider") or "").strip()
+    key = (body.get("api_key") or "").strip()
+    if provider == "heygen":
+        if not key:
+            return {"ok": False, "error": "HeyGen API Key 未填写"}
+        try:
+            data = await asyncio.to_thread(
+                _http_get_json, "https://api.heygen.com/v2/user/remaining_quota",
+                {"x-api-key": key}, 12)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)[:240]}
+        return {"ok": True, "provider": provider,
+                "remaining_quota": (data.get("data") or {}).get("remaining_quota")}
+    if provider == "klingai":
+        if not key:
+            return {"ok": False, "error": "Kling AI API Key 未填写"}
+        url = ("https://api-beijing.klingai.com/v1/videos/avatar/image2video"
+               "?pageNum=1&pageSize=1")
+        try:
+            data = await asyncio.to_thread(
+                _http_get_json, url, {"Authorization": f"Bearer {key}"}, 12)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)[:240]}
+        if data.get("code") not in (None, 0):
+            return {"ok": False, "error": str(data.get("message") or data)[:240]}
+        return {"ok": True, "provider": provider, "region": "中国北京"}
+    if provider == "comfyui":
+        result = await api_test_comfyui({"mode": "local", "url": body.get("url")})
+        if not result.get("ok"):
+            return result
+        url = (body.get("url") or "").strip().rstrip("/")
+        required = ("MultiTalkModelLoader", "MultiTalkWav2VecEmbeds",
+                    "WanVideoImageToVideoMultiTalk", "WanVideoSampler")
+        nodes = {}
+        for node_type in required:
+            try:
+                info = await asyncio.to_thread(
+                    _http_get_json, url + "/object_info/" + node_type, None, 6)
+                nodes[node_type] = bool(info.get(node_type))
+            except Exception:  # noqa: BLE001
+                nodes[node_type] = False
+        workflow = Path(str(body.get("workflow") or "comfy/digitalhuman-infinitetalk-api.json"))
+        if not workflow.is_absolute():
+            workflow = ROOT / workflow
+        return {**result, "provider": provider, "infinitetalk_nodes": nodes,
+                "infinitetalk_ready": all(nodes.values()),
+                "workflow_exists": workflow.is_file()}
+    raise ServiceError(400, "provider must be heygen, klingai or comfyui")
+
+
 async def api_test_comfyui(body: dict):
     """测试 ComfyUI 连接(本地/Comfy Cloud/RunningHub),并检查关键自定义节点是否可见。
 
@@ -4471,11 +4536,11 @@ async def api_test_comfyui(body: dict):
             "minimax_h3_ready": custom_nodes.get("MiniMaxH3ReferenceToVideo", False)}
 
 
-COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts")
+COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts", "digitalhuman")
 
 
 async def api_comfy_workflows():
-    """列出 comfy/ 目录中按文件名前缀分类的 API 工作流 JSON(image-/video-/music-/tts-),
+    """列出 comfy/ 目录中按文件名前缀分类的 API 工作流 JSON，
     并标注是否有同名 .md 说明文档。"""
     out = {kind: [] for kind in COMFY_WORKFLOW_KINDS}
     comfy_dir = ROOT / "comfy"

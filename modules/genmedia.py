@@ -928,7 +928,8 @@ def _comfy_queue_contains(queue: dict, prompt_id: str) -> bool:
 
 
 def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
-               headers: dict | None = None) -> str:
+               headers: dict | None = None, prompt_id: str | None = None,
+               on_submit=None, on_status=None) -> str:
     """提交工作流,轮询完成,下载首个产物到 output。
 
     want_video=True 优先选视频扩展名;want_video=False 时若 output 是音频扩展名
@@ -937,14 +938,18 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
     audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
-    try:
-        resp = _post_json(base + "/prompt", {"prompt": workflow, "client_id": uuid.uuid4().hex},
-                          headers)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError(f"ComfyUI 服务不可达，未能提交任务:{base}") from exc
-    pid = resp.get("prompt_id")
+    pid = str(prompt_id or "").strip()
     if not pid:
-        raise RuntimeError(f"ComfyUI 提交失败:{json.dumps(resp)[:400]}")
+        try:
+            resp = _post_json(base + "/prompt",
+                              {"prompt": workflow, "client_id": uuid.uuid4().hex}, headers)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError(f"ComfyUI 服务不可达，未能提交任务:{base}") from exc
+        pid = str(resp.get("prompt_id") or "").strip()
+        if not pid:
+            raise RuntimeError(f"ComfyUI 提交失败:{json.dumps(resp)[:400]}")
+        if on_submit:
+            on_submit(pid)
     deadline = time.time() + COMFY_TIMEOUT
     queue_missing_since = None
     seen_in_queue = False
@@ -966,6 +971,8 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
             if _comfy_queue_contains(queue, pid):
                 seen_in_queue = True
                 queue_missing_since = None
+                if on_status:
+                    on_status("running")
                 continue
             if queue_missing_since is None:
                 queue_missing_since = time.time()
@@ -981,7 +988,11 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
             continue
         status = hist.get("status") or {}
         if status.get("status_str") == "error":
+            if on_status:
+                on_status("failed")
             raise RuntimeError(f"ComfyUI 执行出错:{_comfy_execution_error(status)}")
+        if on_status:
+            on_status("running")
         outputs = hist.get("outputs") or {}
         files = []
         for node_out in outputs.values():
@@ -1002,6 +1013,8 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
                                         "subfolder": pick.get("subfolder", ""),
                                         "type": pick.get("type", "output")})
             # Comfy Cloud 的 /view 返回 302 → 签名 URL,urllib 自动跟随
+            if on_status:
+                on_status("downloading")
             return _save(_request(f"{base}/view?{q}", headers=headers, timeout=300), output)
         if status.get("completed"):
             need = ("SaveAudio/SaveAudioMP3" if want_audio
