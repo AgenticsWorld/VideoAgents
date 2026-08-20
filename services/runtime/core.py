@@ -2521,7 +2521,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
                     if (session_id and not session_retried and re.search(
                             r"no conversation found|session[^\n]{0,80}not found"
-                            r"|thread[^\n]{0,40}not found",
+                            r"|no session found|thread[^\n]{0,40}not found",
                             f"{run.get('error') or ''} {stderr}", re.I)):
                         session_retried = True
                         session_id = None
@@ -2585,8 +2585,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
-            # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
-            if run.get("session_id") and not is_stateless:
+            # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
+            # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
+            # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
+            # "No session found";这种会话也没有值得续接的上下文
+            if (run.get("session_id") and not is_stateless
+                    and (run.get("result") or run.get("text"))):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
             reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
