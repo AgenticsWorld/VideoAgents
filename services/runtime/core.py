@@ -6270,6 +6270,25 @@ async def api_chat(body: dict):
         raise ServiceError(400, "message must not be empty")
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
+    if message == "/clear":
+        # 会话清理命令:不派发运行,清掉该 Agent 在本项目下全部引擎的会话记录,
+        # 下一条消息即开全新会话。引擎侧的历史会话文件留在原处,仅解除续接
+        # (用途:会话膨胀后续接请求过大被网络掐断、或想甩掉陈旧上下文时手动重置)。
+        cleared = [eng for eng in ENGINES
+                   if STATE["sessions"].pop(f"{eng}::{agent}::{project}", None)]
+        if cleared:
+            save_state(STATE)
+            reply = (f"🧹 已清理会话记录({'、'.join(cleared)}),"
+                     "下一条消息将开启全新会话。")
+        else:
+            reply = "当前没有会话记录可清理,下一条消息本就会开启全新会话。"
+        if any(r.get("agent") == agent and r.get("project") == project
+               and r.get("status") in ("queued", "running") for r in RUNS.values()):
+            reply += ("\n⚠️ 该 Agent 尚有在跑/排队的任务,其结束时会重新记下所用会话;"
+                      "如需彻底清理,请等任务结束后再发一次 /clear。")
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True, "cleared": cleared}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)
