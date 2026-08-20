@@ -104,6 +104,8 @@ ul.arr>li{margin:2px 0}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let DATA=[], CUR=null, FOLDER=null;
+// 深链定位:分镜预览页参考图标签跳转 ?id=<SCN-ID>,首次加载直接选中该场景
+let JUMP_ID=new URLSearchParams(location.search).get('id');
 const DOC_NAMES={architecture:'建筑/空间结构',environment:'环境设定',lighting:'光照设定'};
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent']);
 
@@ -224,9 +226,18 @@ async function load(){
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   CUR=DATA.length?DATA[0].id:null;
+  if(JUMP_ID){
+    const c=DATA.find(x=>x.id===JUMP_ID);
+    if(c)CUR=c.id;
+    JUMP_ID=null;   // 只在首次加载生效,手动刷新/切项目后不再强制定位
+  }
   renderList();
-  if(DATA.length)renderDetail(DATA[0]);
-  else $('#detail').innerHTML='<div class="empty">该项目还没有场景设定</div>';
+  const cur=DATA.find(x=>x.id===CUR);
+  if(cur){
+    renderDetail(cur);
+    const a=$('#items .item.active');
+    if(a)a.scrollIntoView({block:'center'});
+  }else $('#detail').innerHTML='<div class="empty">该项目还没有场景设定</div>';
 }
 $('#reload').onclick=load;
 $('#search').oninput=renderList;

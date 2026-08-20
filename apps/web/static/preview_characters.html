@@ -111,6 +111,8 @@ ul.arr>li{margin:2px 0}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let DATA=[], CUR=null, FOLDER=null;
+// 深链定位:分镜预览页参考图标签跳转 ?id=<CHAR-ID>,首次加载直接选中该角色
+let JUMP_ID=new URLSearchParams(location.search).get('id');
 const DOC_NAMES={appearance:'外貌设定',personality:'性格设定',dialogue_style:'台词风格',voice:'声音/配音',age_versions:'年龄版本'};
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent']);
 
@@ -307,9 +309,18 @@ async function load(){
   // 有图和有设定的排前面
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   CUR=DATA.length?DATA[0].id:null;
+  if(JUMP_ID){
+    const c=DATA.find(x=>x.id===JUMP_ID);
+    if(c)CUR=c.id;
+    JUMP_ID=null;   // 只在首次加载生效,手动刷新/切项目后不再强制定位
+  }
   renderList();
-  if(DATA.length)renderDetail(DATA[0]);
-  else $('#detail').innerHTML='<div class="empty">该项目还没有人物设定</div>';
+  const cur=DATA.find(x=>x.id===CUR);
+  if(cur){
+    renderDetail(cur);
+    const a=$('#items .item.active');
+    if(a)a.scrollIntoView({block:'center'});
+  }else $('#detail').innerHTML='<div class="empty">该项目还没有人物设定</div>';
 }
 $('#reload').onclick=load;
 $('#search').oninput=renderList;

@@ -105,6 +105,8 @@ ul.arr>li{margin:2px 0}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let DATA=[], CUR=null, FOLDER=null;
+// 深链定位:分镜预览页参考图标签跳转 ?id=<PROP-ID>,首次加载直接选中该道具
+let JUMP_ID=new URLSearchParams(location.search).get('id');
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent','oid','id','name','is_plot_prop','key_prop','concept_ref','dictionary_term']);
 const SEC_NAMES={visual:'外形描述',material:'材质',scale:'尺寸定义',plot_role:'剧情作用',symbolism:'象征意义',owners:'持有者/易主链',appears_in_scenes:'出场场景',first_appearance:'首次出场',source:'原文出处',inferred_fields:'推断字段',type:'类别'};
 
@@ -226,9 +228,18 @@ async function load(){
     -(((a.card.is_plot_prop||a.card.key_prop)?4:0)+(a.images.length?2:0)+(Object.keys(a.card).length?1:0))
     ||a.id.localeCompare(b.id));
   CUR=DATA.length?DATA[0].id:null;
+  if(JUMP_ID){
+    const c=DATA.find(x=>x.id===JUMP_ID);
+    if(c)CUR=c.id;
+    JUMP_ID=null;   // 只在首次加载生效,手动刷新/切项目后不再强制定位
+  }
   renderList();
-  if(DATA.length)renderDetail(DATA[0]);
-  else $('#detail').innerHTML='<div class="empty">该项目还没有道具设定</div>';
+  const cur=DATA.find(x=>x.id===CUR);
+  if(cur){
+    renderDetail(cur);
+    const a=$('#items .item.active');
+    if(a)a.scrollIntoView({block:'center'});
+  }else $('#detail').innerHTML='<div class="empty">该项目还没有道具设定</div>';
 }
 $('#reload').onclick=load;
 $('#search').oninput=renderList;
