@@ -610,6 +610,21 @@ def _comfy_is_rh(cfg) -> bool:
     return (cfg.get("mode") or "local") in RH_BASES
 
 
+def _comfy_desc(cfg) -> str:
+    """comfyui 渠道的人类可读描述,必带 mode:info/dry-run 曾只打 url/workflow,
+    RunningHub 模式下与「本地未配置」输出一模一样,agent 据此误判渠道而拒跑。"""
+    mode = cfg.get("mode") or "local"
+    if _comfy_is_rh(cfg):
+        return (f"mode={mode}(RunningHub {RH_BASES[mode].split('//')[1]})"
+                f" workflow_id={cfg.get('rh_workflow_id') or '(未选择)'}"
+                f" instance={cfg.get('rh_instance_type') or 'standard'}")
+    if mode == "cloud":
+        return f"mode=cloud(Comfy Cloud) workflow={cfg.get('workflow') or '(内置默认)'}"
+    return (f"mode=local url={cfg.get('url') or '-'}"
+            f" workflow={cfg.get('workflow') or '(内置默认)'}"
+            f" checkpoint={cfg.get('checkpoint') or '-'}")
+
+
 def _rh_ctx(cfg) -> tuple[str, str, str]:
     """RunningHub 生效上下文:返回 (base, api_key, workflow_id),缺配置即报错。"""
     mode = cfg.get("mode")
@@ -3448,7 +3463,7 @@ def _cmd_info(_args):
         try:
             cfg = get_config(kind)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
-                else f"url={cfg['url']} workflow={cfg.get('workflow') or '(内置默认)'} checkpoint={cfg.get('checkpoint') or '-'}"
+                else _comfy_desc(cfg)
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")
@@ -3458,8 +3473,9 @@ def _cmd_image(args):
     _check_id_digits(args.output)
     if args.dry_run:
         cfg = get_config("image")
-        print(f"[dry-run] image via {cfg['provider']}"
-              f" model={cfg.get('model') or cfg.get('checkpoint') or '-'} → {args.output}")
+        desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
+            else f"model={cfg.get('model') or '-'}"
+        print(f"[dry-run] image via {cfg['provider']} {desc} → {args.output}")
         return
     outs = []
     for i in range(args.n):
@@ -3477,8 +3493,9 @@ def _cmd_video(args):
     if args.dry_run:
         cfg = get_config("video")
         resolution = _resolution_gate(args.resolution)
-        line = (f"[dry-run] video via {cfg['provider']}"
-                f" model={cfg.get('model') or cfg.get('workflow') or '-'} → {args.output}")
+        desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
+            else f"model={cfg.get('model') or '-'}"
+        line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
             body = _ark_video_body(dict(cfg, api_key="dry"), args.prompt,
@@ -3541,7 +3558,9 @@ def _cmd_upscale(args):
 def _cmd_music(args):
     if args.dry_run:
         cfg = get_config("music")
-        print(f"[dry-run] music via {cfg['provider']} model={cfg.get('model') or '-'}"
+        desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
+            else f"model={cfg.get('model') or '-'}"
+        print(f"[dry-run] music via {cfg['provider']} {desc}"
               f" format={MUSIC_FORMATS.get(Path(args.output).suffix.lower(), 'mp3')} → {args.output}")
         return
     out = generate_music(args.prompt, args.output, args.duration)
@@ -3562,7 +3581,9 @@ def _cmd_tts(args):
                 cfg, args.text, args.output, args.voice, args.character,
                 args.variant, args.project, args.instructions)
             voice = f"auto:{selected['file']} ({selected['reason']})"
-        print(f"[dry-run] tts via {cfg['provider']} model={cfg.get('model') or '-'}"
+        desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
+            else f"model={cfg.get('model') or '-'}"
+        print(f"[dry-run] tts via {cfg['provider']} {desc}"
               f" voice={voice}"
               f" format={'mp3' if Path(args.output).suffix.lower()=='.mp3' else 'pcm'} → {args.output}")
         return
