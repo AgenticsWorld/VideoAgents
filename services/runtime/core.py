@@ -1403,9 +1403,9 @@ def claude_probe_enabled() -> bool:
 
 
 def codex_probe_enabled() -> bool:
-    """Codex 用量检查开关(⚙️ 资源消耗 设置);历史无此键时默认开启(保持旧行为)。"""
-    v = resource_cfg().get("codex_probe")
-    return True if v is None else bool(v)
+    """Codex 用量检查开关(⚙️ 资源消耗 设置);默认关闭(与其余引擎一致,
+    初始安装不为未用 Codex 的用户白扫 sessions 目录)。"""
+    return bool(resource_cfg().get("codex_probe"))
 
 
 def kimi_probe_enabled() -> bool:
