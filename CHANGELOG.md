@@ -4,6 +4,27 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-08-21
+
+### Added
+
+- `/clear` chat command: sending `/clear` to any agent clears its stored session records for the current project across all engines, so the next message starts a completely fresh session (engine-side history files stay on disk — only the resume linkage is removed). Useful when a bloated session makes resume requests too large for the network, or to shed stale context. If the agent still has queued/running tasks the reply warns that their sessions will be re-recorded on finish.
+- Signature gates now trigger the same cleanup automatically: when the user signs off a phase gate, the orchestrator's session records are cleared before it is woken (a run still in progress is flagged and cleaned when it ends), so the post-gate phase starts on a fresh session — project state is always file-based, and the Producer's conversation no longer grows without bound as the project advances.
+- Storyboard preview reference labels are now clickable: 📎/🖼 labels that reference character/scene/prop concept images link straight to the matching preview page, which deep-links via `?id=` and auto-selects the asset (selection, detail panel and list scroll into place). All 11 language dictionaries updated.
+
+### Changed
+
+- Agent conversation memory is now a size slider instead of an on/off switch (Settings → Advanced → Agent Advanced Settings): 0–256 KB, default 16 KB. A stateful agent resumes its previous session until the chat history exceeds the quota, then automatically starts a fresh one — resume re-sends the full history every turn, so larger values are slower and costlier (a single codex run once accumulated 14M input tokens). 0 disables memory entirely. The old boolean `agent_memory` setting migrates automatically, and the deepagents engine keeps its stricter 32 KB cap.
+- Default music generation channel switched from Eleven Music to MiniMax.
+- `make run-auto` now performs a clean backend restart: processes still listening on the API port are identified, verified to actually be the VideoAgents API service (never an unrelated process that happens to hold the port), and terminated before the new instance starts.
+- The model-strategy label "DeepSeek Smart Assignment" is renamed "OpenCode Smart Assignment" to match the channel it runs on.
+
+### Fixed
+
+- Storyboard blocking-map rendering: the legend box is now composited as a separate translucent layer, so character markers that fall inside the legend area show through instead of being blanked out by the legend background.
+- `genmedia.py` info/dry-run output for the `comfyui` provider now always states the mode — RunningHub (`rh_cn`/`rh_ai` + workflow id + instance type), Comfy Cloud, or local (+ URL). Previously a RunningHub configuration printed the same output as an unconfigured local ComfyUI, and agents following the "don't run without a configured channel" red line wrongly refused to submit.
+- Session resume for lazily-persisted engines (pi, opencode): runs that were stopped or failed before producing any assistant output no longer store a session id — resuming such never-written "ghost" sessions always failed with "No session found" — and that message is now also recognized as an invalid-session error that transparently falls back to a fresh session.
+
 ## [1.0.20] - 2026-08-20
 
 ### Added

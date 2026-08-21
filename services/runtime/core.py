@@ -174,36 +174,32 @@ STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
 # 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json);
 # 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
 AGENT_CONCURRENCY_DEFAULT = 5
-# Agent 对话记忆缺省值(设置菜单「高级→Agent 高级设置」可关,存 state.json):
-# 开启=有状态 agent 按 engine::agent::project 恢复上次会话(下方 CHAT_RESUME_LIMIT
-# 128KB 保险丝仍生效);关闭=所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
-# 关闭期间 session_id 照常回存,重新开启后从最近一次会话继续
-AGENT_MEMORY_DEFAULT = True
+# Agent 对话记忆额度缺省值(KB;设置菜单「高级→Agent 高级设置」滑块 0..AGENT_MEMORY_KB_MAX
+# 可调,存 state.json 的 agent_memory_kb,兼容旧布尔键 agent_memory):
+# >0=有状态 agent 按 engine::agent::project 恢复上次会话,单会话历史(chats/<agent>.jsonl)
+# 超过该额度自动新开会话防膨胀——resume 每轮重发全史,越大越慢越贵(实测 codex 单 run
+# 累计 input 曾达 1400 万 token;2026-07-23 曾由 512KB 压至 128KB,2026-08-20 改滑块并降默认 16KB);
+# 0=关闭:所有 agent 每次运行全新会话,跨工单记忆只靠落盘产物。
+# 关闭/调小期间 session_id 照常回存,重新调大后从最近一次会话继续
+AGENT_MEMORY_KB_DEFAULT = 16
+AGENT_MEMORY_KB_MAX = 256
 # Agent 自动重跑/重 roll 次数上限缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json):
 # 验收/评分/QA 不过自动带意见退回重做、媒体生成机检不达标自动重 roll 的次数上限,
 # 达到上限仍不过升级用户裁决;0=不自动重跑(首次不过即升级人工)。经 build_role_prompt
 # 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
 MAX_RETRIES_DEFAULT = 3
 MAX_RETRIES_MAX = 10
-# 会话膨胀保险丝:chats/<agent>.jsonl 超过此大小则不再 --resume(新开会话),
-# 防止 resume 每轮重发全史(实测 codex 单 run 累计 input 曾达 1400 万 token);
-# 2026-07-23 由 512KB 压至 128KB:长会话后段每轮重发全史又慢又贵
-CHAT_RESUME_LIMIT = 128 * 1024
-# deepagents 引擎单独调低:该保险丝量的是 chats/*.jsonl(只有用户/助手文本),
-# 而 deepagents 检查点历史含全部工具消息(DAG 查询输出、read_file 全文),
-# 真实会话体量被严重低估;且 OpenAI 兼容端点 resume=每轮重发全史,本地模型
-# 上下文窗口小、OpenRouter 渠道无厂商 prompt cache 兜底,须更早换新会话
+# deepagents 引擎单独封顶(实际生效额度取 min(记忆额度滑块值, 此上限)):
+# 记忆额度量的是 chats/*.jsonl(只有用户/助手文本),而 deepagents 检查点历史含
+# 全部工具消息(DAG 查询输出、read_file 全文),真实会话体量被严重低估;
+# 且 OpenAI 兼容端点 resume=每轮重发全史,本地模型上下文窗口小、OpenRouter 渠道
+# 无厂商 prompt cache 兜底,须更早换新会话
 DEEPAGENTS_RESUME_LIMIT = 32 * 1024
-# 总制片(仅 workflow-orchestrator 一个,不随 DISPATCHERS 扩员生效)单独调低:
-# 长会话里系统提示约束力被历史稀释,一旦出现过一次"自己动手跑生成"的先例还会被
-# 模型自我模仿;调度状态权威在 runs/dag.json 上,新开会话零成本,且 codex 引擎
-# 只在新会话首轮注入 SOUL,更需要尽早重开
 # 运行面板手动停止的统一错误文案:core/dispatch.py/前端/agent 提示词都按这句字面识别
 STOPPED_BY_USER_MSG = "已被用户手动停止"
 # stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
 STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
-ORCHESTRATOR_RESUME_LIMIT = 128 * 1024
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
                                          # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
 # 生成类 Agent 所在类别(系统提示词里会附加 genmedia 模块用法)
@@ -324,9 +320,23 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
     return cached[1]
 
 
+def agent_memory_kb() -> int:
+    """Agent 对话记忆额度(KB,0=关闭,上限 AGENT_MEMORY_KB_MAX,越界钳制;
+    设置菜单「高级→Agent 高级设置」滑块)。兼容旧布尔开关 agent_memory:
+    未设过额度时 False→0,True/缺省→缺省额度。"""
+    v = STATE.get("agent_memory_kb")
+    if v is None:
+        return AGENT_MEMORY_KB_DEFAULT if STATE.get("agent_memory", True) else 0
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return AGENT_MEMORY_KB_DEFAULT
+    return max(0, min(n, AGENT_MEMORY_KB_MAX))
+
+
 def agent_memory_enabled() -> bool:
-    """Agent 对话记忆总开关(设置菜单「高级→Agent 高级设置」)。"""
-    return bool(STATE.get("agent_memory", AGENT_MEMORY_DEFAULT))
+    """Agent 对话记忆总开关(额度 >0 即开启)。"""
+    return agent_memory_kb() > 0
 
 
 def max_retries_setting() -> int:
@@ -569,7 +579,7 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "elevenlabs",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -1798,6 +1808,17 @@ def chat_path(agent_id: str, project: str) -> Path:
     return d / (agent_id.replace("/", "__") + ".jsonl")
 
 
+def _clear_agent_sessions(agent_id: str, project: str) -> list[str]:
+    """清掉该 Agent 在项目下全部引擎的会话记录,返回清掉的引擎列表。
+    引擎侧的历史会话文件留在原处,仅解除续接;下一条消息即开全新会话。
+    (用途:/clear 命令、签字过门后的自动瘦身——防会话随项目推进无限膨胀。)"""
+    cleared = [eng for eng in ENGINES
+               if STATE["sessions"].pop(f"{eng}::{agent_id}::{project}", None)]
+    if cleared:
+        save_state(STATE)
+    return cleared
+
+
 def append_chat(agent_id: str, project: str, entry: dict):
     entry["ts"] = time.time()
     with chat_path(agent_id, project).open("a") as f:
@@ -2301,11 +2322,11 @@ async def execute_run(run: dict, message: str, model: str | None):
         # 记忆开关关闭时所有 agent 全新会话(session_id 仍照常回存,重新开启即恢复)
         session_id = (None if is_stateless or not agent_memory_enabled()
                       else STATE["sessions"].get(session_key))
-        # 会话膨胀保险丝:历史过大时新开会话,避免 resume 每轮重发全史
+        # 会话膨胀保险丝:历史超过记忆额度时新开会话,避免 resume 每轮重发全史
         if session_id:
-            resume_limit = (DEEPAGENTS_RESUME_LIMIT if engine == "deepagents"
-                            else ORCHESTRATOR_RESUME_LIMIT if agent_id == ORCHESTRATOR_AGENT
-                            else CHAT_RESUME_LIMIT)
+            resume_limit = agent_memory_kb() * 1024
+            if engine == "deepagents":
+                resume_limit = min(resume_limit, DEEPAGENTS_RESUME_LIMIT)
             try:
                 if chat_path(agent_id, run["project"]).stat().st_size > resume_limit:
                     session_id = None
@@ -2521,7 +2542,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
                     if (session_id and not session_retried and re.search(
                             r"no conversation found|session[^\n]{0,80}not found"
-                            r"|thread[^\n]{0,40}not found",
+                            r"|no session found|thread[^\n]{0,40}not found",
                             f"{run.get('error') or ''} {stderr}", re.I)):
                         session_retried = True
                         session_id = None
@@ -2585,8 +2606,20 @@ async def execute_run(run: dict, message: str, model: str | None):
                 system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
-            # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)
-            if run.get("session_id") and not is_stateless:
+            # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
+            # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
+            # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
+            # "No session found";这种会话也没有值得续接的上下文
+            if run.pop("clear_sessions_on_end", None):
+                # 本运行期间用户签字过门(见 _continue_signed_gate):阶段收官,
+                # 不回存本次会话并清掉全部记录,下一条消息即开全新会话
+                _clear_agent_sessions(run["agent"], run["project"])
+                append_chat(run["agent"], run["project"], {
+                    "role": "assistant", "status": "done",
+                    "text": "🧹 签字通过,本轮结束后已自动清理会话记录,"
+                            "下一条消息将开启全新会话。"})
+            elif (run.get("session_id") and not is_stateless
+                    and (run.get("result") or run.get("text"))):
                 STATE["sessions"][session_key] = run["session_id"]
                 save_state(STATE)
             reply = run.get("result") or run.get("text") or run.get("error") or "(无输出)"
@@ -6266,6 +6299,23 @@ async def api_chat(body: dict):
         raise ServiceError(400, "message must not be empty")
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
+    if message == "/clear":
+        # 会话清理命令:不派发运行,清掉该 Agent 在本项目下全部引擎的会话记录,
+        # 下一条消息即开全新会话。引擎侧的历史会话文件留在原处,仅解除续接
+        # (用途:会话膨胀后续接请求过大被网络掐断、或想甩掉陈旧上下文时手动重置)。
+        cleared = _clear_agent_sessions(agent, project)
+        if cleared:
+            reply = (f"🧹 已清理会话记录({'、'.join(cleared)}),"
+                     "下一条消息将开启全新会话。")
+        else:
+            reply = "当前没有会话记录可清理,下一条消息本就会开启全新会话。"
+        if any(r.get("agent") == agent and r.get("project") == project
+               and r.get("status") in ("queued", "running") for r in RUNS.values()):
+            reply += ("\n⚠️ 该 Agent 尚有在跑/排队的任务,其结束时会重新记下所用会话;"
+                      "如需彻底清理,请等任务结束后再发一次 /clear。")
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True, "cleared": cleared}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)
@@ -6565,15 +6615,28 @@ async def _continue_signed_gate(c: dict) -> str | None:
     """签字后恢复总制片；仍在等待 dispatch.py 的父运行会自行继续。"""
     parent = RUNS.get(c.get("parent") or "")
     if parent and parent.get("status") in ("queued", "running"):
+        # 总制片仍在运行中等签字,会话正在使用不能立刻清;打标记让该运行结束时
+        # 不回存会话并清掉记录(见 execute_run finally),下一轮即全新会话。
+        parent["clear_sessions_on_end"] = True
         return None
     proj = str(c["project"])
     checkpoint = c.get("checkpoint") or c["gate_id"]
+    # 签字过门 = 一个阶段收官:先做 /clear 同款清理再唤醒,复核以全新会话开始,
+    # 防止总制片会话随项目推进无限膨胀(项目状态一律以文件为准,不依赖对话记忆)。
+    cleared = _clear_agent_sessions(ORCHESTRATOR_AGENT, proj)
+    if cleared:
+        append_chat(ORCHESTRATOR_AGENT, proj, {
+            "role": "assistant", "status": "done",
+            "text": (f"🧹 签字通过,已自动清理会话记录({'、'.join(cleared)}),"
+                     "闸门复核将以全新会话开始。")})
     message = (
         f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
         f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
         "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
         "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG 并派 version 冻结。"
         "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
+        "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
+        "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"
     )
     result = await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message,
                              "project": proj, "source": "approval",
@@ -6886,7 +6949,7 @@ async def api_agent_advanced_get():
 async def api_agent_advanced_set(body: dict):
     """Agent 高级设置合并提交,各字段均可选、可单独提交:
     - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
-    - agent_memory:同 api_agent_memory_set
+    - agent_memory_kb:同 api_agent_memory_set(0=关闭;旧布尔字段 agent_memory 仍兼容)
     - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
       经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效"""
     updates: dict = {}
@@ -6898,12 +6961,20 @@ async def api_agent_advanced_set(body: dict):
         if not 0 <= n <= MAX_RETRIES_MAX:
             raise ServiceError(400, f"max_retries must be between 0 and {MAX_RETRIES_MAX}")
         updates["max_retries"] = n
-    if body.get("agent_memory") is not None:
-        updates["agent_memory"] = bool(body["agent_memory"])
+    if body.get("agent_memory_kb") is not None:
+        try:
+            mk = int(body.get("agent_memory_kb"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "agent_memory_kb must be an integer") from None
+        if not 0 <= mk <= AGENT_MEMORY_KB_MAX:
+            raise ServiceError(400, f"agent_memory_kb must be between 0 and {AGENT_MEMORY_KB_MAX}")
+        updates["agent_memory_kb"] = mk
+    elif body.get("agent_memory") is not None:   # 旧布尔开关兼容
+        updates["agent_memory_kb"] = AGENT_MEMORY_KB_DEFAULT if body["agent_memory"] else 0
     conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory / max_retries")
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
@@ -6966,16 +7037,29 @@ async def api_agent_concurrency_set(body: dict):
 
 async def api_agent_memory_get():
     return {"agent_memory": agent_memory_enabled(),
-            "resume_limit_kb": CHAT_RESUME_LIMIT // 1024}
+            "agent_memory_kb": agent_memory_kb(),
+            "agent_memory_kb_default": AGENT_MEMORY_KB_DEFAULT,
+            "agent_memory_kb_max": AGENT_MEMORY_KB_MAX}
 
 
 async def api_agent_memory_set(body: dict):
-    """Agent记忆设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容):开启=有状态 Agent 恢复上次
-    会话(128KB 保险丝仍生效);关闭=所有 Agent 每次运行全新会话。持久化,
-    立即对后续运行生效;关闭期间会话号照常回存,重新开启后从最近一次会话继续。"""
-    if body.get("agent_memory") is None:
-        raise ServiceError(400, "agent_memory must be a boolean")
-    STATE["agent_memory"] = bool(body["agent_memory"])
+    """Agent记忆设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容):
+    agent_memory_kb=对话记忆额度(KB,0..AGENT_MEMORY_KB_MAX):>0=有状态 Agent 恢复
+    上次会话,单会话历史超过该额度自动新开;0=所有 Agent 每次运行全新会话。持久化,
+    立即对后续运行生效;关闭/调小期间会话号照常回存,重新调大后从最近一次会话继续。
+    旧布尔字段 agent_memory 仍兼容(True=缺省额度,False=0;两者同给时以额度为准)。"""
+    if body.get("agent_memory_kb") is not None:
+        try:
+            n = int(body.get("agent_memory_kb"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "agent_memory_kb must be an integer") from None
+        if not 0 <= n <= AGENT_MEMORY_KB_MAX:
+            raise ServiceError(400, f"agent_memory_kb must be between 0 and {AGENT_MEMORY_KB_MAX}")
+    elif body.get("agent_memory") is not None:   # 旧布尔开关兼容
+        n = AGENT_MEMORY_KB_DEFAULT if body["agent_memory"] else 0
+    else:
+        raise ServiceError(400, "agent_memory_kb must be an integer (KB, 0=off)")
+    STATE["agent_memory_kb"] = n
     save_state(STATE)
     return await api_agent_memory_get()
 

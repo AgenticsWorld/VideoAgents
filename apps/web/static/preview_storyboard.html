@@ -97,6 +97,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.gmedia video{height:210px;border-radius:6px;background:#000;display:block}
 .grp>.gmedia .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
 .grp>.gmedia .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.cap a.charlink{color:inherit;text-decoration:underline dotted;text-underline-offset:2px}
+.cap a.charlink:hover{color:var(--accent)}
 .grp>.gmedia .blabel{font-size:11px;color:var(--dim);width:100%}
 .grp>.gshots{padding:4px 10px 8px}
 .grp>.gshots .shot{background:var(--bg)}
@@ -715,6 +717,18 @@ async function avSync(){
   }catch(e){}
 }
 
+// 参考图直接引用人物/场景/道具形象图(assets/concepts/<kind>/<ID>/…)时,
+// 文件名标签变成链接,点击跳到对应预览页并定位该资产(深链 ?id=)
+const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
+                 scenes:['/preview/scenes','查看场景预览:'],
+                 props:['/preview/props','查看道具预览:']};
+const refFn=(icon,k)=>{
+  const m=/^assets\/concepts\/(characters|scenes|props)\/([^/]+)\//.exec(k.ref||'');
+  if(!m)return `<span class="fn">${icon} ${esc(k.name)}</span>`;
+  const [page,tip]=REF_PAGES[m[1]], proj=$('#project').value.trim()||'demo';
+  return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
+};
+
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
   const chars=(g.characters_union||[]).join('、');
@@ -726,12 +740,12 @@ function groupCard(g,inner){
       <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
   const urefs=(g.user_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}"><span class="fn">🖼 ${esc(k.name)}</span>${avMark(k.ref)}
+      <div class="cap" title="${esc(k.ref)}">${refFn('🖼',k)}${avMark(k.ref)}
       <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
   // 流水线/agent 直连写入组 refs 的参考图(概念图等):只展示不可删,删除接口本就仅限用户添加的
   const prefs=(g.pipeline_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}"><span class="fn">📎 ${esc(k.name)}</span>${avMark(k.ref)}
+      <div class="cap" title="${esc(k.ref)}">${refFn('📎',k)}${avMark(k.ref)}
       <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
