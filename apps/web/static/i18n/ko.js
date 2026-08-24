@@ -1064,7 +1064,7 @@ window.I18N_DICT = {
 "火山引擎 Access Key ID": "Volcengine Access Key ID",
 "火山引擎 Secret Access Key": "Volcengine Secret Access Key",
 "获取 Key:": "Key 발급은 여기서:",
-"配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传": "설정된 사용량/잔액은 우측 \"리소스 사용량\" 패널에 표시되며 10분마다 자동 새로고침됩니다. 모든 Key는 로컬 webui/state.json 에만 저장되며 업로드되지 않습니다",
+"配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;顶栏当前引擎的用量会自动显示(选 pi 显示 codex 用量,因其常配 ChatGPT 订阅),上方开关开启后则不随引擎切换、始终显示;所有 Key 仅保存在本机 webui/state.json,不会上传": "설정된 사용량/잔액은 우측 \"리소스 사용량\" 패널에 표시되며 10분마다 자동 새로고침됩니다. 상단 바에서 현재 선택된 엔진의 사용량은 자동으로 표시됩니다(pi 선택 시 codex 사용량 표시, pi는 보통 ChatGPT 구독을 사용하므로). 위 스위치를 켜면 엔진 전환과 무관하게 항상 표시됩니다. 모든 Key는 로컬 webui/state.json 에만 저장되며 업로드되지 않습니다",
 "开启火山引擎余额检查需同时填写 Access Key 与 Secret Key": "Volcengine 잔액 확인을 켜려면 Access Key와 Secret Key를 모두 입력해야 합니다",
 "RunningHub 余额": "RunningHub 잔액",
 "开启后用 API Key 查询 RH 币与钱包余额;.ai 与 .cn 账号不互通,分别填写,留空的站点不查": "켜면 API Key로 RH 코인과 지갑 잔액을 조회합니다. .ai와 .cn은 계정이 서로 달라 각각 입력하며, 비워 둔 사이트는 조회하지 않습니다",

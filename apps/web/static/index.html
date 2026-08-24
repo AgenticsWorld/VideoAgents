@@ -720,7 +720,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row res-rh-row"><label>.cn API Key</label>
       <input type="password" id="res-rh-cn" placeholder="runninghub.cn API Key" autocomplete="off"></div>
     <div class="note res-rh-row" style="margin-top:-6px">获取 Key:<a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.ai</a> / <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank" rel="noopener" style="color:var(--link)">runninghub.cn</a> <span>API 服务页</span></div>
-    <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
+    <div class="note">配置好的用量/余额显示在右栏「资源消耗」面板,每 10 分钟自动刷新;顶栏当前引擎的用量会自动显示(选 pi 显示 codex 用量,因其常配 ChatGPT 订阅),上方开关开启后则不随引擎切换、始终显示;所有 Key 仅保存在本机 webui/state.json,不会上传</div>
     <div class="err" id="res-err"></div>
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
   </div>
@@ -2328,6 +2328,9 @@ function liveBox(runId){
     await populateModels($('#engine').value);savePrefs();   // 非 deepagents 复位到首项「智能分配」
     if($('#engine').value==='deepagents')syncDaProvider();
     await applyAmMode();   // 切引擎即同步全部 Agent 策略(deepagents 无智能分配→回 global)
+    // 资源消耗面板随当前引擎自动显示对应用量(pi 计入 codex):
+    // 等 savePrefs 的服务端偏好同步(400ms 防抖)落定后再刷新
+    setTimeout(()=>renderResources(),700);
     checkEngineCli($('#engine').value);
   };
   $('#model').onchange=async()=>{

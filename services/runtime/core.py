@@ -1271,6 +1271,8 @@ _OPENROUTER_TTL = 600
 
 
 # ---------------- 引擎会话用量探测(watchdog 阈值门控 + 资源消耗面板,参考 CodexBar) ----------------
+# 显示规则:设置里手动开启的引擎始终显示;未手动开启的随顶栏当前引擎自动显示
+# (USAGE_AUTO_BY_ENGINE:pi 计入 codex,deepagents 无)。
 # codex:本地 ~/.codex/sessions/**/*.jsonl 会记录 rate_limits(primary=5h 窗口,secondary=周窗口)。
 # claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour/seven_day.utilization;
 #   token 读取顺序 env CLAUDE_CODE_OAUTH_TOKEN → macOS Keychain → ~/.claude/.credentials.json,
@@ -1430,20 +1432,41 @@ def _claude_version() -> str:
     return _CLAUDE_VERSION
 
 
-def claude_probe_enabled() -> bool:
-    """Claude 用量探针开关:env VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 或 ⚙️ 资源消耗 设置。"""
+# 顶栏当前引擎自动开启的用量检查(手动开关之外的自动显示):pi→codex,因 pi 通常
+# 配 ChatGPT(openai-codex)订阅渠道,消耗的正是 Codex 配额;deepagents 无用量口径。
+USAGE_AUTO_BY_ENGINE = {"claude": "claude", "codex": "codex", "kimi": "kimi",
+                        "opencode": "opencode", "pi": "codex"}
+
+
+def usage_auto_engine() -> str | None:
+    """随顶栏全局引擎自动显示用量的目标引擎。生效规则:设置里手动开启的始终显示;
+    未手动开启的按当前引擎是否选中自动显示(*_probe_enabled = 手动 or 自动)。"""
+    return USAGE_AUTO_BY_ENGINE.get(global_model_pref()["engine"])
+
+
+def claude_probe_manual() -> bool:
+    """Claude 用量探针手动开关:env VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 或
+    ⚙️ 资源消耗 设置(设置弹窗回显用,不含随引擎的自动开启)。"""
     return CLAUDE_USAGE_PROBE_ENABLED or bool(resource_cfg().get("claude_probe"))
 
 
-def codex_probe_enabled() -> bool:
-    """Codex 用量检查开关(⚙️ 资源消耗 设置);默认关闭(与其余引擎一致,
-    初始安装不为未用 Codex 的用户白扫 sessions 目录)。"""
+def claude_probe_enabled() -> bool:
+    return claude_probe_manual() or usage_auto_engine() == "claude"
+
+
+def codex_probe_manual() -> bool:
+    """Codex 用量检查手动开关(⚙️ 资源消耗 设置);默认关闭,不为未用 Codex 的
+    用户白扫 sessions 目录——顶栏选中 codex/pi 时另行自动开启。"""
     return bool(resource_cfg().get("codex_probe"))
 
 
-def kimi_probe_enabled() -> bool:
-    """KimiCode 用量检查开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key 判定
-    (老配置只填了 Key 没有开关,升级后面板行为不变)。"""
+def codex_probe_enabled() -> bool:
+    return codex_probe_manual() or usage_auto_engine() == "codex"
+
+
+def kimi_probe_manual() -> bool:
+    """KimiCode 用量检查手动开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key
+    判定(老配置只填了 Key 没有开关,升级后面板行为不变)。"""
     cfg = resource_cfg()
     v = cfg.get("kimi_probe")
     if v is None:
@@ -1451,9 +1474,17 @@ def kimi_probe_enabled() -> bool:
     return bool(v)
 
 
-def opencode_probe_enabled() -> bool:
-    """OpenCode Go 订阅用量检查开关(⚙️ 资源消耗 设置);默认关闭。"""
+def kimi_probe_enabled() -> bool:
+    return kimi_probe_manual() or usage_auto_engine() == "kimi"
+
+
+def opencode_probe_manual() -> bool:
+    """OpenCode Go 订阅用量检查手动开关(⚙️ 资源消耗 设置);默认关闭。"""
     return bool(resource_cfg().get("opencode_probe"))
+
+
+def opencode_probe_enabled() -> bool:
+    return opencode_probe_manual() or usage_auto_engine() == "opencode"
 
 
 def _opencode_data_dir() -> Path:
@@ -7210,12 +7241,13 @@ async def api_usage():
 async def api_resources_config_get():
     """资源消耗设置；密钥保存在运行状态目录，不向客户端回传明文。"""
     cfg = resource_cfg()
+    # 开关一律回传手动配置值(不含随顶栏引擎的自动开启,否则保存会把自动固化成手动)
     return {"claude_probe": bool(cfg.get("claude_probe")),
             "claude_probe_env": CLAUDE_USAGE_PROBE_ENABLED,
-            "codex_probe": codex_probe_enabled(),
-            "kimi_probe": kimi_probe_enabled(),
+            "codex_probe": codex_probe_manual(),
+            "kimi_probe": kimi_probe_manual(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
-            "opencode_probe": opencode_probe_enabled(),
+            "opencode_probe": opencode_probe_manual(),
             "opencode_api_key": cfg.get("opencode_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),
