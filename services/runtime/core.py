@@ -1275,8 +1275,8 @@ _OPENROUTER_TTL = 600
 # claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour/seven_day.utilization;
 #   token 读取顺序 env CLAUDE_CODE_OAUTH_TOKEN → macOS Keychain → ~/.claude/.credentials.json,
 #   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
-# kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配),
-#   usage=周配额,limits[](300min 窗口)=5h 会话配额。
+# kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配,
+#   留空自动读本机 kimi CLI 登录凭证),usage=周配额,limits[](300min 窗口)=5h 会话配额。
 # opencode:OpenCode Go 订阅用量 GET opencode.ai/zen/go/v1/usage(额度按美元计,
 #   5 小时/周/月三窗口,面板取 5h→Session、周→Weekly);Key 在设置里配,留空自动读
 #   本机 opencode 登录凭证 auth.json。
@@ -1570,14 +1570,48 @@ def _claude_usage_full() -> dict:
         return empty
 
 
+def _kimi_usage_key() -> str | None:
+    """Kimi 用量接口凭证:设置里手填的 Key 优先;留空读本机 kimi CLI 登录凭证的
+    access token(usages 接口同样接受,参考 CodexBar docs/kimi.md),再退环境变量。
+    凭证字段名按常见命名宽松扫描(顶层与一层嵌套);带过期时间且已过期的跳过。
+    不动 refresh token 也不回写凭证文件(避免与 CLI 抢刷新):token 过期后面板
+    显示未知,重新 kimi login 即恢复——与 claude 探针「过期不刷新」策略一致。"""
+    key = (resource_cfg().get("kimi_api_key") or "").strip()
+    if key:
+        return key
+    for base in (Path.home() / ".kimi-code", Path.home() / ".kimi"):   # 新/旧版数据目录
+        try:
+            cred = json.loads((base / "credentials" / "kimi-code.json").read_text())
+        except Exception:
+            continue
+        if not isinstance(cred, dict):
+            continue
+        for d in [cred] + [v for v in cred.values() if isinstance(v, dict)]:
+            exp = next((_parse_reset_ts(d[k]) for k in
+                        ("expires_at", "expiresAt", "expiry", "expire_at", "expireAt")
+                        if d.get(k) is not None), None)
+            if exp and exp <= time.time():
+                continue
+            for k in ("access_token", "accessToken", "api_key", "apiKey",
+                      "token", "key"):
+                v = d.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    for env in ("KIMI_CODE_API_KEY", "KIMI_API_KEY", "MOONSHOT_API_KEY"):
+        v = (os.environ.get(env) or "").strip()
+        if v:
+            return v
+    return None
+
+
 def _kimi_usage_full() -> dict:
     """Kimi Code 官方用量接口:usage=周配额,limits[](300min 窗口)=5h 会话配额。
     重置时间实测字段名为驼峰 resetTime(ISO 带 9 位小数秒,参考 CodexBar docs/kimi.md),
     另按常见命名兼容扫描;取不到为 None。
-    未配 Key/接口异常返回 None(资源消耗面板显示未知)。"""
+    无凭证/接口异常返回 None(资源消耗面板显示未知)。"""
     empty = {"session": None, "weekly": None,
              "session_resets_at": None, "weekly_resets_at": None}
-    key = (resource_cfg().get("kimi_api_key") or "").strip()
+    key = _kimi_usage_key()
     if not key:
         return empty
     try:

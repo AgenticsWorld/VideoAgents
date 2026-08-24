@@ -693,7 +693,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="checkbox" id="res-kimi-on" style="flex:none">
       <span class="note" style="flex:1">开启后用下方 API Key 查询 KimiCode 会话/周用量</span></div>
     <div class="row res-kimi-row"><label>Kimi API Key</label>
-      <input type="password" id="res-kimi" placeholder="sk-…" autocomplete="off"></div>
+      <input type="password" id="res-kimi" placeholder="留空则用本机 kimi 登录凭证" autocomplete="off"></div>
     <div class="note res-kimi-row" style="margin-top:-6px">获取 KimiCode 使用量;Key 在此创建:<a href="https://www.kimi.com/code/console" target="_blank" rel="noopener" style="color:var(--link)">kimi.com/code/console</a></div>
     <div class="row"><label>OpenCode Go 用量</label>
       <input type="checkbox" id="res-oc-on" style="flex:none">
@@ -1725,8 +1725,6 @@ $('#res-cancel').onclick=()=>$('#res-modal').style.display='none';
 $('#res-ok').onclick=async()=>{
   if($('#res-volc').checked&&!($('#res-volc-ak').value.trim()&&$('#res-volc-sk').value.trim())){
     $('#res-err').textContent=t('开启火山引擎余额检查需同时填写 Access Key 与 Secret Key');return}
-  if($('#res-kimi-on').checked&&!$('#res-kimi').value.trim()){
-    $('#res-err').textContent=t('开启 KimiCode 用量检查需填写 Kimi API Key');return}
   if($('#res-rh').checked&&!($('#res-rh-ai').value.trim()||$('#res-rh-cn').value.trim())){
     $('#res-err').textContent=t('开启 RunningHub 余额检查需至少填写一个站点的 API Key');return}
   try{
