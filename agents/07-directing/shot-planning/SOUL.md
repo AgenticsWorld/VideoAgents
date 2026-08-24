@@ -118,7 +118,7 @@ instruction: |
 - **角色/场景 ID 全部合法**(在两份 index.json 中存在);
 - **镜号唯一**且连续可排序;每镜 `storyboard_ref` 可回溯;`is_dialogue` 必填;
 - **生成组机检**:组覆盖全部镜号不重不漏;组内镜号连续且同 scene_id;`total_duration_s` ∈ [4,15] 整数且 = Σ组内 duration_s;`characters_union` ≤4;`continuity_from` 链完整(首组 null,其余指向前一组);
-- **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/render_blocking_map.py --project <slug> --ep epNN --strict`)**:每个有出场角色的组 `blocking_map` 齐全且角色集合 = `characters_union`;位置引用地标在该场景 layout.json 存在;`route_en` 非空纯英文;同场景相邻组各角色 start 接前组 end;每组定稿动线图 `directing/epNN/blocking_maps/grpNNN.png` 已渲染落盘;每镜 `view_tile` ∈ 1–9 或 null。
+- **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/render_blocking_map.py --project <slug> --ep epNN --strict`)**:每个有出场角色的组 `blocking_map` 齐全且角色集合 = `characters_union`;位置引用地标在该场景 layout.json 存在;`route_en` 非空(语言随界面语言,2026-08-24 二订);同场景相邻组各角色 start 接前组 end;每组定稿动线图 `directing/epNN/blocking_maps/grpNNN.png` 已渲染落盘;每镜 `view_tile` ∈ 1–9 或 null。
 - **时段锚机检(time_anchor_ok,2026-07-20)**:每组 `time_of_day` 必填且在受控枚举内、与 storyboard 对应场块一致;`lighting_scheme_id` 必填、在该组场景 lighting.json 的 schemes 中存在、且该方案 `condition.time_of_day` 与组 time_of_day 一致;同场景同时段的多个组必须取同一 scheme;
 - **旁白挂点机检(§7D ①)**:narration.md 条目 100% 有挂点;挂点镜/组引用合法;可用画面窗口(扣除对白占时)≥ `est_duration_s`×1.15;
 - **组音频形态机检(§7D ①)**:每组 `audio_plan` 必填且与 has_dialogue/挂点事实一致;ambient_only 组必附 `silent_rationale`(无理由的无声组=待核查,不得进 H3A)。

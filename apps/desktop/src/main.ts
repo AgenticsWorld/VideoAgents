@@ -101,6 +101,8 @@ function stopWebServerTree(): void {
   server.kill('SIGTERM')
 }
 let runtimeProgressWindow: BrowserWindow | undefined
+// 下载速度采样:at=上次渲染时刻,received=上次渲染时已收字节,speed=指数平滑后的字节/秒
+const runtimeProgressMeter = {at: 0, received: 0, speed: 0}
 let runtimeUpdateInProgress = false
 let requiredDesktopUpdateActive = false
 let requiredDesktopUpdateCanQuit = false
@@ -341,18 +343,54 @@ async function showRuntimeProgress(
     body{margin:0;background:#111318;color:#f3f4f6;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     main{padding:34px}h2{font-size:18px;margin:0 0 18px}p{color:#b8bec9;height:22px;margin:0 0 14px}
     progress{width:100%;height:12px;accent-color:#5677ff}small{display:block;color:#727987;margin-top:12px}
+    #stats{color:#8b93a3;font-size:12px;height:16px;margin:8px 0 0;font-variant-numeric:tabular-nums}
   </style><main><h2>${title}</h2><p id="message">正在检查更新…</p>
-  <progress id="progress"></progress><small>${note}</small></main>`
+  <progress id="progress" max="100"></progress><div id="stats"></div><small>${note}</small></main>`
   await runtimeProgressWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+}
+
+function formatBytes(value: number): string {
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(value / 1024))} KB`
+}
+
+function resetRuntimeProgressMeter(): void {
+  runtimeProgressMeter.at = 0
+  runtimeProgressMeter.received = 0
+  runtimeProgressMeter.speed = 0
 }
 
 function updateRuntimeProgress(progress: RuntimeProgress): void {
   const target = runtimeProgressWindow
   if (!target || target.isDestroyed()) return
-  const percent = progress.total && progress.received !== undefined
-    ? Math.min(100, Math.round(progress.received / progress.total * 100)) : undefined
+  const downloading = progress.received !== undefined && typeof progress.total === 'number' && progress.total > 0
+  let percent: number | undefined
+  let stats = ''
+  if (downloading) {
+    const received = progress.received as number
+    const total = progress.total as number
+    // 同一进度窗口内的第二次下载（字节数回退）视为新任务，重置测速
+    if (received < runtimeProgressMeter.received) resetRuntimeProgressMeter()
+    // 每个数据块都会回调一次；限频渲染，避免高频 executeJavaScript(最后一块除外)
+    if (runtimeProgressMeter.at && Date.now() - runtimeProgressMeter.at < 200 && received < total) return
+    const now = Date.now()
+    if (runtimeProgressMeter.at && now > runtimeProgressMeter.at) {
+      const instant = (received - runtimeProgressMeter.received) / ((now - runtimeProgressMeter.at) / 1000)
+      runtimeProgressMeter.speed = runtimeProgressMeter.speed
+        ? runtimeProgressMeter.speed * 0.7 + instant * 0.3 : instant
+    }
+    runtimeProgressMeter.at = now
+    runtimeProgressMeter.received = received
+    percent = Math.min(100, Math.round(received / total * 100))
+    stats = `${formatBytes(received)} / ${formatBytes(total)} · ${percent}%`
+      + (runtimeProgressMeter.speed > 0 ? ` · ${formatBytes(runtimeProgressMeter.speed)}/s` : '')
+  } else {
+    resetRuntimeProgressMeter()
+  }
   void target.webContents.executeJavaScript(`(() => {
     document.getElementById('message').textContent = ${JSON.stringify(progress.message)};
+    document.getElementById('stats').textContent = ${JSON.stringify(stats)};
     const bar = document.getElementById('progress');
     ${percent === undefined ? "bar.removeAttribute('value')" : `bar.value = ${percent}`};
   })()`)
@@ -361,6 +399,7 @@ function updateRuntimeProgress(progress: RuntimeProgress): void {
 function closeRuntimeProgress(): void {
   if (runtimeProgressWindow && !runtimeProgressWindow.isDestroyed()) runtimeProgressWindow.destroy()
   runtimeProgressWindow = undefined
+  resetRuntimeProgressMeter()
 }
 
 async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {

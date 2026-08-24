@@ -12,7 +12,7 @@
 ## 职责
 
 1. 按 generation_groups 的 characters_union,拉取 `assets/concepts/characters/<id>/` 三视图作为唯一人脸/形象锚点。
-2. **校正范围只有新生成锚(meta `source: "generated"`,2026-07-24)**:复用自概念库的锚(`source: "reuse:..."`)与在库概念图同源,免校正;整组 `generation_channel: reuse-only` 时直接放行、零额度消耗。对新生成锚,用参考图注入、换脸或 LoRA 手段校正其中的角色形象与标志物(**性别呈现**、发色、瞳色、疤痕、佩饰等 appearance 关键特征)——**性别核对是第一道核对项(2026-07-20)**:锚中人物的性别呈现须与 `appearance.json` 的 `gender` 一致(有 `presented_gender` 以其为准),性别画错不算"相似度不足",算形象错误,直接重 roll 不修补。
+2. **校正范围只有新生成锚(meta `source: "generated"`,2026-07-24)**:复用自概念库的锚(`source: "reuse:..."`)与在库概念图同源,免校正(2026-08-24 引用化后此类锚 `file: null` 无包内文件,免校正判据不变);整组 `generation_channel: reuse-only` 时直接放行、零额度消耗。对新生成锚,用参考图注入、换脸或 LoRA 手段校正其中的角色形象与标志物(**性别呈现**、发色、瞳色、疤痕、佩饰等 appearance 关键特征)——**性别核对是第一道核对项(2026-07-20)**:锚中人物的性别呈现须与 `appearance.json` 的 `gender` 一致(有 `presented_gender` 以其为准),性别画错不算"相似度不足",算形象错误,直接重 roll 不修补。
 3. **多镜头组生成的防漂移规程**(官方 FAQ 缓解方案):
    - 每角色锚必须是**单人**图——多人合照/多视图拼图会触发"双胞胎"重复角色;
    - 人脸特写锚**前置**(排在 refs 前列)可显著降低角色 ID 漂移;

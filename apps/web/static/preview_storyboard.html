@@ -111,6 +111,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #pv-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #pv-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:680px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column}
 #pv-modal pre{overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:10px 0;font:12.5px/1.7 inherit;white-space:pre-wrap;word-break:break-word;min-height:100px;max-height:58vh}
+#pv-modal textarea{overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:10px 0;font:12.5px/1.7 inherit;color:inherit;white-space:pre-wrap;word-break:break-word;height:50vh;min-height:200px;max-height:58vh;width:100%;box-sizing:border-box;resize:vertical}
 #pv-modal .actions{display:flex;gap:8px;align-items:center}
 #pv-modal .actions button{flex:none;white-space:nowrap}
 #pv-modal .meta{color:var(--dim);font-size:11.5px;margin-right:auto}
@@ -211,9 +212,10 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="pv-modal"><div class="box">
   <h3>📄 组视频 Prompt — <span id="pv-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(只读;要修改请用 📝 注释)</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(点「编辑」可手动修改并保存)</div>
   <pre id="pv-text"></pre>
-  <div class="actions"><span class="meta"><span id="pv-bytes"></span><span id="pv-meta"></span></span><button id="pv-copy">复制</button><button id="pv-close">关闭</button></div>
+  <textarea id="pv-editbox" style="display:none" spellcheck="false"></textarea>
+  <div class="actions"><span class="meta"><span id="pv-bytes"></span><span id="pv-meta"></span></span><button id="pv-edit">编辑</button><button id="pv-copy">复制</button><button id="pv-close">关闭</button></div>
 </div></div>
 <div id="ar-modal"><div class="box">
   <h3>🖼 添加参考图 — <span id="ar-grp" style="color:var(--purple)"></span><span class="cnt" id="ar-count"></span></h3>
@@ -520,16 +522,7 @@ $('#ar-file').onchange=async()=>{
 };
 
 // 📄 Prompt:查看本组传给视频生成模型的文字 prompt(assets/prompts/<ep>/<grp>.json 的 video_prompt)
-// 各视频模型 prompt 字节上限,按 model id 子串匹配(生成时 genmedia 还会在末尾追加
-// --resolution/--dur/--ratio 等约 30-50 字节;数字口径以方舟实际为准,不符可在此修正)
-const PROMPT_BYTE_LIMITS=[['seedance-2',5000]];
-let GENCFG=null;
-async function videoModel(){
-  if(!GENCFG){try{GENCFG=await(await fetch('/api/v1/config/generation')).json()}catch(_){GENCFG={}}}
-  const v=GENCFG.video||{};
-  const p=v[v.provider||'volcengine']||{};
-  return p.custom_model||p.model||'';
-}
+// 字节/字符仅作长度参考,不设上限提示(各模型口径不同且非硬限制,2026-08-24 移除上限文案)
 const CAP_TYPE_LABELS={headline:'大标题',keyword:'关键词',location:'地名',time:'时间',skill:'招式',faction:'势力',other:'其他'};
 const CAP_ANIM_LABELS={pop_bounce:'弹入回弹',pop:'弹入',fade:'淡入淡出',slide_up:'上滑入',slide_down:'下滑入',slide_left:'左滑入',slide_right:'右滑入',none:'无'};
 async function openCaption(grp){
@@ -566,28 +559,35 @@ async function openCaption(grp){
   }catch(e){$('#cp-list').innerHTML='<div class="cp-meta">'+esc(String(e.message||e))+'</div>'}
 }
 $('#cp-close').onclick=()=>{$('#cp-modal').style.display='none'};
+let PV_GRP='';
+function pvSetEdit(on){
+  $('#pv-editbox').style.display=on?'block':'none';
+  $('#pv-text').style.display=on?'none':'block';
+  $('#pv-edit').textContent=on?t('保存'):t('编辑');
+}
+function pvBytes(p){
+  const bytes=new TextEncoder().encode(p).length,chars=[...p].length;
+  $('#pv-bytes').style.color='';
+  $('#pv-bytes').textContent=I18N.f('已用 {b} 字节 · {c} 字符',{b:bytes,c:chars});
+}
 async function openPrompt(grp){
   const proj=$('#project').value.trim()||'demo';
+  PV_GRP=grp;
   $('#pv-grp').textContent=grp;
-  $('#pv-bytes').textContent='';$('#pv-meta').textContent='';
+  $('#pv-bytes').style.color='';$('#pv-bytes').textContent='';$('#pv-meta').textContent='';
   $('#pv-text').textContent=t('加载中…');
+  pvSetEdit(false);
+  $('#pv-edit').disabled=true;
   $('#pv-modal').style.display='flex';
   try{
-    const [r,model]=await Promise.all([
-      fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
-        +encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'.json?v='+Date.now()),
-      videoModel()]);
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/artifacts/assets/prompts/'
+      +encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'.json?v='+Date.now());
     if(!r.ok)throw new Error(r.status===404?t('该组 prompt 文件尚未生成'):r.status);
     const d=await r.json();
     const p=d.video_prompt||'';
     $('#pv-text').textContent=p||t('(video_prompt 为空)');
-    const bytes=new TextEncoder().encode(p).length,chars=[...p].length;
-    const lim=(PROMPT_BYTE_LIMITS.find(([k])=>model.toLowerCase().includes(k))||[])[1];   // 大小写不敏感,容错手填自定义 model id
-    const bEl=$('#pv-bytes');
-    bEl.textContent=lim
-      ?I18N.f('已用 {b} 字节 / 上限 {m} 字节({model}) · {c} 字符',{b:bytes,m:lim,model,c:chars})
-      :I18N.f('已用 {b} 字节 · {c} 字符',{b:bytes,c:chars});
-    bEl.style.color=lim&&bytes>lim?'var(--red)':(lim&&bytes>lim*0.9?'var(--yellow)':'');
+    pvBytes(p);
+    if(p)$('#pv-edit').disabled=false;
     const m=[];
     if(d.video_prompt_word_count)m.push(I18N.f('{n} 词',{n:d.video_prompt_word_count}));
     if((d.refs||[]).length)m.push(I18N.f('{n} 张参考图',{n:d.refs.length}));
@@ -595,10 +595,42 @@ async function openPrompt(grp){
     $('#pv-meta').textContent=m.length?' · '+m.join(' · '):'';
   }catch(e){$('#pv-text').textContent=t('加载失败:')+e.message}
 }
+$('#pv-edit').onclick=async()=>{
+  const btn=$('#pv-edit');
+  if($('#pv-editbox').style.display==='none'){          // 只读 → 编辑
+    $('#pv-editbox').value=$('#pv-text').textContent;
+    pvSetEdit(true);
+    $('#pv-editbox').focus();
+    return;
+  }
+  const text=$('#pv-editbox').value.trim();             // 编辑 → 保存
+  if(!text){
+    $('#pv-bytes').style.color='var(--red)';
+    $('#pv-bytes').textContent=t('prompt 内容不能为空');
+    return;
+  }
+  btn.disabled=true;
+  try{
+    const proj=$('#project').value.trim()||'demo';
+    const r=await fetch('/api/v1/storyboard/prompt',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:PV_GRP,text})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    $('#pv-text').textContent=text;
+    pvBytes(text);
+    pvSetEdit(false);
+  }catch(e){
+    $('#pv-bytes').style.color='var(--red)';
+    $('#pv-bytes').textContent=t('保存失败:')+(e.message||e);
+  }
+  btn.disabled=false;
+};
 $('#pv-close').onclick=()=>$('#pv-modal').style.display='none';
 $('#pv-copy').onclick=async()=>{
   try{
-    await navigator.clipboard.writeText($('#pv-text').textContent);
+    const src=$('#pv-editbox').style.display==='none'?$('#pv-text').textContent:$('#pv-editbox').value;
+    await navigator.clipboard.writeText(src);
     $('#pv-copy').textContent=t('已复制');
     setTimeout(()=>{$('#pv-copy').textContent=t('复制')},1200);
   }catch(_){}
