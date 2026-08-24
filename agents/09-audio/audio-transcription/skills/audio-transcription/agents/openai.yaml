@@ -1,0 +1,4 @@
+interface:
+  display_name: "音频转文字"
+  short_description: "自动下载本地模型并生成带时间轴和多人标签的可复用文字稿"
+  default_prompt: "Use $audio-transcription to transcribe audio into a timestamped transcript and map multiple speakers from explicit natural-language instructions."

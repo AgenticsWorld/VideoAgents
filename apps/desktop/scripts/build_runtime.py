@@ -140,7 +140,9 @@ def main() -> None:
     distribution.rename(compact_distribution)
     python = compact_distribution / executable_in_distribution
     # Validate after the final internal relocation.
-    run(str(python), "-c", "import fastapi,lark_oapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml", env=env)
+    run(str(python), "-c",
+        "import fastapi,faster_whisper,lark_oapi,numpy,pygit2,qrcode,scipy,uvicorn,yaml",
+        env=env)
     manifest = {
         "schema": SCHEMA,
         "version": args.version or f"cpython-{version}-{lock_hash[:12]}",

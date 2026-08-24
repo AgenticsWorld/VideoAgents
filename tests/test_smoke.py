@@ -43,6 +43,32 @@ def test_release_versions_consistent():
     assert match and match.group(1) == __version__
 
 
+def test_desktop_openrouter_wrapper_fallback_and_user_key_priority(monkeypatch):
+    from modules import genmedia
+    from services.runtime import core
+
+    for name in ("OPENROUTER_API_KEY", "VIDEOAGENTS_USER_JWT",
+                 "VIDEOAGENTS_OPENROUTER_WRAPPER_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    direct = core.resolve_openrouter_connection()
+    assert direct == {"base_url": "https://openrouter.ai/api/v1",
+                      "api_key": "", "uses_wrapper": False}
+
+    wrapper = "https://api.agentics.world/wrapper/openrouter"
+    monkeypatch.setenv("VIDEOAGENTS_USER_JWT", "desktop-jwt")
+    monkeypatch.setenv("VIDEOAGENTS_OPENROUTER_WRAPPER_URL", wrapper)
+    assert core.resolve_openrouter_connection() == {
+        "base_url": wrapper, "api_key": "desktop-jwt", "uses_wrapper": True}
+    assert genmedia._openrouter_connection() == (wrapper, "desktop-jwt", True)
+
+    # A key saved by the user always bypasses the account wrapper.
+    assert core.resolve_openrouter_connection("user-key") == {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key": "user-key", "uses_wrapper": False}
+    assert genmedia._openrouter_connection("user-key") == (
+        "https://openrouter.ai/api/v1", "user-key", False)
+
 def test_pi_engine_models_and_event_stream(monkeypatch):
     from services.api.schemas import GlobalModelUpdate, RunCreate
     from services.runtime import core

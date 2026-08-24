@@ -81,7 +81,7 @@ button:disabled{opacity:.5;cursor:default}
 <header>
   <a class="back" href="/">← 返回控制台</a>
   <h1>🎨 生成模型设置</h1>
-  <span class="pill">图像 / 视频 / 音乐 / TTS旁白 生成渠道与模型</span>
+  <span class="pill">图像 / 视频 / 数字人 / 音乐 / TTS旁白 生成渠道与模型</span>
   <div class="spacer"></div>
 </header>
 <main>
@@ -135,6 +135,46 @@ button:disabled{opacity:.5;cursor:default}
       <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
     </div>
     <div id="panel-text-openrouter"></div>
+  </div>
+  <div class="card" id="card-digital-human">
+    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
+    <div class="tabs" id="digital-human-tabs">
+      <div class="tab" id="tab-dh-heygen">HeyGen</div>
+      <div class="tab" id="tab-dh-klingai">Kling AI</div>
+      <div class="tab" id="tab-dh-runninghub">RunningHub</div>
+      <div class="tab" id="tab-dh-comfyui">ComfyUI</div>
+    </div>
+    <div class="panel" id="panel-dh-heygen">
+      <div class="row"><label>API Key</label><input type="password" id="dh-heygen-key" placeholder="HeyGen API Key"><button onclick="testDigitalHuman('heygen')">验证 Key</button></div>
+      <div class="row"><label>分辨率</label><select id="dh-heygen-resolution"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+      <div class="row"><label>画幅</label><select id="dh-heygen-aspect"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select></div>
+      <div class="status" id="dh-heygen-status"></div>
+      <div class="hint">任意人物图片 + 已有对白音频；Key 在 <a href="https://app.heygen.com/settings/api" target="_blank">HeyGen API 设置</a>创建。</div>
+    </div>
+    <div class="panel" id="panel-dh-klingai">
+      <div class="row"><label>API Key</label><input type="password" id="dh-kling-key" placeholder="Kling AI API Key"><button onclick="testDigitalHuman('klingai')">验证 Key</button></div>
+      <div class="row"><label>生成模式</label><select id="dh-kling-mode"><option value="std">Standard</option><option value="pro">Professional</option></select></div>
+      <div class="status" id="dh-klingai-status"></div>
+      <div class="hint">首版固定使用中国北京接口 <code>api-beijing.klingai.com</code>，采用 Bearer API Key 鉴权。</div>
+    </div>
+    <div class="panel" id="panel-dh-runninghub">
+      <div class="row"><label>站点</label><select id="digitalhuman-rh-site" onchange="rhSiteUI('digitalhuman')"><option value="rh_cn">RunningHub 国内(.cn)</option><option value="rh_ai">RunningHub 国际(.ai)</option></select><button onclick="testDigitalHuman('runninghub')">测试连接</button></div>
+      <div class="row" id="digitalhuman-rh-key-cn-row"><label>API Key</label><input type="password" id="digitalhuman-rh-key-cn" placeholder="API Key (runninghub.cn)"><button type="button" onclick="const i=document.querySelector('#digitalhuman-rh-key-cn');i.type=i.type==='password'?'text':'password'">显示/隐藏</button></div>
+      <div class="row" id="digitalhuman-rh-key-ai-row" style="display:none"><label>API Key</label><input type="password" id="digitalhuman-rh-key-ai" placeholder="API Key (runninghub.ai)"><button type="button" onclick="const i=document.querySelector('#digitalhuman-rh-key-ai');i.type=i.type==='password'?'text':'password'">显示/隐藏</button></div>
+      <div class="status" id="digitalhuman-rh-status"></div>
+      <div class="row"><label>云端数字人工作流</label><select id="digitalhuman-rh-wf"></select><button type="button" onclick="rhRemoveWf('digitalhuman')">移除</button></div>
+      <div class="row"><label>添加工作流</label><input type="text" id="digitalhuman-rh-add" placeholder="工作流 ID 或页面链接"><input type="text" id="digitalhuman-rh-note" placeholder="备注名(可选)" style="max-width:130px"><button type="button" onclick="rhAddWf('digitalhuman')">验证并添加</button></div>
+      <div class="row"><label>运行模式</label><select id="digitalhuman-rh-inst"><option value="standard">Standard</option><option value="plus">Plus</option><option value="ultra">Ultra</option></select></div>
+      <div class="hint">RunningHub 是独立云端渠道，不使用本地 ComfyUI 地址或本地 JSON。请先在 RunningHub 工作区跑通数字人工作流，再通过工作流 ID 添加。普通导出件只要执行图中各有唯一的 <code>LoadImage</code>、<code>LoadAudio</code>，系统就会自动覆盖示例素材；也兼容 <code>{{IMAGE}}</code>/<code>{{FIRST_FRAME}}</code>、<code>{{AUDIO}}</code>/<code>{{REF_AUDIO}}</code> 等占位符。</div>
+      <div class="hint" id="digitalhuman-rh-hint-cn">国内站账号与国际站不互通；Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">runninghub.cn API 服务页</a>获取，工作流来自 <a href="https://www.runninghub.cn/workspace" target="_blank">国内站工作区</a>。</div>
+      <div class="hint" id="digitalhuman-rh-hint-ai" style="display:none">国际站账号与国内站不互通；Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">runninghub.ai API 服务页</a>获取，工作流来自 <a href="https://www.runninghub.ai/workspace" target="_blank">国际站工作区</a>。</div>
+    </div>
+    <div class="panel" id="panel-dh-comfyui">
+      <div class="row"><label>服务地址</label><input type="text" id="dh-comfy-url" placeholder="http://127.0.0.1:8188"><button onclick="testDigitalHuman('comfyui')">测试连接</button></div>
+      <div id="dh-comfy-workflow-row"></div>
+      <div class="status" id="dh-comfyui-status"></div>
+      <div class="hint">本地 ComfyUI + InfiniteTalk；使用本地服务地址和 <code>comfy/</code> 中的 API JSON，不读取 RunningHub Key 或云端工作流 ID。API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符。</div>
+    </div>
   </div>
   <div id="savebar">
     <span id="save-status">✓ 已保存</span>
@@ -320,6 +360,7 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
 const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'minimax',tts:'volcengine'};
+let DH_PROVIDER='heygen';
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);
@@ -735,7 +776,7 @@ function rhSiteUI(kind){
 }
 
 /* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
-let RH_WFS={image:[],video:[],music:[],tts:[]};
+let RH_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[]};
 
 function fillRhWfSelect(kind,id,value){
   // 收藏按站点过滤(.cn/.ai 不互通);无 site 字段的旧收藏两站均显示
@@ -758,6 +799,23 @@ async function rhAddWf(kind){
     mode,api_key:rhKey(kind),workflow:input})
     .catch(e=>({ok:false,error:e.message}));
   if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('验证失败'));return}
+  let dhBinding='';
+  if(kind==='digitalhuman'){
+    const toks=new Set(r.tokens||[]);
+    const imgs=r.active_load_images||[],auds=r.active_load_audios||[];
+    const imageToken=toks.has('IMAGE')||toks.has('FIRST_FRAME');
+    const audioToken=toks.has('AUDIO')||toks.has('REF_AUDIO');
+    if((!imageToken&&imgs.length!==1)||(!audioToken&&auds.length!==1)){
+      st.className='status err';
+      st.textContent='✗ 无法唯一定位数字人输入：在用 LoadImage '+imgs.length
+        +' 个、LoadAudio '+auds.length+' 个；请精简到各 1 个，或使用对应占位符';
+      return;
+    }
+    const auto=[];
+    if(!imageToken)auto.push('LoadImage#'+imgs[0]);
+    if(!audioToken)auto.push('LoadAudio#'+auds[0]);
+    dhBinding=auto.length?' · 自动绑定 '+auto.join(' / '):' · 使用占位符绑定';
+  }
   const note=$(`#${kind}-rh-note`).value.trim();
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
   RH_WFS[kind].push({id:r.id,note,site:mode});
@@ -766,8 +824,9 @@ async function rhAddWf(kind){
   $(`#${kind}-rh-add`).value='';$(`#${kind}-rh-note`).value='';
   st.className='status ok';
   st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
-    +(r.tokens?.length?' · '+t('占位符:')+r.tokens.join(', ')
-      :' · '+t('未检测到占位符,请在工作流节点中写入 {{PROMPT}} 等输入位后重新验证'));
+    +dhBinding+(kind==='digitalhuman'?'':(r.tokens?.length
+      ?' · '+t('占位符:')+r.tokens.join(', ')
+      :' · '+t('未检测到占位符,将按工作流结构自动绑定可识别输入')));
 }
 
 function rhRemoveWf(kind){
@@ -780,7 +839,7 @@ function rhRemoveWf(kind){
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
 /* comfy/ 目录工作流清单(按文件名前缀 image-/video-/music-/tts- 分类),初始化时拉取 */
-let COMFY_WFS={image:[],video:[],music:[],tts:[]};
+let COMFY_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[]};
 
 function wfRow(kind,id,label){
   const d=el('div',{className:'row'});
@@ -948,6 +1007,53 @@ function showPanel(kind,p){
     tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
     $(`#panel-${kind}-${x}`).classList.toggle('show',x===p);
   });
+}
+
+function showDigitalHumanPanel(provider){
+  DH_PROVIDER=provider;
+  const labels={heygen:'HeyGen',klingai:'Kling AI',runninghub:'RunningHub',comfyui:'ComfyUI'};
+  Object.keys(labels).forEach(p=>{
+    const tab=$(`#tab-dh-${p}`);
+    tab.classList.toggle('active',p===provider);
+    tab.textContent=(p===provider?'✅ ':'')+labels[p];
+    $(`#panel-dh-${p}`).classList.toggle('show',p===provider);
+  });
+}
+['heygen','klingai','runninghub','comfyui'].forEach(p=>{
+  $(`#tab-dh-${p}`).onclick=()=>showDigitalHumanPanel(p);
+});
+
+async function testDigitalHuman(provider){
+  const st=provider==='runninghub'?$('#digitalhuman-rh-status'):$(`#dh-${provider}-status`);
+  st.className='status';st.textContent=['comfyui','runninghub'].includes(provider)?'连接中…':'验证中…';
+  const body={provider};
+  if(provider==='heygen')body.api_key=$('#dh-heygen-key').value.trim();
+  if(provider==='klingai')body.api_key=$('#dh-kling-key').value.trim();
+  if(provider==='runninghub'){
+    body.mode=rhSite('digitalhuman');
+    body.api_key=rhKey('digitalhuman');
+  }
+  if(provider==='comfyui'){
+    body.url=$('#dh-comfy-url').value.trim();
+    body.workflow=pickWf('dh-comfy-workflow');
+  }
+  const r=await api('/api/v1/providers/digital-human/test',body)
+    .catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  if(!r.ok){st.textContent='✗ '+(r.error||t('验证失败'));return}
+  if(provider==='runninghub'){
+    st.textContent=I18N.f('✓ 账户 Key 有效 · 余额 {c} RH 币 · 运行中任务 {n} · 素材上传在生成时校验',
+      {c:r.remain_coins??'?',n:r.current_tasks??'?'});
+  }else if(provider==='comfyui'){
+    const missing=Object.entries(r.infinitetalk_nodes||{}).filter(([,v])=>!v).map(([k])=>k);
+    st.className='status '+(r.infinitetalk_ready&&r.workflow_exists?'ok':'err');
+    st.textContent=r.infinitetalk_ready&&r.workflow_exists
+      ?`✓ InfiniteTalk 就绪 · ${r.version}`
+      :`✗ ${!r.workflow_exists?'工作流文件不存在':('缺少节点: '+missing.join(', '))}`;
+  }else{
+    st.textContent='✓ Key 有效'+(r.region?' · '+r.region:'')
+      +(r.remaining_quota!=null?' · 余额 '+r.remaining_quota:'');
+  }
 }
 
 
@@ -1194,6 +1300,26 @@ function loadIntoForm(){
     showPanel(kind,eff);
     loadOpenRouterModels(kind);
   }
+  const dh=CFG.digital_human||{},hg=dh.heygen||{},kl=dh.klingai||{},
+    rh=dh.runninghub||{},co=dh.comfyui||{};
+  $('#dh-heygen-key').value=hg.api_key||'';
+  $('#dh-heygen-resolution').value=hg.resolution||'720p';
+  $('#dh-heygen-aspect').value=hg.aspect_ratio||'16:9';
+  $('#dh-kling-key').value=kl.api_key||'';
+  $('#dh-kling-mode').value=kl.mode||'std';
+  $('#digitalhuman-rh-site').value=RH_SITES.includes(rh.site)?rh.site:'rh_cn';
+  $('#digitalhuman-rh-key-cn').value=rh.api_key_cn||'';
+  $('#digitalhuman-rh-key-ai').value=rh.api_key_ai||'';
+  RH_WFS.digitalhuman=Array.isArray(rh.workflows)?rh.workflows.slice():[];
+  rhSiteUI('digitalhuman');
+  fillRhWfSelect('digitalhuman','digitalhuman-rh-wf',rh.workflow_id||'');
+  $('#digitalhuman-rh-inst').value=['standard','plus','ultra'].includes(rh.instance_type)
+    ?rh.instance_type:'standard';
+  $('#dh-comfy-url').value=co.url||'http://127.0.0.1:8188';
+  fillWfSelect('dh-comfy-workflow','digitalhuman',
+    co.workflow||'comfy/digitalhuman-infinitetalk-api.json');
+  showDigitalHumanPanel(['heygen','klingai','runninghub','comfyui'].includes(dh.provider)
+    ?dh.provider:'heygen');
   const da=CFG.deepagents||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
   $('#da-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
   $('#da-key').value=lo.api_key||'';
@@ -1277,6 +1403,19 @@ function collect(){
     c.provider=rhSel?'comfyui':SEL_PROVIDER[kind];
     out[kind]=c;
   }
+  out.digital_human={provider:DH_PROVIDER,
+    heygen:{api_key:$('#dh-heygen-key').value.trim(),
+      resolution:$('#dh-heygen-resolution').value,
+      aspect_ratio:$('#dh-heygen-aspect').value},
+    klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
+    runninghub:{site:rhSite('digitalhuman'),
+      api_key_cn:$('#digitalhuman-rh-key-cn').value.trim(),
+      api_key_ai:$('#digitalhuman-rh-key-ai').value.trim(),
+      workflow_id:$('#digitalhuman-rh-wf').value,
+      workflows:RH_WFS.digitalhuman||[],
+      instance_type:$('#digitalhuman-rh-inst').value||'standard'},
+    comfyui:{mode:'local',url:$('#dh-comfy-url').value.trim(),
+      workflow:pickWf('dh-comfy-workflow')}};
   // 生效渠道 = 当前选中的标签页(本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     local:{base_url:$('#da-url').value.trim(),
@@ -1321,12 +1460,14 @@ $('#save').onclick=async()=>{
 /* ---------- 初始化 ---------- */
 (async()=>{
   buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();
+  $('#dh-comfy-workflow-row').appendChild(
+    wfRow('digitalhuman','dh-comfy-workflow','InfiniteTalk 工作流'));
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),
   ]);
   CFG=cfg;
-  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[]},wfs.workflows||{});
+  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[],digitalhuman:[]},wfs.workflows||{});
   loadIntoForm();
 })();
 </script>
