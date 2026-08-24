@@ -97,7 +97,7 @@ python3 code/render_blocking_map.py --project <slug> --scene <id> --check-only
   "checklist": { "architecture_match": true, "lighting_match": true, "style_match": true, "grid_matches_layout": true }
 }
 ```
-`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**保持纯英文不随界面语言,2026-08-24 语言评估——动线标注/渲染链路 `route_en` 依赖英文词源,`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致。
+`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——render_blocking_map 渲染图上只有字母+CHAR 编号与固定英文图例,`name_en`/`desc_en`/`route_en` 均不上图,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致。
 
 ## 接受的工作指令(Work Order)
 

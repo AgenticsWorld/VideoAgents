@@ -8,7 +8,9 @@ blocking_map_landmarks_valid / scene_layout_pack_ok)。
     + 「9 宫格多角度场景图」`grid_9views.png` + 文字事实源 `layout.json`(地标归一化坐标 xy、
     九格机位语义 views[1..9]);
   - storyboard 每个生成组草案写 `blocking_map`(组内每个出场角色的 start / path / end,均引用
-    layout.json 的地标 id,可选 xy 微调;附英文动线句 `route_en`),shot-planning 定稿组时继承进
+    layout.json 的地标 id,可选 xy 微调;附动线句 `route_en`——内容语言随界面语言,
+    2026-08-24 二订:渲染图上只有字母+CHAR 编号与固定英文图例,route_en/name_en 不上图),
+    shot-planning 定稿组时继承进
     shot_list.generation_groups[].blocking_map;
   - 本脚本把标注画到 layout_top.png 上,产出 `directing/epNN/blocking_maps/<group_id>.png`
     (storyboard 草案期 `--source storyboard` 写 `blocking_maps/draft/<scene_no>_g<NN>.png`),
@@ -86,7 +88,7 @@ def load_layout(proj_root: Path, sid: str):
                 and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in xy)):
             errs.append(f"{sid}: landmark {lid} 的 xy 须为 [0..1, 0..1] 归一化坐标,得到 {xy!r}")
         if not lm.get("name_en"):
-            errs.append(f"{sid}: landmark {lid} 缺 name_en(prompt 地标英文词)")
+            errs.append(f"{sid}: landmark {lid} 缺 name_en(prompt 地标词唯一词源;语言随界面语言,2026-08-24 二订)")
     if len(ids) < 3:
         errs.append(f"{sid}: landmarks 少于 3 个({len(ids)}),无法定位人物站位")
     tiles = sorted(v.get("tile") for v in (lay.get("views") or []) if isinstance(v, dict))
@@ -161,11 +163,10 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict):
             errs.append(f"{gid}/{cid}: 有 path 但无 end(有动线必须写终点)")
         route_en = ch.get("route_en")
         if not route_en or not isinstance(route_en, str):
-            errs.append(f"{gid}/{cid}: 缺 route_en(英文动线句,prompt 逐字注入)")
-        elif not route_en.isascii():
-            errs.append(f"{gid}/{cid}: route_en 须为纯英文 —— {route_en!r}")
-        elif len(route_en.split()) > 40:
-            warns.append(f"{gid}/{cid}: route_en 超 40 词({len(route_en.split())}),建议精简")
+            errs.append(f"{gid}/{cid}: 缺 route_en(动线句,prompt 逐字注入;语言随界面语言)")
+        # 纯英文校验已取消(2026-08-24 二订):route_en 不上渲染图,内容语言随界面语言
+        elif (len(route_en.split()) > 40) if route_en.isascii() else (len(route_en) > 60):
+            warns.append(f"{gid}/{cid}: route_en 过长(限 ≤40 英文词或 ≤60 字),建议精简")
         routes.append((cid, ch.get("label") or cid, start, path, end))
     if chars_union is not None:
         a, b = set(seen), set(chars_union)

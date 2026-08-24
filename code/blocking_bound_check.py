@@ -4,7 +4,8 @@
 规则(WORKFLOW §7A / prompt SOUL 空间站位注入,2026-07-23):
   - blocking.json 每个入画角色带 `space_fragment_en`(站位片段:场景地标关系
     + 屏侧方位 + 朝向,由 blocking agent 产出;内容语言随界面语言,2026-08-24,
-    句内地标词保持英文——本脚本仅做逐字比对,语言无关);
+    句内地标词逐字取 layout.json name_en、其语言亦随界面语言(2026-08-24 二订)
+    ——本脚本仅做逐字比对,语言无关);
   - prompt agent 写组级 video_prompt 时,该镜对应 Shot 段必须**逐字**包含该镜每个
     入画角色的 space_fragment_en(比对忽略大小写与连续空白,其余一字不差)——
     严禁自行改写站位散文,自由翻译就是空间漂移入口(前科:ep01 grp007→grp008
