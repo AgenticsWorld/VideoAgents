@@ -659,8 +659,11 @@ DEFAULT_GENCONFIG = {
     # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退文件托管
     # TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
     # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
-    # 上传时自动创建的素材组,记录后复用
-    "avatar_assets": {"enabled": False, "access_key": "", "secret_key": "",
+    # 上传时自动创建的素材组,记录后复用。auto_manage=全自动管理:开启且视频模型为
+    # 火山引擎时,每集 video-generation 工单开跑前自动清空资产库(规避素材数量上限)
+    # 并把该集组 prompt 引用的人物概念图入库、等审核 Active 后开跑(见 execute_run 钩子)
+    "avatar_assets": {"enabled": False, "auto_manage": False,
+                      "access_key": "", "secret_key": "",
                       "project_name": "default", "group_id": "",
                       "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
@@ -2409,6 +2412,11 @@ async def execute_run(run: dict, message: str, model: str | None):
         run["status"] = "running"
         run["started"] = time.time()
         publish_run(run)
+
+        # 虚拟人像资产库「全自动管理」:视频生成工单开跑前自动清库+本集人物图入库
+        # (仅火山引擎视频渠道;函数内部自带条件判定与兜底,失败不阻断)
+        if agent_id == AVATAR_AUTO_AGENT:
+            await avatar_auto_manage_for_run(run, message)
 
         engine = run.get("engine", "claude")
         cli_executable = None
@@ -5325,6 +5333,155 @@ async def api_avatar_delete(body: dict):
     if stale:
         _avatar_ledger_save(led)
     return {"deleted": aid}
+
+
+# ---- 全自动管理(avatar_assets.auto_manage):video-generation 工单开跑前自动整备 ----
+# 触发条件:资产库已启用 + 全自动管理开启 + 该 agent 生效视频渠道为火山引擎。
+# 动作:同一 (项目, 集) 首次开跑先清空资产库(方舟素材数量有限额),再把该集组级
+# prompt refs 引用的人物概念图(assets/concepts/characters/)逐张入库,等待审核
+# Active(genmedia 提交时按台账 sha256 自动改 asset://<id>);后续同集重跑幂等跳过。
+AVATAR_AUTO_AGENT = "08-video-gen/video-generation"
+_AVATAR_AUTO_LOCK = asyncio.Lock()          # 并发 video-generation 工单串行整备
+_AVATAR_AUTO_WAIT_S = 600                   # 等待审核 Active 的上限(超时告警放行)
+
+
+def _avatar_auto_enabled(agent_id: str) -> bool:
+    """全自动管理是否对该 agent 生效:开关都开 + 生效视频渠道为火山引擎
+    (「每 Agent 模型配置」的视频渠道覆盖优先,空则按全局,与 genmedia 同口径)。"""
+    cfg = load_genconfig()
+    av = cfg.get("avatar_assets") or {}
+    if not (av.get("enabled") and av.get("auto_manage")):
+        return False
+    prov = (str(agent_model_config(agent_id).get("video_provider") or "")
+            or str((cfg.get("video") or {}).get("provider") or "volcengine"))
+    return prov == "volcengine"
+
+
+def _avatar_episode_char_refs(project: str, eps: list[str]) -> list[str]:
+    """该集(们)组级 prompt refs 中引用的人物概念图(项目内相对路径,去重,仅存在的
+    文件)。人物参考图口径 = assets/concepts/characters/ 下的图(引用化后组 refs 一律
+    写实体图原路径;存量副本式锚点包的包内副本与原图逐字节一致,sha256 台账同样命中)。"""
+    base = _proj_base(project)
+    out: list[str] = []
+    seen: set[str] = set()
+    for ep in eps:
+        for f in sorted((base / "assets" / "prompts" / ep).glob("grp*.json")):
+            try:
+                refs = json.loads(f.read_text()).get("refs") or []
+            except Exception:
+                continue
+            for r in refs:
+                r = str(r).strip().lstrip("/")
+                pfx = f"data/projects/{base.name}/"
+                if r.startswith(pfx):
+                    r = r[len(pfx):]
+                if not r.startswith("assets/concepts/characters/") or r in seen:
+                    continue
+                seen.add(r)
+                if (base / r).is_file():
+                    out.append(r)
+    return out
+
+
+async def _avatar_clear_all() -> int:
+    """清空虚拟人像库全部素材(逐页 ListAssets + 逐个 DeleteAsset),返回删除数;
+    单条删除失败跳过,整页无一删成即停(防不可删素材导致死循环)。台账 assets 同步清空。"""
+    cfg = _avatar_cfg()
+    deleted = 0
+    for _ in range(50):
+        res = await asyncio.to_thread(
+            _avatar_call, "ListAssets",
+            {"Filter": {"GroupType": "AIGC"}, "PageNumber": 1, "PageSize": 100})
+        items = [it for it in (res.get("Items") or []) if it.get("Id")]
+        if not items:
+            break
+        ok = 0
+        for it in items:
+            try:
+                await asyncio.to_thread(
+                    _avatar_call, "DeleteAsset",
+                    {"Id": it["Id"],
+                     "ProjectName": cfg.get("project_name") or "default"})
+                ok += 1
+            except ServiceError:
+                pass
+        deleted += ok
+        if not ok:
+            break
+    led = _avatar_ledger()
+    if led["assets"]:
+        led["assets"] = {}
+        _avatar_ledger_save(led)
+    return deleted
+
+
+async def avatar_auto_manage_for_run(run: dict, message: str):
+    """「虚拟人像资产库 → 全自动管理」钩子(execute_run 在 video-generation 工单
+    开跑前调用):清空资产库 → 本集人物概念图入库 → 等审核 Active。任何失败只在
+    运行进度条告警,不阻断工单(genmedia 对未入库图照旧走 URL/base64 提交)。"""
+    if run["agent"] != AVATAR_AUTO_AGENT or not _avatar_auto_enabled(run["agent"]):
+        return
+
+    def note(txt: str):
+        run["progress"] = txt[:300]
+        publish_run(run)
+
+    project = run["project"]
+    eps, seen = [], set()
+    for n in re.findall(r"\bep(\d{1,3})\b", message or "", re.I):
+        ep = f"ep{int(n):02d}"
+        if ep not in seen:
+            seen.add(ep)
+            eps.append(ep)
+    try:
+        async with _AVATAR_AUTO_LOCK:
+            if not eps:
+                note("⚠️ 虚拟人像库全自动管理:工单未标明集号(epNN),跳过整备")
+                return
+            refs = await asyncio.to_thread(_avatar_episode_char_refs, project, eps)
+            if not refs:
+                note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
+                return
+            epkey = f"{project}|{','.join(eps)}"
+            led = _avatar_ledger()
+            if (led.get("auto_manage") or {}).get("key") != epkey:
+                note(f"🧹 虚拟人像库全自动管理:清空资产库(为 {'/'.join(eps)} 腾额度)…")
+                n = await _avatar_clear_all()
+                led = _avatar_ledger()
+                led["auto_manage"] = {"key": epkey, "cleared": n,
+                                      "at": int(time.time())}
+                _avatar_ledger_save(led)
+            failed: list[str] = []
+            for i, ref in enumerate(refs):
+                note(f"⬆ 虚拟人像库全自动管理:人物图入库 {i + 1}/{len(refs)} {Path(ref).name}")
+                try:
+                    await api_avatar_upload({"project": project, "ref": ref})
+                except ServiceError as e:
+                    failed.append(f"{Path(ref).name}: {e.detail}")
+            deadline = time.time() + _AVATAR_AUTO_WAIT_S
+            pending = list(refs)
+            while pending and time.time() < deadline:
+                st = (await api_avatar_status({"project": project,
+                                               "refs": refs})).get("status") or {}
+                pending = [r for r in refs
+                           if (st.get(r) or {}).get("status") == "Processing"]
+                if not pending:
+                    break
+                note(f"⏳ 虚拟人像库全自动管理:等待审核 "
+                     f"{len(refs) - len(pending)}/{len(refs)}(剩 {int(deadline - time.time())}s)…")
+                await asyncio.sleep(5)
+            tail = ""
+            if failed:
+                tail += f";{len(failed)} 张入库失败({failed[0]})"
+            if pending:
+                tail += f";{len(pending)} 张审核超时仍 Processing,将按原图提交"
+            if tail:            # 有告警才留在进度行(挂整个运行期间提醒用户)
+                note(f"⚠️ 虚拟人像库整备完成:{'/'.join(eps)} 人物图 {len(refs)} 张{tail}")
+            else:               # 顺利完成:清进度行,不在后续视频生成全程挂陈旧提示
+                run.pop("progress", None)
+                publish_run(run)
+    except Exception as e:  # noqa: BLE001  失败不阻断视频生成
+        note(f"⚠️ 虚拟人像库全自动管理失败(不阻断工单):{e}")
 
 
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------

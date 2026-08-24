@@ -1375,6 +1375,8 @@ window.I18N_DICT = {
 "🔑 密钥与开关": "🔑 Khóa & công tắc",
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Nếu để trống Access Key / Secret Key, hệ thống tự dùng AK/SK đã cấu hình ở ⚙️ Cài đặt → Lưu trữ tệp → Volcano TOS (hoặc biến môi trường TOS_ACCESS_KEY/TOS_SECRET_KEY).",
 "default(须与视频生成 API Key 所属项目一致)": "default (phải trùng dự án của API Key tạo video)",
+"全自动管理": "Quản lý hoàn toàn tự động",
+"开启后:视频模型为火山引擎时,每集视频生成开跑前自动清空资产库(规避素材数量上限),并把该集用到的人物概念图重新入库、等审核通过后开跑": "Khi bật và mô hình video là Volcano Engine, trước khi bắt đầu tạo video mỗi tập, thư viện sẽ được dọn sạch tự động (tránh giới hạn số lượng tài sản) và các ảnh concept nhân vật dùng trong tập đó được đăng ký lại; việc tạo video bắt đầu sau khi duyệt xong",
 "✓ 已启用": "✓ Đã bật",
 "✓ 已停用": "✓ Đã tắt",
 "启用失败:": "Bật thất bại: ",

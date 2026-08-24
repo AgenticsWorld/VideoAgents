@@ -1375,6 +1375,8 @@ window.I18N_DICT = {
 "🔑 密钥与开关": "🔑 Schlüssel & Schalter",
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Bleiben Access Key / Secret Key leer, werden automatisch die unter ⚙️ Einstellungen → Datei-Hosting → Volcano TOS konfigurierten AK/SK (oder die Umgebungsvariablen TOS_ACCESS_KEY/TOS_SECRET_KEY) verwendet.",
 "default(须与视频生成 API Key 所属项目一致)": "default (muss zum Projekt des Videogenerierungs-API-Keys passen)",
+"全自动管理": "Vollautomatische Verwaltung",
+"开启后:视频模型为火山引擎时,每集视频生成开跑前自动清空资产库(规避素材数量上限),并把该集用到的人物概念图重新入库、等审核通过后开跑": "Wenn aktiviert und das Videomodell Volcano Engine ist, wird vor dem Start der Videogenerierung jeder Episode die Bibliothek automatisch geleert (um das Asset-Limit zu umgehen) und die in dieser Episode verwendeten Charakter-Konzeptbilder werden neu registriert; die Generierung startet nach bestandener Prüfung",
 "✓ 已启用": "✓ Aktiviert",
 "✓ 已停用": "✓ Deaktiviert",
 "启用失败:": "Aktivierung fehlgeschlagen: ",
