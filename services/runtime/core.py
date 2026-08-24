@@ -986,6 +986,28 @@ def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> b
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
+DESKTOP_OPENROUTER_WRAPPERS = {
+    "https://api.agentics.world/wrapper/openrouter",
+    "https://wrapper.shumati.cn/wrapper/openrouter",
+}
+
+
+def resolve_openrouter_connection(api_key: str = "") -> dict:
+    """Resolve a user-owned OpenRouter key before the desktop account wrapper.
+
+    Browser deployments never receive the desktop JWT variables and therefore
+    retain the historical direct-OpenRouter behavior.
+    """
+    configured = str(api_key or os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if configured:
+        return {"base_url": DEEPAGENTS_OPENROUTER_URL,
+                "api_key": configured, "uses_wrapper": False}
+    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
+    wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+    if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
+        return {"base_url": wrapper, "api_key": jwt, "uses_wrapper": True}
+    return {"base_url": DEEPAGENTS_OPENROUTER_URL,
+            "api_key": "", "uses_wrapper": False}
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
@@ -993,9 +1015,9 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
     da = (cfg or load_genconfig()).get("deepagents") or {}
     if (da.get("provider") or "local") == "openrouter":
         o = da.get("openrouter") or {}
-        return {"provider": "openrouter", "base_url": DEEPAGENTS_OPENROUTER_URL,
-                "api_key": o.get("api_key") or "",
-                "model": o.get("model") or o.get("custom_model") or ""}
+        connection = resolve_openrouter_connection(o.get("api_key") or "")
+        return {"provider": "openrouter", **connection,
+                "model": o.get("custom_model") or o.get("model") or ""}
     if (da.get("provider") or "local") == "cloud":
         c = da.get("cloud") or {}
         return {"provider": "cloud",
@@ -5299,12 +5321,13 @@ async def api_minimax_voices(body: dict):
 
 async def api_test_openrouter(body: dict):
     """验证 OpenRouter API Key(GET /api/v1/key)。"""
-    key = (body.get("api_key") or "").strip()
+    connection = resolve_openrouter_connection(body.get("api_key") or "")
+    key = connection["api_key"]
     if not key:
         raise ServiceError(400, "api_key must not be empty")
     try:
         data = await asyncio.to_thread(
-            _http_get_json, "https://openrouter.ai/api/v1/key",
+            _http_get_json, connection["base_url"] + "/key",
             {"Authorization": f"Bearer {key}"})
         d = data.get("data") or {}
         return {"ok": True, "label": d.get("label"),

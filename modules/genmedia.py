@@ -150,6 +150,11 @@ CONFIG_PATH = Path(os.environ.get(
 ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
             "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY",
             "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY"}
+OPENROUTER_DIRECT_BASE = "https://openrouter.ai/api/v1"
+DESKTOP_OPENROUTER_WRAPPERS = {
+    "https://api.agentics.world/wrapper/openrouter",
+    "https://wrapper.shumati.cn/wrapper/openrouter",
+}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -221,6 +226,18 @@ def _agent_provider_override(kind: str) -> str:
         return ""
 
 
+def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
+    """Prefer an explicit user key; otherwise use the signed-in desktop wrapper."""
+    configured = str(api_key or os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if configured:
+        return OPENROUTER_DIRECT_BASE, configured, False
+    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
+    wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+    if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
+        return wrapper, jwt, True
+    return OPENROUTER_DIRECT_BASE, "", False
+
+
 def get_config(kind: str) -> dict:
     """读取 kind(image|video)的生效渠道配置,返回 {provider, model, ...}。"""
     if not CONFIG_PATH.is_file():
@@ -251,7 +268,13 @@ def get_config(kind: str) -> dict:
         # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
         pc["api_key"] = _minimax_key(pc)
     if provider != "comfyui":
-        pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS[provider], "")
+        if provider == "openrouter":
+            base_url, key, uses_wrapper = _openrouter_connection(pc.get("api_key") or "")
+            pc["api_key"] = key
+            pc["_base_url"] = base_url
+            pc["_uses_wrapper"] = uses_wrapper
+        else:
+            pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS[provider], "")
         if not pc["api_key"]:
             raise RuntimeError(f"{kind} 渠道 {provider} 未配置 API Key(Web 控制台填入,或设环境变量 {ENV_KEYS[provider]})")
         pc["model"] = pc.get("custom_model") or pc.get("model") or ""
@@ -449,7 +472,7 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
     body = {"model": cfg["model"],
             "messages": [{"role": "user", "content": content}],
             "modalities": ["image", "text"]}
-    resp = _post_json("https://openrouter.ai/api/v1/chat/completions", body,
+    resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions", body,
                       {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=300)
     msg = (resp.get("choices") or [{}])[0].get("message") or {}
     images = msg.get("images") or []
@@ -2037,6 +2060,7 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
 
 def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, seed, output):
     headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    base = cfg.get("_base_url") or OPENROUTER_DIRECT_BASE
     body = {"model": cfg["model"], "prompt": prompt}
     if duration:
         body["duration"] = duration
@@ -2053,17 +2077,18 @@ def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, se
                            "image_url": {"url": _file_to_data_url(path)}})
     if frames:
         body["frame_images"] = frames
-    job = _post_json("https://openrouter.ai/api/v1/videos", body, headers)
+    job = _post_json(base + "/videos", body, headers)
     jid, poll = job.get("id"), job.get("polling_url")
     if not jid:
         raise RuntimeError(f"OpenRouter 视频任务创建失败:{json.dumps(job)[:400]}")
     deadline = time.time() + VIDEO_TIMEOUT
     while time.time() < deadline:
         time.sleep(VIDEO_POLL_INTERVAL)
-        st = _get_json(poll or f"https://openrouter.ai/api/v1/videos/{jid}", headers)
+        st = _get_json((None if cfg.get("_uses_wrapper") else poll)
+                       or f"{base}/videos/{jid}", headers)
         status = st.get("status")
         if status == "completed":
-            data = _request(f"https://openrouter.ai/api/v1/videos/{jid}/content?index=0",
+            data = _request(f"{base}/videos/{jid}/content?index=0",
                             headers=headers, timeout=600)
             return _save(data, output)
         if status == "failed":
@@ -3035,7 +3060,7 @@ def _music_openrouter(cfg, prompt, output):
             "audio": {"voice": "alloy", "format": fmt},
             "stream": True}
     req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
+        (cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions",
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json",
                  "Authorization": f"Bearer {cfg['api_key']}"})
@@ -3168,7 +3193,7 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
         body["speed"] = speed
     if instructions:
         body["provider"] = {"options": {"openai": {"instructions": instructions}}}
-    data = _request("https://openrouter.ai/api/v1/audio/speech",
+    data = _request((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/audio/speech",
                     json.dumps(body).encode(),
                     {"Content-Type": "application/json",
                      "Authorization": f"Bearer {cfg['api_key']}"},

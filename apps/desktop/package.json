@@ -25,6 +25,14 @@
   "build": {
     "appId": "world.agentics.videoagents",
     "productName": "VideoAgents",
+    "protocols": [
+      {
+        "name": "VideoAgents Login",
+        "schemes": [
+          "videoagents"
+        ]
+      }
+    ],
     "directories": {
       "output": "release"
     },
