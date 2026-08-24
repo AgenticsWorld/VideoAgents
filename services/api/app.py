@@ -58,6 +58,16 @@ async def lifespan(_: FastAPI):
     if not _bridge_installed:
         install_runtime_store(STORE)
         _bridge_installed = True
+    # 旧版升级一次性迁移:顶栏「语言模型」默认智能分配,按当前引擎完成各 Agent 设置
+    try:
+        core.migrate_agentmodel_smart_default()
+    except Exception as error:  # noqa: BLE001
+        print(f"[migrate] 智能分配默认策略迁移失败(忽略):{error}", flush=True)
+    # 旧版升级一次性迁移:≤v1.0.20 的对话记忆布尔开关统一重置为缺省额度 16KB
+    try:
+        core.migrate_agent_memory_default()
+    except Exception as error:  # noqa: BLE001
+        print(f"[migrate] 对话记忆缺省额度迁移失败(忽略):{error}", flush=True)
     # 服务停机期间 DAG 可能被外部 Agent 更新；启动即补核对一次，不依赖自动运行开关。
     # ensure 只创建持久签字单，不会把人工 gate 自动置为 passed。
     for project_dir in sorted(core.PROJECTS_DIR.iterdir()):
@@ -585,6 +595,11 @@ async def sketchgen_status(project: str = "", ep: str = "", grp: str = "") -> di
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
+
+
+@api.post("/storyboard/prompt", tags=["storyboard"])
+async def storyboard_prompt(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpprompt_set(body)
 
 
 @api.post("/storyboard/refs", tags=["storyboard"])

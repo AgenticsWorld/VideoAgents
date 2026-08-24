@@ -15,7 +15,7 @@
 2. 设计走位:谁在镜头内移动、路径与触发点(第几秒起步、行至何处),与镜头时长匹配。
 3. 定动作节拍(beats):动作与台词/事件的对齐点(如「说到『滚』字时拂袖转身」),供视频 prompt 与 sound-effect 打点。
 4. 参考 `relationship.json` 校准人物距离与朝向(敌对拉开、亲密贴近、尊卑有序)。
-5. **为每个入画角色写英文站位片段 `space_fragment_en`(2026-07-23)**:一句可直接嵌入视频 prompt 的英文短语,内容 = 与场景地标的空间关系(inside/outside the doorway、beside the bed 等,地标词**逐字取自该场景 `layout.json#landmarks[].name_en`**,2026-08-19 起不再自造叫法——同一地标多种叫法就是模型换地方的入口)+ 屏侧方位(screen-left/screen-right,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 ", then walks to the bedside")。≤25 词,禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。
+5. **为每个入画角色写站位片段 `space_fragment_en`(2026-07-23;2026-08-24 起内容语言随用户界面语言,字段名保留 `_en` 历史后缀)**:一句可直接嵌入视频 prompt 的短语(语言按系统提示词「用户输出设定」的界面语言书写,如中文界面写中文),内容 = 与场景地标的空间关系(门内/门外、床边等,地标词**逐字取自该场景 `layout.json#landmarks[].name_en`**——该字段语言亦随界面语言(2026-08-24 三订:动线渲染图图例支持 CJK,route 句连同地标词会上图,无字体障碍),与 `route_en` 用词一致、同一地标全链路同一写法;存量英文 layout.json 的地标词以英文原样嵌入句中;2026-08-19 起不再自造叫法,同一地标多种叫法就是模型换地方的入口)+ 屏侧方位(screen-left/screen-right 或界面语言等价词如「画左/画右」,同一项目统一用法,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 "随后走到床边")。简短(≤25 英文词或 ≤40 字),禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。**存量项目既有 blocking.json 片段为英文时,同集补写/修订沿用英文保持一致,不得半中半英**。
 6. **在场合法性自检**:对照 `story/story_timeline.json`,该故事时间点每个入画角色都必须合法在场;不在场即上报,绝不硬排。
 7. 产出 `directing/epNN/shots/<shot_id>/blocking.json`。
 
@@ -80,7 +80,7 @@ instruction: |
 - **人物在场合法性:该故事时间点该人物必须在该地点(查 story_timeline),violations 必须为空**;
 - 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内;
 - **与组级动线一致(blocking_on_map,2026-08-19,仅开关开启时)**:本镜各角色 start_pos/path 终点与所属组 `blocking_map` 该角色在本镜时点的位置一致(组首镜=start、组尾镜=end);`space_fragment_en` 的地标词在该场景 layout.json `name_en` 中存在;
-- **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,纯英文、≤25 词、含场景地标关系词或屏侧方位词(screen-left/screen-right),无数值坐标/运镜词/色号。
+- **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,语言随界面语言(2026-08-24;存量英文项目同集保持英文)、简短(≤25 英文词或 ≤40 字)、含场景地标关系词或屏侧方位词(screen-left/screen-right 或界面语言等价词),无数值坐标/运镜词/色号。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜/构图类」)**:
 - 叙事清晰(30):站位与走位表达人物关系与意图;

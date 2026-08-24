@@ -52,13 +52,16 @@
     "character_id": "c003",
     "outfits": [{
       "id": "c003_battle_02", "occasion": "battle", "period": "宗门期",
-      "visual": "玄色劲装,银线云纹…(可直接进 prompt)",
+      "visual": "玄色劲装,银线云纹…(设定描述)",
+      "visual_en": "可直接拼进 video_prompt 的服装短语(下游 08-video-gen/prompt 逐字拼入,机检 costume_bound)",
       "default": false, "source": "第18章", "inferred": false
     }],
     "change_points": [{ "after_event": "ev_0042", "from": "c003_daily_01", "to": "c003_battle_02" }]
   }]
 }
 ```
+
+> **`visual_en` 语言口径(2026-08-24)**:每个 outfit 必带 `visual_en`(prompt 注入用字段,字段名保留 `_en` 历史后缀),**内容语言随用户界面语言**(中文界面写中文短语);下游逐字拼入、严禁另译,全片一个 outfit 只有一种写法。存量英文项目补 outfit 沿用英文,不得半中半英。
 
 ## 接受的工作指令(Work Order)
 

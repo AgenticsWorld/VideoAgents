@@ -323,7 +323,8 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
 def agent_memory_kb() -> int:
     """Agent 对话记忆额度(KB,0=关闭,上限 AGENT_MEMORY_KB_MAX,越界钳制;
     设置菜单「高级→Agent 高级设置」滑块)。兼容旧布尔开关 agent_memory:
-    未设过额度时 False→0,True/缺省→缺省额度。"""
+    未设过额度时 False→0,True/缺省→缺省额度(启动时 migrate_agent_memory_default
+    会把旧版升级的存量安装统一重置为缺省额度,此分支仅在迁移前兜底)。"""
     v = STATE.get("agent_memory_kb")
     if v is None:
         return AGENT_MEMORY_KB_DEFAULT if STATE.get("agent_memory", True) else 0
@@ -658,12 +659,15 @@ DEFAULT_GENCONFIG = {
     # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退文件托管
     # TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
     # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
-    # 上传时自动创建的素材组,记录后复用
-    "avatar_assets": {"enabled": False, "access_key": "", "secret_key": "",
+    # 上传时自动创建的素材组,记录后复用。auto_manage=全自动管理:开启且视频模型为
+    # 火山引擎时,每集 video-generation 工单开跑前自动清空资产库(规避素材数量上限)
+    # 并把该集组 prompt 引用的人物概念图入库、等审核 Active 后开跑(见 execute_run 钩子)
+    "avatar_assets": {"enabled": False, "auto_manage": False,
+                      "access_key": "", "secret_key": "",
                       "project_name": "default", "group_id": "",
                       "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
-    "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
+    "duration": {"episode_minutes": 10, "shot_min_s": 2, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
@@ -671,9 +675,9 @@ DEFAULT_GENCONFIG = {
     # 模型侧硬限另由 genmedia 按 model id 强制校验
     "shot_group": {"max_group_s": 15, "max_ref_images": 9,
                    "max_ref_videos": 3, "max_ref_audios": 3},
-    # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
-    # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
-    "agentmodel_mode": "global",
+    # Agent 语言模型分配策略(顶栏「语言模型」下拉驱动:选「智能分配」→ smart_<引擎>,
+    # 选具体模型→ global 跟随顶栏):初始化默认智能分配(顶栏默认引擎 claude)
+    "agentmodel_mode": "smart_claude",
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
@@ -1016,12 +1020,12 @@ def load_project_settings(project: str) -> dict:
 
 def _validate_duration(d: dict):
     try:
-        ep = float(d.get("episode_minutes", 10))
-        mn = float(d.get("shot_min_s", 4))
+        ep = d.get("episode_minutes", 10)   # 数值 或 "auto"(每集时长由剧本结构自动决定)
+        mn = float(d.get("shot_min_s", 2))
         mx = float(d.get("shot_max_s", 8))
-        assert ep > 0 and 0 < mn <= mx
+        assert (ep == "auto" or float(ep) > 0) and 0 < mn <= mx
     except (TypeError, ValueError, AssertionError):
-        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0; shot duration must satisfy 0 < min <= max") from None
+        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max") from None
 
 
 def _validate_shot_group(g: dict):
@@ -1099,14 +1103,18 @@ def _validate_review(r: dict):
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
-# 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
-# 切换任一策略都会同时清空 agentmodels.json 里全部 Agent 级单独配置。
-#   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
-#   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
+# 「模型策略」(genconfig.agentmodel_mode,由顶栏「语言模型」下拉驱动:选「智能分配」
+# → smart_<引擎>,选具体模型→ global;deepagents 无智能分配,始终 global):
+# 每次切换引擎/语言模型都会同时清空 agentmodels.json 里全部 Agent 级单独配置,
+# 避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
+#   global       全部 Agent 跟随顶栏全局设置
+#   smart_claude 按任务复杂度自动选 claude 模型(high→opus 最新版 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
+#   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-5.6-sol low→openai-codex/gpt-5.6-terra)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
-AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_deepseek")
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
+            "smart_deepseek")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -1135,12 +1143,16 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "15-audio-video/visual-scripter": "high",           # 逐段画面设计 = 创作核心
 }
 AM_MODE_MODELS = {
-    "smart_claude": {"high": {"engine": "claude", "model": "claude-opus-5"},
+    # opus 不锁版本号:CLI 侧别名始终指向最新 opus
+    "smart_claude": {"high": {"engine": "claude", "model": "opus"},
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
+    # pi 引擎经 openai-codex 渠道调用(模型 id 为 pi --list-models 的 provider/model)
+    "smart_pi": {"high": {"engine": "pi", "model": "openai-codex/gpt-5.6-sol"},
+                 "low": {"engine": "pi", "model": "openai-codex/gpt-5.6-terra"}},
     # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
     # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
@@ -1204,6 +1216,43 @@ def agent_effective_model(agent_id: str) -> dict:
     return {"engine": gp["engine"] or "claude", "model": gp["model"]}
 
 
+# 各引擎对应的智能分配策略(deepagents 无智能分配,不在表内→global)
+SMART_MODE_BY_ENGINE = {"claude": "smart_claude", "codex": "smart_codex",
+                        "kimi": "smart_kimi", "pi": "smart_pi",
+                        "opencode": "smart_deepseek"}
+
+
+def migrate_agent_memory_default():
+    """对话记忆额度的一次性迁移(启动时调用):旧版(≤v1.0.20,记忆还是布尔开关,
+    state.json 无 agent_memory_kb 键)升级上来的存量安装,不论旧开关开/关,
+    统一重置为缺省额度 AGENT_MEMORY_KB_DEFAULT 并移除旧布尔键;
+    滑块设过值(键已存在)的安装不受影响。"""
+    if "agent_memory_kb" in STATE:
+        return
+    STATE["agent_memory_kb"] = AGENT_MEMORY_KB_DEFAULT
+    STATE.pop("agent_memory", None)
+    save_state(STATE)
+
+
+def migrate_agentmodel_smart_default():
+    """顶栏「语言模型」默认智能分配的一次性迁移(启动时调用):
+    旧版(≤v1.0.21,「模型策略」还是设置菜单子菜单)升级上来的存量安装,
+    按当前全局引擎自动切到对应智能分配(deepagents→跟随全局),并清空全部
+    Agent 级单独配置,让各 Agent 立即按新策略生效;此后策略只随顶栏切换变化。"""
+    if STATE.get("am_smart_migrated"):
+        return
+    eng = str((STATE.get("global_model") or {}).get("engine")
+              or (STATE.get("ui_prefs") or {}).get("engine") or "claude").lower()
+    mode = SMART_MODE_BY_ENGINE.get(eng, "global")
+    cfg = load_genconfig()
+    if cfg.get("agentmodel_mode") != mode:
+        cfg["agentmodel_mode"] = mode
+        save_genconfig(cfg)
+    atomic_write_json(AGENTMODELS_PATH, {})     # 覆盖旧版遗留的 Agent 级手动配置
+    STATE["am_smart_migrated"] = True
+    save_state(STATE)
+
+
 # macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
 # 本机服务(ComfyUI/LM Studio)强制直连,外网 URL 维持默认代理行为。
 _DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -1238,12 +1287,14 @@ _OPENROUTER_TTL = 600
 
 
 # ---------------- 引擎会话用量探测(watchdog 阈值门控 + 资源消耗面板,参考 CodexBar) ----------------
+# 显示规则:设置里手动开启的引擎始终显示;未手动开启的随顶栏当前引擎自动显示
+# (USAGE_AUTO_BY_ENGINE:pi 计入 codex,deepagents 无)。
 # codex:本地 ~/.codex/sessions/**/*.jsonl 会记录 rate_limits(primary=5h 窗口,secondary=周窗口)。
 # claude:本地无用量文件,走 OAuth 探针 GET /api/oauth/usage 取 five_hour/seven_day.utilization;
 #   token 读取顺序 env CLAUDE_CODE_OAUTH_TOKEN → macOS Keychain → ~/.claude/.credentials.json,
 #   探测失败/token 过期一律返回 None(未知即放行,不冻结流水线)。
-# kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配),
-#   usage=周配额,limits[](300min 窗口)=5h 会话配额。
+# kimi:官方用量接口 GET api.kimi.com/coding/v1/usages(Key 在 ⚙️ 资源消耗 设置里配,
+#   留空自动读本机 kimi CLI 登录凭证),usage=周配额,limits[](300min 窗口)=5h 会话配额。
 # opencode:OpenCode Go 订阅用量 GET opencode.ai/zen/go/v1/usage(额度按美元计,
 #   5 小时/周/月三窗口,面板取 5h→Session、周→Weekly);Key 在设置里配,留空自动读
 #   本机 opencode 登录凭证 auth.json。
@@ -1397,20 +1448,41 @@ def _claude_version() -> str:
     return _CLAUDE_VERSION
 
 
-def claude_probe_enabled() -> bool:
-    """Claude 用量探针开关:env VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 或 ⚙️ 资源消耗 设置。"""
+# 顶栏当前引擎自动开启的用量检查(手动开关之外的自动显示):pi→codex,因 pi 通常
+# 配 ChatGPT(openai-codex)订阅渠道,消耗的正是 Codex 配额;deepagents 无用量口径。
+USAGE_AUTO_BY_ENGINE = {"claude": "claude", "codex": "codex", "kimi": "kimi",
+                        "opencode": "opencode", "pi": "codex"}
+
+
+def usage_auto_engine() -> str | None:
+    """随顶栏全局引擎自动显示用量的目标引擎。生效规则:设置里手动开启的始终显示;
+    未手动开启的按当前引擎是否选中自动显示(*_probe_enabled = 手动 or 自动)。"""
+    return USAGE_AUTO_BY_ENGINE.get(global_model_pref()["engine"])
+
+
+def claude_probe_manual() -> bool:
+    """Claude 用量探针手动开关:env VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE 或
+    ⚙️ 资源消耗 设置(设置弹窗回显用,不含随引擎的自动开启)。"""
     return CLAUDE_USAGE_PROBE_ENABLED or bool(resource_cfg().get("claude_probe"))
 
 
+def claude_probe_enabled() -> bool:
+    return claude_probe_manual() or usage_auto_engine() == "claude"
+
+
+def codex_probe_manual() -> bool:
+    """Codex 用量检查手动开关(⚙️ 资源消耗 设置);默认关闭,不为未用 Codex 的
+    用户白扫 sessions 目录——顶栏选中 codex/pi 时另行自动开启。"""
+    return bool(resource_cfg().get("codex_probe"))
+
+
 def codex_probe_enabled() -> bool:
-    """Codex 用量检查开关(⚙️ 资源消耗 设置);历史无此键时默认开启(保持旧行为)。"""
-    v = resource_cfg().get("codex_probe")
-    return True if v is None else bool(v)
+    return codex_probe_manual() or usage_auto_engine() == "codex"
 
 
-def kimi_probe_enabled() -> bool:
-    """KimiCode 用量检查开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key 判定
-    (老配置只填了 Key 没有开关,升级后面板行为不变)。"""
+def kimi_probe_manual() -> bool:
+    """KimiCode 用量检查手动开关(⚙️ 资源消耗 设置);历史无此键时按是否已配 Key
+    判定(老配置只填了 Key 没有开关,升级后面板行为不变)。"""
     cfg = resource_cfg()
     v = cfg.get("kimi_probe")
     if v is None:
@@ -1418,9 +1490,17 @@ def kimi_probe_enabled() -> bool:
     return bool(v)
 
 
-def opencode_probe_enabled() -> bool:
-    """OpenCode Go 订阅用量检查开关(⚙️ 资源消耗 设置);默认关闭。"""
+def kimi_probe_enabled() -> bool:
+    return kimi_probe_manual() or usage_auto_engine() == "kimi"
+
+
+def opencode_probe_manual() -> bool:
+    """OpenCode Go 订阅用量检查手动开关(⚙️ 资源消耗 设置);默认关闭。"""
     return bool(resource_cfg().get("opencode_probe"))
+
+
+def opencode_probe_enabled() -> bool:
+    return opencode_probe_manual() or usage_auto_engine() == "opencode"
 
 
 def _opencode_data_dir() -> Path:
@@ -1537,14 +1617,48 @@ def _claude_usage_full() -> dict:
         return empty
 
 
+def _kimi_usage_key() -> str | None:
+    """Kimi 用量接口凭证:设置里手填的 Key 优先;留空读本机 kimi CLI 登录凭证的
+    access token(usages 接口同样接受,参考 CodexBar docs/kimi.md),再退环境变量。
+    凭证字段名按常见命名宽松扫描(顶层与一层嵌套);带过期时间且已过期的跳过。
+    不动 refresh token 也不回写凭证文件(避免与 CLI 抢刷新):token 过期后面板
+    显示未知,重新 kimi login 即恢复——与 claude 探针「过期不刷新」策略一致。"""
+    key = (resource_cfg().get("kimi_api_key") or "").strip()
+    if key:
+        return key
+    for base in (Path.home() / ".kimi-code", Path.home() / ".kimi"):   # 新/旧版数据目录
+        try:
+            cred = json.loads((base / "credentials" / "kimi-code.json").read_text())
+        except Exception:
+            continue
+        if not isinstance(cred, dict):
+            continue
+        for d in [cred] + [v for v in cred.values() if isinstance(v, dict)]:
+            exp = next((_parse_reset_ts(d[k]) for k in
+                        ("expires_at", "expiresAt", "expiry", "expire_at", "expireAt")
+                        if d.get(k) is not None), None)
+            if exp and exp <= time.time():
+                continue
+            for k in ("access_token", "accessToken", "api_key", "apiKey",
+                      "token", "key"):
+                v = d.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    for env in ("KIMI_CODE_API_KEY", "KIMI_API_KEY", "MOONSHOT_API_KEY"):
+        v = (os.environ.get(env) or "").strip()
+        if v:
+            return v
+    return None
+
+
 def _kimi_usage_full() -> dict:
     """Kimi Code 官方用量接口:usage=周配额,limits[](300min 窗口)=5h 会话配额。
     重置时间实测字段名为驼峰 resetTime(ISO 带 9 位小数秒,参考 CodexBar docs/kimi.md),
     另按常见命名兼容扫描;取不到为 None。
-    未配 Key/接口异常返回 None(资源消耗面板显示未知)。"""
+    无凭证/接口异常返回 None(资源消耗面板显示未知)。"""
     empty = {"session": None, "weekly": None,
              "session_resets_at": None, "weekly_resets_at": None}
-    key = (resource_cfg().get("kimi_api_key") or "").strip()
+    key = _kimi_usage_key()
     if not key:
         return empty
     try:
@@ -1940,9 +2054,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     if own_review:
         own_review = "\n" + own_review
     ui_lang = resolve_ui_language()
-    ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
-    ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
-    shot_min = _fmt_num(dur.get("shot_min_s") or 4)
+    if dur.get("episode_minutes") == "auto":
+        ep_line = ("根据剧本自动 —— 不设固定每集预算:剧本分集(episode_plan)由 episode-planner 按剧情结构"
+                   "自行决定集数与每集时长,并在 episode_plan 中写明各集实际预算;节奏(pacing)、"
+                   "剪辑(edit)以 episode_plan 的实际预算为基准")
+    else:
+        ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
+        ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
+        ep_line = (f"{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、"
+                   f"节奏(pacing)、剪辑(edit)一律以此为基准")
+    shot_min = _fmt_num(dur.get("shot_min_s") or 2)
     shot_max = _fmt_num(dur.get("shot_max_s") or 8)
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
@@ -1965,15 +2086,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
-- 每集目标时长:{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、节奏(pacing)、剪辑(edit)一律以此为基准
+- 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
 - 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
-- 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;仅提供给图像/音乐生成模型的英文 prompt 不受此限
-- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;但以下保持原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、上游逐字拼入的英文片段(style.json 风格串、space_fragment_en、prompt_fragment_en、visual_en、prompt_token、音效/环境声英文句)、固定英文约束句(Identity lock、非对白组静默句、Global constraints 负面清单)、台词(按剧本冻结版)
+- 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
+- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**动线标注链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(render_blocking_map 图例已支持 CJK——2026-08-24 三订,角色名与 route 句会上图,中文可直接显示;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版)
+- 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
@@ -2119,7 +2241,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 ## 生成模型调用(环境已配置好)
 图像/视频生成一律通过统一模块 modules/genmedia.py(渠道与模型已由用户在 Web 客户端配置,勿自行挑模型或直连各家 API):
 - 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
-- 生成图像:`python3 modules/genmedia.py image --prompt "<英文prompt>" --output <路径.png> [--negative "..."] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
+- 生成图像:`python3 modules/genmedia.py image --prompt "<prompt,语言随界面语言(2026-08-24)>" --output <路径.png> [--negative "<英文负面词>"] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
   (供视频参考的图——锚点/--ref/--first-frame/--last-frame——每张必须 ≥3,686,400 像素=火山硬限,16:9 用 2560x1440、9:16 用 1440x2560;小图提交即拒,严禁按视频草稿分辨率出小图)
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
@@ -2290,6 +2412,11 @@ async def execute_run(run: dict, message: str, model: str | None):
         run["status"] = "running"
         run["started"] = time.time()
         publish_run(run)
+
+        # 虚拟人像资产库「全自动管理」:视频生成工单开跑前自动清库+本集人物图入库
+        # (仅火山引擎视频渠道;函数内部自带条件判定与兜底,失败不阻断)
+        if agent_id == AVATAR_AUTO_AGENT:
+            await avatar_auto_manage_for_run(run, message)
 
         engine = run.get("engine", "claude")
         cli_executable = None
@@ -3220,6 +3347,29 @@ async def api_grpnote_set(body: dict):
     d["video_prompt_word_count"] = len(vp.split())
     atomic_write_json(pf, d)
     return {"text": text}
+
+
+async def api_grpprompt_set(body: dict):
+    """保存用户手动编辑的组 video_prompt(分镜预览页 Prompt 弹窗「编辑→保存」,整段替换)。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise ServiceError(400, "video_prompt must not be empty")
+    pf = _grp_prompt_path(project, ep, grp)
+    if not pf.is_file():
+        raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    d = json.loads(pf.read_text())
+    if text == (d.get("video_prompt") or ""):
+        return {"changed": False}
+    d["video_prompt"] = text
+    d["video_prompt_word_count"] = len(text.split())
+    d.setdefault("notes", []).append(
+        f"用户在分镜预览页手动编辑 video_prompt(API storyboard prompt,"
+        f"{time.strftime('%Y-%m-%d %H:%M:%S')});重出本组时以设计文件为准重写")
+    atomic_write_json(pf, d)
+    return {"changed": True}
 
 
 async def api_sketches(project: str, ep: str, grp: str):
@@ -4482,15 +4632,18 @@ async def api_genconfig_set(body: dict):
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
         return {"ok": True, "config": cfg}
+    # 顶栏引擎/语言模型切换只带 agentmodel_mode:与生成模型渠道无关,跳过 RH 缓存同步
+    mode_only = set(body) <= {"agentmodel_mode"}
     # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
     # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
-    rh_refresh = [] if lang_only else await _refresh_rh_wf_caches(cfg)
+    rh_refresh = [] if (lang_only or mode_only) else await _refresh_rh_wf_caches(cfg)
     changes = _flat_diff(old, cfg)
     # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
     changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
                 for it in rh_refresh if it["status"] == "updated"]
-    await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
-                                  changes)
+    await _notify_settings_change(
+        project, "界面语言" if lang_only
+        else "语言模型分配策略" if mode_only else "生成模型", changes)
     return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 
@@ -5182,6 +5335,155 @@ async def api_avatar_delete(body: dict):
     return {"deleted": aid}
 
 
+# ---- 全自动管理(avatar_assets.auto_manage):video-generation 工单开跑前自动整备 ----
+# 触发条件:资产库已启用 + 全自动管理开启 + 该 agent 生效视频渠道为火山引擎。
+# 动作:同一 (项目, 集) 首次开跑先清空资产库(方舟素材数量有限额),再把该集组级
+# prompt refs 引用的人物概念图(assets/concepts/characters/)逐张入库,等待审核
+# Active(genmedia 提交时按台账 sha256 自动改 asset://<id>);后续同集重跑幂等跳过。
+AVATAR_AUTO_AGENT = "08-video-gen/video-generation"
+_AVATAR_AUTO_LOCK = asyncio.Lock()          # 并发 video-generation 工单串行整备
+_AVATAR_AUTO_WAIT_S = 600                   # 等待审核 Active 的上限(超时告警放行)
+
+
+def _avatar_auto_enabled(agent_id: str) -> bool:
+    """全自动管理是否对该 agent 生效:开关都开 + 生效视频渠道为火山引擎
+    (「每 Agent 模型配置」的视频渠道覆盖优先,空则按全局,与 genmedia 同口径)。"""
+    cfg = load_genconfig()
+    av = cfg.get("avatar_assets") or {}
+    if not (av.get("enabled") and av.get("auto_manage")):
+        return False
+    prov = (str(agent_model_config(agent_id).get("video_provider") or "")
+            or str((cfg.get("video") or {}).get("provider") or "volcengine"))
+    return prov == "volcengine"
+
+
+def _avatar_episode_char_refs(project: str, eps: list[str]) -> list[str]:
+    """该集(们)组级 prompt refs 中引用的人物概念图(项目内相对路径,去重,仅存在的
+    文件)。人物参考图口径 = assets/concepts/characters/ 下的图(引用化后组 refs 一律
+    写实体图原路径;存量副本式锚点包的包内副本与原图逐字节一致,sha256 台账同样命中)。"""
+    base = _proj_base(project)
+    out: list[str] = []
+    seen: set[str] = set()
+    for ep in eps:
+        for f in sorted((base / "assets" / "prompts" / ep).glob("grp*.json")):
+            try:
+                refs = json.loads(f.read_text()).get("refs") or []
+            except Exception:
+                continue
+            for r in refs:
+                r = str(r).strip().lstrip("/")
+                pfx = f"data/projects/{base.name}/"
+                if r.startswith(pfx):
+                    r = r[len(pfx):]
+                if not r.startswith("assets/concepts/characters/") or r in seen:
+                    continue
+                seen.add(r)
+                if (base / r).is_file():
+                    out.append(r)
+    return out
+
+
+async def _avatar_clear_all() -> int:
+    """清空虚拟人像库全部素材(逐页 ListAssets + 逐个 DeleteAsset),返回删除数;
+    单条删除失败跳过,整页无一删成即停(防不可删素材导致死循环)。台账 assets 同步清空。"""
+    cfg = _avatar_cfg()
+    deleted = 0
+    for _ in range(50):
+        res = await asyncio.to_thread(
+            _avatar_call, "ListAssets",
+            {"Filter": {"GroupType": "AIGC"}, "PageNumber": 1, "PageSize": 100})
+        items = [it for it in (res.get("Items") or []) if it.get("Id")]
+        if not items:
+            break
+        ok = 0
+        for it in items:
+            try:
+                await asyncio.to_thread(
+                    _avatar_call, "DeleteAsset",
+                    {"Id": it["Id"],
+                     "ProjectName": cfg.get("project_name") or "default"})
+                ok += 1
+            except ServiceError:
+                pass
+        deleted += ok
+        if not ok:
+            break
+    led = _avatar_ledger()
+    if led["assets"]:
+        led["assets"] = {}
+        _avatar_ledger_save(led)
+    return deleted
+
+
+async def avatar_auto_manage_for_run(run: dict, message: str):
+    """「虚拟人像资产库 → 全自动管理」钩子(execute_run 在 video-generation 工单
+    开跑前调用):清空资产库 → 本集人物概念图入库 → 等审核 Active。任何失败只在
+    运行进度条告警,不阻断工单(genmedia 对未入库图照旧走 URL/base64 提交)。"""
+    if run["agent"] != AVATAR_AUTO_AGENT or not _avatar_auto_enabled(run["agent"]):
+        return
+
+    def note(txt: str):
+        run["progress"] = txt[:300]
+        publish_run(run)
+
+    project = run["project"]
+    eps, seen = [], set()
+    for n in re.findall(r"\bep(\d{1,3})\b", message or "", re.I):
+        ep = f"ep{int(n):02d}"
+        if ep not in seen:
+            seen.add(ep)
+            eps.append(ep)
+    try:
+        async with _AVATAR_AUTO_LOCK:
+            if not eps:
+                note("⚠️ 虚拟人像库全自动管理:工单未标明集号(epNN),跳过整备")
+                return
+            refs = await asyncio.to_thread(_avatar_episode_char_refs, project, eps)
+            if not refs:
+                note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
+                return
+            epkey = f"{project}|{','.join(eps)}"
+            led = _avatar_ledger()
+            if (led.get("auto_manage") or {}).get("key") != epkey:
+                note(f"🧹 虚拟人像库全自动管理:清空资产库(为 {'/'.join(eps)} 腾额度)…")
+                n = await _avatar_clear_all()
+                led = _avatar_ledger()
+                led["auto_manage"] = {"key": epkey, "cleared": n,
+                                      "at": int(time.time())}
+                _avatar_ledger_save(led)
+            failed: list[str] = []
+            for i, ref in enumerate(refs):
+                note(f"⬆ 虚拟人像库全自动管理:人物图入库 {i + 1}/{len(refs)} {Path(ref).name}")
+                try:
+                    await api_avatar_upload({"project": project, "ref": ref})
+                except ServiceError as e:
+                    failed.append(f"{Path(ref).name}: {e.detail}")
+            deadline = time.time() + _AVATAR_AUTO_WAIT_S
+            pending = list(refs)
+            while pending and time.time() < deadline:
+                st = (await api_avatar_status({"project": project,
+                                               "refs": refs})).get("status") or {}
+                pending = [r for r in refs
+                           if (st.get(r) or {}).get("status") == "Processing"]
+                if not pending:
+                    break
+                note(f"⏳ 虚拟人像库全自动管理:等待审核 "
+                     f"{len(refs) - len(pending)}/{len(refs)}(剩 {int(deadline - time.time())}s)…")
+                await asyncio.sleep(5)
+            tail = ""
+            if failed:
+                tail += f";{len(failed)} 张入库失败({failed[0]})"
+            if pending:
+                tail += f";{len(pending)} 张审核超时仍 Processing,将按原图提交"
+            if tail:            # 有告警才留在进度行(挂整个运行期间提醒用户)
+                note(f"⚠️ 虚拟人像库整备完成:{'/'.join(eps)} 人物图 {len(refs)} 张{tail}")
+            else:               # 顺利完成:清进度行,不在后续视频生成全程挂陈旧提示
+                run.pop("progress", None)
+                publish_run(run)
+    except Exception as e:  # noqa: BLE001  失败不阻断视频生成
+        note(f"⚠️ 虚拟人像库全自动管理失败(不阻断工单):{e}")
+
+
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
 
 _MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
@@ -5833,9 +6135,11 @@ async def api_projects_create(body: dict):
     if cfg is not None:
         aspect, aspect_name, lang = resolve_output(cfg)
         dur = cfg["duration"]
+        ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
+                   else f"每集约 {dur['episode_minutes']} 分钟")
         msg.append(
             f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
-            f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
+            f"输出语言 {lang}、{ep_desc}、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"
@@ -7140,12 +7444,13 @@ async def api_usage():
 async def api_resources_config_get():
     """资源消耗设置；密钥保存在运行状态目录，不向客户端回传明文。"""
     cfg = resource_cfg()
+    # 开关一律回传手动配置值(不含随顶栏引擎的自动开启,否则保存会把自动固化成手动)
     return {"claude_probe": bool(cfg.get("claude_probe")),
             "claude_probe_env": CLAUDE_USAGE_PROBE_ENABLED,
-            "codex_probe": codex_probe_enabled(),
-            "kimi_probe": kimi_probe_enabled(),
+            "codex_probe": codex_probe_manual(),
+            "kimi_probe": kimi_probe_manual(),
             "kimi_api_key": cfg.get("kimi_api_key") or "",
-            "opencode_probe": opencode_probe_enabled(),
+            "opencode_probe": opencode_probe_manual(),
             "opencode_api_key": cfg.get("opencode_api_key") or "",
             "openrouter_key": cfg.get("openrouter_key") or "",
             "volc_enabled": bool(cfg.get("volc_enabled")),

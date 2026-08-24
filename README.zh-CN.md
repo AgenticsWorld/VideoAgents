@@ -55,7 +55,7 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 仅当 `v*` tag 指向 `main` 中的提交时，工作流才构建桌面端与 Python 环境；两类包统一使用 tag 版本号并发布到 `packages/video-agents/`。Python 环境位于 `python/`，macOS 与 Windows 的带版本桌面 ZIP 分别位于 `mac/` 和 `win/`，共享更新索引为 `metadata.json`；两个桌面目录还会用 `VideoAgents.zip` 覆盖发布最新版本。Release 客户端启动时先读取该 metadata：高于当前版本但仍受支持时提示可选更新；低于其中的 `desktop.minimumVersion` 时，在创建主窗口和启动本地后端之前进入不可跳过的强制更新流程。发布任务从 GitHub Actions 的 `MINIMUM_DESKTOP_VERSION` environment/repository variable 读取该值，未配置时默认为 `1.0.0`；格式错误或最低版本高于本次 release 版本时，发布任务会失败。
 
-macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎（默认模型 DeepSeek V4 Pro）同样通过 `opencode models` 动态读取；「OpenCode 智能分配」模型策略会把创作核心 Agent 派给 DeepSeek V4 Pro，其余派给 DeepSeek V4 Flash。
+macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
 
 本地 `make desktop` 默认设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，不会读取 macOS Keychain 中的 Apple 开发者证书，也不会签名或公证。正式发布签名只由 GitHub Actions 在显式提供 `CSC_LINK`、Apple ID 等 secrets 时启用。
 

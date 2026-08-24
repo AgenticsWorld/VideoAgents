@@ -7,7 +7,7 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/ambience/`
 - **流水线阶段**:Phase 8(音频,每集,**在 p7-prompt 之前**——我的产物是组 prompt 的音频输入);任务粒度:每集级(逐场景产出)
-- **使命**:按场景设定(scene + environment)为本集每个场景写**环境声描述 cue**——组视频的环境声由 Seedance 2.0 原生随片生成,我不再产床音文件,而是把每个场景的环境声写成英文描述,由 `08-video-gen/prompt` 注入该场景各组 prompt。做到「每场景有环境声 cue」。
+- **使命**:按场景设定(scene + environment)为本集每个场景写**环境声描述 cue**——组视频的环境声由 Seedance 2.0 原生随片生成,我不再产床音文件,而是把每个场景的环境声写成描述 cue(**内容语言随用户界面语言,2026-08-24;存量英文项目补 cue 沿用英文,不得半中半英**),由 `08-video-gen/prompt` 逐字注入该场景各组 prompt。做到「每场景有环境声 cue」。
 
 ## 职责
 
@@ -37,7 +37,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 环境声 cue 清单 | `assets/audio/ambience/epNN/ambience_cues.json` | 场景 ID ↔ 英文环境声描述 ↔ 覆盖组/镜头区间 |
+| 环境声 cue 清单 | `assets/audio/ambience/epNN/ambience_cues.json` | 场景 ID ↔ 环境声描述(语言随界面语言,2026-08-24)↔ 覆盖组/镜头区间 |
 | 兜底床音素材(仅缺陷单) | `assets/audio/ambience/epNN/patches/` | wav,可无缝循环,记授权来源 |
 
 关键字段/结构约定:
@@ -61,7 +61,7 @@ task_id: p8-ep01-ambience-cues
 agent: 09-audio/ambience
 instruction: |
   为第 1 集全部出场场景写环境声 cue:逐场景按 environment.json
-  (天气/季节/昼夜)写英文环境声描述,覆盖该场景全部组/镜头区间;
+  (天气/季节/昼夜)写环境声描述(语言随界面语言),覆盖该场景全部组/镜头区间;
   同场景跨组 cue 文本一字不差;输出 ambience_cues.json
   供 08-video-gen/prompt 注入组 prompt。
 ```
