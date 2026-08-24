@@ -6,6 +6,7 @@ All notable public changes to VideoAgents are documented here.
 
 ### Changed
 
+- Upstream video-prompt fragments now follow the UI language (previously English-only): the injected style anchor string (new `style.json` field `style_fragment_ui`; the English `style_fragment_en`/`negative_prompt_en` remain for the image pipeline), blocking `space_fragment_en`, lighting `prompt_fragment_en`, costume `visual_en`, prop `scale.prompt_token`, and SFX/ambience cues are produced in the interface language for new artifacts (field names keep their historical `_en` suffix). Verbatim-injection discipline is unchanged — existing English fragments are still injected as-is and switching an existing project's language requires regenerating the fragments upstream as a set. Exceptions stay English: structural anchors (`Overall visual style:`/`Shot N:`/`[Image N]`…), fixed constraint sentences (Identity lock, Spatial layout declaration, Global constraints), dialogue, and the blocking-map chain (`route_en`, `layout.json` landmark `name_en`/`desc_en` and landmark words inside fragments — the map renderer's font has no CJK glyphs).
 - Upgrading from v1.0.20 or earlier now resets the agent conversation-memory quota to the 16 KB default on first startup, regardless of the old on/off switch — installs that lacked the memory slider previously mapped a disabled switch to 0 KB. Installs that already set the slider (v1.0.21+) are unaffected.
 
 ## [1.0.21] - 2026-08-21

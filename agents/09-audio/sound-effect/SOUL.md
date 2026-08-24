@@ -7,7 +7,7 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/sound-effect/`
 - **流水线阶段**:Phase 8(音频,每集,**在 p7-prompt 之前**——我的产物是组 prompt 的音频输入);任务粒度:每集级(逐事件点产出)
-- **使命**:按 `shot_list` 与各镜 `blocking` 的事件点位设计**音效提示词(audio_cues)**——组视频的音效由 Seedance 2.0 原生随片生成,我不再产音频文件,而是把每个事件的声音写成逐镜英文音频描述,由 `08-video-gen/prompt` 注入组 prompt 的每镜"音频信息"要素。关键动作 cue 覆盖率 ≥90%。
+- **使命**:按 `shot_list` 与各镜 `blocking` 的事件点位设计**音效提示词(audio_cues)**——组视频的音效由 Seedance 2.0 原生随片生成,我不再产音频文件,而是把每个事件的声音写成逐镜音频描述 cue(**内容语言随用户界面语言,2026-08-24;存量英文项目补 cue 沿用英文,不得半中半英**),由 `08-video-gen/prompt` 逐字注入组 prompt 的每镜"音频信息"要素。关键动作 cue 覆盖率 ≥90%。
 
 ## 职责
 
@@ -39,7 +39,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 音效提示词清单 | `assets/audio/sfx/epNN/audio_cues.json` | 事件 ↔ 镜头 ID ↔ 英文音频描述,供 prompt 注入 |
+| 音效提示词清单 | `assets/audio/sfx/epNN/audio_cues.json` | 事件 ↔ 镜头 ID ↔ 音频描述(语言随界面语言,2026-08-24),供 prompt 逐字注入 |
 | 兜底音效素材(仅缺陷单) | `assets/audio/sfx/epNN/patches/` | wav,统一采样率与电平规范,记授权来源 |
 
 关键字段/结构约定:
@@ -65,7 +65,7 @@ agent: 09-audio/sound-effect
 instruction: |
   为第 1 集按 shot_list + 各镜 blocking 设计音效提示词:
   打斗、开关门、脚步、器物、招式逐事件覆盖,关键动作 cue 覆盖率须 ≥90%;
-  输出 audio_cues.json(镜头 ID + 触发动作 + 英文音频描述),
+  输出 audio_cues.json(镜头 ID + 触发动作 + 音频描述,语言随界面语言),
   供 08-video-gen/prompt 注入组 prompt。
 ```
 

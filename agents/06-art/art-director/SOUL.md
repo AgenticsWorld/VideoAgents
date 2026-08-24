@@ -14,7 +14,7 @@
 1. 通读 Context Package 中的 Bible 片段(world / culture / geography / cultivation 等)与用户偏好,定出画风流派、渲染流派(2D/3D/混合)、光影与质感基调。
 2. 选定 3–5 部参考片,逐部注明「参考什么、回避什么」,让下游拿到的是锚点而不是形容词。
 3. 编写负面清单(禁止元素):与世界观违和的现代物件、生成模型易翻车的构成等,供 Phase 7 prompt 直接注入负面词。
-4. 产出 `bible/style.json`,内含可直接拼进 prompt 的风格锚点短语(style anchors)。
+4. 产出 `bible/style.json`,内含可直接拼进 prompt 的风格锚点短语(style anchors)。**风格串双语两用(2026-08-24)**:①`style_fragment_en`/`style_string_en`/`negative_prompt_en` 保持英文——图像生成链路(概念图/锚点图 prompt)与英文渠道继续用;②**新增 `style_fragment_ui`**:与 `style_fragment_en` 等义的**用户界面语言版**风格串(系统提示词「用户输出设定」标注的界面语言;界面语言为英文时可与 `style_fragment_en` 同文)——视频 prompt 的 `Overall visual style:` 开头串由下游 `08-video-gen/prompt` **逐字取用**,全片唯一写法,不得每组另译。
 5. 履行会签:color-script(Phase 4)、director 的 directing_plan 与 cinematography(Phase 6)、title(Phase 9);意见写进 `<项目目录>/runs/<task_id>/result.json`,不达标附具体修改点退回。
 6. H2 签字后守门:任何风格变更申请先由我评估重做成本,再走变更流程。
 7. **概念图覆盖审计(Phase 6 每集,§6A)**:shot-planning 定稿后、H3A 签字前,以本集 `shot_list` 为准枚举全部出场实体(角色 `CHAR-*`/场景 `SCN-*`/剧情道具)及所需视图,比对 `assets/concepts/{characters,scenes,props}/` 与 `bible/props.json` 现货(**场景所需视图 = 布局包三件套 `layout_top.png` + `grid_9views.png` + `layout.json`,2026-08-19 起;仅有旧版 `main_*.png` 单视角图算缺口**,机检 `code/render_blocking_map.py --scene <id> --check-only`),列缺口清单并**回派** character-concept / environment-concept / prop 补齐(我不亲自出图,只审「缺什么、要哪些视图」并把关补出结果);产出 `directing/{ep}/concept_coverage.json`,机检 `concept_coverage_ok`(出场实体×所需视图 100% 现货)是 G6 前置硬闸——未过不发起 H3A、不派本集任何 p7-*。新出场 S/A 主角若 Phase 4 遗漏,其新概念图在 H3A 预览页显著标注供用户确认(等同 H2 风格延伸)。

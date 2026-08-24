@@ -13,10 +13,11 @@
 
 1. 按该场景 `environment.json` 中实际出现过的环境态,建基准光照矩阵:每种「昼夜×天气」组合一套方案(日-晴、夜-雪…),不为没出现的态白做。
 2. 每套方案写明:主光源类型(日光/月光/烛火/法术辉光)、方向倾向(顶光/侧逆/低位)、色温档位(暖 ~2700K / 中性 ~4500K / 冷 ~6500K)、对比度基调(柔和/硬朗)。
-3. 室内场景依据 architecture 的开窗/开口信息定自然光入射逻辑;夜景列人造与特殊光源清单(灯笼、长明灯、阵法辉光)。
-4. 原文明写的特殊剧情光(「血月当空」)记出处章节,单列为该章节区间的覆盖方案。
-5. 全部字段用受控枚举输出,保证 `08-video-gen/prompt` 可直接注入、`07-directing/continuity-planning` 可查光线方向连续性。
-6. 原文对某场景全无光照描写时,按 environment 环境态与 architecture 开窗/开口信息自行发挥设计基准方案并标 `inferred: true`,继续往后执行,禁止 UNKNOWN/待定占位;剧情设定的感知悬念(如密室角色不知昼夜)如实记为剧情事实,但光源/色温/对比度等制作字段仍须定值(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
+3. **每套方案必带 `prompt_fragment_en`**:一段可直接拼进 video_prompt 的光照描述短语(主光源+方向+色温+对比+氛围一句成段),**内容语言随用户界面语言(2026-08-24,字段名保留 `_en` 历史后缀;存量英文项目补方案沿用英文,不得半中半英)**——下游 `08-video-gen/prompt` 按组 `lighting_scheme_id` **逐字拼入、严禁另写光照散文**(机检 lighting_scheme_bound),同一方案全片唯一写法。
+4. 室内场景依据 architecture 的开窗/开口信息定自然光入射逻辑;夜景列人造与特殊光源清单(灯笼、长明灯、阵法辉光)。
+5. 原文明写的特殊剧情光(「血月当空」)记出处章节,单列为该章节区间的覆盖方案。
+6. 全部字段用受控枚举输出,保证 `08-video-gen/prompt` 可直接注入、`07-directing/continuity-planning` 可查光线方向连续性。
+7. 原文对某场景全无光照描写时,按 environment 环境态与 architecture 开窗/开口信息自行发挥设计基准方案并标 `inferred: true`,继续往后执行,禁止 UNKNOWN/待定占位;剧情设定的感知悬念(如密室角色不知昼夜)如实记为剧情事实,但光源/色温/对比度等制作字段仍须定值(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 
 ## 不做什么(边界)
 
@@ -49,6 +50,7 @@
     "key_source": "烛火", "direction": "低位侧光",
     "color_temp": "暖(~2700K)", "contrast": "高反差",
     "practicals": ["长明灯x4", "案头烛台"],
+    "prompt_fragment_en": "深夜室内仅烛火照明,低位暖侧光约2700K…(注入用光照短语,语言随界面语言)",
     "source_chapter": 12
   }],
   "special": [{ "chapters": [44], "note": "阵法蓝辉覆盖主光", "source_chapter": 44 }]
@@ -75,6 +77,7 @@ instruction: |
 - `scene_id` 在 index.json 中合法(G3 引用完整性);
 - schemes 覆盖 environment.json `states` 中出现过的全部 condition 组合,无缺漏;
 - key_source / direction / color_temp / contrast 取值在受控枚举内;
+- 每套 scheme 必带非空 `prompt_fragment_en`(注入用光照短语,语言随界面语言,2026-08-24;同项目语言统一);
 - 特殊方案必须带 `source_chapter`。
 
 **评分(evaluation Agent)**:
