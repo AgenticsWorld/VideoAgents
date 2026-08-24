@@ -671,9 +671,9 @@ DEFAULT_GENCONFIG = {
     # 模型侧硬限另由 genmedia 按 model id 强制校验
     "shot_group": {"max_group_s": 15, "max_ref_images": 9,
                    "max_ref_videos": 3, "max_ref_audios": 3},
-    # 「模型策略」(设置菜单子菜单):global=全部跟随顶栏全局(初始化默认);
-    # smart_claude / smart_codex=按 Agent 任务复杂度自动选对应引擎的模型
-    "agentmodel_mode": "global",
+    # Agent 语言模型分配策略(顶栏「语言模型」下拉驱动:选「智能分配」→ smart_<引擎>,
+    # 选具体模型→ global 跟随顶栏):初始化默认智能分配(顶栏默认引擎 claude)
+    "agentmodel_mode": "smart_claude",
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
@@ -1099,14 +1099,18 @@ def _validate_review(r: dict):
 # 用户在 UI 保存的覆盖落盘 agentmodels.json;未覆盖时按下方分类默认。
 AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 
-# 「模型策略」(genconfig.agentmodel_mode,设置菜单「模型策略」子菜单切换):
-# 切换任一策略都会同时清空 agentmodels.json 里全部 Agent 级单独配置。
-#   global       全部 Agent 跟随顶栏全局设置(系统初始化默认)
-#   smart_claude 按任务复杂度自动选 claude 模型(high→opus-5 low→sonnet)
+# 「模型策略」(genconfig.agentmodel_mode,由顶栏「语言模型」下拉驱动:选「智能分配」
+# → smart_<引擎>,选具体模型→ global;deepagents 无智能分配,始终 global):
+# 每次切换引擎/语言模型都会同时清空 agentmodels.json 里全部 Agent 级单独配置,
+# 避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
+#   global       全部 Agent 跟随顶栏全局设置
+#   smart_claude 按任务复杂度自动选 claude 模型(high→opus 最新版 low→sonnet)
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
+#   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-5.6-sol low→openai-codex/gpt-5.6-terra)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
-AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_deepseek")
+AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
+            "smart_deepseek")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -1135,12 +1139,16 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "15-audio-video/visual-scripter": "high",           # 逐段画面设计 = 创作核心
 }
 AM_MODE_MODELS = {
-    "smart_claude": {"high": {"engine": "claude", "model": "claude-opus-5"},
+    # opus 不锁版本号:CLI 侧别名始终指向最新 opus
+    "smart_claude": {"high": {"engine": "claude", "model": "opus"},
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
+    # pi 引擎经 openai-codex 渠道调用(模型 id 为 pi --list-models 的 provider/model)
+    "smart_pi": {"high": {"engine": "pi", "model": "openai-codex/gpt-5.6-sol"},
+                 "low": {"engine": "pi", "model": "openai-codex/gpt-5.6-terra"}},
     # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
     # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
@@ -1202,6 +1210,31 @@ def agent_effective_model(agent_id: str) -> dict:
         return {"engine": am["engine"], "model": am.get("model") or ""}
     gp = global_model_pref()
     return {"engine": gp["engine"] or "claude", "model": gp["model"]}
+
+
+# 各引擎对应的智能分配策略(deepagents 无智能分配,不在表内→global)
+SMART_MODE_BY_ENGINE = {"claude": "smart_claude", "codex": "smart_codex",
+                        "kimi": "smart_kimi", "pi": "smart_pi",
+                        "opencode": "smart_deepseek"}
+
+
+def migrate_agentmodel_smart_default():
+    """顶栏「语言模型」默认智能分配的一次性迁移(启动时调用):
+    旧版(≤v1.0.21,「模型策略」还是设置菜单子菜单)升级上来的存量安装,
+    按当前全局引擎自动切到对应智能分配(deepagents→跟随全局),并清空全部
+    Agent 级单独配置,让各 Agent 立即按新策略生效;此后策略只随顶栏切换变化。"""
+    if STATE.get("am_smart_migrated"):
+        return
+    eng = str((STATE.get("global_model") or {}).get("engine")
+              or (STATE.get("ui_prefs") or {}).get("engine") or "claude").lower()
+    mode = SMART_MODE_BY_ENGINE.get(eng, "global")
+    cfg = load_genconfig()
+    if cfg.get("agentmodel_mode") != mode:
+        cfg["agentmodel_mode"] = mode
+        save_genconfig(cfg)
+    atomic_write_json(AGENTMODELS_PATH, {})     # 覆盖旧版遗留的 Agent 级手动配置
+    STATE["am_smart_migrated"] = True
+    save_state(STATE)
 
 
 # macOS 系统代理(如 wsm)会连 127.0.0.1 一起劫持导致 503;
@@ -4482,15 +4515,18 @@ async def api_genconfig_set(body: dict):
     if lang_only and not old.get("ui_language"):
         # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
         return {"ok": True, "config": cfg}
+    # 顶栏引擎/语言模型切换只带 agentmodel_mode:与生成模型渠道无关,跳过 RH 缓存同步
+    mode_only = set(body) <= {"agentmodel_mode"}
     # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
     # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
-    rh_refresh = [] if lang_only else await _refresh_rh_wf_caches(cfg)
+    rh_refresh = [] if (lang_only or mode_only) else await _refresh_rh_wf_caches(cfg)
     changes = _flat_diff(old, cfg)
     # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
     changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
                 for it in rh_refresh if it["status"] == "updated"]
-    await _notify_settings_change(project, "界面语言" if lang_only else "生成模型",
-                                  changes)
+    await _notify_settings_change(
+        project, "界面语言" if lang_only
+        else "语言模型分配策略" if mode_only else "生成模型", changes)
     return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 

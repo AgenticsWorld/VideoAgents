@@ -176,7 +176,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dropdown-box a:hover{background:var(--panel);color:var(--accent)}
 .dropdown-box a:first-child{border-radius:8px 8px 0 0}
 .dropdown-box a:last-child{border-radius:0 0 8px 8px}
-/* 二级子菜单(模型策略):悬停向左弹出 */
+/* 二级子菜单(高级/界面语言):悬停向左弹出 */
 .dd-sub{position:relative}
 .dd-sub-menu{display:none;position:absolute;right:100%;top:-1px;min-width:160px}
 /* RTL(阿拉伯语):设置按钮在屏幕左侧,下拉与二级子菜单改为向右弹出,否则出屏无法选择 */
@@ -240,16 +240,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div id="settings-menu">
     <button id="settings-btn" title="全局设置">⚙️</button>
     <div class="dropdown"><div class="dropdown-box">
-      <div class="dd-sub">
-        <a href="#" onclick="return false" title="全部 Agent 的语言模型策略(切换策略会清除全部 Agent 级单独配置)">◂ 模型策略</a>
-        <div class="dd-sub-menu dropdown-box" id="am-mode-menu">
-          <a href="#" data-ammode="global" title="所有 Agent 跟随 top bar 的全局引擎/模型设置(默认)">跟随全局</a>
-          <a href="#" data-ammode="smart_claude" title="按 Agent 任务复杂度自动选 claude 模型:创作核心→opus-5 其余→sonnet">Claude 智能分配</a>
-          <a href="#" data-ammode="smart_codex" title="按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra">Codex 智能分配</a>
-          <a href="#" data-ammode="smart_kimi" title="按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding">Kimi 智能分配</a>
-          <a href="#" data-ammode="smart_deepseek" title="按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash">OpenCode 智能分配</a>
-        </div>
-      </div>
       <a href="/models">生成模型</a>
       <a href="/storage" title="对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟">文件托管</a>
       <a href="#" id="menu-watchdog" title="自动运行设置:闲置时间(巡检间隔)与用量阈值(与运行面板 🤖 自动运行 是同一功能)">自动运行</a>
@@ -354,7 +344,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">保存后仅对该 Agent 生效,优先级高于右上角全局设置(总制片显式 --engine/--model 派单除外);图像/视频各渠道参数在 🎨 生成模型 页配置</div>
     <div class="err" id="am-err"></div>
     <div class="actions">
-      <button id="am-reset" title="删除该 Agent 的单独配置,回到设置菜单「模型策略」默认" style="margin-right:auto">恢复策略默认</button>
+      <button id="am-reset" title="删除该 Agent 的单独配置,回到顶栏「语言模型」策略默认" style="margin-right:auto">恢复策略默认</button>
       <button id="am-cancel">取消</button>
       <button class="primary" id="am-ok">保存</button>
     </div>
@@ -781,7 +771,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 const $=s=>document.querySelector(s);
 let AGENTS=[], CURRENT=null, RUNS={}, LIVE={}; // LIVE[run_id] = 当前流式 DOM 节点
 let AGENT_MODELS={defaults:{},overrides:{}};   // Agent 级模型配置(/api/v1/agents/models)
-let AM_MODE='global';                          // 「模型策略」(设置菜单子菜单)
+let AM_MODE='global';                          // Agent 语言模型分配策略(顶栏「语言模型」下拉驱动,服务端 genconfig 为准)
 
 function uiConfirm(message){
   return new Promise(resolve=>{
@@ -815,9 +805,21 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_deepseek:'OpenCode 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配'};
 
-// opencode 静态兜底(动态列表读不到时用);首项即顶栏默认模型:DeepSeek V4 Pro。
+/* 顶栏「语言模型」下拉的「智能分配」选项(各引擎默认;deepagents 无此选项):
+   选中→策略切 smart_<引擎>(按 Agent 任务复杂度自动分配模型),选具体模型→策略回 global 跟随全局 */
+const SMART='__smart';
+const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek'};
+const SMART_TITLES={
+  claude:'按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet',
+  codex:'按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra',
+  kimi:'按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding',
+  pi:'按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra',
+  opencode:'按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash',
+};
+
+// opencode 静态兜底(动态列表读不到时用);具体模型区首项:DeepSeek V4 Pro(顶栏默认选「智能分配」)。
 // OpenCode Go 订阅渠道 opencode-go/(实测生效),Zen 按量渠道 opencode/,动态列表反映实际可用集
 const OPENCODE_STATIC=[
   ['opencode-go/deepseek-v4-pro','DeepSeek V4 Pro'],
@@ -826,20 +828,20 @@ const OPENCODE_STATIC=[
   ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
 ];
 const MODEL_OPTIONS={
-  claude:[['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
+  claude:[[SMART,'智能分配'],['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
           ['claude-fable-5','fable-5'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
-  codex:[['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
+  codex:[[SMART,'智能分配'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
          ['gpt-5.6-luna','gpt-5.6-luna'],['gpt-5.5','gpt-5.5'],['gpt-5.4','gpt-5.4'],
          ['gpt-5.4-mini','gpt-5.4-mini'],['gpt-5.3-codex-spark','gpt-5.3-codex-spark'],
          ['__custom','自定义…']],
-  kimi:[['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
+  kimi:[[SMART,'智能分配'],['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
-  pi:[['','默认(CLI配置)'],['__custom','自定义…']],
-  opencode:[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
+  pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
+  opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -849,12 +851,12 @@ async function loadPiModelOptions(refresh=false){
   try{
     const r=await api('/api/v1/engines/pi/models'+(refresh?'?refresh=true':''));
     const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
-    MODEL_OPTIONS.pi=[['','默认(CLI配置)'],...dynamic,['__custom','自定义…']];
+    MODEL_OPTIONS.pi=[[SMART,'智能分配'],['','默认(CLI配置)'],...dynamic,['__custom','自定义…']];
     AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],...dynamic,['__custom','自定义…']];
     PI_MODEL_ERROR='';
   }catch(e){
     PI_MODEL_ERROR=e.message||String(e);
-    MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
+    MODEL_OPTIONS.pi=[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']];
     AM_MODEL_OPTIONS.pi=[['','默认(CLI配置)'],['__custom','自定义…']];
   }
 }
@@ -863,17 +865,17 @@ async function loadOpencodeModelOptions(refresh=false){
   try{
     const r=await api('/api/v1/engines/opencode/models'+(refresh?'?refresh=true':''));
     const dynamic=(r.models||[]).map(m=>[m.id,`${m.provider} · ${m.name||m.model||m.id}`]);
-    // 默认模型 DeepSeek V4 Pro:动态列表里有则置顶(populateModels 默认选第一项),Go 渠道优先
+    // DeepSeek V4 Pro 置顶具体模型区(智能分配之后的首个模型),Go 渠道优先
     const i=['opencode-go/deepseek-v4-pro','opencode/deepseek-v4-pro']
       .map(id=>dynamic.findIndex(([v])=>v===id)).find(x=>x>=0)??-1;
     if(i>0)dynamic.unshift(...dynamic.splice(i,1));
     const list=dynamic.length?dynamic:OPENCODE_STATIC;
-    MODEL_OPTIONS.opencode=[...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    MODEL_OPTIONS.opencode=[[SMART,'智能分配'],...list,['','默认(CLI配置)'],['__custom','自定义…']];
     AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
     OPENCODE_MODEL_ERROR='';
   }catch(e){
     OPENCODE_MODEL_ERROR=e.message||String(e);
-    MODEL_OPTIONS.opencode=[...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    MODEL_OPTIONS.opencode=[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
     AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
   }
 }
@@ -883,7 +885,9 @@ async function populateModels(engine,selected=null){
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
-    const o=document.createElement('option'); o.value=v; o.textContent=label; sel.appendChild(o);
+    const o=document.createElement('option'); o.value=v; o.textContent=label;
+    if(v===SMART)o.title=SMART_TITLES[engine]||'';
+    sel.appendChild(o);
   });
   const values=MODEL_OPTIONS[engine].map(x=>x[0]);
   if(selected!==null&&values.includes(selected))sel.value=selected;
@@ -899,6 +903,7 @@ async function populateModels(engine,selected=null){
 function getModel(){
   if($('#engine').value==='deepagents')return DA_MODEL;
   const v=$('#model').value;
+  if(v===SMART)return '';   // 智能分配:模型由各 Agent 策略默认决定,全局不指定
   return v==='__custom' ? $('#model-custom').value.trim() : v;
 }
 
@@ -936,6 +941,18 @@ async function restorePrefs(){
   }
   if(p.model_custom)$('#model-custom').value=p.model_custom;
   await initProjects(p.project);
+  // 「语言模型」选择与服务端分配策略对齐(策略是全局配置,以服务端为准):
+  // 智能模式→显示「智能分配」(旧版升级迁移后本地存的具体模型也在此复位);
+  // global 而本地残留「智能分配」→ 另一端已选过具体模型,回退本引擎首个具体模型
+  if(SMART_MODE_BY_ENGINE[$('#engine').value]){
+    if(AM_MODE!=='global'){
+      $('#model').value=SMART;$('#model-custom').style.display='none';
+    }else if($('#model').value===SMART){
+      const first=MODEL_OPTIONS[$('#engine').value].find(([v])=>v&&v!==SMART&&v!=='__custom');
+      $('#model').value=first?first[0]:'';
+    }
+  }
+  await applyAmMode(false);   // 策略与顶栏不一致时(另一端换过引擎/deepagents 残留智能策略)对齐
   savePrefs();   // 开屏把本浏览器的顶栏选择同步到服务端副本(换浏览器/首次同步兜底)
 }
 
@@ -2017,28 +2034,22 @@ $('#input').addEventListener('input',saveDraft);
   }
 })();
 
-/* ---------- 设置菜单:模型策略 ---------- */
-function renderAmMode(){
-  document.querySelectorAll('#am-mode-menu a').forEach(a=>{
-    const on=a.dataset.ammode===AM_MODE;
-    a.classList.toggle('on',on);
-    a.textContent=(on?'✓ ':'')+t(AM_MODE_LABELS[a.dataset.ammode]);
-  });
-}
-document.querySelectorAll('#am-mode-menu a').forEach(a=>a.onclick=async e=>{
-  e.preventDefault();
-  const m=a.dataset.ammode;
+/* ---------- 语言模型分配策略(顶栏引擎/语言模型下拉驱动) ----------
+   「智能分配」= smart_<引擎>,具体模型 = global 跟随全局;每次切换都同步全部 Agent
+   并清空 Agent 级单独配置,避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
+   开屏复位(force=false)只在策略不一致时对齐服务端,不清已有单独配置。 */
+async function applyAmMode(force=true){
+  const mode=$('#model').value===SMART
+    ?(SMART_MODE_BY_ENGINE[$('#engine').value]||'global'):'global';
   const ovN=Object.keys(AGENT_MODELS.overrides||{}).length;
-  if(m===AM_MODE&&!ovN)return;   // 同策略且存在单独配置时,重复点击仍执行清除
-  if(ovN&&!await uiConfirm(I18N.f('切到「{m}」将清除 {n} 个 Agent 的单独模型配置,继续?',
-    {m:t(AM_MODE_LABELS[m]),n:ovN})))return;
+  if(mode===AM_MODE&&(!force||!ovN))return;
   try{
-    await api('/api/v1/config/generation',{agentmodel_mode:m,project:$('#project').value.trim()||'demo'});
-    AGENT_MODELS=await api('/api/v1/agents/models');   // 策略变了,全部 defaults 刷新
-    AM_MODE=AGENT_MODELS.mode||m;
-    renderAmMode();updateModelBtn();
+    await api('/api/v1/config/generation',{agentmodel_mode:mode,project:$('#project').value.trim()||'demo'});
+    AGENT_MODELS=await api('/api/v1/agents/models');   // 策略变了,全部 defaults 刷新(单独配置已清空)
+    AM_MODE=AGENT_MODELS.mode||mode;
+    updateModelBtn();
   }catch(err){await uiAlert('切换失败:'+err.message)}
-});
+}
 
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
@@ -2070,7 +2081,7 @@ function updateModelBtn(){
   if(!CURRENT)return;
   $('#btn-models').textContent=t('模型')+' · '+amLabel(CURRENT);
   $('#btn-models').title=(AGENT_MODELS.overrides[CURRENT]?t('该 Agent 已单独配置')
-    :I18N.f('「模型策略」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
+    :I18N.f('「语言模型」默认({m})',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)}))
     +t('(点击修改;优先级高于右上角全局)');
 }
 async function amPopulateModels(engine,selected){
@@ -2106,7 +2117,7 @@ async function openAmModal(){
   amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
   amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
-  $('#am-note').textContent=I18N.f('该 Agent 策略默认(模型策略:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
+  $('#am-note').textContent=I18N.f('该 Agent 策略默认(语言模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
 }
@@ -2311,14 +2322,14 @@ function liveBox(runId){
   [pModels,pRuns,pApprovals].forEach(p=>p.catch(()=>{}));   // pAgents 抛出中止时其余不留未处理 rejection
   AGENTS=await pAgents;
   try{AGENT_MODELS=await pModels;AM_MODE=AGENT_MODELS.mode||'global'}catch(e){}
-  renderAmMode();
   (await pRuns).forEach(r=>RUNS[r.id]=r);
   connect();   // 首次 renderAgents/renderRuns 延后到项目下拉框恢复之后,否则 curProj() 回退 demo 导致按项目过滤为空
   try{(await pApprovals).forEach(showConfirm)}catch(e){}
   $('#search').oninput=renderAgents;
   $('#engine').onchange=async()=>{
-    await populateModels($('#engine').value);savePrefs();
+    await populateModels($('#engine').value);savePrefs();   // 非 deepagents 复位到首项「智能分配」
     if($('#engine').value==='deepagents')syncDaProvider();
+    await applyAmMode();   // 切引擎即同步全部 Agent 策略(deepagents 无智能分配→回 global)
     checkEngineCli($('#engine').value);
   };
   $('#model').onchange=async()=>{
@@ -2330,10 +2341,12 @@ function liveBox(runId){
         setTimeout(()=>sel.style.borderColor='',1200);
       }catch(e){await uiAlert('切换失败:'+e.message);sel.value=prev}
       savePrefs();
+      await applyAmMode();
       return;
     }
     $('#model-custom').style.display = $('#model').value==='__custom'?'':'none';
     savePrefs();
+    await applyAmMode();   // 智能分配↔具体模型切换即同步全部 Agent 策略
   };
   $('#model-custom').oninput=savePrefs;
   await restorePrefs();
