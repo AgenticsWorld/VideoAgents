@@ -323,7 +323,8 @@ def agent_sem(agent_id: str, limit: int) -> asyncio.Semaphore:
 def agent_memory_kb() -> int:
     """Agent 对话记忆额度(KB,0=关闭,上限 AGENT_MEMORY_KB_MAX,越界钳制;
     设置菜单「高级→Agent 高级设置」滑块)。兼容旧布尔开关 agent_memory:
-    未设过额度时 False→0,True/缺省→缺省额度。"""
+    未设过额度时 False→0,True/缺省→缺省额度(启动时 migrate_agent_memory_default
+    会把旧版升级的存量安装统一重置为缺省额度,此分支仅在迁移前兜底)。"""
     v = STATE.get("agent_memory_kb")
     if v is None:
         return AGENT_MEMORY_KB_DEFAULT if STATE.get("agent_memory", True) else 0
@@ -1216,6 +1217,18 @@ def agent_effective_model(agent_id: str) -> dict:
 SMART_MODE_BY_ENGINE = {"claude": "smart_claude", "codex": "smart_codex",
                         "kimi": "smart_kimi", "pi": "smart_pi",
                         "opencode": "smart_deepseek"}
+
+
+def migrate_agent_memory_default():
+    """对话记忆额度的一次性迁移(启动时调用):旧版(≤v1.0.20,记忆还是布尔开关,
+    state.json 无 agent_memory_kb 键)升级上来的存量安装,不论旧开关开/关,
+    统一重置为缺省额度 AGENT_MEMORY_KB_DEFAULT 并移除旧布尔键;
+    滑块设过值(键已存在)的安装不受影响。"""
+    if "agent_memory_kb" in STATE:
+        return
+    STATE["agent_memory_kb"] = AGENT_MEMORY_KB_DEFAULT
+    STATE.pop("agent_memory", None)
+    save_state(STATE)
 
 
 def migrate_agentmodel_smart_default():

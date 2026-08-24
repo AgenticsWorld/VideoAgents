@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrading from v1.0.20 or earlier now resets the agent conversation-memory quota to the 16 KB default on first startup, regardless of the old on/off switch — installs that lacked the memory slider previously mapped a disabled switch to 0 KB. Installs that already set the slider (v1.0.21+) are unaffected.
+
 ## [1.0.21] - 2026-08-21
 
 ### Added
