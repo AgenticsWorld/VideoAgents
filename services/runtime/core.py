@@ -3333,6 +3333,29 @@ async def api_grpnote_set(body: dict):
     return {"text": text}
 
 
+async def api_grpprompt_set(body: dict):
+    """保存用户手动编辑的组 video_prompt(分镜预览页 Prompt 弹窗「编辑→保存」,整段替换)。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise ServiceError(400, "video_prompt must not be empty")
+    pf = _grp_prompt_path(project, ep, grp)
+    if not pf.is_file():
+        raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
+    d = json.loads(pf.read_text())
+    if text == (d.get("video_prompt") or ""):
+        return {"changed": False}
+    d["video_prompt"] = text
+    d["video_prompt_word_count"] = len(text.split())
+    d.setdefault("notes", []).append(
+        f"用户在分镜预览页手动编辑 video_prompt(API storyboard prompt,"
+        f"{time.strftime('%Y-%m-%d %H:%M:%S')});重出本组时以设计文件为准重写")
+    atomic_write_json(pf, d)
+    return {"changed": True}
+
+
 async def api_sketches(project: str, ep: str, grp: str):
     """桌面查询某组已有线稿(仅本机,受 _lan_guard 保护)。"""
     return _sketch_list(safe_slug(project), re.sub(r"[^\w\-]", "", ep),

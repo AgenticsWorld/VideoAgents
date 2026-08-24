@@ -597,6 +597,11 @@ async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
 
 
+@api.post("/storyboard/prompt", tags=["storyboard"])
+async def storyboard_prompt(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpprompt_set(body)
+
+
 @api.post("/storyboard/refs", tags=["storyboard"])
 async def storyboard_ref(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpref_add(body)
