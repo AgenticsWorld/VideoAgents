@@ -337,6 +337,8 @@ window.I18N_DICT = {
 "分级": "Phân loại độ tuổi",
 "分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)": "Phân cảnh {ep}/{sid} (cảnh {sc}{grp}; dữ liệu tại shot_id={sid} trong directing/{ep}/shot_list.json, prompt cấp shot assets/prompts/{ep}/{sid}.json)",
 "分镜时长(秒)": "Thời lượng phân cảnh (giây)",
+"根据剧本自动": "Tự động theo kịch bản",
+"勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长": "Khi chọn, không đặt thời lượng cố định mỗi tập — việc chia tập và thời lượng từng tập được quyết định tự động theo cấu trúc kịch bản",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Thời lượng phân cảnh phải thỏa 0 < giới hạn dưới ≤ giới hạn trên",
 "分镜预览": "Xem trước phân cảnh",
 "分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Xem trước phân cảnh: Kịch bản mỗi tập + phân cảnh + keyframe + video tạo sinh",

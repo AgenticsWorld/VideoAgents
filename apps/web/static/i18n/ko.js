@@ -337,6 +337,8 @@ window.I18N_DICT = {
 "分级": "등급",
 "分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)": "숏 {ep}/{sid}(씬 {sc}{grp}. 데이터는 directing/{ep}/shot_list.json의 shot_id={sid}, 숏 단위 prompt는 assets/prompts/{ep}/{sid}.json)",
 "分镜时长(秒)": "숏 길이(초)",
+"根据剧本自动": "대본에 따라 자동",
+"勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长": "선택하면 회당 고정 길이를 두지 않고 대본 구조에 따라 회차 분할과 회당 길이를 자동으로 결정합니다",
 "分镜时长需满足 0 < 下限 ≤ 上限": "숏 길이는 0 < 하한 ≤ 상한을 만족해야 합니다",
 "分镜预览": "스토리보드 미리보기",
 "分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "스토리보드 미리보기: 화별 대본 + 스토리보드 + 키프레임 + 생성 비디오",

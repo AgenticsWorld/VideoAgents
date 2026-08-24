@@ -420,9 +420,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
-      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10"></div>
+      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
+        <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
       <div class="row"><label>分镜时长(秒)</label>
-        <input type="number" id="npd-smin" min="1" step="0.5" value="4" title="下限">
+        <input type="number" id="npd-smin" min="1" step="0.5" value="2" title="下限">
         <span style="color:var(--dim)">—</span>
         <input type="number" id="npd-smax" min="1" step="0.5" value="8" title="上限">
       </div>
@@ -563,9 +564,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="dur-modal" class="modal">
   <div class="box">
     <h3>⏱ 时长设置 — <span id="dur-proj" style="color:var(--accent)"></span></h3>
-    <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10"></div>
+    <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
+      <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
     <div class="row"><label>分镜时长(秒)</label>
-      <input type="number" id="dur-smin" min="1" step="0.5" placeholder="4" title="下限">
+      <input type="number" id="dur-smin" min="1" step="0.5" placeholder="2" title="下限">
       <span style="color:var(--dim)">—</span>
       <input type="number" id="dur-smax" min="1" step="0.5" placeholder="8" title="上限">
     </div>
@@ -1012,6 +1014,9 @@ function nppToggleRows(){
 }
 $('#npp-intro-on').onchange=nppToggleRows;
 $('#npp-outro-on').onchange=nppToggleRows;
+// 每集时长「根据剧本自动」:勾选后数值输入禁用(新建向导与时长设置弹窗同款)
+$('#npd-ep-auto').onchange=()=>{$('#npd-ep').disabled=$('#npd-ep-auto').checked};
+$('#dur-ep-auto').onchange=()=>{$('#dur-ep').disabled=$('#dur-ep-auto').checked};
 $('#npo-aspect').onchange=()=>{
   $('#npo-custom-row').style.display=$('#npo-aspect').value==='custom'?'':'none'};
 function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置的服务端默认一致)
@@ -1023,7 +1028,8 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
-  $('#npd-ep').value=10;$('#npd-smin').value=4;$('#npd-smax').value=8;
+  $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
+  $('#npd-smin').value=2;$('#npd-smax').value=8;
   sgApplyPreset('npsg','sd20');   // 分镜组默认按 Seedance 2.0 口径(15s/9图/3视频/3音频)
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
@@ -1047,7 +1053,7 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
     if(!document.querySelectorAll('.npo-platform:checked').length)return '至少选择一个发布平台';
   }else if(n===3){
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
-    if(!(ep>0))return '每集时长需大于 0';
+    if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
   }else if(n===4){
     return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
@@ -1075,7 +1081,7 @@ function npCollectSettings(){
       dialogue_voice:$('#npo-dialogue-voice').value,
       spatial_blocking:$('#npo-spatial').checked,
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
-    duration:{episode_minutes:parseFloat($('#npd-ep').value),
+    duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value)},
     shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
       max_ref_images:parseInt($('#npsg-imgs').value),
@@ -1311,8 +1317,10 @@ async function openDurModal(){
   $('#dur-proj').textContent=curProj();
   try{
     const d=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).duration||{};
-    $('#dur-ep').value=d.episode_minutes??10;
-    $('#dur-smin').value=d.shot_min_s??4;
+    const auto=d.episode_minutes==='auto';
+    $('#dur-ep-auto').checked=auto;$('#dur-ep').disabled=auto;
+    $('#dur-ep').value=auto?10:(d.episode_minutes??10);
+    $('#dur-smin').value=d.shot_min_s??2;
     $('#dur-smax').value=d.shot_max_s??8;
   }catch(e){}
   $('#dur-modal').style.display='flex';
@@ -1324,11 +1332,12 @@ document.querySelectorAll('a.pv').forEach(a=>a.addEventListener('click',()=>{
 }));
 $('#dur-cancel').onclick=()=>$('#dur-modal').style.display='none';
 $('#dur-ok').onclick=async()=>{
+  const epAuto=$('#dur-ep-auto').checked;
   const ep=parseFloat($('#dur-ep').value),mn=parseFloat($('#dur-smin').value),mx=parseFloat($('#dur-smax').value);
-  if(!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
+  if(!epAuto&&!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:ep,shot_min_s:mn,shot_max_s:mx}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx}});
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
 };

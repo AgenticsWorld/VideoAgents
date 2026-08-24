@@ -337,6 +337,8 @@ window.I18N_DICT = {
 "分级": "Classification",
 "分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)": "Shot {ep}/{sid} (scène {sc}{grp} ; données : shot_id={sid} dans directing/{ep}/shot_list.json, prompt du shot : assets/prompts/{ep}/{sid}.json)",
 "分镜时长(秒)": "Durée des shots (secondes)",
+"根据剧本自动": "Automatique selon le scénario",
+"勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长": "Si coché, aucune durée fixe par épisode : le découpage et la durée de chaque épisode sont déterminés automatiquement d'après la structure du scénario",
 "分镜时长需满足 0 < 下限 ≤ 上限": "La durée des shots doit vérifier 0 < minimum ≤ maximum",
 "分镜预览": "Aperçu du storyboard",
 "分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Aperçu du storyboard: Scénario + storyboard + keyframes + vidéos générées par épisode",

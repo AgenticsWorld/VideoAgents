@@ -337,6 +337,8 @@ window.I18N_DICT = {
 "分级": "Clasificación",
 "分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)": "Plano {ep}/{sid} (escena {sc}{grp}; datos en directing/{ep}/shot_list.json con shot_id={sid}; prompt del plano en assets/prompts/{ep}/{sid}.json)",
 "分镜时长(秒)": "Duración de plano (segundos)",
+"根据剧本自动": "Automático según el guion",
+"勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长": "Si se marca, no se fija una duración por episodio: la división en episodios y la duración de cada uno se deciden automáticamente según la estructura del guion",
 "分镜时长需满足 0 < 下限 ≤ 上限": "La duración de plano debe cumplir 0 < mínimo ≤ máximo",
 "分镜预览": "Vista previa del storyboard",
 "分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Vista previa del storyboard: Guion por episodio + storyboard + fotogramas clave + vídeo generado",

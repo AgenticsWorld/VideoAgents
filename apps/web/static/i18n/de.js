@@ -337,6 +337,8 @@ window.I18N_DICT = {
 "分级": "Altersfreigabe",
 "分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)": "Shot {ep}/{sid} (Szene {sc}{grp}; Daten: shot_id={sid} in directing/{ep}/shot_list.json, Shot-prompt assets/prompts/{ep}/{sid}.json)",
 "分镜时长(秒)": "Shot-Dauer (Sekunden)",
+"根据剧本自动": "Automatisch nach Drehbuch",
+"勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长": "Wenn aktiviert, gibt es keine feste Episodendauer – Episodenaufteilung und -länge werden automatisch aus der Drehbuchstruktur bestimmt",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Für die Shot-Dauer muss gelten: 0 < Untergrenze ≤ Obergrenze",
 "分镜预览": "Storyboard-Vorschau",
 "分镜预览:每集剧本 + 分镜 + 关键帧 + 生成视频": "Storyboard-Vorschau: Pro Episode: Drehbuch + Storyboard + Keyframes + generierte Videos",

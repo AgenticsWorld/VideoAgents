@@ -664,7 +664,7 @@ DEFAULT_GENCONFIG = {
                       "project_name": "default", "group_id": "",
                       "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
-    "duration": {"episode_minutes": 10, "shot_min_s": 4, "shot_max_s": 8},
+    "duration": {"episode_minutes": 10, "shot_min_s": 2, "shot_max_s": 8},
     # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
@@ -1017,12 +1017,12 @@ def load_project_settings(project: str) -> dict:
 
 def _validate_duration(d: dict):
     try:
-        ep = float(d.get("episode_minutes", 10))
-        mn = float(d.get("shot_min_s", 4))
+        ep = d.get("episode_minutes", 10)   # 数值 或 "auto"(每集时长由剧本结构自动决定)
+        mn = float(d.get("shot_min_s", 2))
         mx = float(d.get("shot_max_s", 8))
-        assert ep > 0 and 0 < mn <= mx
+        assert (ep == "auto" or float(ep) > 0) and 0 < mn <= mx
     except (TypeError, ValueError, AssertionError):
-        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0; shot duration must satisfy 0 < min <= max") from None
+        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max") from None
 
 
 def _validate_shot_group(g: dict):
@@ -2051,9 +2051,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     if own_review:
         own_review = "\n" + own_review
     ui_lang = resolve_ui_language()
-    ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
-    ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
-    shot_min = _fmt_num(dur.get("shot_min_s") or 4)
+    if dur.get("episode_minutes") == "auto":
+        ep_line = ("根据剧本自动 —— 不设固定每集预算:剧本分集(episode_plan)由 episode-planner 按剧情结构"
+                   "自行决定集数与每集时长,并在 episode_plan 中写明各集实际预算;节奏(pacing)、"
+                   "剪辑(edit)以 episode_plan 的实际预算为基准")
+    else:
+        ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
+        ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
+        ep_line = (f"{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、"
+                   f"节奏(pacing)、剪辑(edit)一律以此为基准")
+    shot_min = _fmt_num(dur.get("shot_min_s") or 2)
     shot_max = _fmt_num(dur.get("shot_max_s") or 8)
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
@@ -2076,7 +2083,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
-- 每集目标时长:{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、节奏(pacing)、剪辑(edit)一律以此为基准
+- 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
 - 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
@@ -5970,9 +5977,11 @@ async def api_projects_create(body: dict):
     if cfg is not None:
         aspect, aspect_name, lang = resolve_output(cfg)
         dur = cfg["duration"]
+        ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
+                   else f"每集约 {dur['episode_minutes']} 分钟")
         msg.append(
             f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
-            f"输出语言 {lang}、每集约 {dur['episode_minutes']} 分钟、各维度审核力度与片头片尾开关等,"
+            f"输出语言 {lang}、{ep_desc}、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"
