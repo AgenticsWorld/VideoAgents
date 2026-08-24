@@ -14,7 +14,8 @@
       ④ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
       ⑤ 图上标记映射句:每个角色按 blocking_map.characters 数组顺序对应字母 A/B/C…,video_prompt 须含
          "<字母> = <角色名> (<CHAR id>)" 形式的映射(同一逗号/句号段内既有 "A =" 又有该 CHAR id)——
-         俯视图上只画字母 + 编号(渲染字体无 CJK),名字↔编号↔字母靠这句文字告诉视频模型;
+         俯视图图例亦写角色名与动线句(2026-08-24 三订起支持 CJK 渲染),此句照旧必写:
+         图文双保险,且本机检只读 prompt 文本、不读图;
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
