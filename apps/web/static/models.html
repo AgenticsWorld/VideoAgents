@@ -359,7 +359,7 @@ const EL_TTS_MODELS=[
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'elevenlabs',tts:'volcengine'};
+const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'minimax',tts:'volcengine'};
 let DH_PROVIDER='heygen';
 
 function buildSection(kind){

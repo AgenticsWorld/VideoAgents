@@ -239,7 +239,8 @@ def render(layout_png: Path, routes, out_png: Path, title: str):
             bb = d.textbbox((0, 0), letter, font=fnt)
             d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
                    fill=(255, 255, 255, 255), font=fnt)
-    # 图例(左上,半透明底)
+    # 图例(左上,半透明底;画在独立图层再 alpha 合成——若与标记同层,底色像素会整体
+    # 覆盖其下的标记;分层后落在图例框内的标记以半透明透出,位置信息不丢,2026-08-20)
     # 图例只写「字母 = 角色编号」(2026-08-19 二订):渲染字体无 CJK 字形,中文名会成方块;
     # 名字↔编号↔字母的对应关系改由 prompt 文字承担(Map markers 句,机检 layout_map_bound)
     lines = [f"{title}  |  circle = start, square = end, arrow = path"]
@@ -247,22 +248,24 @@ def render(layout_png: Path, routes, out_png: Path, title: str):
         mv = "moves" if end else "stays"
         cid_ascii = cid if cid.isascii() else cid.encode("ascii", "ignore").decode() or f"char{idx+1}"
         lines.append(f"{LETTERS[idx]} = {cid_ascii}  [{mv}]")
+    lg = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    dl = ImageDraw.Draw(lg)
     pad = int(R * 0.6)
-    tw = max(d.textbbox((0, 0), t, font=lg_font)[2] for t in lines)
-    th = d.textbbox((0, 0), "Ag", font=lg_font)[3]
+    tw = max(dl.textbbox((0, 0), t, font=lg_font)[2] for t in lines)
+    th = dl.textbbox((0, 0), "Ag", font=lg_font)[3]
     box_h = pad * 2 + len(lines) * int(th * 1.35)
-    d.rectangle([pad, pad, pad * 3 + tw + R * 1.4, pad + box_h], fill=(0, 0, 0, 150))
+    dl.rectangle([pad, pad, pad * 3 + tw + R * 1.4, pad + box_h], fill=(0, 0, 0, 135))
     y = pad * 2
     for idx, t in enumerate(lines):
         if idx == 0:
-            d.text((pad * 2, y), t, fill=(255, 255, 255, 255), font=lg_font)
+            dl.text((pad * 2, y), t, fill=(255, 255, 255, 255), font=lg_font)
         else:
             col = PALETTE[(idx - 1) % len(PALETTE)]
             r = int(th * 0.45)
-            d.ellipse([pad * 2, y + th * 0.15, pad * 2 + 2 * r, y + th * 0.15 + 2 * r], fill=col + (255,))
-            d.text((pad * 2 + 2 * r + pad, y), t, fill=(255, 255, 255, 255), font=lg_font)
+            dl.ellipse([pad * 2, y + th * 0.15, pad * 2 + 2 * r, y + th * 0.15 + 2 * r], fill=col + (255,))
+            dl.text((pad * 2 + 2 * r + pad, y), t, fill=(255, 255, 255, 255), font=lg_font)
         y += int(th * 1.35)
-    out = Image.alpha_composite(im, ov).convert("RGB")
+    out = Image.alpha_composite(Image.alpha_composite(im, ov), lg).convert("RGB")
     out_png.parent.mkdir(parents=True, exist_ok=True)
     out.save(out_png, optimize=True)
     return out.size
