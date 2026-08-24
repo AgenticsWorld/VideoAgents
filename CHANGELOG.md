@@ -4,6 +4,12 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+## [1.0.23] - 2026-08-24
+
+### Changed
+
+- The desktop download-progress window (app updates and the first-launch Python runtime download) now shows a live stats line under the progress bar — downloaded / total size, percentage, and a smoothed download speed (e.g. `123.4 MB / 274.0 MB · 45% · 3.2 MB/s`). Also fixes the progress bar itself, which previously rendered as full from the start (`<progress>` was fed 0–100 values against its default max of 1); DOM updates are now throttled to at most once per 200 ms instead of once per network chunk.
+
 ## [1.0.22] - 2026-08-24
 
 ### Added
