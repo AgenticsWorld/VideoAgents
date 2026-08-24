@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """对白文稿 → 单人切换数字人视频。
 
-无论单人物还是多人物，每段都必须是
-``[00:01.200-00:04.800] 说话人: 台词``，不再允许按字数估算人物边界。
+每段都必须有完整起止时间。多人稿使用
+``[00:01.200-00:04.800] 说话人: 台词``；只有一个人物映射时可省略人名。
+不再允许按字数估算人物边界。
 最终封装始终 ``-c:a copy``，渠道临时音轨一律丢弃。
 """
 from __future__ import annotations
@@ -90,12 +91,16 @@ def parse_labeled_transcript(text: str, default_speaker: str | None = None) -> l
     return rows
 
 
-def _require_timed_transcript(text: str) -> None:
+def _require_timed_transcript(text: str, default_speaker: str | None = None) -> None:
     """逐段硬检；在任何时间轴处理或渠道调用之前给出准确行号。"""
     missing_labels, missing_times = [], []
     for lineno, raw in enumerate(text.splitlines(), 1):
         value = raw.strip()
         if not value or value.startswith("#"):
+            continue
+        if default_speaker and _PLAIN_TIMED.match(value):
+            # Check this before _LINE: the colon inside ``00:00`` can otherwise
+            # be interpreted as a speaker separator when the label is omitted.
             continue
         match = _LINE.match(value)
         if not match:
@@ -104,7 +109,8 @@ def _require_timed_transcript(text: str) -> None:
             missing_times.append(lineno)
     if missing_labels:
         shown = ", ".join(map(str, missing_labels[:20]))
-        raise ValueError(f"数字人文稿第 {shown} 行缺少人物名称或合法台词格式")
+        suffix = "；单人稿可用 [起始-结束] 台词" if default_speaker else ""
+        raise ValueError(f"数字人文稿第 {shown} 行缺少人物名称或合法台词格式{suffix}")
     if missing_times:
         shown = ", ".join(map(str, missing_times[:20]))
         raise ValueError(
@@ -206,6 +212,32 @@ def _load_speakers(cast: str | None, speaker_images: dict | None) -> dict:
     return speakers
 
 
+def _require_generated_transcript_ready(transcript_path: Path, audio_path: Path) -> None:
+    """Honor ASR/diarization readiness before any paid avatar plan is built."""
+    metadata_path = transcript_path.with_name("transcription.json")
+    if not metadata_path.is_file():
+        return
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        recorded = Path(str(metadata.get("transcript") or "")).resolve()
+    except (OSError, ValueError, TypeError):
+        return
+    if recorded != transcript_path.resolve():
+        return
+    audio_meta = metadata.get("audio") or {}
+    if audio_meta.get("sha256") != file_sha256(str(audio_path)):
+        raise ValueError("自动转写稿对应的音频 SHA256 与当前母带不一致，必须重新转写")
+    transcript_sha = metadata.get("transcript_sha256")
+    if transcript_sha and transcript_sha != file_sha256(str(transcript_path)):
+        raise ValueError("自动转写稿内容已改变，说话人置信度结论已失效；请重新转写或将修订稿作为用户文稿导入")
+    if metadata.get("ready_for_digital_human") is not True:
+        diarization = metadata.get("diarization") or {}
+        raise ValueError(
+            "自动转写稿的说话人聚类未达到付费生成条件："
+            f"confidence={diarization.get('confidence')}, "
+            f"required={diarization.get('minimum_confidence')}；请确认人物映射或提供文稿")
+
+
 def build_dialogue_track(audio: str, transcript: str, cast: str | None = None,
                          speaker_images: dict | None = None) -> dict:
     audio_path, transcript_path = map(Path, (audio, transcript))
@@ -214,14 +246,16 @@ def build_dialogue_track(audio: str, transcript: str, cast: str | None = None,
             raise RuntimeError(f"输入文件不存在：{path}")
     duration = probe_duration(str(audio_path))
     speakers = _load_speakers(cast, speaker_images)
+    _require_generated_transcript_ready(transcript_path, audio_path)
     transcript_text = transcript_path.read_text(encoding="utf-8")
-    _require_timed_transcript(transcript_text)
-    rows = parse_labeled_transcript(transcript_text)
+    default_speaker = next(iter(speakers)) if len(speakers) == 1 else None
+    _require_timed_transcript(transcript_text, default_speaker=default_speaker)
+    rows = parse_labeled_transcript(transcript_text, default_speaker=default_speaker)
     has_explicit_timestamps = rows[0]["start"] is not None
     if not has_explicit_timestamps:
         raise ValueError(
-            "数字人文稿每段必须提供完整起止时间和人物名称，格式："
-            "[00:00.000-00:03.200] 主持人：台词；禁止按字数估算换人边界")
+            "数字人文稿每段必须提供完整起止时间；多人稿还必须有人物名称。"
+            "格式：[00:00.000-00:03.200] 主持人：台词；禁止按字数估算换人边界")
     # 与 audio-to-video 相同，把云端生成任务控制为短段；人物不变时也允许无缝续接。
     # 不再合并相邻同一说话人，避免一行续稿形成几十秒的单个渠道任务。
     rows = _split_long_rows(rows, duration)

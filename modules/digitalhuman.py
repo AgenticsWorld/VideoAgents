@@ -2,7 +2,7 @@
 """数字人单人片段生成器。
 
 输入一张人物图和一段该人物的对白音频，按「生成模型 → 数字人」配置自动路由到
-HeyGen、Kling AI（北京）或本地 ComfyUI/InfiniteTalk。最终母带封装由
+HeyGen、Kling AI（北京）、RunningHub 云端工作流或本地 ComfyUI/InfiniteTalk。最终母带封装由
 ``modules/dialogue_video.py`` 完成；渠道返回的音轨不会进入成片。
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ import json
 import mimetypes
 import os
 import random
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,15 +23,15 @@ try:
     from modules.avsync import probe_duration
     from modules.genmedia import (
         CONFIG_PATH, _comfy_endpoint, _comfy_fill_workflow,
-        _comfy_run, _comfy_upload, _get_json, _post_json, _request,
-        _resolve_comfy_workflow_path,
+        _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
+        _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
 except ModuleNotFoundError:  # python modules/digitalhuman.py ...
     from avsync import probe_duration
     from genmedia import (
         CONFIG_PATH, _comfy_endpoint, _comfy_fill_workflow,
-        _comfy_run, _comfy_upload, _get_json, _post_json, _request,
-        _resolve_comfy_workflow_path,
+        _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
+        _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
 
 HEYGEN_BASE = "https://api.heygen.com"
@@ -51,8 +52,8 @@ def get_config() -> dict:
     root = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     section = root.get("digital_human") or {}
     provider = section.get("provider")
-    if provider not in {"heygen", "klingai", "comfyui"}:
-        raise RuntimeError("数字人渠道未配置；请选择 HeyGen、Kling AI 或 ComfyUI")
+    if provider not in {"heygen", "klingai", "runninghub", "comfyui"}:
+        raise RuntimeError("数字人渠道未配置；请选择 HeyGen、Kling AI、RunningHub 或 ComfyUI")
     cfg = dict(section.get(provider) or {})
     if provider == "heygen":
         cfg["api_key"] = cfg.get("api_key") or os.environ.get("HEYGEN_API_KEY", "")
@@ -60,7 +61,28 @@ def get_config() -> dict:
     elif provider == "klingai":
         cfg["api_key"] = cfg.get("api_key") or os.environ.get("KLINGAI_API_KEY", "")
         cfg["api_base"] = KLING_BASE
-    if provider != "comfyui" and not cfg.get("api_key"):
+    elif provider == "runninghub":
+        # 数字人的 RunningHub 是独立渠道；这里只在调用 genmedia 的 RH 传输层时
+        # 转成其通用字段，不读取或覆盖 digital_human.comfyui。
+        site = str(cfg.get("site") or "rh_cn")
+        if site not in {"rh_cn", "rh_ai"}:
+            raise RuntimeError("RunningHub 站点必须是 rh_cn 或 rh_ai")
+        cfg = {
+            **cfg,
+            "mode": site,
+            "rh_api_key_cn": cfg.get("api_key_cn") or "",
+            "rh_api_key_ai": cfg.get("api_key_ai") or "",
+            "rh_workflow_id": cfg.get("workflow_id") or "",
+            "rh_instance_type": cfg.get("instance_type") or "standard",
+        }
+        active_key = (cfg[f"rh_api_key_{site[3:]}"] or
+                      os.environ.get("RUNNINGHUB_API_KEY", ""))
+        if not str(active_key).strip():
+            raise RuntimeError(
+                "RunningHub 未配置当前站点 API Key（数字人设置或环境变量 RUNNINGHUB_API_KEY）")
+        if not str(cfg["rh_workflow_id"]).strip():
+            raise RuntimeError("RunningHub 未选择数字人云端工作流")
+    if provider in {"heygen", "klingai"} and not cfg.get("api_key"):
         env = "HEYGEN_API_KEY" if provider == "heygen" else "KLINGAI_API_KEY"
         raise RuntimeError(f"{provider} 未配置 API Key（设置页或环境变量 {env}）")
     return {"provider": provider, **cfg}
@@ -289,6 +311,131 @@ def _comfy(image: str, audio: str, output: str, prompt: str,
     )
 
 
+def _rh_active_loads(workflow: dict, class_type: str) -> list[tuple[str, dict]]:
+    """返回真正连入执行图的加载节点；未被消费的作者孤岛素材不参与歧义计数。"""
+    referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                  for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    return [(str(nid), node.setdefault("inputs", {}))
+            for nid, node in workflow.items() if isinstance(node, dict)
+            and node.get("class_type") == class_type and str(nid) in referenced]
+
+
+def _rh_literal_slots(workflow: dict, keys: tuple[str, ...],
+                      class_contains: str = "") -> list[tuple[str, dict, str]]:
+    out = []
+    for nid, node in workflow.items():
+        if not isinstance(node, dict):
+            continue
+        cls = str(node.get("class_type") or "").lower()
+        if class_contains and class_contains not in cls:
+            continue
+        inputs = node.setdefault("inputs", {})
+        for key in keys:
+            if key in inputs and not _node_link(inputs[key]):
+                out.append((str(nid), inputs, key))
+    return out
+
+
+def _apply_rh_digitalhuman_bindings(raw: str, workflow: dict, image_name: str,
+                                     audio_name: str, prompt: str,
+                                     seed: int, frames: int) -> dict:
+    """为无占位符的 RunningHub 数字人导出件直绑本次输入。
+
+    RunningHub 工作区导出的 API JSON 通常保留作者演示文件名。图片/音频是身份与
+    口型的硬输入，缺占位符时必须能定位唯一在用节点，否则在创建付费任务前停止。
+    prompt/seed/frames 在结构清晰时同步覆盖；无法唯一识别的可选数值沿用模板并回显。
+    """
+    summary = {"mode": "placeholders"}
+    if not any(token in raw for token in ("{{IMAGE}}", "{{FIRST_FRAME}}")):
+        loads = _rh_active_loads(workflow, "LoadImage")
+        if len(loads) != 1:
+            raise RuntimeError(
+                f"RunningHub 数字人工作流须恰好 1 个在用的 LoadImage 节点(找到 {len(loads)} 个),"
+                "无法自动绑定人物图片；请精简工作流或添加 {{IMAGE}}/{{FIRST_FRAME}} 占位符")
+        loads[0][1]["image"] = image_name
+        summary["image_node"] = loads[0][0]
+        summary["mode"] = "auto_nodes"
+    if not any(token in raw for token in ("{{AUDIO}}", "{{REF_AUDIO}}")):
+        loads = _rh_active_loads(workflow, "LoadAudio")
+        if len(loads) != 1:
+            raise RuntimeError(
+                f"RunningHub 数字人工作流须恰好 1 个在用的 LoadAudio 节点(找到 {len(loads)} 个),"
+                "无法自动绑定对白音频；请精简工作流或添加 {{AUDIO}}/{{REF_AUDIO}} 占位符")
+        loads[0][1]["audio"] = audio_name
+        summary["audio_node"] = loads[0][0]
+        summary["mode"] = "auto_nodes"
+    if "{{PROMPT}}" not in raw:
+        slots = _rh_literal_slots(workflow, ("positive_prompt",))
+        if not slots:
+            slots = _rh_literal_slots(workflow, ("prompt", "text"), "textencode")
+        if len(slots) == 1:
+            slots[0][1][slots[0][2]] = prompt
+            summary["prompt_node"] = slots[0][0]
+        else:
+            print(f"[digitalhuman] RunningHub 未定位到唯一正向提示词位(找到 {len(slots)} 个),"
+                  "沿用云端模板提示词", file=sys.stderr)
+    if "{{SEED}}" not in raw:
+        slots = _rh_literal_slots(workflow, ("seed", "noise_seed"), "sampler")
+        numeric = [slot for slot in slots
+                   if isinstance(slot[1].get(slot[2]), (int, float))
+                   and not isinstance(slot[1].get(slot[2]), bool)]
+        if len(numeric) == 1:
+            numeric[0][1][numeric[0][2]] = seed
+            summary["seed_node"] = numeric[0][0]
+    if "{{FRAMES}}" not in raw:
+        slots = _rh_literal_slots(workflow, ("num_frames", "frames"))
+        numeric = [slot for slot in slots
+                   if isinstance(slot[1].get(slot[2]), (int, float))
+                   and not isinstance(slot[1].get(slot[2]), bool)]
+        if len(numeric) == 1:
+            numeric[0][1][numeric[0][2]] = frames
+            summary["frames_node"] = numeric[0][0]
+    return summary
+
+
+def _runninghub(image: str, audio: str, output: str, prompt: str,
+                seed: int | None, cfg: dict, job_path: str | None = None) -> str:
+    """RunningHub 独立数字人渠道：上传图片/音频，填充云端工作流并持久化 task_id。"""
+    task_id = _task_id(job_path, "runninghub")
+    if task_id:
+        # 恢复只轮询既有远端任务；不重新上传输入，更不会再次 create 计费任务。
+        workflow = {}
+    else:
+        template = _rh_workflow_text(cfg)
+        image_name = _rh_upload(cfg, image)
+        audio_name = _rh_upload(cfg, audio)
+        duration = probe_duration(audio)
+        frames = max(1, round(duration * 25 / 4) * 4 + 1)
+        tokens = {
+            "IMAGE": image_name, "FIRST_FRAME": image_name,
+            "AUDIO": audio_name, "REF_AUDIO": audio_name,
+            "PROMPT": prompt or "natural speaking, subtle head movement, steady camera",
+            "SEED": seed if seed is not None else random.randrange(1, 2**31),
+            "DURATION": duration, "FRAMES": frames,
+        }
+        workflow = _comfy_fill_workflow(template, tokens)
+        binding = _apply_rh_digitalhuman_bindings(
+            template, workflow, image_name, audio_name, str(tokens["PROMPT"]),
+            int(tokens["SEED"]), frames)
+        print("[digitalhuman] RunningHub 输入绑定 "
+              + json.dumps(binding, ensure_ascii=False, separators=(",", ":")),
+              file=sys.stderr, flush=True)
+    def update_status(status: str) -> None:
+        waiting = status == "waiting_capacity"
+        changes = {"status": "waiting_capacity" if waiting else "running",
+                   "provider_status": status, "error": None}
+        if waiting:
+            job = _load_job(job_path)
+            changes["capacity_waits"] = int(job.get("capacity_waits") or 0) + 1
+        _update_job(job_path, **changes)
+
+    return _rh_run(
+        cfg, workflow, output, want_video=True, task_id=task_id or None,
+        on_submit=lambda tid: _submitted(job_path, "runninghub", tid),
+        on_status=update_status,
+    )
+
+
 def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
                     seed: int | None = None, dry_run: bool = False,
                     job_path: str | None = None, retry_failed: bool = False) -> str:
@@ -326,6 +473,8 @@ def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
     try:
         if cfg["provider"] == "comfyui":
             result = _comfy(image, audio, output, prompt, seed, cfg, job_path)
+        elif cfg["provider"] == "runninghub":
+            result = _runninghub(image, audio, output, prompt, seed, cfg, job_path)
         else:
             result = {"heygen": _heygen, "klingai": _kling}[cfg["provider"]](
                 image, audio, output, prompt, cfg, job_path)
@@ -334,7 +483,10 @@ def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
         terminal = current.get("provider_status") in {
             "failed", "error", "canceled", "cancelled"
         }
-        _update_job(job_path, status="failed" if terminal else "poll_error",
+        # 没有 task_id 时错误发生在上传/创建之前，不能误报为轮询失败。
+        status = ("failed" if terminal else
+                  "poll_error" if current.get("task_id") else "preflight_error")
+        _update_job(job_path, status=status,
                     error=str(exc)[:2000])
         raise
     _update_job(job_path, status="completed", provider_status="completed",

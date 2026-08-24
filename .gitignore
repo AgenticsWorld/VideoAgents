@@ -69,5 +69,7 @@ plugins/audio-to-video
 plugins/mashup
 conversation_history/
 data/TimbreModel/
+data/models/*
+!data/models/README.md
 Users/
 qa/

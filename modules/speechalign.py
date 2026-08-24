@@ -337,13 +337,12 @@ def align_asr_to_transcript(segs: list[dict], asr_words: list[dict],
 
 def run_whisper(audio: Path, model_size: str = "small", language: str | None = None,
                 initial_prompt: str | None = None) -> list[dict]:
-    """faster-whisper 逐词时间戳(可选依赖)。返回 [{text,start,end}]。"""
+    """faster-whisper 逐词时间戳。模型统一缓存到 ``data/models/``。"""
     try:
-        from faster_whisper import WhisperModel      # type: ignore
-    except ImportError as e:
-        raise RuntimeError("whisper 后端需要 faster-whisper:pip install faster-whisper"
-                           "(或改用 --backend interp / --backend import --words-json)") from e
-    model = WhisperModel(model_size, device="auto", compute_type="default")
+        from modules.transcription import load_model
+    except ModuleNotFoundError:  # python code/render_captions.py ...
+        from transcription import load_model
+    model = load_model(model_size, device="auto", compute_type="default")
     segments, _info = model.transcribe(str(audio), language=language, word_timestamps=True,
                                        initial_prompt=initial_prompt,
                                        vad_filter=True, beam_size=5)

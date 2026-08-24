@@ -71,7 +71,7 @@ def check(track_path: str, clips_dir: str | None, final: str | None,
                     errors.append(
                         f"{item.get('id')} 渠道任务尚未完成：{job.get('status') or 'pending'}")
                 provider = job.get("provider")
-                if provider not in {"static", "heygen", "klingai", "comfyui"}:
+                if provider not in {"static", "heygen", "klingai", "runninghub", "comfyui"}:
                     errors.append(f"{item.get('id')} 任务台账渠道非法：{provider or 'missing'}")
                 if item.get("render_mode") == "avatar" and provider == "static":
                     errors.append(f"{item.get('id')} 口型片段不能用静帧台账冒充")

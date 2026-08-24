@@ -486,6 +486,17 @@ refs/
 > 情况——refs 含所涉实体在库概念图路径、prompt 风格锚命中;不满足则产物不得入库、不得作下游锚,
 > version 不予登记。
 
+### 按需音频转写（09-audio/audio-transcription）
+
+`audio-transcription` 是宿主内置的按需服务工位，不固定插入小说→视频主 DAG。任一流程只有音频、
+没有可消费文字稿时，由 orchestrator 派单执行 `modules/transcription.py transcribe`，缺失的
+faster-whisper 模型自动下载到 `data/models/faster-whisper/` 并复用；产出 UTF-8 时间轴 TXT 与
+包含逐词时间、音频 SHA-256、模型信息的 JSON。数字人插件缺稿时必须自动展开
+`dh0-transcribe`：单人物按 cast 名称直接生成连续覆盖母带的标签稿；多人优先使用显式说话人时间
+边界，否则用本地 MFCC/音高聚类，并按用户指令映射“不同声纹第一次出现顺序”或“低音/高音”到
+cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digital_human=false` 时付费生成保持
+阻塞。已有用户稿件则跳过转写且不覆盖。
+
 ### Phase 8 — 音频(每集;cue 设计、音色样本与旁白轨先于 Phase 7 组生成,混音在其后)
 
 > **§8A 音频范式(2026-07-20 改版:人物 Voice 样本范式——逐角色 voiceprint 挂锚 + prompt 显式绑定)**:

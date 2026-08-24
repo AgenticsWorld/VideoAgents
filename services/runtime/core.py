@@ -167,7 +167,7 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
 # prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
 STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
-                    "01-story/novel-parser"}
+                    "01-story/novel-parser", "09-audio/audio-transcription"}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
@@ -613,12 +613,15 @@ DEFAULT_GENCONFIG = {
                     "rh_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
     },
-    # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling v1 固定中国北京接口；
-    # ComfyUI 首版只支持本地 InfiniteTalk API 工作流，不走 Cloud/RunningHub。
+    # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling 固定中国北京接口；
+    # RunningHub 是独立云端渠道(私有 REST + 工作区工作流),与本地 ComfyUI 分开保存。
     "digital_human": {
-        "provider": "heygen",  # heygen | klingai | comfyui
+        "provider": "heygen",  # heygen | klingai | runninghub | comfyui
         "heygen": {"api_key": "", "resolution": "720p", "aspect_ratio": "16:9"},
         "klingai": {"api_key": "", "mode": "std"},
+        "runninghub": {"site": "rh_cn", "api_key_cn": "", "api_key_ai": "",
+                       "workflow_id": "", "workflows": [],
+                       "instance_type": "standard"},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188",
                     "workflow": "comfy/digitalhuman-infinitetalk-api.json"},
     },
@@ -951,6 +954,10 @@ MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2
 # 注入加载指令给 video-generation agent
 RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
                           "runninghub-cloud-workflow/SKILL.md")
+
+# 本地音频转写 skill:音频转文字 Agent 每单开工前必须读取；模型由宿主缓存到 data/models/
+AUDIO_TRANSCRIPTION_SKILL = (
+    "agents/09-audio/audio-transcription/skills/audio-transcription/SKILL.md")
 
 
 def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
@@ -2033,6 +2040,17 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+    if agent_id == "09-audio/audio-transcription":
+        p += f"""
+
+## 音频转文字 Skill（本工位强制）
+执行任何转写工单前，**先完整阅读 Skill 文件并按其中的模型缓存、时间轴格式和人物归属纪律执行**：
+- Skill 文件：{AUDIO_TRANSCRIPTION_SKILL}
+- 统一入口：`python3 modules/transcription.py transcribe ...`；缺少模型时会自动下载到
+  `data/models/faster-whisper/`，不得在项目目录或插件目录另存模型，不得在工单里临时 pip install
+- 多人音频按 Skill 把自然语言转换成确定参数：显式时间边界优先；“第一/第二个出现”用
+  `--speaker-order`；用户明确男/女声或低/高音映射时用 `--pitch-map`。不得逐行交替，不得从图片推断性别；
+  `ready_for_digital_human=false` 时必须阻塞付费生成"""
     if agent_id in CAPTION_AGENTS and out.get("caption_enabled"):
         p += """
 
@@ -2264,6 +2282,27 @@ def is_stateless_agent(agent_id: str) -> bool:
     return bool(p and any(a["id"] == agent_id and a["stateless"] for a in p["agents"]))
 
 
+def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
+    """Return the local fan-out limit, honoring provider-specific hard capacity.
+
+    RunningHub accounts may expose only one workflow slot.  Serialize digital-human
+    avatar workers locally so queued utterances stay queued in VideoAgents instead of
+    all reaching the remote create endpoint together.  The transport still handles
+    documented backpressure because other clients may occupy that same account.
+    """
+    stateless = is_stateless_agent(agent_id) if is_stateless is None else is_stateless
+    if not stateless:
+        return 1
+    if agent_id == "17-digital-human/avatar-generator":
+        try:
+            provider = (load_genconfig().get("digital_human") or {}).get("provider")
+        except Exception:
+            provider = None
+        if provider == "runninghub":
+            return 1
+    return agent_concurrency()
+
+
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
     is_dispatcher = is_dispatcher_agent(agent_id)
@@ -2277,7 +2316,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             await stack.enter_async_context(SEM)
         # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
         # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)
-        limit = agent_concurrency() if is_stateless else 1
+        limit = agent_run_limit(agent_id, is_stateless)
         await stack.enter_async_context(agent_sem(agent_id, limit))
         run["status"] = "running"
         run["started"] = time.time()
@@ -4389,6 +4428,16 @@ async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
             wf_id = str(comfy.get(field) or "").strip()
             if wf_id:
                 jobs.setdefault((mode, wf_id), key)
+    # 数字人把 RunningHub 作为独立 provider/配置段，不借用 comfyui.mode。
+    dh = cfg.get("digital_human") or {}
+    if dh.get("provider") == "runninghub":
+        rh = dh.get("runninghub") or {}
+        mode = str(rh.get("site") or "")
+        if mode in RH_BASES:
+            key = str(rh.get(f"api_key_{mode[3:]}") or "").strip()
+            wf_id = str(rh.get("workflow_id") or "").strip()
+            if key and wf_id:
+                jobs.setdefault((mode, wf_id), key)
     if not jobs:
         return []
 
@@ -4435,6 +4484,11 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    dh_rh = (cfg.get("digital_human") or {}).get("runninghub") or {}
+    if dh_rh.get("site") not in RH_BASES:
+        raise ServiceError(400, f"digital_human.runninghub.site must be one of {sorted(RH_BASES)}")
+    if dh_rh.get("instance_type") not in {"standard", "plus", "ultra"}:
+        raise ServiceError(400, "digital_human.runninghub.instance_type must be standard, plus or ultra")
     if cfg.get("agentmodel_mode") not in AM_MODES:
         raise ServiceError(400, f"agentmodel_mode must be one of {AM_MODES}")
     if cfg.get("ui_language") not in ("", *UI_LANG_NAMES):
@@ -5267,7 +5321,7 @@ COMFY_CLOUD_API = "https://cloud.comfy.org/api"
 
 
 async def api_test_digitalhuman(body: dict):
-    """测试数字人渠道凭证；Kling 首版固定 api-beijing.klingai.com。"""
+    """测试数字人渠道凭证；Kling 固定北京，RunningHub 与 ComfyUI 独立。"""
     provider = (body.get("provider") or "").strip()
     key = (body.get("api_key") or "").strip()
     if provider == "heygen":
@@ -5294,6 +5348,10 @@ async def api_test_digitalhuman(body: dict):
         if data.get("code") not in (None, 0):
             return {"ok": False, "error": str(data.get("message") or data)[:240]}
         return {"ok": True, "provider": provider, "region": "中国北京"}
+    if provider == "runninghub":
+        mode = str(body.get("mode") or "").strip()
+        result = await api_test_comfyui({"mode": mode, "api_key": key})
+        return {**result, "provider": provider, "site": mode}
     if provider == "comfyui":
         result = await api_test_comfyui({"mode": "local", "url": body.get("url")})
         if not result.get("ok"):
@@ -5315,7 +5373,7 @@ async def api_test_digitalhuman(body: dict):
         return {**result, "provider": provider, "infinitetalk_nodes": nodes,
                 "infinitetalk_ready": all(nodes.values()),
                 "workflow_exists": workflow.is_file()}
-    raise ServiceError(400, "provider must be heygen, klingai or comfyui")
+    raise ServiceError(400, "provider must be heygen, klingai, runninghub or comfyui")
 
 
 async def api_test_comfyui(body: dict):
@@ -5438,6 +5496,20 @@ async def api_comfy_workflow_doc(name: str):
 _RH_WF_ID_RE = re.compile(r"(\d{6,})")
 
 
+def _rh_workflow_active_load_ids(workflow: dict, class_type: str) -> list[str]:
+    """RunningHub API JSON 中真正被下游消费的加载节点 id；忽略未连接的演示孤岛。"""
+    referenced = set()
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+        for value in (node.get("inputs") or {}).values():
+            if isinstance(value, list) and len(value) == 2 \
+                    and isinstance(value[0], (str, int)) and isinstance(value[1], int):
+                referenced.add(str(value[0]))
+    return [str(nid) for nid, node in workflow.items() if isinstance(node, dict)
+            and node.get("class_type") == class_type and str(nid) in referenced]
+
+
 async def api_rh_workflow_verify(body: dict):
     """验证 RunningHub 工作流:按 ID(或工作区页面链接)经 getJsonApiFormat 拉取
     JSON,写入本地缓存(genmedia 运行时同读),并回报检测到的 {{TOKEN}} 占位符,
@@ -5473,9 +5545,12 @@ async def api_rh_workflow_verify(body: dict):
     tokens = sorted(set(re.findall(r"\{\{([A-Z][A-Z0-9_]*)\}\}", text)))
     h3 = any(isinstance(n, dict) and n.get("class_type") == "MiniMaxH3ReferenceToVideo"
              for n in workflow.values()) if isinstance(workflow, dict) else False
+    load_images = _rh_workflow_active_load_ids(workflow, "LoadImage")
+    load_audios = _rh_workflow_active_load_ids(workflow, "LoadAudio")
     return {"ok": True, "id": wf_id, "tokens": tokens,
             "node_count": len(workflow) if isinstance(workflow, dict) else 0,
-            "minimax_h3": h3}
+            "minimax_h3": h3,
+            "active_load_images": load_images, "active_load_audios": load_audios}
 
 
 async def api_agents(refresh: bool = False):

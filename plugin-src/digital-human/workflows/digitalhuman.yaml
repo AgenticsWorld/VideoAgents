@@ -1,0 +1,143 @@
+# digitalhuman.yaml — 数字人对话流水线（纯声明式插件）
+# 不设人工闸门；用户文稿可选。已提供的文稿必须逐段含完整起止时间和台词；多人稿每段另需说话人，单人可省略。
+# 未提供时总制片自动派宿主 09-audio/audio-transcription 生成时间轴稿。单人可全自动归名；
+# 多人可按显式边界、声纹簇首次出现顺序或用户指定低/高音映射人物，严禁逐行交替和图片性别推断。
+# 与 audio-to-video 一样，本 DAG 必须并入 runs/dag.json 统一跟踪，节点真实完成后才能推进。
+# 特别是 dh2 禁止由 orchestrator 直接运行整批命令、伪造 VIDEOAGENTS_AGENT、使用 &/nohup
+# 或把工具的“仍在运行”误报为后台任务。每个 utterance 是独立工单，渠道 task_id 持久化到
+# jobs/{utterance}.json；宿主/Agent 中断后重跑同一工单即恢复轮询，不重复付费提交。
+# 本文件中的所有 outputs 路径均相对当前项目根目录 VIDEOAGENTS_PROJECT_ROOT，严禁写到工作区根。
+version: 1
+plugin: digital-human
+
+main_dag_on_start:
+  skip:
+    - p0-scan
+    - p0-parse-*
+    - p1-*
+    - p2-*
+    - p3-*
+    - p4-*
+    - p5-*
+    - p6-*
+    - p7-*
+    - p8-*
+    - p9-*
+    - p10-*
+    - p11-*
+    - g1
+    - g2
+    - g3
+    - g4
+    - g5
+    - g6
+    - g7
+    - g8
+    - g9
+    - g10
+
+defaults:
+  eval_threshold: 80
+  max_retries: 3
+  on_fail: escalate_human
+  run_record: [context.md, result.json, eval.json, meta.json]
+
+# 调度纪律（与 audio-to-video 的组级生成相同）：
+# 1. orchestrator 只派单，不直接执行 modules/dialogue_video.py render。
+# 2. dh2-avatar 按 utterance 实例化；每个实例只允许 --only 一个 id，且命令必须前台完成。
+# 3. 命令尚未退出、clip/job 未齐备时节点保持 running；不得结束 turn 后声称“后台运行”。
+# 4. dh2-verify 汇总前所有实例必须 terminal done；失败实例按 max_retries 重派同一 id。
+# 5. 无 task_id 的 preflight_error 修正配置/上传后直接重跑；task_id 存在的 poll_error/interrupted
+#    默认恢复；仅远端明确 failed 才 --retry-failed。
+# 6. 当前渠道为 RunningHub 时，宿主把 avatar-generator 本地并发限制为 1；若账户仍被网页端或其它
+#    客户端占满，421/415/804/1003/1010/1011/1520 等背压保持 waiting_capacity 并退避重试。
+#    waiting_capacity 是运行中状态，不计 attempt、不触发 max_retries；鉴权/余额/参数错误不得等待。
+
+phases:
+  - id: dh0
+    name: 输入与时间轴
+    tasks:
+      - id: dh0-ingest
+        agent: 17-digital-human/dialogue-ingest
+        outputs: ["assets/audio/master/{ep}.mp3", "digital-human/input_manifest.json",
+                  "digital-human/cast.json"]
+        validation:
+          auto: [host_toolchain_verified, ffmpeg_verified, master_copied_verbatim,
+                 transcript_optional, supplied_transcript_valid_if_present, cast_ge_1,
+                 ascii_filename]
+          rubric: extraction_v1
+      - id: dh0-transcribe
+        agent: 09-audio/audio-transcription
+        depends_on: [dh0-ingest]
+        condition: transcript_missing
+        outputs: ["digital-human/transcript_generated.txt",
+                  "digital-human/transcription.json"]
+        validation:
+          auto: [asr_model_under_data_models, transcript_nonempty,
+                 explicit_timestamps_for_every_segment, master_sha256_match,
+                 speaker_name_on_every_segment, lightweight_diarization_recorded_if_used,
+                 ready_for_digital_human]
+          rubric: extraction_v1
+      - id: dh0-align
+        agent: 17-digital-human/speaker-aligner
+        depends_on: [dh0-ingest, dh0-transcribe]
+        outputs: ["digital-human/dialogue_track.json"]
+        validation:
+          auto: [schema, timeline_contiguous, timeline_covers_master,
+                 speakers_registered, explicit_timestamps_for_every_segment,
+                 master_sha256_match]
+          rubric: analysis_v1
+
+  - id: dh1
+    name: 数字人导演
+    depends_on: [dh0-align]
+    tasks:
+      - id: dh1-direct
+        agent: 17-digital-human/avatar-director
+        outputs: ["digital-human/render_plan.md"]
+        validation:
+          auto: [all_utterances_planned, one_person_per_shot, active_speaker_only,
+                 no_master_audio_edit]
+          rubric: visual_plan_v1
+
+  - id: dh2
+    name: 片段生成
+    depends_on: [dh1-direct]
+    tasks:
+      - id: dh2-avatar
+        agent: 17-digital-human/avatar-generator
+        for_each: utterance
+        outputs: ["assets/digital-human/{ep}/{utterance}.mp4",
+                  "assets/digital-human/{ep}/jobs/{utterance}.json"]
+        validation:
+          auto: [clip_exists, clip_covers_utterance, correct_speaker_image,
+                 durable_job_completed, provider_task_receipt_recorded,
+                 provider_capacity_wait_recovered_if_needed]
+          rubric: visual_gen_v1
+      - id: dh2-verify
+        agent: 11-qa/digital-human-sync-qa
+        depends_on: [dh2-avatar]
+        outputs: ["digital-human/render_status.json",
+                  "qa/reports/{ep}/digital_human_clips.json"]
+        validation:
+          auto: [all_utterances_terminal, all_jobs_completed, clips_check_pass]
+          rubric: edit_v1
+
+  - id: dh3
+    name: 合成与终审
+    depends_on: [dh2-verify]
+    tasks:
+      - id: dh3-edit
+        agent: 17-digital-human/dialogue-editor
+        outputs: ["edit/{ep}/final.mp4"]
+        validation:
+          auto: [one_person_fullscreen, cuts_follow_speaker, final_audio_no_transcode,
+                 no_cumulative_drift]
+          rubric: edit_v1
+      - id: dh3-qa
+        agent: 11-qa/digital-human-sync-qa
+        depends_on: [dh3-edit]
+        outputs: ["qa/reports/{ep}/digital_human_sync.json"]
+        validation:
+          auto: [digital_human_check_pass, final_audio_frames_intact, blocker_eq_0]
+          rubric: edit_v1

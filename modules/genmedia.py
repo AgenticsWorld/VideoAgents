@@ -598,11 +598,26 @@ COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
 # RunningHub(第三方云托管 ComfyUI):非原生同构 API,走私有 REST
 # (/task/openapi/create → status 轮询 → outputs 取 fileUrl 下载);工作流须先保存在
 # RunningHub 工作区并跑通,提交时以 workflow 字段整体覆盖云端模板(占位符替换与本地
-# 同一套 {{TOKEN}} 约定)。鉴权 = Authorization Bearer 头 + 请求体 apiKey 双重携带;
-# .cn 与 .ai 双站同构,账号与 Key 不互通。
+# 同一套 {{TOKEN}} 约定)。JSON 任务接口同时携带 Bearer 头和 apiKey;素材上传走
+# V2 /openapi/v2/media/upload/binary,只用 Bearer 头和 file multipart。.cn 与 .ai
+# 各自使用对应站点与 Key,账号不互通。
 RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
 RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
 RH_POLL_INTERVAL = 5
+RH_CREATE_WAIT_TIMEOUT = 7200
+
+# RunningHub 工作流 create 接口的可恢复背压。421/1520 是并发上限，415 是机器资源不足，
+# 804 表示同 Key 仍有任务运行；1003/1010/1011 是频率或服务繁忙。其余错误必须立即暴露，
+# 尤其不能把鉴权、余额、参数、内容审核错误伪装成等待。
+_RH_CREATE_BACKPRESSURE = {
+    415: (30, "可用机器不足"),
+    421: (20, "账户并发已满"),
+    804: (20, "同一 API Key 仍有任务运行"),
+    1003: (10, "请求频率受限"),
+    1010: (30, "服务暂不可用"),
+    1011: (30, "服务繁忙"),
+    1520: (20, "账户并发已满"),
+}
 
 
 def _comfy_is_rh(cfg) -> bool:
@@ -639,7 +654,7 @@ def _rh_post(base: str, key: str, path: str, payload: dict, timeout: int = 300) 
 
 
 def _rh_upload(cfg, path: str) -> str:
-    """上传输入文件到 RunningHub(≤30MB),返回 fileName(填入 LoadImage/LoadAudio 值位)。"""
+    """通过 RunningHub V2 媒体接口上传输入，返回 ComfyUI ``fileName``。"""
     p = Path(path)
     if not p.is_file():
         raise RuntimeError(f"输入文件不存在: {path}")
@@ -648,20 +663,18 @@ def _rh_upload(cfg, path: str) -> str:
     base, key, _ = _rh_ctx(cfg)
     boundary = uuid.uuid4().hex
     mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-    parts = []
-    for name, value in (("apiKey", key), ("fileType", "input")):
-        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; "
-                     f"name=\"{name}\"\r\n\r\n{value}\r\n".encode())
-    parts.append((f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
-                  f"filename=\"{p.name}\"\r\nContent-Type: {mime}\r\n\r\n").encode())
+    # V2 已废弃旧 /task/openapi/upload 所需的 apiKey/fileType form 字段。
+    # Key 只放 Authorization 头，避免新端点将旧字段解析为冲突凭据。
+    parts = [(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
+              f"filename=\"{p.name}\"\r\nContent-Type: {mime}\r\n\r\n").encode()]
     parts.append(p.read_bytes())
     parts.append(f"\r\n--{boundary}--\r\n".encode())
-    resp = json.loads(_request(base + "/task/openapi/upload", b"".join(parts),
+    resp = json.loads(_request(base + "/openapi/v2/media/upload/binary", b"".join(parts),
                                {"Content-Type": f"multipart/form-data; boundary={boundary}",
                                 "Authorization": f"Bearer {key}"}, timeout=300))
     if resp.get("code") != 0 or not (resp.get("data") or {}).get("fileName"):
         raise RuntimeError(f"RunningHub 上传失败(code={resp.get('code')}):"
-                           f"{str(resp.get('msg'))[:300]}")
+                           f"{str(resp.get('message') or resp.get('msg'))[:300]}")
     return resp["data"]["fileName"]
 
 
@@ -714,38 +727,133 @@ def _rh_prune_inert_nodes(workflow: dict) -> list[str]:
     return pruned
 
 
-def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
-    """RunningHub 建任务,轮询状态,下载首个匹配产物到 output(对应 _comfy_run)。"""
+def _rh_create_backoff(value, attempt: int) -> tuple[float, str] | None:
+    """Return a jittered create retry delay only for documented backpressure."""
+    code = None
+    if isinstance(value, dict):
+        raw_code = value.get("code")
+        if raw_code in (None, ""):
+            raw_code = value.get("errorCode")
+        text = " ".join(str(value.get(key) or "") for key in
+                        ("msg", "message", "errorMessage", "errorCode"))
+        try:
+            code = int(raw_code)
+        except (TypeError, ValueError):
+            pass
+    else:
+        text = str(value)
+        # _request 会把 HTTP 状态和响应 JSON 一起放入 RuntimeError；尽力提取业务码。
+        match = re.search(r'["\'](?:code|errorCode)["\']\s*:\s*["\']?(-?\d+)', text)
+        if match:
+            code = int(match.group(1))
+        elif re.search(r"\bHTTP\s+429\b", text, re.IGNORECASE):
+            code = 1003
+    if code in _RH_CREATE_BACKPRESSURE:
+        base, reason = _RH_CREATE_BACKPRESSURE[code]
+    else:
+        normalized = text.lower()
+        keyword_groups = (
+            (("task_queue_maxed", "concurrency limit", "concurrent limit",
+              "并发上限", "并发已满", "队列已满"), 20, "账户并发已满"),
+            (("task_instance_maxed", "instance maxed", "machine unavailable",
+              "机器数不足", "资源紧张"), 30, "可用机器不足"),
+            (("api_key task is running", "apikey_task_is_running", "task is running",
+              "任务正在运行"), 20, "同一 API Key 仍有任务运行"),
+            (("rate limit", "too many requests", "请求频率", "限流"),
+             10, "请求频率受限"),
+            (("system is currently busy", "service unavailable", "系统繁忙", "服务繁忙"),
+             30, "RunningHub 服务繁忙"),
+        )
+        found = next(((base, reason) for words, base, reason in keyword_groups
+                      if any(word in normalized for word in words)), None)
+        if not found:
+            return None
+        base, reason = found
+    delay = min(120.0, base * (1.5 ** max(0, attempt - 1)))
+    return delay + random.uniform(0.0, min(5.0, delay * 0.2)), reason
+
+
+def _rh_run(cfg, workflow: dict, output: str, want_video: bool,
+            task_id: str | None = None, on_submit=None, on_status=None) -> str:
+    """RunningHub 建任务/恢复轮询并下载首个匹配产物。
+
+    ``task_id`` 与回调供数字人等按片段持久化远端任务的调用方使用；普通生成调用
+    不传时行为保持不变。已有 task_id 时绝不再次 create，避免中断恢复造成重复计费。
+    """
     audio_exts = (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a")
     video_exts = (".mp4", ".webm", ".gif", ".webp")
     want_audio = (not want_video) and Path(output).suffix.lower() in audio_exts
     base, key, wf_id = _rh_ctx(cfg)
-    pruned = _rh_prune_inert_nodes(workflow)
-    if pruned:
-        print(f"[genmedia] RunningHub 提交前剪除 {len(pruned)} 个孤岛节点:"
-              + ",".join(pruned), file=sys.stderr, flush=True)
-    payload = {"workflowId": wf_id,
-               "workflow": json.dumps(workflow, ensure_ascii=False)}
-    # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
-    # plus/ultra 等直接透传,按秒单价更高,取值不合法由建任务接口报错(不计费)
     inst = str(cfg.get("rh_instance_type") or "").strip().lower()
-    if inst and inst != "standard":
-        payload["instanceType"] = inst
-    resp = _rh_post(base, key, "/task/openapi/create", payload)
-    if resp.get("code") != 0:
-        raise RuntimeError(f"RunningHub 建任务失败(code={resp.get('code')}):"
-                           f"{str(resp.get('msg'))[:400]}")
-    data = resp.get("data") or {}
-    task_id = data.get("taskId")
     if not task_id:
-        raise RuntimeError(f"RunningHub 建任务未返回 taskId:{json.dumps(resp)[:400]}")
-    if str(data.get("taskStatus") or "").upper() == "FAILED":
-        raise RuntimeError("RunningHub 工作流校验失败:"
-                           f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
-    # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印(非默认机器规格一并回显)
-    print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}"
-          + (f"(instanceType={inst})" if inst and inst != "standard" else ""),
-          file=sys.stderr, flush=True)
+        pruned = _rh_prune_inert_nodes(workflow)
+        if pruned:
+            print(f"[genmedia] RunningHub 提交前剪除 {len(pruned)} 个孤岛节点:"
+                  + ",".join(pruned), file=sys.stderr, flush=True)
+        payload = {"workflowId": wf_id,
+                   "workflow": json.dumps(workflow, ensure_ascii=False)}
+        # 运行模式(机器规格):standard 不传 instanceType 沿用平台默认(现行为);
+        # plus/ultra 等直接透传,按秒单价更高,取值不合法由建任务接口报错(不计费)
+        if inst and inst != "standard":
+            payload["instanceType"] = inst
+        create_deadline = time.time() + RH_CREATE_WAIT_TIMEOUT
+        create_attempt = 0
+        while True:
+            create_attempt += 1
+            try:
+                resp = _rh_post(base, key, "/task/openapi/create", payload)
+            except RuntimeError as exc:
+                backoff = _rh_create_backoff(exc, create_attempt)
+                if not backoff:
+                    raise
+                retry_source = exc
+            else:
+                # 813 表示请求已经进入平台队列；只要返回 taskId，就按成功受理继续轮询。
+                create_data = resp.get("data")
+                returned_task_id = (create_data.get("taskId")
+                                    if isinstance(create_data, dict) else None)
+                accepted = str(resp.get("code")) in ("0", "813") and returned_task_id
+                if accepted:
+                    break
+                backoff = _rh_create_backoff(resp, create_attempt)
+                if not backoff:
+                    raise RuntimeError(f"RunningHub 建任务失败(code={resp.get('code')}):"
+                                       f"{str(resp.get('msg') or resp.get('message'))[:400]}")
+                retry_source = resp
+            delay, reason = backoff
+            remaining = create_deadline - time.time()
+            if remaining <= 0:
+                code = retry_source.get("code") if isinstance(retry_source, dict) else "HTTP"
+                raise RuntimeError(
+                    f"RunningHub 等待并发名额超时({RH_CREATE_WAIT_TIMEOUT}s,"
+                    f"最后 code={code},尝试 {create_attempt} 次)：{reason}")
+            delay = min(delay, remaining)
+            if on_status:
+                on_status("waiting_capacity")
+            print(f"[genmedia] RunningHub {reason}，片段保持等待；"
+                  f"{delay:.1f}s 后第 {create_attempt + 1} 次尝试创建任务",
+                  file=sys.stderr, flush=True)
+            time.sleep(delay)
+        data = resp.get("data") or {}
+        task_id = data.get("taskId")
+        if not task_id:
+            raise RuntimeError(f"RunningHub 建任务未返回 taskId:{json.dumps(resp)[:400]}")
+        task_id = str(task_id)
+        if on_submit:
+            on_submit(task_id)
+        if str(data.get("taskStatus") or "").upper() == "FAILED":
+            if on_status:
+                on_status("failed")
+            raise RuntimeError("RunningHub 工作流校验失败:"
+                               f"{str(data.get('promptTips') or resp.get('msg'))[:800]}")
+        # taskId 是排错/对账/防重复计费的唯一凭据,创建即打印(非默认机器规格一并回显)
+        print(f"[genmedia] RunningHub 任务已创建 {task_id} → {Path(output).name}"
+              + (f"(instanceType={inst})" if inst and inst != "standard" else ""),
+              file=sys.stderr, flush=True)
+    else:
+        task_id = str(task_id)
+        print(f"[genmedia] RunningHub 恢复任务 {task_id} → {Path(output).name}",
+              file=sys.stderr, flush=True)
     deadline = time.time() + COMFY_TIMEOUT
     poll_errors = 0
     while time.time() < deadline:
@@ -767,7 +875,11 @@ def _rh_run(cfg, workflow: dict, output: str, want_video: bool) -> str:
         if isinstance(status, dict):  # 容错:部分版本把状态包在对象里
             status = status.get("taskStatus") or status.get("status")
         status = str(status or "").upper()
+        if on_status:
+            on_status(status.lower() or "unknown")
         if status in ("SUCCESS",):
+            if on_status:
+                on_status("downloading")
             return _rh_download_output(base, key, task_id, output, want_video, want_audio)
         if status == "FAILED":
             raise RuntimeError(f"RunningHub 任务失败(taskId={task_id}):"

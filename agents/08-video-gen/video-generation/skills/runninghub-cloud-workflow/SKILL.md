@@ -49,7 +49,7 @@ python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
      像素面积,速度/成本优先);`max`(短边 ≤2048 不压缩直进模型,身份保真更好但更慢
      更贵)**仅当用户/工单原文明确写了「ref-image-size max」时照传;agent 严禁自行
      决定切换**——即便判断人脸与参考图不一致,也只能在回执中建议,由用户决定。
-4. **参考素材**:`--ref`/`--audio-ref` 逐个经 `/task/openapi/upload` 上传(**单文件 ≤30MB**),返回 fileName 后动态新增 `LoadImage`/`LoadAudio` 节点接到 `ref_images.ref_image_N` / `ref_audios.ref_audio_N`(0 起,顺序=命令行顺序=prompt 内 `[Image N]`/`[Audio N]` 序号-1)。模板作者遗留的演示素材连线与节点会被**全部清除**,只提交本单素材。
+4. **参考素材**:`--ref`/`--audio-ref` 逐个经 V2 `/openapi/v2/media/upload/binary` 上传(**宿主当前保守限制单文件 ≤30MB**)，只用 `Authorization: Bearer` 和 `file` multipart，不得退回已弃用的 `/task/openapi/upload`。返回 fileName 后动态新增 `LoadImage`/`LoadAudio` 节点接到 `ref_images.ref_image_N` / `ref_audios.ref_audio_N`(0 起,顺序=命令行顺序=prompt 内 `[Image N]`/`[Audio N]` 序号-1)。模板作者遗留的演示素材连线与节点会被**全部清除**,只提交本单素材。
 5. **提交与取回**:`create` 整体覆盖提交 → `/task/openapi/status` 5s 轮询(QUEUED/RUNNING/SUCCESS/FAILED)→ SUCCESS 后 `/task/openapi/outputs` 取 `fileUrl` 公网直链下载到 `--output`;`--return-last-frame` 由本地 ffmpeg 从成片抽尾帧,不占云端节点。
 
 ## 哪些参数进不了云端模板(如实记录,不得自行拒交)
@@ -61,8 +61,9 @@ python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
 ## 排错口径(保留原文上报,严禁换渠道/换工作流重试)
 
 - **建任务即失败 / taskStatus=FAILED**:报错含 `promptTips` 原文——通常是节点或模型文件在云端缺失(RunningHub 无 `/object_info` 预检,提交才暴露)。原文上报,不要瞎猜改参。
+- **并发/资源背压**:create 返回 421/415/804/1003/1010/1011/1520 或等价消息时，宿主保持当前命令运行并以 10–120 秒退避重试，最长等待 2 小时；这不是失败，不得由 Agent 再开一条同参任务。鉴权、余额、参数、工作流校验和内容审核错误不进入该重试。
 - **任务运行失败**:报错含 outputs 接口的 `failedReason`(code 805 携带)原文。
-- **上传失败**:单文件超 30MB 直接本地报错(不发请求);先压缩/降采样素材。
+- **上传失败**:确认错误 URL 是当前站点的 V2 `/openapi/v2/media/upload/binary`；如果仍出现 401，报告生效站点与 HTTP 原文，不打印 Key。单文件超 30MB 直接本地报错(不发请求)。
 - **超时**:默认超时后自动尝试 `cancel`,报错含 taskId;先查 RunningHub 网页端任务状态再决定重投,防止双份计费。
 - API Key 未配或未选工作流:本地即报错,提示用户去「🎨 生成模型」页配置(.cn/.ai Key 按站点分开保存,不互通)。
 
