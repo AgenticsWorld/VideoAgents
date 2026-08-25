@@ -18,6 +18,7 @@ import {
   ServiceRegion, serviceRegion, UserAccount,
 } from './desktop-auth'
 import {desktopExecutablePath} from './shell-environment'
+import {inspectFfmpegEnvironment, installFfmpeg} from './ffmpeg-environment'
 
 let webServer: ChildProcess | undefined
 let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
@@ -402,6 +403,83 @@ function closeRuntimeProgress(): void {
   resetRuntimeProgressMeter()
 }
 
+async function offerFfmpegEnvironmentSetup(): Promise<void> {
+  // FFmpeg is an optional desktop helper. Check it only after the main window
+  // exists, including when the user chose “暂不登录”; never delay the main flow.
+  if (!window || window.isDestroyed()) return
+  let executablePath = desktopExecutablePath()
+  const environment: NodeJS.ProcessEnv = {...process.env, PATH: executablePath}
+  const existing = inspectFfmpegEnvironment(environment)
+  if (existing.ok) {
+    console.log(`[ffmpeg] ${existing.version}`)
+    return
+  }
+  console.log(`[ffmpeg] optional environment unavailable: ${existing.problem}`)
+  const answer = await dialog.showMessageBox(window, {
+    type: 'warning',
+    title: '需要 FFmpeg 才能使用完整视频功能',
+    message: '未检测到可用的 FFmpeg 环境',
+    detail: `${existing.problem}。部分视频处理功能可能不可用，但不影响其他功能。\n\n`
+      + (process.platform === 'darwin'
+        ? '可以通过 Homebrew 自动安装 Apple Silicon 版 FFmpeg。'
+        : '可以通过 WinGet 自动安装 Windows x64 版 FFmpeg。'),
+    buttons: ['自动安装', '暂时忽略'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  if (answer.response !== 0) {
+    console.log('[ffmpeg] setup ignored by user')
+    return
+  }
+  await showRuntimeProgress(
+    '正在安装 FFmpeg',
+    process.platform === 'darwin'
+      ? 'VideoAgents 将通过 Homebrew 安装 Apple Silicon 版 FFmpeg。'
+      : 'VideoAgents 将通过 WinGet 安装 Windows x64 版 FFmpeg。',
+    'VideoAgents FFmpeg 环境',
+  )
+  try {
+    // Rebuild after installation too: WinGet creates command links while this
+    // Electron process is running, and a process restart should not be required.
+    const installed = await installFfmpeg({
+      executablePath,
+      environment,
+      onProgress: progress => {
+        updateRuntimeProgress({phase: 'extracting', message: progress.detail || progress.message})
+      },
+    })
+    executablePath = desktopExecutablePath()
+    const verified = inspectFfmpegEnvironment({...process.env, PATH: executablePath})
+    if (!verified.ok) throw new Error(verified.problem)
+    console.log(`[ffmpeg] installed: ${installed.version}`)
+    closeRuntimeProgress()
+    if (window && !window.isDestroyed()) {
+      await dialog.showMessageBox(window, {
+        type: 'info', title: 'FFmpeg 安装完成', message: 'FFmpeg 环境已准备完成。',
+      })
+    }
+  } catch (error) {
+    closeRuntimeProgress()
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[ffmpeg] optional setup failed: ${message}`)
+    if (window && !window.isDestroyed()) {
+      await dialog.showMessageBox(window, {
+        type: 'warning',
+        title: 'FFmpeg 安装未完成',
+        message: '暂时无法安装 FFmpeg',
+        detail: `${message}\n\n这不会影响 VideoAgents 的其他功能，可以稍后重新启动应用再试。`,
+        buttons: ['关闭'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+    }
+  } finally {
+    closeRuntimeProgress()
+  }
+}
+
 async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
   let installed: PythonRuntime | undefined
   try {
@@ -763,11 +841,20 @@ app.whenReady().then(async () => {
   }
   installApplicationMenu()
   await createWindow()
-  if (desktopUpdate) {
-    void offerDesktopUpdate(desktopUpdate, build.version).catch(error => {
-      console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
-    })
-  }
+  // Post-launch optional prompts run in sequence after the main page is visible.
+  // Neither desktop-update prompting nor FFmpeg setup can block the main flow.
+  void (async () => {
+    if (desktopUpdate) {
+      try {
+        await offerDesktopUpdate(desktopUpdate, build.version)
+      } catch (error) {
+        console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    await offerFfmpegEnvironmentSetup()
+  })().catch(error => {
+    console.warn(`[ffmpeg] optional environment check skipped: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }).catch(error => {
   if (error instanceof LoginCancelledError) {
     app.quit()

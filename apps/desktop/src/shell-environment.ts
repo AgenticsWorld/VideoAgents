@@ -29,7 +29,12 @@ function loginShellPath(environment: NodeJS.ProcessEnv): string {
 function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
   const home = environment.HOME || homedir()
   if (process.platform === 'win32') {
-    return [environment.APPDATA && path.join(environment.APPDATA, 'npm')].filter(Boolean) as string[]
+    return [
+      environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'),
+      environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Microsoft', 'WindowsApps'),
+      environment.ProgramFiles && path.join(environment.ProgramFiles, 'WinGet', 'Links'),
+      environment.APPDATA && path.join(environment.APPDATA, 'npm'),
+    ].filter(Boolean) as string[]
   }
   return [
     path.join(home, '.local', 'bin'),

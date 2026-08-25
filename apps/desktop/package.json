@@ -10,6 +10,7 @@
     "dev": "npm run build && electron .",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
     "package": "node scripts/package.mjs"
   },
   "dependencies": {
