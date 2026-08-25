@@ -56,11 +56,18 @@ def test_desktop_openrouter_wrapper_fallback_and_user_key_priority(monkeypatch):
                       "api_key": "", "uses_wrapper": False}
 
     wrapper = "https://api.agentics.world/wrapper/openrouter"
+    wrapper_api = wrapper + "/api/v1"
     monkeypatch.setenv("VIDEOAGENTS_USER_JWT", "desktop-jwt")
     monkeypatch.setenv("VIDEOAGENTS_OPENROUTER_WRAPPER_URL", wrapper)
     assert core.resolve_openrouter_connection() == {
-        "base_url": wrapper, "api_key": "desktop-jwt", "uses_wrapper": True}
-    assert genmedia._openrouter_connection() == (wrapper, "desktop-jwt", True)
+        "base_url": wrapper_api, "api_key": "desktop-jwt", "uses_wrapper": True}
+    assert genmedia._openrouter_connection() == (wrapper_api, "desktop-jwt", True)
+    deepagents = core.resolve_deepagents({
+        "deepagents": {"provider": "openrouter", "openrouter": {
+            "api_key": "", "model": "anthropic/claude-sonnet-5"}}})
+    assert deepagents["base_url"] == wrapper_api
+    assert deepagents["api_key"] == "desktop-jwt"
+    assert deepagents["uses_wrapper"] is True
 
     # A key saved by the user always bypasses the account wrapper.
     assert core.resolve_openrouter_connection("user-key") == {
