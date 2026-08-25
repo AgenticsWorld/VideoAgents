@@ -150,6 +150,45 @@ def test_api_event_stream_stops_on_shutdown():
     asyncio.run(probe())
 
 
+def test_opencode_env_redirects_unwritable_cache(monkeypatch, tmp_path):
+    """~/.cache/opencode 归 root 时 opencode 刷新不了模型注册表,新模型一律 UnknownError:
+    须把 XDG_CACHE_HOME 改道到运行时目录;可写时不动用户环境。"""
+    from services.runtime import core
+
+    monkeypatch.setattr(core, "RUNTIME_DIR", tmp_path / "rt")
+    monkeypatch.setattr(core, "_OPENCODE_CACHE_WARNED", False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    env = core.opencode_env()
+    assert env["NO_COLOR"] == "1" and env["OPENCODE_DISABLE_AUTOUPDATE"] == "1"
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / "cache")   # 可写(尚不存在):不改道
+
+    # 只有 state/locks(刷新前建锁处)归 root:仅改道 XDG_STATE_HOME,缓存仍用用户自己的
+    locks = core._opencode_state_dir() / "locks"
+    monkeypatch.setattr(core, "_dir_writable", lambda path: path != locks)
+    env = core.opencode_env()
+    assert env["XDG_STATE_HOME"] == str(tmp_path / "rt" / "opencode-state")
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / "cache")
+
+    monkeypatch.setattr(core, "_dir_writable", lambda path: False)
+    base = {"VIDEOAGENTS_RUN_ID": "r1"}
+    env = core.opencode_env(base)
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / "rt" / "opencode-cache")
+    assert (tmp_path / "rt" / "opencode-cache").is_dir()
+    assert env["VIDEOAGENTS_RUN_ID"] == "r1" and "CLAUDECODE" not in env
+
+    # 快照缺失/过期须显式 --refresh;新鲜快照不刷新
+    assert core.opencode_models_stale(env)
+    snap = tmp_path / "rt" / "opencode-cache" / "opencode" / "models.json"
+    snap.parent.mkdir(parents=True)
+    snap.write_text("{}")
+    assert not core.opencode_models_stale(env)
+    import os
+    old = core.time.time() - core._OPENCODE_SNAPSHOT_MAX_AGE - 60
+    os.utime(snap, (old, old))
+    assert core.opencode_models_stale(env)
+
+
 def test_opencode_engine_strategy_and_event_stream(monkeypatch):
     from services.api.schemas import GlobalModelUpdate, RunCreate
     from services.runtime import core

@@ -1554,6 +1554,76 @@ def _opencode_data_dir() -> Path:
     return base / "opencode"
 
 
+def _opencode_cache_dir() -> Path:
+    xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
+    base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "opencode"
+
+
+def _opencode_state_dir() -> Path:
+    xdg = os.environ.get("XDG_STATE_HOME", "").strip()
+    base = Path(xdg) if xdg else Path.home() / ".local" / "state"
+    return base / "opencode"
+
+
+def _dir_writable(path: Path) -> bool:
+    """path(或其最近的已存在祖先)对当前用户可写。已存在的目录还要求其内文件可写:
+    root 建的目录常见「目录可进但文件不可覆盖」,而 opencode 刷新注册表是整文件重写。"""
+    probe = path
+    while not probe.exists():
+        parent = probe.parent
+        if parent == probe:
+            return False
+        probe = parent
+    if not os.access(probe, os.W_OK):
+        return False
+    if probe == path and path.is_dir():
+        return all(os.access(f, os.W_OK) for f in path.iterdir() if f.is_file())
+    return True
+
+
+_OPENCODE_CACHE_WARNED = False
+
+
+def opencode_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """opencode 子进程环境:统一 NO_COLOR/禁自动更新;缓存目录(models.json 快照)或
+    state 目录(刷新注册表前要在 <state>/opencode/locks 建锁)不可写时——典型:曾用 sudo
+    跑过 opencode,这些目录归 root——把对应 XDG_*_HOME 指到运行时目录。否则 opencode
+    「Failed to fetch models.dev: EACCES」后永远用旧快照,新上线模型在 `opencode models`
+    不列、`run -m` 一律报语义无关的「UnknownError: Unexpected server error」。"""
+    global _OPENCODE_CACHE_WARNED
+    env = {**(os.environ if base is None else base),
+           "NO_COLOR": "1", "OPENCODE_DISABLE_AUTOUPDATE": "1"}
+    broken = []
+    for var, path, sub in (("XDG_CACHE_HOME", _opencode_cache_dir(), "opencode-cache"),
+                           ("XDG_STATE_HOME", _opencode_state_dir() / "locks", "opencode-state")):
+        if _dir_writable(path):
+            continue
+        fallback = RUNTIME_DIR / sub
+        fallback.mkdir(parents=True, exist_ok=True)
+        env[var] = str(fallback)
+        broken.append(str(path))
+    if broken and not _OPENCODE_CACHE_WARNED:
+        _OPENCODE_CACHE_WARNED = True
+        print(f"[opencode] {' 与 '.join(broken)} 不可写(属主多为 root),模型注册表无法刷新;"
+              f"已改道到 {RUNTIME_DIR}。根治:sudo chown -R $USER ~/.cache ~/.local/state/opencode",
+              flush=True)
+    return env
+
+
+_OPENCODE_SNAPSHOT_MAX_AGE = 24 * 3600
+
+
+def opencode_models_stale(env: dict[str, str]) -> bool:
+    """models.json 快照缺失或超过一天:`opencode models` 自身的后台刷新不可靠(实测锁目录
+    可写后连跑数次仍沿用 11 天前的快照),须显式 --refresh 才能看到新上线模型。"""
+    snapshot = Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "opencode" / "models.json"
+    try:
+        return time.time() - snapshot.stat().st_mtime > _OPENCODE_SNAPSHOT_MAX_AGE
+    except OSError:
+        return True
+
+
 def _opencode_go_key() -> str | None:
     """OpenCode Go API Key:设置里配置的优先;留空时读本机 opencode 登录凭证
     (auth.json 里 provider 名含 opencode 的条目,常见字段名逐个尝试)。"""
@@ -2652,6 +2722,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                "WEBUI_PROJECT": run["project"]}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        if engine == "opencode":   # 缓存目录不可写时改道,避免模型注册表过期
+            env = opencode_env(env)
         if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
             env["DA_SYSTEM"] = role
             env["DA_PROMPT"] = message
@@ -6205,12 +6277,16 @@ async def api_opencode_models(refresh: bool = False):
     executable = await asyncio.to_thread(resolve_cli_executable, "opencode")
     if not executable:
         raise ServiceError(503, cli_not_found_error("opencode"))
-    env = {**os.environ, "NO_COLOR": "1", "OPENCODE_DISABLE_AUTOUPDATE": "1"}
+    env = opencode_env()
+    argv = [executable, "models"]
+    if refresh or opencode_models_stale(env):   # 显式刷新 models.dev 快照(约 10s)
+        argv.append("--refresh")
     proc = await asyncio.create_subprocess_exec(
-        executable, "models", cwd=ROOT, env=env,
+        *argv, cwd=ROOT, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=60 if "--refresh" in argv else 20)
     except asyncio.TimeoutError as exc:
         proc.kill()
         await proc.wait()
