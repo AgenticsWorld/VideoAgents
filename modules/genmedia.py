@@ -155,6 +155,7 @@ DESKTOP_OPENROUTER_WRAPPERS = {
     "https://api.agentics.world/wrapper/openrouter",
     "https://wrapper.shumati.cn/wrapper/openrouter",
 }
+OPENROUTER_WRAPPER_API_SUFFIX = "/api/v1"
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -234,7 +235,7 @@ def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
     jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
     wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
     if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
-        return wrapper, jwt, True
+        return wrapper + OPENROUTER_WRAPPER_API_SUFFIX, jwt, True
     return OPENROUTER_DIRECT_BASE, "", False
 
 

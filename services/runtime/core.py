@@ -994,6 +994,7 @@ DESKTOP_OPENROUTER_WRAPPERS = {
     "https://api.agentics.world/wrapper/openrouter",
     "https://wrapper.shumati.cn/wrapper/openrouter",
 }
+OPENROUTER_WRAPPER_API_SUFFIX = "/api/v1"
 
 
 def resolve_openrouter_connection(api_key: str = "") -> dict:
@@ -1009,7 +1010,13 @@ def resolve_openrouter_connection(api_key: str = "") -> dict:
     jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
     wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
     if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
-        return {"base_url": wrapper, "api_key": jwt, "uses_wrapper": True}
+        # agentics-deepcore uses
+        #   <wrapper>/openrouter/api/v1
+        # as the OpenAI-compatible SDK base. VIDEOAGENTS_* stores the full
+        # module root (<wrapper>/openrouter), so append the same API prefix
+        # before ChatOpenAI adds /chat/completions, /models, etc.
+        return {"base_url": wrapper + OPENROUTER_WRAPPER_API_SUFFIX,
+                "api_key": jwt, "uses_wrapper": True}
     return {"base_url": DEEPAGENTS_OPENROUTER_URL,
             "api_key": "", "uses_wrapper": False}
 
