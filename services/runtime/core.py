@@ -3799,6 +3799,95 @@ def _character_voices(base: Path) -> dict[str, list[dict]]:
     return voices
 
 
+# ---------------- 服装 sheet(06-art/costume-concept,2026-08-26) ----------------
+def _costume_entries(doc: dict) -> list[dict]:
+    """bible/costumes.json 两种既有 schema 统一成扁平服装条目列表:
+    ① 平台约定 characters[].outfits[](默认装由条目 default 或角色级
+       default_outfit_id / default_outfit / default_costume 指定);
+    ② 扁平 costumes[] / entries[](以 character_ref / character_id 归属)。
+    每条:id / character_ref / label / occasion / period / default / visual_en /
+    scenes / chapters / episodes / variants / condition。"""
+    out: list[dict] = []
+
+    def _norm(e: dict, cid: str, default_id: str | None) -> dict | None:
+        oid = e.get("id") or e.get("outfit_id") or e.get("costume_id")
+        if not oid:
+            return None
+        variants = e.get("variants") or []
+        return {
+            "id": oid, "character_ref": cid,
+            "label": e.get("label") or e.get("name") or e.get("name_cn") or oid,
+            "occasion": e.get("occasion") or "", "period": e.get("period") or e.get("period_anchor") or "",
+            "default": bool(e.get("default")) or (default_id is not None and oid == default_id),
+            "visual_en": e.get("visual_en") or e.get("visual") or "",
+            "condition": e.get("condition_and_wear") or e.get("condition") or "",
+            "scenes": e.get("scenes") or [], "chapters": e.get("chapters") or [],
+            "episodes": e.get("episodes") or [],
+            "variants": [v.get("name") or v.get("label") or v.get("id") or str(v)
+                         if isinstance(v, dict) else str(v) for v in variants],
+        }
+
+    if not isinstance(doc, dict):
+        return out
+    for e in (doc.get("costumes") or doc.get("entries") or []):
+        if not isinstance(e, dict):
+            continue
+        cid = e.get("character_ref") or e.get("character_id") or ""
+        n = _norm(e, cid, None)
+        if n:
+            out.append(n)
+    for c in (doc.get("characters") or []):
+        if not isinstance(c, dict) or not isinstance(c.get("outfits"), list):
+            continue
+        cid = c.get("character_id") or c.get("id") or ""
+        d = c.get("default_outfit_id") or c.get("default_outfit") or c.get("default_costume")
+        for e in c["outfits"]:
+            if not isinstance(e, dict):
+                continue
+            n = _norm(e, e.get("character_ref") or cid, d if isinstance(d, str) else None)
+            if n:
+                out.append(n)
+    return out
+
+
+def _character_costume_sheets(base: Path, cid: str, entries: list[dict] | None = None) -> list[dict]:
+    """某角色的服装 sheet 清单(人物预览页「👕 服装」区 / 分镜组卡服装图 / 资产选图器共用):
+    以 assets/concepts/characters/<id>/costume_sheets.json 台账为准,台账缺条的套装
+    回落检查主目录 sheet_<COS-id>.png 是否存在(默认装 = sheet.png)。每条带 url(缺图 None)。"""
+    if entries is None:
+        entries = _costume_entries(_read_json_safe(base / "bible" / "costumes.json") or {})
+    adir = base / "assets" / "concepts" / "characters" / cid
+    ledger = _read_json_safe(adir / "costume_sheets.json") or {}
+    lrows = {r.get("costume_ref"): r for r in (ledger.get("sheets") or [])
+             if isinstance(r, dict) and r.get("costume_ref")}
+
+    def _url(rel_file: str | None):
+        if not rel_file:
+            return None, None
+        f = (adir / rel_file).resolve()
+        try:
+            f.relative_to(base.resolve())
+        except ValueError:
+            return None, None
+        if not f.is_file():
+            return None, None
+        rel = f.relative_to(base).as_posix()
+        return rel, f"/projects/{base.name}/{rel}?v={int(f.stat().st_mtime)}"
+
+    rows = []
+    for e in entries:
+        if e["character_ref"] != cid:
+            continue
+        r = lrows.get(e["id"]) or {}
+        file = r.get("reuse_of") or r.get("file")
+        if not r:
+            file = "sheet.png" if e["default"] else f"sheet_{e['id']}.png"
+        ref, url = _url(file)
+        rows.append({**e, "file": ref, "url": url, "in_ledger": bool(r),
+                     "skip_reason": r.get("skip_reason") or "",
+                     "blocked_on": r.get("blocked_on") or ""})
+    return rows
+
 def _preview_characters(project: str):
     """人物设定聚合:bible/characters/* 文字 + assets/concepts/characters/* 概念图。"""
     base = _proj_base(project)
@@ -3813,6 +3902,7 @@ def _preview_characters(project: str):
             ids |= {x.name for x in d.iterdir()
                     if x.is_dir() and not x.name.startswith(".")}
     voices = _character_voices(base)
+    costume_entries = _costume_entries(_read_json_safe(base / "bible" / "costumes.json") or {})
     chars = []
     for cid in sorted(ids):
         docs = {}
@@ -3823,7 +3913,9 @@ def _preview_characters(project: str):
         chars.append({"id": cid, "name": meta.get("canonical_name") or cid,
                       "meta": meta, "docs": docs,
                       "voices": voices.get(cid, []),
-                      "images": _asset_urls(base, adir / cid, IMG_EXTS)})
+                      "images": _asset_urls(base, adir / cid, IMG_EXTS),
+                      # 服装 sheet(costume-concept 台账 + costumes.json 套装),2026-08-26
+                      "costumes": _character_costume_sheets(base, cid, costume_entries)})
     return {"project": base.name, "characters": chars}
 
 
@@ -4040,6 +4132,47 @@ def _preview_storyboard(project: str, ep: str):
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
+    # 组服装(2026-08-26):shot_list 组 costumes_by_char(权威)→ 缺则由镜 costumes 并集
+    # → 再缺回落 continuity 的 costume_states(存量项目);经 costume_sheets.json 台账落到服装 sheet
+    cidx = _read_json_safe(base / "bible" / "characters" / "index.json") or {}
+    cname = {c.get("id"): c.get("canonical_name") or c.get("name") or c.get("id")
+             for c in cidx.get("characters", []) if isinstance(c, dict) and c.get("id")}
+    costume_entries = _costume_entries(_read_json_safe(base / "bible" / "costumes.json") or {})
+    sheet_cache: dict[str, dict[str, dict]] = {}
+    shot_costumes = {s.get("shot_id"): s.get("costumes") for s in (sl.get("shots") or [])
+                     if isinstance(s, dict) and isinstance(s.get("costumes"), dict)}
+    cont = (_read_json_safe(base / "directing" / ep / "continuity.json")
+            or _read_json_safe(base / "directing" / ep / "continuity_plan.json") or {})
+    cont_states = {st.get("shot_id"): st for st in (cont.get("costume_states") or [])
+                   if isinstance(st, dict) and st.get("shot_id")}
+
+    def _group_costumes(g: dict) -> list[dict]:
+        by = g.get("costumes_by_char")
+        source = "shot_list"
+        if not isinstance(by, dict) or not by:
+            by = {}
+            for sid in (g.get("shots") or []):
+                for ch, cos in (shot_costumes.get(sid) or {}).items():
+                    by.setdefault(ch, cos)
+            if not by:
+                source = "continuity"
+                for sid in (g.get("shots") or []):
+                    for ch, v in (cont_states.get(sid) or {}).items():
+                        if ch != "shot_id" and isinstance(v, dict) and v.get("outfit"):
+                            by.setdefault(ch, v["outfit"])
+            if not by:
+                return []
+        rows = []
+        for ch, cos in by.items():
+            if ch not in sheet_cache:
+                sheet_cache[ch] = {r["id"]: r for r in _character_costume_sheets(base, ch, costume_entries)}
+            r = sheet_cache[ch].get(cos) or {}
+            rows.append({"char": ch, "char_name": cname.get(ch) or ch, "costume": cos,
+                         "label": r.get("label") or cos, "default": bool(r.get("default")),
+                         "known": bool(r), "url": r.get("url"), "file": r.get("file"),
+                         "skip_reason": r.get("skip_reason") or "", "blocked_on": r.get("blocked_on") or "",
+                         "source": source})
+        return rows
     # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
     cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
     shots = []
@@ -4049,7 +4182,7 @@ def _preview_storyboard(project: str, ep: str):
         sid = s.get("shot_id") or ""
         shots.append({k: s.get(k) for k in (
             "shot_id", "scene_no", "scene_id", "duration_s", "size",
-            "camera_position", "characters", "is_dialogue", "dialogue_ref",
+            "camera_position", "characters", "costumes", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
             "dialogue_ref": s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref"),
@@ -4113,6 +4246,7 @@ def _preview_storyboard(project: str, ep: str):
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
+            "costumes": _group_costumes(g),
         })
     data["generation_groups"] = groups
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 beat_ref/scene 对位试听
