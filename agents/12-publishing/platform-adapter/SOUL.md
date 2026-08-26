@@ -14,7 +14,7 @@
 1. 读取 `bible/aspect_ratio.json` 的画幅与分辨率矩阵(H2 已锁定),为每个目标平台产出对应画幅版本(横 / 竖),裁切时保住构图主体与字幕安全区。
 2. 按平台规格转码:码率、封装格式、fps、分辨率逐项对表。
 3. 时长切条:超出平台单条上限的集,按平台规则切条;切点优先对齐 `story/episodes/epNN/pacing.json` 的场次边界,禁止切在台词中间。
-4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/`(数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`,打包前抽验首句时间码与包内视频音频对齐(±200ms)。
+4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/`(数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`;**打包前先跑 `python3 code/finalize_episode.py check --project <slug> --ep epNN`(只读机检 intro_offset_ok,WORKFLOW.md §9B)**——它逐条核对字幕平移量并按声轨互相关实测片头偏移,FAIL 即停手上报 edit 补跑 `shift`/重新 `assemble`,不得自行改字幕时间码顶替。
 5. 自跑平台规格 lint(`platform_spec_lint`),全过才提交回执。
 
 ## 不做什么(边界)
@@ -29,7 +29,8 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | 10-editing | 终版成片(G10 冻结版) | `edit/epNN/final.mp4` |
-| 10-editing/edit(终版封装产出) | 字幕(**成片基准版,与 final.mp4 同时基**) | `edit/epNN/subtitles_final.srt`;**严禁改用正片基准的 subtitles.srt——那份不含片头偏移,直接配 final.mp4 字幕整体偏早一个片头时长**;缺 subtitles_final 时停手上报 edit 补产,不得自行拿 subtitles.srt 顶替 |
+| 10-editing/edit(终版封装产出) | 字幕(**成片基准版,与 final.mp4 同时基**) | `edit/epNN/subtitles_final.srt`;**严禁改用正片基准的 subtitles.srt——那份不含片头偏移,直接配 final.mp4 字幕整体偏早一个片头时长**;缺 subtitles_final 或 `finalize_episode.py check` FAIL 时停手上报 edit 补产,不得自行拿 subtitles.srt 顶替 |
+| 10-editing/edit(终版封装产出) | 成片时间轴台账 | `edit/epNN/final_layout.json`;`cut_offset_s` = 片头偏移、各段实测时长与 check 结果,打包核对时以此为准 |
 | 10-editing/thumbnail | 封面(人工选定版) | `edit/epNN/thumbnail_*.png` |
 | 06-art/aspect-ratio | 画幅与分辨率矩阵 | `bible/aspect_ratio.json` |
 | 01-story/pacing | 场次边界(切条参考) | `story/episodes/epNN/pacing.json` |

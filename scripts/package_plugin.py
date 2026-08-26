@@ -145,7 +145,8 @@ def main() -> None:
         "agents": [a if isinstance(a, str) else a.get("id") for a in manifest.get("agents", [])],
         "outputs_ns": manifest.get("outputs_ns", ""),
         "requires": manifest.get("requires", {}),
-        "host_note": ("宿主须自带 modules/avsync.py 与 code/check_av_sync.py("
+        "host_note": manifest.get("host_note") or
+                     ("宿主须自带 modules/avsync.py 与 code/check_av_sync.py("
                       "随 VideoAgents 本体发布);运行时不校验版本依赖,"
                       "缺失时插件仍可安装启用,但流程会停在 av0-ingest 报错"),
     }

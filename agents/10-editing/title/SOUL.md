@@ -44,7 +44,7 @@
 | 片头 | `edit/epNN/intro_outro/intro.mp4` | 分辨率/fps 与正片一致;含集数字卡 |
 | 片尾 | `edit/epNN/intro_outro/outro.mp4` | 含署名与合集信息 |
 | 下集预告 | `edit/epNN/intro_outro/next_ep_teaser.mp4` | 5–15s;文案出自 hooks.json;默认无旁白轨(字卡呈现文案) |
-| 接入说明 | `edit/epNN/intro_outro/placement.json` | 各段建议接入时刻 |
+| 接入说明 | `edit/epNN/intro_outro/placement.json` | 各段建议接入时刻;每段 `duration_s` **必须是 `ffprobe` 实测值**(不是计划值)——edit 终版封装靠它交叉核对片头偏移(WORKFLOW.md §9B,不一致以实测为准并记 WARN) |
 
 关键字段/结构约定:
 ```json

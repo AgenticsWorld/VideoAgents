@@ -196,6 +196,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
     handlers = {
         "characters": lambda: core.api_preview_characters(project),
         "props": lambda: core.api_preview_props(project),
+        "creatures": lambda: core.api_preview_creatures(project),
         "scenes": lambda: core.api_preview_scenes(project),
         "worldview": lambda: core.api_preview_worldview(project),
         "storyboard": lambda: core.api_preview_storyboard(project, ep),
@@ -375,6 +376,11 @@ async def opencode_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_opencode_models(refresh)
 
 
+@api.get("/engines/grok/models", tags=["configuration"])
+async def grok_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_grok_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -388,6 +394,11 @@ async def test_openrouter(body: ProviderProbe) -> dict[str, Any]:
 @api.post("/providers/comfyui/test", tags=["providers"])
 async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_comfyui(body.model_dump())
+
+
+@api.post("/providers/digital-human/test", tags=["providers"])
+async def test_digital_human(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_test_digitalhuman(body.model_dump())
 
 
 @api.post("/providers/runninghub/workflow", tags=["providers"])
@@ -493,6 +504,16 @@ async def agent_advanced_get() -> dict[str, Any]:
 @api.post("/config/agent-advanced", tags=["automation"])
 async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_advanced_set(body)
+
+
+@api.get("/config/skills", tags=["automation"])
+async def skills_get(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_skills_get(refresh)
+
+
+@api.post("/config/skills", tags=["automation"])
+async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_skills_set(body)
 
 
 @api.get("/config/concurrency", tags=["automation"])

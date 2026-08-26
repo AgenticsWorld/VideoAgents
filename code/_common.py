@@ -53,4 +53,3 @@ def spatial_blocking_enabled(proj_root: Path) -> bool:
     """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开):开=场景布局包 + 动线标注流程;
     关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
     return project_output_setting(proj_root, "spatial_blocking", True) is not False
-

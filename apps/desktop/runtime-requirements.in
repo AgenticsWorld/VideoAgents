@@ -1,4 +1,5 @@
 fastapi==0.139.2
+faster-whisper==1.2.1
 lark-oapi==1.7.1
 numpy==2.4.6
 pygit2==1.19.3

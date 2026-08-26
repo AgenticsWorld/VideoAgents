@@ -14,6 +14,7 @@
 1. 读本镜 `shot_list.json` 条目(出场角色、场景、时长、是否对白镜)与**所属生成组的 `blocking_map`**(仅项目「输出设置 → 人物精确空间位置」开启时存在;关闭时无此字段、本条动线约束不适用,地标词按场景空间描述自拟;storyboard 标注、shot-planning 定稿的组级逐角色 起点/动线/终点,底图为该场景俯视空间布局图 `assets/concepts/scenes/<sid>/layout_top.png`,坐标系为 `layout.json#landmarks`),在该场景空间内定各角色的站位(相对位置/朝向)——**本镜站位必须落在组级动线上**:组首镜各角色在 `start`,组尾镜在 `end`(无移动=start),中间镜按时长比例落在 path 沿线;与 blocking_map 矛盾 = 退回重写,确需改动线的上报 orchestrator 回派 storyboard/shot-planning 改地图,不得自行另排。
 2. 设计走位:谁在镜头内移动、路径与触发点(第几秒起步、行至何处),与镜头时长匹配。
 3. 定动作节拍(beats):动作与台词/事件的对齐点(如「说到『滚』字时拂袖转身」),供视频 prompt 与 sound-effect 打点。
+   **表演节拍 `performance`(2026-08-26,仅对白镜 `is_dialogue=true` 的每个说话角色必填;非对白镜仅当所属场次被 director 阐述/pacing 标为情绪峰值场时建议填,其余镜不填)**:我定**意图层**,不写脸——每个说话角色一个 `performance` 对象:`goal`(此刻想争取什么,一句)、`arc_from`/`arc_to`(情绪从哪走向哪,取 dialogue 对白层情绪标签与 personality 表演基调)、`trigger`(`line_ref` 本镜哪句台词 + `word` 该句里哪个词触发变化——**word 必须是冻结版台词的原文子串**)、`forbidden_early`(触发词之前不得出现的可见反应,词组列表,如「眼眶湿润」「肩膀颤」;可空)、`end_state`(说完后保持到镜尾的静止状态短语,≤40 字,只写可见状态:唇/目光落点/眨眼/肩,禁 AU 编码、运镜词、抽象情绪词;**下游 prompt 逐字拼入,机检 performance_bound**)。一镜内同一角色多句台词只取情绪转折所在的那一句作 trigger。面部五区动作、AU 校准、呼吸停顿散文归 prompt(其 `skills/performance-direction`),我不写。
 4. 参考 `relationship.json` 校准人物距离与朝向(敌对拉开、亲密贴近、尊卑有序)。
 5. **为每个入画角色写站位片段 `space_fragment_en`(2026-07-23;2026-08-24 起内容语言随用户界面语言,字段名保留 `_en` 历史后缀)**:一句可直接嵌入视频 prompt 的短语(语言按系统提示词「用户输出设定」的界面语言书写,如中文界面写中文),内容 = 与场景地标的空间关系(门内/门外、床边等,地标词**逐字取自该场景 `layout.json#landmarks[].name_en`**——该字段语言亦随界面语言(2026-08-24 三订:动线渲染图图例支持 CJK,route 句连同地标词会上图,无字体障碍),与 `route_en` 用词一致、同一地标全链路同一写法;存量英文 layout.json 的地标词以英文原样嵌入句中;2026-08-19 起不再自造叫法,同一地标多种叫法就是模型换地方的入口)+ 屏侧方位(screen-left/screen-right 或界面语言等价词如「画左/画右」,同一项目统一用法,与 composition 及相邻镜轴线一致,由 continuity-planning 复核)+ 朝向;有走位时并入终点与拍点(如 "随后走到床边")。简短(≤25 英文词或 ≤40 字),禁数值坐标、禁运镜词、禁色号。**下游 prompt agent 逐字拼入、不做翻译**(机检 blocking_bound,同 lighting `prompt_fragment_en` 纪律)——此片段是防"门外的人瞬移进门内"的唯一文字锚,地标与屏侧必须写死,不留模型自由发挥空间。**存量项目既有 blocking.json 片段为英文时,同集补写/修订沿用英文保持一致,不得半中半英**。
 6. **在场合法性自检**:对照 `story/story_timeline.json`,该故事时间点每个入画角色都必须合法在场;不在场即上报,绝不硬排。
@@ -25,6 +26,7 @@
 - 不管画面构成(人物在画框内的九宫格位置)—— 那是 `composition` 的活;我定空间站位,它定画面呈现。
 - 不写、不改台词 —— 那是 Phase 5 `dialogue-rewrite` 的活;节拍只对齐台词,不动文本。
 - 不做动作修复或生成 —— 那是 `08-video-gen` 的 animation / video-generation 的活。
+- 不写面部动作散文、AU 编码与呼吸停顿 —— 那是 `08-video-gen/prompt` 的表演证据层(其 `skills/performance-direction`);我只给意图层的表演节拍(目的/情绪弧/触发词/禁止提前反应/结束状态)。
 
 ## 输入
 
@@ -36,6 +38,8 @@
 | shot-planning / storyboard | 本镜所属组的组级人物动线标注(逐角色 start/path/end/route_en)与渲染图 | `shot_list.json#generation_groups[].blocking_map`、`directing/epNN/blocking_maps/grpNNN.png` |
 | relationship | 人物关系(类型、强度、随剧情变化) | `bible/characters/relationship.json` |
 | timeline-story | 故事时间轴(在场合法性核查) | `story/story_timeline.json` |
+| dialogue-rewrite | 对白层定稿:每句情绪标签与估时(表演节拍 arc/trigger 的依据;trigger.word 须为台词原文子串) | `story/episodes/epNN/dialogue.md` / `screenplay.md` 对白层 |
+| personality / director | 表演基调(情绪外露度、习惯性防御动作);重点场次/情绪峰值场处理方案 | `bible/characters/<id>/personality.json`、`directing/epNN/directing_plan.md`、`story/episodes/epNN/pacing.json#scenes[].emotion` |
 
 ## 输出
 
@@ -53,7 +57,14 @@
     "id": "c003", "start_pos": "殿门内一步,面向 c007",
     "space_fragment_en": "one step inside the hall doorway on screen-left, facing c007, then strides to the center of the hall",
     "path": [{ "t": 1.5, "to": "殿中,距 c007 三步" }],
-    "beats": [{ "t": 3.2, "action": "按剑,停步", "sync": "台词『站住』" }]
+    "beats": [{ "t": 3.2, "action": "按剑,停步", "sync": "台词『站住』" }],
+    "performance": {
+      "goal": "逼对方先开口,不让他走",
+      "arc_from": "平静地压着", "arc_to": "压不住的怒",
+      "trigger": { "line_ref": "S03-D04", "word": "站住" },
+      "forbidden_early": ["鼻翼张开", "身体前倾"],
+      "end_state": "说完后嘴唇压紧,眼帘收紧盯着对方,不眨眼,肩膀不动"
+    }
   }],
   "presence_check": { "timeline_ok": true, "violations": [] }
 }
@@ -81,6 +92,7 @@ instruction: |
 - 角色 ID 与 shot_list 一致(不多人、不少人);走位/节拍时间点均落在镜头时长内;
 - **与组级动线一致(blocking_on_map,2026-08-19,仅开关开启时)**:本镜各角色 start_pos/path 终点与所属组 `blocking_map` 该角色在本镜时点的位置一致(组首镜=start、组尾镜=end);`space_fragment_en` 的地标词在该场景 layout.json `name_en` 中存在;
 - **站位片段完备(space_fragment_present,2026-07-23)**:每个 characters[] 条目必含非空 `space_fragment_en`,语言随界面语言(2026-08-24;存量英文项目同集保持英文)、简短(≤25 英文词或 ≤40 字)、含场景地标关系词或屏侧方位词(screen-left/screen-right 或界面语言等价词),无数值坐标/运镜词/色号。
+- **表演节拍完备(performance_present,2026-08-26,仅对白镜)**:`is_dialogue=true` 的镜,每个说话角色的 characters[] 条目必含 `performance`,其 `goal`/`arc_from`/`arc_to`/`trigger.line_ref`/`trigger.word`/`end_state` 非空;`trigger.word` 是 `trigger.line_ref` 所指冻结版台词的原文子串;`end_state` ≤40 字、无 `AU\d` 编码、无运镜词、无「悲伤/愤怒」类抽象情绪词。非对白镜不查。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜/构图类」)**:
 - 叙事清晰(30):站位与走位表达人物关系与意图;
@@ -97,5 +109,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:shot-planning(shot_list,含组级 blocking_map)、storyboard(动线标注原作者)、environment-concept(布局包/地标词源)、scene、relationship、timeline-story(story_timeline)。
-- **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
+- **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译;**对白镜 `performance` 意图层节拍:`end_state` 逐字入 prompt、`trigger.word` 作触发词绑定、`forbidden_early` 作提前反应禁项——机检 performance_bound,脚本 `code/performance_bound_check.py`,2026-08-26**)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
 - **需对齐的伙伴**:camera-movement(人物动线与镜头运动互不打架)、composition(空间站位与画面位置互恰)。

@@ -13,7 +13,7 @@
 
 1. 为每个 S/A/B 级角色建服装矩阵:日常/正式/战斗/特殊场合各套服装,外形描述可直接进 prompt,风格遵循 `style.json`,礼制细节对齐 `culture.json`。
 2. 按 `story_timeline.json` 划分时期(如「拜师前/宗门期/黑化后」),标注每套服装的适用区间与**换装点**(哪一事件之后换装、换成哪套)。
-3. 为每个角色指定「默认装」,供 character-concept 画人设图时对齐。
+3. 为每个角色指定「默认装」,供 character-concept 画人设图时对齐(2026-08-26 起 p4-char-concept 依赖本任务,默认装 `visual_en` 逐字入人设图 prompt);其余每套由 `costume-concept` 以人设 sheet 为锚各出一张服装 sheet——因此**每套服装的 `visual_en` 必须是可独立成图的完整描述**(层次/材质/颜色/破损齐全),不得写成「同上仅多血污」这类依赖上下文的差分句(差分只放 `variants[]` 与 `condition_and_wear`)。
 4. 汇总为 `bible/costumes.json`;原文有描写的注明章节出处,制作补全的标 `inferred: true` 并给理由。原文与上游均无依据的制作必需字段,**先自行发挥设计定值再继续**(与已有 Bible/风格自洽),禁止写 UNKNOWN/未知/待定或留空(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 5. 发现服装描写与 appearance 或文化设定冲突时上报,不自行取舍。
 
@@ -100,5 +100,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:appearance、culture、timeline-story(story_timeline)、art-director(style.json)。
-- **下游**:character-concept(按默认装画人设图)、`08-video-gen` 的 prompt(注入该镜时点的正确套装)、`07-directing/continuity-planning`(逐镜核对服装状态)、character-consistency-qa(全片服装一致性)。他们最怕我:换装点含糊、同一时期两套「默认装」。
+- **下游**:character-concept(按默认装画人设图)、costume-concept(按每套 `visual_en` 出服装 sheet `sheet_<COS-id>.png`,默认装复用 sheet.png;`cross_ref`/`hidden_state_ref` 指明两套实为同一物理状态时它登记复用不重画)、storyboard / shot-planning(按套装 `scenes`/`chapters`/`episodes` 与换装点给每组每角色定 `costumes`,换装点须精确到场/事件才能落到组边界)、`08-video-gen` 的 prompt(注入该镜时点的正确套装)、`07-directing/continuity-planning`(逐镜核对服装状态)、character-consistency-qa(全片服装一致性)。他们最怕我:换装点含糊、同一时期两套「默认装」。
 - **需对齐的伙伴**:prop(佩饰/武器归属边界)、character-growth(分龄版本对应的服装尺寸期)。

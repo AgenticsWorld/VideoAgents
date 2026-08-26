@@ -1,7 +1,7 @@
 import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, shell} from 'electron'
 import type {MessageBoxOptions} from 'electron'
 import {ChildProcess, spawn, spawnSync} from 'node:child_process'
-import {existsSync, mkdirSync} from 'node:fs'
+import {existsSync, mkdirSync, writeFileSync} from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
@@ -12,7 +12,13 @@ import {
   cacheRequiredDesktopUpdate, clearCachedRequiredDesktopUpdate, DesktopArtifact, DesktopUpdate,
   downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo, readCachedRequiredDesktopUpdate,
 } from './desktop-update'
+import {
+  AgenticsApiError, authorizationUrl, clearStoredAuth, createPkceSession, exchangeAuthorizationCode,
+  fetchUserAccount, loadStoredAuth, parseAuthorizationCallback, PkceSession, saveStoredAuth,
+  ServiceRegion, serviceRegion, UserAccount,
+} from './desktop-auth'
 import {desktopExecutablePath} from './shell-environment'
+import {inspectFfmpegEnvironment, installFfmpeg} from './ffmpeg-environment'
 
 let webServer: ChildProcess | undefined
 let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
@@ -21,6 +27,65 @@ let webOrigin = process.env.VIDEOAGENTS_WEB_URL?.replace(/\/$/, '') || ''
 let window: BrowserWindow | undefined
 let mainWindowWasCreated = false
 let activeRuntime: PythonRuntime | undefined
+let authWindow: BrowserWindow | undefined
+let authToken = ''
+let authRegion: ServiceRegion | undefined
+let currentAccount: UserAccount | undefined
+
+class LoginCancelledError extends Error {}
+
+interface PendingLogin {
+  session: PkceSession
+  region: ServiceRegion
+  resolve: (value: LoginResult) => void
+  reject: (reason: Error) => void
+}
+
+type LoginResult = {token: string; account: UserAccount} | undefined
+
+let pendingLogin: PendingLogin | undefined
+const ownsSingleInstance = app.requestSingleInstanceLock()
+
+function deepLinkFromArguments(args: string[]): string | undefined {
+  return args.find(value => value.startsWith('videoagents://'))
+}
+
+async function handleAuthorizationCallback(value: string): Promise<boolean> {
+  const pending = pendingLogin
+  if (!pending) return false
+  const callback = parseAuthorizationCallback(
+    value, pending.session.state, pending.region.redirectUri,
+  )
+  if (!callback) return false
+  pendingLogin = undefined
+  try {
+    const token = await exchangeAuthorizationCode(pending.region, callback.code, pending.session.verifier)
+    const account = await fetchUserAccount(pending.region, token)
+    if (authWindow && !authWindow.isDestroyed()) authWindow.close()
+    pending.resolve({token, account})
+  } catch (error) {
+    if (authWindow && !authWindow.isDestroyed()) authWindow.close()
+    pending.reject(error instanceof Error ? error : new Error(String(error)))
+  }
+  return true
+}
+
+app.on('open-url', (event, url) => {
+  if (!url.startsWith('videoagents://')) return
+  event.preventDefault()
+  void handleAuthorizationCallback(url)
+})
+
+app.on('second-instance', (_event, argv) => {
+  const callback = deepLinkFromArguments(argv)
+  if (callback) void handleAuthorizationCallback(callback)
+  const target = authWindow && !authWindow.isDestroyed() ? authWindow : window
+  if (target && !target.isDestroyed()) {
+    if (target.isMinimized()) target.restore()
+    target.show()
+    target.focus()
+  }
+})
 
 function stopWebServerTree(): void {
   const server = webServer
@@ -51,6 +116,174 @@ function webRoot(): string {
 
 function backendRoot(): string {
   return app.isPackaged ? path.join(process.resourcesPath, 'backend') : path.resolve(webRoot(), '../..')
+}
+
+function desktopDataRoot(): string {
+  return process.env.VIDEOAGENTS_DATA_DIR || path.join(app.getPath('userData'), 'data')
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] || character)
+}
+
+function writeInitialJson(target: string, value: object): void {
+  if (existsSync(target)) return
+  mkdirSync(path.dirname(target), {recursive: true})
+  try {
+    writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, {
+      encoding: 'utf8', mode: 0o600, flag: 'wx',
+    })
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    if (code !== 'EEXIST') throw error
+  }
+}
+
+function initializeFirstLoginDefaults(): void {
+  const runtime = path.join(desktopDataRoot(), '.videoagents')
+  // Only create missing files. Existing installations may already contain user
+  // choices from an older desktop or WebUI version and must never be overwritten.
+  writeInitialJson(path.join(runtime, 'genconfig.json'), {
+    image: {provider: 'openrouter'},
+    video: {provider: 'openrouter'},
+    music: {provider: 'openrouter'},
+    tts: {provider: 'openrouter'},
+    deepagents: {provider: 'openrouter'},
+  })
+  writeInitialJson(path.join(runtime, 'state.json'), {
+    sessions: {},
+    ui_prefs: {engine: 'deepagents', model: 'openrouter', model_custom: '', project: ''},
+    global_model: {engine: 'deepagents', model: 'anthropic/claude-sonnet-5'},
+  })
+}
+
+async function loginOnce(region: ServiceRegion): Promise<LoginResult> {
+  const session = createPkceSession()
+  const url = authorizationUrl(region, session)
+  const skipUrl = 'videoagents://skip-login'
+  authWindow = new BrowserWindow({
+    width: 520, height: 330, resizable: false, minimizable: false, maximizable: false,
+    title: '登录 VideoAgents', backgroundColor: '#111318',
+    webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true},
+  })
+  const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <style>body{margin:0;background:#111318;color:#f3f4f6;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  main{padding:42px;text-align:center}h1{font-size:21px;margin:0 0 18px}p{color:#b8bec9;line-height:1.7;margin:0 0 24px}
+  a{display:inline-block;background:#5677ff;color:white;text-decoration:none;border-radius:8px;padding:11px 24px;font-weight:600}
+  a.skip{display:block;background:none;color:#8e96a5;padding:6px;margin:16px auto 0;font-weight:400;width:max-content}</style>
+  <main><h1>登录后使用 VideoAgents</h1>
+  <p>点击登录后会在系统浏览器中打开登录页面，<br>完成登录和授权后会自动返回。</p>
+  <a href="${escapeHtml(url)}" target="_blank">登录</a>
+  <a class="skip" href="${skipUrl}">暂不登录</a></main>`
+  await authWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+  const openLoginPage = (): void => {
+    void shell.openExternal(url).catch(error => {
+      const request = pendingLogin
+      if (!request) return
+      pendingLogin = undefined
+      request.reject(error instanceof Error ? error : new Error(String(error)))
+      if (authWindow && !authWindow.isDestroyed()) authWindow.close()
+    })
+  }
+  authWindow.webContents.setWindowOpenHandler(({url: target}) => {
+    if (target === url) openLoginPage()
+    return {action: 'deny'}
+  })
+  authWindow.webContents.on('will-navigate', (event, target) => {
+    event.preventDefault()
+    if (target === url) {
+      openLoginPage()
+      return
+    }
+    if (target === skipUrl) {
+      const request = pendingLogin
+      if (!request) return
+      pendingLogin = undefined
+      request.resolve(undefined)
+      if (authWindow && !authWindow.isDestroyed()) authWindow.close()
+    }
+  })
+  authWindow.show()
+
+  return await new Promise((resolve, reject) => {
+    const request: PendingLogin = {session, region, resolve, reject}
+    pendingLogin = request
+    authWindow?.once('closed', () => {
+      authWindow = undefined
+      if (pendingLogin === request) {
+        pendingLogin = undefined
+        reject(new LoginCancelledError('用户取消登录'))
+      }
+    })
+  })
+}
+
+async function interactiveLogin(
+  region: ServiceRegion, cancelLabel = '退出应用',
+): Promise<LoginResult> {
+  while (true) {
+    try {
+      return await loginOnce(region)
+    } catch (error) {
+      if (error instanceof LoginCancelledError) throw error
+      const answer = await dialog.showMessageBox({
+        type: 'error', title: 'VideoAgents 登录失败',
+        message: '未能完成登录',
+        detail: error instanceof Error ? error.message : String(error),
+        buttons: ['重试', cancelLabel], defaultId: 0, cancelId: 1, noLink: true,
+      })
+      if (answer.response !== 0) throw new LoginCancelledError('用户取消登录')
+    }
+  }
+}
+
+async function requireDesktopLogin(build: ReturnType<typeof readBuildInfo>): Promise<void> {
+  const region = serviceRegion(build)
+  authRegion = region
+  const userData = app.getPath('userData')
+  const saved = loadStoredAuth(userData)
+  let auth = saved
+  if (auth) {
+    while (auth) {
+      try {
+        currentAccount = await fetchUserAccount(region, auth.token)
+        break
+      } catch (error) {
+        if (error instanceof AgenticsApiError && error.status === 401) {
+          console.warn('[auth] saved session has expired')
+          clearStoredAuth(userData)
+          auth = undefined
+          break
+        }
+        const answer = await dialog.showMessageBox({
+          type: 'error', title: '无法验证 VideoAgents 登录状态',
+          message: '暂时无法连接登录服务',
+          detail: error instanceof Error ? error.message : String(error),
+          buttons: ['重试', '退出应用'], defaultId: 0, cancelId: 1, noLink: true,
+        })
+        if (answer.response !== 0) throw new LoginCancelledError('用户取消登录验证')
+      }
+    }
+  }
+  if (!auth) {
+    const result = await interactiveLogin(region)
+    if (!result) {
+      authToken = ''
+      currentAccount = undefined
+      return
+    }
+    auth = {token: result.token, onboarded: Boolean(saved?.onboarded)}
+    currentAccount = result.account
+  }
+  if (!auth.onboarded) {
+    initializeFirstLoginDefaults()
+    auth.onboarded = true
+  }
+  saveStoredAuth(userData, auth)
+  authToken = auth.token
+  authRegion = region
 }
 
 async function findAvailablePort(): Promise<string> {
@@ -170,6 +403,83 @@ function closeRuntimeProgress(): void {
   resetRuntimeProgressMeter()
 }
 
+async function offerFfmpegEnvironmentSetup(): Promise<void> {
+  // FFmpeg is an optional desktop helper. Check it only after the main window
+  // exists, including when the user chose “暂不登录”; never delay the main flow.
+  if (!window || window.isDestroyed()) return
+  let executablePath = desktopExecutablePath()
+  const environment: NodeJS.ProcessEnv = {...process.env, PATH: executablePath}
+  const existing = inspectFfmpegEnvironment(environment)
+  if (existing.ok) {
+    console.log(`[ffmpeg] ${existing.version}`)
+    return
+  }
+  console.log(`[ffmpeg] optional environment unavailable: ${existing.problem}`)
+  const answer = await dialog.showMessageBox(window, {
+    type: 'warning',
+    title: '需要 FFmpeg 才能使用完整视频功能',
+    message: '未检测到可用的 FFmpeg 环境',
+    detail: `${existing.problem}。部分视频处理功能可能不可用，但不影响其他功能。\n\n`
+      + (process.platform === 'darwin'
+        ? '可以通过 Homebrew 自动安装 Apple Silicon 版 FFmpeg。'
+        : '可以通过 WinGet 自动安装 Windows x64 版 FFmpeg。'),
+    buttons: ['自动安装', '暂时忽略'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  if (answer.response !== 0) {
+    console.log('[ffmpeg] setup ignored by user')
+    return
+  }
+  await showRuntimeProgress(
+    '正在安装 FFmpeg',
+    process.platform === 'darwin'
+      ? 'VideoAgents 将通过 Homebrew 安装 Apple Silicon 版 FFmpeg。'
+      : 'VideoAgents 将通过 WinGet 安装 Windows x64 版 FFmpeg。',
+    'VideoAgents FFmpeg 环境',
+  )
+  try {
+    // Rebuild after installation too: WinGet creates command links while this
+    // Electron process is running, and a process restart should not be required.
+    const installed = await installFfmpeg({
+      executablePath,
+      environment,
+      onProgress: progress => {
+        updateRuntimeProgress({phase: 'extracting', message: progress.detail || progress.message})
+      },
+    })
+    executablePath = desktopExecutablePath()
+    const verified = inspectFfmpegEnvironment({...process.env, PATH: executablePath})
+    if (!verified.ok) throw new Error(verified.problem)
+    console.log(`[ffmpeg] installed: ${installed.version}`)
+    closeRuntimeProgress()
+    if (window && !window.isDestroyed()) {
+      await dialog.showMessageBox(window, {
+        type: 'info', title: 'FFmpeg 安装完成', message: 'FFmpeg 环境已准备完成。',
+      })
+    }
+  } catch (error) {
+    closeRuntimeProgress()
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[ffmpeg] optional setup failed: ${message}`)
+    if (window && !window.isDestroyed()) {
+      await dialog.showMessageBox(window, {
+        type: 'warning',
+        title: 'FFmpeg 安装未完成',
+        message: '暂时无法安装 FFmpeg',
+        detail: `${message}\n\n这不会影响 VideoAgents 的其他功能，可以稍后重新启动应用再试。`,
+        buttons: ['关闭'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+    }
+  } finally {
+    closeRuntimeProgress()
+  }
+}
+
 async function ensurePythonRuntime(backend: string): Promise<PythonRuntime> {
   let installed: PythonRuntime | undefined
   try {
@@ -219,7 +529,7 @@ async function ensureWebServer(): Promise<void> {
   if (await healthy()) return
   if (process.env.VIDEOAGENTS_WEB_URL) throw new Error(`Web 服务不可用：${webOrigin}`)
 
-  const dataRoot = process.env.VIDEOAGENTS_DATA_DIR || path.join(app.getPath('userData'), 'data')
+  const dataRoot = desktopDataRoot()
   mkdirSync(path.join(dataRoot, 'projects'), {recursive: true})
   // macOS 会校验整个已签名的 .app。Python 若在 Resources/backend 写入
   // __pycache__，会使应用在下次启动时因签名失效而被 Gatekeeper 拒绝。
@@ -242,6 +552,9 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,
     VIDEOAGENTS_API_PORT: apiPort,
+    VIDEOAGENTS_USER_JWT: authToken,
+    VIDEOAGENTS_SERVICE_DISTRIBUTION: authRegion?.distribution || 's3',
+    VIDEOAGENTS_OPENROUTER_WRAPPER_URL: authRegion?.openrouterWrapperUrl || '',
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
     cwd: backend,
@@ -436,10 +749,63 @@ ipcMain.handle('desktop:activate-runtime', (_event, version: unknown) => {
   return manifest
 })
 ipcMain.handle('desktop:update-runtime', async () => updatePythonRuntimeManually())
+ipcMain.handle('desktop:account', async () => {
+  if (!authRegion || !authToken) throw new Error('尚未登录')
+  try {
+    currentAccount = await fetchUserAccount(authRegion, authToken)
+  } catch (error) {
+    if (!currentAccount) throw error
+    console.warn(`[auth] account refresh failed: ${String(error)}`)
+  }
+  return currentAccount
+})
+ipcMain.handle('desktop:login', async () => {
+  if (authToken) return true
+  if (!authRegion) throw new Error('登录服务尚未初始化')
+  let result: LoginResult
+  try {
+    result = await interactiveLogin(authRegion, '取消')
+  } catch (error) {
+    if (error instanceof LoginCancelledError) return false
+    throw error
+  }
+  if (!result) return false
+  const auth = {token: result.token, onboarded: false}
+  initializeFirstLoginDefaults()
+  auth.onboarded = true
+  saveStoredAuth(app.getPath('userData'), auth)
+  authToken = auth.token
+  currentAccount = result.account
+  app.relaunch()
+  stopWebServerTree()
+  app.exit(0)
+  return true
+})
+ipcMain.handle('desktop:logout', async () => {
+  if (!authToken) return false
+  const options: MessageBoxOptions = {
+    type: 'question', title: '退出 VideoAgents 登录',
+    message: '确定退出当前登录？',
+    detail: '退出后应用会重新启动，可重新登录或暂不登录继续使用。',
+    buttons: ['退出登录', '取消'], defaultId: 1, cancelId: 1, noLink: true,
+  }
+  const answer = window && !window.isDestroyed()
+    ? await dialog.showMessageBox(window, options)
+    : await dialog.showMessageBox(options)
+  if (answer.response !== 0) return false
+  clearStoredAuth(app.getPath('userData'))
+  authToken = ''
+  authRegion = undefined
+  currentAccount = undefined
+  app.relaunch()
+  stopWebServerTree()
+  app.exit(0)
+  return true
+})
 ipcMain.handle('desktop:open-project-folder', async (_event, project: unknown) => {
   if (process.env.VIDEOAGENTS_API_URL) throw new Error('远程项目目录不能在本机打开')
   if (typeof project !== 'string' || !/^[A-Za-z0-9_-]+$/.test(project)) throw new Error('项目名称无效')
-  const dataRoot = process.env.VIDEOAGENTS_DATA_DIR || path.join(app.getPath('userData'), 'data')
+  const dataRoot = desktopDataRoot()
   const folder = path.join(dataRoot, 'projects', project)
   if (!existsSync(folder)) throw new Error(`项目目录不存在：${project}`)
   const problem = await shell.openPath(folder)
@@ -447,7 +813,17 @@ ipcMain.handle('desktop:open-project-folder', async (_event, project: unknown) =
 })
 
 app.whenReady().then(async () => {
+  if (!ownsSingleInstance) {
+    app.quit()
+    return
+  }
+  if (app.isPackaged) {
+    app.setAsDefaultProtocolClient('videoagents')
+  } else if (process.defaultApp && process.argv[1]) {
+    app.setAsDefaultProtocolClient('videoagents', process.execPath, [path.resolve(process.argv[1])])
+  }
   const build = readBuildInfo(process.resourcesPath, app.isPackaged)
+  await requireDesktopLogin(build)
   const userData = app.getPath('userData')
   let desktopUpdate = readCachedRequiredDesktopUpdate(userData, build)
   if (app.isPackaged) {
@@ -465,12 +841,25 @@ app.whenReady().then(async () => {
   }
   installApplicationMenu()
   await createWindow()
-  if (desktopUpdate) {
-    void offerDesktopUpdate(desktopUpdate, build.version).catch(error => {
-      console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
-    })
-  }
+  // Post-launch optional prompts run in sequence after the main page is visible.
+  // Neither desktop-update prompting nor FFmpeg setup can block the main flow.
+  void (async () => {
+    if (desktopUpdate) {
+      try {
+        await offerDesktopUpdate(desktopUpdate, build.version)
+      } catch (error) {
+        console.warn(`[updater] update check skipped: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    await offerFfmpegEnvironmentSetup()
+  })().catch(error => {
+    console.warn(`[ffmpeg] optional environment check skipped: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }).catch(error => {
+  if (error instanceof LoginCancelledError) {
+    app.quit()
+    return
+  }
   const message = error instanceof Error ? error.stack || error.message : String(error)
   console.error(message)
   dialog.showErrorBox('VideoAgents 启动失败', message)

@@ -14,9 +14,9 @@
 > **流程开关(2026-08-19)**:项目「输出设置 → 人物精确空间位置」(`output.spatial_blocking`,默认开)决定本岗产物形态——**开启**:下述布局包三件套流程(职责 2–6、机检 scene_layout_pack_ok);**关闭**:沿用旧流程——只出主视角概念图 `main_01.png`(`--aspect 16:9 --n 4` 择优)+ 昼/夜等变体(以主图作 `--ref` 只改光照),prompts.json 记 `views[]`,不出 layout_top/grid_9views/layout.json、不跑 render_blocking_map.py;§6A 场景所需视图相应=主视角概念图 + 变体。以系统提示词「用户输出设定」段为准。
 
 1. 读取工单圈定的关键场景:`bible/scenes/index.json` 条目 + 该场景的 `architecture.json`、`lighting.json`、`environment.json`,与 `style.json` 合成绘图 prompt。
-2. **先定空间事实,再出图(2026-08-19)**:依 architecture.json 的空间结构先写 `layout.json` 草案——地图朝向(图上方是哪面墙/哪个方位)、≥3 个地标(门/窗/主家具/地形特征等,每个给 `id`、`name_en`、归一化坐标 `xy`∈[0,1]²,x 向右 y 向下)、九格机位语义 `views[tile 1..9]`(每格从哪个地标看向哪里、景别);地标坐标是布局图 prompt 的依据("main door at bottom center, fireplace on the right wall…"),出图后对照实图校正坐标——**layout.json 与图必须一致,它是分镜师标站位、prompt 写地标词的唯一文字事实源**。
-3. **出俯视空间布局图 `layout_top.png`**:正上方俯视(top-down / bird's-eye plan view),整场空间边界与全部地标可辨,**无人物、无文字标注、无箭头**(干净底图,后续由 `code/render_blocking_map.py` 叠加人物动线标注),≥2560x1440;多张候选择优,落选移入 `candidates/`。
-4. **出 9 宫格多角度场景图 `grid_9views.png`**:以 `layout_top.png` 作第一张 `--ref`、版式模板 `templates/scene_grid_template.png` 作第二张 `--ref`,一次生成 3x3 九格,每格按 `layout.json#views` 逐格描述机位/看向/景别,九格必须是**同一空间**(家具/门窗/地标位置与俯视图一一对应),无人物;版式偏离(缺格/串格/多人)即重出。
+2. **先定空间事实,再出图(2026-08-19)**:依 architecture.json 的空间结构先写 `layout.json` 草案——地图朝向(图上方是哪面墙/哪个方位)、≥3 个地标(门/窗/主家具/地形特征等,每个给 `id`、`name_en`、归一化坐标 `xy`∈[0,1]²,x 向右 y 向下)、九格机位语义 `views[tile 1..9]`(每格 `camera_from` 从哪个地标、`looking_at` 看向哪个地标、`size` 景别、`angle` 机位高度);**九格机位规则(2026-08-26,写 views 时自核,先于出图;前科 polan:SCN-003/006 九格里混进俯视格、SCN-004/005 七格同一条街/巷轴雷同)**:① `angle ∈ {eye, low, high_oblique}`——`eye` 人眼高度、`low` 贴地低机位、`high_oblique` 斜俯高机位(俯角 ≤45°,仍看得见墙体立面与天际线);**九格一律不出垂直俯视**——俯视由 `layout_top.png` 专职,`desc_en` 禁写 俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view 一类措辞(写了模型就复刻俯视图进格);② `camera_from` ≠ `looking_at`,且 `(camera_from, looking_at)` 九格两两不同;③ 同一 `looking_at` ≤3 格;④ 景别配比:`wide` ≤4 格、`close`/`detail` ≥2 格;`angle=low` ≥1 格;⑤ 方位角分散:以地标 `xy` 算 `camera_from`→`looking_at` 的方位角(图上方为 0°、顺时针,x 向右 y 向下),**同一 ±30° 方位内 ≤3 格**——线性空间(巷/街/路)尤其要守:轴向正反各留 1–2 格,其余改垂直看墙、地标特写、贴地与斜俯,否则九格退化成同一条纵深;任何一条不满足就改 views 再出图,不得出图后再补描述);地标坐标是布局图 prompt 的依据("main door at bottom center, fireplace on the right wall…"),出图后对照实图校正坐标——**layout.json 与图必须一致,它是分镜师标站位、prompt 写地标词的唯一文字事实源**。
+3. **出俯视空间布局图 `layout_top.png`**:正射垂直俯视(true nadir orthographic plan view),整场空间边界与全部地标可辨,**无人物、无文字标注、无箭头**(干净底图,后续由 `code/render_blocking_map.py` 叠加人物动线标注),≥2560x1440;多张候选择优,落选移入 `candidates/`。**俯视图 prompt 四条写法(2026-08-26;前科 offer SCN-0005:prompt 写了门栓/棂格这类只有立面才可见的特征,模型只能把门窗平铺到地面上,近侧南墙整面消失)**:① 机位句用正射措辞、**不用 bird's-eye**(该词会让机位前倾、露出墙面立面):`camera axis exactly perpendicular to the floor; no wall face, no elevation, no side of any building is visible; only the floor plane, the top edges of the walls and the tops of furniture are seen`;② 洞口用平面图语言写成墙线上的缺口,**不写立面特征**——门扇/门栓/窗棂/壁挂/壁画等一律不写、并明句排除:`all walls are continuous thick wall lines enclosing the room; the main door is a wide gap in the bottom (south) wall line, flanked by two narrower window gaps; … door leaves, door bars, window lattices and anything mounted on a wall face are not visible from directly above and must not be drawn`;③ 近侧(图下方)那面墙必须明写存在:`the bottom (south) wall is fully present along the bottom edge of the room, seen only as its top edge / thickness; the floor ends at that wall line`(俯视图最容易丢的就是这面墙);④ negative 追加 `door lying on the floor, window lying on the floor, door bar on the floor, wall elements projected onto the floor, elevation view of a door or window, missing wall, open side, dollhouse cutaway, tilted camera, oblique aerial view`。出图后按实图校正 layout.json 坐标时,门窗地标取**墙线上的缺口位置**,不得按被平铺到地面的门窗读数(错图不校正、直接重出)。
+4. **出 9 宫格多角度场景图 `grid_9views.png`**:以 `layout_top.png` 作第一张 `--ref`、版式模板 `templates/scene_grid_template.png` 作第二张 `--ref`,一次生成 3x3 九格,每格按 `layout.json#views` 逐格描述机位/看向/景别/机位高度(`angle`;prompt 里明写 eye-level / low-angle / high oblique angle,并写明「第一张参考图仅作空间布局参考,任何一格不得画成俯视平面图」),九格必须是**同一空间**(家具/门窗/地标位置与俯视图一一对应),无人物;版式偏离(缺格/串格/多人)、**出现俯视格或复刻俯视图的格、两格以上构图雷同(同机位同景别难以分辨)**即重出——重出前先回头核对 views 是否违反职责 2 的机位规则,规则违反的先改 views 再出图。
 5. 对可变维度大的场景(昼/夜、季节),按需产出九格图变体 `grid_9views_<cond>.png`(以 `grid_9views.png` 为 `--ref` 只改光照)并在 layout.json#variants 标注适用条件;俯视图不必出变体。
 6. 落盘布局包 + prompt 记录 + 与设定卡的对照说明,存 `assets/concepts/scenes/<id>/`;交付前跑 `python3 code/render_blocking_map.py --project <slug> --scene <id> --check-only`(机检 scene_layout_pack_ok)。
 7. 发现设定卡自身矛盾(如建筑风格与文化设定打架)时上报,不自行修改。
@@ -89,15 +89,17 @@ python3 code/render_blocking_map.py --project <slug> --scene <id> --check-only
     { "id": "fireplace",  "name": "壁炉", "name_en": "the fireplace",  "kind": "feature",   "xy": [0.89, 0.50] }
   ],
   "views": [
-    { "tile": 1, "camera_from": "main_door", "looking_at": "fireplace", "size": "wide",
-      "desc_en": "wide shot from just inside the main door looking toward the fireplace on the far right wall" },
-    { "tile": 5, "camera_from": "main_door", "looking_at": "long_table", "size": "wide", "desc_en": "main establishing view ..." }
+    { "tile": 1, "camera_from": "main_door", "looking_at": "fireplace", "size": "wide", "angle": "eye",
+      "desc_en": "eye-level wide shot from just inside the main door looking toward the fireplace on the far right wall" },
+    { "tile": 5, "camera_from": "main_door", "looking_at": "long_table", "size": "wide", "angle": "eye", "desc_en": "main establishing view ..." },
+    { "tile": 7, "camera_from": "long_table", "looking_at": "fireplace", "size": "close", "angle": "low",
+      "desc_en": "low-angle close shot across the table top toward the fireplace" }
   ],
   "variants": [{ "file": "grid_9views_night.png", "condition": "night" }],
   "checklist": { "architecture_match": true, "lighting_match": true, "style_match": true, "grid_matches_layout": true }
 }
 ```
-`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——render_blocking_map 图例已支持 CJK(三订),route_en(内含地标词)与角色名会上图、`name_en`/`desc_en` 本身不直接上图,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致。
+`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——render_blocking_map 图例已支持 CJK(三订),route_en(内含地标词)与角色名会上图、`name_en`/`desc_en` 本身不直接上图,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致;每条带 `camera_from`/`looking_at`(地标 id)/`size`(`wide`|`medium`|`close`|`detail`)/`angle`(`eye`|`low`|`high_oblique`)/`desc_en`,并满足职责 2 的九格机位规则(机位对两两不同、同一 looking_at ≤3、wide ≤4、close/detail ≥2、low ≥1、同一 ±30° 方位内 ≤3、无俯视措辞;2026-08-26,自核项、暂不入脚本机检)。
 
 ## 接受的工作指令(Work Order)
 
@@ -121,6 +123,10 @@ instruction: |
 - **scene_layout_pack_ok(2026-08-19,脚本 `code/render_blocking_map.py --scene <id> --check-only`)**:`layout_top.png` / `grid_9views.png` / `layout.json` 三件齐全;两图 ≥3,686,400 像素;layout.json 地标 ≥3 且每个有 `id`/`name_en`/合法 `xy`;`views` 恰为 tile 1..9 各一条且带 `desc_en`。
 - 工单要求的变体齐全;prompt 记录完整;变体条件标注与 environment.json 的可变维度对应。
 - 俯视图与九格图无人物、无文字/箭头标注(标注由下游脚本叠加,底图必须干净)。
+
+**自核(2026-08-26,不入脚本、交付前逐条对照 layout.json#views 与实图)**:
+- views 满足职责 2 的九格机位规则:`angle` 全部在 {eye, low, high_oblique} 内、`desc_en` 无俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view 措辞;`(camera_from, looking_at)` 两两不同;同一 `looking_at` ≤3 格;`wide` ≤4、`close`/`detail` ≥2、`low` ≥1;按地标 xy 算的机位方位角同一 ±30° 内 ≤3 格。
+- 实图九格:无一格是垂直俯视或俯视图复刻;无两格以上同机位同景别雷同;每格与 views 对应格的机位/看向/景别/高度相符(格位串了就改 views 或重出,不得让 layout.json 与图不一致)。
 
 **评分(evaluation Agent,rubric visual_gen_v1,阈值 80;按 §7 适用「图像产物」)**:
 - 与设计稿匹配(35):建筑/光照/环境设定逐项吻合;

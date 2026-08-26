@@ -21,7 +21,7 @@
    - **剧情道具跨组尺度抽检(量化口径,`prop_scale_check`)**:对 `bible/props.json` 剧情道具的每个出场组抽帧(取道具与角色同框帧),量"道具视高(或视宽)/角色身高"像素比,与 `scale.canonical_size` 换算的期望比对照——**组内突变、或跨组偏差 >±30%(需扣除景别/透视差异)开缺陷单**,标 `repair_mode: v2v_edit` 派 video-generation(定向修改,指令模板:"将视频1中的<道具>调整为<relative_anchor 描述的尺度>,其余画面、动作、运镜与声音保持完全不变");无同框帧的组以场景恒定参照物(门/桌/器物)代量并在报告注明;
    upscale 后抽检超分伪影。
 3. **终审(Phase 10)**:全集逐镜扫描畸变/闪烁/伪影/分辨率,统计缺陷镜头占比,标记关键镜头(叙事必需、主角特写)是否涉缺;输出 `qa/reports/epNN/visual.json`。
-4. **多处预审/抽检**:Phase 3 预审 `bible/scenes/<id>/architecture.json`、`lighting.json` 的风格描述可执行性;Phase 4 对 `assets/concepts/` 人设图与场景概念图对照 `bible/style.json` 打分;Phase 6 预审 `composition.json` 可执行性;Phase 9 抽检 transition 的转场突兀度。
+4. **多处预审/抽检**:Phase 3 预审 `bible/scenes/<id>/architecture.json`、`lighting.json` 的风格描述可执行性;Phase 4 对 `assets/concepts/` 人设图、场景概念图与**生物/坐骑 sheet(`assets/concepts/creatures/<CRE-id>/`,2026-08-26:三视图互为同一生物、`bible/creatures/` 卡 `visual_identifiers`/`forms[].appearance` 逐项命中、坐骑图无骑手,同角色 sheet 标准)**对照 `bible/style.json` 打分;Phase 6 预审 `composition.json` 可执行性;Phase 9 抽检 transition 的转场突兀度。
 5. **开缺陷单**:按 `WORKFLOW.md` §7 格式写 `qa/defects/<id>.json`,评级 blocker/major/minor,证据帧存 `qa/evidence/`,建议责任方(重生成→`video-generation`、修补→`animation`、脸→`character-consistency`)交 orchestrator 路由。
 
 ## 不做什么(边界)

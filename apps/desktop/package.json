@@ -1,7 +1,7 @@
 {
   "name": "@videoagents/desktop",
   "private": true,
-  "version": "1.0.23",
+  "version": "1.0.24",
   "author": "AgenticsWorld",
   "description": "VideoAgents desktop client",
   "main": "dist/main.js",
@@ -10,6 +10,7 @@
     "dev": "npm run build && electron .",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
     "package": "node scripts/package.mjs"
   },
   "dependencies": {
@@ -25,6 +26,14 @@
   "build": {
     "appId": "world.agentics.videoagents",
     "productName": "VideoAgents",
+    "protocols": [
+      {
+        "name": "VideoAgents Login",
+        "schemes": [
+          "videoagents"
+        ]
+      }
+    ],
     "directories": {
       "output": "release"
     },

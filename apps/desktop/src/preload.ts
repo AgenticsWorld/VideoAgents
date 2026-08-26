@@ -9,5 +9,8 @@ contextBridge.exposeInMainWorld('videoagentsDesktop', {
   restartBackend: () => ipcRenderer.invoke('desktop:restart-backend'),
   runtimeInfo: () => ipcRenderer.invoke('desktop:runtime-info'),
   activateRuntime: (version: string) => ipcRenderer.invoke('desktop:activate-runtime', version),
-  updateRuntime: () => ipcRenderer.invoke('desktop:update-runtime')
+  updateRuntime: () => ipcRenderer.invoke('desktop:update-runtime'),
+  account: () => ipcRenderer.invoke('desktop:account'),
+  login: () => ipcRenderer.invoke('desktop:login'),
+  logout: () => ipcRenderer.invoke('desktop:logout')
 })
