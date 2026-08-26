@@ -7,6 +7,7 @@
 | `_common.py` | 脚本共享 CLI:`--project`(缺省 `$VIDEOAGENTS_PROJECT` 或 demo)/ `--ep` / `--out-root`;import 副作用把 `modules/` 加入 `sys.path` |
 | `blocking_bound_check.py` | 空间站位机检 blocking_bound(WORKFLOW.md §7A):组 prompt 每镜空间位置句与 blocking.json 各角色 `space_fragment_en` 逐字核对,`--project/--ep` 入参;prompt 批产出后全批跑,video-generation 开跑前单组复核 |
 | `render_blocking_map.py` | 分镜组人物动线图渲染 + 机检(WORKFLOW.md Phase 4/6,2026-08-19):把 shot_list/storyboard 组级 `blocking_map`(逐角色起点/动线/终点,引用场景 `layout.json` 地标)叠加渲染到该场景俯视空间布局图 `layout_top.png` → `directing/epNN/blocking_maps/<grp>.png`(草案 `--source storyboard` 落 `draft/`);同时机检 `scene_layout_pack_ok`(`--scene <id> --check-only`:布局包三件套/像素/地标/九格)与 `blocking_map_present`(地标引用、route_en、同场景相邻组动线衔接),`--project/--ep` 入参 |
+| `performance_bound_check.py` | 表演证据层机检 performance_bound(WORKFLOW.md §7A,2026-08-26,仅对白组):组 prompt 每对白镜每说话角色的触发词在 `{}` 台词内且 `{}` 外再出现一次(绑定短语)、blocking `performance.end_state` 逐字命中、`forbidden_early` 不在绑定短语之前(WARN)、全文无 `AU\d` 编码;`--project/--ep [grp…] --strict` 入参;prompt 批产出后全批跑,video-generation 开跑前单组复核 |
 | `layout_map_bound_check.py` | 空间布局机检 layout_map_bound(WORKFLOW.md §7A):组 prompt refs 是否挂动线俯视图 + 场景 9 宫格图、含 Spatial layout 声明句、逐角色 `route_en` 逐字命中,`--project/--ep` 入参;prompt 批产出后全批跑,video-generation 开跑前单组复核 |
 | `check_generation_groups.py` | 生成组机检 + 草案分组(WORKFLOW.md §7A 规则),`<shot_list.json>` 入参 |
 | `check_av_sync.py` | 音画锁定同步机检 av_sync(audio-to-video 插件):母带零重编码(逐帧 md5)、画面精确铺满、累计漂移为 0;分 timeline/clips/final 三阶段共 15 项,timeline-planner 交付 `--stamp` 盖章,生成/剪辑开工只检,`--project/--ep/--require` 入参;共享库 `modules/avsync.py` |

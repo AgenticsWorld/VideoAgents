@@ -1027,6 +1027,8 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "生效视频模型为 Seedance 2.0 系列"},
     "08-video-gen/prompt/h3-prompt-writing": {
         "kind": "conditional", "condition": "生效视频渠道为 MiniMax H3"},
+    "08-video-gen/prompt/performance-direction": {
+        "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
     "08-video-gen/upscale/minimax-regenerate-2k": {
         "kind": "conditional", "condition": "MiniMax API Key 已配置"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
