@@ -2328,14 +2328,16 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     final_res = out.get("final_resolution") or "480p"
     burn_in = (
         "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt(正片 0 秒基准)后,由 edit 在封装终版时"
-        "先按片头实测时长(ffprobe intro.mp4)整体平移生成成片基准 subtitles_final.srt,再把**平移后的字幕**"
-        "烧录进画面(ffmpeg subtitles 滤镜等)——final.mp4 含片头时严禁直接烧正片基准 SRT,否则字幕整体偏早;"
+        "先用宿主 CLI `code/finalize_episode.py shift`(或 assemble 自动跑)按片头实测时长整体平移生成成片基准"
+        " subtitles_final.srt,再把**平移后的字幕**烧录进画面(ffmpeg subtitles 滤镜等),烧录后 `finalize_episode.py check`"
+        " 须全 PASS——final.mp4 含片头时严禁直接烧正片基准 SRT,否则字幕整体偏早;"
         "烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
         "(小字号贴底、≤2 行、白字黑描边、禁大面积底板);orchestrator 排期须把该烧录步骤纳入本集必做项,"
         "platform-adapter 发布物料一律基于烧录版母版"
         if out.get("subtitle_burn_in") else
-        "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 平移后的成片基准"
-        " subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4),发布期按平台字幕清单处理")
+        "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 用 `code/finalize_episode.py shift`"
+        " 平移后的成片基准 subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4,"
+        "`finalize_episode.py check` 全 PASS 才可交付),发布期按平台字幕清单处理")
     caption_line = (
         "**开启** —— caption Agent 在关键叙事节点设计花字+配套音效(WORKFLOW.md §9A),"
         "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
@@ -2526,7 +2528,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 执行规则:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
-- 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
+- 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction
+- **片头启用 ⇒ 时间轴平移是硬工序(WORKFLOW.md §9B)**:正片 0 秒基准的声轨 assets/audio/final/epNN.wav 与字幕 subtitles.srt 接入片头后都要整体后移一个片头实测时长。edit 总装只准走 `python3 code/finalize_episode.py assemble --project <slug> --ep epNN`(声轨随正片段拼接、偏移天然产生,自动产 subtitles_final.srt 并机检),禁止自写 concat 后再 -itsoffset/adelay 手算;成片由其它路径产出时至少 `shift` + `check`;机检 intro_offset_ok(`finalize_episode.py check`)FAIL 即不交付/不发布。调度开总装工单时 instruction 必须写明该 CLI 命令与 acceptance `intro_offset_ok`;片头禁用时同样跑 check(偏移 0,字幕原样拷贝)"""
     if agent_id == "09-audio/audio-transcription" and skill_enabled("09-audio/audio-transcription/audio-transcription"):
         p += f"""
 

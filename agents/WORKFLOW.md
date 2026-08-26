@@ -610,14 +610,22 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装**;**终版封装(G9)接入片头后必须产出成片基准字幕 `subtitles_final.srt`:把 subtitle 的正片基准 SRT 整体 +片头实际时长(ffprobe intro.mp4 实测,与 placement.json 交叉核对),烧录/发布一律用 final 版,严禁正片基准 SRT 直接配 final.mp4(2026-07-18 前科:thedoor ep01–06 发布包字幕整体偏早一个片头时长)** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24;**subtitle_offset_ok(终版封装时):final.mp4 含片头 ⇒ 交付字幕首句时间码 = 正片基准首句 + intro 实测时长(±200ms)**。评分 edit_v1 |
+| edit | 按 generation_groups 组序粗剪(组 clip 为剪辑单元,组内对位用 meta 切变边界)→ 按 pacing 精剪(裁切、变速);**剪辑期发现局部穿帮(服饰/道具/元素级)开 `repair_mode: v2v_edit` 缺陷单**(附时间窗+对照证据+修改指令草稿),由 video-generation 走 V2V 定向修改低成本修复(§9),不整组重 roll;**封装前重验 narration_anchor_sync(§8B ②)——final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报,不封装**;**终版封装(G9)接入片头后,正片 0 秒基准上的声轨与字幕都要整体后移一个片头实测时长——只准走宿主 CLI `code/finalize_episode.py assemble`(拼接时声轨随正片段一起进 concat,偏移天然产生)+ `shift`(产成片基准字幕 `subtitles_final.srt`)+ `check`(§9B),禁止手算 -itsoffset/adelay,烧录/发布一律用 final 版,严禁正片基准 SRT/声轨直接配 final.mp4(2026-07-18 前科:thedoor ep01–06 发布包字幕整体偏早一个片头时长)** | 组 clips+meta、final_audio、pacing | `edit/epNN/timeline.json` + `cut_v1.mp4` | 机检:**narration_anchor_sync(封装前置,§8B)**;成片时长 = 预算 ±5%;无黑帧/跳帧;fps 统一 24;**intro_offset_ok(终版封装时,`finalize_episode.py check`):成片时长 = Σ各段实测;字幕逐条 = 正片基准 + intro 实测(±200ms);成片声轨 vs final_audio 互相关滞后 = intro 实测(±80ms)**。评分 edit_v1 |
 | transition | 转场设计与实施(硬切为主,特殊转场按导演阐述) | cut、directing_plan | 更新 timeline | QA:visual-qa 抽检转场突兀度 |
-| subtitle | 对白/旁白字幕(时轴对齐,**正片 0 秒基准,不含片头**;成片基准版由 edit 终版封装时平移生成);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
+| subtitle | 对白/旁白字幕(时轴对齐,**正片 0 秒基准,不含片头**;成片基准版由 edit 终版封装时用 `finalize_episode.py shift` 平移生成);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
 | caption | 花字设计(schema v2:headline 大标题/keyword 关键词/信息类,含字体、动画、配套音效;**仅花字开关开启时派发,见 §9A**)+ 逐组烧录(caption-render 工单,只准宿主 CLI) | shot_list、dictionary、timeline、`data/fonts\|sfx/manifest.json` | `epNN/captions.json` + `assets/clips_caption/epNN/` | 机检:术语与 dictionary 100% 一致 + `code/check_captions.py` design/render 段(schema v3/双写对账/入出点=语音逐字起止/资产命中/副本齐备且规格不变) |
 | title | 片头/片尾(含下集预告位);**下集预告默认不配旁白**——钩子文案以字卡/花字呈现,声轨仅画面原声+BGM,需配音须工单显式指定(2026-07-10) | style、hooks、episode_plan | `epNN/intro_outro/` | 机检:预告无旁白轨(工单显式要求除外,teaser_no_narration);QA:art-director 会签 |
 | thumbnail | 封面(每平台画幅各一,A/B 两版);**先盘点 refs/thumbnail/ 用户封面参考,优先借鉴其构图/版式/文字风格并落痕迹**(§2 规则 7) | 本集高光帧、style、seo 关键词、refs/thumbnail/ | `epNN/thumbnail_*.png` | 机检:画幅/安全区合规;QA:人工挑选 |
 
 **G9 闸门 + H4**:第 1 集成片用户全片审看签字;后续集按抽检放行。**总装产物命名固定**:成片必须落盘为 `edit/epNN/final.mp4`(或含 `final` 的变体名,如 `epNN_final.mp4`)、成片基准字幕为 `edit/epNN/subtitles_final.srt`——Web 视频预览页与 platform-adapter 均按 `final` 名索引,orchestrator 开总装工单时 outputs 必须写此规范名,严禁 `master.mp4` 等别名(前科 2026-07-18:tothemoon p9-master-ep01 产出 master.mp4,视频预览页索引不到 ep01 成片)。
+
+> **§9B 片头接入的时间轴平移(2026-08-26 增,归 `10-editing/edit`,总装工单必写)**
+>
+> - **问题**:片头(intro)接在正片之前后,正片 0 秒基准上的一切都要整体后移一个片头时长——外挂声轨 `assets/audio/final/epNN.wav` 与字幕 `subtitles.srt`/`.ass` 都是正片基准,直接配 `final.mp4` 就整体偏早。能力弱的模型常忘掉这一步、或只挪字幕不挪声轨(2026-07-18 thedoor 前科),所以**不再靠模型手算**。
+> - **唯一工序**:宿主 CLI `code/finalize_episode.py`——`assemble`(intro + 正片画面 + final_audio + outro + teaser 一次 concat 成 `final.mp4`,声轨随正片段拼接、偏移天然正确;片头无音轨自动补静音,画面短于声轨用末帧补齐,**严禁 `-shortest`**,分辨率/fps 归一到正片口径)→ 自动 `shift`(字幕整体 +intro 实测时长,产 `subtitles_final.srt`/`.ass`;无片头 = 原样拷贝)→ 自动 `check`。成片由别的路径产出(花字版、外部返修)时至少 `shift` + `check` 必跑。**禁止 Agent 自写 concat 后再 `-itsoffset`/`adelay` 手算声轨偏移**;禁止用 `placement.json` 声明时长代替 `ffprobe` 实测(不一致以实测为准并上报 title)。
+> - **机检 `intro_offset_ok`**(`finalize_episode.py check --project <slug> --ep epNN`,封装后、发布前必跑,FAIL 即不交付/不烧录/不发布):`final_duration_layout` 成片时长 = Σ各段实测(±0.25s);`subtitles_final_present` 有 subtitles.srt 就必须有 subtitles_final.srt;`subtitle_offset_all_cues` 逐条 cue = 正片基准 + intro 实测(±200ms,条数一致;`.ass` 同);`audio_offset_measured` 成片声轨 vs final_audio 互相关实测滞后 = intro 实测(±80ms,首/中/尾三窗一致 = 无累计漂移);`placement_declared_match` 声明 vs 实测(WARN)。台账 `edit/epNN/final_layout.json`(`cut_offset_s` = 片头偏移,各段起点/实测时长,check 结果)。
+> - **段序与开关**:默认 intro → cut → outro → teaser;`settings.json#packaging` 禁用的段与缺失文件自动跳过,片头禁用时偏移 = 0,字幕原样拷贝。av(音频锁定)插件项目要求母带零重编码,与片头接入互斥(CLI 拒绝 assemble)。
+> - **下游**:platform-adapter 打包前重跑 `check`(只读),字幕只取 `subtitles_final.*`;烧录字幕(`output.subtitle_burn_in`)只烧 `subtitles_final.*`,并抽帧核对首句出现时刻。
 
 > **§9A 花字与花字音效(2026-08-08 增,项目级开关,默认关)**
 >
@@ -649,7 +657,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成;字幕一律取成片基准 `subtitles_final.srt`,严禁用正片基准 subtitles.srt 随 final.mp4 打包** | final.mp4、subtitles_final.srt、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台;**字幕时基抽检:首句时间码与母版音频对齐(±200ms)** |
+| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成;字幕一律取成片基准 `subtitles_final.srt`,严禁用正片基准 subtitles.srt 随 final.mp4 打包;打包前重跑 `code/finalize_episode.py check`(§9B,只读)** | final.mp4、subtitles_final.srt、final_layout.json、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台;**intro_offset_ok 复检(`finalize_episode.py check` 全 PASS,字幕逐条与声轨互相关均对齐)** |
 | seo | 标题(3 备选)/tag/简介,按平台调性 | 剧本、hooks、平台 | `publish/seo.json` | 机检:长度/敏感词合规;QA:人工挑标题 |
 | metadata | 元数据(合集归属、集数、分级、封面绑定) | episode_plan、safety 报告 | `publish/metadata.json` | 机检:schema + 必填齐 |
 | publisher | 定时/立即发布,回收平台回执 | 以上全部 | `publish/receipts/` | 机检:回执状态 = 成功;失败自动重试 2 次后报人工 |
