@@ -501,6 +501,16 @@ async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_advanced_set(body)
 
 
+@api.get("/config/skills", tags=["automation"])
+async def skills_get(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_skills_get(refresh)
+
+
+@api.post("/config/skills", tags=["automation"])
+async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_skills_set(body)
+
+
 @api.get("/config/concurrency", tags=["automation"])
 async def agent_concurrency() -> dict[str, Any]:
     return await core.api_agent_concurrency_get()

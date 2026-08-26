@@ -1012,6 +1012,160 @@ AUDIO_TRANSCRIPTION_SKILL = (
     "agents/09-audio/audio-transcription/skills/audio-transcription/SKILL.md")
 
 
+# ---------------- 技能包(设置菜单「高级→技能包」) ----------------
+# 技能 = agents/<类别>/<agent>/skills/<技能目录>/SKILL.md(插件 Agent 同构),技能 id 取
+# "<agent_id>/<技能目录名>"(目录名稳定,不用 frontmatter 的 name)。设置页自动扫描列出,
+# 用户逐项勾选;开关记 state.json 的 skills_disabled 列表(默认全部启用,新增技能自动启用)。
+# 语义 = 「勾选=允许」:现有运行时条件(生效模型/渠道/Key 已配置)照旧判定,勾选只是总闸;
+# 未勾选一律不注入。SOUL.md 无条件写死引用的技能被取消勾选时,追加「已禁用」段声明本单不执行。
+# 注册表说明每个已知技能的激活方式(仅供设置页展示 + 决定禁用时是否需要声明);未登记的
+# 技能按「通用」处理:勾选即注入一段「先读 SKILL.md,按其 description 判定是否适用」的加载指令。
+SKILL_ACTIVATIONS: dict[str, dict] = {
+    "08-video-gen/prompt/sd25-pe": {
+        "kind": "conditional", "condition": "生效视频模型为 Seedance 2.5"},
+    "08-video-gen/prompt/sd20-prompt-writing": {
+        "kind": "conditional", "condition": "生效视频模型为 Seedance 2.0 系列"},
+    "08-video-gen/prompt/h3-prompt-writing": {
+        "kind": "conditional", "condition": "生效视频渠道为 MiniMax H3"},
+    "08-video-gen/upscale/minimax-regenerate-2k": {
+        "kind": "conditional", "condition": "MiniMax API Key 已配置"},
+    "08-video-gen/video-generation/runninghub-cloud-workflow": {
+        "kind": "conditional", "condition": "视频渠道为 ComfyUI RunningHub 运行方式"},
+    "09-audio/audio-transcription/audio-transcription": {"kind": "always"},
+    "10-editing/caption/caption-styling": {"kind": "soul"},
+    "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube"},
+    "12-publishing/publisher/skill-douyin-cdp-draft": {"kind": "soul", "condition": "发布到抖音"},
+    "12-publishing/publisher/skill-tiktok-cdp-draft": {"kind": "soul", "condition": "发布到 TikTok"},
+    "12-publishing/publisher/skill-xhs-cdp-draft": {"kind": "soul", "condition": "发布到小红书"},
+    "12-publishing/publisher/skill-bilibili-cdp-draft": {"kind": "soul", "condition": "发布到 B 站"},
+    "12-publishing/publisher/XiaohongshuSkills": {
+        "kind": "library", "condition": "skill-xhs-cdp-draft 的依赖库"},
+}
+_SKILL_DIR_RE = re.compile(r"[A-Za-z0-9_\-]+")
+
+
+def _parse_skill_frontmatter(text: str) -> dict:
+    """极简 YAML frontmatter:只取顶层 name/description(支持 | / > 块标量),零依赖。"""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out: dict = {}
+    key, buf = None, []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$", line)
+        if m and not line.startswith((" ", "\t")):
+            if key and buf:
+                out[key] = " ".join(x.strip() for x in buf if x.strip()).strip()
+            key, val = m.group(1), m.group(2).strip()
+            buf = []
+            if val in ("|", ">", "|-", ">-"):
+                continue
+            out[key] = val.strip("'\"")
+            key = None
+        elif key is not None:
+            buf.append(line)
+    if key and buf:
+        out[key] = " ".join(x.strip() for x in buf if x.strip()).strip()
+    return {k: v for k, v in out.items() if k in ("name", "description")}
+
+
+_SKILLS_CACHE: tuple[float, list] = (0.0, [])
+_SKILLS_CACHE_TTL = 30.0
+
+
+def scan_agent_skills(refresh: bool = False) -> list[dict]:
+    """扫描全部 Agent(内置 + 已启用插件)的 skills/ 目录,返回不含开关状态的技能清单(带 TTL 缓存)。"""
+    global _SKILLS_CACHE
+    if not refresh and time.time() < _SKILLS_CACHE[0]:
+        return _SKILLS_CACHE[1]
+    skills: list[dict] = []
+    for a in list_agents(refresh=refresh):
+        d = agent_dir(a["id"])
+        if not d or not (d / "skills").is_dir():
+            continue
+        for sd in sorted((d / "skills").iterdir()):
+            f = sd / "SKILL.md"
+            if not sd.is_dir() or not f.is_file() or not _SKILL_DIR_RE.fullmatch(sd.name):
+                continue
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                text = ""
+            fm = _parse_skill_frontmatter(text)
+            desc = fm.get("description", "")
+            if not desc:                      # 无 frontmatter:优先首条引用行,其次首个标题/正文
+                body = [x.strip() for x in text.splitlines() if x.strip() and not x.strip().startswith("---")]
+                quote = next((x for x in body if x.startswith(">")), "")
+                first = quote or (body[0] if body else "")
+                desc = re.sub(r"^SKILL\.md\s*[—\-]+\s*", "", first.lstrip("#>").strip())
+            sid = f"{a['id']}/{sd.name}"
+            act = SKILL_ACTIVATIONS.get(sid, {"kind": "generic"})
+            try:
+                rel = str(f.relative_to(ROOT))
+            except ValueError:
+                rel = str(f)
+            skills.append({
+                "id": sid,
+                "agent_id": a["id"],
+                "agent_name": a["name"],
+                "category_name": a["category_name"],
+                "plugin": a.get("plugin"),
+                "dir": sd.name,
+                "name": fm.get("name") or sd.name,
+                "description": desc[:400],
+                "path": rel,
+                "kind": act.get("kind", "generic"),
+                "condition": act.get("condition", ""),
+            })
+    _SKILLS_CACHE = (time.time() + _SKILLS_CACHE_TTL, skills)
+    return skills
+
+
+def skills_disabled_setting() -> set[str]:
+    v = STATE.get("skills_disabled")
+    return {str(x) for x in v} if isinstance(v, list) else set()
+
+
+def skill_enabled(skill_id: str) -> bool:
+    """技能包开关(默认启用;未在清单里的 id 同样按 STATE 判定,便于注入段常量直接引用)。"""
+    return skill_id not in skills_disabled_setting()
+
+
+def list_agent_skills(refresh: bool = False) -> list[dict]:
+    off = skills_disabled_setting()
+    return [dict(s, enabled=s["id"] not in off) for s in scan_agent_skills(refresh)]
+
+
+def agent_skill_prompt(agent_id: str) -> str:
+    """build_role_prompt 用:本 Agent 的「通用」技能(注册表未登记、已勾选)注入加载指令;
+    SOUL.md 无条件引用的技能(always/soul/library)被取消勾选时注入禁用声明。
+    条件注入型技能由各自分支自行 `skill_enabled(...)` 门控,此处不重复。"""
+    mine = [s for s in list_agent_skills() if s["agent_id"] == agent_id]
+    if not mine:
+        return ""
+    p = ""
+    generic = [s for s in mine if s["kind"] == "generic" and s["enabled"]]
+    if generic:
+        p += "\n\n## 已启用技能(用户在设置「高级→技能包」勾选,当前已生效)\n" \
+             "以下技能已随本工位安装并被用户启用。开工前**先 Read 各技能文件全文**,按其 description 判定是否适用于本单:" \
+             "适用时按其流程执行并在回执如实记录所用技能;不适用时按 SOUL.md 常规手段执行并在回执说明判定结果。" \
+             "技能与 SOUL.md 冲突时以 SOUL.md 为准。"
+        for s in generic:
+            p += f"\n- `{s['name']}`:{s['path']}"
+            if s["description"]:
+                p += f"\n  适用:{s['description'][:200]}"
+    disabled = [s for s in mine if s["kind"] in ("always", "soul", "library") and not s["enabled"]]
+    if disabled:
+        p += "\n\n## 已禁用技能(用户在设置「高级→技能包」取消勾选)\n" \
+             "以下技能已被用户禁用:SOUL.md 中引用它们的指引本单**不执行**,不要读取其 SKILL.md,按 SOUL.md 其余常规手段完成工单;" \
+             "若无该技能就无法完成工单,回执如实说明并升级用户裁决,不得自行绕过禁用。"
+        for s in disabled:
+            p += f"\n- `{s['name']}`({s['path']})"
+    return p
+
+
 def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
     """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
     传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia.get_config 同口径):
@@ -2320,7 +2474,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求中指向 refs/ 的素材路径(厂标/Logo/二维码等)必须实际读取该文件并使用;文件不存在时上报,不得凭空生成替代
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction"""
-    if agent_id == "09-audio/audio-transcription":
+    if agent_id == "09-audio/audio-transcription" and skill_enabled("09-audio/audio-transcription/audio-transcription"):
         p += f"""
 
 ## 音频转文字 Skill（本工位强制）
@@ -2341,7 +2495,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
 - 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
 - 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
-    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()):
+    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()) \
+            and skill_enabled("08-video-gen/prompt/sd25-pe"):
         p += f"""
 
 ## Seedance 2.5 提示词优化 Skill(仅当生效视频模型为 Seedance 2.5 时注入,当前已生效)
@@ -2350,7 +2505,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
-    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()):
+    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()) \
+            and skill_enabled("08-video-gen/prompt/sd20-prompt-writing"):
         p += f"""
 
 ## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
@@ -2359,7 +2515,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
-    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active():
+    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active() \
+            and skill_enabled("08-video-gen/prompt/h3-prompt-writing"):
         p += f"""
 
 ## MiniMax H3 提示词写作 Skill(仅当生效视频渠道为 MiniMax H3 时注入,当前已生效)
@@ -2369,7 +2526,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
-    if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available():
+    if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
+            and skill_enabled("08-video-gen/upscale/minimax-regenerate-2k"):
         p += f"""
 
 ## MiniMax Regenerate-2K 超分 Skill(仅当 MiniMax API Key 已配置时注入,当前已生效)
@@ -2381,7 +2539,8 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
-    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id):
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id) \
+            and skill_enabled("08-video-gen/video-generation/runninghub-cloud-workflow"):
         p += f"""
 
 ## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)
@@ -2390,6 +2549,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
+    p += agent_skill_prompt(agent_id)
     if brief:
         p += f"""
 
@@ -7762,6 +7922,40 @@ async def api_agent_advanced_set(body: dict):
         STATE.update(updates)
         save_state(STATE)
     return await api_agent_advanced_get()
+
+
+async def api_skills_get(refresh: bool = False):
+    """技能包(设置菜单「高级→技能包」):自动扫描各 Agent skills/ 目录,返回清单 + 勾选状态。"""
+    return {"skills": list_agent_skills(refresh=refresh),
+            "skills_disabled": sorted(skills_disabled_setting())}
+
+
+async def api_skills_set(body: dict):
+    """技能包开关提交,两种形态任选:
+    - skills_disabled: [id, ...] 整体覆盖(设置页「保存」);未知 id 拒绝
+    - skill_id + enabled: 单项切换
+    语义「勾选=允许」:开关只是总闸,条件注入型技能仍须满足各自运行时条件才注入;
+    持久化到 state.json,对后续启动的运行生效。"""
+    known = {s["id"] for s in scan_agent_skills(refresh=True)}
+    if body.get("skills_disabled") is not None:
+        ids = body.get("skills_disabled")
+        if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
+            raise ServiceError(400, "skills_disabled must be a list of skill ids")
+        bad = sorted(set(ids) - known)
+        if bad:
+            raise ServiceError(400, "unknown skill id: " + ", ".join(bad))
+        STATE["skills_disabled"] = sorted(set(ids))
+    elif body.get("skill_id"):
+        sid = str(body["skill_id"])
+        if sid not in known:
+            raise ServiceError(400, f"unknown skill id: {sid}")
+        off = skills_disabled_setting()
+        (off.discard if body.get("enabled", True) else off.add)(sid)
+        STATE["skills_disabled"] = sorted(off)
+    else:
+        raise ServiceError(400, "nothing to update: pass skills_disabled or skill_id + enabled")
+    save_state(STATE)
+    return await api_skills_get()
 
 
 async def api_agent_concurrency_get():

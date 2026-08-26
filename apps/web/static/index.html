@@ -254,6 +254,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、思考深度">Agent 高级设置</a>
+          <a href="#" id="menu-skills" title="技能包:自动列出各 Agent 已安装的技能(skills/SKILL.md),逐项勾选是否允许该 Agent 运行时加载;未勾选一律不注入">技能包</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
@@ -694,6 +695,18 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note info-note" id="conc-info-mem">对话记忆额度(KB,默认 16):创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过该额度自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此项影响)。调大可保留更长的连续记忆,但 resume 每轮重发全部历史,越大越慢、token 消耗越高。拖到 0 即完全关闭:所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;调小或关闭期间会话号照常回存,重新调大后从最近一次会话继续。</div>
     <div class="err" id="conc-err"></div>
     <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
+  </div>
+</div>
+<div id="skill-modal" class="modal">
+  <div class="box" style="width:680px">
+    <h3>🧰 技能包</h3>
+    <div class="note">技能 = agents/&lt;类别&gt;/&lt;Agent&gt;/skills/&lt;技能&gt;/SKILL.md,随仓库或插件安装,本页自动扫描列出。勾选 = 允许:该 Agent 运行时把技能加载指令注入提示词,开工前先读技能文件再按其流程执行;标「条件」的技能还须满足其运行时条件(生效模型/渠道/Key 已配置)才会真正注入。未勾选一律不注入;SOUL.md 写死引用的技能取消勾选后会向 Agent 声明「已禁用」。全局设置,保存后对后续启动的工单生效。</div>
+    <div id="skill-list" style="max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px"><div class="empty">读取中…</div></div>
+    <div class="err" id="skill-err"></div>
+    <div class="actions">
+      <span style="margin-right:auto;display:flex;gap:8px"><button id="skill-all">全选</button><button id="skill-none">全不选</button></span>
+      <button id="skill-cancel">取消</button><button class="primary" id="skill-ok">保存</button>
+    </div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -1599,6 +1612,49 @@ $('#conc-ok').onclick=async()=>{
     await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 技能包弹窗(设置菜单「高级」:自动扫描各 Agent skills/,勾选=允许运行时注入加载指令) ---------- */
+const SKILL_KIND={conditional:'条件',always:'常驻',soul:'常驻',library:'依赖库',generic:'通用'};
+function renderSkills(list){
+  const box=$('#skill-list');box.innerHTML='';
+  if(!list.length){box.innerHTML=`<div class="empty">${t('没有找到技能:各 Agent 的 skills/ 目录下没有 SKILL.md')}</div>`;return}
+  const groups=new Map();
+  list.forEach(s=>{if(!groups.has(s.agent_id))groups.set(s.agent_id,{a:s,items:[]});groups.get(s.agent_id).items.push(s)});
+  for(const {a,items} of groups.values()){
+    const g=document.createElement('div');
+    g.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px 10px';
+    g.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>${esc(a.agent_name)}</b><span style="color:var(--dim);font-size:11px">${esc(a.category_name)} · ${esc(a.agent_id)}${a.plugin?' · 🧩 '+esc(a.plugin):''}</span></div>`;
+    items.forEach(s=>{
+      const row=document.createElement('label');
+      row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:5px 0;cursor:pointer;border-top:1px solid var(--border)';
+      const kind=t(SKILL_KIND[s.kind]||s.kind);
+      const cond=s.condition?`<span style="color:var(--dim);font-size:11px">· ${esc(t(s.condition))}</span>`:'';
+      row.innerHTML=`<input type="checkbox" class="skill-cb" data-id="${esc(s.id)}" ${s.enabled?'checked':''} style="flex:none;margin-top:3px">
+        <div style="min-width:0;flex:1"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13px">${esc(s.name)}</b><span style="font-size:10.5px;padding:0 6px;border:1px solid var(--border);border-radius:9px;color:var(--dim)">${esc(kind)}</span>${cond}</div>
+        <div style="color:var(--dim);font-size:12px;margin-top:2px;white-space:pre-wrap">${esc(s.description||'')}</div>
+        <div style="color:var(--dim);font-size:11px;margin-top:2px;font-family:ui-monospace,monospace;opacity:.8">${esc(s.path)}</div></div>`;
+      g.appendChild(row);
+    });
+    box.appendChild(g);
+  }
+}
+async function openSkillModal(){
+  $('#skill-err').textContent='';
+  $('#skill-list').innerHTML='<div class="empty">'+t('读取中…')+'</div>';
+  $('#skill-modal').style.display='flex';
+  try{renderSkills((await api('/api/v1/config/skills?refresh=true')).skills||[])}
+  catch(e){$('#skill-err').textContent=t('读取失败:')+e.message}
+}
+$('#menu-skills').onclick=e=>{e.preventDefault();openSkillModal()};
+$('#skill-cancel').onclick=()=>$('#skill-modal').style.display='none';
+$('#skill-all').onclick=()=>document.querySelectorAll('#skill-list .skill-cb').forEach(c=>c.checked=true);
+$('#skill-none').onclick=()=>document.querySelectorAll('#skill-list .skill-cb').forEach(c=>c.checked=false);
+$('#skill-ok').onclick=async()=>{
+  const off=[...document.querySelectorAll('#skill-list .skill-cb')].filter(c=>!c.checked).map(c=>c.dataset.id);
+  $('#skill-err').textContent='';
+  try{await api('/api/v1/config/skills',{skills_disabled:off});$('#skill-modal').style.display='none'}
+  catch(e){$('#skill-err').textContent=t('保存失败:')+e.message}
 };
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
