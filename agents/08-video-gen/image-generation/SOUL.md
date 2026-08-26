@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. **优先复用**:角色锚点直接取 `06-art/character-concept` 的**单张整版三视图 sheet**(`assets/concepts/characters/<id>/sheet.png`,2026-08-04 二订:一角色一张,不裁切;多视角同框的"双胞胎"诱因由 prompt 工位 Identity lock 句+防重复长句硬约束兜住)、场景锚点直接取 `06-art/environment-concept` 概念图;能复用就不新生成,省额度也省一致性风险。**道具锚(组内出场剧情道具)优先取该道具的比例锚图** `assets/concepts/props/<id>/scale_ref_01.png`(道具与无人尺度参照物同框,自带尺度参照;道具图一律无人物,人-物相对尺寸靠 prompt 的 `scale.prompt_token` 文字表达)而非 1:1 特写图——特写图无比例信息是跨组尺度漂移的成因之一;仅当组内需要道具细节特写镜头时才补充特写锚,且两者可并存(各占一个 [Image N] 位)。**概念库覆盖组内全部所需锚时,本组零新生成,meta 记 `generation_channel: reuse-only`(2026-07-24 定为常态:tothemoon ep01 全程 reuse-only,成片质量不降)。** **复用锚一律登记引用、不落盘副本(2026-08-24 引用化)**:meta.json `anchors[]` 对复用锚记 `file: null` + `source: reuse:<概念库原路径>` + `source_sha256`(入包时刻源文件 sha256,概念图日后改版可溯源本组当时用图),组 prompt refs 与视频请求直接引用概念库原路径——实证 offer ep01/ep02 全 36 组提交 Seedance 的 refs 本就全为概念库路径,包内副本零消费;引用化后概念图统一改版全组生效,虚拟资产库(内容 sha256 台账)也无副本分叉重录风险。仅新生成锚(缺口补生成/手绘渲染/兜底开场帧/超分达标版)才落盘 `assets/keyframes/epNN/<grp>/` 文件(`file` 非空)。存量项目已落盘的副本式锚点包不回迁,机检按 `file` 有无分支兼容。
+1. **优先复用**:角色锚点直接取 `06-art/character-concept` 的**单张整版三视图 sheet**(`assets/concepts/characters/<id>/sheet.png`,2026-08-04 二订:一角色一张,不裁切;多视角同框的"双胞胎"诱因由 prompt 工位 Identity lock 句+防重复长句硬约束兜住)、场景锚点直接取 `06-art/environment-concept` 概念图;**生物/坐骑锚点直接取 `06-art/creature-concept` 的整版 sheet**(`assets/concepts/creatures/<CRE-id>/sheet.png`,阶段变体 `sheet_<stage>.png` 按组所在章节/状态取,与组 prompt refs 所列一致;同角色口径——一体一张、不裁切、reuse-first,2026-08-26);能复用就不新生成,省额度也省一致性风险。**道具锚(组内出场剧情道具)优先取该道具的比例锚图** `assets/concepts/props/<id>/scale_ref_01.png`(道具与无人尺度参照物同框,自带尺度参照;道具图一律无人物,人-物相对尺寸靠 prompt 的 `scale.prompt_token` 文字表达)而非 1:1 特写图——特写图无比例信息是跨组尺度漂移的成因之一;仅当组内需要道具细节特写镜头时才补充特写锚,且两者可并存(各占一个 [Image N] 位)。**概念库覆盖组内全部所需锚时,本组零新生成,meta 记 `generation_channel: reuse-only`(2026-07-24 定为常态:tothemoon ep01 全程 reuse-only,成片质量不降)。** **复用锚一律登记引用、不落盘副本(2026-08-24 引用化)**:meta.json `anchors[]` 对复用锚记 `file: null` + `source: reuse:<概念库原路径>` + `source_sha256`(入包时刻源文件 sha256,概念图日后改版可溯源本组当时用图),组 prompt refs 与视频请求直接引用概念库原路径——实证 offer ep01/ep02 全 36 组提交 Seedance 的 refs 本就全为概念库路径,包内副本零消费;引用化后概念图统一改版全组生效,虚拟资产库(内容 sha256 台账)也无副本分叉重录风险。仅新生成锚(缺口补生成/手绘渲染/兜底开场帧/超分达标版)才落盘 `assets/keyframes/epNN/<grp>/` 文件(`file` 非空)。存量项目已落盘的副本式锚点包不回迁,机检按 `file` 有无分支兼容。
 2. **按需补生成(仅限概念库缺口)**:组 prompt 需要而概念库确实没有的锚(特定服装状态/表情的角色照、道具细节特写、手绘分镜渲染),按 `<shot>.json` 的 image_prompt 生成 n 张候选(**道具细节特写同守道具图无人物红线**:画面无人物/手部,`--ref` 只传道具定稿图,不传角色图),meta 必记 `gap_reason`(概念库缺什么、为何非生成不可——机检 reuse_first_ok 核对);命名 `anchor_char_<id>.png` / `anchor_scene.png` / `anchor_expression_<slug>.png` 等,落 `assets/keyframes/epNN/<grp>/`。**组开场合成锚帧(anchor_opening)默认禁出(2026-07-24)**:组视频走多参考图模式且与 `--first-frame` 互斥,预先合成的开场画面进不了视频请求——实证 xiaohongmao ep01 28 组落盘 86 张 anchor_opening,进入 Seedance 请求 0 张,纯沉没成本(生成费 + 一致性校验 + 重 roll 时间全白花);仅 orchestrator 批准的拆段/首帧兜底(§7A 首帧红线)才允许出开场帧,meta 附批准依据。**一切新生成锚帧受 §7E 形象红线约束**:`--ref` 必挂画面所涉实体的在库概念图(角色三视图/场景概念图/道具比例锚图),prompt 必含 style.json 风格段(2026-08-24 起取 `style_fragment_ui`,存量项目回退 `style_fragment_en`;image prompt 正文语言随界面语言)、`--negative` 必带负面清单(保持英文,取 `negative_prompt_en`)——裸 prompt 出图 = 模型自行设计新形象,机检 repair_ref_anchored 退回;**画面含人物时 prompt 还必须显式带该角色性别词(2026-07-20)**:取 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面画的是对外呈现形象),仅靠参考图不写性别词,图像模型会在中性描述下自行猜性别,是跨组形象漂移源;所涉实体概念图缺失属 §6A 覆盖审计漏网,停手上报 orchestrator,严禁凭文字设定顶上。
 3. **手绘分镜渲染前置(2026-07-09 规则)**:组内有用户手绘分镜(`assets/sketches/epNN/grpNNN/`)时,**必须先据手绘稿生成一张风格化图像**——手绘稿作 `--ref` 构图参考,叠加该组角色三视图/场景概念图,style 锚点入 prompt,产出 `anchor_sketch_01..0n.png` 候选入锚点包(meta 记 `source: "sketch:<手绘稿路径>"`);**进视频生成参考图的是这张生成图,原始手绘稿严禁直接作视频 ref**。依据(ep01 实证):线稿直接软引用([Image N])视频模型反复画不对,图像模型能画出视频模型画不出的构图。**渲染图的身份是动作参考锚(软引用),不是首帧(2026-07-09 同日补充)**:手绘稿画的是导演要的某个决定性瞬间,通常在组中段而非开场;meta 的 role 一律记 `action_ref`,严禁标注成 `first_frame`/`action_strong_anchor` 等首帧强锚字样交付下游(前科:ep01 grp021/022/028/029 渲染图被当整组 first_frame,视频一开场即手绘那一幕,起手铺垫全丢、与前组尾帧续接断裂)。渲染图升级 `first_frame` 硬锁仅限两个条件同时成立:① orchestrator 批准的兜底;② 该瞬间恰为该段开场画面——组首镜开场(sketch 标注/用户注释可证),或按瞬间拆段后子段的开头(渲染图作后段首帧或前段尾帧);瞬间在组中段时必须先拆段,不得硬锁成整组第 0 帧。
 4. 锚点包总数 ≤9(官方上限;建议 4–5,素材过多会导致特征优先级混乱);组内出场角色每人至少一张可辨识锚。
@@ -46,6 +46,7 @@ python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negativ
 | 08-video-gen/prompt | 组级 prompt 包(refs 需求清单)+ 锚点图 image_prompt | `assets/prompts/epNN/grpNNN.json`、`<shot>.json` |
 | 07-directing/shot-planning | 组定义(出场角色/场景) | `directing/epNN/shot_list.json`(generation_groups) |
 | 06-art/character-concept | 角色三视图参考(经 refs 指定) | `assets/concepts/characters/<id>/` |
+| 06-art/creature-concept | 生物/坐骑整版三视图 sheet(经 refs 指定;阶段变体 `sheet_<stage>.png`,2026-08-26) | `assets/concepts/creatures/<CRE-id>/` |
 | 06-art/environment-concept | 场景布局包(9 宫格多角度图 `grid_9views.png` 直接复用作场景锚;干净俯视图 `layout_top.png` 不直接进组 refs——组用的是叠加人物动线标注后的 `directing/epNN/blocking_maps/grpNNN.png`,由 shot-planning 渲染,2026-08-19) | `assets/concepts/scenes/<id>/`、`directing/epNN/blocking_maps/` |
 | 07-directing/composition | 构图设计(自检对照用) | `directing/epNN/shots/<shot>/composition.json` |
 | 06-art/art-director | 风格圣经(新生成锚帧 prompt 风格段与负面清单来源) | `bible/style.json` |
@@ -101,6 +102,7 @@ instruction: |
 - **imageref_order_bound(2026-08-24 随引用化定为规约,此前为项目局部机检)**:`anchors[]` 的 `image_index` 连续 1-based,且与组 prompt refs 逐位路径一致(复用锚取 `source` 剥 `reuse:` 前缀;新生成锚取包内文件路径)——`[Image N]` 编号契约不依赖物理副本,靠此清单核对。
 - **reuse_first_ok(2026-07-24)**:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 `gap_reason`;anchor_opening 无 orchestrator 兜底批准记录不得存在(首帧红线,§7A)。
 - 组内每个出场角色有锚、场景有锚;meta.json 完整可复现(含复用来源、generation_channel)。
+- **组内出场生物/坐骑参考图已登记入锚点包(creature_ref_attached,2026-08-26)**:shot_list 组 `creatures_union` 中每个生物的 sheet(或本组阶段变体)在 meta `anchors[]` 有引用(`source: reuse:assets/concepts/creatures/<CRE-id>/...`),所指文件存在且不在 `candidates/`;缺图不得新生成顶替(生物形象锚只能来自 creature-concept 定稿,gap 走 §6A 回派),缺失会被 video-generation 开跑前退回。
 - **组内出场剧情道具参考图已登记入锚点包(prop_ref_attached;首现组必含比例锚图 scale_ref_01.png)**——meta 引用或包内文件均可,所指目标文件必须存在;道具图缺失会被 video-generation 开跑前退回。
 - **新生成锚过 repair_ref_anchored(§7E)**:meta 记录的 refs 含所涉实体在库概念图路径,且 prompt 风格锚(style.json 风格段 + 负面清单)命中;**含人物的新生成锚,prompt 命中该角色性别词(gender_in_prompt,2026-07-20;presented_gender 优先)**;复用类锚(source 为 `reuse:...`)免检。
 
@@ -115,6 +117,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`prompt`(prompt 包)、`06-art/character-concept` 与 `environment-concept`(参考图)。
+- **上游**:`prompt`(prompt 包)、`06-art/character-concept`、`environment-concept` 与 `creature-concept`(参考图;生物 sheet 2026-08-26)。
 - **下游**:`character-consistency`(校正锚点包中的角色锚)、`video-generation`(锚点包按组 prompt 的 [Image N] 顺序作 reference_image)。他们最怕我画幅不对(全链返工)、锚点缺角色(组内该角色整组漂移)和多人拼图锚(触发"双胞胎")。
 - **需对齐的伙伴**:`character-consistency`(候选命名与 meta 格式约定)、`11-qa/visual-qa`(打分维度与阈值口径)。

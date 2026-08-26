@@ -10,7 +10,7 @@ from pathlib import Path
 STATIC = Path(__file__).parent / "static"
 REQUIRED = {
     "index.html", "models.html", "storage.html", "versions.html", "draw.html",
-    "preview_refs.html", "preview_characters.html", "preview_props.html",
+    "preview_refs.html", "preview_characters.html", "preview_props.html", "preview_creatures.html",
     "preview_scenes.html", "preview_storyboard.html", "preview_videos.html",
     "preview_workflow.html", "preview_worldview.html", "i18n/i18n.js",
     "styles/style_library.json",

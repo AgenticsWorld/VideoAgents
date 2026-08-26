@@ -225,6 +225,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
     <button data-cat="props">🗡 道具</button>
+    <button data-cat="creatures">🐎 生物</button>
     <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
@@ -441,7 +442,7 @@ async function arLoadCat(cat){
       const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
       if(!r.ok)throw new Error((await r.json()).detail||r.status);
       const d=await r.json();
-      AR_CACHE[cat]=(d.characters||d.scenes||d.props||[]).filter(a=>(a.images||[]).length);
+      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[]).filter(a=>(a.images||[]).length);
     }
     const list=AR_CACHE[cat];
     if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
@@ -753,9 +754,10 @@ async function avSync(){
 // 文件名标签变成链接,点击跳到对应预览页并定位该资产(深链 ?id=)
 const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
                  scenes:['/preview/scenes','查看场景预览:'],
-                 props:['/preview/props','查看道具预览:']};
+                 props:['/preview/props','查看道具预览:'],
+                 creatures:['/preview/creatures','查看生物预览:']};
 const refFn=(icon,k)=>{
-  const m=/^assets\/concepts\/(characters|scenes|props)\/([^/]+)\//.exec(k.ref||'');
+  const m=/^assets\/concepts\/(characters|scenes|props|creatures)\/([^/]+)\//.exec(k.ref||'');
   if(!m)return `<span class="fn">${icon} ${esc(k.name)}</span>`;
   const [page,tip]=REF_PAGES[m[1]], proj=$('#project').value.trim()||'demo';
   return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
@@ -1019,7 +1021,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

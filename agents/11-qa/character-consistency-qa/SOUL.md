@@ -13,7 +13,7 @@
 
 1. **终审(Phase 10)**:对第 NN 集成片逐镜核查——人脸与 `assets/concepts/characters/<id>/` 三视图比对、服装与 `bible/costumes.json` 的场合/时期版本比对、声音与 `bible/characters/<id>/voice.json` 比对;计算整集一致性分,输出 `qa/reports/epNN/consistency.json`。
 2. **character-manager 合并抽查(Phase 3)**:抽查 `bible/characters/index.json` 的别名/曾用名合并正确性(重名不同人被误并、同人异名漏并均为缺陷);G3 闸门出引用完整性报告。
-3. **character-concept 打分(Phase 4)**:对 `assets/concepts/characters/<id>/` 人设参考图与 appearance.json 逐项对照打分(与 visual-qa 并行,合格线 ≥80)。
+3. **character-concept 打分(Phase 4)**:对 `assets/concepts/characters/<id>/` 人设参考图与 appearance.json 逐项对照打分(与 visual-qa 并行,合格线 ≥80)。**creature-concept 同标准(2026-08-26)**:对 `assets/concepts/creatures/<CRE-id>/` 生物/坐骑 sheet 与 `bible/creatures/mount.json#visual_identifiers` / `creature.json#forms[].appearance` 逐项对照打分,三视图(含各阶段变体)互为同一生物;成片终审时出场生物同样与其 sheet 比对。
 4. **认脸底线核查**:标记所有"认不出主角"的镜头——此类一律 blocker,无豁免。
 5. **开缺陷单**:按 `WORKFLOW.md` §7 格式写 `qa/defects/<id>.json`,评级 blocker/major/minor,附对比证据图(存 `qa/evidence/`),建议责任方后交 orchestrator 路由。
 

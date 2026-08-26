@@ -22,6 +22,7 @@
    - 对白轮不跨组切断(问句与答句同组);
    - 组内出场角色合计尽量 ≤4(生成模型参考人物 >4 时稳定性下降,超了要拆);
    - 每一镜必须且只属于一个组;单镜成组允许(如超长独立镜头)。
+   - **登记组内出场生物/坐骑 `creatures`(2026-08-26)**:每组 `groups_draft[]` 写 `characters`(出场角色 CHAR-*)与 `creatures`(出场生物/造物/坐骑,ID 取 `bible/creatures/index.json` 的 `CRE-*`,无则空数组)——剧本或镜头 `content` 中出现该生物即登记;**坐骑随骑手登记**:角色骑乘/牵引坐骑的镜头,坐骑必入该组 `creatures`,不得因「主体是人」而省略。生物是与角色同级的形象锚实体,漏登记 = 下游 §6A 覆盖审计与 p7 refs 挂图无从枚举,模型只能凭 bible 文字脑补形象。
 6. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
 7. **关联场景布局包并标注人物站位/动线(blocking_map,2026-08-19)**【开关:仅当项目「输出设置 → 人物精确空间位置」开启(默认开;系统提示词「用户输出设定」段注入,权威)时适用;关闭时沿用单张场景概念图旧流程,本条不适用】:每场先读该场景布局包 `assets/concepts/scenes/<scene_id>/{layout_top.png, grid_9views.png, layout.json}`(缺则上报 orchestrator 回派 environment-concept 补齐,不得无图硬标),然后——
    - 每组 `groups_draft[]` 写 `scene_refs`(三件路径)与 **`blocking_map`**:组内**每个出场角色**一条,`start`(起始位置)必填、`path`(经过点,可空)与 `end`(终点)在有移动时必填、无移动则只写 start——位置一律引用 `layout.json#landmarks` 的地标 `id`(可附 `xy` 归一化坐标微调、`offset_en` 如 "one step inside"/「门内一步」),并写动线句 `route_en`(≤40 英文词或 ≤60 字,地标词逐字取 layout.json `name_en`;有移动写 "enters through the main door, walks past the long table and stops at the fireplace" / 中文界面如「从正门进入,经长桌走过,停在壁炉旁」,无移动写 "stands beside the fireplace facing the door and does not move" / 「站在壁炉旁,面向房门,原地不动」;**2026-08-24 二订:`route_en`/`offset_en` 内容语言随用户界面语言,字段名保留 `_en` 历史后缀,原纯英文机检已取消;三订:渲染图图例支持 CJK,角色名 label 与 route_en 会上图,中文可直接显示;存量英文项目补标注沿用英文,不得半中半英**)——**下游 prompt 逐字拼入、不做翻译**(机检 layout_map_bound);
@@ -76,6 +77,8 @@
       "beat": "推门入殿-殿内环视-发现异样",
       "duration_hint_sum_s": 12.0,
       "rationale": "一个完整的进入-发现节拍;景别 全-中-近 递进",
+      "characters": ["CHAR-0003", "CHAR-0007"],
+      "creatures": [],
       "scene_refs": {
         "layout_top": "assets/concepts/scenes/SCN-0012/layout_top.png",
         "grid_9views": "assets/concepts/scenes/SCN-0012/grid_9views.png",
@@ -121,6 +124,7 @@ instruction: |
 - **剧本场景覆盖率 100%**(coverage 对照表逐场核对);
 - 每镜 `content` 非空;`screenplay_ref` / `dialogue_ref` 引用在剧本中存在;
 - **每镜均入组**:groups_draft 覆盖本场全部 shots_draft,不重不漏;组内 order 连续;`duration_hint_sum_s` ≤15;
+- **生物引用机检(creature_refs_valid,2026-08-26)**:每组 `creatures` 必填(可为空数组),其中每个 ID 在 `bible/creatures/index.json#creatures[]` 存在;镜头 `content` 提及 index 已登记生物/坐骑(按名称或 aliases 匹配)而所在组 `creatures` 未登记 = 退回。
 - **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。
 - **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/render_blocking_map.py --source storyboard --strict`)**:每个有出场角色的组 `blocking_map` 齐全——每角色 `start` 必填、有 path 必有 end、位置引用的地标在该场景 layout.json 存在、`route_en` 非空(语言随界面语言,2026-08-24 二订;≤40 英文词或 ≤60 字);`scene_refs` 三件路径存在;同场景相邻组各角色 start 与前组 end 衔接(无移动=原地);渲染草图落盘。场景无布局包 = 上报回派 environment-concept,不得跳过标注。
 

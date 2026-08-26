@@ -3560,6 +3560,7 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/scenes/",
                       "assets/concepts/props/",
+                      "assets/concepts/creatures/",   # 生物/坐骑 sheet(2026-08-26)
                       "directing/")   # directing/epNN/blocking_maps/grpNNN.png 组人物动线俯视图(2026-08-19)
 
 
@@ -3598,7 +3599,7 @@ async def api_grpref_add(body: dict):
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
-        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props)/ or directing/<ep>/blocking_maps/")
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props|creatures)/ or directing/<ep>/blocking_maps/")
     if ref.startswith("directing/") and "/blocking_maps/" not in ref:
         raise ServiceError(400, "under directing/ only <ep>/blocking_maps/*.png may be added as a ref")
     target = (base / ref).resolve()
@@ -3853,6 +3854,46 @@ def _preview_props(project: str):
 
 async def api_preview_props(project: str = "demo"):
     return await asyncio.to_thread(_preview_props, project)
+
+
+def _preview_creatures(project: str):
+    """生物/坐骑设定聚合:bible/creatures/index.json 登记表(CRE-* 权威)+ 详情卡
+    (index 条目 detail_file 指向 creature.json#creatures[] 或 mount.json#mounts[],
+    后者以 creature_ref 反查)+ assets/concepts/creatures/* 概念图。目录与 ID 一律
+    以 CRE-* 为键;MNT-* 是 mount.json 单文件内部编号,不作聚合键。"""
+    base = _proj_base(project)
+    cdir = base / "bible" / "creatures"
+    idx = _read_json_safe(cdir / "index.json") or {}
+    info = {c.get("id"): c for c in idx.get("creatures", [])
+            if isinstance(c, dict) and c.get("id")}
+    # 详情卡:两份文件各自的数组键不同(creatures / mounts),统一按 id 或 creature_ref 建索引
+    cards: dict[str, tuple[dict, str]] = {}
+    for fname, key in (("creature.json", "creatures"), ("mount.json", "mounts")):
+        doc = _read_json_safe(cdir / fname) or {}
+        for e in doc.get(key) or doc.get("entries") or []:
+            if not isinstance(e, dict):
+                continue
+            cid = e.get("creature_ref") or e.get("id")
+            if cid and cid not in cards:
+                cards[cid] = (e, f"bible/creatures/{fname}")
+    adir = base / "assets" / "concepts" / "creatures"
+    ids = set(info) | set(cards)
+    if adir.is_dir():
+        ids |= {x.name for x in adir.iterdir()
+                if x.is_dir() and not x.name.startswith(".")}
+    creatures = []
+    for cid in sorted(ids):
+        meta = info.get(cid) or {}
+        card, src = cards.get(cid) or ({}, "")
+        creatures.append({"id": cid, "name": meta.get("name") or card.get("name") or cid,
+                          "type": meta.get("type") or "",
+                          "meta": meta, "card": card, "card_source": src,
+                          "images": _asset_urls(base, adir / cid, IMG_EXTS)})
+    return {"project": base.name, "creatures": creatures}
+
+
+async def api_preview_creatures(project: str = "demo"):
+    return await asyncio.to_thread(_preview_creatures, project)
 
 
 def _preview_scenes(project: str):
