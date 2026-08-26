@@ -682,16 +682,17 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling 固定中国北京接口；
-    # RunningHub 是独立云端渠道(私有 REST + 工作区工作流),与本地 ComfyUI 分开保存。
+    # ComfyUI 渠道与图像/视频等段同口径:运行方式 mode=local(本地 InfiniteTalk)/
+    # cloud(Comfy Cloud)/rh_cn/rh_ai(RunningHub 云端工作区工作流,rh_* 字段)
     "digital_human": {
-        "provider": "heygen",  # heygen | klingai | runninghub | comfyui
+        "provider": "heygen",  # heygen | klingai | comfyui
         "heygen": {"api_key": "", "resolution": "720p", "aspect_ratio": "16:9"},
         "klingai": {"api_key": "", "mode": "std"},
-        "runninghub": {"site": "rh_cn", "api_key_cn": "", "api_key_ai": "",
-                       "workflow_id": "", "workflows": [],
-                       "instance_type": "standard"},
-        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188",
-                    "workflow": "comfy/digitalhuman-infinitetalk-api.json"},
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "comfy/digitalhuman-infinitetalk-api.json",
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -910,6 +911,23 @@ def _migrate_genconfig(config: dict) -> None:
         # versions persisted this advanced object; discard it on load.
         if kind == "video":
             comfy.pop("h3", None)
+    # 数字人曾把 RunningHub 存成独立 provider/配置段(digital_human.runninghub),现并回
+    # comfyui 段的运行方式:字段搬到 comfyui.rh_*(仅填空位),旧生效渠道 runninghub ⇒
+    # comfyui + mode=站点;旧段移除,下次保存落盘即完成迁移
+    dh = config.get("digital_human")
+    if isinstance(dh, dict) and isinstance(dh.get("runninghub"), dict):
+        rh = dh.pop("runninghub")
+        comfy = dh.setdefault("comfyui", {})
+        if not isinstance(comfy, dict):
+            comfy = dh["comfyui"] = {}
+        for src, dst in (("api_key_cn", "rh_api_key_cn"), ("api_key_ai", "rh_api_key_ai"),
+                         ("workflow_id", "rh_workflow_id"), ("workflows", "rh_workflows"),
+                         ("instance_type", "rh_instance_type")):
+            if rh.get(src) and not comfy.get(dst):
+                comfy[dst] = rh[src]
+        if dh.get("provider") == "runninghub":
+            dh["provider"] = "comfyui"
+            comfy["mode"] = rh.get("site") if rh.get("site") in RH_BASES else "rh_cn"
 
 
 def load_genconfig() -> dict:
@@ -1193,16 +1211,16 @@ def agent_skill_prompt(agent_id: str) -> str:
 
 def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
     """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
-    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia.get_config 同口径):
-    runninghub ⇒ 是;其他非空覆盖(含 comfyui=本地/云端)⇒ 否;空 ⇒ 按全局判定。"""
+    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖:覆盖为 comfyui ⇒ 按全局
+    comfyui 段的运行方式判定;其他非空覆盖 ⇒ 否;空 ⇒ 按全局生效渠道判定。"""
+    v = (cfg or load_genconfig()).get("video") or {}
+    comfy = v.get("comfyui") or {}
+    rh_mode = (comfy.get("mode") or "local") in RH_BASES
     if agent_id:
         ov = str(agent_model_config(agent_id).get("video_provider") or "")
         if ov:
-            return ov == "runninghub"
-    v = (cfg or load_genconfig()).get("video") or {}
-    comfy = v.get("comfyui") or {}
-    return ((v.get("provider") or "volcengine") == "comfyui"
-            and (comfy.get("mode") or "local") in RH_BASES)
+            return ov == "comfyui" and rh_mode
+    return (v.get("provider") or "volcengine") == "comfyui" and rh_mode
 
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -1426,11 +1444,10 @@ AM_MODE_MODELS = {
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
-# runninghub/comfyui 与「🎨 生成模型」页两个标签页同口径(存储同在 comfyui 段,靠 mode 区分,
-# 见 genmedia.get_config):runninghub=RunningHub 页站点,comfyui=ComfyUI 页本地/云端
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax",
-                      "runninghub", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "runninghub", "comfyui")
+# RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
+# ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
+AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1454,7 +1471,14 @@ def load_agentmodels() -> dict:
 def agent_model_config(agent_id: str) -> dict:
     """该 Agent 的生效模型配置:UI 保存的覆盖(整体快照)优先,否则「模型策略」默认。"""
     ov = load_agentmodels().get(agent_id)
-    return ov if isinstance(ov, dict) else default_agent_model(agent_id)
+    if not isinstance(ov, dict):
+        return default_agent_model(agent_id)
+    ov = dict(ov)
+    # 旧版曾把 RunningHub 列为独立渠道;现已并回 comfyui 渠道的运行方式,存量覆盖等价于 comfyui
+    for field in ("image_provider", "video_provider"):
+        if ov.get(field) == "runninghub":
+            ov[field] = "comfyui"
+    return ov
 
 
 def global_model_pref() -> dict:
@@ -2764,10 +2788,12 @@ def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
         return 1
     if agent_id == "17-digital-human/avatar-generator":
         try:
-            provider = (load_genconfig().get("digital_human") or {}).get("provider")
+            dh = load_genconfig().get("digital_human") or {}
+            rh = (dh.get("provider") == "comfyui"
+                  and ((dh.get("comfyui") or {}).get("mode") or "local") in RH_BASES)
         except Exception:
-            provider = None
-        if provider == "runninghub":
+            rh = False
+        if rh:
             return 1
     return agent_concurrency()
 
@@ -5173,14 +5199,14 @@ async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
             wf_id = str(comfy.get(field) or "").strip()
             if wf_id:
                 jobs.setdefault((mode, wf_id), key)
-    # 数字人把 RunningHub 作为独立 provider/配置段，不借用 comfyui.mode。
+    # 数字人的 ComfyUI 渠道同口径(mode=rh_* + rh_* 字段)
     dh = cfg.get("digital_human") or {}
-    if dh.get("provider") == "runninghub":
-        rh = dh.get("runninghub") or {}
-        mode = str(rh.get("site") or "")
+    if dh.get("provider") == "comfyui":
+        comfy = dh.get("comfyui") or {}
+        mode = str(comfy.get("mode") or "local")
         if mode in RH_BASES:
-            key = str(rh.get(f"api_key_{mode[3:]}") or "").strip()
-            wf_id = str(rh.get("workflow_id") or "").strip()
+            key = str(comfy.get(f"rh_api_key_{mode[3:]}") or "").strip()
+            wf_id = str(comfy.get("rh_workflow_id") or "").strip()
             if key and wf_id:
                 jobs.setdefault((mode, wf_id), key)
     if not jobs:
@@ -5229,11 +5255,12 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
-    dh_rh = (cfg.get("digital_human") or {}).get("runninghub") or {}
-    if dh_rh.get("site") not in RH_BASES:
-        raise ServiceError(400, f"digital_human.runninghub.site must be one of {sorted(RH_BASES)}")
-    if dh_rh.get("instance_type") not in {"standard", "plus", "ultra"}:
-        raise ServiceError(400, "digital_human.runninghub.instance_type must be standard, plus or ultra")
+    dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
+    if dh_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
+        raise ServiceError(400, "digital_human.comfyui.mode must be local, cloud, "
+                                f"or one of {sorted(RH_BASES)}")
+    if dh_comfy.get("rh_instance_type") not in {"standard", "plus", "ultra"}:
+        raise ServiceError(400, "digital_human.comfyui.rh_instance_type must be standard, plus or ultra")
     if cfg.get("agentmodel_mode") not in AM_MODES:
         raise ServiceError(400, f"agentmodel_mode must be one of {AM_MODES}")
     if cfg.get("ui_language") not in ("", *UI_LANG_NAMES):
@@ -6219,7 +6246,7 @@ COMFY_CLOUD_API = "https://cloud.comfy.org/api"
 
 
 async def api_test_digitalhuman(body: dict):
-    """测试数字人渠道凭证；Kling 固定北京，RunningHub 与 ComfyUI 独立。"""
+    """测试数字人渠道凭证;Kling 固定北京;ComfyUI 按运行方式测本地/Comfy Cloud/RunningHub。"""
     provider = (body.get("provider") or "").strip()
     key = (body.get("api_key") or "").strip()
     if provider == "heygen":
@@ -6246,36 +6273,32 @@ async def api_test_digitalhuman(body: dict):
         if data.get("code") not in (None, 0):
             return {"ok": False, "error": str(data.get("message") or data)[:240]}
         return {"ok": True, "provider": provider, "region": "中国北京"}
-    if provider == "runninghub":
-        mode = str(body.get("mode") or "").strip()
-        result = await api_test_comfyui({"mode": mode, "api_key": key})
-        return {**result, "provider": provider, "site": mode}
     if provider == "comfyui":
-        result = await api_test_comfyui({"mode": "local", "url": body.get("url")})
-        if not result.get("ok"):
-            return result
-        url = (body.get("url") or "").strip().rstrip("/")
+        mode = str(body.get("mode") or "local").strip()
+        if mode in RH_BASES:
+            # RunningHub 运行方式:只验 Key/余额,素材上传与工作流绑定在生成时校验
+            result = await api_test_comfyui({"mode": mode, "api_key": key})
+            return {**result, "provider": provider, "mode": mode}
+        # 本地/Comfy Cloud:连通后检查 InfiniteTalk(MultiTalk)自定义节点是否可见
         required = ("MultiTalkModelLoader", "MultiTalkWav2VecEmbeds",
                     "WanVideoImageToVideoMultiTalk", "WanVideoSampler")
-        nodes = {}
-        for node_type in required:
-            try:
-                info = await asyncio.to_thread(
-                    _http_get_json, url + "/object_info/" + node_type, None, 6)
-                nodes[node_type] = bool(info.get(node_type))
-            except Exception:  # noqa: BLE001
-                nodes[node_type] = False
+        result = await api_test_comfyui({"mode": mode, "url": body.get("url"), "api_key": key},
+                                        extra_nodes=required)
+        if not result.get("ok"):
+            return result
+        nodes = {n: bool((result.get("custom_nodes") or {}).get(n)) for n in required}
         workflow = Path(str(body.get("workflow") or "comfy/digitalhuman-infinitetalk-api.json"))
         if not workflow.is_absolute():
             workflow = ROOT / workflow
-        return {**result, "provider": provider, "infinitetalk_nodes": nodes,
+        return {**result, "provider": provider, "mode": mode, "infinitetalk_nodes": nodes,
                 "infinitetalk_ready": all(nodes.values()),
                 "workflow_exists": workflow.is_file()}
-    raise ServiceError(400, "provider must be heygen, klingai, runninghub or comfyui")
+    raise ServiceError(400, "provider must be heygen, klingai or comfyui")
 
 
-async def api_test_comfyui(body: dict):
-    """测试 ComfyUI 连接(本地/Comfy Cloud/RunningHub),并检查关键自定义节点是否可见。
+async def api_test_comfyui(body: dict, extra_nodes: tuple[str, ...] = ()):
+    """测试 ComfyUI 连接(本地/Comfy Cloud/RunningHub),并检查关键自定义节点是否可见
+    (extra_nodes 追加调用方关心的节点类名,结果一并放进 custom_nodes)。
 
     RunningHub 运行方式改测 accountStatus:验证 API Key 并回显余额与并发任务数
     (无原生 /system_stats、/object_info 可探)。"""
@@ -6344,7 +6367,7 @@ async def api_test_comfyui(body: dict):
     except Exception:  # noqa: BLE001
         pass
     custom_nodes = {}
-    for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo"):
+    for node_type in ("ACEModelLoader", "ACEStepGen", "MiniMaxH3ReferenceToVideo", *extra_nodes):
         try:
             info = all_info if cloud else await asyncio.to_thread(
                 _http_get_json, url + "/object_info/" + node_type, headers, 6)
@@ -6567,10 +6590,12 @@ async def api_plugins_delete(body: dict):
 async def api_agentmodels():
     """全部 Agent 的模型配置:mode=「模型策略」;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
     mode = load_genconfig().get("agentmodel_mode") or "global"
+    # 覆盖经 agent_model_config 归一(旧版独立 runninghub 渠道 ⇒ comfyui),与运行时同口径
     return {"mode": mode,
             "defaults": {a["id"]: default_agent_model(a["id"], mode)
                          for a in list_agents()},
-            "overrides": load_agentmodels()}
+            "overrides": {aid: agent_model_config(aid)
+                          for aid, ov in load_agentmodels().items() if isinstance(ov, dict)}}
 
 
 async def api_globalmodel_get():
