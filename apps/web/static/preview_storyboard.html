@@ -225,6 +225,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
     <button data-cat="props">🗡 道具</button>
+    <button data-cat="creatures">🐎 生物</button>
     <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
@@ -441,7 +442,7 @@ async function arLoadCat(cat){
       const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
       if(!r.ok)throw new Error((await r.json()).detail||r.status);
       const d=await r.json();
-      AR_CACHE[cat]=(d.characters||d.scenes||d.props||[]).filter(a=>(a.images||[]).length);
+      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[]).filter(a=>(a.images||[]).length);
     }
     const list=AR_CACHE[cat];
     if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
@@ -753,9 +754,10 @@ async function avSync(){
 // 文件名标签变成链接,点击跳到对应预览页并定位该资产(深链 ?id=)
 const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
                  scenes:['/preview/scenes','查看场景预览:'],
-                 props:['/preview/props','查看道具预览:']};
+                 props:['/preview/props','查看道具预览:'],
+                 creatures:['/preview/creatures','查看生物预览:']};
 const refFn=(icon,k)=>{
-  const m=/^assets\/concepts\/(characters|scenes|props)\/([^/]+)\//.exec(k.ref||'');
+  const m=/^assets\/concepts\/(characters|scenes|props|creatures)\/([^/]+)\//.exec(k.ref||'');
   if(!m)return `<span class="fn">${icon} ${esc(k.name)}</span>`;
   const [page,tip]=REF_PAGES[m[1]], proj=$('#project').value.trim()||'demo';
   return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
@@ -764,6 +766,17 @@ const refFn=(icon,k)=>{
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
   const chars=(g.characters_union||[]).join('、');
+  // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
+  // 有服装 sheet 的在媒体区并列展示并深链人物预览页该套服装卡
+  const proj0=$('#project').value.trim()||'demo';
+  const cosChips=(g.costumes||[]).map(x=>{
+    const miss=!x.url, why=x.blocked_on?t('阻塞:')+x.blocked_on:x.skip_reason?t('免出:')+x.skip_reason:!x.known?t('服装 ID 不在 bible/costumes.json'):miss?t('缺服装 sheet(§6A 回派 costume-concept)'):'';
+    const tip=[I18N.f('{name} 本组着 {cos}',{name:x.char_name,cos:x.costume}),x.label!==x.costume?x.label:'',x.source==='continuity'?t('(来源 continuity 状态表,分镜层未定服装)'):'',why].filter(Boolean).join(' · ');
+    return `<a class="tag" style="text-decoration:none;color:${miss&&!x.skip_reason?'var(--yellow)':'var(--text)'}" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(tip)}">👕 ${esc(x.char_name)}:${esc(x.label)}${x.default?'':' ✱'}${miss&&!x.skip_reason?' ⚠':''}</a>`;
+  }).join('');
+  const cosImgs=(g.costumes||[]).filter(x=>x.url).map(x=>
+    `<div><img src="${esc(bust(x.url))}" loading="lazy" onclick="zoom(this.src)">
+      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(t('查看服装 sheet:')+x.char+' / '+x.costume)}">👕 ${esc(x.char_name)} · ${esc(x.label)}</a></div></div>`);
   const gloc=I18N.f('生成组 {ep}/{gid}(镜 {range}{sc};数据 directing/{ep}/shot_list.json 中 generation_groups group_id={gid},组视频 prompt assets/prompts/{ep}/{gid}.json,组视频 assets/clips/{ep}/{gid}.mp4)',
     {ep:EP,gid:g.group_id,range,sc:g.scene_id?I18N.f(' · 场景 {s}',{s:g.scene_id}):''});
   const sketches=(g.sketches||[]).map(k=>
@@ -786,14 +799,15 @@ function groupCard(g,inner){
   const capvids=(g.caption_clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  const media=(anchors.length||vids.length||capvids.length||sketches.length||urefs.length||prefs.length)?
-    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${capvids.join('')}${bounds}</div>`:'';
+  const media=(anchors.length||vids.length||capvids.length||sketches.length||urefs.length||prefs.length||cosImgs.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${cosImgs.length?`<div class="anchors">${cosImgs.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${capvids.join('')}${bounds}</div>`:'';
   return `<div class="grp" id="a-g-${aid(g.group_id)}">
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+      ${cosChips}
       ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
@@ -1019,7 +1033,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

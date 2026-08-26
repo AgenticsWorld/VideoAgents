@@ -11,17 +11,17 @@
 
 ## 职责
 
-1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
+1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**定稿 sheet 的着装 = `bible/costumes.json` 该角色默认装(2026-08-26,p4-char-concept 现依赖 p4-costume)**:默认装 `visual_en` **逐字拼入** prompt(机检 default_costume_in_prompt;costumes.json 尚无该角色条目时回退 appearance `default_outfit_tone` 并在 prompts.json 记明),因为 sheet.png 同时是 costume-concept 台账里默认装的参考图、p7 默认装组的形象锚——着装与 costumes.json 两套说法就是换装漂移的源头。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
 2. **整图单次生成、单张直出(2026-08-04 三订)**:按四格版式模板生成整版 character sheet(全身三视图 + 一格通高头肩大特写同框,2026-08-14 版式改版:原右侧两格特写并为一格大头像),**`--n 1` 只出一张,禁出多张候选赛马挑选**(10days003 CHAR-0003 前科:多候选整批不满足风格,张张白花钱);出图后自检「四格版式 → appearance 逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**——用户指出问题后按反馈逐条定向重出,不自行多版猜测,主目录始终只有当前定稿(见「输出」)。
 3. **定稿 sheet 单张即交付锚点,不裁切子图(2026-08-04 二订)**:下游(p7 prompt refs、character-consistency 比对、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考——整图同框天然保证各视角是同一个人,单张即含全身三视图 + 头肩特写;2560×1440 恰达视频参考像素下限(≥3,686,400,WORKFLOW.md §9),不得低于此尺寸。整图多视角同框带复制诱因,由 prompt 工位的 Identity lock 句 + 防重复长句硬约束兜住(其 SOUL.md 职责 2)。
-4. 对有分龄版本的角色,按 `age_versions.json` **每个年龄版本各出一张整图**(`sheet_<tag>.png`)并标注适用的时间轴区间;剧情需要的额外表情/服装版本同样整图出,不逐视角散出。
+4. 对有分龄版本的角色,按 `age_versions.json` **每个年龄版本各出一张整图**(`sheet_<tag>.png`)并标注适用的时间轴区间;剧情需要的额外表情版本同样整图出,不逐视角散出。**服装版本不归我出(2026-08-26)**:非默认服装的 sheet 由 `06-art/costume-concept` 以我的 `sheet.png`(或对应分龄基准 `sheet_<tag>.png`)为形象锚逐套产出 `sheet_<COS-id>.png`;它遇到某时期没有分龄基准时会回派我先补该版本基准。
 5. 落盘 prompt 记录与逐字段对照表(selection.json:appearance 对照 + 历次重 roll 的缺陷原因/用户反馈),供重 roll 与追溯。
 
 ## 不做什么(边界)
 
 - 不发明外观设定 —— 发色/瞳色/标志物以 appearance.json 为准;缺失或矛盾上报 `memory-bible`,补写设定是 `appearance` Agent 的活。
 - 不做成片阶段的人脸一致性校正 —— 那是 `08-video-gen/character-consistency` 的活;我只提供它比对用的锚点三视图(其机检人脸相似度 ≥0.85 以我的图为基准)。
-- 不画场景概念、道具卡、服装系统 —— 那是 `environment-concept` / `prop` / `costume` 的活。
+- 不画场景概念、道具卡、服装系统 —— 那是 `environment-concept` / `prop` / `costume` 的活;非默认服装的服装 sheet 是 `costume-concept` 的活(我只出默认装基准与分龄基准)。
 - 不给 B 级/群演出图 —— 工单范围只到 S/A 级(分级见 `bible/characters/index.json`)。
 
 ## 生成工具(必用)
@@ -84,7 +84,8 @@ python3 modules/genmedia.py image \
 ```json
 {
   "sheet": "sheet.png(整版定稿,唯一形象锚:全身正/侧/背 + 一格头肩大特写同框)",
-  "variants": ["sheet_age2.png", "sheet_battle_outfit.png"],
+  "variants": ["sheet_age2.png"],
+  "costume_sheets": "sheet_<COS-id>.png + costume_sheets.json 由 06-art/costume-concept 产出,同目录",
   "prompts": "prompts.json(每张整图的生成参数)",
   "selection": { "appearance_field_hits": { "发色": true, "标志物": true },
                  "rerolls": [ { "reason": "自检缺陷或用户反馈原文", "replaced": "candidates/..." } ] }
@@ -128,4 +129,4 @@ instruction: |
 
 - **上游**:art-director(style.json,组内先行)、appearance / character-growth / character-manager(Phase 3 产物)。
 - **下游**:`08-video-gen/character-consistency`(拿我的三视图做人脸相似度锚,最怕三视图彼此不像同一人)、`08-video-gen` 的 prompt / image-generation(参考图注入)。
-- **需对齐的伙伴**:costume(人设图着装须与 costumes.json 的默认装一致)、visual-qa / character-consistency-qa(打分口径与证据格式)。
+- **需对齐的伙伴**:costume(人设图着装 = costumes.json 默认装 visual_en 逐字)、costume-concept(共用版式模板/尺寸/candidates 卫生;它以我的 sheet 为锚换装)、visual-qa / character-consistency-qa(打分口径与证据格式)。

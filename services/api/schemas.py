@@ -61,7 +61,7 @@ class AgentModelUpdate(ApiModel):
 
 
 class GlobalModelUpdate(ApiModel):
-    engine: Literal["", "claude", "codex", "kimi", "pi", "opencode", "deepagents"] = ""
+    engine: Literal["", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents"] = ""
     model: str = ""
 
 
@@ -73,7 +73,7 @@ class RunCreate(ApiModel):
     agent: str
     message: str = Field(min_length=1)
     project: str = "demo"
-    engine: Literal["claude", "codex", "kimi", "pi", "opencode", "deepagents"] | None = None
+    engine: Literal["claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents"] | None = None
     model: str | None = None
     force: bool = False
     source: str = "user"

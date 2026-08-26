@@ -32,7 +32,7 @@
 ## 不做什么(边界)
 
 - 不管服装与佩饰系统 —— 那是 `costume` 的活;道具与服装的归属争议报 orchestrator 裁决。
-- 不管妖兽/坐骑 —— 那是 Phase 3 `creature` / `mount` 的活。
+- 不管妖兽/坐骑 —— 设定归 Phase 3 `creature` / `mount`,形象参考图归 `06-art/creature-concept`(2026-08-26);随坐骑出场的鞍具由 creature-concept 画在坐骑身上,仅当鞍具作为独立道具登场(离开坐骑被持握/交易)时才由我建卡出比例锚图。
 - 不追踪道具在镜头间的状态(在手/损毁/移交)—— 那是 `07-directing/continuity-planning` 的活;我只提供静态设定与易主链。
 - 不生成镜头内画面 —— 那是 `08-video-gen` 的活;我的参考图只做生成锚点。
 
@@ -146,4 +146,4 @@ instruction: |
 
 - **上游**:novel-parser(structured_story)、dictionary、art-director(style.json)。
 - **下游**:`08-video-gen` 的 prompt(把道具 visual 描述、`scale.prompt_token` 与参考图注入镜头)、`image-generation`(锚点包优先取比例锚图)、`11-qa/visual-qa`(用 `canonical_size` 做跨组尺度抽检仲裁)、`07-directing/continuity-planning`(用易主链核对道具状态)、Phase 9 caption(道具名花字)。他们最怕我:剧情道具漏建卡、同一道具两套长相、尺寸两说。
-- **需对齐的伙伴**:costume(佩饰归属边界)、creature/mount(法宝型坐骑归属)、dictionary(命名唯一)。
+- **需对齐的伙伴**:costume(佩饰归属边界)、creature/mount/creature-concept(法宝型坐骑与鞍具归属)、dictionary(命名唯一)。

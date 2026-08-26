@@ -10,6 +10,8 @@ DEEPAGENTS_VENV ?= .venv-deepagents
 install:
 	$(PYTHON) -m pip install -e .
 
+# deepagents 引擎专用 venv(deepagents 需 Python ≥3.11,与主环境的 3.10 底线隔离)。
+# 依赖清单以 pyproject [deepagents] extra 为准。
 install-deepagents:
 	@$(DEEPAGENTS_PYTHON) -c 'import sys; assert sys.version_info >= (3, 11), "DeepAgents requires Python 3.11+"'
 	$(DEEPAGENTS_PYTHON) -m venv $(DEEPAGENTS_VENV)
@@ -18,14 +20,6 @@ install-deepagents:
 
 install-dev:
 	$(PYTHON) -m pip install -e ".[dev]"
-
-# deepagents 引擎专用 venv(deepagents 需 Python ≥3.11,与主环境的 3.10 底线隔离)。
-# 依赖清单与 pyproject [deepagents] extra 保持一致;Python 版本不足时 pip 会明确报错。
-DEEPAGENTS_PYTHON ?= $(shell command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || echo python3)
-install-deepagents:
-	$(DEEPAGENTS_PYTHON) -m venv .venv-deepagents
-	.venv-deepagents/bin/python -m pip install --upgrade pip
-	.venv-deepagents/bin/python -m pip install "deepagents>=0.2" "langchain-openai>=0.3" "langgraph-checkpoint-sqlite>=2"
 
 run:
 	$(PYTHON) apps/web/server.py
