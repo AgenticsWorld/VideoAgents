@@ -253,7 +253,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限">Agent 高级设置</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、思考深度">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
@@ -675,6 +675,17 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
     <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
     <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>思考深度</label>
+      <select id="conc-effort" style="width:160px">
+        <option value="">引擎默认</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
+      </select>
+    <button type="button" class="info-btn" data-info="conc-info-effort" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),deepagents → reasoning_effort(仅云端/OpenRouter 渠道,本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="range" id="mem-range" min="0" max="256" step="1" style="flex:1">
       <input type="number" id="mem-num" min="0" max="256" step="1" style="width:64px">
@@ -1536,7 +1547,7 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 对话记忆) ---------- */
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 思考深度 + 对话记忆) ---------- */
 let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
@@ -1559,10 +1570,11 @@ async function openConcModal(){
     $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
     concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
     $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
@@ -1584,7 +1596,7 @@ $('#conc-ok').onclick=async()=>{
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory_kb:mk});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };

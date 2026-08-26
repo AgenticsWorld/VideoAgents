@@ -189,6 +189,17 @@ AGENT_MEMORY_KB_MAX = 256
 # 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
 MAX_RETRIES_DEFAULT = 3
 MAX_RETRIES_MAX = 10
+# 思考深度(Thinking Effort)统一设置(设置菜单「高级→Agent 高级设置」下拉,存 state.json 的
+# thinking_effort):派单时按引擎翻译成各自的推理强度参数,全局对所有 Agent 生效——
+#   claude   --effort <level>                    (low/medium/high/xhigh/max 原样)
+#   codex    -c model_reasoning_effort=<level>   (无 max,max→xhigh)
+#   pi       --thinking <level>                  (原样)
+#   opencode --variant <level>                   (模型无该 variant 时由 opencode 忽略)
+#   deepagents --reasoning-effort <level>        (仅云端/OpenRouter 渠道;本地端点不传)
+#   kimi     CLI 无推理强度参数,不传(沿用其自身默认)
+# 空串=引擎默认(不传任何参数,沿用各引擎 CLI 自身配置),亦为缺省值
+THINKING_EFFORT_DEFAULT = ""
+THINKING_EFFORT_LEVELS = ("", "low", "medium", "high", "xhigh", "max")
 # deepagents 引擎单独封顶(实际生效额度取 min(记忆额度滑块值, 此上限)):
 # 记忆额度量的是 chats/*.jsonl(只有用户/助手文本),而 deepagents 检查点历史含
 # 全部工具消息(DAG 查询输出、read_file 全文),真实会话体量被严重低估;
@@ -347,6 +358,33 @@ def max_retries_setting() -> int:
     except (TypeError, ValueError):
         n = MAX_RETRIES_DEFAULT
     return max(0, min(n, MAX_RETRIES_MAX))
+
+
+def thinking_effort_setting() -> str:
+    """思考深度统一设置(设置菜单「高级→Agent 高级设置」;取值见 THINKING_EFFORT_LEVELS,
+    空串=引擎默认,亦为缺省;非法值回退缺省)。"""
+    v = STATE.get("thinking_effort")
+    if v is None:
+        return THINKING_EFFORT_DEFAULT
+    v = str(v).strip().lower()
+    return v if v in THINKING_EFFORT_LEVELS else THINKING_EFFORT_DEFAULT
+
+
+def engine_effort_args(engine: str, level: str, *, local_endpoint: bool = False) -> list[str]:
+    """把统一思考深度翻译成引擎 CLI 参数(见 THINKING_EFFORT_DEFAULT 注释);空/不支持则 []。"""
+    if not level:
+        return []
+    if engine == "claude":
+        return ["--effort", level]
+    if engine == "codex":
+        return ["-c", f"model_reasoning_effort={'xhigh' if level == 'max' else level}"]
+    if engine == "pi":
+        return ["--thinking", level]
+    if engine == "opencode":
+        return ["--variant", level]
+    if engine == "deepagents":
+        return [] if local_endpoint else ["--reasoning-effort", level]
+    return []   # kimi 等无对应参数
 
 
 def load_state() -> dict:
@@ -2596,6 +2634,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                          "run_id": run["id"], "status": "error"})
             publish_run(run)
             return
+        thinking_effort = thinking_effort_setting()   # 统一思考深度,启动时取值(在跑的运行不变)
         session_key = f"{engine}::{agent_id}::{run['project']}"
         # 记忆开关关闭时所有 agent 全新会话(session_id 仍照常回存,重新开启即恢复)
         session_id = (None if is_stateless or not agent_memory_enabled()
@@ -2641,6 +2680,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                       "--model", use_model,
                       "--base-url", da["base_url"],
                       "--api-key", da["api_key"]]
+            da_cmd += engine_effort_args("deepagents", thinking_effort,
+                                         local_endpoint=da["provider"] == "local")
             # 有状态 agent 启用检查点(会话续接);记忆开关关闭时 session_id 为
             # None,runner 仍新开会话并回报 id,照常回存——与 claude/codex 语义
             # 一致(关闭期间照存,重新开启后从最近一次会话继续)
@@ -2663,6 +2704,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                         "--dangerously-bypass-approvals-and-sandbox", "-C", str(ROOT)]
                 if model:
                     base += ["-c", f"model={model}"]
+                base += engine_effort_args("codex", thinking_effort)
                 # Codex reads the prompt from stdin. This avoids Windows'
                 # process command-line length limit for large Agent prompts.
                 if sid:
@@ -2685,6 +2727,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 base = [cli_executable, "run", "--format", "json", "--auto"]
                 if model:
                     base += ["-m", model]
+                base += engine_effort_args("opencode", thinking_effort)
                 if sid:
                     return base + ["--session", sid, message]
                 return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
@@ -2695,6 +2738,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                         "--append-system-prompt", str(system_prompt_file)]
                 if model:
                     base += ["--model", model]
+                base += engine_effort_args("pi", thinking_effort)
                 if sid:
                     base += ["--session", sid]
                 return base + [message]
@@ -2708,6 +2752,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                   "--max-turns", MAX_TURNS]
             if model:
                 c += ["--model", model]
+            c += engine_effort_args("claude", thinking_effort)
             if sid:
                 c += ["--resume", sid]
             return c
@@ -7667,7 +7712,10 @@ async def api_agent_advanced_get():
     d.update(await api_agent_memory_get())
     d.update({"max_retries": max_retries_setting(),
               "max_retries_default": MAX_RETRIES_DEFAULT,
-              "max_retries_max": MAX_RETRIES_MAX})
+              "max_retries_max": MAX_RETRIES_MAX,
+              "thinking_effort": thinking_effort_setting(),
+              "thinking_effort_default": THINKING_EFFORT_DEFAULT,
+              "thinking_effort_levels": list(THINKING_EFFORT_LEVELS)})
     return d
 
 
@@ -7676,8 +7724,16 @@ async def api_agent_advanced_set(body: dict):
     - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
     - agent_memory_kb:同 api_agent_memory_set(0=关闭;旧布尔字段 agent_memory 仍兼容)
     - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
-      经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效"""
+      经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效
+    - thinking_effort:思考深度统一设置(THINKING_EFFORT_LEVELS 之一,空串=引擎默认),
+      派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效"""
     updates: dict = {}
+    if body.get("thinking_effort") is not None:
+        lv = str(body.get("thinking_effort")).strip().lower()
+        if lv not in THINKING_EFFORT_LEVELS:
+            raise ServiceError(400, "thinking_effort must be one of: "
+                               + ", ".join(x or "(default)" for x in THINKING_EFFORT_LEVELS))
+        updates["thinking_effort"] = lv
     if body.get("max_retries") is not None:
         try:
             n = int(body.get("max_retries"))
@@ -7699,7 +7755,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries")
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / thinking_effort")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
