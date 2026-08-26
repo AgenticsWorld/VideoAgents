@@ -22,6 +22,12 @@
    **道具图无人物红线(2026-08-18)**:道具的一切参考图(main 特写、scale_ref 比例锚图、补生成的细节图)**画面中不得出现人物**——含全身/半身/脸、手臂/手掌等身体局部、剪影与背影,也**不得把角色人设图/服装图作 `--ref` 传入**。两个原因:①含人物(尤其真人脸参考)是渠道审核拒图的高发因素;②人物一入画就抢占主体,道具在图中缩成配角(cui3 前科:20+ 张比例锚图全是角色手持小物、人物占 2/3 画面),下游把这张图当道具锚注入时,模型学到的是人不是物——信息稀释。尺度改用参照物表达;身体相对尺寸(及腰/两掌宽等)只留在 `relative_anchor`/`prompt_token` 文字里,由 video prompt 逐字拼入解决。**构图硬要求**:道具为唯一主体、占画面显著面积(建议 ≥1/3),背景干净(素底或与 style.json 相符的简洁环境),negative 必含 `person, human, hand, arm, body, silhouette, face`。
 5. 汇总为 `bible/props.json`,并给出「剧情道具覆盖清单」供机检核对覆盖率。
 6. 发现道具描写前后矛盾(如剑鞘颜色两说)时上报,不自行取舍。
+7. **可读面道具标记与双视图样式图(`readable_face`,2026-08-25;同日二订:背面并入 main 整图,不单出 back_01)**——"文字面/屏幕面朝观众"穿帮的源头对冲。凡**可手持且单面承载可读信息**的道具(手机/文书/合同/信/照片/地图/典籍/符纸等;墙上匾额、固定牌位等不可手持的不标),设定卡加 `readable_face` 对象:
+   - `face_desc`:可读面长什么样(中文底稿,给 07-directing/composition 写朝向片段用,**不进 prompt**);
+   - `back_desc`:非可读面长什么样(同上);
+   - `back_ref`:承载非可读面视图的图相对路径——合一制下即 `main_01.png` 本身。
+   **与 `scale.prompt_token` 的关键差异**:朝向**不设**圣经级 prompt 短语——可读面朝向谁是镜级导演决策(每镜不同),由 composition 逐镜写 `facing_fragment_en`、prompt 逐字拼入;圣经层只负责"标记哪些道具朝向敏感 + 提供两面的样子"。
+   **双视图样式图义务(整图单次生成,同角色 sheet 范式;2026-08-26 三订版式)**:readable_face 道具的样式图 `main_01.png` 直接出成**同一道具正/背两视图同框**的一张图——**中性灰影棚素底,两面板明确分离(宽留白隔开,禁贴合堆叠),每个面板正下方小字标注「正面」/「背面」**(同角色三视图 sheet 的分格版式;标签是图上唯一的面板外文字,供视频 prompt 按标签指认哪一面朝镜头;纸/卡/照片类两视图即可——纸的侧面是一条线无信息量;侧面有信息的道具如手机厚度、典籍书脊可加侧视成三视图,标注「侧面」),**不再单出 `back_01.png`**——省一次生成、省一个 refs 名额(一张图同时携带两面,持读镜无需再做背面图替换正面图的取舍);构图/无人物红线/negative 与职责 4 同口径,两视图为**同一件道具**、材质磨损逐格一致。动机:单面正面平铺图的参考图偏置会持续把可读面喂向镜头(前科:offer ep01 grp009 合同条款正对镜头)。**多视角同框带复制诱因**(同角色三视图前科:背面视角被实例化成第二个人)——下游 prompt 挂此图必配单实例声明句,见 prompt SOUL 朝向锚条目;比例锚图 `scale_ref_01.png` 义务不变、仍单出。存量项目回补时重出 main_01 为双视图 sheet(旧单面图移入 `candidates/`),重出前旧单面 main 挂用照旧、文字锚兜底。
 
 ## 不做什么(边界)
 
@@ -35,15 +41,16 @@
 道具参考图一律通过统一模块生成(渠道/模型由用户在控制台「🎨 生成模型」页配好,不自行挑模型):
 
 ```bash
-# 特写图(形态/材质锚)
-python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 prompt>" \
-  --output assets/concepts/props/<id>/main_01.png --aspect 1:1 --n 2
+# 特写图(形态/材质锚;readable_face 道具出成正/背双视图同框一张——整图单次生成,不单出背面图)
+python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 prompt;readable_face 道具:同一件道具正面与背面两视图左右并排同框,素底,材质磨损两格一致,no person, no hands>" \
+  --output assets/concepts/props/<id>/main_01.png --aspect 1:1 --n 2   # 双视图可改 --aspect 16:9
 
 # 比例锚图(剧情道具必出;尺度锚——道具与无人参照物同框,体现 relative_anchor 比例;严禁人物入画/人设图作 ref)
 python3 modules/genmedia.py image \
   --prompt "<道具置于桌面/门边/与茶杯硬币等常见物并置的构图,道具为唯一主体占大幅画面,no person, no hands>" \
   --output assets/concepts/props/<id>/scale_ref_01.png --aspect 16:9 --n 2 \
   --ref assets/concepts/props/<id>/main_01.png
+
 ```
 
 > 两张图的 negative_prompt 一律含 `person, human, hand, arm, body, silhouette, face`;`--ref` 只准道具自身定稿图与 `refs/props/` 用户参考图,**禁止**传角色/服装概念图(道具图无人物红线,见职责 4)。
@@ -87,6 +94,14 @@ python3 modules/genmedia.py image \
     "owners": [{ "character_id": "c003", "from_chapter": 12 }],
     "source": "第12章", "inferred": false,
     "concept_ref": "assets/concepts/props/prop_017/"
+  }, {
+    "id": "prop_021", "name": "聘书", "is_plot_prop": true,
+    "visual": "…", "scale": { "…": "…" },
+    "readable_face": {
+      "face_desc": "正面=墨书条款、朱印与签名区(可读面)",
+      "back_desc": "背面=素白麻纸,略透墨影",
+      "back_ref": "assets/concepts/props/prop_021/main_01.png"
+    }
   }]
 }
 ```
@@ -112,6 +127,7 @@ instruction: |
 - **剧情道具覆盖率 100%**(对照覆盖清单与实体标注);
 - ID 唯一;名称 100% 命中 dictionary;出处章节必填;`inferred` 项必附理由;制作必需字段无 UNKNOWN/待定占位(no_unknown_placeholder,§1 原则 10);
 - **剧情道具 `scale` 三子字段齐全**(canonical_size/relative_anchor/prompt_token)且比例锚图 `scale_ref_01.png` 落盘(`prop_scale_defined`);
+- **可读面道具标记齐全**(`prop_readable_face_defined`):可手持的单面可读道具(手机/文书/照片/地图/典籍/符等)必带 `readable_face` 三子字段(face_desc/back_desc/back_ref)且 `main_01.png` 为含背面视图的双/三视图 sheet、`back_ref` 指向之(职责 7);
 - **道具图无人物**(`prop_image_no_person`):主目录任一参考图出现人物/身体局部,或 prompts.json 的 `generation_refs` 含 `concepts/characters/`、`concepts/costumes/` 路径 → 退回重出(visual-qa 抽检时同项核对)。
 
 **评分(evaluation Agent,rubric extraction_v1,阈值 80;按 §7 适用「设定抽取类」)**:
