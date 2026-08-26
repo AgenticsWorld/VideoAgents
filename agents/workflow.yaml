@@ -260,7 +260,7 @@ phases:
           validation: { auto: [anchor_checklist_full, prompt_lt_1000_words, refs_match_materials,
                                no_music_notation, negative_has_no_bgm, prop_scale_token_ok,
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
-                               prop_facing_bound, # 持读镜 Shot 段逐字命中 composition 的 facing_fragment_en + Global constraints 朝向恒定句(code/prop_facing_bound_check.py,2026-08-25)——朝向只写 negative=没写,文字面/屏幕面必转向观众(前科 offer ep01 grp009 合同条款正对镜头)
+                               prop_facing_bound, # 持读镜 Shot 段逐字命中 composition 的 facing_fragment_en + Global constraints 朝向恒定句(code/prop_facing_bound_check.py,2026-08-25)——朝向约束若只写在 negative 字段等于没写(该字段不进生成请求),模型就会把文字面/屏幕面转向观众造成穿帮(前科 offer ep01 grp009 合同条款正对镜头)
                                creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
                                layout_map_bound,  # 组动线俯视图 blocking_maps/{group}.png + 场景 grid_9views.png 必在 refs,含 Spatial layout 声明句,逐角色 route_en 逐字命中(code/layout_map_bound_check.py,2026-08-19)
