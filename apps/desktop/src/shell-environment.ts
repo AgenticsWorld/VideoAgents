@@ -40,6 +40,7 @@ function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
     path.join(home, '.local', 'bin'),
     path.join(home, '.kimi-code', 'bin'),
     path.join(home, '.opencode', 'bin'),
+    path.join(home, '.grok', 'bin'),
     path.join(home, '.volta', 'bin'),
     path.join(home, '.bun', 'bin'),
     path.join(home, 'Library', 'pnpm'),

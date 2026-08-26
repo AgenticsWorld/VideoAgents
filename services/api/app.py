@@ -376,6 +376,11 @@ async def opencode_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_opencode_models(refresh)
 
 
+@api.get("/engines/grok/models", tags=["configuration"])
+async def grok_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_grok_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)

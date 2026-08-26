@@ -89,12 +89,28 @@ def _default_opencode_bin() -> str:
 
 
 OPENCODE_BIN = os.environ.get("OPENCODE_BIN") or _default_opencode_bin()
+
+
+def _default_grok_bin() -> str:
+    # Grok Build CLI(grok.com/build)官方安装脚本装到 ~/.grok/bin 并在 ~/.local/bin 建
+    # 软链,同 kimi/opencode:非交互环境 PATH 可能不含这两个目录,回退绝对路径
+    found = shutil.which("grok")
+    if found:
+        return found
+    for fallback in (Path.home() / ".grok" / "bin" / "grok",
+                     Path.home() / ".local" / "bin" / "grok"):
+        if fallback.is_file():
+            return str(fallback)
+    return "grok"
+
+
+GROK_BIN = os.environ.get("GROK_BIN") or _default_grok_bin()
 CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
-            "pi": PI_BIN, "opencode": OPENCODE_BIN}
+            "pi": PI_BIN, "opencode": OPENCODE_BIN, "grok": GROK_BIN}
 CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
-              "pi": "Pi Coding Agent", "opencode": "OpenCode"}
+              "pi": "Pi Coding Agent", "opencode": "OpenCode", "grok": "Grok Build"}
 CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
-                "pi": "PI_BIN", "opencode": "OPENCODE_BIN"}
+                "pi": "PI_BIN", "opencode": "OPENCODE_BIN", "grok": "GROK_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -136,7 +152,7 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "deepagents")   # 执行引擎:CLI 或 deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
@@ -195,6 +211,7 @@ MAX_RETRIES_MAX = 10
 #   codex    -c model_reasoning_effort=<level>   (无 max,max→xhigh)
 #   pi       --thinking <level>                  (原样)
 #   opencode --variant <level>                   (模型无该 variant 时由 opencode 忽略)
+#   grok     --reasoning-effort <level>          (low/medium/high/xhigh,无 max,max→xhigh)
 #   deepagents --reasoning-effort <level>        (仅云端/OpenRouter 渠道;本地端点不传)
 #   kimi     CLI 无推理强度参数,不传(沿用其自身默认)
 # 空串=引擎默认(不传任何参数,沿用各引擎 CLI 自身配置),亦为缺省值
@@ -382,6 +399,8 @@ def engine_effort_args(engine: str, level: str, *, local_endpoint: bool = False)
         return ["--thinking", level]
     if engine == "opencode":
         return ["--variant", level]
+    if engine == "grok":
+        return ["--reasoning-effort", "xhigh" if level == "max" else level]
     if engine == "deepagents":
         return [] if local_endpoint else ["--reasoning-effort", level]
     return []   # kimi 等无对应参数
@@ -1356,8 +1375,9 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-5.6-sol low→openai-codex/gpt-5.6-terra)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
+#   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.6 low→Grok 4.5)
 AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
-            "smart_deepseek")
+            "smart_deepseek", "smart_grok")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -1400,9 +1420,12 @@ AM_MODE_MODELS = {
     # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
                        "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4-flash"}},
+    # grok 引擎(Grok Build CLI,grok.com 登录凭证;模型 id 同 `grok models` 列表)
+    "smart_grok": {"high": {"engine": "grok", "model": "grok-4.6"},
+                   "low": {"engine": "grok", "model": "grok-4.5"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "deepagents")      # "" = 跟随全局
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
 # runninghub/comfyui 与「🎨 生成模型」页两个标签页同口径(存储同在 comfyui 段,靠 mode 区分,
 # 见 genmedia.get_config):runninghub=RunningHub 页站点,comfyui=ComfyUI 页本地/云端
 AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax",
@@ -1462,7 +1485,7 @@ def agent_effective_model(agent_id: str) -> dict:
 # 各引擎对应的智能分配策略(deepagents 无智能分配,不在表内→global)
 SMART_MODE_BY_ENGINE = {"claude": "smart_claude", "codex": "smart_codex",
                         "kimi": "smart_kimi", "pi": "smart_pi",
-                        "opencode": "smart_deepseek"}
+                        "opencode": "smart_deepseek", "grok": "smart_grok"}
 
 
 def migrate_agent_memory_default():
@@ -2634,7 +2657,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
-   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/deepagents 中的另一个)。
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
    `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
@@ -2897,6 +2920,23 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     return base + ["--session", sid, message]
                 return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
+            if engine == "grok":
+                # Grok Build CLI 的 headless 参数与 claude 同构:-p 单轮、--max-turns、
+                # --resume <uuid> 续接;--output-format streaming-messages-json 输出 Anthropic
+                # Messages 线格式(system/init 带 session_id → assistant 消息含 usage →
+                # result 汇总,实测 1.0.5),事件经工具名归一后复用 claude 处理器;
+                # --rules 追加系统提示词(无文件变体,走 argv);--always-approve 放行工具
+                # 权限(非交互运行必需)。系统提示词每轮都传(同 claude --append-system-prompt)
+                base = [cli_executable, "-p", message,
+                        "--output-format", "streaming-messages-json",
+                        "--always-approve", "--max-turns", MAX_TURNS,
+                        "--rules", role]
+                if model:
+                    base += ["-m", model]
+                base += engine_effort_args("grok", thinking_effort)
+                if sid:
+                    base += ["--resume", sid]
+                return base
             if engine == "pi":
                 # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
@@ -3014,6 +3054,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_pi_event(run, obj)
                     elif engine == "opencode":
                         handle_opencode_event(run, obj)
+                    elif engine == "grok":
+                        handle_grok_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
@@ -3346,6 +3388,39 @@ def handle_opencode_event(run: dict, obj: dict):
         run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
     elif t == "error":
         run["error"] = str(obj.get("error") or part.get("error") or obj)[:500]
+
+
+# Grok Build 内置工具名 → claude 同义工具名(tool_summary 按 claude 命名归类活动/产物文件)
+GROK_TOOL_ALIASES = {"write": "Write", "search_replace": "Edit", "read_file": "Read",
+                     "run_terminal_command": "Bash", "grep": "Grep",
+                     "spawn_subagent": "Task"}
+
+
+def handle_grok_event(run: dict, obj: dict):
+    """解析 grok --output-format streaming-messages-json 的 JSONL 事件(实测 1.0.5)。
+
+    与 claude stream-json 同构:system/init.session_id、assistant.message 的
+    content(text/tool_use 块)与 usage(input/output/cache_read/cache_creation)、
+    result 的 result/usage/num_turns/total_cost_usd/session_id;只有内置工具命名
+    不同(write/search_replace/read_file/run_terminal_command,路径参数
+    read_file.target_file、list_dir.target_directory),先归一成 claude 口径再交给
+    claude 处理器,用量统计(_parse_run_usage)也按 claude 分支走。"""
+    if obj.get("type") == "assistant":
+        message = obj.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, list):
+            blocks = []
+            for c in content:
+                if isinstance(c, dict) and c.get("type") == "tool_use":
+                    inp = dict(c.get("input") or {})
+                    for key in ("target_file", "target_directory"):
+                        if isinstance(inp.get(key), str) and "file_path" not in inp:
+                            inp["file_path"] = inp[key]
+                    name = str(c.get("name") or "?")
+                    c = {**c, "name": GROK_TOOL_ALIASES.get(name, name), "input": inp}
+                blocks.append(c)
+            obj = {**obj, "message": {**message, "content": blocks}}
+    handle_claude_event(run, obj)
 
 
 def handle_deepagents_event(run: dict, obj: dict):
@@ -4541,7 +4616,7 @@ _LLM_INDEX_LOCK = threading.Lock()
 
 def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
-    claude stream-json 末尾 result.usage(整个 run 的累计);codex exec 末尾
+    claude stream-json 末尾 result.usage(整个 run 的累计,grok 同格式);codex exec 末尾
     turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
     opencode 的每个 step_finish 各带一次调用用量(part.tokens);
     无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
@@ -4664,7 +4739,7 @@ def _llm_usage_index() -> dict:
 def _project_llm_tokens(project: str):
     """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
     派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/deepagents)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/grok/deepagents)。
     无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
@@ -6692,6 +6767,54 @@ async def api_opencode_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_GROK_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_GROK_MODELS_TTL = 30
+_GROK_MODEL_LINE_RE = re.compile(r"^\s*[*-]\s+(\S+)(\s+\(default\))?\s*$")
+
+
+def _parse_grok_models(output: str) -> list[dict]:
+    """`grok models` 输出(实测 1.0.5):登录信息与 Default model 行之后,
+    `  * grok-4.6 (default)` / `  - grok-4.5` 一行一个模型。"""
+    models = []
+    for raw in output.splitlines():
+        m = _GROK_MODEL_LINE_RE.match(_ANSI_ESCAPE_RE.sub("", raw))
+        if m:
+            models.append({"id": m.group(1), "name": m.group(1), "provider": "xai",
+                           "model": m.group(1), "default": bool(m.group(2))})
+    return models
+
+
+async def api_grok_models(refresh: bool = False):
+    """列出当前 grok 登录凭证实际可用的模型,供全部语言模型选择器复用。"""
+    global _GROK_MODELS_CACHE
+    ts, cached = _GROK_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _GROK_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "grok")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("grok"))
+    env = {**os.environ, "NO_COLOR": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 grok 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 grok 模型列表失败:{detail[:300]}")
+    models = _parse_grok_models(output)
+    if not models:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"grok 未返回可用模型(未登录请先执行 grok login):{detail[:300]}")
+    _GROK_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -6700,7 +6823,7 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode 时前端调用)。
+    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode/grok 时前端调用)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}

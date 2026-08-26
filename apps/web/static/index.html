@@ -200,12 +200,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / grok / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
     <option value="opencode">opencode</option>
+    <option value="grok">grok</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
@@ -338,6 +339,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
         <option value="opencode">opencode</option>
+        <option value="grok">grok</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -686,7 +688,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="max">max</option>
       </select>
     <button type="button" class="info-btn" data-info="conc-info-effort" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),deepagents → reasoning_effort(仅云端/OpenRouter 渠道,本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),grok → --reasoning-effort(无 max,按 xhigh),deepagents → reasoning_effort(仅云端/OpenRouter 渠道,本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="range" id="mem-range" min="0" max="256" step="1" style="flex:1">
       <input type="number" id="mem-num" min="0" max="256" step="1" style="width:64px">
@@ -835,18 +837,19 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配',smart_grok:'Grok 智能分配'};
 
 /* 顶栏「语言模型」下拉的「智能分配」选项(各引擎默认;deepagents 无此选项):
    选中→策略切 smart_<引擎>(按 Agent 任务复杂度自动分配模型),选具体模型→策略回 global 跟随全局 */
 const SMART='__smart';
-const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek'};
+const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek',grok:'smart_grok'};
 const SMART_TITLES={
   claude:'按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet',
   codex:'按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra',
   kimi:'按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding',
   pi:'按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra',
   opencode:'按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash',
+  grok:'按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5',
 };
 
 // opencode 静态兜底(动态列表读不到时用);具体模型区首项:DeepSeek V4 Pro(顶栏默认选「智能分配」)。
@@ -856,6 +859,11 @@ const OPENCODE_STATIC=[
   ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash'],
   ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
   ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
+];
+// grok 静态兜底(动态列表 GET /engines/grok/models 读不到时用;来源 `grok models`,grok.com 登录凭证)
+const GROK_STATIC=[
+  ['grok-4.6','Grok 4.6'],
+  ['grok-4.5','Grok 4.5'],
 ];
 const MODEL_OPTIONS={
   claude:[[SMART,'智能分配'],['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
@@ -872,6 +880,7 @@ const MODEL_OPTIONS={
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
+  grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -909,9 +918,28 @@ async function loadOpencodeModelOptions(refresh=false){
     AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
   }
 }
+let GROK_MODEL_ERROR='';
+async function loadGrokModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/grok/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,m.name||m.id]);
+    // CLI 默认模型置顶具体模型区(智能分配之后的首个模型)
+    const i=dynamic.findIndex(([v])=>(r.models||[]).some(m=>m.id===v&&m.default));
+    if(i>0)dynamic.unshift(...dynamic.splice(i,1));
+    const list=dynamic.length?dynamic:GROK_STATIC;
+    MODEL_OPTIONS.grok=[[SMART,'智能分配'],...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.grok=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    GROK_MODEL_ERROR='';
+  }catch(e){
+    GROK_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.grok=[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.grok=[['','默认(CLI配置)'],...GROK_STATIC,['__custom','自定义…']];
+  }
+}
 async function populateModels(engine,selected=null){
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
+  if(engine==='grok')await loadGrokModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -927,7 +955,8 @@ async function populateModels(engine,selected=null){
   sel.title=engine==='deepagents'
     ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
-    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型'):'';
+    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
+    :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
@@ -1183,6 +1212,7 @@ const ENGINE_CLI={
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
   opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
+  grok:{bin:'grok',cli:'Grok Build',label:'grok',url:'https://grok.com/build'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -2175,6 +2205,7 @@ const AM_MODEL_OPTIONS={
         ['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
+  grok:[['','默认(CLI配置)'],...GROK_STATIC,['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -2197,6 +2228,7 @@ async function amPopulateModels(engine,selected){
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
+  if(engine==='grok')await loadGrokModelOptions();
   if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{
