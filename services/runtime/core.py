@@ -940,9 +940,11 @@ SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-prompt-writing/SKILL.md"
 
 
 def is_minimax_h3(model: str) -> bool:
-    """MiniMax H3 判定(命中 minimax-h3 / MiniMax: H3 / MiniMax-H3 等写法,大小写不敏感)。"""
-    m = re.sub(r"[\s_:]+", "-", (model or "").lower())
-    return "minimax-h3" in m
+    """MiniMax H3 判定:名字同时含 minimax 与 h3 即命中(大小写不敏感,不限写法/顺序/分隔符——
+    H3 是开源模型,RunningHub/ComfyUI 等渠道的模型名、工作流名、节点名写法各异,如
+    minimax-h3 / MiniMax: H3 / MiniMax-H3 / minimax/h3-preview / MiniMaxH3ReferenceToVideo)。"""
+    m = (model or "").lower()
+    return "minimax" in m and "h3" in m
 
 
 # RunningHub(第三方云托管 ComfyUI):.cn/.ai 双站同构,账号与 Key 不互通;
@@ -964,21 +966,23 @@ def _rh_cached_workflow(comfy: dict, wf_id: str = "") -> str:
 
 
 def is_minimax_h3_active(cfg: dict | None = None) -> bool:
-    """生效视频渠道是否 MiniMax H3:OpenRouter/MiniMax 等按模型 id 关键字,
-    ComfyUI 本地/Comfy Cloud 按所选工作流文件名(如 comfy/video-minimax-h3-ref2va-api.json),
-    RunningHub 运行方式按缓存的云端工作流 JSON 是否含 MiniMaxH3ReferenceToVideo 节点。"""
+    """生效视频渠道是否 MiniMax H3(引擎无关,统一按 is_minimax_h3「名字含 minimax 与 h3」判定):
+    OpenRouter/MiniMax/RunningHub 直绑等按生效模型 id,ComfyUI 本地/Comfy Cloud 按所选工作流
+    文件名(如 comfy/video-minimax-h3-ref2va-api.json),RunningHub 工作流方式按缓存的云端
+    工作流 JSON 全文(节点类名 MiniMaxH3ReferenceToVideo 或任何含 minimax+h3 的节点/标题均命中)。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
     if (v.get("provider") or "volcengine") == "comfyui":
         comfy = v.get("comfyui") or {}
         if (comfy.get("mode") or "local") in RH_BASES:
-            return "MiniMaxH3ReferenceToVideo" in _rh_cached_workflow(comfy)
+            return is_minimax_h3(_rh_cached_workflow(comfy))
         return is_minimax_h3(comfy.get("workflow") or "")
     return is_minimax_h3(active_video_model(cfg))
 
 
-# MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频渠道为 H3 时注入
-# 加载指令给 prompt agent;经 npx skills add MiniMax-AI/MiniMax-H3 安装后随仓库分发
+# MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频模型/工作流名含 minimax+h3
+# 时注入加载指令给 prompt agent(H3 开源,任何渠道跑 H3 都触发);经 npx skills add
+# MiniMax-AI/MiniMax-H3 安装后随仓库分发
 H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
 
 
@@ -1026,7 +1030,7 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
     "08-video-gen/prompt/sd20-prompt-writing": {
         "kind": "conditional", "condition": "生效视频模型为 Seedance 2.0 系列"},
     "08-video-gen/prompt/h3-prompt-writing": {
-        "kind": "conditional", "condition": "生效视频渠道为 MiniMax H3"},
+        "kind": "conditional", "condition": "生效视频模型/工作流名含 minimax 与 h3(任意渠道)"},
     "08-video-gen/prompt/performance-direction": {
         "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
     "08-video-gen/upscale/minimax-regenerate-2k": {
@@ -2521,8 +2525,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
             and skill_enabled("08-video-gen/prompt/h3-prompt-writing"):
         p += f"""
 
-## MiniMax H3 提示词写作 Skill(仅当生效视频渠道为 MiniMax H3 时注入,当前已生效)
-当前项目的视频生成走 MiniMax H3(OpenRouter/MiniMax API 或 ComfyUI H3 工作流)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
+## MiniMax H3 提示词写作 Skill(仅当生效视频模型/工作流名含 minimax+h3 时注入,当前已生效)
+当前项目的视频生成走 MiniMax H3 模型(H3 为开源模型,不限渠道:MiniMax/OpenRouter API、RunningHub、ComfyUI H3 工作流等)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
 - Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
 - 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签

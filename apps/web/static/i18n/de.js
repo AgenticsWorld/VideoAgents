@@ -47,7 +47,7 @@ window.I18N_DICT = {
 "通用": "generisch",
 "生效视频模型为 Seedance 2.5": "aktives Videomodell ist Seedance 2.5",
 "生效视频模型为 Seedance 2.0 系列": "aktives Videomodell ist die Seedance-2.0-Reihe",
-"生效视频渠道为 MiniMax H3": "aktiver Videokanal ist MiniMax H3",
+"生效视频模型/工作流名含 minimax 与 h3(任意渠道)": "Name des aktiven Videomodells/Workflows enthält minimax und h3 (beliebiger Kanal)",
 "MiniMax API Key 已配置": "MiniMax API Key konfiguriert",
 "视频渠道为 ComfyUI RunningHub 运行方式": "Videokanal ist ComfyUI im RunningHub-Modus",
 "发布到 YouTube": "auf YouTube veröffentlichen",
