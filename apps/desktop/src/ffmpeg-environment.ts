@@ -28,6 +28,19 @@ interface InstallCommand {
   manager: 'homebrew' | 'winget'
 }
 
+export const FFMPEG_DOWNLOAD_URL = 'https://ffmpeg.org/download.html'
+
+/** 缺少自动安装所需的包管理器（WinGet / Homebrew）：调用方据此改为引导手动下载。 */
+export class FfmpegInstallerMissingError extends Error {
+  readonly manager: 'homebrew' | 'winget'
+  readonly downloadUrl = FFMPEG_DOWNLOAD_URL
+  constructor(manager: 'homebrew' | 'winget', message: string) {
+    super(message)
+    this.name = 'FfmpegInstallerMissingError'
+    this.manager = manager
+  }
+}
+
 function executableCandidates(
   name: string,
   environment: NodeJS.ProcessEnv,
@@ -93,7 +106,10 @@ export function ffmpegInstallCommand(
     if (arch !== 'x64') throw new Error(`不支持自动安装 FFmpeg 的 Windows 架构：${arch}（需要 x64）`)
     const winget = findExecutable('winget', environment, platform)
     if (!winget) {
-      throw new Error('未找到 WinGet。请从 Microsoft Store 安装“应用安装程序”，然后重新启动 VideoAgents。')
+      throw new FfmpegInstallerMissingError(
+        'winget',
+        `未找到 WinGet，暂时无法安装 FFmpeg（AI 自动剪辑需要），这不会影响 VideoAgents 的其他功能。\n请从 FFmpeg 官方下载后手动安装 ${FFMPEG_DOWNLOAD_URL}`,
+      )
     }
     return {
       executable: winget,

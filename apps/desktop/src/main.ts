@@ -18,7 +18,7 @@ import {
   ServiceRegion, serviceRegion, UserAccount,
 } from './desktop-auth'
 import {desktopExecutablePath} from './shell-environment'
-import {inspectFfmpegEnvironment, installFfmpeg} from './ffmpeg-environment'
+import {FfmpegInstallerMissingError, inspectFfmpegEnvironment, installFfmpeg} from './ffmpeg-environment'
 
 let webServer: ChildProcess | undefined
 let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
@@ -463,7 +463,20 @@ async function offerFfmpegEnvironmentSetup(): Promise<void> {
     closeRuntimeProgress()
     const message = error instanceof Error ? error.message : String(error)
     console.warn(`[ffmpeg] optional setup failed: ${message}`)
-    if (window && !window.isDestroyed()) {
+    if (window && !window.isDestroyed() && error instanceof FfmpegInstallerMissingError) {
+      // 缺包管理器（Windows 无 WinGet）：改为引导用户去 FFmpeg 官网手动下载安装。
+      const answer = await dialog.showMessageBox(window, {
+        type: 'warning',
+        title: 'FFmpeg 安装未完成',
+        message: '暂时无法安装 FFmpeg',
+        detail: message,
+        buttons: ['前往下载', '暂时跳过'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      })
+      if (answer.response === 0) void shell.openExternal(error.downloadUrl)
+    } else if (window && !window.isDestroyed()) {
       await dialog.showMessageBox(window, {
         type: 'warning',
         title: 'FFmpeg 安装未完成',
