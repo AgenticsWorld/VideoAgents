@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Scene layout packs: the 3x3 multi-angle sheet (`grid_9views.png`) now follows explicit camera-diversity rules written into `layout.json#views` before generation. Each view carries a new `angle` field (`eye` | `low` | `high_oblique`); no tile may be a vertical top-down view (that is the job of `layout_top.png`, and the plan image was being copied into tiles), `(camera_from, looking_at)` pairs must be pairwise distinct, at most 3 tiles may look at the same landmark, at most 4 `wide` tiles, at least 2 `close`/`detail` tiles, at least 1 `low` tile, and at most 3 tiles may share the same ±30° camera bearing computed from landmark coordinates (so linear spaces such as alleys no longer yield seven near-identical corridor shots). The rules are self-checked by the environment-concept agent and documented in its SOUL, the grid template JSON (`view_rules`) and WORKFLOW.md; no new script check. Existing projects are unaffected until a scene is regenerated.
+
 ## [1.0.23] - 2026-08-24
 
 ### Changed

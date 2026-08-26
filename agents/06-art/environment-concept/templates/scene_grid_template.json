@@ -4,13 +4,14 @@
   "purpose": "场景 9 宫格多角度概念图版式模板:单次生成一张 3x3 九格 grid_9views.png,九格分别是同一场景空间从九个不同机位/角度看到的分镜级画面,与该场景俯视空间布局图 layout_top.png 严格同一空间(家具/门窗/地标位置一一对应)",
   "usage": [
     "先生成 layout_top.png(俯视空间布局图,无人),再以 layout_top.png 作第一张 --ref、本模板作第二张 --ref 生成 grid_9views.png(版式锚);refs/scenes/ 命中的用户参考图排在其后",
-    "九格语义(机位/看向/景别)由 agent 事先写进 layout.json#views(tile 1..9,与格位一一对应),生成 prompt 逐格描述;下游 storyboard 每镜 view_tile 与 prompt 的 [Image N] 格号引用都以 layout.json#views 为准",
+    "九格语义(机位/看向/景别/机位高度)由 agent 事先写进 layout.json#views(tile 1..9,与格位一一对应,每条 camera_from/looking_at/size/angle/desc_en),生成 prompt 逐格描述;下游 storyboard 每镜 view_tile 与 prompt 的 [Image N] 格号引用都以 layout.json#views 为准",
     "尺寸 2560x1440 起(恰达视频参考像素下限 3,686,400,火山硬限,WORKFLOW.md §9),严禁更低;定稿单张即下游场景多角度参考锚,不裁切子图",
-    "格位编号:左上=1、上中=2、右上=3、左中=4、正中=5、右中=6、左下=7、下中=8、右下=9(行优先)"
+    "格位编号:左上=1、上中=2、右上=3、左中=4、正中=5、右中=6、左下=7、下中=8、右下=9(行优先)",
+    "九格一律不出垂直俯视:俯视由 layout_top.png 专职,九格 angle 只在 {eye, low, high_oblique}(斜俯 ≤45°、仍见立面与天际线)内取值,desc_en 禁写 俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view;prompt 里明写第一张参考图仅作空间布局参考、任何一格不得画成俯视平面图(2026-08-26,前科 polan SCN-003/006 俯视图复刻进格)"
   ],
   "min_pixels": 3686400,
   "panels": [
-    { "tile": 1, "position": "左上", "content": "layout.json#views[tile=1] 指定的机位/看向/景别" },
+    { "tile": 1, "position": "左上", "content": "layout.json#views[tile=1] 指定的机位/看向/景别/机位高度" },
     { "tile": 2, "position": "上中", "content": "layout.json#views[tile=2]" },
     { "tile": 3, "position": "右上", "content": "layout.json#views[tile=3]" },
     { "tile": 4, "position": "左中", "content": "layout.json#views[tile=4]" },
@@ -20,5 +21,19 @@
     { "tile": 8, "position": "下中", "content": "layout.json#views[tile=8]" },
     { "tile": 9, "position": "右下", "content": "layout.json#views[tile=9]" }
   ],
-  "recommended_view_set": "覆盖四面墙/四角 + 主入口反打 + 至少一格特写地标(如壁炉/主桌),使任何分镜机位都能在九格中找到最近角度;室外场景按四方位 + 高低机位组织"
+  "view_rules": {
+    "since": "2026-08-26",
+    "note": "写 views 时自核(暂不入脚本机检);任何一条不满足先改 views 再出图。前科 polan:SCN-004/005 七格同一条街/巷轴雷同、SCN-003/006 俯视格混入",
+    "angle_enum": ["eye", "low", "high_oblique"],
+    "size_enum": ["wide", "medium", "close", "detail"],
+    "rules": [
+      "camera_from ≠ looking_at,且 (camera_from, looking_at) 九格两两不同",
+      "同一 looking_at ≤3 格",
+      "size=wide ≤4 格;size ∈ {close, detail} ≥2 格",
+      "angle=low ≥1 格;angle 不得为垂直俯视(无 top_down 取值)",
+      "方位角分散:以地标 xy 算 camera_from→looking_at 方位角(图上方 0°、顺时针;x 向右 y 向下,bearing = atan2(dx, -dy)),同一 ±30° 方位内 ≤3 格",
+      "desc_en 无 俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view 措辞"
+    ]
+  },
+  "recommended_view_set": "围合房间/广场:覆盖四面墙/四角 + 主入口反打 + ≥2 格地标特写(壁炉/主桌等)+ 1 格贴地低机位 + 至多 1 格斜俯高机位;线性空间(巷/街/路/走廊):轴向正反各 1–2 格即可,其余改垂直看墙(横穿轴线)的中景、地标特写、贴地低机位与斜俯——否则九格退化成同一条纵深;室外地貌:四方位 + 高低机位 + 地标特写。目标是任何分镜机位都能在九格中找到最近角度,而不是九格互相重复"
 }
