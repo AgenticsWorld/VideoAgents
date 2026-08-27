@@ -22,6 +22,7 @@ charset-normalizer==3.4.9
 click==8.4.2
     # via
     #   huggingface-hub
+    #   scenedetect
     #   uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via
@@ -68,13 +69,21 @@ numpy==2.4.6
     #   -r apps/desktop/runtime-requirements.in
     #   ctranslate2
     #   onnxruntime
+    #   opencv-python
+    #   scenedetect
     #   scipy
 onnxruntime==1.29.0
     # via faster-whisper
+opencv-python==5.0.0.93
+    # via scenedetect
 packaging==26.3
     # via
     #   huggingface-hub
     #   onnxruntime
+pillow==11.3.0
+    # via -r apps/desktop/runtime-requirements.in
+platformdirs==4.11.4
+    # via scenedetect
 protobuf==7.35.1
     # via onnxruntime
 pycparser==3.0 ; implementation_name != 'PyPy'
@@ -100,6 +109,8 @@ requests==2.34.2
     #   requests-toolbelt
 requests-toolbelt==1.0.0
     # via lark-oapi
+scenedetect==0.7.1
+    # via -r apps/desktop/runtime-requirements.in
 scipy==1.17.1
     # via -r apps/desktop/runtime-requirements.in
 setuptools==84.0.0
@@ -112,6 +123,7 @@ tqdm==4.70.0
     # via
     #   faster-whisper
     #   huggingface-hub
+    #   scenedetect
 typing-extensions==4.16.0
     # via
     #   anyio
@@ -131,3 +143,5 @@ uvicorn==0.51.0
     # via -r apps/desktop/runtime-requirements.in
 websockets==15.0.1
     # via lark-oapi
+yt-dlp==2026.7.4
+    # via -r apps/desktop/runtime-requirements.in
