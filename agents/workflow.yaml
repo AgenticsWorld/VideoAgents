@@ -230,7 +230,8 @@ phases:
       - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
       - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
-          outputs: ["directing/{ep}/shots/{shot}/composition.json"], validation: { qa: [11-qa/visual-qa] } }
+          outputs: ["directing/{ep}/shots/{shot}/composition.json"],
+          validation: { qa: [11-qa/visual-qa] } }
       - { id: p6-cinematography, agent: 07-directing/cinematography, depends_on: [p6-plan],
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
       - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots],

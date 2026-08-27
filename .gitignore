@@ -20,6 +20,8 @@ data/sfx/*
 !data/sfx/README.md
 
 # Runtime state
+.videoagents-web.log
+.claude/launch.json
 data/.videoagents/
 # 用户安装的插件(控制台上传 zip 落盘处,PLUGINS_DIR = DATA_DIR/plugins)
 data/plugins/

@@ -74,7 +74,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - `shot_id` 与 shot_list 一致;`subject.id` 是该镜合法角色 ID;
-- 九宫格/层次/视线字段齐全;`safe_area_ok` 基于 aspect_ratio.json 核对为真。
+- 九宫格/层次/视线字段齐全;`safe_area_ok` 基于 aspect_ratio.json 核对为真;
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80)**:
 - 叙事清晰(30):构图服务于该镜意图(压迫/孤立/亲密);
