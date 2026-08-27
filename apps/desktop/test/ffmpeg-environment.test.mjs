@@ -3,7 +3,7 @@ import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import {ffmpegInstallCommand} from '../dist/ffmpeg-environment.js'
+import {FFMPEG_DOWNLOAD_URL, FfmpegInstallerMissingError, ffmpegInstallCommand} from '../dist/ffmpeg-environment.js'
 
 function withTempDirectory(run) {
   const directory = mkdtempSync(path.join(tmpdir(), 'videoagents-ffmpeg-test-'))
@@ -56,9 +56,16 @@ test('unsupported architectures fail before invoking a package manager', () => {
   )
 })
 
-test('missing package managers produce actionable setup errors', () => {
+test('missing WinGet is a typed error that points at the official FFmpeg download', () => {
   assert.throws(
     () => ffmpegInstallCommand('win32', 'x64', {PATH: ''}),
-    /WinGet.*Microsoft Store/,
+    error => {
+      assert.ok(error instanceof FfmpegInstallerMissingError)
+      assert.equal(error.manager, 'winget')
+      assert.equal(error.downloadUrl, FFMPEG_DOWNLOAD_URL)
+      assert.match(error.message, /未找到 WinGet.*AI 自动剪辑需要.*不会影响 VideoAgents 的其他功能/s)
+      assert.ok(error.message.includes('https://ffmpeg.org/download.html'))
+      return true
+    },
   )
 })

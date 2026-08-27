@@ -745,6 +745,83 @@ async def events() -> StreamingResponse:
     )
 
 
+# ---------------- 素材库(设置→高级→素材库;data/footage/<name>/) ----------------
+
+@api.get("/footage/projects", tags=["footage"])
+async def footage_list() -> dict[str, Any]:
+    return await core.api_footage_list()
+
+
+@api.post("/footage/projects", tags=["footage"])
+async def footage_create(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_footage_create(body or {})
+
+
+@api.get("/footage/projects/{name}", tags=["footage"])
+async def footage_get(name: str) -> dict[str, Any]:
+    return await core.api_footage_get(name)
+
+
+@api.delete("/footage/projects/{name}", tags=["footage"])
+async def footage_delete(name: str) -> dict[str, Any]:
+    return await core.api_footage_delete(name)
+
+
+@api.post("/footage/projects/{name}/upload", tags=["footage"])
+async def footage_upload(
+    name: str, request: Request, upload_id: str = "", index: int = 0, total: int = 1,
+    filename: str = "video.mp4",
+) -> dict[str, Any]:
+    """分块上传:请求体即分块原始字节(与参考文件上传同款,避免 multipart 依赖)。"""
+    data = await request.body()
+    return await core.api_footage_upload(name, data, upload_id, index, total, filename)
+
+
+@api.post("/footage/projects/{name}/settings", tags=["footage"])
+async def footage_settings_set(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_settings_set(name, body)
+
+
+@api.post("/footage/projects/{name}/download", tags=["footage"])
+async def footage_download(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_download(name, body)
+
+
+@api.post("/footage/projects/{name}/reprocess", tags=["footage"])
+async def footage_reprocess(name: str) -> dict[str, Any]:
+    return await core.api_footage_reprocess(name)
+
+
+@api.post("/footage/projects/{name}/transcribe", tags=["footage"])
+async def footage_transcribe(name: str) -> dict[str, Any]:
+    return await core.api_footage_retranscribe(name)
+
+
+@api.post("/footage/projects/{name}/cancel", tags=["footage"])
+async def footage_cancel(name: str) -> dict[str, Any]:
+    return await core.api_footage_cancel(name)
+
+
+@api.post("/footage/projects/{name}/analyze-all", tags=["footage"])
+async def footage_analyze_all(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_footage_analyze_all(name, body or {})
+
+
+@api.post("/footage/projects/{name}/clips/{clip_id}", tags=["footage"])
+async def footage_clip_update(name: str, clip_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_clip_update(name, clip_id, body)
+
+
+@api.post("/footage/projects/{name}/clips/{clip_id}/analyze", tags=["footage"])
+async def footage_clip_analyze(name: str, clip_id: str) -> dict[str, Any]:
+    return await core.api_footage_clip_analyze(name, clip_id)
+
+
+@api.get("/footage/projects/{name}/files/{file_path:path}", tags=["footage"])
+async def footage_file(name: str, file_path: str) -> FileResponse:
+    return FileResponse(core.footage_file_path(name, file_path))
+
+
 app.include_router(api)
 
 

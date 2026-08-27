@@ -356,6 +356,28 @@ async def proxy_api(path: str, request: Request):
     )
 
 
+@app.post("/actions/open-footage-folder", include_in_schema=False)
+async def open_footage_folder(request: Request):
+    """素材库项目文件夹(data/footage/<name>)在系统文件管理器中打开。"""
+    payload = await request.json()
+    name = str(payload.get("name") or "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", name):
+        raise HTTPException(400, "Invalid footage project name")
+    root = (DATA_DIR / "footage").resolve()
+    folder = (root / name).resolve()
+    if folder.parent != root or not folder.is_dir():
+        raise HTTPException(404, "Footage project directory not found")
+    if sys.platform == "darwin":
+        command = ["open", str(folder)]
+    elif os.name == "nt":
+        os.startfile(folder)  # type: ignore[attr-defined]
+        return {"ok": True}
+    else:
+        command = ["xdg-open", str(folder)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True}
+
+
 @app.post("/actions/open-project-folder", include_in_schema=False)
 async def open_project_folder(request: Request):
     payload = await request.json()
@@ -414,6 +436,11 @@ async def clawbot():
 @app.get("/avatars")
 async def avatars():
     return _page("avatars.html")
+
+
+@app.get("/footage")
+async def footage():
+    return _page("footage.html")
 
 
 @app.get("/preview/{page}")

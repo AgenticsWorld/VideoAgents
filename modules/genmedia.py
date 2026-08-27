@@ -2153,7 +2153,9 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     if refs and (first or last):
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
     if refs and len(refs) > max_refs:
-        raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)}")
+        raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
+                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
+                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
     if audio_refs and len(audio_refs) > max_arefs:
         raise RuntimeError(f"参考音频最多 {max_arefs} 段({ver_name}),收到 {len(audio_refs)}")
     if audio_refs:
@@ -2983,7 +2985,9 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
                                "(火山引擎/BytePlus)渠道")
         max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
         if refs and len(refs) > max_refs:
-            raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)}")
+            raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
+                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
+                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
         if is_v25 and resolution and resolution not in ("480p", "720p"):
             print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
                   file=sys.stderr)

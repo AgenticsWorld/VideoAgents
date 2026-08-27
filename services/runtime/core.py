@@ -2352,7 +2352,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "**开启(默认)—— 场景布局包 + 人物动线标注流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
         "`layout_top.png` + 9 宫格多角度图 `grid_9views.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口);"
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
-        "shot-planning 继承并跑 `code/render_blocking_map.py` 渲染 `directing/epNN/blocking_maps/grpNNN.png`"
+        "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并**只准调用宿主 CLI** `code/render_blocking_map.py` 渲染 "
+        "`directing/epNN/blocking_maps/grpNNN.png`(图上只有字母与动线、无文字;禁止复制/改写到项目 code/ 或自绘)"
         "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
         "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
         "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
@@ -2451,12 +2452,12 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
+- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「分镜组设置」同步调高上限(refs_mandatory_le_cap)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
-- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**动线标注链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(render_blocking_map 图例已支持 CJK——2026-08-24 三订,角色名与 route 句会上图,中文可直接显示;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版)
+- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**动线标注链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(动线图上不带任何文字——2026-08-27 四订,只有字母标记与动线,route 句只进 prompt,无字体限制;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版)
 - 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
@@ -4004,6 +4005,107 @@ async def api_grpref_delete(body: dict):
     return {"deleted": ref, "refs": len(refs)}
 
 
+# 对白编号 → 台词索引(2026-08-27):story/episodes/<ep>/dialogue.md 是对白层权威定稿,
+# shot_list 的镜条目只带编号(dialogue_refs ["S04-D05"] / dialogue_ref "LN-ep01-01"),
+# 分镜预览要显示台词正文必须回这里解析。各项目 dialogue.md 由 agent 自由排版,兼容三种形态:
+#   ① 表格行 `| S04-D05 | 镜位 | CHAR-0005 | 通道 | 台词 | … |`(按表头「台词/对白/说话人」定列)
+#   ② 紧凑行 `[LN-ep01-01] 章墨(CHAR-0001)〔OV〕:台词 {emotion: …}`
+#   ③ 标题块 `### [LN-ep01-01] 章墨(CHAR-0001)` + `- **定稿**:**台词**`
+_DLG_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+$")
+_DLG_TEXT_COL = ("台词", "对白", "定稿", "line", "text")
+_DLG_SPK_COL = ("说话人", "角色", "speaker", "char")
+
+
+def _dialogue_index(text: str) -> dict[str, dict]:
+    """解析 dialogue.md,返回 {对白编号: {"speaker": CHAR-id 或名字, "text": 台词}}。"""
+    idx: dict[str, dict] = {}
+
+    def _put(did: str, speaker: str | None, line: str | None):
+        line = (line or "").strip().strip("*").strip()
+        if not did or not line or did in idx:
+            return
+        spk = (speaker or "").strip()
+        m = re.search(r"(CHAR-\d+)", spk)
+        idx[did] = {"speaker": m.group(1) if m else re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
+                    "text": line}
+
+    text_col = spk_col = None
+    cur_id = cur_spk = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if all(re.fullmatch(r":?-+:?", c or "-") for c in cells):
+                continue
+            if not cells or not _DLG_ID_RE.match(cells[0]):
+                # 表头:定位台词列 / 说话人列(排除「原句」「字数」等近似列)
+                low = [c.lower() for c in cells]
+                text_col = next((i for i, c in enumerate(low)
+                                 if any(k in c for k in _DLG_TEXT_COL)
+                                 and not any(k in c for k in ("原句", "字数", "编号", "id"))), None)
+                spk_col = next((i for i, c in enumerate(low) if any(k in c for k in _DLG_SPK_COL)), None)
+                continue
+            if text_col is not None and text_col < len(cells):
+                _put(cells[0], cells[spk_col] if spk_col is not None and spk_col < len(cells) else None,
+                     cells[text_col])
+            continue
+        m = re.match(r"^(?:#{1,6}\s*)?\[([A-Za-z][A-Za-z0-9-]+)\]\s*(.*)$", line)
+        if m and _DLG_ID_RE.match(m.group(1)):
+            rest = m.group(2)
+            # ② 同行带台词:说话人段与台词以全角/半角冒号分隔,尾随 {…} 元数据剔除
+            m2 = re.match(r"^(.*?)[:：]\s*(.+?)(?:\s*\{[^{}]*\})?\s*$", rest)
+            if m2 and m2.group(2) and not line.startswith("#"):
+                _put(m.group(1), m2.group(1), m2.group(2))
+                cur_id = None
+            else:
+                cur_id, cur_spk = m.group(1), rest
+            continue
+        if cur_id:
+            # ③ 标题块内的「定稿」条目
+            m3 = re.match(r"^-\s*\*\*定稿\*\*\s*[:：]\s*(.+)$", line)
+            if m3:
+                _put(cur_id, cur_spk, m3.group(1))
+                cur_id = None
+            elif line.startswith("#"):
+                cur_id = None
+    return idx
+
+
+def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dict]:
+    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text},
+    其次按 dialogue_refs / dialogue_ref 编号查 dialogue.md;编号解析不到的 text=None,
+    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。"""
+    lines: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(ref, speaker, text):
+        key = ref or text
+        if not key or key in seen:
+            return
+        seen.add(key)
+        lines.append({"ref": ref, "speaker": speaker, "text": text})
+
+    emb = s.get("dialogue")
+    for d in (emb if isinstance(emb, list) else [emb]):
+        if isinstance(d, dict) and d.get("text"):
+            _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
+    refs = []
+    for v in (s.get("dialogue_refs"), s.get("dialogue_ref"), draft.get("dialogue_refs"), draft.get("dialogue_ref")):
+        if isinstance(v, list):
+            refs.extend(x for x in v if isinstance(x, str))
+        elif isinstance(v, str) and v.strip():
+            refs.append(v.strip())
+    for r in refs:
+        toks = [t.strip() for t in re.split(r"[\s,;、/]+", r) if t.strip()]
+        if toks and all(_DLG_ID_RE.match(t) for t in toks):
+            for t in toks:
+                hit = idx.get(t) or {}
+                _add(t, hit.get("speaker"), hit.get("text"))
+        else:
+            _add(None, None, r)
+    return lines
+
+
 def _read_json_safe(p: Path):
     try:
         return json.loads(p.read_text())
@@ -4362,6 +4464,87 @@ async def api_preview_worldview(project: str = "demo"):
     return await asyncio.to_thread(_preview_worldview, project)
 
 
+def _shot_camera_move(base: Path, ep: str, sid: str) -> dict | None:
+    """镜级运镜(camera-movement agent 产出 directing/<ep>/shots/<sid>/camera.json,
+    2026-08-27 起进分镜预览):movement 是英文枚举(static/push_in/…),中文标签各项目
+    字段名不一(movement_label / movement_zh / movement_cn / movement_en),取首个非空;
+    没有标签时前端按枚举查词典。文件缺失(如混剪项目无运镜设计)返回 None,前端不渲染。"""
+    if not sid:
+        return None
+    c = _read_json_safe(_id_dir(base / "directing" / ep / "shots", sid) / "camera.json") or {}
+    if not c:
+        return None
+    _s = lambda k: c.get(k) if isinstance(c.get(k), str) and c.get(k).strip() else None
+    # offer 式项目把 movement 直接写成中文("固定机位")、movement_en 才是英文:
+    # 非 ASCII 的 movement 已可读,优先于 movement_en
+    mv = _s("movement")
+    label = next((v for v in (_s("movement_label"), _s("movement_zh"), _s("movement_cn"),
+                              mv if mv and not mv.isascii() else None,
+                              _s("movement_en")) if v), None)
+    out = {"movement": _s("movement"), "label": label, "rig": _s("rig"),
+           "speed_curve": _s("speed_curve"), "start_frame": _s("start_frame"),
+           "end_frame": _s("end_frame")}
+    return out if any(out.values()) else None
+
+
+def _pick_str(d: dict, *keys: str) -> str | None:
+    """取首个字符串字段;值为 dict 时退到其 level/summary/value 子字段(各项目 lighting.json
+    结构自由度大,如 polan2 的 contrast_ratio={level,note})。"""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, dict):
+            v = next((v[x] for x in ("level", "summary", "value", "label")
+                      if isinstance(v.get(x), str)), None)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def _group_lighting(base: Path, g: dict, sb_scene_tod: dict, cache: dict) -> dict | None:
+    """组光照(2026-08-27 起进分镜预览组卡):组 time_of_day + lighting_scheme_id →
+    bible/scenes/<scene_id>/lighting.json 的 schemes[].scheme_id(WORKFLOW time_anchor_ok
+    口径)。老项目组未钉 scheme_id 时按时段唯一匹配 condition.time_of_day 兜底
+    (时段来源依次:组 time_of_day → offer 式 lighting_condition.time_of_day →
+    storyboard 场块 time_of_day);全无时段字段的老项目取场景唯一方案;仍无命中只回
+    时段并标 resolved=False,前端灰显提示;完全无据返回 None,前端不渲染。"""
+    scene_id = g.get("scene_id") or ""
+    scheme_id = g.get("lighting_scheme_id") if isinstance(g.get("lighting_scheme_id"), str) else None
+    lc = g.get("lighting_condition") if isinstance(g.get("lighting_condition"), dict) else {}
+    tod = next((v for v in (g.get("time_of_day"), lc.get("time_of_day"),
+                            sb_scene_tod.get(scene_id)) if isinstance(v, str) and v.strip()), None)
+    if scene_id not in cache:
+        cache[scene_id] = (_read_json_safe(_id_dir(base / "bible" / "scenes", scene_id) / "lighting.json")
+                           if scene_id else {}) or {}
+    schemes = [s for s in (cache[scene_id].get("schemes") or []) if isinstance(s, dict)]
+    hit, source = None, None
+    if scheme_id:
+        hit = next((s for s in schemes if (s.get("scheme_id") or s.get("id")) == scheme_id), None)
+        source = "scheme_id"
+    if hit is None and tod:
+        cands = [s for s in schemes
+                 if isinstance((s.get("condition") or {}).get("time_of_day"), str)
+                 and (tod in s["condition"]["time_of_day"] or s["condition"]["time_of_day"] in tod)]
+        if len(cands) == 1:
+            hit, source = cands[0], "time_of_day"
+    if hit is None and not tod and not scheme_id:
+        # 2026-07-20 前的老项目(如 thedoor)组/场块都无时段字段:场景只有一套方案时唯一可选
+        if len(schemes) == 1:
+            hit, source = schemes[0], "single_scheme"
+            cond_tod = (hit.get("condition") or {}).get("time_of_day")
+            tod = cond_tod if isinstance(cond_tod, str) else None
+        else:
+            return None
+    hit = hit or {}
+    return {"time_of_day": tod, "scheme_id": scheme_id or _pick_str(hit, "scheme_id", "id"),
+            "label": _pick_str(hit, "label", "name"),
+            "key_source": _pick_str(hit, "key_source", "key_light"),
+            "direction": _pick_str(hit, "direction"),
+            "color_temp": _pick_str(hit, "color_temp", "color_temperature", "color_temperature_range"),
+            "contrast": _pick_str(hit, "contrast", "contrast_ratio"),
+            "prompt_fragment": _pick_str(hit, "prompt_fragment_en", "prompt_fragment"),
+            "source": source, "resolved": bool(hit)}
+
+
 def _preview_storyboard(project: str, ep: str):
     """分镜设定聚合:分集列表 + 指定集的剧本/分镜表/每镜关键帧与成片视频。"""
     base = _proj_base(project)
@@ -4434,6 +4617,11 @@ def _preview_storyboard(project: str, ep: str):
             if isinstance(dr, dict) and dr.get("order") is not None:
                 drafts[(sc.get("scene_no"), dr["order"])] = dr
 
+    # 场块时段索引(组未钉 lighting_scheme_id 的老项目按时段兜底匹配光照方案)
+    sb_scene_tod = {sc.get("scene_id"): sc.get("time_of_day")
+                    for sc in sb.get("scenes", [])
+                    if isinstance(sc, dict) and sc.get("scene_id")}
+
     def _shot_draft(s: dict) -> dict:
         m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
@@ -4458,6 +4646,10 @@ def _preview_storyboard(project: str, ep: str):
                      if isinstance(s, dict) and isinstance(s.get("costumes"), dict)}
     cont = (_read_json_safe(base / "directing" / ep / "continuity.json")
             or _read_json_safe(base / "directing" / ep / "continuity_plan.json") or {})
+    # 组间尾帧锚(continuity-planning SOUL 职责 1):group_transitions[].anchor ∈ {last_frame, none};
+    # shot_list 的 continuity_from 只是组序(前一组 id),跨场景硬切也有值,不等于「续接尾帧」
+    cont_trans = {t.get("to_group"): t for t in (cont.get("group_transitions") or [])
+                  if isinstance(t, dict) and t.get("to_group")}
     cont_states = {st.get("shot_id"): st for st in (cont.get("costume_states") or [])
                    if isinstance(st, dict) and st.get("shot_id")}
 
@@ -4488,20 +4680,57 @@ def _preview_storyboard(project: str, ep: str):
                          "skip_reason": r.get("skip_reason") or "", "blocked_on": r.get("blocked_on") or "",
                          "source": source})
         return rows
+    # 组出场生物(2026-08-27):creatures_union → bible/creatures/index.json 名字 + 概念库 sheet 有无,
+    # 预览页组卡只发 🐎 文字 chip(缺 sheet 黄标)、不贴 sheet 缩略——参考图由 prompt 工位按章节选阶段变体
+    # sheet_<stage>.png 写进组 refs,prompt 前贴图只会与 pipeline_refs 同图双显
+    cre_index = _read_json_safe(base / "bible" / "creatures" / "index.json") or {}
+    cre_name = {c.get("id"): (c.get("name") or c.get("id"))
+                for c in cre_index.get("creatures", []) if isinstance(c, dict) and c.get("id")}
+
+    def _creature_rows(ids) -> list[dict]:
+        rows = []
+        for cid in (ids or []):
+            if not isinstance(cid, str):
+                continue
+            cdir = base / "assets" / "concepts" / "creatures" / cid
+            sheet = cdir / "sheet.png"
+            rel = f"assets/concepts/creatures/{cid}/sheet.png"
+            rows.append({"id": cid, "name": cre_name.get(cid) or cid, "known": cid in cre_name,
+                         "url": f"/projects/{base.name}/{rel}?v={int(sheet.stat().st_mtime)}" if sheet.is_file() else None,
+                         "file": rel if sheet.is_file() else None,
+                         "variants": sorted(f.name for f in cdir.glob("sheet_*.png")) if cdir.is_dir() else []})
+        return rows
     # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
     cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
+    # 对白正文(2026-08-27):镜条目的编号回 dialogue.md 解析成台词,预览页显示台词而非编号
+    dlg_idx = _dialogue_index(_read_text(f"story/episodes/{ep}/dialogue.md") or "")
     shots = []
     for s in (sl.get("shots") or []):
         if not isinstance(s, dict):
             continue
         sid = s.get("shot_id") or ""
+        dlines = _shot_dialogue_lines(s, _shot_draft(s), dlg_idx)
+        raw_ref = s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref")
+        for ln in dlines:
+            ln["speaker_name"] = cname.get(ln.get("speaker")) or ln.get("speaker")
         shots.append({k: s.get(k) for k in (
             "shot_id", "scene_no", "scene_id", "duration_s", "size",
-            "camera_position", "characters", "costumes", "is_dialogue", "dialogue_ref",
+            "camera_position", "characters", "creatures", "costumes", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
-            "dialogue_ref": s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref"),
+            # 机位:规约字段 camera_position;有的项目(offer)agent 自创写成 camera,
+            # 镜条目与 storyboard 草稿同名兼容(2026-08-27)
+            "camera_position": next((v for v in (s.get("camera_position"), s.get("camera"),
+                                                 _shot_draft(s).get("camera_position"),
+                                                 _shot_draft(s).get("camera"))
+                                     if isinstance(v, str) and v.strip()), None),
+            # 编号归一成字符串(storyboard 草稿里有的项目存数组,前端 esc() 会拼成 "S04-D05,S04-D06")
+            "dialogue_ref": (" / ".join(str(x) for x in raw_ref) if isinstance(raw_ref, list) else raw_ref)
+                            or " / ".join(ln["ref"] or ln["text"] for ln in dlines) or None,
+            "dialogue_lines": dlines,
             "content": _shot_content(s),
+            # 运镜(2026-08-27):镜级 camera.json,预览页 📷 机位下方 🎥 行
+            "camera_move": _shot_camera_move(base, ep, sid),
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips
                       if sid and _id_name_match(sid, c["name"], any_segment=True)],
@@ -4510,6 +4739,8 @@ def _preview_storyboard(project: str, ep: str):
     # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、
     # 切变边界与尾帧来自 clips/<grp>.meta.json
     groups = []
+    lighting_cache: dict[str, dict] = {}
+    ref_cap = max_group_ref_images(base.name)
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
@@ -4527,17 +4758,22 @@ def _preview_storyboard(project: str, ep: str):
         anchor_sizes = ({p.stat().st_size for p in kdir.iterdir()
                          if p.is_file() and p.suffix.lower() in IMG_EXTS}
                         if kdir.is_dir() else set())
-        for r in (pd.get("refs") or []):
+        for i, r in enumerate(pd.get("refs") or [], 1):
             f = base / r
             if not f.is_file():
+                # 缺文件的 ref(典型:前组尾帧 grpNNN.last_frame.png——prompt 先于视频产出,
+                # 要等前组出片后由 --return-last-frame 落盘):下发占位条目保住 [Image N] 序号,
+                # 预览页渲染 ⏳ 占位格,免得组卡张数与 Prompt 面板 refs 数对不上被误判丢图
+                pipeline_refs.append({"ref": r, "idx": i, "missing": True, "url": None,
+                                      "name": "/".join(r.split("/")[-2:])})
                 continue
             url = f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"
             if _grpref_user_added(pd, r):
-                user_refs.append({"ref": r, "name": f.name, "url": url})
+                user_refs.append({"ref": r, "idx": i, "name": f.name, "url": url})
             elif (not r.startswith(kf_prefix)
                   and f.stat().st_size not in anchor_sizes):
                 # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
-                pipeline_refs.append({"ref": r, "url": url,
+                pipeline_refs.append({"ref": r, "idx": i, "url": url,
                                       "name": "/".join(r.split("/")[-2:])})
         # 组人物动线俯视图(storyboard/shot-planning 的 blocking_map 经 code/render_blocking_map.py
         # 渲染,2026-08-19):prompt 尚未产出时也要在分镜预览可见(H3A 签字审看站位/动线),
@@ -4548,13 +4784,29 @@ def _preview_storyboard(project: str, ep: str):
             pipeline_refs.insert(0, {
                 "ref": bmap_rel, "name": f"blocking_map/{gid}.png",
                 "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
+        tr = cont_trans.get(gid) or {}
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
-            "characters_union", "has_dialogue", "continuity_from")} | {
+            "characters_union", "creatures_union", "has_dialogue", "continuity_from")} | {
+            # 组链 chip 三态:anchor last_frame=续接尾帧 / none=硬切不传尾帧 / 无 continuity 计划=只知前组;
+            # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
+            "continuity_anchor": tr.get("anchor") or None,
+            "continuity_anchor_reason": str(tr.get("anchor_reason") or tr.get("notes") or ""),
+            "has_prompt": bool(pd),
+            "tail_ref": next((r for r in (pd.get("refs") or [])
+                              if isinstance(r, str) and r.endswith(".last_frame.png")), None),
             "blocking_map": g.get("blocking_map"),
+            "creatures": _creature_rows(g.get("creatures_union")),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,
+            # refs 超项目上限(refs_mandatory_le_cap,2026-08-27):prompt 工位判 FAIL 时
+            # 落盘 status=blocked_refs_cap;预览页组卡黄条提示用户手动删减或换更高上限模型
+            "refs_total": len(pd.get("refs") or []),
+            "refs_cap": ref_cap,
+            "refs_blocked": (pd.get("status") == "blocked_refs_cap"
+                             or len(pd.get("refs") or []) > ref_cap),
+            "refs_blocked_reason": str(pd.get("blocked_reason") or ""),
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "caption_clips": [c for c in cap_clips
                               if gid and _id_name_match(gid, c["name"])],
@@ -4562,6 +4814,8 @@ def _preview_storyboard(project: str, ep: str):
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
             "costumes": _group_costumes(g),
+            # 组光照(2026-08-27):time_of_day + lighting_scheme_id → 场景 lighting.json 方案
+            "lighting": _group_lighting(base, g, sb_scene_tod, lighting_cache),
         })
     data["generation_groups"] = groups
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 beat_ref/scene 对位试听
@@ -8373,3 +8627,109 @@ async def api_watchdog_set(body: dict):
     save_state(STATE)
     sync_keepawake()    # 开/关项目自动运行随手校准防休眠
     return await api_watchdog_get(proj)
+
+
+# ---------------- 素材库(设置菜单「高级→素材库」:data/footage/<name>/) ----------------
+# 业务实现在 modules/footage_library.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
+# ServiceError 映射、默认 CLI 引擎规格(全局模型偏好 → 可执行文件)与界面语言的注入。
+
+def _footage_lib():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import footage_library  # noqa: WPS433
+    return footage_library
+
+
+def _footage_call(fn, *args, **kw):
+    lib = _footage_lib()
+    try:
+        return fn(lib, *args, **kw)
+    except lib.FootageLibError as exc:
+        raise ServiceError(exc.status, exc.detail) from exc
+
+
+def footage_engine_spec() -> dict:
+    """AI 画面分析用的引擎规格:当前全局默认引擎/模型(未设置回落 claude)。"""
+    pref = global_model_pref()
+    engine = pref["engine"] or "claude"
+    model = pref["model"]
+    if model.startswith("__"):
+        # 顶栏「智能分配」策略(__smart)不是具体模型:画面分析是单轮看图小活,取该引擎策略的 low 档
+        mode = SMART_MODE_BY_ENGINE.get(engine, "")
+        model = ((AM_MODE_MODELS.get(mode) or {}).get("low") or {}).get("model", "")
+    spec = {"engine": engine, "model": model, "permission_mode": PERMISSION_MODE,
+            "executable": resolve_cli_executable(engine) if engine != "deepagents" else None}
+    if engine == "deepagents":
+        da = resolve_deepagents()
+        spec["deepagents"] = {"python": deepagents_python(),
+                              "runner": str(ROOT / "modules" / "deepagents_runner.py"),
+                              "base_url": da["base_url"], "api_key": da["api_key"],
+                              "model": da["model"]}
+    return spec
+
+
+async def api_footage_list():
+    spec = footage_engine_spec()
+    return {"projects": _footage_call(lambda lib: lib.list_projects()),
+            "dir": str(_footage_lib().FOOTAGE_DIR), "engine": spec["engine"], "model": spec["model"]}
+
+
+async def api_footage_create(body: dict):
+    return _footage_call(lambda lib: lib.create_project((body or {}).get("name") or None))
+
+
+async def api_footage_get(name: str):
+    spec = footage_engine_spec()
+    return {**_footage_call(lambda lib: lib.get_project(name)),
+            "engine": spec["engine"], "model": spec["model"]}
+
+
+async def api_footage_settings_set(name: str, body: dict):
+    _footage_call(lambda lib: lib.update_settings(name, body or {}))
+    return await api_footage_get(name)
+
+
+async def api_footage_delete(name: str):
+    return await asyncio.to_thread(_footage_call, lambda lib: lib.delete_project(name))
+
+
+async def api_footage_upload(name: str, data: bytes, upload_id: str, index: int, total: int,
+                             filename: str):
+    return await asyncio.to_thread(
+        _footage_call, lambda lib: lib.receive_upload_chunk(name, data, upload_id, index, total, filename))
+
+
+async def api_footage_download(name: str, body: dict):
+    return _footage_call(lambda lib: lib.start_download(name, (body or {}).get("url", "")))
+
+
+async def api_footage_reprocess(name: str):
+    return _footage_call(lambda lib: lib.reprocess(name))
+
+
+async def api_footage_retranscribe(name: str):
+    return _footage_call(lambda lib: lib.retranscribe(name))
+
+
+async def api_footage_cancel(name: str):
+    return _footage_call(lambda lib: lib.cancel(name))
+
+
+async def api_footage_clip_update(name: str, clip_id: str, body: dict):
+    return _footage_call(lambda lib: lib.update_clip(name, clip_id, body or {}))
+
+
+async def api_footage_clip_analyze(name: str, clip_id: str):
+    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    return await asyncio.to_thread(
+        _footage_call, lambda lib: lib.analyze_clip(name, clip_id, spec, lang))
+
+
+async def api_footage_analyze_all(name: str, body: dict):
+    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    return _footage_call(lambda lib: lib.analyze_all(name, spec, lang, bool((body or {}).get("force"))))
+
+
+def footage_file_path(name: str, rel: str) -> Path:
+    return _footage_call(lambda lib: lib.resolve_file(name, rel))

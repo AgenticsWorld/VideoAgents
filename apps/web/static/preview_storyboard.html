@@ -83,7 +83,13 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .shot .content{margin:6px 0 4px}
 .shot .dlg{color:var(--yellow);font-size:13px;margin:4px 0}
+.shot .dlg b{font-weight:600;margin-right:2px}
+.shot .dlg-unresolved{color:var(--muted,#888)}
+.shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
+.shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
+.grp>.glight .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
 .grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:hidden}
@@ -94,6 +100,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.gmedia{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--border)}
 .grp>.gmedia .anchors{display:flex;gap:8px;flex-wrap:wrap}
 .grp>.gmedia .anchors img{height:120px;border-radius:6px;cursor:zoom-in;display:block}
+.grp>.gmedia .anchors .refph{height:120px;width:150px;box-sizing:border-box;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dim);font-size:11px;text-align:center;padding:6px;cursor:help}
+.grp>.gmedia .anchors .refph .big{font-size:22px}
 .grp>.gmedia video{height:210px;border-radius:6px;background:#000;display:block}
 .grp>.gmedia .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
 .grp>.gmedia .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
@@ -695,6 +703,47 @@ function renderEps(episodes){
   });
 }
 
+// 对白:后端已把 dialogue_refs 编号回 dialogue.md 解析成台词(dialogue_lines);
+// 解析不到正文的只剩编号,灰显编号提示回查 dialogue.md;老数据无 dialogue_lines 时退回 dialogue_ref 原样
+function dlgHtml(s){
+  const ls=s.dialogue_lines||[];
+  if(!ls.length)return s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:'';
+  return ls.map(l=>{
+    const spk=l.speaker_name||l.speaker;
+    if(!l.text)return `<div class="dlg dlg-unresolved" title="${esc(t('dialogue.md 中未找到该编号的台词'))}">💬 <span class="ref">${esc(l.ref||'')}</span></div>`;
+    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
+  }).join('');
+}
+// 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
+// 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
+// hover 显起幅→落幅。混剪等无运镜设计的项目 camera_move 为空,不渲染
+const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
+  pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
+  track:'跟拍',tracking:'跟拍',follow:'跟拍',truck:'横移',truck_left:'横移',truck_right:'横移',dolly:'移动',slide:'横移',
+  crane:'升降',boom:'升降',pedestal:'升降',orbit:'环绕',arc:'环绕',handheld:'手持',zoom_in:'变焦推',zoom_out:'变焦拉',
+  rack_focus:'变焦点',whip_pan:'甩镜',drone:'航拍',aerial:'航拍'};
+function camHtml(s){
+  const c=s.camera_move;if(!c)return '';
+  const k=MOVE_LABEL[String(c.movement||'').toLowerCase().replace(/[\s-]+/g,'_')];
+  const mv=c.label||(k?t(k):'')||c.movement||'';
+  const sub=[c.rig,c.speed_curve].filter(Boolean).join(' · ');
+  if(!mv&&!sub)return '';
+  const tip=[c.start_frame?t('起幅:')+c.start_frame:'',c.end_frame?t('落幅:')+c.end_frame:''].filter(Boolean).join('\n');
+  return `<div class="cam"${tip?` title="${esc(tip)}"`:''}>🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</div>`;
+}
+// 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
+// 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
+const clip1=(x,n)=>{x=String(x||'');return x.length>n?x.slice(0,n)+'…':x};
+function lightHtml(g){
+  const l=g.lighting;if(!l)return '';
+  const parts=[l.time_of_day,...(l.label?[l.label]:[l.key_source,l.direction,l.color_temp,l.contrast])]
+    .filter(Boolean).map(x=>clip1(x,48));
+  const tip=[l.scheme_id?t('光照方案 ')+l.scheme_id:'',l.label?[l.key_source,l.direction,l.color_temp,l.contrast].filter(Boolean).join(' · '):'',
+    l.prompt_fragment||''].filter(Boolean).join('\n');
+  const warn=l.resolved?'':(l.scheme_id?I18N.f('未在场景 lighting.json 找到方案 {id}',{id:l.scheme_id}):t('未钉光照方案'));
+  if(!parts.length&&!warn)return '';
+  return `<div class="glight"${tip?` title="${esc(tip)}"`:''}>💡 ${esc(parts.join(' · '))}${warn?`<span class="sub">${esc(warn)}</span>`:''}</div>`;
+}
 function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
@@ -703,6 +752,7 @@ function shotCard(s,grp){
   const vids=(s.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
   const chars=(s.characters||[]).join('、');
+  const cres=(s.creatures||[]).join('、');
   return `<div class="shot">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
     <div class="info">
@@ -710,10 +760,12 @@ function shotCard(s,grp){
         ${s.duration_s?`<span class="tag">${esc(s.duration_s)}s</span>`:''}
         ${s.size?`<span class="tag">${esc(s.size)}</span>`:''}
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+        ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
         <button class="editbtn" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发消息给总制片">✏️ 修改</button></div>
       <div class="content">${esc(s.content||'')}</div>
-      ${s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:''}
+      ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
+      ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
   </div>`;
@@ -730,7 +782,7 @@ async function avSync(){
   const d=LAST_DATA;
   if(!d)return;
   const refs=[...new Set((d.generation_groups||[]).flatMap(g=>
-    [...(g.user_refs||[]),...(g.pipeline_refs||[])].map(k=>k.ref).filter(Boolean)))];
+    [...(g.user_refs||[]),...(g.pipeline_refs||[])].filter(k=>!k.missing).map(k=>k.ref).filter(Boolean)))];
   if(!refs.length)return;
   const proj=$('#project').value.trim()||'demo';
   try{
@@ -756,6 +808,22 @@ const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
                  scenes:['/preview/scenes','查看场景预览:'],
                  props:['/preview/props','查看道具预览:'],
                  creatures:['/preview/creatures','查看生物预览:']};
+// 组链 chip:continuity_from 只是组序(前一组 id,跨场景硬切也有值),是否真传尾帧看 continuity 计划的
+// group_transitions[].anchor(last_frame / none);prompt 已落盘时以 refs 里有无 *.last_frame.png 为准,
+// 与 anchor 不一致打 ⚠(WORKFLOW:continuity_from 有值而 refs 无尾帧属元数据冗余,不算续接边界)
+const contChip=g=>{
+  if(!g.continuity_from)return '<span class="link">◦ 组链起点</span>';
+  const a=g.continuity_anchor, tail=!!g.tail_ref, from=g.continuity_from;
+  let txt, tip=g.continuity_anchor_reason||'';
+  if(a==='none'&&!(g.has_prompt&&tail))txt=I18N.f('✂ 硬切自 {g}(不传尾帧)',{g:from});
+  else if(a==='last_frame'||tail)txt=I18N.f('⛓ 续接 {g} 尾帧',{g:from});
+  else{txt=I18N.f('⛓ 前组 {g}',{g:from});tip=t('continuity 尚未定尾帧锚(continuity_plan.json group_transitions)');}
+  if(g.has_prompt&&a&&((a==='last_frame')!==tail)){
+    txt+=' ⚠';
+    tip=[tip,I18N.f('prompt refs 与 continuity 锚不一致:锚 {a},refs {r}',{a,r:tail?t('含前组尾帧'):t('无前组尾帧')})].filter(Boolean).join(' · ');
+  }
+  return `<span class="link" title="${esc(tip)}">${esc(txt)}</span>`;
+};
 const refFn=(icon,k)=>{
   const m=/^assets\/concepts\/(characters|scenes|props|creatures)\/([^/]+)\//.exec(k.ref||'');
   if(!m)return `<span class="fn">${icon} ${esc(k.name)}</span>`;
@@ -765,32 +833,54 @@ const refFn=(icon,k)=>{
 
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
-  const chars=(g.characters_union||[]).join('、');
+  // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
+  // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
+  // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
+  const BM_COLORS=['#e63946','#1d78d8','#2ea043','#f59e0b','#8e44ad','#00acc1','#e91e63','#795548'];
+  const bmChars=((g.blocking_map||{}).characters||[]).filter(c=>c&&c.id);
+  let chars='';
+  if(bmChars.length){
+    const seen=new Set(), parts=bmChars.map((c,i)=>{seen.add(c.id);
+      const tip=[c.label,c.route_en].filter(Boolean).join(' · ');
+      return `<span title="${esc(tip)}"><b style="color:${BM_COLORS[i%BM_COLORS.length]}">${'ABCDEFGH'[i]||'?'}</b> = ${esc(c.id)}</span>`;});
+    (g.characters_union||[]).filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('未在动线图登记(图上无字母)'))}">? = ${esc(id)}</span>`));
+    chars=parts.join('、');
+  }else chars=esc((g.characters_union||[]).join('、'));
   // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
-  // 有服装 sheet 的在媒体区并列展示并深链人物预览页该套服装卡
+  // 深链人物预览页该套服装卡。只发文字 chip、不在媒体区贴服装 sheet 缩略(2026-08-27):参考图由 prompt
+  // 工位按规约挑选写进组 refs(pipeline_refs 已展示),prompt 前在此贴 sheet 只会与之同图双显
   const proj0=$('#project').value.trim()||'demo';
   const cosChips=(g.costumes||[]).map(x=>{
     const miss=!x.url, why=x.blocked_on?t('阻塞:')+x.blocked_on:x.skip_reason?t('免出:')+x.skip_reason:!x.known?t('服装 ID 不在 bible/costumes.json'):miss?t('缺服装 sheet(§6A 回派 costume-concept)'):'';
     const tip=[I18N.f('{name} 本组着 {cos}',{name:x.char_name,cos:x.costume}),x.label!==x.costume?x.label:'',x.source==='continuity'?t('(来源 continuity 状态表,分镜层未定服装)'):'',why].filter(Boolean).join(' · ');
     return `<a class="tag" style="text-decoration:none;color:${miss&&!x.skip_reason?'var(--yellow)':'var(--text)'}" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(tip)}">👕 ${esc(x.char_name)}:${esc(x.label)}${x.default?'':' ✱'}${miss&&!x.skip_reason?' ⚠':''}</a>`;
   }).join('');
-  const cosImgs=(g.costumes||[]).filter(x=>x.url).map(x=>
-    `<div><img src="${esc(bust(x.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(t('查看服装 sheet:')+x.char+' / '+x.costume)}">👕 ${esc(x.char_name)} · ${esc(x.label)}</a></div></div>`);
+  // 组出场生物(creatures_union,2026-08-27):头部 🐎 chip 深链生物预览页;同上不贴 sheet 缩略,
+  // 生物 sheet 由 prompt 工位按章节选阶段变体写进组 refs
+  const creChips=(g.creatures||[]).map(x=>{
+    const miss=!x.url, why=!x.known?t('生物 ID 不在 bible/creatures/index.json'):miss?t('缺生物 sheet(§6A 回派 creature-concept)'):'';
+    const tip=[x.id,(x.variants||[]).length?I18N.f('阶段变体 {n} 张(prompt 按章节选用)',{n:x.variants.length}):'',why].filter(Boolean).join(' · ');
+    return `<a class="tag" style="text-decoration:none;color:${miss?'var(--yellow)':'var(--text)'}" href="/preview/creatures?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.id)}" title="${esc(tip)}">🐎 ${esc(x.name)}${miss?' ⚠':''}</a>`;
+  }).join('');
   const gloc=I18N.f('生成组 {ep}/{gid}(镜 {range}{sc};数据 directing/{ep}/shot_list.json 中 generation_groups group_id={gid},组视频 prompt assets/prompts/{ep}/{gid}.json,组视频 assets/clips/{ep}/{gid}.mp4)',
     {ep:EP,gid:g.group_id,range,sc:g.scene_id?I18N.f(' · 场景 {s}',{s:g.scene_id}):''});
   const sketches=(g.sketches||[]).map(k=>
     `<div><img src="${esc(k.url)}" loading="lazy" onclick="zoom(this.src)" style="background:#fff">
       <div class="cap" title="${esc(k.text)}"><span class="fn">🎨 ${esc(k.text||k.name)}</span>
       <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
+  // 参考图 tooltip 带 [Image N](组 prompt refs 数组下标+1,与正文引用同号)
+  const refTip=k=>(k.idx?`[Image ${k.idx}] `:'')+k.ref;
   const urefs=(g.user_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}">${refFn('🖼',k)}${avMark(k.ref)}
+      <div class="cap" title="${esc(refTip(k))}">${refFn('🖼',k)}${avMark(k.ref)}
       <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
   // 流水线/agent 直连写入组 refs 的参考图(概念图等):只展示不可删,删除接口本就仅限用户添加的
-  const prefs=(g.pipeline_refs||[]).map(k=>
-    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}">${refFn('📎',k)}${avMark(k.ref)}
+  // 缺文件的 ref(前组尾帧等,服务端 missing=true)渲染 ⏳ 占位格保住 [Image N] 序号,与 Prompt 面板张数对齐
+  const prefs=(g.pipeline_refs||[]).map(k=>k.missing
+    ?`<div><div class="refph" title="${esc(refTip(k)+(/last_frame\.png$/.test(k.ref)?' · '+t('前组尾帧:前组视频生成后由 --return-last-frame 落盘,届时自动出现在此'):''))}"><span class="big">⏳</span><span>${esc(/last_frame\.png$/.test(k.ref)?t('待前组出片'):t('文件不存在'))}</span></div>
+      <div class="cap" title="${esc(refTip(k))}"><span class="fn">📎 [Image ${esc(k.idx)}] ${esc(k.name)}</span></div></div>`
+    :`<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
+      <div class="cap" title="${esc(refTip(k))}">${refFn('📎',k)}${avMark(k.ref)}
       <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
@@ -799,21 +889,23 @@ function groupCard(g,inner){
   const capvids=(g.caption_clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  const media=(anchors.length||vids.length||capvids.length||sketches.length||urefs.length||prefs.length||cosImgs.length)?
-    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${cosImgs.length?`<div class="anchors">${cosImgs.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${capvids.join('')}${bounds}</div>`:'';
+  const media=(anchors.length||vids.length||capvids.length||sketches.length||urefs.length||prefs.length)?
+    `<div class="gmedia">${anchors.length?`<div class="anchors">${anchors.join('')}</div>`:''}${prefs.length?`<div class="anchors">${prefs.join('')}</div>`:''}${urefs.length?`<div class="anchors">${urefs.join('')}</div>`:''}${sketches.length?`<div class="anchors">${sketches.join('')}</div>`:''}${vids.join('')}${capvids.join('')}${bounds}</div>`:'';
   return `<div class="grp" id="a-g-${aid(g.group_id)}">
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
-      ${chars?`<span class="tag">${esc(chars)}</span>`:''}
-      ${cosChips}
-      ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
+      ${chars?`<span class="tag">${chars}</span>`:''}
+      ${cosChips}${creChips}
+      ${contChip(g)}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${lightHtml(g)}
+    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」',{n:g.refs_total,cap:g.refs_cap}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>
@@ -946,7 +1038,7 @@ function render(d){
       if(g){ // 组内首镜:渲染整组(组内镜卡就地内嵌;旁白卡插在锚定镜之前)
         // 导航徽标:🎨手稿 📝注释 💬对白 🎙旁白 🎬视频(计数,0 不显示)
         const gsids=g.shots||[];
-        const nDlg=gsids.filter(sid=>byId[sid]&&byId[sid].dialogue_ref).length;
+        const nDlg=gsids.reduce((a,sid)=>a+(byId[sid]?((byId[sid].dialogue_lines||[]).length||(byId[sid].dialogue_ref?1:0)):0),0);
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
         const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];

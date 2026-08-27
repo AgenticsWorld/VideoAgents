@@ -99,7 +99,7 @@ python3 code/render_blocking_map.py --project <slug> --scene <id> --check-only
   "checklist": { "architecture_match": true, "lighting_match": true, "style_match": true, "grid_matches_layout": true }
 }
 ```
-`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——render_blocking_map 图例已支持 CJK(三订),route_en(内含地标词)与角色名会上图、`name_en`/`desc_en` 本身不直接上图,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致;每条带 `camera_from`/`looking_at`(地标 id)/`size`(`wide`|`medium`|`close`|`detail`)/`angle`(`eye`|`low`|`high_oblique`)/`desc_en`,并满足职责 2 的九格机位规则(机位对两两不同、同一 looking_at ≤3、wide ≤4、close/detail ≥2、low ≥1、同一 ±30° 方位内 ≤3、无俯视措辞;2026-08-26,自核项、暂不入脚本机检)。
+`xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——动线图上不带任何文字(2026-08-27 四订,只有字母标记与动线),`name_en`/`desc_en`/route_en 只进 prompt,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条且与九格图格位一致;每条带 `camera_from`/`looking_at`(地标 id)/`size`(`wide`|`medium`|`close`|`detail`)/`angle`(`eye`|`low`|`high_oblique`)/`desc_en`,并满足职责 2 的九格机位规则(机位对两两不同、同一 looking_at ≤3、wide ≤4、close/detail ≥2、low ≥1、同一 ±30° 方位内 ≤3、无俯视措辞;2026-08-26,自核项、暂不入脚本机检)。
 
 ## 接受的工作指令(Work Order)
 
