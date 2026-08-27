@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "Esquema {id} não encontrado em lighting.json da cena",
 "未钉光照方案": "Nenhum esquema de iluminação fixado",
 "未在动线图登记(图上无字母)": "Não está no mapa de blocking (sem letra no mapa)",
+"生物 ID 不在 bible/creatures/index.json": "ID da criatura não está em bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "Falta a folha da criatura (§6A: reencaminhar para creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "{n} variante(s) de estágio (o prompt escolhe por capítulo)",
+"本镜出场生物(creatures)": "Criaturas neste plano (creatures)",
 };

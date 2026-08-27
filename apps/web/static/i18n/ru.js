@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "Схема {id} не найдена в lighting.json сцены",
 "未钉光照方案": "Схема освещения не закреплена",
 "未在动线图登记(图上无字母)": "Нет в карте мизансцены (без буквы на карте)",
+"生物 ID 不在 bible/creatures/index.json": "ID существа нет в bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "Нет листа существа (§6A: вернуть creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "Вариантов стадий: {n} (prompt выбирает по главе)",
+"本镜出场生物(creatures)": "Существа в этом кадре (creatures)",
 };

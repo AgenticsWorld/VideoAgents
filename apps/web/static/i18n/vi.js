@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "Không tìm thấy phương án {id} trong lighting.json của bối cảnh",
 "未钉光照方案": "Chưa chốt phương án ánh sáng",
 "未在动线图登记(图上无字母)": "Chưa đăng ký trong sơ đồ di chuyển (không có chữ cái trên sơ đồ)",
+"生物 ID 不在 bible/creatures/index.json": "ID sinh vật không có trong bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "Thiếu sheet sinh vật (§6A: giao lại creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "{n} biến thể giai đoạn (prompt chọn theo chương)",
+"本镜出场生物(creatures)": "Sinh vật xuất hiện trong cảnh này (creatures)",
 };

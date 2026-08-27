@@ -4676,6 +4676,25 @@ def _preview_storyboard(project: str, ep: str):
                          "skip_reason": r.get("skip_reason") or "", "blocked_on": r.get("blocked_on") or "",
                          "source": source})
         return rows
+    # 组出场生物(2026-08-27):creatures_union → bible/creatures/index.json 名字 + 概念库 sheet,
+    # prompt 前就在预览页可见(H3A 审看生物锚;prompt 阶段按章节选阶段变体 sheet_<stage>.png,此处展示基础 sheet)
+    cre_index = _read_json_safe(base / "bible" / "creatures" / "index.json") or {}
+    cre_name = {c.get("id"): (c.get("name") or c.get("id"))
+                for c in cre_index.get("creatures", []) if isinstance(c, dict) and c.get("id")}
+
+    def _creature_rows(ids) -> list[dict]:
+        rows = []
+        for cid in (ids or []):
+            if not isinstance(cid, str):
+                continue
+            cdir = base / "assets" / "concepts" / "creatures" / cid
+            sheet = cdir / "sheet.png"
+            rel = f"assets/concepts/creatures/{cid}/sheet.png"
+            rows.append({"id": cid, "name": cre_name.get(cid) or cid, "known": cid in cre_name,
+                         "url": f"/projects/{base.name}/{rel}?v={int(sheet.stat().st_mtime)}" if sheet.is_file() else None,
+                         "file": rel if sheet.is_file() else None,
+                         "variants": sorted(f.name for f in cdir.glob("sheet_*.png")) if cdir.is_dir() else []})
+        return rows
     # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
     cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
     # 对白正文(2026-08-27):镜条目的编号回 dialogue.md 解析成台词,预览页显示台词而非编号
@@ -4691,7 +4710,7 @@ def _preview_storyboard(project: str, ep: str):
             ln["speaker_name"] = cname.get(ln.get("speaker")) or ln.get("speaker")
         shots.append({k: s.get(k) for k in (
             "shot_id", "scene_no", "scene_id", "duration_s", "size",
-            "camera_position", "characters", "costumes", "is_dialogue", "dialogue_ref",
+            "camera_position", "characters", "creatures", "costumes", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
             # 机位:规约字段 camera_position;有的项目(offer)agent 自创写成 camera,
@@ -4756,8 +4775,9 @@ def _preview_storyboard(project: str, ep: str):
                 "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
-            "characters_union", "has_dialogue", "continuity_from")} | {
+            "characters_union", "creatures_union", "has_dialogue", "continuity_from")} | {
             "blocking_map": g.get("blocking_map"),
+            "creatures": _creature_rows(g.get("creatures_union")),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,

@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "لم يُعثر على المخطط {id} في lighting.json للمشهد",
 "未钉光照方案": "لم يُثبَّت مخطط إضاءة",
 "未在动线图登记(图上无字母)": "غير مسجّل في خريطة الحركة (لا حرف على الخريطة)",
+"生物 ID 不在 bible/creatures/index.json": "معرّف الكائن غير موجود في bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "ورقة الكائن مفقودة (§6A: إعادة الإسناد إلى creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "{n} نسخة مرحلية (يختارها الـ prompt حسب الفصل)",
+"本镜出场生物(creatures)": "الكائنات في هذه اللقطة (creatures)",
 };

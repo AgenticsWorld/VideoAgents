@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "Skema {id} tidak ditemukan di lighting.json adegan",
 "未钉光照方案": "Skema pencahayaan belum ditetapkan",
 "未在动线图登记(图上无字母)": "Belum terdaftar di peta blocking (tanpa huruf di peta)",
+"生物 ID 不在 bible/creatures/index.json": "ID makhluk tidak ada di bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "Sheet makhluk hilang (§6A: kirim ulang ke creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "{n} varian tahap (prompt memilih per bab)",
+"本镜出场生物(creatures)": "Makhluk dalam shot ini (creatures)",
 };

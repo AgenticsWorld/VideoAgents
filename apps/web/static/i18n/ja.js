@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "シーンの lighting.json にスキーム {id} が見つかりません",
 "未钉光照方案": "照明スキーム未確定",
 "未在动线图登记(图上无字母)": "動線図に未登録(図上に文字なし)",
+"生物 ID 不在 bible/creatures/index.json": "生物 ID が bible/creatures/index.json にありません",
+"缺生物 sheet(§6A 回派 creature-concept)": "生物シートなし(§6A で creature-concept に差し戻し)",
+"阶段变体 {n} 张(prompt 按章节选用)": "段階バリエーション {n} 枚(prompt が章ごとに選択)",
+"本镜出场生物(creatures)": "このショットの登場生物(creatures)",
 };

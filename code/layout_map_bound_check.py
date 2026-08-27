@@ -18,6 +18,8 @@
          本机检只读 prompt 文本、不读图;
       ⑥ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(角色主体定义句与 Map markers 句、
          动线图字母三者以 label 为唯一键;label 换词 = 模型对不上号);
+      ⑦ 生物独立态条目(id CRE-*,2026-08-27)与角色同规则:占字母、Map markers 句写 "<字母> = <label> (<CRE id>)"、
+         主体定义句 "<label>@Image N" 指向其 sheet;骑乘态(骑手 mounted)不占字母、不入此句;
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -35,7 +37,7 @@ from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
 DISCLAIM_RE = re.compile(r"do not (render|draw|reproduce) the map", re.I)
-LETTERS = "ABCDEFGH"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母
+LETTERS = "ABCDEFGHIJKL"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母(含生物独立态条目,2026-08-27)
 
 
 def norm(s: str) -> str:

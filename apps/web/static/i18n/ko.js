@@ -1527,4 +1527,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "장면 lighting.json 에서 스킴 {id}을(를) 찾을 수 없습니다",
 "未钉光照方案": "조명 스킴 미지정",
 "未在动线图登记(图上无字母)": "동선도에 미등록(지도에 문자 없음)",
+"生物 ID 不在 bible/creatures/index.json": "생물 ID가 bible/creatures/index.json에 없음",
+"缺生物 sheet(§6A 回派 creature-concept)": "생물 시트 없음(§6A creature-concept 재배정)",
+"阶段变体 {n} 张(prompt 按章节选用)": "단계 변형 {n}장(prompt가 장별로 선택)",
+"本镜出场生物(creatures)": "이 샷의 출연 생물(creatures)",
 };

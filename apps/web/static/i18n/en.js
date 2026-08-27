@@ -1539,4 +1539,8 @@ window.I18N_DICT = {
 "未在场景 lighting.json 找到方案 {id}": "Scheme {id} not found in the scene's lighting.json",
 "未钉光照方案": "No lighting scheme pinned",
 "未在动线图登记(图上无字母)": "Not in the blocking map (no letter on the map)",
+"生物 ID 不在 bible/creatures/index.json": "Creature ID not in bible/creatures/index.json",
+"缺生物 sheet(§6A 回派 creature-concept)": "Creature sheet missing (§6A: dispatch creature-concept)",
+"阶段变体 {n} 张(prompt 按章节选用)": "{n} stage variant sheet(s) (prompt picks by chapter)",
+"本镜出场生物(creatures)": "Creatures in this shot (creatures)",
 };
