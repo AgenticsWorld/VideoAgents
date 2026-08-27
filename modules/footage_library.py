@@ -805,7 +805,7 @@ def _normalize_result(result: dict) -> dict:
     return out
 
 
-_OBJ_RE = re.compile(r"\{[^{}]*\"content_description\"[^{}]*\}", re.S)
+_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 
 
 def _strings_in(obj, acc: list[str]) -> None:
@@ -819,26 +819,111 @@ def _strings_in(obj, acc: list[str]) -> None:
             _strings_in(v, acc)
 
 
-def extract_result_json(blob: str) -> dict | None:
-    """从引擎输出(JSON / JSONL 事件流 / 纯文本)里找最后一个含 content_description 的 JSON 对象。"""
-    candidates: list[str] = []
+def _iter_json_values(blob: str):
+    """引擎输出可能是:单个(多行美化)JSON、JSONL 事件流、或前后夹杂文本的若干 JSON 对象。"""
+    try:
+        yield json.loads(blob)
+        return
+    except json.JSONDecodeError:
+        pass
+    got = False
     for line in blob.splitlines():
         line = line.strip()
-        if line.startswith("{") or line.startswith("["):
+        if line[:1] in "{[":
             try:
-                _strings_in(json.loads(line), candidates)
-                continue
+                yield json.loads(line)
+                got = True
             except json.JSONDecodeError:
                 pass
-        candidates.append(line)
+    if got:
+        return
+    dec, i = json.JSONDecoder(), 0
+    while True:
+        j = blob.find("{", i)
+        if j < 0:
+            break
+        try:
+            obj, end = dec.raw_decode(blob, j)
+            yield obj
+            i = end
+        except json.JSONDecodeError:
+            i = j + 1
+
+
+def _balanced_object_at(text: str, key_pos: int) -> str | None:
+    """从 key 位置回溯到最近的 `{`,再按字符串感知的括号配平取到配对的 `}`。"""
+    start = text.rfind("{", 0, key_pos)
+    while start >= 0:
+        depth, in_str, esc = 0, False, False
+        for k in range(start, len(text)):
+            ch = text[k]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:k + 1]
+        start = text.rfind("{", 0, start)
+    return None
+
+
+def _result_from_text(text: str) -> dict | None:
+    """一段文本里找含 content_description 的 JSON 对象:先去 ``` 围栏整体解析,再括号配平兜底。"""
+    if "content_description" not in text:
+        return None
+    bodies = [m.group(1) for m in _FENCE_RE.finditer(text)] + [text]
+    found = None
+    for body in bodies:
+        body = body.strip()
+        if body.startswith("{"):
+            try:
+                obj = json.loads(body)
+                if isinstance(obj, dict) and "content_description" in obj:
+                    found = obj
+                    continue
+            except json.JSONDecodeError:
+                pass
+        pos = body.find('"content_description"')
+        while pos >= 0:
+            frag = _balanced_object_at(body, pos)
+            if frag:
+                try:
+                    obj = json.loads(frag)
+                    if isinstance(obj, dict) and "content_description" in obj:
+                        found = obj
+                except json.JSONDecodeError:
+                    pass
+            pos = body.find('"content_description"', pos + 1)
+    return found
+
+
+def extract_result_json(blob: str) -> dict | None:
+    """从引擎输出(单个 JSON / JSONL 事件流 / 纯文本)里找最后一个含 content_description 的 JSON 对象:
+    先把输出解析成 JSON 值并收集其中所有字符串(模型正文通常在 result/text 字段里,内容被二次转义),
+    对每个字符串与原文各试一次。"""
+    if isinstance(blob, dict) and "content_description" in blob:
+        return blob
+    candidates: list[str] = []
+    for val in _iter_json_values(blob):
+        if isinstance(val, dict) and "content_description" in val:
+            return val
+        _strings_in(val, candidates)
     candidates.append(blob)
     found = None
     for text in candidates:
-        for m in _OBJ_RE.finditer(text):
-            try:
-                found = json.loads(m.group(0))
-            except json.JSONDecodeError:
-                continue
+        obj = _result_from_text(text)
+        if obj is not None:
+            found = obj
     return found
 
 
@@ -905,17 +990,17 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
                 result = json.loads(outp.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 result = None
-        if result is None and engine == "claude" and stdout.strip().startswith("{"):
-            try:
-                top = json.loads(stdout)
-                result = extract_result_json(str(top.get("result") or ""))
-            except json.JSONDecodeError:
-                result = None
         if result is None:
             result = extract_result_json(stdout)
         if result is None:
-            detail = (stderr or stdout).strip()[-600:] or f"退出码 {r.returncode}"
-            raise FootageLibError(502, f"{engine} 未返回可解析的分析结果:{detail}")
+            log = image_path.with_suffix(".vision.log")
+            try:
+                log.write_text(f"$ {' '.join(cmd)}\n--- exit {r.returncode}\n--- stdout\n{stdout}\n--- stderr\n{stderr}\n",
+                               encoding="utf-8")
+            except OSError:
+                pass
+            detail = (stderr.strip() or stdout.strip())[-400:] or f"退出码 {r.returncode}"
+            raise FootageLibError(502, f"{engine} 未返回可解析的分析结果(原始输出见 {log.name}):{detail}")
         out = _normalize_result(result)
         out["_meta"] = {"engine": engine, "model": model, "elapsed_s": round(time.perf_counter() - started, 1),
                         "returncode": r.returncode}
