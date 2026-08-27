@@ -1637,4 +1637,11 @@ window.I18N_DICT = {
 "转写字幕": "Transkription",
 "AI 分析中": "KI-Analyse",
 "就绪": "Bereit",
+"AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)": "Engine und Sprachmodell der KI-Analyse: folgen der globalen Standard-Engine/dem Modell in der Kopfzeile („Smarte Zuweisung“ nimmt die niedrige Stufe dieser Engine)",
+"引擎默认模型": "Standardmodell der Engine",
+"🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)": "🤖 Frage für die KI-Analyse (projektspezifisch, wird beim Verlassen gespeichert; Kontaktbogen-Pfad, Antwortsprache und weitere technische Vorgaben werden automatisch vorangestellt)",
+"恢复默认": "Standard wiederherstellen",
+"留空则使用默认问题": "Leer = Standardfrage",
+"按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Erstellt aus mehreren Zeitpunkten des Clips einen Kontaktbogen, schickt ihn mit der Analysefrage des Projekts an die Standard-CLI-Engine und trägt den Antworttext direkt ins Notizfeld ein",
+"点「AI 自动分析」自动生成,或自己看画面后填写": "„KI-Analyse“ klicken oder den Clip ansehen und selbst schreiben",
 };

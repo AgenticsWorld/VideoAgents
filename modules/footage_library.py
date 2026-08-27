@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """素材库(footage library):本地视频 / YouTube·Bilibili 链接 → 智能镜头分割 → 分镜 clip
-+ 字幕(faster-whisper)+ 画面含义(联系图交给当前默认 CLI 引擎)→ 结构化 JSON。
++ 字幕(faster-whisper)+ 画面含义(联系图 + 项目可编辑的问题交给当前默认 CLI 引擎,纯文本回答直接入框)→ 结构化 JSON。
 
 源自 zhiyou-fenjing(镜构·智能分镜工作台)的宿主化移植:项目落盘 data/footage/<name>/,
 API 由 services/runtime/core.py 的 api_footage_* 薄封装调用;本模块本身不依赖 core。
@@ -230,9 +230,20 @@ def delete_project(name: str) -> dict:
     return {"ok": True, "name": name}
 
 
+def update_settings(name: str, fields: dict) -> dict:
+    """项目级设置:analysis_prompt(AI 分析问题,空=用默认)。"""
+    with _LOCK:
+        proj = load_project(name)
+        if "analysis_prompt" in fields:
+            proj["analysis_prompt"] = str(fields.get("analysis_prompt") or "").strip()[:4000]
+        save_project(name, proj)
+    return get_project(name)
+
+
 def get_project(name: str) -> dict:
     _reap(name)
     proj = load_project(name)
+    proj["analysis_prompt_default"] = DEFAULT_ANALYSIS_QUESTION
     doc = load_clips(name)
     proj["running"] = _job_running(name)
     proj["dir"] = str(project_dir(name))
@@ -758,65 +769,35 @@ def make_contact_sheet(name: str, clip_id: str) -> Path:
     return out
 
 
-VISION_SCHEMA = {
-    "type": "object", "additionalProperties": False,
-    "properties": {"content_description": {"type": "string"}, "key_information": {"type": "string"},
-                   "tags": {"type": "array", "items": {"type": "string"}},
-                   "visual_style": {"type": "string"}},
-    "required": ["content_description", "key_information", "tags", "visual_style"],
-}
+DEFAULT_ANALYSIS_QUESTION = (
+    "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分四行回答(不要 JSON、不要 markdown、不要代码块):\n"
+    "画面:这个分镜整体呈现了什么,包括人物、物体、场景、动作与镜头运动。\n"
+    "主旨:提炼这个分镜传递的主旨或叙事信息。\n"
+    "风格:画面整体风格——媒介/艺术形式、色彩、质感、光影与氛围。\n"
+    "标签:3 到 6 个简短的画面标签,用顿号分隔。\n"
+    "不要只根据单个画面下结论,看不清的内容不要猜测。"
+)
 
 
-def vision_prompt(image_path: Path, lang: str = "zh", subtitle: str = "") -> str:
+def build_vision_prompt(image_path: Path, question: str, lang: str = "zh") -> str:
+    """技术性前置(读图路径、联系图说明、语言、禁改文件)由程序拼在用户问题前,用户只维护问题本身。"""
     lang_name = LANG_NAMES.get(lang or "zh", "中文")
-    sub = f"\n(这个分镜的语音字幕仅供参考,不要复述:{subtitle[:300]})" if subtitle.strip() else ""
+    q = (question or "").strip() or DEFAULT_ANALYSIS_QUESTION
     return (
-        f"请读取图片文件 {image_path} 。这是一张由同一个视频分镜多个时间点(按 #1、#2… 顺序)拼成的画面联系图。"
-        "只分析画面,不分析音频/对白。综合多个画面后,只输出一个 JSON 对象(不要 markdown 代码块、不要任何解释文字),字段:\n"
-        "- content_description:这个分镜整体呈现了什么,包括人物、物体、场景、动作与镜头运动。\n"
-        "- key_information:提炼这个分镜传递的主旨或叙事信息。\n"
-        f"- tags:3 到 6 个简短的画面标签(字符串数组)。\n"
-        "- visual_style:画面整体风格——媒介/艺术形式、色彩、质感、光影与氛围。\n"
-        f"所有文字使用{lang_name}。不要只根据单个画面下结论,看不清的内容不要猜测。"
-        "不要修改任何文件,不要运行命令,读完图片直接回答。" + sub
+        f"请读取图片文件 {image_path} 。这是一张由同一个视频分镜多个时间点(按 #1、#2… 顺序)拼成的画面联系图。\n\n"
+        f"{q}\n\n"
+        f"回答用{lang_name},只输出回答正文(纯文本),不要任何前言、解释或格式标记。"
+        "不要修改任何文件,不要运行命令,读完图片直接回答。"
     )
 
 
-def compose_info(result: dict) -> str:
-    parts = []
-    if result.get("content_description"):
-        parts.append("画面:" + result["content_description"])
-    if result.get("key_information"):
-        parts.append("主旨:" + result["key_information"])
-    if result.get("visual_style"):
-        parts.append("风格:" + result["visual_style"])
-    if result.get("tags"):
-        parts.append("标签:" + "、".join(result["tags"]))
-    return "\n".join(parts)
+_FENCE_RE = re.compile(r"^```[a-zA-Z]*\s*\n?(.*?)\n?```\s*$", re.S)
 
 
-def _normalize_result(result: dict) -> dict:
-    out = {"content_description": str(result.get("content_description", "")).strip(),
-           "key_information": str(result.get("key_information", "")).strip(),
-           "tags": [str(t).strip() for t in (result.get("tags") or []) if str(t).strip()][:6],
-           "visual_style": str(result.get("visual_style", "")).strip()}
-    if not out["content_description"] and not out["key_information"] and not out["tags"]:
-        raise FootageLibError(502, "模型返回了空内容")
-    return out
-
-
-_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
-
-
-def _strings_in(obj, acc: list[str]) -> None:
-    if isinstance(obj, str):
-        acc.append(obj)
-    elif isinstance(obj, dict):
-        for v in obj.values():
-            _strings_in(v, acc)
-    elif isinstance(obj, list):
-        for v in obj:
-            _strings_in(v, acc)
+def _strip_fences(text: str) -> str:
+    text = (text or "").strip()
+    m = _FENCE_RE.match(text)
+    return m.group(1).strip() if m else text
 
 
 def _iter_json_values(blob: str):
@@ -850,90 +831,50 @@ def _iter_json_values(blob: str):
             i = j + 1
 
 
-def _balanced_object_at(text: str, key_pos: int) -> str | None:
-    """从 key 位置回溯到最近的 `{`,再按字符串感知的括号配平取到配对的 `}`。"""
-    start = text.rfind("{", 0, key_pos)
-    while start >= 0:
-        depth, in_str, esc = 0, False, False
-        for k in range(start, len(text)):
-            ch = text[k]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
+def _walk_strings(obj, key=None, acc=None):
+    """(key, value) 顺序遍历所有字符串叶子。"""
+    if acc is None:
+        acc = []
+    if isinstance(obj, str):
+        acc.append((key, obj))
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            _walk_strings(v, k, acc)
+    elif isinstance(obj, list):
+        for v in obj:
+            _walk_strings(v, key, acc)
+    return acc
+
+
+def extract_final_text(blob: str, prompt: str = "") -> str:
+    """从引擎输出里取最终回答文本(纯文本口径,不再解析 JSON 结构):
+    1. 事件里最后一个 result 字段(claude/grok/kimi 的 result 汇总、deepagents runner);
+    2. 否则最后一个非提示词回显的 text 字段(opencode/pi 事件流);
+    3. 否则整段输出。统一剥掉 ``` 围栏。"""
+    echo = (prompt or "").strip()[:60]
+    values = list(_iter_json_values(blob))
+    if not values:
+        return _strip_fences(blob)
+    result_text, last_text = "", ""
+    for val in values:
+        for key, text in _walk_strings(val):
+            t = text.strip()
+            if not t or (echo and echo in t):
                 continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start:k + 1]
-        start = text.rfind("{", 0, start)
-    return None
-
-
-def _result_from_text(text: str) -> dict | None:
-    """一段文本里找含 content_description 的 JSON 对象:先去 ``` 围栏整体解析,再括号配平兜底。"""
-    if "content_description" not in text:
-        return None
-    bodies = [m.group(1) for m in _FENCE_RE.finditer(text)] + [text]
-    found = None
-    for body in bodies:
-        body = body.strip()
-        if body.startswith("{"):
-            try:
-                obj = json.loads(body)
-                if isinstance(obj, dict) and "content_description" in obj:
-                    found = obj
-                    continue
-            except json.JSONDecodeError:
-                pass
-        pos = body.find('"content_description"')
-        while pos >= 0:
-            frag = _balanced_object_at(body, pos)
-            if frag:
-                try:
-                    obj = json.loads(frag)
-                    if isinstance(obj, dict) and "content_description" in obj:
-                        found = obj
-                except json.JSONDecodeError:
-                    pass
-            pos = body.find('"content_description"', pos + 1)
-    return found
-
-
-def extract_result_json(blob: str) -> dict | None:
-    """从引擎输出(单个 JSON / JSONL 事件流 / 纯文本)里找最后一个含 content_description 的 JSON 对象:
-    先把输出解析成 JSON 值并收集其中所有字符串(模型正文通常在 result/text 字段里,内容被二次转义),
-    对每个字符串与原文各试一次。"""
-    if isinstance(blob, dict) and "content_description" in blob:
-        return blob
-    candidates: list[str] = []
-    for val in _iter_json_values(blob):
-        if isinstance(val, dict) and "content_description" in val:
-            return val
-        _strings_in(val, candidates)
-    candidates.append(blob)
-    found = None
-    for text in candidates:
-        obj = _result_from_text(text)
-        if obj is not None:
-            found = obj
-    return found
+            if key == "result":
+                result_text = t
+            elif key in ("text", "content", "output_text"):
+                last_text = t
+    return _strip_fences(result_text or last_text or blob)
 
 
 def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
                       timeout: int = 240) -> dict:
-    """用当前默认 CLI 引擎做一次性画面分析。
+    """用当前默认 CLI 引擎做一次性画面分析,返回 {"text": 纯文本回答, "_meta": {...}}。
 
     spec = {"engine", "model", "executable", "permission_mode", "deepagents": {python, runner, base_url, api_key}}
     claude/kimi/grok/opencode/pi:提示词里给图片绝对路径,由 CLI 自带的文件读取工具看图;
-    codex:走 `--image` + `--output-schema`;deepagents:runner 无看图能力,仅文本兜底。"""
+    codex:走 `--image` + `-o` 取最后一条消息;deepagents:runner 无看图能力,仅文本兜底。"""
     engine = str(spec.get("engine") or "claude")
     model = str(spec.get("model") or "")
     exe = spec.get("executable")
@@ -944,16 +885,13 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
     with tempfile.TemporaryDirectory(prefix="footage-vision-") as tmp:
         tmpd = Path(tmp)
         if engine == "codex":
-            schema = tmpd / "schema.json"
-            schema.write_text(json.dumps(VISION_SCHEMA), encoding="utf-8")
-            outp = tmpd / "out.json"
+            outp = tmpd / "out.txt"
             cmd = [exe, "exec", "--skip-git-repo-check", "--sandbox", "workspace-write",
-                   "-C", str(cwd), "--image", str(image_path), "--output-schema", str(schema),
-                   "-o", str(outp)]
+                   "-C", str(cwd), "--image", str(image_path), "-o", str(outp)]
             if model:
                 cmd += ["-c", f"model={model}"]
             cmd.append("-")
-            stdin_data = (prompt + "\n严格按照输出 JSON Schema 返回。").encode("utf-8")
+            stdin_data = prompt.encode("utf-8")
         elif engine == "kimi":
             cmd = [exe, "--output-format", "stream-json"] + (["-m", model] if model else []) + ["-p", prompt]
         elif engine == "opencode":
@@ -984,15 +922,12 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
             raise FootageLibError(504, f"{engine} 分析超时({timeout}s)") from exc
         stdout = (r.stdout or b"").decode("utf-8", errors="replace")
         stderr = (r.stderr or b"").decode("utf-8", errors="replace")
-        result = None
+        text = ""
         if engine == "codex" and outp.is_file() and outp.stat().st_size:
-            try:
-                result = json.loads(outp.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                result = None
-        if result is None:
-            result = extract_result_json(stdout)
-        if result is None:
+            text = _strip_fences(outp.read_text(encoding="utf-8"))
+        if not text:
+            text = extract_final_text(stdout, prompt)
+        if not text or (r.returncode != 0 and len(text) < 20):
             log = image_path.with_suffix(".vision.log")
             try:
                 log.write_text(f"$ {' '.join(cmd)}\n--- exit {r.returncode}\n--- stdout\n{stdout}\n--- stderr\n{stderr}\n",
@@ -1000,27 +935,25 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
             except OSError:
                 pass
             detail = (stderr.strip() or stdout.strip())[-400:] or f"退出码 {r.returncode}"
-            raise FootageLibError(502, f"{engine} 未返回可解析的分析结果(原始输出见 {log.name}):{detail}")
-        out = _normalize_result(result)
-        out["_meta"] = {"engine": engine, "model": model, "elapsed_s": round(time.perf_counter() - started, 1),
-                        "returncode": r.returncode}
-        return out
+            raise FootageLibError(502, f"{engine} 未返回分析文本(原始输出见 {log.name}):{detail}")
+        return {"text": text, "_meta": {"engine": engine, "model": model,
+                                        "elapsed_s": round(time.perf_counter() - started, 1),
+                                        "returncode": r.returncode}}
 
 
 def analyze_clip(name: str, clip_id: str, spec: dict, lang: str = "zh") -> dict:
-    """联系图 + 问题 → 默认 CLI 引擎 → 结果写入 info 框并落盘。"""
+    """联系图 + 项目的分析问题 → 默认 CLI 引擎 → 纯文本回答直接写入 info 框并落盘。"""
     d = project_dir(name)
     sheet = make_contact_sheet(name, clip_id)
-    doc = load_clips(name)
-    clip = _find_clip(doc, clip_id)
-    result = run_engine_vision(sheet, vision_prompt(sheet, lang, clip.get("subtitle", "")), spec, d)
+    question = str(load_project(name).get("analysis_prompt") or "").strip() or DEFAULT_ANALYSIS_QUESTION
+    result = run_engine_vision(sheet, build_vision_prompt(sheet, question, lang), spec, d)
     meta = result.pop("_meta", {})
     with _LOCK:
         doc = load_clips(name)
         clip = _find_clip(doc, clip_id)
-        clip["analysis"] = result
+        clip["analysis"] = {"text": result["text"], "question": question}
         clip["analysis_meta"] = meta
-        clip["info"] = compose_info(result)
+        clip["info"] = result["text"]
         clip["analyzed_at"] = _now()
         clip["updated_at"] = clip["analyzed_at"]
         save_clips(name, doc)

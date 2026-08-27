@@ -1637,4 +1637,11 @@ window.I18N_DICT = {
 "转写字幕": "Đang chuyển lời nói",
 "AI 分析中": "Đang phân tích AI",
 "就绪": "Sẵn sàng",
+"AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)": "Engine và mô hình ngôn ngữ dùng cho phân tích AI: theo engine/mô hình mặc định toàn cục ở thanh trên (“Phân bổ thông minh” dùng bậc thấp của engine đó)",
+"引擎默认模型": "mô hình mặc định của engine",
+"🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)": "🤖 Câu hỏi phân tích AI (riêng cho dự án này, tự lưu khi rời ô; đường dẫn ảnh tổng hợp, ngôn ngữ trả lời và các phần kỹ thuật được tự động thêm vào trước)",
+"恢复默认": "Khôi phục mặc định",
+"留空则使用默认问题": "Để trống sẽ dùng câu hỏi mặc định",
+"按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Ghép nhiều thời điểm của clip thành ảnh tổng hợp, gửi cùng câu hỏi phân tích của dự án tới engine CLI mặc định, và điền thẳng văn bản trả lời vào ô ghi chú rồi tự lưu",
+"点「AI 自动分析」自动生成,或自己看画面后填写": "Bấm “Phân tích AI” để tạo tự động, hoặc xem clip rồi tự viết",
 };

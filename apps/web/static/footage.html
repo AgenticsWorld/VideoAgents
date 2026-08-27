@@ -99,6 +99,11 @@ textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid 
 textarea.info{min-height:96px}
 .clip .err{color:var(--red);font-size:12px;white-space:pre-wrap}
 .sheet-link{font-size:12px}
+.prompt-box{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.prompt-box label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prompt-box label .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
+.prompt-box label .saved.on{opacity:1}
+.prompt-box textarea{min-height:120px}
 @media (max-width:760px){.clip{grid-template-columns:1fr}.clip .thumb{width:100%}}
 </style>
 </head>
@@ -108,7 +113,7 @@ textarea.info{min-height:96px}
   <h1>🎞 素材库</h1>
   <span class="pill">视频 → 智能镜头分割 → 分镜 clip + 字幕 + 画面含义(结构化 JSON)</span>
   <div class="spacer"></div>
-  <span id="engine-chip" class="pill" title="AI 自动分析所用引擎:设置→全局默认引擎/模型"></span>
+  <span id="engine-chip" class="pill" title="AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)"></span>
 </header>
 <main>
   <div id="msg"></div>
@@ -173,6 +178,10 @@ textarea.info{min-height:96px}
         <!-- 源信息 + 操作 -->
         <div id="src-box" style="display:none">
           <div class="meta" id="src-meta"></div>
+          <div class="prompt-box">
+            <label>🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)<span class="saved">✓ 已保存</span><button class="small" id="prompt-reset" style="margin-left:auto">恢复默认</button></label>
+            <textarea id="analysis-prompt" placeholder="留空则使用默认问题"></textarea>
+          </div>
           <div class="toolbar" style="margin-top:10px">
             <button id="analyze-all-btn" title="对所有还没有画面信息的分镜逐个调用默认 CLI 引擎分析(后台运行)">🤖 全部 AI 分析</button>
             <button id="retranscribe-btn" title="重新语音转文字并覆盖各分镜字幕框">🎙 重新转写字幕</button>
@@ -199,6 +208,7 @@ function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls|
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);const h=Math.floor(m/60);return (h?h+':':'')+String(h?m%60:m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 function fmtDate(iso){if(!iso)return '';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleString()}
 function chip(status,running){const cls=RUNNING.has(status)||running?'run':status==='ready'?'ready':status==='failed'?'failed':'empty';return `<span class="chip ${cls}">${esc(t(STATUS_LABEL[status]||status||'未导入'))}</span>`}
+function setEngineChip(r){$('#engine-chip').textContent=t('分析引擎:')+(r.engine||'claude')+' · '+(r.model||t('引擎默认模型'))}
 function fileUrl(name,rel){return `${API}/${encodeURIComponent(name)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`}
 
 /* ---------- 路由:#p=<项目名> ---------- */
@@ -213,7 +223,7 @@ async function showList(){
   try{
     const r=await api(API);
     $('#list-dir').textContent=r.dir||'';
-    $('#engine-chip').textContent=t('分析引擎:')+(r.engine||'claude');
+    setEngineChip(r);
     const rows=r.projects||[];
     $('#list-total').textContent=I18N.f(t('共 {n} 个项目'),{n:rows.length});
     if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
@@ -261,6 +271,9 @@ async function refresh(full){
   try{p=await api(`${API}/${encodeURIComponent(CUR)}`)}catch(e){$('#proj-err').textContent=t('读取失败:')+e.message;return}
   if(p.name!==CUR)return;
   PROJ=p;
+  if(p.engine)setEngineChip(p);
+  const pt=$('#analysis-prompt');
+  if(document.activeElement!==pt&&pt.dataset.orig===pt.value){pt.value=p.analysis_prompt||'';pt.dataset.orig=pt.value;pt.placeholder=(p.analysis_prompt_default||'').split('\n')[0]+'…'}
   const running=RUNNING.has(p.status)||p.running;
   $('#proj-status').outerHTML=chip(p.status,p.running);$('#proj-view .chip').id='proj-status';
   const hasSource=!!(p.source&&p.source.file);
@@ -323,6 +336,16 @@ $('#cancel-btn').onclick=async()=>{try{await api(`${API}/${encodeURIComponent(CU
 $('#reimport-btn').onclick=()=>{if(PROJ&&PROJ.clip_count&&!confirm(t('重新导入会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;$('#input-box').dataset.force='1';$('#input-box').style.display='';$('#input-box').scrollIntoView({behavior:'smooth'})};
 $('#reprocess-btn').onclick=async()=>{if(!confirm(t('重新分割会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/reprocess`,{});refresh(true)}catch(e){msg(e.message,'err')}};
 $('#retranscribe-btn').onclick=async()=>{if(!confirm(t('重新转写会覆盖各分镜的字幕框,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+const promptTa=$('#analysis-prompt');promptTa.dataset.orig='';
+async function savePrompt(){
+  if(promptTa.value===promptTa.dataset.orig)return;
+  try{const p=await api(`${API}/${encodeURIComponent(CUR)}/settings`,{analysis_prompt:promptTa.value});promptTa.value=p.analysis_prompt||'';promptTa.dataset.orig=promptTa.value;
+    const sv=promptTa.previousElementSibling.querySelector('.saved');sv.classList.add('on');setTimeout(()=>sv.classList.remove('on'),1500)}
+  catch(e){msg(t('保存失败:')+e.message,'err')}
+}
+promptTa.addEventListener('blur',savePrompt);
+promptTa.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();promptTa.blur()}});
+$('#prompt-reset').onclick=()=>{promptTa.value=(PROJ&&PROJ.analysis_prompt_default)||'';savePrompt()};
 $('#analyze-all-btn').onclick=async()=>{try{const r=await api(`${API}/${encodeURIComponent(CUR)}/analyze-all`,{});if(!r.started)msg(t('所有分镜都已有画面信息(逐个点「AI 自动分析」可重新生成)'),'ok');refresh(true)}catch(e){msg(t('AI 分析失败:')+e.message,'err')}};
 
 /* ---------- 分镜卡片 ---------- */
@@ -336,12 +359,12 @@ function clipCard(c){
     </div>
     <div class="fields">
       <div class="head"><b>${esc(c.title||c.id)}</b><span class="hint">${esc(c.id)}</span>
-        <button class="small primary ai-btn" onclick="analyzeClip('${esc(c.id)}')" title="${t('按分镜多时间点拼成联系图,连同问题发给当前默认 CLI 引擎,结果填入信息框并自动保存')}">🤖 ${t('AI 自动分析')}</button>
+        <button class="small primary ai-btn" onclick="analyzeClip('${esc(c.id)}')" title="${t('按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存')}">🤖 ${t('AI 自动分析')}</button>
         <span class="st">${c.analyzed_at?t('已分析 ')+esc(fmtDate(c.analyzed_at))+(c.analysis_meta&&c.analysis_meta.engine?` · ${esc(c.analysis_meta.engine)}${c.analysis_meta.model?'/'+esc(c.analysis_meta.model):''}`:''):''}</span></div>
       <label>${t('字幕(语音转文字,可编辑)')}<span class="saved">✓ ${t('已保存')}</span></label>
       <textarea class="sub" data-field="subtitle" placeholder="${t('这个分镜没有识别到语音;可手动填写')}">${esc(c.subtitle)}</textarea>
       <label>${t('画面信息(AI 分析或人工填写,可编辑)')}<span class="saved">✓ ${t('已保存')}</span></label>
-      <textarea class="info" data-field="info" placeholder="${t('点「AI 自动分析」自动生成,或自己看画面后填写:画面内容 / 主旨 / 风格 / 标签')}">${esc(c.info)}</textarea>
+      <textarea class="info" data-field="info" placeholder="${t('点「AI 自动分析」自动生成,或自己看画面后填写')}">${esc(c.info)}</textarea>
       <div class="err"></div>
     </div>
   </div>`;

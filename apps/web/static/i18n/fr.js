@@ -1637,4 +1637,11 @@ window.I18N_DICT = {
 "转写字幕": "Transcription",
 "AI 分析中": "Analyse IA",
 "就绪": "Prêt",
+"AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)": "Moteur et modèle de langage utilisés pour l'analyse IA : suivent le moteur/modèle global de la barre supérieure (« Attribution intelligente » prend le palier bas de ce moteur)",
+"引擎默认模型": "modèle par défaut du moteur",
+"🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)": "🤖 Question d'analyse IA (propre à ce projet, enregistrée à la perte de focus ; le chemin de la planche contact, la langue de réponse et le cadrage technique sont ajoutés automatiquement)",
+"恢复默认": "Rétablir par défaut",
+"留空则使用默认问题": "Vide = question par défaut",
+"按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Assemble une planche contact à partir de plusieurs instants du clip, l'envoie avec la question d'analyse du projet au moteur CLI par défaut et place le texte de la réponse dans la case notes",
+"点「AI 自动分析」自动生成,或自己看画面后填写": "Cliquez « Analyse IA » pour générer, ou regardez le clip et écrivez vous-même",
 };

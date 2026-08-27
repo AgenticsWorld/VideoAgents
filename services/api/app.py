@@ -777,6 +777,11 @@ async def footage_upload(
     return await core.api_footage_upload(name, data, upload_id, index, total, filename)
 
 
+@api.post("/footage/projects/{name}/settings", tags=["footage"])
+async def footage_settings_set(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_settings_set(name, body)
+
+
 @api.post("/footage/projects/{name}/download", tags=["footage"])
 async def footage_download(name: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_footage_download(name, body)

@@ -1637,4 +1637,11 @@ window.I18N_DICT = {
 "转写字幕": "Mentranskripsi",
 "AI 分析中": "Analisis AI berjalan",
 "就绪": "Siap",
+"AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)": "Mesin dan model bahasa untuk analisis AI: mengikuti mesin/model default global di bilah atas (“Penugasan cerdas” memakai tingkat rendah mesin tersebut)",
+"引擎默认模型": "model default mesin",
+"🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)": "🤖 Pertanyaan analisis AI (khusus proyek ini, tersimpan otomatis saat fokus hilang; path lembar kontak, bahasa jawaban, dan bagian teknis lain ditambahkan otomatis di depan)",
+"恢复默认": "Kembalikan default",
+"留空则使用默认问题": "Kosongkan untuk memakai pertanyaan default",
+"按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Menyusun lembar kontak dari beberapa momen klip, mengirimnya bersama pertanyaan analisis proyek ke mesin CLI default, lalu mengisi kotak catatan langsung dengan teks jawabannya",
+"点「AI 自动分析」自动生成,或自己看画面后填写": "Klik “Analisis AI” untuk membuat otomatis, atau tonton klip lalu tulis sendiri",
 };

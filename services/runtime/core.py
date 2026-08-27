@@ -8670,8 +8670,9 @@ def footage_engine_spec() -> dict:
 
 
 async def api_footage_list():
+    spec = footage_engine_spec()
     return {"projects": _footage_call(lambda lib: lib.list_projects()),
-            "dir": str(_footage_lib().FOOTAGE_DIR), "engine": footage_engine_spec()["engine"]}
+            "dir": str(_footage_lib().FOOTAGE_DIR), "engine": spec["engine"], "model": spec["model"]}
 
 
 async def api_footage_create(body: dict):
@@ -8679,7 +8680,14 @@ async def api_footage_create(body: dict):
 
 
 async def api_footage_get(name: str):
-    return _footage_call(lambda lib: lib.get_project(name))
+    spec = footage_engine_spec()
+    return {**_footage_call(lambda lib: lib.get_project(name)),
+            "engine": spec["engine"], "model": spec["model"]}
+
+
+async def api_footage_settings_set(name: str, body: dict):
+    _footage_call(lambda lib: lib.update_settings(name, body or {}))
+    return await api_footage_get(name)
 
 
 async def api_footage_delete(name: str):
