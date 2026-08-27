@@ -1531,4 +1531,5 @@ window.I18N_DICT = {
 "缺生物 sheet(§6A 回派 creature-concept)": "Planche de créature manquante (§6A : renvoyer à creature-concept)",
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} variante(s) d'étape (le prompt choisit par chapitre)",
 "本镜出场生物(creatures)": "Créatures présentes dans ce plan (creatures)",
+"⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} images de référence dépassent la limite de {cap} de ce groupe : les ancres obligatoires seules ne tiennent pas. Supprimez manuellement des images de référence de ce groupe, ou passez à un modèle de génération vidéo avec une limite plus élevée (ex. Seedance 2.5) et ajustez les « Paramètres des groupes de plans » en conséquence",
 };

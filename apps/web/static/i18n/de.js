@@ -1531,4 +1531,5 @@ window.I18N_DICT = {
 "缺生物 sheet(§6A 回派 creature-concept)": "Kreatur-Sheet fehlt (§6A: creature-concept beauftragen)",
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} Stadien-Varianten (Prompt wählt nach Kapitel)",
 "本镜出场生物(creatures)": "Kreaturen in dieser Einstellung (creatures)",
+"⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} Referenzbilder überschreiten das Limit dieser Gruppe von {cap}: allein die Pflicht-Anker passen nicht hinein. Entfernen Sie manuell Referenzbilder dieser Gruppe oder wechseln Sie zu einem Videogenerierungsmodell mit höherem Referenzbild-Limit (z. B. Seedance 2.5) und passen Sie die Gruppeneinstellungen entsprechend an",
 };

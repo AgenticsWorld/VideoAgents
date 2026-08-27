@@ -1531,4 +1531,5 @@ window.I18N_DICT = {
 "缺生物 sheet(§6A 回派 creature-concept)": "Falta la hoja de la criatura (§6A: reasignar a creature-concept)",
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} variante(s) de etapa (el prompt elige por capítulo)",
 "本镜出场生物(creatures)": "Criaturas en este plano (creatures)",
+"⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} imágenes de referencia superan el límite de {cap} de este grupo: solo los anclajes obligatorios ya no caben. Elimine manualmente imágenes de referencia de este grupo, o cambie a un modelo de generación de vídeo con un límite más alto (p. ej. Seedance 2.5) y ajuste la «Configuración de grupos de planos» en consecuencia",
 };

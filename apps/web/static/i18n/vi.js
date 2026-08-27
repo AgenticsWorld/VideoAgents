@@ -1531,4 +1531,5 @@ window.I18N_DICT = {
 "缺生物 sheet(§6A 回派 creature-concept)": "Thiếu sheet sinh vật (§6A: giao lại creature-concept)",
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} biến thể giai đoạn (prompt chọn theo chương)",
 "本镜出场生物(creatures)": "Sinh vật xuất hiện trong cảnh này (creatures)",
+"⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} ảnh tham chiếu vượt giới hạn {cap} của nhóm này: riêng các neo bắt buộc đã không đủ chỗ. Hãy tự tay bớt ảnh tham chiếu của nhóm này, hoặc chuyển sang mô hình tạo video có giới hạn ảnh tham chiếu cao hơn (ví dụ Seedance 2.5) và cập nhật «Cài đặt nhóm cảnh» tương ứng",
 };

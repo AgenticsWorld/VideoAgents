@@ -2452,7 +2452,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验
+- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「分镜组设置」同步调高上限(refs_mandatory_le_cap)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -4735,6 +4735,7 @@ def _preview_storyboard(project: str, ep: str):
     # 切变边界与尾帧来自 clips/<grp>.meta.json
     groups = []
     lighting_cache: dict[str, dict] = {}
+    ref_cap = max_group_ref_images(base.name)
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
@@ -4781,6 +4782,13 @@ def _preview_storyboard(project: str, ep: str):
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
             "user_refs": user_refs,
             "pipeline_refs": pipeline_refs,
+            # refs 超项目上限(refs_mandatory_le_cap,2026-08-27):prompt 工位判 FAIL 时
+            # 落盘 status=blocked_refs_cap;预览页组卡黄条提示用户手动删减或换更高上限模型
+            "refs_total": len(pd.get("refs") or []),
+            "refs_cap": ref_cap,
+            "refs_blocked": (pd.get("status") == "blocked_refs_cap"
+                             or len(pd.get("refs") or []) > ref_cap),
+            "refs_blocked_reason": str(pd.get("blocked_reason") or ""),
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "caption_clips": [c for c in cap_clips
                               if gid and _id_name_match(gid, c["name"])],
