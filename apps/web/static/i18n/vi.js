@@ -445,6 +445,7 @@ window.I18N_DICT = {
 "对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟": "Lưu trữ đối tượng (Volcano TOS/Alibaba OSS/Tencent COS/tương thích S3): video tham chiếu V2V được truyền cho Ark qua URL ký sẵn",
 "对象存储托管:V2V 参考视频(--ref-video)经预签名 URL 传给方舟": "Lưu trữ đối tượng: video tham chiếu V2V (--ref-video) được truyền cho Ark qua URL ký sẵn",
 "对这个分镜提修改意见,发消息给总制片": "Góp ý chỉnh sửa cho phân cảnh này, gửi tin nhắn cho Nhà sản xuất",
+"dialogue.md 中未找到该编号的台词": "Không tìm thấy lời thoại có mã này trong dialogue.md",
 "对这个生成组提修改意见,发消息给总制片": "Góp ý chỉnh sửa cho nhóm tạo sinh này, gửi tin nhắn cho Nhà sản xuất",
 "对这条旁白提修改意见,发消息给总制片": "Góp ý chỉnh sửa cho đoạn thuyết minh này, gửi tin nhắn cho Nhà sản xuất",
 "导演意图注释:保存后以 Director's note 句注入本组 video_prompt(重出生效);清空保存=移除注入": "Chú thích ý đồ đạo diễn: sau khi lưu sẽ chèn vào video_prompt của nhóm này dưới dạng câu Director's note (tạo lại mới có hiệu lực); xóa trống rồi lưu = gỡ phần chèn",

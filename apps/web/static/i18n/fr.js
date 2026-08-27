@@ -445,6 +445,7 @@ window.I18N_DICT = {
 "对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟": "Hébergement en stockage objet (Volcano TOS/Alibaba OSS/Tencent COS/compatible S3) : la vidéo de référence V2V est transmise à Ark via une URL présignée",
 "对象存储托管:V2V 参考视频(--ref-video)经预签名 URL 传给方舟": "Hébergement en stockage objet : la vidéo de référence V2V (--ref-video) est transmise à Ark via une URL présignée",
 "对这个分镜提修改意见,发消息给总制片": "Donner des retours sur ce shot, envoyer un message au Producer",
+"dialogue.md 中未找到该编号的台词": "Aucune réplique avec cet identifiant trouvée dans dialogue.md",
 "对这个生成组提修改意见,发消息给总制片": "Donner des retours sur ce groupe de génération, envoyer un message au Producer",
 "对这条旁白提修改意见,发消息给总制片": "Donner des retours sur cette narration, envoyer un message au Producer",
 "导演意图注释:保存后以 Director's note 句注入本组 video_prompt(重出生效);清空保存=移除注入": "Note d'intention du réalisateur : après enregistrement, injectée comme phrase « Director's note » dans le video_prompt du groupe (effective à la régénération) ; vider puis enregistrer = retirer l'injection",

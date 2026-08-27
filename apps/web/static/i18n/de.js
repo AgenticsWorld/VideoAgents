@@ -445,6 +445,7 @@ window.I18N_DICT = {
 "对象存储托管(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容):V2V 参考视频经预签名 URL 传给方舟": "Objektspeicher-Hosting (Volcano TOS/Alibaba OSS/Tencent COS/S3-kompatibel): V2V-Referenzvideos werden per vorsignierter URL an Ark übergeben",
 "对象存储托管:V2V 参考视频(--ref-video)经预签名 URL 传给方舟": "Objektspeicher-Hosting: V2V-Referenzvideos (--ref-video) werden per vorsignierter URL an Ark übergeben",
 "对这个分镜提修改意见,发消息给总制片": "Änderungswünsche zu diesem Shot als Nachricht an den Producer senden",
+"dialogue.md 中未找到该编号的台词": "In dialogue.md wurde keine Zeile mit dieser ID gefunden",
 "对这个生成组提修改意见,发消息给总制片": "Änderungswünsche zu dieser Generierungsgruppe als Nachricht an den Producer senden",
 "对这条旁白提修改意见,发消息给总制片": "Änderungswünsche zu dieser Narration als Nachricht an den Producer senden",
 "导演意图注释:保存后以 Director's note 句注入本组 video_prompt(重出生效);清空保存=移除注入": "Regieanmerkung: wird nach dem Speichern als Director's-note-Satz in den video_prompt dieser Gruppe injiziert (wirksam beim Neugenerieren); leer speichern = Injektion entfernen",

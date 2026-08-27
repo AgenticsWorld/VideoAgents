@@ -22,6 +22,10 @@ All notable public changes to VideoAgents are documented here.
 - Desktop (Windows): when the optional FFmpeg auto-install cannot run because WinGet is missing, the failure dialog no longer sends users to the Microsoft Store and a restart. It now explains that FFmpeg is only needed for AI auto-editing and nothing else in VideoAgents is affected, points at the official download page (https://ffmpeg.org/download.html) for a manual install, and offers **前往下载** (opens the page in the browser) / **暂时跳过**. Other install failures keep the previous generic dialog.
 - Scene top-down layout image (`layout_top.png`) prompt guidance: the environment-concept SOUL now prescribes true-nadir orthographic wording (no `bird's-eye`), describing doors and windows as gaps in the wall lines rather than by their elevation features (door leaves, bars, lattices — which a model can only satisfy by laying them flat on the floor), explicitly asserting the near (bottom) wall, and adding matching negative terms. Landmark coordinates for openings are calibrated to the wall-line gap, never to a door drawn on the floor.
 
+### Fixed
+
+- Storyboard preview: shot dialogue now shows the actual lines instead of bare IDs such as `S04-D05` / `LN-ep01-01`. The preview API resolves `dialogue_refs` / `dialogue_ref` against `story/episodes/<ep>/dialogue.md` (table rows, `[ID] speaker: line` lines, and `### [ID]` + `**定稿**` blocks) and returns `dialogue_lines` (speaker name + text); embedded `dialogue{text}` entries are used directly, legacy projects that wrote the line text into `dialogue_ref` render unchanged, and IDs missing from dialogue.md fall back to the greyed ID. Array-valued `dialogue_ref` is joined with ` / ` instead of being stringified as `S04-D05,S04-D06`.
+
 ## [1.0.23] - 2026-08-24
 
 ### Changed

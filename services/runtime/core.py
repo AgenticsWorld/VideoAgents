@@ -4004,6 +4004,107 @@ async def api_grpref_delete(body: dict):
     return {"deleted": ref, "refs": len(refs)}
 
 
+# 对白编号 → 台词索引(2026-08-27):story/episodes/<ep>/dialogue.md 是对白层权威定稿,
+# shot_list 的镜条目只带编号(dialogue_refs ["S04-D05"] / dialogue_ref "LN-ep01-01"),
+# 分镜预览要显示台词正文必须回这里解析。各项目 dialogue.md 由 agent 自由排版,兼容三种形态:
+#   ① 表格行 `| S04-D05 | 镜位 | CHAR-0005 | 通道 | 台词 | … |`(按表头「台词/对白/说话人」定列)
+#   ② 紧凑行 `[LN-ep01-01] 章墨(CHAR-0001)〔OV〕:台词 {emotion: …}`
+#   ③ 标题块 `### [LN-ep01-01] 章墨(CHAR-0001)` + `- **定稿**:**台词**`
+_DLG_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+$")
+_DLG_TEXT_COL = ("台词", "对白", "定稿", "line", "text")
+_DLG_SPK_COL = ("说话人", "角色", "speaker", "char")
+
+
+def _dialogue_index(text: str) -> dict[str, dict]:
+    """解析 dialogue.md,返回 {对白编号: {"speaker": CHAR-id 或名字, "text": 台词}}。"""
+    idx: dict[str, dict] = {}
+
+    def _put(did: str, speaker: str | None, line: str | None):
+        line = (line or "").strip().strip("*").strip()
+        if not did or not line or did in idx:
+            return
+        spk = (speaker or "").strip()
+        m = re.search(r"(CHAR-\d+)", spk)
+        idx[did] = {"speaker": m.group(1) if m else re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
+                    "text": line}
+
+    text_col = spk_col = None
+    cur_id = cur_spk = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if all(re.fullmatch(r":?-+:?", c or "-") for c in cells):
+                continue
+            if not cells or not _DLG_ID_RE.match(cells[0]):
+                # 表头:定位台词列 / 说话人列(排除「原句」「字数」等近似列)
+                low = [c.lower() for c in cells]
+                text_col = next((i for i, c in enumerate(low)
+                                 if any(k in c for k in _DLG_TEXT_COL)
+                                 and not any(k in c for k in ("原句", "字数", "编号", "id"))), None)
+                spk_col = next((i for i, c in enumerate(low) if any(k in c for k in _DLG_SPK_COL)), None)
+                continue
+            if text_col is not None and text_col < len(cells):
+                _put(cells[0], cells[spk_col] if spk_col is not None and spk_col < len(cells) else None,
+                     cells[text_col])
+            continue
+        m = re.match(r"^(?:#{1,6}\s*)?\[([A-Za-z][A-Za-z0-9-]+)\]\s*(.*)$", line)
+        if m and _DLG_ID_RE.match(m.group(1)):
+            rest = m.group(2)
+            # ② 同行带台词:说话人段与台词以全角/半角冒号分隔,尾随 {…} 元数据剔除
+            m2 = re.match(r"^(.*?)[:：]\s*(.+?)(?:\s*\{[^{}]*\})?\s*$", rest)
+            if m2 and m2.group(2) and not line.startswith("#"):
+                _put(m.group(1), m2.group(1), m2.group(2))
+                cur_id = None
+            else:
+                cur_id, cur_spk = m.group(1), rest
+            continue
+        if cur_id:
+            # ③ 标题块内的「定稿」条目
+            m3 = re.match(r"^-\s*\*\*定稿\*\*\s*[:：]\s*(.+)$", line)
+            if m3:
+                _put(cur_id, cur_spk, m3.group(1))
+                cur_id = None
+            elif line.startswith("#"):
+                cur_id = None
+    return idx
+
+
+def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dict]:
+    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text},
+    其次按 dialogue_refs / dialogue_ref 编号查 dialogue.md;编号解析不到的 text=None,
+    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。"""
+    lines: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(ref, speaker, text):
+        key = ref or text
+        if not key or key in seen:
+            return
+        seen.add(key)
+        lines.append({"ref": ref, "speaker": speaker, "text": text})
+
+    emb = s.get("dialogue")
+    for d in (emb if isinstance(emb, list) else [emb]):
+        if isinstance(d, dict) and d.get("text"):
+            _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
+    refs = []
+    for v in (s.get("dialogue_refs"), s.get("dialogue_ref"), draft.get("dialogue_refs"), draft.get("dialogue_ref")):
+        if isinstance(v, list):
+            refs.extend(x for x in v if isinstance(x, str))
+        elif isinstance(v, str) and v.strip():
+            refs.append(v.strip())
+    for r in refs:
+        toks = [t.strip() for t in re.split(r"[\s,;、/]+", r) if t.strip()]
+        if toks and all(_DLG_ID_RE.match(t) for t in toks):
+            for t in toks:
+                hit = idx.get(t) or {}
+                _add(t, hit.get("speaker"), hit.get("text"))
+        else:
+            _add(None, None, r)
+    return lines
+
+
 def _read_json_safe(p: Path):
     try:
         return json.loads(p.read_text())
@@ -4490,17 +4591,26 @@ def _preview_storyboard(project: str, ep: str):
         return rows
     # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
     cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
+    # 对白正文(2026-08-27):镜条目的编号回 dialogue.md 解析成台词,预览页显示台词而非编号
+    dlg_idx = _dialogue_index(_read_text(f"story/episodes/{ep}/dialogue.md") or "")
     shots = []
     for s in (sl.get("shots") or []):
         if not isinstance(s, dict):
             continue
         sid = s.get("shot_id") or ""
+        dlines = _shot_dialogue_lines(s, _shot_draft(s), dlg_idx)
+        raw_ref = s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref")
+        for ln in dlines:
+            ln["speaker_name"] = cname.get(ln.get("speaker")) or ln.get("speaker")
         shots.append({k: s.get(k) for k in (
             "shot_id", "scene_no", "scene_id", "duration_s", "size",
             "camera_position", "characters", "costumes", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
-            "dialogue_ref": s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref"),
+            # 编号归一成字符串(storyboard 草稿里有的项目存数组,前端 esc() 会拼成 "S04-D05,S04-D06")
+            "dialogue_ref": (" / ".join(str(x) for x in raw_ref) if isinstance(raw_ref, list) else raw_ref)
+                            or " / ".join(ln["ref"] or ln["text"] for ln in dlines) or None,
+            "dialogue_lines": dlines,
             "content": _shot_content(s),
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips

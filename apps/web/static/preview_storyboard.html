@@ -83,6 +83,9 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .shot .content{margin:6px 0 4px}
 .shot .dlg{color:var(--yellow);font-size:13px;margin:4px 0}
+.shot .dlg b{font-weight:600;margin-right:2px}
+.shot .dlg-unresolved{color:var(--muted,#888)}
+.shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
@@ -695,6 +698,17 @@ function renderEps(episodes){
   });
 }
 
+// 对白:后端已把 dialogue_refs 编号回 dialogue.md 解析成台词(dialogue_lines);
+// 解析不到正文的只剩编号,灰显编号提示回查 dialogue.md;老数据无 dialogue_lines 时退回 dialogue_ref 原样
+function dlgHtml(s){
+  const ls=s.dialogue_lines||[];
+  if(!ls.length)return s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:'';
+  return ls.map(l=>{
+    const spk=l.speaker_name||l.speaker;
+    if(!l.text)return `<div class="dlg dlg-unresolved" title="${esc(t('dialogue.md 中未找到该编号的台词'))}">💬 <span class="ref">${esc(l.ref||'')}</span></div>`;
+    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
+  }).join('');
+}
 function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
@@ -712,7 +726,7 @@ function shotCard(s,grp){
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
         <button class="editbtn" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发消息给总制片">✏️ 修改</button></div>
       <div class="content">${esc(s.content||'')}</div>
-      ${s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:''}
+      ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
@@ -946,7 +960,7 @@ function render(d){
       if(g){ // 组内首镜:渲染整组(组内镜卡就地内嵌;旁白卡插在锚定镜之前)
         // 导航徽标:🎨手稿 📝注释 💬对白 🎙旁白 🎬视频(计数,0 不显示)
         const gsids=g.shots||[];
-        const nDlg=gsids.filter(sid=>byId[sid]&&byId[sid].dialogue_ref).length;
+        const nDlg=gsids.reduce((a,sid)=>a+(byId[sid]?((byId[sid].dialogue_lines||[]).length||(byId[sid].dialogue_ref?1:0)):0),0);
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
         const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];
