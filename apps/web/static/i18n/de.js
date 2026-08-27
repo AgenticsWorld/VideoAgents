@@ -1541,4 +1541,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} Stadien-Varianten (Prompt wählt nach Kapitel)",
 "本镜出场生物(creatures)": "Kreaturen in dieser Einstellung (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} Referenzbilder überschreiten das Limit dieser Gruppe von {cap}: allein die Pflicht-Anker passen nicht hinein. Entfernen Sie manuell Referenzbilder dieser Gruppe oder wechseln Sie zu einem Videogenerierungsmodell mit höherem Referenzbild-Limit (z. B. Seedance 2.5) und passen Sie die Gruppeneinstellungen entsprechend an",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Auf diesem Agent installierte Skills: Klicken zeigt die Liste; ein Klick auf einen Eintrag fügt dessen Pfad (z. B. skills/sd25-pe) ins Eingabefeld ein, um den Agent anzuweisen, diesen Skill für eine Aufgabe zu nutzen",
+"🧰 本 Agent 的技能": "🧰 Skills dieses Agents",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Klicke auf einen Skill, um seinen Pfad (z. B. skills/sd25-pe) ins Eingabefeld einzufügen, und beschreibe dann in der Anweisung, wofür er verwendet werden soll. Grau = unter „Einstellungen→Erweitert→Skill-Pakete“ abgewählt; wird zur Laufzeit nicht automatisch injiziert.",
+"管理技能包…": "Skill-Pakete verwalten…",
+"该 Agent 没有安装技能": "Auf diesem Agent sind keine Skills installiert",
+"点击把 {p} 插入输入框": "Klicken, um {p} ins Eingabefeld einzufügen",
+"已禁用": "Deaktiviert",
 };

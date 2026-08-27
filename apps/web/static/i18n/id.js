@@ -1541,4 +1541,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} varian tahap (prompt memilih per bab)",
 "本镜出场生物(creatures)": "Makhluk dalam shot ini (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} gambar referensi melebihi batas {cap} grup ini: jangkar wajib saja sudah tidak muat. Kurangi gambar referensi grup ini secara manual, atau beralih ke model generasi video dengan batas gambar referensi lebih tinggi (mis. Seedance 2.5) dan sesuaikan «Pengaturan Grup Shot»",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Skill yang terpasang pada Agent ini: klik untuk melihat daftar; pilih satu untuk menyisipkan jalurnya (mis. skills/sd25-pe) ke kotak input agar mudah meminta Agent memakai skill itu untuk suatu tugas",
+"🧰 本 Agent 的技能": "🧰 Skill Agent ini",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Klik sebuah skill untuk menyisipkan jalurnya (mis. skills/sd25-pe) ke kotak input, lalu jelaskan dalam instruksi untuk apa skill itu dipakai. Abu-abu = tidak dicentang di «Pengaturan→Lanjutan→Paket Skill», tidak disuntikkan otomatis saat runtime.",
+"管理技能包…": "Kelola paket skill…",
+"该 Agent 没有安装技能": "Agent ini belum memasang skill",
+"点击把 {p} 插入输入框": "Klik untuk menyisipkan {p} ke kotak input",
+"已禁用": "Nonaktif",
 };

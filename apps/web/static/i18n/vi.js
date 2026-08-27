@@ -1541,4 +1541,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} biến thể giai đoạn (prompt chọn theo chương)",
 "本镜出场生物(creatures)": "Sinh vật xuất hiện trong cảnh này (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} ảnh tham chiếu vượt giới hạn {cap} của nhóm này: riêng các neo bắt buộc đã không đủ chỗ. Hãy tự tay bớt ảnh tham chiếu của nhóm này, hoặc chuyển sang mô hình tạo video có giới hạn ảnh tham chiếu cao hơn (ví dụ Seedance 2.5) và cập nhật «Cài đặt nhóm cảnh» tương ứng",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Kỹ năng đã cài cho Agent này: bấm để xem danh sách, chọn một mục để chèn đường dẫn (vd. skills/sd25-pe) vào ô nhập, tiện chỉ định dùng kỹ năng đó cho một việc",
+"🧰 本 Agent 的技能": "🧰 Kỹ năng của Agent này",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Bấm một kỹ năng để chèn đường dẫn (vd. skills/sd25-pe) vào ô nhập, rồi nêu trong chỉ thị cần dùng kỹ năng đó làm gì. Màu xám = đã bỏ chọn trong «Cài đặt→Nâng cao→Gói kỹ năng», khi chạy sẽ không tự động chèn.",
+"管理技能包…": "Quản lý gói kỹ năng…",
+"该 Agent 没有安装技能": "Agent này chưa cài kỹ năng nào",
+"点击把 {p} 插入输入框": "Bấm để chèn {p} vào ô nhập",
+"已禁用": "Đã tắt",
 };

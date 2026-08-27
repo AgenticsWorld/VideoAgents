@@ -1553,4 +1553,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} stage variant sheet(s) (prompt picks by chapter)",
 "本镜出场生物(creatures)": "Creatures in this shot (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} reference images exceed this group's cap of {cap}: the mandatory anchors alone do not fit. Remove some of this group's reference images manually, or switch to a video generation model with a higher reference-image cap (e.g. Seedance 2.5) and update the Shot Group Settings accordingly",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Skills installed on this agent: click to see the list; pick one to insert its path (e.g. skills/sd25-pe) into the input box so you can ask the agent to use that skill for a task",
+"🧰 本 Agent 的技能": "🧰 This agent's skills",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Click a skill to insert its path (e.g. skills/sd25-pe) into the input box, then say in your instruction what the skill should be used for. Greyed = unticked under Settings → Advanced → Skill Packs; it is not injected automatically at runtime.",
+"管理技能包…": "Manage skill packs…",
+"该 Agent 没有安装技能": "This agent has no skills installed",
+"点击把 {p} 插入输入框": "Click to insert {p} into the input box",
+"已禁用": "Disabled",
 };

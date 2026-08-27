@@ -1541,4 +1541,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} variante(s) de etapa (el prompt elige por capítulo)",
 "本镜出场生物(creatures)": "Criaturas en este plano (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} imágenes de referencia superan el límite de {cap} de este grupo: solo los anclajes obligatorios ya no caben. Elimine manualmente imágenes de referencia de este grupo, o cambie a un modelo de generación de vídeo con un límite más alto (p. ej. Seedance 2.5) y ajuste la «Configuración de grupos de planos» en consecuencia",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Habilidades instaladas en este Agent: haz clic para ver la lista; elige una para insertar su ruta (p. ej. skills/sd25-pe) en el cuadro de entrada y pedir al Agent que la use en una tarea",
+"🧰 本 Agent 的技能": "🧰 Habilidades de este Agent",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Haz clic en una habilidad para insertar su ruta (p. ej. skills/sd25-pe) en el cuadro de entrada; luego indica en la instrucción para qué usarla. Gris = desmarcada en «Ajustes→Avanzado→Paquetes de habilidades», no se inyecta automáticamente en tiempo de ejecución.",
+"管理技能包…": "Gestionar paquetes de habilidades…",
+"该 Agent 没有安装技能": "Este Agent no tiene habilidades instaladas",
+"点击把 {p} 插入输入框": "Clic para insertar {p} en el cuadro de entrada",
+"已禁用": "Desactivada",
 };

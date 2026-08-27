@@ -1541,4 +1541,11 @@ window.I18N_DICT = {
 "阶段变体 {n} 张(prompt 按章节选用)": "{n} variante(s) d'étape (le prompt choisit par chapitre)",
 "本镜出场生物(creatures)": "Créatures présentes dans ce plan (creatures)",
 "⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」": "⚠ {n} images de référence dépassent la limite de {cap} de ce groupe : les ancres obligatoires seules ne tiennent pas. Supprimez manuellement des images de référence de ce groupe, ou passez à un modèle de génération vidéo avec une limite plus élevée (ex. Seedance 2.5) et ajustez les « Paramètres des groupes de plans » en conséquence",
+"本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作": "Compétences installées sur cet Agent : cliquez pour voir la liste ; choisissez-en une pour insérer son chemin (ex. skills/sd25-pe) dans la zone de saisie et demander à l'Agent de l'utiliser pour une tâche",
+"🧰 本 Agent 的技能": "🧰 Compétences de cet Agent",
+"点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。": "Cliquez sur une compétence pour insérer son chemin (ex. skills/sd25-pe) dans la zone de saisie, puis précisez dans l'instruction ce qu'elle doit servir à faire. Grisé = décochée dans « Paramètres→Avancé→Packs de compétences », non injectée automatiquement à l'exécution.",
+"管理技能包…": "Gérer les packs de compétences…",
+"该 Agent 没有安装技能": "Cet Agent n'a aucune compétence installée",
+"点击把 {p} 插入输入框": "Cliquer pour insérer {p} dans la zone de saisie",
+"已禁用": "Désactivée",
 };
