@@ -1526,4 +1526,5 @@ window.I18N_DICT = {
 "光照方案 ": "Esquema de iluminación ",
 "未在场景 lighting.json 找到方案 {id}": "No se encontró el esquema {id} en lighting.json de la escena",
 "未钉光照方案": "Sin esquema de iluminación fijado",
+"未在动线图登记(图上无字母)": "No está en el mapa de blocking (sin letra en el mapa)",
 };

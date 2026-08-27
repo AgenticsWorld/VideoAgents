@@ -13,9 +13,11 @@
          并含"do not render the map"类免责(防止把箭头/字母标记画进成片);
       ④ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
       ⑤ 图上标记映射句:每个角色按 blocking_map.characters 数组顺序对应字母 A/B/C…,video_prompt 须含
-         "<字母> = <角色名> (<CHAR id>)" 形式的映射(同一逗号/句号段内既有 "A =" 又有该 CHAR id)——
-         俯视图图例亦写角色名与动线句(2026-08-24 三订起支持 CJK 渲染),此句照旧必写:
-         图文双保险,且本机检只读 prompt 文本、不读图;
+         "<字母> = <label> (<CHAR id>)"——label 逐字取 blocking_map.characters[].label(短规范名);
+         2026-08-27 四订起俯视图上**只有字母与动线、无任何文字**,字母↔角色的对应完全靠这句,
+         本机检只读 prompt 文本、不读图;
+      ⑥ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(角色主体定义句与 Map markers 句、
+         动线图字母三者以 label 为唯一键;label 换词 = 模型对不上号);
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -94,10 +96,17 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
     for idx, ch in enumerate(bm.get("characters") or []):
         cid = ch.get("id", "?")
         letter = LETTERS[idx] if idx < len(LETTERS) else None
+        label = (ch.get("label") or "").strip()
         if letter and cid != "?":
-            pat = re.compile(r"(?<![A-Za-z])" + letter + r"\s*=\s*[^,;.。;]*" + re.escape(cid))
+            pat = re.compile(r"(?<![A-Za-z])" + letter + r"\s*=\s*" + (re.escape(label) + r"\s*[((]\s*" if label else r"[^,;.。;]*")
+                             + re.escape(cid))
             if not pat.search(vp):
-                errs.append(f"{gid}/{cid}: video_prompt 缺图上标记映射 \"{letter} = <角色名> ({cid})\"(Map markers 句)")
+                errs.append(f"{gid}/{cid}: video_prompt 缺图上标记映射 \"{letter} = {label or '<label>'} ({cid})\""
+                            "(Map markers 句;label 逐字取 blocking_map)")
+        if not label:
+            errs.append(f"{gid}/{cid}: blocking_map 缺 label(短规范名;回派 shot-planning,先过 render_blocking_map.py 的 label_ok)")
+        elif not re.search(re.escape(label) + r"\s*@\s*Image\s*\d+", vp):
+            errs.append(f"{gid}/{cid}: video_prompt 缺主体定义句 \"{label}@Image N\"(主体定义句须与 blocking_map.label 同一个词)")
         route = ch.get("route_en")
         if not route:
             errs.append(f"{gid}/{cid}: blocking_map 缺 route_en(回派 storyboard 补写)")

@@ -813,7 +813,19 @@ const refFn=(icon,k)=>{
 
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
-  const chars=(g.characters_union||[]).join('、');
+  // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
+  // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
+  // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
+  const BM_COLORS=['#e63946','#1d78d8','#2ea043','#f59e0b','#8e44ad','#00acc1','#e91e63','#795548'];
+  const bmChars=((g.blocking_map||{}).characters||[]).filter(c=>c&&c.id);
+  let chars='';
+  if(bmChars.length){
+    const seen=new Set(), parts=bmChars.map((c,i)=>{seen.add(c.id);
+      const tip=[c.label,c.route_en].filter(Boolean).join(' · ');
+      return `<span title="${esc(tip)}"><b style="color:${BM_COLORS[i%BM_COLORS.length]}">${'ABCDEFGH'[i]||'?'}</b> = ${esc(c.id)}</span>`;});
+    (g.characters_union||[]).filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('未在动线图登记(图上无字母)'))}">? = ${esc(id)}</span>`));
+    chars=parts.join('、');
+  }else chars=esc((g.characters_union||[]).join('、'));
   // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
   // 有服装 sheet 的在媒体区并列展示并深链人物预览页该套服装卡
   const proj0=$('#project').value.trim()||'demo';
@@ -854,7 +866,7 @@ function groupCard(g,inner){
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
-      ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+      ${chars?`<span class="tag">${chars}</span>`:''}
       ${cosChips}
       ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>

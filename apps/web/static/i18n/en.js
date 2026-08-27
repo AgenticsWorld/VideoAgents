@@ -1538,4 +1538,5 @@ window.I18N_DICT = {
 "光照方案 ": "Lighting scheme ",
 "未在场景 lighting.json 找到方案 {id}": "Scheme {id} not found in the scene's lighting.json",
 "未钉光照方案": "No lighting scheme pinned",
+"未在动线图登记(图上无字母)": "Not in the blocking map (no letter on the map)",
 };

@@ -8,8 +8,8 @@ blocking_map_landmarks_valid / scene_layout_pack_ok)。
     + 「9 宫格多角度场景图」`grid_9views.png` + 文字事实源 `layout.json`(地标归一化坐标 xy、
     九格机位语义 views[1..9]);
   - storyboard 每个生成组草案写 `blocking_map`(组内每个出场角色的 start / path / end,均引用
-    layout.json 的地标 id,可选 xy 微调;附动线句 `route_en`——内容语言随界面语言,
-    2026-08-24 三订:图例支持 CJK 渲染,角色名 label 与 route_en 动线句会上图),
+    layout.json 的地标 id,可选 xy 微调;附动线句 `route_en`——内容语言随界面语言;
+    `label` = 该角色的短规范名,全集同一角色同一个词,下游 prompt 主体定义句与 Map markers 句逐字用它),
     shot-planning 定稿组时继承进
     shot_list.generation_groups[].blocking_map;
   - 本脚本把标注画到 layout_top.png 上,产出 `directing/epNN/blocking_maps/<group_id>.png`
@@ -17,15 +17,18 @@ blocking_map_landmarks_valid / scene_layout_pack_ok)。
     prompt agent 把定稿图列入组 refs,视频模型按图中人物位置标注与动线安排画面(机检
     layout_map_bound,脚本 code/layout_map_bound_check.py)。
 
-图例:每角色一色;● 实心圆 = 起点(圆内字母 A/B/C/D 为角色序号 = blocking_map.characters 数组顺序,
-      图例条附加在原图**下方**的纯黑横条内(2026-08-24 三订调整:不覆盖原图,避免遮挡布局信息),
-      写「字母 = 角色名 label (CHAR 编号) [moves/stays]」并附该角色动线句 route_en 折行
-      ——_font 优先加载系统 CJK 字体(PingFang/Hiragino/Noto Sans CJK/微软雅黑),
-      中文名与中文动线句可直接上图;系统无 CJK 字体时回退拉丁字体并 WARN(中文会缺字)。
-      prompt 的 Map markers 句照旧写名字↔编号↔字母对应,图文双保险,机检 layout_map_bound 不变);
-      ■ 实心方块 = 终点;箭头折线 = 动线(经过 path 各点);无移动的角色只画起点圆。
-      渲染尺寸 = 布局图宽 x (布局图高 + 底部图例条高)(布局图 ≥2560x1440,产物天然满足
-      视频参考像素下限)。
+图上标注(2026-08-27 四订,**只画字母与动线,不带任何文字**):每角色一色;● 实心圆 = 起点(圆内
+      大写拉丁字母 A/B/C… = 角色序号 = blocking_map.characters 数组顺序);■ 实心方块 = 终点;
+      箭头折线 = 动线(经过 path 各点);无移动的角色只画起点圆。**不画图例、标题、角色名、CHAR 编号、
+      动线句**——视频模型读不准参考图里的小字,烤进图的文字反而是入画泄漏口;字母↔角色的对应
+      由 prompt 的 `Map markers: A = <label> (<CHAR id>), …` 句承担(机检 layout_map_bound)。
+      字体仅需拉丁大写字母,不依赖 CJK 字体。渲染尺寸 = 布局图尺寸(≥2560x1440,满足视频参考像素下限)。
+      本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/ 或自绘替代。
+
+label 机检(label_ok,2026-08-27):每角色 `label` 必填,= 短规范名——≤8 个 CJK 字或 ≤3 个英文词;
+      不得是代词(他/她/它/他们/她们/he/she/they…)、不得含括号/方括号/书名号/冒号/顿点等说明性标点
+      (状态、服装、"画外"之类说明写进 route_en 或 continuity,不进 label);同一角色在本集所有组
+      的 label 必须是同一个词(prompt 主体定义句 `<label>@Image N` 与 Map markers 句逐字用它)。
 
 用法:
   python3 code/render_blocking_map.py --project <slug> --ep ep01                 # 定稿:shot_list 全组
@@ -49,6 +52,28 @@ LAYOUT_SCHEMA = "scene_layout.v1"
 PALETTE = [(230, 57, 70), (29, 120, 216), (46, 160, 67), (245, 158, 11),
            (142, 68, 173), (0, 172, 193), (233, 30, 99), (121, 85, 72)]
 LETTERS = "ABCDEFGH"
+# label_ok(2026-08-27):短规范名;代词与说明性标点均不合格(见文件头)
+_PRONOUNS = {"他", "她", "它", "他们", "她们", "它们", "我", "你", "我们", "你们",
+             "he", "she", "it", "they", "him", "her", "them", "i", "we", "you", "me", "us"}
+_LABEL_BAD_PUNCT = re.compile(r"[()()\[\]【】「」『』《》〈〉<>{}:：;;,,、·/|\\]")
+LABEL_MAX_CJK, LABEL_MAX_WORDS = 8, 3
+
+
+def check_label(label) -> str | None:
+    """返回不合格原因;合格返回 None。"""
+    if not isinstance(label, str) or not label.strip():
+        return "缺 label(短规范名必填)"
+    t = label.strip()
+    if t.lower() in _PRONOUNS:
+        return f"label {t!r} 是代词,须写角色的短规范名"
+    if _LABEL_BAD_PUNCT.search(t):
+        return f"label {t!r} 含括号/冒号/顿点等说明性标点(状态/服装/画外等说明写进 route_en,不进 label)"
+    if t.isascii():
+        if len(t.split()) > LABEL_MAX_WORDS:
+            return f"label {t!r} 超过 {LABEL_MAX_WORDS} 个英文词"
+    elif len(t) > LABEL_MAX_CJK:
+        return f"label {t!r} 超过 {LABEL_MAX_CJK} 个字"
+    return None
 
 
 # ---------------------------------------------------------------- layout pack
@@ -172,8 +197,11 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict):
         # 纯英文校验已取消(2026-08-24 二订):内容语言随界面语言(三订起图例支持 CJK,route_en 上图)
         elif (len(route_en.split()) > 40) if route_en.isascii() else (len(route_en) > 60):
             warns.append(f"{gid}/{cid}: route_en 过长(限 ≤40 英文词或 ≤60 字),建议精简")
-        routes.append((cid, ch.get("label") or cid, start, path, end,
-                       route_en if isinstance(route_en, str) else ""))
+        bad = check_label(ch.get("label"))
+        if bad:
+            errs.append(f"{gid}/{cid}: {bad}")
+        routes.append((cid, (ch.get("label") or cid).strip() if isinstance(ch.get("label"), str) else cid,
+                       start, path, end, route_en if isinstance(route_en, str) else ""))
     if chars_union is not None:
         a, b = set(seen), set(chars_union)
         if a != b:
@@ -184,56 +212,24 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict):
 
 
 # ---------------------------------------------------------------- render
-# CJK 优先(2026-08-24 三订:图例写角色名与 route_en 动线句,中文/GBK 范围汉字按 unicode 渲染);
-# 系统无 CJK 字体时回退拉丁字体,render() 对含中文的图例打 WARN(中文会缺字)
+# 四订(2026-08-27):图上只画字母标记与动线,字体仅需拉丁大写字母;不再加载 CJK 字体
 _FONT_CANDIDATES = (
-    ("/System/Library/Fonts/PingFang.ttc", True),                        # macOS(部分版本 PIL 打不开,顺延)
-    ("/System/Library/Fonts/STHeiti Medium.ttc", True),                  # macOS
-    ("/System/Library/Fonts/Hiragino Sans GB.ttc", True),                # macOS
-    ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", True),      # macOS
-    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", True),       # Linux
-    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", True),
-    ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", True),
-    ("C:/Windows/Fonts/msyhbd.ttc", True),                               # Windows 微软雅黑
-    ("C:/Windows/Fonts/msyh.ttc", True),
-    ("C:/Windows/Fonts/simhei.ttf", True),
-    ("/System/Library/Fonts/Helvetica.ttc", False),
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", False),
-    ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", False),
-    ("C:/Windows/Fonts/arialbd.ttf", False),
+    "/System/Library/Fonts/Helvetica.ttc",                               # macOS
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",              # Linux
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",                                      # Windows
 )
 
 
 def _font(size: int):
     from PIL import ImageFont
-    for cand, cjk in _FONT_CANDIDATES:
+    for cand in _FONT_CANDIDATES:
         try:
-            f = ImageFont.truetype(cand, size)
-            f.cjk_capable = cjk
-            return f
+            return ImageFont.truetype(cand, size)
         except Exception:  # noqa: BLE001
             continue
-    f = ImageFont.load_default()
-    try:
-        f.cjk_capable = False
-    except Exception:  # noqa: BLE001
-        pass
-    return f
-
-
-def _wrap_px(dl, text, font, max_w):
-    """图例动线句按像素宽度折行:ASCII 词(连尾随空格)整词换行,CJK 逐字换行。"""
-    toks = re.findall(r"[\x21-\x7e]+\s*|.", text or "")
-    lines, cur = [], ""
-    for tk in toks:
-        if cur and dl.textlength(cur + tk.rstrip(), font=font) > max_w:
-            lines.append(cur.rstrip())
-            cur = tk.lstrip()
-        else:
-            cur += tk
-    if cur.strip():
-        lines.append(cur.rstrip())
-    return lines
+    return ImageFont.load_default()
 
 
 def _arrow_head(draw, p0, p1, size, color):
@@ -244,7 +240,9 @@ def _arrow_head(draw, p0, p1, size, color):
     draw.polygon(pts, fill=color, outline=(255, 255, 255))
 
 
-def render(layout_png: Path, routes, out_png: Path, title: str):
+def render(layout_png: Path, routes, out_png: Path):
+    """把动线标注画到布局图上:只有字母圆点/方块与箭头折线,无任何文字图例(2026-08-27 四订)。
+    返回 (尺寸, WARN 列表);标记按数组逆序绘制(A 在最上层),近乎重合的标记报 WARN。"""
     from PIL import Image, ImageDraw
     im = Image.open(layout_png).convert("RGBA")
     W, H = im.size
@@ -253,14 +251,18 @@ def render(layout_png: Path, routes, out_png: Path, title: str):
     R = max(18, int(W * 0.018))          # 标记半径
     LW = max(6, int(W * 0.005))          # 线宽
     fnt = _font(int(R * 1.3))
-    lg_font = _font(int(R * 0.9))
     to_px = lambda p: (p[0] * W, p[1] * H)  # noqa: E731
 
-    for idx, (cid, label, start, path, end, _route) in enumerate(routes):
+    def letter_at(x, y, letter):
+        bb = d.textbbox((0, 0), letter, font=fnt)
+        d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
+               fill=(255, 255, 255, 255), font=fnt)
+
+    warns = []
+    # 先画全部动线,再按**逆序**画标记:数组靠前(A)的角色压在上面,不被后序角色盖住
+    for idx, (_cid, _label, start, path, end, _route) in enumerate(routes):
         col = PALETTE[idx % len(PALETTE)]
-        letter = LETTERS[idx]
         pts = [to_px(p) for p in ([start] if start else []) + path + ([end] if end else [])]
-        # 动线:白描边 + 彩色主线,末端箭头
         if len(pts) >= 2:
             # 末段收短到终点方块边缘,箭头露在方块外
             (x0, y0), (x1, y1) = pts[-2], pts[-1]
@@ -271,63 +273,30 @@ def render(layout_png: Path, routes, out_png: Path, title: str):
             d.line(line, fill=(255, 255, 255, 230), width=LW + 6, joint="curve")
             d.line(line, fill=col + (255,), width=LW, joint="curve")
             _arrow_head(d, pts[-2], tip, R * 1.4, col + (255,))
-        # 起点圆
+    markers = []   # (letter, x, y) 用于重叠检测
+    for idx in range(len(routes) - 1, -1, -1):
+        _cid, _label, start, _path, end, _route = routes[idx]
+        col = PALETTE[idx % len(PALETTE)]
+        letter = LETTERS[idx]
         if start:
             x, y = to_px(start)
             d.ellipse([x - R, y - R, x + R, y + R], fill=col + (255,), outline=(255, 255, 255, 255), width=4)
-            bb = d.textbbox((0, 0), letter, font=fnt)
-            d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
-                   fill=(255, 255, 255, 255), font=fnt)
-        # 终点方块
+            letter_at(x, y, letter)
+            markers.append((letter, x, y))
         if end:
             x, y = to_px(end)
             d.rectangle([x - R, y - R, x + R, y + R], fill=col + (255,), outline=(255, 255, 255, 255), width=4)
-            bb = d.textbbox((0, 0), letter, font=fnt)
-            d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
-                   fill=(255, 255, 255, 255), font=fnt)
-    # 图例条(2026-08-24 三订调整:附加在原图**下方**的纯黑横条,画布加高——不再左上角半透明
-    # 覆盖,避免遮挡布局图信息;图例写「字母 = 角色名 (CHAR 编号) [moves/stays]」并附动线句
-    # route_en 折行,_font 带 CJK 候选,中文名/中文动线句可直接上图;prompt 的 Map markers 句
-    # 照旧必写,图文双保险,机检 layout_map_bound 不变)
-    rt_font = _font(int(R * 0.72))
-    pad = int(R * 0.6)
-    th = d.textbbox((0, 0), "Ag", font=lg_font)[3]
-    rh = d.textbbox((0, 0), "Ag", font=rt_font)[3]
-    sw = int(th * 0.6)                         # 角色色块边长
-    indent = sw + pad                          # char/route 行文字相对左边距的缩进(色块之后)
-    max_text_w = W - pad * 4 - indent          # 图例文字最大像素宽(横条整宽可用),超出折行
-    rows = [("title", f"{title}  |  circle = start, square = end, arrow = path", 0)]
-    for idx, (cid, label, start, path, end, route) in enumerate(routes):
-        mv = "moves" if end else "stays"
-        name = f"{label} ({cid})" if label and label != cid else cid
-        rows.append(("char", f"{LETTERS[idx]} = {name}  [{mv}]", idx))
-        for seg in _wrap_px(d, route, rt_font, max_text_w):
-            rows.append(("route", seg, idx))
-    if any(not t.isascii() for _k, t, _i in rows) and not getattr(lg_font, "cjk_capable", False):
-        print(f"WARN {title}: 图例含中文但系统无可用 CJK 字体"
-              "(PingFang/Hiragino/Noto Sans CJK/微软雅黑均未找到),中文将缺字")
-    line_h, route_h = int(th * 1.35), int(rh * 1.3)
-    band_h = pad * 3 + sum(route_h if k == "route" else line_h for k, _t, _i in rows)
-    out = Image.new("RGB", (W, H + band_h), (0, 0, 0))
-    out.paste(Image.alpha_composite(im, ov).convert("RGB"), (0, 0))
-    db = ImageDraw.Draw(out)
-    y = H + pad * 2
-    for kind, t, idx in rows:
-        if kind == "title":
-            db.text((pad * 2, y), t, fill=(255, 255, 255), font=lg_font)
-            y += line_h
-        elif kind == "char":
-            col = PALETTE[idx % len(PALETTE)]
-            y0 = y + int(th * 0.2)
-            db.rectangle([pad * 2, y0, pad * 2 + sw, y0 + sw], fill=col)
-            db.text((pad * 2 + indent, y), t, fill=(255, 255, 255), font=lg_font)
-            y += line_h
-        else:
-            db.text((pad * 2 + indent, y), t, fill=(210, 210, 210), font=rt_font)
-            y += route_h
+            letter_at(x, y, letter)
+            markers.append((letter, x, y))
+    for i, (la, xa, ya) in enumerate(markers):
+        for lb, xb, yb in markers[i + 1:]:
+            if la != lb and math.hypot(xa - xb, ya - yb) < R * 1.2:
+                warns.append(f"标记 {la} 与 {lb} 几乎重合(距离 < 0.6 标记直径),字母可能被遮挡;"
+                             "建议 storyboard/shot-planning 给靠后的角色 xy 微调错开")
+    out = Image.alpha_composite(im, ov).convert("RGB")
     out_png.parent.mkdir(parents=True, exist_ok=True)
     out.save(out_png, optimize=True)
-    return out.size
+    return out.size, sorted(set(warns))
 
 
 # ---------------------------------------------------------------- main
@@ -361,6 +330,7 @@ def main():
         layouts = {}
         n = 0
         prev_scene, prev_end = None, {}     # 跨组动线连续:同场景相邻组 start 须接前组 end
+        label_of = {}                        # label_ok:同一角色全集 label 须同一个词(cid → (label, 首见组))
         for gid, sid, chars, bm, out_rel in iter_groups(proj_root, args.ep, args.source):
             if only and gid not in only:
                 prev_scene, prev_end = sid, {}   # 跳过的组不作连续性基准
@@ -386,6 +356,11 @@ def main():
             routes, e, w = validate_map(gid, bm, chars, landmarks)
             all_errs += e
             all_warns += w
+            for cid, lbl, *_ in routes:
+                if cid in label_of and label_of[cid][0] != lbl:
+                    all_errs.append(f"{gid}/{cid}: label {lbl!r} 与 {label_of[cid][1]} 的 {label_of[cid][0]!r} 不一致"
+                                    "(同一角色全集须同一个短规范名;状态变化写 route_en)")
+                label_of.setdefault(cid, (lbl, gid))
             # 同场景相邻组:角色 start 须等于前组该角色 end(无移动=start),偏差 >5% 画幅报违规;
             # start 带 continuity_note(如角色中途出画后从别处入画)时降为 WARN
             if sid == prev_scene:
@@ -404,7 +379,8 @@ def main():
                 continue
             layout_png = proj_root / "assets" / "concepts" / "scenes" / sid / (lay.get("layout_top") or "layout_top.png")
             try:
-                size = render(layout_png, routes, proj_root / out_rel, gid)
+                size, rw = render(layout_png, routes, proj_root / out_rel)
+                all_warns += [f"{gid}: {m}" for m in rw]
                 print(f"RENDERED {out_rel} {size[0]}x{size[1]} ({len(routes)} 角色)")
             except Exception as ex:  # noqa: BLE001
                 all_errs.append(f"{gid}: 渲染失败 {ex}")

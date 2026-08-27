@@ -1526,4 +1526,5 @@ window.I18N_DICT = {
 "光照方案 ": "Skema pencahayaan ",
 "未在场景 lighting.json 找到方案 {id}": "Skema {id} tidak ditemukan di lighting.json adegan",
 "未钉光照方案": "Skema pencahayaan belum ditetapkan",
+"未在动线图登记(图上无字母)": "Belum terdaftar di peta blocking (tanpa huruf di peta)",
 };

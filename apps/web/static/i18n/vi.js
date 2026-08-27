@@ -1526,4 +1526,5 @@ window.I18N_DICT = {
 "光照方案 ": "Phương án ánh sáng ",
 "未在场景 lighting.json 找到方案 {id}": "Không tìm thấy phương án {id} trong lighting.json của bối cảnh",
 "未钉光照方案": "Chưa chốt phương án ánh sáng",
+"未在动线图登记(图上无字母)": "Chưa đăng ký trong sơ đồ di chuyển (không có chữ cái trên sơ đồ)",
 };
