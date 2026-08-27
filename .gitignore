@@ -23,6 +23,8 @@ data/sfx/*
 .videoagents-web.log
 .claude/launch.json
 data/.videoagents/
+# 素材库项目(原片/分镜 clip/JSON,设置→高级→素材库)
+data/footage/
 # 用户安装的插件(控制台上传 zip 落盘处,PLUGINS_DIR = DATA_DIR/plugins)
 data/plugins/
 agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/

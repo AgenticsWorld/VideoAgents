@@ -8627,3 +8627,101 @@ async def api_watchdog_set(body: dict):
     save_state(STATE)
     sync_keepawake()    # 开/关项目自动运行随手校准防休眠
     return await api_watchdog_get(proj)
+
+
+# ---------------- 素材库(设置菜单「高级→素材库」:data/footage/<name>/) ----------------
+# 业务实现在 modules/footage_library.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
+# ServiceError 映射、默认 CLI 引擎规格(全局模型偏好 → 可执行文件)与界面语言的注入。
+
+def _footage_lib():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import footage_library  # noqa: WPS433
+    return footage_library
+
+
+def _footage_call(fn, *args, **kw):
+    lib = _footage_lib()
+    try:
+        return fn(lib, *args, **kw)
+    except lib.FootageLibError as exc:
+        raise ServiceError(exc.status, exc.detail) from exc
+
+
+def footage_engine_spec() -> dict:
+    """AI 画面分析用的引擎规格:当前全局默认引擎/模型(未设置回落 claude)。"""
+    pref = global_model_pref()
+    engine = pref["engine"] or "claude"
+    model = pref["model"]
+    if model.startswith("__"):
+        # 顶栏「智能分配」策略(__smart)不是具体模型:画面分析是单轮看图小活,取该引擎策略的 low 档
+        mode = SMART_MODE_BY_ENGINE.get(engine, "")
+        model = ((AM_MODE_MODELS.get(mode) or {}).get("low") or {}).get("model", "")
+    spec = {"engine": engine, "model": model, "permission_mode": PERMISSION_MODE,
+            "executable": resolve_cli_executable(engine) if engine != "deepagents" else None}
+    if engine == "deepagents":
+        da = resolve_deepagents()
+        spec["deepagents"] = {"python": deepagents_python(),
+                              "runner": str(ROOT / "modules" / "deepagents_runner.py"),
+                              "base_url": da["base_url"], "api_key": da["api_key"],
+                              "model": da["model"]}
+    return spec
+
+
+async def api_footage_list():
+    return {"projects": _footage_call(lambda lib: lib.list_projects()),
+            "dir": str(_footage_lib().FOOTAGE_DIR), "engine": footage_engine_spec()["engine"]}
+
+
+async def api_footage_create(body: dict):
+    return _footage_call(lambda lib: lib.create_project((body or {}).get("name") or None))
+
+
+async def api_footage_get(name: str):
+    return _footage_call(lambda lib: lib.get_project(name))
+
+
+async def api_footage_delete(name: str):
+    return await asyncio.to_thread(_footage_call, lambda lib: lib.delete_project(name))
+
+
+async def api_footage_upload(name: str, data: bytes, upload_id: str, index: int, total: int,
+                             filename: str):
+    return await asyncio.to_thread(
+        _footage_call, lambda lib: lib.receive_upload_chunk(name, data, upload_id, index, total, filename))
+
+
+async def api_footage_download(name: str, body: dict):
+    return _footage_call(lambda lib: lib.start_download(name, (body or {}).get("url", "")))
+
+
+async def api_footage_reprocess(name: str):
+    return _footage_call(lambda lib: lib.reprocess(name))
+
+
+async def api_footage_retranscribe(name: str):
+    return _footage_call(lambda lib: lib.retranscribe(name))
+
+
+async def api_footage_cancel(name: str):
+    return _footage_call(lambda lib: lib.cancel(name))
+
+
+async def api_footage_clip_update(name: str, clip_id: str, body: dict):
+    return _footage_call(lambda lib: lib.update_clip(name, clip_id, body or {}))
+
+
+async def api_footage_clip_analyze(name: str, clip_id: str):
+    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    return await asyncio.to_thread(
+        _footage_call, lambda lib: lib.analyze_clip(name, clip_id, spec, lang))
+
+
+async def api_footage_analyze_all(name: str, body: dict):
+    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    return _footage_call(lambda lib: lib.analyze_all(name, spec, lang, bool((body or {}).get("force"))))
+
+
+def footage_file_path(name: str, rel: str) -> Path:
+    return _footage_call(lambda lib: lib.resolve_file(name, rel))
