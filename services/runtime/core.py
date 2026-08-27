@@ -4646,6 +4646,10 @@ def _preview_storyboard(project: str, ep: str):
                      if isinstance(s, dict) and isinstance(s.get("costumes"), dict)}
     cont = (_read_json_safe(base / "directing" / ep / "continuity.json")
             or _read_json_safe(base / "directing" / ep / "continuity_plan.json") or {})
+    # 组间尾帧锚(continuity-planning SOUL 职责 1):group_transitions[].anchor ∈ {last_frame, none};
+    # shot_list 的 continuity_from 只是组序(前一组 id),跨场景硬切也有值,不等于「续接尾帧」
+    cont_trans = {t.get("to_group"): t for t in (cont.get("group_transitions") or [])
+                  if isinstance(t, dict) and t.get("to_group")}
     cont_states = {st.get("shot_id"): st for st in (cont.get("costume_states") or [])
                    if isinstance(st, dict) and st.get("shot_id")}
 
@@ -4676,8 +4680,9 @@ def _preview_storyboard(project: str, ep: str):
                          "skip_reason": r.get("skip_reason") or "", "blocked_on": r.get("blocked_on") or "",
                          "source": source})
         return rows
-    # 组出场生物(2026-08-27):creatures_union → bible/creatures/index.json 名字 + 概念库 sheet,
-    # prompt 前就在预览页可见(H3A 审看生物锚;prompt 阶段按章节选阶段变体 sheet_<stage>.png,此处展示基础 sheet)
+    # 组出场生物(2026-08-27):creatures_union → bible/creatures/index.json 名字 + 概念库 sheet 有无,
+    # 预览页组卡只发 🐎 文字 chip(缺 sheet 黄标)、不贴 sheet 缩略——参考图由 prompt 工位按章节选阶段变体
+    # sheet_<stage>.png 写进组 refs,prompt 前贴图只会与 pipeline_refs 同图双显
     cre_index = _read_json_safe(base / "bible" / "creatures" / "index.json") or {}
     cre_name = {c.get("id"): (c.get("name") or c.get("id"))
                 for c in cre_index.get("creatures", []) if isinstance(c, dict) and c.get("id")}
@@ -4753,17 +4758,22 @@ def _preview_storyboard(project: str, ep: str):
         anchor_sizes = ({p.stat().st_size for p in kdir.iterdir()
                          if p.is_file() and p.suffix.lower() in IMG_EXTS}
                         if kdir.is_dir() else set())
-        for r in (pd.get("refs") or []):
+        for i, r in enumerate(pd.get("refs") or [], 1):
             f = base / r
             if not f.is_file():
+                # 缺文件的 ref(典型:前组尾帧 grpNNN.last_frame.png——prompt 先于视频产出,
+                # 要等前组出片后由 --return-last-frame 落盘):下发占位条目保住 [Image N] 序号,
+                # 预览页渲染 ⏳ 占位格,免得组卡张数与 Prompt 面板 refs 数对不上被误判丢图
+                pipeline_refs.append({"ref": r, "idx": i, "missing": True, "url": None,
+                                      "name": "/".join(r.split("/")[-2:])})
                 continue
             url = f"/projects/{base.name}/{r}?v={int(f.stat().st_mtime)}"
             if _grpref_user_added(pd, r):
-                user_refs.append({"ref": r, "name": f.name, "url": url})
+                user_refs.append({"ref": r, "idx": i, "name": f.name, "url": url})
             elif (not r.startswith(kf_prefix)
                   and f.stat().st_size not in anchor_sizes):
                 # 概念图文件名易撞名(如多个 three-quarter.png),取末两段路径作显示名
-                pipeline_refs.append({"ref": r, "url": url,
+                pipeline_refs.append({"ref": r, "idx": i, "url": url,
                                       "name": "/".join(r.split("/")[-2:])})
         # 组人物动线俯视图(storyboard/shot-planning 的 blocking_map 经 code/render_blocking_map.py
         # 渲染,2026-08-19):prompt 尚未产出时也要在分镜预览可见(H3A 签字审看站位/动线),
@@ -4774,9 +4784,17 @@ def _preview_storyboard(project: str, ep: str):
             pipeline_refs.insert(0, {
                 "ref": bmap_rel, "name": f"blocking_map/{gid}.png",
                 "url": f"/projects/{base.name}/{bmap_rel}?v={int(bmap.stat().st_mtime)}"})
+        tr = cont_trans.get(gid) or {}
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "creatures_union", "has_dialogue", "continuity_from")} | {
+            # 组链 chip 三态:anchor last_frame=续接尾帧 / none=硬切不传尾帧 / 无 continuity 计划=只知前组;
+            # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
+            "continuity_anchor": tr.get("anchor") or None,
+            "continuity_anchor_reason": str(tr.get("anchor_reason") or tr.get("notes") or ""),
+            "has_prompt": bool(pd),
+            "tail_ref": next((r for r in (pd.get("refs") or [])
+                              if isinstance(r, str) and r.endswith(".last_frame.png")), None),
             "blocking_map": g.get("blocking_map"),
             "creatures": _creature_rows(g.get("creatures_union")),
             "anchors": _asset_urls(base, _id_dir(kroot, gid), IMG_EXTS),
