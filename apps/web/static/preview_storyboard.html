@@ -87,6 +87,9 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .dlg-unresolved{color:var(--muted,#888)}
 .shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
+.shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
+.grp>.glight .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
 .grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:hidden}
@@ -709,6 +712,36 @@ function dlgHtml(s){
     return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
   }).join('');
 }
+// 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
+// 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
+// hover 显起幅→落幅。混剪等无运镜设计的项目 camera_move 为空,不渲染
+const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
+  pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
+  track:'跟拍',tracking:'跟拍',follow:'跟拍',truck:'横移',truck_left:'横移',truck_right:'横移',dolly:'移动',slide:'横移',
+  crane:'升降',boom:'升降',pedestal:'升降',orbit:'环绕',arc:'环绕',handheld:'手持',zoom_in:'变焦推',zoom_out:'变焦拉',
+  rack_focus:'变焦点',whip_pan:'甩镜',drone:'航拍',aerial:'航拍'};
+function camHtml(s){
+  const c=s.camera_move;if(!c)return '';
+  const k=MOVE_LABEL[String(c.movement||'').toLowerCase().replace(/[\s-]+/g,'_')];
+  const mv=c.label||(k?t(k):'')||c.movement||'';
+  const sub=[c.rig,c.speed_curve].filter(Boolean).join(' · ');
+  if(!mv&&!sub)return '';
+  const tip=[c.start_frame?t('起幅:')+c.start_frame:'',c.end_frame?t('落幅:')+c.end_frame:''].filter(Boolean).join('\n');
+  return `<div class="cam"${tip?` title="${esc(tip)}"`:''}>🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</div>`;
+}
+// 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
+// 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
+const clip1=(x,n)=>{x=String(x||'');return x.length>n?x.slice(0,n)+'…':x};
+function lightHtml(g){
+  const l=g.lighting;if(!l)return '';
+  const parts=[l.time_of_day,...(l.label?[l.label]:[l.key_source,l.direction,l.color_temp,l.contrast])]
+    .filter(Boolean).map(x=>clip1(x,48));
+  const tip=[l.scheme_id?t('光照方案 ')+l.scheme_id:'',l.label?[l.key_source,l.direction,l.color_temp,l.contrast].filter(Boolean).join(' · '):'',
+    l.prompt_fragment||''].filter(Boolean).join('\n');
+  const warn=l.resolved?'':(l.scheme_id?I18N.f('未在场景 lighting.json 找到方案 {id}',{id:l.scheme_id}):t('未钉光照方案'));
+  if(!parts.length&&!warn)return '';
+  return `<div class="glight"${tip?` title="${esc(tip)}"`:''}>💡 ${esc(parts.join(' · '))}${warn?`<span class="sub">${esc(warn)}</span>`:''}</div>`;
+}
 function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
@@ -728,6 +761,7 @@ function shotCard(s,grp){
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
+      ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
   </div>`;
@@ -828,6 +862,7 @@ function groupCard(g,inner){
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${lightHtml(g)}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>

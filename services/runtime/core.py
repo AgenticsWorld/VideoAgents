@@ -4463,6 +4463,87 @@ async def api_preview_worldview(project: str = "demo"):
     return await asyncio.to_thread(_preview_worldview, project)
 
 
+def _shot_camera_move(base: Path, ep: str, sid: str) -> dict | None:
+    """镜级运镜(camera-movement agent 产出 directing/<ep>/shots/<sid>/camera.json,
+    2026-08-27 起进分镜预览):movement 是英文枚举(static/push_in/…),中文标签各项目
+    字段名不一(movement_label / movement_zh / movement_cn / movement_en),取首个非空;
+    没有标签时前端按枚举查词典。文件缺失(如混剪项目无运镜设计)返回 None,前端不渲染。"""
+    if not sid:
+        return None
+    c = _read_json_safe(_id_dir(base / "directing" / ep / "shots", sid) / "camera.json") or {}
+    if not c:
+        return None
+    _s = lambda k: c.get(k) if isinstance(c.get(k), str) and c.get(k).strip() else None
+    # offer 式项目把 movement 直接写成中文("固定机位")、movement_en 才是英文:
+    # 非 ASCII 的 movement 已可读,优先于 movement_en
+    mv = _s("movement")
+    label = next((v for v in (_s("movement_label"), _s("movement_zh"), _s("movement_cn"),
+                              mv if mv and not mv.isascii() else None,
+                              _s("movement_en")) if v), None)
+    out = {"movement": _s("movement"), "label": label, "rig": _s("rig"),
+           "speed_curve": _s("speed_curve"), "start_frame": _s("start_frame"),
+           "end_frame": _s("end_frame")}
+    return out if any(out.values()) else None
+
+
+def _pick_str(d: dict, *keys: str) -> str | None:
+    """取首个字符串字段;值为 dict 时退到其 level/summary/value 子字段(各项目 lighting.json
+    结构自由度大,如 polan2 的 contrast_ratio={level,note})。"""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, dict):
+            v = next((v[x] for x in ("level", "summary", "value", "label")
+                      if isinstance(v.get(x), str)), None)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def _group_lighting(base: Path, g: dict, sb_scene_tod: dict, cache: dict) -> dict | None:
+    """组光照(2026-08-27 起进分镜预览组卡):组 time_of_day + lighting_scheme_id →
+    bible/scenes/<scene_id>/lighting.json 的 schemes[].scheme_id(WORKFLOW time_anchor_ok
+    口径)。老项目组未钉 scheme_id 时按时段唯一匹配 condition.time_of_day 兜底
+    (时段来源依次:组 time_of_day → offer 式 lighting_condition.time_of_day →
+    storyboard 场块 time_of_day);全无时段字段的老项目取场景唯一方案;仍无命中只回
+    时段并标 resolved=False,前端灰显提示;完全无据返回 None,前端不渲染。"""
+    scene_id = g.get("scene_id") or ""
+    scheme_id = g.get("lighting_scheme_id") if isinstance(g.get("lighting_scheme_id"), str) else None
+    lc = g.get("lighting_condition") if isinstance(g.get("lighting_condition"), dict) else {}
+    tod = next((v for v in (g.get("time_of_day"), lc.get("time_of_day"),
+                            sb_scene_tod.get(scene_id)) if isinstance(v, str) and v.strip()), None)
+    if scene_id not in cache:
+        cache[scene_id] = (_read_json_safe(_id_dir(base / "bible" / "scenes", scene_id) / "lighting.json")
+                           if scene_id else {}) or {}
+    schemes = [s for s in (cache[scene_id].get("schemes") or []) if isinstance(s, dict)]
+    hit, source = None, None
+    if scheme_id:
+        hit = next((s for s in schemes if (s.get("scheme_id") or s.get("id")) == scheme_id), None)
+        source = "scheme_id"
+    if hit is None and tod:
+        cands = [s for s in schemes
+                 if isinstance((s.get("condition") or {}).get("time_of_day"), str)
+                 and (tod in s["condition"]["time_of_day"] or s["condition"]["time_of_day"] in tod)]
+        if len(cands) == 1:
+            hit, source = cands[0], "time_of_day"
+    if hit is None and not tod and not scheme_id:
+        # 2026-07-20 前的老项目(如 thedoor)组/场块都无时段字段:场景只有一套方案时唯一可选
+        if len(schemes) == 1:
+            hit, source = schemes[0], "single_scheme"
+            cond_tod = (hit.get("condition") or {}).get("time_of_day")
+            tod = cond_tod if isinstance(cond_tod, str) else None
+        else:
+            return None
+    hit = hit or {}
+    return {"time_of_day": tod, "scheme_id": scheme_id or _pick_str(hit, "scheme_id", "id"),
+            "label": _pick_str(hit, "label", "name"),
+            "key_source": _pick_str(hit, "key_source", "key_light"),
+            "direction": _pick_str(hit, "direction"),
+            "color_temp": _pick_str(hit, "color_temp", "color_temperature", "color_temperature_range"),
+            "contrast": _pick_str(hit, "contrast", "contrast_ratio"),
+            "prompt_fragment": _pick_str(hit, "prompt_fragment_en", "prompt_fragment"),
+            "source": source, "resolved": bool(hit)}
+
+
 def _preview_storyboard(project: str, ep: str):
     """分镜设定聚合:分集列表 + 指定集的剧本/分镜表/每镜关键帧与成片视频。"""
     base = _proj_base(project)
@@ -4534,6 +4615,11 @@ def _preview_storyboard(project: str, ep: str):
         for dr in (sc.get("shots_draft") or []):
             if isinstance(dr, dict) and dr.get("order") is not None:
                 drafts[(sc.get("scene_no"), dr["order"])] = dr
+
+    # 场块时段索引(组未钉 lighting_scheme_id 的老项目按时段兜底匹配光照方案)
+    sb_scene_tod = {sc.get("scene_id"): sc.get("time_of_day")
+                    for sc in sb.get("scenes", [])
+                    if isinstance(sc, dict) and sc.get("scene_id")}
 
     def _shot_draft(s: dict) -> dict:
         m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
@@ -4607,11 +4693,19 @@ def _preview_storyboard(project: str, ep: str):
             "camera_position", "characters", "costumes", "is_dialogue", "dialogue_ref",
             "beat")} | {
             "scene_no": s.get("scene_no") or s.get("scene_id"),
+            # 机位:规约字段 camera_position;有的项目(offer)agent 自创写成 camera,
+            # 镜条目与 storyboard 草稿同名兼容(2026-08-27)
+            "camera_position": next((v for v in (s.get("camera_position"), s.get("camera"),
+                                                 _shot_draft(s).get("camera_position"),
+                                                 _shot_draft(s).get("camera"))
+                                     if isinstance(v, str) and v.strip()), None),
             # 编号归一成字符串(storyboard 草稿里有的项目存数组,前端 esc() 会拼成 "S04-D05,S04-D06")
             "dialogue_ref": (" / ".join(str(x) for x in raw_ref) if isinstance(raw_ref, list) else raw_ref)
                             or " / ".join(ln["ref"] or ln["text"] for ln in dlines) or None,
             "dialogue_lines": dlines,
             "content": _shot_content(s),
+            # 运镜(2026-08-27):镜级 camera.json,预览页 📷 机位下方 🎥 行
+            "camera_move": _shot_camera_move(base, ep, sid),
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips
                       if sid and _id_name_match(sid, c["name"], any_segment=True)],
@@ -4620,6 +4714,7 @@ def _preview_storyboard(project: str, ep: str):
     # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、
     # 切变边界与尾帧来自 clips/<grp>.meta.json
     groups = []
+    lighting_cache: dict[str, dict] = {}
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
@@ -4672,6 +4767,8 @@ def _preview_storyboard(project: str, ep: str):
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
             "costumes": _group_costumes(g),
+            # 组光照(2026-08-27):time_of_day + lighting_scheme_id → 场景 lighting.json 方案
+            "lighting": _group_lighting(base, g, sb_scene_tod, lighting_cache),
         })
     data["generation_groups"] = groups
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 beat_ref/scene 对位试听
