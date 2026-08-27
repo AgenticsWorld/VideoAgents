@@ -1548,4 +1548,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "Agent ini belum memasang skill",
 "点击把 {p} 插入输入框": "Klik untuk menyisipkan {p} ke kotak input",
 "已禁用": "Nonaktif",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Akun: lihat ID akun yang masuk dan saldo; masuk di sini jika belum masuk, atau keluar jika sudah masuk",
+"账号": "Akun",
+"👤 账号": "👤 Akun",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Belum masuk. Klik \"Masuk\" di bawah untuk menyelesaikan proses masuk di browser; setelah berhasil masuk aplikasi akan dimulai ulang otomatis.",
+"账号 ID": "ID akun",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Setelah keluar, aplikasi akan dimulai ulang; Anda dapat masuk lagi atau melanjutkan tanpa masuk",
+"退出登录": "Keluar",
+"登录": "Masuk",
+"登录状态切换失败": "Gagal mengubah status masuk",
 };

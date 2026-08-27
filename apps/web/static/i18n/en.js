@@ -1560,4 +1560,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "This agent has no skills installed",
 "点击把 {p} 插入输入框": "Click to insert {p} into the input box",
 "已禁用": "Disabled",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Account: view the signed-in account ID and balance; sign in here when signed out, or sign out when signed in",
+"账号": "Account",
+"👤 账号": "👤 Account",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Not signed in. Click \"Sign in\" below to complete sign-in in your browser; the app restarts automatically after a successful sign-in.",
+"账号 ID": "Account ID",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "After signing out the app restarts; you can sign in again or continue without signing in",
+"退出登录": "Sign out",
+"登录": "Sign in",
+"登录状态切换失败": "Failed to change sign-in state",
 };

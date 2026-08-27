@@ -1548,4 +1548,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "Cet Agent n'a aucune compétence installée",
 "点击把 {p} 插入输入框": "Cliquer pour insérer {p} dans la zone de saisie",
 "已禁用": "Désactivée",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Compte : afficher l'ID du compte connecté et le solde ; se connecter ici si déconnecté, ou se déconnecter si connecté",
+"账号": "Compte",
+"👤 账号": "👤 Compte",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Non connecté. Cliquez sur « Se connecter » ci-dessous pour terminer la connexion dans le navigateur ; après une connexion réussie, l'application redémarre automatiquement.",
+"账号 ID": "ID du compte",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Après la déconnexion, l'application redémarre ; vous pouvez vous reconnecter ou continuer sans vous connecter",
+"退出登录": "Se déconnecter",
+"登录": "Se connecter",
+"登录状态切换失败": "Échec du changement d'état de connexion",
 };

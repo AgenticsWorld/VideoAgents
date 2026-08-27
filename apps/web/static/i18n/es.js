@@ -1548,4 +1548,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "Este Agent no tiene habilidades instaladas",
 "点击把 {p} 插入输入框": "Clic para insertar {p} en el cuadro de entrada",
 "已禁用": "Desactivada",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Cuenta: ver el ID de la cuenta con sesión iniciada y el saldo; inicia sesión aquí si no la has iniciado, o ciérrala si ya la iniciaste",
+"账号": "Cuenta",
+"👤 账号": "👤 Cuenta",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Sesión no iniciada. Pulsa «Iniciar sesión» abajo para completar el inicio de sesión en el navegador; tras iniciar sesión correctamente la aplicación se reinicia automáticamente.",
+"账号 ID": "ID de cuenta",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Tras cerrar sesión la aplicación se reinicia; puedes volver a iniciar sesión o seguir usándola sin iniciar sesión",
+"退出登录": "Cerrar sesión",
+"登录": "Iniciar sesión",
+"登录状态切换失败": "No se pudo cambiar el estado de la sesión",
 };

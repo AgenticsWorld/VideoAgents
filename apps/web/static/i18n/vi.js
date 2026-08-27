@@ -1548,4 +1548,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "Agent này chưa cài kỹ năng nào",
 "点击把 {p} 插入输入框": "Bấm để chèn {p} vào ô nhập",
 "已禁用": "Đã tắt",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Tài khoản: xem ID tài khoản đang đăng nhập và số dư; đăng nhập tại đây khi chưa đăng nhập, hoặc đăng xuất khi đã đăng nhập",
+"账号": "Tài khoản",
+"👤 账号": "👤 Tài khoản",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Chưa đăng nhập. Nhấn \"Đăng nhập\" bên dưới để hoàn tất đăng nhập trong trình duyệt; sau khi đăng nhập thành công ứng dụng sẽ tự khởi động lại.",
+"账号 ID": "ID tài khoản",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Sau khi đăng xuất ứng dụng sẽ khởi động lại; bạn có thể đăng nhập lại hoặc tiếp tục dùng mà không đăng nhập",
+"退出登录": "Đăng xuất",
+"登录": "Đăng nhập",
+"登录状态切换失败": "Đổi trạng thái đăng nhập thất bại",
 };

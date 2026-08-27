@@ -1548,4 +1548,13 @@ window.I18N_DICT = {
 "该 Agent 没有安装技能": "Auf diesem Agent sind keine Skills installiert",
 "点击把 {p} 插入输入框": "Klicken, um {p} ins Eingabefeld einzufügen",
 "已禁用": "Deaktiviert",
+"账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录": "Konto: angemeldete Konto-ID und Guthaben anzeigen; hier anmelden, wenn abgemeldet, oder abmelden, wenn angemeldet",
+"账号": "Konto",
+"👤 账号": "👤 Konto",
+"尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。": "Nicht angemeldet. Klicke unten auf „Anmelden“, um die Anmeldung im Browser abzuschließen; nach erfolgreicher Anmeldung startet die App automatisch neu.",
+"账号 ID": "Konto-ID",
+"退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Nach dem Abmelden startet die App neu; du kannst dich erneut anmelden oder ohne Anmeldung weiterarbeiten",
+"退出登录": "Abmelden",
+"登录": "Anmelden",
+"登录状态切换失败": "Anmeldestatus konnte nicht geändert werden",
 };
