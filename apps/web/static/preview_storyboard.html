@@ -831,23 +831,24 @@ function groupCard(g,inner){
   // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
   // 有服装 sheet 的在媒体区并列展示并深链人物预览页该套服装卡
   const proj0=$('#project').value.trim()||'demo';
-  const cosChips=(g.costumes||[]).map(x=>{
+  // 头部 chip 只留无缩略图的条目(缺 sheet/免出/ID 不合法);有 sheet 的只在媒体区展示,不重复(2026-08-27)
+  const cosChips=(g.costumes||[]).filter(x=>!x.url).map(x=>{
     const miss=!x.url, why=x.blocked_on?t('阻塞:')+x.blocked_on:x.skip_reason?t('免出:')+x.skip_reason:!x.known?t('服装 ID 不在 bible/costumes.json'):miss?t('缺服装 sheet(§6A 回派 costume-concept)'):'';
     const tip=[I18N.f('{name} 本组着 {cos}',{name:x.char_name,cos:x.costume}),x.label!==x.costume?x.label:'',x.source==='continuity'?t('(来源 continuity 状态表,分镜层未定服装)'):'',why].filter(Boolean).join(' · ');
     return `<a class="tag" style="text-decoration:none;color:${miss&&!x.skip_reason?'var(--yellow)':'var(--text)'}" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(tip)}">👕 ${esc(x.char_name)}:${esc(x.label)}${x.default?'':' ✱'}${miss&&!x.skip_reason?' ⚠':''}</a>`;
   }).join('');
   const cosImgs=(g.costumes||[]).filter(x=>x.url).map(x=>
     `<div><img src="${esc(bust(x.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(t('查看服装 sheet:')+x.char+' / '+x.costume)}">👕 ${esc(x.char_name)} · ${esc(x.label)}</a></div></div>`);
+      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc([x.char_name+':'+x.label, x.source==='continuity'?t('(来源 continuity 状态表,分镜层未定服装)'):''].filter(Boolean).join(' · '))}">👕 ${esc(x.char)} / ${esc(x.costume)}${x.default?'':' ✱'}</a></div></div>`);
   // 组出场生物(creatures_union → 概念库 sheet,2026-08-27):头部 🐎 chip + 媒体区 sheet 缩略,深链生物预览页
-  const creChips=(g.creatures||[]).map(x=>{
+  const creChips=(g.creatures||[]).filter(x=>!x.url).map(x=>{
     const miss=!x.url, why=!x.known?t('生物 ID 不在 bible/creatures/index.json'):miss?t('缺生物 sheet(§6A 回派 creature-concept)'):'';
     const tip=[x.id,(x.variants||[]).length?I18N.f('阶段变体 {n} 张(prompt 按章节选用)',{n:x.variants.length}):'',why].filter(Boolean).join(' · ');
     return `<a class="tag" style="text-decoration:none;color:${miss?'var(--yellow)':'var(--text)'}" href="/preview/creatures?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.id)}" title="${esc(tip)}">🐎 ${esc(x.name)}${miss?' ⚠':''}</a>`;
   }).join('');
   const creImgs=(g.creatures||[]).filter(x=>x.url).map(x=>
     `<div><img src="${esc(bust(x.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/creatures?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.id)}" title="${esc(t('查看生物预览:')+x.id)}">🐎 ${esc(x.name)} · sheet</a></div></div>`);
+      <div class="cap" title="${esc(x.file||'')}"><a class="fn charlink" href="/preview/creatures?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.id)}" title="${esc([x.name,(x.variants||[]).length?I18N.f('阶段变体 {n} 张(prompt 按章节选用)',{n:x.variants.length}):''].filter(Boolean).join(' · '))}">🐎 ${esc(x.id)}</a></div></div>`);
   const gloc=I18N.f('生成组 {ep}/{gid}(镜 {range}{sc};数据 directing/{ep}/shot_list.json 中 generation_groups group_id={gid},组视频 prompt assets/prompts/{ep}/{gid}.json,组视频 assets/clips/{ep}/{gid}.mp4)',
     {ep:EP,gid:g.group_id,range,sc:g.scene_id?I18N.f(' · 场景 {s}',{s:g.scene_id}):''});
   const sketches=(g.sketches||[]).map(k=>
