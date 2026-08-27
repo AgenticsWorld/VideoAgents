@@ -15,8 +15,7 @@
 2. 分层:前景/中景/背景各放什么(引用 blocking 的人物与 prop/scene 元素),写明遮挡与框架关系。
 3. 定视线方向与留白:人物看向哪、视线空间(lead room)与头顶空间(headroom)留多少;对话镜标注正反打的视线匹配。
 4. 遵守 `bible/aspect_ratio.json` 的画幅与安全区:关键信息不进平台 UI 遮挡区。
-5. **持读镜的道具可读面朝向(`facing_fragment_en`,2026-08-25)**:本镜出现**角色手持并看/读** `bible/props.json` 带 `readable_face` 标记的道具(读合同、看手机、端详照片)时,该道具 subject **必填 `facing_fragment_en`**——一句物理朝向声明(内容语言随用户界面语言,字段名保留 `_en` 后缀;≤25 词,不写运镜词与数值坐标),写清**可读面朝向持读角色 + 镜头看到哪一面**,例:`"the printed side of the contract faces the priest who is reading it, tilted away from the camera so only the blank back of the paper is toward the lens"`。默认立场:**可读面朝剧中读者、非可读面朝镜头**——文字面/屏幕面朝观众是物理穿帮(前科:offer ep01 grp009 梁道长念合同,中文 `facing` 写了"纸面朝上翻起"但无注入纪律被 prompt 丢弃,成片条款正对镜头);仅当剧情明确要观众读到内容(插入特写等)才写可读面朝镜头,并在该 subject 的 `rationale` 记依据。写作底稿参考 props.json 的 `readable_face.face_desc/back_desc`。**非持读镜不写此字段**(道具合着放桌上、入画但没人看不触发);原中文 `facing` 照写不变(画面语言),`facing_fragment_en` 是给下游 prompt **逐字拼入**的注入片段,严禁指望 prompt 自行翻译中文 `facing`。
-6. 产出 `directing/epNN/shots/<shot_id>/composition.json`,可执行性交 visual-qa 预审。
+5. 产出 `directing/epNN/shots/<shot_id>/composition.json`,可执行性交 visual-qa 预审。
 
 ## 不做什么(边界)
 
@@ -32,7 +31,6 @@
 | storyboard | 本镜构图草描与画面内容 | `directing/epNN/storyboard.json` |
 | shot-planning | 本镜条目(景别/机位/角色/场景 ID) | `directing/epNN/shot_list.json` |
 | aspect-ratio | 画幅与安全区 | `bible/aspect_ratio.json` |
-| prop | 道具可读面标记(`readable_face`,持读镜朝向片段的判定依据与写作底稿) | `bible/props.json` |
 
 ## 输出
 
@@ -50,16 +48,6 @@
   "layers": { "fg": "门框剪影", "mg": "c003", "bg": "殿内烛光" },
   "gaze": { "direction": "frame_left", "lead_room": "left" },
   "safe_area_ok": true
-}
-```
-
-持读镜(职责 5)的道具 subject 示例(`subjects[]` 多主体结构下):
-```json
-{
-  "id": "prop_021",
-  "desc": "聘书,被 c003 双手展开细读",
-  "facing": "纸面翻向人物,背面受光朝镜头",
-  "facing_fragment_en": "the written side of the letter faces c003 who is reading it, only its blank back toward the camera"
 }
 ```
 
@@ -87,7 +75,6 @@ instruction: |
 **机检(不过直接退回)**:
 - `shot_id` 与 shot_list 一致;`subject.id` 是该镜合法角色 ID;
 - 九宫格/层次/视线字段齐全;`safe_area_ok` 基于 aspect_ratio.json 核对为真;
-- **持读镜朝向片段(`prop_facing_field`)**:`readable_face` 道具与角色同镜而道具 subject 无 `facing_fragment_en` 的,按 WARN 报出复核是否持读镜(持读与否是语义判断,漏写即补);片段含运镜词/数值坐标 → 退回。脚本:`python3 code/prop_facing_field_check.py --project <slug> --ep <epNN>`。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80)**:
 - 叙事清晰(30):构图服务于该镜意图(压迫/孤立/亲密);

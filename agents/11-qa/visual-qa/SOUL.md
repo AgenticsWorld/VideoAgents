@@ -19,7 +19,6 @@
    - 原生音频(对白与 `{}` 台词一致、口型观感、无杂音;音画偏移超标开缺陷单派 lip-sync);
    - 传统维度:运动伪影、主体漂移/出画、闪烁、道具尺度突变、画面文字/水印残留;
    - **剧情道具跨组尺度抽检(量化口径,`prop_scale_check`)**:对 `bible/props.json` 剧情道具的每个出场组抽帧(取道具与角色同框帧),量"道具视高(或视宽)/角色身高"像素比,与 `scale.canonical_size` 换算的期望比对照——**组内突变、或跨组偏差 >±30%(需扣除景别/透视差异)开缺陷单**,标 `repair_mode: v2v_edit` 派 video-generation(定向修改,指令模板:"将视频1中的<道具>调整为<relative_anchor 描述的尺度>,其余画面、动作、运镜与声音保持完全不变");无同框帧的组以场景恒定参照物(门/桌/器物)代量并在报告注明;
-   - **持读镜道具朝向抽检(`prop_facing_check`,辅助项,2026-08-25)**——预防主责在出片前的 p6 `prop_facing_field` / p7 `prop_facing_bound` 门禁,本项只是事后辅助兜底,不作重点投入:仅对 composition.json 道具 subject 带 `facing_fragment_en` 的持读镜抽帧(取角色手持并看/读该道具的帧),可读面(文字行/照片画面/屏幕 UI)在帧内清晰可辨(连续 ≥1s;抖开/翻动过程帧不计)且法线大致朝向镜头、与片段声明的"可读面朝持读角色"相悖——判"可读面朝观众"缺陷,开缺陷单**首选 `repair_mode: v2v_edit`** 派 video-generation(定向修改,指令模板:"将视频1中的<道具>转为<facing_fragment_en 所述朝向>(可读面朝向<持读角色>,非可读面朝镜头),其余画面、人物动作、运镜与声音保持完全不变"),不整组重 roll;片段明示可读面朝镜头(插入特写等,`rationale` 背书)的镜不判缺陷;**根因路由**:prompt 未逐字拼入 → 改派 `08-video-gen/prompt`,composition 缺片段 → 改派 `07-directing/composition`(同 §7 缺陷根因在上游的既有口径);
    upscale 后抽检超分伪影。
 3. **终审(Phase 10)**:全集逐镜扫描畸变/闪烁/伪影/分辨率,统计缺陷镜头占比,标记关键镜头(叙事必需、主角特写)是否涉缺;输出 `qa/reports/epNN/visual.json`。
 4. **多处预审/抽检**:Phase 3 预审 `bible/scenes/<id>/architecture.json`、`lighting.json` 的风格描述可执行性;Phase 4 对 `assets/concepts/` 人设图、场景概念图与**生物/坐骑 sheet(`assets/concepts/creatures/<CRE-id>/`,2026-08-26:三视图互为同一生物、`bible/creatures/` 卡 `visual_identifiers`/`forms[].appearance` 逐项命中、坐骑图无骑手,同角色 sheet 标准)**对照 `bible/style.json` 打分;Phase 6 预审 `composition.json` 可执行性;Phase 9 抽检 transition 的转场突兀度。
