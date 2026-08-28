@@ -13,9 +13,6 @@
                                                  确认/签字卡片按钮点击(card.action.trigger,
                                                  同一条长连接回传,需在开放平台把「回调订阅」
                                                  也设为长连接方式)
-  {"type":"card","value":{...},"open_id":...,"message_id":...}
-                                                 泛化控制卡片按钮点击(value 无 confirm_id
-                                                 时整体透传,如 /auto 自动运行开关卡片)
   {"type":"err","error":...}                     单条消息解析失败(不退出)
   {"type":"fatal","error":"sdk_missing"}         未安装 lark-oapi(rc=3)
 仅转发单聊(p2p)文本;群聊/富文本/图片等不透传。
@@ -64,10 +61,8 @@ def main() -> int:
         P2CardActionTriggerResponse)
 
     def on_card(data):
-        """卡片按钮点击透传给父进程:确认/签字卡片 value 带 confirm_id/option,
-        平铺成老格式;其余(如 /auto 自动运行开关)把 value 整体透传,父进程按
-        action 分发。返回 toast 让手机端立即看到已提交;卡片本体的收尾/刷新
-        由父进程走 PATCH。"""
+        """确认/签字卡片按钮点击透传给父进程(value 带 confirm_id/option,字段
+        平铺)。返回 toast 让手机端立即看到已提交;卡片本体的收尾由父进程走 PATCH。"""
         try:
             ev = data.event
             v = (ev.action.value if ev and ev.action else None) or {}
@@ -76,15 +71,10 @@ def main() -> int:
                                    if ev.context else "") or ""}
             cid = str(v.get("confirm_id") or "")
             opt = str(v.get("option") or "")
-            if cid and opt:               # 确认/签字卡片(老格式,字段平铺)
+            if cid and opt:               # 确认/签字卡片(字段平铺)
                 emit({"type": "card", "confirm_id": cid, "option": opt, **base})
                 return P2CardActionTriggerResponse(
                     {"toast": {"type": "success", "content": f"已提交:{opt}"}})
-            if v:                         # 泛化控制卡片:value 整体透传
-                emit({"type": "card", "value": v, **base})
-                return P2CardActionTriggerResponse(
-                    {"toast": {"type": "success",
-                               "content": str(v.get("toast") or "已收到")}})
         except Exception as e:  # noqa: BLE001
             emit({"type": "err", "error": str(e)})
         return P2CardActionTriggerResponse({})

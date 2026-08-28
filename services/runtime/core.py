@@ -7624,6 +7624,31 @@ async def api_confirm_answer(cid: str, body: dict):
     return {"ok": True, "answer": c["answer"]}
 
 
+_AUTO_USAGE = ("用法:/auto — 查看当前项目自动运行状态;"
+               "/auto on|off — 开/关当前项目自动运行;/auto off all — 关闭全部项目")
+
+
+async def _auto_command(message: str, project: str) -> str:
+    """/auto 聊天命令(api_chat 已确保首词为 /auto):返回要回给用户的文本。"""
+    parts = message.split()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    target = parts[2].lower() if len(parts) > 2 else ""
+    if not sub:
+        on = (await api_watchdog_get(project))["enabled"]
+        th = await api_watchdog_threshold_get()
+        return (f"🤖 项目 {project} 自动运行:{'🟢 开启' if on else '⚪ 关闭'}"
+                f"(闲置 {th['idle_minutes']} 分钟 · 用量阈值 {th['threshold']}%)。\n{_AUTO_USAGE}")
+    if sub not in ("on", "off") or len(parts) > 3 or (target and not (sub == "off" and target == "all")):
+        return f"无法识别的命令「{message}」。{_AUTO_USAGE}"
+    if target == "all":
+        projects = await api_projects()
+        for p in projects:
+            await api_watchdog_set({"project": p, "enabled": False})
+        return f"🤖 已关闭全部 {len(projects)} 个项目的自动运行。"
+    await api_watchdog_set({"project": project, "enabled": sub == "on"})
+    return f"🤖 已{'开启' if sub == 'on' else '关闭'}项目 {project} 的自动运行。"
+
+
 async def api_chat(body: dict):
     agent = safe_agent(body.get("agent", ""))
     message = (body.get("message") or "").strip()
@@ -7657,6 +7682,15 @@ async def api_chat(body: dict):
         append_chat(agent, project, {"role": "user", "text": message, "source": source})
         append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
         return {"ok": True, "cleared": cleared}
+    if message.split()[0].lower() == "/auto":
+        # 自动运行(空转看门狗)开关命令:与 /clear 同一机制——不派发运行、零引擎配额,
+        # 任何通道(网页/飞书/微信/WhatsApp)发来都在此本地处理,回复经 append_chat
+        # 走 HUB 回到各端;开关落 api_watchdog_set(与运行面板 🤖 按钮同一入口),
+        # 其 HUB watchdog 事件同步刷新网页按钮状态。项目=本次对话所在项目。
+        reply = await _auto_command(message, project)
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True, "watchdog": (await api_watchdog_get(project))["enabled"]}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)
@@ -8609,12 +8643,18 @@ async def api_watchdog_get(project: str = ""):
 
 
 async def api_watchdog_set(body: dict):
-    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/飞书 /auto),
+    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/聊天 /auto 命令),
     orders=常任指令(设置菜单「自动运行」,随每条唤醒消息附带,空串清除)。
-    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。"""
+    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。
+    开关变化广播 HUB watchdog 事件,网页 🤖 按钮据此同步(命令/其他页签改的也能跟上)。"""
     proj = safe_slug(body.get("project"))
     if body.get("enabled") is not None:
-        STATE.setdefault("watchdog", {})[proj] = bool(body.get("enabled"))
+        enabled = bool(body.get("enabled"))
+        wd = STATE.setdefault("watchdog", {})
+        changed = bool(wd.get(proj, False)) != enabled
+        wd[proj] = enabled
+        if changed:
+            HUB.publish({"type": "watchdog", "project": proj, "enabled": enabled})
     if body.get("orders") is not None:
         orders = str(body.get("orders")).strip()
         if len(orders) > 2000:

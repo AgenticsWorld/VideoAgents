@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- `/auto` is now a **chat command** handled the same way as `/clear`: sending `/auto`, `/auto on`, `/auto off` or `/auto off all` to any agent from any channel (web chat, Feishu, WeChat, WhatsApp) is intercepted in `api_chat` — no run is dispatched and no engine quota is used — and toggles the idle-watchdog auto-run of the chat's current project via the same entry point as the 🤖 button (`api_watchdog_set`); the reply is written to the chat and pushed back to the originating channel like any other reply. `api_watchdog_set` now broadcasts a `watchdog` SSE event whenever a project's switch changes, and the web run panel's 🤖 **auto-run button** updates from it, so a toggle made by the command (or from another tab/channel) is reflected immediately. The Feishu-only `/auto` implementation (local interception in `feishu.py`, the per-project status card with on/off buttons, and the generic card-button passthrough in `feishu_bridge.py`) is removed; Feishu confirm/sign cards are unchanged.
+
 ## [1.0.25] - 2026-08-27
 
 ### Added

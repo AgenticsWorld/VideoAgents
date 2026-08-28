@@ -2522,6 +2522,7 @@ function connect(){
     }
     else if(ev.type==='confirm')showConfirm(ev);
     else if(ev.type==='confirm_done')removeConfirm(ev.id);
+    else if(ev.type==='watchdog'&&ev.project===curProj()){WATCHDOG_ON=!!ev.enabled;renderWatchdog()} // /auto 命令、其他页签或通道改的开关同步到 🤖 按钮
   };
 }
 
