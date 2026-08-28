@@ -595,8 +595,8 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        # 默认 Lite:含人脸图片默认可过 Seedance 审核
-        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-lite-260128",
+        # 火山方舟默认 5.0 Pro;BytePlus 仍默认 Lite(含人脸图片默认可过 Seedance 审核)
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-pro-260628",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "seedream-5-0-lite-260128",
                      "custom_model": ""},
