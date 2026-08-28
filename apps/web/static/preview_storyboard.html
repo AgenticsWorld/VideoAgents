@@ -197,6 +197,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
+  <select id="ps-skill" class="ps-select" title="视频提示词技能(H3A 签字前确认;自动=按生效视频模型解析)" style="display:none"></select>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -688,9 +689,40 @@ try{
       if(ev.project!==($('#project').value.trim()||'demo'))return;
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
+      else if(ev.type==='prompt_skill'&&document.activeElement!==$('#ps-skill'))psLoad(ev.project);
     }catch(_){}
   };
 }catch(_){}
+
+// 🧰 视频提示词技能(项目级 prompt_skill,与控制台「分镜组设置」/H3A 签字弹窗同一设定;2026-08-28)
+async function psLoad(proj){
+  const sel=$('#ps-skill');
+  try{
+    const d=await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/prompt-skill')).json();
+    if(!d||!d.resolved){sel.style.display='none';return}
+    const r=d.resolved,cfg=d.config||{};
+    sel.innerHTML='';
+    const add=(v,label)=>{const o=document.createElement('option');o.value=v;o.textContent='🧰 '+label;sel.appendChild(o)};
+    add('auto',t(r.auto_dir?'自动(按生效视频模型)':'自动(生效视频模型无对应技能)'));
+    (d.candidates||[]).forEach(c=>add('manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
+    add('off',t('跳过(不套用技能)'));
+    sel.value=cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode==='off'?'off':'auto');
+    if(!sel.value)sel.value='auto';
+    sel.title=t('视频提示词技能(H3A 签字前确认;自动=按生效视频模型解析)')+(r.warning?'\n⚠️ '+r.warning:'');
+    sel.style.borderColor=r.warning?'var(--yellow,#d4a72c)':'';
+    sel.dataset.project=proj;
+    sel.style.display='';
+  }catch(_){sel.style.display='none'}
+}
+$('#ps-skill').onchange=async()=>{
+  const sel=$('#ps-skill'),v=sel.value||'auto';
+  const body=v==='auto'?{mode:'auto'}:(v==='off'?{mode:'off'}:{mode:'manual',skill_id:v.slice(7)});
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(sel.dataset.project)+'/prompt-skill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    psLoad(sel.dataset.project);
+  }catch(e){alert(t('提示词技能读取失败')+':'+e.message)}
+};
 
 function renderEps(episodes){
   const box=$('#eps');box.innerHTML='';
@@ -1136,6 +1168,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
+    psLoad(proj);
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
     render(d);
     avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)

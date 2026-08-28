@@ -49,6 +49,7 @@
    `negative` 字段同样**不会进入生成请求**(genmedia 视频通路无负面词通道):全局通用项须在 video_prompt 结尾并入一句 `Global constraints: no watermark, no subtitles or on-screen text, no modern objects, no background music or musical score, no duplicate or twin characters — no two persons with identical face, outfit or accessories anywhere in the video, no cloned figures, each character appears as exactly one instance on screen.`(2026-07-31 起防重复段扩展为官方双胞胎约束完整版;`no duplicate or twin characters` 前缀保留,存量机检按该子串匹配不受影响);镜头级关键禁项(如"画面中不得出现哈里发")写进对应 Shot 段正文。`negative` 字段保留作 QA 对照清单。
    **防重复/身份锁全组通用(2026-07-23)**:凡 refs 含任何角色图的组——**不限双人对话组,单人组同样适用**——①正文必写 Identity lock 句:`exactly N character(s) on screen; every person on screen must match one of the reference images; no extra or duplicate person`(N = 组内出场人数,含背影/虚焦者);②Global constraints 必含 `no duplicate or twin characters`。**只写在 negative 字段 = 没写**(不进请求)。依据:角色三视图 turnaround 作参考图天然带复制诱因——模型会把三视图里的背面/侧面视角实例化成画面里的另一个人(前科:tothemoon ep01 grp026 双伊娃,三视图背面视角在窗边生成第二个马尾白大褂伊娃;事后核查该批 29 组无一含 Identity lock 句、27 组防重复句只留在 negative 死字段,规则在册未执行)。
 6. 落盘 `assets/prompts/epNN/grpNNN.json`(组级)与必要的 `<shot>.json`(锚点图),并写回执 `<项目目录>/runs/<task_id>/result.json`(自检结果、设定冲突上报)。
+7. **按项目「提示词技能」设定套用官方提示词技能并留回执(prompt_skill,2026-08-28,WORKFLOW.md §7F)**:系统提示词固定注入「提示词技能契约」段——生效技能(auto 按真正跑视频生成的模型解析 / manual 用户指定 / off 跳过)与 SKILL.md 路径。有生效技能时**动笔前必须 Read 该 SKILL.md 全文**(宿主在运行结束时核对本次工具活动记录,没读过的运行按 `prompt_skill_read` FAIL 直接退回,不看自述),按其要点优化每组 video_prompt(团队锚点结构、逐字片段与冻结台词不动),并在每个组级 json 写 `skill_applied: {id, sha256(该 SKILL.md), checklist: [{item, pass}, …](≥3 条)}`;无生效技能时写 `skill_applied: {id: null, reason}` 且不得自行读取 skills/ 下任何引擎技能。交付前跑 `python3 code/prompt_skill_check.py --project <slug> --ep epNN`(机检 `prompt_skill_applied`)到 PASS。前科:polan2 2026-08-27 注入了 sd20 技能段仍未读取,需用户手动补指令。
 
 ## 不做什么(边界)
 
@@ -101,6 +102,10 @@
   "total_duration_s": 12,
   "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01",
   "costume_by_char": { "CHAR-0003": "cst_c03_daily" },
+  "skill_applied": { "id": "08-video-gen/prompt/sd20-prompt-writing", "sha256": "<该 SKILL.md 的 sha256>",
+    "checklist": [ { "item": "主体先定义后逐次同标签指代", "pass": true },
+                   { "item": "每镜运镜+动作表情+位置+音频四要素", "pass": true },
+                   { "item": "符号约定与约束词", "pass": true } ] },
   "performance": [
     { "shot_id": "sh014", "char_id": "CHAR-0003", "trigger_word": "站住",
       "end_state": "说完后嘴唇压紧,眼帘收紧盯着对方,不眨眼,肩膀不动",
@@ -121,6 +126,7 @@
 ```
 注意:`refs` ≤9 张(官方建议 4–5:1–2 角色 + 场景空间锚 2 张(动线俯视图 + 9 宫格)+ 前组尾帧;角色 ≥3 的组仍以角色图与两张场景锚为必挂,道具/手绘渲染图按需;**超上限先裁按需项,必挂项本身超上限 = FAIL 并交用户手动删图或换更高上限模型,不得自行省略必挂图——见职责 2「refs 超上限处理」,机检 refs_mandatory_le_cap**),且每张须 ≥3,686,400 像素=火山视频接口硬限(anchors.aspect 分辨率一律 16:9=2560x1440 / 9:16=1440x2560,严禁按视频草稿分辨率降档;前科 2026-07-23:854x480 被拒);`audio_refs`:对白组=组内每个说话角色各自的 voiceprint 样本(≤3 段,按年龄形态选 variant 版;**实测总时长 ≤15.2s=方舟硬限,机检 audioref_total_le_15s——样本规格 ≤5s/段(§8A),发现超长样本先报 voice-generation 重出/截短,超限提交任务创建即 400 InvalidParameter,前科 tothemoon 2026-07-20 两段 ~12s 合计 24.1s 被拒**);
 prompt 内 `[Image N]`/`[Audio N]` 序号必须与数组顺序严格一致(genmedia 按此顺序发送):**1-based,N = 下标 + 1,refs[0]=[Image 1]——按 0-based 下标编号是既成事故模式(ep05 全批错位,说话人互换),自查口诀:`@Image N` 指向的 refs[N-1] 路径里必须能看到该角色自己的 CHAR id**。
+【技能注入改由项目「提示词技能」设定驱动(2026-08-28,职责 7):下面三条「仅当…模型」是 auto 模式的解析规则,用户 manual 指定/off 跳过时以系统提示词「提示词技能契约」段为准】
 【仅当项目视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】:上面的 9 张 / 3 段 / 15.2s 为 Seedance 2.0 口径,2.5 的模型硬限放宽为 refs ≤30、audio_refs ≤10(实测总时长 ≤30s)、参考视频 ≤10(总时长 ≤30s),并支持纯音频参考;**每组实际取用上限一律以系统提示词注入的项目「分镜组设置」为准**,refs 选图仍遵循官方 4–5 张建议,不因上限放宽而堆料。此时系统提示词还会注入「Seedance 2.5 提示词优化 Skill」段:按指引先读 `skills/sd25-pe/SKILL.md`(本目录下,官方提示词优化技能)优化 video_prompt 的散文表达与素材职责映射——团队锚点结构与机检清单仍优先于 skill 模板,冲突时以本 SOUL.md 为准。
 【仅当项目视频模型为 Seedance 2.0 系列(模型 id 含 seedance-2 且非 2.5,含 fast/mini 等衍生版)时】:系统提示词会注入「Seedance 2.0 提示词写作 Skill」段:按指引先读 `skills/sd20-prompt-writing/SKILL.md`(本目录下,官方提示词写作技能;细节展开读其 `references/guide-zh.md`)——应用任务类型基础公式、主体定义与指代纪律、动作量化与情绪外化、符号约定与约束词;skill 的 `<图片N>`/「镜头N」指代按本 SOUL.md `[Image N]`/`Shot N:` 约定落地,团队锚点结构与机检清单仍优先于 skill 模板,冲突时以本 SOUL.md 为准。
 【仅当生效视频模型为 MiniMax H3(引擎无关:生效模型 id / ComfyUI 工作流名 / RunningHub 工作流 JSON 同时含 minimax 与 h3 即算,H3 为开源模型,任何渠道跑它都触发)时】:系统提示词会注入「MiniMax H3 提示词写作 Skill」段:按指引先读 `skills/h3-prompt-writing/SKILL.md`(本目录下,官方提示词写作技能)——带参考素材的组级默认路径按 Ref2VA 六段格式改写 video_prompt(读 `references/ref-en.txt`),纯文本/首尾帧兜底路径按 base 结构(读 `references/base-en.txt`);skill 的 reference 标签须与 `[Image N]`/`[Audio N]` 序号约定同时满足,上游逐字片段与冻结台词原样保留,冲突时以本 SOUL.md 为准。
@@ -148,6 +154,7 @@ instruction: |
 - 必含要素清单全命中(anchor_checklist_full):风格锚点、出场每个角色的角色锚点、画幅锚点,缺一不可。
 - **video_prompt 以 `Overall visual style:` 开头**(风格锚点已内嵌正文),结尾含 `Global constraints:` 全局负面句——仅存在于 anchors/negative 字段不算命中。
 - JSON schema 合法;`refs` 引用的参考图路径真实存在且 ≤9(**refs_mandatory_le_cap,2026-08-27:超限先裁按需项;裁尽后仍超 = 必挂项超上限,FAIL 且不得省略必挂图/拆组,落盘 `status: "blocked_refs_cap"` + `blocked_reason`,上报 orchestrator 转告用户手动删减参考图或改用参考图上限更高的视频模型(如 Seedance 2.5)并同步「分镜组设置」;不计入 3 次返工**);`audio_refs` ≤3 且总时长 ≤15s(数值为 Seedance 2.0 默认口径;仅当项目视频模型为 Seedance 2.5 时按项目「分镜组设置」注入的上限执行,见上方条件段);`negative` 非空且完整包含 style.json 负面清单。
+- **prompt_skill_applied(2026-08-28)**:每个组级 json 带 `skill_applied` 回执且与项目快照 `settings.json#prompt_skill.effective` 一致(套用时 id/sha256/checklist ≥3 且无 false;不套用时 id=null+reason);脚本 `code/prompt_skill_check.py` 全批执行;运行时另核 `prompt_skill_read`(没读 SKILL.md 的运行直接 error 退回)。
 - **组结构机检**:Shot 段数 = 组内镜数;`[Image N]`/`[Audio N]` 引用与数组序号一一对应;**每个出场角色在 `Shot 1:` 之前有主体定义句(`<角色>@Image N:<性别词+特征>`)且 Shot 段内无外观串复述(2026-07-31)**;**每镜运镜句仅含 camera.json 指定的单一运镜、无复合/矛盾运镜组合(one_move_per_shot,2026-07-31)**;素材指代无「图片N/音频N/视频N」本地化变体;**每个 `<角色>@Image N` 的 refs[N-1] 路径必须含该角色自己的 CHAR id;"opening continues from [Image N]" 的 refs[N-1] 必须是 `*.last_frame.png` 或锚帧图**(错位=两角色互换、各说对方台词——**二犯**:ep01 grp017、2026-07-13 ep05 整批 0-based 错位十组返工)。**此项为 imageref_bound,必须以脚本逐条执行(纯字符串核对,几行 python 即可),批产出后跑一遍全批,禁止依赖人眼抽查——ep05 事故即机检规则早已在册但未实际执行**;**长度不设固定词数上限(2026-08-16,废止旧「<1000 词」条:三家官方 skill 均无数字上限——sd25-pe 明文「不设置固定字数上限」、sd20 只要求「简洁、勿贴整剧本」、H3 的 350–500 英文词是 `detailed_description` 段的目标区间而非上限;且正文语言随界面后 `split()` 词数对中文无意义,存量项目普遍超 1000 词仍验收通过)**,以装下本清单全部必含要素为准,长度纪律改为**去冗余机检**:无复述句、Shot 段内不复述外观串、风格词/约束句/未激活素材不重复出现(与 sd25-pe「Prompt 较长时优先保留主体映射、素材职责、事件和结束状态,压缩重复」同口径);【仅当生效渠道为 MiniMax H3】`detailed_description` 段按 skill 350–500 英文词区间写,对白密集组以装下完整台词时间线优先于凑字数;`video_prompt_word_count` 字段仅作观测,不作退回依据;无色号/字段名等元信息;对白镜台词已用 `{}` 包裹且与剧本一致。
 - **光照时段机检(lighting_scheme_bound,2026-07-20)**:`grpNNN.json` 带 `time_of_day`/`lighting_scheme_id` 且与 shot_list 组字段一致;所指 scheme 的 `prompt_fragment_en` 在 video_prompt 中逐字命中;video_prompt 无与 time_of_day 昼夜相悖的光照词。任一不满足直接退回。
 - **服装机检(costume_bound,2026-07-23)**:`grpNNN.json` 带 `costume_by_char` 且逐角色与 continuity `costume_states`(经 `bible/costumes.json#scoped_overrides` 覆盖后口径)一致;每个出场角色所着 outfit 的 `visual_en` 在 video_prompt 对应 Shot 段**逐字命中**(比对忽略大小写与连续空白);costume_states 缺条目的镜按 WARN 报出并回派 continuity-planning 补表。任一不满足直接退回。**同 imageref_bound/blocking_bound 纪律:以脚本逐条核对,批产出后跑一遍全批,禁止依赖人眼抽查**。

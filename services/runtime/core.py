@@ -785,6 +785,16 @@ DEFAULT_GENCONFIG = {
     # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
     # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
     "versioning": {"enabled": False},
+    # 视频提示词技能(分镜组设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
+    #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
+    #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
+    #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-prompt-writing / MiniMax H3(任意渠道)→
+    #     h3-prompt-writing,解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)= 无技能并提醒手选;
+    #   mode=manual:skill_id 为用户从该工位已安装技能里指定的一项(与生效模型不匹配只告警不阻塞);
+    #   mode=off:本项目不套用技能(回执 skill_applied.id=null, reason=user_skipped)。
+    #   effective=运行时解析快照 {skill_id, mode, resolved_from, reason, decided_at}——派 prompt 工单、
+    #   保存设置、H3A 签字时刷新;机检 code/prompt_skill_check.py(prompt_skill_applied)以此为准。
+    "prompt_skill": {"mode": "auto", "skill_id": "", "effective": {}},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
     # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
@@ -948,11 +958,31 @@ def save_genconfig(cfg: dict):
     atomic_write_json(GENCONFIG_PATH, cfg)
 
 
-def active_video_model(cfg: dict | None = None) -> str:
-    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。"""
+def active_video_provider(cfg: dict | None = None, agent_id: str = "") -> str:
+    """生效视频渠道:传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia
+    _agent_provider_override 同口径),空则按全局「生成模型」页。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    pc = v.get(v.get("provider") or "volcengine") or {}
+    ov = str(agent_model_config(agent_id).get("video_provider") or "") if agent_id else ""
+    return ov or str(v.get("provider") or "volcengine")
+
+
+def active_video_model(cfg: dict | None = None, agent_id: str = "") -> str:
+    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。
+    传 agent_id 时按该 Agent 的视频渠道覆盖取对应渠道段的模型。"""
+    cfg = cfg or load_genconfig()
+    v = cfg.get("video") or {}
+    pc = v.get(active_video_provider(cfg, agent_id)) or {}
     return str(pc.get("custom_model") or pc.get("model") or "")
+
+
+VIDEO_AGENT_ID = "08-video-gen/video-generation"     # 实际提交视频生成请求的工位
+PROMPT_AGENT_ID = "08-video-gen/prompt"
+
+
+def effective_video_model(cfg: dict | None = None) -> str:
+    """真正跑视频生成的模型 id:按 video-generation 工位的渠道覆盖解析(2026-08-28 修:
+    此前 prompt 技能注入只看全局渠道,该工位覆盖了渠道时判定失真)。"""
+    return active_video_model(cfg, VIDEO_AGENT_ID)
 
 
 def is_seedance25(model: str) -> bool:
@@ -1010,12 +1040,12 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     工作流 JSON 全文(节点类名 MiniMaxH3ReferenceToVideo 或任何含 minimax+h3 的节点/标题均命中)。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
-    if (v.get("provider") or "volcengine") == "comfyui":
+    if active_video_provider(cfg, VIDEO_AGENT_ID) == "comfyui":
         comfy = v.get("comfyui") or {}
         if (comfy.get("mode") or "local") in RH_BASES:
             return is_minimax_h3(_rh_cached_workflow(comfy))
         return is_minimax_h3(comfy.get("workflow") or "")
-    return is_minimax_h3(active_video_model(cfg))
+    return is_minimax_h3(effective_video_model(cfg))
 
 
 # MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频模型/工作流名含 minimax+h3
@@ -1210,6 +1240,137 @@ def agent_skill_prompt(agent_id: str) -> str:
     return p
 
 
+# ---------------- 视频提示词技能(项目级 prompt_skill,2026-08-28) ----------------
+# 触发链:项目设置 prompt_skill(auto/manual/off)→ resolve_prompt_skill 解析出本项目应套用的
+# 技能 → 派 prompt 工单时写入系统提示词「提示词技能契约」段 + run["skill"] 面板 chip →
+# 运行结束核验活动记录里确实 Read 过该 SKILL.md(prompt_skill_read)→ 产物 grpNNN.json 须带
+# skill_applied 回执 → 机检 code/prompt_skill_check.py(prompt_skill_applied)对照 effective 快照。
+PROMPT_SKILL_CHECK = "code/prompt_skill_check.py"
+PROMPT_SKILL_SD25 = f"{PROMPT_AGENT_ID}/sd25-pe"
+PROMPT_SKILL_SD20 = f"{PROMPT_AGENT_ID}/sd20-prompt-writing"
+PROMPT_SKILL_H3 = f"{PROMPT_AGENT_ID}/h3-prompt-writing"
+PROMPT_SKILL_REASONS = ("", "user_skipped", "no_match", "disabled", "missing")
+
+
+def prompt_skill_candidates() -> list[dict]:
+    """prompt 工位可作「提示词技能」的技能清单:引擎相关的 conditional 技能 + 注册表未登记的
+    generic 技能(用户自装)。SOUL 按组条件引用的引擎无关技能(performance-direction)不在此列,
+    它们与提示词技能并用而非二选一。"""
+    return [dict(s) for s in list_agent_skills()
+            if s["agent_id"] == PROMPT_AGENT_ID and s["kind"] in ("conditional", "generic")]
+
+
+def _video_model_label(cfg: dict) -> str:
+    """生效视频模型的可读标识:模型 id;ComfyUI 类渠道无模型 id 时给工作流名/RunningHub 工作流 id。"""
+    model = effective_video_model(cfg)
+    if model:
+        return model
+    prov = active_video_provider(cfg, VIDEO_AGENT_ID)
+    if prov == "comfyui":
+        comfy = (cfg.get("video") or {}).get("comfyui") or {}
+        mode = comfy.get("mode") or "local"
+        if mode in RH_BASES:
+            return f"comfyui/{mode}:{comfy.get('rh_workflow_id') or '?'}"
+        return f"comfyui:{comfy.get('workflow') or '?'}"
+    return prov
+
+
+def auto_prompt_skill(cfg: dict | None = None) -> tuple[str, str]:
+    """按真正跑视频生成的模型自动匹配技能 → (skill_id 或 "", 解析依据)。"""
+    cfg = cfg or load_genconfig()
+    label = _video_model_label(cfg)
+    if is_minimax_h3_active(cfg):
+        return PROMPT_SKILL_H3, label
+    model = effective_video_model(cfg)
+    if is_seedance25(model):
+        return PROMPT_SKILL_SD25, label
+    if is_seedance20(model):
+        return PROMPT_SKILL_SD20, label
+    return "", label
+
+
+def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
+    """解析本项目 prompt 工位应套用的提示词技能(不落盘)。返回:
+    mode / skill_id(最终生效,"" = 不套用)/ dir / name / path(SKILL.md 仓库相对路径)/
+    auto_id / resolved_from / reason(""|user_skipped|no_match|disabled|missing)/ warning。"""
+    cfg = cfg or load_genconfig()
+    ps = load_project_settings(project).get("prompt_skill") or {}
+    mode = ps.get("mode") if ps.get("mode") in PROMPT_SKILL_MODES else "auto"
+    manual_id = str(ps.get("skill_id") or "")
+    auto_id, resolved_from = auto_prompt_skill(cfg)
+    cands = {c["id"]: c for c in prompt_skill_candidates()}
+    reason, warning = "", ""
+    if mode == "off":
+        sid = ""
+        reason = "user_skipped"
+    elif mode == "manual":
+        sid = manual_id
+        if sid not in cands:
+            reason, warning, sid = "missing", f"指定的提示词技能 {sid or '(空)'} 未安装,本项目按无技能处理", ""
+        elif auto_id and auto_id != sid:
+            warning = (f"用户指定 {cands[sid]['dir']},与生效视频模型 {resolved_from} "
+                       f"自动匹配的 {cands[auto_id]['dir']} 不同(按用户指定执行)")
+    else:
+        sid = auto_id
+        if not sid:
+            reason = "no_match"
+            warning = (f"生效视频模型 {resolved_from or '(未知)'} 没有对应的提示词技能:"
+                       "可在「分镜组设置→提示词技能」手选一项或选择跳过")
+    if sid and not cands[sid]["enabled"]:
+        warning = f"提示词技能 {cands[sid]['dir']} 已在「设置→高级→技能包」取消勾选,本项目按无技能处理"
+        reason, sid = "disabled", ""
+    c = cands.get(sid) or {}
+    return {"mode": mode, "skill_id": sid, "dir": c.get("dir", ""), "name": c.get("name", ""),
+            "path": c.get("path", ""), "auto_id": auto_id, "auto_dir": (cands.get(auto_id) or {}).get("dir", ""),
+            "resolved_from": resolved_from, "reason": reason, "warning": warning}
+
+
+def sync_prompt_skill_effective(project: str) -> dict:
+    """把解析结果快照进项目 settings.json 的 prompt_skill.effective(仅变化时写盘),返回最新项目设置。
+    快照是机检 prompt_skill_applied 的对照基准,派 prompt 工单/保存设置/H3A 签字时刷新。"""
+    r = resolve_prompt_skill(project)
+    eff = {"skill_id": r["skill_id"], "mode": r["mode"],
+           "resolved_from": r["resolved_from"], "reason": r["reason"]}
+    path = project_settings_path(project)
+    try:
+        saved = json.loads(path.read_text())
+    except Exception:
+        saved = {}
+    if not isinstance(saved, dict):
+        saved = {}
+    block = saved.get("prompt_skill")
+    if not isinstance(block, dict):
+        block = {"mode": r["mode"], "skill_id": ""}
+    cur = block.get("effective") if isinstance(block.get("effective"), dict) else {}
+    if {k: cur.get(k) for k in eff} != eff:
+        block["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
+        saved["prompt_skill"] = block
+        ensure_project(project)
+        atomic_write_json(path, saved)
+    return load_project_settings(project)
+
+
+async def api_prompt_skill_get(project: str):
+    project = safe_slug(project)
+    cfg = sync_prompt_skill_effective(project)
+    return {"project": project, "config": cfg.get("prompt_skill") or {},
+            "resolved": resolve_prompt_skill(project),
+            "candidates": prompt_skill_candidates()}
+
+
+async def api_prompt_skill_set(body: dict):
+    """分镜组设置弹窗 / H3A 签字弹窗 / 分镜预览页的「提示词技能」下拉:{project, mode, skill_id}。"""
+    project = safe_slug((body or {}).get("project"))
+    mode = str((body or {}).get("mode") or "auto")
+    sid = str((body or {}).get("skill_id") or "")
+    await api_projconfig_set({"project": project,
+                              "prompt_skill": {"mode": mode, "skill_id": sid if mode == "manual" else ""}})
+    out = await api_prompt_skill_get(project)
+    HUB.publish({"type": "prompt_skill", "project": project, "resolved": out["resolved"],
+                 "config": out["config"]})
+    return out
+
+
 def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
     """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
     传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖:覆盖为 comfyui ⇒ 按全局
@@ -1282,7 +1443,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "versioning")
+                         "packaging", "versioning", "prompt_skill")
 
 
 def project_settings_path(project: str) -> Path:
@@ -1365,6 +1526,23 @@ def _validate_packaging(p: dict):
 def _validate_versioning(v: dict):
     if "enabled" in v and not isinstance(v["enabled"], bool):
         raise ServiceError(400, "versioning.enabled must be a boolean")
+
+
+PROMPT_SKILL_MODES = ("auto", "manual", "off")
+
+
+def _validate_prompt_skill(ps: dict):
+    if not isinstance(ps, dict):
+        raise ServiceError(400, "prompt_skill must be an object")
+    mode = ps.get("mode", "auto")
+    if mode not in PROMPT_SKILL_MODES:
+        raise ServiceError(400, f"prompt_skill.mode must be one of {PROMPT_SKILL_MODES}")
+    sid = str(ps.get("skill_id") or "")
+    if mode == "manual":
+        if sid not in {c["id"] for c in prompt_skill_candidates()}:
+            raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
+    if "effective" in ps and not isinstance(ps["effective"], dict):
+        raise ServiceError(400, "prompt_skill.effective must be an object")
 
 
 def _validate_review(r: dict):
@@ -2553,37 +2731,71 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
 - 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
 - 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
-    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()) \
-            and skill_enabled("08-video-gen/prompt/sd25-pe"):
+    # 视频提示词技能:按项目 prompt_skill 设定解析(auto=生效视频模型;manual=用户指定;off=跳过),
+    # 而非只看全局渠道;解析结果同步快照进 settings.json(机检基准)
+    psk = None
+    if agent_id == PROMPT_AGENT_ID:
+        sync_prompt_skill_effective(project)
+        psk = resolve_prompt_skill(project)
+    psk_id = (psk or {}).get("skill_id") or ""
+    psk_how = ""
+    if psk:
+        psk_how = (f"用户在项目设置中指定(manual)" if psk["mode"] == "manual"
+                   else f"按生效视频模型 {psk['resolved_from']} 自动解析(auto)")
+    if psk_id == PROMPT_SKILL_SD25:
         p += f"""
 
-## Seedance 2.5 提示词优化 Skill(仅当生效视频模型为 Seedance 2.5 时注入,当前已生效)
+## Seedance 2.5 提示词优化 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成模型是 Seedance 2.5。撰写或优化组级 video_prompt 前,**先阅读官方提示词优化技能并按其方法执行**:
 - Skill 文件:{SD25_PE_SKILL}(官方 sd25-pe,已随仓库安装,直接 Read 全文)
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
-    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()) \
-            and skill_enabled("08-video-gen/prompt/sd20-prompt-writing"):
+    if psk_id == PROMPT_SKILL_SD20:
         p += f"""
 
-## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
+## Seedance 2.0 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
 - Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
 - 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
-    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active() \
-            and skill_enabled("08-video-gen/prompt/h3-prompt-writing"):
+    if psk_id == PROMPT_SKILL_H3:
         p += f"""
 
-## MiniMax H3 提示词写作 Skill(仅当生效视频模型/工作流名含 minimax+h3 时注入,当前已生效)
+## MiniMax H3 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成走 MiniMax H3 模型(H3 为开源模型,不限渠道:MiniMax/OpenRouter API、RunningHub、ComfyUI H3 工作流等)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
 - Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
 - 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
+    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3):
+        p += f"""
+
+## 提示词技能 `{psk['dir']}`(项目「提示词技能」设定:{psk_how},当前已生效)
+撰写或优化组级 video_prompt 前,**先 Read 该技能文件全文并按其方法执行**:
+- Skill 文件:{psk['path']}(按其指引再读同目录 references/ 下的资料)
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段与冻结版台词一律保持不动——skill 只用于提升散文表达、模板化组织与素材职责说明"""
+    if psk is not None:
+        if psk_id:
+            contract = f"""- 本项目生效技能:`{psk['dir']}`(id `{psk_id}`;{psk_how});Skill 文件 {psk['path']}
+- **必须在动笔前 Read 该 SKILL.md 全文**(运行结束时宿主核验本次运行的工具活动记录:没有读取该文件的运行按机检 `prompt_skill_read` FAIL 退回重做,不看回执自述)
+- 每个组级 `assets/prompts/epNN/grpNNN.json` 必带回执字段 `skill_applied`:`{{"id": "{psk_id}", "sha256": "<该 SKILL.md 文件的 sha256>", "checklist": [{{"item": "<技能要点,如 主体先定义后指代>", "pass": true}}, ...]}}`——checklist 逐条对应该技能的核心要点(≥3 条),`pass=false` 的条目须在同级 `notes` 说明原因
+- 用户在设置里改动技能或视频模型后,快照 settings.json#prompt_skill.effective 随之变化,已写好的 grpNNN.json 会因 id/sha256 不符而机检退回——退回单按新技能重做,不得只改字段"""
+        else:
+            why = {"user_skipped": "用户在项目设置中选择跳过(off)",
+                   "no_match": f"生效视频模型 {psk['resolved_from'] or '(未知)'} 没有对应技能(auto 未匹配)",
+                   "disabled": "所匹配技能已在「设置→高级→技能包」取消勾选",
+                   "missing": "用户指定的技能未安装"}.get(psk["reason"], psk["reason"] or "未设定")
+            contract = f"""- 本项目**不套用**提示词技能:{why}。按 SOUL.md 常规写法完成工单,不要自行读取 skills/ 下任何引擎提示词技能
+- 每个组级 `assets/prompts/epNN/grpNNN.json` 仍必带回执字段 `skill_applied`:`{{"id": null, "reason": "{psk['reason'] or 'no_match'}"}}`"""
+        warn = f"\n- ⚠️ {psk['warning']}(已在回执 notes 里如实记录即可,不阻塞)" if psk.get("warning") else ""
+        p += f"""
+
+## 提示词技能契约(prompt_skill_applied,项目「分镜组设置→提示词技能」,当前项目实时生效)
+{contract}{warn}
+- 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
             and skill_enabled("08-video-gen/upscale/minimax-regenerate-2k"):
         p += f"""
@@ -2747,7 +2959,8 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "engine", "model", "tokens", "progress") if k in run} | {
+        "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
         "message": (run.get("message") or "")[:120],
@@ -2803,6 +3016,58 @@ def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
     return agent_concurrency()
 
 
+# 提示词技能读取核验(prompt_skill_read):活动记录里出现该技能目录(Read/cat/read_file 任一
+# 形式)即算读过;codex 引擎不回传文件读取事件,无法核验(skill_read=None,不退回)。
+_NO_READ_TRACKING_ENGINES = {"codex"}
+
+
+def _prompt_skill_postcheck(run: dict):
+    """prompt 工位运行结束:本项目要求套用技能而本次运行没读过 SKILL.md → 机检 FAIL 退回。
+    派单(有父运行)的:状态改 error 回给总制片按返工流程重派;用户手动对话的:同样标 error,
+    并自动在同一会话追加一次补读工单(仅一次,补读单再不读就只报错不再追加)。"""
+    if run.get("agent") != PROMPT_AGENT_ID or not run.get("skill_path"):
+        return
+    if run.get("status") != "done" or run.get("stopped"):
+        return
+    if (run.get("engine") or "") in _NO_READ_TRACKING_ENGINES:
+        run["skill_read"] = None
+        return
+    marker = f"skills/{run.get('skill') or ''}/"
+    acts = run.get("activity") or []
+    run["skill_read"] = any(marker in a for a in acts)
+    if run["skill_read"]:
+        return
+    run["status"] = "error"
+    run["error"] = (f"机检 prompt_skill_read FAIL:本项目要求套用提示词技能 {run['skill']},"
+                    f"但本次运行的工具活动记录里没有读取 {run['skill_path']};"
+                    "产出的 video_prompt 未经该技能优化,本单退回重做")
+    if run.get("skill_retry_of"):
+        run["error"] += "(这已是自动补读单,不再追加;请人工核查该工位是否按契约执行)"
+    elif not run.get("parent"):
+        run["_skill_followup"] = True
+        run["error"] += "(已自动追加一次补读重做工单)"
+    else:
+        run["error"] += ("(派单方按返工流程重派:attempt 递增,指令首行写明「先 Read "
+                         f"{run['skill_path']} 再按其 checklist 重写并补 skill_applied」)")
+
+
+async def _prompt_skill_followup(run: dict):
+    """用户手动对话触发的 prompt 运行漏读技能时,同会话自动追加一次补读工单。"""
+    msg = (f"机检 prompt_skill_read FAIL:上一单没有读取 {run['skill_path']}。"
+           f"现在先 Read 该文件全文,按其要点重新优化你刚写的每个组级 video_prompt"
+           f"(团队锚点结构、逐字片段与冻结台词不动),逐组补 skill_applied 回执字段,"
+           f"然后跑 `python3 {PROMPT_SKILL_CHECK} --project {run['project']} --ep <本单集号>` 到 PASS 再交付。")
+    out = await api_chat({"agent": run["agent"], "message": msg, "project": run["project"],
+                          "engine": run.get("engine") or "", "model": run.get("model") or None,
+                          "source": "runtime", "parent": None})
+    rid = out.get("run_id")
+    if rid and rid in RUNS:
+        RUNS[rid]["skill_retry_of"] = run["id"]
+        run["skill_retry_run"] = rid
+        publish_run(RUNS[rid])
+        publish_run(run)
+
+
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
     is_dispatcher = is_dispatcher_agent(agent_id)
@@ -2842,6 +3107,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 return
         try:
             role = build_role_prompt(agent_id, run["project"])
+            if agent_id == PROMPT_AGENT_ID:
+                # 运行面板 chip + 结束时 prompt_skill_read 核验的依据(dir 空 = 本项目不套用技能)
+                psk = resolve_prompt_skill(run["project"])
+                run["skill"] = psk["dir"]
+                run["skill_path"] = psk["path"]
+                publish_run(run)
         except Exception as error:  # noqa: BLE001
             # Prompt construction happens before the CLI process and its JSONL log
             # are created. Always finish the run here so an encoding/configuration
@@ -3170,6 +3441,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
+            _prompt_skill_postcheck(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -3219,6 +3491,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 await ensure_human_gate_approvals(run["project"], parent=run["id"])
             except Exception as e:  # noqa: BLE001
                 print(f"[approval] 运行结束闸门核对失败(不影响运行回执):{e}", flush=True)
+            if run.pop("_skill_followup", None):
+                try:
+                    await _prompt_skill_followup(run)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[prompt_skill] 自动补读派发失败:{e}", flush=True)
 
 
 def rel_path(p: str) -> str:
@@ -5777,7 +6054,7 @@ async def api_projconfig_get(project: str = "demo"):
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
                        "shot_group": "分镜组设置",
                        "review": "审核设置", "packaging": "片头片尾",
-                       "versioning": "版本管理"}
+                       "versioning": "版本管理", "prompt_skill": "提示词技能"}
 
 
 async def api_projconfig_set(body: dict):
@@ -5792,9 +6069,14 @@ async def api_projconfig_set(body: dict):
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
     _validate_versioning(cfg.get("versioning") or {})
+    _validate_prompt_skill(cfg.get("prompt_skill") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
+    # 提示词技能快照随设置一起刷新(模式/指定技能/视频模型任一变化都会体现在 effective 里);
+    # 快照本身的变化不计入「设置变更」通知(那是派生值,不是用户改的)
+    cfg = sync_prompt_skill_effective(project)
+    old.setdefault("prompt_skill", {})["effective"] = (cfg.get("prompt_skill") or {}).get("effective")
     changes = _flat_diff(old, cfg)
     secs = {c.split(":")[0].split(".")[0] for c in changes}
     label = "、".join(v for k, v in PROJ_SETTING_LABELS.items() if k in secs)
@@ -7682,6 +7964,14 @@ async def api_confirm_answer(cid: str, body: dict):
         c["answered"] = time.time()
         if (c.get("kind") == "sign" and c.get("gate_id")
                 and c["answer"] == "签字"):
+            if str(c.get("checkpoint") or "").upper().startswith("H3A"):
+                # 分镜签字即冻结本集的提示词技能快照(用户在弹窗里可能刚改过)
+                try:
+                    proj = _approval_project(c)
+                    if proj:
+                        sync_prompt_skill_effective(proj)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[prompt_skill] H3A 签字快照失败:{e}", flush=True)
             c["continuation_attempted"] = time.time()
             try:
                 continuation = await _continue_signed_gate(c)

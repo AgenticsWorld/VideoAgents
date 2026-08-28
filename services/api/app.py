@@ -162,6 +162,16 @@ async def set_project_config(project: str, body: dict[str, Any]) -> dict[str, An
     return await core.api_projconfig_set(body)
 
 
+@api.get("/projects/{project}/prompt-skill", tags=["projects"])
+async def get_prompt_skill(project: str) -> dict[str, Any]:
+    return await core.api_prompt_skill_get(project)
+
+
+@api.post("/projects/{project}/prompt-skill", tags=["projects"])
+async def set_prompt_skill(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_prompt_skill_set({**body, "project": project})
+
+
 @api.get("/projects/{project}/references", tags=["artifacts"])
 async def references(project: str) -> dict[str, Any]:
     return _artifact_urls(await core.api_refs_list(project), project)
