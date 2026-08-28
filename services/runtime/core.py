@@ -15,6 +15,7 @@ import io
 import json
 import mimetypes
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -6007,9 +6008,27 @@ def _avatar_keys(cfg: dict) -> tuple[str, str]:
     return ak, sk
 
 
+_AVATAR_THROTTLE_RE = re.compile(
+    r"Quota\w*Exceeded|QPM|QPS|Throttl|RateLimit|TooManyRequests|HTTP 429", re.I)
+_AVATAR_CALL_RETRIES = 6            # 限流退避:2s→4s→…≤30s(+抖动),共重试 6 次
+
+
 def _avatar_call(action: str, body: dict) -> dict:
     """方舟素材资产(Assets)OpenAPI 调用(AK/SK V4 签名,Service=ark);
-    返回 Result,业务/HTTP 错误统一抛 ServiceError。"""
+    返回 Result,业务/HTTP 错误统一抛 ServiceError。方舟写接口有 QPM 限额
+    (实测 CreateAsset 连发触发 QuotaWriteQPMExceeded),命中限流类错误按指数
+    退避重试;其他错误直接抛。"""
+    for attempt in range(_AVATAR_CALL_RETRIES + 1):
+        try:
+            return _avatar_call_once(action, body)
+        except ServiceError as e:
+            if attempt >= _AVATAR_CALL_RETRIES or not _AVATAR_THROTTLE_RE.search(e.detail):
+                raise
+            time.sleep(min(30.0, 2.0 ** (attempt + 1)) + random.random())
+    raise AssertionError("unreachable")
+
+
+def _avatar_call_once(action: str, body: dict) -> dict:
     ak, sk = _avatar_keys(_avatar_cfg())
     try:
         r = _volc_signed_call(ak, sk, action, _AVATAR_API_VERSION, body,
@@ -6099,20 +6118,67 @@ async def _avatar_group_id(cfg: dict) -> str:
     return gid
 
 
+# 「文件托管」各渠道对应的 SDK 模块与 AK/SK 环境变量(与 genmedia.STORAGE_ENV 同口径)
+_STORAGE_SDK = {"tos": ("tos", "tos"), "oss": ("oss2", "oss2"),
+                "cos": ("qcloud_cos", "cos-python-sdk-v5"), "s3": ("boto3", "boto3")}
+_STORAGE_ENV = {"tos": ("TOS_ACCESS_KEY", "TOS_SECRET_KEY"),
+                "oss": ("OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"),
+                "cos": ("COS_SECRET_ID", "COS_SECRET_KEY"),
+                "s3": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")}
+
+
+def _avatar_storage_check() -> dict:
+    """人像入库前置自检:方舟 CreateAsset 只收公网 URL(data: base64 实测 400
+    「URL must be a valid HTTP or HTTPS URL」),本地图必须先经「文件托管」对象存储换
+    预签名 URL——检查生效渠道的 bucket/AK/SK 是否配齐、当前解释器能否导入该渠道 SDK
+    (桌面捆绑运行时曾缺 tos,上传子进程静默失败被误报成 URL 无效)。
+    返回 {ok, provider, bucket, configured, sdk_ok, sdk, detail}。"""
+    st = load_genconfig().get("storage") or {}
+    provider = str(st.get("provider") or "tos")
+    c = st.get(provider) or {}
+    mod, pkg = _STORAGE_SDK.get(provider, (provider, provider))
+    ak_env, sk_env = _STORAGE_ENV.get(provider, ("", ""))
+    ak = str(c.get("access_key") or os.environ.get(ak_env, "")).strip()
+    sk = str(c.get("secret_key") or os.environ.get(sk_env, "")).strip()
+    bucket = str(c.get("bucket") or "").strip()
+    configured = bool(ak and sk and bucket)
+    sdk_ok = importlib.util.find_spec(mod) is not None
+    out = {"ok": configured and sdk_ok, "provider": provider, "bucket": bucket,
+           "configured": configured, "sdk_ok": sdk_ok, "sdk": pkg, "detail": ""}
+    if not configured:
+        out["detail"] = (f"文件托管「{provider}」未配齐 bucket/Access Key/Secret Key"
+                         "(⚙️ 设置 → 文件托管);方舟入库只收公网 URL,须先配置对象存储")
+    elif not sdk_ok:
+        out["detail"] = (f"当前 Python 运行时缺少 {provider} 存储 SDK(模块 {mod}):"
+                         f"请执行 `{sys.executable} -m pip install {pkg}` 后重试")
+    else:
+        out["detail"] = f"{provider} 桶 {bucket},SDK {pkg} 已就绪"
+    return out
+
+
+async def api_avatar_ready() -> dict:
+    """/avatars 页「使用前准备」就绪自检(文件托管配置 + SDK 可导入)。"""
+    return await asyncio.to_thread(_avatar_storage_check)
+
+
 def _avatar_source_url(p: Path) -> str:
-    """本地图片 → CreateAsset 可访问的 URL:优先经「文件托管」对象存储出预签名 URL
-    (genmedia upload 子进程,与参考视频同链路);未配置托管时回退 data: base64
-    内联尝试,若方舟拒收由上层给出配置托管的提示。"""
+    """本地图片 → CreateAsset 可访问的公网 URL:经「文件托管」对象存储出预签名 URL
+    (genmedia upload 子进程,与参考视频同链路)。不再回退 data: base64——方舟实测拒收,
+    回退只会把真实原因(SDK 缺失/密钥错误)换成误导性的 URL 无效报错;失败直接带
+    子进程 stderr 原文抛出。"""
+    chk = _avatar_storage_check()
+    if not chk["ok"]:
+        raise ServiceError(400, chk["detail"])
     r = subprocess.run([sys.executable, str(ROOT / "modules" / "genmedia.py"),
                         "upload", "--input", str(p)],
                        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
-    if r.returncode == 0:
-        out = (r.stdout or "").strip()
-        url = out.splitlines()[-1].strip() if out else ""
-        if url.startswith("http"):
-            return url
-    mime = mimetypes.guess_type(p.name)[0] or "image/png"
-    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+    out = (r.stdout or "").strip()
+    url = out.splitlines()[-1].strip() if out else ""
+    if r.returncode == 0 and url.startswith("http"):
+        return url
+    err = (r.stderr or "").strip().splitlines()
+    raise ServiceError(502, f"参考图上传到对象存储({chk['provider']} {chk['bucket']})失败:"
+                            f"{(err[-1] if err else f'退出码 {r.returncode}')[:300]}")
 
 
 async def api_avatar_upload(body: dict):
@@ -6134,17 +6200,10 @@ async def api_avatar_upload(body: dict):
     gid = await _avatar_group_id(cfg)
     url = await asyncio.to_thread(_avatar_source_url, p)
     name = f"{project}-{p.stem}"[:80]
-    try:
-        res = await asyncio.to_thread(
-            _avatar_call, "CreateAsset",
-            {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
-             "ProjectName": cfg.get("project_name") or "default"})
-    except ServiceError as e:
-        if url.startswith("data:"):
-            raise ServiceError(e.status_code, f"{e.detail}(当前以 base64 内联提交;"
-                               "若方舟要求公网 URL,请先在 ⚙️ 设置 → 文件托管 配置"
-                               "对象存储后重试)") from None
-        raise
+    res = await asyncio.to_thread(
+        _avatar_call, "CreateAsset",
+        {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
+         "ProjectName": cfg.get("project_name") or "default"})
     aid = str(res.get("Id") or "").strip()
     if not aid:
         raise ServiceError(502, f"CreateAsset 未返回素材 Id:{res}")
@@ -6256,6 +6315,7 @@ async def api_avatar_delete(body: dict):
 AVATAR_AUTO_AGENT = "08-video-gen/video-generation"
 _AVATAR_AUTO_LOCK = asyncio.Lock()          # 并发 video-generation 工单串行整备
 _AVATAR_AUTO_WAIT_S = 600                   # 等待审核 Active 的上限(超时告警放行)
+_AVATAR_AUTO_PACE_S = 0.6                   # 逐条删除/上传间隔,先不撞方舟写 QPM 限额
 
 
 def _avatar_auto_enabled(agent_id: str) -> bool:
@@ -6318,6 +6378,7 @@ async def _avatar_clear_all() -> int:
                 ok += 1
             except ServiceError:
                 pass
+            await asyncio.sleep(_AVATAR_AUTO_PACE_S)
         deleted += ok
         if not ok:
             break
@@ -6355,6 +6416,10 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             if not refs:
                 note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
                 return
+            chk = await asyncio.to_thread(_avatar_storage_check)
+            if not chk["ok"]:      # 托管/SDK 不就绪:整备必然全败,不清库、不上传,只告警
+                note(f"⚠️ 虚拟人像库全自动管理跳过:{chk['detail']}")
+                return
             epkey = f"{project}|{','.join(eps)}"
             led = _avatar_ledger()
             if (led.get("auto_manage") or {}).get("key") != epkey:
@@ -6371,6 +6436,7 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
                     await api_avatar_upload({"project": project, "ref": ref})
                 except ServiceError as e:
                     failed.append(f"{Path(ref).name}: {e.detail}")
+                await asyncio.sleep(_AVATAR_AUTO_PACE_S)
             deadline = time.time() + _AVATAR_AUTO_WAIT_S
             pending = list(refs)
             while pending and time.time() < deadline:

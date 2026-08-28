@@ -48,6 +48,8 @@ button:disabled{opacity:.5;cursor:default}
 .autolabel{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);cursor:pointer;flex:none}
 .autolabel input{accent-color:var(--accent)}
 .hint a{color:var(--link)}
+#ready.ok{color:var(--green)}
+#ready.err{color:var(--red)}
 ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px}
 .pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
 .enbadge{font-size:12px;border-radius:10px;padding:1px 10px;font-weight:600}
@@ -96,6 +98,7 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
         <li>点击「启用」后,可在下方管理已入库的素材;人物预览页每张形象图会出现「入库」按钮,分镜重出时已入库(Active)的参考图自动以资产 URI(asset://素材ID)提交。</li>
       </ol>
       <div class="hint">注意:上传入库为异步审核(Processing → Active/Failed),仅 Active 状态的素材可用于视频生成;素材按方舟「项目」隔离,下方 ProjectName 须与「生成模型」页视频生成所用方舟 API Key 所属项目一致(默认 default)。</div>
+      <div class="hint" id="ready"></div>
     </div>
   </div>
 
@@ -259,7 +262,18 @@ $('#list').addEventListener('click',async e=>{
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
+/* 入库前置自检:方舟 CreateAsset 只收公网 URL,本地图须经「文件托管」对象存储换预签名 URL;
+   检查生效渠道 bucket/AK/SK 配齐 + 当前运行时能导入该渠道 SDK(桌面捆绑运行时曾缺 tos) */
+async function loadReady(){
+  const r=$('#ready');
+  try{
+    const d=await api('/api/v1/avatar-assets/ready');
+    r.textContent=t('文件托管自检:')+(d.ok?'✓ ':'✗ ')+(d.detail||'');
+    r.className='hint '+(d.ok?'ok':'err');
+  }catch(e){r.textContent=t('文件托管自检:')+'✗ '+e.message;r.className='hint err'}
+}
 (async()=>{
+  loadReady();
   try{CFG=await api('/api/v1/config/generation')}catch(e){msg(t('加载配置失败:')+e.message);return}
   const c=av();
   $('#in-ak').value=c.access_key||'';

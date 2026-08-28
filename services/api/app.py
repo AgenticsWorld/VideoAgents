@@ -461,6 +461,12 @@ async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_status(body)
 
 
+@api.get("/avatar-assets/ready", tags=["avatar-assets"])
+async def avatar_assets_ready() -> dict[str, Any]:
+    """入库前置自检:文件托管配置 + 存储 SDK 可导入(方舟 CreateAsset 只收公网 URL)。"""
+    return await core.api_avatar_ready()
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())

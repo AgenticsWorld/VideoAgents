@@ -1445,6 +1445,7 @@ window.I18N_DICT = {
 "🔑 密钥与开关": "🔑 Kredensial & Sakelar",
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Jika Access Key / Secret Key dikosongkan, AK/SK yang dikonfigurasi di ⚙️ Pengaturan → Hosting Berkas → Volcano TOS (atau variabel lingkungan TOS_ACCESS_KEY/TOS_SECRET_KEY) dipakai otomatis.",
 "default(须与视频生成 API Key 所属项目一致)": "default (harus sama dengan proyek API Key pembuatan video)",
+"文件托管自检:": "Pemeriksaan hosting berkas: ",
 "全自动管理": "Pengelolaan sepenuhnya otomatis",
 "开启后:视频模型为火山引擎时,每集视频生成开跑前自动清空资产库(规避素材数量上限),并把该集用到的人物概念图重新入库、等审核通过后开跑": "Jika diaktifkan dan model video adalah Volcano Engine, sebelum pembuatan video tiap episode dimulai, pustaka dikosongkan otomatis (menghindari batas jumlah aset) dan gambar konsep karakter yang dipakai episode itu didaftarkan ulang; pembuatan dimulai setelah lolos tinjauan",
 "✓ 已启用": "✓ Diaktifkan",
