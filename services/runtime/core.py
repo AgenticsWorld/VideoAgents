@@ -4793,6 +4793,10 @@ def _preview_storyboard(project: str, ep: str):
             # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
             "continuity_anchor": tr.get("anchor") or None,
             "continuity_anchor_reason": str(tr.get("anchor_reason") or tr.get("notes") or ""),
+            # 组入口转场 / 叙事块(shot_list transition_in / narrative_block,WORKFLOW §9C,2026-08-28):
+            # 非硬切才在组卡显示 chip;实施在 Phase 9 code/render_transitions.py,这里只展示设计
+            "transition_in": g.get("transition_in") if isinstance(g.get("transition_in"), dict) else None,
+            "narrative_block": g.get("narrative_block") if isinstance(g.get("narrative_block"), dict) else None,
             "has_prompt": bool(pd),
             "tail_ref": next((r for r in (pd.get("refs") or [])
                               if isinstance(r, str) and r.endswith(".last_frame.png")), None),

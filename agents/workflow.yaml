@@ -215,7 +215,7 @@ phases:
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan],
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
-                               costume_refs_valid], rubric: visual_plan_v1 } }   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/render_blocking_map.py --source storyboard --strict
+                               costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/render_blocking_map.py --source storyboard --strict
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [p6-storyboard],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
           validation: { auto: [duration_sum_pm_10pct, id_refs_valid, shot_ids_unique,
@@ -226,6 +226,7 @@ phases:
                                dialogue_est_fits_group_x0.7,
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
+                               transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切,渲染 directing/{ep}/blocking_maps/{group}.png(code/render_blocking_map.py --strict,2026-08-19)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
       - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
@@ -240,7 +241,8 @@ phases:
       - { id: p6-continuity, agent: 07-directing/continuity-planning,
           depends_on: [p6-camera, p6-composition, p6-blocking],
           outputs: ["directing/{ep}/continuity_plan.json"],   # 含 group_transitions(组间衔接检查)
-          validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent],
+          validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent,
+                               transition_anchor_consistent],   # group_transitions 镜像 shot_list transition_in;可渲染转场边界 anchor=none,match_cut 核构图对位(§9C,2026-08-28)
                         qa: [11-qa/timeline-qa] } }
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
@@ -347,7 +349,11 @@ phases:
       - { id: p9-edit, agent: 10-editing/edit, outputs: ["edit/{ep}/timeline.json", "edit/{ep}/cut_v1.mp4"],
           # 封装前重验 code/check_narration_sync.py(§8B ②):final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报
           validation: { auto: [narration_anchor_sync, duration_pm_5pct, no_black_frames], rubric: edit_v1 } }
-      - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit],
+          # 只按 shot_list transition_in 实施,只准宿主 CLI code/render_transitions.py plan→render→check(WORKFLOW.md §9C,2026-08-28):
+          # cut_v1→cut_v2 pad 补偿总长不变;全片硬切时不产出 cut_v2(cut_v1 即定稿),transitions_render.json 照常落盘
+          outputs: ["edit/{ep}/transitions_render.json"],
+          validation: { auto: [transition_render_ok], qa: [11-qa/visual-qa] } }
       - { id: p9-subtitle, agent: 10-editing/subtitle, depends_on: [p9-transition],
           outputs: ["edit/{ep}/subtitles.srt"],
           # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板

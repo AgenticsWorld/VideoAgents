@@ -17,6 +17,15 @@
                                        silent_rationale
   (dialogue_est_fits_group_x0.7 需 screenplay 对白层估时,不在本脚本,由 shot-planning 自查)
 
+组间转场机检 transition_ok(2026-08-28,WORKFLOW.md §9C;默认开启,--skip-transition 跳过):
+  9. transition_type_valid            组 transition_in.type ∈ 受控枚举(缺省 = hard_cut);可渲染类型
+                                       (dissolve/fade_black/fade_white/dip_black/dip_white)duration_s 落在各自范围;
+                                       首组只能 hard_cut / fade_black / fade_white(淡入),没有前组可叠
+  10. transition_reason_required      非 hard_cut(含标注型 smash_cut/match_cut)必填 reason 与 intent(可溯 directing_plan 转场清单)
+  11. transition_budget_le_1pct       Σ可渲染转场 duration_s ≤ 集预算 budget_s × 1%
+  12. narrative_block_paired          narrative_block 同 id 的组必须连续,role 序列 start[/middle…]/end(单组 single);
+                                       块首组必有 transition_in(可为显式 hard_cut + reason),块尾组的下一组同样必有
+
 CLI:
   python3 code/check_generation_groups.py <shot_list.json>            # 机检已有分组
   python3 code/check_generation_groups.py <shot_list.json> --propose  # 按贪心规则生成草案分组并打印
@@ -40,6 +49,23 @@ MIN_GROUP_S = 4
 MAX_CHARS = 4
 WINDOW_FACTOR = 1.15          # §7D ①:窗口 ≥ est_duration_s×1.15
 AUDIO_PLANS = ("dialogue", "narration_over", "ambient_only")
+# —— 组间转场契约(shot_list.generation_groups[].transition_in,2026-08-28;render_transitions.py 同源)——
+# 可渲染 5 种由宿主 CLI code/render_transitions.py 在 Phase 9 实施(pad 补偿,总时长不变);
+# 标注型 2 种不渲染(= 硬切),只供 continuity/QA 核构图对位;缺省 = hard_cut
+TRANSITION_RENDERABLE = {
+    "dissolve": (0.25, 1.0),      # 叠化(xfade=fade)
+    "fade_black": (0.3, 1.5),     # 前组尾淡出到黑,本组硬入;首组 = 从黑淡入
+    "fade_white": (0.3, 1.5),     # 同上,白
+    "dip_black": (0.3, 1.5),      # 前组淡出到黑 + 本组从黑淡入(xfade=fadeblack)
+    "dip_white": (0.3, 1.5),      # 同上,白(xfade=fadewhite)
+}
+TRANSITION_ANNOTATION = ("smash_cut", "match_cut")
+TRANSITION_TYPES = ("hard_cut",) + tuple(TRANSITION_RENDERABLE) + TRANSITION_ANNOTATION
+TRANSITION_INTENTS = ("flashback_in", "flashback_out", "time_skip", "scene_change", "montage",
+                      "dream_in", "dream_out", "chapter", "episode_open", "other")
+TRANSITION_BUDGET_RATIO = 0.01     # Σ可渲染转场时长 ≤ 集预算 1%
+BLOCK_KINDS = ("flashback", "dream", "montage", "imagination")
+BLOCK_ROLES = ("start", "middle", "end", "single")
 # narration.md 条目头:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]
 NARR_ITEM_RE = re.compile(
     r"^\[(N-\d+)\s*\|\s*anchor:\s*[^|\]]+\|\s*est_duration_s:\s*([\d.]+)", re.M)
@@ -235,6 +261,95 @@ def check_7d(shot_list: dict, narration_md: str | None) -> list[str]:
     return errors
 
 
+def transition_of(group: dict) -> dict:
+    """组入口转场,规范化:缺省 / None / 空对象 = hard_cut。"""
+    t = group.get("transition_in")
+    if not isinstance(t, dict) or not t:
+        return {"type": "hard_cut"}
+    t = dict(t)
+    t["type"] = str(t.get("type") or "hard_cut")
+    return t
+
+
+def check_transitions(shot_list: dict) -> list[str]:
+    """transition_ok(2026-08-28):组入口转场 transition_in + 叙事块 narrative_block 机检。"""
+    errors = []
+    groups = shot_list.get("generation_groups") or []
+    budget = shot_list.get("budget_s") or shot_list.get("total_duration_s") \
+        or sum(g.get("total_duration_s") or 0 for g in groups)
+    render_total = 0.0
+    has_tr = {}
+    for i, g in enumerate(groups):
+        gid = g.get("group_id", "?")
+        raw = g.get("transition_in")
+        if raw is not None and not isinstance(raw, dict):
+            errors.append(f"{gid} transition_type_valid: transition_in 须为对象,得到 {type(raw).__name__}")
+            continue
+        t = transition_of(g)
+        ty = t["type"]
+        has_tr[gid] = bool(raw)
+        if ty not in TRANSITION_TYPES:
+            errors.append(f"{gid} transition_type_valid: type={ty!r} 不在枚举 {list(TRANSITION_TYPES)}")
+            continue
+        dur = t.get("duration_s")
+        if ty in TRANSITION_RENDERABLE:
+            lo, hi = TRANSITION_RENDERABLE[ty]
+            if not isinstance(dur, (int, float)) or isinstance(dur, bool):
+                errors.append(f"{gid} transition_type_valid: {ty} 缺 duration_s(范围 {lo}–{hi}s)")
+            elif not (lo - 1e-9 <= dur <= hi + 1e-9):
+                errors.append(f"{gid} transition_type_valid: {ty} duration_s={dur} ∉ [{lo},{hi}]")
+            else:
+                render_total += float(dur)
+            if i == 0 and ty in ("dissolve", "dip_black", "dip_white"):
+                errors.append(f"{gid} transition_type_valid: 首组无前组可叠,{ty} 非法"
+                              "(首组只能 hard_cut / fade_black / fade_white 淡入)")
+        elif dur not in (None, 0, 0.0):
+            errors.append(f"{gid} transition_type_valid: {ty} 不渲染,duration_s 应省略或为 0(得到 {dur})")
+        if ty != "hard_cut":
+            if not str(t.get("reason") or "").strip():
+                errors.append(f"{gid} transition_reason_required: {ty} 缺 reason(须可溯 directing_plan 转场清单)")
+            if t.get("intent") not in TRANSITION_INTENTS:
+                errors.append(f"{gid} transition_reason_required: {ty} intent={t.get('intent')!r}"
+                              f" 不在枚举 {list(TRANSITION_INTENTS)}")
+    if budget and render_total > float(budget) * TRANSITION_BUDGET_RATIO + 1e-9:
+        errors.append(f"transition_budget_le_1pct: Σ可渲染转场 {render_total:g}s >"
+                      f" 集预算 {budget}s × {TRANSITION_BUDGET_RATIO:g} = {float(budget) * TRANSITION_BUDGET_RATIO:.2f}s")
+
+    # narrative_block:同 id 连续、role 序列合法、块首与块尾下一组都有 transition_in
+    blocks: dict[str, list[tuple[int, str, str]]] = {}
+    for i, g in enumerate(groups):
+        nb = g.get("narrative_block")
+        if nb is None:
+            continue
+        gid = g.get("group_id", "?")
+        if not isinstance(nb, dict) or not nb.get("id"):
+            errors.append(f"{gid} narrative_block_paired: narrative_block 须为含 id 的对象")
+            continue
+        if nb.get("kind") not in BLOCK_KINDS:
+            errors.append(f"{gid} narrative_block_paired: kind={nb.get('kind')!r} 不在枚举 {list(BLOCK_KINDS)}")
+        if nb.get("role") not in BLOCK_ROLES:
+            errors.append(f"{gid} narrative_block_paired: role={nb.get('role')!r} 不在枚举 {list(BLOCK_ROLES)}")
+        blocks.setdefault(str(nb["id"]), []).append((i, gid, str(nb.get("role"))))
+    for bid, rows in blocks.items():
+        idxs = [r[0] for r in rows]
+        if idxs != list(range(idxs[0], idxs[0] + len(idxs))):
+            errors.append(f"narrative_block_paired: 块 {bid} 的组不连续 {[r[1] for r in rows]}")
+        roles = [r[2] for r in rows]
+        expect = ["single"] if len(rows) == 1 else ["start"] + ["middle"] * (len(rows) - 2) + ["end"]
+        if roles != expect:
+            errors.append(f"narrative_block_paired: 块 {bid} role 序列 {roles} 应为 {expect}")
+        first_gid = rows[0][1]
+        if not has_tr.get(first_gid):
+            errors.append(f"{first_gid} narrative_block_paired: 块 {bid} 入口组缺 transition_in"
+                          "(可为显式 hard_cut + reason,表示有意硬切)")
+        last_i = rows[-1][0]
+        if last_i + 1 < len(groups):
+            nxt = groups[last_i + 1].get("group_id", "?")
+            if not has_tr.get(nxt):
+                errors.append(f"{nxt} narrative_block_paired: 块 {bid} 出口(块尾 {rows[-1][1]} 的下一组)缺 transition_in")
+    return errors
+
+
 def main():
     ap = argparse.ArgumentParser(description="generation_groups 机检 / 草案分组")
     ap.add_argument("shot_list", help="shot_list.json 路径")
@@ -243,6 +358,8 @@ def main():
     ap.add_argument("--narration", help="narration.md 路径(缺省按数据布局自动推导)")
     ap.add_argument("--skip-7d", action="store_true",
                     help="跳过 §7D ① 旁白挂点/audio_plan 机检(仅查生成组)")
+    ap.add_argument("--skip-transition", action="store_true",
+                    help="跳过组间转场机检 transition_ok(transition_in / narrative_block)")
     args = ap.parse_args()
 
     path = Path(args.shot_list)
@@ -266,6 +383,8 @@ def main():
         narr_path = Path(args.narration) if args.narration else derive_narration_path(path)
         narr_text = narr_path.read_text() if narr_path and narr_path.is_file() else None
         errors += check_7d(data, narr_text)
+    if not args.skip_transition:
+        errors += check_transitions(data)
     if errors:
         print(f"机检未通过({len(errors)} 项):")
         for e in errors:
@@ -273,8 +392,10 @@ def main():
         sys.exit(1)
     groups = data["generation_groups"]
     n_anchor = len(data.get("narration_anchors") or [])
+    n_tr = sum(1 for g in groups if transition_of(g)["type"] != "hard_cut")
     print(f"机检通过: {len(groups)} 组全部合规"
-          + ("" if args.skip_7d else f";§7D ① 挂点 {n_anchor} 条/audio_plan 齐备"))
+          + ("" if args.skip_7d else f";§7D ① 挂点 {n_anchor} 条/audio_plan 齐备")
+          + ("" if args.skip_transition else f";transition_ok 非硬切转场 {n_tr} 处"))
 
 
 if __name__ == "__main__":

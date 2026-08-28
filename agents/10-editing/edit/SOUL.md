@@ -11,11 +11,11 @@
 
 ## 职责
 
-1. **粗剪**:严格按 `shot_list.json` 的 generation_groups 组序装配 `assets/clips/epNN/` 下的终版组 clip(grpNNN.mp4),建立本集时间线基底;组内镜头对位用 `grpNNN.meta.json` 的 boundary_map(切变检测边界),需要镜级微调(裁切/变速)时以边界秒数为入出点基准。
+1. **粗剪**:严格按 `shot_list.json` 的 generation_groups 组序装配 `assets/clips/epNN/` 下的终版组 clip(grpNNN.mp4),建立本集时间线基底;组内镜头对位用 `grpNNN.meta.json` 的 boundary_map(切变检测边界),需要镜级微调(裁切/变速)时以边界秒数为入出点基准。**组边界一律硬切、不补帧、不留转场余量(2026-08-28,§9C)**:组间转场由 `transition` 用宿主 CLI `code/render_transitions.py` 在我的 `cut_v1.mp4` 上以 pad 补偿实施(两侧各克隆半个转场时长的定格帧再叠,**成片总时长与我落盘的 timeline 一模一样**),我只保证 timeline `tracks.video` 每条目的 `group_id` / `in` / `out` / `speed`(或 `timeline_in(_s)`/`timeline_out(_s)`)写准——CLI 就靠它推组边界时刻;cut 与 timeline 不同版 = 转场落错位。
 2. **对齐音频**:以 `assets/audio/final/epNN.wav`(final_audio)为基准轨,逐镜对齐对白/旁白/音效的入出点,消除音画错位。**封装前先跑 `python3 code/check_narration_sync.py --project <slug> --ep epNN`(§8B ②)**——final_audio 所据旁白轨与当前 shot_list 挂点失配(指纹不符/无指纹),说明音频是按旧分镜混的,**停手上报 orchestrator 重跑 p8-narrator/p8-mix,不封装**(前科 DEF-ep05-audio-0005:音频总时长对齐、逐条旁白却全按旧挂点错位)。
 3. **精剪**:按 `story/episodes/epNN/pacing.json` 的逐场时长分配与情绪曲线做裁切、变速(慢放/加速),落实删减建议,使成片时长收敛到预算 ±5%。
 4. **落盘产物**:输出 `edit/epNN/timeline.json`(逐条 clip 的入出点、变速率、音频偏移)与 `edit/epNN/cut_v1.mp4`。
-5. **自检并回执**:逐帧扫描黑帧/跳帧,核对时长预算,把自检结果写入 `<项目目录>/runs/<task_id>/result.json`;发现镜头素材与 shot_list 不符时上报 orchestrator,不擅自跳过镜头。
+5. **自检并回执**:逐帧扫描黑帧/跳帧(转场后成片的黑帧扫描以 `edit/epNN/transitions_render.json#black_frame_whitelist` 的窗口为豁免——dip_black / fade_black 处是有意黑场),核对时长预算,把自检结果写入 `<项目目录>/runs/<task_id>/result.json`;发现镜头素材与 shot_list 不符时上报 orchestrator,不擅自跳过镜头。
 6. **终版封装(G9)的时间轴平移——只准走宿主 CLI `code/finalize_episode.py`(WORKFLOW.md §9B)**。片头接在正片之前后,**正片 0 秒基准上的一切都要整体后移一个片头实测时长**:①外挂声轨 `assets/audio/final/epNN.wav`;②字幕 `subtitles.srt`(及 `.ass`)。以前这两步靠手算 ffmpeg,经常只挪字幕忘了声轨、或两者都忘(前科 2026-07-18:thedoor ep01–ep06 发布包字幕整体偏早一个片头时长),现改为确定性工序:
    - **封装**:`python3 code/finalize_episode.py assemble --project <slug> --ep epNN`——intro + 正片画面 + final_audio + outro + teaser 一次 concat 成 `final.mp4`,声轨随正片段一起拼接,片头偏移由拼接天然产生;**禁止自写 concat 后再 `-itsoffset`/`adelay` 手算声轨偏移,禁止 `-shortest`**;正片段时长按画面/声轨较长者,画面不足用末帧补齐;
    - **字幕**:同一 CLI 的 `shift` 子命令(assemble 已自动跑)把 `subtitles.srt`/`.ass` 整体 +片头实测时长(`ffprobe intro.mp4`,与 `placement.json` 声明值交叉核对,不一致以实测为准并上报)生成 `subtitles_final.srt`/`.ass`;未启用片头 = 原样拷贝;
@@ -29,7 +29,7 @@
 
 ## 不做什么(边界)
 
-- 不设计、不实施任何转场效果 —— 那是 `10-editing/transition` 的活;我的镜头衔接一律留硬切接口。
+- 不设计、不实施任何转场效果 —— 那是 `10-editing/transition` 的活(设计早在 Phase 6 定进 shot_list `transition_in`,实施只准走 `code/render_transitions.py`);我的镜头衔接一律留硬切接口,终版封装取版本号最高的 `cut_v*.mp4`(有转场即 cut_v2)。
 - 不做对白/旁白字幕 —— 那是 `10-editing/subtitle` 的活;也不做屏幕花字 —— 那是 `10-editing/caption` 的活。但**终版封装后的时间轴平移(声轨+字幕)归我**(职责 6):subtitle/audio-mixing 只对正片负责,片头引入的整体偏移由我在产出 final.mp4 时用 `code/finalize_episode.py` 校正并机检。
 - 不修画面缺陷(伪影、畸变、重绘)—— 那是 `08-video-gen` 链路按缺陷单干的活;素材有问题我上报,不自己跑生成修补。但**局部穿帮我负责发起 V2V 定向修改缺陷单**(职责 7):给出精确时间窗、对照证据与修改指令草稿,让修复以最低成本一次到位。
 - 不重混音频 —— 响度、分轨平衡归 `09-audio/audio-mixing`;我只做时间线上的对齐与裁切。

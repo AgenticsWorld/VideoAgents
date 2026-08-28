@@ -97,6 +97,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.ghead .gid{font-weight:600;color:var(--purple)}
 .grp>.ghead .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.ghead .link{font-size:11px;color:var(--dim)}
+.grp>.ghead .trchip,.grp>.ghead .nbchip{color:var(--accent,#1d6f7a);font-weight:600}
 .grp>.gmedia{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--border)}
 .grp>.gmedia .anchors{display:flex;gap:8px;flex-wrap:wrap}
 .grp>.gmedia .anchors img{height:120px;border-radius:6px;cursor:zoom-in;display:block}
@@ -811,6 +812,29 @@ const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
 // 组链 chip:continuity_from 只是组序(前一组 id,跨场景硬切也有值),是否真传尾帧看 continuity 计划的
 // group_transitions[].anchor(last_frame / none);prompt 已落盘时以 refs 里有无 *.last_frame.png 为准,
 // 与 anchor 不一致打 ⚠(WORKFLOW:continuity_from 有值而 refs 无尾帧属元数据冗余,不算续接边界)
+// 组入口转场 chip(shot_list generation_groups[].transition_in,WORKFLOW §9C,2026-08-28):非硬切才显示;
+// 可渲染 5 种由 Phase 9 code/render_transitions.py 实施,标注型 2 种不渲染只供 continuity/QA 核构图对位。
+// 叙事块 chip(narrative_block):闪回/梦境/蒙太奇/想象段的块 id 与块内位置(入口/中/出口/单组)
+const TR_LABEL={dissolve:'叠化',fade_black:'淡出到黑',fade_white:'淡出到白',dip_black:'黑场',dip_white:'白场',
+                smash_cut:'强调硬切',match_cut:'匹配剪辑',hard_cut:'有意硬切'};
+const TR_INTENT={flashback_in:'进闪回',flashback_out:'出闪回',time_skip:'时间跳跃',scene_change:'换场',montage:'蒙太奇',
+                 dream_in:'进梦境',dream_out:'出梦境',chapter:'章节',episode_open:'集首淡入'};
+const NB_KIND={flashback:'闪回',dream:'梦境',montage:'蒙太奇',imagination:'想象'};
+const NB_ROLE={start:'入口',middle:'中段',end:'出口',single:'单组'};
+const transChip=g=>{
+  const tr=g.transition_in;
+  if(!tr||!tr.type||(tr.type==='hard_cut'&&!tr.reason))return '';
+  const name=t(TR_LABEL[tr.type]||tr.type), dur=tr.duration_s?` ${tr.duration_s}s`:'',
+        intent=TR_INTENT[tr.intent]?' · '+t(TR_INTENT[tr.intent]):'',
+        tip=[tr.reason,tr.source].filter(Boolean).join(' · ');
+  return `<span class="link trchip" title="${esc(tip)}">⟿ ${esc(name)}${esc(dur)}${esc(intent)}</span>`;
+};
+const blockChip=g=>{
+  const nb=g.narrative_block;
+  if(!nb||!nb.id)return '';
+  const kind=t(NB_KIND[nb.kind]||nb.kind||''), role=NB_ROLE[nb.role]?t(NB_ROLE[nb.role]):'';
+  return `<span class="link nbchip" title="${esc(nb.id)}">⏱ ${esc(kind)}${role?' · '+esc(role):''}</span>`;
+};
 const contChip=g=>{
   if(!g.continuity_from)return '<span class="link">◦ 组链起点</span>';
   const a=g.continuity_anchor, tail=!!g.tail_ref, from=g.continuity_from;
@@ -898,7 +922,7 @@ function groupCard(g,inner){
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${chars?`<span class="tag">${chars}</span>`:''}
       ${cosChips}${creChips}
-      ${contChip(g)}
+      ${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
