@@ -1281,12 +1281,18 @@ def auto_prompt_skill(cfg: dict | None = None) -> tuple[str, str]:
     label = _video_model_label(cfg)
     if is_minimax_h3_active(cfg):
         return PROMPT_SKILL_H3, label
-    model = effective_video_model(cfg)
+    return auto_prompt_skill_for_model(effective_video_model(cfg)), label
+
+
+def auto_prompt_skill_for_model(model: str) -> str:
+    """按模型 id 匹配提示词技能(组级视频模型覆盖时用;ComfyUI 类无模型 id 的渠道不适用)。"""
+    if is_minimax_h3(model):
+        return PROMPT_SKILL_H3
     if is_seedance25(model):
-        return PROMPT_SKILL_SD25, label
+        return PROMPT_SKILL_SD25
     if is_seedance20(model):
-        return PROMPT_SKILL_SD20, label
-    return "", label
+        return PROMPT_SKILL_SD20
+    return ""
 
 
 def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
@@ -1347,6 +1353,12 @@ def sync_prompt_skill_effective(project: str) -> dict:
         saved["prompt_skill"] = block
         ensure_project(project)
         atomic_write_json(path, saved)
+    # 组级覆盖(分镜预览「模型」按钮)的 effective 快照随项目级一起刷新:全局模型/技能变了,
+    # 「跟随全局」的组解析结果也变
+    try:
+        sync_group_settings_effective(project)
+    except Exception as e:  # noqa: BLE001
+        print(f"[group_settings] 快照刷新失败 {project}:{e}", flush=True)
     return load_project_settings(project)
 
 
@@ -2631,7 +2643,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「视频模型设置」同步调高上限(refs_mandatory_le_cap)**
+- 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -2819,6 +2831,10 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
+    if agent_id == PROMPT_AGENT_ID:
+        p += group_overrides_prompt(project)
+    elif agent_id == VIDEO_AGENT_ID:
+        p += group_overrides_prompt(project, for_video_agent=True)
     p += agent_skill_prompt(agent_id)
     if brief:
         p += f"""
@@ -3032,9 +3048,9 @@ def _prompt_skill_postcheck(run: dict):
     if (run.get("engine") or "") in _NO_READ_TRACKING_ENGINES:
         run["skill_read"] = None
         return
-    marker = f"skills/{run.get('skill') or ''}/"
+    markers = [f"skills/{d}/" for d in [run.get("skill") or ""] + list(run.get("skill_alts") or []) if d]
     acts = run.get("activity") or []
-    run["skill_read"] = any(marker in a for a in acts)
+    run["skill_read"] = any(m in a for a in acts for m in markers)
     if run["skill_read"]:
         return
     run["status"] = "error"
@@ -3112,6 +3128,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                 psk = resolve_prompt_skill(run["project"])
                 run["skill"] = psk["dir"]
                 run["skill_path"] = psk["path"]
+                # 组级覆盖的技能(分镜预览「🎛 模型」):本单只写覆盖组时读的是覆盖技能,
+                # prompt_skill_read 核验任一命中即可;逐组精确对照交给机检 prompt_skill_applied
+                try:
+                    alts = sorted({r["skill_dir"] for r in sync_group_settings_effective(run["project"])
+                                   if r.get("skill_dir") and r["skill_dir"] != psk["dir"]})
+                except Exception:
+                    alts = []
+                run["skill_alts"] = alts
+                if not psk["dir"] and alts:
+                    run["skill"], run["skill_path"] = alts[0], next(
+                        (c["path"] for c in prompt_skill_candidates() if c["dir"] == alts[0]), "")
                 publish_run(run)
         except Exception as error:  # noqa: BLE001
             # Prompt construction happens before the CLI process and its JSONL log
@@ -3935,6 +3962,325 @@ def max_group_ref_images(project: str) -> int:
         return MAX_SKETCH_REFS
 
 
+
+# ---------------- 组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」按钮,2026-08-30) ----------------
+# 动机:参考图上限随模型走(Seedance 2.0 ≤9、2.5 ≤30),某组必挂参考图超过全局模型上限时,
+# 用户可只给这一组换更高上限的模型(渠道不可换:仍是「生成模型」页/视频工位覆盖所定的渠道,
+# 只在该渠道的模型目录里选),并为该组单独指定提示词技能(默认跟随全局;auto=按本组模型解析)。
+# 存储:<project>/assets/group_settings/<ep>/<grp>.json(用户所有,不随 prompt 重出丢失):
+#   {"video_model": "<id>"|"", "provider": "<存 override 时的渠道>",
+#    "prompt_skill": {"mode": "global"|"auto"|"manual"|"off", "skill_id": ""},
+#    "effective": {...运行时解析快照(机检 prompt_skill_applied 与 genmedia 对照)...}}
+# 消费:genmedia video/info 按 --group 或 --output 路径(clips/epNN/grpNNN.mp4)自动找到该文件
+# 并改用组模型;prompt 工位系统提示词列出全部覆盖组;预览页组卡按组生效上限判 refs 超限。
+GROUP_SKILL_MODES = ("global", "auto", "manual", "off")
+REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.5);手动加图/手绘生成以此兜底
+# 各渠道可选视频模型目录(与 apps/web/static/models.html 的 VOLC_MODELS/BP_VIDEO_MODELS/
+# MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
+VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
+    "volcengine": [
+        ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("doubao-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
+        ("doubao-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
+        ("doubao-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
+        ("doubao-seedance-1-5-pro-251215", "Seedance 1.5 Pro(即将下线)"),
+        ("doubao-seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
+        ("doubao-seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "byteplus": [
+        ("dreamina-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("dreamina-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
+        ("dreamina-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
+        ("dreamina-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
+        ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
+        ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
+        ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "minimax": [
+        ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
+    ],
+    "openrouter": [
+        ("bytedance/seedance-2.0", "Seedance 2.0(字节)"),
+        ("bytedance/seedance-2.0-fast", "Seedance 2.0 Fast(字节)"),
+        ("kwaivgi/kling-v3.0-pro", "Kling 3.0 Pro"),
+        ("kwaivgi/kling-v3.0-std", "Kling 3.0 Standard"),
+        ("openai/sora-2-pro", "Sora 2 Pro"),
+        ("minimax/hailuo-2.3", "Hailuo 2.3(MiniMax)"),
+        ("alibaba/wan-2.7", "Wan 2.7(阿里)"),
+        ("google/veo-3.1", "Veo 3.1(Google)"),
+        ("google/veo-3.1-fast", "Veo 3.1 Fast(Google)"),
+    ],
+}
+
+
+def video_model_label(model: str, provider: str = "") -> str:
+    """模型的短标签:目录里有则取括号前的名字(如 Seedance 2.5),否则原 id。"""
+    for prov, rows in VIDEO_MODEL_CATALOG.items():
+        if provider and prov != provider:
+            continue
+        for mid, label in rows:
+            if mid == model:
+                return label.split("(")[0]
+    return model
+
+
+def video_model_caps(model: str) -> dict | None:
+    """模型侧硬限(与 genmedia 同口径):参考图/视频/音频数量与单段时长上限;未知模型返回 None
+    (按项目「视频模型设置」执行)。"""
+    if is_seedance25(model):
+        return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30}
+    if is_seedance20(model):
+        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15}
+    if is_minimax_h3(model):
+        return {"max_ref_images": 9, "max_ref_videos": 0, "max_ref_audios": 2, "max_group_s": 15}
+    return None
+
+
+def _grpsettings_path(project: str, ep: str, grp: str) -> Path:
+    return PROJECTS_DIR / project / "assets" / "group_settings" / ep / f"{grp}.json"
+
+
+def _grpsettings_get(project: str, ep: str, grp: str) -> dict:
+    d = _read_json_safe(_grpsettings_path(project, ep, grp))
+    return d if isinstance(d, dict) else {}
+
+
+def _grpsettings_all(project: str) -> list[tuple[str, str, dict]]:
+    """项目内全部组级设定文件 → [(ep, grp, dict)],按 ep/grp 排序。"""
+    root = PROJECTS_DIR / safe_slug(project) / "assets" / "group_settings"
+    out = []
+    if root.is_dir():
+        for f in sorted(root.glob("ep*/grp*.json")):
+            d = _read_json_safe(f)
+            if isinstance(d, dict):
+                out.append((f.parent.name, f.stem, d))
+    return out
+
+
+def group_video_candidates(project: str, cfg: dict | None = None) -> dict:
+    """本项目组级可选的视频模型:渠道固定为视频工位生效渠道,候选=该渠道目录 + 全局当前模型
+    (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。"""
+    cfg = cfg or load_genconfig()
+    provider = active_video_provider(cfg, VIDEO_AGENT_ID)
+    gmodel = effective_video_model(cfg)
+    rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
+    if gmodel and gmodel not in {r["id"] for r in rows}:
+        rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
+    return {"provider": provider, "overridable": provider != "comfyui" and bool(gmodel),
+            "global_model": gmodel,
+            "global_label": video_model_label(gmodel, provider) if gmodel else _video_model_label(cfg),
+            "candidates": rows}
+
+
+def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = None,
+                           gs: dict | None = None, proj_skill: dict | None = None) -> dict:
+    """解析某组生效的视频模型与提示词技能(不落盘)。返回:
+    provider / video_model / model_source(global|group)/ model_label / ref_cap(本组生效参考图上限)/
+    caps / skill_id / skill_dir / skill_path / skill_mode(global|auto|manual|off)/ skill_source /
+    reason / warning / overridden(存在任一组级覆盖)。"""
+    cfg = cfg or load_genconfig()
+    gs = gs if gs is not None else _grpsettings_get(project, ep, grp)
+    cand = group_video_candidates(project, cfg)
+    provider, gmodel = cand["provider"], cand["global_model"]
+    warning = ""
+    model, source = gmodel, "global"
+    ov = str(gs.get("video_model") or "")
+    if ov:
+        if not cand["overridable"]:
+            warning = f"组级视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按全局执行"
+        elif gs.get("provider") and gs.get("provider") != provider:
+            warning = (f"组级视频模型 {ov} 属渠道 {gs.get('provider')},当前视频渠道已改为 {provider},"
+                       "该覆盖未生效(按全局执行);请重新为本组选模型或清除覆盖")
+        else:
+            model, source = ov, "group"
+    caps = video_model_caps(model) if source == "group" else None
+    sg = load_project_settings(project).get("shot_group") or {}
+    ref_cap = (caps or {}).get("max_ref_images") if caps else None
+    if ref_cap is None:
+        ref_cap = max(0, min(REF_CAP_HARD_MAX, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
+    # 提示词技能
+    ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
+    smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
+    if smode == "global" and source == "group":
+        # 组换了模型却没指定技能:按本组模型自动解析,而不是套全局模型的技能(否则 2.5 组套 2.0 技能)
+        smode_eff = "auto"
+    else:
+        smode_eff = smode
+    proj_skill = proj_skill or resolve_prompt_skill(project, cfg)
+    cands = {c["id"]: c for c in prompt_skill_candidates()}
+    reason = ""
+    if smode_eff == "global":
+        sid, reason = proj_skill["skill_id"], proj_skill["reason"]
+        if proj_skill.get("warning"):
+            warning = (warning + " · " if warning else "") + proj_skill["warning"]
+    elif smode_eff == "off":
+        sid, reason = "", "user_skipped"
+    elif smode_eff == "manual":
+        sid = str(ps.get("skill_id") or "")
+        if sid not in cands:
+            warning = (warning + " · " if warning else "") + f"组指定的提示词技能 {sid or '(空)'} 未安装,本组按无技能处理"
+            sid, reason = "", "missing"
+    else:   # auto:按本组生效模型
+        if provider == "comfyui":
+            sid = PROMPT_SKILL_H3 if is_minimax_h3_active(cfg) else ""
+        else:
+            sid = auto_prompt_skill_for_model(model)
+        if not sid:
+            reason = "no_match"
+            warning = (warning + " · " if warning else "") + f"本组视频模型 {model or '(未知)'} 没有对应的提示词技能"
+    if sid and sid in cands and not cands[sid]["enabled"]:
+        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 已在技能包中禁用,本组按无技能处理"
+        sid, reason = "", "disabled"
+    c = cands.get(sid) or {}
+    return {"provider": provider, "video_model": model, "model_source": source,
+            "model_label": video_model_label(model, provider) if model else cand["global_label"],
+            "global_model": gmodel, "ref_cap": ref_cap, "caps": caps,
+            "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
+            "skill_mode": smode, "skill_source": "global" if smode_eff == "global" else "group",
+            "reason": reason, "warning": warning,
+            "overridden": bool(ov) or smode != "global"}
+
+
+def group_ref_cap(project: str, ep: str, grp: str) -> int:
+    """本组生效的参考图上限:组级覆盖了模型 → 该模型硬限;否则项目「视频模型设置」。"""
+    try:
+        return int(resolve_group_settings(project, ep, grp)["ref_cap"])
+    except Exception:
+        return max_group_ref_images(project)
+
+
+def sync_group_settings_effective(project: str) -> list[dict]:
+    """把各组解析结果快照进 group_settings/<ep>/<grp>.json 的 effective(仅变化时写盘)。
+    快照供 code/prompt_skill_check.py 按组对照、genmedia 按组取模型(它只读 video_model/provider,
+    快照仅作对照记录)。返回 [{ep, grp, ...resolved}]。"""
+    project = safe_slug(project)
+    cfg = load_genconfig()
+    proj_skill = resolve_prompt_skill(project, cfg)
+    out = []
+    for ep, grp, gs in _grpsettings_all(project):
+        r = resolve_group_settings(project, ep, grp, cfg, gs, proj_skill)
+        eff = {"provider": r["provider"], "video_model": r["video_model"],
+               "model_source": r["model_source"], "ref_cap": r["ref_cap"],
+               "skill_id": r["skill_id"], "skill_mode": r["skill_mode"],
+               "skill_source": r["skill_source"], "reason": r["reason"]}
+        cur = gs.get("effective") if isinstance(gs.get("effective"), dict) else {}
+        if {k: cur.get(k) for k in eff} != eff:
+            gs["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
+            atomic_write_json(_grpsettings_path(project, ep, grp), gs)
+        out.append({"ep": ep, "grp": grp, **r})
+    return out
+
+
+def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
+    """系统提示词段:列出本项目存在组级覆盖的组(视频模型 / 提示词技能),prompt 与视频生成工位各一版。"""
+    try:
+        rows = [r for r in sync_group_settings_effective(project) if r["overridden"]]
+    except Exception:
+        rows = []
+    if not rows:
+        return ""
+    lines = []
+    for r in rows:
+        caps = r.get("caps") or {}
+        cap_txt = (f"参考图 ≤{caps['max_ref_images']} 张、参考视频 ≤{caps['max_ref_videos']} 个、"
+                   f"参考音频 ≤{caps['max_ref_audios']} 段、组时长 ≤{caps['max_group_s']}s"
+                   if caps else f"参考图 ≤{r['ref_cap']} 张(其余上限沿用项目设定)")
+        model_txt = (f"视频模型 **{r['video_model']}**(组级覆盖,{cap_txt})" if r["model_source"] == "group"
+                     else f"视频模型跟随全局 {r['video_model'] or r['model_label']}")
+        skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
+                     if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
+        warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
+        lines.append(f"- `{r['ep']}/{r['grp']}`:{model_txt};{skill_txt}{warn}")
+    body = "\n".join(lines)
+    if for_video_agent:
+        return f"""
+
+## 组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定并改用该模型,渠道不变;`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
+{body}"""
+    return f"""
+
+## 组级视频模型/提示词技能覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下组不按项目级设定——写这些组的 video_prompt 时按本组的视频模型能力与技能执行:参考素材上限按本组模型硬限(而非项目「视频模型设置」),提示词技能按本组所列(须先 Read 该 SKILL.md,`skill_applied.id` 填本组技能 id;不套用时填 `{{"id": null, "reason": ...}}`),机检 `prompt_skill_applied` 会按组分别对照 `assets/group_settings/epNN/grpNNN.json` 的 effective 快照:
+{body}"""
+
+
+async def api_grpsettings_get(project: str, ep: str, grp: str):
+    project = safe_slug(project)
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    grp = re.sub(r"[^\w\-]", "", grp or "")
+    _proj_base(project)
+    cfg = load_genconfig()
+    gs = _grpsettings_get(project, ep, grp)
+    proj_skill = resolve_prompt_skill(project, cfg)
+    return {"project": project, "ep": ep, "grp": grp,
+            "config": {"video_model": str(gs.get("video_model") or ""),
+                       "prompt_skill": gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict)
+                       else {"mode": "global", "skill_id": ""}},
+            "resolved": resolve_group_settings(project, ep, grp, cfg, gs, proj_skill),
+            "models": group_video_candidates(project, cfg),
+            "skills": prompt_skill_candidates(),
+            "project_skill": proj_skill,
+            "project_ref_cap": max_group_ref_images(project)}
+
+
+async def api_grpsettings_set(body: dict):
+    """分镜预览「🎛 模型」弹窗:{project, ep, grp, video_model, prompt_skill:{mode, skill_id}}。
+    video_model 空 + mode=global ⇒ 清除覆盖(删文件)。渠道不可选:模型只能取当前视频渠道目录。"""
+    project = safe_slug((body or {}).get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", (body or {}).get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", (body or {}).get("grp") or "")
+    if not ep or not grp:
+        raise ServiceError(400, "ep and grp are required")
+    _proj_base(project)
+    cfg = load_genconfig()
+    cand = group_video_candidates(project, cfg)
+    model = str((body or {}).get("video_model") or "")
+    if model:
+        if not cand["overridable"]:
+            raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持组级切换模型")
+        if model not in {c["id"] for c in cand["candidates"]}:
+            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
+        if model == cand["global_model"]:
+            model = ""   # 选了全局同款 = 跟随全局
+    ps = (body or {}).get("prompt_skill") or {}
+    if not isinstance(ps, dict):
+        raise ServiceError(400, "prompt_skill must be an object")
+    mode = str(ps.get("mode") or "global")
+    if mode not in GROUP_SKILL_MODES:
+        raise ServiceError(400, f"prompt_skill.mode must be one of {GROUP_SKILL_MODES}")
+    sid = str(ps.get("skill_id") or "") if mode == "manual" else ""
+    if mode == "manual" and sid not in {c["id"] for c in prompt_skill_candidates()}:
+        raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
+    path = _grpsettings_path(project, ep, grp)
+    old = _grpsettings_get(project, ep, grp)
+    if not model and mode == "global":
+        path.unlink(missing_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(path, {"video_model": model, "provider": cand["provider"] if model else "",
+                                 "prompt_skill": {"mode": mode, "skill_id": sid},
+                                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+    sync_group_settings_effective(project)
+    out = await api_grpsettings_get(project, ep, grp)
+    # 组 prompt 文件记一笔(存在时),方便回溯;组模型变了参考图上限也变,预览页据此重判超限
+    pf = _grp_prompt_path(project, ep, grp)
+    if pf.is_file():
+        try:
+            d = json.loads(pf.read_text())
+            r = out["resolved"]
+            d.setdefault("notes", []).append(
+                f"用户在分镜预览设置组级覆盖:视频模型 {r['video_model'] or '(跟随全局)'}({r['model_source']}),"
+                f"提示词技能 {r['skill_dir'] or '(不套用)'}({r['skill_mode']});本组参考图上限 {r['ref_cap']}。"
+                "重出本组 prompt/视频时生效。由 storyboard service 自动补丁。")
+            atomic_write_json(pf, d)
+        except Exception:
+            pass
+    HUB.publish({"type": "group_settings", "project": project, "ep": ep, "grp": grp,
+                 "resolved": out["resolved"], "changed": old != _grpsettings_get(project, ep, grp)})
+    return out
+
+
 SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
 SKETCHGEN_PROMPT_TMPL = (
     "Image 1 is a rough black-and-white hand-drawn layout sketch by the director. "
@@ -4029,9 +4375,10 @@ async def api_draw_submit(token: str, body: dict):
     if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
         raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
     pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
-    ref_cap = max_group_ref_images(project)
-    if len(pd.get("refs") or []) >= ref_cap:
-        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
+    # 2026-08-30:不再按项目/组上限硬拦——refs 按实际需要加,超组生效上限由预览页黄条提示,
+    # 用户决定删图或给本组换更高上限的模型(🎛 模型);只以模型极值 30 兜底
+    if len(pd.get("refs") or []) >= REF_CAP_HARD_MAX:
+        raise ServiceError(400, f"This group already has {REF_CAP_HARD_MAX} refs (the hard maximum of any video model); cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
@@ -4159,16 +4506,15 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
-    """向组 prompt 的 refs 追加一张参考图(上限=项目「视频模型设置」max_ref_images,
-    回落 MAX_SKETCH_REFS=9 的方舟 Seedance 2.0 口径);返回追加后的 refs 数量。"""
+    """向组 prompt 的 refs 追加一张参考图;返回追加后的 refs 数量。
+    2026-08-30:不再按项目「视频模型设置」上限硬拦——按实际需要加,超过本组生效上限时预览页
+    黄条提示,由用户决定删图或给本组换更高上限的视频模型(🎛 模型);只以模型极值 30 兜底。"""
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
     if ref in refs:
         raise ServiceError(400, "This image is already in the group's refs")
-    # pf = <project>/assets/prompts/<ep>/<grp>.json → parents[3] 即项目根
-    ref_cap = max_group_ref_images(pf.parents[3].name)
-    if len(refs) >= ref_cap:
-        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
+    if len(refs) >= REF_CAP_HARD_MAX:
+        raise ServiceError(400, f"This group already has {REF_CAP_HARD_MAX} refs (the hard maximum of any video model); cannot add more")
     refs.append(ref)
     d.setdefault("notes", []).append(
         f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
@@ -5045,11 +5391,21 @@ def _preview_storyboard(project: str, ep: str):
     # 切变边界与尾帧来自 clips/<grp>.meta.json
     groups = []
     lighting_cache: dict[str, dict] = {}
-    ref_cap = max_group_ref_images(base.name)
+    # 组级视频模型/技能覆盖(2026-08-30):refs 上限按组生效模型判;顶部展示全局模型与技能
+    gcfg = load_genconfig()
+    proj_skill = resolve_prompt_skill(base.name, gcfg)
+    gcand = group_video_candidates(base.name, gcfg)
+    data["video_model"] = {"provider": gcand["provider"], "model": gcand["global_model"],
+                           "label": gcand["global_label"], "overridable": gcand["overridable"]}
+    data["prompt_skill"] = {"mode": proj_skill["mode"], "skill_id": proj_skill["skill_id"],
+                            "dir": proj_skill["dir"], "warning": proj_skill["warning"],
+                            "reason": proj_skill["reason"]}
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
         gid = g.get("group_id") or ""
+        gres = resolve_group_settings(base.name, ep, gid, gcfg, None, proj_skill) if gid else None
+        ref_cap = int(gres["ref_cap"]) if gres else max_group_ref_images(base.name)
         meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
         # 组参考图(组 prompt json 的 refs)分两列:用户经「添加参考图」手动加入的
         # (notes 锚判定,可删)入 user_refs;流水线/agent 直连写入的(如概念图路径)
@@ -5113,6 +5469,9 @@ def _preview_storyboard(project: str, ep: str):
             # 落盘 status=blocked_refs_cap;预览页组卡黄条提示用户手动删减或换更高上限模型
             "refs_total": len(pd.get("refs") or []),
             "refs_cap": ref_cap,
+            "group_settings": ({k: gres[k] for k in ("video_model", "model_source", "model_label",
+                                                     "skill_dir", "skill_mode", "skill_source",
+                                                     "warning", "overridden")} if gres else None),
             "refs_blocked": (pd.get("status") == "blocked_refs_cap"
                              or len(pd.get("refs") or []) > ref_cap),
             "refs_blocked_reason": str(pd.get("blocked_reason") or ""),

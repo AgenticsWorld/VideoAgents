@@ -661,6 +661,17 @@ async def storyboard_ref_upload(
     return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
+@api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
+    """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""
+    return await core.api_grpsettings_get(project, ep, grp)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_set(project: str, ep: str, grp: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpsettings_set({**(body or {}), "project": project, "ep": ep, "grp": grp})
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])
 async def sketches(project: str, ep: str, grp: str) -> list[dict[str, Any]]:
     return await core.api_sketches(project, ep, grp)

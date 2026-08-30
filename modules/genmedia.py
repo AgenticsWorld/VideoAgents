@@ -242,6 +242,54 @@ def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
     return OPENROUTER_DIRECT_BASE, "", False
 
 
+_GROUP_RE = re.compile(r"(?:^|/)(ep[\w-]+)/(grp[\w-]+?)(?:\.[\w.]+)?$")
+
+
+def _group_from_output(output: str) -> str:
+    """从 --output 路径推断组号:…/clips/epNN/grpNNN[.xxx].mp4 → "epNN/grpNNN";推不出返回 ""。"""
+    m = _GROUP_RE.search(str(output or "").replace("\\", "/"))
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
+
+
+def _group_video_override(group: str) -> dict:
+    """组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为单组指定,2026-08-30):
+    读 data/projects/<VIDEOAGENTS_PROJECT>/assets/group_settings/<ep>/<grp>.json 的
+    video_model/provider;非派单环境(无项目)或无文件返回 {}。"""
+    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
+    if not proj or not group or "/" not in group:
+        return {}
+    ep, grp = group.split("/", 1)
+    try:
+        d = json.loads((DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep / f"{grp}.json").read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def apply_group_video_override(cfg: dict, group: str) -> dict:
+    """按组级设定改写 video 生效模型(渠道不变):设定里的 provider 必须与当前生效渠道一致,
+    否则视为失效覆盖、按全局执行并 stderr 提示。返回改写后的 cfg(原地)。"""
+    ov = _group_video_override(group)
+    model = str(ov.get("video_model") or "")
+    if not model:
+        return cfg
+    if cfg.get("provider") == "comfyui":
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
+              file=sys.stderr)
+        return cfg
+    if ov.get("provider") and ov.get("provider") != cfg.get("provider"):
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 属渠道 {ov.get('provider')},"
+              f"当前视频渠道为 {cfg.get('provider')},该覆盖未生效(按全局模型 {cfg.get('model')} 执行)",
+              file=sys.stderr)
+        return cfg
+    if model != cfg.get("model"):
+        print(f"[genmedia] 组 {group} 按组级设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+              file=sys.stderr)
+    cfg["model"] = model
+    cfg["_group_override"] = group
+    return cfg
+
+
 def get_config(kind: str) -> dict:
     """读取 kind(image|video)的生效渠道配置,返回 {provider, model, ...}。"""
     if not CONFIG_PATH.is_file():
@@ -2154,8 +2202,8 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
     if refs and len(refs) > max_refs:
         raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「视频模型设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
     if audio_refs and len(audio_refs) > max_arefs:
         raise RuntimeError(f"参考音频最多 {max_arefs} 段({ver_name}),收到 {len(audio_refs)}")
     if audio_refs:
@@ -2986,8 +3034,8 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
         if refs and len(refs) > max_refs:
             raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「视频模型设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
         if is_v25 and resolution and resolution not in ("480p", "720p"):
             print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
                   file=sys.stderr)
@@ -3443,7 +3491,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None,
-                   ref_image_size: str = "") -> str:
+                   ref_image_size: str = "", group: str = "") -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
@@ -3465,7 +3513,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
-    cfg = get_config("video")
+    cfg = apply_group_video_override(get_config("video"), group or _group_from_output(output))
     if ref_image_size and cfg["provider"] != "comfyui":
         raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
@@ -3600,12 +3648,17 @@ def _check_id_digits(*paths):
                     f" grp/sh 编号固定三位零填充,应为 {fixed!r}(完整路径 {path})")
 
 
-def _cmd_info(_args):
+def _cmd_info(args):
+    group = getattr(args, "group", "") or ""
     for kind in ("image", "video", "music", "tts"):
         try:
             cfg = get_config(kind)
+            if kind == "video" and group:
+                cfg = apply_group_video_override(cfg, group)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
+            if cfg.get("_group_override"):
+                desc += f"  (组 {group} 组级覆盖;全局 model={get_config('video')['model']})"
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")
@@ -3632,11 +3685,12 @@ def _cmd_image(args):
 def _cmd_video(args):
     _check_id_digits(args.output, args.return_last_frame)
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
+    group = args.group or _group_from_output(args.output)
     if args.dry_run:
-        cfg = get_config("video")
+        cfg = apply_group_video_override(get_config("video"), group)
         resolution = _resolution_gate(args.resolution)
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
-            else f"model={cfg.get('model') or '-'}"
+            else f"model={cfg.get('model') or '-'}" + (f" (组级覆盖 {group})" if cfg.get("_group_override") else "")
         line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
@@ -3657,7 +3711,8 @@ def _cmd_video(args):
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,
                          args.duration, args.resolution, args.aspect, args.seed,
                          args.ref, args.audio_ref, gen_audio, args.return_last_frame,
-                         video_refs=args.ref_video, ref_image_size=args.ref_image_size)
+                         video_refs=args.ref_video, ref_image_size=args.ref_image_size,
+                         group=group)
     print(f"已生成: {out}")
 
 
@@ -3737,7 +3792,9 @@ def _cmd_tts(args):
 def main():
     ap = argparse.ArgumentParser(description="统一图像/视频/音乐生成(渠道按 data/.videoagents/genconfig.json)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi = sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:同时显示该组的组级视频模型覆盖(分镜预览「🎛 模型」)")
 
     pi = sub.add_parser("image", help="生成图像")
     pi.add_argument("--prompt", required=True)
@@ -3778,6 +3835,9 @@ def main():
                          "同像素面积;max 短边 ≤2048 不压缩,身份保真更好但更慢更贵")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
+    pv.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:按该组的组级视频模型覆盖生成(渠道不变);"
+                         "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
 
     pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
