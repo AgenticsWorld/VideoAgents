@@ -239,7 +239,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="#" id="menu-brief">设计构想</a>
       <a href="#" id="menu-output">输出设置</a>
       <a href="#" id="menu-duration">时长设置</a>
-      <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">分镜组设置</a>
+      <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">视频模型设置</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
       <a href="#" id="menu-packaging" title="片头/片尾/下集预告 开关与制作要求,按项目独立">片头片尾</a>
     </div></div>
@@ -590,7 +590,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="sg-modal" class="modal">
   <div class="box">
-    <h3>🎬 分镜组设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
+    <h3>🎬 视频模型设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
     <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
@@ -1085,8 +1085,8 @@ $('#project').onchange=async()=>{
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
-/* ---------- 新建项目向导(基础信息→输出设置→时长设置→分镜组设置→审核设置→片头片尾) ---------- */
-const NP_STEP_NAMES=['基础信息','输出设置','时长设置','分镜组设置','审核设置','片头片尾'];
+/* ---------- 新建项目向导(基础信息→输出设置→时长设置→视频模型设置→审核设置→片头片尾) ---------- */
+const NP_STEP_NAMES=['基础信息','输出设置','时长设置','视频模型设置','审核设置','片头片尾'];
 let NP_STEP=1;
 function npShowStep(n){
   NP_STEP=n;
@@ -1438,7 +1438,7 @@ $('#dur-ok').onclick=async()=>{
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 分镜组设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
+/* ---------- 视频模型设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
 // 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框,
 // 手动改值后自动按当前值反查高亮匹配的预设(无匹配则全不高亮)
 const SG_PRESETS={
@@ -1487,7 +1487,7 @@ async function openSgModal(){
   psFill($('#sg-skill'),curProj()).then(d=>psHint($('#sg-skill-hint'),d)).catch(e=>{$('#sg-err').textContent=t('提示词技能读取失败')+':'+e.message});
   $('#sg-modal').style.display='flex';
 }
-/* ---------- 视频提示词技能(项目级 prompt_skill:分镜组设置 / H3A 签字弹窗共用;2026-08-28) ---------- */
+/* ---------- 视频提示词技能(项目级 prompt_skill:视频模型设置 / H3A 签字弹窗共用;2026-08-28) ---------- */
 function psValue(cfg){return cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode==='off'?'off':'auto')}
 async function psFill(sel,proj){   // 拉取解析结果与候选清单填充下拉;返回接口原文供 psHint
   const d=await api('/api/v1/projects/'+encodeURIComponent(proj)+'/prompt-skill');

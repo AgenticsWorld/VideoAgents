@@ -70,11 +70,11 @@ from avsync import (FRAME_S, MIN_GROUP_S, canonical_sha256,
 STAGES = ("timeline", "clips", "final")
 DUR_TOL_S = 0.10             # 成片总长容差
 HARD_MAX_GROUP_S = 15        # 默认=Seedance 2.0 绝对上限(check_generation_groups 同口径);
-                             # 实际以项目「分镜组设置」shot_group.max_group_s 为准(main 里读取)
+                             # 实际以项目「视频模型设置」shot_group.max_group_s 为准(main 里读取)
 
 
 def project_max_group_s(proj: Path) -> int:
-    """项目「分镜组设置」的生成组时长上限(settings.json shot_group.max_group_s,
+    """项目「视频模型设置」的生成组时长上限(settings.json shot_group.max_group_s,
     4-30;读不到回落 HARD_MAX_GROUP_S=15 的 Seedance 2.0 口径)。"""
     try:
         st = json.loads((proj / "settings.json").read_text())
@@ -116,7 +116,7 @@ def main():
 
     args, proj = parse_args(__doc__, configure=configure)
     ep = args.ep
-    hard_max = project_max_group_s(proj)   # 项目「分镜组设置」组时长上限(回落 15)
+    hard_max = project_max_group_s(proj)   # 项目「视频模型设置」组时长上限(回落 15)
     span_max = hard_max - 1                # 留 1s 交付公差(与 avsync.MAX_GROUP_S=14 同理)
     checks: list[tuple[str, bool]] = []
 

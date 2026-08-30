@@ -99,7 +99,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 分辨率合规(resolution_ok:每张 ≥3,686,400 像素,16:9=2560x1440 / 9:16=1440x2560)、画幅合规(aspect_ok);锚点总数 ≤9(anchors_lte_9;上限以项目「分镜组设置」max_ref_images 为准。**超限不得自行丢弃角色/生物/场景空间锚/道具比例锚这些必挂锚(2026-08-27):先裁按需锚(额外脸部锚→道具细节图→手绘渲染图→前组尾帧),必挂锚本身超上限 = FAIL 上报 orchestrator 转告用户手动删减或换更高上限模型,同 prompt SOUL refs_mandatory_le_cap**)。**引用式复用锚(`file: null`)解引用 `source` 路径对源文件检查;副本式存量锚检包内文件——按 `file` 有无分支(2026-08-24)。**
+- 分辨率合规(resolution_ok:每张 ≥3,686,400 像素,16:9=2560x1440 / 9:16=1440x2560)、画幅合规(aspect_ok);锚点总数 ≤9(anchors_lte_9;上限以项目「视频模型设置」max_ref_images 为准。**超限不得自行丢弃角色/生物/场景空间锚/道具比例锚这些必挂锚(2026-08-27):先裁按需锚(额外脸部锚→道具细节图→手绘渲染图→前组尾帧),必挂锚本身超上限 = FAIL 上报 orchestrator 转告用户手动删减或换更高上限模型,同 prompt SOUL refs_mandatory_le_cap**)。**引用式复用锚(`file: null`)解引用 `source` 路径对源文件检查;副本式存量锚检包内文件——按 `file` 有无分支(2026-08-24)。**
 - **imageref_order_bound(2026-08-24 随引用化定为规约,此前为项目局部机检)**:`anchors[]` 的 `image_index` 连续 1-based,且与组 prompt refs 逐位路径一致(复用锚取 `source` 剥 `reuse:` 前缀;新生成锚取包内文件路径)——`[Image N]` 编号契约不依赖物理副本,靠此清单核对。
 - **reuse_first_ok(2026-07-24)**:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 `gap_reason`;anchor_opening 无 orchestrator 兜底批准记录不得存在(首帧红线,§7A)。
 - 组内每个出场角色有锚、场景有锚;meta.json 完整可复现(含复用来源、generation_channel)。

@@ -12,6 +12,7 @@ All notable public changes to VideoAgents are documented here.
 
 ### Changed
 
+- Project settings: the **Shot Group Settings** dialog (generation-group duration cap / per-group reference caps / prompt skill) is renamed **Video Model Settings** — in the header menu, the dialog title, the new-project wizard step, the storyboard preview's reference-cap warning and every runtime/agent-facing mention (system prompts, SOULs, WORKFLOW.md, check scripts). The `shot_group` settings key and behaviour are unchanged; 11 UI languages updated.
 - Version management → **Copy project**: the pre-filled new-project name (`<project>-YYYYMMDD`) now checks the current project list and appends `-1`, `-2`, … when a project with that name already exists (e.g. a second copy on the same day), instead of failing with "Project already exists" on submit. The list is re-fetched each time the source project changes.
 - Preview navigation: the **Creature Preview** entry now sits directly under **Character Preview** (previously after Prop Preview) in the header dropdown on the main page and in the page switcher shared by all preview pages.
 - Virtual Portrait Library page: the "Fully automatic management" checkbox is renamed **Auto-clean** and its explanation moves from the label's hover text to a small ⓘ icon next to it ("Suitable when the total number of portrait assets is small: the system automatically clears the current portrait library before each episode is generated"). Behaviour and the `auto_manage` setting are unchanged; 11 UI languages updated.

@@ -347,7 +347,7 @@ $('#gn-ok').onclick=async()=>{
 };
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
-let AR_MAX=9;   // 每组参考图上限:项目「分镜组设置」max_ref_images(打开弹窗时拉取,回落 9=Seedance 2.0 口径)
+let AR_MAX=9;   // 每组参考图上限:项目「视频模型设置」max_ref_images(打开弹窗时拉取,回落 9=Seedance 2.0 口径)
 let AR_MAX_LOADED=false;
 async function arLoadMax(proj){
   if(AR_MAX_LOADED)return;
@@ -694,7 +694,7 @@ try{
   };
 }catch(_){}
 
-// 🧰 视频提示词技能(项目级 prompt_skill,与控制台「分镜组设置」/H3A 签字弹窗同一设定;2026-08-28)
+// 🧰 视频提示词技能(项目级 prompt_skill,与控制台「视频模型设置」/H3A 签字弹窗同一设定;2026-08-28)
 async function psLoad(proj){
   const sel=$('#ps-skill');
   try{
@@ -961,7 +961,7 @@ function groupCard(g,inner){
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
     ${lightHtml(g)}
-    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」',{n:g.refs_total,cap:g.refs_cap}))}</div>`:''}
+    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「视频模型设置」',{n:g.refs_total,cap:g.refs_cap}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>

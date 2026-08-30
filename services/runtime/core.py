@@ -739,7 +739,7 @@ DEFAULT_GENCONFIG = {
                       "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 2, "shot_max_s": 8},
-    # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
+    # 视频模型设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
     # 「默认值」按钮一键切换三档);注入 Agent 系统提示词约束分组与 prompt 组装,
@@ -785,7 +785,7 @@ DEFAULT_GENCONFIG = {
     # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
     # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
     "versioning": {"enabled": False},
-    # 视频提示词技能(分镜组设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
+    # 视频提示词技能(视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
     #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
     #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
     #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-prompt-writing / MiniMax H3(任意渠道)→
@@ -1315,7 +1315,7 @@ def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
         if not sid:
             reason = "no_match"
             warning = (f"生效视频模型 {resolved_from or '(未知)'} 没有对应的提示词技能:"
-                       "可在「分镜组设置→提示词技能」手选一项或选择跳过")
+                       "可在「视频模型设置→提示词技能」手选一项或选择跳过")
     if sid and not cands[sid]["enabled"]:
         warning = f"提示词技能 {cands[sid]['dir']} 已在「设置→高级→技能包」取消勾选,本项目按无技能处理"
         reason, sid = "disabled", ""
@@ -1359,7 +1359,7 @@ async def api_prompt_skill_get(project: str):
 
 
 async def api_prompt_skill_set(body: dict):
-    """分镜组设置弹窗 / H3A 签字弹窗 / 分镜预览页的「提示词技能」下拉:{project, mode, skill_id}。"""
+    """视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页的「提示词技能」下拉:{project, mode, skill_id}。"""
     project = safe_slug((body or {}).get("project"))
     mode = str((body or {}).get("mode") or "auto")
     sid = str((body or {}).get("skill_id") or "")
@@ -1471,7 +1471,7 @@ def _validate_duration(d: dict):
 
 
 def _validate_shot_group(g: dict):
-    """分镜组设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
+    """视频模型设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
     try:
         gs = float(g.get("max_group_s", 15))
         ni = int(g.get("max_ref_images", 9))
@@ -2630,8 +2630,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
-- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「分镜组设置」同步调高上限(refs_mandatory_le_cap)**
+- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
+- 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「视频模型设置」同步调高上限(refs_mandatory_le_cap)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -2793,7 +2793,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         warn = f"\n- ⚠️ {psk['warning']}(已在回执 notes 里如实记录即可,不阻塞)" if psk.get("warning") else ""
         p += f"""
 
-## 提示词技能契约(prompt_skill_applied,项目「分镜组设置→提示词技能」,当前项目实时生效)
+## 提示词技能契约(prompt_skill_applied,项目「视频模型设置→提示词技能」,当前项目实时生效)
 {contract}{warn}
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
@@ -3922,11 +3922,11 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「分镜组设置」调整)
+MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「视频模型设置」调整)
 
 
 def max_group_ref_images(project: str) -> int:
-    """每组参考图数量上限:项目「分镜组设置」max_ref_images(Seedance 2.5 最高 30),
+    """每组参考图数量上限:项目「视频模型设置」max_ref_images(Seedance 2.5 最高 30),
     读不到回落 MAX_SKETCH_REFS=9(Seedance 2.0 口径)。"""
     try:
         sg = load_project_settings(project).get("shot_group") or {}
@@ -4159,7 +4159,7 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
-    """向组 prompt 的 refs 追加一张参考图(上限=项目「分镜组设置」max_ref_images,
+    """向组 prompt 的 refs 追加一张参考图(上限=项目「视频模型设置」max_ref_images,
     回落 MAX_SKETCH_REFS=9 的方舟 Seedance 2.0 口径);返回追加后的 refs 数量。"""
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
@@ -6079,7 +6079,7 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
-                       "shot_group": "分镜组设置",
+                       "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
                        "versioning": "版本管理", "prompt_skill": "提示词技能"}
 

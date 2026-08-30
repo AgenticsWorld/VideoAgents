@@ -43,7 +43,7 @@ import re
 import sys
 from pathlib import Path
 
-MAX_GROUP_S = 15              # 默认=Seedance 2.0 单次生成上限;实际以项目「分镜组设置」
+MAX_GROUP_S = 15              # 默认=Seedance 2.0 单次生成上限;实际以项目「视频模型设置」
                               # settings.json 的 shot_group.max_group_s 为准(main 里覆盖,4-30)
 MIN_GROUP_S = 4
 MAX_CHARS = 4
@@ -72,7 +72,7 @@ NARR_ITEM_RE = re.compile(
 
 
 def project_max_group_s(shot_list_path: Path) -> int:
-    """项目「分镜组设置」的生成组时长上限:directing/epNN/shot_list.json →
+    """项目「视频模型设置」的生成组时长上限:directing/epNN/shot_list.json →
     项目根 settings.json 的 shot_group.max_group_s;读不到回落 15(Seedance 2.0 口径)。"""
     try:
         st = json.loads((shot_list_path.resolve().parents[2] / "settings.json").read_text())

@@ -78,7 +78,7 @@ def main() -> int:
         else:
             expected, basis = None, "无快照"
             warns.append("项目 settings.json 无 prompt_skill.effective 快照(从未经运行时解析);"
-                         "只做内部一致性核对,请用 --expect 指定基准或先经控制台保存一次分镜组设置")
+                         "只做内部一致性核对,请用 --expect 指定基准或先经控制台保存一次视频模型设置")
     exp_sha = ""
     if expected:
         smd = skill_md_path(expected)
