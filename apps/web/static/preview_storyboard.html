@@ -88,6 +88,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
 .shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.grp>.gcast{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--panel);padding:0 12px 8px}
+.grp>.gcast .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
 .grp>.glight .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
@@ -889,6 +891,7 @@ const refFn=(icon,k)=>{
 
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
+  // 组角色/服装/生物三类 chip 独占头部下一行 .gcast(2026-08-30,原挤在 .ghead 首行太乱),置于 💡 光照行之上
   // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
   // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
   // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
@@ -952,14 +955,13 @@ function groupCard(g,inner){
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
-      ${chars?`<span class="tag">${chars}</span>`:''}
-      ${cosChips}${creChips}
       ${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
     ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「视频模型设置」',{n:g.refs_total,cap:g.refs_cap}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
