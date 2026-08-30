@@ -4349,10 +4349,27 @@ def _dialogue_index(text: str) -> dict[str, dict]:
     return idx
 
 
+def _shot_has_own_dialogue(s: dict) -> bool:
+    """镜条目自身是否带对白信息(内嵌 dialogue / dialogue_lines 或编号 dialogue_refs / dialogue_ref)。
+    有则以镜为准,不再回落 storyboard 草稿——拆镜(storyboard_ref 带 /split:x)的草稿是整镜
+    未拆前的全部台词,回落会把兄弟镜的台词也挂上来(2026-08-30 dzg5 ep01)。"""
+    if isinstance(s.get("dialogue_lines"), list):
+        return True  # 规范字段显式给了列表(含空列表 = 本镜无台词),即为权威
+    return any(_nonempty(s.get(k)) for k in ("dialogue", "dialogue_refs", "dialogue_ref"))
+
+
+def _nonempty(v) -> bool:
+    if isinstance(v, str):
+        return bool(v.strip())
+    return bool(v)
+
+
 def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dict]:
-    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text},
+    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text} /
+    规范字段 dialogue_lines[{speaker, text}](shot-planning 直出台词正文,2026-08-30),
     其次按 dialogue_refs / dialogue_ref 编号查 dialogue.md;编号解析不到的 text=None,
-    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。"""
+    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。
+    storyboard 草稿的 dialogue_refs / dialogue_ref 只在镜条目自身无任何对白信息时才回落。"""
     lines: list[dict] = []
     seen: set[str] = set()
 
@@ -4363,12 +4380,15 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
         seen.add(key)
         lines.append({"ref": ref, "speaker": speaker, "text": text})
 
-    emb = s.get("dialogue")
-    for d in (emb if isinstance(emb, list) else [emb]):
-        if isinstance(d, dict) and d.get("text"):
-            _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
+    for emb in (s.get("dialogue"), s.get("dialogue_lines")):
+        for d in (emb if isinstance(emb, list) else [emb]):
+            if isinstance(d, dict) and d.get("text"):
+                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
     refs = []
-    for v in (s.get("dialogue_refs"), s.get("dialogue_ref"), draft.get("dialogue_refs"), draft.get("dialogue_ref")):
+    srcs = [s.get("dialogue_refs"), s.get("dialogue_ref")]
+    if not _shot_has_own_dialogue(s):
+        srcs += [draft.get("dialogue_refs"), draft.get("dialogue_ref")]
+    for v in srcs:
         if isinstance(v, list):
             refs.extend(x for x in v if isinstance(x, str))
         elif isinstance(v, str) and v.strip():
@@ -4901,12 +4921,17 @@ def _preview_storyboard(project: str, ep: str):
                     if isinstance(sc, dict) and sc.get("scene_id")}
 
     def _shot_draft(s: dict) -> dict:
-        m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
+        # storyboard_ref 规范形 "S03/order:1";shot-planning 按空间/台词把一条草稿拆成多镜时
+        # 写成 "S02/order:3/split:a" / ".../split:b"(2026-08-30 dzg5 ep01 六镜),后缀不参与索引
+        m = re.match(r"^(.+?)/order:(\d+)(?:/split:[^/]+)?$", s.get("storyboard_ref") or "")
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
 
     def _shot_content(s: dict) -> str:
-        if s.get("content"):
-            return s["content"]
+        # 镜条目自身 content / 规范字段 content_brief(shot-planning 直出,拆镜时是本镜独有内容)
+        # 优先于 storyboard 草稿(拆镜的草稿是整镜未拆前的全文)
+        for k in ("content", "content_brief"):
+            if isinstance(s.get(k), str) and s[k].strip():
+                return s[k]
         dr = _shot_draft(s)
         return dr.get("content") or dr.get("subject_action") or ""
 
@@ -4988,7 +5013,9 @@ def _preview_storyboard(project: str, ep: str):
             continue
         sid = s.get("shot_id") or ""
         dlines = _shot_dialogue_lines(s, _shot_draft(s), dlg_idx)
-        raw_ref = s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref")
+        # 镜自身带对白信息时不回落草稿的 dialogue_ref(拆镜草稿含兄弟镜台词,见 _shot_has_own_dialogue)
+        raw_ref = s.get("dialogue_ref") or (
+            None if _shot_has_own_dialogue(s) else _shot_draft(s).get("dialogue_ref"))
         for ln in dlines:
             ln["speaker_name"] = cname.get(ln.get("speaker")) or ln.get("speaker")
         shots.append({k: s.get(k) for k in (
