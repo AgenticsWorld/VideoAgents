@@ -47,6 +47,8 @@ button:disabled{opacity:.5;cursor:default}
 .hint{font-size:12px;color:var(--dim)}
 .autolabel{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);cursor:pointer;flex:none}
 .autolabel input{accent-color:var(--accent)}
+.qi{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:-8px;border:1px solid var(--dim);border-radius:50%;font-size:10px;font-style:italic;font-family:Georgia,serif;line-height:1;color:var(--dim);cursor:help;flex:none;user-select:none}
+.qi:hover{color:var(--accent);border-color:var(--accent)}
 .hint a{color:var(--link)}
 #ready.ok{color:var(--green)}
 #ready.err{color:var(--red)}
@@ -114,7 +116,7 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
       </div>
       <div class="row" style="justify-content:flex-end;gap:12px">
         <span id="msg"></span>
-        <label class="autolabel" title="开启后:视频模型为火山引擎时,每集视频生成开跑前自动清空资产库(规避素材数量上限),并把该集用到的人物概念图重新入库、等审核通过后开跑"><input type="checkbox" id="in-auto"> 全自动管理</label>
+        <label class="autolabel"><input type="checkbox" id="in-auto"> 自动清理</label><span class="qi" title="适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库">i</span>
         <button id="btn-save">保存设置</button>
         <button id="btn-toggle" class="primary">启用</button>
       </div>
