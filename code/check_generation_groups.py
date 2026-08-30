@@ -15,7 +15,8 @@
   8. audio_plan_complete               每组 audio_plan ∈ {dialogue,narration_over,ambient_only}
                                        且与 has_dialogue/挂点事实一致;ambient_only 必附
                                        silent_rationale
-  (dialogue_est_fits_group_x0.7 需 screenplay 对白层估时,不在本脚本,由 shot-planning 自查)
+  (dialogue_est_fits_group_x0.7 需 screenplay 对白层估时与角色语速,由 code/check_dialogue_fit.py 执行——
+   2026-08-30 起为 p6-dialogue-fit 节点的宿主 CLI,不再由 shot-planning 自查)
 
 组间转场机检 transition_ok(2026-08-28,WORKFLOW.md §9C;默认开启,--skip-transition 跳过):
   9. transition_type_valid            组 transition_in.type ∈ 受控枚举(缺省 = hard_cut);可渲染类型

@@ -2641,7 +2641,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_line}
-- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
+- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-08-30)**:每组 Σ台词估时 ≤ 组时长×0.7、每镜 Σ ≤ 镜长、单句 ≤ {shot_max}×0.7 秒(估时 = 有效字符 ÷ 角色 voice.json speed_cpm 中点 ÷60);storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 

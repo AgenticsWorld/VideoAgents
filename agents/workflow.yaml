@@ -194,7 +194,7 @@ phases:
           outputs: ["story/episodes/{ep}/screenplay.md"],
           validation: { auto: [id_refs_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
-          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }
+          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
           outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
           validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
@@ -223,11 +223,23 @@ phases:
                                group_duration_4_15_int, group_characters_lte_4,
                                narration_anchors_cover_all, narration_window_gte_est_x1.15,
                                group_audio_plan_defined, ambient_only_groups_justified,
-                               dialogue_est_fits_group_x0.7,
+                               dialogue_est_fits_group_x0.7,   # 2026-08-30 起由 code/check_dialogue_fit.py 执行(dialogue_fit_group),超限不再自查放行——定稿后固定进 p6-dialogue-fit 精简环节
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切,渲染 directing/{ep}/blocking_maps/{group}.png(code/render_blocking_map.py --strict,2026-08-19)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
+      # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
+      # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
+      # 逐句精简(只动对白文本层:screenplay.md 对白层 + dialogue.md + shot_list dialogue_lines 文本镜像;不动镜/组结构),
+      # --write-est 同步估时后复检至 PASS;3 轮仍装不下 = 上报 orchestrator 回派 shot-planning 调镜时长/拆组(分镜变更)。
+      # blocking(表演触发词 trigger.line_ref/word 取自台词)与 H3A 签字均以本节点 PASS 为前置;严禁指望模型压语速消化。
+      - { id: p6-dialogue-fit, agent: 01-story/dialogue-rewrite, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/dialogue_fit.json", "story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogue.md",
+                    "directing/{ep}/shot_list.json"],   # 后三项仅超限精简时产生新版本(对白文本层 diff)
+          validation: { auto: [dialogue_fit_group, dialogue_fit_shot, line_le_cap, line_est_consistent,
+                               lines_text_match_source,   # 以上 5 项 code/check_dialogue_fit.py --project --ep 全批执行,退出码 0 为 PASS
+                               style_hit_rate_gte_80, non_dialogue_layer_diff_zero],   # 精简后风格命中率不降、非对白层零改动
+                        qa: [11-qa/logic-qa] } }   # 仅精简发生时会签:改短不得引入逻辑断裂
       - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
       - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
@@ -235,7 +247,7 @@ phases:
           validation: { qa: [11-qa/visual-qa] } }
       - { id: p6-cinematography, agent: 07-directing/cinematography, depends_on: [p6-plan],
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
-      - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots],
+      - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots, p6-dialogue-fit],   # performance.trigger 取自定稿台词,须待对白精简完成(2026-08-30)
           outputs: ["directing/{ep}/shots/{shot}/blocking.json"],
           validation: { auto: [presence_consistent_with_timeline, blocking_on_map] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en
       - { id: p6-continuity, agent: 07-directing/continuity-planning,
@@ -248,7 +260,7 @@ phases:
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
                         qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·costume-concept(本集各组 costumes_by_char 所指非默认服装的 sheet_<COS-id>.png)·environment-concept·prop·creature-concept 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
-      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
 
   - id: p7
     name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)

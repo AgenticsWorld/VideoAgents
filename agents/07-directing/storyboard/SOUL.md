@@ -20,6 +20,7 @@
    - 组内时长建议之和 ≤15 秒(Seedance 单次生成上限;若用户全局设定注入了组上限则以注入值为准);
    - **节拍完整**:一个动作-反应节拍、一轮对话问答尽量装进同一组,不在节拍中间断组;
    - 对白轮不跨组切断(问句与答句同组);
+   - **组时长要装得下台词(§7D ①,2026-08-30)**:起草组时把组内对白行的 `est_duration_s` 加总,Σ ≤ 组时长建议×0.7 才成立;装不下优先加长镜/拆组,不要把「删台词」留给定稿后的 p6-dialogue-fit 精简环节(那是兜底,不是分组手段);
    - 组内出场角色合计尽量 ≤4(生成模型参考人物 >4 时稳定性下降,超了要拆);
    - 每一镜必须且只属于一个组;单镜成组允许(如超长独立镜头)。
    - **登记组入口转场 `transition_in` 与叙事块 `narrative_block`(2026-08-28,WORKFLOW.md §9C)**:按 directing_plan `## 转场清单` 把每处非硬切转场落到**进入该段的组**的入口——`transition_in: { type, duration_s, intent, reason, source }`(type/时长/intent 取值契约见 shot-planning SOUL 职责 4;`reason` 引清单条目,`source` 写 `directing_plan#转场清单/<序号>`);缺省 = 硬切,不写。闪回/梦境/蒙太奇/想象段的组标 `narrative_block: { id, kind, role }`(kind ∈ flashback / dream / montage / imagination;role 按块内组序 start / middle / end,单组 single),同一块的组必须连续,**块入口组与块尾的下一组都必须有 `transition_in`**(有意硬切也要显式写 `type: hard_cut` + reason)。这两个字段替代以前各项目自造的 `flashback_block`/`sub_block` 之类临时标记;组间转场**只在这里设计、只在 Phase 9 剪辑期实施**,镜头 `content`/sketch 里不要写「白闪进入」「叠化到」之类让生成模型自己做转场的描述(组内镜间的连续动作/叠化节奏除外)。
