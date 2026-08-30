@@ -157,13 +157,22 @@ async function initProjects(){
 
 /* ---------- 复制项目(整份复制当前项目目录 → 全新项目) ---------- */
 let COPYING=false;
-function defaultCopyName(){
+/* 默认名 = 源项目名-YYYYMMDD;若同名项目已存在(同日已复制过),依次追加 -1、-2… 直到不重名 */
+function defaultCopyName(existing){
   const d=new Date(),p=n=>String(n).padStart(2,'0');
-  return curProj()+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
+  const base=curProj()+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
+  const taken=new Set(existing||[]);
+  if(!taken.has(base))return base;
+  for(let i=1;;i++){const c=base+'-'+i;if(!taken.has(c))return c;}
 }
-function refreshCopy(){
+async function refreshCopy(){
   if(COPYING)return;
-  $('#copy-name').value=defaultCopyName();
+  const src=curProj();
+  // 用最新项目列表查重(其它页面/实例可能刚建过同名项目);取不到就退回下拉里的列表
+  let list=null;try{list=await api('/api/v1/projects')}catch(e){}
+  if(!Array.isArray(list))list=[...$('#project').options].map(o=>o.value);
+  if(COPYING||curProj()!==src)return;      // 等待期间用户已切换项目/开始复制,放弃本次刷新
+  $('#copy-name').value=defaultCopyName(list);
   $('#copy-status').classList.remove('show');
 }
 function copyStatus(cls,html){
