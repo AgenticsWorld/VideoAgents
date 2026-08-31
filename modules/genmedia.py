@@ -25,6 +25,14 @@ CLI:
   需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
+  python3 modules/genmedia.py reclaim --task-id cgt-xxxx --output out.mp4 \
+      [--return-last-frame tail.png]
+
+  认领方舟侧已建成的视频任务(火山引擎/BytePlus):仅查询状态+下载产物,绝不重新
+  提交、不重复计费。适用于提交或下载阶段被网络/工具超时掐断但任务已建成的场景
+  (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 id 见提交日志
+  「任务已创建 cgt-…」行,或 code/ark_task_list.py 按创建时间核对。
+
   python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
       [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
       [--resolution 1080p] [--aspect 16:9] [--seed 1234] [--dry-run]
@@ -2487,48 +2495,71 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     if not tid:
         raise RuntimeError(f"方舟视频任务创建失败:{json.dumps(task)[:400]}")
     print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    return _ark_wait_and_download(cfg, tid, output, resolution, duration, return_last_frame)
+
+
+def _ark_wait_and_download(cfg, tid, output, resolution="", duration=None,
+                           return_last_frame=""):
+    """轮询方舟视频任务直至终态并下载产物(查询/下载接口零计费)。
+    供 _video_ark(新建任务后)与 reclaim_video(认领既有任务)共用。"""
+    tasks_url = f"{_ark_base(cfg)}/contents/generations/tasks"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
     started = time.time()
     deadline = started + VIDEO_TIMEOUT
     last_status, last_beat = "", started
-    while time.time() < deadline:
-        time.sleep(VIDEO_POLL_INTERVAL)
+    while True:
         try:
             st = _get_json(f"{tasks_url}/{tid}", headers)
         except Exception as e:
-            # 轮询瞬时失败不中止:任务已在方舟运行,中止会诱发上层重试重复计费
+            # 查无此任务立即失败(id 有误/已过保留期,重试无意义);
+            # 其余轮询瞬时失败不中止:任务已在方舟运行,中止会诱发上层重试重复计费
+            if "HTTP 404" in str(e):
+                raise RuntimeError(f"方舟查无任务 {tid}:任务 id 有误或产物已过保留期"
+                                   "(可用 code/ark_task_list.py 核对)") from e
             print(f"[genmedia] 轮询失败({e}),{VIDEO_POLL_INTERVAL}s 后重试",
                   file=sys.stderr, flush=True)
-            continue
-        status = st.get("status")
-        # 进度心跳:状态变化即报,同状态每 60s 报一次(方舟查询接口无百分比字段,只能报状态+等待时长)
-        now = time.time()
-        if status != last_status or now - last_beat >= 60:
-            print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
-                  file=sys.stderr, flush=True)
-            last_status, last_beat = status, now
-        if status == "succeeded":
-            c = st.get("content") or {}
-            url = c.get("video_url")
-            if not url:
-                raise RuntimeError(f"方舟任务成功但无 video_url:{json.dumps(st)[:400]}")
-            saved = _save(_request(url, timeout=600), output)
-            usage = st.get("usage") or {}
-            if usage.get("completion_tokens") or usage.get("total_tokens"):
-                _record_video_usage(output, tid, cfg, usage, resolution, duration)
-            else:
-                print("[genmedia] 任务成功但查询响应无 usage 明细,本次未落计费记录",
-                      file=sys.stderr)
-            lf_url = c.get("last_frame_url")
-            if return_last_frame:
-                if lf_url:
-                    _save(_request(lf_url, timeout=600), return_last_frame)
+            st = None
+        if st is not None:
+            status = st.get("status")
+            # 进度心跳:状态变化即报,同状态每 60s 报一次(方舟查询接口无百分比字段,只能报状态+等待时长)
+            now = time.time()
+            if status != last_status or now - last_beat >= 60:
+                print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
+                      file=sys.stderr, flush=True)
+                last_status, last_beat = status, now
+            if status == "succeeded":
+                c = st.get("content") or {}
+                url = c.get("video_url")
+                if not url:
+                    raise RuntimeError(f"方舟任务成功但无 video_url:{json.dumps(st)[:400]}")
+                saved = _save(_request(url, timeout=600), output)
+                usage = st.get("usage") or {}
+                if usage.get("completion_tokens") or usage.get("total_tokens"):
+                    # reclaim 场景 resolution/duration/model 未随命令传入,以任务详情回填台账
+                    if st.get("model"):
+                        cfg = dict(cfg, model=st["model"])
+                    _record_video_usage(output, tid, cfg, usage,
+                                        resolution or st.get("resolution") or "",
+                                        duration if duration is not None
+                                        else st.get("duration"))
                 else:
-                    print("[genmedia] 已请求 return_last_frame 但响应无 last_frame_url",
+                    print("[genmedia] 任务成功但查询响应无 usage 明细,本次未落计费记录",
                           file=sys.stderr)
-            return saved
-        if status in ("failed", "cancelled"):
-            raise RuntimeError(f"方舟视频生成失败:{json.dumps(st.get('error') or st)[:400]}")
-    raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid}")
+                lf_url = c.get("last_frame_url")
+                if return_last_frame:
+                    if lf_url:
+                        _save(_request(lf_url, timeout=600), return_last_frame)
+                    else:
+                        print("[genmedia] 已请求 return_last_frame 但响应无 last_frame_url",
+                              file=sys.stderr)
+                return saved
+            if status in ("failed", "cancelled"):
+                raise RuntimeError(f"方舟视频生成失败:{json.dumps(st.get('error') or st)[:400]}")
+        if time.time() >= deadline:
+            raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid};任务可能仍在"
+                               f"方舟侧运行,完成后可 reclaim --task-id {tid} 认领产物"
+                               "(仅查询/下载,不重复计费),勿直接重投")
+        time.sleep(VIDEO_POLL_INTERVAL)
 
 
 # ---------------- 视频:MiniMax(POST /v2/video_generation,MiniMax-H3) ----------------
@@ -3779,6 +3810,49 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
 
 
+def _ark_reclaim_config() -> dict:
+    """reclaim 只需方舟渠道(火山引擎/BytePlus)的 api_key(查询/下载接口):
+    优先取当前生效视频渠道;非方舟(或生效配置本身报错)时回退直读配置里的方舟段,
+    渠道切走后仍能认领历史任务。"""
+    try:
+        cfg = get_config("video")
+        if cfg.get("provider") in ARK_API_BASES:
+            return cfg
+    except RuntimeError:
+        pass
+    try:
+        raw = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+    except Exception:
+        raw = {}
+    for prov in ARK_API_BASES:
+        pc = dict(raw.get(prov) or {})
+        key = pc.get("api_key") or os.environ.get(ENV_KEYS.get(prov, ""), "")
+        if key:
+            return {"provider": prov, **pc, "api_key": key,
+                    "model": pc.get("custom_model") or pc.get("model") or ""}
+    raise RuntimeError("reclaim 需要方舟渠道(火山引擎/BytePlus)的 API Key:"
+                       "当前视频渠道非方舟且配置无方舟 Key,请在「🎨 生成模型」页补齐"
+                       f"或设环境变量 {ENV_KEYS['volcengine']}")
+
+
+def reclaim_video(task_id: str, output: str, return_last_frame: str = "") -> str:
+    """认领方舟侧已建成的视频任务:仅查询状态并下载产物,绝不重新提交
+    (方舟任务查询/产物下载零计费)。返回保存的绝对路径。
+
+    适用场景:提交或下载阶段被网络/工具超时掐断,但任务在方舟侧已建成——
+    succeeded 直接取回产物;排队/运行中则继续轮询到完成;failed/查无此任务
+    如实报错。任务 id(cgt-…)见提交日志「任务已创建」行或 code/ark_task_list.py。"""
+    _forbid_dispatch_layer("视频")
+    task_id = str(task_id or "").strip()
+    if not task_id:
+        raise RuntimeError("reclaim 需要 --task-id(方舟任务 id,形如 cgt-…)")
+    cfg = _ark_reclaim_config()
+    print(f"[genmedia] 认领任务 {task_id} → {Path(output).name}"
+          "(仅查询/下载,不重新提交不重复计费)", file=sys.stderr, flush=True)
+    return _ark_wait_and_download(cfg, task_id, output,
+                                  return_last_frame=return_last_frame)
+
+
 def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
                      source_task_id: str = "", resolution: str = "",
                      aspect: str = "", seed: int | None = None) -> str:
@@ -3949,6 +4023,12 @@ def _cmd_video(args):
     print(f"已生成: {out}")
 
 
+def _cmd_reclaim(args):
+    _check_id_digits(args.output, args.return_last_frame)
+    out = reclaim_video(args.task_id, args.output, args.return_last_frame)
+    print(f"已认领: {out}")
+
+
 def _cmd_upscale(args):
     _check_id_digits(args.output)
     if args.dry_run:
@@ -4080,6 +4160,14 @@ def main():
                          "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
 
+    pr = sub.add_parser("reclaim", help="认领方舟侧已建成的视频任务:仅查询+下载产物,"
+                                        "不重新提交不重复计费(火山引擎/BytePlus 专用)")
+    pr.add_argument("--task-id", required=True, help="方舟任务 id,形如 cgt-…"
+                    "(见提交日志「任务已创建」行,或 code/ark_task_list.py)")
+    pr.add_argument("--output", required=True, help="输出 mp4 路径")
+    pr.add_argument("--return-last-frame", default="",
+                    help="尾帧 PNG 落盘路径(原提交带 --return-last-frame 时才有产物)")
+
     pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
     pu.add_argument("--input", default="",
                     help="源视频路径;MiniMax 须为 H3 768P 直出规格,与 --source-task-id 二选一")
@@ -4129,8 +4217,8 @@ def main():
     t0 = time.time()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
-         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts,
-         "upload": _cmd_upload}[args.cmd](args)
+         "reclaim": _cmd_reclaim, "upscale": _cmd_upscale, "music": _cmd_music,
+         "tts": _cmd_tts, "upload": _cmd_upload}[args.cmd](args)
     except RuntimeError as e:
         _diag_report(args, t0, error=str(e))
         print(f"生成失败: {e}", file=sys.stderr)
@@ -4143,7 +4231,8 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     """诊断事件旁路(modules/diagnostics.py):白名单字段本地落盘,错误消息
     模板化后只存模板与签名,不出网。info/dry-run 不记;渠道/模型 best-effort,
     读不到(如配置缺失本身就是报错原因)不影响记录。"""
-    if _diagnostics is None or args.cmd in ("info", "upload") \
+    # reclaim 只取回既有任务产物,不是新生成事件,不入生成诊断
+    if _diagnostics is None or args.cmd in ("info", "upload", "reclaim") \
             or getattr(args, "dry_run", False):
         return
     provider = model = ""
