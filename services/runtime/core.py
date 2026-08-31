@@ -5313,8 +5313,13 @@ def _preview_storyboard(project: str, ep: str):
                     by.setdefault(ch, cos)
             if not by:
                 source = "continuity"
+                # costume_states 两种在产结构都认(2026-08-31):SOUL 示例是扁平
+                # {shot_id, CHAR-xxxx: {outfit}},实际 continuity-planning 产物(dzg5/dzg6)
+                # 是嵌套 {shot_id, characters: {CHAR-xxxx: {outfit}}}
                 for sid in (g.get("shots") or []):
-                    for ch, v in (cont_states.get(sid) or {}).items():
+                    st = cont_states.get(sid) or {}
+                    chmap = st.get("characters") if isinstance(st.get("characters"), dict) else st
+                    for ch, v in chmap.items():
                         if ch != "shot_id" and isinstance(v, dict) and v.get("outfit"):
                             by.setdefault(ch, v["outfit"])
             if not by:
