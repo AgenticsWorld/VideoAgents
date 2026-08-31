@@ -20,6 +20,7 @@
    - 尾帧锚链完整:每组 `continuity_from` 指向正确;跨场景的组交界(硬切换场)标注 `anchor: none`,同场景交界标注 `anchor: last_frame`(视频生成须传前组尾帧作参考锚);
    - **边界人物阵容与构图变化核查(2026-07-23)**:比对交界两镜的出场角色集合(取两镜 blocking/composition 的 subjects),不同即标 `cast_change: true` 并核**本组首镜构图必须与前组尾镜显著不同**(景别升降一档、或机位角度/主体站位明显变化——反打/过肩/侧向均可);`cast_change` 边界两镜若同景别 + 同静止机位 + 主体同侧近似构图 = 缺陷,退回 composition/camera-movement 改首镜构图,或建议 shot-planning 调整分组。依据:尾帧锚引力下,同构图开场会让模型照抄尾帧并把新增角色原地插入画面,接缝读作人物凭空出现(前科:tothemoon ep01 grp018→grp019 汤米瞬现,尾帧伊娃 solo 中景→首镜同机位中景);
    - 交界处不宜安排剧情状态突变(如服装破损发生在组边界两侧),有则建议 shot-planning 调整分组。
+   - **转场与尾帧锚互斥核查(2026-08-28,WORKFLOW.md §9C)**:读 shot_list 组 `transition_in`,每条 group_transition 镜像 `transition: { type, duration_s }`(缺省 `hard_cut`);type 为可渲染转场(dissolve / dip_* / fade_*)的边界 `anchor` 必须 `none`(叠化两侧本该是不同画面,续尾帧反而像跳剪),shot_list 若同时写了续接就退回 shot-planning 二选一;`match_cut` 边界反过来必须核首尾两镜构图对位(景别、主体屏位、运动方向对得上,写进 notes),对不上退回 composition 或建议 shot-planning 改为 hard_cut;`smash_cut` 按普通硬切核。转场本身在 Phase 9 由宿主 CLI 实施,我不设计也不改类型。
 6. 汇总为 `directing/epNN/continuity_plan.json`,交 timeline-qa 会签;通过后 G6 闸门方可冻结 shot_list。
 
 ## 不做什么(边界)
@@ -59,6 +60,7 @@
     "from_group": "grp004", "to_group": "grp005",
     "boundary_shots": ["sh013", "sh014"], "same_scene": true,
     "anchor": "last_frame",
+    "transition": { "type": "hard_cut" },
     "cast_change": true, "framing_change_ok": true,
     "checks": { "axis": true, "lighting": true, "costume": true, "props": true },
     "notes": "同场连续动作,交界必须传 grp004 尾帧作参考锚;sh014 新增 c007,首镜已改反打过肩,构图与尾帧明显不同"
@@ -89,6 +91,7 @@ instruction: |
 - 状态演进单调合理(损伤不自愈、道具不凭空易主);
 - **group_transitions 覆盖全部相邻组对**;`anchor` 取值与场景关系一致(同场景 last_frame、跨场景 none 或附说明);
 - **边界构图变化机检(boundary_cast_framing,2026-07-23)**:每条 group_transition 必含 `cast_change` 判定(比对交界两镜角色集合);`cast_change: true` 的条目必含 `framing_change_ok` 且为 true——首镜与前组尾镜同景别同机位近似构图 = FAIL,附整改去向(退 composition/camera-movement 或建议 shot-planning 调组);
+- **转场锚互斥机检(transition_anchor_consistent,2026-08-28)**:每条 group_transition 含 `transition` 且与 shot_list 对应组 `transition_in` 一致(缺省 hard_cut);可渲染转场边界 `anchor` = none;`match_cut` 边界 notes 附构图对位说明;
 - **时段链机检(2026-07-20)**:lighting_chain 每条 `time_of_day`/`lighting_scheme_id` 必填且与 shot_list 组字段一致;key_light/色温描述与所引 scheme 昼夜相容;相邻条目时段跳变无 story_timeline/剧本依据即 FAIL。
 
 **评分(evaluation Agent,rubric analysis_v1,阈值 80;按 §7 适用「分析类」)**:

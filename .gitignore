@@ -71,6 +71,7 @@ apps/desktop/.desktop-packages/
 plugins/fusion-fiction
 plugins/audio-to-video
 plugins/mashup
+plugins/digital-human
 conversation_history/
 data/TimbreModel/
 data/models/*

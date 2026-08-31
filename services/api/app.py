@@ -162,6 +162,16 @@ async def set_project_config(project: str, body: dict[str, Any]) -> dict[str, An
     return await core.api_projconfig_set(body)
 
 
+@api.get("/projects/{project}/prompt-skill", tags=["projects"])
+async def get_prompt_skill(project: str) -> dict[str, Any]:
+    return await core.api_prompt_skill_get(project)
+
+
+@api.post("/projects/{project}/prompt-skill", tags=["projects"])
+async def set_prompt_skill(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_prompt_skill_set({**body, "project": project})
+
+
 @api.get("/projects/{project}/references", tags=["artifacts"])
 async def references(project: str) -> dict[str, Any]:
     return _artifact_urls(await core.api_refs_list(project), project)
@@ -461,6 +471,12 @@ async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_status(body)
 
 
+@api.get("/avatar-assets/ready", tags=["avatar-assets"])
+async def avatar_assets_ready() -> dict[str, Any]:
+    """入库前置自检:文件托管配置 + 存储 SDK 可导入(方舟 CreateAsset 只收公网 URL)。"""
+    return await core.api_avatar_ready()
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())
@@ -643,6 +659,17 @@ async def storyboard_ref_upload(
 ) -> dict[str, Any]:
     data = await request.body()
     return await core.api_grpref_upload(data, project, ep, grp, filename)
+
+
+@api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
+    """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""
+    return await core.api_grpsettings_get(project, ep, grp)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_set(project: str, ep: str, grp: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpsettings_set({**(body or {}), "project": project, "ep": ep, "grp": grp})
 
 
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])

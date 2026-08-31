@@ -78,9 +78,13 @@ Python:
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
-        / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
-        凭证=新版语音技术控制台「API Key 管理」的 API Key,非方舟 ARK Key;
-        音色为 speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
+        / volcengine(豆包语音;凭证=新版语音技术控制台「API Key 管理」的 API Key,
+        非方舟 ARK Key。模型 seed-tts-2.0/1.0 走 openspeech v3 单向流式,音色为
+        speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源;
+        模型 seed-audio-1.0(Doubao-音频生成 1.0)走非流式 /api/v3/tts/create
+        **描述定制嗓音**:不选音色,角色按项目声纹卡 voice.json 声学字段拼装声线
+        描述,旁白用 --instructions 描述(缺省内置旁白声线),--voice 传入的音色库
+        speaker 名会被忽略)
         / minimax(POST /v1/t2a_v2,Speech 2.8 系列;音色为 voice_id,
         可在「生成模型」页拉取音色库选择)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
@@ -240,6 +244,54 @@ def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
     if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
         return wrapper + OPENROUTER_WRAPPER_API_SUFFIX, jwt, True
     return OPENROUTER_DIRECT_BASE, "", False
+
+
+_GROUP_RE = re.compile(r"(?:^|/)(ep[\w-]+)/(grp[\w-]+?)(?:\.[\w.]+)?$")
+
+
+def _group_from_output(output: str) -> str:
+    """从 --output 路径推断组号:…/clips/epNN/grpNNN[.xxx].mp4 → "epNN/grpNNN";推不出返回 ""。"""
+    m = _GROUP_RE.search(str(output or "").replace("\\", "/"))
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
+
+
+def _group_video_override(group: str) -> dict:
+    """组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为单组指定,2026-08-30):
+    读 data/projects/<VIDEOAGENTS_PROJECT>/assets/group_settings/<ep>/<grp>.json 的
+    video_model/provider;非派单环境(无项目)或无文件返回 {}。"""
+    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
+    if not proj or not group or "/" not in group:
+        return {}
+    ep, grp = group.split("/", 1)
+    try:
+        d = json.loads((DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep / f"{grp}.json").read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def apply_group_video_override(cfg: dict, group: str) -> dict:
+    """按组级设定改写 video 生效模型(渠道不变):设定里的 provider 必须与当前生效渠道一致,
+    否则视为失效覆盖、按全局执行并 stderr 提示。返回改写后的 cfg(原地)。"""
+    ov = _group_video_override(group)
+    model = str(ov.get("video_model") or "")
+    if not model:
+        return cfg
+    if cfg.get("provider") == "comfyui":
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
+              file=sys.stderr)
+        return cfg
+    if ov.get("provider") and ov.get("provider") != cfg.get("provider"):
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 属渠道 {ov.get('provider')},"
+              f"当前视频渠道为 {cfg.get('provider')},该覆盖未生效(按全局模型 {cfg.get('model')} 执行)",
+              file=sys.stderr)
+        return cfg
+    if model != cfg.get("model"):
+        print(f"[genmedia] 组 {group} 按组级设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+              file=sys.stderr)
+    cfg["model"] = model
+    cfg["_group_override"] = group
+    return cfg
 
 
 def get_config(kind: str) -> dict:
@@ -2154,8 +2206,8 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
     if refs and len(refs) > max_refs:
         raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
     if audio_refs and len(audio_refs) > max_arefs:
         raise RuntimeError(f"参考音频最多 {max_arefs} 段({ver_name}),收到 {len(audio_refs)}")
     if audio_refs:
@@ -2986,8 +3038,8 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
         if refs and len(refs) > max_refs:
             raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
         if is_v25 and resolution and resolution not in ("480p", "720p"):
             print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
                   file=sys.stderr)
@@ -3203,11 +3255,173 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
 # X-Api-Resource-Id 即模型档(seed-tts-2.0 / seed-tts-1.0 / 克隆 seed-icl-2.0);
 # 响应为 NDJSON:每行 {"code":0,"data":"<base64 音频分片>"},结束行 code=20000000。
 
-def _tts_volcengine(cfg, text, output, voice, speed, instructions):
+# ---- Doubao-音频生成 1.0(seed-audio-1.0,描述定制嗓音)----
+# 同一 X-Api-Key 走非流式音频生成接口:不选音色库 speaker,按「声线文字描述」直接生成
+# 定制嗓音(嗓音模板/voiceprint 样本、旁白、后期配音同一条路)。角色描述由项目声纹卡
+# bible/characters/<id>/voice.json 的**声学字段**(gender/presented_gender、pitch、timbre、
+# accent;--variant 命中 age_variants 时逐字段覆盖)自动拼装——reference_style 等含剧情
+# 叙述的字段不进描述(2026-08-31 实测:剧情文字会被模型当内容读进音频)。旁白(不传
+# --character)用 --instructions 作声线描述,缺省内置旁白声线。注意:同一描述两次生成的
+# 音色不完全相同,voiceprint 样本必须一次冻结复用;重生成=受控变更(§8A)。
+# **嗓音一致性(自动参考锚)**:项目已有冻结样本时自动挂为 @音频1 参考——角色取
+# assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3(形态样本缺失/正在生成
+# 该形态样本时回退基础样本=同一副嗓子按描述变龄),旁白取 refs/NARRATOR_voiceprint.mp3
+# (可选);输出路径即候选样本本身时跳过(首出样本走纯描述)。逐句 dub/逐段旁白因此
+# 不随调用漂音色。
+
+SEEDAUDIO_MODEL = "seed-audio-1.0"
+SEEDAUDIO_NARRATOR_DESC = ("成年旁白,中低音,音色沉稳干净,吐字清晰,"
+                           "叙事感强,官话标准音无口音")
+# 音色库 speaker 名/克隆音色 id 的常见形态:desc 模式下拒作声线描述(陈旧 casting 兜底)
+_SEEDAUDIO_STALE_VOICE = re.compile(
+    r"^(S_|zh_|en_|ja_|es_|id_|pt_|multi_)|_bigtts$|_mars_|_moon_|_uranus_")
+
+
+def _seedaudio_char_desc(character: str, variant: str, project: str, output: str) -> str:
+    """从项目声纹卡拼装角色声线描述(只取声学字段,剧情性文字不进 prompt)。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:                               # 脚本直跑时无包前缀
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        raise RuntimeError("seed-audio 描述定制需要项目上下文:--project 传项目名/目录"
+                           "(Agent 环境通常由 VIDEOAGENTS_PROJECT 自动注入)")
+    vp = root / "bible" / "characters" / character / "voice.json"
+    try:
+        v = json.loads(vp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise RuntimeError(f"seed-audio 描述定制读不到声纹卡 {vp}"
+                           "(03-characters/voiceprint 先出 voice.json)")
+    sel = {}
+    if variant:
+        wanted = variant.casefold()
+        for item in v.get("age_variants") or []:
+            identity = " ".join(str(item.get(k) or "") for k in
+                                ("version_id", "id", "name", "variant", "label"))
+            if wanted in identity.casefold():
+                sel = item
+                break
+        if not sel:
+            raise RuntimeError(f"声纹卡 age_variants 无匹配形态 {variant!r}({vp})")
+    gender = str(v.get("presented_gender") or v.get("gender") or "").strip()
+    parts = []
+    if gender:
+        parts.append({"男": "男性", "女": "女性"}.get(gender, gender))
+    for label, key in (("音高", "pitch"), ("音色:", "timbre"), ("口音:", "accent")):
+        val = str(sel.get(key) or v.get(key) or "").strip()
+        if val:
+            parts.append(f"{label}{val}")
+    if len(parts) < 2:
+        raise RuntimeError(f"声纹卡声学字段不足以定制嗓音(gender/pitch/timbre/accent"
+                           f" 至少两项非空):{vp}")
+    return ",".join(parts)
+
+
+def _seedaudio_ref(character: str, variant: str, project: str, output: str):
+    """描述定制模式的自动参考锚:返回项目冻结样本路径(无则 None)。
+    角色:refs/<CHAR>_<variant>_voiceprint.mp3 → refs/<CHAR>_voiceprint.mp3;
+    旁白:refs/NARRATOR_voiceprint.mp3。候选与输出同路径(正在首出/重出该样本)跳过,
+    变体样本重出因此自动锚定基础样本(同一副嗓子按描述变龄)。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        return None
+    refs = root / "assets" / "audio" / "voice" / "refs"
+    try:
+        out = Path(output).resolve()
+    except OSError:
+        out = Path(output)
+    names = []
+    if character:
+        if variant:
+            names.append(f"{character}_{variant}_voiceprint.mp3")
+        names.append(f"{character}_voiceprint.mp3")
+    else:
+        names.append("NARRATOR_voiceprint.mp3")
+    for name in names:
+        cand = refs / name
+        try:
+            if cand.is_file() and cand.resolve() != out:
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def _seedaudio_desc(voice, instructions, character, variant, project, output):
+    """解析描述定制模式的(声线描述, 语气)。--voice 只接受声线描述文本;疑似音色库
+    speaker 名(陈旧 casting 传入)忽略并告警。"""
+    override = (voice or "").strip()
+    if override and _SEEDAUDIO_STALE_VOICE.search(override):
+        print(f"[genmedia] seed-audio 描述定制模式下 --voice 只接受声线描述文本,"
+              f"疑似音色库 speaker 名 {override!r} 已忽略(改按声纹卡/旁白描述拼装)",
+              file=sys.stderr)
+        override = ""
+    if character:
+        desc = override or _seedaudio_char_desc(character, variant, project, output)
+        tone = (instructions or "").strip() or "平静自然"
+    else:
+        desc = override or (instructions or "").strip() or SEEDAUDIO_NARRATOR_DESC
+        tone = "平静自然"
+    return desc, tone
+
+
+def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
+                        character="", variant="", project=""):
+    api_key = str(cfg.get("api_key") or "").strip()
+    desc, tone = _seedaudio_desc(voice, instructions, character, variant,
+                                 project, output)
+    ref = _seedaudio_ref(character, variant, project, output)
+    references = []
+    if ref is not None:
+        references.append({"audio_data": base64.b64encode(ref.read_bytes()).decode()})
+        text_prompt = ("@音频1 是说话人的嗓音参考(仅音色,非本段台词的朗读)。"
+                       "生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                       f"说话人(与@音频1 同一副嗓子;{desc})"
+                       f"用{tone}的语气说道:“{text}”")
+    else:
+        text_prompt = ("生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                       f"说话人({desc})用{tone}的语气说道:“{text}”")
+    if len(text_prompt) > 3000:
+        raise RuntimeError(f"seed-audio text_prompt 超 3000 字符上限"
+                           f"({len(text_prompt)}):文本过长,分段合成后拼接")
+    fmt = "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm"
+    audio_config = {"format": fmt, "sample_rate": 24000}
+    if speed and speed != 1.0:
+        # speech_rate ∈ [-50,100]:0=常速,100=2 倍速,-50=0.5 倍速
+        audio_config["speech_rate"] = max(-50, min(100, round((speed - 1) * 100)))
+    resp = json.loads(_request(
+        "https://openspeech.bytedance.com/api/v3/tts/create",
+        json.dumps({"model": SEEDAUDIO_MODEL, "text_prompt": text_prompt,
+                    **({"references": references} if references else {}),
+                    "audio_config": audio_config, "watermark": {}},
+                   ensure_ascii=False).encode(),
+        {"Content-Type": "application/json", "X-Api-Key": api_key,
+         "X-Api-Request-Id": str(uuid.uuid4())},
+        timeout=TTS_TIMEOUT))
+    audio_b64 = resp.get("audio") or ""
+    if not audio_b64:
+        raise RuntimeError(f"火山音频生成(seed-audio)返回空音频"
+                           f"(code={resp.get('code')}):{resp.get('message') or json.dumps(resp, ensure_ascii=False)[:300]}")
+    print(f"[genmedia] seed-audio 描述定制嗓音:desc={desc!r} tone={tone!r}"
+          f" ref={ref.name if ref is not None else '无(纯描述)'}"
+          f" dur={resp.get('original_duration')}s", file=sys.stderr)
+    return _save(base64.b64decode(audio_b64), output)
+
+
+def _tts_volcengine(cfg, text, output, voice, speed, instructions,
+                    character="", variant="", project=""):
     api_key = str(cfg.get("api_key") or "").strip()
     if not api_key:
         raise RuntimeError("火山 TTS 未配置 API Key(新版语音技术控制台「API Key 管理」"
                            "创建,「🎨 生成模型」页 TTS → 火山引擎 填入)")
+    if (cfg.get("model") or "") == SEEDAUDIO_MODEL:
+        return _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
+                                   character, variant, project)
     speaker = voice or cfg.get("voice") or ""
     if not speaker:
         raise RuntimeError("火山 TTS 未指定音色:--voice 传 speaker 名,"
@@ -3443,7 +3657,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None,
-                   ref_image_size: str = "") -> str:
+                   ref_image_size: str = "", group: str = "") -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
@@ -3465,7 +3679,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
-    cfg = get_config("video")
+    cfg = apply_group_video_override(get_config("video"), group or _group_from_output(output))
     if ref_image_size and cfg["provider"] != "comfyui":
         raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
@@ -3539,6 +3753,8 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     data/TimbreModel/);旁白不传 character;voice 仅保留真实本地音频文件的兼容覆盖。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
     情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
+    volcengine 模型为 seed-audio-1.0 时走描述定制嗓音(角色按声纹卡声学字段、旁白按
+    instructions 描述直接生成,不选音色;--voice 传 speaker 名会被忽略)。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
@@ -3548,7 +3764,7 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
                            "(可选 openrouter / volcengine / minimax / elevenlabs / comfyui)")
-    if cfg["provider"] == "comfyui":
+    if cfg["provider"] in ("comfyui", "volcengine"):
         return fn(cfg, text, output, voice, speed, instructions,
                   character, variant, project)
     return fn(cfg, text, output, voice, speed, instructions)
@@ -3600,12 +3816,17 @@ def _check_id_digits(*paths):
                     f" grp/sh 编号固定三位零填充,应为 {fixed!r}(完整路径 {path})")
 
 
-def _cmd_info(_args):
+def _cmd_info(args):
+    group = getattr(args, "group", "") or ""
     for kind in ("image", "video", "music", "tts"):
         try:
             cfg = get_config(kind)
+            if kind == "video" and group:
+                cfg = apply_group_video_override(cfg, group)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
+            if cfg.get("_group_override"):
+                desc += f"  (组 {group} 组级覆盖;全局 model={get_config('video')['model']})"
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")
@@ -3632,11 +3853,12 @@ def _cmd_image(args):
 def _cmd_video(args):
     _check_id_digits(args.output, args.return_last_frame)
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
+    group = args.group or _group_from_output(args.output)
     if args.dry_run:
-        cfg = get_config("video")
+        cfg = apply_group_video_override(get_config("video"), group)
         resolution = _resolution_gate(args.resolution)
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
-            else f"model={cfg.get('model') or '-'}"
+            else f"model={cfg.get('model') or '-'}" + (f" (组级覆盖 {group})" if cfg.get("_group_override") else "")
         line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
@@ -3657,7 +3879,8 @@ def _cmd_video(args):
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,
                          args.duration, args.resolution, args.aspect, args.seed,
                          args.ref, args.audio_ref, gen_audio, args.return_last_frame,
-                         video_refs=args.ref_video, ref_image_size=args.ref_image_size)
+                         video_refs=args.ref_video, ref_image_size=args.ref_image_size,
+                         group=group)
     print(f"已生成: {out}")
 
 
@@ -3723,6 +3946,12 @@ def _cmd_tts(args):
                 cfg, args.text, args.output, args.voice, args.character,
                 args.variant, args.project, args.instructions)
             voice = f"auto:{selected['file']} ({selected['reason']})"
+        elif cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL:
+            desc, tone = _seedaudio_desc(args.voice, args.instructions, args.character,
+                                         args.variant, args.project, args.output)
+            ref = _seedaudio_ref(args.character, args.variant, args.project, args.output)
+            voice = (f"desc:{desc} (语气:{tone};"
+                     f"参考锚:{ref.name if ref is not None else '无,纯描述'})")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}"
         print(f"[dry-run] tts via {cfg['provider']} {desc}"
@@ -3737,7 +3966,9 @@ def _cmd_tts(args):
 def main():
     ap = argparse.ArgumentParser(description="统一图像/视频/音乐生成(渠道按 data/.videoagents/genconfig.json)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi = sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:同时显示该组的组级视频模型覆盖(分镜预览「🎛 模型」)")
 
     pi = sub.add_parser("image", help="生成图像")
     pi.add_argument("--prompt", required=True)
@@ -3778,6 +4009,9 @@ def main():
                          "同像素面积;max 短边 ≤2048 不压缩,身份保真更好但更慢更贵")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
+    pv.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:按该组的组级视频模型覆盖生成(渠道不变);"
+                         "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
 
     pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
@@ -3805,6 +4039,7 @@ def main():
     pt.add_argument("--voice", default="",
                     help="音色(云渠道:缺省用配置页默认,openrouter=音色名/火山=speaker 名/"
                          "minimax=voice_id/elevenlabs=voice_id,角色配音按 casting 传;"
+                         "火山 seed-audio-1.0 描述定制模式:不要传,speaker 名会被忽略;"
                          "ComfyUI:仅接受真实本地音频文件的兼容覆盖,通常不要传)")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
     pt.add_argument("--instructions", default="",

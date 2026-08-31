@@ -20,8 +20,10 @@
    - 组内时长建议之和 ≤15 秒(Seedance 单次生成上限;若用户全局设定注入了组上限则以注入值为准);
    - **节拍完整**:一个动作-反应节拍、一轮对话问答尽量装进同一组,不在节拍中间断组;
    - 对白轮不跨组切断(问句与答句同组);
+   - **组时长要装得下台词(§7D ①,2026-08-30)**:起草组时把组内对白行的 `est_duration_s` 加总,Σ ≤ 组时长建议×0.7 才成立;装不下优先加长镜/拆组,不要把「删台词」留给定稿后的 p6-dialogue-fit 精简环节(那是兜底,不是分组手段);
    - 组内出场角色合计尽量 ≤4(生成模型参考人物 >4 时稳定性下降,超了要拆);
    - 每一镜必须且只属于一个组;单镜成组允许(如超长独立镜头)。
+   - **登记组入口转场 `transition_in` 与叙事块 `narrative_block`(2026-08-28,WORKFLOW.md §9C)**:按 directing_plan `## 转场清单` 把每处非硬切转场落到**进入该段的组**的入口——`transition_in: { type, duration_s, intent, reason, source }`(type/时长/intent 取值契约见 shot-planning SOUL 职责 4;`reason` 引清单条目,`source` 写 `directing_plan#转场清单/<序号>`);缺省 = 硬切,不写。闪回/梦境/蒙太奇/想象段的组标 `narrative_block: { id, kind, role }`(kind ∈ flashback / dream / montage / imagination;role 按块内组序 start / middle / end,单组 single),同一块的组必须连续,**块入口组与块尾的下一组都必须有 `transition_in`**(有意硬切也要显式写 `type: hard_cut` + reason)。这两个字段替代以前各项目自造的 `flashback_block`/`sub_block` 之类临时标记;组间转场**只在这里设计、只在 Phase 9 剪辑期实施**,镜头 `content`/sketch 里不要写「白闪进入」「叠化到」之类让生成模型自己做转场的描述(组内镜间的连续动作/叠化节奏除外)。
    - **登记组内每个出场角色的服装 `costumes`(2026-08-26)**:每组 `groups_draft[]` 写 `costumes`(对象,角色 `CHAR-*` → `bible/costumes.json` 该角色的一套服装 id,如 `{"CHAR-0002": "COS-010"}`),组 `characters` 里每个角色必有一条。定值依据:该套服装的 `scenes[]` 含本场 `scene_id`、`chapters[]/episodes[]` 含本集所在章/集,再以 `change_points[]`(`scene_ref`/`ev_ref`/`paragraph`/`trigger`)定换装发生在本场哪一拍;无任何匹配取该角色默认装并在组 `costume_notes` 写明推断依据。**换装点只能落在组边界**:同一角色在一组内只能穿一套——换装/状态突变(敞襟、被扒、沾血)发生在节拍中间时,就在换装点切组(与「对白轮不跨组」同级的分组原则),不得让一组里同一人两种衣着。服装 sheet 由 costume-concept 按此字段挂图(`assets/concepts/characters/<id>/costume_sheets.json` 台账),分镜预览页组卡按此展示服装参考图,§6A 按此审计服装图缺口,p7 按此换挂 refs——漏写 = 模型只能凭默认装 sheet 出片,破衣穿回干净的。
    - **登记组内出场生物/坐骑 `creatures`(2026-08-26)**:每组 `groups_draft[]` 写 `characters`(出场角色 CHAR-*)与 `creatures`(出场生物/造物/坐骑,ID 取 `bible/creatures/index.json` 的 `CRE-*`,无则空数组)——剧本或镜头 `content` 中出现该生物即登记;**坐骑随骑手登记**:角色骑乘/牵引坐骑的镜头,坐骑必入该组 `creatures`,不得因「主体是人」而省略;生物的站位按职责 7 的「生物两态」写进 `blocking_map`(2026-08-27)。生物是与角色同级的形象锚实体,漏登记 = 下游 §6A 覆盖审计与 p7 refs 挂图无从枚举,模型只能凭 bible 文字脑补形象。
 6. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
@@ -84,6 +86,9 @@
       "characters": ["CHAR-0003", "CHAR-0007"],
       "costumes": { "CHAR-0003": "COS-012", "CHAR-0007": "COS-031" },
       "creatures": [],
+      "transition_in": { "type": "dissolve", "duration_s": 0.5, "intent": "flashback_in",
+                         "reason": "S03 闪回入口", "source": "directing_plan#转场清单/1" },
+      "narrative_block": { "id": "fb-2003", "kind": "flashback", "role": "start" },
       "scene_refs": {
         "layout_top": "assets/concepts/scenes/SCN-0012/layout_top.png",
         "grid_9views": "assets/concepts/scenes/SCN-0012/grid_9views.png",
@@ -129,6 +134,7 @@ instruction: |
 - **剧本场景覆盖率 100%**(coverage 对照表逐场核对);
 - 每镜 `content` 非空;`screenplay_ref` / `dialogue_ref` 引用在剧本中存在;
 - **每镜均入组**:groups_draft 覆盖本场全部 shots_draft,不重不漏;组内 order 连续;`duration_hint_sum_s` ≤15;
+- **转场机检(transition_ok,2026-08-28)**:`transition_in.type` 在受控枚举内、可渲染类型 `duration_s` 在范围内、非硬切必填 `intent`/`reason`;`narrative_block` 同 id 的组连续、role 序列合法(start…end / single)、块入口组与块尾下一组都有 `transition_in`;Σ可渲染转场 ≤ 集预算 1%;directing_plan 转场清单每条都落到了某组(漏落 = 退回)。
 - **服装引用机检(costume_refs_valid,2026-08-26)**:每组 `costumes` 必填,组 `characters` 每个角色有且仅有一套,取值在 `bible/costumes.json` 中存在且 `character_ref`/归属为该角色;同场景相邻组同一角色服装不同时,两组之间必须对应 costumes.json 的一个 change_point(或组 `costume_notes` 写明状态突变依据),否则退回。
 - **生物引用机检(creature_refs_valid,2026-08-26)**:每组 `creatures` 必填(可为空数组),其中每个 ID 在 `bible/creatures/index.json#creatures[]` 存在;镜头 `content` 提及 index 已登记生物/坐骑(按名称或 aliases 匹配)而所在组 `creatures` 未登记 = 退回。
 - **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。

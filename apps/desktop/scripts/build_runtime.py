@@ -141,7 +141,7 @@ def main() -> None:
     python = compact_distribution / executable_in_distribution
     # Validate after the final internal relocation.
     run(str(python), "-c",
-        "import cv2,fastapi,faster_whisper,lark_oapi,numpy,PIL,pygit2,qrcode,scenedetect,scipy,uvicorn,yaml,yt_dlp",
+        "import cv2,fastapi,faster_whisper,lark_oapi,numpy,PIL,pygit2,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
         env=env)
     manifest = {
         "schema": SCHEMA,

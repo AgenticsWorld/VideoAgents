@@ -15,6 +15,7 @@ import io
 import json
 import mimetypes
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -595,8 +596,8 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
-        # 默认 Lite:含人脸图片默认可过 Seedance 审核
-        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-lite-260128",
+        # 火山方舟默认 5.0 Pro;BytePlus 仍默认 Lite(含人脸图片默认可过 Seedance 审核)
+        "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-pro-260628",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "seedream-5-0-lite-260128",
                      "custom_model": ""},
@@ -738,7 +739,7 @@ DEFAULT_GENCONFIG = {
                       "group_name": "VideoAgents"},
     # 时长设置:每集目标时长(分钟)与单个分镜时长范围(秒)
     "duration": {"episode_minutes": 10, "shot_min_s": 2, "shot_max_s": 8},
-    # 分镜组设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
+    # 视频模型设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
     # 「默认值」按钮一键切换三档);注入 Agent 系统提示词约束分组与 prompt 组装,
@@ -784,6 +785,16 @@ DEFAULT_GENCONFIG = {
     # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
     # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
     "versioning": {"enabled": False},
+    # 视频提示词技能(视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
+    #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
+    #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
+    #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-prompt-writing / MiniMax H3(任意渠道)→
+    #     h3-prompt-writing,解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)= 无技能并提醒手选;
+    #   mode=manual:skill_id 为用户从该工位已安装技能里指定的一项(与生效模型不匹配只告警不阻塞);
+    #   mode=off:本项目不套用技能(回执 skill_applied.id=null, reason=user_skipped)。
+    #   effective=运行时解析快照 {skill_id, mode, resolved_from, reason, decided_at}——派 prompt 工单、
+    #   保存设置、H3A 签字时刷新;机检 code/prompt_skill_check.py(prompt_skill_applied)以此为准。
+    "prompt_skill": {"mode": "auto", "skill_id": "", "effective": {}},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
     # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
@@ -947,11 +958,31 @@ def save_genconfig(cfg: dict):
     atomic_write_json(GENCONFIG_PATH, cfg)
 
 
-def active_video_model(cfg: dict | None = None) -> str:
-    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。"""
+def active_video_provider(cfg: dict | None = None, agent_id: str = "") -> str:
+    """生效视频渠道:传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia
+    _agent_provider_override 同口径),空则按全局「生成模型」页。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    pc = v.get(v.get("provider") or "volcengine") or {}
+    ov = str(agent_model_config(agent_id).get("video_provider") or "") if agent_id else ""
+    return ov or str(v.get("provider") or "volcengine")
+
+
+def active_video_model(cfg: dict | None = None, agent_id: str = "") -> str:
+    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。
+    传 agent_id 时按该 Agent 的视频渠道覆盖取对应渠道段的模型。"""
+    cfg = cfg or load_genconfig()
+    v = cfg.get("video") or {}
+    pc = v.get(active_video_provider(cfg, agent_id)) or {}
     return str(pc.get("custom_model") or pc.get("model") or "")
+
+
+VIDEO_AGENT_ID = "08-video-gen/video-generation"     # 实际提交视频生成请求的工位
+PROMPT_AGENT_ID = "08-video-gen/prompt"
+
+
+def effective_video_model(cfg: dict | None = None) -> str:
+    """真正跑视频生成的模型 id:按 video-generation 工位的渠道覆盖解析(2026-08-28 修:
+    此前 prompt 技能注入只看全局渠道,该工位覆盖了渠道时判定失真)。"""
+    return active_video_model(cfg, VIDEO_AGENT_ID)
 
 
 def is_seedance25(model: str) -> bool:
@@ -1009,12 +1040,12 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     工作流 JSON 全文(节点类名 MiniMaxH3ReferenceToVideo 或任何含 minimax+h3 的节点/标题均命中)。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
-    if (v.get("provider") or "volcengine") == "comfyui":
+    if active_video_provider(cfg, VIDEO_AGENT_ID) == "comfyui":
         comfy = v.get("comfyui") or {}
         if (comfy.get("mode") or "local") in RH_BASES:
             return is_minimax_h3(_rh_cached_workflow(comfy))
         return is_minimax_h3(comfy.get("workflow") or "")
-    return is_minimax_h3(active_video_model(cfg))
+    return is_minimax_h3(effective_video_model(cfg))
 
 
 # MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频模型/工作流名含 minimax+h3
@@ -1209,6 +1240,149 @@ def agent_skill_prompt(agent_id: str) -> str:
     return p
 
 
+# ---------------- 视频提示词技能(项目级 prompt_skill,2026-08-28) ----------------
+# 触发链:项目设置 prompt_skill(auto/manual/off)→ resolve_prompt_skill 解析出本项目应套用的
+# 技能 → 派 prompt 工单时写入系统提示词「提示词技能契约」段 + run["skill"] 面板 chip →
+# 运行结束核验活动记录里确实 Read 过该 SKILL.md(prompt_skill_read)→ 产物 grpNNN.json 须带
+# skill_applied 回执 → 机检 code/prompt_skill_check.py(prompt_skill_applied)对照 effective 快照。
+PROMPT_SKILL_CHECK = "code/prompt_skill_check.py"
+PROMPT_SKILL_SD25 = f"{PROMPT_AGENT_ID}/sd25-pe"
+PROMPT_SKILL_SD20 = f"{PROMPT_AGENT_ID}/sd20-prompt-writing"
+PROMPT_SKILL_H3 = f"{PROMPT_AGENT_ID}/h3-prompt-writing"
+PROMPT_SKILL_REASONS = ("", "user_skipped", "no_match", "disabled", "missing")
+
+
+def prompt_skill_candidates() -> list[dict]:
+    """prompt 工位可作「提示词技能」的技能清单:引擎相关的 conditional 技能 + 注册表未登记的
+    generic 技能(用户自装)。SOUL 按组条件引用的引擎无关技能(performance-direction)不在此列,
+    它们与提示词技能并用而非二选一。"""
+    return [dict(s) for s in list_agent_skills()
+            if s["agent_id"] == PROMPT_AGENT_ID and s["kind"] in ("conditional", "generic")]
+
+
+def _video_model_label(cfg: dict) -> str:
+    """生效视频模型的可读标识:模型 id;ComfyUI 类渠道无模型 id 时给工作流名/RunningHub 工作流 id。"""
+    model = effective_video_model(cfg)
+    if model:
+        return model
+    prov = active_video_provider(cfg, VIDEO_AGENT_ID)
+    if prov == "comfyui":
+        comfy = (cfg.get("video") or {}).get("comfyui") or {}
+        mode = comfy.get("mode") or "local"
+        if mode in RH_BASES:
+            return f"comfyui/{mode}:{comfy.get('rh_workflow_id') or '?'}"
+        return f"comfyui:{comfy.get('workflow') or '?'}"
+    return prov
+
+
+def auto_prompt_skill(cfg: dict | None = None) -> tuple[str, str]:
+    """按真正跑视频生成的模型自动匹配技能 → (skill_id 或 "", 解析依据)。"""
+    cfg = cfg or load_genconfig()
+    label = _video_model_label(cfg)
+    if is_minimax_h3_active(cfg):
+        return PROMPT_SKILL_H3, label
+    return auto_prompt_skill_for_model(effective_video_model(cfg)), label
+
+
+def auto_prompt_skill_for_model(model: str) -> str:
+    """按模型 id 匹配提示词技能(组级视频模型覆盖时用;ComfyUI 类无模型 id 的渠道不适用)。"""
+    if is_minimax_h3(model):
+        return PROMPT_SKILL_H3
+    if is_seedance25(model):
+        return PROMPT_SKILL_SD25
+    if is_seedance20(model):
+        return PROMPT_SKILL_SD20
+    return ""
+
+
+def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
+    """解析本项目 prompt 工位应套用的提示词技能(不落盘)。返回:
+    mode / skill_id(最终生效,"" = 不套用)/ dir / name / path(SKILL.md 仓库相对路径)/
+    auto_id / resolved_from / reason(""|user_skipped|no_match|disabled|missing)/ warning。"""
+    cfg = cfg or load_genconfig()
+    ps = load_project_settings(project).get("prompt_skill") or {}
+    mode = ps.get("mode") if ps.get("mode") in PROMPT_SKILL_MODES else "auto"
+    manual_id = str(ps.get("skill_id") or "")
+    auto_id, resolved_from = auto_prompt_skill(cfg)
+    cands = {c["id"]: c for c in prompt_skill_candidates()}
+    reason, warning = "", ""
+    if mode == "off":
+        sid = ""
+        reason = "user_skipped"
+    elif mode == "manual":
+        sid = manual_id
+        if sid not in cands:
+            reason, warning, sid = "missing", f"指定的提示词技能 {sid or '(空)'} 未安装,本项目按无技能处理", ""
+        elif auto_id and auto_id != sid:
+            warning = (f"用户指定 {cands[sid]['dir']},与生效视频模型 {resolved_from} "
+                       f"自动匹配的 {cands[auto_id]['dir']} 不同(按用户指定执行)")
+    else:
+        sid = auto_id
+        if not sid:
+            reason = "no_match"
+            warning = (f"生效视频模型 {resolved_from or '(未知)'} 没有对应的提示词技能:"
+                       "可在「视频模型设置→提示词技能」手选一项或选择跳过")
+    if sid and not cands[sid]["enabled"]:
+        warning = f"提示词技能 {cands[sid]['dir']} 已在「设置→高级→技能包」取消勾选,本项目按无技能处理"
+        reason, sid = "disabled", ""
+    c = cands.get(sid) or {}
+    return {"mode": mode, "skill_id": sid, "dir": c.get("dir", ""), "name": c.get("name", ""),
+            "path": c.get("path", ""), "auto_id": auto_id, "auto_dir": (cands.get(auto_id) or {}).get("dir", ""),
+            "resolved_from": resolved_from, "reason": reason, "warning": warning}
+
+
+def sync_prompt_skill_effective(project: str) -> dict:
+    """把解析结果快照进项目 settings.json 的 prompt_skill.effective(仅变化时写盘),返回最新项目设置。
+    快照是机检 prompt_skill_applied 的对照基准,派 prompt 工单/保存设置/H3A 签字时刷新。"""
+    r = resolve_prompt_skill(project)
+    eff = {"skill_id": r["skill_id"], "mode": r["mode"],
+           "resolved_from": r["resolved_from"], "reason": r["reason"]}
+    path = project_settings_path(project)
+    try:
+        saved = json.loads(path.read_text())
+    except Exception:
+        saved = {}
+    if not isinstance(saved, dict):
+        saved = {}
+    block = saved.get("prompt_skill")
+    if not isinstance(block, dict):
+        block = {"mode": r["mode"], "skill_id": ""}
+    cur = block.get("effective") if isinstance(block.get("effective"), dict) else {}
+    if {k: cur.get(k) for k in eff} != eff:
+        block["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
+        saved["prompt_skill"] = block
+        ensure_project(project)
+        atomic_write_json(path, saved)
+    # 组级覆盖(分镜预览「模型」按钮)的 effective 快照随项目级一起刷新:全局模型/技能变了,
+    # 「跟随全局」的组解析结果也变
+    try:
+        sync_group_settings_effective(project)
+    except Exception as e:  # noqa: BLE001
+        print(f"[group_settings] 快照刷新失败 {project}:{e}", flush=True)
+    return load_project_settings(project)
+
+
+async def api_prompt_skill_get(project: str):
+    project = safe_slug(project)
+    cfg = sync_prompt_skill_effective(project)
+    return {"project": project, "config": cfg.get("prompt_skill") or {},
+            "resolved": resolve_prompt_skill(project),
+            "candidates": prompt_skill_candidates()}
+
+
+async def api_prompt_skill_set(body: dict):
+    """视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页的「提示词技能」下拉:{project, mode, skill_id}。"""
+    project = safe_slug((body or {}).get("project"))
+    mode = str((body or {}).get("mode") or "auto")
+    sid = str((body or {}).get("skill_id") or "")
+    await api_projconfig_set({"project": project,
+                              "prompt_skill": {"mode": mode, "skill_id": sid if mode == "manual" else ""}})
+    out = await api_prompt_skill_get(project)
+    HUB.publish({"type": "prompt_skill", "project": project, "resolved": out["resolved"],
+                 "config": out["config"]})
+    return out
+
+
 def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
     """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
     传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖:覆盖为 comfyui ⇒ 按全局
@@ -1281,7 +1455,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "versioning")
+                         "packaging", "versioning", "prompt_skill")
 
 
 def project_settings_path(project: str) -> Path:
@@ -1309,7 +1483,7 @@ def _validate_duration(d: dict):
 
 
 def _validate_shot_group(g: dict):
-    """分镜组设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
+    """视频模型设置:数值范围按当前支持的最强模型口径(Seedance 2.5)封顶。"""
     try:
         gs = float(g.get("max_group_s", 15))
         ni = int(g.get("max_ref_images", 9))
@@ -1364,6 +1538,23 @@ def _validate_packaging(p: dict):
 def _validate_versioning(v: dict):
     if "enabled" in v and not isinstance(v["enabled"], bool):
         raise ServiceError(400, "versioning.enabled must be a boolean")
+
+
+PROMPT_SKILL_MODES = ("auto", "manual", "off")
+
+
+def _validate_prompt_skill(ps: dict):
+    if not isinstance(ps, dict):
+        raise ServiceError(400, "prompt_skill must be an object")
+    mode = ps.get("mode", "auto")
+    if mode not in PROMPT_SKILL_MODES:
+        raise ServiceError(400, f"prompt_skill.mode must be one of {PROMPT_SKILL_MODES}")
+    sid = str(ps.get("skill_id") or "")
+    if mode == "manual":
+        if sid not in {c["id"] for c in prompt_skill_candidates()}:
+            raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
+    if "effective" in ps and not isinstance(ps["effective"], dict):
+        raise ServiceError(400, "prompt_skill.effective must be an object")
 
 
 def _validate_review(r: dict):
@@ -2450,9 +2641,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_line}
-- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间
-- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「分镜组设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 每组参考素材数量上限(项目「分镜组设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— prompt 组装与素材准备(refs/audio_refs/video_refs)不得超出该上限;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验;**refs 超上限先裁按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧),必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)本身超上限时按 FAIL 处理——不得自行省略必挂图或拆组,grpNNN.json 标 `status: "blocked_refs_cap"`,上报 orchestrator 转告用户:手动删减本组参考图,或改用参考图上限更高的视频生成模型并在「分镜组设置」同步调高上限(refs_mandatory_le_cap)**
+- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-08-30)**:每组 Σ台词估时 ≤ 组时长×0.7、每镜 Σ ≤ 镜长、单句 ≤ {shot_max}×0.7 秒(估时 = 有效字符 ÷ 角色 voice.json speed_cpm 中点 ÷60);storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
+- 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
+- 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、动线图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
@@ -2552,37 +2743,71 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
 - 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
 - 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
-    if agent_id == "08-video-gen/prompt" and is_seedance25(active_video_model()) \
-            and skill_enabled("08-video-gen/prompt/sd25-pe"):
+    # 视频提示词技能:按项目 prompt_skill 设定解析(auto=生效视频模型;manual=用户指定;off=跳过),
+    # 而非只看全局渠道;解析结果同步快照进 settings.json(机检基准)
+    psk = None
+    if agent_id == PROMPT_AGENT_ID:
+        sync_prompt_skill_effective(project)
+        psk = resolve_prompt_skill(project)
+    psk_id = (psk or {}).get("skill_id") or ""
+    psk_how = ""
+    if psk:
+        psk_how = (f"用户在项目设置中指定(manual)" if psk["mode"] == "manual"
+                   else f"按生效视频模型 {psk['resolved_from']} 自动解析(auto)")
+    if psk_id == PROMPT_SKILL_SD25:
         p += f"""
 
-## Seedance 2.5 提示词优化 Skill(仅当生效视频模型为 Seedance 2.5 时注入,当前已生效)
+## Seedance 2.5 提示词优化 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成模型是 Seedance 2.5。撰写或优化组级 video_prompt 前,**先阅读官方提示词优化技能并按其方法执行**:
 - Skill 文件:{SD25_PE_SKILL}(官方 sd25-pe,已随仓库安装,直接 Read 全文)
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
-    if agent_id == "08-video-gen/prompt" and is_seedance20(active_video_model()) \
-            and skill_enabled("08-video-gen/prompt/sd20-prompt-writing"):
+    if psk_id == PROMPT_SKILL_SD20:
         p += f"""
 
-## Seedance 2.0 提示词写作 Skill(仅当生效视频模型为 Seedance 2.0 系列(含 fast/mini)时注入,当前已生效)
+## Seedance 2.0 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
 - Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
 - 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
-    if agent_id == "08-video-gen/prompt" and is_minimax_h3_active() \
-            and skill_enabled("08-video-gen/prompt/h3-prompt-writing"):
+    if psk_id == PROMPT_SKILL_H3:
         p += f"""
 
-## MiniMax H3 提示词写作 Skill(仅当生效视频模型/工作流名含 minimax+h3 时注入,当前已生效)
+## MiniMax H3 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成走 MiniMax H3 模型(H3 为开源模型,不限渠道:MiniMax/OpenRouter API、RunningHub、ComfyUI H3 工作流等)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
 - Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
 - 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
+    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3):
+        p += f"""
+
+## 提示词技能 `{psk['dir']}`(项目「提示词技能」设定:{psk_how},当前已生效)
+撰写或优化组级 video_prompt 前,**先 Read 该技能文件全文并按其方法执行**:
+- Skill 文件:{psk['path']}(按其指引再读同目录 references/ 下的资料)
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段与冻结版台词一律保持不动——skill 只用于提升散文表达、模板化组织与素材职责说明"""
+    if psk is not None:
+        if psk_id:
+            contract = f"""- 本项目生效技能:`{psk['dir']}`(id `{psk_id}`;{psk_how});Skill 文件 {psk['path']}
+- **必须在动笔前 Read 该 SKILL.md 全文**(运行结束时宿主核验本次运行的工具活动记录:没有读取该文件的运行按机检 `prompt_skill_read` FAIL 退回重做,不看回执自述)
+- 每个组级 `assets/prompts/epNN/grpNNN.json` 必带回执字段 `skill_applied`:`{{"id": "{psk_id}", "sha256": "<该 SKILL.md 文件的 sha256>", "checklist": [{{"item": "<技能要点,如 主体先定义后指代>", "pass": true}}, ...]}}`——checklist 逐条对应该技能的核心要点(≥3 条),`pass=false` 的条目须在同级 `notes` 说明原因
+- 用户在设置里改动技能或视频模型后,快照 settings.json#prompt_skill.effective 随之变化,已写好的 grpNNN.json 会因 id/sha256 不符而机检退回——退回单按新技能重做,不得只改字段"""
+        else:
+            why = {"user_skipped": "用户在项目设置中选择跳过(off)",
+                   "no_match": f"生效视频模型 {psk['resolved_from'] or '(未知)'} 没有对应技能(auto 未匹配)",
+                   "disabled": "所匹配技能已在「设置→高级→技能包」取消勾选",
+                   "missing": "用户指定的技能未安装"}.get(psk["reason"], psk["reason"] or "未设定")
+            contract = f"""- 本项目**不套用**提示词技能:{why}。按 SOUL.md 常规写法完成工单,不要自行读取 skills/ 下任何引擎提示词技能
+- 每个组级 `assets/prompts/epNN/grpNNN.json` 仍必带回执字段 `skill_applied`:`{{"id": null, "reason": "{psk['reason'] or 'no_match'}"}}`"""
+        warn = f"\n- ⚠️ {psk['warning']}(已在回执 notes 里如实记录即可,不阻塞)" if psk.get("warning") else ""
+        p += f"""
+
+## 提示词技能契约(prompt_skill_applied,项目「视频模型设置→提示词技能」,当前项目实时生效)
+{contract}{warn}
+- 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
             and skill_enabled("08-video-gen/upscale/minimax-regenerate-2k"):
         p += f"""
@@ -2606,6 +2831,10 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
+    if agent_id == PROMPT_AGENT_ID:
+        p += group_overrides_prompt(project)
+    elif agent_id == VIDEO_AGENT_ID:
+        p += group_overrides_prompt(project, for_video_agent=True)
     p += agent_skill_prompt(agent_id)
     if brief:
         p += f"""
@@ -2627,7 +2856,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
-- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
+- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。云渠道:**旁白不传 --voice**——自动用生效渠道配置的「默认音色」,即旁白声线,用户改设置即换声线;角色配音才按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。**火山模型为 seed-audio-1.0(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=`--instructions` 描述(缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
@@ -2644,7 +2873,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 ## 你的调度权(团队中仅调度型 Agent 拥有)
 媒体工单配置认知:
 - ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 按内置音色目录 `modules/timbre_catalog.json`(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
-- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`
+- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`(ComfyUI 纪律;火山渠道模型为 seed-audio-1.0 描述定制嗓音时同样禁止 --voice——描述由声纹卡自动拼装、旁白靠 --instructions;其余云渠道角色配音按 casting.json 传 --voice)
 - TTS 从云渠道切到 ComfyUI 后,旧 casting 的 `eve`/`ara` 等云音色名不得传给 ComfyUI;派 voice-generation 自动重选并更新 casting。工单必须先用相同参数执行 `--dry-run` 记录自动选型,再正式合成；失败回执逐字保留 `node_type/exception_type/exception_message`,不得把 Python 依赖/模型/节点异常改写成缺参考音频。日志出现“自动参考音频已选择并上传”后严禁要求用户手填音色
 
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
@@ -2746,7 +2975,8 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "engine", "model", "tokens", "progress") if k in run} | {
+        "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
         "message": (run.get("message") or "")[:120],
@@ -2802,6 +3032,58 @@ def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
     return agent_concurrency()
 
 
+# 提示词技能读取核验(prompt_skill_read):活动记录里出现该技能目录(Read/cat/read_file 任一
+# 形式)即算读过;codex 引擎不回传文件读取事件,无法核验(skill_read=None,不退回)。
+_NO_READ_TRACKING_ENGINES = {"codex"}
+
+
+def _prompt_skill_postcheck(run: dict):
+    """prompt 工位运行结束:本项目要求套用技能而本次运行没读过 SKILL.md → 机检 FAIL 退回。
+    派单(有父运行)的:状态改 error 回给总制片按返工流程重派;用户手动对话的:同样标 error,
+    并自动在同一会话追加一次补读工单(仅一次,补读单再不读就只报错不再追加)。"""
+    if run.get("agent") != PROMPT_AGENT_ID or not run.get("skill_path"):
+        return
+    if run.get("status") != "done" or run.get("stopped"):
+        return
+    if (run.get("engine") or "") in _NO_READ_TRACKING_ENGINES:
+        run["skill_read"] = None
+        return
+    markers = [f"skills/{d}/" for d in [run.get("skill") or ""] + list(run.get("skill_alts") or []) if d]
+    acts = run.get("activity") or []
+    run["skill_read"] = any(m in a for a in acts for m in markers)
+    if run["skill_read"]:
+        return
+    run["status"] = "error"
+    run["error"] = (f"机检 prompt_skill_read FAIL:本项目要求套用提示词技能 {run['skill']},"
+                    f"但本次运行的工具活动记录里没有读取 {run['skill_path']};"
+                    "产出的 video_prompt 未经该技能优化,本单退回重做")
+    if run.get("skill_retry_of"):
+        run["error"] += "(这已是自动补读单,不再追加;请人工核查该工位是否按契约执行)"
+    elif not run.get("parent"):
+        run["_skill_followup"] = True
+        run["error"] += "(已自动追加一次补读重做工单)"
+    else:
+        run["error"] += ("(派单方按返工流程重派:attempt 递增,指令首行写明「先 Read "
+                         f"{run['skill_path']} 再按其 checklist 重写并补 skill_applied」)")
+
+
+async def _prompt_skill_followup(run: dict):
+    """用户手动对话触发的 prompt 运行漏读技能时,同会话自动追加一次补读工单。"""
+    msg = (f"机检 prompt_skill_read FAIL:上一单没有读取 {run['skill_path']}。"
+           f"现在先 Read 该文件全文,按其要点重新优化你刚写的每个组级 video_prompt"
+           f"(团队锚点结构、逐字片段与冻结台词不动),逐组补 skill_applied 回执字段,"
+           f"然后跑 `python3 {PROMPT_SKILL_CHECK} --project {run['project']} --ep <本单集号>` 到 PASS 再交付。")
+    out = await api_chat({"agent": run["agent"], "message": msg, "project": run["project"],
+                          "engine": run.get("engine") or "", "model": run.get("model") or None,
+                          "source": "runtime", "parent": None})
+    rid = out.get("run_id")
+    if rid and rid in RUNS:
+        RUNS[rid]["skill_retry_of"] = run["id"]
+        run["skill_retry_run"] = rid
+        publish_run(RUNS[rid])
+        publish_run(run)
+
+
 async def execute_run(run: dict, message: str, model: str | None):
     agent_id = run["agent"]
     is_dispatcher = is_dispatcher_agent(agent_id)
@@ -2841,6 +3123,23 @@ async def execute_run(run: dict, message: str, model: str | None):
                 return
         try:
             role = build_role_prompt(agent_id, run["project"])
+            if agent_id == PROMPT_AGENT_ID:
+                # 运行面板 chip + 结束时 prompt_skill_read 核验的依据(dir 空 = 本项目不套用技能)
+                psk = resolve_prompt_skill(run["project"])
+                run["skill"] = psk["dir"]
+                run["skill_path"] = psk["path"]
+                # 组级覆盖的技能(分镜预览「🎛 模型」):本单只写覆盖组时读的是覆盖技能,
+                # prompt_skill_read 核验任一命中即可;逐组精确对照交给机检 prompt_skill_applied
+                try:
+                    alts = sorted({r["skill_dir"] for r in sync_group_settings_effective(run["project"])
+                                   if r.get("skill_dir") and r["skill_dir"] != psk["dir"]})
+                except Exception:
+                    alts = []
+                run["skill_alts"] = alts
+                if not psk["dir"] and alts:
+                    run["skill"], run["skill_path"] = alts[0], next(
+                        (c["path"] for c in prompt_skill_candidates() if c["dir"] == alts[0]), "")
+                publish_run(run)
         except Exception as error:  # noqa: BLE001
             # Prompt construction happens before the CLI process and its JSONL log
             # are created. Always finish the run here so an encoding/configuration
@@ -3169,6 +3468,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 system_prompt_file.unlink(missing_ok=True)
             run["ended"] = time.time()
             run.pop("progress", None)
+            _prompt_skill_postcheck(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -3218,6 +3518,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 await ensure_human_gate_approvals(run["project"], parent=run["id"])
             except Exception as e:  # noqa: BLE001
                 print(f"[approval] 运行结束闸门核对失败(不影响运行回执):{e}", flush=True)
+            if run.pop("_skill_followup", None):
+                try:
+                    await _prompt_skill_followup(run)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[prompt_skill] 自动补读派发失败:{e}", flush=True)
 
 
 def rel_path(p: str) -> str:
@@ -3644,17 +3949,336 @@ async def api_draw_info(token: str):
     return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
 
 
-MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「分镜组设置」调整)
+MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「视频模型设置」调整)
 
 
 def max_group_ref_images(project: str) -> int:
-    """每组参考图数量上限:项目「分镜组设置」max_ref_images(Seedance 2.5 最高 30),
+    """每组参考图数量上限:项目「视频模型设置」max_ref_images(Seedance 2.5 最高 30),
     读不到回落 MAX_SKETCH_REFS=9(Seedance 2.0 口径)。"""
     try:
         sg = load_project_settings(project).get("shot_group") or {}
         return max(0, min(30, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
     except Exception:
         return MAX_SKETCH_REFS
+
+
+
+# ---------------- 组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」按钮,2026-08-30) ----------------
+# 动机:参考图上限随模型走(Seedance 2.0 ≤9、2.5 ≤30),某组必挂参考图超过全局模型上限时,
+# 用户可只给这一组换更高上限的模型(渠道不可换:仍是「生成模型」页/视频工位覆盖所定的渠道,
+# 只在该渠道的模型目录里选),并为该组单独指定提示词技能(默认跟随全局;auto=按本组模型解析)。
+# 存储:<project>/assets/group_settings/<ep>/<grp>.json(用户所有,不随 prompt 重出丢失):
+#   {"video_model": "<id>"|"", "provider": "<存 override 时的渠道>",
+#    "prompt_skill": {"mode": "global"|"auto"|"manual"|"off", "skill_id": ""},
+#    "effective": {...运行时解析快照(机检 prompt_skill_applied 与 genmedia 对照)...}}
+# 消费:genmedia video/info 按 --group 或 --output 路径(clips/epNN/grpNNN.mp4)自动找到该文件
+# 并改用组模型;prompt 工位系统提示词列出全部覆盖组;预览页组卡按组生效上限判 refs 超限。
+GROUP_SKILL_MODES = ("global", "auto", "manual", "off")
+REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.5);手动加图/手绘生成以此兜底
+# 各渠道可选视频模型目录(与 apps/web/static/models.html 的 VOLC_MODELS/BP_VIDEO_MODELS/
+# MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
+VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
+    "volcengine": [
+        ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("doubao-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
+        ("doubao-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
+        ("doubao-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
+        ("doubao-seedance-1-5-pro-251215", "Seedance 1.5 Pro(即将下线)"),
+        ("doubao-seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
+        ("doubao-seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "byteplus": [
+        ("dreamina-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("dreamina-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
+        ("dreamina-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
+        ("dreamina-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
+        ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
+        ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
+        ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "minimax": [
+        ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
+    ],
+    "openrouter": [
+        ("bytedance/seedance-2.0", "Seedance 2.0(字节)"),
+        ("bytedance/seedance-2.0-fast", "Seedance 2.0 Fast(字节)"),
+        ("kwaivgi/kling-v3.0-pro", "Kling 3.0 Pro"),
+        ("kwaivgi/kling-v3.0-std", "Kling 3.0 Standard"),
+        ("openai/sora-2-pro", "Sora 2 Pro"),
+        ("minimax/hailuo-2.3", "Hailuo 2.3(MiniMax)"),
+        ("alibaba/wan-2.7", "Wan 2.7(阿里)"),
+        ("google/veo-3.1", "Veo 3.1(Google)"),
+        ("google/veo-3.1-fast", "Veo 3.1 Fast(Google)"),
+    ],
+}
+
+
+def video_model_label(model: str, provider: str = "") -> str:
+    """模型的短标签:目录里有则取括号前的名字(如 Seedance 2.5),否则原 id。"""
+    for prov, rows in VIDEO_MODEL_CATALOG.items():
+        if provider and prov != provider:
+            continue
+        for mid, label in rows:
+            if mid == model:
+                return label.split("(")[0]
+    return model
+
+
+def video_model_caps(model: str) -> dict | None:
+    """模型侧硬限(与 genmedia 同口径):参考图/视频/音频数量与单段时长上限;未知模型返回 None
+    (按项目「视频模型设置」执行)。"""
+    if is_seedance25(model):
+        return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30}
+    if is_seedance20(model):
+        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15}
+    if is_minimax_h3(model):
+        return {"max_ref_images": 9, "max_ref_videos": 0, "max_ref_audios": 2, "max_group_s": 15}
+    return None
+
+
+def _grpsettings_path(project: str, ep: str, grp: str) -> Path:
+    return PROJECTS_DIR / project / "assets" / "group_settings" / ep / f"{grp}.json"
+
+
+def _grpsettings_get(project: str, ep: str, grp: str) -> dict:
+    d = _read_json_safe(_grpsettings_path(project, ep, grp))
+    return d if isinstance(d, dict) else {}
+
+
+def _grpsettings_all(project: str) -> list[tuple[str, str, dict]]:
+    """项目内全部组级设定文件 → [(ep, grp, dict)],按 ep/grp 排序。"""
+    root = PROJECTS_DIR / safe_slug(project) / "assets" / "group_settings"
+    out = []
+    if root.is_dir():
+        for f in sorted(root.glob("ep*/grp*.json")):
+            d = _read_json_safe(f)
+            if isinstance(d, dict):
+                out.append((f.parent.name, f.stem, d))
+    return out
+
+
+def group_video_candidates(project: str, cfg: dict | None = None) -> dict:
+    """本项目组级可选的视频模型:渠道固定为视频工位生效渠道,候选=该渠道目录 + 全局当前模型
+    (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。"""
+    cfg = cfg or load_genconfig()
+    provider = active_video_provider(cfg, VIDEO_AGENT_ID)
+    gmodel = effective_video_model(cfg)
+    rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
+    if gmodel and gmodel not in {r["id"] for r in rows}:
+        rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
+    return {"provider": provider, "overridable": provider != "comfyui" and bool(gmodel),
+            "global_model": gmodel,
+            "global_label": video_model_label(gmodel, provider) if gmodel else _video_model_label(cfg),
+            "candidates": rows}
+
+
+def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = None,
+                           gs: dict | None = None, proj_skill: dict | None = None) -> dict:
+    """解析某组生效的视频模型与提示词技能(不落盘)。返回:
+    provider / video_model / model_source(global|group)/ model_label / ref_cap(本组生效参考图上限)/
+    caps / skill_id / skill_dir / skill_path / skill_mode(global|auto|manual|off)/ skill_source /
+    reason / warning / overridden(存在任一组级覆盖)。"""
+    cfg = cfg or load_genconfig()
+    gs = gs if gs is not None else _grpsettings_get(project, ep, grp)
+    cand = group_video_candidates(project, cfg)
+    provider, gmodel = cand["provider"], cand["global_model"]
+    warning = ""
+    model, source = gmodel, "global"
+    ov = str(gs.get("video_model") or "")
+    if ov:
+        if not cand["overridable"]:
+            warning = f"组级视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按全局执行"
+        elif gs.get("provider") and gs.get("provider") != provider:
+            warning = (f"组级视频模型 {ov} 属渠道 {gs.get('provider')},当前视频渠道已改为 {provider},"
+                       "该覆盖未生效(按全局执行);请重新为本组选模型或清除覆盖")
+        else:
+            model, source = ov, "group"
+    caps = video_model_caps(model) if source == "group" else None
+    sg = load_project_settings(project).get("shot_group") or {}
+    ref_cap = (caps or {}).get("max_ref_images") if caps else None
+    if ref_cap is None:
+        ref_cap = max(0, min(REF_CAP_HARD_MAX, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
+    # 提示词技能
+    ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
+    smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
+    if smode == "global" and source == "group":
+        # 组换了模型却没指定技能:按本组模型自动解析,而不是套全局模型的技能(否则 2.5 组套 2.0 技能)
+        smode_eff = "auto"
+    else:
+        smode_eff = smode
+    proj_skill = proj_skill or resolve_prompt_skill(project, cfg)
+    cands = {c["id"]: c for c in prompt_skill_candidates()}
+    reason = ""
+    if smode_eff == "global":
+        sid, reason = proj_skill["skill_id"], proj_skill["reason"]
+        if proj_skill.get("warning"):
+            warning = (warning + " · " if warning else "") + proj_skill["warning"]
+    elif smode_eff == "off":
+        sid, reason = "", "user_skipped"
+    elif smode_eff == "manual":
+        sid = str(ps.get("skill_id") or "")
+        if sid not in cands:
+            warning = (warning + " · " if warning else "") + f"组指定的提示词技能 {sid or '(空)'} 未安装,本组按无技能处理"
+            sid, reason = "", "missing"
+    else:   # auto:按本组生效模型
+        if provider == "comfyui":
+            sid = PROMPT_SKILL_H3 if is_minimax_h3_active(cfg) else ""
+        else:
+            sid = auto_prompt_skill_for_model(model)
+        if not sid:
+            reason = "no_match"
+            warning = (warning + " · " if warning else "") + f"本组视频模型 {model or '(未知)'} 没有对应的提示词技能"
+    if sid and sid in cands and not cands[sid]["enabled"]:
+        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 已在技能包中禁用,本组按无技能处理"
+        sid, reason = "", "disabled"
+    c = cands.get(sid) or {}
+    return {"provider": provider, "video_model": model, "model_source": source,
+            "model_label": video_model_label(model, provider) if model else cand["global_label"],
+            "global_model": gmodel, "ref_cap": ref_cap, "caps": caps,
+            "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
+            "skill_mode": smode, "skill_source": "global" if smode_eff == "global" else "group",
+            "reason": reason, "warning": warning,
+            "overridden": bool(ov) or smode != "global"}
+
+
+def group_ref_cap(project: str, ep: str, grp: str) -> int:
+    """本组生效的参考图上限:组级覆盖了模型 → 该模型硬限;否则项目「视频模型设置」。"""
+    try:
+        return int(resolve_group_settings(project, ep, grp)["ref_cap"])
+    except Exception:
+        return max_group_ref_images(project)
+
+
+def sync_group_settings_effective(project: str) -> list[dict]:
+    """把各组解析结果快照进 group_settings/<ep>/<grp>.json 的 effective(仅变化时写盘)。
+    快照供 code/prompt_skill_check.py 按组对照、genmedia 按组取模型(它只读 video_model/provider,
+    快照仅作对照记录)。返回 [{ep, grp, ...resolved}]。"""
+    project = safe_slug(project)
+    cfg = load_genconfig()
+    proj_skill = resolve_prompt_skill(project, cfg)
+    out = []
+    for ep, grp, gs in _grpsettings_all(project):
+        r = resolve_group_settings(project, ep, grp, cfg, gs, proj_skill)
+        eff = {"provider": r["provider"], "video_model": r["video_model"],
+               "model_source": r["model_source"], "ref_cap": r["ref_cap"],
+               "skill_id": r["skill_id"], "skill_mode": r["skill_mode"],
+               "skill_source": r["skill_source"], "reason": r["reason"]}
+        cur = gs.get("effective") if isinstance(gs.get("effective"), dict) else {}
+        if {k: cur.get(k) for k in eff} != eff:
+            gs["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
+            atomic_write_json(_grpsettings_path(project, ep, grp), gs)
+        out.append({"ep": ep, "grp": grp, **r})
+    return out
+
+
+def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
+    """系统提示词段:列出本项目存在组级覆盖的组(视频模型 / 提示词技能),prompt 与视频生成工位各一版。"""
+    try:
+        rows = [r for r in sync_group_settings_effective(project) if r["overridden"]]
+    except Exception:
+        rows = []
+    if not rows:
+        return ""
+    lines = []
+    for r in rows:
+        caps = r.get("caps") or {}
+        cap_txt = (f"参考图 ≤{caps['max_ref_images']} 张、参考视频 ≤{caps['max_ref_videos']} 个、"
+                   f"参考音频 ≤{caps['max_ref_audios']} 段、组时长 ≤{caps['max_group_s']}s"
+                   if caps else f"参考图 ≤{r['ref_cap']} 张(其余上限沿用项目设定)")
+        model_txt = (f"视频模型 **{r['video_model']}**(组级覆盖,{cap_txt})" if r["model_source"] == "group"
+                     else f"视频模型跟随全局 {r['video_model'] or r['model_label']}")
+        skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
+                     if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
+        warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
+        lines.append(f"- `{r['ep']}/{r['grp']}`:{model_txt};{skill_txt}{warn}")
+    body = "\n".join(lines)
+    if for_video_agent:
+        return f"""
+
+## 组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定并改用该模型,渠道不变;`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
+{body}"""
+    return f"""
+
+## 组级视频模型/提示词技能覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下组不按项目级设定——写这些组的 video_prompt 时按本组的视频模型能力与技能执行:参考素材上限按本组模型硬限(而非项目「视频模型设置」),提示词技能按本组所列(须先 Read 该 SKILL.md,`skill_applied.id` 填本组技能 id;不套用时填 `{{"id": null, "reason": ...}}`),机检 `prompt_skill_applied` 会按组分别对照 `assets/group_settings/epNN/grpNNN.json` 的 effective 快照:
+{body}"""
+
+
+async def api_grpsettings_get(project: str, ep: str, grp: str):
+    project = safe_slug(project)
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    grp = re.sub(r"[^\w\-]", "", grp or "")
+    _proj_base(project)
+    cfg = load_genconfig()
+    gs = _grpsettings_get(project, ep, grp)
+    proj_skill = resolve_prompt_skill(project, cfg)
+    return {"project": project, "ep": ep, "grp": grp,
+            "config": {"video_model": str(gs.get("video_model") or ""),
+                       "prompt_skill": gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict)
+                       else {"mode": "global", "skill_id": ""}},
+            "resolved": resolve_group_settings(project, ep, grp, cfg, gs, proj_skill),
+            "models": group_video_candidates(project, cfg),
+            "skills": prompt_skill_candidates(),
+            "project_skill": proj_skill,
+            "project_ref_cap": max_group_ref_images(project)}
+
+
+async def api_grpsettings_set(body: dict):
+    """分镜预览「🎛 模型」弹窗:{project, ep, grp, video_model, prompt_skill:{mode, skill_id}}。
+    video_model 空 + mode=global ⇒ 清除覆盖(删文件)。渠道不可选:模型只能取当前视频渠道目录。"""
+    project = safe_slug((body or {}).get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", (body or {}).get("ep") or "")
+    grp = re.sub(r"[^\w\-]", "", (body or {}).get("grp") or "")
+    if not ep or not grp:
+        raise ServiceError(400, "ep and grp are required")
+    _proj_base(project)
+    cfg = load_genconfig()
+    cand = group_video_candidates(project, cfg)
+    model = str((body or {}).get("video_model") or "")
+    if model:
+        if not cand["overridable"]:
+            raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持组级切换模型")
+        if model not in {c["id"] for c in cand["candidates"]}:
+            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
+        if model == cand["global_model"]:
+            model = ""   # 选了全局同款 = 跟随全局
+    ps = (body or {}).get("prompt_skill") or {}
+    if not isinstance(ps, dict):
+        raise ServiceError(400, "prompt_skill must be an object")
+    mode = str(ps.get("mode") or "global")
+    if mode not in GROUP_SKILL_MODES:
+        raise ServiceError(400, f"prompt_skill.mode must be one of {GROUP_SKILL_MODES}")
+    sid = str(ps.get("skill_id") or "") if mode == "manual" else ""
+    if mode == "manual" and sid not in {c["id"] for c in prompt_skill_candidates()}:
+        raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
+    path = _grpsettings_path(project, ep, grp)
+    old = _grpsettings_get(project, ep, grp)
+    if not model and mode == "global":
+        path.unlink(missing_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(path, {"video_model": model, "provider": cand["provider"] if model else "",
+                                 "prompt_skill": {"mode": mode, "skill_id": sid},
+                                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+    sync_group_settings_effective(project)
+    out = await api_grpsettings_get(project, ep, grp)
+    # 组 prompt 文件记一笔(存在时),方便回溯;组模型变了参考图上限也变,预览页据此重判超限
+    pf = _grp_prompt_path(project, ep, grp)
+    if pf.is_file():
+        try:
+            d = json.loads(pf.read_text())
+            r = out["resolved"]
+            d.setdefault("notes", []).append(
+                f"用户在分镜预览设置组级覆盖:视频模型 {r['video_model'] or '(跟随全局)'}({r['model_source']}),"
+                f"提示词技能 {r['skill_dir'] or '(不套用)'}({r['skill_mode']});本组参考图上限 {r['ref_cap']}。"
+                "重出本组 prompt/视频时生效。由 storyboard service 自动补丁。")
+            atomic_write_json(pf, d)
+        except Exception:
+            pass
+    HUB.publish({"type": "group_settings", "project": project, "ep": ep, "grp": grp,
+                 "resolved": out["resolved"], "changed": old != _grpsettings_get(project, ep, grp)})
+    return out
 
 
 SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
@@ -3751,9 +4375,10 @@ async def api_draw_submit(token: str, body: dict):
     if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
         raise ServiceError(409, "A sketch-based generation is already running for this group; wait for it to finish")
     pd = json.loads(_grp_prompt_path(project, ep, grp).read_text())
-    ref_cap = max_group_ref_images(project)
-    if len(pd.get("refs") or []) >= ref_cap:
-        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
+    # 2026-08-30:不再按项目/组上限硬拦——refs 按实际需要加,超组生效上限由预览页黄条提示,
+    # 用户决定删图或给本组换更高上限的模型(🎛 模型);只以模型极值 30 兜底
+    if len(pd.get("refs") or []) >= REF_CAP_HARD_MAX:
+        raise ServiceError(400, f"This group already has {REF_CAP_HARD_MAX} refs (the hard maximum of any video model); cannot add more")
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
@@ -3881,16 +4506,15 @@ ASSET_REF_PREFIXES = ("assets/concepts/characters/",
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
-    """向组 prompt 的 refs 追加一张参考图(上限=项目「分镜组设置」max_ref_images,
-    回落 MAX_SKETCH_REFS=9 的方舟 Seedance 2.0 口径);返回追加后的 refs 数量。"""
+    """向组 prompt 的 refs 追加一张参考图;返回追加后的 refs 数量。
+    2026-08-30:不再按项目「视频模型设置」上限硬拦——按实际需要加,超过本组生效上限时预览页
+    黄条提示,由用户决定删图或给本组换更高上限的视频模型(🎛 模型);只以模型极值 30 兜底。"""
     d = json.loads(pf.read_text())
     refs = d.setdefault("refs", [])
     if ref in refs:
         raise ServiceError(400, "This image is already in the group's refs")
-    # pf = <project>/assets/prompts/<ep>/<grp>.json → parents[3] 即项目根
-    ref_cap = max_group_ref_images(pf.parents[3].name)
-    if len(refs) >= ref_cap:
-        raise ServiceError(400, f"This group already has the maximum of {ref_cap} refs; cannot add more")
+    if len(refs) >= REF_CAP_HARD_MAX:
+        raise ServiceError(400, f"This group already has {REF_CAP_HARD_MAX} refs (the hard maximum of any video model); cannot add more")
     refs.append(ref)
     d.setdefault("notes", []).append(
         f"用户{src}加入组参考图:{ref}(refs 第 {len(refs)} 张);重出本组时生效。由 storyboard service 自动补丁。")
@@ -4071,10 +4695,27 @@ def _dialogue_index(text: str) -> dict[str, dict]:
     return idx
 
 
+def _shot_has_own_dialogue(s: dict) -> bool:
+    """镜条目自身是否带对白信息(内嵌 dialogue / dialogue_lines 或编号 dialogue_refs / dialogue_ref)。
+    有则以镜为准,不再回落 storyboard 草稿——拆镜(storyboard_ref 带 /split:x)的草稿是整镜
+    未拆前的全部台词,回落会把兄弟镜的台词也挂上来(2026-08-30 dzg5 ep01)。"""
+    if isinstance(s.get("dialogue_lines"), list):
+        return True  # 规范字段显式给了列表(含空列表 = 本镜无台词),即为权威
+    return any(_nonempty(s.get(k)) for k in ("dialogue", "dialogue_refs", "dialogue_ref"))
+
+
+def _nonempty(v) -> bool:
+    if isinstance(v, str):
+        return bool(v.strip())
+    return bool(v)
+
+
 def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dict]:
-    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text},
+    """镜条目的对白列表 [{ref, speaker, text}]:优先 shot_list 内嵌 dialogue{text} /
+    规范字段 dialogue_lines[{speaker, text}](shot-planning 直出台词正文,2026-08-30),
     其次按 dialogue_refs / dialogue_ref 编号查 dialogue.md;编号解析不到的 text=None,
-    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。"""
+    非编号的整段字符串(老项目把台词原文写进 dialogue_ref)原样当台词。
+    storyboard 草稿的 dialogue_refs / dialogue_ref 只在镜条目自身无任何对白信息时才回落。"""
     lines: list[dict] = []
     seen: set[str] = set()
 
@@ -4085,12 +4726,15 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
         seen.add(key)
         lines.append({"ref": ref, "speaker": speaker, "text": text})
 
-    emb = s.get("dialogue")
-    for d in (emb if isinstance(emb, list) else [emb]):
-        if isinstance(d, dict) and d.get("text"):
-            _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
+    for emb in (s.get("dialogue"), s.get("dialogue_lines")):
+        for d in (emb if isinstance(emb, list) else [emb]):
+            if isinstance(d, dict) and d.get("text"):
+                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
     refs = []
-    for v in (s.get("dialogue_refs"), s.get("dialogue_ref"), draft.get("dialogue_refs"), draft.get("dialogue_ref")):
+    srcs = [s.get("dialogue_refs"), s.get("dialogue_ref")]
+    if not _shot_has_own_dialogue(s):
+        srcs += [draft.get("dialogue_refs"), draft.get("dialogue_ref")]
+    for v in srcs:
         if isinstance(v, list):
             refs.extend(x for x in v if isinstance(x, str))
         elif isinstance(v, str) and v.strip():
@@ -4623,12 +5267,17 @@ def _preview_storyboard(project: str, ep: str):
                     if isinstance(sc, dict) and sc.get("scene_id")}
 
     def _shot_draft(s: dict) -> dict:
-        m = re.match(r"^(.+?)/order:(\d+)$", s.get("storyboard_ref") or "")
+        # storyboard_ref 规范形 "S03/order:1";shot-planning 按空间/台词把一条草稿拆成多镜时
+        # 写成 "S02/order:3/split:a" / ".../split:b"(2026-08-30 dzg5 ep01 六镜),后缀不参与索引
+        m = re.match(r"^(.+?)/order:(\d+)(?:/split:[^/]+)?$", s.get("storyboard_ref") or "")
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
 
     def _shot_content(s: dict) -> str:
-        if s.get("content"):
-            return s["content"]
+        # 镜条目自身 content / 规范字段 content_brief(shot-planning 直出,拆镜时是本镜独有内容)
+        # 优先于 storyboard 草稿(拆镜的草稿是整镜未拆前的全文)
+        for k in ("content", "content_brief"):
+            if isinstance(s.get(k), str) and s[k].strip():
+                return s[k]
         dr = _shot_draft(s)
         return dr.get("content") or dr.get("subject_action") or ""
 
@@ -4710,7 +5359,9 @@ def _preview_storyboard(project: str, ep: str):
             continue
         sid = s.get("shot_id") or ""
         dlines = _shot_dialogue_lines(s, _shot_draft(s), dlg_idx)
-        raw_ref = s.get("dialogue_ref") or _shot_draft(s).get("dialogue_ref")
+        # 镜自身带对白信息时不回落草稿的 dialogue_ref(拆镜草稿含兄弟镜台词,见 _shot_has_own_dialogue)
+        raw_ref = s.get("dialogue_ref") or (
+            None if _shot_has_own_dialogue(s) else _shot_draft(s).get("dialogue_ref"))
         for ln in dlines:
             ln["speaker_name"] = cname.get(ln.get("speaker")) or ln.get("speaker")
         shots.append({k: s.get(k) for k in (
@@ -4740,11 +5391,21 @@ def _preview_storyboard(project: str, ep: str):
     # 切变边界与尾帧来自 clips/<grp>.meta.json
     groups = []
     lighting_cache: dict[str, dict] = {}
-    ref_cap = max_group_ref_images(base.name)
+    # 组级视频模型/技能覆盖(2026-08-30):refs 上限按组生效模型判;顶部展示全局模型与技能
+    gcfg = load_genconfig()
+    proj_skill = resolve_prompt_skill(base.name, gcfg)
+    gcand = group_video_candidates(base.name, gcfg)
+    data["video_model"] = {"provider": gcand["provider"], "model": gcand["global_model"],
+                           "label": gcand["global_label"], "overridable": gcand["overridable"]}
+    data["prompt_skill"] = {"mode": proj_skill["mode"], "skill_id": proj_skill["skill_id"],
+                            "dir": proj_skill["dir"], "warning": proj_skill["warning"],
+                            "reason": proj_skill["reason"]}
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
         gid = g.get("group_id") or ""
+        gres = resolve_group_settings(base.name, ep, gid, gcfg, None, proj_skill) if gid else None
+        ref_cap = int(gres["ref_cap"]) if gres else max_group_ref_images(base.name)
         meta = _read_json_safe(_id_file(croot, gid, ".meta.json")) or {}
         # 组参考图(组 prompt json 的 refs)分两列:用户经「添加参考图」手动加入的
         # (notes 锚判定,可删)入 user_refs;流水线/agent 直连写入的(如概念图路径)
@@ -4792,6 +5453,10 @@ def _preview_storyboard(project: str, ep: str):
             # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
             "continuity_anchor": tr.get("anchor") or None,
             "continuity_anchor_reason": str(tr.get("anchor_reason") or tr.get("notes") or ""),
+            # 组入口转场 / 叙事块(shot_list transition_in / narrative_block,WORKFLOW §9C,2026-08-28):
+            # 非硬切才在组卡显示 chip;实施在 Phase 9 code/render_transitions.py,这里只展示设计
+            "transition_in": g.get("transition_in") if isinstance(g.get("transition_in"), dict) else None,
+            "narrative_block": g.get("narrative_block") if isinstance(g.get("narrative_block"), dict) else None,
             "has_prompt": bool(pd),
             "tail_ref": next((r for r in (pd.get("refs") or [])
                               if isinstance(r, str) and r.endswith(".last_frame.png")), None),
@@ -4804,6 +5469,9 @@ def _preview_storyboard(project: str, ep: str):
             # 落盘 status=blocked_refs_cap;预览页组卡黄条提示用户手动删减或换更高上限模型
             "refs_total": len(pd.get("refs") or []),
             "refs_cap": ref_cap,
+            "group_settings": ({k: gres[k] for k in ("video_model", "model_source", "model_label",
+                                                     "skill_dir", "skill_mode", "skill_source",
+                                                     "warning", "overridden")} if gres else None),
             "refs_blocked": (pd.get("status") == "blocked_refs_cap"
                              or len(pd.get("refs") or []) > ref_cap),
             "refs_blocked_reason": str(pd.get("blocked_reason") or ""),
@@ -5770,9 +6438,9 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
-                       "shot_group": "分镜组设置",
+                       "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
-                       "versioning": "版本管理"}
+                       "versioning": "版本管理", "prompt_skill": "提示词技能"}
 
 
 async def api_projconfig_set(body: dict):
@@ -5787,9 +6455,14 @@ async def api_projconfig_set(body: dict):
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
     _validate_versioning(cfg.get("versioning") or {})
+    _validate_prompt_skill(cfg.get("prompt_skill") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
+    # 提示词技能快照随设置一起刷新(模式/指定技能/视频模型任一变化都会体现在 effective 里);
+    # 快照本身的变化不计入「设置变更」通知(那是派生值,不是用户改的)
+    cfg = sync_prompt_skill_effective(project)
+    old.setdefault("prompt_skill", {})["effective"] = (cfg.get("prompt_skill") or {}).get("effective")
     changes = _flat_diff(old, cfg)
     secs = {c.split(":")[0].split(".")[0] for c in changes}
     label = "、".join(v for k, v in PROJ_SETTING_LABELS.items() if k in secs)
@@ -6007,9 +6680,27 @@ def _avatar_keys(cfg: dict) -> tuple[str, str]:
     return ak, sk
 
 
+_AVATAR_THROTTLE_RE = re.compile(
+    r"Quota\w*Exceeded|QPM|QPS|Throttl|RateLimit|TooManyRequests|HTTP 429", re.I)
+_AVATAR_CALL_RETRIES = 6            # 限流退避:2s→4s→…≤30s(+抖动),共重试 6 次
+
+
 def _avatar_call(action: str, body: dict) -> dict:
     """方舟素材资产(Assets)OpenAPI 调用(AK/SK V4 签名,Service=ark);
-    返回 Result,业务/HTTP 错误统一抛 ServiceError。"""
+    返回 Result,业务/HTTP 错误统一抛 ServiceError。方舟写接口有 QPM 限额
+    (实测 CreateAsset 连发触发 QuotaWriteQPMExceeded),命中限流类错误按指数
+    退避重试;其他错误直接抛。"""
+    for attempt in range(_AVATAR_CALL_RETRIES + 1):
+        try:
+            return _avatar_call_once(action, body)
+        except ServiceError as e:
+            if attempt >= _AVATAR_CALL_RETRIES or not _AVATAR_THROTTLE_RE.search(e.detail):
+                raise
+            time.sleep(min(30.0, 2.0 ** (attempt + 1)) + random.random())
+    raise AssertionError("unreachable")
+
+
+def _avatar_call_once(action: str, body: dict) -> dict:
     ak, sk = _avatar_keys(_avatar_cfg())
     try:
         r = _volc_signed_call(ak, sk, action, _AVATAR_API_VERSION, body,
@@ -6099,20 +6790,67 @@ async def _avatar_group_id(cfg: dict) -> str:
     return gid
 
 
+# 「文件托管」各渠道对应的 SDK 模块与 AK/SK 环境变量(与 genmedia.STORAGE_ENV 同口径)
+_STORAGE_SDK = {"tos": ("tos", "tos"), "oss": ("oss2", "oss2"),
+                "cos": ("qcloud_cos", "cos-python-sdk-v5"), "s3": ("boto3", "boto3")}
+_STORAGE_ENV = {"tos": ("TOS_ACCESS_KEY", "TOS_SECRET_KEY"),
+                "oss": ("OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"),
+                "cos": ("COS_SECRET_ID", "COS_SECRET_KEY"),
+                "s3": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")}
+
+
+def _avatar_storage_check() -> dict:
+    """人像入库前置自检:方舟 CreateAsset 只收公网 URL(data: base64 实测 400
+    「URL must be a valid HTTP or HTTPS URL」),本地图必须先经「文件托管」对象存储换
+    预签名 URL——检查生效渠道的 bucket/AK/SK 是否配齐、当前解释器能否导入该渠道 SDK
+    (桌面捆绑运行时曾缺 tos,上传子进程静默失败被误报成 URL 无效)。
+    返回 {ok, provider, bucket, configured, sdk_ok, sdk, detail}。"""
+    st = load_genconfig().get("storage") or {}
+    provider = str(st.get("provider") or "tos")
+    c = st.get(provider) or {}
+    mod, pkg = _STORAGE_SDK.get(provider, (provider, provider))
+    ak_env, sk_env = _STORAGE_ENV.get(provider, ("", ""))
+    ak = str(c.get("access_key") or os.environ.get(ak_env, "")).strip()
+    sk = str(c.get("secret_key") or os.environ.get(sk_env, "")).strip()
+    bucket = str(c.get("bucket") or "").strip()
+    configured = bool(ak and sk and bucket)
+    sdk_ok = importlib.util.find_spec(mod) is not None
+    out = {"ok": configured and sdk_ok, "provider": provider, "bucket": bucket,
+           "configured": configured, "sdk_ok": sdk_ok, "sdk": pkg, "detail": ""}
+    if not configured:
+        out["detail"] = (f"文件托管「{provider}」未配齐 bucket/Access Key/Secret Key"
+                         "(⚙️ 设置 → 文件托管);方舟入库只收公网 URL,须先配置对象存储")
+    elif not sdk_ok:
+        out["detail"] = (f"当前 Python 运行时缺少 {provider} 存储 SDK(模块 {mod}):"
+                         f"请执行 `{sys.executable} -m pip install {pkg}` 后重试")
+    else:
+        out["detail"] = f"{provider} 桶 {bucket},SDK {pkg} 已就绪"
+    return out
+
+
+async def api_avatar_ready() -> dict:
+    """/avatars 页「使用前准备」就绪自检(文件托管配置 + SDK 可导入)。"""
+    return await asyncio.to_thread(_avatar_storage_check)
+
+
 def _avatar_source_url(p: Path) -> str:
-    """本地图片 → CreateAsset 可访问的 URL:优先经「文件托管」对象存储出预签名 URL
-    (genmedia upload 子进程,与参考视频同链路);未配置托管时回退 data: base64
-    内联尝试,若方舟拒收由上层给出配置托管的提示。"""
+    """本地图片 → CreateAsset 可访问的公网 URL:经「文件托管」对象存储出预签名 URL
+    (genmedia upload 子进程,与参考视频同链路)。不再回退 data: base64——方舟实测拒收,
+    回退只会把真实原因(SDK 缺失/密钥错误)换成误导性的 URL 无效报错;失败直接带
+    子进程 stderr 原文抛出。"""
+    chk = _avatar_storage_check()
+    if not chk["ok"]:
+        raise ServiceError(400, chk["detail"])
     r = subprocess.run([sys.executable, str(ROOT / "modules" / "genmedia.py"),
                         "upload", "--input", str(p)],
                        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
-    if r.returncode == 0:
-        out = (r.stdout or "").strip()
-        url = out.splitlines()[-1].strip() if out else ""
-        if url.startswith("http"):
-            return url
-    mime = mimetypes.guess_type(p.name)[0] or "image/png"
-    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+    out = (r.stdout or "").strip()
+    url = out.splitlines()[-1].strip() if out else ""
+    if r.returncode == 0 and url.startswith("http"):
+        return url
+    err = (r.stderr or "").strip().splitlines()
+    raise ServiceError(502, f"参考图上传到对象存储({chk['provider']} {chk['bucket']})失败:"
+                            f"{(err[-1] if err else f'退出码 {r.returncode}')[:300]}")
 
 
 async def api_avatar_upload(body: dict):
@@ -6134,17 +6872,10 @@ async def api_avatar_upload(body: dict):
     gid = await _avatar_group_id(cfg)
     url = await asyncio.to_thread(_avatar_source_url, p)
     name = f"{project}-{p.stem}"[:80]
-    try:
-        res = await asyncio.to_thread(
-            _avatar_call, "CreateAsset",
-            {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
-             "ProjectName": cfg.get("project_name") or "default"})
-    except ServiceError as e:
-        if url.startswith("data:"):
-            raise ServiceError(e.status_code, f"{e.detail}(当前以 base64 内联提交;"
-                               "若方舟要求公网 URL,请先在 ⚙️ 设置 → 文件托管 配置"
-                               "对象存储后重试)") from None
-        raise
+    res = await asyncio.to_thread(
+        _avatar_call, "CreateAsset",
+        {"GroupId": gid, "URL": url, "AssetType": "Image", "Name": name,
+         "ProjectName": cfg.get("project_name") or "default"})
     aid = str(res.get("Id") or "").strip()
     if not aid:
         raise ServiceError(502, f"CreateAsset 未返回素材 Id:{res}")
@@ -6256,6 +6987,7 @@ async def api_avatar_delete(body: dict):
 AVATAR_AUTO_AGENT = "08-video-gen/video-generation"
 _AVATAR_AUTO_LOCK = asyncio.Lock()          # 并发 video-generation 工单串行整备
 _AVATAR_AUTO_WAIT_S = 600                   # 等待审核 Active 的上限(超时告警放行)
+_AVATAR_AUTO_PACE_S = 0.6                   # 逐条删除/上传间隔,先不撞方舟写 QPM 限额
 
 
 def _avatar_auto_enabled(agent_id: str) -> bool:
@@ -6318,6 +7050,7 @@ async def _avatar_clear_all() -> int:
                 ok += 1
             except ServiceError:
                 pass
+            await asyncio.sleep(_AVATAR_AUTO_PACE_S)
         deleted += ok
         if not ok:
             break
@@ -6355,6 +7088,10 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             if not refs:
                 note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
                 return
+            chk = await asyncio.to_thread(_avatar_storage_check)
+            if not chk["ok"]:      # 托管/SDK 不就绪:整备必然全败,不清库、不上传,只告警
+                note(f"⚠️ 虚拟人像库全自动管理跳过:{chk['detail']}")
+                return
             epkey = f"{project}|{','.join(eps)}"
             led = _avatar_ledger()
             if (led.get("auto_manage") or {}).get("key") != epkey:
@@ -6371,6 +7108,7 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
                     await api_avatar_upload({"project": project, "ref": ref})
                 except ServiceError as e:
                     failed.append(f"{Path(ref).name}: {e.detail}")
+                await asyncio.sleep(_AVATAR_AUTO_PACE_S)
             deadline = time.time() + _AVATAR_AUTO_WAIT_S
             pending = list(refs)
             while pending and time.time() < deadline:
@@ -7612,6 +8350,14 @@ async def api_confirm_answer(cid: str, body: dict):
         c["answered"] = time.time()
         if (c.get("kind") == "sign" and c.get("gate_id")
                 and c["answer"] == "签字"):
+            if str(c.get("checkpoint") or "").upper().startswith("H3A"):
+                # 分镜签字即冻结本集的提示词技能快照(用户在弹窗里可能刚改过)
+                try:
+                    proj = _approval_project(c)
+                    if proj:
+                        sync_prompt_skill_effective(proj)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[prompt_skill] H3A 签字快照失败:{e}", flush=True)
             c["continuation_attempted"] = time.time()
             try:
                 continuation = await _continue_signed_gate(c)
@@ -7622,6 +8368,31 @@ async def api_confirm_answer(cid: str, body: dict):
                 print(f"[approval] 签字后唤醒总制片失败(审批已保留):{e}", flush=True)
         HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
     return {"ok": True, "answer": c["answer"]}
+
+
+_AUTO_USAGE = ("用法:/auto — 查看当前项目自动运行状态;"
+               "/auto on|off — 开/关当前项目自动运行;/auto off all — 关闭全部项目")
+
+
+async def _auto_command(message: str, project: str) -> str:
+    """/auto 聊天命令(api_chat 已确保首词为 /auto):返回要回给用户的文本。"""
+    parts = message.split()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    target = parts[2].lower() if len(parts) > 2 else ""
+    if not sub:
+        on = (await api_watchdog_get(project))["enabled"]
+        th = await api_watchdog_threshold_get()
+        return (f"🤖 项目 {project} 自动运行:{'🟢 开启' if on else '⚪ 关闭'}"
+                f"(闲置 {th['idle_minutes']} 分钟 · 用量阈值 {th['threshold']}%)。\n{_AUTO_USAGE}")
+    if sub not in ("on", "off") or len(parts) > 3 or (target and not (sub == "off" and target == "all")):
+        return f"无法识别的命令「{message}」。{_AUTO_USAGE}"
+    if target == "all":
+        projects = await api_projects()
+        for p in projects:
+            await api_watchdog_set({"project": p, "enabled": False})
+        return f"🤖 已关闭全部 {len(projects)} 个项目的自动运行。"
+    await api_watchdog_set({"project": project, "enabled": sub == "on"})
+    return f"🤖 已{'开启' if sub == 'on' else '关闭'}项目 {project} 的自动运行。"
 
 
 async def api_chat(body: dict):
@@ -7657,6 +8428,15 @@ async def api_chat(body: dict):
         append_chat(agent, project, {"role": "user", "text": message, "source": source})
         append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
         return {"ok": True, "cleared": cleared}
+    if message.split()[0].lower() == "/auto":
+        # 自动运行(空转看门狗)开关命令:与 /clear 同一机制——不派发运行、零引擎配额,
+        # 任何通道(网页/飞书/微信/WhatsApp)发来都在此本地处理,回复经 append_chat
+        # 走 HUB 回到各端;开关落 api_watchdog_set(与运行面板 🤖 按钮同一入口),
+        # 其 HUB watchdog 事件同步刷新网页按钮状态。项目=本次对话所在项目。
+        reply = await _auto_command(message, project)
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True, "watchdog": (await api_watchdog_get(project))["enabled"]}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)
@@ -8609,12 +9389,18 @@ async def api_watchdog_get(project: str = ""):
 
 
 async def api_watchdog_set(body: dict):
-    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/飞书 /auto),
+    """按项目设置空转看门狗:enabled=开关(运行面板 🤖 按钮/聊天 /auto 命令),
     orders=常任指令(设置菜单「自动运行」,随每条唤醒消息附带,空串清除)。
-    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。"""
+    两项均可选,只更新给出的项;逐项目独立,状态持久化,重启后保持。
+    开关变化广播 HUB watchdog 事件,网页 🤖 按钮据此同步(命令/其他页签改的也能跟上)。"""
     proj = safe_slug(body.get("project"))
     if body.get("enabled") is not None:
-        STATE.setdefault("watchdog", {})[proj] = bool(body.get("enabled"))
+        enabled = bool(body.get("enabled"))
+        wd = STATE.setdefault("watchdog", {})
+        changed = bool(wd.get(proj, False)) != enabled
+        wd[proj] = enabled
+        if changed:
+            HUB.publish({"type": "watchdog", "project": proj, "enabled": enabled})
     if body.get("orders") is not None:
         orders = str(body.get("orders")).strip()
         if len(orders) > 2000:
