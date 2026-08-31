@@ -259,7 +259,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、思考深度">Agent 高级设置</a>
-          <a href="#" id="menu-skills" title="技能包:自动列出各 Agent 已安装的技能(skills/SKILL.md),逐项勾选是否允许该 Agent 运行时加载;未勾选一律不注入">技能包</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
@@ -284,7 +283,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="title" id="c-title">选择一个 Agent 开始</span>
       <span class="sub" id="c-sub"></span>
       <span class="hbtns">
-        <button id="btn-skills" style="display:none" title="本 Agent 已安装的技能:点击查看清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框,便于指定用该技能完成工作">🧰 SKILL</button>
+        <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
         <button id="btn-soul">SOUL.md</button>
       </span>
@@ -710,25 +709,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="askill-modal" class="modal">
   <div class="box" style="width:620px">
-    <h3>🧰 本 Agent 的技能 <span id="askill-agent" style="color:var(--dim);font-weight:400;font-size:12px;margin-left:6px"></span></h3>
-    <div class="note">点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。灰色 = 已在「设置→高级→技能包」取消勾选,运行时不会自动注入。</div>
+    <h3>本 Agent 的技能 <span id="askill-agent" style="color:var(--dim);font-weight:400;font-size:12px;margin-left:6px"></span></h3>
+    <div class="note">点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。「加载技能」可上传技能 zip 包(内含 SKILL.md),解压安装到本 Agent 的 skills/ 目录。</div>
     <div id="askill-list" style="max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
     <div class="err" id="askill-err"></div>
     <div class="actions">
-      <a href="#" id="askill-manage" style="margin-right:auto;font-size:12px;color:var(--dim)">管理技能包…</a>
+      <input type="file" id="askill-file" accept=".zip" style="display:none">
+      <a href="#" id="askill-load" style="margin-right:auto;font-size:12px;color:var(--dim)">加载技能</a>
       <button id="askill-close">关闭</button>
-    </div>
-  </div>
-</div>
-<div id="skill-modal" class="modal">
-  <div class="box" style="width:680px">
-    <h3>🧰 技能包</h3>
-    <div class="note">技能 = agents/&lt;类别&gt;/&lt;Agent&gt;/skills/&lt;技能&gt;/SKILL.md,随仓库或插件安装,本页自动扫描列出。勾选 = 允许:该 Agent 运行时把技能加载指令注入提示词,开工前先读技能文件再按其流程执行;标「条件」的技能还须满足其运行时条件(生效模型/渠道/Key 已配置)才会真正注入。未勾选一律不注入;SOUL.md 写死引用的技能取消勾选后会向 Agent 声明「已禁用」。全局设置,保存后对后续启动的工单生效。</div>
-    <div id="skill-list" style="max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px"><div class="empty">读取中…</div></div>
-    <div class="err" id="skill-err"></div>
-    <div class="actions">
-      <span style="margin-right:auto;display:flex;gap:8px"><button id="skill-all">全选</button><button id="skill-none">全不选</button></span>
-      <button id="skill-cancel">取消</button><button class="primary" id="skill-ok">保存</button>
     </div>
   </div>
 </div>
@@ -1710,52 +1698,11 @@ $('#conc-ok').onclick=async()=>{
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 技能包弹窗(设置菜单「高级」:自动扫描各 Agent skills/,勾选=允许运行时注入加载指令) ---------- */
+/* ---------- 对话面板顶栏「技能」按钮:选中 Agent 即显示(装了技能显示数量);点开列清单,
+   点一项把技能路径(相对 Agent 目录:skills/<目录名>)插入输入框光标处,便于指定用该技能完成
+   某项工作;「加载技能」上传技能 zip 包解压安装到本 Agent 的 skills/ 目录 ---------- */
 const SKILL_KIND={conditional:'条件',always:'常驻',soul:'常驻',library:'依赖库',generic:'通用'};
-function renderSkills(list){
-  const box=$('#skill-list');box.innerHTML='';
-  if(!list.length){box.innerHTML=`<div class="empty">${t('没有找到技能:各 Agent 的 skills/ 目录下没有 SKILL.md')}</div>`;return}
-  const groups=new Map();
-  list.forEach(s=>{if(!groups.has(s.agent_id))groups.set(s.agent_id,{a:s,items:[]});groups.get(s.agent_id).items.push(s)});
-  for(const {a,items} of groups.values()){
-    const g=document.createElement('div');
-    g.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px 10px';
-    g.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>${esc(a.agent_name)}</b><span style="color:var(--dim);font-size:11px">${esc(a.category_name)} · ${esc(a.agent_id)}${a.plugin?' · 🧩 '+esc(a.plugin):''}</span></div>`;
-    items.forEach(s=>{
-      const row=document.createElement('label');
-      row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:5px 0;cursor:pointer;border-top:1px solid var(--border)';
-      const kind=t(SKILL_KIND[s.kind]||s.kind);
-      const cond=s.condition?`<span style="color:var(--dim);font-size:11px">· ${esc(t(s.condition))}</span>`:'';
-      row.innerHTML=`<input type="checkbox" class="skill-cb" data-id="${esc(s.id)}" ${s.enabled?'checked':''} style="flex:none;margin-top:3px">
-        <div style="min-width:0;flex:1"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13px">${esc(s.name)}</b><span style="font-size:10.5px;padding:0 6px;border:1px solid var(--border);border-radius:9px;color:var(--dim)">${esc(kind)}</span>${cond}</div>
-        <div style="color:var(--dim);font-size:12px;margin-top:2px;white-space:pre-wrap">${esc(s.description||'')}</div>
-        <div style="color:var(--dim);font-size:11px;margin-top:2px;font-family:ui-monospace,monospace;opacity:.8">${esc(s.path)}</div></div>`;
-      g.appendChild(row);
-    });
-    box.appendChild(g);
-  }
-}
-async function openSkillModal(){
-  $('#skill-err').textContent='';
-  $('#skill-list').innerHTML='<div class="empty">'+t('读取中…')+'</div>';
-  $('#skill-modal').style.display='flex';
-  try{renderSkills((await api('/api/v1/config/skills?refresh=true')).skills||[])}
-  catch(e){$('#skill-err').textContent=t('读取失败:')+e.message}
-}
-$('#menu-skills').onclick=e=>{e.preventDefault();openSkillModal()};
-$('#skill-cancel').onclick=()=>$('#skill-modal').style.display='none';
-$('#skill-all').onclick=()=>document.querySelectorAll('#skill-list .skill-cb').forEach(c=>c.checked=true);
-$('#skill-none').onclick=()=>document.querySelectorAll('#skill-list .skill-cb').forEach(c=>c.checked=false);
-$('#skill-ok').onclick=async()=>{
-  const off=[...document.querySelectorAll('#skill-list .skill-cb')].filter(c=>!c.checked).map(c=>c.dataset.id);
-  $('#skill-err').textContent='';
-  try{await api('/api/v1/config/skills',{skills_disabled:off});$('#skill-modal').style.display='none';SKILLS_ALL=null;updateSkillBtn()}
-  catch(e){$('#skill-err').textContent=t('保存失败:')+e.message}
-};
-
-/* ---------- 对话面板顶栏「🧰 SKILL」按钮:当前 Agent 装了技能才显示;点开列清单,点一项把
-   技能路径(相对 Agent 目录:skills/<目录名>)插入输入框光标处,便于指定用该技能完成某项工作 ---------- */
-let SKILLS_ALL=null;   // 全部 Agent 的技能清单缓存(服务端本身带 TTL 缓存);技能包设置保存后置空重取
+let SKILLS_ALL=null;   // 全部 Agent 的技能清单缓存(服务端本身带 TTL 缓存);上传技能后置空重取
 async function ensureSkills(refresh){
   if(SKILLS_ALL&&!refresh)return SKILLS_ALL;
   SKILLS_ALL=(await api('/api/v1/config/skills'+(refresh?'?refresh=true':''))).skills||[];
@@ -1765,11 +1712,11 @@ function agentSkills(id){return (SKILLS_ALL||[]).filter(s=>s.agent_id===id)}
 async function updateSkillBtn(){
   const id=CURRENT,b=$('#btn-skills');
   if(!id){b.style.display='none';return}
-  try{await ensureSkills()}catch(e){b.style.display='none';return}
+  b.style.display='';b.textContent=t('技能');
+  try{await ensureSkills()}catch(e){return}
   if(CURRENT!==id)return;
   const n=agentSkills(id).length;
-  b.style.display=n?'':'none';
-  if(n)b.textContent='🧰 SKILL · '+n;
+  if(n)b.textContent=t('技能')+' · '+n;
 }
 function insertAtCursor(text){
   const inp=$('#input');
@@ -1791,7 +1738,7 @@ function renderAgentSkills(list){
     row.title=I18N.f('点击把 {p} 插入输入框',{p:rel});
     const kind=t(SKILL_KIND[s.kind]||s.kind);
     const cond=s.condition?`<span style="color:var(--dim);font-size:11px">· ${esc(t(s.condition))}</span>`:'';
-    const off=s.enabled?'':`<span style="font-size:10.5px;padding:0 6px;border:1px solid #b8860b;border-radius:9px;color:#e0a92a">${esc(t('已禁用'))}</span>`;
+    const off=s.enabled?'':`<span title="${esc(t('该技能已被禁用,运行时不会自动注入'))}" style="font-size:10.5px;padding:0 6px;border:1px solid #b8860b;border-radius:9px;color:#e0a92a">${esc(t('已禁用'))}</span>`;
     row.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13px">${esc(s.name)}</b><span style="font-size:10.5px;padding:0 6px;border:1px solid var(--border);border-radius:9px;color:var(--dim)">${esc(kind)}</span>${cond}${off}<code style="margin-left:auto;font-size:11px;color:var(--accent);font-family:ui-monospace,monospace">${esc(rel)}</code></div>
       <div style="color:var(--dim);font-size:12px;margin-top:3px;white-space:pre-wrap">${esc(s.description||'')}</div>
       <div style="color:var(--dim);font-size:11px;margin-top:2px;font-family:ui-monospace,monospace;opacity:.7">${esc(s.path)}</div>`;
@@ -1813,7 +1760,21 @@ async function openAgentSkillModal(){
 }
 $('#btn-skills').onclick=openAgentSkillModal;
 $('#askill-close').onclick=()=>$('#askill-modal').style.display='none';
-$('#askill-manage').onclick=e=>{e.preventDefault();$('#askill-modal').style.display='none';openSkillModal()};
+$('#askill-load').onclick=e=>{e.preventDefault();$('#askill-file').click()};
+$('#askill-file').onchange=async()=>{
+  const f=$('#askill-file').files[0];$('#askill-file').value='';
+  if(!f||!CURRENT)return;
+  const id=CURRENT;
+  $('#askill-err').textContent='';
+  try{
+    const r=await fetch('/api/v1/config/skills/upload?agent='+encodeURIComponent(id)+'&filename='+encodeURIComponent(f.name),{method:'POST',body:f});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||r.status);
+    SKILLS_ALL=j.skills||[];
+    if(CURRENT===id)renderAgentSkills(agentSkills(id));
+    updateSkillBtn();
+  }catch(e){$('#askill-err').textContent=t('安装失败:')+e.message}
+};
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
 let DIAG_LESSONS=[];

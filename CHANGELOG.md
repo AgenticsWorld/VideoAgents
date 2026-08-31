@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Agent skills entry reworked** (chat header). The per-agent skills button is renamed from "🧰 SKILL" to **Skill** (localized, e.g. 技能 on the Chinese UI; toolbox icon dropped) and now shows for every selected agent — with the installed-skill count appended when there are any — instead of only for agents that already have skills installed. In the dialog, "Manage skill packs…" is replaced by **Load skill**: pick a skill zip package (a skill directory wrapping SKILL.md, or SKILL.md at the zip root, in which case the skill directory is named after the zip file) and it is extracted into the current agent's `skills/` directory via the new `POST /api/v1/config/skills/upload?agent=…` (raw-zip body like plugin install with the same 50MB/200MB/5000-file limits, staged extraction with path-traversal guard, `__MACOSX`/`.DS_Store` noise skipped, 409 when a skill of the same name already exists). The Settings → Advanced → **Skill Packs** page is removed; `GET/POST /api/v1/config/skills` and the `skills_disabled` state keep working, so existing disabled entries stay in force and are still flagged "disabled" in the list, and prompts/docs no longer point to the removed page. 11 UI languages updated. A running instance must be restarted.
+
 ## [1.0.26] - 2026-08-31
 
 ### Added

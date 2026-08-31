@@ -532,6 +532,11 @@ async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_skills_set(body)
 
 
+@api.post("/config/skills/upload", tags=["automation"])
+async def skills_upload(request: Request, agent: str, filename: str = "") -> dict[str, Any]:
+    return await core.api_skills_upload(agent, await request.body(), filename)
+
+
 @api.get("/config/concurrency", tags=["automation"])
 async def agent_concurrency() -> dict[str, Any]:
     return await core.api_agent_concurrency_get()

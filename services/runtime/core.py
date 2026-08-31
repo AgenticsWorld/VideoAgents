@@ -1084,10 +1084,11 @@ AUDIO_TRANSCRIPTION_SKILL = (
     "agents/09-audio/audio-transcription/skills/audio-transcription/SKILL.md")
 
 
-# ---------------- 技能包(设置菜单「高级→技能包」) ----------------
+# ---------------- Agent 技能(对话面板顶栏「技能」入口) ----------------
 # 技能 = agents/<类别>/<agent>/skills/<技能目录>/SKILL.md(插件 Agent 同构),技能 id 取
-# "<agent_id>/<技能目录名>"(目录名稳定,不用 frontmatter 的 name)。设置页自动扫描列出,
-# 用户逐项勾选;开关记 state.json 的 skills_disabled 列表(默认全部启用,新增技能自动启用)。
+# "<agent_id>/<技能目录名>"(目录名稳定,不用 frontmatter 的 name)。对话面板「技能」弹窗
+# 自动扫描列出,并可上传技能 zip 包安装;开关记 state.json 的 skills_disabled 列表
+# (默认全部启用,新增技能自动启用;设置页勾选入口已下线,存量禁用记录与 API 仍生效)。
 # 语义 = 「勾选=允许」:现有运行时条件(生效模型/渠道/Key 已配置)照旧判定,勾选只是总闸;
 # 未勾选一律不注入。SOUL.md 无条件写死引用的技能被取消勾选时,追加「已禁用」段声明本单不执行。
 # 注册表说明每个已知技能的激活方式(仅供设置页展示 + 决定禁用时是否需要声明);未登记的
@@ -1203,7 +1204,7 @@ def skills_disabled_setting() -> set[str]:
 
 
 def skill_enabled(skill_id: str) -> bool:
-    """技能包开关(默认启用;未在清单里的 id 同样按 STATE 判定,便于注入段常量直接引用)。"""
+    """技能开关(默认启用;未在清单里的 id 同样按 STATE 判定,便于注入段常量直接引用)。"""
     return skill_id not in skills_disabled_setting()
 
 
@@ -1222,7 +1223,7 @@ def agent_skill_prompt(agent_id: str) -> str:
     p = ""
     generic = [s for s in mine if s["kind"] == "generic" and s["enabled"]]
     if generic:
-        p += "\n\n## 已启用技能(用户在设置「高级→技能包」勾选,当前已生效)\n" \
+        p += "\n\n## 已启用技能(当前已生效)\n" \
              "以下技能已随本工位安装并被用户启用。开工前**先 Read 各技能文件全文**,按其 description 判定是否适用于本单:" \
              "适用时按其流程执行并在回执如实记录所用技能;不适用时按 SOUL.md 常规手段执行并在回执说明判定结果。" \
              "技能与 SOUL.md 冲突时以 SOUL.md 为准。"
@@ -1232,7 +1233,7 @@ def agent_skill_prompt(agent_id: str) -> str:
                 p += f"\n  适用:{s['description'][:200]}"
     disabled = [s for s in mine if s["kind"] in ("always", "soul", "library") and not s["enabled"]]
     if disabled:
-        p += "\n\n## 已禁用技能(用户在设置「高级→技能包」取消勾选)\n" \
+        p += "\n\n## 已禁用技能(用户已禁用)\n" \
              "以下技能已被用户禁用:SOUL.md 中引用它们的指引本单**不执行**,不要读取其 SKILL.md,按 SOUL.md 其余常规手段完成工单;" \
              "若无该技能就无法完成工单,回执如实说明并升级用户裁决,不得自行绕过禁用。"
         for s in disabled:
@@ -1323,7 +1324,7 @@ def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
             warning = (f"生效视频模型 {resolved_from or '(未知)'} 没有对应的提示词技能:"
                        "可在「视频模型设置→提示词技能」手选一项或选择跳过")
     if sid and not cands[sid]["enabled"]:
-        warning = f"提示词技能 {cands[sid]['dir']} 已在「设置→高级→技能包」取消勾选,本项目按无技能处理"
+        warning = f"提示词技能 {cands[sid]['dir']} 已被禁用,本项目按无技能处理"
         reason, sid = "disabled", ""
     c = cands.get(sid) or {}
     return {"mode": mode, "skill_id": sid, "dir": c.get("dir", ""), "name": c.get("name", ""),
@@ -2798,7 +2799,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         else:
             why = {"user_skipped": "用户在项目设置中选择跳过(off)",
                    "no_match": f"生效视频模型 {psk['resolved_from'] or '(未知)'} 没有对应技能(auto 未匹配)",
-                   "disabled": "所匹配技能已在「设置→高级→技能包」取消勾选",
+                   "disabled": "所匹配技能已被禁用",
                    "missing": "用户指定的技能未安装"}.get(psk["reason"], psk["reason"] or "未设定")
             contract = f"""- 本项目**不套用**提示词技能:{why}。按 SOUL.md 常规写法完成工单,不要自行读取 skills/ 下任何引擎提示词技能
 - 每个组级 `assets/prompts/epNN/grpNNN.json` 仍必带回执字段 `skill_applied`:`{{"id": null, "reason": "{psk['reason'] or 'no_match'}"}}`"""
@@ -4129,7 +4130,7 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
             reason = "no_match"
             warning = (warning + " · " if warning else "") + f"本组视频模型 {model or '(未知)'} 没有对应的提示词技能"
     if sid and sid in cands and not cands[sid]["enabled"]:
-        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 已在技能包中禁用,本组按无技能处理"
+        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 已被禁用,本组按无技能处理"
         sid, reason = "", "disabled"
     c = cands.get(sid) or {}
     return {"provider": provider, "video_model": model, "model_source": source,
@@ -9116,16 +9117,16 @@ async def api_agent_advanced_set(body: dict):
 
 
 async def api_skills_get(refresh: bool = False):
-    """技能包(设置菜单「高级→技能包」):自动扫描各 Agent skills/ 目录,返回清单 + 勾选状态。"""
+    """Agent 技能清单(对话面板「技能」弹窗):自动扫描各 Agent skills/ 目录,返回清单 + 开关状态。"""
     return {"skills": list_agent_skills(refresh=refresh),
             "skills_disabled": sorted(skills_disabled_setting())}
 
 
 async def api_skills_set(body: dict):
-    """技能包开关提交,两种形态任选:
-    - skills_disabled: [id, ...] 整体覆盖(设置页「保存」);未知 id 拒绝
+    """技能开关提交(设置页入口已下线,保留 API 供脚本/存量调用),两种形态任选:
+    - skills_disabled: [id, ...] 整体覆盖;未知 id 拒绝
     - skill_id + enabled: 单项切换
-    语义「勾选=允许」:开关只是总闸,条件注入型技能仍须满足各自运行时条件才注入;
+    语义「启用=允许」:开关只是总闸,条件注入型技能仍须满足各自运行时条件才注入;
     持久化到 state.json,对后续启动的运行生效。"""
     known = {s["id"] for s in scan_agent_skills(refresh=True)}
     if body.get("skills_disabled") is not None:
@@ -9147,6 +9148,75 @@ async def api_skills_set(body: dict):
         raise ServiceError(400, "nothing to update: pass skills_disabled or skill_id + enabled")
     save_state(STATE)
     return await api_skills_get()
+
+
+async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
+    """对话面板「技能」弹窗「加载技能」:上传技能 zip 包,解压安装到该 Agent 的 skills/ 目录。
+    请求体即 zip 原始字节(与插件安装同口径,免 multipart 依赖)。zip 根可以直接是技能内容
+    (SKILL.md 在根),也可以套一层技能目录;技能目录名取内层目录名,根级则取 zip 文件名;
+    解压前做路径穿越拦截,同名技能已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
+    d = agent_dir(str(agent_id or ""))
+    if not d:
+        raise ServiceError(404, f"no such agent: {agent_id}")
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > MAX_PLUGIN_UPLOAD:
+        raise ServiceError(400, "skill package too large (>50MB)")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        entries = [entry for entry in zf.infolist() if not entry.is_dir()]
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(400, f"invalid zip: {e}")
+    if len(entries) > MAX_PLUGIN_FILES:
+        raise ServiceError(400, f"skill package contains too many files (>{MAX_PLUGIN_FILES})")
+    if sum(entry.file_size for entry in entries) > MAX_PLUGIN_EXTRACTED:
+        raise ServiceError(400, "skill package is too large after extraction (>200MB)")
+    names = [entry.filename for entry in entries]
+    # 定位 SKILL.md:取层级最浅的一个,其所在目录即技能根(macOS 压缩的 __MACOSX 噪声排除)
+    manifests = sorted((n for n in names
+                        if Path(n).name == "SKILL.md" and not n.startswith("__MACOSX/")),
+                       key=lambda n: n.count("/"))
+    if not manifests:
+        raise ServiceError(400, "zip 内找不到 SKILL.md")
+    prefix = manifests[0][: -len("SKILL.md")]               # ""(根)或 "xxx/"
+    if prefix:
+        name = Path(prefix.rstrip("/")).name
+    else:                                                    # 根级内容:目录名取 zip 文件名
+        stem = Path(filename or "").stem
+        name = re.sub(r"[^A-Za-z0-9_\-]+", "-", stem).strip("-")
+    if not name or not _SKILL_DIR_RE.fullmatch(name):
+        raise ServiceError(400, f"非法技能目录名:{name!r}(仅限字母/数字/_-,根级 zip 请用规范文件名)")
+    (d / "skills").mkdir(exist_ok=True)
+    target = d / "skills" / name
+    if target.exists():
+        raise ServiceError(409, f"技能 {name} 已存在;请先删除 {target} 再安装")
+    staging = d / "skills" / f".{name}.{uuid.uuid4().hex}.tmp"
+    staging.mkdir()
+    extracted = 0
+    try:
+        for n in names:
+            if not n.startswith(prefix) or n.startswith("__MACOSX/"):
+                continue
+            rel = n[len(prefix):]
+            if not rel or Path(rel).name.startswith(".DS_Store"):
+                continue
+            dest = (staging / rel).resolve()
+            try:
+                dest.relative_to(staging.resolve())
+            except ValueError as exc:
+                raise ServiceError(400, f"zip 含路径穿越条目:{n}") from exc
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(zf.read(n))
+            extracted += 1
+        if not extracted:
+            raise ServiceError(400, "zip 内没有可解压的技能文件")
+        staging.replace(target)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    scan_agent_skills(refresh=True)
+    return {"ok": True, "name": name, "agent_id": agent_id, "files": extracted,
+            **await api_skills_get()}
 
 
 async def api_agent_concurrency_get():
