@@ -479,25 +479,61 @@ def _storage_upload_url(path: str) -> str:
 AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
 
 
-def _avatar_asset_uri(path: str) -> str | None:
-    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>,否则 None。
-
-    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核);
-    按文件内容 sha256 匹配,与图片所在目录无关。"""
+def _avatar_lib_enabled() -> bool:
+    """虚拟人像库开关(设置 → 高级 → 虚拟人像资产库);配置读不出按关闭处理
+    (get_config 读的是同一文件,真读不出时生成流程在取 API Key 时早已失败)。"""
     try:
-        if not (json.loads(CONFIG_PATH.read_text()).get("avatar_assets") or {}).get("enabled"):
-            return None
-        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+        return bool((json.loads(CONFIG_PATH.read_text())
+                     .get("avatar_assets") or {}).get("enabled"))
     except Exception:
+        return False
+
+
+def _is_portrait_ref(path: str) -> bool:
+    """人物概念图判定:平台约定人物图都在 assets/concepts/characters/ 目录下
+    (与 core.py 虚拟人像库全自动整备的入库口径一致)。"""
+    return "assets/concepts/characters/" in Path(path).as_posix()
+
+
+def _avatar_required_msg(path: str, reason: str) -> str:
+    return (f"虚拟人像库已启用,人物参考图必须以 asset:// 资产 URI 提交,"
+            f"但 {path} 无法解析为库内资产:{reason}。"
+            "base64 内联提交会绕过入库审核且实测人脸一致性明显劣化"
+            "(2026-08-31 dzg6 ep01 前科:内联组人脸/服装全面漂移),已中止本次生成。"
+            "请人工选择下一步:① 在「设置 → 高级 → 虚拟人像资产库」重新整备该项目人物图、"
+            "等审核 Active 后重跑;② 确要临时改走 base64 内联时,先在设置中关闭虚拟人像库再重跑;"
+            "③ 或从本组 refs 移除该图(需同步 [Image N] 编号)。")
+
+
+def _avatar_asset_uri(path: str) -> str | None:
+    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>。
+
+    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核),
+    且对人脸一致性至关重要;按文件内容 sha256 匹配,与图片所在目录无关。
+    库启用时,人物图(assets/concepts/characters/**)未命中不再静默降级 base64,
+    直接抛错交人工定夺(2026-08-31 dzg6 前科:静默降级致 grp003-005 人脸全崩);
+    非人物图(动线图/场景九宫格等)未命中照旧返回 None 走内联。"""
+    if not _avatar_lib_enabled():
         return None
-    if not ledger:
+    must = _is_portrait_ref(path)
+    try:
+        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+    except Exception as e:
+        if must:
+            raise RuntimeError(_avatar_required_msg(
+                path, f"人像库台账读取失败({AVATAR_LEDGER_PATH}:{e})"))
         return None
     p = Path(path)
     if not p.is_file():
+        # 文件不存在交由后续内联环节报错,报文更准确(含调用方拼出的完整路径语境)
         return None
     ent = ledger.get(hashlib.sha256(p.read_bytes()).hexdigest()) or {}
     if ent.get("status") == "Active" and ent.get("asset_id"):
         return f"asset://{ent['asset_id']}"
+    if must:
+        reason = (f"台账中该图状态为 {ent.get('status')}(asset_id={ent.get('asset_id')}),非 Active"
+                  if ent else "该图未入库(台账无此文件内容的 sha256)")
+        raise RuntimeError(_avatar_required_msg(path, reason))
     return None
 
 
@@ -2294,7 +2330,12 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             content.append({"type": "image_url", "role": role,
                             "image_url": {"url": to_url(path)}})
     for path in refs or []:
-        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI)
+        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI);
+        # 库启用时人物图必须走 asset://,解析不到即在 _avatar_asset_uri 内抛错中止
+        if not is_v2 and _avatar_lib_enabled() and _is_portrait_ref(path):
+            raise RuntimeError(_avatar_required_msg(
+                path, f"当前模型 {cfg['model']} 不支持 asset:// 资产 URI(仅 Seedance 2.x 支持),"
+                      "可换用 Seedance 2.x 视频模型"))
         asset_uri = _avatar_asset_uri(path) if is_v2 else None
         if asset_uri:
             print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
@@ -2315,26 +2356,49 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     return body
 
 
-def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None) -> str:
+def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None,
+                          model: str = "") -> str:
     """提交查重:在方舟任务列表中找疑似"刚由本次提交建成"的任务。
 
     创建接口无幂等 token,弱网下响应丢包会让客户端误判失败;盲目重试=重复计费
     (前科:ep01 grp031 重复计费)。匹配口径:created_at 落在本次提交时刻之后
-    (容忍 30s 时钟偏差)且时长一致(可得时)。并行多路提交且同秒同时长时存在
-    极小概率误配,窗口已尽量收紧。"""
+    (容忍 30s 时钟偏差)、model 一致(可得时)、且时长必须可证实一致——列表项缺
+    duration(刚建成排队中常见)时补查任务详情,仍不可得则不认;窗口内命中多个
+    候选也不认,一律返回空交上层报失败由人工核对(code/ark_task_list.py)。
+    错认并发批次里其它组的任务会把别组成片下载成本组文件(前科:2026-08-31 dzg6
+    grp019 错拿 grp004 的 14s 片),比重复计费更糟,宁可失败不可错认。"""
+    want = int(round(duration)) if duration and duration != -1 else None
     for _ in range(3):
         try:
             d = _get_json(f"{tasks_url}?page_size=10", headers)
-            for t in (d.get("items") or []):
-                if (t.get("created_at") or 0) < since_ts - 30:
-                    continue
-                tdur = t.get("duration") or (t.get("content") or {}).get("duration")
-                if duration and tdur and int(round(duration)) != int(tdur):
-                    continue
-                return t.get("id") or ""
-            return ""
         except Exception:
             time.sleep(5)
+            continue
+        hits = []
+        for t in (d.get("items") or []):
+            if (t.get("created_at") or 0) < since_ts - 30:
+                continue
+            tid = t.get("id") or ""
+            if not tid:
+                continue
+            if model and t.get("model") and t.get("model") != model:
+                continue
+            tdur = t.get("duration") or (t.get("content") or {}).get("duration")
+            if want is not None and tdur is None:
+                try:  # 排队中的任务列表项常缺 duration,补查详情再定
+                    tdur = (_get_json(f"{tasks_url}/{tid}", headers) or {}).get("duration")
+                except Exception:
+                    tdur = None
+            if want is not None and (tdur is None or want != int(tdur)):
+                continue
+            hits.append(tid)
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            print(f"[genmedia] 查重命中 {len(hits)} 个同窗口候选({', '.join(hits)}),"
+                  "无法唯一归属本次提交,不认领(请用任务列表人工核对后 reclaim)",
+                  file=sys.stderr, flush=True)
+        return ""
     return ""
 
 
@@ -2414,7 +2478,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
         # 网络层异常:任务可能已在方舟建成,先查重再定失败,避免上层重试重复计费
         print(f"[genmedia] 提交响应异常({e}),查任务列表核对是否已建成…",
               file=sys.stderr, flush=True)
-        tid = _find_recent_ark_task(tasks_url, headers, submit_ts, duration)
+        tid = _find_recent_ark_task(tasks_url, headers, submit_ts, duration,
+                                    model=cfg.get("model") or "")
         if not tid:
             raise RuntimeError(f"方舟提交失败且任务列表未见新任务:{e}") from e
         print(f"[genmedia] 方舟侧已存在本次提交的任务 {tid},转入轮询(未重复提交)",
@@ -3976,7 +4041,8 @@ def main():
     pi.add_argument("--negative", default="")
     pi.add_argument("--aspect", default="", help="画幅,如 16:9(与 --size 二选一)")
     pi.add_argument("--size", default="", help="精确尺寸,如 1280x720")
-    pi.add_argument("--ref", nargs="+", default=None, help="参考图路径(可多张)")
+    pi.add_argument("--ref", nargs="+", action="extend", default=None,
+                    help="参考图路径(可多张;重复给出时累积)")
     pi.add_argument("--n", type=int, default=1, help="候选张数(>1 时文件名加 _01.. 后缀)")
     pi.add_argument("--seed", type=int, default=None)
     pi.add_argument("--dry-run", action="store_true")
@@ -3992,14 +4058,14 @@ def main():
     pv.add_argument("--resolution", default="", help="如 720p / 1080p")
     pv.add_argument("--aspect", default="", help="画幅,如 16:9")
     pv.add_argument("--seed", type=int, default=None)
-    pv.add_argument("--ref-video", nargs="+", default=None,
+    pv.add_argument("--ref-video", nargs="+", action="extend", default=None,
                     help="参考视频路径(2.0 ≤3 个/总时长≤15s,2.5 ≤10 个/总时长≤30s;"
                          "V2V 编辑/延长,Seedance 2.x 专用,"
                          "prompt 用「视频n」序号引用;与首尾帧互斥)")
-    pv.add_argument("--ref", nargs="+", default=None,
+    pv.add_argument("--ref", nargs="+", action="extend", default=None,
                     help="参考图路径(可多张,2.0 ≤9 / 2.5 ≤30;"
                          "多模态参考/多镜头组模式,与首尾帧互斥)")
-    pv.add_argument("--audio-ref", nargs="+", default=None,
+    pv.add_argument("--audio-ref", nargs="+", action="extend", default=None,
                     help="参考音频路径(2.0 ≤3 段/总时长≤15s,2.5 ≤10 段/总时长≤30s;"
                          "如角色 TTS 音色样本)")
     pv.add_argument("--generate-audio", choices=["on", "off", ""], default="",
