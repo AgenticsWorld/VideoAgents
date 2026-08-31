@@ -685,7 +685,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>重跑次数</label>
       <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
     <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 1:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
     <div class="row"><label>思考深度</label>
       <select id="conc-effort" style="width:160px">
         <option value="">引擎默认</option>
@@ -1666,12 +1666,12 @@ async function openConcModal(){
     $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
     $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
     concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
-    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#conc-retry').value=c.max_retries==null?1:c.max_retries;
     $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=1;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
