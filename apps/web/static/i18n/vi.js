@@ -1,4 +1,6 @@
 window.I18N_DICT = {
+"Doubao-音频生成 1.0(描述定制嗓音:按声纹卡/旁白描述直接生成,免选音色)": "Doubao Audio Generation 1.0 (giọng tùy chỉnh theo mô tả: tạo trực tiếp từ thẻ giọng nhân vật / mô tả lời dẫn, không cần chọn giọng)",
+"描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按工单 --instructions 声线描述;项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。": "Giọng tùy chỉnh theo mô tả: không cần chọn giọng — lồng tiếng nhân vật tự động ghép mô tả giọng từ thẻ giọng của dự án (các trường âm học trong voice.json), lời dẫn dùng mô tả --instructions của phiếu việc; khi dự án đã có mẫu voiceprint đóng băng, nó được tự động gắn làm mỏ neo tham chiếu nên giọng của cùng một nhân vật không bị trôi giữa các câu/đoạn.",
 "网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性": "Kiểm tra mạng: hiển thị IP đầu ra và vị trí, đo thực tế kết nối tới google/youtube/claude và các trang khác từ môi trường dòng lệnh",
 "判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。": "Kết luận: mạng bình thường nhưng một số trang nước ngoài không thông — hãy bật chế độ TUN (toàn cục) của VPN rồi kiểm tra lại; người dùng Astrill hãy chuyển giao thức sang StealthVPN / OpenVPN / WireGuard.",
 "连通性": "Kết nối",

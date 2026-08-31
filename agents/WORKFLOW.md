@@ -546,6 +546,17 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > 超限任务创建即 400 InvalidParameter(不计费)——早期 10–15s 规格两段配对必超
 > (tothemoon 实测 12.3s+11.8s=24.1s 被拒);≤5s/段则 3 段满配 ≤15s 恒过,嗓音特点 5s 足够锚定。
 > genmedia 提交前做 audioref_total_le_15s 硬校验(§7A),超限直接报错不发请求。
+> **嗓音模板可由 Doubao-音频生成 1.0 描述定制(2026-08-31)**:「🎨 生成模型」页 TTS 火山渠道
+> 模型选 `seed-audio-1.0`(列表首位,新配置默认)时,②③ 不再从「音色库」挑 speaker——
+> **按 voice.json 声学字段(gender/presented_gender、pitch、timbre、accent;age_variants 逐
+> 形态覆盖)拼文字描述直接生成定制嗓音**(`genmedia tts --character` 自动拼装,禁传 --voice,
+> speaker 名会被忽略;reference_style 等剧情性文字不进描述)。casting.json 条目登记
+> `tts_model: seed-audio-1.0` 与 genmedia 日志回显的 `voice_desc`,`tts_voice` 留空;
+> voice_collision 按「同组说话人 timbre/pitch 描述雷同」判,雷同=调声纹卡后重出样本。
+> **同一描述两次生成音色不同**:样本一次冻结全片复用,重出=受控变更;genmedia 在项目已有
+> 冻结样本时自动把它挂为 seed-audio 的 @音频1 参考锚(形态样本重出锚定基础样本=同一副
+> 嗓子按描述变龄;§8C 逐句 dub、旁白逐段合成同理不漂音色,旁白可冻结
+> `refs/NARRATOR_voiceprint.mp3` 作锚)。
 > **同一角色不同年龄阶段嗓音不同**:voice.json 的 age_variants 有分版的,逐 variant 出样本;
 > 组生成挂锚时按该组时间线选对应形态的样本。
 > **对白组挂逐角色 Voice 锚(2026-07-20,废止组级干声)**:~~每组一条台词干声轨
@@ -606,7 +617,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜音频描述(打斗/门/脚步…;语言随界面语言,2026-08-24) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景描述(语言随界面语言,2026-08-24),同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
 | voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声——≤5s/段是方舟 audio_ref 总时长 15.2s 硬限的配额(3 段满配 ≤15s,§8A 2026-07-20 实证),按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;ComfyUI 渠道调用 `genmedia tts --character <CHAR-ID> [--variant ...]` 自动选型、禁止手填 `--voice`,casting 记录自动选中的 TimbreModel 文件;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[3,5]s、纯人声(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
-| narrator(先于 p7-video) | 旁白配音(云渠道:声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice;ComfyUI:根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`;后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
+| narrator(先于 p7-video) | 旁白配音(云渠道:声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice;火山 seed-audio-1.0 描述定制模式:无「默认音色」,声线=--instructions 描述(缺省内置旁白声线),可冻结 refs/NARRATOR_voiceprint.mp3 作参考锚保段间一致;ComfyUI:根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`;后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
@@ -931,9 +942,10 @@ python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
   [--character <CHAR-ID;ComfyUI 角色音色样本必传,旁白不传>] [--variant <年龄形态>] \
-  [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;ComfyUI 禁止手填>] \
+  [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;火山 seed-audio-1.0 描述定制:禁传,speaker 名会被忽略;ComfyUI 禁止手填>] \
   [--speed 1.0] [--instructions "<语气/情绪指令;OpenAI 系模型生效,火山注入情绪指令,ComfyUI 参与音色匹配>"]
 # ComfyUI TTS 会读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
+# 火山渠道模型为 seed-audio-1.0(Doubao-音频生成 1.0,描述定制嗓音)时同 ComfyUI 纪律:角色传 --character、旁白靠 --instructions 描述声线,禁传 --voice;声线描述由 voice.json 声学字段自动拼装,项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚(逐句/逐段合成不漂音色,§8A)。
 ```
 
 Python 内调用(批量循环时省进程开销):`from modules.genmedia import generate_image, generate_video, generate_music, generate_tts`。

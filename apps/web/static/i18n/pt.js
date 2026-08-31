@@ -1,4 +1,6 @@
 window.I18N_DICT = {
+"Doubao-音频生成 1.0(描述定制嗓音:按声纹卡/旁白描述直接生成,免选音色)": "Doubao Geração de Áudio 1.0 (voz personalizada por descrição: gerada diretamente da ficha vocal / descrição do narrador; sem escolher voz)",
+"描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按工单 --instructions 声线描述;项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。": "Voz personalizada por descrição: sem escolher voz — a dublagem de personagens monta automaticamente a descrição vocal a partir da ficha vocal do projeto (campos acústicos do voice.json) e a narração usa a descrição --instructions da ordem de trabalho; se o projeto já tiver uma amostra voiceprint congelada, ela é anexada automaticamente como âncora de referência, então a voz do mesmo personagem não deriva entre falas/segmentos.",
 "网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性": "Diagnóstico de rede: mostra o IP de saída e a localização e testa a conectividade real com google/youtube/claude e outros sites na linha de comando",
 "判定:网络正常但部分国外站点不通——请打开 VPN 的 TUN(全局)模式后重新检测;Astrill 用户请把协议切到 StealthVPN / OpenVPN / WireGuard。": "Veredicto: a rede está normal, mas alguns sites estrangeiros não respondem — ative o modo TUN (global) da sua VPN e verifique novamente; usuários do Astrill: mudem o protocolo para StealthVPN / OpenVPN / WireGuard.",
 "连通性": "Conectividade",
