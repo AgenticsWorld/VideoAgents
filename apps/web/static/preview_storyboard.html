@@ -100,6 +100,9 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
 .shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.shot .cam-toggle{cursor:pointer;user-select:none}
+.shot .camframes{margin:4px 0 6px 18px;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-size:12.5px;line-height:1.5;white-space:pre-wrap}
+.shot .camframes b{font-weight:600;margin-right:2px}
 .grp>.gcast{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--panel);padding:0 12px 8px}
 .grp>.gcast .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
@@ -823,7 +826,8 @@ function dlgHtml(s){
 }
 // 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
 // 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
-// hover 显起幅→落幅。混剪等无运镜设计的项目 camera_move 为空,不渲染
+// 有起幅/落幅时点击运镜行在下方展开明细层(可选中复制),再点收起,默认收起。
+// 混剪等无运镜设计的项目 camera_move 为空,不渲染
 const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
   pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
   track:'跟拍',tracking:'跟拍',follow:'跟拍',truck:'横移',truck_left:'横移',truck_right:'横移',dolly:'移动',slide:'横移',
@@ -835,8 +839,11 @@ function camHtml(s){
   const mv=c.label||(k?t(k):'')||c.movement||'';
   const sub=[c.rig,c.speed_curve].filter(Boolean).join(' · ');
   if(!mv&&!sub)return '';
-  const tip=[c.start_frame?t('起幅:')+c.start_frame:'',c.end_frame?t('落幅:')+c.end_frame:''].filter(Boolean).join('\n');
-  return `<div class="cam"${tip?` title="${esc(tip)}"`:''}>🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</div>`;
+  const head=`🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}`;
+  const frames=[c.start_frame?[t('起幅:'),c.start_frame]:null,c.end_frame?[t('落幅:'),c.end_frame]:null].filter(Boolean);
+  if(!frames.length)return `<div class="cam">${head}</div>`;
+  return `<div class="cam cam-toggle" onclick="const f=this.nextElementSibling;f.hidden=!f.hidden;this.querySelector('.arrow').textContent=f.hidden?'▸':'▾'">${head}<span class="sub arrow">▸</span></div>
+    <div class="camframes" hidden>${frames.map(([lab,v])=>`<div><b>${esc(lab)}</b>${esc(v)}</div>`).join('')}</div>`;
 }
 // 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
 // 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
