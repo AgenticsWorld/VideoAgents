@@ -320,7 +320,7 @@ refs/
 | episode-planner | 全书拆集:每集事件范围、目标时长、卡点位置;产出总表 | story_graph、events、pacing 约束、目标平台 | `story/episode_plan.json` | 机检:事件 100% 被分配且不重复;每集时长在预算内。评分 writing_v1 |
 | screenplay(每集) | 把该集事件改写为剧本(场景标题/动作/对白/转场) | episode_plan、structured_story、Bible | `story/episodes/epNN/screenplay.md` | 机检:场景/角色引用合法 ID。评分 writing_v1 ≥80。QA:logic-qa 逐集审 |
 | dialogue-rewrite(每集) | 优化对白:符合各角色 dialogue_style、口语化、时长可控 | screenplay、dialogue_style | 更新 screenplay 的对白层 | 机检:风格卡命中率 ≥80%;单句时长估算 ≤ 配音上限(`code/check_dialogue_fit.py --project --ep` 仅剧本层模式:line_le_cap = shot_max_s×0.7、line_est_consistent,2026-08-30);**分镜定稿后另有 p6-dialogue-fit 精简环节回到本岗(§7D ①′)** |
-| narration(每集) | 生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
+| narration(每集) | **仅「📤 输出设置」旁白开关(output.narration_enabled,默认开)开启时派发——关=全片无任何旁白,不派发、闸门不 HOLD(§7D)**;生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
 | hook(每集) | 设计开头 3 秒钩子与结尾悬念;给出备选 3 条 | screenplay、下一集 episode_plan | `epNN/hooks.json` | 评分 creative_v1;QA:人工从备选中挑选或要求重写 |
 | pacing(每集) | 节奏审定:逐场时长分配、情绪曲线、删减建议 | screenplay、color_script | `epNN/pacing.json` | 机检:总时长 = 预算 ±10%;QA:director 会签 |
 
@@ -441,6 +441,15 @@ refs/
 > `{}` 台词由模型原生合成——台词超出组时长承载力时,模型会为念完台词强行提速,语速异常、
 > 表演赶戏,只能整组重 roll。超长的解法优先级:改短台词(文本层,最便宜)> 调镜/拆组(分镜
 > 变更)>> 压语速念完(禁止——那是把缺陷烧进成片)。**检查分两级,另有生成侧联动:
+>
+> **旁白开关(「📤 输出设置」→ 旁白,`settings.json` `output.narration_enabled`,默认开;2026-09-01 增)**:
+> 关闭 = 用户约定**整个片子没有任何旁白**——p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺
+> narration.md/旁白轨而 HOLD(两工位被派到也只说明开关已关闭并结单);shot-planning 不写 narration_anchors,
+> `audio_plan` 禁用 narration_over——无对白组一律 ambient_only,`silent_rationale` 照常逐组核查,但纯画面
+> 讲不清叙事时**不再回派补写旁白**,只能上报走剧本变更加对白或交用户裁决;prompt 不写旁白声明句(无对白
+> 约束句照写);audio-mixing 只混原生轨 + BGM 两路;subtitle 只做对白字幕;narration 系列机检
+> (narration_anchors_cover_all / narration_window_gte_est_x1.15 / narration_fit / narration_anchor_sync)
+> 一律跳过(报 `skipped: narration off`)。本节以下条款与 §8B 均以开关开启为前提。
 > ① **估时级(H3A 签字前,shot-planning 执行)**:
 >   - 定稿 `narration_anchors`(每条旁白 → 具体镜/组区间 + 可用画面窗口秒数,窗口扣除其中
 >     对白占时),机检窗口 ≥ `est_duration_s`×1.15;不满足在签字前解决(优先调镜时长,画面
@@ -617,7 +626,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 | sound-effect(先于 p7-prompt) | 音效 cue 设计:按事件点位写逐镜音频描述(打斗/门/脚步…;语言随界面语言,2026-08-24) | shot_list、blocking | `assets/audio/sfx/epNN/audio_cues.json` | 机检:关键动作 cue 覆盖率 ≥90%;无音乐字样 |
 | ambience(先于 p7-prompt) | 环境声 cue:逐场景描述(语言随界面语言,2026-08-24),同场景跨组一字不差 | scene、environment、generation_groups | `assets/audio/ambience/epNN/ambience_cues.json` | 机检:每场景有 cue;跨组文本一致 |
 | voice-generation(样本随 Phase 3 人物设定完成;集级只查漏补缺,先于 p7-video) | **每个有台词角色×年龄形态出 voiceprint 样本**(**3–5s** 平静中性内容纯人声干声——≤5s/段是方舟 audio_ref 总时长 15.2s 硬限的配额(3 段满配 ≤15s,§8A 2026-07-20 实证),按 voice.json 声纹选型,**人物设定阶段即完成**;新角色/新形态入库时随人物设定补出)——**仅作组生成 reference_audio 嗓音特点锚(逐角色挂锚,§8A 2026-07-20),严禁进成片对白**(§8A 红线);~~组级台词干声轨 lines/grpNNN_dialogue.mp3~~ **废止(2026-07-20)**;**合成前必查项目级选角注册表 `assets/audio/voice/casting.json`**(角色×形态→tts_model+tts_voice,全片唯一事实源;缺条目=先登记再合成,variant 必填,复用须 waiver 且**同组说话人不得共用音色**,§8A)并维护之;ComfyUI 渠道调用 `genmedia tts --character <CHAR-ID> [--variant ...]` 自动选型、禁止手填 `--voice`,casting 记录自动选中的 TimbreModel 文件;集级派单时核对本集说话角色样本覆盖 100%,缺则补 | **casting.json**、voice.json(含 age_variants)、generation_groups(集级查漏用) | 项目级 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3` + `refs/manifest.json`(角色×形态↔样本↔casting 条目)+ 更新 `voice/casting.json` | 机检:本集说话角色(×出场形态)样本覆盖 100%,样本时长 ∈[3,5]s、纯人声(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);**casting_bound:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL**;**voice_collision:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记、或同组说话人共用音色即 FAIL**;QA:audio-qa 抽检样本与 voice.json 相符(音色/语速/年龄感) |
-| narrator(先于 p7-video) | 旁白配音(云渠道:声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice;火山 seed-audio-1.0 描述定制模式:无「默认音色」,声线=--instructions 描述(缺省内置旁白声线),可冻结 refs/NARRATOR_voiceprint.mp3 作参考锚保段间一致;ComfyUI:根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`;后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
+| narrator(先于 p7-video) | **仅「📤 输出设置」旁白开关开启时派发(默认开;关=全片无旁白,§7D)**;旁白配音(云渠道:声线=「生成模型」页生效 TTS 渠道的「默认音色」,合成不传 --voice;火山 seed-audio-1.0 描述定制模式:无「默认音色」,声线=--instructions 描述(缺省内置旁白声线),可冻结 refs/NARRATOR_voiceprint.mp3 作参考锚保段间一致;ComfyUI:根据 instructions 从 TimbreModel narrator 候选自动选型,不传 `--character/--voice`;后期轨,**在 p7-video 前合成并逐条实测时长,供 §7D 旁白适配检查**;超窗只上报回派 narration 改稿,不自行删句);**交付前跑 `code/check_narration_sync.py --stamp` 把当前 narration_anchors 指纹盖进 manifest(§8B)** | narration.md、shot_list.narration_anchors | `assets/audio/narration/epNN/`(逐条音频 + manifest:挂点/实测时长/**anchor_sync 指纹**) | 机检:语速在设定区间;**narration_fit:逐条实测时长 ≤ 挂点窗口×0.9、不与窗口内对白重叠(§7D ②)**;**narration_anchor_sync:逐段挂点组=shot_list 定稿、manifest 指纹与当前 narration_anchors 一致(§8B)**;QA:audio-qa |
 | music | 配乐:按 color_script 情绪曲线**在需要烘托的位置**选/生成 BGM(开场定调/情绪转折/高潮/收束;对白密集与日常过渡段默认留白,**不从头铺到尾**),标注入出点(后期轨) | pacing、color_script | `assets/audio/bgm/epNN/` | 机检:BGM 覆盖率 30%–60%(越界须 notes 说明);QA:audio-qa 审情绪匹配与留白合理性;copyright 审版权 |
 | audio-mixing(依赖全组 p7-video) | 三路混音:组 clip 原生轨(按组序拼接+接缝淡化)+ BGM + 旁白,响度对齐;缺陷贴片嵌入;**铺旁白前必跑 `code/check_narration_sync.py`,指纹失配=停手上报(§8B),旁白摆位逐条按当前 shot_list.narration_anchors,严禁按场景人工连续铺排** | 组 clips+meta、bgm、narration(**manifest 含 anchor_sync**)、patches | `assets/audio/final/epNN.wav` | 机检:**narration_anchor_sync(铺轨前置,§8B)**;响度 -14 LUFS ±1(平台标准)、真峰值 ≤-1dBTP、无削波。QA:audio-qa 终审 |
 
@@ -640,6 +649,8 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 >   `generation_groups`,orchestrator 必须将本集 p8-narrator(重签/重合成)、p8-mix、p9-edit
 >   标脏重跑(§7 缺陷路由同款「只重跑受影响链路」);指纹机制保证即使漏标,下游开工自检也会
 >   拦住。
+> ※ 旁白开关(`output.narration_enabled`)关闭的项目本节不适用:无旁白轨可同步,
+>   `check_narration_sync.py` 自动报 `skipped: narration off` 并 PASS(§7D)。
 
 **G8 闸门**:final_audio 通过 audio-qa(含:**narration_anchor_sync 通过(§8B)**、跨组音色一致**且与 casting.json 选角一致(跨集维度)**、关键动作音效实际出声率 ≥90%、原生轨无 BGM 违禁)。
 

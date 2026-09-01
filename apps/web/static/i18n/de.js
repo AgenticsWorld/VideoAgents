@@ -500,6 +500,8 @@ window.I18N_DICT = {
 "成片分辨率": "Final-Cut-Auflösung",
 "内嵌字幕": "Eingebrannte Untertitel",
 "启用后成片自动烧录字幕进画面": "Wenn aktiviert, werden Untertitel automatisch in den Final Cut eingebrannt",
+"旁白": "Erzählstimme",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "Aktiviert: Erzähltext und Erzählspur werden regulär produziert; deaktiviert: Es gilt die Vereinbarung, dass der gesamte Film keinerlei Erzählstimme enthält – die Geschichte tragen allein Bild und Dialog",
 "对白配音": "Dialogstimme",
 "视频原声(默认)": "Original-Videoton (Standard)",
 "后期配音": "Nachsynchronisation",

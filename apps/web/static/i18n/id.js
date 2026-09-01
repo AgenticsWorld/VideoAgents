@@ -500,6 +500,8 @@ window.I18N_DICT = {
 "成片分辨率": "Resolusi final cut",
 "内嵌字幕": "Subtitle tertanam",
 "启用后成片自动烧录字幕进画面": "Jika diaktifkan, subtitle otomatis dibakar ke dalam final cut",
+"旁白": "Narasi",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "Jika diaktifkan, naskah narasi dan trek suara narasi diproduksi sesuai alur; jika dinonaktifkan, disepakati seluruh film tanpa narasi sama sekali — cerita sepenuhnya dibawakan oleh visual dan dialog",
 "对白配音": "Suara dialog",
 "视频原声(默认)": "Audio asli video (default)",
 "后期配音": "Sulih suara pascaproduksi",

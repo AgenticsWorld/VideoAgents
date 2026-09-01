@@ -775,6 +775,10 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
+    # narration_enabled=旁白(默认开,2026-09-01):关闭=用户约定全片没有任何旁白——
+    #   p5-narration/p8-narrator 不派发,shot_list 不写 narration_anchors、audio_plan 禁 narration_over
+    #   (无对白组一律 ambient_only,silent_rationale 照常核查但不再回派补写旁白),混音只有原生轨+BGM 两路,
+    #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
     # spatial_blocking=人物精确空间位置(默认开):开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+
     #   layout.json,分镜组标注人物起点/动线/终点渲染成动线俯视图,prompt 挂图并逐字注入 route_en,
     #   机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound);关=沿用单张场景概念图流程
@@ -782,6 +786,7 @@ DEFAULT_GENCONFIG = {
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
+               "narration_enabled": True,
                "dialogue_voice": "native",
                "spatial_blocking": True,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
@@ -1525,6 +1530,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
     if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
         raise ServiceError(400, "output.caption_enabled must be a boolean")
+    if "narration_enabled" in o and not isinstance(o["narration_enabled"], bool):
+        raise ServiceError(400, "output.narration_enabled must be a boolean")
     if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
@@ -2571,6 +2578,19 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
         "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
+    narration_on = out.get("narration_enabled", True) is not False
+    narration_line = (
+        "开启(默认)—— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
+        " audio_plan、narrator 在 p7-video 前合成实测、audio-mixing 三路混音,§7D/§8B 机检全数生效"
+        if narration_on else
+        "**关闭 —— 用户约定整个片子没有任何旁白**:p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺"
+        " narration.md/旁白轨而 HOLD(两工位被派到也只说明开关已关闭并结单);剧本/hook/片头片尾/预告等一切内容"
+        "不得以画外音旁白形式呈现叙事;shot-planning 不写 narration_anchors(留空或省略),audio_plan 禁用 narration_over"
+        "——无对白组一律 ambient_only 且照常逐组核查 silent_rationale,纯画面讲不清叙事时**不回派补写旁白**,"
+        "上报 orchestrator 走剧本变更加对白或交用户裁决;prompt 不写旁白声明句(narration_over 专用句作废,"
+        "无对白约束句照写);audio-mixing 只混原生轨+BGM 两路;subtitle 只做对白字幕;narration 系列机检"
+        "(narration_anchors_cover_all/narration_window_gte_est_x1.15/narration_fit/narration_anchor_sync)"
+        "一律跳过(报 skipped: narration off)")
     dubbing = (out.get("dialogue_voice") or "native") == "dubbing"
     dialogue_voice = (
         "**后期配音(dubbing)** —— 用户明确选择用 TTS 后期配对白(接受口型只能尽量贴合、非模型原生的取舍):"
@@ -2668,6 +2688,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
+- 旁白:{narration_line}
 - 对白配音:{dialogue_voice}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -7932,9 +7953,11 @@ async def api_projects_create(body: dict):
         dur = cfg["duration"]
         ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
                    else f"每集约 {dur['episode_minutes']} 分钟")
+        narr_off = ("" if cfg["output"].get("narration_enabled", True) is not False
+                    else "、**旁白已关闭(用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发)**")
         msg.append(
             f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
-            f"输出语言 {lang}、{ep_desc}、各维度审核力度与片头片尾开关等,"
+            f"输出语言 {lang}、{ep_desc}{narr_off}、各维度审核力度与片头片尾开关等,"
             "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"

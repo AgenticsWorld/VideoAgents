@@ -17,6 +17,8 @@
                                        silent_rationale
   (dialogue_est_fits_group_x0.7 需 screenplay 对白层估时与角色语速,由 code/check_dialogue_fit.py 执行——
    2026-08-30 起为 p6-dialogue-fit 节点的宿主 CLI,不再由 shot-planning 自查)
+  项目「📤 输出设置」旁白开关(output.narration_enabled)关闭时:6/7 跳过(skipped: narration off),
+  shot_list 不得残留 narration_anchors;8 照常但禁 narration_over(无对白组一律 ambient_only)。
 
 组间转场机检 transition_ok(2026-08-28,WORKFLOW.md §9C;默认开启,--skip-transition 跳过):
   9. transition_type_valid            组 transition_in.type ∈ 受控枚举(缺省 = hard_cut);可渲染类型
@@ -81,6 +83,16 @@ def project_max_group_s(shot_list_path: Path) -> int:
         return v if 4 <= v <= 30 else 15
     except Exception:
         return 15
+
+
+def project_narration_enabled(shot_list_path: Path) -> bool:
+    """项目「📤 输出设置」旁白开关(output.narration_enabled,默认开):关=用户约定全片无任何旁白,
+    §7D ① 的 narration_anchors 系列机检跳过,audio_plan 禁 narration_over。"""
+    try:
+        st = json.loads((shot_list_path.resolve().parents[2] / "settings.json").read_text())
+        return (st.get("output") or {}).get("narration_enabled", True) is not False
+    except Exception:
+        return True
 
 
 def derive_narration_path(shot_list_path: Path) -> Path | None:
@@ -176,13 +188,42 @@ def check(shot_list: dict) -> list[str]:
     return errors
 
 
-def check_7d(shot_list: dict, narration_md: str | None) -> list[str]:
-    """§7D ① 机检:旁白挂点(narration_anchors)+ 逐组音频形态(audio_plan)。"""
+def check_7d(shot_list: dict, narration_md: str | None,
+             narration_on: bool = True) -> list[str]:
+    """§7D ① 机检:旁白挂点(narration_anchors)+ 逐组音频形态(audio_plan)。
+    旁白开关关闭时(narration_on=False):挂点/窗口机检跳过,shot_list 不得残留
+    narration_anchors,audio_plan 禁 narration_over(无对白组一律 ambient_only)。"""
     errors = []
     shots = shot_list.get("shots") or []
     groups = shot_list.get("generation_groups") or []
     by_id = {s["shot_id"]: s for s in shots}
     by_gid = {g.get("group_id"): g for g in groups}
+
+    if not narration_on:
+        print("[7d] skipped: narration off(项目输出设置「旁白」已关闭,全片无旁白)"
+              "—— 仅查 audio_plan(禁 narration_over)")
+        if shot_list.get("narration_anchors"):
+            errors.append("narration_off: 旁白开关已关闭,但 shot_list 仍有 narration_anchors 条目"
+                          "(全片无旁白约定,须清空或按新约定重定稿)")
+        for g in groups:
+            gid = g.get("group_id", "?")
+            plan = g.get("audio_plan")
+            has_dlg = bool(g.get("has_dialogue"))
+            if plan not in AUDIO_PLANS:
+                errors.append(f"{gid} audio_plan_complete: audio_plan={plan!r} 非法或缺失")
+                continue
+            if plan == "narration_over":
+                errors.append(f"{gid} audio_plan_consistent: 旁白开关已关闭,禁用 narration_over"
+                              "(无对白组一律 ambient_only 并附 silent_rationale)")
+                continue
+            expect = "dialogue" if has_dlg else "ambient_only"
+            if plan != expect:
+                errors.append(f"{gid} audio_plan_consistent: audio_plan={plan},但按"
+                              f" has_dialogue={has_dlg}(旁白已关闭)应为 {expect}")
+            if plan == "ambient_only" and not (g.get("silent_rationale") or "").strip():
+                errors.append(f"{gid} silent_rationale: ambient_only 组未说明纯画面"
+                              "能讲清叙事的理由(§7D ① 无声组核查)")
+        return errors
 
     if narration_md is None:
         errors.append("narration_anchors_cover_all: narration.md 未找到"
@@ -380,10 +421,13 @@ def main():
             print(f"已写回 {path}")
 
     errors = check(data)
+    narration_on = project_narration_enabled(path)
     if not args.skip_7d:
-        narr_path = Path(args.narration) if args.narration else derive_narration_path(path)
-        narr_text = narr_path.read_text() if narr_path and narr_path.is_file() else None
-        errors += check_7d(data, narr_text)
+        narr_text = None
+        if narration_on:
+            narr_path = Path(args.narration) if args.narration else derive_narration_path(path)
+            narr_text = narr_path.read_text() if narr_path and narr_path.is_file() else None
+        errors += check_7d(data, narr_text, narration_on)
     if not args.skip_transition:
         errors += check_transitions(data)
     if errors:
@@ -395,7 +439,9 @@ def main():
     n_anchor = len(data.get("narration_anchors") or [])
     n_tr = sum(1 for g in groups if transition_of(g)["type"] != "hard_cut")
     print(f"机检通过: {len(groups)} 组全部合规"
-          + ("" if args.skip_7d else f";§7D ① 挂点 {n_anchor} 条/audio_plan 齐备")
+          + ("" if args.skip_7d else
+             (f";§7D ① 挂点 {n_anchor} 条/audio_plan 齐备" if narration_on
+              else ";§7D ① 旁白已关闭(skipped: narration off)/audio_plan 齐备"))
           + ("" if args.skip_transition else f";transition_ok 非硬切转场 {n_tr} 处"))
 
 

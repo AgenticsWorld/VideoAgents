@@ -512,6 +512,8 @@ window.I18N_DICT = {
 "成片分辨率": "Final-cut resolution",
 "内嵌字幕": "Burned-in subtitles",
 "启用后成片自动烧录字幕进画面": "When enabled, subtitles are automatically burned into the final cut",
+"旁白": "Narration",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "When enabled, the narration script and narration voice track are produced as usual; when disabled, the entire film is agreed to contain no narration at all — the story is carried entirely by visuals and dialogue",
 "对白配音": "Dialogue voice",
 "视频原声(默认)": "Native video audio (default)",
 "后期配音": "Post-production dubbing",

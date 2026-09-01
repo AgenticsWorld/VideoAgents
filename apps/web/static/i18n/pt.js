@@ -500,6 +500,8 @@ window.I18N_DICT = {
 "成片分辨率": "Resolução do final cut",
 "内嵌字幕": "Legendas embutidas",
 "启用后成片自动烧录字幕进画面": "Quando ativado, as legendas são embutidas automaticamente no final cut",
+"旁白": "Narração",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "Quando ativado, o roteiro e a faixa de narração são produzidos normalmente; quando desativado, fica acordado que o filme inteiro não terá narração alguma — a história é contada apenas por imagem e diálogo",
 "对白配音": "Voz do diálogo",
 "视频原声(默认)": "Áudio original do vídeo (padrão)",
 "后期配音": "Dublagem em pós-produção",

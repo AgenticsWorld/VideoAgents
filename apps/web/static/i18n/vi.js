@@ -500,6 +500,8 @@ window.I18N_DICT = {
 "成片分辨率": "Độ phân giải thành phẩm",
 "内嵌字幕": "Phụ đề gắn cứng",
 "启用后成片自动烧录字幕进画面": "Khi bật, phụ đề sẽ tự động được gắn cứng vào thành phẩm",
+"旁白": "Lời dẫn chuyện",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "Bật: kịch bản và track thu âm lời dẫn chuyện được sản xuất theo quy trình; tắt: cam kết toàn bộ phim không có bất kỳ lời dẫn chuyện nào — câu chuyện hoàn toàn do hình ảnh và thoại đảm nhận",
 "对白配音": "Giọng thoại",
 "视频原声(默认)": "Âm thanh gốc của video (mặc định)",
 "后期配音": "Lồng tiếng hậu kỳ",

@@ -500,6 +500,8 @@ window.I18N_DICT = {
 "成片分辨率": "Résolution du final cut",
 "内嵌字幕": "Sous-titres incrustés",
 "启用后成片自动烧录字幕进画面": "Si activé, les sous-titres sont automatiquement incrustés dans le final cut",
+"旁白": "Narration",
+"启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担": "Activé : le script et la piste de narration sont produits normalement ; désactivé : il est convenu que le film ne contienne aucune narration — le récit repose entièrement sur l'image et les dialogues",
 "对白配音": "Voix des dialogues",
 "视频原声(默认)": "Son original de la vidéo (par défaut)",
 "后期配音": "Doublage en post-production",

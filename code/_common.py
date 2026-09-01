@@ -49,6 +49,12 @@ def project_output_setting(proj_root: Path, key: str, default=None):
         return default
 
 
+def narration_enabled(proj_root: Path) -> bool:
+    """项目输出设置「旁白」(output.narration_enabled,默认开):关=用户约定全片没有任何旁白,
+    p5-narration/p8-narrator 不派发,narration 系列机检(§7D/§8B)一律跳过。"""
+    return project_output_setting(proj_root, "narration_enabled", True) is not False
+
+
 def spatial_blocking_enabled(proj_root: Path) -> bool:
     """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开):开=场景布局包 + 动线标注流程;
     关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
