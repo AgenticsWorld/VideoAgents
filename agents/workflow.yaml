@@ -196,7 +196,7 @@ phases:
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
-          condition: narration_enabled,   # 「📤 输出设置」旁白开关,默认开;关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
           outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
           validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
       - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
@@ -339,7 +339,7 @@ phases:
                                lines_text_match_frozen_script, dialogue_fit_le_group_x0.8],
                         qa: [11-qa/audio-qa] } }
       - { id: p8-narrator, agent: 09-audio/narrator, outputs: ["assets/audio/narration/{ep}/"],
-          condition: narration_enabled,   # 「📤 输出设置」旁白开关,默认开;关=全片无旁白,不派发,p8-mix 只混原生轨+BGM 两路(§7D)
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=全片无旁白,不派发,p8-mix 只混原生轨+BGM 两路(§7D)
           # 先于 p7-video:提前合成正式旁白轨并逐条实测时长(manifest 记挂点/实测),供 §7D 旁白适配检查;
           # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A);
           # 交付前 code/check_narration_sync.py --stamp 把当前 narration_anchors 指纹盖进 manifest(§8B ①)

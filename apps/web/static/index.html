@@ -417,7 +417,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <input type="checkbox" id="npo-spatial" style="flex:none" checked>
         <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
       <div class="row"><label>旁白</label>
-        <input type="checkbox" id="npo-narration" style="flex:none" checked>
+        <input type="checkbox" id="npo-narration" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担</span></div>
       <div class="row"><label>对白配音</label>
         <select id="npo-dialogue-voice" style="flex:1">
@@ -1144,7 +1144,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
-  $('#npo-narration').checked=true;   // 旁白默认启用;关闭=约定全片无任何旁白
+  $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=2;$('#npd-smax').value=8;
   $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭

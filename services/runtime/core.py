@@ -795,7 +795,9 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
-    # narration_enabled=旁白(默认开,2026-09-01):关闭=用户约定全片没有任何旁白——
+    # narration_enabled=旁白(2026-09-01):此处默认 True 只作存量项目缺键回退(老项目旁白链路照常);
+    #   **新建项目基线=False(旁白默认关闭)**——api_projects_create 置基线、向导默认不勾选(同 review 基线先例);
+    #   关闭=用户约定全片没有任何旁白——
     #   p5-narration/p8-narrator 不派发,shot_list 不写 narration_anchors、audio_plan 禁 narration_over
     #   (无对白组一律 ambient_only,silent_rationale 照常核查但不再回派补写旁白),混音只有原生轨+BGM 两路,
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
@@ -2601,7 +2603,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     narration_on = out.get("narration_enabled", True) is not False
     narration_line = (
-        "开启(默认)—— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
+        "开启 —— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
         " audio_plan、narrator 在 p7-video 前合成实测、audio-mixing 三路混音,§7D/§8B 机检全数生效"
         if narration_on else
         "**关闭 —— 用户约定整个片子没有任何旁白**:p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺"
@@ -7980,6 +7982,8 @@ async def api_projects_create(body: dict):
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
     base["review"] = {"evaluation": 60, **{k: 0 for k in REVIEW_DIMENSIONS}}
+    # 新建项目旁白默认关闭(2026-09-01);DEFAULT_GENCONFIG 保持 True 仅作存量项目缺键回退
+    base["output"] = {**base["output"], "narration_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
