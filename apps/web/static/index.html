@@ -685,7 +685,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>重跑次数</label>
       <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
     <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 1:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>轮次上限</label>
+      <input type="number" id="conc-turns" min="10" max="1000" step="10" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-turns" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-turns">单个工单内引擎的对话轮次上限,默认 250:仅对 claude 与 grok 引擎生效(headless 的 --max-turns 参数,不传则不限,这里主动设闸防失控循环);codex/pi/opencode 引擎无此参数不受影响,deepagents 走框架自身的递归上限。撞上限时引擎会被直接切断且无法续跑,回执只显示退出码 1,已落盘的产物保留但核验与回执缺失——大批量工位(逐组选片、批量切片)一单几十组时 100 轮远远不够,如仍撞限优先调小派单批宽、其次上调本值。全局设置,保存后对后续启动的工单生效。</div>
     <div class="row"><label>思考深度</label>
       <select id="conc-effort" style="width:160px">
         <option value="">引擎默认</option>
@@ -1645,7 +1649,7 @@ $('#wdt-ok').onclick=async()=>{
 };
 
 /* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 思考深度 + 对话记忆) ---------- */
-let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256;
+let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
 $('#mem-num').oninput=()=>{
@@ -1666,12 +1670,15 @@ async function openConcModal(){
     $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
     $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
     concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
-    $('#conc-retry').value=c.max_retries==null?1:c.max_retries;
+    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    concTurnsMin=c.max_turns_min||10;concTurnsMax=c.max_turns_max||1000;
+    $('#conc-turns').min=concTurnsMin;$('#conc-turns').max=concTurnsMax;
+    $('#conc-turns').value=c.max_turns==null?(c.max_turns_default||250):c.max_turns;
     $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=1;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#conc-turns').value=250;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
@@ -1690,10 +1697,12 @@ $('#conc-ok').onclick=async()=>{
   if(!(rt>=concRtMin&&rt<=concRtMax)){$('#conc-err').textContent=I18N.f('运行超时需为 {min}-{max} 的整数(分钟)',{min:concRtMin,max:concRtMax});return}
   if(!(it>=0&&it<=concItMax)){$('#conc-err').textContent=I18N.f('无输出超时需为 0-{max} 的整数(分钟,0=关闭)',{max:concItMax});return}
   if(!(retry>=0&&retry<=concRetryMax)){$('#conc-err').textContent=I18N.f('重跑次数需为 0-{max} 的整数(0=不自动重跑)',{max:concRetryMax});return}
+  const turns=parseInt($('#conc-turns').value);
+  if(!(turns>=concTurnsMin&&turns<=concTurnsMax)){$('#conc-err').textContent=I18N.f('轮次上限需为 {min}-{max} 的整数',{min:concTurnsMin,max:concTurnsMax});return}
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
