@@ -211,6 +211,11 @@ AGENT_MEMORY_KB_MAX = 256
 # 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
 MAX_RETRIES_DEFAULT = 1
 MAX_RETRIES_MAX = 10
+# 重跑等待确认时长缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 重跑类确认弹窗(dispatch.py --confirm,非签字类)的倒计时,到点无人答复自动落默认答案;
+# 同时是单条确认允许的最长等待(显式 --timeout 只能更短);签字类永不超时,不受此项影响
+CONFIRM_TIMEOUT_DEFAULT = 60
+CONFIRM_TIMEOUT_MIN, CONFIRM_TIMEOUT_MAX = 5, 3600
 # 思考深度(Thinking Effort)统一设置(设置菜单「高级→Agent 高级设置」下拉,存 state.json 的
 # thinking_effort):派单时按引擎翻译成各自的推理强度参数,全局对所有 Agent 生效——
 #   claude   --effort <level>                    (low/medium/high/xhigh/max 原样)
@@ -390,6 +395,16 @@ def max_retries_setting() -> int:
     except (TypeError, ValueError):
         n = MAX_RETRIES_DEFAULT
     return max(0, min(n, MAX_RETRIES_MAX))
+
+
+def confirm_timeout_setting() -> int:
+    """重跑类确认弹窗倒计时时长(秒,CONFIRM_TIMEOUT_MIN..CONFIRM_TIMEOUT_MAX,越界钳制;
+    设置菜单「高级→Agent 高级设置」)。签字类确认永不超时,不受此项影响。"""
+    try:
+        n = int(STATE.get("confirm_timeout", CONFIRM_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        n = CONFIRM_TIMEOUT_DEFAULT
+    return max(CONFIRM_TIMEOUT_MIN, min(n, CONFIRM_TIMEOUT_MAX))
 
 
 def thinking_effort_setting() -> str:
@@ -2930,6 +2945,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
+        confirm_timeout = confirm_timeout_setting()
         p += f"""
 
 ## 你的调度权(团队中仅调度型 Agent 拥有)
@@ -2958,15 +2974,16 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
 3. 收到产物后做验收:检查文件存在、抽查内容是否达标;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
-   `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?" --timeout 60`
-   该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,60 秒无人答复则输出默认值「重跑」。
+   `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?"`
+   该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,{confirm_timeout} 秒无人答复则输出默认值「重跑」
+   (等待时长为用户设置「Agent 高级设置→重跑等待确认」,不要自行传 --timeout 覆盖)。
    命令输出「重跑」→ 正常重新派单;输出「跳过」→ 不再重跑,把该问题记入
    data/projects/<project>/qa/defects/ 并在最终汇报中说明跳过原因。首次派单不需要确认,只有重跑需要
 5. 【人工签字点必须用 --sign】H1-H5 与每集 H3A 等人工签字闸门,必须用签字类确认:
    `python3 services/runtime/dispatch.py --confirm "【H1 <闸门名>】<要点与放行影响>" --sign`
    弹窗按钮为「签字/暂缓」,不倒计时、永不自动确认,保留到用户操作;命令默认最多等 4 小时。
    输出「签字」→ 闸门通过,走冻结流程;「暂缓」或「未签字」(等待超时)→ 记为等待人工,
-   继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认(60s 自动默认)代替签字
+   继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认({confirm_timeout}s 自动默认)代替签字
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
    派 for_each 批处理单(一单交付 N 份 JSON/MD)时,指令末尾必写「直接逐份落 JSON,不要写生成脚本、不要分批;共用说明不逐份复制」
    (WORKFLOW.md §2「静态数据产物直接落盘」——否则执行方可能先写一堆 gen_*.py 分批跑,耗时/token 数倍于直写)
@@ -8374,7 +8391,7 @@ def confirm_public(c: dict) -> dict:
 
 async def api_confirm_create(body: dict):
     """运行中的 Agent(经 dispatch.py --confirm)向用户发起确认。
-    kind=confirm(默认,重跑类):至多 60s 后自动落默认答案;
+    kind=confirm(默认,重跑类):至多「重跑等待确认」设定时长(缺省 60s)后自动落默认答案;
     kind=sign(签字类,H 门人工签字点):永不超时、永不自动确认,弹窗保留到用户操作。
     签字类同题去重:等待方(dispatch.py)超时退出后重发同一签字时,复用原 confirm_id
     接回原弹窗,避免重复弹窗、且用户点旧弹窗即刻生效;若同题刚被答复(竞态窗口内
@@ -8407,7 +8424,9 @@ async def api_confirm_create(body: dict):
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
          "default": str(body.get("default") or options[0])[:40],
          "timeout": None if kind == "sign" else
-         min(60, max(5, int(body.get("timeout") or 60))),
+         min(confirm_timeout_setting(),
+             max(CONFIRM_TIMEOUT_MIN, int(body.get("timeout")
+                                          or confirm_timeout_setting()))),
          "kind": kind, "parent": parent,
          "created": time.time(), "answer": None}
     if project:
@@ -8418,7 +8437,8 @@ async def api_confirm_create(body: dict):
     CONFIRMS[c["id"]] = c
     HUB.publish({"type": "confirm", **confirm_public(c)})
     notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
-    return {"confirm_id": c["id"]}
+    # timeout 返回服务端实际生效值(经用户设置钳制),等待方(dispatch.py)据此对齐本地截止时间
+    return {"confirm_id": c["id"], "timeout": c["timeout"]}
 
 
 async def api_confirms():
@@ -9159,6 +9179,10 @@ async def api_agent_advanced_get():
     d.update({"max_retries": max_retries_setting(),
               "max_retries_default": MAX_RETRIES_DEFAULT,
               "max_retries_max": MAX_RETRIES_MAX,
+              "confirm_timeout": confirm_timeout_setting(),
+              "confirm_timeout_default": CONFIRM_TIMEOUT_DEFAULT,
+              "confirm_timeout_min": CONFIRM_TIMEOUT_MIN,
+              "confirm_timeout_max": CONFIRM_TIMEOUT_MAX,
               "thinking_effort": thinking_effort_setting(),
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
               "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
@@ -9175,6 +9199,8 @@ async def api_agent_advanced_set(body: dict):
     - agent_memory_kb:同 api_agent_memory_set(0=关闭;旧布尔字段 agent_memory 仍兼容)
     - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
       经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效
+    - confirm_timeout:重跑类确认弹窗倒计时时长(秒,CONFIRM_TIMEOUT_MIN..CONFIRM_TIMEOUT_MAX),
+      到点无人答复自动落默认答案;签字类不受影响;持久化,对后续发起的确认生效
     - thinking_effort:思考深度统一设置(THINKING_EFFORT_LEVELS 之一,空串=引擎默认),
       派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效
     - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
@@ -9203,6 +9229,14 @@ async def api_agent_advanced_set(body: dict):
         if not 0 <= n <= MAX_RETRIES_MAX:
             raise ServiceError(400, f"max_retries must be between 0 and {MAX_RETRIES_MAX}")
         updates["max_retries"] = n
+    if body.get("confirm_timeout") is not None:
+        try:
+            n = int(body.get("confirm_timeout"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "confirm_timeout must be an integer (seconds)") from None
+        if not CONFIRM_TIMEOUT_MIN <= n <= CONFIRM_TIMEOUT_MAX:
+            raise ServiceError(400, f"confirm_timeout must be between {CONFIRM_TIMEOUT_MIN} and {CONFIRM_TIMEOUT_MAX} seconds")
+        updates["confirm_timeout"] = n
     if body.get("agent_memory_kb") is not None:
         try:
             mk = int(body.get("agent_memory_kb"))
@@ -9216,7 +9250,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / thinking_effort / max_turns")
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
