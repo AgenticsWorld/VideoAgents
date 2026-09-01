@@ -37,6 +37,9 @@ main{max-width:1180px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-dir
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .row label{width:110px;color:var(--dim);font-size:13px;flex:none}
 input[type=text],input[type=url]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:180px}
+input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;width:90px}
+.row .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
+.row .saved.on{opacity:1}
 input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
 button:hover{border-color:var(--accent)}
@@ -182,6 +185,12 @@ textarea.info{min-height:96px}
             <label>🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)<span class="saved">✓ 已保存</span><button class="small" id="prompt-reset" style="margin-left:auto">恢复默认</button></label>
             <textarea id="analysis-prompt" placeholder="留空则使用默认问题"></textarea>
           </div>
+          <div class="row" style="margin-top:10px">
+            <label style="width:auto">✂ 最短镜头(秒)</label>
+            <input type="number" id="min-scene-len" min="0.1" max="10" step="0.1">
+            <span class="saved">✓ 已保存</span>
+            <span class="hint">镜头分割时,上一个切点后此时长内的切换会被合并;快切素材建议调小。改后点「✂ 重新分割」生效(默认 0.5)</span>
+          </div>
           <div class="toolbar" style="margin-top:10px">
             <button id="analyze-all-btn" title="对所有还没有画面信息的分镜逐个调用默认 CLI 引擎分析(后台运行)">🤖 全部 AI 分析</button>
             <button id="retranscribe-btn" title="重新语音转文字并覆盖各分镜字幕框">🎙 重新转写字幕</button>
@@ -229,7 +238,7 @@ async function showList(){
     if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
     $('#list-box').innerHTML=`<table><thead><tr><th>${t('项目')}</th><th>${t('来源')}</th><th>${t('状态')}</th><th>${t('分镜')}</th><th>${t('创建时间')}</th><th></th></tr></thead><tbody>`+
       rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr>
-        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.name)}</a></td>
+        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.name)}</a> <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">📋</button></td>
         <td class="src" title="${esc(s.url||s.filename||'')}">${s.type==='url'?'🔗 ':s.type==='upload'?'📤 ':''}${esc(src)}${s.duration_s?` <span class="hint">${fmtDur(s.duration_s)}</span>`:''}</td>
         <td>${chip(p.status,p.running)}${p.message&&RUNNING.has(p.status)?` <span class="hint">${esc(p.message)}</span>`:''}</td>
         <td>${p.clip_count||0}${p.clip_count?` <span class="hint">/ ${t('已分析')} ${p.analyzed_count||0}</span>`:''}</td>
@@ -246,6 +255,17 @@ $('#new-btn').onclick=async()=>{
   catch(e){msg(t('新建失败:')+e.message,'err')}
   finally{$('#new-btn').disabled=false}
 };
+async function copyPath(name){
+  const text=`data/footage/${name}/`;
+  try{await navigator.clipboard.writeText(text)}
+  catch(e){
+    const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy')}catch(e2){msg(t('复制失败:')+text,'err');ta.remove();return}
+    ta.remove();
+  }
+  msg(t('已复制')+' '+text,'ok');
+}
 async function deleteProject(name,fromList){
   if(!confirm(I18N.f(t('确定删除素材项目「{name}」?\n将删除其整个文件夹(原片、分镜 clip 与 JSON),不可恢复。'),{name})))return;
   try{await api(`${API}/${encodeURIComponent(name)}`,undefined,'DELETE');msg(I18N.f(t('已删除项目 {name}'),{name}),'ok');if(fromList)showList();else location.hash=''}
@@ -274,6 +294,8 @@ async function refresh(full){
   if(p.engine)setEngineChip(p);
   const pt=$('#analysis-prompt');
   if(document.activeElement!==pt&&pt.dataset.orig===pt.value){pt.value=p.analysis_prompt||'';pt.dataset.orig=pt.value;pt.placeholder=(p.analysis_prompt_default||'').split('\n')[0]+'…'}
+  const ml=$('#min-scene-len');
+  if(document.activeElement!==ml&&ml.dataset.orig===ml.value){ml.value=p.min_scene_len_s!=null?String(p.min_scene_len_s):'';ml.dataset.orig=ml.value}
   const running=RUNNING.has(p.status)||p.running;
   $('#proj-status').outerHTML=chip(p.status,p.running);$('#proj-view .chip').id='proj-status';
   const hasSource=!!(p.source&&p.source.file);
@@ -346,6 +368,18 @@ async function savePrompt(){
 promptTa.addEventListener('blur',savePrompt);
 promptTa.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();promptTa.blur()}});
 $('#prompt-reset').onclick=()=>{promptTa.value=(PROJ&&PROJ.analysis_prompt_default)||'';savePrompt()};
+const minLenIn=$('#min-scene-len');minLenIn.dataset.orig='';
+async function saveMinLen(){
+  if(minLenIn.value===minLenIn.dataset.orig)return;
+  const v=parseFloat(minLenIn.value);
+  if(!(v>0)){minLenIn.value=minLenIn.dataset.orig;return}
+  try{const p=await api(`${API}/${encodeURIComponent(CUR)}/settings`,{min_scene_len_s:v});
+    minLenIn.value=p.min_scene_len_s!=null?String(p.min_scene_len_s):'';minLenIn.dataset.orig=minLenIn.value;
+    const sv=minLenIn.parentElement.querySelector('.saved');sv.classList.add('on');setTimeout(()=>sv.classList.remove('on'),1500)}
+  catch(e){msg(t('保存失败:')+e.message,'err')}
+}
+minLenIn.addEventListener('blur',saveMinLen);
+minLenIn.addEventListener('change',saveMinLen);
 $('#analyze-all-btn').onclick=async()=>{try{const r=await api(`${API}/${encodeURIComponent(CUR)}/analyze-all`,{});if(!r.started)msg(t('所有分镜都已有画面信息(逐个点「AI 自动分析」可重新生成)'),'ok');refresh(true)}catch(e){msg(t('AI 分析失败:')+e.message,'err')}};
 
 /* ---------- 分镜卡片 ---------- */

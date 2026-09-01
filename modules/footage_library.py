@@ -18,6 +18,7 @@ API 由 services/runtime/core.py 的 api_footage_* 薄封装调用;本模块本�
 
 镜头分割:代理片先跑 PySceneDetect(AdaptiveDetector → ContentDetector),都检不出硬切
 (动画/溶解转场)再退回 2fps 抽帧的整幅画面差分峰值法(zhiyou-fenjing 原算法)。
+最短镜头默认 0.5s,项目设置 min_scene_len_s 可调(短于此的切换被合并,重新分割时生效)。
 
 外部依赖:ffmpeg/ffprobe、yt-dlp(链接下载)、scenedetect+opencv(镜头检测)、Pillow(联系图)、
 faster-whisper(字幕;模型首次使用时下载到 data/models/faster-whisper/)。
@@ -44,7 +45,7 @@ SCHEMA_CLIPS = "videoagents.footage.clips.v1"
 
 PROXY_HEIGHT = int(os.environ.get("VIDEOAGENTS_FOOTAGE_PROXY_HEIGHT", "480"))
 DOWNLOAD_HEIGHT = 1080
-MIN_SCENE_LEN_S = 2.0
+MIN_SCENE_LEN_S = 0.5   # 默认最短镜头(秒);项目级可在 project.json 的 min_scene_len_s 覆盖
 VISUAL_DIFF_THRESHOLD = float(os.environ.get("VISUAL_DIFF_THRESHOLD", "0.025"))
 MAX_UPLOAD_CHUNK = 64 * 1024 * 1024
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -231,11 +232,18 @@ def delete_project(name: str) -> dict:
 
 
 def update_settings(name: str, fields: dict) -> dict:
-    """项目级设置:analysis_prompt(AI 分析问题,空=用默认)。"""
+    """项目级设置:analysis_prompt(AI 分析问题,空=用默认)、
+    min_scene_len_s(镜头分割最短镜头秒数,重新分割时生效)。"""
     with _LOCK:
         proj = load_project(name)
         if "analysis_prompt" in fields:
             proj["analysis_prompt"] = str(fields.get("analysis_prompt") or "").strip()[:4000]
+        if "min_scene_len_s" in fields:
+            try:
+                v = float(fields.get("min_scene_len_s"))
+            except (TypeError, ValueError) as exc:
+                raise FootageLibError(400, "最短镜头须是数字(秒)") from exc
+            proj["min_scene_len_s"] = round(min(10.0, max(0.1, v)), 2)
         save_project(name, proj)
     return get_project(name)
 
@@ -244,6 +252,7 @@ def get_project(name: str) -> dict:
     _reap(name)
     proj = load_project(name)
     proj["analysis_prompt_default"] = DEFAULT_ANALYSIS_QUESTION
+    proj["min_scene_len_s"] = _min_scene_len(proj)
     doc = load_clips(name)
     proj["running"] = _job_running(name)
     proj["dir"] = str(project_dir(name))
@@ -464,13 +473,21 @@ def _extract_audio(src: Path, wav: Path) -> bool:
     return r.returncode == 0 and wav.is_file() and wav.stat().st_size > 1000
 
 
-def _scenedetect_boundaries(proxy: Path) -> list[float]:
+def _min_scene_len(proj: dict) -> float:
+    try:
+        v = float(proj.get("min_scene_len_s") or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    return round(min(10.0, max(0.1, v)), 2) if v > 0 else MIN_SCENE_LEN_S
+
+
+def _scenedetect_boundaries(proxy: Path, min_len: float = MIN_SCENE_LEN_S) -> list[float]:
     try:
         from scenedetect import AdaptiveDetector, ContentDetector, detect
     except ImportError as exc:
         raise FootageLibError(500, f"未安装 scenedetect:{exc}") from exc
-    for det in (AdaptiveDetector(adaptive_threshold=3.0, min_scene_len=f"{MIN_SCENE_LEN_S}s"),
-                ContentDetector(threshold=27.0, min_scene_len=f"{MIN_SCENE_LEN_S}s")):
+    for det in (AdaptiveDetector(adaptive_threshold=3.0, min_scene_len=f"{min_len}s"),
+                ContentDetector(threshold=27.0, min_scene_len=f"{min_len}s")):
         scenes = detect(str(proxy), det, show_progress=False)
         if len(scenes) > 1:
             return [float(s[1].get_seconds()) for s in scenes[:-1]]
@@ -598,8 +615,9 @@ def _pipeline(name: str) -> None:
         wav = d / "source" / "audio.wav"
         has_audio = info["has_audio"] and _extract_audio(src, wav)
 
-        _update(name, progress=15, message="检测镜头边界(PySceneDetect)…")
-        boundaries = _scenedetect_boundaries(proxy)
+        min_len = _min_scene_len(proj)
+        _update(name, progress=15, message=f"检测镜头边界(PySceneDetect,最短镜头 {min_len}s)…")
+        boundaries = _scenedetect_boundaries(proxy, min_len)
         if not boundaries:
             _update(name, progress=15, message="未检出硬切,改用画面差分峰值法…")
             boundaries = _visual_diff_boundaries(proxy, duration, name)
