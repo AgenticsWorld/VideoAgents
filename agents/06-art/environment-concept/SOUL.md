@@ -71,7 +71,7 @@ python3 code/render_blocking_map.py --project <slug> --scene <id> --check-only
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 场景布局包 | `assets/concepts/scenes/<id>/` | `layout_top.png`(俯视空间布局图,无人无标注)+ `grid_9views.png`(9 宫格多角度图,可加 `grid_9views_<cond>.png` 昼夜变体)+ `layout.json`(地标坐标/九格机位/变体条件)+ prompts.json + 设定对照说明;三件套均 ≥2560x1440(视频参考像素硬限) |
+| 场景布局包 | `assets/concepts/scenes/<id>/` | `layout_top.png`(俯视空间布局图,无人无标注)+ `grid_9views.png`(9 宫格多角度图,可加 `grid_9views_<cond>.png` 昼夜变体)+ `layout.json`(地标坐标/九格机位/变体条件)+ prompts.json + 设定对照说明;三件套均 ≥2560x1440(平台统一出图规格) |
 
 > **存量场景兼容**:2026-08-19 前的 `main_*.png` 单视角概念图不删、仍可作 refs 兜底,但 §6A 覆盖审计按新口径判「场景所需视图 = 布局包三件套」,缺即回派本岗补齐;`layout_top.png` 本身**不直接进组视频 refs**(下游用它叠加人物动线标注后的 `directing/epNN/blocking_maps/<grp>.png`,见 storyboard / prompt SOUL),`grid_9views.png` 直接进 refs 作场景多角度锚。
 
@@ -120,7 +120,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- **scene_layout_pack_ok(2026-08-19,脚本 `code/render_blocking_map.py --scene <id> --check-only`)**:`layout_top.png` / `grid_9views.png` / `layout.json` 三件齐全;两图 ≥3,686,400 像素;layout.json 地标 ≥3 且每个有 `id`/`name_en`/合法 `xy`;`views` 恰为 tile 1..9 各一条且带 `desc_en`。
+- **scene_layout_pack_ok(2026-08-19,脚本 `code/render_blocking_map.py --scene <id> --check-only`)**:`layout_top.png` / `grid_9views.png` / `layout.json` 三件齐全;两图 ≥2560x1440;layout.json 地标 ≥3 且每个有 `id`/`name_en`/合法 `xy`;`views` 恰为 tile 1..9 各一条且带 `desc_en`。
 - 工单要求的变体齐全;prompt 记录完整;变体条件标注与 environment.json 的可变维度对应。
 - 俯视图与九格图无人物、无文字/箭头标注(标注由下游脚本叠加,底图必须干净)。
 

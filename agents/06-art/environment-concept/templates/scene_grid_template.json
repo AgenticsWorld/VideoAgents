@@ -6,7 +6,7 @@
     "先生成 layout_top.png(俯视空间布局图,无人),再以 layout_top.png 作第一张 --ref、本模板作第二张 --ref 生成 grid_9views.png(版式锚);refs/scenes/ 命中的用户参考图排在其后",
     "layout_top.png 的 prompt 用正射措辞(true nadir orthographic,不用 bird's-eye),洞口写成墙线上的缺口、不写门扇/门栓/窗棂等立面特征,近侧(图下方)墙明写存在,negative 追加 door/window lying on the floor、missing wall、tilted camera(2026-08-26,前科 offer SCN-0005 门窗被平铺到地面、南墙消失;写法四条见 SOUL 职责 3)",
     "九格语义(机位/看向/景别/机位高度)由 agent 事先写进 layout.json#views(tile 1..9,与格位一一对应,每条 camera_from/looking_at/size/angle/desc_en),生成 prompt 逐格描述;下游 storyboard 每镜 view_tile 与 prompt 的 [Image N] 格号引用都以 layout.json#views 为准",
-    "尺寸 2560x1440 起(恰达视频参考像素下限 3,686,400,火山硬限,WORKFLOW.md §9),严禁更低;定稿单张即下游场景多角度参考锚,不裁切子图",
+    "尺寸 2560x1440 起(平台统一出图规格),严禁更低;定稿单张即下游场景多角度参考锚,不裁切子图",
     "格位编号:左上=1、上中=2、右上=3、左中=4、正中=5、右中=6、左下=7、下中=8、右下=9(行优先)",
     "九格一律不出垂直俯视:俯视由 layout_top.png 专职,九格 angle 只在 {eye, low, high_oblique}(斜俯 ≤45°、仍见立面与天际线)内取值,desc_en 禁写 俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view;prompt 里明写第一张参考图仅作空间布局参考、任何一格不得画成俯视平面图(2026-08-26,前科 polan SCN-003/006 俯视图复刻进格)"
   ],

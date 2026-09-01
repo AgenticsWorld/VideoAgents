@@ -45,7 +45,7 @@ python3 modules/genmedia.py image \
 ```
 
 - **prompt 必写版式句**:开头声明 "four-panel character reference sheet following the reference layout: three full-body views (front / side / back) left to right, and one large head-and-shoulders close-up filling the right column; the exact same character as the second reference image — same face, hair, skin and build — wearing a different outfit; plain background"(散文语言按 WORKFLOW.md 语言约定)。
-- **尺寸**:`--size 2560x1440` 起(≥3,686,400 像素,进视频参考硬限,WORKFLOW.md §9),严禁更低。
+- **尺寸**:`--size 2560x1440` 起(平台统一出图规格),严禁更低。
 - **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一人同一装;版式偏离(缺格/串格/多人)或**脸换了人**即自检失败,旧图移入 `candidates/` 后定向重生成一张。
 - **例外(条件回退)**:仅当当前图像渠道不支持参考图注入时,先按版式句纯文生图(prompt 补写 appearance 全量外观串);版式仍命不中再退回逐视角出图并 `ffmpeg hstack` 拼成单张,prompts.json 记录回退原因。
 - 失败如实上报,不伪造产物;详见 WORKFLOW.md §9。
@@ -118,7 +118,7 @@ instruction: |
 - **台账覆盖(costume_sheet_coverage)**:costumes.json 中该角色每套服装在 `costume_sheets.json` 各有一条,且 `file` 存在于主目录(非 `candidates/`)或带 `skip_reason` / `blocked_on`;默认装映射到 `sheet.png`;
 - **服装串命中(costume_visual_en_in_prompt)**:每张已出 sheet 的 prompts.json 记录中 `prompt` 逐字含该套 `visual_en`(忽略大小写与连续空白);
 - **形象锚挂载(costume_sheet_identity_ref)**:每次生成的 `ref` 列表含版式模板与该角色 `sheet.png`(或对应版本基准);
-- **四格版式齐全、≥3,686,400 像素、主目录无单视角散图、文件名 ASCII**(与角色 sheet 同口径)。
+- **四格版式齐全、≥2560x1440、主目录无单视角散图、文件名 ASCII**(与角色 sheet 同口径)。
 
 **评分(evaluation Agent,rubric visual_gen_v1,阈值 80;按 §7 适用「图像产物」)**:
 - 与设计稿匹配(35):layers/material/color/condition_and_wear/distinctive_details 逐项命中;
