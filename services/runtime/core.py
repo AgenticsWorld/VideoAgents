@@ -158,7 +158,12 @@ PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
 ).lower() in {"1", "true", "yes"}
-MAX_TURNS = "100"
+# 单次运行引擎轮次上限(设置菜单「高级→Agent 高级设置」可调,存 state.json):
+# 仅 claude/grok 引擎有此参数(--max-turns);codex/pi/opencode 不传轮次上限,
+# deepagents 走 LangGraph recursion_limit。撞上限时引擎直接退出且无续跑机制
+# (回执只见退出码 1),大批量工位(curate/cut)实测 100 轮不够,缺省放宽到 250
+MAX_TURNS_DEFAULT = 250
+MAX_TURNS_MIN, MAX_TURNS_MAX = 10, 1000
 MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
 # 单次运行超时缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
 # 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
@@ -321,6 +326,15 @@ def agent_concurrency() -> int:
     except (TypeError, ValueError):
         n = AGENT_CONCURRENCY_DEFAULT
     return max(1, min(n, MAX_CONCURRENT))
+
+
+def max_turns_setting() -> int:
+    """单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX,越界钳制;claude/grok 有效)。"""
+    try:
+        n = int(STATE.get("max_turns", MAX_TURNS_DEFAULT))
+    except (TypeError, ValueError):
+        n = MAX_TURNS_DEFAULT
+    return max(MAX_TURNS_MIN, min(n, MAX_TURNS_MAX))
 
 
 def run_timeout_setting() -> int:
@@ -3259,7 +3273,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 权限(非交互运行必需)。系统提示词每轮都传(同 claude --append-system-prompt)
                 base = [cli_executable, "-p", message,
                         "--output-format", "streaming-messages-json",
-                        "--always-approve", "--max-turns", MAX_TURNS,
+                        "--always-approve", "--max-turns", str(max_turns_setting()),
                         "--rules", role]
                 if model:
                     base += ["-m", model]
@@ -3285,7 +3299,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             else:
                 c += ["--append-system-prompt", role]
             c += ["--permission-mode", PERMISSION_MODE,
-                  "--max-turns", MAX_TURNS]
+                  "--max-turns", str(max_turns_setting())]
             if model:
                 c += ["--model", model]
             c += engine_effort_args("claude", thinking_effort)
@@ -9067,7 +9081,11 @@ async def api_agent_advanced_get():
               "max_retries_max": MAX_RETRIES_MAX,
               "thinking_effort": thinking_effort_setting(),
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
-              "thinking_effort_levels": list(THINKING_EFFORT_LEVELS)})
+              "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
+              "max_turns": max_turns_setting(),
+              "max_turns_default": MAX_TURNS_DEFAULT,
+              "max_turns_min": MAX_TURNS_MIN,
+              "max_turns_max": MAX_TURNS_MAX})
     return d
 
 
@@ -9078,8 +9096,19 @@ async def api_agent_advanced_set(body: dict):
     - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
       经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效
     - thinking_effort:思考深度统一设置(THINKING_EFFORT_LEVELS 之一,空串=引擎默认),
-      派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效"""
+      派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效
+    - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
+      引擎有 --max-turns 参数,撞上限即被切断且无续跑,大批量工位需放宽);持久化,
+      对后续启动的运行生效"""
     updates: dict = {}
+    if body.get("max_turns") is not None:
+        try:
+            n = int(body.get("max_turns"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "max_turns must be an integer") from None
+        if not MAX_TURNS_MIN <= n <= MAX_TURNS_MAX:
+            raise ServiceError(400, f"max_turns must be between {MAX_TURNS_MIN} and {MAX_TURNS_MAX}")
+        updates["max_turns"] = n
     if body.get("thinking_effort") is not None:
         lv = str(body.get("thinking_effort")).strip().lower()
         if lv not in THINKING_EFFORT_LEVELS:
@@ -9107,7 +9136,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / thinking_effort")
+        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / thinking_effort / max_turns")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
