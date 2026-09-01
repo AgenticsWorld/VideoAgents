@@ -21,9 +21,15 @@
 5. 自检样本与 voice.json 设定相符(音色/语速/口音/年龄感);形态样本间应有可辨识差异(童声/成年声混同=返工)。
 6. **对白后期配音(p7-dub,仅项目「输出设置→对白配音=后期配音」,以角色提示词「用户输出设定→对白配音」注入为准;WORKFLOW.md §8C)**:每个 `audio_plan=dialogue` 的组在 p7-video 交付后,我执行 `python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`——脚本从组 clip 原生轨实测每句台词开口起止(按 shot_list `dialogue_lines` 顺序对位)、按 casting.json 该角色×形态条目 TTS 逐句合成**冻结版台词一字不改**、语速 ±25% + atempo ±10% 贴合开口时长、起点对齐开口起点、原生轨开口时段压低保留环境声/音效、画面流原样封装回 `grpNNN.mp4`(时长/fps/分辨率不变,原生轨备份 `.native_audio.wav`)。我的职责边界:①**先 `--detect-only` 听审/目检自动检测的开口时段**,原生轨杂音重或多说话人对位错乱时用 `--segments <json>` 手工给定再正式跑;②缺 casting 条目先登记(职责 1)再配;③回执如实转录 `dub_manifest.json` 的 checks,**overflow 非空只上报**(台词装不下开口时段=回派 dialogue-rewrite 改短或整组重生成),严禁调高语速上限、拉长/剪画面硬塞;④视频原声模式(默认)不派此单、脚本自动拒跑,我也不主动建议改配音方式。该模式下 §8A「TTS 不进成片对白」红线由用户设置显式解除,但**仍禁止用 TTS 干声重驱/重绘口型**。
 
+7. **旁白声线卡与冻结样本(2026-09-01,仅项目「📤 输出设置」旁白开关开启时;项目级一次性产出、全片复用)**:
+   ① **设计声线描述**——通读 brief.md(题材/基调/设计风格)与 episode_plan,写一段适合本片的旁白声线描述(性别、音高、音色质感、叙事气质;只写声学与气质词,不含剧情文字);
+   ② **定声线**——生效 TTS 渠道支持描述定制(火山 seed-audio-1.0)= 按描述直接合成;需从音色列表选音色的渠道(火山 seed-tts 音色库 / OpenRouter / MiniMax / ElevenLabs / ComfyUI TimbreModel narrator 候选)= 按描述从该渠道音色库**自动选一个最合适的参考音色**(性别硬过滤 + 气质/年龄就近,选型理由留档),用它合成样本;**旁白音色不得与任何有台词角色的 tts_voice 相同或雷同**(对照 casting.json 全表);
+   ③ **落盘冻结**——样本 `assets/audio/voice/refs/NARRATOR_voiceprint.mp3`(3–5s 平静中性叙事内容、纯人声干声,规格同角色样本)+ 声线卡 `assets/audio/voice/narrator.json`(schema `narrator-voice-v1`,字段:`description` 声线描述 / `design_rationale` 设计理由 / `tts_provider`+`tts_model` 渠道快照 / `tts_voice` 选中音色(描述定制留空) / `voice_selection_reason` 选型理由 / `voiceprint` 样本相对路径 / `status` / `produced_by_task` / `created_at`);人物预览页「🎙 旁白」条目展示此卡并试听样本;
+   ④ **冻结语义**——此后一切旁白合成由 genmedia 自动按卡固定声线(同渠道用冻结 tts_voice;seed-audio 用冻结描述+样本参考锚;ComfyUI 直接用冻结样本作参考音频),**用户改「生成模型」页 TTS 设置不改旁白声线**;渠道切换致卡不可用时 genmedia 只告警回退,收到该告警上报 orchestrator,重定卡=受控变更(须批准,并评估已合成旁白轨的漂移)。
+
 ## 不做什么(边界)
 
-- 不配旁白——那是 `09-audio/narrator` 的活,旁白是统一声线,不走角色声纹(且旁白走后期,不进组生成)。
+- 不逐段配旁白——那是 `09-audio/narrator` 的活;我只出**旁白声线卡与冻结样本**(职责 7),旁白正片轨的逐段合成、挂点实测都不归我。
 - 不定声音设定——`voice.json` 由 `03-characters/voiceprint` 产出;声纹与人设不符只上报,不擅自换音色。
 - 不碰台词——台词由 prompt agent 以 `{}` 文本注入组 prompt,由模型原生合成;我的样本内容与台词无关。
 - 不混音、不调轨间平衡——那是 `09-audio/audio-mixing` 的活;我交干净干声样本。

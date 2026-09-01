@@ -331,6 +331,9 @@ phases:
           # 严禁进成片对白(TTS 配音=严重口型问题);音色样本降为选角存档
           # §7D ② 对白实测适配:干声实测 ≤ 组时长×0.8,超限回派 dialogue-rewrite 改短台词;
           # 严禁压 --speed/atempo 硬塞——干声压速只掩盖超长,视频模型生成时照样赶词提速
+          # 旁白声线卡(2026-09-01,仅旁白开关开启):项目级 assets/audio/voice/narrator.json +
+          # refs/NARRATOR_voiceprint.mp3 由本工位设计冻结(按项目基调写声线描述;描述定制渠道直接
+          # 合成,音色列表渠道按描述自动选参考音色);genmedia 此后按卡固定旁白声线,不随 TTS 设置变
           outputs: ["assets/audio/voice/{ep}/lines/", "assets/audio/voice/{ep}/refs/manifest.json"],
           validation: { auto: [dialogue_group_lines_coverage_100, group_lines_total_le_15s,
                                lines_text_match_frozen_script, dialogue_fit_le_group_x0.8],

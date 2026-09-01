@@ -157,7 +157,8 @@ function renderList(){
     .forEach(c=>{
       const d=document.createElement('div');
       d.className='item'+(CUR===c.id?' active':'');
-      d.innerHTML=`<div class="row1"><span class="nm">${esc(c.name)}</span>`
+      d.innerHTML=`<div class="row1"><span class="nm">${c.narrator?'🎙 ':''}${esc(c.narrator?t(c.name):c.name)}</span>`
+        +(c.narrator&&(c.voices||[]).some(v=>v.url)?`<span class="badge pic" title="${esc(t('旁白声线'))}">🔊</span>`:'')
         +(c.meta.tier?`<span class="badge">${esc(c.meta.tier)}</span>`:'')
         +(c.images.length?`<span class="badge pic" title="${esc(I18N.f('图{n}',{n:c.images.length}))}">🖼${c.images.length}</span>`:'')
         +((c.costumes||[]).length?`<span class="badge cosb" title="${esc(t('服装 sheet:已出图/总套数'))}">👕${(c.costumes||[]).filter(x=>x.url).length}/${c.costumes.length}</span>`:'')
@@ -168,7 +169,34 @@ function renderList(){
   if(!box.children.length)box.innerHTML='<div class="empty">没有匹配的角色</div>';
 }
 
+// 「旁白」伪角色详情(2026-09-01):旁白声线卡 narrator.json + 冻结样本试听。
+// 声线卡由 09-audio/voice-generation 按项目基调设计并冻结,此后不随 TTS 设置变。
+function renderNarrator(c){
+  const box=$('#detail');
+  const card=c.voice_card||{};
+  const loc=t('旁白声线(声线卡 assets/audio/voice/narrator.json,冻结样本 assets/audio/voice/refs/NARRATOR_voiceprint.mp3)');
+  let h=`<h2 class="title">🎙 ${esc(t('旁白'))}<span class="id">NARRATOR</span>`
+    +`<span class="badge" style="border-color:var(--dim);color:var(--dim)">narrator</span>`
+    +`<button class="editbtn" data-loc="${esc(loc)}" title="对这个音色提修改意见,发消息给总制片">✏️ 修改</button></h2>`;
+  h+=`<div class="meta-line">${esc(t('全片统一旁白声线:声线卡与冻结样本一经生成即固定,不随「生成模型」页 TTS 设置变'))}</div>`;
+  const v=(c.voices||[])[0]||{};
+  h+='<div class="voices"><div class="voice">🔊 <b>'+esc(t('旁白声线'))+'</b>'
+    +(v.tts_voice?`<span class="vtag">${esc(v.tts_voice)}${v.tts_model?' · '+esc(v.tts_model):''}</span>`
+                 :(v.tts_model?`<span class="vtag">${esc(v.tts_model)}</span>`:''))
+    +(v.status&&v.status!=='confirmed'?`<span class="vtag" style="color:var(--yellow);border-color:var(--yellow)">${esc(v.status)}</span>`:'')
+    +(v.url?`<audio controls preload="none" src="${esc(bust(v.url))}"></audio>`
+           :`<span style="color:var(--dim);font-size:12px">${t('(旁白样本未生成)')}</span>`)
+    +`<button class="editbtn" data-loc="${esc(loc)}" title="对这个音色提修改意见,发消息给总制片">✏️ 修改</button></div></div>`;
+  if(Object.keys(card).length){
+    h+=`<div class="doc"><h3 onclick="this.parentNode.classList.toggle('closed')">${esc(t('旁白声线卡'))} <span style="color:var(--dim);font-weight:400">narrator.json</span></h3><div class="body">${jrender(card)}</div></div>`;
+  }else{
+    h+=`<div class="meta-line">${esc(t('旁白声线卡未生成:待配音工位按项目基调设计声线描述并选型合成冻结样本'))}</div>`;
+  }
+  box.innerHTML=h;box.scrollTop=0;
+}
+
 function renderDetail(c){
+  if(c.narrator)return renderNarrator(c);
   const box=$('#detail');
   const m=c.meta||{};
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
@@ -357,6 +385,9 @@ async function load(){
   catch(e){AV_ENABLED=false}
   // 有图和有设定的排前面
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
+  // 「旁白」伪角色固定列表首位(项目旁白开关开启时后端下发,2026-09-01)
+  const ni=DATA.findIndex(x=>x.narrator);
+  if(ni>0)DATA.unshift(DATA.splice(ni,1)[0]);
   CUR=DATA.length?DATA[0].id:null;
   if(JUMP_ID){
     const c=DATA.find(x=>x.id===JUMP_ID);

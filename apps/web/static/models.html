@@ -101,7 +101,7 @@ button:disabled{opacity:.5;cursor:default}
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;旁白声线以项目旁白声线卡的冻结样本为准(人物预览→旁白),不随此处设置变</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
@@ -496,7 +496,7 @@ function buildPanel(kind,p){
       +'音色在控制台「<a href="https://console.volcengine.com/speech/new/voices" target="_blank">音色库</a>」试听/开通,克隆音色 S_ 开头自动切声音复刻 2.0'));
     d.appendChild(vw);
     const dmh=el('div',{className:'hint',id:'tts-volc-descmode-hint',style:'display:none'});
-    dmh.appendChild(document.createTextNode(t('描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按工单 --instructions 声线描述;项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。')));
+    dmh.appendChild(document.createTextNode(t('描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按项目旁白声线卡冻结描述(无卡按工单 --instructions);项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。')));
     dmh.appendChild(el('span',{},' API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」'));
     d.appendChild(dmh);
   }else if(p==='volcengine'){

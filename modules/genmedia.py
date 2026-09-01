@@ -3357,8 +3357,10 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
 # bible/characters/<id>/voice.json 的**声学字段**(gender/presented_gender、pitch、timbre、
 # accent;--variant 命中 age_variants 时逐字段覆盖)自动拼装——reference_style 等含剧情
 # 叙述的字段不进描述(2026-08-31 实测:剧情文字会被模型当内容读进音频)。旁白(不传
-# --character)用 --instructions 作声线描述,缺省内置旁白声线。注意:同一描述两次生成的
-# 音色不完全相同,voiceprint 样本必须一次冻结复用;重生成=受控变更(§8A)。
+# --character)优先取项目旁白声线卡 assets/audio/voice/narrator.json 的冻结描述
+# (2026-09-01,--instructions 降为语气),无卡才用 --instructions 作声线描述、缺省内置
+# 旁白声线。注意:同一描述两次生成的音色不完全相同,voiceprint 样本必须一次冻结复用;
+# 重生成=受控变更(§8A)。
 # **嗓音一致性(自动参考锚)**:项目已有冻结样本时自动挂为 @音频1 参考——角色取
 # assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3(形态样本缺失/正在生成
 # 该形态样本时回退基础样本=同一副嗓子按描述变龄),旁白取 refs/NARRATOR_voiceprint.mp3
@@ -3448,9 +3450,41 @@ def _seedaudio_ref(character: str, variant: str, project: str, output: str):
     return None
 
 
+NARRATOR_CARD_REL = "assets/audio/voice/narrator.json"
+
+
+def _narrator_card(project: str, output: str):
+    """项目级旁白声线卡(narrator.json,旁白声线唯一事实源;2026-09-01):由 voice-generation
+    按项目基调设计声线描述并选型/合成冻结样本,此后旁白声线不随「生成模型」页 TTS 设置变。
+    返回 (卡片 dict, 冻结样本路径或 None);无卡返回 ({}, None)。样本路径即当前输出
+    (正在首出/重出样本)时不作参考。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:                               # 脚本直跑时无包前缀
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        return {}, None
+    try:
+        card = json.loads((root / NARRATOR_CARD_REL).read_text(encoding="utf-8"))
+        if not isinstance(card, dict):
+            return {}, None
+    except Exception:
+        return {}, None
+    vp = root / (card.get("voiceprint")
+                 or "assets/audio/voice/refs/NARRATOR_voiceprint.mp3")
+    try:
+        if not vp.is_file() or vp.resolve() == Path(output).resolve():
+            vp = None
+    except OSError:
+        vp = None
+    return card, vp
+
+
 def _seedaudio_desc(voice, instructions, character, variant, project, output):
     """解析描述定制模式的(声线描述, 语气)。--voice 只接受声线描述文本;疑似音色库
-    speaker 名(陈旧 casting 传入)忽略并告警。"""
+    speaker 名(陈旧 casting 传入)忽略并告警。旁白:项目有旁白声线卡(narrator.json)时
+    冻结描述优先,--instructions 降为语气;无卡沿用 --instructions 描述/内置声线。"""
     override = (voice or "").strip()
     if override and _SEEDAUDIO_STALE_VOICE.search(override):
         print(f"[genmedia] seed-audio 描述定制模式下 --voice 只接受声线描述文本,"
@@ -3461,8 +3495,16 @@ def _seedaudio_desc(voice, instructions, character, variant, project, output):
         desc = override or _seedaudio_char_desc(character, variant, project, output)
         tone = (instructions or "").strip() or "平静自然"
     else:
-        desc = override or (instructions or "").strip() or SEEDAUDIO_NARRATOR_DESC
-        tone = "平静自然"
+        frozen = ""
+        if not override:
+            card, _ = _narrator_card(project, output)
+            frozen = (card.get("description") or "").strip()
+        if frozen:
+            desc = frozen
+            tone = (instructions or "").strip() or "平静自然"
+        else:
+            desc = override or (instructions or "").strip() or SEEDAUDIO_NARRATOR_DESC
+            tone = "平静自然"
     return desc, tone
 
 
@@ -3894,9 +3936,36 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
     volcengine 模型为 seed-audio-1.0 时走描述定制嗓音(角色按声纹卡声学字段、旁白按
     instructions 描述直接生成,不选音色;--voice 传 speaker 名会被忽略)。
+    旁白声线(2026-09-01):项目有旁白声线卡 assets/audio/voice/narrator.json 时以卡为准
+    ——同渠道用卡冻结的 tts_voice、seed-audio 用卡冻结描述+样本参考锚、ComfyUI 直接用
+    冻结样本作参考音频;此后用户改 TTS 设置不影响旁白声线(渠道不一致时告警回退并提示
+    重定卡)。无卡才回退渠道「默认音色」旧行为。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
+    # 旁白(不传 character、未显式 --voice):优先按项目旁白声线卡固定声线(不随 TTS 设置变)
+    if not character and not (voice or "").strip():
+        card, vp = _narrator_card(project, output)
+        if card:
+            prov, model = cfg["provider"], (cfg.get("model") or "")
+            if prov == "comfyui":
+                if vp is not None:
+                    voice = str(vp)   # Index-TTS 直接以冻结样本为参考音频
+                    print(f"[genmedia] 旁白声线取项目旁白声线卡冻结样本 {vp.name}"
+                          f"({NARRATOR_CARD_REL})", file=sys.stderr)
+            elif prov == "volcengine" and model == SEEDAUDIO_MODEL:
+                pass   # 描述定制:_seedaudio_desc 取卡冻结描述,_seedaudio_ref 自动挂冻结样本锚
+            elif (card.get("tts_voice") or "").strip():
+                card_prov = (card.get("tts_provider") or prov).strip()
+                if card_prov == prov:
+                    voice = card["tts_voice"].strip()
+                    print(f"[genmedia] 旁白声线取旁白声线卡冻结音色 {voice}"
+                          f"({NARRATOR_CARD_REL},不随渠道默认音色变)", file=sys.stderr)
+                else:
+                    print(f"[genmedia] 警告:旁白声线卡冻结渠道 {card_prov} 与当前生效渠道"
+                          f" {prov} 不一致,冻结音色不可用——本次回退渠道默认音色,旁白声线可能"
+                          "漂移;请回派 09-audio/voice-generation 按新渠道重定旁白声线卡",
+                          file=sys.stderr)
     fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
           "minimax": _tts_minimax, "elevenlabs": _tts_elevenlabs,
           "comfyui": _tts_comfyui}.get(cfg["provider"])
@@ -4086,11 +4155,21 @@ def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
         voice = args.voice or cfg.get("voice") or "eve"
+        # 旁白声线卡(narrator.json)在 dry-run 同样生效,预览与正式合成一致
+        card, card_vp = ({}, None)
+        if not args.character and not (args.voice or "").strip():
+            card, card_vp = _narrator_card(args.project, args.output)
+            if card and (card.get("tts_voice") or "").strip() and \
+                    (card.get("tts_provider") or cfg["provider"]) == cfg["provider"]:
+                voice = f"narrator-card:{card['tts_voice'].strip()}"
         if cfg["provider"] == "comfyui":
-            selected = _resolve_tts_reference(
-                cfg, args.text, args.output, args.voice, args.character,
-                args.variant, args.project, args.instructions)
-            voice = f"auto:{selected['file']} ({selected['reason']})"
+            if card_vp is not None:
+                voice = f"narrator-card:{card_vp.name}(冻结样本参考)"
+            else:
+                selected = _resolve_tts_reference(
+                    cfg, args.text, args.output, args.voice, args.character,
+                    args.variant, args.project, args.instructions)
+                voice = f"auto:{selected['file']} ({selected['reason']})"
         elif cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL:
             desc, tone = _seedaudio_desc(args.voice, args.instructions, args.character,
                                          args.variant, args.project, args.output)
