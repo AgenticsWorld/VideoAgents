@@ -92,6 +92,14 @@
         ]
       },
       {
+        "from": "../../comfy",
+        "to": "backend/comfy",
+        "filter": [
+          "*.json",
+          "*.md"
+        ]
+      },
+      {
         "from": "../../code",
         "to": "backend/code",
         "filter": [
