@@ -9205,6 +9205,22 @@ async def api_skills_get(refresh: bool = False):
             "skills_disabled": sorted(skills_disabled_setting())}
 
 
+async def api_skills_text(skill_id: str):
+    """技能弹窗「查看文本」:按技能 id 返回该 SKILL.md 全文(只读,路径以扫描清单为准不收任意路径)。"""
+    s = next((x for x in scan_agent_skills() if x["id"] == skill_id), None)
+    if not s:
+        raise ServiceError(404, f"unknown skill id: {skill_id}")
+    d = agent_dir(s["agent_id"])
+    f = (d / "skills" / s["dir"] / "SKILL.md") if d else None
+    if not f or not f.is_file():
+        raise ServiceError(404, f"SKILL.md not found: {skill_id}")
+    try:
+        text = f.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        raise ServiceError(500, f"read failed: {e}") from e
+    return {"id": skill_id, "path": s["path"], "text": text}
+
+
 async def api_skills_set(body: dict):
     """技能开关提交(设置页入口已下线,保留 API 供脚本/存量调用),两种形态任选:
     - skills_disabled: [id, ...] 整体覆盖;未知 id 拒绝

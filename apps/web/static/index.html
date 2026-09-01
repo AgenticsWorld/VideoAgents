@@ -1760,12 +1760,30 @@ function renderAgentSkills(list){
     const off=s.enabled?'':`<span title="${esc(t('该技能已被禁用,运行时不会自动注入'))}" style="font-size:10.5px;padding:0 6px;border:1px solid #b8860b;border-radius:9px;color:#e0a92a">${esc(t('已禁用'))}</span>`;
     row.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13px">${esc(s.name)}</b><span style="font-size:10.5px;padding:0 6px;border:1px solid var(--border);border-radius:9px;color:var(--dim)">${esc(kind)}</span>${cond}${off}<code style="margin-left:auto;font-size:11px;color:var(--accent);font-family:ui-monospace,monospace">${esc(rel)}</code></div>
       <div style="color:var(--dim);font-size:12px;margin-top:3px;white-space:pre-wrap">${esc(s.description||'')}</div>
-      <div style="color:var(--dim);font-size:11px;margin-top:2px;font-family:ui-monospace,monospace;opacity:.7">${esc(s.path)}</div>`;
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="color:var(--dim);font-size:11px;font-family:ui-monospace,monospace;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.path)}</span><button class="askill-view" title="${esc(t('查看该技能的 SKILL.md 全文'))}" style="margin-left:auto;flex:none;font-size:11px;padding:1px 8px">${esc(t('查看文本'))}</button></div>`;
     row.onmouseenter=()=>row.style.borderColor='var(--accent)';
     row.onmouseleave=()=>row.style.borderColor='var(--border)';
     row.onclick=()=>{insertAtCursor(rel);$('#askill-modal').style.display='none'};
+    row.querySelector('.askill-view').onclick=e=>{e.stopPropagation();showSkillText(s)};
     box.appendChild(row);
   });
+}
+/* 「查看文本」:在原列表位置显示该技能 SKILL.md 全文,「返回列表」回到选择列表 */
+async function showSkillText(s){
+  const box=$('#askill-list');
+  $('#askill-err').textContent='';
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:8px;flex:none"><b style="font-size:13px">${esc(s.name)}</b><code style="font-size:11px;color:var(--accent);font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.path)}</code><button id="askill-back" style="margin-left:auto;flex:none;font-size:11px;padding:1px 8px">${esc(t('返回列表'))}</button></div>
+    <pre id="askill-text" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;font-family:ui-monospace,monospace;border:1px solid var(--border);border-radius:8px;padding:8px 10px;overflow-y:auto">${esc(t('读取中…'))}</pre>`;
+  $('#askill-back').onclick=()=>renderAgentSkills(agentSkills(CURRENT));
+  try{
+    const d=await api('/api/v1/config/skills/text?id='+encodeURIComponent(s.id));
+    const pre=$('#askill-text');
+    if(pre)pre.textContent=d.text||'';
+  }catch(e){
+    const pre=$('#askill-text');
+    if(pre)pre.textContent='';
+    $('#askill-err').textContent=t('读取失败:')+e.message;
+  }
 }
 async function openAgentSkillModal(){
   if(!CURRENT)return;

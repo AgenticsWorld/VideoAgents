@@ -533,6 +533,11 @@ async def skills_get(refresh: bool = False) -> dict[str, Any]:
     return await core.api_skills_get(refresh)
 
 
+@api.get("/config/skills/text", tags=["automation"])
+async def skills_text(id: str) -> dict[str, Any]:
+    return await core.api_skills_text(id)
+
+
 @api.post("/config/skills", tags=["automation"])
 async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_skills_set(body)
