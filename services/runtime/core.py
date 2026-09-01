@@ -7039,6 +7039,13 @@ async def api_avatar_delete(body: dict):
     return {"deleted": aid}
 
 
+async def api_avatar_clear(body: dict):
+    """清空虚拟人像库全部素材(资产库页「全部删除」按钮;复用全自动管理的清库逻辑,
+    逐页列出逐个删除,不可恢复),返回删除数。"""
+    deleted = await _avatar_clear_all()
+    return {"deleted": deleted}
+
+
 # ---- 全自动管理(avatar_assets.auto_manage):video-generation 工单开跑前自动整备 ----
 # 触发条件:资产库已启用 + 全自动管理开启 + 该 agent 生效视频渠道为火山引擎。
 # 动作:同一 (项目, 集) 首次开跑先清空资产库(方舟素材数量有限额),再把该集组级

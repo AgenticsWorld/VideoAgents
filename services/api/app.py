@@ -461,6 +461,12 @@ async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_delete(body)
 
 
+@api.post("/avatar-assets/clear", tags=["avatar-assets"])
+async def avatar_assets_clear(body: dict[str, Any]) -> dict[str, Any]:
+    """清空虚拟人像库全部素材(不可恢复)。"""
+    return await core.api_avatar_clear(body)
+
+
 @api.post("/avatar-assets/upload", tags=["avatar-assets"])
 async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_upload(body)
