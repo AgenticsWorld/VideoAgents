@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Long-take switch in the new-project wizard and Duration Settings** (`duration.long_take`, default off). Controls whether shot groups chain on the previous group's last-frame screenshot: when **on**, the existing tail-frame anchor flow applies unchanged — continuity-planning marks same-scene group boundaries `anchor: last_frame`, the prompt agent appends the previous group's `*.last_frame.png` to `refs` with the opening declaration sentence, video-generation runs groups serially and the `tailframe_declared` check applies. When **off** (the new default), no tail-frame reference image is ever attached: continuity-planning marks every group boundary `anchor: none`, the prompt agent opens the first shot with a text-only reframed continuation sentence (no last-frame `[Image N]` reference — scene/lighting/blocking continuity rides on the scene anchors and verbatim fragments), and since no continuation chain exists, groups may generate in parallel; `--return-last-frame` still saves the tail frame for previews/transition rendering (`last_frame_saved` unchanged) and tail-frame checks simply never trigger. Rationale: at low draft resolutions the tail frame itself is low-res, and using it as a reference visibly degrades the next group's image quality and face consistency (dzg6 ep01 grp028→grp029 face drift), so both the wizard step 3 and the Duration Settings dialog show a warning against enabling the switch while the draft resolution is 360p/480p. Wired end to end: wizard + dialog checkbox with low-res warning, `_validate_duration`, `DEFAULT_GENCONFIG`, a dedicated long-take line in every agent's injected duration-settings section, conditional clauses in continuity-planning / prompt / video-generation SOULs, WORKFLOW.md §7A and workflow.yaml, and all 11 language dictionaries. Existing projects get the switch off by default (their next dispatched tasks stop attaching tail-frame refs); a running instance must be restarted.
+
 ## [1.0.27] - 2026-09-01
 
 ### Added

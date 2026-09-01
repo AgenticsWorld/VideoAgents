@@ -17,7 +17,7 @@
 4. 核查**道具状态**:对照 `bible/props.json` 易主链,逐镜标注剧情道具的在手/位置/状态。
 5. **组间衔接检查(group_transitions)**:按 `shot_list.generation_groups` 逐对相邻组核查交界两镜——
    - 轴线/光向/服装/道具状态在组边界处是否连续(同场景相邻组是接缝重灾区,优先核);
-   - 尾帧锚链完整:每组 `continuity_from` 指向正确;跨场景的组交界(硬切换场)标注 `anchor: none`,同场景交界标注 `anchor: last_frame`(视频生成须传前组尾帧作参考锚);
+   - 尾帧锚链完整:每组 `continuity_from` 指向正确;**`anchor` 取值按项目「时长设置 → 长镜头」开关(系统提示词「用户时长设定」段,2026-09-01)**——开启时:跨场景的组交界(硬切换场)标注 `anchor: none`,同场景交界标注 `anchor: last_frame`(视频生成须传前组尾帧作参考锚);**关闭(默认)时:所有组交界一律标注 `anchor: none`**(组间不用尾帧参考图,仅靠 prompt 换构图文字承接,边界连续性要点写 notes 供 prompt 参考);
    - **边界人物阵容与构图变化核查(2026-07-23)**:比对交界两镜的出场角色集合(取两镜 blocking/composition 的 subjects),不同即标 `cast_change: true` 并核**本组首镜构图必须与前组尾镜显著不同**(景别升降一档、或机位角度/主体站位明显变化——反打/过肩/侧向均可);`cast_change` 边界两镜若同景别 + 同静止机位 + 主体同侧近似构图 = 缺陷,退回 composition/camera-movement 改首镜构图,或建议 shot-planning 调整分组。依据:尾帧锚引力下,同构图开场会让模型照抄尾帧并把新增角色原地插入画面,接缝读作人物凭空出现(前科:tothemoon ep01 grp018→grp019 汤米瞬现,尾帧伊娃 solo 中景→首镜同机位中景);
    - 交界处不宜安排剧情状态突变(如服装破损发生在组边界两侧),有则建议 shot-planning 调整分组。
    - **转场与尾帧锚互斥核查(2026-08-28,WORKFLOW.md §9C)**:读 shot_list 组 `transition_in`,每条 group_transition 镜像 `transition: { type, duration_s }`(缺省 `hard_cut`);type 为可渲染转场(dissolve / dip_* / fade_*)的边界 `anchor` 必须 `none`(叠化两侧本该是不同画面,续尾帧反而像跳剪),shot_list 若同时写了续接就退回 shot-planning 二选一;`match_cut` 边界反过来必须核首尾两镜构图对位(景别、主体屏位、运动方向对得上,写进 notes),对不上退回 composition 或建议 shot-planning 改为 hard_cut;`smash_cut` 按普通硬切核。转场本身在 Phase 9 由宿主 CLI 实施,我不设计也不改类型。
@@ -89,7 +89,7 @@ instruction: |
 - **轴线跳变清单为空,或每条均有豁免说明**(附 directing_plan 依据);
 - 逐镜状态表覆盖 shot_list 全部镜头;服装/道具状态引用的 outfit/prop ID 合法;
 - 状态演进单调合理(损伤不自愈、道具不凭空易主);
-- **group_transitions 覆盖全部相邻组对**;`anchor` 取值与场景关系一致(同场景 last_frame、跨场景 none 或附说明);
+- **group_transitions 覆盖全部相邻组对**;`anchor` 取值与场景关系一致(「长镜头」开启时:同场景 last_frame、跨场景 none 或附说明;**「长镜头」关闭(默认)时:一律 none**,2026-09-01);
 - **边界构图变化机检(boundary_cast_framing,2026-07-23)**:每条 group_transition 必含 `cast_change` 判定(比对交界两镜角色集合);`cast_change: true` 的条目必含 `framing_change_ok` 且为 true——首镜与前组尾镜同景别同机位近似构图 = FAIL,附整改去向(退 composition/camera-movement 或建议 shot-planning 调组);
 - **转场锚互斥机检(transition_anchor_consistent,2026-08-28)**:每条 group_transition 含 `transition` 且与 shot_list 对应组 `transition_in` 一致(缺省 hard_cut);可渲染转场边界 `anchor` = none;`match_cut` 边界 notes 附构图对位说明;
 - **时段链机检(2026-07-20)**:lighting_chain 每条 `time_of_day`/`lighting_scheme_id` 必填且与 shot_list 组字段一致;key_light/色温描述与所引 scheme 昼夜相容;相邻条目时段跳变无 story_timeline/剧本依据即 FAIL。

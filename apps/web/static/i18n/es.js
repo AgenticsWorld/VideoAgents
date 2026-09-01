@@ -1724,4 +1724,7 @@ window.I18N_DICT = {
 "自动(按本组视频模型解析)": "Auto (según el modelo de vídeo del grupo)",
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "El canal de vídeo actual {p} ejecuta un flujo de trabajo sin id de modelo; este grupo no puede cambiar de modelo (la habilidad sí)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(supera el límite efectivo del grupo: cambie a un modelo con mayor límite en 🎛 Modelo o elimine imágenes)",
+"长镜头": "Plano secuencia",
+"开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Al activarlo, cada grupo de planos adjunta la captura del último fotograma del grupo anterior como imagen de referencia para dar continuidad; desactivado (por defecto) no se adjunta esa referencia y la continuidad se apoya solo en el texto (frase de apertura con reencuadre)",
+"⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ La resolución de borrador actual es baja; no se recomienda activar el plano secuencia: usar un último fotograma de baja resolución como referencia degradará notablemente la calidad de imagen y la consistencia de los personajes",
 };

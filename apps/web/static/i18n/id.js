@@ -1724,4 +1724,7 @@ window.I18N_DICT = {
 "自动(按本组视频模型解析)": "Otomatis (dari model video grup)",
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Saluran video saat ini {p} berjalan sebagai workflow tanpa id model, jadi grup ini tidak bisa ganti model (skill masih bisa diatur)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(melebihi batas efektif grup: ganti ke model berbatas lebih tinggi lewat 🎛 Model atau hapus gambar)",
+"长镜头": "Long take",
+"开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Jika aktif, setiap grup shot melampirkan tangkapan frame terakhir grup sebelumnya sebagai gambar referensi untuk melanjutkan gambar; jika nonaktif (default), referensi frame terakhir tidak dilampirkan dan kesinambungan hanya mengandalkan teks (kalimat pembuka dengan komposisi baru)",
+"⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Resolusi draf saat ini rendah, tidak disarankan mengaktifkan Long take: frame terakhir beresolusi rendah sebagai referensi akan menurunkan kualitas gambar dan konsistensi karakter secara nyata",
 };

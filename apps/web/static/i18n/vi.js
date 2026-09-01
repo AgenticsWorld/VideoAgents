@@ -1724,4 +1724,7 @@ window.I18N_DICT = {
 "自动(按本组视频模型解析)": "Tự động (theo mô hình video của nhóm)",
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Kênh video hiện tại {p} chạy theo workflow, không có id mô hình nên nhóm này không đổi được mô hình (vẫn chọn được kỹ năng)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(vượt giới hạn hiệu lực của nhóm: đổi mô hình giới hạn cao hơn qua 🎛 Mô hình hoặc bớt ảnh)",
+"长镜头": "Cảnh quay dài (long take)",
+"开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Bật: mỗi nhóm cảnh dùng ảnh chụp khung hình cuối của nhóm trước làm ảnh tham chiếu để nối tiếp hình ảnh; Tắt (mặc định): không đính ảnh tham chiếu khung cuối, chỉ nối tiếp bằng văn bản (câu mở đầu đổi bố cục)",
+"⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Độ phân giải bản nháp hiện tại thấp, không nên bật cảnh quay dài: khung hình cuối độ phân giải thấp dùng làm ảnh tham chiếu sẽ làm giảm rõ chất lượng hình ảnh và tính nhất quán nhân vật",
 };
