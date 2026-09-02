@@ -1241,6 +1241,21 @@ def _comfy_configured_workflow(cfg: dict) -> dict | None:
         return None
 
 
+def _h3_apply_workflow_component_overrides(cfg: dict, settings: dict) -> None:
+    """工作流里写死的模型文件名(非 {{TOKEN}} 占位符)覆盖内置 H3 默认值,
+    使组件预检与占位符注入跟随模板实际加载的文件(如 qwen3vl 变体编码器模板)。"""
+    workflow = _comfy_configured_workflow(cfg) or {}
+    loaders = {"UNETLoader": ("unet", "unet_name"),
+               "CLIPLoader": ("text_encoder", "clip_name")}
+    for node in workflow.values():
+        if not isinstance(node, dict) or node.get("class_type") not in loaders:
+            continue
+        key, field = loaders[node["class_type"]]
+        value = (node.get("inputs") or {}).get(field)
+        if isinstance(value, str) and value and not value.startswith("{{"):
+            settings[key] = value
+
+
 def _is_h3_ref2va_workflow(cfg: dict) -> bool:
     workflow = _comfy_configured_workflow(cfg) or {}
     return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
@@ -3049,6 +3064,7 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
+        _h3_apply_workflow_component_overrides(cfg, settings)
         if ref_image_size:
             settings["ref_image_size"] = ref_image_size
         if not rh:
