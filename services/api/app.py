@@ -461,6 +461,12 @@ async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_delete(body)
 
 
+@api.post("/avatar-assets/clear", tags=["avatar-assets"])
+async def avatar_assets_clear(body: dict[str, Any]) -> dict[str, Any]:
+    """清空虚拟人像库全部素材(不可恢复)。"""
+    return await core.api_avatar_clear(body)
+
+
 @api.post("/avatar-assets/upload", tags=["avatar-assets"])
 async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_upload(body)
@@ -527,9 +533,19 @@ async def skills_get(refresh: bool = False) -> dict[str, Any]:
     return await core.api_skills_get(refresh)
 
 
+@api.get("/config/skills/text", tags=["automation"])
+async def skills_text(id: str) -> dict[str, Any]:
+    return await core.api_skills_text(id)
+
+
 @api.post("/config/skills", tags=["automation"])
 async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_skills_set(body)
+
+
+@api.post("/config/skills/upload", tags=["automation"])
+async def skills_upload(request: Request, agent: str, filename: str = "") -> dict[str, Any]:
+    return await core.api_skills_upload(agent, await request.body(), filename)
 
 
 @api.get("/config/concurrency", tags=["automation"])
@@ -659,6 +675,17 @@ async def storyboard_ref_upload(
 ) -> dict[str, Any]:
     data = await request.body()
     return await core.api_grpref_upload(data, project, ep, grp, filename)
+
+
+@api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
+    """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""
+    return await core.api_grpsettings_get(project, ep, grp)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_set(project: str, ep: str, grp: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpsettings_set({**(body or {}), "project": project, "ep": ep, "grp": grp})
 
 
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])

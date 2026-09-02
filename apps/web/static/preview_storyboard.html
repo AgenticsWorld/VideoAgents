@@ -34,6 +34,18 @@ button{background:var(--panel2);color:var(--text);border:1px solid var(--border)
 button:hover{border-color:var(--accent)}
 header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
 header select:hover{border-color:var(--accent)}
+header .ps-info{font-size:12.5px;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--panel2);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+header .ps-info b{color:var(--text);font-weight:600}
+header .ps-info.warn{border-color:var(--yellow,#d4a72c)}
+.grp>.ghead .gsov{color:var(--accent,#1d6f7a);font-weight:600}
+#gs-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#gs-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:560px;max-width:92vw}
+#gs-modal .row{display:flex;align-items:center;gap:10px;margin:12px 0}
+#gs-modal .row label{flex:none;width:96px;color:var(--dim);font-size:12.5px}
+#gs-modal select{flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+#gs-modal .hint{color:var(--dim);font-size:12px;line-height:1.6;min-height:18px}
+#gs-modal .hint.warn{color:var(--yellow,#d4a72c)}
+#gs-modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 #eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
 #eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
@@ -88,6 +100,11 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
 .shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.shot .cam-toggle{cursor:pointer;user-select:none}
+.shot .camframes{margin:4px 0 6px 18px;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-size:12.5px;line-height:1.5;white-space:pre-wrap}
+.shot .camframes b{font-weight:600;margin-right:2px}
+.grp>.gcast{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--panel);padding:0 12px 8px}
+.grp>.gcast .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
 .grp>.glight .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
@@ -197,7 +214,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
-  <select id="ps-skill" class="ps-select" title="视频提示词技能(H3A 签字前确认;自动=按生效视频模型解析)" style="display:none"></select>
+  <span id="ps-info" class="ps-info" title="当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)" style="display:none"></span>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -213,6 +230,15 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <textarea id="gn-text" placeholder="例:整组节奏放慢;福瓦德全程不看镜头;钱袋始终在画面左下角可见"></textarea>
   <div class="err" id="gn-err" style="color:var(--red);font-size:12px"></div>
   <div class="actions"><button id="gn-cancel">取消</button><button id="gn-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
+</div></div>
+<div id="gs-modal"><div class="box">
+  <h3>🎛 组视频模型 — <span id="gs-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效</div>
+  <div class="row"><label>视频模型</label><select id="gs-model"></select></div>
+  <div class="row"><label>提示词技能</label><select id="gs-skill"></select></div>
+  <div class="hint" id="gs-hint"></div>
+  <div class="err" id="gs-err" style="color:var(--red);font-size:12px"></div>
+  <div class="actions"><button id="gs-cancel">取消</button><button id="gs-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
 </div></div>
 <div id="cp-modal"><div class="box">
   <h3>✨ 组花字设计 — <span id="cp-grp" style="color:var(--purple)"></span></h3>
@@ -347,14 +373,17 @@ $('#gn-ok').onclick=async()=>{
 };
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
-let AR_MAX=9;   // 每组参考图上限:项目「分镜组设置」max_ref_images(打开弹窗时拉取,回落 9=Seedance 2.0 口径)
-let AR_MAX_LOADED=false;
+// 每组参考图上限展示值:本组生效上限(组级覆盖模型的硬限,否则项目「视频模型设置」),随预览数据 refs_cap 取;
+// 2026-08-30 起不再按它硬拦添加——按实际需要加,超限由组卡黄条提示、用户决定「🎛 模型」换模型或删图;
+// 只以任何模型的极值 AR_HARD=30 兜底(与服务端 REF_CAP_HARD_MAX 同口径)
+let AR_MAX=9;
+const AR_HARD=30;
 async function arLoadMax(proj){
-  if(AR_MAX_LOADED)return;
+  const g=(LAST_DATA&&LAST_DATA.generation_groups||[]).find(x=>x.group_id===AR_GRP);
+  if(g&&Number.isInteger(g.refs_cap)){AR_MAX=g.refs_cap;return}
   try{
-    const g=(await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/config')).json()).shot_group||{};
-    if(Number.isInteger(g.max_ref_images))AR_MAX=g.max_ref_images;
-    AR_MAX_LOADED=true;
+    const sg=(await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/config')).json()).shot_group||{};
+    if(Number.isInteger(sg.max_ref_images))AR_MAX=sg.max_ref_images;
   }catch(_){}
 }
 let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={},AR_GEN=false;
@@ -436,11 +465,11 @@ $('#ar-cur').addEventListener('click',async e=>{
 });
 function arCount(){
   const el=$('#ar-count');
-  el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX});
+  el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX})+(AR_REFS.length>AR_MAX?' '+t('(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)'):'');
   el.style.color=AR_REFS.length>=AR_MAX?'var(--red)':'var(--dim)';
   arOkState();
 }
-function arOkState(){$('#ar-ok').disabled=!AR_SEL||AR_REFS.length>=AR_MAX}
+function arOkState(){$('#ar-ok').disabled=!AR_SEL||AR_REFS.length>=AR_HARD}
 async function arLoadCat(cat){
   AR_CAT=cat;AR_SEL='';arOkState();
   document.querySelectorAll('#ar-cats button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
@@ -482,7 +511,7 @@ $('#ar-imgs').addEventListener('click',e=>{
 $('#ar-imgs').addEventListener('dblclick',e=>{const im=e.target.closest('.cell img');if(im)zoom(im.src)});
 $('#ar-cancel').onclick=()=>$('#ar-modal').style.display='none';
 $('#ar-ok').onclick=async()=>{
-  if(!AR_SEL||AR_REFS.length>=AR_MAX)return;
+  if(!AR_SEL||AR_REFS.length>=AR_HARD)return;
   arMsg('');
   $('#ar-ok').disabled=true;
   const proj=$('#project').value.trim()||'demo';
@@ -501,13 +530,13 @@ $('#ar-ok').onclick=async()=>{
 };
 // 🎨 手绘参考图:弹窗内发起手绘会话(基于线稿+已有参考图+项目风格生成成图入 refs)
 $('#ar-sketch').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
+  if(AR_REFS.length>=AR_HARD){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_HARD}));return}
   if(AR_GEN){arMsg(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'),true);return}
   openSketch(AR_GRP);
 };
 // ⬆ 本地上传:文件原始字节直传(与参考图页上传同法),落盘 assets/uploads/<ep>/<grp>/ 并直接加入 refs
 $('#ar-up').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
+  if(AR_REFS.length>=AR_HARD){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_HARD}));return}
   $('#ar-file').click();
 };
 $('#ar-file').onchange=async()=>{
@@ -656,6 +685,8 @@ document.addEventListener('click',async e=>{
   if(cb)return openCaption(cb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
   if(gb)return openNote(gb.dataset.grp);
+  const gsb=e.target.closest('.gsbtn');
+  if(gsb)return openGroupSettings(gsb.dataset.grp);
   const ud=e.target.closest('.urdel');
   if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
     if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref:ud.dataset.ref})))return;
@@ -689,39 +720,85 @@ try{
       if(ev.project!==($('#project').value.trim()||'demo'))return;
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
-      else if(ev.type==='prompt_skill'&&document.activeElement!==$('#ps-skill'))psLoad(ev.project);
+      else if(ev.type==='prompt_skill'||ev.type==='group_settings')load(true);
     }catch(_){}
   };
 }catch(_){}
 
-// 🧰 视频提示词技能(项目级 prompt_skill,与控制台「分镜组设置」/H3A 签字弹窗同一设定;2026-08-28)
-async function psLoad(proj){
-  const sel=$('#ps-skill');
-  try{
-    const d=await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/prompt-skill')).json();
-    if(!d||!d.resolved){sel.style.display='none';return}
-    const r=d.resolved,cfg=d.config||{};
-    sel.innerHTML='';
-    const add=(v,label)=>{const o=document.createElement('option');o.value=v;o.textContent='🧰 '+label;sel.appendChild(o)};
-    add('auto',t(r.auto_dir?'自动(按生效视频模型)':'自动(生效视频模型无对应技能)'));
-    (d.candidates||[]).forEach(c=>add('manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
-    add('off',t('跳过(不套用技能)'));
-    sel.value=cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode==='off'?'off':'auto');
-    if(!sel.value)sel.value='auto';
-    sel.title=t('视频提示词技能(H3A 签字前确认;自动=按生效视频模型解析)')+(r.warning?'\n⚠️ '+r.warning:'');
-    sel.style.borderColor=r.warning?'var(--yellow,#d4a72c)':'';
-    sel.dataset.project=proj;
-    sel.style.display='';
-  }catch(_){sel.style.display='none'}
+// 🎬 右上角:当前全局视频模型 + 提示词技能(只读展示,2026-08-30;改动去控制台「生成模型」/「视频模型设置」,
+// 个别组用组卡「🎛 模型」单独指定)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
+function psRender(d){
+  const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{};
+  if(!vm.provider){el.style.display='none';return}
+  const modeTxt=ps.mode==='off'?t('跳过'):ps.mode==='manual'?t('手选'):t('自动');
+  const skill=ps.skill_id?(ps.dir||ps.skill_id):t('无对应技能');
+  el.innerHTML='🎬 '+t('视频模型:')+'<b>'+esc(vm.label||vm.model||'—')+'</b> <span style="opacity:.7">('+esc(vm.provider)+')</span>'
+    +' · 🧰 '+t('技能:')+'<b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
+  el.classList.toggle('warn',!!ps.warning);
+  el.title=t('当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)')+(ps.warning?'\n⚠️ '+ps.warning:'');
+  el.style.display='';
 }
-$('#ps-skill').onchange=async()=>{
-  const sel=$('#ps-skill'),v=sel.value||'auto';
-  const body=v==='auto'?{mode:'auto'}:(v==='off'?{mode:'off'}:{mode:'manual',skill_id:v.slice(7)});
+
+// 🎛 组级视频模型/提示词技能弹窗(2026-08-30):GET/POST /projects/{p}/storyboard/{ep}/{grp}/settings
+let GS_GRP='',GS_DATA=null;
+function gsHint(){
+  const d=GS_DATA;if(!d)return;
+  const m=$('#gs-model').value,sk=$('#gs-skill').value;
+  const mods=d.models||{},lbl=id=>((mods.candidates||[]).find(c=>c.id===id)||{}).label||id;
+  const model=m||mods.global_model;
+  const cap=/seedance-2[-.]5/i.test(model)?30:/seedance-2/i.test(model)?9:/minimax.*h3|h3.*minimax/i.test(model)?9:d.project_ref_cap;
+  let sTxt;
+  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')})+(m?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
+  else if(sk==='auto')sTxt=t('按本组模型自动解析');
+  else if(sk==='off')sTxt=t('不套用技能');
+  else sTxt=sk.slice(7).split('/').pop();
+  const w=(d.resolved||{}).warning;
+  $('#gs-hint').textContent=I18N.f('生效:{model} · 参考图上限 {cap} 张 · 技能 {skill}',{model:lbl(model),cap,skill:sTxt})+(w?'\n⚠️ '+w:'');
+  $('#gs-hint').classList.toggle('warn',!!w);
+}
+async function openGroupSettings(grp){
+  GS_GRP=grp;GS_DATA=null;
+  $('#gs-grp').textContent=grp;$('#gs-err').textContent='';$('#gs-hint').textContent=t('加载中…');
+  $('#gs-model').innerHTML='';$('#gs-skill').innerHTML='';
+  $('#gs-modal').style.display='flex';
+  const proj=$('#project').value.trim()||'demo';
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(sel.dataset.project)+'/prompt-skill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'/settings?v='+Date.now());
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    GS_DATA=d;
+    const add=(sel,v,label)=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)};
+    const ms=$('#gs-model'),mods=d.models||{};
+    add(ms,'',I18N.f('跟随全局:{m}',{m:mods.global_label||mods.global_model||'—'}));
+    (mods.candidates||[]).filter(c=>c.id!==mods.global_model).forEach(c=>add(ms,c.id,c.label));
+    ms.disabled=!mods.overridable;
+    ms.value=(d.config||{}).video_model||'';if(!ms.value&&ms.value!=='')ms.value='';
+    const ss=$('#gs-skill'),cfg=(d.config||{}).prompt_skill||{};
+    add(ss,'global',I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')}));
+    add(ss,'auto',t('自动(按本组视频模型解析)'));
+    (d.skills||[]).forEach(c=>add(ss,'manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
+    add(ss,'off',t('跳过(不套用技能)'));
+    ss.value=cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode||'global');
+    if(!ss.value)ss.value='global';
+    if(!mods.overridable)$('#gs-err').textContent=I18N.f('当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)',{p:mods.provider});
+    gsHint();
+  }catch(e){$('#gs-hint').textContent='';$('#gs-err').textContent=t('加载失败:')+e.message}
+}
+$('#gs-model').onchange=gsHint;$('#gs-skill').onchange=gsHint;
+$('#gs-cancel').onclick=()=>$('#gs-modal').style.display='none';
+$('#gs-ok').onclick=async()=>{
+  const proj=$('#project').value.trim()||'demo';
+  const sk=$('#gs-skill').value||'global';
+  const body={video_model:$('#gs-model').value||'',prompt_skill:sk.startsWith('manual:')?{mode:'manual',skill_id:sk.slice(7)}:{mode:sk}};
+  $('#gs-ok').disabled=true;
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(GS_GRP)+'/settings',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    psLoad(sel.dataset.project);
-  }catch(e){alert(t('提示词技能读取失败')+':'+e.message)}
+    $('#gs-modal').style.display='none';
+    load(true);
+  }catch(e){$('#gs-err').textContent=t('保存失败:')+e.message}
+  $('#gs-ok').disabled=false;
 };
 
 function renderEps(episodes){
@@ -749,7 +826,8 @@ function dlgHtml(s){
 }
 // 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
 // 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
-// hover 显起幅→落幅。混剪等无运镜设计的项目 camera_move 为空,不渲染
+// 有起幅/落幅时点击运镜行在下方展开明细层(可选中复制),再点收起,默认收起。
+// 混剪等无运镜设计的项目 camera_move 为空,不渲染
 const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
   pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
   track:'跟拍',tracking:'跟拍',follow:'跟拍',truck:'横移',truck_left:'横移',truck_right:'横移',dolly:'移动',slide:'横移',
@@ -761,8 +839,11 @@ function camHtml(s){
   const mv=c.label||(k?t(k):'')||c.movement||'';
   const sub=[c.rig,c.speed_curve].filter(Boolean).join(' · ');
   if(!mv&&!sub)return '';
-  const tip=[c.start_frame?t('起幅:')+c.start_frame:'',c.end_frame?t('落幅:')+c.end_frame:''].filter(Boolean).join('\n');
-  return `<div class="cam"${tip?` title="${esc(tip)}"`:''}>🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</div>`;
+  const head=`🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}`;
+  const frames=[c.start_frame?[t('起幅:'),c.start_frame]:null,c.end_frame?[t('落幅:'),c.end_frame]:null].filter(Boolean);
+  if(!frames.length)return `<div class="cam">${head}</div>`;
+  return `<div class="cam cam-toggle" onclick="const f=this.nextElementSibling;f.hidden=!f.hidden;this.querySelector('.arrow').textContent=f.hidden?'▸':'▾'">${head}<span class="sub arrow">▸</span></div>
+    <div class="camframes" hidden>${frames.map(([lab,v])=>`<div><b>${esc(lab)}</b>${esc(v)}</div>`).join('')}</div>`;
 }
 // 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
 // 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
@@ -887,8 +968,19 @@ const refFn=(icon,k)=>{
   return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
 };
 
+// 🎛 组级视频模型/提示词技能覆盖 chip(2026-08-30):仅覆盖了的组显示,悬停显完整解析结果
+function gsChip(g){
+  const gs=g.group_settings;if(!gs||!gs.overridden)return '';
+  const parts=[];
+  if(gs.model_source==='group')parts.push('🎬 '+gs.model_label);
+  if(gs.skill_source==='group')parts.push('🧰 '+(gs.skill_dir||t('不套用技能')));
+  const tip=[I18N.f('本组视频模型:{m}({src})',{m:gs.video_model||gs.model_label,src:gs.model_source==='group'?t('组级覆盖'):t('跟随全局')}),
+    I18N.f('本组提示词技能:{s}({mode})',{s:gs.skill_dir||t('不套用'),mode:gs.skill_mode}),gs.warning?'⚠️ '+gs.warning:''].filter(Boolean).join('\n');
+  return `<span class="tag gsov" style="${gs.warning?'color:var(--yellow)':''}" title="${esc(tip)}">🎛 ${esc(parts.join(' · ')||t('组级设定'))}</span>`;
+}
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
+  // 组角色/服装/生物三类 chip 独占头部下一行 .gcast(2026-08-30,原挤在 .ghead 首行太乱),置于 💡 光照行之上
   // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
   // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
   // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
@@ -952,16 +1044,16 @@ function groupCard(g,inner){
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
-      ${chars?`<span class="tag">${chars}</span>`:''}
-      ${cosChips}${creChips}
-      ${blockChip(g)}${transChip(g)}${contChip(g)}
+      ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
+      <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
-    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组上限 {cap}:必挂锚点已装不下。请手动删减本组参考图,或改用参考图上限更高的视频生成模型(如 Seedance 2.5)并同步「分镜组设置」',{n:g.refs_total,cap:g.refs_cap}))}</div>`:''}
+    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组生效上限 {cap}({model}):点「🎛 模型」给本组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或手动删减本组参考图;处理后重出本组',{n:g.refs_total,cap:g.refs_cap,model:(g.group_settings||{}).model_label||''}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>
@@ -1168,7 +1260,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
-    psLoad(proj);
+    psRender(d);
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
     render(d);
     avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)
@@ -1182,7 +1274,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

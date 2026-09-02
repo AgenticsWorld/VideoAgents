@@ -23,7 +23,7 @@ blocking_map_landmarks_valid / scene_layout_pack_ok)。
       箭头折线 = 动线(经过 path 各点);无移动的条目只画起点标记。**不画图例、标题、角色名、CHAR 编号、
       动线句**——视频模型读不准参考图里的小字,烤进图的文字反而是入画泄漏口;字母↔角色的对应
       由 prompt 的 `Map markers: A = <label> (<CHAR id>), …` 句承担(机检 layout_map_bound)。
-      字体仅需拉丁大写字母,不依赖 CJK 字体。渲染尺寸 = 布局图尺寸(≥2560x1440,满足视频参考像素下限)。
+      字体仅需拉丁大写字母,不依赖 CJK 字体。渲染尺寸 = 布局图尺寸(≥2560x1440,平台统一出图规格)。
       本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/ 或自绘替代。
 
 label 机检(label_ok,2026-08-27):每角色 `label` 必填,= 短规范名——≤8 个 CJK 字或 ≤3 个英文词;
@@ -55,7 +55,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
-MIN_PIXELS = 3_686_400          # 火山视频参考图像素硬限(WORKFLOW.md §9)
+MIN_PIXELS = 3_686_400          # 布局包出图规格下限(2560x1440 当量,平台统一出图规格;旧火山硬限 2026-09-01 已废止)
 LAYOUT_SCHEMA = "scene_layout.v1"
 PALETTE = [(230, 57, 70), (29, 120, 216), (46, 160, 67), (245, 158, 11),
            (142, 68, 173), (0, 172, 193), (233, 30, 99), (121, 85, 72)]
@@ -108,7 +108,7 @@ def load_layout(proj_root: Path, sid: str):
             with Image.open(f) as im:
                 w, h = im.size
             if w * h < MIN_PIXELS:
-                errs.append(f"{sid}: {f.name} 仅 {w}x{h}={w*h} 像素 < {MIN_PIXELS}(视频参考硬限)")
+                errs.append(f"{sid}: {f.name} 仅 {w}x{h}={w*h} 像素 < {MIN_PIXELS}(布局包出图规格)")
         except Exception as e:  # noqa: BLE001
             warns.append(f"{sid}: 无法读取 {f.name}({e})")
     lms = lay.get("landmarks") or []

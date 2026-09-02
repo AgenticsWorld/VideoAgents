@@ -7,8 +7,10 @@
   python3 services/runtime/dispatch.py --runs                # 查看运行状态
   python3 services/runtime/dispatch.py --status <run_id>     # 查看单个运行(含结果)
   python3 services/runtime/dispatch.py --wait-all <run_id...> # 等待多个运行全部结束(带进度心跳)
-  python3 services/runtime/dispatch.py --confirm "<问题>" [--timeout 60] [--options 重跑,跳过] [--default 重跑]
-                                                  # 重跑类确认:阻塞至答复或超时(弹窗至多 60s 自动落默认),stdout 输出所选项
+  python3 services/runtime/dispatch.py --confirm "<问题>" [--timeout <秒>] [--options 重跑,跳过] [--default 重跑]
+                                                  # 重跑类确认:阻塞至答复或超时后自动落默认,stdout 输出所选项;
+                                                  # 不传 --timeout 用用户设置「Agent 高级设置→重跑等待确认」(缺省 60s),
+                                                  # 显式传值也会被服务端钳到不超过该设置
   python3 services/runtime/dispatch.py --confirm "<H 门说明>" --sign [--timeout 14400]
                                                   # 签字类确认(H1-H5/H3A 人工签字点专用):弹窗不倒计时、
                                                   # 永不自动确认,保留到用户点「签字」;本命令等待至答复或
@@ -84,15 +86,19 @@ def heartbeat(note: str):
         pass
 
 
-def confirm(question: str, timeout: int, options: list[str], default: str,
+def confirm(question: str, timeout: int | None, options: list[str], default: str,
             sign: bool = False, project: str = DEFAULT_PROJECT):
     """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。
-    sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。"""
+    sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。
+    重跑类 timeout=None 表示用服务端「Agent 高级设置→重跑等待确认」设置;等待截止
+    时间一律对齐服务端返回的实际生效时长(显式传值也可能被钳短)。"""
     resp = api("/approvals", {"question": question, "timeout": timeout,
                                 "options": options, "default": default,
                                 "kind": "sign" if sign else "confirm",
                                 "parent": PARENT, "project": project})
     cid = resp["confirm_id"]
+    if not sign:
+        timeout = resp.get("timeout") or timeout or 60
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(2)
@@ -211,8 +217,9 @@ def main():
     if args.confirm:
         raw = args.options or ("签字,暂缓" if args.sign else "重跑,跳过")
         opts = [o.strip() for o in raw.split(",") if o.strip()]
-        # 默认等待:重跑类 60s(弹窗同步倒计时);签字类 4h(弹窗不倒计时,超时弹窗仍保留)
-        timeout = args.timeout if args.timeout is not None else (14400 if args.sign else 60)
+        # 默认等待:重跑类 None=服务端「重跑等待确认」设置(弹窗同步倒计时);
+        # 签字类 4h(弹窗不倒计时,超时弹窗仍保留)
+        timeout = args.timeout if args.timeout is not None else (14400 if args.sign else None)
         confirm(args.confirm, timeout, opts, args.default_opt or opts[0],
                 sign=args.sign, project=args.project)
         return

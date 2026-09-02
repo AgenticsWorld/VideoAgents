@@ -25,6 +25,14 @@ CLI:
   需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
+  python3 modules/genmedia.py reclaim --task-id cgt-xxxx --output out.mp4 \
+      [--return-last-frame tail.png]
+
+  认领方舟侧已建成的视频任务(火山引擎/BytePlus):仅查询状态+下载产物,绝不重新
+  提交、不重复计费。适用于提交或下载阶段被网络/工具超时掐断但任务已建成的场景
+  (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 id 见提交日志
+  「任务已创建 cgt-…」行,或 code/ark_task_list.py 按创建时间核对。
+
   python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
       [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
       [--resolution 1080p] [--aspect 16:9] [--seed 1234] [--dry-run]
@@ -78,9 +86,13 @@ Python:
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
   TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
-        / volcengine(豆包语音 openspeech v3 单向流式,Doubao-Seed-TTS 2.0;
-        凭证=新版语音技术控制台「API Key 管理」的 API Key,非方舟 ARK Key;
-        音色为 speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源)
+        / volcengine(豆包语音;凭证=新版语音技术控制台「API Key 管理」的 API Key,
+        非方舟 ARK Key。模型 seed-tts-2.0/1.0 走 openspeech v3 单向流式,音色为
+        speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源;
+        模型 seed-audio-1.0(Doubao-音频生成 1.0)走非流式 /api/v3/tts/create
+        **描述定制嗓音**:不选音色,角色按项目声纹卡 voice.json 声学字段拼装声线
+        描述,旁白用 --instructions 描述(缺省内置旁白声线),--voice 传入的音色库
+        speaker 名会被忽略)
         / minimax(POST /v1/t2a_v2,Speech 2.8 系列;音色为 voice_id,
         可在「生成模型」页拉取音色库选择)
         / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
@@ -240,6 +252,54 @@ def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
     if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
         return wrapper + OPENROUTER_WRAPPER_API_SUFFIX, jwt, True
     return OPENROUTER_DIRECT_BASE, "", False
+
+
+_GROUP_RE = re.compile(r"(?:^|/)(ep[\w-]+)/(grp[\w-]+?)(?:\.[\w.]+)?$")
+
+
+def _group_from_output(output: str) -> str:
+    """从 --output 路径推断组号:…/clips/epNN/grpNNN[.xxx].mp4 → "epNN/grpNNN";推不出返回 ""。"""
+    m = _GROUP_RE.search(str(output or "").replace("\\", "/"))
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
+
+
+def _group_video_override(group: str) -> dict:
+    """组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为单组指定,2026-08-30):
+    读 data/projects/<VIDEOAGENTS_PROJECT>/assets/group_settings/<ep>/<grp>.json 的
+    video_model/provider;非派单环境(无项目)或无文件返回 {}。"""
+    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
+    if not proj or not group or "/" not in group:
+        return {}
+    ep, grp = group.split("/", 1)
+    try:
+        d = json.loads((DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep / f"{grp}.json").read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def apply_group_video_override(cfg: dict, group: str) -> dict:
+    """按组级设定改写 video 生效模型(渠道不变):设定里的 provider 必须与当前生效渠道一致,
+    否则视为失效覆盖、按全局执行并 stderr 提示。返回改写后的 cfg(原地)。"""
+    ov = _group_video_override(group)
+    model = str(ov.get("video_model") or "")
+    if not model:
+        return cfg
+    if cfg.get("provider") == "comfyui":
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
+              file=sys.stderr)
+        return cfg
+    if ov.get("provider") and ov.get("provider") != cfg.get("provider"):
+        print(f"[genmedia] 组 {group} 的组级模型 {model} 属渠道 {ov.get('provider')},"
+              f"当前视频渠道为 {cfg.get('provider')},该覆盖未生效(按全局模型 {cfg.get('model')} 执行)",
+              file=sys.stderr)
+        return cfg
+    if model != cfg.get("model"):
+        print(f"[genmedia] 组 {group} 按组级设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+              file=sys.stderr)
+    cfg["model"] = model
+    cfg["_group_override"] = group
+    return cfg
 
 
 def get_config(kind: str) -> dict:
@@ -427,25 +487,61 @@ def _storage_upload_url(path: str) -> str:
 AVATAR_LEDGER_PATH = RUNTIME_DIR / "avatar_assets.json"
 
 
-def _avatar_asset_uri(path: str) -> str | None:
-    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>,否则 None。
-
-    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核);
-    按文件内容 sha256 匹配,与图片所在目录无关。"""
+def _avatar_lib_enabled() -> bool:
+    """虚拟人像库开关(设置 → 高级 → 虚拟人像资产库);配置读不出按关闭处理
+    (get_config 读的是同一文件,真读不出时生成流程在取 API Key 时早已失败)。"""
     try:
-        if not (json.loads(CONFIG_PATH.read_text()).get("avatar_assets") or {}).get("enabled"):
-            return None
-        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+        return bool((json.loads(CONFIG_PATH.read_text())
+                     .get("avatar_assets") or {}).get("enabled"))
     except Exception:
+        return False
+
+
+def _is_portrait_ref(path: str) -> bool:
+    """人物概念图判定:平台约定人物图都在 assets/concepts/characters/ 目录下
+    (与 core.py 虚拟人像库全自动整备的入库口径一致)。"""
+    return "assets/concepts/characters/" in Path(path).as_posix()
+
+
+def _avatar_required_msg(path: str, reason: str) -> str:
+    return (f"虚拟人像库已启用,人物参考图必须以 asset:// 资产 URI 提交,"
+            f"但 {path} 无法解析为库内资产:{reason}。"
+            "base64 内联提交会绕过入库审核且实测人脸一致性明显劣化"
+            "(2026-08-31 dzg6 ep01 前科:内联组人脸/服装全面漂移),已中止本次生成。"
+            "请人工选择下一步:① 在「设置 → 高级 → 虚拟人像资产库」重新整备该项目人物图、"
+            "等审核 Active 后重跑;② 确要临时改走 base64 内联时,先在设置中关闭虚拟人像库再重跑;"
+            "③ 或从本组 refs 移除该图(需同步 [Image N] 编号)。")
+
+
+def _avatar_asset_uri(path: str) -> str | None:
+    """参考图已入方舟虚拟人像库(Active)且功能启用时返回 asset://<asset_ID>。
+
+    以资产 URI 提交可规避 Seedance 对含人脸参考图的审核拦截(资产入库时已过审核),
+    且对人脸一致性至关重要;按文件内容 sha256 匹配,与图片所在目录无关。
+    库启用时,人物图(assets/concepts/characters/**)未命中不再静默降级 base64,
+    直接抛错交人工定夺(2026-08-31 dzg6 前科:静默降级致 grp003-005 人脸全崩);
+    非人物图(动线图/场景九宫格等)未命中照旧返回 None 走内联。"""
+    if not _avatar_lib_enabled():
         return None
-    if not ledger:
+    must = _is_portrait_ref(path)
+    try:
+        ledger = json.loads(AVATAR_LEDGER_PATH.read_text()).get("assets") or {}
+    except Exception as e:
+        if must:
+            raise RuntimeError(_avatar_required_msg(
+                path, f"人像库台账读取失败({AVATAR_LEDGER_PATH}:{e})"))
         return None
     p = Path(path)
     if not p.is_file():
+        # 文件不存在交由后续内联环节报错,报文更准确(含调用方拼出的完整路径语境)
         return None
     ent = ledger.get(hashlib.sha256(p.read_bytes()).hexdigest()) or {}
     if ent.get("status") == "Active" and ent.get("asset_id"):
         return f"asset://{ent['asset_id']}"
+    if must:
+        reason = (f"台账中该图状态为 {ent.get('status')}(asset_id={ent.get('asset_id')}),非 Active"
+                  if ent else "该图未入库(台账无此文件内容的 sha256)")
+        raise RuntimeError(_avatar_required_msg(path, reason))
     return None
 
 
@@ -2154,8 +2250,8 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
     if refs and len(refs) > max_refs:
         raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
     if audio_refs and len(audio_refs) > max_arefs:
         raise RuntimeError(f"参考音频最多 {max_arefs} 段({ver_name}),收到 {len(audio_refs)}")
     if audio_refs:
@@ -2242,7 +2338,12 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             content.append({"type": "image_url", "role": role,
                             "image_url": {"url": to_url(path)}})
     for path in refs or []:
-        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI)
+        # 已入虚拟人像库的参考图改用 asset://<id> 提交(仅 Seedance 2.x 支持资产 URI);
+        # 库启用时人物图必须走 asset://,解析不到即在 _avatar_asset_uri 内抛错中止
+        if not is_v2 and _avatar_lib_enabled() and _is_portrait_ref(path):
+            raise RuntimeError(_avatar_required_msg(
+                path, f"当前模型 {cfg['model']} 不支持 asset:// 资产 URI(仅 Seedance 2.x 支持),"
+                      "可换用 Seedance 2.x 视频模型"))
         asset_uri = _avatar_asset_uri(path) if is_v2 else None
         if asset_uri:
             print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
@@ -2263,26 +2364,49 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     return body
 
 
-def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None) -> str:
+def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None,
+                          model: str = "") -> str:
     """提交查重:在方舟任务列表中找疑似"刚由本次提交建成"的任务。
 
     创建接口无幂等 token,弱网下响应丢包会让客户端误判失败;盲目重试=重复计费
     (前科:ep01 grp031 重复计费)。匹配口径:created_at 落在本次提交时刻之后
-    (容忍 30s 时钟偏差)且时长一致(可得时)。并行多路提交且同秒同时长时存在
-    极小概率误配,窗口已尽量收紧。"""
+    (容忍 30s 时钟偏差)、model 一致(可得时)、且时长必须可证实一致——列表项缺
+    duration(刚建成排队中常见)时补查任务详情,仍不可得则不认;窗口内命中多个
+    候选也不认,一律返回空交上层报失败由人工核对(code/ark_task_list.py)。
+    错认并发批次里其它组的任务会把别组成片下载成本组文件(前科:2026-08-31 dzg6
+    grp019 错拿 grp004 的 14s 片),比重复计费更糟,宁可失败不可错认。"""
+    want = int(round(duration)) if duration and duration != -1 else None
     for _ in range(3):
         try:
             d = _get_json(f"{tasks_url}?page_size=10", headers)
-            for t in (d.get("items") or []):
-                if (t.get("created_at") or 0) < since_ts - 30:
-                    continue
-                tdur = t.get("duration") or (t.get("content") or {}).get("duration")
-                if duration and tdur and int(round(duration)) != int(tdur):
-                    continue
-                return t.get("id") or ""
-            return ""
         except Exception:
             time.sleep(5)
+            continue
+        hits = []
+        for t in (d.get("items") or []):
+            if (t.get("created_at") or 0) < since_ts - 30:
+                continue
+            tid = t.get("id") or ""
+            if not tid:
+                continue
+            if model and t.get("model") and t.get("model") != model:
+                continue
+            tdur = t.get("duration") or (t.get("content") or {}).get("duration")
+            if want is not None and tdur is None:
+                try:  # 排队中的任务列表项常缺 duration,补查详情再定
+                    tdur = (_get_json(f"{tasks_url}/{tid}", headers) or {}).get("duration")
+                except Exception:
+                    tdur = None
+            if want is not None and (tdur is None or want != int(tdur)):
+                continue
+            hits.append(tid)
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            print(f"[genmedia] 查重命中 {len(hits)} 个同窗口候选({', '.join(hits)}),"
+                  "无法唯一归属本次提交,不认领(请用任务列表人工核对后 reclaim)",
+                  file=sys.stderr, flush=True)
+        return ""
     return ""
 
 
@@ -2362,7 +2486,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
         # 网络层异常:任务可能已在方舟建成,先查重再定失败,避免上层重试重复计费
         print(f"[genmedia] 提交响应异常({e}),查任务列表核对是否已建成…",
               file=sys.stderr, flush=True)
-        tid = _find_recent_ark_task(tasks_url, headers, submit_ts, duration)
+        tid = _find_recent_ark_task(tasks_url, headers, submit_ts, duration,
+                                    model=cfg.get("model") or "")
         if not tid:
             raise RuntimeError(f"方舟提交失败且任务列表未见新任务:{e}") from e
         print(f"[genmedia] 方舟侧已存在本次提交的任务 {tid},转入轮询(未重复提交)",
@@ -2370,48 +2495,71 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     if not tid:
         raise RuntimeError(f"方舟视频任务创建失败:{json.dumps(task)[:400]}")
     print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    return _ark_wait_and_download(cfg, tid, output, resolution, duration, return_last_frame)
+
+
+def _ark_wait_and_download(cfg, tid, output, resolution="", duration=None,
+                           return_last_frame=""):
+    """轮询方舟视频任务直至终态并下载产物(查询/下载接口零计费)。
+    供 _video_ark(新建任务后)与 reclaim_video(认领既有任务)共用。"""
+    tasks_url = f"{_ark_base(cfg)}/contents/generations/tasks"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
     started = time.time()
     deadline = started + VIDEO_TIMEOUT
     last_status, last_beat = "", started
-    while time.time() < deadline:
-        time.sleep(VIDEO_POLL_INTERVAL)
+    while True:
         try:
             st = _get_json(f"{tasks_url}/{tid}", headers)
         except Exception as e:
-            # 轮询瞬时失败不中止:任务已在方舟运行,中止会诱发上层重试重复计费
+            # 查无此任务立即失败(id 有误/已过保留期,重试无意义);
+            # 其余轮询瞬时失败不中止:任务已在方舟运行,中止会诱发上层重试重复计费
+            if "HTTP 404" in str(e):
+                raise RuntimeError(f"方舟查无任务 {tid}:任务 id 有误或产物已过保留期"
+                                   "(可用 code/ark_task_list.py 核对)") from e
             print(f"[genmedia] 轮询失败({e}),{VIDEO_POLL_INTERVAL}s 后重试",
                   file=sys.stderr, flush=True)
-            continue
-        status = st.get("status")
-        # 进度心跳:状态变化即报,同状态每 60s 报一次(方舟查询接口无百分比字段,只能报状态+等待时长)
-        now = time.time()
-        if status != last_status or now - last_beat >= 60:
-            print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
-                  file=sys.stderr, flush=True)
-            last_status, last_beat = status, now
-        if status == "succeeded":
-            c = st.get("content") or {}
-            url = c.get("video_url")
-            if not url:
-                raise RuntimeError(f"方舟任务成功但无 video_url:{json.dumps(st)[:400]}")
-            saved = _save(_request(url, timeout=600), output)
-            usage = st.get("usage") or {}
-            if usage.get("completion_tokens") or usage.get("total_tokens"):
-                _record_video_usage(output, tid, cfg, usage, resolution, duration)
-            else:
-                print("[genmedia] 任务成功但查询响应无 usage 明细,本次未落计费记录",
-                      file=sys.stderr)
-            lf_url = c.get("last_frame_url")
-            if return_last_frame:
-                if lf_url:
-                    _save(_request(lf_url, timeout=600), return_last_frame)
+            st = None
+        if st is not None:
+            status = st.get("status")
+            # 进度心跳:状态变化即报,同状态每 60s 报一次(方舟查询接口无百分比字段,只能报状态+等待时长)
+            now = time.time()
+            if status != last_status or now - last_beat >= 60:
+                print(f"[genmedia] {Path(output).name}: {status},已等待 {int(now - started)}s",
+                      file=sys.stderr, flush=True)
+                last_status, last_beat = status, now
+            if status == "succeeded":
+                c = st.get("content") or {}
+                url = c.get("video_url")
+                if not url:
+                    raise RuntimeError(f"方舟任务成功但无 video_url:{json.dumps(st)[:400]}")
+                saved = _save(_request(url, timeout=600), output)
+                usage = st.get("usage") or {}
+                if usage.get("completion_tokens") or usage.get("total_tokens"):
+                    # reclaim 场景 resolution/duration/model 未随命令传入,以任务详情回填台账
+                    if st.get("model"):
+                        cfg = dict(cfg, model=st["model"])
+                    _record_video_usage(output, tid, cfg, usage,
+                                        resolution or st.get("resolution") or "",
+                                        duration if duration is not None
+                                        else st.get("duration"))
                 else:
-                    print("[genmedia] 已请求 return_last_frame 但响应无 last_frame_url",
+                    print("[genmedia] 任务成功但查询响应无 usage 明细,本次未落计费记录",
                           file=sys.stderr)
-            return saved
-        if status in ("failed", "cancelled"):
-            raise RuntimeError(f"方舟视频生成失败:{json.dumps(st.get('error') or st)[:400]}")
-    raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid}")
+                lf_url = c.get("last_frame_url")
+                if return_last_frame:
+                    if lf_url:
+                        _save(_request(lf_url, timeout=600), return_last_frame)
+                    else:
+                        print("[genmedia] 已请求 return_last_frame 但响应无 last_frame_url",
+                              file=sys.stderr)
+                return saved
+            if status in ("failed", "cancelled"):
+                raise RuntimeError(f"方舟视频生成失败:{json.dumps(st.get('error') or st)[:400]}")
+        if time.time() >= deadline:
+            raise RuntimeError(f"方舟视频超时({VIDEO_TIMEOUT}s),task={tid};任务可能仍在"
+                               f"方舟侧运行,完成后可 reclaim --task-id {tid} 认领产物"
+                               "(仅查询/下载,不重复计费),勿直接重投")
+        time.sleep(VIDEO_POLL_INTERVAL)
 
 
 # ---------------- 视频:MiniMax(POST /v2/video_generation,MiniMax-H3) ----------------
@@ -2986,8 +3134,8 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
         if refs and len(refs) > max_refs:
             raise RuntimeError(f"参考图最多 {max_refs} 张({ver_name}),收到 {len(refs)};"
-                           "请手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号),"
-                           "或改用参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张)并同步项目「分镜组设置」")
+                           "请在分镜预览用该组「🎛 模型」单独换参考图上限更高的视频生成模型(如 Seedance 2.5:≤30 张,渠道不变),"
+                           "或手动删减本组参考图(assets/prompts/<ep>/<grp>.json refs,并同步 [Image N] 编号)")
         if is_v25 and resolution and resolution not in ("480p", "720p"):
             print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
                   file=sys.stderr)
@@ -3203,11 +3351,215 @@ def _tts_openrouter(cfg, text, output, voice, speed, instructions):
 # X-Api-Resource-Id 即模型档(seed-tts-2.0 / seed-tts-1.0 / 克隆 seed-icl-2.0);
 # 响应为 NDJSON:每行 {"code":0,"data":"<base64 音频分片>"},结束行 code=20000000。
 
-def _tts_volcengine(cfg, text, output, voice, speed, instructions):
+# ---- Doubao-音频生成 1.0(seed-audio-1.0,描述定制嗓音)----
+# 同一 X-Api-Key 走非流式音频生成接口:不选音色库 speaker,按「声线文字描述」直接生成
+# 定制嗓音(嗓音模板/voiceprint 样本、旁白、后期配音同一条路)。角色描述由项目声纹卡
+# bible/characters/<id>/voice.json 的**声学字段**(gender/presented_gender、pitch、timbre、
+# accent;--variant 命中 age_variants 时逐字段覆盖)自动拼装——reference_style 等含剧情
+# 叙述的字段不进描述(2026-08-31 实测:剧情文字会被模型当内容读进音频)。旁白(不传
+# --character)优先取项目旁白声线卡 assets/audio/voice/narrator.json 的冻结描述
+# (2026-09-01,--instructions 降为语气),无卡才用 --instructions 作声线描述、缺省内置
+# 旁白声线。注意:同一描述两次生成的音色不完全相同,voiceprint 样本必须一次冻结复用;
+# 重生成=受控变更(§8A)。
+# **嗓音一致性(自动参考锚)**:项目已有冻结样本时自动挂为 @音频1 参考——角色取
+# assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3(形态样本缺失/正在生成
+# 该形态样本时回退基础样本=同一副嗓子按描述变龄),旁白取 refs/NARRATOR_voiceprint.mp3
+# (可选);输出路径即候选样本本身时跳过(首出样本走纯描述)。逐句 dub/逐段旁白因此
+# 不随调用漂音色。
+
+SEEDAUDIO_MODEL = "seed-audio-1.0"
+SEEDAUDIO_NARRATOR_DESC = ("成年旁白,中低音,音色沉稳干净,吐字清晰,"
+                           "叙事感强,官话标准音无口音")
+# 音色库 speaker 名/克隆音色 id 的常见形态:desc 模式下拒作声线描述(陈旧 casting 兜底)
+_SEEDAUDIO_STALE_VOICE = re.compile(
+    r"^(S_|zh_|en_|ja_|es_|id_|pt_|multi_)|_bigtts$|_mars_|_moon_|_uranus_")
+
+
+def _seedaudio_char_desc(character: str, variant: str, project: str, output: str) -> str:
+    """从项目声纹卡拼装角色声线描述(只取声学字段,剧情性文字不进 prompt)。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:                               # 脚本直跑时无包前缀
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        raise RuntimeError("seed-audio 描述定制需要项目上下文:--project 传项目名/目录"
+                           "(Agent 环境通常由 VIDEOAGENTS_PROJECT 自动注入)")
+    vp = root / "bible" / "characters" / character / "voice.json"
+    try:
+        v = json.loads(vp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise RuntimeError(f"seed-audio 描述定制读不到声纹卡 {vp}"
+                           "(03-characters/voiceprint 先出 voice.json)")
+    sel = {}
+    if variant:
+        wanted = variant.casefold()
+        for item in v.get("age_variants") or []:
+            identity = " ".join(str(item.get(k) or "") for k in
+                                ("version_id", "id", "name", "variant", "label"))
+            if wanted in identity.casefold():
+                sel = item
+                break
+        if not sel:
+            raise RuntimeError(f"声纹卡 age_variants 无匹配形态 {variant!r}({vp})")
+    gender = str(v.get("presented_gender") or v.get("gender") or "").strip()
+    parts = []
+    if gender:
+        parts.append({"男": "男性", "女": "女性"}.get(gender, gender))
+    for label, key in (("音高", "pitch"), ("音色:", "timbre"), ("口音:", "accent")):
+        val = str(sel.get(key) or v.get(key) or "").strip()
+        if val:
+            parts.append(f"{label}{val}")
+    if len(parts) < 2:
+        raise RuntimeError(f"声纹卡声学字段不足以定制嗓音(gender/pitch/timbre/accent"
+                           f" 至少两项非空):{vp}")
+    return ",".join(parts)
+
+
+def _seedaudio_ref(character: str, variant: str, project: str, output: str):
+    """描述定制模式的自动参考锚:返回项目冻结样本路径(无则 None)。
+    角色:refs/<CHAR>_<variant>_voiceprint.mp3 → refs/<CHAR>_voiceprint.mp3;
+    旁白:refs/NARRATOR_voiceprint.mp3。候选与输出同路径(正在首出/重出该样本)跳过,
+    变体样本重出因此自动锚定基础样本(同一副嗓子按描述变龄)。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        return None
+    refs = root / "assets" / "audio" / "voice" / "refs"
+    try:
+        out = Path(output).resolve()
+    except OSError:
+        out = Path(output)
+    names = []
+    if character:
+        if variant:
+            names.append(f"{character}_{variant}_voiceprint.mp3")
+        names.append(f"{character}_voiceprint.mp3")
+    else:
+        names.append("NARRATOR_voiceprint.mp3")
+    for name in names:
+        cand = refs / name
+        try:
+            if cand.is_file() and cand.resolve() != out:
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+NARRATOR_CARD_REL = "assets/audio/voice/narrator.json"
+
+
+def _narrator_card(project: str, output: str):
+    """项目级旁白声线卡(narrator.json,旁白声线唯一事实源;2026-09-01):由 voice-generation
+    按项目基调设计声线描述并选型/合成冻结样本,此后旁白声线不随「生成模型」页 TTS 设置变。
+    返回 (卡片 dict, 冻结样本路径或 None);无卡返回 ({}, None)。样本路径即当前输出
+    (正在首出/重出样本)时不作参考。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:                               # 脚本直跑时无包前缀
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not root:
+        return {}, None
+    try:
+        card = json.loads((root / NARRATOR_CARD_REL).read_text(encoding="utf-8"))
+        if not isinstance(card, dict):
+            return {}, None
+    except Exception:
+        return {}, None
+    vp = root / (card.get("voiceprint")
+                 or "assets/audio/voice/refs/NARRATOR_voiceprint.mp3")
+    try:
+        if not vp.is_file() or vp.resolve() == Path(output).resolve():
+            vp = None
+    except OSError:
+        vp = None
+    return card, vp
+
+
+def _seedaudio_desc(voice, instructions, character, variant, project, output):
+    """解析描述定制模式的(声线描述, 语气)。--voice 只接受声线描述文本;疑似音色库
+    speaker 名(陈旧 casting 传入)忽略并告警。旁白:项目有旁白声线卡(narrator.json)时
+    冻结描述优先,--instructions 降为语气;无卡沿用 --instructions 描述/内置声线。"""
+    override = (voice or "").strip()
+    if override and _SEEDAUDIO_STALE_VOICE.search(override):
+        print(f"[genmedia] seed-audio 描述定制模式下 --voice 只接受声线描述文本,"
+              f"疑似音色库 speaker 名 {override!r} 已忽略(改按声纹卡/旁白描述拼装)",
+              file=sys.stderr)
+        override = ""
+    if character:
+        desc = override or _seedaudio_char_desc(character, variant, project, output)
+        tone = (instructions or "").strip() or "平静自然"
+    else:
+        frozen = ""
+        if not override:
+            card, _ = _narrator_card(project, output)
+            frozen = (card.get("description") or "").strip()
+        if frozen:
+            desc = frozen
+            tone = (instructions or "").strip() or "平静自然"
+        else:
+            desc = override or (instructions or "").strip() or SEEDAUDIO_NARRATOR_DESC
+            tone = "平静自然"
+    return desc, tone
+
+
+def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
+                        character="", variant="", project=""):
+    api_key = str(cfg.get("api_key") or "").strip()
+    desc, tone = _seedaudio_desc(voice, instructions, character, variant,
+                                 project, output)
+    ref = _seedaudio_ref(character, variant, project, output)
+    references = []
+    if ref is not None:
+        references.append({"audio_data": base64.b64encode(ref.read_bytes()).decode()})
+        text_prompt = ("@音频1 是说话人的嗓音参考(仅音色,非本段台词的朗读)。"
+                       "生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                       f"说话人(与@音频1 同一副嗓子;{desc})"
+                       f"用{tone}的语气说道:“{text}”")
+    else:
+        text_prompt = ("生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                       f"说话人({desc})用{tone}的语气说道:“{text}”")
+    if len(text_prompt) > 3000:
+        raise RuntimeError(f"seed-audio text_prompt 超 3000 字符上限"
+                           f"({len(text_prompt)}):文本过长,分段合成后拼接")
+    fmt = "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm"
+    audio_config = {"format": fmt, "sample_rate": 24000}
+    if speed and speed != 1.0:
+        # speech_rate ∈ [-50,100]:0=常速,100=2 倍速,-50=0.5 倍速
+        audio_config["speech_rate"] = max(-50, min(100, round((speed - 1) * 100)))
+    resp = json.loads(_request(
+        "https://openspeech.bytedance.com/api/v3/tts/create",
+        json.dumps({"model": SEEDAUDIO_MODEL, "text_prompt": text_prompt,
+                    **({"references": references} if references else {}),
+                    "audio_config": audio_config, "watermark": {}},
+                   ensure_ascii=False).encode(),
+        {"Content-Type": "application/json", "X-Api-Key": api_key,
+         "X-Api-Request-Id": str(uuid.uuid4())},
+        timeout=TTS_TIMEOUT))
+    audio_b64 = resp.get("audio") or ""
+    if not audio_b64:
+        raise RuntimeError(f"火山音频生成(seed-audio)返回空音频"
+                           f"(code={resp.get('code')}):{resp.get('message') or json.dumps(resp, ensure_ascii=False)[:300]}")
+    print(f"[genmedia] seed-audio 描述定制嗓音:desc={desc!r} tone={tone!r}"
+          f" ref={ref.name if ref is not None else '无(纯描述)'}"
+          f" dur={resp.get('original_duration')}s", file=sys.stderr)
+    return _save(base64.b64decode(audio_b64), output)
+
+
+def _tts_volcengine(cfg, text, output, voice, speed, instructions,
+                    character="", variant="", project=""):
     api_key = str(cfg.get("api_key") or "").strip()
     if not api_key:
         raise RuntimeError("火山 TTS 未配置 API Key(新版语音技术控制台「API Key 管理」"
                            "创建,「🎨 生成模型」页 TTS → 火山引擎 填入)")
+    if (cfg.get("model") or "") == SEEDAUDIO_MODEL:
+        return _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
+                                   character, variant, project)
     speaker = voice or cfg.get("voice") or ""
     if not speaker:
         raise RuntimeError("火山 TTS 未指定音色:--voice 传 speaker 名,"
@@ -3443,7 +3795,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None,
-                   ref_image_size: str = "") -> str:
+                   ref_image_size: str = "", group: str = "") -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
@@ -3465,7 +3817,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
-    cfg = get_config("video")
+    cfg = apply_group_video_override(get_config("video"), group or _group_from_output(output))
     if ref_image_size and cfg["provider"] != "comfyui":
         raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
@@ -3498,6 +3850,49 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
         return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,
                   seed, output, ref_image_size=ref_image_size)
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
+
+
+def _ark_reclaim_config() -> dict:
+    """reclaim 只需方舟渠道(火山引擎/BytePlus)的 api_key(查询/下载接口):
+    优先取当前生效视频渠道;非方舟(或生效配置本身报错)时回退直读配置里的方舟段,
+    渠道切走后仍能认领历史任务。"""
+    try:
+        cfg = get_config("video")
+        if cfg.get("provider") in ARK_API_BASES:
+            return cfg
+    except RuntimeError:
+        pass
+    try:
+        raw = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+    except Exception:
+        raw = {}
+    for prov in ARK_API_BASES:
+        pc = dict(raw.get(prov) or {})
+        key = pc.get("api_key") or os.environ.get(ENV_KEYS.get(prov, ""), "")
+        if key:
+            return {"provider": prov, **pc, "api_key": key,
+                    "model": pc.get("custom_model") or pc.get("model") or ""}
+    raise RuntimeError("reclaim 需要方舟渠道(火山引擎/BytePlus)的 API Key:"
+                       "当前视频渠道非方舟且配置无方舟 Key,请在「🎨 生成模型」页补齐"
+                       f"或设环境变量 {ENV_KEYS['volcengine']}")
+
+
+def reclaim_video(task_id: str, output: str, return_last_frame: str = "") -> str:
+    """认领方舟侧已建成的视频任务:仅查询状态并下载产物,绝不重新提交
+    (方舟任务查询/产物下载零计费)。返回保存的绝对路径。
+
+    适用场景:提交或下载阶段被网络/工具超时掐断,但任务在方舟侧已建成——
+    succeeded 直接取回产物;排队/运行中则继续轮询到完成;failed/查无此任务
+    如实报错。任务 id(cgt-…)见提交日志「任务已创建」行或 code/ark_task_list.py。"""
+    _forbid_dispatch_layer("视频")
+    task_id = str(task_id or "").strip()
+    if not task_id:
+        raise RuntimeError("reclaim 需要 --task-id(方舟任务 id,形如 cgt-…)")
+    cfg = _ark_reclaim_config()
+    print(f"[genmedia] 认领任务 {task_id} → {Path(output).name}"
+          "(仅查询/下载,不重新提交不重复计费)", file=sys.stderr, flush=True)
+    return _ark_wait_and_download(cfg, task_id, output,
+                                  return_last_frame=return_last_frame)
 
 
 def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
@@ -3539,16 +3934,45 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     data/TimbreModel/);旁白不传 character;voice 仅保留真实本地音频文件的兼容覆盖。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
     情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
+    volcengine 模型为 seed-audio-1.0 时走描述定制嗓音(角色按声纹卡声学字段、旁白按
+    instructions 描述直接生成,不选音色;--voice 传 speaker 名会被忽略)。
+    旁白声线(2026-09-01):项目有旁白声线卡 assets/audio/voice/narrator.json 时以卡为准
+    ——同渠道用卡冻结的 tts_voice、seed-audio 用卡冻结描述+样本参考锚、ComfyUI 直接用
+    冻结样本作参考音频;此后用户改 TTS 设置不影响旁白声线(渠道不一致时告警回退并提示
+    重定卡)。无卡才回退渠道「默认音色」旧行为。
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
+    # 旁白(不传 character、未显式 --voice):优先按项目旁白声线卡固定声线(不随 TTS 设置变)
+    if not character and not (voice or "").strip():
+        card, vp = _narrator_card(project, output)
+        if card:
+            prov, model = cfg["provider"], (cfg.get("model") or "")
+            if prov == "comfyui":
+                if vp is not None:
+                    voice = str(vp)   # Index-TTS 直接以冻结样本为参考音频
+                    print(f"[genmedia] 旁白声线取项目旁白声线卡冻结样本 {vp.name}"
+                          f"({NARRATOR_CARD_REL})", file=sys.stderr)
+            elif prov == "volcengine" and model == SEEDAUDIO_MODEL:
+                pass   # 描述定制:_seedaudio_desc 取卡冻结描述,_seedaudio_ref 自动挂冻结样本锚
+            elif (card.get("tts_voice") or "").strip():
+                card_prov = (card.get("tts_provider") or prov).strip()
+                if card_prov == prov:
+                    voice = card["tts_voice"].strip()
+                    print(f"[genmedia] 旁白声线取旁白声线卡冻结音色 {voice}"
+                          f"({NARRATOR_CARD_REL},不随渠道默认音色变)", file=sys.stderr)
+                else:
+                    print(f"[genmedia] 警告:旁白声线卡冻结渠道 {card_prov} 与当前生效渠道"
+                          f" {prov} 不一致,冻结音色不可用——本次回退渠道默认音色,旁白声线可能"
+                          "漂移;请回派 09-audio/voice-generation 按新渠道重定旁白声线卡",
+                          file=sys.stderr)
     fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
           "minimax": _tts_minimax, "elevenlabs": _tts_elevenlabs,
           "comfyui": _tts_comfyui}.get(cfg["provider"])
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
                            "(可选 openrouter / volcengine / minimax / elevenlabs / comfyui)")
-    if cfg["provider"] == "comfyui":
+    if cfg["provider"] in ("comfyui", "volcengine"):
         return fn(cfg, text, output, voice, speed, instructions,
                   character, variant, project)
     return fn(cfg, text, output, voice, speed, instructions)
@@ -3600,12 +4024,17 @@ def _check_id_digits(*paths):
                     f" grp/sh 编号固定三位零填充,应为 {fixed!r}(完整路径 {path})")
 
 
-def _cmd_info(_args):
+def _cmd_info(args):
+    group = getattr(args, "group", "") or ""
     for kind in ("image", "video", "music", "tts"):
         try:
             cfg = get_config(kind)
+            if kind == "video" and group:
+                cfg = apply_group_video_override(cfg, group)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
+            if cfg.get("_group_override"):
+                desc += f"  (组 {group} 组级覆盖;全局 model={get_config('video')['model']})"
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")
@@ -3632,11 +4061,12 @@ def _cmd_image(args):
 def _cmd_video(args):
     _check_id_digits(args.output, args.return_last_frame)
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
+    group = args.group or _group_from_output(args.output)
     if args.dry_run:
-        cfg = get_config("video")
+        cfg = apply_group_video_override(get_config("video"), group)
         resolution = _resolution_gate(args.resolution)
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
-            else f"model={cfg.get('model') or '-'}"
+            else f"model={cfg.get('model') or '-'}" + (f" (组级覆盖 {group})" if cfg.get("_group_override") else "")
         line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
@@ -3657,8 +4087,15 @@ def _cmd_video(args):
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,
                          args.duration, args.resolution, args.aspect, args.seed,
                          args.ref, args.audio_ref, gen_audio, args.return_last_frame,
-                         video_refs=args.ref_video, ref_image_size=args.ref_image_size)
+                         video_refs=args.ref_video, ref_image_size=args.ref_image_size,
+                         group=group)
     print(f"已生成: {out}")
+
+
+def _cmd_reclaim(args):
+    _check_id_digits(args.output, args.return_last_frame)
+    out = reclaim_video(args.task_id, args.output, args.return_last_frame)
+    print(f"已认领: {out}")
 
 
 def _cmd_upscale(args):
@@ -3718,11 +4155,27 @@ def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
         voice = args.voice or cfg.get("voice") or "eve"
+        # 旁白声线卡(narrator.json)在 dry-run 同样生效,预览与正式合成一致
+        card, card_vp = ({}, None)
+        if not args.character and not (args.voice or "").strip():
+            card, card_vp = _narrator_card(args.project, args.output)
+            if card and (card.get("tts_voice") or "").strip() and \
+                    (card.get("tts_provider") or cfg["provider"]) == cfg["provider"]:
+                voice = f"narrator-card:{card['tts_voice'].strip()}"
         if cfg["provider"] == "comfyui":
-            selected = _resolve_tts_reference(
-                cfg, args.text, args.output, args.voice, args.character,
-                args.variant, args.project, args.instructions)
-            voice = f"auto:{selected['file']} ({selected['reason']})"
+            if card_vp is not None:
+                voice = f"narrator-card:{card_vp.name}(冻结样本参考)"
+            else:
+                selected = _resolve_tts_reference(
+                    cfg, args.text, args.output, args.voice, args.character,
+                    args.variant, args.project, args.instructions)
+                voice = f"auto:{selected['file']} ({selected['reason']})"
+        elif cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL:
+            desc, tone = _seedaudio_desc(args.voice, args.instructions, args.character,
+                                         args.variant, args.project, args.output)
+            ref = _seedaudio_ref(args.character, args.variant, args.project, args.output)
+            voice = (f"desc:{desc} (语气:{tone};"
+                     f"参考锚:{ref.name if ref is not None else '无,纯描述'})")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}"
         print(f"[dry-run] tts via {cfg['provider']} {desc}"
@@ -3737,7 +4190,9 @@ def _cmd_tts(args):
 def main():
     ap = argparse.ArgumentParser(description="统一图像/视频/音乐生成(渠道按 data/.videoagents/genconfig.json)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi = sub.add_parser("info", help="查看当前生效渠道与模型")
+    pi.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:同时显示该组的组级视频模型覆盖(分镜预览「🎛 模型」)")
 
     pi = sub.add_parser("image", help="生成图像")
     pi.add_argument("--prompt", required=True)
@@ -3745,7 +4200,8 @@ def main():
     pi.add_argument("--negative", default="")
     pi.add_argument("--aspect", default="", help="画幅,如 16:9(与 --size 二选一)")
     pi.add_argument("--size", default="", help="精确尺寸,如 1280x720")
-    pi.add_argument("--ref", nargs="+", default=None, help="参考图路径(可多张)")
+    pi.add_argument("--ref", nargs="+", action="extend", default=None,
+                    help="参考图路径(可多张;重复给出时累积)")
     pi.add_argument("--n", type=int, default=1, help="候选张数(>1 时文件名加 _01.. 后缀)")
     pi.add_argument("--seed", type=int, default=None)
     pi.add_argument("--dry-run", action="store_true")
@@ -3761,14 +4217,14 @@ def main():
     pv.add_argument("--resolution", default="", help="如 720p / 1080p")
     pv.add_argument("--aspect", default="", help="画幅,如 16:9")
     pv.add_argument("--seed", type=int, default=None)
-    pv.add_argument("--ref-video", nargs="+", default=None,
+    pv.add_argument("--ref-video", nargs="+", action="extend", default=None,
                     help="参考视频路径(2.0 ≤3 个/总时长≤15s,2.5 ≤10 个/总时长≤30s;"
                          "V2V 编辑/延长,Seedance 2.x 专用,"
                          "prompt 用「视频n」序号引用;与首尾帧互斥)")
-    pv.add_argument("--ref", nargs="+", default=None,
+    pv.add_argument("--ref", nargs="+", action="extend", default=None,
                     help="参考图路径(可多张,2.0 ≤9 / 2.5 ≤30;"
                          "多模态参考/多镜头组模式,与首尾帧互斥)")
-    pv.add_argument("--audio-ref", nargs="+", default=None,
+    pv.add_argument("--audio-ref", nargs="+", action="extend", default=None,
                     help="参考音频路径(2.0 ≤3 段/总时长≤15s,2.5 ≤10 段/总时长≤30s;"
                          "如角色 TTS 音色样本)")
     pv.add_argument("--generate-audio", choices=["on", "off", ""], default="",
@@ -3778,7 +4234,18 @@ def main():
                          "同像素面积;max 短边 ≤2048 不压缩,身份保真更好但更慢更贵")
     pv.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(用于组间续接锚)")
+    pv.add_argument("--group", default="",
+                    help="组号 epNN/grpNNN:按该组的组级视频模型覆盖生成(渠道不变);"
+                         "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
+
+    pr = sub.add_parser("reclaim", help="认领方舟侧已建成的视频任务:仅查询+下载产物,"
+                                        "不重新提交不重复计费(火山引擎/BytePlus 专用)")
+    pr.add_argument("--task-id", required=True, help="方舟任务 id,形如 cgt-…"
+                    "(见提交日志「任务已创建」行,或 code/ark_task_list.py)")
+    pr.add_argument("--output", required=True, help="输出 mp4 路径")
+    pr.add_argument("--return-last-frame", default="",
+                    help="尾帧 PNG 落盘路径(原提交带 --return-last-frame 时才有产物)")
 
     pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
     pu.add_argument("--input", default="",
@@ -3805,6 +4272,7 @@ def main():
     pt.add_argument("--voice", default="",
                     help="音色(云渠道:缺省用配置页默认,openrouter=音色名/火山=speaker 名/"
                          "minimax=voice_id/elevenlabs=voice_id,角色配音按 casting 传;"
+                         "火山 seed-audio-1.0 描述定制模式:不要传,speaker 名会被忽略;"
                          "ComfyUI:仅接受真实本地音频文件的兼容覆盖,通常不要传)")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
     pt.add_argument("--instructions", default="",
@@ -3828,8 +4296,8 @@ def main():
     t0 = time.time()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
-         "upscale": _cmd_upscale, "music": _cmd_music, "tts": _cmd_tts,
-         "upload": _cmd_upload}[args.cmd](args)
+         "reclaim": _cmd_reclaim, "upscale": _cmd_upscale, "music": _cmd_music,
+         "tts": _cmd_tts, "upload": _cmd_upload}[args.cmd](args)
     except RuntimeError as e:
         _diag_report(args, t0, error=str(e))
         print(f"生成失败: {e}", file=sys.stderr)
@@ -3842,7 +4310,8 @@ def _diag_report(args, t0: float, error: str = "") -> None:
     """诊断事件旁路(modules/diagnostics.py):白名单字段本地落盘,错误消息
     模板化后只存模板与签名,不出网。info/dry-run 不记;渠道/模型 best-effort,
     读不到(如配置缺失本身就是报错原因)不影响记录。"""
-    if _diagnostics is None or args.cmd in ("info", "upload") \
+    # reclaim 只取回既有任务产物,不是新生成事件,不入生成诊断
+    if _diagnostics is None or args.cmd in ("info", "upload", "reclaim") \
             or getattr(args, "dry_run", False):
         return
     provider = model = ""

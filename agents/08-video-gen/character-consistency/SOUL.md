@@ -37,7 +37,7 @@
 python3 modules/genmedia.py image \
   --prompt "<强化角色特征的 prompt,必含 style.json 风格段与该角色性别词(appearance.json gender;presented_gender 优先)>" \
   --negative "<style.json 负面清单>" \
-  --output <候选帧路径> --size 2560x1440 \   # 16:9 最小合规;校正图要回锚点包进视频参考,须 ≥3,686,400 像素(火山硬限;9:16 用 1440x2560)
+  --output <候选帧路径> --size 2560x1440 \   # 16:9 统一出图规格(9:16 用 1440x2560)
   --ref assets/concepts/characters/<id>/sheet.png <原候选帧>   # sheet 单张即全套视角(2026-08-04 二订)
 ```
 

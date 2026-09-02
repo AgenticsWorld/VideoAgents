@@ -308,9 +308,13 @@ def main(argv=None):
         variants[k] = v or "default"
     try:
         from genmedia import get_config, generate_tts
-        provider = get_config("tts").get("provider", "")
+        tts_cfg = get_config("tts")
+        provider = tts_cfg.get("provider", "")
     except Exception as e:  # noqa: BLE001
         raise SystemExit(f"加载 genmedia 失败:{e}")
+    # 火山 seed-audio-1.0=描述定制嗓音:不传 casting 的 speaker 名(genmedia 按声纹卡
+    # 描述+项目 voiceprint 样本自动锚定同一副嗓子,逐句合成不漂音色)
+    desc_mode = provider == "volcengine" and tts_cfg.get("model") == "seed-audio-1.0"
 
     manifest = {"schema": "dub_manifest/v1", "group_id": gid, "episode": ep, "mode": "dubbing",
                 "clip": str(clip.relative_to(proj)), "clip_duration_s": round(total, 3),
@@ -326,7 +330,7 @@ def main(argv=None):
         if not c:
             raise SystemExit(f"casting.json 无 {ch}/{var} 条目——先登记再合成(dub_speaker_casting_bound)")
         base_speed = float(c.get("speed") or 1.0)
-        voice = "" if provider == "comfyui" else (c.get("tts_voice") or "")
+        voice = "" if (provider == "comfyui" or desc_mode) else (c.get("tts_voice") or "")
         target = b - a
         raw_mp3 = dub_dir / f"l{i:02d}_{ch}.mp3"
         fit_wav = dub_dir / f"l{i:02d}_{ch}.fit.wav"

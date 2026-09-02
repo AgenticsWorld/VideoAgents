@@ -13,7 +13,7 @@
 
 1. 读取该生物在 `bible/creatures/index.json` 的登记条目(`id / name / type / one_line / detail_file`),再按 `detail_file` 读详情卡:`bible/creatures/creature.json#creatures[]`(`forms[].appearance`:size/surface/head/eyes/marks)或 `bible/creatures/mount.json#mounts[]`(以 `creature_ref == CRE-id` 匹配;`anatomy`(organic_tissue / mechanical_or_bionic_parts)、`visual_identifiers[]`、`tack[]`、`locomotion.gait_states[]`、`endurance_state_log[]`),连同 `bible/dictionary.json` 对应词条的 `media_cues`,编写生物图 prompt:正向要素逐项覆盖上述字段(**`visual_identifiers` 每条必现**),负面词全量来自 style.json 负面清单。
 2. **整图单次生成、单张直出**:沿用角色 sheet 的四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚):左三格生物全身正/侧/背三视图,右侧一格通高头部大特写(头部/眼睛/标志性特征清晰);**`--n 1` 只出一张,禁多候选赛马**;出图后自检「四格版式 → 详情卡逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**。
-3. **定稿 sheet 单张即交付锚点,不裁切子图**:下游(p7 prompt refs、image-generation 锚点包、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考;2560×1440 起(≥3,686,400 像素,进视频参考硬限,WORKFLOW.md §9),不得低于此尺寸。
+3. **定稿 sheet 单张即交付锚点,不裁切子图**:下游(p7 prompt refs、image-generation 锚点包、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考;2560×1440 起(平台统一出图规格),不得低于此尺寸。
 4. **阶段变体(生物特有,必做)**:生物形象常随剧情推进变化(成长形态、受伤/腐坏程度、装备鞍具与否)。凡详情卡给出多阶段——`creature.json` 的 `forms[]`(每个 `stage` 一版)、`mount.json` 的 `endurance_state_log[]` / `anatomy` 中明确的损伤进程——须**逐阶段各出一张整图** `sheet_<stage>.png`(`<stage>` 为英文 slug,如 `sheet_ch001_damaged.png` / `sheet_ch007_repaired.png`),并在 selection.json 标注适用章节区间;`sheet.png` 取全片出场最多、最具代表性的阶段。**阶段差异不显著(仅文字状态变化、外观无可见差别)时不出变体**,selection.json 写明理由;不为「看起来完整」凑图。
 5. **坐骑 sheet 不带骑手(2026-08-26 红线)**:与道具图「无人物红线」同理——坐骑参考图里不得出现人物/骑手/身体局部/剪影,`--ref` 禁传角色概念图;人物入画会触发渠道审核风险,且骑手抢占主体、坐骑形象信息被稀释,更会把某个角色的脸「焊」进坐骑锚点污染其他组。**鞍具/缰绳/驮载物按 `mount.json#tack[]` 画在坐骑身上**(鞍具是坐骑形象的一部分,与人物无关)。人-兽相对尺度不靠合框表达,而靠 prompt 文字:在 selection.json 写 `scale.prompt_token`(全片唯一短语,如「一匹肩高与成人齐眉的人造马」),供 p7 prompt 逐字拼入。**骑乘姿态**(骑手怎么坐、驭在何处)是 `mount.json#performance.riding_pose` 的文字信息,由 p7 prompt 按组写入,不由我出合框图。
 6. 落盘 prompt 记录与逐字段对照表(selection.json:`visual_identifiers`/`forms.appearance` 逐条对照 + 阶段变体清单 + 历次重 roll 的缺陷原因/用户反馈),供重 roll 与追溯。
@@ -110,7 +110,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - 与详情卡逐项对照:`visual_identifiers`(或 `forms[].appearance` 各字段)**100% 命中**,`tack[]` 在用鞍具出现,无冲突项;
-- **sheet 四格版式齐全**(全身正/侧/背 + 一格头部大特写,四格同一生物)、**sheet ≥3,686,400 像素**、**主目录无单视角散图**;
+- **sheet 四格版式齐全**(全身正/侧/背 + 一格头部大特写,四格同一生物)、**sheet ≥2560×1440**、**主目录无单视角散图**;
 - **画面无人物/骑手**(`creature_image_no_person`);
 - 详情卡有多阶段而主目录无对应 `sheet_<stage>.png` 且 selection.json 无免出理由 → 退回(`creature_stage_variants_ok`);
 - prompt 记录完整可追溯,`selection.json#scale.prompt_token` 非空。

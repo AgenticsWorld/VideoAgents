@@ -78,7 +78,7 @@ def main() -> int:
         else:
             expected, basis = None, "无快照"
             warns.append("项目 settings.json 无 prompt_skill.effective 快照(从未经运行时解析);"
-                         "只做内部一致性核对,请用 --expect 指定基准或先经控制台保存一次分镜组设置")
+                         "只做内部一致性核对,请用 --expect 指定基准或先经控制台保存一次视频模型设置")
     exp_sha = ""
     if expected:
         smd = skill_md_path(expected)
@@ -98,6 +98,7 @@ def main() -> int:
         want = set(args.groups)
         files = [f for f in files if f.stem in want]
     n = 0
+    proj_expected, proj_reason, proj_sha = expected, exp_reason, exp_sha
     for f in files:
         n += 1
         try:
@@ -105,6 +106,24 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001
             errs.append(f"{f.name}: JSON 解析失败 {e}")
             continue
+        # 组级覆盖(分镜预览「🎛 模型」,2026-08-30):assets/group_settings/<ep>/<grp>.json 的
+        # effective 快照优先于项目级基准;--expect 显式指定时仍以 --expect 为准
+        expected, exp_reason, exp_sha = proj_expected, proj_reason, proj_sha
+        gsf = proj_root / "assets" / "group_settings" / args.ep / f"{f.stem}.json"
+        if args.expect is None and gsf.is_file():
+            try:
+                geff = (json.loads(gsf.read_text(encoding="utf-8")).get("effective") or {})
+            except Exception:
+                geff = {}
+            if isinstance(geff, dict) and "skill_id" in geff:
+                expected, exp_reason = str(geff.get("skill_id") or ""), str(geff.get("reason") or "")
+                exp_sha = ""
+                if expected:
+                    gsmd = skill_md_path(expected)
+                    if not gsmd.is_file():
+                        errs.append(f"{f.name}: 组级基准技能 {expected} 的 SKILL.md 不存在:{gsmd}")
+                        continue
+                    exp_sha = sha256_of(gsmd)
         sa = d.get("skill_applied")
         if not isinstance(sa, dict):
             errs.append(f"{f.name}: 缺 skill_applied 回执字段(须为对象:套用技能时 {{id, sha256, checklist}},"
@@ -118,7 +137,7 @@ def main() -> int:
                 warns.append(f"{f.name}: skill_applied.reason={sa.get('reason')!r} 与快照 {exp_reason!r} 不一致")
             continue
         if expected and sid != expected:
-            errs.append(f"{f.name}: skill_applied.id={sid!r},项目设定要求 {expected}")
+            errs.append(f"{f.name}: skill_applied.id={sid!r},项目/组级设定要求 {expected}")
             continue
         if not sid:
             if expected is None:
