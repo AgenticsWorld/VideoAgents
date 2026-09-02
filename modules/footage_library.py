@@ -25,6 +25,7 @@ faster-whisper(字幕;模型首次使用时下载到 data/models/faster-whisper/
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -44,7 +45,11 @@ SCHEMA_CLIPS = "videoagents.footage.clips.v1"
 
 PROXY_HEIGHT = int(os.environ.get("VIDEOAGENTS_FOOTAGE_PROXY_HEIGHT", "480"))
 DOWNLOAD_HEIGHT = 1080
-MIN_SCENE_LEN_S = 2.0
+# 切分参数 env 可配(默认值不变):快切密集的源(发布会产品蒙太奇)可调
+# MIN_SCENE_S=1.0 后重新分割,避免多镜被合并成蒙太奇 clip(mashup v4 摸底结论)
+MIN_SCENE_LEN_S = float(os.environ.get("VIDEOAGENTS_FOOTAGE_MIN_SCENE_S", "2.0"))
+ADAPTIVE_THRESHOLD = float(os.environ.get("VIDEOAGENTS_FOOTAGE_ADAPTIVE_THRESHOLD", "3.0"))
+CONTENT_THRESHOLD = float(os.environ.get("VIDEOAGENTS_FOOTAGE_CONTENT_THRESHOLD", "27.0"))
 VISUAL_DIFF_THRESHOLD = float(os.environ.get("VISUAL_DIFF_THRESHOLD", "0.025"))
 MAX_UPLOAD_CHUNK = 64 * 1024 * 1024
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -469,8 +474,10 @@ def _scenedetect_boundaries(proxy: Path) -> list[float]:
         from scenedetect import AdaptiveDetector, ContentDetector, detect
     except ImportError as exc:
         raise FootageLibError(500, f"未安装 scenedetect:{exc}") from exc
-    for det in (AdaptiveDetector(adaptive_threshold=3.0, min_scene_len=f"{MIN_SCENE_LEN_S}s"),
-                ContentDetector(threshold=27.0, min_scene_len=f"{MIN_SCENE_LEN_S}s")):
+    for det in (AdaptiveDetector(adaptive_threshold=ADAPTIVE_THRESHOLD,
+                                 min_scene_len=f"{MIN_SCENE_LEN_S}s"),
+                ContentDetector(threshold=CONTENT_THRESHOLD,
+                                min_scene_len=f"{MIN_SCENE_LEN_S}s")):
         scenes = detect(str(proxy), det, show_progress=False)
         if len(scenes) > 1:
             return [float(s[1].get_seconds()) for s in scenes[:-1]]
@@ -729,7 +736,13 @@ def update_clip(name: str, clip_id: str, fields: dict) -> dict:
 
 
 def make_contact_sheet(name: str, clip_id: str) -> Path:
-    """按 clip 时长取 2–8 个时间点,从代理片抽帧拼成带编号的联系图。"""
+    """按 clip 时长线性取 4–16 个时间点,从代理片抽帧拼成带编号+绝对秒标签的联系图。
+
+    v4(mashup 摸底改版):帧数从 2–8 分档改为按时长线性(约 1.5s 一帧,20s clip
+    从 4 帧提到 14 帧);格子角标带**源片绝对秒**(与 clips.json 的 start_s/end_s
+    同坐标),并把 `sheet_stamps`(绝对秒列表)落盘——curator 定 rough/锚点从此有
+    真实时间坐标,不再按格序插值猜。
+    """
     try:
         from PIL import Image, ImageDraw, ImageOps
     except ImportError as exc:
@@ -741,9 +754,13 @@ def make_contact_sheet(name: str, clip_id: str) -> Path:
     source = proxy if proxy.is_file() else d / clip["file"]
     offset = clip["start_s"] if source == proxy else 0.0
     dur = max(0.1, float(clip["duration_s"]))
-    n = 8 if dur >= 60 else 6 if dur >= 30 else 4 if dur >= 10 else 3 if dur >= 3 else 2
+    n = max(4, min(16, math.ceil(dur / 1.5)))
+    if n > 4 and all(n % c for c in (4, 5, 3, 6, 7)):
+        n -= 1                                      # 质数帧数(11/13)退一帧,保证网格填满
     stamps = [dur * (i + 0.5) / n for i in range(n)]
-    cols = n if n <= 3 else 2 if n == 4 else 4      # 网格恰好填满,不留空黑格误导模型
+    abs_stamps = [round(float(clip["start_s"]) + ts, 2) for ts in stamps]
+    # 网格恰好填满,不留空黑格误导模型:优先能整除 n 的列数,否则退 4 列
+    cols = 2 if n == 4 else next((c for c in (4, 5, 3, 6, 7) if n % c == 0), 4)
     tw, th = (640, 360) if n <= 4 else (512, 288)
     rows = (n + cols - 1) // cols
     sheet = Image.new("RGB", (cols * tw, rows * th), "#111318")
@@ -756,24 +773,31 @@ def make_contact_sheet(name: str, clip_id: str) -> Path:
                 continue
             frame = ImageOps.fit(Image.open(fp).convert("RGB"), (tw, th), method=Image.Resampling.LANCZOS)
             draw = ImageDraw.Draw(frame)
-            draw.rectangle((10, 10, 92, 42), fill="#111318")
-            draw.text((20, 18), f"#{i + 1}", fill="white")
+            m, s = divmod(abs_stamps[i], 60.0)
+            draw.rectangle((10, 10, 190, 42), fill="#111318")
+            draw.text((20, 18), f"#{i + 1} @{int(m):02d}:{s:04.1f}", fill="white")
             sheet.paste(frame, ((i % cols) * tw, (i // cols) * th))
     out = d / "clips" / f"{_clip_stem(name, int(clip['index']))}.sheet.jpg"
     sheet.save(out, quality=88, optimize=True)
     clip["sheet"] = f"clips/{out.name}"
+    clip["sheet_stamps"] = abs_stamps
     with _LOCK:
         doc2 = load_clips(name)
-        _find_clip(doc2, clip_id)["sheet"] = clip["sheet"]
+        c2 = _find_clip(doc2, clip_id)
+        c2["sheet"] = clip["sheet"]
+        c2["sheet_stamps"] = abs_stamps
         save_clips(name, doc2)
     return out
 
 
 DEFAULT_ANALYSIS_QUESTION = (
-    "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分四行回答(不要 JSON、不要 markdown、不要代码块):\n"
+    "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分七行回答(不要 JSON、不要 markdown、不要代码块):\n"
     "画面:这个分镜整体呈现了什么,包括人物、物体、场景、动作与镜头运动。\n"
     "主旨:提炼这个分镜传递的主旨或叙事信息。\n"
     "风格:画面整体风格——媒介/艺术形式、色彩、质感、光影与氛围。\n"
+    "切口:画面是否在某两格之间发生硬切或场景突变。有则写「第N格(@角标秒数)与第N+1格(@角标秒数)之间」,可多处;没有写「无」。\n"
+    "稳定:最稳定可用的连续区间,用格子角标秒数表述(如「约 02:15.4 到 02:19.6」);有剧烈晃动、虚焦、遮挡的段落单独指出;整体稳定写「全程稳定」。\n"
+    "主体:主体人物的状态与情绪(在做什么、投入或松弛、情绪如何);无人物写「无人物」。\n"
     "标签:3 到 6 个简短的画面标签,用顿号分隔。\n"
     "不要只根据单个画面下结论,看不清的内容不要猜测。"
 )

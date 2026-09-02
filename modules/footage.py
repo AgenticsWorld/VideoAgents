@@ -9,11 +9,18 @@ doctor 是唯一拦截点。
 成本阶梯(设计约束,Agent 按此顺序花流量):
   search(纯元数据,零视频流量) → preview ≤360p(几 MB) → fetch 1080p 区间(几十 MB)。
   正片流量只许花在已经视觉确认过的候选上;严禁整片下载超过 --max-duration 的源。
+  素材库(library)通道零流量三档:catalog/search 元数据 → 看库内 sheet/thumbnail
+  (现成 jpg,零下载) → cut 直切库内源片(本地转码)。mashup 插件 v3 起只走此通道。
 
 CLI(全部子命令输出 JSON 到 stdout,便于 Agent 解析;失败 exit 非 0):
   python3 modules/footage.py doctor
-  python3 modules/footage.py search --query "..." [--provider youtube|pexels|pixabay]
+  python3 modules/footage.py search --query "..." [--provider youtube|pexels|pixabay|library]
       [--limit 8] [--min-duration 5] [--max-duration 1200]
+      [--library <name> ...]   # provider=library 必填,可重复给多个库
+  python3 modules/footage.py catalog --library <name> [--library <name2> ...] [--brief]
+  python3 modules/footage.py still --input <jpg|视频> [--at 秒] --out <mp4>
+      --frames N [--fps 24] [--width 1920] [--height 1080]
+      [--zoom in|out|none] [--pan left|right|none]
   python3 modules/footage.py preview --url <URL> --out <mp4> [--max-height 360]
       [--section 60-120]
   python3 modules/footage.py montage --input <video> --out <jpg> [--tiles 4x3]
@@ -37,6 +44,12 @@ Python:
   - search 结果统一 schema:{provider, id, url, title, duration_s, uploader,
     view_count, license, width, height};license 拿不到时为 "unknown"
     (版权责任由用户在 MH1 签字自担,本模块不做过滤,只如实登记)。
+  - library 通道读 data/footage/<name>/clips.json(modules/footage_library.py 落盘):
+    id 统一为 "<库名>:<clip_id>"(跨库不撞号),url 为库内 clip mp4 相对路径,
+    另附 library/clip_id/start_s/end_s(源片绝对秒)/subtitle/info/thumbnail/sheet/
+    source_file;license 恒 "user-provided(素材库自备素材)"。
+  - still 产零公差静帧推拉片段(Ken Burns 兜底):帧数恒 == --frames,契约同 cut
+    (setsar=1、-an、count_frames 尾检),可直接进 concat 拼片。
   - youtube 检索标题含 Videohive/Envato/Nimia/CinemaStock/Motion Array/
     Storyblocks/Artgrid/Shutterstock/Pond5 的候选大概率是带水印预览片,
     结果标 watermark_risk=true 供 scout 降权,但不删除(仍由 curator 看帧定夺)。
@@ -137,7 +150,8 @@ def _api_key(provider: str) -> str:
 # ---------------- 检索(纯元数据,零视频流量) ----------------
 
 def search_youtube(query: str, limit: int = 8,
-                   min_duration: float = 5, max_duration: float = 1200) -> list[dict]:
+                   min_duration: float = 5, max_duration: float = 1200,
+                   **_: object) -> list[dict]:
     """yt-dlp ytsearch 元数据检索。时长过滤挡掉超短废片与合集/直播录像。"""
     require_tools("yt-dlp")
     r = _run(_ytdlp_base() + [f"ytsearch{max(limit * 2, limit + 4)}:{query}",
@@ -223,8 +237,113 @@ def search_pixabay(query: str, limit: int = 8, **_: object) -> list[dict]:
     return out
 
 
+def _footage_library():
+    """惰性导入同仓 modules/footage_library.py(零第三方依赖,双导入路径兼容)。"""
+    try:
+        from modules import footage_library  # 作为包导入时
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import footage_library
+    return footage_library
+
+
+def _library_entry(lib: str, source: dict, clip: dict) -> dict:
+    """clips.json 单条 → search 统一 schema(附库通道扩展字段)。"""
+    fl = _footage_library()
+    lib_dir = fl.FOOTAGE_DIR / lib
+    info = str(clip.get("info") or "")
+    info_head = info.splitlines()[0].strip() if info else ""
+    title = clip.get("title") or clip.get("id", "")
+    if info_head:
+        title = f"{title} | {info_head[:60]}"
+
+    def _p(rel: str | None) -> str | None:
+        return str(lib_dir / rel) if rel else None
+
+    return {
+        "provider": "library", "id": f"{lib}:{clip.get('id')}",
+        "url": _p(clip.get("file")), "title": title,
+        "duration_s": float(clip.get("duration_s") or 0),
+        "uploader": str(source.get("title") or lib),
+        "view_count": None,
+        "license": "user-provided(素材库自备素材)",
+        "width": source.get("width"), "height": source.get("height"),
+        "watermark_risk": False,
+        "library": lib, "clip_id": clip.get("id"),
+        "start_s": clip.get("start_s"), "end_s": clip.get("end_s"),
+        "subtitle": clip.get("subtitle") or "", "info": info,
+        "thumbnail": _p(clip.get("thumbnail")), "sheet": _p(clip.get("sheet")),
+        "source_file": _p((source.get("file") or "") or None),
+    }
+
+
+def search_library(query: str, limit: int = 8,
+                   min_duration: float = 0, max_duration: float = 1200,
+                   libraries: list[str] | None = None, **_: object) -> list[dict]:
+    """本地素材库检索:query 分词(空白/顿号/逗号)对 title+info+subtitle 计分,多库合并排序。
+
+    零网络零流量;语义匹配(render 组「人的状态」类意图)召回有限,scout 应以
+    catalog 一次通读为主、本命令为关键词辅助与 queries_run 登记载体。
+    """
+    if not libraries:
+        raise FootageError("provider=library 需要 --library <name>(可重复给多个库)")
+    fl = _footage_library()
+    terms = [t for t in re.split(r"[\s、,,;;/]+", str(query or "").strip()) if t]
+    if not terms:
+        raise FootageError("检索词为空")
+    scored: list[tuple[int, int, dict]] = []
+    for lib in libraries:
+        doc = fl.load_clips(fl.safe_name(lib))
+        if not doc.get("clips"):
+            raise FootageError(f"素材库为空或不存在:{lib}(data/footage/{lib}/clips.json)")
+        source = doc.get("source") or {}
+        for clip in doc["clips"]:
+            dur = float(clip.get("duration_s") or 0)
+            if not (min_duration <= dur <= max_duration):
+                continue
+            hay = " ".join((str(clip.get("title") or ""), str(clip.get("info") or ""),
+                            str(clip.get("subtitle") or "")))
+            score = sum(hay.count(t) for t in terms)
+            if score > 0:
+                scored.append((score, clip.get("index") or 0, _library_entry(lib, source, clip)))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [e for _, _, e in scored[:limit]]
+
+
+def library_catalog(libraries: list[str], brief: bool = False) -> dict:
+    """逐库全量清单(scout 的主工具:一次通读全部库做语义匹配,零流量)。
+
+    brief=True 时省略 subtitle/info 全文,只留 info 首行与 subtitle 截断,
+    适合库很大时先扫概貌。
+    """
+    if not libraries:
+        raise FootageError("catalog 需要 --library <name>(可重复给多个库)")
+    fl = _footage_library()
+    out: dict = {"libraries": []}
+    for lib in libraries:
+        name = fl.safe_name(lib)
+        doc = fl.load_clips(name)
+        source = doc.get("source") or {}
+        clips = []
+        for clip in doc.get("clips") or []:
+            e = _library_entry(lib, source, clip)
+            if brief:
+                e["subtitle"] = (e["subtitle"] or "").replace("\n", " ")[:60]
+                e["info"] = (e["info"] or "").splitlines()[0][:80] if e["info"] else ""
+            clips.append(e)
+        out["libraries"].append({
+            "name": name, "dir": str(fl.FOOTAGE_DIR / name),
+            "source": {"title": source.get("title"),
+                       "duration_s": source.get("duration_s"),
+                       "width": source.get("width"), "height": source.get("height"),
+                       "fps": source.get("fps"), "file": source.get("file")},
+            "clip_count": len(clips), "clips": clips,
+        })
+    return out
+
+
 SEARCH_PROVIDERS = {"youtube": search_youtube, "pexels": search_pexels,
-                    "pixabay": search_pixabay}
+                    "pixabay": search_pixabay, "library": search_library}
 
 
 # ---------------- 探测与抽帧 ----------------
@@ -402,6 +521,64 @@ def cut_clip(src: str, out: str, in_point: float, duration: float,
             "width": width, "height": height, "fps": fps}
 
 
+def still_clip(src: str, out: str, at: float | None = None, frames: int = 0,
+               fps: int = DEFAULT_FPS, width: int = DEFAULT_W, height: int = DEFAULT_H,
+               zoom: str = "in", pan: str = "none") -> dict:
+    """静帧+Ken Burns 推拉片段(素材库兜底最后一档),契约同 cut_clip:零公差帧数、
+    规格归一、setsar=1、无音轨、count_frames 尾检——可直接进 concat 拼片。
+
+    src 是图片时直接用;是视频时须给 --at(秒)先抽该帧。zoom in|out|none,
+    pan left|right|none(pan 需要缩放余量,zoom=none 时自动垫 1.12 倍)。
+    """
+    require_tools("ffmpeg", "ffprobe")
+    if frames <= 0:
+        raise FootageError("still 必须显式给 --frames(累计取整口径 frames_for_beat)")
+    if zoom not in ("in", "out", "none") or pan not in ("left", "right", "none"):
+        raise FootageError(f"非法 zoom/pan:{zoom}/{pan}")
+    src_path = Path(src)
+    if not src_path.exists():
+        raise FootageError(f"输入不存在:{src}")
+    tmp_frame: Path | None = None
+    if src_path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+        if at is None:
+            raise FootageError("视频输入必须给 --at <秒> 指定取帧点")
+        tmp_frame = Path(out).with_suffix(".still_src.jpg")
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        r = _run(["ffmpeg", "-y", "-v", "error", "-ss", str(at), "-i", str(src_path),
+                  "-frames:v", "1", "-q:v", "2", str(tmp_frame)], timeout=300)
+        if r.returncode != 0 or not tmp_frame.exists():
+            raise FootageError(f"取帧失败:{(r.stderr or '').strip()[-300:]}")
+        src_path = tmp_frame
+    n = frames
+    # zoompan 输入先放大 2 倍再取景,消除亚像素抖动;z/x 表达式按 on(输出帧序号)线性走
+    zexpr = {"in": f"1+0.12*on/{n}", "out": f"1.12-0.12*on/{n}",
+             "none": "1.12" if pan != "none" else "1.001"}[zoom]
+    xexpr = {"none": "(iw-iw/zoom)/2",
+             "right": f"(iw-iw/zoom)*on/{n}",
+             "left": f"(iw-iw/zoom)*(1-on/{n})"}[pan]
+    vf = (f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+          f"crop={width * 2}:{height * 2},"
+          f"zoompan=z='{zexpr}':x='{xexpr}':y='(ih-ih/zoom)/2'"
+          f":d={n}:s={width}x{height}:fps={fps},setsar=1")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    try:
+        r = _run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(src_path),
+                  "-vf", vf, "-frames:v", str(n), "-c:v", "libx264", "-crf", "18",
+                  "-preset", "medium", "-pix_fmt", "yuv420p", "-an", str(out)],
+                 timeout=900)
+    finally:
+        if tmp_frame is not None:
+            tmp_frame.unlink(missing_ok=True)
+    if r.returncode != 0:
+        raise FootageError(f"still 生成失败:{(r.stderr or '').strip()[-300:]}")
+    got = count_frames(out)
+    if got != n:
+        raise FootageError(f"still 帧数不符:want {n} got {got}")
+    return {"path": out, "frames": n, "duration_s": round(n / fps, 6),
+            "width": width, "height": height, "fps": fps,
+            "zoom": zoom, "pan": pan}
+
+
 def concat_clips(list_file: str, out: str) -> dict:
     """concat demuxer 无损拼接(要求各 clip 由 cut_clip 产出:同编码同参数)。"""
     require_tools("ffmpeg")
@@ -517,6 +694,16 @@ def doctor() -> dict:
         except FootageError:
             rep["checks"][f"{prov}_key"] = {
                 "ok": True, "detail": "未配置(可选;CC0 兜底通道不可用)"}
+    # 素材库清单(信息项,不判 FAIL;mashup v3 只用 library 通道,yt-dlp 缺失不拦它)
+    try:
+        fl = _footage_library()
+        libs = [f"{p.name}({len((json.loads((p / 'clips.json').read_text()) or {}).get('clips') or [])} clips)"
+                for p in sorted(fl.FOOTAGE_DIR.iterdir())
+                if (p / "clips.json").is_file()] if fl.FOOTAGE_DIR.is_dir() else []
+        rep["checks"]["footage_libraries"] = {
+            "ok": True, "detail": ", ".join(libs) or f"无素材库({fl.FOOTAGE_DIR})"}
+    except Exception as e:  # noqa: BLE001
+        rep["checks"]["footage_libraries"] = {"ok": True, "detail": f"读取失败:{str(e)[-120:]}"}
     return rep
 
 
@@ -534,8 +721,27 @@ def main(argv=None) -> int:
     s.add_argument("--query", required=True)
     s.add_argument("--provider", default="youtube", choices=sorted(SEARCH_PROVIDERS))
     s.add_argument("--limit", type=int, default=8)
-    s.add_argument("--min-duration", type=float, default=5)
+    s.add_argument("--min-duration", type=float, default=None,
+                   help="缺省:网络通道 5(挡废片),library 0(库内短 clip 是常态)")
     s.add_argument("--max-duration", type=float, default=1200)
+    s.add_argument("--library", action="append", default=None,
+                   help="provider=library 必填,可重复给多个库(data/footage/<name>)")
+    s = sub.add_parser("catalog")
+    s.add_argument("--library", action="append", required=True,
+                   help="素材库名,可重复给多个库")
+    s.add_argument("--brief", action="store_true",
+                   help="只留 info 首行与 subtitle 截断(大库先扫概貌)")
+    s = sub.add_parser("still")
+    s.add_argument("--input", required=True, help="图片,或视频(配 --at 取帧)")
+    s.add_argument("--at", type=float, default=None, help="视频取帧点(秒)")
+    s.add_argument("--out", required=True)
+    s.add_argument("--frames", type=int, required=True,
+                   help="显式帧数(累计取整口径 frames_for_beat)")
+    s.add_argument("--fps", type=int, default=DEFAULT_FPS)
+    s.add_argument("--width", type=int, default=DEFAULT_W)
+    s.add_argument("--height", type=int, default=DEFAULT_H)
+    s.add_argument("--zoom", default="in", choices=["in", "out", "none"])
+    s.add_argument("--pan", default="none", choices=["left", "right", "none"])
     s = sub.add_parser("preview")
     s.add_argument("--url", required=True)
     s.add_argument("--out", required=True)
@@ -590,9 +796,17 @@ def main(argv=None) -> int:
             _emit(rep)
             return 0 if rep["ok"] else 1
         if a.cmd == "search":
+            min_dur = a.min_duration if a.min_duration is not None else (
+                0 if a.provider == "library" else 5)
             _emit(SEARCH_PROVIDERS[a.provider](a.query, limit=a.limit,
-                                               min_duration=a.min_duration,
-                                               max_duration=a.max_duration))
+                                               min_duration=min_dur,
+                                               max_duration=a.max_duration,
+                                               libraries=a.library))
+        elif a.cmd == "catalog":
+            _emit(library_catalog(a.library, a.brief))
+        elif a.cmd == "still":
+            _emit(still_clip(a.input, a.out, a.at, a.frames,
+                             a.fps, a.width, a.height, a.zoom, a.pan))
         elif a.cmd == "preview":
             _emit(download_preview(a.url, a.out, a.max_height, a.section))
         elif a.cmd == "montage":

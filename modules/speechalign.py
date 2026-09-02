@@ -101,10 +101,17 @@ def voiced_text(text: str) -> str:
 # ---------------------------------------------------------------- 台本与音频定位
 
 def find_transcript(proj: Path, ep: str) -> tuple[str, Path] | None:
-    """逐句时间码来源:av 项目 beat_track(集级优先),主流程 subtitles.srt。"""
+    """逐句时间码来源:av 项目 beat_track(集级优先)→ mashup 插件 beat_track → 主流程 subtitles.srt。
+
+    mashup 分支必须排在 srt 之前:mashup 的 subtitles.srt 是 beat_track 的下游转写,
+    退化去读它会形成自证循环(错误边界喂回对齐)。
+    """
     for p in (proj / "av" / ep / "beat_track.json", proj / "av" / "beat_track.json"):
         if p.is_file():
             return "beat_track", p
+    p = proj / "mashup" / "beat_track.json"
+    if p.is_file():
+        return "mashup_beat_track", p
     p = proj / "edit" / ep / "subtitles.srt"
     if p.is_file():
         return "srt", p
@@ -112,9 +119,10 @@ def find_transcript(proj: Path, ep: str) -> tuple[str, Path] | None:
 
 
 def find_audio(proj: Path, ep: str) -> Path | None:
-    """声轨权威:av=母带(audio_map.master 优先),主流程=audio-mixing final wav。"""
-    am = proj / "av" / ep / "audio_map.json"
-    if am.is_file():
+    """声轨权威:av/mashup=母带(audio_map.master 优先),主流程=audio-mixing final wav。"""
+    for am in (proj / "av" / ep / "audio_map.json", proj / "mashup" / "audio_map.json"):
+        if not am.is_file():
+            continue
         try:
             rel = json.loads(am.read_text(encoding="utf-8")).get("master")
             if rel and (proj / rel).is_file():
@@ -144,6 +152,11 @@ def load_segments(kind: str, path: Path) -> list[dict]:
         for s in bt.get("segments", []):
             segs.append({"id": s.get("id"), "start": float(s["start"]),
                          "end": float(s["end"]), "text": s.get("text", "")})
+    elif kind == "mashup_beat_track":
+        bt = json.loads(path.read_text(encoding="utf-8"))
+        for b in bt.get("beats", []):
+            segs.append({"id": b.get("beat_id"), "start": float(b["t_in"]),
+                         "end": float(b["t_out"]), "text": b.get("text", "")})
     elif kind == "srt":
         cur = None
         for line in path.read_text(encoding="utf-8-sig").splitlines():
@@ -351,6 +364,89 @@ def run_whisper(audio: Path, model_size: str = "small", language: str | None = N
         for w in (seg.words or []):
             out.append({"text": w.word, "start": float(w.start), "end": float(w.end)})
     return out
+
+
+# ---------------------------------------------------------------- 句边界:ASR 实测(mashup 拍对齐)
+
+def beats_from_asr(sentences: list[str], asr_words: list[dict], total_s: float,
+                   silences: list[tuple[float, float]] | None = None,
+                   ) -> tuple[list[float], list[str], dict]:
+    """整篇文稿逐句 → ASR 实测句边界(mashup 拍边界的 v4 后端)。
+
+    替代 avsync.char_rate_boundaries+snap 的「字数估时+盲吸」:difflib 把台本发声单元
+    与 ASR 单元对齐,句边界取「上句末单元实测 end 与下句首单元实测 start」的中点;
+    该间隙与静音停顿相交时改取停顿中点(听感最宽容)。未锚定边界在左右锚定边界之间
+    按 tokenize **加权**字重插值(数字按位、拉丁按音节——修字数估时的数字毒药)。
+
+    返回 (boundaries, srcs, stats):
+      boundaries  len = len(sentences)+1,含 0.0 与 total_s,单调;
+      srcs        len = len(sentences)-1(内部边界),取值 asr_word|asr_silence_mid|interp;
+      stats       {anchored, interp, match_ratio}。
+    调用方按 match_ratio 决定采信(建议 ≥0.6,否则整体降级 char_rate+snap)。
+    """
+    silences = silences or []
+    sent_units: list[list[dict]] = [voiced_units(s) for s in sentences]
+    tgt, sent_first, sent_last = [], [], []
+    for units in sent_units:
+        sent_first.append(len(tgt))
+        tgt.extend(u["text"].lower() for u in units)
+        sent_last.append(len(tgt) - 1)
+    asr = _asr_chars(asr_words)
+    sm = difflib.SequenceMatcher(a=tgt, b=[w["text"] for w in asr], autojunk=False)
+    hit: dict[int, dict] = {}
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                hit[i1 + k] = asr[j1 + k]
+
+    def _find_hit(idx: int, step: int, limit: int = 2) -> dict | None:
+        for d in range(limit + 1):
+            w = hit.get(idx + d * step)
+            if w is not None:
+                return w
+        return None
+
+    n = len(sentences)
+    bounds: list[float | None] = [0.0] + [None] * (n - 1) + [float(total_s)]
+    srcs = ["interp"] * (n - 1)
+    for i in range(n - 1):
+        last = _find_hit(sent_last[i], -1) if sent_units[i] else None
+        nxt = _find_hit(sent_first[i + 1], +1) if sent_units[i + 1] else None
+        if last is None or nxt is None or nxt["start"] <= last["end"] - 0.5:
+            continue                      # 单侧缺锚或 ASR 倒挂过甚 → 留给插值
+        lo, hi = last["end"], max(nxt["start"], last["end"])
+        mid = (lo + hi) / 2
+        b, src = mid, "asr_word"
+        cands = [(s + e) / 2 for s, e in silences if e > lo - 0.05 and s < hi + 0.05]
+        if cands:
+            b, src = min(cands, key=lambda c: abs(c - mid)), "asr_silence_mid"
+        bounds[i + 1], srcs[i] = round(b, 3), src
+    # 未锚定边界:左右最近锚定边界之间按句加权字重插值
+    weights = [max(sum(u["weight"] for u in units), 0.001) for units in sent_units]
+    i = 1
+    while i <= n - 1:
+        if bounds[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j <= n - 1 and bounds[j] is None:
+            j += 1
+        left, right = bounds[i - 1], bounds[j]      # 两端必非 None(0 与 total_s 恒有值)
+        span_w = sum(weights[i - 1:j])
+        acc = 0.0
+        for k in range(i, j):
+            acc += weights[k - 1]
+            bounds[k] = round(left + (right - left) * acc / span_w, 3)
+        i = j
+    # 单调 clamp(锚定点也可能被 ASR 偶发倒挂波及)
+    out = [float(b) for b in bounds]      # type: ignore[arg-type]
+    for k in range(1, len(out)):
+        out[k] = max(out[k], out[k - 1])
+    out[-1] = float(total_s)
+    anchored = sum(1 for s in srcs if s != "interp")
+    stats = {"anchored": anchored, "interp": len(srcs) - anchored,
+             "match_ratio": round(len(hit) / max(1, len(tgt)), 3)}
+    return out, srcs, stats
 
 
 # ---------------------------------------------------------------- word_track 装配/读写
