@@ -238,6 +238,18 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 STOPPED_BY_USER_MSG = "已被用户手动停止"
 # stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
 STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
+# 网络快速失败:claude CLI 遇 ECONNRESET/超时等连接层错误(api_retry 事件 error_status 为
+# null,即没拿到任何 HTTP 响应)时默认自带指数退避重试 10 次,agent 会在「等待重试」里
+# 干耗数分钟且多个并发 agent 一起卡死。宿主看到这类事件超过下面的容忍次数就立刻杀进程
+# 报错(run.net_error=True),由总制片重派或人工修好代理/网络后再继续。HTTP 状态类错误
+# (429/529/5xx)仍交给 CLI 自己重试。VIDEOAGENTS_NET_RETRY_LIMIT 可放宽(默认 0=首次即停)。
+try:
+    NET_RETRY_LIMIT = max(0, int(os.environ.get("VIDEOAGENTS_NET_RETRY_LIMIT", "0")))
+except ValueError:
+    NET_RETRY_LIMIT = 0
+NET_ERROR_MSG = ("🔌 网络中断:API 连接被重置/超时(Connection dropped,未收到任何 HTTP 响应),"
+                 "已按快速失败策略终止进程、不等待 CLI 自动重试;非程序错误、不计 attempt,"
+                 "请检查代理/VPN 节点后由总制片重新派单或人工介入")
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
                                          # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
@@ -3057,7 +3069,7 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "net_error", "engine", "model", "tokens", "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -3471,6 +3483,10 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
+                    if run.get("net_error") and proc.returncode is None:
+                        # 连接层错误快速失败:不等 CLI 的退避重试,直接杀进程组
+                        _kill_proc_tree(proc)
+                        break
                 await proc.wait()
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
@@ -3581,6 +3597,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                          "非程序错误,无需追查失败原因;是否重派由用户决定)"
                          + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
                 chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run.get("net_error"):
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                reply = (f"{run['error']}(运行 {dur}s 后网络中断快速失败)"
+                         + (f"\n\n--- 中断前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, net_error=True)
             elif run["status"] == "error" and run.get("error") and reply != run["error"]:
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
                 reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
@@ -3896,6 +3918,18 @@ def handle_claude_event(run: dict, obj: dict):
     t = obj.get("type")
     if t == "system" and obj.get("subtype") == "init":
         run["session_id"] = obj.get("session_id")
+    elif t == "system" and obj.get("subtype") == "api_retry":
+        # CLI 将要退避重试一次 API 调用。error_status 为 null = 连接层错误(ECONNRESET/
+        # 超时,没拿到 HTTP 响应):超过容忍次数即标记 net_error,由运行循环杀进程快速失败。
+        # 有 HTTP 状态的(429/529/5xx)是服务端瞬时故障,仍交给 CLI 自己重试。
+        if obj.get("error_status") is None:
+            n = run["net_retries"] = run.get("net_retries", 0) + 1
+            if n > NET_RETRY_LIMIT and not run.get("net_error"):
+                run["net_error"] = True
+                run["error"] = (f"{NET_ERROR_MSG}(CLI 报 api_retry 第 {n} 次,"
+                                f"错误 {obj.get('error') or 'unknown'})")[:500]
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": "\n" + run["error"]})
     elif t == "assistant":
         for c in (obj.get("message") or {}).get("content", []):
             if c.get("type") == "text" and c.get("text"):
@@ -3913,7 +3947,13 @@ def handle_claude_event(run: dict, obj: dict):
                              "agent": run["agent"], "desc": desc})
                 publish_run(run)
     elif t == "result":
-        run["result"] = obj.get("result") or ""
+        if obj.get("is_error"):
+            # CLI 以 API 错误收尾(重试耗尽/未授权等)时 result 正文是错误文案
+            # ("API Error: Connection dropped (ECONNRESET)"),不能当产出:留空 result
+            # 让退出码判定为失败,错误文案进 error(网络快速失败已写的 error 优先)
+            run["error"] = run.get("error") or str(obj.get("result") or "API error")[:500]
+        else:
+            run["result"] = obj.get("result") or ""
         run["session_id"] = obj.get("session_id") or run.get("session_id")
         run["cost"] = round(obj.get("total_cost_usd") or 0, 4)
         run["turns"] = obj.get("num_turns")

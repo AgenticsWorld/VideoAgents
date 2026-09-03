@@ -738,6 +738,8 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 **子任务「手动停止」不是错误**:用户可在运行面板对排队/运行中的子任务点「⏹」手动停止。此类运行的 `status` 仍为 `error`,但 `dispatch.py --status/--runs/--wait/--wait-all` 输出会附「⏹已被用户手动停止(非错误,无需追查原因)」标记(API 字段 `stopped: "user"`,该 Agent 对话记录里也以「⏹ 已被用户手动停止…」开头)。调度层见到此标记**不得**当作程序错误去追查失败原因、翻日志或试探性重跑:只把节点记为 `failed`(note 写明「用户手动停止」),是否重派、跳过或改指令一律由用户决定——用户当轮没有明说时,以 `--confirm` 询问,不要自行重派。
 
+**子任务「网络中断快速失败」不计 attempt**:claude CLI 遇 `API Error: Connection dropped (ECONNRESET)`/连接超时这类连接层错误(没拿到任何 HTTP 响应)时,宿主不再让它在「等待重试」里干耗(CLI 默认指数退避重试 10 次,多个并发 Agent 会一起卡死),而是**立刻终止进程并报错**:`status: error`,API 字段 `net_error: true`,`dispatch.py --status/--runs/--wait/--wait-all` 输出附「🔌网络中断快速失败」标记,该 Agent 对话记录以「🔌 网络中断…」开头(HTTP 状态类错误 429/529/5xx 仍由 CLI 自行重试,不在此列)。调度层见到此标记:不追查程序原因、不计入 `max_retries` 的 attempt;可用**原指令原引擎直接重派一次**(等片刻确认网络恢复后),重派仍是网络中断则停止自动重派,节点记 `failed`(note 写明「网络中断」),以 `--confirm` 升级用户修好代理/VPN 后再继续。总制片自身运行若因此中断,由用户重新发起。
+
 ## 6. 工单(Work Order)统一格式
 
 Orchestrator 发给每个 Agent 的指令统一为:
