@@ -817,7 +817,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <h3>👤 账号</h3>
     <div id="acct-anon" class="note" style="display:none">尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。</div>
     <div id="acct-info" style="display:none">
-      <div class="row"><label>账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
+      <div class="row"><label id="acct-id-label">账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
       <div class="row"><label>余额</label><span id="acct-bal" style="flex:1"></span></div>
     </div>
     <div id="acct-st" class="note" style="display:none">读取中…</div>
@@ -2177,6 +2177,9 @@ function initializeDesktopLogin(){
   const bridge=desktopAuthBridge(),item=$('#menu-account');
   if(!item||!bridge)return;
   item.style.display='block';
+  // 发行版标识来自打包时的 build-info.json:shumati.cn 版显示 SMT ID,agentics.world 版显示 AGT ID
+  const idLabel={oss:'SMT ID',s3:'AGT ID'}[bridge.distribution];
+  if(idLabel)$('#acct-id-label').textContent=idLabel;
   item.onclick=e=>{e.preventDefault();openAccountModal()};
   $('#acct-close').onclick=()=>$('#account-modal').style.display='none';
   $('#account-modal').onclick=e=>{if(e.target===e.currentTarget)$('#account-modal').style.display='none'};
