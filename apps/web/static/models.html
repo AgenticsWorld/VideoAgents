@@ -326,7 +326,9 @@ const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
   image:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
   video:{providers:['openrouter','volcengine','byteplus','fal','minimax','comfyui']},
-  music:{providers:['openrouter','elevenlabs','minimax','comfyui']},
+  // music 的 minimax 暂时隐藏:官方 /v1/music_generation 已停止对新用户开放(HTTP 410 code 2153,
+  // 2026-09-03 两区域全版本实测),后端与已存配置保留,恢复时加回列表即可
+  music:{providers:['openrouter','elevenlabs','comfyui']},
   tts:{providers:['openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
@@ -355,7 +357,7 @@ const EL_TTS_MODELS=[
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'minimax',tts:'volcengine'};
+const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'openrouter',tts:'volcengine'};
 let DH_PROVIDER='heygen';
 
 function buildSection(kind){

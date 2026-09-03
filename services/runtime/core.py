@@ -683,7 +683,10 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax | comfyui;
+        # minimax 音乐 API 已停止对新用户开放(HTTP 410 code 2153),UI 已隐藏该 tab,
+        # 段落保留供存量付费账号沿用
+        "provider": "openrouter",
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
