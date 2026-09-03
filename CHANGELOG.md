@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Claude Fable 5.1 in the language-model menus** (`claude-fable-5-1`, listed as `fable-5.1` right below `fable-5` in both the top-bar model dropdown and the per-agent model dialog). Not a default: Smart Assignment still maps to opus / sonnet.
+
 ### Changed
 
 - **Agent runs now fail fast on API connection drops instead of waiting through the CLI's retry loop.** When the claude CLI reports a connection-level API error (`Connection dropped (ECONNRESET)` / connection timeout, i.e. an `api_retry` event with no HTTP status), the runtime kills the process immediately rather than letting it back off and retry up to 10 times (which left every concurrent agent stuck in a "retrying" wait). The run ends as `error` with `net_error: true`; `dispatch.py` output carries a 🔌 marker and the agent chat log starts with a 🔌 line, so the orchestrator treats it as a network incident (not counted as an attempt; re-dispatch once, then escalate to the user) rather than a program failure. HTTP-status errors (429/529/5xx) are still retried by the CLI. `VIDEOAGENTS_NET_RETRY_LIMIT` (default 0) tolerates that many connection-level retries before failing.
