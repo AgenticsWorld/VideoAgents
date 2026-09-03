@@ -2592,7 +2592,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "`directing/epNN/blocking_maps/grpNNN.png`(图上只有字母与动线、无文字;禁止复制/改写到项目 code/ 或自绘)"
         "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map),站位片段按本镜机位(view_tile 视轴)写**画面视角**并带 `frame_position`(机检 camera_view_consistent,`code/camera_view_check.py`);"
         "shot-planning 每组定稿全局站位表 `blocking_map.station_table`(六项:人物编号/所在区域/固定参照物/身体朝向/相邻人物/不能改变的位置关系,导演台视角;机检 station_table_ok);Phase 7 prompt refs 必挂动线俯视图 + "
-        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en 与 `Blocking table:` 站位表段、Shot 段只写画面视角站位句(机检 layout_map_bound / station_table_bound,"
+        "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)+ Map markers 映射句、逐字注入 route_en 与 `Blocking table:` 站位表段、Shot 段只写画面视角站位句(机检 layout_map_bound / station_table_bound,"
         "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "

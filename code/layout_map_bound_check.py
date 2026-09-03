@@ -11,6 +11,10 @@
       ③ video_prompt 含固定空间布局声明句:引用动线图的 `[Image N]`(N=refs 下标+1)且同句含
          "top-down layout map"、引用 9 宫格图的 `[Image M]` 且同句含 "3x3 multi-angle";
          并含"do not render the map"类免责(防止把箭头/字母标记画进成片);
+         **map_reference_only(2026-09-03,用户指令「不要将俯视图直接用于画面,俯视图仅用于空间位置参考」)**:
+         另含一句同句带动线图 `[Image N]` 与 "spatial position reference only" 的用途限定句
+         (SOUL 固定句 `Map usage: [Image N] is a spatial position reference only, never the picture — …`),
+         且 `Global constraints:` 段含 "bird's-eye"(`no top-down or bird's-eye view, no map or floor-plan imagery`);
       ④ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
       ⑤ 图上标记映射句:每个角色按 blocking_map.characters 数组顺序对应字母 A/B/C…,video_prompt 须含
          "<字母> = <label> (<CHAR id>)"——label 逐字取 blocking_map.characters[].label(短规范名);
@@ -42,6 +46,8 @@ MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
 TABLE_KEY = "Blocking table:"   # 全局站位表固定锚点(2026-09-03)
 DISCLAIM_RE = re.compile(r"do not (render|draw|reproduce) the map", re.I)
+REF_ONLY_KEY = "spatial position reference only"     # map_reference_only(2026-09-03):俯视图仅作空间位置参考句
+BIRDSEYE_RE = re.compile(r"bird'?s[- ]?eye", re.I)     # Global constraints 须含 no top-down or bird's-eye view
 LETTERS = "ABCDEFGHIJKL"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母(含生物独立态条目,2026-08-27)
 
 
@@ -94,6 +100,13 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
             errs.append(f"{gid}: video_prompt 缺动线图绑定句(同句含 {tag} 与 \"{MAP_KEY}\")")
         if not DISCLAIM_RE.search(vp):
             errs.append(f"{gid}: video_prompt 缺 \"do not render the map ...\" 免责句(防标记入画)")
+        # map_reference_only(2026-09-03):俯视图仅作空间位置参考,不得直接用于画面
+        if not any(tag in s and REF_ONLY_KEY in s.lower() for s in sents):
+            errs.append(f"{gid}: video_prompt 缺俯视图用途限定句(同句含 {tag} 与 \"{REF_ONLY_KEY}\";"
+                        "固定句 Map usage: [Image N] is a spatial position reference only, never the picture — …)")
+        gc = vp.split("Global constraints:", 1)[1] if "Global constraints:" in vp else ""
+        if not BIRDSEYE_RE.search(gc):
+            errs.append(f"{gid}: Global constraints 缺 \"no top-down or bird's-eye view, no map or floor-plan imagery\"(俯视图不得直接用于画面)")
     if grid_idx is not None:
         tag = f"[Image {grid_idx + 1}]"
         if not any(tag in s and GRID_KEY in s.lower() for s in sents):
