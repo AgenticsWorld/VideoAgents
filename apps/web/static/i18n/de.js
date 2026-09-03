@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Session {id} geladen",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Alle Clips und Endframes der Session {id} löschen? Das kann nicht rückgängig gemacht werden.",
 "已删除会话 {id}": "Session {id} gelöscht",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "„📚 Frühere Sessions“ in der Kopfzeile lädt eine frühere Session zur Wiedergabe oder um den Stream ab ihrem Endframe fortzusetzen.",
+"📚 会话 ▾": "📚 Session ▾",
+"➕ 新建会话": "➕ Neue Session",
+"清空当前会话画面,设置恢复默认,清空参考图": "Aktuelle Session-Ansicht leeren, Einstellungen zurücksetzen, Referenzbilder löschen",
+"直播进行中,停止后才能新建会话": "Live läuft — zuerst stoppen, dann eine neue Session anlegen",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Neue Session: aktuelle Session-Ansicht leeren, Prompt und Einstellungen auf Standard zurücksetzen und Referenzbilder löschen (Clips und Referenz-Snapshots alter Sessions bleiben über „Frühere Sessions“ ladbar). Fortfahren?",
+"已新建会话,界面已重置": "Neue Session angelegt; die Seite wurde zurückgesetzt",
+"新建失败:": "Neue Session fehlgeschlagen: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menü „📚 Session“ in der Kopfzeile: „Neue Session“ setzt die Seite zurück; „Frühere Sessions“ lädt eine frühere Session zur Wiedergabe oder um den Stream ab ihrem Endframe fortzusetzen.",
 };

@@ -917,6 +917,11 @@ async def live_sessions() -> dict[str, Any]:
     return await core.api_live_sessions()
 
 
+@api.post("/live/sessions/new", tags=["live"])
+async def live_session_new() -> dict[str, Any]:
+    return await core.api_live_session_new()
+
+
 @api.post("/live/sessions/{sid}/load", tags=["live"])
 async def live_session_load(sid: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     return await core.api_live_session_load(sid, body or {})

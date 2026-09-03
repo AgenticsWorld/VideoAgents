@@ -1845,5 +1845,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Loaded session {id}",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Delete all clips and last frames of session {id}? This cannot be undone.",
 "已删除会话 {id}": "Deleted session {id}",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "“📚 Sessions” in the top bar loads a previous session for replay, or to continue the stream from its last frame.",
+"📚 会话 ▾": "📚 Session ▾",
+"➕ 新建会话": "➕ New session",
+"清空当前会话画面,设置恢复默认,清空参考图": "Clear the current session view, reset settings to defaults, clear reference images",
+"直播进行中,停止后才能新建会话": "Live in progress — stop it before starting a new session",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "New session: clear the current session view, reset the prompt and settings to defaults and clear the reference images (old sessions' clips and reference snapshots can still be loaded from “Sessions”). Continue?",
+"已新建会话,界面已重置": "New session started; the page has been reset",
+"新建失败:": "New session failed: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "“📚 Session” menu in the top bar: “New session” resets the page; “Sessions” loads a previous session for replay, or to continue the stream from its last frame.",
 };

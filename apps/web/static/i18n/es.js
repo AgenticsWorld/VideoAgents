@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Sesión {id} cargada",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "¿Eliminar todos los clips y últimos fotogramas de la sesión {id}? No se puede deshacer.",
 "已删除会话 {id}": "Sesión {id} eliminada",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "«📚 Sesiones anteriores» en la barra superior carga una sesión anterior para reproducirla o continuar la emisión desde su último fotograma.",
+"📚 会话 ▾": "📚 Sesión ▾",
+"➕ 新建会话": "➕ Nueva sesión",
+"清空当前会话画面,设置恢复默认,清空参考图": "Vaciar la vista de la sesión actual, restablecer ajustes por defecto, vaciar imágenes de referencia",
+"直播进行中,停止后才能新建会话": "Emisión en curso: deténla antes de crear una nueva sesión",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Nueva sesión: vaciar la vista de la sesión actual, restablecer el prompt y los ajustes por defecto y vaciar las imágenes de referencia (los clips e instantáneas de referencia de sesiones antiguas siguen disponibles en «Sesiones anteriores»). ¿Continuar?",
+"已新建会话,界面已重置": "Nueva sesión creada; la página se ha restablecido",
+"新建失败:": "Error al crear la sesión: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menú «📚 Sesión» en la barra superior: «Nueva sesión» restablece la página; «Sesiones anteriores» carga una sesión anterior para reproducirla o continuar la emisión desde su último fotograma.",
 };

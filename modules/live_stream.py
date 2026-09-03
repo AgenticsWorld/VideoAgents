@@ -15,6 +15,8 @@ services/runtime/core.py 的 api_live_* 薄封装调用,本模块不依赖 core�
       segments/seg_0001.mp4       生成的视频段(480p)
       segments/seg_0001.png       该段尾帧(下一轮参考)
       job.log                     作业日志
+    顶栏「会话」菜单:新建会话=清空当前会话/设置回默认/清空参考图(不删会话目录);历史会话=列表里
+    加载(切为当前会话回放片段,可选恢复其提示词/设置与参考图快照)或单独删除;运行中均不允许。
 
 生成循环在子进程 `python3 modules/live_stream.py job <sid>` 里跑(与素材库同款隔离:API
 进程不阻塞、停止=结束进程组);子进程收到 SIGTERM 后先向 Fal 发 cancel 再退出,尽量不为
@@ -616,6 +618,20 @@ def select_session(sid: str, apply_settings: bool = True, restore_refs: bool = T
                     shutil.copyfile(src, REFS_DIR / src.name)
         _LAST_PLAYED.pop(sid, None)
         _set_state(current=sid)
+    return status(touch=False)
+
+
+def new_session() -> dict:
+    """页面「会话 → 新建会话」:清空当前会话(不删目录)、设置恢复默认、清空参考图;运行中拒绝。"""
+    with _LOCK:
+        if _current_running():
+            raise LiveError(409, "直播进行中,停止后才能新建会话")
+        _set_state(current="")
+        save_settings(dict(DEFAULTS))
+        if REFS_DIR.is_dir():
+            for p in list(REFS_DIR.iterdir()):
+                if p.is_file() and not p.name.startswith("."):
+                    p.unlink()
     return status(touch=False)
 
 

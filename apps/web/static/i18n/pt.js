@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Sessão {id} carregada",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Excluir todos os clipes e últimos quadros da sessão {id}? Isso não pode ser desfeito.",
 "已删除会话 {id}": "Sessão {id} excluída",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "“📚 Sessões anteriores” na barra superior carrega uma sessão anterior para reprodução ou para continuar a transmissão a partir do seu último quadro.",
+"📚 会话 ▾": "📚 Sessão ▾",
+"➕ 新建会话": "➕ Nova sessão",
+"清空当前会话画面,设置恢复默认,清空参考图": "Limpar a visualização da sessão atual, restaurar configurações padrão, limpar imagens de referência",
+"直播进行中,停止后才能新建会话": "Transmissão em andamento — pare antes de criar uma nova sessão",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Nova sessão: limpar a visualização da sessão atual, restaurar o prompt e as configurações padrão e limpar as imagens de referência (clipes e snapshots de referência de sessões antigas continuam disponíveis em “Sessões anteriores”). Continuar?",
+"已新建会话,界面已重置": "Nova sessão criada; a página foi redefinida",
+"新建失败:": "Falha ao criar nova sessão: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menu “📚 Sessão” na barra superior: “Nova sessão” redefine a página; “Sessões anteriores” carrega uma sessão anterior para reprodução ou para continuar a transmissão a partir do seu último quadro.",
 };

@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Đã tải phiên {id}",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Xóa toàn bộ đoạn và khung hình cuối của phiên {id}? Không thể hoàn tác.",
 "已删除会话 {id}": "Đã xóa phiên {id}",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "“📚 Phiên trước” trên thanh đầu trang tải một phiên trước để phát lại hoặc tiếp tục phát trực tiếp từ khung hình cuối của nó.",
+"📚 会话 ▾": "📚 Phiên ▾",
+"➕ 新建会话": "➕ Phiên mới",
+"清空当前会话画面,设置恢复默认,清空参考图": "Xóa màn hình phiên hiện tại, khôi phục cài đặt mặc định, xóa ảnh tham chiếu",
+"直播进行中,停止后才能新建会话": "Đang phát trực tiếp — hãy dừng trước khi tạo phiên mới",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Phiên mới: xóa màn hình phiên hiện tại, khôi phục prompt và cài đặt mặc định, xóa ảnh tham chiếu (đoạn và bản chụp ảnh tham chiếu của phiên cũ vẫn tải được từ “Phiên trước”). Tiếp tục?",
+"已新建会话,界面已重置": "Đã tạo phiên mới; trang đã được đặt lại",
+"新建失败:": "Tạo phiên mới thất bại: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menu “📚 Phiên” trên thanh đầu trang: “Phiên mới” đặt lại trang; “Phiên trước” tải một phiên trước để phát lại hoặc tiếp tục phát trực tiếp từ khung hình cuối của nó.",
 };

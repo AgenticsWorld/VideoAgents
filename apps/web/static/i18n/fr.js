@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Session {id} chargée",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Supprimer tous les clips et dernières images de la session {id} ? Action irréversible.",
 "已删除会话 {id}": "Session {id} supprimée",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "« 📚 Sessions précédentes » dans la barre supérieure charge une session précédente pour la relire ou poursuivre le direct depuis sa dernière image.",
+"📚 会话 ▾": "📚 Session ▾",
+"➕ 新建会话": "➕ Nouvelle session",
+"清空当前会话画面,设置恢复默认,清空参考图": "Effacer la vue de la session actuelle, rétablir les réglages par défaut, vider les images de référence",
+"直播进行中,停止后才能新建会话": "Live en cours — arrêtez-le avant de créer une nouvelle session",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Nouvelle session : effacer la vue de la session actuelle, rétablir le prompt et les réglages par défaut et vider les images de référence (les clips et instantanés de référence des anciennes sessions restent chargeables via « Sessions précédentes »). Continuer ?",
+"已新建会话,界面已重置": "Nouvelle session créée ; la page a été réinitialisée",
+"新建失败:": "Échec de la nouvelle session : ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menu « 📚 Session » dans la barre supérieure : « Nouvelle session » réinitialise la page ; « Sessions précédentes » charge une session précédente pour la relire ou poursuivre le direct depuis sa dernière image.",
 };

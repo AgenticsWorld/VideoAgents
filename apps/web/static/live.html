@@ -99,6 +99,14 @@ details .body{padding:10px 0 2px}
 .segs .s div{padding:3px 6px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .segs .s.cur{border-color:var(--accent)}
 .segs .s.new{border-color:var(--green)}
+/* 顶栏「会话」悬停菜单 */
+.menu{position:relative}
+.menu .menu-list{display:none;position:absolute;top:100%;left:0;padding-top:4px;z-index:6;min-width:150px}
+.menu:hover .menu-list,.menu:focus-within .menu-list{display:block}
+.menu .menu-list button{display:block;width:100%;text-align:left;border-radius:0;border-width:0 1px 1px}
+.menu .menu-list button:first-child{border-top-width:1px;border-radius:8px 8px 0 0}
+.menu .menu-list button:last-child{border-radius:0 0 8px 8px}
+.menu .menu-list button:hover{background:var(--panel);color:var(--accent)}
 /* 历史会话弹层 */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px}
 .modal[hidden]{display:none}
@@ -128,7 +136,13 @@ details .body{padding:10px 0 2px}
   <h1>📡 直播</h1>
   <span class="pill">参考图 + 提示词 → Fal 视频模型循环生成 480p 短段 → 尾帧续接 → 连续播放</span>
   <div class="spacer"></div>
-  <button class="small" id="sessions-btn" title="查看并加载之前的直播会话">📚 历史会话</button>
+  <div class="menu" id="sess-menu">
+    <button class="small">📚 会话 ▾</button>
+    <div class="menu-list">
+      <button id="new-session-btn" title="清空当前会话画面,设置恢复默认,清空参考图">➕ 新建会话</button>
+      <button id="sessions-btn" title="查看并加载之前的直播会话">📚 历史会话</button>
+    </div>
+  </div>
   <button class="small" id="open-folder">📂 打开文件夹</button>
   <button class="small danger" id="clear-btn" title="删除所有已停止会话的片段视频与尾帧,释放磁盘">🗑 清理历史片段</button>
 </header>
@@ -199,7 +213,7 @@ details .body{padding:10px 0 2px}
       <div class="stats" id="stats"></div>
       <div class="segs" id="segs"></div>
       <div class="hint">播放策略:按顺序播放已生成的片段;新片段还没到时重播最新一段,到了就在当前段结束后接上,不会打断正在播的画面。生成通常慢于播放,所以"回放"是常态——把单段时长调长可以减少重播占比。待播片段达到上限(默认 3 段,高级选项可调)时暂停生成,播掉一段再继续。停止后循环回放全部片段。</div>
-      <div class="hint">顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。</div>
+      <div class="hint">顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。</div>
     </div>
   </div>
 </main>
@@ -365,6 +379,12 @@ async function deleteSession(id){
   catch(e){msg(t('删除失败:')+e.message,'err')}
 }
 $('#sessions-btn').onclick=openSessions;
+$('#new-session-btn').onclick=async()=>{
+  if(STATE&&STATE.session&&STATE.session.running){msg(t('直播进行中,停止后才能新建会话'),'err');return}
+  if(!confirm(t('新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?')))return;
+  try{const r=await api(`${API}/sessions/new`,{});SETTINGS_FILLED=false;applyState(r);msg(t('已新建会话,界面已重置'),'ok')}
+  catch(e){msg(t('新建失败:')+e.message,'err')}
+};
 $('#sessions-close').onclick=()=>{smodal.hidden=true};
 smodal.addEventListener('click',e=>{if(e.target===smodal)smodal.hidden=true});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!smodal.hidden)smodal.hidden=true});

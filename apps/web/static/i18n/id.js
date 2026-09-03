@@ -1833,5 +1833,12 @@ window.I18N_DICT = {
 "已加载会话 {id}": "Sesi {id} dimuat",
 "删除会话 {id} 的全部片段与尾帧,不可恢复,继续?": "Hapus semua klip dan frame terakhir sesi {id}? Tidak dapat dibatalkan.",
 "已删除会话 {id}": "Sesi {id} dihapus",
-"顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。": "“📚 Sesi sebelumnya” di bilah atas memuat sesi sebelumnya untuk diputar ulang atau melanjutkan siaran dari frame terakhirnya.",
+"📚 会话 ▾": "📚 Sesi ▾",
+"➕ 新建会话": "➕ Sesi baru",
+"清空当前会话画面,设置恢复默认,清空参考图": "Kosongkan tampilan sesi saat ini, kembalikan pengaturan default, kosongkan gambar referensi",
+"直播进行中,停止后才能新建会话": "Siaran sedang berlangsung — hentikan dulu sebelum membuat sesi baru",
+"新建会话:清空当前会话画面,提示词与设置恢复默认,并清空参考图(旧会话的片段与参考图快照仍可从「历史会话」加载),继续?": "Sesi baru: kosongkan tampilan sesi saat ini, kembalikan prompt dan pengaturan ke default, dan kosongkan gambar referensi (klip dan snapshot referensi sesi lama tetap bisa dimuat dari “Sesi sebelumnya”). Lanjutkan?",
+"已新建会话,界面已重置": "Sesi baru dibuat; halaman telah direset",
+"新建失败:": "Gagal membuat sesi baru: ",
+"顶栏「📚 会话」菜单:「新建会话」重置界面;「历史会话」加载之前的会话回放,或从其尾帧继续直播。": "Menu “📚 Sesi” di bilah atas: “Sesi baru” mereset halaman; “Sesi sebelumnya” memuat sesi sebelumnya untuk diputar ulang atau melanjutkan siaran dari frame terakhirnya.",
 };
