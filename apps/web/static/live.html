@@ -62,7 +62,7 @@ button:disabled{opacity:.5;cursor:default}
 .ref button{position:absolute;top:3px;right:3px;padding:0 6px;font-size:12px;line-height:18px;background:rgba(0,0,0,.6);border-color:transparent;color:#fff}
 .ref button:hover{border-color:var(--red);color:var(--red)}
 .ref .idx{position:absolute;left:4px;bottom:3px;font-size:11px;color:#fff;text-shadow:0 0 4px #000}
-.drop{border:1px dashed var(--border);border-radius:8px;padding:14px;text-align:center;color:var(--dim);cursor:pointer;transition:border-color .15s;font-size:13px}
+.drop{display:block;border:1px dashed var(--border);border-radius:8px;padding:14px;text-align:center;color:var(--dim);cursor:pointer;transition:border-color .15s;font-size:13px}
 .drop.over,.drop:hover{border-color:var(--accent);color:var(--text)}
 .drop input{display:none}
 .drop.disabled{opacity:.5;pointer-events:none}
@@ -170,8 +170,8 @@ details .body{padding:10px 0 2px}
       <div class="row"><label>渠道</label><select id="provider"><option value="fal">Fal</option></select></div>
       <div class="row"><label>模型</label><select id="model"></select></div>
       <div class="hint" id="model-hint"></div>
-      <div class="row"><label>画幅</label><select id="aspect" style="flex:none;width:100px"><option value="16:9">16:9 横屏</option><option value="9:16">9:16 竖屏</option></select>
-        <label style="width:auto">单段时长</label><input type="number" id="duration" min="3" max="30" step="1"><span class="hint">秒</span></div>
+      <div class="row"><label>画幅</label><select id="aspect" style="flex:none;width:100px"><option value="16:9">16:9 横屏</option><option value="9:16">9:16 竖屏</option></select></div>
+      <div class="row"><label>单段时长</label><input type="number" id="duration" min="3" max="30" step="1" style="flex:none;width:100px"><span class="hint">秒</span></div>
       <div class="hint" id="dur-hint"></div>
       <details>
         <summary>高级选项</summary>
