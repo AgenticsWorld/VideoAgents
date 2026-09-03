@@ -99,6 +99,27 @@ details .body{padding:10px 0 2px}
 .segs .s div{padding:3px 6px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .segs .s.cur{border-color:var(--accent)}
 .segs .s.new{border-color:var(--green)}
+/* 历史会话弹层 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px}
+.modal[hidden]{display:none}
+.modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:min(920px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+.modal .box>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.modal .box>h2 .x{margin-left:auto}
+.modal .opts{display:flex;gap:16px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim)}
+.modal .opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.modal .list{overflow:auto;padding:10px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.sess{display:grid;grid-template-columns:112px 1fr auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--panel2)}
+.sess.cur{border-color:var(--accent)}
+.sess .th{width:112px;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:11px}
+.sess .th.v{aspect-ratio:9/16;width:56px;justify-self:center}
+.sess .th img{width:100%;height:100%;object-fit:cover;display:block}
+.sess .info{min-width:0;font-size:12px;color:var(--dim);line-height:1.5}
+.sess .info b{color:var(--text);font-weight:600;font-size:13px}
+.sess .info .p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.sess .info .e{color:var(--red);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess .btns{display:flex;flex-direction:column;gap:6px}
+.chip.cur{color:var(--accent);border-color:var(--accent)}
+.empty{color:var(--dim);font-size:13px;text-align:center;padding:24px 0}
 </style>
 </head>
 <body>
@@ -107,6 +128,7 @@ details .body{padding:10px 0 2px}
   <h1>📡 直播</h1>
   <span class="pill">参考图 + 提示词 → Fal 视频模型循环生成 480p 短段 → 尾帧续接 → 连续播放</span>
   <div class="spacer"></div>
+  <button class="small" id="sessions-btn" title="查看并加载之前的直播会话">📚 历史会话</button>
   <button class="small" id="open-folder">📂 打开文件夹</button>
   <button class="small danger" id="clear-btn" title="删除所有已停止会话的片段视频与尾帧,释放磁盘">🗑 清理历史片段</button>
 </header>
@@ -176,9 +198,21 @@ details .body{padding:10px 0 2px}
       <div class="stats" id="stats"></div>
       <div class="segs" id="segs"></div>
       <div class="hint">播放策略:按顺序播放已生成的片段;新片段还没到时重播最新一段,到了就在当前段结束后接上,不会打断正在播的画面。生成通常慢于播放,所以"回放"是常态——把单段时长调长可以减少重播占比。待播片段达到上限(默认 3 段,高级选项可调)时暂停生成,播掉一段再继续。停止后循环回放全部片段。</div>
+      <div class="hint">顶栏「📚 历史会话」可加载之前的会话回放,或从其尾帧继续直播。</div>
     </div>
   </div>
 </main>
+<div class="modal" id="sessions-modal" hidden>
+  <div class="box">
+    <h2>📚 历史会话 <span class="cur" id="sessions-count"></span><button class="small x" id="sessions-close">关闭</button></h2>
+    <div class="opts">
+      <label><input type="checkbox" id="load-settings" checked> 恢复该会话的提示词与模型设置</label>
+      <label><input type="checkbox" id="load-refs" checked> 用该会话的参考图快照替换当前参考图</label>
+      <span id="sessions-lock" style="color:var(--yellow);display:none">直播进行中,停止后才能加载或删除历史会话</span>
+    </div>
+    <div class="list" id="sessions-list"><div class="empty">加载中…</div></div>
+  </div>
+</div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -282,6 +316,57 @@ $('#clear-btn').onclick=async()=>{
   catch(e){msg(t('清理失败:')+e.message,'err')}
 };
 
+/* ---------- 历史会话:列表 / 加载 / 删除 ---------- */
+const smodal=$('#sessions-modal');
+function fmtTime(iso){if(!iso)return '';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleString()}
+function statusLabel(r){return r.running?t('直播中'):r.status==='failed'?t('失败'):t('已停止')}
+async function openSessions(){
+  smodal.hidden=false;$('#sessions-list').innerHTML=`<div class="empty">${t('加载中…')}</div>`;
+  await refreshSessions();
+}
+async function refreshSessions(){
+  let rows=[];
+  try{rows=(await api(`${API}/sessions`)).sessions||[]}
+  catch(e){$('#sessions-list').innerHTML=`<div class="empty">${esc(t('读取会话列表失败:')+e.message)}</div>`;return}
+  const running=!!(STATE&&STATE.session&&STATE.session.running);
+  $('#sessions-lock').style.display=running?'':'none';
+  $('#sessions-count').textContent=I18N.f(t('共 {n} 个会话'),{n:rows.length});
+  if(!rows.length){$('#sessions-list').innerHTML=`<div class="empty">${t('还没有历史会话')}</div>`;return}
+  $('#sessions-list').innerHTML=rows.map(r=>{
+    const st=r.running?'run':r.status==='failed'?'failed':'stopped';
+    const v=r.aspect==='9:16';
+    return `<div class="sess${r.current?' cur':''}" data-id="${esc(r.id)}">
+      <div class="th${v?' v':''}">${r.frame?`<img src="${fileUrl(r.frame)}" alt="">`:t('无片段')}</div>
+      <div class="info">
+        <div><b>${esc(r.id)}</b> <span class="chip ${st}">${esc(statusLabel(r))}</span>${r.current?` <span class="chip cur">${t('当前')}</span>`:''} <span>${esc(fmtTime(r.created_at))}</span></div>
+        <div>${esc(r.model)} · ${esc(r.aspect)} · ${esc(r.resolution)} · ${esc(String(r.duration))}s · ${I18N.f(t('{n} 段 / {d}'),{n:r.segments,d:fmtDur(r.total_s)})} · ${I18N.f(t('参考图 {n} 张'),{n:r.refs})} · ${fmtBytes(r.size)}</div>
+        <div class="p" title="${esc(r.prompt)}">${r.prompt?esc(r.prompt):`<span style="color:var(--dim)">${t('(无提示词)')}</span>`}</div>
+        ${r.error?`<div class="e" title="${esc(r.error)}">${esc(r.error)}</div>`:''}
+      </div>
+      <div class="btns">
+        <button class="small primary" onclick="loadSession('${esc(r.id)}')" ${running||r.current?'disabled':''}>▶ 加载</button>
+        <button class="small danger" onclick="deleteSession('${esc(r.id)}')" ${running&&r.current?'disabled':''}>🗑 删除</button>
+      </div>
+    </div>`}).join('');
+}
+async function loadSession(id){
+  const body={apply_settings:$('#load-settings').checked,restore_refs:$('#load-refs').checked};
+  try{
+    const r=await api(`${API}/sessions/${encodeURIComponent(id)}/load`,body);
+    if(body.apply_settings)SETTINGS_FILLED=false;   // 让 applyState 用该会话的设置重新填表单
+    applyState(r);smodal.hidden=true;msg(I18N.f(t('已加载会话 {id}'),{id}),'ok');
+  }catch(e){msg(t('加载失败:')+e.message,'err')}
+}
+async function deleteSession(id){
+  if(!confirm(I18N.f(t('删除会话 {id} 的全部片段与尾帧,不可恢复,继续?'),{id})))return;
+  try{const r=await api(`${API}/sessions/${encodeURIComponent(id)}`,undefined,'DELETE');applyState(r);await refreshSessions();msg(I18N.f(t('已删除会话 {id}'),{id}),'ok')}
+  catch(e){msg(t('删除失败:')+e.message,'err')}
+}
+$('#sessions-btn').onclick=openSessions;
+$('#sessions-close').onclick=()=>{smodal.hidden=true};
+smodal.addEventListener('click',e=>{if(e.target===smodal)smodal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!smodal.hidden)smodal.hidden=true});
+
 /* ---------- 状态轮询 ---------- */
 async function poll(){
   clearTimeout(POLL);
@@ -318,6 +403,7 @@ function applyState(r){
     ].map(([k,v])=>`<div><span>${k}:</span> ${esc(v)}</div>`).join('');
     setSegments(segs,running,sess.aspect);
   }else{
+    if(SESSION_ID){SESSION_ID='';resetPlayer()}
     $('#sess-id').textContent='';$('#sess-chip').className='chip';$('#sess-chip').textContent='';
     $('#status-msg').textContent='';$('#sess-err').textContent='';$('#stats').innerHTML='';$('#segs').innerHTML='';
     $('#live-badge').textContent='OFFLINE';$('#live-badge').className='live';
@@ -338,8 +424,8 @@ function setSegments(segs,running,aspect){
   PLAY.segs=segs;PLAY.running=running;
   const box=$('#segs');
   box.innerHTML=segs.map((s,i)=>`<div class="s${aspect==='9:16'?' v':''}${i===PLAY.idx?' cur':''}${i>PLAY.idx?' new':''}" onclick="jumpTo(${i})" title="${esc(s.prompt||'')}"><img src="${fileUrl('sessions/'+SESSION_ID+'/'+s.frame)}" alt=""><div>#${s.seq} · ${(Number(s.duration_s)||0).toFixed(1)}s · ⏳${s.gen_seconds||0}s</div></div>`).join('');
-  if(!before&&segs.length){ // 首段到达:从最新一段开播(刷新页面时也从最新开始,贴近直播)
-    playSeg(segs.length-1);
+  if(!before&&segs.length){ // 首段到达:直播中从最新一段开播(刷新页面时也从最新开始,贴近直播);已停止/历史会话从第 1 段回放
+    playSeg(running?segs.length-1:0);
   }else if(segs.length>before&&PLAY.idx>=0){
     preloadNext();
     if(PLAY.replaying){ /* 正在重播旧段:当前段播完自然接上,不打断 */ }

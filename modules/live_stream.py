@@ -547,6 +547,90 @@ def clear_history() -> dict:
     return {**status(touch=False), "removed": removed}
 
 
+def _session_row(sid: str, cur: str) -> dict | None:
+    d = SESSIONS_DIR / sid
+    sess = _read_json(d / "session.json", None)
+    if not isinstance(sess, dict):
+        return None
+    segs = sess.get("segments") or []
+    size = 0
+    for p in d.rglob("*"):
+        if p.is_file():
+            size += p.stat().st_size
+    last = str(segs[-1].get("frame") or "") if segs else ""
+    return {"id": sid, "created_at": sess.get("created_at") or "", "updated_at": sess.get("updated_at") or "",
+            "status": sess.get("status") or "", "current": sid == cur,
+            "running": sess.get("status") in RUNNING_STATES and _job_running(sid),
+            "model": sess.get("model") or "", "aspect": sess.get("aspect") or "",
+            "resolution": sess.get("resolution") or DEFAULT_RESOLUTION, "duration": sess.get("duration") or 0,
+            "prompt": str(sess.get("prompt") or "")[:300], "refs": len(sess.get("refs") or []),
+            "segments": len(segs), "total_s": round(sum(float(x.get("duration_s") or 0) for x in segs), 1),
+            "size": size, "message": sess.get("message") or "", "error": str(sess.get("error") or "")[:300],
+            "frame": f"sessions/{sid}/{last}" if last and (d / last).is_file() else ""}
+
+
+def list_sessions() -> list[dict]:
+    """历史会话列表(新→旧),供页面「📚 历史会话」加载/删除。"""
+    rows = []
+    if not SESSIONS_DIR.is_dir():
+        return rows
+    cur = str(_state().get("current") or "")
+    for d in sorted(SESSIONS_DIR.iterdir(), reverse=True):
+        if not d.is_dir() or not SID_RE.fullmatch(d.name):
+            continue
+        with _LOCK:
+            _reap(d.name)
+        row = _session_row(d.name, cur)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def select_session(sid: str, apply_settings: bool = True, restore_refs: bool = True) -> dict:
+    """把历史会话切为当前会话(页面回放其片段,「从上次直播的尾帧继续」也以它为准);
+    apply_settings=用它的提示词/模型/时长等覆盖页面设置;restore_refs=用它的参考图快照替换当前参考图。
+    运行中不允许(会话切换会让轮询/闸门错位)。"""
+    with _LOCK:
+        if _current_running():
+            raise LiveError(409, "直播进行中,停止后才能加载历史会话")
+        d = session_dir(sid)
+        _reap(sid)
+        sess = load_session(sid)
+        if apply_settings:
+            s = load_settings()
+            for k in ("prompt", "provider", "model", "duration", "aspect", "resolution", "link_mode",
+                      "max_rounds", "idle_stop_min", "max_pending", "generate_audio"):
+                if k in sess:
+                    s[k] = sess[k]
+            save_settings(s)
+        if restore_refs:
+            REFS_DIR.mkdir(parents=True, exist_ok=True)
+            for p in list(REFS_DIR.iterdir()):
+                if p.is_file() and not p.name.startswith("."):
+                    p.unlink()
+            for rel in (sess.get("refs") or [])[:MAX_REFS]:
+                src = d / str(rel)
+                if src.is_file() and src.suffix.lower() in IMAGE_EXTS:
+                    shutil.copyfile(src, REFS_DIR / src.name)
+        _LAST_PLAYED.pop(sid, None)
+        _set_state(current=sid)
+    return status(touch=False)
+
+
+def delete_session(sid: str) -> dict:
+    """删除单个历史会话目录;运行中的会话不能删;删的是当前会话则清空 current。"""
+    with _LOCK:
+        d = session_dir(sid)
+        if _job_running(sid):
+            raise LiveError(409, "该会话正在直播中,先停止再删除")
+        shutil.rmtree(d, ignore_errors=True)
+        _JOBS.pop(sid, None)
+        _LAST_PLAYED.pop(sid, None)
+        if str(_state().get("current") or "") == sid:
+            _set_state(current="")
+    return status(touch=False)
+
+
 def resolve_file(rel: str) -> Path:
     p = (LIVE_DIR / rel).resolve()
     try:
