@@ -1764,6 +1764,7 @@ window.I18N_DICT = {
 "秒": "giây",
 "该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久": "Mô hình này {lo}–{hi} giây mỗi đoạn; càng dài càng ít phát lại nhưng mỗi đoạn chờ lâu hơn",
 "⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧": "⚠ Endpoint Kling không nhận ảnh tham chiếu: vòng 1 dùng ảnh #1 làm khung đầu, các vòng sau dùng khung cuối của đoạn trước",
+"⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p": "⚠ H3 Max Turbo không có endpoint tham chiếu, không nhận ảnh tham chiếu: vòng 1 dùng ảnh tham chiếu #1 làm khung đầu, các vòng sau dùng khung cuối của đoạn trước; độ phân giải chỉ 480p/768p",
 "MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生": "MiniMax H3: tham chiếu + khung cuối tổng ≤12; sinh âm thanh và hình cùng lúc",
 "Seedance 2.0:参考图 + 尾帧合计 ≤9 张": "Seedance 2.0: tham chiếu + khung cuối tổng ≤9 ảnh",
 "高级选项": "Tùy chọn nâng cao",

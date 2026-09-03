@@ -1764,6 +1764,7 @@ window.I18N_DICT = {
 "秒": "s",
 "该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久": "Este modelo: {lo}–{hi} s por clip; cuanto más largo, menos repeticiones pero más espera por clip",
 "⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧": "⚠ Los endpoints Kling no admiten referencias: la ronda 1 usa la referencia n.º 1 como primer fotograma y las siguientes el último fotograma del clip anterior",
+"⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p": "⚠ H3 Max Turbo no tiene endpoint de referencia y no acepta imágenes de referencia: la ronda 1 usa la referencia n.º 1 como primer fotograma, las siguientes usan el último fotograma del clip anterior; resolución solo 480p/768p",
 "MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生": "MiniMax H3: referencias + último fotograma ≤12 en total; audio y vídeo generados a la vez",
 "Seedance 2.0:参考图 + 尾帧合计 ≤9 张": "Seedance 2.0: referencias + último fotograma ≤9 imágenes",
 "高级选项": "Opciones avanzadas",

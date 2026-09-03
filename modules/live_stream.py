@@ -707,12 +707,16 @@ def _job(sid: str) -> int:
     gm = _genmedia()
     cfg = {"provider": "fal", "api_key": key, "model": sess["model"]}
     family = gm._fal_family(sess["model"])  # noqa: SLF001
+    # 仅首帧端点(无 reference-to-video):Kling 系列、MiniMax H3 Max Turbo——参考图不生效,
+    # 首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧(link_mode 不起作用)
+    first_only = family == "kling" or (family == "h3" and "turbo" in str(sess["model"]).lower())
     refs = _shrink_refs(d, list(sess.get("refs") or []))
     prev_frame = str(sess.get("start_frame") or "")
     if sess.get("segments"):
         prev_frame = _last_frame_of(sess) or prev_frame
-    if family == "kling" and refs:
-        print("[live] Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,其余参考图不生效", flush=True)
+    if first_only and refs:
+        print(f"[live] {sess['model']} 端点不支持参考图:首轮用第 1 张参考图作首帧,其余参考图不生效",
+              flush=True)
     seq = len(sess.get("segments") or [])
     fails = 0
     while not stop.is_set():
@@ -752,7 +756,7 @@ def _job(sid: str) -> int:
         prompt = str(sess.get("prompt") or "")
         link_mode = sess.get("link_mode") or "refs_tail"
         first, round_refs = "", []
-        if family == "kling":
+        if first_only:
             first = prev_frame or (refs[0] if refs else "")
         elif link_mode == "first_frame" and prev_frame:
             first = prev_frame
