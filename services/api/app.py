@@ -865,6 +865,58 @@ async def footage_file(name: str, file_path: str) -> FileResponse:
     return FileResponse(core.footage_file_path(name, file_path))
 
 
+# ---------------- 直播(设置→高级→直播;data/live/) ----------------
+
+@api.get("/live", tags=["live"])
+async def live_status(touch: int = 1, played: int | None = None) -> dict[str, Any]:
+    """页面轮询:参考图/设置/当前会话;touch=1 记观看心跳(「无人观看自动停止」依据),
+    played=页面当前播到的段号(待播队列上限 3 段的闸门依据)。"""
+    return await core.api_live_status(touch=bool(touch), played=played)
+
+
+@api.post("/live/refs", tags=["live"])
+async def live_ref_add(request: Request, filename: str = "ref.png") -> dict[str, Any]:
+    """请求体即图片原始字节(与素材库上传同款,避免 multipart 依赖)。"""
+    data = await request.body()
+    return await core.api_live_ref_add(data, filename)
+
+
+@api.delete("/live/refs/{ref_id}", tags=["live"])
+async def live_ref_delete(ref_id: str) -> dict[str, Any]:
+    return await core.api_live_ref_delete(ref_id)
+
+
+@api.post("/live/start", tags=["live"])
+async def live_start(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_live_start(body or {})
+
+
+@api.post("/live/stop", tags=["live"])
+async def live_stop() -> dict[str, Any]:
+    return await core.api_live_stop()
+
+
+@api.post("/live/prompt", tags=["live"])
+async def live_prompt(body: dict[str, Any]) -> dict[str, Any]:
+    """运行中改提示词:下一段生效。"""
+    return await core.api_live_prompt(body)
+
+
+@api.post("/live/settings", tags=["live"])
+async def live_settings(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_live_settings(body)
+
+
+@api.post("/live/clear", tags=["live"])
+async def live_clear() -> dict[str, Any]:
+    return await core.api_live_clear()
+
+
+@api.get("/live/files/{file_path:path}", tags=["live"])
+async def live_file(file_path: str) -> FileResponse:
+    return FileResponse(core.live_file_path(file_path))
+
+
 app.include_router(api)
 
 

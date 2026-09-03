@@ -9805,3 +9805,69 @@ async def api_footage_analyze_all(name: str, body: dict):
 
 def footage_file_path(name: str, rel: str) -> Path:
     return _footage_call(lambda lib: lib.resolve_file(name, rel))
+
+
+# ---------------- 直播(设置菜单「高级→直播」:data/live/) ----------------
+# 业务实现在 modules/live_stream.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
+# LiveError → ServiceError 映射,并注入「🎨 生成模型」页的 Fal 模型目录(与 Key 共用同一配置)。
+
+def _live_lib():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import live_stream  # noqa: WPS433
+    return live_stream
+
+
+def _live_call(fn, *args, **kw):
+    lib = _live_lib()
+    try:
+        return fn(lib, *args, **kw)
+    except lib.LiveError as exc:
+        raise ServiceError(exc.status, exc.detail) from exc
+
+
+def _live_decorate(res: dict) -> dict:
+    """状态附带 Fal 模型目录(与生成模型页同一份 VIDEO_MODEL_CATALOG)与生效渠道的模型。"""
+    fal = (load_genconfig().get("video") or {}).get("fal") or {}
+    return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get("fal", [])],
+            "providers": [["fal", "Fal"]],
+            "genconfig_model": str(fal.get("custom_model") or fal.get("model") or "")}
+
+
+async def api_live_status(touch: bool = True, played: int | None = None):
+    return _live_decorate(await asyncio.to_thread(
+        _live_call, lambda lib: lib.status(touch=touch, played=played)))
+
+
+async def api_live_ref_add(data: bytes, filename: str):
+    return await asyncio.to_thread(_live_call, lambda lib: lib.add_ref(data, filename))
+
+
+async def api_live_ref_delete(ref_id: str):
+    return _live_call(lambda lib: lib.delete_ref(ref_id))
+
+
+async def api_live_start(body: dict):
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.start(body or {})))
+
+
+async def api_live_stop():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.stop()))
+
+
+async def api_live_prompt(body: dict):
+    return _live_decorate(_live_call(lambda lib: lib.update_prompt(str((body or {}).get("prompt") or ""))))
+
+
+async def api_live_settings(body: dict):
+    return {"settings": _live_call(lambda lib: lib.save_settings(body or {}))}
+
+
+async def api_live_clear():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.clear_history()))
+
+
+def live_file_path(rel: str) -> Path:
+    return _live_call(lambda lib: lib.resolve_file(rel))
+

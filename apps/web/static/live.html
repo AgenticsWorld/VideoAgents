@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>直播 — Agentics:VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📡%3C/text%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+main{max-width:1280px;margin:0 auto;padding:18px 18px 60px;display:grid;grid-template-columns:400px 1fr;gap:18px;align-items:start}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+.body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:96px;color:var(--dim);font-size:13px;flex:none}
+select,input[type=number],input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px}
+select{flex:1;min-width:120px;max-width:100%}
+input[type=number]{width:90px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;min-height:110px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+button.stop{background:var(--red);border-color:var(--red);color:#fff;font-weight:600}
+button.danger{color:var(--red)}
+button.danger:hover{border-color:var(--red)}
+button.small{padding:3px 10px;font-size:12px}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--dim);line-height:1.5}
+.hint a,.hint code{color:var(--link)}
+.pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+#msg{grid-column:1/-1;font-size:13px;min-height:18px}
+#msg.ok{color:var(--green)}
+#msg.err{color:var(--red)}
+.refs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ref{position:relative;aspect-ratio:1;background:#000;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ref img{width:100%;height:100%;object-fit:cover;display:block}
+.ref button{position:absolute;top:3px;right:3px;padding:0 6px;font-size:12px;line-height:18px;background:rgba(0,0,0,.6);border-color:transparent;color:#fff}
+.ref button:hover{border-color:var(--red);color:var(--red)}
+.ref .idx{position:absolute;left:4px;bottom:3px;font-size:11px;color:#fff;text-shadow:0 0 4px #000}
+.drop{border:1px dashed var(--border);border-radius:8px;padding:14px;text-align:center;color:var(--dim);cursor:pointer;transition:border-color .15s;font-size:13px}
+.drop.over,.drop:hover{border-color:var(--accent);color:var(--text)}
+.drop input{display:none}
+.drop.disabled{opacity:.5;pointer-events:none}
+details{border:1px solid var(--border);border-radius:8px;padding:8px 12px}
+details summary{cursor:pointer;color:var(--dim);font-size:13px}
+details .body{padding:10px 0 2px}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.actions button.big{padding:9px 22px;font-size:14px}
+/* 播放器 */
+.player{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9;max-height:72vh;margin:0 auto}
+.player.v{aspect-ratio:9/16;max-width:calc(72vh*9/16)}
+.player video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:0;transition:opacity .08s}
+.player video.on{opacity:1;z-index:2}
+.player .overlay{position:absolute;left:10px;top:10px;z-index:3;display:flex;gap:6px;align-items:center}
+.player .live{font-size:11px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff}
+.player .live.on{background:var(--red)}
+.player .live.replay{background:rgba(251,191,36,.85);color:#0b1020}
+.player .seg{font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff}
+.player .ctl{position:absolute;right:10px;bottom:10px;z-index:3;display:flex;gap:6px}
+.player .ctl button{background:rgba(0,0,0,.55);border-color:transparent;color:#fff;padding:3px 10px;font-size:12px}
+.player .idle{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px;z-index:1;text-align:center;padding:20px}
+.status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px}
+.chip{font-size:11px;border-radius:10px;padding:1px 9px;font-weight:600;border:1px solid var(--border);color:var(--dim);white-space:nowrap}
+.chip.run{color:var(--red);border-color:var(--red)}
+.chip.stopped{color:var(--dim)}
+.chip.failed{color:var(--red);border-color:var(--red)}
+.err{color:var(--red);font-size:12px;white-space:pre-wrap}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 14px;font-size:12px}
+.stats span{color:var(--dim)}
+.segs{display:flex;gap:8px;overflow-x:auto;padding:4px 0}
+.segs .s{flex:none;width:120px;border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;background:var(--panel2);font-size:11px}
+.segs .s img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
+.segs .s.v img{aspect-ratio:9/16}
+.segs .s div{padding:3px 6px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segs .s.cur{border-color:var(--accent)}
+.segs .s.new{border-color:var(--green)}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>📡 直播</h1>
+  <span class="pill">参考图 + 提示词 → Fal 视频模型循环生成 480p 短段 → 尾帧续接 → 连续播放</span>
+  <div class="spacer"></div>
+  <button class="small" id="open-folder">📂 打开文件夹</button>
+  <button class="small danger" id="clear-btn" title="删除所有已停止会话的片段视频与尾帧,释放磁盘">🗑 清理历史片段</button>
+</header>
+<main>
+  <div id="msg"></div>
+
+  <!-- ====== 输入 ====== -->
+  <div class="card" id="input-card">
+    <h2>🎛 输入 <span class="cur" id="key-chip"></span></h2>
+    <div class="body">
+      <div>
+        <div class="row" style="margin-bottom:6px"><label style="width:auto">🖼 参考图</label><span class="hint" id="refs-count"></span></div>
+        <div class="refs" id="refs"></div>
+        <label class="drop" id="drop" style="margin-top:8px">
+          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" multiple>
+          <div>＋ 添加参考图(最多 8 张,PNG/JPG/WebP,可多选或拖入)</div>
+        </label>
+        <div class="hint">人物/场景/风格锚图;每一轮都会连同上一段的尾帧一起作为参考提交,保持人物一致。启动后冻结,停止后可改。</div>
+      </div>
+      <div>
+        <div class="row" style="margin-bottom:6px"><label style="width:auto">✍️ 提示词</label><span class="hint">画面主体、动作、氛围;不要写秒数与分辨率</span></div>
+        <textarea id="prompt" placeholder="例如:一位年轻主播坐在暖光直播间里,面对镜头微笑聊天,偶尔喝一口咖啡,背景霓虹灯牌缓慢闪烁"></textarea>
+        <div class="row" id="prompt-apply-row" style="display:none;margin-top:6px"><button class="small" id="prompt-apply">✏️ 更新提示词(下一段生效)</button><span class="hint" id="prompt-pending"></span></div>
+      </div>
+      <div class="row"><label>渠道</label><select id="provider"><option value="fal">Fal</option></select></div>
+      <div class="row"><label>模型</label><select id="model"></select></div>
+      <div class="hint" id="model-hint"></div>
+      <div class="row"><label>画幅</label><select id="aspect" style="flex:none;width:100px"><option value="16:9">16:9 横屏</option><option value="9:16">9:16 竖屏</option></select>
+        <label style="width:auto">单段时长</label><input type="number" id="duration" min="3" max="30" step="1"><span class="hint">秒</span></div>
+      <div class="hint" id="dur-hint"></div>
+      <details>
+        <summary>高级选项</summary>
+        <div class="body">
+          <div class="row"><label>衔接模式</label><select id="link-mode">
+            <option value="refs_tail">参考图 + 尾帧一起作参考(默认)</option>
+            <option value="first_frame">尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)</option>
+          </select></div>
+          <div class="row"><label>分辨率</label><select id="resolution" style="flex:none;width:100px"><option value="480p">480p</option><option value="768p">768p</option></select><span class="hint">默认 480p;768p 更清晰但更慢更贵(Seedance 按 720p 提交,Kling 无此参数)</span></div>
+          <div class="row"><label>待播上限</label><input type="number" id="max-pending" min="1" max="10" step="1"><span class="hint">未播片段达到该数即暂停生成,播掉一段再继续;默认 3</span></div>
+          <div class="row"><label>最多段数</label><input type="number" id="max-rounds" min="0" step="1"><span class="hint">0 = 不限,直到手动停止</span></div>
+          <div class="row"><label>无人观看</label><input type="number" id="idle-stop" min="0" step="1"><span class="hint">分钟无人打开本页即自动停止;0 = 不自动停</span></div>
+          <div class="row"><label style="width:auto"><input type="checkbox" id="gen-audio"> 生成音频</label><span class="hint">Seedance/Kling 可关;MiniMax H3 固定音画同生</span></div>
+          <div class="row" id="continue-row" style="display:none"><label style="width:auto"><input type="checkbox" id="continue-last"> 从上次直播的尾帧继续</label></div>
+        </div>
+      </details>
+      <div class="actions">
+        <button class="primary big" id="start-btn">▶ 启动</button>
+        <button class="stop big" id="stop-btn" style="display:none">⏹ 停止</button>
+        <span class="hint" id="cost-hint">启动后按段持续计费,直到停止;单段通常要 1–3 分钟</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 播放 ====== -->
+  <div class="card">
+    <h2>📺 直播画面 <span class="chip" id="sess-chip"></span><span class="cur" id="sess-id"></span></h2>
+    <div class="body">
+      <div class="player" id="player">
+        <div class="idle" id="idle-text">还没有画面:填好参考图与提示词后点「启动」,第一段生成完成即开播</div>
+        <video id="va" preload="auto" playsinline></video>
+        <video id="vb" preload="auto" playsinline></video>
+        <div class="overlay"><span class="live" id="live-badge">OFFLINE</span><span class="seg" id="seg-badge" style="display:none"></span></div>
+        <div class="ctl"><button id="mute-btn" style="display:none">🔇 静音中,点击开启声音</button><button id="latest-btn" style="display:none" title="跳到最新一段">⏭ 最新</button></div>
+      </div>
+      <div class="status"><span id="status-msg"></span></div>
+      <div class="err" id="sess-err"></div>
+      <div class="stats" id="stats"></div>
+      <div class="segs" id="segs"></div>
+      <div class="hint">播放策略:按顺序播放已生成的片段;新片段还没到时重播最新一段,到了就在当前段结束后接上,不会打断正在播的画面。生成通常慢于播放,所以"回放"是常态——把单段时长调长可以减少重播占比。待播片段达到上限(默认 3 段,高级选项可调)时暂停生成,播掉一段再继续。停止后循环回放全部片段。</div>
+    </div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,body,method){const o=body!==undefined?{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:(method?{method}:{});const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+const API='/api/v1/live';
+const fileUrl=rel=>`${API}/files/${rel.split('/').map(encodeURIComponent).join('/')}`;
+function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls||'';if(text&&cls==='ok')setTimeout(()=>{if(m.textContent===text)m.textContent=''},4000)}
+function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?(n/1e6).toFixed(1)+' MB':Math.round(n/1e3)+' KB'}
+function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
+
+let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false;
+const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':'generic'};
+const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],generic:[3,30]};
+
+/* ---------- 设置表单 ---------- */
+function fillModels(models,cur){
+  const sel=$('#model');const old=sel.value;
+  sel.innerHTML=models.map(([id,label])=>`<option value="${esc(id)}">${esc(t(label))}</option>`).join('');
+  const want=cur||old||'minimax/h3-max';
+  if([...sel.options].some(o=>o.value===want))sel.value=want;
+  else if(want){sel.insertAdjacentHTML('afterbegin',`<option value="${esc(want)}">${esc(want)}</option>`);sel.value=want}
+  onModelChange();
+}
+function onModelChange(){
+  const fam=FAMILY($('#model').value);const [lo,hi]=DUR_RANGE[fam];
+  $('#duration').min=lo;$('#duration').max=hi;
+  $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
+  $('#model-hint').textContent=fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):'';
+  $('#gen-audio').disabled=fam==='h3';
+}
+$('#model').onchange=onModelChange;
+function fillSettings(s){
+  if(SETTINGS_FILLED)return;SETTINGS_FILLED=true;
+  $('#prompt').value=s.prompt||'';$('#aspect').value=s.aspect||'16:9';$('#duration').value=s.duration||10;
+  $('#link-mode').value=s.link_mode||'refs_tail';$('#max-rounds').value=s.max_rounds||0;$('#idle-stop').value=s.idle_stop_min??10;
+  $('#resolution').value=s.resolution||'480p';$('#max-pending').value=s.max_pending||3;
+  $('#gen-audio').checked=s.generate_audio!==false;$('#continue-last').checked=!!s.continue_last;
+}
+function collect(){
+  return {prompt:$('#prompt').value.trim(),provider:$('#provider').value,model:$('#model').value,aspect:$('#aspect').value,
+    duration:parseInt($('#duration').value,10)||10,resolution:$('#resolution').value,link_mode:$('#link-mode').value,max_rounds:parseInt($('#max-rounds').value,10)||0,
+    max_pending:Math.min(10,Math.max(1,parseInt($('#max-pending').value,10)||3)),
+    idle_stop_min:parseInt($('#idle-stop').value,10)||0,generate_audio:$('#gen-audio').checked,continue_last:$('#continue-last').checked};
+}
+function setInputsLocked(locked){
+  ['#model','#provider','#aspect','#duration','#resolution','#max-pending','#link-mode','#max-rounds','#idle-stop','#gen-audio','#continue-last'].forEach(s=>$(s).disabled=locked);
+  if(locked)$('#gen-audio').disabled=true;else onModelChange();
+  $('#drop').classList.toggle('disabled',locked);
+  document.querySelectorAll('.ref button').forEach(b=>b.disabled=locked);
+  $('#prompt-apply-row').style.display=locked?'':'none';
+  $('#start-btn').style.display=locked?'none':'';$('#stop-btn').style.display=locked?'':'none';
+}
+
+/* ---------- 参考图 ---------- */
+function renderRefs(refs,locked){
+  $('#refs').innerHTML=refs.map((r,i)=>`<div class="ref"><img src="${fileUrl(r.file)}" alt="" title="${esc(r.name)}"><span class="idx">${i+1}</span><button title="${t('删除')}" onclick="deleteRef('${esc(r.id)}')" ${locked?'disabled':''}>✕</button></div>`).join('');
+  $('#refs-count').textContent=I18N.f(t('{n}/{max} 张'),{n:refs.length,max:(STATE&&STATE.max_refs)||8});
+  $('#drop').classList.toggle('disabled',locked||refs.length>=((STATE&&STATE.max_refs)||8));
+}
+async function deleteRef(id){try{const r=await api(`${API}/refs/${encodeURIComponent(id)}`,undefined,'DELETE');renderRefs(r.refs,false)}catch(e){msg(t('删除失败:')+e.message,'err')}}
+const drop=$('#drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>uploadRefs([...(e.dataTransfer.files||[])]));
+$('#file-input').onchange=e=>{uploadRefs([...e.target.files]);e.target.value=''};
+async function uploadRefs(files){
+  files=files.filter(f=>/^image\//.test(f.type));if(!files.length)return;
+  for(const f of files){
+    try{
+      const r=await fetch(`${API}/refs?filename=${encodeURIComponent(f.name)}`,{method:'POST',body:f,headers:{'Content-Type':'application/octet-stream'}});
+      const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);
+      renderRefs(j.refs,false);
+    }catch(e){msg(t('上传失败:')+f.name+' '+e.message,'err');break}
+  }
+}
+
+/* ---------- 启动 / 停止 / 提示词 ---------- */
+$('#start-btn').onclick=async()=>{
+  const s=collect();
+  if(!s.prompt&&!(STATE&&STATE.refs&&STATE.refs.length)){msg(t('提示词与参考图至少填一样'),'err');return}
+  $('#start-btn').disabled=true;
+  try{const r=await api(`${API}/start`,s);resetPlayer();applyState(r);msg(t('已启动,第一段生成中…'),'ok')}
+  catch(e){msg(t('启动失败:')+e.message,'err')}
+  finally{$('#start-btn').disabled=false}
+};
+$('#stop-btn').onclick=async()=>{
+  $('#stop-btn').disabled=true;
+  try{const r=await api(`${API}/stop`,{});applyState(r);msg(t('已停止'),'ok')}
+  catch(e){msg(t('停止失败:')+e.message,'err')}
+  finally{$('#stop-btn').disabled=false}
+};
+$('#prompt-apply').onclick=async()=>{
+  try{const r=await api(`${API}/prompt`,{prompt:$('#prompt').value.trim()});applyState(r);msg(t('提示词已更新,下一段生效'),'ok')}
+  catch(e){msg(t('更新失败:')+e.message,'err')}
+};
+$('#open-folder').onclick=async()=>{try{await api('/actions/open-live-folder',{})}catch(e){msg(t('打开文件夹失败:')+e.message,'err')}};
+$('#clear-btn').onclick=async()=>{
+  if(!confirm(t('删除所有已停止会话的片段视频与尾帧(运行中的会话保留),不可恢复,继续?')))return;
+  try{const r=await api(`${API}/clear`,{});if(!(r.session&&r.session.running))resetPlayer();applyState(r);msg(I18N.f(t('已清理 {n} 个会话'),{n:r.removed||0}),'ok')}
+  catch(e){msg(t('清理失败:')+e.message,'err')}
+};
+
+/* ---------- 状态轮询 ---------- */
+async function poll(){
+  clearTimeout(POLL);
+  const played=PLAY.idx>=0&&PLAY.segs[PLAY.idx]?PLAY.segs[PLAY.idx].seq:0;   // 播到的段号:待播队列闸门依据
+  try{const r=await api(`${API}?touch=1&played=${played}`);applyState(r)}catch(e){$('#status-msg').textContent=t('读取失败:')+e.message}
+  const running=!!(STATE&&STATE.session&&STATE.session.running);
+  POLL=setTimeout(poll,running?2000:6000);
+}
+function applyState(r){
+  STATE=r;
+  fillModels(r.models||[],SETTINGS_FILLED?null:(r.settings&&r.settings.model));
+  fillSettings(r.settings||{});
+  $('#key-chip').textContent=r.fal_key_configured?t('Fal Key:已配置(与生成模型页共用)'):t('⚠ Fal Key 未配置:请到「生成模型」页 视频 → Fal 填写');
+  $('#key-chip').style.color=r.fal_key_configured?'':'var(--yellow)';
+  const sess=r.session;const running=!!(sess&&sess.running);
+  renderRefs(r.refs||[],running);
+  setInputsLocked(running);
+  $('#continue-row').style.display=r.prev_frame&&!running?'':'none';
+  if(sess){
+    if(sess.id!==SESSION_ID){SESSION_ID=sess.id;resetPlayer()}
+    $('#sess-id').textContent=sess.id+' · '+(sess.model||'')+' · '+(sess.aspect||'')+' · '+(sess.resolution||'480p');
+    const st=running?'run':sess.status==='failed'?'failed':'stopped';
+    $('#sess-chip').className='chip '+st;$('#sess-chip').textContent=running?t('直播中'):sess.status==='failed'?t('失败'):t('已停止');
+    $('#status-msg').textContent=sess.message||'';
+    $('#sess-err').textContent=sess.error||'';
+    if(sess.pending_prompt!=null&&sess.pending_prompt!==sess.prompt)$('#prompt-pending').textContent=t('(待生效)');else $('#prompt-pending').textContent='';
+    const segs=sess.segments||[];const total=segs.reduce((a,s)=>a+(Number(s.duration_s)||0),0);const avg=segs.length?Math.round(segs.reduce((a,s)=>a+(Number(s.gen_seconds)||0),0)/segs.length):0;
+    $('#stats').innerHTML=[
+      [t('已生成'),I18N.f(t('{n} 段 / {d}'),{n:segs.length,d:fmtDur(total)})],
+      [t('当前段'),sess.gen_elapsed_s!=null?I18N.f(t('第 {n} 段已等待 {s}s'),{n:sess.round,s:sess.gen_elapsed_s}):'—'],
+      [t('平均生成耗时'),avg?avg+' s':'—'],
+      [t('未播缓冲'),running?I18N.f(t('{n} 段(上限 {m},满了暂停生成)'),{n:Math.max(0,segs.length-1-Math.max(PLAY.idx,-1)),m:sess.max_pending||3}):'—'],
+      [t('磁盘占用'),fmtBytes(r.disk_bytes)],
+    ].map(([k,v])=>`<div><span>${k}:</span> ${esc(v)}</div>`).join('');
+    setSegments(segs,running,sess.aspect);
+  }else{
+    $('#sess-id').textContent='';$('#sess-chip').className='chip';$('#sess-chip').textContent='';
+    $('#status-msg').textContent='';$('#sess-err').textContent='';$('#stats').innerHTML='';$('#segs').innerHTML='';
+    $('#live-badge').textContent='OFFLINE';$('#live-badge').className='live';
+  }
+  $('#player').classList.toggle('v',!!(sess&&sess.aspect==='9:16'));
+}
+
+/* ---------- 播放器:A/B 双 video 无缝续播 ---------- */
+const PLAY={segs:[],idx:-1,active:0,running:false,muted:false,replaying:false};
+const VIDS=[$('#va'),$('#vb')];
+function resetPlayer(){
+  PLAY.segs=[];PLAY.idx=-1;PLAY.replaying=false;
+  VIDS.forEach(v=>{v.pause();v.removeAttribute('src');v.load();v.classList.remove('on');v.dataset.url=''});
+  $('#idle-text').style.display='';$('#seg-badge').style.display='none';$('#latest-btn').style.display='none';
+}
+function setSegments(segs,running,aspect){
+  const before=PLAY.segs.length;
+  PLAY.segs=segs;PLAY.running=running;
+  const box=$('#segs');
+  box.innerHTML=segs.map((s,i)=>`<div class="s${aspect==='9:16'?' v':''}${i===PLAY.idx?' cur':''}${i>PLAY.idx?' new':''}" onclick="jumpTo(${i})" title="${esc(s.prompt||'')}"><img src="${fileUrl('sessions/'+SESSION_ID+'/'+s.frame)}" alt=""><div>#${s.seq} · ${(Number(s.duration_s)||0).toFixed(1)}s · ⏳${s.gen_seconds||0}s</div></div>`).join('');
+  if(!before&&segs.length){ // 首段到达:从最新一段开播(刷新页面时也从最新开始,贴近直播)
+    playSeg(segs.length-1);
+  }else if(segs.length>before&&PLAY.idx>=0){
+    preloadNext();
+    if(PLAY.replaying){ /* 正在重播旧段:当前段播完自然接上,不打断 */ }
+  }
+  if(!running&&!segs.length){$('#live-badge').textContent='OFFLINE';$('#live-badge').className='live'}
+  $('#latest-btn').style.display=segs.length>1&&PLAY.idx<segs.length-1?'':'none';
+}
+function segUrl(i){return fileUrl('sessions/'+SESSION_ID+'/'+PLAY.segs[i].file)}
+function nextIndex(){
+  if(!PLAY.segs.length)return -1;
+  if(PLAY.idx+1<PLAY.segs.length)return PLAY.idx+1;
+  return PLAY.running?PLAY.idx:0;   // 直播中:重播最新一段;已停止:从头循环全部
+}
+function preloadNext(){
+  const n=nextIndex();if(n<0||n===PLAY.idx)return;
+  const other=VIDS[1-PLAY.active];const url=segUrl(n);
+  if(other.dataset.url!==url){other.dataset.url=url;other.src=url;other.load()}
+}
+async function tryPlay(v){
+  v.muted=PLAY.muted;
+  try{await v.play()}
+  catch(e){
+    if(!PLAY.muted){PLAY.muted=true;v.muted=true;$('#mute-btn').style.display='';try{await v.play()}catch(e2){}}
+  }
+}
+async function playSeg(i){
+  if(i<0||i>=PLAY.segs.length)return;
+  const url=segUrl(i);
+  const cur=VIDS[PLAY.active];
+  let v;
+  if(i===PLAY.idx&&cur.dataset.url===url){v=cur;v.currentTime=0}   // 重播同一段:原地回零最省
+  else{
+    v=VIDS[1-PLAY.active];
+    if(v.dataset.url!==url){v.dataset.url=url;v.src=url;v.load()}
+  }
+  PLAY.replaying=(i===PLAY.idx)&&PLAY.running;
+  PLAY.idx=i;
+  await tryPlay(v);
+  if(v!==cur){PLAY.active=1-PLAY.active;v.classList.add('on');cur.classList.remove('on');cur.pause()}
+  $('#idle-text').style.display='none';
+  updateBadges();preloadNext();
+  document.querySelectorAll('#segs .s').forEach((el,k)=>{el.classList.toggle('cur',k===i);el.classList.toggle('new',k>i)});
+  $('#latest-btn').style.display=PLAY.segs.length>1&&i<PLAY.segs.length-1?'':'none';
+  if(PLAY.running){clearTimeout(POLL);POLL=setTimeout(poll,300)}   // 尽快上报播到的段号,放行下一段生成
+}
+function updateBadges(){
+  const b=$('#live-badge');
+  if(PLAY.running){b.textContent=PLAY.replaying?t('回放 · 等待新段'):'LIVE';b.className='live '+(PLAY.replaying?'replay':'on')}
+  else{b.textContent=t('已停止 · 循环回放');b.className='live'}
+  const s=PLAY.segs[PLAY.idx];
+  if(s){$('#seg-badge').style.display='';$('#seg-badge').textContent=I18N.f(t('第 {n}/{m} 段'),{n:s.seq,m:PLAY.segs.length})}
+}
+function jumpTo(i){if(i!==PLAY.idx)playSeg(i)}
+$('#latest-btn').onclick=()=>playSeg(PLAY.segs.length-1);
+VIDS.forEach(v=>{
+  v.addEventListener('ended',()=>{if(v!==VIDS[PLAY.active])return;const n=nextIndex();if(n>=0)playSeg(n)});
+  v.addEventListener('error',()=>{if(v!==VIDS[PLAY.active])return;setTimeout(()=>{const n=nextIndex();if(n>=0&&n!==PLAY.idx)playSeg(n)},1500)});
+  v.addEventListener('timeupdate',()=>{ // 段尾 0.4s 内保证下一段已在预载
+    if(v===VIDS[PLAY.active]&&v.duration&&v.duration-v.currentTime<0.4)preloadNext();
+  });
+});
+$('#mute-btn').onclick=()=>{PLAY.muted=false;VIDS.forEach(v=>v.muted=false);$('#mute-btn').style.display='none'};
+$('#player').addEventListener('click',e=>{if(PLAY.muted&&!e.target.closest('button'))$('#mute-btn').click()});
+
+poll();
+</script>
+</body>
+</html>
