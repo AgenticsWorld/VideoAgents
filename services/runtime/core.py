@@ -4125,6 +4125,7 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "fal": [
         ("minimax/h3-max", "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)"),
         ("minimax/h3", "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)"),
+        ("minimax/h3-max-turbo", "MiniMax H3 Max Turbo(Fal 托管;速度优先版,仅文生/首尾帧,480P/768P,不支持参考素材)"),
         ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
         ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
         ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),

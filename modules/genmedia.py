@@ -2852,6 +2852,11 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             if audio_refs:
                 body["audio_urls"] = [to_url(p) for p in audio_refs]
     elif family == "h3":
+        # H3 Max Turbo(速度优先版)只有 text-/image-to-video 端点,分辨率仅 480P/768P
+        turbo = "turbo" in model.lower()
+        if turbo and task == "reference-to-video":
+            raise RuntimeError("Fal MiniMax H3 Max Turbo 无 reference-to-video 端点,不支持参考素材"
+                               "(--ref/--ref-video/--audio-ref),请改用首尾帧模式或换 minimax/h3-max")
         if len(refs) + len(video_refs) + len(audio_refs) > FAL_H3_MAX_TOTAL_REFS:
             raise RuntimeError(f"Fal MiniMax H3 参考素材(图+视频+音频)合计最多 {FAL_H3_MAX_TOTAL_REFS} 件")
         if gen_audio is False:
@@ -2862,7 +2867,10 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             if not mapped:
                 raise RuntimeError(f"Fal MiniMax H3 分辨率无法映射 {res}"
                                    f"(可映射档位:{'/'.join(sorted(FAL_H3_RESOLUTION_MAP))})")
-            if mapped != res.upper():
+            if turbo and mapped not in ("480P", "768P"):
+                print(f"[genmedia] Fal MiniMax H3 Max Turbo 仅 480P/768P,{res} 已压到 768P", file=sys.stderr)
+                mapped = "768P"
+            elif mapped != res.upper():
                 print(f"[genmedia] Fal MiniMax H3 分辨率 {res} 已映射为 {mapped}", file=sys.stderr)
             body["resolution"] = mapped
         if seed is not None:

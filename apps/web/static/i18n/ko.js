@@ -1734,6 +1734,7 @@ window.I18N_DICT = {
 "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0(Fal 호스팅; 오디오 동시 생성, 4–15초, 참조 9 이미지/3 비디오/3 오디오, 최대 4K)",
 "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3(Fal 호스팅; 첫/끝 프레임 또는 멀티모달 참조, 480P/768P/2K/4K, 참조 합계 ≤12개)",
 "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max(Fal 호스팅; H3 후속 학습판, 프롬프트 준수 강화)",
+"MiniMax H3 Max Turbo(Fal 托管;速度优先版,仅文生/首尾帧,480P/768P,不支持参考素材)": "MiniMax H3 Max Turbo(Fal 호스팅; 속도 우선판, 텍스트/첫·끝 프레임만, 480P/768P, 참조 소재 미지원)",
 "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro(Fal 호스팅; 첫/끝 프레임, 3–15초, 네이티브 오디오, 참조 소재 미지원)",
 "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard(Fal 호스팅; 첫/끝 프레임, 3–15초, 네이티브 오디오, 참조 소재 미지원)",
 "Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "Fal 비디오 생성 API(queue.fal.run 비동기 큐, Seedance 2.0/2.5·MiniMax H3·Kling 3.0 등 엔드포인트 호스팅); 모델 ID는 패밀리 접두사이며 입력에 따라 text-to-video / image-to-video / reference-to-video 작업 세그먼트가 자동으로 붙습니다. 「사용자 지정…」으로 전체 엔드포인트 ID 입력 가능; 해상도/길이/참조 상한은 선택한 모델을 따릅니다(공식 채널과 동일 기준); Key는",
