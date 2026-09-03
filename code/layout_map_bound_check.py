@@ -20,6 +20,10 @@
          动线图字母三者以 label 为唯一键;label 换词 = 模型对不上号);
       ⑦ 生物独立态条目(id CRE-*,2026-08-27)与角色同规则:占字母、Map markers 句写 "<字母> = <label> (<CRE id>)"、
          主体定义句 "<label>@Image N" 指向其 sheet;骑乘态(骑手 mounted)不占字母、不入此句;
+      ⑧ 全局站位表逐字(station_table_bound,2026-09-03):video_prompt 含固定锚点 `Blocking table:`,且组
+         `blocking_map.station_table[]` 每条目的 zone_en / anchor.relation_en / facing_en / neighbors[].relation_en /
+         invariants[] 全部逐字命中(比对忽略大小写与连续空白)——站位表是导演台视角的不变量,每镜 Shot 段的
+         画面视角站位句(space_fragment_en,机检 blocking_bound)必须与之相容;组缺 station_table 按 WARN(--strict FAIL);
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -36,6 +40,7 @@ from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
+TABLE_KEY = "Blocking table:"   # 全局站位表固定锚点(2026-09-03)
 DISCLAIM_RE = re.compile(r"do not (render|draw|reproduce) the map", re.I)
 LETTERS = "ABCDEFGHIJKL"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母(含生物独立态条目,2026-08-27)
 
@@ -115,6 +120,26 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
             continue
         if norm(route) not in hay:
             errs.append(f"{gid}/{cid}: 动线句未逐字命中 video_prompt —— \"{route}\"")
+    # ⑧ 全局站位表逐字(station_table_bound,2026-09-03)
+    st = bm.get("station_table")
+    if not isinstance(st, list) or not st:
+        (errs if strict else warns).append(f"{gid}: blocking_map 缺 station_table(回派 shot-planning 补全局站位表;先过 render_blocking_map.py 的 station_table_ok)")
+    else:
+        if TABLE_KEY not in vp:
+            errs.append(f"{gid}: video_prompt 缺 \"{TABLE_KEY}\" 段(全局站位表:逐角色 zone/anchor/facing/neighbors/keep 逐字拼入)")
+        for row in st:
+            if not isinstance(row, dict):
+                continue
+            cid = row.get("id", "?")
+            fields = [("zone_en", row.get("zone_en")), ("facing_en", row.get("facing_en")),
+                      ("anchor.relation_en", (row.get("anchor") or {}).get("relation_en") if isinstance(row.get("anchor"), dict) else None)]
+            fields += [(f"neighbors[{j}].relation_en", n.get("relation_en")) for j, n in enumerate(row.get("neighbors") or []) if isinstance(n, dict)]
+            fields += [(f"invariants[{j}]", x) for j, x in enumerate(row.get("invariants") or [])]
+            for name, val in fields:
+                if not isinstance(val, str) or not val.strip():
+                    continue   # 结构缺失由 station_table_ok 报
+                if norm(val) not in hay:
+                    errs.append(f"{gid}/{cid}: 站位表 {name} 未逐字命中 video_prompt —— \"{val}\"")
     return errs, warns
 
 

@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Video prompts now describe character positions from each shot's camera, backed by a per-group global blocking table** (spatial blocking on). Per-shot `space_fragment_en` in `blocking.json` is now a *camera-view* sentence — frame side / depth layer / facing relative to camera / relation to other characters in frame + one landmark word — written from the shot's `view_tile` camera axis instead of copying the top-down map's compass wording, plus a structured `frame_position {side, depth, facing_camera}`. New `code/camera_view_check.py` (`camera_view_consistent`) verifies each fragment geometrically against the group `blocking_map` and the `layout.json` view axis (wrong side / wrong depth order / compass words = FAIL; legacy shots without `frame_position` = WARN). Shot-planning (drafted by storyboard) now finalises `blocking_map.station_table[]` — six fields per character or independent creature: id, zone, fixed anchor landmark, body facing, neighbors, invariant relations — camera-independent, checked by `render_blocking_map.py` (`station_table_ok`); the prompt agent copies it verbatim into a fixed `Blocking table:` block before `Shot 1:` (`station_table_bound`, `layout_map_bound_check.py` rule ⑧). Existing projects only get WARNs until blocking / shot-planning are re-dispatched.
+
 ## [1.0.28] - 2026-09-01
 
 ### Added
