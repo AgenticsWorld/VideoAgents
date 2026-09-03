@@ -165,6 +165,7 @@ details .body{padding:10px 0 2px}
           <div class="row"><label>衔接模式</label><select id="link-mode">
             <option value="refs_tail">参考图 + 尾帧一起作参考(默认)</option>
             <option value="first_frame">尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)</option>
+            <option value="none">不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)</option>
           </select></div>
           <div class="row"><label>分辨率</label><select id="resolution" style="flex:none;width:100px"><option value="480p">480p</option><option value="768p">768p</option></select><span class="hint">默认 480p;768p 更清晰但更慢更贵(Seedance 按 720p 提交,Kling 无此参数)</span></div>
           <div class="row"><label>待播上限</label><input type="number" id="max-pending" min="1" max="10" step="1"><span class="hint">未播片段达到该数即暂停生成,播掉一段再继续;默认 3</span></div>
@@ -241,10 +242,11 @@ function onModelChange(){
   $('#duration').min=lo;$('#duration').max=hi;
   $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
   const turbo=fam==='h3'&&$('#model').value.toLowerCase().includes('turbo');   // H3 Max Turbo 只有文生/首帧端点,同 Kling 走尾帧作首帧
-  $('#model-hint').textContent=fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):'';
+  const noLink=$('#link-mode').value==='none';
+  $('#model-hint').textContent=noLink?t('不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续'):fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):'';
   $('#gen-audio').disabled=fam==='h3';
 }
-$('#model').onchange=onModelChange;
+$('#model').onchange=onModelChange;$('#link-mode').onchange=onModelChange;
 function fillSettings(s){
   if(SETTINGS_FILLED)return;SETTINGS_FILLED=true;
   $('#prompt').value=s.prompt||'';$('#aspect').value=s.aspect||'16:9';$('#duration').value=s.duration||10;

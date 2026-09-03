@@ -1771,6 +1771,8 @@ window.I18N_DICT = {
 "衔接模式": "Übergang",
 "参考图 + 尾帧一起作参考(默认)": "Referenzen + letzter Frame als Referenzen (Standard)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Letzter Frame als erstes Bild (ohne Referenzen; weichere Übergänge, aber Figuren driften)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "Ohne Übergang (Text-zu-Video: jeder Clip wird nur aus dem Prompt erzeugt, ohne Referenzen oder letzten Frame)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "Ohne Übergang: jeder Clip ist Text-zu-Video nur aus dem Prompt; weder Referenzen noch der letzte Frame werden gesendet, die Clips schließen visuell nicht aneinander an",
 "最多段数": "Max. Clips",
 "0 = 不限,直到手动停止": "0 = unbegrenzt, bis zum manuellen Stopp",
 "无人观看": "Ohne Zuschauer",

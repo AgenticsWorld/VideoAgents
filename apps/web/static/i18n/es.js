@@ -1771,6 +1771,8 @@ window.I18N_DICT = {
 "衔接模式": "Continuidad",
 "参考图 + 尾帧一起作参考(默认)": "Referencias + último fotograma como referencias (predeterminado)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Último fotograma como primero (sin referencias; uniones más suaves pero los personajes derivan)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "Sin continuidad (texto a vídeo: cada clip se genera solo con el prompt, sin referencias ni último fotograma)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "Sin continuidad: cada clip es texto a vídeo solo con el prompt; no se envían referencias ni el último fotograma, los clips no se unen visualmente",
 "最多段数": "Máx. clips",
 "0 = 不限,直到手动停止": "0 = sin límite, hasta detener manualmente",
 "无人观看": "Sin espectadores",

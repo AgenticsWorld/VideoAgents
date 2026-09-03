@@ -1771,6 +1771,8 @@ window.I18N_DICT = {
 "衔接模式": "Mode sambung",
 "参考图 + 尾帧一起作参考(默认)": "Referensi + frame terakhir sebagai referensi (default)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Frame terakhir sebagai frame pertama (tanpa referensi; sambungan lebih mulus tapi karakter mudah berubah)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "Tanpa sambungan (teks ke video: tiap klip dibuat hanya dari prompt, tanpa referensi atau frame terakhir)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "Tanpa sambungan: tiap klip adalah teks ke video dari prompt saja; referensi maupun frame terakhir tidak dikirim, sehingga antar klip tidak tersambung secara visual",
 "最多段数": "Klip maks.",
 "0 = 不限,直到手动停止": "0 = tanpa batas, sampai dihentikan manual",
 "无人观看": "Tanpa penonton",

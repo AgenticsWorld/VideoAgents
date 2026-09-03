@@ -1771,6 +1771,8 @@ window.I18N_DICT = {
 "衔接模式": "Enchaînement",
 "参考图 + 尾帧一起作参考(默认)": "Références + dernière image en références (par défaut)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Dernière image en première image (sans références ; raccords plus fluides mais les personnages dérivent)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "Sans raccord (texte vers vidéo : chaque clip est généré à partir du seul prompt, sans références ni dernière image)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "Sans raccord : chaque clip est du texte vers vidéo à partir du seul prompt ; ni les références ni la dernière image ne sont envoyées, les clips ne s'enchaînent pas visuellement",
 "最多段数": "Clips max",
 "0 = 不限,直到手动停止": "0 = illimité, jusqu'à l'arrêt manuel",
 "无人观看": "Sans spectateur",

@@ -1771,6 +1771,8 @@ window.I18N_DICT = {
 "衔接模式": "Cách nối",
 "参考图 + 尾帧一起作参考(默认)": "Tham chiếu + khung cuối làm tham chiếu (mặc định)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Khung cuối làm khung đầu (không tham chiếu; nối mượt hơn nhưng nhân vật dễ trôi)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "Không nối (văn bản sang video: mỗi đoạn chỉ tạo từ prompt, không tham chiếu hay khung cuối)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "Không nối: mỗi đoạn là văn bản sang video chỉ từ prompt; không gửi tham chiếu lẫn khung cuối, các đoạn không nối hình với nhau",
 "最多段数": "Số đoạn tối đa",
 "0 = 不限,直到手动停止": "0 = không giới hạn, đến khi dừng thủ công",
 "无人观看": "Không ai xem",

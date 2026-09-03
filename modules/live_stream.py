@@ -59,7 +59,7 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 RESOLUTIONS = ("480p", "768p")   # 页面档位;768p 提交时按 genmedia 口径传 720p(H3 → 768P,Seedance → 720p)
 DEFAULT_RESOLUTION = "480p"
 ASPECTS = ("16:9", "9:16")
-LINK_MODES = ("refs_tail", "first_frame")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图)
+LINK_MODES = ("refs_tail", "first_frame", "none")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图) / 不衔接(纯文生视频)
 PROVIDERS = ("fal",)
 DEFAULT_MODEL = "minimax/h3-max"
 DEFAULTS = {"prompt": "", "provider": "fal", "model": DEFAULT_MODEL, "duration": 10,
@@ -425,6 +425,8 @@ def start(fields: dict) -> dict:
         refs = list_refs()
         if not s["prompt"] and not refs:
             raise LiveError(400, "提示词与参考图至少填一样")
+        if s["link_mode"] == "none" and not s["prompt"]:
+            raise LiveError(400, "不衔接(文生视频)模式不提交参考图与尾帧,必须填提示词")
         family = _genmedia_family(s["model"])
         prev = _state().get("current")
         start_frame = ""
@@ -798,7 +800,10 @@ def _job(sid: str) -> int:
     prev_frame = str(sess.get("start_frame") or "")
     if sess.get("segments"):
         prev_frame = _last_frame_of(sess) or prev_frame
-    if first_only and refs:
+    no_link = (sess.get("link_mode") or "refs_tail") == "none"
+    if no_link:
+        print("[live] 衔接模式=不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交", flush=True)
+    elif first_only and refs:
         print(f"[live] {sess['model']} 端点不支持参考图:首轮用第 1 张参考图作首帧,其余参考图不生效",
               flush=True)
     seq = len(sess.get("segments") or [])
@@ -840,13 +845,15 @@ def _job(sid: str) -> int:
         prompt = str(sess.get("prompt") or "")
         link_mode = sess.get("link_mode") or "refs_tail"
         first, round_refs = "", []
-        if first_only:
+        if link_mode == "none":
+            pass                                   # 不衔接:纯文生视频,不带参考图与尾帧,也不加续接句
+        elif first_only:
             first = prev_frame or (refs[0] if refs else "")
         elif link_mode == "first_frame" and prev_frame:
             first = prev_frame
         else:
             round_refs = list(refs) + ([prev_frame] if prev_frame else [])
-        if prev_frame:
+        if prev_frame and link_mode != "none":
             prompt = (prompt + (CONTINUITY_FIRST if first else CONTINUITY_REFS)).strip()
         elif not prompt:
             prompt = "A continuous live-stream shot of the subject in the reference images."

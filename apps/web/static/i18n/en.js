@@ -1783,6 +1783,8 @@ window.I18N_DICT = {
 "衔接模式": "Continuity",
 "参考图 + 尾帧一起作参考(默认)": "References + last frame as references (default)",
 "尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)": "Last frame as first frame (no references; smoother joins but characters drift)",
+"不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)": "No continuity (text-to-video: each clip is generated from the prompt alone, no references or last frame)",
+"不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续": "No continuity: each clip is text-to-video from the prompt only; neither references nor the last frame are submitted, so clips do not join visually",
 "最多段数": "Max clips",
 "0 = 不限,直到手动停止": "0 = unlimited, until stopped manually",
 "无人观看": "Idle stop",
