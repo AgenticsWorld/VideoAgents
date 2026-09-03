@@ -1730,4 +1730,13 @@ window.I18N_DICT = {
 "长镜头": "Plansequenz",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Aktiviert hängt jede Shot-Gruppe den Screenshot des letzten Frames der Vorgruppe als Referenzbild an, um das Bild fortzuführen; deaktiviert (Standard) wird kein Endframe-Referenzbild angehängt und der Anschluss erfolgt nur über Text (Eröffnungssatz mit neuem Bildausschnitt)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Die aktuelle Entwurfsauflösung ist niedrig; Plansequenz wird nicht empfohlen: Ein niedrig aufgelöster Endframe als Referenzbild verschlechtert Bildqualität und Figurenkonsistenz deutlich",
+"Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (auf Fal gehostet; einzelner Clip 4–30 s, Referenzen 30 Bilder/10 Videos/10 Audios, 480p/720p/1080p)",
+"Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (auf Fal gehostet; Audio-Video-Kogeneration, 4–15 s, Referenzen 9 Bilder/3 Videos/3 Audios, bis 4K)",
+"MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (auf Fal gehostet; Start-/Endframe oder multimodale Referenzen, 480P/768P/2K/4K, insgesamt ≤12 Referenzdateien)",
+"MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max (auf Fal gehostet; nachtrainiertes H3, stärkere Prompt-Treue)",
+"Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro (auf Fal gehostet; Start-/Endframe, 3–15 s, natives Audio, keine Referenzmaterialien)",
+"Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard (auf Fal gehostet; Start-/Endframe, 3–15 s, natives Audio, keine Referenzmaterialien)",
+"Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "Fal-Videogenerierungs-API (asynchrone Warteschlange queue.fal.run mit Endpunkten für Seedance 2.0/2.5, MiniMax H3, Kling 3.0 u. a.); die Modell-ID ist das Familienpräfix, das Aufgabensegment text-to-video / image-to-video / reference-to-video wird je nach Eingaben automatisch angehängt, oder über „Benutzerdefiniert…“ eine vollständige Endpunkt-ID eintragen; Auflösungs-/Dauer-/Referenzlimits folgen dem gewählten Modell (gleiche Regeln wie die offiziellen Kanäle); Key im",
+"fal.ai 控制台「API Keys」": "fal.ai-Dashboard „API Keys“",
+"创建(API 权限即可),文档见": "erstellen (API-Berechtigung genügt); Doku:",
 };

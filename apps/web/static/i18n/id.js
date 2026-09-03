@@ -1730,4 +1730,13 @@ window.I18N_DICT = {
 "长镜头": "Long take",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Jika aktif, setiap grup shot melampirkan tangkapan frame terakhir grup sebelumnya sebagai gambar referensi untuk melanjutkan gambar; jika nonaktif (default), referensi frame terakhir tidak dilampirkan dan kesinambungan hanya mengandalkan teks (kalimat pembuka dengan komposisi baru)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Resolusi draf saat ini rendah, tidak disarankan mengaktifkan Long take: frame terakhir beresolusi rendah sebagai referensi akan menurunkan kualitas gambar dan konsistensi karakter secara nyata",
+"Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (dihosting di Fal; satu klip 4–30 dtk, referensi 30 gambar/10 video/10 audio, 480p/720p/1080p)",
+"Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (dihosting di Fal; audio-video dibuat bersamaan, 4–15 dtk, referensi 9 gambar/3 video/3 audio, hingga 4K)",
+"MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (dihosting di Fal; frame awal/akhir atau referensi multimodal, 480P/768P/2K/4K, total referensi ≤12 berkas)",
+"MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max (dihosting di Fal; H3 pasca-latih, lebih patuh pada prompt)",
+"Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro (dihosting di Fal; frame awal/akhir, 3–15 dtk, audio bawaan, tanpa materi referensi)",
+"Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard (dihosting di Fal; frame awal/akhir, 3–15 dtk, audio bawaan, tanpa materi referensi)",
+"Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "API pembuatan video Fal (antrean asinkron queue.fal.run yang menghosting endpoint Seedance 2.0/2.5, MiniMax H3, Kling 3.0, dll.); ID model adalah prefiks keluarga, segmen tugas text-to-video / image-to-video / reference-to-video ditambahkan otomatis sesuai input, atau pilih “Kustom…” untuk mengisi ID endpoint lengkap; batas resolusi/durasi/referensi mengikuti model yang dipilih (aturan sama dengan kanal resmi); buat Key di",
+"fal.ai 控制台「API Keys」": "dasbor fal.ai “API Keys”",
+"创建(API 权限即可),文档见": "(izin API sudah cukup); dokumentasi:",
 };

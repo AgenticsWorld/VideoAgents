@@ -1742,4 +1742,13 @@ window.I18N_DICT = {
 "长镜头": "Long take",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "When on, each shot group attaches the previous group's last-frame screenshot as a reference image to continue the picture; when off (default), no last-frame reference is attached and continuity relies on text only (a reframed opening sentence)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ The draft resolution is low; enabling Long take is not recommended: a low-res last frame used as a reference will noticeably degrade image quality and character consistency",
+"Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (hosted on Fal; single clip 4–30 s, references 30 images/10 videos/10 audios, 480p/720p/1080p)",
+"Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (hosted on Fal; audio-video co-generation, 4–15 s, references 9 images/3 videos/3 audios, up to 4K)",
+"MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (hosted on Fal; first/last frame or multimodal references, 480P/768P/2K/4K, ≤12 reference files in total)",
+"MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max (hosted on Fal; post-trained H3, stronger prompt adherence)",
+"Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro (hosted on Fal; first/last frame, 3–15 s, native audio, no reference assets)",
+"Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard (hosted on Fal; first/last frame, 3–15 s, native audio, no reference assets)",
+"Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "Fal video generation API (queue.fal.run async queue hosting Seedance 2.0/2.5, MiniMax H3, Kling 3.0 and more); the model ID is the family prefix and the text-to-video / image-to-video / reference-to-video task segment is appended automatically from the inputs, or pick “Custom…” to enter a full endpoint ID; resolution/duration/reference caps follow the selected model (same rules as the official channels); create the Key in the",
+"fal.ai 控制台「API Keys」": "fal.ai dashboard “API Keys”",
+"创建(API 权限即可),文档见": "(API scope is enough); docs:",
 };

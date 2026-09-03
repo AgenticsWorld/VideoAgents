@@ -1730,4 +1730,13 @@ window.I18N_DICT = {
 "长镜头": "Cảnh quay dài (long take)",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Bật: mỗi nhóm cảnh dùng ảnh chụp khung hình cuối của nhóm trước làm ảnh tham chiếu để nối tiếp hình ảnh; Tắt (mặc định): không đính ảnh tham chiếu khung cuối, chỉ nối tiếp bằng văn bản (câu mở đầu đổi bố cục)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Độ phân giải bản nháp hiện tại thấp, không nên bật cảnh quay dài: khung hình cuối độ phân giải thấp dùng làm ảnh tham chiếu sẽ làm giảm rõ chất lượng hình ảnh và tính nhất quán nhân vật",
+"Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (host trên Fal; một clip 4–30 s, tham chiếu 30 ảnh/10 video/10 audio, 480p/720p/1080p)",
+"Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (host trên Fal; sinh đồng thời âm thanh, 4–15 s, tham chiếu 9 ảnh/3 video/3 audio, tối đa 4K)",
+"MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (host trên Fal; khung đầu/cuối hoặc tham chiếu đa phương thức, 480P/768P/2K/4K, tổng tham chiếu ≤12 tệp)",
+"MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max (host trên Fal; bản H3 huấn luyện thêm, bám prompt tốt hơn)",
+"Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro (host trên Fal; khung đầu/cuối, 3–15 s, âm thanh gốc, không hỗ trợ tài liệu tham chiếu)",
+"Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard (host trên Fal; khung đầu/cuối, 3–15 s, âm thanh gốc, không hỗ trợ tài liệu tham chiếu)",
+"Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "API sinh video Fal (hàng đợi bất đồng bộ queue.fal.run, host các endpoint Seedance 2.0/2.5, MiniMax H3, Kling 3.0…); ID mô hình là tiền tố họ mô hình, đoạn tác vụ text-to-video / image-to-video / reference-to-video được tự thêm theo đầu vào, hoặc chọn “Tùy chỉnh…” để nhập ID endpoint đầy đủ; giới hạn độ phân giải/thời lượng/tham chiếu theo mô hình đã chọn (cùng quy tắc với kênh chính thức); tạo Key tại",
+"fal.ai 控制台「API Keys」": "bảng điều khiển fal.ai “API Keys”",
+"创建(API 权限即可),文档见": "(quyền API là đủ); tài liệu:",
 };

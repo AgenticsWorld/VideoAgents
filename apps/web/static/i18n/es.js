@@ -1730,4 +1730,13 @@ window.I18N_DICT = {
 "长镜头": "Plano secuencia",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Al activarlo, cada grupo de planos adjunta la captura del último fotograma del grupo anterior como imagen de referencia para dar continuidad; desactivado (por defecto) no se adjunta esa referencia y la continuidad se apoya solo en el texto (frase de apertura con reencuadre)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ La resolución de borrador actual es baja; no se recomienda activar el plano secuencia: usar un último fotograma de baja resolución como referencia degradará notablemente la calidad de imagen y la consistencia de los personajes",
+"Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (alojado en Fal; clip único de 4–30 s, referencias 30 imágenes/10 vídeos/10 audios, 480p/720p/1080p)",
+"Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (alojado en Fal; generación conjunta de audio y vídeo, 4–15 s, referencias 9 imágenes/3 vídeos/3 audios, hasta 4K)",
+"MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (alojado en Fal; primer/último fotograma o referencias multimodales, 480P/768P/2K/4K, ≤12 archivos de referencia en total)",
+"MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)": "MiniMax H3 Max (alojado en Fal; H3 post-entrenado, mayor fidelidad al prompt)",
+"Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Pro (alojado en Fal; primer/último fotograma, 3–15 s, audio nativo, sin material de referencia)",
+"Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)": "Kling 3.0 Standard (alojado en Fal; primer/último fotograma, 3–15 s, audio nativo, sin material de referencia)",
+"Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在": "API de generación de vídeo de Fal (cola asíncrona queue.fal.run que aloja Seedance 2.0/2.5, MiniMax H3, Kling 3.0 y más); el ID de modelo es el prefijo de familia y el segmento de tarea text-to-video / image-to-video / reference-to-video se añade automáticamente según las entradas, o elige “Personalizado…” para introducir un ID de endpoint completo; los límites de resolución/duración/referencias siguen el modelo elegido (mismas reglas que los canales oficiales); crea la Key en el",
+"fal.ai 控制台「API Keys」": "panel de fal.ai “API Keys”",
+"创建(API 权限即可),文档见": "(basta el permiso API); documentación:",
 };

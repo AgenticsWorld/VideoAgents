@@ -661,13 +661,17 @@ DEFAULT_GENCONFIG = {
                     "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # openrouter | volcengine | byteplus | fal | minimax | comfyui
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
+        # Fal(queue.fal.run 托管端点):model 存家族前缀(bytedance/seedance-2.0、minimax/h3、
+        # fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video
+        # 任务段;custom_model 可填完整端点 ID 原样调用;Key 在 fal.ai/dashboard/keys 创建
+        "fal": {"api_key": "", "model": "bytedance/seedance-2.0", "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
@@ -1695,7 +1699,7 @@ AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagen
 # RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
 # ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
 AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -4098,7 +4102,7 @@ def max_group_ref_images(project: str) -> int:
 GROUP_SKILL_MODES = ("global", "auto", "manual", "off")
 REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.5);手动加图/手绘生成以此兜底
 # 各渠道可选视频模型目录(与 apps/web/static/models.html 的 VOLC_MODELS/BP_VIDEO_MODELS/
-# MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
+# FAL_VIDEO_MODELS/MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
 VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "volcengine": [
         ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
@@ -4117,6 +4121,14 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
         ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
         ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "fal": [
+        ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
+        ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
+        ("minimax/h3", "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)"),
+        ("minimax/h3-max", "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)"),
+        ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
+        ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
     "minimax": [
         ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),

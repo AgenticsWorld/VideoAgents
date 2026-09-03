@@ -974,6 +974,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 | Ideogram | ✓ | — | — | — | 云端 |
 | 火山引擎(方舟) | ✓ | ✓ | — | — | 云端;图像 Seedream 系列同步返回,视频异步任务自动轮询 |
 | BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0/2.5 为 dreamina-seedance-2-*) |
+| Fal | — | ✓ | — | — | 云端;queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点;模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video 任务段;Seedance/Kling 无 seed 入参 |
 | ComfyUI | ✓ | ✓ | — | — | 本地;视频必须在设置页配好 API 格式工作流 JSON,占位符见模块头注释 |
 
 **生成类 Agent 的纪律**:
