@@ -2,7 +2,7 @@
 
 All notable public changes to VideoAgents are documented here.
 
-## [Unreleased]
+## [1.0.29] - 2026-09-03
 
 ### Added
 
