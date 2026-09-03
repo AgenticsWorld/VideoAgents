@@ -2,8 +2,9 @@
 """数字人单人片段生成器。
 
 输入一张人物图和一段该人物的对白音频，按「生成模型 → 数字人」配置自动路由到
-HeyGen、Kling AI（北京）、RunningHub 云端工作流或本地 ComfyUI/InfiniteTalk。最终母带封装由
-``modules/dialogue_video.py`` 完成；渠道返回的音轨不会进入成片。
+HeyGen、Kling AI（北京）或 ComfyUI 渠道；ComfyUI 渠道再按运行方式走本地 InfiniteTalk、
+Comfy Cloud 或 RunningHub 云端工作区工作流（与图像/视频等段的 comfyui 配置同口径）。
+最终母带封装由 ``modules/dialogue_video.py`` 完成；渠道返回的音轨不会进入成片。
 """
 from __future__ import annotations
 
@@ -22,14 +23,14 @@ from pathlib import Path
 try:
     from modules.avsync import probe_duration
     from modules.genmedia import (
-        CONFIG_PATH, _comfy_endpoint, _comfy_fill_workflow,
+        CONFIG_PATH, RH_BASES, _comfy_endpoint, _comfy_fill_workflow,
         _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
         _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
 except ModuleNotFoundError:  # python modules/digitalhuman.py ...
     from avsync import probe_duration
     from genmedia import (
-        CONFIG_PATH, _comfy_endpoint, _comfy_fill_workflow,
+        CONFIG_PATH, RH_BASES, _comfy_endpoint, _comfy_fill_workflow,
         _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
         _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
@@ -50,10 +51,11 @@ def get_config() -> dict:
     if not CONFIG_PATH.is_file():
         raise RuntimeError(f"未找到生成模型配置 {CONFIG_PATH}；请先在 Web 控制台保存数字人配置")
     root = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    section = root.get("digital_human") or {}
+    section = dict(root.get("digital_human") or {})
+    _migrate_legacy_runninghub(section)
     provider = section.get("provider")
-    if provider not in {"heygen", "klingai", "runninghub", "comfyui"}:
-        raise RuntimeError("数字人渠道未配置；请选择 HeyGen、Kling AI、RunningHub 或 ComfyUI")
+    if provider not in {"heygen", "klingai", "comfyui"}:
+        raise RuntimeError("数字人渠道未配置；请选择 HeyGen、Kling AI 或 ComfyUI")
     cfg = dict(section.get(provider) or {})
     if provider == "heygen":
         cfg["api_key"] = cfg.get("api_key") or os.environ.get("HEYGEN_API_KEY", "")
@@ -61,31 +63,57 @@ def get_config() -> dict:
     elif provider == "klingai":
         cfg["api_key"] = cfg.get("api_key") or os.environ.get("KLINGAI_API_KEY", "")
         cfg["api_base"] = KLING_BASE
-    elif provider == "runninghub":
-        # 数字人的 RunningHub 是独立渠道；这里只在调用 genmedia 的 RH 传输层时
-        # 转成其通用字段，不读取或覆盖 digital_human.comfyui。
-        site = str(cfg.get("site") or "rh_cn")
-        if site not in {"rh_cn", "rh_ai"}:
-            raise RuntimeError("RunningHub 站点必须是 rh_cn 或 rh_ai")
-        cfg = {
-            **cfg,
-            "mode": site,
-            "rh_api_key_cn": cfg.get("api_key_cn") or "",
-            "rh_api_key_ai": cfg.get("api_key_ai") or "",
-            "rh_workflow_id": cfg.get("workflow_id") or "",
-            "rh_instance_type": cfg.get("instance_type") or "standard",
-        }
-        active_key = (cfg[f"rh_api_key_{site[3:]}"] or
-                      os.environ.get("RUNNINGHUB_API_KEY", ""))
-        if not str(active_key).strip():
-            raise RuntimeError(
-                "RunningHub 未配置当前站点 API Key（数字人设置或环境变量 RUNNINGHUB_API_KEY）")
-        if not str(cfg["rh_workflow_id"]).strip():
-            raise RuntimeError("RunningHub 未选择数字人云端工作流")
+    elif provider == "comfyui":
+        # 运行方式与图像/视频等段的 comfyui 同口径:local/cloud 走 ComfyUI 原生 API
+        # (_comfy_endpoint 按 mode 选本地 url 或 Comfy Cloud),rh_cn/rh_ai 走 RunningHub
+        # 私有 REST(rh_* 字段直接是 genmedia RH 传输层的通用字段名)
+        mode = str(cfg.get("mode") or "local")
+        if mode not in {"local", "cloud", *RH_BASES}:
+            raise RuntimeError("ComfyUI 运行方式必须是 local、cloud、rh_cn 或 rh_ai")
+        cfg["mode"] = mode
+        if mode in RH_BASES:
+            active_key = (cfg.get(f"rh_api_key_{mode[3:]}") or cfg.get("rh_api_key")
+                          or os.environ.get("RUNNINGHUB_API_KEY", ""))
+            if not str(active_key).strip():
+                raise RuntimeError(
+                    "RunningHub 未配置当前站点 API Key（数字人 ComfyUI 渠道设置或环境变量 "
+                    "RUNNINGHUB_API_KEY）")
+            if not str(cfg.get("rh_workflow_id") or "").strip():
+                raise RuntimeError("RunningHub 未选择数字人云端工作流")
     if provider in {"heygen", "klingai"} and not cfg.get("api_key"):
         env = "HEYGEN_API_KEY" if provider == "heygen" else "KLINGAI_API_KEY"
         raise RuntimeError(f"{provider} 未配置 API Key（设置页或环境变量 {env}）")
     return {"provider": provider, **cfg}
+
+
+def _migrate_legacy_runninghub(section: dict) -> None:
+    """旧版把 RunningHub 存成数字人独立 provider/配置段;现并回 comfyui 渠道的运行方式。
+    与 services/runtime/core.py 的 _migrate_genconfig 同口径,让未经 Web 控制台重存的旧
+    配置文件也能直接跑。"""
+    rh = section.get("runninghub")
+    if not isinstance(rh, dict):
+        return
+    comfy = section.get("comfyui")
+    if not isinstance(comfy, dict):
+        comfy = {}
+    comfy = dict(comfy)
+    for src, dst in (("api_key_cn", "rh_api_key_cn"), ("api_key_ai", "rh_api_key_ai"),
+                     ("workflow_id", "rh_workflow_id"), ("workflows", "rh_workflows"),
+                     ("instance_type", "rh_instance_type")):
+        if rh.get(src) and not comfy.get(dst):
+            comfy[dst] = rh[src]
+    if section.get("provider") == "runninghub":
+        section["provider"] = "comfyui"
+        comfy["mode"] = rh.get("site") if rh.get("site") in RH_BASES else "rh_cn"
+    section["comfyui"] = comfy
+
+
+def _transport(cfg: dict) -> str:
+    """任务台账里的渠道标识:ComfyUI 的 RunningHub 运行方式记 runninghub(与旧版独立渠道
+    时期的台账兼容,中断恢复时能接着轮询同一远端任务),其余记 provider。"""
+    if cfg["provider"] == "comfyui" and cfg.get("mode") in RH_BASES:
+        return "runninghub"
+    return cfg["provider"]
 
 
 def _media_b64(path: str) -> tuple[str, str]:
@@ -395,7 +423,7 @@ def _apply_rh_digitalhuman_bindings(raw: str, workflow: dict, image_name: str,
 
 def _runninghub(image: str, audio: str, output: str, prompt: str,
                 seed: int | None, cfg: dict, job_path: str | None = None) -> str:
-    """RunningHub 独立数字人渠道：上传图片/音频，填充云端工作流并持久化 task_id。"""
+    """ComfyUI 渠道的 RunningHub 运行方式：上传图片/音频，填充云端工作流并持久化 task_id。"""
     task_id = _task_id(job_path, "runninghub")
     if task_id:
         # 恢复只轮询既有远端任务；不重新上传输入，更不会再次 create 计费任务。
@@ -445,7 +473,8 @@ def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
             raise RuntimeError(f"输入文件不存在：{p}")
     cfg = get_config()
     if dry_run:
-        print(json.dumps({"provider": cfg["provider"], "image": image, "audio": audio,
+        print(json.dumps({"provider": cfg["provider"], "mode": cfg.get("mode"),
+                          "image": image, "audio": audio,
                           "output": output, "duration_s": probe_duration(audio),
                           "prompt": prompt}, ensure_ascii=False, indent=2))
         return output
@@ -467,14 +496,15 @@ def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
                          "submitted_at", "updated_at")})
         _update_job(job_path, history=history, task_id=None, status="retrying",
                     provider_status=None, remote_url=None, error=None)
-    _update_job(job_path, schema_version=1, provider=cfg["provider"], inputs=fingerprint,
+    transport = _transport(cfg)
+    _update_job(job_path, schema_version=1, provider=transport, inputs=fingerprint,
                 status=_load_job(job_path).get("status") or "preparing",
                 created_at=job.get("created_at") or _now())
     try:
-        if cfg["provider"] == "comfyui":
-            result = _comfy(image, audio, output, prompt, seed, cfg, job_path)
-        elif cfg["provider"] == "runninghub":
+        if transport == "runninghub":
             result = _runninghub(image, audio, output, prompt, seed, cfg, job_path)
+        elif cfg["provider"] == "comfyui":
+            result = _comfy(image, audio, output, prompt, seed, cfg, job_path)
         else:
             result = {"heygen": _heygen, "klingai": _kling}[cfg["provider"]](
                 image, audio, output, prompt, cfg, job_path)

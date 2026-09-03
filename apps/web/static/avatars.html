@@ -47,7 +47,11 @@ button:disabled{opacity:.5;cursor:default}
 .hint{font-size:12px;color:var(--dim)}
 .autolabel{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);cursor:pointer;flex:none}
 .autolabel input{accent-color:var(--accent)}
+.qi{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:-10px;border:1px solid var(--dim);border-radius:50%;font-size:10px;font-style:italic;font-family:Georgia,serif;line-height:1;color:var(--dim);cursor:pointer;flex:none;user-select:none}
+.qi:hover{color:var(--accent);border-color:var(--accent)}
 .hint a{color:var(--link)}
+#ready.ok{color:var(--green)}
+#ready.err{color:var(--red)}
 ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px}
 .pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
 .enbadge{font-size:12px;border-radius:10px;padding:1px 10px;font-weight:600}
@@ -72,7 +76,8 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
 .st.Active{color:var(--green);border:1px solid var(--green)}
 .st.Processing{color:var(--yellow);border:1px solid var(--yellow)}
 .st.Failed{color:var(--red);border:1px solid var(--red)}
-.pager{display:flex;align-items:center;gap:10px;justify-content:center;padding-top:8px}
+.pager{display:flex;align-items:center;gap:10px;justify-content:center;padding-top:8px;position:relative}
+#btn-clear{position:absolute;right:0}
 .pager .pg{font-size:13px;color:var(--dim)}
 .empty{color:var(--dim);text-align:center;padding:26px 0}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
@@ -96,6 +101,7 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
         <li>点击「启用」后,可在下方管理已入库的素材;人物预览页每张形象图会出现「入库」按钮,分镜重出时已入库(Active)的参考图自动以资产 URI(asset://素材ID)提交。</li>
       </ol>
       <div class="hint">注意:上传入库为异步审核(Processing → Active/Failed),仅 Active 状态的素材可用于视频生成;素材按方舟「项目」隔离,下方 ProjectName 须与「生成模型」页视频生成所用方舟 API Key 所属项目一致(默认 default)。</div>
+      <div class="hint" id="ready"></div>
     </div>
   </div>
 
@@ -109,12 +115,14 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
         <label>ProjectName</label>
         <input type="text" id="in-project" placeholder="default(须与视频生成 API Key 所属项目一致)">
       </div>
-      <div class="row" style="justify-content:flex-end;gap:12px">
+      <div class="row" style="gap:12px">
+        <label class="autolabel" style="width:auto"><input type="checkbox" id="in-auto"> 自动清理</label><span class="qi" id="auto-qi">i</span>
+        <div style="flex:1"></div>
         <span id="msg"></span>
-        <label class="autolabel" title="开启后:视频模型为火山引擎时,每集视频生成开跑前自动清空资产库(规避素材数量上限),并把该集用到的人物概念图重新入库、等审核通过后开跑"><input type="checkbox" id="in-auto"> 全自动管理</label>
         <button id="btn-save">保存设置</button>
         <button id="btn-toggle" class="primary">启用</button>
       </div>
+      <div class="hint" id="auto-tip" style="display:none">适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库</div>
     </div>
   </div>
 
@@ -133,6 +141,7 @@ ol.steps{padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:
         <button id="pg-prev">← 上一页</button>
         <span class="pg" id="pg-info"></span>
         <button id="pg-next">下一页 →</button>
+        <button id="btn-clear" class="danger" disabled>🗑 全部删除</button>
       </div>
     </div>
   </div>
@@ -205,7 +214,7 @@ function fmtTime(s){
 async function loadList(){
   $('#list').innerHTML='<div class="empty">'+t('加载中…')+'</div>';
   $('#total').textContent='';$('#pg-info').textContent='';
-  $('#pg-prev').disabled=$('#pg-next').disabled=true;
+  $('#pg-prev').disabled=$('#pg-next').disabled=$('#btn-clear').disabled=true;
   let d;
   try{
     d=await api('/api/v1/avatar-assets/list',{page:PAGE,page_size:PAGE_SIZE,q:Q});
@@ -218,6 +227,7 @@ async function loadList(){
   $('#pg-info').textContent=I18N.f('第 {p} / {m} 页',{p:PAGE,m:PAGES});
   $('#pg-prev').disabled=PAGE<=1;
   $('#pg-next').disabled=PAGE>=PAGES;
+  $('#btn-clear').disabled=!(d.total>0);
   const items=d.items||[];
   if(!items.length){
     $('#list').innerHTML='<div class="empty">'+(Q?t('没有匹配的素材'):t('资产库还没有素材:到「人物预览」页把人物形象图入库,或在方舟控制台上传'))+'</div>';
@@ -255,11 +265,37 @@ $('#list').addEventListener('click',async e=>{
     loadList();
   }catch(e2){alert(t('删除失败:')+e2.message);b.disabled=false}
 });
+$('#auto-qi').onclick=()=>{
+  const d=$('#auto-tip');
+  d.style.display=d.style.display==='none'?'':'none';
+};
+$('#btn-clear').onclick=async()=>{
+  if(!confirm(t('确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。')))return;
+  const b=$('#btn-clear');b.disabled=true;
+  const old=b.textContent;b.textContent=t('清空中…');
+  try{
+    const d=await api('/api/v1/avatar-assets/clear',{});
+    alert(I18N.f('✓ 已删除 {n} 个素材',{n:d.deleted||0}));
+  }catch(e2){alert(t('全部删除失败:')+e2.message)}
+  b.textContent=old;
+  Q='';$('#in-q').value='';PAGE=1;loadList();
+};
 
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
+/* 入库前置自检:方舟 CreateAsset 只收公网 URL,本地图须经「文件托管」对象存储换预签名 URL;
+   检查生效渠道 bucket/AK/SK 配齐 + 当前运行时能导入该渠道 SDK(桌面捆绑运行时曾缺 tos) */
+async function loadReady(){
+  const r=$('#ready');
+  try{
+    const d=await api('/api/v1/avatar-assets/ready');
+    r.textContent=t('文件托管自检:')+(d.ok?'✓ ':'✗ ')+(d.detail||'');
+    r.className='hint '+(d.ok?'ok':'err');
+  }catch(e){r.textContent=t('文件托管自检:')+'✗ '+e.message;r.className='hint err'}
+}
 (async()=>{
+  loadReady();
   try{CFG=await api('/api/v1/config/generation')}catch(e){msg(t('加载配置失败:')+e.message);return}
   const c=av();
   $('#in-ak').value=c.access_key||'';

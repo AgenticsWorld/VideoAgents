@@ -162,6 +162,16 @@ async def set_project_config(project: str, body: dict[str, Any]) -> dict[str, An
     return await core.api_projconfig_set(body)
 
 
+@api.get("/projects/{project}/prompt-skill", tags=["projects"])
+async def get_prompt_skill(project: str) -> dict[str, Any]:
+    return await core.api_prompt_skill_get(project)
+
+
+@api.post("/projects/{project}/prompt-skill", tags=["projects"])
+async def set_prompt_skill(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_prompt_skill_set({**body, "project": project})
+
+
 @api.get("/projects/{project}/references", tags=["artifacts"])
 async def references(project: str) -> dict[str, Any]:
     return _artifact_urls(await core.api_refs_list(project), project)
@@ -196,6 +206,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
     handlers = {
         "characters": lambda: core.api_preview_characters(project),
         "props": lambda: core.api_preview_props(project),
+        "creatures": lambda: core.api_preview_creatures(project),
         "scenes": lambda: core.api_preview_scenes(project),
         "worldview": lambda: core.api_preview_worldview(project),
         "storyboard": lambda: core.api_preview_storyboard(project, ep),
@@ -375,6 +386,11 @@ async def opencode_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_opencode_models(refresh)
 
 
+@api.get("/engines/grok/models", tags=["configuration"])
+async def grok_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_grok_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)
@@ -445,6 +461,12 @@ async def avatar_assets_delete(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_delete(body)
 
 
+@api.post("/avatar-assets/clear", tags=["avatar-assets"])
+async def avatar_assets_clear(body: dict[str, Any]) -> dict[str, Any]:
+    """清空虚拟人像库全部素材(不可恢复)。"""
+    return await core.api_avatar_clear(body)
+
+
 @api.post("/avatar-assets/upload", tags=["avatar-assets"])
 async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_upload(body)
@@ -453,6 +475,12 @@ async def avatar_assets_upload(body: dict[str, Any]) -> dict[str, Any]:
 @api.post("/avatar-assets/status", tags=["avatar-assets"])
 async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_avatar_status(body)
+
+
+@api.get("/avatar-assets/ready", tags=["avatar-assets"])
+async def avatar_assets_ready() -> dict[str, Any]:
+    """入库前置自检:文件托管配置 + 存储 SDK 可导入(方舟 CreateAsset 只收公网 URL)。"""
+    return await core.api_avatar_ready()
 
 
 @api.post("/providers/minimax/voices", tags=["providers"])
@@ -498,6 +526,26 @@ async def agent_advanced_get() -> dict[str, Any]:
 @api.post("/config/agent-advanced", tags=["automation"])
 async def agent_advanced_set(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_advanced_set(body)
+
+
+@api.get("/config/skills", tags=["automation"])
+async def skills_get(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_skills_get(refresh)
+
+
+@api.get("/config/skills/text", tags=["automation"])
+async def skills_text(id: str) -> dict[str, Any]:
+    return await core.api_skills_text(id)
+
+
+@api.post("/config/skills", tags=["automation"])
+async def skills_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_skills_set(body)
+
+
+@api.post("/config/skills/upload", tags=["automation"])
+async def skills_upload(request: Request, agent: str, filename: str = "") -> dict[str, Any]:
+    return await core.api_skills_upload(agent, await request.body(), filename)
 
 
 @api.get("/config/concurrency", tags=["automation"])
@@ -629,6 +677,17 @@ async def storyboard_ref_upload(
     return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
+@api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
+    """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""
+    return await core.api_grpsettings_get(project, ep, grp)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
+async def storyboard_group_settings_set(project: str, ep: str, grp: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_grpsettings_set({**(body or {}), "project": project, "ep": ep, "grp": grp})
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/sketches", tags=["storyboard"])
 async def sketches(project: str, ep: str, grp: str) -> list[dict[str, Any]]:
     return await core.api_sketches(project, ep, grp)
@@ -727,6 +786,83 @@ async def events() -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------- 素材库(设置→高级→素材库;data/footage/<name>/) ----------------
+
+@api.get("/footage/projects", tags=["footage"])
+async def footage_list() -> dict[str, Any]:
+    return await core.api_footage_list()
+
+
+@api.post("/footage/projects", tags=["footage"])
+async def footage_create(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_footage_create(body or {})
+
+
+@api.get("/footage/projects/{name}", tags=["footage"])
+async def footage_get(name: str) -> dict[str, Any]:
+    return await core.api_footage_get(name)
+
+
+@api.delete("/footage/projects/{name}", tags=["footage"])
+async def footage_delete(name: str) -> dict[str, Any]:
+    return await core.api_footage_delete(name)
+
+
+@api.post("/footage/projects/{name}/upload", tags=["footage"])
+async def footage_upload(
+    name: str, request: Request, upload_id: str = "", index: int = 0, total: int = 1,
+    filename: str = "video.mp4",
+) -> dict[str, Any]:
+    """分块上传:请求体即分块原始字节(与参考文件上传同款,避免 multipart 依赖)。"""
+    data = await request.body()
+    return await core.api_footage_upload(name, data, upload_id, index, total, filename)
+
+
+@api.post("/footage/projects/{name}/settings", tags=["footage"])
+async def footage_settings_set(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_settings_set(name, body)
+
+
+@api.post("/footage/projects/{name}/download", tags=["footage"])
+async def footage_download(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_download(name, body)
+
+
+@api.post("/footage/projects/{name}/reprocess", tags=["footage"])
+async def footage_reprocess(name: str) -> dict[str, Any]:
+    return await core.api_footage_reprocess(name)
+
+
+@api.post("/footage/projects/{name}/transcribe", tags=["footage"])
+async def footage_transcribe(name: str) -> dict[str, Any]:
+    return await core.api_footage_retranscribe(name)
+
+
+@api.post("/footage/projects/{name}/cancel", tags=["footage"])
+async def footage_cancel(name: str) -> dict[str, Any]:
+    return await core.api_footage_cancel(name)
+
+
+@api.post("/footage/projects/{name}/analyze-all", tags=["footage"])
+async def footage_analyze_all(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_footage_analyze_all(name, body or {})
+
+
+@api.post("/footage/projects/{name}/clips/{clip_id}", tags=["footage"])
+async def footage_clip_update(name: str, clip_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_footage_clip_update(name, clip_id, body)
+
+
+@api.post("/footage/projects/{name}/clips/{clip_id}/analyze", tags=["footage"])
+async def footage_clip_analyze(name: str, clip_id: str) -> dict[str, Any]:
+    return await core.api_footage_clip_analyze(name, clip_id)
+
+
+@api.get("/footage/projects/{name}/files/{file_path:path}", tags=["footage"])
+async def footage_file(name: str, file_path: str) -> FileResponse:
+    return FileResponse(core.footage_file_path(name, file_path))
 
 
 app.include_router(api)

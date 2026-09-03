@@ -2,6 +2,7 @@
 # 与 WORKFLOW.md 保持同步;WORKFLOW.md 是人读权威,本文件是 orchestrator 的执行输入。
 # 约定:
 #   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台,
+#             creature=每生物——实例来自 bible/creatures/index.json creatures[](CRE-*,登记为空即零实例,2026-08-26),
 #             chapter_batch=每章节批——p0 解析扇出,批清单来自 story/chapter_manifest.json)
 #   validation.auto      机器校验(schema/指标),不过直接退回
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
@@ -150,9 +151,16 @@ phases:
     # 用户参考图 > Agent 自行发挥;凡引用须在产物 meta 记 user_refs
     tasks:
       - { id: p4-style, agent: 06-art/art-director, outputs: [bible/style.json], validation: { rubric: creative_v1 } }
-      - { id: p4-char-concept, agent: 06-art/character-concept, for_each: character, depends_on: [p4-style],
+      - { id: p4-char-concept, agent: 06-art/character-concept, for_each: character, depends_on: [p4-style, p4-costume],
+          # 2026-08-26 起依赖 p4-costume:定稿 sheet.png 的着装 = costumes.json 默认装 visual_en 逐字入 prompt(此前二者并行,人设图着装与默认装只能靠事后对齐)
           outputs: ["assets/concepts/characters/{id}/"],
-          validation: { auto: [appearance_fields_match], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
+          validation: { auto: [appearance_fields_match, default_costume_in_prompt], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
+      - { id: p4-costume-sheet, agent: 06-art/costume-concept, for_each: character, depends_on: [p4-char-concept, p4-costume],
+          # 服装 sheet(2026-08-26):以定稿 sheet.png 为形象锚,按 costumes.json 该角色每套非默认服装各出整版四视图 sheet_<COS-id>.png,
+          # 默认装登记复用 sheet.png;台账 costume_sheets.json 是 p6 分镜挂图 / §6A 审计 / p7 refs / 预览页取图的唯一入口
+          # 分龄/异体时期无基准 sheet_<tag>.png 的套装记 blocked_on 回派 character-concept,不拿现有 sheet 硬当锚
+          outputs: ["assets/concepts/characters/{id}/costume_sheets.json"],
+          validation: { auto: [costume_sheet_coverage, costume_visual_en_in_prompt, costume_sheet_identity_ref], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           # 场景布局包(2026-08-19):俯视空间布局图 layout_top.png + 9 宫格多角度图 grid_9views.png + layout.json(地标坐标/九格机位),替代单张主视角概念图
           # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound 四项机检脚本自动 skipped
@@ -162,6 +170,11 @@ phases:
           # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref(与无人参照物同框)
           # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图(审核风险+信息稀释)
           validation: { auto: [plot_props_coverage_100, prop_scale_defined, prop_image_no_person, no_unknown_placeholder] } }
+      - { id: p4-creature-concept, agent: 06-art/creature-concept, for_each: creature, depends_on: [p4-style],
+          # 生物/坐骑形象参考图(2026-08-26):整版三视图 sheet.png + 按 creature.json forms[] / mount.json endurance_state_log 的阶段变体 sheet_<stage>.png
+          # 坐骑图无骑手红线(同道具无人物红线):人-兽尺度靠 selection.json scale.prompt_token 文字锚;目录键用 CRE-*(index.json 权威),不用 MNT-*
+          outputs: ["assets/concepts/creatures/{id}/"],
+          validation: { auto: [creature_identifiers_match, creature_image_no_person, creature_stage_variants_ok], qa: [11-qa/visual-qa] } }
       - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json],
           validation: { auto: [no_unknown_placeholder] } }
       - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
@@ -169,7 +182,7 @@ phases:
       - { id: p4-aspect, agent: 06-art/aspect-ratio, outputs: [bible/aspect_ratio.json],
           validation: { auto: [platform_spec_match] } }
       - { id: g4, gate: true, human: true, checkpoint: H2-美术风格锁定,
-          depends_on: [p4-char-concept, p4-env-concept, p4-prop, p4-costume, p4-color-script, p4-aspect] }
+          depends_on: [p4-char-concept, p4-costume-sheet, p4-env-concept, p4-prop, p4-creature-concept, p4-costume, p4-color-script, p4-aspect] }
 
   - id: p5
     name: 剧本改编          # 与 p4 并行,均依赖 g3
@@ -181,8 +194,9 @@ phases:
           outputs: ["story/episodes/{ep}/screenplay.md"],
           validation: { auto: [id_refs_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
-          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }
+          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
           outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
           validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
       - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
@@ -200,36 +214,54 @@ phases:
       - { id: p6-plan, agent: 07-directing/director, outputs: ["directing/{ep}/directing_plan.md"],
           validation: { rubric: creative_v1, qa: [06-art/art-director] } }
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan],
-          outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每镜 view_tile
-          validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present], rubric: visual_plan_v1 } }   # blocking_map_present:code/render_blocking_map.py --source storyboard --strict
+          outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
+          validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
+                               costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/render_blocking_map.py --source storyboard --strict
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [p6-storyboard],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
           validation: { auto: [duration_sum_pm_10pct, id_refs_valid, shot_ids_unique,
                                groups_cover_all_shots, group_shots_contiguous_same_scene,
                                group_duration_4_15_int, group_characters_lte_4,
-                               narration_anchors_cover_all, narration_window_gte_est_x1.15,
+                               narration_anchors_cover_all, narration_window_gte_est_x1.15,   # 旁白开关关闭时两项自动跳过(skipped: narration off),且 audio_plan 禁 narration_over(code/check_generation_groups.py)
                                group_audio_plan_defined, ambient_only_groups_justified,
-                               dialogue_est_fits_group_x0.7,
+                               dialogue_est_fits_group_x0.7,   # 2026-08-30 起由 code/check_dialogue_fit.py 执行(dialogue_fit_group),超限不再自查放行——定稿后固定进 p6-dialogue-fit 精简环节
+                               creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
+                               costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
+                               transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切,渲染 directing/{ep}/blocking_maps/{group}.png(code/render_blocking_map.py --strict,2026-08-19)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
+      # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
+      # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
+      # 逐句精简(只动对白文本层:screenplay.md 对白层 + dialogue.md + shot_list dialogue_lines 文本镜像;不动镜/组结构),
+      # --write-est 同步估时后复检至 PASS;3 轮仍装不下 = 上报 orchestrator 回派 shot-planning 调镜时长/拆组(分镜变更)。
+      # blocking(表演触发词 trigger.line_ref/word 取自台词)与 H3A 签字均以本节点 PASS 为前置;严禁指望模型压语速消化。
+      - { id: p6-dialogue-fit, agent: 01-story/dialogue-rewrite, depends_on: [p6-shots],
+          outputs: ["directing/{ep}/dialogue_fit.json", "story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogue.md",
+                    "directing/{ep}/shot_list.json"],   # 后三项仅超限精简时产生新版本(对白文本层 diff)
+          validation: { auto: [dialogue_fit_group, dialogue_fit_shot, line_le_cap, line_est_consistent,
+                               lines_text_match_source,   # 以上 5 项 code/check_dialogue_fit.py --project --ep 全批执行,退出码 0 为 PASS
+                               style_hit_rate_gte_80, non_dialogue_layer_diff_zero],   # 精简后风格命中率不降、非对白层零改动
+                        qa: [11-qa/logic-qa] } }   # 仅精简发生时会签:改短不得引入逻辑断裂
       - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
       - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
-          outputs: ["directing/{ep}/shots/{shot}/composition.json"], validation: { qa: [11-qa/visual-qa] } }
+          outputs: ["directing/{ep}/shots/{shot}/composition.json"],
+          validation: { qa: [11-qa/visual-qa] } }
       - { id: p6-cinematography, agent: 07-directing/cinematography, depends_on: [p6-plan],
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
-      - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots],
+      - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots, p6-dialogue-fit],   # performance.trigger 取自定稿台词,须待对白精简完成(2026-08-30)
           outputs: ["directing/{ep}/shots/{shot}/blocking.json"],
           validation: { auto: [presence_consistent_with_timeline, blocking_on_map] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en
       - { id: p6-continuity, agent: 07-directing/continuity-planning,
           depends_on: [p6-camera, p6-composition, p6-blocking],
           outputs: ["directing/{ep}/continuity_plan.json"],   # 含 group_transitions(组间衔接检查)
-          validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent],
+          validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent,
+                               transition_anchor_consistent],   # group_transitions 镜像 shot_list transition_in;可渲染转场边界 anchor=none,match_cut 核构图对位(§9C,2026-08-28)
                         qa: [11-qa/timeline-qa] } }
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
-                        qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·environment-concept·prop 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
-      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit] }   # 每集:用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+                        qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·costume-concept(本集各组 costumes_by_char 所指非默认服装的 sheet_<COS-id>.png)·environment-concept·prop·creature-concept 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
 
   - id: p7
     name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)
@@ -242,18 +274,23 @@ phases:
           validation: { auto: [anchor_checklist_full, prompt_lt_1000_words, refs_match_materials,
                                no_music_notation, negative_has_no_bgm, prop_scale_token_ok,
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
+                               creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
+                               costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
                                layout_map_bound,  # 组动线俯视图 blocking_maps/{group}.png + 场景 grid_9views.png 必在 refs,含 Spatial layout 声明句,逐角色 route_en 逐字命中(code/layout_map_bound_check.py,2026-08-19)
-                               nonspeech_group_prompt_ok] } }   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
+                               nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
+                               prompt_skill_applied] } }   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
-          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等(像素下限硬限另论);reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
-                               prop_ref_attached],   # 组内出场剧情道具参考图已入锚点包
+          validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等;reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
+                               prop_ref_attached,   # 组内出场剧情道具参考图已入锚点包
+                               creature_ref_attached,    # 组内出场生物参考图已入锚点包(reuse-first 取 assets/concepts/creatures/<id>/,2026-08-26)
+                               costume_ref_attached],    # 组内角色按 costumes_by_char 所指服装 sheet 已入锚点包(reuse-first 取 costume_sheets.json 台账所指文件,2026-08-26)
                         qa: [11-qa/visual-qa] } }
       - { id: p7-consistency, agent: 08-video-gen/character-consistency, depends_on: [p7-image],
           condition: group.has_character,
           validation: { auto: [face_similarity_gte_0.85] } }   # 仅校新生成锚;复用锚(source=reuse:)与概念图同源免校,reuse-only 组直接放行(§7A 2026-07-24)
       - { id: p7-video, agent: 08-video-gen/video-generation,
-          depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚;对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
+          depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
           validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
@@ -294,11 +331,15 @@ phases:
           # 严禁进成片对白(TTS 配音=严重口型问题);音色样本降为选角存档
           # §7D ② 对白实测适配:干声实测 ≤ 组时长×0.8,超限回派 dialogue-rewrite 改短台词;
           # 严禁压 --speed/atempo 硬塞——干声压速只掩盖超长,视频模型生成时照样赶词提速
+          # 旁白声线卡(2026-09-01,仅旁白开关开启):项目级 assets/audio/voice/narrator.json +
+          # refs/NARRATOR_voiceprint.mp3 由本工位设计冻结(按项目基调写声线描述;描述定制渠道直接
+          # 合成,音色列表渠道按描述自动选参考音色);genmedia 此后按卡固定旁白声线,不随 TTS 设置变
           outputs: ["assets/audio/voice/{ep}/lines/", "assets/audio/voice/{ep}/refs/manifest.json"],
           validation: { auto: [dialogue_group_lines_coverage_100, group_lines_total_le_15s,
                                lines_text_match_frozen_script, dialogue_fit_le_group_x0.8],
                         qa: [11-qa/audio-qa] } }
       - { id: p8-narrator, agent: 09-audio/narrator, outputs: ["assets/audio/narration/{ep}/"],
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=全片无旁白,不派发,p8-mix 只混原生轨+BGM 两路(§7D)
           # 先于 p7-video:提前合成正式旁白轨并逐条实测时长(manifest 记挂点/实测),供 §7D 旁白适配检查;
           # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A);
           # 交付前 code/check_narration_sync.py --stamp 把当前 narration_anchors 指纹盖进 manifest(§8B ①)
@@ -315,6 +356,7 @@ phases:
           outputs: ["assets/audio/final/{ep}.wav"],
           # 铺旁白前必跑 code/check_narration_sync.py(只检):指纹失配=shot_list 挂点已改版,停手上报
           # 回派 narrator 重签/重合成,严禁按旧 narration_track 人工连续铺排(§8B ②,前科 DEF-ep05-audio-0005)
+          # 旁白开关关闭时:无旁白轨,两路混音(原生轨+BGM),narration_anchor_sync 自动跳过(skipped: narration off)
           validation: { auto: [narration_anchor_sync, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
       - { id: g8, gate: true, depends_on: [p8-mix] }
 
@@ -326,7 +368,11 @@ phases:
       - { id: p9-edit, agent: 10-editing/edit, outputs: ["edit/{ep}/timeline.json", "edit/{ep}/cut_v1.mp4"],
           # 封装前重验 code/check_narration_sync.py(§8B ②):final_audio 所据旁白轨与当前 shot_list 挂点失配即停手上报
           validation: { auto: [narration_anchor_sync, duration_pm_5pct, no_black_frames], rubric: edit_v1 } }
-      - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit], validation: { qa: [11-qa/visual-qa] } }
+      - { id: p9-transition, agent: 10-editing/transition, depends_on: [p9-edit],
+          # 只按 shot_list transition_in 实施,只准宿主 CLI code/render_transitions.py plan→render→check(WORKFLOW.md §9C,2026-08-28):
+          # cut_v1→cut_v2 pad 补偿总长不变;全片硬切时不产出 cut_v2(cut_v1 即定稿),transitions_render.json 照常落盘
+          outputs: ["edit/{ep}/transitions_render.json"],
+          validation: { auto: [transition_render_ok], qa: [11-qa/visual-qa] } }
       - { id: p9-subtitle, agent: 10-editing/subtitle, depends_on: [p9-transition],
           outputs: ["edit/{ep}/subtitles.srt"],
           # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板

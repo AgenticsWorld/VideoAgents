@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>素材库 — Agentics:VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎞%3C/text%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:15px;font-weight:600}
+header .spacer{flex:1}
+a.back{color:var(--dim);text-decoration:none;font-size:13px}
+a.back:hover{color:var(--accent)}
+main{max-width:1180px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+.body{padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:110px;color:var(--dim);font-size:13px;flex:none}
+input[type=text],input[type=url]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:180px}
+input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;width:90px}
+.row .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
+.row .saved.on{opacity:1}
+input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+button.danger{color:var(--red)}
+button.danger:hover{border-color:var(--red)}
+button.small{padding:3px 10px;font-size:12px}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--dim)}
+.hint a,.hint code{color:var(--link)}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
+.chip{font-size:11px;border-radius:10px;padding:1px 9px;font-weight:600;border:1px solid var(--border);color:var(--dim);white-space:nowrap}
+.chip.ready{color:var(--green);border-color:var(--green)}
+.chip.run{color:var(--accent);border-color:var(--accent)}
+.chip.failed{color:var(--red);border-color:var(--red)}
+.chip.empty{color:var(--dim)}
+#msg{font-size:13px;min-height:18px}
+#msg.ok{color:var(--green)}
+#msg.err{color:var(--red)}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.toolbar .total{font-size:13px;color:var(--dim)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{color:var(--dim);font-weight:500;font-size:12px}
+tr:hover td{background:var(--panel2)}
+td.name a{color:var(--text);font-weight:600;text-decoration:none}
+td.name a:hover{color:var(--accent)}
+td.src{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+td.act{white-space:nowrap;text-align:right}
+.empty{color:var(--dim);font-size:13px;padding:20px;text-align:center}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border)}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:6px 12px;color:var(--dim)}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.drop{border:1px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--dim);cursor:pointer;transition:border-color .15s}
+.drop.over,.drop:hover{border-color:var(--accent);color:var(--text)}
+.drop input{display:none}
+.progress{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;border:1px solid var(--border)}
+.progress>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.progress.err>i{background:var(--red)}
+.meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 18px;font-size:13px}
+.meta span{color:var(--dim)}
+.meta b{font-weight:500;word-break:break-all}
+.clips{display:flex;flex-direction:column;gap:14px}
+.clip{display:grid;grid-template-columns:300px 1fr;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+.clip.analyzed{border-color:#2f4d3a}
+.clip .thumb{position:relative;width:300px;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;cursor:pointer}
+.clip .thumb img,.clip .thumb video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.clip .thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff;text-shadow:0 0 12px #000;opacity:.85}
+.clip .thumb:hover .play{opacity:1}
+.clip .tc{font-size:12px;color:var(--dim);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.clip .fields{display:flex;flex-direction:column;gap:8px;min-width:0}
+.clip .fields .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.clip .fields .head b{font-size:14px}
+.clip .fields .head .st{margin-left:auto;font-size:12px;color:var(--dim)}
+.clip label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.clip label .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
+.clip label .saved.on{opacity:1}
+textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;min-height:54px}
+textarea.info{min-height:96px}
+.clip .err{color:var(--red);font-size:12px;white-space:pre-wrap}
+.sheet-link{font-size:12px}
+.prompt-box{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.prompt-box label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prompt-box label .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
+.prompt-box label .saved.on{opacity:1}
+.prompt-box textarea{min-height:120px}
+@media (max-width:760px){.clip{grid-template-columns:1fr}.clip .thumb{width:100%}}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 返回控制台</a>
+  <h1>🎞 素材库</h1>
+  <span class="pill">视频 → 智能镜头分割 → 分镜 clip + 字幕 + 画面含义(结构化 JSON)</span>
+  <div class="spacer"></div>
+  <span id="engine-chip" class="pill" title="AI 自动分析所用的引擎与语言模型:跟随顶栏全局默认引擎/模型(「智能分配」取该引擎低档模型)"></span>
+</header>
+<main>
+  <div id="msg"></div>
+
+  <!-- ====== 项目列表 ====== -->
+  <section id="list-view">
+    <div class="card">
+      <h2>📁 素材项目 <span class="cur" id="list-dir"></span></h2>
+      <div class="body">
+        <div class="toolbar">
+          <input type="text" id="new-name" placeholder="新项目名(英文/数字/_-;留空自动命名)" style="max-width:320px">
+          <button class="primary" id="new-btn">＋ 新建项目</button>
+          <button id="refresh-btn">刷新</button>
+          <span class="total" id="list-total"></span>
+        </div>
+        <div class="hint">每个素材项目是 data/footage/&lt;项目名&gt;/ 下的一个文件夹:原片、分析代理、分镜 clip 与 clips.json 全在其中;删除项目即删除该文件夹。</div>
+        <div id="list-box"><div class="empty">读取中…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== 单个项目 ====== -->
+  <section id="proj-view" style="display:none">
+    <div class="card">
+      <h2>
+        <a class="back" href="#" id="back-list">← 项目列表</a>
+        <span id="proj-name" style="font-weight:600"></span>
+        <span id="proj-status" class="chip"></span>
+        <span class="cur">
+          <button class="small" id="open-folder">📂 打开文件夹</button>
+          <button class="small danger" id="proj-delete">🗑 删除项目</button>
+        </span>
+      </h2>
+      <div class="body">
+        <!-- 输入 -->
+        <div id="input-box">
+          <div class="tabs">
+            <button class="on" data-tab="file">📤 上传视频文件</button>
+            <button data-tab="url">🔗 YouTube / Bilibili 链接</button>
+          </div>
+          <div id="tab-file" style="padding-top:12px">
+            <label class="drop" id="drop">
+              <input type="file" id="file-input" accept="video/*,.mkv,.mov,.mp4,.webm,.m4v,.avi,.flv,.ts">
+              <div>点击选择或拖入视频文件</div>
+              <div class="hint">上传后自动:生成小画幅分析代理 → 镜头分割 → 导出分镜 clip → 语音转文字</div>
+            </label>
+          </div>
+          <div id="tab-url" style="padding-top:12px;display:none">
+            <div class="row">
+              <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=… 或 https://www.bilibili.com/video/BV…">
+              <button class="primary" id="url-btn">⬇ 下载并处理</button>
+            </div>
+            <div class="hint" style="margin-top:6px">经 yt-dlp 按 ≤1080p 下载到项目文件夹,再压缩为小画幅代理用于分析;下载受网络与站点限制(Bilibili 高清可能需要登录 cookie)。</div>
+          </div>
+        </div>
+        <!-- 进度 -->
+        <div id="prog-box" style="display:none">
+          <div class="row"><span id="prog-msg" style="flex:1"></span><button class="small" id="cancel-btn">取消</button></div>
+          <div class="progress" id="prog-bar"><i></i></div>
+        </div>
+        <div id="proj-err" class="err" style="color:var(--red);font-size:13px;white-space:pre-wrap"></div>
+        <!-- 源信息 + 操作 -->
+        <div id="src-box" style="display:none">
+          <div class="meta" id="src-meta"></div>
+          <div class="prompt-box">
+            <label>🤖 AI 分析问题(本项目专用,失焦自动保存;联系图路径、回答语言等技术性前置由程序自动加在问题前)<span class="saved">✓ 已保存</span><button class="small" id="prompt-reset" style="margin-left:auto">恢复默认</button></label>
+            <textarea id="analysis-prompt" placeholder="留空则使用默认问题"></textarea>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label style="width:auto">✂ 最短镜头(秒)</label>
+            <input type="number" id="min-scene-len" min="0.1" max="10" step="0.1">
+            <span class="saved">✓ 已保存</span>
+            <span class="hint">镜头分割时,上一个切点后此时长内的切换会被合并;快切素材建议调小。改后点「✂ 重新分割」生效(默认 0.5)</span>
+          </div>
+          <div class="toolbar" style="margin-top:10px">
+            <button id="analyze-all-btn" title="对所有还没有画面信息的分镜逐个调用默认 CLI 引擎分析(后台运行)">🤖 全部 AI 分析</button>
+            <button id="retranscribe-btn" title="重新语音转文字并覆盖各分镜字幕框">🎙 重新转写字幕</button>
+            <button id="reprocess-btn" title="重新镜头分割:清空现有分镜 clip 与已编辑的字幕/信息">✂ 重新分割</button>
+            <button id="reimport-btn" title="重新上传或换链接(会清空现有分镜)">📤 重新导入</button>
+            <span class="total" id="out-links"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="clips" id="clips"></div>
+  </section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,body,method){const o=body!==undefined?{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:(method?{method}:{});const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+const API='/api/v1/footage/projects';
+const RUNNING=new Set(['queued','downloading','processing','transcribing','analyzing']);
+const STATUS_LABEL={empty:'未导入',queued:'排队中',downloading:'下载中',processing:'处理中',transcribing:'转写字幕',analyzing:'AI 分析中',ready:'就绪',failed:'失败'};
+const CHUNK=8*1024*1024;
+let CUR='',POLL=null,LAST_SIG='',PROJ=null;
+function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls||'';if(text&&cls==='ok')setTimeout(()=>{if(m.textContent===text)m.textContent=''},4000)}
+function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);const h=Math.floor(m/60);return (h?h+':':'')+String(h?m%60:m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
+function fmtDate(iso){if(!iso)return '';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleString()}
+function chip(status,running){const cls=RUNNING.has(status)||running?'run':status==='ready'?'ready':status==='failed'?'failed':'empty';return `<span class="chip ${cls}">${esc(t(STATUS_LABEL[status]||status||'未导入'))}</span>`}
+function setEngineChip(r){$('#engine-chip').textContent=t('分析引擎:')+(r.engine||'claude')+' · '+(r.model||t('引擎默认模型'))}
+function fileUrl(name,rel){return `${API}/${encodeURIComponent(name)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`}
+
+/* ---------- 路由:#p=<项目名> ---------- */
+function route(){const m=location.hash.match(/^#p=([A-Za-z0-9][A-Za-z0-9_-]*)$/);if(m)openProject(m[1]);else showList()}
+window.addEventListener('hashchange',route);
+
+/* ---------- 项目列表 ---------- */
+async function showList(){
+  stopPoll();CUR='';PROJ=null;
+  $('#proj-view').style.display='none';$('#list-view').style.display='';
+  $('#list-box').innerHTML='<div class="empty">'+t('读取中…')+'</div>';
+  try{
+    const r=await api(API);
+    $('#list-dir').textContent=r.dir||'';
+    setEngineChip(r);
+    const rows=r.projects||[];
+    $('#list-total').textContent=I18N.f(t('共 {n} 个项目'),{n:rows.length});
+    if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
+    $('#list-box').innerHTML=`<table><thead><tr><th>${t('项目')}</th><th>${t('来源')}</th><th>${t('状态')}</th><th>${t('分镜')}</th><th>${t('创建时间')}</th><th></th></tr></thead><tbody>`+
+      rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr>
+        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.name)}</a> <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">📋</button></td>
+        <td class="src" title="${esc(s.url||s.filename||'')}">${s.type==='url'?'🔗 ':s.type==='upload'?'📤 ':''}${esc(src)}${s.duration_s?` <span class="hint">${fmtDur(s.duration_s)}</span>`:''}</td>
+        <td>${chip(p.status,p.running)}${p.message&&RUNNING.has(p.status)?` <span class="hint">${esc(p.message)}</span>`:''}</td>
+        <td>${p.clip_count||0}${p.clip_count?` <span class="hint">/ ${t('已分析')} ${p.analyzed_count||0}</span>`:''}</td>
+        <td class="hint">${esc(fmtDate(p.created_at))}</td>
+        <td class="act"><button class="small" onclick="location.hash='#p=${esc(p.name)}'">${t('打开')}</button> <button class="small danger" onclick="deleteProject('${esc(p.name)}',true)">${t('删除')}</button></td></tr>`}).join('')+'</tbody></table>';
+  }catch(e){$('#list-box').innerHTML='<div class="empty" style="color:var(--red)">'+t('读取失败:')+esc(e.message)+'</div>'}
+}
+$('#refresh-btn').onclick=showList;
+$('#new-btn').onclick=async()=>{
+  const name=$('#new-name').value.trim();
+  if(name&&!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(name)){msg(t('项目名只能用英文字母、数字、下划线与连字符(1–64 位,字母数字开头)'),'err');return}
+  $('#new-btn').disabled=true;
+  try{const p=await api(API,{name});$('#new-name').value='';msg(I18N.f(t('已创建项目 {name}'),{name:p.name}),'ok');location.hash='#p='+p.name}
+  catch(e){msg(t('新建失败:')+e.message,'err')}
+  finally{$('#new-btn').disabled=false}
+};
+async function copyPath(name){
+  const text=`data/footage/${name}/`;
+  try{await navigator.clipboard.writeText(text)}
+  catch(e){
+    const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy')}catch(e2){msg(t('复制失败:')+text,'err');ta.remove();return}
+    ta.remove();
+  }
+  msg(t('已复制')+' '+text,'ok');
+}
+async function deleteProject(name,fromList){
+  if(!confirm(I18N.f(t('确定删除素材项目「{name}」?\n将删除其整个文件夹(原片、分镜 clip 与 JSON),不可恢复。'),{name})))return;
+  try{await api(`${API}/${encodeURIComponent(name)}`,undefined,'DELETE');msg(I18N.f(t('已删除项目 {name}'),{name}),'ok');if(fromList)showList();else location.hash=''}
+  catch(e){msg(t('删除失败:')+e.message,'err')}
+}
+
+/* ---------- 单个项目 ---------- */
+function stopPoll(){if(POLL){clearTimeout(POLL);POLL=null}}
+async function openProject(name){
+  stopPoll();CUR=name;LAST_SIG='';
+  $('#list-view').style.display='none';$('#proj-view').style.display='';
+  $('#proj-name').textContent=name;$('#clips').innerHTML='';$('#proj-err').textContent='';
+  await refresh(true);
+}
+$('#back-list').onclick=e=>{e.preventDefault();location.hash=''};
+$('#proj-delete').onclick=()=>deleteProject(CUR,false);
+$('#open-folder').onclick=async()=>{try{await api('/actions/open-footage-folder',{name:CUR})}catch(e){msg(t('打开文件夹失败:')+e.message,'err')}};
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$('#tab-file').style.display=b.dataset.tab==='file'?'':'none';$('#tab-url').style.display=b.dataset.tab==='url'?'':'none'});
+
+async function refresh(full){
+  if(!CUR)return;
+  let p;
+  try{p=await api(`${API}/${encodeURIComponent(CUR)}`)}catch(e){$('#proj-err').textContent=t('读取失败:')+e.message;return}
+  if(p.name!==CUR)return;
+  PROJ=p;
+  if(p.engine)setEngineChip(p);
+  const pt=$('#analysis-prompt');
+  if(document.activeElement!==pt&&pt.dataset.orig===pt.value){pt.value=p.analysis_prompt||'';pt.dataset.orig=pt.value;pt.placeholder=(p.analysis_prompt_default||'').split('\n')[0]+'…'}
+  const ml=$('#min-scene-len');
+  if(document.activeElement!==ml&&ml.dataset.orig===ml.value){ml.value=p.min_scene_len_s!=null?String(p.min_scene_len_s):'';ml.dataset.orig=ml.value}
+  const running=RUNNING.has(p.status)||p.running;
+  $('#proj-status').outerHTML=chip(p.status,p.running);$('#proj-view .chip').id='proj-status';
+  const hasSource=!!(p.source&&p.source.file);
+  $('#input-box').style.display=(!hasSource||$('#input-box').dataset.force==='1')&&!running?'':'none';
+  $('#prog-box').style.display=running?'':'none';
+  if(running){$('#prog-msg').textContent=p.message||'';$('#prog-bar').className='progress';$('#prog-bar>i').style.width=Math.max(2,Math.min(100,p.progress||0))+'%'}
+  $('#proj-err').textContent=p.error||'';
+  $('#src-box').style.display=hasSource&&!running?'':'none';
+  if(hasSource){
+    const s=p.source||{},asr=p.asr||{};
+    $('#src-meta').innerHTML=[
+      [t('来源'),s.type==='url'?`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title||s.url)}</a>`:esc(s.filename||'')],
+      [t('时长 / 分辨率'),`${fmtDur(s.duration_s)} · ${s.width||'?'}×${s.height||'?'} · ${s.fps||'?'} fps`],
+      [t('原片'),`<a href="${fileUrl(CUR,s.file)}" target="_blank">${esc(s.file)}</a>`],
+      [t('分镜'),`${p.clip_count||0} · ${t('已分析')} ${p.analyzed_count||0}`],
+      [t('字幕(ASR)'),asr.ok?I18N.f(t('{n} 段,语言 {lang},模型 {model}'),{n:asr.segments,lang:asr.language||'?',model:asr.model||'faster-whisper'}):esc(asr.error||t('未生成'))],
+      [t('状态'),esc(p.message||'')],
+    ].map(([k,v])=>`<div><span>${k}:</span> <b>${v}</b></div>`).join('');
+    $('#out-links').innerHTML=`${t('输出:')} <a href="${fileUrl(CUR,'clips.json')}" target="_blank">clips.json</a> · <code>${esc(p.dir||'')}/clips/</code>`;
+  }
+  const sig=JSON.stringify((p.clips||[]).map(c=>[c.id,c.file,c.analyzed_at]));
+  if(full||sig!==LAST_SIG){LAST_SIG=sig;renderClips(p.clips||[])}
+  else if(p.status==='analyzing'||p.status==='transcribing'||p.status==='ready'){(p.clips||[]).forEach(c=>syncClipFields(c))}
+  if(running)POLL=setTimeout(()=>refresh(false),1500);
+}
+
+/* ---------- 输入:上传 / 下载 ---------- */
+const drop=$('#drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)uploadFile(f)});
+$('#file-input').onchange=e=>{const f=e.target.files[0];if(f)uploadFile(f);e.target.value=''};
+async function uploadFile(file){
+  if(!CUR)return;
+  const id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())).replace(/-/g,'');
+  const total=Math.max(1,Math.ceil(file.size/CHUNK));
+  $('#input-box').style.display='none';$('#input-box').dataset.force='';
+  $('#prog-box').style.display='';$('#prog-bar').className='progress';$('#cancel-btn').style.display='none';
+  try{
+    for(let i=0;i<total;i++){
+      const blob=file.slice(i*CHUNK,Math.min(file.size,(i+1)*CHUNK));
+      $('#prog-msg').textContent=I18N.f(t('上传中 {a}/{b}({name})'),{a:i+1,b:total,name:file.name});
+      $('#prog-bar>i').style.width=Math.round((i+1)/total*100)+'%';
+      const q=new URLSearchParams({upload_id:id,index:i,total,filename:file.name});
+      const r=await fetch(`${API}/${encodeURIComponent(CUR)}/upload?${q}`,{method:'POST',body:blob,headers:{'Content-Type':'application/octet-stream'}});
+      if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||r.status)}
+    }
+    msg(t('上传完成,开始处理'),'ok');
+  }catch(e){msg(t('上传失败:')+e.message,'err');$('#prog-bar').className='progress err'}
+  finally{$('#cancel-btn').style.display='';refresh(true)}
+}
+$('#url-btn').onclick=async()=>{
+  const url=$('#url-input').value.trim();if(!url){msg(t('请先粘贴视频链接'),'err');return}
+  $('#url-btn').disabled=true;
+  try{await api(`${API}/${encodeURIComponent(CUR)}/download`,{url});$('#input-box').dataset.force='';msg(t('已开始下载'),'ok');refresh(true)}
+  catch(e){msg(t('下载失败:')+e.message,'err')}
+  finally{$('#url-btn').disabled=false}
+};
+$('#cancel-btn').onclick=async()=>{try{await api(`${API}/${encodeURIComponent(CUR)}/cancel`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+$('#reimport-btn').onclick=()=>{if(PROJ&&PROJ.clip_count&&!confirm(t('重新导入会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;$('#input-box').dataset.force='1';$('#input-box').style.display='';$('#input-box').scrollIntoView({behavior:'smooth'})};
+$('#reprocess-btn').onclick=async()=>{if(!confirm(t('重新分割会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/reprocess`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+$('#retranscribe-btn').onclick=async()=>{if(!confirm(t('重新转写会覆盖各分镜的字幕框,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+const promptTa=$('#analysis-prompt');promptTa.dataset.orig='';
+async function savePrompt(){
+  if(promptTa.value===promptTa.dataset.orig)return;
+  try{const p=await api(`${API}/${encodeURIComponent(CUR)}/settings`,{analysis_prompt:promptTa.value});promptTa.value=p.analysis_prompt||'';promptTa.dataset.orig=promptTa.value;
+    const sv=promptTa.previousElementSibling.querySelector('.saved');sv.classList.add('on');setTimeout(()=>sv.classList.remove('on'),1500)}
+  catch(e){msg(t('保存失败:')+e.message,'err')}
+}
+promptTa.addEventListener('blur',savePrompt);
+promptTa.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();promptTa.blur()}});
+$('#prompt-reset').onclick=()=>{promptTa.value=(PROJ&&PROJ.analysis_prompt_default)||'';savePrompt()};
+const minLenIn=$('#min-scene-len');minLenIn.dataset.orig='';
+async function saveMinLen(){
+  if(minLenIn.value===minLenIn.dataset.orig)return;
+  const v=parseFloat(minLenIn.value);
+  if(!(v>0)){minLenIn.value=minLenIn.dataset.orig;return}
+  try{const p=await api(`${API}/${encodeURIComponent(CUR)}/settings`,{min_scene_len_s:v});
+    minLenIn.value=p.min_scene_len_s!=null?String(p.min_scene_len_s):'';minLenIn.dataset.orig=minLenIn.value;
+    const sv=minLenIn.parentElement.querySelector('.saved');sv.classList.add('on');setTimeout(()=>sv.classList.remove('on'),1500)}
+  catch(e){msg(t('保存失败:')+e.message,'err')}
+}
+minLenIn.addEventListener('blur',saveMinLen);
+minLenIn.addEventListener('change',saveMinLen);
+$('#analyze-all-btn').onclick=async()=>{try{const r=await api(`${API}/${encodeURIComponent(CUR)}/analyze-all`,{});if(!r.started)msg(t('所有分镜都已有画面信息(逐个点「AI 自动分析」可重新生成)'),'ok');refresh(true)}catch(e){msg(t('AI 分析失败:')+e.message,'err')}};
+
+/* ---------- 分镜卡片 ---------- */
+function clipCard(c){
+  const thumb=c.thumbnail?fileUrl(CUR,c.thumbnail):'';
+  return `<div class="clip${c.info?' analyzed':''}" id="clip-${esc(c.id)}" data-id="${esc(c.id)}">
+    <div>
+      <div class="thumb" onclick="playClip('${esc(c.id)}')" title="${t('点击播放预览')}">${thumb?`<img src="${thumb}" alt="">`:''}<div class="play">▶</div></div>
+      <div class="tc"><span>⏱ ${esc(c.start_tc)} → ${esc(c.end_tc)}</span><span>${(Number(c.duration_s)||0).toFixed(1)} s</span>
+        <a class="sheet-link" href="${fileUrl(CUR,c.file)}" target="_blank" title="${esc(c.file)}">${t('clip 文件')}</a>${c.sheet?` <a class="sheet-link" href="${fileUrl(CUR,c.sheet)}" target="_blank">${t('联系图')}</a>`:''}</div>
+    </div>
+    <div class="fields">
+      <div class="head"><b>${esc(c.title||c.id)}</b><span class="hint">${esc(c.id)}</span>
+        <button class="small primary ai-btn" onclick="analyzeClip('${esc(c.id)}')" title="${t('按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存')}">🤖 ${t('AI 自动分析')}</button>
+        <span class="st">${c.analyzed_at?t('已分析 ')+esc(fmtDate(c.analyzed_at))+(c.analysis_meta&&c.analysis_meta.engine?` · ${esc(c.analysis_meta.engine)}${c.analysis_meta.model?'/'+esc(c.analysis_meta.model):''}`:''):''}</span></div>
+      <label>${t('字幕(语音转文字,可编辑)')}<span class="saved">✓ ${t('已保存')}</span></label>
+      <textarea class="sub" data-field="subtitle" placeholder="${t('这个分镜没有识别到语音;可手动填写')}">${esc(c.subtitle)}</textarea>
+      <label>${t('画面信息(AI 分析或人工填写,可编辑)')}<span class="saved">✓ ${t('已保存')}</span></label>
+      <textarea class="info" data-field="info" placeholder="${t('点「AI 自动分析」自动生成,或自己看画面后填写')}">${esc(c.info)}</textarea>
+      <div class="err"></div>
+    </div>
+  </div>`;
+}
+function renderClips(clips){
+  const box=$('#clips');
+  if(!clips.length){box.innerHTML=PROJ&&PROJ.source&&PROJ.source.file&&!RUNNING.has(PROJ.status)?'<div class="empty">'+t('还没有分镜 clip')+'</div>':'';return}
+  box.innerHTML=clips.map(clipCard).join('');
+  box.querySelectorAll('textarea').forEach(ta=>{
+    ta.dataset.orig=ta.value;
+    ta.addEventListener('blur',()=>saveField(ta));
+    ta.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();ta.blur()}});
+  });
+}
+function syncClipFields(c){
+  const card=document.getElementById('clip-'+c.id);if(!card)return;
+  card.querySelectorAll('textarea').forEach(ta=>{
+    const v=String(c[ta.dataset.field]||'');
+    if(document.activeElement===ta||ta.dataset.orig!==ta.value)return;   // 正在编辑/未保存的不覆盖
+    if(ta.value!==v){ta.value=v;ta.dataset.orig=v}
+  });
+  if(c.analyzed_at){const st=card.querySelector('.st');const txt=t('已分析 ')+fmtDate(c.analyzed_at)+(c.analysis_meta&&c.analysis_meta.engine?` · ${c.analysis_meta.engine}${c.analysis_meta.model?'/'+c.analysis_meta.model:''}`:'');if(st.textContent!==txt)st.textContent=txt;card.classList.toggle('analyzed',!!c.info)}
+}
+async function saveField(ta){
+  if(ta.value===ta.dataset.orig)return;
+  const card=ta.closest('.clip'),id=card.dataset.id,field=ta.dataset.field;
+  const err=card.querySelector('.err');err.textContent='';
+  try{
+    const c=await api(`${API}/${encodeURIComponent(CUR)}/clips/${encodeURIComponent(id)}`,{[field]:ta.value});
+    ta.dataset.orig=ta.value;
+    const saved=ta.previousElementSibling.querySelector('.saved');saved.classList.add('on');setTimeout(()=>saved.classList.remove('on'),1500);
+    card.classList.toggle('analyzed',!!(c.info&&c.info.trim()));
+  }catch(e){err.textContent=t('保存失败:')+e.message}
+}
+function playClip(id){
+  const card=document.getElementById('clip-'+id);if(!card)return;
+  const c=(PROJ&&PROJ.clips||[]).find(x=>x.id===id);if(!c)return;
+  const box=card.querySelector('.thumb');
+  if(box.querySelector('video'))return;
+  document.querySelectorAll('.clip .thumb video').forEach(v=>{v.pause()});
+  box.innerHTML=`<video controls autoplay src="${fileUrl(CUR,c.file)}"></video>`;box.onclick=null;
+}
+async function analyzeClip(id){
+  const card=document.getElementById('clip-'+id);if(!card)return;
+  const btn=card.querySelector('.ai-btn'),err=card.querySelector('.err');
+  const info=card.querySelector('textarea.info');
+  if(info.value.trim()&&!confirm(t('信息框已有内容,AI 分析结果会覆盖它,继续?')))return;
+  btn.disabled=true;const old=btn.textContent;btn.textContent='⏳ '+t('分析中…');err.textContent='';
+  try{
+    const c=await api(`${API}/${encodeURIComponent(CUR)}/clips/${encodeURIComponent(id)}/analyze`,{});
+    info.value=c.info||'';info.dataset.orig=info.value;
+    const saved=info.previousElementSibling.querySelector('.saved');saved.classList.add('on');setTimeout(()=>saved.classList.remove('on'),1500);
+    if(PROJ&&PROJ.clips){const i=PROJ.clips.findIndex(x=>x.id===id);if(i>=0)PROJ.clips[i]=c}
+    syncClipFields(c);
+    if(c.sheet&&!card.querySelector('.tc a:nth-of-type(2)'))card.querySelector('.tc').insertAdjacentHTML('beforeend',` <a class="sheet-link" href="${fileUrl(CUR,c.sheet)}" target="_blank">${t('联系图')}</a>`);
+  }catch(e){err.textContent=t('AI 分析失败:')+e.message}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+
+route();
+</script>
+</body>
+</html>

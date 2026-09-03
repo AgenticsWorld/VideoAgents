@@ -101,9 +101,32 @@ button:disabled{opacity:.5;cursor:default}
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;选中渠道的「默认音色」即旁白声线</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;旁白声线以项目旁白声线卡的冻结样本为准(人物预览→旁白),不随此处设置变</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
+  </div>
+  <div class="card" id="card-digital-human">
+    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
+    <div class="tabs" id="digital-human-tabs">
+      <div class="tab" id="tab-dh-heygen">HeyGen</div>
+      <div class="tab" id="tab-dh-klingai">Kling AI</div>
+      <div class="tab" id="tab-dh-comfyui">ComfyUI</div>
+    </div>
+    <div class="panel" id="panel-dh-heygen">
+      <div class="row"><label>API Key</label><input type="password" id="dh-heygen-key" placeholder="HeyGen API Key"><button onclick="testDigitalHuman('heygen')">验证 Key</button></div>
+      <div class="row"><label>分辨率</label><select id="dh-heygen-resolution"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+      <div class="row"><label>画幅</label><select id="dh-heygen-aspect"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select></div>
+      <div class="status" id="dh-heygen-status"></div>
+      <div class="hint">任意人物图片 + 已有对白音频；Key 在 <a href="https://app.heygen.com/settings/api" target="_blank">HeyGen API 设置</a>创建。</div>
+    </div>
+    <div class="panel" id="panel-dh-klingai">
+      <div class="row"><label>API Key</label><input type="password" id="dh-kling-key" placeholder="Kling AI API Key"><button onclick="testDigitalHuman('klingai')">验证 Key</button></div>
+      <div class="row"><label>生成模式</label><select id="dh-kling-mode"><option value="std">Standard</option><option value="pro">Professional</option></select></div>
+      <div class="status" id="dh-klingai-status"></div>
+      <div class="hint">首版固定使用中国北京接口 <code>api-beijing.klingai.com</code>，采用 Bearer API Key 鉴权。</div>
+    </div>
+    <!-- ComfyUI 面板由 buildPanel('digitalhuman','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub 国内/国际 -->
+    <div class="panel" id="panel-dh-comfyui"></div>
   </div>
   <div class="card" id="card-text">
     <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
@@ -135,46 +158,6 @@ button:disabled{opacity:.5;cursor:default}
       <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
     </div>
     <div id="panel-text-openrouter"></div>
-  </div>
-  <div class="card" id="card-digital-human">
-    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
-    <div class="tabs" id="digital-human-tabs">
-      <div class="tab" id="tab-dh-heygen">HeyGen</div>
-      <div class="tab" id="tab-dh-klingai">Kling AI</div>
-      <div class="tab" id="tab-dh-runninghub">RunningHub</div>
-      <div class="tab" id="tab-dh-comfyui">ComfyUI</div>
-    </div>
-    <div class="panel" id="panel-dh-heygen">
-      <div class="row"><label>API Key</label><input type="password" id="dh-heygen-key" placeholder="HeyGen API Key"><button onclick="testDigitalHuman('heygen')">验证 Key</button></div>
-      <div class="row"><label>分辨率</label><select id="dh-heygen-resolution"><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
-      <div class="row"><label>画幅</label><select id="dh-heygen-aspect"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select></div>
-      <div class="status" id="dh-heygen-status"></div>
-      <div class="hint">任意人物图片 + 已有对白音频；Key 在 <a href="https://app.heygen.com/settings/api" target="_blank">HeyGen API 设置</a>创建。</div>
-    </div>
-    <div class="panel" id="panel-dh-klingai">
-      <div class="row"><label>API Key</label><input type="password" id="dh-kling-key" placeholder="Kling AI API Key"><button onclick="testDigitalHuman('klingai')">验证 Key</button></div>
-      <div class="row"><label>生成模式</label><select id="dh-kling-mode"><option value="std">Standard</option><option value="pro">Professional</option></select></div>
-      <div class="status" id="dh-klingai-status"></div>
-      <div class="hint">首版固定使用中国北京接口 <code>api-beijing.klingai.com</code>，采用 Bearer API Key 鉴权。</div>
-    </div>
-    <div class="panel" id="panel-dh-runninghub">
-      <div class="row"><label>站点</label><select id="digitalhuman-rh-site" onchange="rhSiteUI('digitalhuman')"><option value="rh_cn">RunningHub 国内(.cn)</option><option value="rh_ai">RunningHub 国际(.ai)</option></select><button onclick="testDigitalHuman('runninghub')">测试连接</button></div>
-      <div class="row" id="digitalhuman-rh-key-cn-row"><label>API Key</label><input type="password" id="digitalhuman-rh-key-cn" placeholder="API Key (runninghub.cn)"><button type="button" onclick="const i=document.querySelector('#digitalhuman-rh-key-cn');i.type=i.type==='password'?'text':'password'">显示/隐藏</button></div>
-      <div class="row" id="digitalhuman-rh-key-ai-row" style="display:none"><label>API Key</label><input type="password" id="digitalhuman-rh-key-ai" placeholder="API Key (runninghub.ai)"><button type="button" onclick="const i=document.querySelector('#digitalhuman-rh-key-ai');i.type=i.type==='password'?'text':'password'">显示/隐藏</button></div>
-      <div class="status" id="digitalhuman-rh-status"></div>
-      <div class="row"><label>云端数字人工作流</label><select id="digitalhuman-rh-wf"></select><button type="button" onclick="rhRemoveWf('digitalhuman')">移除</button></div>
-      <div class="row"><label>添加工作流</label><input type="text" id="digitalhuman-rh-add" placeholder="工作流 ID 或页面链接"><input type="text" id="digitalhuman-rh-note" placeholder="备注名(可选)" style="max-width:130px"><button type="button" onclick="rhAddWf('digitalhuman')">验证并添加</button></div>
-      <div class="row"><label>运行模式</label><select id="digitalhuman-rh-inst"><option value="standard">Standard</option><option value="plus">Plus</option><option value="ultra">Ultra</option></select></div>
-      <div class="hint">RunningHub 是独立云端渠道，不使用本地 ComfyUI 地址或本地 JSON。请先在 RunningHub 工作区跑通数字人工作流，再通过工作流 ID 添加。普通导出件只要执行图中各有唯一的 <code>LoadImage</code>、<code>LoadAudio</code>，系统就会自动覆盖示例素材；也兼容 <code>{{IMAGE}}</code>/<code>{{FIRST_FRAME}}</code>、<code>{{AUDIO}}</code>/<code>{{REF_AUDIO}}</code> 等占位符。</div>
-      <div class="hint" id="digitalhuman-rh-hint-cn">国内站账号与国际站不互通；Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">runninghub.cn API 服务页</a>获取，工作流来自 <a href="https://www.runninghub.cn/workspace" target="_blank">国内站工作区</a>。</div>
-      <div class="hint" id="digitalhuman-rh-hint-ai" style="display:none">国际站账号与国内站不互通；Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">runninghub.ai API 服务页</a>获取，工作流来自 <a href="https://www.runninghub.ai/workspace" target="_blank">国际站工作区</a>。</div>
-    </div>
-    <div class="panel" id="panel-dh-comfyui">
-      <div class="row"><label>服务地址</label><input type="text" id="dh-comfy-url" placeholder="http://127.0.0.1:8188"><button onclick="testDigitalHuman('comfyui')">测试连接</button></div>
-      <div id="dh-comfy-workflow-row"></div>
-      <div class="status" id="dh-comfyui-status"></div>
-      <div class="hint">本地 ComfyUI + InfiniteTalk；使用本地服务地址和 <code>comfy/</code> 中的 API JSON，不读取 RunningHub Key 或云端工作流 ID。API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符。</div>
-    </div>
   </div>
   <div id="savebar">
     <span id="save-status">✓ 已保存</span>
@@ -254,13 +237,13 @@ const IDEOGRAM_MODELS=[['V_3','V 3(最新)'],['AUTO','Auto(官方自动选版)']
 const VOLC_IMAGE_MODELS=[
   ['doubao-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
   ['doubao-seedream-5-0-260128','Seedream 5.0'],
-  ['doubao-seedream-5-0-lite-260128','Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)'],
+  ['doubao-seedream-5-0-lite-260128','Seedream 5.0 Lite'],
   ['doubao-seedream-4-5-251128','Seedream 4.5(文/图生图/多图融合)'],
   ['doubao-seedream-4-0-250828','Seedream 4.0(文/图生图)'],
 ];
 /* 2026-07-11 API 探测验证:6 个 ID 全部在售可用;官方价格页仍标 1.5 Pro 即将下线 */
 /* 2026-08-09 新增 Seedance 2.5(单段 30s 直出/参考上限 30图+10视频+10音频/仅 480p·720p);
-   默认选项保持 2.0 不变,选用 2.5 前请先到「项目设置 → 分镜组设置」调大组时长与参考上限 */
+   默认选项保持 2.0 不变,选用 2.5 前请先到「项目设置 → 视频模型设置」调大组时长与参考上限 */
 const VOLC_MODELS=[
   ['doubao-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p)'],
   ['doubao-seedance-2-0-260128','Seedance 2.0(音画同生,多模态生视频,最高4K)'],
@@ -324,26 +307,27 @@ const PROVIDER_META={
   volcengine:{label:'火山引擎'},
   byteplus:{label:'BytePlus'},
   minimax:{label:'MiniMax'},
-  runninghub:{label:'RunningHub'},
   comfyui:{label:'ComfyUI'},
   elevenlabs:{label:'ElevenLabs'},
 };
 const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
-  // runninghub 为纯前端标签页:存储复用 comfyui 段(provider=comfyui + mode=rh_cn/rh_ai)
-  image:{providers:['openrouter','volcengine','byteplus','minimax','runninghub','comfyui']},
-  video:{providers:['openrouter','volcengine','byteplus','minimax','runninghub','comfyui']},
-  music:{providers:['openrouter','elevenlabs','minimax','runninghub','comfyui']},
-  tts:{providers:['openrouter','volcengine','elevenlabs','minimax','runninghub','comfyui']},
+  image:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  video:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
+  music:{providers:['openrouter','elevenlabs','minimax','comfyui']},
+  tts:{providers:['openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
   ['music_v2','Eleven Music v2(最新)'],
 ];
-/* 新版豆包语音 openspeech v3(X-Api-Key 单头鉴权):model = X-Api-Resource-Id 档位;
-   S_ 开头克隆音色自动切 seed-icl-2.0 */
+/* 新版豆包语音(X-Api-Key 单头鉴权):seed-tts 档 = openspeech v3 单向流式的
+   X-Api-Resource-Id,S_ 开头克隆音色自动切 seed-icl-2.0;seed-audio-1.0 =
+   Doubao-音频生成 1.0 描述定制嗓音(非流式 /tts/create,免选音色,置首=新配置默认,
+   选中即隐藏音色相关选项,见 volcTtsModeUI) */
 const VOLC_TTS_MODELS=[
+  ['seed-audio-1.0','Doubao-音频生成 1.0(描述定制嗓音:按声纹卡/旁白描述直接生成,免选音色)'],
   ['seed-tts-2.0','Doubao-Seed-TTS 2.0(最新,深度语义理解/指令式情感控制)'],
   ['seed-tts-1.0','Doubao-Seed-TTS 1.0'],
   ['seed-icl-2.0','声音复刻 2.0(克隆音色,speaker 为 S_ 开头)'],
@@ -425,11 +409,9 @@ function mmKey(kind){
 }
 
 /* RunningHub 国内站/国际站账号与 Key 不互通:两站 Key 分别保存
-   (rh_api_key_cn/rh_api_key_ai),按「站点」取用对应站点的输入框 */
-const RH_SITES=['rh_cn','rh_ai'];
-function rhSite(kind){return $(`#${kind}-rh-site`).value}
+   (rh_api_key_cn/rh_api_key_ai),按「运行方式」取用对应站点的输入框 */
 function rhKey(kind){
-  return $(`#${kind}-rh-key-${rhSite(kind)==='rh_ai'?'ai':'cn'}`).value.trim();
+  return $(`#${kind}-comfy-rhkey-${$(`#${kind}-comfy-mode`).value==='rh_ai'?'ai':'cn'}`).value.trim();
 }
 
 function fillSelect(sel,options,value,customValue){
@@ -481,11 +463,15 @@ function buildPanel(kind,p){
       'Key 在 <a href="https://ideogram.ai/manage-api" target="_blank">ideogram.ai/manage-api</a> 生成'));
   }else if(p==='volcengine'&&kind==='tts'){
     d.appendChild(keyRow('tts-volc-key','新版控制台「API Key 管理」创建的 API Key'));
-    d.appendChild(modelRow('tts-volc-model','tts-volc-custom'));
+    const mr=modelRow('tts-volc-model','tts-volc-custom');
+    mr.querySelector('select').addEventListener('change',volcTtsModeUI);
+    d.appendChild(mr);
+    // seed-audio-1.0(描述定制嗓音)时以下音色相关选项整体隐藏(volcTtsModeUI)
+    const vw=el('div',{id:'tts-volc-voicewrap'});
     const vr=el('div',{className:'row'});
     vr.appendChild(el('label',{},'默认音色'));
     vr.appendChild(el('input',{type:'text',id:'tts-volc-voice',placeholder:'speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…'}));
-    d.appendChild(vr);
+    vw.appendChild(vr);
     // 音色库:ListSpeakers 全量拉取 + 关键词过滤 + 试听 + 设为默认
     const sr=el('div',{className:'row'});
     sr.appendChild(el('label',{},'音色库'));
@@ -494,7 +480,7 @@ function buildPanel(kind,p){
     sr.appendChild(fi);
     const lb=el('button',{},'拉取音色库');
     lb.onclick=volcLoadLib;
-    sr.appendChild(lb);d.appendChild(sr);
+    sr.appendChild(lb);vw.appendChild(sr);
     const lr=el('div',{className:'row'});
     lr.appendChild(el('label',{},''));
     const lsel=el('select',{id:'tts-volc-lib'});
@@ -503,11 +489,16 @@ function buildPanel(kind,p){
     pb.onclick=volcPreviewLib;
     const ab=el('button',{},'✓ 设为默认音色');
     ab.onclick=volcSetDefault;
-    lr.appendChild(pb);lr.appendChild(ab);d.appendChild(lr);
-    d.appendChild(el('div',{className:'status',id:'tts-volc-status'}));
-    d.appendChild(el('div',{className:'hint'},
+    lr.appendChild(pb);lr.appendChild(ab);vw.appendChild(lr);
+    vw.appendChild(el('div',{className:'status',id:'tts-volc-status'}));
+    vw.appendChild(el('div',{className:'hint'},
       'API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」;'
       +'音色在控制台「<a href="https://console.volcengine.com/speech/new/voices" target="_blank">音色库</a>」试听/开通,克隆音色 S_ 开头自动切声音复刻 2.0'));
+    d.appendChild(vw);
+    const dmh=el('div',{className:'hint',id:'tts-volc-descmode-hint',style:'display:none'});
+    dmh.appendChild(document.createTextNode(t('描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按项目旁白声线卡冻结描述(无卡按工单 --instructions);项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。')));
+    dmh.appendChild(el('span',{},' API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」'));
+    d.appendChild(dmh);
   }else if(p==='volcengine'){
     d.appendChild(keyRow(`${kind}-volc-key`,'火山方舟 ARK API Key'));
     d.appendChild(modelRow(`${kind}-volc-model`,`${kind}-volc-custom`));
@@ -614,25 +605,31 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint'},
       intro+'Key 在 <a href="https://platform.minimax.io/console/access" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/console/access" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='comfyui'){
-    // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构);
-    // RunningHub 第三方云托管已拆为独立「RunningHub」标签页(存储仍复用 comfyui 段,
-    // 生效时 provider=comfyui + mode=rh_cn/rh_ai,后端口径不变)
+    // 运行方式:本地 ComfyUI / Comfy Cloud 官方云端(X-API-Key 鉴权,API 同构)
+    // / RunningHub 国内(.cn)/国际(.ai) 第三方云托管(私有 REST,工作流存云端工作区)
+    // kind='digitalhuman' 时同一面板服务数字人卡片(InfiniteTalk 工作流,无 checkpoint 行)
+    const dh=kind==='digitalhuman';
     const mr=el('div',{className:'row'});
     mr.appendChild(el('label',{},'运行方式'));
     const msel=el('select',{id:`${kind}-comfy-mode`});
-    [['local','本地'],['cloud','云端(Comfy Cloud)']].forEach(([v,l])=>
+    [['local','本地'],['cloud','云端(Comfy Cloud)'],
+     ['rh_cn','RunningHub 国内(.cn)'],['rh_ai','RunningHub 国际(.ai)']].forEach(([v,l])=>
       msel.appendChild(el('option',{value:v,textContent:t(l)})));
     msel.onchange=()=>comfyModeUI(kind);
     mr.appendChild(msel);
     const tb=el('button',{},'测试连接');
-    tb.onclick=async()=>{
+    tb.onclick=dh?()=>testDigitalHuman('comfyui'):async()=>{
       const mode=$(`#${kind}-comfy-mode`).value;
       const st=$(`#${kind}-comfy-status`);st.className='status';st.textContent='连接中…';
       const r=await api('/api/v1/providers/comfyui/test',{
         mode,url:$(`#${kind}-comfy-url`).value.trim(),
-        api_key:mode==='cloud'?$(`#${kind}-comfy-cloudkey`).value.trim():''})
+        api_key:mode==='cloud'?$(`#${kind}-comfy-cloudkey`).value.trim():rhKey(kind)})
         .catch(e=>({ok:false,error:e.message}));
-      if(r.ok){
+      if(r.ok&&r.runninghub){
+        st.className='status ok';
+        st.textContent=I18N.f('✓ Key 有效 · 余额 {c} RH 币 · 运行中任务 {n}',
+          {c:r.remain_coins??'?',n:r.current_tasks??'?'});
+      }else if(r.ok){
         st.className='status ok';
         st.textContent=I18N.f('✓ 已连接({v})· {n} 个 checkpoint',
           {v:r.version+(r.devices?.length?' · '+r.devices.join(', '):''),n:r.checkpoints.length});
@@ -650,25 +647,80 @@ function buildPanel(kind,p){
     const kr=keyRow(`${kind}-comfy-cloudkey`,'Comfy Cloud API Key');
     kr.id=`${kind}-comfy-cloudkey-row`;kr.style.display='none';
     d.appendChild(kr);
+    const rkc=keyRow(`${kind}-comfy-rhkey-cn`,'API Key (runninghub.cn)');
+    rkc.id=`${kind}-comfy-rhkey-cn-row`;rkc.style.display='none';
+    d.appendChild(rkc);
+    const rka=keyRow(`${kind}-comfy-rhkey-ai`,'API Key (runninghub.ai)');
+    rka.id=`${kind}-comfy-rhkey-ai-row`;rka.style.display='none';
+    d.appendChild(rka);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
-    const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
-    cr.appendChild(el('label',{},'Checkpoint'));
-    const sel=el('select',{id:`${kind}-comfy-ckpt`});
-    sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
-    cr.appendChild(sel);d.appendChild(cr);
-    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图API':'工作流 API');
+    // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
+    const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
+    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':dh?'云端数字人工作流':'云端工作流'));
+    const rsel=el('select',{id:`${kind}-comfy-rhwf`});
+    rw.appendChild(rsel);
+    const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
+    rmb.onclick=()=>rhRemoveWf(kind);
+    rw.appendChild(rmb);d.appendChild(rw);
+    if(kind==='image'){
+      const rw2=el('div',{className:'row',id:'image-comfy-rhrefwf-row',style:'display:none'});
+      rw2.appendChild(el('label',{},'云端图生图工作流'));
+      rw2.appendChild(el('select',{id:'image-comfy-rhrefwf'}));
+      d.appendChild(rw2);
+    }
+    const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
+    ar.appendChild(el('label',{},'添加工作流'));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhadd`,
+      placeholder:t('工作流 ID 或页面链接')}));
+    ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhnote`,
+      placeholder:t('备注名(可选)'),style:'max-width:130px'}));
+    const ab=el('button',{},'验证并添加');
+    ab.onclick=()=>rhAddWf(kind);
+    ar.appendChild(ab);d.appendChild(ar);
+    // RunningHub 运行模式(机器规格):standard 不传 instanceType 沿用平台默认
+    const ir=el('div',{className:'row',id:`${kind}-comfy-rhinst-row`,style:'display:none'});
+    ir.appendChild(el('label',{},'运行模式'));
+    const isel=el('select',{id:`${kind}-comfy-rhinst`});
+    [['standard','Standard'],['plus','Plus'],['ultra','Ultra']].forEach(([v,l])=>
+      isel.appendChild(el('option',{value:v,textContent:l})));
+    ir.appendChild(isel);d.appendChild(ir);
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-rhinst-hint`,style:'display:none'},
+      'RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准'));
+    if(!dh){
+      const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
+      cr.appendChild(el('label',{},'Checkpoint'));
+      const sel=el('select',{id:`${kind}-comfy-ckpt`});
+      sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
+      cr.appendChild(sel);d.appendChild(cr);
+    }
+    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图API':dh?'InfiniteTalk 工作流':'工作流 API');
     wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
     if(kind==='image'){
       const wr2=wfRow(kind,'image-comfy-ref-wf','图生图API');
       wr2.id='image-comfy-ref-wf-row';d.appendChild(wr2);
     }
-    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},
-      '连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
+    // 数字人:本地/云端跑 InfiniteTalk API 工作流;RunningHub 工作流普通导出件按唯一 LoadImage/LoadAudio 自动绑定
+    const dhWf='API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符';
+    const rhBind=dh
+      ?'请先在工作区跑通数字人工作流,再把工作流 ID 或页面链接粘贴到「添加工作流」验证;普通导出件只要执行图中各有唯一的 <code>LoadImage</code>、<code>LoadAudio</code>,系统就会自动覆盖示例素材,也兼容 <code>{{IMAGE}}</code>/<code>{{FIRST_FRAME}}</code>、<code>{{AUDIO}}</code>/<code>{{REF_AUDIO}}</code> 等占位符;'
+      :'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),再把工作流 ID 或页面链接粘贴到「添加工作流」验证;';
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},dh
+      ?'本地 ComfyUI + InfiniteTalk;使用本地服务地址和 <code>comfy/</code> 中的 API JSON(「测试连接」会检查 MultiTalk 节点是否就绪);'+dhWf
+      :'连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
       +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
     d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-cloud`,style:'display:none'},
       '工作流在 <a href="https://cloud.comfy.org/" target="_blank">Comfy Cloud</a> 官方云端执行,无需本地部署;'
       +'API Key 在 <a href="https://platform.comfy.org" target="_blank">platform.comfy.org</a> 创建(需 Comfy Cloud 订阅,与网页版共用月度额度,免费档无 API 权限);'
-      +'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准'));
+      +(dh?'工作流下拉与本地一致(InfiniteTalk API JSON,'+dhWf+');MultiTalk 等自定义节点在云端可能不可用,以「测试连接」结果为准'
+          :'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准')));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-cn`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.cn/workspace" target="_blank">RunningHub 国内站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币),不使用本地服务地址或本地 JSON;API Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +rhBind+'国内站与国际站账号与 Key 不互通'));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-ai`,style:'display:none'},
+      '工作流在 <a href="https://www.runninghub.ai/workspace" target="_blank">RunningHub 国际站工作区</a>'
+      +' 云端执行(按运行秒数扣 RH 币),不使用本地服务地址或本地 JSON;API Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
+      +rhBind+'国内站与国际站账号与 Key 不互通'));
     if(kind==='music'){
       d.appendChild(el('div',{className:'hint',id:'music-comfy-hint-extra'},
         '推荐 <code>comfy/music-ace-step-v1-api.json</code> (ACE-Step 3.5B);'
@@ -679,120 +731,60 @@ function buildPanel(kind,p){
         '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
         +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
     }
-  }else if(p==='runninghub'){
-    // RunningHub 国内(.cn)/国际(.ai) 第三方云托管 ComfyUI(私有 REST,工作流存云端工作区);
-    // 独立标签页,配置仍落在 genconfig 的 comfyui 段(rh_* 字段),生效时 provider=comfyui + mode=站点
-    const mr=el('div',{className:'row'});
-    mr.appendChild(el('label',{},'站点'));
-    const ssel=el('select',{id:`${kind}-rh-site`});
-    [['rh_cn','RunningHub 国内(.cn)'],['rh_ai','RunningHub 国际(.ai)']].forEach(([v,l])=>
-      ssel.appendChild(el('option',{value:v,textContent:t(l)})));
-    ssel.onchange=()=>rhSiteUI(kind);
-    mr.appendChild(ssel);
-    const tb=el('button',{},'测试连接');
-    tb.onclick=async()=>{
-      const st=$(`#${kind}-rh-status`);st.className='status';st.textContent='连接中…';
-      const r=await api('/api/v1/providers/comfyui/test',{
-        mode:rhSite(kind),url:'',api_key:rhKey(kind)})
-        .catch(e=>({ok:false,error:e.message}));
-      if(r.ok){
-        st.className='status ok';
-        st.textContent=I18N.f('✓ Key 有效 · 余额 {c} RH 币 · 运行中任务 {n}',
-          {c:r.remain_coins??'?',n:r.current_tasks??'?'});
-      }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
-    };
-    mr.appendChild(tb);d.appendChild(mr);
-    const rkc=keyRow(`${kind}-rh-key-cn`,'API Key (runninghub.cn)');
-    rkc.id=`${kind}-rh-key-cn-row`;
-    d.appendChild(rkc);
-    const rka=keyRow(`${kind}-rh-key-ai`,'API Key (runninghub.ai)');
-    rka.id=`${kind}-rh-key-ai-row`;rka.style.display='none';
-    d.appendChild(rka);
-    d.appendChild(el('div',{className:'status',id:`${kind}-rh-status`}));
-    // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
-    const rw=el('div',{className:'row',id:`${kind}-rh-wf-row`});
-    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':'云端工作流'));
-    const rsel=el('select',{id:`${kind}-rh-wf`});
-    rw.appendChild(rsel);
-    const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
-    rmb.onclick=()=>rhRemoveWf(kind);
-    rw.appendChild(rmb);d.appendChild(rw);
-    if(kind==='image'){
-      const rw2=el('div',{className:'row',id:'image-rh-refwf-row'});
-      rw2.appendChild(el('label',{},'云端图生图工作流'));
-      rw2.appendChild(el('select',{id:'image-rh-refwf'}));
-      d.appendChild(rw2);
-    }
-    const ar=el('div',{className:'row',id:`${kind}-rh-add-row`});
-    ar.appendChild(el('label',{},'添加工作流'));
-    ar.appendChild(el('input',{type:'text',id:`${kind}-rh-add`,
-      placeholder:t('工作流 ID 或页面链接')}));
-    ar.appendChild(el('input',{type:'text',id:`${kind}-rh-note`,
-      placeholder:t('备注名(可选)'),style:'max-width:130px'}));
-    const ab=el('button',{},'验证并添加');
-    ab.onclick=()=>rhAddWf(kind);
-    ar.appendChild(ab);d.appendChild(ar);
-    // RunningHub 运行模式(机器规格):standard 不传 instanceType 沿用平台默认
-    const ir=el('div',{className:'row',id:`${kind}-rh-inst-row`});
-    ir.appendChild(el('label',{},'运行模式'));
-    const isel=el('select',{id:`${kind}-rh-inst`});
-    [['standard','Standard'],['plus','Plus'],['ultra','Ultra']].forEach(([v,l])=>
-      isel.appendChild(el('option',{value:v,textContent:l})));
-    ir.appendChild(isel);d.appendChild(ir);
-    d.appendChild(el('div',{className:'hint',id:`${kind}-rh-inst-hint`},
-      'RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准'));
-    d.appendChild(el('div',{className:'hint',id:`${kind}-rh-hint-cn`},
-      '工作流在 <a href="https://www.runninghub.cn/workspace" target="_blank">RunningHub 国内站工作区</a>'
-      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.cn/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
-      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
-      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
-    d.appendChild(el('div',{className:'hint',id:`${kind}-rh-hint-ai`,style:'display:none'},
-      '工作流在 <a href="https://www.runninghub.ai/workspace" target="_blank">RunningHub 国际站工作区</a>'
-      +' 云端执行(按运行秒数扣 RH 币);API Key 在 <a href="https://www.runninghub.ai/enterprise-api/consumerApi" target="_blank">API 服务页</a> 获取;'
-      +'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),'
-      +'再把工作流 ID 或页面链接粘贴到「添加工作流」验证;国内站与国际站账号与 Key 不互通'));
   }
   return d;
 }
 
-/* ComfyUI 运行方式切换:本地=服务地址,Comfy Cloud=云端 Key */
+/* ComfyUI 运行方式切换:本地=服务地址,Comfy Cloud=云端 Key,RunningHub=RH Key+云端工作流收藏 */
 function comfyModeUI(kind){
-  const cloud=$(`#${kind}-comfy-mode`).value==='cloud';
-  $(`#${kind}-comfy-url-row`).style.display=cloud?'none':'';
+  const m=$(`#${kind}-comfy-mode`).value;
+  const cloud=m==='cloud',rh=m==='rh_cn'||m==='rh_ai';
+  $(`#${kind}-comfy-url-row`).style.display=(cloud||rh)?'none':'';
   $(`#${kind}-comfy-cloudkey-row`).style.display=cloud?'':'none';
-  $(`#${kind}-comfy-hint-local`).style.display=cloud?'none':'';
+  $(`#${kind}-comfy-rhkey-cn-row`).style.display=m==='rh_cn'?'':'none';
+  $(`#${kind}-comfy-rhkey-ai-row`).style.display=m==='rh_ai'?'':'none';
+  $(`#${kind}-comfy-rhwf-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhadd-row`).style.display=rh?'':'none';
+  const ck=$(`#${kind}-comfy-ckpt-row`);if(ck)ck.style.display=rh?'none':'';   // 数字人面板无 checkpoint 行
+  $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
+  $(`#${kind}-comfy-rhinst-row`).style.display=rh?'':'none';
+  $(`#${kind}-comfy-rhinst-hint`).style.display=rh?'':'none';
+  if(kind==='image'){
+    $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
+    $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
+  }
+  $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
-}
-
-/* RunningHub 站点切换:.cn/.ai 账号与 Key 不互通,按站点显示 Key 输入框/说明,并按站点过滤收藏 */
-function rhSiteUI(kind){
-  const ai=rhSite(kind)==='rh_ai';
-  $(`#${kind}-rh-key-cn-row`).style.display=ai?'none':'';
-  $(`#${kind}-rh-key-ai-row`).style.display=ai?'':'none';
-  $(`#${kind}-rh-hint-cn`).style.display=ai?'none':'';
-  $(`#${kind}-rh-hint-ai`).style.display=ai?'':'none';
-  fillRhWfSelect(kind,`${kind}-rh-wf`,$(`#${kind}-rh-wf`).value);
-  if(kind==='image')fillRhWfSelect('image','image-rh-refwf',$('#image-rh-refwf').value);
+  $(`#${kind}-comfy-hint-rh-cn`).style.display=m==='rh_cn'?'':'none';
+  $(`#${kind}-comfy-hint-rh-ai`).style.display=m==='rh_ai'?'':'none';
+  const ex=$(`#${kind}-comfy-hint-extra`);if(ex)ex.style.display=rh?'none':'';
+  // 收藏按站点过滤(.cn/.ai 账号不互通),切换运行方式后重建下拉
+  if(rh){
+    fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
+    if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  }
 }
 
 /* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
 let RH_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[]};
 
 function fillRhWfSelect(kind,id,value){
-  // 收藏按站点过滤(.cn/.ai 不互通);无 site 字段的旧收藏两站均显示
-  const site=rhSite(kind);
+  const mode=$(`#${kind}-comfy-mode`).value;
+  // 仅 RunningHub 模式按站点过滤(.cn/.ai 不互通);其他模式保留全部选项,
+  // 避免隐藏状态下保存把已选工作流 ID 意外清空
+  const site=(mode==='rh_cn'||mode==='rh_ai')?mode:null;
   const sel=$('#'+id);sel.innerHTML='';
   sel.appendChild(el('option',{value:'',textContent:t('(未选择)')}));
-  (RH_WFS[kind]||[]).filter(w=>!w.site||w.site===site).forEach(w=>
+  (RH_WFS[kind]||[]).filter(w=>!site||!w.site||w.site===site).forEach(w=>
     sel.appendChild(el('option',{value:String(w.id),
       textContent:(w.note?w.note+' · ':'')+w.id})));
   sel.value=value&&[...sel.options].some(o=>o.value===String(value))?String(value):'';
 }
 
 async function rhAddWf(kind){
-  const st=$(`#${kind}-rh-status`);
-  const mode=rhSite(kind);
-  const input=$(`#${kind}-rh-add`).value.trim();
+  const st=$(`#${kind}-comfy-status`);
+  const mode=$(`#${kind}-comfy-mode`).value;
+  const input=$(`#${kind}-comfy-rhadd`).value.trim();
   if(!input){st.className='status err';st.textContent='✗ '+t('请先填写工作流 ID 或页面链接');return}
   st.className='status';st.textContent=t('验证中…');
   const r=await api('/api/v1/providers/runninghub/workflow',{
@@ -816,12 +808,12 @@ async function rhAddWf(kind){
     if(!audioToken)auto.push('LoadAudio#'+auds[0]);
     dhBinding=auto.length?' · 自动绑定 '+auto.join(' / '):' · 使用占位符绑定';
   }
-  const note=$(`#${kind}-rh-note`).value.trim();
+  const note=$(`#${kind}-comfy-rhnote`).value.trim();
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
   RH_WFS[kind].push({id:r.id,note,site:mode});
-  fillRhWfSelect(kind,`${kind}-rh-wf`,r.id);
-  if(kind==='image')fillRhWfSelect('image','image-rh-refwf',$('#image-rh-refwf').value);
-  $(`#${kind}-rh-add`).value='';$(`#${kind}-rh-note`).value='';
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,r.id);
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  $(`#${kind}-comfy-rhadd`).value='';$(`#${kind}-comfy-rhnote`).value='';
   st.className='status ok';
   st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
     +dhBinding+(kind==='digitalhuman'?'':(r.tokens?.length
@@ -830,11 +822,11 @@ async function rhAddWf(kind){
 }
 
 function rhRemoveWf(kind){
-  const sel=$(`#${kind}-rh-wf`);const v=sel.value;if(!v)return;
-  const mode=rhSite(kind);
+  const sel=$(`#${kind}-comfy-rhwf`);const v=sel.value;if(!v)return;
+  const mode=$(`#${kind}-comfy-mode`).value;
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
-  fillRhWfSelect(kind,`${kind}-rh-wf`,'');
-  if(kind==='image')fillRhWfSelect('image','image-rh-refwf',$('#image-rh-refwf').value);
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -1011,7 +1003,7 @@ function showPanel(kind,p){
 
 function showDigitalHumanPanel(provider){
   DH_PROVIDER=provider;
-  const labels={heygen:'HeyGen',klingai:'Kling AI',runninghub:'RunningHub',comfyui:'ComfyUI'};
+  const labels={heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
   Object.keys(labels).forEach(p=>{
     const tab=$(`#tab-dh-${p}`);
     tab.classList.toggle('active',p===provider);
@@ -1019,29 +1011,29 @@ function showDigitalHumanPanel(provider){
     $(`#panel-dh-${p}`).classList.toggle('show',p===provider);
   });
 }
-['heygen','klingai','runninghub','comfyui'].forEach(p=>{
+['heygen','klingai','comfyui'].forEach(p=>{
   $(`#tab-dh-${p}`).onclick=()=>showDigitalHumanPanel(p);
 });
 
 async function testDigitalHuman(provider){
-  const st=provider==='runninghub'?$('#digitalhuman-rh-status'):$(`#dh-${provider}-status`);
-  st.className='status';st.textContent=['comfyui','runninghub'].includes(provider)?'连接中…':'验证中…';
+  const st=provider==='comfyui'?$('#digitalhuman-comfy-status'):$(`#dh-${provider}-status`);
+  st.className='status';st.textContent=provider==='comfyui'?'连接中…':'验证中…';
   const body={provider};
   if(provider==='heygen')body.api_key=$('#dh-heygen-key').value.trim();
   if(provider==='klingai')body.api_key=$('#dh-kling-key').value.trim();
-  if(provider==='runninghub'){
-    body.mode=rhSite('digitalhuman');
-    body.api_key=rhKey('digitalhuman');
-  }
   if(provider==='comfyui'){
-    body.url=$('#dh-comfy-url').value.trim();
-    body.workflow=pickWf('dh-comfy-workflow');
+    // 按运行方式:本地=服务地址,Comfy Cloud=云端 Key,RunningHub=站点 Key(只验 Key/余额)
+    const mode=$('#digitalhuman-comfy-mode').value;
+    body.mode=mode;
+    body.url=$('#digitalhuman-comfy-url').value.trim();
+    body.api_key=mode==='cloud'?$('#digitalhuman-comfy-cloudkey').value.trim():rhKey('digitalhuman');
+    body.workflow=pickWf('digitalhuman-comfy-wf');
   }
   const r=await api('/api/v1/providers/digital-human/test',body)
     .catch(e=>({ok:false,error:e.message}));
   st.className='status '+(r.ok?'ok':'err');
   if(!r.ok){st.textContent='✗ '+(r.error||t('验证失败'));return}
-  if(provider==='runninghub'){
+  if(provider==='comfyui'&&r.runninghub){
     st.textContent=I18N.f('✓ 账户 Key 有效 · 余额 {c} RH 币 · 运行中任务 {n} · 素材上传在生成时校验',
       {c:r.remain_coins??'?',n:r.current_tasks??'?'});
   }else if(provider==='comfyui'){
@@ -1140,6 +1132,13 @@ let VOLC_LIB=[];  // 最近一次拉取的音色库(试听/设默认时按下标
 let VOLC_AUDIO=null;
 const volcVoiceLabel=v=>[v.name,v.gender,v.age,...(v.labels||[]).slice(0,2),
   (v.languages||[]).join('/'),v.voice_type].filter(Boolean).join(' · ');
+/* 火山 TTS 模型档 UI 联动:seed-audio-1.0=描述定制嗓音,音色相关选项整体隐藏 */
+function volcTtsModeUI(){
+  const m=$('#tts-volc-model');if(!m)return;
+  const desc=m.value==='seed-audio-1.0';
+  const w=$('#tts-volc-voicewrap');if(w)w.style.display=desc?'none':'';
+  const h=$('#tts-volc-descmode-hint');if(h)h.style.display=desc?'':'none';
+}
 function volcStatus(msg,ok){const st=$('#tts-volc-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
 function volcRenderLib(){
   const kw=$('#tts-volc-search').value.trim().toLowerCase();
@@ -1217,6 +1216,30 @@ function mmSetDefault(){
 }
 
 /* ---------- 装载 / 收集 ---------- */
+/* ComfyUI 段回填(图像/视频/音乐/TTS/数字人同构):运行方式、本地地址、Comfy Cloud Key、
+   RunningHub 两站 Key/收藏/运行模式、工作流下拉 */
+function loadComfyForm(kind,cc){
+  $(`#${kind}-comfy-mode`).value=['local','cloud','rh_cn','rh_ai'].includes(cc.mode)?cc.mode:'local';
+  $(`#${kind}-comfy-cloudkey`).value=cc.cloud_api_key||'';
+  // 两站 Key 分别保存;旧版单一 rh_api_key 兜底填入两侧(旧行为即两站同 Key)
+  $(`#${kind}-comfy-rhkey-cn`).value=cc.rh_api_key_cn||cc.rh_api_key||'';
+  $(`#${kind}-comfy-rhkey-ai`).value=cc.rh_api_key_ai||cc.rh_api_key||'';
+  RH_WFS[kind]=Array.isArray(cc.rh_workflows)?cc.rh_workflows.slice():[];
+  comfyModeUI(kind);
+  fillRhWfSelect(kind,`${kind}-comfy-rhwf`,cc.rh_workflow_id||'');
+  $(`#${kind}-comfy-rhinst`).value=['standard','plus','ultra'].includes(cc.rh_instance_type)
+    ?cc.rh_instance_type:'standard';
+  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',cc.rh_ref_workflow_id||'');
+  $(`#${kind}-comfy-url`).value=cc.url||'';
+  fillWfSelect(`${kind}-comfy-wf`,kind,cc.workflow||'');
+  if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',cc.ref_workflow||'');
+  const sel=$(`#${kind}-comfy-ckpt`);
+  if(sel&&cc.checkpoint){
+    sel.appendChild(el('option',{value:cc.checkpoint,textContent:cc.checkpoint}));
+    sel.value=cc.checkpoint;
+  }
+}
+
 function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
     const c=CFG[kind];
@@ -1253,33 +1276,7 @@ function loadIntoForm(){
       if(kind==='music')$('#music-mm-instr').checked=c.minimax.force_instrumental!==false;
       if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
-    if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui){
-      // mode 为 rh_cn/rh_ai 时生效的是 RunningHub 标签页;ComfyUI 页的本地/云端选择
-      // 与 RunningHub 页的站点各自用影子字段(comfy_mode/rh_site)记忆,互不覆盖
-      const rh=RH_SITES.includes(c.comfyui.mode);
-      const cm=rh?c.comfyui.comfy_mode:c.comfyui.mode;
-      $(`#${kind}-comfy-mode`).value=['local','cloud'].includes(cm)?cm:'local';
-      const site=rh?c.comfyui.mode:c.comfyui.rh_site;
-      $(`#${kind}-rh-site`).value=RH_SITES.includes(site)?site:'rh_cn';
-      $(`#${kind}-comfy-cloudkey`).value=c.comfyui.cloud_api_key||'';
-      // 两站 Key 分别保存;旧版单一 rh_api_key 兜底填入两侧(旧行为即两站同 Key)
-      $(`#${kind}-rh-key-cn`).value=c.comfyui.rh_api_key_cn||c.comfyui.rh_api_key||'';
-      $(`#${kind}-rh-key-ai`).value=c.comfyui.rh_api_key_ai||c.comfyui.rh_api_key||'';
-      RH_WFS[kind]=Array.isArray(c.comfyui.rh_workflows)?c.comfyui.rh_workflows.slice():[];
-      comfyModeUI(kind);rhSiteUI(kind);
-      fillRhWfSelect(kind,`${kind}-rh-wf`,c.comfyui.rh_workflow_id||'');
-      $(`#${kind}-rh-inst`).value=['standard','plus','ultra'].includes(c.comfyui.rh_instance_type)
-        ?c.comfyui.rh_instance_type:'standard';
-      if(kind==='image')fillRhWfSelect('image','image-rh-refwf',c.comfyui.rh_ref_workflow_id||'');
-      $(`#${kind}-comfy-url`).value=c.comfyui.url||'';
-      fillWfSelect(`${kind}-comfy-wf`,kind,c.comfyui.workflow||'');
-      if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',c.comfyui.ref_workflow||'');
-      if(c.comfyui.checkpoint){
-        const sel=$(`#${kind}-comfy-ckpt`);
-        sel.appendChild(el('option',{value:c.comfyui.checkpoint,textContent:c.comfyui.checkpoint}));
-        sel.value=c.comfyui.checkpoint;
-      }
-    }
+    if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui)loadComfyForm(kind,c.comfyui);
     if(kind==='music'){
       const elm=c.elevenlabs||{};
       $('#music-el-key').value=elm.api_key||'';
@@ -1289,37 +1286,28 @@ function loadIntoForm(){
     if(kind==='tts'){
       $('#tts-or-voice').value=c.openrouter.voice||'eve';
       $('#tts-volc-voice').value=c.volcengine?.voice||'';
+      volcTtsModeUI();
       const elc=c.elevenlabs||{};
       $('#tts-el-key').value=elc.api_key||'';
       fillSelect($('#tts-el-model'),EL_TTS_MODELS,elc.model,elc.custom_model);
       fillSelect($('#tts-el-voice'),elc.voice?[[elc.voice,elc.voice]]:[],elc.voice,'');
     }
-    let eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
-    // 存储口径 provider=comfyui + mode=rh_* ⇒ 界面生效标签页为 RunningHub
-    if(eff==='comfyui'&&RH_SITES.includes(c.comfyui?.mode))eff='runninghub';
+    const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
     showPanel(kind,eff);
     loadOpenRouterModels(kind);
   }
-  const dh=CFG.digital_human||{},hg=dh.heygen||{},kl=dh.klingai||{},
-    rh=dh.runninghub||{},co=dh.comfyui||{};
+  const dh=CFG.digital_human||{},hg=dh.heygen||{},kl=dh.klingai||{},co=dh.comfyui||{};
   $('#dh-heygen-key').value=hg.api_key||'';
   $('#dh-heygen-resolution').value=hg.resolution||'720p';
   $('#dh-heygen-aspect').value=hg.aspect_ratio||'16:9';
   $('#dh-kling-key').value=kl.api_key||'';
   $('#dh-kling-mode').value=kl.mode||'std';
-  $('#digitalhuman-rh-site').value=RH_SITES.includes(rh.site)?rh.site:'rh_cn';
-  $('#digitalhuman-rh-key-cn').value=rh.api_key_cn||'';
-  $('#digitalhuman-rh-key-ai').value=rh.api_key_ai||'';
-  RH_WFS.digitalhuman=Array.isArray(rh.workflows)?rh.workflows.slice():[];
-  rhSiteUI('digitalhuman');
-  fillRhWfSelect('digitalhuman','digitalhuman-rh-wf',rh.workflow_id||'');
-  $('#digitalhuman-rh-inst').value=['standard','plus','ultra'].includes(rh.instance_type)
-    ?rh.instance_type:'standard';
-  $('#dh-comfy-url').value=co.url||'http://127.0.0.1:8188';
-  fillWfSelect('dh-comfy-workflow','digitalhuman',
-    co.workflow||'comfy/digitalhuman-infinitetalk-api.json');
-  showDigitalHumanPanel(['heygen','klingai','runninghub','comfyui'].includes(dh.provider)
-    ?dh.provider:'heygen');
+  // 数字人 ComfyUI 段与图像/视频等段同口径(mode 本地/云端/RunningHub 站点 + rh_* 字段);
+  // 旧版独立 runninghub 段由后端 load_genconfig 迁移为 comfyui+mode=站点
+  loadComfyForm('digitalhuman',{...co,url:co.url||'http://127.0.0.1:8188',
+    workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
+  showDigitalHumanPanel(['heygen','klingai','comfyui'].includes(dh.provider)?dh.provider
+    :dh.provider==='runninghub'?'comfyui':'heygen');
   const da=CFG.deepagents||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
   $('#da-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
   $('#da-key').value=lo.api_key||'';
@@ -1340,30 +1328,30 @@ function pickModel(selId,customId){
   return{model:v,custom_model:''};
 }
 
+/* ComfyUI 段通用字段(图像/视频/音乐/TTS/数字人同构;kind 专属字段由调用方追加) */
+function collectComfy(kind){
+  return {mode:$(`#${kind}-comfy-mode`).value,
+          cloud_api_key:$(`#${kind}-comfy-cloudkey`).value.trim(),
+          url:$(`#${kind}-comfy-url`).value.trim(),
+          workflow:pickWf(`${kind}-comfy-wf`),
+          ...($(`#${kind}-comfy-ckpt`)?{checkpoint:$(`#${kind}-comfy-ckpt`).value}:{}),
+          rh_api_key_cn:$(`#${kind}-comfy-rhkey-cn`).value.trim(),
+          rh_api_key_ai:$(`#${kind}-comfy-rhkey-ai`).value.trim(),
+          rh_workflow_id:$(`#${kind}-comfy-rhwf`).value,
+          rh_workflows:RH_WFS[kind]||[],
+          rh_instance_type:$(`#${kind}-comfy-rhinst`).value||'standard'};
+}
+
 function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
     const c={openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
-    // RunningHub 标签页选中 ⇒ 存储为 provider=comfyui + mode=站点(后端口径不变);
-    // comfy_mode/rh_site 为两个标签页各自选择的影子记忆
-    const rhSel=SEL_PROVIDER[kind]==='runninghub';
     if(SECTIONS[kind].providers.includes('comfyui'))
-      c.comfyui={mode:rhSel?rhSite(kind):$(`#${kind}-comfy-mode`).value,
-               comfy_mode:$(`#${kind}-comfy-mode`).value,
-               rh_site:rhSite(kind),
-               cloud_api_key:$(`#${kind}-comfy-cloudkey`).value.trim(),
-               url:$(`#${kind}-comfy-url`).value.trim(),
-               workflow:pickWf(`${kind}-comfy-wf`),
-               checkpoint:$(`#${kind}-comfy-ckpt`).value,
-               rh_api_key_cn:$(`#${kind}-rh-key-cn`).value.trim(),
-               rh_api_key_ai:$(`#${kind}-rh-key-ai`).value.trim(),
-               rh_workflow_id:$(`#${kind}-rh-wf`).value,
-               rh_workflows:RH_WFS[kind]||[],
-               rh_instance_type:$(`#${kind}-rh-inst`).value||'standard',
+      c.comfyui={...collectComfy(kind),
                ...(kind==='image'?{
                  ref_workflow:pickWf('image-comfy-ref-wf'),
-                 rh_ref_workflow_id:$('#image-rh-refwf').value,
+                 rh_ref_workflow_id:$('#image-comfy-rhrefwf').value,
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',
@@ -1399,8 +1387,8 @@ function collect(){
         ...pickModel('#tts-el-model','#tts-el-custom'),
         voice:ev===CUSTOM?$('#tts-el-voice-custom').value.trim():ev};
     }
-    // 生效渠道 = 当前选中的标签页(✅);RunningHub 页存储为 comfyui(mode 已置为站点)
-    c.provider=rhSel?'comfyui':SEL_PROVIDER[kind];
+    // 生效渠道 = 当前选中的标签页(✅)
+    c.provider=SEL_PROVIDER[kind];
     out[kind]=c;
   }
   out.digital_human={provider:DH_PROVIDER,
@@ -1408,14 +1396,7 @@ function collect(){
       resolution:$('#dh-heygen-resolution').value,
       aspect_ratio:$('#dh-heygen-aspect').value},
     klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
-    runninghub:{site:rhSite('digitalhuman'),
-      api_key_cn:$('#digitalhuman-rh-key-cn').value.trim(),
-      api_key_ai:$('#digitalhuman-rh-key-ai').value.trim(),
-      workflow_id:$('#digitalhuman-rh-wf').value,
-      workflows:RH_WFS.digitalhuman||[],
-      instance_type:$('#digitalhuman-rh-inst').value||'standard'},
-    comfyui:{mode:'local',url:$('#dh-comfy-url').value.trim(),
-      workflow:pickWf('dh-comfy-workflow')}};
+    comfyui:collectComfy('digitalhuman')};
   // 生效渠道 = 当前选中的标签页(本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     local:{base_url:$('#da-url').value.trim(),
@@ -1460,8 +1441,9 @@ $('#save').onclick=async()=>{
 /* ---------- 初始化 ---------- */
 (async()=>{
   buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();
-  $('#dh-comfy-workflow-row').appendChild(
-    wfRow('digitalhuman','dh-comfy-workflow','InfiniteTalk 工作流'));
+  // 数字人 ComfyUI 面板与图像/视频等段同构(运行方式 本地/Comfy Cloud/RunningHub),复用 buildPanel
+  const dhPanel=buildPanel('digitalhuman','comfyui');dhPanel.id='panel-dh-comfyui';
+  $('#panel-dh-comfyui').replaceWith(dhPanel);
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),

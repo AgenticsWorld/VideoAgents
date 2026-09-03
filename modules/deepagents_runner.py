@@ -3,7 +3,7 @@
 
 由 services/runtime/core.py 以子进程方式调用(解释器由 DEEPAGENTS_PY 指定):
   runner --model <id> --base-url <url> --api-key <key>
-         [--checkpoint-db <sqlite>] [--thread-id <id>]
+         [--checkpoint-db <sqlite>] [--thread-id <id>] [--reasoning-effort <level>]
   系统提示词与工作指令经环境变量 DA_SYSTEM / DA_PROMPT 传入(避免超长 argv)。
   --checkpoint-db 给出时启用 LangGraph SqliteSaver 会话续接(Agent记忆):
   消息历史(含工具结果)按 thread_id 持久化;--thread-id 缺省则新开会话并生成 id。
@@ -257,6 +257,9 @@ def main():
     )
     ap.add_argument("--checkpoint-db", default=None)
     ap.add_argument("--thread-id", default=None)
+    # 思考深度(设置菜单「Agent 高级设置→思考深度」):以 OpenAI 兼容的 reasoning_effort
+    # 字段透传给端点;core.py 仅对云端/OpenRouter 渠道传入,本地端点不传
+    ap.add_argument("--reasoning-effort", default=None)
     args = ap.parse_args()
 
     workspace, project_root = runtime_paths()
@@ -319,6 +322,7 @@ def main():
         timeout=600,
         max_retries=1,
         max_completion_tokens=args.max_output_tokens,
+        **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
         profile={
             "max_input_tokens": max_input_tokens,
             "max_output_tokens": args.max_output_tokens,

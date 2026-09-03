@@ -28,6 +28,7 @@
   - audio-mixing 铺轨前、10-editing/edit 封装前:只检模式,FAIL 即停手上报 orchestrator
     (指纹失配 = shot_list 已改版,须回派 narrator 重签/重合成,严禁按旧轨继续)。
 退出码:全 PASS=0,任一 FAIL=1。
+项目「📤 输出设置」旁白开关(output.narration_enabled)关闭时整体跳过(skipped: narration off,退出码 0)。
 """
 import hashlib
 import json
@@ -35,7 +36,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
-from _common import parse_args
+from _common import narration_enabled, parse_args
 
 WINDOW_FACTOR = 0.9          # §7D ②:实测时长 ≤ 窗口×0.9
 GRP_RE = re.compile(r"grp\d{3}")
@@ -71,6 +72,10 @@ def main():
         ap.add_argument("--track", default=None, help="显式指定 narration_track/manifest 路径")
 
     args, proj = parse_args(__doc__, configure=configure)
+    if not narration_enabled(proj):
+        print(f"[narration_sync] {args.project}: skipped: narration off"
+              "(项目输出设置「旁白」已关闭,全片无旁白,无轨可同步)-> PASS")
+        sys.exit(0)
     ep = args.ep
     checks: list[tuple[str, bool]] = []
 

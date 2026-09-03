@@ -34,6 +34,18 @@ button{background:var(--panel2);color:var(--text);border:1px solid var(--border)
 button:hover{border-color:var(--accent)}
 header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
 header select:hover{border-color:var(--accent)}
+header .ps-info{font-size:12.5px;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--panel2);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+header .ps-info b{color:var(--text);font-weight:600}
+header .ps-info.warn{border-color:var(--yellow,#d4a72c)}
+.grp>.ghead .gsov{color:var(--accent,#1d6f7a);font-weight:600}
+#gs-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#gs-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:560px;max-width:92vw}
+#gs-modal .row{display:flex;align-items:center;gap:10px;margin:12px 0}
+#gs-modal .row label{flex:none;width:96px;color:var(--dim);font-size:12.5px}
+#gs-modal select{flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+#gs-modal .hint{color:var(--dim);font-size:12px;line-height:1.6;min-height:18px}
+#gs-modal .hint.warn{color:var(--yellow,#d4a72c)}
+#gs-modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 #eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
 #eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
@@ -83,7 +95,18 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .shot .content{margin:6px 0 4px}
 .shot .dlg{color:var(--yellow);font-size:13px;margin:4px 0}
+.shot .dlg b{font-weight:600;margin-right:2px}
+.shot .dlg-unresolved{color:var(--muted,#888)}
+.shot .dlg-unresolved .ref{font-family:monospace}
 .shot .cam{color:var(--dim);font-size:12.5px}
+.shot .cam .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
+.shot .cam-toggle{cursor:pointer;user-select:none}
+.shot .camframes{margin:4px 0 6px 18px;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-size:12.5px;line-height:1.5;white-space:pre-wrap}
+.shot .camframes b{font-weight:600;margin-right:2px}
+.grp>.gcast{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--panel);padding:0 12px 8px}
+.grp>.gcast .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
+.grp>.glight{color:var(--dim);font-size:12.5px;padding:4px 12px 6px;background:var(--panel);border-top:1px solid var(--border)}
+.grp>.glight .sub{color:var(--muted,#888);font-size:11px;margin-left:4px}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
 .grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:hidden}
@@ -91,9 +114,12 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.ghead .gid{font-weight:600;color:var(--purple)}
 .grp>.ghead .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.ghead .link{font-size:11px;color:var(--dim)}
+.grp>.ghead .trchip,.grp>.ghead .nbchip{color:var(--accent,#1d6f7a);font-weight:600}
 .grp>.gmedia{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--border)}
 .grp>.gmedia .anchors{display:flex;gap:8px;flex-wrap:wrap}
 .grp>.gmedia .anchors img{height:120px;border-radius:6px;cursor:zoom-in;display:block}
+.grp>.gmedia .anchors .refph{height:120px;width:150px;box-sizing:border-box;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dim);font-size:11px;text-align:center;padding:6px;cursor:help}
+.grp>.gmedia .anchors .refph .big{font-size:22px}
 .grp>.gmedia video{height:210px;border-radius:6px;background:#000;display:block}
 .grp>.gmedia .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
 .grp>.gmedia .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
@@ -188,6 +214,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
+  <span id="ps-info" class="ps-info" title="当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)" style="display:none"></span>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -203,6 +230,15 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <textarea id="gn-text" placeholder="例:整组节奏放慢;福瓦德全程不看镜头;钱袋始终在画面左下角可见"></textarea>
   <div class="err" id="gn-err" style="color:var(--red);font-size:12px"></div>
   <div class="actions"><button id="gn-cancel">取消</button><button id="gn-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
+</div></div>
+<div id="gs-modal"><div class="box">
+  <h3>🎛 组视频模型 — <span id="gs-grp" style="color:var(--purple)"></span></h3>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效</div>
+  <div class="row"><label>视频模型</label><select id="gs-model"></select></div>
+  <div class="row"><label>提示词技能</label><select id="gs-skill"></select></div>
+  <div class="hint" id="gs-hint"></div>
+  <div class="err" id="gs-err" style="color:var(--red);font-size:12px"></div>
+  <div class="actions"><button id="gs-cancel">取消</button><button id="gs-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">保存</button></div>
 </div></div>
 <div id="cp-modal"><div class="box">
   <h3>✨ 组花字设计 — <span id="cp-grp" style="color:var(--purple)"></span></h3>
@@ -225,6 +261,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
     <button data-cat="props">🗡 道具</button>
+    <button data-cat="creatures">🐎 生物</button>
     <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
@@ -336,14 +373,17 @@ $('#gn-ok').onclick=async()=>{
 };
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
-let AR_MAX=9;   // 每组参考图上限:项目「分镜组设置」max_ref_images(打开弹窗时拉取,回落 9=Seedance 2.0 口径)
-let AR_MAX_LOADED=false;
+// 每组参考图上限展示值:本组生效上限(组级覆盖模型的硬限,否则项目「视频模型设置」),随预览数据 refs_cap 取;
+// 2026-08-30 起不再按它硬拦添加——按实际需要加,超限由组卡黄条提示、用户决定「🎛 模型」换模型或删图;
+// 只以任何模型的极值 AR_HARD=30 兜底(与服务端 REF_CAP_HARD_MAX 同口径)
+let AR_MAX=9;
+const AR_HARD=30;
 async function arLoadMax(proj){
-  if(AR_MAX_LOADED)return;
+  const g=(LAST_DATA&&LAST_DATA.generation_groups||[]).find(x=>x.group_id===AR_GRP);
+  if(g&&Number.isInteger(g.refs_cap)){AR_MAX=g.refs_cap;return}
   try{
-    const g=(await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/config')).json()).shot_group||{};
-    if(Number.isInteger(g.max_ref_images))AR_MAX=g.max_ref_images;
-    AR_MAX_LOADED=true;
+    const sg=(await(await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/config')).json()).shot_group||{};
+    if(Number.isInteger(sg.max_ref_images))AR_MAX=sg.max_ref_images;
   }catch(_){}
 }
 let AR_GRP='',AR_CAT='characters',AR_SEL='',AR_REFS=[],AR_NOTES=[],AR_CACHE={},AR_GEN=false;
@@ -425,11 +465,11 @@ $('#ar-cur').addEventListener('click',async e=>{
 });
 function arCount(){
   const el=$('#ar-count');
-  el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX});
+  el.textContent=I18N.f('参考图 {n}/{m}',{n:AR_REFS.length,m:AR_MAX})+(AR_REFS.length>AR_MAX?' '+t('(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)'):'');
   el.style.color=AR_REFS.length>=AR_MAX?'var(--red)':'var(--dim)';
   arOkState();
 }
-function arOkState(){$('#ar-ok').disabled=!AR_SEL||AR_REFS.length>=AR_MAX}
+function arOkState(){$('#ar-ok').disabled=!AR_SEL||AR_REFS.length>=AR_HARD}
 async function arLoadCat(cat){
   AR_CAT=cat;AR_SEL='';arOkState();
   document.querySelectorAll('#ar-cats button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
@@ -441,7 +481,7 @@ async function arLoadCat(cat){
       const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
       if(!r.ok)throw new Error((await r.json()).detail||r.status);
       const d=await r.json();
-      AR_CACHE[cat]=(d.characters||d.scenes||d.props||[]).filter(a=>(a.images||[]).length);
+      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[]).filter(a=>(a.images||[]).length);
     }
     const list=AR_CACHE[cat];
     if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
@@ -471,7 +511,7 @@ $('#ar-imgs').addEventListener('click',e=>{
 $('#ar-imgs').addEventListener('dblclick',e=>{const im=e.target.closest('.cell img');if(im)zoom(im.src)});
 $('#ar-cancel').onclick=()=>$('#ar-modal').style.display='none';
 $('#ar-ok').onclick=async()=>{
-  if(!AR_SEL||AR_REFS.length>=AR_MAX)return;
+  if(!AR_SEL||AR_REFS.length>=AR_HARD)return;
   arMsg('');
   $('#ar-ok').disabled=true;
   const proj=$('#project').value.trim()||'demo';
@@ -490,13 +530,13 @@ $('#ar-ok').onclick=async()=>{
 };
 // 🎨 手绘参考图:弹窗内发起手绘会话(基于线稿+已有参考图+项目风格生成成图入 refs)
 $('#ar-sketch').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
+  if(AR_REFS.length>=AR_HARD){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_HARD}));return}
   if(AR_GEN){arMsg(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'),true);return}
   openSketch(AR_GRP);
 };
 // ⬆ 本地上传:文件原始字节直传(与参考图页上传同法),落盘 assets/uploads/<ep>/<grp>/ 并直接加入 refs
 $('#ar-up').onclick=()=>{
-  if(AR_REFS.length>=AR_MAX){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_MAX}));return}
+  if(AR_REFS.length>=AR_HARD){arMsg(I18N.f('参考图已满({m} 张),不能再添加',{m:AR_HARD}));return}
   $('#ar-file').click();
 };
 $('#ar-file').onchange=async()=>{
@@ -645,6 +685,8 @@ document.addEventListener('click',async e=>{
   if(cb)return openCaption(cb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
   if(gb)return openNote(gb.dataset.grp);
+  const gsb=e.target.closest('.gsbtn');
+  if(gsb)return openGroupSettings(gsb.dataset.grp);
   const ud=e.target.closest('.urdel');
   if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
     if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref:ud.dataset.ref})))return;
@@ -678,9 +720,86 @@ try{
       if(ev.project!==($('#project').value.trim()||'demo'))return;
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
+      else if(ev.type==='prompt_skill'||ev.type==='group_settings')load(true);
     }catch(_){}
   };
 }catch(_){}
+
+// 🎬 右上角:当前全局视频模型 + 提示词技能(只读展示,2026-08-30;改动去控制台「生成模型」/「视频模型设置」,
+// 个别组用组卡「🎛 模型」单独指定)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
+function psRender(d){
+  const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{};
+  if(!vm.provider){el.style.display='none';return}
+  const modeTxt=ps.mode==='off'?t('跳过'):ps.mode==='manual'?t('手选'):t('自动');
+  const skill=ps.skill_id?(ps.dir||ps.skill_id):t('无对应技能');
+  el.innerHTML='🎬 '+t('视频模型:')+'<b>'+esc(vm.label||vm.model||'—')+'</b> <span style="opacity:.7">('+esc(vm.provider)+')</span>'
+    +' · 🧰 '+t('技能:')+'<b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
+  el.classList.toggle('warn',!!ps.warning);
+  el.title=t('当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)')+(ps.warning?'\n⚠️ '+ps.warning:'');
+  el.style.display='';
+}
+
+// 🎛 组级视频模型/提示词技能弹窗(2026-08-30):GET/POST /projects/{p}/storyboard/{ep}/{grp}/settings
+let GS_GRP='',GS_DATA=null;
+function gsHint(){
+  const d=GS_DATA;if(!d)return;
+  const m=$('#gs-model').value,sk=$('#gs-skill').value;
+  const mods=d.models||{},lbl=id=>((mods.candidates||[]).find(c=>c.id===id)||{}).label||id;
+  const model=m||mods.global_model;
+  const cap=/seedance-2[-.]5/i.test(model)?30:/seedance-2/i.test(model)?9:/minimax.*h3|h3.*minimax/i.test(model)?9:d.project_ref_cap;
+  let sTxt;
+  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')})+(m?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
+  else if(sk==='auto')sTxt=t('按本组模型自动解析');
+  else if(sk==='off')sTxt=t('不套用技能');
+  else sTxt=sk.slice(7).split('/').pop();
+  const w=(d.resolved||{}).warning;
+  $('#gs-hint').textContent=I18N.f('生效:{model} · 参考图上限 {cap} 张 · 技能 {skill}',{model:lbl(model),cap,skill:sTxt})+(w?'\n⚠️ '+w:'');
+  $('#gs-hint').classList.toggle('warn',!!w);
+}
+async function openGroupSettings(grp){
+  GS_GRP=grp;GS_DATA=null;
+  $('#gs-grp').textContent=grp;$('#gs-err').textContent='';$('#gs-hint').textContent=t('加载中…');
+  $('#gs-model').innerHTML='';$('#gs-skill').innerHTML='';
+  $('#gs-modal').style.display='flex';
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'/settings?v='+Date.now());
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    GS_DATA=d;
+    const add=(sel,v,label)=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)};
+    const ms=$('#gs-model'),mods=d.models||{};
+    add(ms,'',I18N.f('跟随全局:{m}',{m:mods.global_label||mods.global_model||'—'}));
+    (mods.candidates||[]).filter(c=>c.id!==mods.global_model).forEach(c=>add(ms,c.id,c.label));
+    ms.disabled=!mods.overridable;
+    ms.value=(d.config||{}).video_model||'';if(!ms.value&&ms.value!=='')ms.value='';
+    const ss=$('#gs-skill'),cfg=(d.config||{}).prompt_skill||{};
+    add(ss,'global',I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')}));
+    add(ss,'auto',t('自动(按本组视频模型解析)'));
+    (d.skills||[]).forEach(c=>add(ss,'manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
+    add(ss,'off',t('跳过(不套用技能)'));
+    ss.value=cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode||'global');
+    if(!ss.value)ss.value='global';
+    if(!mods.overridable)$('#gs-err').textContent=I18N.f('当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)',{p:mods.provider});
+    gsHint();
+  }catch(e){$('#gs-hint').textContent='';$('#gs-err').textContent=t('加载失败:')+e.message}
+}
+$('#gs-model').onchange=gsHint;$('#gs-skill').onchange=gsHint;
+$('#gs-cancel').onclick=()=>$('#gs-modal').style.display='none';
+$('#gs-ok').onclick=async()=>{
+  const proj=$('#project').value.trim()||'demo';
+  const sk=$('#gs-skill').value||'global';
+  const body={video_model:$('#gs-model').value||'',prompt_skill:sk.startsWith('manual:')?{mode:'manual',skill_id:sk.slice(7)}:{mode:sk}};
+  $('#gs-ok').disabled=true;
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(GS_GRP)+'/settings',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    $('#gs-modal').style.display='none';
+    load(true);
+  }catch(e){$('#gs-err').textContent=t('保存失败:')+e.message}
+  $('#gs-ok').disabled=false;
+};
 
 function renderEps(episodes){
   const box=$('#eps');box.innerHTML='';
@@ -694,6 +813,51 @@ function renderEps(episodes){
   });
 }
 
+// 对白:后端已把 dialogue_refs 编号回 dialogue.md 解析成台词(dialogue_lines);
+// 解析不到正文的只剩编号,灰显编号提示回查 dialogue.md;老数据无 dialogue_lines 时退回 dialogue_ref 原样
+function dlgHtml(s){
+  const ls=s.dialogue_lines||[];
+  if(!ls.length)return s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:'';
+  return ls.map(l=>{
+    const spk=l.speaker_name||l.speaker;
+    if(!l.text)return `<div class="dlg dlg-unresolved" title="${esc(t('dialogue.md 中未找到该编号的台词'))}">💬 <span class="ref">${esc(l.ref||'')}</span></div>`;
+    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
+  }).join('');
+}
+// 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
+// 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
+// 有起幅/落幅时点击运镜行在下方展开明细层(可选中复制),再点收起,默认收起。
+// 混剪等无运镜设计的项目 camera_move 为空,不渲染
+const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
+  pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
+  track:'跟拍',tracking:'跟拍',follow:'跟拍',truck:'横移',truck_left:'横移',truck_right:'横移',dolly:'移动',slide:'横移',
+  crane:'升降',boom:'升降',pedestal:'升降',orbit:'环绕',arc:'环绕',handheld:'手持',zoom_in:'变焦推',zoom_out:'变焦拉',
+  rack_focus:'变焦点',whip_pan:'甩镜',drone:'航拍',aerial:'航拍'};
+function camHtml(s){
+  const c=s.camera_move;if(!c)return '';
+  const k=MOVE_LABEL[String(c.movement||'').toLowerCase().replace(/[\s-]+/g,'_')];
+  const mv=c.label||(k?t(k):'')||c.movement||'';
+  const sub=[c.rig,c.speed_curve].filter(Boolean).join(' · ');
+  if(!mv&&!sub)return '';
+  const head=`🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}`;
+  const frames=[c.start_frame?[t('起幅:'),c.start_frame]:null,c.end_frame?[t('落幅:'),c.end_frame]:null].filter(Boolean);
+  if(!frames.length)return `<div class="cam">${head}</div>`;
+  return `<div class="cam cam-toggle" onclick="const f=this.nextElementSibling;f.hidden=!f.hidden;this.querySelector('.arrow').textContent=f.hidden?'▸':'▾'">${head}<span class="sub arrow">▸</span></div>
+    <div class="camframes" hidden>${frames.map(([lab,v])=>`<div><b>${esc(lab)}</b>${esc(v)}</div>`).join('')}</div>`;
+}
+// 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
+// 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
+const clip1=(x,n)=>{x=String(x||'');return x.length>n?x.slice(0,n)+'…':x};
+function lightHtml(g){
+  const l=g.lighting;if(!l)return '';
+  const parts=[l.time_of_day,...(l.label?[l.label]:[l.key_source,l.direction,l.color_temp,l.contrast])]
+    .filter(Boolean).map(x=>clip1(x,48));
+  const tip=[l.scheme_id?t('光照方案 ')+l.scheme_id:'',l.label?[l.key_source,l.direction,l.color_temp,l.contrast].filter(Boolean).join(' · '):'',
+    l.prompt_fragment||''].filter(Boolean).join('\n');
+  const warn=l.resolved?'':(l.scheme_id?I18N.f('未在场景 lighting.json 找到方案 {id}',{id:l.scheme_id}):t('未钉光照方案'));
+  if(!parts.length&&!warn)return '';
+  return `<div class="glight"${tip?` title="${esc(tip)}"`:''}>💡 ${esc(parts.join(' · '))}${warn?`<span class="sub">${esc(warn)}</span>`:''}</div>`;
+}
 function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
@@ -702,6 +866,7 @@ function shotCard(s,grp){
   const vids=(s.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
   const chars=(s.characters||[]).join('、');
+  const cres=(s.creatures||[]).join('、');
   return `<div class="shot">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
     <div class="info">
@@ -709,10 +874,12 @@ function shotCard(s,grp){
         ${s.duration_s?`<span class="tag">${esc(s.duration_s)}s</span>`:''}
         ${s.size?`<span class="tag">${esc(s.size)}</span>`:''}
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
+        ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
         <button class="editbtn" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发消息给总制片">✏️ 修改</button></div>
       <div class="content">${esc(s.content||'')}</div>
-      ${s.dialogue_ref?`<div class="dlg">💬 ${esc(s.dialogue_ref)}</div>`:''}
+      ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
+      ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
   </div>`;
@@ -729,7 +896,7 @@ async function avSync(){
   const d=LAST_DATA;
   if(!d)return;
   const refs=[...new Set((d.generation_groups||[]).flatMap(g=>
-    [...(g.user_refs||[]),...(g.pipeline_refs||[])].map(k=>k.ref).filter(Boolean)))];
+    [...(g.user_refs||[]),...(g.pipeline_refs||[])].filter(k=>!k.missing).map(k=>k.ref).filter(Boolean)))];
   if(!refs.length)return;
   const proj=$('#project').value.trim()||'demo';
   try{
@@ -753,31 +920,115 @@ async function avSync(){
 // 文件名标签变成链接,点击跳到对应预览页并定位该资产(深链 ?id=)
 const REF_PAGES={characters:['/preview/characters','查看人物预览:'],
                  scenes:['/preview/scenes','查看场景预览:'],
-                 props:['/preview/props','查看道具预览:']};
+                 props:['/preview/props','查看道具预览:'],
+                 creatures:['/preview/creatures','查看生物预览:']};
+// 组链 chip:continuity_from 只是组序(前一组 id,跨场景硬切也有值),是否真传尾帧看 continuity 计划的
+// group_transitions[].anchor(last_frame / none);prompt 已落盘时以 refs 里有无 *.last_frame.png 为准,
+// 与 anchor 不一致打 ⚠(WORKFLOW:continuity_from 有值而 refs 无尾帧属元数据冗余,不算续接边界)
+// 组入口转场 chip(shot_list generation_groups[].transition_in,WORKFLOW §9C,2026-08-28):非硬切才显示;
+// 可渲染 5 种由 Phase 9 code/render_transitions.py 实施,标注型 2 种不渲染只供 continuity/QA 核构图对位。
+// 叙事块 chip(narrative_block):闪回/梦境/蒙太奇/想象段的块 id 与块内位置(入口/中/出口/单组)
+const TR_LABEL={dissolve:'叠化',fade_black:'淡出到黑',fade_white:'淡出到白',dip_black:'黑场',dip_white:'白场',
+                smash_cut:'强调硬切',match_cut:'匹配剪辑',hard_cut:'有意硬切'};
+const TR_INTENT={flashback_in:'进闪回',flashback_out:'出闪回',time_skip:'时间跳跃',scene_change:'换场',montage:'蒙太奇',
+                 dream_in:'进梦境',dream_out:'出梦境',chapter:'章节',episode_open:'集首淡入'};
+const NB_KIND={flashback:'闪回',dream:'梦境',montage:'蒙太奇',imagination:'想象'};
+const NB_ROLE={start:'入口',middle:'中段',end:'出口',single:'单组'};
+const transChip=g=>{
+  const tr=g.transition_in;
+  if(!tr||!tr.type||(tr.type==='hard_cut'&&!tr.reason))return '';
+  const name=t(TR_LABEL[tr.type]||tr.type), dur=tr.duration_s?` ${tr.duration_s}s`:'',
+        intent=TR_INTENT[tr.intent]?' · '+t(TR_INTENT[tr.intent]):'',
+        tip=[tr.reason,tr.source].filter(Boolean).join(' · ');
+  return `<span class="link trchip" title="${esc(tip)}">⟿ ${esc(name)}${esc(dur)}${esc(intent)}</span>`;
+};
+const blockChip=g=>{
+  const nb=g.narrative_block;
+  if(!nb||!nb.id)return '';
+  const kind=t(NB_KIND[nb.kind]||nb.kind||''), role=NB_ROLE[nb.role]?t(NB_ROLE[nb.role]):'';
+  return `<span class="link nbchip" title="${esc(nb.id)}">⏱ ${esc(kind)}${role?' · '+esc(role):''}</span>`;
+};
+const contChip=g=>{
+  if(!g.continuity_from)return '<span class="link">◦ 组链起点</span>';
+  const a=g.continuity_anchor, tail=!!g.tail_ref, from=g.continuity_from;
+  let txt, tip=g.continuity_anchor_reason||'';
+  if(a==='none'&&!(g.has_prompt&&tail))txt=I18N.f('✂ 硬切自 {g}(不传尾帧)',{g:from});
+  else if(a==='last_frame'||tail)txt=I18N.f('⛓ 续接 {g} 尾帧',{g:from});
+  else{txt=I18N.f('⛓ 前组 {g}',{g:from});tip=t('continuity 尚未定尾帧锚(continuity_plan.json group_transitions)');}
+  if(g.has_prompt&&a&&((a==='last_frame')!==tail)){
+    txt+=' ⚠';
+    tip=[tip,I18N.f('prompt refs 与 continuity 锚不一致:锚 {a},refs {r}',{a,r:tail?t('含前组尾帧'):t('无前组尾帧')})].filter(Boolean).join(' · ');
+  }
+  return `<span class="link" title="${esc(tip)}">${esc(txt)}</span>`;
+};
 const refFn=(icon,k)=>{
-  const m=/^assets\/concepts\/(characters|scenes|props)\/([^/]+)\//.exec(k.ref||'');
+  const m=/^assets\/concepts\/(characters|scenes|props|creatures)\/([^/]+)\//.exec(k.ref||'');
   if(!m)return `<span class="fn">${icon} ${esc(k.name)}</span>`;
   const [page,tip]=REF_PAGES[m[1]], proj=$('#project').value.trim()||'demo';
   return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
 };
 
+// 🎛 组级视频模型/提示词技能覆盖 chip(2026-08-30):仅覆盖了的组显示,悬停显完整解析结果
+function gsChip(g){
+  const gs=g.group_settings;if(!gs||!gs.overridden)return '';
+  const parts=[];
+  if(gs.model_source==='group')parts.push('🎬 '+gs.model_label);
+  if(gs.skill_source==='group')parts.push('🧰 '+(gs.skill_dir||t('不套用技能')));
+  const tip=[I18N.f('本组视频模型:{m}({src})',{m:gs.video_model||gs.model_label,src:gs.model_source==='group'?t('组级覆盖'):t('跟随全局')}),
+    I18N.f('本组提示词技能:{s}({mode})',{s:gs.skill_dir||t('不套用'),mode:gs.skill_mode}),gs.warning?'⚠️ '+gs.warning:''].filter(Boolean).join('\n');
+  return `<span class="tag gsov" style="${gs.warning?'color:var(--yellow)':''}" title="${esc(tip)}">🎛 ${esc(parts.join(' · ')||t('组级设定'))}</span>`;
+}
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
-  const chars=(g.characters_union||[]).join('、');
+  // 组角色/服装/生物三类 chip 独占头部下一行 .gcast(2026-08-30,原挤在 .ghead 首行太乱),置于 💡 光照行之上
+  // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
+  // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
+  // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
+  const BM_COLORS=['#e63946','#1d78d8','#2ea043','#f59e0b','#8e44ad','#00acc1','#e91e63','#795548'];
+  const bmChars=((g.blocking_map||{}).characters||[]).filter(c=>c&&c.id);
+  let chars='';
+  if(bmChars.length){
+    const seen=new Set(), parts=bmChars.map((c,i)=>{seen.add(c.id);
+      const tip=[c.label,c.route_en].filter(Boolean).join(' · ');
+      return `<span title="${esc(tip)}"><b style="color:${BM_COLORS[i%BM_COLORS.length]}">${'ABCDEFGH'[i]||'?'}</b> = ${esc(c.id)}</span>`;});
+    (g.characters_union||[]).filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('未在动线图登记(图上无字母)'))}">? = ${esc(id)}</span>`));
+    chars=parts.join('、');
+  }else chars=esc((g.characters_union||[]).join('、'));
+  // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
+  // 深链人物预览页该套服装卡。只发文字 chip、不在媒体区贴服装 sheet 缩略(2026-08-27):参考图由 prompt
+  // 工位按规约挑选写进组 refs(pipeline_refs 已展示),prompt 前在此贴 sheet 只会与之同图双显
+  const proj0=$('#project').value.trim()||'demo';
+  const cosChips=(g.costumes||[]).map(x=>{
+    const miss=!x.url, why=x.blocked_on?t('阻塞:')+x.blocked_on:x.skip_reason?t('免出:')+x.skip_reason:!x.known?t('服装 ID 不在 bible/costumes.json'):miss?t('缺服装 sheet(§6A 回派 costume-concept)'):'';
+    const tip=[I18N.f('{name} 本组着 {cos}',{name:x.char_name,cos:x.costume}),x.label!==x.costume?x.label:'',x.source==='continuity'?t('(来源 continuity 状态表,分镜层未定服装)'):'',why].filter(Boolean).join(' · ');
+    return `<a class="tag" style="text-decoration:none;color:${miss&&!x.skip_reason?'var(--yellow)':'var(--text)'}" href="/preview/characters?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.char)}&costume=${encodeURIComponent(x.costume)}" title="${esc(tip)}">👕 ${esc(x.char_name)}:${esc(x.label)}${x.default?'':' ✱'}${miss&&!x.skip_reason?' ⚠':''}</a>`;
+  }).join('');
+  // 组出场生物(creatures_union,2026-08-27):头部 🐎 chip 深链生物预览页;同上不贴 sheet 缩略,
+  // 生物 sheet 由 prompt 工位按章节选阶段变体写进组 refs
+  const creChips=(g.creatures||[]).map(x=>{
+    const miss=!x.url, why=!x.known?t('生物 ID 不在 bible/creatures/index.json'):miss?t('缺生物 sheet(§6A 回派 creature-concept)'):'';
+    const tip=[x.id,(x.variants||[]).length?I18N.f('阶段变体 {n} 张(prompt 按章节选用)',{n:x.variants.length}):'',why].filter(Boolean).join(' · ');
+    return `<a class="tag" style="text-decoration:none;color:${miss?'var(--yellow)':'var(--text)'}" href="/preview/creatures?project=${encodeURIComponent(proj0)}&id=${encodeURIComponent(x.id)}" title="${esc(tip)}">🐎 ${esc(x.name)}${miss?' ⚠':''}</a>`;
+  }).join('');
   const gloc=I18N.f('生成组 {ep}/{gid}(镜 {range}{sc};数据 directing/{ep}/shot_list.json 中 generation_groups group_id={gid},组视频 prompt assets/prompts/{ep}/{gid}.json,组视频 assets/clips/{ep}/{gid}.mp4)',
     {ep:EP,gid:g.group_id,range,sc:g.scene_id?I18N.f(' · 场景 {s}',{s:g.scene_id}):''});
   const sketches=(g.sketches||[]).map(k=>
     `<div><img src="${esc(k.url)}" loading="lazy" onclick="zoom(this.src)" style="background:#fff">
       <div class="cap" title="${esc(k.text)}"><span class="fn">🎨 ${esc(k.text||k.name)}</span>
       <button class="editbtn skdel" data-grp="${esc(g.group_id)}" data-name="${esc(k.name)}" title="删除线稿并回滚 prompt 注入">🗑</button></div></div>`);
+  // 参考图 tooltip 带 [Image N](组 prompt refs 数组下标+1,与正文引用同号)
+  const refTip=k=>(k.idx?`[Image ${k.idx}] `:'')+k.ref;
   const urefs=(g.user_refs||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}">${refFn('🖼',k)}${avMark(k.ref)}
+      <div class="cap" title="${esc(refTip(k))}">${refFn('🖼',k)}${avMark(k.ref)}
       <button class="editbtn urdel" data-grp="${esc(g.group_id)}" data-ref="${esc(k.ref)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button></div></div>`);
   // 流水线/agent 直连写入组 refs 的参考图(概念图等):只展示不可删,删除接口本就仅限用户添加的
-  const prefs=(g.pipeline_refs||[]).map(k=>
-    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
-      <div class="cap" title="${esc(k.ref)}">${refFn('📎',k)}${avMark(k.ref)}
+  // 缺文件的 ref(前组尾帧等,服务端 missing=true)渲染 ⏳ 占位格保住 [Image N] 序号,与 Prompt 面板张数对齐
+  const prefs=(g.pipeline_refs||[]).map(k=>k.missing
+    ?`<div><div class="refph" title="${esc(refTip(k)+(/last_frame\.png$/.test(k.ref)?' · '+t('前组尾帧:前组视频生成后由 --return-last-frame 落盘,届时自动出现在此'):''))}"><span class="big">⏳</span><span>${esc(/last_frame\.png$/.test(k.ref)?t('待前组出片'):t('文件不存在'))}</span></div>
+      <div class="cap" title="${esc(refTip(k))}"><span class="fn">📎 [Image ${esc(k.idx)}] ${esc(k.name)}</span></div></div>`
+    :`<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
+      <div class="cap" title="${esc(refTip(k))}">${refFn('📎',k)}${avMark(k.ref)}
       <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
@@ -793,13 +1044,16 @@ function groupCard(g,inner){
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
-      ${chars?`<span class="tag">${esc(chars)}</span>`:''}
-      ${g.continuity_from?`<span class="link">${esc(I18N.f('⛓ 续接 {g} 尾帧',{g:g.continuity_from}))}</span>`:'<span class="link">◦ 组链起点</span>'}
+      ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
+      <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
+    ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
+    ${lightHtml(g)}
+    ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组生效上限 {cap}({model}):点「🎛 模型」给本组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或手动删减本组参考图;处理后重出本组',{n:g.refs_total,cap:g.refs_cap,model:(g.group_settings||{}).model_label||''}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>
@@ -932,7 +1186,7 @@ function render(d){
       if(g){ // 组内首镜:渲染整组(组内镜卡就地内嵌;旁白卡插在锚定镜之前)
         // 导航徽标:🎨手稿 📝注释 💬对白 🎙旁白 🎬视频(计数,0 不显示)
         const gsids=g.shots||[];
-        const nDlg=gsids.filter(sid=>byId[sid]&&byId[sid].dialogue_ref).length;
+        const nDlg=gsids.reduce((a,sid)=>a+(byId[sid]?((byId[sid].dialogue_lines||[]).length||(byId[sid].dialogue_ref?1:0)):0),0);
         const nNarr=gsids.reduce((a,sid)=>a+((narrByShot[sid]||[]).length),0);
         const nMus=gsids.reduce((a,sid)=>a+((musByShot[sid]||[]).length),0);
         const badges=[];
@@ -1006,6 +1260,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
+    psRender(d);
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
     render(d);
     avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)
@@ -1019,7 +1274,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

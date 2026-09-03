@@ -116,9 +116,13 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .run .parent{color:var(--purple)}
 .run .err2{color:var(--red);margin-top:2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run .eng{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 4px;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.run .skill{font-size:10px;color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:0 4px;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.run .skill.bad{color:var(--red);border-color:var(--red)}
+.confirm-box .ps-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;color:var(--dim)}
+.confirm-box .ps-row select{flex:1;min-width:0;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:12px}
+.confirm-box .ps-hint{font-size:11px;color:var(--dim);margin:-6px 0 10px;line-height:1.4}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
-#desktop-account{display:none;color:var(--dim);font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 配置弹窗(时长设置等) */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
 .modal .box{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;width:440px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -200,25 +204,26 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <label style="color:var(--dim);font-size:12px">项目</label>
   <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / grok / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
     <option value="pi">pi</option>
     <option value="opencode">opencode</option>
+    <option value="grok">grok</option>
     <option value="deepagents">deepagents</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
   <select id="model"></select>
   <input type="text" id="model-custom" style="width:130px;display:none" placeholder="输入模型ID">
   <div id="conn" title="实时连接状态"></div>
-  <div id="desktop-account"></div>
   <div id="preview-menu">
     <button id="preview-btn" title="预览设定产物"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><circle cx="9" cy="9.5" r="1.8" fill="var(--panel2)"/><path d="M5.5 17l4.5-5 2.8 3.1 2.2-2.5 3.5 4.4z" fill="var(--panel2)"/></svg></button>
     <div class="dropdown"><div class="dropdown-box">
       <a href="/preview/refs" class="pv" title="用户参考素材:refs/ 分类预览、上传参考图/音乐/文本、逐文件注释(注释写入 NOTES.md,视觉/配乐 Agent 必读)">参考文件</a>
       <a href="/preview/worldview" class="pv" title="世界观设定:地理/政治/文化/修炼等 bible 配置结构化预览">世界观预览</a>
       <a href="/preview/characters" class="pv" title="人物设定文字 + 概念图">人物预览</a>
+      <a href="/preview/creatures" class="pv" title="生物/坐骑设定卡 + 概念图">生物预览</a>
       <a href="/preview/scenes" class="pv" title="场景设定文字 + 概念图">场景预览</a>
       <a href="/preview/props" class="pv" title="道具设定卡 + 参考图(特写/比例锚图)">道具预览</a>
       <a href="/preview/workflow" class="pv" title="工作流预览:流水线 DAG 可视化——任务状态/串并行依赖/签字节点/预估时间与价格">工作流预览</a>
@@ -234,7 +239,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="#" id="menu-brief">设计构想</a>
       <a href="#" id="menu-output">输出设置</a>
       <a href="#" id="menu-duration">时长设置</a>
-      <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">分镜组设置</a>
+      <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">视频模型设置</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
       <a href="#" id="menu-packaging" title="片头/片尾/下集预告 开关与制作要求,按项目独立">片头片尾</a>
     </div></div>
@@ -251,8 +256,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
+          <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限">Agent 高级设置</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
@@ -261,7 +267,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <a href="#" onclick="return false" title="界面与 agent 对话语言(全局设置;首次打开按浏览器语言自动判断)">◂ 界面语言</a>
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
       </div>
-      <a href="#" id="menu-login" style="display:none">登录</a>
+      <a href="#" id="menu-account" style="display:none" title="账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录">账号</a>
       <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
     </div></div>
   </div>
@@ -277,6 +283,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="title" id="c-title">选择一个 Agent 开始</span>
       <span class="sub" id="c-sub"></span>
       <span class="hbtns">
+        <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
         <button id="btn-soul">SOUL.md</button>
       </span>
@@ -336,6 +343,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="kimi">kimicode</option>
         <option value="pi">pi</option>
         <option value="opencode">opencode</option>
+        <option value="grok">grok</option>
         <option value="deepagents">deepagents</option>
       </select></div>
     <div class="row"><label>语言模型</label>
@@ -405,15 +413,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="1080p">1080p</option>
           <option value="4k">4K</option>
         </select></div>
-      <div class="row"><label>内嵌字幕</label>
-        <input type="checkbox" id="npo-burnin" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
-      <div class="row"><label>花字</label>
-        <input type="checkbox" id="npo-caption" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片</span></div>
       <div class="row"><label>人物精确空间位置</label>
         <input type="checkbox" id="npo-spatial" style="flex:none" checked>
         <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
+      <div class="row"><label>旁白</label>
+        <input type="checkbox" id="npo-narration" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担</span></div>
       <div class="row"><label>对白配音</label>
         <select id="npo-dialogue-voice" style="flex:1">
           <option value="native">视频原声(默认)</option>
@@ -421,6 +426,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
         </select>
         <button type="button" class="info-btn" data-info="npo-info-voice" title="说明">i</button></div>
       <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
+      <div class="row"><label>花字</label>
+        <input type="checkbox" id="npo-caption" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片</span></div>
+      <div class="row"><label>内嵌字幕</label>
+        <input type="checkbox" id="npo-burnin" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
@@ -430,6 +441,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <span style="color:var(--dim)">—</span>
         <input type="number" id="npd-smax" min="1" step="0.5" value="8" title="上限">
       </div>
+      <div class="row"><label>长镜头</label>
+        <input type="checkbox" id="npd-longtake" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)</span></div>
+      <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降</div>
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
     <div class="np-step" data-step="4" style="display:none">
@@ -544,15 +559,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="1080p">1080p</option>
         <option value="4k">4K</option>
       </select></div>
-    <div class="row"><label>内嵌字幕</label>
-      <input type="checkbox" id="out-burnin" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
-    <div class="row"><label>花字</label>
-      <input type="checkbox" id="out-caption" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片(final_caption)</span></div>
     <div class="row"><label>人物精确空间位置</label>
       <input type="checkbox" id="out-spatial" style="flex:none" checked>
       <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
+    <div class="row"><label>旁白</label>
+      <input type="checkbox" id="out-narration" style="flex:none" checked>
+      <span style="color:var(--dim);font-size:12px">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担</span></div>
     <div class="row"><label>对白配音</label>
       <select id="out-dialogue-voice" style="flex:1">
         <option value="native">视频原声(默认)</option>
@@ -560,6 +572,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </select>
       <button type="button" class="info-btn" data-info="out-info-voice" title="说明">i</button></div>
     <div class="note info-note" id="out-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
+    <div class="row"><label>花字</label>
+      <input type="checkbox" id="out-caption" style="flex:none">
+      <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片(final_caption)</span></div>
+    <div class="row"><label>内嵌字幕</label>
+      <input type="checkbox" id="out-burnin" style="flex:none">
+      <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
     <div class="err" id="out-err"></div>
     <div class="actions"><button id="out-cancel">取消</button><button class="primary" id="out-ok">确定</button></div>
   </div>
@@ -574,6 +592,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span style="color:var(--dim)">—</span>
       <input type="number" id="dur-smax" min="1" step="0.5" placeholder="8" title="上限">
     </div>
+    <div class="row"><label>长镜头</label>
+      <input type="checkbox" id="dur-longtake" style="flex:none">
+      <span style="color:var(--dim);font-size:12px">开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)</span></div>
+    <div class="note" id="dur-longtake-warn" style="display:none;color:#e8a33d">⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降</div>
     <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="dur-err"></div>
     <div class="actions"><button id="dur-cancel">取消</button><button class="primary" id="dur-ok">确定</button></div>
@@ -581,12 +603,16 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="sg-modal" class="modal">
   <div class="box">
-    <h3>🎬 分镜组设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
+    <h3>🎬 视频模型设置 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
     <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
     <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="3"></div>
     <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
+    <div class="row"><label>提示词技能</label><select id="sg-skill" class="ps-select" style="flex:1"></select>
+      <button type="button" class="info-btn" data-info="sg-info-skill" title="说明">i</button></div>
+    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-prompt-writing,MiniMax H3→h3-prompt-writing);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
+    <div class="note ps-hint" id="sg-skill-hint" style="display:none"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>
     <div class="actions"><button id="sg-cancel">取消</button><button class="primary" id="sg-ok">确定</button></div>
@@ -673,7 +699,26 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>重跑次数</label>
       <input type="number" id="conc-retry" min="0" max="10" step="1" style="width:90px">
     <button type="button" class="info-btn" data-info="conc-info-retry" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 3:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-retry">Agent 自动重跑/重 roll 的次数上限,默认 1:验收评分、QA 审核或机检不过时,总制片带意见自动退回重做;视频/图像生成机检不达标时自动重 roll。同一任务累计达到该次数仍不过就升级用户裁决,不再自行重试;填 0 则完全不自动重跑,首次不过即升级人工。全局设置,通过运行提示词注入所有 Agent,覆盖流程文档里写死的「最多 3 次」,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>重跑等待确认(秒)</label>
+      <input type="number" id="conc-confirm" min="5" max="3600" step="5" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-confirm" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-confirm">重跑类确认弹窗(「是否重跑?」等)的等待时长,默认 60 秒:倒计时结束无人答复即自动采用默认选项(通常为「重跑」),流水线不会因等人而卡住。调大可给自己留更多裁决时间,代价是无人值守时流水线在弹窗上等得更久;Agent 显式指定的更短等待仍有效,但不能超过本值。签字类弹窗(H 门人工签字)永不倒计时、永不自动确认,不受本项影响。全局设置,保存后对后续发起的确认生效。</div>
+    <div class="row"><label>轮次上限</label>
+      <input type="number" id="conc-turns" min="10" max="1000" step="10" style="width:90px">
+    <button type="button" class="info-btn" data-info="conc-info-turns" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-turns">单个工单内引擎的对话轮次上限,默认 250:仅对 claude 与 grok 引擎生效(headless 的 --max-turns 参数,不传则不限,这里主动设闸防失控循环);codex/pi/opencode 引擎无此参数不受影响,deepagents 走框架自身的递归上限。撞上限时引擎会被直接切断且无法续跑,回执只显示退出码 1,已落盘的产物保留但核验与回执缺失——大批量工位(逐组选片、批量切片)一单几十组时 100 轮远远不够,如仍撞限优先调小派单批宽、其次上调本值。全局设置,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>思考深度</label>
+      <select id="conc-effort" style="width:160px">
+        <option value="">引擎默认</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
+      </select>
+    <button type="button" class="info-btn" data-info="conc-info-effort" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),grok → --reasoning-effort(无 max,按 xhigh),deepagents → reasoning_effort(仅云端/OpenRouter 渠道,本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
     <div class="row"><label>对话记忆</label>
       <input type="range" id="mem-range" min="0" max="256" step="1" style="flex:1">
       <input type="number" id="mem-num" min="0" max="256" step="1" style="width:64px">
@@ -682,6 +727,19 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note info-note" id="conc-info-mem">对话记忆额度(KB,默认 16):创作型 Agent 每次运行接续上次会话,多轮对话有连续记忆;单个会话历史超过该额度自动新开会话防膨胀(扇出型无状态 Agent 本就每单全新会话,不受此项影响)。调大可保留更长的连续记忆,但 resume 每轮重发全部历史,越大越慢、token 消耗越高。拖到 0 即完全关闭:所有 Agent(含总制片)每次运行/发言都是全新会话,跨工单信息只靠落盘产物(bible、工单档案等)传递,可显著省 token,但对话上下文不再延续。全局设置,保存后立即对后续运行生效;调小或关闭期间会话号照常回存,重新调大后从最近一次会话继续。</div>
     <div class="err" id="conc-err"></div>
     <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
+  </div>
+</div>
+<div id="askill-modal" class="modal">
+  <div class="box" style="width:620px">
+    <h3>本 Agent 的技能 <span id="askill-agent" style="color:var(--dim);font-weight:400;font-size:12px;margin-left:6px"></span></h3>
+    <div class="note">点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。「加载技能」可上传技能 zip 包(内含 SKILL.md),解压安装到本 Agent 的 skills/ 目录。</div>
+    <div id="askill-list" style="max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
+    <div class="err" id="askill-err"></div>
+    <div class="actions">
+      <input type="file" id="askill-file" accept=".zip" style="display:none">
+      <a href="#" id="askill-load" style="margin-right:auto;font-size:12px;color:var(--dim)">加载技能</a>
+      <button id="askill-close">关闭</button>
+    </div>
   </div>
 </div>
 <div id="res-modal" class="modal">
@@ -753,6 +811,24 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
   </div>
 </div>
+
+<div id="account-modal" class="modal">
+  <div class="box" style="width:420px">
+    <h3>👤 账号</h3>
+    <div id="acct-anon" class="note" style="display:none">尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。</div>
+    <div id="acct-info" style="display:none">
+      <div class="row"><label>账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
+      <div class="row"><label>余额</label><span id="acct-bal" style="flex:1"></span></div>
+    </div>
+    <div id="acct-st" class="note" style="display:none">读取中…</div>
+    <div class="err" id="acct-err"></div>
+    <div class="actions">
+      <button id="acct-logout" style="display:none;margin-right:auto" title="退出登录后应用会重新启动,可重新登录或暂不登录继续使用">退出登录</button>
+      <button id="acct-login" class="primary" style="display:none">登录</button>
+      <button id="acct-close">关闭</button>
+    </div>
+  </div>
+</div>
 <div id="net-modal" class="modal">
   <div class="box" style="width:640px">
     <h3>🌐 网络检测</h3>
@@ -810,18 +886,19 @@ function uiAlert(message){
     setTimeout(()=>ok.focus(),0);
   });
 }
-const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配'};
+const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配',smart_grok:'Grok 智能分配'};
 
 /* 顶栏「语言模型」下拉的「智能分配」选项(各引擎默认;deepagents 无此选项):
    选中→策略切 smart_<引擎>(按 Agent 任务复杂度自动分配模型),选具体模型→策略回 global 跟随全局 */
 const SMART='__smart';
-const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek'};
+const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek',grok:'smart_grok'};
 const SMART_TITLES={
   claude:'按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet',
   codex:'按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra',
   kimi:'按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding',
   pi:'按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra',
   opencode:'按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash',
+  grok:'按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5',
 };
 
 // opencode 静态兜底(动态列表读不到时用);具体模型区首项:DeepSeek V4 Pro(顶栏默认选「智能分配」)。
@@ -831,6 +908,11 @@ const OPENCODE_STATIC=[
   ['opencode-go/deepseek-v4-flash','DeepSeek V4 Flash'],
   ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
   ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
+];
+// grok 静态兜底(动态列表 GET /engines/grok/models 读不到时用;来源 `grok models`,grok.com 登录凭证)
+const GROK_STATIC=[
+  ['grok-4.6','Grok 4.6'],
+  ['grok-4.5','Grok 4.5'],
 ];
 const MODEL_OPTIONS={
   claude:[[SMART,'智能分配'],['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
@@ -847,6 +929,7 @@ const MODEL_OPTIONS={
         ['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
+  grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
 let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -884,9 +967,28 @@ async function loadOpencodeModelOptions(refresh=false){
     AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
   }
 }
+let GROK_MODEL_ERROR='';
+async function loadGrokModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/grok/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,m.name||m.id]);
+    // CLI 默认模型置顶具体模型区(智能分配之后的首个模型)
+    const i=dynamic.findIndex(([v])=>(r.models||[]).some(m=>m.id===v&&m.default));
+    if(i>0)dynamic.unshift(...dynamic.splice(i,1));
+    const list=dynamic.length?dynamic:GROK_STATIC;
+    MODEL_OPTIONS.grok=[[SMART,'智能分配'],...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.grok=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    GROK_MODEL_ERROR='';
+  }catch(e){
+    GROK_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.grok=[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.grok=[['','默认(CLI配置)'],...GROK_STATIC,['__custom','自定义…']];
+  }
+}
 async function populateModels(engine,selected=null){
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
+  if(engine==='grok')await loadGrokModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
   MODEL_OPTIONS[engine].forEach(([v,label])=>{
@@ -902,7 +1004,8 @@ async function populateModels(engine,selected=null){
   sel.title=engine==='deepagents'
     ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
-    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型'):'';
+    :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
+    :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
 }
 function getModel(){
@@ -992,8 +1095,8 @@ $('#project').onchange=async()=>{
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
-/* ---------- 新建项目向导(基础信息→输出设置→时长设置→分镜组设置→审核设置→片头片尾) ---------- */
-const NP_STEP_NAMES=['基础信息','输出设置','时长设置','分镜组设置','审核设置','片头片尾'];
+/* ---------- 新建项目向导(基础信息→输出设置→时长设置→视频模型设置→审核设置→片头片尾) ---------- */
+const NP_STEP_NAMES=['基础信息','输出设置','时长设置','视频模型设置','审核设置','片头片尾'];
 let NP_STEP=1;
 function npShowStep(n){
   NP_STEP=n;
@@ -1020,6 +1123,16 @@ $('#npp-outro-on').onchange=nppToggleRows;
 // 每集时长「根据剧本自动」:勾选后数值输入禁用(新建向导与时长设置弹窗同款)
 $('#npd-ep-auto').onchange=()=>{$('#npd-ep').disabled=$('#npd-ep-auto').checked};
 $('#dur-ep-auto').onchange=()=>{$('#dur-ep').disabled=$('#dur-ep-auto').checked};
+// 长镜头低分辨率提示:草稿档 ≤480p 时尾帧低清,作参考图会拖累续接组画质与人脸一致性
+const LONGTAKE_LOWRES=['360p','480p'];
+function npdLongtakeWarn(){$('#npd-longtake-warn').style.display=
+  ($('#npd-longtake').checked&&LONGTAKE_LOWRES.includes($('#npo-draft-res').value))?'':'none'}
+$('#npd-longtake').onchange=npdLongtakeWarn;
+$('#npo-draft-res').addEventListener('change',npdLongtakeWarn);
+let DUR_DRAFT_RES='480p';   // 时长设置弹窗打开时取当前项目输出设置的草稿分辨率
+function durLongtakeWarn(){$('#dur-longtake-warn').style.display=
+  ($('#dur-longtake').checked&&LONGTAKE_LOWRES.includes(DUR_DRAFT_RES))?'':'none'}
+$('#dur-longtake').onchange=durLongtakeWarn;
 $('#npo-aspect').onchange=()=>{
   $('#npo-custom-row').style.display=$('#npo-aspect').value==='custom'?'':'none'};
 function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置的服务端默认一致)
@@ -1031,8 +1144,10 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
+  $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=2;$('#npd-smax').value=8;
+  $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭
   sgApplyPreset('npsg','sd20');   // 分镜组默认按 Seedance 2.0 口径(15s/9图/3视频/3音频)
   REVIEW_DIMS.forEach(([k])=>{const v=REV_DEFAULT(k);$(`#npr-${k}`).value=v;$(`#npr-${k}-num`).value=v});   // 新建项目审核力度与质量评委默认全 0(不审核/跳过评委)
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
@@ -1081,11 +1196,13 @@ function npCollectSettings(){
       draft_resolution:$('#npo-draft-res').value,final_resolution:$('#npo-final-res').value,
       subtitle_burn_in:$('#npo-burnin').checked,
       caption_enabled:$('#npo-caption').checked,
+      narration_enabled:$('#npo-narration').checked,
       dialogue_voice:$('#npo-dialogue-voice').value,
       spatial_blocking:$('#npo-spatial').checked,
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value),
-      shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value)},
+      shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value),
+      long_take:$('#npd-longtake').checked},
     shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
       max_ref_images:parseInt($('#npsg-imgs').value),
       max_ref_videos:parseInt($('#npsg-vids').value),
@@ -1131,9 +1248,8 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  // runninghub/comfyui 与生成模型页两个标签页同口径(RunningHub=云端站点,ComfyUI=本地/Comfy Cloud)
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['runninghub','RunningHub'],['comfyui','ComfyUI']],
+  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
@@ -1158,6 +1274,7 @@ const ENGINE_CLI={
   kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
   pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
   opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
+  grok:{bin:'grok',cli:'Grok Build',label:'grok',url:'https://grok.com/build'},
 };
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
@@ -1287,6 +1404,7 @@ async function openOutModal(){
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
     $('#out-burnin').checked=!!o.subtitle_burn_in;
     $('#out-caption').checked=!!o.caption_enabled;
+    $('#out-narration').checked=o.narration_enabled!==false;
     $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
     $('#out-spatial').checked=o.spatial_blocking!==false;
     const pf=Array.isArray(o.platforms)?o.platforms:['youtube','bilibili','tiktok','douyin'];
@@ -1309,6 +1427,7 @@ $('#out-ok').onclick=async()=>{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
       subtitle_burn_in:$('#out-burnin').checked,caption_enabled:$('#out-caption').checked,
+      narration_enabled:$('#out-narration').checked,
       dialogue_voice:$('#out-dialogue-voice').value,spatial_blocking:$('#out-spatial').checked,platforms}});
     $('#out-modal').style.display='none';
   }catch(e){$('#out-err').textContent='保存失败:'+e.message}
@@ -1319,12 +1438,16 @@ async function openDurModal(){
   $('#dur-err').textContent='';
   $('#dur-proj').textContent=curProj();
   try{
-    const d=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).duration||{};
+    const cfg=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config');
+    const d=cfg.duration||{};
     const auto=d.episode_minutes==='auto';
     $('#dur-ep-auto').checked=auto;$('#dur-ep').disabled=auto;
     $('#dur-ep').value=auto?10:(d.episode_minutes??10);
     $('#dur-smin').value=d.shot_min_s??2;
     $('#dur-smax').value=d.shot_max_s??8;
+    $('#dur-longtake').checked=d.long_take===true;
+    DUR_DRAFT_RES=(cfg.output||{}).draft_resolution||'480p';
+    durLongtakeWarn();
   }catch(e){}
   $('#dur-modal').style.display='flex';
 }
@@ -1340,12 +1463,12 @@ $('#dur-ok').onclick=async()=>{
   if(!epAuto&&!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked}});
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 分镜组设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
+/* ---------- 视频模型设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
 // 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框,
 // 手动改值后自动按当前值反查高亮匹配的预设(无匹配则全不高亮)
 const SG_PRESETS={
@@ -1390,7 +1513,34 @@ async function openSgModal(){
     $('#sg-auds').value=g.max_ref_audios??3;
   }catch(e){}
   sgSyncPreset('sg');
+  $('#sg-skill-hint').style.display='none';
+  psFill($('#sg-skill'),curProj()).then(d=>psHint($('#sg-skill-hint'),d)).catch(e=>{$('#sg-err').textContent=t('提示词技能读取失败')+':'+e.message});
   $('#sg-modal').style.display='flex';
+}
+/* ---------- 视频提示词技能(项目级 prompt_skill:视频模型设置 / H3A 签字弹窗共用;2026-08-28) ---------- */
+function psValue(cfg){return cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode==='off'?'off':'auto')}
+async function psFill(sel,proj){   // 拉取解析结果与候选清单填充下拉;返回接口原文供 psHint
+  const d=await api('/api/v1/projects/'+encodeURIComponent(proj)+'/prompt-skill');
+  const r=d.resolved||{},cfg=d.config||{};
+  sel.innerHTML='';
+  const add=(v,label)=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)};
+  add('auto',t(r.auto_dir?'自动(按生效视频模型)':'自动(生效视频模型无对应技能)'));
+  (d.candidates||[]).forEach(c=>add('manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
+  add('off',t('跳过(不套用技能)'));
+  sel.value=psValue(cfg); if(!sel.value)sel.value='auto';
+  sel.dataset.project=proj;
+  return d;
+}
+function psHint(el,d,fallback){   // 只在有告警时展示;无告警回落 fallback(H3A 的冻结说明),否则隐藏
+  const r=(d&&d.resolved)||{};
+  const txt=r.warning?'⚠️ '+r.warning:(fallback||'');
+  el.textContent=txt;
+  el.style.display=txt?'':'none';
+}
+async function psSave(sel){
+  const v=sel.value||'auto';
+  const body=v==='auto'?{mode:'auto'}:(v==='off'?{mode:'off'}:{mode:'manual',skill_id:v.slice(7)});
+  return api('/api/v1/projects/'+encodeURIComponent(sel.dataset.project)+'/prompt-skill',body);
 }
 $('#menu-shotgroup').onclick=e=>{e.preventDefault();openSgModal()};
 $('#sg-cancel').onclick=()=>$('#sg-modal').style.display='none';
@@ -1401,6 +1551,7 @@ $('#sg-ok').onclick=async()=>{
   if(err){$('#sg-err').textContent=err;return}
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),shot_group:{max_group_s:gs,max_ref_images:ni,max_ref_videos:nv,max_ref_audios:na}});
+    if($('#sg-skill').dataset.project===curProj())await psSave($('#sg-skill'));
     $('#sg-modal').style.display='none';
   }catch(e){$('#sg-err').textContent='保存失败:'+e.message}
 };
@@ -1535,8 +1686,8 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 对话记忆) ---------- */
-let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256;
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 重跑等待确认 + 思考深度 + 对话记忆) ---------- */
+let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000,concCfMin=5,concCfMax=3600;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
 $('#mem-num').oninput=()=>{
@@ -1557,11 +1708,18 @@ async function openConcModal(){
     $('#conc-rt').value=Math.round((c.run_timeout||7200)/60);
     $('#conc-it').value=Math.round((c.idle_timeout==null?1800:c.idle_timeout)/60);
     concRetryMax=c.max_retries_max||10;$('#conc-retry').max=concRetryMax;
-    $('#conc-retry').value=c.max_retries==null?3:c.max_retries;
+    $('#conc-retry').value=c.max_retries==null?1:c.max_retries;
+    concCfMin=c.confirm_timeout_min||5;concCfMax=c.confirm_timeout_max||3600;
+    $('#conc-confirm').min=concCfMin;$('#conc-confirm').max=concCfMax;
+    $('#conc-confirm').value=c.confirm_timeout==null?(c.confirm_timeout_default||60):c.confirm_timeout;
+    concTurnsMin=c.max_turns_min||10;concTurnsMax=c.max_turns_max||1000;
+    $('#conc-turns').min=concTurnsMin;$('#conc-turns').max=concTurnsMax;
+    $('#conc-turns').value=c.max_turns==null?(c.max_turns_default||250):c.max_turns;
+    $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=3;$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=1;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
@@ -1580,12 +1738,112 @@ $('#conc-ok').onclick=async()=>{
   if(!(rt>=concRtMin&&rt<=concRtMax)){$('#conc-err').textContent=I18N.f('运行超时需为 {min}-{max} 的整数(分钟)',{min:concRtMin,max:concRtMax});return}
   if(!(it>=0&&it<=concItMax)){$('#conc-err').textContent=I18N.f('无输出超时需为 0-{max} 的整数(分钟,0=关闭)',{max:concItMax});return}
   if(!(retry>=0&&retry<=concRetryMax)){$('#conc-err').textContent=I18N.f('重跑次数需为 0-{max} 的整数(0=不自动重跑)',{max:concRetryMax});return}
+  const cf=parseInt($('#conc-confirm').value);
+  if(!(cf>=concCfMin&&cf<=concCfMax)){$('#conc-err').textContent=I18N.f('重跑等待确认需为 {min}-{max} 的整数(秒)',{min:concCfMin,max:concCfMax});return}
+  const turns=parseInt($('#conc-turns').value);
+  if(!(turns>=concTurnsMin&&turns<=concTurnsMax)){$('#conc-err').textContent=I18N.f('轮次上限需为 {min}-{max} 的整数',{min:concTurnsMin,max:concTurnsMax});return}
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,agent_memory_kb:mk});
+    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
+};
+
+/* ---------- 对话面板顶栏「技能」按钮:选中 Agent 即显示(装了技能显示数量);点开列清单,
+   点一项把技能路径(相对 Agent 目录:skills/<目录名>)插入输入框光标处,便于指定用该技能完成
+   某项工作;「加载技能」上传技能 zip 包解压安装到本 Agent 的 skills/ 目录 ---------- */
+const SKILL_KIND={conditional:'条件',always:'常驻',soul:'常驻',library:'依赖库',generic:'通用'};
+let SKILLS_ALL=null;   // 全部 Agent 的技能清单缓存(服务端本身带 TTL 缓存);上传技能后置空重取
+async function ensureSkills(refresh){
+  if(SKILLS_ALL&&!refresh)return SKILLS_ALL;
+  SKILLS_ALL=(await api('/api/v1/config/skills'+(refresh?'?refresh=true':''))).skills||[];
+  return SKILLS_ALL;
+}
+function agentSkills(id){return (SKILLS_ALL||[]).filter(s=>s.agent_id===id)}
+async function updateSkillBtn(){
+  const id=CURRENT,b=$('#btn-skills');
+  if(!id){b.style.display='none';return}
+  b.style.display='';b.textContent=t('技能');
+  try{await ensureSkills()}catch(e){return}
+  if(CURRENT!==id)return;
+  const n=agentSkills(id).length;
+  if(n)b.textContent=t('技能')+' · '+n;
+}
+function insertAtCursor(text){
+  const inp=$('#input');
+  const st=inp.selectionStart??inp.value.length,en=inp.selectionEnd??st;
+  const before=inp.value.slice(0,st),after=inp.value.slice(en);
+  const pre=before&&!/\s$/.test(before)?' ':'';
+  const post=after&&/^\S/.test(after)?' ':(after?'':' ');
+  inp.value=before+pre+text+post+after;
+  const pos=(before+pre+text+post).length;
+  inp.focus();inp.setSelectionRange(pos,pos);saveDraft();
+}
+function renderAgentSkills(list){
+  const box=$('#askill-list');box.innerHTML='';
+  if(!list.length){box.innerHTML=`<div class="empty">${t('该 Agent 没有安装技能')}</div>`;return}
+  list.forEach(s=>{
+    const row=document.createElement('div');
+    const rel='skills/'+s.dir;
+    row.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer'+(s.enabled?'':';opacity:.55');
+    row.title=I18N.f('点击把 {p} 插入输入框',{p:rel});
+    const kind=t(SKILL_KIND[s.kind]||s.kind);
+    const cond=s.condition?`<span style="color:var(--dim);font-size:11px">· ${esc(t(s.condition))}</span>`:'';
+    const off=s.enabled?'':`<span title="${esc(t('该技能已被禁用,运行时不会自动注入'))}" style="font-size:10.5px;padding:0 6px;border:1px solid #b8860b;border-radius:9px;color:#e0a92a">${esc(t('已禁用'))}</span>`;
+    row.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13px">${esc(s.name)}</b><span style="font-size:10.5px;padding:0 6px;border:1px solid var(--border);border-radius:9px;color:var(--dim)">${esc(kind)}</span>${cond}${off}<code style="margin-left:auto;font-size:11px;color:var(--accent);font-family:ui-monospace,monospace">${esc(rel)}</code></div>
+      <div style="color:var(--dim);font-size:12px;margin-top:3px;white-space:pre-wrap">${esc(s.description||'')}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="color:var(--dim);font-size:11px;font-family:ui-monospace,monospace;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.path)}</span><button class="askill-view" title="${esc(t('查看该技能的 SKILL.md 全文'))}" style="margin-left:auto;flex:none;font-size:11px;padding:1px 8px">${esc(t('查看文本'))}</button></div>`;
+    row.onmouseenter=()=>row.style.borderColor='var(--accent)';
+    row.onmouseleave=()=>row.style.borderColor='var(--border)';
+    row.onclick=()=>{insertAtCursor(rel);$('#askill-modal').style.display='none'};
+    row.querySelector('.askill-view').onclick=e=>{e.stopPropagation();showSkillText(s)};
+    box.appendChild(row);
+  });
+}
+/* 「查看文本」:在原列表位置显示该技能 SKILL.md 全文,「返回列表」回到选择列表 */
+async function showSkillText(s){
+  const box=$('#askill-list');
+  $('#askill-err').textContent='';
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:8px;flex:none"><b style="font-size:13px">${esc(s.name)}</b><code style="font-size:11px;color:var(--accent);font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.path)}</code><button id="askill-back" style="margin-left:auto;flex:none;font-size:11px;padding:1px 8px">${esc(t('返回列表'))}</button></div>
+    <pre id="askill-text" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;font-family:ui-monospace,monospace;border:1px solid var(--border);border-radius:8px;padding:8px 10px;overflow-y:auto">${esc(t('读取中…'))}</pre>`;
+  $('#askill-back').onclick=()=>renderAgentSkills(agentSkills(CURRENT));
+  try{
+    const d=await api('/api/v1/config/skills/text?id='+encodeURIComponent(s.id));
+    const pre=$('#askill-text');
+    if(pre)pre.textContent=d.text||'';
+  }catch(e){
+    const pre=$('#askill-text');
+    if(pre)pre.textContent='';
+    $('#askill-err').textContent=t('读取失败:')+e.message;
+  }
+}
+async function openAgentSkillModal(){
+  if(!CURRENT)return;
+  const a=AGENTS.find(x=>x.id===CURRENT);
+  $('#askill-agent').textContent=(a?agentName(a.name)+' · ':'')+CURRENT;
+  $('#askill-err').textContent='';
+  $('#askill-list').innerHTML='<div class="empty">'+t('读取中…')+'</div>';
+  $('#askill-modal').style.display='flex';
+  try{await ensureSkills(true);renderAgentSkills(agentSkills(CURRENT))}
+  catch(e){$('#askill-err').textContent=t('读取失败:')+e.message}
+}
+$('#btn-skills').onclick=openAgentSkillModal;
+$('#askill-close').onclick=()=>$('#askill-modal').style.display='none';
+$('#askill-load').onclick=e=>{e.preventDefault();$('#askill-file').click()};
+$('#askill-file').onchange=async()=>{
+  const f=$('#askill-file').files[0];$('#askill-file').value='';
+  if(!f||!CURRENT)return;
+  const id=CURRENT;
+  $('#askill-err').textContent='';
+  try{
+    const r=await fetch('/api/v1/config/skills/upload?agent='+encodeURIComponent(id)+'&filename='+encodeURIComponent(f.name),{method:'POST',body:f});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||r.status);
+    SKILLS_ALL=j.skills||[];
+    if(CURRENT===id)renderAgentSkills(agentSkills(id));
+    updateSkillBtn();
+  }catch(e){$('#askill-err').textContent=t('安装失败:')+e.message}
 };
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
@@ -1884,34 +2142,52 @@ async function updateConnTitle(connected){
   }catch(e){}
   $('#conn').title=text;
 }
+/* ---------- 账号(设置菜单「账号」;仅桌面端有登录桥接时显示)----------
+   未登录:弹窗只给「登录」;已登录:显示账号 ID(邮箱)与余额 + 「退出登录」。
+   登录/退出都由桌面端完成并自动重启应用;取消则状态不变。顶栏不再显示账号与余额。 */
+let DESKTOP_ACCOUNT=null;   // 最近一次 bridge.account() 结果;null = 未登录或取不到
+function desktopAuthBridge(){
+  const b=window.videoagentsDesktop;
+  return b&&typeof b.account==='function'&&typeof b.login==='function'&&typeof b.logout==='function'?b:null;
+}
 async function refreshDesktopAccount(){
-  const bridge=window.videoagentsDesktop,box=$('#desktop-account'),item=$('#menu-login');
-  if(!bridge||typeof bridge.account!=='function'||!box)return;
-  try{
-    const user=await bridge.account();
-    const balance=Number(user.balance).toLocaleString(undefined,{maximumFractionDigits:4});
-    box.textContent=`${user.email} · Balance: ${balance}`;
-    box.title=`Email: ${user.email}\nBalance: ${balance}`;
-    box.style.display='block';
-    if(item){item.textContent='退出当前登录';item.dataset.authenticated='true'}
-  }catch(e){
-    box.style.display='none';
-    if(item){item.textContent='登录';item.dataset.authenticated='false'}
+  const bridge=desktopAuthBridge();if(!bridge)return;
+  try{DESKTOP_ACCOUNT=await bridge.account()}catch(e){DESKTOP_ACCOUNT=null}
+  renderAccountModal();
+}
+function renderAccountModal(){
+  const u=DESKTOP_ACCOUNT,box=$('#account-modal');if(!box)return;
+  $('#acct-anon').style.display=u?'none':'';
+  $('#acct-info').style.display=u?'':'none';
+  $('#acct-login').style.display=u?'none':'';
+  $('#acct-logout').style.display=u?'':'none';
+  if(u){
+    $('#acct-id').textContent=u.email;
+    $('#acct-bal').textContent=Number(u.balance).toLocaleString(undefined,{maximumFractionDigits:4});
   }
 }
+async function openAccountModal(){
+  $('#acct-err').textContent='';
+  renderAccountModal();
+  $('#account-modal').style.display='flex';
+  $('#acct-st').style.display='';          // 打开时按当前缓存先显示,再向桌面端刷新一次
+  try{await refreshDesktopAccount()}finally{$('#acct-st').style.display='none'}
+}
 function initializeDesktopLogin(){
-  const bridge=window.videoagentsDesktop,item=$('#menu-login');
-  if(!item||!bridge||typeof bridge.login!=='function'||typeof bridge.logout!=='function')return;
+  const bridge=desktopAuthBridge(),item=$('#menu-account');
+  if(!item||!bridge)return;
   item.style.display='block';
-  item.onclick=async event=>{
-    event.preventDefault();
-    item.style.pointerEvents='none';
-    try{
-      if(item.dataset.authenticated==='true')await bridge.logout();
-      else await bridge.login();
-    }catch(error){await uiAlert('登录状态切换失败: '+(error?.message||error))}
-    finally{item.style.pointerEvents=''}
+  item.onclick=e=>{e.preventDefault();openAccountModal()};
+  $('#acct-close').onclick=()=>$('#account-modal').style.display='none';
+  $('#account-modal').onclick=e=>{if(e.target===e.currentTarget)$('#account-modal').style.display='none'};
+  const act=async(btn,fn)=>{
+    $('#acct-err').textContent='';btn.disabled=true;
+    try{await fn();await refreshDesktopAccount()}
+    catch(err){$('#acct-err').textContent=t('登录状态切换失败')+': '+(err?.message||err)}
+    finally{btn.disabled=false}
   };
+  $('#acct-login').onclick=()=>act($('#acct-login'),()=>bridge.login());
+  $('#acct-logout').onclick=()=>act($('#acct-logout'),()=>bridge.logout());
 }
 
 /* ---------- Agent 列表 ---------- */
@@ -1964,7 +2240,7 @@ async function selectAgent(id){
   CURRENT=id; const a=AGENTS.find(x=>x.id===id);
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
   $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
-  updateModelBtn();
+  updateModelBtn();updateSkillBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组
   renderAgents(); scrollToActiveAgent(); LIVE={};
@@ -2106,6 +2382,7 @@ const AM_MODEL_OPTIONS={
         ['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
+  grok:[['','默认(CLI配置)'],...GROK_STATIC,['__custom','自定义…']],
   deepagents:[['','默认(🎨 生成模型页配置)']],
 };
 function amEffective(id){
@@ -2128,6 +2405,7 @@ async function amPopulateModels(engine,selected){
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
+  if(engine==='grok')await loadGrokModelOptions();
   if($('#am-engine').value!==engine)return;
   sel.disabled=false;sel.innerHTML='';
   AM_MODEL_OPTIONS[engine].forEach(([v,l])=>{
@@ -2262,7 +2540,11 @@ function renderRuns(){
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);
     const engLabel=r.engine?(r.engine+(r.model?' · '+r.model:'')):'';
-    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${engLabel?`<span class="eng" title="${esc(engLabel)}">${esc(engLabel)}</span>`:''}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
+    // 视频提示词技能 chip(仅 prompt 工位运行带 skill 字段):本项目生效技能;运行结束核出漏读时红色 ✗
+    const skillChip=r.skill===undefined?'':(r.skill
+      ?`<span class="skill${r.skill_read===false?' bad':''}" title="${esc(r.skill_read===false?t('本次运行未读取技能文件,已按机检退回'):t('本项目生效的视频提示词技能'))}">🧰 ${esc(r.skill)}${r.skill_read===false?' ✗':''}</span>`
+      :`<span class="skill" title="${esc(t('本项目不套用视频提示词技能'))}">🧰 ${esc(t('无技能'))}</span>`);
+    d.innerHTML=`<div class="r1"><span class="st ${r.status}"></span><span class="ag">${esc(agentName(r.agent_name))}</span>${engLabel?`<span class="eng" title="${esc(engLabel)}">${esc(engLabel)}</span>`:''}${skillChip}<span class="tm">${dur}${usage}</span>${stoppable?`<button class="run-stop" title="停止此任务">⏹</button>`:''}</div>
       <div class="msg2">${par}${esc(r.message||'')}</div>
       ${r.status==='running'&&r.progress?`<div class="prog">${esc(r.progress)}</div>`:''}
       ${r.error?`<div class="err2">${esc(r.error)}</div>`:''}`;
@@ -2312,6 +2594,14 @@ function connect(){
     }
     else if(ev.type==='confirm')showConfirm(ev);
     else if(ev.type==='confirm_done')removeConfirm(ev.id);
+    else if(ev.type==='watchdog'&&ev.project===curProj()){WATCHDOG_ON=!!ev.enabled;renderWatchdog()} // /auto 命令、其他页签或通道改的开关同步到 🤖 按钮
+    else if(ev.type==='prompt_skill'){   // 其他页签/预览页改了提示词技能:刷新本页所有对应下拉(正在操作的不动)
+      document.querySelectorAll('.ps-select[data-project="'+ev.project+'"]').forEach(sel=>{
+        if(document.activeElement===sel)return;
+        psFill(sel,ev.project).then(x=>{const h=sel.closest('.confirm-box,.box');const hint=h&&h.querySelector('.ps-hint');
+          if(hint)psHint(hint,x,h.classList.contains('confirm-box')?t('签字即冻结本项目的视频提示词技能设定'):'')}).catch(()=>{});
+      });
+    }
   };
 }
 
@@ -2323,6 +2613,17 @@ function showConfirm(c){
   const sign=c.kind==='sign';
   const d=document.createElement('div');d.className='confirm-box'+(sign?' sign':'');d.dataset.id=c.id;
   const q=document.createElement('div');q.className='q';q.textContent=(sign?'✍️ ':'❓ ')+c.question;d.appendChild(q);
+  if(sign&&c.project&&String(c.checkpoint||'').toUpperCase().startsWith('H3A')){
+    // H3A 分镜签字:在弹窗里确认本项目的视频提示词技能(改动即保存;签字时服务端冻结快照)
+    const pr=document.createElement('div');pr.className='ps-row';
+    const lb=document.createElement('span');lb.textContent='🧰 '+t('视频提示词技能:');pr.appendChild(lb);
+    const sel=document.createElement('select');sel.className='ps-select';pr.appendChild(sel);
+    const note=t('签字即冻结本项目的视频提示词技能设定');
+    const hint=document.createElement('div');hint.className='ps-hint';hint.textContent=note;
+    d.appendChild(pr);d.appendChild(hint);
+    psFill(sel,c.project).then(x=>psHint(hint,x,note)).catch(()=>{hint.textContent=t('提示词技能读取失败')});
+    sel.onchange=async()=>{try{psHint(hint,await psSave(sel),note)}catch(e){hint.textContent='⚠️ '+e.message;hint.style.display=''}};
+  }
   const row=document.createElement('div');row.className='row';
   const timer=document.createElement('span');timer.className='cd';
   let iv=null;
