@@ -6,6 +6,7 @@ PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUNTIME_VERSION ?= $(shell git rev-parse --short HEAD)
 DEEPAGENTS_PYTHON ?= $(shell command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || echo python3)
 DEEPAGENTS_VENV ?= .venv-deepagents
+DESKTOP_DEV_SERVICE_ENV ?= dev
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -48,7 +49,7 @@ desktop-install:
 desktop-run: desktop-dev
 
 desktop-dev:
-	npm run dev:desktop
+	VIDEOAGENTS_SERVICE_ENV=$(DESKTOP_DEV_SERVICE_ENV) npm run dev:desktop
 
 desktop-build:
 	npm run build:desktop
