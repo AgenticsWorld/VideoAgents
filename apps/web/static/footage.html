@@ -60,6 +60,18 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:12px}
 #msg{font-size:13px;min-height:18px}
 #msg.ok{color:var(--green)}
 #msg.err{color:var(--red)}
+/* 自定义确认弹框(替代原生 confirm) */
+#ui-confirm{position:fixed;inset:0;background:rgba(8,10,16,.62);backdrop-filter:blur(2px);
+  display:none;align-items:center;justify-content:center;z-index:1000}
+#ui-confirm.on{display:flex}
+#ui-confirm .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  width:min(440px,92vw);padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+#ui-confirm h4{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+#ui-confirm .body{color:var(--dim);font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:16px}
+#ui-confirm .acts{display:flex;justify-content:flex-end;gap:10px}
+#ui-confirm .acts button{min-width:76px}
+#ui-confirm .acts .danger{background:var(--red,#ef4444);border-color:var(--red,#ef4444);color:#fff;font-weight:600}
+#ui-confirm .acts .danger:hover{filter:brightness(1.1)}
 .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .toolbar .total{font-size:13px;color:var(--dim)}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -209,6 +221,34 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(p,body,method){const o=body!==undefined?{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:(method?{method}:{});const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
 const API='/api/v1/footage/projects';
+/* 自定义确认弹框:uiConfirm(正文, {danger, okText}) → Promise<boolean>
+   Esc/点遮罩=取消,Enter=确认;danger 时确认键红色 */
+function uiConfirm(message,opts){
+  opts=opts||{};
+  let el=document.getElementById('ui-confirm');
+  if(!el){
+    el=document.createElement('div');el.id='ui-confirm';
+    el.innerHTML=`<div class="box"><h4>⚠️ <span class="ttl"></span></h4><div class="body"></div>
+      <div class="acts"><button class="cancel"></button><button class="ok"></button></div></div>`;
+    document.body.appendChild(el);
+  }
+  el.querySelector('.ttl').textContent=t('请确认');
+  el.querySelector('.body').textContent=message;
+  const ok=el.querySelector('.ok'),cancel=el.querySelector('.cancel');
+  ok.textContent=opts.okText||(opts.danger?t('确认删除'):t('继续'));
+  ok.className='ok'+(opts.danger?' danger':' primary');
+  cancel.textContent=t('取消');
+  el.classList.add('on');
+  return new Promise(res=>{
+    const done=v=>{el.classList.remove('on');document.removeEventListener('keydown',onkey);res(v)};
+    const onkey=e=>{if(e.key==='Escape')done(false);
+      if(e.key==='Enter'){e.preventDefault();done(document.activeElement!==cancel)}};
+    ok.onclick=()=>done(true);cancel.onclick=()=>done(false);
+    el.onclick=e=>{if(e.target===el)done(false)};
+    document.addEventListener('keydown',onkey);
+    (opts.danger?cancel:ok).focus();
+  });
+}
 const RUNNING=new Set(['queued','downloading','processing','transcribing','analyzing']);
 const STATUS_LABEL={empty:'未导入',queued:'排队中',downloading:'下载中',processing:'处理中',transcribing:'转写字幕',analyzing:'AI 分析中',ready:'就绪',failed:'失败'};
 const CHUNK=8*1024*1024;
@@ -267,7 +307,7 @@ async function copyPath(name){
   msg(t('已复制')+' '+text,'ok');
 }
 async function deleteProject(name,fromList){
-  if(!confirm(I18N.f(t('确定删除素材项目「{name}」?\n将删除其整个文件夹(原片、分镜 clip 与 JSON),不可恢复。'),{name})))return;
+  if(!await uiConfirm(I18N.f(t('确定删除素材项目「{name}」?\n将删除其整个文件夹(原片、分镜 clip 与 JSON),不可恢复。'),{name}),{danger:true}))return;
   try{await api(`${API}/${encodeURIComponent(name)}`,undefined,'DELETE');msg(I18N.f(t('已删除项目 {name}'),{name}),'ok');if(fromList)showList();else location.hash=''}
   catch(e){msg(t('删除失败:')+e.message,'err')}
 }
@@ -355,9 +395,9 @@ $('#url-btn').onclick=async()=>{
   finally{$('#url-btn').disabled=false}
 };
 $('#cancel-btn').onclick=async()=>{try{await api(`${API}/${encodeURIComponent(CUR)}/cancel`,{});refresh(true)}catch(e){msg(e.message,'err')}};
-$('#reimport-btn').onclick=()=>{if(PROJ&&PROJ.clip_count&&!confirm(t('重新导入会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;$('#input-box').dataset.force='1';$('#input-box').style.display='';$('#input-box').scrollIntoView({behavior:'smooth'})};
-$('#reprocess-btn').onclick=async()=>{if(!confirm(t('重新分割会清空现有分镜 clip 与已编辑的字幕/信息,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/reprocess`,{});refresh(true)}catch(e){msg(e.message,'err')}};
-$('#retranscribe-btn').onclick=async()=>{if(!confirm(t('重新转写会覆盖各分镜的字幕框,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+$('#reimport-btn').onclick=async()=>{if(PROJ&&PROJ.clip_count&&!await uiConfirm(t('重新导入会清空现有分镜 clip 与已编辑的字幕/信息,继续?'),{danger:true}))return;$('#input-box').dataset.force='1';$('#input-box').style.display='';$('#input-box').scrollIntoView({behavior:'smooth'})};
+$('#reprocess-btn').onclick=async()=>{if(!await uiConfirm(t('重新分割会清空现有分镜 clip 与已编辑的字幕/信息,继续?'),{danger:true}))return;try{await api(`${API}/${encodeURIComponent(CUR)}/reprocess`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+$('#retranscribe-btn').onclick=async()=>{if(!await uiConfirm(t('重新转写会覆盖各分镜的字幕框,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{});refresh(true)}catch(e){msg(e.message,'err')}};
 const promptTa=$('#analysis-prompt');promptTa.dataset.orig='';
 async function savePrompt(){
   if(promptTa.value===promptTa.dataset.orig)return;
@@ -394,6 +434,7 @@ function clipCard(c){
     <div class="fields">
       <div class="head"><b>${esc(c.title||c.id)}</b><span class="hint">${esc(c.id)}</span>
         <button class="small primary ai-btn" onclick="analyzeClip('${esc(c.id)}')" title="${t('按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存')}">🤖 ${t('AI 自动分析')}</button>
+        <button class="small del-clip-btn" onclick="deleteClip('${esc(c.id)}')" title="${t('删除这条分镜(clip 文件与字幕/画面信息一并删除;其余分镜编号不变)')}">🗑 ${t('删除')}</button>
         <span class="st">${c.analyzed_at?t('已分析 ')+esc(fmtDate(c.analyzed_at))+(c.analysis_meta&&c.analysis_meta.engine?` · ${esc(c.analysis_meta.engine)}${c.analysis_meta.model?'/'+esc(c.analysis_meta.model):''}`:''):''}</span></div>
       <label>${t('字幕(语音转文字,可编辑)')}<span class="saved">✓ ${t('已保存')}</span></label>
       <textarea class="sub" data-field="subtitle" placeholder="${t('这个分镜没有识别到语音;可手动填写')}">${esc(c.subtitle)}</textarea>
@@ -441,11 +482,20 @@ function playClip(id){
   document.querySelectorAll('.clip .thumb video').forEach(v=>{v.pause()});
   box.innerHTML=`<video controls autoplay src="${fileUrl(CUR,c.file)}"></video>`;box.onclick=null;
 }
+async function deleteClip(id){
+  const c=(PROJ&&PROJ.clips||[]).find(x=>x.id===id);
+  if(!await uiConfirm(I18N.f(t('确定删除分镜 {id}?clip 文件与字幕/画面信息一并删除,不可恢复(其余分镜编号不变)'),{id:(c&&c.title)||id}),{danger:true}))return;
+  try{
+    const r=await api(`${API}/${encodeURIComponent(CUR)}/clips/${encodeURIComponent(id)}`,undefined,'DELETE');
+    msg(I18N.f(t('已删除分镜 {id},剩余 {n} 条'),{id,n:r.clip_count}),'ok');
+    refresh(true);
+  }catch(e){msg(t('删除失败:')+e.message,'err')}
+}
 async function analyzeClip(id){
   const card=document.getElementById('clip-'+id);if(!card)return;
   const btn=card.querySelector('.ai-btn'),err=card.querySelector('.err');
   const info=card.querySelector('textarea.info');
-  if(info.value.trim()&&!confirm(t('信息框已有内容,AI 分析结果会覆盖它,继续?')))return;
+  if(info.value.trim()&&!await uiConfirm(t('信息框已有内容,AI 分析结果会覆盖它,继续?')))return;
   btn.disabled=true;const old=btn.textContent;btn.textContent='⏳ '+t('分析中…');err.textContent='';
   try{
     const c=await api(`${API}/${encodeURIComponent(CUR)}/clips/${encodeURIComponent(id)}/analyze`,{});

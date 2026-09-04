@@ -21,10 +21,25 @@
              4 beats_cover_master     首拍从 0 起,末拍止于母带实测时长(±1 帧)
              5 beat_span_in_range     每拍时长 ∈[--min-span,--max-span](缺省 1.0–20.0s;
                                       拍=句,节奏由镜承担,禁止为凑节奏改拍)
+            5b word_track_fresh       edit/{ep}/word_track.json 存在、schema v1、
+                                      speechalign.staleness 为空(台本/声轨改版即过期);
+                                      v4 起为 timeline 段硬要求(mashup_align build 产出)
+            5c beat_boundary_on_word  逐词(ASR 实测词)时间中点落在其文本归属拍窗口内
+                                      (±0.25s)——文本-时间归属一致即声画不错位;仅
+                                      source.backend=asr_word 时执行,降级后端 SKIP——
+                                      interp 词时间从拍边界插出,自证循环无信息量)
              6 shotlist_match         shot_list 与 beat_track 对齐:每镜绝对 t_in/t_out、
                                       全片无缝覆盖、嵌套于单一拍内、镜长 ≥0.5s、
                                       duration_s 一致、1 镜=1 组、
                                       每拍有 beat_design 条目(mode∈literal|render,focus 非空)
+            6b shot_cut_on_word       非拍首镜必带 cut_word{text,start} 且 word_track
+                                      locate 该词 onset 与 t_in 差 ≤0.3s(切点吸词凭据)
+            6c rhythm_differentiated  median(render 镜长) ≤ 0.7×median(literal 镜长)
+                                      (两组各 ≥3 镜才判;leijun 病根:两者 1.03 无差别)
+            6d no_uniform_shots       镜长 ∈[3,5]s 占比 ≤50% 或变异系数 ≥0.5
+                                      (防 3–5s 均拍舒适区堆积,leijun 实测 60%)
+            6e fast_cut_present       render 拍的镜中 ≤2.5s 占比 ≥70%(渲染快切硬口径;
+                                      无 render 拍 SKIP)
              7 ascii_filename         mashup/ 与 assets/clips/{ep}/ 文件名 ASCII
              8 beat_fingerprint       盖章校验(audio_map 改版即过期,须重对齐)
   [picks]    9 picks_complete         每组有选片:rough 区间 ≥ 镜长+0.5s(推荐 +2s)
@@ -62,11 +77,23 @@ from pathlib import Path
 from _common import parse_args  # noqa: F401  (副作用:modules/ 入 sys.path)
 import avsync
 import footage
+import speechalign
 
 STAGES = ["timeline", "picks", "clips", "final"]
 DEFAULT_MIN_SPAN, DEFAULT_MAX_SPAN = 1.0, 20.0   # 拍(语义句)时长界
 MIN_SHOT_S = 0.5                                  # 镜硬下限(12 帧@24fps,再短即闪帧)
 BEAT_MODES = ("literal", "render")
+
+# v4 节奏/对齐阈值(集中于此便于 MH1 签字时按 waiver 口径核对;依据 leijun 摸底:
+# render/literal 镜长中位数比 1.03、3–5s 镜占 60%、多镜拍 73% 均分——三项全应 FAIL)
+CUT_WORD_TOL_S = 0.3        # 6b:镜切点与 cut_word onset 允许偏差
+WORD_MID_TOL_S = 0.25       # 5c:词时间中点相对归属拍窗口的允许越界
+RHYTHM_MEDIAN_RATIO = 0.7   # 6c:median(render) / median(literal) 上限
+UNIFORM_BAND = (3.0, 5.0)   # 6d:均拍舒适区
+UNIFORM_MAX_SHARE = 0.5     # 6d:舒适区占比上限(或 CV 达标即 PASS)
+UNIFORM_MIN_CV = 0.5        # 6d:镜长变异系数下限
+FAST_CUT_MAX_S = 2.5        # 6e:快切镜时长上限
+FAST_CUT_MIN_SHARE = 0.7    # 6e:render 拍内快切镜最低占比
 
 
 def _configure(ap):
@@ -173,6 +200,46 @@ def main() -> None:
         check("beats_cover_master", False, "beat_track 拍列表为空")
         check("beat_span_in_range", False, "beat_track 拍列表为空")
 
+    # 5b/5c:词级时间轴(v4 声画对齐;mashup_align build 产出)
+    wt_path = speechalign.word_track_path(proj, ep)
+    word_track: dict | None = None
+    if wt_path.exists():
+        try:
+            word_track = speechalign.load_word_track(wt_path)
+            stale = speechalign.staleness(word_track, proj, ep)
+            check("word_track_fresh", not stale,
+                  f"source={word_track.get('source')} confidence={word_track.get('confidence')}"
+                  f" match_ratio={(word_track.get('stats') or {}).get('match_ratio')}"
+                  + (f";过期:{stale}" if stale else ""))
+            if stale:
+                word_track = None
+        except (ValueError, OSError) as e:
+            word_track = None
+            check("word_track_fresh", False, f"word_track 无法读取:{e}")
+    else:
+        check("word_track_fresh", False,
+              f"缺 {wt_path.relative_to(proj)}(v4 起由 code/mashup_align.py build 产出)")
+    bt_backend = str(((bt.get("source") or {}) if isinstance(bt.get("source"), dict) else {})
+                     .get("backend") or "")
+    if bt_backend == "asr_word" and word_track and beats:
+        # 判据:逐词(仅 ASR 实测词)时间**中点**须落在其文本归属拍的窗口内
+        # (±WORD_MID_TOL_S)。直接度量「文本-时间归属一致」,即声画错位的可机检形式;
+        # 不用词起止对边界比——whisper 常把句间停顿并进下一句首词,词界虚胖会误报。
+        win = {_bid(b): (float(b["t_in"]), float(b["t_out"])) for b in beats}
+        bad = []
+        for w in word_track["words"]:
+            if w.get("src") != "asr" or w.get("seg") not in win:
+                continue
+            lo, hi = win[w["seg"]]
+            mid = (float(w["start"]) + float(w["end"])) / 2
+            if not (lo - WORD_MID_TOL_S <= mid <= hi + WORD_MID_TOL_S):
+                bad.append(f"{w['seg']}「{w['text']}」中点 {mid:.2f}s 出窗 [{lo:.2f},{hi:.2f}]")
+        check("beat_boundary_on_word", not bad,
+              f"逐词中点落归属拍窗口(±{WORD_MID_TOL_S}s)" + (f";{bad[:5]}" if bad else ""))
+    else:
+        skip("beat_boundary_on_word",
+             f"backend={bt_backend or '未登记'}(仅 asr_word 后端可检;降级/无 word_track 免检)")
+
     # 镜行(sid/gid/t_in/t_out):shotlist_match 产出,picks/clips 段沿用
     shot_rows: list[dict] | None = None
     if sl_path.exists():
@@ -226,6 +293,80 @@ def main() -> None:
         if not problems and rows:
             shot_rows = [{"sid": s["shot_id"], "gid": gid_of[s["shot_id"]],
                           "t_in": s["t_in"], "t_out": s["t_out"]} for s in rows]
+
+        # 6b–6e:切点吸词 + 节奏三项(v4;镜按所属拍的 beat_design.mode 归组)
+        if rows:
+            def _host_bid(s):
+                for b in beats:
+                    if b["t_in"] - 1e-6 <= s["t_in"] and s["t_out"] <= b["t_out"] + 1e-6:
+                        return _bid(b)
+                return None
+
+            mode_of = {bid: (design.get(bid) or {}).get("mode") for bid in
+                       {_bid(b) for b in beats}}
+            beat_tin = {_bid(b): float(b["t_in"]) for b in beats}
+            spans = {"literal": [], "render": []}
+            cut_bad, cut_checked = [], 0
+            for s in rows:
+                bid = _host_bid(s)
+                m = mode_of.get(bid)
+                if m in spans:
+                    spans[m].append(s["t_out"] - s["t_in"])
+                if bid is None or abs(s["t_in"] - beat_tin.get(bid, -1)) < 1e-6:
+                    continue                      # 拍首镜切点=拍边界,由 5c 兜
+                cut_checked += 1
+                cw = s.get("cut_word") or {}
+                if not str(cw.get("text") or "").strip():
+                    cut_bad.append(f"{s.get('shot_id')} 缺 cut_word")
+                    continue
+                if word_track is None:
+                    cut_bad.append(f"{s.get('shot_id')} 无 word_track 可核")
+                    continue
+                b = next(x for x in beats if _bid(x) == bid)
+                loc = speechalign.locate(word_track, cw["text"], near_s=s["t_in"],
+                                         window=(b["t_in"], b["t_out"]))
+                if loc is None:
+                    cut_bad.append(f"{s.get('shot_id')} cut_word「{cw['text']}」拍窗内定位失败")
+                elif abs(loc["start"] - s["t_in"]) > CUT_WORD_TOL_S:
+                    cut_bad.append(f"{s.get('shot_id')} 切点距「{cw['text']}」onset "
+                                   f"{abs(loc['start'] - s['t_in']):.2f}s > {CUT_WORD_TOL_S}s")
+            if bt_backend != "asr_word":
+                skip("shot_cut_on_word",
+                     f"backend={bt_backend or '未登记'}(interp 词时间从拍边界插出,自证循环无信息量;同 5c 口径)")
+            elif cut_checked:
+                check("shot_cut_on_word", not cut_bad,
+                      f"{cut_checked} 个非拍首镜切点核词" + (f";{cut_bad[:5]}" if cut_bad else ""))
+            else:
+                skip("shot_cut_on_word", "全片无非拍首镜(每拍单镜)")
+
+            def _median(xs):
+                xs = sorted(xs)
+                return xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2
+
+            lit, ren = spans["literal"], spans["render"]
+            if len(lit) >= 3 and len(ren) >= 3:
+                ratio = _median(ren) / max(_median(lit), 1e-6)
+                check("rhythm_differentiated", ratio <= RHYTHM_MEDIAN_RATIO + 1e-6,
+                      f"median(render)={_median(ren):.2f}s / median(literal)={_median(lit):.2f}s"
+                      f" = {ratio:.2f}(上限 {RHYTHM_MEDIAN_RATIO})")
+            else:
+                skip("rhythm_differentiated", f"literal {len(lit)} / render {len(ren)} 镜,两组各≥3 才判")
+            all_spans = lit + ren
+            if all_spans:
+                share = sum(1 for x in all_spans
+                            if UNIFORM_BAND[0] <= x <= UNIFORM_BAND[1]) / len(all_spans)
+                mean = sum(all_spans) / len(all_spans)
+                cv = (sum((x - mean) ** 2 for x in all_spans) / len(all_spans)) ** 0.5 / max(mean, 1e-6)
+                check("no_uniform_shots",
+                      share <= UNIFORM_MAX_SHARE + 1e-6 or cv >= UNIFORM_MIN_CV - 1e-6,
+                      f"{UNIFORM_BAND[0]:.0f}–{UNIFORM_BAND[1]:.0f}s 占比 {share:.0%}"
+                      f"(上限 {UNIFORM_MAX_SHARE:.0%})或 CV {cv:.2f}(下限 {UNIFORM_MIN_CV})")
+            if ren:
+                fshare = sum(1 for x in ren if x <= FAST_CUT_MAX_S + 1e-6) / len(ren)
+                check("fast_cut_present", fshare >= FAST_CUT_MIN_SHARE - 1e-6,
+                      f"render 镜 ≤{FAST_CUT_MAX_S}s 占比 {fshare:.0%}(下限 {FAST_CUT_MIN_SHARE:.0%})")
+            else:
+                skip("fast_cut_present", "无 render 拍")
     elif need("timeline") and not args.stamp:
         check("shotlist_match", False, f"shot_list 不存在:{sl_path}")
     else:
@@ -330,9 +471,14 @@ def main() -> None:
                 bad_frames.append(gid)
             if info["has_audio"]:
                 with_audio.append(gid)
+            # pix_fmt/color_range 一并归一:full-range(yuvj/pc)片段混进 concat 会让
+            # ffmpeg 8 的转场 filter 图在流参数切换处断流,播放器上黑位跳变
+            # (2026-09-03 leijun2 静帧兜底组实测教训)
             if (width and info["width"] != width) or (height and info["height"] != height) \
                     or (info["fps"] and abs(info["fps"] - fps) > 0.01) \
-                    or (info["sar"] not in (None, "1:1", "0:1", "N/A")):
+                    or (info["sar"] not in (None, "1:1", "0:1", "N/A")) \
+                    or str(info.get("pix_fmt") or "").startswith("yuvj") \
+                    or info.get("color_range") == "pc":
                 bad_spec.append(gid)
         check("clip_frames_exact", not absent and not bad_frames,
               (f"缺片:{absent[:5]};" if absent else "")

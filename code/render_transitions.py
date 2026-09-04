@@ -43,6 +43,7 @@ from pathlib import Path
 
 from _common import parse_args  # 副作用:modules/ 入 sys.path
 from avsync import probe_duration, require_tools
+from footage import count_frames as count_frames_of
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_generation_groups import (TRANSITION_ANNOTATION, TRANSITION_RENDERABLE,  # noqa: E402
@@ -132,6 +133,51 @@ def _entry_dur(e, proj):
 
 def _entry_gid(e, idx):
     return str(e.get("group_id") or e.get("id") or e.get("name") or f"entry{idx:03d}")
+
+
+def requantize_cuts(entries, timeline, proj, fps):
+    """把非硬切条目的 cut_time_s 重量化为**各组片段实际帧数的累计**(物理口径)。
+
+    timeline 的 in/out 常见毫秒截断(3.545),几十组浮点累加后可偏过半帧线,
+    round(累计秒×fps) 会与 concat 实拼的帧边界差 1 帧——渲染窗口与像素核验双双
+    错位(2026-09-03 leijun2 实测)。concat 拼的就是组片段文件,按文件帧数累计
+    即与成片逐帧一致。就地更新 entries,返回重量化条数。"""
+    vids = ((timeline.get("tracks") or {}).get("video")) or timeline.get("video") or []
+    if not vids:
+        return 0
+    cum, walk = 0, []                   # walk: 有序边界表 [(from,to,t), ...]
+    prev = None
+    for i, e in enumerate(vids):
+        gid = _entry_gid(e, i)
+        if prev is not None and gid != prev:
+            walk.append([prev, gid, cum / fps])
+        src = e.get("src")
+        if not src:
+            return 0                    # 条目缺 src,无从按帧累计,保持原值
+        # 防御:条目做了子区间修剪或变速时,文件帧数 ≠ 成片占帧,帧准口径不成立,整体放弃
+        if e.get("timeline_in_s") is not None or e.get("timeline_in") is not None                 or (e.get("speed") or 1.0) != 1.0:
+            return 0
+        frames = count_frames_of(str(proj / src))
+        dur = _entry_dur(e, proj)
+        if abs(frames / fps - dur) > 1.5 / fps:   # in/out 只取了文件一段 → 同样放弃
+            return 0
+        cum += frames
+        prev = gid
+    # 有序消费匹配:同一 (from,to) 邻接重复出现时按边界顺序一一对应,不坍缩到最后一处
+    n = 0
+    for e in entries:
+        if e.get("type") in (None, "hard_cut"):
+            continue
+        key = (e.get("from_group"), e.get("to_group"))
+        for w in walk:
+            if w is not None and (w[0], w[1]) == key:
+                t = w[2]
+                walk[walk.index(w)] = None
+                if abs(t - float(e.get("cut_time_s") or 0)) > 1e-6:
+                    e["cut_time_s"] = round(t, 6)
+                    n += 1
+                break
+    return n
 
 
 def boundaries_of(timeline, proj, shot_list=None):
@@ -269,23 +315,32 @@ def build_filter(entries, total_s, fps):
                 fades.append(f"fade=t=out:st={st:.6f}:d={d:.6f}:color={FADE_COLOR[ty]}"
                              f":enable='gte(t\\,{st:.6f})*lt(t\\,{t:.6f})'")
     xf = sorted((e for e in entries if e["type"] in XFADE_OF), key=lambda e: e["cut_time_s"])
-    head = "[0:v]" + ",".join(["format=yuv420p"] + fades)
+    # 防御性归一:历史 cut 可能混有 full-range 片段(concat -c copy 不转码),ffmpeg 8 的
+    # filter 图在输入流参数切换处会断流截断输出——先统一 range/格式再进转场链
+    head = "[0:v]" + ",".join(["scale=in_range=auto:out_range=tv", "format=yuv420p"] + fades)
     if not xf:
         return head + "[vout]", 0
     cut_f = [_frames(e["cut_time_s"], fps) for e in xf]
-    dur_f = [max(2, _frames(e["duration_s"], fps)) for e in xf]
+    # 叠化帧长取**偶**(0.3s@24fps 的 7 帧 → 8 帧):窗口关于边界对称、边界时刻恰为
+    # 50/50 混合中点(check transition_frames_verified 的口径),且两侧克隆帧数相等,
+    # 消除奇数帧长下前侧比 xfade 窗口短 1 帧的 EOF 隐患(2026-09-03 leijun2 实测)
+    dur_f = [max(2, 2 * round(_frames(e["duration_s"], fps) / 2)) for e in xf]
     half_a = [df // 2 for df in dur_f]            # 前侧(前组尾)克隆帧数
-    half_b = [df - ha for df, ha in zip(dur_f, half_a)]   # 后侧(本组首)克隆帧数
+    half_b = [df - ha for df, ha in zip(dur_f, half_a)]   # 后侧(本组首)克隆帧数(=half_a)
     k = len(xf) + 1
     parts = [head + f",split={k}" + "".join(f"[p{i}]" for i in range(k))]
     starts = [0] + cut_f
     ends = cut_f + [_frames(total_s, fps) + 5 * int(fps)]   # 末段 end 给足余量,trim 到源尾
     for i in range(k):
         f = f"[p{i}]trim=start_frame={starts[i]}:end_frame={ends[i]},setpts=PTS-STARTPTS"
+        # 叠化窗口跨边界 [cut−half_a, cut+half_b):前段尾部须冻结到窗口**末端**(垫 half_b 帧),
+        # 后段头部须冻结到窗口**起点**(垫 half_a 帧)。奇数帧长叠化时两者差 1 帧——垫反会让
+        # xfade 第一输入比 offset+duration 短 1 帧,ffmpeg 8.x 对此严格按 EOF 截断整条输出
+        # (7.x 宽容复用末帧,故偶数帧长/旧 ffmpeg 下无症状;2026-09-03 leijun2 实测修正)
         if i > 0:
-            f += f",tpad=start_mode=clone:start_duration={half_b[i - 1] / fps:.6f}"
+            f += f",tpad=start_mode=clone:start_duration={half_a[i - 1] / fps:.6f}"
         if i < k - 1:
-            f += f",tpad=stop_mode=clone:stop_duration={half_a[i] / fps:.6f}"
+            f += f",tpad=stop_mode=clone:stop_duration={half_b[i] / fps:.6f}"
         parts.append(f + f",setpts=N/({fps:g}*TB)[s{i}]")   # 段内按帧序重打时间戳,tpad 克隆帧不留 pts 缝
     prev = "[s0]"
     for i, e in enumerate(xf):
@@ -314,20 +369,164 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
               f"边界时刻以 timeline 为准——请先核对 edit 的 timeline 与 cut 是否同版")
     info = _probe(src_path)
     fps = _fps(info["video"])
-    fc, n_xf = build_filter(entries, src_dur, fps)
+    tl = _read_json(_ep_paths(proj, ep)[2])
+    rq = requantize_cuts(entries, tl, proj, fps)
+    if rq:
+        print(f"[INFO ] {rq} 处边界按组片段实际帧数重量化(timeline 浮点截断补正)")
+    xf_entries = [e for e in entries if e["type"] in XFADE_OF]
     n_fade = sum(1 for e in entries if e["type"] in FADE_COLOR)
-    if not n_xf and not n_fade:
+    if not xf_entries and not n_fade:
         print("[INFO ] 无可渲染转场:全片硬切,不产出 cut_v2(cut_v1 即转场定稿)")
         write_ledger(proj, ep, src_path, None, entries, policy, checks=None)
         return None
+    if n_fade:
+        # fade 类须对整片施加,退回整片路径(现役场景只有 dissolve,此路径极少走)
+        return _render_wholefile(proj, ep, src_path, out_path, entries, src_dur, fps,
+                                 crf, preset, policy)
+    # ★分段式渲染(v4.2,清晰度改造):成片 = 各组片段 concat 而来,组边界必是
+    # 关键帧——**未涉叠化的组直接引用原组片段文件流拷贝(零再编码)**,只把叠化
+    # 边界两侧的组合并重编码。相比整片重编码(两遍式=全片 3 代),成片除叠化段外
+    # 保持 1 代编码,清晰度损失只发生在 5×几十帧的窗口内;且每个渲染段输入参数
+    # 恒定,天然规避 ffmpeg 8 的 filtergraph reinit 帧计数清零坑。
+    vids = ((tl.get("tracks") or {}).get("video")) or tl.get("video") or []
+    order, files, gframes = [], [], []          # 按**位置**索引:同组 id 重复出现也不坍缩
+    for i, v in enumerate(vids):
+        gid = _entry_gid(v, i)
+        src = v.get("src")
+        if not src:
+            raise SystemExit(f"[FAIL] timeline video 条目 {i}({gid})缺 src,分段渲染无从引用组片段")
+        order.append(gid)
+        files.append(proj / src)
+        gframes.append(count_frames_of(str(proj / src)))
+    # 边界定位:按相邻位置对有序消费匹配 xf 条目(重复邻接不坍缩、不匹配到错误出现处)
+    remaining = list(xf_entries)
+    boundary_at = {}                            # 位置 i → 该条目(边界在 order[i]|order[i+1] 之间)
+    for i in range(len(order) - 1):
+        key = (order[i], order[i + 1])
+        for e in remaining:
+            if (e["from_group"], e["to_group"]) == key:
+                boundary_at[i] = e
+                remaining.remove(e)
+                break
+    if remaining:
+        raise SystemExit(f"[FAIL] {len(remaining)} 条叠化边界在 timeline 组序里找不到相邻位置:"
+                         f"{[(e['from_group'], e['to_group']) for e in remaining][:3]}")
+    hot = sorted({i for i in boundary_at} | {i + 1 for i in boundary_at})
+    runs, cur = [], []
+    for i in hot:
+        if cur and i == cur[-1] + 1:
+            cur.append(i)
+        else:
+            if cur:
+                runs.append(cur)
+            cur = [i]
+    if cur:
+        runs.append(cur)
+    run_of = {i: r for r, run in enumerate(runs) for i in run}
+    tmp_dir = out_path.parent
+    seg_paths, cleanup = [], []
+    for r, run in enumerate(runs):
+        run_frames = sum(gframes[i] for i in run)
+        lst = tmp_dir / f".xfrun{r}.txt"
+        lst.write_text("".join(f"file '{files[i].resolve()}'\n" for i in run))
+        run_src = tmp_dir / f".xfrun{r}.src.mp4"
+        # run 源直接归一重编码(不 -c copy):组片段间哪怕只有 color_range 标签之差,
+        # concat 后进 filter 也会触发 ffmpeg 8 的 filtergraph reinit 清零 trim 计数
+        # (实测 143 帧渲染段截成 97);run 仅数秒,重编码代价近零且反正要过 xfade
+        _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+              "-i", str(lst),
+              "-vf", "scale=in_range=auto:out_range=tv,format=yuv420p,setsar=1",
+              "-fps_mode", "passthrough", "-frames:v", str(run_frames),
+              "-c:v", "libx264", "-crf", "14", "-preset", "fast",
+              "-pix_fmt", "yuv420p", "-color_range", "tv", "-an",
+              str(run_src)], timeout=1200)
+        if count_frames_of(str(run_src)) != run_frames:
+            raise SystemExit(f"[FAIL] 渲染段源 {run_gids[0]}..{run_gids[-1]} 归一后帧数不符")
+        # run 内边界的相对时刻 = run 内前序组帧和(帧准;boundary_at 按位置,无键碰撞)
+        local, acc = [], 0
+        for i in run[:-1]:
+            acc += gframes[i]
+            e = boundary_at.get(i)
+            if e:
+                local.append({**e, "cut_time_s": acc / fps})
+        fc, _ = build_filter(local, run_frames / fps, fps)
+        run_out = tmp_dir / f".xfrun{r}.out.mp4"
+        _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(run_src),
+              "-filter_complex", fc, "-map", "[vout]", "-an",
+              "-c:v", "libx264", "-crf", str(max(14, crf - 2)), "-preset", preset,
+              "-pix_fmt", "yuv420p", "-color_range", "tv", str(run_out)], timeout=7200)
+        got = count_frames_of(str(run_out))
+        if got != run_frames:
+            raise SystemExit(f"[FAIL] 渲染段 {run_gids[0]}..{run_gids[-1]} 帧数不符:"
+                             f"want {run_frames} got {got}")
+        seg_paths.append((run[0], run_out))
+        cleanup += [lst, run_src, run_out]
+    # 总装 concat 列表:copy 组按原文件、渲染 run 按渲染段,严格组序
+    final_lst = tmp_dir / ".xf_final.txt"
+    lines, i = [], 0
+    seg_by_start = {s: p for s, p in seg_paths}
+    while i < len(order):
+        if i in run_of:
+            run = runs[run_of[i]]
+            lines.append(f"file '{seg_by_start[run[0]].resolve()}'\n")
+            i = run[-1] + 1
+        else:
+            lines.append(f"file '{files[i].resolve()}'\n")
+            i += 1
+    final_lst.write_text("".join(lines))
+    cleanup.append(final_lst)
     tmp = out_path.with_name(out_path.stem + ".rendering.mp4")
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src_path),
-           "-filter_complex", fc, "-map", "[vout]", "-map", "0:a?", "-c:a", "copy",
+    n_copy = sum(1 for i in range(len(order)) if i not in run_of)
+    print(f"[RUN  ] 分段式转场渲染:{len(xf_entries)} 处叠化 / {len(runs)} 个渲染段"
+          f"(重编码 {len(order) - n_copy} 组)+ {n_copy} 组流拷贝 → {out_path.relative_to(proj)}")
+    # 源 cut 带声轨时随总装流拷贝带回(模块契约:声轨 -c:a copy 不碰;mashup 的 cut 无声则跳过)
+    has_audio = bool((_probe(src_path).get("audio") or {}))
+    a_args = (["-i", str(src_path), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "copy"]
+              if has_audio else [])
+    _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+          "-i", str(final_lst), *a_args, "-c:v", "copy",
+          "-movflags", "+faststart", str(tmp)],
+         timeout=1200)
+    total_frames = sum(gframes)
+    got = count_frames_of(str(tmp))
+    if got != total_frames:
+        raise SystemExit(f"[FAIL] 总装帧数不符:want {total_frames} got {got}")
+    for p in cleanup:
+        p.unlink(missing_ok=True)
+    if out_path.exists():
+        out_path.unlink()
+    tmp.rename(out_path)
+    print(f"[DONE ] {out_path.relative_to(proj)} = {_fmt(probe_duration(out_path))}"
+          f"(源 {_fmt(src_dur)};{got} 帧,{n_copy}/{len(order)} 组零再编码)")
+    return out_path
+
+
+def _render_wholefile(proj, ep, src_path, out_path, entries, src_dur, fps, crf, preset, policy):
+    """整片路径(仅 fade 类需要;两遍式规避 ffmpeg 8 filtergraph reinit)。"""
+    fc, n_xf = build_filter(entries, src_dur, fps)
+    n_fade = sum(1 for e in entries if e["type"] in FADE_COLOR)
+    norm = out_path.with_name(out_path.stem + ".norm.tmp.mp4")
+    src_frames = count_frames_of(src_path)
+    _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src_path),
+          "-vf", "scale=in_range=auto:out_range=tv,format=yuv420p,setsar=1",
+          "-fps_mode", "passthrough",
+          "-frames:v", str(src_frames), "-c:v", "libx264", "-crf", "14",
+          "-preset", "fast", "-pix_fmt", "yuv420p", "-color_range", "tv",
+          "-an", str(norm)], timeout=7200)
+    got = count_frames_of(str(norm))
+    if got != src_frames:
+        norm.unlink(missing_ok=True)
+        raise SystemExit(f"[FAIL] 归一中间件帧数不符:want {src_frames} got {got}(源 cut 时间戳异常?)")
+    tmp = out_path.with_name(out_path.stem + ".rendering.mp4")
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-i", str(norm), "-i", str(src_path),
+           "-filter_complex", fc, "-map", "[vout]", "-map", "1:a?", "-c:a", "copy",
            "-c:v", "libx264", "-crf", str(crf), "-preset", preset, "-pix_fmt", "yuv420p",
-           "-movflags", "+faststart", str(tmp)]
-    print(f"[RUN  ] ffmpeg 转场渲染:xfade {n_xf} 处 + fade {n_fade} 处 → {out_path.relative_to(proj)}"
-          f"(libx264 crf{crf},声轨流拷贝)")
+           "-color_range", "tv", "-movflags", "+faststart", str(tmp)]
+    print(f"[RUN  ] ffmpeg 转场渲染(整片):xfade {n_xf} 处 + fade {n_fade} 处 → "
+          f"{out_path.relative_to(proj)}(两遍式,libx264 crf{crf})")
     _run(cmd, timeout=7200)
+    norm.unlink(missing_ok=True)
     if out_path.exists():
         out_path.unlink()
     tmp.rename(out_path)
@@ -429,20 +628,30 @@ def do_check(proj, ep, src_path, out_path, write=True):
     else:
         rec("audio_stream_intact", True, "源无声轨,转场后亦无")
 
-    # 抽帧核对
+    # 抽帧核对(边界先按组片段实际帧数重量化,与渲染同口径)
+    requantize_cuts(planned, timeline, proj, fps)
     w, h = 160, 90
     problems, verified, whitelist = [], 0, []
     step = 1.0 / fps
     for e in planned:
         ty, t, d = e.get("type"), float(e.get("cut_time_s") or 0), float(e.get("duration_s") or 0)
+        t = round(t * fps) / fps        # 量化到整帧:渲染按帧号切界,-ss 用未量化秒会错位 1 帧
         try:
             if ty == "dissolve":
-                a = _gray_frame(src_path, t - step, w, h)
-                b = _gray_frame(src_path, t + step, w, h)
+                # 参考帧取**叠化窗口之外**两侧(±(d/2+2 帧)):纯前组帧与纯后组帧的
+                # 50/50 合成对比窗口中点。窗口内帧是克隆冻结的,窗口外 2 帧余量还
+                # 容忍名义边界与实拼内容 1–2 帧的历史偏差(timeline 浮点截断遗留)
+                # (2026-09-03 首次实跑校准)
+                margin = round(_frames(d, fps) / 2) / fps + 2 * step
+                a = _gray_frame(src_path, t - margin, w, h)
+                b = _gray_frame(src_path, t + margin, w, h)
                 x = _gray_frame(out_path, t, w, h)
                 m = _blend_mad(x, a, b)
-                if m > BLEND_TOL:
-                    problems.append(f"{e['at_shot']} dissolve 中点与前后帧 50/50 混合差 {m:.1f}>{BLEND_TOL}")
+                # 阈值随前后组画面差自适应:参考帧在窗口外 ±2 帧,运动内容下与窗口内
+                # 冻结克隆帧的差 ∝ 前后组差;静止组 _mad(a,b)≈0 仍按 BLEND_TOL 严卡
+                tol = max(BLEND_TOL, 0.45 * _mad(a, b))
+                if m > tol:
+                    problems.append(f"{e['at_shot']} dissolve 中点与前后帧 50/50 混合差 {m:.1f}>{tol:.1f}")
                 verified += 1
             elif ty in ("dip_black", "dip_white"):
                 # ffmpeg fadeblack/fadewhite 的纯黑/纯白峰值不在窗口正中(实测约 1/3 处),窗口内取三点极值
