@@ -38,6 +38,13 @@ label 机检(label_ok,2026-08-27):每角色 `label` 必填,= 短规范名——�
       同组同一生物不得两态并存;mounted 值须在 creatures_union 内;creatures_union 有生物却两态皆无 =
       --strict 违规 / 否则 WARN(生物在图上无锚)。字母池 A–L 共 12 个(含生物条目)。
 
+全局站位表(station_table_ok,2026-09-03):组 `blocking_map.station_table[]` 每个占字母的条目(角色 + 独立态生物)一行,
+      六项必填——`id`(人物编号)、`zone_en`(所在区域)、`anchor{landmark, relation_en}`(固定参照物:layout.json 地标 id +
+      与它的关系)、`facing_en`(身体朝向)、`neighbors[{id, relation_en}]`(相邻人物,单人组可空数组)、`invariants[]`
+      (不能改变的位置关系,≥1 条);全表**导演台视角**(地标/人物相对关系),不得写画幅侧/景深层/镜头词
+      (画左/画右/前景/背景/screen-left/foreground/镜头/camera…)——那些是镜级 blocking.json `frame_position`/
+      `space_fragment_en` 的事(机检 camera_view_consistent,code/camera_view_check.py);下游 prompt 逐字拼入
+      `Blocking table:` 段(机检 station_table_bound,code/layout_map_bound_check.py)。缺表:--strict 违规 / 否则 WARN。
 用法:
   python3 code/render_blocking_map.py --project <slug> --ep ep01                 # 定稿:shot_list 全组
   python3 code/render_blocking_map.py --project <slug> --ep ep01 grp005 grp006   # 只渲染指定组
@@ -65,6 +72,11 @@ _PRONOUNS = {"他", "她", "它", "他们", "她们", "它们", "我", "你", "�
              "he", "she", "it", "they", "him", "her", "them", "i", "we", "you", "me", "us"}
 _LABEL_BAD_PUNCT = re.compile(r"[()()\[\]【】「」『』《》〈〉<>{}:：;;,,、·/|\\]")
 LABEL_MAX_CJK, LABEL_MAX_WORDS = 8, 3
+# station_table_ok(2026-09-03):站位表是导演台视角,禁画面视角词
+_CAMERA_WORDS = re.compile(r"画左|画右|画中|画外|画幅|画面|前景|中景|背景|近景|远景|镜头|机位|入画|出画|"
+                           r"screen[- ]?(left|right)|frame[- ]?(left|right)|foreground|midground|background|"
+                           r"camera|off[- ]?screen|on[- ]?screen|in[- ]frame", re.I)
+STATION_FIELDS = ("id", "zone_en", "anchor", "facing_en", "neighbors", "invariants")
 
 
 def check_label(label) -> str | None:
@@ -180,6 +192,78 @@ def resolve_pt(pt, landmarks: dict, gid: str, cid: str, what: str, errs: list):
     return float(xy[0]), float(xy[1])
 
 
+def validate_station_table(gid: str, bm, routes, landmarks: dict, strict: bool = False):
+    """station_table_ok(2026-09-03):组级全局站位表六项齐全、id 集合 = 占字母条目、地标合法、无画面视角词。"""
+    errs, warns = [], []
+    st = bm.get("station_table") if isinstance(bm, dict) else None
+    ids = [r[0] for r in routes]
+    if not isinstance(st, list) or not st:
+        (errs if strict else warns).append(f"{gid}: blocking_map 缺 station_table(全局站位表:六项/条目,2026-09-03;回派 storyboard/shot-planning 补写)")
+        return errs, warns
+    seen = []
+    for i, row in enumerate(st):
+        if not isinstance(row, dict):
+            errs.append(f"{gid}: station_table[{i}] 不是对象")
+            continue
+        cid = row.get("id") or f"#{i}"
+        seen.append(cid)
+        if cid not in ids:
+            errs.append(f"{gid}/{cid}: station_table 条目不在 blocking_map.characters(占字母条目)内")
+        for k in STATION_FIELDS:
+            if k not in row:
+                errs.append(f"{gid}/{cid}: station_table 缺 {k}(六项必填:id/zone_en/anchor/facing_en/neighbors/invariants)")
+        texts = []
+        for k in ("zone_en", "facing_en"):
+            v = row.get(k)
+            if not (isinstance(v, str) and v.strip()):
+                errs.append(f"{gid}/{cid}: station_table.{k} 须为非空字符串")
+            else:
+                texts.append(v)
+        anc = row.get("anchor")
+        if not isinstance(anc, dict):
+            errs.append(f"{gid}/{cid}: station_table.anchor 须为 {{landmark, relation_en}}")
+        else:
+            lid = anc.get("landmark")
+            if lid not in landmarks:
+                errs.append(f"{gid}/{cid}: station_table.anchor.landmark {lid!r} 不在 layout.json#landmarks")
+            rel = anc.get("relation_en")
+            if not (isinstance(rel, str) and rel.strip()):
+                errs.append(f"{gid}/{cid}: station_table.anchor.relation_en 须为非空字符串(与固定参照物的关系)")
+            else:
+                texts.append(rel)
+        nb = row.get("neighbors")
+        if not isinstance(nb, list):
+            errs.append(f"{gid}/{cid}: station_table.neighbors 须为数组(单人组可为空数组)")
+        else:
+            for j, n in enumerate(nb):
+                if not isinstance(n, dict) or not n.get("id") or not (isinstance(n.get("relation_en"), str) and n["relation_en"].strip()):
+                    errs.append(f"{gid}/{cid}: station_table.neighbors[{j}] 须为 {{id, relation_en}}")
+                    continue
+                if n["id"] == cid:
+                    errs.append(f"{gid}/{cid}: station_table.neighbors 不得指向自己")
+                elif n["id"] not in ids:
+                    errs.append(f"{gid}/{cid}: station_table.neighbors[{j}].id {n['id']!r} 不在本组 blocking_map 条目内")
+                texts.append(n["relation_en"])
+            if len(ids) > 1 and not nb:
+                warns.append(f"{gid}/{cid}: 多人组 station_table.neighbors 为空,确认该角色确无相邻人物")
+        inv = row.get("invariants")
+        if not (isinstance(inv, list) and inv and all(isinstance(x, str) and x.strip() for x in inv)):
+            errs.append(f"{gid}/{cid}: station_table.invariants 须为 ≥1 条非空字符串(不能改变的位置关系)")
+        else:
+            texts += inv
+        for tx in texts:
+            m = _CAMERA_WORDS.search(tx)
+            if m:
+                errs.append(f"{gid}/{cid}: station_table 含画面视角词 {m.group(0)!r}(表是导演台视角:只写地标/人物相对关系;画幅侧/景深归镜级 frame_position)—— \"{tx}\"")
+    missing = [c for c in ids if c not in seen]
+    if missing:
+        errs.append(f"{gid}: station_table 缺条目 {missing}(每个占字母的角色/独立态生物各一行)")
+    dup = {c for c in seen if seen.count(c) > 1}
+    if dup:
+        errs.append(f"{gid}: station_table 条目重复 {sorted(dup)}")
+    return errs, warns
+
+
 def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=None, strict: bool = False):
     """blocking_map 结构机检;返回 (routes, errs, warns)。
     routes=[(id, label, start, path, end, route_en, kind)],kind ∈ {"character", "creature"}(id 以 CRE- 开头为生物)。"""
@@ -243,6 +327,9 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
             (errs if strict else warns).append(msg)
     if len(routes) > len(LETTERS):
         errs.append(f"{gid}: 条目数 {len(routes)}(角色+生物)超出字母池上限 {len(LETTERS)}")
+    se, sw = validate_station_table(gid, bm, routes, landmarks, strict)
+    errs += se
+    warns += sw
     return routes, errs, warns
 
 

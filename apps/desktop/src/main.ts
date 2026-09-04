@@ -146,15 +146,15 @@ function initializeFirstLoginDefaults(): void {
   // Only create missing files. Existing installations may already contain user
   // choices from an older desktop or WebUI version and must never be overwritten.
   writeInitialJson(path.join(runtime, 'genconfig.json'), {
-    image: {provider: 'openrouter'},
-    video: {provider: 'openrouter'},
-    music: {provider: 'openrouter'},
-    tts: {provider: 'openrouter'},
-    deepagents: {provider: 'openrouter'},
+    image: {provider: 'agentics'},
+    video: {provider: 'agentics'},
+    music: {provider: 'agentics'},
+    tts: {provider: 'agentics'},
+    deepagents: {provider: 'agentics'},
   })
   writeInitialJson(path.join(runtime, 'state.json'), {
     sessions: {},
-    ui_prefs: {engine: 'deepagents', model: 'openrouter', model_custom: '', project: ''},
+    ui_prefs: {engine: 'deepagents', model: 'agentics', model_custom: '', project: ''},
     global_model: {engine: 'deepagents', model: 'anthropic/claude-sonnet-5'},
   })
 }
@@ -243,7 +243,7 @@ async function requireDesktopLogin(build: ReturnType<typeof readBuildInfo>): Pro
   const region = serviceRegion(build)
   authRegion = region
   const userData = app.getPath('userData')
-  const saved = loadStoredAuth(userData)
+  const saved = loadStoredAuth(userData, region.environment)
   let auth = saved
   if (auth) {
     while (auth) {
@@ -253,7 +253,7 @@ async function requireDesktopLogin(build: ReturnType<typeof readBuildInfo>): Pro
       } catch (error) {
         if (error instanceof AgenticsApiError && error.status === 401) {
           console.warn('[auth] saved session has expired')
-          clearStoredAuth(userData)
+          clearStoredAuth(userData, region.environment)
           auth = undefined
           break
         }
@@ -281,7 +281,7 @@ async function requireDesktopLogin(build: ReturnType<typeof readBuildInfo>): Pro
     initializeFirstLoginDefaults()
     auth.onboarded = true
   }
-  saveStoredAuth(userData, auth)
+  saveStoredAuth(userData, auth, region.environment)
   authToken = auth.token
   authRegion = region
 }
@@ -566,7 +566,10 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_WEB_PORT: webPort,
     VIDEOAGENTS_API_PORT: apiPort,
     VIDEOAGENTS_USER_JWT: authToken,
+    VIDEOAGENTS_SERVICE_ENV: authRegion?.environment || '',
     VIDEOAGENTS_SERVICE_DISTRIBUTION: authRegion?.distribution || 's3',
+    VIDEOAGENTS_SERVICE_SSO_ORIGIN: authRegion?.ssoOrigin || '',
+    VIDEOAGENTS_SERVICE_API_ORIGIN: authRegion?.apiOrigin || '',
     VIDEOAGENTS_OPENROUTER_WRAPPER_URL: authRegion?.openrouterWrapperUrl || '',
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
@@ -741,6 +744,10 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
 }
 
 ipcMain.on('desktop:version', event => {event.returnValue = app.getVersion()})
+// 发行版标识:oss = shumati.cn,s3 = agentics.world;页面据此把「账号 ID」显示为 SMT ID / AGT ID
+ipcMain.on('desktop:distribution', event => {
+  event.returnValue = (authRegion ?? serviceRegion(readBuildInfo(process.resourcesPath, app.isPackaged))).distribution
+})
 ipcMain.handle('desktop:open-external', async (_event, value: unknown) => {
   if (typeof value !== 'string' || !/^https?:\/\//.test(value)) throw new Error('不允许的 URL')
   await shell.openExternal(value)
@@ -767,6 +774,12 @@ ipcMain.handle('desktop:account', async () => {
   try {
     currentAccount = await fetchUserAccount(authRegion, authToken)
   } catch (error) {
+    if (error instanceof AgenticsApiError && error.status === 401) {
+      clearStoredAuth(app.getPath('userData'), authRegion.environment)
+      authToken = ''
+      currentAccount = undefined
+      throw new Error('登录已过期，请重新登录')
+    }
     if (!currentAccount) throw error
     console.warn(`[auth] account refresh failed: ${String(error)}`)
   }
@@ -786,7 +799,7 @@ ipcMain.handle('desktop:login', async () => {
   const auth = {token: result.token, onboarded: false}
   initializeFirstLoginDefaults()
   auth.onboarded = true
-  saveStoredAuth(app.getPath('userData'), auth)
+  saveStoredAuth(app.getPath('userData'), auth, authRegion.environment)
   authToken = auth.token
   currentAccount = result.account
   app.relaunch()
@@ -795,7 +808,7 @@ ipcMain.handle('desktop:login', async () => {
   return true
 })
 ipcMain.handle('desktop:logout', async () => {
-  if (!authToken) return false
+  if (!authRegion || !authToken) return false
   const options: MessageBoxOptions = {
     type: 'question', title: '退出 VideoAgents 登录',
     message: '确定退出当前登录？',
@@ -806,7 +819,7 @@ ipcMain.handle('desktop:logout', async () => {
     ? await dialog.showMessageBox(window, options)
     : await dialog.showMessageBox(options)
   if (answer.response !== 0) return false
-  clearStoredAuth(app.getPath('userData'))
+  clearStoredAuth(app.getPath('userData'), authRegion.environment)
   authToken = ''
   authRegion = undefined
   currentAccount = undefined

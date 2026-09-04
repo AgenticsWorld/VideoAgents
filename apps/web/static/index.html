@@ -257,6 +257,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
+          <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
@@ -417,7 +418,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <input type="checkbox" id="npo-spatial" style="flex:none" checked>
         <span style="color:var(--dim);font-size:12px">开启=每场景出俯视空间布局图+9宫格多角度图,分镜组标注人物起点/动线/终点供视频模型定位;关闭=沿用单张场景概念图流程</span></div>
       <div class="row"><label>旁白</label>
-        <input type="checkbox" id="npo-narration" style="flex:none" checked>
+        <input type="checkbox" id="npo-narration" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担</span></div>
       <div class="row"><label>对白配音</label>
         <select id="npo-dialogue-voice" style="flex:1">
@@ -817,7 +818,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <h3>👤 账号</h3>
     <div id="acct-anon" class="note" style="display:none">尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。</div>
     <div id="acct-info" style="display:none">
-      <div class="row"><label>账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
+      <div class="row"><label id="acct-id-label">账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
       <div class="row"><label>余额</label><span id="acct-bal" style="flex:1"></span></div>
     </div>
     <div id="acct-st" class="note" style="display:none">读取中…</div>
@@ -916,7 +917,7 @@ const GROK_STATIC=[
 ];
 const MODEL_OPTIONS={
   claude:[[SMART,'智能分配'],['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
-          ['claude-fable-5','fable-5'],
+          ['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
@@ -930,9 +931,9 @@ const MODEL_OPTIONS={
   pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
-  deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
+  deepagents:[['agentics','AgenticsLLM'],['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
-let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
+let DA_PROVIDER='agentics';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
 let PI_MODEL_ERROR='';
 async function loadPiModelOptions(refresh=false){
@@ -1002,7 +1003,7 @@ async function populateModels(engine,selected=null){
     sel.value='__custom';$('#model-custom').value=selected;
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
-    ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
+    ?'deepagents 生效渠道:AgenticsLLM/本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
     :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
     :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型'):'';
@@ -1144,7 +1145,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
   $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
-  $('#npo-narration').checked=true;   // 旁白默认启用;关闭=约定全片无任何旁白
+  $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=2;$('#npd-smax').value=8;
   $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭
@@ -1248,19 +1249,20 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
+  image:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['fal','Fal'],['minimax','MiniMax'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/云端模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
 function syncDaSelect(cfg){
   const da=cfg.deepagents||{};
-  DA_PROVIDER=['cloud','openrouter'].includes(da.provider)?da.provider:'local';
+  DA_PROVIDER=['agentics','local','cloud','openrouter'].includes(da.provider)?da.provider:'agentics';
   if($('#engine').value!=='deepagents')return;
   const sel=$('#model');
   sel.value=DA_PROVIDER;
-  const models={local:(da.local||{}).model||'',
+  const models={agentics:(da.agentics||{}).custom_model||(da.agentics||{}).model||'',
+                local:(da.local||{}).model||'',
                 cloud:(da.cloud||{}).custom_model||(da.cloud||{}).model||'',
                 openrouter:(da.openrouter||{}).custom_model||(da.openrouter||{}).model||''};
   DA_MODEL=models[DA_PROVIDER]||'';
@@ -2177,6 +2179,9 @@ function initializeDesktopLogin(){
   const bridge=desktopAuthBridge(),item=$('#menu-account');
   if(!item||!bridge)return;
   item.style.display='block';
+  // 发行版标识来自打包时的 build-info.json:shumati.cn 版显示 SMT ID,agentics.world 版显示 AGT ID
+  const idLabel={oss:'SMT ID',s3:'AGT ID'}[bridge.distribution];
+  if(idLabel)$('#acct-id-label').textContent=idLabel;
   item.onclick=e=>{e.preventDefault();openAccountModal()};
   $('#acct-close').onclick=()=>$('#account-modal').style.display='none';
   $('#account-modal').onclick=e=>{if(e.target===e.currentTarget)$('#account-modal').style.display='none'};
@@ -2369,7 +2374,7 @@ async function applyAmMode(force=true){
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
   claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['claude-opus-5','opus-5'],
-          ['sonnet','sonnet'],['claude-fable-5','fable-5'],
+          ['sonnet','sonnet'],['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
   codex:[['','默认'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],

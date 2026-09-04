@@ -238,6 +238,18 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 STOPPED_BY_USER_MSG = "已被用户手动停止"
 # stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
 STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
+# 网络快速失败:claude CLI 遇 ECONNRESET/超时等连接层错误(api_retry 事件 error_status 为
+# null,即没拿到任何 HTTP 响应)时默认自带指数退避重试 10 次,agent 会在「等待重试」里
+# 干耗数分钟且多个并发 agent 一起卡死。宿主看到这类事件超过下面的容忍次数就立刻杀进程
+# 报错(run.net_error=True),由总制片重派或人工修好代理/网络后再继续。HTTP 状态类错误
+# (429/529/5xx)仍交给 CLI 自己重试。VIDEOAGENTS_NET_RETRY_LIMIT 可放宽(默认 0=首次即停)。
+try:
+    NET_RETRY_LIMIT = max(0, int(os.environ.get("VIDEOAGENTS_NET_RETRY_LIMIT", "0")))
+except ValueError:
+    NET_RETRY_LIMIT = 0
+NET_ERROR_MSG = ("🔌 网络中断:API 连接被重置/超时(Connection dropped,未收到任何 HTTP 响应),"
+                 "已按快速失败策略终止进程、不等待 CLI 自动重试;非程序错误、不计 attempt,"
+                 "请检查代理/VPN 节点后由总制片重新派单或人工介入")
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
                                          # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
@@ -621,7 +633,8 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | ideogram | volcengine | byteplus | minimax | comfyui
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -649,13 +662,18 @@ DEFAULT_GENCONFIG = {
                     "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
+        # Fal(queue.fal.run 托管端点):model 存家族前缀(bytedance/seedance-2.0、minimax/h3、
+        # fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video
+        # 任务段;custom_model 可填完整端点 ID 原样调用;Key 在 fal.ai/dashboard/keys 创建
+        "fal": {"api_key": "", "model": "minimax/h3-max", "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
@@ -668,6 +686,7 @@ DEFAULT_GENCONFIG = {
     },
     "music": {
         "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -688,6 +707,7 @@ DEFAULT_GENCONFIG = {
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -728,7 +748,8 @@ DEFAULT_GENCONFIG = {
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
-        "provider": "local",   # local | cloud | openrouter
+        "provider": "local",   # agentics | local | cloud | openrouter
+        "agentics": {"model": "anthropic/claude-sonnet-5", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
         "cloud": {"base_url": "https://api.deepseek.com",
@@ -795,7 +816,9 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
-    # narration_enabled=旁白(默认开,2026-09-01):关闭=用户约定全片没有任何旁白——
+    # narration_enabled=旁白(2026-09-01):此处默认 True 只作存量项目缺键回退(老项目旁白链路照常);
+    #   **新建项目基线=False(旁白默认关闭)**——api_projects_create 置基线、向导默认不勾选(同 review 基线先例);
+    #   关闭=用户约定全片没有任何旁白——
     #   p5-narration/p8-narrator 不派发,shot_list 不写 narration_anchors、audio_plan 禁 narration_over
     #   (无对白组一律 ambient_only,silent_rationale 照常核查但不再回派补写旁白),混音只有原生轨+BGM 两路,
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
@@ -946,6 +969,14 @@ def _migrate_genconfig(config: dict) -> None:
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     for kind in ("image", "video", "music", "tts", "digital_human"):
         section = config.get(kind, {})
+        # Older desktop defaults selected OpenRouter with an empty user key and
+        # silently routed that tab through the Agentics account wrapper. Keep
+        # those installs working while making the two providers explicit.
+        if (kind != "digital_human" and os.environ.get("VIDEOAGENTS_USER_JWT")
+                and section.get("provider") == "openrouter"
+                and not str((section.get("openrouter") or {}).get("api_key")
+                            or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
+            section["provider"] = "agentics"
         mm = section.get("minimax")
         if isinstance(mm, dict):
             _split_legacy_key(mm, "api_key", ("api_key_io", "api_key_cn"))
@@ -978,6 +1009,12 @@ def _migrate_genconfig(config: dict) -> None:
         if dh.get("provider") == "runninghub":
             dh["provider"] = "comfyui"
             comfy["mode"] = rh.get("site") if rh.get("site") in RH_BASES else "rh_cn"
+    da = config.get("deepagents")
+    if (isinstance(da, dict) and os.environ.get("VIDEOAGENTS_USER_JWT")
+            and da.get("provider") == "openrouter"
+            and not str((da.get("openrouter") or {}).get("api_key")
+                        or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
+        da["provider"] = "agentics"
 
 
 def load_genconfig() -> dict:
@@ -1011,7 +1048,7 @@ def active_video_model(cfg: dict | None = None, agent_id: str = "") -> str:
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
     pc = v.get(active_video_provider(cfg, agent_id)) or {}
-    return str(pc.get("custom_model") or pc.get("model") or "")
+    return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "")
 
 
 VIDEO_AGENT_ID = "08-video-gen/video-generation"     # 实际提交视频生成请求的工位
@@ -1117,6 +1154,8 @@ MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2
 # 注入加载指令给 video-generation agent
 RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
                           "runninghub-cloud-workflow/SKILL.md")
+AGENTICS_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
+                        "agentics-media-generation/SKILL.md")
 
 # 本地音频转写 skill:音频转文字 Agent 每单开工前必须读取；模型由宿主缓存到 data/models/
 AUDIO_TRANSCRIPTION_SKILL = (
@@ -1145,6 +1184,8 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "MiniMax API Key 已配置"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
         "kind": "conditional", "condition": "视频渠道为 ComfyUI RunningHub 运行方式"},
+    "08-video-gen/video-generation/agentics-media-generation": {
+        "kind": "conditional", "condition": "视频渠道为 AgenticsLLM"},
     "09-audio/audio-transcription/audio-transcription": {"kind": "always"},
     "10-editing/caption/caption-styling": {"kind": "soul"},
     "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube"},
@@ -1441,38 +1482,59 @@ DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 DESKTOP_OPENROUTER_WRAPPERS = {
     "https://api.agentics.world/wrapper/openrouter",
+    "https://devapi.agentics.world/wrapper/openrouter",
     "https://wrapper.shumati.cn/wrapper/openrouter",
+}
+AGENTICS_SERVICE_ORIGINS = {
+    "https://api.agentics.world",
+    "https://devapi.agentics.world",
+    "https://api.shumati.cn",
 }
 OPENROUTER_WRAPPER_API_SUFFIX = "/api/v1"
 
 
 def resolve_openrouter_connection(api_key: str = "") -> dict:
-    """Resolve a user-owned OpenRouter key before the desktop account wrapper.
-
-    Browser deployments never receive the desktop JWT variables and therefore
-    retain the historical direct-OpenRouter behavior.
-    """
+    """Resolve the explicit user-owned OpenRouter connection."""
     configured = str(api_key or os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    if configured:
-        return {"base_url": DEEPAGENTS_OPENROUTER_URL,
-                "api_key": configured, "uses_wrapper": False}
-    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
-    wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
-    if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
-        # agentics-deepcore uses
-        #   <wrapper>/openrouter/api/v1
-        # as the OpenAI-compatible SDK base. VIDEOAGENTS_* stores the full
-        # module root (<wrapper>/openrouter), so append the same API prefix
-        # before ChatOpenAI adds /chat/completions, /models, etc.
-        return {"base_url": wrapper + OPENROUTER_WRAPPER_API_SUFFIX,
-                "api_key": jwt, "uses_wrapper": True}
     return {"base_url": DEEPAGENTS_OPENROUTER_URL,
-            "api_key": "", "uses_wrapper": False}
+            "api_key": configured, "uses_wrapper": False}
+
+
+def resolve_agentics_connection() -> dict:
+    """Resolve the signed-in desktop account's Agentics service endpoints.
+
+    These variables are injected only by the desktop shell. Browser deployments
+    therefore cannot accidentally opt into account-billed Agentics requests.
+    """
+    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
+    origin = str(os.environ.get("VIDEOAGENTS_SERVICE_API_ORIGIN") or "").strip().rstrip("/")
+    if not origin:
+        wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+        if wrapper.endswith("/wrapper/openrouter"):
+            origin = wrapper[:-len("/wrapper/openrouter")]
+    else:
+        wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+    if not jwt:
+        raise ServiceError(401, "AgenticsLLM requires a signed-in desktop account")
+    if origin not in AGENTICS_SERVICE_ORIGINS:
+        raise ServiceError(400, "Agentics service origin is unavailable")
+    if wrapper not in DESKTOP_OPENROUTER_WRAPPERS:
+        raise ServiceError(400, "AgenticsLLM wrapper endpoint is unavailable")
+    return {
+        "api_origin": origin,
+        "base_url": wrapper + OPENROUTER_WRAPPER_API_SUFFIX,
+        "api_key": jwt,
+    }
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
     """deepagents 配置 -> 生效渠道的 {provider, base_url, api_key, model}。"""
     da = (cfg or load_genconfig()).get("deepagents") or {}
+    if (da.get("provider") or "local") == "agentics":
+        a = da.get("agentics") or {}
+        connection = resolve_agentics_connection()
+        return {"provider": "agentics", **connection,
+                "model": a.get("custom_model") or a.get("model") or ""}
     if (da.get("provider") or "local") == "openrouter":
         o = da.get("openrouter") or {}
         connection = resolve_openrouter_connection(o.get("api_key") or "")
@@ -1680,8 +1742,8 @@ AM_MODE_MODELS = {
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
 # RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
 # ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+AM_IMAGE_PROVIDERS = ("", "agentics", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1722,10 +1784,13 @@ def global_model_pref() -> dict:
     p = STATE.get("global_model") or {}
     eng = str(p.get("engine") or "").lower()
     model = str(p.get("model") or "").strip()
-    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/cloud/openrouter)。旧 UI 会把
+    # DeepAgents 顶栏的 model 选择器实际存的是渠道(agentics/local/cloud/openrouter)。旧 UI 会把
     # 渠道名写入 global_model，导致它覆盖 genconfig 中的真实模型 ID。
-    if eng == "deepagents" and (not model or model in ("local", "cloud", "openrouter")):
-        model = resolve_deepagents()["model"]
+    if eng == "deepagents" and (not model or model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            model = resolve_deepagents()["model"]
+        except ServiceError:
+            model = ""
     return {"engine": eng if eng in ENGINES else "",
             "model": model}
 
@@ -2588,8 +2653,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
         "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并**只准调用宿主 CLI** `code/render_blocking_map.py` 渲染 "
         "`directing/epNN/blocking_maps/grpNNN.png`(图上只有字母与动线、无文字;禁止复制/改写到项目 code/ 或自绘)"
-        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
-        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
+        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map),站位片段按本镜机位(view_tile 视轴)写**画面视角**并带 `frame_position`(机检 camera_view_consistent,`code/camera_view_check.py`);"
+        "shot-planning 每组定稿全局站位表 `blocking_map.station_table`(六项:人物编号/所在区域/固定参照物/身体朝向/相邻人物/不能改变的位置关系,导演台视角;机检 station_table_ok);Phase 7 prompt refs 必挂动线俯视图 + "
+        "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)+ Map markers 映射句、逐字注入 route_en 与 `Blocking table:` 站位表段、Shot 段只写画面视角站位句(机检 layout_map_bound / station_table_bound,"
         "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "
@@ -2597,11 +2663,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 render_blocking_map.py;blocking 不受 blocking_on_map 约束"
         "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
         "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
-        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "blocking_on_map/layout_map_bound 四项及 camera_view_consistent/station_table_ok/station_table_bound(2026-09-03)机检一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     narration_on = out.get("narration_enabled", True) is not False
     narration_line = (
-        "开启(默认)—— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
+        "开启 —— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
         " audio_plan、narrator 在 p7-video 前合成实测、audio-mixing 三路混音,§7D/§8B 机检全数生效"
         if narration_on else
         "**关闭 —— 用户约定整个片子没有任何旁白**:p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺"
@@ -2908,6 +2974,17 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
+    if agent_id == VIDEO_AGENT_ID and active_video_provider(agent_id=agent_id) == "agentics" \
+            and skill_enabled("08-video-gen/video-generation/agentics-media-generation"):
+        p += f"""
+
+## AgenticsLLM 视频生成 Skill(当前渠道已生效)
+当前项目通过登录桌面端账号调用 Agentics 媒体生成 profile。执行视频生成工单前,**先阅读技能文件并遵守其调用与错误处理边界**:
+- Skill 文件:{AGENTICS_VIDEO_SKILL}(直接 Read 全文)
+- 统一调用 `python3 modules/genmedia.py video ...`;profile 固定字段、取值与附件数量约束、上传、幂等重试、轮询和取消由模块处理
+- 禁止手工拼 Agentics REST 请求、猜工作流 node/token/index、为了 `repeat_last` 补槽位而重复附件或在测试中修改核心模块
+- Agentics 视频命令允许至少 2 小时运行并按心跳等待;TLS/网络/503 不得判定生成失败。若外层进程在 task ID 创建后中断,用 `python3 modules/genmedia.py reclaim --task-id <UUID> --output <原路径>` 恢复同一任务,严禁重新提交
+- 422 只按结构化 field/reason 上报或修正明确的工单输入;401/402/403 停止;只有服务端明确 failed/cancelled 才按生成失败处理"""
     if agent_id == PROMPT_AGENT_ID:
         p += group_overrides_prompt(project)
     elif agent_id == VIDEO_AGENT_ID:
@@ -3054,7 +3131,7 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "net_error", "engine", "model", "tokens", "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -3249,15 +3326,24 @@ async def execute_run(run: dict, message: str, model: str | None):
                 pass
 
         if engine == "deepagents":
-            da = resolve_deepagents()
+            try:
+                da = resolve_deepagents()
+                resolution_error = None
+            except ServiceError as exc:
+                da = {"provider": "agentics", "base_url": "", "api_key": "", "model": ""}
+                resolution_error = exc.detail
             requested_model = str(model or "").strip()
             # 兼容修复前已落盘/传入的渠道占位值，绝不把 local/openrouter 发给模型端点。
             use_model = (da["model"] if not requested_model
                          or requested_model == da["provider"] else requested_model)
-            err = None
+            err = resolution_error
             if not use_model:
-                err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
-                       "「语言模型/DeepAgents」为生效渠道(本地模型/云端模型/OpenRouter)配置模型")
+                err = err or ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
+                              "「语言模型/DeepAgents」为生效渠道"
+                              "(AgenticsLLM/本地模型/云端模型/OpenRouter)配置模型")
+            elif da["provider"] == "agentics" and not da["api_key"]:
+                err = err or ("deepagents 引擎当前生效渠道为 AgenticsLLM，"
+                              "请先登录桌面端账号")
             elif da["provider"] == "openrouter" and not da["api_key"]:
                 err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
                        "请在 🎨 生成模型 页「语言模型/DeepAgents → OpenRouter」填写")
@@ -3468,6 +3554,10 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
+                    if run.get("net_error") and proc.returncode is None:
+                        # 连接层错误快速失败:不等 CLI 的退避重试,直接杀进程组
+                        _kill_proc_tree(proc)
+                        break
                 await proc.wait()
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
@@ -3578,6 +3668,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                          "非程序错误,无需追查失败原因;是否重派由用户决定)"
                          + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
                 chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run.get("net_error"):
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                reply = (f"{run['error']}(运行 {dur}s 后网络中断快速失败)"
+                         + (f"\n\n--- 中断前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, net_error=True)
             elif run["status"] == "error" and run.get("error") and reply != run["error"]:
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
                 reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
@@ -3893,6 +3989,18 @@ def handle_claude_event(run: dict, obj: dict):
     t = obj.get("type")
     if t == "system" and obj.get("subtype") == "init":
         run["session_id"] = obj.get("session_id")
+    elif t == "system" and obj.get("subtype") == "api_retry":
+        # CLI 将要退避重试一次 API 调用。error_status 为 null = 连接层错误(ECONNRESET/
+        # 超时,没拿到 HTTP 响应):超过容忍次数即标记 net_error,由运行循环杀进程快速失败。
+        # 有 HTTP 状态的(429/529/5xx)是服务端瞬时故障,仍交给 CLI 自己重试。
+        if obj.get("error_status") is None:
+            n = run["net_retries"] = run.get("net_retries", 0) + 1
+            if n > NET_RETRY_LIMIT and not run.get("net_error"):
+                run["net_error"] = True
+                run["error"] = (f"{NET_ERROR_MSG}(CLI 报 api_retry 第 {n} 次,"
+                                f"错误 {obj.get('error') or 'unknown'})")[:500]
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": "\n" + run["error"]})
     elif t == "assistant":
         for c in (obj.get("message") or {}).get("content", []):
             if c.get("type") == "text" and c.get("text"):
@@ -3910,7 +4018,13 @@ def handle_claude_event(run: dict, obj: dict):
                              "agent": run["agent"], "desc": desc})
                 publish_run(run)
     elif t == "result":
-        run["result"] = obj.get("result") or ""
+        if obj.get("is_error"):
+            # CLI 以 API 错误收尾(重试耗尽/未授权等)时 result 正文是错误文案
+            # ("API Error: Connection dropped (ECONNRESET)"),不能当产出:留空 result
+            # 让退出码判定为失败,错误文案进 error(网络快速失败已写的 error 优先)
+            run["error"] = run.get("error") or str(obj.get("result") or "API error")[:500]
+        else:
+            run["result"] = obj.get("result") or ""
         run["session_id"] = obj.get("session_id") or run.get("session_id")
         run["cost"] = round(obj.get("total_cost_usd") or 0, 4)
         run["turns"] = obj.get("num_turns")
@@ -4055,7 +4169,7 @@ def max_group_ref_images(project: str) -> int:
 GROUP_SKILL_MODES = ("global", "auto", "manual", "off")
 REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.5);手动加图/手绘生成以此兜底
 # 各渠道可选视频模型目录(与 apps/web/static/models.html 的 VOLC_MODELS/BP_VIDEO_MODELS/
-# MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
+# FAL_VIDEO_MODELS/MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
 VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "volcengine": [
         ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
@@ -4074,6 +4188,14 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
         ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
         ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "fal": [
+        ("minimax/h3-max", "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)"),
+        ("minimax/h3", "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)"),
+        ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
+        ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
+        ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
+        ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
     "minimax": [
         ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
@@ -6283,6 +6405,9 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    if any((cfg.get(kind) or {}).get("provider") == "agentics"
+           for kind in ("image", "video", "music", "tts", "deepagents")):
+        resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
     if dh_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
         raise ServiceError(400, "digital_human.comfyui.mode must be local, cloud, "
@@ -6583,6 +6708,70 @@ OPENROUTER_TTS_MODELS = [
     ("sesame/csm-1b", "CSM 1B(Sesame)· 英文对话/朗读音色(conversational/read_speech)"),
     ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
 ]
+
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4}
+
+
+def _agentics_response_data(payload: dict) -> dict:
+    """Unwrap the Agentics API's ``{code,msg,data}`` response envelope."""
+    if not isinstance(payload, dict):
+        raise ServiceError(502, "Agentics service returned an invalid response")
+    if "code" not in payload:
+        return payload
+    if payload.get("code") != 0 or not isinstance(payload.get("data"), dict):
+        raise ServiceError(502, str(payload.get("msg") or "Agentics service request failed")[:300])
+    return payload["data"]
+
+
+async def api_agentics_models(modality: str = "image", refresh: bool = False):
+    """List signed-in Agentics media profiles or AgenticsLLM text models."""
+    del refresh  # Service-side ordering and freshness are authoritative.
+    if modality not in (*AGENTICS_MEDIA_TYPES, "media", "text"):
+        raise ServiceError(400, "modality must be one of image / video / music / tts / media / text")
+    connection = resolve_agentics_connection()
+    headers = {"Authorization": f"Bearer {connection['api_key']}"}
+    try:
+        if modality == "text":
+            payload = await asyncio.to_thread(
+                _http_get_json, connection["api_origin"] + "/v1/agent_models", headers, 15)
+            values = _agentics_response_data(payload).get("models") or []
+            models = [{"id": m, "name": m} for m in values if isinstance(m, str) and m]
+            return {"models": models, "profiles": [], "cached": False}
+        query = ("" if modality == "media" else
+                 "?" + urllib.parse.urlencode({"media_type": AGENTICS_MEDIA_TYPES[modality]}))
+        payload = await asyncio.to_thread(
+            _http_get_json,
+            connection["api_origin"] + "/v1/media_generation/profiles" + query,
+            headers, 15)
+        profiles = _agentics_response_data(payload).get("profiles") or []
+        profiles = [p for p in profiles if isinstance(p, dict) and p.get("profile_code")]
+        if modality == "media":
+            type_to_modality = {value: key for key, value in AGENTICS_MEDIA_TYPES.items()}
+            media = {kind: {"models": [], "profiles": []} for kind in AGENTICS_MEDIA_TYPES}
+            for profile in profiles:
+                kind = type_to_modality.get(profile.get("media_type"))
+                if not kind:
+                    continue
+                media[kind]["profiles"].append(profile)
+                media[kind]["models"].append({
+                    "id": profile["profile_code"],
+                    "name": profile.get("name") or profile["profile_code"],
+                })
+            return {"media": media, "cached": False}
+        return {
+            "models": [{"id": p["profile_code"], "name": p.get("name") or p["profile_code"]}
+                       for p in profiles],
+            "profiles": profiles,
+            "cached": False,
+        }
+    except ServiceError:
+        raise
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        raise ServiceError(e.code if e.code in (401, 403) else 502,
+                           f"Agentics service HTTP {e.code}: {detail}") from e
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"Failed to fetch Agentics model list: {str(e)[:300]}") from e
 
 
 async def api_openrouter_models(modality: str = "image", refresh: bool = False):
@@ -7715,8 +7904,11 @@ async def api_globalmodel_set(body: dict):
     if eng and eng not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
     model = str(body.get("model") or "").strip()
-    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
-        model = resolve_deepagents()["model"]
+    if eng == "deepagents" and (not model or model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            model = resolve_deepagents()["model"]
+        except ServiceError:
+            model = ""
     STATE["global_model"] = {"engine": eng, "model": model}
     save_state(STATE)
     return {"ok": True, "global_model": global_model_pref()}
@@ -7754,8 +7946,11 @@ async def api_uiprefs_set(body: dict):
     STATE["ui_prefs"] = prefs
     effective_model = str(body.get("effective_model") or "").strip()
     if eng == "deepagents" and (not effective_model
-                                 or effective_model in ("local", "openrouter")):
-        effective_model = resolve_deepagents()["model"]
+                                 or effective_model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            effective_model = resolve_deepagents()["model"]
+        except ServiceError:
+            effective_model = ""
     elif not effective_model:
         effective_model = str(body.get("model") or "").strip()
     STATE["global_model"] = {"engine": eng, "model": effective_model}
@@ -7980,6 +8175,8 @@ async def api_projects_create(body: dict):
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
     base["review"] = {"evaluation": 60, **{k: 0 for k in REVIEW_DIMENSIONS}}
+    # 新建项目旁白默认关闭(2026-09-01);DEFAULT_GENCONFIG 保持 True 仅作存量项目缺键回退
+    base["output"] = {**base["output"], "narration_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
@@ -9752,3 +9949,68 @@ async def api_footage_analyze_all(name: str, body: dict):
 
 def footage_file_path(name: str, rel: str) -> Path:
     return _footage_call(lambda lib: lib.resolve_file(name, rel))
+
+
+# ---------------- 直播(设置菜单「高级→直播」:data/live/) ----------------
+# 业务实现在 modules/live_stream.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
+# LiveError → ServiceError 映射,并注入「🎨 生成模型」页的 Fal 模型目录(与 Key 共用同一配置)。
+
+def _live_lib():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import live_stream  # noqa: WPS433
+    return live_stream
+
+
+def _live_call(fn, *args, **kw):
+    lib = _live_lib()
+    try:
+        return fn(lib, *args, **kw)
+    except lib.LiveError as exc:
+        raise ServiceError(exc.status, exc.detail) from exc
+
+
+def _live_decorate(res: dict) -> dict:
+    """状态附带 Fal 模型目录(与生成模型页同一份 VIDEO_MODEL_CATALOG)与生效渠道的模型。"""
+    fal = (load_genconfig().get("video") or {}).get("fal") or {}
+    return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get("fal", [])],
+            "providers": [["fal", "Fal"]],
+            "genconfig_model": str(fal.get("custom_model") or fal.get("model") or "")}
+
+
+async def api_live_status(touch: bool = True, played: int | None = None):
+    return _live_decorate(await asyncio.to_thread(
+        _live_call, lambda lib: lib.status(touch=touch, played=played)))
+
+
+async def api_live_ref_add(data: bytes, filename: str):
+    return await asyncio.to_thread(_live_call, lambda lib: lib.add_ref(data, filename))
+
+
+async def api_live_ref_delete(ref_id: str):
+    return _live_call(lambda lib: lib.delete_ref(ref_id))
+
+
+async def api_live_start(body: dict):
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.start(body or {})))
+
+
+async def api_live_stop():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.stop()))
+
+
+async def api_live_prompt(body: dict):
+    return _live_decorate(_live_call(lambda lib: lib.update_prompt(str((body or {}).get("prompt") or ""))))
+
+
+async def api_live_settings(body: dict):
+    return {"settings": _live_call(lambda lib: lib.save_settings(body or {}))}
+
+
+async def api_live_clear():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.clear_history()))
+
+
+def live_file_path(rel: str) -> Path:
+    return _live_call(lambda lib: lib.resolve_file(rel))

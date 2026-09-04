@@ -72,6 +72,8 @@ def fmt_run(r: dict) -> str:
         tag = " ⏹已被用户手动停止(非错误,无需追查原因)"
     elif r.get("stopped"):
         tag = " ⏹服务关闭/重启时被中断(非错误,无需追查原因)"
+    elif r.get("net_error"):
+        tag = " 🔌网络中断快速失败(API 连接被重置,非程序错误,不计 attempt;修好网络后重派)"
     return (f"[{r['status']:>7}] {r['id']} {r['agent']}{par}{dur} "
             f"| {r.get('message', '')[:60]}{tag}")
 
@@ -160,6 +162,9 @@ def wait_all(ids: list[str], timeout: int, interval: int = 5):
                         print("  ⏹ 该任务" + ("被用户在运行面板手动停止" if r["stopped"] == "user"
                                             else "因服务关闭/重启被中断")
                               + ",非程序错误,无需追查失败原因;是否重派由用户决定")
+                    elif r.get("net_error"):
+                        print("  " + r.get("error", "🔌 网络中断快速失败")
+                              + ";该任务未计 attempt,可原指令直接重派一次,再失败则升级用户")
                     elif r.get("error"):
                         print("  错误:", r["error"])
             sys.exit(1 if failed else 0)
@@ -271,6 +276,8 @@ def main():
                     print("⏹ 该任务" + ("被用户在运行面板手动停止" if r["stopped"] == "user"
                                       else "因服务关闭/重启被中断")
                           + ",非程序错误,无需追查失败原因;是否重派由用户决定")
+                elif r.get("net_error"):
+                    print("🔌 该任务未计 attempt,可原指令直接重派一次,再失败则升级用户修网络/代理")
                 elif r["status"] == "error" and r.get("error") and r.get("result"):
                     print("错误:", r["error"])
                 sys.exit(0 if r["status"] == "done" else 1)
