@@ -10032,5 +10032,21 @@ async def api_live_session_delete(sid: str):
     return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.delete_session(sid)))
 
 
+async def api_live_director_bridge(path: str, body: dict):
+    return await asyncio.to_thread(_live_call, lambda lib: lib.director_bridge(path, body or {}))
+
+
+async def api_live_director_config():
+    return _live_call(lambda lib: lib.director_config())
+
+
+async def api_live_director_event(body: dict):
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.director_event(body or {})))
+
+
+async def api_live_director_record(seq: int, data: bytes, ext: str):
+    return await asyncio.to_thread(_live_call, lambda lib: lib.director_record(int(seq), data, ext))
+
+
 def live_file_path(rel: str) -> Path:
     return _live_call(lambda lib: lib.resolve_file(rel))

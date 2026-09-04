@@ -76,6 +76,7 @@ details .body{padding:10px 0 2px}
 .player.v{aspect-ratio:9/16;max-width:calc(72vh*9/16)}
 .player video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:0;transition:opacity .08s}
 .player video.on{opacity:1;z-index:2}
+.player .live.director{background:var(--purple);color:#0b1020}
 .player .overlay{position:absolute;left:10px;top:10px;z-index:3;display:flex;gap:6px;align-items:center}
 .player .live{font-size:11px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff}
 .player .live.on{background:var(--red)}
@@ -180,7 +181,9 @@ details .body{padding:10px 0 2px}
             <option value="refs_tail">参考图 + 尾帧一起作参考(默认)</option>
             <option value="first_frame">尾帧作首帧(不带参考图,衔接更平滑但人物易漂移)</option>
             <option value="none">不衔接(文生视频:每段仅按提示词独立生成,不带参考图与尾帧)</option>
+            <option value="director">导演模式(MiniMax H3 Max Director:实时连续生成,WebRTC 直推,提示词随时改)</option>
           </select></div>
+          <div class="row" id="memory-row" style="display:none"><label>记忆段数</label><input type="number" id="memory" min="1" max="50" step="1"><span class="hint">导演模式:保留最近多少段提示词作为上下文(1–50,默认 12)</span></div>
           <div class="row"><label>分辨率</label><select id="resolution" style="flex:none;width:100px"><option value="480p">480p</option><option value="768p">768p</option></select><span class="hint">默认 480p;768p 更清晰但更慢更贵(Seedance 按 720p 提交,Kling 无此参数)</span></div>
           <div class="row"><label>待播上限</label><input type="number" id="max-pending" min="1" max="10" step="1"><span class="hint">未播片段达到该数即暂停生成,播掉一段再继续;默认 3</span></div>
           <div class="row"><label>最多段数</label><input type="number" id="max-rounds" min="0" step="1"><span class="hint">0 = 不限,直到手动停止</span></div>
@@ -205,6 +208,7 @@ details .body{padding:10px 0 2px}
         <div class="idle" id="idle-text">还没有画面:填好参考图与提示词后点「启动」,第一段生成完成即开播</div>
         <video id="va" preload="auto" playsinline></video>
         <video id="vb" preload="auto" playsinline></video>
+        <video id="vlive" autoplay playsinline></video>
         <div class="overlay"><span class="live" id="live-badge">OFFLINE</span><span class="seg" id="seg-badge" style="display:none"></span></div>
         <div class="ctl"><button id="mute-btn" style="display:none">🔇 静音中,点击开启声音</button><button id="latest-btn" style="display:none" title="跳到最新一段">⏭ 最新</button></div>
       </div>
@@ -238,21 +242,42 @@ function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls|
 function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?(n/1e6).toFixed(1)+' MB':Math.round(n/1e3)+' KB'}
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 
-let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false;
+let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='';
 const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':'generic'};
 const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],generic:[3,30]};
 
 /* ---------- 设置表单 ---------- */
+const isDirector=()=>$('#link-mode').value==='director';
 function fillModels(models,cur){
   const sel=$('#model');const old=sel.value;
   sel.innerHTML=models.map(([id,label])=>`<option value="${esc(id)}">${esc(t(label))}</option>`).join('');
-  const want=cur||old||'minimax/h3-max';
+  let want=cur||old||'minimax/h3-max';
+  if(isDirector())want=DIRECTOR_MODEL;else if(want===DIRECTOR_MODEL)want=DIRECTOR_PREV_MODEL||(STATE&&STATE.genconfig_model)||'minimax/h3-max';
+  if(want===DIRECTOR_MODEL){sel.insertAdjacentHTML('afterbegin',`<option value="${esc(DIRECTOR_MODEL)}">${esc(t('MiniMax H3 Max Director(导演模式专用,实时 WebRTC)'))}</option>`)}
   if([...sel.options].some(o=>o.value===want))sel.value=want;
   else if(want){sel.insertAdjacentHTML('afterbegin',`<option value="${esc(want)}">${esc(want)}</option>`);sel.value=want}
   onModelChange();
 }
 function onModelChange(){
-  const fam=FAMILY($('#model').value);const [lo,hi]=DUR_RANGE[fam];
+  const sel=$('#model');const director=isDirector();
+  if(director){   // 导演模式:模型固定为 director 端点(非队列端点,不进生成模型目录),记住原模型以便切回
+    if(sel.value!==DIRECTOR_MODEL){DIRECTOR_PREV_MODEL=sel.value||DIRECTOR_PREV_MODEL;if(![...sel.options].some(o=>o.value===DIRECTOR_MODEL))sel.insertAdjacentHTML('afterbegin',`<option value="${esc(DIRECTOR_MODEL)}">${esc(t('MiniMax H3 Max Director(导演模式专用,实时 WebRTC)'))}</option>`);sel.value=DIRECTOR_MODEL}
+  }else if(sel.value===DIRECTOR_MODEL){
+    [...sel.options].filter(o=>o.value===DIRECTOR_MODEL).forEach(o=>o.remove());
+    const back=DIRECTOR_PREV_MODEL||(STATE&&STATE.genconfig_model)||'minimax/h3-max';
+    sel.value=[...sel.options].some(o=>o.value===back)?back:(sel.options[0]?sel.options[0].value:'');
+  }
+  const locked=!!(STATE&&STATE.session&&STATE.session.running);
+  sel.disabled=locked||director;
+  ['#duration','#max-pending','#max-rounds'].forEach(x=>$(x).disabled=locked||director);
+  $('#memory-row').style.display=director?'':'none';
+  $('#cost-hint').textContent=director?t('导演模式按秒计费(最少 60 秒),单会话默认最长 2 分钟(更长需向 fal 申请);关闭页面即结束'):t('启动后按段持续计费,直到停止;单段通常要 1–3 分钟');
+  if(director){
+    $('#dur-hint').textContent=t('导演模式:fal 侧按约 10 秒一块连续生成,单段时长/待播上限/最多段数不适用');
+    $('#model-hint').textContent=t('导演模式:MiniMax H3 Max Director 实时连续生成,视频经 WebRTC 直推本页,自带前文记忆不需尾帧衔接;参考图只取第 1 张作首帧;分辨率 480p/768p');
+    $('#gen-audio').disabled=true;return;
+  }
+  const fam=FAMILY(sel.value);const [lo,hi]=DUR_RANGE[fam];
   $('#duration').min=lo;$('#duration').max=hi;
   $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
   const turbo=fam==='h3'&&$('#model').value.toLowerCase().includes('turbo');   // H3 Max Turbo 只有文生/首帧端点,同 Kling 走尾帧作首帧
@@ -265,6 +290,7 @@ function fillSettings(s){
   if(SETTINGS_FILLED)return;SETTINGS_FILLED=true;
   $('#prompt').value=s.prompt||'';$('#aspect').value=s.aspect||'16:9';$('#duration').value=s.duration||10;
   $('#link-mode').value=s.link_mode||'refs_tail';$('#max-rounds').value=s.max_rounds||0;$('#idle-stop').value=s.idle_stop_min??10;
+  $('#memory').value=s.memory||12;if(s.link_mode==='director')onModelChange();
   $('#resolution').value=s.resolution||'480p';$('#max-pending').value=s.max_pending||3;
   $('#gen-audio').checked=s.generate_audio!==false;$('#continue-last').checked=!!s.continue_last;
 }
@@ -272,14 +298,16 @@ function collect(){
   return {prompt:$('#prompt').value.trim(),provider:$('#provider').value,model:$('#model').value,aspect:$('#aspect').value,
     duration:parseInt($('#duration').value,10)||10,resolution:$('#resolution').value,link_mode:$('#link-mode').value,max_rounds:parseInt($('#max-rounds').value,10)||0,
     max_pending:Math.min(10,Math.max(1,parseInt($('#max-pending').value,10)||3)),
-    idle_stop_min:parseInt($('#idle-stop').value,10)||0,generate_audio:$('#gen-audio').checked,continue_last:$('#continue-last').checked};
+    idle_stop_min:parseInt($('#idle-stop').value,10)||0,generate_audio:$('#gen-audio').checked,continue_last:$('#continue-last').checked,
+    memory:Math.min(50,Math.max(1,parseInt($('#memory').value,10)||12))};
 }
 function setInputsLocked(locked){
-  ['#model','#provider','#aspect','#duration','#resolution','#max-pending','#link-mode','#max-rounds','#idle-stop','#gen-audio','#continue-last'].forEach(s=>$(s).disabled=locked);
+  ['#model','#provider','#aspect','#duration','#resolution','#max-pending','#link-mode','#max-rounds','#idle-stop','#gen-audio','#continue-last','#memory'].forEach(s=>$(s).disabled=locked);
   if(locked)$('#gen-audio').disabled=true;else onModelChange();
   $('#drop').classList.toggle('disabled',locked);
   document.querySelectorAll('.ref button').forEach(b=>b.disabled=locked);
   $('#prompt-apply-row').style.display=locked?'':'none';
+  $('#prompt-apply').textContent=locked&&STATE&&STATE.session&&STATE.session.mode==='director'?t('✏️ 更新提示词(立即生效)'):t('✏️ 更新提示词(下一段生效)');
   $('#start-btn').style.display=locked?'none':'';$('#stop-btn').style.display=locked?'':'none';
 }
 
@@ -311,18 +339,31 @@ $('#start-btn').onclick=async()=>{
   const s=collect();
   if(!s.prompt&&!(STATE&&STATE.refs&&STATE.refs.length)){msg(t('提示词与参考图至少填一样'),'err');return}
   $('#start-btn').disabled=true;
-  try{const r=await api(`${API}/start`,s);resetPlayer();applyState(r);msg(t('已启动,第一段生成中…'),'ok')}
-  catch(e){msg(t('启动失败:')+e.message,'err')}
+  const director=s.link_mode==='director';
+  if(director&&!s.prompt){msg(t('导演模式必须填提示词'),'err');$('#start-btn').disabled=false;return}
+  if(director&&!(window.RTCPeerConnection)){msg(t('当前浏览器不支持 WebRTC,无法使用导演模式'),'err');$('#start-btn').disabled=false;return}
+  if(director)DIRECTOR.connecting=true;   // 先置位,避免 applyState 把刚建的会话当成孤儿收口
+  try{const r=await api(`${API}/start`,s);resetPlayer();applyState(r);
+    if(director){msg(t('已启动,正在建立 WebRTC 连接…'),'ok');directorConnect()}else msg(t('已启动,第一段生成中…'),'ok')}
+  catch(e){DIRECTOR.connecting=false;msg(t('启动失败:')+e.message,'err')}
   finally{$('#start-btn').disabled=false}
 };
 $('#stop-btn').onclick=async()=>{
   $('#stop-btn').disabled=true;
+  if(DIRECTOR.active||DIRECTOR.connecting){msg(t('正在关闭连接并保存录像…'),'ok');await directorClose()}
   try{const r=await api(`${API}/stop`,{});applyState(r);msg(t('已停止'),'ok')}
   catch(e){msg(t('停止失败:')+e.message,'err')}
   finally{$('#stop-btn').disabled=false}
 };
 $('#prompt-apply').onclick=async()=>{
-  try{const r=await api(`${API}/prompt`,{prompt:$('#prompt').value.trim()});applyState(r);msg(t('提示词已更新,下一段生效'),'ok')}
+  const prompt=$('#prompt').value.trim();
+  try{const r=await api(`${API}/prompt`,{prompt});applyState(r);
+    if(DIRECTOR.active){
+      if(!prompt){msg(t('导演模式提示词不能为空'),'err');return}
+      const v=(r.session&&r.session.director&&r.session.director.prompt_version)||(DIRECTOR.promptVersion+1);
+      if(directorSend({type:'prompt',prompt_version:v,prompt})){DIRECTOR.promptVersion=v;msg(t('提示词已发送,实时生效'),'ok')}
+      else msg(t('控制通道未就绪,提示词未发送'),'err');
+    }else msg(t('提示词已更新,下一段生效'),'ok')}
   catch(e){msg(t('更新失败:')+e.message,'err')}
 };
 $('#open-folder').onclick=async()=>{try{await api('/actions/open-live-folder',{})}catch(e){msg(t('打开文件夹失败:')+e.message,'err')}};
@@ -404,8 +445,14 @@ function applyState(r){
   $('#key-chip').textContent=r.fal_key_configured?t('Fal Key:已配置(与生成模型页共用)'):t('⚠ Fal Key 未配置:请到「生成模型」页 视频 → Fal 填写');
   $('#key-chip').style.color=r.fal_key_configured?'':'var(--yellow)';
   const sess=r.session;const running=!!(sess&&sess.running);
+  if(r.director_model)DIRECTOR_MODEL=r.director_model;
   renderRefs(r.refs||[],running);
   setInputsLocked(running);
+  if(sess&&running&&sess.mode==='director'&&!DIRECTOR.active&&!DIRECTOR.connecting&&!DIRECTOR.orphanHandled){
+    // 页面刷新/重开:WebRTC 已随旧页面丢失,fal 会话随心跳停止而失效——直接收口,不留空转会话
+    DIRECTOR.orphanHandled=true;
+    api(`${API}/stop`,{}).then(x=>{applyState(x);msg(t('页面重新打开,上一次导演模式连接已丢失,会话已收口'),'err')}).catch(()=>{});
+  }
   $('#continue-row').style.display=r.prev_frame&&!running?'':'none';
   if(sess){
     if(sess.id!==SESSION_ID){SESSION_ID=sess.id;resetPlayer()}
@@ -416,7 +463,17 @@ function applyState(r){
     $('#sess-err').textContent=sess.error||'';
     if(sess.pending_prompt!=null&&sess.pending_prompt!==sess.prompt)$('#prompt-pending').textContent=t('(待生效)');else $('#prompt-pending').textContent='';
     const segs=sess.segments||[];const total=segs.reduce((a,s)=>a+(Number(s.duration_s)||0),0);const avg=segs.length?Math.round(segs.reduce((a,s)=>a+(Number(s.gen_seconds)||0),0)/segs.length):0;
-    $('#stats').innerHTML=[
+    const dd=sess.director||{};
+    $('#stats').innerHTML=sess.mode==='director'?[
+      [t('连接'),running?(DIRECTOR.active?t('WebRTC 已连接'):DIRECTOR.connecting?t('连接中…'):t('未连接')):t('已结束')],
+      [t('画面块'),String(dd.chunks||0)],
+      [t('已播放'),fmtDur(dd.playback_s||0)],
+      [t('生成耗时'),(dd.gen_s||0)+' s'],
+      [t('缓冲块'),String(dd.buffer_depth||0)],
+      [t('线路'),dd.route||'—'],
+      [t('录像'),dd.rec_bytes?fmtBytes(dd.rec_bytes):(segs.length?fmtDur(total):'—')],
+      [t('磁盘占用'),fmtBytes(r.disk_bytes)],
+    ].map(([k,v])=>`<div><span>${k}:</span> ${esc(v)}</div>`).join(''):[
       [t('已生成'),I18N.f(t('{n} 段 / {d}'),{n:segs.length,d:fmtDur(total)})],
       [t('当前段'),sess.gen_elapsed_s!=null?I18N.f(t('第 {n} 段已等待 {s}s'),{n:sess.round,s:sess.gen_elapsed_s}):'—'],
       [t('平均生成耗时'),avg?avg+' s':'—'],
@@ -424,6 +481,7 @@ function applyState(r){
       [t('磁盘占用'),fmtBytes(r.disk_bytes)],
     ].map(([k,v])=>`<div><span>${k}:</span> ${esc(v)}</div>`).join('');
     setSegments(segs,running,sess.aspect);
+    if(sess.mode==='director'&&running&&DIRECTOR.active){$('#live-badge').textContent=t('LIVE · 导演模式');$('#live-badge').className='live director';$('#seg-badge').style.display='none'}
   }else{
     if(SESSION_ID){SESSION_ID='';resetPlayer()}
     $('#sess-id').textContent='';$('#sess-chip').className='chip';$('#sess-chip').textContent='';
@@ -438,6 +496,7 @@ const PLAY={segs:[],idx:-1,active:0,running:false,muted:false,replaying:false};
 const VIDS=[$('#va'),$('#vb')];
 function resetPlayer(){
   PLAY.segs=[];PLAY.idx=-1;PLAY.replaying=false;
+  if(!DIRECTOR.active){VLIVE.classList.remove('on');VLIVE.srcObject=null}
   VIDS.forEach(v=>{v.pause();v.removeAttribute('src');v.load();v.classList.remove('on');v.dataset.url=''});
   $('#idle-text').style.display='';$('#seg-badge').style.display='none';$('#latest-btn').style.display='none';
 }
@@ -509,8 +568,161 @@ VIDS.forEach(v=>{
     if(v===VIDS[PLAY.active]&&v.duration&&v.duration-v.currentTime<0.4)preloadNext();
   });
 });
-$('#mute-btn').onclick=()=>{PLAY.muted=false;VIDS.forEach(v=>v.muted=false);$('#mute-btn').style.display='none'};
+$('#mute-btn').onclick=()=>{PLAY.muted=false;VIDS.forEach(v=>v.muted=false);VLIVE.muted=false;$('#mute-btn').style.display='none'};
 $('#player').addEventListener('click',e=>{if(PLAY.muted&&!e.target.closest('button'))$('#mute-btn').click()});
+
+/* ---------- 导演模式:浏览器直连 Fal WMA(WebRTC) ----------
+ * 信令(/ice、/session、/session/heartbeat)经本服务代附 Key 转发;媒体经 WebRTC 直达本页 <video>;
+ * 控制消息走 data channel "control":configure(首条)/ prompt(随时改)/ stop;
+ * 收到的流用 MediaRecorder 分块上传,停止后服务端转码成片段供回放与「从尾帧继续」。 */
+const VLIVE=$('#vlive');
+const DIRECTOR={active:false,connecting:false,closing:false,orphanHandled:false,pc:null,ch:null,hb:null,hbFails:0,wmaId:'',
+  stream:null,rec:null,recWait:null,recSeq:0,recExt:'webm',recQueue:Promise.resolve(),recBytes:0,
+  chunks:0,playback:0,gen:0,depth:0,route:'',promptVersion:1,lastEvt:0,cfg:null};
+function directorSend(m){try{if(DIRECTOR.ch&&DIRECTOR.ch.readyState==='open'){DIRECTOR.ch.send(JSON.stringify(m));return true}}catch(e){console.warn('[director] send',e)}return false}
+async function directorEvent(body){try{const r=await api(`${API}/director/event`,body);applyState(r);return r}catch(e){console.warn('[director] event',e)}}
+function waitIce(pc,iceServers){   // WMA 桥不支持 trickle ICE:等候选集齐(srflx/relay 出现后静默 1.25s,或 gathering complete,最长 12s)
+  return new Promise(res=>{
+    const hasTurn=iceServers.some(s=>[].concat(s.urls||[]).some(u=>/^turns?:/i.test(u)));
+    const c={host:0,srflx:0,relay:0};let quiet=null,done=false;
+    const finish=()=>{if(done)return;done=true;clearTimeout(hard);clearTimeout(quiet);pc.removeEventListener('icegatheringstatechange',onS);pc.removeEventListener('icecandidate',onC);res(c)};
+    const enough=()=>hasTurn?c.relay>0:c.srflx>0;
+    const onS=()=>{if(pc.iceGatheringState==='complete')finish()};
+    const onC=e=>{const m=e.candidate&&/typ (host|srflx|relay)/.exec(e.candidate.candidate);if(m)c[m[1]]++;clearTimeout(quiet);if(enough())quiet=setTimeout(finish,1250)};
+    const hard=setTimeout(finish,12000);
+    pc.addEventListener('icegatheringstatechange',onS);pc.addEventListener('icecandidate',onC);
+    if(pc.iceGatheringState==='complete')finish();
+  });
+}
+function showLive(){VLIVE.classList.add('on');VIDS.forEach(v=>v.classList.remove('on'));$('#idle-text').style.display='none';$('#seg-badge').style.display='none';$('#latest-btn').style.display='none';$('#live-badge').textContent=t('LIVE · 导演模式');$('#live-badge').className='live director'}
+async function directorConnect(){
+  Object.assign(DIRECTOR,{active:true,connecting:true,closing:false,orphanHandled:false,hbFails:0,wmaId:'',rec:null,recSeq:0,recBytes:0,recQueue:Promise.resolve(),chunks:0,playback:0,gen:0,depth:0,route:'',lastEvt:0});
+  $('#idle-text').style.display='';$('#idle-text').textContent=t('导演模式:正在建立 WebRTC 连接…');
+  try{
+    const cfg=await api(`${API}/director/config`);DIRECTOR.cfg=cfg;DIRECTOR.promptVersion=cfg.prompt_version||1;
+    let ice=[{urls:'stun:stun.l.google.com:19302'}];
+    try{const r=await api(`${API}/director/bridge/ice`,{});if(Array.isArray(r.ice_servers)&&r.ice_servers.length)ice=r.ice_servers}catch(e){console.warn('[director] /ice 不可用,退回 STUN:',e.message)}
+    const pc=new RTCPeerConnection({iceServers:ice});DIRECTOR.pc=pc;
+    pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
+    const ch=pc.createDataChannel('control');DIRECTOR.ch=ch;
+    const stream=new MediaStream();DIRECTOR.stream=stream;
+    pc.ontrack=ev=>{
+      (ev.streams[0]?ev.streams[0].getTracks():[ev.track]).forEach(tr=>{if(!stream.getTracks().includes(tr))stream.addTrack(tr)});
+      if(VLIVE.srcObject!==stream)VLIVE.srcObject=stream;
+      showLive();tryPlay(VLIVE);directorStartRecorder();
+    };
+    pc.onconnectionstatechange=()=>{
+      if(DIRECTOR.closing)return;
+      if(pc.connectionState==='connected'){DIRECTOR.connecting=false}
+      else if(pc.connectionState==='failed')directorFail(t('WebRTC 连接失败:ICE 无法建立媒体路径(常见于 UDP 被封,可换网络重试)'));
+      else if(pc.connectionState==='closed')directorFail(t('WebRTC 连接已关闭'));
+    };
+    ch.onopen=()=>{
+      const m={type:'configure',protocol_version:1,prompt_version:DIRECTOR.promptVersion,prompt:cfg.prompt,resolution:cfg.resolution||'480p',aspect_ratio:cfg.aspect_ratio||'16:9',memory:cfg.memory||12};
+      if(cfg.image_url)m.image_url=cfg.image_url;
+      directorSend(m);DIRECTOR.connecting=false;
+      directorEvent({type:'connected',wma_session_id:DIRECTOR.wmaId});
+    };
+    ch.onmessage=ev=>{const d=ev.data;if(typeof d==='string')directorMessage(d);else if(d instanceof Blob)d.text().then(directorMessage);else if(d instanceof ArrayBuffer)directorMessage(new TextDecoder().decode(d))};
+    ch.onclose=()=>{if(!DIRECTOR.closing)directorFail(t('控制通道已关闭(fal 侧结束了会话)'))};
+    ch.onerror=e=>{console.warn('[director] channel error',e)};
+    const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+    await waitIce(pc,ice);
+    if(DIRECTOR.closing)return;
+    $('#idle-text').textContent=t('导演模式:信令中(等待 fal 分配算力)…');
+    const ans=await api(`${API}/director/bridge/session`,{sdp:pc.localDescription.sdp,type:pc.localDescription.type});
+    if(DIRECTOR.closing)return;
+    DIRECTOR.wmaId=ans.session_id||'';
+    await pc.setRemoteDescription({type:ans.type||'answer',sdp:ans.sdp});
+    DIRECTOR.hb=setInterval(directorHeartbeat,5000);
+    $('#idle-text').textContent=t('导演模式:已连接,等待首个画面块(通常十几秒)…');
+  }catch(e){directorFail(e.message||String(e))}
+}
+let HB_INFLIGHT=false;
+async function directorHeartbeat(){
+  if(!DIRECTOR.active||DIRECTOR.closing||HB_INFLIGHT||!DIRECTOR.wmaId)return;
+  HB_INFLIGHT=true;
+  try{const r=await api(`${API}/director/bridge/session/heartbeat`,{session_id:DIRECTOR.wmaId});DIRECTOR.hbFails=0;
+    if(r&&r.alive===false)directorFail(t('fal 报告会话已失效(心跳 alive=false)'))}
+  catch(e){DIRECTOR.hbFails++;console.warn('[director] heartbeat',e.message);if(DIRECTOR.hbFails>=3)directorFail(t('心跳连续失败 3 次,会话租约已丢失:')+e.message)}
+  finally{HB_INFLIGHT=false}
+}
+function directorMessage(raw){
+  let m;try{m=JSON.parse(raw)}catch(e){return}
+  switch(m.type){
+    case 'session_info':DIRECTOR.info=m;break;
+    case 'configured':$('#status-msg').textContent=t('已配置:')+(m.resolution||'')+' '+(m.aspect_ratio||'')+(m.has_initial_image?t('(带首帧)'):'');break;
+    case 'chunk':
+      DIRECTOR.chunks=Math.max(DIRECTOR.chunks,(Number(m.chunk_index)||0)+1);DIRECTOR.playback+=Number(m.playback_seconds)||0;DIRECTOR.gen+=Number(m.generation_seconds)||0;
+      DIRECTOR.depth=Number(m.buffer_depth_chunks)||0;DIRECTOR.route=m.route||DIRECTOR.route;
+      if(Date.now()-DIRECTOR.lastEvt>4000){DIRECTOR.lastEvt=Date.now();directorEvent({type:'chunk',chunks:DIRECTOR.chunks,playback_s:DIRECTOR.playback,gen_s:DIRECTOR.gen,buffer_depth:DIRECTOR.depth,route:DIRECTOR.route,wma_session_id:DIRECTOR.wmaId})}
+      break;
+    case 'prompt_applied':msg(t('提示词已生效(版本 ')+(m.prompt_version||'')+')','ok');break;
+    case 'prompt_pending':break;
+    case 'prompt_rejected':msg(t('提示词被拒绝:')+(m.reason||''),'err');directorEvent({type:'message',message:t('提示词被拒绝:')+(m.reason||''),error:t('提示词被拒绝:')+(m.reason||'')});break;
+    case 'deadline_missed':$('#status-msg').textContent=I18N.f(t('第 {n} 块生成迟到 {s}s,画面暂冻结'),{n:m.chunk_index,s:(Number(m.late_by_seconds)||0).toFixed(1)});break;
+    case 'error':msg(t('fal 错误:')+(m.error||m.code||''),'err');directorEvent({type:'message',message:t('fal 错误:')+(m.error||m.code||''),error:String(m.error||m.code||'')});break;
+    case 'stream_exhausted':directorEnd(m.reason==='session_limit'?t('达到 fal 单会话时长上限,直播已结束'):t('fal 会话已结束'));break;
+    default:break;   // chunk_metrics / session_metrics / pong
+  }
+}
+function directorStartRecorder(){
+  if(DIRECTOR.rec||!DIRECTOR.stream||!window.MediaRecorder||DIRECTOR.closing)return;
+  const kinds=DIRECTOR.stream.getTracks().map(t=>t.kind);
+  if(!kinds.includes('video'))return;
+  if(!kinds.includes('audio')&&!DIRECTOR.recWait){DIRECTOR.recWait=setTimeout(()=>{DIRECTOR.recWait=null;directorStartRecorder()},2000);return}   // 等音轨最多 2s,晚到的轨不会被录
+  const mimes=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+  const mime=mimes.find(x=>MediaRecorder.isTypeSupported(x));
+  if(!mime){console.warn('[director] MediaRecorder 无可用编码,不录像');return}
+  DIRECTOR.recExt=mime.startsWith('video/mp4')?'mp4':'webm';
+  try{
+    const rec=new MediaRecorder(DIRECTOR.stream,{mimeType:mime,videoBitsPerSecond:4e6});
+    rec.ondataavailable=e=>{if(e.data&&e.data.size)directorUpload(e.data)};
+    rec.onerror=e=>console.warn('[director] recorder',e);
+    rec.start(5000);DIRECTOR.rec=rec;
+  }catch(e){console.warn('[director] MediaRecorder 启动失败,不录像:',e)}
+}
+function directorUpload(blob){
+  const seq=++DIRECTOR.recSeq;
+  DIRECTOR.recQueue=DIRECTOR.recQueue.then(async()=>{
+    try{const r=await fetch(`${API}/director/record?seq=${seq}&ext=${DIRECTOR.recExt}`,{method:'POST',body:blob,headers:{'Content-Type':'application/octet-stream'}});
+      if(r.ok){DIRECTOR.recBytes+=blob.size}else console.warn('[director] 录像块上传失败',r.status)}
+    catch(e){console.warn('[director] 录像块上传异常',e)}
+  });
+}
+async function directorStopRecorder(){
+  clearTimeout(DIRECTOR.recWait);DIRECTOR.recWait=null;
+  const rec=DIRECTOR.rec;DIRECTOR.rec=null;
+  if(rec&&rec.state!=='inactive'){await new Promise(res=>{rec.onstop=res;try{rec.requestData()}catch(e){}try{rec.stop()}catch(e){res()}})}
+  await DIRECTOR.recQueue;
+}
+async function directorClose(){
+  if(!DIRECTOR.active&&!DIRECTOR.connecting)return;
+  DIRECTOR.closing=true;DIRECTOR.active=false;DIRECTOR.connecting=false;
+  clearInterval(DIRECTOR.hb);DIRECTOR.hb=null;
+  directorSend({type:'stop'});
+  await directorStopRecorder();
+  try{DIRECTOR.pc&&DIRECTOR.pc.close()}catch(e){}
+  DIRECTOR.pc=null;DIRECTOR.ch=null;DIRECTOR.stream=null;
+  VLIVE.srcObject=null;VLIVE.classList.remove('on');
+  $('#live-badge').className='live';$('#live-badge').textContent='OFFLINE';
+  if(!PLAY.segs.length)$('#idle-text').style.display='';
+}
+async function directorFail(err){
+  if(DIRECTOR.closing)return;
+  msg(t('导演模式连接失败:')+err,'err');
+  await directorClose();
+  await directorEvent({type:'failed',error:String(err),message:t('导演模式连接失败')});
+}
+async function directorEnd(why){
+  if(DIRECTOR.closing)return;
+  msg(why,'ok');
+  await directorClose();
+  await directorEvent({type:'ended',message:why});
+}
+window.addEventListener('pagehide',()=>{   // 关页/刷新:先告诉 fal 停,再让服务端收口(心跳一停 fal 会话也会自行失效)
+  if(DIRECTOR.active||DIRECTOR.connecting){directorSend({type:'stop'});try{navigator.sendBeacon(`${API}/stop`)}catch(e){}}
+});
 
 poll();
 </script>

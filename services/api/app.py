@@ -947,6 +947,32 @@ async def live_file(file_path: str) -> FileResponse:
     return FileResponse(core.live_file_path(file_path))
 
 
+# 导演模式(minimax/h3-max/director,Fal WMA 实时 WebRTC):页面直连媒体,这里只代附 Key 转发信令 + 记账 + 收录像
+@api.post("/live/director/bridge/{bridge_path:path}", tags=["live"])
+async def live_director_bridge(bridge_path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """转发 wma.fal.run/{ice|session|session/heartbeat}(Key 由服务端附加,不下发页面)。"""
+    return await core.api_live_director_bridge(bridge_path, body or {})
+
+
+@api.get("/live/director/config", tags=["live"])
+async def live_director_config() -> dict[str, Any]:
+    """页面 data channel 打开后发 configure 消息所需字段(提示词/首帧 URL/分辨率/画幅/memory)。"""
+    return await core.api_live_director_config()
+
+
+@api.post("/live/director/event", tags=["live"])
+async def live_director_event(body: dict[str, Any]) -> dict[str, Any]:
+    """页面上报 connected / chunk / message / ended / failed 事件。"""
+    return await core.api_live_director_event(body)
+
+
+@api.post("/live/director/record", tags=["live"])
+async def live_director_record(request: Request, seq: int, ext: str = "webm") -> dict[str, Any]:
+    """MediaRecorder 分块录像:请求体即媒体字节,seq 递增;停止后服务端转码为片段。"""
+    data = await request.body()
+    return await core.api_live_director_record(seq, data, ext)
+
+
 app.include_router(api)
 
 

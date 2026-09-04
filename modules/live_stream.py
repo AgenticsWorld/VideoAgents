@@ -23,6 +23,14 @@ services/runtime/core.py 的 api_live_* 薄封装调用,本模块不依赖 core�
 已被放弃的片段付费。请求体沿用 modules/genmedia.py 的 _fal_video_body(家族/分辨率/时长/
 参考上限校验与正式流水线同口径),轮询与取消在本模块实现。
 
+导演模式(link_mode=director,模型固定 minimax/h3-max/director):不走队列端点,而是 Fal 的 WMA
+实时协议——浏览器把 SDP offer POST 到 wma.fal.run/session(本模块代为附加 Key,Key 不下发页面),
+视频/音频经 WebRTC 直达页面 <video>,提示词经 data channel 随时改,fal 侧连续生成(自带前文记忆,
+无需尾帧衔接)。没有子进程:会话按页面轮询/心跳判活(DIRECTOR_STALE_S 秒无心跳视为断线);页面用
+MediaRecorder 把收到的流分块上传(segments/recording.*),停止后转码为 seg_0001.mp4 并抽尾帧,
+历史会话回放与「从上次尾帧继续」由此仍然可用。官方限制:单会话默认最长 2 分钟(更长需申请),
+最少按 60 秒计费。
+
 已知取舍(页面提示里也有说明):
   * 单段生成通常要 1-3 分钟而片段只有几秒到十几秒,真正的"实时"做不到——前端在新段未到时
     重播最新一段,新段到了再接上;段越长,重播占比越低,但单段等得越久。
@@ -61,13 +69,21 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 RESOLUTIONS = ("480p", "768p")   # 页面档位;768p 提交时按 genmedia 口径传 720p(H3 → 768P,Seedance → 720p)
 DEFAULT_RESOLUTION = "480p"
 ASPECTS = ("16:9", "9:16")
-LINK_MODES = ("refs_tail", "first_frame", "none")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图) / 不衔接(纯文生视频)
+LINK_MODES = ("refs_tail", "first_frame", "none", "director")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图) / 不衔接(纯文生视频) / 导演模式(实时 WebRTC)
+DIRECTOR_MODEL = "minimax/h3-max/director"   # 导演模式固定模型:Fal WMA 实时端点,不在 genmedia 目录内
+WMA_URL = "https://wma.fal.run"              # Fal WMA 信令桥(/ice、/session、/session/heartbeat)
+FAL_REST_URL = "https://rest.fal.ai"         # 首帧图上传到 fal 存储(数据通道单条消息有体积上限,不内联)
+WMA_BRIDGE_PATHS = ("ice", "session", "session/heartbeat")
+DIRECTOR_STALE_S = 45                        # 导演模式:页面轮询/心跳中断超过此秒数视为断线(fal 侧心跳 5s 一停会话即失效)
+DIRECTOR_MEMORY_RANGE = (1, 50)              # configure.memory:保留多少段前文提示词作上下文
+DIRECTOR_INLINE_MAX_SIDE = 480               # fal 存储不可用时首帧内联 data URI 的长边(受数据通道消息上限约束)
+RECORD_MAX_BYTES = 4 * 1024 ** 3             # 单会话录像上限
 PROVIDERS = ("fal",)
 DEFAULT_MODEL = "minimax/h3-max"
 DEFAULTS = {"prompt": "", "provider": "fal", "model": DEFAULT_MODEL, "duration": 10,
             "aspect": "16:9", "resolution": DEFAULT_RESOLUTION, "link_mode": "refs_tail",
             "max_rounds": 0, "idle_stop_min": 10, "max_pending": 3,
-            "generate_audio": True, "continue_last": False}
+            "generate_audio": True, "continue_last": False, "memory": 12}
 POLL_S = 3                     # Fal 轮询间隔(短:停止时要尽快发 cancel)
 ROUND_TIMEOUT_S = 1800         # 单段生成上限
 MAX_CONSEC_FAILS = 5           # 连续失败次数达到即停
@@ -81,6 +97,7 @@ _LOCK = threading.RLock()
 _JOBS: dict[str, subprocess.Popen] = {}     # sid -> 作业子进程
 _LAST_SEEN_WRITE: dict[str, float] = {}     # sid -> 上次落盘心跳时间(限频)
 _LAST_PLAYED: dict[str, int] = {}           # sid -> 上次上报的已播段号(变化才落盘)
+_DIRECTOR_SEEN: dict[str, float] = {}       # sid -> 导演模式最近一次页面轮询/心跳时间(内存,判活用)
 
 CONTINUITY_REFS = ("\n\n[Continuity] The last reference image is the final frame of the previous "
                    "segment of this continuous live stream. Start exactly from that frame (same "
@@ -181,6 +198,16 @@ def normalize_settings(s: dict, strict: bool = True) -> dict:
     out["resolution"] = res
     lm = str(s.get("link_mode") or "refs_tail")
     out["link_mode"] = lm if lm in LINK_MODES else "refs_tail"
+    # 导演模式模型固定;离开导演模式时把固定模型换回默认(它不是队列端点,循环模式用不了)
+    if out["link_mode"] == "director":
+        out["model"] = DIRECTOR_MODEL
+    elif out["model"] == DIRECTOR_MODEL:
+        out["model"] = DEFAULT_MODEL
+    try:
+        mem = int(s.get("memory", DEFAULTS["memory"]) or DEFAULTS["memory"])
+    except (TypeError, ValueError):
+        mem = DEFAULTS["memory"]
+    out["memory"] = min(max(mem, DIRECTOR_MEMORY_RANGE[0]), DIRECTOR_MEMORY_RANGE[1])
     for key, lo, hi in (("max_rounds", 0, 100000), ("idle_stop_min", 0, 100000),
                         ("max_pending", 1, MAX_PENDING_LIMIT)):
         try:
@@ -329,7 +356,16 @@ def _job_running(sid: str) -> bool:
         return proc.poll() is None
     # 服务重启后 Popen 句柄丢失:按 session.json 里作业自报的 pid 判活(孤儿作业仍可被停止)
     sess = _read_json(SESSIONS_DIR / sid / "session.json", {})
-    return sess.get("status") in RUNNING_STATES and _pid_alive(int(sess.get("pid") or 0))
+    if sess.get("status") not in RUNNING_STATES:
+        return False
+    if sess.get("mode") == "director":
+        return _director_alive(sid)     # 无子进程:按页面心跳判活
+    return _pid_alive(int(sess.get("pid") or 0))
+
+
+def _director_alive(sid: str) -> bool:
+    seen = max(float(_load_control(sid).get("last_seen") or 0), _DIRECTOR_SEEN.get(sid, 0.0))
+    return time.time() - seen < DIRECTOR_STALE_S
 
 
 def _current_running() -> bool:
@@ -345,6 +381,14 @@ def _reap(sid: str) -> None:
     sess = _read_json(SESSIONS_DIR / sid / "session.json", {})
     if sess.get("status") not in RUNNING_STATES:
         _JOBS.pop(sid, None)
+        return
+    if sess.get("mode") == "director":
+        if _director_alive(sid):
+            return
+        sess.update(status="stopped", gen_started_at=None,
+                    message=f"页面心跳中断超过 {DIRECTOR_STALE_S}s,导演模式直播已结束(fal 会话随心跳停止而失效)")
+        _save_session(sid, sess)
+        _finalize_recording_async(sid)
         return
     if proc is None:
         if _pid_alive(int(sess.get("pid") or 0)):
@@ -384,6 +428,8 @@ def status(touch: bool = True, played: int | None = None) -> dict:
             sess["running"] = running
             if touch and running:
                 now = time.time()
+                if sess.get("mode") == "director":
+                    _DIRECTOR_SEEN[sid] = now
                 fields = {}
                 if now - _LAST_SEEN_WRITE.get(sid, 0) >= 15:
                     fields["last_seen"] = now
@@ -404,6 +450,7 @@ def status(touch: bool = True, played: int | None = None) -> dict:
             "dir": str(LIVE_DIR), "max_refs": MAX_REFS, "resolutions": list(RESOLUTIONS),
             "max_pending_limit": MAX_PENDING_LIMIT,
             "prev_frame": f"sessions/{sid}/{prev_frame}" if prev_frame else "",
+            "director_model": DIRECTOR_MODEL, "director_stale_s": DIRECTOR_STALE_S,
             "disk_bytes": _disk_bytes(), "fal_key_configured": bool(fal_api_key())}
 
 
@@ -429,7 +476,10 @@ def start(fields: dict) -> dict:
             raise LiveError(400, "提示词与参考图至少填一样")
         if s["link_mode"] == "none" and not s["prompt"]:
             raise LiveError(400, "不衔接(文生视频)模式不提交参考图与尾帧,必须填提示词")
-        family = _genmedia_family(s["model"])
+        director = s["link_mode"] == "director"
+        if director and not s["prompt"]:
+            raise LiveError(400, "导演模式必须填提示词(参考图只取第 1 张作首帧,可不填)")
+        family = "director" if director else _genmedia_family(s["model"])
         prev = _state().get("current")
         start_frame = ""
         if s["continue_last"] and prev and SID_RE.fullmatch(str(prev)):
@@ -453,18 +503,28 @@ def start(fields: dict) -> dict:
             shutil.copyfile(start_frame, dst)
             start_frame = "refs/start_frame.png"
         sess = {"schema": SCHEMA_SESSION, "id": sid, "created_at": _now(), "status": "running",
+                "mode": "director" if director else "loop",
                 "refs": snap, "start_frame": start_frame,
                 "segments": [], "round": 0, "fails": 0, "message": "启动中…", "error": "",
                 "gen_started_at": None, "family": family,
                 **{k: s[k] for k in ("prompt", "provider", "model", "duration", "aspect", "resolution",
                                      "link_mode", "max_rounds", "idle_stop_min", "max_pending",
-                                     "generate_audio")}}
+                                     "generate_audio", "memory")}}
+        if director:
+            sess["message"] = "等待页面建立 WebRTC 连接…"
+            sess["director"] = {"wma_session_id": "", "connected": False, "started_at": None,
+                                "prompt_version": 1, "chunks": 0, "playback_s": 0.0, "gen_s": 0.0,
+                                "buffer_depth": 0, "route": "", "rec_seq": 0, "rec_bytes": 0, "rec_ext": ""}
         _save_session(sid, sess)
         _atomic_write_json(d / "control.json", {"prompt": None, "last_seen": time.time(), "stop": False,
                                                 "played_seq": 0})
         _LAST_PLAYED.pop(sid, None)
+        _DIRECTOR_SEEN[sid] = time.time()
         _set_state(current=sid)
-        _start_job(sid)
+        if director:
+            _prepare_director_first_frame(sid, d, start_frame or (snap[0] if snap else ""))
+        else:
+            _start_job(sid)
     return status(touch=True)
 
 
@@ -484,6 +544,15 @@ def stop() -> dict:
     """停止当前会话:先写停止标志,再 SIGTERM 进程组(子进程会先向 Fal 发 cancel),10s 不退强杀。"""
     with _LOCK:
         sid = str(_state().get("current") or "")
+        if sid and SID_RE.fullmatch(sid):
+            sess = _read_json(SESSIONS_DIR / sid / "session.json", {})
+            if sess.get("mode") == "director":
+                # 导演模式没有子进程:页面已关闭 WebRTC(fal 会话随心跳停止失效),这里只收口状态并转码录像
+                if sess.get("status") in RUNNING_STATES:
+                    sess.update(status="stopped", message="已停止", gen_started_at=None)
+                    _save_session(sid, sess)
+                    _finalize_recording_async(sid)
+                return status(touch=False)
         if not sid or not _job_running(sid):
             if sid and SID_RE.fullmatch(sid):
                 _reap(sid)
@@ -529,7 +598,16 @@ def update_prompt(prompt: str) -> dict:
     save_settings(s)
     sid = str(_state().get("current") or "")
     if sid and _job_running(sid):
-        _save_control(sid, prompt=prompt)
+        with _LOCK:
+            sess = load_session(sid)
+            if sess.get("mode") == "director":
+                # 导演模式:立即生效——服务端发号 prompt_version,页面拿到后经 data channel 发 prompt 消息
+                sess["prompt"] = prompt
+                dd = sess.setdefault("director", {})
+                dd["prompt_version"] = int(dd.get("prompt_version") or 1) + 1
+                _save_session(sid, sess)
+            else:
+                _save_control(sid, prompt=prompt)
     return status(touch=True)
 
 
@@ -563,7 +641,7 @@ def _session_row(sid: str, cur: str) -> dict | None:
             size += p.stat().st_size
     last = str(segs[-1].get("frame") or "") if segs else ""
     return {"id": sid, "created_at": sess.get("created_at") or "", "updated_at": sess.get("updated_at") or "",
-            "status": sess.get("status") or "", "current": sid == cur,
+            "status": sess.get("status") or "", "current": sid == cur, "mode": sess.get("mode") or "loop",
             "running": sess.get("status") in RUNNING_STATES and _job_running(sid),
             "model": sess.get("model") or "", "aspect": sess.get("aspect") or "",
             "resolution": sess.get("resolution") or DEFAULT_RESOLUTION, "duration": sess.get("duration") or 0,
@@ -603,7 +681,7 @@ def select_session(sid: str, apply_settings: bool = True, restore_refs: bool = T
         if apply_settings:
             s = load_settings()
             for k in ("prompt", "provider", "model", "duration", "aspect", "resolution", "link_mode",
-                      "max_rounds", "idle_stop_min", "max_pending", "generate_audio"):
+                      "max_rounds", "idle_stop_min", "max_pending", "generate_audio", "memory"):
                 if k in sess:
                     s[k] = sess[k]
             save_settings(s)
@@ -669,6 +747,301 @@ def _genmedia_family(model: str) -> str:
     if "kling" in m:
         return "kling"
     return "generic"
+
+
+# ---------------- 导演模式(minimax/h3-max/director:Fal WMA 实时 WebRTC) ----------------
+# 页面直连 WebRTC(媒体不经本服务);本节只做三件事:代附 Key 转发信令桥请求、记账(状态/事件/
+# 提示词版本)、录像分块落盘 + 停止后转码。Key 不下发页面。
+
+def _http_json(url: str, payload: dict | None = None, headers: dict | None = None,
+               method: str | None = None, timeout: int = 60, raw: bytes | None = None,
+               content_type: str | None = None) -> tuple[int, object]:
+    """小型 HTTP 工具(API 进程内用,不引入 genmedia):返回 (HTTP 状态码, JSON 或文本)。"""
+    import urllib.error
+    import urllib.request
+    h = dict(headers or {})
+    data = raw
+    if payload is not None:
+        data = json.dumps(payload).encode()
+        h.setdefault("Content-Type", "application/json")
+    elif content_type:
+        h.setdefault("Content-Type", content_type)
+    req = urllib.request.Request(url, data=data, headers=h, method=method or ("POST" if data is not None else "GET"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = r.read()
+            code = r.status
+    except urllib.error.HTTPError as e:
+        body = e.read()
+        code = e.code
+    except Exception as exc:  # noqa: BLE001
+        raise LiveError(502, f"请求 {url} 失败:{str(exc)[:300]}") from exc
+    text = body.decode("utf-8", "replace")
+    try:
+        return code, json.loads(text) if text.strip() else {}
+    except json.JSONDecodeError:
+        return code, text[:800]
+
+
+def _fal_storage_upload(key: str, data: bytes, content_type: str, filename: str) -> str:
+    """把文件上传到 fal 存储(与 @fal-ai/client storage.upload 同协议),返回可被端点读取的 URL。"""
+    code, j = _http_json(f"{FAL_REST_URL}/storage/upload/initiate?storage_type=fal-cdn-v3",
+                         {"content_type": content_type, "file_name": filename},
+                         {"Authorization": f"Key {key}"}, timeout=30)
+    if code >= 400 or not isinstance(j, dict) or not j.get("upload_url") or not j.get("file_url"):
+        raise RuntimeError(f"initiate HTTP {code}:{str(j)[:300]}")
+    code2, j2 = _http_json(str(j["upload_url"]), raw=data, content_type=content_type, method="PUT", timeout=120)
+    if code2 >= 400:
+        raise RuntimeError(f"PUT HTTP {code2}:{str(j2)[:300]}")
+    return str(j["file_url"])
+
+
+def _prepare_director_first_frame(sid: str, d: Path, rel: str) -> None:
+    """导演模式首帧(configure.image_url):优先上传 fal 存储;失败则缩到很小内联 data URI
+    (data channel 单条消息有上限,大图会被拒)。结果写 director.json,由 /live/director/config 下发。"""
+    info = {"image_src": rel, "image_url": "", "note": ""}
+    if rel:
+        src = d / rel
+        try:
+            small = d / _shrink_refs(d, [rel])[0]
+            mime = "image/png" if small.suffix.lower() == ".png" else "image/jpeg"
+            if small.suffix.lower() == ".webp":
+                mime = "image/webp"
+            key = fal_api_key()
+            if not key:
+                raise RuntimeError("Fal Key 未配置")
+            info["image_url"] = _fal_storage_upload(key, small.read_bytes(), mime, small.name)
+            info["note"] = "首帧已上传 fal 存储"
+        except Exception as exc:  # noqa: BLE001
+            try:
+                from PIL import Image  # noqa: WPS433
+                import base64
+                import io
+                with Image.open(src) as im:
+                    w, h = im.size
+                    scale = min(1.0, DIRECTOR_INLINE_MAX_SIDE / max(w, h))
+                    im = im.convert("RGB").resize((max(1, int(w * scale)), max(1, int(h * scale))))
+                    buf = io.BytesIO()
+                    im.save(buf, "JPEG", quality=70)
+                info["image_url"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+                info["note"] = f"fal 存储上传失败({str(exc)[:160]}),首帧改为 {DIRECTOR_INLINE_MAX_SIDE}px 内联提交"
+            except Exception as exc2:  # noqa: BLE001
+                info["note"] = f"首帧不可用(上传失败:{str(exc)[:160]};内联失败:{str(exc2)[:120]}),按纯提示词开播"
+    _atomic_write_json(d / "director.json", info)
+    with _LOCK:
+        sess = load_session(sid)
+        if info["note"]:
+            sess["message"] = info["note"] + ";等待页面建立 WebRTC 连接…"
+            _save_session(sid, sess)
+
+
+def _current_director(require_running: bool = True) -> tuple[str, dict]:
+    sid = str(_state().get("current") or "")
+    if not sid or not SID_RE.fullmatch(sid):
+        raise LiveError(409, "当前没有直播会话")
+    sess = _read_json(SESSIONS_DIR / sid / "session.json", {})
+    if sess.get("mode") != "director":
+        raise LiveError(409, "当前会话不是导演模式")
+    if require_running and not (sess.get("status") in RUNNING_STATES and _director_alive(sid)):
+        raise LiveError(409, "导演模式直播未在进行中")
+    return sid, sess
+
+
+def director_bridge(path: str, body: dict) -> dict:
+    """代页面向 Fal WMA 信令桥发请求(附 Key):ice / session(SDP offer→answer)/ session/heartbeat。"""
+    path = (path or "").strip("/")
+    if path not in WMA_BRIDGE_PATHS:
+        raise LiveError(404, f"未知信令路径:{path}")
+    key = fal_api_key()
+    if not key:
+        raise LiveError(400, "Fal API Key 未配置:请先在「🎨 生成模型」页 视频 → Fal 标签页填写并保存")
+    sid, sess = _current_director(require_running=True)
+    body = dict(body or {})
+    if path in ("ice", "session"):
+        body["app_id"] = DIRECTOR_MODEL
+    if path == "session":
+        if not body.get("sdp") or body.get("type") != "offer":
+            raise LiveError(400, "session 请求须带 SDP offer(sdp/type)")
+    if path == "session/heartbeat":
+        body = {"session_id": str(body.get("session_id") or (sess.get("director") or {}).get("wma_session_id") or "")}
+        if not body["session_id"]:
+            raise LiveError(400, "缺少 session_id")
+    code, data = _http_json(f"{WMA_URL}/{path}", body, {"Authorization": f"Key {key}"},
+                            timeout=120 if path == "session" else 20)
+    _DIRECTOR_SEEN[sid] = time.time()
+    if code >= 400:
+        detail = data
+        if isinstance(data, dict):
+            detail = data.get("error") or data.get("message") or data.get("detail") or data
+        raise LiveError(502, f"Fal WMA /{path} HTTP {code}:{str(detail)[:400]}")
+    if not isinstance(data, dict):
+        raise LiveError(502, f"Fal WMA /{path} 返回非 JSON:{str(data)[:200]}")
+    if path == "session":
+        with _LOCK:
+            sess = load_session(sid)
+            dd = sess.setdefault("director", {})
+            dd["wma_session_id"] = str(data.get("session_id") or "")
+            sess["message"] = "信令完成,建立媒体连接…"
+            _save_session(sid, sess)
+    return data
+
+
+def director_config() -> dict:
+    """页面建立连接后发 configure 消息所需的字段(首帧 URL 不进状态轮询,单独取)。"""
+    sid, sess = _current_director(require_running=False)
+    info = _read_json(SESSIONS_DIR / sid / "director.json", {})
+    dd = sess.get("director") or {}
+    return {"session": sid, "app_id": DIRECTOR_MODEL, "prompt": str(sess.get("prompt") or ""),
+            "prompt_version": int(dd.get("prompt_version") or 1),
+            "image_url": str(info.get("image_url") or ""), "image_source": str(info.get("image_src") or ""),
+            "image_note": str(info.get("note") or ""),
+            "resolution": str(sess.get("resolution") or DEFAULT_RESOLUTION),
+            "aspect_ratio": str(sess.get("aspect") or "16:9"),
+            "memory": int(sess.get("memory") or DEFAULTS["memory"])}
+
+
+def director_event(body: dict) -> dict:
+    """页面上报连接/画面块/结束/失败事件,写进 session.json 供轮询与历史列表显示。"""
+    body = dict(body or {})
+    sid, sess = _current_director(require_running=False)
+    if sess.get("status") not in RUNNING_STATES:
+        return status(touch=False)
+    kind = str(body.get("type") or "")
+    finalize = False
+    with _LOCK:
+        sess = load_session(sid)
+        dd = sess.setdefault("director", {})
+        for k in ("chunks", "buffer_depth"):
+            if body.get(k) is not None:
+                dd[k] = max(0, int(body[k]))
+        for k in ("playback_s", "gen_s"):
+            if body.get(k) is not None:
+                dd[k] = round(max(0.0, float(body[k])), 1)
+        if body.get("route"):
+            dd["route"] = str(body["route"])[:40]
+        if body.get("wma_session_id"):
+            dd["wma_session_id"] = str(body["wma_session_id"])[:80]
+        if kind == "connected":
+            dd["connected"] = True
+            dd["started_at"] = dd.get("started_at") or time.time()
+            sess["gen_started_at"] = dd["started_at"]
+            sess["message"] = "已连接,已发送 configure,等待首个画面块…"
+        elif kind == "chunk":
+            sess["message"] = (f"实时生成中:已收 {dd.get('chunks', 0)} 块 / 播放 {dd.get('playback_s', 0)}s"
+                               f" / 生成耗时 {dd.get('gen_s', 0)}s / 缓冲 {dd.get('buffer_depth', 0)} 块")
+        elif kind == "message":
+            sess["message"] = str(body.get("message") or "")[:300]
+        elif kind == "ended":
+            sess.update(status="stopped", gen_started_at=None,
+                        message=str(body.get("message") or "fal 会话已结束")[:300])
+            finalize = True
+        elif kind == "failed":
+            sess.update(status="failed", gen_started_at=None,
+                        error=str(body.get("error") or "连接失败")[:600],
+                        message=str(body.get("message") or "导演模式连接失败")[:300])
+            finalize = True
+        else:
+            raise LiveError(400, f"未知事件类型:{kind}")
+        if body.get("error") and kind not in ("failed",):
+            sess["error"] = str(body["error"])[:600]
+        _save_session(sid, sess)
+    _DIRECTOR_SEEN[sid] = time.time()
+    if finalize:
+        _finalize_recording_async(sid)
+    return status(touch=not finalize)
+
+
+def director_record(seq: int, data: bytes, ext: str = "") -> dict:
+    """页面 MediaRecorder 分块上传:按序追加到 segments/recording.<ext>(乱序/重复块丢弃)。"""
+    sid, sess = _current_director(require_running=False)
+    if sess.get("status") not in RUNNING_STATES:
+        raise LiveError(409, "会话已结束,不再接收录像块")
+    if not data:
+        return {"ok": True, "skipped": True}
+    ext = re.sub(r"[^a-z0-9]", "", (ext or "").lower())[:8] or "webm"
+    with _LOCK:
+        sess = load_session(sid)
+        dd = sess.setdefault("director", {})
+        if int(dd.get("rec_bytes") or 0) + len(data) > RECORD_MAX_BYTES:
+            raise LiveError(413, "录像已达上限,不再追加")
+        last = int(dd.get("rec_seq") or 0)
+        if seq <= last:
+            return {"ok": True, "skipped": True, "seq": last}
+        if not dd.get("rec_ext"):
+            dd["rec_ext"] = ext
+        path = SESSIONS_DIR / sid / "segments" / f"recording.{dd['rec_ext']}"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("ab") as f:
+            f.write(data)
+        dd["rec_seq"] = seq
+        dd["rec_bytes"] = int(dd.get("rec_bytes") or 0) + len(data)
+        _save_session(sid, sess)
+    _DIRECTOR_SEEN[sid] = time.time()
+    return {"ok": True, "seq": seq, "bytes": dd["rec_bytes"]}
+
+
+def _finalize_recording_async(sid: str) -> None:
+    threading.Thread(target=_finalize_recording, args=(sid,), daemon=True, name=f"live-finalize-{sid}").start()
+
+
+def _finalize_recording(sid: str) -> None:
+    """停止后把录像转成 seg_0001.mp4(fMP4 优先直接 remux,失败/WebM 则转码 H.264+AAC)并抽尾帧,
+    作为该会话唯一片段——历史回放与「从上次尾帧继续」由此可用。"""
+    d = SESSIONS_DIR / sid
+    with _LOCK:
+        sess = _read_json(d / "session.json", {})
+        dd = sess.get("director") or {}
+        ext = str(dd.get("rec_ext") or "")
+        src = d / "segments" / f"recording.{ext}" if ext else None
+        if sess.get("finalizing") or any(str(x.get("file") or "").endswith("seg_0001.mp4") for x in sess.get("segments") or []):
+            return
+        if not src or not src.is_file() or src.stat().st_size == 0:
+            sess["message"] = (sess.get("message") or "已停止") + "(无录像)"
+            _save_session(sid, sess)
+            return
+        sess["finalizing"] = True
+        sess["message"] = "正在整理录像(转码/抽尾帧)…"
+        _save_session(sid, sess)
+    out = d / "segments" / "seg_0001.mp4"
+    frame = d / "segments" / "seg_0001.png"
+    err = ""
+    try:
+        cmds = []
+        if ext == "mp4":
+            cmds.append(["ffmpeg", "-y", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(out)])
+        cmds.append(["ffmpeg", "-y", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)])
+        ok = False
+        for cmd in cmds:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            if r.returncode == 0 and out.is_file() and out.stat().st_size > 0:
+                ok = True
+                break
+            err = (r.stderr or r.stdout).strip()[-500:]
+        if not ok:
+            raise RuntimeError(f"ffmpeg 转码失败:{err}")
+        r = subprocess.run(["ffmpeg", "-y", "-sseof", "-0.1", "-i", str(out), "-frames:v", "1", str(frame)],
+                           capture_output=True, text=True, timeout=120)
+        if r.returncode or not frame.is_file():
+            raise RuntimeError(f"尾帧提取失败:{(r.stderr or r.stdout).strip()[-300:]}")
+        dur = _probe_duration(out)
+        src.unlink(missing_ok=True)
+        with _LOCK:
+            sess = _read_json(d / "session.json", {})
+            sess["segments"] = [{"seq": 1, "file": f"segments/{out.name}", "frame": f"segments/{frame.name}",
+                                 "duration_s": dur, "size": out.stat().st_size, "created_at": _now(),
+                                 "gen_seconds": int((sess.get("director") or {}).get("gen_s") or 0),
+                                 "prompt": str(sess.get("prompt") or "")}]
+            sess["finalizing"] = False
+            sess["message"] = f"录像已保存({dur:.1f}s),可回放或作为下次直播的首帧"
+            _save_session(sid, sess)
+    except Exception as exc:  # noqa: BLE001
+        with _LOCK:
+            sess = _read_json(d / "session.json", {})
+            sess["finalizing"] = False
+            sess["error"] = (str(sess.get("error") or "") + f"\n录像整理失败:{str(exc)[:500]}").strip()
+            sess["message"] = "已停止(录像整理失败,原始录像仍在 segments/ 下)"
+            _save_session(sid, sess)
 
 
 # ---------------- 作业子进程:生成循环 ----------------
