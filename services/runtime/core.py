@@ -633,7 +633,8 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # openrouter | ideogram | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | ideogram | volcengine | byteplus | minimax | comfyui
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
@@ -661,7 +662,8 @@ DEFAULT_GENCONFIG = {
                     "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
-        "provider": "volcengine",   # openrouter | volcengine | byteplus | fal | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
         "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
@@ -684,6 +686,7 @@ DEFAULT_GENCONFIG = {
     },
     "music": {
         "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -704,6 +707,7 @@ DEFAULT_GENCONFIG = {
     },
     "tts": {
         "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
+        "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -744,7 +748,8 @@ DEFAULT_GENCONFIG = {
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
-        "provider": "local",   # local | cloud | openrouter
+        "provider": "local",   # agentics | local | cloud | openrouter
+        "agentics": {"model": "anthropic/claude-sonnet-5", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
         "cloud": {"base_url": "https://api.deepseek.com",
@@ -964,6 +969,14 @@ def _migrate_genconfig(config: dict) -> None:
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     for kind in ("image", "video", "music", "tts", "digital_human"):
         section = config.get(kind, {})
+        # Older desktop defaults selected OpenRouter with an empty user key and
+        # silently routed that tab through the Agentics account wrapper. Keep
+        # those installs working while making the two providers explicit.
+        if (kind != "digital_human" and os.environ.get("VIDEOAGENTS_USER_JWT")
+                and section.get("provider") == "openrouter"
+                and not str((section.get("openrouter") or {}).get("api_key")
+                            or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
+            section["provider"] = "agentics"
         mm = section.get("minimax")
         if isinstance(mm, dict):
             _split_legacy_key(mm, "api_key", ("api_key_io", "api_key_cn"))
@@ -996,6 +1009,12 @@ def _migrate_genconfig(config: dict) -> None:
         if dh.get("provider") == "runninghub":
             dh["provider"] = "comfyui"
             comfy["mode"] = rh.get("site") if rh.get("site") in RH_BASES else "rh_cn"
+    da = config.get("deepagents")
+    if (isinstance(da, dict) and os.environ.get("VIDEOAGENTS_USER_JWT")
+            and da.get("provider") == "openrouter"
+            and not str((da.get("openrouter") or {}).get("api_key")
+                        or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
+        da["provider"] = "agentics"
 
 
 def load_genconfig() -> dict:
@@ -1029,7 +1048,7 @@ def active_video_model(cfg: dict | None = None, agent_id: str = "") -> str:
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
     pc = v.get(active_video_provider(cfg, agent_id)) or {}
-    return str(pc.get("custom_model") or pc.get("model") or "")
+    return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "")
 
 
 VIDEO_AGENT_ID = "08-video-gen/video-generation"     # 实际提交视频生成请求的工位
@@ -1135,6 +1154,8 @@ MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2
 # 注入加载指令给 video-generation agent
 RUNNINGHUB_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
                           "runninghub-cloud-workflow/SKILL.md")
+AGENTICS_VIDEO_SKILL = ("agents/08-video-gen/video-generation/skills/"
+                        "agentics-media-generation/SKILL.md")
 
 # 本地音频转写 skill:音频转文字 Agent 每单开工前必须读取；模型由宿主缓存到 data/models/
 AUDIO_TRANSCRIPTION_SKILL = (
@@ -1163,6 +1184,8 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "MiniMax API Key 已配置"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
         "kind": "conditional", "condition": "视频渠道为 ComfyUI RunningHub 运行方式"},
+    "08-video-gen/video-generation/agentics-media-generation": {
+        "kind": "conditional", "condition": "视频渠道为 AgenticsLLM"},
     "09-audio/audio-transcription/audio-transcription": {"kind": "always"},
     "10-editing/caption/caption-styling": {"kind": "soul"},
     "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube"},
@@ -1459,38 +1482,59 @@ DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 DESKTOP_OPENROUTER_WRAPPERS = {
     "https://api.agentics.world/wrapper/openrouter",
+    "https://devapi.agentics.world/wrapper/openrouter",
     "https://wrapper.shumati.cn/wrapper/openrouter",
+}
+AGENTICS_SERVICE_ORIGINS = {
+    "https://api.agentics.world",
+    "https://devapi.agentics.world",
+    "https://api.shumati.cn",
 }
 OPENROUTER_WRAPPER_API_SUFFIX = "/api/v1"
 
 
 def resolve_openrouter_connection(api_key: str = "") -> dict:
-    """Resolve a user-owned OpenRouter key before the desktop account wrapper.
-
-    Browser deployments never receive the desktop JWT variables and therefore
-    retain the historical direct-OpenRouter behavior.
-    """
+    """Resolve the explicit user-owned OpenRouter connection."""
     configured = str(api_key or os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    if configured:
-        return {"base_url": DEEPAGENTS_OPENROUTER_URL,
-                "api_key": configured, "uses_wrapper": False}
-    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
-    wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
-    if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
-        # agentics-deepcore uses
-        #   <wrapper>/openrouter/api/v1
-        # as the OpenAI-compatible SDK base. VIDEOAGENTS_* stores the full
-        # module root (<wrapper>/openrouter), so append the same API prefix
-        # before ChatOpenAI adds /chat/completions, /models, etc.
-        return {"base_url": wrapper + OPENROUTER_WRAPPER_API_SUFFIX,
-                "api_key": jwt, "uses_wrapper": True}
     return {"base_url": DEEPAGENTS_OPENROUTER_URL,
-            "api_key": "", "uses_wrapper": False}
+            "api_key": configured, "uses_wrapper": False}
+
+
+def resolve_agentics_connection() -> dict:
+    """Resolve the signed-in desktop account's Agentics service endpoints.
+
+    These variables are injected only by the desktop shell. Browser deployments
+    therefore cannot accidentally opt into account-billed Agentics requests.
+    """
+    jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
+    origin = str(os.environ.get("VIDEOAGENTS_SERVICE_API_ORIGIN") or "").strip().rstrip("/")
+    if not origin:
+        wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+        if wrapper.endswith("/wrapper/openrouter"):
+            origin = wrapper[:-len("/wrapper/openrouter")]
+    else:
+        wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+    if not jwt:
+        raise ServiceError(401, "AgenticsLLM requires a signed-in desktop account")
+    if origin not in AGENTICS_SERVICE_ORIGINS:
+        raise ServiceError(400, "Agentics service origin is unavailable")
+    if wrapper not in DESKTOP_OPENROUTER_WRAPPERS:
+        raise ServiceError(400, "AgenticsLLM wrapper endpoint is unavailable")
+    return {
+        "api_origin": origin,
+        "base_url": wrapper + OPENROUTER_WRAPPER_API_SUFFIX,
+        "api_key": jwt,
+    }
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
     """deepagents 配置 -> 生效渠道的 {provider, base_url, api_key, model}。"""
     da = (cfg or load_genconfig()).get("deepagents") or {}
+    if (da.get("provider") or "local") == "agentics":
+        a = da.get("agentics") or {}
+        connection = resolve_agentics_connection()
+        return {"provider": "agentics", **connection,
+                "model": a.get("custom_model") or a.get("model") or ""}
     if (da.get("provider") or "local") == "openrouter":
         o = da.get("openrouter") or {}
         connection = resolve_openrouter_connection(o.get("api_key") or "")
@@ -1698,8 +1742,8 @@ AM_MODE_MODELS = {
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
 # RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
 # ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
-AM_IMAGE_PROVIDERS = ("", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
+AM_IMAGE_PROVIDERS = ("", "agentics", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1740,10 +1784,13 @@ def global_model_pref() -> dict:
     p = STATE.get("global_model") or {}
     eng = str(p.get("engine") or "").lower()
     model = str(p.get("model") or "").strip()
-    # DeepAgents 顶栏的 model 选择器实际存的是渠道(local/cloud/openrouter)。旧 UI 会把
+    # DeepAgents 顶栏的 model 选择器实际存的是渠道(agentics/local/cloud/openrouter)。旧 UI 会把
     # 渠道名写入 global_model，导致它覆盖 genconfig 中的真实模型 ID。
-    if eng == "deepagents" and (not model or model in ("local", "cloud", "openrouter")):
-        model = resolve_deepagents()["model"]
+    if eng == "deepagents" and (not model or model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            model = resolve_deepagents()["model"]
+        except ServiceError:
+            model = ""
     return {"engine": eng if eng in ENGINES else "",
             "model": model}
 
@@ -2927,6 +2974,17 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
+    if agent_id == VIDEO_AGENT_ID and active_video_provider(agent_id=agent_id) == "agentics" \
+            and skill_enabled("08-video-gen/video-generation/agentics-media-generation"):
+        p += f"""
+
+## AgenticsLLM 视频生成 Skill(当前渠道已生效)
+当前项目通过登录桌面端账号调用 Agentics 媒体生成 profile。执行视频生成工单前,**先阅读技能文件并遵守其调用与错误处理边界**:
+- Skill 文件:{AGENTICS_VIDEO_SKILL}(直接 Read 全文)
+- 统一调用 `python3 modules/genmedia.py video ...`;profile 固定字段、取值与附件数量约束、上传、幂等重试、轮询和取消由模块处理
+- 禁止手工拼 Agentics REST 请求、猜工作流 node/token/index、为了 `repeat_last` 补槽位而重复附件或在测试中修改核心模块
+- Agentics 视频命令允许至少 2 小时运行并按心跳等待;TLS/网络/503 不得判定生成失败。若外层进程在 task ID 创建后中断,用 `python3 modules/genmedia.py reclaim --task-id <UUID> --output <原路径>` 恢复同一任务,严禁重新提交
+- 422 只按结构化 field/reason 上报或修正明确的工单输入;401/402/403 停止;只有服务端明确 failed/cancelled 才按生成失败处理"""
     if agent_id == PROMPT_AGENT_ID:
         p += group_overrides_prompt(project)
     elif agent_id == VIDEO_AGENT_ID:
@@ -3268,15 +3326,24 @@ async def execute_run(run: dict, message: str, model: str | None):
                 pass
 
         if engine == "deepagents":
-            da = resolve_deepagents()
+            try:
+                da = resolve_deepagents()
+                resolution_error = None
+            except ServiceError as exc:
+                da = {"provider": "agentics", "base_url": "", "api_key": "", "model": ""}
+                resolution_error = exc.detail
             requested_model = str(model or "").strip()
             # 兼容修复前已落盘/传入的渠道占位值，绝不把 local/openrouter 发给模型端点。
             use_model = (da["model"] if not requested_model
                          or requested_model == da["provider"] else requested_model)
-            err = None
+            err = resolution_error
             if not use_model:
-                err = ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
-                       "「语言模型/DeepAgents」为生效渠道(本地模型/云端模型/OpenRouter)配置模型")
+                err = err or ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
+                              "「语言模型/DeepAgents」为生效渠道"
+                              "(AgenticsLLM/本地模型/云端模型/OpenRouter)配置模型")
+            elif da["provider"] == "agentics" and not da["api_key"]:
+                err = err or ("deepagents 引擎当前生效渠道为 AgenticsLLM，"
+                              "请先登录桌面端账号")
             elif da["provider"] == "openrouter" and not da["api_key"]:
                 err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
                        "请在 🎨 生成模型 页「语言模型/DeepAgents → OpenRouter」填写")
@@ -6338,6 +6405,9 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    if any((cfg.get(kind) or {}).get("provider") == "agentics"
+           for kind in ("image", "video", "music", "tts", "deepagents")):
+        resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
     if dh_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
         raise ServiceError(400, "digital_human.comfyui.mode must be local, cloud, "
@@ -6638,6 +6708,70 @@ OPENROUTER_TTS_MODELS = [
     ("sesame/csm-1b", "CSM 1B(Sesame)· 英文对话/朗读音色(conversational/read_speech)"),
     ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
 ]
+
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4}
+
+
+def _agentics_response_data(payload: dict) -> dict:
+    """Unwrap the Agentics API's ``{code,msg,data}`` response envelope."""
+    if not isinstance(payload, dict):
+        raise ServiceError(502, "Agentics service returned an invalid response")
+    if "code" not in payload:
+        return payload
+    if payload.get("code") != 0 or not isinstance(payload.get("data"), dict):
+        raise ServiceError(502, str(payload.get("msg") or "Agentics service request failed")[:300])
+    return payload["data"]
+
+
+async def api_agentics_models(modality: str = "image", refresh: bool = False):
+    """List signed-in Agentics media profiles or AgenticsLLM text models."""
+    del refresh  # Service-side ordering and freshness are authoritative.
+    if modality not in (*AGENTICS_MEDIA_TYPES, "media", "text"):
+        raise ServiceError(400, "modality must be one of image / video / music / tts / media / text")
+    connection = resolve_agentics_connection()
+    headers = {"Authorization": f"Bearer {connection['api_key']}"}
+    try:
+        if modality == "text":
+            payload = await asyncio.to_thread(
+                _http_get_json, connection["api_origin"] + "/v1/agent_models", headers, 15)
+            values = _agentics_response_data(payload).get("models") or []
+            models = [{"id": m, "name": m} for m in values if isinstance(m, str) and m]
+            return {"models": models, "profiles": [], "cached": False}
+        query = ("" if modality == "media" else
+                 "?" + urllib.parse.urlencode({"media_type": AGENTICS_MEDIA_TYPES[modality]}))
+        payload = await asyncio.to_thread(
+            _http_get_json,
+            connection["api_origin"] + "/v1/media_generation/profiles" + query,
+            headers, 15)
+        profiles = _agentics_response_data(payload).get("profiles") or []
+        profiles = [p for p in profiles if isinstance(p, dict) and p.get("profile_code")]
+        if modality == "media":
+            type_to_modality = {value: key for key, value in AGENTICS_MEDIA_TYPES.items()}
+            media = {kind: {"models": [], "profiles": []} for kind in AGENTICS_MEDIA_TYPES}
+            for profile in profiles:
+                kind = type_to_modality.get(profile.get("media_type"))
+                if not kind:
+                    continue
+                media[kind]["profiles"].append(profile)
+                media[kind]["models"].append({
+                    "id": profile["profile_code"],
+                    "name": profile.get("name") or profile["profile_code"],
+                })
+            return {"media": media, "cached": False}
+        return {
+            "models": [{"id": p["profile_code"], "name": p.get("name") or p["profile_code"]}
+                       for p in profiles],
+            "profiles": profiles,
+            "cached": False,
+        }
+    except ServiceError:
+        raise
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        raise ServiceError(e.code if e.code in (401, 403) else 502,
+                           f"Agentics service HTTP {e.code}: {detail}") from e
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(502, f"Failed to fetch Agentics model list: {str(e)[:300]}") from e
 
 
 async def api_openrouter_models(modality: str = "image", refresh: bool = False):
@@ -7770,8 +7904,11 @@ async def api_globalmodel_set(body: dict):
     if eng and eng not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
     model = str(body.get("model") or "").strip()
-    if eng == "deepagents" and (not model or model in ("local", "openrouter")):
-        model = resolve_deepagents()["model"]
+    if eng == "deepagents" and (not model or model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            model = resolve_deepagents()["model"]
+        except ServiceError:
+            model = ""
     STATE["global_model"] = {"engine": eng, "model": model}
     save_state(STATE)
     return {"ok": True, "global_model": global_model_pref()}
@@ -7809,8 +7946,11 @@ async def api_uiprefs_set(body: dict):
     STATE["ui_prefs"] = prefs
     effective_model = str(body.get("effective_model") or "").strip()
     if eng == "deepagents" and (not effective_model
-                                 or effective_model in ("local", "openrouter")):
-        effective_model = resolve_deepagents()["model"]
+                                 or effective_model in ("agentics", "local", "cloud", "openrouter")):
+        try:
+            effective_model = resolve_deepagents()["model"]
+        except ServiceError:
+            effective_model = ""
     elif not effective_model:
         effective_model = str(body.get("model") or "").strip()
     STATE["global_model"] = {"engine": eng, "model": effective_model}
@@ -9870,4 +10010,3 @@ async def api_live_clear():
 
 def live_file_path(rel: str) -> Path:
     return _live_call(lambda lib: lib.resolve_file(rel))
-

@@ -25,13 +25,13 @@ CLI:
   需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
-  python3 modules/genmedia.py reclaim --task-id cgt-xxxx --output out.mp4 \
+  python3 modules/genmedia.py reclaim --task-id <UUID|cgt-xxxx> --output out.mp4 \
       [--return-last-frame tail.png]
 
-  认领方舟侧已建成的视频任务(火山引擎/BytePlus):仅查询状态+下载产物,绝不重新
-  提交、不重复计费。适用于提交或下载阶段被网络/工具超时掐断但任务已建成的场景
-  (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 id 见提交日志
-  「任务已创建 cgt-…」行,或 code/ark_task_list.py 按创建时间核对。
+  恢复已建成的视频任务:AgenticsLLM UUID 或方舟 cgt-… task ID 均可。仅查询状态并
+  下载产物,绝不重新提交、不重复计费。适用于提交后被网络/工具超时掐断的场景
+  (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 ID 见提交日志的
+  「任务已创建」行;方舟任务也可用 code/ark_task_list.py 按创建时间核对。
 
   python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
       [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
@@ -61,12 +61,12 @@ Python:
       generate_music, generate_tts, get_config
 
 渠道:
-  图像: openrouter(chat completions, modalities=image) / ideogram
+  图像: agentics(登录账号 + 后端 profile) / openrouter(chat completions, modalities=image) / ideogram
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
         / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
-  视频: openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
+  视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
@@ -82,14 +82,14 @@ Python:
         工作流 video-upscale-seedvr2-api.json,RunningHub 用选中的云端超分工作流)
         / minimax(POST /v2/video_regeneration,
         Regenerate-2K 异步任务;模型固定 MiniMax-H3,分辨率固定 2K)
-  音乐: openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
+  音乐: agentics(登录账号 + 后端 profile) / openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
         省略=模型自定;force_instrumental 由「生成模型」页配置,默认纯音乐;仅 .mp3/.opus)
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
-  TTS : openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
+  TTS : agentics(登录账号 + 后端 profile) / openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
         Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
         / volcengine(豆包语音;凭证=新版语音技术控制台「API Key 管理」的 API Key,
         非方舟 ARK Key。模型 seed-tts-2.0/1.0 走 openspeech v3 单向流式,音色为
@@ -169,11 +169,12 @@ ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
             "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY",
             "fal": "FAL_KEY"}
 OPENROUTER_DIRECT_BASE = "https://openrouter.ai/api/v1"
-DESKTOP_OPENROUTER_WRAPPERS = {
-    "https://api.agentics.world/wrapper/openrouter",
-    "https://wrapper.shumati.cn/wrapper/openrouter",
+AGENTICS_SERVICE_ORIGINS = {
+    "https://api.agentics.world",
+    "https://devapi.agentics.world",
+    "https://api.shumati.cn",
 }
-OPENROUTER_WRAPPER_API_SUFFIX = "/api/v1"
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -209,6 +210,8 @@ LTX25_DEFAULTS = {
 
 VIDEO_POLL_INTERVAL = 10
 VIDEO_TIMEOUT = 1800
+AGENTICS_VIDEO_TIMEOUT = 7200
+AGENTICS_HEARTBEAT_INTERVAL = 60
 COMFY_TIMEOUT = 1800
 COMFY_QUEUE_SUBMIT_GRACE = 30
 COMFY_QUEUE_DISAPPEAR_GRACE = 15
@@ -249,15 +252,24 @@ def _agent_provider_override(kind: str) -> str:
 
 
 def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
-    """Prefer an explicit user key; otherwise use the signed-in desktop wrapper."""
+    """Return the explicit user-owned OpenRouter connection."""
     configured = str(api_key or os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    if configured:
-        return OPENROUTER_DIRECT_BASE, configured, False
+    return OPENROUTER_DIRECT_BASE, configured, False
+
+
+def _agentics_connection() -> tuple[str, str]:
+    """Return the trusted service origin and signed-in desktop JWT."""
     jwt = str(os.environ.get("VIDEOAGENTS_USER_JWT") or "").strip()
-    wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
-    if jwt and wrapper in DESKTOP_OPENROUTER_WRAPPERS:
-        return wrapper + OPENROUTER_WRAPPER_API_SUFFIX, jwt, True
-    return OPENROUTER_DIRECT_BASE, "", False
+    origin = str(os.environ.get("VIDEOAGENTS_SERVICE_API_ORIGIN") or "").strip().rstrip("/")
+    if not origin:
+        wrapper = str(os.environ.get("VIDEOAGENTS_OPENROUTER_WRAPPER_URL") or "").strip().rstrip("/")
+        if wrapper.endswith("/wrapper/openrouter"):
+            origin = wrapper[:-len("/wrapper/openrouter")]
+    if not jwt:
+        raise RuntimeError("AgenticsLLM 仅支持已登录的桌面端账号；请先在生成模型页登录")
+    if origin not in AGENTICS_SERVICE_ORIGINS:
+        raise RuntimeError("AgenticsLLM 服务域未配置或不受信任")
+    return origin, jwt
 
 
 _GROUP_RE = re.compile(r"(?:^|/)(ep[\w-]+)/(grp[\w-]+?)(?:\.[\w.]+)?$")
@@ -309,19 +321,32 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
 
 
 def get_config(kind: str) -> dict:
-    """读取 kind(image|video)的生效渠道配置,返回 {provider, model, ...}。"""
+    """读取 kind(image|video|music|tts)的生效渠道配置。"""
     if not CONFIG_PATH.is_file():
         raise RuntimeError(f"未找到生成模型配置 {CONFIG_PATH};先在 Web 控制台「🎨 生成模型」页保存配置")
     cfg = json.loads(CONFIG_PATH.read_text())[kind]
     provider = cfg["provider"]
+    # Upgrade the historical desktop default: an empty OpenRouter key used to
+    # mean "bill the signed-in Agentics account". That behavior now has its own
+    # explicit provider and OpenRouter always means a user-owned key.
+    if (provider == "openrouter" and os.environ.get("VIDEOAGENTS_USER_JWT")
+            and not str((cfg.get("openrouter") or {}).get("api_key")
+                        or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
+        provider = "agentics"
     ov = _agent_provider_override(kind)
     if ov and isinstance(cfg.get(ov), dict):
         provider = ov
-    pc = dict(cfg[provider])
+    pc = dict(cfg.get(provider) or {})
     if provider == "minimax":
         # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
         pc["api_key"] = _minimax_key(pc)
-    if provider != "comfyui":
+    if provider == "agentics":
+        _agentics_connection()
+        pc["profile_code"] = str(pc.get("profile_code") or "").strip()
+        # Keep the common model field aligned so existing group-level video
+        # overrides can target another Agentics profile without a special path.
+        pc["model"] = pc["profile_code"]
+    elif provider != "comfyui":
         if provider == "openrouter":
             base_url, key, uses_wrapper = _openrouter_connection(pc.get("api_key") or "")
             pc["api_key"] = key
@@ -350,7 +375,29 @@ def _request(url: str, data: bytes | None = None, headers: dict | None = None,
             return body
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:800]
-        raise RuntimeError(f"HTTP {e.code} {url}\n{body}") from e
+        raise _HTTPStatusError(e.code, url, body) from e
+    except (urllib.error.URLError, TimeoutError, ConnectionError,
+            http.client.HTTPException, OSError) as e:
+        raise _TransportError(url, e) from e
+
+
+class _HTTPStatusError(RuntimeError):
+    """HTTP failure retaining status/body while preserving the historical text."""
+
+    def __init__(self, status: int, url: str, body: str):
+        self.status = status
+        self.url = url
+        self.body = body
+        super().__init__(f"HTTP {status} {url}\n{body}")
+
+
+class _TransportError(RuntimeError):
+    """Retryable DNS/TCP/TLS/read failure without an authoritative HTTP response."""
+
+    def __init__(self, url: str, cause: BaseException):
+        self.url = url
+        self.cause = cause
+        super().__init__(f"网络传输失败 {url}: {cause}")
 
 
 def _post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 300) -> dict:
@@ -371,6 +418,12 @@ def _save(data: bytes, output: str) -> str:
     return str(p)
 
 
+def _output_format(output: str) -> str:
+    """Return the stable media-generation/v1 format value for an output path."""
+    suffix = Path(output).suffix.lower().lstrip(".")
+    return "jpeg" if suffix == "jpg" else suffix
+
+
 def _file_to_data_url(path: str) -> str:
     p = Path(path)
     if not p.is_file():
@@ -383,6 +436,492 @@ def _decode_data_url(url: str) -> bytes:
     if url.startswith("data:"):
         return base64.b64decode(url.split(",", 1)[1])
     return _request(url, timeout=300)
+
+
+# ---------------- AgenticsLLM 账号媒体生成 ----------------
+
+_AGENTICS_PROFILE_LIST_CACHE: tuple[float, list[dict]] | None = None
+_AGENTICS_PROFILE_DETAIL_CACHE: dict[str, tuple[str, dict]] = {}
+_AGENTICS_PROFILE_TTL = 60
+
+
+class AgenticsServiceError(RuntimeError):
+    """Structured service error used for field diagnostics and safe retries."""
+
+    def __init__(self, status: int, code: int, message: str, details: dict | None = None):
+        self.status = status
+        self.code = code
+        self.details = details or {}
+        self.reason = str(self.details.get("reason") or "")
+        self.retryable = (bool(self.details.get("retryable"))
+                          or status in (408, 425, 429, 500, 502, 503, 504))
+        location = str(self.details.get("location") or "")
+        field = str(self.details.get("field") or "")
+        where = ".".join(value for value in (location, field) if value)
+        detail_message = str(self.details.get("message") or "")
+        suffix = f" [{where}]" if where else ""
+        if self.reason:
+            suffix += f" ({self.reason})"
+        super().__init__(f"AgenticsLLM 服务错误 {code or status}{suffix}:"
+                         f"{detail_message or message or '请求失败'}")
+
+
+def _agentics_data(payload: dict, status: int = 200) -> dict:
+    """Unwrap agentics-service's ``{code,msg,data}`` envelope."""
+    if not isinstance(payload, dict):
+        raise RuntimeError("AgenticsLLM 服务返回了无效响应")
+    if "code" not in payload:
+        return payload
+    if payload.get("code") != 0 or not isinstance(payload.get("data"), dict):
+        details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+        raise AgenticsServiceError(status, int(payload.get("code") or status),
+                                   str(payload.get("msg") or "AgenticsLLM 服务请求失败")[:500],
+                                   details)
+    return payload["data"]
+
+
+def _agentics_json(path: str, payload: dict | None = None,
+                    extra_headers: dict | None = None, timeout: int = 30) -> dict:
+    origin, jwt = _agentics_connection()
+    headers = {"Authorization": f"Bearer {jwt}", **(extra_headers or {})}
+    url = origin + path
+    try:
+        raw = (_post_json(url, payload, headers, timeout=timeout)
+               if payload is not None else _get_json(url, headers, timeout=timeout))
+    except _HTTPStatusError as exc:
+        try:
+            error_payload = json.loads(exc.body)
+        except (TypeError, json.JSONDecodeError):
+            error_payload = {}
+        if isinstance(error_payload, dict) and error_payload.get("code"):
+            raise AgenticsServiceError(
+                exc.status, int(error_payload.get("code") or exc.status),
+                str(error_payload.get("msg") or "AgenticsLLM 服务请求失败")[:500],
+                error_payload.get("details") if isinstance(error_payload.get("details"), dict) else {},
+            ) from exc
+        retryable = exc.status in (408, 425, 429, 500, 502, 503, 504)
+        raise AgenticsServiceError(
+            exc.status, exc.status, "AgenticsLLM 服务请求失败",
+            {"retryable": retryable, "message": exc.body or f"HTTP {exc.status}"},
+        ) from exc
+    except AgenticsServiceError:
+        raise
+    except _TransportError:
+        raise
+    except json.JSONDecodeError as exc:
+        raise _TransportError(url, RuntimeError("服务响应不是完整 JSON")) from exc
+    except RuntimeError as exc:
+        raise RuntimeError(f"AgenticsLLM 服务请求失败:{exc}") from exc
+    return _agentics_data(raw)
+
+
+def _agentics_profiles(kind: str, refresh: bool = False) -> list[dict]:
+    """Fetch the lightweight catalog once, then split it locally by media type."""
+    global _AGENTICS_PROFILE_LIST_CACHE
+    cached = _AGENTICS_PROFILE_LIST_CACHE
+    if not cached or refresh or time.time() - cached[0] >= _AGENTICS_PROFILE_TTL:
+        data = _agentics_json("/v1/media_generation/profiles")
+        profiles = [p for p in data.get("profiles") or []
+                    if isinstance(p, dict) and p.get("profile_code")]
+        _AGENTICS_PROFILE_LIST_CACHE = (time.time(), profiles)
+    else:
+        profiles = cached[1]
+    media_type = AGENTICS_MEDIA_TYPES[kind]
+    return [profile for profile in profiles if profile.get("media_type") == media_type]
+
+
+def _agentics_profile(kind: str, configured: str, refresh: bool = False) -> dict:
+    """Resolve a catalog summary and fetch/cache its full schema-bearing detail."""
+    profiles = _agentics_profiles(kind, refresh)
+    selected = next((profile for profile in profiles
+                     if not configured or profile.get("profile_code") == configured), None)
+    if selected is None and configured and not refresh:
+        return _agentics_profile(kind, configured, True)
+    if selected is None:
+        if configured:
+            raise RuntimeError(f"AgenticsLLM {kind} profile 不存在或已下线:{configured}")
+        raise RuntimeError(f"AgenticsLLM 后端暂无{kind} profile")
+    profile_code = str(selected["profile_code"])
+    updated_at = str(selected.get("updated_at") or "")
+    cached = _AGENTICS_PROFILE_DETAIL_CACHE.get(profile_code)
+    if cached and not refresh and cached[0] == updated_at:
+        return cached[1]
+    data = _agentics_json(
+        "/v1/media_generation/profiles/" + urllib.parse.quote(profile_code, safe=""))
+    profile = data.get("profile")
+    if not isinstance(profile, dict) or profile.get("profile_code") != profile_code:
+        raise RuntimeError(f"AgenticsLLM profile 详情响应无效:{profile_code}")
+    contract = str(profile.get("contract_version") or "")
+    if contract and contract != "media-generation/v1":
+        raise RuntimeError(f"AgenticsLLM profile 契约版本不受支持:{contract}")
+    if profile.get("media_type") != AGENTICS_MEDIA_TYPES[kind]:
+        raise RuntimeError(f"AgenticsLLM profile 类型与 {kind} 不匹配:{profile_code}")
+    _AGENTICS_PROFILE_DETAIL_CACHE[profile_code] = (
+        str(profile.get("updated_at") or updated_at), profile)
+    return profile
+
+
+def _agentics_upload(token: str, file_path: str) -> dict:
+    path = Path(file_path)
+    if not path.is_file():
+        raise RuntimeError(f"AgenticsLLM 参考文件不存在:{file_path}")
+    size = path.stat().st_size
+    if size <= 0 or size > 200 * 1024 * 1024:
+        raise RuntimeError(f"AgenticsLLM 参考文件大小须在 1B–200MB 之间:{path.name}")
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    upload = _agentics_json("/v1/user/upload", {
+        "file_name": path.name, "content_type": content_type, "size": size,
+    })
+    upload_url = str(upload.get("upload_url") or "")
+    file_url = str(upload.get("file_url") or "")
+    if not upload_url or not file_url:
+        raise RuntimeError("AgenticsLLM 文件上传服务未返回有效 URL")
+    headers = {str(k): str(v) for k, v in (upload.get("headers") or {}).items()}
+    _request(upload_url, path.read_bytes(), headers,
+             method=str(upload.get("method") or "PUT"), timeout=600)
+    return {
+        "token": token,
+        "url": file_url,
+        "key": str(upload.get("key") or ""),
+        "name": path.name,
+        "content_type": content_type,
+        "size": size,
+    }
+
+
+_AGENTICS_FIXED_PARAMETERS = {
+    "video": {
+        "prompt": ("string", 1, None), "negative_prompt": ("string", None, None),
+        "duration": ("integer", 1, None), "resolution": ("string", None, None),
+        "aspect_ratio": ("string", None, None), "fps": ("integer", 1, 120),
+        "seed": ("integer", None, None), "steps": ("integer", 1, None),
+        "guidance_scale": ("number", 0, None), "generate_audio": ("boolean", None, None),
+    },
+    "image": {
+        "prompt": ("string", 1, None), "negative_prompt": ("string", None, None),
+        "width": ("integer", 64, None), "height": ("integer", 64, None),
+        "resolution": ("string", None, None), "aspect_ratio": ("string", None, None),
+        "num_images": ("integer", 1, 16), "steps": ("integer", 1, None),
+        "guidance_scale": ("number", 0, None), "denoise": ("number", 0, 1),
+        "seed": ("integer", None, None), "output_format": ("string", None, None),
+    },
+    "music": {
+        "prompt": ("string", 1, None), "lyrics": ("string", None, None),
+        "duration": ("number", 1, None), "instrumental": ("boolean", None, None),
+        "language": ("string", None, None), "bpm": ("integer", 1, None),
+        "key": ("string", None, None), "seed": ("integer", None, None),
+        "num_tracks": ("integer", 1, 16), "steps": ("integer", 1, None),
+        "guidance_scale": ("number", 0, None), "output_format": ("string", None, None),
+    },
+    "tts": {
+        "text": ("string", 1, None), "voice_id": ("string", None, None),
+        "language": ("string", None, None), "speed": ("number", 0.1, None),
+        "pitch": ("number", None, None), "volume": ("number", 0, None),
+        "seed": ("integer", None, None), "sample_rate_hz": ("integer", 8000, None),
+        "output_format": ("string", None, None),
+    },
+}
+
+_AGENTICS_FIXED_FILES = {
+    "video": {"reference_images", "reference_videos", "reference_audios",
+              "first_frame", "last_frame"},
+    "image": {"input_images", "style_images", "mask_image", "control_images"},
+    "music": {"reference_audios", "vocal_audio"},
+    "tts": {"reference_audios"},
+}
+
+
+def _agentics_profile_kind(profile: dict, schema: dict) -> str:
+    expected = next((kind for kind, media_type in AGENTICS_MEDIA_TYPES.items()
+                     if media_type == profile.get("media_type")), "")
+    actual = str(schema.get("media_type") or "")
+    if schema.get("version") != 1 or not expected or actual != expected:
+        raise RuntimeError(
+            f"AgenticsLLM profile {profile.get('profile_code')} 不是有效的 media-generation/v1 映射")
+    return expected
+
+
+def _agentics_fixed_value(kind: str, name: str, value: object,
+                           mapping: dict) -> object:
+    spec = _AGENTICS_FIXED_PARAMETERS[kind].get(name)
+    if spec is None:
+        raise RuntimeError(f"AgenticsLLM profile 包含未知的 {kind} 参数:{name}")
+    expected, minimum, maximum = spec
+    number_value = isinstance(value, (int, float)) and not isinstance(value, bool)
+    valid = {
+        "string": isinstance(value, str),
+        "number": number_value,
+        "integer": number_value and float(value).is_integer(),
+        "boolean": isinstance(value, bool),
+    }[expected]
+    if not valid:
+        raise RuntimeError(f"AgenticsLLM 参数 {name} 必须是 {expected}")
+    if expected == "integer" and isinstance(value, float):
+        value = int(value)
+    if expected == "string" and name in ("prompt", "text") and not value:
+        raise RuntimeError(f"AgenticsLLM 参数 {name} 不能为空")
+    if number_value and minimum is not None and value < minimum:
+        raise RuntimeError(f"AgenticsLLM 参数 {name} 不能小于 {minimum}")
+    if number_value and maximum is not None and value > maximum:
+        raise RuntimeError(f"AgenticsLLM 参数 {name} 不能大于 {maximum}")
+    value_map = mapping.get("value_map") or {}
+    if value_map:
+        if not isinstance(value, str) or not isinstance(value_map, dict):
+            raise RuntimeError(f"AgenticsLLM profile 参数 {name} 的 value_map 无效")
+        if value not in value_map:
+            match = next((candidate for candidate in value_map
+                          if candidate.lower() == value.lower()), "")
+            if not match:
+                raise RuntimeError(
+                    f"AgenticsLLM profile {name} 不支持值 {value!r};可选:{list(value_map)}")
+            value = match
+    return value
+
+
+def _agentics_payload(profile: dict, values: dict,
+                       available_files: dict[str, list[str]]) -> tuple[dict, list[dict]]:
+    schema = profile.get("token_schema") or {}
+    if not isinstance(schema, dict):
+        raise RuntimeError(f"AgenticsLLM profile {profile.get('profile_code')} 缺少 token_schema")
+    kind = _agentics_profile_kind(profile, schema)
+    mappings = schema.get("parameters")
+    file_mappings = schema.get("files") or {}
+    if not isinstance(mappings, dict) or not mappings or not isinstance(file_mappings, dict):
+        raise RuntimeError(f"AgenticsLLM profile {profile.get('profile_code')} 映射结构无效")
+
+    parameters: dict = {}
+    missing: list[str] = []
+    for name, raw_mapping in mappings.items():
+        if not isinstance(raw_mapping, dict):
+            raise RuntimeError(f"AgenticsLLM profile 参数 {name} 的映射结构无效")
+        mapping = raw_mapping
+        if name not in _AGENTICS_FIXED_PARAMETERS[kind]:
+            raise RuntimeError(f"AgenticsLLM profile 包含未知的 {kind} 参数:{name}")
+        value = values.get(name)
+        if value is not None and not (isinstance(value, str) and not value):
+            parameters[name] = _agentics_fixed_value(kind, name, value, mapping)
+        elif mapping.get("required") and "default" not in mapping:
+            missing.append(name)
+
+    prepared_files: dict[str, list[str]] = {}
+    for token, raw_mapping in file_mappings.items():
+        if token not in _AGENTICS_FIXED_FILES[kind]:
+            raise RuntimeError(f"AgenticsLLM profile 包含未知的 {kind} 附件字段:{token}")
+        if not isinstance(raw_mapping, dict):
+            raise RuntimeError(f"AgenticsLLM profile 附件 {token} 的映射结构无效")
+        mapping = raw_mapping
+        paths = [str(path) for path in (available_files.get(token) or []) if path]
+        minimum = int(mapping.get("min_items") or 0)
+        maximum = int(mapping.get("max_items") or 0)
+        if len(paths) < minimum or (mapping.get("required") and not paths):
+            missing.append(f"{token}(至少 {minimum or 1} 个)")
+            continue
+        if maximum < 1:
+            raise RuntimeError(f"AgenticsLLM profile 附件 {token} 的 max_items 无效")
+        if len(paths) > maximum:
+            raise RuntimeError(
+                f"AgenticsLLM profile {token} 最多接受 {maximum} 个附件，实际 {len(paths)} 个")
+        prepared_files[token] = paths
+
+    unsupported_files = sorted(token for token, paths in available_files.items()
+                               if paths and token not in file_mappings)
+    if unsupported_files:
+        raise RuntimeError(
+            f"AgenticsLLM profile {profile.get('profile_code')} 不支持附件:"
+            + ", ".join(unsupported_files))
+    if missing:
+        raise RuntimeError(
+            f"AgenticsLLM profile {profile.get('profile_code')} 缺少必填参数/参考文件:"
+            + ", ".join(sorted(missing)))
+    if sum(len(paths) for paths in prepared_files.values()) > 10:
+        raise RuntimeError("AgenticsLLM 单个任务最多支持 10 个参考文件")
+
+    files: list[dict] = []
+    uploaded_files: dict[str, dict] = {}
+    for token, paths in prepared_files.items():
+        for index, path in enumerate(paths):
+            uploaded = uploaded_files.get(path)
+            if uploaded is None:
+                uploaded = _agentics_upload(token, path)
+                uploaded_files[path] = uploaded
+            files.append({**uploaded, "token": token, "index": index})
+    return parameters, files
+
+
+def _agentics_cancel(task_id: str) -> None:
+    try:
+        _agentics_json(
+            "/v1/media_generation/task/" + urllib.parse.quote(task_id, safe="") + "/cancel", {})
+        print(f"[genmedia] AgenticsLLM 任务已取消 {task_id}", file=sys.stderr, flush=True)
+    except AgenticsServiceError as exc:
+        if exc.status != 409:
+            print(f"[genmedia] AgenticsLLM 取消任务失败:{exc}", file=sys.stderr, flush=True)
+    except RuntimeError as exc:
+        print(f"[genmedia] AgenticsLLM 取消任务失败:{exc}", file=sys.stderr, flush=True)
+
+
+def _agentics_download(task_id: str, artifact_url: str, deadline: float) -> bytes:
+    """Download a completed artifact without turning a transient TLS fault into a rerun."""
+    failures = 0
+    while True:
+        try:
+            remaining = max(1, int(deadline - time.time()))
+            return _request(artifact_url, timeout=min(600, remaining))
+        except _TransportError as exc:
+            failures += 1
+            error = exc
+        except _HTTPStatusError as exc:
+            if exc.status not in (408, 425, 429, 500, 502, 503, 504):
+                raise
+            failures += 1
+            error = exc
+        if time.time() >= deadline:
+            raise RuntimeError(
+                f"AgenticsLLM 任务 {task_id} 已成功，但产物下载持续失败；"
+                f"可用 reclaim --task-id {task_id} 继续取回，最后错误:{error}") from error
+        delay = min(30, 2 ** min(failures, 5))
+        print(f"[genmedia] AgenticsLLM 任务 {task_id} 已成功，产物下载暂时失败；"
+              f"{delay}s 后继续下载(不会重新生成):{error}", file=sys.stderr, flush=True)
+        time.sleep(delay)
+
+
+def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
+    """Wait for one existing task; transport failures never create a replacement task."""
+    timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "music": MUSIC_TIMEOUT,
+               "tts": TTS_TIMEOUT}.get(kind, 600)
+    started = time.time()
+    deadline = started + timeout
+    poll_interval = VIDEO_POLL_INTERVAL if kind == "video" else 2
+    last_status: int | None = None
+    last_beat = 0.0
+    failures = 0
+    next_delay = 0 if task is None else poll_interval
+    task_url = "/v1/media_generation/task/" + urllib.parse.quote(task_id, safe="")
+
+    try:
+        while True:
+            if task is not None:
+                try:
+                    status = int(task.get("status", 0))
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"AgenticsLLM 任务 {task_id} 返回无效状态:{task.get('status')!r}") from exc
+                now = time.time()
+                if status != last_status or now - last_beat >= AGENTICS_HEARTBEAT_INTERVAL:
+                    state = {0: "排队中", 1: "生成中", 2: "已完成",
+                             3: "失败", 4: "已取消"}.get(status, f"状态 {status}")
+                    print(f"[genmedia] AgenticsLLM {kind} 任务 {task_id}: {state}，"
+                          f"已等待 {int(now - started)}s", file=sys.stderr, flush=True)
+                    last_status, last_beat = status, now
+                if status == 2:
+                    result = task.get("result") or {}
+                    if isinstance(result, str):
+                        try:
+                            result = json.loads(result)
+                        except json.JSONDecodeError:
+                            result = {}
+                    artifacts = result.get("artifacts") if isinstance(result, dict) else []
+                    artifact = next((item for item in artifacts or []
+                                     if isinstance(item, dict) and item.get("url")), None)
+                    if not artifact:
+                        raise RuntimeError(
+                            f"AgenticsLLM 任务 {task_id} 成功但未返回可下载产物")
+                    return _agentics_download(
+                        task_id, str(artifact["url"]), max(deadline, time.time() + 600))
+                if status in (3, 4):
+                    state = "已取消" if status == 4 else "失败"
+                    raise RuntimeError(
+                        f"AgenticsLLM 任务 {task_id} {state}(status={status},"
+                        f"code={task.get('error_code') or '-'}):"
+                        f"{task.get('error_message') or '未知错误'}")
+
+            if time.time() >= deadline:
+                if kind != "video":
+                    _agentics_cancel(task_id)
+                action = ("任务未被取消，可用 reclaim --task-id 继续等待，切勿重新提交"
+                          if kind == "video" else "任务已请求取消")
+                raise RuntimeError(
+                    f"AgenticsLLM {kind} 等待超过 {timeout}s，任务 {task_id} 未确认终态；"
+                    f"{action}")
+
+            if next_delay:
+                time.sleep(min(next_delay, max(0, deadline - time.time())))
+            try:
+                task = _agentics_json(task_url).get("task") or {}
+                failures = 0
+                next_delay = poll_interval
+            except AgenticsServiceError as exc:
+                if not exc.retryable:
+                    raise
+                failures += 1
+                next_delay = min(30, poll_interval * (2 ** min(failures - 1, 3)))
+                print(f"[genmedia] AgenticsLLM 任务 {task_id} 轮询暂时失败；"
+                      f"{next_delay}s 后继续查询同一任务:{exc}", file=sys.stderr, flush=True)
+            except _TransportError as exc:
+                failures += 1
+                next_delay = min(30, poll_interval * (2 ** min(failures - 1, 3)))
+                print(f"[genmedia] AgenticsLLM 任务 {task_id} 轮询网络异常；"
+                      f"{next_delay}s 后继续查询同一任务(不会重新提交):{exc}",
+                      file=sys.stderr, flush=True)
+    except KeyboardInterrupt:
+        _agentics_cancel(task_id)
+        raise
+
+
+def _agentics_generate(kind: str, cfg: dict, values: dict,
+                        available_files: dict[str, list[str]], profile: dict | None = None) -> bytes:
+    configured = str(cfg.get("model") or cfg.get("profile_code") or "")
+    profile = profile or _agentics_profile(kind, configured)
+    parameters, files = _agentics_payload(profile, values, available_files)
+    idempotency_key = str(uuid.uuid4())
+    create_payload = {"profile_code": profile["profile_code"], "parameters": parameters,
+                      **({"files": files} if files else {})}
+    schema_refreshed = False
+    retry_count = 0
+    while True:
+        try:
+            # A retry deliberately reuses the same key: if the first response
+            # was lost after creation, agentics-service returns that task.
+            data = _agentics_json(
+                "/v1/media_generation/task", create_payload,
+                {"Idempotency-Key": idempotency_key}, timeout=60)
+            break
+        except AgenticsServiceError as exc:
+            if (exc.status == 422 and exc.reason in ("unknown_field", "unsupported_field")
+                    and not schema_refreshed):
+                # The catalog summary may have changed inside its short TTL.
+                # Refresh just the selected detail and rebuild the fixed-field payload.
+                profile = _agentics_profile(kind, configured or str(profile["profile_code"]), True)
+                parameters, files = _agentics_payload(profile, values, available_files)
+                create_payload = {"profile_code": profile["profile_code"],
+                                  "parameters": parameters,
+                                  **({"files": files} if files else {})}
+                print("[genmedia] AgenticsLLM profile 已更新，按最新详情重建请求",
+                      file=sys.stderr, flush=True)
+                schema_refreshed = True
+                continue
+            if not exc.retryable or retry_count >= 4:
+                raise
+            print("[genmedia] AgenticsLLM 服务暂不可用，正在用相同幂等键重试",
+                  file=sys.stderr, flush=True)
+            time.sleep(max(1, int(exc.details.get("retry_after_seconds")
+                                  or min(15, 2 ** retry_count))))
+            retry_count += 1
+        except _TransportError as exc:
+            if retry_count >= 4:
+                raise
+            print(f"[genmedia] AgenticsLLM 创建任务响应中断，正在用相同幂等键重试:"
+                  f"{exc}",
+                  file=sys.stderr, flush=True)
+            time.sleep(min(15, 2 ** retry_count))
+            retry_count += 1
+    task = data.get("task") or {}
+    task_id = str(task.get("task_id") or "")
+    if not task_id:
+        raise RuntimeError("AgenticsLLM 媒体任务未返回 task_id")
+    print(f"[genmedia] AgenticsLLM {kind} 任务已创建 {task_id}"
+          f" (profile={profile['profile_code']})", file=sys.stderr, flush=True)
+    return _agentics_wait(kind, task_id, task)
 
 
 # 对象存储:AK/SK 为空时的环境变量兜底(按渠道)
@@ -4040,6 +4579,13 @@ def generate_image(prompt: str, output: str, negative: str = "",
     else:
         width, height = ASPECT_SIZES.get(aspect or "16:9", ASPECT_SIZES["16:9"])
     seed = seed if seed is not None else random.randint(1, 2**31)
+    if cfg["provider"] == "agentics":
+        data = _agentics_generate("image", cfg, {
+            "prompt": prompt, "negative_prompt": negative,
+            "width": width, "height": height, "aspect_ratio": aspect or "16:9",
+            "seed": seed, "num_images": 1, "output_format": _output_format(output),
+        }, {"input_images": list(refs or [])})
+        return _save(data, output)
     if cfg["provider"] == "openrouter":
         return _save(_image_openrouter(cfg, prompt, negative, refs, width, height, seed), output)
     if cfg["provider"] == "ideogram":
@@ -4117,6 +4663,21 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
     resolution = _resolution_gate(resolution)
     seed = seed if seed is not None else random.randint(1, 2**31)
+    if cfg["provider"] == "agentics":
+        data = _agentics_generate("video", cfg, {
+            "prompt": prompt, "duration": duration, "resolution": resolution,
+            "aspect_ratio": aspect, "seed": seed, "generate_audio": generate_audio,
+        }, {
+            "reference_images": list(refs or []),
+            "first_frame": [first_frame] if first_frame else [],
+            "last_frame": [last_frame] if last_frame else [],
+            "reference_audios": list(audio_refs or []),
+            "reference_videos": list(video_refs or []),
+        })
+        saved = _save(data, output)
+        if return_last_frame:
+            _extract_last_frame(saved, return_last_frame)
+        return saved
     if cfg["provider"] in ("volcengine", "byteplus"):
         return _video_ark(cfg, prompt, first_frame, last_frame, duration,
                           resolution, aspect, seed, output,
@@ -4177,16 +4738,26 @@ def _ark_reclaim_config() -> dict:
 
 
 def reclaim_video(task_id: str, output: str, return_last_frame: str = "") -> str:
-    """认领方舟侧已建成的视频任务:仅查询状态并下载产物,绝不重新提交
-    (方舟任务查询/产物下载零计费)。返回保存的绝对路径。
+    """恢复 AgenticsLLM 或方舟侧已建成的视频任务，只查询并下载，绝不重新提交。
 
-    适用场景:提交或下载阶段被网络/工具超时掐断,但任务在方舟侧已建成——
+    适用场景:提交或下载阶段被网络/工具超时掐断,但服务端任务已经建成——
     succeeded 直接取回产物;排队/运行中则继续轮询到完成;failed/查无此任务
-    如实报错。任务 id(cgt-…)见提交日志「任务已创建」行或 code/ark_task_list.py。"""
+    如实报错。AgenticsLLM 使用 UUID；方舟使用 cgt-… ID。"""
     _forbid_dispatch_layer("视频")
     task_id = str(task_id or "").strip()
     if not task_id:
-        raise RuntimeError("reclaim 需要 --task-id(方舟任务 id,形如 cgt-…)")
+        raise RuntimeError("reclaim 需要 --task-id(AgenticsLLM UUID 或方舟 cgt-…)")
+    try:
+        is_agentics = str(uuid.UUID(task_id)) == task_id.lower()
+    except ValueError:
+        is_agentics = False
+    if is_agentics:
+        print(f"[genmedia] 恢复 AgenticsLLM 任务 {task_id} → {Path(output).name}"
+              "(仅查询/下载，不重新提交不重复计费)", file=sys.stderr, flush=True)
+        saved = _save(_agentics_wait("video", task_id), output)
+        if return_last_frame:
+            _extract_last_frame(saved, return_last_frame)
+        return saved
     cfg = _ark_reclaim_config()
     print(f"[genmedia] 认领任务 {task_id} → {Path(output).name}"
           "(仅查询/下载,不重新提交不重复计费)", file=sys.stderr, flush=True)
@@ -4231,6 +4802,8 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     voice/personality/appearance,按 modules/timbre_catalog.json 索引的远端
     ComfyUI-Index-TTS/TimbreModel 音频库自动选择参考音频(首次使用下载缓存到
     data/TimbreModel/);旁白不传 character;voice 仅保留真实本地音频文件的兼容覆盖。
+    AgenticsLLM 仅在所选 profile 的固定映射声明 files.reference_audios 时复用同一套
+    自动参考音频逻辑；纯文本/voice-ID profile 不触发选型或上传。
     instructions:openrouter 仅 OpenAI 系模型生效,volcengine 注入 context_texts
     情绪指令,minimax/elevenlabs 不支持(忽略),comfyui 参与音色自动匹配、不注入合成。
     volcengine 模型为 seed-audio-1.0 时走描述定制嗓音(角色按声纹卡声学字段、旁白按
@@ -4242,6 +4815,59 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
+    if cfg["provider"] == "agentics":
+        profile = _agentics_profile(
+            "tts", str(cfg.get("model") or cfg.get("profile_code") or ""))
+        schema = profile.get("token_schema") or {}
+        _agentics_profile_kind(profile, schema)
+        file_mappings = schema.get("files") if isinstance(schema, dict) else {}
+        reference_mapping = ((file_mappings or {}).get("reference_audios")
+                             if isinstance(file_mappings, dict) else None)
+        has_reference_audio = isinstance(reference_mapping, dict)
+        requires_reference_audio = bool(has_reference_audio and (
+            reference_mapping.get("required")
+            or int(reference_mapping.get("min_items") or 0) > 0))
+        voice_path = ""
+        voice_is_local = False
+
+        # 只有当前 profile 声明了上传文件字段时才选参考音频；纯文本/voice-ID
+        # profile 保持 voice 原值，不下载 TimbreModel，也不制造无关上传。
+        if has_reference_audio:
+            if voice:
+                raw_voice = Path(voice)
+                candidates = ([raw_voice] if raw_voice.is_absolute()
+                              else [Path.cwd() / raw_voice, ROOT / raw_voice])
+                local_voice = next((path.resolve() for path in candidates if path.is_file()), None)
+                if local_voice is not None:
+                    voice_path = str(local_voice)
+                    voice_is_local = True
+            if not voice_path and not character and not (voice or "").strip():
+                card, voiceprint = _narrator_card(project, output)
+                if card and voiceprint is not None and voiceprint.is_file():
+                    voice_path = str(voiceprint.resolve())
+                    print(f"[genmedia] AgenticsLLM TTS 使用旁白声线卡冻结样本 {voiceprint.name}",
+                          file=sys.stderr)
+            # 必填文件必须补齐；可选参考音频仅在用户没有明确 voice ID 时自动附加。
+            if not voice_path and (requires_reference_audio or not (voice or "").strip()):
+                try:
+                    selection = _resolve_tts_reference(
+                        cfg, text, output, "", character, variant, project, instructions)
+                    voice_path = selection["path"]
+                    print(f"[genmedia] AgenticsLLM TTS 自动参考音频:"
+                          f" {selection['file']} (score={selection['score']}, {selection['reason']})",
+                          file=sys.stderr)
+                except RuntimeError as exc:
+                    if requires_reference_audio:
+                        raise RuntimeError(
+                            f"AgenticsLLM TTS profile {profile.get('profile_code')} 需要参考音频，"
+                            f"但自动音色选择失败:{exc}") from exc
+                    print(f"[genmedia] AgenticsLLM TTS 可选参考音频选择失败，按无参考提交:{exc}",
+                          file=sys.stderr)
+        data = _agentics_generate("tts", cfg, {
+            "text": text, "voice_id": "" if voice_is_local else voice,
+            "speed": speed, "output_format": _output_format(output),
+        }, {"reference_audios": [voice_path] if voice_path else []}, profile=profile)
+        return _save(data, output)
     # 旁白(不传 character、未显式 --voice):优先按项目旁白声线卡固定声线(不随 TTS 设置变)
     if not character and not (voice or "").strip():
         card, vp = _narrator_card(project, output)
@@ -4270,24 +4896,35 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
           "comfyui": _tts_comfyui}.get(cfg["provider"])
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
-                           "(可选 openrouter / volcengine / minimax / elevenlabs / comfyui)")
+                           "(可选 agentics / openrouter / volcengine / minimax / elevenlabs / comfyui)")
     if cfg["provider"] in ("comfyui", "volcengine"):
         return fn(cfg, text, output, voice, speed, instructions,
                   character, variant, project)
     return fn(cfg, text, output, voice, speed, instructions)
 
 
-def generate_music(prompt: str, output: str, duration_s: float | None = None) -> str:
+def generate_music(prompt: str, output: str, duration_s: float | None = None,
+                   lyrics: str = "", instrumental: bool | None = None) -> str:
     """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 music 段。
 
     输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus;
     minimax:mp3/wav)。
-    duration_s:elevenlabs 生效(music_length_ms,3–600s);comfyui 注入 DURATION 占位符
+    duration_s:AgenticsLLM 按 profile 约束、elevenlabs 生效(music_length_ms,3–600s);comfyui 注入 DURATION 占位符
     (默认 30s);openrouter/minimax 省略或忽略=模型按 prompt 自定。
+    AgenticsLLM 默认生成纯音乐并为必填歌词字段发送 [Instrumental]；显式 lyrics 时
+    作为歌词提交并关闭 instrumental 标记。
     openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
     """
     _forbid_dispatch_layer("音乐")
     cfg = get_config("music")
+    if cfg["provider"] == "agentics":
+        instrumental = not bool(lyrics.strip()) if instrumental is None else instrumental
+        data = _agentics_generate("music", cfg, {
+            "prompt": prompt, "duration": duration_s,
+            "lyrics": lyrics.strip() or ("[Instrumental]" if instrumental else ""),
+            "instrumental": instrumental, "output_format": _output_format(output),
+        }, {})
+        return _save(data, output)
     if cfg["provider"] == "elevenlabs":
         return _music_elevenlabs(cfg, prompt, output, duration_s)
     if cfg["provider"] == "minimax":
@@ -4296,7 +4933,7 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None) ->
         return _music_comfyui(cfg, prompt, output, duration_s)
     if cfg["provider"] != "openrouter":
         raise RuntimeError(f"音乐生成不支持渠道 {cfg['provider']}"
-                           "(可选 openrouter / elevenlabs / minimax / comfyui)")
+                           "(可选 agentics / openrouter / elevenlabs / minimax / comfyui)")
     if duration_s:
         print("[genmedia] openrouter 音乐渠道不支持 --duration,已忽略(时长由模型决定)",
               file=sys.stderr)
@@ -4406,7 +5043,7 @@ def _cmd_video(args):
 def _cmd_reclaim(args):
     _check_id_digits(args.output, args.return_last_frame)
     out = reclaim_video(args.task_id, args.output, args.return_last_frame)
-    print(f"已认领: {out}")
+    print(f"已恢复: {out}")
 
 
 def _cmd_upscale(args):
@@ -4453,7 +5090,8 @@ def _cmd_music(args):
         print(f"[dry-run] music via {cfg['provider']} {desc}"
               f" format={MUSIC_FORMATS.get(Path(args.output).suffix.lower(), 'mp3')} → {args.output}")
         return
-    out = generate_music(args.prompt, args.output, args.duration)
+    out = generate_music(args.prompt, args.output, args.duration, args.lyrics,
+                         not bool(args.lyrics.strip()))
     print(f"已生成: {out}")
 
 
@@ -4550,10 +5188,10 @@ def main():
                          "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
 
-    pr = sub.add_parser("reclaim", help="认领方舟侧已建成的视频任务:仅查询+下载产物,"
-                                        "不重新提交不重复计费(火山引擎/BytePlus 专用)")
-    pr.add_argument("--task-id", required=True, help="方舟任务 id,形如 cgt-…"
-                    "(见提交日志「任务已创建」行,或 code/ark_task_list.py)")
+    pr = sub.add_parser("reclaim", help="恢复 AgenticsLLM/方舟侧已建成的视频任务:"
+                                        "仅查询+下载，不重新提交不重复计费")
+    pr.add_argument("--task-id", required=True,
+                    help="AgenticsLLM UUID 或方舟 cgt-… ID(见「任务已创建」日志)")
     pr.add_argument("--output", required=True, help="输出 mp4 路径")
     pr.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(原提交带 --return-last-frame 时才有产物)")
@@ -4599,8 +5237,11 @@ def main():
     pm.add_argument("--prompt", required=True, help="英文音乐描述:风格/情绪/乐器/节奏(Lyria Pro 可含歌词)")
     pm.add_argument("--output", required=True, help="输出音频路径(.mp3/.wav/.flac/.opus;elevenlabs 仅 .mp3/.opus;minimax 仅 .mp3/.wav)")
     pm.add_argument("--duration", type=float, default=None,
-                    help="目标时长秒(elevenlabs:3–600;comfyui:注入 DURATION,默认 30;"
+                    help="目标时长秒(AgenticsLLM:按 profile;elevenlabs:3–600;"
+                         "comfyui:注入 DURATION,默认 30;"
                          "openrouter/minimax 忽略;省略=模型/工作流默认)")
+    pm.add_argument("--lyrics", default="",
+                    help="歌词(AgenticsLLM profile 支持时提交；省略按纯音乐 [Instrumental])")
     pm.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()

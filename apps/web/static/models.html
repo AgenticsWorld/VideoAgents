@@ -131,10 +131,12 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-text">
     <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="text-tabs">
-      <div class="tab active" id="tab-text-local">本地模型</div>
+      <div class="tab active" id="tab-text-agentics">AgenticsLLM</div>
+      <div class="tab" id="tab-text-local">本地模型</div>
       <div class="tab" id="tab-text-cloud">云端模型</div>
       <div class="tab" id="tab-text-openrouter">OpenRouter</div>
     </div>
+    <div id="panel-text-agentics"></div>
     <div class="panel show" id="panel-text-local">
       <div class="row">
         <label>Base URL</label>
@@ -312,6 +314,7 @@ const MINIMAX_TTS_MODELS=[
 ];
 
 const PROVIDER_META={
+  agentics:{label:'AgenticsLLM'},
   openrouter:{label:'OpenRouter'},
   ideogram:{label:'Ideogram'},
   volcengine:{label:'火山引擎'},
@@ -323,10 +326,10 @@ const PROVIDER_META={
 };
 const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
-  image:{providers:['openrouter','volcengine','byteplus','minimax','comfyui']},
-  video:{providers:['openrouter','volcengine','byteplus','fal','minimax','comfyui']},
-  music:{providers:['openrouter','elevenlabs','minimax','comfyui']},
-  tts:{providers:['openrouter','volcengine','elevenlabs','minimax','comfyui']},
+  image:{providers:['agentics','openrouter','volcengine','byteplus','minimax','comfyui']},
+  video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
+  music:{providers:['agentics','openrouter','elevenlabs','minimax','comfyui']},
+  tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
@@ -354,7 +357,7 @@ const EL_TTS_MODELS=[
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const SEL_PROVIDER={image:'openrouter',video:'openrouter',music:'minimax',tts:'volcengine'};
+const SEL_PROVIDER={image:'agentics',video:'agentics',music:'agentics',tts:'agentics'};
 let DH_PROVIDER='heygen';
 
 function buildSection(kind){
@@ -438,9 +441,64 @@ function fillSelect(sel,options,value,customValue){
     if(sel.value===CUSTOM)custom.value=customValue||value||''}
 }
 
+let AGENTICS_ACCOUNT=null;
+let AGENTICS_ACCOUNT_READY=false;
+function agenticsBridge(){
+  const bridge=window.videoagentsDesktop;
+  return bridge&&typeof bridge.account==='function'&&typeof bridge.login==='function'?bridge:null;
+}
+function renderAgenticsAccount(){
+  const bridge=agenticsBridge();
+  document.querySelectorAll('.agentics-account').forEach(node=>{
+    node.textContent=!bridge?t('仅支持桌面客户端')
+      :AGENTICS_ACCOUNT?`${AGENTICS_ACCOUNT.email} · ${t('余额')} $${Number(AGENTICS_ACCOUNT.balance).toFixed(2)}`
+      :t('未登录');
+  });
+  document.querySelectorAll('.agentics-auth').forEach(button=>{
+    button.style.display=bridge?'':'none';
+    button.textContent=AGENTICS_ACCOUNT?t('退出登录'):t('登录');
+    button.disabled=false;
+  });
+}
+async function refreshAgenticsAccount(){
+  const bridge=agenticsBridge();
+  AGENTICS_ACCOUNT=null;
+  if(bridge){try{AGENTICS_ACCOUNT=await bridge.account()}catch(e){AGENTICS_ACCOUNT=null}}
+  AGENTICS_ACCOUNT_READY=true;
+  renderAgenticsAccount();
+  return AGENTICS_ACCOUNT;
+}
+async function agenticsAuth(button){
+  const bridge=agenticsBridge();if(!bridge)return;
+  button.disabled=true;
+  try{
+    if(AGENTICS_ACCOUNT&&typeof bridge.logout==='function')await bridge.logout();
+    else await bridge.login();
+  }finally{button.disabled=false;await refreshAgenticsAccount()}
+}
+function agenticsModelRow(kind){
+  const row=el('div',{className:'row'});
+  row.appendChild(el('label',{},'模型'));
+  row.appendChild(el('select',{id:`${kind}-agentics-model`}));
+  const refresh=el('button',{},'刷新列表');
+  refresh.onclick=()=>kind==='text'?loadAgenticsModels(kind,true):refreshAgenticsMediaModels();
+  row.appendChild(refresh);
+  return row;
+}
+
 function buildPanel(kind,p){
   const d=el('div',{className:'panel',id:`panel-${kind}-${p}`});
-  if(p==='openrouter'){
+  if(p==='agentics'){
+    const account=el('div',{className:'row'});
+    account.appendChild(el('label',{},'账号'));
+    account.appendChild(el('span',{className:'agentics-account'},t('检查登录状态…')));
+    const auth=el('button',{className:'agentics-auth'},t('登录'));
+    auth.onclick=()=>agenticsAuth(auth);
+    account.appendChild(auth);d.appendChild(account);
+    d.appendChild(agenticsModelRow(kind));
+    d.appendChild(el('div',{className:'hint',id:`${kind}-agentics-hint`},
+      t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
+  }else if(p==='openrouter'){
     d.appendChild(keyRow(`${kind}-or-key`,'sk-or-v1-…'));
     const vr=el('div',{className:'row'});
     vr.appendChild(el('label',{},''));
@@ -966,9 +1024,9 @@ async function showWfDoc(sel,custom){
   }
 }
 
-/* ---------- deepagents 语言模型(本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
-let TEXT_PROVIDER='local';
-const TEXT_TABS={local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
+/* ---------- deepagents 语言模型(AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
+let TEXT_PROVIDER='agentics';
+const TEXT_TABS={agentics:'AgenticsLLM',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
 /* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
 const CLOUD_MODELS=[['deepseek-v4-flash','deepseek-v4-flash'],['deepseek-v4-pro','deepseek-v4-pro']];
 function wireDaTest(prefix,savedModel){
@@ -984,6 +1042,7 @@ function wireDaTest(prefix,savedModel){
   };
 }
 function buildDeepagents(){
+  $('#panel-text-agentics').replaceWith(buildPanel('text','agentics'));
   $('#da-key-row').replaceWith(keyRow('da-key','lm-studio(本地端点可随意填)'));
   $('#da-model-row').replaceWith(modelRow('da-model','da-custom'));
   $('#da-model').parentElement.querySelector('label').textContent='默认模型';
@@ -1069,6 +1128,63 @@ async function testDigitalHuman(provider){
 
 /* ---------- OpenRouter 模型列表 ---------- */
 const orSaved=kind=>kind==='text'?(CFG.deepagents?.openrouter||{}):CFG[kind].openrouter;
+const agenticsSaved=kind=>kind==='text'?(CFG.deepagents?.agentics||{}):(CFG[kind].agentics||{});
+let AGENTICS_MEDIA_CATALOG_PROMISE=null;
+function agenticsMediaCatalog(refresh=false){
+  if(refresh)AGENTICS_MEDIA_CATALOG_PROMISE=null;
+  if(!AGENTICS_MEDIA_CATALOG_PROMISE){
+    AGENTICS_MEDIA_CATALOG_PROMISE=api('/api/v1/providers/agentics/models?modality=media'+(refresh?'&refresh=1':''))
+      .catch(e=>{AGENTICS_MEDIA_CATALOG_PROMISE=null;throw e});
+  }
+  return AGENTICS_MEDIA_CATALOG_PROMISE;
+}
+function refreshAgenticsMediaModels(){
+  AGENTICS_MEDIA_CATALOG_PROMISE=null;
+  return agenticsMediaCatalog(true)
+    .then(()=>Promise.all(Object.keys(SECTIONS).map(kind=>loadAgenticsModels(kind))));
+}
+function agenticsProfileLabel(profile){
+  return profile.name||profile.profile_code;
+}
+async function loadAgenticsModels(kind,refresh=false){
+  const sel=$(`#${kind}-agentics-model`),hint=$(`#${kind}-agentics-hint`);
+  const saved=agenticsSaved(kind);
+  if(!agenticsBridge()){
+    sel.innerHTML='';sel.appendChild(el('option',{value:'',textContent:t('仅支持桌面客户端')}));sel.disabled=true;
+    hint.textContent=t('AgenticsLLM 暂不兼容网页版');return;
+  }
+  if(!AGENTICS_ACCOUNT_READY)await refreshAgenticsAccount();
+  if(!AGENTICS_ACCOUNT){
+    sel.innerHTML='';sel.appendChild(el('option',{value:'',textContent:t('请先登录')}));sel.disabled=true;
+    hint.textContent=t('登录后可加载 AgenticsLLM 模型列表');return;
+  }
+  sel.disabled=true;hint.textContent=t('正在拉取 AgenticsLLM 模型列表…');
+  try{
+    const r=kind==='text'
+      ?await api(`/api/v1/providers/agentics/models?modality=text${refresh?'&refresh=1':''}`)
+      :await agenticsMediaCatalog(refresh);
+    const section=kind==='text'?r:(r.media?.[kind]||{});
+    const models=section.models||[],profiles=section.profiles||[];
+    const profileByCode=new Map(profiles.map(p=>[p.profile_code,p]));sel.innerHTML='';
+    models.forEach(m=>{
+      const profile=profileByCode.get(m.id);
+      sel.appendChild(el('option',{value:m.id,textContent:profile?agenticsProfileLabel(profile):(m.name||m.id)}));
+    });
+    const wanted=kind==='text'?(saved.custom_model||saved.model):(saved.profile_code||'');
+    if(wanted&&models.some(m=>m.id===wanted))sel.value=wanted;
+    const renderHint=()=>{hint.textContent=kind==='text'
+      ?I18N.f('AgenticsLLM 共 {n} 个可用模型',{n:models.length})
+      :''};
+    sel.onchange=renderHint;renderHint();
+    if(!models.length)sel.appendChild(el('option',{value:'',textContent:t('暂无可用模型')}));
+  }catch(e){
+    sel.innerHTML='';
+    const wanted=kind==='text'?(saved.custom_model||saved.model):(saved.profile_code||'');
+    if(wanted)sel.appendChild(el('option',{value:wanted,textContent:wanted}));
+    else sel.appendChild(el('option',{value:'',textContent:t('列表加载失败')}));
+    hint.textContent=I18N.f('⚠ AgenticsLLM 列表拉取失败:{msg}',{msg:e.message});
+  }finally{sel.disabled=false}
+}
 async function loadOpenRouterModels(kind,refresh=false){
   const sel=$(`#${kind}-or-model`),hint=$(`#${kind}-or-hint`);
   const rec=OR_RECOMMENDED[kind];
@@ -1261,6 +1377,9 @@ function loadComfyForm(kind,cc){
 function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
     const c=CFG[kind];
+    const ac=c.agentics||{};
+    const asel=$(`#${kind}-agentics-model`);asel.innerHTML='';
+    if(ac.profile_code)asel.appendChild(el('option',{value:ac.profile_code,textContent:ac.profile_code}));
     $(`#${kind}-or-key`).value=c.openrouter.api_key||'';
     // 先用已保存值预填,避免列表拉取完成前保存把模型清空
     fillSelect($(`#${kind}-or-model`),
@@ -1317,6 +1436,7 @@ function loadIntoForm(){
     }
     const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
     showPanel(kind,eff);
+    loadAgenticsModels(kind);
     loadOpenRouterModels(kind);
   }
   const dh=CFG.digital_human||{},hg=dh.heygen||{},kl=dh.klingai||{},co=dh.comfyui||{};
@@ -1331,7 +1451,9 @@ function loadIntoForm(){
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
   showDigitalHumanPanel(['heygen','klingai','comfyui'].includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':'heygen');
-  const da=CFG.deepagents||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
+  const da=CFG.deepagents||{},aa=da.agentics||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
+  const atext=$('#text-agentics-model');atext.innerHTML='';
+  if(aa.model)atext.appendChild(el('option',{value:aa.model,textContent:aa.model}));
   $('#da-url').value=lo.base_url||'http://127.0.0.1:1234/v1';
   $('#da-key').value=lo.api_key||'';
   fillSelect($('#da-model'),lo.model?[[lo.model,lo.model]]:[],lo.model,'');
@@ -1341,7 +1463,8 @@ function loadIntoForm(){
   $('#text-or-key').value=or.api_key||'';
   fillSelect($('#text-or-model'),
     or.model&&!or.custom_model?[[or.model,or.model]]:[],or.model,or.custom_model);
-  showTextPanel(['cloud','openrouter'].includes(da.provider)?da.provider:'local');
+  showTextPanel(['agentics','local','cloud','openrouter'].includes(da.provider)?da.provider:'agentics');
+  loadAgenticsModels('text');
   loadOpenRouterModels('text');
 }
 
@@ -1368,7 +1491,8 @@ function collectComfy(kind){
 function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
-    const c={openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
+    const c={agentics:{profile_code:$(`#${kind}-agentics-model`).value||''},
+      openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
       c.comfyui={...collectComfy(kind),
@@ -1423,8 +1547,9 @@ function collect(){
       aspect_ratio:$('#dh-heygen-aspect').value},
     klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
     comfyui:collectComfy('digitalhuman')};
-  // 生效渠道 = 当前选中的标签页(本地模型/云端模型/OpenRouter)
+  // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
+    agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
     local:{base_url:$('#da-url').value.trim(),
       api_key:$('#da-key').value.trim(),
       model:pickModel('#da-model','#da-custom').model},
@@ -1439,9 +1564,16 @@ function collect(){
 $('#save').onclick=async()=>{
   const btn=$('#save');btn.disabled=true;btn.textContent='保存中…';
   try{
+    const draft=collect();
+    const agenticsKinds=Object.keys(SECTIONS).filter(kind=>draft[kind].provider==='agentics');
+    if(draft.deepagents.provider==='agentics')agenticsKinds.push('text');
+    if(agenticsKinds.length&&!agenticsBridge())throw new Error(t('AgenticsLLM 仅支持桌面客户端'));
+    if(agenticsKinds.length&&!AGENTICS_ACCOUNT)throw new Error(t('请先登录 AgenticsLLM 账号'));
+    const empty=agenticsKinds.filter(kind=>!$(`#${kind}-agentics-model`).value);
+    if(empty.length)throw new Error(t('AgenticsLLM 暂无可用模型'));
     const proj=(new URLSearchParams(location.search).get('project'))
       ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
-    const r=await api('/api/v1/config/generation',Object.assign(collect(),{project:proj}));
+    const r=await api('/api/v1/config/generation',Object.assign(draft,{project:proj}));
     CFG=r.config;
     const st=$('#save-status');st.style.color='';
     // RunningHub 工作流缓存已随保存同步云端最新版(genmedia 提交走本地缓存整包);
@@ -1476,6 +1608,7 @@ $('#save').onclick=async()=>{
   ]);
   CFG=cfg;
   COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[],digitalhuman:[]},wfs.workflows||{});
+  await refreshAgenticsAccount();
   loadIntoForm();
 })();
 </script>
