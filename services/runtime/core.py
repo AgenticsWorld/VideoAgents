@@ -685,7 +685,7 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "minimax",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "provider": "openrouter",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
