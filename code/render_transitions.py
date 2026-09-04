@@ -145,25 +145,38 @@ def requantize_cuts(entries, timeline, proj, fps):
     vids = ((timeline.get("tracks") or {}).get("video")) or timeline.get("video") or []
     if not vids:
         return 0
-    cum, cut_at = 0, {}
+    cum, walk = 0, []                   # walk: 有序边界表 [(from,to,t), ...]
     prev = None
     for i, e in enumerate(vids):
         gid = _entry_gid(e, i)
         if prev is not None and gid != prev:
-            cut_at[(prev, gid)] = cum / fps
+            walk.append([prev, gid, cum / fps])
         src = e.get("src")
         if not src:
             return 0                    # 条目缺 src,无从按帧累计,保持原值
-        cum += count_frames_of(str(proj / src))
+        # 防御:条目做了子区间修剪或变速时,文件帧数 ≠ 成片占帧,帧准口径不成立,整体放弃
+        if e.get("timeline_in_s") is not None or e.get("timeline_in") is not None                 or (e.get("speed") or 1.0) != 1.0:
+            return 0
+        frames = count_frames_of(str(proj / src))
+        dur = _entry_dur(e, proj)
+        if abs(frames / fps - dur) > 1.5 / fps:   # in/out 只取了文件一段 → 同样放弃
+            return 0
+        cum += frames
         prev = gid
+    # 有序消费匹配:同一 (from,to) 邻接重复出现时按边界顺序一一对应,不坍缩到最后一处
     n = 0
     for e in entries:
+        if e.get("type") in (None, "hard_cut"):
+            continue
         key = (e.get("from_group"), e.get("to_group"))
-        if e.get("type") not in (None, "hard_cut") and key in cut_at:
-            t = cut_at[key]
-            if abs(t - float(e.get("cut_time_s") or 0)) > 1e-6:
-                e["cut_time_s"] = round(t, 6)
-                n += 1
+        for w in walk:
+            if w is not None and (w[0], w[1]) == key:
+                t = w[2]
+                walk[walk.index(w)] = None
+                if abs(t - float(e.get("cut_time_s") or 0)) > 1e-6:
+                    e["cut_time_s"] = round(t, 6)
+                    n += 1
+                break
     return n
 
 
@@ -376,16 +389,29 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     # 保持 1 代编码,清晰度损失只发生在 5×几十帧的窗口内;且每个渲染段输入参数
     # 恒定,天然规避 ffmpeg 8 的 filtergraph reinit 帧计数清零坑。
     vids = ((tl.get("tracks") or {}).get("video")) or tl.get("video") or []
-    order, files, gframes = [], {}, {}
+    order, files, gframes = [], [], []          # 按**位置**索引:同组 id 重复出现也不坍缩
     for i, v in enumerate(vids):
         gid = _entry_gid(v, i)
+        src = v.get("src")
+        if not src:
+            raise SystemExit(f"[FAIL] timeline video 条目 {i}({gid})缺 src,分段渲染无从引用组片段")
         order.append(gid)
-        files[gid] = proj / v["src"]
-        gframes[gid] = count_frames_of(str(files[gid]))
-    idx = {g: i for i, g in enumerate(order)}
-    # 聚类:叠化边界涉及 (from,to) 两组;相邻边界共享组时合并为同一渲染 run
-    hot = sorted({idx[e["from_group"]] for e in xf_entries if e["from_group"] in idx}
-                 | {idx[e["to_group"]] for e in xf_entries if e["to_group"] in idx})
+        files.append(proj / src)
+        gframes.append(count_frames_of(str(proj / src)))
+    # 边界定位:按相邻位置对有序消费匹配 xf 条目(重复邻接不坍缩、不匹配到错误出现处)
+    remaining = list(xf_entries)
+    boundary_at = {}                            # 位置 i → 该条目(边界在 order[i]|order[i+1] 之间)
+    for i in range(len(order) - 1):
+        key = (order[i], order[i + 1])
+        for e in remaining:
+            if (e["from_group"], e["to_group"]) == key:
+                boundary_at[i] = e
+                remaining.remove(e)
+                break
+    if remaining:
+        raise SystemExit(f"[FAIL] {len(remaining)} 条叠化边界在 timeline 组序里找不到相邻位置:"
+                         f"{[(e['from_group'], e['to_group']) for e in remaining][:3]}")
+    hot = sorted({i for i in boundary_at} | {i + 1 for i in boundary_at})
     runs, cur = [], []
     for i in hot:
         if cur and i == cur[-1] + 1:
@@ -400,10 +426,9 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     tmp_dir = out_path.parent
     seg_paths, cleanup = [], []
     for r, run in enumerate(runs):
-        run_gids = [order[i] for i in run]
-        run_frames = sum(gframes[g] for g in run_gids)
+        run_frames = sum(gframes[i] for i in run)
         lst = tmp_dir / f".xfrun{r}.txt"
-        lst.write_text("".join(f"file '{files[g].resolve()}'\n" for g in run_gids))
+        lst.write_text("".join(f"file '{files[i].resolve()}'\n" for i in run))
         run_src = tmp_dir / f".xfrun{r}.src.mp4"
         # run 源直接归一重编码(不 -c copy):组片段间哪怕只有 color_range 标签之差,
         # concat 后进 filter 也会触发 ffmpeg 8 的 filtergraph reinit 清零 trim 计数
@@ -417,12 +442,11 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
               str(run_src)], timeout=1200)
         if count_frames_of(str(run_src)) != run_frames:
             raise SystemExit(f"[FAIL] 渲染段源 {run_gids[0]}..{run_gids[-1]} 归一后帧数不符")
-        # run 内边界的相对时刻 = run 内前序组帧和(帧准,无浮点截断问题)
+        # run 内边界的相对时刻 = run 内前序组帧和(帧准;boundary_at 按位置,无键碰撞)
         local, acc = [], 0
-        cutmap = {(e["from_group"], e["to_group"]): e for e in xf_entries}
-        for a, b in zip(run_gids, run_gids[1:]):
-            acc += gframes[a]
-            e = cutmap.get((a, b))
+        for i in run[:-1]:
+            acc += gframes[i]
+            e = boundary_at.get(i)
             if e:
                 local.append({**e, "cut_time_s": acc / fps})
         fc, _ = build_filter(local, run_frames / fps, fps)
@@ -447,7 +471,7 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
             lines.append(f"file '{seg_by_start[run[0]].resolve()}'\n")
             i = run[-1] + 1
         else:
-            lines.append(f"file '{files[order[i]].resolve()}'\n")
+            lines.append(f"file '{files[i].resolve()}'\n")
             i += 1
     final_lst.write_text("".join(lines))
     cleanup.append(final_lst)
@@ -455,10 +479,15 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     n_copy = sum(1 for i in range(len(order)) if i not in run_of)
     print(f"[RUN  ] 分段式转场渲染:{len(xf_entries)} 处叠化 / {len(runs)} 个渲染段"
           f"(重编码 {len(order) - n_copy} 组)+ {n_copy} 组流拷贝 → {out_path.relative_to(proj)}")
+    # 源 cut 带声轨时随总装流拷贝带回(模块契约:声轨 -c:a copy 不碰;mashup 的 cut 无声则跳过)
+    has_audio = bool((_probe(src_path).get("audio") or {}))
+    a_args = (["-i", str(src_path), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "copy"]
+              if has_audio else [])
     _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-          "-i", str(final_lst), "-c", "copy", "-movflags", "+faststart", str(tmp)],
+          "-i", str(final_lst), *a_args, "-c:v", "copy",
+          "-movflags", "+faststart", str(tmp)],
          timeout=1200)
-    total_frames = sum(gframes.values())
+    total_frames = sum(gframes)
     got = count_frames_of(str(tmp))
     if got != total_frames:
         raise SystemExit(f"[FAIL] 总装帧数不符:want {total_frames} got {got}")

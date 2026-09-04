@@ -241,7 +241,8 @@ function uiConfirm(message,opts){
   el.classList.add('on');
   return new Promise(res=>{
     const done=v=>{el.classList.remove('on');document.removeEventListener('keydown',onkey);res(v)};
-    const onkey=e=>{if(e.key==='Escape')done(false);if(e.key==='Enter'){e.preventDefault();done(true)}};
+    const onkey=e=>{if(e.key==='Escape')done(false);
+      if(e.key==='Enter'){e.preventDefault();done(document.activeElement!==cancel)}};
     ok.onclick=()=>done(true);cancel.onclick=()=>done(false);
     el.onclick=e=>{if(e.target===el)done(false)};
     document.addEventListener('keydown',onkey);

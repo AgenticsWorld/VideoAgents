@@ -134,11 +134,13 @@ def cmd_build(args, proj: Path):
                   f"整体降级 char_rate(文稿与语音是否一致?)")
             backend = "char_rate"
     if backend == "char_rate":
-        ends = avsync.char_rate_boundaries(sentences, total_s)   # 各句末边界(不含起点 0)
-        ends = avsync.snap(ends, avsync.midpoints(silences), tol_s=1.5)
+        raw = avsync.char_rate_boundaries(sentences, total_s)    # 各句末边界(不含起点 0)
+        ends = avsync.snap(raw, avsync.midpoints(silences), tol_s=1.5)
         bounds = [0.0] + list(ends)
         bounds[-1] = total_s                                     # 末边界钉死实测总长
-        srcs = ["silence_mid"] * (len(sentences) - 1)
+        # 如实标注:snap 实际移动过的边界才是 silence_mid,原值保留的是纯估计(char_rate)
+        srcs = ["silence_mid" if abs(ends[i] - raw[i]) > 1e-9 else "char_rate"
+                for i in range(len(sentences) - 1)]
 
     # 组拍:<1s 并入相邻较短拍;>20s 句内停顿再切
     beats: list[dict] = []
@@ -160,7 +162,7 @@ def cmd_build(args, proj: Path):
         beats.pop(0)
     for k, b in enumerate(beats):
         b["beat_id"] = f"bt{k + 1:03d}"
-        b["snapped"] = b["boundary_src"] in ("asr_word", "asr_silence_mid", "silence_mid")
+        b["snapped"] = b["boundary_src"] in ("asr_word", "asr_silence_mid", "silence_mid")  # char_rate/interp=False
     beats[-1]["t_out"] = round(total_s, 3)
     beats[-1]["boundary_src_end"] = "master_end"
 

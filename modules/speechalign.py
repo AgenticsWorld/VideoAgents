@@ -111,7 +111,12 @@ def find_transcript(proj: Path, ep: str) -> tuple[str, Path] | None:
             return "beat_track", p
     p = proj / "mashup" / "beat_track.json"
     if p.is_file():
-        return "mashup_beat_track", p
+        try:
+            bt_ep = json.loads(p.read_text(encoding="utf-8")).get("ep")
+        except (ValueError, OSError):
+            bt_ep = None
+        if not bt_ep or bt_ep == ep:      # beat_track 归属别的集时放行到 srt 回退
+            return "mashup_beat_track", p
     p = proj / "edit" / ep / "subtitles.srt"
     if p.is_file():
         return "srt", p
@@ -399,9 +404,14 @@ def beats_from_asr(sentences: list[str], asr_words: list[dict], total_s: float,
             for k in range(i2 - i1):
                 hit[i1 + k] = asr[j1 + k]
 
-    def _find_hit(idx: int, step: int, limit: int = 2) -> dict | None:
+    def _find_hit(idx: int, step: int, lo: int, hi: int, limit: int = 2) -> dict | None:
+        """从 idx 沿 step 方向回退最多 limit 个单元找命中,但不越出 [lo, hi](本句范围)——
+        越句取锚会把邻句语音标成本句边界,产出「看似实测实则错位」的 asr_word。"""
         for d in range(limit + 1):
-            w = hit.get(idx + d * step)
+            j = idx + d * step
+            if j < lo or j > hi:
+                break
+            w = hit.get(j)
             if w is not None:
                 return w
         return None
@@ -410,8 +420,10 @@ def beats_from_asr(sentences: list[str], asr_words: list[dict], total_s: float,
     bounds: list[float | None] = [0.0] + [None] * (n - 1) + [float(total_s)]
     srcs = ["interp"] * (n - 1)
     for i in range(n - 1):
-        last = _find_hit(sent_last[i], -1) if sent_units[i] else None
-        nxt = _find_hit(sent_first[i + 1], +1) if sent_units[i + 1] else None
+        last = (_find_hit(sent_last[i], -1, sent_first[i], sent_last[i])
+                if sent_units[i] else None)
+        nxt = (_find_hit(sent_first[i + 1], +1, sent_first[i + 1], sent_last[i + 1])
+               if sent_units[i + 1] else None)
         if last is None or nxt is None or nxt["start"] <= last["end"] - 0.5:
             continue                      # 单侧缺锚或 ASR 倒挂过甚 → 留给插值
         lo, hi = last["end"], max(nxt["start"], last["end"])

@@ -330,7 +330,10 @@ def main() -> None:
                 elif abs(loc["start"] - s["t_in"]) > CUT_WORD_TOL_S:
                     cut_bad.append(f"{s.get('shot_id')} 切点距「{cw['text']}」onset "
                                    f"{abs(loc['start'] - s['t_in']):.2f}s > {CUT_WORD_TOL_S}s")
-            if cut_checked:
+            if bt_backend != "asr_word":
+                skip("shot_cut_on_word",
+                     f"backend={bt_backend or '未登记'}(interp 词时间从拍边界插出,自证循环无信息量;同 5c 口径)")
+            elif cut_checked:
                 check("shot_cut_on_word", not cut_bad,
                       f"{cut_checked} 个非拍首镜切点核词" + (f";{cut_bad[:5]}" if cut_bad else ""))
             else:
