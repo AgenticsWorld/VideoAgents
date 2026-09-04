@@ -16,7 +16,7 @@
   1. dialogue_fit_group     每个 audio_plan=dialogue(或 has_dialogue)组:Σ台词估时 ≤ total_duration_s × ratio(默认 0.7)   FAIL
   2. dialogue_fit_shot      每镜:Σ本镜台词估时 ≤ duration_s × shot_ratio(默认 1.0,物理装不下)                          FAIL
                             Σ > duration_s × 0.85 报 WARN(紧,留不出反应/停顿)
-  3. line_le_cap            单句估时 ≤ settings.json#duration.shot_max_s × ratio(缺省 shot_max 8s)——Phase 5 line_duration_fits 同口径  FAIL
+  3. line_le_cap            单句估时 ≤ settings.json#duration.shot_max_s × ratio(缺省 shot_max 10s)——Phase 5 line_duration_fits 同口径  FAIL
   4. line_est_consistent    shot_list / screenplay 记录的 est_duration_s 与按文本+语速重算值一致(容差 max(0.25s, 10%))——
                             台词改短后没同步估时 = 闸门失效                                                                  FAIL
   5. lines_text_match_source  shot_list 每句台词(说话人+有效字符)能在 screenplay.md 对白层(退回 dialogue.md)找到——
@@ -52,7 +52,7 @@ GROUP_RATIO = 0.7          # §7D ①:Σ台词估时 ≤ 组总时长 × 0.7
 SHOT_RATIO = 1.0           # 镜级:物理装不下即 FAIL
 SHOT_TIGHT_RATIO = 0.85    # 镜级:超此比例 WARN
 DEFAULT_CPM = 240.0        # 无语速设定的说话人
-DEFAULT_SHOT_MAX_S = 8.0   # settings.json 缺 duration.shot_max_s 时
+DEFAULT_SHOT_MAX_S = 10.0   # settings.json 缺 duration.shot_max_s 时
 EST_TOL_S = 0.25           # 估时一致性绝对容差
 EST_TOL_REL = 0.10         # 估时一致性相对容差
 

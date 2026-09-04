@@ -792,7 +792,7 @@ DEFAULT_GENCONFIG = {
     # 截图列入下组 refs+开场声明句);关=所有组交界 anchor: none、refs 不挂任何
     # *.last_frame.png,仅靠换构图文字承接开场句续接(低分辨率草稿档下低清尾帧作
     # 参考图会拖累续接组画质与人脸一致性,故默认关闭;续接链不存在,组可并行生成)
-    "duration": {"episode_minutes": 10, "shot_min_s": 2, "shot_max_s": 8,
+    "duration": {"episode_minutes": 10, "shot_min_s": 1, "shot_max_s": 10,
                  "long_take": False},
     # 视频模型设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
@@ -1577,8 +1577,8 @@ def load_project_settings(project: str) -> dict:
 def _validate_duration(d: dict):
     try:
         ep = d.get("episode_minutes", 10)   # 数值 或 "auto"(每集时长由剧本结构自动决定)
-        mn = float(d.get("shot_min_s", 2))
-        mx = float(d.get("shot_max_s", 8))
+        mn = float(d.get("shot_min_s", 1))
+        mx = float(d.get("shot_max_s", 10))
         assert (ep == "auto" or float(ep) > 0) and 0 < mn <= mx
         assert isinstance(d.get("long_take", False), bool)
     except (TypeError, ValueError, AssertionError):
@@ -2739,8 +2739,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
         ep_line = (f"{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、"
                    f"节奏(pacing)、剪辑(edit)一律以此为基准")
-    shot_min = _fmt_num(dur.get("shot_min_s") or 2)
-    shot_max = _fmt_num(dur.get("shot_max_s") or 8)
+    shot_min = _fmt_num(dur.get("shot_min_s") or 1)
+    shot_max = _fmt_num(dur.get("shot_max_s") or 10)
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
     sg_img = int(sg.get("max_ref_images", 9))

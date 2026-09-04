@@ -299,7 +299,7 @@ def _ceil_int(x: float) -> int:
     return i if abs(x - i) < 1e-9 else i + 1
 
 
-def split_shots(total_duration_s: int, shot_max_s: int = 8,
+def split_shots(total_duration_s: int, shot_max_s: int = 10,
                 min_shots: int = 1) -> list[float]:
     """把组时长拆成若干子镜头,各 ≤ shot_max_s,和恰好等于 total_duration_s。
 
