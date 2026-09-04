@@ -1500,7 +1500,7 @@ window.I18N_DICT = {
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Jika Access Key / Secret Key dikosongkan, AK/SK yang dikonfigurasi di ⚙️ Pengaturan → Hosting Berkas → Volcano TOS (atau variabel lingkungan TOS_ACCESS_KEY/TOS_SECRET_KEY) dipakai otomatis.",
 "default(须与视频生成 API Key 所属项目一致)": "default (harus sama dengan proyek API Key pembuatan video)",
 "文件托管自检:": "Pemeriksaan hosting berkas: ",
-"自动清理": "Pembersihan otomatis",
+"全自动管理": "Manajemen otomatis penuh",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Cocok saat total aset potret virtual sedikit: sistem akan otomatis membersihkan pustaka aset saat ini sebelum setiap episode dibuat",
 "全部删除": "Hapus semua",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Kosongkan pustaka potret virtual? Semua aset di dalamnya akan dihapus dan tidak dapat dipulihkan.",

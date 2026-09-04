@@ -1500,7 +1500,7 @@ window.I18N_DICT = {
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Si Access Key / Secret Key restent vides, les AK/SK configurés dans ⚙️ Réglages → Hébergement de fichiers → Volcano TOS (ou les variables TOS_ACCESS_KEY/TOS_SECRET_KEY) sont utilisés automatiquement.",
 "default(须与视频生成 API Key 所属项目一致)": "default (doit correspondre au projet de la clé API de génération vidéo)",
 "文件托管自检:": "Vérification de l'hébergement de fichiers : ",
-"自动清理": "Nettoyage automatique",
+"全自动管理": "Gestion entièrement automatique",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Adapté lorsque le nombre total d'actifs de portrait est faible : le système vide automatiquement la bibliothèque de portraits actuelle avant la génération de chaque épisode",
 "全部删除": "Tout supprimer",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Vider la bibliothèque de portraits virtuels ? Tous les éléments seront supprimés, action irréversible.",

@@ -1500,7 +1500,7 @@ window.I18N_DICT = {
 "Access Key / Secret Key 留空时,自动使用「⚙️ 设置 → 文件托管 → 火山引擎 TOS」已配置的 AK/SK(或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY)。": "Nếu để trống Access Key / Secret Key, hệ thống tự dùng AK/SK đã cấu hình ở ⚙️ Cài đặt → Lưu trữ tệp → Volcano TOS (hoặc biến môi trường TOS_ACCESS_KEY/TOS_SECRET_KEY).",
 "default(须与视频生成 API Key 所属项目一致)": "default (phải trùng dự án của API Key tạo video)",
 "文件托管自检:": "Tự kiểm tra lưu trữ tệp: ",
-"自动清理": "Tự động dọn dẹp",
+"全自动管理": "Quản lý hoàn toàn tự động",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Phù hợp khi tổng số tài sản chân dung ảo nhỏ: hệ thống sẽ tự động dọn dẹp thư viện tài sản hiện tại trước khi tạo mỗi tập",
 "全部删除": "Xóa tất cả",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Xóa toàn bộ thư viện chân dung ảo? Tất cả tài nguyên trong thư viện sẽ bị xóa và không thể khôi phục.",
