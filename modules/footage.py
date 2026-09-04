@@ -349,16 +349,18 @@ SEARCH_PROVIDERS = {"youtube": search_youtube, "pexels": search_pexels,
 # ---------------- 探测与抽帧 ----------------
 
 def probe_video(path: str) -> dict:
-    """ffprobe 实测:duration_s/width/height/fps/nb_frames/has_audio/sar。失败即抛错。"""
+    """ffprobe 实测:duration_s/width/height/fps/nb_frames/has_audio/sar/pix_fmt/color_range。失败即抛错。"""
     require_tools("ffprobe")
     r = _run(["ffprobe", "-v", "quiet", "-show_entries",
-              "format=duration:stream=codec_type,width,height,r_frame_rate,nb_frames,sample_aspect_ratio",
+              "format=duration:stream=codec_type,width,height,r_frame_rate,nb_frames,"
+              "sample_aspect_ratio,pix_fmt,color_range",
               "-of", "json", str(path)], timeout=120)
     if r.returncode != 0 or not r.stdout:
         raise FootageError(f"ffprobe 失败:{path}")
     j = json.loads(r.stdout)
     info = {"duration_s": float(j["format"]["duration"]), "has_audio": False,
-            "width": None, "height": None, "fps": None, "nb_frames": None, "sar": None}
+            "width": None, "height": None, "fps": None, "nb_frames": None, "sar": None,
+            "pix_fmt": None, "color_range": None}
     for s in j.get("streams", []):
         if s.get("codec_type") == "audio":
             info["has_audio"] = True
@@ -368,6 +370,8 @@ def probe_video(path: str) -> dict:
             info["fps"] = round(float(num) / float(den or 1), 3) if float(den or 1) else None
             info["nb_frames"] = int(s["nb_frames"]) if str(s.get("nb_frames", "")).isdigit() else None
             info["sar"] = s.get("sample_aspect_ratio")
+            info["pix_fmt"] = s.get("pix_fmt")
+            info["color_range"] = s.get("color_range")
     return info
 
 
@@ -505,12 +509,17 @@ def cut_clip(src: str, out: str, in_point: float, duration: float,
             f"入点+时长({in_point}+{duration})超出素材长度 {src_info['duration_s']:.2f}s;"
             f"回退 curator 重定 rough_in/rough_out")
     xpos = {"center": "(iw-ow)/2", "left": "0", "right": "iw-ow"}[crop_x]
-    vf = (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+    # scale 显式 out_range=tv:归一 color range(-pix_fmt 只转像素格式不改 range 元数据;
+    # full-range 源/jpg 静帧不归一会让 concat 后的成片流参数混杂——ffmpeg 8 的 xfade
+    # 在参数切换处直接断流,播放器上还会黑位跳变。2026-09-03 leijun2 实测教训)
+    vf = (f"scale={width}:{height}:force_original_aspect_ratio=increase"
+          f":in_range=auto:out_range=tv,"
           f"crop={width}:{height}:{xpos}:(ih-oh)/2,fps={fps},setsar=1")
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     r = _run(["ffmpeg", "-y", "-v", "error", "-ss", str(in_point), "-i", str(src),
               "-vf", vf, "-frames:v", str(frames), "-c:v", "libx264", "-crf", "18",
-              "-preset", "medium", "-pix_fmt", "yuv420p", "-an", str(out)],
+              "-preset", "medium", "-pix_fmt", "yuv420p", "-color_range", "tv",
+              "-an", str(out)],
              timeout=900)
     if r.returncode != 0:
         raise FootageError(f"切片失败:{(r.stderr or '').strip()[-300:]}")
@@ -538,17 +547,9 @@ def still_clip(src: str, out: str, at: float | None = None, frames: int = 0,
     src_path = Path(src)
     if not src_path.exists():
         raise FootageError(f"输入不存在:{src}")
-    tmp_frame: Path | None = None
-    if src_path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
-        if at is None:
-            raise FootageError("视频输入必须给 --at <秒> 指定取帧点")
-        tmp_frame = Path(out).with_suffix(".still_src.jpg")
-        Path(out).parent.mkdir(parents=True, exist_ok=True)
-        r = _run(["ffmpeg", "-y", "-v", "error", "-ss", str(at), "-i", str(src_path),
-                  "-frames:v", "1", "-q:v", "2", str(tmp_frame)], timeout=300)
-        if r.returncode != 0 or not tmp_frame.exists():
-            raise FootageError(f"取帧失败:{(r.stderr or '').strip()[-300:]}")
-        src_path = tmp_frame
+    is_video = src_path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+    if is_video and at is None:
+        raise FootageError("视频输入必须给 --at <秒> 指定取帧点")
     n = frames
     # zoompan 输入先放大 2 倍再取景,消除亚像素抖动;z/x 表达式按 on(输出帧序号)线性走
     zexpr = {"in": f"1+0.12*on/{n}", "out": f"1.12-0.12*on/{n}",
@@ -556,19 +557,23 @@ def still_clip(src: str, out: str, at: float | None = None, frames: int = 0,
     xexpr = {"none": "(iw-iw/zoom)/2",
              "right": f"(iw-iw/zoom)*on/{n}",
              "left": f"(iw-iw/zoom)*(1-on/{n})"}[pan]
-    vf = (f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+    # in_range=auto:out_range=tv:归一 range(jpg 是 full-range;同 cut_clip 注释);
+    # 视频源免 jpg 中转(v4.2:jpg 有损 + 2 倍上采样是静帧糊感来源之一)——-ss 直取
+    # 该帧,trim=end_frame=1 只放一帧进 zoompan;上采样用 lanczos 保细节
+    vf = (f"trim=end_frame=1," if is_video else "") + (
+          f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase"
+          f":in_range=auto:out_range=tv:flags=lanczos,"
           f"crop={width * 2}:{height * 2},"
           f"zoompan=z='{zexpr}':x='{xexpr}':y='(ih-ih/zoom)/2'"
           f":d={n}:s={width}x{height}:fps={fps},setsar=1")
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    try:
-        r = _run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(src_path),
-                  "-vf", vf, "-frames:v", str(n), "-c:v", "libx264", "-crf", "18",
-                  "-preset", "medium", "-pix_fmt", "yuv420p", "-an", str(out)],
-                 timeout=900)
-    finally:
-        if tmp_frame is not None:
-            tmp_frame.unlink(missing_ok=True)
+    src_args = (["-ss", str(at), "-i", str(src_path)] if is_video
+                else ["-loop", "1", "-i", str(src_path)])
+    r = _run(["ffmpeg", "-y", "-v", "error", *src_args,
+              "-vf", vf, "-frames:v", str(n), "-c:v", "libx264", "-crf", "18",
+              "-preset", "medium", "-pix_fmt", "yuv420p", "-color_range", "tv",
+              "-an", str(out)],
+             timeout=900)
     if r.returncode != 0:
         raise FootageError(f"still 生成失败:{(r.stderr or '').strip()[-300:]}")
     got = count_frames(out)

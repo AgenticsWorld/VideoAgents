@@ -468,9 +468,14 @@ def main() -> None:
                 bad_frames.append(gid)
             if info["has_audio"]:
                 with_audio.append(gid)
+            # pix_fmt/color_range 一并归一:full-range(yuvj/pc)片段混进 concat 会让
+            # ffmpeg 8 的转场 filter 图在流参数切换处断流,播放器上黑位跳变
+            # (2026-09-03 leijun2 静帧兜底组实测教训)
             if (width and info["width"] != width) or (height and info["height"] != height) \
                     or (info["fps"] and abs(info["fps"] - fps) > 0.01) \
-                    or (info["sar"] not in (None, "1:1", "0:1", "N/A")):
+                    or (info["sar"] not in (None, "1:1", "0:1", "N/A")) \
+                    or str(info.get("pix_fmt") or "").startswith("yuvj") \
+                    or info.get("color_range") == "pc":
                 bad_spec.append(gid)
         check("clip_frames_exact", not absent and not bad_frames,
               (f"缺片:{absent[:5]};" if absent else "")

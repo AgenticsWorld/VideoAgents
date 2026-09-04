@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python3 services/runtime/dispatch.py:*)",
-      "Bash(python services/runtime/dispatch.py:*)"
+      "Bash(python services/runtime/dispatch.py:*)",
+      "Bash(python3 services/runtime/dagcheck.py:*)",
+      "Bash(python services/runtime/dagcheck.py:*)"
     ]
   },
   "hooks": {
