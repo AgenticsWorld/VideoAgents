@@ -386,10 +386,21 @@ async def push_video(path: str, caption: str) -> bool:
 
 # ---------------- 确认/签字卡片:HUB confirm 事件 ↔ 飞书互动卡片 ----------------
 # dispatch.py --confirm 发起的确认(重跑类)与签字(H 门)以互动卡片推到飞书,
-# 按钮 value 带 confirm_id+option,点击经长连接回传后落 api_confirm_answer,
-# 与网页弹窗同一份答案;答复/超时后 PATCH 卡片移除按钮,防止旧按钮残留误点。
+# 按钮 value 带 confirm_id+option(+q),点击经长连接回传后落 api_confirm_answer,
+# 与网页弹窗同一份答案。防重复点击分两层:桥进程在回调响应里原地把卡片换成
+# 无按钮的"已提交"态(点击即变);父进程在答复/超时后再 PATCH 成终态。
 
 _CARDS: dict[str, dict] = {}   # confirm_id -> {message_id, question, default}
+_DONE_MIDS: dict[str, float] = {}   # 已写成终态(已处理/已超时)的 message_id,防被改写
+
+
+def _mark_done(message_id: str):
+    if not message_id:
+        return
+    _DONE_MIDS[message_id] = time.time()
+    if len(_DONE_MIDS) > 500:              # 有界:只留最近的
+        for k in sorted(_DONE_MIDS, key=_DONE_MIDS.get)[:100]:
+            _DONE_MIDS.pop(k, None)
 
 
 def _card(header: str, template: str, question: str,
@@ -413,9 +424,12 @@ def _confirm_card(ev: dict) -> dict:
     note = ("签字类不超时;建议先在控制台核对相关产物再签。" if sign else
             f"{ev.get('remaining') or ev.get('timeout') or 60}s 内未选择将按默认"
             f"「{ev.get('default') or ''}」处理。")
+    # value 多带一份 q(问题文本):桥进程在回调响应里原地把卡片换成"已提交"态
+    # 时不依赖父进程就能拼出卡片(点击即变,不留可重复点击的窗口)。
+    q = (ev.get("question") or "")[:300]
     actions = [{"tag": "button", "text": {"tag": "plain_text", "content": o},
                 "type": "primary" if o == (ev.get("default") or "") else "default",
-                "value": {"confirm_id": ev.get("id") or "", "option": o}}
+                "value": {"confirm_id": ev.get("id") or "", "option": o, "q": q}}
                for o in (ev.get("options") or [])]
     return _card(head, "orange" if sign else "blue",
                  ev.get("question") or "", actions, note)
@@ -470,6 +484,7 @@ async def _finish_confirm_card(cid: str, answer: str):
     c = _CARDS.pop(cid, None)
     if not (c and c["message_id"]):
         return
+    _mark_done(c["message_id"])
     try:
         await _patch_card(c["message_id"],
                           _card("✅ 已处理", "green", c["question"],
@@ -483,6 +498,7 @@ async def _expire_card_later(cid: str, delay: int):
     c = _CARDS.pop(cid, None)             # 已答复的先被 finish 弹掉,这里自然空
     if not (c and c["message_id"]):
         return
+    _mark_done(c["message_id"])
     try:
         await _patch_card(c["message_id"],
                           _card("⏱ 已超时", "grey", c["question"],
@@ -508,7 +524,8 @@ async def _handle_card_click(ev: dict):
     except core.ServiceError:             # 确认项已被清理:把残留卡片改为失效态
         c = _CARDS.pop(cid, None)
         mid = (c or {}).get("message_id") or ev.get("message_id") or ""
-        if mid:
+        if mid and mid not in _DONE_MIDS:  # 已是终态的卡片(重复点击)不改写
+            _mark_done(mid)
             try:
                 await _patch_card(mid, _card(
                     "🚫 已失效", "grey", (c or {}).get("question") or "",

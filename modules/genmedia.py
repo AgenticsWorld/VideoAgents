@@ -71,6 +71,11 @@ Python:
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
+        / fal(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点;
+        模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro),
+        按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,填完整端点 ID
+        则原样使用;分辨率/时长/参考素材上限随家族与官方渠道同口径,Seedance/Kling 无 seed 入参;
+        环境变量兜底 FAL_KEY)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
   超分: seedvr2(ComfyUI SeedVR2 视频超分;复用视频 ComfyUI 配置,本地/Cloud 固定
@@ -161,7 +166,8 @@ CONFIG_PATH = Path(os.environ.get(
 # 配置里 Key 为空时的环境变量兜底
 ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
             "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY",
-            "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY"}
+            "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY",
+            "fal": "FAL_KEY"}
 OPENROUTER_DIRECT_BASE = "https://openrouter.ai/api/v1"
 AGENTICS_SERVICE_ORIGINS = {
     "https://api.agentics.world",
@@ -1780,6 +1786,21 @@ def _comfy_configured_workflow(cfg: dict) -> dict | None:
         return None
 
 
+def _h3_apply_workflow_component_overrides(cfg: dict, settings: dict) -> None:
+    """工作流里写死的模型文件名(非 {{TOKEN}} 占位符)覆盖内置 H3 默认值,
+    使组件预检与占位符注入跟随模板实际加载的文件(如 qwen3vl 变体编码器模板)。"""
+    workflow = _comfy_configured_workflow(cfg) or {}
+    loaders = {"UNETLoader": ("unet", "unet_name"),
+               "CLIPLoader": ("text_encoder", "clip_name")}
+    for node in workflow.values():
+        if not isinstance(node, dict) or node.get("class_type") not in loaders:
+            continue
+        key, field = loaders[node["class_type"]]
+        value = (node.get("inputs") or {}).get(field)
+        if isinstance(value, str) and value and not value.startswith("{{"):
+            settings[key] = value
+
+
 def _is_h3_ref2va_workflow(cfg: dict) -> bool:
     workflow = _comfy_configured_workflow(cfg) or {}
     return any(isinstance(node, dict) and node.get("class_type") == H3_REFERENCE_NODE
@@ -2052,7 +2073,7 @@ def _extract_last_frame(video_path: str, frame_path: str) -> None:
         capture_output=True, text=True, timeout=90)
     if result.returncode or not target.is_file() or target.stat().st_size == 0:
         detail = (result.stderr or result.stdout).strip()[-500:]
-        raise RuntimeError(f"MiniMax-H3 成片已生成但尾帧提取失败:{detail}")
+        raise RuntimeError(f"成片已生成但尾帧提取失败:{detail}")
 
 
 def _comfy_execution_error(status: dict) -> str:
@@ -3233,6 +3254,277 @@ def _video_minimax(cfg, prompt, first, last, duration, resolution, aspect, seed,
     return saved
 
 
+# ---------------- 视频:Fal(queue.fal.run 异步队列;托管 Seedance / MiniMax H3 / Kling 等端点) ----------------
+
+# Fal 统一队列 API(docs: fal.ai/docs/model-apis/queue):POST /{endpoint} 提交 → 返回
+# request_id/status_url/response_url;GET status_url 轮询 IN_QUEUE/IN_PROGRESS/COMPLETED;
+# GET response_url 取产物 JSON(video.url 为 CDN 地址)。鉴权头 Authorization: Key <FAL_KEY>。
+FAL_QUEUE_BASE = "https://queue.fal.run"
+FAL_TASKS = ("text-to-video", "image-to-video", "reference-to-video")
+FAL_VIDEO_RATIOS = ("21:9", "16:9", "4:3", "1:1", "3:4", "9:16")
+FAL_KLING_RATIOS = ("16:9", "9:16", "1:1")
+# 项目档位(360p..4k)→ 各家族分辨率枚举:Seedance 2.0 = 480p/720p/1080p/4k;Seedance 2.5 =
+# 480p/720p/1080p;MiniMax H3 = 480P/768P/2K/4K(2K/4K 为 768P 基底超采);Kling 无分辨率参数
+FAL_SEEDANCE_RESOLUTIONS = ("480p", "720p", "1080p", "4k")
+FAL_SEEDANCE25_RESOLUTIONS = ("480p", "720p", "1080p")
+FAL_H3_RESOLUTION_MAP = {"360p": "480P", "480p": "480P", "720p": "768P",
+                         "1080p": "2K", "4k": "4K"}
+FAL_H3_MAX_TOTAL_REFS = 12   # H3 reference-to-video:图+视频+音频合计 ≤12 件
+FAL_SEEDANCE_MAX_TOTAL_REFS = 12     # Seedance 2.0 reference-to-video:合计 ≤12 件
+FAL_SEEDANCE25_MAX_TOTAL_REFS = 50   # Seedance 2.5 reference-to-video:合计 ≤50 件
+
+
+def _fal_family(model: str) -> str:
+    """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling / generic(其它端点,
+    按 fal 常见字段名 prompt/image_url/end_image_url/duration/resolution/aspect_ratio/seed 尽力映射)。"""
+    m = (model or "").lower()
+    if "seedance" in m:
+        return "seedance"
+    if "minimax" in m and "h3" in m:
+        return "h3"
+    if "kling" in m:
+        return "kling"
+    return "generic"
+
+
+def _fal_task(first: str, last: str, refs, audio_refs, video_refs) -> str:
+    """按输入决定任务段:有参考素材 → reference-to-video;有首/尾帧 → image-to-video;否则文生视频。"""
+    if refs or audio_refs or video_refs:
+        return "reference-to-video"
+    if first or last:
+        return "image-to-video"
+    return "text-to-video"
+
+
+def _fal_endpoint(model: str, task: str) -> str:
+    """模型 ID 为家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro)时
+    按任务补 /text-to-video|image-to-video|reference-to-video;「自定义…」填的完整端点 ID
+    (末段以 -to-video 结尾)原样使用,不按输入切换任务(输入与端点不匹配由 Fal 侧报 422)。"""
+    mid = (model or "").strip().strip("/")
+    if not mid:
+        raise RuntimeError("Fal 渠道未选择模型")
+    if mid.rsplit("/", 1)[-1].endswith("-to-video"):
+        return mid
+    return f"{mid}/{task}"
+
+
+def _fal_plan(cfg, first, last, refs, audio_refs, video_refs) -> tuple[str, str, str]:
+    """(family, task, endpoint);dry-run 与正式提交共用。"""
+    task = _fal_task(first, last, refs, audio_refs, video_refs)
+    return _fal_family(cfg["model"]), task, _fal_endpoint(cfg["model"], task)
+
+
+def _fal_int_duration(duration, lo: int, hi: int, default: int, label: str) -> int:
+    d = int(round(duration)) if duration else default
+    if duration and d != duration:
+        print(f"[genmedia] {label} 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
+    if not lo <= d <= hi:
+        raise RuntimeError(f"{label} 时长须在 [{lo},{hi}] 整数秒,收到 {d}")
+    return d
+
+
+def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                    refs, audio_refs, gen_audio, video_refs=None,
+                    to_url=None, video_to_url=None) -> tuple[str, dict]:
+    """构造 Fal 请求体并返回 (endpoint, body)。to_url/video_to_url 可替换文件 URL 化逻辑
+    (dry-run 不内联文件);图片/音频默认内联 data URI(Fal 文档明确接受),参考视频体积大,
+    与方舟/MiniMax 同策略走对象存储预签名 URL。"""
+    to_url = to_url or _file_to_data_url
+    video_to_url = video_to_url or _storage_upload_url
+    refs, audio_refs, video_refs = list(refs or []), list(audio_refs or []), list(video_refs or [])
+    if (refs or video_refs or audio_refs) and (first or last):
+        raise RuntimeError("首帧/尾帧与参考素材(--ref/--ref-video/--audio-ref)是互斥模式,不能同时传")
+    if last and not first:
+        raise RuntimeError("Fal 首尾帧模式须同时给首帧(image_url),仅尾帧不受支持")
+    family, task, endpoint = _fal_plan(cfg, first, last, refs, audio_refs, video_refs)
+    model = cfg["model"]
+    res = (resolution or "").lower()
+    body: dict = {"prompt": prompt}
+    if family == "seedance":
+        is_v25 = _seedance_gen(model) >= 2.5
+        max_i, max_v, max_a, max_total = (
+            (V25_MAX_VIDEO_REFS, V25_MAX_VIDEOIN_REFS, V25_MAX_AUDIO_REFS, FAL_SEEDANCE25_MAX_TOTAL_REFS)
+            if is_v25 else (MAX_VIDEO_REFS, MAX_VIDEOIN_REFS, MAX_AUDIO_REFS, FAL_SEEDANCE_MAX_TOTAL_REFS))
+        if len(refs) > max_i:
+            raise RuntimeError(f"Fal Seedance 参考图最多 {max_i} 张,收到 {len(refs)}")
+        if len(video_refs) > max_v:
+            raise RuntimeError(f"Fal Seedance 参考视频最多 {max_v} 个,收到 {len(video_refs)}")
+        if len(audio_refs) > max_a:
+            raise RuntimeError(f"Fal Seedance 参考音频最多 {max_a} 段,收到 {len(audio_refs)}")
+        if len(refs) + len(video_refs) + len(audio_refs) > max_total:
+            raise RuntimeError(f"Fal Seedance 参考素材合计最多 {max_total} 件")
+        if task == "reference-to-video" and not (refs or video_refs):
+            raise RuntimeError("Fal Seedance 参考模式至少要 1 张参考图或 1 个参考视频(仅参考音频不受支持)")
+        if res:
+            if res == "360p":
+                print("[genmedia] Fal Seedance 无 360p 档,已就近映射为 480p", file=sys.stderr)
+                res = "480p"
+            allowed = FAL_SEEDANCE25_RESOLUTIONS if is_v25 else FAL_SEEDANCE_RESOLUTIONS
+            if res not in allowed:
+                if is_v25 and res == "4k":
+                    print("[genmedia] Fal Seedance 2.5 最高 1080p,4k 已压到 1080p", file=sys.stderr)
+                    res = "1080p"
+                else:
+                    raise RuntimeError(f"Fal Seedance 分辨率仅支持 {'/'.join(allowed)},收到 {res}")
+            body["resolution"] = res
+        body["duration"] = str(_fal_int_duration(duration, 4, 30 if is_v25 else 15, 5,
+                                                 "Fal Seedance")) if duration else "auto"
+        if aspect:
+            if aspect in FAL_VIDEO_RATIOS:
+                body["aspect_ratio"] = aspect
+            else:
+                print(f"[genmedia] Fal Seedance 不支持画幅 {aspect},按素材自适应(auto)", file=sys.stderr)
+        if gen_audio is not None:
+            body["generate_audio"] = bool(gen_audio)
+        if seed is not None:
+            print("[genmedia] Fal Seedance 端点无 seed 入参,--seed 已忽略(产物 seed 见日志)",
+                  file=sys.stderr)
+        if task == "image-to-video":
+            body["image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+        elif task == "reference-to-video":
+            if refs:
+                body["image_urls"] = [to_url(p) for p in refs]
+            if video_refs:
+                body["video_urls"] = [video_to_url(p) for p in video_refs]
+            if audio_refs:
+                body["audio_urls"] = [to_url(p) for p in audio_refs]
+    elif family == "h3":
+        if len(refs) + len(video_refs) + len(audio_refs) > FAL_H3_MAX_TOTAL_REFS:
+            raise RuntimeError(f"Fal MiniMax H3 参考素材(图+视频+音频)合计最多 {FAL_H3_MAX_TOTAL_REFS} 件")
+        if gen_audio is False:
+            print("[genmedia] MiniMax H3 原生音画同生,不支持关闭 generate_audio,已忽略", file=sys.stderr)
+        body["duration"] = _fal_int_duration(duration, 4, 15, 5, "Fal MiniMax H3")
+        if res:
+            mapped = FAL_H3_RESOLUTION_MAP.get(res)
+            if not mapped:
+                raise RuntimeError(f"Fal MiniMax H3 分辨率无法映射 {res}"
+                                   f"(可映射档位:{'/'.join(sorted(FAL_H3_RESOLUTION_MAP))})")
+            if mapped != res.upper():
+                print(f"[genmedia] Fal MiniMax H3 分辨率 {res} 已映射为 {mapped}", file=sys.stderr)
+            body["resolution"] = mapped
+        if seed is not None:
+            body["seed"] = seed
+        if task == "image-to-video":
+            body["image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+            if aspect:
+                print(f"[genmedia] Fal MiniMax H3 首尾帧模式画幅随图片,--aspect {aspect} 已忽略",
+                      file=sys.stderr)
+        else:
+            if aspect and aspect in FAL_VIDEO_RATIOS:
+                body["aspect_ratio"] = aspect
+            elif aspect:
+                if task == "text-to-video":
+                    raise RuntimeError(f"Fal MiniMax H3 文生视频画幅仅支持 "
+                                       f"{'/'.join(FAL_VIDEO_RATIOS)},收到 {aspect}")
+                print(f"[genmedia] Fal MiniMax H3 不支持画幅 {aspect},按参考素材自适应(adaptive)",
+                      file=sys.stderr)
+            if task == "reference-to-video":
+                if refs:
+                    body["reference_image_urls"] = [to_url(p) for p in refs]
+                if video_refs:
+                    body["reference_video_urls"] = [video_to_url(p) for p in video_refs]
+                if audio_refs:
+                    body["reference_audio_urls"] = [to_url(p) for p in audio_refs]
+    elif family == "kling":
+        if task == "reference-to-video":
+            raise RuntimeError("Fal Kling 端点不支持参考素材(--ref/--ref-video/--audio-ref),"
+                               "请改用首尾帧模式或换 Seedance / MiniMax H3")
+        body["duration"] = str(_fal_int_duration(duration, 3, 15, 5, "Fal Kling"))
+        if gen_audio is not None:
+            body["generate_audio"] = bool(gen_audio)
+        if res:
+            print(f"[genmedia] Fal Kling 端点无分辨率参数,--resolution {res} 已忽略", file=sys.stderr)
+        if seed is not None:
+            print("[genmedia] Fal Kling 端点无 seed 入参,--seed 已忽略", file=sys.stderr)
+        if task == "image-to-video":
+            body["start_image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+        elif aspect:
+            if aspect not in FAL_KLING_RATIOS:
+                raise RuntimeError(f"Fal Kling 文生视频画幅仅支持 {'/'.join(FAL_KLING_RATIOS)},收到 {aspect}")
+            body["aspect_ratio"] = aspect
+    else:
+        # 未知端点:按 fal 通用字段名尽力映射,仅支持文生/首尾帧;参考素材不映射(字段名因端点而异)
+        if task == "reference-to-video":
+            raise RuntimeError(f"Fal 自定义端点 {model} 的参考素材字段未知,genmedia 仅对 Seedance /"
+                               " MiniMax H3 支持 --ref/--ref-video/--audio-ref")
+        if duration:
+            body["duration"] = _fal_int_duration(duration, 1, 60, 5, "Fal")
+        if res:
+            body["resolution"] = res
+        if aspect:
+            body["aspect_ratio"] = aspect
+        if seed is not None:
+            body["seed"] = seed
+        if gen_audio is not None:
+            body["generate_audio"] = bool(gen_audio)
+        if task == "image-to-video":
+            body["image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+    return endpoint, body
+
+
+def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
+    """提交 Fal 队列任务并轮询到 COMPLETED,取 response 里的 video.url 下载到 output。"""
+    headers = {"Authorization": f"Key {cfg['api_key']}"}
+    submit_url = f"{FAL_QUEUE_BASE}/{endpoint}"
+    job = _post_json(submit_url, body, headers)
+    rid = job.get("request_id")
+    if not rid:
+        raise RuntimeError(f"Fal 视频任务创建失败:{json.dumps(job, ensure_ascii=False)[:400]}")
+    status_url = job.get("status_url") or f"{submit_url}/requests/{rid}/status"
+    response_url = job.get("response_url") or f"{submit_url}/requests/{rid}"
+    print(f"[genmedia] Fal 任务已创建 {rid}({endpoint})→ {Path(output).name}",
+          file=sys.stderr, flush=True)
+    started = time.time()
+    deadline = started + VIDEO_TIMEOUT
+    last_status, last_beat = "", started
+    while time.time() < deadline:
+        time.sleep(VIDEO_POLL_INTERVAL)
+        try:
+            st = _get_json(status_url, headers)
+        except Exception as e:
+            # 轮询瞬时失败不中止:任务已在 Fal 侧运行,中止会诱发上层重试重复计费
+            print(f"[genmedia] Fal 轮询异常(继续等待):{str(e)[:200]}", file=sys.stderr, flush=True)
+            continue
+        status = str(st.get("status") or "")
+        if status != last_status or time.time() - last_beat >= 60:
+            pos = st.get("queue_position")
+            print(f"[genmedia] Fal {rid} {status or '?'}"
+                  f"{f' 排队位 {pos}' if pos is not None else ''} "
+                  f"已等待 {int(time.time() - started)}s", file=sys.stderr, flush=True)
+            last_status, last_beat = status, time.time()
+        if status == "COMPLETED":
+            if st.get("error"):
+                raise RuntimeError(f"Fal 视频任务失败({st.get('error_type') or 'error'}):"
+                                   f"{str(st.get('error'))[:400]}")
+            res = _get_json(response_url, headers, timeout=120)
+            video = res.get("video")
+            vurl = video.get("url") if isinstance(video, dict) else ""
+            if not vurl:
+                raise RuntimeError(f"Fal 任务成功但无视频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+            return _save(_decode_data_url(vurl), output)
+    raise RuntimeError(f"Fal 视频超时({VIDEO_TIMEOUT}s),request={rid}")
+
+
+def _video_fal(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
+               refs=None, audio_refs=None, gen_audio=None, return_last_frame="",
+               video_refs=None):
+    endpoint, body = _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect,
+                                     seed, refs, audio_refs, gen_audio, video_refs)
+    saved = _fal_submit_and_wait(cfg, endpoint, body, output)
+    if return_last_frame:
+        # Fal 端点无 last_frame 返回参数,续接锚从成片本地抽取
+        _extract_last_frame(saved, return_last_frame)
+    return saved
+
+
 # ---------------- 超分:MiniMax / ComfyUI SeedVR2 ----------------
 
 # /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
@@ -3588,6 +3880,7 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
+        _h3_apply_workflow_component_overrides(cfg, settings)
         if ref_image_size:
             settings["ref_image_size"] = ref_image_size
         if not rh:
@@ -4349,9 +4642,10 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     建议仅对脸部一致性要求高的组按需指定。
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
-    多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)及 ComfyUI(H3 Ref2VA /
-    LTX-2.5 / Seedance 云工作流, 只有H3 Ref2VA 支持 audio_refs)渠道支持;refs 与
-    first/last_frame 互斥。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
+    多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)/Fal(Seedance、MiniMax H3 端点)
+    及 ComfyUI(H3 Ref2VA / LTX-2.5 / Seedance 云工作流, 只有H3 Ref2VA 支持 audio_refs)
+    渠道支持;refs 与 first/last_frame 互斥。fal 渠道:按输入自动选 text-/image-/
+    reference-to-video 端点,Kling 仅首尾帧,return_last_frame 从成片本地抽帧。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
     return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
     video_refs 为 V2V 编辑/延长模式(Seedance 2.x):传待修改/待延长的原视频
@@ -4394,6 +4688,11 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                               resolution, aspect, seed, output,
                               refs, audio_refs, generate_audio, return_last_frame,
                               video_refs)
+    if cfg["provider"] == "fal":
+        return _video_fal(cfg, prompt, first_frame, last_frame, duration,
+                          resolution, aspect, seed, output,
+                          refs, audio_refs, generate_audio, return_last_frame,
+                          video_refs)
     if cfg["provider"] == "comfyui" and (_is_h3_ref2va_workflow(cfg)
                                          or _seedance_cloud_workflow_gen(cfg)
                                          or _is_ltx25_workflow(cfg)):
@@ -4404,7 +4703,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     if refs or audio_refs or video_refs or return_last_frame or generate_audio is not None:
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
-                           "请在生成模型页切换到火山引擎/BytePlus 或改用首尾帧模式")
+                           "请在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal 或改用首尾帧模式")
     fn = {"openrouter": _video_openrouter, "comfyui": _video_comfyui}[cfg["provider"]]
     if fn is _video_comfyui:
         # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
@@ -4719,6 +5018,18 @@ def _cmd_video(args):
                      f"\n[dry-run] roles={roles}"
                      f" generate_audio={body.get('generate_audio')}"
                      f" return_last_frame={body.get('return_last_frame')}")
+        elif cfg["provider"] == "fal":
+            # 同样走真实构造逻辑校验(家族/任务段/上限/时长),不发请求、不内联文件
+            endpoint, body = _fal_video_body(dict(cfg, api_key="dry"), args.prompt,
+                                             args.first_frame, args.last_frame,
+                                             args.duration, resolution, args.aspect, args.seed,
+                                             args.ref, args.audio_ref, gen_audio,
+                                             video_refs=args.ref_video,
+                                             to_url=lambda p: f"file://{p}",
+                                             video_to_url=lambda p: f"file://{p}")
+            fields = {k: v for k, v in body.items() if k != "prompt"}
+            line += (f"\n[dry-run] endpoint={FAL_QUEUE_BASE}/{endpoint}"
+                     f"\n[dry-run] fields={json.dumps(fields, ensure_ascii=False)[:600]}")
         print(line)
         return
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,

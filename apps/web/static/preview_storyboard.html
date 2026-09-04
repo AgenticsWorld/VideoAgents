@@ -1262,15 +1262,19 @@ async function load(keep){
     EP=d.ep||'';
     psRender(d);
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
+    // 集号记忆:记住的集已不存在(改名/删集)时回落到首集,避免停在空页
+    if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
+    localStorage.setItem('sb-ep:'+(d.project||proj),EP);
     render(d);
     avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)
   }catch(e){$('#content').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`}
 }
 $('#reload').onclick=()=>load(true);
 const _q=new URLSearchParams(location.search);
-EP=_q.get('ep')||'';
 $('#project').value=_q.get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+// 集号记忆:URL 未指定 ep 时沿用该项目上次看的集(与滚动位置记忆配套,再次进入无需重新点集)
+EP=_q.get('ep')||localStorage.getItem('sb-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)

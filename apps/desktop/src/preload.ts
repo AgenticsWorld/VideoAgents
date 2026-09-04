@@ -3,6 +3,7 @@ import {contextBridge, ipcRenderer} from 'electron'
 contextBridge.exposeInMainWorld('videoagentsDesktop', {
   platform: process.platform,
   version: ipcRenderer.sendSync('desktop:version') as string,
+  distribution: ipcRenderer.sendSync('desktop:distribution') as 's3' | 'oss',
   remoteBackend: Boolean(process.env.VIDEOAGENTS_API_URL),
   openExternal: (url: string) => ipcRenderer.invoke('desktop:open-external', url),
   openProjectFolder: (project: string) => ipcRenderer.invoke('desktop:open-project-folder', project),

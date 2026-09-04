@@ -744,6 +744,10 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
 }
 
 ipcMain.on('desktop:version', event => {event.returnValue = app.getVersion()})
+// 发行版标识:oss = shumati.cn,s3 = agentics.world;页面据此把「账号 ID」显示为 SMT ID / AGT ID
+ipcMain.on('desktop:distribution', event => {
+  event.returnValue = (authRegion ?? serviceRegion(readBuildInfo(process.resourcesPath, app.isPackaged))).distribution
+})
 ipcMain.handle('desktop:open-external', async (_event, value: unknown) => {
   if (typeof value !== 'string' || !/^https?:\/\//.test(value)) throw new Error('不允许的 URL')
   await shell.openExternal(value)

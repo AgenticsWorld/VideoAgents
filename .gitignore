@@ -18,6 +18,7 @@ data/fonts/*
 !data/fonts/README.md
 data/sfx/*
 !data/sfx/README.md
+data/live/*
 
 # Runtime state
 .videoagents-web.log

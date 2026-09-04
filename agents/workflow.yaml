@@ -163,7 +163,7 @@ phases:
           validation: { auto: [costume_sheet_coverage, costume_visual_en_in_prompt, costume_sheet_identity_ref], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           # 场景布局包(2026-08-19):俯视空间布局图 layout_top.png + 9 宫格多角度图 grid_9views.png + layout.json(地标坐标/九格机位),替代单张主视角概念图
-          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound 四项机检脚本自动 skipped
+          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound 四项及 camera_view_consistent/station_table_ok/station_table_bound(2026-09-03)机检脚本自动 skipped
           outputs: ["assets/concepts/scenes/{id}/"],
           validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/render_blocking_map.py --scene <id> --check-only
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
@@ -215,7 +215,7 @@ phases:
           validation: { rubric: creative_v1, qa: [06-art/art-director] } }
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan],
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
-          validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
+          validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, station_table_ok, creature_refs_valid,   # station_table_ok:每组 blocking_map.station_table 全局站位表六项(草案期缺表 WARN,render_blocking_map.py 内置,2026-09-03)
                                costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/render_blocking_map.py --source storyboard --strict
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [p6-storyboard],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
@@ -228,7 +228,7 @@ phases:
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
-                               blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切,渲染 directing/{ep}/blocking_maps/{group}.png(code/render_blocking_map.py --strict,2026-08-19)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
+                               blocking_map_present, station_table_ok] } }   # station_table_ok:定稿组全局站位表六项/条目齐全(id/zone_en/anchor/facing_en/neighbors/invariants),导演台视角,render_blocking_map.py --strict 内置(2026-09-03);继承 storyboard blocking_map/view_tile 并按定稿组重切,渲染 directing/{ep}/blocking_maps/{group}.png(code/render_blocking_map.py --strict,2026-08-19)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
       # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
       # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
       # 逐句精简(只动对白文本层:screenplay.md 对白层 + dialogue.md + shot_list dialogue_lines 文本镜像;不动镜/组结构),
@@ -250,7 +250,7 @@ phases:
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
       - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots, p6-dialogue-fit],   # performance.trigger 取自定稿台词,须待对白精简完成(2026-08-30)
           outputs: ["directing/{ep}/shots/{shot}/blocking.json"],
-          validation: { auto: [presence_consistent_with_timeline, blocking_on_map] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en
+          validation: { auto: [presence_consistent_with_timeline, blocking_on_map, camera_view_consistent] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en;camera_view_consistent:space_fragment_en 为画面视角站位句 + frame_position 枚举,与 view_tile 视轴下的组 blocking_map 几何一致(code/camera_view_check.py --strict,2026-09-03)
       - { id: p6-continuity, agent: 07-directing/continuity-planning,
           depends_on: [p6-camera, p6-composition, p6-blocking],
           outputs: ["directing/{ep}/continuity_plan.json"],   # 含 group_transitions(组间衔接检查)
@@ -276,7 +276,8 @@ phases:
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
                                creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
-                               layout_map_bound,  # 组动线俯视图 blocking_maps/{group}.png + 场景 grid_9views.png 必在 refs,含 Spatial layout 声明句,逐角色 route_en 逐字命中(code/layout_map_bound_check.py,2026-08-19)
+                               layout_map_bound,  # 组动线俯视图 blocking_maps/{group}.png + 场景 grid_9views.png 必在 refs,含 Spatial layout 声明句,逐角色 route_en 逐字命中,并含 Map usage 俯视图仅作空间位置参考句 + Global constraints no top-down or bird's-eye view(map_reference_only,2026-09-03)(code/layout_map_bound_check.py,2026-08-19)
+                               station_table_bound,   # 正文含 `Blocking table:` 段且组 blocking_map.station_table 五项逐字命中(zone/anchor/facing/neighbors/keep,导演台不变量;code/layout_map_bound_check.py ⑧,2026-09-03)
                                nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
                                prompt_skill_applied] } }   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],

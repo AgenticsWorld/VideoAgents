@@ -257,6 +257,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box">
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
+          <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度">Agent 高级设置</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
@@ -817,7 +818,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <h3>👤 账号</h3>
     <div id="acct-anon" class="note" style="display:none">尚未登录。点击下方「登录」在浏览器中完成登录;登录成功后应用会自动重启。</div>
     <div id="acct-info" style="display:none">
-      <div class="row"><label>账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
+      <div class="row"><label id="acct-id-label">账号 ID</label><span id="acct-id" style="flex:1;user-select:text;word-break:break-all"></span></div>
       <div class="row"><label>余额</label><span id="acct-bal" style="flex:1"></span></div>
     </div>
     <div id="acct-st" class="note" style="display:none">读取中…</div>
@@ -916,7 +917,7 @@ const GROK_STATIC=[
 ];
 const MODEL_OPTIONS={
   claude:[[SMART,'智能分配'],['opus','opus(最新)'],['claude-opus-5','opus-5'],['sonnet','sonnet'],
-          ['claude-fable-5','fable-5'],
+          ['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
@@ -1249,7 +1250,7 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
   image:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
+  video:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['fal','Fal'],['minimax','MiniMax'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
@@ -2178,6 +2179,9 @@ function initializeDesktopLogin(){
   const bridge=desktopAuthBridge(),item=$('#menu-account');
   if(!item||!bridge)return;
   item.style.display='block';
+  // 发行版标识来自打包时的 build-info.json:shumati.cn 版显示 SMT ID,agentics.world 版显示 AGT ID
+  const idLabel={oss:'SMT ID',s3:'AGT ID'}[bridge.distribution];
+  if(idLabel)$('#acct-id-label').textContent=idLabel;
   item.onclick=e=>{e.preventDefault();openAccountModal()};
   $('#acct-close').onclick=()=>$('#account-modal').style.display='none';
   $('#account-modal').onclick=e=>{if(e.target===e.currentTarget)$('#account-modal').style.display='none'};
@@ -2370,7 +2374,7 @@ async function applyAmMode(force=true){
 /* ---------- Agent 级模型配置弹窗 ---------- */
 const AM_MODEL_OPTIONS={
   claude:[['','默认(CLI配置)'],['opus','opus(最新)'],['claude-opus-5','opus-5'],
-          ['sonnet','sonnet'],['claude-fable-5','fable-5'],
+          ['sonnet','sonnet'],['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
   codex:[['','默认'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],

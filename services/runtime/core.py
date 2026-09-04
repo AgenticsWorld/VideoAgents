@@ -238,6 +238,18 @@ DEEPAGENTS_RESUME_LIMIT = 32 * 1024
 STOPPED_BY_USER_MSG = "已被用户手动停止"
 # stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
 STOPPED_MSGS = {"user": STOPPED_BY_USER_MSG, "shutdown": "服务关闭,任务已停止"}
+# 网络快速失败:claude CLI 遇 ECONNRESET/超时等连接层错误(api_retry 事件 error_status 为
+# null,即没拿到任何 HTTP 响应)时默认自带指数退避重试 10 次,agent 会在「等待重试」里
+# 干耗数分钟且多个并发 agent 一起卡死。宿主看到这类事件超过下面的容忍次数就立刻杀进程
+# 报错(run.net_error=True),由总制片重派或人工修好代理/网络后再继续。HTTP 状态类错误
+# (429/529/5xx)仍交给 CLI 自己重试。VIDEOAGENTS_NET_RETRY_LIMIT 可放宽(默认 0=首次即停)。
+try:
+    NET_RETRY_LIMIT = max(0, int(os.environ.get("VIDEOAGENTS_NET_RETRY_LIMIT", "0")))
+except ValueError:
+    NET_RETRY_LIMIT = 0
+NET_ERROR_MSG = ("🔌 网络中断:API 连接被重置/超时(Connection dropped,未收到任何 HTTP 响应),"
+                 "已按快速失败策略终止进程、不等待 CLI 自动重试;非程序错误、不计 attempt,"
+                 "请检查代理/VPN 节点后由总制片重新派单或人工介入")
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
                                          # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
@@ -650,7 +662,7 @@ DEFAULT_GENCONFIG = {
                     "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
-        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
@@ -658,6 +670,10 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
                      "custom_model": ""},
+        # Fal(queue.fal.run 托管端点):model 存家族前缀(bytedance/seedance-2.0、minimax/h3、
+        # fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video
+        # 任务段;custom_model 可填完整端点 ID 原样调用;Key 在 fal.ai/dashboard/keys 创建
+        "fal": {"api_key": "", "model": "minimax/h3-max", "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
@@ -1727,7 +1743,7 @@ AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagen
 # RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
 # ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
 AM_IMAGE_PROVIDERS = ("", "agentics", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "agentics", "openrouter", "volcengine", "byteplus", "minimax", "comfyui")
+AM_VIDEO_PROVIDERS = ("", "agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -2637,8 +2653,9 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
         "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并**只准调用宿主 CLI** `code/render_blocking_map.py` 渲染 "
         "`directing/epNN/blocking_maps/grpNNN.png`(图上只有字母与动线、无文字;禁止复制/改写到项目 code/ 或自绘)"
-        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map);Phase 7 prompt refs 必挂动线俯视图 + "
-        "9 宫格图、写 Spatial layout 声明句 + Map markers 映射句、逐字注入 route_en(机检 layout_map_bound,"
+        "(机检 blocking_map_present),blocking 每镜站位落在组级动线上(blocking_on_map),站位片段按本镜机位(view_tile 视轴)写**画面视角**并带 `frame_position`(机检 camera_view_consistent,`code/camera_view_check.py`);"
+        "shot-planning 每组定稿全局站位表 `blocking_map.station_table`(六项:人物编号/所在区域/固定参照物/身体朝向/相邻人物/不能改变的位置关系,导演台视角;机检 station_table_ok);Phase 7 prompt refs 必挂动线俯视图 + "
+        "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)+ Map markers 映射句、逐字注入 route_en 与 `Blocking table:` 站位表段、Shot 段只写画面视角站位句(机检 layout_map_bound / station_table_bound,"
         "`code/layout_map_bound_check.py`),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程**(用户判断本片不需要精确人物位置):Phase 4 environment-concept 只出主视角场景概念图 "
@@ -2646,7 +2663,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 render_blocking_map.py;blocking 不受 blocking_on_map 约束"
         "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
         "不写 Spatial layout/Map markers 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
-        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "blocking_on_map/layout_map_bound 四项及 camera_view_consistent/station_table_ok/station_table_bound(2026-09-03)机检一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     narration_on = out.get("narration_enabled", True) is not False
     narration_line = (
@@ -3114,7 +3131,7 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "net_error", "engine", "model", "tokens", "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -3537,6 +3554,10 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
+                    if run.get("net_error") and proc.returncode is None:
+                        # 连接层错误快速失败:不等 CLI 的退避重试,直接杀进程组
+                        _kill_proc_tree(proc)
+                        break
                 await proc.wait()
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
@@ -3647,6 +3668,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                          "非程序错误,无需追查失败原因;是否重派由用户决定)"
                          + (f"\n\n--- 停止前的部分输出 ---\n{partial}" if partial else ""))
                 chat_entry.update(text=reply, stopped=run["stopped"])
+            elif run.get("net_error"):
+                partial = run.get("result") or run.get("text") or ""
+                dur = int(run["ended"] - run["started"]) if run.get("started") else 0
+                reply = (f"{run['error']}(运行 {dur}s 后网络中断快速失败)"
+                         + (f"\n\n--- 中断前的部分输出 ---\n{partial}" if partial else ""))
+                chat_entry.update(text=reply, net_error=True)
             elif run["status"] == "error" and run.get("error") and reply != run["error"]:
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
                 reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
@@ -3962,6 +3989,18 @@ def handle_claude_event(run: dict, obj: dict):
     t = obj.get("type")
     if t == "system" and obj.get("subtype") == "init":
         run["session_id"] = obj.get("session_id")
+    elif t == "system" and obj.get("subtype") == "api_retry":
+        # CLI 将要退避重试一次 API 调用。error_status 为 null = 连接层错误(ECONNRESET/
+        # 超时,没拿到 HTTP 响应):超过容忍次数即标记 net_error,由运行循环杀进程快速失败。
+        # 有 HTTP 状态的(429/529/5xx)是服务端瞬时故障,仍交给 CLI 自己重试。
+        if obj.get("error_status") is None:
+            n = run["net_retries"] = run.get("net_retries", 0) + 1
+            if n > NET_RETRY_LIMIT and not run.get("net_error"):
+                run["net_error"] = True
+                run["error"] = (f"{NET_ERROR_MSG}(CLI 报 api_retry 第 {n} 次,"
+                                f"错误 {obj.get('error') or 'unknown'})")[:500]
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": "\n" + run["error"]})
     elif t == "assistant":
         for c in (obj.get("message") or {}).get("content", []):
             if c.get("type") == "text" and c.get("text"):
@@ -3979,7 +4018,13 @@ def handle_claude_event(run: dict, obj: dict):
                              "agent": run["agent"], "desc": desc})
                 publish_run(run)
     elif t == "result":
-        run["result"] = obj.get("result") or ""
+        if obj.get("is_error"):
+            # CLI 以 API 错误收尾(重试耗尽/未授权等)时 result 正文是错误文案
+            # ("API Error: Connection dropped (ECONNRESET)"),不能当产出:留空 result
+            # 让退出码判定为失败,错误文案进 error(网络快速失败已写的 error 优先)
+            run["error"] = run.get("error") or str(obj.get("result") or "API error")[:500]
+        else:
+            run["result"] = obj.get("result") or ""
         run["session_id"] = obj.get("session_id") or run.get("session_id")
         run["cost"] = round(obj.get("total_cost_usd") or 0, 4)
         run["turns"] = obj.get("num_turns")
@@ -4124,7 +4169,7 @@ def max_group_ref_images(project: str) -> int:
 GROUP_SKILL_MODES = ("global", "auto", "manual", "off")
 REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.5);手动加图/手绘生成以此兜底
 # 各渠道可选视频模型目录(与 apps/web/static/models.html 的 VOLC_MODELS/BP_VIDEO_MODELS/
-# MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
+# FAL_VIDEO_MODELS/MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
 VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "volcengine": [
         ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
@@ -4143,6 +4188,14 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
         ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
         ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+    ],
+    "fal": [
+        ("minimax/h3-max", "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)"),
+        ("minimax/h3", "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)"),
+        ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
+        ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
+        ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
+        ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
     "minimax": [
         ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
@@ -9892,3 +9945,68 @@ async def api_footage_analyze_all(name: str, body: dict):
 
 def footage_file_path(name: str, rel: str) -> Path:
     return _footage_call(lambda lib: lib.resolve_file(name, rel))
+
+
+# ---------------- 直播(设置菜单「高级→直播」:data/live/) ----------------
+# 业务实现在 modules/live_stream.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
+# LiveError → ServiceError 映射,并注入「🎨 生成模型」页的 Fal 模型目录(与 Key 共用同一配置)。
+
+def _live_lib():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import live_stream  # noqa: WPS433
+    return live_stream
+
+
+def _live_call(fn, *args, **kw):
+    lib = _live_lib()
+    try:
+        return fn(lib, *args, **kw)
+    except lib.LiveError as exc:
+        raise ServiceError(exc.status, exc.detail) from exc
+
+
+def _live_decorate(res: dict) -> dict:
+    """状态附带 Fal 模型目录(与生成模型页同一份 VIDEO_MODEL_CATALOG)与生效渠道的模型。"""
+    fal = (load_genconfig().get("video") or {}).get("fal") or {}
+    return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get("fal", [])],
+            "providers": [["fal", "Fal"]],
+            "genconfig_model": str(fal.get("custom_model") or fal.get("model") or "")}
+
+
+async def api_live_status(touch: bool = True, played: int | None = None):
+    return _live_decorate(await asyncio.to_thread(
+        _live_call, lambda lib: lib.status(touch=touch, played=played)))
+
+
+async def api_live_ref_add(data: bytes, filename: str):
+    return await asyncio.to_thread(_live_call, lambda lib: lib.add_ref(data, filename))
+
+
+async def api_live_ref_delete(ref_id: str):
+    return _live_call(lambda lib: lib.delete_ref(ref_id))
+
+
+async def api_live_start(body: dict):
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.start(body or {})))
+
+
+async def api_live_stop():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.stop()))
+
+
+async def api_live_prompt(body: dict):
+    return _live_decorate(_live_call(lambda lib: lib.update_prompt(str((body or {}).get("prompt") or ""))))
+
+
+async def api_live_settings(body: dict):
+    return {"settings": _live_call(lambda lib: lib.save_settings(body or {}))}
+
+
+async def api_live_clear():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.clear_history()))
+
+
+def live_file_path(rel: str) -> Path:
+    return _live_call(lambda lib: lib.resolve_file(rel))

@@ -60,9 +60,24 @@ def main() -> int:
     from lark_oapi.event.callback.model.p2_card_action_trigger import (
         P2CardActionTriggerResponse)
 
+    def ack_card(question: str, opt: str) -> dict:
+        """点击后原地替换的"已提交"卡片:无按钮,防重复点击。布局与父进程
+        feishu._card 保持一致(本进程刻意不 import 父模块,避免拉起整个 core)。"""
+        # 旧卡片(改版前发出)的 value 没有 q,占位文本避免空 div 被飞书拒收
+        els = [{"tag": "div", "text": {"tag": "plain_text",
+                                       "content": question or "确认/签字项"}},
+               {"tag": "note", "elements": [
+                   {"tag": "plain_text",
+                    "content": f"已提交「{opt}」,处理中…结果会更新到这张卡片。"}]}]
+        return {"config": {"wide_screen_mode": True},
+                "header": {"template": "turquoise",
+                           "title": {"tag": "plain_text", "content": "⏳ 已提交"}},
+                "elements": els}
+
     def on_card(data):
-        """确认/签字卡片按钮点击透传给父进程(value 带 confirm_id/option,字段
-        平铺)。返回 toast 让手机端立即看到已提交;卡片本体的收尾由父进程走 PATCH。"""
+        """确认/签字卡片按钮点击透传给父进程(value 带 confirm_id/option/q,字段
+        平铺)。响应里同时带 toast 和整张替换卡片:飞书收到即原地换成无按钮的
+        "已提交"态,不留可重复点击的窗口;终态(已处理/超时/失效)由父进程 PATCH。"""
         try:
             ev = data.event
             v = (ev.action.value if ev and ev.action else None) or {}
@@ -74,7 +89,9 @@ def main() -> int:
             if cid and opt:               # 确认/签字卡片(字段平铺)
                 emit({"type": "card", "confirm_id": cid, "option": opt, **base})
                 return P2CardActionTriggerResponse(
-                    {"toast": {"type": "success", "content": f"已提交:{opt}"}})
+                    {"toast": {"type": "success", "content": f"已提交:{opt}"},
+                     "card": {"type": "raw",
+                              "data": ack_card(str(v.get("q") or ""), opt)}})
         except Exception as e:  # noqa: BLE001
             emit({"type": "err", "error": str(e)})
         return P2CardActionTriggerResponse({})

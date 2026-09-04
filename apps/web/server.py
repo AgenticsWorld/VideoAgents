@@ -378,6 +378,22 @@ async def open_footage_folder(request: Request):
     return {"ok": True}
 
 
+@app.post("/actions/open-live-folder", include_in_schema=False)
+async def open_live_folder():
+    """直播文件夹(data/live)在系统文件管理器中打开。"""
+    folder = (DATA_DIR / "live").resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "darwin":
+        command = ["open", str(folder)]
+    elif os.name == "nt":
+        os.startfile(folder)  # type: ignore[attr-defined]
+        return {"ok": True}
+    else:
+        command = ["xdg-open", str(folder)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True}
+
+
 @app.post("/actions/open-project-folder", include_in_schema=False)
 async def open_project_folder(request: Request):
     payload = await request.json()
@@ -441,6 +457,11 @@ async def avatars():
 @app.get("/footage")
 async def footage():
     return _page("footage.html")
+
+
+@app.get("/live")
+async def live():
+    return _page("live.html")
 
 
 @app.get("/preview/{page}")
