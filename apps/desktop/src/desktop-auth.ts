@@ -5,8 +5,15 @@ import {safeStorage} from 'electron'
 import type {BuildInfo} from './desktop-update'
 
 export const OAUTH_CLIENT_ID = 'videoagents-desktop'
+export type ServiceEnvironment = 'dev' | 'production'
+const TRUSTED_API_ORIGINS = new Set([
+  'https://api.agentics.world',
+  'https://devapi.agentics.world',
+  'https://api.shumati.cn',
+])
 
 export interface ServiceRegion {
+  environment: ServiceEnvironment
   distribution: 's3' | 'oss'
   ssoOrigin: string
   apiOrigin: string
@@ -47,17 +54,53 @@ export function serviceRegion(build: BuildInfo): ServiceRegion {
   const requested = process.env.VIDEOAGENTS_DISTRIBUTION
   const distribution = requested === 'oss' || requested === 's3'
     ? requested : build.distribution === 'oss' ? 'oss' : 's3'
-  return distribution === 'oss' ? {
-    distribution,
-    ssoOrigin: 'https://sso.shumati.cn',
-    apiOrigin: 'https://api.shumati.cn',
-    openrouterWrapperUrl: 'https://wrapper.shumati.cn/wrapper/openrouter',
-    redirectUri: 'videoagents://shumati.cn',
+  const requestedEnvironment = process.env.VIDEOAGENTS_SERVICE_ENV
+  if (requestedEnvironment && requestedEnvironment !== 'dev' && requestedEnvironment !== 'production') {
+    throw new Error(`Unknown Agentics service environment: ${requestedEnvironment}`)
+  }
+  const configuredApiOrigin = process.env.VIDEOAGENTS_SERVICE_API_ORIGIN?.replace(/\/$/, '')
+  if (configuredApiOrigin && !TRUSTED_API_ORIGINS.has(configuredApiOrigin)) {
+    throw new Error(`Untrusted Agentics service origin: ${configuredApiOrigin}`)
+  }
+  if (distribution === 'oss') {
+    if (requestedEnvironment === 'dev') {
+      throw new Error('The OSS distribution has no configured Agentics development environment')
+    }
+    if (configuredApiOrigin && configuredApiOrigin !== 'https://api.shumati.cn') {
+      throw new Error('Agentics service origin does not match the oss distribution')
+    }
+    return {
+      environment: 'production',
+      distribution,
+      ssoOrigin: 'https://sso.shumati.cn',
+      apiOrigin: configuredApiOrigin || 'https://api.shumati.cn',
+      openrouterWrapperUrl: 'https://wrapper.shumati.cn/wrapper/openrouter',
+      redirectUri: 'videoagents://shumati.cn',
+    }
+  }
+  if (configuredApiOrigin === 'https://api.shumati.cn') {
+    throw new Error('Agentics service origin does not match the s3 distribution')
+  }
+  const environment: ServiceEnvironment = requestedEnvironment === 'dev' ? 'dev'
+    : requestedEnvironment === 'production' ? 'production'
+    : (configuredApiOrigin === 'https://devapi.agentics.world'
+      || (!configuredApiOrigin && (build.channel === 'local' || build.channel === 'dev'))
+      ? 'dev' : 'production')
+  const endpoints = environment === 'dev' ? {
+    apiOrigin: 'https://devapi.agentics.world',
+    ssoOrigin: 'https://devsso.agentics.world',
   } : {
-    distribution,
-    ssoOrigin: 'https://sso.agentics.world',
     apiOrigin: 'https://api.agentics.world',
-    openrouterWrapperUrl: 'https://api.agentics.world/wrapper/openrouter',
+    ssoOrigin: 'https://sso.agentics.world',
+  }
+  if (configuredApiOrigin && configuredApiOrigin !== endpoints.apiOrigin) {
+    throw new Error(`Agentics API origin does not match the ${environment} environment`)
+  }
+  return {
+    environment,
+    distribution,
+    ...endpoints,
+    openrouterWrapperUrl: `${endpoints.apiOrigin}/wrapper/openrouter`,
     redirectUri: 'videoagents://agentics.world',
   }
 }
@@ -102,12 +145,14 @@ export function parseAuthorizationCallback(
   return {code}
 }
 
-function authPath(userData: string): string {
-  return path.join(userData, 'auth.json')
+function authPath(userData: string, environment: ServiceEnvironment): string {
+  return path.join(userData, environment === 'dev' ? 'auth-dev.json' : 'auth.json')
 }
 
-export function loadStoredAuth(userData: string): StoredAuth | undefined {
-  const target = authPath(userData)
+export function loadStoredAuth(
+  userData: string, environment: ServiceEnvironment = 'production',
+): StoredAuth | undefined {
+  const target = authPath(userData, environment)
   if (!existsSync(target)) return undefined
   try {
     const value = JSON.parse(readFileSync(target, 'utf8')) as Partial<AuthFile>
@@ -122,8 +167,10 @@ export function loadStoredAuth(userData: string): StoredAuth | undefined {
   }
 }
 
-export function saveStoredAuth(userData: string, auth: StoredAuth): void {
-  const target = authPath(userData)
+export function saveStoredAuth(
+  userData: string, auth: StoredAuth, environment: ServiceEnvironment = 'production',
+): void {
+  const target = authPath(userData, environment)
   const temporary = `${target}.${process.pid}.tmp`
   mkdirSync(path.dirname(target), {recursive: true})
   const protect = safeStorage.isEncryptionAvailable()
@@ -137,8 +184,10 @@ export function saveStoredAuth(userData: string, auth: StoredAuth): void {
   renameSync(temporary, target)
 }
 
-export function clearStoredAuth(userData: string): void {
-  rmSync(authPath(userData), {force: true})
+export function clearStoredAuth(
+  userData: string, environment: ServiceEnvironment = 'production',
+): void {
+  rmSync(authPath(userData, environment), {force: true})
 }
 
 async function responseData<T>(response: Response): Promise<T> {

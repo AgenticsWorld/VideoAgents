@@ -930,9 +930,9 @@ const MODEL_OPTIONS={
   pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
-  deepagents:[['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
+  deepagents:[['agentics','AgenticsLLM'],['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 生效渠道开关(存 genconfig);模型/API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置
 };
-let DA_PROVIDER='local';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
+let DA_PROVIDER='agentics';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
 let PI_MODEL_ERROR='';
 async function loadPiModelOptions(refresh=false){
@@ -1002,7 +1002,7 @@ async function populateModels(engine,selected=null){
     sel.value='__custom';$('#model-custom').value=selected;
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
-    ?'deepagents 生效渠道:本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
+    ?'deepagents 生效渠道:AgenticsLLM/本地模型/云端模型/OpenRouter;模型与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
     :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
     :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型'):'';
@@ -1248,19 +1248,20 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 /* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
 const GEN_PROVIDERS={
-  image:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
+  image:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
+  video:[['agentics','AgenticsLLM'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],
 };
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/云端模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
 function syncDaSelect(cfg){
   const da=cfg.deepagents||{};
-  DA_PROVIDER=['cloud','openrouter'].includes(da.provider)?da.provider:'local';
+  DA_PROVIDER=['agentics','local','cloud','openrouter'].includes(da.provider)?da.provider:'agentics';
   if($('#engine').value!=='deepagents')return;
   const sel=$('#model');
   sel.value=DA_PROVIDER;
-  const models={local:(da.local||{}).model||'',
+  const models={agentics:(da.agentics||{}).custom_model||(da.agentics||{}).model||'',
+                local:(da.local||{}).model||'',
                 cloud:(da.cloud||{}).custom_model||(da.cloud||{}).model||'',
                 openrouter:(da.openrouter||{}).custom_model||(da.openrouter||{}).model||''};
   DA_MODEL=models[DA_PROVIDER]||'';

@@ -396,6 +396,11 @@ async def openrouter_models(modality: str = "image", refresh: bool = False) -> d
     return await core.api_openrouter_models(modality, refresh)
 
 
+@api.get("/providers/agentics/models", tags=["providers"])
+async def agentics_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
+    return await core.api_agentics_models(modality, refresh)
+
+
 @api.post("/providers/openrouter/test", tags=["providers"])
 async def test_openrouter(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_openrouter(body.model_dump())
