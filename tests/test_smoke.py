@@ -84,11 +84,11 @@ def test_agentics_is_first_generation_provider_and_desktop_only_account_ui():
     assert "video:{providers:['agentics','openrouter'" in models
     assert "music:{providers:['agentics','openrouter'" in models
     assert "tts:{providers:['agentics','openrouter'" in models
-    assert "const TEXT_TABS={agentics:'AgenticsLLM'" in models
+    assert "const TEXT_TABS={agentics:'Agentics'" in models
     assert "window.videoagentsDesktop" in models
     assert "AgenticsLLM 暂不兼容网页版" in models
     assert "models?modality=media" in models
-    assert "deepagents:[['agentics','AgenticsLLM']" in index
+    assert "deepagents:[['agentics','Agentics']" in index
 
 
 def test_agentics_video_generation_skill_is_conditional_and_valid():

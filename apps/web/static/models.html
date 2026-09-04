@@ -96,12 +96,12 @@ button:disabled{opacity:.5;cursor:default}
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐模型 <span class="cur">BGM 由 music Agent 后期生成(不进 Seedance 组视频);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🎵 音乐模型 <span class="cur">BGM 走音乐生成;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成(BGM 走音乐生成);生效渠道=当前选中的标签页(✅),保存后生效;旁白声线以项目旁白声线卡的冻结样本为准(人物预览→旁白),不随此处设置变</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
@@ -131,7 +131,7 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-text">
     <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="text-tabs">
-      <div class="tab active" id="tab-text-agentics">AgenticsLLM</div>
+      <div class="tab active" id="tab-text-agentics">Agentics</div>
       <div class="tab" id="tab-text-local">本地模型</div>
       <div class="tab" id="tab-text-cloud">云端模型</div>
       <div class="tab" id="tab-text-openrouter">OpenRouter</div>
@@ -315,7 +315,7 @@ const MINIMAX_TTS_MODELS=[
 ];
 
 const PROVIDER_META={
-  agentics:{label:'AgenticsLLM'},
+  agentics:{label:'Agentics'},
   openrouter:{label:'OpenRouter'},
   ideogram:{label:'Ideogram'},
   volcengine:{label:'火山引擎'},
@@ -587,8 +587,7 @@ function buildPanel(kind,p){
     d.appendChild(modelRow(`${kind}-fal-model`,`${kind}-fal-custom`));
     d.appendChild(el('div',{className:'hint'},
       'Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在 '
-      +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a> 创建(API 权限即可),文档见 '
-      +'<a href="https://fal.ai/docs/documentation/model-apis/overview" target="_blank">Model APIs</a>'));
+      +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a> 创建'));
   }else if(p==='elevenlabs'&&kind==='music'){
     d.appendChild(keyRow('music-el-key','ElevenLabs API Key(xi-api-key)'));
     d.appendChild(modelRow('music-el-model','music-el-custom'));
@@ -1028,7 +1027,7 @@ async function showWfDoc(sel,custom){
 
 /* ---------- deepagents 语言模型(AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
 let TEXT_PROVIDER='agentics';
-const TEXT_TABS={agentics:'AgenticsLLM',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
+const TEXT_TABS={agentics:'Agentics',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
 /* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
 const CLOUD_MODELS=[['deepseek-v4-flash','deepseek-v4-flash'],['deepseek-v4-pro','deepseek-v4-pro']];
 function wireDaTest(prefix,savedModel){
