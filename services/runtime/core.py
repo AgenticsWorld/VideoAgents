@@ -7291,7 +7291,9 @@ async def api_avatar_clear(body: dict):
 # 触发条件:资产库已启用 + 全自动管理开启 + 该 agent 生效视频渠道为火山引擎。
 # 动作:同一 (项目, 集) 首次开跑先清空资产库(方舟素材数量有限额),再把该集组级
 # prompt refs 引用的人物概念图(assets/concepts/characters/)逐张入库,等待审核
-# Active(genmedia 提交时按台账 sha256 自动改 asset://<id>);后续同集重跑幂等跳过。
+# Active(genmedia 提交时按台账 sha256 自动改 asset://<id>)。整备顺利完成后在台账
+# auto_manage 记 {key: "<项目>|<集>", done: true}:后续同集重跑先查该标识,命中且台账
+# 里本集人物图全部 Active 就整体跳过(不再逐张试入库/轮询);换集或换项目则重新整备。
 AVATAR_AUTO_AGENT = "08-video-gen/video-generation"
 _AVATAR_AUTO_LOCK = asyncio.Lock()          # 并发 video-generation 工单串行整备
 _AVATAR_AUTO_WAIT_S = 600                   # 等待审核 Active 的上限(超时告警放行)
@@ -7334,6 +7336,20 @@ def _avatar_episode_char_refs(project: str, eps: list[str]) -> list[str]:
                 if (base / r).is_file():
                     out.append(r)
     return out
+
+
+def _avatar_refs_all_active(project: str, refs: list[str], led: dict) -> bool:
+    """本集人物图是否已全部入库 Active(按台账 sha256 查,digest 带 mtime 缓存不重读图)。
+    任一张缺台账/非 Active(如人物图重生成过、库被手动清空)即返回 False。"""
+    for ref in refs:
+        try:
+            p = _avatar_ref_path(project, ref)
+        except ServiceError:
+            return False
+        ent = led["assets"].get(_avatar_digest(p, led)) or {}
+        if not ent.get("asset_id") or ent.get("status") != "Active":
+            return False
+    return True
 
 
 async def _avatar_clear_all() -> int:
@@ -7396,13 +7412,21 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             if not refs:
                 note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
                 return
+            epkey = f"{project}|{','.join(eps)}"
+            led = _avatar_ledger()
+            am = led.get("auto_manage") or {}
+            # 入库完成标识命中(同项目同集已整备完成)且台账里本集人物图全部 Active:
+            # 整体跳过,不再逐张试入库、不轮询审核(进度行留一条提示,运行结束自动清)
+            if (am.get("key") == epkey and am.get("done")
+                    and _avatar_refs_all_active(project, refs, led)):
+                note(f"✅ 虚拟人像库全自动管理:{'/'.join(eps)} 人物图 {len(refs)} 张"
+                     f"已入库(标识 {epkey}),跳过整备")
+                return
             chk = await asyncio.to_thread(_avatar_storage_check)
             if not chk["ok"]:      # 托管/SDK 不就绪:整备必然全败,不清库、不上传,只告警
                 note(f"⚠️ 虚拟人像库全自动管理跳过:{chk['detail']}")
                 return
-            epkey = f"{project}|{','.join(eps)}"
-            led = _avatar_ledger()
-            if (led.get("auto_manage") or {}).get("key") != epkey:
+            if am.get("key") != epkey:
                 note(f"🧹 虚拟人像库全自动管理:清空资产库(为 {'/'.join(eps)} 腾额度)…")
                 n = await _avatar_clear_all()
                 led = _avatar_ledger()
@@ -7429,6 +7453,16 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
                 note(f"⏳ 虚拟人像库全自动管理:等待审核 "
                      f"{len(refs) - len(pending)}/{len(refs)}(剩 {int(deadline - time.time())}s)…")
                 await asyncio.sleep(5)
+            # 记入库完成标识:无失败且全部审核完毕才算 done(下次同集直接跳过);
+            # 有失败/超时则不记,下次重跑继续补(已入库的按台账幂等跳过)
+            led = _avatar_ledger()
+            am = led.get("auto_manage") or {}
+            if am.get("key") == epkey:
+                am["done"] = not failed and not pending
+                am["refs"] = len(refs)
+                am["done_at"] = int(time.time())
+                led["auto_manage"] = am
+                _avatar_ledger_save(led)
             tail = ""
             if failed:
                 tail += f";{len(failed)} 张入库失败({failed[0]})"
