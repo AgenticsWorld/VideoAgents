@@ -15,6 +15,8 @@ services/runtime/core.py 的 api_live_* 薄封装调用,本模块不依赖 core�
       segments/seg_0001.mp4       生成的视频段(480p)
       segments/seg_0001.png       该段尾帧(下一轮参考)
       job.log                     作业日志
+    顶栏「会话」菜单:新建会话=清空当前会话/设置回默认/清空参考图(不删会话目录);历史会话=列表里
+    加载(切为当前会话回放片段,可选恢复其提示词/设置与参考图快照)或单独删除;运行中均不允许。
 
 生成循环在子进程 `python3 modules/live_stream.py job <sid>` 里跑(与素材库同款隔离:API
 进程不阻塞、停止=结束进程组);子进程收到 SIGTERM 后先向 Fal 发 cancel 再退出,尽量不为
@@ -59,7 +61,7 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 RESOLUTIONS = ("480p", "768p")   # 页面档位;768p 提交时按 genmedia 口径传 720p(H3 → 768P,Seedance → 720p)
 DEFAULT_RESOLUTION = "480p"
 ASPECTS = ("16:9", "9:16")
-LINK_MODES = ("refs_tail", "first_frame")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图)
+LINK_MODES = ("refs_tail", "first_frame", "none")   # 参考图+尾帧一起作参考 / 尾帧作首帧(不带参考图) / 不衔接(纯文生视频)
 PROVIDERS = ("fal",)
 DEFAULT_MODEL = "minimax/h3-max"
 DEFAULTS = {"prompt": "", "provider": "fal", "model": DEFAULT_MODEL, "duration": 10,
@@ -425,6 +427,8 @@ def start(fields: dict) -> dict:
         refs = list_refs()
         if not s["prompt"] and not refs:
             raise LiveError(400, "提示词与参考图至少填一样")
+        if s["link_mode"] == "none" and not s["prompt"]:
+            raise LiveError(400, "不衔接(文生视频)模式不提交参考图与尾帧,必须填提示词")
         family = _genmedia_family(s["model"])
         prev = _state().get("current")
         start_frame = ""
@@ -545,6 +549,104 @@ def clear_history() -> dict:
         if cur and not _job_running(cur):
             _set_state(current="")
     return {**status(touch=False), "removed": removed}
+
+
+def _session_row(sid: str, cur: str) -> dict | None:
+    d = SESSIONS_DIR / sid
+    sess = _read_json(d / "session.json", None)
+    if not isinstance(sess, dict):
+        return None
+    segs = sess.get("segments") or []
+    size = 0
+    for p in d.rglob("*"):
+        if p.is_file():
+            size += p.stat().st_size
+    last = str(segs[-1].get("frame") or "") if segs else ""
+    return {"id": sid, "created_at": sess.get("created_at") or "", "updated_at": sess.get("updated_at") or "",
+            "status": sess.get("status") or "", "current": sid == cur,
+            "running": sess.get("status") in RUNNING_STATES and _job_running(sid),
+            "model": sess.get("model") or "", "aspect": sess.get("aspect") or "",
+            "resolution": sess.get("resolution") or DEFAULT_RESOLUTION, "duration": sess.get("duration") or 0,
+            "prompt": str(sess.get("prompt") or "")[:300], "refs": len(sess.get("refs") or []),
+            "segments": len(segs), "total_s": round(sum(float(x.get("duration_s") or 0) for x in segs), 1),
+            "size": size, "message": sess.get("message") or "", "error": str(sess.get("error") or "")[:300],
+            "frame": f"sessions/{sid}/{last}" if last and (d / last).is_file() else ""}
+
+
+def list_sessions() -> list[dict]:
+    """历史会话列表(新→旧),供页面「📚 历史会话」加载/删除。"""
+    rows = []
+    if not SESSIONS_DIR.is_dir():
+        return rows
+    cur = str(_state().get("current") or "")
+    for d in sorted(SESSIONS_DIR.iterdir(), reverse=True):
+        if not d.is_dir() or not SID_RE.fullmatch(d.name):
+            continue
+        with _LOCK:
+            _reap(d.name)
+        row = _session_row(d.name, cur)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def select_session(sid: str, apply_settings: bool = True, restore_refs: bool = True) -> dict:
+    """把历史会话切为当前会话(页面回放其片段,「从上次直播的尾帧继续」也以它为准);
+    apply_settings=用它的提示词/模型/时长等覆盖页面设置;restore_refs=用它的参考图快照替换当前参考图。
+    运行中不允许(会话切换会让轮询/闸门错位)。"""
+    with _LOCK:
+        if _current_running():
+            raise LiveError(409, "直播进行中,停止后才能加载历史会话")
+        d = session_dir(sid)
+        _reap(sid)
+        sess = load_session(sid)
+        if apply_settings:
+            s = load_settings()
+            for k in ("prompt", "provider", "model", "duration", "aspect", "resolution", "link_mode",
+                      "max_rounds", "idle_stop_min", "max_pending", "generate_audio"):
+                if k in sess:
+                    s[k] = sess[k]
+            save_settings(s)
+        if restore_refs:
+            REFS_DIR.mkdir(parents=True, exist_ok=True)
+            for p in list(REFS_DIR.iterdir()):
+                if p.is_file() and not p.name.startswith("."):
+                    p.unlink()
+            for rel in (sess.get("refs") or [])[:MAX_REFS]:
+                src = d / str(rel)
+                if src.is_file() and src.suffix.lower() in IMAGE_EXTS:
+                    shutil.copyfile(src, REFS_DIR / src.name)
+        _LAST_PLAYED.pop(sid, None)
+        _set_state(current=sid)
+    return status(touch=False)
+
+
+def new_session() -> dict:
+    """页面「会话 → 新建会话」:清空当前会话(不删目录)、设置恢复默认、清空参考图;运行中拒绝。"""
+    with _LOCK:
+        if _current_running():
+            raise LiveError(409, "直播进行中,停止后才能新建会话")
+        _set_state(current="")
+        save_settings(dict(DEFAULTS))
+        if REFS_DIR.is_dir():
+            for p in list(REFS_DIR.iterdir()):
+                if p.is_file() and not p.name.startswith("."):
+                    p.unlink()
+    return status(touch=False)
+
+
+def delete_session(sid: str) -> dict:
+    """删除单个历史会话目录;运行中的会话不能删;删的是当前会话则清空 current。"""
+    with _LOCK:
+        d = session_dir(sid)
+        if _job_running(sid):
+            raise LiveError(409, "该会话正在直播中,先停止再删除")
+        shutil.rmtree(d, ignore_errors=True)
+        _JOBS.pop(sid, None)
+        _LAST_PLAYED.pop(sid, None)
+        if str(_state().get("current") or "") == sid:
+            _set_state(current="")
+    return status(touch=False)
 
 
 def resolve_file(rel: str) -> Path:
@@ -714,7 +816,10 @@ def _job(sid: str) -> int:
     prev_frame = str(sess.get("start_frame") or "")
     if sess.get("segments"):
         prev_frame = _last_frame_of(sess) or prev_frame
-    if first_only and refs:
+    no_link = (sess.get("link_mode") or "refs_tail") == "none"
+    if no_link:
+        print("[live] 衔接模式=不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交", flush=True)
+    elif first_only and refs:
         print(f"[live] {sess['model']} 端点不支持参考图:首轮用第 1 张参考图作首帧,其余参考图不生效",
               flush=True)
     seq = len(sess.get("segments") or [])
@@ -756,13 +861,15 @@ def _job(sid: str) -> int:
         prompt = str(sess.get("prompt") or "")
         link_mode = sess.get("link_mode") or "refs_tail"
         first, round_refs = "", []
-        if first_only:
+        if link_mode == "none":
+            pass                                   # 不衔接:纯文生视频,不带参考图与尾帧,也不加续接句
+        elif first_only:
             first = prev_frame or (refs[0] if refs else "")
         elif link_mode == "first_frame" and prev_frame:
             first = prev_frame
         else:
             round_refs = list(refs) + ([prev_frame] if prev_frame else [])
-        if prev_frame:
+        if prev_frame and link_mode != "none":
             prompt = (prompt + (CONTINUITY_FIRST if first else CONTINUITY_REFS)).strip()
         elif not prompt:
             prompt = "A continuous live-stream shot of the subject in the reference images."

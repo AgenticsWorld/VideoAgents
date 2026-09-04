@@ -329,7 +329,7 @@ const SECTIONS={
   // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
   image:{providers:['agentics','openrouter','volcengine','byteplus','minimax','comfyui']},
   video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
-  music:{providers:['agentics','openrouter','elevenlabs','minimax','comfyui']},
+  music:{providers:['agentics','openrouter','elevenlabs','comfyui']},
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
@@ -359,6 +359,7 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
 const SEL_PROVIDER={image:'agentics',video:'agentics',music:'agentics',tts:'agentics'};
+
 let DH_PROVIDER='heygen';
 
 function buildSection(kind){

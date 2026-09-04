@@ -917,6 +917,26 @@ async def live_clear() -> dict[str, Any]:
     return await core.api_live_clear()
 
 
+@api.get("/live/sessions", tags=["live"])
+async def live_sessions() -> dict[str, Any]:
+    return await core.api_live_sessions()
+
+
+@api.post("/live/sessions/new", tags=["live"])
+async def live_session_new() -> dict[str, Any]:
+    return await core.api_live_session_new()
+
+
+@api.post("/live/sessions/{sid}/load", tags=["live"])
+async def live_session_load(sid: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_live_session_load(sid, body or {})
+
+
+@api.delete("/live/sessions/{sid}", tags=["live"])
+async def live_session_delete(sid: str) -> dict[str, Any]:
+    return await core.api_live_session_delete(sid)
+
+
 @api.get("/live/files/{file_path:path}", tags=["live"])
 async def live_file(file_path: str) -> FileResponse:
     return FileResponse(core.live_file_path(file_path))

@@ -10009,5 +10009,24 @@ async def api_live_clear():
     return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.clear_history()))
 
 
+async def api_live_sessions():
+    return {"sessions": await asyncio.to_thread(_live_call, lambda lib: lib.list_sessions())}
+
+
+async def api_live_session_new():
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.new_session()))
+
+
+async def api_live_session_load(sid: str, body: dict):
+    b = body or {}
+    return _live_decorate(await asyncio.to_thread(
+        _live_call, lambda lib: lib.select_session(sid, apply_settings=bool(b.get("apply_settings", True)),
+                                                   restore_refs=bool(b.get("restore_refs", True)))))
+
+
+async def api_live_session_delete(sid: str):
+    return _live_decorate(await asyncio.to_thread(_live_call, lambda lib: lib.delete_session(sid)))
+
+
 def live_file_path(rel: str) -> Path:
     return _live_call(lambda lib: lib.resolve_file(rel))
