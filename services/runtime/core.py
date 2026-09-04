@@ -9735,6 +9735,10 @@ async def api_footage_clip_update(name: str, clip_id: str, body: dict):
     return _footage_call(lambda lib: lib.update_clip(name, clip_id, body or {}))
 
 
+async def api_footage_clip_delete(name: str, clip_id: str):
+    return _footage_call(lambda lib: lib.delete_clip(name, clip_id))
+
+
 async def api_footage_clip_analyze(name: str, clip_id: str):
     spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
     return await asyncio.to_thread(

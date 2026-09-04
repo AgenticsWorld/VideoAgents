@@ -752,6 +752,29 @@ def update_clip(name: str, clip_id: str, fields: dict) -> dict:
     return clip
 
 
+def delete_clip(name: str, clip_id: str) -> dict:
+    """删除单条分镜:clips.json 条目 + 该 clip 的文件(mp4/缩略图/联系图)。
+
+    **不重排**其余 clip 的 id/index——mashup 等下游以 `<库名>:<clip_id>` 全局寻址,
+    id 必须终身稳定,删除即留缺号。流水线运行中禁删(作业会整表重写 clips.json)。"""
+    with _LOCK:
+        proj = load_project(name)
+        if proj.get("status") in RUNNING_STATES:
+            raise FootageLibError(409, "流水线运行中,先取消或等它完成再删分镜")
+        d = project_dir(name)
+        doc = load_clips(name)
+        clip = _find_clip(doc, clip_id)
+        for key in ("file", "thumbnail", "sheet"):
+            rel = clip.get(key)
+            if rel:
+                (d / rel).unlink(missing_ok=True)
+        doc["clips"] = [c for c in doc["clips"] if c.get("id") != clip_id]
+        save_clips(name, doc)
+        _update(name, clip_count=len(doc["clips"]),
+                analyzed_count=sum(1 for c in doc["clips"] if str(c.get("info") or "").strip()))
+    return {"ok": True, "id": clip_id, "clip_count": len(doc["clips"])}
+
+
 def make_contact_sheet(name: str, clip_id: str) -> Path:
     """按 clip 时长线性取 4–16 个时间点,从代理片抽帧拼成带编号+绝对秒标签的联系图。
 

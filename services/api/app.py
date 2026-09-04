@@ -855,6 +855,11 @@ async def footage_clip_update(name: str, clip_id: str, body: dict[str, Any]) -> 
     return await core.api_footage_clip_update(name, clip_id, body)
 
 
+@api.delete("/footage/projects/{name}/clips/{clip_id}", tags=["footage"])
+async def footage_clip_delete(name: str, clip_id: str) -> dict[str, Any]:
+    return await core.api_footage_clip_delete(name, clip_id)
+
+
 @api.post("/footage/projects/{name}/clips/{clip_id}/analyze", tags=["footage"])
 async def footage_clip_analyze(name: str, clip_id: str) -> dict[str, Any]:
     return await core.api_footage_clip_analyze(name, clip_id)
