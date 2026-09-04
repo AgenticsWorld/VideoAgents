@@ -738,6 +738,11 @@ async def feishu_unbind(body: dict[str, Any]) -> dict[str, Any]:
     return await feishu.api_feishu_unbind()
 
 
+@api.post("/feishu/settings", tags=["feishu"])
+async def feishu_settings(body: dict[str, Any]) -> dict[str, Any]:
+    return await feishu.api_feishu_settings(body)
+
+
 @api.get("/whatsapp/status", tags=["whatsapp"])
 async def whatsapp_status() -> dict[str, Any]:
     return await whatsapp.api_whatsapp_status()

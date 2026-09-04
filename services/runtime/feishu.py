@@ -16,7 +16,9 @@
   不耗引擎配额),回复经 HUB 出站循环推回飞书
 - 素材推送:media_push 监视循环发现新完成的人物/场景/道具主图或分镜组
   视频后调 push_image/push_video,经 im/v1/images / im/v1/files 上传,
-  再以富文本图片(post)/可播放视频(media)消息推送
+  再以富文本图片(post)/可播放视频(media)消息推送;超过设置页「文件大小
+  上限」(默认 5MB,存 feishu.json media_max_mb)或平台上限的文件不推送,
+  只发一条文字提示
 
 前置条件(设置页有说明):应用需开启机器人能力、以「长连接」方式订阅
 「接收消息 im.message.receive_v1」事件与「回调订阅」(卡片按钮回传依赖
@@ -47,6 +49,8 @@ DEFAULT_DOMAIN = "https://open.feishu.cn"
 
 OUT_TEXT_LIMIT = 3000                     # 与微信通道一致:手机端可读性截断
 API_TIMEOUT_S = 15
+MEDIA_MAX_MB_DEFAULT = 5                  # 素材推送单文件上限(MB),设置页可改
+MEDIA_MAX_MB_CEIL = 30                    # 不超过飞书 im/v1/files 平台上限
 
 RELAY: dict = {"err_in": "", "err_out": "", "last_in": 0.0, "last_out": 0.0}
 _ERR_IN_THRESHOLD = 3
@@ -81,6 +85,25 @@ def load_cfg() -> dict:
 
 def save_cfg(cfg: dict):
     core.atomic_write_json(FEISHU_CONFIG_PATH, cfg)
+
+
+def media_max_mb(cfg: dict | None = None) -> float:
+    """素材推送单文件上限(MB):配置缺失/非法时取默认值。"""
+    try:
+        v = float((cfg if cfg is not None else load_cfg()).get("media_max_mb"))
+    except (TypeError, ValueError):
+        return float(MEDIA_MAX_MB_DEFAULT)
+    return v if 0 < v <= MEDIA_MAX_MB_CEIL else float(MEDIA_MAX_MB_DEFAULT)
+
+
+def _parse_media_max_mb(raw) -> float:
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        raise core.ServiceError(400, "文件大小上限须为数字(MB)") from None
+    if not (0 < v <= MEDIA_MAX_MB_CEIL):
+        raise core.ServiceError(400, f"文件大小上限须在 0–{MEDIA_MAX_MB_CEIL}MB 之间")
+    return round(v, 2)
 
 
 # ---------------- 飞书 HTTP(阻塞式,线程里跑) ----------------
@@ -137,9 +160,19 @@ async def api_feishu_status():
         "ready": bool(_contact_label(cfg)["user_id"]),
         "sdk": _sdk_ok(),
         "sdk_error": _sdk_error(),
+        "media_max_mb": media_max_mb(cfg),
         "relay": {"last_error": _sdk_error() or RELAY["err_in"] or RELAY["err_out"],
                   "last_in": RELAY["last_in"], "last_out": RELAY["last_out"]},
     }
+
+
+async def api_feishu_settings(body: dict):
+    """推送设置:素材单文件上限(MB),超过的图片/视频不推送只发文字提示。"""
+    cfg = load_cfg()
+    if "media_max_mb" in body:
+        cfg["media_max_mb"] = _parse_media_max_mb(body.get("media_max_mb"))
+    save_cfg(cfg)
+    return {"ok": True, "media_max_mb": media_max_mb(cfg)}
 
 
 async def api_feishu_bind(body: dict):
@@ -159,7 +192,8 @@ async def api_feishu_bind(body: dict):
         raise core.ServiceError(
             400, f"应用凭证校验失败(code={d.get('code')}):{d.get('msg') or d}")
     save_cfg({"app_id": app_id, "app_secret": app_secret, "domain": domain,
-              "bound_at": time.time(), "contact": {}})
+              "bound_at": time.time(), "contact": {},
+              "media_max_mb": media_max_mb()})   # 重绑保留推送设置
     _TOKEN.update(v="", key="", exp=0.0)
     RELAY["err_in"] = RELAY["err_out"] = ""
     _WAKE.set()
@@ -167,7 +201,7 @@ async def api_feishu_bind(body: dict):
 
 
 async def api_feishu_unbind():
-    save_cfg({})
+    save_cfg({"media_max_mb": media_max_mb()})   # 解绑只清凭证,推送设置保留
     RELAY["err_in"] = RELAY["err_out"] = ""
     _WAKE.set()
     return {"ok": True}
@@ -342,14 +376,29 @@ async def _upload_media(cfg: dict, kind: str, path: str) -> str:
     return key
 
 
+def _oversize_notice(cfg: dict, path: str, platform_max: int, what: str) -> str | None:
+    """文件超过用户设置上限或平台上限 → 返回文字提示(不推送文件);否则 None。"""
+    size = Path(path).stat().st_size
+    user_mb = media_max_mb(cfg)
+    limit = min(int(user_mb * 1024 * 1024), platform_max)
+    if size <= limit:
+        return None
+    if size > platform_max:
+        return f"({what}超过飞书平台上限 {platform_max // (1024 * 1024)}MB 无法直传,请在控制台查看)"
+    return (f"({what} {size / (1024 * 1024):.1f}MB 超过推送上限 {user_mb:g}MB,未推送;"
+            "可在设置 → 手机消息 → 飞书调整,或在控制台查看)")
+
+
 async def push_image(path: str, caption: str) -> bool:
-    """新完成概念图 → 富文本消息(标题带说明,正文图片)。未绑定返回 False。"""
+    """新完成概念图 → 富文本消息(标题带说明,正文图片)。未绑定返回 False。
+    超过设置上限(默认 5MB)或平台上限的文件不推送,只发一条文字提示。"""
     cfg = load_cfg()
     open_id = (cfg.get("contact") or {}).get("open_id")
     if not (cfg.get("app_id") and open_id):
         return False
-    if Path(path).stat().st_size > IMG_MAX_BYTES:
-        return await _send_to_feishu(f"{caption}\n(图片超过 10MB 无法直传,请在控制台查看)")
+    notice = _oversize_notice(cfg, path, IMG_MAX_BYTES, "图片")
+    if notice:
+        return await _send_to_feishu(f"{caption}\n{notice}")
     key = await _upload_media(cfg, "image", path)
     await _card_request(
         "/open-apis/im/v1/messages?receive_id_type=open_id",
@@ -370,8 +419,9 @@ async def push_video(path: str, caption: str) -> bool:
     open_id = (cfg.get("contact") or {}).get("open_id")
     if not (cfg.get("app_id") and open_id):
         return False
-    if Path(path).stat().st_size > VID_MAX_BYTES:
-        return await _send_to_feishu(f"{caption}\n(视频超过 30MB 无法直传,请在控制台查看)")
+    notice = _oversize_notice(cfg, path, VID_MAX_BYTES, "视频")
+    if notice:
+        return await _send_to_feishu(f"{caption}\n{notice}")
     key = await _upload_media(cfg, "video", path)
     await _send_to_feishu(caption)
     await _card_request(

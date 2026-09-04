@@ -35,7 +35,7 @@ main{max-width:680px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-dire
 .card .body{padding:16px;display:flex;flex-direction:column;gap:14px}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .row label{width:110px;color:var(--dim);font-size:13px;flex:none}
-input[type=text],input[type=password]{flex:1;min-width:180px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px}
+input[type=text],input[type=password],input[type=number]{flex:1;min-width:180px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px}
 input:focus{outline:none;border-color:var(--accent)}
 select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
@@ -101,6 +101,10 @@ ul.how b,ol.how b{color:var(--text);font-weight:600}
         </div>
         <div class="row"><label>互通状态</label><span class="status" id="fs-c-ready"></span></div>
         <div class="row" id="fs-row-err" style="display:none"><label>最近错误</label><span class="status err" id="fs-c-err"></span></div>
+        <div class="row"><label>文件大小上限</label>
+          <input type="number" id="fs-max-mb" min="1" max="30" step="1" style="flex:none;width:90px;min-width:0">
+          <span class="hint">MB;超过此大小的图片/视频不推送,只发一条文字提示。默认 5MB;平台上限图片 10MB、视频 30MB</span>
+          <span class="status" id="fs-max-st"></span></div>
         <div class="row"><label></label>
           <button class="danger" id="fs-btn-unbind">解除绑定</button>
           <span class="status" id="fs-unbind-st"></span></div>
@@ -290,6 +294,7 @@ async function refreshFs(){
   }
   fill('fs',st,'飞书已绑定','飞书用户 ');
   if(st.app_id)$('#fs-c-sub').textContent+='  ·  '+st.app_id;
+  if(document.activeElement!==$('#fs-max-mb'))$('#fs-max-mb').value=st.media_max_mb||5;
   const r=$('#fs-c-ready');
   if(!st.sdk){r.textContent=st.sdk_error||t('飞书 SDK 加载失败');r.className='status err'}
   else if(st.ready){r.textContent=t('✓ 已互通,可双向收发消息');r.className='status ok'}
@@ -306,6 +311,14 @@ $('#fs-btn-bind').onclick=async()=>{
     setTimeout(refreshFs,400);
   }catch(e){$('#fs-bind-st').textContent=t('绑定失败:')+e.message;$('#fs-bind-st').className='status err'}
   finally{btn.disabled=false}
+};
+
+$('#fs-max-mb').onchange=async()=>{
+  const el=$('#fs-max-mb'),st=$('#fs-max-st');
+  try{
+    const d=await api('/api/v1/feishu/settings',{media_max_mb:el.value});
+    el.value=d.media_max_mb;st.textContent=t('✓ 已保存');st.className='status ok';
+  }catch(e){st.textContent=t('保存失败:')+e.message;st.className='status err'}
 };
 
 $('#fs-btn-unbind').onclick=async()=>{

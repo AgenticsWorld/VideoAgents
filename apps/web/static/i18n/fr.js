@@ -1323,6 +1323,8 @@ window.I18N_DICT = {
 "未安装飞书 SDK:需先在服务端执行 pip install lark-oapi": "SDK Feishu non installé : exécutez d'abord pip install lark-oapi côté serveur",
 "绑定后需在飞书里先给机器人发一条消息(搜索应用名即可找到),系统才能开始向你反向推送。": "Après la liaison, envoyez d'abord un message au bot dans Feishu (recherchez le nom de l'application pour le trouver) pour que le système puisse vous envoyer des messages en retour.",
 "推送图片/视频还需在应用权限里开通 im:resource;之后新完成的人物/场景/道具主图与分镜组视频会自动推送到飞书。": "L'envoi d'images/vidéos nécessite aussi d'activer la permission im:resource pour l'application ; ensuite, les images principales de personnages/décors/accessoires et les vidéos de groupes de storyboard nouvellement terminées seront poussées automatiquement vers Feishu.",
+"文件大小上限": "Taille max. de fichier",
+"MB;超过此大小的图片/视频不推送,只发一条文字提示。默认 5MB;平台上限图片 10MB、视频 30MB": "Mo ; les images/vidéos plus volumineuses ne sont pas envoyées, seule une notification texte l'est. Par défaut 5 Mo ; limites de la plateforme : images 10 Mo, vidéos 30 Mo",
 "尚未绑定 WhatsApp。点击下方按钮生成二维码,用手机 WhatsApp 把本系统添加为「已连接的设备」。": "Aucun WhatsApp lié pour le moment. Cliquez sur le bouton ci-dessous pour générer un QR code et ajoutez ce système comme « appareil connecté » dans WhatsApp sur votre téléphone.",
 "打开手机 WhatsApp → 设置 → 已连接的设备 → 连接设备,扫描上方二维码": "Ouvrez WhatsApp sur votre téléphone → Réglages → Appareils connectés → Connecter un appareil, puis scannez le QR code ci-dessus",
 "正在生成二维码…": "Génération du QR code…",
