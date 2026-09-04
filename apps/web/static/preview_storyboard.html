@@ -1141,16 +1141,21 @@ function render(d){
       :esc(I18N.f('⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示',{a:n.anchor}))}</span>
      <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button>${
       n.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(n.audio))}"></audio><button class="editbtn" data-url="${esc(n.audio)}" title="对这段旁白配音提修改意见,发消息给总制片">✏️ 修改</button></span>`:''}</div>`).join('');
-  // 配乐 cue 对位:beat_ref 首个命中镜 → 挂该镜前;退回 scene 中 SCN-xxxx 匹配场景首镜;再退集首
+  // 配乐 cue 对位:covers_groups 首组的首镜 → beat_ref 首个命中镜 → scene 中 SCN-xxxx 匹配场景首镜 → 集首
   const musByShot={},musTop=[];
   (d.bgm_cues||[]).forEach(c=>{
     let hit=null;
-    for(const b of (c.beat_ref||[])){
+    for(const gid of (c.covers_groups||[])){ // 条目可带注释如 "grp001(静默头部分,0.0–7.0s)",只取组号
+      const gm=String(gid).match(/grp\d+/i);
+      if(gm)hit=grpFirstShot(ggroups.find(x=>(x.group_id||'').toLowerCase()===gm[0].toLowerCase()));
+      if(hit)break;
+    }
+    for(const b of (hit?[]:(c.beat_ref||[]))){
       hit=shots.find(s=>(s.beat||'')===b||String(s.beat||'').startsWith(b+'-'));
       if(hit)break;
     }
     if(!hit){
-      const m=String(c.scene||'').match(/SCN-\d+/);
+      const m=String(c.scene||'').match(/SCN-\d+/)||String(c.scene||'').match(/^S\d+$/);
       if(m)hit=shots.find(s=>String(s.scene_id||'')===m[0]||String(s.scene_no||'')===m[0]);
     }
     if(hit)(musByShot[hit.shot_id]=musByShot[hit.shot_id]||[]).push(c);

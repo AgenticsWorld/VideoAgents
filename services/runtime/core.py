@@ -5713,14 +5713,21 @@ def _preview_storyboard(project: str, ep: str):
             "lighting": _group_lighting(base, g, sb_scene_tod, lighting_cache),
         })
     data["generation_groups"] = groups
-    # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 beat_ref/scene 对位试听
+    # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 covers_groups/beat_ref/scene 对位试听;
+    # 兼容 music_cues.json 文件名与 file 写成项目根相对路径(2026-09-02 liaozhai2 三集)
     bdir = base / "assets" / "audio" / "bgm" / ep
-    cs = _read_json_safe(bdir / "cue_sheet.json") or {}
+    cs = (_read_json_safe(bdir / "cue_sheet.json")
+          or _read_json_safe(bdir / "music_cues.json") or {})
+
+    def _cue_audio(f) -> str | None:
+        if not isinstance(f, str) or not f.strip():
+            return None
+        return _audio_url(base, bdir / f) or _audio_url(base, base / f)
+
     data["bgm_cues"] = [
         {k: c.get(k) for k in ("cue_id", "in_s", "out_s", "scene",
-                               "beat_ref", "mood", "loop_fill")} | {
-            "audio": (_audio_url(base, bdir / c["file"])
-                      if isinstance(c.get("file"), str) else None)}
+                               "beat_ref", "covers_groups", "mood", "loop_fill")} | {
+            "audio": _cue_audio(c.get("file"))}
         for c in (cs.get("cues") or []) if isinstance(c, dict)]
     return data
 
