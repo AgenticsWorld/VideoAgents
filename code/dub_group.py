@@ -188,10 +188,12 @@ def load_group(proj: Path, ep: str, gid: str):
     lines = []
     for sid in g.get("shots", []):
         for ln in (shots.get(sid) or {}).get("dialogue_lines") or []:
-            if not (ln.get("text") or "").strip():
+            # 规约键 text;兼容写成 line 的出稿(同 check_dialogue_fit / 预览接口)
+            text = (ln.get("text") or ln.get("line") or "").strip()
+            if not text:
                 continue
             lines.append({"shot_id": sid, "speaker": ln.get("speaker") or ln.get("character_id"),
-                          "text": ln["text"].strip(), "est_duration_s": ln.get("est_duration_s"),
+                          "text": text, "est_duration_s": ln.get("est_duration_s"),
                           "emotion": ln.get("emotion") or ln.get("tone") or ""})
     return g, lines
 

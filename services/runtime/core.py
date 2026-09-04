@@ -4930,8 +4930,10 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
 
     for emb in (s.get("dialogue"), s.get("dialogue_lines")):
         for d in (emb if isinstance(emb, list) else [emb]):
-            if isinstance(d, dict) and d.get("text"):
-                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(d["text"]).strip())
+            # 规约键 text;有的出稿把正文写成 line(liaozhai2 ep08,2026-09-04),与 check_dialogue_fit 同样兼容
+            txt = d.get("text") or d.get("line") if isinstance(d, dict) else None
+            if txt:
+                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(txt).strip())
     refs = []
     srcs = [s.get("dialogue_refs"), s.get("dialogue_ref")]
     if not _shot_has_own_dialogue(s):
