@@ -5489,8 +5489,9 @@ def _preview_storyboard(project: str, ep: str):
 
     def _shot_draft(s: dict) -> dict:
         # storyboard_ref 规范形 "S03/order:1";shot-planning 按空间/台词把一条草稿拆成多镜时
-        # 写成 "S02/order:3/split:a" / ".../split:b"(2026-08-30 dzg5 ep01 六镜),后缀不参与索引
-        m = re.match(r"^(.+?)/order:(\d+)(?:/split:[^/]+)?$", s.get("storyboard_ref") or "")
+        # 写成 "S02/order:3/split:a" / ".../split:b"(2026-08-30 dzg5 ep01 六镜),后缀不参与索引;
+        # 兼容 "S01/shots_draft/order:1"(2026-09-02 liaozhai2 ep01/ep02 多插了一段路径),中段不参与索引
+        m = re.match(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$", s.get("storyboard_ref") or "")
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
 
     def _shot_content(s: dict) -> str:
