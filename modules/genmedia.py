@@ -211,6 +211,7 @@ LTX25_DEFAULTS = {
 VIDEO_POLL_INTERVAL = 10
 VIDEO_TIMEOUT = 1800
 AGENTICS_VIDEO_TIMEOUT = 7200
+IMAGE_TIMEOUT = 600   # 图像生成单次请求/等待上限(秒),各云端图像渠道共用
 AGENTICS_HEARTBEAT_INTERVAL = 60
 COMFY_TIMEOUT = 1800
 COMFY_QUEUE_SUBMIT_GRACE = 30
@@ -787,8 +788,8 @@ def _agentics_download(task_id: str, artifact_url: str, deadline: float) -> byte
 
 def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
     """Wait for one existing task; transport failures never create a replacement task."""
-    timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "music": MUSIC_TIMEOUT,
-               "tts": TTS_TIMEOUT}.get(kind, 600)
+    timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "image": IMAGE_TIMEOUT,
+               "music": MUSIC_TIMEOUT, "tts": TTS_TIMEOUT}.get(kind, 600)
     started = time.time()
     deadline = started + timeout
     poll_interval = VIDEO_POLL_INTERVAL if kind == "video" else 2
@@ -1102,7 +1103,7 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
             "messages": [{"role": "user", "content": content}],
             "modalities": ["image", "text"]}
     resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions", body,
-                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=300)
+                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
     msg = (resp.get("choices") or [{}])[0].get("message") or {}
     images = msg.get("images") or []
     if not images:
@@ -1125,7 +1126,7 @@ def _image_ideogram(cfg, prompt, negative, refs, width, height, seed):
         if seed is not None:
             body["seed"] = seed
         resp = _post_json("https://api.ideogram.ai/v1/ideogram-v3/generate", body,
-                          headers, timeout=300)
+                          headers, timeout=IMAGE_TIMEOUT)
     else:
         req = {"prompt": prompt, "model": model,
                "aspect_ratio": "ASPECT_" + aspect.replace(":", "_")}
@@ -1134,11 +1135,11 @@ def _image_ideogram(cfg, prompt, negative, refs, width, height, seed):
         if seed is not None:
             req["seed"] = seed
         resp = _post_json("https://api.ideogram.ai/generate", {"image_request": req},
-                          headers, timeout=300)
+                          headers, timeout=IMAGE_TIMEOUT)
     data = resp.get("data") or []
     if not data or not data[0].get("url"):
         raise RuntimeError(f"Ideogram 未返回图像:{json.dumps(resp)[:400]}")
-    return _request(data[0]["url"], timeout=300)
+    return _request(data[0]["url"], timeout=IMAGE_TIMEOUT)
 
 
 def _closest_aspect(width: int, height: int) -> str:
@@ -1171,7 +1172,7 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
         urls = [_file_to_data_url(r) for r in refs]
         body["image"] = urls[0] if len(urls) == 1 else urls   # Seedream 4.x 图生图/多图融合
     resp = _post_json(f"{_ark_base(cfg)}/images/generations", body,
-                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=300)
+                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
     data = resp.get("data") or []
     if not data:
         raise RuntimeError(f"方舟未返回图像:{json.dumps(resp, ensure_ascii=False)[:400]}")
@@ -1179,7 +1180,7 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     if data[0].get("b64_json"):
         return base64.b64decode(data[0]["b64_json"]), usage
     if data[0].get("url"):
-        return _request(data[0]["url"], timeout=300), usage
+        return _request(data[0]["url"], timeout=IMAGE_TIMEOUT), usage
     raise RuntimeError(f"方舟返回格式异常:{json.dumps(data[0])[:400]}")
 
 
@@ -1225,11 +1226,11 @@ def _image_minimax(cfg, prompt, negative, refs, width, height, seed):
                                f"收到 {len(refs)}")
         body["subject_reference"] = [{"type": "character",
                                       "image_file": _file_to_data_url(refs[0])}]
-    resp = _minimax_post(cfg, "/v1/image_generation", body)
+    resp = _minimax_post(cfg, "/v1/image_generation", body, timeout=IMAGE_TIMEOUT)
     data = resp.get("data") or {}
     urls = data.get("image_urls") or []
     if urls:
-        return _request(urls[0], timeout=300)
+        return _request(urls[0], timeout=IMAGE_TIMEOUT)
     b64 = data.get("image_base64") or []
     if b64:
         return base64.b64decode(b64[0])
