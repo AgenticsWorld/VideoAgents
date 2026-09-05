@@ -1504,6 +1504,8 @@ window.I18N_DICT = {
 "文件托管自检:": "Pemeriksaan hosting berkas: ",
 "全自动管理": "Manajemen otomatis penuh",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Cocok saat total aset potret virtual sedikit: sistem akan otomatis membersihkan pustaka aset saat ini sebelum setiap episode dibuat",
+"生物入库": "Sertakan makhluk",
+"勾选后,全自动整备时把本集组 prompt 引用的生物概念图与人物图一起入库(默认仅入人物图)": "Jika dicentang, saat persiapan otomatis gambar konsep makhluk yang dirujuk prompt grup episode didaftarkan bersama gambar karakter (default hanya gambar karakter)",
 "全部删除": "Hapus semua",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Kosongkan pustaka potret virtual? Semua aset di dalamnya akan dihapus dan tidak dapat dipulihkan.",
 "清空中…": "Mengosongkan…",

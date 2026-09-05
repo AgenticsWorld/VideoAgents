@@ -1516,6 +1516,8 @@ window.I18N_DICT = {
 "文件托管自检:": "File-hosting check: ",
 "全自动管理": "Fully automatic management",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Suitable when the total number of portrait assets is small: the system automatically clears the current portrait library before each episode is generated",
+"生物入库": "Include creatures",
+"勾选后,全自动整备时把本集组 prompt 引用的生物概念图与人物图一起入库(默认仅入人物图)": "When checked, the creature concept images referenced by the episode's group prompts are registered together with the character images during automatic preparation (by default only character images are registered)",
 "全部删除": "Delete All",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Clear the entire virtual-portrait library? All assets in it will be deleted; this cannot be undone.",
 "清空中…": "Clearing…",

@@ -782,8 +782,11 @@ DEFAULT_GENCONFIG = {
     # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
     # 上传时自动创建的素材组,记录后复用。auto_manage=全自动管理:开启且视频模型为
     # 火山引擎时,每集 video-generation 工单开跑前自动清空资产库(规避素材数量上限)
-    # 并把该集组 prompt 引用的人物概念图入库、等审核 Active 后开跑(见 execute_run 钩子)
+    # 并把该集组 prompt 引用的人物概念图入库、等审核 Active 后开跑(见 execute_run 钩子);
+    # auto_manage_creatures=生物入库(默认关):开启时把组 prompt 引用的生物概念图
+    # (assets/concepts/creatures/)与人物图一起入库(genmedia 按 sha256 台账匹配不分目录)
     "avatar_assets": {"enabled": False, "auto_manage": False,
+                      "auto_manage_creatures": False,
                       "access_key": "", "secret_key": "",
                       "project_name": "default", "group_id": "",
                       "group_name": "VideoAgents"},
@@ -7292,7 +7295,8 @@ async def api_avatar_clear(body: dict):
 # ---- 全自动管理(avatar_assets.auto_manage):video-generation 工单开跑前自动整备 ----
 # 触发条件:资产库已启用 + 全自动管理开启 + 该 agent 生效视频渠道为火山引擎。
 # 动作:同一 (项目, 集) 首次开跑先清空资产库(方舟素材数量有限额),再把该集组级
-# prompt refs 引用的人物概念图(assets/concepts/characters/)逐张入库,等待审核
+# prompt refs 引用的人物概念图(assets/concepts/characters/;「生物入库」开启时连同
+# assets/concepts/creatures/ 生物概念图)逐张入库,等待审核
 # Active(genmedia 提交时按台账 sha256 自动改 asset://<id>)。整备顺利完成后在台账
 # auto_manage 记 {key: "<项目>|<集>", done: true}:后续同集重跑先查该标识,命中且台账
 # 里本集人物图全部 Active 就整体跳过(不再逐张试入库/轮询);换集或换项目则重新整备。
@@ -7314,11 +7318,16 @@ def _avatar_auto_enabled(agent_id: str) -> bool:
     return prov == "volcengine"
 
 
-def _avatar_episode_char_refs(project: str, eps: list[str]) -> list[str]:
+def _avatar_episode_char_refs(project: str, eps: list[str],
+                              creatures: bool = False) -> list[str]:
     """该集(们)组级 prompt refs 中引用的人物概念图(项目内相对路径,去重,仅存在的
     文件)。人物参考图口径 = assets/concepts/characters/ 下的图(引用化后组 refs 一律
-    写实体图原路径;存量副本式锚点包的包内副本与原图逐字节一致,sha256 台账同样命中)。"""
+    写实体图原路径;存量副本式锚点包的包内副本与原图逐字节一致,sha256 台账同样命中);
+    creatures=True(设置页「生物入库」勾选)时 assets/concepts/creatures/ 生物概念图
+    同样纳入。"""
     base = _proj_base(project)
+    prefixes = ("assets/concepts/characters/",) + (
+        ("assets/concepts/creatures/",) if creatures else ())
     out: list[str] = []
     seen: set[str] = set()
     for ep in eps:
@@ -7332,7 +7341,7 @@ def _avatar_episode_char_refs(project: str, eps: list[str]) -> list[str]:
                 pfx = f"data/projects/{base.name}/"
                 if r.startswith(pfx):
                     r = r[len(pfx):]
-                if not r.startswith("assets/concepts/characters/") or r in seen:
+                if not r.startswith(prefixes) or r in seen:
                     continue
                 seen.add(r)
                 if (base / r).is_file():
@@ -7389,10 +7398,14 @@ async def _avatar_clear_all() -> int:
 
 async def avatar_auto_manage_for_run(run: dict, message: str):
     """「虚拟人像资产库 → 全自动管理」钩子(execute_run 在 video-generation 工单
-    开跑前调用):清空资产库 → 本集人物概念图入库 → 等审核 Active。任何失败只在
-    运行进度条告警,不阻断工单(genmedia 对未入库图照旧走 URL/base64 提交)。"""
+    开跑前调用):清空资产库 → 本集人物概念图(「生物入库」开启时含生物概念图)入库
+    → 等审核 Active。任何失败只在运行进度条告警,不阻断工单(genmedia 对未入库图
+    照旧走 URL/base64 提交)。"""
     if run["agent"] != AVATAR_AUTO_AGENT or not _avatar_auto_enabled(run["agent"]):
         return
+    with_creatures = bool((load_genconfig().get("avatar_assets") or {})
+                          .get("auto_manage_creatures"))
+    kind = "人物/生物图" if with_creatures else "人物图"
 
     def note(txt: str):
         run["progress"] = txt[:300]
@@ -7410,9 +7423,10 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             if not eps:
                 note("⚠️ 虚拟人像库全自动管理:工单未标明集号(epNN),跳过整备")
                 return
-            refs = await asyncio.to_thread(_avatar_episode_char_refs, project, eps)
+            refs = await asyncio.to_thread(_avatar_episode_char_refs, project, eps,
+                                           with_creatures)
             if not refs:
-                note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用人物概念图,跳过整备")
+                note(f"虚拟人像库全自动管理:{'/'.join(eps)} 组 prompt 未引用{kind[:-1]}概念图,跳过整备")
                 return
             epkey = f"{project}|{','.join(eps)}"
             led = _avatar_ledger()
@@ -7421,7 +7435,7 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             # 整体跳过,不再逐张试入库、不轮询审核(进度行留一条提示,运行结束自动清)
             if (am.get("key") == epkey and am.get("done")
                     and _avatar_refs_all_active(project, refs, led)):
-                note(f"✅ 虚拟人像库全自动管理:{'/'.join(eps)} 人物图 {len(refs)} 张"
+                note(f"✅ 虚拟人像库全自动管理:{'/'.join(eps)} {kind} {len(refs)} 张"
                      f"已入库(标识 {epkey}),跳过整备")
                 return
             chk = await asyncio.to_thread(_avatar_storage_check)
@@ -7437,7 +7451,7 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
                 _avatar_ledger_save(led)
             failed: list[str] = []
             for i, ref in enumerate(refs):
-                note(f"⬆ 虚拟人像库全自动管理:人物图入库 {i + 1}/{len(refs)} {Path(ref).name}")
+                note(f"⬆ 虚拟人像库全自动管理:{kind}入库 {i + 1}/{len(refs)} {Path(ref).name}")
                 try:
                     await api_avatar_upload({"project": project, "ref": ref})
                 except ServiceError as e:
@@ -7471,7 +7485,7 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
             if pending:
                 tail += f";{len(pending)} 张审核超时仍 Processing,将按原图提交"
             if tail:            # 有告警才留在进度行(挂整个运行期间提醒用户)
-                note(f"⚠️ 虚拟人像库整备完成:{'/'.join(eps)} 人物图 {len(refs)} 张{tail}")
+                note(f"⚠️ 虚拟人像库整备完成:{'/'.join(eps)} {kind} {len(refs)} 张{tail}")
             else:               # 顺利完成:清进度行,不在后续视频生成全程挂陈旧提示
                 run.pop("progress", None)
                 publish_run(run)

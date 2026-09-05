@@ -1504,6 +1504,8 @@ window.I18N_DICT = {
 "文件托管自检:": "Tự kiểm tra lưu trữ tệp: ",
 "全自动管理": "Quản lý hoàn toàn tự động",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Phù hợp khi tổng số tài sản chân dung ảo nhỏ: hệ thống sẽ tự động dọn dẹp thư viện tài sản hiện tại trước khi tạo mỗi tập",
+"生物入库": "Đưa sinh vật vào kho",
+"勾选后,全自动整备时把本集组 prompt 引用的生物概念图与人物图一起入库(默认仅入人物图)": "Khi chọn, lúc chuẩn bị tự động các ảnh concept sinh vật được prompt nhóm của tập tham chiếu sẽ được đưa vào kho cùng ảnh nhân vật (mặc định chỉ đưa ảnh nhân vật)",
 "全部删除": "Xóa tất cả",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Xóa toàn bộ thư viện chân dung ảo? Tất cả tài nguyên trong thư viện sẽ bị xóa và không thể khôi phục.",
 "清空中…": "Đang xóa…",

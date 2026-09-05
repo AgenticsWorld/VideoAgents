@@ -1504,6 +1504,8 @@ window.I18N_DICT = {
 "文件托管自检:": "Datei-Hosting-Selbsttest: ",
 "全自动管理": "Vollautomatische Verwaltung",
 "适合虚拟资产总量较小的情况，系统会在每集生成前自动清理当前虚拟资产库": "Geeignet, wenn die Gesamtzahl der Porträt-Assets klein ist: Das System leert die aktuelle Porträtbibliothek automatisch vor der Generierung jeder Episode",
+"生物入库": "Kreaturen registrieren",
+"勾选后,全自动整备时把本集组 prompt 引用的生物概念图与人物图一起入库(默认仅入人物图)": "Wenn aktiviert, werden bei der automatischen Vorbereitung die von den Gruppen-Prompts der Episode referenzierten Kreatur-Konzeptbilder zusammen mit den Charakterbildern registriert (standardmäßig nur Charakterbilder)",
 "全部删除": "Alle löschen",
 "确认清空虚拟人像资产库?将删除库内全部素材,此操作不可恢复。": "Die virtuelle Porträt-Bibliothek leeren? Alle Assets darin werden gelöscht; dies kann nicht rückgängig gemacht werden.",
 "清空中…": "Wird geleert…",
