@@ -693,6 +693,29 @@ async def storyboard_ref_upload(
     return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
+@api.get("/projects/{project}/storyboard/{ep}/{grp}/vrefs", tags=["storyboard"])
+async def storyboard_vrefs_get(project: str, ep: str, grp: str) -> dict[str, Any]:
+    """本组参考视频清单(video_refs + 实测时长 + 本组生效模型上限;分镜预览「🎬 视频」弹窗)。"""
+    return _artifact_urls(await core.api_grpvref_list(project, ep, grp), project)
+
+
+@api.post("/storyboard/vrefs/upload", tags=["storyboard"])
+async def storyboard_vref_upload(
+    request: Request,
+    project: str = "",
+    ep: str = "",
+    grp: str = "",
+    filename: str = "",
+) -> dict[str, Any]:
+    data = await request.body()
+    return _artifact_urls(await core.api_grpvref_upload(data, project, ep, grp, filename), project)
+
+
+@api.post("/storyboard/vrefs/delete", tags=["storyboard"])
+async def storyboard_vref_delete(body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_grpvref_delete(body), str(body.get("project") or ""))
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
 async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
     """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""

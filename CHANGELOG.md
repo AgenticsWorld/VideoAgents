@@ -6,6 +6,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Reference videos in the storyboard preview**: a new “🎬 Video” button next to “🖼 Image” on each group card opens a dialog listing the group's `video_refs` with their `[Video N]` numbers (matching the prompt), inline playback, per-video duration and the total duration against the effective video model's limit. Videos can be uploaded from disk (mp4/mov/webm, ≤45MB) or removed after a confirmation (pipeline-injected whitebox / continuation videos need a stronger confirmation; prompt references are renumbered and their fixed blocks rolled back). When the count or total duration exceeds the model's limit, the card and dialog warn and leave the decision to the user: remove videos or switch the group's model via “🎛 Model” — agents must report rather than trim. Strings added in all 11 locales.
+
 ### Changed
 
 - **Project skills** is now available in Project Settings. Installed skills are grouped by Agent name and directory, with searchable one-line descriptions and project-scoped checkboxes. Only the selected video-model prompt skill starts enabled; other skills, including performance direction, require opt-in. Activation rules apply to resumed conversations and group overrides. Disabling performance direction also skips its upstream requirements and downstream checks.

@@ -4302,13 +4302,45 @@ def video_model_label(model: str, provider: str = "") -> str:
 def video_model_caps(model: str) -> dict | None:
     """模型侧硬限(与 genmedia 同口径):参考图/视频/音频数量与单段时长上限;未知模型返回 None
     (按项目「视频模型设置」执行)。"""
+    # max_ref_video_s:参考视频总时长硬限(秒;genmedia 提交前按 2.0≤15.2/2.5≤30.2 预检)——
+    # Seedance 官方口径;MiniMax H3 官方未见明示,按组时长上限 15s 同口径(2026-09-07 假定,待实测)
     if is_seedance25(model):
-        return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30}
+        return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30,
+                "max_ref_video_s": 30}
     if is_seedance20(model):
-        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15}
+        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15,
+                "max_ref_video_s": 15}
     if is_minimax_h3(model):
-        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15}   # 2026-09-07:参考视频/音频各 3(白模参考视频可挂)
+        return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15,   # 2026-09-07:参考视频/音频各 3(白模参考视频可挂)
+                "max_ref_video_s": 15}
     return None
+
+
+_MEDIA_DUR_CACHE: dict[tuple[str, int, int], float | None] = {}
+
+
+def media_duration_s(path: Path) -> float | None:
+    """ffprobe 实测音视频时长(秒);按 (路径, mtime, size) 缓存,ffprobe 不可用/失败返回 None。
+    预览页每次加载都要汇总各组参考视频总时长,靠缓存避免反复起 ffprobe。"""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key in _MEDIA_DUR_CACHE:
+        return _MEDIA_DUR_CACHE[key]
+    dur = None
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                              "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, timeout=30)
+        dur = float(out.stdout.strip().splitlines()[0])
+    except Exception:
+        dur = None
+    if len(_MEDIA_DUR_CACHE) > 2000:
+        _MEDIA_DUR_CACHE.clear()
+    _MEDIA_DUR_CACHE[key] = dur
+    return dur
 
 
 def _grpsettings_path(project: str, ep: str, grp: str) -> Path:
@@ -4373,6 +4405,15 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     ref_cap = (caps or {}).get("max_ref_images") if caps else None
     if ref_cap is None:
         ref_cap = max(0, min(REF_CAP_HARD_MAX, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
+    # 参考视频上限(2026-09-07):个数同参考图口径(组级覆盖→模型硬限,否则项目「视频模型设置」);
+    # 总时长项目设置里没有,按本组生效模型(含跟随全局)的硬限,未知模型/comfyui 类渠道 = None(不判)
+    vref_cap = (caps or {}).get("max_ref_videos") if caps else None
+    if vref_cap is None:
+        vref_cap = max(0, int(sg.get("max_ref_videos", 3) or 0))
+    mcaps = video_model_caps(model) if model else None
+    vref_cap_s = (mcaps or {}).get("max_ref_video_s")
+    if provider in ("comfyui", "runninghub"):
+        vref_cap, vref_cap_s = 0, None   # 工作流方式渠道不支持 --ref-video(与 modules/whitebox_refs.video_budget 同口径)
     # 提示词技能
     ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
     smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
@@ -4412,6 +4453,7 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     return {"provider": provider, "video_model": model, "model_source": source,
             "model_label": video_model_label(model, provider) if model else cand["global_label"],
             "global_model": gmodel, "ref_cap": ref_cap, "caps": caps,
+            "vref_cap": vref_cap, "vref_cap_s": vref_cap_s,
             "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
             "skill_mode": smode, "skill_source": "global" if smode_eff == "global" else "group",
             "reason": reason, "warning": warning,
@@ -4956,6 +4998,220 @@ async def api_grpref_delete(body: dict):
             p.unlink(missing_ok=True)
     return {"deleted": ref, "refs": len(refs), "user_added": user_added,
             "prompt_refs_shifted": shifted, "prompt_refs_dropped": dropped}
+
+
+# ---------------- 组参考视频(分镜预览「🎬 视频」弹窗,2026-09-07) ----------------
+# 组 prompt json 的 video_refs(与 refs/audio_refs 同级;video-generation 按序传 --ref-video,正文以 [Video N] 引用):
+# 来源三类——白模 camera.mp4/top.mp4(code/sync_whitebox_refs.py 注入)、前组尾段 .continuation.mp4
+# (modules/continuity_refs 注入)、用户本地上传(assets/uploads/<ep>/<grp>/,note 锚「加入组参考视频:<ref>(」)。
+# 总时长按本组生效模型硬限判超(resolve_group_settings.vref_cap_s):超限只提示,由用户决定删视频或「🎛 模型」换模型;
+# genmedia 提交前另有同口径硬校验(参考视频总时长 2.0≤15.2s / 2.5≤30.2s)兜底。
+MAX_GRPVREF_UPLOAD = 45 * 1024 * 1024   # 与 genmedia.MAX_VIDEOIN_BYTES 同口径(方舟参考视频单文件上限)
+_VID_REF_RE = re.compile(r" ?(?:\[Video (\d+)\]|@Video (\d+))(?!\d)")
+_CONT_CLAUSE_RE = re.compile(r"\s*Continuation reference:.*?End continuation reference\.\s*", re.S)
+
+
+def _grpvref_user_added(d: dict, ref: str) -> bool:
+    return any(f"加入组参考视频:{ref}(" in str(n) for n in d.get("notes") or [])
+
+
+def _grpvref_kind(ref: str) -> str:
+    if "/whitebox/" in ref:
+        return "whitebox"
+    if ref.endswith(".continuation.mp4"):
+        return "continuation"
+    if "/uploads/" in ref:
+        return "upload"
+    return "other"
+
+
+def _group_video_refs(base: Path, ep: str, gid: str, pd: dict, gres: dict | None) -> dict:
+    """本组参考视频清单 + 总时长 + 上限判定(预览组卡与「🎬 视频」弹窗共用)。"""
+    rows, total, unknown = [], 0.0, 0
+    for i, r in enumerate(pd.get("video_refs") or [], 1):
+        if not isinstance(r, str):
+            continue
+        f = base / r
+        row = {"ref": r, "idx": i, "name": "/".join(r.split("/")[-2:]), "kind": _grpvref_kind(r),
+               "user_added": _grpvref_user_added(pd, r), "missing": not f.is_file(),
+               "url": None, "duration_s": None, "size": None}
+        if f.is_file():
+            st = f.stat()
+            row["url"] = f"/projects/{base.name}/{r}?v={int(st.st_mtime)}"
+            row["size"] = st.st_size
+            d = media_duration_s(f)
+            row["duration_s"] = round(d, 2) if d is not None else None
+            if d is None:
+                unknown += 1
+            else:
+                total += d
+        rows.append(row)
+    cap_n = gres.get("vref_cap") if gres else None
+    cap_s = gres.get("vref_cap_s") if gres else None
+    model_label = (gres or {}).get("model_label") or ""
+    unsupported = bool(rows) and cap_n == 0
+    over_n = cap_n is not None and not unsupported and len(rows) > cap_n
+    over_s = cap_s is not None and total > cap_s + 0.05
+    reasons = []   # 中文原因串给 agent/日志;前端按下方三个布尔位自行拼多语言文案
+    if unsupported:
+        reasons.append("本组生效渠道/模型不支持参考视频")
+    if over_n:
+        reasons.append(f"参考视频 {len(rows)} 个超过本组生效上限 {cap_n} 个")
+    if over_s:
+        reasons.append(f"参考视频总时长 {total:.1f}s 超过本组生效模型硬限 {cap_s:g}s")
+    return {"video_refs": rows, "vrefs_total_s": round(total, 2), "vrefs_unknown": unknown,
+            "vrefs_cap": cap_n, "vrefs_cap_s": cap_s, "vrefs_model_label": model_label,
+            "vrefs_over_n": over_n, "vrefs_over_s": over_s, "vrefs_unsupported": unsupported,
+            "vrefs_blocked": bool(reasons),
+            "vrefs_blocked_reason": ("；".join(reasons) + (f"({model_label})" if model_label else "")) if reasons else ""}
+
+
+def _grpvref_summary(project: str, ep: str, grp: str, base: Path, pf: Path) -> dict:
+    pd = _read_json_safe(pf) or {}
+    try:
+        gres = resolve_group_settings(project, ep, grp)
+    except Exception:
+        gres = None
+    return {"project": project, "ep": ep, "grp": grp,
+            "model_source": (gres or {}).get("model_source"),
+            **_group_video_refs(base, ep, grp, pd, gres)}
+
+
+async def api_grpvref_list(project: str, ep: str, grp: str):
+    project, ep, grp, base, pf = _grpref_ctx({"project": project, "ep": ep, "grp": grp})
+    return _grpvref_summary(project, ep, grp, base, pf)
+
+
+def _video_ext_by_magic(data: bytes) -> str | None:
+    """mp4/mov(ISO BMFF:offset 4 为 ftyp)、webm/mkv(EBML 头)——与 VIDEO_EXTS 对应,mkv 归 webm 外拒收。"""
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        brand = data[8:12]
+        return ".mov" if brand in (b"qt  ",) else ".mp4"
+    if data.startswith(b"\x1a\x45\xdf\xa3"):
+        return ".webm" if b"webm" in data[:64] else None
+    return None
+
+
+async def api_grpvref_upload(data: bytes, project: str, ep: str, grp: str, filename: str):
+    """本地上传一段参考视频并直接加入组 video_refs:落盘 assets/uploads/<ep>/<grp>/(与参考图上传同目录),
+    请求体即文件原始字节。不按上限硬拦(与参考图同策略):超限由弹窗/组卡黄条提示,用户决定删或换模型。"""
+    project, ep, grp, base, pf = _grpref_ctx({"project": project, "ep": ep, "grp": grp})
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > MAX_GRPVREF_UPLOAD:
+        raise ServiceError(400, "file too large (>45MB, the Ark reference_video per-file limit); compress it first")
+    ext = _video_ext_by_magic(data)
+    if not ext:
+        raise ServiceError(400, "file must be an mp4/mov/webm video")
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(filename)[0]).strip("._-")
+    stem = re.sub(r"_{2,}", "_", stem)[:80] or "upload"
+    d = base / "assets" / "uploads" / ep / grp
+    d.mkdir(parents=True, exist_ok=True)
+    p, i = d / f"{stem}{ext}", 1
+    while p.exists():
+        p, i = d / f"{stem}_{i}{ext}", i + 1
+    p.write_bytes(data)
+    ref = p.relative_to(base).as_posix()
+    dur = media_duration_s(p)
+    if dur is not None and dur < 0.5:
+        p.unlink(missing_ok=True)
+        raise ServiceError(400, "video too short or unreadable (ffprobe duration < 0.5s)")
+    pj = json.loads(pf.read_text())
+    vrefs = pj.setdefault("video_refs", [])
+    if ref in vrefs:
+        p.unlink(missing_ok=True)
+        raise ServiceError(400, "This video is already in the group's video_refs")
+    vrefs.append(ref)
+    pj.setdefault("notes", []).append(
+        f"用户从本地上传加入组参考视频:{ref}(video_refs 第 {len(vrefs)} 个,[Video {len(vrefs)}]"
+        f"{f',{dur:.1f}s' if dur is not None else ''});正文尚未引用——重出本组 prompt 时按用途写 [Video {len(vrefs)}] 说明句;"
+        "重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, pj)
+    return {"ref": ref, "idx": len(vrefs), "duration_s": round(dur, 2) if dur is not None else None,
+            **_grpvref_summary(project, ep, grp, base, pf)}
+
+
+def _grpvref_renumber_prompt(vp: str, removed: int) -> tuple[str, int, int]:
+    """删除 video_refs 第 removed 个(1-based)后重排正文 [Video N]/@Video N:大于的减一,指向被删的整体删除。"""
+    shifted = dropped = 0
+
+    def _sub(m: re.Match) -> str:
+        nonlocal shifted, dropped
+        n = int(m.group(1) or m.group(2))
+        if n == removed:
+            dropped += 1
+            return ""
+        if n < removed:
+            return m.group(0)
+        shifted += 1
+        return m.group(0).replace(str(n), str(n - 1), 1)
+
+    return _VID_REF_RE.sub(_sub, vp), shifted, dropped
+
+
+async def api_grpvref_delete(body: dict):
+    """从组 video_refs 移除一个参考视频(重出本组生效)。用户上传的普通确认即删(并删落盘文件);
+    白模/前组尾段等流水线注入的须 force=true(弹窗强确认):同时回滚其固定说明段
+    (白模:Whitebox reference/legend 段——本组不再挂任何白模视频时整段删;尾段:Continuation reference 块),
+    再重排正文 [Video N] 引用。注意流水线重跑 sync_whitebox_refs --write / continuity 同步会按预算重新挂回,
+    要彻底不用需在「🎛 模型」换模型或关闭对应项目开关。"""
+    project, ep, grp, base, pf = _grpref_ctx(body)
+    ref = (body.get("ref") or "").strip().lstrip("/")
+    d = json.loads(pf.read_text())
+    vrefs = d.get("video_refs") or []
+    if ref not in vrefs:
+        raise ServiceError(404, f"Ref not in this group's video_refs: {ref}")
+    user_added = _grpvref_user_added(d, ref)
+    if not user_added and not body.get("force"):
+        raise ServiceError(400, "This reference video was injected by the pipeline (whitebox/continuation), not added by hand; "
+                                "pass force=true to remove it (the preview dialog asks for confirmation)")
+    i = vrefs.index(ref)
+    kind = _grpvref_kind(ref)
+    vp = d.get("video_prompt") or ""
+    extra = []
+    cm = _CONT_CLAUSE_RE.search(vp) if kind == "continuation" else None
+    if cm and f"[Video {i + 1}]" in cm.group(0):
+        vp = _CONT_CLAUSE_RE.sub("\n", vp, count=1).strip()
+        d.pop("continuity_ref", None)
+        extra.append("已移除 Continuation reference 续写块")
+    vrefs.pop(i)
+    if kind == "whitebox" and not any("/whitebox/" in v for v in vrefs):
+        try:
+            from modules.whitebox_refs import _BLOCK_RE as _WB_BLOCK_RE, GC_SENTENCE as _WB_GC
+            vp2 = _WB_BLOCK_RE.sub("", vp)
+            vp2 = re.sub(r"\s*" + re.escape(_WB_GC), "", vp2)   # Global constraints 里的禁白模外观句一并摘掉
+            if vp2 != vp:
+                vp = vp2
+                extra.append("已移除 Whitebox reference/legend 固定段")
+        except Exception:
+            pass
+        d.pop("whitebox_refs", None)
+    shifted = dropped = 0
+    if vp:
+        vp, shifted, dropped = _grpvref_renumber_prompt(vp, i + 1)
+        if shifted or dropped:
+            extra.append(f"正文引用重排 {shifted} 处、移除指向该视频的引用 {dropped} 处")
+        d["video_prompt"] = vp
+        d["video_prompt_word_count"] = len(vp.split())
+    if vrefs:
+        d["video_refs"] = vrefs
+    else:
+        d.pop("video_refs", None)
+    d.setdefault("notes", []).append(
+        f"用户移除组参考视频:{ref}(原 video_refs 第 {i + 1} 个"
+        f"{'' if user_added else ',流水线注入(' + kind + ')'}"
+        f"{';' + ';'.join(extra) if extra else ''});重出本组时生效。由 storyboard service 自动补丁。")
+    atomic_write_json(pf, d)
+    if ref.startswith(f"assets/uploads/{ep}/{grp}/"):
+        p = (base / ref).resolve()
+        try:
+            p.relative_to(base.resolve())
+            p.unlink(missing_ok=True)
+        except ValueError:
+            pass
+    return {"deleted": ref, "user_added": user_added, "kind": kind,
+            "prompt_refs_shifted": shifted, "prompt_refs_dropped": dropped, "extra": extra,
+            **_grpvref_summary(project, ep, grp, base, pf)}
 
 
 # 对白编号 → 台词索引(2026-08-27):story/episodes/<ep>/dialogue.md 是对白层权威定稿,
@@ -5832,6 +6088,8 @@ def _preview_storyboard(project: str, ep: str):
             "refs_blocked": (pd.get("status") == "blocked_refs_cap"
                              or len(pd.get("refs") or []) > ref_cap),
             "refs_blocked_reason": str(pd.get("blocked_reason") or ""),
+            # 参考视频(2026-09-07「🎬 视频」):清单+总时长+按本组生效模型硬限判超(超限黄条,用户决定删或换模型)
+            **_group_video_refs(base, ep, gid, pd, gres),
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "caption_clips": [c for c in cap_clips
                               if gid and _id_name_match(gid, c["name"])],

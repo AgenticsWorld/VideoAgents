@@ -99,7 +99,7 @@ python3 modules/genmedia.py video \
   --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
 ```
 
-**白模参考视频(2026-09-07,仅「人物精确空间位置」开启)**:组 json 有 `video_refs` 时**必须**按数组顺序原样传 `--ref-video`(`[Video N]` 序号与之对应;`whitebox_refs.skipped_reason` 非空说明宿主已按模型预算取舍,不自行增删);开跑前跑 `python3 code/sync_whitebox_refs.py --project <slug> --ep epNN <本组>` 复核 PASS,FAIL 回派 prompt(或先 `--write` 再复核);方舟/MiniMax 的 reference_video 须公网 URL——「设置 → 文件托管」未配置时 genmedia 直接报错,如实上报、不得删掉 video_refs 硬跑;video_refs 为空的组照旧不传。
+**白模参考视频(2026-09-07,仅「人物精确空间位置」开启)**:组 json 有 `video_refs` 时**必须**按数组顺序原样传 `--ref-video`(`[Video N]` 序号与之对应;`whitebox_refs.skipped_reason` 非空说明宿主已按模型预算取舍,不自行增删);开跑前跑 `python3 code/sync_whitebox_refs.py --project <slug> --ep epNN <本组>` 复核 PASS,FAIL 回派 prompt(或先 `--write` 再复核);方舟/MiniMax 的 reference_video 须公网 URL——「设置 → 文件托管」未配置时 genmedia 直接报错,如实上报、不得删掉 video_refs 硬跑;video_refs 为空的组照旧不传。**参考视频超限(2026-09-07)**:genmedia 提交前按本组生效模型硬限校验参考视频个数与总时长(Seedance 2.0:≤3 个/总时长 ≤15s;2.5:≤10 个/≤30s),报「参考视频总时长 … 超过方舟硬限」或「参考视频最多 … 个」即**停手上报 orchestrator 转告用户,禁止自行删减/截短/换序 video_refs 或私自换模型**——由用户在分镜预览决定:①「🎬 视频」弹窗删除多余/过长的参考视频(用户本地上传的视频也在其中,同样不得代删),或 ②「🎛 模型」给本组单独换参考视频上限更高的模型(渠道不变);用户处理后重派本组(prompt 若被改动则先回派 prompt 重出)。分镜预览组卡对超限组已有黄条提示,上报文案写明组号、当前个数/总时长与上限即可。
 
 云端渠道为异步任务,模块内部自动轮询到完成;--ref 与 --first/last-frame 互斥;
 Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 minimax(MiniMax-H3)时:

@@ -201,6 +201,33 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
 #ar-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
 #ar-modal #ar-ok:disabled{opacity:.5;cursor:default}
+#vr-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#vr-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:820px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column}
+#vr-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
+#vr-modal .hint{color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.6}
+#vr-modal .sum{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0 6px;font-size:12.5px;color:var(--text);flex:none}
+#vr-modal .sum b{font-weight:600}
+#vr-modal .sum .over{color:var(--yellow);font-weight:600}
+#vr-modal .sum .ok{color:var(--green)}
+#vr-modal .warn{color:var(--yellow);font-size:12.5px;line-height:1.6;border:1px solid var(--yellow);border-radius:8px;padding:8px 10px;margin:4px 0 8px;flex:none}
+#vr-modal .list{flex:1;min-height:0;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:8px;display:flex;flex-direction:column;gap:8px}
+#vr-modal .list .ph{color:var(--dim);font-size:12.5px;margin:auto;padding:24px 0}
+#vr-modal .vrow{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:8px}
+#vr-modal .vrow video{width:300px;max-width:42%;aspect-ratio:16/9;background:#000;border-radius:6px;flex:none}
+#vr-modal .vrow .vph{width:300px;max-width:42%;aspect-ratio:16/9;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dim);font-size:11.5px;flex:none}
+#vr-modal .vrow .vph .big{font-size:22px}
+#vr-modal .vrow .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+#vr-modal .vrow .vno{display:inline-block;font-weight:700;color:#0b1020;background:var(--purple);border-radius:5px;padding:1px 8px;font-size:12.5px;margin-right:8px}
+#vr-modal .vrow .vkind{display:inline-block;font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px;margin-right:6px}
+#vr-modal .vrow .vpath{color:var(--dim);font-size:11.5px;word-break:break-all;line-height:1.5}
+#vr-modal .vrow .vmeta{color:var(--text);font-size:12px}
+#vr-modal .vrow .vmeta b{font-weight:600}
+#vr-modal .vrow .vact{margin-top:auto;display:flex;gap:8px}
+#vr-modal .vrow .vdel:hover{background:var(--red);color:#fff}
+#vr-modal .vrow .vdel.sys{outline:1px solid var(--yellow,#e6b450)}
+#vr-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
+#vr-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none;align-items:center}
+#vr-modal #vr-up:disabled{opacity:.5;cursor:default}
 #sk-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #sk-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;max-width:420px;text-align:center}
 #sk-modal .qr{background:#fff;border-radius:8px;padding:10px;margin:12px auto;width:240px;height:240px}
@@ -274,6 +301,20 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   </div>
   <div class="err" id="ar-err"></div>
   <div class="actions"><button id="ar-cancel">关闭</button><button id="ar-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">➕ 加入参考图</button></div>
+</div></div>
+<div id="vr-modal"><div class="box">
+  <h3>🎬 参考视频 — <span id="vr-grp" style="color:var(--purple)"></span><span class="cnt" id="vr-count"></span></h3>
+  <div class="hint">本组 prompt 的 video_refs:随重出本组时按序作为参考视频(--ref-video)传给视频生成模型,正文以 [Video N] 引用(编号=列表序号)。白模/前组尾段视频由流水线注入,本地上传的视频须在重出 prompt 时补写 [Video N] 说明句。</div>
+  <div class="sum" id="vr-sum"></div>
+  <div class="warn" id="vr-warn" style="display:none"></div>
+  <div class="list" id="vr-list"></div>
+  <div class="err" id="vr-err"></div>
+  <div class="actions">
+    <input type="file" id="vr-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" style="display:none">
+    <button id="vr-up" title="从本地上传一段视频(mp4/mov/webm,≤45MB),直接加入本组参考视频">⬆ 本地上传</button>
+    <button id="vr-gs" title="为本组单独选择参考视频上限更高的视频模型(渠道不变)">🎛 模型</button>
+    <button id="vr-close">关闭</button>
+  </div>
 </div></div>
 <div id="sk-modal"><div class="box">
   <h3>🎨 手绘参考图 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
@@ -572,6 +613,117 @@ $('#ar-file').onchange=async()=>{
   $('#ar-up').disabled=false;
 };
 
+// 🎬 视频:本组参考视频(组 prompt video_refs)弹窗——列出每个视频([Video N] 编号与正文引用同号)、可播放、
+// 可删(二次确认;流水线注入的白模/尾段视频强确认并带 force)、本地上传;顶部汇总总时长并按本组生效模型硬限判超,
+// 超限只提示由用户决定:删参考视频或「🎛 模型」给本组换上限更高的模型(genmedia 提交前另有同口径硬校验兜底)
+let VR_GRP='',VR_DATA=null;
+// 超限原因多语言拼装(服务端 vrefs_over_n / vrefs_over_s / vrefs_unsupported 三个布尔位;中文原因串另给 agent)
+function vrReason(d){
+  const parts=[];
+  if(d.vrefs_unsupported)parts.push(t('本组生效渠道/模型不支持参考视频'));
+  if(d.vrefs_over_n)parts.push(I18N.f('参考视频 {n} 个超过本组生效上限 {cap} 个',{n:(d.video_refs||[]).length,cap:d.vrefs_cap}));
+  if(d.vrefs_over_s)parts.push(I18N.f('参考视频总时长 {t}s 超过本组生效模型硬限 {cap}s',{t:fmtS(d.vrefs_total_s||0).replace(/s$/,''),cap:d.vrefs_cap_s}));
+  return parts.join('; ')+(d.vrefs_model_label?'('+d.vrefs_model_label+')':'');
+}
+const VR_KIND_LABELS={whitebox:'🧊 白模',continuation:'⏭ 前组尾段',upload:'⬆ 本地上传',other:'📎 流水线'};
+const fmtS=x=>(Math.round(x*10)/10).toFixed(1)+'s';
+function vrMsg(txt,ok){const e=$('#vr-err');e.textContent=txt;e.style.color=ok?'var(--green)':'var(--red)'}
+async function openVrefs(grp){
+  VR_GRP=grp;VR_DATA=null;
+  $('#vr-grp').textContent=grp;$('#vr-count').textContent='';vrMsg('');
+  $('#vr-sum').innerHTML='';$('#vr-warn').style.display='none';
+  $('#vr-list').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
+  $('#vr-modal').style.display='flex';
+  await vrReload();
+}
+async function vrReload(){
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(VR_GRP)+'/vrefs?v='+Date.now());
+    const d=await r.json();
+    if(!r.ok)throw new Error(r.status===404?t('该组 prompt 文件尚未生成'):(d.detail||r.status));
+    VR_DATA=d;vrRender(d);
+  }catch(e){$('#vr-list').innerHTML='';vrMsg(t('加载失败:')+e.message)}
+}
+function vrRender(d){
+  const proj=$('#project').value.trim()||'demo';
+  const rows=d.video_refs||[];
+  const capN=d.vrefs_cap,capS=d.vrefs_cap_s,total=d.vrefs_total_s||0;
+  const overN=capN!=null&&rows.length>capN,overS=capS!=null&&total>capS+0.05;
+  $('#vr-count').textContent=I18N.f('{n} 个',{n:rows.length})+(capN!=null?' / ≤'+capN:'');
+  $('#vr-sum').innerHTML=
+    `<span>${t('参考视频总时长:')}<b class="${overS?'over':(capS!=null?'ok':'')}">${fmtS(total)}</b>${capS!=null?` <span class="${overS?'over':''}">/ ≤${capS}s</span>`:''}${d.vrefs_unknown?` <span style="color:var(--dim)">(${I18N.f('{n} 个时长未知',{n:d.vrefs_unknown})})</span>`:''}</span>`+
+    `<span>${t('个数:')}<b class="${overN?'over':(capN!=null?'ok':'')}">${rows.length}</b>${capN!=null?` <span class="${overN?'over':''}">/ ≤${capN}</span>`:''}</span>`+
+    `<span style="color:var(--dim)">${t('生效模型:')}${esc(d.vrefs_model_label||'—')}${d.model_source==='group'?' · '+t('(组级覆盖)'):''}</span>`;
+  const w=$('#vr-warn');
+  if(d.vrefs_blocked){
+    w.style.display='';
+    w.textContent=I18N.f('⚠ {reason}。视频生成模型会拒绝提交,请二选一:① 在下方删除多余/过长的参考视频;② 点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5:≤10 个/总时长 ≤30s,渠道不变)。处理后重出本组。',{reason:vrReason(d)});
+  }else w.style.display='none';
+  if(!rows.length){$('#vr-list').innerHTML='<div class="ph">'+t('(本组暂无参考视频)')+'</div>';return}
+  $('#vr-list').innerHTML=rows.map(k=>{
+    const sys=!k.user_added;
+    const kind=VR_KIND_LABELS[k.kind]||k.kind;
+    const media=k.missing
+      ?`<div class="vph"><span class="big">⏳</span><span>${esc(k.kind==='continuation'?t('待前组出片'):t('文件不存在'))}</span></div>`
+      :`<video controls preload="metadata" src="${esc(k.url)}"></video>`;
+    const meta=[k.duration_s!=null?I18N.f('时长 <b>{d}</b>',{d:fmtS(k.duration_s)}):(k.missing?'':t('时长未知(ffprobe 不可用)')),
+      k.size?(k.size/1024/1024).toFixed(1)+' MB':''].filter(Boolean).join(' · ');
+    return `<div class="vrow" data-ref="${esc(k.ref)}">${media}
+      <div class="info">
+        <div><span class="vno" title="${esc(t('与 prompt 正文 [Video N] 引用同号'))}">[Video ${k.idx}]</span><span class="vkind">${esc(t(kind))}</span>${sys?`<span class="vkind" title="${esc(t('流水线注入的参考视频(非手动添加);流水线重跑时会按预算重新挂回'))}">${t('系统添加')}</span>`:''}</div>
+        <div class="vpath" title="${esc(k.ref)}">${esc(k.ref)}</div>
+        <div class="vmeta">${meta}</div>
+        <div class="vact"><button class="editbtn vdel${sys?' sys':''}" data-ref="${esc(k.ref)}" data-idx="${k.idx}" data-sys="${sys?'1':''}" data-kind="${esc(k.kind)}" title="${sys?esc(t('删除这个流水线注入的参考视频(需确认;重出本组生效)')):esc(t('删除这个参考视频(重出本组生效)'))}">🗑 ${t('删除')}</button></div>
+      </div></div>`;
+  }).join('');
+}
+$('#vr-list').addEventListener('click',async e=>{
+  const b=e.target.closest('.vdel');
+  if(!b)return;
+  const ref=b.dataset.ref,sys=b.dataset.sys==='1',n=b.dataset.idx,kind=b.dataset.kind;
+  const msg=sys
+    ?I18N.f('⚠ 参考视频 [Video {n}] 由流水线注入({kind}),不是手动添加的:\n{ref}\n\n删除后 prompt 正文中的 [Video N] 引用会自动重排,指向该视频的引用与其固定说明段会被移除;流水线重跑同步脚本时会按模型预算重新挂回(要彻底不用请换模型或关闭对应项目开关)。重出本组生效。\n\n确定删除?',{ref,n,kind:VR_KIND_LABELS[kind]||kind})
+    :I18N.f('确认移除这个参考视频 [Video {n}]?\n{ref}\n(本地上传的文件将一并删除;移除后随本组重出生效)',{ref,n});
+  if(!confirm(msg))return;
+  vrMsg('');
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/storyboard/vrefs/delete',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project:proj,ep:EP,grp:VR_GRP,ref,force:sys})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    VR_DATA=d;vrRender(d);
+    vrMsg(t('✅ 已删除参考视频')+((d.prompt_refs_shifted||d.prompt_refs_dropped)
+      ?' · '+I18N.f('prompt 引用已重排 {a} 处、移除 {b} 处',{a:d.prompt_refs_shifted||0,b:d.prompt_refs_dropped||0}):''),true);
+    load(true);
+  }catch(e){vrMsg(t('删除失败:')+e.message)}
+});
+$('#vr-up').onclick=()=>$('#vr-file').click();
+$('#vr-file').onchange=async()=>{
+  const f=$('#vr-file').files[0];
+  $('#vr-file').value='';
+  if(!f)return;
+  if(f.size>45*1024*1024){vrMsg(t('文件超过 45MB(方舟参考视频单文件上限),请先压缩'));return}
+  const proj=$('#project').value.trim()||'demo';
+  vrMsg(t('上传中…'),true);
+  $('#vr-up').disabled=true;
+  try{
+    const q='project='+encodeURIComponent(proj)+'&ep='+encodeURIComponent(EP)
+      +'&grp='+encodeURIComponent(VR_GRP)+'&filename='+encodeURIComponent(f.name);
+    const r=await fetch('/api/v1/storyboard/vrefs/upload?'+q,{method:'POST',body:f});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    VR_DATA=d;vrRender(d);
+    vrMsg(I18N.f('✅ 已上传并加入参考视频 [Video {n}];重出本组 prompt 时须补写该编号的说明句',{n:d.idx}),true);
+    load(true);
+  }catch(e){vrMsg(t('上传失败:')+e.message)}
+  $('#vr-up').disabled=false;
+};
+$('#vr-gs').onclick=()=>{$('#vr-modal').style.display='none';openGroupSettings(VR_GRP)};
+$('#vr-close').onclick=()=>$('#vr-modal').style.display='none';
+
 // 📄 Prompt:查看本组传给视频生成模型的文字 prompt(assets/prompts/<ep>/<grp>.json 的 video_prompt)
 // 字节/字符仅作长度参考,不设上限提示(各模型口径不同且非硬限制,2026-08-24 移除上限文案)
 const CAP_TYPE_LABELS={headline:'大标题',keyword:'关键词',location:'地名',time:'时间',skill:'招式',faction:'势力',other:'其他'};
@@ -643,6 +795,7 @@ async function openPrompt(grp){
     if(d.video_prompt_word_count)m.push(I18N.f('{n} 词',{n:d.video_prompt_word_count}));
     if((d.refs||[]).length)m.push(I18N.f('{n} 张参考图',{n:d.refs.length}));
     if((d.audio_refs||[]).length)m.push(I18N.f('{n} 段音频参考',{n:d.audio_refs.length}));
+    if((d.video_refs||[]).length)m.push(I18N.f('{n} 个参考视频',{n:d.video_refs.length}));
     $('#pv-meta').textContent=m.length?' · '+m.join(' · '):'';
   }catch(e){$('#pv-text').textContent=t('加载失败:')+e.message}
 }
@@ -692,6 +845,8 @@ document.addEventListener('click',async e=>{
   if(pb)return openPrompt(pb.dataset.grp);
   const rb=e.target.closest('.refpickbtn');
   if(rb)return openRefpick(rb.dataset.grp);
+  const vb=e.target.closest('.vrefbtn');
+  if(vb)return openVrefs(vb.dataset.grp);
   const cb=e.target.closest('.capbtn');
   if(cb)return openCaption(cb.dataset.grp);
   const gb=e.target.closest('.gnotebtn');
@@ -1065,6 +1220,7 @@ function groupCard(g,inner){
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
+      <button class="editbtn vrefbtn" data-grp="${esc(g.group_id)}" title="查看/播放/删除/上传本组参考视频(video_refs,[Video N] 编号与 prompt 正文同号),并核对总时长是否超过本组生效模型上限"${g.vrefs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🎬 视频${(g.video_refs||[]).length?`<span> ${g.video_refs.length}</span>`:''}</button>
       <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">${esc(t('🧊白模'))}</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
@@ -1072,6 +1228,7 @@ function groupCard(g,inner){
     ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
     ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组生效上限 {cap}({model}):点「🎛 模型」给本组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或手动删减本组参考图;处理后重出本组',{n:g.refs_total,cap:g.refs_cap,model:(g.group_settings||{}).model_label||''}))}</div>`:''}
+    ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots">${inner}</div>
@@ -1221,6 +1378,7 @@ function render(d){
         const nRefs=(g.user_refs||[]).length+(g.pipeline_refs||[]).length;
         if(nRefs)badges.push('🖼'+nRefs);
         if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
+        if((g.video_refs||[]).length)badges.push('🎞'+g.video_refs.length+(g.vrefs_blocked?'⚠':''));
         if(g.user_note)badges.push('📝');
         if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');
         if(nNarr)badges.push('🎙'+nNarr);
