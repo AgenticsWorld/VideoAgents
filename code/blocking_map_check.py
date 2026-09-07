@@ -3,6 +3,8 @@
 label_ok / scene_layout_pack_ok)。
 
 背景(WORKFLOW.md §4 Phase 4 / Phase 6,2026-08-19;2026-09-07 改版):
+  - 一个 SCN 只登记一个空间(2026-09-07,机检 scene_single_space):layout.json 不得含 landmarks_<space> /
+    views_<space> / orientation_<space> 子空间键,多空间须拆 ID 各出布局包;
   - environment-concept 每场景出「俯视空间布局图」`assets/concepts/scenes/<sid>/layout_top.png`
     + 「9 宫格多角度场景图」`grid_9views.png` + 文字事实源 `layout.json`(地标归一化坐标 xy、
     九格机位语义 views[1..9]);
@@ -87,6 +89,15 @@ def load_layout(proj_root: Path, sid: str):
         return None, [f"{sid}: layout.json 不是合法 JSON({e})"], warns
     if lay.get("schema_version") != LAYOUT_SCHEMA:
         warns.append(f"{sid}: layout.json schema_version={lay.get('schema_version')!r},期望 {LAYOUT_SCHEMA}")
+    # scene_single_space(2026-09-07):一个 SCN 只登记一个空间。layout.json 出现 landmarks_<space> /
+    # views_<space> / orientation_<space> 子空间键,即同一 ID 塞了第二个空间(前科 dzg6 SCN-0075/0076/0079:
+    # 机舱/后厨/新加坡街道各挂一套附加包,机检与动线只认主包,ep02 grp005/grp019 因此无法解析);
+    # 处置=回派 05-scenes/scene 拆 ID,再按新 ID 各出一套布局包,不得改脚本兼容子空间。
+    sub_keys = sorted(k for k in lay if isinstance(k, str)
+                      and (k.startswith("landmarks_") or k.startswith("views_") or k.startswith("orientation_")))
+    if sub_keys:
+        errs.append(f"{sid}: layout.json 含子空间键 {sub_keys}(scene_single_space:一个 SCN 只登记一个空间;"
+                    f"第二个空间须由 05-scenes/scene 另立 SCN 再出独立布局包,不得以附加包并入)")
     for key, default in (("layout_top", "layout_top.png"), ("grid_9views", "grid_9views.png")):
         f = d / (lay.get(key) or default)
         if not f.is_file():
