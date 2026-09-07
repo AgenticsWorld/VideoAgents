@@ -982,9 +982,9 @@ function gsChip(g){
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
   // 组角色/服装/生物三类 chip 独占头部下一行 .gcast(2026-08-30,原挤在 .ghead 首行太乱),置于 💡 光照行之上
-  // 组角色按动线图字母序展示「A = CHAR-id」(2026-08-27):字母与颜色同 code/render_blocking_map.py 的
-  // 数组顺序/调色板,悬停显 label 与动线句,供人工对照 blocking_maps/grpNNN.png 审核站位;
-  // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
+  // 组角色按 blocking_map 数组顺序展示彩色 chip(2026-09-07 改版:字母动线图已退役,不再显示「A = 」字母):
+  // 颜色同 modules/whitebox.py PALETTE 的数组顺序,与组卡「🧊白模」参考视频里的人物模型同色,
+  // 悬停显 label 与动线句;不在 blocking_map 的场次人物由白模调度继承位置
   const BM_COLORS=['#e63946','#1d78d8','#2ea043','#f59e0b','#8e44ad','#00acc1','#e91e63','#795548'];
   const bmChars=((g.blocking_map||{}).characters||[]).filter(c=>c&&c.id);
   // Older running services still expose the updated references: use them to
@@ -995,7 +995,7 @@ function groupCard(g,inner){
   if(bmChars.length){
     const seen=new Set(), parts=bmChars.map((c,i)=>{seen.add(c.id);
       const tip=[c.label,c.route_en].filter(Boolean).join(' · ');
-      return `<span title="${esc(tip)}"><b style="color:${BM_COLORS[i%BM_COLORS.length]}">${'ABCDEFGH'[i]||'?'}</b> = ${esc(c.id)}</span>`;});
+      return `<span title="${esc(tip)}"><i class="wb-color" style="background:${BM_COLORS[i%BM_COLORS.length]}"></i>${esc(c.label||c.id)} (${esc(c.id)})</span>`;});
     sceneCast.filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('场次人物，空间位置由白模调度继承'))}">${esc(id)} · ${t('场次人物')}</span>`));
     chars=parts.join('、');
   }else chars=esc(sceneCast.join('、'));

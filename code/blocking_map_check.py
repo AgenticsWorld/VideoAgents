@@ -1,56 +1,41 @@
 #!/usr/bin/env python3
-"""render_blocking_map.py — 分镜组人物动线图:把组级 blocking_map(逐角色 起点/动线/终点)
-标注渲染到该场景的俯视空间布局图上,并做 blocking_map 机检(blocking_map_present /
-blocking_map_landmarks_valid / scene_layout_pack_ok)。
+"""blocking_map_check.py — 分镜组人物动线数据机检(blocking_map_present / creature_blocking_ok /
+label_ok / scene_layout_pack_ok)。
 
-背景(WORKFLOW.md §4 Phase 4 / Phase 6,2026-08-19):
+背景(WORKFLOW.md §4 Phase 4 / Phase 6,2026-08-19;2026-09-07 改版):
   - environment-concept 每场景出「俯视空间布局图」`assets/concepts/scenes/<sid>/layout_top.png`
     + 「9 宫格多角度场景图」`grid_9views.png` + 文字事实源 `layout.json`(地标归一化坐标 xy、
     九格机位语义 views[1..9]);
   - storyboard 每个生成组草案写 `blocking_map`(组内每个出场角色的 start / path / end,均引用
     layout.json 的地标 id,可选 xy 微调;附动线句 `route_en`——内容语言随界面语言;
-    `label` = 该角色的短规范名,全集同一角色同一个词,下游 prompt 主体定义句与 Map markers 句逐字用它),
-    shot-planning 定稿组时继承进
+    `label` = 该角色的短规范名,全集同一角色同一个词,下游 prompt 主体定义句 `<label>@Image N`
+    与白模参考视频的人物图例逐字用它),shot-planning 定稿组时继承进
     shot_list.generation_groups[].blocking_map;
-  - 本脚本把标注画到 layout_top.png 上,产出 `directing/epNN/blocking_maps/<group_id>.png`
-    (storyboard 草案期 `--source storyboard` 写 `blocking_maps/draft/<scene_no>_g<NN>.png`),
-    prompt agent 把定稿图列入组 refs,视频模型按图中人物位置标注与动线安排画面(机检
-    layout_map_bound,脚本 code/layout_map_bound_check.py)。
-
-图上标注(2026-08-27 四订,**只画字母与动线,不带任何文字**):每条目一色;角色 ● 实心圆 = 起点(圆内
-      大写拉丁字母 A/B/C… = 条目序号 = blocking_map.characters 数组顺序,含生物条目)、■ 实心方块 = 终点;
-      **生物条目(id `CRE-*`,独立态,2026-08-27)◆ 菱形 = 起点、▲ 三角 = 终点**,与角色形状区分;
-      箭头折线 = 动线(经过 path 各点);无移动的条目只画起点标记。**不画图例、标题、角色名、CHAR 编号、
-      动线句**——视频模型读不准参考图里的小字,烤进图的文字反而是入画泄漏口;字母↔角色的对应
-      由 prompt 的 `Map markers: A = <label> (<CHAR id>), …` 句承担(机检 layout_map_bound)。
-      字体仅需拉丁大写字母,不依赖 CJK 字体。渲染尺寸 = 布局图尺寸(≥2560x1440,平台统一出图规格)。
-      本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/ 或自绘替代。
+  - **2026-09-07 起本脚本只做数据机检、不再渲染动线图**:原「把起点/动线/终点字母标注叠加到
+    layout_top.png 上产出 directing/epNN/blocking_maps/<grp>.png 并挂进组 refs」的流程退役——
+    人物在场景中的空间位置与动线改由 3D 白模参考视频(docs/whitebox.md,`code/render_whitebox.py`
+    产出 assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4})承担;组 prompt refs 直接挂干净的
+    `layout_top.png` + `grid_9views.png`(机检 layout_map_bound,脚本 code/layout_map_bound_check.py)。
+    blocking_map 数据本身仍是白模编译(modules/whitebox.py)与 route_en 逐字注入的事实源,故保留机检。
+    本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/。
 
 label 机检(label_ok,2026-08-27):每角色 `label` 必填,= 短规范名——≤8 个 CJK 字或 ≤3 个英文词;
       不得是代词(他/她/它/他们/她们/he/she/they…)、不得含括号/方括号/书名号/冒号/顿点等说明性标点
       (状态、服装、"画外"之类说明写进 route_en 或 continuity,不进 label);同一角色在本集所有组
-      的 label 必须是同一个词(prompt 主体定义句 `<label>@Image N` 与 Map markers 句逐字用它)。
+      的 label 必须是同一个词(prompt 主体定义句 `<label>@Image N` 逐字用它)。
 
 生物两态(creature_blocking_ok,2026-08-27):组 creatures_union 内每个生物必须二选一——
       ①**独立态**(牵引/拴着/独自入画/被处置):作为 blocking_map.characters[] 的一条(id `CRE-*`、label 短规范名、
-        自有 start/path/end/route_en,route 写清相对主人的位置),自占一个字母;
-      ②**骑乘态**(人在它背上):骑手条目 `mounted: "CRE-*"`,不占字母、不画(人兽同点同轨迹);
+        自有 start/path/end/route_en,route 写清相对主人的位置);
+      ②**骑乘态**(人在它背上):骑手条目 `mounted: "CRE-*"`(人兽同点同轨迹);
       同组同一生物不得两态并存;mounted 值须在 creatures_union 内;creatures_union 有生物却两态皆无 =
-      --strict 违规 / 否则 WARN(生物在图上无锚)。字母池 A–L 共 12 个(含生物条目)。
+      --strict 违规 / 否则 WARN(生物在空间中无锚)。
 
-全局站位表(station_table_ok,2026-09-03):组 `blocking_map.station_table[]` 每个占字母的条目(角色 + 独立态生物)一行,
-      六项必填——`id`(人物编号)、`zone_en`(所在区域)、`anchor{landmark, relation_en}`(固定参照物:layout.json 地标 id +
-      与它的关系)、`facing_en`(身体朝向)、`neighbors[{id, relation_en}]`(相邻人物,单人组可空数组)、`invariants[]`
-      (不能改变的位置关系,≥1 条);全表**导演台视角**(地标/人物相对关系),不得写画幅侧/景深层/镜头词
-      (画左/画右/前景/背景/screen-left/foreground/镜头/camera…)——那些是镜级 blocking.json `frame_position`/
-      `space_fragment_en` 的事(机检 camera_view_consistent,code/camera_view_check.py);下游 prompt 逐字拼入
-      `Blocking table:` 段(机检 station_table_bound,code/layout_map_bound_check.py)。缺表:--strict 违规 / 否则 WARN。
 用法:
-  python3 code/render_blocking_map.py --project <slug> --ep ep01                 # 定稿:shot_list 全组
-  python3 code/render_blocking_map.py --project <slug> --ep ep01 grp005 grp006   # 只渲染指定组
-  python3 code/render_blocking_map.py --project <slug> --ep ep01 --source storyboard   # 草案期
-  python3 code/render_blocking_map.py --project <slug> --ep ep01 --check-only    # 只机检不落图
-  python3 code/render_blocking_map.py --project <slug> --scene SCN-0012 --check-only  # 只查场景布局包
+  python3 code/blocking_map_check.py --project <slug> --ep ep01                 # 定稿:shot_list 全组
+  python3 code/blocking_map_check.py --project <slug> --ep ep01 grp005 grp006   # 只查指定组
+  python3 code/blocking_map_check.py --project <slug> --ep ep01 --source storyboard   # 草案期
+  python3 code/blocking_map_check.py --project <slug> --scene SCN-0012          # 只查场景布局包
 退出码:0=通过(可含 WARN),1=有违规。
 """
 import json
@@ -64,19 +49,11 @@ from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 MIN_PIXELS = 3_686_400          # 布局包出图规格下限(2560x1440 当量,平台统一出图规格;旧火山硬限 2026-09-01 已废止)
 LAYOUT_SCHEMA = "scene_layout.v1"
-PALETTE = [(230, 57, 70), (29, 120, 216), (46, 160, 67), (245, 158, 11),
-           (142, 68, 173), (0, 172, 193), (233, 30, 99), (121, 85, 72)]
-LETTERS = "ABCDEFGHIJKL"   # 2026-08-27:扩到 12 个,生物独立态条目也占字母
 # label_ok(2026-08-27):短规范名;代词与说明性标点均不合格(见文件头)
 _PRONOUNS = {"他", "她", "它", "他们", "她们", "它们", "我", "你", "我们", "你们",
              "he", "she", "it", "they", "him", "her", "them", "i", "we", "you", "me", "us"}
 _LABEL_BAD_PUNCT = re.compile(r"[()()\[\]【】「」『』《》〈〉<>{}:：;;,,、·/|\\]")
 LABEL_MAX_CJK, LABEL_MAX_WORDS = 8, 3
-# station_table_ok(2026-09-03):站位表是导演台视角,禁画面视角词
-_CAMERA_WORDS = re.compile(r"画左|画右|画中|画外|画幅|画面|前景|中景|背景|近景|远景|镜头|机位|入画|出画|"
-                           r"screen[- ]?(left|right)|frame[- ]?(left|right)|foreground|midground|background|"
-                           r"camera|off[- ]?screen|on[- ]?screen|in[- ]frame", re.I)
-STATION_FIELDS = ("id", "zone_en", "anchor", "facing_en", "neighbors", "invariants")
 
 
 def check_label(label) -> str | None:
@@ -153,15 +130,14 @@ def load_layout(proj_root: Path, sid: str):
 
 # ---------------------------------------------------------------- groups
 def iter_groups(proj_root: Path, ep: str, source: str):
-    """统一产出 (group_key, scene_id, characters_union|None, creatures_union|None, blocking_map|None, out_rel)。"""
+    """统一产出 (group_key, scene_id, characters_union|None, creatures_union|None, blocking_map|None)。"""
     if source == "shot_list":
         sl = json.loads((proj_root / "directing" / ep / "shot_list.json").read_text())
         for g in sl.get("generation_groups") or []:
             gid = g.get("group_id")
             if not gid:
                 continue
-            yield gid, g.get("scene_id"), g.get("characters_union"), g.get("creatures_union"), \
-                g.get("blocking_map"), f"directing/{ep}/blocking_maps/{gid}.png"
+            yield gid, g.get("scene_id"), g.get("characters_union"), g.get("creatures_union"), g.get("blocking_map")
     else:
         sb = json.loads((proj_root / "directing" / ep / "storyboard.json").read_text())
         for sc in sb.get("scenes") or []:
@@ -169,12 +145,11 @@ def iter_groups(proj_root: Path, ep: str, source: str):
             for g in sc.get("groups_draft") or []:
                 go = g.get("group_order")
                 key = f"{sno}_g{int(go):02d}" if go is not None else f"{sno}_g?"
-                yield key, g.get("scene_id") or sc.get("scene_id"), None, g.get("creatures"), \
-                    g.get("blocking_map"), f"directing/{ep}/blocking_maps/draft/{key}.png"
+                yield key, g.get("scene_id") or sc.get("scene_id"), None, g.get("creatures"), g.get("blocking_map")
 
 
 def resolve_pt(pt, landmarks: dict, gid: str, cid: str, what: str, errs: list):
-    """start/path[i]/end → 像素前的归一化 (x, y);地标 id 优先,xy 覆盖。"""
+    """start/path[i]/end → 归一化 (x, y);地标 id 优先,xy 覆盖。"""
     if pt is None:
         return None
     if isinstance(pt, str):
@@ -190,78 +165,6 @@ def resolve_pt(pt, landmarks: dict, gid: str, cid: str, what: str, errs: list):
         errs.append(f"{gid}/{cid}: {what} 既无合法地标也无 xy")
         return None
     return float(xy[0]), float(xy[1])
-
-
-def validate_station_table(gid: str, bm, routes, landmarks: dict, strict: bool = False):
-    """station_table_ok(2026-09-03):组级全局站位表六项齐全、id 集合 = 占字母条目、地标合法、无画面视角词。"""
-    errs, warns = [], []
-    st = bm.get("station_table") if isinstance(bm, dict) else None
-    ids = [r[0] for r in routes]
-    if not isinstance(st, list) or not st:
-        (errs if strict else warns).append(f"{gid}: blocking_map 缺 station_table(全局站位表:六项/条目,2026-09-03;回派 storyboard/shot-planning 补写)")
-        return errs, warns
-    seen = []
-    for i, row in enumerate(st):
-        if not isinstance(row, dict):
-            errs.append(f"{gid}: station_table[{i}] 不是对象")
-            continue
-        cid = row.get("id") or f"#{i}"
-        seen.append(cid)
-        if cid not in ids:
-            errs.append(f"{gid}/{cid}: station_table 条目不在 blocking_map.characters(占字母条目)内")
-        for k in STATION_FIELDS:
-            if k not in row:
-                errs.append(f"{gid}/{cid}: station_table 缺 {k}(六项必填:id/zone_en/anchor/facing_en/neighbors/invariants)")
-        texts = []
-        for k in ("zone_en", "facing_en"):
-            v = row.get(k)
-            if not (isinstance(v, str) and v.strip()):
-                errs.append(f"{gid}/{cid}: station_table.{k} 须为非空字符串")
-            else:
-                texts.append(v)
-        anc = row.get("anchor")
-        if not isinstance(anc, dict):
-            errs.append(f"{gid}/{cid}: station_table.anchor 须为 {{landmark, relation_en}}")
-        else:
-            lid = anc.get("landmark")
-            if lid not in landmarks:
-                errs.append(f"{gid}/{cid}: station_table.anchor.landmark {lid!r} 不在 layout.json#landmarks")
-            rel = anc.get("relation_en")
-            if not (isinstance(rel, str) and rel.strip()):
-                errs.append(f"{gid}/{cid}: station_table.anchor.relation_en 须为非空字符串(与固定参照物的关系)")
-            else:
-                texts.append(rel)
-        nb = row.get("neighbors")
-        if not isinstance(nb, list):
-            errs.append(f"{gid}/{cid}: station_table.neighbors 须为数组(单人组可为空数组)")
-        else:
-            for j, n in enumerate(nb):
-                if not isinstance(n, dict) or not n.get("id") or not (isinstance(n.get("relation_en"), str) and n["relation_en"].strip()):
-                    errs.append(f"{gid}/{cid}: station_table.neighbors[{j}] 须为 {{id, relation_en}}")
-                    continue
-                if n["id"] == cid:
-                    errs.append(f"{gid}/{cid}: station_table.neighbors 不得指向自己")
-                elif n["id"] not in ids:
-                    errs.append(f"{gid}/{cid}: station_table.neighbors[{j}].id {n['id']!r} 不在本组 blocking_map 条目内")
-                texts.append(n["relation_en"])
-            if len(ids) > 1 and not nb:
-                warns.append(f"{gid}/{cid}: 多人组 station_table.neighbors 为空,确认该角色确无相邻人物")
-        inv = row.get("invariants")
-        if not (isinstance(inv, list) and inv and all(isinstance(x, str) and x.strip() for x in inv)):
-            errs.append(f"{gid}/{cid}: station_table.invariants 须为 ≥1 条非空字符串(不能改变的位置关系)")
-        else:
-            texts += inv
-        for tx in texts:
-            m = _CAMERA_WORDS.search(tx)
-            if m:
-                errs.append(f"{gid}/{cid}: station_table 含画面视角词 {m.group(0)!r}(表是导演台视角:只写地标/人物相对关系;画幅侧/景深归镜级 frame_position)—— \"{tx}\"")
-    missing = [c for c in ids if c not in seen]
-    if missing:
-        errs.append(f"{gid}: station_table 缺条目 {missing}(每个占字母的角色/独立态生物各一行)")
-    dup = {c for c in seen if seen.count(c) > 1}
-    if dup:
-        errs.append(f"{gid}: station_table 条目重复 {sorted(dup)}")
-    return errs, warns
 
 
 def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=None, strict: bool = False):
@@ -296,7 +199,7 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
         route_en = ch.get("route_en")
         if not route_en or not isinstance(route_en, str):
             errs.append(f"{gid}/{cid}: 缺 route_en(动线句,prompt 逐字注入;语言随界面语言)")
-        # 纯英文校验已取消(2026-08-24 二订):内容语言随界面语言(三订起图例支持 CJK,route_en 上图)
+        # 纯英文校验已取消(2026-08-24 二订):内容语言随界面语言
         elif (len(route_en.split()) > 40) if route_en.isascii() else (len(route_en) > 60):
             warns.append(f"{gid}/{cid}: route_en 过长(限 ≤40 英文词或 ≤60 字),建议精简")
         bad = check_label(ch.get("label"))
@@ -323,127 +226,21 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
                 errs.append(f"{gid}/{rider}: mounted {cre} 不在组 creatures_union {sorted(cu)}")
         for cre in sorted(cu - cre_ids - set(mounted)):
             msg = (f"{gid}/{cre}: 生物在 creatures_union 却未登记站位——独立态入 blocking_map 条目或骑乘态由骑手 mounted"
-                   "(图上无锚,回派 storyboard/shot-planning)")
+                   "(空间中无锚,回派 storyboard/shot-planning)")
             (errs if strict else warns).append(msg)
-    if len(routes) > len(LETTERS):
-        errs.append(f"{gid}: 条目数 {len(routes)}(角色+生物)超出字母池上限 {len(LETTERS)}")
-    se, sw = validate_station_table(gid, bm, routes, landmarks, strict)
-    errs += se
-    warns += sw
     return routes, errs, warns
-
-
-# ---------------------------------------------------------------- render
-# 四订(2026-08-27):图上只画字母标记与动线,字体仅需拉丁大写字母;不再加载 CJK 字体
-_FONT_CANDIDATES = (
-    "/System/Library/Fonts/Helvetica.ttc",                               # macOS
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",              # Linux
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "C:/Windows/Fonts/arialbd.ttf",                                      # Windows
-)
-
-
-def _font(size: int):
-    from PIL import ImageFont
-    for cand in _FONT_CANDIDATES:
-        try:
-            return ImageFont.truetype(cand, size)
-        except Exception:  # noqa: BLE001
-            continue
-    return ImageFont.load_default()
-
-
-def _arrow_head(draw, p0, p1, size, color):
-    ang = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
-    a1, a2 = ang + math.radians(150), ang - math.radians(150)
-    pts = [p1, (p1[0] + size * math.cos(a1), p1[1] + size * math.sin(a1)),
-           (p1[0] + size * math.cos(a2), p1[1] + size * math.sin(a2))]
-    draw.polygon(pts, fill=color, outline=(255, 255, 255))
-
-
-def render(layout_png: Path, routes, out_png: Path):
-    """把动线标注画到布局图上:只有字母圆点/方块与箭头折线,无任何文字图例(2026-08-27 四订)。
-    返回 (尺寸, WARN 列表);标记按数组逆序绘制(A 在最上层),近乎重合的标记报 WARN。"""
-    from PIL import Image, ImageDraw
-    im = Image.open(layout_png).convert("RGBA")
-    W, H = im.size
-    ov = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(ov)
-    R = max(18, int(W * 0.018))          # 标记半径
-    LW = max(6, int(W * 0.005))          # 线宽
-    fnt = _font(int(R * 1.3))
-    to_px = lambda p: (p[0] * W, p[1] * H)  # noqa: E731
-
-    def letter_at(x, y, letter):
-        bb = d.textbbox((0, 0), letter, font=fnt)
-        d.text((x - (bb[2] - bb[0]) / 2 - bb[0], y - (bb[3] - bb[1]) / 2 - bb[1]), letter,
-               fill=(255, 255, 255, 255), font=fnt)
-
-    warns = []
-    # 先画全部动线,再按**逆序**画标记:数组靠前(A)的角色压在上面,不被后序角色盖住
-    for idx, (_cid, _label, start, path, end, _route, _kind) in enumerate(routes):
-        col = PALETTE[idx % len(PALETTE)]
-        pts = [to_px(p) for p in ([start] if start else []) + path + ([end] if end else [])]
-        if len(pts) >= 2:
-            # 末段收短到终点方块边缘,箭头露在方块外
-            (x0, y0), (x1, y1) = pts[-2], pts[-1]
-            seg = math.hypot(x1 - x0, y1 - y0) or 1.0
-            cut = min(R * 1.25, seg * 0.6)
-            tip = (x1 - (x1 - x0) / seg * cut, y1 - (y1 - y0) / seg * cut)
-            line = pts[:-1] + [tip]
-            d.line(line, fill=(255, 255, 255, 230), width=LW + 6, joint="curve")
-            d.line(line, fill=col + (255,), width=LW, joint="curve")
-            _arrow_head(d, pts[-2], tip, R * 1.4, col + (255,))
-    markers = []   # (letter, x, y) 用于重叠检测
-    def marker(kind, is_end, x, y, col):
-        fill, ol = col + (255,), (255, 255, 255, 255)
-        if kind == "creature":
-            r = R * 1.25
-            if is_end:   # ▲ 三角(字母略下移到三角重心)
-                d.polygon([(x, y - r), (x + r, y + r * 0.8), (x - r, y + r * 0.8)], fill=fill, outline=ol, width=4)
-            else:        # ◆ 菱形
-                d.polygon([(x, y - r), (x + r, y), (x, y + r), (x - r, y)], fill=fill, outline=ol, width=4)
-        elif is_end:     # ■ 方块
-            d.rectangle([x - R, y - R, x + R, y + R], fill=fill, outline=ol, width=4)
-        else:            # ● 圆
-            d.ellipse([x - R, y - R, x + R, y + R], fill=fill, outline=ol, width=4)
-
-    for idx in range(len(routes) - 1, -1, -1):
-        _cid, _label, start, _path, end, _route, kind = routes[idx]
-        col = PALETTE[idx % len(PALETTE)]
-        letter = LETTERS[idx]
-        if start:
-            x, y = to_px(start)
-            marker(kind, False, x, y, col)
-            letter_at(x, y, letter)
-            markers.append((letter, x, y))
-        if end:
-            x, y = to_px(end)
-            marker(kind, True, x, y, col)
-            letter_at(x, y + (R * 0.25 if kind == "creature" else 0), letter)
-            markers.append((letter, x, y))
-    for i, (la, xa, ya) in enumerate(markers):
-        for lb, xb, yb in markers[i + 1:]:
-            if la != lb and math.hypot(xa - xb, ya - yb) < R * 1.2:
-                warns.append(f"标记 {la} 与 {lb} 几乎重合(距离 < 0.6 标记直径),字母可能被遮挡;"
-                             "建议 storyboard/shot-planning 给靠后的角色 xy 微调错开")
-    out = Image.alpha_composite(im, ov).convert("RGB")
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    out.save(out_png, optimize=True)
-    return out.size, sorted(set(warns))
 
 
 # ---------------------------------------------------------------- main
 def main():
     args, proj_root = parse_args(
-        "分镜组人物动线图渲染 + blocking_map / scene_layout_pack 机检",
+        "分镜组人物动线数据机检(blocking_map / scene_layout_pack)",
         configure=lambda ap: (
             ap.add_argument("groups", nargs="*", help="只处理指定组(shot_list 用 grpNNN;storyboard 用 S03_g01),缺省全部"),
             ap.add_argument("--source", choices=("shot_list", "storyboard"), default="shot_list",
                             help="读 shot_list.generation_groups(定稿,默认)或 storyboard.groups_draft(草案)"),
             ap.add_argument("--scene", action="append", default=[], help="只机检指定场景布局包(可多次),不处理分组"),
-            ap.add_argument("--check-only", action="store_true", help="只机检不渲染"),
+            ap.add_argument("--check-only", action="store_true", help="兼容旧用法,无实际作用(本脚本只机检,2026-09-07 起不再渲染)"),
             ap.add_argument("--strict", action="store_true", help="组缺 blocking_map 也按违规(新产出批次用)"),
         ),
     )
@@ -466,7 +263,7 @@ def main():
         n = 0
         prev_scene, prev_end = None, {}     # 跨组动线连续:同场景相邻组 start 须接前组 end
         label_of = {}                        # label_ok:同一角色全集 label 须同一个词(cid → (label, 首见组))
-        for gid, sid, chars, cres, bm, out_rel in iter_groups(proj_root, args.ep, args.source):
+        for gid, sid, chars, cres, bm in iter_groups(proj_root, args.ep, args.source):
             if only and gid not in only:
                 prev_scene, prev_end = sid, {}   # 跳过的组不作连续性基准
                 continue
@@ -485,7 +282,7 @@ def main():
                 prev_scene, prev_end = sid, {}
                 continue
             if lay is None:
-                all_errs.append(f"{gid}: 场景 {sid} 无可用布局包,无法渲染动线图")
+                all_errs.append(f"{gid}: 场景 {sid} 无可用布局包,无法核对动线地标")
                 continue
             landmarks = {lm["id"]: lm for lm in lay.get("landmarks") or [] if lm.get("id")}
             routes, e, w = validate_map(gid, bm, chars, landmarks, cres, args.strict)
@@ -510,16 +307,6 @@ def main():
                             (all_warns if note else all_errs).append(msg)
             prev_scene = sid
             prev_end = {cid: (end or start) for cid, _l, start, _p, end, _r, _k in routes}
-            if e or args.check_only:
-                continue
-            layout_png = proj_root / "assets" / "concepts" / "scenes" / sid / (lay.get("layout_top") or "layout_top.png")
-            try:
-                size, rw = render(layout_png, routes, proj_root / out_rel)
-                all_warns += [f"{gid}: {m}" for m in rw]
-                ncre = sum(1 for r in routes if r[6] == "creature")
-                print(f"RENDERED {out_rel} {size[0]}x{size[1]} ({len(routes) - ncre} 角色" + (f" + {ncre} 生物" if ncre else "") + ")")
-            except Exception as ex:  # noqa: BLE001
-                all_errs.append(f"{gid}: 渲染失败 {ex}")
         if n == 0:
             all_warns.append(f"{args.source} 无匹配的生成组")
     for w in all_warns:

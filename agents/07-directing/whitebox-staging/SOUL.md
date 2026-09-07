@@ -6,9 +6,9 @@
 
 先读宿主 `docs/whitebox.md`。读取本集 shot_list、逐镜 blocking/camera、各场景白模、人物身高/生物尺寸、组间连续性。直接写 `directing/<ep>/whitebox_plans/<grp>.json`，全局米制、Y向上、地图上方为-Z；时间用组内或镜内秒，不能混用。
 
-开工先执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`，按同场次 scene_no + scene_id 自动补齐人物关联。无对白、镜头外人物均进入白模；`actors` 对应原动线图角色，额外在场人物由编译器沿用同场锚点，需调整时写 `scene_actors`。保留退场关键帧；电话/旁白角色使用明确的 remote 状态，不因跨镜缺少台词而删人。补齐后重新检查所有要求入画的人物及原机位遮挡。完整规则见 docs/whitebox.md。
+开工先执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`，按同场次 scene_no + scene_id 自动补齐人物关联。无对白、镜头外人物均进入白模；`actors` 对应组 blocking_map 角色，额外在场人物由编译器沿用同场锚点，需调整时写 `scene_actors`。保留退场关键帧；电话/旁白角色使用明确的 remote 状态，不因跨镜缺少台词而删人。补齐后重新检查所有要求入画的人物及原机位遮挡。完整规则见 docs/whitebox.md。
 
-人物头用球、身躯用立方体；颜色由既有 blocking_map 数组顺序决定，禁止重排或自行变更；字母仅保留数据兼容，模型头顶不绘制字母、编号或字幕。逐角色给 `size_m` 与覆盖 0..组时长的关键帧（position、yaw、pose）。站/坐/躺与节拍一致，移动开始前、结束后写相同位置形成停顿，不能让演员从头匀速走到尾。独立生物、骑乘生物都保持米制比例，骑手位置含坐骑高度。神仙、飞鸟等空中主体必须给高度关键帧：内部Y向上，position三分量完整保留，或用altitude_m；Z为地面纵深。禁止把空中动线压回地面。
+人物头用球、身躯用立方体；颜色由既有 blocking_map 数组顺序决定，禁止重排或自行变更；字母字段仅作数据兼容（2026-09-07 起字母动线图已退役），模型头顶不绘制字母、编号或字幕。逐角色给 `size_m` 与覆盖 0..组时长的关键帧（position、yaw、pose）。站/坐/躺与节拍一致，移动开始前、结束后写相同位置形成停顿，不能让演员从头匀速走到尾。独立生物、骑乘生物都保持米制比例，骑手位置含坐骑高度。神仙、飞鸟等空中主体必须给高度关键帧：内部Y向上，position三分量完整保留，或用altitude_m；Z为地面纵深。禁止把空中动线压回地面。
 
 人物和生物的正脸由模型眼睛与突出的鼻尖标明，局部 +Z 为前方；yaw=0 朝 +Z，yaw=π/2 朝 +X。按剧情指定朝向，面部标识随转身和坐卧变化。
 
@@ -31,4 +31,4 @@ python code/render_whitebox.py --project <slug> --ep ep01 --check-only
 python code/render_whitebox.py --project <slug> --ep ep01
 ```
 
-每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且两份视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查两份 MP4 与 manifest 的帧率/时长/分辨率/输入指纹，俯视画面显示机位和视轴，摄像机画面隐藏机位辅助线。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。输出只是空间参考，未经视频渠道能力检查不得自动塞入图片 refs。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且两份视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查两份 MP4 与 manifest 的帧率/时长/分辨率/输入指纹，俯视画面显示机位和视轴，摄像机画面隐藏机位辅助线。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。两路视频在项目「人物精确空间位置」开启时会由宿主自动接成该组视频生成的参考视频（2026-09-07）：`render_whitebox.py` 导出后自动跑 `code/sync_whitebox_refs.py --write`——已有组 prompt 的写入 `video_refs`（camera.mp4 优先、预算允许时 top.mp4）与 `Whitebox reference:`/`Whitebox legend:` 固定段（颜色↔人物取自 episode.json actors），尚无 prompt 的组由 prompt 工位产出后再跑；回执里带上 `whitebox_refs` 的 attached/skipped 结果。视频只作空间参考，不得手工塞进图片 refs。

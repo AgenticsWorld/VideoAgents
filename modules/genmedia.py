@@ -1066,7 +1066,7 @@ def _avatar_asset_uri(path: str) -> str | None:
     且对人脸一致性至关重要;按文件内容 sha256 匹配,与图片所在目录无关。
     库启用时,人物图(assets/concepts/characters/**)未命中不再静默降级 base64,
     直接抛错交人工定夺(2026-08-31 dzg6 前科:静默降级致 grp003-005 人脸全崩);
-    非人物图(动线图/场景九宫格等)未命中照旧返回 None 走内联。"""
+    非人物图(场景俯视图/九宫格等)未命中照旧返回 None 走内联。"""
     if not _avatar_lib_enabled():
         return None
     must = _is_portrait_ref(path)

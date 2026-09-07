@@ -8,7 +8,7 @@
 
 运行链：environment-concept 布局包 → **05-scenes/scene-modeling** 场景白模 → shot-planning + blocking + camera-movement + continuity-planning → **07-directing/whitebox-staging** 数值时间线和参考视频 → 分镜确认/视频生成。
 
-新项目由 orchestrator 在有布局包且要求白模参考视频时添加上述工单，场景工单以 SCN-ID 为粒度，调度工单以 ep 为粒度，逐组按依赖先后执行。已有项目可直接编译，不修改其分镜、动线或视频。
+项目「输出设置 → 人物精确空间位置」开启（默认开）时，orchestrator 在有布局包后自动添加上述工单（workflow.yaml `whitebox_requested` = 该开关，用户工单单独要求白模参考视频时同此），场景工单以 SCN-ID 为粒度，调度工单以 ep 为粒度，逐组按依赖先后执行。已有项目可直接编译，不修改其分镜、动线或视频。
 
 ## 坐标、比例与场景资产
 
@@ -48,7 +48,7 @@
 
 编译器给遗漏人物沿用同场次最近前组的尾位置/姿态；无前组锚点才用后组首锚，并记录推断。关键帧 `visible:false` 的退场状态继续继承，不让已离场人物复活；仅在画外不等于退场。补充人物的精确轨迹写入计划 `scene_actors`（结构与 actors 一样），不改变旧动线图字母；找不到同场次空间锚点则报错，不放到原点凑数。组级 `scene_presence: {"CHAR-…":{"state":"absent|remote|present","reason":"…"}}` 可明确整组的缺席、远程声音或在场状态；镜内进退场仍用关键帧。只有完成场次同步的组才启用新名单规则：无 `visibility_override_reason` 的摄像机名单被忽略；未迁移的旧组保留原名单，避免在本次选择范围外改镜头。
 
-原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。字母/颜色与 `code/render_blocking_map.py` 相同，按组内数组顺序；不是跨所有组的永久颜色。骑乘生物与骑手同色、不另占字母。字母只保留在数据中供兼容旧动线图，白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
+原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。颜色按组内 blocking_map 数组顺序取自固定调色板（与分镜预览组卡的人物 chip 同色），不是跨所有组的永久颜色。骑乘生物与骑手同色。字母字段只保留在数据中作兼容（2026-09-07 起字母动线图 `directing/<ep>/blocking_maps/` 已退役，人物空间位置参考改由本白模视频承担），白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
 
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
@@ -126,5 +126,15 @@ python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --force --fps 24
 API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GET `/<ep>`；既有 POST `/<ep>/exports/<gid>` 和 GET 同路径状态接口保留供兼容调用，预览页不再触发。路径标识严格限定，禁止目录穿越。预览 GET 不写项目，也不会因用户打开页面而重复渲染。旧服务尚未重启时，前端仍可读取已编译产物预览；自动保存由 Agent 执行宿主 CLI，不依赖用户页面。
 
 `dzg6/ep01` 的8个场景已按其俯视图写入带比例依据的白模。它们位于用户项目 data 目录（按仓库约定不提交）。数值轨迹尚有遗留推断，不能把粗模视为最终镜头调度。最终视频模型画面仍在原分镜组卡中，白模输出不会自动上传到生成渠道。
+
+## 接入视频生成（2026-09-07）
+
+项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
+
+- `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前，预算允许时 `top.mp4`（俯视，`[Video 2]`）紧随；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s（组长 >7.5s 只挂 camera），2.5 ≤10 个且 ≤30s，comfyui/runninghub 不支持参考视频则不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
+- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（两路视频各自作用：camera-view 定机位/构图/人物画面位置/景深/朝向/节奏，top-down 只用于理解空间关系、不得作为视角）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；深色摄像机盒=摄像机、其射线=镜头方向，仅俯视有）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
+- video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（组间续接仍走尾帧图 `--ref`）。
+
+尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。
 
 参考实现 API：[Three.js OrbitControls](https://threejs.org/docs/pages/OrbitControls.html)、[WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html)。

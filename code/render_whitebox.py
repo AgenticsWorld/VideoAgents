@@ -8,6 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from _common import parse_args
 from modules.whitebox import compile_episode, component
 from modules.whitebox_export import ensure_videos
+from modules.whitebox_refs import sync_episode
 
 
 def main():
@@ -50,6 +51,15 @@ def main():
     result=ensure_videos(base,episode,sorted(selected) if scoped else None,
                          width=args.width,height=args.height,fps=args.fps,progress=progress,force=args.force)
     print(json.dumps({'videos':result,'directory':f'assets/whitebox/{args.ep}/'},ensure_ascii=False),flush=True)
+    # 白模视频 → 组视频生成参考视频自动接线(2026-09-07,仅「人物精确空间位置」开启时):
+    # 已有组 prompt 的写 video_refs + Whitebox reference 段;尚无 prompt 的组由 prompt 工位产出后再跑 sync_whitebox_refs.py --write
+    from _common import spatial_blocking_enabled
+    if spatial_blocking_enabled(base):
+        sync=sync_episode(base,args.ep,sorted(selected) if scoped else None,write=True)
+        print(json.dumps({'whitebox_refs':{'updated_prompts':sync['updated_prompts'],
+                          'attached':[r['group_id'] for r in sync['groups'] if r['video_refs']],
+                          'skipped':{r['group_id']:r['skipped_reason'] for r in sync['groups'] if r['skipped_reason']},
+                          'errors':sync['errors']}},ensure_ascii=False),flush=True)
     return 0
 
 

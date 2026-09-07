@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from modules.whitebox import compile_episode, component, load_scene, read
 from modules.whitebox_export import render_videos
+from modules.whitebox_refs import sync_episode
 from services.runtime import core
 
 router=APIRouter(prefix='/projects/{project}/whitebox',tags=['artifacts'])
@@ -77,7 +78,10 @@ async def start_export(project: str,ep: str,gid: str):
             def progress(_,pct):
                 with _lock:_jobs[key]['progress']=pct
             records=render_videos(base,data,[gid],progress=progress)
-            with _lock:_jobs[key]={'status':'complete','progress':100,'files':file_links(project,records[0])}
+            # 与 render_whitebox.py 同步:导出即接成该组视频生成的参考视频(仅「人物精确空间位置」开启,2026-09-07)
+            sync=sync_episode(base,ep,[gid],write=True) if (read(base/'settings.json',{}) or {}).get('output',{}).get('spatial_blocking',True) is not False else None
+            with _lock:_jobs[key]={'status':'complete','progress':100,'files':file_links(project,records[0]),
+                                   'whitebox_refs':(sync['groups'][0] if sync and sync['groups'] else None)}
         except Exception as e:
             with _lock:_jobs[key]={'status':'failed','error':str(e)}
     threading.Thread(target=worker,daemon=True,name=f'whitebox-{gid}').start()

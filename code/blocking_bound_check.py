@@ -2,12 +2,10 @@
 """blocking_bound 机检:核对组 prompt 的每镜空间位置句是否逐字拼入 blocking 的站位片段。
 
 规则(WORKFLOW §7A / prompt SOUL 空间站位注入,2026-07-23):
-  - blocking.json 每个入画角色带 `space_fragment_en`(站位片段,由 blocking agent 产出;内容语言随界面语言,
-    2026-08-24,句内地标词逐字取 layout.json name_en、其语言亦随界面语言(2026-08-24 二订)
-    ——本脚本仅做逐字比对,语言无关);**2026-09-03 起该片段是「画面视角站位句」**:按本镜机位描述
-    画幅侧/景深层/对镜朝向/与同框人物的相对位置 + 一个地标词,不写罗盘方位;其与机位、组级
-    blocking_map 的一致性由 code/camera_view_check.py(camera_view_consistent)核,组级不变量由
-    station_table(code/layout_map_bound_check.py ⑧ station_table_bound)核,本脚本不查内容;
+  - blocking.json 每个入画角色带 `space_fragment_en`(站位片段:场景地标关系
+    + 屏侧方位 + 朝向,由 blocking agent 产出;内容语言随界面语言,2026-08-24,
+    句内地标词逐字取 layout.json name_en、其语言亦随界面语言(2026-08-24 二订)
+    ——本脚本仅做逐字比对,语言无关);
   - prompt agent 写组级 video_prompt 时,该镜对应 Shot 段必须**逐字**包含该镜每个
     入画角色的 space_fragment_en(比对忽略大小写与连续空白,其余一字不差)——
     严禁自行改写站位散文,自由翻译就是空间漂移入口(前科:ep01 grp007→grp008

@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读本镜的 storyboard 草描与 `shot_list.json` 条目(景别、机位、出场角色),细化为精确构图:主体在九宫格的位置、水平线/垂直线关系。
-2. 分层:前景/中景/背景各放什么(引用 blocking 的人物与 prop/scene 元素),写明遮挡与框架关系;人物的左右与前后景**按该镜 blocking.json `frame_position`(side/depth,blocking 已按机位从俯视站位换算)细化落点,不得反号**(2026-09-03)——认为其与机位不符时退回 blocking,不自行改侧。
+2. 分层:前景/中景/背景各放什么(引用 blocking 的人物与 prop/scene 元素),写明遮挡与框架关系。
 3. 定视线方向与留白:人物看向哪、视线空间(lead room)与头顶空间(headroom)留多少;对话镜标注正反打的视线匹配。
 4. 遵守 `bible/aspect_ratio.json` 的画幅与安全区:关键信息不进平台 UI 遮挡区。
 5. 产出 `directing/epNN/shots/<shot_id>/composition.json`,可执行性交 visual-qa 预审。

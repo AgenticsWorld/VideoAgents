@@ -1,33 +1,28 @@
 #!/usr/bin/env python3
-"""layout_map_bound 机检:核对组 prompt 是否挂上并绑定了「人物动线俯视图 + 9 宫格场景图」,
+"""layout_map_bound 机检:核对组 prompt 是否挂上并绑定了「场景干净俯视图 + 9 宫格场景图」,
 且逐角色动线句 route_en 逐字拼入 video_prompt。
 
-规则(WORKFLOW.md §7A / prompt SOUL「空间布局按组确定性注入」,2026-08-19):
+规则(WORKFLOW.md §7A / prompt SOUL「空间布局按组确定性注入」,2026-08-19;2026-09-07 改版):
   - shot_list.generation_groups[].blocking_map 非空的组:
-      ① refs 必含该组动线图 `directing/epNN/blocking_maps/<grp>.png`(由 code/render_blocking_map.py
-         从 storyboard/shot-planning 的 blocking_map 渲染,文件必须存在);
+      ① refs 必含该场景干净俯视空间布局图 `assets/concepts/scenes/<sid>/layout_top.png`
+         (environment-concept 布局包原图,直接引用、不叠加人物位置标注;场景有变体时可为
+         layout_top_<cond>.png,同目录即可;文件必须存在)——**2026-09-07 起原「本组人物动线俯视图
+         directing/epNN/blocking_maps/<grp>.png」退役**,人物空间位置与动线改由 3D 白模参考视频承担
+         (docs/whitebox.md),refs 里出现 blocking_maps/ 路径按违规报;
       ② refs 必含该场景 9 宫格图 `assets/concepts/scenes/<sid>/grid_9views.png`
          (场景有昼夜等变体时可为 grid_9views_<cond>.png,同目录即可);
-      ③ video_prompt 含固定空间布局声明句:引用动线图的 `[Image N]`(N=refs 下标+1)且同句含
+      ③ video_prompt 含固定空间布局声明句:引用俯视图的 `[Image N]`(N=refs 下标+1)且同句含
          "top-down layout map"、引用 9 宫格图的 `[Image M]` 且同句含 "3x3 multi-angle";
-         并含"do not render the map"类免责(防止把箭头/字母标记画进成片);
+         并含"do not render the map"类免责(防止把平面图画进成片);
          **map_reference_only(2026-09-03,用户指令「不要将俯视图直接用于画面,俯视图仅用于空间位置参考」)**:
-         另含一句同句带动线图 `[Image N]` 与 "spatial position reference only" 的用途限定句
+         另含一句同句带俯视图 `[Image N]` 与 "spatial position reference only" 的用途限定句
          (SOUL 固定句 `Map usage: [Image N] is a spatial position reference only, never the picture — …`),
          且 `Global constraints:` 段含 "bird's-eye"(`no top-down or bird's-eye view, no map or floor-plan imagery`);
       ④ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
-      ⑤ 图上标记映射句:每个角色按 blocking_map.characters 数组顺序对应字母 A/B/C…,video_prompt 须含
-         "<字母> = <label> (<CHAR id>)"——label 逐字取 blocking_map.characters[].label(短规范名);
-         2026-08-27 四订起俯视图上**只有字母与动线、无任何文字**,字母↔角色的对应完全靠这句,
-         本机检只读 prompt 文本、不读图;
-      ⑥ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(角色主体定义句与 Map markers 句、
-         动线图字母三者以 label 为唯一键;label 换词 = 模型对不上号);
-      ⑦ 生物独立态条目(id CRE-*,2026-08-27)与角色同规则:占字母、Map markers 句写 "<字母> = <label> (<CRE id>)"、
-         主体定义句 "<label>@Image N" 指向其 sheet;骑乘态(骑手 mounted)不占字母、不入此句;
-      ⑧ 全局站位表逐字(station_table_bound,2026-09-03):video_prompt 含固定锚点 `Blocking table:`,且组
-         `blocking_map.station_table[]` 每条目的 zone_en / anchor.relation_en / facing_en / neighbors[].relation_en /
-         invariants[] 全部逐字命中(比对忽略大小写与连续空白)——站位表是导演台视角的不变量,每镜 Shot 段的
-         画面视角站位句(space_fragment_en,机检 blocking_bound)必须与之相容;组缺 station_table 按 WARN(--strict FAIL);
+      ⑤ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(label 逐字取 blocking_map.characters[].label
+         短规范名,全集同角色同词;骑乘态生物并入骑手条目、独立态生物条目同规则);
+      (原 ⑤ `Map markers: A = <label> (<CHAR id>)` 字母映射句与 ⑧ `Blocking table:` 全局站位表段随动线标注图
+       一并退役,2026-09-07:prompt 不再写,存量 prompt 含有也不报错)
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL);场景无布局包按 WARN 并提示回派。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -44,11 +39,9 @@ from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 MAP_KEY = "top-down layout map"
 GRID_KEY = "3x3 multi-angle"
-TABLE_KEY = "Blocking table:"   # 全局站位表固定锚点(2026-09-03)
 DISCLAIM_RE = re.compile(r"do not (render|draw|reproduce) the map", re.I)
 REF_ONLY_KEY = "spatial position reference only"     # map_reference_only(2026-09-03):俯视图仅作空间位置参考句
 BIRDSEYE_RE = re.compile(r"bird'?s[- ]?eye", re.I)     # Global constraints 须含 no top-down or bird's-eye view
-LETTERS = "ABCDEFGHIJKL"   # 与 code/render_blocking_map.py 一致:blocking_map.characters 数组顺序 → 图上字母(含生物独立态条目,2026-08-27)
 
 
 def norm(s: str) -> str:
@@ -74,15 +67,20 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
     sid = g.get("scene_id") or ""
     refs = [r for r in (pj.get("refs") or []) if isinstance(r, str)]
     vp = pj.get("video_prompt", "")
-    map_rel = f"directing/{ep}/blocking_maps/{gid}.png"
-    # ① 动线图
-    if not (proj_root / map_rel).is_file():
-        errs.append(f"{gid}: 动线图未落盘 {map_rel}(先跑 code/render_blocking_map.py)")
-    map_idx = next((i for i, r in enumerate(refs) if r == map_rel), None)
-    if map_idx is None:
-        errs.append(f"{gid}: refs 未列入动线图 {map_rel}")
-    # ② 9 宫格
     sdir = proj_root / "assets" / "concepts" / "scenes" / sid
+    # 退役的动线标注图(2026-09-07):不得再挂
+    for r in refs:
+        if "/blocking_maps/" in r:
+            errs.append(f"{gid}: refs 含已退役的动线标注图 {r}(2026-09-07 起改挂干净 layout_top.png,人物位置由白模参考视频承担)")
+    # ① 干净俯视图
+    map_idx = next((i for i, r in enumerate(refs)
+                    if r.startswith(f"assets/concepts/scenes/{sid}/layout_top") and r.endswith(".png")), None)
+    if map_idx is None:
+        errs.append(f"{gid}: refs 未列入场景干净俯视图 assets/concepts/scenes/{sid}/layout_top*.png"
+                    + ("" if sdir.is_dir() and any(sdir.glob("layout_top*.png")) else "(场景无布局包,回派 environment-concept)"))
+    elif not (proj_root / refs[map_idx]).is_file():
+        errs.append(f"{gid}: refs 所列俯视图不存在 {refs[map_idx]}")
+    # ② 9 宫格
     grid_idx = next((i for i, r in enumerate(refs)
                      if r.startswith(f"assets/concepts/scenes/{sid}/grid_9views") and r.endswith(".png")), None)
     if grid_idx is None:
@@ -97,9 +95,9 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
     if map_idx is not None:
         tag = f"[Image {map_idx + 1}]"
         if not any(tag in s and MAP_KEY in s.lower() for s in sents):
-            errs.append(f"{gid}: video_prompt 缺动线图绑定句(同句含 {tag} 与 \"{MAP_KEY}\")")
+            errs.append(f"{gid}: video_prompt 缺俯视图绑定句(同句含 {tag} 与 \"{MAP_KEY}\")")
         if not DISCLAIM_RE.search(vp):
-            errs.append(f"{gid}: video_prompt 缺 \"do not render the map ...\" 免责句(防标记入画)")
+            errs.append(f"{gid}: video_prompt 缺 \"do not render the map ...\" 免责句(防平面图入画)")
         # map_reference_only(2026-09-03):俯视图仅作空间位置参考,不得直接用于画面
         if not any(tag in s and REF_ONLY_KEY in s.lower() for s in sents):
             errs.append(f"{gid}: video_prompt 缺俯视图用途限定句(同句含 {tag} 与 \"{REF_ONLY_KEY}\";"
@@ -111,20 +109,13 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
         tag = f"[Image {grid_idx + 1}]"
         if not any(tag in s and GRID_KEY in s.lower() for s in sents):
             errs.append(f"{gid}: video_prompt 缺 9 宫格绑定句(同句含 {tag} 与 \"{GRID_KEY}\")")
-    # ④ route_en 逐字 + ⑤ 字母↔角色映射句
+    # ④ route_en 逐字 + ⑤ 主体定义句同词
     hay = norm(vp)
-    for idx, ch in enumerate(bm.get("characters") or []):
+    for ch in bm.get("characters") or []:
         cid = ch.get("id", "?")
-        letter = LETTERS[idx] if idx < len(LETTERS) else None
         label = (ch.get("label") or "").strip()
-        if letter and cid != "?":
-            pat = re.compile(r"(?<![A-Za-z])" + letter + r"\s*=\s*" + (re.escape(label) + r"\s*[((]\s*" if label else r"[^,;.。;]*")
-                             + re.escape(cid))
-            if not pat.search(vp):
-                errs.append(f"{gid}/{cid}: video_prompt 缺图上标记映射 \"{letter} = {label or '<label>'} ({cid})\""
-                            "(Map markers 句;label 逐字取 blocking_map)")
         if not label:
-            errs.append(f"{gid}/{cid}: blocking_map 缺 label(短规范名;回派 shot-planning,先过 render_blocking_map.py 的 label_ok)")
+            errs.append(f"{gid}/{cid}: blocking_map 缺 label(短规范名;回派 shot-planning,先过 blocking_map_check.py 的 label_ok)")
         elif not re.search(re.escape(label) + r"\s*@\s*Image\s*\d+", vp):
             errs.append(f"{gid}/{cid}: video_prompt 缺主体定义句 \"{label}@Image N\"(主体定义句须与 blocking_map.label 同一个词)")
         route = ch.get("route_en")
@@ -133,32 +124,12 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
             continue
         if norm(route) not in hay:
             errs.append(f"{gid}/{cid}: 动线句未逐字命中 video_prompt —— \"{route}\"")
-    # ⑧ 全局站位表逐字(station_table_bound,2026-09-03)
-    st = bm.get("station_table")
-    if not isinstance(st, list) or not st:
-        (errs if strict else warns).append(f"{gid}: blocking_map 缺 station_table(回派 shot-planning 补全局站位表;先过 render_blocking_map.py 的 station_table_ok)")
-    else:
-        if TABLE_KEY not in vp:
-            errs.append(f"{gid}: video_prompt 缺 \"{TABLE_KEY}\" 段(全局站位表:逐角色 zone/anchor/facing/neighbors/keep 逐字拼入)")
-        for row in st:
-            if not isinstance(row, dict):
-                continue
-            cid = row.get("id", "?")
-            fields = [("zone_en", row.get("zone_en")), ("facing_en", row.get("facing_en")),
-                      ("anchor.relation_en", (row.get("anchor") or {}).get("relation_en") if isinstance(row.get("anchor"), dict) else None)]
-            fields += [(f"neighbors[{j}].relation_en", n.get("relation_en")) for j, n in enumerate(row.get("neighbors") or []) if isinstance(n, dict)]
-            fields += [(f"invariants[{j}]", x) for j, x in enumerate(row.get("invariants") or [])]
-            for name, val in fields:
-                if not isinstance(val, str) or not val.strip():
-                    continue   # 结构缺失由 station_table_ok 报
-                if norm(val) not in hay:
-                    errs.append(f"{gid}/{cid}: 站位表 {name} 未逐字命中 video_prompt —— \"{val}\"")
     return errs, warns
 
 
 def main():
     args, proj_root = parse_args(
-        "layout_map_bound 机检:组 prompt 动线图/9 宫格 refs 绑定 + route_en 逐字核对",
+        "layout_map_bound 机检:组 prompt 俯视图/9 宫格 refs 绑定 + route_en 逐字核对",
         configure=lambda ap: (
             ap.add_argument("groups", nargs="*", help="只查指定组(如 grp002),缺省全批"),
             ap.add_argument("--strict", action="store_true", help="组缺 blocking_map 也按违规计(新产出批次用)"),

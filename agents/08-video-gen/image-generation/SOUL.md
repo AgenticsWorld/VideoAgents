@@ -48,7 +48,7 @@ python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negativ
 | 06-art/character-concept | 角色三视图参考(经 refs 指定) | `assets/concepts/characters/<id>/` |
 | 06-art/costume-concept | 服装 sheet(按组 costume_by_char 经 costume_sheets.json 台账取 `sheet_<COS-id>.png`,2026-08-26) | `assets/concepts/characters/<id>/` |
 | 06-art/creature-concept | 生物/坐骑整版三视图 sheet(经 refs 指定;阶段变体 `sheet_<stage>.png`,2026-08-26) | `assets/concepts/creatures/<CRE-id>/` |
-| 06-art/environment-concept | 场景布局包(9 宫格多角度图 `grid_9views.png` 直接复用作场景锚;干净俯视图 `layout_top.png` 不直接进组 refs——组用的是叠加人物动线标注后的 `directing/epNN/blocking_maps/grpNNN.png`,由 shot-planning 渲染,2026-08-19;**锚点图 image_prompt 若引用动线图,同样须写明它只作空间位置参考、不得复现其俯视/鸟瞰视角与平面图质感,2026-09-03**) | `assets/concepts/scenes/<id>/`、`directing/epNN/blocking_maps/` |
+| 06-art/environment-concept | 场景布局包(9 宫格多角度图 `grid_9views.png` 与干净俯视图 `layout_top.png` 直接复用作场景空间锚——**2026-09-07 起俯视图直接引用、不再叠加人物动线标注,原 `directing/epNN/blocking_maps/grpNNN.png` 退役**,人物空间位置由 3D 白模参考视频承担;**锚点图 image_prompt 若引用俯视图,同样须写明它只作空间位置参考、不得复现其俯视/鸟瞰视角与平面图质感,2026-09-03**) | `assets/concepts/scenes/<id>/` |
 | 07-directing/composition | 构图设计(自检对照用) | `directing/epNN/shots/<shot>/composition.json` |
 | 06-art/art-director | 风格圣经(新生成锚帧 prompt 风格段与负面清单来源) | `bible/style.json` |
 | 03-characters/appearance | 外观卡(性别 gender/presented_gender——新生成含人物锚的 prompt 性别词来源) | `bible/characters/<id>/appearance.json` |

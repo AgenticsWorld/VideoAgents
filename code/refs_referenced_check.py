@@ -7,6 +7,8 @@
     模型可能忽略它(白占参考图名额,前科 polan3 grp008/009 满员挂不上尾帧),也可能误用它
     (道具比例锚图里的木板/碗漏进画面);官方指南:每次涉及主体都要明确指代,避免省略。
   - audioref_all_referenced:audio_refs[i-1] 同理须以 `[Audio i]` / `@Audio i` 引用。
+  - videoref_all_referenced(2026-09-07):video_refs[i-1](白模参考视频 camera.mp4/top.mp4 等)须以 `[Video i]` 引用,
+    白模视频的固定说明段由 code/sync_whitebox_refs.py(whitebox_ref_bound)另核。
   - prop_ref_bound:`assets/concepts/props/<PROP-id>/` 下的道具图除被引用外,须以绑定句
     `<道具名>@Image i` 形式绑定(道具首现 Shot 段,后接 scale.prompt_token);只写 `[Image i]`
     不带 `@` 按 WARN,--strict 时按违规。
@@ -33,6 +35,7 @@ from _common import parse_args
 BIND_RE = re.compile(r"([^\s,，。:：;；、@\[\]()（）]+)@Image\s*(\d+)(?!\d)")
 IMG_RE = re.compile(r"(?:\[Image\s*(\d+)\]|@Image\s*(\d+))(?!\d)")
 AUD_RE = re.compile(r"(?:\[Audio\s*(\d+)\]|@Audio\s*(\d+))(?!\d)")
+VID_RE = re.compile(r"(?:\[Video\s*(\d+)\]|@Video\s*(\d+))(?!\d)")
 TAIL_RE = re.compile(r"(?:opening continues from|same location and lighting as)\s*\[Image\s*(\d+)\]")
 
 
@@ -46,9 +49,11 @@ def check_group(pf: Path, strict: bool):
     vp = pj.get("video_prompt", "") or ""
     refs = [r for r in (pj.get("refs") or []) if isinstance(r, str)]
     arefs = [r for r in (pj.get("audio_refs") or []) if isinstance(r, str)]
+    vrefs = [r for r in (pj.get("video_refs") or []) if isinstance(r, str)]
     errs, warns = [], []
     used_img = _nums(IMG_RE, vp)
     used_aud = _nums(AUD_RE, vp)
+    used_vid = _nums(VID_RE, vp)
     bound = {int(n) for _, n in BIND_RE.findall(vp)}
     tail_declared = {int(n) for n in TAIL_RE.findall(vp)}
     for n in sorted(used_img):
@@ -57,6 +62,9 @@ def check_group(pf: Path, strict: bool):
     for n in sorted(used_aud):
         if n > len(arefs):
             errs.append(f"{gid}: [Audio {n}] 越界(audio_refs 仅 {len(arefs)} 段)")
+    for n in sorted(used_vid):
+        if n > len(vrefs):
+            errs.append(f"{gid}: [Video {n}] 越界(video_refs 仅 {len(vrefs)} 个)")
     for i, r in enumerate(refs, start=1):
         short = "/".join(r.split("/")[-2:])
         is_tail = r.endswith(".last_frame.png")
@@ -78,6 +86,9 @@ def check_group(pf: Path, strict: bool):
     for i, r in enumerate(arefs, start=1):
         if i not in used_aud:
             errs.append(f"{gid}: [Audio {i}] {Path(r).name} 正文未引用(须 `<角色>@Audio {i}` 绑定句)")
+    for i, r in enumerate(vrefs, start=1):
+        if i not in used_vid:
+            errs.append(f"{gid}: [Video {i}] {'/'.join(r.split('/')[-2:])} 正文未引用(参考视频白挂;白模视频跑 code/sync_whitebox_refs.py --write 补固定说明段)")
     return errs, warns
 
 

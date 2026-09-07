@@ -58,7 +58,8 @@ python3 modules/genmedia.py info --group epNN/grpNNN   # 该组有组级模型�
 # 默认:组级多镜头生成(多模态参考模式;--ref 顺序必须 = grpNNN.json 的 refs 顺序)
 python3 modules/genmedia.py video --prompt "<grpNNN.json 的 video_prompt>" \
   --output assets/clips/epNN/grpNNN.mp4 \
-  --ref <grpNNN.json refs 原路径:概念库图/动线图/包内新生成锚...> [<前组尾帧>] \
+  --ref <grpNNN.json refs 原路径:概念库图/场景俯视图/包内新生成锚...> [<前组尾帧>] \
+  --ref-video <grpNNN.json video_refs 原路径顺序:白模 camera.mp4 [top.mp4],2026-09-07;字段缺省则不传> \
   --audio-ref <说话角色1样本 voice/refs/CHAR-xxxx_voiceprint.mp3> [<说话角色2样本> <说话角色3样本>] \
   --generate-audio on \
   --return-last-frame assets/clips/epNN/grpNNN.last_frame.png \
@@ -82,6 +83,8 @@ python3 modules/genmedia.py video \
   --return-last-frame assets/clips/epNN/grpNNN.last_frame.png \
   --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
 ```
+
+**白模参考视频(2026-09-07,仅「人物精确空间位置」开启)**:组 json 有 `video_refs` 时**必须**按数组顺序原样传 `--ref-video`(`[Video N]` 序号与之对应;`whitebox_refs.skipped_reason` 非空说明宿主已按模型预算取舍,不自行增删);开跑前跑 `python3 code/sync_whitebox_refs.py --project <slug> --ep epNN <本组>` 复核 PASS,FAIL 回派 prompt(或先 `--write` 再复核);方舟/MiniMax 的 reference_video 须公网 URL——「设置 → 文件托管」未配置时 genmedia 直接报错,如实上报、不得删掉 video_refs 硬跑;video_refs 为空的组照旧不传。
 
 云端渠道为异步任务,模块内部自动轮询到完成;--ref 与 --first/last-frame 互斥;
 Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 minimax(MiniMax-H3)时:

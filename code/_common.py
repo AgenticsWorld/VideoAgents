@@ -56,6 +56,6 @@ def narration_enabled(proj_root: Path) -> bool:
 
 
 def spatial_blocking_enabled(proj_root: Path) -> bool:
-    """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开):开=场景布局包 + 动线标注流程;
+    """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开;2026-09-07 起含义=用白模摄影机视角视频给视频生成定位人物):开=场景布局包流程(俯视图/九格图/layout.json 直接进 refs + 组级 blocking_map 数据)+ 白模链(scene-modeling/whitebox-staging,导出视频自动接成组 video_refs,机检 whitebox_ref_bound);
     关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
     return project_output_setting(proj_root, "spatial_blocking", True) is not False
