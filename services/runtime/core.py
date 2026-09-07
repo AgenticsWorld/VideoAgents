@@ -4872,10 +4872,35 @@ def _grpref_user_added(d: dict, ref: str) -> bool:
     return any(f"加入组参考图:{ref}(" in str(n) for n in d.get("notes") or [])
 
 
+_IMG_REF_RE = re.compile(r" ?(?:\[Image (\d+)\]|@Image (\d+))")
+
+
+def _grpref_renumber_prompt(vp: str, removed: int) -> tuple[str, int, int]:
+    """删除 refs 第 removed 张(1-based)后重排正文里的 [Image N] / @Image N 引用:
+    序号大于 removed 的减一;指向被删图的引用 token 整体删除(连同前导空格)。
+    返回 (新正文, 重排数, 删除数)。一次 sub 完成,避免链式替换把 3→2 再当 2→1 处理。"""
+    shifted = dropped = 0
+
+    def _sub(m: re.Match) -> str:
+        nonlocal shifted, dropped
+        n = int(m.group(1) or m.group(2))
+        if n == removed:
+            dropped += 1
+            return ""
+        if n < removed:
+            return m.group(0)
+        shifted += 1
+        tok = m.group(0)
+        return tok.replace(str(n), str(n - 1), 1)
+
+    return _IMG_REF_RE.sub(_sub, vp), shifted, dropped
+
+
 async def api_grpref_delete(body: dict):
-    """从组 refs 移除一张用户手动加入的参考图(重出本组生效)。
-    仅限用户加入的 ref,且其后不得残留非用户加入的 ref——线稿注入句按 [Image N]
-    序号引用 refs 位置,删中间会错位(与线稿删除的末位约束同理);
+    """从组 refs 移除一张参考图(重出本组生效)。
+    2026-09-07:不再限于用户手动加入的 ref——流水线锚点/概念图/线稿注入的也可删,但须带
+    force=true(预览页弹窗对系统添加的图弹强确认后才带);删中间位置时正文 [Image N]/@Image N
+    引用自动重排(指向被删图的引用整体移除),线稿另回滚注入句并删线稿文件;
     本地上传的图一并删除落盘文件。"""
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
@@ -4883,14 +4908,43 @@ async def api_grpref_delete(body: dict):
     refs = d.get("refs") or []
     if ref not in refs:
         raise ServiceError(404, f"Ref not in this group's refs: {ref}")
-    if not _grpref_user_added(d, ref):
-        raise ServiceError(400, "Only user-added refs (asset pick / local upload) can be removed here; delete sketches via the group card instead")
+    user_added = _grpref_user_added(d, ref)
+    if not user_added and not body.get("force"):
+        raise ServiceError(400, "This ref was injected by the pipeline/a sketch, not added by hand; "
+                                "pass force=true to remove it (the preview dialog asks for confirmation)")
     i = refs.index(ref)
-    if not all(_grpref_user_added(d, r) for r in refs[i + 1:]):
-        raise ServiceError(400, "A pipeline/sketch ref comes after this one; delete that first (to keep [Image N] numbering aligned)")
     refs.pop(i)
+    vp = d.get("video_prompt") or ""
+    extra = []
+    # 线稿:按 meta.ref_path 反查,回滚其注入句并删线稿 png/json(与 api_sketch_delete 同法,
+    # 但不受「须为末位」限制——序号错位由下方重排兜住)
+    sdir = _sketch_dir(project, ep, grp)
+    if sdir.is_dir():
+        for mj in sorted(sdir.glob("sketch_*.json")):
+            meta = _read_json_safe(mj) or {}
+            if meta.get("ref_path") != ref:
+                continue
+            sent = meta.get("prompt_sentence") or ""
+            # 早先删过前面的 ref 时,正文里这句的 [Image N] 已被重排,与 meta 存的原句对不上:
+            # 再按线稿当前位置(第 i+1 张)改写序号试一次
+            for cand in (sent, re.sub(r"\[Image \d+\]", f"[Image {i + 1}]", sent)):
+                if cand and cand in vp:
+                    vp = vp.replace(cand, "", 1)
+                    break
+            mj.with_suffix(".png").unlink(missing_ok=True)
+            mj.unlink(missing_ok=True)
+            extra.append(f"线稿 {mj.stem} 注入句已回滚、文件已删")
+    shifted = dropped = 0
+    if vp:
+        vp, shifted, dropped = _grpref_renumber_prompt(vp, i + 1)
+        if shifted or dropped:
+            extra.append(f"正文引用重排 {shifted} 处、移除指向该图的引用 {dropped} 处")
+        d["video_prompt"] = vp
+        d["video_prompt_word_count"] = len(vp.split())
     d.setdefault("notes", []).append(
-        f"用户移除组参考图:{ref}(原 refs 第 {i + 1} 张);重出本组时生效。由 storyboard service 自动补丁。")
+        f"用户移除组参考图:{ref}(原 refs 第 {i + 1} 张"
+        f"{'' if user_added else ',流水线/线稿注入'}"
+        f"{';' + ';'.join(extra) if extra else ''});重出本组时生效。由 storyboard service 自动补丁。")
     atomic_write_json(pf, d)
     if ref.startswith(f"assets/uploads/{ep}/{grp}/"):
         p = (base / ref).resolve()
@@ -4900,7 +4954,8 @@ async def api_grpref_delete(body: dict):
             p = None
         if p:
             p.unlink(missing_ok=True)
-    return {"deleted": ref, "refs": len(refs)}
+    return {"deleted": ref, "refs": len(refs), "user_added": user_added,
+            "prompt_refs_shifted": shifted, "prompt_refs_dropped": dropped}
 
 
 # 对白编号 → 台词索引(2026-08-27):story/episodes/<ep>/dialogue.md 是对白层权威定稿,

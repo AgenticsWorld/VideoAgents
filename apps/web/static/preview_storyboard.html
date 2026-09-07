@@ -173,6 +173,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .cur .ccell .ck{position:absolute;left:2px;bottom:2px;font-size:9.5px;line-height:1.4;background:rgba(0,0,0,.65);color:#c8d0e0;border-radius:3px;padding:0 3px}
 #ar-modal .cur .ccell .cdel{position:absolute;right:2px;top:2px;font-size:10px;line-height:1;background:rgba(0,0,0,.65);border:none;border-radius:4px;padding:2px 3px;cursor:pointer}
 #ar-modal .cur .ccell .cdel:hover{background:var(--red)}
+#ar-modal .cur .ccell .cdel.sys{outline:1px solid var(--yellow,#e6b450)}
 #ar-modal .cur .ccell .avck{position:absolute;right:2px;bottom:2px;font-size:10px;line-height:1.3;background:rgba(0,0,0,.65);border-radius:3px;padding:0 2px}
 .avmark{font-size:10px;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 4px;flex:none}
 #ar-modal .cats{display:flex;gap:8px;margin:10px 0 8px;flex:none}
@@ -429,38 +430,44 @@ async function arReload(){
     if(cur)arShowAsset(+cur.dataset.i);
   }catch(e){}
 }
-// 本组当前参考图条:带序号缩略图;用户手动加入的(资产选图/本地上传,按 notes 锚判定,
-// 与后端 _grpref_user_added 同规则)带 🗑 可删;流水线锚点/线稿注入的不可在此删,
-// 且手动图之后若还有线稿也暂不可删(线稿按 [Image N] 序号引用 refs 位置,删中间会错位)
+// 本组当前参考图条:带序号缩略图,每张都带 🗑。用户手动加入的(资产选图/本地上传,按 notes 锚判定,
+// 与后端 _grpref_user_added 同规则)普通确认即删;流水线锚点/概念图/线稿注入的(2026-09-07 起也可删)
+// 弹强确认并带 force=true,后端自动重排正文 [Image N]/@Image N 引用、回滚线稿注入句
 const arAdded=r=>AR_NOTES.some(n=>String(n).includes('加入组参考图:'+r+'('));
 function arCur(){
   const proj=$('#project').value.trim()||'demo';
   $('#ar-cur').innerHTML='<span class="clabel">'+t('本组当前参考图:')+'</span>'+(AR_REFS.length?AR_REFS.map((r,i)=>{
-    const del=arAdded(r)&&AR_REFS.slice(i+1).every(arAdded);
-    return `<div class="ccell" title="[Image ${i+1}] ${esc(r)}${del?'':' · '+t('流水线锚点/线稿注入,不能在此删除(线稿在分镜卡上删)')}">
+    const user=arAdded(r);
+    return `<div class="ccell" title="[Image ${i+1}] ${esc(r)}${user?'':' · '+t('流水线/线稿注入的参考图(非手动添加)')}">
       <img src="/api/v1/projects/${encodeURIComponent(proj)}/artifacts/${esc(r)}?v=${LOAD_T}" loading="lazy" onclick="zoom(this.src)"><span class="ck">${i+1}</span>${
-      AV_ST[r]==='Active'?`<span class="avck" title="${esc(t('已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截'))}">🛡</span>`:''}${
-      del?`<button class="cdel" data-ref="${esc(r)}" title="${t('删除这张参考图(重出本组生效)')}">🗑</button>`:''}</div>`;
+      AV_ST[r]==='Active'?`<span class="avck" title="${esc(t('已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截'))}">🛡</span>`:''}
+      <button class="cdel${user?'':' sys'}" data-ref="${esc(r)}" data-idx="${i+1}" data-sys="${user?'':'1'}" title="${user?t('删除这张参考图(重出本组生效)'):t('删除这张系统添加的参考图(需确认;重出本组生效)')}">🗑</button></div>`;
   }).join(''):'<span class="clabel">'+t('(暂无参考图)')+'</span>')
   +(AR_GEN?`<div class="ccell genp" title="${t('正在基于手绘生成最终的参考图…(约 1-2 分钟)')}"><span class="spin"></span></div>`:'');
 }
 $('#ar-cur').addEventListener('click',async e=>{
   const b=e.target.closest('.cdel');
   if(!b)return;
-  const ref=b.dataset.ref;
-  if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref})))return;
+  const ref=b.dataset.ref,sys=b.dataset.sys==='1',n=b.dataset.idx;
+  // 系统添加的(流水线锚点/概念图/线稿注入)弹强确认:说明 [Image N] 会重排、指向该图的引用会被移除
+  const msg=sys
+    ?I18N.f('⚠ 这张参考图 [Image {n}] 由流水线/线稿注入,不是手动添加的:\n{ref}\n\n删除后 prompt 正文中的 [Image N] 引用会自动重排,指向该图的引用会被移除(线稿另回滚注入句);重出本组生效。\n\n确定删除?',{ref,n})
+    :I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref});
+  if(!confirm(msg))return;
   arMsg('');
   const proj=$('#project').value.trim()||'demo';
   try{
     const r=await fetch('/api/v1/storyboard/refs/delete',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({project:proj,ep:EP,grp:AR_GRP,ref})});
-    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      body:JSON.stringify({project:proj,ep:EP,grp:AR_GRP,ref,force:sys})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
     AR_REFS=AR_REFS.filter(x=>x!==ref);
     arCount();arCur();
     const cur=document.querySelector('#ar-assets .ast.on');   // 重绘网格,去掉「已在参考图」标记
     if(cur)arShowAsset(+cur.dataset.i);
-    arMsg(t('✅ 已删除参考图'),true);
+    arMsg(t('✅ 已删除参考图')+((d.prompt_refs_shifted||d.prompt_refs_dropped)
+      ?' · '+I18N.f('prompt 引用已重排 {a} 处、移除 {b} 处',{a:d.prompt_refs_shifted||0,b:d.prompt_refs_dropped||0}):''),true);
     load(true);
   }catch(e){arMsg(t('删除失败:')+e.message)}
 });
@@ -482,7 +489,10 @@ async function arLoadCat(cat){
       const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
       if(!r.ok)throw new Error((await r.json()).detail||r.status);
       const d=await r.json();
-      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[]).filter(a=>(a.images||[]).length);
+      // 只列资产目录根下的主图;candidates/ 等候选/过程稿子目录(退役的比例锚图等)不进选图器
+      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[])
+        .map(a=>({...a,images:(a.images||[]).filter(im=>!/(^|\/)candidates\//i.test(im.name||''))}))
+        .filter(a=>a.images.length);
     }
     const list=AR_CACHE[cat];
     if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
