@@ -1049,3 +1049,8 @@ plugins/<plugin-name>/
 - 插件是纯声明式的(plugin.json + SOUL.md + workflows YAML),**不允许包含可执行代码**;
   Agent 运行期为完成任务写的一次性脚本照常落项目 `code/`,与内置成员同规。
 - 产物越出 `outputs_ns` 命名空间写入(尤其改写正史 bible/、其他插件命名空间)按调度缺陷处理。
+
+
+### 白模参考视频扩展流程（2026-09-07）
+
+用户要求白模参考视频时，orchestrator 在布局包完成后为每场景派 `05-scenes/scene-modeling`，产出带米制尺度与几何体的 `bible/scenes/<sid>/whitebox.json`；在分镜定稿、blocking、camera-movement、continuity-planning 完成后，逐集派 `07-directing/whitebox-staging`，写各组数值时间线并调用宿主 `code/render_whitebox.py --export` 输出双视角视频。两个工单在对应分镜确认前完成，已有非空间流程不强制补派。基础数据、比例、姿态、继承/切换和导出验收统一遵循 `docs/whitebox.md`，不得复制渲染器到项目。编译成功不代表视频导出成功，回执分别记录。

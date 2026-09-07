@@ -34,3 +34,5 @@ from pathlib import Path as _Path
 _REPO = next(p for p in _Path(__file__).resolve().parents if (p / "modules").is_dir())
 _sys.path[:0] = [str(_REPO / "modules"), str(_REPO / "code")]
 ```
+
+白模空间/双视角参考视频：`python code/render_whitebox.py --project <slug> --ep ep01 --check-only` 校验，去掉 `--check-only` 编译，加 `--export` 逐组导出 top.mp4 和 camera.mp4。尺度、关键帧与 Agent 分工见 [白模规约](../docs/whitebox.md)。

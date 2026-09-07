@@ -21,6 +21,7 @@ from .schemas import (
     ProviderProbe,
 )
 from .state import RuntimeStore
+from .whitebox import router as whitebox_router
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -978,6 +979,7 @@ async def live_director_record(request: Request, seq: int, ext: str = "webm") ->
     return await core.api_live_director_record(seq, data, ext)
 
 
+api.include_router(whitebox_router)
 app.include_router(api)
 
 

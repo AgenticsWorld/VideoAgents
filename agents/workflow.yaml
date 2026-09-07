@@ -8,6 +8,8 @@
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
 #   gate: 闸门任务,全部依赖通过才放行;human: true 表示需用户签字
+#   whitebox_requested: brief/用户工单明确要求白模预演或参考视频时为真；
+#     为假时不实例化白模节点，并从 g6 移除对应依赖（同其他 condition 节点）。
 
 version: 1
 defaults:
@@ -166,6 +168,10 @@ phases:
           # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound 四项及 camera_view_consistent/station_table_ok/station_table_bound(2026-09-03)机检脚本自动 skipped
           outputs: ["assets/concepts/scenes/{id}/"],
           validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/render_blocking_map.py --scene <id> --check-only
+      - { id: p4-scene-model, agent: 05-scenes/scene-modeling, for_each: scene,
+          condition: whitebox_requested, depends_on: [p4-env-concept],
+          outputs: ["bible/scenes/{id}/whitebox.json"],
+          validation: { qa: [11-qa/visual-qa] } } # docs/whitebox.md：米制尺度与俯视图几何校准
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
           # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref(与无人参照物同框)
           # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图(审核风险+信息稀释)
@@ -257,11 +263,15 @@ phases:
           validation: { auto: [axis_jumps_zero_or_waived, group_transitions_cover_all_adjacent,
                                transition_anchor_consistent],   # group_transitions 镜像 shot_list transition_in;可渲染转场边界 anchor=none,match_cut 核构图对位(§9C,2026-08-28)
                         qa: [11-qa/timeline-qa] } }
+      - { id: p6-whitebox, agent: 07-directing/whitebox-staging, condition: whitebox_requested,
+          depends_on: [p4-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
+          outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json", "assets/whitebox/{ep}/"],
+          validation: { qa: [11-qa/visual-qa] } } # render_whitebox.py --check-only 后 --export；逐组两份 MP4
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
                         qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·costume-concept(本集各组 costumes_by_char 所指非默认服装的 sheet_<COS-id>.png)·environment-concept·prop·creature-concept 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
-      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit, p6-whitebox] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
 
   - id: p7
     name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)

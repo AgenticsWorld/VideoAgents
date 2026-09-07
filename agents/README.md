@@ -1,6 +1,6 @@
 # agents/ — 小说→视频 多 Agent 制作团队
 
-基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:83 个 Agent、13 个类别。
+基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:85 个 Agent、13 个类别。
 每个 Agent 一个目录,目录下的 `SOUL.md` 定义它的职责、输入输出、工作指令格式与质量标准。
 
 - **流程权威**:`WORKFLOW.md`(人读)/ `workflow.yaml`(orchestrator 执行输入)
@@ -15,9 +15,9 @@
 | `02-worldbuilding/` | 世界设定 | 9 | world, timeline, geography, religion, culture, political, economy, magic-cultivation, dictionary |
 | `03-characters/` | 角色 | 7 | character-manager, appearance, character-growth, personality, relationship, voiceprint, dialogue-style |
 | `04-creatures/` | 生物资产 | 2 | creature, mount |
-| `05-scenes/` | 场景资产 | 4 | scene, environment, architecture, lighting |
+| `05-scenes/` | 场景资产 | 5 | scene, environment, architecture, lighting, scene-modeling |
 | `06-art/` | 美术资产 | 7 | art-director, character-concept, environment-concept, prop, costume, color-script, aspect-ratio |
-| `07-directing/` | 导演 | 8 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning |
+| `07-directing/` | 导演 | 9 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging |
 | `08-video-gen/` | 视频生成 | 7 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale |
 | `09-audio/` | 音频 | 6 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing |
 | `10-editing/` | 剪辑 | 6 | edit, transition, subtitle, caption, title, thumbnail |

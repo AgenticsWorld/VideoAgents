@@ -13,3 +13,8 @@ Ideogram, Volcengine ModelArk, BytePlus ModelArk, ComfyUI, and compatible object
 storage services. Installing or configuring an integration does not grant model,
 content, trademark, or service rights. Review the applicable upstream license
 and service terms before use or redistribution.
+
+The offline whitebox viewer bundles Three.js 0.180.0 (MIT), including its core,
+WebGL renderer and OrbitControls. Copyright notice and license are retained in
+`apps/web/static/vendor/three/LICENSE`. OrbitControls' package import is changed
+to a relative local import. Upstream: https://github.com/mrdoob/three.js/tree/r180.

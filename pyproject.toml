@@ -67,7 +67,7 @@ videoagents-web = "apps.web.server:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["apps.web*", "services*"]
+include = ["apps.web*", "services*", "modules"]
 
 [tool.setuptools.package-data]
 "apps.web" = ["static/**/*"]

@@ -5,6 +5,7 @@
 <title>分镜预览 · Agentics：VideoAgents</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M6.5%207.5h7M6.5%2010h4.5%27%20stroke%3D%27%23000%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fmask%3E%3Cg%20fill%3D%27%236c9ef8%27%3E%3Cpath%20d%3D%27M3%205a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202v7a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2z%27%20mask%3D%27url%28%23m%29%27%2F%3E%3Crect%20x%3D%273%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3Crect%20x%3D%2713%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/whitebox.css">
 <script src="/static/i18n/i18n.js"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -1045,6 +1046,7 @@ function groupCard(g,inner){
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
+      <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">3D 白模</button>
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
@@ -1060,8 +1062,13 @@ function groupCard(g,inner){
   </div>`;
 }
 
+document.addEventListener('click', async e=>{
+  const button=e.target.closest('.wb-open');
+  if(button){const m=await import('/static/whitebox-ui.js');m.toggleGroup(button,$('#project').value.trim()||'demo',EP,button.dataset.grp);}
+});
 let LAST_DATA=null;
 function render(d){
+  import('/static/whitebox-ui.js').then(m=>m.resetWhitebox());
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
