@@ -9,6 +9,16 @@ import pytest
 from modules.whitebox import compile_episode, load_scene, sample, validate_keys, xyz
 
 
+def test_whitebox_localization():
+    """Exercise dynamic preview text using the real runtime and every locale."""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):
+        pytest.skip('Node unavailable')
+    subprocess.run(['node', str(Path(__file__).with_name('whitebox_i18n_check.mjs'))],
+                   check=True, capture_output=True, text=True)
+
+
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(data),encoding='utf-8')

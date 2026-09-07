@@ -136,7 +136,7 @@ function renderList(){
       d.innerHTML=`<div class="row1"><span class="nm">${esc(s.name)}</span>`
         +(s.meta.level?`<span class="badge">${esc(s.meta.level)}</span>`:'')
         +(s.images.length?`<span class="badge pic" title="${esc(I18N.f('图{n}',{n:s.images.length}))}">🖼${s.images.length}</span>`:'')
-        +(Array.isArray(s.docs?.whitebox?.objects)?'<span class="badge pic" title="3D 白模" aria-label="3D 白模">🧊</span>':'')
+        +(Array.isArray(s.docs?.whitebox?.objects)?`<span class="badge pic" title="${esc(t('3D 白模'))}" aria-label="${esc(t('3D 白模'))}">🧊</span>`:'')
         +`</div><span class="id">${esc(s.id)}</span>`;
       d.onclick=()=>{CUR=s.id;FOLDER=null;renderList();renderDetail(s)};
       box.appendChild(d);

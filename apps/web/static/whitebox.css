@@ -1,6 +1,6 @@
 .wb-panel{margin:16px 0;padding:14px;background:#161a23;border:1px solid #2a3040;border-radius:10px;color:#dde3ee;font:13px/1.6 -apple-system,sans-serif}
 .wb-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-bottom:10px}
-.wb-heading{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-right:auto}
+.wb-heading{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-inline-end:auto}
 .wb-panel button,.wb-panel select{background:#222a36;color:#dde3ee;border:1px solid #3b4658;border-radius:5px;padding:5px 10px;cursor:pointer}
 .wb-panel button:disabled{opacity:.5;cursor:wait}
 .wb-views{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
@@ -14,7 +14,7 @@
 .wb-transport{display:flex;align-items:center;gap:12px;margin-top:10px}
 .wb-transport input{flex:1;min-width:40px}
 .wb-cast{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}
-.wb-color{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+.wb-color{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:5px}
 .wb-warnings{color:#e3b66b;max-height:140px;overflow:auto}
 .wb-status{color:#99a8bb}
 .wb-links a{color:#8fbaff;margin-right:16px}

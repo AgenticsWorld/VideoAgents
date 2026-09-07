@@ -14,7 +14,7 @@ REQUIRED = {
     "preview_scenes.html", "preview_storyboard.html", "preview_videos.html",
     "preview_workflow.html", "preview_worldview.html", "i18n/i18n.js",
     "styles/style_library.json", "whitebox-ui.js", "whitebox-renderer.js", "whitebox-format.js",
-    "whitebox.css", "whitebox-export.html", "vendor/three/three.module.js",
+    "whitebox.css", "whitebox-export.html", "whitebox-i18n.js", "vendor/three/three.module.js",
     "vendor/three/three.core.js", "vendor/three/OrbitControls.js", "vendor/three/LICENSE",
 }
 
