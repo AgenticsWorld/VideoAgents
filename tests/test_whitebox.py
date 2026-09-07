@@ -296,10 +296,34 @@ def test_api_read_only_and_validation(project,monkeypatch):
     client=TestClient(app)
     result=client.get('/api/v1/projects/demo/whitebox/ep01')
     assert result.status_code==200 and len(result.json()['groups'])==1
+    assert result.json()['groups'][0]['artifact_status']=={'plan':False,'preview':False,'video':False}
+    assert result.json()['scenes']['SCN-1']['artifact_status']=={'model':True}
     assert set(project.rglob('*'))==before
     assert client.get('/api/v1/projects/demo/whitebox/ep%2E01').status_code==400
     assert client.get('/api/v1/projects/missing/whitebox/ep01').status_code==404
     assert client.post('/api/v1/projects/demo/whitebox/ep01/exports/missing').status_code==422
+
+
+def test_api_artifact_status_tracks_files_not_preview_availability(project,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from services.api import whitebox
+    monkeypatch.setattr(whitebox.core,'PROJECTS_DIR',project.parent)
+    app=FastAPI();app.include_router(whitebox.router,prefix='/api/v1')
+    client=TestClient(app)
+    (project/'bible/scenes/SCN-1/whitebox.json').unlink()
+    url='/api/v1/projects/demo/whitebox/ep01'
+    data=client.get(url).json()
+    assert len(data['groups'])==1 and data['scenes']['SCN-1']['inferred']
+    assert data['scenes']['SCN-1']['artifact_status']=={'model':False}
+    assert client.get('/api/v1/projects/demo/whitebox/scenes/SCN-1').json()['artifact_status']=={'model':False}
+    write(project/'directing/ep01/whitebox_plans/grp1.json',{'continuity':{}})
+    write(project/'directing/ep01/whitebox/episode.json',data)
+    folder=project/'assets/whitebox/ep01/grp1'
+    write(folder/'manifest.json',{'files':['assets/whitebox/ep01/grp1/camera.mp4']})
+    assert client.get(url).json()['groups'][0]['artifact_status']=={'plan':True,'preview':True,'video':False}
+    (folder/'camera.mp4').write_bytes(b'video fixture')
+    assert client.get(url).json()['groups'][0]['artifact_status']['video'] is True
 
 
 @pytest.mark.parametrize('aspect,width,height', [('16:9',256,144),('9:16',144,256),('1:1',128,128)])

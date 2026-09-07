@@ -1961,4 +1961,13 @@ window.I18N_DICT = {
 "{actor}: 同场次在场人物，沿用 {group} 的首姿态与位置；补充走位可写 scene_actors。": "{actor}: pemeran adegan mewarisi pose dan posisi awal {group}; tambahkan gerakan di scene_actors.",
 "{actor}: 与 {group} 的位置/姿态不连续，请确认切换或继承。": "{actor}: posisi/pose tidak berkesinambungan dengan {group}; pastikan pergantian atau pewarisan.",
 "机位与 {group} 不连续。": "Posisi kamera tidak berkesinambungan dengan {group}.",
+"推算预览": "Pratinjau perkiraan",
+"已有白模数据": "Data model blok tersedia",
+"已有": "Ada",
+"场景模型：{state}": "Model adegan: {state}",
+"调度计划：{state}": "Rencana penataan: {state}",
+"预览文件：{state}": "Berkas pratinjau: {state}",
+"参考视频：{state}": "Video referensi: {state}",
+"包含自动推算数据，显示预览不代表白模已制作完成。": "Berisi data perkiraan otomatis. Pratinjau yang terlihat tidak berarti model blok sudah selesai.",
+"文件状态未知，请重启服务后刷新。": "Status berkas tidak diketahui. Mulai ulang layanan dan muat ulang.",
 };

@@ -72,6 +72,8 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   const parent={querySelector(sel){return sel==='.wb-panel'?null:{before(node){panel=node;}};}};
   await ui.toggleGroup({closest:()=>parent},'dzg6','ep01','grp048');
   assert.ok(panel.innerHTML.includes(escape(wbText('3D 白模'))),lang);
+  assert.ok(panel.innerHTML.includes(escape(wbText('推算预览'))),lang);
+  assert.ok(panel.innerHTML.includes(escape(wbText('文件状态未知，请重启服务后刷新。'))),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('白模时间'))}"`),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('摄像机白模'))}"`),lang);
   assert.ok(panel.innerHTML.includes(`value="top" selected>${escape(wbText('俯视图'))}`),lang);
@@ -93,6 +95,29 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   assert.equal(failed.textContent,wbText('场景白模尚不可用：{error}',{error:wbText('项目画幅无效：{aspect}',params)}));
 }
 delete globalThis.I18N;
+// A calibrated scene alone must not mark inferred group staging as authored.
+scene.inferred=false;scene.artifact_status={model:true};
+group.authored=false;group.artifact_status={plan:false,preview:false,video:false};
+globalThis.fetch=async url=>respond(url.endsWith('/config')?{output:{aspect_preset:'douyin'}}:episode);
+let statusPanel;
+const statusParent={querySelector(sel){return sel==='.wb-panel'?null:{before(node){statusPanel=node;}};}};
+await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
+assert.ok(statusPanel.innerHTML.includes('推算预览'));
+assert.ok(statusPanel.innerHTML.includes('场景模型：已有'));
+assert.ok(statusPanel.innerHTML.includes('调度计划：未生成'));
+assert.ok(statusPanel.innerHTML.includes('参考视频：未生成'));
+assert.ok(!statusPanel.innerHTML.includes('文件状态未知'));
+ui.resetWhitebox();
+group.authored=true;group.artifact_status={plan:true,preview:true,video:true};
+await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
+assert.ok(statusPanel.innerHTML.includes('已有白模数据'));
+assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
+ui.resetWhitebox();
+scene.inferred=true;
+await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
+assert.ok(statusPanel.innerHTML.includes('推算预览'));
+assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
+ui.resetWhitebox();
 assert.equal(wbText('3D 白模'),'3D 白模');
 assert.equal(wbText('建模依据与检查 ({count})',{count:0}),'建模依据与检查 (0)');
 console.log(`Whitebox i18n: ${keys.size} keys, 12 locales; dynamic UI, playback, diagnostics and identifiers passed.`);

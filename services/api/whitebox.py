@@ -36,12 +36,27 @@ async def checked(fn,*args):
 
 @router.get('/scenes/{sid}')
 async def scene(project: str,sid: str):
-    return await checked(load_scene,project_path(project,sid),sid)
+    base=project_path(project,sid)
+    result=await checked(load_scene,base,sid)
+    result['artifact_status']={'model':(base/'bible/scenes'/sid/'whitebox.json').is_file()}
+    return result
 
 
 @router.get('/{ep}')
 async def episode(project: str,ep: str):
-    return await checked(compile_episode,project_path(project,ep),ep)
+    base=project_path(project,ep)
+    result=await checked(compile_episode,base,ep)
+    for sid, item in result['scenes'].items():
+        item['artifact_status']={'model':(base/'bible/scenes'/sid/'whitebox.json').is_file()}
+    preview=(base/'directing'/ep/'whitebox/episode.json').is_file()
+    for group in result['groups']:
+        gid=group['group_id']
+        group['artifact_status']={
+            'plan':(base/'directing'/ep/'whitebox_plans'/f'{gid}.json').is_file(),
+            'preview':preview,
+            'video':(base/'assets/whitebox'/ep/gid/'camera.mp4').is_file(),
+        }
+    return result
 
 
 def file_links(project,record):

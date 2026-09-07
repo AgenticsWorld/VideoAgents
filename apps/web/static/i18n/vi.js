@@ -1961,4 +1961,13 @@ window.I18N_DICT = {
 "{actor}: 同场次在场人物，沿用 {group} 的首姿态与位置；补充走位可写 scene_actors。": "{actor}: người trong cảnh kế thừa tư thế và vị trí đầu của {group}; bổ sung di chuyển trong scene_actors.",
 "{actor}: 与 {group} 的位置/姿态不连续，请确认切换或继承。": "{actor}: vị trí/tư thế không liên tục với {group}; xác nhận chuyển cảnh hoặc kế thừa.",
 "机位与 {group} 不连续。": "Vị trí máy quay không liên tục với {group}.",
+"推算预览": "Xem trước suy luận",
+"已有白模数据": "Dữ liệu mô hình khối hiện có",
+"已有": "Có",
+"场景模型：{state}": "Mô hình cảnh: {state}",
+"调度计划：{state}": "Kế hoạch dàn cảnh: {state}",
+"预览文件：{state}": "Tệp xem trước: {state}",
+"参考视频：{state}": "Video tham chiếu: {state}",
+"包含自动推算数据，显示预览不代表白模已制作完成。": "Có dữ liệu suy luận tự động. Hiển thị bản xem trước không có nghĩa mô hình khối đã hoàn thành.",
+"文件状态未知，请重启服务后刷新。": "Không rõ trạng thái tệp. Hãy khởi động lại dịch vụ và làm mới.",
 };

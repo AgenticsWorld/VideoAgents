@@ -1961,4 +1961,13 @@ window.I18N_DICT = {
 "{actor}: 同场次在场人物，沿用 {group} 的首姿态与位置；补充走位可写 scene_actors。": "{actor}: anwesende Figur übernimmt Anfangspose und Position aus {group}; Bewegung in scene_actors ergänzen.",
 "{actor}: 与 {group} 的位置/姿态不连续，请确认切换或继承。": "{actor}: Position/Pose gegenüber {group} nicht kontinuierlich; Schnitt oder Übernahme bestätigen.",
 "机位与 {group} 不连续。": "Kameraposition gegenüber {group} nicht kontinuierlich.",
+"推算预览": "Abgeleitete Vorschau",
+"已有白模数据": "Vorhandene Blockmodelldaten",
+"已有": "Vorhanden",
+"场景模型：{state}": "Szenenmodell: {state}",
+"调度计划：{state}": "Inszenierungsplan: {state}",
+"预览文件：{state}": "Vorschaudatei: {state}",
+"参考视频：{state}": "Referenzvideo: {state}",
+"包含自动推算数据，显示预览不代表白模已制作完成。": "Enthält automatisch abgeleitete Daten. Eine sichtbare Vorschau bedeutet nicht, dass das Blockmodell fertig ist.",
+"文件状态未知，请重启服务后刷新。": "Dateistatus unbekannt. Dienst neu starten und aktualisieren.",
 };

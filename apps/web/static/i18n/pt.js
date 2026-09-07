@@ -1961,4 +1961,13 @@ window.I18N_DICT = {
 "{actor}: 同场次在场人物，沿用 {group} 的首姿态与位置；补充走位可写 scene_actors。": "{actor}: personagem presente herda pose e posição iniciais de {group}; adicione movimento em scene_actors.",
 "{actor}: 与 {group} 的位置/姿态不连续，请确认切换或继承。": "{actor}: posição/pose descontínua em relação a {group}; confirme corte ou herança.",
 "机位与 {group} 不连续。": "A posição da câmera é descontínua em relação a {group}.",
+"推算预览": "Prévia inferida",
+"已有白模数据": "Dados de modelo existentes",
+"已有": "Existe",
+"场景模型：{state}": "Modelo de cena: {state}",
+"调度计划：{state}": "Plano de encenação: {state}",
+"预览文件：{state}": "Arquivo de prévia: {state}",
+"参考视频：{state}": "Vídeo de referência: {state}",
+"包含自动推算数据，显示预览不代表白模已制作完成。": "Inclui dados inferidos. Exibir a prévia não significa que o modelo está concluído.",
+"文件状态未知，请重启服务后刷新。": "Estado dos arquivos desconhecido. Reinicie o serviço e atualize.",
 };

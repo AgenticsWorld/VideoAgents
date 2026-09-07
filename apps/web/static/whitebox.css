@@ -17,5 +17,9 @@
 .wb-color{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:5px}
 .wb-warnings{color:#e3b66b;max-height:140px;overflow:auto}
 .wb-status{color:#99a8bb}
+.wb-provenance{margin-bottom:10px;padding:9px 12px;border:1px solid;border-radius:7px}
+.wb-inferred{color:#f0c77e;background:#382c19;border-color:#806333}
+.wb-authored{color:#a9cfff;background:#1d2c42;border-color:#3e6089}
+.wb-artifacts{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px}
 .wb-links a{color:#8fbaff;margin-right:16px}
 .wb-panel progress{width:100%}

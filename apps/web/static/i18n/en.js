@@ -1981,4 +1981,13 @@ window.I18N_DICT = {
 "{actor}: 同场次在场人物，沿用 {group} 的首姿态与位置；补充走位可写 scene_actors。": "{actor}: scene occupant inherits the initial pose and position of {group}; add movement in scene_actors.",
 "{actor}: 与 {group} 的位置/姿态不连续，请确认切换或继承。": "{actor}: position/pose is discontinuous with {group}; confirm a cut or inheritance.",
 "机位与 {group} 不连续。": "Camera position is discontinuous with {group}.",
+"推算预览": "Inferred preview",
+"已有白模数据": "Existing blockout data",
+"已有": "Present",
+"场景模型：{state}": "Scene model: {state}",
+"调度计划：{state}": "Staging plan: {state}",
+"预览文件：{state}": "Preview file: {state}",
+"参考视频：{state}": "Reference video: {state}",
+"包含自动推算数据，显示预览不代表白模已制作完成。": "Includes inferred data. A visible preview does not mean the blockout is complete.",
+"文件状态未知，请重启服务后刷新。": "File status is unknown. Restart the service and refresh.",
 };
