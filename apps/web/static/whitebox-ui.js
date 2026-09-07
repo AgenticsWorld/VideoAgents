@@ -18,12 +18,12 @@ async function previewData(url,fallback,minStagingVersion=0){
   return current;
 }
 
+// 「状态」弹出层:点面板外任意处收起
+document.addEventListener('click',e=>{if(!e.target.closest('.wb-statuswrap'))document.querySelectorAll('.wb-statuspop.open').forEach(x=>{x.classList.remove('open');x.previousElementSibling?.setAttribute('aria-expanded','false');});});
 async function mount(host,project,scene,group=null,ep='') {
   const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
   if(!host.isConnected)return;
   const format=projectRenderFormat(settings);
-  const inferred=scene.inferred!==false||(group&&!group.authored);
-  const sourceLabel=inferred?t('推算预览'):t('已有白模数据');
   const fileState=value=>value===true?t('已有'):value===false?t('未生成'):t('未知');
   const statusItems=[t('场景模型：{state}',{state:fileState(scene.artifact_status?.model)})];
   if(group)statusItems.push(
@@ -38,15 +38,13 @@ async function mount(host,project,scene,group=null,ep='') {
     shots:group.cameras.map(c=>c.shot_id).join(', '),plan:`directing/${ep}/whitebox_plans/${group.group_id}.json`,
     model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`,
   }):'';
-  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="${esc(t('对这组3D白模提修改意见，发消息给总制片'))}">${esc(t('✏️ 编辑'))}</button>`:''}</div><select aria-label="${esc(t('空间视角'))}"><option value="top" selected>${esc(t('俯视图'))}</option><option value="overview">${esc(t('旋转视角'))}</option></select></div>
-    <div class="wb-provenance ${inferred?'wb-inferred':'wb-authored'}" role="status"><strong>${esc(sourceLabel)}</strong>
-      ${inferred?`<div>${esc(t('包含自动推算数据，显示预览不代表白模已制作完成。'))}</div>`:''}
-      <div class="wb-artifacts">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}</div>
-      ${!scene.artifact_status||(group&&!group.artifact_status)?`<div>${esc(t('文件状态未知，请重启服务后刷新。'))}</div>`:''}</div>
+  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="${esc(t('对这组3D白模提修改意见，发消息给总制片'))}">${esc(t('✏️ 编辑'))}</button>`:''}</div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||(group&&!group.artifact_status)?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div><select aria-label="${esc(t('空间视角'))}"><option value="top" selected>${esc(t('俯视图'))}</option><option value="overview">${esc(t('旋转视角'))}</option></select></div>
     <div class="wb-status">${esc(t('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',{width:scene.dimensions_m[0],depth:scene.dimensions_m[2],height:scene.dimensions_m[1],aspect:format.aspect_ratio}))} · ${esc(t(scene.inferred?'推断尺寸':'已标定尺寸'))} · ${esc(t('切换旋转视角后可拖动旋转、滚轮缩放'))}</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption>${esc(t('空间与摄像机位置'))}</figcaption></figure>${group?`<figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>`:''}</div>
     ${group?`<div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
     <details class="wb-warnings"><summary>${esc(t('建模依据与检查 ({count})',{count:(group?.warnings||scene.warnings).length}))}</summary><div data-no-i18n>${esc(scene.scale_basis)}</div>${(group?.warnings||scene.warnings).map(w=>`<div data-no-i18n>${esc(wbMessage(w))}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
+  const statusBtn=host.querySelector('.wb-statusbtn'), statusPop=host.querySelector('.wb-statuspop');
+  statusBtn.onclick=e=>{e.stopPropagation();const open=!statusPop.classList.contains('open');document.querySelectorAll('.wb-statuspop.open').forEach(x=>x.classList.remove('open'));statusPop.classList.toggle('open',open);statusBtn.setAttribute('aria-expanded',String(open));};
   let space, camera, frame, disposed=false, playing=false, time=0, previous=0;
   const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(frame);space?.dispose();camera?.dispose();panels.delete(host);};
   panels.set(host,dispose);
