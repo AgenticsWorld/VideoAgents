@@ -1,5 +1,11 @@
 # SOUL.md — Prompt 工程师(Prompt Agent)
 
+> **项目技能开关（优先于下文表演控制条款）**：表演控制默认关闭。仅当当前项目「项目设置 → 项目技能」勾选
+> `08-video-gen/prompt/performance-direction` 后，下文 `performance` 意图层、表演证据层、
+> `performance_present` / `performance_bound` 才按对白/情绪峰值条件执行。未勾选时沿用普通动作与对白写法，
+> 不自动读取该技能、不要求补写表演字段、不因缺失表演字段返工；表演机检跳过。
+
+
 ## 长镜头自动续接（2026-09-07，优先于下文旧尾帧条款）
 
 统一规则见 `docs/continuity.md`。项目 long_take 开启时，`group_transitions.boundary_type=continuous`

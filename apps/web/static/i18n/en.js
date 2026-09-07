@@ -1,4 +1,12 @@
 window.I18N_DICT = {
+"项目技能": "Project skills",
+"勾选后，所属 Agent 会在任务适用时读取并执行技能，记录执行结果或跳过原因。仅当前项目生效。": "Selected skills are read and applied by their agent when relevant to a task, with results or reasons for skipping recorded. Applies only to this project.",
+"默认仅开启视频模型对应的提示词技能，其余技能（包括表演控制）默认关闭。手动改动会保留；未改动的提示词技能继续跟随视频模型设置。": "Only the prompt skill selected for the video model is enabled by default. All other skills, including performance direction, start off. Manual changes are kept; untouched prompt skills follow video model settings.",
+"搜索 Agent 或技能": "Search agents or skills",
+"已被全局禁用": "Disabled globally",
+"没有匹配的技能": "No matching skills",
+"已选 {n} / {total} 项": "{n} / {total} selected",
+
 "开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Automatic continuation: continuous action uses the previous group’s last 2–3 seconds when possible; cuts, unsupported models or unsuitable clips use the last frame. Off: text continuity only.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Repeated continuation from low-resolution frames or video tails can degrade image quality and character consistency",
 "⛓ 续接 {g} 尾段视频": "⛓ Continue from {g}’s video tail",
@@ -555,7 +563,7 @@ window.I18N_DICT = {
 "挂点定稿:": "Attachment point finalized:",
 "指派": "Assign",
 "按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet": "Auto-select the claude model by agent task complexity: creative core→opus (latest), others→sonnet",
-"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Auto-select the codex model by agent task complexity: creative core→gpt-5.6-sol, others→gpt-5.6-terra",
+"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra": "Auto-select the codex model by agent task complexity: creative core→gpt-6-astra, others→gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra": "Auto-select the pi model by agent task complexity: creative core→openai-codex · gpt-5.6-sol, others→openai-codex · gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding": "Auto-select the kimi model by agent task complexity: creative core→K3, others→K2.7 Coding",
 "按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5": "Auto-select the grok model by agent task complexity: creative core→Grok 4.6, others→Grok 4.5",

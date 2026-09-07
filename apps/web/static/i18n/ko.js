@@ -543,7 +543,7 @@ window.I18N_DICT = {
 "挂点定稿:": "연결 지점 확정:",
 "指派": "지정",
 "按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet": "Agent 작업 복잡도에 따라 claude 모델 자동 선택: 창작 핵심→opus(최신) 나머지→sonnet",
-"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Agent 작업 복잡도에 따라 codex 모델 자동 선택: 창작 핵심→gpt-5.6-sol 나머지→gpt-5.6-terra",
+"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra": "Agent 작업 복잡도에 따라 codex 모델 자동 선택: 창작 핵심→gpt-6-astra 나머지→gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra": "Agent 작업 복잡도에 따라 pi 모델 자동 선택: 창작 핵심→openai-codex · gpt-5.6-sol 나머지→openai-codex · gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding": "Agent 작업 복잡도에 따라 kimi 모델 자동 선택: 창작 핵심→K3 나머지→K2.7 Coding",
 "按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5": "Agent 작업 복잡도에 따라 grok 모델 자동 선택: 창작 핵심→Grok 4.6 나머지→Grok 4.5",

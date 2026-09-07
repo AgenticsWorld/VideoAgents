@@ -163,6 +163,16 @@ async def set_project_config(project: str, body: dict[str, Any]) -> dict[str, An
     return await core.api_projconfig_set(body)
 
 
+@api.get("/projects/{project}/skills", tags=["projects"])
+async def project_skills_get(project: str) -> dict[str, Any]:
+    return await core.api_project_skills_get(project)
+
+
+@api.post("/projects/{project}/skills", tags=["projects"])
+async def project_skills_set(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_project_skills_set(project, body)
+
+
 @api.get("/projects/{project}/prompt-skill", tags=["projects"])
 async def get_prompt_skill(project: str) -> dict[str, Any]:
     return await core.api_prompt_skill_get(project)

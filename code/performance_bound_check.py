@@ -3,6 +3,7 @@
 
 规则(WORKFLOW §7A / prompt SOUL 职责 2「表演证据层」,2026-08-26;规范见
 agents/08-video-gen/prompt/skills/performance-direction/SKILL.md):
+  - 仅在当前项目「项目技能」勾选 performance-direction 后执行,默认 skipped;
   - 仅查 shot_list `generation_groups[].audio_plan == "dialogue"`(或 has_dialogue)的组,
     其余组报 skipped;
   - blocking.json 每个说话角色带 `performance`(意图层:goal / arc_from / arc_to /
@@ -24,16 +25,37 @@ agents/08-video-gen/prompt/skills/performance-direction/SKILL.md):
 prompt 批产出后必须全批跑一遍;video-generation 开跑前对单组复核。
 """
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_args
+from _common import DATA_DIR, parse_args
 
 AU_RE = re.compile(r"\bAU\s?\d{1,2}\b", re.IGNORECASE)
 BRACE_RE = re.compile(r"\{([^{}]*)\}")
 PERF_FIELDS = ("goal", "arc_from", "arc_to", "end_state")
+
+
+PERFORMANCE_SKILL_ID = "08-video-gen/prompt/performance-direction"
+
+
+def performance_enabled(proj_root: Path) -> bool:
+    """独立 CLI 同样遵循项目技能开关,存量/新项目均默认关闭。"""
+    try:
+        settings = json.loads((proj_root / "settings.json").read_text())
+        selected = ((settings.get("project_skills") or {}).get("overrides") or {}).get(PERFORMANCE_SKILL_ID) is True
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    if not selected:
+        return False
+    state_path = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")) / "state.json"
+    try:
+        disabled = json.loads(state_path.read_text()).get("skills_disabled") or []
+    except (OSError, ValueError, TypeError, AttributeError):
+        disabled = []
+    return PERFORMANCE_SKILL_ID not in disabled
 
 
 def norm(s: str) -> str:
@@ -91,6 +113,8 @@ def is_dialogue_group(g: dict | None, pj: dict) -> bool:
 
 
 def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool):
+    if not performance_enabled(proj_root):
+        return [], [], True
     pj = json.loads(pf.read_text())
     gid = pj.get("group_id", pf.stem)
     g = groups.get(gid)
@@ -185,6 +209,9 @@ def main():
         ap.add_argument("groups", nargs="*", help="只查指定组 id(如 grp002);缺省全批")
         ap.add_argument("--strict", action="store_true", help="blocking 缺 performance 的对白镜按 FAIL")
     args, proj_root = parse_args("performance_bound 机检", configure=configure)
+    if not performance_enabled(proj_root):
+        print("performance_bound: skipped — 项目技能未启用表演控制")
+        return 0
     pdir = proj_root / "assets" / "prompts" / args.ep
     if not pdir.is_dir():
         print(f"未找到 {pdir}")

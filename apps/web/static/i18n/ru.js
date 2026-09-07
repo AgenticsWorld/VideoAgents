@@ -543,7 +543,7 @@ window.I18N_DICT = {
 "挂点定稿:": "Точка привязки утверждена:",
 "指派": "Назначить",
 "按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet": "Автовыбор модели claude по сложности задач Agent: творческое ядро → opus (новейшая), остальные → sonnet",
-"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Автовыбор модели codex по сложности задач Agent: творческое ядро → gpt-5.6-sol, остальные → gpt-5.6-terra",
+"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra": "Автовыбор модели codex по сложности задач Agent: творческое ядро → gpt-6-astra, остальные → gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra": "Автовыбор модели pi по сложности задач Agent: творческое ядро → openai-codex · gpt-5.6-sol, остальные → openai-codex · gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding": "Автовыбор модели kimi по сложности задач Agent: творческое ядро → K3, остальные → K2.7 Coding",
 "按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5": "Автовыбор модели grok по сложности задач Agent: творческое ядро → Grok 4.6, остальные → Grok 4.5",

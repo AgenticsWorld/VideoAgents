@@ -543,7 +543,7 @@ window.I18N_DICT = {
 "挂点定稿:": "Point d'attache finalisé :",
 "指派": "Assigner",
 "按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet": "Choix automatique du modèle claude selon la complexité de la tâche : cœur créatif → opus (le plus récent), le reste → sonnet",
-"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Choix automatique du modèle codex selon la complexité de la tâche : cœur créatif → gpt-5.6-sol, le reste → gpt-5.6-terra",
+"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra": "Choix automatique du modèle codex selon la complexité de la tâche : cœur créatif → gpt-6-astra, le reste → gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra": "Choix automatique du modèle pi selon la complexité de la tâche : cœur créatif → openai-codex · gpt-5.6-sol, le reste → openai-codex · gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding": "Choix automatique du modèle kimi selon la complexité de la tâche : cœur créatif → K3, le reste → K2.7 Coding",
 "按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5": "Choix automatique du modèle grok selon la complexité de la tâche : cœur créatif → Grok 4.6, le reste → Grok 4.5",

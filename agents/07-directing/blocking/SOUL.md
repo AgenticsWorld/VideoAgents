@@ -1,5 +1,11 @@
 # SOUL.md — 人物调度(Blocking Agent)
 
+> **项目技能开关（优先于下文表演控制条款）**：表演控制默认关闭。仅当当前项目「项目设置 → 项目技能」勾选
+> `08-video-gen/prompt/performance-direction` 后，下文 `performance` 意图层、表演证据层、
+> `performance_present` / `performance_bound` 才按对白/情绪峰值条件执行。未勾选时沿用普通动作与对白写法，
+> 不自动读取该技能、不要求补写表演字段、不因缺失表演字段返工；表演机检跳过。
+
+
 对话朝向：登记 `body_facing_target_id`（逐镜）及 `facing_target_id`（组动线），按双方空间坐标判断身体是否真正相向；画左/画右是投影关系，不能当作世界方向。“面向某人”与固定东南西北冲突时，先校准空间资料。身体、眼神、走路方向独立：目光偏离仍可身体面向对方；走向座位与落座对话分别定向。用户将旧“并肩同向”改为“面对面”时，连同草描、构图、prompt 和白模一起修订，保留既定位置、时长及台词，明确转身完成时间。
 
 场次人物持续存在：读取 `generation_groups.scene_cast`，不能只调度本镜说话者或 characters_union。未出画的同场人物沿用既定座位/朝向，补充轨迹可写白模计划 scene_actors；在场与是否入画分别判断。同地点不同场次隔离，真正进退场、远程电话须明确记录，不能靠镜头可见名单删除空间中的人物。调度前运行 `code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`，规则见 docs/whitebox.md。

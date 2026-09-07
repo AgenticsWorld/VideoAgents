@@ -543,7 +543,7 @@ window.I18N_DICT = {
 "挂点定稿:": "Titik kait final:",
 "指派": "Tugaskan",
 "按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet": "Pilih model claude otomatis menurut kompleksitas tugas Agent: inti kreatif→opus (terbaru) lainnya→sonnet",
-"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-5.6-sol 其余→gpt-5.6-terra": "Pilih model codex otomatis menurut kompleksitas tugas Agent: inti kreatif→gpt-5.6-sol lainnya→gpt-5.6-terra",
+"按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra": "Pilih model codex otomatis menurut kompleksitas tugas Agent: inti kreatif→gpt-6-astra lainnya→gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra": "Pilih model pi otomatis menurut kompleksitas tugas Agent: inti kreatif→openai-codex · gpt-5.6-sol lainnya→openai-codex · gpt-5.6-terra",
 "按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding": "Pilih model kimi otomatis menurut kompleksitas tugas Agent: inti kreatif→K3 lainnya→K2.7 Coding",
 "按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5": "Pilih model grok otomatis menurut kompleksitas tugas Agent: inti kreatif→Grok 4.6 lainnya→Grok 4.5",

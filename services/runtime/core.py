@@ -866,6 +866,8 @@ DEFAULT_GENCONFIG = {
     #   effective=运行时解析快照 {skill_id, mode, resolved_from, reason, decided_at}——派 prompt 工单、
     #   保存设置、H3A 签字时刷新;机检 code/prompt_skill_check.py(prompt_skill_applied)以此为准。
     "prompt_skill": {"mode": "auto", "skill_id": "", "effective": {}},
+    # 仅记录用户覆盖;未设置时只有生效视频提示词技能默认开启。
+    "project_skills": {"overrides": {}},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
     # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
@@ -1158,14 +1160,10 @@ AUDIO_TRANSCRIPTION_SKILL = (
 
 
 # ---------------- Agent 技能(对话面板顶栏「技能」入口) ----------------
-# 技能 = agents/<类别>/<agent>/skills/<技能目录>/SKILL.md(插件 Agent 同构),技能 id 取
-# "<agent_id>/<技能目录名>"(目录名稳定,不用 frontmatter 的 name)。对话面板「技能」弹窗
-# 自动扫描列出,并可上传技能 zip 包安装;开关记 state.json 的 skills_disabled 列表
-# (默认全部启用,新增技能自动启用;设置页勾选入口已下线,存量禁用记录与 API 仍生效)。
-# 语义 = 「勾选=允许」:现有运行时条件(生效模型/渠道/Key 已配置)照旧判定,勾选只是总闸;
-# 未勾选一律不注入。SOUL.md 无条件写死引用的技能被取消勾选时,追加「已禁用」段声明本单不执行。
-# 注册表说明每个已知技能的激活方式(仅供设置页展示 + 决定禁用时是否需要声明);未登记的
-# 技能按「通用」处理:勾选即注入一段「先读 SKILL.md,按其 description 判定是否适用」的加载指令。
+# 技能 = agents/<类别>/<agent>/skills/<技能目录>/SKILL.md(插件 Agent 同构)。
+# 安装清单/全局禁用与项目选择分离:全局禁用保留为总闸;项目 overrides 控制自动激活。
+# 默认仅模型/提示词设置选中的技能开启,其他技能(含 SOUL 引用)默认关闭。
+# 注册表保留模型/渠道等适用条件;项目勾选不绕过这些条件。
 SKILL_ACTIVATIONS: dict[str, dict] = {
     "08-video-gen/prompt/sd25-pe": {
         "kind": "conditional", "condition": "生效视频模型为 Seedance 2.5"},
@@ -1288,32 +1286,91 @@ def list_agent_skills(refresh: bool = False) -> list[dict]:
     return [dict(s, enabled=s["id"] not in off) for s in scan_agent_skills(refresh)]
 
 
-def agent_skill_prompt(agent_id: str) -> str:
-    """build_role_prompt 用:本 Agent 的「通用」技能(注册表未登记、已勾选)注入加载指令;
-    SOUL.md 无条件引用的技能(always/soul/library)被取消勾选时注入禁用声明。
-    条件注入型技能由各自分支自行 `skill_enabled(...)` 门控,此处不重复。"""
-    mine = [s for s in list_agent_skills() if s["agent_id"] == agent_id]
-    if not mine:
-        return ""
-    p = ""
-    generic = [s for s in mine if s["kind"] == "generic" and s["enabled"]]
-    if generic:
-        p += "\n\n## 已启用技能(当前已生效)\n" \
-             "以下技能已随本工位安装并被用户启用。开工前**先 Read 各技能文件全文**,按其 description 判定是否适用于本单:" \
-             "适用时按其流程执行并在回执如实记录所用技能;不适用时按 SOUL.md 常规手段执行并在回执说明判定结果。" \
-             "技能与 SOUL.md 冲突时以 SOUL.md 为准。"
-        for s in generic:
-            p += f"\n- `{s['name']}`:{s['path']}"
-            if s["description"]:
-                p += f"\n  适用:{s['description'][:200]}"
-    disabled = [s for s in mine if s["kind"] in ("always", "soul", "library") and not s["enabled"]]
+PERFORMANCE_SKILL_ID = "08-video-gen/prompt/performance-direction"
+
+
+def project_skill_enabled(skill_id: str, project: str, *, default: bool | None = None) -> bool:
+    """项目自动激活总闸;全局禁用优先,其余技能默认关闭。
+
+    视频提示词解析器传入 default=True:已由模型/用户选择该技能,无需再次解析。
+    overrides 只保存用户明确改动,因此未手动覆盖的提示词技能继续随模型联动。
+    """
+    if not skill_enabled(skill_id):
+        return False
+    overrides = (load_project_settings(project).get("project_skills") or {}).get("overrides") or {}
+    if skill_id in overrides:
+        return overrides[skill_id] is True
+    if default is not None:
+        return default
+    return skill_id == resolve_prompt_skill(project, apply_project=False)["skill_id"]
+
+
+def list_project_skills(project: str, refresh: bool = False) -> list[dict]:
+    skills = list_agent_skills(refresh)
+    default_id = resolve_prompt_skill(project, apply_project=False)["skill_id"]
+    overrides = (load_project_settings(project).get("project_skills") or {}).get("overrides") or {}
+    return [dict(s, selected=s["enabled"] and overrides.get(s["id"], s["id"] == default_id),
+                 default_selected=s["id"] == default_id) for s in skills]
+
+
+def agent_skill_prompt(agent_id: str, project: str) -> str:
+    """每轮注入当前项目的技能契约,包括 SOUL 中的旧自动触发规则覆盖。"""
+    skills = list_project_skills(project)
+    mine = [s for s in skills if s["agent_id"] == agent_id]
+    p = "\n\n## 项目技能自动激活契约(本轮最新设置,优先于历史会话与 SOUL.md 的自动触发规则)\n"
+    p += ("仅自动激活当前项目勾选的技能;安装技能不等于允许自动执行。"
+          "先按技能介绍、任务输入与触发条件判断适用性。适用时必须在相关工作之前完整读取 SKILL.md,"
+          "按其前置条件和步骤执行:准备输入后应用生产技能,交付前应用检查技能;"
+          "不要等产物写完才补读。模型/渠道等条件仍须满足,项目勾选不绕过条件。"
+          "缺少必要输入时报告缺项;不适用时跳过并说明原因。"
+          "回执逐项列出技能 id、已完成/已跳过/失败、原因以及实际产物和检查结果;"
+          "读过文件不等于完成,适用技能未完成不得把本单标为完成。"
+          "技能不得改变冻结台词、项目结构和工位职责。依赖库仅作为所选技能需要的参考资源读取,不独立自动执行。")
+    selected = [s for s in mine if s["selected"]]
+    p += "\n本工位已勾选:\n" if selected else "\n本工位没有勾选自动激活技能。"
+    for s in selected:
+        p += f"\n- `{s['id']}`: `{s['path']}`\n  适用: {s['description']}"
+        if s["condition"]:
+            p += f"\n  触发条件: {s['condition']}"
+    disabled = [s for s in mine if not s["selected"]]
     if disabled:
-        p += "\n\n## 已禁用技能(用户已禁用)\n" \
-             "以下技能已被用户禁用:SOUL.md 中引用它们的指引本单**不执行**,不要读取其 SKILL.md,按 SOUL.md 其余常规手段完成工单;" \
-             "若无该技能就无法完成工单,回执如实说明并升级用户裁决,不得自行绕过禁用。"
-        for s in disabled:
-            p += f"\n- `{s['name']}`({s['path']})"
+        p += "\n本工位未启用自动激活(覆盖 SOUL.md 中的默认/强制加载指引,本单不要自动读取或执行):"
+        p += "".join(f"\n- `{s['id']}`" for s in disabled)
+    if agent_id == PROMPT_AGENT_ID:
+        active = resolve_prompt_skill(project)
+        p += (f"\n本轮提示词主技能: {active['skill_id'] or '无'};文件: {active['path'] or '无'}。"
+              f"主设定回执 skill_applied.id={json.dumps(active['skill_id'] or None)},"
+              f"不套用原因={active['reason'] or '无'}。此处覆盖历史会话里的技能 id 与选择;"
+              "逐组以最新 group_settings effective 快照为准,组级技能同样必须通过项目勾选。")
+    performance = next((s["selected"] for s in skills if s["id"] == PERFORMANCE_SKILL_ID), False)
+    p += ("\n表演控制:项目已勾选。对白/情绪峰值任务按表演控制技能执行;blocking 准备 performance 意图层,"
+          "prompt 生成证据层,video-generation/QA 复核 performance_bound。" if performance else
+          "\n表演控制:项目未勾选(默认关闭)。所有工位不自动触发表演控制:"
+          "blocking 不要求补写 performance 意图层,prompt 不要求表演证据层/performance[] 回执,"
+          "不因缺少这些字段返工;performance_present/performance_bound 检查跳过,保留普通动作与对白写法。")
+    if agent_id in DISPATCHERS:
+        p += "\n派单时将以下项目已勾选技能安排到所属工位的适用任务中(其他技能不得自动派活):"
+        p += "".join(f"\n- {s['agent_name']} ({s['agent_id']}): {s['id']} — {s['description']}"
+                     for s in skills if s["selected"])
     return p
+
+
+def skill_resume_message(message: str, contract: str, resumed: bool) -> str:
+    """只在不重传角色提示词的引擎续轮附加最新契约,防止会话沿用旧勾选。"""
+    return f"{contract}\n\n## 当前工作指令\n{message}" if resumed else message
+
+
+async def api_project_skills_get(project: str):
+    project = safe_slug(project)
+    return {"project": project, "skills": list_project_skills(project, refresh=True)}
+
+
+async def api_project_skills_set(project: str, body: dict):
+    project = safe_slug(project)
+    # 使用项目配置的严格校验与持久化;只修改本次勾选变化,保留其他项目/技能设置。
+    await api_projconfig_set({"project": project, "project_skills": body})
+    HUB.publish({"type": "project_skills", "project": project})
+    return await api_project_skills_get(project)
 
 
 # ---------------- 视频提示词技能(项目级 prompt_skill,2026-08-28) ----------------
@@ -1371,7 +1428,7 @@ def auto_prompt_skill_for_model(model: str) -> str:
     return ""
 
 
-def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
+def resolve_prompt_skill(project: str, cfg: dict | None = None, *, apply_project: bool = True) -> dict:
     """解析本项目 prompt 工位应套用的提示词技能(不落盘)。返回:
     mode / skill_id(最终生效,"" = 不套用)/ dir / name / path(SKILL.md 仓库相对路径)/
     auto_id / resolved_from / reason(""|user_skipped|no_match|disabled|missing)/ warning。"""
@@ -1391,15 +1448,18 @@ def resolve_prompt_skill(project: str, cfg: dict | None = None) -> dict:
             reason, warning, sid = "missing", f"指定的提示词技能 {sid or '(空)'} 未安装,本项目按无技能处理", ""
         elif auto_id and auto_id != sid:
             warning = (f"用户指定 {cands[sid]['dir']},与生效视频模型 {resolved_from} "
-                       f"自动匹配的 {cands[auto_id]['dir']} 不同(按用户指定执行)")
+                       f"自动匹配的 {(cands.get(auto_id) or {}).get('dir', auto_id)} 不同(按用户指定执行)")
     else:
         sid = auto_id
         if not sid:
             reason = "no_match"
             warning = (f"生效视频模型 {resolved_from or '(未知)'} 没有对应的提示词技能:"
                        "可在「视频模型设置→提示词技能」手选一项或选择跳过")
-    if sid and not cands[sid]["enabled"]:
-        warning = f"提示词技能 {cands[sid]['dir']} 已被禁用,本项目按无技能处理"
+    if sid and sid not in cands:
+        warning, reason, sid = f"提示词技能 {sid} 未安装,本项目按无技能处理", "missing", ""
+    if sid and (not cands[sid]["enabled"] or
+                (apply_project and not project_skill_enabled(sid, project, default=True))):
+        warning = f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本项目按无技能处理"
         reason, sid = "disabled", ""
     c = cands.get(sid) or {}
     return {"mode": mode, "skill_id": sid, "dir": c.get("dir", ""), "name": c.get("name", ""),
@@ -1552,7 +1612,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "versioning", "prompt_skill")
+                         "packaging", "versioning", "prompt_skill", "project_skills")
 
 
 def project_settings_path(project: str) -> Path:
@@ -1645,6 +1705,15 @@ def _validate_versioning(v: dict):
 PROMPT_SKILL_MODES = ("auto", "manual", "off")
 
 
+def _validate_project_skills(value):
+    if not isinstance(value, dict) or set(value) - {"overrides"}:
+        raise ServiceError(400, "project_skills must contain only overrides")
+    overrides = value.get("overrides")
+    if not isinstance(overrides, dict) or any(type(v) is not bool for v in overrides.values()):
+        raise ServiceError(400, "project_skills.overrides must map skill ids to booleans")
+    # 保留已卸载插件的旧配置,但 API 不允许新增未知 id(在提交处验证)。
+
+
 def _validate_prompt_skill(ps: dict):
     if not isinstance(ps, dict):
         raise ServiceError(400, "prompt_skill must be an object")
@@ -1682,7 +1751,7 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 # 避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
 #   global       全部 Agent 跟随顶栏全局设置
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus 最新版 low→sonnet)
-#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-5.6-sol low→gpt-5.6-terra)
+#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6-astra low→gpt-5.6-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-5.6-sol low→openai-codex/gpt-5.6-terra)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
@@ -1720,7 +1789,7 @@ AM_MODE_MODELS = {
     # opus 不锁版本号:CLI 侧别名始终指向最新 opus
     "smart_claude": {"high": {"engine": "claude", "model": "opus"},
                      "low": {"engine": "claude", "model": "sonnet"}},
-    "smart_codex": {"high": {"engine": "codex", "model": "gpt-5.6-sol"},
+    "smart_codex": {"high": {"engine": "codex", "model": "gpt-6-astra"},
                     "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
@@ -2861,7 +2930,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 用户要求与 style.json 风格冲突时上报 art-director 裁决,不擅自取舍;涉及剧名的以 story/episode_plan.json 为权威,显示用标题按本设定呈现
 - 调度派单时须把本设定原文写入 title/edit 相关工单的 instruction
 - **片头启用 ⇒ 时间轴平移是硬工序(WORKFLOW.md §9B)**:正片 0 秒基准的声轨 assets/audio/final/epNN.wav 与字幕 subtitles.srt 接入片头后都要整体后移一个片头实测时长。edit 总装只准走 `python3 code/finalize_episode.py assemble --project <slug> --ep epNN`(声轨随正片段拼接、偏移天然产生,自动产 subtitles_final.srt 并机检),禁止自写 concat 后再 -itsoffset/adelay 手算;成片由其它路径产出时至少 `shift` + `check`;机检 intro_offset_ok(`finalize_episode.py check`)FAIL 即不交付/不发布。调度开总装工单时 instruction 必须写明该 CLI 命令与 acceptance `intro_offset_ok`;片头禁用时同样跑 check(偏移 0,字幕原样拷贝)"""
-    if agent_id == "09-audio/audio-transcription" and skill_enabled("09-audio/audio-transcription/audio-transcription"):
+    if agent_id == "09-audio/audio-transcription" and project_skill_enabled("09-audio/audio-transcription/audio-transcription", project):
         p += f"""
 
 ## 音频转文字 Skill（本工位强制）
@@ -2939,7 +3008,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
                    "no_match": f"生效视频模型 {psk['resolved_from'] or '(未知)'} 没有对应技能(auto 未匹配)",
                    "disabled": "所匹配技能已被禁用",
                    "missing": "用户指定的技能未安装"}.get(psk["reason"], psk["reason"] or "未设定")
-            contract = f"""- 本项目**不套用**提示词技能:{why}。按 SOUL.md 常规写法完成工单,不要自行读取 skills/ 下任何引擎提示词技能
+            contract = f"""- 本项目**不套用**提示词技能:{why}。按 SOUL.md 常规写法完成工单,不要自行读取未启用的引擎提示词技能(本单有组级覆盖且通过项目勾选时,该组按组级契约执行)
 - 每个组级 `assets/prompts/epNN/grpNNN.json` 仍必带回执字段 `skill_applied`:`{{"id": null, "reason": "{psk['reason'] or 'no_match'}"}}`"""
         warn = f"\n- ⚠️ {psk['warning']}(已在回执 notes 里如实记录即可,不阻塞)" if psk.get("warning") else ""
         p += f"""
@@ -2948,7 +3017,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 {contract}{warn}
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
-            and skill_enabled("08-video-gen/upscale/minimax-regenerate-2k"):
+            and project_skill_enabled("08-video-gen/upscale/minimax-regenerate-2k", project):
         p += f"""
 
 ## MiniMax Regenerate-2K 超分 Skill(仅当 MiniMax API Key 已配置时注入,当前已生效)
@@ -2961,7 +3030,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
     if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id) \
-            and skill_enabled("08-video-gen/video-generation/runninghub-cloud-workflow"):
+            and project_skill_enabled("08-video-gen/video-generation/runninghub-cloud-workflow", project):
         p += f"""
 
 ## RunningHub 云端工作流视频生成 Skill(仅当视频渠道为 ComfyUI RunningHub 运行方式时注入,当前已生效)
@@ -2971,7 +3040,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
     if agent_id == VIDEO_AGENT_ID and active_video_provider(agent_id=agent_id) == "agentics" \
-            and skill_enabled("08-video-gen/video-generation/agentics-media-generation"):
+            and project_skill_enabled("08-video-gen/video-generation/agentics-media-generation", project):
         p += f"""
 
 ## AgenticsLLM 视频生成 Skill(当前渠道已生效)
@@ -2985,7 +3054,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
         p += group_overrides_prompt(project)
     elif agent_id == VIDEO_AGENT_ID:
         p += group_overrides_prompt(project, for_video_agent=True)
-    p += agent_skill_prompt(agent_id)
+    p += agent_skill_prompt(agent_id, project)
     if brief:
         p += f"""
 
@@ -3275,6 +3344,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 return
         try:
             role = build_role_prompt(agent_id, run["project"])
+            skill_contract = agent_skill_prompt(agent_id, run["project"])
             if agent_id == PROMPT_AGENT_ID:
                 # 运行面板 chip + 结束时 prompt_skill_read 核验的依据(dir 空 = 本项目不套用技能)
                 psk = resolve_prompt_skill(run["project"])
@@ -3370,7 +3440,7 @@ async def execute_run(run: dict, message: str, model: str | None):
         def codex_stdin(sid: str | None) -> bytes | None:
             if engine != "codex":
                 return None
-            prompt = message if sid else f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"
+            prompt = skill_resume_message(message, skill_contract, bool(sid)) if sid else f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"
             return prompt.encode("utf-8")
 
         def make_cmd(sid: str | None) -> list[str]:
@@ -3397,7 +3467,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if model:
                     base += ["-m", model]
                 if sid:
-                    return base + ["-r", sid, "-p", message]
+                    return base + ["-r", sid, "-p", skill_resume_message(message, skill_contract, True)]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "opencode":
                 # opencode run 原生 JSON 事件流与持久会话,但无 --append-system-prompt:
@@ -3408,7 +3478,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                     base += ["-m", model]
                 base += engine_effort_args("opencode", thinking_effort)
                 if sid:
-                    return base + ["--session", sid, message]
+                    return base + ["--session", sid, skill_resume_message(message, skill_contract, True)]
                 return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "grok":
                 # Grok Build CLI 的 headless 参数与 claude 同构:-p 单轮、--max-turns、
@@ -4326,8 +4396,10 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
         if not sid:
             reason = "no_match"
             warning = (warning + " · " if warning else "") + f"本组视频模型 {model or '(未知)'} 没有对应的提示词技能"
-    if sid and sid in cands and not cands[sid]["enabled"]:
-        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 已被禁用,本组按无技能处理"
+    if sid and sid not in cands:
+        sid, reason = "", "missing"
+    if sid and not project_skill_enabled(sid, project):
+        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本组按无技能处理"
         sid, reason = "", "disabled"
     c = cands.get(sid) or {}
     return {"provider": provider, "video_model": model, "model_source": source,
@@ -6673,12 +6745,19 @@ async def api_projconfig_get(project: str = "demo"):
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
                        "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
-                       "versioning": "版本管理", "prompt_skill": "提示词技能"}
+                       "versioning": "版本管理", "prompt_skill": "提示词技能",
+                       "project_skills": "项目技能"}
 
 
 async def api_projconfig_set(body: dict):
     project = safe_slug(body.get("project"))
     old = load_project_settings(project)
+    if "project_skills" in body:
+        _validate_project_skills(body["project_skills"])
+        known = {s["id"] for s in scan_agent_skills(refresh=True)}
+        unknown = set(body["project_skills"]["overrides"]) - known
+        if unknown:
+            raise ServiceError(400, "unknown skill id: " + ", ".join(sorted(unknown)))
     cfg = _merge(load_project_settings(project),
                  {k: v for k, v in (body or {}).items()
                   if k in PROJECT_SETTINGS_KEYS})
@@ -6689,12 +6768,15 @@ async def api_projconfig_set(body: dict):
     _validate_packaging(cfg.get("packaging") or {})
     _validate_versioning(cfg.get("versioning") or {})
     _validate_prompt_skill(cfg.get("prompt_skill") or {})
+    _validate_project_skills(cfg.get("project_skills"))
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
     # 提示词技能快照随设置一起刷新(模式/指定技能/视频模型任一变化都会体现在 effective 里);
     # 快照本身的变化不计入「设置变更」通知(那是派生值,不是用户改的)
     cfg = sync_prompt_skill_effective(project)
+    if "project_skills" in body:
+        sync_group_settings_effective(project)
     old.setdefault("prompt_skill", {})["effective"] = (cfg.get("prompt_skill") or {}).get("effective")
     changes = _flat_diff(old, cfg)
     secs = {c.split(":")[0].split(".")[0] for c in changes}
