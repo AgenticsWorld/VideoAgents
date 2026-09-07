@@ -1,10 +1,10 @@
 .wb-panel{margin:16px 0;padding:14px;background:#161a23;border:1px solid #2a3040;border-radius:10px;color:#dde3ee;font:13px/1.6 -apple-system,sans-serif}
 .wb-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-bottom:10px}
-.wb-toolbar strong{margin-right:auto}
+.wb-heading{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-right:auto}
 .wb-panel button,.wb-panel select{background:#222a36;color:#dde3ee;border:1px solid #3b4658;border-radius:5px;padding:5px 10px;cursor:pointer}
 .wb-panel button:disabled{opacity:.5;cursor:wait}
 .wb-views{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
-/* Each group viewport matches the 210px-high video; scene limits double the image. */
+/* Group viewports are 1.5 times the 210px-high video; scene limits double the image. */
 .wb-group{--wb-preview-max-width:100%}
 .wb-scene{--wb-preview-max-width:760px}
 .wb-views figure{margin:0;min-width:0;flex:none;width:min(100%,var(--wb-preview-width));max-width:var(--wb-preview-max-width)}

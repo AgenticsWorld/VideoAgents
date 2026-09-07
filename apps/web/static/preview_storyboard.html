@@ -987,14 +987,18 @@ function groupCard(g,inner){
   // 在 characters_union 却未登记进 blocking_map 的角色标「?」(图上无字母)
   const BM_COLORS=['#e63946','#1d78d8','#2ea043','#f59e0b','#8e44ad','#00acc1','#e91e63','#795548'];
   const bmChars=((g.blocking_map||{}).characters||[]).filter(c=>c&&c.id);
+  // Older running services still expose the updated references: use them to
+  // show scene occupants until the new scene_cast response is available.
+  const sceneCast=g.scene_cast||[...new Set([...(g.characters_union||[]),
+    ...[...(g.pipeline_refs||[]),...(g.user_refs||[])].map(r=>/^assets\/concepts\/characters\/([^/]+)\//.exec(r.ref||'')?.[1]).filter(Boolean)])];
   let chars='';
   if(bmChars.length){
     const seen=new Set(), parts=bmChars.map((c,i)=>{seen.add(c.id);
       const tip=[c.label,c.route_en].filter(Boolean).join(' · ');
       return `<span title="${esc(tip)}"><b style="color:${BM_COLORS[i%BM_COLORS.length]}">${'ABCDEFGH'[i]||'?'}</b> = ${esc(c.id)}</span>`;});
-    (g.characters_union||[]).filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('未在动线图登记(图上无字母)'))}">? = ${esc(id)}</span>`));
+    sceneCast.filter(id=>!seen.has(id)).forEach(id=>parts.push(`<span title="${esc(t('场次人物，空间位置由白模调度继承'))}">${esc(id)} · ${t('场次人物')}</span>`));
     chars=parts.join('、');
-  }else chars=esc((g.characters_union||[]).join('、'));
+  }else chars=esc(sceneCast.join('、'));
   // 组服装(shot_list costumes_by_char → costume_sheets.json 台账,2026-08-26):头部逐角色服装 chip,
   // 深链人物预览页该套服装卡。只发文字 chip、不在媒体区贴服装 sheet 缩略(2026-08-27):参考图由 prompt
   // 工位按规约挑选写进组 refs(pipeline_refs 已展示),prompt 前在此贴 sheet 只会与之同图双显
@@ -1046,10 +1050,10 @@ function groupCard(g,inner){
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
-      <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">3D 白模</button>
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
+      <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">🧊白模</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
       <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>

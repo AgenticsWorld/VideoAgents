@@ -51,6 +51,21 @@ def test_group_time_and_cast(project):
     assert group['cameras'][0]['keyframes'][0]=={**group['cameras'][0]['keyframes'][-1],'t':0}
 
 
+def test_scene_cast_enables_physical_visibility_and_explicit_exceptions(project):
+    path, data = source(project)
+    data['generation_groups'][0]['scene_cast'] = ['CHAR-1']
+    write(path, data)
+    camera = compile_episode(project, 'ep01')['groups'][0]['cameras'][0]
+    camera['visible_actor_ids'] = []
+    plan_path = project/'directing/ep01/whitebox_plans/grp1.json'
+    write(plan_path, {'cameras': [camera]})
+    group = compile_episode(project, 'ep01')['groups'][0]
+    assert 'visible_actor_ids' not in group['cameras'][0]
+    camera['visibility_override_reason'] = 'Intentional prop-only VFX plate'
+    write(plan_path, {'cameras': [camera]})
+    assert compile_episode(project, 'ep01')['groups'][0]['cameras'][0]['visible_actor_ids'] == []
+
+
 def test_timed_trajectory_and_pose(project):
     write(project/'directing/ep01/shots/sh1/blocking.json',{'characters':[
         {'id':'CHAR-1','xy_start':[.1,.5],'xy_end':[.7,.5],

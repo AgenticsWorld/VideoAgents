@@ -1,5 +1,7 @@
 # SOUL.md — 视频生成(Video Generation Agent)
 
+场次人物前置检查：开跑前执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> <grp>`（检查模式）及 refs_referenced_check.py，核对同场次所有人物的身份/服装图均关联，即使无对白或在当前镜头外。不能从 prompt 已列人物反推验收名单；缺图/缺引用退回 prompt 执行场次同步，超上限按现有 refs_cap 处理。人物参考存在不代表每镜都必须入画，也不允许给沉默者新增音轨或台词。
+
 > 一组分镜,我一次成片——按组级多镜头 prompt 把锚点包驱动成连贯的组视频,组内切镜由模型天然保证一致。
 
 ## 我是谁

@@ -23,8 +23,9 @@ async function mount(host,project,scene,group=null,ep='') {
   const format=projectRenderFormat(settings);
   host.className='wb-panel '+(group?'wb-group':'wb-scene');
   host.style.setProperty('--wb-aspect',`${format.width} / ${format.height}`);
-  host.style.setProperty('--wb-preview-width',`${(group?210:460)*format.width/format.height}px`);
-  host.innerHTML=`<div class="wb-toolbar"><strong>3D 白模 · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong><select aria-label="空间视角"><option value="overview">旋转视角</option><option value="top">俯视图</option></select>${group?'<button class="wb-export">导出双视角 MP4</button>':''}</div>
+  host.style.setProperty('--wb-preview-width',`${(group?315:460)*format.width/format.height}px`);
+  const editLocation=group?`3D 白模 [whitebox:${project}/${ep}/${group.group_id}]（项目 ${project}；集 ${ep}；分镜组 ${group.group_id}；场景 ${scene.scene_id}；镜头 ${group.cameras.map(c=>c.shot_id).join('、')}；白模调度计划 directing/${ep}/whitebox_plans/${group.group_id}.json；场景模型 bible/scenes/${scene.scene_id}/whitebox.json；编译预览 directing/${ep}/whitebox/episode.json）`:'';
+  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>3D 白模 · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="对这组3D白模提修改意见，发消息给总制片">✏️ 编辑</button>`:''}</div><select aria-label="空间视角"><option value="overview">旋转视角</option><option value="top">俯视图</option></select>${group?'<button class="wb-export">导出双视角 MP4</button>':''}</div>
     <div class="wb-status">${scene.dimensions_m[0]} × ${scene.dimensions_m[2]} m · 高 ${scene.dimensions_m[1]} m · 网格 1 m · 画幅 ${esc(format.aspect_ratio)} · ${scene.inferred?'推断尺寸':'已标定尺寸'} · 拖动旋转，滚轮缩放</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="场景白模"></canvas><figcaption>空间与摄像机位置</figcaption></figure>${group?'<figure><canvas class="wb-camera" aria-label="摄像机白模"></canvas><figcaption>摄像机视角</figcaption></figure>':''}</div>
     ${group?`<div class="wb-transport"><button class="wb-play">播放</button><input type="range" aria-label="白模时间" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast">${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
@@ -49,7 +50,7 @@ async function mount(host,project,scene,group=null,ep='') {
     host.querySelector('.wb-play').onclick=()=>{if(time>=group.duration_s)time=0;playing=!playing;previous=performance.now();host.querySelector('.wb-play').textContent=playing?'暂停':'播放';};
     host.querySelector('input').oninput=e=>{time=Number(e.target.value);playing=false;host.querySelector('.wb-play').textContent='播放';render();};
     const result=host.querySelector('.wb-result'),button=host.querySelector('.wb-export');
-    if(group.requires_service_restart){button.disabled=true;result.textContent='白模预览已更新；重启服务后可导出包含群演、道具和退场调度的视频。';}
+    if(group.requires_service_restart){button.disabled=true;result.textContent='白模预览已更新；重启服务后可导出本次完整调度的视频。';}
     const poll=async()=>{
       try{const s=await json(`${api(project)}/${encodeURIComponent(ep)}/exports/${encodeURIComponent(group.group_id)}`);if(disposed)return;
         result.textContent=s.status==='running'?`正在导出 ${s.progress||0}%`:s.status==='complete'?'双视角参考视频已保存到项目。':s.error||'';
@@ -74,11 +75,11 @@ export async function toggleGroup(button,project,ep,gid){
   // Keep GPU use bounded even for episodes with hundreds of groups.
   for(const [node,dispose] of panels){dispose();node.remove();}
   host=document.createElement('section');host.className='wb-panel';host.textContent='正在加载分镜组白模…';
-  parent.querySelector('.ghead').after(host);
+  parent.querySelector('.gshots').before(host);
   panels.set(host,()=>{host.remove();panels.delete(host);});
   try{
     const key=project+'/'+ep;
-    if(!episodeCache||episodeCache.key!==key)episodeCache={key,promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`,2)};
+    if(!episodeCache||episodeCache.key!==key)episodeCache={key,promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`,3)};
     const data=await episodeCache.promise;
     const group=data.groups.find(g=>g.group_id===gid);
     if(!group)throw Error(data.errors.find(e=>e.group_id===gid)?.error||'没有本组白模数据');

@@ -5459,6 +5459,8 @@ def _preview_storyboard(project: str, ep: str):
                                "emotion", "director_beat_note")}
         for s in sb.get("scenes", []) if isinstance(s, dict)]
     sl = _read_json_safe(base / "directing" / ep / "shot_list.json") or {}
+    from modules.scene_cast import scene_cast_groups
+    scene_cast_contexts = scene_cast_groups(sl)
     # 旁白挂点定稿(shot-planning 产出,§7D ①):预览页最优先按它对位,
     # 缺失时前端回退 narration.md 锚的 grpNNN/beat 前缀匹配并标注"挂点未定稿"
     data["narration_anchors"] = [
@@ -5669,6 +5671,9 @@ def _preview_storyboard(project: str, ep: str):
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
             "characters_union", "creatures_union", "has_dialogue", "continuity_from")} | {
+            "scene_no": scene_cast_contexts.get(gid, {}).get("scene_no"),
+            "scene_cast": scene_cast_contexts.get(gid, {}).get("actor_ids", []),
+            "scene_cast_refs": g.get("scene_cast_refs", []),
             # 组链 chip 三态:anchor last_frame=续接尾帧 / none=硬切不传尾帧 / 无 continuity 计划=只知前组;
             # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
             "continuity_anchor": tr.get("anchor") or None,

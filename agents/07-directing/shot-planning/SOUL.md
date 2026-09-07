@@ -11,6 +11,8 @@
 
 ## 职责
 
+场次人物默认继承：每组保留 `scene_no`，以同集 `scene_no + scene_id` 建立完整 `scene_cast`，包含无对白、画外和静止陪衬人物。`characters_union` 是组内叙事角色合集，维持现有分组统计；完整在场集合单独记录，不再用叙事列表限制白模或引用人物。定稿后运行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write`，读取缺图报告并补交上游；同地点的不同时间、闪回不得混场。明确进退场与远程声音例外，不能把暂未入画解释为离场。
+
 1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…)、定终稿时长、景别、机位描述;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
 2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。
 3. 按 `pacing.json` 的逐场时长分配收敛总时长:Σ镜头时长 = 集时长 ±10%;超预算时按 pacing 的删减建议裁,并记录取舍。

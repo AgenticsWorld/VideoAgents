@@ -13,6 +13,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from modules.output_format import resolve_output
+from modules.scene_cast import scene_cast_groups
 
 PALETTE = ['#e63946', '#1d78d8', '#2ea043', '#f59e0b', '#8e44ad', '#00acc1', '#e91e63', '#795548']
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -335,6 +336,11 @@ def compile_group(base, ep, group, shots, scene):
         if len(overrides) != len(plan['actors']) or set(overrides) != {a['id'] for a in actors}:
             raise ValueError(f'{gid}: plan actor IDs must match blocking map (including mounts)')
         actors = [{**a, **{k:v for k,v in overrides[a['id']].items() if k not in ('color', 'letter', 'id')}} for a in actors]
+    # Scene occupants are separate from shot subjects / blocking-map letters.
+    for actor in plan.get('scene_actors', []):
+        if actor['id'] not in group.get('scene_cast', []) or actor['id'] in {a['id'] for a in actors}:
+            raise ValueError('scene_actors must be unique scene cast outside the blocking-map cast')
+        actors.append(copy.deepcopy(actor))
     if 'cameras' in plan:
         cameras = plan['cameras']
         warnings = [w for w in warnings if not any(w.startswith(s+':') for s in group['shots'])]
@@ -377,8 +383,11 @@ def compile_group(base, ep, group, shots, scene):
         sd = shots[camera['shot_id']]['duration_s']
         if 'visible_actor_ids' in camera:
             visible_ids = camera['visible_actor_ids']
-            if not isinstance(visible_ids, list) or any(not isinstance(cid, str) for cid in visible_ids) or set(visible_ids) - seen:
+            if not isinstance(visible_ids, list) or any(not isinstance(cid, str) for cid in visible_ids) or set(visible_ids) - seen - set(group.get('scene_cast', [])):
                 raise ValueError('visible_actor_ids must reference actors or extras in the group')
+            if group.get('scene_cast_enabled') and not str(camera.get('visibility_override_reason') or '').strip():
+                camera.pop('visible_actor_ids')
+                warnings.append(f"{camera['shot_id']}: 已忽略无明确原因的人物过滤，按实际机位显示在场人物。")
         if abs(camera['start']-cursor) > 1e-6 or abs(camera['duration_s']-sd) > 1e-6:
             raise ValueError(f'{gid}: camera intervals must match shot timing')
         validate_keys(camera['keyframes'], sd, True); cursor += sd
@@ -389,12 +398,57 @@ def compile_group(base, ep, group, shots, scene):
             'warnings': warnings, 'authored': bool(plan)}
 
 
+def complete_scene_actors(groups, contexts, raw_groups, errors):
+    # Snapshot authored tracks before filling holes so a later authored entrance
+    # or departure, rather than a synthetic placeholder, remains authoritative.
+    anchors = {}
+    for i, group in enumerate(groups):
+        key = contexts[group['group_id']]['key']
+        for actor in group['actors']:
+            anchors.setdefault((key, actor['id']), []).append((i, copy.deepcopy(actor), group['group_id']))
+    for i, group in enumerate(groups):
+        gid = group['group_id']; context = contexts[gid]
+        group['scene_cast'] = context['actor_ids']
+        present = {a['id'] for a in group['actors']}
+        colors = {a.get('color') for a in group['actors']}
+        for cid in context['actor_ids']:
+            if cid in present:
+                continue
+            candidates = anchors.get((context['key'], cid), [])
+            if not candidates:
+                errors.append({'group_id': gid, 'error': f'{cid}: 同场次缺少空间锚点，请补 scene_actors'})
+                continue
+            previous = [entry for entry in candidates if entry[0] < i]
+            index, actor, origin = previous[-1] if previous else candidates[0]
+            actor = copy.deepcopy(actor)
+            anchor = copy.deepcopy(actor['keyframes'][-1 if index < i else 0])
+            actor['keyframes'] = [{**copy.deepcopy(anchor), 't': t} for t in (0, group['duration_s'])]
+            actor['letter'] = ''
+            actor['color'] = next((color for color in PALETTE if color not in colors), actor.get('color', PALETTE[0]))
+            colors.add(actor['color'])
+            actor['scene_inherited_from'] = origin
+            group['actors'].append(actor)
+            group['warnings'].append(f'{cid}: 同场次在场人物，沿用 {origin} 的'+('尾' if index < i else '首')+'姿态与位置；补充走位可写 scene_actors。')
+        for cid, presence in (raw_groups[gid].get('scene_presence') or {}).items():
+            if cid not in context['actor_ids'] or not isinstance(presence, dict) or presence.get('state') not in ('absent', 'remote', 'present') or not presence.get('reason'):
+                errors.append({'group_id': gid, 'error': f'{cid}: scene_presence requires a scene actor, state and reason'})
+                continue
+            for actor in group['actors']:
+                if actor['id'] == cid:
+                    if presence['state'] != 'present' or actor.get('scene_inherited_from'):
+                        for key in actor['keyframes']:
+                            key['visible'] = presence['state'] == 'present'
+                    actor['presence'] = copy.deepcopy(presence)
+
+
 def compile_episode(base: Path, ep: str):
     component(ep)
     source = read(base / 'directing' / ep / 'shot_list.json')
     if not source:
         raise FileNotFoundError(f'{ep}: missing shot_list.json')
     shots = {s['shot_id']: s for s in source.get('shots', [])}
+    contexts = scene_cast_groups(source)
+    raw_groups = {g['group_id']: g for g in source.get('generation_groups', [])}
     scenes = {}; groups = []; errors = []; by_id = {}
     for raw in source.get('generation_groups', []):
         gid = raw.get('group_id', '?')
@@ -402,7 +456,8 @@ def compile_episode(base: Path, ep: str):
             sid = component(raw['scene_id'])
             if sid not in scenes:
                 scenes[sid] = load_scene(base, sid)
-            group = compile_group(base, ep, raw, shots, scenes[sid])
+            group = compile_group(base, ep, {**raw, 'scene_cast': contexts[gid]['actor_ids'],
+                                  'scene_cast_enabled': 'scene_cast' in raw}, shots, scenes[sid])
             prev = by_id.get(group['continuity_from'])
             policy = group['continuity']
             for key in ('actors', 'camera'):
@@ -428,7 +483,8 @@ def compile_episode(base: Path, ep: str):
             by_id[gid] = group; groups.append(group)
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
-    return {'schema_version': 'whitebox_episode.v1', 'staging_version': 2, 'project': base.name, 'ep': ep,
+    complete_scene_actors(groups, contexts, raw_groups, errors)
+    return {'schema_version': 'whitebox_episode.v1', 'staging_version': 3, 'project': base.name, 'ep': ep,
             'render': render_format(read(base / 'settings.json', {})),
             'scenes': scenes, 'groups': groups, 'errors': errors,
             'source_group_count': len(source.get('generation_groups', []))}

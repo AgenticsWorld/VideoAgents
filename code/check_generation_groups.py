@@ -112,6 +112,7 @@ def propose_groups(shots: list[dict]) -> list[dict]:
         groups.append({
             "group_id": f"grp{len(groups) + 1:03d}",
             "scene_id": cur[0].get("scene_id"),
+            "scene_no": cur[0].get("scene_no"),
             "shots": [s["shot_id"] for s in cur],
             "total_duration_s": int(round(sum(s["duration_s"] for s in cur))),
             "characters_union": sorted({c for s in cur for c in (s.get("characters") or [])}),
@@ -126,6 +127,7 @@ def propose_groups(shots: list[dict]) -> list[dict]:
             cur_dur = sum(x["duration_s"] for x in cur)
             cur_chars = {c for x in cur for c in (x.get("characters") or [])}
             if (s.get("scene_id") != cur[0].get("scene_id")
+                    or s.get("scene_no") != cur[0].get("scene_no")
                     or cur_dur + s["duration_s"] > MAX_GROUP_S
                     or len(cur_chars | chars) > MAX_CHARS):
                 flush()
@@ -163,6 +165,9 @@ def check(shot_list: dict) -> list[str]:
         scenes = {by_id[x].get("scene_id") for x in gshots if x in by_id}
         if len(scenes) > 1:
             errors.append(f"{gid} same_scene: 跨场景 {sorted(scenes)}")
+        scene_numbers = {by_id[x].get("scene_no") for x in gshots if x in by_id and by_id[x].get("scene_no")}
+        if len(scene_numbers) > 1:
+            errors.append(f"{gid} same_scene_instance: 跨场次 {sorted(scene_numbers)}")
         # 3. 时长
         td = g.get("total_duration_s")
         real = sum(by_id[x]["duration_s"] for x in gshots if x in by_id)
