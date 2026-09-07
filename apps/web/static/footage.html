@@ -155,7 +155,10 @@ textarea.info{min-height:96px}
     <div class="card">
       <h2>
         <a class="back" href="#" id="back-list">← 项目列表</a>
-        <span id="proj-name" style="font-weight:600"></span>
+        <span id="proj-title" style="font-weight:600"></span>
+        <span id="proj-name" class="hint" style="font-weight:400"></span>
+        <button class="small" id="rename-btn" title="修改项目名称">✏️</button>
+        <input id="rename-input" type="text" maxlength="120" placeholder="项目名称(留空则显示文件夹名)" style="display:none;flex:1;min-width:160px;max-width:420px;font-size:14px;font-weight:600;padding:4px 8px">
         <span id="proj-status" class="chip"></span>
         <span class="cur">
           <button class="small" id="open-folder">📂 打开文件夹</button>
@@ -278,7 +281,7 @@ async function showList(){
     if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
     $('#list-box').innerHTML=`<table><thead><tr><th>${t('项目')}</th><th>${t('来源')}</th><th>${t('状态')}</th><th>${t('分镜')}</th><th>${t('创建时间')}</th><th></th></tr></thead><tbody>`+
       rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr>
-        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.name)}</a> <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">📋</button></td>
+        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.title||p.name)}</a>${p.title?` <span class="hint">${esc(p.name)}</span>`:''} <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">📋</button></td>
         <td class="src" title="${esc(s.url||s.filename||'')}">${s.type==='url'?'🔗 ':s.type==='upload'?'📤 ':''}${esc(src)}${s.duration_s?` <span class="hint">${fmtDur(s.duration_s)}</span>`:''}</td>
         <td>${chip(p.status,p.running)}${p.message&&RUNNING.has(p.status)?` <span class="hint">${esc(p.message)}</span>`:''}</td>
         <td>${p.clip_count||0}${p.clip_count?` <span class="hint">/ ${t('已分析')} ${p.analyzed_count||0}</span>`:''}</td>
@@ -317,12 +320,43 @@ function stopPoll(){if(POLL){clearTimeout(POLL);POLL=null}}
 async function openProject(name){
   stopPoll();CUR=name;LAST_SIG='';
   $('#list-view').style.display='none';$('#proj-view').style.display='';
-  $('#proj-name').textContent=name;$('#clips').innerHTML='';$('#proj-err').textContent='';
+  renderTitle({name,title:''});$('#clips').innerHTML='';$('#proj-err').textContent='';
   await refresh(true);
 }
 $('#back-list').onclick=e=>{e.preventDefault();location.hash=''};
 $('#proj-delete').onclick=()=>deleteProject(CUR,false);
 $('#open-folder').onclick=async()=>{try{await api('/actions/open-footage-folder',{name:CUR})}catch(e){msg(t('打开文件夹失败:')+e.message,'err')}};
+/* 项目名称:title 为显示名(任意文字),文件夹名 name 是引用 ID 不改 */
+function renderTitle(p){
+  const title=(p.title||'').trim();
+  $('#proj-title').textContent=title||p.name;
+  $('#proj-name').textContent=title?p.name:'';
+  document.title=(title||p.name)+' — '+t('素材库');
+}
+const renameIn=$('#rename-input');let RENAMING=false,RENAME_SAVING=false;
+function startRename(){
+  if(!PROJ||RENAMING)return;RENAMING=true;
+  renameIn.value=PROJ.title||'';renameIn.dataset.orig=renameIn.value;
+  $('#proj-title').style.display='none';$('#proj-name').style.display='none';$('#rename-btn').style.display='none';
+  renameIn.style.display='';renameIn.focus();renameIn.select();
+}
+function endRename(){
+  RENAMING=false;renameIn.style.display='none';
+  $('#proj-title').style.display='';$('#proj-name').style.display='';$('#rename-btn').style.display='';
+}
+async function saveRename(){
+  if(!RENAMING||RENAME_SAVING)return;
+  const v=renameIn.value.trim();
+  if(v===(renameIn.dataset.orig||'')){endRename();return}
+  RENAME_SAVING=true;
+  try{const p=await api(`${API}/${encodeURIComponent(CUR)}/settings`,{title:v});PROJ=p;endRename();renderTitle(p);msg(t('项目名称已保存'),'ok')}
+  catch(e){msg(t('保存失败:')+e.message,'err');renameIn.focus()}
+  finally{RENAME_SAVING=false}
+}
+$('#rename-btn').onclick=startRename;
+$('#proj-title').ondblclick=startRename;
+renameIn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveRename()}else if(e.key==='Escape'){e.preventDefault();endRename()}});
+renameIn.addEventListener('blur',saveRename);
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$('#tab-file').style.display=b.dataset.tab==='file'?'':'none';$('#tab-url').style.display=b.dataset.tab==='url'?'':'none'});
 
 async function refresh(full){
@@ -331,6 +365,7 @@ async function refresh(full){
   try{p=await api(`${API}/${encodeURIComponent(CUR)}`)}catch(e){$('#proj-err').textContent=t('读取失败:')+e.message;return}
   if(p.name!==CUR)return;
   PROJ=p;
+  if(!RENAMING)renderTitle(p);
   if(p.engine)setEngineChip(p);
   const pt=$('#analysis-prompt');
   if(document.activeElement!==pt&&pt.dataset.orig===pt.value){pt.value=p.analysis_prompt||'';pt.dataset.orig=pt.value;pt.placeholder=(p.analysis_prompt_default||'').split('\n')[0]+'…'}

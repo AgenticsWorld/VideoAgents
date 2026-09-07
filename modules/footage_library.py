@@ -199,7 +199,8 @@ def list_projects() -> list[dict]:
         _reap(d.name)
         proj = _read_json(pj, {})
         src = proj.get("source") or {}
-        out.append({"name": d.name, "created_at": proj.get("created_at", ""),
+        out.append({"name": d.name, "title": str(proj.get("title") or ""),
+                    "created_at": proj.get("created_at", ""),
                     "updated_at": proj.get("updated_at", ""),
                     "status": proj.get("status", "empty"), "message": proj.get("message", ""),
                     "clip_count": int(proj.get("clip_count") or 0),
@@ -236,10 +237,13 @@ def delete_project(name: str) -> dict:
 
 
 def update_settings(name: str, fields: dict) -> dict:
-    """项目级设置:analysis_prompt(AI 分析问题,空=用默认)、
+    """项目级设置:title(显示名称,任意文字,空=显示文件夹名;文件夹名 name 是引用 ID 不改)、
+    analysis_prompt(AI 分析问题,空=用默认)、
     min_scene_len_s(镜头分割最短镜头秒数,重新分割时生效)。"""
     with _LOCK:
         proj = load_project(name)
+        if "title" in fields:
+            proj["title"] = " ".join(str(fields.get("title") or "").split())[:120]
         if "analysis_prompt" in fields:
             proj["analysis_prompt"] = str(fields.get("analysis_prompt") or "").strip()[:4000]
         if "min_scene_len_s" in fields:
