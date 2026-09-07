@@ -138,6 +138,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .info-note{display:none;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:-6px}
 .modal .info-note.on{display:block}
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
+.modal .rhythm-kind{flex:none;width:60px;color:var(--dim);font-size:12px}
+.modal .rhythm-detail{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;line-height:1.6}
+.modal .rhythm-detail b{color:var(--text);font-weight:500}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
 /* 风格库选择弹窗(设计风格字段) */
@@ -374,12 +377,21 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <textarea id="np-novel" style="height:150px" placeholder="粘贴小说原文(可留空,之后手动放入 novel/ 目录)"></textarea></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
         <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">设计风格</label>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">画面风格</label>
         <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
           <button type="button" id="np-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
           <textarea id="np-style" style="height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
         </div></div>
-      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想与设计风格会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
+        <div class="rhythm-box" data-prefix="np" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+          <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="np-rhythm-episode" style="flex:1"></select></div>
+          <div class="rhythm-detail" id="np-rhythm-episode-detail" style="display:none"></div>
+          <textarea id="np-rhythm-episode-custom" style="height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
+          <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">跨集节奏</span><select id="np-rhythm-season" style="flex:1"></select></div>
+          <div class="rhythm-detail" id="np-rhythm-season-detail" style="display:none"></div>
+          <textarea id="np-rhythm-season-custom" style="height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
+        </div></div>
+      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
     </div>
     <div class="np-step" data-step="2" style="display:none">
       <div class="row"><label>输出画幅</label>
@@ -500,12 +512,21 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <h3>🧭 设计构想 — <span id="brief-proj" style="color:var(--accent)"></span></h3>
     <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
       <textarea id="brief-text" style="height:130px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
-    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">设计风格</label>
+    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">画面风格</label>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
         <button type="button" id="brief-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
         <textarea id="brief-style" style="height:100px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
       </div></div>
-    <div class="note">构想与风格保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提;设计风格约束全部画面视觉产出。保存后对之后派发的任务生效;全部清空保存则移除该设定</div>
+    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
+      <div class="rhythm-box" data-prefix="brief" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="brief-rhythm-episode" style="flex:1"></select></div>
+        <div class="rhythm-detail" id="brief-rhythm-episode-detail" style="display:none"></div>
+        <textarea id="brief-rhythm-episode-custom" style="height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
+        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">跨集节奏</span><select id="brief-rhythm-season" style="flex:1"></select></div>
+        <div class="rhythm-detail" id="brief-rhythm-season-detail" style="display:none"></div>
+        <textarea id="brief-rhythm-season-custom" style="height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
+      </div></div>
+    <div class="note">构想、风格与叙事节奏保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提;画面风格约束全部画面视觉产出,叙事节奏的节拍链约束剧本分集/分场与分镜节拍。保存后对之后派发的任务生效;全部清空保存则移除该设定</div>
     <div class="err" id="brief-err"></div>
     <div class="actions"><button id="brief-cancel">取消</button><button class="primary" id="brief-ok">保存</button></div>
   </div>
@@ -1172,6 +1193,7 @@ function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   npResetDefaults();
+  rhythmInit('np').then(()=>rhythmApply('np',null));
   npShowStep(1);
   $('#np-modal').style.display='flex';
   $('#np-name').focus();
@@ -1236,7 +1258,7 @@ async function npCreate(){
   $('#np-err').textContent='';
   try{
     await api('/api/v1/projects',{name,novel:$('#np-novel').value,brief:$('#np-brief').value,
-      style:$('#np-style').value,settings:npCollectSettings()});
+      style:$('#np-style').value,rhythm:rhythmCollect('np'),settings:npCollectSettings()});
     await initProjects(name);
     savePrefs();
     $('#np-modal').style.display='none';
@@ -1319,9 +1341,11 @@ async function openBriefModal(){
   $('#brief-proj').textContent=curProj();
   $('#brief-text').value='';$('#brief-style').value='';
   try{
+    await rhythmInit('brief');
     const r=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief');
     $('#brief-text').value=r.brief||'';
     $('#brief-style').value=r.style||'';
+    rhythmApply('brief',r.rhythm);
   }catch(e){$('#brief-err').textContent='读取失败:'+e.message}
   $('#brief-modal').style.display='flex';
   $('#brief-text').focus();
@@ -1332,10 +1356,49 @@ $('#brief-cancel').onclick=()=>$('#brief-modal').style.display='none';
 $('#brief-ok').onclick=async()=>{
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),brief:$('#brief-text').value,
-      style:$('#brief-style').value});
+      style:$('#brief-style').value,rhythm:rhythmCollect('brief')});
     $('#brief-modal').style.display='none';
   }catch(e){$('#brief-err').textContent='保存失败:'+e.message}
 };
+
+/* ---------- 叙事节奏(2026-09-07:新建向导 / 设计构想弹窗共用;目录来自 /api/v1/rhythms,选中后展示节拍链+要点+适用) ---------- */
+const RHYTHM_KINDS=['episode','season'];
+let RHYTHM_CAT=null;
+async function rhythmInit(prefix){   // 拉目录(仅一次)并填两层下拉;已填过的不重复填
+  if(!RHYTHM_CAT){try{RHYTHM_CAT=await api('/api/v1/rhythms')}catch(e){RHYTHM_CAT={episode:[],season:[],custom_id:'custom'}}}
+  RHYTHM_KINDS.forEach(k=>{
+    const sel=$(`#${prefix}-rhythm-${k}`);
+    if(sel.dataset.ready)return;
+    sel.dataset.ready='1';
+    const opts=[['','不指定']].concat((RHYTHM_CAT[k]||[]).map(r=>[r.id,r.name]),[[RHYTHM_CAT.custom_id,'自定义']]);
+    sel.innerHTML=opts.map(([v,t])=>`<option value="${v}">${esc(t)}</option>`).join('');
+    sel.onchange=()=>rhythmRender(prefix,k);
+  });
+}
+function rhythmRender(prefix,k){   // 按当前选择显示详情框 / 自定义输入框
+  const sel=$(`#${prefix}-rhythm-${k}`),det=$(`#${prefix}-rhythm-${k}-detail`),cus=$(`#${prefix}-rhythm-${k}-custom`);
+  const id=sel.value,item=(RHYTHM_CAT[k]||[]).find(r=>r.id===id);
+  cus.style.display=id===RHYTHM_CAT.custom_id?'':'none';
+  if(item){
+    det.innerHTML=`<div><b>节拍链:</b>${esc(item.beats)}</div><div><b>要点:</b>${esc(item.detail)}</div><div><b>适用:</b>${esc(item.fit)}</div>`;
+    det.style.display='';
+  }else det.style.display='none';
+}
+function rhythmApply(prefix,r){   // 服务端结构 {episode,episode_custom,season,season_custom} → 界面;null=全部不指定
+  r=r||{};
+  RHYTHM_KINDS.forEach(k=>{
+    const sel=$(`#${prefix}-rhythm-${k}`);
+    const id=r[k]||'';
+    sel.value=[...sel.options].some(o=>o.value===id)?id:'';
+    $(`#${prefix}-rhythm-${k}-custom`).value=r[k+'_custom']||'';
+    rhythmRender(prefix,k);
+  });
+}
+function rhythmCollect(prefix){
+  const out={};
+  RHYTHM_KINDS.forEach(k=>{out[k]=$(`#${prefix}-rhythm-${k}`).value;out[k+'_custom']=$(`#${prefix}-rhythm-${k}-custom`).value.trim()});
+  return out;
+}
 
 /* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
 let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';

@@ -143,6 +143,12 @@ async def copy_project_status(project: str) -> dict[str, Any]:
     return await core.api_projects_copy_status(project)
 
 
+@api.get("/rhythms", tags=["projects"])
+async def get_rhythms() -> dict[str, Any]:
+    """叙事节奏目录(单集/跨集),供新建项目向导与设计构想弹窗展示。"""
+    return await core.api_rhythms_get()
+
+
 @api.get("/projects/{project}/brief", tags=["projects"])
 async def get_brief(project: str) -> dict[str, Any]:
     return await core.api_brief_get(project)

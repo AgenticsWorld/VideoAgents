@@ -1218,12 +1218,12 @@ function groupCard(g,inner){
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
-      <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">${esc(t('🧊白模'))}</button>
+      <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 提示词</button>
+      <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn vrefbtn" data-grp="${esc(g.group_id)}" title="查看/播放/删除/上传本组参考视频(video_refs,[Video N] 编号与 prompt 正文同号),并核对总时长是否超过本组生效模型上限"${g.vrefs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🎬 视频${(g.video_refs||[]).length?`<span> ${g.video_refs.length}</span>`:''}</button>
-      <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 Prompt</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
-      <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 修改</button>
+      <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 编辑</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
     ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
