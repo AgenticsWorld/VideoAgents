@@ -951,12 +951,14 @@ const blockChip=g=>{
 };
 const contChip=g=>{
   if(!g.continuity_from)return '<span class="link">◦ 组链起点</span>';
-  const a=g.continuity_anchor, tail=!!g.tail_ref, from=g.continuity_from;
-  let txt, tip=g.continuity_anchor_reason||'';
-  if(a==='none'&&!(g.has_prompt&&tail))txt=I18N.f('✂ 硬切自 {g}(不传尾帧)',{g:from});
+  const a=g.continuity_anchor, tail=!!g.tail_ref, video=!!g.continuity_video_ref, from=g.continuity_from;
+  const linked=tail||video;
+  let txt, tip=[g.continuity_anchor_reason,g.continuity_ref?.reason].filter(Boolean).join(' · ');
+  if(video)txt=I18N.f('⛓ 续接 {g} 尾段视频',{g:from});
+  else if(a==='none'&&!(g.has_prompt&&linked))txt=I18N.f('✂ 硬切自 {g}(不传尾帧)',{g:from});
   else if(a==='last_frame'||tail)txt=I18N.f('⛓ 续接 {g} 尾帧',{g:from});
   else{txt=I18N.f('⛓ 前组 {g}',{g:from});tip=t('continuity 尚未定尾帧锚(continuity_plan.json group_transitions)');}
-  if(g.has_prompt&&a&&((a==='last_frame')!==tail)){
+  if(g.has_prompt&&a&&((a==='last_frame'||a==='tail_video')!==linked)){
     txt+=' ⚠';
     tip=[tip,I18N.f('prompt refs 与 continuity 锚不一致:锚 {a},refs {r}',{a,r:tail?t('含前组尾帧'):t('无前组尾帧')})].filter(Boolean).join(' · ');
   }

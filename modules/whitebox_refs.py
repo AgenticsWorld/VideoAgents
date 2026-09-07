@@ -18,7 +18,6 @@ import copy
 import json
 import os
 import re
-import sys
 from pathlib import Path
 
 from modules.whitebox import component, read
@@ -29,7 +28,7 @@ BLOCK_KEY = 'Whitebox reference:'
 LEGEND_KEY = 'Whitebox legend:'
 GC_KEY = 'Global constraints:'
 GC_SENTENCE = 'No whitebox look: no grey boxes, no placeholder figures, no color-coded people, no camera icon or sight line.'
-_BLOCK_RE = re.compile(r'\s*Whitebox reference:.*?(?=Shot\s*1\s*:)', re.S)
+_BLOCK_RE = re.compile(r'\s*Whitebox reference:.*?(?:render the real characters, set and lighting from the reference images\.|(?=Shot\s*1\s*:))', re.S)
 
 
 def color_name(hex_color):
@@ -57,6 +56,8 @@ def _model_caps(model: str):
         return {'max_ref_videos': 10, 'max_total_s': 30}
     if 'seedance-2' in m or 'seedance2' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
+    if 'turbo' in m and 'h3' in m or 'kling' in m:
+        return {'max_ref_videos': 0, 'max_total_s': 0}
     if 'minimax' in m and 'h3' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
     return None
@@ -64,33 +65,40 @@ def _model_caps(model: str):
 
 def video_budget(base: Path, ep: str, gid: str) -> dict:
     """本组生效视频模型的参考视频预算:{max_videos, max_total_s, model, provider, source}。
-    组级覆盖 assets/group_settings/<ep>/<grp>.json 优先;全局模型经宿主服务解析(不可用时按项目
+    组级覆盖 assets/group_settings/<ep>/<grp>.json 优先;全局模型按 genmedia 的提交配置解析(不可用时按项目
     「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道不支持参考视频。"""
     settings = read(base/'settings.json', {}) or {}
     sg = settings.get('shot_group') or {}
     ov = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
     model, provider, source = str(ov.get('video_model') or ''), str(ov.get('provider') or ''), 'group'
-    if not model:
-        source = 'global'
-        try:
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-            from services.runtime import core  # noqa: WPS433
-            cand = core.group_video_candidates(base.name, core.load_genconfig())
-            model, provider = str(cand.get('global_model') or ''), str(cand.get('provider') or '')
-        except Exception:  # noqa: BLE001 — 宿主服务不可导入时按项目设定回落
+    try:
+        # Use the same provider/model resolution as submission, without importing
+        # the API service (pygit2/FastAPI are unnecessary for this media CLI).
+        from modules.genmedia import get_config
+        cfg = get_config('video')
+        global_model, global_provider = str(cfg.get('model') or ''), str(cfg.get('provider') or '')
+        if not model or global_provider == 'comfyui' or (provider and provider != global_provider):
+            model, provider, source = global_model, global_provider, 'global'
+        else:
+            provider = global_provider
+    except (RuntimeError, KeyError, ValueError, OSError):
+        if not model:
             model, provider, source = '', '', 'project_settings'
     caps = _model_caps(model)
     if provider in ('comfyui', 'runninghub'):
         return {'max_videos': 0, 'max_total_s': 0, 'model': model, 'provider': provider, 'source': source,
                 'reason': f'渠道 {provider} 不支持参考视频(--ref-video)'}
     if caps:
-        return {'max_videos': caps['max_ref_videos'], 'max_total_s': caps['max_total_s'], 'model': model,
+        max_videos = caps['max_ref_videos']
+        if source != 'group' and 'max_ref_videos' in sg:
+            max_videos = min(max_videos, int(sg['max_ref_videos'] or 0))
+        return {'max_videos': max_videos, 'max_total_s': caps['max_total_s'], 'model': model,
                 'provider': provider, 'source': source, 'reason': ''}
     return {'max_videos': int(sg.get('max_ref_videos', 3) or 0), 'max_total_s': float(sg.get('max_group_s', 15) or 15),
             'model': model, 'provider': provider, 'source': source, 'reason': ''}
 
 
-def plan_refs(base: Path, ep: str, gid: str) -> dict:
+def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> dict:
     """决定本组挂哪些白模视频:{camera, top, videos[], duration_s, budget, skipped_reason}。"""
     group, manifest = whitebox_group(base, ep, gid)
     ep, gid = component(ep), component(gid)
@@ -98,6 +106,23 @@ def plan_refs(base: Path, ep: str, gid: str) -> dict:
         return {'camera': None, 'top': None, 'videos': [], 'group': group, 'budget': None,
                 'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
     budget = video_budget(base, ep, gid)
+    from modules.continuity_refs import plan as continuation_plan, probe, local, TAIL_VIDEO
+    if continuation is None:
+        try:
+            continuation = continuation_plan(base, ep, gid, budget=budget)
+        except ValueError:
+            # Whitebox export precedes the final continuity plan; continuation sync
+            # and generation validation will enforce it when the group is ready.
+            continuation = {'mode': 'none'}
+    prompt = prompt if prompt is not None else (read(base/f'assets/prompts/{ep}/{gid}.json', {}) or {})
+    others = [v for v in prompt.get('video_refs', []) if '/whitebox/' not in v and not v.endswith(TAIL_VIDEO)]
+    reserved_s = sum(probe(local(base, v)) for v in others)
+    reserved_n = len(others)
+    if continuation['mode'] == 'tail_video':
+        reserved_s += continuation['duration_s']
+        reserved_n += 1
+    budget = dict(budget, max_videos=max(0, budget['max_videos']-reserved_n),
+                  max_total_s=max(0, budget['max_total_s']-reserved_s))
     # output.whitebox_top_video(默认 False = 只挂 camera.mp4,预算再宽也不追加 top.mp4;2026-09-07 用户指令):置 True 才按预算追加 top
     top_wanted = ((read(base/'settings.json', {}) or {}).get('output') or {}).get('whitebox_top_video', False) is True
     dur = float(manifest.get('duration_s') or group.get('duration_s') or 0)
@@ -164,6 +189,8 @@ def apply_prompt(prompt: dict, plan: dict) -> dict:
     others = [v for v in (out.get('video_refs') or []) if isinstance(v, str) and '/whitebox/' not in v]
     vp = out.get('video_prompt') or ''
     vp = _BLOCK_RE.sub('', vp)
+    from modules.continuity_refs import remap
+    vp = remap(vp, 'Video', out.get('video_refs') or [], plan['videos'] + others)
     if plan['videos']:
         out['video_refs'] = plan['videos'] + others
         block = build_block(plan)

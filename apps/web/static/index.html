@@ -445,8 +445,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div>
       <div class="row"><label>长镜头</label>
         <input type="checkbox" id="npd-longtake" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)</span></div>
-      <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降</div>
+        <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
+      <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
     <div class="np-step" data-step="4" style="display:none">
@@ -596,8 +596,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>长镜头</label>
       <input type="checkbox" id="dur-longtake" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)</span></div>
-    <div class="note" id="dur-longtake-warn" style="display:none;color:#e8a33d">⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降</div>
+      <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
+    <div class="note" id="dur-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
     <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="dur-err"></div>
     <div class="actions"><button id="dur-cancel">取消</button><button class="primary" id="dur-ok">确定</button></div>

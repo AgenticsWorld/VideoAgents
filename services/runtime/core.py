@@ -2746,23 +2746,21 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     sg_aud = int(sg.get("max_ref_audios", 3))
     long_take = dur.get("long_take") is True
     long_take_line = (
-        "**开启 —— 组间续接沿用尾帧锚流程**:continuity-planning 同场景组交界照常标 `anchor: last_frame`"
-        "(跨场景/可渲染转场边界 anchor: none 等既有例外照旧),prompt 把前组尾帧 `assets/clips/epNN/<prev>.last_frame.png`"
-        " 列入 refs(殿后)并写开场声明句(opening continues from [Image N],或换构图改写句 same location and lighting as"
-        " [Image N], cut to a new <景别> from <机位>),video-generation 按组序串行、开跑前核尾帧声明句"
-        "(tailframe_declared)——SOUL.md/WORKFLOW.md 的尾帧锚/续接措辞/§7C 前向接缝条款全部适用。"
-        "注意:低分辨率草稿档下尾帧本身低清,作参考图会拖累续接组画质与人脸一致性——这是用户已知取舍,"
-        "不得因此擅自调高分辨率或自行删尾帧"
+        "**开启——自动续接**:continuity 的 group_transitions 新增 boundary_type: continuous(同一动作/运镜跨组)"
+        "或 cut(反打/换构图连戏,旧数据缺省);跨场景/转场仍 anchor:none。同场景 anchor:last_frame 表示续接意图,"
+        "实际模式由宿主选择:continuous 优先前组最后 2–3 秒视频向后续写,cut/模型不支持/尾镜不足2秒/视频预算不足回退尾帧。"
+        "prompt 产出后运行 python3 code/sync_continuity_refs.py --project <slug> --ep <epNN> --write;"
+        "生成前必须等前组出片,单组运行同命令 <grpNNN> --prepare,再重新读取 JSON 原序提交 refs/video_refs。"
+        "continuity_ref.mode=tail_video 使用明确向后延长语义,开场不得 cut/reverse angle,不重复挂尾帧图;"
+        "角色/场景高清图保留。白模与尾段共用数量/时长预算,摄影机白模优先,可选俯视预算不足不挂。"
+        "尾段只含画面不带原对白,声音按本组指令生成。续接链及重生成影响判据必须同时看 refs 尾帧和 video_refs 尾段,"
+        "不得把无尾帧图的视频续接当硬断点。重生成前组后必须重新 prepare 后组并复查接缝。"
+        "旧 SOUL/WORKFLOW 中仅按尾帧判依赖的条款由本段覆盖;低清视频同样可能累积漂移。"
         if long_take else
-        "**关闭(默认)—— 组间不使用前组尾帧作参考图,仅靠文字承接**:continuity-planning 的 group_transitions"
-        " 一律标 `anchor: none`(同场景交界也不标 last_frame,边界连续性要点写 notes 供 prompt 参考);"
-        "prompt 的 refs **一律不挂** `*.last_frame.png`,首镜开场句改为**不引用尾帧图的换构图文字承接**"
-        "(如 same location and lighting continuing from the previous group, cut to a new <景别> from <机位>"
-        "——不写尾帧 [Image N] 引用),场景/光线/站位连戏靠场景锚图与 lighting/blocking 逐字片段承担;"
-        "video-generation 照常传 --return-last-frame 落盘尾帧(供预览/转场渲染,机检 last_frame_saved 不变)"
-        "但 refs 无尾帧,组间无续接链、各组可并行生成(§7C 前向接缝评估按「后组 refs 不含尾帧=硬断点」免处理);"
-        "tailframe_declared 等尾帧续接机检自然不触发——SOUL.md/WORKFLOW.md 的尾帧锚/续接措辞条款在本项目**不适用**,"
-        "不得自行补挂尾帧参考图")
+        "**关闭(默认)——组间只用文字承接**:group_transitions 一律 anchor:none,不挂前组尾帧或续接尾段。"
+        "如已有 continuity_ref,运行 sync_continuity_refs.py --write 清理;仅由明确的连戏文字承接。"
+        "--return-last-frame 照常保存供预览/转场,无续接依赖的组可并行。")
+
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -2782,7 +2780,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-08-30)**:每组 Σ台词估时 ≤ 组时长×0.7、每镜 Σ ≤ 镜长、单句 ≤ {shot_max}×0.7 秒(估时 = 有效字符 ÷ 角色 voice.json speed_cpm 中点 ÷60);storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 长镜头(时长设置「长镜头」开关,组间尾帧续接):{long_take_line}
+- 长镜头(时长设置「长镜头」开关,自动选择尾段视频或尾帧):{long_take_line}
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、场景干净俯视图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
@@ -5674,6 +5672,9 @@ def _preview_storyboard(project: str, ep: str):
             # 组链 chip 三态:anchor last_frame=续接尾帧 / none=硬切不传尾帧 / 无 continuity 计划=只知前组;
             # tail_ref 是 prompt refs 里实际挂的前组尾帧路径(None=未挂),与 anchor 不一致时前端打 ⚠
             "continuity_anchor": tr.get("anchor") or None,
+            "continuity_ref": pd.get("continuity_ref") or {},
+            "continuity_video_ref": next((r for r in (pd.get("video_refs") or [])
+                                          if isinstance(r, str) and r.endswith(".continuation.mp4")), None),
             "continuity_anchor_reason": str(tr.get("anchor_reason") or tr.get("notes") or ""),
             # 组入口转场 / 叙事块(shot_list transition_in / narrative_block,WORKFLOW §9C,2026-08-28):
             # 非硬切才在组卡显示 chip;实施在 Phase 9 code/render_transitions.py,这里只展示设计

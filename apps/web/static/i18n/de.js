@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Automatischer Anschluss: Fortlaufende Aktionen nutzen bevorzugt die letzten 2–3 Sekunden der Vorgruppe. Bei Schnitten, ungeeigneten Clips oder nicht unterstützten Modellen wird das Endbild verwendet. Aus: nur Textanschluss.",
+"⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Wiederholte Anschlüsse mit niedrig aufgelösten Endbildern oder Videoenden können Bildqualität und Figurenkonsistenz verschlechtern",
+"⛓ 续接 {g} 尾段视频": "⛓ Anschluss an das Videoende von {g}",
+
 "仅支持桌面客户端": "Nur Desktop-App",
 "未登录": "Nicht angemeldet",
 "检查登录状态…": "Anmeldestatus wird geprüft…",

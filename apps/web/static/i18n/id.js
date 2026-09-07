@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Sambungan otomatis: aksi berkelanjutan mengutamakan 2–3 detik terakhir grup sebelumnya. Potongan, model yang tidak mendukung, atau klip yang tidak sesuai memakai bingkai terakhir. Nonaktif: teks saja.",
+"⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Sambungan berulang dari bingkai atau akhir video beresolusi rendah dapat menurunkan kualitas dan konsistensi karakter",
+"⛓ 续接 {g} 尾段视频": "⛓ Sambung dari akhir video {g}",
+
 "仅支持桌面客户端": "Khusus aplikasi desktop",
 "未登录": "Belum masuk",
 "检查登录状态…": "Memeriksa status masuk…",

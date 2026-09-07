@@ -1,5 +1,7 @@
 # Changelog
 
+- **Long take → automatic continuation**: explicit continuous-action boundaries use the previous group's final 2–3 seconds with forward-extension instructions; cut boundaries, unsupported video-reference routes, short final shots and exhausted video budgets use a last-frame reference. New `sync_continuity_refs.py` plans forward references and prepares actual clips before generation, preserving character images, reserving mandatory camera whitebox budget, renumbering references and detecting stale predecessor media before submission. Tail clips are silent and stored separately from finished clips. Preview shows video-tail continuation; settings help updated in all 11 locales. Legacy boundaries keep cut continuity; see `docs/continuity.md`.
+
 All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]

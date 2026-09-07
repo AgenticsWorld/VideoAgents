@@ -36,6 +36,7 @@ agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 !/tests/test_whitebox.py
 !/tests/whitebox_i18n_check.mjs
 !/tests/test_scene_cast.py
+!/tests/test_continuity_refs.py
 
 # Python
 .venv/

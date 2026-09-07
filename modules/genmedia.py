@@ -155,6 +155,8 @@ except Exception:
         _diagnostics = None
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:  # direct CLI also uses package-based continuation helpers
+    sys.path.insert(0, str(ROOT))
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 RUNTIME_DIR = Path(os.environ.get(
     "VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents"
@@ -4667,6 +4669,8 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """
     _forbid_dispatch_layer("视频")
     cfg = apply_group_video_override(get_config("video"), group or _group_from_output(output))
+    from modules.continuity_refs import validate_request
+    validate_request(output, prompt, refs, video_refs, cfg, first_frame, last_frame)
     if ref_image_size and cfg["provider"] != "comfyui":
         raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
@@ -5009,6 +5013,8 @@ def _cmd_video(args):
     group = args.group or _group_from_output(args.output)
     if args.dry_run:
         cfg = apply_group_video_override(get_config("video"), group)
+        from modules.continuity_refs import validate_request
+        validate_request(args.output, args.prompt, args.ref, args.ref_video, cfg, args.first_frame, args.last_frame)
         resolution = _resolution_gate(args.resolution)
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}" + (f" (组级覆盖 {group})" if cfg.get("_group_override") else "")

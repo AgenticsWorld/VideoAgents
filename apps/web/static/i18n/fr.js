@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Raccord automatique : les actions continues utilisent les 2–3 dernières secondes du groupe précédent. Pour les coupes, modèles non compatibles ou clips inadaptés, utiliser la dernière image. Désactivé : raccord textuel uniquement.",
+"⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Les raccords répétés à partir d’images ou de fins de vidéo basse résolution peuvent dégrader la qualité et la cohérence des personnages",
+"⛓ 续接 {g} 尾段视频": "⛓ Raccord depuis la fin vidéo de {g}",
+
 "仅支持桌面客户端": "Application de bureau uniquement",
 "未登录": "Non connecté",
 "检查登录状态…": "Vérification de la connexion…",

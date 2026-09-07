@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Continuidade automática: ações contínuas usam os últimos 2–3 segundos do grupo anterior. Cortes, modelos incompatíveis ou clipes inadequados usam o último quadro. Desativado: apenas texto.",
+"⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Continuações repetidas a partir de quadros ou finais de vídeo de baixa resolução podem degradar a qualidade e a consistência dos personagens",
+"⛓ 续接 {g} 尾段视频": "⛓ Continuar do final do vídeo de {g}",
+
 "仅支持桌面客户端": "Apenas no aplicativo para desktop",
 "未登录": "Sessão não iniciada",
 "检查登录状态…": "Verificando a sessão…",
