@@ -46,7 +46,11 @@
 
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
+计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动。预览与导出共用这些规则。
+
 人物和生物的头部均有白色眼睛、深色瞳孔与突出的白色鼻尖，用于识别正脸方向。模型局部 +Z 为正前方，yaw=0 朝 +Z，yaw=π/2 朝 +X；面部随转身和坐卧姿态变化，在空间、俯视、摄像机预览与导出视频中保持一致。
+
+每段 cameras 可选 `visible_actor_ids`，限定镜头中可见的角色/群演；空数组适用于只有器物的插入镜头。被镜头排除的角色仍留在空间视角和俯视图中，只有关键帧 `visible:false` 才会从所有视角退场。
 
 ```json
 {

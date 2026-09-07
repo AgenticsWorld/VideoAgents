@@ -5,7 +5,17 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const panels=new Map();
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok){const e=Error(d.detail||r.statusText);e.status=r.status;throw e;}return d;}
-async function previewData(url,fallback){try{return await json(url);}catch(e){if(e.status!==404)throw e;return json(fallback);}}
+async function previewData(url,fallback,minStagingVersion=0){
+  let current;
+  try{current=await json(url);}catch(e){if(e.status!==404)throw e;return {...await json(fallback),requires_service_restart:true};}
+  if((current.staging_version||0)<minStagingVersion){
+    // A running pre-upgrade service can compile actors but drop extras/props.
+    // Prefer the newly compiled project artifact until that service restarts.
+    try{const compiled=await json(fallback);if((compiled.staging_version||0)>=minStagingVersion)return {...compiled,requires_service_restart:true};}
+    catch(e){if(e.status!==404)throw e;}
+  }
+  return current;
+}
 
 async function mount(host,project,scene,group=null,ep='') {
   const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
@@ -17,7 +27,7 @@ async function mount(host,project,scene,group=null,ep='') {
   host.innerHTML=`<div class="wb-toolbar"><strong>3D 白模 · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong><select aria-label="空间视角"><option value="overview">旋转视角</option><option value="top">俯视图</option></select>${group?'<button class="wb-export">导出双视角 MP4</button>':''}</div>
     <div class="wb-status">${scene.dimensions_m[0]} × ${scene.dimensions_m[2]} m · 高 ${scene.dimensions_m[1]} m · 网格 1 m · 画幅 ${esc(format.aspect_ratio)} · ${scene.inferred?'推断尺寸':'已标定尺寸'} · 拖动旋转，滚轮缩放</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="场景白模"></canvas><figcaption>空间与摄像机位置</figcaption></figure>${group?'<figure><canvas class="wb-camera" aria-label="摄像机白模"></canvas><figcaption>摄像机视角</figcaption></figure>':''}</div>
-    ${group?`<div class="wb-transport"><button class="wb-play">播放</button><input type="range" aria-label="白模时间" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast">${group.actors.map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
+    ${group?`<div class="wb-transport"><button class="wb-play">播放</button><input type="range" aria-label="白模时间" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast">${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
     <details class="wb-warnings"><summary>建模依据与检查 (${(group?.warnings||scene.warnings).length})</summary><div>${esc(scene.scale_basis)}</div>${(group?.warnings||scene.warnings).map(w=>`<div>${esc(w)}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div><div class="wb-links"></div>`;
   let space, camera, frame, disposed=false, playing=false, time=0, previous=0, exportTimer;
   const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(frame);clearTimeout(exportTimer);space?.dispose();camera?.dispose();panels.delete(host);};
@@ -39,6 +49,7 @@ async function mount(host,project,scene,group=null,ep='') {
     host.querySelector('.wb-play').onclick=()=>{if(time>=group.duration_s)time=0;playing=!playing;previous=performance.now();host.querySelector('.wb-play').textContent=playing?'暂停':'播放';};
     host.querySelector('input').oninput=e=>{time=Number(e.target.value);playing=false;host.querySelector('.wb-play').textContent='播放';render();};
     const result=host.querySelector('.wb-result'),button=host.querySelector('.wb-export');
+    if(group.requires_service_restart){button.disabled=true;result.textContent='白模预览已更新；重启服务后可导出包含群演、道具和退场调度的视频。';}
     const poll=async()=>{
       try{const s=await json(`${api(project)}/${encodeURIComponent(ep)}/exports/${encodeURIComponent(group.group_id)}`);if(disposed)return;
         result.textContent=s.status==='running'?`正在导出 ${s.progress||0}%`:s.status==='complete'?'双视角参考视频已保存到项目。':s.error||'';
@@ -67,11 +78,11 @@ export async function toggleGroup(button,project,ep,gid){
   panels.set(host,()=>{host.remove();panels.delete(host);});
   try{
     const key=project+'/'+ep;
-    if(!episodeCache||episodeCache.key!==key)episodeCache={key,promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`)};
+    if(!episodeCache||episodeCache.key!==key)episodeCache={key,promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`,2)};
     const data=await episodeCache.promise;
     const group=data.groups.find(g=>g.group_id===gid);
     if(!group)throw Error(data.errors.find(e=>e.group_id===gid)?.error||'没有本组白模数据');
-    if(host.isConnected)await mount(host,project,data.scenes[group.scene_id],group,ep);
+    if(host.isConnected)await mount(host,project,data.scenes[group.scene_id],{...group,requires_service_restart:data.requires_service_restart},ep);
   }catch(e){episodeCache=null;host.textContent='白模加载失败：'+e.message;}
 }
 export function resetWhitebox(){episodeCache=null;for(const dispose of [...panels.values()])dispose();}

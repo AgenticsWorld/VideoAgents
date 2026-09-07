@@ -209,6 +209,58 @@ def test_override_keeps_identity(project):
     assert (actual['color'],actual['letter'])==('#e63946','A')
 
 
+def test_background_performers_props_and_departure(project):
+    extra={'id':'EXTRA-passenger','label':'Passenger','kind':'person','color':'#8899aa',
+           'size_m':[.5,1.7,.4],'keyframes':[
+               {'t':0,'position':[0,0,0],'pose':'sit','visible':True},
+               {'t':2,'position':[1,0,0],'pose':'stand','visible':False},
+               {'t':4,'position':[2,0,0],'pose':'stand','visible':False}]}
+    prop={'id':'book','shape':'box','size_m':[.2,.03,.3],'position':[0,.8,0],'shot_ids':['sh1']}
+    plan={'extras':[extra],'props':[prop]}
+    path=project/'directing/ep01/whitebox_plans/grp1.json';write(path,plan)
+    result=compile_episode(project,'ep01');assert not result['errors']
+    group=result['groups'][0]
+    assert [a['id'] for a in group['actors']]==['CHAR-1']
+    assert group['extras']==[extra] and group['props']==[prop]
+    assert sample(extra['keyframes'],1.99)['visible'] is True
+    assert sample(extra['keyframes'],2)['visible'] is False
+    # Real scene-graph behavior: extras render, departed performers disappear,
+    # and camera-only cast filtering preserves the spatial overview.
+    import shutil
+    import subprocess
+    if shutil.which('node'):
+        static=Path(__file__).resolve().parents[1]/'apps/web/static'
+        group['cameras'][0]['visible_actor_ids']=['EXTRA-passenger']
+        script=f'''
+import assert from 'node:assert/strict';
+import * as THREE from {json.dumps((static/'vendor/three/three.module.js').as_uri())};
+import {{WhiteboxRenderer}} from {json.dumps((static/'whitebox-renderer.js').as_uri())};
+const r=Object.create(WhiteboxRenderer.prototype);
+Object.assign(r,{{width:960,height:540,scene:null,controls:null,
+  camera:new THREE.PerspectiveCamera(),overview:new THREE.PerspectiveCamera(),top:new THREE.OrthographicCamera()}});
+r.load({json.dumps(result['scenes']['SCN-1'])},{json.dumps(group)});
+assert.equal(r.actors.length,2);assert.equal(r.props.length,1);
+assert.equal(r.actors[0].root.layers.test(r.camera.layers),false);
+assert.equal(r.actors[0].root.layers.test(r.top.layers),true);
+assert.equal(r.actors[1].root.layers.test(r.camera.layers),true);
+assert.equal(r.props[0].mesh.visible,true);
+r.setTime(1.99);assert.equal(r.actors[1].root.visible,true);
+r.setTime(2);assert.equal(r.actors[1].root.visible,false);
+r.props[0].data.shot_ids=[];r.setTime(0);assert.equal(r.props[0].mesh.visible,false);
+r.disposeScene();
+'''
+        subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)
+    extra['id']='CHAR-1';write(path,plan)
+    assert 'EXTRA-' in compile_episode(project,'ep01')['errors'][0]['error']
+    extra['id']='EXTRA-passenger';extra['keyframes'][0]['visible']='false';write(path,plan)
+    assert 'boolean' in compile_episode(project,'ep01')['errors'][0]['error']
+    extra['keyframes'][0]['visible']=True;prop['shot_ids']=['unknown'];write(path,plan)
+    assert 'shot_ids' in compile_episode(project,'ep01')['errors'][0]['error']
+    prop['shot_ids']=['sh1'];plan['cameras']=copy.deepcopy(group['cameras'])
+    plan['cameras'][0]['visible_actor_ids']=['CHAR-missing'];write(path,plan)
+    assert 'visible_actor_ids' in compile_episode(project,'ep01')['errors'][0]['error']
+
+
 def test_api_read_only_and_validation(project,monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

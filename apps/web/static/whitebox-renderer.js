@@ -43,7 +43,7 @@ export class WhiteboxRenderer {
     this.scene=null;
   }
   load(sceneData, group=null) {
-    this.disposeScene();this.sceneData=sceneData;this.group=group;this.actors=[];
+    this.disposeScene();this.sceneData=sceneData;this.group=group;this.actors=[];this.props=[];
     const scene=this.scene=new THREE.Scene();scene.background=new THREE.Color(0xe9ede9);
     scene.add(new THREE.HemisphereLight(0xffffff,0x8c968d,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(-8,20,10);scene.add(sun);
@@ -52,17 +52,18 @@ export class WhiteboxRenderer {
     floor.position.y=-.05;scene.add(floor);
     const grid=new THREE.GridHelper(Math.ceil(Math.max(w,d)),Math.ceil(Math.max(w,d)),0xa8b5a5,0xc0cbbd);
     grid.position.y=.005;scene.add(grid);
-    for(const obj of sceneData.objects) {
+    for(const obj of [...sceneData.objects,...(group?.props||[])]) {
       let geo; const [x,y,z]=obj.size_m;
       if(obj.shape==='sphere') {geo=new THREE.SphereGeometry(.5,16,12);geo.scale(x,y,z);}
       else if(obj.shape==='cylinder') {geo=new THREE.CylinderGeometry(.5,.5,1,16);geo.scale(x,y,z);}
       else geo=new THREE.BoxGeometry(x,y,z);
       const material=new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
-      const mesh=new THREE.Mesh(geo,material);mesh.position.fromArray(obj.position);mesh.rotation.y=obj.yaw||0;
+      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position);mesh.rotation.y=obj.yaw||0;
       scene.add(mesh);
+      if(group?.props?.includes(obj))this.props.push({data:obj,mesh});
       const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
     }
-    for(const actor of group?.actors||[]) {
+    for(const actor of [...(group?.actors||[]),...(group?.extras||[])]) {
       const root=new THREE.Group();const body=new THREE.Group();root.add(body);
       const [aw,ah,ad]=actor.size_m;
       const mat=new THREE.MeshStandardMaterial({color:actor.color,roughness:.9});
@@ -140,6 +141,7 @@ export class WhiteboxRenderer {
     const t=Math.max(0,Math.min(time,this.group.duration_s));
     for(const a of this.actors) {
       const k=sample(a.data.keyframes,t);a.root.position.fromArray(k.position);a.root.rotation.y=k.yaw||0;
+      a.root.visible=k.visible!==false;
       const h=a.data.size_m[1];
       // Bend hips/knees for sitting; keep dimensions and ground anchors in meters.
       a.body.rotation.x=k.pose==='lie'?-Math.PI/2:0;
@@ -154,6 +156,16 @@ export class WhiteboxRenderer {
       }
     }
     const shot=this.group.cameras.find(c=>t<c.start+c.duration_s)||this.group.cameras.at(-1);
+    // Off-screen cast stays in spatial/top views without obscuring this shot.
+    for(const a of this.actors){
+      const layer=shot.visible_actor_ids&&!shot.visible_actor_ids.includes(a.data.id)?1:0;
+      a.root.traverse(o=>o.layers.set(layer));
+    }
+    for(const {data,mesh} of this.props){
+      const k=data.keyframes?sample(data.keyframes,t):data;
+      mesh.position.fromArray(k.position);mesh.rotation.y=k.yaw||0;
+      mesh.visible=k.visible!==false&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
+    }
     const k=sample(shot.keyframes,t-shot.start);this.shotId=shot.shot_id;
     this.camera.position.fromArray(k.position);this.camera.lookAt(new THREE.Vector3(...k.target));
     this.camera.fov=k.fov;this.camera.updateProjectionMatrix();

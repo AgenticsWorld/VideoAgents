@@ -186,6 +186,8 @@ def validate_keys(keys, duration, camera=False):
             if key.get('pose', 'stand') not in ('stand', 'sit', 'lie'):
                 raise ValueError('pose must be stand/sit/lie')
             number(key.get('yaw', 0), 'yaw')
+            if 'visible' in key and not isinstance(key['visible'], bool):
+                raise ValueError('visible must be a boolean')
     if abs(keys[0]['t']) > 1e-6 or abs(keys[-1]['t']-duration) > 1e-6:
         raise ValueError('Keyframes must cover 0..duration')
 
@@ -266,7 +268,8 @@ def compile_group(base, ep, group, shots, scene):
             for key in actor['keyframes']:
                 key['position'][1] += 1.45
                 key['pose'] = 'sit'
-    warnings.append('存量人物身高、文字姿态及未标时动线按规约推断；精确节拍可在白模计划中覆盖。')
+    if 'actors' not in plan:
+        warnings.append('存量人物身高、文字姿态及未标时动线按规约推断；精确节拍可在白模计划中覆盖。')
     cameras = []; offset = 0
     for sid in group['shots']:
         shot = shots[sid]; sd = shot['duration_s']
@@ -334,22 +337,54 @@ def compile_group(base, ep, group, shots, scene):
         actors = [{**a, **{k:v for k,v in overrides[a['id']].items() if k not in ('color', 'letter', 'id')}} for a in actors]
     if 'cameras' in plan:
         cameras = plan['cameras']
+        warnings = [w for w in warnings if not any(w.startswith(s+':') for s in group['shots'])]
+    warnings.extend(plan.get('warnings', []))
     expected = set(group.get('characters_union', [])) | set(group.get('creatures_union', []))
     if expected - {a['id'] for a in actors}:
         raise ValueError(f'{gid}: cast missing from blocking map: {sorted(expected-{a["id"] for a in actors})}')
-    for actor in actors:
+    # Background performers remain separate from the registered cast. They are
+    # needed for shots whose only subjects are unnamed passengers, for example.
+    extras = plan.get('extras', [])
+    seen = {a['id'] for a in actors}
+    for extra in extras:
+        eid = component(extra['id'])
+        if not eid.startswith('EXTRA-') or eid in seen:
+            raise ValueError('Extra IDs must be unique EXTRA- identifiers outside the cast')
+        seen.add(eid)
+        if extra.get('kind', 'person') not in ('person', 'creature'):
+            raise ValueError('Extra kind must be person/creature')
+    for actor in actors + extras:
         vector(actor['size_m'], 'actor.size_m', positive=True)
         validate_keys(actor['keyframes'], duration)
+    props = plan.get('props', [])
+    prop_ids = set()
+    for prop in props:
+        pid = component(prop['id'])
+        if pid in prop_ids or prop.get('shape', 'box') not in ('box', 'sphere', 'cylinder'):
+            raise ValueError('Props need unique IDs and supported primitive shapes')
+        prop_ids.add(pid)
+        vector(prop['size_m'], 'prop.size_m', positive=True)
+        vector(prop['position'], 'prop.position')
+        number(prop.get('yaw', 0), 'prop.yaw')
+        if set(prop.get('shot_ids', [])) - set(group['shots']):
+            raise ValueError('Prop shot_ids must belong to the group')
+        if prop.get('keyframes') is not None:
+            validate_keys(prop['keyframes'], duration)
     cursor = 0
     if [c['shot_id'] for c in cameras] != group['shots']:
         raise ValueError(f'{gid}: cameras must match group shot order')
     for camera in cameras:
         sd = shots[camera['shot_id']]['duration_s']
+        if 'visible_actor_ids' in camera:
+            visible_ids = camera['visible_actor_ids']
+            if not isinstance(visible_ids, list) or any(not isinstance(cid, str) for cid in visible_ids) or set(visible_ids) - seen:
+                raise ValueError('visible_actor_ids must reference actors or extras in the group')
         if abs(camera['start']-cursor) > 1e-6 or abs(camera['duration_s']-sd) > 1e-6:
             raise ValueError(f'{gid}: camera intervals must match shot timing')
         validate_keys(camera['keyframes'], sd, True); cursor += sd
     return {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],
-            'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'cameras': cameras,
+            'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'extras': extras,
+            'props': props, 'cameras': cameras,
             'continuity_from': group.get('continuity_from'), 'continuity': plan.get('continuity', {}),
             'warnings': warnings, 'authored': bool(plan)}
 
@@ -393,7 +428,7 @@ def compile_episode(base: Path, ep: str):
             by_id[gid] = group; groups.append(group)
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
-    return {'schema_version': 'whitebox_episode.v1', 'project': base.name, 'ep': ep,
+    return {'schema_version': 'whitebox_episode.v1', 'staging_version': 2, 'project': base.name, 'ep': ep,
             'render': render_format(read(base / 'settings.json', {})),
             'scenes': scenes, 'groups': groups, 'errors': errors,
             'source_group_count': len(source.get('generation_groups', []))}
