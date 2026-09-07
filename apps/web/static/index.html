@@ -1220,7 +1220,8 @@ function npCollectSettings(){
     shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
       max_ref_images:parseInt($('#npsg-imgs').value),
       max_ref_videos:parseInt($('#npsg-vids').value),
-      max_ref_audios:parseInt($('#npsg-auds').value)},
+      max_ref_audios:parseInt($('#npsg-auds').value),
+      preset:sgActivePreset('npsg')||''},   // 记住选的是哪个模型预设(数值相同的预设靠它区分)
     review,
     packaging:{intro_enabled:$('#npp-intro-on').checked,intro_notes:$('#npp-intro-text').value,
       outro_enabled:$('#npp-outro-on').checked,outro_notes:$('#npp-outro-text').value,
@@ -1484,24 +1485,32 @@ $('#dur-ok').onclick=async()=>{
 };
 
 /* ---------- 视频模型设置弹窗(生成组时长/参考素材上限,须与视频模型能力匹配) ---------- */
-// 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框,
-// 手动改值后自动按当前值反查高亮匹配的预设(无匹配则全不高亮)
+// 默认值预设(设置弹窗与新建向导共用):按视频模型单次生成能力口径;点按钮一键填入四个输入框。
+// 高亮规则(2026-09-07 改):预设是独立的模型选项,数值相同(如 Seedance 2.0 与 MiniMax H3)也不能同时高亮——
+// 用户点选过的预设(SG_PICKED)只要四个值仍与之相符就只高亮它;手动改值后若与点选不符则清除点选,
+// 按当前值反查:唯一匹配则高亮该项,无匹配或多项匹配(无法判定是哪个模型)则全不高亮
 const SG_PRESETS={
   sd20:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // Seedance 2.0 系列(含 fast/mini)
   sd25:{max_group_s:30,max_ref_images:30,max_ref_videos:10,max_ref_audios:10},  // Seedance 2.5
   mmh3:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // MiniMax Hailuo 3(2026-09-07:参考视频/音频各 3)
 };
 const SG_FIELDS={max_group_s:'maxs',max_ref_images:'imgs',max_ref_videos:'vids',max_ref_audios:'auds'};
-function sgSyncPreset(pfx){   // 按四个输入框当前值高亮匹配的预设按钮
+const SG_PICKED={};   // pfx → 用户显式点选的预设 key(null=未点选/已被手动改值打破)
+function sgActivePreset(pfx){   // 返回应高亮的预设 key(null=全不高亮);同时维护 SG_PICKED
   const cur=Object.fromEntries(Object.entries(SG_FIELDS).map(([k,id])=>[k,parseFloat($('#'+pfx+'-'+id).value)]));
-  document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>{
-    const p=SG_PRESETS[b.dataset.preset];
-    b.classList.toggle('active',Object.keys(SG_FIELDS).every(k=>p[k]===cur[k]));
-  });
+  const matches=Object.keys(SG_PRESETS).filter(key=>Object.keys(SG_FIELDS).every(k=>SG_PRESETS[key][k]===cur[k]));
+  if(SG_PICKED[pfx]&&matches.includes(SG_PICKED[pfx]))return SG_PICKED[pfx];
+  SG_PICKED[pfx]=null;
+  return matches.length===1?matches[0]:null;
+}
+function sgSyncPreset(pfx){   // 按点选/当前值高亮预设按钮(同一时刻至多一个高亮)
+  const active=sgActivePreset(pfx);
+  document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>b.classList.toggle('active',b.dataset.preset===active));
 }
 function sgApplyPreset(pfx,key){
   const p=SG_PRESETS[key];
   for(const [k,id] of Object.entries(SG_FIELDS))$('#'+pfx+'-'+id).value=p[k];
+  SG_PICKED[pfx]=key;
   sgSyncPreset(pfx);
 }
 document.querySelectorAll('[data-sg-presets]').forEach(box=>{
@@ -1526,6 +1535,7 @@ async function openSgModal(){
     $('#sg-imgs').value=g.max_ref_images??9;
     $('#sg-vids').value=g.max_ref_videos??3;
     $('#sg-auds').value=g.max_ref_audios??3;
+    SG_PICKED.sg=SG_PRESETS[g.preset]?g.preset:null;   // 按项目记录的预设还原高亮(存量项目无此键→按值反查)
   }catch(e){}
   sgSyncPreset('sg');
   $('#sg-skill-hint').style.display='none';
@@ -1628,7 +1638,7 @@ $('#sg-ok').onclick=async()=>{
   const err=sgValidate(gs,ni,nv,na);
   if(err){$('#sg-err').textContent=err;return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),shot_group:{max_group_s:gs,max_ref_images:ni,max_ref_videos:nv,max_ref_audios:na}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),shot_group:{max_group_s:gs,max_ref_images:ni,max_ref_videos:nv,max_ref_audios:na,preset:sgActivePreset('sg')||''}});
     if($('#sg-skill').dataset.project===curProj())await psSave($('#sg-skill'));
     $('#sg-modal').style.display='none';
   }catch(e){$('#sg-err').textContent='保存失败:'+e.message}
