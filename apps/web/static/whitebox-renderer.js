@@ -68,6 +68,22 @@ export class WhiteboxRenderer {
       const mat=new THREE.MeshStandardMaterial({color:actor.color,roughness:.9});
       const box=(sx,sy,sz,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat);m.position.set(x,y,z);body.add(m);return m;};
       const head=new THREE.Mesh(new THREE.SphereGeometry(ah*.1,20,14),mat);
+      // The face points along local +Z, matching the trajectory's yaw convention.
+      // Attach solid features to the head so they follow turns and sitting/lying
+      // poses in every view, including exported camera and top-down frames.
+      const radius=ah*.1;
+      const face=new THREE.Group();face.name='face-direction';
+      const white=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9});
+      const dark=new THREE.MeshStandardMaterial({color:0x18232b,roughness:.9});
+      for(const side of [-1,1]) {
+        const eye=new THREE.Mesh(new THREE.SphereGeometry(radius*.25,12,8),white);
+        eye.position.set(side*radius*.38,radius*.2,radius*.88);
+        const pupil=new THREE.Mesh(new THREE.SphereGeometry(radius*.13,12,8),dark);
+        pupil.position.z=radius*.2;eye.add(pupil);face.add(eye);
+      }
+      const nose=new THREE.Mesh(new THREE.ConeGeometry(radius*.28,radius*.85,4),white);
+      nose.name='face-forward';nose.rotation.x=Math.PI/2;
+      nose.position.set(0,-radius*.08,radius*1.18);face.add(nose);head.add(face);
       let torso,legs=[];
       if(actor.kind==='creature') {
         box(aw,ah*.45,ad*.8,0,ah*.6,0);
@@ -82,10 +98,9 @@ export class WhiteboxRenderer {
         }
       }
       body.add(head);
-      const label=this.label(actor.letter || ''); label.position.y=ah+.25;root.add(label);
-      scene.add(root);this.actors.push({data:actor,root,body,label,head,torso,legs});
+      scene.add(root);this.actors.push({data:actor,root,body,head,torso,legs});
       if(actor.keyframes.length>1) {
-        const geo=new THREE.BufferGeometry().setFromPoints(actor.keyframes.map(k=>new THREE.Vector3(k.position[0],.08,k.position[2])));
+        const geo=new THREE.BufferGeometry().setFromPoints(actor.keyframes.map(k=>new THREE.Vector3(k.position[0],k.position[1]+.08,k.position[2])));
         const path=new THREE.Line(geo,new THREE.LineBasicMaterial({color:actor.color,transparent:true,opacity:.6}));
         path.layers.set(1);scene.add(path);
       }
@@ -96,21 +111,29 @@ export class WhiteboxRenderer {
     this.ray=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x1b3d4b}));
     this.ray.layers.set(1);scene.add(this.ray);
     this.overview.layers.enable(1);this.top.layers.enable(1);
-    this.overview.position.set(w*.65,Math.max(w,d)*.9,d*.9);
-    this.overview.lookAt(0,0,0);
-    if(this.controls){this.controls.target.set(0,0,0);this.controls.update();}
-    const extent=Math.max(d,w/(this.width/this.height))*1.12;
+    // Fit the full 3D trajectory using the narrower field of view. Portrait
+    // overviews otherwise clip flying subjects even with a correct aspect.
+    const bounds=new THREE.Box3(new THREE.Vector3(-w/2,0,-d/2),new THREE.Vector3(w/2,h,d/2));
+    for(const a of this.actors)for(const k of a.data.keyframes){
+      const p=new THREE.Vector3(...k.position),[aw,ah,ad]=a.data.size_m;
+      bounds.expandByPoint(p.clone().add(new THREE.Vector3(-aw/2,0,-ad/2)));
+      bounds.expandByPoint(p.clone().add(new THREE.Vector3(aw/2,ah,ad/2)));
+    }
+    const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+    const radius=size.length()/2,aspect=this.width/this.height;
+    const halfFov=Math.min(Math.PI/8,Math.atan(Math.tan(Math.PI/8)*aspect));
+    const distance=radius/Math.sin(halfFov)*1.08;
+    this.overview.position.copy(center).add(new THREE.Vector3(.65,.9,.9).normalize().multiplyScalar(distance));
+    this.overview.lookAt(center);
+    if(this.controls){this.controls.target.copy(center);this.controls.update();}
+    this.overview.far=Math.max(3000,distance+radius*4);this.overview.updateProjectionMatrix();
+    this.camera.far=Math.max(2000,bounds.max.y*4);
+    this.top.far=Math.max(3000,bounds.max.y*4);
+    const extent=Math.max(size.z,size.x/aspect)*1.12;
     this.top.left=-extent*(this.width/this.height)/2;this.top.right=-this.top.left;
     this.top.top=extent/2;this.top.bottom=-extent/2;
-    this.top.position.set(0,Math.max(w,d)*2,0);this.top.up.set(0,0,-1);this.top.lookAt(0,0,0);this.top.updateProjectionMatrix();
+    this.top.position.set(center.x,Math.max(w,d,bounds.max.y)*2,center.z);this.top.up.set(0,0,-1);this.top.lookAt(center.x,0,center.z);this.top.updateProjectionMatrix();
     this.setTime(0);
-  }
-  label(text) {
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(64,64,46,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#182420';ctx.font='bold 74px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,64,68);
-    const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
-    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));sprite.scale.set(.5,.5,1);return sprite;
   }
   setTime(time) {
     if(!this.group)return;
@@ -129,7 +152,6 @@ export class WhiteboxRenderer {
           shin.position.z=seated?h*.175:0;
         }
       }
-      a.label.position.y=k.pose==='lie'?h*.35:(k.pose==='sit'?h*.7:h)+.25;
     }
     const shot=this.group.cameras.find(c=>t<c.start+c.duration_s)||this.group.cameras.at(-1);
     const k=sample(shot.keyframes,t-shot.start);this.shotId=shot.shot_id;

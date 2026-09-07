@@ -154,6 +154,53 @@ def test_javascript_interpolation_matches_compiler():
         assert value['pose']==expected['pose']
 
 
+def test_face_direction_follows_actor_turn_pose_and_altitude():
+    """Use real Three.js scene graphs without a GPU to check both actor types."""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    static=Path(__file__).resolve().parents[1]/'apps/web/static'
+    script='''
+import assert from 'node:assert/strict';
+import * as THREE from THREE_MODULE;
+import {WhiteboxRenderer} from RENDERER_MODULE;
+for(const kind of ['character','creature']) {
+  const renderer=Object.create(WhiteboxRenderer.prototype);
+  Object.assign(renderer,{width:960,height:540,scene:null,controls:null,
+    camera:new THREE.PerspectiveCamera(),overview:new THREE.PerspectiveCamera(),
+    top:new THREE.OrthographicCamera()});
+  renderer.load({dimensions_m:[10,3,8],objects:[]},{duration_s:2,actors:[{
+    id:'actor',kind,color:'#e63946',size_m:[.5,1.7,.4],keyframes:[
+      {t:0,position:[0,0,0],yaw:0,pose:'stand'},
+      {t:1,position:[2,4,3],yaw:Math.PI/2,pose:'sit'},
+      {t:2,position:[3,8,4],yaw:Math.PI,pose:'lie'}]}],cameras:[{
+    shot_id:'shot',start:0,duration_s:2,keyframes:[
+      {t:0,position:[0,2,5],target:[0,1,0],fov:45},
+      {t:2,position:[0,10,5],target:[0,8,0],fov:45}]}]});
+  const actor=renderer.actors[0],face=actor.head.getObjectByName('face-direction');
+  assert.ok(face,kind+' must have facial markers');
+  const nose=face.getObjectByName('face-forward');
+  assert.ok(nose.position.z>1.7*.1,'nose must protrude from the head');
+  for(const [time,expected] of [[0,[0,0,1]],[1,[1,0,0]],[2,[0,1,0]]]) {
+    renderer.setTime(time);renderer.scene.updateMatrixWorld(true);
+    const base=nose.localToWorld(new THREE.Vector3(0,0,0));
+    const tip=nose.localToWorld(new THREE.Vector3(0,1,0));
+    assert.ok(tip.sub(base).normalize().distanceTo(new THREE.Vector3(...expected))<1e-8,
+      kind+' face direction at '+time);
+    assert.ok(actor.head.getWorldPosition(new THREE.Vector3()).y>=time*4,
+      'face must follow airborne actor');
+  }
+  face.traverse(o=>{
+    assert.ok(!o.isSprite,'face must not billboard toward the viewer');
+    assert.ok(o.layers.test(renderer.camera.layers),'face must appear in camera exports');
+  });
+  renderer.disposeScene();
+}
+'''.replace('THREE_MODULE',json.dumps((static/'vendor/three/three.module.js').as_uri()))\
+   .replace('RENDERER_MODULE',json.dumps((static/'whitebox-renderer.js').as_uri()))
+    subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)
+
+
 def test_override_keeps_identity(project):
     group=compile_episode(project,'ep01')['groups'][0];actor=group['actors'][0]
     actor.update(color='#ffffff',letter='Z')
@@ -178,7 +225,8 @@ def test_api_read_only_and_validation(project,monkeypatch):
     assert client.post('/api/v1/projects/demo/whitebox/ep01/exports/missing').status_code==422
 
 
-def test_export_encoding_two_views(project,monkeypatch):
+@pytest.mark.parametrize('aspect,width,height', [('16:9',256,144),('9:16',144,256),('1:1',128,128)])
+def test_export_encoding_two_views(project,monkeypatch,aspect,width,height):
     """Exercise real FFmpeg mux/crop/duration with deterministic synthetic GPU frames."""
     import base64
     import io
@@ -188,7 +236,8 @@ def test_export_encoding_two_views(project,monkeypatch):
     import playwright.sync_api
     from modules.whitebox_export import render_videos
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):pytest.skip('FFmpeg unavailable')
-    im=Image.new('RGB',(128,256),'red');im.paste('blue',(0,128,128,256));buf=io.BytesIO();im.save(buf,format='JPEG');frame=base64.b64encode(buf.getvalue()).decode()
+    write(project/'settings.json',{'output':{'aspect_preset':'custom','aspect_custom':aspect}})
+    im=Image.new('RGB',(width,height*2),'red');im.paste('blue',(0,height,width,height*2));buf=io.BytesIO();im.save(buf,format='JPEG');frame=base64.b64encode(buf.getvalue()).decode()
     class FakePage:
         def add_init_script(self,*a):pass
         def goto(self,*a):pass
@@ -204,11 +253,95 @@ def test_export_encoding_two_views(project,monkeypatch):
         def __exit__(self,*a):pass
         def launch(self,**kw):return FakeBrowser()
     monkeypatch.setattr(playwright.sync_api,'sync_playwright',FakePlaywright)
-    result=render_videos(project,compile_episode(project,'ep01'),width=128,height=128,fps=2)
+    result=render_videos(project,compile_episode(project,'ep01'),width=width,height=height,fps=2)
     assert result[0]['frames']==8
+    assert result[0]['aspect_ratio']==aspect
     for rel,color in zip(result[0]['files'],['red','blue']):
         path=project/rel
         info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(path)]))['streams'][0]
-        assert float(info['duration'])==4 and info['width']==128 and info['height']==128
+        assert float(info['duration'])==4 and info['width']==width and info['height']==height
         pixels=subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])
         assert pixels[0]>200 if color=='red' else pixels[2]>200
+
+
+@pytest.mark.parametrize('output,expected',[
+    ({},('16:9',960,540)),
+    ({'aspect_preset':'youtube'},('16:9',960,540)),
+    ({'aspect_preset':'douyin'},('9:16',540,960)),
+    ({'aspect_preset':'custom','aspect_custom':'4:3'},('4:3',960,720)),
+    ({'aspect_preset':'custom','aspect_custom':'1:1'},('1:1',960,960)),
+    ({'aspect_preset':'custom','aspect_custom':'2.39 : 1'},('2.39:1',956,400)),
+])
+def test_project_camera_and_export_format(project,output,expected):
+    from modules.whitebox import render_format
+    from modules.output_format import resolve_output
+    write(project/'settings.json',{'output':output})
+    fmt=render_format({'output':output})
+    assert (fmt['aspect_ratio'],fmt['width'],fmt['height'])==expected
+    assert resolve_output({'output':output})[0]==fmt['aspect_ratio']
+    data=compile_episode(project,'ep01')
+    assert data['render']==fmt and data['scenes']['SCN-1']['render']==fmt
+
+
+@pytest.mark.parametrize('width,height',[(960,540),(128,128),(None,960),(541,960)])
+def test_export_cannot_override_portrait_aspect(width,height):
+    from modules.whitebox import render_format
+    with pytest.raises(ValueError):render_format({'output':{'aspect_preset':'douyin'}},width,height)
+
+
+def test_portrait_full_hd_allowed():
+    from modules.whitebox import render_format
+    assert render_format({'output':{'aspect_preset':'douyin'}},1080,1920)['height']==1920
+
+
+@pytest.mark.parametrize('cid', ['CHAR-1','CRE-1'])
+def test_airborne_route_and_altitude_beats(project,cid):
+    path,data=source(project)
+    route=data['generation_groups'][0]['blocking_map']['characters'][0]
+    route.update(id=cid,start={'xy':[.1,.5],'altitude_m':2},end={'xy':[.7,.5],'altitude_m':6})
+    data['generation_groups'][0]['characters_union']=[cid]
+    data['shots'][0]['characters']=[cid]
+    write(path,data)
+    # A 2D per-shot correction must preserve altitude; altitude-only beats work.
+    write(project/'directing/ep01/shots/sh1/blocking.json',{'characters':[
+        {'id':cid,'xy_start':[.2,.5],'xy_end':[.8,.5],
+         'beats':[{'t':2,'altitude_m':10},{'t':3,'xy':[.7,.6]}]}]})
+    result=compile_episode(project,'ep01');assert not result['errors']
+    group=result['groups'][0];keys=group['actors'][0]['keyframes']
+    assert keys[0]['position'][1]==2 and keys[-1]['position'][1]==6
+    assert sample(keys,1)['position'][1]==6
+    assert sample(keys,2)['position'][1]==10
+    assert sample(keys,3)['position'][1]==8
+    assert group['cameras'][0]['keyframes'][0]['target'][1]>2
+
+
+def test_three_axis_world_positions(project):
+    path,data=source(project)
+    route=data['generation_groups'][0]['blocking_map']['characters'][0]
+    route.update(start={'position':[-1,3,2]},end={'position':[1,7,8]})
+    write(path,data)
+    result=compile_episode(project,'ep01');assert not result['errors']
+    keys=result['groups'][0]['actors'][0]['keyframes']
+    assert sample(keys,2)['position']==[0,5,5]
+
+
+def test_explicit_airborne_shot_endpoints(project):
+    write(project/'directing/ep01/shots/sh1/blocking.json',{'characters':[
+        {'id':'CHAR-1','position_start':[-1,3,2],'position_end':[1,7,8],
+         'beats':[{'t':2,'xy':[.5,.5]}]}]})
+    result=compile_episode(project,'ep01');assert not result['errors']
+    keys=result['groups'][0]['actors'][0]['keyframes']
+    assert sample(keys,2)['position']==[0,5,0]
+
+
+def test_browser_format_matches_python():
+    import shutil
+    import subprocess
+    from modules.whitebox import render_format
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    configs=[{'output':{'aspect_preset':preset,'aspect_custom':ratio}}
+             for preset,ratio in [('youtube',''),('douyin',''),('custom','4:3'),('custom','2.39:1')]]
+    module=(Path(__file__).resolve().parents[1]/'apps/web/static/whitebox-format.js').as_uri()
+    script=f'import {{projectRenderFormat}} from {json.dumps(module)}; console.log(JSON.stringify({json.dumps(configs)}.map(projectRenderFormat)));'
+    actual=json.loads(subprocess.check_output(['node','--input-type=module','-e',script],text=True))
+    assert actual==[render_format(c) for c in configs]

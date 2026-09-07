@@ -193,8 +193,13 @@ function renderDetail(s){
     h+='<div class="meta-line">(暂无 bible 设定文档)</div>';
   }
   box.innerHTML=h;box.scrollTop=0;
+  // Layout landmarks alone are not an authored scene model. An explicit empty
+  // objects array is valid for a modeled open space; inferred scale is valid too.
+  if(!Array.isArray(s.docs?.whitebox?.objects))return;
   const whitebox=document.createElement('section');
-  box.querySelector('.title').after(whitebox);
+  const gallery=box.querySelector('.gallery');
+  if(gallery)gallery.after(whitebox);
+  else box.insertBefore(whitebox,box.querySelector('.doc'));
   import('/static/whitebox-ui.js').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
 }
 

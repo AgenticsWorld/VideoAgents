@@ -9,7 +9,10 @@ import copy
 import json
 import math
 import re
+from fractions import Fraction
 from pathlib import Path
+
+from modules.output_format import resolve_output
 
 PALETTE = ['#e63946', '#1d78d8', '#2ea043', '#f59e0b', '#8e44ad', '#00acc1', '#e91e63', '#795548']
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -41,9 +44,32 @@ def vector(value, name, size=3, positive=False):
     return [number(x, name, 0.001 if positive else None) for x in value]
 
 
+def render_format(settings, width=None, height=None):
+    """Keep camera, preview and encoded pixels at the project's native aspect."""
+    aspect, _, _ = resolve_output(settings)
+    try:
+        a, b = (Fraction(x) for x in aspect.split(':'))
+        if a <= 0 or b <= 0:
+            raise ValueError()
+        ratio = a / b
+    except (ValueError, ZeroDivisionError) as error:
+        raise ValueError(f'Invalid project aspect ratio: {aspect}') from error
+    a, b = ratio.numerator, ratio.denominator
+    if width is None and height is None:
+        scale = max(1, 960 // (2 * max(a, b)))
+        width, height = 2 * a * scale, 2 * b * scale
+    elif width is None or height is None:
+        raise ValueError('Specify both width and height, or neither')
+    if any(isinstance(v, bool) or not isinstance(v, int) or v % 2 or not 128 <= v <= 1920 for v in (width, height)):
+        raise ValueError('Render dimensions must be even integers within 128..1920')
+    if width * b != height * a:
+        raise ValueError(f'Export dimensions must match project aspect {aspect}')
+    return {'aspect_ratio': aspect, 'width': width, 'height': height}
+
+
 def xyz(xy, dimensions, y=0):
     x, z = vector(xy, 'xy', 2)
-    return [(x - .5) * dimensions[0], y, (z - .5) * dimensions[2]]
+    return [(x - .5) * dimensions[0], number(y, 'altitude_m'), (z - .5) * dimensions[2]]
 
 
 def point(pt, landmarks, dimensions):
@@ -51,10 +77,12 @@ def point(pt, landmarks, dimensions):
         pt = {'landmark': pt}
     if not isinstance(pt, dict):
         raise ValueError('Position needs xy or landmark')
+    if 'position' in pt:
+        return vector(pt['position'], 'position')
     if pt.get('landmark') and pt['landmark'] not in landmarks:
         raise ValueError(f"Unknown landmark {pt['landmark']}")
     xy = pt.get('xy', landmarks.get(pt.get('landmark'), {}).get('xy'))
-    return xyz(xy, dimensions, pt.get('height_m', 0))
+    return xyz(xy, dimensions, pt.get('altitude_m', pt.get('height_m', 0)))
 
 
 def load_scene(base: Path, sid: str):
@@ -97,6 +125,7 @@ def load_scene(base: Path, sid: str):
     return {'schema_version': 'whitebox_scene.v1', 'scene_id': sid,
             'name': layout.get('scene_name', sid), 'units': 'meters',
             'dimensions_m': dimensions, 'objects': objects,
+            'render': render_format(read(base / 'settings.json', {})),
             'landmarks': layout.get('landmarks', []), 'views': layout.get('views', []),
             'layout_top': f'assets/concepts/scenes/{sid}/{layout.get("layout_top", "layout_top.png")}',
             'inferred': authored.get('inferred', not bool(authored)),
@@ -189,9 +218,17 @@ def compile_group(base, ep, group, shots, scene):
         for sid in group['shots']:
             sd = shots[sid]['duration_s']; doc = docs[sid]
             entry = next((x for x in doc.get('characters', [])+doc.get('creatures', []) if x.get('id') == cid), {})
-            for field, t in [('xy_start', offset), ('xy_end', offset+sd)]:
-                if entry.get(field) is not None:
-                    keyed[t] = {**sample(keys, t), 't': t, 'position': xyz(entry[field], dims)}
+            for suffix, t in [('start', offset), ('end', offset+sd)]:
+                key = {**sample(keys, t), 't': t}
+                if entry.get(f'position_{suffix}') is not None:
+                    key['position'] = vector(entry[f'position_{suffix}'], 'position')
+                else:
+                    if entry.get(f'xy_{suffix}') is not None:
+                        key['position'] = xyz(entry[f'xy_{suffix}'], dims, key['position'][1])
+                    if entry.get(f'altitude_{suffix}_m') is not None:
+                        key['position'][1] = number(entry[f'altitude_{suffix}_m'], 'altitude_m')
+                if any(field in entry for field in (f'position_{suffix}', f'xy_{suffix}', f'altitude_{suffix}_m')):
+                    keyed[t] = key
             initial_pose = entry.get('pose') or pose_from(entry.get('start_pos', ''))
             if entry.get('pose') or re.search(r'坐|躺|卧|seat|sitting|lying', entry.get('start_pos', ''), re.I):
                 keyed[offset] = {**keyed.get(offset, sample(keys, offset)), 't': offset, 'pose': initial_pose}
@@ -199,15 +236,20 @@ def compile_group(base, ep, group, shots, scene):
             for beat in entry.get('path', []) + entry.get('beats', []):
                 if not isinstance(beat.get('t'), (float, int)) or not 0 <= beat['t'] <= sd:
                     continue
-                t = offset+beat['t']; k = {**keyed.get(t, sample(keys, t)), 't': t}
-                if beat.get('xy') is not None:
-                    k['position'] = xyz(beat['xy'], dims)
+                t = offset+beat['t']; k = {**keyed.get(t, sample([keyed[x] for x in sorted(keyed)], t)), 't': t}
+                if beat.get('position') is not None:
+                    k['position'] = vector(beat['position'], 'position')
+                elif beat.get('xy') is not None:
+                    k['position'] = xyz(beat['xy'], dims, k['position'][1])
                 elif beat.get('landmark'):
-                    k['position'] = point(beat, landmarks, dims)
+                    k['position'] = point({**beat, 'altitude_m': k['position'][1]}, landmarks, dims)
+                if 'altitude_m' in beat or 'height_m' in beat:
+                    k['position'] = list(k['position'])
+                    k['position'][1] = number(beat.get('altitude_m', beat.get('height_m')), 'altitude_m')
                 if beat.get('pose'):
                     k['pose'] = beat['pose']
                     pose_events[t] = beat['pose']
-                if beat.get('xy') is not None or beat.get('landmark') or beat.get('pose'):
+                if any(field in beat for field in ('position', 'xy', 'landmark', 'altitude_m', 'height_m', 'pose')):
                     keyed[t] = k
             offset += sd
         keys = [keyed[t] for t in sorted(keyed)]
@@ -250,11 +292,14 @@ def compile_group(base, ep, group, shots, scene):
             direction = [target[0]-pos[0], target[2]-pos[2]]
             length = math.hypot(*direction) or 1
             low = pos[1] == .25
-            target = [sum(p[0] for p in centers)/len(centers), .16 if low else 1.2,
+            altitude = sum(p[1] for p in centers)/len(centers)
+            pos[1] += altitude
+            target = [sum(p[0] for p in centers)/len(centers), altitude + (.16 if low else 1.2),
                       sum(p[2] for p in centers)/len(centers)]
             frame_height = {'ECU':.35,'CU':.7,'MCU':1.2,'MS':2.1,'MLS':2.8,'FS':3.4,'WS':5,'EWS':9}.get(shot.get('size_code'),3.4)
             spread = max((math.dist(a,b) for a in centers for b in centers),default=0)
-            distance = max(frame_height,spread/1.4)/(2*math.tan(math.radians(fov/2)))
+            fmt = scene['render']
+            distance = max(frame_height,spread/(fmt['width']/fmt['height'])*1.2)/(2*math.tan(math.radians(fov/2)))
             pos = [target[0]-direction[0]/length*distance, pos[1], target[2]-direction[1]/length*distance]
             warnings.append(f'{sid}: 沿布局视轴按景别对准镜首主体，机距为推断值。')
         a = {'t': 0, 'position': pos, 'target': target, 'fov': fov}
@@ -349,5 +394,6 @@ def compile_episode(base: Path, ep: str):
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
     return {'schema_version': 'whitebox_episode.v1', 'project': base.name, 'ep': ep,
+            'render': render_format(read(base / 'settings.json', {})),
             'scenes': scenes, 'groups': groups, 'errors': errors,
             'source_group_count': len(source.get('generation_groups', []))}

@@ -37,6 +37,8 @@ from pathlib import Path
 import base64
 import pygit2
 
+from modules.output_format import OUTPUT_ASPECTS, resolve_output
+
 # ---------------- 配置 ----------------
 ROOT = Path(__file__).resolve().parents[2]             # 工作区根目录
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
@@ -905,7 +907,6 @@ CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
                   "12-publishing/platform-adapter"} | DISPATCHERS
 
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
-OUTPUT_ASPECTS = {"youtube": ("16:9", "YouTube 横屏"), "douyin": ("9:16", "抖音竖屏")}
 # 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
 # aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序)
 OUTPUT_PLATFORMS = {
@@ -922,19 +923,6 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
-
-
-def resolve_output(cfg: dict) -> tuple[str, str, str]:
-    """genconfig -> (画幅比例, 画幅名称, 输出语言)。"""
-    out = cfg.get("output") or {}
-    preset = out.get("aspect_preset") or "youtube"
-    if preset == "custom":
-        aspect = re.sub(r"\s", "", out.get("aspect_custom") or "") or "16:9"
-        name = "自定义"
-    else:
-        aspect, name = OUTPUT_ASPECTS.get(preset, OUTPUT_ASPECTS["youtube"])
-    lang = out.get("language") or "English"
-    return aspect, name, lang
 
 
 def resolve_platforms(cfg: dict) -> list[tuple[str, str, str]]:

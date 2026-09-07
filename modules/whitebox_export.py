@@ -12,7 +12,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from modules.whitebox import component
+from modules.whitebox import component, read, render_format
 
 STATIC = Path(__file__).resolve().parents[1] / 'apps/web/static'
 _EXPORT_LOCK = threading.Lock()
@@ -23,9 +23,13 @@ def fingerprint(episode, group):
     return hashlib.sha256(json.dumps([scene, group], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def render_videos(base, episode, group_ids=None, *, width=960, height=540, fps=24, progress=None):
-    if not 128 <= width <= 1920 or not 128 <= height <= 1080 or width % 2 or height % 2 or not 1 <= fps <= 60:
-        raise ValueError('Export requires even 128..1920 × 128..1080 dimensions, fps 1..60')
+def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None):
+    fmt = render_format(read(base / 'settings.json', {}), width, height)
+    if episode.get('render', {}).get('aspect_ratio', fmt['aspect_ratio']) != fmt['aspect_ratio']:
+        raise ValueError('Project aspect changed; recompile the episode before exporting')
+    width, height = fmt['width'], fmt['height']
+    if isinstance(fps, bool) or not isinstance(fps, int) or not 1 <= fps <= 60:
+        raise ValueError('Export fps must be an integer within 1..60')
     ffmpeg = shutil.which('ffmpeg')
     if not ffmpeg:
         raise RuntimeError('未找到 FFmpeg，请先安装并加入 PATH。')
@@ -77,7 +81,7 @@ def render_videos(base, episode, group_ids=None, *, width=960, height=540, fps=2
                                 if proc.stdin and not proc.stdin.closed:proc.stdin.close()
                                 if proc.poll() is None:proc.kill();proc.wait()
                         record={'schema_version':'whitebox_export.v1','group_id':gid,'duration_s':duration,'fps':fps,'frames':frames,
-                                'width':width,'height':height,'source_sha256':fingerprint(episode,group),
+                                **fmt,'source_sha256':fingerprint(episode,group),
                                 'files':[f'assets/whitebox/{ep}/{gid}/top.mp4',f'assets/whitebox/{ep}/{gid}/camera.mp4']}
                         for name in ('top.mp4','camera.mp4'):os.replace(staging/name,output/name)
                         (staging/'manifest.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
