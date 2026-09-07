@@ -75,6 +75,10 @@ apps/desktop/.desktop-packages/
 plugins/fusion-fiction
 plugins/audio-to-video
 plugins/mashup
+# 混剪运行时目录(previews 预览产物),与 plugins/mashup 一样不入库
+/mashup/
+# 根目录 assets/(概念图运行时落盘目录),不入库
+/assets/
 plugins/digital-human
 conversation_history/
 data/TimbreModel/
