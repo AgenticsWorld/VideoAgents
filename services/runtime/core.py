@@ -839,6 +839,8 @@ DEFAULT_GENCONFIG = {
                "narration_enabled": True,
                "dialogue_voice": "native",
                "spatial_blocking": True,
+               # whitebox_top_video(默认关,暂无 UI):白模参考视频默认只挂 camera.mp4;置 true 才在预算允许时追加 top.mp4(code/sync_whitebox_refs.py,2026-09-07)
+               "whitebox_top_video": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -1612,6 +1614,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
+    if "whitebox_top_video" in o and not isinstance(o["whitebox_top_video"], bool):
+        raise ServiceError(400, "output.whitebox_top_video must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -2649,7 +2653,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs 必挂该场景干净俯视图 `layout_top.png`(直接引用、不做人物标注)+ "
         "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)、逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
         "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/{camera.mp4,top.mp4}`,"
-        "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4[,top.mp4](按生效模型参考视频预算取舍)+ `Shot 1:` 前固定段 `Whitebox reference:`(两路视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向、深色摄像机盒+射线=镜头方向)+ Global constraints 禁白模外观句;"
+        "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4(默认只挂 camera;项目 output.whitebox_top_video=true 且预算允许时才追加 top.mp4)+ `Shot 1:` 前固定段 `Whitebox reference:`(两路视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向、深色摄像机盒+射线=镜头方向)+ Global constraints 禁白模外观句;"
         "prompt 工位写完必跑 `--write`,机检 whitebox_ref_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "

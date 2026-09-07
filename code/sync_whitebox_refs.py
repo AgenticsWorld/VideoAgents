@@ -2,7 +2,7 @@
 """白模参考视频接线机检 / 回写(whitebox_ref_bound,2026-09-07)。
 
 项目「输出设置 → 人物精确空间位置」开启时,每个已导出白模视频的分镜组,其组 prompt 必须:
-  ① `video_refs` 以 camera.mp4(画面视角)开头,预算允许时紧随 top.mp4(俯视);
+  ① `video_refs` 以 camera.mp4(画面视角)开头(默认只挂 camera;项目 output.whitebox_top_video=true 且预算允许时紧随 top.mp4 俯视);
   ② video_prompt `Shot 1:` 前含固定段 `Whitebox reference: [Video N] … camera-view … [Video M] … top-down …`
      与 `Whitebox legend: <color> figure = <label> (<CHAR id>); …; eyes/nose tip = facing; dark camera box + line = shooting direction`;
   ③ `Global constraints:` 含禁白模外观句(no whitebox look …)。

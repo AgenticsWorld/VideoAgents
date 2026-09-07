@@ -8,7 +8,8 @@
     并在 `Global constraints:` 并入禁白模外观句;
   - 机检 whitebox_ref_bound(code/sync_whitebox_refs.py 不带 --write)。
 预算:按本组生效视频模型的参考视频数量/总时长上限取舍——camera.mp4 优先(画面视角,定人物在画面里的位置),
-top.mp4 仅在额度允许时追加(俯视,只用于理解空间关系);渠道不支持参考视频时不接、退回干净俯视图口径。
+默认只挂 camera(项目 output.whitebox_top_video 默认 false,2026-09-07 用户指令);置 true 且额度允许时才追加 top.mp4
+(俯视,只用于理解空间关系);渠道不支持参考视频时不接、退回干净俯视图口径。
 数据源:directing/<ep>/whitebox/episode.json(actors/extras 的颜色与 label,render_whitebox.py 编译落盘)。
 """
 from __future__ import annotations
@@ -97,6 +98,8 @@ def plan_refs(base: Path, ep: str, gid: str) -> dict:
         return {'camera': None, 'top': None, 'videos': [], 'group': group, 'budget': None,
                 'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
     budget = video_budget(base, ep, gid)
+    # output.whitebox_top_video(默认 False = 只挂 camera.mp4,预算再宽也不追加 top.mp4;2026-09-07 用户指令):置 True 才按预算追加 top
+    top_wanted = ((read(base/'settings.json', {}) or {}).get('output') or {}).get('whitebox_top_video', False) is True
     dur = float(manifest.get('duration_s') or group.get('duration_s') or 0)
     cam, top = f'assets/whitebox/{ep}/{gid}/camera.mp4', f'assets/whitebox/{ep}/{gid}/top.mp4'
     videos, skipped = [], ''
@@ -104,7 +107,9 @@ def plan_refs(base: Path, ep: str, gid: str) -> dict:
         skipped = budget['reason'] or (f'参考视频预算不足(模型 {budget["model"] or "?"}:≤{budget["max_videos"]} 个/总时长 ≤{budget["max_total_s"]}s,组时长 {dur}s)')
     else:
         videos.append(cam)
-        if budget['max_videos'] >= 2 and 2*dur <= budget['max_total_s'] + 1e-6:
+        if not top_wanted:
+            skipped = 'top.mp4 未挂:项目输出设置 whitebox_top_video 未开(默认只挂 camera.mp4)'
+        elif budget['max_videos'] >= 2 and 2*dur <= budget['max_total_s'] + 1e-6:
             videos.append(top)
         else:
             skipped = f'top.mp4 未挂:参考视频总时长上限 {budget["max_total_s"]}s 装不下两路 {dur}s 视频,只挂 camera.mp4'
