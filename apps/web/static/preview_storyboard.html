@@ -243,7 +243,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
-  <span id="ps-info" class="ps-info" title="当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)" style="display:none"></span>
+  <span id="ps-info" class="ps-info" title="当前全局视频模型与提示词技能(在控制台「生成模型」/「模型限制」修改;个别组可用组卡「🎛 模型」单独指定)" style="display:none"></span>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -416,7 +416,7 @@ $('#gn-ok').onclick=async()=>{
 };
 
 // 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
-// 每组参考图上限展示值:本组生效上限(组级覆盖模型的硬限,否则项目「视频模型设置」),随预览数据 refs_cap 取;
+// 每组参考图上限展示值:本组生效上限(组级覆盖模型的硬限,否则项目「模型限制」),随预览数据 refs_cap 取;
 // 2026-08-30 起不再按它硬拦添加——按实际需要加,超限由组卡黄条提示、用户决定「🎛 模型」换模型或删图;
 // 只以任何模型的极值 AR_HARD=30 兜底(与服务端 REF_CAP_HARD_MAX 同口径)
 let AR_MAX=9;
@@ -891,7 +891,7 @@ try{
   };
 }catch(_){}
 
-// 🎬 右上角:当前全局视频模型 + 提示词技能(只读展示,2026-08-30;改动去控制台「生成模型」/「视频模型设置」,
+// 🎬 右上角:当前全局视频模型 + 提示词技能(只读展示,2026-08-30;改动去控制台「生成模型」/「模型限制」,
 // 个别组用组卡「🎛 模型」单独指定)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
 function psRender(d){
   const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{};
@@ -901,7 +901,7 @@ function psRender(d){
   el.innerHTML='🎬 '+t('视频模型:')+'<b>'+esc(vm.label||vm.model||'—')+'</b> <span style="opacity:.7">('+esc(vm.provider)+')</span>'
     +' · 🧰 '+t('技能:')+'<b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
   el.classList.toggle('warn',!!ps.warning);
-  el.title=t('当前全局视频模型与提示词技能(在控制台「生成模型」/「视频模型设置」修改;个别组可用组卡「🎛 模型」单独指定)')+(ps.warning?'\n⚠️ '+ps.warning:'');
+  el.title=t('当前全局视频模型与提示词技能(在控制台「生成模型」/「模型限制」修改;个别组可用组卡「🎛 模型」单独指定)')+(ps.warning?'\n⚠️ '+ps.warning:'');
   el.style.display='';
 }
 

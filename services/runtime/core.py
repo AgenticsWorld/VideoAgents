@@ -8642,10 +8642,10 @@ async def api_projects_create(body: dict):
     if (PROJECTS_DIR / name).exists():
         raise ServiceError(400, f"Project already exists: {name}")
     # 向导初始设置(输出/时长/审核/片头片尾):先校验后建目录,校验失败不留下半成品项目
-    # 新建项目的审核力度默认全 0(不审核),向导/调用方显式给值则覆盖
+    # 新建项目审核默认全 0:质量评委 0(跳过不派单)+各维度力度 0(不审核);2026-09-07 用户拍板,向导不再传 review,只能在项目设置「审核设置」改;调用方显式给值仍可覆盖
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
-    base["review"] = {"evaluation": 60, **{k: 0 for k in REVIEW_DIMENSIONS}}
+    base["review"] = {"evaluation": 0, **{k: 0 for k in REVIEW_DIMENSIONS}}
     # 新建项目旁白默认关闭(2026-09-01);DEFAULT_GENCONFIG 保持 True 仅作存量项目缺键回退
     base["output"] = {**base["output"], "narration_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
