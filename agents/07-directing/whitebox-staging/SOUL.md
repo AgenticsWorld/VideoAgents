@@ -28,7 +28,7 @@
 
 ```sh
 python code/render_whitebox.py --project <slug> --ep ep01 --check-only
-python code/render_whitebox.py --project <slug> --ep ep01 --export
+python code/render_whitebox.py --project <slug> --ep ep01
 ```
 
-也可指定组号重渲染。检查每组 top.mp4 与 camera.mp4、manifest 的帧率/时长/分辨率/输入指纹，俯视画面显示机位和视轴，摄像机画面隐藏机位辅助线。输出只是空间参考，未经视频渠道能力检查不得自动塞入图片 refs。回执如实记录推断、警告、未渲染项及原因，不能用编译通过代替视频导出完成。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且两份视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查两份 MP4 与 manifest 的帧率/时长/分辨率/输入指纹，俯视画面显示机位和视轴，摄像机画面隐藏机位辅助线。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。输出只是空间参考，未经视频渠道能力检查不得自动塞入图片 refs。

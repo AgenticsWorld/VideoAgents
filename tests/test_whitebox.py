@@ -329,6 +329,98 @@ def test_export_encoding_two_views(project,monkeypatch,aspect,width,height):
         assert float(info['duration'])==4 and info['width']==width and info['height']==height
         pixels=subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])
         assert pixels[0]>200 if color=='red' else pixels[2]>200
+    # A failed update must retain the previous complete pair and its manifest.
+    folder=project/'assets/whitebox/ep01/grp1'
+    previous={p.name:p.read_bytes() for p in folder.iterdir() if p.is_file()}
+    def broken_frame(self,fn,arg):
+        if '.frame(' in fn:raise RuntimeError('GPU frame failed')
+    monkeypatch.setattr(FakePage,'evaluate',broken_frame)
+    with pytest.raises(RuntimeError,match='GPU frame failed'):
+        render_videos(project,compile_episode(project,'ep01'),width=width,height=height,fps=2)
+    assert {p.name:p.read_bytes() for p in folder.iterdir() if p.is_file()}==previous
+    assert not list(folder.glob('.render-*'))
+
+
+def whitebox_cli(monkeypatch, project, *args):
+    import importlib.util
+    import sys
+    root=Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root/'code'))
+    spec=importlib.util.spec_from_file_location('whitebox_cli_test',root/'code/render_whitebox.py')
+    cli=importlib.util.module_from_spec(spec);spec.loader.exec_module(cli)
+    monkeypatch.setattr(sys,'argv',['render_whitebox','--project','demo','--out-root',str(project),'--ep','ep01',*args])
+    return cli
+
+
+def test_cli_automatically_saves_videos_without_export_flag(project,monkeypatch):
+    cli=whitebox_cli(monkeypatch,project)
+    calls=[]
+    def save(base,episode,groups,**options):
+        calls.append((base,episode,groups,options));return {'rendered':['grp1'],'skipped':[]}
+    monkeypatch.setattr(cli,'ensure_videos',save)
+    assert cli.main()==0
+    assert len(calls)==1 and calls[0][2] is None and calls[0][3]['fps']==24
+    assert (project/'directing/ep01/whitebox/episode.json').is_file()
+    assert (project/'assets/concepts/scenes/SCN-1/whitebox.scene.json').is_file()
+
+
+def test_cli_check_only_has_no_export_or_writes(project,monkeypatch):
+    cli=whitebox_cli(monkeypatch,project,'--check-only')
+    monkeypatch.setattr(cli,'ensure_videos',lambda *a,**kw:pytest.fail('check-only exported'))
+    assert cli.main()==0
+    assert not (project/'directing/ep01/whitebox').exists()
+
+
+def test_scene_update_exports_only_referencing_groups(project,monkeypatch):
+    import shutil
+    path,data=source(project)
+    shutil.copytree(project/'assets/concepts/scenes/SCN-1',project/'assets/concepts/scenes/SCN-2')
+    data['shots'].append({**data['shots'][0],'shot_id':'sh2','scene_id':'SCN-2'})
+    data['generation_groups'].append({**data['generation_groups'][0],'group_id':'grp2','scene_id':'SCN-2','shots':['sh2']})
+    write(path,data)
+    cli=whitebox_cli(monkeypatch,project,'--scene','SCN-1')
+    calls=[]
+    monkeypatch.setattr(cli,'ensure_videos',lambda base,e,g,**kw:calls.append(g) or {'rendered':g,'skipped':[]})
+    assert cli.main()==0 and calls==[['grp1']]
+
+
+def test_auto_export_cache_tracks_scene_actor_format_renderer_and_missing_files(project,monkeypatch):
+    from modules import whitebox_export as export
+    episode=compile_episode(project,'ep01');calls=[]
+    def save(base,e,ids,**kw):
+        calls.append(list(ids));records=[]
+        for group in e['groups']:
+            gid=group['group_id']
+            if gid not in ids:continue
+            files=[f'assets/whitebox/ep01/{gid}/{view}.mp4' for view in ('top','camera')]
+            for rel in files:
+                p=base/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'video')
+            record={'group_id':gid,'fps':kw['fps'],**export.render_format({},kw['width'],kw['height']),
+                    'files':files,'source_sha256':export.fingerprint(e,group),'renderer_sha256':export.renderer_fingerprint()}
+            write(base/f'assets/whitebox/ep01/{gid}/manifest.json',record);records.append(record)
+        return records
+    monkeypatch.setattr(export,'render_videos',save)
+    assert export.ensure_videos(project,episode)['rendered']==['grp1']
+    assert export.ensure_videos(project,episode)['skipped']==['grp1'] and len(calls)==1
+    episode['groups'][0]['actors'][0]['keyframes'][0]['yaw']=1
+    assert export.ensure_videos(project,episode)['rendered']==['grp1']
+    episode['scenes']['SCN-1']['objects'][0]['position'][0]+=1
+    assert export.ensure_videos(project,episode)['rendered']==['grp1']
+    assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']
+    assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['skipped']==['grp1']
+    (project/'assets/whitebox/ep01/grp1/top.mp4').unlink()
+    assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']
+    monkeypatch.setattr(export,'renderer_fingerprint',lambda:'new-renderer')
+    assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']
+    assert export.ensure_videos(project,episode,width=256,height=144,fps=12,force=True)['rendered']==['grp1']
+
+
+def test_cli_propagates_export_failure_instead_of_claiming_saved(project,monkeypatch):
+    cli=whitebox_cli(monkeypatch,project)
+    def fail(*a,**kw):raise RuntimeError('encoder failed')
+    monkeypatch.setattr(cli,'ensure_videos',fail)
+    with pytest.raises(RuntimeError,match='encoder failed'):cli.main()
+    assert not (project/'assets/whitebox/ep01/grp1/manifest.json').exists()
 
 
 @pytest.mark.parametrize('output,expected',[

@@ -1,6 +1,6 @@
 # Three.js 白模空间与参考视频
 
-场景预览放在图片之后，尺寸上限为图片预览的两倍（760×460 CSS px），支持旋转和缩放；分镜预览每组的「🧊白模」同时播放空间视角和镜头视角，可切换正俯视并拖动时间。两个白模视口均为原210px高度的1.5倍，即315px高，宽度按项目画幅同比放大；容器较窄时等比缩小或换行。统一使用本地 Three.js 0.180.0，不依赖 CDN；预览与视频导出共用同一个渲染器。参考视频分为 top.mp4（俯视空间、人物、摄像机与视轴）和 camera.mp4（最终机位白模）。
+场景预览放在图片之后，尺寸上限为图片预览的两倍（760×460 CSS px）；分镜预览每组的「🧊白模」同时播放空间视角和镜头视角，可拖动时间。两个页面的空间视角默认俯视图，可切换到旋转视角后拖动、缩放；摄像机视口保持实际机位。预览不再提供“导出双视角 MP4”按钮，视频由建模流程自动保存。两个白模视口均为原210px高度的1.5倍，即315px高，宽度按项目画幅同比放大；容器较窄时等比缩小或换行。统一使用本地 Three.js 0.180.0，不依赖 CDN；预览与视频导出共用同一个渲染器。参考视频分为 top.mp4（俯视空间、人物、摄像机与视轴）和 camera.mp4（最终机位白模）。
 
 ## 系统与项目职责
 
@@ -112,15 +112,18 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 ```sh
 python code/render_whitebox.py --project dzg6 --ep ep01 --check-only
 python code/render_whitebox.py --project dzg6 --ep ep01
-python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --export
-python code/render_whitebox.py --project dzg6 --ep ep01 --export --fps 24
+python code/render_whitebox.py --project dzg6 --ep ep01 grp002
+python code/render_whitebox.py --project dzg6 --ep ep01 --scene SCN-0002
+python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --force --fps 24
 ```
 
-不指定组时处理全体。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；任一选中组错误则 CLI 非零退出。
+不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。每次建模或修改后由 Agent 执行；--check-only 不写编译产物或视频，仅供检查，不能当作完成交付。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
+
+自动保存按 manifest 比对场景/调度源指纹、渲染器指纹、画幅、分辨率与帧率，且核对两份 MP4 均存在且非空。匹配则复用，否则重出；--force 强制重出。场景几何更新会使该场景下各组的视频过期，场景建模 Agent 需对所有引用它的已有分镜集执行 --scene。首次场景建模无分镜时只交付场景模型，分镜就绪后由白模调度 Agent 自动保存视频。两路视频先在临时目录完成编码，再发布与更新清单；编码失败保留原有效视频，不能标注本次更新成功。
 
 导出需要项目 Python 依赖 Playwright、已安装 Chromium（`python -m playwright install chromium`）以及 PATH 中 FFmpeg；可用 VIDEOAGENTS_CHROMIUM 指向独立 Chromium 可执行文件。通过 file URL 加载本地渲染器，逐帧按 i/fps 渲染，不依赖实时录屏速度。输出 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，H.264/yuv420p，无音频，默认24fps、长边约960px，画幅读取项目 settings.json 的 output.aspect_preset/aspect_custom：YouTube=960×540（16:9）、抖音=540×960（9:16），自定义比例同样保留。摄像机 aspect、预览和两路导出像素尺寸使用同一比例；布局图坐标和场景米制尺度不因横竖屏变化而变形。--width/--height 必须同时提供且保持项目比例，支持1080×1920等竖屏尺寸。时长精度为一帧；manifest 记录源数据 SHA-256、帧数和规格。仅一项导出任务同时运行；浏览器关闭后服务端任务继续。
 
-API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GET `/<ep>`、POST `/<ep>/exports/<gid>` 开始导出、GET 同一路径查询状态。路径标识严格限定，禁止目录穿越。预览 GET 不写项目。旧服务尚未重启时，前端可读取已编译产物预览；导出新 API 需重启服务生效。
+API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GET `/<ep>`；既有 POST `/<ep>/exports/<gid>` 和 GET 同路径状态接口保留供兼容调用，预览页不再触发。路径标识严格限定，禁止目录穿越。预览 GET 不写项目，也不会因用户打开页面而重复渲染。旧服务尚未重启时，前端仍可读取已编译产物预览；自动保存由 Agent 执行宿主 CLI，不依赖用户页面。
 
 `dzg6/ep01` 的8个场景已按其俯视图写入带比例依据的白模。它们位于用户项目 data 目录（按仓库约定不提交）。数值轨迹尚有遗留推断，不能把粗模视为最终镜头调度。最终视频模型画面仍在原分镜组卡中，白模输出不会自动上传到生成渠道。
 

@@ -171,7 +171,7 @@ phases:
       - { id: p4-scene-model, agent: 05-scenes/scene-modeling, for_each: scene,
           condition: whitebox_requested, depends_on: [p4-env-concept],
           outputs: ["bible/scenes/{id}/whitebox.json"],
-          validation: { qa: [11-qa/visual-qa] } } # docs/whitebox.md：米制尺度与俯视图几何校准
+          validation: { qa: [11-qa/visual-qa] } } # 已有分镜时，更新场景后逐相关集运行 render_whitebox.py --scene <id>；自动刷新引用本场景的两路 MP4。首次建模无分镜则交接 p6-whitebox。
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
           # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref(与无人参照物同框)
           # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图(审核风险+信息稀释)
@@ -266,7 +266,7 @@ phases:
       - { id: p6-whitebox, agent: 07-directing/whitebox-staging, condition: whitebox_requested,
           depends_on: [p4-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json", "assets/whitebox/{ep}/"],
-          validation: { qa: [11-qa/visual-qa] } } # render_whitebox.py --check-only 后 --export；逐组两份 MP4
+          validation: { qa: [11-qa/visual-qa] } } # render_whitebox.py 默认编译并自动保存 top.mp4/camera.mp4/manifest.json；每次生成或更新后执行，禁止只交付 --check-only。视频失败则任务未完成。
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*

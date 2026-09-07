@@ -36,4 +36,4 @@ _REPO = next(p for p in _Path(__file__).resolve().parents if (p / "modules").is_
 _sys.path[:0] = [str(_REPO / "modules"), str(_REPO / "code")]
 ```
 
-白模空间/双视角参考视频：`python code/render_whitebox.py --project <slug> --ep ep01 --check-only` 校验，去掉 `--check-only` 编译，加 `--export` 逐组导出 top.mp4 和 camera.mp4。尺度、关键帧与 Agent 分工见 [白模规约](../docs/whitebox.md)。
+白模空间/双视角参考视频：`python code/render_whitebox.py --project <slug> --ep ep01` 默认编译并自动保存 top.mp4、camera.mp4、manifest.json 至 `assets/whitebox/<ep>/<grp>/`。可追加组号，或用 `--scene <sid>` 更新引用该场景的所有组；完整且指纹/规格匹配的视频自动复用，`--force` 强制重出。`--check-only` 仅校验，不完成视频交付；旧 `--export` 保留兼容。尺度、关键帧与 Agent 分工见 [白模规约](../docs/whitebox.md)。

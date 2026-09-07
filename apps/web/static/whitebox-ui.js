@@ -25,13 +25,13 @@ async function mount(host,project,scene,group=null,ep='') {
   host.style.setProperty('--wb-aspect',`${format.width} / ${format.height}`);
   host.style.setProperty('--wb-preview-width',`${(group?315:460)*format.width/format.height}px`);
   const editLocation=group?`3D 白模 [whitebox:${project}/${ep}/${group.group_id}]（项目 ${project}；集 ${ep}；分镜组 ${group.group_id}；场景 ${scene.scene_id}；镜头 ${group.cameras.map(c=>c.shot_id).join('、')}；白模调度计划 directing/${ep}/whitebox_plans/${group.group_id}.json；场景模型 bible/scenes/${scene.scene_id}/whitebox.json；编译预览 directing/${ep}/whitebox/episode.json）`:'';
-  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>3D 白模 · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="对这组3D白模提修改意见，发消息给总制片">✏️ 编辑</button>`:''}</div><select aria-label="空间视角"><option value="overview">旋转视角</option><option value="top">俯视图</option></select>${group?'<button class="wb-export">导出双视角 MP4</button>':''}</div>
-    <div class="wb-status">${scene.dimensions_m[0]} × ${scene.dimensions_m[2]} m · 高 ${scene.dimensions_m[1]} m · 网格 1 m · 画幅 ${esc(format.aspect_ratio)} · ${scene.inferred?'推断尺寸':'已标定尺寸'} · 拖动旋转，滚轮缩放</div>
+  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>3D 白模 · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="对这组3D白模提修改意见，发消息给总制片">✏️ 编辑</button>`:''}</div><select aria-label="空间视角"><option value="top" selected>俯视图</option><option value="overview">旋转视角</option></select></div>
+    <div class="wb-status">${scene.dimensions_m[0]} × ${scene.dimensions_m[2]} m · 高 ${scene.dimensions_m[1]} m · 网格 1 m · 画幅 ${esc(format.aspect_ratio)} · ${scene.inferred?'推断尺寸':'已标定尺寸'} · 切换旋转视角后可拖动旋转、滚轮缩放</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="场景白模"></canvas><figcaption>空间与摄像机位置</figcaption></figure>${group?'<figure><canvas class="wb-camera" aria-label="摄像机白模"></canvas><figcaption>摄像机视角</figcaption></figure>':''}</div>
     ${group?`<div class="wb-transport"><button class="wb-play">播放</button><input type="range" aria-label="白模时间" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast">${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
-    <details class="wb-warnings"><summary>建模依据与检查 (${(group?.warnings||scene.warnings).length})</summary><div>${esc(scene.scale_basis)}</div>${(group?.warnings||scene.warnings).map(w=>`<div>${esc(w)}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div><div class="wb-links"></div>`;
-  let space, camera, frame, disposed=false, playing=false, time=0, previous=0, exportTimer;
-  const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(frame);clearTimeout(exportTimer);space?.dispose();camera?.dispose();panels.delete(host);};
+    <details class="wb-warnings"><summary>建模依据与检查 (${(group?.warnings||scene.warnings).length})</summary><div>${esc(scene.scale_basis)}</div>${(group?.warnings||scene.warnings).map(w=>`<div>${esc(w)}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
+  let space, camera, frame, disposed=false, playing=false, time=0, previous=0;
+  const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(frame);space?.dispose();camera?.dispose();panels.delete(host);};
   panels.set(host,dispose);
   try {
     const {WhiteboxRenderer}=await loadRenderer();if(disposed||!host.isConnected)return dispose();
@@ -49,16 +49,6 @@ async function mount(host,project,scene,group=null,ep='') {
   if(group){
     host.querySelector('.wb-play').onclick=()=>{if(time>=group.duration_s)time=0;playing=!playing;previous=performance.now();host.querySelector('.wb-play').textContent=playing?'暂停':'播放';};
     host.querySelector('input').oninput=e=>{time=Number(e.target.value);playing=false;host.querySelector('.wb-play').textContent='播放';render();};
-    const result=host.querySelector('.wb-result'),button=host.querySelector('.wb-export');
-    if(group.requires_service_restart){button.disabled=true;result.textContent='白模预览已更新；重启服务后可导出本次完整调度的视频。';}
-    const poll=async()=>{
-      try{const s=await json(`${api(project)}/${encodeURIComponent(ep)}/exports/${encodeURIComponent(group.group_id)}`);if(disposed)return;
-        result.textContent=s.status==='running'?`正在导出 ${s.progress||0}%`:s.status==='complete'?'双视角参考视频已保存到项目。':s.error||'';
-        if(s.status==='running')exportTimer=setTimeout(poll,1500);
-        else{button.disabled=false;if(s.status==='complete')host.querySelector('.wb-links').innerHTML=s.files.map(f=>`<a href="${esc(f.url)}" download>${esc(f.name)}</a>`).join('');}
-      }catch(e){result.textContent=e.message;button.disabled=false;}
-    };
-    button.onclick=async()=>{button.disabled=true;result.textContent='准备导出…';try{await json(`${api(project)}/${encodeURIComponent(ep)}/exports/${encodeURIComponent(group.group_id)}`,{method:'POST'});poll();}catch(e){result.textContent=e.status===404?'白模导出接口尚未启用，请重启 VideoAgents 服务后重试。':e.message;button.disabled=false;}};
   }
 }
 
