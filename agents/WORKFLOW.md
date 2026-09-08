@@ -25,7 +25,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 
 > 输入:一本小说(txt/epub,按章节存放)。
 > 输出:可发布的成片(分集视频 + 字幕 + 封面 + 各平台包)。
-> 团队:83 个 Agent,13 个类别,目录见 `agents/README.md`;可经插件扩展新工位与业务流程(§10,如衍生小说创作插件 `plugins/derivative-fiction/`)。
+> 团队:87 个 Agent,13 个类别,目录见 `agents/README.md`;可经插件扩展新工位与业务流程(§10,如衍生小说创作插件 `plugins/derivative-fiction/`)。
 > 本文档是唯一的流程权威(single source of truth for process);各 Agent 的职责细节见其目录下的 `SOUL.md`。
 
 ---
@@ -1007,7 +1007,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 
 ## 10. Agent 插件机制(团队扩展)
 
-内置 83 个 Agent 覆盖「小说→视频」主流程;主流程之外的衍生业务(如基于世界圣经的衍生小说创作)
+内置 87 个 Agent 覆盖「小说→视频」主流程;主流程之外的衍生业务(如基于世界圣经的衍生小说创作)
 通过**声明式插件**扩展团队,不改内核。插件不含任何可执行代码——SOUL.md 即身份、YAML 即流程,
 与内置 Agent 享受完全相同的派单/评审/闸门待遇。编写规范详见 `plugins/README.md`。
 
