@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile whiteboxes and automatically save every changed top/camera video pair."""
+"""Compile whiteboxes and automatically save every changed camera-view video (camera.mp4; no top view since 2026-09-08)."""
 import json
 import sys
 from pathlib import Path

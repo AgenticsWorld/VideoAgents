@@ -266,7 +266,7 @@ phases:
       - { id: p6-whitebox, agent: 07-directing/whitebox-staging, condition: whitebox_requested,
           depends_on: [p4-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json", "assets/whitebox/{ep}/"],
-          validation: { qa: [11-qa/visual-qa] } } # render_whitebox.py 默认编译并自动保存 top.mp4/camera.mp4/manifest.json；每次生成或更新后执行，禁止只交付 --check-only。视频失败则任务未完成。
+          validation: { qa: [11-qa/visual-qa] } } # render_whitebox.py 默认编译并自动保存 camera.mp4/manifest.json(2026-09-08 起仅摄影机视角,无 top.mp4)；每次生成或更新后执行，禁止只交付 --check-only。视频失败则任务未完成。
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
@@ -286,7 +286,7 @@ phases:
                                prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
                                creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
-                               whitebox_ref_bound,   # 白模视频已导出的组:video_refs=camera.mp4[,top.mp4](按生效模型参考视频预算取舍)+ 正文 Whitebox reference/legend 固定段 + Global constraints 禁白模外观句(code/sync_whitebox_refs.py,2026-09-07;开关关闭 skipped)
+                               whitebox_ref_bound,   # 白模视频已导出的组:video_refs=camera.mp4(按生效模型参考视频预算取舍;2026-09-08 起无 top.mp4)+ 正文 Whitebox reference/legend 固定段 + Global constraints 禁白模外观句(code/sync_whitebox_refs.py,2026-09-07;开关关闭 skipped)
                                layout_map_bound,  # 场景干净俯视图 layout_top.png + 场景 grid_9views.png 必在 refs(2026-09-07 起俯视图直接引用,已退役的 blocking_maps/ 动线标注图不得再挂),含 Spatial layout 声明句,逐角色 route_en 逐字命中,并含 Map usage 俯视图仅作空间位置参考句 + Global constraints no top-down or bird's-eye view(map_reference_only,2026-09-03)(code/layout_map_bound_check.py,2026-08-19)
                                nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
                                prompt_skill_applied] } }   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
@@ -302,7 +302,7 @@ phases:
           validation: { auto: [face_similarity_gte_0.85] } }   # 仅校新生成锚;复用锚(source=reuse:)与概念图同源免校,reuse-only 组直接放行(§7A 2026-07-24)
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
-          # 组 json 有 video_refs(白模 camera.mp4/top.mp4,2026-09-07)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
+          # 组 json 有 video_refs(白模 camera.mp4,2026-09-07;2026-09-08 起无 top.mp4)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
           validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],

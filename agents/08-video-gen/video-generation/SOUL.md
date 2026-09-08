@@ -74,7 +74,7 @@ python3 modules/genmedia.py info --group epNN/grpNNN   # 该组有组级模型�
 python3 modules/genmedia.py video --prompt "<grpNNN.json 的 video_prompt>" \
   --output assets/clips/epNN/grpNNN.mp4 \
   --ref <grpNNN.json refs 原路径:概念库图/场景俯视图/包内新生成锚...> [<前组尾帧>] \
-  --ref-video <grpNNN.json video_refs 原路径顺序:白模 camera.mp4 [top.mp4],2026-09-07;字段缺省则不传> \
+  --ref-video <grpNNN.json video_refs 原路径顺序:白模 camera.mp4,2026-09-07(2026-09-08 起无 top.mp4);字段缺省则不传> \
   --audio-ref <说话角色1样本 voice/refs/CHAR-xxxx_voiceprint.mp3> [<说话角色2样本> <说话角色3样本>] \
   --generate-audio on \
   --return-last-frame assets/clips/epNN/grpNNN.last_frame.png \

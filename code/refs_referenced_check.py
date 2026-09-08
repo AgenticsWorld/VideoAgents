@@ -7,7 +7,7 @@
     模型可能忽略它(白占参考图名额,前科 polan3 grp008/009 满员挂不上尾帧),也可能误用它
     (道具比例锚图里的木板/碗漏进画面);官方指南:每次涉及主体都要明确指代,避免省略。
   - audioref_all_referenced:audio_refs[i-1] 同理须以 `[Audio i]` / `@Audio i` 引用。
-  - videoref_all_referenced(2026-09-07):video_refs[i-1](白模参考视频 camera.mp4/top.mp4 等)须以 `[Video i]` 引用,
+  - videoref_all_referenced(2026-09-07):video_refs[i-1](白模参考视频 camera.mp4 等)须以 `[Video i]` 引用,
     白模视频的固定说明段由 code/sync_whitebox_refs.py(whitebox_ref_bound)另核。
   - prop_ref_bound:`assets/concepts/props/<PROP-id>/` 下的道具图除被引用外,须以绑定句
     `<道具名>@Image i` 形式绑定(道具首现 Shot 段,后接 scale.prompt_token);只写 `[Image i]`
