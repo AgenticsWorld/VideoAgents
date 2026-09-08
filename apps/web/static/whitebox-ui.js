@@ -5,7 +5,26 @@ const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20260
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const panels=new Map();
-async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok){const e=Error(d.detail||r.statusText);e.status=r.status;throw e;}return d;}
+// 请求加超时 + 一次重试:同源 HTTP/1.1 连接被 SSE 长连接/媒体请求占满时,fetch 会在浏览器里无限期排队,
+// 不加超时面板会永远停在「正在加载…」且没有任何报错;超时/网络错误重试一次,仍失败交给调用方显示可重试的错误
+const FETCH_TIMEOUT_MS=15000;
+async function json(url,options={}){
+  for(let attempt=0;;attempt++){
+    const ac=new AbortController();
+    const timer=setTimeout(()=>ac.abort(),FETCH_TIMEOUT_MS);
+    try{
+      const r=await fetch(url,{...options,signal:ac.signal});
+      const d=await r.json();
+      if(!r.ok){const e=Error(d.detail||r.statusText);e.status=r.status;throw e;}
+      return d;
+    }catch(e){
+      const transient=e.name==='AbortError'||e.name==='TypeError';
+      if(transient&&attempt<1)continue;
+      if(e.name==='AbortError')throw Error(t('白模数据请求超时（{seconds} 秒）',{seconds:Math.round(FETCH_TIMEOUT_MS/1000)}));
+      throw e;
+    }finally{clearTimeout(timer);}
+  }
+}
 async function previewData(url,fallback,minStagingVersion=0){
   let current;
   try{current=await json(url);}catch(e){if(e.status!==404)throw e;return {...await json(fallback),requires_service_restart:true};}
@@ -77,7 +96,7 @@ let episodeCache=null;
 const settingsCache=new Map();
 const episodeData=(project,ep)=>{
   const key=project+'/'+ep;
-  if(!episodeCache||episodeCache.key!==key)episodeCache={key,promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`,3)};
+  if(!episodeCache||episodeCache.key!==key)episodeCache={key,at:Date.now(),promise:previewData(`${api(project)}/${encodeURIComponent(ep)}`,`/api/v1/projects/${encodeURIComponent(project)}/artifacts/directing/${encodeURIComponent(ep)}/whitebox/episode.json`,3)};
   return episodeCache.promise;
 };
 const projectSettings=project=>{
@@ -89,6 +108,7 @@ const projectSettings=project=>{
 // (人物色标 → 播放 → 摄像机视角 → 俯视图 → 建模依据)。全页共用一个 WebGL 上下文,
 // 面板只在滚入视口附近时建 3D 场景、滚出即释放;单个 rAF 循环驱动全部面板,静止且无交互时不重绘 ----
 const groupPanels=new Map();   // host -> state
+let pending=new Map();         // host -> build promise(每次 mountGroups 重建)
 let groupObserver=null, groupFrame=0;
 function groupLoop(now){
   groupFrame=0;
@@ -114,6 +134,16 @@ function groupLoop(now){
 }
 const kick=()=>{if(!groupFrame)groupFrame=requestAnimationFrame(groupLoop);};
 function releaseGroup(st){st.rr?.dispose();st.rr=null;st.playing=false;}
+// 数据请求失败(超时/断网/服务端错误)显示错误 + 「重试」按钮;重试把该组恢复成占位并重新交给观察器建面板
+function failGroup(host,message){
+  host.innerHTML=`<div class="wb-fail">${esc(message)} <button type="button" class="editbtn wb-retry">${esc(t('重试'))}</button></div>`;
+  host.querySelector('.wb-retry').onclick=()=>retryGroup(host);
+}
+function retryGroup(host){
+  pending.delete(host);groupPanels.delete(host);
+  host.textContent=t('正在加载分镜组白模…');
+  if(groupObserver){groupObserver.unobserve(host);groupObserver.observe(host);}
+}
 async function acquireGroup(st){
   if(st.rr||st.loading||!st.ready)return;
   st.loading=true;
@@ -133,7 +163,7 @@ async function buildGroup(host,project,ep){
   groupPanels.set(host,st);
   let data,settings;
   try{[data,settings]=await Promise.all([episodeData(project,ep),projectSettings(project)]);}
-  catch(e){episodeCache=null;if(host.isConnected)host.textContent=t('白模加载失败：{error}',{error:wbMessage(e.message)});return st;}
+  catch(e){episodeCache=null;if(host.isConnected)failGroup(host,t('白模加载失败：{error}',{error:wbMessage(e.message)}));return st;}
   if(!host.isConnected||!groupPanels.has(host))return st;
   const group=data.groups.find(g=>g.group_id===gid);
   if(!group){host.textContent=t('白模加载失败：{error}',{error:wbMessage(data.errors?.find(e=>e.group_id===gid)?.error||t('没有本组白模数据'))});return st;}
@@ -178,7 +208,7 @@ export function mountGroups(root,project,ep){
     const f=projectRenderFormat(settings);
     for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+190)}px`;}
   }).catch(()=>{});
-  const pending=new Map();   // host -> build promise
+  pending=new Map();
   groupObserver=new IntersectionObserver(entries=>{
     for(const {target,isIntersecting} of entries){
       if(!isIntersecting){const st=groupPanels.get(target);if(st)releaseGroup(st);continue;}
@@ -188,4 +218,12 @@ export function mountGroups(root,project,ep){
   },{root,rootMargin:'400px 0px'});
   hosts.forEach(h=>groupObserver.observe(h));
 }
-export function resetWhitebox(){episodeCache=null;for(const dispose of [...panels.values()])dispose();groupObserver?.disconnect();groupObserver=null;for(const st of groupPanels.values())releaseGroup(st);groupPanels.clear();}
+// keepData:分镜页页内重绘(SSE 事件触发的 load(true)、虚拟人像标记补打等)沿用已取到的白模/项目设置数据,
+// 不再每次重绘都重发请求;手动刷新、切集/切项目(keepData=false)或数据超过 DATA_TTL_MS 仍重新请求
+const DATA_TTL_MS=5*60*1000;
+export function resetWhitebox({keepData=false}={}){
+  if(!keepData||!episodeCache||Date.now()-episodeCache.at>DATA_TTL_MS){episodeCache=null;settingsCache.clear();}
+  for(const dispose of [...panels.values()])dispose();
+  groupObserver?.disconnect();groupObserver=null;pending=new Map();
+  for(const st of groupPanels.values())releaseGroup(st);groupPanels.clear();
+}

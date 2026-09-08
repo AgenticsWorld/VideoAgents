@@ -400,6 +400,10 @@ def compile_group(base, ep, group, shots, scene):
         if abs(camera['start']-cursor) > 1e-6 or abs(camera['duration_s']-sd) > 1e-6:
             raise ValueError(f'{gid}: camera intervals must match shot timing')
         validate_keys(camera['keyframes'], sd, True); cursor += sd
+        from modules.whitebox_camera import check_camera
+        camera_errors = check_camera(base, ep, shots[camera['shot_id']], camera)
+        if camera_errors:
+            raise ValueError('; '.join(camera_errors))
     return {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],
             'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'extras': extras,
             'props': props, 'cameras': cameras,
@@ -504,6 +508,8 @@ def compile_episode(base: Path, ep: str):
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
     complete_scene_actors(groups, contexts, raw_groups, errors)
+    from modules.whitebox_camera import check_matches
+    errors.extend(check_matches(base, ep, groups))
     return {'schema_version': 'whitebox_episode.v1', 'staging_version': 3, 'project': base.name, 'ep': ep,
             'render': render_format(read(base / 'settings.json', {})),
             'scenes': scenes, 'groups': groups, 'errors': errors,

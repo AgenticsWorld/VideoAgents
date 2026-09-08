@@ -1962,6 +1962,8 @@ window.I18N_DICT = {
 "3D 加载失败：{error}": "Error al cargar 3D: {error}",
 "场景白模尚不可用：{error}": "Modelo de escena no disponible: {error}",
 "白模加载失败：{error}": "Error al cargar el modelo de bloques: {error}",
+"重试": "Reintentar",
+"白模数据请求超时（{seconds} 秒）": "La solicitud de datos del modelo de bloques agotó el tiempo de espera ({seconds} s)",
 "没有本组白模数据": "No hay datos de modelo para este grupo",
 "场次人物": "Reparto de la escena",
 "场次人物，空间位置由白模调度继承": "Reparto de la escena; posiciones heredadas de la puesta en escena del modelo",

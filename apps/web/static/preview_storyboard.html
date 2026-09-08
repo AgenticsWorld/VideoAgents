@@ -1241,8 +1241,11 @@ function groupCard(g,inner){
 }
 
 let LAST_DATA=null;
+// 白模数据缓存失效标记:手动刷新/切集/切项目置 true,render 时传给 resetWhitebox;页内重绘(SSE 事件、标记补打)沿用缓存
+let WB_INVALIDATE=true;
 function render(d){
-  import('/static/whitebox-ui.js?v=20260908-bedfoot-pour').then(m=>m.resetWhitebox());
+  const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
+  import('/static/whitebox-ui.js?v=20260908-wbretry2').then(m=>m.resetWhitebox({keepData:wbKeep}));
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1395,7 +1398,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  import('/static/whitebox-ui.js?v=20260908-bedfoot-pour').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
+  import('/static/whitebox-ui.js?v=20260908-wbretry2').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();
@@ -1459,7 +1462,7 @@ async function load(keep){
   const proj=$('#project').value.trim()||'demo';
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
   // keep 模式(页内操作就地更新)不清空内容:清空瞬间滚动条会被浏览器强制归零,"回到原位"随之失效
-  if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  if(!keep){WB_INVALIDATE=true;$('#content').innerHTML='<div class="empty">加载中…</div>';}
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/storyboard'+(EP?'?ep='+encodeURIComponent(EP):''));
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
@@ -1474,7 +1477,7 @@ async function load(keep){
     avSync();   // 异步补打虚拟人像库 🛡 标记(未启用/无入库图时无感)
   }catch(e){$('#content').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`}
 }
-$('#reload').onclick=()=>load(true);
+$('#reload').onclick=()=>{WB_INVALIDATE=true;load(true)};
 const _q=new URLSearchParams(location.search);
 $('#project').value=_q.get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';

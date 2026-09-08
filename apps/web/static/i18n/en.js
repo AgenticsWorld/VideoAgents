@@ -2001,6 +2001,8 @@ window.I18N_DICT = {
 "3D 加载失败：{error}": "3D loading failed: {error}",
 "场景白模尚不可用：{error}": "Scene blockout unavailable: {error}",
 "白模加载失败：{error}": "Blockout loading failed: {error}",
+"重试": "Retry",
+"白模数据请求超时（{seconds} 秒）": "Blockout data request timed out ({seconds} s)",
 "没有本组白模数据": "No blockout data for this group",
 "场次人物": "Scene cast",
 "场次人物，空间位置由白模调度继承": "Scene cast; spatial positions inherited from blockout staging",

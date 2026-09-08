@@ -1962,6 +1962,8 @@ window.I18N_DICT = {
 "3D 加载失败：{error}": "3D-Laden fehlgeschlagen: {error}",
 "场景白模尚不可用：{error}": "Szenen-Blockmodell nicht verfügbar: {error}",
 "白模加载失败：{error}": "Laden des Blockmodells fehlgeschlagen: {error}",
+"重试": "Erneut versuchen",
+"白模数据请求超时（{seconds} 秒）": "Zeitüberschreitung bei der Blockmodell-Datenanfrage ({seconds} s)",
 "没有本组白模数据": "Keine Blockmodelldaten für diese Gruppe",
 "场次人物": "Szenenbesetzung",
 "场次人物，空间位置由白模调度继承": "Szenenbesetzung; räumliche Positionen aus der Blockmodell-Inszenierung übernommen",

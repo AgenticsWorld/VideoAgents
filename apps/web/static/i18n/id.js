@@ -1962,6 +1962,8 @@ window.I18N_DICT = {
 "3D 加载失败：{error}": "Gagal memuat 3D: {error}",
 "场景白模尚不可用：{error}": "Model blok adegan belum tersedia: {error}",
 "白模加载失败：{error}": "Gagal memuat model blok: {error}",
+"重试": "Coba lagi",
+"白模数据请求超时（{seconds} 秒）": "Permintaan data model blok habis waktu ({seconds} detik)",
 "没有本组白模数据": "Tidak ada data model blok untuk grup ini",
 "场次人物": "Pemeran adegan",
 "场次人物，空间位置由白模调度继承": "Pemeran adegan; posisi diwarisi dari penataan model blok",

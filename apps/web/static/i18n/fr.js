@@ -1962,6 +1962,8 @@ window.I18N_DICT = {
 "3D 加载失败：{error}": "Échec du chargement 3D : {error}",
 "场景白模尚不可用：{error}": "Maquette de scène indisponible : {error}",
 "白模加载失败：{error}": "Échec du chargement de la maquette : {error}",
+"重试": "Réessayer",
+"白模数据请求超时（{seconds} 秒）": "Délai dépassé pour la requête des données de maquette ({seconds} s)",
 "没有本组白模数据": "Aucune donnée de maquette pour ce groupe",
 "场次人物": "Personnages de la scène",
 "场次人物，空间位置由白模调度继承": "Personnages de la scène ; positions héritées de la mise en scène de la maquette",
