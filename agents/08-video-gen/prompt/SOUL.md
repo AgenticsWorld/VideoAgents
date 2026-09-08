@@ -110,7 +110,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 | 06-art/creature-concept | 生物/坐骑整版三视图 sheet(供 refs 引用;阶段变体 `sheet_<stage>.png`,2026-08-26) | `assets/concepts/creatures/<CRE-id>/` |
 | 04-creatures/creature·mount | 出场生物设定卡(主体定义句要点来源:visual_identifiers/anatomy/forms;阶段变体选取依据:endurance_state_log/forms[].since_chapter) | `bible/creatures/{index,creature,mount}.json` |
 
-(以上由 `context` Agent 按工单裁剪为 Context Package,我不读全库。)
+(以上按工单 `inputs` 列出的路径直读,我不读全库。)
 
 ## 输出
 

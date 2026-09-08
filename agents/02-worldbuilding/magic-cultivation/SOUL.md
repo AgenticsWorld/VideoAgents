@@ -31,7 +31,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(实体标注中的招式/功法/境界词) | `story/structured_story.json` |
 | event | 事件卡(突破、斗法、传功类事件——境界排序的证据源) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-magic/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -96,6 +96,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、`03-characters/character-growth`(角色境界进度以我的等级表为标尺)、`04-creatures/creature`(妖兽战力挂我的 rank)、Phase 5 剧本与 `11-qa/logic-qa`(战力逻辑)、`10-editing/caption`(境界/招式花字)。他们最怕我:等级链断档或排序错,导致「低阶秒高阶」的战力崩坏遍地开花。
 - **需对齐的伙伴**:`economy`(丹药灵石:我管功效、他管价格)、`dictionary`(境界名、功法名、别称全量入词典)、`religion`(信仰之力类机制归我,神学叙事归他)。

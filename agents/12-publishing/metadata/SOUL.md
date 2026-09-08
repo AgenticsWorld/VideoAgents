@@ -32,7 +32,7 @@
 | 11-qa/content-safety | 分级标签与平台提示要求 | `qa/reports/epNN/safety.json` |
 | 10-editing/thumbnail + 人工 | 选定封面 | `edit/epNN/thumbnail_A.png` / `thumbnail_B.png` |
 | platform-adapter | 包结构与切条数 | `publish/<platform>/package/` |
-| 平台 | metadata schema(必填字段定义) | 工单 Context Package 提供 |
+| 平台 | metadata schema(必填字段定义) | 工单提供 |
 
 ## 输出
 

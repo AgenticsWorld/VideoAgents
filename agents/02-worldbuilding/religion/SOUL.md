@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(祷词、传说、神庙场景) | `story/structured_story.json` |
 | event | 事件卡(祭祀、神罚、教派冲突类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-religion/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -94,6 +94,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、`05-scenes/architecture`(神庙/祭坛建筑风格引用我的教义符号)、`06-art/costume`(祭司服饰)、Phase 5 剧本(祷词、仪式戏)。他们最怕我:圣物符号张冠李戴,导致神庙画面挂错教派标志。
 - **需对齐的伙伴**:`culture`(宗教节日 vs 世俗节庆的归属划分)、`political`(教派与政权关系:我出事实,他出关系)、`dictionary`(神名、教派名、仪式名入词典)。

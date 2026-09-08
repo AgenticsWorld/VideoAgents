@@ -31,7 +31,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(实体标注中的生物) | `story/structured_story.json` |
 | Bible v1(经 context 裁剪) | dictionary 词条、cultivation 等级、geography 地点 | `bible/dictionary.json` 等片段 |
-| context Agent | Context Package | `<项目目录>/runs/p3-creature/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -97,6 +97,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`(structured_story)、Bible v1(dictionary/cultivation/geography 片段)、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`(structured_story)、Bible v1(dictionary/cultivation/geography 片段)。
 - **下游**:`04-creatures/mount`(`p3-mount` 依赖我,引用我的 creature id)、`08-video-gen/prompt` 与 `image-generation`(外观卡直接注入绘图 prompt)、`09-audio/sound-effect`(兽吼打点)。他们最怕我:外观含糊或形态混淆——直接变成画面缺陷单。
 - **需对齐的伙伴**:`03-characters/character-manager`(化形妖的角色/图鉴双档互挂)、`02-worldbuilding/magic-cultivation`(战力等级口径)、`02-worldbuilding/dictionary`(生物名与别名命中)。

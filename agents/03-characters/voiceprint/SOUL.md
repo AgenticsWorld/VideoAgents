@@ -30,7 +30,7 @@
 |---|---|---|
 | 03-characters/personality | 性格档案(气质、习惯) | `bible/characters/<id>/personality.json` |
 | 03-characters/appearance | 外观卡(**性别 gender/presented_gender**、年龄段、体型) | `bible/characters/<id>/appearance.json` |
-| 00-orchestration/context | 原文中对嗓音的直接描写(如有) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 原文中对嗓音的直接描写(如有) | 工单 `instruction`/`inputs` |
 
 ## 输出
 

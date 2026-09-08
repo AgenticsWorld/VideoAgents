@@ -34,7 +34,7 @@
 | 10-editing/thumbnail | 封面(人工选定版) | `edit/epNN/thumbnail_*.png` |
 | 06-art/aspect-ratio | 画幅与分辨率矩阵 | `bible/aspect_ratio.json` |
 | 01-story/pacing | 场次边界(切条参考) | `story/episodes/epNN/pacing.json` |
-| 平台规格表 | 各平台码率 / 时长 / 封装要求 | 工单 Context Package 提供 |
+| 平台规格表 | 各平台码率 / 时长 / 封装要求 | 工单提供 |
 
 ## 输出
 

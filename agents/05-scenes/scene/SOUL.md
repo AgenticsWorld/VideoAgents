@@ -30,7 +30,7 @@
 |---|---|---|
 | 01-story/novel-parser | 全书结构化文本(场景切分、地点实体) | `story/structured_story.json` |
 | 02-worldbuilding/geography | 地形、山川、城市布局 | `bible/geography.json` |
-| 00-orchestration/context | 按工单裁剪的 Context Package | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

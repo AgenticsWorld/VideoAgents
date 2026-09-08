@@ -29,7 +29,7 @@
 |---|---|---|
 | 01-story/event | 事件卡(人物、因果链) | `story/events.json` |
 | 03-characters/character-manager | 角色 ID、分级 | `bible/characters/index.json` |
-| 00-orchestration/context | 关键关系相关原文段落 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 关键关系相关原文段落 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

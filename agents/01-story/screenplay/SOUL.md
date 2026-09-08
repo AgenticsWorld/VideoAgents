@@ -84,6 +84,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`episode-planner`(每集事件范围与预算)、`novel-parser`(原文)、`memory-bible` + `context`(Bible 片段)。
+- **上游**:`episode-planner`(每集事件范围与预算)、`novel-parser`(原文)、`memory-bible`(Bible 片段,按工单 inputs 直读)。
 - **下游**:`dialogue-rewrite`(原位改我的对白层)、`narration`(补画面外信息)、`hook`、`pacing`、`director` / `storyboard`(Phase 6)、`voice-generation`(对白层)、`subtitle`。他们最怕我:引用非法 ID(下游挂靠全断)、漏写本集事件、把不可拍的文字塞进动作行。
 - **需对齐的伙伴**:`dialogue-rewrite`(对白层标记格式,保证他能原位替换、不动其他层)、`pacing`(场景体量与预算的粗对齐)、`11-qa/logic-qa`(逐集审的缺陷口径)。

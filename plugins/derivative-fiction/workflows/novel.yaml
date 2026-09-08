@@ -10,11 +10,9 @@ defaults:
   eval_threshold: 80
   max_retries: 3
   on_fail: escalate_human
-  # 四件套同主流程(WORKFLOW.md §6.1):context_package: inline 的工单免 context.md,不构成每单必调
-  # context Agent 的依据。本插件章节级扇出(nv3 draft/edit 等)所需上下文(premise/chapters.json 本章
-  # 节拍/文风圣经/正史术语)均可用明确路径列进工单 inputs,默认走 inline;仅重做单(attempt>1 必附上次
-  # 失败意见)与确需跨文件摘要裁剪时 full,且同批扇出共享底包、逐章只补增量(§1 原则 5)
-  run_record: [context.md, result.json, eval.json, meta.json]
+  # 三件套同主流程(WORKFLOW.md §6.1)。本插件章节级扇出(nv3 draft/edit 等)所需上下文(premise/chapters.json 本章
+  # 节拍/文风圣经/正史术语)由 orchestrator 用明确路径列进工单 inputs;重做单(attempt>1)必附上次失败意见(§1 原则 5)
+  run_record: [result.json, eval.json, meta.json]
   gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
               qa_hold_requires_waiver, human_checks_executed_or_waived]
 
@@ -131,4 +129,4 @@ phases:
           outputs: [derivative/publish/],
           validation: { auto: [format_lint, chapters_complete, ascii_filename] } }
 
-# 贯穿型服务与主流程一致(context/evaluation/version/memory-bible/orchestrator 钩子),见 agents/workflow.yaml services 段
+# 贯穿型服务与主流程一致(evaluation/version/memory-bible/orchestrator 钩子),见 agents/workflow.yaml services 段

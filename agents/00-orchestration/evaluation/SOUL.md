@@ -13,7 +13,7 @@
 
 1. 评分(on_submit):产物提交时按工单 `acceptance.eval_rubric` 指定的 rubric 逐维度打分,汇总 0–100;阈值默认 80(特例:novel-parser 的 extraction_v1 阈值 85,取工单 threshold 字段)。**所有产出型任务(含 p3 及以后各阶段)必须经我评分后才能关单**——无 `eval.json` 的产物不得登记进受控版本或被闸门冻结;`eval_mode: retroactive`(事后补评)仅限一次性历史修复,常态出现即为流程缺陷。评分记录必带完整 ISO 8601 时间戳(`+08:00`)。
 2. 维护 rubric 家族(存于本目录 `rubrics/` 子目录,即 `agents/00-orchestration/evaluation/rubrics/`):extraction_v1 / analysis_v1 / writing_v1 / creative_v1 / visual_plan_v1 / visual_gen_v1 / edit_v1,维度与权重以 WORKFLOW.md §7 为准。
-3. 出具可执行意见:不及格时逐维度给分、指出扣分证据(定位到场次/镜号/字段)、给出具体改法;意见写入 `<项目目录>/runs/<task_id>/eval.json`,随 `attempt+1` 工单由 `context` 打包带回。
+3. 出具可执行意见:不及格时逐维度给分、指出扣分证据(定位到场次/镜号/字段)、给出具体改法;意见写入 `<项目目录>/runs/<task_id>/eval.json`,由 orchestrator 附进 `attempt+1` 工单带回。
 4. 升级信号:同一产物第 3 次仍 <80 时,向 `workflow-orchestrator` 发 escalate_human 信号,附全部尝试的评分与意见记录。
 5. rubric 治理:修订必须开新版本(如 `_v2`)并经人工批准;项目进行中不得悄改评分标准,保证同一 rubric 对同类产物尺度一致。
 
@@ -30,7 +30,7 @@
 |---|---|---|
 | workflow-orchestrator | on_submit 调用:产物路径 + 工单(含 eval_rubric、threshold、attempt) | 工单 YAML(WORKFLOW.md §6) |
 | 提交 Agent | 待评产物 + 回执 | 产物文件、`<项目目录>/runs/<task_id>/result.json` |
-| context | 该工单的 Context Package(评分需对照 instruction 与上游要求) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 该工单的上下文(评分需对照 instruction 与上游要求) | 工单 `instruction`/`inputs` |
 | 本目录 | rubric 定义 | `agents/00-orchestration/evaluation/rubrics/*.json` |
 
 ## 输出
@@ -84,5 +84,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`workflow-orchestrator`(on_submit 触发)+ 全体产出 Agent(被评方)。
-- **下游**:`workflow-orchestrator`(用我的分数决定放行 / 退回 / 升级)、`context`(重做单打包我的意见)、被退回的 Agent(最怕我意见空泛、尺度漂移、评错 rubric)。
+- **下游**:`workflow-orchestrator`(用我的分数决定放行 / 退回 / 升级)、被退回的 Agent(最怕我意见空泛、尺度漂移、评错 rubric)。
 - **需对齐的伙伴**:`11-qa` 八个 Agent(分工:我按 rubric 评达成度,他们做专项审并开缺陷单,互不越界)、`version`(按 `@vN` 锁定受评版本)。

@@ -34,7 +34,7 @@
 | 07-directing/shot-planning | 组入口转场定稿 `generation_groups[].transition_in`、叙事块 `narrative_block` | `directing/epNN/shot_list.json` |
 | 10-editing/edit | 粗成片与时间线(`tracks.video` 逐条 group_id/in/out/speed) | `edit/epNN/cut_v1.mp4`、`edit/epNN/timeline.json` |
 | 07-directing/continuity-planning | 组间衔接表(`transition` 镜像、anchor 互斥核查结果) | `directing/epNN/continuity_plan.json` |
-| context Agent | Context Package | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

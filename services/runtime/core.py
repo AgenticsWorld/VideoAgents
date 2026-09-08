@@ -181,7 +181,7 @@ IDLE_TIMEOUT_MAX = 6 * 3600
 STREAM_LIMIT = 32 * 1024 * 1024          # 子进程 stdout 单行缓冲上限(stream-json 一行可能带整个文件内容)
 # 拥有调度权的 Agent(系统提示词里会附加 dispatch.py 用法);仅总制片,导演不派单
 DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
-# 无状态服务型/扇出型 Agent:每次派单自足(context.md + SOUL 注入),不 resume 会话、
+# 无状态服务型/扇出型 Agent:每次派单自足(工单内联上下文 + SOUL 注入),不 resume 会话、
 # 同 agent 允许并发(否则 8 个 eval/QA 会被 AGENT_SEMS 串成一列)。
 # 08-video-gen 为组级扇出工位(prompt/imagegen/videogen…每组一单,2026-07-23 纳入):
 # 组间依赖由 DAG depends_on 表达,不靠会话串行,同 agent 并发是 Phase 7 吞吐关键。
@@ -191,7 +191,7 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入。
 # 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
 # prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
-STATELESS_AGENTS = {"00-orchestration/context", "00-orchestration/evaluation",
+STATELESS_AGENTS = {"00-orchestration/evaluation",
                     "01-story/novel-parser", "09-audio/audio-transcription"}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
@@ -1778,7 +1778,6 @@ AM_CATEGORY_TIERS = {
     "12-publishing": "low",
 }
 AM_AGENT_TIERS = {                                      # 分类内的例外
-    "00-orchestration/context": "low",                  # context 打包 = 机械活
     "00-orchestration/version": "low",                  # 版本快照 = 机械活
     "00-orchestration/evaluation": "low",               # 评分
     "01-story/event": "low",                            # 事件抽取索引
@@ -2912,7 +2911,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 
 ## 你来自插件「{plug['name']}」{('—— ' + plug['description']) if plug['description'] else ''}
 - 本插件目录:{plug_path}/;插件流程权威文件:{wf_list}(需要时自行阅读){ns_line}
-- 团队通用纪律对插件成员同等生效:工单格式(WORKFLOW.md §6)、运行记录四件套(§6.1)、质量三道闸与缺陷单(§7)、文件名 ASCII 红线(§1 原则 9)、Bible 冲突只上报不擅改"""
+- 团队通用纪律对插件成员同等生效:工单格式(WORKFLOW.md §6)、运行记录三件套(§6.1)、质量三道闸与缺陷单(§7)、文件名 ASCII 红线(§1 原则 9)、Bible 冲突只上报不擅改"""
     if agent_id in PACKAGING_AGENTS:
         pk = ps.get("packaging") or {}
 
@@ -3171,7 +3170,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
   VIDEOAGENTS_AGENT 冒充成员绕过职责边界;耗时命令必须留在被派发的成员任务内前台完成
 - 工具/命令仍为 in_progress 时对应节点只能保持 running;不得结束任务后声称“后台继续”。外部异步渠道
   必须按插件 DAG 的最小生成单元派单并保留可恢复回执,等待真实产物与 validation 通过后才能标 done
-- 插件任务同样走工单格式 §6、四件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
+- 插件任务同样走工单格式 §6、三件套 §6.1、评分与闸门 §7;人工签字点用 --sign,与 H1–H5 同规格
 - 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑
 - 插件流程 YAML 若声明顶层 main_dag_on_start.skip(与该插件业务无关的主流程节点清单),并入节点的同一次改动中
   按 WORKFLOW.md §10.3 第 6 条执行:清单节点全部未开工(pending/template/blocked)才整组置 skipped 并写 skip_reason,

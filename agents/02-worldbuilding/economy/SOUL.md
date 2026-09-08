@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(交易、拍卖、悬赏、讨价还价段落) | `story/structured_story.json` |
 | event | 事件卡(拍卖会、劫镖、商战类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-economy/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -95,6 +95,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、Phase 5 剧本(交易对白报价查我的样本库)、`06-art/prop`(道具价值背景)、`11-qa/logic-qa`(「穷小子突然一掷千金」类逻辑缺陷以我为基准)。他们最怕我:兑换率错一个数量级,让台词里的钱变成笑话。
 - **需对齐的伙伴**:`magic-cultivation`(灵石/丹药:他管功效、我管价格,id 互引不重复定义)、`geography`(商路挂靠他的城市)、`dictionary`(货币名、商品名入词典)。

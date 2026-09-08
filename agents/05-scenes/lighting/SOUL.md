@@ -32,7 +32,7 @@
 |---|---|---|
 | 05-scenes/scene | 场景 ID、室内外、层级 | `bible/scenes/index.json` |
 | 05-scenes/environment | 环境态(昼夜/季节/天气序列) | `bible/scenes/<id>/environment.json` |
-| 00-orchestration/context | 该场景原文光线描写段落(如有) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 该场景原文光线描写段落(如有) | 工单 `instruction`/`inputs` |
 
 ## 输出
 

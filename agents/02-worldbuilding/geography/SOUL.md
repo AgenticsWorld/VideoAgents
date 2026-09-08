@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(实体标注中的地名) | `story/structured_story.json` |
 | event | 事件卡(地点字段、赶路/迁徙类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-geography/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -93,6 +93,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、`05-scenes/scene`(场景注册挂靠我的地名,机检 `geography_refs_valid`)、`07-directing/blocking`(人物在场合法性依赖空间关系)。他们最怕我:地名悬空或方位打架,导致场景挂靠失败、赶路戏穿帮。
 - **需对齐的伙伴**:`world`(地名互查)、`economy`(贸易路线引用我的城市/路程)、`dictionary`(全部地名入词典)。

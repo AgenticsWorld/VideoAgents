@@ -31,7 +31,7 @@
 |---|---|---|
 | 01-story/novel-parser | 全书结构化文本(该角色言行、对白、评价) | `story/structured_story.json` |
 | 03-characters/character-manager | 角色 ID、分级 | `bible/characters/index.json` |
-| 00-orchestration/context | 按角色裁剪的原文段落合集 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 按角色裁剪的原文段落合集 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

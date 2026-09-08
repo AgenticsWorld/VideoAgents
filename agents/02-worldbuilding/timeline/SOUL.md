@@ -31,7 +31,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(含历史回忆、说书人段落) | `story/structured_story.json` |
 | event | 事件卡(其中含历史背景类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-timeline/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -93,6 +93,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、`11-qa/timeline-qa`(以我为世界史基准审后续产物)、`05-scenes/environment` 与 `10-editing/caption`(年代字幕/季节)经 Bible 消费。他们最怕我:纪年换算错一位,导致全片年代字幕系统性出错。
 - **需对齐的伙伴**:`01-story/timeline-story`(剧情时间必须能落在我的编年框架内)、`world`(历史概述与我的年表不冲突)、`dictionary`(纪元名、战役名入词典)。

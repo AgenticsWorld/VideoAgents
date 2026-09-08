@@ -17,10 +17,9 @@ defaults:
   eval_threshold: 80
   max_retries: 3
   on_fail: escalate_human
-  # 运行记录四件套(细则 WORKFLOW.md §6.1):任务关单前 runs/<task_id>/ 必须齐备,缺一不得置 done/passed。
-  # 唯一豁免:context_package: inline 的工单免 context.md,工单本体即上下文记录(§1 原则 5 分级);
-  # 本行不构成「每单必调 context Agent」的依据——full/inline 判定只看 §1 原则 5 白名单
-  run_record: [context.md, result.json, eval.json, meta.json]
+  # 运行记录三件套(细则 WORKFLOW.md §6.1):任务关单前 runs/<task_id>/ 必须齐备,缺一不得置 done/passed。
+  # 上下文由 orchestrator 内联进工单本体(instruction/inputs,§1 原则 5),不另落 context.md(2026-09-08 上下文管家 Agent 已删除)
+  run_record: [result.json, eval.json, meta.json]
   # 闸门通用机检(WORKFLOW.md §7 闸门放行硬约束):对 g0–g10 一律附加
   gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
               qa_hold_requires_waiver, human_checks_executed_or_waived]
@@ -453,10 +452,9 @@ phases:
 
 # 贯穿型 Agent(不在 DAG 中显式建任务,由 orchestrator 在派单/收单时自动调用)
 services:
-  - { agent: 00-orchestration/context,     hook: before_dispatch }   # 组装 full 包 Context Package——仅限三类工单:重做单/需跨文件摘要裁剪(能列明确路径清单进 inputs 的不算,创作类不例外)/需聚合缺陷历史(WORKFLOW.md §1 原则 5);其余工单 inline 轻量包,orchestrator 内联,不触发本钩子
   - { agent: 00-orchestration/evaluation,  hook: on_submit }         # rubric 评分(产出型任务无 eval 不得关单)
   - { agent: 00-orchestration/version,     hook: on_artifact_write } # 实时版本化(落盘即登记,禁止事后补录常态化)
   - { agent: 00-orchestration/memory-bible, hook: on_bible_access }  # Bible 写入仲裁与冲突受理;读取受控版免仲裁,不触发本钩子
   - { agent: 00-orchestration/workflow-orchestrator, hook: on_task_complete }
-    # 收尾钩子(WORKFLOW.md §6.1):校验 run_record 四件套 → 确认产物已实时登记 → 更新 runs/dag.json 节点 state/run_id;
+    # 收尾钩子(WORKFLOW.md §6.1):校验 run_record 三件套 → 确认产物已实时登记 → 更新 runs/dag.json 节点 state/run_id;
     # 三步未完成不得关单,dag.json 与 gate 文件、runs/ 产物不一致视为调度缺陷

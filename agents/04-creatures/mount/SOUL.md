@@ -31,7 +31,7 @@
 | creature(`04-creatures`) | 生物图鉴(我的 `creature_ref` 基准) | `bible/creatures/creature.json` |
 | novel-parser | 全书结构化文本(骑乘、赶路、御兽段落) | `story/structured_story.json` |
 | Bible v1(经 context 裁剪) | 角色 index、dictionary 词条 | `bible/characters/index.json` 等片段 |
-| context Agent | Context Package | `<项目目录>/runs/p3-mount/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -97,6 +97,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`04-creatures/creature`(图鉴,我的依赖项 `p3-creature`)、`03-characters/character-manager`(角色 index)、`01-story/novel-parser`、`00-orchestration/context`。
+- **上游**:`04-creatures/creature`(图鉴,我的依赖项 `p3-creature`)、`03-characters/character-manager`(角色 index)、`01-story/novel-parser`。
 - **下游**:`07-directing/blocking`(骑乘镜头的人兽调度)、`07-directing/continuity-planning`(鞍具/坐骑状态连续性)、`08-video-gen/prompt`(骑乘画面要素)。他们最怕我:归属时段错——上一镜骑冰蛟、下一镜换了兽,连续性缺陷单直接砸回来。
 - **需对齐的伙伴**:`creature`(形态阶段与骑乘期匹配:幼兽期不能被骑)、`06-art/prop`(剧情级鞍具 id 互引)、`01-story/timeline-story`(获得/易主章节与叙事时间轴一致)。

@@ -32,7 +32,7 @@
 | 被审产物(按工单) | 成片 / story_graph / screenplay / personality / narration | `edit/epNN/cut_v1.mp4`、`story/story_graph.json`、`story/episodes/epNN/screenplay.md` 等 |
 | 01-story/novel-parser | 原著结构化文本(比对基准) | `story/structured_story.json` |
 | 01-story/event | 事件卡与因果链 | `story/events.json` |
-| context Agent | 裁剪好的 Bible 片段与缺陷历史 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的 Bible 文件与缺陷单 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

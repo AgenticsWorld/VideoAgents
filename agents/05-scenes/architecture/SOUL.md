@@ -30,7 +30,7 @@
 |---|---|---|
 | 05-scenes/scene | 场景 ID、层级(parent 关系) | `bible/scenes/index.json` |
 | 02-worldbuilding/culture | 风俗、语言、礼仪(含建筑文化风格) | `bible/culture.json` |
-| 00-orchestration/context | 该场景原文建筑描写段落 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 该场景原文建筑描写段落 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

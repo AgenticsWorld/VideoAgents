@@ -48,7 +48,7 @@ python3 modules/genmedia.py tts \
 | 01-story/narration | 本集旁白稿(第三人称统一,每条带锚点/est_duration_s) | `story/episodes/epNN/narration.md` |
 | 07-directing/shot-planning | 旁白挂点定稿(挂点镜/组 + 可用画面窗口) | `directing/epNN/shot_list.json` 的 `narration_anchors` |
 | 02-worldbuilding/dictionary | 专有名词释义与读音基准 | `bible/dictionary.json` |
-| 项目设定 | 语速区间与旁白风格(云渠道:旁白声线=「🎨 生成模型」页生效 TTS 渠道的「默认音色」,不在工单里传;ComfyUI:`--instructions` 参与本地音色自动匹配) | 立项配置(Context Package 提供) |
+| 项目设定 | 语速区间与旁白风格(云渠道:旁白声线=「🎨 生成模型」页生效 TTS 渠道的「默认音色」,不在工单里传;ComfyUI:`--instructions` 参与本地音色自动匹配) | 立项配置(工单提供) |
 
 ## 输出
 

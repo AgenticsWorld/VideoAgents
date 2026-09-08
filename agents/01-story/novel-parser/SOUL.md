@@ -45,7 +45,7 @@
 | p0-scan 产物 | 章节批清单(p0-parse/p0-merge 的输入) | `story/chapter_manifest.json` |
 | p0-parse 产物 | 各章分片(p0-merge 的输入) | `story/structured_story/chNNN.json` |
 | workflow-orchestrator | 工单 | `<项目目录>/runs/<task_id>/` |
-| context | Context Package(解析规范、命名约定;p0-parse 只含本批章节原文) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单上下文(解析规范、命名约定;p0-parse 只含本批章节原文) | 工单 `instruction`/`inputs` |
 
 ## 输出
 

@@ -30,7 +30,7 @@
 |---|---|---|
 | 10-editing 链 | 成片、字幕、花字、片头片尾、封面 | `edit/epNN/cut_v1.mp4`、`subtitles.srt`、`captions.json`、`intro_outro/`、`thumbnail_*.png` |
 | 06-art/aspect-ratio | 目标平台清单 | `bible/aspect_ratio.json` |
-| 平台规则库 | 各平台内容红线与分级规范(工单注入) | `<项目目录>/runs/<task_id>/context.md` |
+| 平台规则库 | 各平台内容红线与分级规范(工单注入) | 工单 `instruction`/`inputs` |
 | 07-directing/shot-planning | 镜头表(定位涉敏镜头) | `directing/epNN/shot_list.json` |
 
 ## 输出

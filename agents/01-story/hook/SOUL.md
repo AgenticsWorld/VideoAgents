@@ -29,7 +29,7 @@
 |---|---|---|
 | screenplay | 本集剧本(对白/旁白定稿后) | `story/episodes/epNN/screenplay.md` |
 | episode-planner | 下一集事件范围与卡点 | `story/episode_plan.json`(下一集条目) |
-| context | 平台钩子惯例、时长约束 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 平台钩子惯例、时长约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

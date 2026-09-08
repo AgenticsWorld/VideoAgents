@@ -31,7 +31,7 @@
 | 03-characters/appearance | 基准外观卡 | `bible/characters/<id>/appearance.json` |
 | 01-story/timeline-story | 双轴时间线(叙事 vs 故事时间、闪回标注) | `story/story_timeline.json` |
 | 03-characters/character-manager | 角色 ID、出场章节 | `bible/characters/index.json` |
-| 00-orchestration/context | 涉及年龄/形象变化的原文段落 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 涉及年龄/形象变化的原文段落 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

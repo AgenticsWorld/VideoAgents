@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(实体标注 = 词条底册) | `story/structured_story.json` |
 | event | 事件卡(术语的使用语境) | `story/events.json` |
-| context Agent | Context Package(含其余 8 份文件的术语缺口清单,若为补录工单) | `<项目目录>/runs/p2-dictionary/context.md` |
+| 工单(orchestrator 内联) | 工单上下文(含其余 8 份文件的术语缺口清单,若为补录工单) | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -98,6 +98,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`(实体标注底册)、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`(实体标注底册)、`01-story/event`。
 - **下游**:全体 Agent——工单统一要求「术语以 dictionary 为准」;直接机检消费方:`10-editing/caption`(花字术语与词典 100% 一致)、`10-editing/subtitle`(错别字基准)、`p2-merge`(命中率检查)。他们最怕我:词条缺失或别名断链,让下游校验成批失败。
 - **需对齐的伙伴**:其余 8 个 `02-worldbuilding` 同事(术语双向对齐)、`03-characters/character-manager`(Phase 3 角色 ID 与我的 person 词条挂接)、`memory-bible`(词条变更走 changelog)。

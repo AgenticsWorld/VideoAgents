@@ -31,7 +31,7 @@
 |---|---|---|
 | novel-parser(`01-story`) | 全书结构化文本(章节/场景/实体标注:地名、组织名) | `story/structured_story.json` |
 | event(`01-story`) | 事件卡(灭国、结盟、宗门大战等格局事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-world/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -93,6 +93,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`(structured_story)、`01-story/event`(events.json)、`00-orchestration/context`(Context Package)。
+- **上游**:`01-story/novel-parser`(structured_story)、`01-story/event`(events.json)。
 - **下游**:`memory-bible`(合并进 Bible v1)、`02-worldbuilding/political`(以我的势力表为对齐基准)、`02-worldbuilding/geography`(与我做地名互查)、Phase 5 剧本与 Phase 6 导演经 Bible 消费。他们最怕我:势力从属写错、亡国状态漏标——会传染成全链路设定错误。
 - **需对齐的伙伴**:`political`(势力表 100% 对齐)、`geography`(地名双向可查)、`dictionary`(所有专有名词能在词典命中)、`timeline`(历史概述与编年不打架)。

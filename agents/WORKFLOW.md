@@ -36,7 +36,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 1 次(默认;用户可在设置「高级→Agent 高级设置→重跑次数」全局改,0=不自动重跑,运行提示词「用户重跑次数设定」注入的值覆盖本文档所有写死的 3 次/≤3 次/max_retries: 3),仍不过升级人工。
-5. **上下文按需组装**:Agent 不读全库。Context Package 分两级(2026-08-01,教训:每单必调 context Agent 一次约 4 分钟,shixibook 310 张工单调了 395 次):**full 包**由 `context` Agent 裁剪(该任务需要的 Bible 片段 + 上游产物 + 缺陷历史),仅限三类工单——① `attempt > 1` 重做单(必须附上次失败原因与 evaluation 逐条意见);② 需**跨文件摘要裁剪**的工单——所需上下文**无法用明确文件路径清单表达**、必须摘要/裁剪进 token 预算时才算;「创作类/涉及设定」本身不是升 full 的理由,所需 Bible 与上游文件能以明确路径列进 `inputs` 的(执行 Agent 直读当前受控版),一律 inline(2026-08-02 教训:衍生小说链 52 单全按「创作类需裁剪」升 full,白名单形同虚设);③ 需聚合缺陷历史的工单(qa/defects 存在与该产物/该 Agent 相关的 open 缺陷)。其余工单走 **inline 轻量包**:orchestrator 派单时把输入文件路径清单 + 硬约束直接写进工单 `instruction`/`inputs`,`context_package: inline`,不调用 context Agent。**打包防重复**:同一工单已有未过期 `context.md` 时禁止重新打包,重打仅限 attempt 递增或 inputs 实质变更,且优先增量更新而非整包重建;章节/镜头/场景级扇出任务若确需 full,共享一份批次底包(如 `runs/<批次>-base/context.md`),逐实例只补该实例的增量,禁止逐实例复制同质全量包(2026-08-02 教训:nv3 二十三章草稿同刻各打一份近似全量包)。
+5. **上下文按需组装**:Agent 不读全库。上下文由 orchestrator 派单时**内联进工单本体**:把该任务需要的输入文件路径清单(Bible 当前受控版片段所在文件、上游产物、相关 `qa/defects/` 缺陷单)+ 硬约束直接写进工单 `instruction`/`inputs`,执行 Agent 只读工单列出的文件,不自行读全库补料(缺料走回执上报)。`attempt > 1` 的重做单必须在 `instruction` 附上次失败原因与 evaluation 逐条修改意见(`runs/<task_id>/eval.json` 路径列入 `inputs`);扇出批次的共用说明只在 instruction 写一次,不逐实例复制。(2026-09-08:原「上下文管家」Agent 及 full/inline 两级 Context Package 已删除——每单先打包一次约 4 分钟,实测收益抵不过时间与 token 开销;`runs/<task_id>/context.md` 不再产出。)
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 1–10 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。每集时长可设为「根据剧本自动」(settings.json `duration.episode_minutes: "auto"`):此时不设固定每集预算,episode-planner 按剧情结构自行决定集数与每集时长并在 episode_plan 中写明各集实际预算,pacing/edit 以 episode_plan 实际预算为基准。
 8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤项目「视频模型设置」的组时长上限,整数秒;默认 15s=Seedance 2.0 单次生成上限,仅当视频模型为 Seedance 2.5 且用户调高该设置时最高 30s——本文档余下部分出现的 15s 组上限示例值均指该设置的默认值,以系统提示词注入的项目实际设置为准),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
@@ -83,13 +83,13 @@ data/projects/<slug>/
 ├── qa/             # reports/, defects/(缺陷工单)
 ├── publish/        # <platform>/package/, seo.json, metadata.json, receipts/
 ├── code/           # 本项目的一次性制作脚本(Agent 为完成任务写的脚本,内嵌本项目创作数据)
-└── runs/           # 工单、Context Package、评分记录、日志(runs/<task_id>/)
+└── runs/           # 工单、评分记录、日志(runs/<task_id>/)
 ```
 
 **项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(批量出图/合成、机检、媒体处理等**确有计算或外部调用**的脚本)
 是项目产物,落 `data/projects/<slug>/code/` 并与其它产物一样用 `.version/vc.py register` 登记;
 **不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`),也**不要**散落在 `runs/<task_id>/`
-(那里只放运行记录四件套 + 可选 lesson.md,§6.1)。脚本内定位仓库根
+(那里只放运行记录三件套 + 可选 lesson.md,§6.1)。脚本内定位仓库根
 用「向上找 modules/」标准头(见根 `code/README.md`),禁止硬编码绝对路径。
 **宿主 `code/` 下的 CLI(`blocking_map_check.py`、`finalize_episode.py`、`render_captions.py`、各机检脚本等)只准按其用法调用:禁止复制到项目 `code/`、禁止改写成项目本地版本、禁止自写同功能替代脚本**(前科 2026-08-26 polan2:agent 重写了动线图渲染器,产物偏离规范);宿主脚本报错或功能不合需求 = 上报 orchestrator,由宿主侧修改(2026-08-27)。
 
@@ -195,7 +195,7 @@ refs/
      platform-adapter →(seo + metadata 并行)→ publisher
 ```
 
-调度层 5 个 Agent(orchestrator / memory-bible / context / version / evaluation)贯穿全程,不属于任何单一 Phase。
+调度层 4 个 Agent(orchestrator / memory-bible / version / evaluation)贯穿全程,不属于任何单一 Phase。
 
 ### 3.1 DAG 按集动态展开(强制)
 
@@ -753,8 +753,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 | Agent | 何时被调用 | 职责要点 |
 |---|---|---|
-| workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录四件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
-| context | 仅 full 包工单派发前(§1 原则 5 三类:重做单 / 需跨文件摘要裁剪(能列明确路径清单进 inputs 的不算,创作类不例外)/ 需聚合缺陷历史) | 组装 Context Package:该任务需要的 Bible 片段 + 上游产物 + 相关缺陷历史,控制在预算 token 内;扇出批次共享底包、逐实例增量,已有未过期 context.md 不重打;其余工单走 inline 轻量包,由 orchestrator 在工单本体内联,不调用本 Agent |
+| workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录三件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
 | memory-bible | 任何设定**写入**与冲突上报 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游。**读取受控版免仲裁**:任何 Agent 直读 `bible/` 当前受控版无需经过本 Agent |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
 | evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
@@ -773,7 +772,6 @@ agent: 08-video-gen/video-generation
 project: data/projects/<slug>
 depends_on: [p7-ep01-grp005-imagegen, p7-ep01-grp004-videogen]  # 前组尾帧续接,按组序串行
 attempt: 1            # 第几次尝试(重做时递增,并附上次失败原因)
-context_package: runs/p7-ep01-grp005-videogen/context.md   # full 包:context Agent 已裁剪;inline 轻量包工单此处填 inline(§1 原则 5)
 instruction: |
   为第 1 集生成组 grp005(sh006–sh008,Σ15s)生成多镜头组视频。
   组 prompt 见 grp005.json(Shot 1:/Shot 2:/Shot 3: 结构),锚点包用已校正版,
@@ -800,22 +798,21 @@ Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物�
 批处理工单一次做完不拆批;确需脚本(计算/媒体处理/机检)才写,落项目 `code/`,`runs/<task_id>/` 只放运行记录。
 orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「直接逐份落 JSON,不要写生成脚本、不要分批」。
 
-**inline 工单的上下文约定**:工单 `context_package: inline` 时,执行 Agent 以工单本体的 `instruction`/`inputs` 为完整上下文,不得因缺 `runs/<task_id>/context.md` 拒单,也不得自行读全库补料(缺料照旧走回执上报);各 Agent SOUL 输入表中的「Context Package / context.md」行在 inline 工单下即指工单本体,无需另有文件。
+**工单的上下文约定**:执行 Agent 以工单本体的 `instruction`/`inputs` 为完整上下文(§1 原则 5),不得以「缺上下文包」拒单,也不得自行读全库补料(缺料照旧走回执上报);各 Agent SOUL 输入表中的「工单(orchestrator 内联)」行即指工单本体,无需另有文件。
 
-### 6.1 运行记录统一 schema(每个任务必备四件套)
+### 6.1 运行记录统一 schema(每个任务必备三件套)
 
-`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下四个文件,**缺一不得关单**(唯一豁免:inline 轻量包工单免 `context.md`,以工单本体的 `instruction`/`inputs` 充当上下文记录,前提是工单 `context_package: inline`;full 包工单缺 `context.md` 照旧不得关单):
+`<项目目录>/runs/<task_id>/` 在任务置为 done/passed 前必须齐备以下三个文件,**缺一不得关单**(上下文记录即工单本体的 `instruction`/`inputs`,不另落 `context.md`):
 
 | 文件 | 写入方 | 内容要求 |
 |---|---|---|
-| `context.md` | context | Context Package(含 token 预算声明);**仅 full 包工单必备**(§1 原则 5),inline 工单免 |
 | `result.json` | 责任 Agent | 产物路径、自检结果、冲突上报;`status` 只允许 `completed / failed / escalated`,禁止 `completed_with_*` 之类带病状态——有残留问题必须开缺陷单并在 result 里引用缺陷 ID |
 | `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
-**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验四件套齐备(inline 工单按上文豁免 `context.md`);(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
+**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验三件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
-**可选第五件:经验卡 `lesson.md`(2026-08-12,默认不写)**。仅当**同时满足**以下全部条件时,orchestrator 在收尾钩子随四件套补写 `runs/<task_id>/lesson.md`:① 该任务经历了缺陷单闭环(status: resolved)或 attempt ≥ 3 后才通过;② 教训是**机制性的**(工具用法/渠道参数/流程约束,换一个项目仍然成立),与本项目情节、人物、文本内容无关;③ 现有 SOUL.md/WORKFLOW.md 尚无同款条目。三条有一条不满足就**不写**——常规任务、内容性返工(写得不好重写)、已有规约覆盖的旧坑,一律不产出经验卡。格式:frontmatter(`title`/`category`(provider|workflow|tooling)/`severity`/`provider`/`model`/`agents`/`date`/`evidence`(run_id 或缺陷 ID))+ 正文两节「现象与根因」「怎么做才对」;**正文禁止引用项目原文、人物名与情节**,禁止出现绝对路径与 API Key。用途:设置菜单「高级→诊断数据」会扫描各项目 `runs/*/lesson.md` 供用户逐张预览勾选、打包进诊断导出 zip 手动提交给开发者(见 `modules/diagnostics.py`;永不自动上传),用于沉淀回 SOUL/WORKFLOW 规约。
+**可选第四件:经验卡 `lesson.md`(2026-08-12,默认不写)**。仅当**同时满足**以下全部条件时,orchestrator 在收尾钩子随三件套补写 `runs/<task_id>/lesson.md`:① 该任务经历了缺陷单闭环(status: resolved)或 attempt ≥ 3 后才通过;② 教训是**机制性的**(工具用法/渠道参数/流程约束,换一个项目仍然成立),与本项目情节、人物、文本内容无关;③ 现有 SOUL.md/WORKFLOW.md 尚无同款条目。三条有一条不满足就**不写**——常规任务、内容性返工(写得不好重写)、已有规约覆盖的旧坑,一律不产出经验卡。格式:frontmatter(`title`/`category`(provider|workflow|tooling)/`severity`/`provider`/`model`/`agents`/`date`/`evidence`(run_id 或缺陷 ID))+ 正文两节「现象与根因」「怎么做才对」;**正文禁止引用项目原文、人物名与情节**,禁止出现绝对路径与 API Key。用途:设置菜单「高级→诊断数据」会扫描各项目 `runs/*/lesson.md` 供用户逐张预览勾选、打包进诊断导出 zip 手动提交给开发者(见 `modules/diagnostics.py`;永不自动上传),用于沉淀回 SOUL/WORKFLOW 规约。
 
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 
@@ -1048,7 +1045,7 @@ plugins/<plugin-name>/
    validation 三道闸、gate/human)完全一致;节点 id 用插件自己的前缀(如 `nv0-premise`),不与主流程冲突。
 2. orchestrator 接到插件业务后,把插件 DAG 节点**并入项目 `runs/dag.json` 统一跟踪**
    (可与主流程共存),改完照常 `dagcheck.py --strict`。
-3. 工单格式 §6、运行记录四件套 §6.1、评分与缺陷单 §7、文件名 ASCII 红线(§1 原则 9)对插件任务同等生效;
+3. 工单格式 §6、运行记录三件套 §6.1、评分与缺陷单 §7、文件名 ASCII 红线(§1 原则 9)对插件任务同等生效;
    人工签字点用 `--sign`,与 H1–H5 同规格。
 4. `requires.artifacts` 未满足时先补主流程对应阶段,不得硬跑。
 5. 插件若产生新设定,**不得写入正史 `bible/`**——写自己命名空间下的 `bible-delta/`,

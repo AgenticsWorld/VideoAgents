@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 从 Context Package 提供的原文出处段落中抽取角色外观:**性别**、发色、发型、瞳色、肤色、身高体型、基准年龄段、疤痕/纹身/佩饰等标志物、惯常衣着基调。
+1. 从工单 inputs 提供的原文出处段落中抽取角色外观:**性别**、发色、发型、瞳色、肤色、身高体型、基准年龄段、疤痕/纹身/佩饰等标志物、惯常衣着基调。
 2. 每个字段注明原文出处章节;原文没写但绘图必需的字段(如瞳色),标 `inferred: true` 并给推断理由(依据种族/文化/同类描写)。原文对该角色**完全没有外貌描写**时(仅出场无刻画),按戏份定位/身份/年龄段自行发挥设计整卡外观并逐字段标 `inferred`,继续往后执行,禁止 UNKNOWN/待定或缺卡(WORKFLOW.md §1 原则 10,机检 no_unknown_placeholder)。
 3. **性别必须定值(2026-07-20)**:`gender` 受控词表仅「男/女」,是声音选型与形象生成的一致性硬锚,**不允许留空或写"不明"**——原文未明写时依据称谓(他/她、兄/姐)、姓名、社会角色等推断并标 `inferred + reason`;女扮男装等「对外呈现性别 ≠ 生理性别」的设定,另加可选字段 `presented_gender`(男/女)并注明出处章节与生效范围,`gender` 仍写生理性别。
 4. 把模糊文学描写量化成可执行取值(「高大」→ 身高区间;「面容清冷」→ 面部特征枚举),字段值使用受控词表,避免绘图歧义。
@@ -30,7 +30,7 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | 03-characters/character-manager | 角色 ID、分级、出场章节 | `bible/characters/index.json` |
-| 00-orchestration/context | 该角色的原文外观描写段落合集(带章节号) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 该角色的原文外观描写段落合集(带章节号) | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -92,6 +92,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`character-manager`(ID 与分级)、`00-orchestration/context`(原文出处段落)。
+- **上游**:`character-manager`(ID 与分级)、工单 inputs(原文出处段落)。
 - **下游**:`character-growth`(以我为基准做分龄差分)、`voiceprint`(参考年龄段/体型定声线)、`06-art/character-concept`(逐字段对照出参考图,它的机检直接按我的字段查)、`06-art/costume`、`08-video-gen/prompt` 与 `character-consistency`。他们最怕:字段含糊(「气质出尘」没法画)、与原文冲突(观众一眼识破)。
 - **需对齐的伙伴**:`06-art/character-concept`(受控词表与字段口径)、`02-worldbuilding/dictionary`(种族/服饰术语以词典为准)。

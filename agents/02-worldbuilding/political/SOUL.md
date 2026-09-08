@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(朝堂戏、谈判戏、檄文诏书) | `story/structured_story.json` |
 | event | 事件卡(结盟、宣战、政变、和谈类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-political/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -95,6 +95,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`;`02-worldbuilding/world` 的势力表是我的引用基准。
+- **上游**:`01-story/novel-parser`、`01-story/event`;`02-worldbuilding/world` 的势力表是我的引用基准。
 - **下游**:`memory-bible`(合并)、`03-characters/relationship`(角色阵营背景)、Phase 5 剧本与 `11-qa/logic-qa`(敌我关系是否合理)。他们最怕我:关系分段错位,导致某集里盟友互砍、敌人共饮。
 - **需对齐的伙伴**:`world`(势力表 100% 对齐,他管存在、我管关系)、`religion`(政教关系分工)、`01-story/timeline-story`(关系变化章节与叙事时间轴一致)、`dictionary`(阵营名、官职名入词典)。

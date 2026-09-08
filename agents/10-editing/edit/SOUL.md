@@ -43,7 +43,7 @@
 | 09-audio/audio-mixing | 成品混音(G8 已通过) | `assets/audio/final/epNN.wav` |
 | 07-directing/shot-planning | 镜头表(镜号、时长、顺序) | `directing/epNN/shot_list.json` |
 | 01-story/pacing | 节奏审定(逐场时长、情绪曲线、删减建议) | `story/episodes/epNN/pacing.json` |
-| context Agent | 裁剪好的 Context Package | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

@@ -35,7 +35,7 @@
 |---|---|---|
 | screenplay | 本集剧本(对白初版) | `story/episodes/epNN/screenplay.md` |
 | dialogue-style(Phase 3) | 本集出场角色的风格卡 | `bible/characters/<id>/dialogue_style.json` |
-| context | 配音上限、语速参数 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 配音上限、语速参数 | 工单 `instruction`/`inputs` |
 | shot-planning(p6-dialogue-fit 时) | 定稿镜头表:组时长、镜时长、每镜 dialogue_lines | `directing/epNN/shot_list.json` |
 | voiceprint / settings(p6-dialogue-fit 时) | 各角色语速 `speed_cpm`、单镜上限 `duration.shot_max_s` | `bible/characters/<id>/voice.json`、`settings.json` |
 

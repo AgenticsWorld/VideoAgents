@@ -30,7 +30,7 @@
 |---|---|---|
 | novel-parser | 全书结构化文本(对白称谓、日常场景、节庆段落) | `story/structured_story.json` |
 | event | 事件卡(婚礼、寿宴、拜师、赶集类事件) | `story/events.json` |
-| context Agent | 按工单裁剪的 Context Package | `<项目目录>/runs/p2-culture/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 
@@ -94,6 +94,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:`01-story/novel-parser`、`01-story/event`、`00-orchestration/context`。
+- **上游**:`01-story/novel-parser`、`01-story/event`。
 - **下游**:`memory-bible`(合并)、`05-scenes/architecture`(建筑风格卡以我的地域文化为输入)、`06-art/costume`(服装系统引用我的礼俗)、`01-story/dialogue-rewrite`(对白称谓合规)。他们最怕我:称谓体系写错,导致全剧对白改写系统性跑偏。
 - **需对齐的伙伴**:`religion`(节庆归属划分:有神明对象归他)、`political`(朝堂礼仪:制度归他、礼节归我)、`dictionary`(节庆名、称谓、语言名入词典)。

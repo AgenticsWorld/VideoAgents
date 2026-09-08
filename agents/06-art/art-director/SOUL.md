@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 通读 Context Package 中的 Bible 片段(world / culture / geography / cultivation 等)与用户偏好,定出画风流派、渲染流派(2D/3D/混合)、光影与质感基调。
+1. 通读工单 inputs 列出的 Bible 片段(world / culture / geography / cultivation 等)与用户偏好,定出画风流派、渲染流派(2D/3D/混合)、光影与质感基调。
 2. 选定 3–5 部参考片,逐部注明「参考什么、回避什么」,让下游拿到的是锚点而不是形容词。
 3. 编写负面清单(禁止元素):与世界观违和的现代物件、生成模型易翻车的构成等,供 Phase 7 prompt 直接注入负面词。
 4. 产出 `bible/style.json`,内含可直接拼进 prompt 的风格锚点短语(style anchors)。**风格串双份(2026-08-24;二订扩大 `_ui` 适用面)**:①**`style_fragment_ui`**:注入用风格串,与 `style_fragment_en` 等义、内容语言随用户界面语言(系统提示词「用户输出设定」标注;界面语言为英文时可与 `style_fragment_en` 同文)——**视频 prompt 的 `Overall visual style:` 开头串与图像生成链路(概念图/锚点图 image prompt)的风格段都逐字取用本字段(图像链路 2026-08-24 二订起)**,全片唯一写法,不得每组另译;②`style_fragment_en`/`style_string_en`/`negative_prompt_en` 保持英文——**负面词表恒用英文 `negative_prompt_en`**(image `--negative` 与 prompt 负面清单;通用负面术语跨引擎稳定,道具无人物红线等机检按英文子串匹配),`style_fragment_en` 供存量英文项目与英文渠道回退。

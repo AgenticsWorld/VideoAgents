@@ -29,7 +29,7 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | novel-parser | 结构化全书 | `story/structured_story.json` |
-| context | Context Package | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

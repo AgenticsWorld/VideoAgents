@@ -31,7 +31,7 @@
 |---|---|---|
 | 01-story/novel-parser | 全书结构化文本(实体标注、对白说话人) | `story/structured_story.json` |
 | 01-story/event | 事件卡(人物字段) | `story/events.json` |
-| 00-orchestration/context | 按工单裁剪的 Context Package | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 工单列出的输入文件与硬约束 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

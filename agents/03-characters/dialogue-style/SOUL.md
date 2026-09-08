@@ -29,7 +29,7 @@
 |---|---|---|
 | 01-story/novel-parser | 该角色对白集(带说话人标注) | `story/structured_story.json` |
 | 03-characters/character-manager | 角色 ID、分级 | `bible/characters/index.json` |
-| 00-orchestration/context | 按角色裁剪的台词与语境段落 | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 按角色裁剪的台词与语境段落 | 工单 `instruction`/`inputs` |
 
 ## 输出
 

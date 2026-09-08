@@ -32,7 +32,7 @@
 | 01-story/hook | 钩子备选(标题素材) | `story/episodes/epNN/hooks.json` |
 | 02-worldbuilding/dictionary | 专有名词统一拼写 | `bible/dictionary.json` |
 | platform-adapter | 包结构与切条数(决定每条标题需求) | `publish/<platform>/package/` |
-| 平台 | 调性说明、长度上限、敏感词清单 | 工单 Context Package 提供 |
+| 平台 | 调性说明、长度上限、敏感词清单 | 工单提供 |
 
 ## 输出
 

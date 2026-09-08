@@ -12,6 +12,8 @@ All notable public changes to VideoAgents are documented here.
 
 ### Changed
 
+- **Context agent removed.** The `00-orchestration/context` agent (上下文管家) and the two-tier full/inline Context Package scheme are gone: the orchestrator now inlines every work order's context (input file paths for the current Bible/upstream artifacts/relevant defect tickets + hard constraints) in `instruction`/`inputs`, and retry orders (`attempt > 1`) must carry the previous failure reason and the evaluation notes (`runs/<task_id>/eval.json` listed in `inputs`). `runs/<task_id>/context.md` is no longer produced, so the run record shrinks from four files to three (`result.json`, `eval.json`, `meta.json`) in `agents/workflow.yaml` and every plugin DAG; the `before_dispatch` service hook, the `context_package` work-order field, the agent's stateless/tier entries in the runtime, and its i18n strings in all 11 locales are removed, and every SOUL input table now points at the work order itself.
+
 - **Project skills** is now available in Project Settings. Installed skills are grouped by Agent name and directory, with searchable one-line descriptions and project-scoped checkboxes. Only the selected video-model prompt skill starts enabled; other skills, including performance direction, require opt-in. Activation rules apply to resumed conversations and group overrides. Disabling performance direction also skips its upstream requirements and downstream checks.
 
 - **codex Smart Assignment high tier now resolves to `gpt-6-astra`** (was `gpt-5.6-sol`); the low tier stays `gpt-5.6-terra`. The tier is resolved at dispatch time, so existing installs on the codex smart policy pick it up after a restart; the top-bar tooltip and all 11 i18n dictionaries are updated.

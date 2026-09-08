@@ -30,7 +30,7 @@
 |---|---|---|
 | 05-scenes/scene | 场景 ID、层级、出场章节 | `bible/scenes/index.json` |
 | 01-story/timeline-story | 双轴时间线(故事时间、闪回标注) | `story/story_timeline.json` |
-| 00-orchestration/context | 该场景相关原文段落(环境描写) | `<项目目录>/runs/<task_id>/context.md` |
+| 工单(orchestrator 内联) | 该场景相关原文段落(环境描写) | 工单 `instruction`/`inputs` |
 
 ## 输出
 

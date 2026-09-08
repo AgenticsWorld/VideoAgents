@@ -29,7 +29,7 @@
 |---|---|---|
 | story-structure | 全书结构图(结构节点、伏笔) | `story/story_graph.json` |
 | event | 全书事件卡 | `story/events.json` |
-| 用户/项目配置 | pacing 约束、目标平台 | 工单 `instruction` / Context Package |
+| 用户/项目配置 | pacing 约束、目标平台 | 工单 `instruction` / `inputs` |
 
 ## 输出
 

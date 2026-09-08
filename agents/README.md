@@ -10,7 +10,7 @@
 
 | 目录 | 类别 | Agent 数 | 成员 |
 |---|---|---|---|
-| `00-orchestration/` | 调度层(贯穿全程) | 5 | workflow-orchestrator, memory-bible, context, version, evaluation |
+| `00-orchestration/` | 调度层(贯穿全程) | 4 | workflow-orchestrator, memory-bible, version, evaluation |
 | `01-story/` | 剧情 | 10 | novel-parser, story-structure, event, timeline-story, screenplay, narration, dialogue-rewrite, episode-planner, hook, pacing |
 | `02-worldbuilding/` | 世界设定 | 9 | world, timeline, geography, religion, culture, political, economy, magic-cultivation, dictionary |
 | `03-characters/` | 角色 | 7 | character-manager, appearance, character-growth, personality, relationship, voiceprint, dialogue-style |
@@ -26,7 +26,7 @@
 
 ## SOUL.md 统一结构
 
-每份 SOUL.md 按同一骨架撰写,保证 orchestrator / context Agent 可以机械地定位信息:
+每份 SOUL.md 按同一骨架撰写,保证 orchestrator 可以机械地定位信息:
 
 1. **我是谁** — 类别、流水线阶段、一句话使命
 2. **职责** — 具体做什么
