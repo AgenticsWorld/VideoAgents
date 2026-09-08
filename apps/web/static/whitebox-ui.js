@@ -149,7 +149,7 @@ async function buildGroup(host,project,ep){
     marker:`[whitebox:${project}/${ep}/${gid}]`,scene:scene.scene_id,shots:group.cameras.map(c=>c.shot_id).join(', '),
     plan:`directing/${ep}/whitebox_plans/${gid}.json`,model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`});
   const warnings=group.warnings||scene.warnings||[];
-  host.className='wb-panel wb-host';
+  host.className='wb-panel wb-host';host.style.minHeight='';
   host.style.setProperty('--wb-aspect',`${format.width} / ${format.height}`);
   host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong><button class="editbtn wb-edit" data-loc="${esc(editLocation)}" title="${esc(t('对这组3D白模提修改意见，发消息给总制片'))}">${esc(t('✏️ 编辑'))}</button></div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||!group.artifact_status?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div></div>
     <div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>
@@ -172,6 +172,12 @@ export function mountGroups(root,project,ep){
   groupObserver?.disconnect();
   const hosts=[...root.querySelectorAll('.wb-host')];
   if(!hosts.length)return;
+  // 未建面板先按项目画幅预留高度(两块画面 + 工具条/色标/播放条/说明约 190px),
+  // 减少懒建时上方内容撑高把页面推走的位移(导航跳转靠 preview_storyboard.html jumpTo 再校正)
+  projectSettings(project).then(settings=>{
+    const f=projectRenderFormat(settings);
+    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+190)}px`;}
+  }).catch(()=>{});
   const pending=new Map();   // host -> build promise
   groupObserver=new IntersectionObserver(entries=>{
     for(const {target,isIntersecting} of entries){

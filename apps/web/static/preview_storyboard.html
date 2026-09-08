@@ -1242,7 +1242,7 @@ function groupCard(g,inner){
 
 let LAST_DATA=null;
 function render(d){
-  import('/static/whitebox-ui.js?v=20260908-shot').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20260908-nav').then(m=>m.resetWhitebox());
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1395,7 +1395,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  import('/static/whitebox-ui.js?v=20260908-shot').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP));
+  import('/static/whitebox-ui.js?v=20260908-nav').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP));
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();
@@ -1408,11 +1408,28 @@ function render(d){
   KEEP_SCROLL=false;
 }
 let FIRST_RENDER=true,KEEP_SCROLL=false,scrollSaveTick=null,NAV=[];
-// 右侧导航:点击平滑滚到对应场次/组
+// 右侧导航:点击直接定位到对应场次/组。不用 smooth scrollIntoView:跳转后视口附近的白模面板才懒建
+// (占位文字 → 整块 3D 面板),上方内容撑高会把目标推走,之前要点好几次才到位;
+// 这里按滚动容器算目标 scrollTop 立即跳,再在 1.5s 内每帧校正锚点位置,用户一滚轮/触屏即停止校正
+let navHold=0;
+function jumpTo(el){
+  const box=$('#content');
+  const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-6;
+  cancelAnimationFrame(navHold);
+  box.scrollTop=want();
+  const t0=performance.now();
+  const hold=()=>{
+    const y=want();
+    if(Math.abs(box.scrollTop-y)>1)box.scrollTop=y;
+    navHold=performance.now()-t0<1500?requestAnimationFrame(hold):0;
+  };
+  navHold=requestAnimationFrame(hold);
+}
+for(const ev of ['wheel','touchstart','keydown'])$('#content').addEventListener(ev,()=>{cancelAnimationFrame(navHold);navHold=0;},{passive:true});
 $('#nav').addEventListener('click',e=>{
   const b=e.target.closest('.nv');if(!b)return;
   const el=document.getElementById(b.dataset.t);
-  if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+  if(el)jumpTo(el);
 });
 // 滚动高亮:NAV 顺序即文档顺序,取视口顶端上方最近的锚点
 function updateNavActive(){
