@@ -38,6 +38,7 @@ import base64
 import pygit2
 
 from modules.output_format import OUTPUT_ASPECTS, resolve_output
+from modules import skill_records
 from services.runtime import rhythm as narrative_rhythm
 
 # ---------------- 配置 ----------------
@@ -1327,6 +1328,17 @@ def agent_skill_prompt(agent_id: str, project: str) -> str:
           "回执逐项列出技能 id、已完成/已跳过/失败、原因以及实际产物和检查结果;"
           "读过文件不等于完成,适用技能未完成不得把本单标为完成。"
           "技能不得改变冻结台词、项目结构和工位职责。依赖库仅作为所选技能需要的参考资源读取,不独立自动执行。")
+    p += """
+技能执行记录(每个技能、每集/分镜组分别登记,所有引擎通用):
+- 确认适用并完整读取 SKILL.md 后、开始应用前执行:
+  `python3 services/runtime/skill_report.py <skill_id> running --reason "项目已勾选，<本任务实际触发条件>" --ep ep01 --group grp001`
+- 完成技能步骤后,用相同 skill_id/--ep/--group 登记 `completed --reason "<实际完成情况>"`。
+- 不适用时登记 `skipped --reason "<具体跳过原因>"`;失败登记 `failed`;无法确认登记 `unverified`。
+- 上述 ep01/grp001 仅为示例,必须替换为实际集数/组号;项目级任务无集数/组号时省略对应参数。
+  批量任务逐集逐组登记,不得用一个组冒充整批。开始和完成必须用同一作用范围。
+- 此命令自动绑定当前运行、Agent 和技能版本,不得伪造 run id。completed 只表示已登记完成,不等于视频效果更好。
+  只读取文件不能登记 completed;漏登记的技能在运行结束后显示「未验证」。登记失败需如实报告。
+"""
     selected = [s for s in mine if s["selected"]]
     p += "\n本工位已勾选:\n" if selected else "\n本工位没有勾选自动激活技能。"
     for s in selected:
@@ -1359,6 +1371,55 @@ def agent_skill_prompt(agent_id: str, project: str) -> str:
 def skill_resume_message(message: str, contract: str, resumed: bool) -> str:
     """只在不重传角色提示词的引擎续轮附加最新契约,防止会话沿用旧勾选。"""
     return f"{contract}\n\n## 当前工作指令\n{message}" if resumed else message
+
+
+def init_skill_records(run: dict):
+    """Bind installed skill versions to the run, refreshing queued selections at launch."""
+    fresh = skill_records.seed(run, list_project_skills(run["project"]), ROOT)
+    old = run.get("_skill_records", [])
+    selected = {r["skill_id"] for r in fresh}
+    for r in fresh:
+        previous = next((o for o in old if o["skill_id"] == r["skill_id"]), None)
+        if previous:
+            r["id"] = previous["id"]
+    removed = [dict(r, status="skipped", ended=time.time(),
+                    reason="排队期间项目取消勾选，本次未自动激活")
+               for r in old if r["skill_id"] not in selected]
+    run["_skill_records"] = fresh + removed
+    run["_skill_bound_ids"] = sorted(selected)
+    run.pop("_skill_records_phase", None)
+
+
+def persist_skill_records(run: dict):
+    if run.get("_skill_records"):
+        skill_records.write(PROJECTS_DIR / safe_slug(run["project"]), run, run["_skill_records"])
+
+
+async def api_project_skill_records(project: str, offset: int = 0, limit: int = 50):
+    project = require_project_slug(project)
+    if offset < 0 or not 1 <= limit <= 100:
+        raise ServiceError(400, "offset must be >= 0; limit must be between 1 and 100")
+    return {"project": project, **skill_records.history(
+        PROJECTS_DIR / project, project, RUNS, offset=offset, limit=limit)}
+
+
+async def api_skill_report(run_id: str, body: dict):
+    run = RUNS.get(run_id)
+    if not run:
+        raise ServiceError(404, "run not found")
+    if run.get("status") != "running":
+        raise ServiceError(409, "skill reports require an active run")
+    if body.get("skill_id") not in run.get("_skill_bound_ids", []):
+        raise ServiceError(400, "skill is not selected for this agent/run")
+    try:
+        records = skill_records.report(run.get("_skill_records", []), body)
+    except (ValueError, TypeError) as error:
+        raise ServiceError(400, str(error)) from None
+    # Persist before acknowledging the report; never claim success after an I/O failure.
+    skill_records.write(PROJECTS_DIR / safe_slug(run["project"]), run, records)
+    run["_skill_records"] = records
+    publish_run(run)
+    return {"ok": True}
 
 
 async def api_project_skills_get(project: str):
@@ -3214,6 +3275,15 @@ def run_public(run: dict) -> dict:
 
 
 def publish_run(run: dict):
+    # Only lifecycle transitions write history; token/tool stream updates stay cheap.
+    if "_skill_records" in run and run.get("_skill_records_phase") != run.get("status"):
+        if run.get("status") in {"done", "error"}:
+            run["_skill_records"] = skill_records.finish(run["_skill_records"], run)
+        try:
+            persist_skill_records(run)
+            run["_skill_records_phase"] = run.get("status")
+        except OSError as error:
+            print(f"[skill-records] 保存执行记录失败: {error}", flush=True)
     HUB.publish({"type": "run", "run": run_public(run)})
 
 
@@ -3352,6 +3422,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                 publish_run(run)
                 return
         try:
+            init_skill_records(run)
+            publish_run(run)
             role = build_role_prompt(agent_id, run["project"])
             skill_contract = agent_skill_prompt(agent_id, run["project"])
             if agent_id == PROMPT_AGENT_ID:
@@ -9261,6 +9333,7 @@ async def api_chat(body: dict):
         "project": project, "status": "queued", "created": time.time(),
         "message": message, "engine": engine, "model": model or "",
     }
+    init_skill_records(run)
     RUNS[run["id"]] = run
     append_chat(agent, project, {"role": "user", "text": message,
                                  "run_id": run["id"], "source": source})

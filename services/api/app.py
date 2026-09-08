@@ -174,6 +174,16 @@ async def project_skills_get(project: str) -> dict[str, Any]:
     return await core.api_project_skills_get(project)
 
 
+@api.get("/projects/{project}/skills/records", tags=["projects"])
+async def project_skill_records(project: str, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    return await core.api_project_skill_records(project, offset, limit)
+
+
+@api.post("/runs/{run_id}/skills", tags=["automation"])
+async def skill_report(run_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_skill_report(run_id, body)
+
+
 @api.post("/projects/{project}/skills", tags=["projects"])
 async def project_skills_set(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_project_skills_set(project, body)

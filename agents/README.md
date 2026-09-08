@@ -49,3 +49,20 @@
 plugin.json(manifest)+ agents/…/SOUL.md(同一模板)+ 可选 workflows/*.yaml(独立 DAG)。
 复制目录即安装,启停在 Web 控制台 ⚙️ 设置 →「插件」页;机制与纪律见 `WORKFLOW.md` §10,
 编写规范见 `plugins/README.md`。首个官方插件:`plugins/derivative-fiction/`(衍生小说创作团队)。
+
+## 项目技能执行记录
+
+在「项目设置 → 项目技能 → 执行记录」查看本项目技能的执行信息、触发原因和状态。
+记录保存于项目 `runs/skill_records/`，版本为运行启动时技能文件的 SHA-256，不保存 prompt 对比或产物内容。
+新运行会为已勾选技能建立待执行记录；旧运行不补造历史记录。
+
+Agent 根据运行时指令使用统一登记工具（当前运行由环境变量自动绑定）：
+
+```sh
+python3 services/runtime/skill_report.py 08-video-gen/prompt/performance-direction running --reason "项目已勾选，当前组为对白组" --ep ep01 --group grp001
+python3 services/runtime/skill_report.py 08-video-gen/prompt/performance-direction completed --reason "已完成表演控制步骤" --ep ep01 --group grp001
+```
+
+不适用用 `skipped`，失败用 `failed`，无法确认用 `unverified`，均需说明原因。批量任务逐集逐组登记，
+无集数/分镜组的项目级任务可省略相应参数。只有对应开始记录存在时才接受完成登记；
+终态不可覆盖，重试使用新运行。只读取技能文件或整次 Agent 运行结束，不等于该技能完成。

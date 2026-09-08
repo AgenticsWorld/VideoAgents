@@ -757,7 +757,16 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <input id="project-skills-search" type="search" placeholder="搜索 Agent 或技能" aria-label="搜索 Agent 或技能" style="width:100%;box-sizing:border-box;margin:8px 0">
     <div id="project-skills-list" style="max-height:52vh;min-height:0;overflow-y:auto"></div>
     <div class="err" id="project-skills-err"></div>
-    <div class="actions"><span id="project-skills-count" style="margin-right:auto;color:var(--dim);font-size:12px"></span><button id="project-skills-cancel">取消</button><button id="project-skills-save" class="primary">保存</button></div>
+    <div class="actions"><span id="project-skills-count" style="margin-right:auto;color:var(--dim);font-size:12px"></span><button id="project-skills-history">执行记录</button><button id="project-skills-cancel">取消</button><button id="project-skills-save" class="primary">保存</button></div>
+  </div>
+</div>
+<div id="skill-records-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="skill-records-heading">
+  <div class="box" style="width:1060px;max-width:96vw;max-height:92vh;box-sizing:border-box;overflow:hidden">
+    <h3 id="skill-records-heading">技能执行记录 <span id="skill-records-project" style="color:var(--dim);font-size:12px;font-weight:400"></span></h3>
+    <div class="note">状态依据 Agent 的执行登记；没有完整登记时显示「未验证」。版本以技能文件的 SHA-256 标识。</div>
+    <div id="skill-records-list" style="min-height:0;overflow:auto;max-height:65vh"></div>
+    <div class="err" id="skill-records-err" role="status"></div>
+    <div class="actions"><span id="skill-records-count" style="margin-right:auto;color:var(--dim);font-size:12px"></span><button id="skill-records-more" style="display:none">加载更多</button><button id="skill-records-refresh">刷新</button><button id="skill-records-back">返回项目技能</button></div>
   </div>
 </div>
 <div id="askill-modal" class="modal">
@@ -1654,6 +1663,65 @@ $('#project-skills-save').onclick=async()=>{
   }catch(e){$('#project-skills-err').textContent=t('保存失败:')+e.message}
   finally{$('#project-skills-save').disabled=false;$('#project-skills-cancel').disabled=false}
 };
+/* 项目技能唯一入口下的执行记录;返回时保留尚未保存的勾选。 */
+const SKILL_RECORD_STATUS={pending:'待执行',running:'执行中',completed:'已完成',skipped:'已跳过',failed:'失败',unverified:'未验证'};
+let SKILL_RECORDS={project:'',rows:[],total:0,request:0,open:false,timer:null};
+function renderSkillRecords(){
+  const box=$('#skill-records-list');
+  if(!SKILL_RECORDS.rows.length){box.innerHTML=`<div class="empty">${esc(t('暂无技能执行记录；后续 Agent 运行时会自动记录。'))}</div>`}
+  else{
+    const timeText=r=>{
+      const start=r.started?new Date(r.started*1000).toLocaleString():t('未登记开始时间');
+      const end=r.ended?new Date(r.ended*1000).toLocaleString():'';
+      return esc(start)+(end?'<br>'+esc(t('结束:'))+' '+esc(end):'');
+    };
+    box.innerHTML=`<table style="width:100%;min-width:760px;border-collapse:collapse;font-size:12px;text-align:left"><thead><tr>${['Agent','技能 / 版本','运行时间','集数 / 分镜组','触发原因','执行状态'].map(h=>`<th style="padding:9px;border-bottom:1px solid var(--border);white-space:nowrap">${esc(t(h))}</th>`).join('')}</tr></thead><tbody>${SKILL_RECORDS.rows.map(r=>{
+      const status=SKILL_RECORD_STATUS[r.status]||'未验证';
+      const color=r.status==='failed'?'var(--red)':r.status==='completed'?'var(--green)':r.status==='running'?'var(--accent)':'var(--dim)';
+      return `<tr><td style="padding:10px 9px;border-bottom:1px solid var(--border);max-width:180px;overflow-wrap:anywhere">${esc(agentName(r.agent_name||r.agent_id))}<br><span style="color:var(--dim);font-size:11px">${esc(r.agent_id)}</span></td><td style="padding:10px 9px;border-bottom:1px solid var(--border);max-width:200px;overflow-wrap:anywhere">${esc(r.skill_name)}<br><code title="${esc(r.version||'')}" style="color:var(--dim)">${esc(r.version?r.version.slice(0,12):t('版本未记录'))}</code></td><td style="padding:10px 9px;border-bottom:1px solid var(--border);white-space:nowrap">${timeText(r)}</td><td style="padding:10px 9px;border-bottom:1px solid var(--border)">${esc(r.episode||'—')}<br>${esc(r.group||'—')}</td><td style="padding:10px 9px;border-bottom:1px solid var(--border);min-width:160px;max-width:280px;overflow-wrap:anywhere">${esc(r.trigger||r.reason||'—')}</td><td title="${esc(r.reason||'')}" style="padding:10px 9px;border-bottom:1px solid var(--border);white-space:nowrap;color:${color}">${esc(t(status))}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+  $('#skill-records-count').textContent=I18N.f('显示 {n} / {total} 条',{n:SKILL_RECORDS.rows.length,total:SKILL_RECORDS.total});
+  $('#skill-records-more').style.display=SKILL_RECORDS.rows.length<SKILL_RECORDS.total?'':'none';
+}
+async function loadSkillRecords(more=false){
+  const request=++SKILL_RECORDS.request,project=SKILL_RECORDS.project;
+  clearTimeout(SKILL_RECORDS.timer);
+  $('#skill-records-err').textContent='';
+  $('#skill-records-refresh').disabled=true;$('#skill-records-more').disabled=true;
+  try{
+    const offset=more?SKILL_RECORDS.rows.length:0;
+    const d=await api('/api/v1/projects/'+encodeURIComponent(project)+'/skills/records?offset='+offset+'&limit=50');
+    if(!SKILL_RECORDS.open||request!==SKILL_RECORDS.request)return;
+    SKILL_RECORDS.rows=more?[...SKILL_RECORDS.rows,...d.records.filter(r=>!SKILL_RECORDS.rows.some(old=>old.id===r.id))]:d.records;
+    SKILL_RECORDS.total=d.total;
+    renderSkillRecords();
+  }catch(e){if(SKILL_RECORDS.open&&request===SKILL_RECORDS.request){
+    $('#skill-records-err').textContent=t('读取失败:')+e.message;
+    if(!SKILL_RECORDS.rows.length)$('#skill-records-list').innerHTML='';
+  }}finally{
+    if(SKILL_RECORDS.open&&request===SKILL_RECORDS.request){
+      $('#skill-records-refresh').disabled=false;$('#skill-records-more').disabled=false;
+      // Only auto-refresh the first page; never discard an expanded history while reading it.
+      if(SKILL_RECORDS.rows.length<=50)SKILL_RECORDS.timer=setTimeout(()=>loadSkillRecords(),5000);
+    }
+  }
+}
+$('#project-skills-history').onclick=()=>{
+  SKILL_RECORDS.open=true;SKILL_RECORDS.project=$('#project-skills-project').textContent;
+  SKILL_RECORDS.rows=[];SKILL_RECORDS.total=0;
+  $('#skill-records-project').textContent=SKILL_RECORDS.project;
+  $('#skill-records-count').textContent='';$('#skill-records-more').style.display='none';
+  $('#skill-records-list').innerHTML=`<div class="empty">${esc(t('读取中…'))}</div>`;
+  $('#project-skills-modal').style.display='none';$('#skill-records-modal').style.display='flex';
+  loadSkillRecords();
+};
+$('#skill-records-back').onclick=()=>{
+  SKILL_RECORDS.open=false;SKILL_RECORDS.request++;clearTimeout(SKILL_RECORDS.timer);
+  $('#skill-records-modal').style.display='none';$('#project-skills-modal').style.display='flex';
+};
+$('#skill-records-refresh').onclick=()=>loadSkillRecords();
+$('#skill-records-more').onclick=()=>loadSkillRecords(true);
 /* ---------- 视频提示词技能(项目级 prompt_skill:模型限制 / H3A 签字弹窗共用;2026-08-28) ---------- */
 function psValue(cfg){return cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode==='off'?'off':'auto')}
 async function psFill(sel,proj){   // 拉取解析结果与候选清单填充下拉;返回接口原文供 psHint

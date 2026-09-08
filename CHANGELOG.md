@@ -8,6 +8,8 @@ All notable public changes to VideoAgents are documented here.
 
 ### Added
 
+- **Project skill execution records**: Project Settings → Project Skills → Execution Records lists Agent, skill name and content version, execution times, episode/group, trigger reason and lifecycle status. Project-scoped metadata survives restarts. Agents report start/completion/skip/failure through a shared CLI; incomplete reports remain unverified instead of being inferred from file reads. No prompt comparisons or artifact snapshots are stored.
+
 - **Reference videos in the storyboard preview**: a new “🎬 Video” button next to “🖼 Image” on each group card opens a dialog listing the group's `video_refs` with their `[Video N]` numbers (matching the prompt), inline playback, per-video duration and the total duration against the effective video model's limit. Videos can be uploaded from disk (mp4/mov/webm, ≤45MB) or removed after a confirmation (pipeline-injected whitebox / continuation videos need a stronger confirmation; prompt references are renumbered and their fixed blocks rolled back). When the count or total duration exceeds the model's limit, the card and dialog warn and leave the decision to the user: remove videos or switch the group's model via “🎛 Model” — agents must report rather than trim. Strings added in all 11 locales.
 
 ### Changed
