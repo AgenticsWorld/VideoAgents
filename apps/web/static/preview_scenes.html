@@ -145,7 +145,7 @@ function renderList(){
 }
 
 function renderDetail(s){
-  import('/static/whitebox-ui.js?v=20260908-hands-reveal').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20260908-wife-actions').then(m=>m.resetWhitebox());
   const box=$('#detail');
   const m=s.meta||{};
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
@@ -201,7 +201,7 @@ function renderDetail(s){
   const gallery=box.querySelector('.gallery');
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
-  import('/static/whitebox-ui.js?v=20260908-hands-reveal').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
+  import('/static/whitebox-ui.js?v=20260908-wife-actions').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
 }
 
 // 图片 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留

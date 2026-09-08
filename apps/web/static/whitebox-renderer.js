@@ -15,7 +15,7 @@ export function sample(keys, time) {
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
-    for(const k of ['bend','pitch','roll','head_pitch','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
+    for(const k of ['bend','pitch','roll','head_pitch','head_yaw','torso_yaw','body_roll','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
     return out;
   }
   return {...keys.at(-1)};
@@ -140,7 +140,9 @@ export class WhiteboxRenderer {
         hand.name=key;arms.push({side,key,upper,lower,hand});
       }
       body.add(head);
-      scene.add(root);this.actors.push({data:actor,root,body,head,torso,legs,arms,eyes,brows,tongue,mat,neck});
+      const upper=new THREE.Group();body.add(upper);
+      if(torso){upper.add(torso,head);if(neck)upper.add(neck);for(const arm of arms)upper.add(arm.upper,arm.lower,arm.hand);}
+      scene.add(root);this.actors.push({data:actor,root,body,head,torso,legs,arms,eyes,brows,tongue,mat,neck,upper});
       if(actor.keyframes.length>1) {
         const geo=new THREE.BufferGeometry().setFromPoints(actor.keyframes.map(k=>new THREE.Vector3(k.position[0],k.position[1]+.08,k.position[2])));
         const path=new THREE.Line(geo,new THREE.LineBasicMaterial({color:actor.color,transparent:true,opacity:.6}));
@@ -185,7 +187,9 @@ export class WhiteboxRenderer {
       a.root.visible=k.visible!==false;
       const h=a.data.size_m[1];
       // Bend hips/knees for sitting; keep dimensions and ground anchors in meters.
-      a.body.rotation.x=k.pose==='lie'?-Math.PI/2:0;
+      // Roll a lying performer about their longitudinal axis before lying/yaw.
+      a.body.rotation.set(k.pose==='lie'?-Math.PI/2:0,k.pose==='lie'?(k.body_roll||0):0,0,'XYZ');
+      a.upper.rotation.y=k.torso_yaw||0;
       a.body.position.y=k.pose==='lie'?h*.16:0;
       if(a.torso){
         const seated=k.pose==='sit';
@@ -200,7 +204,7 @@ export class WhiteboxRenderer {
         a.torso.rotation.x=bend;
         a.torso.position.z=(a.torso.position.y-hip)*Math.sin(bend);
         a.torso.position.y=hip+(a.torso.position.y-hip)*Math.cos(bend);
-        a.head.rotation.x=bend+(k.head_pitch||0);
+        a.head.rotation.set(bend+(k.head_pitch||0),k.head_yaw||0,0,'YXZ');
         a.head.position.z=(a.head.position.y-hip)*Math.sin(bend);
         a.head.position.y=hip+(a.head.position.y-hip)*Math.cos(bend);
         if(a.neck){

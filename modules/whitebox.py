@@ -163,7 +163,7 @@ def sample(keys, t):
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
-            for key in ('bend', 'pitch', 'roll', 'head_pitch', 'neck_extension', 'expression', 'morph'):
+            for key in ('bend', 'pitch', 'roll', 'head_pitch', 'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph'):
                 if key in a or key in b:
                     out[key] = a.get(key, 0) + (b.get(key, 0)-a.get(key, 0))*u
             return out
@@ -196,6 +196,9 @@ def validate_keys(keys, duration, camera=False):
             for axis in ('pitch', 'roll'):
                 number(key.get(axis, 0), axis)
             number(key.get('head_pitch', 0), 'head_pitch')
+            for name in ('head_yaw', 'torso_yaw', 'body_roll'):
+                if abs(number(key.get(name, 0), name)) > math.pi/2:
+                    raise ValueError(f'{name} must be -pi/2..pi/2 radians')
             if not 0 <= number(key.get('neck_extension', 0), 'neck_extension') <= .3:
                 raise ValueError('neck_extension must be 0..0.3 meters')
             for name in ('expression', 'morph'):
