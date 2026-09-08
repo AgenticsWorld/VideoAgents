@@ -168,7 +168,12 @@ CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
 # (回执只见退出码 1),大批量工位(curate/cut)实测 100 轮不够,缺省放宽到 250
 MAX_TURNS_DEFAULT = 250
 MAX_TURNS_MIN, MAX_TURNS_MAX = 10, 1000
-MAX_CONCURRENT = 8                       # 同时运行的工人进程上限(调度器不占槽,见 execute_run)
+# 跨 Agent 并发额度(同时运行的工人进程上限,调度器不占槽,见 execute_run)缺省值/上限
+# (设置菜单「高级→Agent 高级设置」可调,存 state.json 的 global_concurrency);
+# 单 Agent 并发额度的上限随之联动。MAX_CONCURRENT 保留为缺省值别名,兼容旧引用
+GLOBAL_CONCURRENCY_DEFAULT = 8
+GLOBAL_CONCURRENCY_MAX = 50
+MAX_CONCURRENT = GLOBAL_CONCURRENCY_DEFAULT
 # 单次运行超时缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
 # 墙钟硬限,兜底回收挂死的引擎进程(API 长连接不返回、代理 stall 等);调度型 Agent
 # 要等整条流水线,取 4 倍。到点连派生子进程一起杀,run 记为 error
@@ -198,7 +203,7 @@ STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
 # 无状态 agent 的同 agent 并发额度缺省值(设置菜单「高级→Agent 高级设置」可调,存 state.json);
-# 有状态 agent 恒为 1(串行保护会话),全局仍受 MAX_CONCURRENT 总闸
+# 有状态 agent 恒为 1(串行保护会话),全局仍受跨 Agent 并发额度总闸,取值上限也随之联动
 AGENT_CONCURRENCY_DEFAULT = 5
 # Agent 对话记忆额度缺省值(KB;设置菜单「高级→Agent 高级设置」滑块 0..AGENT_MEMORY_KB_MAX
 # 可调,存 state.json 的 agent_memory_kb,兼容旧布尔键 agent_memory):
@@ -334,19 +339,38 @@ RUNS: dict[str, dict] = {}                       # run_id -> run 记录
 RUN_TASKS: dict[str, asyncio.Task] = {}          # run_id -> execute_run 任务(停止排队用)
 RUN_PROCS: dict[str, asyncio.subprocess.Process] = {}  # run_id -> 子进程(停止运行用)
 CONFIRMS: dict[str, dict] = {}                   # confirm_id -> 待用户确认项
-SEM = asyncio.Semaphore(MAX_CONCURRENT)
-# 每 agent 并发闸:agent_id -> (创建时的额度, 信号量)。额度被用户调整后按需重建;
+# 全局并发总闸:(创建时的额度, 信号量)。跨 Agent 并发额度被用户调整后按需重建;
 # 旧信号量由仍持有它的 run 自然释放后回收,切换瞬间总并发可能短暂超出新额度(可接受)
+GLOBAL_SEM: tuple[int, asyncio.Semaphore] | None = None
+# 每 agent 并发闸:agent_id -> (创建时的额度, 信号量)。重建/回收规则同上
 AGENT_SEMS: dict[str, tuple[int, asyncio.Semaphore]] = {}
 
 
+def global_concurrency() -> int:
+    """跨 Agent 并发额度(同时运行的工人进程上限,1..GLOBAL_CONCURRENCY_MAX,越界钳制)。"""
+    try:
+        n = int(STATE.get("global_concurrency", GLOBAL_CONCURRENCY_DEFAULT))
+    except (TypeError, ValueError):
+        n = GLOBAL_CONCURRENCY_DEFAULT
+    return max(1, min(n, GLOBAL_CONCURRENCY_MAX))
+
+
+def global_sem() -> asyncio.Semaphore:
+    """按当前跨 Agent 并发额度取全局总闸信号量;额度变化时重建。"""
+    global GLOBAL_SEM
+    limit = global_concurrency()
+    if GLOBAL_SEM is None or GLOBAL_SEM[0] != limit:
+        GLOBAL_SEM = (limit, asyncio.Semaphore(limit))
+    return GLOBAL_SEM[1]
+
+
 def agent_concurrency() -> int:
-    """无状态 agent 的同 agent 并发额度(1..MAX_CONCURRENT,越界钳制)。"""
+    """无状态 agent 的同 agent 并发额度(1..跨 Agent 并发额度,越界钳制)。"""
     try:
         n = int(STATE.get("agent_concurrency", AGENT_CONCURRENCY_DEFAULT))
     except (TypeError, ValueError):
         n = AGENT_CONCURRENCY_DEFAULT
-    return max(1, min(n, MAX_CONCURRENT))
+    return max(1, min(n, global_concurrency()))
 
 
 def max_turns_setting() -> int:
@@ -3389,9 +3413,9 @@ async def execute_run(run: dict, message: str, model: str | None):
     idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
-        # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 8 个槽实际只剩 7 个干活
+        # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 N 个槽实际只剩 N-1 个干活
         if not is_dispatcher:
-            await stack.enter_async_context(SEM)
+            await stack.enter_async_context(global_sem())
         # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
         # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)
         limit = agent_run_limit(agent_id, is_stateless)
@@ -9960,7 +9984,7 @@ async def api_agent_advanced_get():
 
 async def api_agent_advanced_set(body: dict):
     """Agent 高级设置合并提交,各字段均可选、可单独提交:
-    - agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
+    - global_concurrency / agent_concurrency / run_timeout / idle_timeout:同 api_agent_concurrency_set
     - agent_memory_kb:同 api_agent_memory_set(0=关闭;旧布尔字段 agent_memory 仍兼容)
     - max_retries:Agent 自动重跑/重 roll 次数上限(0..MAX_RETRIES_MAX,0=不自动重跑),
       经运行提示词注入全员,覆盖文档写死的 3 次;持久化,对后续启动的运行生效
@@ -10012,10 +10036,10 @@ async def api_agent_advanced_set(body: dict):
         updates["agent_memory_kb"] = mk
     elif body.get("agent_memory") is not None:   # 旧布尔开关兼容
         updates["agent_memory_kb"] = AGENT_MEMORY_KB_DEFAULT if body["agent_memory"] else 0
-    conc = {k: body.get(k) for k in ("agent_concurrency", "run_timeout", "idle_timeout")
+    conc = {k: body.get(k) for k in ("global_concurrency", "agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
@@ -10144,9 +10168,12 @@ async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
 
 
 async def api_agent_concurrency_get():
-    return {"agent_concurrency": agent_concurrency(),
+    return {"global_concurrency": global_concurrency(),
+            "global_concurrency_default": GLOBAL_CONCURRENCY_DEFAULT,
+            "global_concurrency_max": GLOBAL_CONCURRENCY_MAX,
+            "agent_concurrency": agent_concurrency(),
             "default": AGENT_CONCURRENCY_DEFAULT,
-            "max": MAX_CONCURRENT,
+            "max": global_concurrency(),   # 单 Agent 并发额度的上限 = 跨 Agent 并发额度
             "run_timeout": run_timeout_setting(),
             "run_timeout_default": RUN_TIMEOUT_DEFAULT,
             "run_timeout_min": RUN_TIMEOUT_MIN,
@@ -10157,20 +10184,31 @@ async def api_agent_concurrency_get():
 
 
 async def api_agent_concurrency_set(body: dict):
-    """并发和超时设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容),三项均可选、可单独提交:
+    """并发和超时设置(设置菜单「高级→Agent 高级设置」;前端经 api_agent_advanced_set 合并提交,本接口保留兼容),四项均可选、可单独提交:
+    - global_concurrency:跨 Agent 并发额度,即同时运行的工人进程总上限
+      (1..GLOBAL_CONCURRENCY_MAX,调度型 Agent 不占槽);也是 agent_concurrency 的上限
     - agent_concurrency:无状态扇出型 Agent(05-scenes/08-video-gen/11-qa/eval 等)的
-      同 agent 并发额度;有状态 Agent 恒为 1,全局仍受 MAX_CONCURRENT 总闸
+      同 agent 并发额度(1..global_concurrency,同单提交时按新值校验);有状态 Agent 恒为 1
     - run_timeout:单次运行墙钟超时(秒,调度型 Agent 自动 4 倍)
     - idle_timeout:引擎事件流无输出超时(秒,0=关闭;调度型 Agent 不受约束)
     持久化,立即对后续启动的运行生效(在跑的运行沿用启动时的取值)。"""
     updates: dict[str, int] = {}
+    gmax = global_concurrency()
+    if body.get("global_concurrency") is not None:
+        try:
+            n = int(body.get("global_concurrency"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "global_concurrency must be an integer") from None
+        if not 1 <= n <= GLOBAL_CONCURRENCY_MAX:
+            raise ServiceError(400, f"global_concurrency must be between 1 and {GLOBAL_CONCURRENCY_MAX}")
+        updates["global_concurrency"] = gmax = n
     if body.get("agent_concurrency") is not None:
         try:
             n = int(body.get("agent_concurrency"))
         except (TypeError, ValueError):
             raise ServiceError(400, "agent_concurrency must be an integer") from None
-        if not 1 <= n <= MAX_CONCURRENT:
-            raise ServiceError(400, f"agent_concurrency must be between 1 and {MAX_CONCURRENT}")
+        if not 1 <= n <= gmax:
+            raise ServiceError(400, f"agent_concurrency must be between 1 and {gmax} (global_concurrency)")
         updates["agent_concurrency"] = n
     if body.get("run_timeout") is not None:
         try:
@@ -10189,7 +10227,7 @@ async def api_agent_concurrency_set(body: dict):
             raise ServiceError(400, f"idle_timeout must be between 0 and {IDLE_TIMEOUT_MAX} seconds")
         updates["idle_timeout"] = n
     if not updates:
-        raise ServiceError(400, "nothing to update: pass agent_concurrency / run_timeout / idle_timeout")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout")
     STATE.update(updates)
     save_state(STATE)
     return await api_agent_concurrency_get()

@@ -704,11 +704,16 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="conc-modal" class="modal">
   <div class="box" style="width:560px">
     <h3>⚙️ Agent 高级设置</h3>
-    <div class="row"><label>每 Agent 并发额度</label>
+    <div class="row"><label>跨 Agent 并发额度</label>
+      <input type="range" id="gconc-range" min="1" max="50" step="1" style="flex:1">
+      <input type="number" id="gconc-num" min="1" max="50" step="1" style="width:64px">
+    <button type="button" class="info-btn" data-info="conc-info-gconc" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-gconc">全局同时运行的工单(工人进程)总上限,默认 8,最高 50:所有 Agent 的运行共用这一池进程槽,占满后新工单排队等槽;总制片等调度型 Agent 大部分时间静默等子任务,不占槽。它同时是下方「单 Agent 并发额度」的取值上限。每个槽 = 一个真实的模型 CLI 进程,调大会同步放大 token 消耗速度、本机负载与网络代理并发压力,建议按机器与额度承受力逐步上调。保存后立即对后续启动的工单生效。</div>
+    <div class="row"><label>单 Agent 并发额度</label>
       <input type="range" id="conc-range" min="1" max="8" step="1" style="flex:1">
       <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
     <button type="button" class="info-btn" data-info="conc-info-conc" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受全局 8 个进程槽总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
+    <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5,最大不超过上方「跨 Agent 并发额度」。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受跨 Agent 并发额度总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
     <div class="row"><label>运行超时(分钟)</label>
       <input type="number" id="conc-rt" min="10" max="1440" step="10" style="width:90px">
     </div>
@@ -1891,7 +1896,7 @@ $('#wdt-ok').onclick=async()=>{
 };
 
 /* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 重跑等待确认 + 思考深度 + 对话记忆) ---------- */
-let concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000,concCfMin=5,concCfMax=3600;
+let gconcMax=50,concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000,concCfMin=5,concCfMax=3600;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
 $('#mem-num').oninput=()=>{
@@ -1903,8 +1908,11 @@ async function openConcModal(){
   $('#conc-err').textContent='';
   try{
     const c=await api('/api/v1/config/agent-advanced');
-    concMax=c.max||8;
-    $('#conc-range').max=concMax;$('#conc-num').max=concMax;
+    gconcMax=c.global_concurrency_max||50;
+    $('#gconc-range').max=gconcMax;$('#gconc-num').max=gconcMax;
+    const gc=c.global_concurrency||c.max||8;
+    $('#gconc-range').value=gc;$('#gconc-num').value=gc;
+    syncConcMax(gc);
     $('#conc-range').value=c.agent_concurrency;$('#conc-num').value=c.agent_concurrency;
     concRtMin=Math.round((c.run_timeout_min||600)/60);concRtMax=Math.round((c.run_timeout_max||86400)/60);
     concItMax=Math.round((c.idle_timeout_max||21600)/60);
@@ -1923,12 +1931,24 @@ async function openConcModal(){
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=1;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#gconc-range').value=8;$('#gconc-num').value=8;syncConcMax(8);$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=1;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
 $('#menu-agent-adv').onclick=e=>{e.preventDefault();openConcModal()};
 document.querySelectorAll('.modal .info-btn').forEach(b=>b.onclick=()=>{const n=$('#'+b.dataset.info);n.classList.toggle('on');b.classList.toggle('on',n.classList.contains('on'))});
+/* 单 Agent 并发额度的上限 = 跨 Agent 并发额度:全局值一变,滑块/数字框上限跟着走,超出的当前值就地钳到新上限 */
+function syncConcMax(g){
+  concMax=Math.max(1,Math.min(parseInt(g)||1,gconcMax));
+  $('#conc-range').max=concMax;$('#conc-num').max=concMax;
+  const v=parseInt($('#conc-num').value);
+  if(v>concMax){$('#conc-num').value=concMax;$('#conc-range').value=concMax}
+}
+$('#gconc-range').oninput=()=>{$('#gconc-num').value=$('#gconc-range').value;syncConcMax($('#gconc-range').value)};
+$('#gconc-num').oninput=()=>{
+  const v=parseInt($('#gconc-num').value);
+  if(v>=1&&v<=gconcMax){$('#gconc-range').value=v;syncConcMax(v)}
+};
 $('#conc-range').oninput=()=>$('#conc-num').value=$('#conc-range').value;
 $('#conc-num').oninput=()=>{
   const v=parseInt($('#conc-num').value);
@@ -1936,6 +1956,9 @@ $('#conc-num').oninput=()=>{
 };
 $('#conc-cancel').onclick=()=>$('#conc-modal').style.display='none';
 $('#conc-ok').onclick=async()=>{
+  const g=parseInt($('#gconc-num').value);
+  if(!(g>=1&&g<=gconcMax)){$('#conc-err').textContent=I18N.f('跨 Agent 并发额度需为 1-{max} 的整数',{max:gconcMax});return}
+  syncConcMax(g);
   const v=parseInt($('#conc-num').value);
   if(!(v>=1&&v<=concMax)){$('#conc-err').textContent=I18N.f('并发额度需为 1-{max} 的整数',{max:concMax});return}
   const rt=parseInt($('#conc-rt').value),it=parseInt($('#conc-it').value),retry=parseInt($('#conc-retry').value);
@@ -1949,7 +1972,7 @@ $('#conc-ok').onclick=async()=>{
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    await api('/api/v1/config/agent-advanced',{agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
+    await api('/api/v1/config/agent-advanced',{global_concurrency:g,agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value});
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
