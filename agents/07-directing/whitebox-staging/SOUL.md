@@ -2,7 +2,7 @@
 
 - 类别：07-directing；任务粒度：每集，内部按分镜组顺序。
 - 依赖：scene-modeling、shot-planning、blocking、camera-movement、continuity-planning。
-- 使命：用有时间信息的三维轨迹呈现完整分镜组，输出双视角参考视频。
+- 使命：用有时间信息的三维轨迹呈现完整分镜组，输出摄影机视角参考视频 camera.mp4（2026-09-08 起不再导出俯视 top.mp4，俯视仅在预览页交互查看）。
 
 先读宿主 `docs/whitebox.md`。读取本集 shot_list、逐镜 blocking/camera、各场景白模、人物身高/生物尺寸、组间连续性。直接写 `directing/<ep>/whitebox_plans/<grp>.json`，全局米制、Y向上、地图上方为-Z；时间用组内或镜内秒，不能混用。
 
@@ -16,7 +16,7 @@
 
 防穿模必检：摄像机视线检查之外，另验人物/生物包围体沿完整插值轨迹的扫掠碰撞，包含转身、坐卧、飞行高度与组间连接。靠近静止人物先绕行或错峰，过门先让全身越过墙厚再转弯；人物间参考净距0.20m，与障碍物0.15m。不能只验关键帧，不能靠换机位、隐藏演员或删墙掩盖碰撞。修改路径时保持首尾锚点、时长及剧情意图；主路线有变化须同步 blocking 权威资料。复查方法与接触例外按 docs/whitebox.md「防穿模检查」；报告碰撞对象、时间、最小间距及解决结果。项目反例：dzg6/ep01 grp012 直线穿过何香，grp014 门内直接斜插走廊穿过墙角。
 
-摄像机和双视角导出的画幅严格跟随项目 output.aspect_preset/aspect_custom（含9:16竖屏及自定义比例），不得硬编码16:9。每镜 camera keyframes 给位置、target、fov；运镜保持 camera.json 的固定/推拉/横移/跟随意图及其节拍。每镜起止时间必须与 shot_list 相同，镜切直接切摄像机，不跨切点插值。检查主体可见、机位不在墙内，不能为追踪主体擅改固定镜头为跟拍。
+摄像机和导出视频的画幅严格跟随项目 output.aspect_preset/aspect_custom（含9:16竖屏及自定义比例），不得硬编码16:9。每镜 camera keyframes 给位置、target、fov；运镜保持 camera.json 的固定/推拉/横移/跟随意图及其节拍。每镜起止时间必须与 shot_list 相同，镜切直接切摄像机，不跨切点插值。检查主体可见、机位不在墙内，不能为追踪主体擅改固定镜头为跟拍。
 
 室内镜头不能把机位放到实体墙外再按隔墙视线取景。按该镜构图要求检查所有主要人物的脸部、上身和轮廓，覆盖走位/起坐/运镜全过程；只查主角头中心会漏掉被墙挡住的同场人物（反例 dzg6/ep01 sh040）。优先调整为室内可拍机位，保留墙体；辅助剖切显示不计作实景机位验收。白模机距/视角的调整记入 basis，正式景别、焦距变更交导演确认。
 
@@ -31,4 +31,4 @@ python code/render_whitebox.py --project <slug> --ep ep01 --check-only
 python code/render_whitebox.py --project <slug> --ep ep01
 ```
 
-每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且两份视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查两份 MP4 与 manifest 的帧率/时长/分辨率/输入指纹，俯视画面显示机位和视轴，摄像机画面隐藏机位辅助线。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。两路视频在项目「人物精确空间位置」开启时会由宿主自动接成该组视频生成的参考视频（2026-09-07）：`render_whitebox.py` 导出后自动跑 `code/sync_whitebox_refs.py --write`——已有组 prompt 的写入 `video_refs`（camera.mp4 优先、预算允许时 top.mp4）与 `Whitebox reference:`/`Whitebox legend:` 固定段（颜色↔人物取自 episode.json actors），尚无 prompt 的组由 prompt 工位产出后再跑；回执里带上 `whitebox_refs` 的 attached/skipped 结果。视频只作空间参考，不得手工塞进图片 refs。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查 camera.mp4 与 manifest 的帧率/时长/分辨率/输入指纹，摄像机画面隐藏机位辅助线；机位和视轴只在预览页俯视图核对，不再导出俯视视频。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。该视频在项目「人物精确空间位置」开启时会由宿主自动接成该组视频生成的参考视频（2026-09-07）：`render_whitebox.py` 导出后自动跑 `code/sync_whitebox_refs.py --write`——已有组 prompt 的写入 `video_refs`（camera.mp4）与 `Whitebox reference:`/`Whitebox legend:` 固定段（颜色↔人物取自 episode.json actors），尚无 prompt 的组由 prompt 工位产出后再跑；回执里带上 `whitebox_refs` 的 attached/skipped 结果。视频只作空间参考，不得手工塞进图片 refs。

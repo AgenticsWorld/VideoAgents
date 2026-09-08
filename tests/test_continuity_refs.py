@@ -104,9 +104,9 @@ def test_short_last_shot_falls_back_and_stays_valid(project):
 
 
 def whitebox(base, duration):
-    edit(base/'settings.json', lambda d: d['output'].update(spatial_blocking=True, whitebox_top_video=True))
+    edit(base/'settings.json', lambda d: d['output'].update(spatial_blocking=True))
     write(base/'directing/ep01/whitebox/episode.json', {'groups': [{'group_id': 'grp002', 'actors': []}]})
-    files = ['assets/whitebox/ep01/grp002/'+n+'.mp4' for n in ('camera', 'top')]
+    files = ['assets/whitebox/ep01/grp002/camera.mp4']
     for f in files:
         p = base/f; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(b'video')
     write(base/'assets/whitebox/ep01/grp002/manifest.json', {'files': files, 'duration_s': duration})
@@ -228,6 +228,20 @@ def test_model_budget_honors_global_limit_and_ignores_stale_provider(project, mo
 def test_whitebox_can_export_before_continuity_plan(project):
     whitebox(project, 7)
     (project/'directing/ep01/continuity.json').unlink()
-    assert len(plan_refs(project, 'ep01', 'grp002')['videos']) == 2
+    assert plan_refs(project, 'ep01', 'grp002')['videos'] == ['assets/whitebox/ep01/grp002/camera.mp4']
     with pytest.raises(ValueError, match='连戏规划'):
         cr.sync_group(project, 'ep01', 'grp002', write=True)
+
+
+def test_legacy_two_view_manifest_still_attaches_camera_only(project):
+    # 2026-09-08 前导出的 manifest 记两路文件;top.mp4 已不再维护(可能缺失),只要 camera.mp4 在即照挂
+    whitebox(project, 7)
+    write(project/'assets/whitebox/ep01/grp002/manifest.json',
+          {'files': ['assets/whitebox/ep01/grp002/top.mp4', 'assets/whitebox/ep01/grp002/camera.mp4'], 'duration_s': 7})
+    plan = plan_refs(project, 'ep01', 'grp002')
+    assert plan['videos'] == ['assets/whitebox/ep01/grp002/camera.mp4'] and 'top' not in plan
+    cr.sync_group(project, 'ep01', 'grp002', write=True)
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    assert 'top-down' not in pj['video_prompt'] and 'shooting direction' not in pj['video_prompt']
+    assert pj['whitebox_refs'] == {'camera': 'assets/whitebox/ep01/grp002/camera.mp4', 'skipped_reason': '',
+                                   'model': pj['whitebox_refs']['model'], 'source': 'sync_whitebox_refs.v1'}

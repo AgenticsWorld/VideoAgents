@@ -1,15 +1,15 @@
 """白模参考视频 → 组视频生成参考视频的接线(2026-09-07)。
 
 项目「输出设置 → 人物精确空间位置」(output.spatial_blocking)开启时,白模调度导出的
-`assets/whitebox/<ep>/<grp>/{camera.mp4,top.mp4}` 自动成为该分镜组视频生成的参考视频:
+`assets/whitebox/<ep>/<grp>/camera.mp4` 自动成为该分镜组视频生成的参考视频:
   - 写进组 prompt `assets/prompts/<ep>/<grp>.json` 的 `video_refs`(video-generation 按序传 --ref-video);
   - 在 video_prompt 的 `Shot 1:` 之前插入固定英文锚点段 `Whitebox reference: … Whitebox legend: …`
-    (两路视频各自作用、颜色↔人物、眼睛/鼻尖=朝向、深色摄像机盒与射线=机位与镜头方向、禁复现白模外观),
+    (视频作用、颜色↔人物、眼睛/鼻尖=朝向、禁复现白模外观),
     并在 `Global constraints:` 并入禁白模外观句;
   - 机检 whitebox_ref_bound(code/sync_whitebox_refs.py 不带 --write)。
-预算:按本组生效视频模型的参考视频数量/总时长上限取舍——camera.mp4 优先(画面视角,定人物在画面里的位置),
-默认只挂 camera(项目 output.whitebox_top_video 默认 false,2026-09-07 用户指令);置 true 且额度允许时才追加 top.mp4
-(俯视,只用于理解空间关系);渠道不支持参考视频时不接、退回干净俯视图口径。
+预算:按本组生效视频模型的参考视频数量/总时长上限判 camera.mp4(画面视角,定人物在画面里的位置)是否装得下;
+2026-09-08 起白模只导出摄影机视角、不再有 top.mp4 俯视视频(原 output.whitebox_top_video 开关废止);
+渠道不支持参考视频时不接、退回干净俯视图口径。
 数据源:directing/<ep>/whitebox/episode.json(actors/extras 的颜色与 label,render_whitebox.py 编译落盘)。
 """
 from __future__ import annotations
@@ -45,7 +45,9 @@ def whitebox_group(base: Path, ep: str, gid: str):
     if not isinstance(manifest, dict):
         return group, None
     files = manifest.get('files') or []
-    if len(files) != 2 or not all((base/f).is_file() and (base/f).stat().st_size > 0 for f in files):
+    cam = f'assets/whitebox/{ep}/{gid}/camera.mp4'
+    # 只要求 camera.mp4(2026-09-08 起唯一导出);旧版 manifest 里的 top.mp4 记录忽略
+    if cam not in files or not ((base/cam).is_file() and (base/cam).stat().st_size > 0):
         return group, None
     return group, manifest
 
@@ -99,11 +101,11 @@ def video_budget(base: Path, ep: str, gid: str) -> dict:
 
 
 def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> dict:
-    """决定本组挂哪些白模视频:{camera, top, videos[], duration_s, budget, skipped_reason}。"""
+    """决定本组是否挂白模摄影机视频:{camera, videos[], duration_s, budget, skipped_reason}。"""
     group, manifest = whitebox_group(base, ep, gid)
     ep, gid = component(ep), component(gid)
     if group is None or manifest is None:
-        return {'camera': None, 'top': None, 'videos': [], 'group': group, 'budget': None,
+        return {'camera': None, 'videos': [], 'group': group, 'budget': None,
                 'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
     budget = video_budget(base, ep, gid)
     from modules.continuity_refs import plan as continuation_plan, probe, local, TAIL_VIDEO
@@ -123,22 +125,15 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
         reserved_n += 1
     budget = dict(budget, max_videos=max(0, budget['max_videos']-reserved_n),
                   max_total_s=max(0, budget['max_total_s']-reserved_s))
-    # output.whitebox_top_video(默认 False = 只挂 camera.mp4,预算再宽也不追加 top.mp4;2026-09-07 用户指令):置 True 才按预算追加 top
-    top_wanted = ((read(base/'settings.json', {}) or {}).get('output') or {}).get('whitebox_top_video', False) is True
+    # 2026-09-08 起白模只导出摄影机视角 camera.mp4(不再有 top.mp4),预算只判这一路装不装得下
     dur = float(manifest.get('duration_s') or group.get('duration_s') or 0)
-    cam, top = f'assets/whitebox/{ep}/{gid}/camera.mp4', f'assets/whitebox/{ep}/{gid}/top.mp4'
+    cam = f'assets/whitebox/{ep}/{gid}/camera.mp4'
     videos, skipped = [], ''
     if budget['max_videos'] <= 0 or dur > budget['max_total_s'] + 1e-6:
         skipped = budget['reason'] or (f'参考视频预算不足(模型 {budget["model"] or "?"}:≤{budget["max_videos"]} 个/总时长 ≤{budget["max_total_s"]}s,组时长 {dur}s)')
     else:
         videos.append(cam)
-        if not top_wanted:
-            skipped = 'top.mp4 未挂:项目输出设置 whitebox_top_video 未开(默认只挂 camera.mp4)'
-        elif budget['max_videos'] >= 2 and 2*dur <= budget['max_total_s'] + 1e-6:
-            videos.append(top)
-        else:
-            skipped = f'top.mp4 未挂:参考视频总时长上限 {budget["max_total_s"]}s 装不下两路 {dur}s 视频,只挂 camera.mp4'
-    return {'camera': cam if cam in videos else None, 'top': top if top in videos else None, 'videos': videos,
+    return {'camera': cam if cam in videos else None, 'videos': videos,
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
 
 
@@ -169,14 +164,9 @@ def build_block(plan: dict) -> str:
     parts = [f"{BLOCK_KEY} [Video {ci}] is the camera-view whitebox previs of this exact group — grey placeholder geometry "
              "rendered from the real camera of every shot with the same cuts and timing; follow it for camera position, framing, "
              "each character's screen position, depth, facing and movement timing."]
-    if plan['top']:
-        ti = videos.index(plan['top']) + 1
-        parts.append(f"[Video {ti}] is the top-down whitebox previs of the same group — use it only to understand where everyone "
-                     "stands and walks in the space, never as a viewpoint.")
     legend = '; '.join(legend_rows(plan['group'] or {}))
     facing = 'the white eyes and nose tip show where a figure faces'
-    cam = ('the dark camera box is the camera and the dark line from it is the shooting direction (top view only)'
-           if plan['top'] else 'the camera itself is never drawn in the camera view')
+    cam = 'the camera itself is never drawn in the camera view'
     parts.append(f"{LEGEND_KEY} {legend}; {facing}; {cam}.")
     parts.append("Do not reproduce the whitebox look: no grey boxes, no placeholder figures, no color-coded people, "
                  "no camera icon or sight line — render the real characters, set and lighting from the reference images.")
@@ -208,7 +198,7 @@ def apply_prompt(prompt: dict, plan: dict) -> dict:
         else:
             out.pop('video_refs', None)
     out['video_prompt'] = vp
-    out['whitebox_refs'] = {'camera': plan['camera'], 'top': plan['top'], 'skipped_reason': plan.get('skipped_reason') or '',
+    out['whitebox_refs'] = {'camera': plan['camera'], 'skipped_reason': plan.get('skipped_reason') or '',
                             'model': (plan.get('budget') or {}).get('model', ''), 'source': 'sync_whitebox_refs.v1'}
     note = (f"白模参考视频自动接线(code/sync_whitebox_refs.py):video_refs={plan['videos']}"
             + (f";未挂:{plan['skipped_reason']}" if plan.get('skipped_reason') else ''))
@@ -231,20 +221,14 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
         return errs, warns
     for i, v in enumerate(plan['videos']):
         if i >= len(vrefs) or vrefs[i] != v:
-            errs.append(f"{gid}: video_refs[{i}] 应为 {v},实际 {vrefs[i] if i < len(vrefs) else '(缺)'}(白模视频须在前、camera 先于 top;跑 code/sync_whitebox_refs.py --write)")
+            errs.append(f"{gid}: video_refs[{i}] 应为 {v},实际 {vrefs[i] if i < len(vrefs) else '(缺)'}(白模视频须在前;跑 code/sync_whitebox_refs.py --write)")
     if BLOCK_KEY not in vp:
-        errs.append(f"{gid}: video_prompt 缺 \"{BLOCK_KEY}\" 段(两路白模视频作用/颜色↔人物图例/摄像机与镜头方向含义)")
+        errs.append(f"{gid}: video_prompt 缺 \"{BLOCK_KEY}\" 段(白模摄影机视频作用/颜色↔人物图例)")
         return errs, warns
     block = vp[vp.index(BLOCK_KEY):]
     ci = plan['videos'].index(plan['camera']) + 1
     if not re.search(r'\[Video\s*%d\][^.]*camera-view' % ci, block):
         errs.append(f"{gid}: {BLOCK_KEY} 段缺 [Video {ci}] 的 camera-view 说明句")
-    if plan['top']:
-        ti = plan['videos'].index(plan['top']) + 1
-        if not re.search(r'\[Video\s*%d\][^.]*top-down' % ti, block):
-            errs.append(f"{gid}: {BLOCK_KEY} 段缺 [Video {ti}] 的 top-down 说明句")
-        if 'shooting direction' not in block:
-            errs.append(f"{gid}: {LEGEND_KEY} 缺摄像机盒与镜头方向射线的含义说明(shooting direction)")
     if LEGEND_KEY not in block:
         errs.append(f"{gid}: 缺 \"{LEGEND_KEY}\" 颜色↔人物图例")
     else:
