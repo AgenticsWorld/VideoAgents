@@ -15,6 +15,7 @@ export function sample(keys, time) {
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
+    if(a.bend!==undefined||b.bend!==undefined)out.bend=(a.bend||0)+((b.bend||0)-(a.bend||0))*u;
     return out;
   }
   return {...keys.at(-1)};
@@ -167,6 +168,15 @@ export class WhiteboxRenderer {
           thigh.rotation.x=seated?Math.PI/2:0;thigh.position.y=h*(seated?.175:.2625);thigh.position.z=seated?h*.0875:0;
           shin.position.z=seated?h*.175:0;
         }
+        // Lean the upper body about the hips without turning a standing
+        // performer into a horizontal, bed-anchored lying performer.
+        const bend=k.pose==='stand'?(k.bend||0):0,hip=h*.35;
+        a.torso.rotation.x=bend;
+        a.torso.position.z=(a.torso.position.y-hip)*Math.sin(bend);
+        a.torso.position.y=hip+(a.torso.position.y-hip)*Math.cos(bend);
+        a.head.rotation.x=bend;
+        a.head.position.z=(a.head.position.y-hip)*Math.sin(bend);
+        a.head.position.y=hip+(a.head.position.y-hip)*Math.cos(bend);
       }
     }
     const shot=this.group.cameras.find(c=>t<c.start+c.duration_s)||this.group.cameras.at(-1);

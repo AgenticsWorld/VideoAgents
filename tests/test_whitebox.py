@@ -161,12 +161,24 @@ def test_yaw_shortest_path_and_hold():
     assert sample(keys,2)['position']==[2,0,0]
 
 
+def test_standing_bend_defaults_interpolation_and_validation():
+    keys=[{'t':0,'position':[0,0,0],'pose':'stand'},
+          {'t':2,'position':[0,0,0],'pose':'stand','bend':1.2},
+          {'t':4,'position':[0,0,0],'pose':'stand'}]
+    validate_keys(keys,4)
+    assert sample(keys,1)['bend']==pytest.approx(.6)
+    assert sample(keys,3)['bend']==pytest.approx(.6)
+    for invalid in [-.01, math.pi, float('nan'), True]:
+        bad=copy.deepcopy(keys);bad[1]['bend']=invalid
+        with pytest.raises(ValueError):validate_keys(bad,4)
+
+
 def test_javascript_interpolation_matches_compiler():
     import shutil
     import subprocess
     if not shutil.which('node'):pytest.skip('Node unavailable')
     keys=[{'t':0,'position':[0,0,0],'yaw':2.9,'pose':'stand','easing':'smooth'},
-          {'t':2,'position':[2,0,0],'yaw':-2.9,'pose':'sit','hold':True},
+          {'t':2,'position':[2,0,0],'yaw':-2.9,'pose':'sit','hold':True,'bend':1.2},
           {'t':4,'position':[3,0,2],'yaw':0,'pose':'lie'}]
     times=[0,.5,1,1.999,2,3,4]
     module=(Path(__file__).resolve().parents[1]/'apps/web/static/whitebox-renderer.js').as_uri()
@@ -177,6 +189,31 @@ def test_javascript_interpolation_matches_compiler():
         assert value['position']==pytest.approx(expected['position'])
         assert value['yaw']==pytest.approx(expected['yaw'])
         assert value['pose']==expected['pose']
+        assert value.get('bend',0)==pytest.approx(expected.get('bend',0))
+
+
+def test_bend_preserves_feet_and_resets_when_scrubbing():
+    import shutil
+    import subprocess
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    static=Path(__file__).resolve().parents[1]/'apps/web/static'
+    script='''
+import assert from 'node:assert/strict';
+import * as T from THREE_MODULE;
+import {WhiteboxRenderer} from RENDERER_MODULE;
+const r=Object.create(WhiteboxRenderer.prototype);
+Object.assign(r,{width:960,height:540,scene:null,controls:null,camera:new T.PerspectiveCamera(),overview:new T.PerspectiveCamera(),top:new T.OrthographicCamera()});
+r.load({dimensions_m:[8,3,6],objects:[]},{duration_s:2,actors:[{id:'a',kind:'person',color:'#cc4444',size_m:[.48,1.7,.38],keyframes:[{t:0,position:[0,0,0],pose:'stand'},{t:1,position:[0,0,0],pose:'stand',bend:1.2},{t:2,position:[0,0,0],pose:'stand'}]}],cameras:[{start:0,duration_s:2,keyframes:[{t:0,position:[0,2,5],target:[0,1,0],fov:45}]}]});
+const a=r.actors[0];
+function state(t){r.setTime(t);r.scene.updateMatrixWorld(true);return {head:a.head.getWorldPosition(new T.Vector3()),feet:a.legs.map(l=>l.shin.getWorldPosition(new T.Vector3()))};}
+const upright=state(0),bent=state(1);
+assert.ok(bent.head.y<upright.head.y && bent.head.z>upright.head.z);
+for(let i=0;i<2;i++)assert.ok(bent.feet[i].distanceTo(upright.feet[i])<1e-9);
+for(const t of [2,0,1,0]){const s=state(t);if(t!==1)assert.ok(s.head.distanceTo(upright.head)<1e-9);}
+r.disposeScene();
+'''.replace('THREE_MODULE',json.dumps((static/'vendor/three/three.module.js').as_uri()))\
+   .replace('RENDERER_MODULE',json.dumps((static/'whitebox-renderer.js').as_uri()))
+    subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)
 
 
 def test_face_direction_follows_actor_turn_pose_and_altitude():
@@ -622,4 +659,3 @@ def test_preview_videos_reports_whitebox_reel(reel_project, monkeypatch):
     w = core._preview_videos('demo', 'ep02')['whitebox']
     assert w['exists'] and not w['stale'] and w['name'] == 'ep02-camera.mp4' and w['groups'] == 3
     assert w['url'].startswith('/projects/demo/assets/whitebox/ep02/ep02-camera.mp4?v=')
-

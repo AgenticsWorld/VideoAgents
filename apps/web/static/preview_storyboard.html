@@ -1242,7 +1242,7 @@ function groupCard(g,inner){
 
 let LAST_DATA=null;
 function render(d){
-  import('/static/whitebox-ui.js?v=20260908-nav').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20260908-camera-audit').then(m=>m.resetWhitebox());
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1395,7 +1395,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  import('/static/whitebox-ui.js?v=20260908-nav').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP));
+  import('/static/whitebox-ui.js?v=20260908-camera-audit').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP));
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();

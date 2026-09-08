@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js';
 import { wbText as t, wbMessage } from './whitebox-i18n.js';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20260908-shot');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20260908-camera-audit');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const panels=new Map();

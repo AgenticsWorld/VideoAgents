@@ -163,6 +163,8 @@ def sample(keys, t):
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
+            if 'bend' in a or 'bend' in b:
+                out['bend'] = a.get('bend', 0) + (b.get('bend', 0)-a.get('bend', 0))*u
             return out
     return copy.deepcopy(keys[-1])
 
@@ -187,6 +189,8 @@ def validate_keys(keys, duration, camera=False):
             if key.get('pose', 'stand') not in ('stand', 'sit', 'lie'):
                 raise ValueError('pose must be stand/sit/lie')
             number(key.get('yaw', 0), 'yaw')
+            if not 0 <= number(key.get('bend', 0), 'bend') <= math.pi/2:
+                raise ValueError('bend must be 0..pi/2 radians')
             if 'visible' in key and not isinstance(key['visible'], bool):
                 raise ValueError('visible must be a boolean')
     if abs(keys[0]['t']) > 1e-6 or abs(keys[-1]['t']-duration) > 1e-6:
