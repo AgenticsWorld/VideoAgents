@@ -28,8 +28,8 @@ def sync(base, ep, selected=None, write=False):
         pp = base/'assets/prompts'/ep/f'{gid}.json'
         prompt = read_json(pp, None)
         if prompt is not None:
-            updated = complete_prompt_cast(prompt, rows[gid]) if write else prompt
-            errors.extend(f'{gid}: {e}' for e in check_prompt_cast(updated, rows[gid]))
+            updated = complete_prompt_cast(prompt, rows[gid], contexts[gid]['presence']) if write else prompt
+            errors.extend(f'{gid}: {e}' for e in check_prompt_cast(updated, rows[gid], contexts[gid]['presence']))
             if write and updated != prompt:
                 # Preserve the original once for review/recovery; no generated media touched.
                 backup = base/'directing'/ep/'scene_cast_backups'/'prompts'/pp.name

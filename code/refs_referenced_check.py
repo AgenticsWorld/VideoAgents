@@ -115,12 +115,13 @@ def main():
     all_errs, all_warns = [], []
     # Independently derive occupants; do not validate only characters already
     # listed in the prompt, which would miss a silently dropped listener.
-    from scene_cast import scene_reference_rows, read_json, check_prompt_cast
+    from scene_cast import scene_reference_rows, scene_cast_groups, read_json, check_prompt_cast
     source = read_json(proj_root/'directing'/args.ep/'shot_list.json', {})
-    cast_refs = scene_reference_rows(proj_root, args.ep, source) if source else {}
+    cast_contexts = scene_cast_groups(source) if source else {}
+    cast_refs = scene_reference_rows(proj_root, args.ep, source, cast_contexts) if source else {}
     for f in files:
         errs, warns = check_group(f, args.strict)
-        errs.extend(f'{f.stem}: {e}' for e in check_prompt_cast(json.loads(f.read_text()), cast_refs.get(f.stem, [])))
+        errs.extend(f'{f.stem}: {e}' for e in check_prompt_cast(json.loads(f.read_text()), cast_refs.get(f.stem, []), cast_contexts.get(f.stem, {}).get('presence')))
         all_errs += errs
         all_warns += warns
     for w in all_warns:

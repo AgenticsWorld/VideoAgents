@@ -412,8 +412,16 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
     # or departure, rather than a synthetic placeholder, remains authoritative.
     anchors = {}
     for i, group in enumerate(groups):
-        key = contexts[group['group_id']]['key']
+        context = contexts[group['group_id']]
+        key = context['key']
         for actor in group['actors']:
+            presence = context.get('presence', {}).get(actor['id'])
+            if presence:
+                if presence['state'] != 'present' or (actor.get('scene_inherited_from')
+                        and all(frame.get('visible') is False for frame in actor['keyframes'])):
+                    for frame in actor['keyframes']:
+                        frame['visible'] = presence['state'] == 'present'
+                actor['presence'] = copy.deepcopy(presence)
             anchors.setdefault((key, actor['id']), []).append((i, copy.deepcopy(actor), group['group_id']))
     for i, group in enumerate(groups):
         gid = group['group_id']; context = contexts[gid]
@@ -425,6 +433,8 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
                 continue
             candidates = anchors.get((context['key'], cid), [])
             if not candidates:
+                if context.get('presence', {}).get(cid, {}).get('state') in ('absent', 'remote'):
+                    continue  # An absent body needs no invented spatial anchor.
                 errors.append({'group_id': gid, 'error': f'{cid}: 同场次缺少空间锚点，请补 scene_actors'})
                 continue
             previous = [entry for entry in candidates if entry[0] < i]
@@ -441,10 +451,11 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
         for cid, presence in (raw_groups[gid].get('scene_presence') or {}).items():
             if cid not in context['actor_ids'] or not isinstance(presence, dict) or presence.get('state') not in ('absent', 'remote', 'present') or not presence.get('reason'):
                 errors.append({'group_id': gid, 'error': f'{cid}: scene_presence requires a scene actor, state and reason'})
-                continue
+        for cid, presence in context.get('presence', {}).items():
             for actor in group['actors']:
                 if actor['id'] == cid:
-                    if presence['state'] != 'present' or actor.get('scene_inherited_from'):
+                    if presence['state'] != 'present' or (actor.get('scene_inherited_from')
+                            and all(frame.get('visible') is False for frame in actor['keyframes'])):
                         for key in actor['keyframes']:
                             key['visible'] = presence['state'] == 'present'
                     actor['presence'] = copy.deepcopy(presence)

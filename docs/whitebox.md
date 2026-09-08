@@ -50,6 +50,10 @@
 
 原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。颜色按组内 blocking_map 数组顺序取自固定调色板（与分镜预览组卡的人物 chip 同色），不是跨所有组的永久颜色。骑乘生物与骑手同色。字母字段只保留在数据中作兼容（2026-09-07 起字母动线图 `directing/<ep>/blocking_maps/` 已退役，人物空间位置参考改由本白模视频承担），白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
 
+进退场必须另做时间核对，`scene_cast` 是同场身份总表，不代表每组同时在场。退场镜末写 `visible:false`，首个完整缺席组写 `scene_presence` 的 `absent` 与来源原因；同一 `scene_no + scene_id` 后续自动延续缺席，优先于缓存或复制的 `scene_actors`，直到用 `present` 明确声明重新入场。`remote` 同样不生成实体；`present` 只解除此前缺席，不覆盖新轨迹中的镜内退场。状态不跨场次/地点继承；时间跳切需重新核对。同步参考图时，不给 absent 人物新增在场绑定，旧图片序号保持不动，并在 prompt 写明缺席，避免把身份参考误解为出场要求。
+
+调度验收按“已入场 / 仍在场但画外 / 已离场 / 尚未入场 / 远程声音”逐组核对，不用是否有对白或是否列入 shot.characters 代替。原文只写“出去”不会自动变成数值退场；工位必须落实为关键帧与 scene_presence。反例 liaozhai2/ep01 grp021–grp034：母亲退场仅保留在文字里，门口可见尾帧被复制进后续 scene_actors，造成她一直留在房内。回归测试覆盖缺席延续、复制轨迹覆盖、重新入场、场次隔离及提示词同步。
+
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
 计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动。预览与导出共用这些规则。

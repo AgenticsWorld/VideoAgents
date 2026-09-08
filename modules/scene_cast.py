@@ -50,6 +50,26 @@ def scene_cast_groups(source):
         result[gid] = {'key': key, 'scene_no': number, 'scene_id': group.get('scene_id')}
     for entry in result.values():
         entry['actor_ids'] = sorted(pools[entry['key']])
+    # A scene-wide identity pool is not a timeline of physical occupancy.
+    # Explicit departures persist within this scene instance until re-entry is
+    # declared. A present declaration clears the departure, but must not keep
+    # forcing visibility after a later keyframed exit.
+    departures = {}
+    for group in source.get('generation_groups', []):
+        entry = result[group['group_id']]
+        states = departures.setdefault(entry['key'], {})
+        declared = {}
+        for cid, presence in (group.get('scene_presence') or {}).items():
+            if (cid not in entry['actor_ids'] or not isinstance(presence, dict)
+                    or presence.get('state') not in ('absent', 'remote', 'present')
+                    or not presence.get('reason')):
+                continue  # The whitebox compiler reports malformed declarations.
+            declared[cid] = copy.deepcopy(presence)
+            if presence['state'] == 'present':
+                states.pop(cid, None)
+            else:
+                states[cid] = copy.deepcopy(presence)
+        entry['presence'] = {**copy.deepcopy(states), **declared}
     return result
 
 
@@ -74,6 +94,8 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                        key=lambda i: (i != index, abs(i-index), i > index))
         rows = []
         for cid in context['actor_ids']:
+            if context.get('presence', {}).get(cid, {}).get('state') == 'absent':
+                continue
             kind = 'creatures' if cid.startswith('CRE-') else 'characters'
             prefix = f'assets/concepts/{kind}/{cid}/'
             costume = None
@@ -104,7 +126,7 @@ CAST_BEGIN = '\nScene presence references:\n'
 CAST_END = '\nEnd scene presence references.\n'
 
 
-def complete_prompt_cast(prompt, rows):
+def complete_prompt_cast(prompt, rows, presence=None):
     """Append references without renumbering existing Image bindings. Pure/idempotent."""
     out = copy.deepcopy(prompt)
     refs = out.setdefault('refs', [])
@@ -125,9 +147,20 @@ def complete_prompt_cast(prompt, rows):
                   'no duplicate or twin characters; visibility follows each shot’s framing.', text, flags=re.I)
     text = re.sub(r'there are exactly\s+\d+\s+distinct characters across the whole video,?\s*', '', text, flags=re.I)
     text = re.sub(r'no extra, third, or duplicate person', 'no duplicate person', text, flags=re.I)
-    if bindings:
+    excluded = []
+    for cid, p in (presence or {}).items():
+        if p.get('state') not in ('absent', 'remote'):
+            continue
+        retained = [f'[Image {i}]' for i, ref in enumerate(refs, 1)
+                    if isinstance(ref, str) and cid in ref.split('/')]
+        reference_note = ('（保留的 '+'、'.join(retained)+' 仅供身份核对，不要求出场）') if retained else ''
+        excluded.append(f"{cid}：{p['reason']}"+reference_note)
+    if bindings or excluded:
         block = CAST_BEGIN+' '.join(bindings)+'\n同场人物保持既定位置与进退场连续性；'+\
-                '镜头外人物仍在场，不要求每镜全部入画。仅按原台词安排说话，其余人物保持沉默。'+CAST_END
+                '镜头外人物仍在场，不要求每镜全部入画。仅按原台词安排说话，其余人物保持沉默。'
+        if excluded:
+            block += '\n本组不在场，不得生成实体人物：'+'；'.join(excluded)+'。已有身份参考不代表人物在场。'
+        block += CAST_END
         # Definitions precede shot instructions, while existing reference indices stay stable.
         match = re.search(r'Shot\s+1\s*:', text)
         at = match.start() if match else 0
@@ -135,14 +168,22 @@ def complete_prompt_cast(prompt, rows):
     out['video_prompt'] = text
     out['scene_cast'] = [r['id'] for r in rows]
     out['scene_cast_refs'] = copy.deepcopy(rows)
+    if presence is not None:
+        out['scene_presence'] = copy.deepcopy(presence)
     return out
 
 
-def check_prompt_cast(prompt, rows):
+def check_prompt_cast(prompt, rows, presence=None):
     errors = []
     for row in rows:
         if row['missing']:
             errors.append(f"scene_cast_ref: {row['id']} 缺少本场次身份/服装参考图")
         elif row['ref'] not in (prompt.get('refs') or []):
             errors.append(f"scene_cast_ref: 未关联在场人物 {row['id']} 的参考图 {row['ref']}")
+    for cid, state in (presence or {}).items():
+        if state.get('state') not in ('absent', 'remote'):
+            continue
+        recorded = (prompt.get('scene_presence') or {}).get(cid, {})
+        if recorded.get('state') != state['state']:
+            errors.append(f"scene_presence: {cid} 的 {state['state']} 状态未同步到 prompt，请运行 sync_scene_cast.py --write")
     return errors

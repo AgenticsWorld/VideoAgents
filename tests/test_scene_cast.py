@@ -100,3 +100,69 @@ def test_whitebox_missing_anchor_is_error_not_invented_origin():
     complete_scene_actors(groups, scene_cast_groups(data), {g['group_id']: g for g in data['generation_groups']}, errors)
     assert 'CHAR-B' in errors[0]['error']
     assert len(groups[0]['actors']) == 1
+
+
+def test_departure_overrides_cached_scene_actor_until_explicit_reentry(tmp_path):
+    data = source()
+    first = data['generation_groups'][0]
+    data['generation_groups'] = [{**first, 'group_id': f'g{i}'} for i in range(1, 6)]
+    data['generation_groups'][1]['scene_presence'] = {
+        'CHAR-A': {'state': 'absent', 'reason': 'Left through the door after g1'}}
+    data['generation_groups'][3]['scene_presence'] = {
+        'CHAR-A': {'state': 'present', 'reason': 'Returns through the door in g4'}}
+    # A new scene instance must not inherit a departure from the prior scene.
+    data['generation_groups'][4]['scene_no'] = 'S2'
+    stale = actor('CHAR-A', 0)
+    stale['scene_inherited_from'] = 'g1'
+    groups = [{'group_id': f'g{i}', 'actors': [copy.deepcopy(stale)],
+               'duration_s': 4, 'warnings': []} for i in range(1, 6)]
+    contexts = scene_cast_groups(data)
+    errors = []
+    complete_scene_actors(groups, contexts, {g['group_id']: g for g in data['generation_groups']}, errors)
+    assert not errors
+    assert [all(k.get('visible', True) for k in g['actors'][0]['keyframes'])
+            for g in groups] == [True, False, False, True, True]
+    rows = scene_reference_rows(tmp_path, 'ep01', data, contexts)
+    assert rows['g2'] == rows['g3'] == []
+    prompt = {'refs': ['assets/concepts/characters/CHAR-A/mother.png', 'room.png'], 'video_prompt': 'Shot 1: [Image 2]'}
+    updated = complete_prompt_cast(prompt, rows['g3'], contexts['g3']['presence'])
+    assert updated['refs'] == prompt['refs']  # Existing image indices stay stable.
+    assert '不得生成实体人物：CHAR-A' in updated['video_prompt']
+    assert '保留的 [Image 1] 仅供身份核对，不要求出场' in updated['video_prompt']
+    assert complete_prompt_cast(updated, rows['g3'], contexts['g3']['presence']) == updated
+    assert not check_prompt_cast(updated, rows['g3'], contexts['g3']['presence'])
+    assert 'scene_presence:' in check_prompt_cast(prompt, rows['g3'], contexts['g3']['presence'])[0]
+
+
+def test_absence_applied_before_anchor_snapshot_and_no_anchor_required():
+    data = source(); data['generation_groups'] = data['generation_groups'][:2]
+    data['generation_groups'][0]['scene_presence'] = {
+        'CHAR-A': {'state': 'absent', 'reason': 'Already left'},
+        'CHAR-B': {'state': 'remote', 'reason': 'Voice from another room'}}
+    groups = [
+        {'group_id': 'g1', 'actors': [actor('CHAR-A', 2)], 'duration_s': 4, 'warnings': []},
+        {'group_id': 'g2', 'actors': [], 'duration_s': 4, 'warnings': []}]
+    errors = []
+    complete_scene_actors(groups, scene_cast_groups(data),
+                          {g['group_id']: g for g in data['generation_groups']}, errors)
+    assert not errors
+    assert all(k['visible'] is False for k in groups[1]['actors'][0]['keyframes'])
+    assert [a['id'] for a in groups[1]['actors']] == ['CHAR-A']
+
+
+def test_present_does_not_override_later_keyframed_departure():
+    data = source(); data['generation_groups'] = data['generation_groups'][:2]
+    data['generation_groups'][0]['characters_union'] = ['CHAR-A', 'CHAR-B']
+    data['generation_groups'][0]['scene_presence'] = {
+        'CHAR-A': {'state': 'present', 'reason': 'Enters then leaves within this group'}}
+    exiting = actor('CHAR-A', 0)
+    exiting['scene_inherited_from'] = 'earlier-authored-group'
+    exiting['keyframes'][-1]['visible'] = False
+    groups = [
+        {'group_id': 'g1', 'actors': [exiting, actor('CHAR-B', 2)], 'duration_s': 4, 'warnings': []},
+        {'group_id': 'g2', 'actors': [actor('CHAR-B', 2)], 'duration_s': 4, 'warnings': []}]
+    errors = []
+    complete_scene_actors(groups, scene_cast_groups(data),
+                          {g['group_id']: g for g in data['generation_groups']}, errors)
+    assert not errors
+    assert all(k['visible'] is False for k in groups[1]['actors'][1]['keyframes'])
