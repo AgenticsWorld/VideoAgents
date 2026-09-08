@@ -380,6 +380,8 @@ def compile_group(base, ep, group, shots, scene):
             raise ValueError('Extra kind must be person/creature')
     for actor in actors + extras:
         vector(actor['size_m'], 'actor.size_m', positive=True)
+        if 'faceless' in actor and not isinstance(actor['faceless'], bool):
+            raise ValueError('actor.faceless must be boolean')
         if 'morph_target' in actor:
             vector(actor['morph_target']['size_m'], 'morph_target.size_m', positive=True)
             if not re.fullmatch(r'#[0-9a-fA-F]{6}', actor['morph_target'].get('color', '')):
@@ -399,6 +401,14 @@ def compile_group(base, ep, group, shots, scene):
             number(prop.get(axis, 0), 'prop.'+axis)
         if set(prop.get('shot_ids', [])) - set(group['shots']):
             raise ValueError('Prop shot_ids must belong to the group')
+        if 'projection_screen' in prop:
+            screen = prop['projection_screen']
+            if not isinstance(screen, dict) or not isinstance(screen.get('actor_ids'), list) or not screen['actor_ids'] or any(not isinstance(cid, str) or cid not in seen for cid in screen['actor_ids']):
+                raise ValueError('projection_screen.actor_ids must reference group actors')
+            if prop.get('shape', 'box') != 'box' or any(prop.get(axis, 0) for axis in ('yaw', 'pitch', 'roll')) or prop.get('keyframes'):
+                raise ValueError('projection_screen requires a fixed axis-aligned box')
+            if set(screen.get('shot_ids', [])) - set(group['shots']):
+                raise ValueError('projection_screen shot_ids must belong to the group')
         if prop.get('keyframes') is not None:
             validate_keys(prop['keyframes'], duration)
     cursor = 0

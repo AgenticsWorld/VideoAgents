@@ -1,6 +1,27 @@
 import * as THREE from './vendor/three/three.module.js';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 
+// Whitebox shadow proxy: project the actual posed triangles onto a curtain,
+// clipping to its physical rectangle. This is a parallel silhouette, not a
+// photometric simulation of the final film lighting.
+export function projectSilhouette(geometry, matrixWorld, bounds, z) {
+  const p=geometry.attributes.position,index=geometry.index,out=[];
+  for(let i=0;i<(index?index.count:p.count);i+=3){
+    let polygon=[0,1,2].map(j=>new THREE.Vector3().fromBufferAttribute(p,index?index.getX(i+j):i+j).applyMatrix4(matrixWorld));
+    for(const [axis,edge,sign] of [['x',bounds.min.x,1],['x',bounds.max.x,-1],['y',bounds.min.y,1],['y',bounds.max.y,-1]]){
+      const clipped=[];
+      for(let j=0;j<polygon.length;j++){
+        const a=polygon[j],b=polygon[(j+1)%polygon.length],da=(a[axis]-edge)*sign,db=(b[axis]-edge)*sign;
+        if(da>=0)clipped.push(a);
+        if((da>=0)!==(db>=0))clipped.push(a.clone().lerp(b,da/(da-db)));
+      }
+      polygon=clipped;
+    }
+    for(let j=1;j+1<polygon.length;j++)for(const v of [polygon[0],polygon[j],polygon[j+1]])out.push(v.x,v.y,z);
+  }
+  return new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(out,3));
+}
+
 export function sample(keys, time) {
   if (time <= keys[0].t) return {...keys[0]};
   for (let i=1; i<keys.length; i++) {
@@ -58,7 +79,7 @@ export class WhiteboxRenderer {
     this.scene=null;
   }
   load(sceneData, group=null) {
-    this.disposeScene();this.sceneData=sceneData;this.group=group;this.actors=[];this.props=[];
+    this.disposeScene();this.sceneData=sceneData;this.group=group;this.actors=[];this.props=[];this.silhouettes=[];
     const scene=this.scene=new THREE.Scene();scene.background=new THREE.Color(0xe9ede9);
     scene.add(new THREE.HemisphereLight(0xffffff,0x8c968d,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(-8,20,10);scene.add(sun);
@@ -103,6 +124,7 @@ export class WhiteboxRenderer {
       const nose=new THREE.Mesh(new THREE.ConeGeometry(radius*.28,radius*.85,4),white);
       nose.name='face-forward';nose.rotation.x=Math.PI/2;
       nose.position.set(0,-radius*.08,radius*1.18);face.add(nose);head.add(face);
+      face.visible=actor.faceless!==true;
       // Optional performance channels leave legacy silhouettes unchanged.
       let tongue=null;
       if(actor.keyframes.some(k=>k.expression!==undefined)){
@@ -149,6 +171,12 @@ export class WhiteboxRenderer {
         path.layers.set(1);scene.add(path);
       }
     }
+    for(const screen of this.props.filter(p=>p.data.projection_screen)){
+      const shadow=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial({color:0x202020,side:THREE.DoubleSide,depthWrite:false}));
+      shadow.name=screen.data.id+'-silhouette';shadow.layers.set(2);shadow.renderOrder=1;scene.add(shadow);
+      this.silhouettes.push({screen,shadow});
+    }
+    this.camera.layers.enable(2);
     this.marker=new THREE.Group();this.marker.layers.set(1);
     const camBody=new THREE.Mesh(new THREE.BoxGeometry(.35,.25,.5),new THREE.MeshBasicMaterial({color:0x1b3d4b}));
     camBody.layers.set(1);this.marker.add(camBody);scene.add(this.marker);
@@ -258,6 +286,24 @@ export class WhiteboxRenderer {
       mesh.position.fromArray(k.position);mesh.rotation.set(k.pitch||0,k.yaw||0,k.roll||0);
       mesh.scale.fromArray(k.scale||[1,1,1]);
       mesh.visible=k.visible!==false&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
+    }
+    this.scene.updateMatrixWorld(true);
+    for(const {screen,shadow} of this.silhouettes){
+      const spec=screen.data.projection_screen;
+      shadow.visible=screen.mesh.visible&&(!spec.shot_ids||spec.shot_ids.includes(shot.shot_id));
+      if(!shadow.visible)continue;
+      const bounds=new THREE.Box3().setFromObject(screen.mesh),positions=[];
+      for(const a of this.actors.filter(a=>a.root.visible&&spec.actor_ids.includes(a.data.id))){
+        a.root.traverse(o=>{
+          if(!o.isMesh)return;
+          for(let p=o;p;p=p.parent)if(!p.visible)return;
+          const projected=projectSilhouette(o.geometry,o.matrixWorld,bounds,bounds.min.z-.003);
+          const values=projected.attributes.position.array;
+          for(const v of values)positions.push(v);
+          projected.dispose();
+        });
+      }
+      shadow.geometry.dispose();shadow.geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
     }
     const k=sample(shot.keyframes,t-shot.start);this.shotId=shot.shot_id;
     this.camera.position.fromArray(k.position);this.camera.lookAt(new THREE.Vector3(...k.target));

@@ -691,3 +691,17 @@ assert.ok(Math.abs(sample({json.dumps(keys)},3).roll-.6)<1e-9);
 r.disposeScene();
 '''
     subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)
+
+
+def test_projection_screen_validates_cast_and_fixed_plane(project):
+    prop = {'id':'curtain','shape':'box','position':[0,1,-1], 'size_m':[2,2,.02],
+            'projection_screen':{'actor_ids':['CHAR-1'],'shot_ids':['sh1']}}
+    path=project/'directing/ep01/whitebox_plans/grp1.json'
+    write(path,{'props':[prop]})
+    compiled=compile_episode(project,'ep01')
+    assert not compiled['errors']
+    assert compiled['groups'][0]['props'][0]['projection_screen']==prop['projection_screen']
+    for bad in [{**prop,'yaw':.1}, {**prop,'projection_screen':{'actor_ids':['missing']}},
+                {**prop,'projection_screen':{'actor_ids':['CHAR-1'],'shot_ids':['missing']}}]:
+        write(path,{'props':[bad]})
+        assert compile_episode(project,'ep01')['errors']
