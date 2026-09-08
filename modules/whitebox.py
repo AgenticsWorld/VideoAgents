@@ -401,7 +401,7 @@ def compile_group(base, ep, group, shots, scene):
             raise ValueError(f'{gid}: camera intervals must match shot timing')
         validate_keys(camera['keyframes'], sd, True); cursor += sd
         from modules.whitebox_camera import check_camera
-        camera_errors = check_camera(base, ep, shots[camera['shot_id']], camera)
+        camera_errors = check_camera(base, ep, shots[camera['shot_id']], camera, gid)
         if camera_errors:
             raise ValueError('; '.join(camera_errors))
     return {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],

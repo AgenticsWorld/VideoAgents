@@ -24,6 +24,8 @@
 
 默认不写 camera.visible_actor_ids，由真实机位和几何关系决定入画。不能把 shot.characters 或 composition.subject/secondary_subjects 当作完整的可见名单；必须读 composition.layers、notes 与分镜草描，包含静止陪衬、前景和背景人物。只有明确的特殊隐藏需求才设名单，并在 basis 注明每个排除对象的理由。反例 dzg6/ep01 grp050/sh089：角色列表只列笑起来的两人，但构图要求老道儿在中间不动，错误名单让他凭空消失。按构图独立列出应入画人物，再检查 root.visible、摄像机渲染层、视锥及遮挡；不能仅验空间视图或从 visible_actor_ids 生成验收名单。
 
+机位验收按 docs/whitebox.md「机位与运镜设定校验」执行：先从 camera/composition 读出平视/低位/俯仰、对称轴、物件或身体局部主体、焦段、重复机位、起停与位移，再写独立 whitebox_contract。相邻重复镜头引用同一基准。人物或模型修改后重验全时段取景，审查完成才更新 source_fingerprint / placement_fingerprint；不得只改指纹消除报错。禁止用自由搜索机高/方位的算法替代设定，也不能把手部/门闩特写改成全身取景。数值一致、取景可用、视觉构图分项报告；缺少帘幕/影子/物证白模属于模型缺口，不算摄影机通过。源设定之间或与实际空间冲突时列出具体取舍；已经授权的决定直接执行并同步源文件和 prompt，不重复索要确认。
+
 按 continuity_from 检查相邻组：同场实时连续动作可设 actors/camera 为 inherit；仅人物续接但换机位时 actors=inherit,camera=cut。闪回、时间跳切、场景切换明确 cut。validate 产生的不连续告警必须解释或修正，不可盲目沿用前组坐标；不得用 inheritance 掩盖源资料冲突。
 
 执行宿主：
