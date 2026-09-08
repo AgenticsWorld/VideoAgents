@@ -20,13 +20,27 @@ export function sample(keys, time) {
   return {...keys.at(-1)};
 }
 
+// One detached WebGL context shared by every per-shot preview on a page: each
+// panel renders into it and copies the frame to its own 2D canvas, so hundreds
+// of storyboard shots never approach the browser's WebGL context limit.
+let shared=null;
+export function sharedRenderer() {
+  if(!shared){
+    shared=new THREE.WebGLRenderer({canvas:document.createElement('canvas'),antialias:true});
+    shared.setPixelRatio(1);shared.setClearColor(0xe9ede9);
+  }
+  return shared;
+}
+
 export class WhiteboxRenderer {
-  constructor(canvas, {width=960,height=540, controls=true}={}) {
-    this.canvas=canvas; this.width=width; this.height=height;
-    this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(width,height,false);
-    this.renderer.setClearColor(0xe9ede9);
+  constructor(canvas, {width=960,height=540, controls=true, renderer=null}={}) {
+    this.canvas=canvas; this.width=width; this.height=height; this.shared=!!renderer;
+    this.renderer=renderer||new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
+    if(!this.shared){
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width,height,false);
+      this.renderer.setClearColor(0xe9ede9);
+    }
     this.camera=new THREE.PerspectiveCamera(50,width/height,.025,2000);
     this.overview=new THREE.PerspectiveCamera(45,width/height,.05,3000);
     this.top=new THREE.OrthographicCamera(-10,10,6,-6,.05,3000);
@@ -172,11 +186,19 @@ export class WhiteboxRenderer {
     this.marker.position.copy(this.camera.position);this.marker.quaternion.copy(this.camera.quaternion);
     this.ray.geometry.dispose();this.ray.geometry=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...k.position),new THREE.Vector3(...k.target)]);
   }
-  render(view='overview') {
+  // target: a 2D canvas to copy the frame into (defaults to this.canvas when the
+  // WebGL context is shared); ignored when rendering straight into an own context.
+  render(view='overview', target=null) {
     if(!this.scene)return;
     if(this.controls)this.controls.enabled=view==='overview';
     this.marker.visible=!!this.group;this.ray.visible=!!this.group;
+    const gl=this.renderer.domElement;
+    if(this.shared&&(gl.width!==this.width||gl.height!==this.height))this.renderer.setSize(this.width,this.height,false);
     this.renderer.render(this.scene,view==='camera'?this.camera:view==='top'?this.top:this.overview);
+    const out=target||(this.shared?this.canvas:null);
+    if(!out||out===gl)return;
+    if(out.width!==this.width||out.height!==this.height){out.width=this.width;out.height=this.height;}
+    out.getContext('2d').drawImage(gl,0,0);
   }
-  dispose(){this.controls?.dispose();this.disposeScene();this.renderer.dispose();this.renderer.forceContextLoss();}
+  dispose(){this.controls?.dispose();this.disposeScene();if(!this.shared){this.renderer.dispose();this.renderer.forceContextLoss();}}
 }

@@ -5,7 +5,7 @@
 <title>分镜预览 · Agentics：VideoAgents</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M6.5%207.5h7M6.5%2010h4.5%27%20stroke%3D%27%23000%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fmask%3E%3Cg%20fill%3D%27%236c9ef8%27%3E%3Cpath%20d%3D%27M3%205a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202v7a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2z%27%20mask%3D%27url%28%23m%29%27%2F%3E%3Crect%20x%3D%273%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3Crect%20x%3D%2713%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/whitebox.css?v=20260907-status">
+<link rel="stylesheet" href="/static/whitebox.css?v=20260908-shot">
 <script src="/static/i18n/i18n.js"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -127,7 +127,11 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .cap a.charlink{color:inherit;text-decoration:underline dotted;text-underline-offset:2px}
 .cap a.charlink:hover{color:var(--accent)}
 .grp>.gmedia .blabel{font-size:11px;color:var(--dim);width:100%}
-.grp>.gshots{padding:4px 10px 8px}
+.grp>.gshots{padding:4px 10px 8px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.grp>.gshots>.glist{min-width:0}
+.grp>.gshots>.glist .shot:first-child{margin-top:10px}
+.grp>.gshots>.wb-host{min-width:0;position:sticky;top:8px;margin-top:10px}
+@media(max-width:900px){.grp>.gshots{grid-template-columns:1fr}.grp>.gshots>.wb-host{position:static}}
 .grp>.gshots .shot{background:var(--bg)}
 .gnote{border-top:1px solid var(--border);background:var(--panel2);padding:7px 12px;font-size:13px;line-height:1.6;color:var(--green)}
 .gnote .glabel{color:var(--dim);font-size:11px;margin-right:6px}
@@ -992,7 +996,7 @@ function dlgHtml(s){
 }
 // 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
 // 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
-// 有起幅/落幅时点击运镜行在下方展开明细层(可选中复制),再点收起,默认收起。
+// 有起幅/落幅时明细层默认展开在下方(可选中复制),点击运镜行收起/再展开(2026-09-08 改默认展开)。
 // 混剪等无运镜设计的项目 camera_move 为空,不渲染
 const MOVE_LABEL={static:'固定',locked:'固定',locked_off:'固定',fixed:'固定',push_in:'推入',dolly_in:'推入',push:'推入',
   pull_out:'拉出',dolly_out:'拉出',pull:'拉出',pan:'摇',pan_left:'左摇',pan_right:'右摇',tilt:'俯仰',tilt_up:'上仰',tilt_down:'下俯',
@@ -1008,8 +1012,8 @@ function camHtml(s){
   const head=`🎥 ${esc(mv)}${sub?`<span class="sub">${esc(sub)}</span>`:''}`;
   const frames=[c.start_frame?[t('起幅:'),c.start_frame]:null,c.end_frame?[t('落幅:'),c.end_frame]:null].filter(Boolean);
   if(!frames.length)return `<div class="cam">${head}</div>`;
-  return `<div class="cam cam-toggle" onclick="const f=this.nextElementSibling;f.hidden=!f.hidden;this.querySelector('.arrow').textContent=f.hidden?'▸':'▾'">${head}<span class="sub arrow">▸</span></div>
-    <div class="camframes" hidden>${frames.map(([lab,v])=>`<div><b>${esc(lab)}</b>${esc(v)}</div>`).join('')}</div>`;
+  return `<div class="cam cam-toggle" onclick="const f=this.nextElementSibling;f.hidden=!f.hidden;this.querySelector('.arrow').textContent=f.hidden?'▸':'▾'">${head}<span class="sub arrow">▾</span></div>
+    <div class="camframes">${frames.map(([lab,v])=>`<div><b>${esc(lab)}</b>${esc(v)}</div>`).join('')}</div>`;
 }
 // 组光照(2026-08-27):组 time_of_day + lighting_scheme_id → 场景 lighting.json 方案;
 // 有方案 label 显 label,否则主光源·方向·色温·反差;未命中方案灰显提示,hover 显 scheme_id / prompt 片段
@@ -1218,7 +1222,6 @@ function groupCard(g,inner){
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
-      <button class="editbtn wb-open" data-grp="${esc(g.group_id)}">${esc(t('🧊白模'))}</button>
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 提示词</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图">🖼 图片</button>
       <button class="editbtn vrefbtn" data-grp="${esc(g.group_id)}" title="查看/播放/删除/上传本组参考视频(video_refs,[Video N] 编号与 prompt 正文同号),并核对总时长是否超过本组生效模型上限"${g.vrefs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🎬 视频${(g.video_refs||[]).length?`<span> ${g.video_refs.length}</span>`:''}</button>
@@ -1231,17 +1234,13 @@ function groupCard(g,inner){
     ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
-    <div class="gshots">${inner}</div>
+    <div class="gshots"><div class="glist">${inner}</div><div class="wb-host" data-grp="${esc(g.group_id)}">${esc(t('正在加载分镜组白模…'))}</div></div>
   </div>`;
 }
 
-document.addEventListener('click', async e=>{
-  const button=e.target.closest('.wb-open');
-  if(button){const m=await import('/static/whitebox-ui.js?v=20260907-status');m.toggleGroup(button,$('#project').value.trim()||'demo',EP,button.dataset.grp);}
-});
 let LAST_DATA=null;
 function render(d){
-  import('/static/whitebox-ui.js?v=20260907-status').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20260908-shot').then(m=>m.resetWhitebox());
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1394,6 +1393,8 @@ function render(d){
   });
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
+  // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
+  import('/static/whitebox-ui.js?v=20260908-shot').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP));
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();

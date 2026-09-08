@@ -31,17 +31,28 @@ function locale(lang){
   globalThis.I18N=context.window.I18N;
   return context.window.I18N_DICT;
 }
-let raf;
-globalThis.requestAnimationFrame=fn=>{raf=fn;return 1;};
-globalThis.cancelAnimationFrame=()=>{};
+const frames=new Map();let frameId=0;
+globalThis.requestAnimationFrame=fn=>{frames.set(++frameId,fn);return frameId;};
+globalThis.cancelAnimationFrame=id=>{frames.delete(id);};
+const tick=now=>{const fns=[...frames.values()];frames.clear();for(const fn of fns)fn(now);};
 globalThis.TestRenderer=class {load(){} dispose(){} setTime(){} render(){} shotId='sh085';};
+// The storyboard page mounts one panel per generation group as it scrolls into
+// view; here every observed host intersects immediately.
+globalThis.IntersectionObserver=class {constructor(cb){this.cb=cb;} observe(el){this.cb([{target:el,isIntersecting:true}]);} disconnect(){}};
+globalThis.document={createElement(){return host();},addEventListener(){},querySelectorAll(){return [];}};
+const settle=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r));};
+async function mountGroup(ui,gid,ep='ep01'){
+  const panel=host();panel.dataset={grp:gid};
+  ui.mountGroups({querySelectorAll:()=>[panel]},'dzg6',ep);
+  await settle();return panel;
+}
 // Substitute only the GPU renderer; exercise actual mount/play/seek/error code.
-let uiSource=source.replace("import('./whitebox-renderer.js')",'Promise.resolve({WhiteboxRenderer:globalThis.TestRenderer})');
+let uiSource=source.replace(/import\('\.\/whitebox-renderer\.js[^']*'\)/,'Promise.resolve({WhiteboxRenderer:globalThis.TestRenderer,sharedRenderer:()=>({})})');
 uiSource=uiSource.replace(/from '(\.\/[^']+)'/g,(_,path)=>`from '${new URL(path,staticURL).href}'`);
 const ui=await import('data:text/javascript;base64,'+Buffer.from(uiSource).toString('base64'));
 function host(){
   const children={};
-  return {isConnected:true,innerHTML:'',textContent:'',style:{setProperty(){}},
+  return {isConnected:true,innerHTML:'',textContent:'',className:'',dataset:{},style:{setProperty(){}},
     querySelector(sel){return children[sel]||=(sel==='select'?{value:'top'}:{});},
     remove(){this.isConnected=false;}};
 }
@@ -67,12 +78,8 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   assert.equal(wbText('未知键 {id}',{id:'CHAR-$&'}),'未知键 CHAR-$&');
   globalThis.fetch=async url=>respond(url.endsWith('/config')?{output:{aspect_preset:'douyin'}}:
     url.includes('/scenes/')?scene:episode);
-  let panel;
-  globalThis.document={createElement(){return host();}};
-  const parent={querySelector(sel){return sel==='.wb-panel'?null:{before(node){panel=node;}};}};
-  await ui.toggleGroup({closest:()=>parent},'dzg6','ep01','grp048');
+  const panel=await mountGroup(ui,'grp048');
   assert.ok(panel.innerHTML.includes(escape(wbText('3D 白模'))),lang);
-  assert.ok(panel.innerHTML.includes(escape(wbText('推算预览'))),lang);
   assert.ok(panel.innerHTML.includes(escape(wbText('文件状态未知，请重启服务后刷新。'))),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('白模时间'))}"`),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('摄像机白模'))}"`),lang);
@@ -82,7 +89,7 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   assert.ok(panel.innerHTML.includes(escape(wbMessage(scene.warnings[0]))),lang);
   const play=panel.querySelector('.wb-play');play.onclick();assert.equal(play.textContent,wbText('暂停'));
   play.onclick();assert.equal(play.textContent,wbText('播放'));
-  play.onclick();raf(performance.now()+3000);assert.equal(play.textContent,wbText('重播'));
+  play.onclick();tick(performance.now()+3000);assert.equal(play.textContent,wbText('重播'));
   panel.querySelector('input').oninput({target:{value:'0.5'}});assert.equal(play.textContent,wbText('播放'));
   ui.resetWhitebox();
   const sceneHost=host();await ui.mountScene(sceneHost,'dzg6','SCN-0075');
@@ -99,24 +106,26 @@ delete globalThis.I18N;
 scene.inferred=false;scene.artifact_status={model:true};
 group.authored=false;group.artifact_status={plan:false,preview:false,video:false};
 globalThis.fetch=async url=>respond(url.endsWith('/config')?{output:{aspect_preset:'douyin'}}:episode);
-let statusPanel;
-const statusParent={querySelector(sel){return sel==='.wb-panel'?null:{before(node){statusPanel=node;}};}};
-await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
-assert.ok(statusPanel.innerHTML.includes('推算预览'));
+let statusPanel=await mountGroup(ui,'grp048','ep02');
+assert.ok(statusPanel.innerHTML.includes('已标定尺寸'));
 assert.ok(statusPanel.innerHTML.includes('场景模型：已有'));
 assert.ok(statusPanel.innerHTML.includes('调度计划：未生成'));
 assert.ok(statusPanel.innerHTML.includes('参考视频：未生成'));
 assert.ok(!statusPanel.innerHTML.includes('文件状态未知'));
 ui.resetWhitebox();
 group.authored=true;group.artifact_status={plan:true,preview:true,video:true};
-await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
-assert.ok(statusPanel.innerHTML.includes('已有白模数据'));
+statusPanel=await mountGroup(ui,'grp048','ep02');
 assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
 ui.resetWhitebox();
 scene.inferred=true;
-await ui.toggleGroup({closest:()=>statusParent},'dzg6','ep02','grp048');
-assert.ok(statusPanel.innerHTML.includes('推算预览'));
+statusPanel=await mountGroup(ui,'grp048','ep02');
+assert.ok(statusPanel.innerHTML.includes('推断尺寸'));
 assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
+ui.resetWhitebox();
+// A group missing from the compiled episode reports the compiler's reason.
+episode.groups=[];episode.errors=[{group_id:'grp048',error:'机位与 grp047 不连续。'}];
+statusPanel=await mountGroup(ui,'grp048','ep02');
+assert.equal(statusPanel.textContent,wbText('白模加载失败：{error}',{error:wbMessage('机位与 grp047 不连续。')}));
 ui.resetWhitebox();
 assert.equal(wbText('3D 白模'),'3D 白模');
 assert.equal(wbText('建模依据与检查 ({count})',{count:0}),'建模依据与检查 (0)');
