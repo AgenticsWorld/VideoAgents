@@ -1,7 +1,4 @@
-"""Offline Three.js frame rendering -> one exact-duration H.264 MP4 camera-view reference (camera.mp4).
-
-2026-09-08:不再导出俯视 top.mp4(用户指令:白模参考视频仅摄影机视角);俯视只在预览页交互查看。
-"""
+"""Offline Three.js frame rendering -> two exact-duration H.264 MP4 references."""
 from __future__ import annotations
 
 import base64
@@ -38,7 +35,7 @@ def renderer_fingerprint():
 
 
 def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None, force=False):
-    """Save missing/stale camera videos automatically after a modeling update."""
+    """Save missing/stale video pairs automatically after a modeling update."""
     fmt = render_format(read(base/'settings.json', {}), width, height)
     if isinstance(fps, bool) or not isinstance(fps, int) or not 1 <= fps <= 60:
         raise ValueError('Export fps must be an integer within 1..60')
@@ -57,7 +54,7 @@ def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps
             record = read(folder/'manifest.json', {})
         except (ValueError, OSError):
             record = {}
-        files = [f'assets/whitebox/{ep}/{gid}/camera.mp4']
+        files = [f'assets/whitebox/{ep}/{gid}/{view}.mp4' for view in ('top', 'camera')]
         current = (isinstance(record, dict) and record.get('source_sha256') == fingerprint(episode, group)
                    and record.get('renderer_sha256') == renderer_hash and record.get('fps') == fps
                    and all(record.get(k) == v for k, v in fmt.items())
@@ -97,7 +94,7 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
                 kwargs['executable_path']=executable
             browser=p.chromium.launch(**kwargs)
             try:
-                page=browser.new_page(viewport={'width':width,'height':height})
+                page=browser.new_page(viewport={'width':width,'height':height*2})
                 page.add_init_script('window.whiteboxExportData = '+json.dumps(payload,ensure_ascii=False)+';')
                 page.goto((STATIC/'whitebox-export.html').as_uri())
                 page.wait_for_function('window.whiteboxReady === true',timeout=60000)
@@ -105,11 +102,13 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
                     gid=component(group['group_id']);duration=group['duration_s'];frames=math.ceil(duration*fps-1e-7)
                     output=base/'assets/whitebox'/ep/gid;output.mkdir(parents=True,exist_ok=True)
                     page.evaluate('(gid)=>window.whiteboxExport.load(gid)',gid)
-                    # Stage the camera video before publishing; failed jobs retain prior valid exports.
+                    # Stage both views before publishing; failed jobs retain prior valid exports.
                     with tempfile.TemporaryDirectory(prefix='.render-',dir=output) as staging:
                         staging=Path(staging)
                         command=[ffmpeg,'-hide_banner','-loglevel','error','-y','-f','image2pipe','-vcodec','mjpeg','-framerate',str(fps),'-i','pipe:0',
-                                 '-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-t',str(duration),'-movflags','+faststart',str(staging/'camera.mp4')]
+                                 '-filter_complex',f'[0:v]split=2[a][b];[a]crop={width}:{height}:0:0[top];[b]crop={width}:{height}:0:{height}[cam]']
+                        for name,label in [('top','top'),('camera','cam')]:
+                            command+=['-map',f'[{label}]','-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-t',str(duration),'-movflags','+faststart',str(staging/f'{name}.mp4')]
                         with tempfile.TemporaryFile() as errors:
                             proc=subprocess.Popen(command,stdin=subprocess.PIPE,stderr=errors)
                             try:
@@ -125,11 +124,8 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
                                 if proc.poll() is None:proc.kill();proc.wait()
                         record={'schema_version':'whitebox_export.v1','group_id':gid,'duration_s':duration,'fps':fps,'frames':frames,
                                 **fmt,'source_sha256':fingerprint(episode,group),'renderer_sha256':renderer_fingerprint(),
-                                'files':[f'assets/whitebox/{ep}/{gid}/camera.mp4']}
-                        os.replace(staging/'camera.mp4',output/'camera.mp4')
-                        # 旧版双视角导出遗留的 top.mp4 不再维护,顺手清掉以免被误当参考视频
-                        stale=output/'top.mp4'
-                        if stale.exists():stale.unlink()
+                                'files':[f'assets/whitebox/{ep}/{gid}/top.mp4',f'assets/whitebox/{ep}/{gid}/camera.mp4']}
+                        for name in ('top.mp4','camera.mp4'):os.replace(staging/name,output/name)
                         (staging/'manifest.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
                         os.replace(staging/'manifest.json',output/'manifest.json');results.append(record)
             finally:

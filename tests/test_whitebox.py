@@ -364,8 +364,8 @@ def test_api_artifact_status_tracks_files_not_preview_availability(project,monke
 
 
 @pytest.mark.parametrize('aspect,width,height', [('16:9',256,144),('9:16',144,256),('1:1',128,128)])
-def test_export_encoding_camera_view_only(project,monkeypatch,aspect,width,height):
-    """Exercise real FFmpeg encode/duration with deterministic synthetic GPU frames (camera.mp4 only, 2026-09-08)."""
+def test_export_encoding_two_views(project,monkeypatch,aspect,width,height):
+    """Exercise real FFmpeg mux/crop/duration with deterministic synthetic GPU frames."""
     import base64
     import io
     import shutil
@@ -375,7 +375,7 @@ def test_export_encoding_camera_view_only(project,monkeypatch,aspect,width,heigh
     from modules.whitebox_export import render_videos
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):pytest.skip('FFmpeg unavailable')
     write(project/'settings.json',{'output':{'aspect_preset':'custom','aspect_custom':aspect}})
-    im=Image.new('RGB',(width,height),'blue');buf=io.BytesIO();im.save(buf,format='JPEG');frame=base64.b64encode(buf.getvalue()).decode()
+    im=Image.new('RGB',(width,height*2),'red');im.paste('blue',(0,height,width,height*2));buf=io.BytesIO();im.save(buf,format='JPEG');frame=base64.b64encode(buf.getvalue()).decode()
     class FakePage:
         def add_init_script(self,*a):pass
         def goto(self,*a):pass
@@ -394,15 +394,14 @@ def test_export_encoding_camera_view_only(project,monkeypatch,aspect,width,heigh
     result=render_videos(project,compile_episode(project,'ep01'),width=width,height=height,fps=2)
     assert result[0]['frames']==8
     assert result[0]['aspect_ratio']==aspect
-    assert result[0]['files']==['assets/whitebox/ep01/grp1/camera.mp4']
+    for rel,color in zip(result[0]['files'],['red','blue']):
+        path=project/rel
+        info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(path)]))['streams'][0]
+        assert float(info['duration'])==4 and info['width']==width and info['height']==height
+        pixels=subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])
+        assert pixels[0]>200 if color=='red' else pixels[2]>200
+    # A failed update must retain the previous complete pair and its manifest.
     folder=project/'assets/whitebox/ep01/grp1'
-    assert not (folder/'top.mp4').exists()
-    path=project/result[0]['files'][0]
-    info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(path)]))['streams'][0]
-    assert float(info['duration'])==4 and info['width']==width and info['height']==height
-    pixels=subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])
-    assert pixels[2]>200
-    # A failed update must retain the previous complete video and its manifest.
     previous={p.name:p.read_bytes() for p in folder.iterdir() if p.is_file()}
     def broken_frame(self,fn,arg):
         if '.frame(' in fn:raise RuntimeError('GPU frame failed')
@@ -464,7 +463,7 @@ def test_auto_export_cache_tracks_scene_actor_format_renderer_and_missing_files(
         for group in e['groups']:
             gid=group['group_id']
             if gid not in ids:continue
-            files=[f'assets/whitebox/ep01/{gid}/camera.mp4']
+            files=[f'assets/whitebox/ep01/{gid}/{view}.mp4' for view in ('top','camera')]
             for rel in files:
                 p=base/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'video')
             record={'group_id':gid,'fps':kw['fps'],**export.render_format({},kw['width'],kw['height']),
@@ -480,7 +479,7 @@ def test_auto_export_cache_tracks_scene_actor_format_renderer_and_missing_files(
     assert export.ensure_videos(project,episode)['rendered']==['grp1']
     assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']
     assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['skipped']==['grp1']
-    (project/'assets/whitebox/ep01/grp1/camera.mp4').unlink()
+    (project/'assets/whitebox/ep01/grp1/top.mp4').unlink()
     assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']
     monkeypatch.setattr(export,'renderer_fingerprint',lambda:'new-renderer')
     assert export.ensure_videos(project,episode,width=256,height=144,fps=12)['rendered']==['grp1']

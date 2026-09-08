@@ -102,4 +102,4 @@ instruction: |
 
 ## 白模参考视频派单
 
-项目「输出设置 → 人物精确空间位置」开启时（默认开；2026-09-07 起该开关即 workflow.yaml 的 `whitebox_requested`，用户工单单独要求白模预演时同此），按 `docs/whitebox.md` 与 WORKFLOW 白模扩展流程添加依赖：布局包→每场景 scene-modeling→每集 whitebox-staging（另依赖 shot-planning、blocking、camera-movement、continuity-planning）→分镜确认。前者校准米制场景，后者给人物/生物/摄像机数值关键帧，逐组导出 camera.mp4（2026-09-08 起仅摄影机视角，不出俯视视频）。缺尺度、时标、连续性或视频导出失败必须回派并在回执体现；不可仅调用编译器就宣称参考视频完成。
+项目「输出设置 → 人物精确空间位置」开启时（默认开；2026-09-07 起该开关即 workflow.yaml 的 `whitebox_requested`，用户工单单独要求白模预演时同此），按 `docs/whitebox.md` 与 WORKFLOW 白模扩展流程添加依赖：布局包→每场景 scene-modeling→每集 whitebox-staging（另依赖 shot-planning、blocking、camera-movement、continuity-planning）→分镜确认。前者校准米制场景，后者给人物/生物/摄像机数值关键帧，逐组导出 top.mp4、camera.mp4。缺尺度、时标、连续性或视频导出失败必须回派并在回执体现；不可仅调用编译器就宣称参考视频完成。

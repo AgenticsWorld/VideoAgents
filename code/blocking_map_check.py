@@ -16,7 +16,7 @@ label_ok / scene_layout_pack_ok)。
   - **2026-09-07 起本脚本只做数据机检、不再渲染动线图**:原「把起点/动线/终点字母标注叠加到
     layout_top.png 上产出 directing/epNN/blocking_maps/<grp>.png 并挂进组 refs」的流程退役——
     人物在场景中的空间位置与动线改由 3D 白模参考视频(docs/whitebox.md,`code/render_whitebox.py`
-    产出 assets/whitebox/<ep>/<grp>/camera.mp4)承担;组 prompt refs 直接挂干净的
+    产出 assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4})承担;组 prompt refs 直接挂干净的
     `layout_top.png` + `grid_9views.png`(机检 layout_map_bound,脚本 code/layout_map_bound_check.py)。
     blocking_map 数据本身仍是白模编译(modules/whitebox.py)与 route_en 逐字注入的事实源,故保留机检。
     本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/。

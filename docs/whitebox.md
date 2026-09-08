@@ -1,6 +1,6 @@
 # Three.js 白模空间与参考视频
 
-场景预览放在图片之后，尺寸上限为图片预览的两倍（760×460 CSS px）；分镜预览每组的「🧊白模」同时播放空间视角和镜头视角，可拖动时间。两个页面的空间视角默认俯视图，可切换到旋转视角后拖动、缩放；摄像机视口保持实际机位。预览不再提供“导出 MP4”按钮，视频由建模流程自动保存。两个白模视口均为原210px高度的1.5倍，即315px高，宽度按项目画幅同比放大；容器较窄时等比缩小或换行。统一使用本地 Three.js 0.180.0，不依赖 CDN；预览与视频导出共用同一个渲染器。参考视频只有 camera.mp4（最终机位白模；2026-09-08 起白模只导出摄影机视角 camera.mp4,不再导出俯视 top.mp4(俯视仅在预览页交互查看)，旧项目目录里残留的 top.mp4 重出时自动删除、不再挂参考）。
+场景预览放在图片之后，尺寸上限为图片预览的两倍（760×460 CSS px）；分镜预览每组的「🧊白模」同时播放空间视角和镜头视角，可拖动时间。两个页面的空间视角默认俯视图，可切换到旋转视角后拖动、缩放；摄像机视口保持实际机位。预览不再提供“导出双视角 MP4”按钮，视频由建模流程自动保存。两个白模视口均为原210px高度的1.5倍，即315px高，宽度按项目画幅同比放大；容器较窄时等比缩小或换行。统一使用本地 Three.js 0.180.0，不依赖 CDN；预览与视频导出共用同一个渲染器。参考视频分为 top.mp4（俯视空间、人物、摄像机与视轴）和 camera.mp4（最终机位白模）。
 
 ## 系统与项目职责
 
@@ -121,9 +121,9 @@ python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --force --fps 24
 
 不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。每次建模或修改后由 Agent 执行；--check-only 不写编译产物或视频，仅供检查，不能当作完成交付。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
 
-自动保存按 manifest 比对场景/调度源指纹、渲染器指纹、画幅、分辨率与帧率，且核对 camera.mp4 存在且非空。匹配则复用，否则重出；--force 强制重出。场景几何更新会使该场景下各组的视频过期，场景建模 Agent 需对所有引用它的已有分镜集执行 --scene。首次场景建模无分镜时只交付场景模型，分镜就绪后由白模调度 Agent 自动保存视频。视频先在临时目录完成编码，再发布与更新清单；编码失败保留原有效视频，不能标注本次更新成功。
+自动保存按 manifest 比对场景/调度源指纹、渲染器指纹、画幅、分辨率与帧率，且核对两份 MP4 均存在且非空。匹配则复用，否则重出；--force 强制重出。场景几何更新会使该场景下各组的视频过期，场景建模 Agent 需对所有引用它的已有分镜集执行 --scene。首次场景建模无分镜时只交付场景模型，分镜就绪后由白模调度 Agent 自动保存视频。两路视频先在临时目录完成编码，再发布与更新清单；编码失败保留原有效视频，不能标注本次更新成功。
 
-导出需要项目 Python 依赖 Playwright、已安装 Chromium（`python -m playwright install chromium`）以及 PATH 中 FFmpeg；可用 VIDEOAGENTS_CHROMIUM 指向独立 Chromium 可执行文件。通过 file URL 加载本地渲染器，逐帧按 i/fps 渲染，不依赖实时录屏速度。输出 `assets/whitebox/<ep>/<grp>/{camera.mp4,manifest.json}`，H.264/yuv420p，无音频，默认24fps、长边约960px，画幅读取项目 settings.json 的 output.aspect_preset/aspect_custom：YouTube=960×540（16:9）、抖音=540×960（9:16），自定义比例同样保留。摄像机 aspect、预览和导出像素尺寸使用同一比例；布局图坐标和场景米制尺度不因横竖屏变化而变形。--width/--height 必须同时提供且保持项目比例，支持1080×1920等竖屏尺寸。时长精度为一帧；manifest 记录源数据 SHA-256、帧数和规格。仅一项导出任务同时运行；浏览器关闭后服务端任务继续。
+导出需要项目 Python 依赖 Playwright、已安装 Chromium（`python -m playwright install chromium`）以及 PATH 中 FFmpeg；可用 VIDEOAGENTS_CHROMIUM 指向独立 Chromium 可执行文件。通过 file URL 加载本地渲染器，逐帧按 i/fps 渲染，不依赖实时录屏速度。输出 `assets/whitebox/<ep>/<grp>/{top.mp4,camera.mp4,manifest.json}`，H.264/yuv420p，无音频，默认24fps、长边约960px，画幅读取项目 settings.json 的 output.aspect_preset/aspect_custom：YouTube=960×540（16:9）、抖音=540×960（9:16），自定义比例同样保留。摄像机 aspect、预览和两路导出像素尺寸使用同一比例；布局图坐标和场景米制尺度不因横竖屏变化而变形。--width/--height 必须同时提供且保持项目比例，支持1080×1920等竖屏尺寸。时长精度为一帧；manifest 记录源数据 SHA-256、帧数和规格。仅一项导出任务同时运行；浏览器关闭后服务端任务继续。
 
 API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GET `/<ep>`；既有 POST `/<ep>/exports/<gid>` 和 GET 同路径状态接口保留供兼容调用，预览页不再触发。路径标识严格限定，禁止目录穿越。预览 GET 不写项目，也不会因用户打开页面而重复渲染。旧服务尚未重启时，前端仍可读取已编译产物预览；自动保存由 Agent 执行宿主 CLI，不依赖用户页面。
 
@@ -139,8 +139,8 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
 
-- `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前（2026-09-08 起白模只有这一路，原 `output.whitebox_top_video` 开关废止）；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s，2.5 ≤10 个且 ≤30s，comfyui/runninghub 不支持参考视频则不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
-- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
+- `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前；默认只挂 camera，项目 `output.whitebox_top_video=true` 且预算允许时 `top.mp4`（俯视，`[Video 2]`）紧随；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s（组长 >7.5s 只挂 camera），2.5 ≤10 个且 ≤30s，comfyui/runninghub 不支持参考视频则不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
+- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（两路视频各自作用：camera-view 定机位/构图/人物画面位置/景深/朝向/节奏，top-down 只用于理解空间关系、不得作为视角）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；深色摄像机盒=摄像机、其射线=镜头方向，仅俯视有）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
 - video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（长镜头自动选择尾段视频或尾帧图，详见 [自动续接](continuity.md)；摄影机白模与尾段共用参考视频预算）。
 
 尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。

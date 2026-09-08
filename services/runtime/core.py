@@ -855,7 +855,7 @@ DEFAULT_GENCONFIG = {
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
     # spatial_blocking=人物精确空间位置(默认开)——2026-09-07 起含义=「用白模摄影机视角视频给视频生成定位人物」:
     #   开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+layout.json,分镜组登记人物起点/动线/终点
-    #   blocking_map)+ 白模链(p4-scene-model / p6-whitebox),导出的 camera.mp4(2026-09-08 起仅摄影机视角,不出俯视 top.mp4)自动接成组视频生成的
+    #   blocking_map)+ 白模链(p4-scene-model / p6-whitebox),导出的 camera.mp4/top.mp4 自动接成组视频生成的
     #   参考视频(video_refs + Whitebox reference/legend 固定段,code/sync_whitebox_refs.py),prompt 另挂干净俯视图+九格图
     #   并逐字注入 route_en(机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound/whitebox_ref_bound);关=沿用单张场景概念图流程
     #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
@@ -865,7 +865,8 @@ DEFAULT_GENCONFIG = {
                "narration_enabled": True,
                "dialogue_voice": "native",
                "spatial_blocking": True,
-               # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
+               # whitebox_top_video(默认关,暂无 UI):白模参考视频默认只挂 camera.mp4;置 true 才在预算允许时追加 top.mp4(code/sync_whitebox_refs.py,2026-09-07)
+               "whitebox_top_video": False,
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
@@ -1766,6 +1767,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
+    if "whitebox_top_video" in o and not isinstance(o["whitebox_top_video"], bool):
+        raise ServiceError(400, "output.whitebox_top_video must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -2810,8 +2813,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs 必挂该场景干净俯视图 `layout_top.png`(直接引用、不做人物标注)+ "
         "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)、逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角,2026-09-08 起不出俯视视频),"
-        "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/{camera.mp4,top.mp4}`,"
+        "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4(默认只挂 camera;项目 output.whitebox_top_video=true 且预算允许时才追加 top.mp4)+ `Shot 1:` 前固定段 `Whitebox reference:`(两路视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向、深色摄像机盒+射线=镜头方向)+ Global constraints 禁白模外观句;"
         "prompt 工位写完必跑 `--write`,机检 whitebox_ref_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "
@@ -3163,7 +3166,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 查看当前渠道/模型:`python3 modules/genmedia.py info`(记入产物 meta,保证可复现)
 - 生成图像:`python3 modules/genmedia.py image --prompt "<prompt,语言随界面语言(2026-08-24)>" --output <路径.png> [--negative "<英文负面词>"] [--aspect 16:9|--size 2560x1440] [--ref 参考图...] [--n 4] [--seed N]`
   (新生成供视频参考的图统一出图规格:16:9 用 2560x1440、9:16 用 1440x2560;无最小像素硬限,复用图/前组尾帧不设像素门槛)
-- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--ref-video 组 json video_refs 的白模 camera.mp4 等,按序] [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
+- 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--ref-video 组 json video_refs 的白模 camera.mp4/top.mp4,按序] [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
 - TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。**旁白一律不传 --voice**——项目有旁白声线卡 `assets/audio/voice/narrator.json`(由 voice-generation 设计冻结,旁白声线唯一事实源)时 genmedia 自动按卡固定声线:同渠道用卡冻结 tts_voice、seed-audio 用卡冻结描述+冻结样本参考锚、ComfyUI 直接用冻结样本作参考音频,**用户改 TTS 设置不影响旁白声线**(渠道与卡不一致时 genmedia 告警回退并提示重定卡,如实上报);无卡才回退生效渠道配置的「默认音色」。角色配音按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。**火山模型为 seed-audio-1.0(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=旁白声线卡冻结描述(无卡按 `--instructions` 描述,缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
@@ -5097,7 +5100,7 @@ async def api_grpref_delete(body: dict):
 
 # ---------------- 组参考视频(分镜预览「🎬 视频」弹窗,2026-09-07) ----------------
 # 组 prompt json 的 video_refs(与 refs/audio_refs 同级;video-generation 按序传 --ref-video,正文以 [Video N] 引用):
-# 来源三类——白模 camera.mp4(code/sync_whitebox_refs.py 注入;2026-09-08 起无 top.mp4)、前组尾段 .continuation.mp4
+# 来源三类——白模 camera.mp4/top.mp4(code/sync_whitebox_refs.py 注入)、前组尾段 .continuation.mp4
 # (modules/continuity_refs 注入)、用户本地上传(assets/uploads/<ep>/<grp>/,note 锚「加入组参考视频:<ref>(」)。
 # 总时长按本组生效模型硬限判超(resolve_group_settings.vref_cap_s):超限只提示,由用户决定删视频或「🎛 模型」换模型;
 # genmedia 提交前另有同口径硬校验(参考视频总时长 2.0≤15.2s / 2.5≤30.2s)兜底。
