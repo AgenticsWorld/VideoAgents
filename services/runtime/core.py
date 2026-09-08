@@ -6482,6 +6482,32 @@ def _ep_publish_info(base: Path, ep: str):
     return info
 
 
+def _ep_whitebox_reel(base: Path, ep: str) -> dict:
+    """视频预览页「白模合辑」板块(2026-09-08):整集摄影机视角白模视频
+    assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,并按各组
+    camera.mp4 指纹判断是否过期;附派单目标 Agent,页面按钮据此发指令。"""
+    from modules.whitebox_export import episode_reel_status
+    try:
+        st = episode_reel_status(base, ep)
+    except Exception as error:  # noqa: BLE001  分镜组 ID 非法等,不影响其余板块
+        return {"exists": False, "error": str(error), "agent": WHITEBOX_REEL_AGENT}
+    out = {"exists": st["exists"], "stale": st["stale"], "path": st["path"],
+           "groups_total": st["groups_total"], "groups_ready": len(st["groups_ready"]),
+           "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT}
+    if st["exists"]:
+        f = base / st["path"]
+        stat = f.stat()
+        m = st["manifest"]
+        out.update({"name": f.name, "size_mb": round(stat.st_size / 1048576, 1),
+                    "url": f"/projects/{base.name}/{st['path']}?v={int(stat.st_mtime)}",
+                    "duration_s": m.get("duration_s"), "groups": m.get("groups"),
+                    "width": m.get("width"), "height": m.get("height"), "fps": m.get("fps")})
+    return out
+
+
+WHITEBOX_REEL_AGENT = "07-directing/whitebox-staging"
+
+
 def _preview_videos(project: str, ep: str):
     """视频预览聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
     base = _proj_base(project)
@@ -6526,6 +6552,7 @@ def _preview_videos(project: str, ep: str):
     data["finals"] = _files(("final", "master"), VIDEO_EXTS)
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
+    data["whitebox"] = _ep_whitebox_reel(base, ep)
 
     # 审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要
     defects = []

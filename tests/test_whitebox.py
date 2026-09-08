@@ -539,3 +539,87 @@ def test_browser_format_matches_python():
     script=f'import {{projectRenderFormat}} from {json.dumps(module)}; console.log(JSON.stringify({json.dumps(configs)}.map(projectRenderFormat)));'
     actual=json.loads(subprocess.check_output(['node','--input-type=module','-e',script],text=True))
     assert actual==[render_format(c) for c in configs]
+
+
+# ---------------- 整集白模合辑(2026-09-08) ----------------
+def _tiny_clip(path, seconds, size='64x36', fps=24):
+    import shutil, subprocess
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([shutil.which('ffmpeg'), '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+                    f'color=c=gray:s={size}:r={fps}', '-t', str(seconds), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)],
+                   check=True)
+
+
+@pytest.fixture
+def reel_project(tmp_path):
+    import shutil
+    if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+        pytest.skip('ffmpeg unavailable')
+    base = tmp_path/'demo'
+    groups = [('grp002', 3), ('grp001', 2), ('grp003', 4)]   # shot_list 顺序故意不按字典序
+    write(base/'directing/ep02/shot_list.json', {'shots': [], 'generation_groups': [
+        {'group_id': g, 'scene_id': 'SCN-1', 'shots': [f'sh{i}'], 'total_duration_s': d} for i, (g, d) in enumerate(groups)]})
+    for g, d in groups:
+        _tiny_clip(base/'assets/whitebox/ep02'/g/'camera.mp4', d)
+        write(base/'assets/whitebox/ep02'/g/'manifest.json', {'group_id': g, 'duration_s': d, 'fps': 24, 'width': 64, 'height': 36,
+                                                              'source_sha256': 'src-'+g, 'files': [f'assets/whitebox/ep02/{g}/camera.mp4']})
+    return base
+
+
+def test_concat_episode_orders_groups_and_tracks_staleness(reel_project):
+    from modules.whitebox_export import concat_episode, episode_reel_status
+    base = reel_project
+    before = episode_reel_status(base, 'ep02')
+    assert not before['exists'] and before['groups_missing'] == [] and [g['group_id'] for g in before['order']] == ['grp002', 'grp001', 'grp003']
+    (base/'assets/whitebox/ep02/ep02-top.mp4').write_bytes(b'stale')   # 旧版俯视合辑残留应被清掉
+    manifest = concat_episode(base, 'ep02')
+    reel = base/'assets/whitebox/ep02/ep02-camera.mp4'
+    assert reel.is_file() and reel.stat().st_size > 0
+    assert manifest['mode'] == 'copy' and manifest['groups'] == 3 and abs(manifest['duration_s']-9) < 0.2
+    assert manifest['group_order'] == ['grp002', 'grp001', 'grp003'] and manifest['missing_groups'] == []
+    assert manifest['group_sources'] == {'grp001': 'src-grp001', 'grp002': 'src-grp002', 'grp003': 'src-grp003'}
+    assert not (base/'assets/whitebox/ep02/ep02-top.mp4').exists()
+    saved = json.loads((base/'assets/whitebox/ep02/episode-manifest.json').read_text())
+    assert saved['reels'][0]['path'] == 'assets/whitebox/ep02/ep02-camera.mp4' and saved['reels'][0]['bytes'] == reel.stat().st_size
+    after = episode_reel_status(base, 'ep02')
+    assert after['exists'] and not after['stale']
+    # 某组重出(源指纹变)→ 合辑过期
+    m = base/'assets/whitebox/ep02/grp001/manifest.json'
+    write(m, {**json.loads(m.read_text()), 'source_sha256': 'src-grp001-v2'})
+    assert episode_reel_status(base, 'ep02')['stale'] is True
+
+
+def test_concat_episode_missing_group_requires_allow_missing(reel_project):
+    from modules.whitebox_export import concat_episode, episode_reel_status
+    base = reel_project
+    (base/'assets/whitebox/ep02/grp003/camera.mp4').unlink()
+    assert episode_reel_status(base, 'ep02')['groups_missing'] == ['grp003']
+    with pytest.raises(ValueError, match='grp003'):
+        concat_episode(base, 'ep02')
+    assert not (base/'assets/whitebox/ep02/ep02-camera.mp4').exists()
+    manifest = concat_episode(base, 'ep02', allow_missing=True)
+    assert manifest['groups'] == 2 and manifest['missing_groups'] == ['grp003'] and abs(manifest['duration_s']-5) < 0.2
+
+
+def test_concat_episode_reencodes_mixed_specs(reel_project):
+    from modules.whitebox_export import concat_episode
+    base = reel_project
+    _tiny_clip(base/'assets/whitebox/ep02/grp003/camera.mp4', 4, size='128x72')
+    m = base/'assets/whitebox/ep02/grp003/manifest.json'
+    write(m, {**json.loads(m.read_text()), 'width': 128, 'height': 72})
+    manifest = concat_episode(base, 'ep02')
+    assert manifest['mode'] == 'reencode' and manifest['groups'] == 3 and abs(manifest['duration_s']-9) < 0.2
+
+
+def test_preview_videos_reports_whitebox_reel(reel_project, monkeypatch):
+    from services.runtime import core
+    from modules.whitebox_export import concat_episode
+    base = reel_project
+    monkeypatch.setattr(core, 'PROJECTS_DIR', base.parent)
+    w = core._preview_videos('demo', 'ep02')['whitebox']
+    assert w['exists'] is False and w['groups_total'] == 3 and w['groups_ready'] == 3 and w['agent'] == '07-directing/whitebox-staging'
+    concat_episode(base, 'ep02')
+    w = core._preview_videos('demo', 'ep02')['whitebox']
+    assert w['exists'] and not w['stale'] and w['name'] == 'ep02-camera.mp4' and w['groups'] == 3
+    assert w['url'].startswith('/projects/demo/assets/whitebox/ep02/ep02-camera.mp4?v=')
+

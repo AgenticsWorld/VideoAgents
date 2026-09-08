@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from _common import parse_args
 from modules.whitebox import compile_episode, component
-from modules.whitebox_export import ensure_videos
+from modules.whitebox_export import concat_episode, ensure_videos, episode_reel_status
 from modules.whitebox_refs import sync_episode
 
 
@@ -51,6 +51,17 @@ def main():
     result=ensure_videos(base,episode,sorted(selected) if scoped else None,
                          width=args.width,height=args.height,fps=args.fps,progress=progress,force=args.force)
     print(json.dumps({'videos':result,'directory':f'assets/whitebox/{args.ep}/'},ensure_ascii=False),flush=True)
+    # 整集白模合辑(2026-09-08,视频预览页「白模合辑」板块):已生成过合辑且本次有组重出时自动刷新,
+    # 保持合辑与各组 camera.mp4 一致;从未生成过的不主动出,由用户在预览页点「重新生成白模合辑」派单
+    if result['rendered']:
+        status=episode_reel_status(base,args.ep)
+        if status['exists']:
+            try:
+                reel=concat_episode(base,args.ep,allow_missing=True)
+                print(json.dumps({'reel':{'path':reel['reels'][0]['path'],'groups':reel['groups'],'duration_s':reel['duration_s'],
+                                  'missing_groups':reel['missing_groups']}},ensure_ascii=False),flush=True)
+            except Exception as error:
+                print(json.dumps({'reel':{'error':str(error),'stale':True}},ensure_ascii=False),flush=True)
     # 白模视频 → 组视频生成参考视频自动接线(2026-09-07,仅「人物精确空间位置」开启时):
     # 已有组 prompt 的写 video_refs + Whitebox reference 段;尚无 prompt 的组由 prompt 工位产出后再跑 sync_whitebox_refs.py --write
     from _common import spatial_blocking_enabled

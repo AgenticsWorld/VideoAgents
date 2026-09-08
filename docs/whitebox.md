@@ -127,6 +127,12 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 `dzg6/ep01` 的8个场景已按其俯视图写入带比例依据的白模。它们位于用户项目 data 目录（按仓库约定不提交）。数值轨迹尚有遗留推断，不能把粗模视为最终镜头调度。最终视频模型画面仍在原分镜组卡中，白模输出不会自动上传到生成渠道。
 
+## 整集白模合辑（2026-09-08）
+
+视频预览页（`/preview/videos`）成片视频板块下方新增「🧊 白模合辑」板块：检索 `assets/whitebox/<ep>/<ep>-camera.mp4`，存在则按成片视频同样的播放卡展示（尺寸、时长、组数、规格），并按 `episode-manifest.json` 记录的组序与各组 `manifest.json` 的 `source_sha256` 判断合辑是否过期（组视频重出后未刷新合辑 = ⚠ 过期）、缺哪些组的 camera.mp4。板块按钮「🔄 重新生成白模合辑」把指令派给 `07-directing/whitebox-staging`（POST /api/v1/runs，引擎跟随顶栏全局设置），页面轮询运行结束后自动刷新。
+
+宿主 CLI `code/concat_whitebox.py --project <slug> --ep <ep> [--allow-missing] [--status]`：按 shot_list `generation_groups` 组序（无 shot_list 时按目录名）把各组 camera.mp4 用 ffmpeg concat 拼成整集视频。各组规格（宽高/帧率）一致时流拷贝不重编码（秒级完成、画质无损），规格不一致时统一缩放到当前项目画幅后 libx264 重编码。默认缺组即失败，`--allow-missing` 跳过缺组并记入清单 `missing_groups`。先在临时目录成片并用 ffprobe 核对总时长等于各组之和，再原子替换发布；失败保留旧合辑。清单 `episode-manifest.json`（`whitebox_episode_export.v1`）记录组数、镜数、时长、规格、`group_order`、`group_sources`（组→源指纹）与合辑 SHA-256。合辑只有摄影机视角，旧版残留的 `<ep>-top.mp4` 在重出时删除。`render_whitebox.py` 在已有合辑且本次有组重出时自动刷新合辑（回执 `reel` 字段），从未生成过的合辑不主动出。
+
 ## 接入视频生成（2026-09-07）
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：

@@ -1,4 +1,4 @@
-# SOUL.md — 白模调度与参考视频 Agent
+# SOUL.md — 白模调度
 
 - 类别：07-directing；任务粒度：每集，内部按分镜组顺序。
 - 依赖：scene-modeling、shot-planning、blocking、camera-movement、continuity-planning。
@@ -32,3 +32,13 @@ python code/render_whitebox.py --project <slug> --ep ep01
 ```
 
 每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查 camera.mp4 与 manifest 的帧率/时长/分辨率/输入指纹，摄像机画面隐藏机位辅助线；机位和视轴只在预览页俯视图核对，不再导出俯视视频。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。该视频在项目「人物精确空间位置」开启时会由宿主自动接成该组视频生成的参考视频（2026-09-07）：`render_whitebox.py` 导出后自动跑 `code/sync_whitebox_refs.py --write`——已有组 prompt 的写入 `video_refs`（camera.mp4）与 `Whitebox reference:`/`Whitebox legend:` 固定段（颜色↔人物取自 episode.json actors），尚无 prompt 的组由 prompt 工位产出后再跑；回执里带上 `whitebox_refs` 的 attached/skipped 结果。视频只作空间参考，不得手工塞进图片 refs。
+
+整集白模合辑（2026-09-08，视频预览页「🧊 白模合辑」板块）：用户在视频预览页点「重新生成白模合辑」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。只准调用宿主 CLI：
+
+```sh
+python code/concat_whitebox.py --project <slug> --ep ep02 --status   # 只看现状:是否存在/是否过期/缺哪些组
+python code/concat_whitebox.py --project <slug> --ep ep02            # 合并(同规格流拷贝,秒级;规格不一时自动重编码)
+```
+
+缺 camera.mp4 的组默认报错不合并：先按上文用 `render_whitebox.py` 补出这些组再合并，确实补不出的组才加 `--allow-missing` 跳过并在回执写明；禁止自写 ffmpeg 拼接或改写脚本。合辑必须只含摄影机视角，不再产出俯视合辑。`render_whitebox.py` 在已有合辑且本次有组重出时会自动刷新合辑，回执带 `reel` 字段；从未生成过的合辑不主动出，等用户在预览页派单。回执报告合辑路径、包含组数、总时长与缺失/跳过的组；只有文件写入成功才可宣称完成。
+
