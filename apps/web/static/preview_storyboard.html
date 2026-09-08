@@ -1379,7 +1379,6 @@ function render(d){
         const nRefs=(g.user_refs||[]).length+(g.pipeline_refs||[]).length;
         if(nRefs)badges.push('🖼'+nRefs);
         if((g.sketches||[]).length)badges.push('🎨'+g.sketches.length);
-        if((g.video_refs||[]).length)badges.push('🎞'+g.video_refs.length+(g.vrefs_blocked?'⚠':''));
         if(g.user_note)badges.push('📝');
         if(nDlg)badges.push('💬'+nDlg);else if(g.has_dialogue)badges.push('💬');
         if(nNarr)badges.push('🎙'+nNarr);
