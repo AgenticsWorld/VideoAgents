@@ -163,8 +163,9 @@ def sample(keys, t):
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
-            if 'bend' in a or 'bend' in b:
-                out['bend'] = a.get('bend', 0) + (b.get('bend', 0)-a.get('bend', 0))*u
+            for key in ('bend', 'pitch', 'roll'):
+                if key in a or key in b:
+                    out[key] = a.get(key, 0) + (b.get(key, 0)-a.get(key, 0))*u
             return out
     return copy.deepcopy(keys[-1])
 
@@ -189,6 +190,8 @@ def validate_keys(keys, duration, camera=False):
             if key.get('pose', 'stand') not in ('stand', 'sit', 'lie'):
                 raise ValueError('pose must be stand/sit/lie')
             number(key.get('yaw', 0), 'yaw')
+            for axis in ('pitch', 'roll'):
+                number(key.get(axis, 0), axis)
             if not 0 <= number(key.get('bend', 0), 'bend') <= math.pi/2:
                 raise ValueError('bend must be 0..pi/2 radians')
             if 'visible' in key and not isinstance(key['visible'], bool):
@@ -376,6 +379,8 @@ def compile_group(base, ep, group, shots, scene):
         vector(prop['size_m'], 'prop.size_m', positive=True)
         vector(prop['position'], 'prop.position')
         number(prop.get('yaw', 0), 'prop.yaw')
+        for axis in ('pitch', 'roll'):
+            number(prop.get(axis, 0), 'prop.'+axis)
         if set(prop.get('shot_ids', [])) - set(group['shots']):
             raise ValueError('Prop shot_ids must belong to the group')
         if prop.get('keyframes') is not None:

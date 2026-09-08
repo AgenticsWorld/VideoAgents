@@ -658,3 +658,36 @@ def test_preview_videos_reports_whitebox_reel(reel_project, monkeypatch):
     w = core._preview_videos('demo', 'ep02')['whitebox']
     assert w['exists'] and not w['stale'] and w['name'] == 'ep02-camera.mp4' and w['groups'] == 3
     assert w['url'].startswith('/projects/demo/assets/whitebox/ep02/ep02-camera.mp4?v=')
+
+
+def test_animated_scene_prop_tilts_without_duplicate_and_resets(project):
+    import shutil, subprocess
+    keys=[{'t':0,'position':[0,.8,0]}, {'t':2,'position':[1,.9,0],'pitch':.4,'roll':1.2},
+          {'t':4,'position':[0,.8,0]}]
+    validate_keys(keys,4)
+    assert sample(keys,1)['roll']==pytest.approx(.6)
+    assert sample(keys,3)['pitch']==pytest.approx(.2)
+    bad=copy.deepcopy(keys);bad[1]['roll']=float('nan')
+    with pytest.raises(ValueError):validate_keys(bad,4)
+    prop={'id':'pot','shape':'cylinder','size_m':[.5,.3,.5],'position':[0,.8,0],'keyframes':keys}
+    write(project/'directing/ep01/whitebox_plans/grp1.json',{'props':[prop]})
+    e=compile_episode(project,'ep01');assert not e['errors']
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    static=Path(__file__).resolve().parents[1]/'apps/web/static'
+    scene=e['scenes']['SCN-1'];scene['objects'].append({k:v for k,v in prop.items() if k!='keyframes'})
+    script=f'''
+import assert from 'node:assert/strict';
+import * as T from {json.dumps((static/'vendor/three/three.module.js').as_uri())};
+import {{WhiteboxRenderer,sample}} from {json.dumps((static/'whitebox-renderer.js').as_uri())};
+const r=Object.create(WhiteboxRenderer.prototype);
+Object.assign(r,{{width:960,height:540,scene:null,controls:null,camera:new T.PerspectiveCamera(),overview:new T.PerspectiveCamera(),top:new T.OrthographicCamera()}});
+r.load({json.dumps(scene)},{json.dumps(e['groups'][0])});
+let count=0;r.scene.traverse(o=>{{if(o.name==='pot')count++;}});assert.equal(count,1);
+const p=r.scene.getObjectByName('pot');
+r.setTime(1);assert.ok(Math.abs(p.rotation.z-.6)<1e-9);assert.ok(Math.abs(p.rotation.x-.2)<1e-9);assert.equal(p.position.x,.5);
+r.setTime(2);assert.ok(Math.abs(p.rotation.z-1.2)<1e-9);
+for(const t of [4,0]){{r.setTime(t);assert.equal(p.rotation.x,0);assert.equal(p.rotation.z,0);}}
+assert.ok(Math.abs(sample({json.dumps(keys)},3).roll-.6)<1e-9);
+r.disposeScene();
+'''
+    subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)

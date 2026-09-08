@@ -15,7 +15,7 @@ export function sample(keys, time) {
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
-    if(a.bend!==undefined||b.bend!==undefined)out.bend=(a.bend||0)+((b.bend||0)-(a.bend||0))*u;
+    for(const k of ['bend','pitch','roll'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
     return out;
   }
   return {...keys.at(-1)};
@@ -67,13 +67,15 @@ export class WhiteboxRenderer {
     floor.position.y=-.05;scene.add(floor);
     const grid=new THREE.GridHelper(Math.ceil(Math.max(w,d)),Math.ceil(Math.max(w,d)),0xa8b5a5,0xc0cbbd);
     grid.position.y=.005;scene.add(grid);
-    for(const obj of [...sceneData.objects,...(group?.props||[])]) {
+    const propIds=new Set((group?.props||[]).map(p=>p.id));
+    // A group can animate an existing scene prop without leaving a duplicate.
+    for(const obj of [...sceneData.objects.filter(o=>!propIds.has(o.id)),...(group?.props||[])]) {
       let geo; const [x,y,z]=obj.size_m;
       if(obj.shape==='sphere') {geo=new THREE.SphereGeometry(.5,16,12);geo.scale(x,y,z);}
       else if(obj.shape==='cylinder') {geo=new THREE.CylinderGeometry(.5,.5,1,16);geo.scale(x,y,z);}
       else geo=new THREE.BoxGeometry(x,y,z);
       const material=new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
-      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position);mesh.rotation.y=obj.yaw||0;
+      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
       scene.add(mesh);
       if(group?.props?.includes(obj))this.props.push({data:obj,mesh});
       const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
@@ -187,7 +189,7 @@ export class WhiteboxRenderer {
     }
     for(const {data,mesh} of this.props){
       const k=data.keyframes?sample(data.keyframes,t):data;
-      mesh.position.fromArray(k.position);mesh.rotation.y=k.yaw||0;
+      mesh.position.fromArray(k.position);mesh.rotation.set(k.pitch||0,k.yaw||0,k.roll||0);
       mesh.visible=k.visible!==false&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
     }
     const k=sample(shot.keyframes,t-shot.start);this.shotId=shot.shot_id;

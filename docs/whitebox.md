@@ -146,3 +146,5 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。
 
 参考实现 API：[Three.js OrbitControls](https://threejs.org/docs/pages/OrbitControls.html)、[WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html)。
+
+组内 props 可用与场景物体相同的 id 覆盖该物体（避免拿起道具时原位残留一份）。道具及其关键帧支持 pitch/roll，分别绕 X/Z 轴旋转，单位弧度、线性插值、缺省为0；yaw 仍绕 Y 轴。用于倾锅、掀起席角等刚体动作。
