@@ -9,13 +9,13 @@ export function sample(keys, time) {
     let u=a.hold?0:(time-a.t)/(b.t-a.t);
     if(a.easing==='smooth') u=u*u*(3-2*u);
     const out={...a};
-    for(const k of ['position','target']) if(a[k]) out[k]=a[k].map((v,j)=>v+(b[k][j]-v)*u);
+    for(const k of ['position','target','left_hand','right_hand','scale']) if(a[k]) out[k]=a[k].map((v,j)=>v+(b[k][j]-v)*u);
     for(const k of ['fov','yaw']) if(a[k]!==undefined) {
       let delta=b[k]-a[k];
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
-    for(const k of ['bend','pitch','roll'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
+    for(const k of ['bend','pitch','roll','head_pitch','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
     return out;
   }
   return {...keys.at(-1)};
@@ -93,15 +93,27 @@ export class WhiteboxRenderer {
       const face=new THREE.Group();face.name='face-direction';
       const white=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9});
       const dark=new THREE.MeshStandardMaterial({color:0x18232b,roughness:.9});
+      const eyes=[],brows=[];
       for(const side of [-1,1]) {
         const eye=new THREE.Mesh(new THREE.SphereGeometry(radius*.25,12,8),white);
         eye.position.set(side*radius*.38,radius*.2,radius*.88);
         const pupil=new THREE.Mesh(new THREE.SphereGeometry(radius*.13,12,8),dark);
-        pupil.position.z=radius*.2;eye.add(pupil);face.add(eye);
+        pupil.position.z=radius*.2;eye.add(pupil);face.add(eye);eyes.push(eye);
       }
       const nose=new THREE.Mesh(new THREE.ConeGeometry(radius*.28,radius*.85,4),white);
       nose.name='face-forward';nose.rotation.x=Math.PI/2;
       nose.position.set(0,-radius*.08,radius*1.18);face.add(nose);head.add(face);
+      // Optional performance channels leave legacy silhouettes unchanged.
+      let tongue=null;
+      if(actor.keyframes.some(k=>k.expression!==undefined)){
+        head.material=mat.clone();
+        for(const side of [-1,1]){
+          const brow=new THREE.Mesh(new THREE.BoxGeometry(radius*.55,radius*.09,radius*.08),dark);
+          brow.position.set(side*radius*.38,radius*.48,radius*.88);brow.userData.side=side;face.add(brow);brows.push(brow);
+        }
+        tongue=new THREE.Mesh(new THREE.BoxGeometry(radius*.3,radius*.45,radius*.12),new THREE.MeshStandardMaterial({color:0x864b50,roughness:1}));
+        tongue.position.set(0,-radius*.6,radius*.92);face.add(tongue);
+      }
       let torso,legs=[];
       if(actor.kind==='creature') {
         box(aw,ah*.45,ad*.8,0,ah*.6,0);
@@ -115,8 +127,20 @@ export class WhiteboxRenderer {
           legs.push({thigh,shin});
         }
       }
+      let neck=null;
+      if(actor.kind!=='creature'&&actor.keyframes.some(k=>k.neck_extension!==undefined)){
+        neck=new THREE.Mesh(new THREE.CylinderGeometry(ah*.06,ah*.06,1,12),mat);neck.name='neck';body.add(neck);
+      }
+      const arms=[];
+      if(actor.kind!=='creature')for(const [side,key] of [[-1,'left_hand'],[1,'right_hand']]){
+        if(!actor.keyframes.some(k=>k[key]))continue;
+        const upper=box(ah*.055,1,ah*.055,0,0,0),lower=box(ah*.05,1,ah*.05,0,0,0);
+        upper.name=key+'-upper-arm';lower.name=key+'-forearm';
+        const hand=new THREE.Mesh(new THREE.SphereGeometry(ah*.035,12,8),mat);body.add(hand);
+        hand.name=key;arms.push({side,key,upper,lower,hand});
+      }
       body.add(head);
-      scene.add(root);this.actors.push({data:actor,root,body,head,torso,legs});
+      scene.add(root);this.actors.push({data:actor,root,body,head,torso,legs,arms,eyes,brows,tongue,mat,neck});
       if(actor.keyframes.length>1) {
         const geo=new THREE.BufferGeometry().setFromPoints(actor.keyframes.map(k=>new THREE.Vector3(k.position[0],k.position[1]+.08,k.position[2])));
         const path=new THREE.Line(geo,new THREE.LineBasicMaterial({color:actor.color,transparent:true,opacity:.6}));
@@ -165,7 +189,7 @@ export class WhiteboxRenderer {
       a.body.position.y=k.pose==='lie'?h*.16:0;
       if(a.torso){
         const seated=k.pose==='sit';
-        a.torso.position.y=h*(seated?.4:.575);a.head.position.y=h*(seated?.725:.9);
+        a.torso.position.y=h*(seated?.4:.575);a.head.position.y=h*(seated?.725:.9)+(k.neck_extension||0);
         for(const {thigh,shin} of a.legs){
           thigh.rotation.x=seated?Math.PI/2:0;thigh.position.y=h*(seated?.175:.2625);thigh.position.z=seated?h*.0875:0;
           shin.position.z=seated?h*.175:0;
@@ -176,9 +200,47 @@ export class WhiteboxRenderer {
         a.torso.rotation.x=bend;
         a.torso.position.z=(a.torso.position.y-hip)*Math.sin(bend);
         a.torso.position.y=hip+(a.torso.position.y-hip)*Math.cos(bend);
-        a.head.rotation.x=bend;
+        a.head.rotation.x=bend+(k.head_pitch||0);
         a.head.position.z=(a.head.position.y-hip)*Math.sin(bend);
         a.head.position.y=hip+(a.head.position.y-hip)*Math.cos(bend);
+        if(a.neck){
+          const extension=k.neck_extension||0,cy=h*(seated?.625:.8)+extension/2;
+          a.neck.visible=extension>0;a.neck.scale.y=Math.max(.001,extension+.01);
+          a.neck.rotation.x=bend;a.neck.position.set(0,hip+(cy-hip)*Math.cos(bend),(cy-hip)*Math.sin(bend));
+        }
+      }
+      for(const arm of a.arms){
+        const shoulder=new THREE.Vector3(arm.side*a.data.size_m[0]*.52,h*(k.pose==='sit'?.58:.77),0);
+        const hand=new THREE.Vector3(...k[arm.key]);
+        // Two equal arm segments: elbow bends outward, with a stable pole.
+        const delta=hand.clone().sub(shoulder),distance=delta.length(),axis=delta.clone().normalize();
+        const pole=new THREE.Vector3(arm.side,-.35,0).addScaledVector(axis,-new THREE.Vector3(arm.side,-.35,0).dot(axis)).normalize();
+        const elbow=shoulder.clone().addScaledVector(delta,.5).addScaledVector(pole,Math.sqrt(Math.max(0,(h*.21)**2-(distance/2)**2)));
+        for(const [mesh,start,end] of [[arm.upper,shoulder,elbow],[arm.lower,elbow,hand]]){
+          const d=end.clone().sub(start);mesh.position.copy(start).add(end).multiplyScalar(.5);mesh.scale.y=d.length();
+          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+        }
+        arm.hand.position.copy(hand);
+      }
+      const morph=k.morph||0,target=a.data.morph_target;
+      a.body.scale.set(...a.data.size_m.map((v,i)=>target?1+(target.size_m[i]/v-1)*morph:1));
+      // Heads and limb thickness are height-based in both endpoint models.
+      // Cancel the body's anisotropic width/depth blend for these meshes so
+      // a morph handoff has exactly the same geometry as the target actor.
+      const sx=a.body.scale.y/a.body.scale.x,sz=a.body.scale.y/a.body.scale.z;
+      a.head.scale.set(sx,1,sz);
+      if(a.neck){a.neck.scale.x=sx;a.neck.scale.z=sz;}
+      for(const arm of a.arms){
+        arm.hand.scale.set(sx,1,sz);
+        // Arm segments rotate about their own axes; endpoints are authoritative.
+      }
+      a.mat.color.set(a.data.color);if(target)a.mat.color.lerp(new THREE.Color(target.color),morph);
+      const expression=k.expression||0;
+      if(a.tongue){
+        a.head.material.color.copy(a.mat.color).lerp(new THREE.Color(0xe4e4dc),expression);
+        for(const eye of a.eyes)eye.scale.y=1-.94*expression;
+        for(const brow of a.brows){brow.visible=expression>0;brow.rotation.z=brow.userData.side*.65*expression;}
+        a.tongue.visible=expression>0;a.tongue.scale.y=Math.max(.001,expression);
       }
     }
     const shot=this.group.cameras.find(c=>t<c.start+c.duration_s)||this.group.cameras.at(-1);
@@ -190,6 +252,7 @@ export class WhiteboxRenderer {
     for(const {data,mesh} of this.props){
       const k=data.keyframes?sample(data.keyframes,t):data;
       mesh.position.fromArray(k.position);mesh.rotation.set(k.pitch||0,k.yaw||0,k.roll||0);
+      mesh.scale.fromArray(k.scale||[1,1,1]);
       mesh.visible=k.visible!==false&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
     }
     const k=sample(shot.keyframes,t-shot.start);this.shotId=shot.shot_id;

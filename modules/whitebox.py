@@ -153,7 +153,7 @@ def sample(keys, t):
             if a.get('easing') == 'smooth':
                 u = u*u*(3-2*u)
             out = copy.deepcopy(a)
-            for key in ('position', 'target'):
+            for key in ('position', 'target', 'left_hand', 'right_hand', 'scale'):
                 if key in a:
                     out[key] = [x+(y-x)*u for x, y in zip(a[key], b[key])]
             for key in ('fov', 'yaw'):
@@ -163,7 +163,7 @@ def sample(keys, t):
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
-            for key in ('bend', 'pitch', 'roll'):
+            for key in ('bend', 'pitch', 'roll', 'head_pitch', 'neck_extension', 'expression', 'morph'):
                 if key in a or key in b:
                     out[key] = a.get(key, 0) + (b.get(key, 0)-a.get(key, 0))*u
             return out
@@ -173,6 +173,7 @@ def sample(keys, t):
 def validate_keys(keys, duration, camera=False):
     if not isinstance(keys, list) or not keys:
         raise ValueError('Empty keyframes')
+    channels = [name for name in ('left_hand', 'right_hand', 'scale') if any(name in k for k in keys)]
     previous = -1
     for key in keys:
         t = number(key['t'], 'keyframe.t', 0)
@@ -180,6 +181,8 @@ def validate_keys(keys, duration, camera=False):
             raise ValueError('Keyframe times must increase within duration')
         previous = t
         vector(key['position'], 'position')
+        for name in channels:
+            vector(key.get(name), name, positive=name == 'scale')
         if camera:
             vector(key['target'], 'target')
             if math.dist(key['position'], key['target']) < .001:
@@ -192,6 +195,12 @@ def validate_keys(keys, duration, camera=False):
             number(key.get('yaw', 0), 'yaw')
             for axis in ('pitch', 'roll'):
                 number(key.get(axis, 0), axis)
+            number(key.get('head_pitch', 0), 'head_pitch')
+            if not 0 <= number(key.get('neck_extension', 0), 'neck_extension') <= .3:
+                raise ValueError('neck_extension must be 0..0.3 meters')
+            for name in ('expression', 'morph'):
+                if not 0 <= number(key.get(name, 0), name) <= 1:
+                    raise ValueError(f'{name} must be 0..1')
             if not 0 <= number(key.get('bend', 0), 'bend') <= math.pi/2:
                 raise ValueError('bend must be 0..pi/2 radians')
             if 'visible' in key and not isinstance(key['visible'], bool):
@@ -368,6 +377,10 @@ def compile_group(base, ep, group, shots, scene):
             raise ValueError('Extra kind must be person/creature')
     for actor in actors + extras:
         vector(actor['size_m'], 'actor.size_m', positive=True)
+        if 'morph_target' in actor:
+            vector(actor['morph_target']['size_m'], 'morph_target.size_m', positive=True)
+            if not re.fullmatch(r'#[0-9a-fA-F]{6}', actor['morph_target'].get('color', '')):
+                raise ValueError('morph_target.color must be a hex color')
         validate_keys(actor['keyframes'], duration)
     props = plan.get('props', [])
     prop_ids = set()
