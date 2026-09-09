@@ -2059,6 +2059,8 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Shot-Hintergrundplatten",
+"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Shot-Hintergrund {ep}/{sid} ({role}; Datei {file}; Bibliotheksschlüssel {key}; neu erzeugen: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
+"对这张分镜背景图提修改意见,发消息给总制片": "Änderungswünsche zu diesem Hintergrund an den Produzenten senden",
 "起点": "Anfang",
 "终点": "Ende",
 "裁自宽景": "Aus weiterer Platte beschnitten",

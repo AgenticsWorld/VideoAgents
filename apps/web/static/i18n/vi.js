@@ -2059,6 +2059,8 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Nền cảnh quay",
+"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Nền cảnh {ep}/{sid} ({role}; tệp {file}; khóa thư viện {key}; tạo lại: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
+"对这张分镜背景图提修改意见,发消息给总制片": "Gửi góp ý chỉnh sửa nền này cho Nhà sản xuất",
 "起点": "Bắt đầu",
 "终点": "Kết thúc",
 "裁自宽景": "Cắt từ nền rộng hơn",

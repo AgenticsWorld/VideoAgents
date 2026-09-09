@@ -2059,6 +2059,8 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Fundos de plano",
+"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Fundo de plano {ep}/{sid} ({role}; arquivo {file}; chave {key}; regenerar: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
+"对这张分镜背景图提修改意见,发消息给总制片": "Enviar observações sobre este fundo ao produtor",
 "起点": "Início",
 "终点": "Fim",
 "裁自宽景": "Recortado de um plano mais aberto",

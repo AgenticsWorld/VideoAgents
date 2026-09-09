@@ -2149,6 +2149,8 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Shot background plates",
+"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Shot plate {ep}/{sid} ({role}; file {file}; library key {key}; regenerate: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
+"对这张分镜背景图提修改意见,发消息给总制片": "Send revision notes for this shot plate to the Producer",
 "起点": "Start",
 "终点": "End",
 "裁自宽景": "Cropped from wider plate",

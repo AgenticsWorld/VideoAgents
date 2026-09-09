@@ -2059,6 +2059,8 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Фоновые планы кадра",
+"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Фон кадра {ep}/{sid} ({role}; файл {file}; ключ {key}; пересоздать: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
+"对这张分镜背景图提修改意见,发消息给总制片": "Отправить замечания по этому фону продюсеру",
 "起点": "Начало",
 "终点": "Конец",
 "裁自宽景": "Кадрировано из более широкого плана",
