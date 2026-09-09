@@ -68,6 +68,34 @@ def render_format(settings, width=None, height=None):
     return {'aspect_ratio': aspect, 'width': width, 'height': height}
 
 
+def image_size(path):
+    """Width/height of a PNG or JPEG (layout_top.png is often JPEG data) from the header, no decoder; None when unreadable."""
+    try:
+        with open(path, 'rb') as fh:
+            head = fh.read(24)
+            if head[:8] == b'\x89PNG\r\n\x1a\n' and head[12:16] == b'IHDR':
+                width, height = int.from_bytes(head[16:20], 'big'), int.from_bytes(head[20:24], 'big')
+                return (width, height) if width and height else None
+            if head[:2] != b'\xff\xd8':
+                return None
+            fh.seek(2)
+            for _ in range(256):  # walk marker segments (APPn blocks can exceed 64 KB) until a SOFn frame header
+                seg = fh.read(4)
+                if len(seg) < 4 or seg[0] != 0xFF:
+                    return None
+                marker, length = seg[1], int.from_bytes(seg[2:4], 'big')
+                if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                    frame = fh.read(5)
+                    height, width = int.from_bytes(frame[1:3], 'big'), int.from_bytes(frame[3:5], 'big')
+                    return (width, height) if width and height else None
+                if marker in (0xD8, 0xD9) or length < 2:
+                    return None
+                fh.seek(length - 2, 1)
+    except OSError:
+        return None
+    return None
+
+
 def xyz(xy, dimensions, y=0):
     x, z = vector(xy, 'xy', 2)
     return [(x - .5) * dimensions[0], number(y, 'altitude_m'), (z - .5) * dimensions[2]]
@@ -97,6 +125,15 @@ def load_scene(base: Path, sid: str):
     warnings = []
     if not authored.get('dimensions_m') and not layout.get('dimensions_m'):
         warnings.append('场景尺寸暂按 20 × 12 m、层高 3 m 推断，请由场景建模 Agent 校准。')
+    layout_top = base / 'assets/concepts/scenes' / sid / layout.get('layout_top', 'layout_top.png')
+    size = image_size(layout_top)
+    if size:
+        # 俯视图整幅铺满 X×Z 地面(实景图视图/机检 whitebox_layout_ok):X:Z 与图幅不同比会把图单向拉伸
+        ratio_model, ratio_image = dimensions[0] / dimensions[2], size[0] / size[1]
+        if abs(ratio_model - ratio_image) / ratio_image > .02:
+            warnings.append(f'dimensions_m X:Z={dimensions[0]}:{dimensions[2]} 与俯视图 {size[0]}x{size[1]} 宽高比不同,'
+                            f'铺地后图会被单向拉伸;应保持 X 并把 Z 改为 {dimensions[0] / ratio_image:.3f}(或按 Z 反推 X),'
+                            '再用 code/whitebox_layout_check.py 核墙线。')
     objects = authored.get('objects')
     if objects is None:
         warnings.append('几何体由布局地标推断；物体范围与高度需对照俯视图校准。')

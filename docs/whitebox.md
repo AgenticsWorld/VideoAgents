@@ -30,6 +30,8 @@
 
 1单位=1米，Y向上，X向地图右方，Z向地图下方。`dimensions_m=[宽,高,深]`。地图归一化坐标 `(u,v)` 映射到 `[(u-.5)*宽,高度,(v-.5)*深]`。`position` 是几何体中心；`xy` 默认中心高度为 size_m[1]/2，可用 elevation_m 覆盖。`shape` 默认 box，可用 sphere/cylinder。`size_m` 是三个轴的包围盒尺寸，yaw 为绕Y轴弧度。人物轨迹 position 是脚下/支撑平面的锚点，不能误用物体中心。
 
+`dimensions_m` 的 X×Z 覆盖整幅 `layout_top.png`（实景图视图把整张图同比铺满地面），所以 **X:Z 必须等于图幅宽高比**（16:9 图即 Z = X×9/16）：只用比例锚定一个轴，另一轴按图幅算；不同比时编译器发警告、机检 `whitebox_layout_ok` FAIL。室内墙体/门洞/窗位一律按图量出归一化范围再写 `xy`+`size_m`：外墙内皮贴图上地面边界、墙厚向外取，内墙按图上墙顶；图上有的墙不少、图上没有的墙不加，图未画但功能必需的门洞按功能留口并在 `workflow_notes` 登记。宿主机检 `python code/whitebox_layout_check.py --project <slug> [--scene SCN-ID ...]`（缺省核全部已建白模场景）核比例与越界，并输出 `assets/concepts/scenes/<sid>/whitebox_overlay.png`（1m 网格 + 墙红/家具蓝脚印 + 地标黄点）供逐段目视比对；建模 Agent 交付前必跑并读图核对（2026-09-09 dzg6 SCN-0001/0004 反馈）。
+
 没有标尺的图无法恢复绝对尺度，必须保留 inferred 和比例锚说明。场景预览仅在 `bible/scenes/<sid>/whitebox.json` 含有显式 objects 数组时显示3D区域；没有建模的场景不显示白模或加载占位。已建模的空场地可以使用空数组，推断尺寸的模型仍正常显示。legacy 分镜编译缺场景资产时按地标生成简模并明确告警；其 20×12m 默认图幅不等于校准值。一个场景白模对应一套布局，暂不自动选择 layout 的替代形态。
 
 ## 飞行、升降与三维路径

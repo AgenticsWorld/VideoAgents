@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from modules.whitebox import compile_episode, load_scene, sample, validate_keys, xyz
+from modules.whitebox import compile_episode, image_size, load_scene, sample, validate_keys, xyz
 
 
 def test_whitebox_localization():
@@ -51,6 +51,20 @@ def test_scene_scale_matches_map(project):
     assert scene['objects'][0]['position']==pytest.approx([2,.375,0])
     assert xyz([0,0],[10,3,8])==[-5,0,-4]
     assert xyz([1,1],[10,3,8])==[5,0,4]
+
+
+def test_layout_aspect_warning_and_image_size(project,tmp_path):
+    """dimensions_m X:Z must match the layout_top image aspect (the map is stretched over the floor); JPEG/PNG headers both read."""
+    PIL=pytest.importorskip('PIL.Image')
+    folder=project/'assets/concepts/scenes/SCN-1'
+    PIL.new('RGB',(160,90)).save(folder/'layout_top.png',format='JPEG')
+    assert image_size(folder/'layout_top.png')==(160,90)
+    PIL.new('RGB',(32,32)).save(tmp_path/'square.png');assert image_size(tmp_path/'square.png')==(32,32)
+    assert image_size(project/'assets/concepts/scenes/SCN-1/layout.json') is None
+    write(project/'bible/scenes/SCN-1/whitebox.json',{'dimensions_m':[16,3,9],'objects':[]})
+    assert not any('宽高比' in w for w in load_scene(project,'SCN-1')['warnings'])
+    write(project/'bible/scenes/SCN-1/whitebox.json',{'dimensions_m':[12,3,10],'objects':[]})
+    assert any('宽高比' in w and '6.750' in w for w in load_scene(project,'SCN-1')['warnings'])
 
 
 def test_group_time_and_cast(project):
