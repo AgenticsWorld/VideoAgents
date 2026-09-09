@@ -14,7 +14,13 @@
   python code/render_shot_plates.py --project <slug> --ep ep01 grp002 sh010    # 只处理指定组/镜
   python code/render_shot_plates.py --project <slug> --ep ep01 --dry-run       # 只算决策与提示词、渲白模帧,不调图像模型
   python code/render_shot_plates.py --project <slug> --ep ep01 --force         # 无视集索引里的现有记录重新决策(库图仍复用)
+  python code/render_shot_plates.py --project <slug> --ep ep01 --max-new 6   # 分批:每次最多新出 6 张即返回(退出码 3=还有待出),前台循环直到 0
+  python code/render_shot_plates.py --project <slug> --ep ep01 --status      # 验收机检 shot_plates_complete:逐镜覆盖状态,不齐退出码 1
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
+
+纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
+  本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
+  中途被杀不丢已出图,重跑自动续;长集用 --max-new 分批,退出码 3 表示还有待出,继续在前台跑;结单前跑 --status 作验收依据。
 """
 import json
 import sys
@@ -23,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
-from modules.shot_plates import run_episode, sync_episode  # noqa: E402
+from modules.shot_plates import run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
 
 
@@ -35,6 +41,8 @@ def main():
         ap.add_argument('--sun', default='')
         ap.add_argument('--seed', type=int, default=None)
         ap.add_argument('--allow-unexported', action='store_true', help='跳过「白模视频已导出」前置检查(仅调试)')
+        ap.add_argument('--max-new', type=int, default=None, help='本次最多新出 N 张后停止(索引已按镜落盘);还有待出图时退出码 3,Agent 在前台循环再跑直到 0')
+        ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
     args, base = parse_args(__doc__, configure=configure)
     ep = component(args.ep)
     if not spatial_blocking_enabled(base):
@@ -58,13 +66,25 @@ def main():
             print(f"以下组的白模视频尚未导出,分镜背景图须在用户签字「H3W-白模确认」并导出 camera.mp4 之后生成:{unexported}"
                   "(python code/render_whitebox.py --project <slug> --ep <ep>)", file=sys.stderr)
             return 1
-    stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed)
+    if args.status:
+        st = status_episode(base, ep, targets or None)
+        print(json.dumps({'shot_plates_complete': st}, ensure_ascii=False), flush=True)
+        print(f"[shot_plates_complete] {args.project}/{ep}: {st['shots_ok']}/{st['shots_total']} 镜齐全,问题 {len(st['problems'])} 镜 "
+              f"-> {'FAIL' if st['problems'] else 'PASS'}", flush=True)
+        return 1 if st['problems'] else 0
+    stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
+                        max_new=args.max_new)
     print(json.dumps({'shot_plates': stats}, ensure_ascii=False), flush=True)
     if not args.dry_run:
         sync = sync_episode(base, ep, groups, write=True)
         print(json.dumps({'shot_plate_refs': {'updated_prompts': sync['updated_prompts'],
                           'errors': sync['errors'], 'warnings': sync['warnings']}}, ensure_ascii=False), flush=True)
-    return 1 if stats['errors'] else 0
+    if stats['errors']:
+        return 1
+    if stats.get('pending_new'):
+        print(f"[shot_plates] 本次已达 --max-new 上限,仍有 {stats['pending_new']} 张待出:请在前台再次运行同一命令直到退出码 0", flush=True)
+        return 3
+    return 0
 
 
 if __name__ == '__main__':

@@ -22,6 +22,15 @@
 
 镜尾图以镜尾白模帧为第一参考图、镜首成图为第二参考图、俯视图第三，seed 与镜首相同，材质与光照跟着镜首走。
 
+## 运行纪律与验收（2026-09-09，前科 dzg6 p6-shot-plates-ep01-s01s02）
+
+Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组 16 镜一张没出。系统侧对策：
+
+- 脚本每出一张打印 `saved:`，并按镜落盘集索引与场景库，中途被杀不丢已出图，重跑按索引/库自动续。
+- `--max-new N`：本次最多新出 N 张即返回，退出码 3 表示还有待出；Agent 在前台循环运行直到退出码 0，避免单次命令过长而被诱导丢后台。
+- `--status`：机检 `shot_plates_complete`，逐镜给出 ok / partial（缺镜尾）/ missing / stale / file_missing，有问题退出码 1。workflow.yaml 把它列为 p6-shot-plates 的验收机检，orchestrator 只认它，不采信回执自述。
+- SOUL 硬纪律：禁止 nohup / & / “后台继续”；结单前必跑 `--status` PASS。
+
 ## 复用（按机位指纹建库，不按分镜建图）
 
 - 库：`assets/concepts/scenes/<sid>/plates/index.json` + `<key>.png` + `<key>.json`（提示词/refs/机位事实/渠道）+ `<key>.whitebox.jpg`（干净白模帧）。`key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_f<fov°>`，由首个生成它的机位命名，跨组、跨集共享。

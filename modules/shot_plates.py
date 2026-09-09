@@ -572,7 +572,7 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
     return {'episode': episode, 'fmt': fmt, 'jobs': jobs, 'layouts': layouts, 'axes': axes, 'libs': libs, 'shots': shots}
 
 
-def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print) -> dict:
+def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None) -> dict:
     """出图主流程:查库 → 裁切/复用 → 渲白模帧 → 出图 → 入库 → 写集索引。返回统计。"""
     ep = component(ep)
     plan = plan_episode(base, ep, only)
@@ -585,7 +585,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     style_doc = read(base/'bible/style.json', {}) or {}
     style = style_doc.get('style_fragment_en') or ''
     idx = load_episode_index(base, ep)
-    stats = {'shots': 0, 'plates': 0, 'new': 0, 'library': 0, 'crop': 0, 'skipped_fresh': 0, 'errors': []}
+    stats = {'shots': 0, 'plates': 0, 'new': 0, 'library': 0, 'crop': 0, 'skipped_fresh': 0, 'errors': [], 'pending_new': 0}
     # 先决定每个 job 的来源;起点先于终点;同场景按 fov 从宽到窄,窄景别可裁宽图
     jobs = sorted(plan['jobs'], key=lambda j: (j['scene_id'], j['role'] == 'end', -j['facts']['fov_v_deg']))
     by_shot = {}
@@ -627,8 +627,26 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                               'reuse': 'new'})
     if pending_frames:   # 白模干净帧本地渲染无成本,dry-run 也渲,便于核对构图
         render_clean_frames(base, episode, pending_frames, wb_fmt['width'], wb_fmt['height'])
+    def flush_shot(shot_id):
+        """某镜全部决策落地后立即写集索引(进程中途被杀也不丢已出图;重跑按索引/库续跑)。"""
+        ds = [d for d in decisions if d['shot_id'] == shot_id and d.get('file')]
+        if dry_run or not ds:
+            return
+        j0 = by_shot[shot_id][0]
+        idx['shots'][shot_id] = {
+            'group_id': j0['group_id'], 'scene_id': j0['scene_id'], 'lighting_scheme_id': j0['scheme'],
+            'movement': next((c.get('movement') for g in episode['groups'] for c in g['cameras'] if c['shot_id'] == shot_id), None),
+            'tier': j0['tier'],
+            'plates': [{'role': d['role'], 'key': d['entry']['key'], 'file': d['file'], 'reuse': d['reuse'],
+                        'crop': d.get('crop'), 'camera': d['facts'], 'whitebox_frame': d['entry'].get('whitebox_frame')}
+                       for d in ds],
+            'written_at': dt.datetime.now().isoformat(timespec='seconds')}
+        save_episode_index(base, ep, idx)
+
     # 逐决策落地(新出图 → 入库);起点先于终点(终点需要起点成图)
     generated = {}     # (shot_id, 'start') -> entry
+    done_shots = set()
+    budget_hit = False
     by_key = {}        # 本次运行生成/复用到的库条目 key -> entry
     channel = None
     for d in decisions:
@@ -660,6 +678,10 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
             continue
         # new
+        if budget_hit or (max_new is not None and stats['new'] >= max_new):
+            budget_hit = True
+            stats['pending_new'] += 1
+            continue
         layout = layouts[sid]; scene = episode['scenes'][sid]
         items, phrases, out_of_frame = inventory(scene, layout, d['keyframe'], fmt)
         lighting = lighting_fragment(base, sid, d['scheme'])
@@ -714,25 +736,12 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         d['entry'] = entry; d['file'] = out_rel
         generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
         stats['new'] += 1
-    # 写集索引
-    if not dry_run:
-        for shot_id, shot_jobs in by_shot.items():
-            ds = [d for d in decisions if d['shot_id'] == shot_id and d.get('file')]
-            if not ds:
-                continue
-            j0 = shot_jobs[0]
-            idx['shots'][shot_id] = {
-                'group_id': j0['group_id'], 'scene_id': j0['scene_id'], 'lighting_scheme_id': j0['scheme'],
-                'movement': next((c.get('movement') for g in episode['groups'] for c in g['cameras'] if c['shot_id'] == shot_id), None),
-                'tier': j0['tier'],
-                'plates': [{'role': d['role'], 'key': d['entry']['key'], 'file': d['file'], 'reuse': d['reuse'],
-                            'crop': d.get('crop'), 'camera': d['facts'], 'whitebox_frame': d['entry'].get('whitebox_frame')}
-                           for d in ds],
-                'written_at': dt.datetime.now().isoformat(timespec='seconds')}
-        stats['shots'] = len({d['shot_id'] for d in decisions if d.get('file')})
-        save_episode_index(base, ep, idx)
-    else:
-        stats['shots'] = len(by_shot)
+        log(f"saved: {out_rel}")
+        flush_shot(shot_id)   # 本镜到此为止已落地的图先写索引(终点图若后续才出,再次 flush 覆盖)
+    # 写集索引:按镜落盘(每镜全部决策处理完即写,避免整批跑完才写、中途被杀全丢)
+    for shot_id in by_shot:
+        flush_shot(shot_id)
+    stats['shots'] = len({d['shot_id'] for d in decisions if d.get('file')}) if not dry_run else len(by_shot)
     stats['index'] = str(episode_index_path(base, ep).relative_to(base))
     return stats
 
@@ -920,3 +929,32 @@ def sync_episode(base: Path, ep: str, groups=None, write: bool = False, strict: 
     warnings = [w for r in rows for w in r['warnings']]
     return {'groups': rows, 'updated_prompts': [r['group_id'] for r in rows if r['updated']],
             'errors': errors, 'warnings': warnings}
+
+
+# ---------------------------------------------------------------- coverage status(验收机检 shot_plates_complete)
+def status_episode(base: Path, ep: str, only=None) -> dict:
+    """每镜背景图覆盖状态:ok / partial(缺镜尾) / missing / stale(机位与当前白模不一致) / file_missing。
+    验收以此为准,不采信 Agent 自述;退出码由调用方按 problems 判。"""
+    plan = plan_episode(base, ep, only)
+    idx = load_episode_index(base, ep)
+    need = {}
+    for j in plan['jobs']:
+        need.setdefault(j['shot_id'], {})[j['role']] = j['facts']
+    shots = {}
+    for shot_id, roles in need.items():
+        rec = idx['shots'].get(shot_id) or {}
+        have = {p['role']: p for p in rec.get('plates', []) if isinstance(p, dict)}
+        state = 'ok'
+        for role, facts in roles.items():
+            p = have.get(role)
+            if not p:
+                state = 'missing' if role == 'start' else ('partial' if state == 'ok' else state)
+            elif not (base/p['file']).is_file():
+                state = 'file_missing'
+            elif camera_stale(p.get('camera'), facts) and state == 'ok':
+                state = 'stale'
+        shots[shot_id] = {'state': state, 'need': sorted(roles), 'have': sorted(have),
+                          'files': [p['file'] for p in have.values()]}
+    problems = {k: v['state'] for k, v in shots.items() if v['state'] != 'ok'}
+    return {'ep': component(ep), 'shots_total': len(shots), 'shots_ok': len(shots) - len(problems),
+            'plates_needed': sum(len(v['need']) for v in shots.values()), 'problems': problems, 'shots': shots}

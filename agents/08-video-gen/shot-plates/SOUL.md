@@ -11,12 +11,15 @@
 
 ```sh
 python code/render_shot_plates.py --project <slug> --ep <ep> --dry-run      # 先看决策:每镜出几张、复用/裁切/新出各多少、提示词
-python code/render_shot_plates.py --project <slug> --ep <ep>                # 出图 + 入库 + 写集索引 + 自动 sync_shot_plates --write
+python code/render_shot_plates.py --project <slug> --ep <ep>                # 出图 + 入库 + 写集索引 + 自动 sync_shot_plates --write(前台跑完)
+python code/render_shot_plates.py --project <slug> --ep <ep> --max-new 6    # 长集分批:退出码 3 = 还有待出,前台再跑直到 0
+python code/render_shot_plates.py --project <slug> --ep <ep> --status       # 验收机检 shot_plates_complete(结单前必跑,PASS 才结单)
 python code/sync_shot_plates.py --project <slug> --ep <ep>                  # 机检 shot_plate_bound
 ```
 
-3. 脚本按运镜分档决定张数（静态 / 推拉变焦 / 摇俯仰 = 镜首一张；横移跟拍位移 < 机位到主体距离 10% 按静态、否则镜首 + 镜尾；复杂轨迹 = 镜首 + 镜尾），按机位指纹查库（同场景、同光照方案、同机高档、朝向 ±20°、机位 6 m 内、fov ±15° 复用；同轴更宽的库图按 fov 比例裁切复用），缺的才用白模干净帧 + 场景俯视图 + 场景描述 + 光照方案出新图（长边 1920，控制台默认图像模型，不写死渠道）。**只出脚本决策要出的图，不多出候选、不赛马**；用户要求重出某镜时用 `--force` 指定镜号。
-4. 逐张目视核对新出图：方向与画左/画右内容与白模帧一致、无人物/无网格/无俯视、光照时段与组一致；不合格的记入回执（镜号、问题）并用 `--force <shot>` 重出一次，仍不合格如实上报，不得手改库索引蒙混。
+3. **前台同步跑完,禁止丢后台(硬纪律,2026-09-09;前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把脚本丢后台就结单返回,进程随之被杀,9 组 16 镜一张没出,验收未过)**:出图命令必须在本任务内前台执行、等到退出码才算跑完;禁止 `nohup` / `&` / 任何"后台继续、完成后通知"的说法——任务结束进程即被杀。脚本每出一张打印 `saved:` 并按镜落盘索引与库,中途被杀不丢已出图、重跑自动续。集大、镜多时**分批**:`--max-new 6`(或按组号逐组)在前台循环运行,退出码 3 = 还有待出,继续跑,直到退出码 0。结单前必跑 `python code/render_shot_plates.py --project <slug> --ep <ep> [grp…] --status`(机检 shot_plates_complete),PASS 才能结单;FAIL 或没跑就结单 = 验收不过,直接退回。
+4. 脚本按运镜分档决定张数（静态 / 推拉变焦 / 摇俯仰 = 镜首一张；横移跟拍位移 < 机位到主体距离 10% 按静态、否则镜首 + 镜尾；复杂轨迹 = 镜首 + 镜尾），按机位指纹查库（同场景、同光照方案、同机高档、朝向 ±20°、机位 6 m 内、fov ±15° 复用；同轴更宽的库图按 fov 比例裁切复用），缺的才用白模干净帧 + 场景俯视图 + 场景描述 + 光照方案出新图（长边 1920，控制台默认图像模型，不写死渠道）。**只出脚本决策要出的图，不多出候选、不赛马**；用户要求重出某镜时用 `--force` 指定镜号。
+5. 逐张目视核对新出图：方向与画左/画右内容与白模帧一致、无人物/无网格/无俯视、光照时段与组一致；不合格的记入回执（镜号、问题）并用 `--force <shot>` 重出一次，仍不合格如实上报，不得手改库索引蒙混。
 5. 回执写明：`directing/<ep>/shot_plates.json` 统计（shots / plates / new / library / crop）、新出图清单与费用口径（张数）、`sync_shot_plates` 的 updated_prompts / WARN / 违规。尚无 prompt 的组由 prompt 工位产出后再跑一次 `code/sync_shot_plates.py --write`。
 
 ## 不做什么
