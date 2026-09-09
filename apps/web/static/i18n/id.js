@@ -1939,6 +1939,8 @@ window.I18N_DICT = {
 "场景建模": "Pemodelan Adegan",
 "场景白模建模 Agent": "Agent Pemodelan Adegan",
 "白模调度": "Penataan Model Blok",
+"分镜背景": "Latar Shot",
+"白模视频导出": "Ekspor Model Blok",
 "✏️ 编辑": "✏️ Edit",
 "对这组3D白模提修改意见，发消息给总制片": "Kirim catatan revisi model blok 3D ini ke Produser",
 "空间视角": "Tampilan ruang",

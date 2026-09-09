@@ -1939,6 +1939,8 @@ window.I18N_DICT = {
 "场景建模": "Szenenmodellierung",
 "场景白模建模 Agent": "Agent für Szenenmodellierung",
 "白模调度": "Blockmodell-Inszenierung",
+"分镜背景": "Shot-Hintergründe",
+"白模视频导出": "Blockmodell-Export",
 "✏️ 编辑": "✏️ Bearbeiten",
 "对这组3D白模提修改意见，发消息给总制片": "Änderungswünsche zu diesem 3D-Blockmodell an die Produktionsleitung senden",
 "空间视角": "Raumansicht",

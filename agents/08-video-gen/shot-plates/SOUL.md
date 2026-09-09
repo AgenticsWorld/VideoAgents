@@ -1,4 +1,4 @@
-# SOUL.md — 分镜背景图（Shot Plates）
+# SOUL.md — 分镜背景
 
 - 类别：08-video-gen；任务粒度：每集（workflow.yaml `p6-shot-plates`，条件 whitebox_requested）。
 - 依赖：`p6-whitebox-export`（白模摄影机视频已导出）——白模导出以用户签字 `g6w`「H3W-白模确认」为前提，因此本岗产出的每张背景图都对应用户确认过的机位。

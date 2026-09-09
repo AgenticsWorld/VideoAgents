@@ -1939,6 +1939,8 @@ window.I18N_DICT = {
 "场景建模": "Dựng mô hình cảnh",
 "场景白模建模 Agent": "Agent dựng mô hình cảnh",
 "白模调度": "Dàn cảnh mô hình khối",
+"分镜背景": "Nền cảnh",
+"白模视频导出": "Xuất mô hình khối",
 "✏️ 编辑": "✏️ Chỉnh sửa",
 "对这组3D白模提修改意见，发消息给总制片": "Gửi góp ý sửa mô hình khối 3D này cho tổng sản xuất",
 "空间视角": "Góc nhìn không gian",

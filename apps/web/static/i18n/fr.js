@@ -1939,6 +1939,8 @@ window.I18N_DICT = {
 "场景建模": "Modélisation de scènes",
 "场景白模建模 Agent": "Agent de modélisation de scènes",
 "白模调度": "Mise en scène blockout",
+"分镜背景": "Fonds de plan",
+"白模视频导出": "Export blockout",
 "✏️ 编辑": "✏️ Modifier",
 "对这组3D白模提修改意见，发消息给总制片": "Envoyer au producteur des demandes de modification pour cette maquette 3D",
 "空间视角": "Vue spatiale",

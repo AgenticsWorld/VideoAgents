@@ -1978,6 +1978,8 @@ window.I18N_DICT = {
 "场景建模": "Scene Modeling",
 "场景白模建模 Agent": "Scene Modeling Agent",
 "白模调度": "Blockout Staging",
+"分镜背景": "Shot Plates",
+"白模视频导出": "Blockout Export",
 "✏️ 编辑": "✏️ Edit",
 "对这组3D白模提修改意见，发消息给总制片": "Send revision notes for this 3D blockout to the Producer",
 "空间视角": "Spatial view",
