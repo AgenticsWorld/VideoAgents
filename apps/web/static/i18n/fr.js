@@ -866,6 +866,7 @@ window.I18N_DICT = {
 "查看本组传给视频生成模型的文字 prompt": "Voir le prompt texte envoyé au modèle de génération vidéo pour ce groupe",
 "复制": "Copier",
 "已复制": "Copié",
+"复制编号": "Copier l’ID",
 "该组 prompt 文件尚未生成": "Le fichier de prompt de ce groupe n'a pas encore été généré",
 "(video_prompt 为空)": "(video_prompt est vide)",
 "{n} 词": "{n} mots",

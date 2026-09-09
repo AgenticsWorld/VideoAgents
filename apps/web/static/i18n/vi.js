@@ -865,6 +865,7 @@ window.I18N_DICT = {
 "查看本组传给视频生成模型的文字 prompt": "Xem prompt văn bản gửi cho mô hình tạo video của nhóm này",
 "复制": "Sao chép",
 "已复制": "Đã sao chép",
+"复制编号": "Sao chép ID",
 "该组 prompt 文件尚未生成": "Tệp prompt của nhóm này chưa được tạo",
 "(video_prompt 为空)": "(video_prompt trống)",
 "{n} 词": "{n} từ",
