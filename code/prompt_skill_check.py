@@ -32,6 +32,50 @@ from _common import REPO_ROOT, parse_args
 CHECK = "prompt_skill_applied"
 NONE_REASONS = ("user_skipped", "no_match", "disabled", "missing")
 STRUCT_CHECK = "sd25_prompt_structure"   # 2026-09-09:生效技能为 sd25-pe 时,正文必须按 Seedance 2.5 官方结构写
+H3_CHECK = "h3_prompt_structure"         # 2026-09-09:生效技能为 h3-prompt-writing 时,正文必须按 H3 Ref2VA 六段结构写
+
+
+def h3_structure_errors(d: dict, name: str) -> list[str]:
+    """MiniMax H3 结构机检(h3_prompt_structure):Ref2VA 官方六段(subject_definitions / summary / retention_analysis /
+    detailed_description / overall_soundscape / non_diegetic_music)依序齐全且不得空心(前科 10days007 ep01:六段各一句套话);
+      ① subject_definitions 段内每张角色/生物图有 `<Subject N>` 定义并指回 `<Picture i>` 或 `[Image i]`(角色→图片映射在 [Shot 1] 前显式写);
+      ② 有 audio_refs 时每段 `<Audio N>`/`[Audio N]` 与说话人 ID `(Sx)` 绑定;正文出现台词 `{…}` 时必须同时有 `<d>[语种] …</d>`;
+      ③ Shot 段(`Shot k:` / `[Shot k]`)在 detailed_description 段内且至少 1 个;④ retention_analysis 段逐份说明(≥ 角色图张数行/句)。
+    背景图的 `<Picture N>` 构图锚与逐镜 `Plate anchor:` 句由 code/sync_shot_plates.py 写入,机检在 shot_plate_bound。"""
+    import re
+    vp = str(d.get("video_prompt") or "")
+    errs = []
+    order = ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"]
+    pos = []
+    for sec in order:
+        m = re.search(r"(?<![A-Za-z_])%s\s*[:：]" % sec, vp)
+        if not m:
+            errs.append(f"{name}: 缺 H3 六段之 `{sec}:`")
+        pos.append(m.start() if m else -1)
+    if all(x >= 0 for x in pos) and pos != sorted(pos):
+        errs.append(f"{name}: H3 六段顺序错误,须为 " + " → ".join(order))
+    if -1 in pos:
+        return errs
+    sd = vp[pos[0]:pos[1]]
+    refs = [r for r in (d.get("refs") or []) if isinstance(r, str)]
+    for i, r in enumerate(refs, 1):
+        if r.startswith("assets/concepts/characters/") or r.startswith("assets/concepts/creatures/"):
+            if not re.search(r"<Subject\s*\d+>[^.。\n]*(?:<Picture\s*%d>|\[Image\s*%d\]|@Image\s*%d(?!\d))" % (i, i, i), sd):
+                errs.append(f"{name}: subject_definitions 缺 refs[{i-1}] 角色/生物图的 `<Subject N> … <Picture {i}>` 定义(H3 要求 [Shot 1] 前显式映射)")
+    arefs = [a for a in (d.get("audio_refs") or []) if isinstance(a, str)]
+    for i in range(1, len(arefs) + 1):
+        if not re.search(r"(?:<Audio\s*%d>|\[Audio\s*%d\])[^.。\n]{0,80}\(S\d+\)|\(S\d+\)[^.。\n]{0,80}(?:<Audio\s*%d>|\[Audio\s*%d\])" % (i, i, i, i), vp):
+            errs.append(f"{name}: `<Audio {i}>` 未与说话人 ID `(Sx)` 绑定(H3:每段音色参考须指明对应说话人)")
+    if re.search(r"\{[^}]+\}", vp) and "<d>" not in vp:
+        errs.append(f"{name}: 正文有 {{台词}} 但无 `<d>[语种] …</d>`——H3 台词只认 <d> 标签,{{}} 不能作唯一标记")
+    dd = vp[pos[3]:pos[4]]
+    if not re.search(r"\[?Shot\s*1\s*[:：\]]", dd):
+        errs.append(f"{name}: detailed_description 段内无 `Shot 1:`/`[Shot 1]` 镜头段")
+    ra = vp[pos[2]:pos[3]]
+    nchar = sum(1 for r in refs if r.startswith("assets/concepts/characters/") or r.startswith("assets/concepts/creatures/"))
+    if nchar and len(re.findall(r"<Subject\s*\d+>|\[Image\s*\d+\]|<Picture\s*\d+>", ra)) < nchar:
+        errs.append(f"{name}: retention_analysis 须逐份说明每个 <Subject N>/<Picture N> 的保留关系(现不足 {nchar} 份,疑为一句套话)")
+    return errs
 
 
 def sd25_structure_errors(d: dict, name: str) -> list[str]:
@@ -103,6 +147,7 @@ def main() -> int:
     warns: list[str] = []
     errs: list[str] = []
     struct_errs: list[str] = []
+    h3_errs: list[str] = []
 
     # ---- 对照基准 ----
     expected: str | None      # "" = 不套用;None = 未知
@@ -174,6 +219,12 @@ def main() -> int:
                         continue
                     exp_sha = sha256_of(gsmd)
         sa = d.get("skill_applied")
+        # 结构机检按「项目/组级期望的技能」执行,不依赖回执自述(回执缺失/造假也要核结构)
+        target = str(expected or "")
+        if target.endswith("/sd25-pe"):
+            struct_errs.extend(sd25_structure_errors(d, f.name))
+        if target.endswith("/h3-prompt-writing"):
+            h3_errs.extend(h3_structure_errors(d, f.name))
         if not isinstance(sa, dict):
             errs.append(f"{f.name}: 缺 skill_applied 回执字段(须为对象:套用技能时 {{id, sha256, checklist}},"
                         "不套用时 {id: null, reason})")
@@ -213,8 +264,10 @@ def main() -> int:
             if fails:
                 errs.append(f"{f.name}: checklist 有 pass=false 的要点:{'; '.join(map(str, fails))[:200]}")
         # Seedance 2.5 结构机检(sd25_prompt_structure):套用 sd25-pe 时正文必须按官方结构写,自述 checklist 不算数
-        if str(sid).endswith("/sd25-pe"):
+        if not target and str(sid).endswith("/sd25-pe"):
             struct_errs.extend(sd25_structure_errors(d, f.name))
+        if not target and str(sid).endswith("/h3-prompt-writing"):
+            h3_errs.extend(h3_structure_errors(d, f.name))
 
     if args.strict:
         errs.extend(warns)
@@ -225,11 +278,15 @@ def main() -> int:
         print("FAIL", e)
     for e in struct_errs:
         print("FAIL", e)
+    for e in h3_errs:
+        print("FAIL", e)
     print(f"[{CHECK}] {args.project}/{args.ep}: 基准={basis} 期望={expected if expected else ('无技能' if expected == '' else '未知')}; "
           f"{n} 组核对, 违规 {len(errs)} 条, WARN {len(warns)} 条 -> {'FAIL' if errs else 'PASS'}")
     if str(expected or "").endswith("/sd25-pe") or struct_errs:
         print(f"[{STRUCT_CHECK}] {args.project}/{args.ep}: 违规 {len(struct_errs)} 条 -> {'FAIL' if struct_errs else 'PASS'}")
-    return 1 if (errs or struct_errs) else 0
+    if str(expected or "").endswith("/h3-prompt-writing") or h3_errs:
+        print(f"[{H3_CHECK}] {args.project}/{args.ep}: 违规 {len(h3_errs)} 条 -> {'FAIL' if h3_errs else 'PASS'}")
+    return 1 if (errs or struct_errs or h3_errs) else 0
 
 
 if __name__ == "__main__":

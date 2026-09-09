@@ -3107,7 +3107,8 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 提示词技能契约(prompt_skill_applied,项目「视频模型设置→提示词技能」,当前项目实时生效)
 {contract}{warn}
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执
-- 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检"""
+- 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检
+- 生效技能为 h3-prompt-writing(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
             and project_skill_enabled("08-video-gen/upscale/minimax-regenerate-2k", project):
         p += f"""

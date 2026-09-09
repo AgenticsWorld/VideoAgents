@@ -806,7 +806,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
 _SPATIAL_RE = re.compile(r'\s*Spatial layout:.*?do not copy its tiling\.', re.S)
 _MAPUSE_RE = re.compile(r'\s*Map usage:.*?(?:described in that shot\.|in that shot\.)', re.S)
 _TILE_RE = re.compile(r',?\s*framed like tile\s*\d+\s*of\s*\[Image\s*\d+\]', re.I)
-_BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?=Shot\s*1\s*[:：｜|]|$)', re.S)   # Shot 段头兼容 Shot 1: / Shot 1｜标题。(2.5 分镜写法)
+# 段落以自带结尾句终止(三种口径各一句),兜底到 Shot 1 段头或文末;H3 段内含「[Shot 1]」字样,不能拿段头当终止符
+_BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?:described in each [Ss]hot\.|按各 Shot 段描述。|(?=\n?\[?Shot\s*1\s*[:：｜|])|$)', re.S)
 _IMG_RE = re.compile(r'\[Image\s*(\d+)\]|@Image\s*(\d+)(?!\d)')
 
 
@@ -832,6 +833,29 @@ def group_is_v25(base: Path, ep: str, gid: str) -> bool:
 
 
 _ACT_RE = re.compile(r'\s*场景激活：[^。]*。')
+_H3_ANCHOR_RE = re.compile(r'\s*Plate anchor:[^.]*\.(?:[^.]*not used in this shot\.)?')
+
+
+def group_is_h3(base: Path, ep: str, gid: str) -> bool:
+    """本组生效视频模型是否 MiniMax H3(引擎无关:模型 id / ComfyUI 工作流名同时含 minimax 与 h3)。
+    H3 的图片绑定用官方 <Picture N> 关键帧/构图锚语法逐镜写,2.0 式 Shot plates 段不适用。"""
+    def h3(text):
+        t = str(text or '').lower()
+        return ('minimax' in t and 'h3' in t) or t.endswith('/h3-prompt-writing')
+    gs = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
+    if h3(gs.get('video_model')) or h3((gs.get('effective') or {}).get('skill_id')) or h3((gs.get('effective') or {}).get('resolved_from')):
+        return True
+    if gs.get('video_model'):
+        return False
+    eff = ((read(base/'settings.json', {}) or {}).get('prompt_skill') or {}).get('effective') or {}
+    if h3(eff.get('skill_id')) or h3(eff.get('resolved_from')):
+        return True
+    try:
+        from modules.whitebox_refs import video_budget
+        b = video_budget(base, ep, gid)
+        return h3(b.get('model')) or h3(b.get('reason'))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def is_scene_map(ref: str) -> bool:
@@ -914,6 +938,34 @@ def activation_line(plates: list, shot_no: int) -> str:
     return text + '。'
 
 
+def build_block_h3(plates: list) -> str:
+    """MiniMax H3 Ref2VA 口径:背景图 = 各镜的构图锚 <Picture N>(官方 2.2:图片作某镜首帧/关键帧/构图锚时用独立 <Picture N> 条目,
+    并写明映射到哪个镜头);[Image N] 并列保留供项目机检。"""
+    parts = []
+    for p in plates:
+        n = p['index']
+        role = 'end-of-move composition anchor' if p['role'] == 'end' else 'composition anchor'
+        parts.append(f"<Picture {n}> ([Image {n}]) is the empty background plate and {role} of [Shot {p['shot_no']}], photographed from "
+                     f"that shot's exact camera with nobody in it — reference generation for architecture, set dressing, lighting and camera space only")
+    return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each shot follows only its own plate for set and framing; the plates are set references, '
+            'never frames to hold on — keep the subjects and actions described in each shot.')
+
+
+def anchor_line_h3(plates: list, shot_no: int) -> str:
+    mine = [p for p in plates if p['shot_no'] == shot_no]
+    others = [p for p in plates if p['shot_no'] != shot_no]
+    use = ' and '.join(f"<Picture {p['index']}> ([Image {p['index']}])" + (' at the end of the move' if p['role'] == 'end' else '') for p in mine)
+    text = f"Plate anchor: this shot's set and framing correspond to {use}."
+    if others:
+        seen = []
+        for p in others:
+            tag = f"<Picture {p['index']}> ([Image {p['index']}])"
+            if tag not in seen:
+                seen.append(tag)
+        text += ' ' + ', '.join(seen) + ' not used in this shot.'
+    return text
+
+
 def build_block(plates: list) -> str:
     parts = []
     for p in plates:
@@ -945,14 +997,14 @@ def _remap_images(text: str, old: list, new: list) -> tuple[str, list]:
     return _IMG_RE.sub(replace, text), warns
 
 
-def apply_prompt(prompt: dict, plan: dict, v25: bool = False) -> tuple[dict, list]:
+def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False) -> tuple[dict, list]:
     """幂等回写:剔除俯视图/九宫格 refs 与其声明句,角色/生物 sheet 之后插入本组背景图,重排编号,写 Shot plates 段。
     v25=True(Seedance 2.5):Shot plates 段改写为【场景】分组,并在每个 Shot 段头插入「场景激活：」句(逐镜点名激活/不采用)。"""
     out = copy.deepcopy(prompt)
     old = [r for r in (out.get('refs') or []) if isinstance(r, str)]
     vp = out.get('video_prompt') or ''
     vp = _SPATIAL_RE.sub('', vp); vp = _MAPUSE_RE.sub('', vp); vp = _TILE_RE.sub('', vp); vp = _BLOCK_RE.sub(' ', vp)
-    vp = _ACT_RE.sub('', vp)
+    vp = _ACT_RE.sub('', vp); vp = _H3_ANCHOR_RE.sub('', vp)
     keep = [r for r in old if not is_scene_map(r) and f'/{PLATES_DIR}/' not in r]
     plates = [p['file'] for p in plan['plates']]
     plates = list(dict.fromkeys(plates))
@@ -966,13 +1018,19 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False) -> tuple[dict, lis
         indexed = []
         for p in plan['plates']:
             indexed.append({**p, 'index': new.index(p['file']) + 1})
-        block = build_block_v25(indexed) if v25 else build_block(indexed)
-        m = re.search(r'Shot\s*1\s*[:：｜|]', vp)
+        block = build_block_v25(indexed) if v25 else build_block_h3(indexed) if h3 else build_block(indexed)
+        m = re.search(r'\[?Shot\s*1\s*[:：｜|\]]', vp)
         vp = (vp[:m.start()].rstrip() + ' ' + block + ' ' + vp[m.start():]) if m else (vp.rstrip() + ' ' + block)
+        after = vp.find(block) + len(block)   # 段头只在 Shot plates 段之后找(H3 段文本里含「[Shot k]」字样)
+        if h3:
+            for shot_no in sorted({p['shot_no'] for p in indexed}):
+                head = re.compile(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。\n]*。)' % shot_no).search(vp, after)
+                if head:
+                    vp = vp[:head.end()] + ' ' + anchor_line_h3(indexed, shot_no) + vp[head.end():]
         if v25:
             # 每个 Shot 段头(Shot k: / Shot k｜标题。)之后插入机器持有的「场景激活：」句,Agent 自己的「使用：/不采用：」清单不动
             for shot_no in sorted({p['shot_no'] for p in indexed}):
-                head = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)' % shot_no, vp)
+                head = re.compile(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)' % shot_no).search(vp, after)
                 if head:
                     vp = vp[:head.end()] + activation_line(indexed, shot_no) + vp[head.end():]
     vp = re.sub(r'[ \t]{2,}', ' ', vp).strip()
@@ -986,7 +1044,7 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False) -> tuple[dict, lis
     return out, warns
 
 
-def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: bool = False) -> tuple[list, list]:
+def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: bool = False, h3: bool = False) -> tuple[list, list]:
     errs, warns = [], []
     refs = [r for r in (prompt.get('refs') or []) if isinstance(r, str)]
     vp = prompt.get('video_prompt') or ''
@@ -1001,7 +1059,8 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: 
         if BLOCK_KEY in vp:
             warns.append(f"{gid}: 正文含 {BLOCK_KEY} 段但本组无背景图,建议 --write 清理")
         return errs, warns
-    block = vp[vp.index(BLOCK_KEY):] if BLOCK_KEY in vp else ''
+    block = _BLOCK_RE.search(vp).group(0) if BLOCK_KEY in vp else ''
+    body_text = _BLOCK_RE.sub(' ', vp)   # 段头只在 Shot plates 段之外找
     for p in plan['plates']:
         if p['file'] not in refs:
             errs.append(f"{gid}/{p['shot_id']}: refs 未挂 {p['role']} 背景图 {p['file']}(跑 code/sync_shot_plates.py --write)")
@@ -1011,10 +1070,17 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: 
             if not re.search(r'场景[A-Z]（[^）]*background plate）参考 \[Image\s*%d\]' % n, block):
                 errs.append(f"{gid}/{p['shot_id']}: Seedance 2.5 口径 {BLOCK_KEY} 段缺【场景】槽位「场景X（… background plate）参考 [Image {n}]」(跑 code/sync_shot_plates.py --write)")
             shot_no = p['shot_no']
-            seg = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)(.*?)(?=Shot\s*\d+\s*[:：｜|]|Global constraints:|$)' % shot_no, vp, re.S)
+            seg = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)(.*?)(?=Shot\s*\d+\s*[:：｜|]|Global constraints:|$)' % shot_no, body_text, re.S)
             body = seg.group(1) if seg else ''
             if not re.search(r'场景激活：使用[^。]*\[Image\s*%d\]' % n, body):
                 errs.append(f"{gid}/{p['shot_id']}: Shot {shot_no} 段缺「场景激活：使用场景X（[Image {n}]）…」句(2.5 逐镜激活;跑 --write)")
+        elif h3:
+            if not re.search(r'<Picture\s*%d>\s*\(\[Image\s*%d\]\)[^.;]*composition anchor of \[Shot\s*%d\]' % (n, n, p['shot_no']), block):
+                errs.append(f"{gid}/{p['shot_id']}: H3 口径 {BLOCK_KEY} 段缺「<Picture {n}> ([Image {n}]) … composition anchor of [Shot {p['shot_no']}]」(跑 code/sync_shot_plates.py --write)")
+            seg = re.search(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。\n]*。)(.*?)(?=\[?Shot\s*\d+\s*[:：｜|\]]|Global constraints:|overall_soundscape:|$)' % p['shot_no'], body_text, re.S)
+            body = seg.group(1) if seg else ''
+            if not re.search(r'Plate anchor:[^.]*<Picture\s*%d>' % n, body):
+                errs.append(f"{gid}/{p['shot_id']}: Shot {p['shot_no']} 段缺「Plate anchor: … <Picture {n}>」句(H3 逐镜构图锚;跑 --write)")
         elif not re.search(r'\[Image\s*%d\][^.;]*(background plate|end plate)' % n, block):
             errs.append(f"{gid}/{p['shot_id']}: {BLOCK_KEY} 段缺 [Image {n}] 的 {p['role']} 背景图说明句")
         if p.get('stale'):
@@ -1037,9 +1103,10 @@ def sync_group(base: Path, ep: str, gid: str, write: bool = False, strict: bool 
     if not isinstance(prompt, dict):
         return result
     v25 = group_is_v25(base, ep, gid)
-    result['seedance_25'] = v25
+    h3 = (not v25) and group_is_h3(base, ep, gid)
+    result['seedance_25'] = v25; result['minimax_h3'] = h3
     if write:
-        updated, warns = apply_prompt(prompt, plan, v25)
+        updated, warns = apply_prompt(prompt, plan, v25, h3)
         result['warnings'].extend(f'{gid}: {w}' for w in warns)
         if updated != prompt:
             backup = base/'directing'/ep/'whitebox'/'prompt_backups'/pp.name
@@ -1051,7 +1118,7 @@ def sync_group(base: Path, ep: str, gid: str, write: bool = False, strict: bool 
             os.replace(tmp, pp)
             result['updated'] = True
         prompt = updated
-    e, w = check_prompt(prompt, plan, gid, strict, v25)
+    e, w = check_prompt(prompt, plan, gid, strict, v25, h3)
     result['errors'].extend(e); result['warnings'].extend(w)
     return result
 

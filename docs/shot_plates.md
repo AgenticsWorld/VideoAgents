@@ -64,6 +64,8 @@ grp003 的 sh005 背景图（机位在路上、朝南南西横看绿化带，54 
 
 **Seedance 2.5 变体（2026-09-09）**：组生效模型为 2.5（组级覆盖、项目提示词技能快照或 genmedia 当前模型任一判定）时，`--write` 改写为 2.5 官方结构：Shot plates 段变为 `【场景】场景A（Shot 1 的机位，空场景 background plate）参考 [Image N]，只采用空间布局、建筑、材质和光线…`，并在每个 Shot 段头（`Shot k:` 或 `Shot k｜标题。`）插入机器持有的「场景激活：使用场景A（[Image N]）；不采用场景B（[Image M]）。」句；Agent 自己写的「使用：/不采用：」清单不动。机检同样分支。实测 dzg6 grp010：2.0 式绑定段三次都被模型合成一个环境，按此结构重写后两镜各用各图。配套机检 `sd25_prompt_structure`（`code/prompt_skill_check.py`）要求正文其余部分也按 2.5 结构写。
 
+**MiniMax H3 变体（2026-09-09）**：组生效模型为 H3（模型 id 或工作流名同时含 minimax 与 h3，或技能为 h3-prompt-writing）时，Shot plates 段按 Ref2VA 官方 §2.2 写成图片构图锚：`<Picture N> ([Image N]) is the empty background plate and composition anchor of [Shot k] … reference generation for architecture, set dressing, lighting and camera space only`，并在每个 Shot 段头插入 `Plate anchor: this shot's set and framing correspond to <Picture N> ([Image N]). <Picture M> ([Image M]) not used in this shot.`；`[Image N]` 并列保留供项目机检。配套机检 `h3_prompt_structure`。H3 变体尚未在真实项目上出片验证。
+
 不带 `--write` 为机检：refs 不含俯视图/九宫格（违规）、每张背景图在 refs 且有说明句（违规）、背景图机位过期（WARN）、尚无背景图的镜（WARN，`--strict` 违规）。`render_shot_plates.py` 出图后自动 `--write`；prompt 工位产出 prompt 后再跑一次。原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
 
 ## 预览
