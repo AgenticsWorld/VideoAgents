@@ -394,6 +394,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
     </div>
     <div class="np-step" data-step="2" style="display:none">
+      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
+      <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
+      <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="30"></div>
+      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="10"></div>
+      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="10"></div>
+      <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
+      <div class="note">选择 Seedance 2.0 时自动关闭「人物精确空间位置」(白模参考视频),其他模型默认开启;可在下一步「输出设置」再手动调整。</div>
+    </div>
+    <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>输出画幅</label>
         <select id="npo-aspect" style="flex:1">
           <option value="youtube">YouTube 画幅(16:9)</option>
@@ -448,7 +457,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <input type="checkbox" id="npo-burnin" style="flex:none">
         <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
     </div>
-    <div class="np-step" data-step="3" style="display:none">
+    <div class="np-step" data-step="4" style="display:none">
       <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
         <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
       <div class="row"><label>分镜时长(秒)</label>
@@ -461,14 +470,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
       <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
-    </div>
-    <div class="np-step" data-step="4" style="display:none">
-      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
-      <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="15"></div>
-      <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="9"></div>
-      <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="3"></div>
-      <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="3"></div>
-      <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
     </div>
     <div class="np-step" data-step="5" style="display:none">
       <div class="row"><label>片头(intro)</label>
@@ -1140,8 +1141,8 @@ $('#project').onchange=async()=>{
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
-/* ---------- 新建项目向导(基础信息→输出设置→时长设置→模型限制→片头片尾;审核设置不进向导,新建默认全 0,只能在项目设置「审核设置」修改,2026-09-07) ---------- */
-const NP_STEP_NAMES=['基础信息','输出设置','时长设置','模型限制','片头片尾'];
+/* ---------- 新建项目向导(基础信息→模型限制→输出设置→时长设置→片头片尾,2026-09-09 模型限制提到第二步;审核设置不进向导,新建默认全 0,只能在项目设置「审核设置」修改,2026-09-07) ---------- */
+const NP_STEP_NAMES=['基础信息','模型限制','输出设置','时长设置','片头片尾'];
 let NP_STEP=1;
 function npShowStep(n){
   NP_STEP=n;
@@ -1187,12 +1188,12 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
   $('#npo-burnin').checked=false;
-  $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';$('#npo-spatial').checked=true;
+  $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=1;$('#npd-smax').value=10;
   $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭
-  sgApplyPreset('npsg','sd20');   // 分镜组默认按 Seedance 2.0 口径(15s/9图/3视频/3音频)
+  sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动人物精确空间位置
   $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
   $('#npp-intro-text').value='';$('#npp-outro-text').value='';
   nppToggleRows();
@@ -1209,17 +1210,17 @@ function openNpModal(){
 function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置弹窗/服务端校验一致)
   if(n===1){
     if(!/^[A-Za-z0-9]+$/.test($('#np-name').value.trim()))return '项目名称只能使用英文字母和数字';
-  }else if(n===2){
+  }else if(n===2){   // 模型限制
+    return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
+      parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
+  }else if(n===3){   // 输出设置
     if($('#npo-aspect').value==='custom'&&!/^\d+\s*:\s*\d+$/.test($('#npo-custom').value.trim()))
       return '自定义画幅格式:宽:高,如 21:9';
     if(!document.querySelectorAll('.npo-platform:checked').length)return '至少选择一个发布平台';
-  }else if(n===3){
+  }else if(n===4){   // 时长设置
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
     if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
-  }else if(n===4){
-    return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
-      parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
   }else if(n===5){
     if($('#npp-intro-text').value.length>2000||$('#npp-outro-text').value.length>2000)
       return '片头/片尾要求文本过长(≤2000 字)';
@@ -1575,11 +1576,17 @@ function sgApplyPreset(pfx,key){
   for(const [k,id] of Object.entries(SG_FIELDS))$('#'+pfx+'-'+id).value=p[k];
   SG_PICKED[pfx]=key;
   sgSyncPreset(pfx);
+  if(pfx==='npsg')npSpatialFromModel();
+}
+// 新建向导:人物精确空间位置随第二步所选视频模型联动——Seedance 2.0 系列关闭,
+// 其余模型默认开启(2026-09-09 用户拍板);仅在模型限制步点选预设/改值时联动,用户之后在输出设置步仍可手动改
+function npSpatialFromModel(){
+  $('#npo-spatial').checked=sgActivePreset('npsg')!=='sd20';
 }
 document.querySelectorAll('[data-sg-presets]').forEach(box=>{
   const pfx=box.dataset.sgPresets;
   box.querySelectorAll('button').forEach(b=>b.onclick=()=>sgApplyPreset(pfx,b.dataset.preset));
-  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>sgSyncPreset(pfx));
+  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>{sgSyncPreset(pfx);if(pfx==='npsg')npSpatialFromModel()});
 });
 sgSyncPreset('npsg');
 function sgValidate(gs,ni,nv,na){   // 返回错误文案,''=通过(与服务端 _validate_shot_group 同口径)

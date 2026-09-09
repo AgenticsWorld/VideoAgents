@@ -86,6 +86,7 @@ window.I18N_DICT = {
 "最大参考视频数量": "Max. Referenzvideos",
 "最大参考音频数量": "Max. Referenzaudios",
 "约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。": "Begrenzt die Gesamtdauer und die Anzahl der Referenzmaterialien jeder Generierungsgruppe. Diese Werte müssen zu den Fähigkeiten des gewählten Videogenerierungsmodells passen (Seedance 2.0: Gruppendauer ≤15s, Referenzbilder ≤9, Referenzvideos ≤3, Referenzaudios ≤3; Seedance 2.5: Gruppendauer ≤30s, Referenzbilder ≤30, Referenzvideos ≤10, Referenzaudios ≤10). Im Zweifel unverändert lassen.",
+"选择 Seedance 2.0 时自动关闭「人物精确空间位置」(白模参考视频),其他模型默认开启;可在下一步「输出设置」再手动调整。": "Bei Seedance 2.0 wird „Präzise Figurenpositionen“ (Whitebox-Referenzvideo) automatisch deaktiviert; bei anderen Modellen ist es standardmäßig aktiv. Im nächsten Schritt „Ausgabeeinstellungen“ kann es manuell geändert werden.",
 "最大分镜组时长需为 4-30 的数值": "Max. Gruppendauer muss eine Zahl zwischen 4 und 30 sein",
 "最大参考图数量需为 0-30 的整数": "Max. Referenzbilder muss eine ganze Zahl zwischen 0 und 30 sein",
 "最大参考视频数量需为 0-10 的整数": "Max. Referenzvideos muss eine ganze Zahl zwischen 0 und 10 sein",

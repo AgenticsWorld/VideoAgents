@@ -694,9 +694,9 @@ DEFAULT_GENCONFIG = {
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
-        "volcengine": {"api_key": "", "model": "doubao-seedance-2-0-260128",
+        "volcengine": {"api_key": "", "model": "doubao-seedance-2-5-260628",
                        "custom_model": ""},
-        "byteplus": {"api_key": "", "model": "dreamina-seedance-2-0-260128",
+        "byteplus": {"api_key": "", "model": "dreamina-seedance-2-5-260628",
                      "custom_model": ""},
         # Fal(queue.fal.run 托管端点):model 存家族前缀(bytedance/seedance-2.0、minimax/h3、
         # fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video
