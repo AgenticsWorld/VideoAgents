@@ -185,6 +185,14 @@ def x_word(xmin, xmax, xmean):
             if x <= .2 else 'on the right' if x <= .66 else 'at the far right edge')
 
 
+def y_word(ymin, ymax):
+    """竖向占幅:ndc_y → 自顶向下百分比,如 'filling the frame vertically from the top edge down to 65% of the height'。"""
+    top = round((1 - ymax) / 2 * 100); bottom = round((1 - ymin) / 2 * 100)
+    a = 'the top edge' if top <= 3 else f'{top}% of the height'
+    b = 'the bottom edge' if bottom >= 97 else f'{bottom}% of the height'
+    return f'filling the frame vertically from {a} down to {b}'
+
+
 def dist_word(z):
     return 'in the near foreground' if z < 4 else 'in the middle distance' if z < 20 else 'far in the distance'
 
@@ -202,10 +210,11 @@ def inventory(scene, layout, key, fmt):
             continue
         b = base_name(obj['id']); lid = resolve_landmark(b, landmarks)
         entry = merged.setdefault(lid or b, {'id': lid or b, 'name': names.get(lid, b.replace('_', ' ')), 'landmark': lid,
-                                             'objects': [], 'xs': [], 'xmin': 1, 'xmax': -1, 'z': 1e9})
-        xs = [h[0] for h in hits]
+                                             'objects': [], 'xs': [], 'xmin': 1, 'xmax': -1, 'ymin': 1, 'ymax': -1, 'z': 1e9})
+        xs = [h[0] for h in hits]; ys = [h[1] for h in hits]
         entry['objects'].append(obj['id']); entry['xs'].extend(xs)
         entry['xmin'] = min(entry['xmin'], max(-1, min(xs))); entry['xmax'] = max(entry['xmax'], min(1, max(xs)))
+        entry['ymin'] = min(entry['ymin'], max(-1, min(ys))); entry['ymax'] = max(entry['ymax'], min(1, max(ys)))
         entry['z'] = min(entry['z'], min(h[2] for h in hits))
     items = []
     view = norm([key['target'][0]-key['position'][0], 0, key['target'][2]-key['position'][2]])
@@ -233,7 +242,7 @@ def inventory(scene, layout, key, fmt):
         if not p or abs(p[0]) > 1.05:
             continue
         items.append({'id': lid, 'name': names[lid], 'landmark': lid, 'objects': [], 'x': p[0], 'xmin': p[0], 'xmax': p[0],
-                      'z': round(p[2], 1), 'direction': lm.get('kind') == 'direction'})
+                      'ymin': p[1], 'ymax': p[1], 'z': round(p[2], 1), 'direction': lm.get('kind') == 'direction'})
     items.sort(key=lambda it: it['x'])
     in_frame_ids = {it['landmark'] for it in items if it['landmark']}
     out_of_frame = []
@@ -253,7 +262,8 @@ def inventory(scene, layout, key, fmt):
             count = len({re.sub(r'\D', '', o) or o for o in it['objects']})
             plural = f" ({count} of them)" if count > 1 else ''
             phrases.append(f"{it['name']}{plural} {x_word(it['xmin'], it['xmax'], it['x'])}, {dist_word(it['z'])} (nearest {it['z']} m)"
-                           + (f", {it['orientation']}" if it.get('orientation') else ''))
+                           + (f", {it['orientation']}" if it.get('orientation') else '')
+                           + (f", {y_word(it['ymin'], it['ymax'])}" if it.get('objects') else ''))
     return items, phrases, out_of_frame
 
 
@@ -508,6 +518,9 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
         lines.append("In frame from left to right: " + '; '.join(phrases) + '.')
     if out_of_frame:
         lines.append("Not visible in this frame (behind or beside the camera, do not paint them in): " + '; '.join(out_of_frame) + '.')
+    if facts.get('standing_hidden'):
+        lines.append(f"The camera stands {facts['standing']}, but that surface lies below the bottom edge of the frame and is not visible — "
+                     "the frame starts at the far kerb line; do not put any road or ground in the foreground.")
     if desc:
         lines.append("General location description for materials and era only (only the elements listed above are in frame): " + desc)
     lines.append("Empty location plate: no people, no characters, no human figures or silhouettes, no animals, no moving vehicles, "
@@ -671,6 +684,15 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     budget_hit = False
     by_key = {}        # 本次运行生成/复用到的库条目 key -> entry
     group_first = {}   # group_id -> 本组最先落定的背景图条目(同组后续新图以它为第二参考图,保证同组各镜是同一处地方)
+    forced = {d['shot_id'] for d in decisions if d['mode'] == 'new'} if force else set()
+    for g in episode['groups']:
+        for shot_id in [c['shot_id'] for c in g['cameras']]:
+            if shot_id in forced or g['group_id'] in group_first:
+                continue
+            for p in (idx['shots'].get(shot_id) or {}).get('plates', []):
+                if p.get('role') == 'start' and (base/p['file']).is_file():
+                    group_first[g['group_id']] = {'key': p['key'], 'file': p['file']}   # 单镜重出时以同组已有成图为第二参考图
+                    break
     channel = None
     for d in decisions:
         sid, shot_id, role = d['scene_id'], d['shot_id'], d['role']
@@ -709,6 +731,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             continue
         layout = layouts[sid]; scene = episode['scenes'][sid]
         items, phrases, out_of_frame = inventory(scene, layout, d['keyframe'], fmt)
+        stand = d['facts'].get('standing', '')
+        d['facts']['standing_hidden'] = bool(stand.startswith('on ')) and not any(it['name'] == stand[3:] for it in items)
         lighting = lighting_fragment(base, sid, d['scheme'])
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, d['facts']['bearing_deg']) if sun else None
