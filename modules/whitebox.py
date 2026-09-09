@@ -467,11 +467,14 @@ def compile_group(base, ep, group, shots, scene):
         camera_errors = check_camera(base, ep, shots[camera['shot_id']], camera, gid)
         if camera_errors:
             raise ValueError('; '.join(camera_errors))
+    # 待决项(2026-09-09,docs/whitebox.md「待决项与用户裁决」):Agent 调度时拿不准的取舍,结构校验后随组透传给预览页
+    from modules.whitebox_issues import validate_issues
+    issues = validate_issues(plan, ep, gid, duration, group['shots'], seen | set(group.get('scene_cast', [])))
     return {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],
             'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'extras': extras,
             'props': props, 'cameras': cameras,
             'continuity_from': group.get('continuity_from'), 'continuity': plan.get('continuity', {}),
-            'warnings': warnings, 'authored': bool(plan)}
+            'warnings': warnings, 'authored': bool(plan), 'issues': issues}
 
 
 def complete_scene_actors(groups, contexts, raw_groups, errors):
@@ -573,7 +576,13 @@ def compile_episode(base: Path, ep: str):
     complete_scene_actors(groups, contexts, raw_groups, errors)
     from modules.whitebox_camera import check_matches
     errors.extend(check_matches(base, ep, groups))
+    # 用户裁决(directing/<ep>/whitebox/decisions.json)合并进各组 issues,并给整集汇总
+    from modules.whitebox_issues import load_decisions, merge_decision, summarize
+    decisions = load_decisions(base, ep)
+    for group in groups:
+        group['issues'] = [merge_decision(i, decisions.get(i['issue_id'])) for i in group.get('issues', [])]
     return {'schema_version': 'whitebox_episode.v1', 'staging_version': 3, 'project': base.name, 'ep': ep,
             'render': render_format(read(base / 'settings.json', {})),
             'scenes': scenes, 'groups': groups, 'errors': errors,
+            'issues_summary': summarize(groups),
             'source_group_count': len(source.get('generation_groups', []))}

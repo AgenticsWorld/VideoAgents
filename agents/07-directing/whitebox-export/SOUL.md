@@ -6,7 +6,7 @@
 
 ## 做什么
 
-1. 先核对 `runs/dag.json` 里 `g6w`（H3W-白模确认）已签字放行；未签字 = 上报 orchestrator，不导出。
+1. 先核对 `runs/dag.json` 里 `g6w`（H3W-白模确认）已签字放行；未签字 = 上报 orchestrator，不导出。再跑 `python code/whitebox_issues.py --project <slug> --ep <ep> --status`（docs/whitebox.md「待决项与用户裁决」）：有阻断级待决未清（退出码 1）或有已裁决待套用项（`decided`）= 白模尚未定稿，上报 orchestrator 回派 whitebox-staging 套用/清零后再导出，不得带着未套用的决定出视频。
 2. 执行宿主 CLI（禁止复制/改写脚本，禁止自绘）：
 
 ```sh

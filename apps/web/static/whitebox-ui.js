@@ -188,6 +188,7 @@ async function buildGroup(host,project,ep){
     <div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div>
     <figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>
     <figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span><select aria-label="${esc(t('空间视角'))}"><option value="top" selected>${esc(t('俯视图'))}</option><option value="real">${esc(t('实景图'))}</option><option value="overview">${esc(t('旋转视角'))}</option></select></figcaption></figure>
+    <div class="wb-issues"></div>
     <details class="wb-warnings"><summary>${esc(t('建模依据与检查 ({count})',{count:warnings.length}))}</summary><div class="wb-status">${esc(t('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',{width:scene.dimensions_m[0],depth:scene.dimensions_m[2],height:scene.dimensions_m[1],aspect:format.aspect_ratio}))} · ${esc(t(scene.inferred?'推断尺寸':'已标定尺寸'))} · ${esc(t('切换旋转视角后可拖动旋转、滚轮缩放'))}</div><div data-no-i18n>${esc(scene.scale_basis)}</div>${warnings.map(w=>`<div data-no-i18n>${esc(wbMessage(w))}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
   const q=x=>host.querySelector(x);
   Object.assign(st,{ready:true,scene,group,format,end:group.duration_s,
@@ -198,7 +199,72 @@ async function buildGroup(host,project,ep){
   st.els.view.onchange=()=>{st.dirty=true;kick();};
   st.els.play.onclick=()=>{if(!st.rr)return;if(st.time>=st.end)st.time=0;st.playing=!st.playing;st.previous=performance.now();st.els.play.textContent=t(st.playing?'暂停':'播放');kick();};
   st.els.range.oninput=e=>{st.time=Number(e.target.value);st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();};
+  st.ep=ep;st.issues=q('.wb-issues');renderIssues(st);
   return st;
+}
+
+// ---- 待决项(docs/whitebox.md「待决项与用户裁决」,2026-09-09):白模调度 Agent 拿不准的取舍列在组面板,
+// 用户「▶ 看现场」跳到对应时刻后点选项;答复写 directing/<ep>/whitebox/decisions.json,
+// 「应用决定并重编译」派单给 whitebox-staging 套用;「自定义…」走 ✏️ 修改同款通道发给总制片 ----
+const kindLabel=k=>({facing:t('朝向'),occlusion:t('遮挡'),timing:t('时长'),presence:t('进退场'),source_conflict:t('设定冲突'),model_gap:t('模型缺口'),missing_info:t('缺信息'),continuity:t('连续性')})[k]||t('其他');
+function renderIssues(st){
+  const box=st.issues;if(!box)return;
+  const issues=st.group.issues||[];
+  if(!issues.length){box.innerHTML='';box.hidden=true;return;}
+  box.hidden=false;
+  const pending=issues.filter(i=>i.status==='open'||i.status==='stale');
+  const blocking=pending.filter(i=>i.severity==='blocking').length;
+  const decided=issues.filter(i=>i.status==='decided');
+  const item=i=>{
+    const jumpT=i.camera_view?.t??i.t_range_s?.[0];
+    const where=[i.shots?.length?i.shots.join(', '):'',i.t_range_s?t('{start}–{end} 秒',{start:i.t_range_s[0].toFixed(1),end:i.t_range_s[1].toFixed(1)}):'',i.actors?.length?t('人物 {actors}',{actors:i.actors.join(', ')}):''].filter(Boolean).join(' · ');
+    const chosen=i.decision?.choice;
+    const opts=[...i.options.map(o=>`<button type="button" class="wb-opt${chosen===o.id?' on':''}${i.recommended===o.id?' rec':''}" data-issue="${esc(i.issue_id)}" data-choice="${esc(o.id)}" title="${esc([o.consequence,o.cost].filter(Boolean).join(' · '))}">${esc(o.id)}. ${esc(o.label)}${i.recommended===o.id?' <em>'+esc(t('推荐方案'))+'</em>':''}</button>`),
+      i.provisional&&!i.options.some(o=>o.id==='provisional')?`<button type="button" class="wb-opt${chosen==='provisional'?' on':''}" data-issue="${esc(i.issue_id)}" data-choice="provisional">${esc(t('默认取舍'))}</button>`:'',
+      `<button type="button" class="editbtn wb-custom" data-loc="${esc(t('白模待决项 {marker} {question} 我的决定:',{marker:`[whitebox-issue:${st.project}/${st.ep}/${st.group.group_id}/${i.issue_id}]`,question:i.question}))}" title="${esc(t('对这条白模待决项给出自定义决定,发消息给总制片'))}">${esc(t('自定义…'))}</button>`].join('');
+    let state='';
+    if(i.status==='applied')state=`<div class="wb-issue-state ok">✅ ${esc(t('已套用'))}${i.applied?.choice?' · '+esc(i.applied.choice):''}</div>`;
+    else if(i.status==='decided')state=`<div class="wb-issue-state ok">☑ ${esc(t('已选「{choice}」· {by}',{choice:i.decision.choice,by:i.decision.by||''}))}${i.decision.note?' · '+esc(i.decision.note):''}</div>`;
+    else if(i.status==='stale')state=`<div class="wb-issue-state warn">⚠ ${esc(t('答复已失效(问题已变),请重新选择'))}</div>`;
+    return `<div class="wb-issue sev-${esc(i.severity)} st-${esc(i.status)}" data-issue="${esc(i.issue_id)}">
+      <div class="wb-issue-head"><span class="wb-sev">${esc(t(i.severity==='blocking'?'阻断':'建议'))}</span><span class="wb-kind">${esc(kindLabel(i.kind))}</span><code data-no-i18n>${esc(i.issue_id)}</code>${where?`<span class="wb-where" data-no-i18n>${esc(where)}</span>`:''}${jumpT!=null?`<button type="button" class="wb-jump" data-t="${jumpT}">${esc(t('▶ 看现场'))}</button>`:''}</div>
+      <div class="wb-q" data-no-i18n>${esc(i.question)}</div>
+      ${i.provisional?`<div class="wb-prov" data-no-i18n>${esc(t('默认取舍:{text}',{text:i.provisional}))}</div>`:''}
+      ${i.status==='applied'?'':`<div class="wb-opts">${opts}</div>`}${state}</div>`;
+  };
+  box.innerHTML=`<details class="wb-issues-box" open><summary>⚠ ${esc(t('待决项 ({count})',{count:issues.length}))}${pending.length?` · <b class="wb-pending">${esc(t('待处理 {count}',{count:pending.length}))}</b>`:''}${blocking?` · <b class="wb-blocking">${esc(t('阻断 {count}',{count:blocking}))}</b>`:''}</summary>
+    ${issues.map(item).join('')}
+    ${decided.length?`<div class="wb-apply"><button type="button" class="wb-apply-btn">${esc(t('🔄 应用 {count} 项决定并重编译',{count:decided.length}))}</button><span class="wb-apply-msg" role="status"></span></div>`:''}</details>`;
+  box.querySelectorAll('.wb-jump').forEach(b=>b.onclick=()=>{st.time=Math.min(st.end,Number(b.dataset.t));st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();});
+  box.querySelectorAll('.wb-opt').forEach(b=>b.onclick=()=>decideIssue(st,b.dataset.issue,b.dataset.choice,b));
+  const apply=box.querySelector('.wb-apply-btn');if(apply)apply.onclick=()=>applyDecisions(st,apply);
+}
+async function decideIssue(st,issueId,choice,button){
+  button.disabled=true;
+  try{
+    const r=await json(`${api(st.project)}/${encodeURIComponent(st.ep)}/issues/${encodeURIComponent(issueId)}/decision`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({choice})});
+    const idx=st.group.issues.findIndex(i=>i.issue_id===issueId);
+    if(idx>=0)st.group.issues[idx]=r.issue;
+    renderIssues(st);
+  }catch(e){button.disabled=false;const row=button.closest('.wb-issue');let er=row.querySelector('.wb-issue-state.err');if(!er){er=document.createElement('div');er.className='wb-issue-state err';row.appendChild(er);}er.textContent=t('保存失败:{e}',{e:wbMessage(e.message)});}
+}
+async function applyDecisions(st,button){
+  const rows=(st.group.issues||[]).filter(i=>i.status==='decided');
+  if(!rows.length)return;
+  const gid=st.group.group_id, proj=st.project, ep=st.ep;
+  // 指令用中文写给 Agent(同视频预览页「重新生成白模合辑」):内联已裁决项,按规约套用并回写源文件
+  const message=[`请套用 ${ep} ${gid} 已裁决的白模待决项(docs/whitebox.md「待决项与用户裁决」):`,
+    ...rows.map(i=>`- ${i.issue_id}:选「${i.decision.choice}」${i.decision.note?'(说明:'+i.decision.note+')':''}${i.decision.choice==='provisional'?'(=接受默认取舍:'+i.provisional+')':''}`),
+    `先执行 python code/whitebox_issues.py --project ${proj} --ep ${ep} --pending 核对;逐条按所选方案修改 directing/${ep}/whitebox_plans/${gid}.json 并回写对应源文件(blocking/camera/shot_list/prompt),`,
+    `把该条 issues[].status 置 applied 并写 applied:{choice,at,note};然后 python code/render_whitebox.py --project ${proj} --ep ${ep} --compile-only ${gid} 重编译。`,
+    '回执逐条报告处理结果与回写的文件;不得只改 status 不改内容。'].join('\n');
+  button.disabled=true;
+  const msg=button.parentElement.querySelector('.wb-apply-msg');
+  try{
+    const r=await json('/api/v1/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent:'07-directing/whitebox-staging',message,project:proj,source:'user'})});
+    msg.textContent=t('已派单给白模调度 Agent(运行 {run}),套用后刷新本页',{run:r.run_id||'?'});
+    episodeCache=null;
+  }catch(e){button.disabled=false;msg.textContent=t('派单失败:{e}',{e:wbMessage(e.message)});}
 }
 export function mountGroups(root,project,ep){
   groupObserver?.disconnect();

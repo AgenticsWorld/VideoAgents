@@ -59,6 +59,28 @@ async def episode(project: str,ep: str):
     return result
 
 
+# ---- 待决项裁决(docs/whitebox.md「待决项与用户裁决」,2026-09-09):预览页组卡按钮 → 写 directing/<ep>/whitebox/decisions.json ----
+@router.get('/{ep}/issues')
+async def issues(project: str,ep: str):
+    """不经完整编译直接读计划 + decisions 汇总(阻断级未清则 H3W 签字被拒;同 code/whitebox_issues.py --status)。"""
+    from modules.whitebox_issues import collect,format_summary
+    base=project_path(project,ep)
+    data=await checked(collect,base,ep)
+    data['text']=format_summary(data['summary'])
+    return data
+
+
+@router.post('/{ep}/issues/{issue_id}/decision')
+async def decide_issue(project: str,ep: str,issue_id: str,body: dict):
+    """写一条用户裁决:choice ∈ 选项 id | provisional | custom(note 必填)。返回合并后的 issue 与整集汇总。"""
+    from modules.whitebox_issues import collect,decide,format_summary
+    base=project_path(project,ep)
+    if not isinstance(body,dict):raise HTTPException(422,'body must be an object')
+    issue=await checked(decide,base,ep,issue_id,str(body.get('choice') or ''),str(body.get('note') or ''),'user:page')
+    summary=(await checked(collect,base,ep))['summary']
+    return {'issue':issue,'summary':summary,'text':format_summary(summary)}
+
+
 def file_links(project,record):
     return [{'name':Path(path).name,'url':f'/api/v1/projects/{quote(project)}/artifacts/{path}'} for path in record.get('files',[])]
 

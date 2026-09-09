@@ -32,3 +32,27 @@
 .wb-host figcaption select{padding:1px 6px;font-size:11px}
 .wb-host canvas{width:100%;height:auto;aspect-ratio:var(--wb-aspect);border-radius:6px;display:block}
 .wb-host .wb-warnings{max-height:110px}
+/* 待决项(2026-09-09):Agent 调度时拿不准的取舍,用户看现场后点选项 */
+.wb-issues[hidden]{display:none}
+.wb-issues-box{border:1px solid #5a4a2a;border-radius:7px;padding:6px 10px;background:#1b1a17;color:#dde3ee;max-height:320px;overflow:auto}
+.wb-issues-box>summary{cursor:pointer;color:#e3b66b;font-weight:600}
+.wb-issues-box .wb-pending{color:#e3b66b}.wb-issues-box .wb-blocking{color:#ff7b72}
+.wb-issue{border-top:1px solid #2a3040;padding:7px 0}
+.wb-issue-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11px;color:#99a8bb}
+.wb-issue-head code{font-size:10.5px;color:#8fbaff}
+.wb-sev{padding:0 6px;border-radius:4px;border:1px solid #6b5a30;color:#e3b66b}
+.wb-issue.sev-blocking .wb-sev{border-color:#a33;color:#ff7b72}
+.wb-kind{padding:0 6px;border-radius:4px;background:#222a36}
+.wb-issue-head .wb-jump{margin-inline-start:auto;padding:1px 8px;font-size:11px}
+.wb-q{margin:4px 0 2px;line-height:1.5}
+.wb-prov{color:#99a8bb;font-size:11.5px}
+.wb-opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.wb-opts .wb-opt{padding:2px 8px;font-size:11.5px;text-align:start}
+.wb-opts .wb-opt.rec{border-color:#7aa2d8}.wb-opts .wb-opt.rec em{font-style:normal;color:#8fbaff;font-size:10px}
+.wb-opts .wb-opt.on{background:#2b4a2e;border-color:#3f8f4a;color:#c8f0c8}
+.wb-opts .wb-custom{padding:2px 8px;font-size:11.5px}
+.wb-issue-state{margin-top:5px;font-size:11.5px}
+.wb-issue-state.ok{color:#8fd19e}.wb-issue-state.warn{color:#e3b66b}.wb-issue-state.err{color:#ff7b72}
+.wb-issue.st-applied{opacity:.75}
+.wb-apply{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.wb-apply-msg{font-size:11.5px;color:#99a8bb}

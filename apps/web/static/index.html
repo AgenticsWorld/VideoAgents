@@ -2891,7 +2891,15 @@ function showConfirm(c){
     const b=document.createElement('button');b.textContent=t(o);
     if(o===(c.default||(sign?'签字':'重跑')))b.className='primary';
     b.onclick=async e=>{e.stopPropagation();
-      try{await api('/api/v1/approvals/'+encodeURIComponent(c.id)+'/answer',{answer:o})}catch(err){}
+      try{await api('/api/v1/approvals/'+encodeURIComponent(c.id)+'/answer',{answer:o})}
+      catch(err){
+        // 服务端拒签(如 H3W 白模阻断级待决项未清 → 409):弹窗保留,把原因显示在卡内,用户处理后可再点
+        const msg=String(err&&err.message||'');
+        if(msg&&!/^(404|no such confirm)/.test(msg)){
+          let er=d.querySelector('.err');if(!er){er=document.createElement('div');er.className='err';er.style.cssText='margin-top:8px;font-size:12px;color:var(--red)';d.appendChild(er)}
+          er.textContent='⛔ '+msg;return;
+        }
+      }
       if(iv)clearInterval(iv);d.remove()};
     row.appendChild(b);
   });

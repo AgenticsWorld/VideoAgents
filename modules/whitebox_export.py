@@ -23,6 +23,8 @@ _EXPORT_LOCK = threading.Lock()
 
 def fingerprint(episode, group):
     scene = episode['scenes'][group['scene_id']]
+    # 待决项/裁决状态不影响画面,不进视频指纹(否则用户每答一题所有组视频都会显示过期)
+    group = {k: v for k, v in group.items() if k != 'issues'}
     return hashlib.sha256(json.dumps([scene, group], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

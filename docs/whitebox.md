@@ -135,6 +135,49 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 室内取景需保留墙壁，它们定义房间尺度、门洞及碰撞边界。发生隔墙遮挡时，优先将机位置于室内可拍范围，再按构图调整朝向和参考视角；对每个需要入画的主要人物，检查脸部、上身和左右轮廓，而不是只检测一条相机中心线或主角头部射线。允许按镜头意图出现过肩、局部遮挡，但不能漏验被墙完全挡住的其他主要人物。辅助剖切视图可以便于观察室内，但不能删除物理墙或当作正常参考镜头；虚拟拆墙/摄影棚可拆墙必须明确标注。`sh040` 已由东墙外机位移回室内，保留固定三人构图及墙体；`whitebox/check_sh040.mjs` 按24fps检查全6秒、三人的脸部及上身轮廓共2592条视线，结果见 `sh040-camera-review.json`。白模参考视角调整单独记录，正式镜头描述未改。
 
+## 待决项与用户裁决（2026-09-09）
+
+白模调度时拿不准的取舍（人物脸朝向与文字矛盾、机位被墙遮挡、时长内动作做不完、人物该不该在画内、缺道具白模、源设定互相冲突…）不再埋进 `basis`/`warnings` 散文，也不逐条弹 `dispatch.py --confirm`（串行、无画面、超时落默认反而掩盖问题），而是写成**结构化待决项（issue）**：计划照样按默认取舍（provisional）编译落盘，用户在「分镜设定」预览页组卡「🧊白模」面板看着 3D 现场逐条裁决，Agent 再回派套用。计划归 Agent、决定归用户，两者分文件、按 `issue_id` 关联，重编译/重派互不覆盖。
+
+**Agent 侧（whitebox-staging）**：在 `directing/<ep>/whitebox_plans/<grp>.json` 写 `issues[]`，每条：
+
+```json
+{
+  "issue_id": "WBI-ep01-grp028-001",
+  "kind": "facing",
+  "severity": "advisory",
+  "question": "血描说何香面向王三合,但站位坐标算出她背对镜头;以谁为准?",
+  "provisional": "按坐标求 yaw,何香转身面向王三合,机位不动(反打变 3/4 背面)",
+  "options": [
+    {"id": "A", "label": "信坐标,改文字与 prompt", "rewrites": ["directing/ep01/shots/sh052/blocking.json"], "cost": "无"},
+    {"id": "B", "label": "信文字,把王三合挪到灶台北侧", "rewrites": ["blocking_map"], "cost": "同场 3 组重编译"},
+    {"id": "C", "label": "改反打机位到室内东侧", "rewrites": ["camera.json"], "consequence": "景别变更需导演确认"}
+  ],
+  "recommended": "A",
+  "shots": ["sh052"], "t_range_s": [3.0, 8.5], "actors": ["CHAR-0003", "CHAR-0001"],
+  "camera_view": {"t": 4.0},
+  "sources": [{"file": "directing/ep01/shots/sh052/blocking.json", "quote": "何香面向王三合"}],
+  "evidence": {"yaw_required_deg": 167, "yaw_written_deg": 0},
+  "status": "open"
+}
+```
+
+- `issue_id` 固定 `WBI-<ep>-<grp>-NNN`，同组内唯一；`kind ∈ facing | occlusion | timing | presence | source_conflict | model_gap | missing_info | continuity | other`。
+- `severity`：`advisory`（默认；已按 `provisional` 编译，`provisional` 必填）/ `blocking`（找不到任何合理默认，如人物 2 秒要走 8 米、室内没有不隔墙的机位、缺关键道具白模；也要用最接近的可看方案占位编译，并在 question 说明）。**阻断级未清时 H3W 不能签字**（宿主在签字答复时拦，409 并保留弹窗）。
+- `options[].id` 短标识（A/B/C…，不得用保留值 `provisional`/`custom`）；`recommended` 指向其一。`shots`/`actors` 须属于本组，`t_range_s`/`camera_view.t` 为**组内秒**（预览页「▶ 看现场」跳到该时刻）。
+- 每个底层冲突只开一条，不按镜重复；已授权的决定直接执行不再开 issue（沿用「不重复索要确认」规则）。结构不合规 = 编译报错（`render_whitebox.py` 与 `code/whitebox_issues.py --status` 同时报）。
+- 套用用户决定后把该条 `status` 置 `applied` 并写 `applied: {choice, at, note}`，同时按所选方案回写源文件（blocking / camera / shot_list / prompt），**不得只改 status 不改内容**；然后 `--compile-only` 重编译。回执原样带上 `render_whitebox.py` 输出的 `issues` 汇总。
+
+**用户侧**：`directing/<ep>/whitebox/decisions.json`（宿主写，禁止 Agent 手改）：`{"decisions": {"<issue_id>": {choice, note, by, at, issue_hash}}}`。`choice` ∈ 选项 id | `provisional`（接受默认取舍）| `custom`（note 必填）；`by` ∈ `user:page`（预览页按钮）/ `user:chat`（聊天答复，总制片用 CLI 落盘）/ `sign:g6w`（签字自动接受）。`issue_hash` 绑定答复时的问题文本：问题/默认取舍/选项/严重级任一变化，旧答复即 **stale**，须重答。
+
+**有效状态**（编译合并，预览页/API/CLI 一致）：`applied` > `decided` > `stale` > `open`。整集汇总在 `episode.json#issues_summary`（total/open/blocking_open/decided/applied/stale/groups_open/blocking_ids）。裁决状态不进视频指纹，答题不会让 camera.mp4 显示过期。
+
+**入口**：
+- 预览页组卡「🧊白模」面板「⚠ 待决项」：徽标计数、逐条问题 + 默认取舍 + 「▶ 看现场」+ 选项按钮（推荐项带标记）+「默认取舍」+「自定义…」（走 ✏️ 修改同款通道，把 `[whitebox-issue:<proj>/<ep>/<grp>/<issue_id>]` 标记发给总制片）；有已裁决项时出「🔄 应用 n 项决定并重编译」派单给 whitebox-staging。
+- 宿主 CLI `code/whitebox_issues.py --project <slug> --ep <ep> --status | --pending | --decide <id> --choice <x> [--note …] [--by user:chat] | --accept-provisional`（`--status` 有阻断级未清退出码 1）。
+- API `GET /projects/<p>/whitebox/<ep>/issues`、`POST …/issues/<issue_id>/decision {choice, note}`。
+- H3W 签字卡（`g6w`）自动追加各集摘要；签字时阻断级未清 → 拒签；建议级未答复 → 按 `recommended`（无则 `provisional`）记为已决（by=sign:g6w），即**签字等于接受 Agent 的默认取舍**，有记录可追溯。
+
 ## 编译、输出与验证
 
 ```sh

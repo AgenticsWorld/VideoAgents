@@ -43,6 +43,11 @@ def main():
     missing=selected-{g['group_id'] for g in episode['groups']}-{e['group_id'] for e in errors}
     errors.extend({'group_id':g,'error':'Unknown group'} for g in sorted(missing))
     print(json.dumps({'groups':len(episode['groups']),'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)
+    # 待决项汇总(docs/whitebox.md「待决项与用户裁决」):回执须原样带上;阻断级未清时 H3W 签字会被拒
+    from modules.whitebox_issues import format_summary
+    summary=episode.get('issues_summary') or {}
+    print(json.dumps({'issues':{k:summary.get(k) for k in ('total','open','blocking_open','decided','applied','stale','groups_open','blocking_ids')},
+                      'issues_text':format_summary(summary)},ensure_ascii=False),flush=True)
     if errors:return 1
     if args.check_only:return 0
     output=base/'directing'/args.ep/'whitebox';output.mkdir(parents=True,exist_ok=True)

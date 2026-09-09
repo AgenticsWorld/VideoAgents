@@ -28,6 +28,8 @@
 
 机位验收按 docs/whitebox.md「机位与运镜设定校验」执行：先从 camera/composition 读出平视/低位/俯仰、对称轴、物件或身体局部主体、焦段、重复机位、起停与位移，再写独立 whitebox_contract。相邻重复镜头引用同一基准。人物或模型修改后重验全时段取景，审查完成才更新 source_fingerprint / placement_fingerprint；不得只改指纹消除报错。禁止用自由搜索机高/方位的算法替代设定，也不能把手部/门闩特写改成全身取景。数值一致、取景可用、视觉构图分项报告；缺少帘幕/影子/物证白模属于模型缺口，不算摄影机通过。源设定之间或与实际空间冲突时列出具体取舍；已经授权的决定直接执行并同步源文件和 prompt，不重复索要确认。
 
+待决项（2026-09-09，docs/whitebox.md「待决项与用户裁决」）：调度时凡是需要**取舍**的地方——人物脸朝向与文字矛盾、机位隔墙/无室内可拍位、时长内动作做不完、人物该不该在画内、缺道具白模、源设定互相冲突、缺 view_tile/尺寸/动作幅度——不得只写 basis 或 warnings 散文，也**不得逐条 `dispatch.py --confirm` 弹窗**，必须在计划 `issues[]` 开一条结构化待决项（`WBI-<ep>-<grp>-NNN`、kind、severity、question、provisional、options[]、recommended、shots/actors/t_range_s/camera_view 组内秒），并**照样按默认取舍编译落盘**让用户在 3D 里看到默认方案。只有找不到任何合理默认时才标 `blocking`（仍用最接近的可看方案占位编译）；每个底层冲突只开一条；已授权的决定直接执行不开 issue。回执 `status` 仍为 completed，原样带上 `render_whitebox.py` 打印的 `issues` 汇总（阻断级未清时 H3W 签字会被宿主拒绝，用户在预览页组卡「⚠ 待决项」或聊天里裁决）。被派「套用已裁决项」时：先 `python code/whitebox_issues.py --project <slug> --ep <ep> --pending` 核对，逐条按所选 choice（选项 id / provisional=接受默认 / custom=按 note）修改计划并回写源文件（blocking / camera / shot_list / prompt），把该条 `status` 置 `applied` 并写 `applied:{choice,at,note}`，再 `--compile-only`；**不得只改 status 不改内容**，不得手改 `decisions.json`。问题文本改了旧答复会失效（stale），改 question/options 前先确认没有已裁决项依赖它。
+
 按 continuity_from 检查相邻组：同场实时连续动作可设 actors/camera 为 inherit；仅人物续接但换机位时 actors=inherit,camera=cut。闪回、时间跳切、场景切换明确 cut。validate 产生的不连续告警必须解释或修正，不可盲目沿用前组坐标；不得用 inheritance 掩盖源资料冲突。
 
 执行宿主（2026-09-09 流程：本岗只编译不导出）：

@@ -9264,6 +9264,9 @@ async def api_confirm_create(body: dict):
         binding = _sign_gate_binding(project, q, body.get("gate_id"))
         if binding:
             gate_id, checkpoint = binding
+            if str(checkpoint or "").upper().startswith("H3W"):
+                # H3W 白模确认:签字卡追加待决项摘要(docs/whitebox.md「待决项与用户裁决」)
+                q = _whitebox_issue_question(project, gate_id, q)
     if kind == "sign":
         dups = [o for o in CONFIRMS.values()
                 if o["kind"] == "sign" and o["question"] == q[:500]]
@@ -9316,7 +9319,15 @@ async def api_confirm_answer(cid: str, body: dict):
     if not c:
         raise ServiceError(404, "no such confirm")
     if c["answer"] is None:
-        c["answer"] = str(body.get("answer") or "")[:40] or c["default"]
+        answer = str(body.get("answer") or "")[:40] or c["default"]
+        if (c.get("kind") == "sign" and c.get("gate_id") and answer == "签字"
+                and str(c.get("checkpoint") or "").upper().startswith("H3W")):
+            # H3W 白模确认:阻断级待决项未清 → 拒签(弹窗保留,前端显示原因);
+            # 未答复的建议级 → 签字即接受 Agent 的默认取舍,记 by=sign:g6w
+            proj = _approval_project(c)
+            if proj:
+                _whitebox_issue_sign_guard(proj, c.get("gate_id"))
+        c["answer"] = answer
         c["answered"] = time.time()
         if (c.get("kind") == "sign" and c.get("gate_id")
                 and c["answer"] == "签字"):
@@ -9654,6 +9665,62 @@ def _sign_gate_binding(proj: str, question: str,
         node = ready[0]
         return node["id"], _gate_checkpoint(node)
     return None
+
+
+def _whitebox_gate_episodes(proj: str, gate_id: str | None) -> list[str]:
+    """H3W 闸门对应哪些集:节点 for_each.episode → 节点 id 里的 epNN → 项目里所有有白模计划的集。"""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    node = next((n for n in _dag_load_nodes(dag_path) if n.get("id") == gate_id), None) if gate_id else None
+    fe = (node or {}).get("for_each")
+    ep = fe.get("episode") if isinstance(fe, dict) else None
+    if not ep and gate_id:
+        m = re.search(r"(?<![A-Za-z0-9])(ep\d+)(?![A-Za-z0-9])", gate_id)
+        ep = m.group(1) if m else None
+    if ep:
+        return [ep]
+    directing = PROJECTS_DIR / proj / "directing"
+    return sorted(d.name for d in directing.iterdir()
+                  if d.is_dir() and (d / "whitebox_plans").is_dir()) if directing.is_dir() else []
+
+
+def _whitebox_issue_question(proj: str, gate_id: str | None, question: str) -> str:
+    """签字卡问题末尾追加各集待决项摘要(总长仍受 500 字上限)。"""
+    try:
+        from modules.whitebox_issues import collect, format_summary
+        lines = []
+        for ep in _whitebox_gate_episodes(proj, gate_id):
+            summary = collect(PROJECTS_DIR / proj, ep)["summary"]
+            if summary["total"]:
+                lines.append(f"{ep} {format_summary(summary)}")
+        if not lines:
+            return question
+        tail = "｜".join(lines) + ";请在「分镜设定」预览页组卡🧊白模面板逐条裁决;阻断级未清不能签字"
+        return question[: max(40, 500 - len(tail) - 1)] + "\n" + tail
+    except Exception as e:  # noqa: BLE001
+        print(f"[whitebox_issues] 签字卡摘要失败:{e}", flush=True)
+        return question
+
+
+def _whitebox_issue_sign_guard(proj: str, gate_id: str | None) -> None:
+    """H3W 签字前置:阻断级待决未清 → 409 拒签;建议级未答复 → 按默认取舍记为已决(sign:g6w)。"""
+    from modules.whitebox_issues import accept_provisional, collect
+    base = PROJECTS_DIR / proj
+    blocked = []
+    for ep in _whitebox_gate_episodes(proj, gate_id):
+        summary = collect(base, ep)["summary"]
+        blocked.extend(summary["blocking_ids"])
+        blocked.extend(f"{e['group_id']}(计划 issues 结构错误:{e['error'][:60]})" for e in summary["errors"])
+    if blocked:
+        raise ServiceError(409, "H3W 未能签字:白模阻断级待决项未清 " + ", ".join(blocked[:6])
+                           + ("…" if len(blocked) > 6 else "")
+                           + "。请到「分镜设定」预览页组卡🧊白模面板逐条裁决(或在聊天里告诉总制片决定)后再签字。")
+    for ep in _whitebox_gate_episodes(proj, gate_id):
+        try:
+            accepted = accept_provisional(base, ep, "sign:g6w")
+            if accepted:
+                print(f"[whitebox_issues] {proj}/{ep} H3W 签字接受默认取舍 {len(accepted)} 项:{', '.join(accepted[:5])}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[whitebox_issues] {proj}/{ep} 签字接受默认取舍失败:{e}", flush=True)
 
 
 def _approval_project(c: dict) -> str | None:

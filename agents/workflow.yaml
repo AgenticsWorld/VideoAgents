@@ -271,7 +271,7 @@ phases:
           depends_on: [p4-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json"],
           validation: { qa: [11-qa/visual-qa] } } # 2026-09-09:只写调度计划并 render_whitebox.py --compile-only 编译落盘 episode.json 供分镜预览页 3D 审看,不导出视频;禁止只交付 --check-only。
-      - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)后签字;签字后才导出 camera.mp4、再生成分镜背景图(有出图费用)
+      - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)后签字;签字后才导出 camera.mp4、再生成分镜背景图(有出图费用);签字卡自动带白模待决项摘要,阻断级未清宿主拒签、建议级签字即接受默认取舍(docs/whitebox.md「待决项与用户裁决」)
       - { id: p6-whitebox-export, agent: 07-directing/whitebox-export, condition: whitebox_requested, depends_on: [g6w],
           outputs: ["assets/whitebox/{ep}/"],
           validation: { auto: [whitebox_videos_exported] } }   # code/render_whitebox.py(不带 --compile-only)导出每组 camera.mp4/manifest.json 并自动 sync_whitebox_refs --write;机检 render_whitebox.py --verify-export;视频失败则任务未完成
