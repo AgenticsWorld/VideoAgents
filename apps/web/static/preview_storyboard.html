@@ -5,7 +5,7 @@
 <title>分镜预览 · Agentics：VideoAgents</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M6.5%207.5h7M6.5%2010h4.5%27%20stroke%3D%27%23000%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fmask%3E%3Cg%20fill%3D%27%236c9ef8%27%3E%3Cpath%20d%3D%27M3%205a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202v7a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2z%27%20mask%3D%27url%28%23m%29%27%2F%3E%3Crect%20x%3D%273%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3Crect%20x%3D%2713%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/whitebox.css?v=20260909-issues">
+<link rel="stylesheet" href="/static/whitebox.css?v=20260909-wbedit">
 <script src="/static/i18n/i18n.js"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -351,7 +351,8 @@ function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
 // ✏️ 修改:跳转总制片界面,把修改对象预填进「输入工作指令」框。
-// data-url=具体媒体文件路径;data-loc=结构化位置元数据(分镜/生成组/旁白等无单一文件的对象)
+// data-url=具体媒体文件路径;data-loc=结构化位置元数据(分镜/生成组/旁白等无单一文件的对象);
+// data-agent=改发给指定 Agent(白模面板的编辑/自定义决定直发 07-directing/whitebox-staging)
 document.addEventListener('click',e=>{
   const b=e.target.closest('.editbtn');
   if(!b||(!b.dataset.url&&!b.dataset.loc))return;
@@ -359,7 +360,8 @@ document.addEventListener('click',e=>{
   const subject=b.dataset.loc
     ||decodeURIComponent(b.dataset.url.split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/'));
   location.href='/?project='+encodeURIComponent(proj)
-    +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'));
+    +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'))
+    +(b.dataset.agent?'&agent='+encodeURIComponent(b.dataset.agent):'');   // data-agent=直发指定 Agent(默认总制片)
 });
 
 // 🎨 手绘参考图:发起会话→二维码→手机提交线稿后服务端后台生图(线稿为构图底、
@@ -1285,7 +1287,7 @@ let WB_ON=true;
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
   WB_ON=d.whitebox_enabled!==false;
-  import('/static/whitebox-ui.js?v=20260909-issues').then(m=>m.resetWhitebox({keepData:wbKeep}));
+  import('/static/whitebox-ui.js?v=20260909-wbedit').then(m=>m.resetWhitebox({keepData:wbKeep}));
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1438,7 +1440,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  if(WB_ON)import('/static/whitebox-ui.js?v=20260909-issues').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
+  if(WB_ON)import('/static/whitebox-ui.js?v=20260909-wbedit').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();

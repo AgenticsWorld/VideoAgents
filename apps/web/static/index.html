@@ -2958,7 +2958,8 @@ function liveBox(runId){
   $('#model-custom').oninput=savePrefs;
   await restorePrefs();
   checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
-  // 预览页「✏️ 修改」跳转:?project=xx&compose=预填指令(选中总制片并填入输入框)
+  // 预览页「✏️ 修改」跳转:?project=xx&compose=预填指令(选中总制片并填入输入框);
+  // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片
   const qp=new URLSearchParams(location.search);
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}
   renderAgents();renderRuns();
@@ -2967,8 +2968,9 @@ function liveBox(runId){
   // 左下角版本号:来自 API health 的 __version__,随 release 升版自动变化
   api('/api/v1/health').then(h=>{if(h.version)$('#app-ver').textContent='v'+h.version}).catch(()=>{});
   // 运行面板计时刷新由顶部的条件 setInterval 统一负责(仅有任务在跑时重绘)
-  // 默认选中总制片
-  const d=AGENTS.find(a=>a.dispatcher);
+  // 默认选中总制片;compose 跳转指定了有效 agent 时改选该 Agent
+  const target=qp.get('compose')&&qp.get('agent')&&AGENTS.find(a=>a.id===qp.get('agent'));
+  const d=target||AGENTS.find(a=>a.dispatcher);
   if(d)selectAgent(d.id);
   const inp=$('#input');
   if(qp.get('compose')){
