@@ -5,6 +5,9 @@
   - 写进组 prompt `assets/prompts/<ep>/<grp>.json` 的 `video_refs`(video-generation 按序传 --ref-video);
   - 在 video_prompt 的 `Shot 1:` 之前插入固定英文锚点段 `Whitebox reference: … Whitebox legend: …`
     (视频作用、颜色↔人物、眼睛/鼻尖=朝向、禁复现白模外观),
+    **2026-09-09 起段内再写 `Whitebox facing:` 逐镜开场相对镜头朝向句**(由计划里每镜机位与人物 yaw(+torso_yaw+head_yaw)推导:
+    front / three-quarter front / profile / three-quarter back / back + 脸朝画左/画右;只写开场,镜内转头/转身/运镜的变化由 Shot 段正文写;见 facing_rows()),
+    背影镜而正文无背影字样时机检 WARN——白模里背影=没有眼鼻标记,模型读不出,必须靠文字;
     并在 `Global constraints:` 并入禁白模外观句;
   - 机检 whitebox_ref_bound(code/sync_whitebox_refs.py 不带 --write)。
   - **白模人物参考图规约(2026-09-09)**:只有在本组白模摄影机视频里实际出现的人物/生物,其参考图
@@ -33,6 +36,7 @@ COLOR_NAMES = {'#e63946': 'red', '#1d78d8': 'blue', '#2ea043': 'green', '#f59e0b
                '#8e44ad': 'purple', '#00acc1': 'cyan', '#e91e63': 'pink', '#795548': 'brown'}
 BLOCK_KEY = 'Whitebox reference:'
 LEGEND_KEY = 'Whitebox legend:'
+FACING_KEY = 'Whitebox facing:'
 GC_KEY = 'Global constraints:'
 GC_SENTENCE = 'No whitebox look: no grey boxes, no placeholder figures, no color-coded people, no camera icon or sight line.'
 _BLOCK_RE = re.compile(r'Whitebox reference:.*?(?:render the real characters, set and lighting from the reference images\.\s*|(?=Shot\s*1\s*:))', re.S)
@@ -287,7 +291,7 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
     ep, gid = component(ep), component(gid)
     cast = cast_filter(base, ep, gid)   # 本组白模实际出现的人物(None=项目未开白模链/本组未编译,不限制)
     if group is None or manifest is None:
-        return {'camera': None, 'videos': [], 'group': group, 'budget': None, 'cast': cast,
+        return {'camera': None, 'videos': [], 'group': group, 'budget': None, 'cast': cast, 'render': {},
                 'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
     budget = video_budget(base, ep, gid)
     from modules.continuity_refs import plan as continuation_plan, probe, local, TAIL_VIDEO
@@ -315,7 +319,8 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
         skipped = budget['reason'] or (f'参考视频预算不足(模型 {budget["model"] or "?"}:≤{budget["max_videos"]} 个/总时长 ≤{budget["max_total_s"]}s,组时长 {dur}s)')
     else:
         videos.append(cam)
-    return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast,
+    render = (read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}).get('render') or {}
+    return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast, 'render': render,
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
 
 
@@ -342,6 +347,179 @@ def legend_rows(group: dict, cast: dict | None = None) -> list:
     return rows
 
 
+# ---------------------------------------------------------------- camera-relative facing
+FACING_BUCKETS = ((30, 'front'), (70, 'three-quarter front'), (110, 'profile'), (150, 'three-quarter back'), (181, 'back'))
+FACING_PHRASES = {
+    'front': 'facing the camera (front view, face fully visible)',
+    'three-quarter front': 'in three-quarter front view, face turned toward screen-{side}',
+    'profile': 'in side profile, facing screen-{side}',
+    'three-quarter back': 'in three-quarter back view, mostly seen from behind, head turned toward screen-{side}',
+    'back': 'with back to the camera (seen from behind, face not visible)',
+}
+BACK_VIEW_WORDS = ('背对镜头', '背对着镜头', '背影', '背向镜头', 'back to the camera', 'back to camera', 'seen from behind', 'from behind')
+MIN_PHASE_S = 0.5        # 短于 min(0.5s, 20% 镜长)的朝向相位视为切点抖动/擦边,不报
+
+
+def facing_bucket(actor_key: dict, cam_key: dict) -> tuple | None:
+    """人物在某一时刻相对摄影机的朝向:(bucket, side)。
+    脸朝人偶本地 +Z、root.rotation.y=yaw、头再叠 torso_yaw+head_yaw(与 whitebox-renderer.js / whitebox.py 轨迹 yaw=atan2(dx,dz) 同约定);
+    夹角 θ = 脸的朝向与「人物→摄影机」连线的夹角(水平面):≤30° front / ≤70° 三分正 / ≤110° 侧面 / ≤150° 三分背 / 其余 back;
+    side = 脸朝画左还是画右(脸的朝向在摄影机 right 轴上的分量)。"""
+    basis = _basis(cam_key)
+    if basis is None:
+        return None
+    right = basis[0]
+    yaw = float(actor_key.get('yaw') or 0) + float(actor_key.get('torso_yaw') or 0) + float(actor_key.get('head_yaw') or 0)
+    face = [math.sin(yaw), 0.0, math.cos(yaw)]
+    pos = actor_key.get('position') or [0, 0, 0]
+    to_cam = [float(cam_key['position'][0]) - float(pos[0]), 0.0, float(cam_key['position'][2]) - float(pos[2])]
+    n = math.sqrt(to_cam[0] ** 2 + to_cam[2] ** 2)
+    if n < 1e-6:
+        return None
+    cos_t = max(-1.0, min(1.0, (face[0] * to_cam[0] + face[2] * to_cam[2]) / n))
+    theta = math.degrees(math.acos(cos_t))
+    side = 'right' if (face[0] * right[0] + face[2] * right[2]) >= 0 else 'left'
+    bucket = next(name for limit, name in FACING_BUCKETS if theta <= limit)
+    return bucket, (side if bucket not in ('front', 'back') else '')
+
+
+def _screen_rect(actor: dict, key: dict, cam_key: dict):
+    """人物包围盒在摄影机里的角坐标矩形 (l, r, b, t, depth);摄影机在人物脚下投影范围内/身后 → None(渲染里看不见自己身处的盒子)。"""
+    basis = _basis(cam_key)
+    if basis is None:
+        return None
+    right, up, fwd = basis
+    size = actor.get('size_m') or [0.5, 1.7, 0.4]
+    half_w = 0.5 * max(float(size[0]), float(size[2]) if len(size) > 2 else 0.0)
+    height = float(size[1]) if len(size) > 1 else 1.7
+    pos = key.get('position') or [0, 0, 0]
+    rel = [float(pos[i]) - float(cam_key['position'][i]) for i in range(3)]
+    depth = sum(a * b for a, b in zip(rel, fwd))
+    if depth <= max(half_w, CAMERA_NEAR_M):
+        return None
+    lat = sum(a * b for a, b in zip(rel, right)) / depth
+    base = sum(a * b for a, b in zip(rel, up)) / depth
+    return (lat - half_w / depth, lat + half_w / depth, base, base + height / depth, depth)
+
+
+def _occluded(rect, others) -> bool:
+    """rect 是否被某个更近的矩形完全盖住(粗判:只判包围盒完全包含,不判部分遮挡)。"""
+    l, r, b, t, d = rect
+    return any(o[4] < d and o[0] <= l and o[1] >= r and o[2] <= b and o[3] >= t for o in others)
+
+
+def facing_phrase(phases: list) -> str:
+    """一镜内的朝向相位序列 → 一句英文:只报开场相位(2026-09-09 用户定:镜内转头/转身/运镜带来的变化由 Shot 段正文描述)。"""
+    b, side = phases[0]
+    return FACING_PHRASES[b].format(side=side)
+
+
+def _compress_phases(spans: list, duration: float) -> list:
+    """[(bucket, side, t0, t1)…] → 去掉过短相位后的 [(bucket, side)…](相邻同值合并)。"""
+    min_s = min(MIN_PHASE_S, 0.2 * duration) if duration > 0 else 0.0
+    kept = [sp for sp in spans if sp[3] - sp[2] >= min_s - 1e-9] or (spans[-1:] if spans else [])
+    out = []
+    for b, side, _t0, _t1 in kept:
+        if not out or out[-1] != (b, side):
+            out.append((b, side))
+    return out
+
+
+def facing_rows(group: dict, cast: dict | None = None, render: dict | None = None) -> list:
+    """逐镜、逐(在画内的)人物相对摄影机朝向:[{shot_no, shot_id, actors: [{id, label, phases, phrase}]}];
+    phases 记整镜相位序列(结构化数据),phrase 只取开场相位。
+    只算图例里的人物/生物(非骑手、白模里实际出现者);采样点取该镜 [start, start+duration) 内、关键帧 visible 非 false、
+    该镜 visible_actor_ids 允许、包围球在画幅内、摄影机不在其身体里、且未被更近人物的包围盒完全遮住的时刻;
+    短于 min(0.5s, 20% 镜长)的相位不报(切点抖动/擦边)。"""
+    render = render or {}
+    aspect = None
+    try:
+        if render.get('width') and render.get('height'):
+            aspect = float(render['width']) / float(render['height'])
+        elif render.get('aspect_ratio'):
+            a, b = (float(x) for x in str(render['aspect_ratio']).split(':'))
+            aspect = a / b
+    except (ValueError, ZeroDivisionError, TypeError):
+        aspect = None
+    shown = set(cast['visible']) if cast else None
+    everyone = [a for a in list(group.get('actors') or []) + list(group.get('extras') or [])
+                if a.get('id') and not a.get('rider') and (a.get('keyframes') or [])]
+    people = [a for a in everyone if shown is None or a['id'] in shown]
+    rows = []
+    for i, cam in enumerate(group.get('cameras') or []):
+        ckeys = cam.get('keyframes') or []
+        if not ckeys:
+            continue
+        start = float(cam.get('start') or 0); duration = float(cam.get('duration_s') or 0)
+        allowed = cam.get('visible_actor_ids')
+        in_shot = [a for a in everyone if not (isinstance(allowed, list) and a['id'] not in allowed)]
+        times = [t for t in _sample_times(start, duration, *[a['keyframes'] for a in in_shot]) if t < start + duration - 1e-9]
+        # 每个采样时刻:所有在镜人物的屏幕矩形(供遮挡判定)
+        frames = []
+        for t in times:
+            ck = sample(ckeys, t - start)
+            rects = {}
+            for a in in_shot:
+                k = sample(a['keyframes'], t)
+                if k.get('visible') is False:
+                    continue
+                rect = _screen_rect(a, k, ck)
+                if rect:
+                    rects[a['id']] = (rect, k)
+            frames.append((t, ck, rects))
+        entry = {'shot_no': i + 1, 'shot_id': cam.get('shot_id') or f'shot{i + 1}', 'actors': []}
+        for a in people:
+            if a not in in_shot:
+                continue
+            size = a.get('size_m') or [0.5, 1.7, 0.4]
+            radius = 0.5 * math.sqrt(sum(float(v) * float(v) for v in size))
+            half_h = float(size[1]) / 2 if len(size) > 1 else 0.85
+            spans = []
+            for t, ck, rects in frames:
+                if a['id'] not in rects:
+                    continue
+                rect, k = rects[a['id']]
+                pos = k.get('position') or [0, 0, 0]
+                if not sphere_in_frame([float(pos[0]), float(pos[1]) + half_h, float(pos[2])], radius, ck, aspect):
+                    continue
+                if _occluded(rect, [r for cid, (r, _k) in rects.items() if cid != a['id']]):
+                    continue
+                fb = facing_bucket(k, ck)
+                if not fb:
+                    continue
+                if spans and spans[-1][:2] == fb:
+                    spans[-1] = (fb[0], fb[1], spans[-1][2], t)
+                else:
+                    spans.append((fb[0], fb[1], t, t))
+            phases = _compress_phases(spans, duration)
+            if phases:
+                entry['actors'].append({'id': a['id'], 'label': a.get('label') or a['id'], 'phases': phases,
+                                        'phrase': facing_phrase(phases)})
+        if entry['actors']:
+            rows.append(entry)
+    return rows
+
+
+def facing_sentence(plan: dict, rows: list | None = None) -> str:
+    """固定英文朝向句(进 Whitebox reference 段;机检逐字核对):
+    `Whitebox facing: … shot 1 of 3 (sh018) 老道儿 facing the camera (…); shot 2 of 3 (sh019) …`——只写每镜开场朝向,
+    镜内转头/转身/运镜的变化由 Shot 段正文写。
+    段头故意用小写 `shot k of n`,避免被各机检的 `Shot N:` / `Shot N｜` 切段正则当成镜头段。"""
+    videos = plan.get('videos') or []
+    if not videos or not plan.get('camera'):
+        return ''
+    rows = facing_rows(plan.get('group') or {}, plan.get('cast'), plan.get('render')) if rows is None else rows
+    if not rows:
+        return ''
+    ci = videos.index(plan['camera']) + 1
+    n = len((plan.get('group') or {}).get('cameras') or [])
+    cuts = '; '.join(f"shot {r['shot_no']} of {n} ({r['shot_id']}) " + ', '.join(f"{a['label']} {a['phrase']}" for a in r['actors'])
+                     for r in rows)
+    return (f"{FACING_KEY} how each figure faces the camera at the start of each cut of [Video {ci}], computed from the previs "
+            f"geometry and authoritative for that opening moment — every Shot paragraph opens with the figure in this facing, and any "
+            f"turn of the head or body, or change of camera angle, after that moment is described in the Shot paragraph itself: {cuts}.")
+
+
 def build_block(plan: dict) -> str:
     videos = plan['videos']
     if not videos:
@@ -354,6 +532,9 @@ def build_block(plan: dict) -> str:
     facing = 'the white eyes and nose tip show where a figure faces'
     cam = 'the camera itself is never drawn in the camera view'
     parts.append(f"{LEGEND_KEY} {legend}; {facing}; {cam}.")
+    facing_line = facing_sentence(plan)
+    if facing_line:
+        parts.append(facing_line)
     parts.append("Do not reproduce the whitebox look: no grey boxes, no placeholder figures, no color-coded people, "
                  "no camera icon or sight line — render the real characters, set and lighting from the reference images.")
     return ' '.join(parts)
@@ -399,6 +580,10 @@ def apply_prompt(prompt: dict, plan: dict) -> dict:
             dropped += [r for r in drop if r not in dropped]
     out['whitebox_refs'] = {'camera': plan['camera'], 'skipped_reason': plan.get('skipped_reason') or '',
                             'model': (plan.get('budget') or {}).get('model', ''), 'source': 'sync_whitebox_refs.v1'}
+    facing = facing_rows(plan.get('group') or {}, plan.get('cast'), plan.get('render')) if plan['videos'] else []
+    if facing:
+        out['whitebox_refs']['facing'] = [{'shot_no': r['shot_no'], 'shot_id': r['shot_id'],
+                                           'actors': {a['id']: a['phrase'] for a in r['actors']}} for r in facing]
     if plan.get('cast'):
         out['whitebox_refs']['cast'] = {'visible': list(plan['cast']['visible']), 'hidden': dict(plan['cast']['hidden']),
                                         'dropped_refs': dropped, 'source': plan['cast'].get('source', CAST_SOURCE)}
@@ -455,6 +640,19 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
                 errs.append(f"{gid}: 图例缺 {color_name(a.get('color'))} = {a.get('label') or a['id']} ({a['id']})")
         if 'faces' not in legend and 'facing' not in legend:
             errs.append(f"{gid}: 图例缺眼睛/鼻尖=朝向说明")
+    rows = facing_rows(plan.get('group') or {}, cast, plan.get('render'))
+    expected = facing_sentence(plan, rows)
+    if expected:
+        if FACING_KEY not in block:
+            warns.append(f"{gid}: {BLOCK_KEY} 段缺 \"{FACING_KEY}\" 逐镜相对镜头朝向句(2026-09-09 起由白模机位与人物 yaw 推导);跑 code/sync_whitebox_refs.py --write 补写")
+        elif expected not in block:
+            errs.append(f"{gid}: \"{FACING_KEY}\" 朝向句与白模计划推导结果不一致(白模改过机位/朝向后未刷新);跑 code/sync_whitebox_refs.py --write")
+        body = vp[:vp.index(BLOCK_KEY)] + _BLOCK_RE.sub('', vp[vp.index(BLOCK_KEY):])
+        backs = [(r['shot_id'], a['label']) for r in rows for a in r['actors'] if a['phases'][0][0] == 'back']
+        if backs and not any(w in body for w in BACK_VIEW_WORDS):
+            warns.append(f"{gid}: 白模里 {', '.join(f'{s}/{l}' for s, l in backs)} 开场背对镜头,但正文 Shot 段没有一句背影字样"
+                         f"({' / '.join(BACK_VIEW_WORDS[:2] + BACK_VIEW_WORDS[4:6])});模型只按文字理解朝向——该 Shot 段须写明"
+                         f"背对镜头(机位在人物身后、只见后脑后背、不转身不回头),并把眉/唇/眼等只有正脸才可见的表演节拍改成背影可见的身体语言")
     gi = vp.rfind(GC_KEY)
     if gi < 0 or 'whitebox' not in vp[gi:].lower():
         errs.append(f"{gid}: {GC_KEY} 缺禁白模外观句(no whitebox look …)")

@@ -4,7 +4,10 @@
 项目「输出设置 → 人物精确空间位置」开启时,每个已导出白模视频的分镜组,其组 prompt 必须:
   ① `video_refs` 以 camera.mp4(画面视角)开头(2026-09-08 起白模只导出摄影机视角,无 top.mp4);
   ② video_prompt `Shot 1:` 前含固定段 `Whitebox reference: [Video N] … camera-view …`
-     与 `Whitebox legend: <color> figure = <label> (<CHAR id>); …; eyes/nose tip = facing; dark camera box + line = shooting direction`;
+     与 `Whitebox legend: <color> figure = <label> (<CHAR id>); …; eyes/nose tip = facing; dark camera box + line = shooting direction`
+     及 `Whitebox facing: … shot k of n (shNNN) <label> faces the camera | side profile facing screen-left/right | back to the camera …`
+     (2026-09-09 起:按白模计划每镜机位与人物 yaw 推导的**开场**相对镜头朝向,镜内变化由 Shot 段正文写;缺=WARN、与推导不符=FAIL;
+     开场背影而正文 Shot 段无「背对镜头/背影/back to the camera/seen from behind」字样=WARN);
   ③ `Global constraints:` 含禁白模外观句(no whitebox look …);
   ④ **白模人物参考图规约(2026-09-09)**:refs 只含本组白模摄影机视频里实际出现的人物/生物的参考图
      (`assets/concepts/characters|creatures/<id>/…`);未出现者(缺席/远程、整组 visible:false、各镜 visible_actor_ids
