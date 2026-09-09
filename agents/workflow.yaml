@@ -301,7 +301,8 @@ phases:
                                layout_map_bound,  # 2026-09-09 改版:refs 不得含场景俯视图 layout_top*.png / 九宫格 grid_9views*.png / 已退役的 blocking_maps/(俯视图只供分镜预览),逐角色 route_en 逐字命中、主体定义句用 blocking_map label(code/layout_map_bound_check.py)
                                shot_plate_bound,  # 分镜背景图已生成的组:refs 在角色/生物 sheet 之后按镜序挂各镜背景图(两张图的镜 start+end 都挂,不走首尾帧模式)+ 正文 Shot 1: 前固定段 Shot plates:(逐镜 [Image N] 说明句);背景图机位与当前白模不一致 WARN 过期(code/sync_shot_plates.py,2026-09-09;开关关闭 skipped)
                                nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
-                               prompt_skill_applied] } }   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
+                               prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py
+                               sd25_prompt_structure] } }   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
           validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等;reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在

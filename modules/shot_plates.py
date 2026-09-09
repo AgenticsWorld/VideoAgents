@@ -806,8 +806,32 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
 _SPATIAL_RE = re.compile(r'\s*Spatial layout:.*?do not copy its tiling\.', re.S)
 _MAPUSE_RE = re.compile(r'\s*Map usage:.*?(?:described in that shot\.|in that shot\.)', re.S)
 _TILE_RE = re.compile(r',?\s*framed like tile\s*\d+\s*of\s*\[Image\s*\d+\]', re.I)
-_BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?=Shot\s*1\s*:|$)', re.S)
+_BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?=Shot\s*1\s*[:：｜|]|$)', re.S)   # Shot 段头兼容 Shot 1: / Shot 1｜标题。(2.5 分镜写法)
 _IMG_RE = re.compile(r'\[Image\s*(\d+)\]|@Image\s*(\d+)(?!\d)')
+
+
+def group_is_v25(base: Path, ep: str, gid: str) -> bool:
+    """本组生效视频模型是否 Seedance 2.5:组级覆盖(assets/group_settings)→ 项目提示词技能快照 → genmedia 当前视频模型。
+    2.5 的场景图绑定必须按其官方结构写(【场景】分组 + 逐镜激活),2.0 式 Shot plates 段对 2.5 无效(dzg6 grp010 实测,2026-09-09)。"""
+    def v25(text):
+        t = str(text or '').lower()
+        return 'seedance-2-5' in t or 'seedance-2.5' in t or 'sd25' in t
+    gs = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
+    if v25(gs.get('video_model')) or v25((gs.get('effective') or {}).get('skill_id')) or v25((gs.get('effective') or {}).get('resolved_from')):
+        return True
+    if gs.get('video_model'):
+        return False
+    eff = ((read(base/'settings.json', {}) or {}).get('prompt_skill') or {}).get('effective') or {}
+    if v25(eff.get('skill_id')) or v25(eff.get('resolved_from')):
+        return True
+    try:
+        from modules.whitebox_refs import video_budget
+        return v25(video_budget(base, ep, gid).get('model'))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_ACT_RE = re.compile(r'\s*场景激活：[^。]*。')
 
 
 def is_scene_map(ref: str) -> bool:
@@ -849,6 +873,47 @@ def plan_group_refs(base: Path, ep: str, gid: str, idx: dict | None = None, epis
     return {'plates': plates, 'missing': missing, 'group': raw}
 
 
+SCENE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
+def scene_labels(plates: list) -> dict:
+    """按 refs 顺序给每张背景图一个场景字母:{file: 'A'}(同一文件复用同一字母)。"""
+    labels = {}
+    for p in plates:
+        if p['file'] not in labels:
+            labels[p['file']] = SCENE_LETTERS[len(labels) % 26]
+    return labels
+
+
+def build_block_v25(plates: list) -> str:
+    """Seedance 2.5 口径:按官方规范把背景图定义成独立场景槽位(【场景】分组),逐镜激活由 Shot 段的「场景激活：」句承担。"""
+    labels = scene_labels(plates)
+    lines = []
+    seen = set()
+    for p in plates:
+        if p['file'] in seen:
+            continue
+        seen.add(p['file'])
+        users = [f"Shot {q['shot_no']}" + ('落幅' if q['role'] == 'end' else '') for q in plates if q['file'] == p['file']]
+        lines.append(f"场景{labels[p['file']]}（{'、'.join(users)} 的机位，空场景 background plate）参考 [Image {p['index']}]，"
+                     "只采用空间布局、建筑、材质和光线，不采用图中任何人物。")
+    return (BLOCK_KEY + ' 【场景】' + ''.join(lines)
+            + '各场景只在点名的镜头里激活；同一地点的不同机位是不同场景槽位，不得合并、不得把一个镜头的场景带进另一个镜头。'
+            '背景图只作场景参照：画面不得停在空场，人物与动作按各 Shot 段描述。')
+
+
+def activation_line(plates: list, shot_no: int) -> str:
+    """某镜的「场景激活：」句:使用本镜的场景(两张图的镜写起幅/落幅),不采用同组其它场景。"""
+    labels = scene_labels(plates)
+    mine = [p for p in plates if p['shot_no'] == shot_no]
+    others = sorted({labels[p['file']] for p in plates if p['shot_no'] != shot_no} - {labels[p['file']] for p in mine})
+    use = '与'.join(f"场景{labels[p['file']]}（[Image {p['index']}]" + ('，落幅' if p['role'] == 'end' else ('，起幅' if len(mine) > 1 else '')) + '）' for p in mine)
+    text = f"场景激活：使用{use}"
+    if others:
+        text += '；不采用' + '、'.join(f"场景{o}（[Image {next(p['index'] for p in plates if labels[p['file']] == o)}]）" for o in others)
+    return text + '。'
+
+
 def build_block(plates: list) -> str:
     parts = []
     for p in plates:
@@ -880,12 +945,14 @@ def _remap_images(text: str, old: list, new: list) -> tuple[str, list]:
     return _IMG_RE.sub(replace, text), warns
 
 
-def apply_prompt(prompt: dict, plan: dict) -> tuple[dict, list]:
-    """幂等回写:剔除俯视图/九宫格 refs 与其声明句,角色/生物 sheet 之后插入本组背景图,重排编号,写 Shot plates 段。"""
+def apply_prompt(prompt: dict, plan: dict, v25: bool = False) -> tuple[dict, list]:
+    """幂等回写:剔除俯视图/九宫格 refs 与其声明句,角色/生物 sheet 之后插入本组背景图,重排编号,写 Shot plates 段。
+    v25=True(Seedance 2.5):Shot plates 段改写为【场景】分组,并在每个 Shot 段头插入「场景激活：」句(逐镜点名激活/不采用)。"""
     out = copy.deepcopy(prompt)
     old = [r for r in (out.get('refs') or []) if isinstance(r, str)]
     vp = out.get('video_prompt') or ''
     vp = _SPATIAL_RE.sub('', vp); vp = _MAPUSE_RE.sub('', vp); vp = _TILE_RE.sub('', vp); vp = _BLOCK_RE.sub(' ', vp)
+    vp = _ACT_RE.sub('', vp)
     keep = [r for r in old if not is_scene_map(r) and f'/{PLATES_DIR}/' not in r]
     plates = [p['file'] for p in plan['plates']]
     plates = list(dict.fromkeys(plates))
@@ -899,9 +966,15 @@ def apply_prompt(prompt: dict, plan: dict) -> tuple[dict, list]:
         indexed = []
         for p in plan['plates']:
             indexed.append({**p, 'index': new.index(p['file']) + 1})
-        block = build_block(indexed)
-        m = re.search(r'Shot\s*1\s*:', vp)
+        block = build_block_v25(indexed) if v25 else build_block(indexed)
+        m = re.search(r'Shot\s*1\s*[:：｜|]', vp)
         vp = (vp[:m.start()].rstrip() + ' ' + block + ' ' + vp[m.start():]) if m else (vp.rstrip() + ' ' + block)
+        if v25:
+            # 每个 Shot 段头(Shot k: / Shot k｜标题。)之后插入机器持有的「场景激活：」句,Agent 自己的「使用：/不采用：」清单不动
+            for shot_no in sorted({p['shot_no'] for p in indexed}):
+                head = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)' % shot_no, vp)
+                if head:
+                    vp = vp[:head.end()] + activation_line(indexed, shot_no) + vp[head.end():]
     vp = re.sub(r'[ \t]{2,}', ' ', vp).strip()
     out['refs'] = new
     out['video_prompt'] = vp
@@ -913,7 +986,7 @@ def apply_prompt(prompt: dict, plan: dict) -> tuple[dict, list]:
     return out, warns
 
 
-def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False) -> tuple[list, list]:
+def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: bool = False) -> tuple[list, list]:
     errs, warns = [], []
     refs = [r for r in (prompt.get('refs') or []) if isinstance(r, str)]
     vp = prompt.get('video_prompt') or ''
@@ -928,13 +1001,21 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False) -> tu
         if BLOCK_KEY in vp:
             warns.append(f"{gid}: 正文含 {BLOCK_KEY} 段但本组无背景图,建议 --write 清理")
         return errs, warns
+    block = vp[vp.index(BLOCK_KEY):] if BLOCK_KEY in vp else ''
     for p in plan['plates']:
         if p['file'] not in refs:
             errs.append(f"{gid}/{p['shot_id']}: refs 未挂 {p['role']} 背景图 {p['file']}(跑 code/sync_shot_plates.py --write)")
             continue
         n = refs.index(p['file']) + 1
-        block = vp[vp.index(BLOCK_KEY):] if BLOCK_KEY in vp else ''
-        if not re.search(r'\[Image\s*%d\][^.;]*(background plate|end plate)' % n, block):
+        if v25:
+            if not re.search(r'场景[A-Z]（[^）]*background plate）参考 \[Image\s*%d\]' % n, block):
+                errs.append(f"{gid}/{p['shot_id']}: Seedance 2.5 口径 {BLOCK_KEY} 段缺【场景】槽位「场景X（… background plate）参考 [Image {n}]」(跑 code/sync_shot_plates.py --write)")
+            shot_no = p['shot_no']
+            seg = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)(.*?)(?=Shot\s*\d+\s*[:：｜|]|Global constraints:|$)' % shot_no, vp, re.S)
+            body = seg.group(1) if seg else ''
+            if not re.search(r'场景激活：使用[^。]*\[Image\s*%d\]' % n, body):
+                errs.append(f"{gid}/{p['shot_id']}: Shot {shot_no} 段缺「场景激活：使用场景X（[Image {n}]）…」句(2.5 逐镜激活;跑 --write)")
+        elif not re.search(r'\[Image\s*%d\][^.;]*(background plate|end plate)' % n, block):
             errs.append(f"{gid}/{p['shot_id']}: {BLOCK_KEY} 段缺 [Image {n}] 的 {p['role']} 背景图说明句")
         if p.get('stale'):
             warns.append(f"{gid}/{p['shot_id']}: {p['role']} 背景图机位与当前白模不一致(白模重调度后过期),重跑 code/render_shot_plates.py")
@@ -955,8 +1036,10 @@ def sync_group(base: Path, ep: str, gid: str, write: bool = False, strict: bool 
         return result
     if not isinstance(prompt, dict):
         return result
+    v25 = group_is_v25(base, ep, gid)
+    result['seedance_25'] = v25
     if write:
-        updated, warns = apply_prompt(prompt, plan)
+        updated, warns = apply_prompt(prompt, plan, v25)
         result['warnings'].extend(f'{gid}: {w}' for w in warns)
         if updated != prompt:
             backup = base/'directing'/ep/'whitebox'/'prompt_backups'/pp.name
@@ -968,7 +1051,7 @@ def sync_group(base: Path, ep: str, gid: str, write: bool = False, strict: bool 
             os.replace(tmp, pp)
             result['updated'] = True
         prompt = updated
-    e, w = check_prompt(prompt, plan, gid, strict)
+    e, w = check_prompt(prompt, plan, gid, strict, v25)
     result['errors'].extend(e); result['warnings'].extend(w)
     return result
 

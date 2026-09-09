@@ -31,6 +31,54 @@ from _common import REPO_ROOT, parse_args
 
 CHECK = "prompt_skill_applied"
 NONE_REASONS = ("user_skipped", "no_match", "disabled", "missing")
+STRUCT_CHECK = "sd25_prompt_structure"   # 2026-09-09:生效技能为 sd25-pe 时,正文必须按 Seedance 2.5 官方结构写
+
+
+def sd25_structure_errors(d: dict, name: str) -> list[str]:
+    """Seedance 2.5 结构机检(sd25_prompt_structure):dzg6 grp010 实测——同一组多张场景图,2.0 式自由文本绑定对 2.5 无效,
+    按官方「类型分组 + 逐镜使用/不采用 + 未采用素材」写才逐镜切换。要求(团队锚点 Overall visual style:/Shot N/[Image N]/
+    Global constraints: 照旧保留,与本结构并存):
+      ① 素材职责分组:【人物】(或【参考素材职责】)且每张角色/生物图有 `<名>@Image N` 绑定;有 video_refs/audio_refs 时
+         【动作与声音】(或【参考素材职责】)逐份写 `[Video N] 用于…` / `[Audio N] 用于…`;
+      ② 每个 Shot 段(Shot k: / Shot k｜标题。)含「使用：」与「不采用：」清单(逐镜点名激活);
+      ③ 【未采用素材】段(无则写「无」);④ 【保持一致】(或「保持一致：」)。
+    【场景】槽位与逐镜「场景激活：」句由 code/sync_shot_plates.py 按背景图机器写入,机检在 shot_plate_bound。"""
+    import re
+    vp = str(d.get("video_prompt") or "")
+    errs = []
+    refs = [r for r in (d.get("refs") or []) if isinstance(r, str)]
+    has_people = "【人物】" in vp or "【参考素材职责】" in vp
+    if not has_people:
+        errs.append(f"{name}: 缺【人物】(或【参考素材职责】)分组段——2.5 规范要求逐份素材职责,不得用总括句")
+    for i, r in enumerate(refs, 1):
+        if r.startswith("assets/concepts/characters/") or r.startswith("assets/concepts/creatures/"):
+            if not re.search(r"[^\s@]+\s*@\s*Image\s*%d(?!\d)" % i, vp):
+                errs.append(f"{name}: refs[{i-1}] 角色/生物图缺 `<名>@Image {i}` 绑定句")
+    vrefs = [v for v in (d.get("video_refs") or []) if isinstance(v, str)]
+    arefs = [a for a in (d.get("audio_refs") or []) if isinstance(a, str)]
+    if (vrefs or arefs) and not ("【动作与声音】" in vp or "【参考素材职责】" in vp):
+        errs.append(f"{name}: 有参考视频/音频但缺【动作与声音】(或【参考素材职责】)分组段")
+    for i in range(1, len(vrefs) + 1):
+        if not re.search(r"\[Video\s*%d\][^。\n]{0,40}用于" % i, vp):
+            errs.append(f"{name}: 缺 `[Video {i}] 用于…` 职责句")
+    for i in range(1, len(arefs) + 1):
+        if not re.search(r"\[Audio\s*%d\][^。\n]{0,60}(用于|只用于|是)" % i, vp):
+            errs.append(f"{name}: 缺 `[Audio {i}] 用于…` 职责句")
+    heads = list(re.finditer(r"Shot\s*(\d+)\s*(?:[:：]|[｜|][^。\n]*。)", vp))
+    if not heads:
+        errs.append(f"{name}: 正文无 Shot N 段")
+    for k, h in enumerate(heads):
+        end = heads[k + 1].start() if k + 1 < len(heads) else (vp.find("Global constraints:") if "Global constraints:" in vp else len(vp))
+        body = vp[h.end():end]
+        if "使用：" not in body:
+            errs.append(f"{name}: Shot {h.group(1)} 段缺「使用：」激活清单(本镜激活的人物/场景/动作/声音)")
+        if "不采用：" not in body:
+            errs.append(f"{name}: Shot {h.group(1)} 段缺「不采用：」清单(本镜不激活的素材;无则写「无」)")
+    if "【未采用素材】" not in vp:
+        errs.append(f"{name}: 缺【未采用素材】段(全部素材都用到也要写「无」)")
+    if "【保持一致】" not in vp and not re.search(r"保持一致\s*[:：]", vp):
+        errs.append(f"{name}: 缺【保持一致】段")
+    return errs
 
 
 def skill_md_path(skill_id: str) -> Path:
@@ -54,6 +102,7 @@ def main() -> int:
                                  configure=configure)
     warns: list[str] = []
     errs: list[str] = []
+    struct_errs: list[str] = []
 
     # ---- 对照基准 ----
     expected: str | None      # "" = 不套用;None = 未知
@@ -163,6 +212,9 @@ def main() -> int:
             fails = [c.get("item") for c in cl if isinstance(c, dict) and c.get("pass") is False]
             if fails:
                 errs.append(f"{f.name}: checklist 有 pass=false 的要点:{'; '.join(map(str, fails))[:200]}")
+        # Seedance 2.5 结构机检(sd25_prompt_structure):套用 sd25-pe 时正文必须按官方结构写,自述 checklist 不算数
+        if str(sid).endswith("/sd25-pe"):
+            struct_errs.extend(sd25_structure_errors(d, f.name))
 
     if args.strict:
         errs.extend(warns)
@@ -171,9 +223,13 @@ def main() -> int:
         print("WARN", w)
     for e in errs:
         print("FAIL", e)
+    for e in struct_errs:
+        print("FAIL", e)
     print(f"[{CHECK}] {args.project}/{args.ep}: 基准={basis} 期望={expected if expected else ('无技能' if expected == '' else '未知')}; "
           f"{n} 组核对, 违规 {len(errs)} 条, WARN {len(warns)} 条 -> {'FAIL' if errs else 'PASS'}")
-    return 1 if errs else 0
+    if str(expected or "").endswith("/sd25-pe") or struct_errs:
+        print(f"[{STRUCT_CHECK}] {args.project}/{args.ep}: 违规 {len(struct_errs)} 条 -> {'FAIL' if struct_errs else 'PASS'}")
+    return 1 if (errs or struct_errs) else 0
 
 
 if __name__ == "__main__":
