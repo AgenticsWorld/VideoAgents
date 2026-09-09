@@ -2789,8 +2789,19 @@ def _is_seedance2(model: str) -> bool:
 # Seedance 2.5 任务类型触发词(官方文档口径):视频编辑/视频延长任务对 ratio(仅
 # adaptive)与 duration(编辑仅 -1)有硬约束,违规异步报错 TaskTypeConstraint。
 # 意图最终由模型判定,此处仅作提交前的保守预警/参数修正,不拦截。
-_V25_EDIT_RE = re.compile(r"编辑视频|删除|去掉|删掉|修改|替换|改成|增加|加上")
-_V25_EXTEND_RE = re.compile(r"向前延长|向后延长|延续|续写")
+# 2026-09-09 收紧:只认「对某个视频素材下达的明确编辑/延长指令」——动词必须紧邻视频引用
+# (@视频N / <视频N> / [Video N] / 视频N)。此前「延续/修改/增加」等裸词命中了普通参考生成
+# prompt 里的「光照延续 Shot 1」「增加暖轮廓」之类散文(dzg6 grp005/grp010 实况),把 16:9 误改
+# 成 adaptive;竖屏项目或参考视频画幅不同时会直接出错画幅。
+_V25_VREF = r"(?:@\s*视频\s*\d+|<\s*视频\s*\d+\s*>|\[\s*Video\s*\d+\s*\]|视频\s*\d+)"
+_V25_EDIT_RE = re.compile(
+    r"(?:严格)?编辑\s*" + _V25_VREF                                   # 严格编辑@视频1 / 编辑视频1
+    + r"|(?:删除|去掉|删掉|修改|替换|改成|增加|加上)[^。;;\n]{0,12}?" + _V25_VREF   # 修改@视频1中的… / 删除视频1里的…
+    + r"|" + _V25_VREF + r"[^。;;\n]{0,6}?(?:是|作为)[^。;;\n]{0,12}?编辑母版")     # @视频1是唯一编辑母版
+_V25_EXTEND_RE = re.compile(
+    r"(?:向前|向后)延长\s*" + _V25_VREF                                # 向后延长@视频1
+    + r"|" + _V25_VREF + r"[^。;;\n]{0,12}?(?:向前|向后)延长"           # @视频1是需要向后延长的原视频
+    + r"|续写\s*" + _V25_VREF)
 
 
 def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
