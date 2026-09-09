@@ -5930,6 +5930,10 @@ def _preview_storyboard(project: str, ep: str):
                 for e in sorted(eps)]
     ep = ep or (episodes[0]["ep"] if episodes else "")
     data = {"project": base.name, "episodes": episodes, "ep": ep}
+    # 人物精确空间位置(output.spatial_blocking,默认开)关闭时,分镜预览页不显示各组白模面板,
+    # 分镜信息单栏铺满;开关状态随预览数据下发,页面据此决定是否渲染/挂载 3D 白模
+    data["whitebox_enabled"] = ((load_project_settings(base.name).get("output") or {})
+                                .get("spatial_blocking", True) is not False)
     if not ep:
         return data
     ep = re.sub(r"[^\w\-]", "", ep)

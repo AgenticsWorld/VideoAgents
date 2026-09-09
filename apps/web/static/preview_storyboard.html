@@ -140,6 +140,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.gshots>.glist .shot:first-child{margin-top:10px}
 .grp>.gshots>.wb-host{min-width:0;position:sticky;top:8px;margin-top:10px}
 @media(max-width:900px){.grp>.gshots{grid-template-columns:1fr}.grp>.gshots>.wb-host{position:static}}
+/* 人物精确空间位置关闭:无白模栏,分镜信息单栏铺满 */
+.grp>.gshots.nowb{grid-template-columns:1fr}
 .grp>.gshots .shot{background:var(--bg)}
 .gnote{border-top:1px solid var(--border);background:var(--panel2);padding:7px 12px;font-size:13px;line-height:1.6;color:var(--green)}
 .gnote .glabel{color:var(--dim);font-size:11px;margin-right:6px}
@@ -1270,15 +1272,19 @@ function groupCard(g,inner){
     ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
-    <div class="gshots"><div class="glist">${inner}</div><div class="wb-host" data-grp="${esc(g.group_id)}">${esc(t('正在加载分镜组白模…'))}</div></div>
+    <div class="gshots${WB_ON?'':' nowb'}"><div class="glist">${inner}</div>${WB_ON?`<div class="wb-host" data-grp="${esc(g.group_id)}">${esc(t('正在加载分镜组白模…'))}</div>`:''}</div>
   </div>`;
 }
 
 let LAST_DATA=null;
 // 白模数据缓存失效标记:手动刷新/切集/切项目置 true,render 时传给 resetWhitebox;页内重绘(SSE 事件、标记补打)沿用缓存
 let WB_INVALIDATE=true;
+// 人物精确空间位置开关(项目设置 output.spatial_blocking,随预览数据 whitebox_enabled 下发):
+// 关闭时组卡不渲染右侧白模面板、不挂载 3D,分镜信息单栏铺满
+let WB_ON=true;
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
+  WB_ON=d.whitebox_enabled!==false;
   import('/static/whitebox-ui.js?v=20260909-realplate').then(m=>m.resetWhitebox({keepData:wbKeep}));
   LAST_DATA=d;
   renderEps(d.episodes||[]);
@@ -1432,7 +1438,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  import('/static/whitebox-ui.js?v=20260909-realplate').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
+  if(WB_ON)import('/static/whitebox-ui.js?v=20260909-realplate').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
   $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
     `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
   updateNavActive();
