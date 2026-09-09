@@ -87,6 +87,8 @@ window.I18N_DICT = {
 "最大参考音频数量": "Audios de référence max.",
 "约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。": "Limite la durée totale et le nombre de matériaux de référence de chaque groupe de génération. Ces valeurs doivent correspondre aux capacités du modèle de génération vidéo sélectionné (série Seedance 2.0 : durée du groupe ≤15s, images ≤9, vidéos ≤3, audios ≤3 ; Seedance 2.5 : durée ≤30s, images ≤30, vidéos ≤10, audios ≤10). En cas de doute, ne pas modifier.",
 "选择 Seedance 2.0 时自动关闭「人物精确空间位置」(白模参考视频),其他模型默认开启;可在下一步「输出设置」再手动调整。": "Avec Seedance 2.0, « Positions précises des personnages » (vidéo de référence whitebox) est désactivé automatiquement ; les autres modèles l'activent par défaut. Vous pourrez l'ajuster manuellement à l'étape suivante « Paramètres de sortie ».",
+"⚠ 生成模型设置里当前生效的视频模型是 {model}(对应 {family} 口径),与此处所选 {preset} 不同。不影响下一步,但建议两边保持一致,否则分镜组上限会与实际生成模型的能力不符": "⚠ Le modèle vidéo actif dans les réglages des modèles de génération est {model} (préréglage {family}), différent de {preset} choisi ici. Vous pouvez continuer, mais il est conseillé de les faire coïncider, sinon les limites de groupe de plans ne correspondront pas aux capacités réelles du modèle",
+"手动值": "Valeurs manuelles",
 "最大分镜组时长需为 4-30 的数值": "La durée max. du groupe doit être un nombre entre 4 et 30",
 "最大参考图数量需为 0-30 的整数": "Le nombre max. d'images de référence doit être un entier entre 0 et 30",
 "最大参考视频数量需为 0-10 的整数": "Le nombre max. de vidéos de référence doit être un entier entre 0 et 10",

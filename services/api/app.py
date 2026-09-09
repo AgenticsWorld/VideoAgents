@@ -383,6 +383,11 @@ async def set_global_model(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_globalmodel_set(body)
 
 
+@api.get("/config/video-model", tags=["configuration"])
+async def video_model() -> dict[str, Any]:
+    return await core.api_video_model_get()
+
+
 @api.get("/config/ui-prefs", tags=["configuration"])
 async def ui_prefs() -> dict[str, Any]:
     return await core.api_uiprefs_get()

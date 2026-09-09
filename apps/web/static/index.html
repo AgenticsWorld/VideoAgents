@@ -395,6 +395,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="2" style="display:none">
       <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
+      <div class="note" id="npsg-model-hint" style="display:none;color:#e8a33d"></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
       <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="30"></div>
       <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="10"></div>
@@ -1202,6 +1203,8 @@ function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   npResetDefaults();
+  NP_VIDEO_MODEL=null;npsgModelHint();
+  api('/api/v1/config/video-model').then(m=>{NP_VIDEO_MODEL=m;npsgModelHint()}).catch(()=>{});
   rhythmInit('np').then(()=>rhythmApply('np',null));
   npShowStep(1);
   $('#np-modal').style.display='flex';
@@ -1570,6 +1573,19 @@ function sgActivePreset(pfx){   // 返回应高亮的预设 key(null=全不高�
 function sgSyncPreset(pfx){   // 按点选/当前值高亮预设按钮(同一时刻至多一个高亮)
   const active=sgActivePreset(pfx);
   document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>b.classList.toggle('active',b.dataset.preset===active));
+  if(pfx==='npsg')npsgModelHint();
+}
+// 新建向导「模型限制」步:所选预设与「生成模型」页当前生效视频模型(GET /config/video-model,
+// video-generation 工位口径)不一致时给黄字提示,只提示不拦下一步;生效模型无法归入预设口径时不提示
+let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|''};openNpModal 时拉取
+const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3'};
+function npsgModelHint(){
+  const el=$('#npsg-model-hint');if(!el)return;
+  const m=NP_VIDEO_MODEL,active=sgActivePreset('npsg');
+  if(!m||!m.family||m.family===active){el.style.display='none';return}
+  el.textContent=I18N.f('⚠ 生成模型设置里当前生效的视频模型是 {model}(对应 {family} 口径),与此处所选 {preset} 不同。不影响下一步,但建议两边保持一致,否则分镜组上限会与实际生成模型的能力不符',
+    {model:m.label||m.model||m.provider,family:SG_PRESET_NAMES[m.family],preset:active?SG_PRESET_NAMES[active]:t('手动值')});
+  el.style.display='';
 }
 function sgApplyPreset(pfx,key){
   const p=SG_PRESETS[key];

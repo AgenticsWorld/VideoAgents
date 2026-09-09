@@ -8526,6 +8526,31 @@ async def api_globalmodel_get():
     return {"global_model": global_model_pref()}
 
 
+def video_model_family(cfg: dict | None = None) -> str:
+    """生效视频模型对应的「模型限制」预设口径:sd25 / sd20(含 fast/mini)/ mmh3(任何渠道跑 H3,
+    含 ComfyUI/RunningHub 工作流);无法判定(其他模型或无模型渠道)返 ""。"""
+    cfg = cfg or load_genconfig()
+    if is_minimax_h3_active(cfg):
+        return "mmh3"
+    m = effective_video_model(cfg)
+    if is_seedance25(m):
+        return "sd25"
+    if is_seedance20(m):
+        return "sd20"
+    return ""
+
+
+async def api_video_model_get():
+    """「生成模型」页当前生效的视频模型(video-generation 工位口径)及其预设口径;
+    新建向导「模型限制」步据此在所选预设与生效模型不一致时给提示(不拦下一步)。"""
+    cfg = load_genconfig()
+    model = effective_video_model(cfg)
+    prov = active_video_provider(cfg, VIDEO_AGENT_ID)
+    return {"provider": prov, "model": model,
+            "label": video_model_label(model, prov) if model else _video_model_label(cfg),
+            "family": video_model_family(cfg)}
+
+
 async def api_globalmodel_set(body: dict):
     """顶栏全局引擎/模型的服务端副本:前端每次切换顶栏选择时同步写入 STATE。
     localStorage 只有该浏览器可见,没有这份副本时服务端自发对话只能硬编码回退
