@@ -27,8 +27,8 @@
    - **登记组内每个出场角色的服装 `costumes`(2026-08-26)**:每组 `groups_draft[]` 写 `costumes`(对象,角色 `CHAR-*` → `bible/costumes.json` 该角色的一套服装 id,如 `{"CHAR-0002": "COS-010"}`),组 `characters` 里每个角色必有一条。定值依据:该套服装的 `scenes[]` 含本场 `scene_id`、`chapters[]/episodes[]` 含本集所在章/集,再以 `change_points[]`(`scene_ref`/`ev_ref`/`paragraph`/`trigger`)定换装发生在本场哪一拍;无任何匹配取该角色默认装并在组 `costume_notes` 写明推断依据。**换装点只能落在组边界**:同一角色在一组内只能穿一套——换装/状态突变(敞襟、被扒、沾血)发生在节拍中间时,就在换装点切组(与「对白轮不跨组」同级的分组原则),不得让一组里同一人两种衣着。服装 sheet 由 costume-concept 按此字段挂图(`assets/concepts/characters/<id>/costume_sheets.json` 台账),分镜预览页组卡按此展示服装参考图,§6A 按此审计服装图缺口,p7 按此换挂 refs——漏写 = 模型只能凭默认装 sheet 出片,破衣穿回干净的。
    - **登记组内出场生物/坐骑 `creatures`(2026-08-26)**:每组 `groups_draft[]` 写 `characters`(出场角色 CHAR-*)与 `creatures`(出场生物/造物/坐骑,ID 取 `bible/creatures/index.json` 的 `CRE-*`,无则空数组)——剧本或镜头 `content` 中出现该生物即登记;**坐骑随骑手登记**:角色骑乘/牵引坐骑的镜头,坐骑必入该组 `creatures`,不得因「主体是人」而省略;生物的站位按职责 7 的「生物两态」写进 `blocking_map`(2026-08-27)。生物是与角色同级的形象锚实体,漏登记 = 下游 §6A 覆盖审计与 p7 refs 挂图无从枚举,模型只能凭 bible 文字脑补形象。
 6. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
-7. **关联场景布局包并标注人物站位/动线(blocking_map,2026-08-19)**【开关:仅当项目「输出设置 → 人物精确空间位置」开启(默认开;系统提示词「用户输出设定」段注入,权威)时适用;关闭时沿用单张场景概念图旧流程,本条不适用】:每场先读该场景布局包 `assets/concepts/scenes/<scene_id>/{layout_top.png, grid_9views.png, layout.json}`(缺则上报 orchestrator 回派 environment-concept 补齐,不得无图硬标),然后——
-   - 每组 `groups_draft[]` 写 `scene_refs`(三件路径)与 **`blocking_map`**:组内**每个出场角色**一条、**每个独立态生物**(`creatures` 内,非骑乘)也一条(`id` 用 `CRE-*`,规则见下),`start`(起始位置)必填、`path`(经过点,可空)与 `end`(终点)在有移动时必填、无移动则只写 start——位置一律引用 `layout.json#landmarks` 的地标 `id`(可附 `xy` 归一化坐标微调、`offset_en` 如 "one step inside"/「门内一步」),并写动线句 `route_en`(≤40 英文词或 ≤60 字,地标词逐字取 layout.json `name_en`;有移动写 "enters through the main door, walks past the long table and stops at the fireplace" / 中文界面如「从正门进入,经长桌走过,停在壁炉旁」,无移动写 "stands beside the fireplace facing the door and does not move" / 「站在壁炉旁,面向房门,原地不动」;**2026-08-24 二订:`route_en`/`offset_en` 内容语言随用户界面语言,字段名保留 `_en` 历史后缀,原纯英文机检已取消;2026-09-07 起不再渲染动线图,route_en 只进 prompt 与白模;存量英文项目补标注沿用英文,不得半中半英**)——**下游 prompt 逐字拼入、不做翻译**(机检 layout_map_bound);
+7. **关联场景布局包并标注人物站位/动线(blocking_map,2026-08-19)**【开关:仅当项目「输出设置 → 人物精确空间位置」开启(默认开;系统提示词「用户输出设定」段注入,权威)时适用;关闭时沿用单张场景概念图旧流程,本条不适用】:每场先读该场景布局包 `assets/concepts/scenes/<scene_id>/{layout_top.png, layout.json}`(缺则上报 orchestrator 回派 environment-concept 补齐,不得无图硬标;九宫格 grid_9views.png 自 2026-09-09 退役,存量有则可参考、不再要求),然后——
+   - 每组 `groups_draft[]` 写 `scene_refs`(`layout_top` / `layout_json` 两件路径;**俯视图只供分镜预览页查看,不会进视频参考图**,2026-09-09;存量 `grid_9views` 键可留可删)与 **`blocking_map`**:组内**每个出场角色**一条、**每个独立态生物**(`creatures` 内,非骑乘)也一条(`id` 用 `CRE-*`,规则见下),`start`(起始位置)必填、`path`(经过点,可空)与 `end`(终点)在有移动时必填、无移动则只写 start——位置一律引用 `layout.json#landmarks` 的地标 `id`(可附 `xy` 归一化坐标微调、`offset_en` 如 "one step inside"/「门内一步」),并写动线句 `route_en`(≤40 英文词或 ≤60 字,地标词逐字取 layout.json `name_en`;有移动写 "enters through the main door, walks past the long table and stops at the fireplace" / 中文界面如「从正门进入,经长桌走过,停在壁炉旁」,无移动写 "stands beside the fireplace facing the door and does not move" / 「站在壁炉旁,面向房门,原地不动」;**2026-08-24 二订:`route_en`/`offset_en` 内容语言随用户界面语言,字段名保留 `_en` 历史后缀,原纯英文机检已取消;2026-09-07 起不再渲染动线图,route_en 只进 prompt 与白模;存量英文项目补标注沿用英文,不得半中半英**)——**下游 prompt 逐字拼入、不做翻译**(机检 layout_map_bound);
    - **动线跨组连续**:同场景相邻组,后组每个角色的 `start` 必须等于前组该角色的 `end`(无移动则等于其 start),角色离场/入场要在 route_en 写明从哪个出入口地标进出——这是解决「不同分镜中人物在场景中的位置不连续」的源头约束;
    - 每镜 `shots_draft[]` 挂 `view_tile`(1–9,该镜机位最接近九格图的哪一格,取 layout.json#views;特写/无对应角度可 null 但要在 sketch 说明机位相对哪个地标);
    - `characters` **数组顺序即白模参考视频里的人物颜色顺序**(`modules/whitebox.py` 按此数组顺序取固定调色板,禁重排;2026-09-07 起不再渲染字母动线图),**生物两态站位(2026-08-27)**:组 `creatures_union` 内每个生物必须二选一——①**独立态**(牵引/拴着/独自入画/被处置,如牵马拉车、马停在车前):作为 `blocking_map.characters[]` 独立一条,`id` 用 `CRE-*`、`label` 短规范名(同 label_ok)、自有 start/path/end/`route_en`(route 写清相对主人的位置,如「在他前方一个马身,拉着拖车」),白模中自占一个模型;②**骑乘态**(人在它背上):骑手条目加 `mounted: "CRE-*"`,生物不单列,人兽同点同轨迹,骑手 `route_en` 写明 riding;同组同一生物不得两态并存;两态皆无 = 生物在空间中无锚(机检 creature_blocking_ok,`blocking_map_check.py --strict` 违规)。独立态与主人的重叠不是问题:马身 2–3 m,俯视坐标上天然错开(`offset_en`/xy 写清),真贴在一起走骑乘态;跨组连续机检对生物同样生效(后组 start = 前组 end)。
@@ -54,7 +54,7 @@
 | 05-scenes/scene | 场景时段变体清单(每场 time_of_day 定值依据) | `bible/scenes/index.json`(time_variants) |
 | 06-art/costume | 每角色服装套装(scenes/chapters/episodes 适用区间)与换装点(组 `costumes` 定值依据) | `bible/costumes.json`(costumes[]/characters[].outfits[] + change_points) |
 | 06-art/costume-concept | 服装 sheet 台账(核对本组所指服装是否已有图;无图不改字段,由 §6A 回派补图) | `assets/concepts/characters/<id>/costume_sheets.json` |
-| 06-art/environment-concept | 场景布局包:俯视空间布局图 + 9 宫格多角度图 + 地标坐标/九格机位事实源 | `assets/concepts/scenes/<scene_id>/{layout_top.png,grid_9views.png,layout.json}` |
+| 06-art/environment-concept | 场景布局包:俯视空间布局图 + 地标坐标/机位语义事实源(九宫格 2026-09-09 退役) | `assets/concepts/scenes/<scene_id>/{layout_top.png,layout.json}` |
 
 ## 输出
 
@@ -90,7 +90,6 @@
       "narrative_block": { "id": "fb-2003", "kind": "flashback", "role": "start" },
       "scene_refs": {
         "layout_top": "assets/concepts/scenes/SCN-0012/layout_top.png",
-        "grid_9views": "assets/concepts/scenes/SCN-0012/grid_9views.png",
         "layout_json": "assets/concepts/scenes/SCN-0012/layout.json"
       },
       "blocking_map": {
@@ -137,7 +136,7 @@ instruction: |
 - **服装引用机检(costume_refs_valid,2026-08-26)**:每组 `costumes` 必填,组 `characters` 每个角色有且仅有一套,取值在 `bible/costumes.json` 中存在且 `character_ref`/归属为该角色;同场景相邻组同一角色服装不同时,两组之间必须对应 costumes.json 的一个 change_point(或组 `costume_notes` 写明状态突变依据),否则退回。
 - **生物引用机检(creature_refs_valid,2026-08-26)**:每组 `creatures` 必填(可为空数组),其中每个 ID 在 `bible/creatures/index.json#creatures[]` 存在;镜头 `content` 提及 index 已登记生物/坐骑(按名称或 aliases 匹配)而所在组 `creatures` 未登记 = 退回。
 - **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。
-- **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/blocking_map_check.py --source storyboard --strict`)**:每个有出场角色的组 `blocking_map` 齐全——每角色 `start` 必填、有 path 必有 end、位置引用的地标在该场景 layout.json 存在、`route_en` 非空(语言随界面语言,2026-08-24 二订;≤40 英文词或 ≤60 字);每角色 `label` 合规(label_ok,2026-08-27:短规范名、非代词、无说明性标点、全集同角色同词);`scene_refs` 三件路径存在;同场景相邻组各角色 start 与前组 end 衔接(无移动=原地)。场景无布局包 = 上报回派 environment-concept,不得跳过标注。
+- **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/blocking_map_check.py --source storyboard --strict`)**:每个有出场角色的组 `blocking_map` 齐全——每角色 `start` 必填、有 path 必有 end、位置引用的地标在该场景 layout.json 存在、`route_en` 非空(语言随界面语言,2026-08-24 二订;≤40 英文词或 ≤60 字);每角色 `label` 合规(label_ok,2026-08-27:短规范名、非代词、无说明性标点、全集同角色同词);`scene_refs` 的 layout_top / layout_json 路径存在(九宫格不再要求);同场景相邻组各角色 start 与前组 end 衔接(无移动=原地)。场景无布局包 = 上报回派 environment-concept,不得跳过标注。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80)**:
 - 叙事清晰(30):不看剧本也能从镜头序列读懂剧情;

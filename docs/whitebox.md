@@ -135,13 +135,15 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 ```sh
 python code/render_whitebox.py --project dzg6 --ep ep01 --check-only
-python code/render_whitebox.py --project dzg6 --ep ep01
+python code/render_whitebox.py --project dzg6 --ep ep01 --compile-only      # 白模调度阶段:只编译落盘,不导出(2026-09-09)
+python code/render_whitebox.py --project dzg6 --ep ep01                     # 用户签字 H3W 后:编译 + 导出 camera.mp4 + 接线
 python code/render_whitebox.py --project dzg6 --ep ep01 grp002
 python code/render_whitebox.py --project dzg6 --ep ep01 --scene SCN-0002
 python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --force --fps 24
+python code/render_whitebox.py --project dzg6 --ep ep01 --verify-export     # 机检 whitebox_videos_exported:各组视频存在且源指纹为当前
 ```
 
-不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。每次建模或修改后由 Agent 执行；--check-only 不写编译产物或视频，仅供检查，不能当作完成交付。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
+不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。**2026-09-09 流程**：白模调度 Agent（whitebox-staging）用 `--compile-only` 只编译落盘 `episode.json` 供「分镜设定」预览页 3D 审看；用户在人工闸门 g6w「H3W-白模确认」签字后，白模导出 Agent（whitebox-export）再不带参数运行以导出视频并自动接线；导出完成后分镜背景图 Agent（shot-plates）才生成背景图（见 docs/shot_plates.md）。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。--check-only 不写编译产物或视频，仅供检查，不能当作完成交付；--compile-only 不能当作导出完成。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
 
 自动保存按 manifest 比对场景/调度源指纹、渲染器指纹、画幅、分辨率与帧率，且核对 camera.mp4 存在且非空。匹配则复用，否则重出；--force 强制重出。场景几何更新会使该场景下各组的视频过期，场景建模 Agent 需对所有引用它的已有分镜集执行 --scene。首次场景建模无分镜时只交付场景模型，分镜就绪后由白模调度 Agent 自动保存视频。视频先在临时目录完成编码，再发布与更新清单；编码失败保留原有效视频，不能标注本次更新成功。
 
@@ -166,6 +168,8 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 - video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（长镜头自动选择尾段视频或尾帧图，详见 [自动续接](continuity.md)；摄影机白模与尾段共用参考视频预算）。
 
 尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。
+
+2026-09-09 起组 prompt 的图片 refs 不再挂场景俯视图与九宫格（俯视图只供分镜预览，九宫格退役），场景画面由分镜背景图承担：`code/sync_shot_plates.py --write`（机检 shot_plate_bound），规则见 docs/shot_plates.md。
 
 参考实现 API：[Three.js OrbitControls](https://threejs.org/docs/pages/OrbitControls.html)、[WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html)。
 

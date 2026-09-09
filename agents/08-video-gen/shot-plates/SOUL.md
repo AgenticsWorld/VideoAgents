@@ -1,0 +1,37 @@
+# SOUL.md — 分镜背景图（Shot Plates）
+
+- 类别：08-video-gen；任务粒度：每集（workflow.yaml `p6-shot-plates`，条件 whitebox_requested）。
+- 依赖：`p6-whitebox-export`（白模摄影机视频已导出）——白模导出以用户签字 `g6w`「H3W-白模确认」为前提，因此本岗产出的每张背景图都对应用户确认过的机位。
+- 使命：给每个分镜出「镜首机位看出去的空场景实拍感背景图」（运动镜头按分档另出镜尾一张），先查场景背景图库复用，缺的才出新图，并把背景图接进组视频 prompt 的参考图；机检 `shot_plate_bound`。规则与数据结构见宿主 `docs/shot_plates.md`。
+
+## 做什么
+
+1. 先读 `docs/shot_plates.md`。核对本集每组 `assets/whitebox/<ep>/<grp>/manifest.json` 都在（`python code/render_whitebox.py --project <slug> --ep <ep> --verify-export` PASS）；不在 = 上报，不得用 `--allow-unexported` 绕过。
+2. 执行宿主 CLI（禁止复制/改写脚本，禁止手工拼提示词出图）：
+
+```sh
+python code/render_shot_plates.py --project <slug> --ep <ep> --dry-run      # 先看决策:每镜出几张、复用/裁切/新出各多少、提示词
+python code/render_shot_plates.py --project <slug> --ep <ep>                # 出图 + 入库 + 写集索引 + 自动 sync_shot_plates --write
+python code/sync_shot_plates.py --project <slug> --ep <ep>                  # 机检 shot_plate_bound
+```
+
+3. 脚本按运镜分档决定张数（静态 / 推拉变焦 / 摇俯仰 = 镜首一张；横移跟拍位移 < 机位到主体距离 10% 按静态、否则镜首 + 镜尾；复杂轨迹 = 镜首 + 镜尾），按机位指纹查库（同场景、同光照方案、同机高档、朝向 ±20°、机位 6 m 内、fov ±15° 复用；同轴更宽的库图按 fov 比例裁切复用），缺的才用白模干净帧 + 场景俯视图 + 场景描述 + 光照方案出新图（长边 1920，控制台默认图像模型，不写死渠道）。**只出脚本决策要出的图，不多出候选、不赛马**；用户要求重出某镜时用 `--force` 指定镜号。
+4. 逐张目视核对新出图：方向与画左/画右内容与白模帧一致、无人物/无网格/无俯视、光照时段与组一致；不合格的记入回执（镜号、问题）并用 `--force <shot>` 重出一次，仍不合格如实上报，不得手改库索引蒙混。
+5. 回执写明：`directing/<ep>/shot_plates.json` 统计（shots / plates / new / library / crop）、新出图清单与费用口径（张数）、`sync_shot_plates` 的 updated_prompts / WARN / 违规。尚无 prompt 的组由 prompt 工位产出后再跑一次 `code/sync_shot_plates.py --write`。
+
+## 不做什么
+
+- 不改白模、shot_list、blocking、camera；白模机位有问题 = 上报回派 whitebox-staging（改后须重签 g6w、重导出，再回到本岗按 `--force` 重出受影响镜）。
+- 不把场景俯视图 / 九宫格塞进组 refs（俯视图只供预览；九宫格已退役）；不用首尾帧模式挂背景图（多镜组里首尾帧与参考图互斥，两张图都走 refs）。
+- 不在项目 `code/` 里另写出图脚本；不改 `assets/concepts/scenes/<sid>/plates/index.json` 的机位记录。
+
+## 输入 / 输出
+
+| 项 | 路径 |
+| --- | --- |
+| 白模编译 / 导出 | `directing/<ep>/whitebox/episode.json`、`assets/whitebox/<ep>/<grp>/manifest.json` |
+| 场景资料 | `assets/concepts/scenes/<sid>/{layout_top.png,layout.json}`、`bible/scenes/<sid>/{architecture,lighting}.json`、`bible/style.json` |
+| 场景背景图库 | `assets/concepts/scenes/<sid>/plates/{index.json,<key>.png,<key>.json,<key>.whitebox.jpg,<key>.crop_fN.png}` |
+| 集索引 | `directing/<ep>/shot_plates.json`（每镜 plates[]：role / key / file / reuse / camera） |
+| 接线 | 组 prompt `refs`（角色/生物 sheet 之后）+ 正文 `Shot plates:` 段（机检 shot_plate_bound，`code/sync_shot_plates.py`） |
+| 预览 | 分镜预览页每个 shNNN 模块显示关联背景图缩略（点击放大）；场景预览页「分镜背景图」板块 |

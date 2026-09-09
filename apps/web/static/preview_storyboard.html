@@ -88,6 +88,10 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .clipslabel{width:100%;font-size:11px;color:var(--dim);margin-bottom:2px}
 .shot .media .cap{font-size:10.5px;color:var(--dim);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:5px}
 .shot .media .cap .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.shot .plates{width:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;padding-top:6px;border-top:1px dashed var(--border)}
+.shot .plates img{width:100px;height:auto;border-radius:4px;cursor:zoom-in;display:block;border:1px solid var(--border);background:#000}
+.shot .plates .pl{font-size:10px;color:var(--dim);text-align:center;width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shot .plateslabel{width:100%;font-size:11px;color:var(--dim)}
 .editbtn{font-size:10.5px;padding:0 6px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .shot .info{flex:1;min-width:220px}
@@ -1037,6 +1041,13 @@ function shotCard(s,grp){
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
   const chars=(s.characters||[]).join('、');
   const cres=(s.creatures||[]).join('、');
+  // 分镜背景图(2026-09-09):directing/<ep>/shot_plates.json 关联到本镜的背景图,全部显示、宽 100px、点击放大
+  const plates=(s.plates||[]).map(p=>{
+    const role=p.role==='end'?t('终点'):t('起点');
+    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):t('本镜新出');
+    const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
+    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${esc(role)} · ${esc(how)}</div></div>`;
+  });
   return `<div class="shot">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
     <div class="info">
@@ -1052,6 +1063,7 @@ function shotCard(s,grp){
       ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
+    ${plates.length?`<div class="plates"><div class="plateslabel">🖼 ${t('分镜背景图')}</div>${plates.join('')}</div>`:''}
   </div>`;
 }
 

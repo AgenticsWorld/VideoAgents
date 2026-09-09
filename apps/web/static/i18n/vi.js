@@ -2052,4 +2052,16 @@ window.I18N_DICT = {
 "窗口—发展—收束": "Cửa sổ–phát triển–khép",
 "季中双峰": "Hai đỉnh giữa–cuối mùa",
 "单元+主线": "Tập lẻ + mạch chính",
+
+// 分镜背景图(2026-09-09)
+"分镜背景图": "Nền cảnh quay",
+"起点": "Bắt đầu",
+"终点": "Kết thúc",
+"裁自宽景": "Cắt từ nền rộng hơn",
+"复用库图": "Dùng lại từ thư viện",
+"本镜新出": "Tạo riêng cho cảnh này",
+"朝向 {d}": "Hướng {d}",
+"机高 {h} m": "Độ cao máy quay {h} m",
+"用于分镜:{s}": "Dùng cho cảnh: {s}",
+"尚未被分镜引用": "Chưa được cảnh nào dùng",
 };

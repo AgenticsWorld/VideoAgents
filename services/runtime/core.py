@@ -854,10 +854,11 @@ DEFAULT_GENCONFIG = {
     #   (无对白组一律 ambient_only,silent_rationale 照常核查但不再回派补写旁白),混音只有原生轨+BGM 两路,
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
     # spatial_blocking=人物精确空间位置(默认开)——2026-09-07 起含义=「用白模摄影机视角视频给视频生成定位人物」:
-    #   开=场景布局包流程(每场景俯视空间布局图+9 宫格多角度图+layout.json,分镜组登记人物起点/动线/终点
+    #   开=场景布局包流程(每场景俯视空间布局图+layout.json;九宫格 2026-09-09 退役,分镜组登记人物起点/动线/终点
     #   blocking_map)+ 白模链(p4-scene-model / p6-whitebox),导出的 camera.mp4(2026-09-08 起仅摄影机视角,不出俯视 top.mp4)自动接成组视频生成的
-    #   参考视频(video_refs + Whitebox reference/legend 固定段,code/sync_whitebox_refs.py),prompt 另挂干净俯视图+九格图
-    #   并逐字注入 route_en(机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound/whitebox_ref_bound);关=沿用单张场景概念图流程
+    #   参考视频(video_refs + Whitebox reference/legend 固定段,code/sync_whitebox_refs.py);白模签字 H3W 后导出视频、再出分镜背景图
+    #   (code/render_shot_plates.py → 组 refs,机检 shot_plate_bound);俯视图只供预览不进 refs,prompt 逐字注入 route_en
+    #   (机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound/whitebox_ref_bound/shot_plate_bound);关=沿用单张场景概念图流程
     #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
@@ -2804,22 +2805,22 @@ def build_role_prompt(agent_id: str, project: str) -> str:
     spatial_on = out.get("spatial_blocking", True) is not False
     spatial_line = (
         "**开启(默认)—— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
-        "`layout_top.png` + 9 宫格多角度图 `grid_9views.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口);"
+        "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
         "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并跑宿主 CLI `code/blocking_map_check.py` 机检"
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
-        "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs 必挂该场景干净俯视图 `layout_top.png`(直接引用、不做人物标注)+ "
-        "9 宫格图、写 Spatial layout 声明句 + Map usage 俯视图仅作空间位置参考句(不得直接用于画面,机检 map_reference_only)、逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角,2026-09-08 起不出俯视视频),"
+        "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs **不挂**俯视图/九宫格(2026-09-09:俯视图只供分镜预览页与 storyboard/shot_list `scene_refs` 查看,不进视频参考图;场景空间由白模摄影机视频 + 分镜背景图承担)、"
+        "逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-export 用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
-        "prompt 工位写完必跑 `--write`,机检 whitebox_ref_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
+        "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
         if spatial_on else
         "**关闭 —— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "
-        "`main_*.png` + 昼夜变体(不出 layout_top/grid_9views/layout.json,§6A 场景所需视图=主视角概念图+变体);"
+        "`main_*.png` + 昼夜变体(不出 layout_top/layout.json,§6A 场景所需视图=主视角概念图+变体);"
         "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;blocking 不受 blocking_on_map 约束"
         "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
-        "不写 Spatial layout 句、不跑 layout_map_bound_check.py;scene_layout_pack_ok/blocking_map_present/"
-        "blocking_on_map/layout_map_bound 四项机检一律跳过(报 `skipped: spatial_blocking off`)——"
+        "不跑 layout_map_bound_check.py / sync_shot_plates.py;scene_layout_pack_ok/blocking_map_present/"
+        "blocking_on_map/layout_map_bound/shot_plate_bound 五项机检一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
     narration_on = out.get("narration_enabled", True) is not False
     narration_line = (
@@ -4913,7 +4914,7 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 
 # ---------------- 组参考图(分镜预览页从资产库选图,追加进组 prompt 的 refs) ----------------
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
-                      "assets/concepts/scenes/",      # 含干净俯视图 layout_top.png / 九格图(2026-09-07 起俯视图直接作 ref,动线标注图退役)
+                      "assets/concepts/scenes/",      # 含分镜背景图 plates/(2026-09-09;俯视图/九宫格不再作 ref,用户手动追加不拦)
                       "assets/concepts/props/",
                       "assets/concepts/creatures/")   # 生物/坐骑 sheet(2026-08-26)
 
@@ -5763,6 +5764,14 @@ def _preview_scenes(project: str):
         if d.is_dir():
             ids |= {x.name for x in d.iterdir()
                     if x.is_dir() and not x.name.startswith(".")}
+    # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用
+    used_by: dict[str, list] = {}
+    for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
+        sp = _read_json_safe(f) or {}
+        for sp_sid, rec in (sp.get("shots") or {}).items():
+            for p in (rec.get("plates") or []) if isinstance(rec, dict) else []:
+                if isinstance(p, dict) and p.get("key"):
+                    used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
     scenes = []
     for sid in sorted(ids):
         docs = {}
@@ -5770,9 +5779,22 @@ def _preview_scenes(project: str):
             for f in sorted((bdir / sid).glob("*.json")):
                 docs[f.stem] = _read_json_safe(f)
         meta = info.get(sid) or {}
+        plates = []
+        for p in ((_read_json_safe(adir / sid / "plates" / "index.json") or {}).get("plates") or []):
+            f = base / str(p.get("file") or "") if isinstance(p, dict) else None
+            if not (f and f.is_file()):
+                continue
+            cam = p.get("camera") or {}
+            plates.append({"key": p.get("key"), "file": p.get("file"),
+                           "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}",
+                           "lighting_scheme_id": p.get("lighting_scheme_id"), "time_of_day": p.get("time_of_day"),
+                           "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
+                           "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
         scenes.append({"id": sid, "name": meta.get("name") or sid,
                        "meta": meta, "docs": docs,
-                       "images": _asset_urls(base, adir / sid, IMG_EXTS)})
+                       # plates/ 子目录(背景图 + 白模帧 + 裁切)不进概念图库,单独以「分镜背景图」板块展示
+                       "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith("plates/")],
+                       "plates": plates})
     return {"project": base.name, "scenes": scenes}
 
 
@@ -5988,6 +6010,18 @@ def _preview_storyboard(project: str, ep: str):
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
+    # 分镜背景图(2026-09-09):directing/<ep>/shot_plates.json 每镜 plates[](起点/终点、复用来源)→ 分镜预览 shNNN 模块缩略
+    sp_idx = _read_json_safe(base / "directing" / ep / "shot_plates.json") or {}
+    shot_plates: dict[str, list] = {}
+    for sp_sid, sp_rec in (sp_idx.get("shots") or {}).items():
+        rows = []
+        for p in (sp_rec.get("plates") or []) if isinstance(sp_rec, dict) else []:
+            f = base / str(p.get("file") or "")
+            if not (isinstance(p, dict) and p.get("file") and f.is_file()):
+                continue
+            rows.append({"role": p.get("role"), "key": p.get("key"), "reuse": p.get("reuse"), "crop": p.get("crop"),
+                         "file": p.get("file"), "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}"})
+        shot_plates[str(sp_sid)] = rows
     # 组服装(2026-08-26):shot_list 组 costumes_by_char(权威)→ 缺则由镜 costumes 并集
     # → 再缺回落 continuity 的 costume_states(存量项目);经 costume_sheets.json 台账落到服装 sheet
     cidx = _read_json_safe(base / "bible" / "characters" / "index.json") or {}
@@ -6094,6 +6128,7 @@ def _preview_storyboard(project: str, ep: str):
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips
                       if sid and _id_name_match(sid, c["name"], any_segment=True)],
+            "plates": shot_plates.get(sid, []),
         })
     data["shots"] = shots
     # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、

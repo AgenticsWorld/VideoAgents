@@ -2052,4 +2052,16 @@ window.I18N_DICT = {
 "窗口—发展—收束": "Fenster–Entwicklung–Abschluss",
 "季中双峰": "Zwei Höhepunkte",
 "单元+主线": "Episodisch + Hauptbogen",
+
+// 分镜背景图(2026-09-09)
+"分镜背景图": "Shot-Hintergrundplatten",
+"起点": "Anfang",
+"终点": "Ende",
+"裁自宽景": "Aus weiterer Platte beschnitten",
+"复用库图": "Aus Bibliothek wiederverwendet",
+"本镜新出": "Für diese Einstellung erzeugt",
+"朝向 {d}": "Blickrichtung {d}",
+"机高 {h} m": "Kamerahöhe {h} m",
+"用于分镜:{s}": "Verwendet in Einstellungen: {s}",
+"尚未被分镜引用": "Noch von keiner Einstellung referenziert",
 };

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Compile whiteboxes and automatically save every changed camera-view video (camera.mp4; no top view since 2026-09-08)."""
+"""Compile whiteboxes and automatically save every changed camera-view video (camera.mp4; no top view since 2026-09-08).
+
+2026-09-09 流程:白模调度 Agent 用 --compile-only 只编译落盘 episode.json 供预览页审看;用户签字「H3W-白模确认」后,
+白模导出 Agent 再不带该参数运行本脚本导出 camera.mp4 并自动接线;导出完成后才生成分镜背景图(code/render_shot_plates.py)。"""
 import json
 import sys
 from pathlib import Path
@@ -18,6 +21,8 @@ def main():
         parser.add_argument('--force',action='store_true',help='Re-render even when saved videos match current inputs')
         parser.add_argument('--scene',help='Update all groups using this scene in the episode')
         parser.add_argument('--check-only',action='store_true')
+        parser.add_argument('--verify-export',action='store_true',help='机检 whitebox_videos_exported:编译后核对所选组 camera.mp4/manifest 存在且源指纹为当前值,不导出;缺/过期退出码 1')
+        parser.add_argument('--compile-only',action='store_true',help='只编译并落盘 episode.json / whitebox.scene.json,不导出视频、不接线(白模调度阶段,待用户签字后再导出)')
         parser.add_argument('--width',type=int,help='Override together with --height; must preserve project aspect')
         parser.add_argument('--height',type=int,help='Default dimensions follow project aspect (960px long edge)')
         parser.add_argument('--fps',type=int,default=24)
@@ -44,6 +49,24 @@ def main():
     (output/'episode.json').write_text(json.dumps(episode,ensure_ascii=False,indent=2),encoding='utf-8')
     for sid,scene in episode['scenes'].items():
         (base/'assets/concepts/scenes'/sid/'whitebox.scene.json').write_text(json.dumps(scene,ensure_ascii=False,indent=2),encoding='utf-8')
+    if args.verify_export:
+        from modules.whitebox_export import fingerprint
+        report={}
+        for g in episode['groups']:
+            if scoped and g['group_id'] not in selected:continue
+            folder=base/'assets/whitebox'/args.ep/g['group_id']
+            try:record=json.loads((folder/'manifest.json').read_text(encoding='utf-8'))
+            except Exception:record={}
+            video=folder/'camera.mp4'
+            report[g['group_id']]=('ok' if record.get('source_sha256')==fingerprint(episode,g) and video.is_file() and video.stat().st_size>0
+                                   else 'stale' if video.is_file() else 'missing')
+        bad={k:v for k,v in report.items() if v!='ok'}
+        print(json.dumps({'whitebox_videos_exported':{'groups':len(report),'ok':len(report)-len(bad),'problems':bad}},ensure_ascii=False),flush=True)
+        print(f"[whitebox_videos_exported] {args.project}/{args.ep}: {len(bad)} 组缺/过期 -> {'FAIL' if bad else 'PASS'}",flush=True)
+        return 1 if bad else 0
+    if args.compile_only:
+        print(json.dumps({'compiled':[g['group_id'] for g in episode['groups']],'videos':'skipped(--compile-only:待用户签字 H3W-白模确认后再导出)'},ensure_ascii=False),flush=True)
+        return 0
     last={}
     def progress(gid,pct):
         bucket=pct//20

@@ -6,8 +6,8 @@ label_ok / scene_layout_pack_ok)。
   - 一个 SCN 只登记一个空间(2026-09-07,机检 scene_single_space):layout.json 不得含 landmarks_<space> /
     views_<space> / orientation_<space> 子空间键,多空间须拆 ID 各出布局包;
   - environment-concept 每场景出「俯视空间布局图」`assets/concepts/scenes/<sid>/layout_top.png`
-    + 「9 宫格多角度场景图」`grid_9views.png` + 文字事实源 `layout.json`(地标归一化坐标 xy、
-    九格机位语义 views[1..9]);
+    + 文字事实源 `layout.json`(地标归一化坐标 xy、机位语义 views[]);**2026-09-09 起九宫格
+    `grid_9views.png` 退役**:不再生成、不进视频参考图,存量文件不删也不核;
   - storyboard 每个生成组草案写 `blocking_map`(组内每个出场角色的 start / path / end,均引用
     layout.json 的地标 id,可选 xy 微调;附动线句 `route_en`——内容语言随界面语言;
     `label` = 该角色的短规范名,全集同一角色同一个词,下游 prompt 主体定义句 `<label>@Image N`
@@ -16,8 +16,9 @@ label_ok / scene_layout_pack_ok)。
   - **2026-09-07 起本脚本只做数据机检、不再渲染动线图**:原「把起点/动线/终点字母标注叠加到
     layout_top.png 上产出 directing/epNN/blocking_maps/<grp>.png 并挂进组 refs」的流程退役——
     人物在场景中的空间位置与动线改由 3D 白模参考视频(docs/whitebox.md,`code/render_whitebox.py`
-    产出 assets/whitebox/<ep>/<grp>/camera.mp4)承担;组 prompt refs 直接挂干净的
-    `layout_top.png` + `grid_9views.png`(机检 layout_map_bound,脚本 code/layout_map_bound_check.py)。
+    产出 assets/whitebox/<ep>/<grp>/camera.mp4)+ 分镜背景图(2026-09-09,code/render_shot_plates.py,
+    机检 shot_plate_bound)承担;俯视图只供分镜预览、不进组 refs(机检 layout_map_bound 改为核对
+    refs 不含俯视图/九宫格 + route_en 逐字,脚本 code/layout_map_bound_check.py)。
     blocking_map 数据本身仍是白模编译(modules/whitebox.py)与 route_en 逐字注入的事实源,故保留机检。
     本脚本是宿主 CLI:Agent 只准按下方用法调用,禁止复制/改写到项目 code/。
 
@@ -98,7 +99,8 @@ def load_layout(proj_root: Path, sid: str):
     if sub_keys:
         errs.append(f"{sid}: layout.json 含子空间键 {sub_keys}(scene_single_space:一个 SCN 只登记一个空间;"
                     f"第二个空间须由 05-scenes/scene 另立 SCN 再出独立布局包,不得以附加包并入)")
-    for key, default in (("layout_top", "layout_top.png"), ("grid_9views", "grid_9views.png")):
+    # 2026-09-09:九宫格 grid_9views.png 退役(不再生成、不进视频参考图),布局包只要求俯视图 + layout.json
+    for key, default in (("layout_top", "layout_top.png"),):
         f = d / (lay.get(key) or default)
         if not f.is_file():
             errs.append(f"{sid}: 缺 {key} 图 {f.name}")

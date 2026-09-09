@@ -2142,4 +2142,16 @@ window.I18N_DICT = {
 "每集独立小案 → 主线每 3–5 集推进一次": "Standalone case each episode → main arc advances every 3–5 episodes",
 "单集有独立闭环,主线间歇露头,两层节奏并行": "Each episode has its own closed loop while the main arc surfaces intermittently, two layers of rhythm in parallel",
 "侦探、职业剧、冒险、任务制故事": "Detective, professional dramas, adventure, mission-based stories",
+
+// 分镜背景图(2026-09-09)
+"分镜背景图": "Shot background plates",
+"起点": "Start",
+"终点": "End",
+"裁自宽景": "Cropped from wider plate",
+"复用库图": "Reused from library",
+"本镜新出": "Generated for this shot",
+"朝向 {d}": "Facing {d}",
+"机高 {h} m": "Camera height {h} m",
+"用于分镜:{s}": "Used by shots: {s}",
+"尚未被分镜引用": "Not referenced by any shot yet",
 };

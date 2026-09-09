@@ -2052,4 +2052,16 @@ window.I18N_DICT = {
 "窗口—发展—收束": "Jendela–kembang–tutup",
 "季中双峰": "Dua puncak",
 "单元+主线": "Episodik + alur utama",
+
+// 分镜背景图(2026-09-09)
+"分镜背景图": "Latar belakang shot",
+"起点": "Awal",
+"终点": "Akhir",
+"裁自宽景": "Dipotong dari plate lebih lebar",
+"复用库图": "Dipakai ulang dari pustaka",
+"本镜新出": "Dibuat untuk shot ini",
+"朝向 {d}": "Menghadap {d}",
+"机高 {h} m": "Tinggi kamera {h} m",
+"用于分镜:{s}": "Dipakai oleh shot: {s}",
+"尚未被分镜引用": "Belum dirujuk oleh shot mana pun",
 };

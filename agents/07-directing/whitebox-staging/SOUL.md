@@ -30,14 +30,14 @@
 
 按 continuity_from 检查相邻组：同场实时连续动作可设 actors/camera 为 inherit；仅人物续接但换机位时 actors=inherit,camera=cut。闪回、时间跳切、场景切换明确 cut。validate 产生的不连续告警必须解释或修正，不可盲目沿用前组坐标；不得用 inheritance 掩盖源资料冲突。
 
-执行宿主：
+执行宿主（2026-09-09 流程：本岗只编译不导出）：
 
 ```sh
 python code/render_whitebox.py --project <slug> --ep ep01 --check-only
-python code/render_whitebox.py --project <slug> --ep ep01
+python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 ```
 
-每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号），默认自动保存到 `assets/whitebox/<ep>/<grp>/{camera.mp4,manifest.json}`，不等待用户在预览页点击；--check-only 仅用于检查，不能作为交付完成。相同输入/规格且视频完整时自动复用，人物/场景/画幅/渲染器变化或文件缺失时自动重出；必要时 --force 重渲染。检查 camera.mp4 与 manifest 的帧率/时长/分辨率/输入指纹，摄像机画面隐藏机位辅助线；机位和视轴只在预览页俯视图核对，不再导出俯视视频。只有视频写入成功才可宣称完成；失败报告原因并保留旧视频。该视频在项目「人物精确空间位置」开启时会由宿主自动接成该组视频生成的参考视频（2026-09-07）：`render_whitebox.py` 导出后自动跑 `code/sync_whitebox_refs.py --write`——已有组 prompt 的写入 `video_refs`（camera.mp4）与 `Whitebox reference:`/`Whitebox legend:` 固定段（颜色↔人物取自 episode.json actors），尚无 prompt 的组由 prompt 工位产出后再跑；回执里带上 `whitebox_refs` 的 attached/skipped 结果。视频只作空间参考，不得手工塞进图片 refs。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**本岗不导出 camera.mp4**：用户在人工闸门 g6w「H3W-白模确认」签字后，由 `07-directing/whitebox-export` 运行 `render_whitebox.py`（不带 --compile-only）导出视频并自动接线（`code/sync_whitebox_refs.py --write`），导出完成后再由 `08-video-gen/shot-plates` 生成分镜背景图；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、whitebox-export 重出受影响组，再由 shot-plates 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。合辑重出（视频预览页「重新生成白模合辑」）仍派本岗，用宿主 `code/concat_whitebox.py`。
 
 整集白模合辑（2026-09-08，视频预览页「🧊 白模合辑」板块）：用户在视频预览页点「重新生成白模合辑」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。只准调用宿主 CLI：
 
