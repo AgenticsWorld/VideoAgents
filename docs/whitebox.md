@@ -46,6 +46,8 @@
 
 在白模调度前、prompt 完成后执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`。它自动从同场次各组汇总人物，写入组 `scene_cast/scene_cast_refs`，补齐已存在 prompt 的 refs 与主体绑定，不改变已有 `[Image N]` 序号；可重复运行。参考图按本场次服装台账或同场次已有选图确定，缺图明确报错，不跨时代借装。图数超过渠道上限时按既有 refs_cap 流程处理，不裁掉在场人物；此命令只准备数据，不调用生成服务。prompt 前还没有文件时，先保存组关联供工位读取，prompt 产出后再同步。视频生成前通过 `refs_referenced_check.py` 复核，其检查已包含按场次独立推导的参考图完整性。
 
+**白模人物参考图规约(2026-09-09,白模项目=「人物精确空间位置」开启且本组已编译白模)**:只有在本组白模摄影机视频里**实际出现**的人物/生物(该 actor 至少一镜 presence 非 absent/remote、关键帧 visible 非 false、未被该镜 `visible_actor_ids` 排除、且包围球落在该镜摄影机画幅内;宿主 `modules/whitebox_refs.appearing_cast` 判定,不计几何遮挡)的参考图才进本组 refs;其余同场次人物(镜头外在场、已离场/未入场、缺席/远程)**不挂图、不写 @Image 绑定**——`sync_scene_cast.py` 只为出现者补图并在 `scene_cast_refs` 记 `whitebox_hidden` 原因,`sync_whitebox_refs.py --write` 把已挂的多余人物图移出 refs 并重排 `[Image N]`(`Whitebox legend:` 也只列出现者),两者机检(whitebox_cast_ref / whitebox_ref_bound)与 refs_referenced_check 都按违规报;正文仍引用被移除图时宿主不动 refs,须先删正文引用再跑 `--write`。本组已编译进 `episode.json` 后即生效（导出视频前也生效）；`prompt.whitebox_refs.cast` 记录 visible / hidden(原因) / dropped_refs 供复核。
+
 编译器给遗漏人物沿用同场次最近前组的尾位置/姿态；无前组锚点才用后组首锚，并记录推断。关键帧 `visible:false` 的退场状态继续继承，不让已离场人物复活；仅在画外不等于退场。补充人物的精确轨迹写入计划 `scene_actors`（结构与 actors 一样），不改变旧动线图字母；找不到同场次空间锚点则报错，不放到原点凑数。组级 `scene_presence: {"CHAR-…":{"state":"absent|remote|present","reason":"…"}}` 可明确整组的缺席、远程声音或在场状态；镜内进退场仍用关键帧。只有完成场次同步的组才启用新名单规则：无 `visibility_override_reason` 的摄像机名单被忽略；未迁移的旧组保留原名单，避免在本次选择范围外改镜头。
 
 原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。颜色按组内 blocking_map 数组顺序取自固定调色板（与分镜预览组卡的人物 chip 同色），不是跨所有组的永久颜色。骑乘生物与骑手同色。字母字段只保留在数据中作兼容（2026-09-07 起字母动线图 `directing/<ep>/blocking_maps/` 已退役，人物空间位置参考改由本白模视频承担），白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
@@ -168,7 +170,7 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
 
 - `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前（2026-09-08 起白模只有这一路，原 `output.whitebox_top_video` 开关废止）；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s，2.5 ≤10 个且 ≤30s，comfyui/runninghub 不支持参考视频则不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
-- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
+- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，2026-09-09 起只列在摄影机视频里实际出现的人物/生物/群演，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
 - video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（长镜头自动选择尾段视频或尾帧图，详见 [自动续接](continuity.md)；摄影机白模与尾段共用参考视频预算）。
 
 尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Prepare/check scene occupants and identity references before staging or generation."""
+"""Prepare/check scene occupants and identity references before staging or generation.
+
+白模项目(「人物精确空间位置」开)且本组已编译白模时,只为白模摄影机视频里实际出现的人物关联参考图(2026-09-09):
+其余同场次人物在 references 行记 whitebox_hidden,--write 把已挂的图移出 refs;仍挂着按错误报。"""
 import json
 import sys
 from pathlib import Path
@@ -59,7 +62,10 @@ def main():
     output = base/'directing'/args.ep/'scene_cast_review.json'
     if args.write:
         output.write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    print(json.dumps({'groups': len(result['groups']), 'updated_prompts': result['updated_prompts'], 'errors': result['errors']}, ensure_ascii=False))
+    hidden = {g['group_id']: {r['id']: r['whitebox_hidden'] for r in g['references'] if r.get('whitebox_hidden')}
+              for g in result['groups'] if any(r.get('whitebox_hidden') for r in g['references'])}
+    print(json.dumps({'groups': len(result['groups']), 'updated_prompts': result['updated_prompts'],
+                      'whitebox_hidden_cast': hidden, 'errors': result['errors']}, ensure_ascii=False))
     return bool(result['errors'])
 
 

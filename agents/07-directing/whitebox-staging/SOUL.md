@@ -6,7 +6,7 @@
 
 先读宿主 `docs/whitebox.md`。读取本集 shot_list、逐镜 blocking/camera、各场景白模、人物身高/生物尺寸、组间连续性。直接写 `directing/<ep>/whitebox_plans/<grp>.json`，全局米制、Y向上、地图上方为-Z；时间用组内或镜内秒，不能混用。
 
-开工先执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`，按同场次 scene_no + scene_id 自动补齐人物关联。无对白、镜头外人物均进入白模；`actors` 对应组 blocking_map 角色，额外在场人物由编译器沿用同场锚点，需调整时写 `scene_actors`。保留退场关键帧；电话/旁白角色使用明确的 remote 状态，不因跨镜缺少台词而删人。补齐后重新检查所有要求入画的人物及原机位遮挡。完整规则见 docs/whitebox.md。
+开工先执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write [grp…]`，按同场次 scene_no + scene_id 自动补齐人物关联。无对白、镜头外人物均进入白模；`actors` 对应组 blocking_map 角色，额外在场人物由编译器沿用同场锚点，需调整时写 `scene_actors`。保留退场关键帧；电话/旁白角色使用明确的 remote 状态，不因跨镜缺少台词而删人。补齐后重新检查所有要求入画的人物及原机位遮挡。完整规则见 docs/whitebox.md。注意(2026-09-09):人物是否在摄影机视频里出现决定其参考图能否进组 refs(白模人物参考图规约)——机位/`visible_actor_ids`/退场关键帧改动后,组 prompt 的人物图由 `sync_scene_cast.py --write` 与 `sync_whitebox_refs.py --write` 重新对齐,本岗不手改 prompt。
 
 补齐前必须核对人物进退场时间：同场身份总表不等于每组实体名单。文本中的“离开/出去”需落实为退场帧 visible:false，并在首个完整缺席组记录 scene_presence.absent（含来源镜头与原因）；重新入场显式记录 present。同场缺席状态自动延续并覆盖旧 scene_actors 副本，但不跨场次/地点。修改后再次同步参考与 prompt，检查摄像机、俯视图全时段均无已离场者，同时保留仍在场但画外的人。不能只删除某组 scene_actors，否则同场补齐会再次添加。回归案例：liaozhai2/ep01 陈代之母在 grp021 退场后被补进 grp022/023/024/033/034。
 

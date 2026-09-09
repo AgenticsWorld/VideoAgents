@@ -13,6 +13,10 @@ DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", REPO_ROOT / "data")).expa
 MODULES_DIR = REPO_ROOT / "modules"
 if str(MODULES_DIR) not in sys.path:
     sys.path.insert(0, str(MODULES_DIR))
+# modules/ 内部互相以 `from modules.xxx import` 引用(如 scene_cast → whitebox_refs),顶层直导 `from scene_cast import` 的
+# CLI 也要能解析 `modules.*`,因此仓库根同样入 sys.path
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
 
 
 def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):

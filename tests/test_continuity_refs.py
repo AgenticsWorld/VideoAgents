@@ -243,5 +243,7 @@ def test_legacy_two_view_manifest_still_attaches_camera_only(project):
     cr.sync_group(project, 'ep01', 'grp002', write=True)
     pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
     assert 'top-down' not in pj['video_prompt'] and 'shooting direction' not in pj['video_prompt']
-    assert pj['whitebox_refs'] == {'camera': 'assets/whitebox/ep01/grp002/camera.mp4', 'skipped_reason': '',
-                                   'model': pj['whitebox_refs']['model'], 'source': 'sync_whitebox_refs.v1'}
+    assert {k: v for k, v in pj['whitebox_refs'].items() if k != 'cast'} == {
+        'camera': 'assets/whitebox/ep01/grp002/camera.mp4', 'skipped_reason': '',
+        'model': pj['whitebox_refs']['model'], 'source': 'sync_whitebox_refs.v1'}
+    assert pj['whitebox_refs']['cast'] == {'visible': [], 'hidden': {}, 'dropped_refs': [], 'source': 'whitebox_cast.v1'}

@@ -2,6 +2,10 @@
 
 Shot characters describe narrative subjects, not everyone occupying the space.
 Never join different scene numbers merely because they reuse a location asset.
+
+白模项目(output.spatial_blocking 开)且本组已编译进 directing/<ep>/whitebox/episode.json 时,
+只有在本组白模摄影机视频里实际出现的人物/生物才关联参考图(modules.whitebox_refs.appearing_cast,2026-09-09):
+其余同场次人物记 whitebox_hidden、不补图,--write 时把已挂的图移出 refs 并重排 [Image N]。
 """
 from __future__ import annotations
 
@@ -93,7 +97,12 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
         peers = sorted((i for i, g in enumerate(groups) if contexts[g['group_id']]['key'] == context['key']),
                        key=lambda i: (i != index, abs(i-index), i > index))
         rows = []
+        cast = whitebox_cast(base, ep, gid)
         for cid in context['actor_ids']:
+            if cast is not None and cid not in cast['visible']:
+                rows.append({'id': cid, 'name': names.get(cid, cid), 'ref': None, 'costume': None, 'missing': False,
+                             'whitebox_hidden': cast['hidden'].get(cid) or '不在本组白模人物列表'})
+                continue
             if context.get('presence', {}).get(cid, {}).get('state') == 'absent':
                 continue
             kind = 'creatures' if cid.startswith('CRE-') else 'characters'
@@ -122,13 +131,45 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
     return result
 
 
+def whitebox_cast(base: Path, ep: str, gid: str):
+    """本组白模实际出现人物(None=项目未开白模链/本组未编译,不限制)。延迟导入避免 whitebox→scene_cast 循环。"""
+    from modules.whitebox_refs import cast_filter
+    try:
+        return cast_filter(base, ep, gid)
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 CAST_BEGIN = '\nScene presence references:\n'
 CAST_END = '\nEnd scene presence references.\n'
+CAST_BLOCK_RE = re.compile(r'\n?' + re.escape(CAST_BEGIN.strip()) + r'\n.*?' + re.escape(CAST_END.strip()) + r'\n?', re.S)
+
+
+def block_anchor(text, *later_keys):
+    """本段应插入的位置:后置固定段(默认 Whitebox reference / Shot plates)与 `Shot 1:` 中最靠前者;都没有时为文首。"""
+    keys = list(later_keys) or ['Whitebox reference:', 'Shot plates:']
+    positions = [text.index(k) for k in keys if k in text]
+    match = re.search(r'Shot\s+1\s*:', text)
+    if match:
+        positions.append(match.start())
+    return min(positions) if positions else 0
 
 
 def complete_prompt_cast(prompt, rows, presence=None):
     """Append references without renumbering existing Image bindings. Pure/idempotent."""
     out = copy.deepcopy(prompt)
+    text = out.get('video_prompt') or ''
+    # 段首尾换行可能被其他 sync(白模段插入时 rstrip)吃掉,按标题文本匹配以免旧段残留、重复堆叠
+    text = CAST_BLOCK_RE.sub('', text)
+    out['video_prompt'] = text
+    # 白模未出现的人物:已挂的参考图移出 refs 并重排序号(正文其他地方仍引用时保留,由 check_prompt_cast 报错)
+    hidden = {row['id'] for row in rows if row.get('whitebox_hidden')}
+    if hidden:
+        from modules.whitebox_refs import cast_ref_id, strip_cast_refs
+        drop = [r for r in (out.get('refs') or []) if cast_ref_id(r) in hidden]
+        if drop:
+            out, _ = strip_cast_refs(out, drop)
+            text = out.get('video_prompt') or ''
     refs = out.setdefault('refs', [])
     bindings = []
     for row in rows:
@@ -139,8 +180,6 @@ def complete_prompt_cast(prompt, rows, presence=None):
             refs.append(ref)
         n = refs.index(ref)+1
         bindings.append(f"{row['name']}@Image {n}: {row['id']}，本场次人物的身份与服装参考。")
-    text = out.get('video_prompt') or ''
-    text = re.sub(re.escape(CAST_BEGIN)+r'.*?'+re.escape(CAST_END), '', text, flags=re.S)
     # Old group-wide counts incorrectly force off-camera occupants to disappear.
     text = re.sub(r'(?:Identity lock:\s*)?exactly\s+\d+\s+(?:named\s+)?characters?\s+(?:on screen|across the video|in this group)[^.。]*(?:[.。]|$)',
                   'Identity lock: every depicted registered character must match their own reference; '
@@ -162,9 +201,8 @@ def complete_prompt_cast(prompt, rows, presence=None):
             block += '\n本组不在场，不得生成实体人物：'+'；'.join(excluded)+'。已有身份参考不代表人物在场。'
         block += CAST_END
         # Definitions precede shot instructions, while existing reference indices stay stable.
-        match = re.search(r'Shot\s+1\s*:', text)
-        at = match.start() if match else 0
-        text = text[:at]+block+text[at:]
+        # 固定段规范顺序:Scene presence → Whitebox reference → Shot plates → Shot 1(各 sync 各自锚定,重跑不互换位置)
+        text = text[:block_anchor(text)]+block+text[block_anchor(text):]
     out['video_prompt'] = text
     out['scene_cast'] = [r['id'] for r in rows]
     out['scene_cast_refs'] = copy.deepcopy(rows)
@@ -176,6 +214,12 @@ def complete_prompt_cast(prompt, rows, presence=None):
 def check_prompt_cast(prompt, rows, presence=None):
     errors = []
     for row in rows:
+        if row.get('whitebox_hidden'):
+            stale = [r for r in (prompt.get('refs') or []) if isinstance(r, str) and row['id'] in r.split('/')]
+            for r in stale:
+                errors.append(f"whitebox_cast_ref: {row['id']} 未在本组白模出现({row['whitebox_hidden']}),其参考图 {r} 不得进 refs;"
+                              "删去正文对该图的引用后运行 sync_scene_cast.py --write 移出")
+            continue
         if row['missing']:
             errors.append(f"scene_cast_ref: {row['id']} 缺少本场次身份/服装参考图")
         elif row['ref'] not in (prompt.get('refs') or []):

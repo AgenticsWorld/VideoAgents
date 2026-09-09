@@ -16,7 +16,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --verify-export   # �
 ```
 
 3. 逐组核对 `manifest.json` 的帧率/时长/分辨率/源指纹与 `camera.mp4` 非空；`--verify-export` 为 PASS 才算完成。视频失败 = 任务未完成，如实上报原因并保留旧视频，不得改指纹、不得跳组。
-4. 导出脚本会自动执行 `code/sync_whitebox_refs.py --write`（已有组 prompt 的写 `video_refs` + `Whitebox reference/legend` 段）；回执带上 attached / skipped 结果。尚无 prompt 的组由 prompt 工位产出后再跑。
+4. 导出脚本会自动执行 `code/sync_whitebox_refs.py --write`（已有组 prompt 的写 `video_refs` + `Whitebox reference/legend` 段）；回执带上 attached / skipped 结果,以及输出里的 `whitebox_hidden_cast` / `dropped_cast_refs`(2026-09-09 白模人物参考图规约:未在摄影机视频里出现的人物图被移出 refs;仍报 VIOLATION 的组=正文还引用该图,回执列出交 orchestrator 回派 prompt)。尚无 prompt 的组由 prompt 工位产出后再跑。
 5. 若导出时发现白模本身有错（编译报错、机位在墙内、漏人穿模），**不改计划**：上报 orchestrator 回派 `07-directing/whitebox-staging` 修正，修正后须重新经 g6w 签字再导出。
 
 ## 不做什么
