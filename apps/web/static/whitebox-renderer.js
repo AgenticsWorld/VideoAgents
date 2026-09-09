@@ -69,6 +69,9 @@ export class WhiteboxRenderer {
     this.controls=controls?new OrbitControls(this.overview,canvas):null;
     if(this.controls) {this.controls.enableDamping=false;this.controls.maxPolarAngle=Math.PI*.49;}
     this.scene=null; this.group=null; this.actors=[];
+    // 实景图视图(2026-09-09):assetBase 指向项目 artifacts 根时,把场景俯视图 layout_top.png 铺在地面,
+    // 'real' 视图隐藏灰盒几何只留实景俯视图 + 人物 + 机位,便于比对分镜背景图;导出页不设 assetBase 不加载贴图
+    this.assetBase=null; this.onRealPlate=null; this.solids=[]; this.realPlane=null;
   }
   disposeScene() {
     if(!this.scene)return;
@@ -88,6 +91,16 @@ export class WhiteboxRenderer {
     floor.position.y=-.05;scene.add(floor);
     const grid=new THREE.GridHelper(Math.ceil(Math.max(w,d)),Math.ceil(Math.max(w,d)),0xa8b5a5,0xc0cbbd);
     grid.position.y=.005;scene.add(grid);
+    this.solids=[floor,grid];this.realPlane=null;
+    if(this.assetBase&&sceneData.layout_top){
+      // 俯视图上北下南左西右东 = 白模 -z 北 / +x 东;PlaneGeometry 绕 X 轴转 -90° 后图片上缘落到 -z
+      const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({color:0xffffff}));
+      plane.rotation.x=-Math.PI/2;plane.position.y=.02;plane.visible=false;plane.name='real-plate';scene.add(plane);
+      this.realPlane=plane;
+      new THREE.TextureLoader().load(this.assetBase+sceneData.layout_top,tex=>{
+        if(this.scene!==scene)return;tex.colorSpace=THREE.SRGBColorSpace;plane.material.map=tex;plane.material.needsUpdate=true;this.onRealPlate?.();
+      });
+    }
     const propIds=new Set((group?.props||[]).map(p=>p.id));
     // A group can animate an existing scene prop without leaving a duplicate.
     for(const obj of [...sceneData.objects.filter(o=>!propIds.has(o.id)),...(group?.props||[])]) {
@@ -98,7 +111,7 @@ export class WhiteboxRenderer {
       const material=new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
       const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
       scene.add(mesh);
-      if(group?.props?.includes(obj))this.props.push({data:obj,mesh});
+      if(group?.props?.includes(obj))this.props.push({data:obj,mesh});else this.solids.push(mesh);
       const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
     }
     for(const actor of [...(group?.actors||[]),...(group?.extras||[])]) {
@@ -317,9 +330,12 @@ export class WhiteboxRenderer {
     if(!this.scene)return;
     if(this.controls)this.controls.enabled=view==='overview';
     this.marker.visible=!!this.group;this.ray.visible=!!this.group;
+    const real=view==='real';
+    for(const m of this.solids)m.visible=!real;
+    if(this.realPlane)this.realPlane.visible=real;
     const gl=this.renderer.domElement;
     if(this.shared&&(gl.width!==this.width||gl.height!==this.height))this.renderer.setSize(this.width,this.height,false);
-    this.renderer.render(this.scene,view==='camera'?this.camera:view==='top'?this.top:this.overview);
+    this.renderer.render(this.scene,view==='camera'?this.camera:(view==='top'||real)?this.top:this.overview);
     const out=target||(this.shared?this.canvas:null);
     if(!out||out===gl)return;
     if(out.width!==this.width||out.height!==this.height){out.width=this.width;out.height=this.height;}

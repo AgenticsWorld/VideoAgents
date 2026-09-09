@@ -1945,6 +1945,7 @@ window.I18N_DICT = {
 "对这组3D白模提修改意见，发消息给总制片": "Enviar al productor sugerencias para este modelo 3D",
 "空间视角": "Vista espacial",
 "俯视图": "Vista superior",
+"实景图": "Vista real",
 "旋转视角": "Vista orbital",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Alto {height} m · Cuadrícula 1 m · Relación {aspect}",
 "推断尺寸": "Dimensiones estimadas",

@@ -1945,6 +1945,7 @@ window.I18N_DICT = {
 "对这组3D白模提修改意见，发消息给总制片": "Envoyer au producteur des demandes de modification pour cette maquette 3D",
 "空间视角": "Vue spatiale",
 "俯视图": "Vue de dessus",
+"实景图": "Vue réelle",
 "旋转视角": "Vue orbitale",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Hauteur {height} m · Grille 1 m · Format {aspect}",
 "推断尺寸": "Dimensions estimées",

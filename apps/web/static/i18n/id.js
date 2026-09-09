@@ -1945,6 +1945,7 @@ window.I18N_DICT = {
 "对这组3D白模提修改意见，发消息给总制片": "Kirim catatan revisi model blok 3D ini ke Produser",
 "空间视角": "Tampilan ruang",
 "俯视图": "Tampilan atas",
+"实景图": "Tampilan nyata",
 "旋转视角": "Tampilan putar",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Tinggi {height} m · Kisi 1 m · Rasio {aspect}",
 "推断尺寸": "Dimensi perkiraan",

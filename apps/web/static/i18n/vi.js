@@ -1945,6 +1945,7 @@ window.I18N_DICT = {
 "对这组3D白模提修改意见，发消息给总制片": "Gửi góp ý sửa mô hình khối 3D này cho tổng sản xuất",
 "空间视角": "Góc nhìn không gian",
 "俯视图": "Góc nhìn từ trên",
+"实景图": "Ảnh thực cảnh",
 "旋转视角": "Góc nhìn xoay",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Cao {height} m · Lưới 1 m · Tỷ lệ {aspect}",
 "推断尺寸": "Kích thước ước tính",

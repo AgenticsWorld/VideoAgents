@@ -1945,6 +1945,7 @@ window.I18N_DICT = {
 "对这组3D白模提修改意见，发消息给总制片": "Änderungswünsche zu diesem 3D-Blockmodell an die Produktionsleitung senden",
 "空间视角": "Raumansicht",
 "俯视图": "Draufsicht",
+"实景图": "Realansicht",
 "旋转视角": "Drehansicht",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Höhe {height} m · Raster 1 m · Format {aspect}",
 "推断尺寸": "Geschätzte Maße",
