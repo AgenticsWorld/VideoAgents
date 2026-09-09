@@ -208,8 +208,22 @@ def inventory(scene, layout, key, fmt):
         entry['xmin'] = min(entry['xmin'], max(-1, min(xs))); entry['xmax'] = max(entry['xmax'], min(1, max(xs)))
         entry['z'] = min(entry['z'], min(h[2] for h in hits))
     items = []
+    view = norm([key['target'][0]-key['position'][0], 0, key['target'][2]-key['position'][2]])
+    axis_of = {}
+    for obj in scene.get('objects', []):
+        sx, _, sz = obj['size_m']
+        if max(sx, sz) >= 8 and max(sx, sz) >= 3*min(sx, sz):      # 细长地面物(马路/人行道/绿化带/围墙)
+            yaw = obj.get('yaw', 0) or 0
+            ax = [math.cos(yaw), 0, -math.sin(yaw)] if sx >= sz else [math.sin(yaw), 0, math.cos(yaw)]
+            axis_of[obj['id']] = abs(math.degrees(math.acos(max(-1, min(1, abs(dot(ax, view)))))))
     for entry in merged.values():
         entry['x'] = sum(entry['xs'])/len(entry['xs']); entry['z'] = round(entry['z'], 1); entry.pop('xs')
+        angles = [axis_of[o] for o in entry['objects'] if o in axis_of]
+        if angles:
+            a = min(angles)
+            entry['orientation'] = ('crosses the frame from side to side, seen broadside — it does not recede into the distance' if a > 60
+                                    else 'runs away from the camera into the depth of the frame' if a < 30
+                                    else 'runs diagonally across the frame')
         items.append(entry)
     covered = {it['landmark'] for it in items if it['landmark']}
     for lid, lm in landmarks.items():
@@ -224,19 +238,22 @@ def inventory(scene, layout, key, fmt):
     in_frame_ids = {it['landmark'] for it in items if it['landmark']}
     out_of_frame = []
     for lid, lm in landmarks.items():
-        if lid in in_frame_ids or lm.get('kind') in ('space', 'direction', 'ground', 'path'):
-            continue
+        if lid in in_frame_ids or lm.get('kind') in ('space', 'direction', 'ground', 'path', 'vegetation', 'boundary'):
+            continue   # 只列点状地标(门/建筑/灯杆/道具);面状的绿化带/围墙靠几何清单判断,避免与画内清单自相矛盾
         p = project([(lm['xy'][0]-.5)*dims[0], 1.0, (lm['xy'][1]-.5)*dims[2]])
         if not p or abs(p[0]) > 1.05:
             out_of_frame.append(names[lid])
     phrases = []
     for it in items:
         if it.get('direction'):
+            if abs(it['x']) > .6:
+                continue   # 视轴不沿马路时,路端地标只会落在画幅边缘,写成「路向远处延伸」反而诱导画出纵深马路
             phrases.append(f"the road runs away into the distance toward {it['name']} {x_word(it['xmin'], it['xmax'], it['x'])}")
         else:
             count = len({re.sub(r'\D', '', o) or o for o in it['objects']})
             plural = f" ({count} of them)" if count > 1 else ''
-            phrases.append(f"{it['name']}{plural} {x_word(it['xmin'], it['xmax'], it['x'])}, {dist_word(it['z'])} (nearest {it['z']} m)")
+            phrases.append(f"{it['name']}{plural} {x_word(it['xmin'], it['xmax'], it['x'])}, {dist_word(it['z'])} (nearest {it['z']} m)"
+                           + (f", {it['orientation']}" if it.get('orientation') else ''))
     return items, phrases, out_of_frame
 
 
@@ -452,7 +469,7 @@ def scene_description(base: Path, sid: str) -> tuple[str, str]:
     return desc[:1200], flat(arch.get('negative'))[:600]
 
 
-def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None):
+def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None, sibling=False):
     size = SIZE_WORDS.get(shot.get('size_code'), 'wide')
     name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or scene.get('name') or scene['scene_id']).strip()
     head = f"Empty location background plate for one film shot, photographed with nobody present. Location: {name}."
@@ -464,9 +481,8 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
            f"{facts['tilt_word']}, standing {facts['standing']}, facing {facts['facing']}. ")
     if facts['facing_desc']:
         cam += f"Looking {facts['facing_cardinal']}: {facts['facing_desc']}. "
-    cam += f"Frame left is {facts['frame_left']}" + (f": {facts['left_desc']}" if facts['left_desc'] else '') + '. '
-    cam += f"Frame right is {facts['frame_right']}" + (f": {facts['right_desc']}" if facts['right_desc'] else '') + '. '
-    cam += f"Behind the camera, out of frame, lies {facts['behind']}" + (f": {facts['behind_desc']}" if facts['behind_desc'] else '') + '.'
+    cam += f"Frame left is {facts['frame_left']}, frame right is {facts['frame_right']}; behind the camera, out of frame, lies {facts['behind']}"
+    cam += (f" ({facts['behind_desc']})" if facts['behind_desc'] else '') + '.'
     if sun:
         cam += f" The low sun is in the {sun['compass']}, {sun['relative']}; long shadows fall {sun['shadows']}."
     lines = [head, cam,
@@ -477,6 +493,12 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
         lines.append("[Image 2] is the finished background plate of the same shot at the start of the camera move: keep exactly the same "
                      "location, materials, set dressing, weather, light direction and color grade, seen from this new camera; "
                      "do not copy its framing.")
+        lines.append("[Image 3] is the top-down layout map of this location: use it only to identify what each whitebox volume is and where it "
+                     "stands relative to the camera; never reproduce the map, its top-down viewpoint or its colors.")
+    elif sibling:
+        lines.append("[Image 2] is the finished background plate of another shot of the same scene, photographed minutes earlier from a different "
+                     "camera: keep exactly the same location, building facades, materials, vegetation, set dressing, weather, light direction "
+                     "and color grade, so the two plates read as one place; do not copy its framing or camera.")
         lines.append("[Image 3] is the top-down layout map of this location: use it only to identify what each whitebox volume is and where it "
                      "stands relative to the camera; never reproduce the map, its top-down viewpoint or its colors.")
     else:
@@ -648,6 +670,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     done_shots = set()
     budget_hit = False
     by_key = {}        # 本次运行生成/复用到的库条目 key -> entry
+    group_first = {}   # group_id -> 本组最先落定的背景图条目(同组后续新图以它为第二参考图,保证同组各镜是同一处地方)
     channel = None
     for d in decisions:
         sid, shot_id, role = d['scene_id'], d['shot_id'], d['role']
@@ -655,6 +678,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         stats['plates'] += 1
         if d['mode'] == 'fresh':
             generated[(shot_id, role)] = d['entry']; by_key[d['entry']['key']] = d['entry']
+            group_first.setdefault(d['group_id'], d['entry'])
             continue
         if d['mode'] in ('library', 'crop'):
             entry = d['entry']
@@ -676,6 +700,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                              'fraction': round(math.tan(math.radians(d['facts']['fov_v_deg']/2))/math.tan(math.radians(entry['camera']['fov_v_deg']/2)), 3)}
             stats[d['mode']] += 1
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
+            group_first.setdefault(d['group_id'], entry)
             continue
         # new
         if budget_hit or (max_new is not None and stats['new'] >= max_new):
@@ -687,7 +712,11 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         lighting = lighting_fragment(base, sid, d['scheme'])
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, d['facts']['bearing_deg']) if sun else None
-        prompt = build_prompt(d['facts'], phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame)
+        sibling = group_first.get(d['group_id']) if role == 'start' else None
+        if sibling is not None and not dry_run and not (base/sibling['file']).is_file():
+            sibling = None
+        prompt = build_prompt(d['facts'], phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame,
+                              sibling=sibling is not None)
         negative = ', '.join(x for x in (style_doc.get('negative_prompt_en') or '', scene_neg, NEGATIVE_EXTRA) if x)
         sref = d['raw_group'].get('scene_refs') or {}
         top = sref.get('layout_top') or f"assets/concepts/scenes/{sid}/{layout.get('layout_top', 'layout_top.png')}"
@@ -698,8 +727,10 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 stats['errors'].append(f'{shot_id}: 镜尾图缺镜首成图')
                 continue
             refs.append(start_entry['file'])
+        elif sibling is not None:
+            refs.append(sibling['file'])
         refs.append(top)
-        missing = [r for r in refs if not (base/r).is_file() and not (dry_run and start_entry and r == start_entry['file'])]
+        missing = [r for r in refs if not (base/r).is_file() and not (dry_run and ((start_entry and r == start_entry['file']) or (sibling and r == sibling['file'])))]
         if missing:
             stats['errors'].append(f'{shot_id}/{role}: 参考图缺失 {missing}')
             continue
@@ -735,6 +766,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 stale.unlink()   # 源图重出后旧裁切失效
         d['entry'] = entry; d['file'] = out_rel
         generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
+        group_first.setdefault(d['group_id'], entry)
         stats['new'] += 1
         log(f"saved: {out_rel}")
         flush_shot(shot_id)   # 本镜到此为止已落地的图先写索引(终点图若后续才出,再次 flush 覆盖)
@@ -806,7 +838,9 @@ def build_block(plates: list) -> str:
         else:
             parts.append(f"[Image {n}] is the end plate of Shot {p['shot_no']} (where the camera move ends); the shot travels from the "
                          "start plate's framing to this framing")
-    return BLOCK_KEY + ' ' + '; '.join(parts) + '. Background plates are set references only: never freeze the shot on them, keep the characters and motion described in each Shot.'
+    return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each Shot uses only its own plate for its background and camera angle — do not carry one '
+            "Shot's plate into another Shot. Background plates are set references only: never freeze the shot on them, keep the characters and "
+            'motion described in each Shot.')
 
 
 def _remap_images(text: str, old: list, new: list) -> tuple[str, list]:
