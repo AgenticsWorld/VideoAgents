@@ -218,7 +218,7 @@ AGENT_MEMORY_KB_MAX = 256
 # 验收/评分/QA 不过自动带意见退回重做、媒体生成机检不达标自动重 roll 的次数上限,
 # 达到上限仍不过升级用户裁决;0=不自动重跑(首次不过即升级人工)。经 build_role_prompt
 # 注入全员运行提示词,覆盖 SOUL/WORKFLOW 文档里写死的「最多 3 次」
-MAX_RETRIES_DEFAULT = 1
+MAX_RETRIES_DEFAULT = 0
 MAX_RETRIES_MAX = 10
 # 重跑等待确认时长缺省值(秒;设置菜单「高级→Agent 高级设置」可调,存 state.json):
 # 重跑类确认弹窗(dispatch.py --confirm,非签字类)的倒计时,到点无人答复自动落默认答案;

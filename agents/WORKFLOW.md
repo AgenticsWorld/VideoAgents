@@ -35,7 +35,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 1. **单一事实源**:所有世界观/角色/场景设定只存在于 Project Bible(`bible/`),由 `memory-bible` 唯一管理。任何 Agent 发现冲突只能上报,不得擅自改 Bible。
 2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
-4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回,最多重做 1 次(默认;用户可在设置「高级→Agent 高级设置→重跑次数」全局改,0=不自动重跑,运行提示词「用户重跑次数设定」注入的值覆盖本文档所有写死的 3 次/≤3 次/max_retries: 3),仍不过升级人工。
+4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回重做,重跑次数默认 0(即默认不自动重跑,首次不过即升级人工;用户可在设置「高级→Agent 高级设置→重跑次数」全局改,运行提示词「用户重跑次数设定」注入的值覆盖本文档所有写死的 3 次/≤3 次/max_retries: 3),仍不过升级人工。
 5. **上下文按需组装**:Agent 不读全库。上下文由 orchestrator 派单时**内联进工单本体**:把该任务需要的输入文件路径清单(Bible 当前受控版片段所在文件、上游产物、相关 `qa/defects/` 缺陷单)+ 硬约束直接写进工单 `instruction`/`inputs`,执行 Agent 只读工单列出的文件,不自行读全库补料(缺料走回执上报)。`attempt > 1` 的重做单必须在 `instruction` 附上次失败原因与 evaluation 逐条修改意见(`runs/<task_id>/eval.json` 路径列入 `inputs`);扇出批次的共用说明只在 instruction 写一次,不逐实例复制。(2026-09-08:原「上下文管家」Agent 及 full/inline 两级 Context Package 已删除——每单先打包一次约 4 分钟,实测收益抵不过时间与 token 开销;`runs/<task_id>/context.md` 不再产出。)
 6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「视频预览」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「⏱ 时长设置」配置(默认每集 10 分钟、单镜 1–10 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。每集时长可设为「根据剧本自动」(settings.json `duration.episode_minutes: "auto"`):此时不设固定每集预算,episode-planner 按剧情结构自行决定集数与每集时长并在 episode_plan 中写明各集实际预算,pacing/edit 以 episode_plan 实际预算为基准。
@@ -856,7 +856,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 生命周期规则:每张缺陷单必须有 `assigned_to`(orchestrator 路由时补齐);`closed` 必须填 `resolution` 与 `verified_by`(修复者不得自证关闭);`waived` 必须挂对应闸门 waiver 记录(见下)。QA 报告中的放行条件(如「某缺陷须在下一阶段前闭环」)由 orchestrator 转为该缺陷单的 `due_gate` 字段并在对应闸门机检强制。
 
 **返工规则**:
-1. 评分 <80 或 QA 缺陷 → 自动退回 + 意见,`attempt+1`,最多 1 次(默认;以用户「Agent 高级设置→重跑次数」为准);
+1. 评分 <80 或 QA 缺陷 → 自动退回 + 意见,`attempt+1`,次数以用户「Agent 高级设置→重跑次数」为准(默认 0=不自动重跑,首次不过直接走第 2 条升级人工);
 2. 达到重跑次数上限仍不过 → 升级人工,附全部尝试与意见;
 3. 缺陷根因在上游(如设定本身错)→ 不许下游打补丁,缺陷单改派上游,orchestrator 按 DAG 标脏并只重跑受影响链路;
 4. **返修中的一切重生成受 §7E 形象红线约束**:只准复用在库概念图作形象锚、prompt 必带 style.json 风格锚,所涉概念图缺失时停手上报补齐——严禁修正环节新造人物/场景/道具形象(机检 repair_ref_anchored);
