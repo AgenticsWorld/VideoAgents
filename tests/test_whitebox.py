@@ -75,6 +75,36 @@ def test_group_time_and_cast(project):
     assert group['cameras'][0]['keyframes'][0]=={**group['cameras'][0]['keyframes'][-1],'t':0}
 
 
+def test_authored_scene_actor_cannot_copy_an_occupied_color(project):
+    path, data = source(project)
+    data['scene_table'] = [{'scene_no': 'S1', 'scene_id': 'SCN-1', 'cast': ['CRE-028']}]
+    write(path, data)
+    first = compile_episode(project, 'ep01')['groups'][0]['actors'][0]
+    corpse = {**copy.deepcopy(first), 'id': 'CRE-028', 'kind': 'creature'}
+    plan = {'scene_actors': [corpse]}
+    write(project/'directing/ep01/whitebox_plans/grp1.json', plan)
+    result = compile_episode(project, 'ep01')
+    assert not result['errors']
+    actors = result['groups'][0]['actors']
+    assert [a['color'] for a in actors] == ['#e63946', '#1d78d8']
+    assert actors[1]['keyframes'] == corpse['keyframes']
+    del corpse['color']
+    write(project/'directing/ep01/whitebox_plans/grp1.json', plan)
+    assert compile_episode(project, 'ep01')['groups'][0]['actors'] == actors
+
+
+def test_actor_colors_allow_only_explicit_mount_sharing():
+    from modules.whitebox import PALETTE, unused_actor_color, validate_actor_colors
+    actors = [{'id': 'CHAR-1', 'color': PALETTE[0]},
+              {'id': 'CRE-1', 'kind': 'creature', 'color': PALETTE[0], 'rider': 'CHAR-1'}]
+    validate_actor_colors(actors)
+    del actors[1]['rider']
+    with pytest.raises(ValueError, match='share color'):
+        validate_actor_colors(actors)
+    with pytest.raises(ValueError, match='exhausted'):
+        unused_actor_color([{'color': c} for c in PALETTE])
+
+
 def test_scene_cast_enables_physical_visibility_and_explicit_exceptions(project):
     path, data = source(project)
     data['generation_groups'][0]['scene_cast'] = ['CHAR-1']

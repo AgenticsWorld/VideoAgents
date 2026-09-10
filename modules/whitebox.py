@@ -19,6 +19,31 @@ PALETTE = ['#e63946', '#1d78d8', '#2ea043', '#f59e0b', '#8e44ad', '#00acc1', '#e
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
+def unused_actor_color(actors):
+    used = {a.get('color', '').lower() for a in actors}
+    for color in PALETTE:
+        if color not in used:
+            return color
+    raise ValueError('actor color palette exhausted; independent actors cannot share a color')
+
+
+def validate_actor_colors(actors):
+    by_id = {a['id']: a for a in actors}
+    owners = {}
+    for actor in actors:
+        color = actor.get('color', '')
+        if not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+            raise ValueError(f"{actor['id']}: actor.color must be a hex color")
+        rider = actor.get('rider')
+        if rider and (rider not in by_id or actor.get('kind') != 'creature'
+                      or color.lower() != by_id[rider].get('color', '').lower()):
+            raise ValueError(f"{actor['id']}: mount color must match its rider")
+        owner = rider or actor['id']
+        previous = owners.setdefault(color.lower(), owner)
+        if previous != owner:
+            raise ValueError(f"{previous}/{owner}: independent actors share color {color}")
+
+
 def component(value):
     if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_-]+', value):
         raise ValueError(f'Invalid identifier: {value!r}')
@@ -396,7 +421,10 @@ def compile_group(base, ep, group, shots, scene):
     for actor in plan.get('scene_actors', []):
         if actor['id'] not in group.get('scene_cast', []) or actor['id'] in {a['id'] for a in actors}:
             raise ValueError('scene_actors must be unique scene cast outside the blocking-map cast')
-        actors.append(copy.deepcopy(actor))
+        actor = copy.deepcopy(actor)
+        actor['color'] = unused_actor_color(actors)
+        actor['letter'] = ''
+        actors.append(actor)
     if 'cameras' in plan:
         cameras = plan['cameras']
         warnings = [w for w in warnings if not any(w.startswith(s+':') for s in group['shots'])]
@@ -497,7 +525,6 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
         gid = group['group_id']; context = contexts[gid]
         group['scene_cast'] = context['actor_ids']
         present = {a['id'] for a in group['actors']}
-        colors = {a.get('color') for a in group['actors']}
         for cid in context['actor_ids']:
             if cid in present:
                 continue
@@ -513,8 +540,11 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
             anchor = copy.deepcopy(actor['keyframes'][-1 if index < i else 0])
             actor['keyframes'] = [{**copy.deepcopy(anchor), 't': t} for t in (0, group['duration_s'])]
             actor['letter'] = ''
-            actor['color'] = next((color for color in PALETTE if color not in colors), actor.get('color', PALETTE[0]))
-            colors.add(actor['color'])
+            try:
+                actor['color'] = unused_actor_color(group['actors'])
+            except ValueError as error:
+                errors.append({'group_id': gid, 'error': str(error)})
+                continue
             actor['scene_inherited_from'] = origin
             group['actors'].append(actor)
             group['warnings'].append(f'{cid}: 同场次在场人物，沿用 {origin} 的'+('尾' if index < i else '首')+'姿态与位置；补充走位可写 scene_actors。')
@@ -574,6 +604,11 @@ def compile_episode(base: Path, ep: str):
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
     complete_scene_actors(groups, contexts, raw_groups, errors)
+    for group in groups:
+        try:
+            validate_actor_colors(group['actors'])
+        except ValueError as error:
+            errors.append({'group_id': group['group_id'], 'error': str(error)})
     from modules.whitebox_camera import check_matches
     errors.extend(check_matches(base, ep, groups))
     # 用户裁决(directing/<ep>/whitebox/decisions.json)合并进各组 issues,并给整集汇总
