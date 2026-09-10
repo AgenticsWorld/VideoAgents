@@ -6,6 +6,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Saving Generation Models no longer messages the producer**: the "[settings changed]" chat that was auto-sent to the workflow orchestrator after every save on the Generation Models page is gone (channel/model switches take effect on the next `genmedia` submission anyway, and the notice only tempted the orchestrator to dispatch work). Project-settings and creative-brief changes still notify the orchestrator as before.
+
 ### Added
 
 - **Fal tab in Generation Models → Image**: new `image.fal` channel (placed before MiniMax) with Fal-hosted image endpoints — Seedream 5.0 Lite (default) / 4.5, Nano Banana Pro / 2, GPT Image 2.5 Flare / GPT Image 2, FLUX.2 Pro / Max, FLUX Kontext Max, Qwen Image 3, HunyuanImage 3.0 — plus "Custom…" for any full endpoint ID. The stored model ID is the endpoint family prefix; `modules/genmedia.py image` uses the text-to-image endpoint without references and switches to the family's `edit` / `multi` endpoint when `--ref` is given (HunyuanImage has no edit endpoint and refuses references). Fields are mapped per family: explicit `{width,height}` for Seedream / FLUX.2 / Qwen / Hunyuan, size presets for GPT Image, aspect ratio (+ 1K/2K/4K tier) for Nano Banana and Kontext; `--negative` goes to `negative_prompt` on Qwen / Hunyuan and is appended to the prompt elsewhere; `--seed` is honoured except on GPT Image; reference caps 10 (Seedream) / 14 (Nano Banana) / 16 (GPT Image) / 3 (Qwen) are checked before submission. Submission goes through the shared `queue.fal.run` runner (now common to image and video), downloading `images[0].url`. The Fal API key is shared between the image and video tabs (either one is enough; `FAL_KEY` env fallback). `--dry-run` prints the resolved endpoint and fields. WORKFLOW.md channel table and all 11 language dictionaries updated. Not yet exercised against a real Fal key. A running instance must be restarted.

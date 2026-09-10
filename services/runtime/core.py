@@ -6875,7 +6875,8 @@ def _flat_diff(old, new, prefix="") -> list[str]:
 
 
 async def _notify_settings_change(project: str, label: str, changes: list[str]):
-    """设置保存后自动知会总制片,由其通知依赖该配置的 agent,避免继续按旧配置执行。"""
+    """项目设置/设计构想保存后自动知会总制片,由其通知依赖该配置的 agent,避免继续按旧配置执行
+    (生成模型页保存不走这里,见 api_genconfig_set)。"""
     if not changes:
         return
     orch = next(iter(DISPATCHERS))
@@ -6961,8 +6962,10 @@ async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
 
 async def api_genconfig_set(body: dict):
     body = dict(body or {})
-    # project 仅用于「设置变更」通知的会话归属(genconfig 本身是全局配置),不落盘
-    project = safe_slug(body.pop("project", None))
+    # 前端仍随请求带 project(历史上用于「设置变更」通知的会话归属);genconfig 是全局配置,不落盘。
+    # 2026-09-10 起生成模型保存不再知会总制片(用户拍板:渠道/模型切换由 genmedia 提交时按最新配置生效,
+    # 通知只会让总制片凭空派活);项目设置/设计构想的变更通知不受影响
+    body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
     for kind in ("image", "video", "music", "tts", "digital_human", "deepagents"):
@@ -7001,22 +7004,11 @@ async def api_genconfig_set(body: dict):
         # 界面语言按全局持久化到 state.json(genconfig 键双写,兼容旧版回读)
         STATE["ui_lang"] = cfg.get("ui_language") or ""
         save_state(STATE)
-    lang_only = set(body) <= {"ui_language"}
-    if lang_only and not old.get("ui_language"):
-        # 首次打开浏览器自动判定语言的静默初始化:不知会总制片
-        return {"ok": True, "config": cfg}
-    # 顶栏引擎/语言模型切换只带 agentmodel_mode:与生成模型渠道无关,跳过 RH 缓存同步
-    mode_only = set(body) <= {"agentmodel_mode"}
+    # 界面语言初始化 / 顶栏引擎策略切换只带单键:与生成模型渠道无关,跳过 RH 缓存同步
+    single_key = set(body) <= {"ui_language"} or set(body) <= {"agentmodel_mode"}
     # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
     # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
-    rh_refresh = [] if (lang_only or mode_only) else await _refresh_rh_wf_caches(cfg)
-    changes = _flat_diff(old, cfg)
-    # 云端工作流内容变了但配置本身无 diff 时,也要让总制片知会相关 agent
-    changes += [f"RunningHub 工作流缓存已同步云端最新版: {it['mode']}-{it['id']}"
-                for it in rh_refresh if it["status"] == "updated"]
-    await _notify_settings_change(
-        project, "界面语言" if lang_only
-        else "语言模型分配策略" if mode_only else "生成模型", changes)
+    rh_refresh = [] if single_key else await _refresh_rh_wf_caches(cfg)
     return {"ok": True, "config": cfg, "rh_cache_refresh": rh_refresh}
 
 
