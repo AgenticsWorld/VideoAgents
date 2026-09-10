@@ -661,11 +661,16 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # agentics | openrouter | ideogram | volcengine | byteplus | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | ideogram | volcengine | byteplus | fal | minimax | comfyui
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
+        # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
+        # fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
+        # genmedia 无参考图走文生图端点、有 --ref 自动切 edit/multi;custom_model 可填完整端点 ID;
+        # api_key 与视频段 Fal 共用(任一段填过即可,genmedia.get_config 互相兜底)
+        "fal": {"api_key": "", "model": "fal-ai/bytedance/seedream/v5/lite", "custom_model": ""},
         # 火山方舟默认 5.0 Pro;BytePlus 仍默认 Lite(含人脸图片默认可过 Seedance 审核)
         "volcengine": {"api_key": "", "model": "doubao-seedream-5-0-pro-260628",
                        "custom_model": ""},

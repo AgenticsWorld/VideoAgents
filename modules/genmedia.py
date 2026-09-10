@@ -65,6 +65,11 @@ Python:
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
+        / fal(queue.fal.run 异步队列,托管 Seedream 5.0 Lite/4.5、Nano Banana Pro/2、GPT Image 2.5/2、
+        FLUX.2 Pro/Max、FLUX Kontext Max、Qwen Image 3、HunyuanImage 3.0 等端点;模型 ID 填家族前缀
+        (fal-ai/bytedance/seedream/v5/lite、fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare…),
+        无参考图走文生图端点、有 --ref 自动切 edit/multi 端点,填完整端点 ID 则原样使用;
+        尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY)
         / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
   视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
@@ -336,6 +341,12 @@ def get_config(kind: str) -> dict:
             pc["_uses_wrapper"] = uses_wrapper
         else:
             pc["api_key"] = pc.get("api_key") or os.environ.get(ENV_KEYS[provider], "")
+            if provider == "fal" and not pc["api_key"]:
+                # Fal 账号一个 Key 通用:图像/视频任一段填过就共用,免得两处重复粘贴
+                allcfg = json.loads(CONFIG_PATH.read_text())
+                pc["api_key"] = next((str((allcfg.get(k) or {}).get("fal", {}).get("api_key") or "").strip()
+                                      for k in ("image", "video") if k != kind
+                                      and str((allcfg.get(k) or {}).get("fal", {}).get("api_key") or "").strip()), "")
         if not pc["api_key"]:
             raise RuntimeError(f"{kind} 渠道 {provider} 未配置 API Key(Web 控制台填入,或设环境变量 {ENV_KEYS[provider]})")
         pc["model"] = pc.get("custom_model") or pc.get("model") or ""
@@ -1163,6 +1174,123 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     if data[0].get("url"):
         return _request(data[0]["url"], timeout=IMAGE_TIMEOUT), usage
     raise RuntimeError(f"方舟返回格式异常:{json.dumps(data[0])[:400]}")
+
+
+# ---------------- 图像:Fal(queue.fal.run 异步队列;托管 Seedream / Nano Banana / GPT Image / FLUX.2 / Qwen 等端点) ----------------
+
+# 各家族端点与字段(2026-09-10 按 fal.ai OpenAPI 抄录;模型 ID 存家族前缀,按有无参考图补任务段):
+#   seedream  fal-ai/bytedance/seedream/v5/lite | v4.5  → /text-to-image | /edit;image_size {width,height}
+#             (v5 lite 总像素须在 2560x1440..4096x4096,越界由 Fal 等比缩放);image_urls ≤10;seed;无 output_format
+#   banana    fal-ai/nano-banana-pro | nano-banana-2      → 空 | /edit;aspect_ratio 枚举 + resolution 1K/2K/4K;
+#             image_urls(Pro 官方上限 14);seed;output_format
+#   gpt       openai/gpt-image-2.5/flare | sunburst      → /text-to-image | /edit;openai/gpt-image-2 → 空 | /edit;
+#             image_size 枚举(square_hd/landscape_16_9…,OpenAI 不接任意宽高);image_urls ≤16;无 seed;output_format
+#   flux2     fal-ai/flux-2-pro | flux-2-max               → 空 | /edit;image_size {width,height};image_urls;seed;output_format jpeg|png
+#   kontext   fal-ai/flux-pro/kontext/max                 → /text-to-image | /multi;aspect_ratio 枚举;image_urls;seed;output_format
+#   qwen      alibaba/qwen-image-3                        → /text-to-image | /edit;image_size {width,height};image_urls 1-3;
+#             seed;negative_prompt(≤500 字);output_format
+#   hunyuan   fal-ai/hunyuan-image/v3                     → /text-to-image(无编辑端点);image_size;seed;negative_prompt;output_format
+#   generic   其它端点:prompt + image_size {width,height} + seed(+ image_urls),字段名因端点而异由 Fal 侧 422 报错
+FAL_IMAGE_TASK_SUFFIXES = ("text-to-image", "edit", "multi", "image-to-image")
+FAL_IMAGE_ENUM_SIZES = {"1:1": "square_hd", "4:3": "landscape_4_3", "16:9": "landscape_16_9",
+                        "3:4": "portrait_4_3", "9:16": "portrait_16_9"}
+FAL_BANANA_RATIOS = ("21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16")
+FAL_KONTEXT_RATIOS = ("21:9", "16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "9:21")
+FAL_IMAGE_MAX_REFS = {"seedream": 10, "banana": 14, "gpt": 16, "qwen": 3}
+
+
+def _fal_image_family(model: str) -> str:
+    m = (model or "").lower()
+    if "seedream" in m:
+        return "seedream"
+    if "nano-banana" in m:
+        return "banana"
+    if "gpt-image" in m:
+        return "gpt"
+    if "kontext" in m:
+        return "kontext"
+    if "flux-2" in m:
+        return "flux2"
+    if "qwen-image" in m:
+        return "qwen"
+    if "hunyuan-image" in m:
+        return "hunyuan"
+    return "generic"
+
+
+def _fal_image_endpoint(model: str, family: str, has_refs: bool) -> str:
+    """家族前缀 → 按有无参考图补任务段;末段已是任务段(text-to-image/edit/multi)的完整端点 ID 原样使用。"""
+    mid = (model or "").strip().strip("/")
+    if not mid:
+        raise RuntimeError("Fal 渠道未选择模型")
+    if mid.rsplit("/", 1)[-1] in FAL_IMAGE_TASK_SUFFIXES:
+        return mid
+    if family == "hunyuan":
+        if has_refs:
+            raise RuntimeError("Fal HunyuanImage 3.0 只有文生图端点,不支持参考图(--ref),请换 Seedream / Nano Banana 等")
+        return f"{mid}/text-to-image"
+    if family == "kontext":
+        return f"{mid}/multi" if has_refs else f"{mid}/text-to-image"
+    if family in ("seedream", "qwen") or (family == "gpt" and "2.5" in mid):
+        return f"{mid}/edit" if has_refs else f"{mid}/text-to-image"
+    if family in ("banana", "gpt", "flux2"):
+        return f"{mid}/edit" if has_refs else mid
+    return f"{mid}/edit" if has_refs else mid
+
+
+def _closest_ratio(width: int, height: int, choices) -> str:
+    ratio = width / height
+    def _val(a):
+        w, h = a.split(":")
+        return int(w) / int(h)
+    return min(choices, key=lambda a: abs(_val(a) - ratio))
+
+
+def _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output="",
+                    to_url=None) -> tuple[str, dict]:
+    """构造 Fal 图像请求体,返回 (endpoint, body);to_url 可替换参考图 URL 化(dry-run 不内联)。"""
+    to_url = to_url or _file_to_data_url
+    refs = list(refs or [])
+    model = cfg["model"]
+    family = _fal_image_family(model)
+    endpoint = _fal_image_endpoint(model, family, bool(refs))
+    cap = FAL_IMAGE_MAX_REFS.get(family)
+    if cap and len(refs) > cap:
+        raise RuntimeError(f"Fal {model} 参考图最多 {cap} 张,收到 {len(refs)}")
+    body: dict = {"prompt": prompt}
+    if negative:
+        if family in ("qwen", "hunyuan"):
+            body["negative_prompt"] = negative[:500]
+        else:
+            body["prompt"] = f"{prompt}\nAvoid: {negative}"
+    fmt = _output_format(output) if output else ""
+    if family == "banana":
+        body["aspect_ratio"] = _closest_ratio(width, height, FAL_BANANA_RATIOS)
+        long_side = max(width, height)
+        body["resolution"] = "1K" if long_side <= 1280 else "2K" if long_side <= 2560 else "4K"
+    elif family == "kontext":
+        body["aspect_ratio"] = _closest_ratio(width, height, FAL_KONTEXT_RATIOS)
+    elif family == "gpt":
+        body["image_size"] = FAL_IMAGE_ENUM_SIZES[_closest_ratio(width, height, FAL_IMAGE_ENUM_SIZES)]
+    else:
+        body["image_size"] = {"width": int(width), "height": int(height)}
+    if seed is not None and family != "gpt":
+        body["seed"] = seed
+    if fmt in ("png", "jpeg", "webp") and family != "seedream":
+        body["output_format"] = "png" if (fmt == "webp" and family in ("flux2", "kontext")) else fmt
+    if refs:
+        body["image_urls"] = [to_url(r) for r in refs]
+    return endpoint, body
+
+
+def _image_fal(cfg, prompt, negative, refs, width, height, seed, output):
+    endpoint, body = _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output)
+    res = _fal_queue_run(cfg, endpoint, body, IMAGE_TIMEOUT, Path(output).name, kind="图像")
+    images = res.get("images") or []
+    url = images[0].get("url") if images and isinstance(images[0], dict) else ""
+    if not url:
+        raise RuntimeError(f"Fal 任务成功但无图像 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+    return _decode_data_url(url)
 
 
 # ---------------- MiniMax 云端通用(图像/视频/音乐/TTS 共用) ----------------
@@ -3534,23 +3662,24 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     return endpoint, body
 
 
-def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
-    """提交 Fal 队列任务并轮询到 COMPLETED,取 response 里的 video.url 下载到 output。"""
+def _fal_queue_run(cfg, endpoint: str, body: dict, timeout: int, label: str,
+                   kind: str = "视频", poll: float | None = None) -> dict:
+    """提交 Fal 队列任务并轮询到 COMPLETED,返回 response JSON(图像/视频共用;
+    鉴权 Authorization: Key,status_url/response_url 以提交返回为准)。"""
     headers = {"Authorization": f"Key {cfg['api_key']}"}
     submit_url = f"{FAL_QUEUE_BASE}/{endpoint}"
     job = _post_json(submit_url, body, headers)
     rid = job.get("request_id")
     if not rid:
-        raise RuntimeError(f"Fal 视频任务创建失败:{json.dumps(job, ensure_ascii=False)[:400]}")
+        raise RuntimeError(f"Fal {kind}任务创建失败:{json.dumps(job, ensure_ascii=False)[:400]}")
     status_url = job.get("status_url") or f"{submit_url}/requests/{rid}/status"
     response_url = job.get("response_url") or f"{submit_url}/requests/{rid}"
-    print(f"[genmedia] Fal 任务已创建 {rid}({endpoint})→ {Path(output).name}",
-          file=sys.stderr, flush=True)
+    print(f"[genmedia] Fal 任务已创建 {rid}({endpoint})→ {label}", file=sys.stderr, flush=True)
     started = time.time()
-    deadline = started + VIDEO_TIMEOUT
+    deadline = started + timeout
     last_status, last_beat = "", started
     while time.time() < deadline:
-        time.sleep(VIDEO_POLL_INTERVAL)
+        time.sleep(poll if poll is not None else VIDEO_POLL_INTERVAL)
         try:
             st = _get_json(status_url, headers)
         except Exception as e:
@@ -3566,15 +3695,20 @@ def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
             last_status, last_beat = status, time.time()
         if status == "COMPLETED":
             if st.get("error"):
-                raise RuntimeError(f"Fal 视频任务失败({st.get('error_type') or 'error'}):"
+                raise RuntimeError(f"Fal {kind}任务失败({st.get('error_type') or 'error'}):"
                                    f"{str(st.get('error'))[:400]}")
-            res = _get_json(response_url, headers, timeout=120)
-            video = res.get("video")
-            vurl = video.get("url") if isinstance(video, dict) else ""
-            if not vurl:
-                raise RuntimeError(f"Fal 任务成功但无视频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
-            return _save(_decode_data_url(vurl), output)
-    raise RuntimeError(f"Fal 视频超时({VIDEO_TIMEOUT}s),request={rid}")
+            return _get_json(response_url, headers, timeout=120)
+    raise RuntimeError(f"Fal {kind}超时({timeout}s),request={rid}")
+
+
+def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
+    """提交 Fal 视频任务并轮询到 COMPLETED,取 response 里的 video.url 下载到 output。"""
+    res = _fal_queue_run(cfg, endpoint, body, VIDEO_TIMEOUT, Path(output).name, kind="视频")
+    video = res.get("video")
+    vurl = video.get("url") if isinstance(video, dict) else ""
+    if not vurl:
+        raise RuntimeError(f"Fal 任务成功但无视频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+    return _save(_decode_data_url(vurl), output)
 
 
 def _video_fal(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -4662,6 +4796,8 @@ def generate_image(prompt: str, output: str, negative: str = "",
         return saved
     if cfg["provider"] == "minimax":
         return _save(_image_minimax(cfg, prompt, negative, refs, width, height, seed), output)
+    if cfg["provider"] == "fal":
+        return _save(_image_fal(cfg, prompt, negative, refs, width, height, seed, output), output)
     return _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output)
 
 
@@ -5048,7 +5184,20 @@ def _cmd_image(args):
         cfg = get_config("image")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}"
-        print(f"[dry-run] image via {cfg['provider']} {desc} → {args.output}")
+        line = f"[dry-run] image via {cfg['provider']} {desc} → {args.output}"
+        if cfg["provider"] == "fal":
+            # 走真实构造逻辑校验(家族/端点/参考图上限/尺寸映射),不发请求、不内联文件
+            if args.size:
+                w, h = (int(x) for x in args.size.lower().split("x"))
+            else:
+                w, h = ASPECT_SIZES.get(args.aspect or "16:9", ASPECT_SIZES["16:9"])
+            endpoint, body = _fal_image_body(dict(cfg, api_key="dry"), args.prompt, args.negative,
+                                             args.ref, w, h, args.seed, args.output,
+                                             to_url=lambda p: f"file://{p}")
+            fields = {k: v for k, v in body.items() if k != "prompt"}
+            line += (f"\n[dry-run] endpoint={FAL_QUEUE_BASE}/{endpoint}"
+                     f"\n[dry-run] fields={json.dumps(fields, ensure_ascii=False)[:600]}")
+        print(line)
         return
     outs = []
     for i in range(args.n):
