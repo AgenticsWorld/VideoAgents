@@ -184,11 +184,11 @@ details .body{padding:10px 0 2px}
             <option value="director">导演模式(MiniMax H3 Max Director:实时连续生成,WebRTC 直推,提示词随时改)</option>
           </select></div>
           <div class="row" id="memory-row" style="display:none"><label>记忆段数</label><input type="number" id="memory" min="1" max="50" step="1"><span class="hint">导演模式:保留最近多少段提示词作为上下文(1–50,默认 12)</span></div>
-          <div class="row"><label>分辨率</label><select id="resolution" style="flex:none;width:100px"><option value="480p">480p</option><option value="768p">768p</option></select><span class="hint">默认 480p;768p 更清晰但更慢更贵(Seedance 按 720p 提交,Kling 无此参数)</span></div>
+          <div class="row"><label>分辨率</label><select id="resolution" style="flex:none;width:100px"><option value="480p">480p</option><option value="768p">768p</option></select><span class="hint">默认 480p;768p 更清晰但更慢更贵(Seedance/Wan 按 720p 提交,Kling 无此参数)</span></div>
           <div class="row"><label>待播上限</label><input type="number" id="max-pending" min="1" max="10" step="1"><span class="hint">未播片段达到该数即暂停生成,播掉一段再继续;默认 3</span></div>
           <div class="row"><label>最多段数</label><input type="number" id="max-rounds" min="0" step="1"><span class="hint">0 = 不限,直到手动停止</span></div>
           <div class="row"><label>无人观看</label><input type="number" id="idle-stop" min="0" step="1"><span class="hint">分钟无人打开本页即自动停止;0 = 不自动停</span></div>
-          <div class="row"><label style="width:auto"><input type="checkbox" id="gen-audio"> 生成音频</label><span class="hint">Seedance/Kling 可关;MiniMax H3 固定音画同生</span></div>
+          <div class="row"><label style="width:auto"><input type="checkbox" id="gen-audio"> 生成音频</label><span class="hint">Seedance/Kling/Wan 可关;MiniMax H3 固定音画同生</span></div>
           <div class="row" id="continue-row" style="display:none"><label style="width:auto"><input type="checkbox" id="continue-last"> 从上次直播的尾帧继续</label></div>
         </div>
       </details>
@@ -243,8 +243,8 @@ function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 
 let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='';
-const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':'generic'};
-const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],generic:[3,30]};
+const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
+const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],wan:[2,30],generic:[3,30]};
 
 /* ---------- 设置表单 ---------- */
 const isDirector=()=>$('#link-mode').value==='director';
@@ -282,7 +282,7 @@ function onModelChange(){
   $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
   const turbo=fam==='h3'&&$('#model').value.toLowerCase().includes('turbo');   // H3 Max Turbo 只有文生/首帧端点,同 Kling 走尾帧作首帧
   const noLink=$('#link-mode').value==='none';
-  $('#model-hint').textContent=noLink?t('不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续'):fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):'';
+  $('#model-hint').textContent=noLink?t('不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续'):fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):fam==='wan'?t('Wan 3.0:参考图 + 尾帧合计 ≤10 张,单段 2–30 秒'):'';
   $('#gen-audio').disabled=fam==='h3';
 }
 $('#model').onchange=onModelChange;$('#link-mode').onchange=onModelChange;

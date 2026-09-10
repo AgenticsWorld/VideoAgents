@@ -746,6 +746,8 @@ def _genmedia_family(model: str) -> str:
         return "h3"
     if "kling" in m:
         return "kling"
+    if "wan-3" in m or "wan3" in m:
+        return "wan"
     return "generic"
 
 

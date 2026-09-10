@@ -71,11 +71,12 @@ Python:
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
-        / fal(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0 等端点;
-        模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro),
-        按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,填完整端点 ID
-        则原样使用;分辨率/时长/参考素材上限随家族与官方渠道同口径,Seedance/Kling 无 seed 入参;
-        环境变量兜底 FAL_KEY)
+        / fal(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0、Wan 3.0 等端点;
+        模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro、
+        alibaba/wan-3.0),按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,
+        填完整端点 ID 则原样使用;分辨率/时长/参考素材上限随家族与官方渠道同口径,
+        Seedance/Kling 无 seed 入参;Wan 3.0 时长 [2,30] 整数秒、参考 10 图/5 视频/5 音频
+        (视频与音频各合计 ≤15s);环境变量兜底 FAL_KEY)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
   超分: seedvr2(ComfyUI SeedVR2 视频超分;复用视频 ComfyUI 配置,本地/Cloud 固定
@@ -222,9 +223,6 @@ COMFY_QUEUE_DISAPPEAR_GRACE = 15
 
 # ---------------- 配置 ----------------
 
-AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
-
-
 def _forbid_dispatch_layer(kind: str) -> None:
     """调度层守卫:00-orchestration 各 Agent(总制片/context/evaluation 等)只派单
     不生成,禁止直接调用生成能力(SOUL.md 边界)。VIDEOAGENTS_AGENT 由 runtime 注入运行
@@ -236,22 +234,6 @@ def _forbid_dispatch_layer(kind: str) -> None:
             f"[genmedia] 拒绝执行:{agent} 属调度层,只派单不生成,禁止直接生成{kind}。"
             "正确做法:生成工单并通过 services/runtime/dispatch.py 派发给对应执行 Agent"
             "(图像=06-art、视频=08-video-gen、旁白/对白/BGM=09-audio)。")
-
-
-def _agent_provider_override(kind: str) -> str:
-    """Agent 级渠道覆盖:runtime 在运行环境注入 VIDEOAGENTS_AGENT,若该 Agent 在
-    data/.videoagents/agentmodels.json 里单独配置了 image/video 渠道,则优先于全局 provider。"""
-    agent = os.environ.get("VIDEOAGENTS_AGENT", "")
-    if not agent:
-        return ""
-    try:
-        ov = json.loads(AGENTMODELS_PATH.read_text()).get(agent) or {}
-        prov = str(ov.get(f"{kind}_provider") or "")
-        # 旧版曾把 RunningHub 列为独立渠道;现已并回 comfyui 渠道的运行方式(mode=rh_*),
-        # 存量覆盖等价于 comfyui(运行方式跟随全局 comfyui 段)
-        return "comfyui" if prov == "runninghub" else prov
-    except Exception:
-        return ""
 
 
 def _openrouter_connection(api_key: str = "") -> tuple[str, str, bool]:
@@ -336,9 +318,6 @@ def get_config(kind: str) -> dict:
             and not str((cfg.get("openrouter") or {}).get("api_key")
                         or os.environ.get("OPENROUTER_API_KEY") or "").strip()):
         provider = "agentics"
-    ov = _agent_provider_override(kind)
-    if ov and isinstance(cfg.get(ov), dict):
-        provider = ov
     pc = dict(cfg.get(provider) or {})
     if provider == "minimax":
         # 海外/国内区域 Key 分别保存,按 api_base 归一到 api_key 供下游统一取用
@@ -3286,11 +3265,22 @@ FAL_H3_RESOLUTION_MAP = {"360p": "480P", "480p": "480P", "720p": "768P",
 FAL_H3_MAX_TOTAL_REFS = 12   # H3 reference-to-video:图+视频+音频合计 ≤12 件
 FAL_SEEDANCE_MAX_TOTAL_REFS = 12     # Seedance 2.0 reference-to-video:合计 ≤12 件
 FAL_SEEDANCE25_MAX_TOTAL_REFS = 50   # Seedance 2.5 reference-to-video:合计 ≤50 件
+# Wan 3.0(alibaba/wan-3.0,官方 OpenAPI 2026-09-10 抄录):三端点同款字段;分辨率 480p/720p/1080p
+# (默认 1080p),aspect_ratio adaptive|16:9|4:3|1:1|3:4|9:16,duration [2,30] 整数秒(null=模型自选,
+# 本模块不用),audio 布尔,seed 有效;reference-to-video 参考图 ≤10、参考视频 ≤5(合计 ≤15s,
+# 每段 ≥16fps)、参考音频 ≤5(合计 ≤15s);首尾帧字段为 start_image_url/end_image_url
+FAL_WAN_RESOLUTIONS = ("480p", "720p", "1080p")
+FAL_WAN_RATIOS = ("16:9", "4:3", "1:1", "3:4", "9:16")
+FAL_WAN_MAX_IMAGE_REFS = 10
+FAL_WAN_MAX_VIDEO_REFS = 5
+FAL_WAN_MAX_AUDIO_REFS = 5
+FAL_WAN_REF_TOTAL_S = 15.2   # 参考视频 / 参考音频各自合计硬限(同 Seedance 2.0 的 15s+容差口径)
 
 
 def _fal_family(model: str) -> str:
-    """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling / generic(其它端点,
-    按 fal 常见字段名 prompt/image_url/end_image_url/duration/resolution/aspect_ratio/seed 尽力映射)。"""
+    """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling / wan(阿里 Wan 3.0)/
+    generic(其它端点,按 fal 常见字段名 prompt/image_url/end_image_url/duration/resolution/
+    aspect_ratio/seed 尽力映射)。"""
     m = (model or "").lower()
     if "seedance" in m:
         return "seedance"
@@ -3298,6 +3288,8 @@ def _fal_family(model: str) -> str:
         return "h3"
     if "kling" in m:
         return "kling"
+    if "wan-3" in m or "wan3" in m:   # 仅 Wan 3.x(Fal 上的 wan-2.x 端点字段不同,走 generic)
+        return "wan"
     return "generic"
 
 
@@ -3311,7 +3303,7 @@ def _fal_task(first: str, last: str, refs, audio_refs, video_refs) -> str:
 
 
 def _fal_endpoint(model: str, task: str) -> str:
-    """模型 ID 为家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro)时
+    """模型 ID 为家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro、alibaba/wan-3.0)时
     按任务补 /text-to-video|image-to-video|reference-to-video;「自定义…」填的完整端点 ID
     (末段以 -to-video 结尾)原样使用,不按输入切换任务(输入与端点不匹配由 Fal 侧报 422)。"""
     mid = (model or "").strip().strip("/")
@@ -3470,11 +3462,61 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             if aspect not in FAL_KLING_RATIOS:
                 raise RuntimeError(f"Fal Kling 文生视频画幅仅支持 {'/'.join(FAL_KLING_RATIOS)},收到 {aspect}")
             body["aspect_ratio"] = aspect
+    elif family == "wan":
+        # Wan 3.0:三端点字段同款(见 FAL_WAN_* 注释);参考模式字段名与 H3 同为 reference_*_urls
+        if len(refs) > FAL_WAN_MAX_IMAGE_REFS:
+            raise RuntimeError(f"Fal Wan 3.0 参考图最多 {FAL_WAN_MAX_IMAGE_REFS} 张,收到 {len(refs)}")
+        if len(video_refs) > FAL_WAN_MAX_VIDEO_REFS:
+            raise RuntimeError(f"Fal Wan 3.0 参考视频最多 {FAL_WAN_MAX_VIDEO_REFS} 个,收到 {len(video_refs)}")
+        if len(audio_refs) > FAL_WAN_MAX_AUDIO_REFS:
+            raise RuntimeError(f"Fal Wan 3.0 参考音频最多 {FAL_WAN_MAX_AUDIO_REFS} 段,收到 {len(audio_refs)}")
+        # 参考视频 / 参考音频各自合计 ≤15s(官方硬限;ffprobe 不可用则跳过交 Fal 拒绝)
+        for kind, paths in (("参考视频", video_refs), ("参考音频", audio_refs)):
+            durs = [_audio_duration_s(str(p)) for p in paths if Path(str(p)).is_file()]
+            if paths and len(durs) == len(paths) and all(d is not None for d in durs) \
+                    and sum(durs) > FAL_WAN_REF_TOTAL_S:
+                detail = "、".join(f"{Path(p).name}={d:.1f}s" for p, d in zip(paths, durs))
+                raise RuntimeError(f"Fal Wan 3.0 {kind}总时长 {sum(durs):.1f}s 超过硬限 15s:{detail};请先截短")
+        body["duration"] = _fal_int_duration(duration, 2, 30, 5, "Fal Wan 3.0")
+        if gen_audio is not None:
+            body["audio"] = bool(gen_audio)
+        if res:
+            if res == "360p":
+                print("[genmedia] Fal Wan 3.0 无 360p 档,已就近映射为 480p", file=sys.stderr)
+                res = "480p"
+            elif res == "4k":
+                print("[genmedia] Fal Wan 3.0 最高 1080p,4k 已压到 1080p", file=sys.stderr)
+                res = "1080p"
+            if res not in FAL_WAN_RESOLUTIONS:
+                raise RuntimeError(f"Fal Wan 3.0 分辨率仅支持 {'/'.join(FAL_WAN_RESOLUTIONS)},收到 {res}")
+            body["resolution"] = res
+        if seed is not None:
+            body["seed"] = seed
+        if aspect:
+            if task == "image-to-video":
+                print(f"[genmedia] Fal Wan 3.0 首尾帧模式画幅随图片(adaptive),--aspect {aspect} 已忽略",
+                      file=sys.stderr)
+            elif aspect in FAL_WAN_RATIOS:
+                body["aspect_ratio"] = aspect
+            else:
+                print(f"[genmedia] Fal Wan 3.0 不支持画幅 {aspect}(可选 {'/'.join(FAL_WAN_RATIOS)}),"
+                      "按素材自适应(adaptive)", file=sys.stderr)
+        if task == "image-to-video":
+            body["start_image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+        elif task == "reference-to-video":
+            if refs:
+                body["reference_image_urls"] = [to_url(p) for p in refs]
+            if video_refs:
+                body["reference_video_urls"] = [video_to_url(p) for p in video_refs]
+            if audio_refs:
+                body["reference_audio_urls"] = [to_url(p) for p in audio_refs]
     else:
         # 未知端点:按 fal 通用字段名尽力映射,仅支持文生/首尾帧;参考素材不映射(字段名因端点而异)
         if task == "reference-to-video":
             raise RuntimeError(f"Fal 自定义端点 {model} 的参考素材字段未知,genmedia 仅对 Seedance /"
-                               " MiniMax H3 支持 --ref/--ref-video/--audio-ref")
+                               " MiniMax H3 / Wan 3.0 支持 --ref/--ref-video/--audio-ref")
         if duration:
             body["duration"] = _fal_int_duration(duration, 1, 60, 5, "Fal")
         if res:

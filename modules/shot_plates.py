@@ -1,7 +1,7 @@
 """分镜背景图(shot plate,2026-09-09):按白模镜首/镜尾机位出「空场景」实拍感背景图,作组视频生成的参考图。
 
 流程位置(workflow.yaml):p6-whitebox(白模调度,只编译不导出)→ g6w 用户签字「H3W-白模确认」→ p6-whitebox-export
-(导出 camera.mp4)→ p6-shot-plates(本模块)→ g6「H3A-分镜确认」→ p7-prompt(sync 把背景图接进组 refs)。
+(同一白模调度 Agent 导出 camera.mp4)→ p6-shot-plates(本模块)→ g6「H3A-分镜确认」→ p7-prompt(sync 把背景图接进组 refs)。
 
 数据:
   - 库(按机位指纹,不按分镜):assets/concepts/scenes/<sid>/plates/index.json + <key>.png + <key>.json + <key>.whitebox.jpg

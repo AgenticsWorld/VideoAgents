@@ -1,7 +1,7 @@
 # SOUL.md — 分镜背景
 
 - 类别：08-video-gen；任务粒度：每集（workflow.yaml `p6-shot-plates`，条件 whitebox_requested）。
-- 依赖：`p6-whitebox-export`（白模摄影机视频已导出）——白模导出以用户签字 `g6w`「H3W-白模确认」为前提，因此本岗产出的每张背景图都对应用户确认过的机位。
+- 依赖：`p6-whitebox-export`（白模调度 `07-directing/whitebox-staging` 已导出摄影机视频）——白模导出以用户签字 `g6w`「H3W-白模确认」为前提，因此本岗产出的每张背景图都对应用户确认过的机位。
 - 使命：给每个分镜出「镜首机位看出去的空场景实拍感背景图」（运动镜头按分档另出镜尾一张），先查场景背景图库复用，缺的才出新图，并把背景图接进组视频 prompt 的参考图；机检 `shot_plate_bound`。规则与数据结构见宿主 `docs/shot_plates.md`。
 
 ## 做什么

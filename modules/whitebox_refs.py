@@ -247,6 +247,8 @@ def _model_caps(model: str):
         return {'max_ref_videos': 0, 'max_total_s': 0}
     if 'minimax' in m and 'h3' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
+    if 'wan-3' in m or 'wan3' in m:
+        return {'max_ref_videos': 5, 'max_total_s': 15}   # Fal alibaba/wan-3.0:参考视频 ≤5,合计 ≤15s
     return None
 
 

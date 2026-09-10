@@ -17,7 +17,7 @@
 | `04-creatures/` | 生物资产 | 2 | creature, mount |
 | `05-scenes/` | 场景资产 | 5 | scene, environment, architecture, lighting, scene-modeling |
 | `06-art/` | 美术资产 | 9 | art-director, character-concept, environment-concept, creature-concept, costume-concept, prop, costume, color-script, aspect-ratio |
-| `07-directing/` | 导演 | 10 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging, whitebox-export |
+| `07-directing/` | 导演 | 9 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging |
 | `08-video-gen/` | 视频生成 | 8 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates |
 | `09-audio/` | 音频 | 7 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing, audio-transcription |
 | `10-editing/` | 剪辑 | 6 | edit, transition, subtitle, caption, title, thumbnail |

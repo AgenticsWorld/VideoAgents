@@ -11,7 +11,7 @@
 #   whitebox_requested: = 项目输出设置 output.spatial_blocking(「人物精确空间位置」,默认开)——2026-09-07 起该开关的含义即
 #     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p4-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
 #     白模视频自动接成组视频生成的参考视频,分镜背景图自动接成组参考图;
-#     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4
+#     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
 #     → p6-shot-plates 生成分镜背景图(code/render_shot_plates.py)→ g6「H3A-分镜确认」;
 #     关闭时不实例化以上白模节点，并从 g6 移除对应依赖（同其他 condition 节点）。用户工单单独要求白模预演时同此。
 
@@ -272,7 +272,7 @@ phases:
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json"],
           validation: { qa: [11-qa/visual-qa] } } # 2026-09-09:只写调度计划并 render_whitebox.py --compile-only 编译落盘 episode.json 供分镜预览页 3D 审看,不导出视频;禁止只交付 --check-only。
       - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)后签字;签字后才导出 camera.mp4、再生成分镜背景图(有出图费用);签字卡自动带白模待决项摘要,阻断级未清宿主拒签、建议级签字即接受默认取舍(docs/whitebox.md「待决项与用户裁决」)
-      - { id: p6-whitebox-export, agent: 07-directing/whitebox-export, condition: whitebox_requested, depends_on: [g6w],
+      - { id: p6-whitebox-export, agent: 07-directing/whitebox-staging, condition: whitebox_requested, depends_on: [g6w],   # 2026-09-10:导出工单派给白模调度本岗(SOUL「视频导出」节),原 07-directing/whitebox-export 已删除
           outputs: ["assets/whitebox/{ep}/"],
           validation: { auto: [whitebox_videos_exported] } }   # code/render_whitebox.py(不带 --compile-only)导出每组 camera.mp4/manifest.json 并自动 sync_whitebox_refs --write;机检 render_whitebox.py --verify-export;视频失败则任务未完成
       - { id: p6-shot-plates, agent: 08-video-gen/shot-plates, condition: whitebox_requested, depends_on: [p6-whitebox-export],

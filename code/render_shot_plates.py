@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """分镜背景图生成(shot plates,2026-09-09;规则与数据结构见 modules/shot_plates.py 顶部注释、docs/shot_plates.md)。
 
-流程位置:白模调度(p6-whitebox,只编译)→ 用户签字 H3W-白模确认 → 导出 camera.mp4(p6-whitebox-export)→ 本脚本(p6-shot-plates)。
+流程位置:白模调度(p6-whitebox,只编译)→ 用户签字 H3W-白模确认 → 白模调度导出 camera.mp4(p6-whitebox-export)→ 本脚本(p6-shot-plates)。
 本脚本要求所选组的白模视频已导出(assets/whitebox/<ep>/<grp>/manifest.json),否则拒跑——保证背景图只在用户确认白模之后生成。
 
 每镜按运镜分档决定出几张(静态/推拉/摇俯仰 = 镜首一张;横移跟拍/复杂轨迹按位移出镜首 + 镜尾),先查场景背景图库

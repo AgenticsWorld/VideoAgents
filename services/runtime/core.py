@@ -699,7 +699,7 @@ DEFAULT_GENCONFIG = {
         "byteplus": {"api_key": "", "model": "dreamina-seedance-2-5-260628",
                      "custom_model": ""},
         # Fal(queue.fal.run 托管端点):model 存家族前缀(bytedance/seedance-2.0、minimax/h3、
-        # fal-ai/kling-video/v3/pro),genmedia 按输入自动补 text-/image-/reference-to-video
+        # fal-ai/kling-video/v3/pro、alibaba/wan-3.0),genmedia 按输入自动补 text-/image-/reference-to-video
         # 任务段;custom_model 可填完整端点 ID 原样调用;Key 在 fal.ai/dashboard/keys 创建
         "fal": {"api_key": "", "model": "minimax/h3-max", "custom_model": ""},
         # MiniMax-H3:分辨率仅 768P/2K,genmedia 把项目档位(360p..4k)自动就近映射
@@ -1057,20 +1057,19 @@ def save_genconfig(cfg: dict):
     atomic_write_json(GENCONFIG_PATH, cfg)
 
 
-def active_video_provider(cfg: dict | None = None, agent_id: str = "") -> str:
-    """生效视频渠道:传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖(与 genmedia
-    _agent_provider_override 同口径),空则按全局「生成模型」页。"""
+def active_video_provider(cfg: dict | None = None) -> str:
+    """生效视频渠道:唯一来源是全局「生成模型」页(genconfig.json video.provider)。
+    「每 Agent 模型配置」曾可按 Agent 覆盖图像/视频渠道,因易被遗忘而导致实际渠道与页面
+    显示不符,已整体移除;存量 agentmodels.json 里的 image_provider/video_provider 一律忽略。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    ov = str(agent_model_config(agent_id).get("video_provider") or "") if agent_id else ""
-    return ov or str(v.get("provider") or "volcengine")
+    return str(v.get("provider") or "volcengine")
 
 
-def active_video_model(cfg: dict | None = None, agent_id: str = "") -> str:
-    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。
-    传 agent_id 时按该 Agent 的视频渠道覆盖取对应渠道段的模型。"""
+def active_video_model(cfg: dict | None = None) -> str:
+    """「生成模型」页当前生效的视频模型 id(custom_model 优先;comfyui 等无模型渠道返 "")。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
-    pc = v.get(active_video_provider(cfg, agent_id)) or {}
+    pc = v.get(active_video_provider(cfg)) or {}
     return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "")
 
 
@@ -1081,7 +1080,7 @@ PROMPT_AGENT_ID = "08-video-gen/prompt"
 def effective_video_model(cfg: dict | None = None) -> str:
     """真正跑视频生成的模型 id:按 video-generation 工位的渠道覆盖解析(2026-08-28 修:
     此前 prompt 技能注入只看全局渠道,该工位覆盖了渠道时判定失真)。"""
-    return active_video_model(cfg, VIDEO_AGENT_ID)
+    return active_video_model(cfg)
 
 
 def is_seedance25(model: str) -> bool:
@@ -1132,6 +1131,12 @@ def _rh_cached_workflow(comfy: dict, wf_id: str = "") -> str:
         return ""
 
 
+def is_wan30(model: str) -> bool:
+    """阿里 Wan 3.0 判定(Fal 托管 alibaba/wan-3.0 及其 *-to-video 端点;与 genmedia._fal_family 同口径)。"""
+    m = (model or "").lower()
+    return "wan-3.0" in m or "wan-3-0" in m or "wan3.0" in m or "wan-3" in m
+
+
 def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     """生效视频渠道是否 MiniMax H3(引擎无关,统一按 is_minimax_h3「名字含 minimax 与 h3」判定):
     OpenRouter/MiniMax/RunningHub 直绑等按生效模型 id,ComfyUI 本地/Comfy Cloud 按所选工作流
@@ -1139,7 +1144,7 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     工作流 JSON 全文(节点类名 MiniMaxH3ReferenceToVideo 或任何含 minimax+h3 的节点/标题均命中)。"""
     cfg = cfg or load_genconfig()
     v = cfg.get("video") or {}
-    if active_video_provider(cfg, VIDEO_AGENT_ID) == "comfyui":
+    if active_video_provider(cfg) == "comfyui":
         comfy = v.get("comfyui") or {}
         if (comfy.get("mode") or "local") in RH_BASES:
             return is_minimax_h3(_rh_cached_workflow(comfy))
@@ -1484,7 +1489,7 @@ def _video_model_label(cfg: dict) -> str:
     model = effective_video_model(cfg)
     if model:
         return model
-    prov = active_video_provider(cfg, VIDEO_AGENT_ID)
+    prov = active_video_provider(cfg)
     if prov == "comfyui":
         comfy = (cfg.get("video") or {}).get("comfyui") or {}
         mode = comfy.get("mode") or "local"
@@ -1605,17 +1610,11 @@ async def api_prompt_skill_set(body: dict):
     return out
 
 
-def is_runninghub_video_active(cfg: dict | None = None, agent_id: str = "") -> bool:
-    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai)。
-    传 agent_id 时先看「每 Agent 模型配置」的视频渠道覆盖:覆盖为 comfyui ⇒ 按全局
-    comfyui 段的运行方式判定;其他非空覆盖 ⇒ 否;空 ⇒ 按全局生效渠道判定。"""
+def is_runninghub_video_active(cfg: dict | None = None) -> bool:
+    """生效视频渠道是否 ComfyUI 的 RunningHub 运行方式(rh_cn/rh_ai),按全局「生成模型」页判定。"""
     v = (cfg or load_genconfig()).get("video") or {}
     comfy = v.get("comfyui") or {}
     rh_mode = (comfy.get("mode") or "local") in RH_BASES
-    if agent_id:
-        ov = str(agent_model_config(agent_id).get("video_provider") or "")
-        if ov:
-            return ov == "comfyui" and rh_mode
     return (v.get("provider") or "volcengine") == "comfyui" and rh_mode
 
 
@@ -1896,10 +1895,9 @@ AM_MODE_MODELS = {
 }
 
 AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
-# RunningHub 不是独立渠道:它是 comfyui 渠道的运行方式(mode=rh_cn/rh_ai,见「🎨 生成模型」页
-# ComfyUI 标签页),按 Agent 覆盖只到渠道粒度,运行方式跟随全局 comfyui 段
-AM_IMAGE_PROVIDERS = ("", "agentics", "openrouter", "ideogram", "volcengine", "byteplus", "minimax", "comfyui")
-AM_VIDEO_PROVIDERS = ("", "agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
+# Agent 级配置只含执行引擎/语言模型;图像/视频渠道曾可按 Agent 覆盖,因易被遗忘导致实际生成
+# 渠道与「🎨 生成模型」页显示不符,已整体移除(存量 agentmodels.json 里的旧字段读入时剔除)
+AM_FIELDS = ("engine", "model")
 
 
 def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
@@ -1909,8 +1907,7 @@ def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
     tier = AM_AGENT_TIERS.get(agent_id) \
         or AM_CATEGORY_TIERS.get(agent_id.split("/")[0]) or "low"
     d = AM_MODE_MODELS.get(mode, {}).get(tier) or {}
-    return {"engine": d.get("engine", ""), "model": d.get("model", ""),
-            "image_provider": "", "video_provider": ""}
+    return {"engine": d.get("engine", ""), "model": d.get("model", "")}
 
 
 def load_agentmodels() -> dict:
@@ -1925,12 +1922,8 @@ def agent_model_config(agent_id: str) -> dict:
     ov = load_agentmodels().get(agent_id)
     if not isinstance(ov, dict):
         return default_agent_model(agent_id)
-    ov = dict(ov)
-    # 旧版曾把 RunningHub 列为独立渠道;现已并回 comfyui 渠道的运行方式,存量覆盖等价于 comfyui
-    for field in ("image_provider", "video_provider"):
-        if ov.get(field) == "runninghub":
-            ov[field] = "comfyui"
-    return ov
+    # 只保留引擎/语言模型;存量文件里的 image_provider/video_provider(已移除的按 Agent 渠道覆盖)剔除
+    return {k: str(ov.get(k) or "") for k in AM_FIELDS}
 
 
 def global_model_pref() -> dict:
@@ -2811,7 +2804,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs **不挂**俯视图/九宫格(2026-09-09:俯视图只供分镜预览页与 storyboard/shot_list `scene_refs` 查看,不进视频参考图;场景空间由白模摄影机视频 + 分镜背景图承担)、"
         "逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-export 用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
@@ -3122,7 +3115,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
 - 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
 - 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
-    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active(agent_id=agent_id) \
+    if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active() \
             and project_skill_enabled("08-video-gen/video-generation/runninghub-cloud-workflow", project):
         p += f"""
 
@@ -3132,7 +3125,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 调用入口不变:统一 CLI `python3 modules/genmedia.py video ...`,先 `--dry-run` 核对生效 provider/mode/参数组合;严禁绕过 genmedia 手工拼 RunningHub API 请求,严禁自行切换渠道/工作流
 - 成功输出的远端 taskId 必须记入产物 meta 与 result.json;--seed 与(无占位符模板下的)--resolution/--aspect 进不了云端模板,实际输出以 ffprobe 实测为准如实写回执,不得因与请求档位不符自行拒交或改档
 - 失败按 skill 排错口径保留 promptTips/failedReason 原文上报;云端按任务计费,严禁同参盲重投"""
-    if agent_id == VIDEO_AGENT_ID and active_video_provider(agent_id=agent_id) == "agentics" \
+    if agent_id == VIDEO_AGENT_ID and active_video_provider() == "agentics" \
             and project_skill_enabled("08-video-gen/video-generation/agentics-media-generation", project):
         p += f"""
 
@@ -3636,7 +3629,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                "VIDEOAGENTS_WORKSPACE_ROOT": str(ROOT),
                "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
                # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
-               "WEBUI_PROJECT": run["project"]}   # genmedia 据此应用 Agent 级图像/视频渠道覆盖
+               "WEBUI_PROJECT": run["project"]}
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
         if engine == "opencode":   # 缓存目录不可写时改道,避免模型注册表过期
@@ -4367,6 +4360,7 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("minimax/h3-max-turbo", "MiniMax H3 Max Turbo(Fal 托管;速度优先版,仅文生/首尾帧,480P/768P,不支持参考素材)"),
         ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
         ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
+        ("alibaba/wan-3.0", "Wan 3.0(Fal 托管;文生/首尾帧/多模态参考,2-30 秒,参考 10 图/5 视频/5 音频(视频、音频各合计 ≤15s),480p/720p/1080p)"),
         ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
         ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
@@ -4411,6 +4405,10 @@ def video_model_caps(model: str) -> dict | None:
                 "max_ref_video_s": 15}
     if is_minimax_h3(model):
         return {"max_ref_images": 9, "max_ref_videos": 3, "max_ref_audios": 3, "max_group_s": 15,   # 2026-09-07:参考视频/音频各 3(白模参考视频可挂)
+                "max_ref_video_s": 15}
+    if is_wan30(model):
+        # Fal alibaba/wan-3.0 官方 OpenAPI(2026-09-10):参考图 ≤10、视频 ≤5(合计 ≤15s)、音频 ≤5(合计 ≤15s),单段 2-30s
+        return {"max_ref_images": 10, "max_ref_videos": 5, "max_ref_audios": 5, "max_group_s": 30,
                 "max_ref_video_s": 15}
     return None
 
@@ -4467,7 +4465,7 @@ def group_video_candidates(project: str, cfg: dict | None = None) -> dict:
     """本项目组级可选的视频模型:渠道固定为视频工位生效渠道,候选=该渠道目录 + 全局当前模型
     (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。"""
     cfg = cfg or load_genconfig()
-    provider = active_video_provider(cfg, VIDEO_AGENT_ID)
+    provider = active_video_provider(cfg)
     gmodel = effective_video_model(cfg)
     rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
     if gmodel and gmodel not in {r["id"] for r in rows}:
@@ -7880,15 +7878,12 @@ _AVATAR_AUTO_PACE_S = 0.6                   # 逐条删除/上传间隔,先不�
 
 
 def _avatar_auto_enabled(agent_id: str) -> bool:
-    """全自动管理是否对该 agent 生效:开关都开 + 生效视频渠道为火山引擎
-    (「每 Agent 模型配置」的视频渠道覆盖优先,空则按全局,与 genmedia 同口径)。"""
+    """全自动管理是否对该 agent 生效:开关都开 + 全局生效视频渠道为火山引擎。"""
     cfg = load_genconfig()
     av = cfg.get("avatar_assets") or {}
     if not (av.get("enabled") and av.get("auto_manage")):
         return False
-    prov = (str(agent_model_config(agent_id).get("video_provider") or "")
-            or str((cfg.get("video") or {}).get("provider") or "volcengine"))
-    return prov == "volcengine"
+    return active_video_provider(cfg) == "volcengine"
 
 
 def _avatar_episode_char_refs(project: str, eps: list[str],
@@ -8516,7 +8511,7 @@ async def api_plugins_delete(body: dict):
 async def api_agentmodels():
     """全部 Agent 的模型配置:mode=「模型策略」;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
     mode = load_genconfig().get("agentmodel_mode") or "global"
-    # 覆盖经 agent_model_config 归一(旧版独立 runninghub 渠道 ⇒ comfyui),与运行时同口径
+    # 覆盖经 agent_model_config 归一(剔除已移除的图像/视频渠道字段),与运行时同口径
     return {"mode": mode,
             "defaults": {a["id"]: default_agent_model(a["id"], mode)
                          for a in list_agents()},
@@ -8547,7 +8542,7 @@ async def api_video_model_get():
     新建向导「模型限制」步据此在所选预设与生效模型不一致时给提示(不拦下一步)。"""
     cfg = load_genconfig()
     model = effective_video_model(cfg)
-    prov = active_video_provider(cfg, VIDEO_AGENT_ID)
+    prov = active_video_provider(cfg)
     return {"provider": prov, "model": model,
             "label": video_model_label(model, prov) if model else _video_model_label(cfg),
             "family": video_model_family(cfg)}
@@ -8625,15 +8620,9 @@ async def api_agentmodels_set(body: dict):
     else:
         cfg = body.get("config") or {}
         c = {"engine": str(cfg.get("engine") or "").lower(),
-             "model": str(cfg.get("model") or "").strip(),
-             "image_provider": str(cfg.get("image_provider") or ""),
-             "video_provider": str(cfg.get("video_provider") or "")}
+             "model": str(cfg.get("model") or "").strip()}
         if c["engine"] not in AM_ENGINES:
             raise ServiceError(400, f"engine must be one of {AM_ENGINES} (empty = follow global)")
-        if c["image_provider"] not in AM_IMAGE_PROVIDERS:
-            raise ServiceError(400, f"image_provider must be one of {AM_IMAGE_PROVIDERS}")
-        if c["video_provider"] not in AM_VIDEO_PROVIDERS:
-            raise ServiceError(400, f"video_provider must be one of {AM_VIDEO_PROVIDERS}")
         if not c["engine"]:
             c["model"] = ""                     # 引擎跟随全局时模型无意义
         overrides[agent] = c

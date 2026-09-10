@@ -67,6 +67,8 @@ def video_caps(model, provider):
         return (10, 30.) if ('seedance-2-5' in m or 'seedance-2.5' in m) else (3, 15.)
     if 'minimax' in m and 'h3' in m:
         return 3, 15.
+    if 'wan-3' in m or 'wan3' in m:
+        return 5, 15.   # Fal alibaba/wan-3.0:参考视频 ≤5,合计 ≤15s
     return None
 
 

@@ -355,8 +355,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>语言模型</label>
       <select id="am-model" style="flex:1"></select>
       <input type="text" id="am-model-custom" style="display:none" placeholder="输入模型ID"></div>
-    <div class="row"><label>图像模型</label><select id="am-img" style="flex:1"></select></div>
-    <div class="row"><label>视频模型</label><select id="am-vid" style="flex:1"></select></div>
     <div class="note" id="am-note"></div>
     <div class="note">保存后仅对该 Agent 生效,优先级高于右上角全局设置(总制片显式 --engine/--model 派单除外);图像/视频各渠道参数在 🎨 生成模型 页配置</div>
     <div class="err" id="am-err"></div>
@@ -1287,11 +1285,6 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
   await npCreate();
 };
 
-/* ---------- 图像/视频渠道列表(每 Agent 模型配置弹窗用;生效渠道在 🎨 生成模型 页按标签页切换) ---------- */
-const GEN_PROVIDERS={
-  image:[['agentics','Agentics'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['minimax','MiniMax'],['comfyui','ComfyUI']],  // ideogram 暂隐藏
-  video:[['agentics','Agentics'],['openrouter','OpenRouter'],['volcengine','火山引擎'],['byteplus','BytePlus'],['fal','Fal'],['minimax','MiniMax'],['comfyui','ComfyUI']],
-};
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- deepagents 生效渠道(顶栏语言模型下拉=本地模型/云端模型/OpenRouter 开关;参数在 🎨 生成模型 页配置) ---------- */
@@ -2640,7 +2633,7 @@ const AM_MODEL_OPTIONS={
 };
 function amEffective(id){
   return AGENT_MODELS.overrides[id]||AGENT_MODELS.defaults[id]
-    ||{engine:'',model:'',image_provider:'',video_provider:''};
+    ||{engine:'',model:''};
 }
 function amLabel(id){
   const c=amEffective(id);
@@ -2671,11 +2664,6 @@ async function amPopulateModels(engine,selected){
     custom.style.display=sel.value==='__custom'?'':'none';
   }
 }
-function amFillProvider(sel,options,val){
-  sel.innerHTML='<option value="">跟随全局</option>';
-  options.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o)});
-  sel.value=[...sel.options].some(o=>o.value===val)?val:'';
-}
 async function openAmModal(){
   if(!CURRENT)return;
   $('#am-err').textContent='';
@@ -2684,8 +2672,6 @@ async function openAmModal(){
   $('#am-engine').value=c.engine||'';
   $('#am-modal').style.display='flex';
   await amPopulateModels(c.engine||'',c.model||'');
-  amFillProvider($('#am-img'),GEN_PROVIDERS.image,c.image_provider||'');
-  amFillProvider($('#am-vid'),GEN_PROVIDERS.video,c.video_provider||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
   $('#am-note').textContent=I18N.f('该 Agent 策略默认(语言模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
     +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
@@ -2710,7 +2696,7 @@ $('#am-ok').onclick=async()=>{
     model=$('#am-model-custom').value.trim();
     if(!model){$('#am-err').textContent='请输入自定义模型ID';return}
   }
-  const cfg={engine,model,image_provider:$('#am-img').value,video_provider:$('#am-vid').value};
+  const cfg={engine,model};
   try{
     await api('/api/v1/agents/models',{agent:CURRENT,config:cfg});
     AGENT_MODELS.overrides[CURRENT]=cfg;

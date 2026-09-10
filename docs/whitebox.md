@@ -190,7 +190,7 @@ python code/render_whitebox.py --project dzg6 --ep ep01 grp002 --force --fps 24
 python code/render_whitebox.py --project dzg6 --ep ep01 --verify-export     # 机检 whitebox_videos_exported:各组视频存在且源指纹为当前
 ```
 
-不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。**2026-09-09 流程**：白模调度 Agent（whitebox-staging）用 `--compile-only` 只编译落盘 `episode.json` 供「分镜设定」预览页 3D 审看；用户在人工闸门 g6w「H3W-白模确认」签字后，白模导出 Agent（whitebox-export）再不带参数运行以导出视频并自动接线；导出完成后分镜背景图 Agent（shot-plates）才生成背景图（见 docs/shot_plates.md）。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。--check-only 不写编译产物或视频，仅供检查，不能当作完成交付；--compile-only 不能当作导出完成。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
+不指定组时处理全体；--scene 处理该集中引用指定场景的所有组，不能与组号同时使用。**2026-09-09 流程**：白模调度 Agent（whitebox-staging）用 `--compile-only` 只编译落盘 `episode.json` 供「分镜设定」预览页 3D 审看；用户在人工闸门 g6w「H3W-白模确认」签字后，同一白模调度 Agent 收到导出工单（`p6-whitebox-export`，2026-09-10 起原 whitebox-export 工位已并入）再不带参数运行以导出视频并自动接线；导出完成后分镜背景图 Agent（shot-plates）才生成背景图（见 docs/shot_plates.md）。默认命令在编译后自动导出保存，无需 --export（该旧参数保留兼容）。--check-only 不写编译产物或视频，仅供检查，不能当作完成交付；--compile-only 不能当作导出完成。编译结果为 `directing/<ep>/whitebox/episode.json` 和场景目录 `whitebox.scene.json`；计划与编译输出分开，重编译不覆写 Agent 设计。报错包含 group_id；选中组编译错误或视频渲染失败均非零退出。
 
 自动保存按 manifest 比对场景/调度源指纹、渲染器指纹、画幅、分辨率与帧率，且核对 camera.mp4 存在且非空。匹配则复用，否则重出；--force 强制重出。场景几何更新会使该场景下各组的视频过期，场景建模 Agent 需对所有引用它的已有分镜集执行 --scene。首次场景建模无分镜时只交付场景模型，分镜就绪后由白模调度 Agent 自动保存视频。视频先在临时目录完成编码，再发布与更新清单；编码失败保留原有效视频，不能标注本次更新成功。
 
