@@ -53,7 +53,7 @@ HOP_HEADERS = {
 }
 PREVIEW_FILES = {
     "refs", "characters", "props", "creatures", "scenes", "script", "board", "storyboard", "videos", "workflow", "worldview",
-}
+ "post"}
 
 # 直连本机 API,绕过系统/环境代理(macOS 上 urllib 会自动读取系统代理设置)。
 _DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))

@@ -434,8 +434,16 @@ phases:
       - { id: p9-thumbnail, agent: 10-editing/thumbnail, depends_on: [p9-edit],
           outputs: ["edit/{ep}/thumbnail_A.png", "edit/{ep}/thumbnail_B.png"],
           validation: { auto: [aspect_safe_area_ok], qa: [human_pick] } }
+      - { id: g9p, gate: true, human: true, checkpoint: H3P-后期确认, scope: episode, depends_on: [p9-subtitle] }   # 2026-09-11:用户在「🎚️ 后期预览」页(/preview/post)对签字母本做特效/包装/细节填充/光感/调色/音效处方(台账 edit/{ep}/post_plan.json,ffmpeg 类宿主直出、agent 类派 post-finishing、记录类只记台账),看过 A|B 与拼装预检后签字;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再变即「签字已过期」,orchestrator 重新建单;签字时按保留规则清理旧版本(母本+最近两个已采纳)
+      - { id: p9-post, agent: 10-editing/post-finishing, depends_on: [g9p],
+          condition: post_recipes_adopted,   # 台账里有已采纳处方才派发(post_apply.py status --json 的 current 非空或 adopted>0);无处方=不派发,g9 不因缺我而 HOLD
+          # 只准宿主 CLI code/post_apply.py finalize(build-cut → sync-timeline → render_transitions render --src cut_post.mp4 → finalize_episode assemble --cut … → check,WORKFLOW.md §9D);
+          # 用户已在页面点过「出成片」且 post_check.json 指纹与台账一致时只重跑 check
+          outputs: ["edit/{ep}/cut_post.mp4", "edit/{ep}/final.mp4", "edit/{ep}/post_check.json"],
+          validation: { auto: [post_ok, intro_offset_ok, transition_render_ok], qa: [11-qa/visual-qa] } }
       - { id: g9, gate: true, human_on: first_episode, checkpoint: H4-首集成片确认,
-          depends_on: [p9-subtitle, p9-caption, p9-title, p9-thumbnail, p9-caption-final] }
+          depends_on: [p9-subtitle, p9-caption, p9-title, p9-thumbnail, p9-caption-final, g9p, p9-post] }
+        # post_recipes_adopted=false 时 p9-post 未派发,视同满足,G9 不 HOLD(同 caption 先例);g9p 是每集人工点,H4 只在首集
         # caption_enabled=false 时 p9-caption/p9-caption-render/p9-caption-final 均未派发,
         # 视同满足,G9 不 HOLD(同 §7B p7-upscale/g7 先例)
 

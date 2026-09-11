@@ -696,6 +696,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 | transition | **只按 shot_list `transition_in` 实施组间转场,只准宿主 CLI `code/render_transitions.py` plan → render → check(§9C,2026-08-28)**:cut_v1 → cut_v2,pad 补偿(两侧各克隆半个转场时长的定格帧再 xfade,成片总长 ±1 帧不变,声轨流拷贝);硬切为默认;导演意图未进 shot_list 的转场不得自加,走变更流程回派 shot-planning | shot_list、cut_v1、timeline | `edit/epNN/cut_v2.mp4`、timeline `transitions[]`、`edit/epNN/transitions_render.json`(含黑帧白名单) | 机检 **transition_render_ok**(覆盖全部组边界、非硬切与 shot_list 一致、时长不变、声轨完整、抽帧核对);QA:visual-qa 抽检转场突兀度 |
 | subtitle | 对白/旁白字幕(时轴对齐,**正片 0 秒基准,不含片头**;成片基准版由 edit 终版封装时用 `finalize_episode.py shift` 平移生成);**烧录样式权威:小字号贴底、最小化遮挡**(字高 ≤4% 画面高、底部居中、下边距 2%–4%、≤2 行、白字黑描边禁大面积底板) | final_audio、剧本文本 | `epNN/subtitles.srt` | 机检:时轴偏差 <200ms、错别字检查、每行字数 ≤ 平台上限、烧录样式合规(subtitle_style_ok) |
 | caption | 花字设计(schema v2:headline 大标题/keyword 关键词/信息类,含字体、动画、配套音效;**仅花字开关开启时派发,见 §9A**)+ 逐组烧录(caption-render 工单,只准宿主 CLI) | shot_list、dictionary、timeline、`data/fonts\|sfx/manifest.json` | `epNN/captions.json` + `assets/clips_caption/epNN/` | 机检:术语与 dictionary 100% 一致 + `code/check_captions.py` design/render 段(schema v3/双写对账/入出点=语音逐字起止/资产命中/副本齐备且规格不变) |
+| post-finishing(按处方派发;`p9-post` 出成片,2026-09-11) | **执行「🎚️ 后期预览」页(/preview/post)台账 `edit/epNN/post_plan.json` 的后期处方(§9D)**:agent 类(超分/局部重绘/插帧/重打光/生成特效)逐组在**当前版本**上出片写 `assets/post/epNN/<grp>/`,`post_apply.py register` 登记版本,用户 A|B 后采纳;ffmpeg 类(基础校正/LUT/场次色板/参考帧匹配/氛围光感/去闪烁/遮标/叠加素材/水印)由宿主直出不派 agent;记录类(字幕样式/花字/转场/环境声/BGM 段落/电平/混音目标)只记台账由对应工位落地;出成片只准 `code/post_apply.py finalize` | post_plan.json、组当前版本、参考帧/蒙版/素材、组 prompt | `assets/post/epNN/<grp>/v{n}.mp4`、`edit/epNN/cut_post*.mp4`、`final.mp4`、`post_check.json` | 机检 **post_ok**(已采纳产物齐全指纹一致、无派单中、同场相邻组色差、音效点位落地、转场与 shot_list 一致)+ intro_offset_ok + transition_render_ok;人工点 H3P |
 | title | 片头/片尾(含下集预告位);**下集预告默认不配旁白**——钩子文案以字卡/花字呈现,声轨仅画面原声+BGM,需配音须工单显式指定(2026-07-10) | style、hooks、episode_plan | `epNN/intro_outro/` | 机检:预告无旁白轨(工单显式要求除外,teaser_no_narration);QA:art-director 会签 |
 | thumbnail | 封面(每平台画幅各一,A/B 两版);**先盘点 refs/thumbnail/ 用户封面参考,优先借鉴其构图/版式/文字风格并落痕迹**(§2 规则 7) | 本集高光帧、style、seo 关键词、refs/thumbnail/ | `epNN/thumbnail_*.png` | 机检:画幅/安全区合规;QA:人工挑选 |
 
@@ -709,6 +710,16 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > - **段序与开关**:默认 intro → cut → outro → teaser;`settings.json#packaging` 禁用的段与缺失文件自动跳过,片头禁用时偏移 = 0,字幕原样拷贝。av(音频锁定)插件项目要求母带零重编码,与片头接入互斥(CLI 拒绝 assemble)。
 > - **下游**:platform-adapter 打包前重跑 `check`(只读),字幕只取 `subtitles_final.*`;烧录字幕(`output.subtitle_burn_in`)只烧 `subtitles_final.*`,并抽帧核对首句出现时刻。
 
+> **§9D 后期处方与后期预览页(2026-09-11 增,归 `10-editing/post-finishing`,页面 `/preview/post`)**
+>
+> - **问题**:H3B 签字后的调色 / 特效 / 光感 / 细节修补 / 包装 / 音效没有入口,用户只能在编辑弹窗里写一段话等 agent;调色 / 特效 / 光感在流水线里只有创作意图(color_script、lighting)没有执行工序。
+> - **模型**:三层(画面 / 包装 / 声音)、一张处方表、四级作用域(整集 → 场次 → 分镜组 → 组内时间段,下级覆盖上级)。每项调整 = 一条处方 `{id, scope, section, kind, exec, params, refs, note, status, output}`,五个分区(细节填充 / 调色与光感 / 特效 / 包装 / 音效与声音)共用状态机 `草稿 → 已派单 → 已出片 → 已采纳 | 已弃用`(记录类采纳即生效)。**说明 `note` 必填**:执行侧能力不足时退化为给 agent 的自然语言指令,不允许静默跳过。
+> - **母本永不覆盖**:`assets/clips/epNN/grpNNN.mp4` 是 v0;产物按版本另存 `assets/post/epNN/grpNNN/v{n}.mp4`,台账 `edit/epNN/post_plan.json` 记版本链与当前指针,回滚只挪指针;H3P 签字时按保留规则清理(母本 + 最近两个已采纳版本 + 当前指针,更早的删文件留记录)。
+> - **唯一工序**:宿主 CLI `code/post_apply.py`——`apply`(ffmpeg 类出片 / `--preview` 4 秒 480p 低清预览)、`register`(agent 类登记产物)、`adopt/discard/rollback`、`check`(机检 `post_ok`)、`finalize`(出成片:各组当前版本归一化拼 `cut_post.mp4` → `sync-timeline` 把 timeline `tracks.video[].src` 指向归一化段文件、原值存 `src_orig`,首次备份 `timeline.pre_post.json` → `render_transitions.py render --src cut_post.mp4 --out cut_post_v2.mp4` → `finalize_episode.py assemble --cut …` → `check`;原 `final.mp4` 首次备份为 `final.pre_post.mp4`)。**禁止 Agent 自写 ffmpeg 改母本、禁止复制 / 改写脚本到项目 `code/`**。快速预览只给 ffmpeg 类处方;V2V 类没有便宜预览,只有派单。
+> - **机检 `post_ok`**(`post_apply.py check`,出成片前必跑;台账 `edit/epNN/post_check.json` 记台账指纹,指纹不符 = 结果过期):`post_plan_applied` 已采纳产物存在且指纹一致(FAIL);`post_no_pending` 无派单中处方(FAIL)、草稿 / 未裁决 WARN;`color_consistency` 同场次相邻组均值色差(WARN);`sfx_cues_resolved` 音效点位表逐条已选来源或显式略过(WARN);`transitions_synced` 已采纳转场处方与 shot_list 一致(FAIL)。
+> - **人工点 H3P**(`g9p`,每集,`p9-subtitle` 后):用户在后期预览页签字,宿主拦阻:派单中处方未清 / `post_ok` FAIL → 409;签字记台账指纹,台账再变即过期。`p9-post`(条件 `post_recipes_adopted`)在签字后跑 `finalize`;无处方的集不派发,G9 不 HOLD。
+> - **导航**:控制台顶栏独立图标(视频预览之前)、各预览页下拉「🎚️ 后期预览」;页内只有页面切换与刷新在顶栏,操作区在集行(显示层开关 / 导出时间线 / 出成片 / H3P 状态)。声音层记录类处方由 `09-audio/*` 落地(`level/mix_target/ambience → audio-mixing`,`bgm_segment → music`),花字 → caption,音效点位表 `assets/post/epNN/sfx_cues.json` → sound-effect。
+>
 > **§9C 组间转场:Phase 6 设计、Phase 9 实施(2026-08-28 增)**
 >
 > - **问题**:transition 工位以前按 directing_plan 自由文本猜转场、自写 ffmpeg xfade,一项目一格式无法机检,且常忘记补偿 xfade 吃掉的重叠时长(成片缩短 → 外挂声轨/字幕/旁白挂点整体偏早);上游没有任何结构化转场字段,dzg5 等项目只能自造 `flashback_block`/`sub_block` 临时标记。
@@ -889,6 +900,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 | H3S(每集) | p6-storyboard 后、shot-planning 前 | 本集分镜草案(「📋 故事板预览」页审看逐场逐镜表:编号/内容/铅笔草图 + 导演计划;草图按需出、不是签字前置;意见发总制片改分镜后重新建单;签字后 storyboard.json 再改动即视为签字过期,orchestrator 重新建单,2026-09-11) |
 | H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D);**同时确认本项目「视频提示词技能」:自动(按生效视频模型)/手选/跳过,签字即冻结快照(§7F)** |
 | H3B(每集) | G7 后、Phase 9 前 | 本集全部生成组终版 clip(「视频预览」页审看组画面/原生音频质量;签字前不进剪辑合成) |
+| H3P(每集) | p9-subtitle 后、p9-post / G9 前 | 本集后期处方(「🎚️ 后期预览」页:分镜组母本上的特效/包装/细节填充/光感/调色/音效处方,A|B 比对后采纳,拼装预检通过;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再改动即视为签字过期,orchestrator 重新建单;签字时清理旧版本文件,§9D,2026-09-11) |
 | H4 | G9 后 | 第 1 集成片(试点集全片审看) |
 | H5 | G10 后 | 发布签字 |
 

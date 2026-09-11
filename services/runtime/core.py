@@ -7761,6 +7761,866 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
 WHITEBOX_REEL_AGENT = "07-directing/whitebox-staging"
 
 
+# ═══════════════════════ 后期预览(/preview/post,WORKFLOW.md §9D,2026-09-11) ═══════════════════════
+# 分镜组签字(H3B)之后、成片闸门(G9)之前的后期工作台:处方台账 edit/epNN/post_plan.json(modules/post_plan.py),
+# ffmpeg 类处方由宿主 CLI code/post_apply.py 出片(后台线程),agent 类处方派 10-editing/post-finishing,
+# record 类只记台账;H3P 后期签字卡与控制台同一条(api_confirm_answer),签字记台账指纹判过期。
+POST_GATE_ID = "g9p"
+POST_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, kind, started_at, finished_at, error, log, recipe_ids}
+POST_RECORD_AGENTS = {"level": "09-audio/audio-mixing", "mix_target": "09-audio/audio-mixing", "ambience": "09-audio/audio-mixing",
+                      "bgm_segment": "09-audio/music", "caption": "10-editing/caption", "subtitle_style": "10-editing/subtitle",
+                      "transition": "10-editing/transition"}
+POST_SFX_AGENT = "09-audio/sound-effect"
+
+
+def _post_pp():
+    from modules import post_plan
+    return post_plan
+
+
+def _post_url(base: Path, rel: str | None) -> str | None:
+    if not rel:
+        return None
+    p = base / rel
+    if not p.is_file():
+        return None
+    return f"/projects/{base.name}/{rel}?v={int(p.stat().st_mtime)}"
+
+
+def _post_scene_catalog(base: Path, ep: str) -> dict:
+    """scene_id -> {name, type(内/外), tod}:bible/scenes/index.json + directing/epNN/storyboard.json。"""
+    out: dict[str, dict] = {}
+    idx = _read_json_safe(base / "bible" / "scenes" / "index.json") or {}
+    for s in idx.get("scenes", []) or []:
+        if isinstance(s, dict) and s.get("id"):
+            t = str(s.get("type") or "")
+            out[s["id"]] = {"name": s.get("name") or s["id"], "type": "内" if "内" in t else ("外" if "外" in t else t), "tod": ""}
+    sb = _read_json_safe(base / "directing" / ep / "storyboard.json") or {}
+    for sc in sb.get("scenes", []) or []:
+        if isinstance(sc, dict) and sc.get("scene_id"):
+            row = out.setdefault(sc["scene_id"], {"name": sc.get("location") or sc["scene_id"], "type": "", "tod": ""})
+            row["tod"] = row["tod"] or str(sc.get("time_of_day") or "")
+            row["scene_no"] = sc.get("scene_no") or ""
+    return out
+
+
+def _post_scene_palettes(base: Path, ep: str) -> dict:
+    """scene_no -> palette(色彩脚本 episodes[ep].segments[].scenes)。"""
+    cs = _read_json_safe(base / "bible" / "color_script.json") or {}
+    out = {}
+    for e in cs.get("episodes", []) or []:
+        if not isinstance(e, dict) or (e.get("episode") or e.get("episode_id")) != ep:
+            continue
+        for seg in e.get("segments", []) or []:
+            if isinstance(seg, dict):
+                for sn in seg.get("scenes") or []:
+                    out[str(sn)] = [c for c in (seg.get("palette") or []) if isinstance(c, str)]
+        out["_episode"] = [c for c in (e.get("key_palette") or []) if isinstance(c, str)]
+    return out
+
+
+def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
+    """分镜组行(timeline 组序优先)+ shot 起点索引(组内秒)。"""
+    pp = _post_pp()
+    sl = _read_json_safe(base / "directing" / ep / "shot_list.json") or {}
+    gmeta = {g.get("group_id"): g for g in (sl.get("generation_groups") or []) if isinstance(g, dict) and g.get("group_id")}
+    shots = {s.get("shot_id"): s for s in (sl.get("shots") or []) if isinstance(s, dict) and s.get("shot_id")}
+    tl = _read_json_safe(base / "edit" / ep / "timeline.json") or {}
+    tracks = ((tl.get("tracks") or {}).get("video") or []) if isinstance(tl, dict) else []
+    order = []
+    if tracks:
+        for t in tracks:
+            if t.get("group_id"):
+                t_in = t.get("in_orig") if t.get("in_orig") is not None else t.get("in")
+                t_out = t.get("out_orig") if t.get("out_orig") is not None else t.get("out")
+                order.append((t["group_id"], float(t.get("cum_start_s") or 0), max(0.0, float(t_out or 0) - float(t_in or 0))))
+    else:
+        cum = 0.0
+        for gid, g in gmeta.items():
+            d = float(g.get("total_duration_s") or 0)
+            order.append((gid, cum, d))
+            cum += d
+    rows, shot_start = [], {}
+    for i, (gid, cum, dur) in enumerate(order):
+        g = gmeta.get(gid) or {}
+        meta = _read_json_safe(base / "assets" / "clips" / ep / f"{gid}.meta.json") or {}
+        clip = base / "assets" / "clips" / ep / f"{gid}.mp4"
+        if not dur and meta.get("boundary_map"):
+            try:
+                dur = float(meta["boundary_map"][-1].get("end_s") or 0)
+            except (TypeError, ValueError, IndexError):
+                dur = 0.0
+        # 镜起点:clip meta 的 boundary_map,回退按 shot_list duration_s 累加
+        starts = {}
+        for bm in meta.get("boundary_map") or []:
+            if isinstance(bm, dict) and bm.get("shot_id"):
+                starts[bm["shot_id"]] = (float(bm.get("start_s") or 0), float(bm.get("end_s") or 0))
+        if not starts:
+            acc = 0.0
+            for sid in g.get("shots") or []:
+                d = float((shots.get(sid) or {}).get("duration_s") or 0)
+                starts[sid] = (acc, acc + d)
+                acc += d
+        shot_start[gid] = starts
+        versions = [{"v": 0, "url": _post_url(base, f"assets/clips/{ep}/{gid}.mp4"), "file": f"assets/clips/{ep}/{gid}.mp4",
+                     "recipes": [], "adopted_at": None, "cleaned": False, "created_at": meta.get("generated_at") or "", "label": "母本"}]
+        for ver in pp.group_versions(plan, gid):
+            versions.append({"v": int(ver.get("v") or 0), "url": None if ver.get("cleaned") else _post_url(base, ver.get("file")),
+                             "file": ver.get("file"), "recipes": ver.get("recipes") or [], "adopted_at": ver.get("adopted_at"),
+                             "cleaned": bool(ver.get("cleaned")), "created_at": ver.get("created_at") or "",
+                             "label": f"v{ver.get('v')}"})
+        thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
+        rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": g.get("scene_no") or "",
+                     "order": i, "cum_start_s": round(cum, 3), "duration": round(dur, 3), "shots": g.get("shots") or [],
+                     "time_of_day": g.get("time_of_day") or "", "lighting_scheme_id": g.get("lighting_scheme_id") or "",
+                     "has_clip": clip.is_file(), "thumb": _post_url(base, f"assets/clips/{ep}/{gid}.last_frame.png") if thumb.is_file() else None,
+                     "current": pp.current_version(plan, gid), "versions": versions,
+                     "transition_in": g.get("transition_in") if isinstance(g.get("transition_in"), dict) else None,
+                     "dialogue": [{"shot_id": sid, "t0": round(starts.get(sid, (0, 0))[0], 3), "t1": round(starts.get(sid, (0, 0))[1], 3),
+                                   "speakers": [ln.get("speaker") for ln in ((shots.get(sid) or {}).get("dialogue_lines") or []) if isinstance(ln, dict)]}
+                                  for sid in (g.get("shots") or []) if (shots.get(sid) or {}).get("is_dialogue")]})
+    return rows, shot_start
+
+
+def _post_sfx_rows(base: Path, ep: str, groups: list[dict], shot_start: dict) -> tuple[dict, bool]:
+    """音效点位表:已保存的 assets/post/epNN/sfx_cues.json;否则从分镜 sfx cue(assets/audio/sfx/epNN/audio_cues.json|sfx_cues.json)生成(未落盘)。"""
+    pp = _post_pp()
+    saved = _read_json_safe(pp.sfx_path(base, ep))
+    if isinstance(saved, dict) and saved.get("rows") is not None:
+        return saved, True
+    shot2grp = {sid: g["group_id"] for g in groups for sid in g.get("shots") or []}
+    cum = {g["group_id"]: g["cum_start_s"] for g in groups}
+    rows = []
+    for name in ("audio_cues.json", "sfx_cues.json"):
+        doc = _read_json_safe(base / "assets" / "audio" / "sfx" / ep / name)
+        if not isinstance(doc, dict):
+            continue
+        for i, c in enumerate(doc.get("cues") or []):
+            if not isinstance(c, dict):
+                continue
+            sid = c.get("shot_id") or ""
+            gid = c.get("group_id") or shot2grp.get(sid) or ""
+            if not gid:
+                continue
+            st = (shot_start.get(gid) or {}).get(sid, (0.0, 0.0))[0]
+            m = re.search(r"t\s*[=≈]\s*([\d.]+)\s*s", str(c.get("trigger") or ""))
+            local = st + (float(m.group(1)) if m else 0.5)
+            rows.append({"id": f"sfx-{i + 1:03d}", "shot_id": sid, "group_id": gid, "t": round(local, 3),
+                         "t_abs": round(cum.get(gid, 0) + local, 3), "text": c.get("cue_en") or c.get("event") or "",
+                         "event": c.get("event") or "", "level": c.get("level") or "", "source": "", "file": "", "gain_db": -12})
+        break
+    return {"schema": "post_sfx_cues/1.0", "ep": ep, "rows": rows}, False
+
+
+def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dict:
+    cum = {g["group_id"]: g["cum_start_s"] for g in groups}
+    lanes = {"dialogue": [], "narration": [], "bgm": [], "sfx": []}
+    for g in groups:
+        for d in g.get("dialogue") or []:
+            lanes["dialogue"].append({"group_id": g["group_id"], "t0": round(g["cum_start_s"] + d["t0"], 3),
+                                      "t1": round(g["cum_start_s"] + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
+    man = _read_json_safe(base / "assets" / "audio" / "narration" / ep / "manifest.json") or {}
+    for s in man.get("segments") or []:
+        if not isinstance(s, dict):
+            continue
+        gid = (s.get("anchor") or {}).get("group") or ""
+        if gid in cum:
+            t0 = cum[gid]
+            lanes["narration"].append({"group_id": gid, "t0": round(t0, 3), "t1": round(t0 + float(s.get("duration_s") or 0), 3),
+                                       "label": s.get("num") or s.get("seg_id") or "", "file": _post_url(base, f"assets/audio/narration/{ep}/{s.get('file')}") if s.get("file") else None})
+    cue = _read_json_safe(base / "assets" / "audio" / "bgm" / ep / "cue_sheet.json") or {}
+    for c in cue.get("cues") or []:
+        if isinstance(c, dict) and c.get("status", "active") == "active":
+            lanes["bgm"].append({"t0": round(float(c.get("in_s") or 0), 3), "t1": round(float(c.get("out_s") or 0), 3),
+                                 "label": f"{c.get('cue_id') or ''} {c.get('mood') or ''}".strip(),
+                                 "file": _post_url(base, f"assets/audio/bgm/{ep}/{c.get('file')}") if c.get("file") else None})
+    for r in sfx.get("rows") or []:
+        lanes["sfx"].append({"id": r.get("id"), "group_id": r.get("group_id"), "t": r.get("t"), "t_abs": r.get("t_abs"),
+                             "label": r.get("event") or r.get("text") or "", "resolved": bool(r.get("source") == "skip" or (r.get("source") and r.get("file")))})
+    return lanes
+
+
+def _post_defects(base: Path, ep: str) -> list[dict]:
+    """qa/defects 里与本集分镜组相关且未关闭的工单,提取 group 引用。"""
+    out = []
+    ddir = base / "qa" / "defects"
+    if not ddir.is_dir():
+        return out
+    closed = {"fixed", "resolved", "closed", "verified", "waived", "waived_by_user"}
+    for f in sorted(ddir.glob("*.json")):
+        j = _read_json_safe(f)
+        if not isinstance(j, dict):
+            continue
+        status = str(j.get("status") or "").lower()
+        if status in closed:
+            continue
+        blob = json.dumps({k: j.get(k) for k in ("defect_id", "title", "artifact", "group", "group_id", "groups", "episode", "episode_id", "ep",
+                                                  "task_id", "shots", "shot", "shot_ids", "description", "detail")}, ensure_ascii=False).lower()
+        if ep not in blob:
+            continue
+        groups = sorted(set(re.findall(r"grp\d{2,4}", blob)))
+        out.append({"defect_id": j.get("defect_id") or f.stem, "severity": j.get("severity") or "", "status": status,
+                    "title": j.get("title") or j.get("violated") or str(j.get("description") or "")[:80], "groups": groups,
+                    "type": j.get("type") or j.get("category") or "", "blocking": bool(j.get("blocking"))})
+    return out
+
+
+def _post_gate(base: Path, ep: str, plan: dict) -> dict:
+    """H3P 后期签字状态:dag 里 g9p(-ep)节点 + 待答复的 H3P 签字卡 + 本页签字记录(台账指纹变了 = 签字过期)。"""
+    pp = _post_pp()
+    node = None
+    for n in _dag_load_nodes(base / "runs" / "dag.json"):
+        nid = str(n.get("id") or "")
+        if nid == POST_GATE_ID or (nid.startswith(POST_GATE_ID + "-") and ep in nid) \
+                or (str(n.get("checkpoint") or "").upper().startswith("H3P") and ep in nid):
+            node = n
+            break
+    cards = []
+    for c in CONFIRMS.values():
+        if c.get("answer") is not None or c.get("kind") != "sign" or c.get("project") != base.name:
+            continue
+        cp, q = str(c.get("checkpoint") or ""), str(c.get("question") or "")
+        if not (cp.upper().startswith("H3P") or "H3P" in q or POST_GATE_ID in str(c.get("gate_id") or "")):
+            continue
+        gid = str(c.get("gate_id") or "")
+        if ep in gid or ep in q or (not gid and ep not in q):
+            cards.append({k: c.get(k) for k in ("id", "question", "options", "default", "gate_id", "checkpoint")})
+    rec = _read_json_safe(base / pp.SIGNOFF_REL.format(ep=ep)) or {}
+    fp = pp.plan_fingerprint(plan)
+    signed = bool(node and node.get("state") in _DONE_STATES) or (rec.get("answer") == "签字")
+    stale = bool(signed and rec.get("plan_fingerprint") and rec.get("plan_fingerprint") != fp)
+    return {"gate_id": (node or {}).get("id") or f"{POST_GATE_ID}-{ep}", "state": (node or {}).get("state"), "in_dag": bool(node),
+            "pending": cards, "signed": signed, "stale": stale, "signed_at": rec.get("signed_at"), "signed_answer": rec.get("answer"),
+            "checkpoint": pp.CHECKPOINT, "fingerprint": fp}
+
+
+def _post_run_alive(run_id) -> bool | None:
+    """派单运行是否还在跑:True 跑着 / False 已结束 / None 不是 agent 运行(host 或未知)。"""
+    if not run_id or run_id == "host":
+        return None
+    run = RUNS.get(str(run_id))
+    if not run:
+        return False
+    return run.get("status") in ("queued", "running")
+
+
+def _post_reconcile_dispatched(base: Path, ep: str, plan: dict) -> bool:
+    """agent 类处方:运行已结束却没 register 产物 → 标失败(否则永远卡在「已派单」拦住签字)。返回是否改动。"""
+    pp = _post_pp()
+    changed = False
+    job = POST_JOBS.get(f"{base.name}/{ep}") or {}
+    for r in plan.get("recipes", []):
+        if r.get("status") != "dispatched":
+            continue
+        if r.get("run_id") == "host":
+            # 宿主 ffmpeg 作业:服务重启/作业异常后没有回写 → 标失败让用户重试
+            if job.get("status") == "running" and r.get("id") in (job.get("recipe_ids") or []):
+                continue
+            pp.set_status(r, "failed", error="宿主出片作业已中断(未回写台账),请重试出片")
+            changed = True
+            continue
+        alive = _post_run_alive(r.get("run_id"))
+        if alive is False:
+            run = RUNS.get(str(r.get("run_id"))) or {}
+            pp.set_status(r, "failed", error=(f"运行 {r.get('run_id')} 已结束({run.get('status') or '不存在'})但未登记产物"
+                                              + (":" + str(run.get("error"))[:200] if run.get("error") else "")))
+            changed = True
+    if changed:
+        pp.save_plan(base, ep, plan)
+    return changed
+
+
+def _preview_post(project: str, ep: str):
+    pp = _post_pp()
+    base = _proj_base(project)
+    plan_doc = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    plan_eps = {e.get("ep"): e for e in plan_doc.get("episodes", []) if isinstance(e, dict) and e.get("ep")}
+    eps = set(plan_eps)
+    for sub in ("story/episodes", "directing", "edit"):
+        d = base / sub
+        if d.is_dir():
+            eps |= {x.name for x in d.iterdir() if x.is_dir() and not x.name.startswith(".")}
+    episodes = []
+    for e in sorted(eps):
+        has_clips = (base / "assets" / "clips" / e).is_dir() and any((base / "assets" / "clips" / e).glob("grp*.mp4"))
+        episodes.append({"ep": e, "title": (plan_eps.get(e) or {}).get("title", ""), "has_clips": has_clips,
+                         "has_plan": (base / pp.LEDGER_REL.format(ep=e)).is_file()})
+    ep = ep or next((e["ep"] for e in episodes if e["has_clips"]), episodes[0]["ep"] if episodes else "")
+    data = {"project": base.name, "episodes": episodes, "ep": ep, "agent": pp.AGENT_ID,
+            "catalog": {"sections": pp.SECTIONS, "kinds": pp.KINDS, "status_label": pp.STATUS_LABEL, "layers": pp.LAYERS,
+                        "lut_presets": pp.lut_presets(base, DATA_DIR), "record_agents": POST_RECORD_AGENTS, "sfx_agent": POST_SFX_AGENT}}
+    if not ep:
+        return data
+    ep = re.sub(r"[^\w\-]", "", ep)
+    data["ep"] = ep
+    plan = pp.load_plan(base, ep)
+    _post_reconcile_dispatched(base, ep, plan)
+    groups, shot_start = _post_groups(base, ep, plan)
+    cat = _post_scene_catalog(base, ep)
+    pals = _post_scene_palettes(base, ep)
+    scenes, seen = [], {}
+    for g in groups:
+        sid = g["scene_id"] or "?"
+        if sid not in seen:
+            info = cat.get(sid) or {}
+            label = " · ".join(x for x in (info.get("name") or sid, info.get("tod") or g.get("time_of_day") or "", info.get("type") or "") if x)
+            seen[sid] = {"scene_id": sid, "scene_no": g["scene_no"], "label": label, "name": info.get("name") or sid,
+                         "tod": info.get("tod") or g.get("time_of_day") or "", "type": info.get("type") or "",
+                         "palette": pals.get(g["scene_no"]) or [], "groups": []}
+            scenes.append(seen[sid])
+        seen[sid]["groups"].append(g["group_id"])
+    sfx, sfx_saved = _post_sfx_rows(base, ep, groups, shot_start)
+    tl = _read_json_safe(base / "edit" / ep / "timeline.json") or {}
+    transitions = [{"from_group": t.get("from_group"), "to_group": t.get("to_group"), "type": t.get("type"),
+                    "duration_s": t.get("duration_s"), "cut_time_s": t.get("cut_time_s")}
+                   for t in (tl.get("transitions") or []) if isinstance(t, dict)]
+    if not transitions:
+        cum = {g["group_id"]: g["cum_start_s"] for g in groups}
+        transitions = [{"from_group": None, "to_group": g["group_id"], "type": (g.get("transition_in") or {}).get("type"),
+                        "duration_s": (g.get("transition_in") or {}).get("duration_s"), "cut_time_s": cum.get(g["group_id"])}
+                       for g in groups if g.get("transition_in")]
+    for r in plan.get("recipes", []):
+        gid = r["scope"].get("group_id")
+        r["preview_url"] = _post_url(base, f"assets/post/{ep}/{gid}/refs/preview_{r['id']}.mp4") if gid else None
+        r["kind_label"] = (pp.KIND_BY_ID.get(r["kind"]) or {}).get("label", r["kind"])
+        r["status_label"] = pp.STATUS_LABEL.get(r.get("status"), r.get("status"))
+        r["refs_url"] = {k: _post_url(base, v) for k, v in (r.get("refs") or {}).items() if isinstance(v, str)}
+    ed = base / "edit" / ep
+    check = _read_json_safe(ed / pp.CHECK_REL.split("/")[-1].format(ep=ep)) or {}
+    settings = load_project_settings(base.name)
+    data.update({
+        "plan": plan, "summary": pp.summary(plan), "groups": groups, "scenes": scenes, "transitions": transitions,
+        "lanes": _post_audio_lanes(base, ep, groups, sfx), "sfx": sfx, "sfx_saved": sfx_saved,
+        "defects": _post_defects(base, ep), "gate": _post_gate(base, ep, plan),
+        "check": {**check, "fresh": bool(check) and check.get("plan_fingerprint") == pp.plan_fingerprint(plan)},
+        "job": POST_JOBS.get(f"{base.name}/{ep}") or {},
+        "finals": {"final": _post_url(base, f"edit/{ep}/final.mp4"), "cut_post": _post_url(base, f"edit/{ep}/{pp.CUT_POST}"),
+                   "cut_post_v2": _post_url(base, f"edit/{ep}/{pp.CUT_POST_V2}"), "cut_v1": _post_url(base, f"edit/{ep}/cut_v1.mp4"),
+                   "final_audio": _post_url(base, f"assets/audio/final/{ep}.wav"),
+                   "final_pre_post": _post_url(base, f"edit/{ep}/final.pre_post.mp4")},
+        "episode_duration": round(float(tl.get("duration_s") or (groups[-1]["cum_start_s"] + groups[-1]["duration"] if groups else 0)), 3),
+        "settings": {"packaging": settings.get("packaging") or {}, "output": {k: (settings.get("output") or {}).get(k)
+                                                                              for k in ("subtitle_burn_in", "caption_enabled", "narration_enabled", "final_resolution")}},
+        "episode_palette": pals.get("_episode") or [],
+    })
+    return data
+
+
+async def api_preview_post(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_post, project, ep)
+
+
+def _post_load(project: str, ep: str):
+    pp = _post_pp()
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not ep:
+        raise ServiceError(400, "ep required")
+    return pp, base, ep, pp.load_plan(base, ep)
+
+
+def _post_recipe_public(base: Path, ep: str, r: dict) -> dict:
+    pp = _post_pp()
+    out = dict(r)
+    out["kind_label"] = (pp.KIND_BY_ID.get(r["kind"]) or {}).get("label", r["kind"])
+    out["status_label"] = pp.STATUS_LABEL.get(r.get("status"), r.get("status"))
+    gid = r["scope"].get("group_id")
+    out["preview_url"] = _post_url(base, f"assets/post/{ep}/{gid}/refs/preview_{r['id']}.mp4") if gid else None
+    return out
+
+
+async def api_post_recipe_create(project: str, ep: str, body: dict):
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        try:
+            r = pp.make_recipe(str(body.get("kind") or ""), body.get("scope") or {}, body.get("params") or {},
+                               body.get("refs") or {}, str(body.get("note") or ""))
+        except ValueError as e:
+            raise ServiceError(400, str(e)) from None
+        r["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if r["exec"] == "ffmpeg" else ("按渠道计费" if r["exec"] == "agent" else "记台账 · ¥0")
+        plan["recipes"].append(r)
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "summary": pp.summary(plan)}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        r = pp.find_recipe(plan, rid)
+        if not r:
+            raise ServiceError(404, "recipe not found")
+        if r.get("status") in ("dispatched",):
+            raise ServiceError(409, "派单中的处方不能改;等回来或先弃用")
+        kind = pp.KIND_BY_ID[r["kind"]]
+        try:
+            if "scope" in body:
+                sc = pp.normalize_scope(body["scope"])
+                if sc["level"] not in kind.get("scopes", []):
+                    raise ValueError(f"{kind['label']} 不支持作用域 {sc['level']}")
+                r["scope"] = sc
+            if "params" in body:
+                r["params"] = pp.coerce_params(kind, body["params"])
+            if "refs" in body:
+                r["refs"] = {k: v for k, v in (body["refs"] or {}).items() if v is not None}
+            if "note" in body:
+                if not str(body["note"]).strip():
+                    raise ValueError("处方说明(note)必填")
+                r["note"] = str(body["note"]).strip()[:2000]
+        except ValueError as e:
+            raise ServiceError(400, str(e)) from None
+        # 改了参数/作用域/参考 → 已出片/已采纳/失败的处方退回草稿(产物仍在版本链里,需重出片)
+        if r.get("status") in ("applied", "failed") or (r.get("status") == "adopted" and r.get("exec") == "record"):
+            pp.set_status(r, "draft", error="")
+        r["updated_at"] = pp._now()
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r)}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_recipe_delete(project: str, ep: str, rid: str):
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        r = pp.find_recipe(plan, rid)
+        if not r:
+            raise ServiceError(404, "recipe not found")
+        if r.get("status") == "adopted":
+            raise ServiceError(409, "已采纳的处方先「弃用」再删除")
+        if r.get("status") == "dispatched":
+            raise ServiceError(409, "派单中的处方不能删除")
+        plan["recipes"] = [x for x in plan["recipes"] if x.get("id") != rid]
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "summary": pp.summary(plan)}
+    return await asyncio.to_thread(_do)
+
+
+def _post_job_start(base: Path, ep: str, kind: str, cli_args: list[str], recipe_ids: list[str], on_done=None) -> dict:
+    """后台线程跑宿主 CLI code/post_apply.py;同集同时只许一个作业(409)。"""
+    key = f"{base.name}/{ep}"
+    job = POST_JOBS.get(key) or {}
+    if job.get("status") == "running":
+        raise ServiceError(409, f"本集已有后期作业在跑({job.get('kind')}),请等它结束")
+    job = {"status": "running", "kind": kind, "started_at": time.time(), "finished_at": None, "error": "",
+           "log": [], "recipe_ids": list(recipe_ids), "args": cli_args}
+    POST_JOBS[key] = job
+
+    def _worker():
+        cmd = [sys.executable, str(ROOT / "code" / "post_apply.py")] + cli_args + ["--project", base.name, "--ep", ep]
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(ROOT))
+            for line in p.stdout:
+                line = line.rstrip()
+                if line:
+                    job["log"].append(line[-300:])
+                    if len(job["log"]) > 60:
+                        del job["log"][:-60]
+                    if line.startswith("[") and kind in ("finalize", "apply"):
+                        HUB.publish({"type": "post_job", "project": base.name, "ep": ep, "kind": kind, "status": "running", "line": line[-200:]})
+            rc = p.wait(timeout=7200)
+            if rc != 0:
+                raise RuntimeError("\n".join(job["log"][-6:]) or f"exit {rc}")
+            job.update(status="done", error="")
+        except Exception as e:  # noqa: BLE001
+            job.update(status="failed", error=str(e)[-800:])
+        job["finished_at"] = time.time()
+        if on_done:
+            try:
+                on_done(job)
+            except Exception as e:  # noqa: BLE001
+                print(f"[post] on_done 失败:{e}", flush=True)
+        HUB.publish({"type": "post_job", "project": base.name, "ep": ep, "kind": kind, "status": job["status"], "error": job["error"]})
+
+    threading.Thread(target=_worker, daemon=True).start()
+    HUB.publish({"type": "post_job", "project": base.name, "ep": ep, "kind": kind, "status": "running"})
+    return job
+
+
+def _post_scope_text(r: dict) -> str:
+    sc = r.get("scope") or {}
+    lv = sc.get("level")
+    if lv == "episode":
+        return "整集"
+    if lv == "scene":
+        return f"场次 {sc.get('scene_id')}"
+    if lv == "range":
+        return f"分镜组 {sc.get('group_id')} 第 {sc.get('t0')}–{sc.get('t1')} 秒"
+    return f"分镜组 {sc.get('group_id')}"
+
+
+def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[dict]) -> tuple[str, str]:
+    """agent 类处方的派单指令;record 类给对应工位的落地指令。返回 (agent_id, message)。"""
+    pp = _post_pp()
+    kind = pp.KIND_BY_ID[r["kind"]]
+    params = ", ".join(f"{k}={v}" for k, v in (r.get("params") or {}).items())
+    refs = ", ".join(f"{k}={v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}" for k, v in (r.get("refs") or {}).items())
+    head = [f"后期处方 {r['id']}「{kind['label']}」(项目 {base.name} · {ep} · {_post_scope_text(r)})。",
+            f"参数:{params or '无'};参考:{refs or '无'}。", f"用户说明:{r.get('note', '')}"]
+    if r.get("exec") == "agent":
+        targets = [g for g in groups if pp.scope_matches_group(r["scope"], {"group_id": g["group_id"], "scene_id": g["scene_id"]})]
+        lines = head + ["逐组处理(源 = 该组当前版本文件,产物帧率/时长/画幅与源一致,严禁改时长;母本 assets/clips 永不覆盖):"]
+        for g in targets[:80]:
+            f = pp.current_file(base, ep, g["group_id"], plan)
+            src = str(f.relative_to(base)) if f else f"assets/clips/{ep}/{g['group_id']}.mp4"
+            out = f"assets/post/{ep}/{g['group_id']}/agent_{r['id']}.mp4"
+            lines.append(f"- {g['group_id']}:源 {src}(v{pp.current_version(plan, g['group_id'])}) → 产物 {out};完成后登记:"
+                         f"python3 code/post_apply.py register --project {base.name} --ep {ep} --recipe {r['id']} --file {out} --group {g['group_id']}")
+        lines.append("超分走 python3 modules/genmedia.py upscale(见 08-video-gen/upscale 技能);局部重绘/重打光/特效走 V2V(genmedia.py video --ref-video)或已配置的 ComfyUI/RunningHub 工作流。"
+                     "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
+        return pp.AGENT_ID, "\n".join(lines)
+    agent = POST_RECORD_AGENTS.get(r["kind"], pp.AGENT_ID)
+    lines = head + ["这是后期预览页记入台账(edit/%s/post_plan.json)的「记录类」处方,请按本工位规约把它落地到对应产物" % ep]
+    if r["kind"] in ("level", "mix_target", "ambience"):
+        lines.append(f"(重跑混音 → assets/audio/final/{ep}.wav,LUFS/TP 达标;只改台账要求的段落/组,其余保持)。")
+    elif r["kind"] == "bgm_segment":
+        lines.append(f"(按段落重出/增删 BGM cue → assets/audio/bgm/{ep}/cue_sheet.json,然后通知混音重跑)。")
+    elif r["kind"] == "caption":
+        lines.append(f"(写入 edit/{ep}/captions.json 契约 v3,组内时间以处方作用域为准;须 output.caption_enabled 开启)。")
+    elif r["kind"] == "subtitle_style":
+        lines.append("(更新字幕烧录样式参数;字高/边距/行数按处方,不得超出 WORKFLOW subtitle 行的上限)。")
+    elif r["kind"] == "transition":
+        lines.append(f"(shot_list.generation_groups[].transition_in 已由台账回写;只需 python3 code/render_transitions.py plan --project {base.name} --ep {ep} 核对)。")
+    lines.append("完成后回执写明改了哪些文件;不要动 post_plan.json。")
+    return agent, "\n".join(lines)
+
+
+async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, body: dict):
+    pp, base, ep2, plan = _post_load(project, ep)
+    r = pp.find_recipe(plan, rid)
+    if not r:
+        raise ServiceError(404, "recipe not found")
+    body = body or {}
+    if action == "adopt":
+        try:
+            pp.adopt_recipe(base, ep2, plan, r)
+        except ValueError as e:
+            raise ServiceError(400, str(e)) from None
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "current": plan.get("current")}
+    if action == "discard":
+        try:
+            pp.discard_recipe(base, ep2, plan, r)
+        except ValueError as e:
+            raise ServiceError(400, str(e)) from None
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "current": plan.get("current")}
+    if action == "reset":
+        if r.get("status") == "dispatched":
+            alive = _post_run_alive(r.get("run_id"))
+            job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
+            if alive or (r.get("run_id") == "host" and job.get("status") == "running" and rid in (job.get("recipe_ids") or [])):
+                raise ServiceError(409, "处方还在派单运行中,等结束再重置")
+        pp.set_status(r, "draft", error="")
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r)}
+    if action == "copy":
+        gids = [str(g) for g in (body.get("groups") or []) if str(g)]
+        if not gids:
+            raise ServiceError(400, "copy 需要 groups")
+        groups, _ = _post_groups(base, ep2, plan)
+        scene_of = {g["group_id"]: g["scene_id"] for g in groups}
+        made = []
+        for gid in gids:
+            if gid not in scene_of:
+                continue
+            sc = dict(r["scope"])
+            sc["group_id"] = gid
+            sc["scene_id"] = scene_of[gid]
+            if sc["level"] in ("episode", "scene"):
+                sc["level"] = "group"
+                sc.pop("t0", None)
+                sc.pop("t1", None)
+            try:
+                nr = pp.make_recipe(r["kind"], sc, r.get("params"), r.get("refs"), r.get("note"))
+            except ValueError as e:
+                raise ServiceError(400, str(e)) from None
+            nr["copied_from"] = rid
+            plan["recipes"].append(nr)
+            made.append(nr["id"])
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "created": made, "summary": pp.summary(plan)}
+    if action in ("apply", "preview"):
+        if r.get("exec") != "ffmpeg":
+            raise ServiceError(400, "只有 ffmpeg 类处方能直接出片/预览;agent 类请「派单」")
+        if action == "apply" and r.get("status") == "dispatched":
+            raise ServiceError(409, "已在派单中")
+        extra = [str(x) for x in (body.get("with") or []) if pp.find_recipe(plan, str(x)) and (pp.find_recipe(plan, str(x)) or {}).get("exec") == "ffmpeg"]
+        args = ["apply", "--recipe", rid] + sum((["--recipe", x] for x in extra if x != rid), [])
+        if body.get("group"):
+            args += ["--group", str(body["group"])]
+        if action == "preview":
+            args.append("--preview")
+        else:
+            pp.set_status(r, "dispatched", run_id="host", dispatched_at=pp._now(), error="")
+            for x in extra:
+                if x != rid:
+                    pp.set_status(pp.find_recipe(plan, x), "dispatched", run_id="host", dispatched_at=pp._now(), error="")
+            pp.save_plan(base, ep2, plan)
+
+        def _done(job):
+            if action != "apply":
+                return
+            # CLI 自己写台账(applied/failed);作业异常退出而台账仍是 dispatched → 标失败
+            p2 = pp.load_plan(base, ep2)
+            for x in [rid] + extra:
+                rr = pp.find_recipe(p2, x)
+                if rr and rr.get("status") == "dispatched" and rr.get("run_id") == "host":
+                    pp.set_status(rr, "failed" if job.get("status") != "done" else "draft", error=job.get("error", "")[-500:])
+            pp.save_plan(base, ep2, p2)
+
+        job = _post_job_start(base, ep2, action, args, [rid] + extra, _done)
+        return {"ok": True, "job": job, "recipe": _post_recipe_public(base, ep2, r)}
+    if action == "dispatch":
+        if r.get("exec") == "ffmpeg":
+            raise ServiceError(400, "ffmpeg 类处方用「出片」,不派 agent")
+        if r.get("status") == "dispatched":
+            raise ServiceError(409, "已在派单中")
+        groups, _ = _post_groups(base, ep2, plan)
+        agent, msg = _post_agent_message(base, ep2, plan, r, groups)
+        if not agent_dir(agent):
+            raise ServiceError(404, f"Unknown agent: {agent}")
+        res = await api_chat({"agent": agent, "message": msg, "project": base.name, "source": "user"})
+        plan = pp.load_plan(base, ep2)
+        r = pp.find_recipe(plan, rid) or r
+        if r.get("exec") == "agent":
+            pp.set_status(r, "dispatched", run_id=res.get("run_id"), dispatched_at=pp._now(), error="", dispatched_agent=agent)
+        else:
+            r["run_id"] = res.get("run_id")
+            r["dispatched_at"] = pp._now()
+            r["dispatched_agent"] = agent
+            r["updated_at"] = pp._now()
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "run_id": res.get("run_id"), "agent": agent, "recipe": _post_recipe_public(base, ep2, r)}
+    raise ServiceError(400, f"unknown action {action}")
+
+
+async def api_post_rollback(project: str, ep: str, body: dict):
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = str(body.get("group_id") or "")
+        try:
+            v = int(body.get("to") or 0)
+            pp.adopt_version(plan, gid, v)
+        except (ValueError, TypeError) as e:
+            raise ServiceError(400, str(e)) from None
+        pp.save_plan(base, ep2, plan)
+        return {"ok": True, "current": plan.get("current")}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_frame(project: str, ep: str, body: dict):
+    """从某组某版本 t 秒抽一帧存为参考帧 assets/post/epNN/<grp>/refs/frame_<t>.png。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = str(body.get("group_id") or "")
+        if not re.fullmatch(r"grp\d{1,4}", gid):
+            raise ServiceError(400, "group_id 形如 grp012")
+        v = int(body.get("v") or pp.current_version(plan, gid))
+        t = max(0.0, float(body.get("t") or 0))
+        src = pp.version_file(base, ep2, gid, v, plan) or pp.current_file(base, ep2, gid, plan)
+        if not src:
+            raise ServiceError(404, f"{gid} 无视频文件")
+        rel = f"assets/post/{ep2}/{gid}/refs/frame_v{v}_{t:.2f}.png"
+        try:
+            post_fx.extract_frame(src, t, base / rel)
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(500, f"抽帧失败:{str(e)[-300:]}") from None
+        return {"ok": True, "path": rel, "url": _post_url(base, rel), "group_id": gid, "v": v, "t": t}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_asset_upload(project: str, ep: str, data: bytes, filename: str, kind: str = "asset"):
+    """上传特效素材/水印/LUT 到 assets/post/epNN/assets/ 或 assets/post/luts/(kind=lut)。"""
+    def _do():
+        pp, base, ep2, _plan = _post_load(project, ep)
+        if not data:
+            raise ServiceError(400, "empty body")
+        if len(data) > 200 * 1024 * 1024:
+            raise ServiceError(400, "file too large (>200MB)")
+        stem = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename or "asset").stem)[:80] or "asset"
+        ext = Path(filename or "").suffix.lower()[:10]
+        if kind == "lut":
+            if ext != ".cube":
+                raise ServiceError(400, "LUT 只收 .cube")
+            d = base / "assets" / "post" / "luts"
+        else:
+            if ext not in (".png", ".mp4", ".mov", ".webm", ".jpg", ".jpeg", ".webp"):
+                raise ServiceError(400, "素材只收 png/jpg/webp 图片或 mp4/mov/webm 视频")
+            d = base / "assets" / "post" / ep2 / "assets"
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / f"{stem}{ext}"
+        i = 1
+        while p.exists():
+            p = d / f"{stem}_{i}{ext}"
+            i += 1
+        p.write_bytes(data)
+        rel = str(p.relative_to(base))
+        return {"ok": True, "path": rel, "url": _post_url(base, rel), "kind": kind}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_assets(project: str, ep: str):
+    def _do():
+        pp, base, ep2, _plan = _post_load(project, ep)
+        out = []
+        for d in (base / "assets" / "post" / ep2 / "assets", base / "refs"):
+            if d.is_dir():
+                for f in sorted(d.rglob("*")):
+                    if f.is_file() and f.suffix.lower() in (".png", ".mp4", ".mov", ".webm", ".jpg", ".jpeg", ".webp"):
+                        rel = str(f.relative_to(base))
+                        out.append({"path": rel, "name": f.name, "url": _post_url(base, rel), "video": f.suffix.lower() in (".mp4", ".mov", ".webm")})
+        return {"assets": out[:400], "luts": pp.lut_presets(base, DATA_DIR)}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_sfx_get(project: str, ep: str):
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        groups, shot_start = _post_groups(base, ep2, plan)
+        sfx, saved = _post_sfx_rows(base, ep2, groups, shot_start)
+        lib = _read_json_safe(DATA_DIR / "sfx" / "manifest.json") or {}
+        return {"sfx": sfx, "saved": saved, "library": [{"id": s.get("id"), "file": s.get("file"), "tags": s.get("tags") or [], "duration_s": s.get("duration_s")}
+                                                        for s in (lib.get("sfx") or []) if isinstance(s, dict)][:500]}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_sfx_set(project: str, ep: str, body: dict):
+    def _do():
+        pp, base, ep2, _plan = _post_load(project, ep)
+        rows = []
+        for r in (body.get("rows") or []):
+            if not isinstance(r, dict):
+                continue
+            src = str(r.get("source") or "")
+            if src not in ("", "library", "generate", "skip"):
+                src = ""
+            rows.append({"id": str(r.get("id") or f"sfx-{len(rows) + 1:03d}"), "shot_id": str(r.get("shot_id") or ""),
+                         "group_id": str(r.get("group_id") or ""), "t": round(float(r.get("t") or 0), 3),
+                         "t_abs": round(float(r.get("t_abs") or 0), 3), "text": str(r.get("text") or "")[:400],
+                         "event": str(r.get("event") or "")[:120], "level": str(r.get("level") or ""), "source": src,
+                         "file": str(r.get("file") or "")[:300], "gain_db": float(r.get("gain_db") or -12)})
+        pp.save_sfx(base, ep2, {"rows": rows})
+        return {"ok": True, "rows": rows}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_sfx_dispatch(project: str, ep: str, body: dict):
+    """把点位表里「生成」且无文件的条目派给音效工位;库条目缺文件的一并列出。"""
+    pp, base, ep2, _plan = _post_load(project, ep)
+    sfx = pp.load_sfx(base, ep2)
+    todo = [r for r in sfx.get("rows") or [] if r.get("source") in ("generate", "library") and not r.get("file")]
+    if not todo:
+        raise ServiceError(400, "没有待生成/待选库的点位")
+    lines = [f"后期预览页音效点位表(assets/post/{ep2}/sfx_cues.json,项目 {base.name} · {ep2}):{len(todo)} 条待落地。",
+             "逐条产出音频文件(wav/mp3,时长与事件相符),写到 assets/audio/sfx/%s/patches/<id>_<event>.wav,并把该行的 file 字段回填成项目相对路径(只改 file,不改其它字段):" % ep2]
+    for r in todo[:120]:
+        lines.append(f"- {r['id']} 组 {r['group_id']} 镜 {r.get('shot_id') or '-'} 组内 t={r.get('t')}s 整集 t={r.get('t_abs')}s 来源={r['source']} 电平 {r.get('gain_db')}dB:{r.get('text') or r.get('event')}")
+    lines.append("来源=library 的优先从 data/sfx/manifest.json 素材库里挑最贴合的条目复制到 patches/;来源=generate 的用已配置的音效生成渠道。完成后回执列出每条 id → 文件。")
+    if not agent_dir(POST_SFX_AGENT):
+        raise ServiceError(404, f"Unknown agent: {POST_SFX_AGENT}")
+    res = await api_chat({"agent": POST_SFX_AGENT, "message": "\n".join(lines), "project": base.name, "source": "user"})
+    return {"ok": True, "run_id": res.get("run_id"), "count": len(todo), "agent": POST_SFX_AGENT}
+
+
+def _post_precheck_sync(project: str, ep: str, run_check: bool = True) -> dict:
+    pp, base, ep2, plan = _post_load(project, ep)
+    s = pp.summary(plan)
+    check = {}
+    if run_check:
+        try:
+            cmd = [sys.executable, str(ROOT / "code" / "post_apply.py"), "check", "--project", base.name, "--ep", ep2]
+            subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        except Exception as e:  # noqa: BLE001
+            check = {"error": str(e)[:300]}
+    check = {**(_read_json_safe(base / pp.CHECK_REL.format(ep=ep2)) or {}), **check}
+    items = ((check.get("check") or {}).get("items") or [])
+    fails = [i for i in items if i.get("status") == "FAIL"]
+    warns = [i for i in items if i.get("status") == "WARN"]
+    ed = base / "edit" / ep2
+    audio = base / "assets" / "audio" / "final" / f"{ep2}.wav"
+    audio_m = audio.stat().st_mtime if audio.is_file() else 0
+    sound_pending = [r["id"] for r in plan.get("recipes", []) if r.get("layer") == "sound" and r.get("status") == "adopted"
+                     and (not audio_m or (r.get("adopted_at") or "") > time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(audio_m)))]
+    job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
+    blockers = []
+    if s.get("dispatched"):
+        blockers.append(f"派单中 {s['dispatched']} 条处方")
+    if fails:
+        blockers.append("机检 FAIL:" + ", ".join(i["name"] for i in fails))
+    if job.get("status") == "running":
+        blockers.append(f"后期作业进行中({job.get('kind')})")
+    if not (ed / "timeline.json").is_file():
+        blockers.append("缺 edit/timeline.json(粗剪未交付)")
+    return {"summary": s, "check": check, "fails": fails, "warns": warns, "blockers": blockers, "blocked": bool(blockers),
+            "sound_pending": sound_pending, "has_final_audio": audio.is_file(),
+            "has_cut_v1": (ed / "cut_v1.mp4").is_file(), "has_final": (ed / "final.mp4").is_file(),
+            "layout": _read_json_safe(ed / "final_layout.json") or {}, "packaging": load_project_settings(base.name).get("packaging") or {},
+            "gate": _post_gate(base, ep2, plan), "fingerprint": pp.plan_fingerprint(plan)}
+
+
+async def api_post_precheck(project: str, ep: str, body: dict | None = None):
+    return await asyncio.to_thread(_post_precheck_sync, project, ep, not (body or {}).get("quick"))
+
+
+async def api_post_assemble(project: str, ep: str, body: dict):
+    pp, base, ep2, plan = _post_load(project, ep)
+    pre = await asyncio.to_thread(_post_precheck_sync, project, ep2, False)
+    hard = [b for b in pre["blockers"] if not b.startswith("机检")]
+    if hard and not (body or {}).get("force"):
+        raise ServiceError(409, "不能出成片:" + ";".join(hard))
+    job = _post_job_start(base, ep2, "finalize", ["finalize"], [])
+    return {"ok": True, "job": job}
+
+
+async def api_post_job(project: str, ep: str):
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    return {"job": POST_JOBS.get(f"{base.name}/{ep}") or {}}
+
+
+def _post_sign_guard(proj: str, gate_id: str | None) -> None:
+    """H3P 签字前置:派单中的处方 / 机检 FAIL(台账指纹匹配的最近一次)→ 409 拒签。"""
+    pp = _post_pp()
+    base = PROJECTS_DIR / proj
+    eps = []
+    m = re.search(r"(ep\d+)", str(gate_id or ""))
+    if m:
+        eps = [m.group(1)]
+    else:
+        ed = base / "edit"
+        eps = [x.name for x in ed.iterdir() if x.is_dir() and (x / "post_plan.json").is_file()] if ed.is_dir() else []
+    for ep in eps:
+        plan = pp.load_plan(base, ep)
+        _post_reconcile_dispatched(base, ep, plan)
+        s = pp.summary(plan)
+        if s.get("dispatched"):
+            raise ServiceError(409, f"H3P 未能签字:{ep} 还有 {s['dispatched']} 条处方在派单中,等回来采纳或弃用后再签")
+        chk = _read_json_safe(base / pp.CHECK_REL.format(ep=ep)) or {}
+        if chk.get("plan_fingerprint") == pp.plan_fingerprint(plan) and (chk.get("check") or {}).get("result") == "FAIL":
+            raise ServiceError(409, f"H3P 未能签字:{ep} 后期机检 post_ok FAIL,请到「后期预览」页看拼装预检")
+
+
+async def api_post_signoff(project: str, ep: str, body: dict):
+    """后期页「✅ 签字确认 / ⏸ 暂缓」:答复 H3P 签字卡(与控制台同一条),落 edit/<ep>/post_signoff.json 记台账指纹,
+    签字后按保留规则清理版本文件(母本 + 最近两个已采纳版本)。"""
+    pp, base, ep2, plan = _post_load(project, ep)
+    cid = str(body.get("confirm_id") or "")
+    answer = str(body.get("answer") or "签字")
+    if not cid or cid not in CONFIRMS:
+        raise ServiceError(404, "sign-off card not found (it may have been answered from the console)")
+    res = await api_confirm_answer(cid, {"answer": answer})
+    cleaned = []
+    if answer == "签字":
+        cleaned = pp.cleanup_versions(plan, base, ep2)
+        pp.save_plan(base, ep2, plan)
+    atomic_write_json(base / pp.SIGNOFF_REL.format(ep=ep2), {
+        "schema": "post_signoff/1.0", "ep": ep2, "gate": POST_GATE_ID, "confirm_id": cid, "answer": answer,
+        "signed_at": time.strftime("%Y-%m-%d %H:%M:%S"), "signed_from": "preview_post",
+        "plan_fingerprint": pp.plan_fingerprint(plan), "cleaned_versions": cleaned})
+    return {"ok": True, "confirm": res, "gate": _post_gate(base, ep2, plan), "cleaned": cleaned}
+
+
+
 def _preview_videos(project: str, ep: str):
     """视频预览聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
     base = _proj_base(project)
@@ -10511,6 +11371,12 @@ async def api_confirm_answer(cid: str, body: dict):
             proj = _approval_project(c)
             if proj:
                 _whitebox_issue_sign_guard(proj, c.get("gate_id"))
+        if (c.get("kind") == "sign" and c.get("gate_id") and answer == "签字"
+                and str(c.get("checkpoint") or "").upper().startswith("H3P")):
+            # H3P 后期确认:派单中的处方 / 后期机检 FAIL → 拒签(2026-09-11)
+            proj = _approval_project(c)
+            if proj:
+                _post_sign_guard(proj, c.get("gate_id"))
         c["answer"] = answer
         c["answered"] = time.time()
         if (c.get("kind") == "sign" and c.get("gate_id")

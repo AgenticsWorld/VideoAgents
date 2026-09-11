@@ -20,7 +20,7 @@
 | `07-directing/` | 导演 | 9 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging |
 | `08-video-gen/` | 视频生成 | 8 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates |
 | `09-audio/` | 音频 | 7 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing, audio-transcription |
-| `10-editing/` | 剪辑 | 6 | edit, transition, subtitle, caption, title, thumbnail |
+| `10-editing/` | 剪辑 | 7 | edit, transition, subtitle, caption, title, thumbnail, post-finishing |
 | `11-qa/` | 审核 | 8 | logic-qa, character-consistency-qa, timeline-qa, world-consistency-qa, visual-qa, audio-qa, content-safety, copyright |
 | `12-publishing/` | 发布 | 4 | platform-adapter, seo, metadata, publisher |
 

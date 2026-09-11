@@ -240,6 +240,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
         "storyboard": lambda: core.api_preview_storyboard(project, ep),
         "board": lambda: core.api_preview_board(project, ep),
         "videos": lambda: core.api_preview_videos(project, ep),
+        "post": lambda: core.api_preview_post(project, ep),
         "workflow": lambda: core.api_preview_workflow(project),
     }
     if kind not in handlers:
@@ -263,6 +264,83 @@ async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str
 async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """故事板/视频预览页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
     return await core.api_board_animatic_start(project, ep, body or {})
+
+# ---- 后期预览(/preview/post):处方台账 / 出片作业 / 音效点位 / 拼装预检 / H3P 签字(2026-09-11) ----
+@api.post("/projects/{project}/post/{ep}/recipes", tags=["artifacts"])
+async def post_recipe_create(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_recipe_create(project, ep, body), project)
+
+
+@api.put("/projects/{project}/post/{ep}/recipes/{rid}", tags=["artifacts"])
+async def post_recipe_update(project: str, ep: str, rid: str, body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_recipe_update(project, ep, rid, body), project)
+
+
+@api.delete("/projects/{project}/post/{ep}/recipes/{rid}", tags=["artifacts"])
+async def post_recipe_delete(project: str, ep: str, rid: str) -> dict[str, Any]:
+    return await core.api_post_recipe_delete(project, ep, rid)
+
+
+@api.post("/projects/{project}/post/{ep}/recipes/{rid}/{action}", tags=["artifacts"])
+async def post_recipe_action(project: str, ep: str, rid: str, action: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_recipe_action(project, ep, rid, action, body or {}), project)
+
+
+@api.post("/projects/{project}/post/{ep}/rollback", tags=["artifacts"])
+async def post_rollback(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_post_rollback(project, ep, body)
+
+
+@api.post("/projects/{project}/post/{ep}/frame", tags=["artifacts"])
+async def post_frame(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_frame(project, ep, body), project)
+
+
+@api.post("/projects/{project}/post/{ep}/assets", tags=["artifacts"])
+async def post_asset_upload(project: str, ep: str, request: Request, filename: str = "", kind: str = "asset") -> dict[str, Any]:
+    data = await request.body()
+    return _artifact_urls(await core.api_post_asset_upload(project, ep, data, filename, kind), project)
+
+
+@api.get("/projects/{project}/post/{ep}/assets", tags=["artifacts"])
+async def post_assets(project: str, ep: str) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_assets(project, ep), project)
+
+
+@api.get("/projects/{project}/post/{ep}/sfx", tags=["artifacts"])
+async def post_sfx_get(project: str, ep: str) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_sfx_get(project, ep), project)
+
+
+@api.put("/projects/{project}/post/{ep}/sfx", tags=["artifacts"])
+async def post_sfx_set(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_post_sfx_set(project, ep, body)
+
+
+@api.post("/projects/{project}/post/{ep}/sfx/dispatch", tags=["artifacts"])
+async def post_sfx_dispatch(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_post_sfx_dispatch(project, ep, body or {})
+
+
+@api.post("/projects/{project}/post/{ep}/precheck", tags=["artifacts"])
+async def post_precheck(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _artifact_urls(await core.api_post_precheck(project, ep, body or {}), project)
+
+
+@api.post("/projects/{project}/post/{ep}/assemble", tags=["artifacts"])
+async def post_assemble(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_post_assemble(project, ep, body or {})
+
+
+@api.get("/projects/{project}/post/{ep}/job", tags=["artifacts"])
+async def post_job(project: str, ep: str) -> dict[str, Any]:
+    return await core.api_post_job(project, ep)
+
+
+@api.post("/projects/{project}/post/{ep}/signoff", tags=["artifacts"])
+async def post_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_post_signoff(project, ep, body)
+
 
 
 @api.post("/projects/{project}/board/{ep}/sketch", tags=["artifacts"])
