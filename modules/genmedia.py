@@ -61,7 +61,7 @@ Python:
       generate_music, generate_tts, get_config
 
 渠道:
-  图像: agentics(登录账号 + 后端 profile) / openrouter(chat completions, modalities=image) / ideogram
+  图像: agentics(登录账号 + 后端 profile) / openrouter(chat completions, modalities=image)
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
@@ -172,7 +172,7 @@ CONFIG_PATH = Path(os.environ.get(
 )).expanduser().resolve()
 
 # 配置里 Key 为空时的环境变量兜底
-ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "ideogram": "IDEOGRAM_API_KEY",
+ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY",
             "volcengine": "ARK_API_KEY", "byteplus": "BYTEPLUS_API_KEY",
             "elevenlabs": "ELEVENLABS_API_KEY", "minimax": "MINIMAX_API_KEY",
             "fal": "FAL_KEY"}
@@ -1113,36 +1113,6 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
         raise RuntimeError(f"OpenRouter 未返回图像(model={cfg['model']}):"
                            f"{(msg.get('content') or json.dumps(resp)[:400])!s:.400}")
     return _decode_data_url(images[0]["image_url"]["url"])
-
-
-# ---------------- 图像:Ideogram ----------------
-
-def _image_ideogram(cfg, prompt, negative, refs, width, height, seed):
-    model = cfg["model"]
-    aspect = _closest_aspect(width, height)
-    headers = {"Api-Key": cfg["api_key"]}
-    if model.upper().startswith("V_3") or model.lower().startswith("v3"):
-        body = {"prompt": prompt, "aspect_ratio": aspect.replace(":", "x"),
-                "rendering_speed": "DEFAULT"}
-        if negative:
-            body["negative_prompt"] = negative
-        if seed is not None:
-            body["seed"] = seed
-        resp = _post_json("https://api.ideogram.ai/v1/ideogram-v3/generate", body,
-                          headers, timeout=IMAGE_TIMEOUT)
-    else:
-        req = {"prompt": prompt, "model": model,
-               "aspect_ratio": "ASPECT_" + aspect.replace(":", "_")}
-        if negative:
-            req["negative_prompt"] = negative
-        if seed is not None:
-            req["seed"] = seed
-        resp = _post_json("https://api.ideogram.ai/generate", {"image_request": req},
-                          headers, timeout=IMAGE_TIMEOUT)
-    data = resp.get("data") or []
-    if not data or not data[0].get("url"):
-        raise RuntimeError(f"Ideogram 未返回图像:{json.dumps(resp)[:400]}")
-    return _request(data[0]["url"], timeout=IMAGE_TIMEOUT)
 
 
 def _closest_aspect(width: int, height: int) -> str:
@@ -4797,8 +4767,6 @@ def generate_image(prompt: str, output: str, negative: str = "",
         return _save(data, output)
     if cfg["provider"] == "openrouter":
         return _save(_image_openrouter(cfg, prompt, negative, refs, width, height, seed), output)
-    if cfg["provider"] == "ideogram":
-        return _save(_image_ideogram(cfg, prompt, negative, refs, width, height, seed), output)
     if cfg["provider"] in ("volcengine", "byteplus"):
         data, usage = _image_ark(cfg, prompt, negative, refs, width, height, seed)
         saved = _save(data, output)

@@ -32,7 +32,7 @@
 
 ## 图像模型能力
 
-全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、Ideogram、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户到控制台「🎨 生成模型」换图像模型，不得自行换模型或绕过。
+全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户到控制台「🎨 生成模型」换图像模型，不得自行换模型或绕过。
 
 ## 命令
 

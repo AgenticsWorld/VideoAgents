@@ -45,5 +45,4 @@ fal:[   // 首项 = 新配置默认(与 core.py DEFAULT_GENCONFIG 一致)
 minimax:[
   ['image-01','Image-01(文/图生图,单角色参考图)'],
 ],
-ideogram:[['V_3','V 3(最新)'],['AUTO','Auto(官方自动选版)'],['V_2A','V 2a'],['V_2A_TURBO','V 2a Turbo'],['V_2','V 2'],['V_2_TURBO','V 2 Turbo'],['V_1','V 1'],['V_1_TURBO','V 1 Turbo']],
 };

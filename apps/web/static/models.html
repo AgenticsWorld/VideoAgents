@@ -221,8 +221,6 @@ const OR_RECOMMENDED={
   ],
 };
 const KIND_LABEL={image:'图像',video:'视频',music:'音乐',tts:'TTS旁白',text:'文本'};
-/* 2026-07-11 用非法枚举探测官方 /generate 校验:合法值就是 V_1..V_3 + AUTO,无更新版本 */
-const IDEOGRAM_MODELS=IMAGE_MODEL_LISTS.ideogram;   // 见 image-models.js
 /* 2026-07-11 刷新(API 逐个探测验证可用):新增 5.0 Pro;普通版 5.0 已从官方价格页
    下架但仍可调用(退市过渡期,建议迁移 Pro);Pro 出图面积须 ≥921600px(1280×720 起) */
 const VOLC_IMAGE_MODELS=IMAGE_MODEL_LISTS.volcengine;   // 见 image-models.js
@@ -296,7 +294,6 @@ const MINIMAX_TTS_MODELS=[
 const PROVIDER_META={
   agentics:{label:'Agentics'},
   openrouter:{label:'OpenRouter'},
-  ideogram:{label:'Ideogram'},
   volcengine:{label:'火山引擎'},
   byteplus:{label:'BytePlus'},
   fal:{label:'Fal'},
@@ -305,7 +302,6 @@ const PROVIDER_META={
   elevenlabs:{label:'ElevenLabs'},
 };
 const SECTIONS={
-  // ideogram 暂时隐藏(后端与已存配置保留,恢复时加回列表即可)
   image:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
   video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
   music:{providers:['agentics','openrouter','elevenlabs','comfyui']},
@@ -506,11 +502,6 @@ function buildPanel(kind,p){
       d.appendChild(el('div',{className:'hint'},
         '音色因模型而异(Grok:eve/ara/rex/sal/leo;Kokoro 中文:zf_xiaoxiao/zm_yunxi;MAI:en-US-Harper:MAI-Voice-2);Agent 可用 --voice 按角色覆盖'));
     }
-  }else if(p==='ideogram'){
-    d.appendChild(keyRow(`${kind}-ideo-key`,'Ideogram API Key'));
-    d.appendChild(modelRow(`${kind}-ideo-model`,`${kind}-ideo-custom`));
-    d.appendChild(el('div',{className:'hint'},
-      'Key 在 <a href="https://ideogram.ai/manage-api" target="_blank">ideogram.ai/manage-api</a> 生成'));
   }else if(p==='volcengine'&&kind==='tts'){
     d.appendChild(keyRow('tts-volc-key','新版控制台「API Key 管理」创建的 API Key'));
     const mr=modelRow('tts-volc-model','tts-volc-custom');
@@ -1366,10 +1357,6 @@ function loadIntoForm(){
     fillSelect($(`#${kind}-or-model`),
       c.openrouter.model&&!c.openrouter.custom_model?[[c.openrouter.model,c.openrouter.model]]:[],
       c.openrouter.model,c.openrouter.custom_model);
-    if(SECTIONS[kind].providers.includes('ideogram')){
-      $(`#${kind}-ideo-key`).value=c.ideogram.api_key||'';
-      fillSelect($(`#${kind}-ideo-model`),IDEOGRAM_MODELS,c.ideogram.model,c.ideogram.custom_model);
-    }
     if(c.volcengine){
       $(`#${kind}-volc-key`).value=c.volcengine.api_key||'';
       fillSelect($(`#${kind}-volc-model`),
@@ -1485,9 +1472,6 @@ function collect(){
                ...(kind==='tts'?{voice:'',ref_audio:'',
                  timbre_dir:'data/TimbreModel',
                  timbre_catalog:'data/TimbreModel/catalog.json'}:{})};
-    if(SECTIONS[kind].providers.includes('ideogram'))
-      c.ideogram={api_key:$(`#${kind}-ideo-key`).value.trim(),
-        ...pickModel(`#${kind}-ideo-model`,`#${kind}-ideo-custom`)};
     if(SECTIONS[kind].providers.includes('volcengine'))
       c.volcengine={api_key:$(`#${kind}-volc-key`).value.trim(),
         ...pickModel(`#${kind}-volc-model`,`#${kind}-volc-custom`)};

@@ -661,11 +661,10 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # agentics | openrouter | ideogram | volcengine | byteplus | fal | minimax | comfyui
+        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
-        "ideogram": {"api_key": "", "model": "V_3", "custom_model": ""},
         # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
         # fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
         # genmedia 无参考图走文生图端点、有 --ref 自动切 edit/multi;custom_model 可填完整端点 ID;
@@ -997,6 +996,11 @@ def _migrate_genconfig(config: dict) -> None:
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     for kind in ("image", "video", "music", "tts", "digital_human"):
         section = config.get(kind, {})
+        # Ideogram 图像渠道已整体移除(2026-09-11):存量配置里的该段丢弃,曾选中它的回落到默认渠道
+        if kind == "image" and isinstance(section, dict):
+            section.pop("ideogram", None)
+            if section.get("provider") == "ideogram":
+                section["provider"] = DEFAULT_GENCONFIG["image"]["provider"]
         # Older desktop defaults selected OpenRouter with an empty user key and
         # silently routed that tab through the Agentics account wrapper. Keep
         # those installs working while making the two providers explicit.
@@ -6518,7 +6522,7 @@ async def api_preview_script(project: str = "demo", ep: str = ""):
 # 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.sketch_model),
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
 BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at}
-IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "ideogram", "comfyui")
+IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 _BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
 
 
@@ -6544,8 +6548,7 @@ def _image_channels() -> list[dict]:
         else:
             configured = bool(pc.get("api_key") or os.environ.get({"openrouter": "OPENROUTER_API_KEY",
                                                                      "volcengine": "ARK_API_KEY",
-                                                                     "byteplus": "BYTEPLUS_API_KEY",
-                                                                     "ideogram": "IDEOGRAM_API_KEY"}.get(pid, ""), ""))
+                                                                     "byteplus": "BYTEPLUS_API_KEY"}.get(pid, ""), ""))
             model = str(pc.get("custom_model") or pc.get("model") or "")
         rows.append({"id": pid, "configured": configured, "model": model, "active": pid == img.get("provider")})
     return rows

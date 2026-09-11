@@ -380,7 +380,7 @@ def pano_support(cfg: dict) -> tuple[bool, str]:
         if 'hunyuan-image' in m:
             return False, 'Fal HunyuanImage 无参考图端点'
         return True, 'image_size {width,height}'
-    if provider in ('ideogram', 'minimax', 'openrouter'):
+    if provider in ('minimax', 'openrouter'):
         return False, f'{provider} 图像模型只接受固定宽高比,不支持 2:1 全景'
     return False, f'{provider} 渠道未验证支持 2:1 全景'
 

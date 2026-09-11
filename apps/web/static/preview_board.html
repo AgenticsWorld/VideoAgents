@@ -169,7 +169,7 @@ let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=f
 const num=(v,d=1)=>v==null||isNaN(v)?'—':(+v).toFixed(d).replace(/\.0$/,'');
 const secs=v=>v==null?'—':num(v,1)+'s';
 const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
-const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',ideogram:'Ideogram',comfyui:'ComfyUI'};
+const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',comfyui:'ComfyUI'};
 function todIcon(s){
   if(!s)return '';
   if(/黄昏|傍晚|暮|夕|日暮|dusk|sunset/i.test(s))return '🌇';
