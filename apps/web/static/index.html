@@ -2944,7 +2944,7 @@ function liveBox(runId){
   $('#model-custom').oninput=savePrefs;
   await restorePrefs();
   checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
-  // 预览页「✏️ 修改」跳转:?project=xx&compose=预填指令(选中总制片并填入输入框);
+  // 外部入口预填通道:?project=xx&compose=预填指令(选中总制片并填入输入框);预览页「✏️ 修改」已改为页内编辑浮窗(edit-popup.js)直发,不再经此跳转;
   // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片
   const qp=new URLSearchParams(location.search);
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}

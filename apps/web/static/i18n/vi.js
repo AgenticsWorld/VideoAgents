@@ -2133,4 +2133,10 @@ window.I18N_DICT = {
 "白模全景": "toàn cảnh whitebox",
 "全景 {a}": "toàn cảnh {a}",
 "旧法(非全景制)": "cách cũ (không toàn cảnh)",
+"修改意见": "Ý kiến chỉnh sửa",
+"发给:": "Gửi tới: ",
+"接着写修改意见… (Shift+Enter 发送,Enter 换行)": "Viết tiếp ý kiến chỉnh sửa… (Shift+Enter để gửi, Enter xuống dòng)",
+"发出后到控制台可看 Agent 回复": "Sau khi gửi, xem phản hồi của Agent trong bảng điều khiển",
+"发送中…": "Đang gửi…",
+"✅ 已发送给 {agent}": "✅ Đã gửi tới {agent}",
 };

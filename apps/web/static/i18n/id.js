@@ -2133,4 +2133,10 @@ window.I18N_DICT = {
 "白模全景": "panorama whitebox",
 "全景 {a}": "panorama {a}",
 "旧法(非全景制)": "cara lama (tanpa panorama)",
+"修改意见": "Catatan revisi",
+"发给:": "Kepada: ",
+"接着写修改意见… (Shift+Enter 发送,Enter 换行)": "Lanjutkan catatan revisi… (Shift+Enter untuk kirim, Enter untuk baris baru)",
+"发出后到控制台可看 Agent 回复": "Setelah terkirim, lihat balasan Agent di konsol",
+"发送中…": "Mengirim…",
+"✅ 已发送给 {agent}": "✅ Terkirim ke {agent}",
 };

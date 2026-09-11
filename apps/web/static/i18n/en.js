@@ -2222,4 +2222,10 @@ window.I18N_DICT = {
 "白模全景": "whitebox panorama",
 "全景 {a}": "panorama {a}",
 "旧法(非全景制)": "legacy (pre-panorama)",
+"修改意见": "Revision notes",
+"发给:": "To: ",
+"接着写修改意见… (Shift+Enter 发送,Enter 换行)": "Continue with your revision notes… (Shift+Enter to send, Enter for a new line)",
+"发出后到控制台可看 Agent 回复": "See the agent's reply in the console after sending",
+"发送中…": "Sending…",
+"✅ 已发送给 {agent}": "✅ Sent to {agent}",
 };

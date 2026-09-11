@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/whitebox.css?v=20260909-wbedit">
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/edit-popup.js?v=20260911-editpopup"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -350,7 +351,7 @@ const bust=u=>u.includes('?')?u:u+'?v='+LOAD_T;
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
-// ✏️ 修改:跳转总制片界面,把修改对象预填进「输入工作指令」框。
+// ✏️ 修改:在本页右下角弹出编辑浮窗(edit-popup.js),把修改对象预填进输入框,写完直接发给目标 Agent。
 // data-url=具体媒体文件路径;data-loc=结构化位置元数据(分镜/生成组/旁白等无单一文件的对象);
 // data-agent=改发给指定 Agent(白模面板的编辑/自定义决定直发 07-directing/whitebox-staging)
 document.addEventListener('click',e=>{
@@ -359,9 +360,7 @@ document.addEventListener('click',e=>{
   const proj=$('#project').value.trim()||'demo';
   const subject=b.dataset.loc
     ||decodeURIComponent(b.dataset.url.split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/'));
-  location.href='/?project='+encodeURIComponent(proj)
-    +'&compose='+encodeURIComponent(t('修改 ')+subject+'\n'+t('修改意见:'))
-    +(b.dataset.agent?'&agent='+encodeURIComponent(b.dataset.agent):'');   // data-agent=直发指定 Agent(默认总制片)
+  EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent});   // data-agent=直发指定 Agent(默认总制片)
 });
 
 // 🎨 手绘参考图:发起会话→二维码→手机提交线稿后服务端后台生图(线稿为构图底、

@@ -205,7 +205,7 @@ async function buildGroup(host,project,ep){
 
 // ---- 待决项(docs/whitebox.md「待决项与用户裁决」,2026-09-09):白模调度 Agent 拿不准的取舍列在组面板,
 // 用户「▶ 看现场」跳到对应时刻后点选项;答复写 directing/<ep>/whitebox/decisions.json,
-// 「应用决定并重编译」派单给 whitebox-staging 套用;「自定义…」与面板「✏️ 编辑」走预览页 ✏️ 修改同款 compose 通道,
+// 「应用决定并重编译」派单给 whitebox-staging 套用;「自定义…」与面板「✏️ 编辑」走预览页 ✏️ 修改同款编辑浮窗(edit-popup.js)通道,
 // 但带 data-agent 直发 07-directing/whitebox-staging(2026-09-09 起不再经总制片) ----
 const kindLabel=k=>({facing:t('朝向'),occlusion:t('遮挡'),timing:t('时长'),presence:t('进退场'),source_conflict:t('设定冲突'),model_gap:t('模型缺口'),missing_info:t('缺信息'),continuity:t('连续性')})[k]||t('其他');
 function renderIssues(st){
