@@ -399,7 +399,7 @@ def check_pano_support(base: Path, sid: str, idx: dict, log=print) -> dict:
     if not ok:
         mark_blocked(base, sid, idx, cfg, reason)
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 不支持 2:1 等距柱状全景({reason});"
-                              "全景图与分镜背景图已暂停。请用户在控制台「🎨 生成模型」切换图像模型(如火山 Seedream 5.0 pro)后重跑。")
+                              "全景图与分镜背景图已暂停。请用户切换图像模型(如火山 Seedream 5.0 pro)后重跑:场景预览页顶部「🎨 图像模型」有选则改那里,否则改控制台「🎨 生成模型」。")
     if idx.get('blocked'):
         idx.pop('blocked', None); save_index(base, sid, idx)
     return cfg
@@ -732,7 +732,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         target.rename(target.with_suffix('.rejected.png'))
         mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
-                              "全景图与分镜背景图已暂停。请用户在控制台「🎨 生成模型」切换图像模型后重跑。")
+                              "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🎨 图像模型」有选则改那里,否则改控制台「🎨 生成模型」。")
     if mode == 'chain':
         score = chain_consistency(chain, target)
         parent['consistency'] = score
