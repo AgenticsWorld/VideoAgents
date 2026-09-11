@@ -345,6 +345,78 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
     return cfg
 
 
+# ---------------- 预览页按资产类别单独选的图像模型(2026-09-11) ----------------
+# 场景/人物/生物/道具预览页顶部各有「🎨 图像模型」下拉(同故事板页草图模型),存控制台
+# state.json image_model_prefs[<kind>] = {provider, model}(空 = 跟随全局「生成模型」设置)。
+# 出图时按 --output 路径所在目录 assets/concepts/<scenes|characters|creatures|props>/ 判定类别,
+# 没有显式 --provider/--model(环境变量)时套用该类别的偏好;Key 仍取该渠道在 genconfig 的配置。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
+_IMAGE_KIND_RE = re.compile(r"(?:^|/)assets/concepts/(scenes|characters|creatures|props)/")
+STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
+
+
+def image_kind_of_output(output: str | os.PathLike | None) -> str:
+    """按输出路径判定资产类别(scenes|characters|creatures|props),不属于概念图目录返回空。"""
+    if not output:
+        return ""
+    m = _IMAGE_KIND_RE.search(Path(output).as_posix())
+    return m.group(1) if m else ""
+
+
+def image_model_pref(kind: str) -> dict:
+    """读取某类别的图像渠道/模型偏好 {provider, model};未设或跟随全局 → 两项皆空。
+    sketch 兼容旧字段 state.json sketch_model。"""
+    try:
+        st = json.loads(STATE_PATH.read_text())
+    except Exception:
+        return {"provider": "", "model": ""}
+    pref = (st.get("image_model_prefs") or {}).get(kind)
+    if pref is None and kind == "sketch":
+        pref = st.get("sketch_model")
+    pref = pref if isinstance(pref, dict) else {}
+    provider = str(pref.get("provider") or "").strip()
+    return {"provider": provider, "model": str(pref.get("model") or "").strip() if provider else ""}
+
+
+@contextlib.contextmanager
+def image_pref_env(kind_or_output: str | os.PathLike | None):
+    """在 with 块内按类别偏好设置 VIDEOAGENTS_IMAGE_PROVIDER/MODEL(已由 --provider/--model 显式
+    指定时不动);退出时还原,宿主进程内调用不串到别的出图。参数可传类别名或输出路径。"""
+    kind = kind_or_output if kind_or_output in IMAGE_PREF_KINDS else image_kind_of_output(kind_or_output)
+    if not kind or os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() \
+            or os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip():
+        yield ""
+        return
+    pref = image_model_pref(kind)
+    if not pref["provider"]:
+        yield ""
+        return
+    try:
+        allcfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.is_file() else {}
+    except Exception:
+        allcfg = {}
+    if not isinstance((allcfg.get("image") or {}).get(pref["provider"]), dict):
+        print(f"[genmedia] 预览页为 {kind} 选的图像渠道 {pref['provider']} 未在「生成模型」页配置过,本次按全局图像渠道出图",
+              file=sys.stderr)
+        yield ""
+        return
+    saved = {k: os.environ.get(k) for k in ("VIDEOAGENTS_IMAGE_PROVIDER", "VIDEOAGENTS_IMAGE_MODEL")}
+    os.environ["VIDEOAGENTS_IMAGE_PROVIDER"] = pref["provider"]
+    if pref["model"]:
+        os.environ["VIDEOAGENTS_IMAGE_MODEL"] = pref["model"]
+    else:
+        os.environ.pop("VIDEOAGENTS_IMAGE_MODEL", None)
+    print(f"[genmedia] {kind} 按预览页设定使用图像渠道 {pref['provider']} 模型 {pref['model'] or '(该渠道默认)'}", file=sys.stderr)
+    try:
+        yield kind
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def get_config(kind: str, provider_override: str = "", model_override: str = "") -> dict:
     """读取 kind(image|video|music|tts)的生效渠道配置。
     provider_override/model_override:调用方显式指定渠道/模型(集级切换视频渠道用),Key 仍取该渠道在
