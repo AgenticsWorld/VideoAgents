@@ -214,7 +214,10 @@ phases:
       - { id: p5-pacing, agent: 01-story/pacing, for_each: episode, depends_on: [p5-hooks],
           outputs: ["story/episodes/{ep}/pacing.json"],
           validation: { auto: [total_duration_pm_10pct], qa: [07-directing/director] } }
-      - { id: g5, gate: true, human: true, checkpoint: H3-第1集剧本确认, depends_on: [p5-pacing] }
+      - { id: p5-breakdown, agent: 01-story/screenplay, for_each: episode, depends_on: [p5-pacing],
+          outputs: ["story/episodes/{ep}/script_breakdown.json"],   # 剧本拆解表(2026-09-11):剧情层产物的结构化视图,供「剧本预览」页与 H3 审看;只读拆解,不改剧本
+          validation: { auto: [script_breakdown_ok] } }   # code/check_script_breakdown.py --project --ep
+      - { id: g5, gate: true, human: true, checkpoint: H3-第1集剧本确认, depends_on: [p5-breakdown] }
 
   - id: p6
     name: 导演分镜

@@ -236,6 +236,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
         "creatures": lambda: core.api_preview_creatures(project),
         "scenes": lambda: core.api_preview_scenes(project),
         "worldview": lambda: core.api_preview_worldview(project),
+        "script": lambda: core.api_preview_script(project, ep),
         "storyboard": lambda: core.api_preview_storyboard(project, ep),
         "videos": lambda: core.api_preview_videos(project, ep),
         "workflow": lambda: core.api_preview_workflow(project),

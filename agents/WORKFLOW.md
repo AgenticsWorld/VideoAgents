@@ -55,7 +55,8 @@ data/projects/<slug>/
 ├── refs/           # 输入:用户放置的参考图(视觉风格/角色/场景/道具)、音乐与文本资料(见下方约定)
 ├── story/          # chapter_manifest.json(章节批清单), structured_story.json(总表),
 │                   # structured_story/(chNNN.json 章节分片,供按章裁剪), story_graph.json,
-│                   # events.json, story_timeline.json, episodes/ep01/screenplay.md ...
+│                   # events.json, story_timeline.json, episodes/ep01/{screenplay.md, dialogue.md,
+│                   # narration.md, hooks.json, pacing.json, script_breakdown.json(剧本拆解表,剧本预览页数据源)} ...
 ├── bible/          # 世界圣经:world.json, timeline.json, geography.json, religion.json,
 │                   # culture.json, politics.json, economy.json, cultivation.json,
 │                   # dictionary.json, characters/<id>/*.json, creatures/, scenes/,
@@ -346,8 +347,9 @@ refs/
 | narration(每集) | **仅「📤 输出设置」旁白开关(output.narration_enabled,新建项目默认关、存量项目缺省=开)开启时派发——关=全片无任何旁白,不派发、闸门不 HOLD(§7D)**;生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
 | hook(每集) | 设计开头 3 秒钩子与结尾悬念;给出备选 3 条 | screenplay、下一集 episode_plan | `epNN/hooks.json` | 评分 creative_v1;QA:人工从备选中挑选或要求重写 |
 | pacing(每集) | 节奏审定:逐场时长分配、情绪曲线、删减建议 | screenplay、color_script | `epNN/pacing.json` | 机检:总时长 = 预算 ±10%;QA:director 会签 |
+| screenplay(p5-breakdown,每集,2026-09-11) | **剧本拆解表**:把本集剧情层全部产物拆成一份结构化 JSON(逐场 场次/场景/内外时段/出场/事件/一句话内容/节拍功能/情绪/节奏/预计时长(对白·旁白·无声)/台词逐句/旁白/钩子/人物表/情绪曲线/删减建议/分集计划/事件卡),供控制台「📜 剧本预览」页一张两列表展示(左列剧本按 `blocks[]` 小块逐行、右列该块关联信息:时长/情绪/节奏/事件/钩子/删减/估时)与逐块反馈;**只读拆解,不改写任何剧本/对白/旁白/钩子/节奏文件**;schema 与字段见 `docs/script_breakdown.md`。老项目没有该文件时预览页显示启发式推导视图并提供「重新分析」按钮直接派单本工位 | screenplay、dialogue、narration、hooks、pacing、episode_plan、events、story_graph、Bible 索引 | `epNN/script_breakdown.json` | 机检 `script_breakdown_ok`(`code/check_script_breakdown.py --project --ep`:schema/场次唯一/情绪 0–1/时长非负/台词 speaker+text/旁白锚点合法;比输入旧 = WARN 须重跑) |
 
-**G5 闸门 + H3 人工确认**:第 1 集剧本用户签字后,后续集按同标准批量流转(用户可抽查)。
+**G5 闸门 + H3 人工确认**:第 1 集剧本用户签字后,后续集按同标准批量流转(用户可抽查)。用户在控制台「📜 剧本预览」页审看本集拆解表(场次/人物/对白/旁白/节奏/情绪/钩子,2026-09-11 起剧本与旁白全文不再放在分镜预览页),每个板块的「✏️ 修改」直发对应 01-story 工位。
 
 ### Phase 6 — 导演分镜(每集,依赖 G4+G5)
 
@@ -879,7 +881,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 | H1 | G2 后 | 世界圣经摘要(设定理解对不对) |
 | H1A | G3 后 | 角色与资产设定:角色形象/性格/关系/声音、生物、场景环境(进美术与剧本前锁定) |
 | H2 | G4 后 | 美术风格 + 主角人设图(风格锁定) |
-| H3 | G5 后 | 第 1 集剧本 |
+| H3 | G5 后 | 第 1 集剧本(「剧本预览」页审看剧本拆解表:场次/人物/对白/旁白/节奏/情绪/钩子,逐块提修改意见直发负责工位) |
 | H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D);**同时确认本项目「视频提示词技能」:自动(按生效视频模型)/手选/跳过,签字即冻结快照(§7F)** |
 | H3B(每集) | G7 后、Phase 9 前 | 本集全部生成组终版 clip(「视频预览」页审看组画面/原生音频质量;签字前不进剪辑合成) |
 | H4 | G9 后 | 第 1 集成片(试点集全片审看) |

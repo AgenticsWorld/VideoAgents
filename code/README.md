@@ -21,6 +21,7 @@
 | `finalize_episode.py` | 终版封装宿主 CLI + 机检 intro_offset_ok(WORKFLOW.md §9B,2026-08-26):`probe` 实测各段时长写台账 `edit/epNN/final_layout.json`;`shift` 把 subtitles.srt/.ass 整体 +片头实测时长产 `subtitles_final.*`(无片头原样拷贝);`assemble` intro+正片画面+final_audio+outro+teaser 一次 concat 成 final.mp4(声轨随正片段拼接,片头偏移天然产生,禁 -shortest,自动 shift+check);`check` 成片时长=Σ各段、字幕逐条平移量、成片声轨 vs final_audio 互相关实测滞后=片头(±80ms,三窗一致);`--project/--ep [--cut/--audio/--final/--layout]` 入参;edit 封装后、platform-adapter 打包前必跑 |
 | `check_narration_sync.py` | 旁白挂点同步机检 narration_anchor_sync(WORKFLOW.md §8B):narration_track 与 shot_list.narration_anchors 指纹/逐段核对;narrator 交付 `--stamp` 盖章,mix/edit 开工只检,`--project/--ep` 入参;项目旁白开关(output.narration_enabled)关闭时整体跳过(skipped: narration off) |
 | `verify_episode_plan.py` | episode_plan.json 只读机检(事件覆盖/时长预算/ID 合法),`--project` 入参 |
+| `check_script_breakdown.py` | 剧本拆解表机检 script_breakdown_ok(WORKFLOW.md Phase 5 p5-breakdown,2026-09-11):`story/episodes/<ep>/script_breakdown.json` 的 schema/场次唯一/情绪 0–1/时长非负/台词 speaker+text/旁白锚点/ID 对照 Bible(WARN)/总估时 vs 预算(WARN)/比输入旧(WARN);与 `modules/script_breakdown.derive` 推导视图对拍疑似漏场 WARN;`--project/--ep [--strict] [--json]`,退出码 0/1/2(缺文件);**宿主 CLI,Agent 只准调用,禁止复制/改写到项目 code/** |
 
 ## 项目制作脚本不放这里
 

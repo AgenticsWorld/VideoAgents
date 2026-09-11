@@ -1309,12 +1309,9 @@ function render(d){
     }
     h+=`</div>`;
   }
-  // 剧本/旁白/导演计划:统一折叠区块,标题栏 ✏️ 修改 → 总制片界面预填修改意见
+  // 导演计划:折叠区块,标题栏 ✏️ 修改 → 总制片界面预填修改意见
+  // (剧本 screenplay.md 与旁白 narration.md 全文 2026-09-11 起移到「📜 剧本预览」页,本页只保留旁白逐条对位到分镜的显示)
   const docSec=(title,body,loc)=>`<div class="doc closed"><h3 onclick="if(!event.target.closest('.editbtn'))this.parentNode.classList.toggle('closed')">${title}<button class="editbtn docedit" data-loc="${esc(loc)}" title="对该文档提修改意见,发消息给总制片">✏️ 修改</button></h3><div class="body"><pre>${esc(body)}</pre></div></div>`;
-  if(d.screenplay)h+=docSec('📜 剧本 screenplay.md',d.screenplay,
-    I18N.f('剧本 {ep}(文件 story/episodes/{ep}/screenplay.md)',{ep:d.ep}));
-  if(d.narration)h+=docSec('🎙 旁白 narration.md',d.narration,
-    I18N.f('旁白 {ep}(文件 story/episodes/{ep}/narration.md)',{ep:d.ep}));
   if(d.directing_plan)h+=docSec('🎬 导演计划 directing_plan.md',d.directing_plan,
     I18N.f('导演计划 {ep}(文件 directing/{ep}/directing_plan.md)',{ep:d.ep}));
 
@@ -1527,7 +1524,7 @@ EP=_q.get('ep')||localStorage.getItem('sb-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

@@ -5974,8 +5974,9 @@ def _preview_storyboard(project: str, ep: str):
         except Exception:
             return ""
 
-    data["screenplay"] = _read_text(f"story/episodes/{ep}/screenplay.md")
-    data["narration"] = _read_text(f"story/episodes/{ep}/narration.md")
+    # 剧本/旁白全文 2026-09-11 起不再随分镜预览下发:剧情处理层产物统一在「剧本预览」页(api_preview_script)展示;
+    # narration.md 这里只解析成逐条 narration_items 供分镜对位,原文不进载荷
+    narration_md = _read_text(f"story/episodes/{ep}/narration.md")
     data["directing_plan"] = _read_text(f"directing/{ep}/directing_plan.md")
     # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
     data["narration_items"] = [
@@ -5984,7 +5985,7 @@ def _preview_storyboard(project: str, ep: str):
         for m in re.finditer(
             r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)"
             r"(?:\s*\|.*)?\]\s*\n(.+)$",
-            data["narration"], re.M)]
+            narration_md, re.M)]
     # 旁白音频对位:narration/<ep>/manifest.json(早期集)或 narration_track.json
     # 的 segments[].num(N-xx)→ file;manifest 缺失时按 <ep>_nar_<xx>.mp3 命名兜底
     ndir = base / "assets" / "audio" / "narration" / ep
@@ -6286,6 +6287,51 @@ def _preview_storyboard(project: str, ep: str):
 
 async def api_preview_storyboard(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_storyboard, project, ep)
+
+
+def _preview_script(project: str, ep: str):
+    """剧本预览(2026-09-11):剧情处理层(01-story)产物的结构化拆解视图。分集列表 + 指定集的
+    script_breakdown(正式产物 story/episodes/<ep>/script_breakdown.json 优先,缺则由
+    modules/script_breakdown.derive 从 screenplay/dialogue/narration/hooks/pacing/episode_plan 推导,
+    source 字段告诉前端是 agent 正式拆解还是 derived 推导视图,前端据此显示「重新分析」提示)。
+    只涉及剧情层文件,不读 directing/ 与生成产物。"""
+    from modules import script_breakdown as sb
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    plan_eps = {e.get("episode_id") or e.get("ep"): e for e in plan.get("episodes", [])
+                if isinstance(e, dict) and (e.get("episode_id") or e.get("ep"))}
+    eps = set(plan_eps)
+    d = base / "story" / "episodes"
+    if d.is_dir():
+        eps |= {x.name for x in d.iterdir() if x.is_dir() and not x.name.startswith(".")}
+    episodes = [{"ep": e, "title": (plan_eps.get(e) or {}).get("title", ""),
+                 "has_breakdown": sb.breakdown_path(base, e).is_file(),
+                 "has_screenplay": (base / "story" / "episodes" / e / "screenplay.md").is_file()}
+                for e in sorted(eps)]
+    ep = ep or (episodes[0]["ep"] if episodes else "")
+    data = {"project": base.name, "episodes": episodes, "ep": ep, "agents": sb.BLOCK_AGENTS,
+            "owner_agent": sb.OWNER_AGENT, "schema_version": sb.SCHEMA_VERSION}
+    if not ep:
+        return data
+    ep = re.sub(r"[^\w\-]", "", ep)
+    data["ep"] = ep
+    res = sb.load(base, ep)
+    data.update({k: res[k] for k in ("source", "stale", "file", "mtime", "inputs", "errors")})
+    data["breakdown"] = res["breakdown"]
+    data["breakdown_rel"] = sb.BREAKDOWN_REL.format(ep=ep)
+    out = (load_project_settings(base.name).get("output") or {})
+    data["narration_enabled"] = out.get("narration_enabled", True) is not False
+    # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
+    data["reanalyze_run"] = next(
+        (r["id"] for r in reversed(list(RUNS.values()))
+         if r.get("project") == base.name and r.get("agent") == sb.OWNER_AGENT
+         and r.get("status") in ("queued", "running")
+         and "script_breakdown" in (r.get("message") or "") and ep in (r.get("message") or "")), None)
+    return data
+
+
+async def api_preview_script(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_script, project, ep)
 
 
 def _project_media_tokens(base: Path):

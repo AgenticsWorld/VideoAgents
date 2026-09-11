@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>剧本预览 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20d%3D%27M6%203h8.5L20%208.5V19a2%202%200%200%201-2%202H6a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2z%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M14.5%203v5.5H20%27%20fill%3D%27%231c2130%27%2F%3E%3Cpath%20d%3D%27M7.5%2011.5h9M7.5%2014.5h9M7.5%2017.5h6%27%20stroke%3D%27%231c2130%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script src="/static/edit-popup.js?v=20260911-editpopup"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+  --c-dlg:#fbbf24; --c-narr:#c084fc; --c-silent:#3b4356;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px}
+header a.back:hover{color:var(--accent)}
+header .spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;font-family:inherit}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.6;cursor:default}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+header select:hover{border-color:var(--accent)}
+#eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
+#eps button{flex:none;white-space:nowrap}
+#eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#eps button .st{font-size:10px;margin-left:4px;opacity:.75}
+#content{flex:1;overflow-y:auto;padding:16px 22px 60px}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+h2.title{font-size:19px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
+h2.title .dur{font-size:13px;font-weight:400;color:var(--text);display:inline-flex;align-items:center;gap:8px}
+h2.title .spacer{flex:1}
+h2.title .editbtn{font-size:12.5px;padding:3px 10px;align-self:center}
+.src{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel);margin-bottom:12px}
+.src.agent{border-color:rgba(74,222,128,.45)}
+.src.derived,.src.stale{border-color:rgba(251,191,36,.55)}
+.src .msg{flex:1;min-width:200px}
+.src .err{color:var(--red);font-size:12px;white-space:pre-wrap;width:100%}
+.spin{display:inline-block;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.gauge{display:inline-block;width:90px;height:6px;border-radius:3px;background:var(--c-silent);position:relative;overflow:hidden;vertical-align:middle}
+.gauge>i{display:block;height:100%;background:var(--green)}
+.gauge>i.warn{background:var(--yellow)}.gauge>i.bad{background:var(--red)}
+.gauge>b{position:absolute;top:-2px;width:2px;height:10px;background:var(--text);opacity:.8}
+/* 主表 */
+table.sc{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:10px}
+table.sc th{position:sticky;top:0;background:var(--panel);color:var(--dim);font-weight:500;text-align:left;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px;z-index:1}
+table.sc td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+table.sc td.l{width:52%;line-height:1.7}
+table.sc td.r{color:var(--dim);font-size:12.5px;line-height:1.6}
+table.sc td.e{width:1%;white-space:nowrap;text-align:right}
+table.sc tr.blk:hover td{background:rgba(108,158,248,.05)}
+tr.ep td{background:var(--panel2)}
+tr.sh td{background:#1a2033;border-top:2px solid var(--border)}
+tr.sh td.l{font-weight:600}
+tr.sh td.l .no{color:var(--accent);margin-right:6px}
+tr.sh td.l .meta{font-weight:400;color:var(--dim);font-size:12.5px;margin-left:6px}
+tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
+.act{white-space:pre-wrap}
+.snd{color:var(--dim);font-style:italic;white-space:pre-wrap}
+.trn{color:var(--dim);font-size:12px}
+.trn::before{content:'⤵ '}
+.nar{color:var(--purple);white-space:pre-wrap}
+.nar .nid{font-weight:600;margin-right:6px}
+.nar .cand{color:var(--dim);font-size:11.5px;margin-left:6px}
+.dl{display:flex;gap:6px;align-items:baseline;margin:1px 0}
+.dl .spk{flex:none;font-weight:600;white-space:nowrap}
+.dl .spk i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:0}
+.dl .par{color:var(--dim);font-size:12px;flex:none}
+.dl .tx{color:var(--yellow)}
+.rl{display:flex;gap:8px;align-items:baseline;margin:1px 0;white-space:nowrap}
+.rl .i{flex:none;color:var(--dim);width:1.8em;text-align:right;font-variant-numeric:tabular-nums}
+.rl .em{overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.rl .es{color:var(--text);font-variant-numeric:tabular-nums}
+.rl .sh{color:var(--green)}
+.info{display:flex;flex-direction:column;gap:3px}
+.info .ln{display:flex;gap:6px;align-items:baseline}
+.info .ln .k{flex:none;width:1.4em;text-align:center}
+.info .ln .v{min-width:0;flex:1}
+.info .ln .v b{color:var(--text);font-weight:600}
+.info .ln .editbtn{margin-left:2px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 7px 0 4px;margin:1px 3px 1px 0;white-space:nowrap;background:var(--panel)}
+.chip i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.chip .cid{color:var(--dim);font-size:10px;margin-left:3px;font-family:ui-monospace,Menlo,monospace}
+.chip.ev{color:var(--dim);padding:0 6px;border-style:dashed}
+.bar{display:inline-block;width:110px;height:8px;border-radius:4px;background:var(--c-silent);vertical-align:middle;overflow:hidden}
+.bar>i{display:block;height:100%;float:left}
+.bar>i.d{background:var(--c-dlg)}.bar>i.n{background:var(--c-narr)}
+.ib{display:inline-block;width:50px;height:7px;border-radius:4px;background:var(--c-silent);overflow:hidden;vertical-align:middle;margin:0 4px}
+.ib>i{display:block;height:100%;background:var(--accent)}
+.ib>i.hi{background:var(--red)}.ib>i.mid{background:var(--yellow)}
+.editbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer;font-family:inherit;white-space:nowrap}
+.editbtn:hover{color:var(--accent);border-color:var(--accent)}
+.editbtn.sm{font-size:10.5px;padding:0 5px;opacity:.75}
+.issues{font-size:12px;color:var(--yellow)}
+.issues .info{color:var(--dim)}
+.legend{font-size:11.5px;color:var(--dim);margin:8px 2px 0;display:flex;gap:14px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+@media(max-width:800px){table.sc td.l{width:60%}table.sc td.r{font-size:12px}}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 控制台</a>
+  <h1>📜 剧本预览</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<div id="eps"></div>
+<div id="content"><div class="empty">加载中…</div></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let EP='',LAST=null,RUN=null;
+const CAST_COLORS=['#6c9ef8','#fbbf24','#4ade80','#f87171','#c084fc','#22d3ee','#fb923c','#a3e635'];
+const num=(v,d=0)=>v==null||isNaN(v)?'—':(+v).toFixed(d).replace(/\.0$/,'');
+const secs=v=>v==null?'—':num(v,1)+'s';
+const IE={INT:'🏠 '+t('内'),EXT:'🌳 '+t('外'),'INT/EXT':'🏠🌳 '+t('内外')};
+function todIcon(s){
+  if(!s)return '';
+  if(/黄昏|傍晚|暮|夕|日暮/.test(s))return '🌇';
+  if(/深夜|入夜|夜|晚|凌晨/.test(s))return '🌙';
+  if(/清晨|黎明|晨|早/.test(s))return '🌅';
+  if(/午后|下午/.test(s))return '🌤';
+  if(/日|白天|正午|午/.test(s))return '☀️';
+  return '🕒';
+}
+const face=i=>i==null?'':i<=0.3?'😌':i<=0.5?'🙂':i<=0.7?'😮':i<=0.85?'😨':'😱';
+const TEMPO={slow:['🐢',t('慢')],medium:['▶️',t('中')],fast:['⚡',t('快')]};
+let CAST_COLOR={},NAMES={};
+const cname=id=>NAMES[id]||id||'?';
+const dot=id=>`<i style="background:${CAST_COLOR[id]||'#5b6478'}"></i>`;
+// 人物 chip:名字 + 编号(有的剧本只写编号没人名,编号是唯一可对照 bible 的标识)
+const chip=id=>`<span class="chip" title="${esc(id)}">${dot(id)}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
+
+/* ✏️ 反馈:直发负责 Agent */
+const AGENT_NAMES={'01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
+const agentName=id=>t(AGENT_NAMES[id]||id);
+function editBtn(agent,loc,cls,label){
+  return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`;
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.editbtn');if(!b||!b.dataset.loc)return;
+  const proj=$('#project').value.trim()||'demo';
+  EditPopup.open({project:proj,compose:t('修改 ')+b.dataset.loc+'\n'+t('修改意见:'),agent:b.dataset.agent||''});   // 无 data-agent(标题行整体反馈)→ 总制片
+});
+const epFile=(ep,f)=>`story/episodes/${ep}/${f}`;
+const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
+
+function render(d){
+  LAST=d;
+  renderEps(d.episodes||[]);
+  const box=$('#content');
+  const bd=d.breakdown,ep=d.ep,A=d.agents||{};
+  if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集/剧本数据(story/episodes 为空)'))}</div>`;return}
+  const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
+  if(!bd){box.innerHTML=`<h2 class="title">${esc(ep)} ${esc(epi.title||'')}</h2><div class="empty">${esc(I18N.f('该集还没有剧本文件({f}),无法拆解',{f:epFile(ep,'screenplay.md')}))}</div>`;return}
+  NAMES={};CAST_COLOR={};
+  (bd.cast||[]).forEach((c,i)=>{NAMES[c.id]=c.name||c.id;CAST_COLOR[c.id]=i<CAST_COLORS.length?CAST_COLORS[i]:'#5b6478'});
+  const budget=bd.duration_budget_s,total=bd.total_est_s;
+  let g='';
+  if(budget&&total!=null){
+    const r=total/budget,cls=Math.abs(r-1)<=0.1?'':Math.abs(r-1)<=0.2?'warn':'bad';
+    g=`<span class="gauge" title="${esc(I18N.f('预算 {b} · 估算 {t}({p}%)',{b:secs(budget),t:secs(total),p:Math.round(r*100)}))}"><i class="${cls}" style="width:${Math.min(100,Math.round(r*100/1.3))}%"></i><b style="left:${Math.round(100/1.3)}%"></b></span>`;
+  }
+  let h=`<h2 class="title">${esc(ep)} ${esc(bd.title||epi.title||'')}<span class="dur">⏱ ${total==null?'—':num(total)}<span class="sub">/ ${budget==null?'—':num(budget)} s</span>${g}</span><span class="sub">${esc(I18N.f('{n} 场 · {l} 句台词 · {m} 条旁白',{n:(bd.scenes||[]).length,l:(bd.totals||{}).lines??0,m:(bd.totals||{}).narration_items??0}))}</span><span class="spacer"></span><button class="editbtn" data-loc="${esc(I18N.f('剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)',{ep,title:bd.title||epi.title||''}))}" title="${esc(t('对本集剧本整体提修改意见,发给总制片统筹处理'))}">✏️ ${esc(t('修改'))}</button></h2>`;
+  h+=statusHtml(d);
+  h+=`<table class="sc"><thead><tr><th class="l">${esc(t('剧本'))}</th><th class="r">${esc(t('相关信息'))}</th><th class="e"></th></tr></thead><tbody>`;
+  h+=episodeRow(d,bd,ep,A);
+  (bd.scenes||[]).forEach(sc=>{h+=sceneRows(sc,bd,ep,A)});
+  h+=`</tbody></table>`;
+  h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
+  box.innerHTML=h;
+  if(RUN)pollRun(RUN);
+}
+
+function statusHtml(d){
+  const inFlight=RUN||d.reanalyze_run;
+  if(inFlight)return `<div class="src derived"><span class="spin">⏳</span><span class="msg">${esc(I18N.f('已派单给 {agent} 重新分析,运行中…(run {id})',{agent:agentName(d.owner_agent),id:inFlight}))}</span></div>`;
+  let h='';
+  if(d.source==='agent'){
+    const stale=(d.stale||[]).length;
+    h=`<div class="src ${stale?'stale':'agent'}"><span>${stale?'⚠':'✅'}</span><span class="msg">${stale
+      ?esc(I18N.f('拆解表已过期:{files} 在拆解之后又更新过,建议重新分析',{files:d.stale.map(x=>x.split('/').pop()).join('、')}))
+      :esc(I18N.f('正式拆解表 {f} · 更新于 {t}',{f:d.file,t:new Date((d.mtime||0)*1000).toLocaleString()}))}</span><button id="reanalyze">🔁 ${esc(t('重新分析'))}</button>${(d.errors||[]).length?`<div class="err">${esc(t('拆解表未过机检:'))}\n${esc(d.errors.join('\n'))}</div>`:''}</div>`;
+  }else{
+    h=`<div class="src derived"><span>⚠</span><span class="msg">${esc(t('推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。'))}</span><button id="reanalyze">🔁 ${esc(t('重新分析'))}</button>${(d.errors||[]).length?`<div class="err">${esc(d.errors.join('\n'))}</div>`:''}</div>`;
+  }
+  return h;
+}
+
+/* 本集行:看点/概要 ↔ 预算/章节/事件/钩子选定 */
+function episodeRow(d,bd,ep,A){
+  const p=bd.plan||{},hk=bd.hooks||{},sel=hk.selected||{};
+  let l=`<div><b>${esc(t('本集'))}</b>${bd.pov?`<span class="trn" style="margin-left:8px">🗣 ${esc(bd.pov)}</span>`:''}</div>`;
+  if(bd.logline)l+=`<div>${esc(bd.logline)}</div>`;
+  if(p.summary&&p.summary!==bd.logline)l+=`<div class="act" style="color:var(--dim);font-size:12.5px">${esc(p.summary)}</div>`;
+  if((p.beats||[]).length)l+=`<ol style="padding-left:20px;color:var(--dim);font-size:12.5px">${p.beats.map(b=>`<li>${esc(b)}</li>`).join('')}</ol>`;
+  const r=[];
+  if(bd.duration_budget_s!=null)r.push(['⏱',`${esc(t('预算'))} <b>${secs(bd.duration_budget_s)}</b> · ${esc(t('预计'))} <b>${secs(bd.total_est_s)}</b>`]);
+  if(p.chapter_range)r.push(['📖',`${esc(p.chapter_range.start||'')} – ${esc(p.chapter_range.end||'')}`]);
+  if((p.events||[]).length)r.push(['🧩',p.events.map(e=>`<span class="chip ev">${esc(e)}</span>`).join('')]);
+  const selTxt=['opening','ending'].filter(k=>typeof sel[k]==='string'&&sel[k]&&sel[k]!=='none').map(k=>`${esc(t(k==='opening'?'开场':'结尾'))} ★ ${esc(sel[k])}`);
+  if(selTxt.length||hk.note)r.push(['🪝',(selTxt.join(' · ')||esc(clip(hk.note,80)))+' '+editBtn(A.hooks,I18N.f('钩子 {ep}(文件 {f})',{ep,f:epFile(ep,'hooks.json')}),'sm')]);
+  if(d.narration_enabled===false)r.push(['🔇',esc(t('项目旁白开关已关闭(全片无旁白)'))]);
+  if(p.title||p.beats)r.push(['🗂',`${esc(t('分集计划'))} ${editBtn(A.plan,I18N.f('分集计划 {ep}(文件 story/episode_plan.json)',{ep}),'sm')}`]);
+  const iss=bd.issues||[];
+  if(iss.length)r.push(['⚠',`<span class="issues">${iss.slice(0,4).map(i=>`<div class="${i.level==='info'?'info':''}">${esc(i.text)}</div>`).join('')}${iss.length>4?`<div class="info">… ${esc(I18N.f('共 {n} 条',{n:iss.length}))}</div>`:''}</span>`]);
+  return `<tr class="ep"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${editBtn(A.overview,I18N.f('剧本 {ep} 整体(文件 {f})',{ep,f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+}
+
+/* 场次头 + 场内小块 */
+function sceneRows(sc,bd,ep,A){
+  const evs={};(bd.events||[]).forEach(e=>{evs[e.id]=e});
+  const hooks=[].concat((bd.hooks||{}).opening||[],(bd.hooks||{}).mid||[],(bd.hooks||{}).ending||[]).filter(x=>x.scene===sc.no||(sc.hooks||[]).includes(x.id));
+  const trims=(bd.trim_suggestions||[]).filter(x=>x.scene===sc.no);
+  let l=`<span class="no">${esc(sc.no)}</span>${esc(sc.scene_name||'')}<span class="meta">${sc.scene_id?esc(sc.scene_id)+' · ':''}${IE[sc.int_ext]||''}${sc.time_of_day?` ${todIcon(sc.time_of_day)} ${esc(sc.time_of_day)}`:''}${sc.pacing_only?' · '+esc(t('仅节奏表单元')):''}</span>`;
+  if((sc.cast||[]).length)l+=`<span class="cast">${sc.cast.map(chip).join('')}</span>`;
+  const r=[];
+  if(sc.alloc_s!=null){
+    const a=sc.alloc_s,dl=sc.dialogue_s||0,nr=sc.narration_s||0,si=sc.silent_s!=null?sc.silent_s:Math.max(0,a-dl-nr);
+    r.push(['⏱',`<b>${secs(a)}</b> <span class="bar" title="${esc(I18N.f('对白 {d} · 旁白 {n} · 无声 {s}',{d:secs(dl),n:secs(nr),s:secs(si)}))}"><i class="d" style="width:${Math.min(100,dl/a*100)}%"></i><i class="n" style="width:${Math.min(100-Math.min(100,dl/a*100),nr/a*100)}%"></i></span> ${esc(t('对白'))} ${secs(dl)} · ${esc(t('旁白'))} ${secs(nr)} · ${esc(t('无声'))} ${secs(si)}${sc.start_s!=null?` · ${esc(t('起于'))} ${Math.floor(sc.start_s/60)}:${String(Math.round(sc.start_s%60)).padStart(2,'0')}`:''}`]);
+  }
+  const e=sc.emotion,tp=TEMPO[sc.tempo];
+  if((e&&(e.intensity!=null||e.type))||tp||sc.tempo_label){
+    let v='';
+    if(e){const i=e.intensity;v+=`${face(i)}${i!=null?`<span class="ib"><i class="${i>0.75?'hi':i>0.5?'mid':''}" style="width:${Math.round(i*100)}%"></i></span>${num(i,2)}`:''} ${esc(e.type||'')}`;}
+    if(tp||sc.tempo_label)v+=`${v?' · ':''}${tp?tp[0]+' '+esc(tp[1]):'▫️'}${sc.tempo_label&&(!tp||sc.tempo_label!==tp[1])?' '+esc(clip(sc.tempo_label,24)):''}`;
+    r.push(['🎭',v+' '+editBtn(A.pacing,I18N.f('节奏/情绪 {ep} 场次 {no}(文件 {f})',{ep,no:sc.no,f:epFile(ep,'pacing.json')}),'sm')]);
+  }
+  if(sc.beat||sc.purpose)r.push(['🎯',`${sc.beat?`<b>${esc(sc.beat)}</b> `:''}${sc.purpose&&sc.purpose!==sc.beat?esc(clip(sc.purpose,90)):''}`]);
+  (sc.events||[]).forEach(id=>{const ev=evs[id];r.push(['🧩',`<span class="chip ev">${esc(id)}</span>${ev?esc(clip(ev.process,90)):''}${ev?' '+editBtn(A.events,I18N.f('事件卡 {id}(文件 story/events.json;本集 {ep})',{id,ep}),'sm'):''}`])});
+  hooks.forEach(x=>r.push(['🪝',`<b>${esc(x.id)}</b> ${esc(x.label||x.type||'')}${x.copy?` 「${esc(clip(x.copy,50))}」`:''}${x.est_s!=null?` ⏱${secs(x.est_s)}`:''} ${editBtn(A.hooks,I18N.f('钩子 {ep}/{id}{label}(文件 {f})',{ep,id:x.id,label:x.label?' '+x.label:'',f:epFile(ep,'hooks.json')}),'sm')}`]));
+  trims.forEach(x=>r.push(['✂️',`${x.save_s!=null?`<b>−${secs(x.save_s)}</b> `:''}${esc(clip(x.how,110))}${x.risk?` (${esc(x.risk)})`:''}${x.stale?` ⚠ ${esc(clip(x.stale,60))}`:''} ${editBtn(A.pacing,I18N.f('删减建议 {ep} 场次 {no}(文件 {f})',{ep,no:sc.no,f:epFile(ep,'pacing.json')}),'sm')}`]));
+  (sc.incompressible||[]).forEach(x=>r.push(['🔒',`${esc(x.item||'')}${x.s!=null?` (${secs(x.s)})`:''}`]));
+  (sc.notes||[]).forEach(n=>r.push(['📝',esc(clip(n,120))]));
+  let h=`<tr class="sh"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+  const blocks=sc.blocks&&sc.blocks.length?sc.blocks:fallbackBlocks(sc);
+  let dn=0;
+  blocks.forEach(b=>{
+    if(b.type==='dialogue'){
+      const lines=b.lines||[];const from=dn+1;dn+=lines.length;
+      const tot=lines.reduce((a,x)=>a+(x.est_s||0),0);
+      const left=lines.map(x=>`<div class="dl"><span class="spk">${dot(x.speaker)}${esc(x.speaker_name||cname(x.speaker))}</span>${x.paren?`<span class="par">(${esc(x.paren)})</span>`:''}<span class="tx">${esc(x.text)}</span></div>`).join('');
+      const right=lines.map((x,i)=>`<div class="rl"><span class="i">${from+i}</span><span class="em">${esc(x.emotion||'')}</span><span class="es">${x.est_s!=null?secs(x.est_s):''}</span>${(x.style_hits||[]).length?`<span class="sh" title="${esc(x.style_hits.join(', '))}">✓</span>`:''}</div>`).join('')
+        +(lines.length>1&&tot?`<div class="rl" style="margin-top:3px;color:var(--text)"><span class="i"></span><span>Σ ${secs(tot)}</span></div>`:'');
+      const first=lines[0]||{};
+      h+=`<tr class="blk"><td class="l">${left}</td><td class="r">${right}</td><td class="e">${editBtn(A.dialogue,I18N.f('对白 {ep}/{no} 第 {a}–{b} 句(起「{spk}:{txt}」;对白层文件 {f})',{ep,no:sc.no,a:from,b:dn,spk:first.speaker_name||cname(first.speaker),txt:clip(first.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+    }else if(b.type==='narration'){
+      const right=b.final===false||!b.id
+        ?`<span class="cand">${esc(bd.narration&&bd.narration.length?t('剧本内旁白候选,未进旁白定稿'):t('旁白候选(尚无旁白定稿)'))}</span>${b.est_s!=null?` · ${secs(b.est_s)}`:''}`
+        :`<b style="color:var(--purple)">${esc(b.id)}</b>${b.est_s!=null?` · ${secs(b.est_s)}`:''}${b.tone?` · ${esc(b.tone)}`:''}${b.anchor?`<div>📍 ${esc(clip(b.anchor,60))}</div>`:''}`;
+      h+=`<tr class="blk"><td class="l"><div class="nar">🎙 ${b.speaker?`<span class="nid">${esc(b.speaker)}</span>`:''}${esc(b.text)}</div></td><td class="r">${right}</td><td class="e">${editBtn(A.narration,b.id?I18N.f('旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})',{ep,id:b.id,a:b.anchor||'',f:epFile(ep,'narration.md')}):I18N.f('旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+    }else if(b.type==='transition'){
+      h+=`<tr class="blk"><td class="l"><span class="trn">${esc(b.text)}</span></td><td class="r"></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 转场「{txt}」(文件 {f})',{ep,no:sc.no,txt:b.text,f:epFile(ep,'screenplay.md')}),'sm')}</td></tr>`;
+    }else{
+      h+=`<tr class="blk"><td class="l"><div class="${b.type==='sound'?'snd':'act'}">${esc(b.text)}</div></td><td class="r">${b.type==='sound'?'🔊':''}</td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 动作段「{txt}」(文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+    }
+  });
+  return h;
+}
+// 正式拆解表没给 blocks 时按 动作 → 对白 → 旁白 → 转场 顺序兜底
+function fallbackBlocks(sc){
+  const out=[];
+  if(sc.action)out.push({type:'action',text:sc.action});
+  if((sc.dialogue||[]).length)out.push({type:'dialogue',lines:sc.dialogue});
+  ((LAST&&LAST.breakdown&&LAST.breakdown.narration)||[]).filter(n=>n.scene===sc.no||(sc.narration_ids||[]).includes(n.id)).forEach(n=>out.push({type:'narration',...n,final:true}));
+  if(sc.transition)out.push({type:'transition',text:sc.transition});
+  return out;
+}
+
+function renderEps(episodes){
+  const box=$('#eps');box.innerHTML='';
+  episodes.forEach(e=>{
+    const b=document.createElement('button');
+    b.className=e.ep===EP?'on':'';
+    b.innerHTML=esc(e.ep)+`<span class="st" title="${esc(e.has_breakdown?t('已有正式拆解表'):e.has_screenplay?t('仅剧本,尚未拆解'):t('无剧本'))}">${e.has_breakdown?'✅':e.has_screenplay?'⚠':'–'}</span>`;
+    if(e.title)b.title=e.title;
+    b.onclick=()=>{EP=e.ep;load()};
+    box.appendChild(b);
+  });
+}
+
+/* 重新分析:派单给剧本改编 Agent 产出正式拆解表,轮询结束后刷新 */
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('#reanalyze');if(!b||!LAST||RUN)return;
+  const proj=$('#project').value.trim()||'demo',ep=LAST.ep,agent=LAST.owner_agent||'01-story/screenplay';
+  const rel=LAST.breakdown_rel||`story/episodes/${ep}/script_breakdown.json`;
+  const message=[
+    `[剧本拆解] 请为项目 ${proj} 的 ${ep} 生成剧本拆解表 ${rel}(schema ${LAST.schema_version||'script_breakdown/1.0'};规约见 agents/01-story/screenplay/SOUL.md「剧本拆解表」与 docs/script_breakdown.md)。`,
+    `输入(只读):story/episodes/${ep}/screenplay.md(事实源)、dialogue.md、narration.md、hooks.json、pacing.json、story/episode_plan.json、story/events.json、bible/characters/index.json、bible/scenes/index.json。`,
+    '要求:只做结构化拆解,不改写任何剧本/对白/旁白/钩子/节奏文件;每场按剧本原顺序切成 blocks[](action/sound/dialogue/narration/transition),台词逐句带 speaker/text/emotion/est_s,旁白块对上 narration.md 定稿条目(id/est_s/tone);每场给一句话 summary、beat(节拍功能)与 purpose(戏剧功能);emotion/时长/节奏优先取 pacing.json,缺失时按剧本估算并在 issues[] 标注。',
+    `完成后运行 python3 code/check_script_breakdown.py --project ${proj} --ep ${ep} 通过(PASS)后交付;不派发其它工位。`,
+    '触发:用户在「剧本预览」页点击「重新分析」。'].join('\n');
+  b.disabled=true;
+  try{
+    const r=await fetch('/api/v1/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,message,project:proj,source:'user'})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    RUN=j.run_id||'?';render(LAST);
+  }catch(err){b.disabled=false;alert(I18N.f('派单失败:{e}',{e:err.message}))}
+});
+let POLLING=null;
+async function pollRun(id){
+  if(POLLING===id)return;POLLING=id;
+  const proj=$('#project').value.trim()||'demo',ep=LAST&&LAST.ep;
+  while(RUN===id||(LAST&&LAST.reanalyze_run===id&&!RUN)){
+    await new Promise(r=>setTimeout(r,4000));
+    let st='';
+    try{const r=await fetch('/api/v1/runs/'+encodeURIComponent(id));if(r.ok)st=((await r.json()).status||'')}catch(e){}
+    if(st&&st!=='queued'&&st!=='running'){
+      RUN=null;POLLING=null;
+      if(LAST&&LAST.ep===ep&&($('#project').value.trim()||'demo')===proj)load(true);
+      return;
+    }
+  }
+  POLLING=null;
+}
+
+async function load(keep){
+  const proj=$('#project').value.trim()||'demo';
+  history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
+  if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/script'+(EP?'?ep='+encodeURIComponent(EP):''));
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    const d=await r.json();
+    EP=d.ep||'';
+    if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集/剧本数据(story/episodes 为空)'))}</div>`;return}
+    if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
+    localStorage.setItem('sc-ep:'+(d.project||proj),EP);
+    if(d.reanalyze_run&&!RUN)RUN=d.reanalyze_run;
+    else if(RUN&&!d.reanalyze_run&&keep)RUN=null;
+    render(d);
+  }catch(e){$('#content').innerHTML=`<div class="empty">${t('加载失败:')}${esc(e.message)}</div>`}
+}
+$('#reload').onclick=()=>load(true);
+const _q=new URLSearchParams(location.search);
+$('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+EP=_q.get('ep')||localStorage.getItem('sc-ep:'+$('#project').value.trim())||'';
+load();
+
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>
