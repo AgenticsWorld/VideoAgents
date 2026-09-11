@@ -396,7 +396,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
     </div>
     <div class="np-step" data-step="2" style="display:none">
-      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
+      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
       <div class="note" id="npsg-model-hint" style="display:none;color:#e8a33d"></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
       <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="30"></div>
@@ -628,7 +628,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="sg-modal" class="modal">
   <div class="box">
     <h3>🎬 模型限制 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
-    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button></div></div>
+    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
     <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="3"></div>
@@ -1557,6 +1557,7 @@ const SG_PRESETS={
   sd20:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // Seedance 2.0 系列(含 fast/mini)
   sd25:{max_group_s:30,max_ref_images:30,max_ref_videos:10,max_ref_audios:10},  // Seedance 2.5
   mmh3:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // MiniMax Hailuo 3(2026-09-07:参考视频/音频各 3)
+  wan30:{max_group_s:30,max_ref_images:10,max_ref_videos:5,max_ref_audios:5},   // 阿里 Wan 3.0(Fal 托管;2026-09-11,与 core.video_model_caps 同口径:2-30s,参考 10 图/5 视频/5 音频)
 };
 const SG_FIELDS={max_group_s:'maxs',max_ref_images:'imgs',max_ref_videos:'vids',max_ref_audios:'auds'};
 const SG_PICKED={};   // pfx → 用户显式点选的预设 key(null=未点选/已被手动改值打破)
@@ -1574,8 +1575,8 @@ function sgSyncPreset(pfx){   // 按点选/当前值高亮预设按钮(同一时
 }
 // 新建向导「模型限制」步:所选预设与「生成模型」页当前生效视频模型(GET /config/video-model,
 // video-generation 工位口径)不一致时给黄字提示,只提示不拦下一步;生效模型无法归入预设口径时不提示
-let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|''};openNpModal 时拉取
-const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3'};
+let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|wan30|''};openNpModal 时拉取
+const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3',wan30:'Wan 3.0'};
 function npsgModelHint(){
   const el=$('#npsg-model-hint');if(!el)return;
   const m=NP_VIDEO_MODEL,active=sgActivePreset('npsg');

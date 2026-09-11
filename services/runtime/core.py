@@ -1734,7 +1734,7 @@ def _validate_duration(d: dict):
         raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean") from None
 
 
-SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3")   # 与 index.html SG_PRESETS 同步
+SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30")   # 与 index.html SG_PRESETS 同步
 
 
 def _validate_shot_group(g: dict):
@@ -1748,7 +1748,7 @@ def _validate_shot_group(g: dict):
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
                                 "max_ref_images 0-30; max_ref_videos 0-10; max_ref_audios 0-10") from None
-    # preset:界面点选的模型预设 key(sd20/sd25/mmh3),仅用于还原按钮高亮——数值相同的预设
+    # preset:界面点选的模型预设 key(sd20/sd25/mmh3/wan30),仅用于还原按钮高亮——数值相同的预设
     # (Seedance 2.0 与 MiniMax H3)靠它区分;空串/缺省=未点选
     if g.get("preset") not in (None, "", *SHOT_GROUP_PRESETS):
         raise ServiceError(400, f"shot_group.preset must be one of {SHOT_GROUP_PRESETS} or empty")
@@ -9295,7 +9295,7 @@ async def api_globalmodel_get():
 
 def video_model_family(cfg: dict | None = None) -> str:
     """生效视频模型对应的「模型限制」预设口径:sd25 / sd20(含 fast/mini)/ mmh3(任何渠道跑 H3,
-    含 ComfyUI/RunningHub 工作流);无法判定(其他模型或无模型渠道)返 ""。"""
+    含 ComfyUI/RunningHub 工作流)/ wan30(Fal 托管阿里 Wan 3.0);无法判定(其他模型或无模型渠道)返 ""。"""
     cfg = cfg or load_genconfig()
     if is_minimax_h3_active(cfg):
         return "mmh3"
@@ -9304,6 +9304,8 @@ def video_model_family(cfg: dict | None = None) -> str:
         return "sd25"
     if is_seedance20(m):
         return "sd20"
+    if is_wan30(m):
+        return "wan30"
     return ""
 
 
