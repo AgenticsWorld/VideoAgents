@@ -21,7 +21,8 @@ FORBIDDEN = re.compile(
 
 def main() -> None:
     agent = os.environ.get("VIDEOAGENTS_AGENT", "")
-    if not agent.startswith("00-orchestration/"):
+    # 修改师(00-orchestration/reviser)归入调度层分组但亲手代行专业工位重出产物,放行
+    if not agent.startswith("00-orchestration/") or agent == "00-orchestration/reviser":
         return
     try:
         data = json.load(sys.stdin)

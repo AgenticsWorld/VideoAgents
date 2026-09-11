@@ -1,6 +1,6 @@
 # agents/ — 小说→视频 多 Agent 制作团队
 
-基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:89 个 Agent、13 个类别。
+基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:90 个 Agent、13 个类别。
 每个 Agent 一个目录,目录下的 `SOUL.md` 定义它的职责、输入输出、工作指令格式与质量标准。
 
 - **流程权威**:`WORKFLOW.md`(人读)/ `workflow.yaml`(orchestrator 执行输入)
@@ -10,7 +10,7 @@
 
 | 目录 | 类别 | Agent 数 | 成员 |
 |---|---|---|---|
-| `00-orchestration/` | 调度层(贯穿全程) | 4 | workflow-orchestrator, memory-bible, version, evaluation |
+| `00-orchestration/` | 调度层(贯穿全程) | 5 | workflow-orchestrator, memory-bible, version, evaluation, reviser(修改师:预览页「✏️ 修改」默认收件人,代行主责工位一人改完,不经总制片派单;守卫放行) |
 | `01-story/` | 剧情 | 10 | novel-parser, story-structure, event, timeline-story, screenplay, narration, dialogue-rewrite, episode-planner, hook, pacing |
 | `02-worldbuilding/` | 世界设定 | 9 | world, timeline, geography, religion, culture, political, economy, magic-cultivation, dictionary |
 | `03-characters/` | 角色 | 7 | character-manager, appearance, character-growth, personality, relationship, voiceprint, dialogue-style |

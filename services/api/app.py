@@ -349,6 +349,12 @@ async def runs() -> list[dict[str, Any]]:
     return await core.api_runs()
 
 
+@api.get("/projects/{project}/revisions", tags=["runs"])
+async def revisions(project: str, limit: int = 100) -> list[dict[str, Any]]:
+    """修改师(00-orchestration/reviser)完成的修改记录,最新在前(runs/revisions/*.json)。"""
+    return await core.api_revisions(project, limit)
+
+
 @api.post("/runs", tags=["runs"])
 async def create_run(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_chat(body)

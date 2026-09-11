@@ -238,7 +238,8 @@ def _forbid_dispatch_layer(kind: str) -> None:
     环境并传递到全部子进程,所以总制片自己写 driver 脚本绕道也拦得住;对 codex /
     deepagents 引擎(没有 PreToolUse hook)这里是唯一的机制级硬拦截。"""
     agent = os.environ.get("VIDEOAGENTS_AGENT", "")
-    if agent.startswith("00-orchestration/"):
+    # 修改师(00-orchestration/reviser)归入调度层分组但亲手代行专业工位重出产物,放行
+    if agent.startswith("00-orchestration/") and agent != "00-orchestration/reviser":
         raise SystemExit(
             f"[genmedia] 拒绝执行:{agent} 属调度层,只派单不生成,禁止直接生成{kind}。"
             "正确做法:生成工单并通过 services/runtime/dispatch.py 派发给对应执行 Agent"

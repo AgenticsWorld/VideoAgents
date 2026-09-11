@@ -763,6 +763,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 | memory-bible | 任何设定**写入**与冲突上报 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游。**读取受控版免仲裁**:任何 Agent 直读 `bible/` 当前受控版无需经过本 Agent |
 | version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
 | evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
+| reviser(00-orchestration) | 用户在预览页点「✏️ 修改/反馈/编辑」时(hook: on_user_revision) | **修改师**:无状态可并发、非调度层;一单一进程,在用户指定对象范围内**代行**主责工位(宿主按对象类型把该工位 SOUL 附进提示词,映射表 core.py `REVISION_KIND_AGENTS`),自己改产物/重出/跑该工位机检/`.version/vc.py register` 登记/写 `runs/rev-<run_id>/result.json`;用户意见即用户裁决,**不派 evaluation/QA**;bible 可直接写但必须追加 `bible/changelog.md`;关单时宿主解析回执末尾「## 变更记录」写 `runs/revisions/<run_id>.json`——`rerun_downstream=是` 立即投递总制片,否 则随下一条自动运行状态检查消息附带;总制片对修改记录**只标脏/重建签字单,不重做**。工作流页「调整 dag.json」与已直发专门工位的按钮(草图重绘、全景锚点、白模面板、剧本各板块)不经修改师 |
 
 **子任务「手动停止」不是错误**:用户可在运行面板对排队/运行中的子任务点「⏹」手动停止。此类运行的 `status` 仍为 `error`,但 `dispatch.py --status/--runs/--wait/--wait-all` 输出会附「⏹已被用户手动停止(非错误,无需追查原因)」标记(API 字段 `stopped: "user"`,该 Agent 对话记录里也以「⏹ 已被用户手动停止…」开头)。调度层见到此标记**不得**当作程序错误去追查失败原因、翻日志或试探性重跑:只把节点记为 `failed`(note 写明「用户手动停止」),是否重派、跳过或改指令一律由用户决定——用户当轮没有明说时,以 `--confirm` 询问,不要自行重派。
 
@@ -865,6 +866,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 3. 缺陷根因在上游(如设定本身错)→ 不许下游打补丁,缺陷单改派上游,orchestrator 按 DAG 标脏并只重跑受影响链路;
 4. **返修中的一切重生成受 §7E 形象红线约束**:只准复用在库概念图作形象锚、prompt 必带 style.json 风格锚,所涉概念图缺失时停手上报补齐——严禁修正环节新造人物/场景/道具形象(机检 repair_ref_anchored);
 5. 通过闸门的版本由 version Agent 冻结,后续修改必须新开版本。
+6. **用户修改通道(2026-09-11)**:预览页「✏️ 修改」默认发给修改师 `00-orchestration/reviser`(§5),不经总制片派单;修改师改完只落 `runs/revisions/<run_id>.json` 变更记录,总制片据记录把受影响节点标脏(`state` 回 pending、note 写记录 id),`rerun_downstream=是` 才重派、否 只标脏不派;改动使 H3S/H3A/H3B 等签字过期的,按 §8 重新建签字单。修改师的重生成同受 §7E 形象红线与 §7B 分辨率闸门约束。
 
 **闸门放行硬约束(G0–G10 通用,含 H1–H5)**:
 1. **缺陷清零机检**:闸门判定前 orchestrator 必须机检本闸门范围内的缺陷单——`status=open|fixing|verify` 的 blocker/major = 0,且所有 `due_gate` 到期缺陷已闭环;否则闸门只能给出 `verdict: PASS_WITH_WAIVER` 或 `HOLD`,不存在「带 open major 直接 PASS」。

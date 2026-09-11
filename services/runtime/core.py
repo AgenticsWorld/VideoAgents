@@ -197,7 +197,7 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # env-concept 每场景一单)同为扇出工位,novel-parser 按章节分块工单,2026-07-28 一并纳入。
 # 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
 # prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
-STATELESS_AGENTS = {"00-orchestration/evaluation",
+STATELESS_AGENTS = {"00-orchestration/evaluation", "00-orchestration/reviser",
                     "01-story/novel-parser", "09-audio/audio-transcription"}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
@@ -271,6 +271,36 @@ CATEGORY_NAMES = {
     "06-art": "美术资产", "07-directing": "导演", "08-video-gen": "视频生成",
     "09-audio": "音频", "10-editing": "剪辑", "11-qa": "审核", "12-publishing": "发布",
 }
+
+# ---------------- 修改师(00-orchestration/reviser):预览页「✏️ 修改」的默认收件人 ----------------
+# 无状态、可并发、非 dispatcher;一单一进程,自己改产物/跑机检/登记版本,不派单不等人。
+# 归入调度层分组但**不是**调度层:genmedia._forbid_dispatch_layer 与 .claude/hooks/orchestrator_guard.py
+# 对本 id 放行(修改师要亲手重出图/视频/音频)。
+# 修改单头由宿主拼(见 _revision_header),按对象类型附代行工位 SOUL(见 build_role_prompt),
+# 关单时宿主解析回执末尾「## 变更记录」写 runs/revisions/<run_id>.json 交总制片
+# (rerun_downstream=是 → 立即投递总制片;否 → 留给自动运行状态检查消息附带)。
+REVISER_ID = "00-orchestration/reviser"
+REVISION_KIND_AGENTS: dict[str, list[str]] = {
+    "character":       ["03-characters/appearance", "06-art/character-concept"],
+    "voice":           ["03-characters/voiceprint", "09-audio/voice-generation"],
+    "costume":         ["06-art/costume", "06-art/costume-concept"],
+    "scene":           ["05-scenes/scene", "06-art/environment-concept"],
+    "prop":            ["06-art/prop"],
+    "creature":        ["04-creatures/creature", "06-art/creature-concept"],
+    "worldview":       ["02-worldbuilding/world"],
+    "script":          ["01-story/screenplay", "01-story/dialogue-rewrite"],
+    "storyboard":      ["07-directing/storyboard"],
+    "shot":            ["07-directing/shot-planning", "08-video-gen/prompt"],
+    "group":           ["08-video-gen/prompt", "08-video-gen/video-generation"],
+    "group_media":     ["08-video-gen/video-generation", "08-video-gen/image-generation"],
+    "shot_plate":      ["08-video-gen/shot-plates"],
+    "caption":         ["10-editing/caption"],
+    "narration":       ["01-story/narration"],
+    "narration_audio": ["09-audio/narrator"],
+    "bgm":             ["09-audio/music"],
+}
+REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
+REVISION_HISTORY_MAX = 3              # 修改单头里列出的同对象历史修改记录条数
 
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 CHATS_DIR.mkdir(exist_ok=True)
@@ -935,12 +965,12 @@ REVIEW_DIMENSIONS = {
 }
 
 # 片头片尾设定的注入对象:包装制作(title)、占位(edit)、预告文案上游(hook)+ 调度(派单时写入工单)
-PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS
+PACKAGING_AGENTS = {"10-editing/title", "10-editing/edit", "01-story/hook"} | DISPATCHERS | {REVISER_ID}
 
 # 花字设定的详细纪律注入对象:设计与烧录(caption)、花字版封装(edit)、发布物料(platform-adapter)
 # + 调度(排产 condition 判定与工单撰写);其余 Agent 只收一行开关状态(WORKFLOW.md §9A)
 CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
-                  "12-publishing/platform-adapter"} | DISPATCHERS
+                  "12-publishing/platform-adapter"} | DISPATCHERS | {REVISER_ID}   # 修改师代行时同样要看全量设定
 
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 # 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
@@ -1871,6 +1901,7 @@ AM_CATEGORY_TIERS = {
 AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/version": "low",                  # 版本快照 = 机械活
     "00-orchestration/evaluation": "low",               # 评分
+    "00-orchestration/reviser": "high",                 # 修改师:跨工位代行改产物 = 创作核心,智能分配固定高档
     "01-story/event": "low",                            # 事件抽取索引
     "01-story/timeline-story": "low",                   # 时间线索引
     "02-worldbuilding/world": "high",                   # 世界观总纲 = 创作核心
@@ -2770,7 +2801,8 @@ def project_prompt_path(project: str) -> str:
     return (PROJECTS_DIR / safe_slug(project)).resolve().as_posix()
 
 
-def build_role_prompt(agent_id: str, project: str) -> str:
+def build_role_prompt(agent_id: str, project: str,
+                      target: dict | None = None) -> str:
     soul = ((agent_dir(agent_id) or AGENTS_DIR / agent_id) / "SOUL.md").read_text(
         encoding="utf-8"
     )
@@ -2923,6 +2955,11 @@ def build_role_prompt(agent_id: str, project: str) -> str:
         "如已有 continuity_ref,运行 sync_continuity_refs.py --write 清理;仅由明确的连戏文字承接。"
         "--return-last-frame 照常保存供预览/转场,无续接依赖的组可并行。")
 
+    scope_line = (
+        "- 你是修改师:在本修改单指定的对象范围内可代行任何专业工位的职责(产物格式/路径/红线按该工位 SOUL),"
+        "但不改 runs/dag.json、不派单、不判闸门;修改单之外的需求说明应由哪个 Agent 负责,不要顺手扩大范围"
+        if agent_id == REVISER_ID else
+        "- 只做你 SOUL.md 职责内的事;越界的需求要说明应由哪个 Agent 负责,不要代劳")
     p = f"""你是「小说→视频」多 Agent 制作团队的成员,编号:{agent_id}。
 以下 SOUL.md 是你的职责与边界的权威定义,必须严格遵守:
 
@@ -2931,7 +2968,7 @@ def build_role_prompt(agent_id: str, project: str) -> str:
 ## 运行环境
 - 当前目录即工作区根目录;团队流程权威文件:agents/WORKFLOW.md、agents/workflow.yaml(需要时自行阅读相关章节)
 - 当前项目目录:{proj_rel}/ —— 你的一切工作产物必须写入该目录下的对应子目录(布局见 WORKFLOW.md §2);目录不存在就创建
-- 只做你 SOUL.md 职责内的事;越界的需求要说明应由哪个 Agent 负责,不要代劳
+{scope_line}
 - 任务回执/评分/日志一律写 {proj_rel}/runs/<task_id>/(项目目录内);**严禁写工作区根 runs/**(文档中省略前缀的 runs/ 均指项目目录内)
 - 交付方式:JSON/MD/YAML 类设计产物**直接逐份写出最终文件**,严禁先写 Python 生成脚本(把数据写成 dict 再跑脚本落盘)、严禁按几份一批拆多轮;一单 N 份的批处理工单一次做完;同批产物的共用说明(输入清单/坐标系/画幅约定等)不逐份复制进每个文件,只写 SOUL 规定字段与本实例特有值。确需脚本(计算/媒体处理/机检/批量调用)才写,落 {proj_rel}/code/,不要放进 runs/<task_id>/(WORKFLOW.md §2)
 - 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
@@ -3263,7 +3300,224 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
 - 插件流程 YAML 若声明顶层 main_dag_on_start.skip(与该插件业务无关的主流程节点清单),并入节点的同一次改动中
   按 WORKFLOW.md §10.3 第 6 条执行:清单节点全部未开工(pending/template/blocked)才整组置 skipped 并写 skip_reason,
   存在任一已开工节点则一个不跳;闸门判定时 skipped 依赖视为已满足;用户其后要求推进被跳分支时恢复 pending 重新排产"""
+    if agent_id == REVISER_ID:
+        p += _revision_role_suffix(project, target)
     return p
+
+
+def revision_agents_for(target: dict | None) -> list[str]:
+    """修改单的代行工位:页面显式指定优先,否则按对象类型映射;只保留真实存在的 Agent,至多 2 个。"""
+    t = target or {}
+    ids: list[str] = []
+    for aid in list(t.get("agents") or []) + REVISION_KIND_AGENTS.get(str(t.get("kind") or ""), []):
+        if aid not in ids and aid != REVISER_ID and agent_dir(aid):
+            ids.append(aid)
+    return ids[:2]
+
+
+def _revision_role_suffix(project: str, target: dict | None) -> str:
+    """修改师提示词尾段:附代行工位 SOUL 正文(用户点的对象归谁,谁的格式与机检就是修改师的)。"""
+    ids = revision_agents_for(target)
+    if not ids:
+        return ("\n\n## 代行工位\n本修改单未映射到具体工位:先按修改单头与 agents/WORKFLOW.md §2 数据布局定位对象归属,"
+                "Read 该工位 agents/<类别>/<工位>/SOUL.md 后再按其格式修改。")
+    p = ("\n\n## 代行工位(以下 SOUL 是你本单代行工位的职责定义:产物格式、路径、机检与红线按它执行;"
+         "其「不做什么」里划给别的工位的活,若在本修改单范围内你同样代行)")
+    for aid in ids:
+        try:
+            txt = (agent_dir(aid) / "SOUL.md").read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if len(txt) > REVISION_SOUL_MAX_CHARS:
+            txt = txt[:REVISION_SOUL_MAX_CHARS] + "\n…(已截断,全文见 agents/" + aid + "/SOUL.md)"
+        p += f"\n\n### 代行:{aid}\n\n{txt}"
+    return p
+
+
+def sanitize_revision_target(raw) -> dict | None:
+    """预览页随修改单传来的结构化定位(POST /runs 的 target 字段),只收白名单字段并限长。"""
+    if not isinstance(raw, dict):
+        return None
+    def _s(k, n):
+        v = raw.get(k)
+        return str(v).strip()[:n] if isinstance(v, (str, int, float)) else ""
+    def _l(k, n, each):
+        v = raw.get(k)
+        out = []
+        if isinstance(v, list):
+            for x in v[:n]:
+                if isinstance(x, str) and x.strip():
+                    out.append(x.strip()[:each])
+        return out
+    return {
+        "kind": re.sub(r"[^\w\-]", "", _s("kind", 40)),
+        "id": _s("id", 120),
+        "ep": _s("ep", 24),
+        "label": _s("label", 400),
+        "files": _l("files", 20, 300),
+        "agents": [a for a in _l("agents", 4, 80) if re.fullmatch(r"[\w\-]+/[\w\-]+", a)],
+        "rerun_downstream": bool(raw.get("rerun_downstream")),
+    }
+
+
+def revisions_dir(project: str) -> Path:
+    return PROJECTS_DIR / safe_slug(project) / "runs" / "revisions"
+
+
+def load_revisions(project: str) -> list[dict]:
+    """项目全部修改记录(按创建时间升序);单个坏文件跳过。"""
+    d = revisions_dir(project)
+    if not d.is_dir():
+        return []
+    out = []
+    for f in d.glob("*.json"):
+        try:
+            rec = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(rec, dict) and rec.get("id"):
+                out.append(rec)
+        except Exception:
+            continue
+    out.sort(key=lambda r: r.get("created") or 0)
+    return out
+
+
+def _revision_target_key(t: dict | None) -> tuple[str, str, str]:
+    t = t or {}
+    return (str(t.get("kind") or ""), str(t.get("id") or ""), str(t.get("ep") or ""))
+
+
+def _revision_header(project: str, target: dict | None, message: str) -> str:
+    """修改单头:结构化定位 + 代行工位 + 同对象历史记录,置于用户原话之前(落入对话记录,可追溯)。"""
+    t = target or {}
+    ids = revision_agents_for(t)
+    yes = "是" if t.get("rerun_downstream") else "否"
+    lines = [f"[修改单] kind={t.get('kind') or '-'} id={t.get('id') or '-'} ep={t.get('ep') or '-'} "
+             f"rerun_downstream={yes}"]
+    if t.get("files"):
+        lines.append("files: " + "; ".join(t["files"]))
+    lines.append("代行工位: " + (", ".join(ids) + "(SOUL 已附在系统提示词末尾)" if ids
+                                else "未映射,按 WORKFLOW.md §2 自行定位归属工位并 Read 其 SOUL"))
+    key = _revision_target_key(t)
+    if key[1] or key[2]:
+        hist = [r for r in load_revisions(project)
+                if _revision_target_key(r.get("target")) == key and r.get("status") == "done"]
+        if hist:
+            paths = [f"runs/revisions/{r['id']}.json" for r in hist[-REVISION_HISTORY_MAX:]]
+            lines.append("上次修改记录: " + ", ".join(paths) + "(必读:不要把用户上次改好的东西改回去)")
+    lines.append("---")
+    return "\n".join(lines) + "\n" + message
+
+
+def _parse_revision_block(text: str) -> dict:
+    """解析修改师汇报末尾「## 变更记录」段(一行一键,键名英文);缺段返回空 dict。"""
+    m = re.search(r"^##\s*变更记录\s*$(.*)", text or "", re.M | re.S)
+    if not m:
+        return {}
+    rec: dict = {}
+    for line in m.group(1).splitlines():
+        mm = re.match(r"^\s*([a-z_]+)\s*:\s*(.*)$", line)
+        if not mm:
+            continue
+        k, v = mm.group(1), mm.group(2).strip()
+        if k in ("changed_files", "dirty_nodes", "checks"):
+            rec[k] = [x.strip() for x in re.split(r"[,;,;]", v) if x.strip() and x.strip().lower() != "none"]
+        elif k in ("signature_expired", "notes"):
+            rec[k] = "" if v.lower() == "none" else v[:1000]
+    return rec
+
+
+def _revision_summary_lines(rec: dict) -> str:
+    t = rec.get("target") or {}
+    blk = rec.get("record") or {}
+    files = blk.get("changed_files") or rec.get("files") or []
+    parts = [f"- {rec['id']}(kind={t.get('kind') or '-'} id={t.get('id') or '-'} ep={t.get('ep') or '-'};"
+             f"记录 runs/revisions/{rec['id']}.json)",
+             f"  用户意见:{(rec.get('message') or '')[:200]}",
+             f"  改动文件:{', '.join(files[:12]) or '(未列出)'}"]
+    if blk.get("dirty_nodes"):
+        parts.append(f"  修改师判断受影响、本单未重跑:{', '.join(blk['dirty_nodes'][:12])}")
+    if blk.get("signature_expired"):
+        parts.append(f"  签字过期:{blk['signature_expired']}")
+    if blk.get("notes"):
+        parts.append(f"  备注:{blk['notes'][:300]}")
+    return "\n".join(parts)
+
+
+def pending_revisions_note(project: str, mark_consumed_by: str | None = None) -> str:
+    """未交总制片消化的修改记录摘要(附在唤醒消息末尾);mark_consumed_by 非空时顺带标记已消化。"""
+    recs = [r for r in load_revisions(project)
+            if r.get("status") == "done" and not r.get("consumed")]
+    if not recs:
+        return ""
+    body = "\n".join(_revision_summary_lines(r) for r in recs[-20:])
+    note = ("\n\n[修改记录] 以下是用户经预览页「修改」由修改师(00-orchestration/reviser)已直接完成的改动,"
+            "产物已落盘并登记版本,**不要重做**;你只负责:按记录判断下游是否受影响,"
+            "受影响节点在 runs/dag.json 标脏(state 回 pending 并 note 写明依据记录 id),"
+            "rerun_downstream=是 的才重派,否 的只标脏不派;签字过期的按 §8 重新建签字单。\n" + body)
+    if mark_consumed_by:
+        mark_revisions_consumed(project, mark_consumed_by)
+    return note
+
+
+def mark_revisions_consumed(project: str, by: str) -> int:
+    """把已完成且未消化的修改记录标为已消化(唤醒消息确已发出后调用)。"""
+    n = 0
+    now = time.time()
+    for r in load_revisions(project):
+        if r.get("status") == "done" and not r.get("consumed"):
+            r["consumed"] = {"by": by, "at": now}
+            try:
+                atomic_write_json(revisions_dir(project) / f"{r['id']}.json", r)
+                n += 1
+            except Exception as e:  # noqa: BLE001
+                print(f"[revision] 标记已消化失败 {r['id']}:{e}", flush=True)
+    return n
+
+
+async def _finish_revision(run: dict) -> None:
+    """修改师关单钩子:写 runs/revisions/<run_id>.json;rerun_downstream=是 且成功 → 立即投递总制片。"""
+    project = run["project"]
+    t = run.get("target") or {}
+    text = run.get("result") or run.get("text") or ""
+    rec = {
+        "id": run["id"], "run_id": run["id"], "project": project,
+        "created": run.get("created"), "ended": run.get("ended"),
+        "status": run.get("status"), "error": (run.get("error") or "")[:500],
+        "target": t, "message": (run.get("user_message") or run.get("message") or "")[:2000],
+        "files": list(run.get("files") or [])[-50:],
+        "record": _parse_revision_block(text),
+        "rerun_downstream": bool(t.get("rerun_downstream")),
+        "consumed": None,
+    }
+    d = revisions_dir(project)
+    d.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(d / f"{run['id']}.json", rec)
+    HUB.publish({"type": "revision", "project": project, "id": run["id"],
+                 "status": rec["status"], "target": t})
+    if rec["status"] != "done":
+        return
+    sig = (rec["record"] or {}).get("signature_expired")
+    if sig:
+        notify_user(f"修改师改动使签字过期:{sig}(项目 {project}),总制片将重新建签字单")
+    if rec["rerun_downstream"]:
+        orch = next(iter(DISPATCHERS))
+        note = pending_revisions_note(project, mark_consumed_by=f"reviser:{run['id']}")
+        msg = (f"[修改回执] 项目 {project}:用户经预览页提交的修改已由修改师完成,"
+               "且用户勾选了「顺带重跑下游」。请按下方记录标脏并重派受影响链路(只重跑受影响部分,"
+               "修改师已改好的产物不要重做)。" + note)
+        try:
+            await api_chat({"agent": orch, "message": msg, "project": project,
+                            "source": "reviser", "parent": run["id"]})
+        except Exception as e:  # noqa: BLE001
+            print(f"[revision] 投递总制片失败(记录保留,自动运行会再附带):{e}", flush=True)
+            rec["consumed"] = None
+            atomic_write_json(d / f"{run['id']}.json", rec)
+
+
+async def api_revisions(project: str, limit: int = 100):
+    project = require_project_slug(project)
+    recs = load_revisions(project)[-max(1, min(int(limit or 100), 500)):]
+    return list(reversed(recs))
 
 # ---------------- 运行 claude -p ----------------
 
@@ -3451,7 +3705,7 @@ async def execute_run(run: dict, message: str, model: str | None):
         try:
             init_skill_records(run)
             publish_run(run)
-            role = build_role_prompt(agent_id, run["project"])
+            role = build_role_prompt(agent_id, run["project"], run.get("target"))
             skill_contract = agent_skill_prompt(agent_id, run["project"])
             if agent_id == PROMPT_AGENT_ID:
                 # 运行面板 chip + 结束时 prompt_skill_read 核验的依据(dir 空 = 本项目不套用技能)
@@ -3864,6 +4118,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 chat_entry["text"] = reply
             append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
+            if agent_id == REVISER_ID:
+                try:
+                    await _finish_revision(run)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[revision] 修改记录落盘失败:{e}", flush=True)
             try:
                 # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
                 # 白名单字段本地落盘,错误消息模板化、项目名只存哈希;绝不出网
@@ -10317,6 +10576,11 @@ async def api_chat(body: dict):
         raise ServiceError(400, "message must not be empty")
     if not agent_dir(agent):
         raise ServiceError(404, f"Unknown agent: {agent}")
+    target = sanitize_revision_target(body.get("target"))
+    user_message = message
+    if agent == REVISER_ID and not message.startswith("/"):
+        # 修改师:宿主拼修改单头(结构化定位/代行工位/同对象历史),用户原话在其后
+        message = _revision_header(project, target, message)
     if message == "/clear":
         # 会话清理命令:不派发运行,清掉该 Agent 在本项目下全部引擎的会话记录,
         # 下一条消息即开全新会话。引擎侧的历史会话文件留在原处,仅解除续接
@@ -10384,6 +10648,9 @@ async def api_chat(body: dict):
         "project": project, "status": "queued", "created": time.time(),
         "message": message, "engine": engine, "model": model or "",
     }
+    if agent == REVISER_ID:
+        run["target"] = target or {}
+        run["user_message"] = user_message
     init_skill_records(run)
     RUNS[run["id"]] = run
     append_chat(agent, project, {"role": "user", "text": message,
@@ -10921,6 +11188,9 @@ async def idle_watchdog():
                                "\n(用户设定的长期约束,始终有效;与 DAG 待办冲突时以"
                                "常任指令为准,受限节点暂不派发,只推进不受限部分。)"
                                ) if orders else ""
+                # 修改师已完成、尚未交总制片消化的修改记录:随本轮任一唤醒消息附带
+                # (只标脏/重建签字单,不重做);附带即标记已消化
+                orders_note += pending_revisions_note(proj)
                 # DAG 缺失/解析不出任何节点时不再静默失明:唤醒总制片核对
                 # (至多 1 次/小时)。格式规范与写入时自检见 WORKFLOW.md §3.2。
                 dag_path = proj_dir / "runs" / "dag.json"
@@ -10935,6 +11205,7 @@ async def idle_watchdog():
                         await api_chat({"agent": orch, "message": msg,
                                         "project": proj, "source": "watchdog",
                                         "engine": eng, "model": mdl})
+                        mark_revisions_consumed(proj, "watchdog")
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
                 runnable, human_waiting = _dag_runnable(proj)
@@ -10947,6 +11218,7 @@ async def idle_watchdog():
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
+                    mark_revisions_consumed(proj, "watchdog")
                     print(f"[watchdog] 唤醒 {orch}:{proj} 待办 {len(runnable)} 项", flush=True)
                     continue   # 各项目独立唤醒,不再一轮只唤醒一个
                 # DAG 覆盖率兜底:无可跑节点 ≠ 只等人工——若 episode_plan 里
@@ -10966,6 +11238,7 @@ async def idle_watchdog():
                     await api_chat({"agent": orch, "message": msg,
                                     "project": proj, "source": "watchdog",
                                     "engine": eng, "model": mdl})
+                    mark_revisions_consumed(proj, "watchdog")
                     print(f"[watchdog] 唤醒 {orch}:{proj} DAG 缺集 "
                           f"{', '.join(missing)}", flush=True)
                     continue

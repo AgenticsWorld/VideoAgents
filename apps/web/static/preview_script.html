@@ -6,7 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20d%3D%27M6%203h8.5L20%208.5V19a2%202%200%200%201-2%202H6a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2z%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M14.5%203v5.5H20%27%20fill%3D%27%231c2130%27%2F%3E%3Cpath%20d%3D%27M7.5%2011.5h9M7.5%2014.5h9M7.5%2017.5h6%27%20stroke%3D%27%231c2130%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
-<script src="/static/edit-popup.js?v=20260911-editpopup"></script>
+<script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -160,7 +160,8 @@ function editBtn(agent,loc,cls,label){
 document.addEventListener('click',e=>{
   const b=e.target.closest('.editbtn');if(!b||!b.dataset.loc)return;
   const proj=$('#project').value.trim()||'demo';
-  EditPopup.open({project:proj,compose:t('修改 ')+b.dataset.loc+'\n'+t('修改意见:'),agent:b.dataset.agent||''});   // 无 data-agent(标题行整体反馈)→ 总制片
+  const loc=b.dataset.loc, target={kind:'script',id:'',ep:(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
+  EditPopup.open({project:proj,compose:t('修改 ')+loc+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // 无 data-agent(标题行整体反馈)→ 修改师
 });
 const epFile=(ep,f)=>`story/episodes/${ep}/${f}`;
 const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};

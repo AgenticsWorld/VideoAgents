@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/whitebox.css?v=20260909-wbedit">
 <script src="/static/i18n/i18n.js"></script>
-<script src="/static/edit-popup.js?v=20260911-editpopup"></script>
+<script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260911"></script>
 <script>
@@ -177,7 +177,7 @@ function renderDetail(s){
   let h=`<h2 class="title">${esc(s.name)}<span class="id">${esc(s.id)}</span>`
     +(m.level?`<span class="badge">${esc(m.level)}</span>`:'')
     +(m.key_scene?`<span class="badge" style="border-color:var(--yellow);color:var(--yellow)">关键场景</span>`:'')
-    +`<button class="editbtn" data-loc="${esc(I18N.f('场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)',{name:s.name,id:s.id}))}" title="对这个场景的设定提修改意见,发消息给总制片">✏️ 修改</button></h2>`;
+    +`<button class="editbtn" data-kind="scene" data-id="${esc(s.id)}" data-loc="${esc(I18N.f('场景 {name}({id};设定文档 bible/scenes/{id}/,登记 bible/scenes/index.json)',{name:s.name,id:s.id}))}" title="对这个场景的设定提修改意见,发给修改师处理">✏️ 修改</button></h2>`;
   const ml=[];
   if(aliases.length)ml.push(t('别名:')+aliases.join('、'));
   if(m.parent)ml.push(t('父级:')+m.parent);
@@ -195,7 +195,7 @@ function renderDetail(s){
   if(FOLDER&&!folders[FOLDER])FOLDER=null;
   const fig=(im,strip)=>{
     const nm=strip?im.name.slice(strip.length+1):im.name;
-    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></figcaption></figure>`;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></figcaption></figure>`;
   };
   if(FOLDER){
     const ims=folders[FOLDER];
@@ -309,7 +309,8 @@ document.addEventListener('click',e=>{
   const proj=$('#project').value.trim()||'demo';
   const subject=b.dataset.loc
     ||decodeURIComponent(b.dataset.url.split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/'));
-  EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent});   // data-agent=直发指定 Agent(默认总制片)
+  const target={kind:b.dataset.kind||'scene',id:b.dataset.id||'',ep:b.dataset.ep||((subject.match(/\bep\d{2,}\b/)||[''])[0]),files:b.dataset.url?[subject]:[],label:subject};   // 结构化定位→修改师(服务端拼修改单头、附代行工位 SOUL)
+  EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // data-agent=直发指定 Agent(默认修改师)
 });
 
 async function load(){

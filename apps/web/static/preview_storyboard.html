@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/whitebox.css?v=20260909-wbedit">
 <script src="/static/i18n/i18n.js"></script>
-<script src="/static/edit-popup.js?v=20260911-editpopup"></script>
+<script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/whitebox-reel.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -296,7 +296,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="cp-modal"><div class="box">
   <h3>✨ 组花字设计 — <span id="cp-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给总制片)</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)</div>
   <div class="cp-list" id="cp-list"></div>
   <div class="actions"><button id="cp-close">关闭</button></div>
 </div></div>
@@ -370,7 +370,8 @@ document.addEventListener('click',e=>{
   const proj=$('#project').value.trim()||'demo';
   const subject=b.dataset.loc
     ||decodeURIComponent(b.dataset.url.split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/'));
-  EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent});   // data-agent=直发指定 Agent(默认总制片)
+  const target={kind:b.dataset.kind||'group_media',id:b.dataset.id||'',ep:b.dataset.ep||(typeof EP!=='undefined'?EP:'')||((subject.match(/\bep\d{2,}\b/)||[''])[0]),files:b.dataset.url?[subject]:[],label:subject};   // 结构化定位→修改师(服务端拼修改单头、附代行工位 SOUL)
+  EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // data-agent=直发指定 Agent(默认修改师)
 });
 
 // 🎨 手绘参考图:发起会话→二维码→手机提交线稿后服务端后台生图(线稿为构图底、
@@ -782,7 +783,7 @@ async function openCaption(grp){
       ];
       const cloc=I18N.f('花字 {ep}/{cid}(组 {gid} {s}s–{e}s,位置 {pos},文案「{txt}」;数据 edit/{ep}/captions.json 中 captions id={cid})',
         {ep:EP,cid:c.id||'',gid:c.group_id||grp,s:c.local_start,e:c.local_end,pos:c.position||'',txt:c.text||''});
-      return `<div class="cp-item"><button class="editbtn cp-edit" data-loc="${esc(cloc)}" title="${t('对这条花字提修改意见,发消息给总制片')}">✏️ ${t('编辑')}</button><div class="cp-text">${esc(c.text||'')}</div><div class="cp-meta">${rows.join('<br>')}</div></div>`;
+      return `<div class="cp-item"><button class="editbtn cp-edit" data-kind="caption" data-id="${esc(c.id||'')}" data-loc="${esc(cloc)}" title="${t('对这条花字提修改意见,发给修改师处理')}">✏️ ${t('编辑')}</button><div class="cp-text">${esc(c.text||'')}</div><div class="cp-meta">${rows.join('<br>')}</div></div>`;
     }).join('');
   }catch(e){$('#cp-list').innerHTML='<div class="cp-meta">'+esc(String(e.message||e))+'</div>'}
 }
@@ -1123,9 +1124,9 @@ function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
   const imgs=(s.keyframes||[]).map(k=>
-    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张图提修改意见">✏️ 修改</button></div></div>`);
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const vids=(s.clips||[]).map(c=>
-    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段视频提修改意见">✏️ 修改</button></div></div>`);
+    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="对这段视频提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const chars=(s.characters||[]).join('、');
   const cres=(s.creatures||[]).join('、');
   // 分镜背景图(2026-09-09):directing/<ep>/shot_plates.json 关联到本镜的背景图,全部显示、宽 100px、点击放大
@@ -1133,10 +1134,10 @@ function shotCard(s,grp){
     const role=p.role==='end'?t('终点'):t('起点');
     const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):t('本镜新出');
     const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
-    // ✏️ 修改:带上镜号/起止/文件/库 key 与重出命令,发给总制片反馈这张背景图的问题
+    // ✏️ 修改:带上镜号/起止/文件/库 key 与重出命令,发给修改师处理这张背景图的问题
     const loc=I18N.f('分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)',
       {ep:EP,sid:s.shot_id,role,file:p.file||'',key:p.key||'',proj:$('#project').value.trim()||'demo'});
-    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${esc(role)} · ${esc(how)}</div><div class="pl"><button class="editbtn" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发消息给总制片'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
+    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${esc(role)} · ${esc(how)}</div><div class="pl"><button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   });
   return `<div class="shot">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
@@ -1146,7 +1147,7 @@ function shotCard(s,grp){
         ${s.size?`<span class="tag">${esc(s.size)}</span>`:''}
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
         ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
-        <button class="editbtn" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发消息给总制片">✏️ 修改</button></div>
+        <button class="editbtn" data-kind="shot" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发给修改师处理">✏️ 修改</button></div>
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
@@ -1307,11 +1308,11 @@ function groupCard(g,inner){
       <div class="cap" title="${esc(refTip(k))}"><span class="fn">📎 [Image ${esc(k.idx)}] ${esc(k.name)}</span></div></div>`
     :`<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)">
       <div class="cap" title="${esc(refTip(k))}">${refFn('📎',k)}${avMark(k.ref)}
-      <button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张参考图提修改意见">✏️ 修改</button></div></div>`);
+      <button class="editbtn" data-url="${esc(k.url)}" title="对这张参考图提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const anchors=(g.anchors||[]).map(k=>
-    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="到总制片界面对这张锚点图提修改意见">✏️ 修改</button></div></div>`);
+    `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="对这张锚点图提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const vids=(g.clips||[]).map(c=>
-    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="到总制片界面对这段组视频提修改意见">✏️ 修改</button></div></div>`);
+    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="对这段组视频提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const capvids=(g.caption_clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span></div></div>`);
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
@@ -1330,7 +1331,7 @@ function groupCard(g,inner){
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图"${g.refs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🖼 图片${nRefsHead?`<span> ${nRefsHead}</span>`:''}</button>
       <button class="editbtn vrefbtn" data-grp="${esc(g.group_id)}" title="查看/播放/删除/上传本组参考视频(video_refs,[Video N] 编号与 prompt 正文同号),并核对总时长是否超过本组生效模型上限"${g.vrefs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🎬 视频${(g.video_refs||[]).length?`<span> ${g.video_refs.length}</span>`:''}</button>
       <button class="editbtn capbtn" data-grp="${esc(g.group_id)}" title="查看本组花字设计(文案/字体/动画/音效)">✨ 花字</button>
-      <button class="editbtn" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发消息给总制片">✏️ 编辑</button>
+      <button class="editbtn" data-kind="group" data-id="${esc(g.group_id)}" data-loc="${esc(gloc)}" title="对这个生成组提修改意见,发给修改师处理">✏️ 编辑</button>
       <button class="editbtn gnotebtn" data-grp="${esc(g.group_id)}" title="给本组写导演注释,注入 prompt 随重出生效">📝 注释</button></div>
     ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
@@ -1467,8 +1468,8 @@ function render(d){
     `<div class="narr">🎙 <span class="nid">${esc(n.id)}</span>${esc(n.text)}<span class="nest">≈${n.est_s}s · ${t('旁白(后期轨,起于本镜位、riding over 后续镜)')} · ${n.pinned
       ?t('挂点定稿:')+esc(n.pinned.anchor_group||'')+(n.pinned.window_s?esc(I18N.f(' 窗口{w}s',{w:n.pinned.window_s})):'')
       :esc(I18N.f('⚠ 场景级锚({a}),挂点未定稿,按 beat 首镜近似显示',{a:n.anchor}))}</span>
-     <button class="editbtn" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发消息给总制片">✏️ 修改</button>${
-      n.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(n.audio))}"></audio><button class="editbtn" data-url="${esc(n.audio)}" title="对这段旁白配音提修改意见,发消息给总制片">✏️ 修改</button></span>`:''}</div>`).join('');
+     <button class="editbtn" data-kind="narration" data-id="${esc(n.id)}" data-loc="${esc(I18N.f('旁白 {ep}/{id}(anchor: {a};数据 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id:n.id,a:n.anchor}))}" title="对这条旁白提修改意见,发给修改师处理">✏️ 修改</button>${
+      n.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(n.audio))}"></audio><button class="editbtn" data-kind="narration_audio" data-id="${esc(n.id)}" data-url="${esc(n.audio)}" title="对这段旁白配音提修改意见,发给修改师处理">✏️ 修改</button></span>`:''}</div>`).join('');
   // 配乐 cue 对位:covers_groups 首组的首镜 → beat_ref 首个命中镜 → scene 中 SCN-xxxx 匹配场景首镜 → 集首
   const musByShot={},musTop=[];
   (d.bgm_cues||[]).forEach(c=>{
@@ -1493,7 +1494,7 @@ function render(d){
     `<div class="mus">🎵 <span class="mid">${esc(c.cue_id)}</span>${esc(c.mood||'')}<span class="mest">${
        c.in_s!=null&&c.out_s!=null?esc(c.in_s+'s–'+c.out_s+'s')+' · ':''}${
        top?t('⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首'):t('BGM(后期配乐轨,起于本镜位)')}${c.loop_fill?' · loop':''}</span>
-     <button class="editbtn" data-loc="${esc(I18N.f('配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})',{ep:EP,cid:c.cue_id,sc:c.scene||''}))}" title="${t('对这条配乐提修改意见,发消息给总制片')}">✏️ 修改</button>${
+     <button class="editbtn" data-kind="bgm" data-id="${esc(c.cue_id)}" data-loc="${esc(I18N.f('配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})',{ep:EP,cid:c.cue_id,sc:c.scene||''}))}" title="${t('对这条配乐提修改意见,发给修改师处理')}">✏️ 修改</button>${
       c.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(c.audio))}"></audio></span>`:`<span class="mest">${t('(音频未生成)')}</span>`}</div>`).join('');
   if(musTop.length)h+=musBlock(musTop,true);
   NAV=[];

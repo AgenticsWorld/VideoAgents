@@ -78,6 +78,7 @@ class RunCreate(ApiModel):
     force: bool = False
     source: str = "user"
     parent: str | None = None
+    target: dict[str, Any] | None = None   # 预览页修改单的结构化定位(仅修改师消费):kind/id/ep/files/agents/label/rerun_downstream
 
 
 class RunCreated(ApiModel):
