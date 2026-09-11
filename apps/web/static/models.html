@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/image-models.js?v=20260911"></script>
+<script src="/static/text-models.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -206,19 +207,7 @@ const OR_RECOMMENDED={
     ['sesame/csm-1b','CSM 1B(Sesame)· 英文对话/朗读音色'],
     ['canopylabs/orpheus-3b-0.1-ft','Orpheus 3B · 英文 7 音色(tara/leah/leo 等)'],
   ],
-  text:[
-    ['anthropic/claude-sonnet-5','Claude Sonnet 5(Anthropic)· 写作/长文本/性价比'],
-    ['anthropic/claude-opus-4.8','Claude Opus 4.8(Anthropic)· 旗舰,复杂创作/指令遵循强'],
-    ['openai/gpt-5.6-sol','GPT-5.6 Sol(OpenAI)· 旗舰通用'],
-    ['google/gemini-3.1-pro-preview','Gemini 3.1 Pro(Google)· 长上下文/多模态理解'],
-    ['google/gemini-3.5-flash','Gemini 3.5 Flash(Google)· 快/低成本'],
-    ['x-ai/grok-4.5','Grok 4.5(xAI)· 通用旗舰'],
-    ['deepseek/deepseek-v4-pro','DeepSeek V4 Pro · 中文优秀/低价'],
-    ['moonshotai/kimi-k2.6','Kimi K2.6(月之暗面)· 中文创作/长文本'],
-    ['qwen/qwen3-max','Qwen3 Max(阿里)· 中文/通用'],
-    ['z-ai/glm-5.2','GLM 5.2(智谱)· 中文/Agent 任务'],
-    ['minimax/minimax-m3','MiniMax M3 · 中文/Agent 任务'],
-  ],
+  text:TEXT_MODEL_LISTS.openrouter,   // 文本清单见 text-models.js(与控制台顶栏共用)
 };
 const KIND_LABEL={image:'图像',video:'视频',music:'音乐',tts:'TTS旁白',text:'文本'};
 /* 2026-07-11 刷新(API 逐个探测验证可用):新增 5.0 Pro;普通版 5.0 已从官方价格页
@@ -1000,7 +989,7 @@ async function showWfDoc(sel,custom){
 let TEXT_PROVIDER='agentics';
 const TEXT_TABS={agentics:'Agentics',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
 /* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
-const CLOUD_MODELS=[['deepseek-v4-flash','deepseek-v4-flash'],['deepseek-v4-pro','deepseek-v4-pro']];
+const CLOUD_MODELS=TEXT_MODEL_LISTS.cloud;   // 见 text-models.js
 function wireDaTest(prefix,savedModel){
   $(`#${prefix}-test`).onclick=async()=>{
     const st=$(`#${prefix}-status`);st.className='status';st.textContent='连接中…';
@@ -1419,6 +1408,12 @@ function loadIntoForm(){
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
   showDigitalHumanPanel(['heygen','klingai','comfyui'].includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':'heygen');
+  loadDeepagentsForm();
+}
+
+/* deepagents 段单独装载:控制台顶栏(引擎选 deepagents 时的渠道/模型两层下拉)也会即选即写这段配置,
+   本页在切回可见时重读服务端并按需刷新,避免带着旧值保存把顶栏的选择覆盖回去 */
+function loadDeepagentsForm(){
   const da=CFG.deepagents||{},aa=da.agentics||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};
   const atext=$('#text-agentics-model');atext.innerHTML='';
   if(aa.model)atext.appendChild(el('option',{value:aa.model,textContent:aa.model}));
@@ -1435,6 +1430,15 @@ function loadIntoForm(){
   loadAgenticsModels('text');
   loadOpenRouterModels('text');
 }
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible'||!CFG)return;
+  try{
+    const cfg=await api('/api/v1/config/generation');
+    if(JSON.stringify(cfg.deepagents||{})===JSON.stringify(CFG.deepagents||{}))return;
+    CFG.deepagents=cfg.deepagents;
+    loadDeepagentsForm();
+  }catch(e){}
+});
 
 function pickModel(selId,customId){
   const v=$(selId).value;

@@ -512,8 +512,8 @@ async def comfy_workflow_doc(name: str) -> dict[str, Any]:
 
 
 @api.get("/providers/deepagents/models", tags=["providers"])
-async def deepagents_models() -> dict[str, Any]:
-    return await core.api_deepagents_models()
+async def deepagents_models(provider: str = "") -> dict[str, Any]:
+    return await core.api_deepagents_models(provider)
 
 
 @api.post("/providers/deepagents/test", tags=["providers"])

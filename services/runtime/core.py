@@ -8940,9 +8940,16 @@ async def api_test_openrouter(body: dict):
         return {"ok": False, "error": str(e)[:200]}
 
 
-async def api_deepagents_models():
-    """列出 deepagents 生效渠道端点上的可用模型(本地端点如 LM Studio,或 OpenRouter)。"""
-    da = resolve_deepagents()
+async def api_deepagents_models(provider: str = ""):
+    """列出 deepagents 渠道端点上的可用模型(OpenAI 兼容 /models):默认为生效渠道;
+    provider=local|cloud 时按该渠道已保存的端点/Key 查询(控制台顶栏渠道/模型两层下拉切渠道预览用)。"""
+    cfg = load_genconfig()
+    provider = (provider or "").strip()
+    if provider:
+        if provider not in ("agentics", "local", "cloud", "openrouter"):
+            raise ServiceError(400, "provider must be one of agentics, local, cloud, openrouter")
+        cfg["deepagents"] = {**(cfg.get("deepagents") or {}), "provider": provider}
+    da = resolve_deepagents(cfg)
     base = (da.get("base_url") or "").rstrip("/")
     if not base:
         raise ServiceError(400, "deepagents base_url is not configured")
