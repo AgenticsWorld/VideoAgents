@@ -873,13 +873,23 @@ _BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?:described in each [Ss]hot\.|按各
 _IMG_RE = re.compile(r'\[Image\s*(\d+)\]|@Image\s*(\d+)(?!\d)')
 
 
+def _group_or_episode_settings(base: Path, ep: str, gid: str) -> dict:
+    """组级设定 assets/group_settings/<ep>/<grp>.json;组没指定模型时回落集级 <ep>/episode.json
+    (分镜预览顶部下拉,2026-09-11)。"""
+    gs = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
+    if gs.get('video_model'):
+        return gs
+    es = read(base/'assets/group_settings'/component(ep)/'episode.json', {}) or {}
+    return es if es.get('video_model') else gs
+
+
 def group_is_v25(base: Path, ep: str, gid: str) -> bool:
-    """本组生效视频模型是否 Seedance 2.5:组级覆盖(assets/group_settings)→ 项目提示词技能快照 → genmedia 当前视频模型。
+    """本组生效视频模型是否 Seedance 2.5:组级覆盖(assets/group_settings,无组级时集级 episode.json)→ 项目提示词技能快照 → genmedia 当前视频模型。
     2.5 的场景图绑定必须按其官方结构写(【场景】分组 + 逐镜激活),2.0 式 Shot plates 段对 2.5 无效(dzg6 grp010 实测,2026-09-09)。"""
     def v25(text):
         t = str(text or '').lower()
         return 'seedance-2-5' in t or 'seedance-2.5' in t or 'sd25' in t
-    gs = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
+    gs = _group_or_episode_settings(base, ep, gid)
     if v25(gs.get('video_model')) or v25((gs.get('effective') or {}).get('skill_id')) or v25((gs.get('effective') or {}).get('resolved_from')):
         return True
     if gs.get('video_model'):
@@ -904,7 +914,7 @@ def group_is_h3(base: Path, ep: str, gid: str) -> bool:
     def h3(text):
         t = str(text or '').lower()
         return ('minimax' in t and 'h3' in t) or t.endswith('/h3-prompt-writing')
-    gs = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
+    gs = _group_or_episode_settings(base, ep, gid)
     if h3(gs.get('video_model')) or h3((gs.get('effective') or {}).get('skill_id')) or h3((gs.get('effective') or {}).get('resolved_from')):
         return True
     if gs.get('video_model'):

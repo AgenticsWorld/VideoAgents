@@ -254,12 +254,16 @@ def _model_caps(model: str):
 
 def video_budget(base: Path, ep: str, gid: str) -> dict:
     """本组生效视频模型的参考视频预算:{max_videos, max_total_s, model, provider, source}。
-    组级覆盖 assets/group_settings/<ep>/<grp>.json 优先;全局模型按 genmedia 的提交配置解析(不可用时按项目
+    组级覆盖 assets/group_settings/<ep>/<grp>.json 优先,其次集级 <ep>/episode.json;全局模型按 genmedia 的提交配置解析(不可用时按项目
     「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道不支持参考视频。"""
     settings = read(base/'settings.json', {}) or {}
     sg = settings.get('shot_group') or {}
     ov = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
-    model, provider, source = str(ov.get('video_model') or ''), str(ov.get('provider') or ''), 'group'
+    source = 'group'
+    if not ov.get('video_model'):   # 无组级模型 → 集级 episode.json(分镜预览顶部下拉,2026-09-11)
+        ov = read(base/'assets/group_settings'/component(ep)/'episode.json', {}) or {}
+        source = 'episode'
+    model, provider = str(ov.get('video_model') or ''), str(ov.get('provider') or '')
     try:
         # Use the same provider/model resolution as submission, without importing
         # the API service (pygit2/FastAPI are unnecessary for this media CLI).

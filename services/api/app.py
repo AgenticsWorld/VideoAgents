@@ -774,6 +774,17 @@ async def storyboard_vref_delete(body: dict[str, Any]) -> dict[str, Any]:
     return _artifact_urls(await core.api_grpvref_delete(body), str(body.get("project") or ""))
 
 
+@api.get("/projects/{project}/storyboard/{ep}/settings", tags=["storyboard"])
+async def storyboard_episode_settings_get(project: str, ep: str) -> dict[str, Any]:
+    """集级视频模型覆盖(分镜预览顶部下拉;默认跟随全局,组级覆盖仍优先)。"""
+    return await core.api_epsettings_get(project, ep)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/settings", tags=["storyboard"])
+async def storyboard_episode_settings_set(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_epsettings_set({**(body or {}), "project": project, "ep": ep})
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
 async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
     """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""

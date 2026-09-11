@@ -39,6 +39,9 @@ header select:hover{border-color:var(--accent)}
 header .ps-info{font-size:12.5px;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--panel2);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
 header .ps-info b{color:var(--text);font-weight:600}
 header .ps-info.warn{border-color:var(--yellow,#d4a72c)}
+header .ps-info select{background:transparent;color:var(--text);border:none;border-bottom:1px dashed var(--border);border-radius:0;padding:0 2px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:26vw;text-overflow:ellipsis}
+header .ps-info select:hover{border-bottom-color:var(--accent)}
+header .ps-info select.ov{color:var(--accent)}
 .grp>.ghead .gsov{color:var(--accent,#1d6f7a);font-weight:600}
 #gs-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #gs-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:560px;max-width:92vw}
@@ -258,7 +261,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
-  <span id="ps-info" class="ps-info" title="当前全局视频模型与提示词技能(在控制台「生成模型」/「模型限制」修改;个别组可用组卡「🎛 模型」单独指定)" style="display:none"></span>
+  <span id="ps-info" class="ps-info" title="本集生效的视频模型与提示词技能:下拉可直接为本集换模型(默认跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先" style="display:none"></span>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -916,22 +919,48 @@ try{
       if(ev.project!==($('#project').value.trim()||'demo'))return;
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
-      else if(ev.type==='prompt_skill'||ev.type==='group_settings')load(true);
+      else if(ev.type==='prompt_skill'||ev.type==='group_settings'||ev.type==='episode_settings')load(true);
     }catch(_){}
   };
 }catch(_){}
 
-// 🎬 右上角:当前全局视频模型 + 提示词技能(只读展示,2026-08-30;改动去控制台「生成模型」/「模型限制」,
-// 个别组用组卡「🎛 模型」单独指定)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
+// 🎬 右上角:本集生效视频模型 + 提示词技能(2026-08-30 只读;2026-09-11 改为下拉可直接切换:
+// 「渠道名 模型名」,默认跟随全局,选别的 = 集级覆盖 assets/group_settings/epNN/episode.json,
+// 个别组仍可用组卡「🎛 模型」单独指定且优先)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
+const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub'};
+const provName=p=>t(PROVIDER_NAMES[p]||p||'');
 function psRender(d){
   const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{};
   if(!vm.provider){el.style.display='none';return}
   const modeTxt=ps.mode==='off'?t('跳过'):ps.mode==='manual'?t('手选'):t('自动');
   const skill=ps.skill_id?(ps.dir||ps.skill_id):t('无对应技能');
-  el.innerHTML='🎬 '+t('视频模型:')+'<b>'+esc(vm.label||vm.model||'—')+'</b> <span style="opacity:.7">('+esc(vm.provider)+')</span>'
-    +' · 🧰 '+t('技能:')+'<b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
+  const pn=provName(vm.provider);
+  let modelHtml;
+  if(vm.overridable&&(vm.candidates||[]).length){
+    const opts=[`<option value="">${esc(pn+' '+(vm.global_label||vm.global_model||'—'))}(${t('跟随全局')})</option>`]
+      .concat((vm.candidates||[]).filter(c=>c.id!==vm.global_model).map(c=>`<option value="${esc(c.id)}">${esc(pn+' '+(c.label||c.id))}</option>`));
+    modelHtml=`<select id="ps-model" class="${vm.source==='episode'?'ov':''}">${opts.join('')}</select>`;
+  }else modelHtml='<b>'+esc(pn+' '+(vm.label||vm.model||'—'))+'</b>';
+  el.innerHTML='🎬 '+modelHtml+' · 🧰 <b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
+  const sel=$('#ps-model');
+  if(sel){
+    sel.value=vm.source==='episode'?(vm.episode_model||vm.model):'';
+    if(sel.value!==(vm.source==='episode'?(vm.episode_model||vm.model):''))sel.value='';
+    sel.onchange=async()=>{
+      const proj=$('#project').value.trim()||'demo';
+      sel.disabled=true;
+      try{
+        const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/settings',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({video_model:sel.value||''})});
+        if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      }catch(e){alert(t('保存失败:')+e.message)}
+      load(true);
+    };
+  }
   el.classList.toggle('warn',!!ps.warning);
-  el.title=t('当前全局视频模型与提示词技能(在控制台「生成模型」/「模型限制」修改;个别组可用组卡「🎛 模型」单独指定)')+(ps.warning?'\n⚠️ '+ps.warning:'');
+  el.title=t('本集生效的视频模型与提示词技能:下拉可直接为本集换模型(默认跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先')
+    +(vm.source==='episode'?'\n'+I18N.f('本集已覆盖为 {m}(全局 {g})',{m:vm.label||vm.model,g:vm.global_label||vm.global_model}):'')
+    +(ps.warning?'\n⚠️ '+ps.warning:'');
   el.style.display='';
 }
 
@@ -941,10 +970,10 @@ function gsHint(){
   const d=GS_DATA;if(!d)return;
   const m=$('#gs-model').value,sk=$('#gs-skill').value;
   const mods=d.models||{},lbl=id=>((mods.candidates||[]).find(c=>c.id===id)||{}).label||id;
-  const model=m||mods.global_model;
+  const model=m||mods.base_model||mods.global_model;
   const cap=/seedance-2[-.]5/i.test(model)?30:/seedance-2/i.test(model)?9:/minimax.*h3|h3.*minimax/i.test(model)?9:d.project_ref_cap;
   let sTxt;
-  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')})+(m?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
+  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')})+((m||mods.base_source==='episode')?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
   else if(sk==='auto')sTxt=t('按本组模型自动解析');
   else if(sk==='off')sTxt=t('不套用技能');
   else sTxt=sk.slice(7).split('/').pop();
@@ -965,8 +994,10 @@ async function openGroupSettings(grp){
     GS_DATA=d;
     const add=(sel,v,label)=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)};
     const ms=$('#gs-model'),mods=d.models||{};
-    add(ms,'',I18N.f('跟随全局:{m}',{m:mods.global_label||mods.global_model||'—'}));
-    (mods.candidates||[]).filter(c=>c.id!==mods.global_model).forEach(c=>add(ms,c.id,c.label));
+    // 基准 = 本集(顶部下拉已为整集换模型时)或全局;组级覆盖压过基准
+    if(mods.base_source==='episode')add(ms,'',I18N.f('跟随本集:{m}',{m:mods.base_label||mods.base_model||'—'}));
+    else add(ms,'',I18N.f('跟随全局:{m}',{m:mods.global_label||mods.global_model||'—'}));
+    (mods.candidates||[]).filter(c=>c.id!==(mods.base_model||mods.global_model)).forEach(c=>add(ms,c.id,c.label));
     ms.disabled=!mods.overridable;
     ms.value=(d.config||{}).video_model||'';if(!ms.value&&ms.value!=='')ms.value='';
     const ss=$('#gs-skill'),cfg=(d.config||{}).prompt_skill||{};
@@ -1183,7 +1214,7 @@ function gsChip(g){
   const parts=[];
   if(gs.model_source==='group')parts.push('🎬 '+gs.model_label);
   if(gs.skill_source==='group')parts.push('🧰 '+(gs.skill_dir||t('不套用技能')));
-  const tip=[I18N.f('本组视频模型:{m}({src})',{m:gs.video_model||gs.model_label,src:gs.model_source==='group'?t('组级覆盖'):t('跟随全局')}),
+  const tip=[I18N.f('本组视频模型:{m}({src})',{m:gs.video_model||gs.model_label,src:gs.model_source==='group'?t('组级覆盖'):gs.model_source==='episode'?t('跟随本集'):t('跟随全局')}),
     I18N.f('本组提示词技能:{s}({mode})',{s:gs.skill_dir||t('不套用'),mode:gs.skill_mode}),gs.warning?'⚠️ '+gs.warning:''].filter(Boolean).join('\n');
   return `<span class="tag gsov" style="${gs.warning?'color:var(--yellow)':''}" title="${esc(tip)}">🎛 ${esc(parts.join(' · ')||t('组级设定'))}</span>`;
 }

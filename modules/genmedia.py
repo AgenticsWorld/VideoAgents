@@ -274,16 +274,22 @@ def _group_from_output(output: str) -> str:
 def _group_video_override(group: str) -> dict:
     """组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为单组指定,2026-08-30):
     读 data/projects/<VIDEOAGENTS_PROJECT>/assets/group_settings/<ep>/<grp>.json 的
-    video_model/provider;非派单环境(无项目)或无文件返回 {}。"""
+    video_model/provider;组文件没指定模型时回落集级 <ep>/episode.json(分镜预览顶部下拉,2026-09-11);
+    非派单环境(无项目)或无文件返回 {}。"""
     proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
     if not proj or not group or "/" not in group:
         return {}
     ep, grp = group.split("/", 1)
-    try:
-        d = json.loads((DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep / f"{grp}.json").read_text())
-        return d if isinstance(d, dict) else {}
-    except Exception:
-        return {}
+    root = DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep
+    for name in (f"{grp}.json", "episode.json"):
+        try:
+            d = json.loads((root / name).read_text())
+        except Exception:
+            continue
+        if isinstance(d, dict) and d.get("video_model"):
+            d["_scope"] = "集级" if name == "episode.json" else "组级"
+            return d
+    return {}
 
 
 def apply_group_video_override(cfg: dict, group: str) -> dict:
@@ -294,19 +300,20 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
     if not model:
         return cfg
     if cfg.get("provider") == "comfyui":
-        print(f"[genmedia] 组 {group} 的组级模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
+        print(f"[genmedia] 组 {group} 的{ov.get('_scope') or '组级'}模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
               file=sys.stderr)
         return cfg
     if ov.get("provider") and ov.get("provider") != cfg.get("provider"):
-        print(f"[genmedia] 组 {group} 的组级模型 {model} 属渠道 {ov.get('provider')},"
+        print(f"[genmedia] 组 {group} 的{ov.get('_scope') or '组级'}模型 {model} 属渠道 {ov.get('provider')},"
               f"当前视频渠道为 {cfg.get('provider')},该覆盖未生效(按全局模型 {cfg.get('model')} 执行)",
               file=sys.stderr)
         return cfg
     if model != cfg.get("model"):
-        print(f"[genmedia] 组 {group} 按组级设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+        print(f"[genmedia] 组 {group} 按{ov.get('_scope') or '组级'}设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
               file=sys.stderr)
     cfg["model"] = model
     cfg["_group_override"] = group
+    cfg["_override_scope"] = ov.get("_scope") or "组级"
     return cfg
 
 
@@ -5151,7 +5158,7 @@ def _cmd_info(args):
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
             if cfg.get("_group_override"):
-                desc += f"  (组 {group} 组级覆盖;全局 model={get_config('video')['model']})"
+                desc += f"  (组 {group} {cfg.get('_override_scope') or '组级'}覆盖;全局 model={get_config('video')['model']})"
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")

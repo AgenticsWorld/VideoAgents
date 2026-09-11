@@ -201,9 +201,12 @@ def main() -> int:
             errs.append(f"{f.name}: JSON 解析失败 {e}")
             continue
         # 组级覆盖(分镜预览「🎛 模型」,2026-08-30):assets/group_settings/<ep>/<grp>.json 的
-        # effective 快照优先于项目级基准;--expect 显式指定时仍以 --expect 为准
+        # effective 快照优先于项目级基准;无组文件时回落集级 <ep>/episode.json 快照(分镜预览顶部下拉,
+        # 2026-09-11);--expect 显式指定时仍以 --expect 为准
         expected, exp_reason, exp_sha = proj_expected, proj_reason, proj_sha
         gsf = proj_root / "assets" / "group_settings" / args.ep / f"{f.stem}.json"
+        if not gsf.is_file():
+            gsf = proj_root / "assets" / "group_settings" / args.ep / "episode.json"
         if args.expect is None and gsf.is_file():
             try:
                 geff = (json.loads(gsf.read_text(encoding="utf-8")).get("effective") or {})
@@ -215,7 +218,7 @@ def main() -> int:
                 if expected:
                     gsmd = skill_md_path(expected)
                     if not gsmd.is_file():
-                        errs.append(f"{f.name}: 组级基准技能 {expected} 的 SKILL.md 不存在:{gsmd}")
+                        errs.append(f"{f.name}: {'集' if gsf.name == 'episode.json' else '组'}级基准技能 {expected} 的 SKILL.md 不存在:{gsmd}")
                         continue
                     exp_sha = sha256_of(gsmd)
         sa = d.get("skill_applied")

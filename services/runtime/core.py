@@ -4637,6 +4637,28 @@ def _grpsettings_get(project: str, ep: str, grp: str) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def _epsettings_path(project: str, ep: str) -> Path:
+    """集级视频模型覆盖(分镜预览顶部下拉,2026-09-11):assets/group_settings/<ep>/episode.json
+    {video_model, provider, effective}。层级 全局 → 本集 → 本组;组文件 glob grp*.json 不会误读它。"""
+    return PROJECTS_DIR / project / "assets" / "group_settings" / ep / "episode.json"
+
+
+def _epsettings_get(project: str, ep: str) -> dict:
+    d = _read_json_safe(_epsettings_path(project, ep))
+    return d if isinstance(d, dict) else {}
+
+
+def _epsettings_all(project: str) -> list[tuple[str, dict]]:
+    root = PROJECTS_DIR / safe_slug(project) / "assets" / "group_settings"
+    out = []
+    if root.is_dir():
+        for f in sorted(root.glob("ep*/episode.json")):
+            d = _read_json_safe(f)
+            if isinstance(d, dict):
+                out.append((f.parent.name, d))
+    return out
+
+
 def _grpsettings_all(project: str) -> list[tuple[str, str, dict]]:
     """项目内全部组级设定文件 → [(ep, grp, dict)],按 ep/grp 排序。"""
     root = PROJECTS_DIR / safe_slug(project) / "assets" / "group_settings"
@@ -4649,33 +4671,87 @@ def _grpsettings_all(project: str) -> list[tuple[str, str, dict]]:
     return out
 
 
-def group_video_candidates(project: str, cfg: dict | None = None) -> dict:
+def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") -> dict:
     """本项目组级可选的视频模型:渠道固定为视频工位生效渠道,候选=该渠道目录 + 全局当前模型
-    (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。"""
+    (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。
+    传 ep 时附带本集基准(base_*):集级覆盖 episode.json 生效则 base=集模型(source=episode),
+    否则 base=全局;组「跟随」的就是这个基准。"""
     cfg = cfg or load_genconfig()
     provider = active_video_provider(cfg)
     gmodel = effective_video_model(cfg)
     rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
     if gmodel and gmodel not in {r["id"] for r in rows}:
         rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
-    return {"provider": provider, "overridable": provider != "comfyui" and bool(gmodel),
-            "global_model": gmodel,
-            "global_label": video_model_label(gmodel, provider) if gmodel else _video_model_label(cfg),
-            "candidates": rows}
+    overridable = provider != "comfyui" and bool(gmodel)
+    glabel = video_model_label(gmodel, provider) if gmodel else _video_model_label(cfg)
+    out = {"provider": provider, "overridable": overridable,
+           "global_model": gmodel, "global_label": glabel, "candidates": rows,
+           "base_model": gmodel, "base_label": glabel, "base_source": "global",
+           "episode_model": "", "episode_warning": ""}
+    if ep:
+        es = _epsettings_get(project, ep)
+        ov = str(es.get("video_model") or "")
+        out["episode_model"] = ov
+        if ov:
+            if not overridable:
+                out["episode_warning"] = f"本集视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按全局执行"
+            elif es.get("provider") and es.get("provider") != provider:
+                out["episode_warning"] = (f"本集视频模型 {ov} 属渠道 {es.get('provider')},当前视频渠道已改为 {provider},"
+                                          "该覆盖未生效(按全局执行);请重新为本集选模型或改回跟随全局")
+            else:
+                out.update({"base_model": ov, "base_label": video_model_label(ov, provider), "base_source": "episode"})
+    return out
+
+
+def resolve_episode_settings(project: str, ep: str, cfg: dict | None = None,
+                             proj_skill: dict | None = None) -> dict:
+    """解析本集生效的视频模型与提示词技能(不落盘;分镜预览顶部展示/下拉)。
+    集级只覆盖模型;技能沿用项目设定,但本集换了模型且项目技能是「自动」或「跟随」时按本集模型解析
+    (与组级同一规则,避免 2.5 集套 2.0 技能);项目技能手选/跳过时照旧。"""
+    cfg = cfg or load_genconfig()
+    cand = group_video_candidates(project, cfg, ep)
+    proj_skill = proj_skill or resolve_prompt_skill(project, cfg)
+    provider, model, source = cand["provider"], cand["base_model"], cand["base_source"]
+    warning = cand["episode_warning"]
+    cands = {c["id"]: c for c in prompt_skill_candidates()}
+    smode, sid, reason = proj_skill["mode"], proj_skill["skill_id"], proj_skill["reason"]
+    if proj_skill.get("warning"):
+        warning = (warning + " · " if warning else "") + proj_skill["warning"]
+    if source == "episode" and smode not in ("manual", "off"):
+        smode, reason, warning = "auto", "", cand["episode_warning"]
+        sid = auto_prompt_skill_for_model(model)
+        if not sid:
+            reason = "no_match"
+            warning = (warning + " · " if warning else "") + f"本集视频模型 {model or '(未知)'} 没有对应的提示词技能"
+        elif sid not in cands:
+            sid, reason = "", "missing"
+        elif not project_skill_enabled(sid, project):
+            warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本集按无技能处理"
+            sid, reason = "", "disabled"
+    c = cands.get(sid) or {}
+    return {"ep": ep, "provider": provider, "video_model": model, "model_source": source,
+            "model_label": video_model_label(model, provider) if model else cand["global_label"],
+            "global_model": cand["global_model"], "global_label": cand["global_label"],
+            "episode_model": cand["episode_model"], "overridable": cand["overridable"],
+            "candidates": cand["candidates"],
+            "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
+            "skill_mode": smode, "reason": reason, "warning": warning,
+            "overridden": bool(cand["episode_model"])}
 
 
 def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = None,
                            gs: dict | None = None, proj_skill: dict | None = None) -> dict:
     """解析某组生效的视频模型与提示词技能(不落盘)。返回:
-    provider / video_model / model_source(global|group)/ model_label / ref_cap(本组生效参考图上限)/
+    provider / video_model / model_source(global|episode|group)/ model_label / ref_cap(本组生效参考图上限)/
     caps / skill_id / skill_dir / skill_path / skill_mode(global|auto|manual|off)/ skill_source /
     reason / warning / overridden(存在任一组级覆盖)。"""
     cfg = cfg or load_genconfig()
     gs = gs if gs is not None else _grpsettings_get(project, ep, grp)
-    cand = group_video_candidates(project, cfg)
+    cand = group_video_candidates(project, cfg, ep)
     provider, gmodel = cand["provider"], cand["global_model"]
-    warning = ""
-    model, source = gmodel, "global"
+    # 基准 = 集级覆盖(episode.json)生效则本集模型,否则全局;组级覆盖再压过基准
+    warning = cand.get("episode_warning") or ""
+    model, source = cand.get("base_model", gmodel), cand.get("base_source", "global")
     ov = str(gs.get("video_model") or "")
     if ov:
         if not cand["overridable"]:
@@ -4685,7 +4761,7 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
                        "该覆盖未生效(按全局执行);请重新为本组选模型或清除覆盖")
         else:
             model, source = ov, "group"
-    caps = video_model_caps(model) if source == "group" else None
+    caps = video_model_caps(model) if source != "global" else None
     sg = load_project_settings(project).get("shot_group") or {}
     ref_cap = (caps or {}).get("max_ref_images") if caps else None
     if ref_cap is None:
@@ -4702,8 +4778,8 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     # 提示词技能
     ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
     smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
-    if smode == "global" and source == "group":
-        # 组换了模型却没指定技能:按本组模型自动解析,而不是套全局模型的技能(否则 2.5 组套 2.0 技能)
+    if smode == "global" and source != "global":
+        # 组(或本集)换了模型却没指定技能:按本组生效模型自动解析,而不是套全局模型的技能(否则 2.5 组套 2.0 技能)
         smode_eff = "auto"
     else:
         smode_eff = smode
@@ -4760,6 +4836,15 @@ def sync_group_settings_effective(project: str) -> list[dict]:
     project = safe_slug(project)
     cfg = load_genconfig()
     proj_skill = resolve_prompt_skill(project, cfg)
+    # 集级覆盖快照(episode.json#effective):无组文件的组由机检 prompt_skill_applied 回落到它对照
+    for ep, es in _epsettings_all(project):
+        r = resolve_episode_settings(project, ep, cfg, proj_skill)
+        eff = {"provider": r["provider"], "video_model": r["video_model"], "model_source": r["model_source"],
+               "skill_id": r["skill_id"], "skill_mode": r["skill_mode"], "reason": r["reason"]}
+        cur = es.get("effective") if isinstance(es.get("effective"), dict) else {}
+        if {k: cur.get(k) for k in eff} != eff:
+            es["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
+            atomic_write_json(_epsettings_path(project, ep), es)
     out = []
     for ep, grp, gs in _grpsettings_all(project):
         r = resolve_group_settings(project, ep, grp, cfg, gs, proj_skill)
@@ -4779,18 +4864,27 @@ def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
     """系统提示词段:列出本项目存在组级覆盖的组(视频模型 / 提示词技能),prompt 与视频生成工位各一版。"""
     try:
         rows = [r for r in sync_group_settings_effective(project) if r["overridden"]]
+        eps = [r for r in (resolve_episode_settings(project, ep) for ep, _ in _epsettings_all(project)) if r["overridden"]]
     except Exception:
-        rows = []
-    if not rows:
+        rows, eps = [], []
+    if not rows and not eps:
         return ""
     lines = []
+    for r in eps:
+        caps = video_model_caps(r["video_model"]) or {}
+        cap_txt = (f"参考图 ≤{caps['max_ref_images']} 张、参考视频 ≤{caps['max_ref_videos']} 个、"
+                   f"参考音频 ≤{caps['max_ref_audios']} 段、组时长 ≤{caps['max_group_s']}s" if caps else "上限按该模型硬限")
+        skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
+                     if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
+        warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
+        lines.append(f"- 整集 `{r['ep']}`(未单独覆盖的组都按此):视频模型 **{r['video_model']}**(集级覆盖,{cap_txt});{skill_txt}{warn}")
     for r in rows:
         caps = r.get("caps") or {}
         cap_txt = (f"参考图 ≤{caps['max_ref_images']} 张、参考视频 ≤{caps['max_ref_videos']} 个、"
                    f"参考音频 ≤{caps['max_ref_audios']} 段、组时长 ≤{caps['max_group_s']}s"
                    if caps else f"参考图 ≤{r['ref_cap']} 张(其余上限沿用项目设定)")
         model_txt = (f"视频模型 **{r['video_model']}**(组级覆盖,{cap_txt})" if r["model_source"] == "group"
-                     else f"视频模型跟随全局 {r['video_model'] or r['model_label']}")
+                     else f"视频模型跟随{'本集' if r['model_source'] == 'episode' else '全局'} {r['video_model'] or r['model_label']}")
         skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
                      if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
         warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
@@ -4799,13 +4893,13 @@ def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
     if for_video_agent:
         return f"""
 
-## 组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
-以下组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定并改用该模型,渠道不变;`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
+## 集级/组级视频模型覆盖(用户在分镜预览顶部下拉为整集、或组卡「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下集/组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定(无组级设定时读集级 episode.json)并改用该模型,渠道不变;`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
 {body}"""
     return f"""
 
-## 组级视频模型/提示词技能覆盖(用户在分镜预览「🎛 模型」按钮为个别组单独指定,当前已生效)
-以下组不按项目级设定——写这些组的 video_prompt 时按本组的视频模型能力与技能执行:参考素材上限按本组模型硬限(而非项目「视频模型设置」),提示词技能按本组所列(须先 Read 该 SKILL.md,`skill_applied.id` 填本组技能 id;不套用时填 `{{"id": null, "reason": ...}}`),机检 `prompt_skill_applied` 会按组分别对照 `assets/group_settings/epNN/grpNNN.json` 的 effective 快照:
+## 集级/组级视频模型/提示词技能覆盖(用户在分镜预览顶部下拉为整集、或组卡「🎛 模型」按钮为个别组单独指定,当前已生效)
+以下集/组不按项目级设定——写这些组的 video_prompt 时按本组生效的视频模型能力与技能执行:参考素材上限按本组模型硬限(而非项目「视频模型设置」),提示词技能按本组所列(须先 Read 该 SKILL.md,`skill_applied.id` 填本组技能 id;不套用时填 `{{"id": null, "reason": ...}}`),机检 `prompt_skill_applied` 会按组分别对照 `assets/group_settings/epNN/grpNNN.json` 的 effective 快照(无组文件时对照 `epNN/episode.json`):
 {body}"""
 
 
@@ -4822,7 +4916,7 @@ async def api_grpsettings_get(project: str, ep: str, grp: str):
                        "prompt_skill": gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict)
                        else {"mode": "global", "skill_id": ""}},
             "resolved": resolve_group_settings(project, ep, grp, cfg, gs, proj_skill),
-            "models": group_video_candidates(project, cfg),
+            "models": group_video_candidates(project, cfg, ep),
             "skills": prompt_skill_candidates(),
             "project_skill": proj_skill,
             "project_ref_cap": max_group_ref_images(project)}
@@ -4838,15 +4932,15 @@ async def api_grpsettings_set(body: dict):
         raise ServiceError(400, "ep and grp are required")
     _proj_base(project)
     cfg = load_genconfig()
-    cand = group_video_candidates(project, cfg)
+    cand = group_video_candidates(project, cfg, ep)
     model = str((body or {}).get("video_model") or "")
     if model:
         if not cand["overridable"]:
             raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持组级切换模型")
         if model not in {c["id"] for c in cand["candidates"]}:
             raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
-        if model == cand["global_model"]:
-            model = ""   # 选了全局同款 = 跟随全局
+        if model == cand["base_model"]:
+            model = ""   # 选了基准同款(本集/全局)= 跟随
     ps = (body or {}).get("prompt_skill") or {}
     if not isinstance(ps, dict):
         raise ServiceError(400, "prompt_skill must be an object")
@@ -4882,6 +4976,49 @@ async def api_grpsettings_set(body: dict):
             pass
     HUB.publish({"type": "group_settings", "project": project, "ep": ep, "grp": grp,
                  "resolved": out["resolved"], "changed": old != _grpsettings_get(project, ep, grp)})
+    return out
+
+
+async def api_epsettings_get(project: str, ep: str):
+    project = safe_slug(project)
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    _proj_base(project)
+    cfg = load_genconfig()
+    return {"project": project, "ep": ep,
+            "config": {"video_model": str(_epsettings_get(project, ep).get("video_model") or "")},
+            "resolved": resolve_episode_settings(project, ep, cfg)}
+
+
+async def api_epsettings_set(body: dict):
+    """分镜预览顶部视频模型下拉(2026-09-11):{project, ep, video_model}。空 = 跟随全局(删文件)。
+    渠道不可选:只能取当前视频渠道目录;组级覆盖仍压过本集。"""
+    project = safe_slug((body or {}).get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", (body or {}).get("ep") or "")
+    if not ep:
+        raise ServiceError(400, "ep is required")
+    _proj_base(project)
+    cfg = load_genconfig()
+    cand = group_video_candidates(project, cfg)
+    model = str((body or {}).get("video_model") or "")
+    if model:
+        if not cand["overridable"]:
+            raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持按集切换模型")
+        if model not in {c["id"] for c in cand["candidates"]}:
+            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
+        if model == cand["global_model"]:
+            model = ""   # 选了全局同款 = 跟随全局
+    path = _epsettings_path(project, ep)
+    old = _epsettings_get(project, ep)
+    if not model:
+        path.unlink(missing_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(path, {"video_model": model, "provider": cand["provider"],
+                                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+    sync_group_settings_effective(project)
+    out = await api_epsettings_get(project, ep)
+    HUB.publish({"type": "episode_settings", "project": project, "ep": ep,
+                 "resolved": out["resolved"], "changed": old != _epsettings_get(project, ep)})
     return out
 
 
@@ -6356,12 +6493,17 @@ def _preview_storyboard(project: str, ep: str):
     # 组级视频模型/技能覆盖(2026-08-30):refs 上限按组生效模型判;顶部展示全局模型与技能
     gcfg = load_genconfig()
     proj_skill = resolve_prompt_skill(base.name, gcfg)
-    gcand = group_video_candidates(base.name, gcfg)
-    data["video_model"] = {"provider": gcand["provider"], "model": gcand["global_model"],
-                           "label": gcand["global_label"], "overridable": gcand["overridable"]}
-    data["prompt_skill"] = {"mode": proj_skill["mode"], "skill_id": proj_skill["skill_id"],
-                            "dir": proj_skill["dir"], "warning": proj_skill["warning"],
-                            "reason": proj_skill["reason"]}
+    # 顶部展示本集生效模型(集级覆盖 episode.json → 全局)并可直接切换(2026-09-11)
+    eres = resolve_episode_settings(base.name, ep, gcfg, proj_skill)
+    data["video_model"] = {"provider": eres["provider"], "model": eres["video_model"],
+                           "label": eres["model_label"], "overridable": eres["overridable"],
+                           "source": eres["model_source"], "episode_model": eres["episode_model"],
+                           "global_model": eres["global_model"], "global_label": eres["global_label"],
+                           "candidates": [{"id": c["id"], "label": video_model_label(c["id"], eres["provider"])}
+                                          for c in eres["candidates"]]}
+    data["prompt_skill"] = {"mode": eres["skill_mode"], "skill_id": eres["skill_id"],
+                            "dir": eres["skill_dir"], "warning": eres["warning"],
+                            "reason": eres["reason"]}
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
