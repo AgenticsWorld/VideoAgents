@@ -111,6 +111,12 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 let DATA=[], CUR=null, FOLDER=null;
 // 深链定位:分镜预览页参考图标签跳转 ?id=<CRE-ID>,首次加载直接选中该生物
 let JUMP_ID=new URLSearchParams(location.search).get('id');
+// 把当前项目+选中条目写回地址栏(?project=&id=),刷新/分享后仍停在同一条目
+function syncUrl(){
+  const proj=$('#project').value.trim()||'demo';
+  const id=CUR||JUMP_ID;
+  history.replaceState(null,'','?project='+encodeURIComponent(proj)+(id?'&id='+encodeURIComponent(id):''));
+}
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent','oid','id','name','is_plot_prop','key_prop','concept_ref','dictionary_term']);
 // 详情卡分区标签:坐骑卡(mount.json)与生物卡(creature.json)字段并集;未知键原样显示
 const SEC_NAMES={anatomy:'解剖结构',locomotion:'运动方式',ownership:'归属',tack:'鞍具装备',performance:'载具性能',
@@ -150,7 +156,7 @@ function renderList(){
         +(ctype(p)?`<span class="badge">${esc(ctype(p))}</span>`:'')
         +(p.images.length?`<span class="badge pic" title="${esc(I18N.f('图{n}',{n:p.images.length}))}">🖼${p.images.length}</span>`:'')
         +`</div><span class="id">${esc(p.id)}</span>`;
-      d.onclick=()=>{CUR=p.id;FOLDER=null;renderList();renderDetail(p)};
+      d.onclick=()=>{CUR=p.id;FOLDER=null;syncUrl();renderList();renderDetail(p)};
       box.appendChild(d);
     });
   if(!box.children.length)box.innerHTML='<div class="empty">没有匹配的生物</div>';
@@ -241,7 +247,7 @@ document.addEventListener('click',e=>{
 
 async function load(){
   const proj=$('#project').value.trim()||'demo';
-  history.replaceState(null,'','?project='+encodeURIComponent(proj));
+  syncUrl();   // 先写项目名(id 沿用当前选中/深链),加载完成后再按实际命中的条目重写
   $('#detail').innerHTML='<div class="empty">加载中…</div>';
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/creatures');
@@ -252,12 +258,12 @@ async function load(){
   DATA.sort((a,b)=>((b.images.length?2:0)+(Object.keys(b.card).length?1:0))
     -((a.images.length?2:0)+(Object.keys(a.card).length?1:0))
     ||a.id.localeCompare(b.id));
-  CUR=DATA.length?DATA[0].id:null;
-  if(JUMP_ID){
-    const c=DATA.find(x=>x.id===JUMP_ID);
-    if(c)CUR=c.id;
-    JUMP_ID=null;   // 只在首次加载生效,手动刷新/切项目后不再强制定位
-  }
+  // 优先级:首次深链 id > 页内刷新前已选中的条目 > 列表第一项(切项目时旧 id 找不到自然回落)
+  const keep=JUMP_ID||CUR;
+  JUMP_ID=null;   // 只在首次加载生效
+  const kept=keep?DATA.find(x=>x.id===keep):null;
+  CUR=kept?kept.id:(DATA.length?DATA[0].id:null);
+  syncUrl();
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
   if(cur){
