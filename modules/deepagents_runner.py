@@ -13,6 +13,7 @@ stdout 输出 JSONL 事件(server.handle_deepagents_event 解析):
   {"type":"session","session_id":...}   本次会话 thread_id(仅启用检查点时)
   {"type":"text","text":...}        assistant 文本增量
   {"type":"tool","name":...,"input":{...}}   工具调用
+  {"type":"tool_result","name":...,"output":...,"is_error":bool}   工具回执(宿主显示体积+首行)
   {"type":"usage","input_tokens":N,"output_tokens":N}
   {"type":"result","text":...}      最终回复
   {"type":"error","message":...}
@@ -292,7 +293,7 @@ def main():
         sys.exit(2)
 
     from langchain_openai import ChatOpenAI
-    from langchain_core.messages import AIMessage
+    from langchain_core.messages import AIMessage, ToolMessage
     from deepagents import (
         GeneralPurposeSubagentProfile,
         HarnessProfile,
@@ -378,6 +379,12 @@ def main():
         for upd in agent.stream(inp, stream_mode="updates", config=config):
             for _node, data in (upd or {}).items():
                 for m in (data or {}).get("messages", []) or []:
+                    if isinstance(m, ToolMessage):
+                        # 工具回执:宿主只取体积+首行做实时反馈,正文截断即可
+                        emit({"type": "tool_result", "name": getattr(m, "name", "") or "",
+                              "output": content_text(m.content)[:2000],
+                              "is_error": getattr(m, "status", "") == "error"})
+                        continue
                     if not isinstance(m, AIMessage):
                         continue
                     txt = content_text(m.content)

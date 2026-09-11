@@ -66,6 +66,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .msg .meta{font-size:11px;color:var(--dim);margin-bottom:4px}
 .msg.user .meta{color:#9db8dd}
 .toolchip{display:block;font-size:12px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;padding:1px 0}
+.toolchip.toolres{opacity:.65;padding-left:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg .meta .liveprog{margin-left:8px;color:var(--yellow)}
 #composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
 #input{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;resize:none;height:64px;font:inherit}
 /* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
@@ -2534,6 +2536,7 @@ async function restoreLive(id){
       const c=document.createElement('span');c.className='toolchip';c.textContent=a;d.appendChild(c);
     });
     appendLiveText(d,full.text);
+    if(full.progress){const meta=d.querySelector('.meta');if(meta){const sp=document.createElement('span');sp.className='liveprog';sp.textContent=full.progress;meta.appendChild(sp)}}
     $('#messages').scrollTop=$('#messages').scrollHeight;
   }
 }
@@ -2828,8 +2831,22 @@ function connect(){
     else if(ev.type==='tool'){
       if(ev.agent===CURRENT&&runProj(ev.run_id)===curProj()){
         const d=liveBox(ev.run_id);
-        const c=document.createElement('span');c.className='toolchip';c.textContent=ev.desc;d.appendChild(c);
+        const c=document.createElement('span');c.className='toolchip'+(ev.kind==='result'?' toolres':'');c.textContent=ev.desc;d.appendChild(c);
         $('#messages').scrollTop=$('#messages').scrollHeight;
+      }
+    }
+    else if(ev.type==='progress'){   // 思考心跳/工具入参生成/执行工具…:只改进度行,不重画整卡
+      const r=RUNS[ev.run_id];
+      if(r){if(ev.note)r.progress=ev.note;else delete r.progress;
+        const card=document.querySelector(`.run[data-id="${ev.run_id}"]`);
+        if(card){let pg=card.querySelector('.prog');
+          if(ev.note&&r.status==='running'){if(!pg){pg=document.createElement('div');pg.className='prog';const err=card.querySelector('.err2');card.insertBefore(pg,err||null)}pg.textContent=ev.note}
+          else if(pg)pg.remove();}}
+      if(ev.agent===CURRENT&&runProj(ev.run_id)===curProj()){
+        const live=LIVE[ev.run_id];const meta=live&&live.querySelector('.meta');
+        if(meta){let sp=meta.querySelector('.liveprog');
+          if(ev.note){if(!sp){sp=document.createElement('span');sp.className='liveprog';meta.appendChild(sp)}sp.textContent=ev.note}
+          else if(sp)sp.remove();}
       }
     }
     else if(ev.type==='confirm')showConfirm(ev);

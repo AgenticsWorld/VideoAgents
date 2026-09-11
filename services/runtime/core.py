@@ -3593,6 +3593,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 权限(非交互运行必需)。系统提示词每轮都传(同 claude --append-system-prompt)
                 base = [cli_executable, "-p", message,
                         "--output-format", "streaming-messages-json",
+                        "--include-partial-messages",   # 同 claude:逐块增量 stream_event
                         "--always-approve", "--max-turns", str(max_turns_setting()),
                         "--rules", role]
                 if model:
@@ -3612,8 +3613,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     base += ["--session", sid]
                 return base + [message]
+            # --include-partial-messages:逐块增量 stream_event(文字/工具入参/思考心跳),
+            # 否则一个内容块(如几千字的 heredoc 工具调用)生成完才有一条 assistant 事件,
+            # 期间前端无任何日志;整块 assistant 事件照旧发出,处理器按已流出前缀去重
             c = [cli_executable, "-p", message,
-                 "--output-format", "stream-json", "--verbose"]
+                 "--output-format", "stream-json", "--verbose",
+                 "--include-partial-messages"]
             if claude_prompt_file:
                 c += ["--append-system-prompt-file", str(claude_prompt_file)]
             else:
@@ -3704,12 +3709,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                     line = raw.decode("utf-8", "replace").strip()
                     if not line:
                         continue
-                    log_f.write(line + "\n")
-                    log_f.flush()
                     try:
                         obj = json.loads(line)
                     except Exception:
+                        log_f.write(line + "\n")
+                        log_f.flush()
                         continue
+                    if obj.get("type") != "stream_event":
+                        # 增量 stream_event 只喂前端,不落 jsonl:一条 delta 一行会把日志撑大
+                        # 十倍;整块 assistant 事件照旧落盘,用量统计/会话日志口径不变
+                        log_f.write(line + "\n")
+                        log_f.flush()
                     if engine == "codex":
                         handle_codex_event(run, obj)
                     elif engine == "kimi":
@@ -3870,6 +3880,64 @@ async def execute_run(run: dict, message: str, model: str | None):
                     print(f"[prompt_skill] 自动补读派发失败:{e}", flush=True)
 
 
+def _fmt_tokens(n) -> str:
+    try:
+        n = int(n or 0)
+    except (TypeError, ValueError):
+        return "?"
+    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+
+
+def _fmt_bytes(n: int) -> str:
+    return f"{n / 1024:.1f} KB" if n >= 1024 else f"{n} B"
+
+
+def run_progress(run: dict, note: str | None):
+    """更新运行卡片/实时框上的进度行(思考中/生成入参/执行工具…),只推轻量 SSE,
+    不走 publish_run(不重发整份 run 摘要);run.progress 本身会随下次 publish_run 带出。
+    note 为空 = 清掉进度行。"""
+    note = (note or "")[:300]
+    if run.get("progress", "") == note:
+        return
+    if note:
+        run["progress"] = note
+    else:
+        run.pop("progress", None)
+    HUB.publish({"type": "progress", "run_id": run["id"],
+                 "agent": run["agent"], "note": note})
+
+
+def _tool_output_text(output) -> str:
+    """把各引擎的工具输出归一成纯文本(claude/pi 是 content 块列表,其余是字符串)。"""
+    if output is None:
+        return ""
+    if isinstance(output, str):
+        return output
+    if isinstance(output, dict):
+        if isinstance(output.get("content"), (list, str)):
+            return _tool_output_text(output["content"])
+        return str(output.get("text") or output.get("output") or "")
+    if isinstance(output, list):
+        return "\n".join(_tool_output_text(b.get("text") if isinstance(b, dict) else b)
+                         for b in output if b)
+    return str(output)
+
+
+def tool_receipt(run: dict, output, is_error: bool = False, label: str = ""):
+    """工具执行完毕的回执:体积 + 首行摘要,推到实时框(不进 activity:activity 参与
+    prompt_skill_read 等机检的路径匹配,工具输出首行混进去会误判)。"""
+    text = _tool_output_text(output)
+    size = len(text.encode("utf-8", "replace"))
+    first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    if len(first) > 100:
+        first = first[:100] + "…"
+    head = f"✗ {label or '工具'}报错" if is_error else f"↩ {label + ' ' if label else ''}{_fmt_bytes(size)}"
+    desc = f"{head} · {first}" if first else head
+    HUB.publish({"type": "tool", "run_id": run["id"], "agent": run["agent"],
+                 "desc": desc, "kind": "result"})
+    run_progress(run, "⏳ 等待模型下一步…")
+
+
 def rel_path(p: str) -> str:
     try:
         return os.path.relpath(p, ROOT) if os.path.isabs(p) else p
@@ -3898,6 +3966,20 @@ def handle_codex_event(run: dict, obj: dict):
             HUB.publish({"type": "tool", "run_id": run["id"],
                          "agent": run["agent"], "desc": desc})
             publish_run(run)
+            run_progress(run, "⚙ 执行命令中…")
+        elif it == "command_execution" and t == "item.completed":
+            code = item.get("exit_code")
+            tool_receipt(run, item.get("aggregated_output"),
+                         is_error=bool(code not in (0, None)),
+                         label=f"exit {code}" if code not in (0, None) else "")
+        elif it == "mcp_tool_call" and t == "item.completed":
+            tool_receipt(run, item.get("result") or item.get("output"),
+                         is_error=item.get("status") == "failed")
+        elif it == "reasoning" and t == "item.completed":
+            # codex 的推理摘要(有则显示首行,让思考期不再空白)
+            summary = (item.get("text") or "").strip().splitlines()
+            if summary:
+                run_progress(run, "💭 " + summary[0][:120])
         elif it == "file_change" and t == "item.completed":
             for ch in item.get("changes", []):
                 fp = rel_path(ch.get("path") or "")
@@ -3914,10 +3996,13 @@ def handle_codex_event(run: dict, obj: dict):
             HUB.publish({"type": "tool", "run_id": run["id"],
                          "agent": run["agent"], "desc": desc})
             publish_run(run)
+    elif t == "turn.started":
+        run_progress(run, "💭 模型思考中…")
     elif t == "turn.completed":
         u = obj.get("usage") or {}
         run["tokens"] = (run.get("tokens") or 0) + \
             (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+        run_progress(run, None)
     elif t in ("turn.failed", "error"):
         run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
 
@@ -3952,6 +4037,10 @@ def handle_kimi_event(run: dict, obj: dict):
             HUB.publish({"type": "tool", "run_id": run["id"],
                          "agent": run["agent"], "desc": desc})
             publish_run(run)
+            run_progress(run, "⚙ 执行工具中…")
+    elif role_ == "tool":
+        # kimi stream-json 无增量/思考事件,工具回执是两次模型输出之间唯一的反馈点
+        tool_receipt(run, obj.get("content"), is_error=bool(obj.get("is_error")))
     elif role_ == "meta" and obj.get("type") == "session.resume_hint":
         run["session_id"] = obj.get("session_id")
 
@@ -3978,13 +4067,25 @@ def handle_pi_event(run: dict, obj: dict):
         return
     if event == "message_update":
         update = obj.get("assistantMessageEvent") or {}
-        if update.get("type") == "text_delta":
+        ut = update.get("type")
+        if ut == "text_delta":
             delta = update.get("delta") or ""
             if delta:
                 run["_pi_message_text"] = run.get("_pi_message_text", "") + delta
                 run["text"] = run.get("text", "") + delta
                 HUB.publish({"type": "text", "run_id": run["id"],
                              "agent": run["agent"], "text": delta})
+            run_progress(run, None)
+        elif ut == "thinking_start":
+            run["_pi_thinking_chars"] = 0
+            run_progress(run, "💭 思考中…")
+        elif ut == "thinking_delta":
+            d = len(update.get("delta") or "")
+            n = run["_pi_thinking_chars"] = (run.get("_pi_thinking_chars") or 0) + d
+            if d and n // 200 != (n - d) // 200:   # 每 ~200 字刷一次
+                run_progress(run, f"💭 思考中 ≈{n} 字")
+        elif ut == "toolcall_start":
+            run_progress(run, "⚙ 生成工具调用参数…")
         return
     if event == "message_end":
         message = obj.get("message") or {}
@@ -4020,6 +4121,10 @@ def handle_pi_event(run: dict, obj: dict):
         HUB.publish({"type": "tool", "run_id": run["id"],
                      "agent": run["agent"], "desc": desc})
         publish_run(run)
+        run_progress(run, "⚙ 执行工具中…")
+        return
+    if event == "tool_execution_end":
+        tool_receipt(run, obj.get("result"), is_error=bool(obj.get("isError")))
         return
     if event == "error":
         run["error"] = str(obj.get("error") or obj.get("message") or obj)[:500]
@@ -4057,7 +4162,15 @@ def handle_opencode_event(run: dict, obj: dict):
         HUB.publish({"type": "tool", "run_id": run["id"],
                      "agent": run["agent"], "desc": desc})
         publish_run(run)
+        state = part.get("state") or {}
+        if state.get("status") in ("completed", "error"):
+            # opencode 的 tool_use 事件本身在工具完成时才发,顺带就是回执
+            tool_receipt(run, state.get("output") or state.get("error"),
+                         is_error=state.get("status") == "error")
+    elif t == "step_start":
+        run_progress(run, "💭 模型思考中…")
     elif t == "step_finish":
+        run_progress(run, None)
         tok = part.get("tokens") or {}
         total = tok.get("total")
         if not isinstance(total, (int, float)):
@@ -4146,6 +4259,10 @@ def handle_deepagents_event(run: dict, obj: dict):
         HUB.publish({"type": "tool", "run_id": run["id"],
                      "agent": run["agent"], "desc": desc})
         publish_run(run)
+        run_progress(run, "⚙ 执行工具中…")
+    elif t == "tool_result":
+        tool_receipt(run, obj.get("output"), is_error=bool(obj.get("is_error")),
+                     label=str(obj.get("name") or ""))
     elif t == "usage":
         run["tokens"] = (run.get("tokens") or 0) + \
             (obj.get("input_tokens") or 0) + (obj.get("output_tokens") or 0)
@@ -4155,10 +4272,59 @@ def handle_deepagents_event(run: dict, obj: dict):
         run["error"] = str(obj.get("message") or "")[:500]
 
 
+def _claude_stream_event(run: dict, ev: dict):
+    """--include-partial-messages 的增量事件(Anthropic Messages 流式线格式,grok 同构):
+    content_block_start/delta/stop 按块索引跟踪;文字增量直接推前端并记入已流出前缀
+    (整块 assistant 事件到达时只补差额);工具入参增量按体积报进度;thinking_delta 只带
+    estimated_tokens(正文不外发)→ 思考心跳。"""
+    et = ev.get("type")
+    blocks = run.setdefault("_cc_blocks", {})
+    idx = ev.get("index")
+    if et == "content_block_start":
+        cb = ev.get("content_block") or {}
+        bt = cb.get("type")
+        blocks[idx] = {"type": bt, "name": cb.get("name"), "json_len": 0}
+        if bt == "thinking":
+            run_progress(run, "💭 思考中…")
+        elif bt == "text":
+            run_progress(run, "✍ 输出中…")
+        elif bt == "tool_use":
+            run_progress(run, f"⚙ 生成 {cb.get('name') or '工具'} 调用参数…")
+    elif et == "content_block_delta":
+        d = ev.get("delta") or {}
+        dt = d.get("type")
+        blk = blocks.setdefault(idx, {"json_len": 0})
+        if dt == "text_delta":
+            delta = d.get("text") or ""
+            if delta:
+                run["_cc_streamed"] = run.get("_cc_streamed", "") + delta
+                run["text"] = run.get("text", "") + delta
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": delta})
+        elif dt == "input_json_delta":
+            add = len(d.get("partial_json") or "")
+            n = blk["json_len"] = blk.get("json_len", 0) + add
+            if add and n // 2048 != (n - add) // 2048:   # 每 2KB 刷一次
+                run_progress(run, f"⚙ 生成 {blk.get('name') or '工具'} 调用参数 {_fmt_bytes(n)}…")
+        elif dt == "thinking_delta":
+            est = d.get("estimated_tokens")
+            if est:
+                run_progress(run, f"💭 思考中 ≈{_fmt_tokens(est)} tokens")
+    elif et == "message_stop":
+        blocks.clear()
+
+
 def handle_claude_event(run: dict, obj: dict):
     t = obj.get("type")
-    if t == "system" and obj.get("subtype") == "init":
+    if t == "stream_event":
+        _claude_stream_event(run, obj.get("event") or {})
+    elif t == "system" and obj.get("subtype") == "init":
         run["session_id"] = obj.get("session_id")
+    elif t == "system" and obj.get("subtype") == "thinking_tokens":
+        # CLI 每隔一段思考发一次估算 token 数(不带正文);不开 partial 也有,作心跳
+        est = obj.get("estimated_tokens")
+        if est:
+            run_progress(run, f"💭 思考中 ≈{_fmt_tokens(est)} tokens")
     elif t == "system" and obj.get("subtype") == "api_retry":
         # CLI 将要退避重试一次 API 调用。error_status 为 null = 连接层错误(ECONNRESET/
         # 超时,没拿到 HTTP 响应):超过容忍次数即标记 net_error,由运行循环杀进程快速失败。
@@ -4174,9 +4340,16 @@ def handle_claude_event(run: dict, obj: dict):
     elif t == "assistant":
         for c in (obj.get("message") or {}).get("content", []):
             if c.get("type") == "text" and c.get("text"):
-                run["text"] = run.get("text", "") + c["text"]
-                HUB.publish({"type": "text", "run_id": run["id"],
-                             "agent": run["agent"], "text": c["text"]})
+                # 开了 partial 时文字已按 delta 流出:只补未流出的尾巴(或整段,若无增量)
+                text = c["text"]
+                streamed = run.pop("_cc_streamed", "")
+                missing = (text[len(streamed):] if text.startswith(streamed)
+                           else ("" if streamed else text))
+                if missing:
+                    run["text"] = run.get("text", "") + missing
+                    HUB.publish({"type": "text", "run_id": run["id"],
+                                 "agent": run["agent"], "text": missing})
+                run_progress(run, None)
             elif c.get("type") == "tool_use":
                 desc, fp = tool_summary(c.get("name", "?"), c.get("input") or {})
                 run.setdefault("activity", []).append(desc)
@@ -4187,6 +4360,12 @@ def handle_claude_event(run: dict, obj: dict):
                 HUB.publish({"type": "tool", "run_id": run["id"],
                              "agent": run["agent"], "desc": desc})
                 publish_run(run)
+                run_progress(run, f"⚙ 执行 {c.get('name') or '工具'} 中…")
+    elif t == "user":
+        # 工具执行结果回到模型:给前端一条回执(体积+首行),否则「命令跑完了」无任何反馈
+        for c in (obj.get("message") or {}).get("content", []) or []:
+            if isinstance(c, dict) and c.get("type") == "tool_result":
+                tool_receipt(run, c.get("content"), is_error=bool(c.get("is_error")))
     elif t == "result":
         if obj.get("is_error"):
             # CLI 以 API 错误收尾(重试耗尽/未授权等)时 result 正文是错误文案

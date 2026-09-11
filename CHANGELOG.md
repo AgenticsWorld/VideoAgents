@@ -8,6 +8,8 @@ All notable public changes to VideoAgents are documented here.
 
 ### Changed
 
+- **Live run logs no longer go quiet between tool calls**: the Claude and Grok engines now run with `--include-partial-messages`, so assistant text streams as it is generated and long tool-call arguments (multi-KB heredocs) report their size while being produced instead of appearing only once complete. Every engine now shows a thinking heartbeat (Claude/Grok estimated thinking tokens, pi thinking characters, Codex/opencode turn markers) and a tool receipt (output size and first line, error flag) after each tool finishes; DeepAgents runner emits a new `tool_result` event for this. The run card's progress line and the chat live box share the new lightweight `progress` SSE event. Incremental `stream_event` lines are fed to the UI only and are not written to `runs/<id>.jsonl`, so usage accounting and log size are unchanged.
+
 - **Saving Generation Models no longer messages the producer**: the "[settings changed]" chat that was auto-sent to the workflow orchestrator after every save on the Generation Models page is gone (channel/model switches take effect on the next `genmedia` submission anyway, and the notice only tempted the orchestrator to dispatch work). Project-settings and creative-brief changes still notify the orchestrator as before.
 
 ### Added
