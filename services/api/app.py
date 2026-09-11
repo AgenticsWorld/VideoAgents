@@ -659,6 +659,27 @@ async def set_agent_memory(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_memory_set(body)
 
 
+@api.get("/voice-input", tags=["voice-input"])
+async def voice_input_get() -> dict[str, Any]:
+    return await core.api_voice_input_get()
+
+
+@api.post("/config/voice-input", tags=["voice-input"])
+async def voice_input_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_voice_input_set(body)
+
+
+@api.post("/voice-input/download", tags=["voice-input"])
+async def voice_input_download(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_voice_input_download(body)
+
+
+@api.post("/voice-input/transcribe", tags=["voice-input"])
+async def voice_input_transcribe(request: Request, lang: str = "") -> dict[str, Any]:
+    return await core.api_voice_input_transcribe(
+        await request.body(), request.headers.get("content-type", ""), lang)
+
+
 @api.get("/diagnostics", tags=["diagnostics"])
 async def diagnostics_summary() -> dict[str, Any]:
     return await core.api_diagnostics_get()

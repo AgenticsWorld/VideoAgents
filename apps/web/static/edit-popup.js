@@ -65,6 +65,14 @@
     '@media (prefers-reduced-motion:reduce){#edit-popup.ep-sent{animation:none}}',
   ].join('\n');
 
+  // 语音输入按钮(设置「语音输入」开启时才显示):共用 /static/voice-input.js,未随页面加载时按需拉取
+  function attachVoice(ta){
+    if(window.VoiceInput){VoiceInput.attach(ta);return}
+    if(document.querySelector('script[data-voice-input]'))return;
+    var s=document.createElement('script');s.src='/static/voice-input.js?v=20260911';s.setAttribute('data-voice-input','1');
+    s.onload=function(){if(window.VoiceInput)VoiceInput.attach(ta)};
+    document.head.appendChild(s);
+  }
   function ensure(){
     if(root)return root;
     var st=document.createElement('style');st.textContent=CSS;document.head.appendChild(st);
@@ -87,6 +95,7 @@
     root.querySelector('.ep-cancel').onclick=close;
     root.querySelector('.ep-send').onclick=send;
     var ta=root.querySelector('textarea');
+    attachVoice(ta);
     ta.addEventListener('keydown',function(e){
       if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send();}   // 与控制台输入框同一快捷键
       else if(e.key==='Escape'){e.preventDefault();close();}         // 仅焦点在浮窗内时 Esc 关闭,不截获页面其它 Esc

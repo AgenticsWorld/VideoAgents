@@ -1,4 +1,4 @@
-import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, shell} from 'electron'
+import {app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, session, shell, systemPreferences} from 'electron'
 import type {MessageBoxOptions} from 'electron'
 import {ChildProcess, spawn, spawnSync} from 'node:child_process'
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs'
@@ -586,8 +586,26 @@ async function ensureWebServer(): Promise<void> {
   throw new Error('Python Web 服务启动超时')
 }
 
+/** 麦克风权限(语音输入):只放行本机 Web 服务页面的音频采集,其它权限沿用 Electron 默认(允许)。
+ *  macOS 首次访问由系统按 Info.plist 的 NSMicrophoneUsageDescription 弹授权框;这里先主动请求,
+ *  避免 Chromium 在未授权时直接把 getUserMedia 判为 NotAllowedError。 */
+function installMediaPermissionHandler(): void {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    if (permission !== 'media') { callback(true); return }
+    const mediaTypes = (details as {mediaTypes?: string[]}).mediaTypes ?? []
+    const fromApp = !details.requestingUrl || details.requestingUrl.startsWith(webOrigin)
+    if (!fromApp || mediaTypes.includes('video')) { callback(false); return }
+    if (process.platform === 'darwin') {
+      systemPreferences.askForMediaAccess('microphone').then(callback, () => callback(false))
+      return
+    }
+    callback(true)
+  })
+}
+
 async function createWindow(): Promise<void> {
   await ensureWebServer()
+  installMediaPermissionHandler()
   window = new BrowserWindow({
     width: 1440, height: 920, minWidth: 980, minHeight: 680,
     backgroundColor: '#0c0d11', title: 'VideoAgents',

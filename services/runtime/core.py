@@ -11594,6 +11594,144 @@ async def api_agent_memory_set(body: dict):
     return await api_agent_memory_get()
 
 
+# ---------------- 语音输入(设置菜单「高级→语音输入」) ----------------
+# 浏览器录音 → POST 音频字节 → ffmpeg 转 16k 单声道 WAV → 子进程 modules/voice_input.py
+# 用本机 faster-whisper 转写(重依赖不进 API 进程,与素材库 ASR 同一隔离约定)。
+# 开关与模型存 state.json#voice_input(全局,默认关);模型下载走后台子进程,
+# 进度文件 data/models/faster-whisper/.download-<model>.json 由 GET /voice-input 轮询回读。
+VOICE_INPUT_DEFAULT = {"enabled": False, "model": "small"}
+VOICE_DOWNLOADS: dict[str, subprocess.Popen] = {}     # model_id → 下载子进程(本进程生命周期内)
+VOICE_TMP_DIR = RUNTIME_DIR / "voice-input"
+
+
+def _voice_input():
+    from modules import voice_input
+    return voice_input
+
+
+def voice_input_settings() -> dict:
+    cfg = dict(VOICE_INPUT_DEFAULT)
+    saved = STATE.get("voice_input")
+    if isinstance(saved, dict):
+        cfg.update({k: saved[k] for k in VOICE_INPUT_DEFAULT if k in saved})
+    if cfg["model"] not in _voice_input().CATALOG_BY_ID:
+        cfg["model"] = VOICE_INPUT_DEFAULT["model"]
+    cfg["enabled"] = bool(cfg["enabled"])
+    return cfg
+
+
+def _voice_downloading() -> set[str]:
+    """仍在跑的下载子进程集合;已退出的顺手清掉句柄。"""
+    alive = set()
+    for mid, proc in list(VOICE_DOWNLOADS.items()):
+        if proc.poll() is None:
+            alive.add(mid)
+        else:
+            VOICE_DOWNLOADS.pop(mid, None)
+    return alive
+
+
+async def api_voice_input_get():
+    vi = _voice_input()
+    cfg = voice_input_settings()
+    models = await asyncio.to_thread(vi.all_status, _voice_downloading())
+    cur = next((m for m in models if m["id"] == cfg["model"]), None)
+    return {**cfg, "models": models,
+            "model_ready": bool(cur and cur["status"] == "ready"),
+            "ffmpeg": shutil.which("ffmpeg") is not None}
+
+
+async def api_voice_input_set(body: dict):
+    vi = _voice_input()
+    cfg = voice_input_settings()
+    if "enabled" in body:
+        if not isinstance(body["enabled"], bool):
+            raise ServiceError(400, "enabled must be a boolean")
+        cfg["enabled"] = body["enabled"]
+    if "model" in body:
+        if body["model"] not in vi.CATALOG_BY_ID:
+            raise ServiceError(400, f"model must be one of {[m['id'] for m in vi.CATALOG]}")
+        cfg["model"] = body["model"]
+    STATE["voice_input"] = cfg
+    save_state(STATE)
+    return await api_voice_input_get()
+
+
+async def api_voice_input_download(body: dict):
+    """后台拉取模型:同一模型只起一个子进程;已就绪直接返回。"""
+    vi = _voice_input()
+    mid = str(body.get("model") or voice_input_settings()["model"])
+    if mid not in vi.CATALOG_BY_ID:
+        raise ServiceError(400, f"unknown model {mid}")
+    if mid not in _voice_downloading() and not vi.is_ready(mid):
+        vi.MODEL_ROOT.mkdir(parents=True, exist_ok=True)
+        log = open(vi.MODEL_ROOT / f".download-{mid}.log", "ab")  # noqa: SIM115
+        VOICE_DOWNLOADS[mid] = subprocess.Popen(
+            [sys.executable, str(ROOT / "modules" / "voice_input.py"), "download", "--model", mid],
+            cwd=str(ROOT), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    return await api_voice_input_get()
+
+
+def _voice_transcribe_sync(data: bytes, content_type: str, lang: str) -> dict:
+    vi = _voice_input()
+    cfg = voice_input_settings()
+    if not cfg["enabled"]:
+        raise ServiceError(400, "语音输入未开启(设置 → 高级 → 语音输入)")
+    if not vi.is_ready(cfg["model"]):
+        raise ServiceError(400, f"识别模型 {cfg['model']} 未下载(设置 → 高级 → 语音输入)")
+    if not data or len(data) < 200:
+        raise ServiceError(400, "没有收到录音数据")
+    if len(data) > 32 * 1024 * 1024:
+        raise ServiceError(413, "录音过大")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise ServiceError(500, "缺少 ffmpeg,无法解码录音")
+    ext = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3",
+           "audio/wav": "wav", "audio/x-wav": "wav", "audio/aac": "aac"}.get(
+        (content_type or "").split(";")[0].strip().lower(), "bin")
+    VOICE_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    stem = VOICE_TMP_DIR / f"rec-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}"
+    src, wav = stem.with_suffix("." + ext), stem.with_suffix(".wav")
+    try:
+        src.write_bytes(data)
+        # 统一转 16k 单声道 WAV(whisper 原生采样率),并截到 MAX_AUDIO_S 兜底
+        r = subprocess.run([ffmpeg, "-y", "-v", "error", "-i", str(src), "-t", str(vi.MAX_AUDIO_S),
+                            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 or not wav.is_file():
+            lines = (r.stderr or "").strip().splitlines()   # 只取末行,不回显临时文件路径
+            raise ServiceError(400, "录音解码失败:" + (lines[-1] if lines else "ffmpeg exit %s" % r.returncode)[:200])
+        cmd = [sys.executable, str(ROOT / "modules" / "voice_input.py"), "transcribe",
+               "--audio", str(wav), "--model", cfg["model"]]
+        if lang:
+            cmd += ["--language", lang]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180, cwd=str(ROOT))
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "").strip().splitlines()
+            raise ServiceError(500, "语音识别失败:" + (err[-1] if err else f"exit {r.returncode}")[:300])
+        try:
+            out = json.loads((r.stdout or "").strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            raise ServiceError(500, "语音识别失败:子进程无 JSON 输出")
+        return out
+    except subprocess.TimeoutExpired:
+        raise ServiceError(504, "语音识别超时")
+    finally:
+        for p in (src, wav):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+
+async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str = ""):
+    """lang 缺省按界面语言(state.json ui_lang)提示 whisper;传 auto 则自动检测。"""
+    if not lang:
+        lang = ui_lang_code()
+    lang = "" if lang == "auto" else re.sub(r"[^a-z]", "", lang.lower())[:5]
+    return await asyncio.to_thread(_voice_transcribe_sync, data, content_type, lang)
+
+
 # ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
 # 本地结构化事件(run 收敛处与 genmedia CLI 出口按「字段白名单」落盘
 # telemetry/outbox,错误消息模板化聚签名)与经验卡(runs/<task_id>/lesson.md,

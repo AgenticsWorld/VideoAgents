@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/text-models.js?v=20260911"></script>
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/voice-input.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -71,6 +72,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .toolchip.toolres{opacity:.65;padding-left:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg .meta .liveprog{margin-left:8px;color:var(--yellow)}
 #composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
+/* 语音输入设置弹窗:模型下拉与下载进度条 */
+#voice-model{flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+#voice-prog{display:none;flex-direction:column;gap:4px}#voice-prog.on{display:flex}
+#voice-prog .vbar{height:6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+#voice-prog .vbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
 #input{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;resize:none;height:64px;font:inherit}
 /* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
 #composer.dispatcher #input{border-color:var(--accent);animation:composer-grow 2s ease-out infinite}
@@ -267,11 +273,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度">Agent 高级设置</a>
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
           <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
-          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度">Agent 高级设置</a>
+          <a href="#" id="menu-voice" title="语音输入:开启后控制台与预览页「修改」浮窗的输入框出现麦克风按钮,录音由本机 faster-whisper 转成文字,音频不出本机">语音输入</a>
           <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
@@ -840,6 +847,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions"><button id="res-cancel">取消</button><button class="primary" id="res-ok">保存</button></div>
   </div>
 </div>
+<div id="voice-modal" class="modal">
+  <div class="box" style="width:600px">
+    <h3>🎤 语音输入</h3>
+    <div class="row"><label style="width:auto">启用语音输入</label>
+      <input type="checkbox" id="voice-on" style="width:auto;flex:none;margin:0">
+      <span id="voice-st" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="note">开启后控制台输入框与预览页「修改」浮窗的右侧出现麦克风按钮:点一下开始录音、再点一下结束,录音由本机 faster-whisper 模型转成文字插到光标处(最长 60 秒,音频不出本机,不需要任何 API Key)。识别语言跟随界面语言。模型首次使用需先下载,越大的模型越准但越慢:small 起步够用,Apple 芯片可选 medium 或 large-v3-turbo。</div>
+    <div class="row"><label>识别模型</label>
+      <select id="voice-model" data-no-i18n></select>
+      <button id="voice-dl">⬇ 下载模型</button>
+    </div>
+    <div id="voice-prog"><div class="vbar"><i></i></div><span class="note" id="voice-prog-txt" data-no-i18n></span></div>
+    <div class="note" id="voice-model-st" data-no-i18n></div>
+    <div class="err" id="voice-err"></div>
+    <div class="actions">
+      <button id="voice-close" class="primary">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div id="diag-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🩺 诊断数据</h3>
@@ -2171,6 +2199,61 @@ $('#askill-file').onchange=async()=>{
   }catch(e){$('#askill-err').textContent=t('安装失败:')+e.message}
 };
 
+/* ---------- 语音输入弹窗(设置菜单「高级」;开关+模型选择+下载进度,存 state.json#voice_input) ---------- */
+let VOICE=null,VOICE_POLL=null;
+function voiceSize(mb){return mb>=1000?(mb/1000).toFixed(1)+' GB':mb+' MB'}
+function voiceBytes(b){return b>=1e9?(b/1e9).toFixed(2)+' GB':Math.round(b/1e6)+' MB'}
+function voiceStatusText(m){
+  if(m.status==='ready')return t('已下载');
+  if(m.status==='downloading')return I18N.f('下载中 {pct}%',{pct:m.progress?m.progress.pct:0});
+  if(m.status==='error')return t('下载失败');
+  return t('未下载');
+}
+function voiceRender(d){
+  VOICE=d;
+  $('#voice-on').checked=!!d.enabled;
+  $('#voice-st').textContent=d.enabled?t('✓ 已开启:输入框显示麦克风按钮'):t('已关闭:输入框不显示麦克风按钮');
+  const sel=$('#voice-model');sel.innerHTML='';
+  d.models.forEach(m=>{const o=document.createElement('option');o.value=m.id;
+    o.textContent=`${m.id} · ${voiceSize(m.size_mb)} · ${t(m.hint)} · ${voiceStatusText(m)}`;sel.appendChild(o)});
+  sel.value=d.model;
+  const m=d.models.find(x=>x.id===d.model)||{};
+  const prog=$('#voice-prog');prog.classList.toggle('on',m.status==='downloading');
+  if(m.status==='downloading'&&m.progress){
+    prog.querySelector('i').style.width=m.progress.pct+'%';
+    $('#voice-prog-txt').textContent=`${voiceBytes(m.progress.done_bytes)} / ${voiceBytes(m.progress.total_bytes)} · ${m.progress.pct}%`;
+  }
+  $('#voice-model-st').textContent=
+    m.status==='ready'?t('✓ 模型已就绪,可直接使用'):
+    m.status==='downloading'?t('模型下载中,可关闭本窗口,下载在后台继续'):
+    m.status==='error'?I18N.f('下载失败:{err}',{err:m.error||''}):
+    t('模型未下载:点「下载模型」拉取到本机 data/models/faster-whisper/');
+  $('#voice-dl').disabled=m.status==='ready'||m.status==='downloading';
+  $('#voice-err').textContent=d.ffmpeg?'':t('未检测到 ffmpeg,录音无法解码');
+  VoiceInput.setEnabled(!!d.enabled);
+  const anyDl=d.models.some(x=>x.status==='downloading');
+  if(anyDl&&!VOICE_POLL)VOICE_POLL=setInterval(voiceLoad,1000);
+  if(!anyDl&&VOICE_POLL){clearInterval(VOICE_POLL);VOICE_POLL=null}
+}
+async function voiceLoad(){
+  try{voiceRender(await api('/api/v1/voice-input'))}
+  catch(e){$('#voice-err').textContent=t('读取失败')+':'+e.message}
+}
+async function voiceSave(body){
+  try{voiceRender(await api('/api/v1/config/voice-input',body))}
+  catch(e){$('#voice-err').textContent=t('保存失败')+':'+e.message}
+}
+function openVoiceModal(){$('#voice-err').textContent='';$('#voice-modal').style.display='flex';voiceLoad()}
+$('#menu-voice').onclick=e=>{e.preventDefault();openVoiceModal()};
+$('#voice-close').onclick=()=>{$('#voice-modal').style.display='none';if(VOICE_POLL){clearInterval(VOICE_POLL);VOICE_POLL=null}};
+$('#voice-on').onchange=()=>voiceSave({enabled:$('#voice-on').checked});
+$('#voice-model').onchange=()=>voiceSave({model:$('#voice-model').value});
+$('#voice-dl').onclick=async()=>{
+  $('#voice-err').textContent='';$('#voice-dl').disabled=true;
+  try{voiceRender(await api('/api/v1/voice-input/download',{model:$('#voice-model').value}))}
+  catch(e){$('#voice-err').textContent=t('下载失败')+':'+e.message;$('#voice-dl').disabled=false}
+};
+
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
 let DIAG_LESSONS=[];
 function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
@@ -2664,6 +2747,7 @@ async function send(){
 $('#send').onclick=send;
 $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send()}});
 $('#input').addEventListener('input',saveDraft);
+VoiceInput.attach($('#input'));   // 语音输入按钮:仅设置「语音输入」开启时显示
 
 /* ---------- 设置菜单:界面语言(语言名是各语言自称,不翻译) ---------- */
 (function(){
