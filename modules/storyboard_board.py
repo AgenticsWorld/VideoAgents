@@ -8,7 +8,10 @@
   图片 assets/storyboard/<ep>/<S01-01>.png;台账写入经 flock 串行,宿主后台任务与 Agent 的 CLI 进程可并发;
 - build_prompt / collect_refs:草图提示词(铅笔手绘分镜风格,英文风格句 + 原文画面内容)与参考图
   (只带出场人物 sheet,缩到 512px 长边;不带场景图——俯视布局图会误导图像模型,场景只靠文字描述;
-  也不用风格参考图,铅笔风格全靠提示词——2026-09-11 用户拍板)。
+  也不用风格参考图,铅笔风格全靠提示词——2026-09-11 用户拍板);
+- 九宫格批量(2026-09-11 用户拍板):单集标题行「出草图」一次出一张 3×3 宫格图(≤9 镜,按集内顺序分批),
+  split_grid 切成小图落到各镜的 <S01-01>.png(台账记 mode=grid + grid.file/cell);宫格原图存 _grids/。
+  单镜「出图/重出」仍是单张出图。宫格切出的小图比单张小(约 820×460),动态样片按画布等比缩放统一。
 只读 storyboard.json / shot_list.json / bible 与概念图,不改任何分镜文件。
 """
 from __future__ import annotations
@@ -43,6 +46,24 @@ SKETCH_STYLE_PROMPT = (
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                    "text, letters, caption, watermark, logo, speech bubble, comic panel grid, multiple panels, "
                    "border, frame lines")
+
+GRID_MAX_PANELS = 9          # 一张宫格图最多 9 镜(3×3)
+GRID_MAX_CAST_REFS = 4       # 宫格模式人物参考图上限(9 镜的出场并集,按出场次数取前几位)
+GRID_CELL_TRIM = 0.02        # 切分时每格四边各裁掉 2%,去掉模型画的格线/留白
+GRID_DIR_REL = "assets/storyboard/{ep}/_grids"
+GRID_STYLE_PROMPT = (
+    "A film storyboard contact sheet: a strict {cols}x{rows} grid of {n} equal-size panels on one white page, "
+    "{cols} columns and {rows} rows, separated only by thin straight black gutter lines, panels read left to right, "
+    "top to bottom, every panel filling its cell edge to edge with the same {aspect} framing. Each panel is a rough "
+    "pencil sketch: hand-drawn monochrome line art with loose hatching and soft grey marker shading, quick gestural "
+    "strokes, unfinished sketchbook look. Strictly black-and-white, no color. No text, no numbers, no captions, no "
+    "speech bubbles, no watermark inside the panels. The attached images are the project's official character "
+    "designs — keep each character's likeness, hairstyle and outfit in every panel, but redraw everything as a "
+    "pencil sketch; locations are described in text only.{blank}"
+)
+GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
+                 "text, letters, numbers, caption, watermark, logo, speech bubble, uneven panels, overlapping panels, "
+                 "panels of different sizes, decorative border")
 
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
 _DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(CHAR-\d+|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")
@@ -414,6 +435,17 @@ def find_shot(board: dict, scene_no: str, order=None) -> tuple[dict | None, list
     return None, []
 
 
+def find_shots_by_keys(board: dict, keys: list[str]) -> list[tuple[dict, dict]]:
+    """按草图键(S01-03)在归一化故事板里找 (scene, shot),保持传入顺序;找不到的键跳过。"""
+    idx = {sh["key"]: (sc, sh) for sc in board["scenes"] for sh in sc["shots"]}
+    return [idx[k] for k in keys if k in idx]
+
+
+def episode_shots(board: dict, scene_no: str | None = None) -> list[tuple[dict, dict]]:
+    """整集(或某场)的 (scene, shot) 按集内顺序。"""
+    return [(sc, sh) for sc in board["scenes"] if scene_no is None or sc["scene_no"] == scene_no for sh in sc["shots"]]
+
+
 # ---------------- 草图提示词 + 参考图 ----------------
 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[str, str]:
@@ -476,6 +508,121 @@ def collect_refs(base: Path, ep: str, scene: dict, shot: dict, catalog: dict) ->
             refs.append(_shrink(base / rec["file"], cache))
             n += 1
     return refs
+
+
+def grid_layout(n: int) -> tuple[int, int]:
+    """按镜数选宫格:1 镜单张(调用方走单镜路径)、2–4 镜 2×2、5–9 镜 3×3。返回 (cols, rows)。"""
+    if n <= 1:
+        return 1, 1
+    if n <= 4:
+        return 2, 2
+    return 3, 3
+
+
+def _short(s, n: int) -> str:
+    s = re.sub(r"\s+", " ", str(s or "")).strip()
+    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
+
+
+GRID_PROMPT_MAX = 2400       # 宫格提示词字符上限(9 格合一,按三档收紧逐格文字直到不超)
+_GRID_CLIPS = ({"desc": 220, "content": 220, "action": 120, "sketch": 140, "note": 140},
+               {"desc": 120, "content": 140, "action": 0, "sketch": 80, "note": 100},
+               {"desc": 0, "content": 100, "action": 0, "sketch": 0, "note": 80})
+
+
+def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
+                      max_chars: int = GRID_PROMPT_MAX) -> tuple[str, str]:
+    """宫格提示词:风格总句 + 各场地点描述一次 + 逐格「Panel k (row r, col c)」景别/地点/出场/画面/构图(用台账 note)。
+    panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
+    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(先砍动作/构图/地点描述,画面内容最后砍)。"""
+    n = len(panels)
+    cells = cols * rows
+    blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
+    head = GRID_STYLE_PROMPT.format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank)
+    prompt = ""
+    for clip in _GRID_CLIPS:
+        parts = [head]
+        seen = []
+        for sc, _ in panels:
+            key = sc.get("scene_no")
+            if key in seen:
+                continue
+            seen.append(key)
+            loc = " ".join(x for x in (sc.get("location") or sc.get("scene_name") or "", sc.get("time_of_day") or "") if x)
+            desc = _short(sc.get("scene_description"), clip["desc"]) if clip["desc"] else ""
+            if loc or desc:
+                parts.append(f"Location {key}: {loc}{'. ' + desc if desc else ''}")
+        for k, (sc, shot) in enumerate(panels, 1):
+            r, c = (k - 1) // cols + 1, (k - 1) % cols + 1
+            seg = [f"Panel {k} (row {r}, column {c}):"]
+            if shot.get("size_hint"):
+                seg.append(f"{shot['size_hint']} shot.")
+            if len(seen) > 1:
+                seg.append(f"Location {sc.get('scene_no')}.")
+            cast = [names.get(x, x) for x in shot.get("cast") or []]
+            if cast:
+                seg.append("Characters: " + ", ".join(cast) + ".")
+            if shot.get("content"):
+                seg.append(_short(shot["content"], clip["content"]))
+            if clip["action"] and shot.get("action") and shot["action"] not in (shot.get("content") or ""):
+                seg.append("Action: " + _short(shot["action"], clip["action"]))
+            if clip["sketch"] and shot.get("sketch"):
+                seg.append("Composition: " + _short(shot["sketch"], clip["sketch"]))
+            note = str(shot.get("_note") or "").strip()
+            if note:
+                seg.append("Revision instruction: " + _short(note, clip["note"]))
+            parts.append(" ".join(seg))
+        prompt = " ".join(parts)
+        if len(prompt) <= max_chars:
+            break
+    return prompt, GRID_NEGATIVE
+
+
+def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], catalog: dict) -> list[Path]:
+    """宫格模式参考图:各格出场人物并集,按出场格数降序取前 GRID_MAX_CAST_REFS 张 sheet(缩小后)。"""
+    cache = sketch_dir(base, ep) / "_refcache"
+    freq: dict[str, int] = {}
+    for _, shot in panels:
+        for cid in shot.get("cast") or []:
+            freq[cid] = freq.get(cid, 0) + 1
+    refs: list[Path] = []
+    for cid, _ in sorted(freq.items(), key=lambda kv: (-kv[1], kv[0])):
+        rec = catalog["characters"].get(cid) or catalog["creatures"].get(cid) or {}
+        if rec.get("file") and (base / rec["file"]).is_file():
+            refs.append(_shrink(base / rec["file"], cache))
+        if len(refs) >= GRID_MAX_CAST_REFS:
+            break
+    return refs
+
+
+def split_grid(src: Path, cols: int, rows: int, n: int, outs: list[Path], trim: float = GRID_CELL_TRIM) -> list[Path]:
+    """把宫格图等分成 cols×rows 格,按行优先取前 n 格,四边各裁 trim 去格线,存到 outs[k](PNG)。返回写出的路径。"""
+    from PIL import Image
+    im = Image.open(src).convert("RGB")
+    W, H = im.size
+    cw, ch = W / cols, H / rows
+    tx, ty = cw * trim, ch * trim
+    written = []
+    for k in range(min(n, cols * rows, len(outs))):
+        r, c = k // cols, k % cols
+        box = (int(c * cw + tx), int(r * ch + ty), int((c + 1) * cw - tx), int((r + 1) * ch - ty))
+        tile = im.crop(box)
+        outs[k].parent.mkdir(parents=True, exist_ok=True)
+        tile.save(outs[k], "PNG", optimize=True)
+        written.append(outs[k])
+    return written
+
+
+def grid_size(provider: str, aspect: str) -> str:
+    """宫格图出图尺寸:所有渠道都按 3,686,400 像素当量(2560×1440)出,切 3×3 后每格约 850×480;不再压缩。"""
+    try:
+        rw, rh = (int(x) for x in str(aspect or "16:9").split(":"))
+    except Exception:
+        rw, rh = 16, 9
+    pixels = 3_686_400
+    w = -(-int((pixels * rw / rh) ** 0.5) // 8) * 8
+    h = -(-(w * rh) // (rw * 8)) * 8
+    return f"{w}x{h}"
 
 
 def resolve_aspect(base: Path) -> str:

@@ -230,7 +230,7 @@ function render(d){
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   const T=d.totals||{};
-  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}</span><span class="spacer"></span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
+  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
   const sm=d.storyboard_meta||{};
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
   if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div>`;
@@ -312,16 +312,24 @@ function mergeRedraw(server){
   return out;
 }
 
+/* 单集标题行「出草图」:整集九宫格批量(每 9 镜一张 3×3 宫格图切成小图;已出的跳过;Shift = 全部重出)。单镜「出图/重出」仍是单张。 */
+function batchBtnHtml(){
+  if(!LAST)return '';
+  const all=[];(LAST.scenes||[]).forEach(sc=>sc.shots.forEach(s=>all.push(s.key)));
+  const nDone=all.filter(k=>(SK[k]||{}).status==='done').length;
+  const job=JOBS['*'],busy=job&&job.status==='running';
+  const prog=busy?` ${job.done+job.failed}/${job.total||job.keys.length}`:'';
+  return `<button class="editbtn pri sk-gen" data-all="1" ${busy?'disabled':''} title="${esc(t('按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出'))}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${prog}${job.current?' · '+esc(job.current):''}`:(nDone>=all.length&&all.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:all.length-nDone})))}</button>`;
+}
+function renderBatchBtn(){const el=document.getElementById('skbatch');if(el&&LAST&&LAST.has_storyboard)el.innerHTML=batchBtnHtml()}
+
 function sceneCard(sc,d){
   const ep=d.ep;
   const nDone=sc.shots.filter(s=>(SK[s.key]||{}).status==='done').length;
-  const job=JOBS[sc.scene_no];
-  const busy=job&&job.status==='running';
   let hd=`<div class="row1"><span class="no">${esc(sc.scene_no)}</span><span class="nm" data-no-i18n>${esc(sc.location||sc.scene_name||'')}</span>`;
   if(sc.scene_name&&sc.scene_name!==sc.location)hd+=`<span class="meta">${esc(sc.scene_name)}</span>`;
   hd+=`<span class="meta">${sc.scene_id?esc(sc.scene_id)+' · ':''}${sc.time_of_day?todIcon(sc.time_of_day)+' '+esc(sc.time_of_day)+' · ':''}⏱ ${esc(t('分配'))} ${secs(sc.alloc_s)} · ${esc(t('草案'))} ${secs(sc.draft_sum_s)}${sc.final_sum_s!=null?' · '+esc(t('定稿'))+' '+secs(sc.final_sum_s):''} · ${esc(I18N.f('{n} 镜 · {g} 组',{n:sc.shots.length,g:sc.group_count}))}</span><span class="spacer"></span>`;
-  hd+=`<span class="meta">🖊 ${nDone}/${sc.shots.length}</span>`;
-  hd+=`<button class="editbtn pri sk-gen" data-scene="${esc(sc.scene_no)}" ${busy?'disabled':''} title="${esc(t('按当前草图模型逐镜出铅笔草图(已出的跳过);按住 Shift 点击 = 全部重出'))}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${job.current?' '+esc(job.current):''}`:(nDone>=sc.shots.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:sc.shots.length-nDone})))}</button>`;
+  hd+=`<span class="meta" title="${esc(t('已出草图 / 镜数;整集批量出图在上方标题行'))}">🖊 ${nDone}/${sc.shots.length}</span>`;
   hd+=editBtn(I18N.f('故事板 {ep} 场次 {no}{name}(文件 directing/{ep}/storyboard.json scenes[{no}])',{ep,no:sc.scene_no,name:sc.location?' '+sc.location:''}))+`</div>`;
   let as='';
   if(sc.scene_id)as+=aChip('scenes',sc.scene_id,'🏞');
@@ -406,6 +414,7 @@ async function refreshSketches(){
     keys.forEach(k=>{if(JSON.stringify(oldSK[k])!==JSON.stringify(SK[k])||oldR[k]!==REDRAW[k])renderCell(k)});
     const scs=new Set([...Object.keys(oldJ),...Object.keys(JOBS)]);
     (LAST.scenes||[]).forEach(sc=>{if(scs.has(sc.scene_no)||keys.size)renderSceneHead(sc.scene_no)});
+    if(scs.size||keys.size)renderBatchBtn();
     (LAST.episodes||[]).forEach(e=>{if(e.ep===ep)e.sketches=Object.values(SK).filter(r=>r.status==='done').length});
     renderEps(LAST.episodes||[]);
   }catch(_){}
@@ -430,15 +439,16 @@ try{
 document.addEventListener('click',async e=>{
   const b=e.target.closest('.sk-gen');if(!b||b.disabled||!LAST)return;
   const proj=$('#project').value.trim()||'demo',ep=LAST.ep;
-  const body={scene:b.dataset.scene,force:!!e.shiftKey||b.dataset.order!=null};
-  if(b.dataset.order!=null)body.order=+b.dataset.order;
+  const whole=!!b.dataset.all;
+  const body=whole?{all:true,force:!!e.shiftKey}:{scene:b.dataset.scene,force:!!e.shiftKey||b.dataset.order!=null};
+  if(!whole&&b.dataset.order!=null)body.order=+b.dataset.order;
   Object.assign(body,skmValue());
   b.disabled=true;
   try{
     const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/board/${encodeURIComponent(ep)}/sketch`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(j.detail||j.error||r.status);
-    if(!j.queued){b.disabled=false;alert(t('该场草图都已出过;按住 Shift 点击可全部重出'));return}
+    if(!j.queued){b.disabled=false;alert(t(whole?'本集草图都已出过(或正在出);按住 Shift 点击可全部重出':'该场草图都已出过;按住 Shift 点击可全部重出'));return}
     await refreshSketches();startPoll();
   }catch(err){b.disabled=false;alert(I18N.f('出图失败:{e}',{e:err.message}))}
 });

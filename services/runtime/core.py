@@ -7044,7 +7044,8 @@ async def api_preview_script(project: str = "demo", ep: str = ""):
 # 页面 /preview/board:导演计划(Markdown 折叠)+ 每场资产头 + 逐镜表(编号/内容/草图);
 # 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.image_model_prefs.sketch),
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
-BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at}
+BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at};整集九宫格批量的 scene 段为 "*"
+BOARD_GRID_BATCH = 9                         # 整集批量:每 9 镜出一张 3×3 宫格图再切分(code/storyboard_sketch.py --grid --keys)
 IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 _BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
 
@@ -7353,6 +7354,51 @@ async def api_board_signoff(project: str, ep: str, body: dict):
 BOARD_ANIMATIC_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, finished_at}
 
 
+def _board_sketch_batch_worker(project: str, ep: str, jobkey: str, targets: list[tuple[str, int]],
+                               provider: str, model: str):
+    """后台线程(单集标题行「出草图」):待出的镜按集内顺序每 9 镜一批,每批调用一次宿主 CLI
+    `code/storyboard_sketch.py --grid --keys a,b,c`(一张 3×3 宫格图切成小图,台账由 CLI 写);每批结束发 SSE board_sketch。"""
+    job = BOARD_SKETCH_JOBS[jobkey]
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    keys = [k for k, _ in targets]
+    orders = dict(targets)
+    for i in range(0, len(keys), BOARD_GRID_BATCH):
+        batch = keys[i:i + BOARD_GRID_BATCH]
+        job["current"] = f"{batch[0]}…{batch[-1]}" if len(batch) > 1 else batch[0]
+        cmd = [sys.executable, str(ROOT / "code" / "storyboard_sketch.py"), "--project", project, "--ep", ep,
+               "--grid", "--keys", ",".join(batch)]
+        if provider:
+            cmd += ["--provider", provider]
+        if model:
+            cmd += ["--model", model]
+        err = ""
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, cwd=str(ROOT))
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            err = str(e)[:500]
+        idx = sbb.load_index(base, ep)["shots"]
+        for key in batch:
+            rec = idx.get(key) or {}
+            if rec.get("status") == "done":
+                job["done"] += 1
+            else:
+                job["failed"] += 1
+                if rec.get("status") in (None, "queued", "running"):   # CLI 没来得及写台账(如启动失败)时补记
+                    sbb.update_index(base, ep, key, {"status": "failed", "error": err or "grid batch failed",
+                                                     "scene_no": key.rsplit("-", 1)[0], "order": orders.get(key)})
+        HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": "*", "key": "",
+                     "keys": batch, "status": "failed" if err else "done", "error": err,
+                     "done": job["done"], "failed": job["failed"], "total": len(keys)})
+    job["status"] = "done" if not job["failed"] else "failed"
+    job["current"] = ""
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": "*",
+                 "key": "", "status": job["status"], "done": job["done"], "failed": job["failed"]})
+
+
 def _board_animatic(base: Path, ep: str) -> dict:
     from modules import storyboard_board as sbb
     out = sbb.animatic_status(base, ep)
@@ -7397,14 +7443,16 @@ async def api_board_animatic_start(project: str, ep: str, body: dict):
 
 
 async def api_board_sketch_start(project: str, ep: str, body: dict):
-    """故事板页「出草图」:整场(缺 order;已出的跳过,force 全重出)或单镜。渠道/模型随请求(页面顶部所选),
+    """故事板页「出草图」:{all:true} 整集九宫格批量(单集标题行按钮;已出的跳过,force 全重出;每 9 镜一张宫格图切分)、
+    整场(scene,缺 order;逐镜单张)或单镜(scene+order,单张)。渠道/模型随请求(页面顶部所选),
     不传则按 CLI 缺省链(台账上次 → STATE.image_model_prefs.sketch → 全局图像渠道)。"""
     from modules import storyboard_board as sbb
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)
     scene = re.sub(r"[^\w\-]", "", str(body.get("scene") or ""))
-    if not scene:
-        raise ServiceError(400, "scene is required")
+    whole = bool(body.get("all"))
+    if not scene and not whole:
+        raise ServiceError(400, "scene is required (or all:true)")
     order = body.get("order")
     force = bool(body.get("force"))
     note = str(body.get("note") or "")
@@ -7415,6 +7463,34 @@ async def api_board_sketch_start(project: str, ep: str, body: dict):
     if not (base / "directing" / ep / "storyboard.json").is_file():
         raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
     board = sbb.load_board(base, ep)
+    if whole:
+        jobkey = f"{base.name}/{ep}/*"
+        if (BOARD_SKETCH_JOBS.get(jobkey) or {}).get("status") == "running":
+            raise ServiceError(409, "episode sketches are already being generated; wait for it to finish")
+        idx = sbb.load_index(base, ep)
+        targets, skipped = [], 0
+        for sc, sh in sbb.episode_shots(board):
+            rec = idx["shots"].get(sh["key"]) or {}
+            if rec.get("status") in ("queued", "running"):      # 单镜/改草图工单在飞的镜不抢
+                skipped += 1
+                continue
+            if not force and rec.get("status") == "done" and rec.get("file") and (base / rec["file"]).is_file():
+                skipped += 1
+                continue
+            targets.append((sh["key"], sh["order"]))
+        if not targets:
+            return {"ok": True, "queued": 0, "skipped": skipped}
+        for key, o in targets:
+            sbb.update_index(base, ep, key, {"status": "queued", "error": "", "scene_no": key.rsplit("-", 1)[0], "order": o})
+        BOARD_SKETCH_JOBS[jobkey] = {"status": "running", "keys": [k for k, _ in targets], "done": 0, "failed": 0,
+                                     "total": len(targets), "current": "", "started_at": time.time(),
+                                     "provider": provider, "model": model, "mode": "grid"}
+        threading.Thread(target=_board_sketch_batch_worker,
+                         args=(base.name, ep, jobkey, targets, provider, model), daemon=True).start()
+        HUB.publish({"type": "board_sketch", "project": base.name, "ep": ep, "scene": "*", "key": "",
+                     "status": "running", "keys": [k for k, _ in targets]})
+        return {"ok": True, "queued": len(targets), "skipped": skipped, "job": jobkey,
+                "batches": -(-len(targets) // BOARD_GRID_BATCH)}
     sc, shots = sbb.find_shot(board, scene, order)
     if sc is None:
         raise ServiceError(404, f"scene {scene} not in storyboard.json")

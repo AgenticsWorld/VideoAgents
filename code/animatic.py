@@ -40,6 +40,16 @@ def _canvas_size(aspect: str) -> tuple[int, int]:
     return (1280, 720) if rw >= rh else (720, 1280)
 
 
+def fit_canvas(im, size: tuple[int, int]):
+    """等比缩放到刚好装进画布(既缩小也放大,LANCZOS),不裁切;尺寸已相同则原样返回。"""
+    from PIL import Image
+    W, H = size
+    if (im.width, im.height) == (W, H):
+        return im
+    k = min(W / im.width, H / im.height)
+    return im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+
+
 def render_frame(out: Path, sketch: Path | None, size: tuple[int, int], label: str, content: str,
                  subs: list[tuple[str, str]]) -> None:
     """一镜一帧:草图等比铺满(留黑边)/ 占位卡;顶部镜号标签 + 画面内容文字(有草图时,半透明黑带);底部字幕带(台词黄、旁白紫)。"""
@@ -49,8 +59,9 @@ def render_frame(out: Path, sketch: Path | None, size: tuple[int, int], label: s
     d = ImageDraw.Draw(im)
     if sketch and sketch.is_file():
         try:
+            # 草图尺寸不一(单张 1280 长边 / 九宫格切出的小图约 850×480):一律按画布等比缩放(放大或缩小)居中,余边留黑
             sk = Image.open(sketch).convert("RGB")
-            sk.thumbnail((W, H))
+            sk = fit_canvas(sk, (W, H))
             im.paste(sk, ((W - sk.width) // 2, (H - sk.height) // 2))
         except Exception:
             sketch = None
