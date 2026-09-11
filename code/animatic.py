@@ -74,7 +74,7 @@ def _canvas_size(aspect: str) -> tuple[int, int]:
 
 def render_frame(out: Path, sketch: Path | None, size: tuple[int, int], label: str, content: str,
                  subs: list[tuple[str, str]]) -> None:
-    """一镜一帧:草图等比铺满(留黑边)/ 占位卡;左上角镜号标签;底部字幕带(台词黄、旁白紫)。"""
+    """一镜一帧:草图等比铺满(留黑边)/ 占位卡;顶部镜号标签 + 画面内容文字(有草图时,半透明黑带);底部字幕带(台词黄、旁白紫)。"""
     from PIL import Image, ImageDraw
     W, H = size
     im = Image.new("RGB", (W, H), (18, 18, 22))
@@ -96,12 +96,30 @@ def render_frame(out: Path, sketch: Path | None, size: tuple[int, int], label: s
             y += lh
         fs = _font(max(18, W // 60))
         d.text((W // 2 - d.textlength("(草图未出)", font=fs) // 2, y + 8), "(草图未出)", font=fs, fill=(110, 116, 130))
-    # 标签
+    # 标签 + 画面内容(有草图时把内容文字也压在画面顶上,半透明黑带,便于对照草图看节拍;占位卡内容已居中不再重复)
     fl = _font(max(18, W // 58))
     pad = 8
     tw = d.textlength(label, font=fl)
-    d.rectangle((12, 12, 12 + tw + pad * 2, 12 + fl.size + pad * 2), fill=(0, 0, 0))
-    d.text((12 + pad, 12 + pad), label, font=fl, fill=(230, 234, 240))
+    if sketch and content:
+        fc = _font(max(16, W // 66))
+        lh = int(fc.size * 1.35)
+        clines = _wrap(d, content, fc, int(W - 24 - pad * 2))
+        if len(clines) > 3:
+            clines = clines[:3]
+            clines[-1] = clines[-1][:-2].rstrip() + "…"
+        band_h = pad + fl.size + 6 + lh * len(clines) + pad
+        ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(ov).rectangle((0, 0, W, band_h), fill=(0, 0, 0, 165))
+        im = Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB")
+        d = ImageDraw.Draw(im)
+        d.text((12 + pad, pad), label, font=fl, fill=(230, 234, 240))
+        y = pad + fl.size + 6
+        for ln in clines:
+            d.text((12 + pad, y), ln, font=fc, fill=(205, 210, 220))
+            y += lh
+    else:
+        d.rectangle((12, 12, 12 + tw + pad * 2, 12 + fl.size + pad * 2), fill=(0, 0, 0))
+        d.text((12 + pad, 12 + pad), label, font=fl, fill=(230, 234, 240))
     # 字幕带
     if subs:
         fsub = _font(max(20, W // 42))
