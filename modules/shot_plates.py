@@ -837,7 +837,10 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         else:
             from modules.genmedia import generate_image, get_config
             if channel is None:
-                cfg = get_config('image'); channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
+                from modules.genmedia import image_pref_env
+                with image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局)
+                    cfg = get_config('image')
+                channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
             entry['channel'] = channel
             try:
                 generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in refs],

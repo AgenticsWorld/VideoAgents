@@ -392,8 +392,9 @@ def mark_blocked(base: Path, sid: str, idx: dict, cfg: dict, reason: str):
 
 
 def check_pano_support(base: Path, sid: str, idx: dict, log=print) -> dict:
-    from modules.genmedia import get_config
-    cfg = get_config('image')
+    from modules.genmedia import get_config, image_pref_env
+    with image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局)
+        cfg = get_config('image')
     ok, reason = pano_support(cfg)
     if not ok:
         mark_blocked(base, sid, idx, cfg, reason)
@@ -686,8 +687,9 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
                   time_of_day: str | None = None, log=print) -> dict:
     """出一张 (锚点, 光照方案) 全景。模式:relight(同锚点已有其它方案)> chain(其它锚点已有同方案)> fresh。"""
     from PIL import Image
-    from modules.genmedia import generate_image, get_config
-    cfg = get_config('image')
+    from modules.genmedia import generate_image, get_config, image_pref_env
+    with image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局)
+        cfg = get_config('image')
     out = panos_dir(base, sid) / anchor['anchor_id']
     out.mkdir(parents=True, exist_ok=True)
     wb = out / 'whitebox_pano.jpg'

@@ -2302,4 +2302,10 @@ window.I18N_DICT = {
 "该集还没有动态样片(assets/storyboard/{ep}/animatic.mp4);草图没出全也能出,缺图的镜显示画面内容文字": "Tập này chưa có animatic (assets/storyboard/{ep}/animatic.mp4); vẫn tạo được khi thiếu phác thảo (hiện văn bản cảnh quay)",
 "重出动态样片": "Tạo lại animatic",
 "重出样片": "Tạo lại",
+
+"🎨 图像模型": "🎨 Mô hình ảnh",
+"本页场景资产(概念图/全景/分镜背景图/布局图)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Kênh/mô hình ảnh dùng cho tài sản bối cảnh của trang này (concept/toàn cảnh/nền cảnh quay/sơ đồ bố cục), tách biệt với cài đặt «Mô hình tạo» toàn cục; để trống = theo toàn cục",
+"本页人物资产(人物 sheet/服装 sheet)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Kênh/mô hình ảnh dùng cho tài sản nhân vật của trang này (sheet nhân vật/sheet trang phục), tách biệt với cài đặt «Mô hình tạo» toàn cục; để trống = theo toàn cục",
+"本页生物概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Kênh/mô hình ảnh dùng cho concept sinh vật của trang này, tách biệt với cài đặt «Mô hình tạo» toàn cục; để trống = theo toàn cục",
+"本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Kênh/mô hình ảnh dùng cho concept đạo cụ của trang này, tách biệt với cài đặt «Mô hình tạo» toàn cục; để trống = theo toàn cục",
 };

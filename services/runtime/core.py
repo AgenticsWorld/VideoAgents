@@ -6661,7 +6661,7 @@ async def api_preview_script(project: str = "demo", ep: str = ""):
 
 # ---------------- 故事板预览(2026-09-11):分镜层产物 storyboard.json 的表格视图 + 分镜草图 ----------------
 # 页面 /preview/board:导演计划(Markdown 折叠)+ 每场资产头 + 逐镜表(编号/内容/草图);
-# 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.sketch_model),
+# 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.image_model_prefs.sketch),
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
 BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at}
 IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
@@ -6696,26 +6696,59 @@ def _image_channels() -> list[dict]:
     return rows
 
 
+# 预览页按类别单独选的图像渠道/模型(2026-09-11):sketch=故事板草图,scenes/characters/creatures/props=
+# 四个资产预览页顶部「🎨 图像模型」;存 STATE.image_model_prefs[<kind>](空 provider = 跟随全局)。
+# 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用(modules/genmedia.py image_pref_env),
+# 草图由 code/storyboard_sketch.py 显式传 --provider/--model。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
+
+
+def image_model_pref(kind: str) -> dict:
+    prefs = STATE.get("image_model_prefs") or {}
+    sm = prefs.get(kind)
+    if sm is None and kind == "sketch":
+        sm = STATE.get("sketch_model")     # 旧字段兼容
+    sm = sm if isinstance(sm, dict) else {}
+    provider = str(sm.get("provider") or "")
+    return {"provider": provider, "model": str(sm.get("model") or "") if provider else ""}
+
+
 def sketch_model_pref() -> dict:
-    sm = STATE.get("sketch_model") or {}
-    return {"provider": str(sm.get("provider") or ""), "model": str(sm.get("model") or "")}
+    return image_model_pref("sketch")
 
 
-async def api_sketch_model_get():
+async def api_image_model_get(kind: str):
+    if kind not in IMAGE_PREF_KINDS:
+        raise ServiceError(404, f"kind must be one of {IMAGE_PREF_KINDS}")
     img = (load_genconfig().get("image") or {})
-    return {**sketch_model_pref(), "channels": _image_channels(),
+    return {"kind": kind, **image_model_pref(kind), "channels": _image_channels(),
             "global": {"provider": img.get("provider") or "", "model": active_image_model()}}
 
 
-async def api_sketch_model_set(body: dict):
-    """故事板页顶部「草图渠道/模型」:空 = 跟随全局图像渠道;存 STATE(桌面端随机端口换 origin 也能恢复)。"""
+async def api_image_model_set(kind: str, body: dict):
+    """预览页顶部「图像渠道/模型」:空 = 跟随全局图像渠道;存 STATE(桌面端随机端口换 origin 也能恢复)。"""
+    if kind not in IMAGE_PREF_KINDS:
+        raise ServiceError(404, f"kind must be one of {IMAGE_PREF_KINDS}")
     provider = str(body.get("provider") or "").strip()
     model = str(body.get("model") or "").strip()
     if provider and provider not in IMAGE_PROVIDERS:
         raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
-    STATE["sketch_model"] = {"provider": provider, "model": model if provider else ""}
+    prefs = STATE.get("image_model_prefs")
+    if not isinstance(prefs, dict):
+        prefs = STATE["image_model_prefs"] = {}
+    prefs[kind] = {"provider": provider, "model": model if provider else ""}
+    if kind == "sketch":
+        STATE.pop("sketch_model", None)    # 迁到 image_model_prefs.sketch
     save_state(STATE)
-    return {"ok": True, **sketch_model_pref()}
+    return {"ok": True, "kind": kind, **image_model_pref(kind)}
+
+
+async def api_sketch_model_get():
+    return await api_image_model_get("sketch")
+
+
+async def api_sketch_model_set(body: dict):
+    return await api_image_model_set("sketch", body)
 
 
 def active_image_model() -> str:
@@ -6984,7 +7017,7 @@ async def api_board_animatic_start(project: str, ep: str, body: dict):
 
 async def api_board_sketch_start(project: str, ep: str, body: dict):
     """故事板页「出草图」:整场(缺 order;已出的跳过,force 全重出)或单镜。渠道/模型随请求(页面顶部所选),
-    不传则按 CLI 缺省链(台账上次 → STATE.sketch_model → 全局图像渠道)。"""
+    不传则按 CLI 缺省链(台账上次 → STATE.image_model_prefs.sketch → 全局图像渠道)。"""
     from modules import storyboard_board as sbb
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)

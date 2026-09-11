@@ -2302,4 +2302,10 @@ window.I18N_DICT = {
 "该集还没有动态样片(assets/storyboard/{ep}/animatic.mp4);草图没出全也能出,缺图的镜显示画面内容文字": "Diese Episode hat noch kein Animatic (assets/storyboard/{ep}/animatic.mp4); geht auch mit fehlenden Skizzen (Shot-Text)",
 "重出动态样片": "Animatic neu rendern",
 "重出样片": "Neu rendern",
+
+"🎨 图像模型": "🎨 Bildmodell",
+"本页场景资产(概念图/全景/分镜背景图/布局图)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Bildkanal/-modell für die Szenen-Assets dieser Seite (Concept Art / Panoramen / Shot-Hintergründe / Grundrisse), getrennt von der globalen Einstellung „Generierungsmodelle“; leer = global folgen",
+"本页人物资产(人物 sheet/服装 sheet)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Bildkanal/-modell für die Figuren-Assets dieser Seite (Figurenblätter / Kostümblätter), getrennt von der globalen Einstellung „Generierungsmodelle“; leer = global folgen",
+"本页生物概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Bildkanal/-modell für die Kreaturen-Concept-Art dieser Seite, getrennt von der globalen Einstellung „Generierungsmodelle“; leer = global folgen",
+"本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Bildkanal/-modell für die Requisiten-Concept-Art dieser Seite, getrennt von der globalen Einstellung „Generierungsmodelle“; leer = global folgen",
 };

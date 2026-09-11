@@ -3,6 +3,9 @@
 
 渠道与模型在 Web 客户端「生成服务」页配置(落盘 data/.videoagents/genconfig.json),
 本模块按配置自动路由到对应渠道;Agent 只管出 prompt 与产物路径,不挑模型。
+图像:输出落在 assets/concepts/<scenes|characters|creatures|props>/ 下时,自动套用控制台
+对应预览页顶部「🎨 图像模型」选的渠道/模型(state.json image_model_prefs,空=跟随全局);
+`image --provider/--model` 显式指定优先。
 
 CLI:
   python3 modules/genmedia.py info
@@ -130,6 +133,7 @@ ComfyUI 自定义工作流占位符(文本替换):
 """
 import argparse
 import base64
+import contextlib
 import gzip
 import http.client
 import hashlib
@@ -315,6 +319,78 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
     cfg["_group_override"] = group
     cfg["_override_scope"] = ov.get("_scope") or "组级"
     return cfg
+
+
+# ---------------- 预览页按资产类别单独选的图像模型(2026-09-11) ----------------
+# 场景/人物/生物/道具预览页顶部各有「🎨 图像模型」下拉(同故事板页草图模型),存控制台
+# state.json image_model_prefs[<kind>] = {provider, model}(空 = 跟随全局「生成模型」设置)。
+# 出图时按 --output 路径所在目录 assets/concepts/<scenes|characters|creatures|props>/ 判定类别,
+# 没有显式 --provider/--model(环境变量)时套用该类别的偏好;Key 仍取该渠道在 genconfig 的配置。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
+_IMAGE_KIND_RE = re.compile(r"(?:^|/)assets/concepts/(scenes|characters|creatures|props)/")
+STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
+
+
+def image_kind_of_output(output: str | os.PathLike | None) -> str:
+    """按输出路径判定资产类别(scenes|characters|creatures|props),不属于概念图目录返回空。"""
+    if not output:
+        return ""
+    m = _IMAGE_KIND_RE.search(Path(output).as_posix())
+    return m.group(1) if m else ""
+
+
+def image_model_pref(kind: str) -> dict:
+    """读取某类别的图像渠道/模型偏好 {provider, model};未设或跟随全局 → 两项皆空。
+    sketch 兼容旧字段 state.json sketch_model。"""
+    try:
+        st = json.loads(STATE_PATH.read_text())
+    except Exception:
+        return {"provider": "", "model": ""}
+    pref = (st.get("image_model_prefs") or {}).get(kind)
+    if pref is None and kind == "sketch":
+        pref = st.get("sketch_model")
+    pref = pref if isinstance(pref, dict) else {}
+    provider = str(pref.get("provider") or "").strip()
+    return {"provider": provider, "model": str(pref.get("model") or "").strip() if provider else ""}
+
+
+@contextlib.contextmanager
+def image_pref_env(kind_or_output: str | os.PathLike | None):
+    """在 with 块内按类别偏好设置 VIDEOAGENTS_IMAGE_PROVIDER/MODEL(已由 --provider/--model 显式
+    指定时不动);退出时还原,宿主进程内调用不串到别的出图。参数可传类别名或输出路径。"""
+    kind = kind_or_output if kind_or_output in IMAGE_PREF_KINDS else image_kind_of_output(kind_or_output)
+    if not kind or os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() \
+            or os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip():
+        yield ""
+        return
+    pref = image_model_pref(kind)
+    if not pref["provider"]:
+        yield ""
+        return
+    try:
+        allcfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.is_file() else {}
+    except Exception:
+        allcfg = {}
+    if not isinstance((allcfg.get("image") or {}).get(pref["provider"]), dict):
+        print(f"[genmedia] 预览页为 {kind} 选的图像渠道 {pref['provider']} 未在「生成模型」页配置过,本次按全局图像渠道出图",
+              file=sys.stderr)
+        yield ""
+        return
+    saved = {k: os.environ.get(k) for k in ("VIDEOAGENTS_IMAGE_PROVIDER", "VIDEOAGENTS_IMAGE_MODEL")}
+    os.environ["VIDEOAGENTS_IMAGE_PROVIDER"] = pref["provider"]
+    if pref["model"]:
+        os.environ["VIDEOAGENTS_IMAGE_MODEL"] = pref["model"]
+    else:
+        os.environ.pop("VIDEOAGENTS_IMAGE_MODEL", None)
+    print(f"[genmedia] {kind} 按预览页设定使用图像渠道 {pref['provider']} 模型 {pref['model'] or '(该渠道默认)'}", file=sys.stderr)
+    try:
+        yield kind
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def get_config(kind: str) -> dict:
@@ -4757,8 +4833,16 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
 def generate_image(prompt: str, output: str, negative: str = "",
                    refs: list[str] | None = None, aspect: str = "",
                    size: str = "", seed: int | None = None) -> str:
-    """生成一张图,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。"""
+    """生成一张图,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json
+    (输出在 assets/concepts/<类别>/ 下时套用预览页为该类别选的渠道/模型,见 image_pref_env)。"""
     _forbid_dispatch_layer("图像")
+    with image_pref_env(output):
+        return _generate_image(prompt, output, negative, refs, aspect, size, seed)
+
+
+def _generate_image(prompt: str, output: str, negative: str = "",
+                    refs: list[str] | None = None, aspect: str = "",
+                    size: str = "", seed: int | None = None) -> str:
     cfg = get_config("image")
     if size:
         width, height = (int(x) for x in size.lower().split("x"))
@@ -5171,6 +5255,10 @@ def _cmd_image(args):
         os.environ["VIDEOAGENTS_IMAGE_PROVIDER"] = args.provider
     if getattr(args, "model", ""):
         os.environ["VIDEOAGENTS_IMAGE_MODEL"] = args.model
+    # 没显式指定时,按输出目录类别(assets/concepts/<scenes|characters|creatures|props>/)套用预览页选的模型;
+    # CLI 进程一次只出一类图,整个进程内生效即可
+    _pref_ctx = image_pref_env(args.output)
+    _pref_ctx.__enter__()
     if args.dry_run:
         cfg = get_config("image")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \

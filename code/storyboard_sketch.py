@@ -4,7 +4,7 @@
 按 `directing/<ep>/storyboard.json` 的草案镜出**铅笔手绘风格的小草图**,落
 `assets/storyboard/<ep>/<S01-01>.png`,台账 `assets/storyboard/<ep>/index.json`(schema storyboard_sketches/1.0)。
 参考图:只带出场人物 sheet(≤3),缩到 512px 长边;场景只靠文字(俯视图会误导模型),不用风格参考图;画幅取项目「输出设置」的视频画幅;渠道/模型按 --provider/--model
-(缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json sketch_model → 全局图像渠道)。
+(缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
 
 用法:
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --scene S01            # 整场逐镜出图(已出的跳过)
@@ -24,13 +24,13 @@ from modules import storyboard_board as sbb
 
 
 def _default_channel(rec: dict) -> tuple[str, str]:
-    """渠道/模型缺省链:台账该镜上次记录 → 控制台故事板页保存的偏好(state.json sketch_model)→ 空(全局)。"""
+    """渠道/模型缺省链:台账该镜上次记录 → 控制台故事板页保存的偏好(state.json image_model_prefs.sketch)→ 空(全局)。"""
     if rec.get("provider"):
         return str(rec.get("provider") or ""), str(rec.get("model") or "")
     try:
-        st = json.loads((DATA_DIR / ".videoagents" / "state.json").read_text())
-        sm = st.get("sketch_model") or {}
-        return str(sm.get("provider") or ""), str(sm.get("model") or "")
+        from modules.genmedia import image_model_pref
+        sm = image_model_pref("sketch")     # state.json image_model_prefs.sketch(兼容旧 sketch_model)
+        return sm["provider"], sm["model"]
     except Exception:
         return "", ""
 

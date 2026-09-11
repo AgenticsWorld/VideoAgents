@@ -9,6 +9,7 @@
 <script src="/static/edit-popup.js?v=20260911-board"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
+<script src="/static/image-model-picker.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -154,7 +155,7 @@ td.e{width:1%;white-space:nowrap;text-align:right}
   <a class="back" href="/">← 控制台</a>
   <h1>📋 故事板预览</h1>
   <div class="spacer"></div>
-  <span class="skm" id="skm" title="草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)">🖊 草图模型 <select id="sk-prov"></select><select id="sk-model"></select><input id="sk-custom" placeholder="自定义模型 id" hidden></span>
+  <span class="skm" id="skm" title="草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)"></span>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
@@ -213,7 +214,6 @@ function render(d){
   LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};
   PORTRAIT=aspectPortrait(d.aspect);
   renderEps(d.episodes||[]);
-  renderSkm(d);
   const box=$('#content'),ep=d.ep;
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
@@ -431,48 +431,9 @@ document.addEventListener('click',async e=>{
   }catch(err){b.disabled=false;alert(I18N.f('出图失败:{e}',{e:err.message}))}
 });
 
-/* ---------- 草图渠道/模型(顶栏;存服务端 STATE,与全局「生成模型」分开) ---------- */
-function skmValue(){
-  const p=effProv(),m=$('#sk-model').value==='__custom__'?$('#sk-custom').value.trim():$('#sk-model').value;
-  const g=(LAST&&LAST.global_image)||{};
-  if(!$('#sk-prov').value&&(!m||m===g.model))return {};      // 跟随全局且模型没改:不传,按全局
-  return p?{provider:p,model:m}:{};
-}
-function renderSkm(d){
-  const ch=d.image_channels||[],cur=d.sketch_model||{},g=d.global_image||{};
-  const sp=$('#sk-prov');sp.innerHTML='';
-  const o0=document.createElement('option');o0.value='';o0.textContent=I18N.f('跟随全局({p} · {m})',{p:PROV_NAMES[g.provider]||g.provider||'—',m:clip(g.model||'—',28)});sp.appendChild(o0);
-  ch.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=(PROV_NAMES[c.id]||c.id)+(c.configured?'':' ('+t('未配置')+')');o.disabled=!c.configured;sp.appendChild(o)});
-  sp.value=ch.some(c=>c.id===cur.provider&&c.configured)?cur.provider:'';
-  fillSkModels(cur.model||'');
-}
-// 模型下拉常显:渠道选「跟随全局」时列全局图像渠道的模型(当前全局模型预选),直接换模型即等于选定该渠道+模型
-function effProv(){return $('#sk-prov').value||((LAST&&LAST.global_image)||{}).provider||''}
-function fillSkModels(model){
-  const p=effProv(),sm=$('#sk-model'),ci=$('#sk-custom');sm.innerHTML='';
-  const ch=((LAST&&LAST.image_channels)||[]).find(c=>c.id===p)||{};
-  if(!p||p==='comfyui'){sm.hidden=true;ci.hidden=true;return}
-  sm.hidden=false;
-  const list=(IMAGE_MODEL_LISTS[p]||[]).slice();
-  if(ch.model&&!list.some(x=>x[0]===ch.model))list.unshift([ch.model,ch.model+' ('+t('当前全局')+')']);
-  if(!model)model=ch.model||(list[0]||[''])[0];
-  list.forEach(([id,label])=>{const o=document.createElement('option');o.value=id;o.textContent=clip(label||id,46);o.title=id;sm.appendChild(o)});
-  const oc=document.createElement('option');oc.value='__custom__';oc.textContent=t('自定义…');sm.appendChild(oc);
-  if(list.some(x=>x[0]===model))sm.value=model;else{sm.value='__custom__';ci.value=model}
-  ci.hidden=sm.value!=='__custom__';
-}
-async function saveSkm(){
-  const v=skmValue();
-  try{await fetch('/api/v1/config/sketch-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:v.provider||'',model:v.model||''})});
-    if(LAST)LAST.sketch_model={provider:v.provider||'',model:v.model||''};
-  }catch(_){}
-}
-$('#sk-prov').onchange=()=>{fillSkModels('');saveSkm()};
-$('#sk-model').onchange=()=>{
-  // 跟随全局状态下换了模型:渠道落到全局渠道并保存,顶栏渠道下拉同步显示
-  if(!$('#sk-prov').value&&$('#sk-model').value!==((LAST&&LAST.global_image)||{}).model){$('#sk-prov').value=effProv()}
-  $('#sk-custom').hidden=$('#sk-model').value!=='__custom__';if($('#sk-model').value!=='__custom__')saveSkm();else $('#sk-custom').focus()};
-$('#sk-custom').onchange=saveSkm;
+/* ---------- 草图渠道/模型(顶栏;共用 image-model-picker.js,存服务端 STATE.image_model_prefs.sketch) ---------- */
+const SKM=mountImageModelPicker({kind:'sketch',host:'#skm',label:'🖊 草图模型'});
+function skmValue(){return SKM.value()}
 
 function renderEps(episodes){
   const box=$('#eps');box.innerHTML='';
@@ -495,7 +456,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
-    if(!(d.episodes||[]).length){$('#eps').innerHTML='';renderSkm(d);$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
+    if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
     if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
     localStorage.setItem('board-ep:'+(d.project||proj),EP);
     render(d);

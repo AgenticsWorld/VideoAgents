@@ -425,6 +425,17 @@ async def set_sketch_model(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_sketch_model_set(body)
 
 
+@api.get("/config/image-model/{kind}", tags=["configuration"])
+async def image_model(kind: str) -> dict[str, Any]:
+    """预览页按类别单独选的图像渠道/模型(kind: sketch|scenes|characters|creatures|props;空=跟随全局)+ 各图像渠道配置状态。"""
+    return await core.api_image_model_get(kind)
+
+
+@api.post("/config/image-model/{kind}", tags=["configuration"])
+async def set_image_model(kind: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_image_model_set(kind, body)
+
+
 @api.get("/config/ui-prefs", tags=["configuration"])
 async def ui_prefs() -> dict[str, Any]:
     return await core.api_uiprefs_get()

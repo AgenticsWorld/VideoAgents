@@ -7,6 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/edit-popup.js?v=20260911-editpopup"></script>
+<script src="/static/image-models.js?v=20260911"></script>
+<script src="/static/image-model-picker.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -90,6 +92,7 @@ ul.arr>li{margin:2px 0}
   <a class="back" href="/">← 控制台</a>
   <h1>🗡 道具预览</h1>
   <div class="spacer"></div>
+  <span id="imp" title="本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局"></span>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
@@ -242,6 +245,7 @@ async function load(){
   }else $('#detail').innerHTML='<div class="empty">该项目还没有道具设定</div>';
 }
 $('#reload').onclick=load;
+mountImageModelPicker({kind:'props',host:'#imp',label:'🎨 图像模型'});
 $('#search').oninput=renderList;
 $('#project').value=new URLSearchParams(location.search).get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';

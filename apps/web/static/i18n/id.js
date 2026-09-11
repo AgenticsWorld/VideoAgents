@@ -2302,4 +2302,10 @@ window.I18N_DICT = {
 "该集还没有动态样片(assets/storyboard/{ep}/animatic.mp4);草图没出全也能出,缺图的镜显示画面内容文字": "Episode ini belum punya animatic (assets/storyboard/{ep}/animatic.mp4); bisa dibuat walau sketsa belum lengkap (teks shot)",
 "重出动态样片": "Buat ulang animatic",
 "重出样片": "Buat ulang",
+
+"🎨 图像模型": "🎨 Model gambar",
+"本页场景资产(概念图/全景/分镜背景图/布局图)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Saluran/model gambar untuk aset adegan halaman ini (concept art / panorama / latar shot / denah tata letak), terpisah dari pengaturan global «Model Generasi»; kosong = ikut global",
+"本页人物资产(人物 sheet/服装 sheet)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Saluran/model gambar untuk aset karakter halaman ini (sheet karakter / sheet kostum), terpisah dari pengaturan global «Model Generasi»; kosong = ikut global",
+"本页生物概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Saluran/model gambar untuk concept art makhluk halaman ini, terpisah dari pengaturan global «Model Generasi»; kosong = ikut global",
+"本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Saluran/model gambar untuk concept art properti halaman ini, terpisah dari pengaturan global «Model Generasi»; kosong = ikut global",
 };

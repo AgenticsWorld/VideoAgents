@@ -2391,4 +2391,10 @@ window.I18N_DICT = {
 "该集还没有动态样片(assets/storyboard/{ep}/animatic.mp4);草图没出全也能出,缺图的镜显示画面内容文字": "This episode has no animatic yet (assets/storyboard/{ep}/animatic.mp4); it can be rendered even with missing sketches, which show the shot text instead",
 "重出动态样片": "Re-render animatic",
 "重出样片": "Re-render",
+
+"🎨 图像模型": "🎨 Image model",
+"本页场景资产(概念图/全景/分镜背景图/布局图)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Image channel/model for this page's scene assets (concept art / panoramas / shot plates / layout maps), separate from the global Generation Models setting; empty = follow global",
+"本页人物资产(人物 sheet/服装 sheet)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Image channel/model for this page's character assets (character sheets / costume sheets), separate from the global Generation Models setting; empty = follow global",
+"本页生物概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Image channel/model for this page's creature concept art, separate from the global Generation Models setting; empty = follow global",
+"本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局": "Image channel/model for this page's prop concept art, separate from the global Generation Models setting; empty = follow global",
 };
