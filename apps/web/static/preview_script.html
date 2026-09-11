@@ -152,7 +152,7 @@ const dot=id=>`<i style="background:${CAST_COLOR[id]||'#5b6478'}"></i>`;
 const chip=id=>`<span class="chip" title="${esc(id)}">${dot(id)}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
 
 /* ✏️ 反馈:直发负责 Agent */
-const AGENT_NAMES={'01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
+const AGENT_NAMES={'01-story/timeline-story':'剧情时间轴','01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
 const agentName=id=>t(AGENT_NAMES[id]||id);
 function editBtn(agent,loc,cls,label){
   return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`;
@@ -202,7 +202,7 @@ function statusHtml(d){
       ?esc(I18N.f('拆解表已过期:{files} 在拆解之后又更新过,建议重新分析',{files:d.stale.map(x=>x.split('/').pop()).join('、')}))
       :esc(I18N.f('正式拆解表 {f} · 更新于 {t}',{f:d.file,t:new Date((d.mtime||0)*1000).toLocaleString()}))}</span><button id="reanalyze">🔁 ${esc(t('重新分析'))}</button>${(d.errors||[]).length?`<div class="err">${esc(t('拆解表未过机检:'))}\n${esc(d.errors.join('\n'))}</div>`:''}</div>`;
   }else{
-    h=`<div class="src derived"><span>⚠</span><span class="msg">${esc(t('推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。'))}</span><button id="reanalyze">🔁 ${esc(t('重新分析'))}</button>${(d.errors||[]).length?`<div class="err">${esc(d.errors.join('\n'))}</div>`:''}</div>`;
+    h=`<div class="src derived"><span>⚠</span><span class="msg">${esc(t('推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。'))}</span><button id="reanalyze">🔁 ${esc(t('重新分析'))}</button>${(d.errors||[]).length?`<div class="err">${esc(d.errors.join('\n'))}</div>`:''}</div>`;
   }
   return h;
 }
@@ -299,13 +299,13 @@ function renderEps(episodes){
   });
 }
 
-/* 重新分析:派单给剧本改编 Agent 产出正式拆解表,轮询结束后刷新 */
+/* 重新分析:派单给拆解表产出工位(owner_agent,当前 01-story/timeline-story)产出正式拆解表,轮询结束后刷新 */
 document.addEventListener('click',async e=>{
   const b=e.target.closest('#reanalyze');if(!b||!LAST||RUN)return;
-  const proj=$('#project').value.trim()||'demo',ep=LAST.ep,agent=LAST.owner_agent||'01-story/screenplay';
+  const proj=$('#project').value.trim()||'demo',ep=LAST.ep,agent=LAST.owner_agent||'01-story/timeline-story';
   const rel=LAST.breakdown_rel||`story/episodes/${ep}/script_breakdown.json`;
   const message=[
-    `[剧本拆解] 请为项目 ${proj} 的 ${ep} 生成剧本拆解表 ${rel}(schema ${LAST.schema_version||'script_breakdown/1.0'};规约见 agents/01-story/screenplay/SOUL.md「剧本拆解表」与 docs/script_breakdown.md)。`,
+    `[剧本拆解] 请为项目 ${proj} 的 ${ep} 生成剧本拆解表 ${rel}(schema ${LAST.schema_version||'script_breakdown/1.0'};规约见 agents/01-story/timeline-story/SOUL.md「剧本拆解表」与 docs/script_breakdown.md)。`,
     `输入(只读):story/episodes/${ep}/screenplay.md(事实源)、dialogue.md、narration.md、hooks.json、pacing.json、story/episode_plan.json、story/events.json、bible/characters/index.json、bible/scenes/index.json。`,
     '要求:只做结构化拆解,不改写任何剧本/对白/旁白/钩子/节奏文件;每场按剧本原顺序切成 blocks[](action/sound/dialogue/narration/transition),台词逐句带 speaker/text/emotion/est_s,旁白块对上 narration.md 定稿条目(id/est_s/tone);每场给一句话 summary、beat(节拍功能)与 purpose(戏剧功能);emotion/时长/节奏优先取 pacing.json,缺失时按剧本估算并在 issues[] 标注。',
     `完成后运行 python3 code/check_script_breakdown.py --project ${proj} --ep ${ep} 通过(PASS)后交付;不派发其它工位。`,

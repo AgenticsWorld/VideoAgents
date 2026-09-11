@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ Enviado a {agent}",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Línea temporal",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Guion {ep} {title} (comentarios generales; archivos en story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Comentarios generales sobre el guion de este episodio, enviados al productor para coordinar",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} escenas · {l} líneas · {m} narraciones",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "lento",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "El desglose está desactualizado: {files} cambió después; conviene reanalizar",
 "拆解表未过机检:": "El desglose no pasó la comprobación automática:",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Vista derivada: este episodio aún no tiene desglose estructurado. Lo siguiente se extrajo automáticamente de los archivos de guion/ritmo/ganchos y puede estar incompleto; pulsa «Volver a analizar» para que el agente de guion genere el desglose oficial.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Vista derivada: este episodio aún no tiene desglose estructurado. Lo siguiente se extrajo automáticamente de los archivos de guion/ritmo/ganchos y puede estar incompleto; pulsa «Volver a analizar» para que el agente de línea temporal genere el desglose oficial.",
 "故事结构": "Estructura narrativa",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Narración {ep}/{id} (anchor: {a}; archivo {f} entrada {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Candidato a narración {ep} escena {no} «{txt}» (archivo de guion {f})",

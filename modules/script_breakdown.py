@@ -1,8 +1,8 @@
 """剧本拆解表(script_breakdown.json)—— 剧情处理层(01-story)产物的统一结构化视图。
 
 两条来源,同一 schema `script_breakdown/1.0`:
-  ① 正式产物:`story/episodes/<ep>/script_breakdown.json`,由 `01-story/screenplay` 在 p5-breakdown
-     节点(或用户在「剧本预览」页点「重新分析」派单)按 docs/script_breakdown.md 规约产出;
+  ① 正式产物:`story/episodes/<ep>/script_breakdown.json`,由 `01-story/timeline-story` 在 p5-breakdown
+     节点(或用户在「剧本预览」页点「重新分析」派单)按 docs/script_breakdown.md 规约产出(剧本内容的反馈仍发 screenplay 等各自工位);
   ② 推导视图:老项目没有正式产物时,本模块从 screenplay.md / dialogue.md / narration.md /
      hooks.json / pacing.json / episode_plan.json / events.json / story_graph.json 启发式拆解
      (各项目 agent 自由排版,解析器按已见过的多种形态兼容),标 source="derived"。
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "script_breakdown/1.0"
-OWNER_AGENT = "01-story/screenplay"
+OWNER_AGENT = "01-story/timeline-story"    # 拆解表产出/「重新分析」承接工位(2026-09-11 用户指定)
 BREAKDOWN_REL = "story/episodes/{ep}/script_breakdown.json"
 
 # 页面各板块的负责 Agent(✏️ 修改直发对象)

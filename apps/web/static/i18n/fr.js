@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ Envoyé à {agent}",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Chronologie",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Scénario {ep} {title} (remarques globales ; fichiers dans story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Remarques globales sur le scénario de cet épisode, envoyées au producteur pour coordination",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} scènes · {l} répliques · {m} narrations",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "lent",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "Le découpage est périmé : {files} a été modifié depuis ; réanalysez",
 "拆解表未过机检:": "Le découpage n'a pas passé le contrôle automatique :",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Vue dérivée : cet épisode n'a pas encore de découpage structuré. Le contenu ci-dessous est extrait automatiquement des fichiers scénario / rythme / accroches et peut être incomplet ; cliquez sur « Réanalyser » pour que l'agent scénario produise le découpage officiel.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Vue dérivée : cet épisode n'a pas encore de découpage structuré. Le contenu ci-dessous est extrait automatiquement des fichiers scénario / rythme / accroches et peut être incomplet ; cliquez sur « Réanalyser » pour que l'agent chronologie produise le découpage officiel.",
 "故事结构": "Structure narrative",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Narration {ep}/{id} (ancre : {a} ; fichier {f} entrée {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Candidat à la narration {ep} scène {no} « {txt} » (fichier scénario {f})",

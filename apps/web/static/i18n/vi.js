@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ Đã gửi tới {agent}",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Dòng thời gian cốt truyện",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Kịch bản {ep} {title} (góp ý tổng thể; tệp trong story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Góp ý tổng thể cho kịch bản tập này, gửi Tổng chế tác điều phối",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} cảnh · {l} câu thoại · {m} lời dẫn",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "chậm",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "Bảng phân tách đã cũ: {files} được cập nhật sau khi phân tách, nên phân tích lại",
 "拆解表未过机检:": "Bảng phân tách không qua kiểm tra máy:",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Bản suy luận: tập này chưa được phân tách có cấu trúc. Nội dung dưới đây được phân tích tự động từ tệp kịch bản/nhịp/móc câu nên có thể thiếu sót; bấm “Phân tích lại” để Agent chuyển thể kịch bản tạo bảng phân tách chính thức.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Bản suy luận: tập này chưa được phân tách có cấu trúc. Nội dung dưới đây được phân tích tự động từ tệp kịch bản/nhịp/móc câu nên có thể thiếu sót; bấm “Phân tích lại” để Agent dòng thời gian cốt truyện tạo bảng phân tách chính thức.",
 "故事结构": "Cấu trúc câu chuyện",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Lời dẫn {ep}/{id} (anchor: {a}; tệp {f} mục {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Ứng viên lời dẫn {ep} cảnh {no} “{txt}” (tệp kịch bản {f})",

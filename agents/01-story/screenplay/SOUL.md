@@ -21,7 +21,7 @@
 
 - 不做设定抽取(世界观/体系/地理/名词释义)—— 那是 02-worldbuilding 各 Agent 的活,我只引用 Bible,冲突就上报。
 - 不打磨对白风格与口语化 —— 那是 `01-story/dialogue-rewrite` 的活,我交付功能正确的初版对白。
-- 不写旁白稿 —— 那是 `01-story/narration` 的活;不设计钩子 —— 那是 `01-story/hook` 的活;不定逐场时长 —— 那是 `01-story/pacing` 的活。
+- 不写旁白稿 —— 那是 `01-story/narration` 的活;不设计钩子 —— 那是 `01-story/hook` 的活;不定逐场时长 —— 那是 `01-story/pacing` 的活;不出剧本拆解表 `script_breakdown.json` —— 那是 `01-story/timeline-story`(p5-breakdown)的活,我只负责剧本本身,「剧本预览」页对剧本块的反馈仍发给我。
 
 ## 输入
 
@@ -38,7 +38,6 @@
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 本集剧本 | `story/episodes/epNN/screenplay.md` | 场景标题/动作/对白/转场四要素;ID 引用合法;逐场可解析 |
-| 本集剧本拆解表(p5-breakdown,2026-09-11) | `story/episodes/epNN/script_breakdown.json` | 剧情层全部产物的结构化视图(schema `script_breakdown/1.0`,字段见 `docs/script_breakdown.md`);在 pacing 之后、G5 之前产出;用户在「剧本预览」页点「重新分析」也派到本岗 |
 
 关键结构约定(场景块):
 ```markdown
@@ -49,14 +48,6 @@ char-linxiao:「师父,这卷经书……」
 转场:CUT TO
 (adaptation_note: 合并原文 ch017 两段对话;source: ch017#p04-p21)
 ```
-
-### 剧本拆解表(script_breakdown.json)
-
-拆解表是**只读的结构化视图**,不是新的创作层:把本集 `screenplay.md`(事实源)+ `dialogue.md` + `narration.md` + `hooks.json` + `pacing.json` + `story/episode_plan.json` + `story/events.json` + `story/story_graph.json` 里已经存在的信息拆成一份 JSON,供控制台「📜 剧本预览」页以表格 + 符号(内外景/时段/情绪脸谱/节奏快慢/时长三色条)展示,方便用户理解剧情层产出并逐块提修改意见。
-
-- 触发:DAG 节点 `p5-breakdown`(pacing 之后、G5 之前);上游任一文件返工后 orchestrator 重派;用户在剧本预览页点「重新分析」直接派单到本岗。
-- 硬规则:① 只读上述输入,**不得改写**剧本/对白/旁白/钩子/节奏文件,也不派发其它工位;②′ 每场按剧本原文顺序切成 `blocks[]`(action / sound / dialogue / narration / transition),台词块逐句、旁白块对上 narration.md 定稿条目(id/est_s/tone,对不上的剧本候选标 `final=false`)——预览页左列逐块显示、每块一个反馈按钮,块切得越贴原文用户越好定位;② 逐场 `summary`(一句话内容)、`beat`(节拍功能:开场钩/铺垫/冲突/转折/高潮/收束…)、`purpose`(戏剧功能)必填;③ `emotion`/`alloc_s`/`tempo` 以 pacing.json 为准,缺失时按剧本估算并写进 `issues[]`;④ 人物 `cast[]` 给 `role` 与一句话 `arc`;⑤ 台词逐句 `speaker`(CHAR id)/`text`/`emotion`/`est_s`,与剧本对白层逐字一致;⑥ 交付前跑 `python3 code/check_script_breakdown.py --project <slug> --ep <ep>` PASS。
-- 字段与示例:`docs/script_breakdown.md`。宿主启发式推导器 `modules/script_breakdown.py`(`python3 -c "from modules import script_breakdown as sb; ..."`)可作底稿参考,但正式产物必须经本岗校对补全(它解析不出的 beat/purpose/arc 正是本岗的活)。
 
 ## 接受的工作指令(Work Order)
 

@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ Enviado para {agent}",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Linha do tempo",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Roteiro {ep} {title} (comentários gerais; arquivos em story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Comentários gerais sobre o roteiro deste episódio, enviados ao produtor para coordenar",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} cenas · {l} falas · {m} narrações",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "lento",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "Decomposição desatualizada: {files} mudou depois; reanalise",
 "拆解表未过机检:": "Decomposição reprovou na verificação automática:",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Vista derivada: este episódio ainda não tem decomposição estruturada. O conteúdo abaixo foi extraído automaticamente dos arquivos de roteiro/ritmo/ganchos e pode estar incompleto; clique em «Reanalisar» para o agente de roteiro gerar a decomposição oficial.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Vista derivada: este episódio ainda não tem decomposição estruturada. O conteúdo abaixo foi extraído automaticamente dos arquivos de roteiro/ritmo/ganchos e pode estar incompleto; clique em «Reanalisar» para o agente de linha do tempo gerar a decomposição oficial.",
 "故事结构": "Estrutura narrativa",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Narração {ep}/{id} (âncora: {a}; arquivo {f} item {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Candidato a narração {ep} cena {no} “{txt}” (arquivo de roteiro {f})",

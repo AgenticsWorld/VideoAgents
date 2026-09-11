@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ Terkirim ke {agent}",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Linimasa Cerita",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Naskah {ep} {title} (masukan keseluruhan; berkas di story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Masukan keseluruhan untuk naskah episode ini, dikirim ke Produser untuk dikoordinasikan",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} adegan · {l} baris dialog · {m} narasi",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "lambat",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "Uraian sudah usang: {files} berubah setelahnya, sebaiknya analisis ulang",
 "拆解表未过机检:": "Uraian gagal pemeriksaan otomatis:",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Tampilan turunan: episode ini belum punya uraian terstruktur. Isi di bawah diurai otomatis dari berkas naskah/tempo/kait dan mungkin tidak lengkap; klik “Analisis ulang” agar Agent naskah membuat uraian resmi.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Tampilan turunan: episode ini belum punya uraian terstruktur. Isi di bawah diurai otomatis dari berkas naskah/tempo/kait dan mungkin tidak lengkap; klik “Analisis ulang” agar Agent linimasa cerita membuat uraian resmi.",
 "故事结构": "Struktur Cerita",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Narasi {ep}/{id} (anchor: {a}; berkas {f} entri {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Kandidat narasi {ep} adegan {no} “{txt}” (berkas naskah {f})",

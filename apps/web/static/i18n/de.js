@@ -2141,6 +2141,7 @@ window.I18N_DICT = {
 "✅ 已发送给 {agent}": "✅ An {agent} gesendet",
 
 /* 剧本预览页(preview_script.html,2026-09-11) */
+"剧情时间轴": "Zeitachse",
 "剧本 {ep} {title}(整体反馈;文件 story/episodes/{ep}/)": "Drehbuch {ep} {title} (Gesamtfeedback; Dateien unter story/episodes/{ep}/)",
 "对本集剧本整体提修改意见,发给总制片统筹处理": "Gesamtfeedback zum Drehbuch dieser Episode, an den Produzenten zur Koordination",
 "{n} 场 · {l} 句台词 · {m} 条旁白": "{n} Szenen · {l} Dialogzeilen · {m} Erzähleinträge",
@@ -2181,7 +2182,7 @@ window.I18N_DICT = {
 "慢": "langsam",
 "拆解表已过期:{files} 在拆解之后又更新过,建议重新分析": "Aufschlüsselung veraltet: {files} wurde danach geändert – neu analysieren",
 "拆解表未过机检:": "Aufschlüsselung fiel bei der Prüfung durch:",
-"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧本改编 Agent 产出正式拆解表。": "Abgeleitete Ansicht: Diese Episode hat noch keine strukturierte Aufschlüsselung. Folgendes wurde automatisch aus Drehbuch-/Tempo-/Hook-Dateien gelesen und kann lückenhaft sein; mit „Neu analysieren“ erstellt der Drehbuch-Agent die offizielle Aufschlüsselung.",
+"推导视图:本集尚未做结构化拆解,以下由剧本/节奏/钩子文件自动解析,可能有缺漏;点「重新分析」由剧情时间轴 Agent 产出正式拆解表。": "Abgeleitete Ansicht: Diese Episode hat noch keine strukturierte Aufschlüsselung. Folgendes wurde automatisch aus Drehbuch-/Tempo-/Hook-Dateien gelesen und kann lückenhaft sein; mit „Neu analysieren“ erstellt der Zeitachsen-Agent die offizielle Aufschlüsselung.",
 "故事结构": "Erzählstruktur",
 "旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})": "Erzählung {ep}/{id} (Anker: {a}; Datei {f} Eintrag {id})",
 "旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})": "Erzählkandidat {ep} Szene {no} „{txt}“ (Drehbuchdatei {f})",

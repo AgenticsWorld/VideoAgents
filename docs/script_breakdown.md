@@ -8,7 +8,7 @@
 
 | 来源 | 文件 | 产生方式 | 页面标记 |
 |---|---|---|---|
-| 正式产物 | `story/episodes/<ep>/script_breakdown.json` | `01-story/screenplay` 在 DAG 节点 `p5-breakdown`(p5-pacing 之后、g5/H3 之前)按 SOUL「剧本拆解表」规约产出;用户在页面点「🔁 重新分析」也直接派单到该工位(消息含 `script_breakdown`,页面据此识别在跑的 run 并轮询) | ✅ 正式拆解表 · 更新时间;任一输入文件比它新 → ⚠ 已过期 |
+| 正式产物 | `story/episodes/<ep>/script_breakdown.json` | `01-story/timeline-story` 在 DAG 节点 `p5-breakdown`(p5-pacing 之后、g5/H3 之前)按 SOUL「剧本拆解表」规约产出;用户在页面点「🔁 重新分析」也直接派单到该工位(消息含 `script_breakdown`,页面据此识别在跑的 run 并轮询) | ✅ 正式拆解表 · 更新时间;任一输入文件比它新 → ⚠ 已过期 |
 | 推导视图 | 无文件,服务端即时计算 | `script_breakdown.derive()` 解析 `screenplay.md`(兼容 `## S01 \| 外 \| SCN-0075 名 \| 黄昏`、`## S01 \| INT \| scene:SCN-0001 \| 未知`、`### S01 ｜ EXT ｜ SCN-001 名 · 日 ｜ 42s ｜ …`、`## 1-2 日 内 神庙大厅`、`### [S001 \| …]` 等已见形态;对白行 `- **名(CHAR-x)**(括注):台词 {emotion, est_duration_s, style_hits}` / `CHAR-x:「台词」` / `[LN-…] 名(CHAR-x)〔OV〕:台词`;`[事件]/[出场]/[时长]`、`〔出场:…〕`、`- 在场:` 元信息;`动作:`/`△`/子块段落;`转场:`;`旁白候选`)+ `pacing.json` + `hooks.json` + `narration.md|json` + `episode_plan.json` + `events.json` + `story_graph.json` + Bible 索引 | ⚠ 推导视图 + 「重新分析」按钮 |
 
 正式产物存在时以它为准,**缺的顶层块由推导视图补齐**(如 agent 只写了 scenes/cast,plan/events/structure 仍显示)。正式产物不是合法 JSON 或缺 `scenes[]` 时退回推导视图并在页面报错。
@@ -84,4 +84,4 @@
 
 ## 重新分析
 
-按钮把固定工单(输入清单、只读拆解、逐场 summary/beat/purpose、cast role/arc、跑机检 PASS 后交付、不派其它工位)`POST /api/v1/runs` 给 `01-story/screenplay`(引擎/模型随顶栏全局设置),页面每 4s 轮询该 run,结束后重新拉数据;刷新页面时服务端从在跑 run 里识别同集拆解单继续显示「分析中」。老项目一集一按;DAG 新项目由 `p5-breakdown` 自动产出。
+按钮把固定工单(输入清单、只读拆解、逐场 summary/beat/purpose、cast role/arc、跑机检 PASS 后交付、不派其它工位)`POST /api/v1/runs` 给 `01-story/timeline-story`(拆解表产出工位,2026-09-11 用户指定;引擎/模型随顶栏全局设置),页面每 4s 轮询该 run,结束后重新拉数据;刷新页面时服务端从在跑 run 里识别同集拆解单继续显示「分析中」。老项目一集一按;DAG 新项目由 `p5-breakdown` 自动产出。
