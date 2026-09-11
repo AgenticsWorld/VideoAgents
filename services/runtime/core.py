@@ -6694,7 +6694,10 @@ def _preview_storyboard(project: str, ep: str):
         for s in sb.get("scenes", []) if isinstance(s, dict)]
     sl = _read_json_safe(base / "directing" / ep / "shot_list.json") or {}
     from modules.scene_cast import scene_cast_groups
+    from modules.whitebox import episode_actor_colors
     scene_cast_contexts = scene_cast_groups(sl)
+    # 整集人物固定身份色(2026-09-11):组卡人物 chip 与白模模型/图例同色,同一人物各组不变
+    data["actor_colors"] = episode_actor_colors(sl, scene_cast_contexts)
     # 旁白挂点定稿(shot-planning 产出,§7D ①):预览页最优先按它对位,
     # 缺失时前端回退 narration.md 锚的 grpNNN/beat 前缀匹配并标注"挂点未定稿"
     data["narration_anchors"] = [

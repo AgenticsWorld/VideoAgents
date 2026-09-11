@@ -15,16 +15,59 @@ from pathlib import Path
 from modules.output_format import resolve_output
 from modules.scene_cast import scene_cast_groups
 
-PALETTE = ['#e63946', '#1d78d8', '#2ea043', '#f59e0b', '#8e44ad', '#00acc1', '#e91e63', '#795548']
+# 人物身份色(2026-09-11 改为整集固定):调色板前 8 色与 modules/whitebox_refs.COLOR_NAMES、
+# preview_storyboard.html BM_COLORS 同序;后 8 色为整集人物超过 8 人时的命名备色。
+PALETTE = ['#e63946', '#1d78d8', '#2ea043', '#f59e0b', '#8e44ad', '#00acc1', '#e91e63', '#795548',
+           '#ffd60a', '#0d9488', '#1e3a8a', '#84cc16', '#b5179e', '#6b8e23', '#800000', '#ff7f50']
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
-def unused_actor_color(actors):
+def palette_color(index):
+    """整集第 index 位人物的身份色:命名调色板用尽后按黄金角等距取 HSL 色,永不循环复用。"""
+    if index < len(PALETTE):
+        return PALETTE[index]
+    import colorsys
+    n = index - len(PALETTE)
+    r, g, b = colorsys.hls_to_rgb((n * 0.618033988749895) % 1.0, 0.40 + 0.18 * (n % 2), 0.72)
+    return '#%02x%02x%02x' % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def free_color(actors):
+    """本组尚未被任何 actor 占用的下一个身份色(仅供整集配色表漏项时兜底)。"""
     used = {a.get('color', '').lower() for a in actors}
-    for color in PALETTE:
-        if color not in used:
-            return color
-    raise ValueError('actor color palette exhausted; independent actors cannot share a color')
+    index = 0
+    while palette_color(index).lower() in used:
+        index += 1
+    return palette_color(index)
+
+
+def episode_actor_colors(source, contexts=None):
+    """整集人物/生物 → 固定身份色(2026-09-11)。
+
+    同一人物在本集所有分镜组里同色:按 generation_groups 顺序、组内 blocking_map.characters 顺序、
+    再按同场次名单顺序记首次出场,依次取 palette_color。只作坐骑(从不作独立角色)的生物不占色位,
+    与其骑手同色;独立出场过的生物有自己的色位,被骑乘的那一组仍按规约临时改用骑手色。
+    """
+    contexts = contexts if contexts is not None else scene_cast_groups(source)
+    order, riders = [], {}
+    groups = source.get('generation_groups', [])
+    routes = [(g, r) for g in groups for r in (g.get('blocking_map') or {}).get('characters', []) if isinstance(r, dict)]
+    independent = {r.get('id') for _, r in routes}
+    for _, route in routes:
+        mount = route.get('mounted')
+        if mount and mount not in independent:
+            riders.setdefault(mount, route.get('id'))
+    for group in groups:
+        ids = [r.get('id') for r in (group.get('blocking_map') or {}).get('characters', []) if isinstance(r, dict)]
+        ids += contexts.get(group.get('group_id'), {}).get('actor_ids', [])
+        for cid in ids:
+            if isinstance(cid, str) and cid and cid not in order and cid not in riders:
+                order.append(cid)
+    colors = {cid: palette_color(i) for i, cid in enumerate(order)}
+    for mount, rider in riders.items():
+        if rider in colors:
+            colors[mount] = colors[rider]
+    return colors
 
 
 def validate_actor_colors(actors):
@@ -274,7 +317,8 @@ def validate_keys(keys, duration, camera=False):
         raise ValueError('Keyframes must cover 0..duration')
 
 
-def compile_group(base, ep, group, shots, scene):
+def compile_group(base, ep, group, shots, scene, colors=None):
+    colors = colors or {}
     gid = component(group['group_id'])
     duration = sum(number(shots[s]['duration_s'], 'duration_s', .001) for s in group['shots'])
     declared = group.get('total_duration_s', duration)
@@ -340,7 +384,7 @@ def compile_group(base, ep, group, shots, scene):
         for key in keys:
             key['pose'] = pose_events[max(t for t in pose_events if t <= key['t'])]
         actor = {'id': cid, 'label': route.get('label', cid), 'letter': LETTERS[index % 26],
-                 'color': PALETTE[index % len(PALETTE)], 'kind': 'creature' if cid.startswith('CRE-') else 'person',
+                 'color': colors.get(cid) or palette_color(index), 'kind': 'creature' if cid.startswith('CRE-') else 'person',
                  'size_m': route.get('size_m', [height*.28, height, height*.22]), 'keyframes': keys}
         actors.append(actor)
         if route.get('mounted'):
@@ -422,7 +466,7 @@ def compile_group(base, ep, group, shots, scene):
         if actor['id'] not in group.get('scene_cast', []) or actor['id'] in {a['id'] for a in actors}:
             raise ValueError('scene_actors must be unique scene cast outside the blocking-map cast')
         actor = copy.deepcopy(actor)
-        actor['color'] = unused_actor_color(actors)
+        actor['color'] = colors.get(actor['id']) or free_color(actors)
         actor['letter'] = ''
         actors.append(actor)
     if 'cameras' in plan:
@@ -505,7 +549,8 @@ def compile_group(base, ep, group, shots, scene):
             'warnings': warnings, 'authored': bool(plan), 'issues': issues}
 
 
-def complete_scene_actors(groups, contexts, raw_groups, errors):
+def complete_scene_actors(groups, contexts, raw_groups, errors, colors=None):
+    colors = colors or {}
     # Snapshot authored tracks before filling holes so a later authored entrance
     # or departure, rather than a synthetic placeholder, remains authoritative.
     anchors = {}
@@ -540,11 +585,7 @@ def complete_scene_actors(groups, contexts, raw_groups, errors):
             anchor = copy.deepcopy(actor['keyframes'][-1 if index < i else 0])
             actor['keyframes'] = [{**copy.deepcopy(anchor), 't': t} for t in (0, group['duration_s'])]
             actor['letter'] = ''
-            try:
-                actor['color'] = unused_actor_color(group['actors'])
-            except ValueError as error:
-                errors.append({'group_id': gid, 'error': str(error)})
-                continue
+            actor['color'] = colors.get(cid) or free_color(group['actors'])
             actor['scene_inherited_from'] = origin
             group['actors'].append(actor)
             group['warnings'].append(f'{cid}: 同场次在场人物，沿用 {origin} 的'+('尾' if index < i else '首')+'姿态与位置；补充走位可写 scene_actors。')
@@ -568,6 +609,7 @@ def compile_episode(base: Path, ep: str):
         raise FileNotFoundError(f'{ep}: missing shot_list.json')
     shots = {s['shot_id']: s for s in source.get('shots', [])}
     contexts = scene_cast_groups(source)
+    colors = episode_actor_colors(source, contexts)   # 整集固定身份色:同一人物各组同色
     raw_groups = {g['group_id']: g for g in source.get('generation_groups', [])}
     scenes = {}; groups = []; errors = []; by_id = {}
     for raw in source.get('generation_groups', []):
@@ -577,7 +619,7 @@ def compile_episode(base: Path, ep: str):
             if sid not in scenes:
                 scenes[sid] = load_scene(base, sid)
             group = compile_group(base, ep, {**raw, 'scene_cast': contexts[gid]['actor_ids'],
-                                  'scene_cast_enabled': 'scene_cast' in raw}, shots, scenes[sid])
+                                  'scene_cast_enabled': 'scene_cast' in raw}, shots, scenes[sid], colors)
             prev = by_id.get(group['continuity_from'])
             policy = group['continuity']
             for key in ('actors', 'camera'):
@@ -603,7 +645,7 @@ def compile_episode(base: Path, ep: str):
             by_id[gid] = group; groups.append(group)
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
-    complete_scene_actors(groups, contexts, raw_groups, errors)
+    complete_scene_actors(groups, contexts, raw_groups, errors, colors)
     for group in groups:
         try:
             validate_actor_colors(group['actors'])
@@ -618,6 +660,6 @@ def compile_episode(base: Path, ep: str):
         group['issues'] = [merge_decision(i, decisions.get(i['issue_id'])) for i in group.get('issues', [])]
     return {'schema_version': 'whitebox_episode.v1', 'staging_version': 3, 'project': base.name, 'ep': ep,
             'render': render_format(read(base / 'settings.json', {})),
-            'scenes': scenes, 'groups': groups, 'errors': errors,
+            'scenes': scenes, 'groups': groups, 'errors': errors, 'actor_colors': colors,
             'issues_summary': summarize(groups),
             'source_group_count': len(source.get('generation_groups', []))}

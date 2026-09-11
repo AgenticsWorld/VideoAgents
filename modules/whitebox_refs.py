@@ -32,8 +32,11 @@ from pathlib import Path
 
 from modules.whitebox import component, read, sample
 
+# 与 modules/whitebox.PALETTE 同序(2026-09-11 扩到 16 色:整集固定身份色,人物多于 8 人时启用后 8 色)
 COLOR_NAMES = {'#e63946': 'red', '#1d78d8': 'blue', '#2ea043': 'green', '#f59e0b': 'orange',
-               '#8e44ad': 'purple', '#00acc1': 'cyan', '#e91e63': 'pink', '#795548': 'brown'}
+               '#8e44ad': 'purple', '#00acc1': 'cyan', '#e91e63': 'pink', '#795548': 'brown',
+               '#ffd60a': 'yellow', '#0d9488': 'teal', '#1e3a8a': 'navy', '#84cc16': 'lime',
+               '#b5179e': 'magenta', '#6b8e23': 'olive', '#800000': 'maroon', '#ff7f50': 'coral'}
 BLOCK_KEY = 'Whitebox reference:'
 LEGEND_KEY = 'Whitebox legend:'
 FACING_KEY = 'Whitebox facing:'

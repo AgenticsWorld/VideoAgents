@@ -94,15 +94,44 @@ def test_authored_scene_actor_cannot_copy_an_occupied_color(project):
 
 
 def test_actor_colors_allow_only_explicit_mount_sharing():
-    from modules.whitebox import PALETTE, unused_actor_color, validate_actor_colors
+    from modules.whitebox import PALETTE, free_color, palette_color, validate_actor_colors
     actors = [{'id': 'CHAR-1', 'color': PALETTE[0]},
               {'id': 'CRE-1', 'kind': 'creature', 'color': PALETTE[0], 'rider': 'CHAR-1'}]
     validate_actor_colors(actors)
     del actors[1]['rider']
     with pytest.raises(ValueError, match='share color'):
         validate_actor_colors(actors)
-    with pytest.raises(ValueError, match='exhausted'):
-        unused_actor_color([{'color': c} for c in PALETTE])
+    # 调色板用尽不报错:按黄金角生成新色,且与已有色不重复
+    extra = free_color([{'color': c} for c in PALETTE])
+    assert extra == palette_color(len(PALETTE)) and extra.lower() not in {c.lower() for c in PALETTE}
+    assert len({palette_color(i).lower() for i in range(40)}) == 40
+
+
+def test_actor_colors_are_fixed_across_groups(project):
+    """整集固定身份色(2026-09-11):同一人物在不同分镜组同色,不随组内 blocking_map 顺序变化;
+    只作坐骑的生物不占色位、与骑手同色;场次名单人物也进整集表。"""
+    path, data = source(project)
+    shot2 = {'shot_id': 'sh2', 'scene_id': 'SCN-1', 'duration_s': 3, 'characters': ['CHAR-2', 'CHAR-1'], 'view_tile': 1}
+    shot3 = {'shot_id': 'sh3', 'scene_id': 'SCN-1', 'duration_s': 3, 'characters': ['CHAR-3'], 'view_tile': 1}
+    data['shots'] += [shot2, shot3]
+    data['generation_groups'][0]['blocking_map']['characters'][0]['mounted'] = 'CRE-horse'
+    data['generation_groups'] += [
+        {'group_id': 'grp2', 'scene_id': 'SCN-1', 'scene_no': 'S1', 'shots': ['sh2'], 'total_duration_s': 3,
+         'characters_union': ['CHAR-2', 'CHAR-1'], 'blocking_map': {'characters': [
+             {'id': 'CHAR-2', 'label': 'B', 'start': {'landmark': 'desk'}, 'end': {'landmark': 'door'}},
+             {'id': 'CHAR-1', 'label': 'A', 'start': {'landmark': 'door'}, 'end': {'landmark': 'desk'}}]}},
+        {'group_id': 'grp3', 'scene_id': 'SCN-1', 'scene_no': 'S2', 'shots': ['sh3'], 'total_duration_s': 3,
+         'characters_union': ['CHAR-3'], 'blocking_map': {'characters': [
+             {'id': 'CHAR-3', 'label': 'C', 'start': {'landmark': 'door'}, 'end': {'landmark': 'desk'}}]}}]
+    write(path, data)
+    result = compile_episode(project, 'ep01'); assert not result['errors']
+    colors = result['actor_colors']
+    assert colors == {'CHAR-1': '#e63946', 'CRE-horse': '#e63946', 'CHAR-2': '#1d78d8', 'CHAR-3': '#2ea043'}
+    for group in result['groups']:
+        for actor in group['actors']:
+            assert actor['color'] == colors[actor['id']], (group['group_id'], actor['id'])
+    grp2 = {a['id']: a['color'] for a in result['groups'][1]['actors']}
+    assert grp2 == {'CHAR-2': '#1d78d8', 'CHAR-1': '#e63946', 'CRE-horse': '#e63946'}  # 顺序反了颜色不变;坐骑继承
 
 
 def test_scene_cast_enables_physical_visibility_and_explicit_exceptions(project):
