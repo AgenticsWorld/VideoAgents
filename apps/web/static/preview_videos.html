@@ -128,6 +128,17 @@ tr.detail pre{white-space:pre-wrap;word-break:break-word;font:12px/1.7 inherit;c
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let EP='',LAST=null,SHOW_GENERIC=false;
+// 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
+// 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
+let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
+function restoreScroll(box,ep){
+  const k='vid-scroll:'+($('#project').value.trim()||'demo')+':'+(ep||''),same=box.dataset.skey===k;
+  box.dataset.skey=k;box.scrollTop=(same||SCROLL_FIRST)?(+localStorage.getItem(k)||0):0;SCROLL_FIRST=false;SCROLL_HOLD=false;
+}
+$('#content').addEventListener('scroll',()=>{
+  if(SCROLL_HOLD||SCROLL_TICK)return;
+  SCROLL_TICK=requestAnimationFrame(()=>{SCROLL_TICK=null;const k=$('#content').dataset.skey;if(k)localStorage.setItem(k,Math.round($('#content').scrollTop))});
+});
 
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
@@ -342,7 +353,7 @@ function render(d){
     </tr></thead><tbody>${defectRows(shown)}</tbody></table>`
     :'<div class="none">没有匹配的审核工单</div>';
 
-  $('#content').innerHTML=h;
+  $('#content').innerHTML=h;restoreScroll($('#content'),d.ep);
   const wb=$('#wbregen');if(wb)wb.onclick=regenWhitebox;
   document.querySelectorAll('input[name=dfscope]').forEach(r=>r.onchange=()=>{SHOW_GENERIC=r.value==='generic';render(LAST)});
   document.querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>{
@@ -354,21 +365,25 @@ function render(d){
 async function load(){
   const proj=$('#project').value.trim()||'demo';
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
-  $('#content').innerHTML='<div class="empty">加载中…</div>';
+  SCROLL_HOLD=true;$('#content').innerHTML='<div class="empty">加载中…</div>';
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/videos'+(EP?'?ep='+encodeURIComponent(EP):''));
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集数据</div>';return}
+    // 集号记忆(2026-09-11,同分镜预览):记住的集已不存在时回落到首集
+    if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load();return}
+    localStorage.setItem('vid-ep:'+(d.project||proj),EP);
     render(d);
   }catch(e){$('#content').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`}
 }
 $('#reload').onclick=load;
 const _q=new URLSearchParams(location.search);
-EP=_q.get('ep')||'';
 $('#project').value=_q.get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+// 集号记忆:URL 未指定 ep 时沿用该项目上次看的集(与滚动位置记忆配套)
+EP=_q.get('ep')||localStorage.getItem('vid-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)

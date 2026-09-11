@@ -261,6 +261,11 @@ const tc=v=>{v=Math.max(0,+v||0);const m=Math.floor(v/60),s=v-m*60;return (m?Str
 let D=null,EP='',SEL='',SCOPE='group',RANGE=null,AB='a',VA=null,VB=null,MODE='group',MULTI=new Set(),MASK=null,FILTER='all',
     POLL=null,JOB_POLL=null,LAYERS={picture:true,pack:true,sound:true},OPEN_SCN=new Set(),CLOSED_SEC=new Set(),EPIDX=0,PLAYING_EP=false;
 const proj=()=>$('#project').value.trim()||'demo';
+// 页面位置记忆(2026-09-11,同分镜预览):选中组 / 展开的场次 / 左栏组列表滚动按 项目:集 记进 localStorage,刷新或重开回到原位
+let POS_TICK=null;
+const posKey=()=>'post-pos:'+proj()+':'+EP;
+function posLoad(){try{return JSON.parse(localStorage.getItem(posKey())||'{}')||{}}catch(_){return {}}}
+function posSave(patch){try{localStorage.setItem(posKey(),JSON.stringify({...posLoad(),...patch}))}catch(_){}}
 const api=p=>'/api/v1/projects/'+encodeURIComponent(proj())+'/post/'+encodeURIComponent(EP)+p;
 async function J(url,method,body){
   const r=await fetch(url,{method:method||'GET',headers:body!==undefined?{'Content-Type':'application/json'}:{},body:body!==undefined?JSON.stringify(body):undefined});
@@ -288,7 +293,11 @@ async function load(keep){
     localStorage.setItem('post-ep:'+(d.project||proj()),EP);
     const first=!D||D.ep!==d.ep;
     D=d;
-    if(first||!grpById(SEL)){SEL=(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id||'';VA=null;VB=null;RANGE=null;MASK=null;OPEN_SCN=new Set(d.scenes.slice(0,3).map(s=>s.scene_id));}
+    if(first||!grpById(SEL)){
+      const pos=first?posLoad():{},open=(pos.open||[]).filter(id=>d.scenes.some(s=>s.scene_id===id));
+      SEL=(pos.sel&&grpById(pos.sel)?pos.sel:(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id)||'';VA=null;VB=null;RANGE=null;MASK=null;
+      OPEN_SCN=new Set(open.length?open:d.scenes.slice(0,3).map(s=>s.scene_id));
+    }
     render(!first&&keep);
     schedulePoll();
   }catch(e){$('#work').innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(t('加载失败:'))}${esc(e.message)}</div>`}
@@ -397,18 +406,21 @@ function renderLeft(){
   $('#left').innerHTML=h;
   $('#multi').onchange=e=>{document.body.classList.toggle('multi',e.target.checked);if(!e.target.checked){MULTI.clear();renderLeft()}};
   $$('#left .flt span').forEach(s=>s.onclick=()=>{FILTER=s.dataset.f;renderLeft()});
-  $$('#left .scn').forEach(s=>s.onclick=()=>{const id=s.dataset.scn;OPEN_SCN.has(id)?OPEN_SCN.delete(id):OPEN_SCN.add(id);renderLeft()});
+  $$('#left .scn').forEach(s=>s.onclick=()=>{const id=s.dataset.scn;OPEN_SCN.has(id)?OPEN_SCN.delete(id):OPEN_SCN.add(id);posSave({open:[...OPEN_SCN]});renderLeft()});
   $$('#left .grp').forEach(el=>{
     el.onclick=e=>{
       if(e.target.classList.contains('chk')){e.target.checked?MULTI.add(el.dataset.g):MULTI.delete(el.dataset.g);return}
       selectGroup(el.dataset.g);
     };
   });
+  // 左栏列表每次重建都归零:先回到记住的滚动位置,再让选中组就近入视;滚动即记
+  const gl=$('#glist'),pos=posLoad();
+  if(gl){if(pos.glist!=null)gl.scrollTop=pos.glist;gl.addEventListener('scroll',()=>{if(POS_TICK)return;POS_TICK=requestAnimationFrame(()=>{POS_TICK=null;posSave({glist:Math.round(gl.scrollTop)})})})}
   const sel=$('#left .grp.sel');if(sel)sel.scrollIntoView({block:'nearest'});
 }
 function selectGroup(gid){
   if(gid===SEL)return;
-  SEL=gid;RANGE=null;MASK=null;VA=null;VB=null;if(SCOPE==='range')SCOPE='group';
+  SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;if(SCOPE==='range')SCOPE='group';
   MODE='group';PLAYING_EP=false;
   renderLeft();renderRight();renderFoot();setMonitor();
 }

@@ -134,6 +134,17 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let EP='',LAST=null,RUN=null;
+// 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
+// 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
+let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
+function restoreScroll(box,ep){
+  const k='sc-scroll:'+($('#project').value.trim()||'demo')+':'+(ep||''),same=box.dataset.skey===k;
+  box.dataset.skey=k;box.scrollTop=(same||SCROLL_FIRST)?(+localStorage.getItem(k)||0):0;SCROLL_FIRST=false;SCROLL_HOLD=false;
+}
+$('#content').addEventListener('scroll',()=>{
+  if(SCROLL_HOLD||SCROLL_TICK)return;
+  SCROLL_TICK=requestAnimationFrame(()=>{SCROLL_TICK=null;const k=$('#content').dataset.skey;if(k)localStorage.setItem(k,Math.round($('#content').scrollTop))});
+});
 const CAST_COLORS=['#6c9ef8','#fbbf24','#4ade80','#f87171','#c084fc','#22d3ee','#fb923c','#a3e635'];
 const num=(v,d=0)=>v==null||isNaN(v)?'—':(+v).toFixed(d).replace(/\.0$/,'');
 const secs=v=>v==null?'—':num(v,1)+'s';
@@ -193,7 +204,7 @@ function render(d){
   (bd.scenes||[]).forEach(sc=>{h+=sceneRows(sc,bd,ep,A)});
   h+=`</tbody></table>`;
   h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
-  box.innerHTML=h;
+  box.innerHTML=h;restoreScroll(box,ep);
   if(RUN)pollRun(RUN);
 }
 
@@ -343,7 +354,7 @@ async function pollRun(id){
 async function load(keep){
   const proj=$('#project').value.trim()||'demo';
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
-  if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  SCROLL_HOLD=true;if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/script'+(EP?'?ep='+encodeURIComponent(EP):''));
     if(!r.ok)throw new Error((await r.json()).detail||r.status);

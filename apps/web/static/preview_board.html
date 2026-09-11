@@ -167,6 +167,17 @@ td.e{width:1%;white-space:nowrap;text-align:right}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,ANIM={},GATE={};
+// 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
+// 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
+let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
+function restoreScroll(box,ep){
+  const k='board-scroll:'+($('#project').value.trim()||'demo')+':'+(ep||''),same=box.dataset.skey===k;
+  box.dataset.skey=k;box.scrollTop=(same||SCROLL_FIRST)?(+localStorage.getItem(k)||0):0;SCROLL_FIRST=false;SCROLL_HOLD=false;
+}
+$('#content').addEventListener('scroll',()=>{
+  if(SCROLL_HOLD||SCROLL_TICK)return;
+  SCROLL_TICK=requestAnimationFrame(()=>{SCROLL_TICK=null;const k=$('#content').dataset.skey;if(k)localStorage.setItem(k,Math.round($('#content').scrollTop))});
+});
 const num=(v,d=1)=>v==null||isNaN(v)?'—':(+v).toFixed(d).replace(/\.0$/,'');
 const secs=v=>v==null?'—':num(v,1)+'s';
 const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
@@ -228,11 +239,11 @@ function render(d){
   }
   if(!d.has_storyboard){
     h+=`<div class="empty">${esc(I18N.f('该集分镜层尚未产出 storyboard.json(directing/{ep}/);导演计划{p}',{ep,p:d.directing_plan?t('已在上方'):t('也还没有')}))}</div>`;
-    box.innerHTML=h;return;
+    box.innerHTML=h;restoreScroll(box,ep);return;
   }
   (d.scenes||[]).forEach(sc=>{h+=sceneCard(sc,d)});
   h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白挂点'))}</span><span>🎬 ${esc(t('动作'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
-  box.innerHTML=h;
+  box.innerHTML=h;restoreScroll(box,ep);
   if(anyBusy())startPoll();
 }
 /* ---------- H3S 故事板签字(workflow.yaml g6s):答复总制片发的签字卡,与控制台同一条 ---------- */
@@ -451,7 +462,7 @@ function renderEps(episodes){
 async function load(keep){
   const proj=$('#project').value.trim()||'demo';
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
-  if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  SCROLL_HOLD=true;if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/board'+(EP?'?ep='+encodeURIComponent(EP):''));
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
