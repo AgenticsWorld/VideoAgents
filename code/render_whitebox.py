@@ -79,8 +79,8 @@ def main():
     result=ensure_videos(base,episode,sorted(selected) if scoped else None,
                          width=args.width,height=args.height,fps=args.fps,progress=progress,force=args.force)
     print(json.dumps({'videos':result,'directory':f'assets/whitebox/{args.ep}/'},ensure_ascii=False),flush=True)
-    # 整集白模合辑(2026-09-08,视频预览页「白模合辑」板块):已生成过合辑且本次有组重出时自动刷新,
-    # 保持合辑与各组 camera.mp4 一致;从未生成过的不主动出,由用户在预览页点「重新生成白模合辑」派单
+    # 整集白模样片(2026-09-08,视频预览页/分镜预览页「白模样片」板块,原名白模合辑):已生成过样片且本次有组重出时自动刷新,
+    # 保持样片与各组 camera.mp4 一致(含对白/旁白字幕);从未生成过的不主动出,由用户在预览页点「重新生成白模样片」派单
     if result['rendered']:
         status=episode_reel_status(base,args.ep)
         if status['exists']:

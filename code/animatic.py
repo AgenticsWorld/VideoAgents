@@ -26,42 +26,10 @@ from _common import parse_args
 
 from modules import storyboard_board as sbb
 
-FONT_CANDIDATES = [
-    "/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "/System/Library/Fonts/STHeiti Light.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf",
-]
+from modules.whitebox_subtitles import find_font as _font, wrap_text as _wrap   # 字体查找/折行与白模样片字幕共用
+
 DEFAULT_SHOT_S = 4.0
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
-
-
-def _font(size: int):
-    from PIL import ImageFont
-    root = sbb.ROOT
-    cands = [str(p) for p in sorted((root / "data" / "fonts").glob("*")) if p.suffix.lower() in (".ttf", ".otf", ".ttc")]
-    for f in cands + FONT_CANDIDATES:
-        if Path(f).is_file():
-            try:
-                return ImageFont.truetype(f, size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
-
-
-def _wrap(draw, text: str, font, max_w: int) -> list[str]:
-    """按像素宽逐字折行(中文无空格,英文按词)。"""
-    lines, cur = [], ""
-    for tok in re.findall(r"\s+|[A-Za-z0-9'’.,;:!?()\-]+|.", text):
-        trial = cur + tok
-        if draw.textlength(trial, font=font) <= max_w or not cur:
-            cur = trial
-        else:
-            lines.append(cur.rstrip())
-            cur = tok.lstrip()
-    if cur.strip():
-        lines.append(cur.rstrip())
-    return lines
 
 
 def _canvas_size(aspect: str) -> tuple[int, int]:

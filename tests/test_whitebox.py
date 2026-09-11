@@ -622,7 +622,7 @@ def test_browser_format_matches_python():
     assert actual==[render_format(c) for c in configs]
 
 
-# ---------------- 整集白模合辑(2026-09-08) ----------------
+# ---------------- 整集白模样片(2026-09-08,原名白模合辑;2026-09-11 烧入字幕) ----------------
 def _tiny_clip(path, seconds, size='64x36', fps=24):
     import shutil, subprocess
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -750,3 +750,100 @@ def test_projection_screen_validates_cast_and_fixed_plane(project):
                 {**prop,'projection_screen':{'actor_ids':['CHAR-1'],'shot_ids':['missing']}}]:
         write(path,{'props':[bad]})
         assert compile_episode(project,'ep01')['errors']
+
+
+# ---------------- 白模样片字幕(2026-09-11) ----------------
+@pytest.fixture
+def subtitled_reel_project(reel_project):
+    """在 reel_project 上加对白/旁白源:shot_list shots(dialogue_lines/narration_ref)+narration_anchors、narration.md、人物名、白模编译镜段。"""
+    base = reel_project
+    for g, d in (('grp002', 3), ('grp001', 2), ('grp003', 4)):   # 字幕要看得见,组视频放大到 320x180
+        _tiny_clip(base/'assets/whitebox/ep02'/g/'camera.mp4', d, size='320x180')
+        m = base/'assets/whitebox/ep02'/g/'manifest.json'
+        write(m, {**json.loads(m.read_text()), 'width': 320, 'height': 180})
+    write(base/'directing/ep02/shot_list.json', {
+        'shots': [
+            {'shot_id': 'sh0', 'duration_s': 3, 'narration_ref': ['N-01']},
+            {'shot_id': 'sh1', 'duration_s': 2, 'dialogue_lines': [
+                {'speaker': 'CHAR-0001', 'text': '施主,请留步!', 'est_duration_s': 1.5},
+                {'speaker': 'CHAR-0002', 'text': '叫我?', 'est_duration_s': 0.5}]},
+            {'shot_id': 'sh2', 'duration_s': 4, 'dialogue_lines': [{'speaker': 'CHAR-0002', 'text': '算命?'}]}],
+        'generation_groups': [{'group_id': g, 'scene_id': 'SCN-1', 'shots': [f'sh{i}'], 'total_duration_s': d}
+                              for i, (g, d) in enumerate((('grp002', 3), ('grp001', 2), ('grp003', 4)))],
+        'narration_anchors': [{'narration_id': 'N-01', 'anchor_shots': ['sh0'], 'anchor_group': 'grp002', 'est_duration_s': 2.0}]})
+    (base/'story/episodes/ep02').mkdir(parents=True, exist_ok=True)
+    (base/'story/episodes/ep02/narration.md').write_text(
+        '# EP02\n\n```\n[N-01 | anchor: S01开场 | est_duration_s: 2.0 | source: ch001#p001]\n我刚出生,道士就说我仙缘深厚。\n```\n', encoding='utf-8')
+    write(base/'bible/characters/index.json', {'characters': [{'id': 'CHAR-0001', 'canonical_name': '老道儿'}, {'id': 'CHAR-0002', 'name': '王三合'}]})
+    # grp001 有编译镜段(镜从 0.5s 起),其余组走 shot_list 累加兜底
+    write(base/'directing/ep02/whitebox/episode.json', {'groups': [
+        {'group_id': 'grp001', 'cameras': [{'shot_id': 'sh1', 'start': 0.5, 'duration_s': 1.5}]}]})
+    return base
+
+
+def _frame_band_colors(video, t, height_frac=0.15):
+    """取样片 t 秒一帧底部字幕带的像素集合(去重,便于断言有无黄/紫字)。"""
+    import shutil, subprocess, tempfile
+    from PIL import Image
+    with tempfile.TemporaryDirectory() as td:
+        png = Path(td)/'f.png'
+        subprocess.run([shutil.which('ffmpeg'), '-hide_banner', '-loglevel', 'error', '-y', '-ss', str(t), '-i', str(video),
+                        '-frames:v', '1', str(png)], check=True)
+        im = Image.open(png).convert('RGB')
+        w, h = im.size
+        return {im.getpixel((x, y)) for x in range(0, w, 2) for y in range(int(h*(1-height_frac)), h, 2)}
+
+
+def test_episode_subtitle_cues_from_shot_list_and_narration(subtitled_reel_project):
+    from modules.whitebox_export import episode_reel_status
+    st = episode_reel_status(subtitled_reel_project, 'ep02')
+    cues = st['cues']
+    assert [c['kind'] for c in cues] == ['narration', 'dialogue', 'dialogue', 'dialogue']
+    nar = cues[0]
+    assert nar['text'] == '我刚出生,道士就说我仙缘深厚。' and (nar['start'], nar['end']) == (0.0, 2.0) and nar['group_id'] == 'grp002'
+    # grp001 从 3s 起,编译镜段 sh1 起点 0.5s → 3.5s 起;两句按 1.5:0.5 分 1.5s
+    d1, d2, d3 = cues[1:]
+    assert d1['text'] == '老道儿:施主,请留步!' and (d1['start'], d1['end']) == (3.5, 4.625)
+    assert d2['text'] == '王三合:叫我?' and (d2['start'], d2['end']) == (4.625, 5.0)
+    assert d3['text'] == '王三合:算命?' and (d3['start'], d3['end']) == (5.0, 9.0)   # grp003 无编译结果 → shot_list 累加
+    assert st['subtitles_sha256'] and not st['exists'] and st['stale_reason'] == ''
+
+
+def test_concat_episode_burns_subtitles_and_tracks_subtitle_staleness(subtitled_reel_project):
+    from modules.whitebox_export import concat_episode, episode_reel_status
+    base = subtitled_reel_project
+    manifest = concat_episode(base, 'ep02')
+    assert manifest['mode'] == 'burn' and abs(manifest['duration_s']-9) < 0.2
+    assert manifest['subtitles']['cues'] == 4 and manifest['subtitles']['dialogue'] == 3 and manifest['subtitles']['narration'] == 1
+    assert manifest['subtitles']['sha256'] == episode_reel_status(base, 'ep02')['subtitles_sha256']
+    reel = base/'assets/whitebox/ep02/ep02-camera.mp4'
+    yellow = lambda px: px[0] > 180 and px[1] > 140 and px[2] < 110
+    purple = lambda px: px[0] > 140 and px[1] < 160 and px[2] > 180
+    assert any(purple(px) for px in _frame_band_colors(reel, 1.0))      # 旁白紫
+    assert any(yellow(px) for px in _frame_band_colors(reel, 4.0))      # 对白黄
+    gap = _frame_band_colors(reel, 2.6)                                  # 2.0–3.5s 无字幕:底部仍是源视频灰
+    assert not any(yellow(px) or purple(px) for px in gap) and all(abs(px[0]-px[1]) < 12 and abs(px[1]-px[2]) < 12 for px in gap)
+    st = episode_reel_status(base, 'ep02')
+    assert st['exists'] and not st['stale']
+    # 对白文本改了 → 样片按字幕过期;组视频没变
+    sl = base/'directing/ep02/shot_list.json'
+    data = json.loads(sl.read_text()); data['shots'][2]['dialogue_lines'][0]['text'] = '算命?这词儿低了些。'; write(sl, data)
+    st = episode_reel_status(base, 'ep02')
+    assert st['stale'] and st['stale_reason'] == 'subtitles'
+    # --no-subtitles:同规格流拷贝,清单字幕为 0,状态提示需重出以补字幕
+    manifest = concat_episode(base, 'ep02', subtitles=False)
+    assert manifest['mode'] == 'copy' and manifest['subtitles']['cues'] == 0
+    assert episode_reel_status(base, 'ep02')['stale_reason'] == 'subtitles'
+
+
+def test_preview_pages_report_whitebox_reel_subtitles(subtitled_reel_project, monkeypatch):
+    from services.runtime import core
+    from modules.whitebox_export import concat_episode
+    base = subtitled_reel_project
+    monkeypatch.setattr(core, 'PROJECTS_DIR', base.parent)
+    w = core._preview_storyboard('demo', 'ep02')['whitebox_reel']
+    assert w['exists'] is False and w['subtitle_cues'] == 4 and w['subtitle_dialogue'] == 3 and w['subtitle_narration'] == 1
+    concat_episode(base, 'ep02')
+    w = core._preview_videos('demo', 'ep02')['whitebox']
+    assert w['exists'] and w['mode'] == 'burn' and w['subtitles']['cues'] == 4 and w['stale_reason'] == ''
+    assert core._preview_storyboard('demo', 'ep02')['whitebox_reel']['url'] == w['url']

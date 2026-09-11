@@ -6591,6 +6591,8 @@ def _preview_storyboard(project: str, ep: str):
             "lighting": _group_lighting(base, g, sb_scene_tod, lighting_cache),
         })
     data["generation_groups"] = groups
+    # 白模样片(2026-09-11):分镜预览页顶部板块,与视频预览页「白模样片」同一份数据(整集摄影机视角 + 对白/旁白字幕)
+    data["whitebox_reel"] = _ep_whitebox_reel(base, ep) if data["whitebox_enabled"] else {"exists": False, "disabled": True}
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 covers_groups/beat_ref/scene 对位试听;
     # 兼容 music_cues.json 文件名与 file 写成项目根相对路径(2026-09-02 liaozhai2 三集)
     bdir = base / "assets" / "audio" / "bgm" / ep
@@ -7353,17 +7355,21 @@ def _ep_publish_info(base: Path, ep: str):
 
 
 def _ep_whitebox_reel(base: Path, ep: str) -> dict:
-    """视频预览页「白模合辑」板块(2026-09-08):整集摄影机视角白模视频
-    assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,并按各组
-    camera.mp4 指纹判断是否过期;附派单目标 Agent,页面按钮据此发指令。"""
+    """视频预览页与分镜预览页「白模样片」板块(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
+    整集摄影机视角白模视频 assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,
+    并按各组 camera.mp4 指纹与字幕指纹判断是否过期(stale_reason=groups|subtitles);
+    附派单目标 Agent 与当前可烧字幕条数,页面按钮据此发指令。"""
     from modules.whitebox_export import episode_reel_status
     try:
         st = episode_reel_status(base, ep)
     except Exception as error:  # noqa: BLE001  分镜组 ID 非法等,不影响其余板块
         return {"exists": False, "error": str(error), "agent": WHITEBOX_REEL_AGENT}
-    out = {"exists": st["exists"], "stale": st["stale"], "path": st["path"],
+    cues = st.get("cues") or []
+    out = {"exists": st["exists"], "stale": st["stale"], "stale_reason": st.get("stale_reason", ""), "path": st["path"],
            "groups_total": st["groups_total"], "groups_ready": len(st["groups_ready"]),
-           "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT}
+           "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT,
+           "subtitle_cues": len(cues), "subtitle_dialogue": sum(1 for c in cues if c["kind"] == "dialogue"),
+           "subtitle_narration": sum(1 for c in cues if c["kind"] == "narration")}
     if st["exists"]:
         f = base / st["path"]
         stat = f.stat()
@@ -7371,7 +7377,8 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
         out.update({"name": f.name, "size_mb": round(stat.st_size / 1048576, 1),
                     "url": f"/projects/{base.name}/{st['path']}?v={int(stat.st_mtime)}",
                     "duration_s": m.get("duration_s"), "groups": m.get("groups"),
-                    "width": m.get("width"), "height": m.get("height"), "fps": m.get("fps")})
+                    "width": m.get("width"), "height": m.get("height"), "fps": m.get("fps"),
+                    "mode": m.get("mode"), "subtitles": m.get("subtitles") or {"cues": 0, "dialogue": 0, "narration": 0}})
     return out
 
 
@@ -7423,7 +7430,7 @@ def _preview_videos(project: str, ep: str):
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
     data["whitebox"] = _ep_whitebox_reel(base, ep)
-    # 动态样片(2026-09-11):故事板草图串片,与白模合辑并列
+    # 动态样片(2026-09-11):故事板草图串片,与白模样片并列
     try:
         data["animatic"] = _board_animatic(base, ep)
     except Exception as error:  # noqa: BLE001

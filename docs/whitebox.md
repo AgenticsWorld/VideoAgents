@@ -206,11 +206,20 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 分镜预览组卡与场景预览页的「空间与摄像机位置」视角下拉新增「实景图」：把该场景的俯视布局图 `layout_top.png` 按 `dimensions_m` 铺在地面（图上缘 = 北 = -Z），隐藏灰盒几何、地板与网格，只留实景俯视图 + 人物模型 + 机位与视线，用于比对分镜背景图的方向与画内内容是否正确。贴图经项目 artifacts 接口加载，导出页不加载；俯视图本身不进视频参考图。
 
-## 整集白模合辑（2026-09-08）
+## 整集白模样片（2026-09-08，原名白模合辑；2026-09-11 改名并烧入字幕）
 
-视频预览页（`/preview/videos`）成片视频板块下方新增「🧊 白模合辑」板块：检索 `assets/whitebox/<ep>/<ep>-camera.mp4`，存在则按成片视频同样的播放卡展示（尺寸、时长、组数、规格），并按 `episode-manifest.json` 记录的组序与各组 `manifest.json` 的 `source_sha256` 判断合辑是否过期（组视频重出后未刷新合辑 = ⚠ 过期）、缺哪些组的 camera.mp4。板块按钮「🔄 重新生成白模合辑」把指令派给 `07-directing/whitebox-staging`（POST /api/v1/runs，引擎跟随顶栏全局设置），页面轮询运行结束后自动刷新。
+视频预览页（`/preview/videos`）成片视频板块下方的「🧊 白模样片」板块与分镜预览页（`/preview/storyboard`）顶部统计行下方的同名折叠块（样式同故事板页「动态样片」）共用一份数据（API `_ep_whitebox_reel`：视频预览 `whitebox`、分镜预览 `whitebox_reel`，「人物精确空间位置」关闭的项目分镜页不显示）：检索 `assets/whitebox/<ep>/<ep>-camera.mp4`，存在则内嵌播放并列出尺寸、时长、组数、字幕条数、规格，并按 `episode-manifest.json` 记录的组序与各组 `manifest.json` 的 `source_sha256` 判断样片是否过期（组视频重出后未刷新 = ⚠ 过期，`stale_reason=groups`），按字幕指纹判断对白/旁白文本或镜段时间是否变过（`stale_reason=subtitles`；旧样片清单没有 `subtitles` 段而现在有字幕可烧也算），并列出缺哪些组的 camera.mp4。按钮「🔄 重新生成白模样片」把指令派给 `07-directing/whitebox-staging`（POST /api/v1/runs，引擎跟随顶栏全局设置；两页共用 `apps/web/static/whitebox-reel.js` 的派单文案/轮询/状态行，运行中状态存 sessionStorage 跨页保留），页面轮询运行结束后自动刷新本块。
 
-宿主 CLI `code/concat_whitebox.py --project <slug> --ep <ep> [--allow-missing] [--status]`：按 shot_list `generation_groups` 组序（无 shot_list 时按目录名）把各组 camera.mp4 用 ffmpeg concat 拼成整集视频。各组规格（宽高/帧率）一致时流拷贝不重编码（秒级完成、画质无损），规格不一致时统一缩放到当前项目画幅后 libx264 重编码。默认缺组即失败，`--allow-missing` 跳过缺组并记入清单 `missing_groups`。先在临时目录成片并用 ffprobe 核对总时长等于各组之和，再原子替换发布；失败保留旧合辑。清单 `episode-manifest.json`（`whitebox_episode_export.v1`）记录组数、镜数、时长、规格、`group_order`、`group_sources`（组→源指纹）与合辑 SHA-256。合辑只有摄影机视角，旧版残留的 `<ep>-top.mp4` 在重出时删除。`render_whitebox.py` 在已有合辑且本次有组重出时自动刷新合辑（回执 `reel` 字段），从未生成过的合辑不主动出。
+宿主 CLI `code/concat_whitebox.py --project <slug> --ep <ep> [--allow-missing] [--no-subtitles] [--status]`：按 shot_list `generation_groups` 组序（无 shot_list 时按目录名）把各组 camera.mp4 用 ffmpeg concat 拼成整集视频。默认烧入字幕（`mode=burn`，libx264 重编码，整集 65 组 648s 实测约 15s）；`--no-subtitles` 或本集没有任何字幕时，各组规格（宽高/帧率）一致则流拷贝不重编码（`mode=copy`），规格不一致时统一缩放到当前项目画幅后重编码（`mode=reencode`）。默认缺组即失败，`--allow-missing` 跳过缺组并记入清单 `missing_groups`。先在临时目录成片并用 ffprobe 核对总时长等于各组之和，再原子替换发布；失败保留旧样片。清单 `episode-manifest.json`（`whitebox_episode_export.v1`）记录组数、镜数、时长、规格、`mode`、`subtitles`（cues/dialogue/narration/sha256/frames）、`group_order`、`group_sources`（组→源指纹）与样片 SHA-256。样片只有摄影机视角，旧版残留的 `<ep>-top.mp4` 在重出时删除。`render_whitebox.py` 在已有样片且本次有组重出时自动刷新样片（回执 `reel` 字段），从未生成过的样片不主动出。
+
+### 字幕（2026-09-11，`modules/whitebox_subtitles.py`）
+
+本机 ffmpeg 不带 libass/freetype（无 `subtitles`/`drawtext` 滤镜），字幕用 PIL 画成整幅透明 PNG 字幕带（底部半透明黑带、居中；台词黄 `#fbbf24`、旁白紫 `#c084fc`，与动态样片同配色，字体查找/折行与 `code/animatic.py` 共用），按时段用 concat demuxer 排片作为第二路输入，一次 `overlay` 叠到样片上；相同在屏内容复用同一张 PNG，重叠的对白/旁白切成互不重叠时段同屏显示（最多 6 行）。字幕只读源文件、不写回。
+
+- 逐镜时间：`directing/<ep>/whitebox/episode.json` `groups[].cameras[]`（shot_id/start/duration_s）；没有编译结果时按 shot_list 组内镜序累加 `duration_s`。组在样片里的起点按各组 `manifest.json` 的 `duration_s` 累加。
+- 对白：shot_list `shots[].dialogue_lines[{speaker,text,est_duration_s}]`，在该镜时段内按各句估时按比例分配显示区间（无估时则均分），说话人名取 `bible/characters|creatures/index.json`，显示为「名:台词」。
+- 旁白：文本取 `story/episodes/<ep>/narration.md` 的 `[N-xx | anchor … | est_duration_s: …]` 条目（与分镜预览 narration_items 同一正则），挂点取 shot_list `narration_anchors`（首个挂点镜起点起，显示 est_duration_s，不超出挂点镜窗口）；没有挂点表时按 `shots[].narration_ref`（如 `N-01(前段)`）覆盖的镜段兜底；正文缺失显示「旁白 N-xx」。
+- 状态：`episode_reel_status()` 返回 `cues`、`subtitles_sha256`、`stale_reason`；`--status` 回执带 `subtitle_cues`。
 
 ## 接入视频生成（2026-09-07）
 

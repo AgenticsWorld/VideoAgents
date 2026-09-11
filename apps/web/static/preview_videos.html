@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M10%208.5%2016%2012l-6%203.5z%27%20fill%3D%27%23000%27%2F%3E%3C%2Fmask%3E%3Crect%20x%3D%273%27%20y%3D%274%27%20width%3D%2718%27%20height%3D%2716%27%20rx%3D%273%27%20fill%3D%27%236c9ef8%27%20mask%3D%27url%28%23m%29%27%2F%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/whitebox-reel.js?v=20260911"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -50,7 +51,7 @@ h3.sec .n{color:var(--dim);font-size:12px;font-weight:400}
 .vcard video{width:100%;border-radius:6px;background:#000;display:block}
 .vcard .cap{font-size:12px;color:var(--dim);margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .vcard .cap .fn{color:var(--text);font-weight:600}
-/* 白模合辑(整集摄影机视角白模视频,2026-09-08) */
+/* 白模样片(整集摄影机视角白模视频 + 对白/旁白字幕,2026-09-08;原名白模合辑) */
 .wbbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px 13px;font-size:12.5px;color:var(--dim)}
 .wbbar button{white-space:nowrap}
 .wbbar button:disabled{opacity:.55;cursor:default}
@@ -215,30 +216,23 @@ function pubHtml(p,ep){
   return h+'</div>';
 }
 
-/* ---------- 白模合辑:整集摄影机视角白模视频(assets/whitebox/<ep>/<ep>-camera.mp4) ----------
-   文件由白模调度 Agent 用宿主 CLI code/concat_whitebox.py 把本集各组 camera.mp4 按组序拼成;
-   板块按钮把这条指令派给该 Agent(POST /api/v1/runs),轮询运行结束后刷新本页。 */
-let WB_RUN=null;
+/* ---------- 白模样片:整集摄影机视角白模视频 + 对白/旁白字幕(assets/whitebox/<ep>/<ep>-camera.mp4;原名白模合辑) ----------
+   文件由白模调度 Agent 用宿主 CLI code/concat_whitebox.py 把本集各组 camera.mp4 按组序拼成并烧入字幕;
+   派单/轮询/状态行与分镜预览页共用 /static/whitebox-reel.js,运行中状态跨页保留。 */
 function wbHtml(w,ep){
   w=w||{};
-  let h=`<h3 class="sec">🧊 白模合辑<span class="n">${esc(I18N.f('整集摄影机视角 · assets/whitebox/{ep}/{ep}-camera.mp4',{ep}))}</span></h3>`;
+  const proj=$('#project').value.trim()||'demo',run=WhiteboxReel.runId(proj,ep);
+  let h=`<h3 class="sec">🧊 白模样片<span class="n">${esc(I18N.f('整集摄影机视角 + 对白/旁白字幕 · assets/whitebox/{ep}/{ep}-camera.mp4',{ep}))}</span></h3>`;
   const ready=`${w.groups_ready||0}/${w.groups_total||0}`;
-  let st='';
-  if(WB_RUN)st=`<span class="warn">⏳ ${esc(I18N.f('已派单给白模调度 Agent,运行中…(run {id})',{id:WB_RUN}))}</span>`;
-  else if(w.error)st=`<span class="err">${esc(w.error)}</span>`;
-  else if(w.stale)st=`<span class="warn">⚠ ${esc(t('分镜组白模视频已更新,合辑可能过期'))}</span>`;
-  else if(w.exists)st=`<span class="ok">✓ ${esc(t('合辑与各组白模视频一致'))}</span>`;
-  if((w.groups_missing||[]).length)st+=` <span class="warn">${esc(I18N.f('缺 {n} 组 camera.mp4:{list}',{n:w.groups_missing.length,list:w.groups_missing.slice(0,6).join(', ')+(w.groups_missing.length>6?'…':'')}))}</span>`;
-  h+=`<div class="wbbar"><button id="wbregen" ${WB_RUN?'disabled':''}>🔄 重新生成白模合辑</button>
-      <span>${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}</span>${st}</div>`;
+  h+=`<div class="wbbar"><button id="wbregen" ${run?'disabled':''}>🔄 重新生成白模样片</button>
+      <span>${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}${w.subtitle_cues?` · ${esc(I18N.f('可烧字幕 {n} 条',{n:w.subtitle_cues}))}`:''}</span>${WhiteboxReel.statusHtml(w,run)}</div>`;
   if(w.exists){
-    const meta=[w.size_mb!=null?w.size_mb+' MB':'',w.duration_s?Math.round(w.duration_s)+'s':'',w.groups?I18N.f('{n} 组',{n:w.groups}):'',
-      w.width&&w.height?w.width+'×'+w.height:'',w.fps?w.fps+'fps':''].filter(Boolean);
     h+=`<div class="vids"><div class="vcard"><video controls preload="metadata" src="${esc(w.url)}"></video>
-      <div class="cap"><span class="fn">${esc(w.name)}</span>${meta.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></div>`;
+      <div class="cap"><span class="fn">${esc(w.name)}</span>${WhiteboxReel.metaList(w).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></div>`;
   }else{
-    h+='<div class="none">'+esc(I18N.f('该集还没有白模合辑(assets/whitebox/{ep}/{ep}-camera.mp4),点「重新生成白模合辑」派单给白模调度 Agent 生成',{ep}))+'</div>';
+    h+='<div class="none">'+esc(I18N.f('该集还没有白模样片(assets/whitebox/{ep}/{ep}-camera.mp4),点「重新生成白模样片」派单给白模调度 Agent 生成',{ep}))+'</div>';
   }
+  if(run)pollWhitebox(run,proj,ep);
   return h;
 }
 /* ---------- 动态样片(2026-09-11):故事板草图按时长串片 + 台词/旁白字幕,assets/storyboard/<ep>/animatic.mp4 ----------
@@ -285,43 +279,28 @@ function pollAnimatic(){
   },4000);
 }
 async function regenWhitebox(){
-  if(!LAST||!LAST.ep||WB_RUN)return;
-  const proj=$('#project').value.trim()||'demo',ep=LAST.ep,w=LAST.whitebox||{};
-  const agent=w.agent||'07-directing/whitebox-staging';
-  // 指令用中文写给 Agent:合并本集全部分镜组 camera.mp4 为整集视频,缺组先补出;回执报组数/时长/缺组
-  const message=[`请重新生成 ${ep} 的白模合辑(整集摄影机视角白模视频)。`,
-    `执行宿主 CLI:python code/concat_whitebox.py --project ${proj} --ep ${ep}`,
-    `把本集全部分镜组的 assets/whitebox/${ep}/<grp>/camera.mp4 按 shot_list 组序合并为一份整集视频 assets/whitebox/${ep}/${ep}-camera.mp4(方便连续查看)。`,
-    (w.groups_missing||[]).length?`当前缺少 ${w.groups_missing.length} 组 camera.mp4(${w.groups_missing.join(', ')}),请先按规约用 python code/render_whitebox.py --project ${proj} --ep ${ep} 补出这些组再合并;确实无法补出的组才用 --allow-missing 跳过并在回执说明。`
-      :'各组 camera.mp4 已齐,直接合并即可;若合并前发现有组视频过期,先用 render_whitebox.py 重出该组。',
-    '回执报告:合辑路径、包含组数、总时长、缺失/跳过的组。'].join('\n');
+  if(!LAST||!LAST.ep)return;
+  const proj=$('#project').value.trim()||'demo',ep=LAST.ep;
+  if(WhiteboxReel.runId(proj,ep))return;
   const btn=$('#wbregen');if(btn)btn.disabled=true;
   try{
-    const r=await fetch('/api/v1/runs',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({agent,message,project:proj,source:'user'})});
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok)throw new Error(j.detail||j.error||r.status);
-    WB_RUN=j.run_id||'?';
+    const id=await WhiteboxReel.dispatch(proj,ep,LAST.whitebox||{});
     render(LAST);
-    pollWhitebox(WB_RUN,proj,ep);
+    pollWhitebox(id,proj,ep);
   }catch(e){
-    WB_RUN=null;render(LAST);
+    render(LAST);
     const bar=document.querySelector('.wbbar');
     if(bar)bar.insertAdjacentHTML('beforeend',`<span class="err">${esc(I18N.f('派单失败:{e}',{e:e.message}))}</span>`);
   }
 }
-async function pollWhitebox(id,proj,ep){
-  // 轮询运行状态;结束后重新拉本集数据刷新合辑板块(用户已切到别集/别项目则只清状态)
-  while(WB_RUN===id){
-    await new Promise(r=>setTimeout(r,4000));
-    let st='';
-    try{const r=await fetch('/api/v1/runs/'+encodeURIComponent(id));if(r.ok)st=((await r.json()).status||'');}catch(e){}
-    if(st&&st!=='queued'&&st!=='running'){
-      WB_RUN=null;
-      if(LAST&&LAST.ep===ep&&($('#project').value.trim()||'demo')===proj)load();else if(LAST)render(LAST);
-      return;
-    }
-  }
+const WB_POLLING=new Set();
+function pollWhitebox(id,proj,ep){
+  // 轮询运行状态;结束后重新拉本集数据刷新样片板块(用户已切到别集/别项目则只清状态)
+  if(WB_POLLING.has(id))return;WB_POLLING.add(id);
+  WhiteboxReel.poll(proj,ep,id,()=>{
+    WB_POLLING.delete(id);
+    if(LAST&&LAST.ep===ep&&($('#project').value.trim()||'demo')===proj)load();else if(LAST)render(LAST);
+  });
 }
 
 function render(d){

@@ -16,6 +16,7 @@ import threading
 from pathlib import Path
 
 from modules.whitebox import component, read, render_format
+from modules.whitebox_subtitles import cues_fingerprint, episode_subtitle_cues, write_subtitle_track
 
 STATIC = Path(__file__).resolve().parents[1] / 'apps/web/static'
 _EXPORT_LOCK = threading.Lock()
@@ -139,10 +140,10 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
         return results
 
 
-# ---------------- 整集白模合辑(2026-09-08) ----------------
-# 视频预览页「白模合辑」板块:把本集全部分镜组的 camera.mp4 按 shot_list 组序拼成一份
+# ---------------- 整集白模样片(2026-09-08,原名白模合辑;2026-09-11 改名并烧入对白/旁白字幕) ----------------
+# 视频预览页/分镜预览页「白模样片」板块:把本集全部分镜组的 camera.mp4 按 shot_list 组序拼成一份
 # 整集摄影机视角视频 assets/whitebox/<ep>/<ep>-camera.mp4,便于连续查看;
-# 清单 episode-manifest.json 记录组序/各组源指纹,预览页据此判断合辑是否过期。
+# 清单 episode-manifest.json 记录组序/各组源指纹/字幕指纹,预览页据此判断样片是否过期。
 EPISODE_MANIFEST = 'episode-manifest.json'
 
 
@@ -193,10 +194,28 @@ def episode_reel_status(base, ep):
     except (ValueError, OSError):
         manifest = {}
     exists = video.is_file() and video.stat().st_size > 0
-    stale = bool(exists and (manifest.get('group_sources') != sources or manifest.get('group_order') != [g['group_id'] for g in order]))
+    # 字幕(2026-09-11):对白/旁白字幕烧进样片,源文本或镜段时间变了同样算过期;旧清单没有 subtitles 段而现在有字幕可烧,也提示重出
+    durations = {}
+    for gid in ready:
+        try:
+            durations[gid] = float((read(base/'assets/whitebox'/ep/gid/'manifest.json', {}) or {}).get('duration_s') or 0)
+        except (ValueError, OSError, TypeError):
+            durations[gid] = 0.0
+    try:
+        cues = episode_subtitle_cues(base, ep, ready, durations)
+    except Exception:  # noqa: BLE001  字幕源坏了不拦合辑状态
+        cues = []
+    subtitles_sha = cues_fingerprint(cues) if cues else ''
+    stale_reason = ''
+    if exists:
+        if manifest.get('group_sources') != sources or manifest.get('group_order') != [g['group_id'] for g in order]:
+            stale_reason = 'groups'
+        elif (manifest.get('subtitles') or {}).get('sha256', '') != subtitles_sha:
+            stale_reason = 'subtitles'
     return {'ep': ep, 'path': paths['video'], 'manifest_path': paths['manifest'], 'exists': exists,
-            'stale': stale, 'groups_total': len(order), 'groups_ready': ready, 'groups_missing': missing,
-            'sources': sources, 'order': order, 'manifest': manifest if exists else {}}
+            'stale': bool(stale_reason), 'stale_reason': stale_reason, 'groups_total': len(order), 'groups_ready': ready,
+            'groups_missing': missing, 'sources': sources, 'order': order, 'manifest': manifest if exists else {},
+            'durations': durations, 'cues': cues, 'subtitles_sha256': subtitles_sha}
 
 
 def _probe_duration(path):
@@ -211,16 +230,17 @@ def _probe_duration(path):
         return None
 
 
-def concat_episode(base, ep, *, allow_missing=False):
-    """把本集各组 camera.mp4 按组序拼成 <ep>-camera.mp4;同规格流直接 copy 拼接,规格不一致时重编码。
+def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
+    """把本集各组 camera.mp4 按组序拼成 <ep>-camera.mp4(白模样片);同规格且无字幕时流 copy 拼接,
+    有对白/旁白字幕时烧入字幕带重编码(mode=burn),规格不一致时统一缩放后重编码。
 
-    缺组默认报错(合辑必须是整集);allow_missing=True 时跳过缺组并在清单里记录。
-    先在临时目录成片再 os.replace 发布,失败保留旧合辑。
+    缺组默认报错(样片必须是整集);allow_missing=True 时跳过缺组并在清单里记录。
+    先在临时目录成片再 os.replace 发布,失败保留旧样片。
     """
     ep = component(ep)
     status = episode_reel_status(base, ep)
     if not status['groups_total']:
-        raise ValueError(f'{ep} 没有分镜组或白模视频,无法生成合辑')
+        raise ValueError(f'{ep} 没有分镜组或白模视频,无法生成样片')
     if status['groups_missing'] and not allow_missing:
         raise ValueError(f"{ep} 缺少分镜组白模视频: {', '.join(status['groups_missing'])};先用 render_whitebox.py 补出,或 --allow-missing 跳过")
     if not status['groups_ready']:
@@ -244,19 +264,28 @@ def concat_episode(base, ep, *, allow_missing=False):
     width, height = fmt.get('width'), fmt.get('height')
     expected = sum(float(r.get('duration_s') or 0) for r in records.values())
     paths = episode_reel_paths(ep)
+    cues = status['cues'] if subtitles else []
     with _EXPORT_LOCK, tempfile.TemporaryDirectory(prefix='.reel-', dir=folder) as staging:
         staging = Path(staging)
         listing = staging/'concat.txt'
         listing.write_text(''.join(f"file '{c.resolve().as_posix()}'\n" for c in clips), encoding='utf-8')
         target = staging/f'{ep}-camera.mp4'
         base_cmd = [ffmpeg, '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing)]
-        if uniform:
+        encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart']
+        normalize = f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps={fps}'
+        track = None
+        if cues:
+            # 字幕带:PIL 画透明 PNG 按时段排片(本机 ffmpeg 无 subtitles/drawtext 滤镜),作第二路输入 overlay 到样片上
+            track = write_subtitle_track(cues, int(width), int(height), expected, staging/'subs')
+            chain = (f'[0:v]{normalize}[base];' if not uniform else '[0:v]null[base];') + '[base][1:v]overlay=0:0:format=auto,format=yuv420p[v]'
+            cmd = base_cmd + ['-f', 'concat', '-safe', '0', '-i', str(track['list']), '-filter_complex', chain, '-map', '[v]'] + encode + [str(target)]
+            mode = 'burn'
+        elif uniform:
             cmd = base_cmd + ['-c', 'copy', '-movflags', '+faststart', str(target)]
             mode = 'copy'
         else:
             # 组视频规格不一(项目画幅/帧率中途变过):统一缩放到当前项目规格后重编码
-            cmd = base_cmd + ['-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps={fps}',
-                              '-c:v', 'libx264', '-preset', 'fast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', str(target)]
+            cmd = base_cmd + ['-vf', normalize] + encode + [str(target)]
             mode = 'reencode'
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if proc.returncode != 0 or not target.is_file() or target.stat().st_size == 0:
@@ -269,6 +298,10 @@ def concat_episode(base, ep, *, allow_missing=False):
         manifest = {'schema_version': 'whitebox_episode_export.v1', 'project': base.name, 'ep': ep,
                     'groups': len(status['groups_ready']), 'shots': sum(g['shots'] for g in status['order'] if g['group_id'] in records),
                     'duration_s': round(duration, 3), 'width': width, 'height': height, 'fps': fps, 'audio': False, 'mode': mode,
+                    'subtitles': {'cues': len(cues), 'dialogue': sum(1 for c in cues if c['kind'] == 'dialogue'),
+                                  'narration': sum(1 for c in cues if c['kind'] == 'narration'),
+                                  'sha256': cues_fingerprint(cues) if cues else '',
+                                  'frames': track['frames'] if track else 0},
                     'reels': [{'path': paths['video'], 'duration_s': round(duration, 3), 'frames': round(duration*fps),
                                'bytes': target.stat().st_size, 'sha256': digest}],
                     'group_order': [g['group_id'] for g in status['order']],
