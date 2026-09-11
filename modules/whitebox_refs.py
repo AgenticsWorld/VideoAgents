@@ -258,23 +258,22 @@ def video_budget(base: Path, ep: str, gid: str) -> dict:
     「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道不支持参考视频。"""
     settings = read(base/'settings.json', {}) or {}
     sg = settings.get('shot_group') or {}
-    ov = read(base/'assets/group_settings'/component(ep)/f'{component(gid)}.json', {}) or {}
-    source = 'group'
-    if not ov.get('video_model'):   # 无组级模型 → 集级 episode.json(分镜预览顶部下拉,2026-09-11)
-        ov = read(base/'assets/group_settings'/component(ep)/'episode.json', {}) or {}
-        source = 'episode'
-    model, provider = str(ov.get('video_model') or ''), str(ov.get('provider') or '')
+    sdir = base/'assets/group_settings'/component(ep)
     try:
-        # Use the same provider/model resolution as submission, without importing
-        # the API service (pygit2/FastAPI are unnecessary for this media CLI).
-        from modules.genmedia import get_config
+        # Use the same layered provider/model resolution as submission (global → episode → group),
+        # without importing the API service (pygit2/FastAPI are unnecessary for this media CLI).
+        from modules.genmedia import get_config, resolve_video_override
         cfg = get_config('video')
-        global_model, global_provider = str(cfg.get('model') or ''), str(cfg.get('provider') or '')
-        if not model or global_provider == 'comfyui' or (provider and provider != global_provider):
-            model, provider, source = global_model, global_provider, 'global'
-        else:
-            provider = global_provider
+        r = resolve_video_override(sdir, component(gid), str(cfg.get('provider') or ''), str(cfg.get('model') or ''))
+        model, provider, source = r['video_model'], r['provider'], r['source']
     except (RuntimeError, KeyError, ValueError, OSError):
+        # 提交配置不可用(无 Key 等):只按覆盖文件里的模型判上限,渠道未知
+        ov = read(sdir/f'{component(gid)}.json', {}) or {}
+        source = 'group'
+        if not ov.get('video_model'):
+            ov = read(sdir/'episode.json', {}) or {}
+            source = 'episode'
+        model, provider = str(ov.get('video_model') or ''), str(ov.get('provider') or '')
         if not model:
             model, provider, source = '', '', 'project_settings'
     caps = _model_caps(model)

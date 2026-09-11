@@ -67,7 +67,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 python3 modules/genmedia.py info     # 先看当前渠道/模型,记入回执 meta
 python3 modules/genmedia.py info --group epNN/grpNNN   # 该组有组级/集级模型覆盖(分镜预览「🎛 模型」/顶部下拉)时显示本组生效模型
 # 组级/集级覆盖由 genmedia 自动应用:video 命令按 --output assets/clips/epNN/grpNNN.mp4 路径推断组号并读
-# assets/group_settings/epNN/grpNNN.json(无组级模型时读 epNN/episode.json)改用该模型(渠道不变);输出路径不规范时显式加 --group epNN/grpNNN。
+# assets/group_settings/epNN/grpNNN.json(无组级模型时读 epNN/episode.json)改用该模型(集级切换了渠道时连渠道一起切,Key 取该渠道在「生成模型」页的配置;组级只换模型);输出路径不规范时显式加 --group epNN/grpNNN。
 # 回执 meta 记实际所用模型(stderr 有「按组级/集级设定使用视频模型」提示行即为覆盖生效)
 
 # 默认:组级多镜头生成(多模态参考模式;--ref 顺序必须 = grpNNN.json 的 refs 顺序)

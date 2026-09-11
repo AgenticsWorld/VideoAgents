@@ -37,10 +37,10 @@ button{background:var(--panel2);color:var(--text);border:1px solid var(--border)
 button:hover{border-color:var(--accent)}
 header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
 header select:hover{border-color:var(--accent)}
-header .ps-info{font-size:12.5px;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--panel2);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+header .ps-info{font-size:12.5px;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--panel2);white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis}
 header .ps-info b{color:var(--text);font-weight:600}
 header .ps-info.warn{border-color:var(--yellow,#d4a72c)}
-header .ps-info select{background:transparent;color:var(--text);border:none;border-bottom:1px dashed var(--border);border-radius:0;padding:0 2px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:26vw;text-overflow:ellipsis}
+header .ps-info select{background:transparent;color:var(--text);border:none;border-bottom:1px dashed var(--border);border-radius:0;padding:0 2px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:20vw;text-overflow:ellipsis}
 header .ps-info select:hover{border-bottom-color:var(--accent)}
 header .ps-info select.ov{color:var(--accent)}
 .grp>.ghead .gsov{color:var(--accent,#1d6f7a);font-weight:600}
@@ -268,7 +268,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   <h1>🎬 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
-  <span id="ps-info" class="ps-info" title="本集生效的视频模型与提示词技能:下拉可直接为本集换模型(默认跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先" style="display:none"></span>
+  <span id="ps-info" class="ps-info" title="本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先" style="display:none"></span>
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
 </header>
@@ -931,42 +931,69 @@ try{
   };
 }catch(_){}
 
-// 🎬 右上角:本集生效视频模型 + 提示词技能(2026-08-30 只读;2026-09-11 改为下拉可直接切换:
-// 「渠道名 模型名」,默认跟随全局,选别的 = 集级覆盖 assets/group_settings/epNN/episode.json,
-// 个别组仍可用组卡「🎛 模型」单独指定且优先)。数据随 /previews/storyboard 返回的 video_model / prompt_skill
-const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub'};
+// 🎬 右上角:本集生效视频渠道 / 模型 / 提示词技能(2026-08-30 只读;2026-09-11 改为三个下拉可直接切换:
+// 「🎬 [渠道] [模型] · 🧰 [技能]」,三项默认都跟随全局,选别的 = 集级覆盖 assets/group_settings/epNN/episode.json
+// {provider, provider_override, video_model, prompt_skill};个别组仍可用组卡「🎛 模型」单独指定且优先)。
+// 数据随 /previews/storyboard 返回的 video_model / prompt_skill(解析结果)与 episode_settings(存盘配置+可选清单)
+const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
 const provName=p=>t(PROVIDER_NAMES[p]||p||'');
+let PS_STATE=null;   // 当前集级存盘配置(三下拉共享;任一改动即整份 POST)
 function psRender(d){
-  const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{};
+  const el=$('#ps-info'),vm=d.video_model||{},ps=d.prompt_skill||{},es=d.episode_settings||{};
   if(!vm.provider){el.style.display='none';return}
-  const modeTxt=ps.mode==='off'?t('跳过'):ps.mode==='manual'?t('手选'):t('自动');
-  const skill=ps.skill_id?(ps.dir||ps.skill_id):t('无对应技能');
-  const pn=provName(vm.provider);
-  let modelHtml;
-  if(vm.overridable&&(vm.candidates||[]).length){
-    const opts=[`<option value="">${esc(pn+' '+(vm.global_label||vm.global_model||'—'))}(${t('跟随全局')})</option>`]
-      .concat((vm.candidates||[]).filter(c=>c.id!==vm.global_model).map(c=>`<option value="${esc(c.id)}">${esc(pn+' '+(c.label||c.id))}</option>`));
-    modelHtml=`<select id="ps-model" class="${vm.source==='episode'?'ov':''}">${opts.join('')}</select>`;
-  }else modelHtml='<b>'+esc(pn+' '+(vm.label||vm.model||'—'))+'</b>';
-  el.innerHTML='🎬 '+modelHtml+' · 🧰 <b>'+esc(modeTxt)+(ps.mode!=='off'?' → '+esc(skill):'')+'</b>';
-  const sel=$('#ps-model');
-  if(sel){
-    sel.value=vm.source==='episode'?(vm.episode_model||vm.model):'';
-    if(sel.value!==(vm.source==='episode'?(vm.episode_model||vm.model):''))sel.value='';
-    sel.onchange=async()=>{
-      const proj=$('#project').value.trim()||'demo';
-      sel.disabled=true;
-      try{
-        const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/settings',{method:'POST',
-          headers:{'Content-Type':'application/json'},body:JSON.stringify({video_model:sel.value||''})});
-        if(!r.ok)throw new Error((await r.json()).detail||r.status);
-      }catch(e){alert(t('保存失败:')+e.message)}
-      load(true);
-    };
-  }
+  const cfg=es.config||{provider:'',video_model:'',prompt_skill:{mode:'global',skill_id:''}};
+  PS_STATE={provider:cfg.provider||'',video_model:cfg.video_model||'',prompt_skill:{mode:(cfg.prompt_skill||{}).mode||'global',skill_id:(cfg.prompt_skill||{}).skill_id||''}};
+  const follow=s=>s+'('+t('跟随全局')+')';
+  const opt=(v,txt,sel,dis)=>`<option value="${esc(v)}"${sel?' selected':''}${dis?' disabled':''}>${esc(txt)}</option>`;
+  // ① 渠道:跟随全局(全局渠道名)+ 目录内其它渠道(未配 Key 的置灰)
+  const provs=(es.providers||[]).filter(p=>p.id!==vm.global_provider);
+  const provSel=provs.length?`<select id="ps-prov" class="${vm.provider_source==='episode'?'ov':''}">`
+      +opt('',follow(provName(vm.global_provider)),!PS_STATE.provider)
+      +provs.map(p=>opt(p.id,provName(p.id)+(p.configured?'':'('+t('未配 Key')+')'),PS_STATE.provider===p.id,!p.configured)).join('')
+      +'</select>':'<b>'+esc(provName(vm.provider))+'</b>';
+  // ② 模型:渠道跟随全局时 = 跟随全局(全局模型)+ 全局渠道目录;渠道已切换时 = 该渠道目录(必选其一)
+  let modelSel;
+  if(PS_STATE.provider){
+    const pr=(es.providers||[]).find(p=>p.id===PS_STATE.provider)||{models:[]};
+    modelSel=`<select id="ps-model" class="ov">`+(pr.models||[]).map(m=>opt(m.id,m.label||m.id,m.id===PS_STATE.video_model)).join('')+'</select>';
+  }else if(vm.overridable&&(vm.candidates||[]).length){
+    modelSel=`<select id="ps-model" class="${vm.source==='episode'?'ov':''}">`
+      +opt('',follow(vm.global_label||vm.global_model||'—'),!PS_STATE.video_model)
+      +(vm.candidates||[]).filter(c=>c.id!==vm.global_model).map(c=>opt(c.id,c.label||c.id,c.id===PS_STATE.video_model)).join('')
+      +'</select>';
+  }else modelSel='<b>'+esc(vm.label||vm.model||'—')+'</b>';
+  // ③ 技能:跟随全局(项目设定的模式 → 技能)/ 自动(按本集模型)/ 手选各已安装技能 / 跳过
+  const pj=es.project_skill||{};
+  const modeTxt=m=>m==='off'?t('跳过'):m==='manual'?t('手选'):t('自动');
+  const pjTxt=modeTxt(pj.mode)+(pj.mode!=='off'?' → '+(pj.dir||(pj.skill_id?pj.skill_id:t('无对应技能'))):'');
+  const skMode=PS_STATE.prompt_skill.mode,skVal=skMode==='manual'?'manual:'+PS_STATE.prompt_skill.skill_id:skMode;
+  const skillSel=`<select id="ps-skill" class="${skMode!=='global'?'ov':''}">`
+      +opt('global',follow(pjTxt),skVal==='global')
+      +opt('auto',t('自动 → 按本集模型'),skVal==='auto')
+      +(es.skills||[]).map(c=>opt('manual:'+c.id,t('手选')+' → '+c.dir+(c.enabled?'':'('+t('已禁用')+')'),skVal==='manual:'+c.id)).join('')
+      +opt('off',t('跳过'),skVal==='off')+'</select>';
+  el.innerHTML='🎬 '+provSel+' '+modelSel+' · 🧰 '+skillSel;
+  const post=async body=>{
+    const proj=$('#project').value.trim()||'demo';
+    el.querySelectorAll('select').forEach(x=>x.disabled=true);
+    try{
+      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/settings',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    }catch(e){alert(t('保存失败:')+e.message)}
+    load(true);
+  };
+  const sp=$('#ps-prov'),sm=$('#ps-model'),ss=$('#ps-skill');
+  if(sp)sp.onchange=()=>{   // 换渠道:模型改为该渠道在「生成模型」页保存的默认模型(后端按目录校验)
+    const pr=(es.providers||[]).find(p=>p.id===sp.value);
+    post({...PS_STATE,provider:sp.value||'',video_model:sp.value?((pr||{}).default_model||''):''});
+  };
+  if(sm)sm.onchange=()=>post({...PS_STATE,video_model:sm.value||''});
+  if(ss)ss.onchange=()=>post({...PS_STATE,prompt_skill:ss.value.startsWith('manual:')?{mode:'manual',skill_id:ss.value.slice(7)}:{mode:ss.value,skill_id:''}});
   el.classList.toggle('warn',!!ps.warning);
-  el.title=t('本集生效的视频模型与提示词技能:下拉可直接为本集换模型(默认跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先')
-    +(vm.source==='episode'?'\n'+I18N.f('本集已覆盖为 {m}(全局 {g})',{m:vm.label||vm.model,g:vm.global_label||vm.global_model}):'')
+  const eff=provName(vm.provider)+' '+(vm.label||vm.model||'—')+' · '+modeTxt(ps.mode)+(ps.mode!=='off'?' → '+(ps.dir||ps.skill_id||t('无对应技能')):'');
+  el.title=t('本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先')
+    +'\n'+I18N.f('本集生效:{e}',{e:eff})
     +(ps.warning?'\n⚠️ '+ps.warning:'');
   el.style.display='';
 }
@@ -980,7 +1007,7 @@ function gsHint(){
   const model=m||mods.base_model||mods.global_model;
   const cap=/seedance-2[-.]5/i.test(model)?30:/seedance-2/i.test(model)?9:/minimax.*h3|h3.*minimax/i.test(model)?9:d.project_ref_cap;
   let sTxt;
-  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')})+((m||mods.base_source==='episode')?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
+  if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.episode_skill||{}).skill_dir||t('不套用')})+(m?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
   else if(sk==='auto')sTxt=t('按本组模型自动解析');
   else if(sk==='off')sTxt=t('不套用技能');
   else sTxt=sk.slice(7).split('/').pop();
@@ -1008,7 +1035,7 @@ async function openGroupSettings(grp){
     ms.disabled=!mods.overridable;
     ms.value=(d.config||{}).video_model||'';if(!ms.value&&ms.value!=='')ms.value='';
     const ss=$('#gs-skill'),cfg=(d.config||{}).prompt_skill||{};
-    add(ss,'global',I18N.f('跟随全局:{s}',{s:(d.project_skill||{}).dir||t('不套用')}));
+    add(ss,'global',I18N.f('跟随全局:{s}',{s:(d.episode_skill||{}).skill_dir||(d.project_skill||{}).dir||t('不套用')}));   // 跟随 = 本集解析结果(集级技能下拉/项目设定)
     add(ss,'auto',t('自动(按本组视频模型解析)'));
     (d.skills||[]).forEach(c=>add(ss,'manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
     add(ss,'off',t('跳过(不套用技能)'));

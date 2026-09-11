@@ -275,126 +275,80 @@ def _group_from_output(output: str) -> str:
     return f"{m.group(1)}/{m.group(2)}" if m else ""
 
 
-def _group_video_override(group: str) -> dict:
-    """组级视频模型覆盖(用户在分镜预览「🎛 模型」按钮为单组指定,2026-08-30):
-    读 data/projects/<VIDEOAGENTS_PROJECT>/assets/group_settings/<ep>/<grp>.json 的
-    video_model/provider;组文件没指定模型时回落集级 <ep>/episode.json(分镜预览顶部下拉,2026-09-11);
-    非派单环境(无项目)或无文件返回 {}。"""
-    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
-    if not proj or not group or "/" not in group:
+def _read_override_json(path: Path) -> dict:
+    try:
+        d = json.loads(path.read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
         return {}
-    ep, grp = group.split("/", 1)
-    root = DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep
-    for name in (f"{grp}.json", "episode.json"):
+
+
+def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, global_model: str) -> dict:
+    """层级解析本组生效的视频渠道/模型:全局 → 本集 settings_dir/episode.json → 本组 settings_dir/<grp>.json。
+    集级(分镜预览顶部三下拉,2026-09-11)可切换渠道(provider_override=true,须该渠道已配 Key)或只换模型;
+    组级(组卡「🎛 模型」)只换模型,其 provider 须与本集生效渠道一致,否则视为失效。
+    返回 {provider, video_model, source(global|episode|group), notes[]}(与 services.runtime.core.group_video_candidates 同口径)。"""
+    out = {"provider": global_provider, "video_model": global_model, "source": "global", "notes": []}
+    es = _read_override_json(settings_dir / "episode.json")
+    ov, eprov = str(es.get("video_model") or ""), str(es.get("provider") or "")
+    if ov and es.get("provider_override") and eprov and eprov != global_provider:
         try:
-            d = json.loads((root / name).read_text())
-        except Exception:
-            continue
-        if isinstance(d, dict) and d.get("video_model"):
-            d["_scope"] = "集级" if name == "episode.json" else "组级"
-            return d
-    return {}
+            get_config("video", provider_override=eprov, model_override=ov)
+            out.update(provider=eprov, video_model=ov, source="episode")
+        except RuntimeError as e:
+            out["notes"].append(f"集级视频渠道 {eprov} 不可用({e}),集级设定未生效,按全局执行")
+    elif ov:
+        if global_provider == "comfyui" or not global_model:
+            out["notes"].append(f"集级模型 {ov} 未生效:当前渠道 {global_provider} 按工作流运行,无模型 id")
+        elif eprov and eprov != global_provider:
+            out["notes"].append(f"集级模型 {ov} 属渠道 {eprov},当前视频渠道为 {global_provider},该覆盖未生效")
+        else:
+            out.update(video_model=ov, source="episode")
+    gs = _read_override_json(settings_dir / f"{grp}.json")
+    gov, gprov = str(gs.get("video_model") or ""), str(gs.get("provider") or "")
+    if gov:
+        if out["provider"] == "comfyui" or not out["video_model"]:
+            out["notes"].append(f"组级模型 {gov} 未生效:当前渠道 {out['provider']} 按工作流运行,无模型 id")
+        elif gprov and gprov != out["provider"]:
+            out["notes"].append(f"组级模型 {gov} 属渠道 {gprov},本组生效渠道为 {out['provider']},该覆盖未生效")
+        else:
+            out.update(video_model=gov, source="group")
+    return out
 
 
 def apply_group_video_override(cfg: dict, group: str) -> dict:
-    """按组级设定改写 video 生效模型(渠道不变):设定里的 provider 必须与当前生效渠道一致,
-    否则视为失效覆盖、按全局执行并 stderr 提示。返回改写后的 cfg(原地)。"""
-    ov = _group_video_override(group)
-    model = str(ov.get("video_model") or "")
-    if not model:
+    """按集级/组级设定改写 video 生效渠道与模型(用户在分镜预览顶部三下拉 / 组卡「🎛 模型」指定):
+    集级可切渠道(整份配置换成该渠道的),组级只换模型;失效的覆盖 stderr 提示并按全局执行。
+    非派单环境(无项目)或无设定原样返回。返回改写后的 cfg(可能是新 dict,调用方须用返回值)。"""
+    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
+    if not proj or not group or "/" not in group:
         return cfg
-    if cfg.get("provider") == "comfyui":
-        print(f"[genmedia] 组 {group} 的{ov.get('_scope') or '组级'}模型 {model} 未生效:当前渠道 comfyui 按工作流运行,无模型 id",
-              file=sys.stderr)
+    ep, grp = group.split("/", 1)
+    r = resolve_video_override(DATA_DIR / "projects" / proj / "assets" / "group_settings" / ep, grp,
+                               str(cfg.get("provider") or ""), str(cfg.get("model") or ""))
+    for n in r["notes"]:
+        print(f"[genmedia] 组 {group}:{n}", file=sys.stderr)
+    if r["source"] == "global":
         return cfg
-    if ov.get("provider") and ov.get("provider") != cfg.get("provider"):
-        print(f"[genmedia] 组 {group} 的{ov.get('_scope') or '组级'}模型 {model} 属渠道 {ov.get('provider')},"
-              f"当前视频渠道为 {cfg.get('provider')},该覆盖未生效(按全局模型 {cfg.get('model')} 执行)",
+    scope = "集级" if r["source"] == "episode" else "组级"
+    if r["provider"] != cfg.get("provider"):
+        cfg = get_config("video", provider_override=r["provider"], model_override=r["video_model"])
+        print(f"[genmedia] 组 {group} 按{scope}设定切换视频渠道 {r['provider']} / 模型 {r['video_model']}",
               file=sys.stderr)
-        return cfg
-    if model != cfg.get("model"):
-        print(f"[genmedia] 组 {group} 按{ov.get('_scope') or '组级'}设定使用视频模型 {model}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
-              file=sys.stderr)
-    cfg["model"] = model
+    else:
+        if r["video_model"] != cfg.get("model"):
+            print(f"[genmedia] 组 {group} 按{scope}设定使用视频模型 {r['video_model']}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+                  file=sys.stderr)
+        cfg["model"] = r["video_model"]
     cfg["_group_override"] = group
-    cfg["_override_scope"] = ov.get("_scope") or "组级"
+    cfg["_override_scope"] = scope
     return cfg
 
 
-# ---------------- 预览页按资产类别单独选的图像模型(2026-09-11) ----------------
-# 场景/人物/生物/道具预览页顶部各有「🎨 图像模型」下拉(同故事板页草图模型),存控制台
-# state.json image_model_prefs[<kind>] = {provider, model}(空 = 跟随全局「生成模型」设置)。
-# 出图时按 --output 路径所在目录 assets/concepts/<scenes|characters|creatures|props>/ 判定类别,
-# 没有显式 --provider/--model(环境变量)时套用该类别的偏好;Key 仍取该渠道在 genconfig 的配置。
-IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
-_IMAGE_KIND_RE = re.compile(r"(?:^|/)assets/concepts/(scenes|characters|creatures|props)/")
-STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
-
-
-def image_kind_of_output(output: str | os.PathLike | None) -> str:
-    """按输出路径判定资产类别(scenes|characters|creatures|props),不属于概念图目录返回空。"""
-    if not output:
-        return ""
-    m = _IMAGE_KIND_RE.search(Path(output).as_posix())
-    return m.group(1) if m else ""
-
-
-def image_model_pref(kind: str) -> dict:
-    """读取某类别的图像渠道/模型偏好 {provider, model};未设或跟随全局 → 两项皆空。
-    sketch 兼容旧字段 state.json sketch_model。"""
-    try:
-        st = json.loads(STATE_PATH.read_text())
-    except Exception:
-        return {"provider": "", "model": ""}
-    pref = (st.get("image_model_prefs") or {}).get(kind)
-    if pref is None and kind == "sketch":
-        pref = st.get("sketch_model")
-    pref = pref if isinstance(pref, dict) else {}
-    provider = str(pref.get("provider") or "").strip()
-    return {"provider": provider, "model": str(pref.get("model") or "").strip() if provider else ""}
-
-
-@contextlib.contextmanager
-def image_pref_env(kind_or_output: str | os.PathLike | None):
-    """在 with 块内按类别偏好设置 VIDEOAGENTS_IMAGE_PROVIDER/MODEL(已由 --provider/--model 显式
-    指定时不动);退出时还原,宿主进程内调用不串到别的出图。参数可传类别名或输出路径。"""
-    kind = kind_or_output if kind_or_output in IMAGE_PREF_KINDS else image_kind_of_output(kind_or_output)
-    if not kind or os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() \
-            or os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip():
-        yield ""
-        return
-    pref = image_model_pref(kind)
-    if not pref["provider"]:
-        yield ""
-        return
-    try:
-        allcfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.is_file() else {}
-    except Exception:
-        allcfg = {}
-    if not isinstance((allcfg.get("image") or {}).get(pref["provider"]), dict):
-        print(f"[genmedia] 预览页为 {kind} 选的图像渠道 {pref['provider']} 未在「生成模型」页配置过,本次按全局图像渠道出图",
-              file=sys.stderr)
-        yield ""
-        return
-    saved = {k: os.environ.get(k) for k in ("VIDEOAGENTS_IMAGE_PROVIDER", "VIDEOAGENTS_IMAGE_MODEL")}
-    os.environ["VIDEOAGENTS_IMAGE_PROVIDER"] = pref["provider"]
-    if pref["model"]:
-        os.environ["VIDEOAGENTS_IMAGE_MODEL"] = pref["model"]
-    else:
-        os.environ.pop("VIDEOAGENTS_IMAGE_MODEL", None)
-    print(f"[genmedia] {kind} 按预览页设定使用图像渠道 {pref['provider']} 模型 {pref['model'] or '(该渠道默认)'}", file=sys.stderr)
-    try:
-        yield kind
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-
-
-def get_config(kind: str) -> dict:
-    """读取 kind(image|video|music|tts)的生效渠道配置。"""
+def get_config(kind: str, provider_override: str = "", model_override: str = "") -> dict:
+    """读取 kind(image|video|music|tts)的生效渠道配置。
+    provider_override/model_override:调用方显式指定渠道/模型(集级切换视频渠道用),Key 仍取该渠道在
+    genconfig 里保存的配置;图像另可用环境变量 VIDEOAGENTS_IMAGE_PROVIDER/MODEL 指定。"""
     if not CONFIG_PATH.is_file():
         raise RuntimeError(f"未找到生成模型配置 {CONFIG_PATH};先在 Web 控制台「🎨 生成模型」页保存配置")
     cfg = json.loads(CONFIG_PATH.read_text())[kind]
@@ -402,11 +356,11 @@ def get_config(kind: str) -> dict:
     # 调用方指定渠道/模型(2026-09-11,仅图像):故事板草图等轻量出图链路按页面单独选的
     # 便宜模型出图,不动全局「生成模型」设置;Key 仍取该渠道在 genconfig 里保存的配置。
     # 环境变量由 `genmedia image --provider/--model` 或宿主后台任务设置,只作用于当前进程。
-    ov_provider = os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() if kind == "image" else ""
-    ov_model = os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip() if kind == "image" else ""
+    ov_provider = (provider_override or "").strip() or (os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() if kind == "image" else "")
+    ov_model = (model_override or "").strip() or (os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip() if kind == "image" else "")
     if ov_provider:
         if ov_provider not in cfg or not isinstance(cfg.get(ov_provider), dict):
-            raise RuntimeError(f"image 渠道 {ov_provider} 未在「生成模型」页配置过,无法按指定渠道出图")
+            raise RuntimeError(f"{kind} 渠道 {ov_provider} 未在「生成模型」页配置过,无法按指定渠道生成")
         provider = ov_provider
     # Upgrade the historical desktop default: an empty OpenRouter key used to
     # mean "bill the signed-in Agentics account". That behavior now has its own
@@ -5242,7 +5196,8 @@ def _cmd_info(args):
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
             if cfg.get("_group_override"):
-                desc += f"  (组 {group} {cfg.get('_override_scope') or '组级'}覆盖;全局 model={get_config('video')['model']})"
+                g = get_config("video")
+                desc += f"  (组 {group} {cfg.get('_override_scope') or '组级'}覆盖;全局 {g['provider']} model={g['model']})"
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")

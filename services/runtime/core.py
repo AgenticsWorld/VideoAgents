@@ -4671,72 +4671,152 @@ def _grpsettings_all(project: str) -> list[tuple[str, str, dict]]:
     return out
 
 
+VIDEO_PROVIDER_ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "volcengine": "ARK_API_KEY",
+                           "byteplus": "BYTEPLUS_API_KEY", "minimax": "MINIMAX_API_KEY", "fal": "FAL_KEY"}
+
+
+def video_provider_configured(cfg: dict, provider: str) -> bool:
+    """该视频渠道在「生成模型」页(或环境变量)是否配了 Key——集级切换渠道只列/只收已配置的渠道
+    (与 genmedia.get_config 的取 Key 口径一致:minimax 双区域 Key 任一,fal 与图像段共用)。"""
+    v = cfg.get("video") or {}
+    pc = v.get(provider) or {}
+    if provider == "minimax":
+        return bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key")
+                    or os.environ.get("MINIMAX_API_KEY"))
+    if provider == "fal":
+        return bool(pc.get("api_key") or ((cfg.get("image") or {}).get("fal") or {}).get("api_key")
+                    or os.environ.get("FAL_KEY"))
+    return bool(pc.get("api_key") or os.environ.get(VIDEO_PROVIDER_ENV_KEYS.get(provider, ""), ""))
+
+
+def video_provider_options(cfg: dict) -> list[dict]:
+    """集级可切换的视频渠道清单(目录内有模型 id 的渠道):[{id, configured, default_model, models[{id,label}]}];
+    default_model = 该渠道在「生成模型」页保存的模型(custom_model 优先),没有则目录首项。"""
+    v = cfg.get("video") or {}
+    out = []
+    for pid, rows in VIDEO_MODEL_CATALOG.items():
+        pc = v.get(pid) or {}
+        dm = str(pc.get("custom_model") or pc.get("model") or "") or (rows[0][0] if rows else "")
+        out.append({"id": pid, "configured": video_provider_configured(cfg, pid), "default_model": dm,
+                    "models": [{"id": m, "label": lbl.split("(")[0]} for m, lbl in rows]})
+    return out
+
+
 def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") -> dict:
-    """本项目组级可选的视频模型:渠道固定为视频工位生效渠道,候选=该渠道目录 + 全局当前模型
-    (自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。
-    传 ep 时附带本集基准(base_*):集级覆盖 episode.json 生效则 base=集模型(source=episode),
+    """本项目组级可选的视频模型:渠道固定为本集生效渠道(集级切换了渠道则本集渠道,否则全局视频渠道),
+    候选=该渠道目录 + 全局当前模型(自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。
+    传 ep 时附带本集基准(base_*):集级覆盖 episode.json 生效则 base=集渠道/集模型(source=episode),
     否则 base=全局;组「跟随」的就是这个基准。"""
     cfg = cfg or load_genconfig()
-    provider = active_video_provider(cfg)
+    gprovider = active_video_provider(cfg)
     gmodel = effective_video_model(cfg)
-    rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
-    if gmodel and gmodel not in {r["id"] for r in rows}:
-        rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
-    overridable = provider != "comfyui" and bool(gmodel)
-    glabel = video_model_label(gmodel, provider) if gmodel else _video_model_label(cfg)
-    out = {"provider": provider, "overridable": overridable,
-           "global_model": gmodel, "global_label": glabel, "candidates": rows,
-           "base_model": gmodel, "base_label": glabel, "base_source": "global",
-           "episode_model": "", "episode_warning": ""}
+    glabel = video_model_label(gmodel, gprovider) if gmodel else _video_model_label(cfg)
+    provider, base_model, base_source, provider_source = gprovider, gmodel, "global", "global"
+    episode_model, episode_provider, warning = "", "", ""
     if ep:
         es = _epsettings_get(project, ep)
         ov = str(es.get("video_model") or "")
-        out["episode_model"] = ov
-        if ov:
-            if not overridable:
-                out["episode_warning"] = f"本集视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按全局执行"
-            elif es.get("provider") and es.get("provider") != provider:
-                out["episode_warning"] = (f"本集视频模型 {ov} 属渠道 {es.get('provider')},当前视频渠道已改为 {provider},"
-                                          "该覆盖未生效(按全局执行);请重新为本集选模型或改回跟随全局")
+        eprov = str(es.get("provider") or "")
+        episode_model = ov
+        if ov and es.get("provider_override") and eprov and eprov != gprovider:
+            # 集级切换了渠道(2026-09-11):渠道须在目录内且已配 Key,否则整条集级设定按全局执行
+            episode_provider = eprov
+            if eprov in VIDEO_MODEL_CATALOG and video_provider_configured(cfg, eprov):
+                provider, base_model, base_source, provider_source = eprov, ov, "episode", "episode"
             else:
-                out.update({"base_model": ov, "base_label": video_model_label(ov, provider), "base_source": "episode"})
-    return out
+                warning = (f"本集视频渠道 {eprov} 未配置 API Key 或不可按集切换,集级设定(模型 {ov})未生效,按全局执行;"
+                           "请在控制台「生成模型」页配置该渠道或改回跟随全局")
+        elif ov:
+            if gprovider == "comfyui" or not gmodel:
+                warning = f"本集视频模型 {ov} 未生效:当前渠道 {gprovider} 无模型 id(按工作流运行),按全局执行"
+            elif eprov and eprov != gprovider:
+                warning = (f"本集视频模型 {ov} 属渠道 {eprov},当前视频渠道已改为 {gprovider},"
+                           "该覆盖未生效(按全局执行);请重新为本集选模型或改回跟随全局")
+            else:
+                base_model, base_source = ov, "episode"
+    rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
+    if provider == gprovider and gmodel and gmodel not in {r["id"] for r in rows}:
+        rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
+    overridable = provider != "comfyui" and bool(base_model)
+    return {"provider": provider, "provider_source": provider_source, "global_provider": gprovider,
+            "overridable": overridable,
+            "global_model": gmodel, "global_label": glabel, "candidates": rows,
+            "base_model": base_model, "base_label": video_model_label(base_model, provider) if base_model else glabel,
+            "base_source": base_source,
+            "episode_model": episode_model, "episode_provider": episode_provider, "episode_warning": warning}
 
 
 def resolve_episode_settings(project: str, ep: str, cfg: dict | None = None,
                              proj_skill: dict | None = None) -> dict:
-    """解析本集生效的视频模型与提示词技能(不落盘;分镜预览顶部展示/下拉)。
-    集级只覆盖模型;技能沿用项目设定,但本集换了模型且项目技能是「自动」或「跟随」时按本集模型解析
-    (与组级同一规则,避免 2.5 集套 2.0 技能);项目技能手选/跳过时照旧。"""
+    """解析本集生效的视频渠道/模型/提示词技能(不落盘;分镜预览顶部三个下拉)。
+    episode.json {provider, provider_override, video_model, prompt_skill{mode: global|auto|manual|off, skill_id}}:
+    技能 global=沿用项目设定(但本集换了模型且项目技能是「自动」或「跟随」时按本集模型解析,与组级同一规则);
+    auto=按本集模型;manual=指定;off=不套用。"""
     cfg = cfg or load_genconfig()
     cand = group_video_candidates(project, cfg, ep)
+    es = _epsettings_get(project, ep) if ep else {}
     proj_skill = proj_skill or resolve_prompt_skill(project, cfg)
     provider, model, source = cand["provider"], cand["base_model"], cand["base_source"]
     warning = cand["episode_warning"]
     cands = {c["id"]: c for c in prompt_skill_candidates()}
+    eps = es.get("prompt_skill") if isinstance(es.get("prompt_skill"), dict) else {}
+    emode = eps.get("mode") if eps.get("mode") in GROUP_SKILL_MODES else "global"
     smode, sid, reason = proj_skill["mode"], proj_skill["skill_id"], proj_skill["reason"]
-    if proj_skill.get("warning"):
-        warning = (warning + " · " if warning else "") + proj_skill["warning"]
-    if source == "episode" and smode not in ("manual", "off"):
+    if emode == "global":
+        if proj_skill.get("warning"):
+            warning = (warning + " · " if warning else "") + proj_skill["warning"]
+        mode_eff = "auto" if (source == "episode" and smode not in ("manual", "off")) else "global"
+    else:
+        mode_eff = emode
+    if mode_eff == "auto":
         smode, reason, warning = "auto", "", cand["episode_warning"]
-        sid = auto_prompt_skill_for_model(model)
+        sid = (PROMPT_SKILL_H3 if is_minimax_h3_active(cfg) else "") if provider == "comfyui" \
+            else auto_prompt_skill_for_model(model)
         if not sid:
             reason = "no_match"
             warning = (warning + " · " if warning else "") + f"本集视频模型 {model or '(未知)'} 没有对应的提示词技能"
-        elif sid not in cands:
+    elif mode_eff == "manual":
+        smode, sid, reason, warning = "manual", str(eps.get("skill_id") or ""), "", cand["episode_warning"]
+        if sid not in cands:
+            warning = (warning + " · " if warning else "") + f"本集指定的提示词技能 {sid or '(空)'} 未安装,本集按无技能处理"
             sid, reason = "", "missing"
-        elif not project_skill_enabled(sid, project):
-            warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本集按无技能处理"
-            sid, reason = "", "disabled"
+    elif mode_eff == "off":
+        smode, sid, reason, warning = "off", "", "user_skipped", cand["episode_warning"]
+    if sid and sid not in cands:
+        sid, reason = "", "missing"
+    if sid and not project_skill_enabled(sid, project):
+        warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本集按无技能处理"
+        sid, reason = "", "disabled"
     c = cands.get(sid) or {}
-    return {"ep": ep, "provider": provider, "video_model": model, "model_source": source,
+    return {"ep": ep, "provider": provider, "provider_source": cand["provider_source"],
+            "global_provider": cand["global_provider"],
+            "video_model": model, "model_source": source,
             "model_label": video_model_label(model, provider) if model else cand["global_label"],
             "global_model": cand["global_model"], "global_label": cand["global_label"],
-            "episode_model": cand["episode_model"], "overridable": cand["overridable"],
-            "candidates": cand["candidates"],
+            "episode_model": cand["episode_model"], "episode_provider": cand["episode_provider"],
+            "overridable": cand["overridable"], "candidates": cand["candidates"],
             "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
-            "skill_mode": smode, "reason": reason, "warning": warning,
-            "overridden": bool(cand["episode_model"])}
+            "skill_mode": smode, "episode_skill_mode": emode,
+            "skill_source": "global" if emode == "global" else "episode",
+            "reason": reason, "warning": warning,
+            "overridden": bool(cand["episode_model"]) or emode != "global"}
+
+
+def episode_settings_payload(project: str, ep: str, cfg: dict | None = None,
+                             proj_skill: dict | None = None) -> dict:
+    """分镜预览顶部三下拉/集级设置接口共用的负载:存盘配置 + 解析结果 + 可选渠道/模型/技能清单。"""
+    cfg = cfg or load_genconfig()
+    es = _epsettings_get(project, ep)
+    eps = es.get("prompt_skill") if isinstance(es.get("prompt_skill"), dict) else {}
+    proj_skill = proj_skill or resolve_prompt_skill(project, cfg)
+    return {"config": {"provider": str(es.get("provider") or "") if es.get("provider_override") else "",
+                       "video_model": str(es.get("video_model") or ""),
+                       "prompt_skill": {"mode": eps.get("mode") if eps.get("mode") in GROUP_SKILL_MODES else "global",
+                                        "skill_id": str(eps.get("skill_id") or "")}},
+            "resolved": resolve_episode_settings(project, ep, cfg, proj_skill),
+            "providers": video_provider_options(cfg),
+            "skills": prompt_skill_candidates(),
+            "project_skill": {k: proj_skill.get(k) for k in ("mode", "skill_id", "dir", "warning", "reason")}}
 
 
 def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = None,
@@ -4778,8 +4858,8 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     # 提示词技能
     ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
     smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
-    if smode == "global" and source != "global":
-        # 组(或本集)换了模型却没指定技能:按本组生效模型自动解析,而不是套全局模型的技能(否则 2.5 组套 2.0 技能)
+    if smode == "global" and source == "group":
+        # 组换了模型却没指定技能:按本组模型自动解析,而不是套上层的技能(否则 2.5 组套 2.0 技能)
         smode_eff = "auto"
     else:
         smode_eff = smode
@@ -4787,9 +4867,11 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     cands = {c["id"]: c for c in prompt_skill_candidates()}
     reason = ""
     if smode_eff == "global":
-        sid, reason = proj_skill["skill_id"], proj_skill["reason"]
-        if proj_skill.get("warning"):
-            warning = (warning + " · " if warning else "") + proj_skill["warning"]
+        # 跟随 = 本集解析结果(集级技能下拉;集未覆盖时即项目设定,本集换了模型时已按本集模型解析)
+        eres = resolve_episode_settings(project, ep, cfg, proj_skill)
+        sid, reason = eres["skill_id"], eres["reason"]
+        if eres.get("warning") and eres["warning"] != warning:
+            warning = (warning + " · " if warning else "") + eres["warning"]
     elif smode_eff == "off":
         sid, reason = "", "user_skipped"
     elif smode_eff == "manual":
@@ -4839,8 +4921,10 @@ def sync_group_settings_effective(project: str) -> list[dict]:
     # 集级覆盖快照(episode.json#effective):无组文件的组由机检 prompt_skill_applied 回落到它对照
     for ep, es in _epsettings_all(project):
         r = resolve_episode_settings(project, ep, cfg, proj_skill)
-        eff = {"provider": r["provider"], "video_model": r["video_model"], "model_source": r["model_source"],
-               "skill_id": r["skill_id"], "skill_mode": r["skill_mode"], "reason": r["reason"]}
+        eff = {"provider": r["provider"], "provider_source": r["provider_source"],
+               "video_model": r["video_model"], "model_source": r["model_source"],
+               "skill_id": r["skill_id"], "skill_mode": r["skill_mode"], "skill_source": r["skill_source"],
+               "reason": r["reason"]}
         cur = es.get("effective") if isinstance(es.get("effective"), dict) else {}
         if {k: cur.get(k) for k in eff} != eff:
             es["effective"] = eff | {"decided_at": datetime.now().isoformat(timespec="seconds")}
@@ -4877,7 +4961,10 @@ def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
         skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
                      if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
         warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
-        lines.append(f"- 整集 `{r['ep']}`(未单独覆盖的组都按此):视频模型 **{r['video_model']}**(集级覆盖,{cap_txt});{skill_txt}{warn}")
+        prov_txt = f"视频渠道 **{r['provider']}**(集级切换,全局 {r['global_provider']})、" if r["provider_source"] == "episode" else ""
+        model_txt = (f"视频模型 **{r['video_model']}**(集级覆盖,{cap_txt})" if r["model_source"] == "episode"
+                     else f"视频模型跟随全局 {r['video_model'] or r['model_label']}")
+        lines.append(f"- 整集 `{r['ep']}`(未单独覆盖的组都按此):{prov_txt}{model_txt};{skill_txt}{warn}")
     for r in rows:
         caps = r.get("caps") or {}
         cap_txt = (f"参考图 ≤{caps['max_ref_images']} 张、参考视频 ≤{caps['max_ref_videos']} 个、"
@@ -4894,7 +4981,7 @@ def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
         return f"""
 
 ## 集级/组级视频模型覆盖(用户在分镜预览顶部下拉为整集、或组卡「🎛 模型」按钮为个别组单独指定,当前已生效)
-以下集/组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定(无组级设定时读集级 episode.json)并改用该模型,渠道不变;`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
+以下集/组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定(无组级设定时读集级 episode.json)并改用该模型(集级切换了渠道时连渠道一起切,Key 取该渠道在「生成模型」页的配置);`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
 {body}"""
     return f"""
 
@@ -4911,11 +4998,13 @@ async def api_grpsettings_get(project: str, ep: str, grp: str):
     cfg = load_genconfig()
     gs = _grpsettings_get(project, ep, grp)
     proj_skill = resolve_prompt_skill(project, cfg)
+    eres = resolve_episode_settings(project, ep, cfg, proj_skill)   # 组「跟随」的技能基准 = 本集解析结果
     return {"project": project, "ep": ep, "grp": grp,
             "config": {"video_model": str(gs.get("video_model") or ""),
                        "prompt_skill": gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict)
                        else {"mode": "global", "skill_id": ""}},
             "resolved": resolve_group_settings(project, ep, grp, cfg, gs, proj_skill),
+            "episode_skill": {k: eres[k] for k in ("skill_id", "skill_dir", "skill_mode", "skill_source")},
             "models": group_video_candidates(project, cfg, ep),
             "skills": prompt_skill_candidates(),
             "project_skill": proj_skill,
@@ -4983,37 +5072,59 @@ async def api_epsettings_get(project: str, ep: str):
     project = safe_slug(project)
     ep = re.sub(r"[^\w\-]", "", ep or "")
     _proj_base(project)
-    cfg = load_genconfig()
-    return {"project": project, "ep": ep,
-            "config": {"video_model": str(_epsettings_get(project, ep).get("video_model") or "")},
-            "resolved": resolve_episode_settings(project, ep, cfg)}
+    return {"project": project, "ep": ep, **episode_settings_payload(project, ep)}
 
 
 async def api_epsettings_set(body: dict):
-    """分镜预览顶部视频模型下拉(2026-09-11):{project, ep, video_model}。空 = 跟随全局(删文件)。
-    渠道不可选:只能取当前视频渠道目录;组级覆盖仍压过本集。"""
+    """分镜预览顶部三下拉(2026-09-11):{project, ep, provider, video_model, prompt_skill:{mode, skill_id}}。
+    provider 空 = 渠道跟随全局(此时 video_model 只能取全局渠道目录,空/同全局 = 跟随全局);
+    provider 非空 = 集级切换渠道(须在目录内且已配 Key),video_model 必填且属该渠道目录。
+    三项全跟随 ⇒ 删文件。组级覆盖仍压过本集。"""
     project = safe_slug((body or {}).get("project") or "")
     ep = re.sub(r"[^\w\-]", "", (body or {}).get("ep") or "")
     if not ep:
         raise ServiceError(400, "ep is required")
     _proj_base(project)
     cfg = load_genconfig()
-    cand = group_video_candidates(project, cfg)
+    cand = group_video_candidates(project, cfg)   # 不传 ep:全局基准
+    provider = str((body or {}).get("provider") or "")
     model = str((body or {}).get("video_model") or "")
-    if model:
+    if provider and provider == cand["provider"]:
+        provider = ""   # 选了全局同款渠道 = 渠道跟随全局
+    if provider:
+        if provider not in VIDEO_MODEL_CATALOG:
+            raise ServiceError(400, f"视频渠道 {provider} 无模型目录,不支持按集切换")
+        if not video_provider_configured(cfg, provider):
+            raise ServiceError(400, f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
+        allowed = {m for m, _ in VIDEO_MODEL_CATALOG[provider]}
+        if not model:
+            model = next(p["default_model"] for p in video_provider_options(cfg) if p["id"] == provider)
+        if model not in allowed:
+            raise ServiceError(400, f"模型 {model} 不在视频渠道 {provider} 的可选目录内")
+    elif model:
         if not cand["overridable"]:
             raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持按集切换模型")
         if model not in {c["id"] for c in cand["candidates"]}:
-            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
+            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内")
         if model == cand["global_model"]:
             model = ""   # 选了全局同款 = 跟随全局
+    ps = (body or {}).get("prompt_skill") or {}
+    if not isinstance(ps, dict):
+        raise ServiceError(400, "prompt_skill must be an object")
+    mode = str(ps.get("mode") or "global")
+    if mode not in GROUP_SKILL_MODES:
+        raise ServiceError(400, f"prompt_skill.mode must be one of {GROUP_SKILL_MODES}")
+    sid = str(ps.get("skill_id") or "") if mode == "manual" else ""
+    if mode == "manual" and sid not in {c["id"] for c in prompt_skill_candidates()}:
+        raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
     path = _epsettings_path(project, ep)
     old = _epsettings_get(project, ep)
-    if not model:
+    if not provider and not model and mode == "global":
         path.unlink(missing_ok=True)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(path, {"video_model": model, "provider": cand["provider"],
+        atomic_write_json(path, {"provider": provider or cand["provider"], "provider_override": bool(provider),
+                                 "video_model": model, "prompt_skill": {"mode": mode, "skill_id": sid},
                                  "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
     sync_group_settings_effective(project)
     out = await api_epsettings_get(project, ep)
@@ -6494,16 +6605,22 @@ def _preview_storyboard(project: str, ep: str):
     gcfg = load_genconfig()
     proj_skill = resolve_prompt_skill(base.name, gcfg)
     # 顶部展示本集生效模型(集级覆盖 episode.json → 全局)并可直接切换(2026-09-11)
-    eres = resolve_episode_settings(base.name, ep, gcfg, proj_skill)
-    data["video_model"] = {"provider": eres["provider"], "model": eres["video_model"],
+    epay = episode_settings_payload(base.name, ep, gcfg, proj_skill)
+    eres = epay["resolved"]
+    data["video_model"] = {"provider": eres["provider"], "provider_source": eres["provider_source"],
+                           "global_provider": eres["global_provider"],
+                           "model": eres["video_model"],
                            "label": eres["model_label"], "overridable": eres["overridable"],
                            "source": eres["model_source"], "episode_model": eres["episode_model"],
                            "global_model": eres["global_model"], "global_label": eres["global_label"],
                            "candidates": [{"id": c["id"], "label": video_model_label(c["id"], eres["provider"])}
                                           for c in eres["candidates"]]}
-    data["prompt_skill"] = {"mode": eres["skill_mode"], "skill_id": eres["skill_id"],
+    data["prompt_skill"] = {"mode": eres["skill_mode"], "episode_mode": eres["episode_skill_mode"],
+                            "source": eres["skill_source"], "skill_id": eres["skill_id"],
                             "dir": eres["skill_dir"], "warning": eres["warning"],
                             "reason": eres["reason"]}
+    # 集级三下拉(渠道/模型/技能)所需的存盘配置与可选清单
+    data["episode_settings"] = {k: epay[k] for k in ("config", "providers", "skills", "project_skill")}
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
