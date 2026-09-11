@@ -83,6 +83,18 @@ dl.kv>dd{min-width:0;word-break:break-word}
 dl.kv dl.kv{margin:2px 0 6px;padding-left:10px;border-left:1px solid var(--border)}
 ul.arr{padding-left:18px}
 ul.arr>li{margin:2px 0}
+/* 全景图板块(2026-09-10):俯视图上标锚点中心 + 每锚点各光照方案全景 */
+.pano-map{position:relative;display:inline-block;max-width:420px;margin:6px 0 10px}
+.pano-map img{width:100%;display:block;border-radius:6px}
+.pano-dot{position:absolute;transform:translate(-50%,-50%);min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.45);cursor:default}
+.pano-anchor{border-top:1px solid var(--border);padding:8px 0 2px}
+.pano-title{font-size:13px}
+.pano-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin:6px 0}
+.pano-row figure{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px;text-align:center}
+.pano-row img{height:140px;max-width:300px;object-fit:contain;display:block;border-radius:5px;cursor:zoom-in}
+.pano-row figcaption{font-size:11px;color:var(--dim);margin-top:3px;max-width:300px}
+.pano-row figure.pano-wb img{height:90px;opacity:.85}
+.pano-blocked{border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 </style>
@@ -202,7 +214,8 @@ function renderDetail(s){
       +s.plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
-        const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||''].filter(Boolean).join(' · ');
+        const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
+          p.pano_ref?I18N.f('全景 {a}',{a:p.pano_ref.anchor_id}):t('旧法(非全景制)')].filter(Boolean).join(' · ');
         return `<figure title="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span></figcaption><figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
       }).join('')+'</div>';
   }
@@ -221,6 +234,57 @@ function renderDetail(s){
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
   import('/static/whitebox-ui.js?v=20260909-wbedit').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
+  // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标
+  mountPanoSection(whitebox,s);
+}
+
+// 预览 API 未重启(旧服务不带 scenes[].panos)时直接读产物 panos/index.json 兜底
+async function mountPanoSection(whitebox,s){
+  const proj=$('#project').value.trim()||'demo';
+  let panos=s.panos;
+  if(panos===undefined){
+    try{
+      const abase=`/api/v1/projects/${encodeURIComponent(proj)}/artifacts/assets/concepts/scenes/${encodeURIComponent(s.id)}/`;
+      const r=await fetch(abase+'panos/index.json');if(!r.ok)return;
+      const idx=await r.json();if(!Array.isArray(idx.anchors))return;
+      const dims=(s.docs?.whitebox?.dimensions_m)||[1,1,1];
+      panos={anchors:idx.anchors.map(a=>({...a,xy:[a.position[0]/dims[0]+.5,a.position[2]/dims[2]+.5],
+          whitebox_pano_url:abase+`panos/${a.anchor_id}/whitebox_pano.jpg`,
+          panos:Object.fromEntries(Object.entries(a.panos||{}).map(([k,v])=>[k,{...v,url:abase+`panos/${a.anchor_id}/${v.file}`}]))})),
+        indoor:idx.indoor,blocked:idx.blocked,dimensions_m:dims,layout_top_url:abase+'layout_top.png'};
+    }catch(e){return}
+  }
+  if(!panos||CUR!==s.id||!whitebox.isConnected)return;
+  const sec=document.createElement('section');sec.className='wb-panel pano-panel';whitebox.after(sec);
+  const anchors=panos.anchors||[];
+  const marker=`[panos:${proj}/${s.id}]`;
+  const loc=I18N.f('全景锚点 {marker}(场景 {scene};索引 {file};锚点 {anchors};改动后重出:python code/render_scene_panos.py --project {proj} --scene {scene} --anchor x,z --force,再 python code/render_shot_plates.py --project {proj} --ep <ep> --repano)',
+    {marker,scene:s.id,file:`assets/concepts/scenes/${s.id}/panos/index.json`,anchors:anchors.map(a=>`${a.anchor_id}(${a.position[0]},${a.position[2]})`).join(' ')||'-',proj});
+  let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌐 ${esc(t('全景图'))} · ${esc(s.id)}</strong><span style="color:var(--dim)">${esc(I18N.f('{n} 个锚点',{n:anchors.length}))} · ${esc(panos.indoor?t('室内(补顶)'):t('室外'))}</span>`
+    +`<button class="editbtn" data-loc="${esc(loc)}" data-agent="08-video-gen/shot-plates" title="${esc(t('对全景锚点提修改意见(移动/增删锚点、重出全景),直接发消息给分镜背景图 Agent'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
+  if(panos.blocked){
+    h+=`<div class="pano-blocked">⚠️ ${esc(I18N.f('当前图像模型 {model}({provider})不支持 2:1 全景,全景图与分镜背景图已暂停:请到控制台「🎨 生成模型」切换图像模型后重跑 code/render_shot_plates.py',{model:panos.blocked.model||'?',provider:panos.blocked.provider||'?'}))}${panos.blocked.detail?` — ${esc(panos.blocked.detail)}`:''}</div>`;
+  }
+  if(panos.layout_top_url){
+    h+=`<div class="pano-map"><img src="${esc(bust(panos.layout_top_url))}" alt="">`
+      +anchors.map(a=>`<span class="pano-dot" style="left:${(a.xy[0]*100).toFixed(2)}%;top:${(a.xy[1]*100).toFixed(2)}%" title="${esc(a.anchor_id)} (${a.position[0]}, ${a.position[2]})">${esc(a.anchor_id)}</span>`).join('')
+      +`</div>`;
+  }
+  const servesText=a=>{
+    const by={};(a.serves||[]).forEach(k=>{const m=k.match(/^([^/]*)\/([^:]+)(?::(\w+))?$/);if(!m)return;(by[m[1]]=by[m[1]]||new Set()).add(m[2]);});
+    return Object.keys(by).sort().map(ep=>`${ep}: ${[...by[ep]].sort().join(', ')}`).join(' · ');
+  };
+  const modeText=(rec)=>rec.mode==='chain'?I18N.f('链式补洞(自 {a})',{a:rec.parent?.anchor_id||'?'}):rec.mode==='relight'?I18N.f('重打光(自 {s})',{s:rec.parent?.scheme||'?'}):t('独立出图');
+  anchors.forEach(a=>{
+    const p=a.position;
+    h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}`
+      +`<div style="color:var(--dim);font-size:12px">${esc((a.serves||[]).length?I18N.f('服务机位:{s}',{s:servesText(a)}):t('尚未服务任何机位'))}</div></div><div class="pano-row">`;
+    Object.keys(a.panos||{}).sort().forEach(sch=>{const rec=a.panos[sch];if(!rec.url)return;
+      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn" title="${esc(sch)}">${esc(sch)}${rec.time_of_day?` · ${esc(rec.time_of_day)}`:''} · ${esc(modeText(rec))}</span></figcaption></figure>`;});
+    if(a.whitebox_pano_url)h+=`<figure class="pano-wb"><img src="${esc(bust(a.whitebox_pano_url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(t('白模全景'))}</span></figcaption></figure>`;
+    h+='</div></div>';
+  });
+  sec.innerHTML=h;
 }
 
 // 图片 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留

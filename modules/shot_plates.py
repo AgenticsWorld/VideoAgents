@@ -11,9 +11,13 @@
   - 集索引(分镜只记指纹):directing/<ep>/shot_plates.json —— 每镜 plates[]{role:start|end, key, file, reuse:new|library|crop, camera}
   - 运镜分档(按 camera.json movement + 白模机位几何):静态/推拉变焦/摇俯仰 = 只出镜首一张;横移跟拍 = 位移 < 机位到主体距离的
     10% 按静态、否则镜首 + 镜尾两张;复杂轨迹 = 镜首 + 镜尾。镜尾图以镜尾白模帧为第一参考图、镜首成图为第二参考图、同 seed。
-  - 出图:refs = 白模干净帧(隐藏人物)→ 场景俯视图 [→ 镜首成图];提示词 = 空场景声明 + 场景描述(architecture)+ 光照方案
-    prompt_fragment_en + 机位事实(罗盘朝向/画左画右/机高/焦距/水平线)+ 画内自左向右清单 + 风格串;分辨率长边 1920 按项目画幅;
-    渠道 = 控制台默认图像模型(modules.genmedia.generate_image)。
+  - 出图(2026-09-10 起全景制):先保证场景全景齐备(modules/scene_panos.py:锚点规划 → 白模深度全景 → 图像模型出 2:1 全景,
+    按光照方案各一张),每镜把全景按本镜机位用白模深度重投影成透视图 <key>.pano.jpg 作 [Image 1](镜尾图再加镜首成图),
+    提示词 = 空场景声明 + 光照方案 prompt_fragment_en + 机位事实(罗盘朝向/画左画右/机高/焦距/水平线)+ 「重投影图是权威,
+    重绘清晰」+ 画内自左向右清单 + 风格串;白模干净帧仍渲(<key>.whitebox.jpg,预览/核对用)但不进 refs,俯视图不进 refs——
+    多张背景图各自基于白模帧出图互不一致,是改全景制的直接原因。库条目 pano_ref 记来源锚点/方案/空洞比;无 pano_ref 的
+    旧条目(legacy)不再被新决策复用,--repano 可把集内 legacy 记录整体重出。图像模型不支持 2:1 全景时整条链停下
+    (PanoUnsupported,CLI 退出码 2),由 Agent 上报用户换模型。分辨率长边 1920 按项目画幅;渠道 = 控制台默认图像模型。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -371,12 +375,17 @@ def plate_key(scheme: str, facts: dict) -> str:
     return f"{scheme}_b{int(round(facts['bearing_deg'])):03d}_h{facts['height_class']}_x{int(round(p[0]))}_z{int(round(p[2]))}_f{int(round(facts['fov_v_deg']))}"
 
 
+def is_legacy(entry: dict) -> bool:
+    """2026-09-10 前按白模帧 + 俯视图直出的库条目(无 pano_ref):不再被新决策复用。"""
+    return not entry.get('pending') and not entry.get('pano_ref')
+
+
 def find_reusable(lib: dict, scheme: str, facts: dict, base: Path, sid: str, require_file: bool = True):
     """按容差找可复用库图:返回 (entry, mode) —— mode ∈ {'library','crop'};无则 (None, None)。"""
     best = None
     for e in lib.get('plates', []):
         c = e.get('camera') or {}
-        if e.get('lighting_scheme_id') != scheme or c.get('height_class') != facts['height_class']:
+        if e.get('lighting_scheme_id') != scheme or c.get('height_class') != facts['height_class'] or is_legacy(e):
             continue
         if require_file and not e.get('pending') and not (base/e['file']).is_file():
             continue
@@ -495,25 +504,17 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
     cam += (f" ({facts['behind_desc']})" if facts['behind_desc'] else '') + '.'
     if sun:
         cam += f" The low sun is in the {sun['compass']}, {sun['relative']}; long shadows fall {sun['shadows']}."
+    # 2026-09-10 全景制:[Image 1] = 场景全景按本镜机位的深度重投影(内容与位置权威,画质与空洞不作数);不再给白模帧/俯视图
     lines = [head, cam,
-             f"[Image 1] is a grey untextured 3D whitebox render of this exact location from this exact camera: reproduce its perspective, "
-             f"its horizon line (about {facts['horizon_pct_from_top']}% down from the top edge), its camera height and the position and scale of "
-             f"every volume in frame exactly, then dress every volume with real materials; do not reproduce its grey CG blocks or flat shading."]
+             f"[Image 1] is a photograph of this exact location re-projected to this exact camera from the scene's 360 panorama taken a few "
+             f"metres away, so it may show smearing, stretching or blank holes: treat it as the authoritative reference for what stands where "
+             f"and how it looks (walls, floors, ceilings, furniture, facades, roads, trees, poles, materials, colours, weather and light), keep "
+             f"its perspective and its horizon line (about {facts['horizon_pct_from_top']}% down from the top edge), keep every element at the "
+             f"position it has there, and repaint the whole frame sharp and photographic; never copy its smears, holes or soft focus."]
     if role == 'end':
         lines.append("[Image 2] is the finished background plate of the same shot at the start of the camera move: keep exactly the same "
                      "location, materials, set dressing, weather, light direction and color grade, seen from this new camera; "
                      "do not copy its framing.")
-        lines.append("[Image 3] is the top-down layout map of this location: use it only to identify what each whitebox volume is and where it "
-                     "stands relative to the camera; never reproduce the map, its top-down viewpoint or its colors.")
-    elif sibling:
-        lines.append("[Image 2] is the finished background plate of another shot of the same scene, photographed minutes earlier from a different "
-                     "camera: keep exactly the same location, building facades, materials, vegetation, set dressing, weather, light direction "
-                     "and color grade, so the two plates read as one place; do not copy its framing or camera.")
-        lines.append("[Image 3] is the top-down layout map of this location: use it only to identify what each whitebox volume is and where it "
-                     "stands relative to the camera; never reproduce the map, its top-down viewpoint or its colors.")
-    else:
-        lines.append("[Image 2] is the top-down layout map of this location: use it only to identify what each whitebox volume is and where it "
-                     "stands relative to the camera; never reproduce the map, its top-down viewpoint or its colors.")
     if phrases:
         lines.append("In frame from left to right: " + '; '.join(phrases) + '.')
     if out_of_frame:
@@ -566,6 +567,36 @@ def camera_stale(recorded: dict, current: dict) -> bool:
             or abs(recorded.get('fov_v_deg', 0) - current['fov_v_deg']) > .5)
 
 
+# ---------------------------------------------------------------- pano reprojection for one plate
+def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str, facts: dict, width: int, height: int, output: Path,
+                        *, indoor: bool, seed=None, log=print) -> dict:
+    """按锚点优先级重投影;空洞 > PLATE_HOLE_MAX 换下一锚点;全部不合格 → 在本机位加锚点、出该方案全景后再重投影(保证每张背景图都基于全景)。"""
+    from modules import scene_panos
+    camera = {'position': facts['position'], 'target': facts['target'], 'fov_v_deg': facts['fov_v_deg']}
+    tried = []
+    for a in scene_panos.anchor_for_camera(base, sid, idx, cam, scheme):
+        info = scene_panos.reproject_to_camera(base, sid, a, scheme, camera, width, height, output)
+        tried.append((info['hole_fraction'], a['anchor_id']))
+        if info['hole_fraction'] <= scene_panos.PLATE_HOLE_MAX:
+            if len(tried) > 1:
+                log(f"   锚点 {a['anchor_id']} 重投影空洞 {info['hole_fraction']:.0%}(前序锚点 {tried[:-1]})")
+            return info
+    log(f"   现有锚点重投影空洞都超 {scene_panos.PLATE_HOLE_MAX:.0%}:{tried};在机位 {cam['shot_id']} 处加锚点出全景")
+    height_m = idx['anchors'][0]['position'][1] if idx['anchors'] else 1.6
+    used = {a['anchor_id'] for a in idx['anchors']}
+    n = len(idx['anchors']) + 1
+    while f'A{n}' in used:
+        n += 1
+    anchor = {'anchor_id': f'A{n}', 'position': [round(cam['position'][0], 3), height_m, round(cam['position'][2], 3)], 'yaw_deg': 0.0,
+              'source': 'auto-self', 'locked': False, 'serves': [scene_panos._cam_key(cam)], 'panos': {}}
+    idx['anchors'].append(anchor)
+    scene_panos.save_index(base, sid, idx)
+    scene_panos.render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)
+    scene_panos.check_pano_support(base, sid, idx, log=log)
+    scene_panos.generate_pano(base, sid, idx, anchor, scheme, indoor=indoor, seed=seed, time_of_day=cam.get('time_of_day'), log=log)
+    return scene_panos.reproject_to_camera(base, sid, anchor, scheme, camera, width, height, output)
+
+
 # ---------------------------------------------------------------- generation driver
 def plan_episode(base: Path, ep: str, only=None) -> dict:
     """算出本集每镜需要的背景图与复用/裁切/新出决策(不出图)。only = 组号或镜号集合。"""
@@ -607,8 +638,12 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
     return {'episode': episode, 'fmt': fmt, 'jobs': jobs, 'layouts': layouts, 'axes': axes, 'libs': libs, 'shots': shots}
 
 
-def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None) -> dict:
-    """出图主流程:查库 → 裁切/复用 → 渲白模帧 → 出图 → 入库 → 写集索引。返回统计。"""
+def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None,
+                repano=False) -> dict:
+    """出图主流程:查库 → 裁切/复用 → 场景全景齐备 → 渲白模帧 → 全景重投影 → 出图 → 入库 → 写集索引。返回统计。
+    repano:集索引里仍指向 legacy(非全景制)库图的镜视为需重做(可复用本次新出的全景制库图)。
+    图像模型不支持全景时抛 scene_panos.PanoUnsupported,一张背景图也不出。"""
+    from modules import scene_panos
     ep = component(ep)
     plan = plan_episode(base, ep, only)
     episode, fmt, libs, layouts = plan['episode'], plan['fmt'], plan['libs'], plan['layouts']
@@ -620,7 +655,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     style_doc = read(base/'bible/style.json', {}) or {}
     style = style_doc.get('style_fragment_en') or ''
     idx = load_episode_index(base, ep)
-    stats = {'shots': 0, 'plates': 0, 'new': 0, 'library': 0, 'crop': 0, 'skipped_fresh': 0, 'errors': [], 'pending_new': 0}
+    stats = {'shots': 0, 'plates': 0, 'new': 0, 'library': 0, 'crop': 0, 'skipped_fresh': 0, 'errors': [], 'pending_new': 0,
+             'legacy': 0, 'panos': {}}
     # 先决定每个 job 的来源;起点先于终点;同场景按 fov 从宽到窄,窄景别可裁宽图
     jobs = sorted(plan['jobs'], key=lambda j: (j['scene_id'], j['role'] == 'end', -j['facts']['fov_v_deg']))
     by_shot = {}
@@ -637,11 +673,14 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             sid, scheme, facts = j['scene_id'], j['scheme'], j['facts']
             lib = libs[sid]
             old = prev_plates.get(j['role'])
-            if (old and not force and not camera_stale(old.get('camera'), facts) and (base/old['file']).is_file()
-                    and old.get('key') and any(e['key'] == old['key'] for e in lib['plates'])):
-                decisions.append({**j, 'mode': 'fresh', 'entry': next(e for e in lib['plates'] if e['key'] == old['key']),
+            cur = next((e for e in lib['plates'] if old and e['key'] == old.get('key')), None)
+            if (old and cur is not None and not force and not camera_stale(old.get('camera'), facts) and (base/old['file']).is_file()
+                    and not (repano and is_legacy(cur))):
+                decisions.append({**j, 'mode': 'fresh', 'entry': cur,
                                   'file': old['file'], 'crop': old.get('crop'), 'reuse': old.get('reuse') or 'library'})
                 stats['skipped_fresh'] += 1
+                if is_legacy(cur):
+                    stats['legacy'] += 1
                 continue
             view = {'plates': lib['plates'] + pending.get(sid, [])}   # 本次运行里已决定新出的机位也参与复用判断
             # --force:目标镜不查库、重出新图(同指纹 key 覆盖原库条目);其余镜照常复用
@@ -662,6 +701,22 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                               'reuse': 'new'})
     if pending_frames:   # 白模干净帧本地渲染无成本,dry-run 也渲,便于核对构图
         render_clean_frames(base, episode, pending_frames, wb_fmt['width'], wb_fmt['height'])
+    # 场景全景齐备(2026-09-10):有新出决策的场景先保证锚点全景(按本集全部机位规划,按新决策所用光照方案出图);
+    # 图像模型不支持 2:1 全景 → PanoUnsupported 直接抛出,本次一张背景图也不出
+    def cam_of(j):
+        return {'ep': ep, 'group_id': j['group_id'], 'shot_id': j['shot_id'], 'role': j['role'], 'position': list(j['keyframe']['position']),
+                'target': list(j['keyframe']['target']), 'fov': float(j['keyframe']['fov']),
+                'scheme': scene_panos.scheme_slug(j['scheme'], j['raw_group'].get('time_of_day')), 'time_of_day': j['raw_group'].get('time_of_day')}
+    pano_idx = {}
+    for sid in {d['scene_id'] for d in decisions if d['mode'] == 'new'}:
+        schemes = {}
+        for d in decisions:
+            if d['scene_id'] == sid and d['mode'] == 'new':
+                schemes.setdefault(scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day')), d['raw_group'].get('time_of_day'))
+        cams = [cam_of(j) for j in plan['jobs'] if j['scene_id'] == sid]
+        log(f"== {sid} 场景全景:{len(cams)} 个机位,光照方案 {sorted(schemes)}")
+        stats['panos'][sid] = scene_panos.ensure_scene_panos(base, sid, cameras=cams, schemes=schemes, dry_run=dry_run, seed=seed, log=log)
+        pano_idx[sid] = scene_panos.load_index(base, sid)
     def flush_shot(shot_id):
         """某镜全部决策落地后立即写集索引(进程中途被杀也不丢已出图;重跑按索引/库续跑)。"""
         ds = [d for d in decisions if d['shot_id'] == shot_id and d.get('file')]
@@ -736,25 +791,32 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         lighting = lighting_fragment(base, sid, d['scheme'])
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, d['facts']['bearing_deg']) if sun else None
-        sibling = group_first.get(d['group_id']) if role == 'start' else None
-        if sibling is not None and not dry_run and not (base/sibling['file']).is_file():
-            sibling = None
-        prompt = build_prompt(d['facts'], phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame,
-                              sibling=sibling is not None)
+        prompt = build_prompt(d['facts'], phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame)
         negative = ', '.join(x for x in (style_doc.get('negative_prompt_en') or '', scene_neg, NEGATIVE_EXTRA) if x)
-        sref = d['raw_group'].get('scene_refs') or {}
-        top = sref.get('layout_top') or f"assets/concepts/scenes/{sid}/{layout.get('layout_top', 'layout_top.png')}"
-        refs = [d['whitebox_frame']]
+        # [Image 1] = 场景全景按本镜机位重投影(2026-09-10):规划里服务本机位的锚点优先,空洞过多换锚点,都不行就在本机位加锚点出全景
+        scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
+        pano_rel = str(Path(d['whitebox_frame']).with_name(f"{d['key']}.pano.jpg"))
+        pano_info = None
+        if dry_run:
+            pano_info = {'anchor_id': '(dry-run)', 'scheme': scheme_key, 'hole_fraction': None}
+        else:
+            try:
+                pano_info = reproject_for_plate(base, sid, pano_idx[sid], cam_of(d), scheme_key, d['facts'], width, height, base/pano_rel,
+                                                indoor=stats['panos'][sid]['indoor'], seed=seed, log=log)
+            except scene_panos.PanoUnsupported:
+                raise
+            except Exception as error:  # noqa: BLE001
+                stats['errors'].append(f'{shot_id}/{role}: 全景重投影失败 {error}')
+                continue
+        pano_info['file'] = pano_rel
+        refs = [pano_rel]
         start_entry = generated.get((shot_id, 'start')) if role == 'end' else None
         if role == 'end':
             if not start_entry:
                 stats['errors'].append(f'{shot_id}: 镜尾图缺镜首成图')
                 continue
             refs.append(start_entry['file'])
-        elif sibling is not None:
-            refs.append(sibling['file'])
-        refs.append(top)
-        missing = [r for r in refs if not (base/r).is_file() and not (dry_run and ((start_entry and r == start_entry['file']) or (sibling and r == sibling['file'])))]
+        missing = [r for r in refs if not (base/r).is_file() and not (dry_run and (r == pano_rel or (start_entry and r == start_entry['file'])))]
         if missing:
             stats['errors'].append(f'{shot_id}/{role}: 参考图缺失 {missing}')
             continue
@@ -765,7 +827,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png"
         entry = {'key': d['key'], 'file': out_rel, 'whitebox_frame': d['whitebox_frame'], 'lighting_scheme_id': d['scheme'],
                  'time_of_day': d['raw_group'].get('time_of_day'), 'camera': d['facts'], 'size': f'{width}x{height}', 'seed': use_seed,
-                 'refs': refs, 'prompt': prompt, 'negative': negative, 'in_frame': items,
+                 'refs': refs, 'prompt': prompt, 'negative': negative, 'in_frame': items, 'pano_ref': pano_info,
                  'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': d['group_id'], 'role': role},
                  'written_at': dt.datetime.now().isoformat(timespec='seconds')}
         log(f"== {shot_id} {role} ({d['group_id']}) new plate {d['key']} facing {d['facts']['facing']} h={d['facts']['height_m']}m lens≈{d['facts']['lens_mm_equiv']}mm")
@@ -1148,11 +1210,18 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
     need = {}
     for j in plan['jobs']:
         need.setdefault(j['shot_id'], {})[j['role']] = j['facts']
+    scene_of = {j['shot_id']: j['scene_id'] for j in plan['jobs']}
+    lib_by_key = {}
+    for sid in set(scene_of.values()):
+        for e in load_library(base, sid)['plates']:
+            lib_by_key[e['key']] = e
     shots = {}
+    legacy_shots = []
     for shot_id, roles in need.items():
         rec = idx['shots'].get(shot_id) or {}
         have = {p['role']: p for p in rec.get('plates', []) if isinstance(p, dict)}
         state = 'ok'
+        legacy = False
         for role, facts in roles.items():
             p = have.get(role)
             if not p:
@@ -1161,8 +1230,14 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
                 state = 'file_missing'
             elif camera_stale(p.get('camera'), facts) and state == 'ok':
                 state = 'stale'
-        shots[shot_id] = {'state': state, 'need': sorted(roles), 'have': sorted(have),
+            if p and p.get('key') in lib_by_key and is_legacy(lib_by_key[p['key']]):
+                legacy = True
+        if legacy:
+            legacy_shots.append(shot_id)
+        shots[shot_id] = {'state': state, 'need': sorted(roles), 'have': sorted(have), 'legacy': legacy,
                           'files': [p['file'] for p in have.values()]}
     problems = {k: v['state'] for k, v in shots.items() if v['state'] != 'ok'}
+    # legacy(2026-09-10 前非全景制出的图)只作 WARN 不算问题:整体重出有费用,由用户决定(--repano)
     return {'ep': component(ep), 'shots_total': len(shots), 'shots_ok': len(shots) - len(problems),
-            'plates_needed': sum(len(v['need']) for v in shots.values()), 'problems': problems, 'shots': shots}
+            'plates_needed': sum(len(v['need']) for v in shots.values()), 'problems': problems, 'shots': shots,
+            'legacy_shots': legacy_shots}

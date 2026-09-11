@@ -5791,16 +5791,40 @@ def _preview_scenes(project: str):
             if not (f and f.is_file()):
                 continue
             cam = p.get("camera") or {}
+            pr = p.get("pano_ref") or {}
             plates.append({"key": p.get("key"), "file": p.get("file"),
                            "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}",
                            "lighting_scheme_id": p.get("lighting_scheme_id"), "time_of_day": p.get("time_of_day"),
                            "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
+                           # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
+                           "pano_ref": {k: pr.get(k) for k in ("anchor_id", "scheme", "hole_fraction")} if pr else None,
                            "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
+        # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
+        panos = None
+        try:
+            from modules.scene_panos import preview_summary
+            panos = preview_summary(base, sid)
+        except Exception as e:  # noqa: BLE001
+            print(f"[preview-scenes] {sid} panos 读取失败(忽略):{e}", flush=True)
+        if panos:
+            pdir = adir / sid / "panos"
+            for a in panos["anchors"]:
+                aid = a["anchor_id"]
+                wb = pdir / aid / "whitebox_pano.jpg"
+                a["whitebox_pano_url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/panos/{aid}/whitebox_pano.jpg?v={int(wb.stat().st_mtime)}" if wb.is_file() else None
+                for s, rec in list(a["panos"].items()):
+                    f = pdir / aid / str(rec.get("file") or "")
+                    if f.is_file():
+                        rec["url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/panos/{aid}/{f.name}?v={int(f.stat().st_mtime)}"
+                    else:
+                        a["panos"].pop(s)
+            lt = adir / sid / (((_read_json_safe(adir / sid / "layout.json") or {}).get("layout_top")) or "layout_top.png")
+            panos["layout_top_url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/{lt.name}?v={int(lt.stat().st_mtime)}" if lt.is_file() else None
         scenes.append({"id": sid, "name": meta.get("name") or sid,
                        "meta": meta, "docs": docs,
-                       # plates/ 子目录(背景图 + 白模帧 + 裁切)不进概念图库,单独以「分镜背景图」板块展示
-                       "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith("plates/")],
-                       "plates": plates})
+                       # plates/ 与 panos/ 子目录不进概念图库,分别以「分镜背景图」「全景图」板块展示
+                       "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/"))],
+                       "plates": plates, "panos": panos})
     return {"project": base.name, "scenes": scenes}
 
 

@@ -40,9 +40,11 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 
 dzg6 ep01 全集 112 镜 dry-run：需 114 张背景图，新出 46、库复用 60、裁切 8。
 
-## 出图
+## 出图（2026-09-10 起全景制，见 `docs/scene_panos.md`）
 
-- refs：`[Image 1]` 白模干净帧（隐藏人物/群演，1920×1080）→ `[Image 2]` 场景俯视图（`scene_refs.layout_top`）；镜尾图在两者之间插镜首成图。
+- 先保证场景全景齐备（`modules/scene_panos.py`：按本集机位规划少数锚点 → 白模深度全景 → 图像模型出 2:1 全景，每个光照方案一张；同方案第二个锚点起链式补洞，同锚点第二个方案起保结构重打光）。当前图像模型不支持 2:1 全景 → 退出码 2 `[pano_unsupported]`，一张背景图也不出，Agent 上报用户换模型。
+- refs：`[Image 1]` = 场景全景按本镜机位用白模几何重投影的透视图 `<key>.pano.jpg`（内容与位置权威，画质与空洞不作数，提示词要求重绘清晰）；镜尾图再加 `[Image 2]` 镜首成图。**白模干净帧与俯视图不再进 refs**（多张背景图各自基于白模帧出图互不一致，是改全景制的直接原因）；白模帧仍渲作 `<key>.whitebox.jpg` 供预览核对。库条目 `pano_ref{anchor_id, scheme, hole_fraction, distance_from_anchor_m}`；无 `pano_ref` 的旧条目为 legacy，不再被新决策复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
+- 旧口径（2026-09-09，已废止）：`[Image 1]` 白模干净帧 → `[Image 2]` 场景俯视图；镜尾图在两者之间插镜首成图。
 - 提示词：空场景声明 + 组 `time_of_day` + 光照方案 `prompt_fragment_en` + 机位事实（景别、等效焦距、机高档、俯仰、机位落在哪个几何上、罗盘朝向、画左/画右/身后各是什么——由 `layout.json#orientation` 把白模坐标映射到东南西北）+ 白模帧用法 + 俯视图用法 + 画内自左向右清单（白模几何盒采样投影，按基名/地标归并）+ **画外不可见清单**（在画幅外/身后的地标，明令不画——实测没有这句时场景描述会把身后的大门院墙带进画面）+ 场景描述（architecture.json 的 form / arch_style / era_region / scale / materials / details，声明只作材质与年代参考）+ 禁人/禁网格/禁俯视 + `style_fragment_en`。negative = `negative_prompt_en` + architecture.negative + 人物/网格/俯视词。可选 `--sun <罗盘>` 写太阳相对机位方向。
 - 分辨率长边 1920 按项目画幅；渠道 = 控制台默认图像模型（`modules.genmedia.generate_image`，不写死）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
 

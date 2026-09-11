@@ -5,9 +5,16 @@
 本脚本要求所选组的白模视频已导出(assets/whitebox/<ep>/<grp>/manifest.json),否则拒跑——保证背景图只在用户确认白模之后生成。
 
 每镜按运镜分档决定出几张(静态/推拉/摇俯仰 = 镜首一张;横移跟拍/复杂轨迹按位移出镜首 + 镜尾),先查场景背景图库
-(assets/concepts/scenes/<sid>/plates/,按机位指纹容差复用、同轴更宽的库图裁切复用),缺的才渲白模干净帧 + 场景俯视图出新图
-(长边 1920,控制台默认图像模型),入库并写集索引 directing/<ep>/shot_plates.json;最后自动跑 code/sync_shot_plates.py --write
-把背景图接进已有组 prompt 的 refs。
+(assets/concepts/scenes/<sid>/plates/,按机位指纹容差复用、同轴更宽的库图裁切复用),缺的才出新图(长边 1920,控制台默认图像模型),
+入库并写集索引 directing/<ep>/shot_plates.json;最后自动跑 code/sync_shot_plates.py --write 把背景图接进已有组 prompt 的 refs。
+
+全景制(2026-09-10,docs/scene_panos.md):新图一律由场景全景按本镜机位重投影后二次生成——脚本先保证场景全景齐备
+(modules/scene_panos.py:按本集机位规划少数锚点 → 白模深度全景 → 图像模型出 2:1 全景,每个光照方案一张;可单独用
+code/render_scene_panos.py 预跑/改锚点),再把全景重投影成 <key>.pano.jpg 作 [Image 1] 出图;不再给白模帧 / 俯视图作参考图
+(多张背景图互不一致的根因)。当前图像模型不支持 2:1 全景时脚本退出码 2 并打印 [pano_unsupported],一张都不出——
+Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模型后重跑,不得自行换模型或绕过。
+库里 2026-09-10 前按旧法出的图(无 pano_ref,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜(WARN 不算 FAIL);
+--repano 把这些镜整体按全景制重出(有费用,仅用户明确要求时用)。
 
 用法:
   python code/render_shot_plates.py --project <slug> --ep ep01                 # 全集
@@ -16,7 +23,9 @@
   python code/render_shot_plates.py --project <slug> --ep ep01 --force         # 无视集索引里的现有记录重新决策(库图仍复用)
   python code/render_shot_plates.py --project <slug> --ep ep01 --max-new 6   # 分批:每次最多新出 6 张即返回(退出码 3=还有待出),前台循环直到 0
   python code/render_shot_plates.py --project <slug> --ep ep01 --status      # 验收机检 shot_plates_complete:逐镜覆盖状态,不齐退出码 1
+  python code/render_shot_plates.py --project <slug> --ep ep01 grp027 --repano  # 把仍指向 legacy(非全景制)图的镜重出(用户明确要求时)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
+  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出。
 
 纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
   本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
@@ -29,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
+from modules.scene_panos import PanoUnsupported  # noqa: E402
 from modules.shot_plates import run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
 
@@ -43,6 +53,7 @@ def main():
         ap.add_argument('--allow-unexported', action='store_true', help='跳过「白模视频已导出」前置检查(仅调试)')
         ap.add_argument('--max-new', type=int, default=None, help='本次最多新出 N 张后停止(索引已按镜落盘);还有待出图时退出码 3,Agent 在前台循环再跑直到 0')
         ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
+        ap.add_argument('--repano', action='store_true', help='集索引里仍指向 legacy(非全景制)库图的镜视为需重做,按全景制重出(有费用,仅用户明确要求时)')
     args, base = parse_args(__doc__, configure=configure)
     ep = component(args.ep)
     if not spatial_blocking_enabled(base):
@@ -71,9 +82,17 @@ def main():
         print(json.dumps({'shot_plates_complete': st}, ensure_ascii=False), flush=True)
         print(f"[shot_plates_complete] {args.project}/{ep}: {st['shots_ok']}/{st['shots_total']} 镜齐全,问题 {len(st['problems'])} 镜 "
               f"-> {'FAIL' if st['problems'] else 'PASS'}", flush=True)
+        if st.get('legacy_shots'):
+            print(f"[shot_plates_complete] WARN: {len(st['legacy_shots'])} 镜仍用 2026-09-10 前非全景制背景图(legacy):{st['legacy_shots']};"
+                  "按全景制重出请用户确认后跑 --repano", flush=True)
         return 1 if st['problems'] else 0
-    stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
-                        max_new=args.max_new)
+    try:
+        stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
+                            max_new=args.max_new, repano=args.repano)
+    except PanoUnsupported as error:
+        print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
+        print(json.dumps({'shot_plates': {'blocked': 'pano_unsupported', 'detail': str(error)}}, ensure_ascii=False), flush=True)
+        return 2
     print(json.dumps({'shot_plates': stats}, ensure_ascii=False), flush=True)
     if not args.dry_run:
         sync = sync_episode(base, ep, groups, write=True)

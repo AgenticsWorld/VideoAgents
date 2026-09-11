@@ -1,0 +1,76 @@
+<!doctype html><html><head><meta charset="utf-8"><title>白模全景深度渲染</title></head><body>
+<canvas id="render"></canvas>
+<script type="module">
+// 场景全景锚点(2026-09-10,docs/scene_panos.md):从白模场景内一点渲染 360° 等距柱状「径向深度全景」与白模彩色全景,
+// 供 modules/scene_panos.py 出真实全景并按分镜机位重投影。等距柱状约定:
+//   全景中心列 = 相机局部 -Z(three.js 正前方),u 向右 = 绕 Y 顺时针(局部 +X 在 u=0.75),v 向下 = 从天顶到地面;
+//   深度 = 片元到相机的径向距离(米),无几何处为 0(调用方视作最远)。
+import * as THREE from './vendor/three/three.module.js';
+import { WhiteboxRenderer } from './whitebox-renderer.js';
+const data=window.whiteboxPanoData;
+const renderer=new WhiteboxRenderer(document.querySelector('#render'),{width:256,height:128,controls:false});
+window.whiteboxPano={
+  load(){
+    const scene=data.scene;
+    renderer.load(scene,null);
+    // 白模室内场景没有天花板;渲染全景时按场景高度补一块顶板,否则深度全景会把顶漏成无穷远
+    if(data.ceiling!==false){
+      const [w,h,d]=scene.dimensions_m;
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(w,.05,d),new THREE.MeshStandardMaterial({color:0xf3f0e8,roughness:1}));
+      slab.position.y=h+.025;slab.name='pano-ceiling';renderer.scene.add(slab);
+    }
+    return true;
+  },
+  // position:[x,y,z] 米;yaw:弧度(绕 Y,0 = 看 -Z);cube:立方体面分辨率;width/height:全景尺寸
+  render({position,yaw=0,cube=1024,width=2048,height=1024}){
+    const gl=renderer.renderer, scene=renderer.scene;
+    const cam=new THREE.Vector3(...position);
+    const rot=new THREE.Matrix4().makeRotationY(yaw);
+    const equirect=(cubeTarget,type)=>{
+      const out=new THREE.WebGLRenderTarget(width,height,{type,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,generateMipmaps:false,depthBuffer:false});
+      const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.ShaderMaterial({
+        uniforms:{cubeMap:{value:cubeTarget.texture},rot:{value:rot}},
+        vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position,1.0);}',
+        fragmentShader:`uniform samplerCube cubeMap;uniform mat4 rot;varying vec2 vUv;const float PI=3.141592653589793;
+          void main(){float theta=vUv.x*2.0*PI-PI;float phi=(1.0-vUv.y)*PI;
+          vec3 dir=vec3(sin(phi)*sin(theta),cos(phi),-cos(theta)*sin(phi));
+          dir=(rot*vec4(dir,0.0)).xyz;gl_FragColor=textureCube(cubeMap,dir);}`}));
+      const s=new THREE.Scene();s.add(quad);
+      gl.setRenderTarget(out);gl.render(s,new THREE.OrthographicCamera(-1,1,1,-1,0,1));gl.setRenderTarget(null);
+      quad.geometry.dispose();quad.material.dispose();
+      return out;
+    };
+    // 1) 径向深度:覆盖材质输出片元到相机的世界距离
+    const depthCube=new THREE.WebGLCubeRenderTarget(cube,{type:THREE.FloatType,format:THREE.RGBAFormat,generateMipmaps:false,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
+    const cubeCam=new THREE.CubeCamera(.02,1000,depthCube);cubeCam.position.copy(cam);scene.add(cubeCam);
+    const savedBg=scene.background;scene.background=new THREE.Color(0,0,0);
+    scene.overrideMaterial=new THREE.ShaderMaterial({uniforms:{camPos:{value:cam}},side:THREE.DoubleSide,
+      vertexShader:'varying vec3 vWorld;void main(){vec4 w=modelMatrix*vec4(position,1.0);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}',
+      fragmentShader:'uniform vec3 camPos;varying vec3 vWorld;void main(){float d=distance(vWorld,camPos);gl_FragColor=vec4(d,d,d,1.0);}'});
+    cubeCam.update(gl,scene);
+    scene.overrideMaterial=null;scene.background=savedBg;
+    const depthOut=equirect(depthCube,THREE.FloatType);
+    const floats=new Float32Array(width*height*4);gl.readRenderTargetPixels(depthOut,0,0,width,height,floats);
+    const depth=new Float32Array(width*height);
+    // WebGL 读回的行序自下而上,翻成图像行序(第 0 行 = 天顶)
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++)depth[(height-1-y)*width+x]=floats[(y*width+x)*4];
+    // 2) 白模彩色全景(参考用)
+    const colorCube=new THREE.WebGLCubeRenderTarget(cube,{generateMipmaps:false,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+    const colorCam=new THREE.CubeCamera(.02,1000,colorCube);colorCam.position.copy(cam);scene.add(colorCam);
+    colorCam.update(gl,scene);
+    const colorOut=equirect(colorCube,THREE.UnsignedByteType);
+    const bytes=new Uint8Array(width*height*4);gl.readRenderTargetPixels(colorOut,0,0,width,height,bytes);
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const img=canvas.getContext('2d').createImageData(width,height);
+    for(let y=0;y<height;y++)img.data.set(bytes.subarray(y*width*4,(y+1)*width*4),(height-1-y)*width*4);
+    canvas.getContext('2d').putImageData(img,0,0);
+    for(const o of [depthCube,depthOut,colorCube,colorOut])o.dispose();
+    scene.remove(cubeCam);scene.remove(colorCam);
+    // float32 小端二进制按 32KB 分块转 base64(一次 String.fromCharCode 展开 8MB 会爆栈)
+    const u8=new Uint8Array(depth.buffer);let bin='';
+    for(let i=0;i<u8.length;i+=32768)bin+=String.fromCharCode.apply(null,u8.subarray(i,i+32768));
+    return {depth_base64:btoa(bin),color_jpeg:canvas.toDataURL('image/jpeg',.92).split(',')[1],width,height};
+  }
+};
+window.whiteboxPanoReady=true;
+</script></body></html>

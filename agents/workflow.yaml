@@ -278,6 +278,7 @@ phases:
       - { id: p6-shot-plates, agent: 08-video-gen/shot-plates, condition: whitebox_requested, depends_on: [p6-whitebox-export],
           outputs: ["directing/{ep}/shot_plates.json"],   # 背景图本体入场景库 assets/concepts/scenes/<sid>/plates/(按机位指纹复用,跨组跨集)
           validation: { auto: [shot_plates_complete, shot_plate_bound], qa: [11-qa/visual-qa] } }   # shot_plates_complete=render_shot_plates.py --status 逐镜齐全(验收以此为准,不采信自述;前科 Agent 丢后台结单一张没出);code/render_shot_plates.py:运镜分档出镜首/镜尾、查库复用/裁切、缺的出新图(长边 1920,控制台默认图像模型)并自动 sync_shot_plates --write;机检 code/sync_shot_plates.py
+          # 全景制(2026-09-10,docs/scene_panos.md):脚本先保证场景全景齐备(modules/scene_panos.py 按机位规划少数锚点、每光照方案一张 2:1 全景),背景图一律由全景按机位重投影后二次生成,不再基于白模帧+俯视图;图像模型不支持 2:1 全景 → 退出码 2 [pano_unsupported] 一张不出,Agent 上报用户换图像模型(不得自行换)
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*

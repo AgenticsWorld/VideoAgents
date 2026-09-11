@@ -2,7 +2,8 @@
 
 - 类别：08-video-gen；任务粒度：每集（workflow.yaml `p6-shot-plates`，条件 whitebox_requested）。
 - 依赖：`p6-whitebox-export`（白模调度 `07-directing/whitebox-staging` 已导出摄影机视频）——白模导出以用户签字 `g6w`「H3W-白模确认」为前提，因此本岗产出的每张背景图都对应用户确认过的机位。
-- 使命：给每个分镜出「镜首机位看出去的空场景实拍感背景图」（运动镜头按分档另出镜尾一张），先查场景背景图库复用，缺的才出新图，并把背景图接进组视频 prompt 的参考图；机检 `shot_plate_bound`。规则与数据结构见宿主 `docs/shot_plates.md`。
+- 使命：给每个分镜出「镜首机位看出去的空场景实拍感背景图」（运动镜头按分档另出镜尾一张），先查场景背景图库复用，缺的才出新图，并把背景图接进组视频 prompt 的参考图；机检 `shot_plate_bound`。规则与数据结构见宿主 `docs/shot_plates.md`、`docs/scene_panos.md`。
+- **全景制（2026-09-10）**：背景图一律由场景全景按本镜机位重投影后二次生成——脚本自动先保证场景全景齐备（`modules/scene_panos.py`，按机位规划少数锚点、每个光照方案一张 2:1 全景），再出背景图；不再基于白模帧 + 俯视图直出。**当前图像模型不支持 2:1 全景时脚本退出码 2 并打印 `[pano_unsupported]`，一张都不出：原文上报，请用户到控制台「🎨 生成模型」切换图像模型后重跑；不得自行换模型、不得绕过。**
 
 ## 做什么
 
@@ -13,12 +14,13 @@
 python code/render_shot_plates.py --project <slug> --ep <ep> --dry-run      # 先看决策:每镜出几张、复用/裁切/新出各多少、提示词
 python code/render_shot_plates.py --project <slug> --ep <ep>                # 出图 + 入库 + 写集索引 + 自动 sync_shot_plates --write(前台跑完)
 python code/render_shot_plates.py --project <slug> --ep <ep> --max-new 6    # 长集分批:退出码 3 = 还有待出,前台再跑直到 0
-python code/render_shot_plates.py --project <slug> --ep <ep> --status       # 验收机检 shot_plates_complete(结单前必跑,PASS 才结单)
+python code/render_shot_plates.py --project <slug> --ep <ep> --status       # 验收机检 shot_plates_complete(结单前必跑,PASS 才结单;WARN legacy 只上报不自动重出)
+python code/render_scene_panos.py --project <slug> --scene <sid> --dry-run  # (可选)先看场景全景锚点规划;--anchor x,z --force 按用户指令改锚点
 python code/sync_shot_plates.py --project <slug> --ep <ep>                  # 机检 shot_plate_bound
 ```
 
 3. **前台同步跑完,禁止丢后台(硬纪律,2026-09-09;前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把脚本丢后台就结单返回,进程随之被杀,9 组 16 镜一张没出,验收未过)**:出图命令必须在本任务内前台执行、等到退出码才算跑完;禁止 `nohup` / `&` / 任何"后台继续、完成后通知"的说法——任务结束进程即被杀。脚本每出一张打印 `saved:` 并按镜落盘索引与库,中途被杀不丢已出图、重跑自动续。集大、镜多时**分批**:`--max-new 6`(或按组号逐组)在前台循环运行,退出码 3 = 还有待出,继续跑,直到退出码 0。结单前必跑 `python code/render_shot_plates.py --project <slug> --ep <ep> [grp…] --status`(机检 shot_plates_complete),PASS 才能结单;FAIL 或没跑就结单 = 验收不过,直接退回。
-4. 脚本按运镜分档决定张数（静态 / 推拉变焦 / 摇俯仰 = 镜首一张；横移跟拍位移 < 机位到主体距离 10% 按静态、否则镜首 + 镜尾；复杂轨迹 = 镜首 + 镜尾），按机位指纹查库（同场景、同光照方案、同机高档、朝向 ±20°、机位 6 m 内、fov ±15° 复用；同轴更宽的库图按 fov 比例裁切复用），缺的才用白模干净帧 + 场景俯视图 + 场景描述 + 光照方案出新图（长边 1920，控制台默认图像模型，不写死渠道）。**只出脚本决策要出的图，不多出候选、不赛马**；用户要求重出某镜时用 `--force` 指定镜号。
+4. 脚本按运镜分档决定张数（静态 / 推拉变焦 / 摇俯仰 = 镜首一张；横移跟拍位移 < 机位到主体距离 10% 按静态、否则镜首 + 镜尾；复杂轨迹 = 镜首 + 镜尾），按机位指纹查库（同场景、同光照方案、同机高档、朝向 ±20°、机位 6 m 内、fov ±15° 复用；同轴更宽的库图按 fov 比例裁切复用；无 `pano_ref` 的 legacy 旧图不复用），缺的才由场景全景重投影 + 场景描述 + 光照方案出新图（长边 1920，控制台默认图像模型，不写死渠道）。**只出脚本决策要出的图，不多出候选、不赛马**；用户要求重出某镜时用 `--force` 指定镜号；`--repano`（把 legacy 背景图整体重出）仅用户明确要求时用——有费用。
 5. 逐张目视核对新出图：方向与画左/画右内容与白模帧一致、无人物/无网格/无俯视、光照时段与组一致；不合格的记入回执（镜号、问题）并用 `--force <shot>` 重出一次，仍不合格如实上报，不得手改库索引蒙混。
 5. 回执写明：`directing/<ep>/shot_plates.json` 统计（shots / plates / new / library / crop）、新出图清单与费用口径（张数）、`sync_shot_plates` 的 updated_prompts / WARN / 违规。尚无 prompt 的组由 prompt 工位产出后再跑一次 `code/sync_shot_plates.py --write`。
 
@@ -34,7 +36,8 @@ python code/sync_shot_plates.py --project <slug> --ep <ep>                  # �
 | --- | --- |
 | 白模编译 / 导出 | `directing/<ep>/whitebox/episode.json`、`assets/whitebox/<ep>/<grp>/manifest.json` |
 | 场景资料 | `assets/concepts/scenes/<sid>/{layout_top.png,layout.json}`、`bible/scenes/<sid>/{architecture,lighting}.json`、`bible/style.json` |
-| 场景背景图库 | `assets/concepts/scenes/<sid>/plates/{index.json,<key>.png,<key>.json,<key>.whitebox.jpg,<key>.crop_fN.png}` |
+| 场景背景图库 | `assets/concepts/scenes/<sid>/plates/{index.json,<key>.png,<key>.json,<key>.pano.jpg,<key>.whitebox.jpg,<key>.crop_fN.png}` |
+| 场景全景锚点 | `assets/concepts/scenes/<sid>/panos/{index.json,<A>/<scheme>.png,<A>/whitebox_pano.jpg,<A>/depth_pano.npy}`（`docs/scene_panos.md`） |
 | 集索引 | `directing/<ep>/shot_plates.json`（每镜 plates[]：role / key / file / reuse / camera） |
 | 接线 | 组 prompt `refs`（角色/生物 sheet 之后）+ 正文 `Shot plates:` 段（机检 shot_plate_bound，`code/sync_shot_plates.py`） |
-| 预览 | 分镜预览页每个 shNNN 模块显示关联背景图缩略（点击放大）；场景预览页「分镜背景图」板块 |
+| 预览 | 分镜预览页每个 shNNN 模块显示关联背景图缩略（点击放大）；场景预览页「分镜背景图」板块、「🌐 全景图」板块（3D 白模之下，标锚点中心坐标） |

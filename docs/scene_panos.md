@@ -1,0 +1,48 @@
+# 场景全景锚点（scene panos）· 2026-09-10
+
+分镜背景图自此一律**由场景全景二次生成**：先在白模场景内少数「锚点」出 360° 等距柱状全景（每个光照方案一张），再把全景按每个分镜机位用白模几何重投影成透视图，交图像模型重绘成该镜的背景图。之前每镜各自按白模帧 + 俯视图直出，多张背景图之间同一处地方长得不一样；全景是同一场景所有背景图的共同来源，一致性由此而来。
+
+实现：`modules/scene_panos.py`；CLI `code/render_scene_panos.py`（预跑/改锚点/状态）；`code/render_shot_plates.py` 出背景图前自动保证全景齐备（`docs/shot_plates.md`）。白模全景渲染页 `apps/web/static/whitebox-pano-export.html`（无头 Chromium）。
+
+## 数据（场景级资产，跨组跨集复用）
+
+`assets/concepts/scenes/<sid>/panos/`
+
+| 文件 | 内容 |
+| --- | --- |
+| `index.json` | `scene_panos.v1`：`anchors[]{anchor_id, position[x,y,z], yaw_deg, source auto|auto-self|manual, locked, serves[](ep/镜:角色), panos{<scheme>: {file, mode fresh|chain|relight, parent, channel, seed, size}}}`、`indoor`、`planned_at`、`blocked`（图像模型不支持全景时写入） |
+| `<A>/whitebox_pano.jpg` | 白模彩色全景（出全景的第一参考图） |
+| `<A>/depth_pano.npy` / `.json` | 径向深度全景（米）+ 锚点相机记录（重投影用） |
+| `<A>/<scheme>.png` / `.json` | 该光照方案的真实全景（2880×1440，严格 2:1）+ 提示词/参考图/渠道 |
+| `<A>/<scheme>.chain_<P>.jpg` | 父锚点全景重投影到本锚点球面的参考图（链式补洞用） |
+
+预览：场景预览页「🌐 全景图」板块（3D 白模之下）——俯视图上标出每个锚点中心，逐锚点列各方案全景与白模全景，标注中心坐标（白模米制 x/z）、高度、服务的机位、出图模式；图像模型不支持全景时红条提示换模型。✏️ 修改按钮直发 `08-video-gen/shot-plates`。
+
+## 三个设计问题
+
+**1. 不为每个分镜位置出全景（成本）**：全景数量由**机位覆盖**决定。锚点 a 能服务机位 c 须同时满足：水平距离 ≤ max(3 m, 50% × 机位到主体距离) 且 ≤ 10 m；锚点→机位、锚点→主体两条线段不穿过白模实体。候选点 = 场景 0.5 m 网格上不在实体内、离高实体 ≥ 1.2 m 的点 + 各机位自身位置；贪心集合覆盖，每轮取服务最多未覆盖机位的候选，直到全覆盖。锚点高度 = max(1.6 m, 机高中位数)（高于座椅背/柜台，遮挡少；重投影按机位射线求交，锚点高度不必等于机高）。增量：新机位先看已有锚点能否服务，不能才补锚点。机位落在白模地面之外时锚点夹回地面边缘内 0.5 m（白模外半球没有几何，全景只能瞎补；根治是把场景白模范围建到覆盖全部机位）。dzg6 SCN-0002（机场候机厅）ep01 54 个机位 → 5 个锚点。
+
+**2. 多张全景互相一致**：同一方案第二个锚点起走**链式补洞**——把已成全景用白模几何重投影到新锚点球面（`reproject_to_anchor`），作第二参考图，提示词声明「同一地点换位置拍的，所示物体全部保持、只补空白区」；先出服务机位最多的锚点（母全景）。提示词还按白模几何**逐物写清**方位（罗盘 + 画面横向百分比）、距离、长轴走向与朝向（有 `<id>_back` 靠背块的座椅自动推出「靠背在 X 侧、面朝 Y」）——白模只是方块，不写这些模型会在每个锚点各自猜（dzg6 SCN-0002 首版 A1/A2 座椅方向相反，加清单后一致）。**不要**再把母全景原图挂作参考：实测（A4/A5）模型会整张照抄原图、无视本锚点几何（`CHAIN_INCLUDE_SOURCE=False`）。每张链式全景记 `parent.consistency`（与重投影参考图的像素相似度，仅 WARN；抓不住座椅朝向这类语义差异，最终靠预览页人眼核对，`--redo <A>` 重出）。**时段变化**（白天/夜晚 = 不同光照方案）：同一锚点已有其它方案的全景时走**保结构重打光**——以已成全景为第一参考图、白模全景第二，提示词要求像素对齐只改光照；不重画内容。模式记在 `panos[scheme].mode`。
+
+**3. 全景中心自动还是手动**：默认自动（上述规划），预览页显示每个锚点在俯视图中的坐标。手动：`code/render_scene_panos.py --scene <sid> --anchor x,z[,yaw] --force`（锚点锁定，规划时保留，只为未覆盖机位补锚点）或直接改 `index.json` 后 `--replan --force`。
+
+## 重投影（backward warp）
+
+目标视图（分镜机位透视图 / 新锚点球面）每个像素：对白模几何（objects 盒 + 地板外扩 20 m + 室内天花板）射线求交得 3D 点 → 回到源全景按方向取色 → 用源深度全景做遮挡判定（源在该方向的深度明显小于点距 = 被遮挡 → 空洞）；目标射线无几何时按纯方向取色，但源在该方向有几何即视为遮挡。分镜图空洞 inpaint 后作 `[Image 1]`；空洞 > 50% 换下一锚点，都不行则在该机位加锚点出全景。实测 dzg6 SCN-0002：机位离锚点 0.1–2 m 空洞 0.3–4%，锚点间 5.4 m 链式重投影空洞 8%。
+
+## 图像模型能力
+
+全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、Ideogram、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户到控制台「🎨 生成模型」换图像模型，不得自行换模型或绕过。
+
+## 命令
+
+```sh
+python code/render_scene_panos.py --project <slug> --scene SCN-0002 --dry-run        # 规划锚点 + 渲白模全景,不调图像模型
+python code/render_scene_panos.py --project <slug> --scene SCN-0002                  # 出缺的全景(各集机位所用方案)
+python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --force
+python code/render_scene_panos.py --project <slug> --scene SCN-0002 --status         # 机检 scene_panos_ready
+python code/render_shot_plates.py --project <slug> --ep ep01 [grp…]                   # 自动保证全景 → 重投影 → 出背景图
+python code/render_shot_plates.py --project <slug> --ep ep01 [grp…] --repano          # 把 legacy(非全景制)背景图整体重出(用户确认后)
+```
+
+全景与背景图一样在派发任务内前台跑完，禁止丢后台。库里 2026-09-10 前的旧背景图（无 `pano_ref`）视为 legacy：不再被新决策复用，`--status` 列为 WARN；整体重出有费用，由用户决定。
