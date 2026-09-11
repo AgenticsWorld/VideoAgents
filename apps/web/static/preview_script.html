@@ -359,7 +359,7 @@ EP=_q.get('ep')||localStorage.getItem('sc-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

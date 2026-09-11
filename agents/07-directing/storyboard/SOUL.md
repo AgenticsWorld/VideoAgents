@@ -34,7 +34,7 @@
    - `characters` **数组顺序即白模参考视频里的人物颜色顺序**(`modules/whitebox.py` 按此数组顺序取固定调色板,禁重排;2026-09-07 起不再渲染字母动线图),**生物两态站位(2026-08-27)**:组 `creatures_union` 内每个生物必须二选一——①**独立态**(牵引/拴着/独自入画/被处置,如牵马拉车、马停在车前):作为 `blocking_map.characters[]` 独立一条,`id` 用 `CRE-*`、`label` 短规范名(同 label_ok)、自有 start/path/end/`route_en`(route 写清相对主人的位置,如「在他前方一个马身,拉着拖车」),白模中自占一个模型;②**骑乘态**(人在它背上):骑手条目加 `mounted: "CRE-*"`,生物不单列,人兽同点同轨迹,骑手 `route_en` 写明 riding;同组同一生物不得两态并存;两态皆无 = 生物在空间中无锚(机检 creature_blocking_ok,`blocking_map_check.py --strict` 违规)。独立态与主人的重叠不是问题:马身 2–3 m,俯视坐标上天然错开(`offset_en`/xy 写清),真贴在一起走骑乘态;跨组连续机检对生物同样生效(后组 start = 前组 end)。
    - `label` 是下游对号的唯一键——**label 收口(2026-08-27)**:每角色 `label` = 短规范名(≤8 字或 ≤3 英文词;不得是代词「他/她」,不得带括号/顿点/冒号等说明性标点——「前襟已敞开」「本镜画外」「6–10 人」这类状态/服装/在场说明写进 `route_en` 或 continuity,不进 label),**同一角色全集所有组同一个词**;下游 prompt 主体定义句 `<label>@Image N` 与白模参考视频的人物图例都逐字用这个词(机检 label_ok,`blocking_map_check.py` 内置;2026-09-07 起动线图与 `Map markers` 句退役)。
    - 写完跑 `python3 code/blocking_map_check.py --project <slug> --ep epNN --source storyboard`(机检地标引用/route_en/label_ok/跨组连续性;**2026-09-07 起不再渲染草案动线图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,见 docs/whitebox.md),核对站位符合叙事再交付。**禁止自写渲染脚本/自绘动线图,禁止把宿主机检脚本复制/改写到项目 `code/`**(前科 2026-08-26 polan2:agent 在项目 code/ 重写了一版渲染器,产物全偏离规范);宿主脚本报错或不合需求 = 上报 orchestrator,不自改。
-8. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。
+8. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。交付后进入人工闸门 `g6s`「H3S-故事板确认」(2026-09-11):用户在「📋 故事板预览」页(`/preview/board`)看逐场逐镜表与按需出的铅笔草图后签字,签字前不派 shot-planning;用户经该页发来的修改意见由总制片回派本岗改 storyboard.json,改完重新建签字单。草图(`assets/storyboard/<ep>/`)不是本岗产物、不要出图。
 9. 发现剧本不可拍(如同场人物凭空出现)时上报 orchestrator,不自行改剧情。
 
 ## 不做什么(边界)

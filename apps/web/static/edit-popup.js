@@ -2,7 +2,9 @@
  * 用法:<script src="/static/edit-popup.js"></script>(放 i18n.js 之后),
  *      EditPopup.open({project, compose, agent})
  *   project = 项目 slug;compose = 预填进输入框的定位文本(如「修改 <对象>\n修改意见:」);
- *   agent   = 目标 Agent id,缺省或不存在时落总制片(与控制台 ?compose= 跳转同一规则)。
+ *   agent   = 目标 Agent id,缺省或不存在时落总制片(与控制台 ?compose= 跳转同一规则);
+ *   onSent  = 可选回调 (runJson) => void,派单成功后拿到 /api/v1/runs 的返回(含 run_id),
+ *             供页面就地标记「处理中」并轮询(故事板页草图重绘用)。
  * 行为:在当前页右下角弹出非模态浮窗(无遮罩,不抢页面其它区域的点击/选择/复制),
  *      标头显示目标 Agent,输入框预填定位文本、光标落尾,用户接着写修改意见,
  *      Shift+Enter 或「发送」按钮 POST /api/v1/runs(引擎/模型不传,由服务端回退顶栏全局设置);
@@ -104,7 +106,8 @@
     el.querySelector('.ep-err').textContent='';
     el.querySelector('.ep-send').disabled=false;
     var b=el.querySelector('.ep-agent b');b.textContent='…';
-    cur={project:opt.project||'demo',agent:{id:opt.agent||'',name:opt.agent||''},text:opt.compose||''};
+    cur={project:opt.project||'demo',agent:{id:opt.agent||'',name:opt.agent||''},text:opt.compose||'',
+         onSent:typeof opt.onSent==='function'?opt.onSent:null};
     var ta=el.querySelector('textarea');
     ta.value=cur.text;
     el.hidden=false;
@@ -140,10 +143,13 @@
     });
     ready.then(go).then(function(r){
       if(!r.ok)return r.json().catch(function(){return {}}).then(function(d){throw new Error(d.detail||String(r.status))});
+      return r.json().catch(function(){return {}});
+    }).then(function(j){
       if(cur!==mine)return;
       root.querySelector('.ep-done').textContent=F('✅ 已发送给 {agent}',{agent:target.name||target.id});
       root.classList.add('ep-sent');
       hideTimer=setTimeout(close,HIDE_MS);
+      if(mine.onSent){try{mine.onSent(j||{})}catch(_){}}
     }).catch(function(e){
       if(cur!==mine)return;
       err.textContent=T('发送失败:')+(e&&e.message||e);   // 失败保留原文,用户可改后重发

@@ -241,6 +241,49 @@ function wbHtml(w,ep){
   }
   return h;
 }
+/* ---------- 动态样片(2026-09-11):故事板草图按时长串片 + 台词/旁白字幕,assets/storyboard/<ep>/animatic.mp4 ----------
+   宿主后台直接跑 code/animatic.py(无 Agent、零生成费用);按钮 POST /board/<ep>/animatic,SSE board_animatic 或 4s 轮询刷新 */
+let AN_POLL=null;
+function animHtml(a,ep){
+  a=a||{};
+  let h=`<h3 class="sec">🎞 ${esc(t('动态样片'))}<span class="n">${esc(I18N.f('故事板草图串片 · assets/storyboard/{ep}/animatic.mp4',{ep}))}</span></h3>`;
+  let st='';
+  if(a.running)st=`<span class="warn">⏳ ${esc(t('生成中…'))}</span>`;
+  else if(a.error)st=`<span class="err">${esc(a.error)}</span>`;
+  else if(a.exists&&a.stale)st=`<span class="warn">⚠ ${esc(t('样片已过期(草图或分镜时长变了),建议重出'))}</span>`;
+  else if(a.exists)st=`<span class="ok">✓ ${esc(a.created_at||'')}</span>`;
+  const miss=a.exists?(a.missing_sketches??0):0;
+  h+=`<div class="wbbar"><button id="animregen" ${a.running?'disabled':''}>🎞 ${esc(a.exists?t('重出动态样片'):t('出动态样片'))}</button>
+      <span>${esc(I18N.f('已出草图 {n} 张',{n:a.sketches_done??0}))}${miss?` · <span class="warn">${esc(I18N.f('缺 {n} 张草图(占位卡顶替)',{n:miss}))}</span>`:''}</span>${st}
+      <a href="/preview/board?project=${encodeURIComponent($('#project').value.trim()||'demo')}&ep=${encodeURIComponent(ep)}" style="font-size:12px">📋 ${esc(t('去故事板预览出草图'))}</a></div>`;
+  if(a.exists){
+    const meta=[a.size_mb!=null?a.size_mb+' MB':'',a.duration_s?Math.round(a.duration_s)+'s':'',a.shots?I18N.f('{n} 镜',{n:a.shots}):'',
+      a.duration_source?(a.duration_source==='final'?t('定稿时长'):a.duration_source==='draft'?t('草案时长'):t('定稿+草案时长')):'',a.audio_tracks?`🔊 ${a.audio_tracks}`:''].filter(Boolean);
+    h+=`<div class="vids"><div class="vcard"><video controls preload="metadata" src="${esc(a.url)}"></video>
+      <div class="cap"><span class="fn">${esc(a.name)}</span>${meta.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></div>`;
+  }else{
+    h+='<div class="none">'+esc(I18N.f('该集还没有动态样片(assets/storyboard/{ep}/animatic.mp4);草图没出全也能出,缺图的镜显示画面内容文字',{ep}))+'</div>';
+  }
+  return h;
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('#animregen');if(!b||b.disabled||!LAST||!LAST.ep)return;
+  const proj=$('#project').value.trim()||'demo',ep=LAST.ep;
+  b.disabled=true;
+  try{
+    const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/board/${encodeURIComponent(ep)}/animatic`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    LAST.animatic=Object.assign({},LAST.animatic||{},{running:true,error:''});render(LAST);pollAnimatic();
+  }catch(err){b.disabled=false;alert(I18N.f('出样片失败:{e}',{e:err.message}))}
+});
+function pollAnimatic(){
+  if(AN_POLL)return;
+  AN_POLL=setInterval(async()=>{
+    try{const r=await fetch('/api/v1/projects/'+encodeURIComponent($('#project').value.trim()||'demo')+'/previews/videos?ep='+encodeURIComponent(LAST.ep));
+      if(r.ok){const d=await r.json();if(d.ep===LAST.ep){if(!(d.animatic||{}).running){clearInterval(AN_POLL);AN_POLL=null;render(d)}}}}catch(_){}
+  },4000);
+}
 async function regenWhitebox(){
   if(!LAST||!LAST.ep||WB_RUN)return;
   const proj=$('#project').value.trim()||'demo',ep=LAST.ep,w=LAST.whitebox||{};
@@ -297,6 +340,7 @@ function render(d){
      <div class="cap"><span class="fn">${esc(f.name)}</span><span>${f.size_mb} MB</span></div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有 final 成片(edit/{ep}/*final*.mp4)',{ep:d.ep}))+'</div>';
 
+  h+=animHtml(d.animatic,d.ep);
   h+=wbHtml(d.whitebox,d.ep);
 
   h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
@@ -349,7 +393,7 @@ $('#project').value=_q.get('project')
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

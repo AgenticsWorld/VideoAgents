@@ -238,12 +238,37 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
         "worldview": lambda: core.api_preview_worldview(project),
         "script": lambda: core.api_preview_script(project, ep),
         "storyboard": lambda: core.api_preview_storyboard(project, ep),
+        "board": lambda: core.api_preview_board(project, ep),
         "videos": lambda: core.api_preview_videos(project, ep),
         "workflow": lambda: core.api_preview_workflow(project),
     }
     if kind not in handlers:
         raise HTTPException(404, "unknown preview type")
     return _artifact_urls(await handlers[kind](), project)
+
+
+@api.get("/projects/{project}/board/{ep}/sketches", tags=["artifacts"])
+async def board_sketches(project: str, ep: str) -> dict[str, Any]:
+    """故事板预览页:分镜草图台账 + 后台出图任务状态(轮询/SSE 兜底)。"""
+    return _artifact_urls(await core.api_board_sketches(project, ep), project)
+
+
+@api.post("/projects/{project}/board/{ep}/signoff", tags=["artifacts"])
+async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """故事板页签字:{confirm_id, answer: 签字|暂缓} → 答复 H3S 签字卡并落 storyboard_signoff.json。"""
+    return await core.api_board_signoff(project, ep, body)
+
+
+@api.post("/projects/{project}/board/{ep}/animatic", tags=["artifacts"])
+async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """故事板/视频预览页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
+    return await core.api_board_animatic_start(project, ep, body or {})
+
+
+@api.post("/projects/{project}/board/{ep}/sketch", tags=["artifacts"])
+async def board_sketch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """故事板预览页「出草图」:{scene, order?, note?, provider?, model?, force?}。"""
+    return await core.api_board_sketch_start(project, ep, body)
 
 
 @api.get("/projects/{project}/artifacts/{artifact_path:path}", tags=["artifacts"])
@@ -387,6 +412,17 @@ async def set_global_model(body: dict[str, Any]) -> dict[str, Any]:
 @api.get("/config/video-model", tags=["configuration"])
 async def video_model() -> dict[str, Any]:
     return await core.api_video_model_get()
+
+
+@api.get("/config/sketch-model", tags=["configuration"])
+async def sketch_model() -> dict[str, Any]:
+    """故事板预览页顶部单独选的草图图像渠道/模型(空=跟随全局图像渠道)+ 各图像渠道配置状态。"""
+    return await core.api_sketch_model_get()
+
+
+@api.post("/config/sketch-model", tags=["configuration"])
+async def set_sketch_model(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_sketch_model_set(body)
 
 
 @api.get("/config/ui-prefs", tags=["configuration"])

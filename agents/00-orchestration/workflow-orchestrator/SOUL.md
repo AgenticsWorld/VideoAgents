@@ -7,7 +7,7 @@
 - **类别**:00-orchestration(调度层)
 - **目录**:`agents/00-orchestration/workflow-orchestrator/`
 - **流水线阶段**:贯穿全程(始终在线),不属于单一 Phase;Phase 0 承担立项任务 `p0-init`。任务粒度:全书级(立项)+ 逐工单级(调度)
-- **使命**:把 `workflow.yaml` 实例化为项目 DAG,按依赖解锁、派发、跟踪每一张工单,判定 G0–G10 闸门与 H1–H5 与每集 H3A(分镜确认)/H3B(视觉生成确认)人工点,路由缺陷单并只重跑受影响链路。
+- **使命**:把 `workflow.yaml` 实例化为项目 DAG,按依赖解锁、派发、跟踪每一张工单,判定 G0–G10 闸门与 H1–H5 与每集 H3S(故事板确认,storyboard 交付后、shot-planning 前;用户在「📋 故事板预览」页签字)/H3A(分镜确认)/H3B(视觉生成确认)人工点,路由缺陷单并只重跑受影响链路。
 
 ## 职责
 

@@ -1309,11 +1309,8 @@ function render(d){
     }
     h+=`</div>`;
   }
-  // 导演计划:折叠区块,标题栏 ✏️ 修改 → 总制片界面预填修改意见
-  // (剧本 screenplay.md 与旁白 narration.md 全文 2026-09-11 起移到「📜 剧本预览」页,本页只保留旁白逐条对位到分镜的显示)
-  const docSec=(title,body,loc)=>`<div class="doc closed"><h3 onclick="if(!event.target.closest('.editbtn'))this.parentNode.classList.toggle('closed')">${title}<button class="editbtn docedit" data-loc="${esc(loc)}" title="对该文档提修改意见,发消息给总制片">✏️ 修改</button></h3><div class="body"><pre>${esc(body)}</pre></div></div>`;
-  if(d.directing_plan)h+=docSec('🎬 导演计划 directing_plan.md',d.directing_plan,
-    I18N.f('导演计划 {ep}(文件 directing/{ep}/directing_plan.md)',{ep:d.ep}));
+  // 导演计划 directing_plan.md 2026-09-11 起移到「📋 故事板预览」页(Markdown 折叠显示);
+  // 剧本 screenplay.md 与旁白 narration.md 全文同日移到「📜 剧本预览」页,本页只保留旁白逐条对位到分镜的显示
 
   const boards={};(d.board_scenes||[]).forEach(b=>{if(b.scene_no)boards[b.scene_no]=b});
   // 按 shot_list 顺序切分场次块:同一场次在片中多次出现(回闪/插叙)时拆成多块,
@@ -1388,7 +1385,7 @@ function render(d){
        c.in_s!=null&&c.out_s!=null?esc(c.in_s+'s–'+c.out_s+'s')+' · ':''}${
        top?t('⚠ 未对位到分镜,按 cue_sheet 顺序显示在集首'):t('BGM(后期配乐轨,起于本镜位)')}${c.loop_fill?' · loop':''}</span>
      <button class="editbtn" data-loc="${esc(I18N.f('配乐 {ep}/{cid}(scene: {sc};数据 assets/audio/bgm/{ep}/cue_sheet.json 条目 {cid})',{ep:EP,cid:c.cue_id,sc:c.scene||''}))}" title="${t('对这条配乐提修改意见,发消息给总制片')}">✏️ 修改</button>${
-      c.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(c.audio))}"></audio><button class="editbtn" data-url="${esc(c.audio)}" title="对这段配乐音频提修改意见,发消息给总制片">✏️ 修改</button></span>`:`<span class="mest">${t('(音频未生成)')}</span>`}</div>`).join('');
+      c.audio?`<span class="aud"><audio controls preload="none" src="${esc(bust(c.audio))}"></audio></span>`:`<span class="mest">${t('(音频未生成)')}</span>`}</div>`).join('');
   if(musTop.length)h+=musBlock(musTop,true);
   NAV=[];
   const snSeen={};
@@ -1524,7 +1521,7 @@ EP=_q.get('ep')||localStorage.getItem('sb-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

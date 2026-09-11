@@ -6156,7 +6156,7 @@ def _preview_storyboard(project: str, ep: str):
     # 剧本/旁白全文 2026-09-11 起不再随分镜预览下发:剧情处理层产物统一在「剧本预览」页(api_preview_script)展示;
     # narration.md 这里只解析成逐条 narration_items 供分镜对位,原文不进载荷
     narration_md = _read_text(f"story/episodes/{ep}/narration.md")
-    data["directing_plan"] = _read_text(f"directing/{ep}/directing_plan.md")
+    # 导演计划 directing_plan.md 2026-09-11 起移到「故事板预览」页(api_preview_board)展示,本页不再下发
     # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
     data["narration_items"] = [
         {"id": m.group(1), "anchor": m.group(2).strip(),
@@ -6511,6 +6511,380 @@ def _preview_script(project: str, ep: str):
 
 async def api_preview_script(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_script, project, ep)
+
+
+# ---------------- 故事板预览(2026-09-11):分镜层产物 storyboard.json 的表格视图 + 分镜草图 ----------------
+# 页面 /preview/board:导演计划(Markdown 折叠)+ 每场资产头 + 逐镜表(编号/内容/草图);
+# 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.sketch_model),
+# 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
+BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at}
+IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "ideogram", "comfyui")
+_BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
+
+
+def _image_channels() -> list[dict]:
+    """图像渠道清单(故事板页草图模型下拉用):每个渠道是否已配置(有 Key/地址)+ 当前在「生成模型」页选的模型。"""
+    img = (load_genconfig().get("image") or {})
+    rows = []
+    for pid in IMAGE_PROVIDERS:
+        pc = img.get(pid) if isinstance(img.get(pid), dict) else {}
+        if pid == "agentics":
+            configured = bool(os.environ.get("VIDEOAGENTS_USER_JWT"))
+            model = str(pc.get("profile_code") or "")
+        elif pid == "comfyui":
+            configured = bool(pc.get("url") or pc.get("cloud_api_key"))
+            model = str(pc.get("workflow") or "")
+        elif pid == "minimax":
+            configured = bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key"))
+            model = str(pc.get("custom_model") or pc.get("model") or "")
+        elif pid == "fal":
+            vf = ((load_genconfig().get("video") or {}).get("fal") or {})
+            configured = bool(pc.get("api_key") or vf.get("api_key"))
+            model = str(pc.get("custom_model") or pc.get("model") or "")
+        else:
+            configured = bool(pc.get("api_key") or os.environ.get({"openrouter": "OPENROUTER_API_KEY",
+                                                                     "volcengine": "ARK_API_KEY",
+                                                                     "byteplus": "BYTEPLUS_API_KEY",
+                                                                     "ideogram": "IDEOGRAM_API_KEY"}.get(pid, ""), ""))
+            model = str(pc.get("custom_model") or pc.get("model") or "")
+        rows.append({"id": pid, "configured": configured, "model": model, "active": pid == img.get("provider")})
+    return rows
+
+
+def sketch_model_pref() -> dict:
+    sm = STATE.get("sketch_model") or {}
+    return {"provider": str(sm.get("provider") or ""), "model": str(sm.get("model") or "")}
+
+
+async def api_sketch_model_get():
+    img = (load_genconfig().get("image") or {})
+    return {**sketch_model_pref(), "channels": _image_channels(),
+            "global": {"provider": img.get("provider") or "", "model": active_image_model()}}
+
+
+async def api_sketch_model_set(body: dict):
+    """故事板页顶部「草图渠道/模型」:空 = 跟随全局图像渠道;存 STATE(桌面端随机端口换 origin 也能恢复)。"""
+    provider = str(body.get("provider") or "").strip()
+    model = str(body.get("model") or "").strip()
+    if provider and provider not in IMAGE_PROVIDERS:
+        raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    STATE["sketch_model"] = {"provider": provider, "model": model if provider else ""}
+    save_state(STATE)
+    return {"ok": True, **sketch_model_pref()}
+
+
+def active_image_model() -> str:
+    img = (load_genconfig().get("image") or {})
+    pc = img.get(img.get("provider") or "") or {}
+    return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "") if isinstance(pc, dict) else ""
+
+
+def _board_sketch_rows(base: Path, ep: str, idx: dict) -> dict[str, dict]:
+    from modules import storyboard_board as sbb
+    rows = {}
+    for key, rec in (idx.get("shots") or {}).items():
+        if not isinstance(rec, dict):
+            continue
+        rows[key] = {k: rec.get(k) for k in ("status", "error", "note", "provider", "model", "updated_at", "file")}
+        rows[key]["url"] = sbb.sketch_url(base, rec)
+        if rows[key]["status"] == "done" and not rows[key]["url"]:
+            rows[key]["status"] = "missing"      # 台账说出过图但文件没了
+    return rows
+
+
+def _board_redraw_runs(project: str, ep: str) -> dict[str, str]:
+    """草图修改工位在跑/排队的工单 → {草图键: run_id}(工单文本带 [草图 epNN/S01-03] 标记,由故事板页写入)。"""
+    from modules.storyboard_board import SKETCH_AGENT
+    out = {}
+    for r in RUNS.values():
+        if r.get("project") != project or r.get("agent") != SKETCH_AGENT \
+                or r.get("status") not in ("queued", "running"):
+            continue
+        for m in _BOARD_REDRAW_RE.finditer(r.get("message") or ""):
+            if m.group(1) == ep:
+                out.setdefault(m.group(2), r["id"])
+    return out
+
+
+def _preview_board(project: str, ep: str):
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    plan_eps = {e.get("episode_id") or e.get("ep"): e for e in plan.get("episodes", [])
+                if isinstance(e, dict) and (e.get("episode_id") or e.get("ep"))}
+    eps = set(plan_eps)
+    for sub in ("story/episodes", "directing"):
+        d = base / sub
+        if d.is_dir():
+            eps |= {x.name for x in d.iterdir() if x.is_dir() and not x.name.startswith(".")}
+    episodes = []
+    for e in sorted(eps):
+        idx = sbb.load_index(base, e)
+        episodes.append({"ep": e, "title": (plan_eps.get(e) or {}).get("title", ""),
+                         "has_storyboard": (base / "directing" / e / "storyboard.json").is_file(),
+                         "has_plan": (base / "directing" / e / "directing_plan.md").is_file(),
+                         "sketches": sum(1 for r in idx["shots"].values() if isinstance(r, dict) and r.get("status") == "done")})
+    ep = ep or next((e["ep"] for e in episodes if e["has_storyboard"]), episodes[0]["ep"] if episodes else "")
+    img = (load_genconfig().get("image") or {})
+    data = {"project": base.name, "episodes": episodes, "ep": ep,
+            "agents": {"storyboard": sbb.STORYBOARD_AGENT, "director": sbb.DIRECTOR_AGENT, "sketch": sbb.SKETCH_AGENT},
+            "aspect": sbb.resolve_aspect(base),
+            "sketch_model": sketch_model_pref(), "image_channels": _image_channels(),
+            "global_image": {"provider": img.get("provider") or "", "model": active_image_model()}}
+    if not ep:
+        return data
+    ep = re.sub(r"[^\w\-]", "", ep)
+    data["ep"] = ep
+    catalog = sbb.asset_catalog(base)
+    board = sbb.load_board(base, ep, catalog)
+    data.update(board)
+    pf = base / "directing" / ep / "directing_plan.md"
+    try:
+        data["directing_plan"] = pf.read_text() if pf.is_file() else ""
+        data["directing_plan_mtime"] = int(pf.stat().st_mtime) if pf.is_file() else None
+    except Exception:
+        data["directing_plan"], data["directing_plan_mtime"] = "", None
+    # 资产缩略(只带本集用到的 id,payload 不膨胀):url 走 /projects/ 前缀由 _artifact_urls 改写
+    used = {"characters": set(), "scenes": set(), "creatures": set(), "props": set()}
+    for sc in board["scenes"]:
+        used["scenes"].add(sc.get("scene_id") or "")
+        used["characters"].update(sc.get("cast") or [])
+        used["creatures"].update(sc.get("creatures") or [])
+        used["props"].update(sc.get("props") or [])
+        for sh in sc["shots"]:
+            used["characters"].update(sh.get("cast") or [])
+            for ln in sh.get("dialogue") or []:
+                if ln.get("speaker"):
+                    used["characters"].add(ln["speaker"])
+    assets = {}
+    for kind, ids in used.items():
+        assets[kind] = {}
+        for i in ids:
+            rec = catalog[kind].get(i)
+            if not rec:
+                if i:
+                    assets[kind][i] = {"name": i, "url": None}
+                continue
+            f = base / rec["file"] if rec.get("file") else None
+            assets[kind][i] = {"name": rec.get("name") or i,
+                               "url": f"/projects/{base.name}/{rec['file']}?v={int(f.stat().st_mtime)}" if f and f.is_file() else None}
+    data["assets"] = assets
+    data["sketches"] = _board_sketch_rows(base, ep, sbb.load_index(base, ep))
+    data["jobs"] = {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items()
+                    if k.startswith(f"{base.name}/{ep}/")}
+    data["redraw_runs"] = _board_redraw_runs(base.name, ep)
+    data["sketch_dir"] = sbb.SKETCH_DIR_REL.format(ep=ep)
+    data["animatic"] = _board_animatic(base, ep)
+    data["gate"] = _board_gate(base, ep)
+    return data
+
+
+async def api_preview_board(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_board, project, ep)
+
+
+async def api_board_sketches(project: str, ep: str):
+    """草图台账 + 后台任务状态(页面轮询/SSE 兜底)。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    return {"sketches": _board_sketch_rows(base, ep, sbb.load_index(base, ep)),
+            "jobs": {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items() if k.startswith(f"{base.name}/{ep}/")},
+            "redraw_runs": _board_redraw_runs(base.name, ep),
+            "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep)}
+
+
+def _board_sketch_worker(project: str, ep: str, scene: str, jobkey: str, targets: list[tuple[str, int]],
+                         note: str, provider: str, model: str, force: bool):
+    """后台线程:逐镜调用宿主 CLI code/storyboard_sketch.py(每镜一进程,台账由 CLI 写);
+    每镜结束发 SSE board_sketch 事件,页面据此更新该格图片。"""
+    job = BOARD_SKETCH_JOBS[jobkey]
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    for key, order in targets:
+        job["current"] = key
+        cmd = [sys.executable, str(ROOT / "code" / "storyboard_sketch.py"), "--project", project, "--ep", ep,
+               "--scene", scene, "--order", str(order)]
+        if note.strip():
+            cmd += ["--note", note.strip()]
+        if provider:
+            cmd += ["--provider", provider]
+        if model:
+            cmd += ["--model", model]
+        if force:
+            cmd.append("--force")
+        status, err = "done", ""
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+            if r.returncode != 0:
+                status = "failed"
+                err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            status, err = "failed", str(e)[:500]
+        if status == "failed":
+            job["failed"] += 1
+            # CLI 自己没来得及写台账(如启动失败)时补记
+            rec = sbb.load_index(base, ep)["shots"].get(key) or {}
+            if rec.get("status") in (None, "queued", "running"):
+                sbb.update_index(base, ep, key, {"status": "failed", "error": err,
+                                                 "scene_no": scene, "order": order})
+        else:
+            job["done"] += 1
+        HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene,
+                     "key": key, "status": status, "error": err})
+    job["status"] = "done" if not job["failed"] else "failed"
+    job["current"] = ""
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene,
+                 "key": "", "status": job["status"], "done": job["done"], "failed": job["failed"]})
+
+
+BOARD_GATE_ID = "g6s"                          # workflow.yaml 人工闸门 H3S-故事板确认(每集实例 g6s-epNN)
+BOARD_SIGNOFF_REL = "directing/{ep}/storyboard_signoff.json"
+
+
+def _board_gate(base: Path, ep: str) -> dict:
+    """故事板签字状态:dag.json 里 g6s(-ep) 节点状态 + 待答复的 H3S 签字卡 + 本页签字记录(判 storyboard.json 是否在签字后又改动)。"""
+    node = None
+    for n in _dag_load_nodes(base / "runs" / "dag.json"):
+        nid = str(n.get("id") or "")
+        if nid == BOARD_GATE_ID or (nid.startswith(BOARD_GATE_ID + "-") and ep in nid) \
+                or (str(n.get("checkpoint") or "").upper().startswith("H3S") and ep in nid):
+            node = n
+            break
+    cards = []
+    for c in CONFIRMS.values():
+        if c.get("answer") is not None or c.get("kind") != "sign" or c.get("project") != base.name:
+            continue
+        cp = str(c.get("checkpoint") or "")
+        q = str(c.get("question") or "")
+        if not (cp.upper().startswith("H3S") or "H3S" in q or BOARD_GATE_ID in str(c.get("gate_id") or "")):
+            continue
+        gid = str(c.get("gate_id") or "")
+        if ep in gid or ep in q or (not gid and ep not in q):
+            cards.append({k: c.get(k) for k in ("id", "question", "options", "default", "gate_id", "checkpoint")})
+    rec = _read_json_safe(base / BOARD_SIGNOFF_REL.format(ep=ep)) or {}
+    sbf = base / "directing" / ep / "storyboard.json"
+    sb_mtime = int(sbf.stat().st_mtime) if sbf.is_file() else None
+    signed = bool(node and node.get("state") in _DONE_STATES) or (rec.get("answer") == "签字")
+    stale = bool(signed and rec.get("storyboard_mtime") and sb_mtime and sb_mtime > int(rec["storyboard_mtime"]) + 1)
+    return {"gate_id": (node or {}).get("id") or f"{BOARD_GATE_ID}-{ep}", "state": (node or {}).get("state"),
+            "in_dag": bool(node), "pending": cards, "signed": signed, "stale": stale,
+            "signed_at": rec.get("signed_at"), "signed_answer": rec.get("answer")}
+
+
+async def api_board_signoff(project: str, ep: str, body: dict):
+    """故事板页「✅ 签字确认 / ⏸ 暂缓」:答复待处理的 H3S 签字卡(与控制台签字卡同一条,api_confirm_answer),
+    并落 directing/<ep>/storyboard_signoff.json 记 storyboard.json 的 mtime,供页面判「签字已过期」。"""
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    cid = str(body.get("confirm_id") or "")
+    answer = str(body.get("answer") or "签字")
+    if not cid or cid not in CONFIRMS:
+        raise ServiceError(404, "sign-off card not found (it may have been answered from the console)")
+    res = await api_confirm_answer(cid, {"answer": answer})
+    sbf = base / "directing" / ep / "storyboard.json"
+    atomic_write_json(base / BOARD_SIGNOFF_REL.format(ep=ep), {
+        "schema": "storyboard_signoff/1.0", "ep": ep, "gate": BOARD_GATE_ID, "confirm_id": cid, "answer": answer,
+        "signed_at": time.strftime("%Y-%m-%d %H:%M:%S"), "signed_from": "preview_board",
+        "storyboard_mtime": int(sbf.stat().st_mtime) if sbf.is_file() else None})
+    return {"ok": True, "confirm": res, "gate": _board_gate(base, ep)}
+
+
+BOARD_ANIMATIC_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, finished_at}
+
+
+def _board_animatic(base: Path, ep: str) -> dict:
+    from modules import storyboard_board as sbb
+    out = sbb.animatic_status(base, ep)
+    job = BOARD_ANIMATIC_JOBS.get(f"{base.name}/{ep}") or {}
+    out["running"] = job.get("status") == "running"
+    out["error"] = job.get("error") or ""
+    return out
+
+
+def _board_animatic_worker(project: str, ep: str, no_audio: bool):
+    """后台线程:宿主 CLI code/animatic.py 串草图出动态样片(零生成费用,ffmpeg);结束发 SSE board_animatic。"""
+    key = f"{project}/{ep}"
+    job = BOARD_ANIMATIC_JOBS[key]
+    cmd = [sys.executable, str(ROOT / "code" / "animatic.py"), "--project", project, "--ep", ep]
+    if no_audio:
+        cmd.append("--no-audio")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=str(ROOT))
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}")
+        job.update(status="done", error="")
+    except Exception as e:  # noqa: BLE001
+        job.update(status="failed", error=str(e)[:500])
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "board_animatic", "project": project, "ep": ep, "status": job["status"], "error": job.get("error", "")})
+
+
+async def api_board_animatic_start(project: str, ep: str, body: dict):
+    """故事板页 / 视频预览页「出动态样片」:缺草图的镜用占位卡,不拦;同集在跑时 409。"""
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not (base / "directing" / ep / "storyboard.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
+    key = f"{base.name}/{ep}"
+    if (BOARD_ANIMATIC_JOBS.get(key) or {}).get("status") == "running":
+        raise ServiceError(409, "animatic is already being rendered for this episode")
+    BOARD_ANIMATIC_JOBS[key] = {"status": "running", "started_at": time.time(), "error": ""}
+    threading.Thread(target=_board_animatic_worker, args=(base.name, ep, bool((body or {}).get("no_audio"))),
+                     daemon=True).start()
+    HUB.publish({"type": "board_animatic", "project": base.name, "ep": ep, "status": "running"})
+    return {"ok": True, "job": key}
+
+
+async def api_board_sketch_start(project: str, ep: str, body: dict):
+    """故事板页「出草图」:整场(缺 order;已出的跳过,force 全重出)或单镜。渠道/模型随请求(页面顶部所选),
+    不传则按 CLI 缺省链(台账上次 → STATE.sketch_model → 全局图像渠道)。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    scene = re.sub(r"[^\w\-]", "", str(body.get("scene") or ""))
+    if not scene:
+        raise ServiceError(400, "scene is required")
+    order = body.get("order")
+    force = bool(body.get("force"))
+    note = str(body.get("note") or "")
+    provider = str(body.get("provider") or "").strip()
+    model = str(body.get("model") or "").strip()
+    if provider and provider not in IMAGE_PROVIDERS:
+        raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    if not (base / "directing" / ep / "storyboard.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
+    board = sbb.load_board(base, ep)
+    sc, shots = sbb.find_shot(board, scene, order)
+    if sc is None:
+        raise ServiceError(404, f"scene {scene} not in storyboard.json")
+    if not shots:
+        raise ServiceError(404, f"shot order {order} not in scene {scene}")
+    jobkey = f"{base.name}/{ep}/{scene}"
+    if (BOARD_SKETCH_JOBS.get(jobkey) or {}).get("status") == "running":
+        raise ServiceError(409, f"scene {scene} sketches are already being generated; wait for it to finish")
+    idx = sbb.load_index(base, ep)
+    targets = []
+    for s in shots:
+        rec = idx["shots"].get(s["key"]) or {}
+        if order is None and not force and rec.get("status") == "done" and rec.get("file") \
+                and (base / rec["file"]).is_file():
+            continue
+        targets.append((s["key"], s["order"]))
+    if not targets:
+        return {"ok": True, "queued": 0, "skipped": len(shots)}
+    for key, o in targets:
+        sbb.update_index(base, ep, key, {"status": "queued", "error": "", "scene_no": scene, "order": o})
+    BOARD_SKETCH_JOBS[jobkey] = {"status": "running", "keys": [k for k, _ in targets], "done": 0, "failed": 0,
+                                 "current": "", "started_at": time.time(),
+                                 "provider": provider, "model": model}
+    threading.Thread(target=_board_sketch_worker,
+                     args=(base.name, ep, scene, jobkey, targets, note, provider, model, force or order is not None),
+                     daemon=True).start()
+    HUB.publish({"type": "board_sketch", "project": base.name, "ep": ep, "scene": scene, "key": "",
+                 "status": "running", "keys": [k for k, _ in targets]})
+    return {"ok": True, "queued": len(targets), "skipped": len(shots) - len(targets), "job": jobkey}
 
 
 def _project_media_tokens(base: Path):
@@ -6871,6 +7245,11 @@ def _preview_videos(project: str, ep: str):
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
     data["whitebox"] = _ep_whitebox_reel(base, ep)
+    # 动态样片(2026-09-11):故事板草图串片,与白模合辑并列
+    try:
+        data["animatic"] = _board_animatic(base, ep)
+    except Exception as error:  # noqa: BLE001
+        data["animatic"] = {"exists": False, "error": str(error)}
 
     # 审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要
     defects = []

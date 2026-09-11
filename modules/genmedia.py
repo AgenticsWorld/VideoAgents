@@ -316,6 +316,15 @@ def get_config(kind: str) -> dict:
         raise RuntimeError(f"未找到生成模型配置 {CONFIG_PATH};先在 Web 控制台「🎨 生成模型」页保存配置")
     cfg = json.loads(CONFIG_PATH.read_text())[kind]
     provider = cfg["provider"]
+    # 调用方指定渠道/模型(2026-09-11,仅图像):故事板草图等轻量出图链路按页面单独选的
+    # 便宜模型出图,不动全局「生成模型」设置;Key 仍取该渠道在 genconfig 里保存的配置。
+    # 环境变量由 `genmedia image --provider/--model` 或宿主后台任务设置,只作用于当前进程。
+    ov_provider = os.environ.get("VIDEOAGENTS_IMAGE_PROVIDER", "").strip() if kind == "image" else ""
+    ov_model = os.environ.get("VIDEOAGENTS_IMAGE_MODEL", "").strip() if kind == "image" else ""
+    if ov_provider:
+        if ov_provider not in cfg or not isinstance(cfg.get(ov_provider), dict):
+            raise RuntimeError(f"image 渠道 {ov_provider} 未在「生成模型」页配置过,无法按指定渠道出图")
+        provider = ov_provider
     # Upgrade the historical desktop default: an empty OpenRouter key used to
     # mean "bill the signed-in Agentics account". That behavior now has its own
     # explicit provider and OpenRouter always means a user-owned key.
@@ -349,9 +358,11 @@ def get_config(kind: str) -> dict:
                                       and str((allcfg.get(k) or {}).get("fal", {}).get("api_key") or "").strip()), "")
         if not pc["api_key"]:
             raise RuntimeError(f"{kind} 渠道 {provider} 未配置 API Key(Web 控制台填入,或设环境变量 {ENV_KEYS[provider]})")
-        pc["model"] = pc.get("custom_model") or pc.get("model") or ""
+        pc["model"] = ov_model or pc.get("custom_model") or pc.get("model") or ""
         if not pc["model"]:
             raise RuntimeError(f"{kind} 渠道 {provider} 未选择模型")
+    if ov_model and provider == "agentics":
+        pc["profile_code"] = pc["model"] = ov_model
     return {"provider": provider, **pc}
 
 
@@ -5180,6 +5191,11 @@ def _cmd_info(args):
 
 def _cmd_image(args):
     _check_id_digits(args.output)
+    # --provider/--model:本次出图改走指定渠道/模型(不改全局设置;见 get_config)
+    if getattr(args, "provider", ""):
+        os.environ["VIDEOAGENTS_IMAGE_PROVIDER"] = args.provider
+    if getattr(args, "model", ""):
+        os.environ["VIDEOAGENTS_IMAGE_MODEL"] = args.model
     if args.dry_run:
         cfg = get_config("image")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
@@ -5370,6 +5386,10 @@ def main():
                     help="参考图路径(可多张;重复给出时累积)")
     pi.add_argument("--n", type=int, default=1, help="候选张数(>1 时文件名加 _01.. 后缀)")
     pi.add_argument("--seed", type=int, default=None)
+    pi.add_argument("--provider", default="",
+                    help="本次改用指定图像渠道(须已在「生成模型」页配置 Key;默认全局生效渠道)")
+    pi.add_argument("--model", default="",
+                    help="本次改用指定图像模型 id(默认该渠道在「生成模型」页选定的模型)")
     pi.add_argument("--dry-run", action="store_true")
 
     pv = sub.add_parser("video", help="生成视频")
