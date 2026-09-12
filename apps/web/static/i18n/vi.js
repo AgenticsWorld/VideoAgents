@@ -2642,7 +2642,6 @@ window.I18N_DICT = {
 "Marble 深度转全景(锚点 {a})": "Marble độ sâu→toàn cảnh (mốc {a})",
 "Marble 深度转全景(自动机位)": "Marble độ sâu→toàn cảnh (camera tự động)",
 "全景来源": "Nguồn toàn cảnh",
-"在 Marble 打开": "Mở trong Marble",
 "尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)": "Chưa có mô hình thế giới. Chọn nguồn toàn cảnh rồi bấm “Tạo mô hình thế giới” (khoảng 5–10 phút, tiêu tốn credits World Labs).",
 "该场景还没有白模,不能生成世界模型": "Cảnh này chưa có whitebox nên không thể tạo mô hình thế giới.",
 "正在生成世界模型…": "Đang tạo mô hình thế giới…",

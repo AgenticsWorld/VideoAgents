@@ -2642,7 +2642,6 @@ window.I18N_DICT = {
 "Marble 深度转全景(锚点 {a})": "Marble Tiefe→Panorama (Anker {a})",
 "Marble 深度转全景(自动机位)": "Marble Tiefe→Panorama (automatische Kamera)",
 "全景来源": "Panoramaquelle",
-"在 Marble 打开": "In Marble öffnen",
 "尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)": "Noch kein Weltmodell. Panoramaquelle wählen und „Weltmodell erzeugen“ klicken (ca. 5–10 Minuten, verbraucht World-Labs-Credits).",
 "该场景还没有白模,不能生成世界模型": "Diese Szene hat noch keine Whitebox, daher kann kein Weltmodell erzeugt werden.",
 "正在生成世界模型…": "Weltmodell wird erzeugt…",

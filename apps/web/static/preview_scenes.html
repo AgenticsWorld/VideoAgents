@@ -249,7 +249,7 @@ function renderDetail(s){
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
   import('/static/whitebox-ui.js?v=20260909-wbedit').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
-  // 🌍 世界模型(2026-09-12):先同步占位在白模之后,全景图板块随后插到白模与它之间
+  // 🌍 世界模型(2026-09-12):挂在「分镜背景图」板块之后;场景没有背景图时退回白模之后(全景图板块随后插到白模与它之间)
   mountWorldSection(whitebox,s);
   // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标
   mountPanoSection(whitebox,s);
@@ -270,7 +270,8 @@ function worldSourceOptions(s){
 function mountWorldSection(whitebox,s){
   if(WB_ON===false)return;
   const proj=$('#project').value.trim()||'demo';
-  const sec=document.createElement('section');sec.className='wb-panel world-panel';whitebox.after(sec);
+  const sec=document.createElement('section');sec.className='wb-panel world-panel';
+  (whitebox.parentNode.querySelector('.gallery.plates')||whitebox).after(sec);
   const world=s.world||null,job=s.world_job||null;
   const opts=worldSourceOptions(s);
   const inp=(world&&world.input)||{};
@@ -279,14 +280,13 @@ function mountWorldSection(whitebox,s){
   const running=job&&job.status==='running';
   let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌍 ${esc(t('世界模型'))} · ${esc(s.id)}</strong>`
     +(world?`<span style="color:var(--dim);font-weight:400">${esc(world.model||'')}${srcText?' · '+esc(t('来源'))+' '+esc(srcText):''}${world.written_at?' · '+esc(String(world.written_at).replace('T',' ')):''}</span>`:'')
-    +(world&&world.world_marble_url?`<a href="${esc(world.world_marble_url)}" target="_blank" rel="noopener">${esc(t('在 Marble 打开'))}</a>`:'')
     +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}"${o.v===curV?' selected':''}>${esc(o.label)}</option>`).join('')}</select></label>`
     +`<button type="button" class="ws-gen"${running?' disabled':''}>${esc(running?t('生成中…'):world?t('重新生成世界模型'):t('生成世界模型'))}</button></div>`
     +`<div class="wb-status ws-status">${esc(running?t('正在生成世界模型…'):world?'':t('尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)'))}</div>`
     +`<pre class="ws-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`
     +`<div class="ws-viewer"></div>`;
   if(world&&world.previews){
-    const caps=[['pano','输入全景'],['whitebox_pano','白模全景'],['depth_pano','深度全景'],['thumbnail','缩略图']].filter(([k])=>world.previews[k]);
+    const caps=[['pano','输入全景'],['whitebox_pano','白模全景'],['depth_pano','深度全景']].filter(([k])=>world.previews[k]);
     if(caps.length)h+=`<div class="gallery plates" style="margin-top:8px">${caps.map(([k,cap])=>`<figure><img src="${esc(world.previews[k])}" alt="${esc(t(cap))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(t(cap))}</span></figcaption></figure>`).join('')}</div>`;
   }
   sec.innerHTML=h;
