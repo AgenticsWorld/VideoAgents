@@ -60,7 +60,7 @@ header .ps-info select.ov{color:var(--accent)}
 #main{flex:1;display:flex;min-height:0}
 #cwrap{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;min-height:0}
 #content{flex:1;min-height:0;overflow-y:auto;padding:20px 26px;--stick:0px}
-/* 置顶定位栏(2026-09-12):滚动时把当前所在场次 + 分镜组的头一行钉在内容区顶部,带 📋 复制编号;
+/* 置顶定位栏(2026-09-12):滚动时把当前所在场次 + 分镜组的头一行钉在内容区顶部,带 ⧉ 复制编号;
    由 updateNavActive 按视口顶端算出当前场次/组后重绘;点场次/组名跳回其锚点。
    高度写进 #content 的 --stick,组卡右侧的白模面板 / 组视频栏 sticky 时让出这条高度 */
 #stickbar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 26px;background:var(--panel);border-bottom:1px solid var(--border);box-shadow:0 3px 10px rgba(0,0,0,.35);font-size:13.5px;line-height:1.5}
@@ -119,7 +119,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .plateslabel{width:100%;font-size:11px;color:var(--dim)}
 .editbtn{font-size:10.5px;padding:0 6px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
-.cpid{font-size:11px;line-height:1;padding:1px 4px;flex:none;background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);cursor:pointer;opacity:.6;vertical-align:baseline}
+.cpid{font-size:13px;line-height:1;padding:1px 4px;flex:none;background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);cursor:pointer;opacity:.6;vertical-align:baseline}
 .cpid:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
 .cpid.ok{opacity:1;color:var(--green,#3a9d5d);border-color:transparent}
 .shot .info{flex:1;min-width:220px}
@@ -888,8 +888,8 @@ $('#pv-copy').onclick=async()=>{
   }catch(_){}
 };
 
-// 📋 复制编号(2026-09-09):场次 SNN / 分镜组 grpNNN / 分镜 shNN 编号旁的小按钮,点击把编号写入剪贴板
-function cpBtn(id){return `<button class="cpid" data-cpid="${esc(id)}" title="复制编号">📋</button>`}
+// ⧉ 复制编号(2026-09-09;2026-09-12 图标 📋→⧉,避免与故事板页图标撞):场次 SNN / 分镜组 grpNNN / 分镜 shNN 编号旁的小按钮,点击把编号写入剪贴板
+function cpBtn(id){return `<button class="cpid" data-cpid="${esc(id)}" title="复制编号">⧉</button>`}
 async function copyId(btn){
   const id=btn.dataset.cpid||'';
   try{await navigator.clipboard.writeText(id)}
@@ -898,7 +898,7 @@ async function copyId(btn){
     document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(_){}ta.remove();
   }
   btn.classList.add('ok');btn.textContent='✅';
-  setTimeout(()=>{btn.classList.remove('ok');btn.textContent='📋'},1000);
+  setTimeout(()=>{btn.classList.remove('ok');btn.textContent='⧉'},1000);
 }
 
 document.addEventListener('click',async e=>{
@@ -1634,7 +1634,7 @@ function updateNavActive(){
   bar.hidden=false;
   box.style.setProperty('--stick',bar.offsetHeight+'px');
 }
-// 置顶栏:点场次/组名跳回其锚点(📋 由全局 .cpid 处理)
+// 置顶栏:点场次/组名跳回其锚点(⧉ 由全局 .cpid 处理)
 $('#stickbar').addEventListener('click',e=>{
   if(e.target.closest('.cpid'))return;
   const s=e.target.closest('[data-t]');if(!s)return;

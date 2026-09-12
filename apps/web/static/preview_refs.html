@@ -108,7 +108,7 @@ function noteBoxHtml(f){
   const txt=f.note
     ?`<span class="note-txt">${esc(f.note)}</span>`
     :`<span class="note-txt none">${esc(t('(未添加注释)'))}</span>`;
-  return `<div class="note-row"><button class="editbtn copybtn" title="${esc(t('复制在项目中的相对路径'))}">📋</button><button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>${txt}`;
+  return `<div class="note-row"><button class="editbtn copybtn" title="${esc(t('复制在项目中的相对路径'))}">⧉</button><button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>${txt}`;
 }
 function cardHtml(f){
   let thumb;

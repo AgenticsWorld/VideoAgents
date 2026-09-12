@@ -281,7 +281,7 @@ async function showList(){
     if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
     $('#list-box').innerHTML=`<table><thead><tr><th>${t('项目')}</th><th>${t('来源')}</th><th>${t('状态')}</th><th>${t('分镜')}</th><th>${t('创建时间')}</th><th></th></tr></thead><tbody>`+
       rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr>
-        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.title||p.name)}</a>${p.title?` <span class="hint">${esc(p.name)}</span>`:''} <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">📋</button></td>
+        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.title||p.name)}</a>${p.title?` <span class="hint">${esc(p.name)}</span>`:''} <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">⧉</button></td>
         <td class="src" title="${esc(s.url||s.filename||'')}">${s.type==='url'?'🔗 ':s.type==='upload'?'📤 ':''}${esc(src)}${s.duration_s?` <span class="hint">${fmtDur(s.duration_s)}</span>`:''}</td>
         <td>${chip(p.status,p.running)}${p.message&&RUNNING.has(p.status)?` <span class="hint">${esc(p.message)}</span>`:''}</td>
         <td>${p.clip_count||0}${p.clip_count?` <span class="hint">/ ${t('已分析')} ${p.analyzed_count||0}</span>`:''}</td>
