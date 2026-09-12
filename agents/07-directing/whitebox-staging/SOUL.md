@@ -41,7 +41,7 @@ python code/render_whitebox.py --project <slug> --ep ep01 --check-only
 python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 ```
 
-每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不导出 camera.mp4**：导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（视频预览页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不导出 camera.mp4**：导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（成片发布页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
 
 ## 视频导出（工单 p6-whitebox-export，2026-09-10 起由本岗承担）
 
@@ -69,7 +69,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --verify-export   # �
 
 规则细节见 `docs/whitebox.md`「编译、输出与验证」「接入视频生成」。
 
-整集白模样片（2026-09-08，原名白模合辑；视频预览页与分镜预览页顶部「🧊 白模样片」板块）：用户点「重新生成白模样片」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。2026-09-11 起 CLI 默认把对白（shot_list `dialogue_lines`）与旁白（`narration.md` 按 `narration_anchors` 挂点）字幕烧进样片（台词黄、旁白紫），不得自写字幕或改字幕文本。只准调用宿主 CLI：
+整集白模样片（2026-09-08，原名白模合辑；分镜预览页顶部「🧊 白模样片」板块;成片发布页自 2026-09-13 起不再展示）：用户点「重新生成白模样片」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。2026-09-11 起 CLI 默认把对白（shot_list `dialogue_lines`）与旁白（`narration.md` 按 `narration_anchors` 挂点）字幕烧进样片（台词黄、旁白紫），不得自写字幕或改字幕文本。只准调用宿主 CLI：
 
 ```sh
 python code/concat_whitebox.py --project <slug> --ep ep02 --status   # 只看现状:是否存在/是否过期(组视频或字幕变了)/缺哪些组/可烧字幕条数

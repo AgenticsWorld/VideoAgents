@@ -145,7 +145,7 @@ async def copy_project_status(project: str) -> dict[str, Any]:
 
 @api.get("/rhythms", tags=["projects"])
 async def get_rhythms() -> dict[str, Any]:
-    """叙事节奏目录(单集/跨集),供新建项目向导与设计构想弹窗展示。"""
+    """叙事节奏目录(单集/跨集),供新建项目向导与创作定调弹窗展示。"""
     return await core.api_rhythms_get()
 
 
@@ -262,10 +262,10 @@ async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str
 
 @api.post("/projects/{project}/board/{ep}/animatic", tags=["artifacts"])
 async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    """故事板/视频预览页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
+    """故事板/成片发布页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
     return await core.api_board_animatic_start(project, ep, body or {})
 
-# ---- 后期预览(/preview/post):处方台账 / 出片作业 / 音效点位 / 拼装预检 / H3P 签字(2026-09-11) ----
+# ---- 后期处理(/preview/post):处方台账 / 出片作业 / 音效点位 / 拼装预检 / H3P 签字(2026-09-11) ----
 @api.post("/projects/{project}/post/{ep}/recipes", tags=["artifacts"])
 async def post_recipe_create(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     return _artifact_urls(await core.api_post_recipe_create(project, ep, body), project)

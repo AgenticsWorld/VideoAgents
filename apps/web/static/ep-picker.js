@@ -1,6 +1,6 @@
 /* 分集入口(2026-09-12):剧本/故事板/分镜/视频四个预览页共用的顶部集行。
    集数 ≤ EpPicker.MAX 时逐集按钮平铺(原样);超过时收成一行「◀ [下拉] ▶ k/N」,
-   避免几十集的项目(liaozhai2 之类)把顶部版面撑掉半屏。后期预览页本就是下拉,不经此处。
+   避免几十集的项目(liaozhai2 之类)把顶部版面撑掉半屏。后期处理页本就是下拉,不经此处。
    用法:EpPicker.render($('#eps'), episodes, EP, ep=>{EP=ep;load()}, {btnTag, optTag})
      btnTag(e) → 按钮模式集号后缀 html(状态角标,可省) ; optTag(e) → 下拉模式 option 纯文本后缀(可省) */
 (function(){

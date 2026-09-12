@@ -340,7 +340,7 @@ phases:
       - { id: p7-upscale, agent: 08-video-gen/upscale, depends_on: [p7-lipsync, p7-animation, p7-dub],   # 后期配音模式:超分取配音后的组 clip
           validation: { auto: [target_resolution_ok] } }
       - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale],
-          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「视频预览」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
+          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「成片发布」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
 
   - id: p8
     name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成(视频原声,默认);项目「对白配音=后期配音」时对白轨由 p7-dub 按开口时段 TTS 替换(§8C),
@@ -406,7 +406,7 @@ phases:
           # 烧录样式:字高≤4%画面高、底部居中贴底(下边距2-4%)、≤2行、禁大面积底板
           validation: { auto: [sync_lt_200ms, typo_check, line_length_ok, subtitle_style_ok] } }
       - { id: p9-caption, agent: 10-editing/caption, depends_on: [p9-transition, p9-subtitle],   # 需 subtitles.srt 作逐字语音轨台本
-          condition: caption_enabled,   # 「📤 输出设置」花字开关,默认关;关=不派发,g9 不因缺我而 HOLD
+          condition: caption_enabled,   # 「🎚️ 后期处理」页「片头片尾 / 花字开关」的花字开关(output.caption_enabled,2026-09-13 起不在输出设置里),默认关;关=不派发,g9 不因缺我而 HOLD
           outputs: ["edit/{ep}/captions.json"],
           # schema v3(模版/sfx/组内时间);入出点=语音逐字起止(render_captions.py speech-align/snap);
           # 交付前 code/check_captions.py --require design
@@ -431,7 +431,7 @@ phases:
       - { id: p9-thumbnail, agent: 10-editing/thumbnail, depends_on: [p9-edit],
           outputs: ["edit/{ep}/thumbnail_A.png", "edit/{ep}/thumbnail_B.png"],
           validation: { auto: [aspect_safe_area_ok], qa: [human_pick] } }
-      - { id: g9p, gate: true, human: true, checkpoint: H3P-后期确认, scope: episode, depends_on: [p9-subtitle] }   # 2026-09-11:用户在「🎚️ 后期预览」页(/preview/post)对签字母本做特效/包装/细节填充/光感/调色/音效处方(台账 edit/{ep}/post_plan.json,ffmpeg 类宿主直出、agent 类派 post-finishing、记录类只记台账),看过 A|B 与拼装预检后签字;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再变即「签字已过期」,orchestrator 重新建单;签字时按保留规则清理旧版本(母本+最近两个已采纳)
+      - { id: g9p, gate: true, human: true, checkpoint: H3P-后期确认, scope: episode, depends_on: [p9-subtitle] }   # 2026-09-11:用户在「🎚️ 后期处理」页(/preview/post)对签字母本做特效/包装/细节填充/光感/调色/音效处方(台账 edit/{ep}/post_plan.json,ffmpeg 类宿主直出、agent 类派 post-finishing、记录类只记台账),看过 A|B 与拼装预检后签字;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再变即「签字已过期」,orchestrator 重新建单;签字时按保留规则清理旧版本(母本+最近两个已采纳)
       - { id: p9-post, agent: 10-editing/post-finishing, depends_on: [g9p],
           condition: post_recipes_adopted,   # 台账里有已采纳处方才派发(post_apply.py status --json 的 current 非空或 adopted>0);无处方=不派发,g9 不因缺我而 HOLD
           # 只准宿主 CLI code/post_apply.py finalize(build-cut → sync-timeline → render_transitions render --src cut_post.mp4 → finalize_episode assemble --cut … → check,WORKFLOW.md §9D);

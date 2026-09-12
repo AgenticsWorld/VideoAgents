@@ -133,7 +133,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .confirm-box .ps-hint{font-size:11px;color:var(--dim);margin:-6px 0 10px;line-height:1.4}
 #conn{width:8px;height:8px;border-radius:50%;background:var(--red)}
 #conn.ok{background:var(--green)}
-/* 配置弹窗(时长设置等) */
+/* 配置弹窗(视频节奏等) */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
 .modal .box{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;width:440px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
 .modal h3{font-size:14px;font-weight:600}
@@ -206,7 +206,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .dd-sub:hover .dd-sub-menu{display:block}
 .dd-sub:hover>a{background:var(--panel);color:var(--accent)}
 .dd-sub-menu a.on{color:var(--green)}
-/* 分镜/视频预览独立入口(顶栏图标);预览设定产物按钮同风格 */
+/* 分镜/成片发布独立入口(顶栏图标);预览设定产物按钮同风格 */
 a.hdr-icon{display:flex;align-items:center;background:var(--panel2);color:var(--accent);border:1px solid var(--border);border-radius:6px;padding:5px 9px;line-height:1}
 a.hdr-icon:hover{border-color:var(--accent)}
 #preview-btn{display:flex;align-items:center;color:var(--accent)}
@@ -249,20 +249,19 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <a href="/preview/script" class="pv hdr-icon" title="剧本预览:剧情处理层产出的结构化拆解——场次/人物/对白/旁白/节奏/情绪/钩子,逐块提修改意见直发负责 Agent"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8.5L20 8.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor"/><path d="M14.5 3v5.5H20" fill="var(--panel2)"/><path d="M7.5 11.5h9M7.5 14.5h9M7.5 17.5h6" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></a>
   <a href="/preview/board" class="pv hdr-icon" title="故事板预览:分镜层产出的逐场逐镜表(编号/内容/铅笔草图)+ 导演计划,草图可按便宜模型单独出图与修改"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor"/><rect x="5.5" y="6.5" width="7" height="5" rx="1" fill="var(--panel2)"/><rect x="14" y="6.5" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="14" y="9.9" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="5.5" y="13.5" width="7" height="5" rx="1" fill="var(--panel2)"/><rect x="14" y="13.5" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="14" y="16.9" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/></svg></a>
   <a href="/preview/storyboard" class="pv hdr-icon" title="分镜预览:每集分镜 + 关键帧 + 生成视频"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/><path d="M6.5 7.5h7M6.5 10h4.5" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="3" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/><rect x="13" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/></svg></a>
-  <a href="/preview/post" class="pv hdr-icon" title="后期预览:分镜组签字后的特效 / 包装 / 细节填充 / 光感 / 调色 / 音效调整,处方台账 + A|B 监视器 + 出成片(H3P 后期签字)"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M7 8v8M12 8v8M17 8v8" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="5.4" y="12.5" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="10.4" y="9" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="15.4" y="11" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/></svg></a>
-  <a href="/preview/videos" class="pv hdr-icon" title="视频预览:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M10 8.5 16 12l-6 3.5z" fill="var(--panel2)"/></svg></a>
+  <a href="/preview/post" class="pv hdr-icon" title="后期处理:分镜组签字后的特效 / 包装 / 细节填充 / 光感 / 调色 / 音效调整,处方台账 + A|B 监视器 + 出成片(H3P 后期签字)"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M7 8v8M12 8v8M17 8v8" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="5.4" y="12.5" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="10.4" y="9" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="15.4" y="11" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/></svg></a>
+  <a href="/preview/videos" class="pv hdr-icon" title="成片发布:每集成片 final 视频 + 封面 thumbnail + 审核问题反馈"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M10 8.5 16 12l-6 3.5z" fill="var(--panel2)"/></svg></a>
   <a href="#" id="open-dir" class="hdr-icon" title="在 Finder 中打开当前项目目录"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.1a2.5 2.5 0 0 1 1.77.73L12.6 6H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" fill="currentColor"/><path d="M3 10h18v1.8H3z" fill="var(--panel2)"/></svg></a>
   <div id="proj-settings-menu">
     <button id="proj-settings-btn" title="项目设置(仅当前项目生效)">🎛️</button>
     <div class="dropdown"><div class="dropdown-box">
       <a href="#" id="menu-versions" title="复制当前项目为全新项目,或删除当前项目">版本管理</a>
-      <a href="#" id="menu-brief">设计构想</a>
+      <a href="#" id="menu-brief">创作定调</a>
+      <a href="#" id="menu-duration">视频节奏</a>
       <a href="#" id="menu-output">输出设置</a>
-      <a href="#" id="menu-duration">时长设置</a>
       <a href="#" id="menu-shotgroup" title="生成组时长与每组参考素材数量上限,须与所选视频生成模型能力匹配,按项目独立">模型限制</a>
       <a href="#" id="menu-project-skills">项目技能</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
-      <a href="#" id="menu-packaging" title="片头/片尾/下集预告 开关与制作要求,按项目独立">片头片尾</a>
     </div></div>
   </div>
   <div id="settings-menu">
@@ -388,27 +387,41 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="np-step" data-step="1">
       <div class="row"><label>项目名称</label>
         <input type="text" id="np-name" placeholder="仅英文字母和数字,如 MyNovel01"></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">小说文本</label>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">故事文本</label>
         <textarea id="np-novel" style="height:150px" placeholder="粘贴小说原文(可留空,之后手动放入 novel/ 目录)"></textarea></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
-        <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">内容定位</label>
+        <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、改编取舍……"></textarea></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">画面风格</label>
         <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
           <button type="button" id="np-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
-          <textarea id="np-style" style="height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
+          <textarea id="np-style" style="flex:none;height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
         </div></div>
+      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;内容定位、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+    </div>
+    <div class="np-step" data-step="2" style="display:none">
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
         <div class="rhythm-box" data-prefix="np" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
           <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="np-rhythm-episode" style="flex:1"></select></div>
           <div class="rhythm-detail" id="np-rhythm-episode-detail" style="display:none"></div>
-          <textarea id="np-rhythm-episode-custom" style="height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
+          <textarea id="np-rhythm-episode-custom" style="flex:none;height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
           <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">跨集节奏</span><select id="np-rhythm-season" style="flex:1"></select></div>
           <div class="rhythm-detail" id="np-rhythm-season-detail" style="display:none"></div>
-          <textarea id="np-rhythm-season-custom" style="height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
+          <textarea id="np-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
         </div></div>
-      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;主要构想、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
+        <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
+      <div class="row"><label>分镜时长(秒)</label>
+        <input type="number" id="npd-smin" min="1" step="0.5" value="1" title="下限">
+        <span style="color:var(--dim)">—</span>
+        <input type="number" id="npd-smax" min="1" step="0.5" value="10" title="上限">
+      </div>
+      <div class="row"><label>长镜头</label>
+        <input type="checkbox" id="npd-longtake" style="flex:none">
+        <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
+      <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
+      <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
-    <div class="np-step" data-step="2" style="display:none">
+    <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
       <div class="note" id="npsg-model-hint" style="display:none;color:#e8a33d"></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
@@ -418,7 +431,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
       <div class="note">选择 Seedance 2.0 时自动关闭「白模」,其他模型默认开启;可在下一步「输出设置」再手动调整。</div>
     </div>
-    <div class="np-step" data-step="3" style="display:none">
+    <div class="np-step" data-step="4" style="display:none">
       <div class="row"><label>输出画幅</label>
         <select id="npo-aspect" style="flex:1">
           <option value="youtube">YouTube 画幅(16:9)</option>
@@ -466,50 +479,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
         </select>
         <button type="button" class="info-btn" data-info="npo-info-voice" title="说明">i</button></div>
       <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
-      <div class="row"><label>花字</label>
-        <input type="checkbox" id="npo-caption" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片</span></div>
-      <div class="row"><label>内嵌字幕</label>
-        <input type="checkbox" id="npo-burnin" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
-    </div>
-    <div class="np-step" data-step="4" style="display:none">
-      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
-        <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
-      <div class="row"><label>分镜时长(秒)</label>
-        <input type="number" id="npd-smin" min="1" step="0.5" value="1" title="下限">
-        <span style="color:var(--dim)">—</span>
-        <input type="number" id="npd-smax" min="1" step="0.5" value="10" title="上限">
-      </div>
-      <div class="row"><label>长镜头</label>
-        <input type="checkbox" id="npd-longtake" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
-      <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
-      <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
-    </div>
-    <div class="np-step" data-step="5" style="display:none">
-      <div class="row"><label>片头(intro)</label>
-        <input type="checkbox" id="npp-intro-on" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后每集制作片头</span></div>
-      <div class="row" id="npp-intro-row">
-        <textarea id="npp-intro-text" style="height:90px" placeholder="片头制作要求(留空按团队默认),可输入:
-- 时长上限(如 ≤10s)
-- 剧名:显示用标题/副标题(比如加英文名)
-- 厂标/Logo 图路径(可选,指向 refs/ 下的文件)"></textarea></div>
-      <div class="row"><label>片尾(outro)</label>
-        <input type="checkbox" id="npp-outro-on" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后每集制作片尾</span></div>
-      <div class="row" id="npp-outro-row">
-        <textarea id="npp-outro-text" style="height:110px" placeholder="片尾制作要求(留空按团队默认),可输入:
-- 时长上限(如 ≤15s)
-- 制作署名:公司名、网站 URL
-- 版权声明模板:如 © {year} {公司名}
-- 社媒/二维码(可选,指向 refs/ 下的文件)
-- 合集信息显示"></textarea></div>
-      <div class="row"><label>下集预告(teaser)</label>
-        <input type="checkbox" id="npp-teaser-on" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">启用后片尾后接 5–15s 下集预告</span></div>
-      <div class="note">禁用的段落不制作、不占时长额度;要求文本注入片头片尾(title)/剪辑(edit)/钩子(hook)与总制片的系统提示词,优先级高于 SOUL.md 默认方案</div>
     </div>
     <div class="err" id="np-err"></div>
     <div class="actions">
@@ -522,24 +491,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="brief-modal" class="modal">
   <div class="box" style="width:580px">
-    <h3>🧭 设计构想 — <span id="brief-proj" style="color:var(--accent)"></span></h3>
-    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">主要构想</label>
-      <textarea id="brief-text" style="height:130px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、叙事节奏、改编取舍……"></textarea></div>
+    <h3>🧭 创作定调 — <span id="brief-proj" style="color:var(--accent)"></span></h3>
+    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">内容定位</label>
+      <textarea id="brief-text" style="height:130px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、改编取舍……"></textarea></div>
     <div class="row" style="align-items:flex-start"><label style="padding-top:6px">画面风格</label>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
         <button type="button" id="brief-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
-        <textarea id="brief-style" style="height:100px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
+        <textarea id="brief-style" style="flex:none;height:100px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
       </div></div>
-    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
-      <div class="rhythm-box" data-prefix="brief" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
-        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="brief-rhythm-episode" style="flex:1"></select></div>
-        <div class="rhythm-detail" id="brief-rhythm-episode-detail" style="display:none"></div>
-        <textarea id="brief-rhythm-episode-custom" style="height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
-        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">跨集节奏</span><select id="brief-rhythm-season" style="flex:1"></select></div>
-        <div class="rhythm-detail" id="brief-rhythm-season-detail" style="display:none"></div>
-        <textarea id="brief-rhythm-season-custom" style="height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
-      </div></div>
-    <div class="note">构想、风格与叙事节奏保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提;画面风格约束全部画面视觉产出,叙事节奏的节拍链约束剧本分集/分场与分镜节拍。保存后对之后派发的任务生效;全部清空保存则移除该设定</div>
+    <div class="note">构想与风格保存在项目的 brief.md,注入该项目每个 Agent 的系统提示词,作为最高创作前提;画面风格约束全部画面视觉产出。保存后对之后派发的任务生效;全部清空保存则移除该设定。叙事节奏改在「视频节奏」设置中配置</div>
     <div class="err" id="brief-err"></div>
     <div class="actions"><button id="brief-cancel">取消</button><button class="primary" id="brief-ok">保存</button></div>
   </div>
@@ -609,19 +569,23 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </select>
       <button type="button" class="info-btn" data-info="out-info-voice" title="说明">i</button></div>
     <div class="note info-note" id="out-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
-    <div class="row"><label>花字</label>
-      <input type="checkbox" id="out-caption" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后在关键节点自动设计花字并配音效,额外产出花字版成片(final_caption)</span></div>
-    <div class="row"><label>内嵌字幕</label>
-      <input type="checkbox" id="out-burnin" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后成片自动烧录字幕进画面</span></div>
     <div class="err" id="out-err"></div>
     <div class="actions"><button id="out-cancel">取消</button><button class="primary" id="out-ok">确定</button></div>
   </div>
 </div>
 <div id="dur-modal" class="modal">
   <div class="box">
-    <h3>⏱ 时长设置 — <span id="dur-proj" style="color:var(--accent)"></span></h3>
+    <h3>🎵 视频节奏 — <span id="dur-proj" style="color:var(--accent)"></span></h3>
+    <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
+      <div class="rhythm-box" data-prefix="dur" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="dur-rhythm-episode" style="flex:1"></select></div>
+        <div class="rhythm-detail" id="dur-rhythm-episode-detail" style="display:none"></div>
+        <textarea id="dur-rhythm-episode-custom" style="flex:none;height:56px;display:none" placeholder="自定义单集节拍链,如:A → B → C;可再写一行要点与适用题材"></textarea>
+        <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">跨集节奏</span><select id="dur-rhythm-season" style="flex:1"></select></div>
+        <div class="rhythm-detail" id="dur-rhythm-season-detail" style="display:none"></div>
+        <textarea id="dur-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
+      </div></div>
+    <div class="note">叙事节奏保存在项目的 brief.md 并注入每个 Agent 的系统提示词,节拍链约束剧本分集/分场与分镜节拍</div>
     <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
       <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
     <div class="row"><label>分镜时长(秒)</label>
@@ -662,35 +626,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note">「质量评委」为 evaluation 对每张工单验收评分的合格线:低于该分数必须照意见返工(默认 60);0=跳过质量评委,全程不派 evaluation 工单<br>其余维度为审核力度 0-100:<b>0=不审核</b>,数值越高越严格,<b>100=最严格审核</b>(默认 0)。约束对应审核/评审 Agent 的把关尺度;非 0 力度仅在 G 闸门前的闸门级审核生效,草稿迭代期一律不审。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="rev-err"></div>
     <div class="actions"><button id="rev-cancel">取消</button><button class="primary" id="rev-ok">保存</button></div>
-  </div>
-</div>
-<div id="pkg-modal" class="modal">
-  <div class="box">
-    <h3>🎞 片头片尾 — <span id="pkg-proj" style="color:var(--accent)"></span></h3>
-    <div class="row"><label>片头(intro)</label>
-      <input type="checkbox" id="pkg-intro-on" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后每集制作片头</span></div>
-    <div class="row" id="pkg-intro-row" style="display:none">
-      <textarea id="pkg-intro-text" style="height:110px" placeholder="片头制作要求(留空按团队默认),可输入:
-- 时长上限(如 ≤10s)
-- 剧名:显示用标题/副标题(比如加英文名)
-- 厂标/Logo 图路径(可选,指向 refs/ 下的文件)"></textarea></div>
-    <div class="row"><label>片尾(outro)</label>
-      <input type="checkbox" id="pkg-outro-on" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后每集制作片尾</span></div>
-    <div class="row" id="pkg-outro-row" style="display:none">
-      <textarea id="pkg-outro-text" style="height:140px" placeholder="片尾制作要求(留空按团队默认),可输入:
-- 时长上限(如 ≤15s)
-- 制作署名:公司名、网站 URL
-- 版权声明模板:如 © {year} {公司名}
-- 社媒/二维码(可选,指向 refs/ 下的文件)
-- 合集信息显示"></textarea></div>
-    <div class="row"><label>下集预告(teaser)</label>
-      <input type="checkbox" id="pkg-teaser-on" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">启用后片尾后接 5–15s 下集预告</span></div>
-    <div class="note">保存到项目 settings.json,注入片头片尾(title)/剪辑(edit)/钩子(hook)与总制片的系统提示词,优先级高于 SOUL.md 默认方案;禁用的段落不制作、不占时长额度。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
-    <div class="err" id="pkg-err"></div>
-    <div class="actions"><button id="pkg-cancel">取消</button><button class="primary" id="pkg-ok">保存</button></div>
   </div>
 </div>
 <div id="wdt-modal" class="modal">
@@ -1181,8 +1116,8 @@ $('#project').onchange=async()=>{
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 };
 
-/* ---------- 新建项目向导(基础信息→模型限制→输出设置→时长设置→片头片尾,2026-09-09 模型限制提到第二步;审核设置不进向导,新建默认全 0,只能在项目设置「审核设置」修改,2026-09-07) ---------- */
-const NP_STEP_NAMES=['基础信息','模型限制','输出设置','时长设置','片头片尾'];
+/* ---------- 新建项目向导(基础信息→视频节奏→模型限制→输出设置;2026-09-13 时长设置改名视频节奏并提到第二步、叙事节奏从基础信息移入;片头片尾步删除,开关移到后期处理页,新建默认三段全关由服务端兜底;2026-09-09 模型限制提到第二步;审核设置不进向导,新建默认全 0,只能在项目设置「审核设置」修改,2026-09-07) ---------- */
+const NP_STEP_NAMES=['基础信息','视频节奏','模型限制','输出设置'];
 let NP_STEP=1;
 function npShowStep(n){
   NP_STEP=n;
@@ -1199,13 +1134,7 @@ function npInitOnce(){   // 语言下拉首次打开时构建(OUT_LANGS 在下�
   if(!sel.options.length)OUT_LANGS.forEach(l=>{
     const o=document.createElement('option');o.value=l;o.textContent=l;sel.appendChild(o)});
 }
-function nppToggleRows(){
-  $('#npp-intro-row').style.display=$('#npp-intro-on').checked?'':'none';
-  $('#npp-outro-row').style.display=$('#npp-outro-on').checked?'':'none';
-}
-$('#npp-intro-on').onchange=nppToggleRows;
-$('#npp-outro-on').onchange=nppToggleRows;
-// 每集时长「根据剧本自动」:勾选后数值输入禁用(新建向导与时长设置弹窗同款)
+// 每集时长「根据剧本自动」:勾选后数值输入禁用(新建向导与视频节奏弹窗同款)
 $('#npd-ep-auto').onchange=()=>{$('#npd-ep').disabled=$('#npd-ep-auto').checked};
 $('#dur-ep-auto').onchange=()=>{$('#dur-ep').disabled=$('#dur-ep-auto').checked};
 // 长镜头低分辨率提示:草稿档 ≤480p 时尾帧低清,作参考图会拖累续接组画质与人脸一致性
@@ -1214,7 +1143,7 @@ function npdLongtakeWarn(){$('#npd-longtake-warn').style.display=
   ($('#npd-longtake').checked&&LONGTAKE_LOWRES.includes($('#npo-draft-res').value))?'':'none'}
 $('#npd-longtake').onchange=npdLongtakeWarn;
 $('#npo-draft-res').addEventListener('change',npdLongtakeWarn);
-let DUR_DRAFT_RES='480p';   // 时长设置弹窗打开时取当前项目输出设置的草稿分辨率
+let DUR_DRAFT_RES='480p';   // 视频节奏弹窗打开时取当前项目输出设置的草稿分辨率
 function durLongtakeWarn(){$('#dur-longtake-warn').style.display=
   ($('#dur-longtake').checked&&LONGTAKE_LOWRES.includes(DUR_DRAFT_RES))?'':'none'}
 $('#dur-longtake').onchange=durLongtakeWarn;
@@ -1226,17 +1155,13 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   document.querySelectorAll('.npo-platform').forEach(c=>c.checked=false);   // 发布平台默认全不选,创建前须自选(≥1)
   const uiLang=I18N.langs[I18N.lang];   // 输出语言默认跟随当前界面语言(自称与 OUT_LANGS 同表)
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
-  $('#npo-draft-res').value='480p';$('#npo-final-res').value='480p';
-  $('#npo-burnin').checked=false;
-  $('#npo-caption').checked=false;$('#npo-dialogue-voice').value='native';
+  $('#npo-draft-res').value='480p';$('#npo-final-res').value='1080p';   // 新建项目成片分辨率默认 1080p(2026-09-13 用户拍板);服务端默认仍为 480p 仅作存量项目缺键回退
+  $('#npo-dialogue-voice').value='native';   // 花字/内嵌字幕开关 2026-09-13 移到后期处理页,新建默认关由服务端兜底
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=1;$('#npd-smax').value=10;
   $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭
   sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动白模开关
-  $('#npp-intro-on').checked=false;$('#npp-outro-on').checked=false;$('#npp-teaser-on').checked=false;   // 片头/片尾/下集预告默认不启用
-  $('#npp-intro-text').value='';$('#npp-outro-text').value='';
-  nppToggleRows();
 }
 function openNpModal(){
   npInitOnce();
@@ -1252,20 +1177,17 @@ function openNpModal(){
 function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置弹窗/服务端校验一致)
   if(n===1){
     if(!/^[A-Za-z0-9]+$/.test($('#np-name').value.trim()))return '项目名称只能使用英文字母和数字';
-  }else if(n===2){   // 模型限制
+  }else if(n===3){   // 模型限制
     return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
       parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
-  }else if(n===3){   // 输出设置
+  }else if(n===4){   // 输出设置
     if($('#npo-aspect').value==='custom'&&!/^\d+\s*:\s*\d+$/.test($('#npo-custom').value.trim()))
       return '自定义画幅格式:宽:高,如 21:9';
     if(!document.querySelectorAll('.npo-platform:checked').length)return '至少选择一个发布平台';
-  }else if(n===4){   // 时长设置
+  }else if(n===2){   // 视频节奏(时长)
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
     if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
-  }else if(n===5){
-    if($('#npp-intro-text').value.length>2000||$('#npp-outro-text').value.length>2000)
-      return '片头/片尾要求文本过长(≤2000 字)';
   }
   return '';
 }
@@ -1274,8 +1196,6 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
     output:{aspect_preset:$('#npo-aspect').value,aspect_custom:$('#npo-custom').value.trim(),
       language:$('#npo-lang').value,
       draft_resolution:$('#npo-draft-res').value,final_resolution:$('#npo-final-res').value,
-      subtitle_burn_in:$('#npo-burnin').checked,
-      caption_enabled:$('#npo-caption').checked,
       narration_enabled:$('#npo-narration').checked,
       dialogue_voice:$('#npo-dialogue-voice').value,
       spatial_blocking:$('#npo-spatial').checked,
@@ -1288,9 +1208,6 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
       max_ref_videos:parseInt($('#npsg-vids').value),
       max_ref_audios:parseInt($('#npsg-auds').value),
       preset:sgActivePreset('npsg')||''},   // 记住选的是哪个模型预设(数值相同的预设靠它区分)
-    packaging:{intro_enabled:$('#npp-intro-on').checked,intro_notes:$('#npp-intro-text').value,
-      outro_enabled:$('#npp-outro-on').checked,outro_notes:$('#npp-outro-text').value,
-      teaser_enabled:$('#npp-teaser-on').checked},
   };
 }
 async function npCreate(){
@@ -1444,17 +1361,15 @@ $('#eng-recheck').onclick=async()=>{
   if(ok){$('#eng-modal').style.display='none';return}
   $('#eng-err').textContent=I18N.f('仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效',{bin:info.bin});
 };
-/* ---------- 设计构想弹窗(编辑当前项目 brief.md:主要构想 + 设计风格) ---------- */
+/* ---------- 创作定调弹窗(编辑当前项目 brief.md:内容定位(文件小节标题仍为「主要构想」) + 画面风格) ---------- */
 async function openBriefModal(){
   $('#brief-err').textContent='';
   $('#brief-proj').textContent=curProj();
   $('#brief-text').value='';$('#brief-style').value='';
   try{
-    await rhythmInit('brief');
     const r=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief');
     $('#brief-text').value=r.brief||'';
     $('#brief-style').value=r.style||'';
-    rhythmApply('brief',r.rhythm);
   }catch(e){$('#brief-err').textContent='读取失败:'+e.message}
   $('#brief-modal').style.display='flex';
   $('#brief-text').focus();
@@ -1465,12 +1380,12 @@ $('#brief-cancel').onclick=()=>$('#brief-modal').style.display='none';
 $('#brief-ok').onclick=async()=>{
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),brief:$('#brief-text').value,
-      style:$('#brief-style').value,rhythm:rhythmCollect('brief')});
+      style:$('#brief-style').value});   // 叙事节奏 2026-09-13 移到视频节奏弹窗,此处不带 rhythm 字段=服务端保留原值
     $('#brief-modal').style.display='none';
   }catch(e){$('#brief-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 叙事节奏(2026-09-07:新建向导 / 设计构想弹窗共用;目录来自 /api/v1/rhythms,选中后展示节拍链+要点+适用) ---------- */
+/* ---------- 叙事节奏(2026-09-07:新建向导 / 视频节奏弹窗共用(2026-09-13 从创作定调弹窗移入);目录来自 /api/v1/rhythms,选中后展示节拍链+要点+适用) ---------- */
 const RHYTHM_KINDS=['episode','season'];
 let RHYTHM_CAT=null;
 async function rhythmInit(prefix){   // 拉目录(仅一次)并填两层下拉;已填过的不重复填
@@ -1590,8 +1505,6 @@ async function openOutModal(){
     sel.value=OUT_LANGS.includes(o.language)?o.language:'English';
     $('#out-draft-res').value=OUT_RESOLUTIONS.includes(o.draft_resolution)?o.draft_resolution:'480p';
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
-    $('#out-burnin').checked=!!o.subtitle_burn_in;
-    $('#out-caption').checked=!!o.caption_enabled;
     $('#out-narration').checked=o.narration_enabled!==false;
     $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
     $('#out-spatial').checked=o.spatial_blocking!==false;syncSpatialHint('out-spatial');
@@ -1614,18 +1527,20 @@ $('#out-ok').onclick=async()=>{
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
-      subtitle_burn_in:$('#out-burnin').checked,caption_enabled:$('#out-caption').checked,
       narration_enabled:$('#out-narration').checked,
       dialogue_voice:$('#out-dialogue-voice').value,spatial_blocking:$('#out-spatial').checked,platforms}});
     $('#out-modal').style.display='none';
   }catch(e){$('#out-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- 时长设置弹窗 ---------- */
+/* ---------- 视频节奏弹窗(原时长设置;2026-09-13 改名并把叙事节奏从创作定调弹窗移入:时长存 settings.json duration,叙事节奏仍存 brief.md) ---------- */
 async function openDurModal(){
   $('#dur-err').textContent='';
   $('#dur-proj').textContent=curProj();
   try{
+    await rhythmInit('dur');
+    const br=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief');
+    rhythmApply('dur',br.rhythm);
     const cfg=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config');
     const d=cfg.duration||{};
     const auto=d.episode_minutes==='auto';
@@ -1652,6 +1567,7 @@ $('#dur-ok').onclick=async()=>{
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}
 };
@@ -1946,40 +1862,6 @@ $('#rev-ok').onclick=async()=>{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),review});
     $('#rev-modal').style.display='none';
   }catch(e){$('#rev-err').textContent='保存失败:'+e.message}
-};
-
-/* ---------- 片头片尾弹窗(三段包装开关 + 制作要求,按项目独立) ---------- */
-function pkgToggleRows(){
-  $('#pkg-intro-row').style.display=$('#pkg-intro-on').checked?'':'none';
-  $('#pkg-outro-row').style.display=$('#pkg-outro-on').checked?'':'none';
-}
-$('#pkg-intro-on').onchange=pkgToggleRows;
-$('#pkg-outro-on').onchange=pkgToggleRows;
-async function openPkgModal(){
-  $('#pkg-err').textContent='';
-  $('#pkg-proj').textContent=curProj();
-  let pk={};
-  try{pk=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).packaging||{}}catch(e){}
-  $('#pkg-intro-on').checked=pk.intro_enabled!==false;
-  $('#pkg-outro-on').checked=pk.outro_enabled!==false;
-  $('#pkg-teaser-on').checked=pk.teaser_enabled!==false;
-  $('#pkg-intro-text').value=pk.intro_notes||'';
-  $('#pkg-outro-text').value=pk.outro_notes||'';
-  pkgToggleRows();
-  $('#pkg-modal').style.display='flex';
-}
-$('#menu-packaging').onclick=e=>{e.preventDefault();openPkgModal()};
-$('#pkg-cancel').onclick=()=>$('#pkg-modal').style.display='none';
-$('#pkg-ok').onclick=async()=>{
-  const intro=$('#pkg-intro-text').value,outro=$('#pkg-outro-text').value;
-  if(intro.length>2000||outro.length>2000){$('#pkg-err').textContent='片头/片尾要求文本过长(≤2000 字)';return}
-  try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),packaging:{
-      intro_enabled:$('#pkg-intro-on').checked,intro_notes:intro,
-      outro_enabled:$('#pkg-outro-on').checked,outro_notes:outro,
-      teaser_enabled:$('#pkg-teaser-on').checked}});
-    $('#pkg-modal').style.display='none';
-  }catch(e){$('#pkg-err').textContent='保存失败:'+e.message}
 };
 
 /* ---------- Watchdog 用量阈值弹窗(设置菜单) ---------- */

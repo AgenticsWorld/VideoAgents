@@ -13,7 +13,7 @@
 
 1. 拆集归类:把 `events.json` 的全部事件归到各集,100% 覆盖、零重复;背景事件也必须归属某一集,不许静默丢弃(总表带 `roadmap` 时,只对精确规划集章节范围内的事件逐个归类)。
 1′. **逐事件定取舍 `treatments[]`(2026-09-12,WORKFLOW.md §5A)**:每集 `events` 里的每个事件写一条 `{event, treatment, reason?, merge_into?}`,`treatment` ∈ `dramatize`(演,正片成场)/ `mention`(带过,旁白或台词一句交代)/ `merge`(并入,`merge_into` 指向同集一个 dramatize 事件)/ `cut`(删,不出现);mention/merge/cut 必写 `reason`。**每集 dramatize 数 ≤ ⌈duration_budget_s ÷ 90⌉**(600s ≤7、300s ≤4、180s ≤2;上限由宿主 CLI `--sec-per-event` 定,我不得在总表里自定或放宽),开场钩位与结尾卡点事件必须 dramatize;cut 不得用于 major 事件、任何保留事件的 `caused_by`、卡点事件(因果链上的至少 mention)。挑 dramatize 的标准:主线因果节点、冲突/反转/情绪峰值、卡点;重复信息、赶路过渡、纯背景交代一律 mention/merge/cut。
-2. 定目标时长:每集时长预算以运行环境注入的「用户全局时长设定 · 每集目标时长」为准(用户在 Web 控制台「⏱ 时长设置」配置;未注入时默认 10 分钟),不得自行按平台惯例另定;预算是下游 pacing、shot-planning、edit 的对账基准。
+2. 定目标时长:每集时长预算以运行环境注入的「用户全局时长设定 · 每集目标时长」为准(用户在 Web 控制台「🎵 视频节奏」配置;未注入时默认 10 分钟),不得自行按平台惯例另定;预算是下游 pacing、shot-planning、edit 的对账基准。
 3. 定卡点位置:结合 story_graph 的结构节点选每集开场钩位与结尾卡点(只定位置和所用事件,不写文案)。
 4. 排集间依赖:标注每集所需前情、跨集延续的伏笔(引用 story_graph 的 `fs-*` ID),供 screenplay 与 hook 使用。
 5. 维护总表版本:集数或范围调整走 version 新版本并通知 orchestrator 重排受影响集的工单。

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """post_plan.py — 后期处方台账(edit/epNN/post_plan.json)与处方目录。
 
-后期预览页(/preview/post,WORKFLOW.md §9D,2026-09-11)的原子记录是「处方」(recipe):
+后期处理页(/preview/post,WORKFLOW.md §9D,2026-09-11)的原子记录是「处方」(recipe):
 一条处方说清楚作用在哪(scope)、做什么(section/kind)、参数与参考(params/refs)、说明(note)、
 到哪一步了(status)、产物(output)。五个分区(细节填充/调色与光感/特效/包装/音效与声音)共用同一套
 字段与状态机,差别只在 kind 的参数表。

@@ -9,7 +9,7 @@
 - **流水线阶段**:
   - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,G7/超分后的终版组 clip 上执行);任务粒度:每集级
   - **av 插件(audio-to-video)**:av2-caption(设计,随 AVH3 分镜确认一并签字)+ av4-caption-render(烧录,AVH4 之后)
-  - **派发前提**:项目「📤 输出设置」的**花字开关(caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
+  - **派发前提**:项目「🎚️ 后期处理」页「片头片尾 / 花字开关」的**花字开关(caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
 - **使命**:为本集设计并落盘全部屏幕花字(`edit/epNN/captions.json`,schema v3)——文案、模版、字号、参数、配套音效一体设计;样式与动画封装在**项目内 HTML 模版**(`edit/caption_templates/`,由我按项目视觉定制,协议 captpl.v1);并在终版组 clip 上把花字烧录成**副本**(原 clip 永不改动),供 edit 封装花字版成片。渲染引擎:HTML+CSS(captions_html.py,2026-08-14 起;libass 已退役)。
 
 ## 职责

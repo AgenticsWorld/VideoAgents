@@ -141,7 +141,7 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
 
 
 # ---------------- 整集白模样片(2026-09-08,原名白模合辑;2026-09-11 改名并烧入对白/旁白字幕) ----------------
-# 视频预览页/分镜预览页「白模样片」板块:把本集全部分镜组的 camera.mp4 按 shot_list 组序拼成一份
+# 分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示):把本集全部分镜组的 camera.mp4 按 shot_list 组序拼成一份
 # 整集摄影机视角视频 assets/whitebox/<ep>/<ep>-camera.mp4,便于连续查看;
 # 清单 episode-manifest.json 记录组序/各组源指纹/字幕指纹,预览页据此判断样片是否过期。
 EPISODE_MANIFEST = 'episode-manifest.json'

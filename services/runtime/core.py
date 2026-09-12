@@ -914,7 +914,8 @@ DEFAULT_GENCONFIG = {
     "review": {"evaluation": 60, **{k: 0 for k in (
         "audio_quality", "character_consistency", "content_safety", "copyright",
         "logic", "timeline", "visual_quality", "worldview")}},
-    # 片头片尾设置(设置菜单「片头片尾」):三段包装的开关 + 片头/片尾自由文本要求,按项目独立
+    # 片头片尾设置(2026-09-13 起开关在后期处理页 /preview/post「片头片尾 / 花字开关」,项目设置菜单与新建向导已无入口):
+    # 三段包装的开关 + 片头/片尾自由文本要求(notes 仅存 settings.json,无 UI),按项目独立;此默认仅作存量项目缺键回退
     "packaging": {"intro_enabled": True, "intro_notes": "",
                   "outro_enabled": True, "outro_notes": "",
                   "teaser_enabled": True},
@@ -3180,7 +3181,7 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
     if brief:
         p += f"""
 
-## 用户设计构想(项目 {proj_rel}/brief.md,全片最高创作前提)
+## 用户创作定调(项目 {proj_rel}/brief.md,全片最高创作前提)
 以下构想约束题材类型、叙事取舍等全部环节;其中「设计风格」一节(如有)是全片画面视觉风格的权威定义,
 风格设定(style.json)、概念图、关键帧、视频生成等一切视觉产出及其 prompt 必须与之一致;
 「叙事节奏」一节(如有)给出单集节奏与跨集节奏的节拍链,是剧本分集/分场、钩子与分镜节拍设计的权威依据,
@@ -7092,7 +7093,7 @@ def _preview_storyboard(project: str, ep: str):
             "lighting": _group_lighting(base, g, sb_scene_tod, lighting_cache),
         })
     data["generation_groups"] = groups
-    # 白模样片(2026-09-11):分镜预览页顶部板块,与视频预览页「白模样片」同一份数据(整集摄影机视角 + 对白/旁白字幕)
+    # 白模样片(2026-09-11):分镜预览页顶部板块(成片发布页 2026-09-13 起不再展示)(整集摄影机视角 + 对白/旁白字幕)
     data["whitebox_reel"] = _ep_whitebox_reel(base, ep) if data["whitebox_enabled"] else {"exists": False, "disabled": True}
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 covers_groups/beat_ref/scene 对位试听;
     # 兼容 music_cues.json 文件名与 file 写成项目根相对路径(2026-09-02 liaozhai2 三集)
@@ -7570,7 +7571,7 @@ def _board_animatic_worker(project: str, ep: str, no_audio: bool):
 
 
 async def api_board_animatic_start(project: str, ep: str, body: dict):
-    """故事板页 / 视频预览页「出动态样片」:缺草图的镜用占位卡,不拦;同集在跑时 409。"""
+    """故事板页「出动态样片」:缺草图的镜用占位卡,不拦;同集在跑时 409。"""
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)
     if not (base / "directing" / ep / "storyboard.json").is_file():
@@ -7953,7 +7954,7 @@ def _ep_publish_info(base: Path, ep: str):
 
 
 def _ep_whitebox_reel(base: Path, ep: str) -> dict:
-    """视频预览页与分镜预览页「白模样片」板块(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
+    """分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示,接口字段 whitebox 保留供测试/兼容)(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
     整集摄影机视角白模视频 assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,
     并按各组 camera.mp4 指纹与字幕指纹判断是否过期(stale_reason=groups|subtitles);
     附派单目标 Agent 与当前可烧字幕条数,页面按钮据此发指令。"""
@@ -7983,7 +7984,7 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
 WHITEBOX_REEL_AGENT = "07-directing/whitebox-staging"
 
 
-# ═══════════════════════ 后期预览(/preview/post,WORKFLOW.md §9D,2026-09-11) ═══════════════════════
+# ═══════════════════════ 后期处理(/preview/post,WORKFLOW.md §9D,2026-09-11) ═══════════════════════
 # 分镜组签字(H3B)之后、成片闸门(G9)之前的后期工作台:处方台账 edit/epNN/post_plan.json(modules/post_plan.py),
 # ffmpeg 类处方由宿主 CLI code/post_apply.py 出片(后台线程),agent 类处方派 10-editing/post-finishing,
 # record 类只记台账;H3P 后期签字卡与控制台同一条(api_confirm_answer),签字记台账指纹判过期。
@@ -8537,7 +8538,7 @@ def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[d
                      "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
         return pp.AGENT_ID, "\n".join(lines)
     agent = POST_RECORD_AGENTS.get(r["kind"], pp.AGENT_ID)
-    lines = head + ["这是后期预览页记入台账(edit/%s/post_plan.json)的「记录类」处方,请按本工位规约把它落地到对应产物" % ep]
+    lines = head + ["这是后期处理页记入台账(edit/%s/post_plan.json)的「记录类」处方,请按本工位规约把它落地到对应产物" % ep]
     if r["kind"] in ("level", "mix_target", "ambience"):
         lines.append(f"(重跑混音 → assets/audio/final/{ep}.wav,LUFS/TP 达标;只改台账要求的段落/组,其余保持)。")
     elif r["kind"] == "bgm_segment":
@@ -8780,7 +8781,7 @@ async def api_post_sfx_dispatch(project: str, ep: str, body: dict):
     todo = [r for r in sfx.get("rows") or [] if r.get("source") in ("generate", "library") and not r.get("file")]
     if not todo:
         raise ServiceError(400, "没有待生成/待选库的点位")
-    lines = [f"后期预览页音效点位表(assets/post/{ep2}/sfx_cues.json,项目 {base.name} · {ep2}):{len(todo)} 条待落地。",
+    lines = [f"后期处理页音效点位表(assets/post/{ep2}/sfx_cues.json,项目 {base.name} · {ep2}):{len(todo)} 条待落地。",
              "逐条产出音频文件(wav/mp3,时长与事件相符),写到 assets/audio/sfx/%s/patches/<id>_<event>.wav,并把该行的 file 字段回填成项目相对路径(只改 file,不改其它字段):" % ep2]
     for r in todo[:120]:
         lines.append(f"- {r['id']} 组 {r['group_id']} 镜 {r.get('shot_id') or '-'} 组内 t={r.get('t')}s 整集 t={r.get('t_abs')}s 来源={r['source']} 电平 {r.get('gain_db')}dB:{r.get('text') or r.get('event')}")
@@ -8866,7 +8867,7 @@ def _post_sign_guard(proj: str, gate_id: str | None) -> None:
             raise ServiceError(409, f"H3P 未能签字:{ep} 还有 {s['dispatched']} 条处方在派单中,等回来采纳或弃用后再签")
         chk = _read_json_safe(base / pp.CHECK_REL.format(ep=ep)) or {}
         if chk.get("plan_fingerprint") == pp.plan_fingerprint(plan) and (chk.get("check") or {}).get("result") == "FAIL":
-            raise ServiceError(409, f"H3P 未能签字:{ep} 后期机检 post_ok FAIL,请到「后期预览」页看拼装预检")
+            raise ServiceError(409, f"H3P 未能签字:{ep} 后期机检 post_ok FAIL,请到「后期处理」页看拼装预检")
 
 
 async def api_post_signoff(project: str, ep: str, body: dict):
@@ -8891,7 +8892,7 @@ async def api_post_signoff(project: str, ep: str, body: dict):
 
 
 def _preview_videos(project: str, ep: str):
-    """视频预览聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
+    """成片发布聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
     base = _proj_base(project)
     plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
     plan_eps = {e.get("ep"): e for e in plan.get("episodes", [])
@@ -8934,8 +8935,8 @@ def _preview_videos(project: str, ep: str):
     data["finals"] = _files(("final", "master"), VIDEO_EXTS)
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
+    # 白模样片 / 动态样片:成片发布页 2026-09-13 起不再展示,字段保留供兼容与测试(tests/test_whitebox.py)
     data["whitebox"] = _ep_whitebox_reel(base, ep)
-    # 动态样片(2026-09-11):故事板草图串片,与白模样片并列
     try:
         data["animatic"] = _board_animatic(base, ep)
     except Exception as error:  # noqa: BLE001
@@ -9193,7 +9194,7 @@ def _flat_diff(old, new, prefix="") -> list[str]:
 
 
 async def _notify_settings_change(project: str, label: str, changes: list[str]):
-    """项目设置/设计构想保存后自动知会总制片,由其通知依赖该配置的 agent,避免继续按旧配置执行
+    """项目设置/创作定调保存后自动知会总制片,由其通知依赖该配置的 agent,避免继续按旧配置执行
     (生成模型页保存不走这里,见 api_genconfig_set)。"""
     if not changes:
         return
@@ -9282,7 +9283,7 @@ async def api_genconfig_set(body: dict):
     body = dict(body or {})
     # 前端仍随请求带 project(历史上用于「设置变更」通知的会话归属);genconfig 是全局配置,不落盘。
     # 2026-09-10 起生成模型保存不再知会总制片(用户拍板:渠道/模型切换由 genmedia 提交时按最新配置生效,
-    # 通知只会让总制片凭空派活);项目设置/设计构想的变更通知不受影响
+    # 通知只会让总制片凭空派活);项目设置/创作定调的变更通知不受影响
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
@@ -9371,27 +9372,30 @@ def format_brief(brief: str, style: str, rhythm: dict | None = None) -> str:
 
 
 async def api_rhythms_get():
-    """叙事节奏目录(单集/跨集两层;新建项目向导与设计构想弹窗共用)。"""
+    """叙事节奏目录(单集/跨集两层;新建项目向导与创作定调弹窗共用)。"""
     return narrative_rhythm.catalog()
 
 
 async def api_brief_get(project: str = "demo"):
-    """当前项目的设计构想:brief.md 的主要构想 + 设计风格 + 叙事节奏三个字段。"""
+    """当前项目的创作定调:brief.md 的主要构想 + 设计风格 + 叙事节奏三个字段。"""
     p = PROJECTS_DIR / safe_slug(project) / "brief.md"
     brief, style, rhythm = parse_brief(p.read_text() if p.is_file() else "")
     return {"project": project, "brief": brief, "style": style, "rhythm": rhythm}
 
 
 async def api_brief_set(body: dict):
-    """保存设计构想(主要构想+设计风格+叙事节奏)到 data/projects/<项目>/brief.md;全部清空即移除该设定。"""
+    """保存创作定调(主要构想+设计风格+叙事节奏)到 data/projects/<项目>/brief.md;全部清空即移除该设定。
+    2026-09-13 起按字段部分更新:body 未带的字段保留现值(创作定调弹窗只发 brief/style,视频节奏弹窗只发 rhythm)。"""
     project = safe_slug(body.get("project"))
     if not (PROJECTS_DIR / project).is_dir():
         raise ServiceError(404, f"Project not found: {project}")
-    brief = str(body.get("brief") or "").strip()
-    style = str(body.get("style") or "").strip()
-    rhythm = narrative_rhythm.normalize(body.get("rhythm") if isinstance(body.get("rhythm"), dict) else None)
     p = PROJECTS_DIR / project / "brief.md"
     old = p.read_text().strip() if p.is_file() else ""
+    cur_brief, cur_style, cur_rhythm = parse_brief(old)
+    brief = str(body.get("brief") or "").strip() if "brief" in body else cur_brief
+    style = str(body.get("style") or "").strip() if "style" in body else cur_style
+    rhythm = (narrative_rhythm.normalize(body.get("rhythm") if isinstance(body.get("rhythm"), dict) else None)
+              if "rhythm" in body else cur_rhythm)
     text = format_brief(brief, style, rhythm)
     if text:
         p.write_text(text)
@@ -9399,7 +9403,7 @@ async def api_brief_set(body: dict):
         p.unlink()
     new = p.read_text().strip() if p.is_file() else ""
     if new != old:
-        await _notify_settings_change(project, "设计构想", [
+        await _notify_settings_change(project, "创作定调", [
             f"brief.md 已更新,最新全文:\n{new[:1500]}" if new
             else "brief.md 已清空(移除主创构想、设计风格与叙事节奏设定)"])
     return {"ok": True, "project": project, "brief": brief, "style": style, "rhythm": rhythm}
@@ -9555,7 +9559,7 @@ async def api_projconfig_get(project: str = "demo"):
     return load_project_settings(project)
 
 
-PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
+PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "视频节奏",
                        "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
                        "prompt_skill": "提示词技能",
@@ -11139,13 +11143,15 @@ async def api_projects_create(body: dict):
         raise ServiceError(400, "Project name may only contain ASCII letters and digits")
     if (PROJECTS_DIR / name).exists():
         raise ServiceError(400, f"Project already exists: {name}")
-    # 向导初始设置(输出/时长/审核/片头片尾):先校验后建目录,校验失败不留下半成品项目
+    # 向导初始设置(输出/时长/模型限制):先校验后建目录,校验失败不留下半成品项目
     # 新建项目审核默认全 0:质量评委 0(跳过不派单)+各维度力度 0(不审核);2026-09-07 用户拍板,向导不再传 review,只能在项目设置「审核设置」改;调用方显式给值仍可覆盖
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
     base["review"] = {"evaluation": 0, **{k: 0 for k in REVIEW_DIMENSIONS}}
     # 新建项目旁白默认关闭(2026-09-01);DEFAULT_GENCONFIG 保持 True 仅作存量项目缺键回退
     base["output"] = {**base["output"], "narration_enabled": False}
+    # 新建项目片头/片尾/下集预告默认不启用(原向导「片头片尾」步的默认值;2026-09-13 该步删除后由此兜底,开关移到后期处理页)
+    base["packaging"] = {**base["packaging"], "intro_enabled": False, "outro_enabled": False, "teaser_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
     _validate_duration(cfg["duration"])
@@ -11181,7 +11187,7 @@ async def api_projects_create(body: dict):
         msg.append("2) 用户暂未导入小说文本:在汇报中提醒用户把小说原文放入 novel/ 目录")
     if brief_text:
         msg.append(
-            "3) 用户设计构想(主要构想 + 设计风格 + 叙事节奏)已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
+            "3) 用户创作定调(主要构想 + 设计风格 + 叙事节奏)已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
             "是后续全部工作的最高创作前提,其中设计风格约束全部画面视觉产出、叙事节奏约束剧本分集/分场与分镜节拍):"
             "请通读,并在汇报中简要复述你的理解以便用户纠偏")
     if cfg is not None:

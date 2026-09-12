@@ -37,7 +37,7 @@
 
 - 宿主 CLI `code/animatic.py --project --ep [--no-audio]`:把草图按时长串成 `assets/storyboard/<ep>/animatic.mp4`(+ `animatic.json`),PIL 逐镜合成帧(草图**按画布等比缩放**——单张 1280 长边与宫格切出的约 820×460 小图混用时尺寸不一,`fit_canvas` 既缩小也放大到刚好装进画布再居中,余边留黑;顶部半透明黑带压镜号标签 + 画面内容文字(≤3 行)便于对照;缺草图的镜用占位卡:灰底 + 镜号 + 画面内容文字居中;底部字幕带:台词黄、旁白紫),ffmpeg concat 出 1280×720 / 720×1280(按项目画幅)24fps;有 `assets/audio/narration/<ep>/` 旁白段按 shot_list `narration_anchors` 挂点混入、`assets/audio/voice/<ep>/` 以 shNNN 开头的对白干声挂到该镜起点。零生成费用。
 - 时长口径:有 shot_list 定稿用 `duration_s`(草案镜被拆成多镜时求和),否则草案 `duration_hint_s`;`duration_source = final|draft|mixed` 页面角标注明。
-- 入口:故事板页「🎞 出动态样片」(标题下折叠块,内嵌播放;缺 N 张草图只提醒不拦,Shift 无关)与视频预览页「🎞 动态样片」板块(白模样片之上,同一按钮)。`POST /api/v1/projects/<p>/board/<ep>/animatic` 起宿主后台线程,SSE `board_animatic` 通知,页面 4s 轮询兜底;`animatic_status()` 按 storyboard.json / shot_list.json / 任一草图比样片新判「已过期」。
+- 入口:故事板页「🎞 出动态样片」(标题下折叠块,内嵌播放;缺 N 张草图只提醒不拦,Shift 无关)(成片发布页的「🎞 动态样片」板块 2026-09-13 已删,只保留故事板页入口)。`POST /api/v1/projects/<p>/board/<ep>/animatic` 起宿主后台线程,SSE `board_animatic` 通知,页面 4s 轮询兜底;`animatic_status()` 按 storyboard.json / shot_list.json / 任一草图比样片新判「已过期」。
 
 
 ## 预览页互跳(2026-09-12)

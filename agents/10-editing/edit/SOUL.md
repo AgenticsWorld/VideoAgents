@@ -55,7 +55,7 @@
 | 粗成片 | `edit/epNN/cut_v1.mp4` | 时长 = 预算 ±5%,分辨率/fps 与 `bible/aspect_ratio.json` 一致 |
 | 成片基准字幕(终版封装时) | `edit/epNN/subtitles_final.srt`(+`.ass`) | `finalize_episode.py shift` 产出:subtitles.srt 整体 +片头实测时长(职责 6);无片头 = 原样拷贝;烧录/发布唯一字幕源 |
 | 成片时间轴台账(终版封装时) | `edit/epNN/final_layout.json` | `finalize_episode.py` 写:各段实测时长/起点、`cut_offset_s`(片头偏移)、`check` 结果;platform-adapter/QA 据此核对 |
-| 花字版成片(花字开关开启时,职责 7) | `edit/epNN/final_caption.mp4` + `edit/epNN/caption_sfx.m4a` | a:0=预混(开箱即听)、a:1=声轨权威存档;含 `final` 名 → 视频预览页与干净版并列收录 |
+| 花字版成片(花字开关开启时,职责 7) | `edit/epNN/final_caption.mp4` + `edit/epNN/caption_sfx.m4a` | a:0=预混(开箱即听)、a:1=声轨权威存档;含 `final` 名 → 成片发布页与干净版并列收录 |
 
 关键字段/结构约定:
 ```json

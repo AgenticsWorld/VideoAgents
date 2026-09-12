@@ -1,5 +1,5 @@
 /* 白模样片(整集摄影机视角白模视频 + 对白/旁白字幕,2026-09-11;原名白模合辑)
-   视频预览页与分镜预览页共用:派单文案、运行中状态(sessionStorage 跨页保留)、运行轮询、状态行 HTML。
+   分镜预览页使用(成片发布页 2026-09-13 起不再展示白模样片板块):派单文案、运行中状态(sessionStorage 跨页保留)、运行轮询、状态行 HTML。
    文件由白模调度 Agent 用宿主 CLI code/concat_whitebox.py 生成;按钮把指令派给该 Agent(POST /api/v1/runs)。 */
 (function(){
   const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

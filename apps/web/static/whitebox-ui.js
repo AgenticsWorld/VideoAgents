@@ -253,7 +253,7 @@ async function applyDecisions(st,button){
   const rows=(st.group.issues||[]).filter(i=>i.status==='decided');
   if(!rows.length)return;
   const gid=st.group.group_id, proj=st.project, ep=st.ep;
-  // 指令用中文写给 Agent(同视频预览页「重新生成白模样片」):内联已裁决项,按规约套用并回写源文件
+  // 指令用中文写给 Agent(同分镜预览页「重新生成白模样片」):内联已裁决项,按规约套用并回写源文件
   const message=[`请套用 ${ep} ${gid} 已裁决的白模待决项(docs/whitebox.md「待决项与用户裁决」):`,
     ...rows.map(i=>`- ${i.issue_id}:选「${i.decision.choice}」${i.decision.note?'(说明:'+i.decision.note+')':''}${i.decision.choice==='provisional'?'(=接受默认取舍:'+i.provisional+')':''}`),
     `先执行 python code/whitebox_issues.py --project ${proj} --ep ${ep} --pending 核对;逐条按所选方案修改 directing/${ep}/whitebox_plans/${gid}.json 并回写对应源文件(blocking/camera/shot_list/prompt),`,
