@@ -8008,6 +8008,46 @@ def _post_scene_palettes(base: Path, ep: str) -> dict:
     return out
 
 
+def _tl_num(t: dict, *keys):
+    for k in keys:
+        v = t.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+    return None
+
+
+def _tl_entry_span(t: dict) -> tuple[float | None, float]:
+    """timeline 视频轨条目 → (成片起点秒或 None, 占时秒)。兼容各版剪辑 agent 的字段命名。"""
+    start = _tl_num(t, "cum_start_s", "timeline_in_s", "timeline_in")
+    end = _tl_num(t, "cum_end_s", "timeline_out_s", "timeline_out")
+    if start is not None and end is not None and end >= start:
+        return start, end - start
+    t_in = _tl_num(t, "in_orig", "in", "in_s")
+    t_out = _tl_num(t, "out_orig", "out", "out_s")
+    if t_out is not None:
+        dur = max(0.0, t_out - (t_in or 0.0)) / (_tl_num(t, "speed") or 1.0)
+    else:
+        dur = max(0.0, _tl_num(t, "duration_s") or 0.0)
+    return start, dur
+
+
+def _post_episode_duration(tl: dict, groups: list[dict]) -> float:
+    """集成片总时长:timeline 顶层 duration_s → 视频轨最大终点(含黑场/片头)→ 末组终点。"""
+    d = _tl_num(tl, "duration_s", "duration_s_video_real") if isinstance(tl, dict) else None
+    if d:
+        return d
+    end, acc = 0.0, 0.0
+    for t in (((tl.get("tracks") or {}).get("video") or []) if isinstance(tl, dict) else []):
+        if not isinstance(t, dict):
+            continue
+        start, dur = _tl_entry_span(t)
+        acc = (start if start is not None else acc) + dur
+        end = max(end, acc)
+    if end:
+        return end
+    return groups[-1]["cum_start_s"] + groups[-1]["duration"] if groups else 0.0
+
+
 def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
     """分镜组行(timeline 组序优先)+ shot 起点索引(组内秒)。"""
     pp = _post_pp()
@@ -8018,11 +8058,18 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
     tracks = ((tl.get("tracks") or {}).get("video") or []) if isinstance(tl, dict) else []
     order = []
     if tracks:
+        # timeline.json 视频轨字段名因剪辑 agent 版本而异:起点 cum_start_s|timeline_in_s|timeline_in,
+        # 源区间 in_orig/out_orig|in/out|in_s/out_s,或直接 duration_s;缺起点时按轨道顺序累加(含黑场/片头等无组条目)
+        acc = 0.0
         for t in tracks:
+            if not isinstance(t, dict):
+                continue
+            start, dur = _tl_entry_span(t)
+            if start is None:
+                start = acc
             if t.get("group_id"):
-                t_in = t.get("in_orig") if t.get("in_orig") is not None else t.get("in")
-                t_out = t.get("out_orig") if t.get("out_orig") is not None else t.get("out")
-                order.append((t["group_id"], float(t.get("cum_start_s") or 0), max(0.0, float(t_out or 0) - float(t_in or 0))))
+                order.append((t["group_id"], start, dur))
+            acc = start + dur
     else:
         cum = 0.0
         for gid, g in gmeta.items():
@@ -8287,7 +8334,7 @@ def _preview_post(project: str, ep: str):
                    "cut_post_v2": _post_url(base, f"edit/{ep}/{pp.CUT_POST_V2}"), "cut_v1": _post_url(base, f"edit/{ep}/cut_v1.mp4"),
                    "final_audio": _post_url(base, f"assets/audio/final/{ep}.wav"),
                    "final_pre_post": _post_url(base, f"edit/{ep}/final.pre_post.mp4")},
-        "episode_duration": round(float(tl.get("duration_s") or (groups[-1]["cum_start_s"] + groups[-1]["duration"] if groups else 0)), 3),
+        "episode_duration": round(_post_episode_duration(tl, groups), 3),
         "settings": {"packaging": settings.get("packaging") or {}, "output": {k: (settings.get("output") or {}).get(k)
                                                                               for k in ("subtitle_burn_in", "caption_enabled", "narration_enabled", "final_resolution")}},
         "episode_palette": pals.get("_episode") or [],
