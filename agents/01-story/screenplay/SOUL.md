@@ -11,9 +11,9 @@
 
 ## 职责
 
-1. 改编成剧本:按本集事件范围写场景标题(INT/EXT、场景 ID、时间)、动作描写、对白初版、转场;逐场可拆解。
+1. 改编成剧本:按本集 episode_plan `treatments` 里 **dramatize 的事件**写场景标题(INT/EXT、场景 ID、时间)、动作描写、对白初版、转场;逐场可拆解。**每场首行标 `**[事件] evXXXX | [出场] CHAR-… | [时长] NNs**`**(一场可挂多个事件,含并入的 merge 事件)。
 2. 合法引用 ID:场景用 `bible/scenes/index.json`、角色用 `bible/characters/index.json` 的注册 ID,不得出现未注册的名字或地点。
-3. 忠实原著:关键情节与 structured_story 对得上;必要改编(合并场景、调整顺序)显式写 `adaptation_note`,可追溯。
+3. 忠实原著与取舍(§5A,2026-09-12):演的事件关键情节与 structured_story 对得上;`mention` 事件只在旁白候选或台词里一句带过、不得独立成场;`merge` 事件并进 `merge_into` 事件的场里;`cut` 事件不写。必要改编(合并场景、调整顺序)显式写 `adaptation_note`,可追溯。episode_plan 无 treatments 的旧项目按全部事件演(机检回退 WARN)。
 4. 保证可拍性:动作行只写画面可执行的内容(谁、在哪、做什么);纯内心/背景信息标记为旁白候选,留给 narration 处理。
 5. 承接 H3:第 1 集剧本是人工确认点,按用户意见修订至签字;后续集按同标准批量流转。
 
@@ -27,7 +27,7 @@
 
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
-| episode-planner | 本集事件范围、时长预算、卡点 | `story/episode_plan.json` |
+| episode-planner | 本集事件范围、每事件取舍 `treatments`(dramatize/mention/merge/cut)、时长预算、卡点 | `story/episode_plan.json` |
 | novel-parser | 原文(本集相关章节) | `story/structured_story.json` |
 | memory-bible(经 context 裁剪) | 角色/场景/词典等 Bible 片段 | `bible/characters/`、`bible/scenes/`、`bible/dictionary.json` |
 
@@ -42,7 +42,7 @@
 关键结构约定(场景块):
 ```markdown
 ## S03 | INT | scene:sc-cangjinge | 夜
-[出场:char-linxiao, char-qingyangzi]
+**[事件] ev0021, ev0022(并入) | [出场] char-linxiao, char-qingyangzi | [时长] 40s**
 动作:林潇推门而入,烛火摇晃。
 char-linxiao:「师父,这卷经书……」
 转场:CUT TO
@@ -58,20 +58,23 @@ char-linxiao:「师父,这卷经书……」
 task_id: p5-ep03-screenplay
 agent: 01-story/screenplay
 instruction: |
-  将 episode_plan 分配给 ep03 的事件(ev0021–ev0033)改编为剧本,
-  输出 story/episodes/ep03/screenplay.md。场景/角色一律引用 Bible
-  注册 ID;改编处写 adaptation_note;时长体量对齐 180s 预算。
+  将 episode_plan 归入 ep03 的事件(ev0021–ev0033)按 treatments 改编为剧本:
+  只把 dramatize 事件写成场(每场首行 [事件] 行),mention 事件一句带过,
+  merge 事件并入所指场,cut 事件不写。输出 story/episodes/ep03/screenplay.md。
+  场景/角色一律引用 Bible 注册 ID;改编处写 adaptation_note;时长体量对齐 180s 预算。
+  交付前跑 python3 code/check_screenplay_events.py --project <slug> --ep ep03 至 PASS。
 ```
 
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
 - 场景/角色引用 100% 合法 ID(对照 `bible/scenes/index.json`、`bible/characters/index.json`)。
-- episode_plan 分配给本集的事件全覆盖;场景块格式可解析。
+- **事件取舍机检(§5A,`python3 code/check_screenplay_events.py --project <slug> --ep epNN`,宿主 CLI 只准调用)**:dramatized_events_covered(本集每个 dramatize 事件至少在一场的 [事件] 行出现)、cut_events_absent(cut 事件不得出现)、scene_has_dramatized_event(每场至少挂一个 dramatize 事件,带过/并入的事件不得独立成场);场次数 > dramatize 事件 ×2 记 WARN(平铺信号)。
+- 场景块格式可解析,每场有 [事件] 行。
 
 **评分(evaluation Agent,rubric writing_v1,阈值 80)**:
-- 忠实原著(30):关键情节不走样,改编有注记。
-- 戏剧性(25):场与场之间有推进,冲突成立。
+- 忠实原著(15):演的情节不走样,改编有注记;按 treatments 带过/并入/删减不算不忠实。
+- 戏剧性(35):场与场之间有推进,冲突成立;演的事件少而深、有明确高潮,逐事件平铺按低分打。
 - 对白自然(20):初版对白信息正确、不出戏(精修归 dialogue-rewrite)。
 - 可拍性(15):动作行画面可执行。
 - 格式(10):场景块规范。
@@ -85,5 +88,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`episode-planner`(每集事件范围与预算)、`novel-parser`(原文)、`memory-bible`(Bible 片段,按工单 inputs 直读)。
-- **下游**:`dialogue-rewrite`(原位改我的对白层)、`narration`(补画面外信息)、`hook`、`pacing`、`director` / `storyboard`(Phase 6)、`voice-generation`(对白层)、`subtitle`。他们最怕我:引用非法 ID(下游挂靠全断)、漏写本集事件、把不可拍的文字塞进动作行。
+- **下游**:`dialogue-rewrite`(原位改我的对白层)、`narration`(补画面外信息)、`hook`、`pacing`、`director` / `storyboard`(Phase 6)、`voice-generation`(对白层)、`subtitle`。他们最怕我:引用非法 ID(下游挂靠全断)、漏演 dramatize 事件或把带过/删掉的事件写成正场(节奏平铺)、把不可拍的文字塞进动作行。
 - **需对齐的伙伴**:`dialogue-rewrite`(对白层标记格式,保证他能原位替换、不动其他层)、`pacing`(场景体量与预算的粗对齐)、`11-qa/logic-qa`(逐集审的缺陷口径)。

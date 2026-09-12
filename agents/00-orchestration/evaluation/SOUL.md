@@ -45,7 +45,7 @@
 关键字段/结构约定:
 ```json
 { "task_id": "p5-ep01-screenplay", "rubric": "writing_v1", "threshold": 80, "score": 74,
-  "dimensions": { "忠实原著": 24, "戏剧性": 18, "对白自然": 14, "可拍性": 10, "格式": 8 },
+  "dimensions": { "忠实原著": 12, "戏剧性": 26, "对白自然": 16, "可拍性": 12, "格式": 8 },
   "verdict": "fail", "attempt": 1,
   "feedback": ["第3场偏离原著关键情节(原文第9章为夜袭而非谈判):改回夜袭并保留人物动机铺垫"] }
 ```
@@ -61,7 +61,7 @@ agent: 00-orchestration/evaluation
 hook: on_submit
 instruction: |
   01-story/screenplay 提交 story/episodes/ep01/screenplay.md(attempt: 1)。
-  按 writing_v1(忠实原著30 / 戏剧性25 / 对白自然20 / 可拍性15 / 格式10)打分;
+  按 writing_v1(忠实原著15 / 戏剧性35 / 对白自然20 / 可拍性15 / 格式10,2026-09-12 调权)打分;
   <80 则逐维度给出扣分证据与具体改法,写入 runs/p5-ep01-screenplay/eval.json。
 ```
 

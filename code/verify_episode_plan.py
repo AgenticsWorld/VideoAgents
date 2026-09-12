@@ -1,78 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""只读校验 episode_plan.json:事件 100% 覆盖且不重复、时长在预算内、ID 合法。仅 print 统计,不改任何文件。
+"""episode_plan.json 只读机检(WORKFLOW.md Phase 5 p5-episode-plan;2026-09-12 改「分配」为「归类+取舍」)。
 
-用法:python3 code/verify_episode_plan.py [--project <slug>]
+机检项(逻辑在 modules/episode_treatments.py):
+  events_classified_once   对账范围内事件 100% 归到唯一一集、无重复、ID 合法(总表带 roadmap 时只对账精确规划集章节范围)
+  treatments_complete      每集 events 逐个定 treatment ∈ dramatize/mention/merge/cut;mention/merge/cut 须写 reason
+  dramatize_within_cap     每集 dramatize 事件数 ≤ ceil(duration_budget_s / --sec-per-event),默认 90s/事件
+  hook_points_dramatized   开场钩位/结尾卡点事件必须 dramatize
+  cut_not_on_causal_chain  cut 事件不得 importance=major、不得是任何保留事件的 caused_by、不得是卡点
+  merge_target_valid       merge_into 指向同集 dramatize 事件
+  duration_in_budget / ids_valid  沿用旧检
+
+用法:python3 code/verify_episode_plan.py [--project <slug>] [--sec-per-event 90] [--json]
+退出码:0 全 PASS、1 有 FAIL、2 文件缺失。只 print,不改任何文件。
+宿主 CLI,Agent 只准调用,禁止复制/改写到项目 code/。
 """
-import json, sys
+import json
+import sys
 
 from _common import parse_args
 
-args, _proj = parse_args(__doc__, ep=False)
-BASE = _proj / "story"
-plan = json.load(open(BASE / "episode_plan.json", encoding="utf-8"))
-events = json.load(open(BASE / "events.json", encoding="utf-8"))
-graph = json.load(open(BASE / "story_graph.json", encoding="utf-8"))
+from modules import episode_treatments as et
 
-all_ev = [e["id"] for e in events["events"]]
-all_ev_set = set(all_ev)
-all_fs = {f["id"] for f in graph["foreshadowing"]}
 
-assigned = []
-for ep in plan["episodes"]:
-    assigned.extend(ep["events"])
+def main() -> int:
+    args, root = parse_args(__doc__, ep=False, configure=lambda ap: (
+        ap.add_argument("--sec-per-event", type=float, default=et.DEFAULT_SEC_PER_DRAMATIZED_EVENT,
+                        help="每个 dramatize 事件平均预算秒数,决定每集 dramatize 上限(默认 90)"),
+        ap.add_argument("--json", action="store_true", help="机器可读输出")))
+    base = root / "story"
+    plan = et.read_json(base / "episode_plan.json")
+    if plan is None:
+        print(f"MISSING {base / 'episode_plan.json'}(不存在或 JSON 无法解析)")
+        return 2
+    events = et.read_json(base / "events.json")
+    graph = et.read_json(base / "story_graph.json")
+    if events is None:
+        print(f"MISSING {base / 'events.json'}")
+        return 2
+    res = et.verify_plan(plan, events, graph, sec_per_event=args.sec_per_event)
+    ok = all(res["checks"].values())
+    if args.json:
+        print(json.dumps({"ok": ok, **res}, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+    print(et.format_report(res, "episode_plan 机检"))
+    print(f"\n对账范围: {res.get('scope')}  范围内事件 {res.get('n_scope_events')}  归类条目 {res.get('n_assigned')}")
+    print("\n集     预算   事件  演  带过  并入  删  上限  卡点")
+    for e in res["episodes"]:
+        b = f"{e['budget_s']:.0f}s" if e["budget_s"] else "-"
+        hk = e["hook"]
+        print(f"{e['ep']:<6} {b:>6} {e['n_events']:>4} {e['n_dramatize']:>4} {e['n_mention']:>5} {e['n_merge']:>5} "
+              f"{e['n_cut']:>4} {str(e['cap'] or '-'):>4}  {hk.get('opening')}->{hk.get('cliffhanger')}")
+    print(f"\n全部机检: {'ALL PASS' if ok else 'HAS FAIL'}")
+    return 0 if ok else 1
 
-assigned_set = set(assigned)
-dups = [x for x in assigned_set if assigned.count(x) > 1]
-missing = sorted(all_ev_set - assigned_set)
-extra = sorted(assigned_set - all_ev_set)
 
-print("=== episode_plan 机检 ===")
-print(f"events.json 事件总数        : {len(all_ev)}")
-print(f"episode_plan 分配事件条目数  : {len(assigned)}")
-print(f"去重后覆盖事件数            : {len(assigned_set)}")
-print(f"重复分配的事件             : {dups if dups else '无'}")
-print(f"漏分配的事件               : {missing if missing else '无'}")
-print(f"非法/多余事件ID            : {extra if extra else '无'}")
-cov_ok = (len(assigned) == len(all_ev)) and not dups and not missing and not extra
-print(f"[CHECK] events_assigned_once: {'PASS' if cov_ok else 'FAIL'}")
-
-# 时长预算
-budget = plan["default_duration_budget_s"]
-print(f"\n=== 时长预算(基准 {budget}s / 集) ===")
-dur_ok = True
-for ep in plan["episodes"]:
-    b = ep["duration_budget_s"]
-    load = ep.get("content_load_estimate_s", "-")
-    inrange = (b == budget)
-    load_ok = (isinstance(load, int) and load <= budget)
-    dur_ok = dur_ok and inrange and load_ok
-    print(f"  {ep['ep']} 预算={b}s 内容负荷估={load}s 事件数={len(ep['events'])} "
-          f"卡点={ep['hook_point']['opening']}->{ep['hook_point']['cliffhanger']}")
-print(f"[CHECK] duration_in_budget : {'PASS' if dur_ok else 'FAIL'}")
-
-# ID 合法性(事件卡点 + 伏笔)
-bad_hook = []
-for ep in plan["episodes"]:
-    for k in ("opening", "cliffhanger"):
-        v = ep["hook_point"][k]
-        if v not in all_ev_set:
-            bad_hook.append((ep["ep"], k, v))
-bad_fs = []
-for ep in plan["episodes"]:
-    for f in ep.get("carry_over", []):
-        if f not in all_fs:
-            bad_fs.append((ep["ep"], f))
-print(f"\n=== ID 合法性 ===")
-print(f"非法卡点事件ID : {bad_hook if bad_hook else '无'}")
-print(f"非法伏笔ID     : {bad_fs if bad_fs else '无'}")
-id_ok = not bad_hook and not bad_fs
-print(f"[CHECK] ids_valid          : {'PASS' if id_ok else 'FAIL'}")
-
-# 叙事顺序单调性(骨架应 ev0001->ev0034 顺次不倒序)
-mono = all(assigned[i] <= assigned[i+1] for i in range(len(assigned)-1))
-print(f"\n[CHECK] narrative_order_monotonic (ev 编号顺次): {'PASS' if mono else 'FAIL'}")
-
-print(f"\n总集数: {plan['total_episodes']}  | 全部机检: "
-      f"{'ALL PASS' if cov_ok and dur_ok and id_ok else 'HAS FAIL'}")
-sys.exit(0 if (cov_ok and dur_ok and id_ok) else 1)
+if __name__ == "__main__":
+    sys.exit(main())

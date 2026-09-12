@@ -72,7 +72,7 @@ instruction: |
 - 钩子占位(opening 3s / ending)已预留。
 
 **评分(evaluation Agent)**:
-- `WORKFLOW.md` Phase 5 表对本岗以机检 + director 会签为准,未单列 rubric;若工单 `acceptance.eval_rubric` 指定,按 writing_v1(阈值 80)执行,重点维度「戏剧性(25)」(曲线有峰谷不平铺)与「可拍性(15)」(分配可被镜头执行)。
+- `WORKFLOW.md` Phase 5 表对本岗以机检 + director 会签为准,未单列 rubric;若工单 `acceptance.eval_rubric` 指定,按 writing_v1(阈值 80)执行,重点维度「戏剧性(35)」(曲线有峰谷不平铺)与「可拍性(15)」(分配可被镜头执行)。
 
 ## 校验与返工
 

@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""剧本事件取舍机检 dramatized_events_covered(WORKFLOW.md Phase 5 p5-screenplay,2026-09-12)。
+
+核 `story/episodes/<ep>/screenplay.md` 各场次 `[事件]` 行 vs `story/episode_plan.json` 本集 treatments:
+  dramatized_events_covered   本集每个 dramatize 事件至少出现在一场的 [事件] 行
+  cut_events_absent           任何场次不得引用 cut 事件
+  scene_has_dramatized_event  每场 [事件] 至少含一个 dramatize 事件(mention/merge 事件不得独立成场)
+WARN:场次引用本集之外的事件;场次无 [事件] 行;场次数 > dramatize 事件数 ×2(平铺信号);
+      episode_plan 本集无 treatments(旧格式)→ 全部事件按 dramatize 核,不阻断存量项目。
+
+用法:python3 code/check_screenplay_events.py --project <slug> --ep ep01 [--strict] [--json]
+退出码:0 PASS(--strict 时 WARN 也算失败)、1 FAIL、2 文件缺失。只 print,不改任何文件。
+宿主 CLI,Agent 只准调用,禁止复制/改写到项目 code/。
+"""
+import json
+import sys
+
+from _common import parse_args
+
+from modules import episode_treatments as et
+
+
+def main() -> int:
+    args, root = parse_args(__doc__, configure=lambda ap: (
+        ap.add_argument("--strict", action="store_true", help="WARN 也算失败"),
+        ap.add_argument("--json", action="store_true", help="机器可读输出")))
+    sp = root / "story" / "episodes" / args.ep / "screenplay.md"
+    if not sp.is_file():
+        print(f"MISSING {sp}")
+        return 2
+    plan = et.read_json(root / "story" / "episode_plan.json")
+    if plan is None:
+        print(f"MISSING {root / 'story' / 'episode_plan.json'}")
+        return 2
+    res = et.verify_screenplay(sp.read_text(encoding="utf-8"), plan, args.ep)
+    ok = all(res["checks"].values()) and not (args.strict and res["warns"])
+    if args.json:
+        print(json.dumps({"ok": ok, **{k: v for k, v in res.items() if k != "scenes"},
+                          "scenes": res["scenes"]}, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+    print(et.format_report(res, f"{args.ep} 剧本事件取舍机检"))
+    tr = res.get("treatments") or {}
+    if tr:
+        by = {}
+        for e, t in tr.items():
+            by.setdefault(t, []).append(e)
+        for t in et.TREATMENTS:
+            if by.get(t):
+                print(f"  {et.TREATMENT_ZH[t]:<3}({t:<9}) {len(by[t]):>3}: {' '.join(by[t])}")
+    print(f"  场次 {res.get('n_scenes')} 场 / dramatize 事件 {res.get('n_dramatize')} 个")
+    print(f"\n结果: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

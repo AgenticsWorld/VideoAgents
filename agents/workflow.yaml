@@ -195,11 +195,11 @@ phases:
     name: 剧本改编          # 与 p4 并行,均依赖 g3
     depends_on: [g3]
     tasks:
-      - { id: p5-episode-plan, agent: 01-story/episode-planner, outputs: [story/episode_plan.json],
-          validation: { auto: [events_assigned_once, duration_in_budget], rubric: writing_v1 } }
+      - { id: p5-episode-plan, agent: 01-story/episode-planner, outputs: [story/episode_plan.json],   # 2026-09-12 §5A:事件「分配」改「归类+取舍」,每集 treatments[] 逐事件定 dramatize/mention/merge/cut;机检 code/verify_episode_plan.py --project
+          validation: { auto: [events_classified_once, treatments_complete, dramatize_within_cap, hook_points_dramatized, cut_not_on_causal_chain, merge_target_valid, duration_in_budget], rubric: writing_v1 } }
       - { id: p5-screenplay, agent: 01-story/screenplay, for_each: episode, depends_on: [p5-episode-plan],
-          outputs: ["story/episodes/{ep}/screenplay.md"],
-          validation: { auto: [id_refs_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
+          outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12)
+          validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],

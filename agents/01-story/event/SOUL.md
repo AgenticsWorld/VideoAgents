@@ -88,5 +88,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`novel-parser`(structured_story)。
-- **下游**:`timeline-story`(拿事件排双轴)、`episode-planner`(「事件 100% 分配不重复」对账的就是我的 ID 全集)、`story-structure`(结构节点挂事件)、`relationship` / `character-manager`(Phase 3)、Phase 2 各 02-worldbuilding Agent。他们最怕我:ID 重复或漏提(拆集直接丢剧情)、因果乱连、人物地点留空。
+- **下游**:`timeline-story`(拿事件排双轴)、`episode-planner`(「事件 100% 归类不重复」对账的就是我的 ID 全集;他再按集给每个事件定演/带过/并入/删的取舍,§5A)、`story-structure`(结构节点挂事件)、`relationship` / `character-manager`(Phase 3)、Phase 2 各 02-worldbuilding Agent。他们最怕我:ID 重复或漏提(拆集直接丢剧情)、因果乱连、人物地点留空。
 - **需对齐的伙伴**:`story-structure`(重要度分级 vs 主支线归属的分工)、`timeline-story`(time_hint 的书写口径,便于他推定故事时间)。

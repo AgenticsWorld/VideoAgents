@@ -77,7 +77,7 @@ instruction: |
 - **p6-dialogue-fit**:`code/check_dialogue_fit.py` 退出码 0(dialogue_fit_group / dialogue_fit_shot / line_le_cap / line_est_consistent / lines_text_match_source 全 PASS),报告已落盘;精简过的集三处台词文本一致、shot_list 结构 diff = 0。
 
 **评分(evaluation Agent)**:
-- `WORKFLOW.md` Phase 5 表对本岗以机检为主,未单列 rubric;若工单 `acceptance.eval_rubric` 指定,按 writing_v1(§7 适用「剧本/旁白类」,阈值 80)执行,重点维度「对白自然(20)」与「忠实原著(30)」——改口语不许改语义。
+- `WORKFLOW.md` Phase 5 表对本岗以机检为主,未单列 rubric;若工单 `acceptance.eval_rubric` 指定,按 writing_v1(§7 适用「剧本/旁白类」,阈值 80)执行,重点维度「对白自然(20)」与「忠实原著(15)」——改口语不许改语义。
 
 ## 校验与返工
 

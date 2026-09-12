@@ -340,13 +340,15 @@ refs/
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| episode-planner | 全书拆集:每集事件范围、目标时长、卡点位置;产出总表 | story_graph、events、pacing 约束、目标平台 | `story/episode_plan.json` | 机检:事件 100% 被分配且不重复;每集时长在预算内。评分 writing_v1 |
-| screenplay(每集) | 把该集事件改写为剧本(场景标题/动作/对白/转场) | episode_plan、structured_story、Bible | `story/episodes/epNN/screenplay.md` | 机检:场景/角色引用合法 ID。评分 writing_v1 ≥80。QA:logic-qa 逐集审 |
+| episode-planner | 全书拆集:每集事件范围、目标时长、卡点位置;**每集逐事件定取舍 `treatments[]`(2026-09-12,§5A):dramatize 演 / mention 带过 / merge 并入 / cut 删,演的事件数受集预算封顶**;产出总表 | story_graph、events、pacing 约束、目标平台 | `story/episode_plan.json` | 机检 `code/verify_episode_plan.py --project`:事件 100% 归类到唯一一集(events_classified_once)、treatments 齐全且 mention/merge/cut 有 reason(treatments_complete)、dramatize 数 ≤ ⌈集预算 ÷ 90s⌉(dramatize_within_cap)、卡点事件必须 dramatize(hook_points_dramatized)、cut 事件不在主线因果链上(cut_not_on_causal_chain)、merge_into 合法;每集时长在预算内。评分 writing_v1 |
+| screenplay(每集) | 把该集 **dramatize 事件**改写为剧本(场景标题/动作/对白/转场);mention 事件只在旁白候选/台词里一句带过、merge 事件并进 merge_into 事件的场、cut 事件不写(§5A);每场首行标 `[事件]` 行 | episode_plan(含 treatments)、structured_story、Bible | `story/episodes/epNN/screenplay.md` | 机检:场景/角色引用合法 ID;`code/check_screenplay_events.py --project --ep`:dramatize 事件全部成场(dramatized_events_covered)、cut 事件不出现(cut_events_absent)、每场至少挂一个 dramatize 事件(scene_has_dramatized_event)。评分 writing_v1 ≥80。QA:logic-qa 逐集审 |
 | dialogue-rewrite(每集) | 优化对白:符合各角色 dialogue_style、口语化、时长可控 | screenplay、dialogue_style | 更新 screenplay 的对白层 | 机检:风格卡命中率 ≥80%;单句时长估算 ≤ 配音上限(`code/check_dialogue_fit.py --project --ep` 仅剧本层模式:line_le_cap = shot_max_s×0.7、line_est_consistent,2026-08-30);**分镜定稿后另有 p6-dialogue-fit 精简环节回到本岗(§7D ①′)** |
 | narration(每集) | **仅「📤 输出设置」旁白开关(output.narration_enabled,新建项目默认关、存量项目缺省=开)开启时派发——关=全片无任何旁白,不派发、闸门不 HOLD(§7D)**;生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
 | hook(每集) | 设计开头 3 秒钩子与结尾悬念;给出备选 3 条 | screenplay、下一集 episode_plan | `epNN/hooks.json` | 评分 creative_v1;QA:人工从备选中挑选或要求重写 |
 | pacing(每集) | 节奏审定:逐场时长分配、情绪曲线、删减建议 | screenplay、color_script | `epNN/pacing.json` | 机检:总时长 = 预算 ±10%;QA:director 会签 |
 | timeline-story(p5-breakdown,每集,2026-09-11) | **剧本拆解表**:把本集剧情层全部产物拆成一份结构化 JSON(逐场 场次/场景/内外时段/出场/事件/一句话内容/节拍功能/情绪/节奏/预计时长(对白·旁白·无声)/台词逐句/旁白/钩子/人物表/情绪曲线/删减建议/分集计划/事件卡),供控制台「📜 剧本预览」页一张两列表展示(左列剧本按 `blocks[]` 小块逐行、右列该块关联信息:时长/情绪/节奏/事件/钩子/删减/估时)与逐块反馈;**只读拆解,不改写任何剧本/对白/旁白/钩子/节奏文件**;schema 与字段见 `docs/script_breakdown.md`。老项目没有该文件时预览页显示启发式推导视图并提供「重新分析」按钮直接派单本工位(拆解归 timeline-story;页面上对剧本/对白/旁白等内容的反馈仍发各自工位) | screenplay、dialogue、narration、hooks、pacing、episode_plan、events、story_graph、Bible 索引 | `epNN/script_breakdown.json` | 机检 `script_breakdown_ok`(`code/check_script_breakdown.py --project --ep`:schema/场次唯一/情绪 0–1/时长非负/台词 speaker+text/旁白锚点合法;比输入旧 = WARN 须重跑) |
+
+> **§5A 事件取舍契约(2026-09-12)**:旧规「事件 100% 分配」+「剧本本集事件全覆盖」让每个事件都被演成一场戏,成片节奏平铺、没有爆点。现改为「事件 100% 归类、按取舍演」:episode-planner 仍须把对账范围内每个事件归到唯一一集(不许静默丢;总表带 `roadmap` 时只对账精确规划集章节范围内的事件),但每集 `treatments[]` 逐事件定 `treatment` ∈ `dramatize`(演,正片成场)/ `mention`(带过,旁白或台词一句交代,不成场)/ `merge`(并入,`merge_into` 指向同集一个 dramatize 事件,并进它的场里)/ `cut`(删,不出现);mention/merge/cut 须写 `reason`。**每集 dramatize 事件数 ≤ ⌈duration_budget_s ÷ 90⌉**(600s 集 ≤7 个、300s ≤4 个、180s ≤2 个;这个上限只能由用户/orchestrator 经 CLI `--sec-per-event` 调整,Agent 不得在总表里自定);开场钩位与结尾卡点事件必须 dramatize;cut 事件不得是 major 事件、不得是任何保留事件的 `caused_by`(因果链断裂,至少 mention)、不得是卡点。screenplay 只把 dramatize 事件写成场,每场首行 `**[事件] evXXXX | [出场] CHAR-… | [时长] NNs**` 标所演事件(一场可挂多个,含并入的 merge 事件);mention 事件只能出现在旁白候选/台词里、不得独立成场;cut 事件不得出现。两侧机检:`code/verify_episode_plan.py --project`、`code/check_screenplay_events.py --project --ep`(宿主 CLI,Agent 只准调用)。**存量项目**:episode_plan 无 treatments 的旧格式,剧本侧机检回退为「全部按 dramatize 核」并 WARN,不阻断;重跑 p5-episode-plan 即按新契约。评分 writing_v1 同步调权:忠实原著 30→15、戏剧性 25→35——为节奏做的带过/并入/删减只要有标注不算「不忠实」,平铺覆盖式改编在「戏剧性」扣分。
 
 **G5 闸门 + H3 人工确认**:第 1 集剧本用户签字后,后续集按同标准批量流转(用户可抽查)。用户在控制台「📜 剧本预览」页审看本集拆解表(场次/人物/对白/旁白/节奏/情绪/钩子,2026-09-11 起剧本与旁白全文不再放在分镜预览页),每个板块的「✏️ 修改」直发对应 01-story 工位。
 
@@ -839,7 +841,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 |---|---|---|
 | extraction_v1 | 设定/事件抽取类 | 忠实原文 40 / 出处可溯 20 / 完整性 25 / 格式 15 |
 | analysis_v1 | 结构/性格分析类 | 证据充分 35 / 洞察深度 25 / 自洽 25 / 格式 15 |
-| writing_v1 | 剧本/旁白类 | 忠实原著 30 / 戏剧性 25 / 对白自然 20 / 可拍性 15 / 格式 10 |
+| writing_v1 | 剧本/旁白类 | 忠实原著 15 / 戏剧性 35 / 对白自然 20 / 可拍性 15 / 格式 10(2026-09-12 调权,§5A:只罚改错不罚改少,平铺覆盖式改编在戏剧性扣分) |
 | creative_v1 | 风格/钩子/导演阐述 | 契合原著气质 30 / 独特性 25 / 可执行 30 / 格式 15 |
 | visual_plan_v1 | 分镜/构图类 | 叙事清晰 30 / 视觉多样性 20 / 可生成性 30 / 规范 20 |
 | visual_gen_v1 | 图像/视频产物 | 与设计稿匹配 35 / 技术质量 30 / 角色一致 25 / 无违禁 10 |
