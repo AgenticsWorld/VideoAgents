@@ -89,11 +89,11 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
 .dl .spk i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:0}
 .dl .par{color:var(--dim);font-size:12px;flex:none}
 .dl .tx{color:var(--yellow)}
-.rl{display:flex;gap:8px;align-items:baseline;margin:1px 0;white-space:nowrap}
+.rl{display:flex;gap:8px;align-items:baseline;margin:1px 0}
 .rl .i{flex:none;color:var(--dim);width:1.8em;text-align:right;font-variant-numeric:tabular-nums}
-.rl .em{overflow:hidden;text-overflow:ellipsis;max-width:180px}
-.rl .es{color:var(--text);font-variant-numeric:tabular-nums}
-.rl .sh{color:var(--green)}
+.rl .em{flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.rl .es{flex:none;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rl .sh{flex:none;color:var(--green)}
 .info{display:flex;flex-direction:column;gap:3px}
 .info .ln{display:flex;gap:6px;align-items:baseline}
 .info .ln .k{flex:none;width:1.4em;text-align:center}
