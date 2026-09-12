@@ -64,6 +64,7 @@ header .ps-info select.ov{color:var(--accent)}
    由 updateNavActive 按视口顶端算出当前场次/组后重绘;点场次/组名跳回其锚点。
    高度写进 #content 的 --stick,组卡右侧的白模面板 / 组视频栏 sticky 时让出这条高度 */
 #stickbar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 26px;background:var(--panel);border-bottom:1px solid var(--border);box-shadow:0 3px 10px rgba(0,0,0,.35);font-size:13.5px;line-height:1.5}
+#stickbar[hidden]{display:none}   /* hidden 属性的 UA 样式会被上面的 display:flex 盖掉,显式补一条 */
 #stickbar .sc{color:var(--accent);font-weight:600;cursor:pointer}
 #stickbar .g{color:var(--purple);font-weight:600;cursor:pointer}
 #stickbar .sc:hover,#stickbar .g:hover{text-decoration:underline}
@@ -1628,7 +1629,7 @@ function updateNavActive(){
   const key=(sc?sc.id:'')+'|'+(gp?gp.id:'');
   if(key===STICK_KEY)return;
   STICK_KEY=key;
-  if(!sc){bar.hidden=true;box.style.setProperty('--stick','0px');return}
+  if(!sc){bar.hidden=true;bar.innerHTML='';box.style.setProperty('--stick','0px');return}
   bar.innerHTML=`<span class="sc" data-t="${esc(sc.id)}" title="${esc(sc.hint||'')}">🎬 ${esc(sc.label)}</span>${sc.sn&&sc.sn!=='?'?cpBtn(sc.sn):''}`
     +(gp?`<span class="sep">›</span><span class="g" data-t="${esc(gp.id)}" title="${esc(gp.hint||'')}">${esc(gp.label)}</span>${cpBtn(gp.label)}<span class="tag">${esc(gp.hint||'')}</span>${gp.badges?`<span class="bd">${esc(gp.badges)}</span>`:''}`:'');
   bar.hidden=false;
