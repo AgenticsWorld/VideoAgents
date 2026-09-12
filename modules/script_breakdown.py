@@ -1039,3 +1039,17 @@ def validate(bd: dict, base: Path | None = None, ep: str | None = None) -> tuple
     if isinstance(b, (int, float)) and isinstance(t, (int, float)) and b > 0 and abs(t - b) > b * 0.1:
         warns.append(f"总估时 {t:g}s 偏离预算 {b:g}s 超过 10%")
     return errors, warns
+
+
+def scene_nos(base: Path, ep: str) -> list[str]:
+    """跨预览页跳转用(2026-09-12):剧本预览页会显示的场次号列表(正式拆解表优先,缺则推导视图);
+    故事板/分镜预览只对存在的场次显示「📜 剧本」链接。无剧本时为空。"""
+    p = breakdown_path(base, ep)
+    if p.is_file():
+        agent = read_json(p)
+        if isinstance(agent, dict) and isinstance(agent.get("scenes"), list):
+            return [str(sc.get("no")) for sc in agent["scenes"] if isinstance(sc, dict) and sc.get("no") is not None]
+    if not (base / "story" / "episodes" / ep / "screenplay.md").is_file():
+        return []
+    d = derive(base, ep) or {}
+    return [str(sc.get("no")) for sc in (d.get("scenes") or []) if isinstance(sc, dict) and sc.get("no") is not None]

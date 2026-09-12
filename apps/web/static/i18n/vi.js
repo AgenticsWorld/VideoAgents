@@ -837,7 +837,7 @@ window.I18N_DICT = {
 "🎞️ 视频预览": "🎞️ Xem trước video",
 "🎨 生成模型": "🎨 Mô hình tạo sinh",
 "🎨 生成模型设置": "🎨 Cài đặt mô hình tạo sinh",
-"🎬 分镜预览": "🎬 Xem trước phân cảnh",
+"🎦 分镜预览": "🎦 Xem trước phân cảnh",
 "🎬 视频模型": "🎬 Mô hình video",
 "🎵 音乐模型": "🎵 Mô hình nhạc",
 "🏔 场景预览": "🏔 Xem trước bối cảnh",
@@ -2675,4 +2675,12 @@ window.I18N_DICT = {
 "Marble 1.0 · 上一代": "Marble 1.0 · thế hệ trước",
 "Marble 1.0 Draft · 草稿版": "Marble 1.0 Draft · bản nháp",
 "图像 / 视频 / 数字人 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型": "Kênh và mô hình Ảnh / Video / Người ảo / Nhạc / TTS lời dẫn / Mô hình thế giới",
+/* 预览页跨页跳转图标链接(2026-09-12) */
+"在剧本预览中查看该场次": "Xem cảnh này trong Xem trước kịch bản",
+"在故事板预览中查看该场次": "Xem cảnh này trong Bảng storyboard",
+"在分镜预览中查看该场次": "Xem cảnh này trong Xem trước phân cảnh",
+"在故事板预览中查看该镜": "Xem cú máy này trong Bảng storyboard",
+"在分镜预览中查看该镜": "Xem cú máy này trong Xem trước phân cảnh",
+"在分镜预览中查看该组": "Xem nhóm này trong Xem trước phân cảnh",
+"本页没有找到 {id},可能尚未产出或编号已变": "Không tìm thấy {id} trên trang này; có thể chưa tạo hoặc số hiệu đã đổi",
 };

@@ -6796,6 +6796,11 @@ def _preview_storyboard(project: str, ep: str):
         it["audio"] = _audio_url(base, ndir / rel)
     sb = _read_json_safe(base / "directing" / ep / "storyboard.json") or {}
     data["title"] = sb.get("title") or (plan_eps.get(ep) or {}).get("title", "")
+    # 跨预览页跳转(2026-09-12):剧本预览有的场次、故事板有的场次/草案镜键;页面只对存在的目标显示 📜 / 📋 链接
+    from modules import storyboard_board as sbb
+    from modules import script_breakdown as sbk
+    data["script_scenes"] = sbk.scene_nos(base, ep)
+    data["board_scene_nos"], board_keys = sbb.board_targets(sb)
     data["board_scenes"] = [
         {k: s.get(k) for k in ("scene_no", "scene_code", "int_ext", "alloc_s",
                                "emotion", "director_beat_note")}
@@ -6827,12 +6832,20 @@ def _preview_storyboard(project: str, ep: str):
                     for sc in sb.get("scenes", [])
                     if isinstance(sc, dict) and sc.get("scene_id")}
 
+    _SB_REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
+
     def _shot_draft(s: dict) -> dict:
         # storyboard_ref 规范形 "S03/order:1";shot-planning 按空间/台词把一条草稿拆成多镜时
         # 写成 "S02/order:3/split:a" / ".../split:b"(2026-08-30 dzg5 ep01 六镜),后缀不参与索引;
         # 兼容 "S01/shots_draft/order:1"(2026-09-02 liaozhai2 ep01/ep02 多插了一段路径),中段不参与索引
-        m = re.match(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$", s.get("storyboard_ref") or "")
+        m = _SB_REF_RE.match(s.get("storyboard_ref") or "")
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
+
+    def _board_key(s: dict) -> str | None:
+        # 本镜在故事板预览页的镜行键(S01-03),仅当故事板里真有这条草案镜才给(拆镜的多个镜指向同一行)
+        m = _SB_REF_RE.match(s.get("storyboard_ref") or "")
+        key = sbb.shot_key(m.group(1), int(m.group(2))) if m else None
+        return key if key in board_keys else None
 
     def _shot_content(s: dict) -> str:
         # 镜条目自身 content / 规范字段 content_brief(shot-planning 直出,拆镜时是本镜独有内容)
@@ -6965,6 +6978,7 @@ def _preview_storyboard(project: str, ep: str):
             "clips": [c for c in clips
                       if sid and _id_name_match(sid, c["name"], any_segment=True)],
             "plates": shot_plates.get(sid, []),
+            "board_key": _board_key(s),
         })
     data["shots"] = shots
     # 生成组(WORKFLOW.md §7A):组锚点包 keyframes/<grp>/、组视频 clips/<grp>.mp4、
@@ -7103,6 +7117,17 @@ async def api_preview_storyboard(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_storyboard, project, ep)
 
 
+def _shot_list_scene_nos(sl: dict) -> list[str]:
+    """shot_list.json 里出现的场次号(分镜预览页的场块口径:scene_no 缺则 scene_id),去重保序。"""
+    out: list[str] = []
+    for s in (sl.get("shots") or []):
+        if isinstance(s, dict):
+            no = s.get("scene_no") or s.get("scene_id")
+            if no and str(no) not in out:
+                out.append(str(no))
+    return out
+
+
 def _preview_script(project: str, ep: str):
     """剧本预览(2026-09-11):剧情处理层(01-story)产物的结构化拆解视图。分集列表 + 指定集的
     script_breakdown(正式产物 story/episodes/<ep>/script_breakdown.json 优先,缺则由
@@ -7133,6 +7158,10 @@ def _preview_script(project: str, ep: str):
     data.update({k: res[k] for k in ("source", "stale", "file", "mtime", "inputs", "errors")})
     data["breakdown"] = res["breakdown"]
     data["breakdown_rel"] = sb.BREAKDOWN_REL.format(ep=ep)
+    # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接
+    from modules import storyboard_board as sbb
+    data["board_scenes"] = sbb.board_targets(_read_json_safe(base / "directing" / ep / "storyboard.json") or {})[0]
+    data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})
     out = (load_project_settings(base.name).get("output") or {})
     data["narration_enabled"] = out.get("narration_enabled", True) is not False
     # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
@@ -7308,6 +7337,10 @@ def _preview_board(project: str, ep: str):
     catalog = sbb.asset_catalog(base)
     board = sbb.load_board(base, ep, catalog)
     data.update(board)
+    # 跨预览页跳转(2026-09-12):剧本预览有的场次、分镜表有的场次;镜级跳分镜靠 shots[].final[].shot_id
+    from modules import script_breakdown as sbk
+    data["script_scenes"] = sbk.scene_nos(base, ep)
+    data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})
     pf = base / "directing" / ep / "directing_plan.md"
     try:
         data["directing_plan"] = pf.read_text() if pf.is_file() else ""

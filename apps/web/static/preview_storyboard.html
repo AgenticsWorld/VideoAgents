@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/static/whitebox.css?v=20260909-wbedit">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
+<script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/whitebox-reel.js?v=20260911"></script>
 <script>
@@ -286,7 +287,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 <body>
 <header>
   <a class="back" href="/">← 控制台</a>
-  <h1>🎬 分镜预览</h1>
+  <h1>🎦 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
   <span id="ps-info" class="ps-info" title="本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先" style="display:none"></span>
@@ -1151,7 +1152,7 @@ function shotCard(s,grp){
       {ep:EP,sid:s.shot_id,role,file:p.file||'',key:p.key||'',proj:$('#project').value.trim()||'demo'});
     return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${esc(role)} · ${esc(how)}</div><div class="pl"><button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   });
-  return `<div class="shot">
+  return `<div class="shot" id="a-s-${aid(s.shot_id)}">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}
     <div class="info">
       <div class="r1"><span class="sid">${esc(s.shot_id)}</span>${cpBtn(s.shot_id)}
@@ -1159,7 +1160,8 @@ function shotCard(s,grp){
         ${s.size?`<span class="tag">${esc(s.size)}</span>`:''}
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
         ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
-        <button class="editbtn" data-kind="shot" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发给修改师处理">✏️ 修改</button></div>
+        <button class="editbtn" data-kind="shot" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发给修改师处理">✏️ 修改</button>${
+          s.board_key?JumpAnchor.group([JumpAnchor.link('board',$('#project').value.trim()||'demo',EP,'shot',s.board_key)]):''}</div>
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
@@ -1529,7 +1531,9 @@ function render(d){
         ${b.scene_code?`<span class="tag">${esc(b.scene_code)}</span>`:''}
         ${b.int_ext?`<span class="tag">${esc(b.int_ext)}</span>`:''}
         <span class="tag">${I18N.f('{n} 镜',{n:bshots.length})}${nGrp?I18N.f(' · {n} 组',{n:nGrp}):''} · ${Math.round(dur)}s</span>
-        ${b.emotion&&b.emotion.type?`<span class="tag">${t('情绪:')}${esc(b.emotion.type)}</span>`:''}</h3>
+        ${b.emotion&&b.emotion.type?`<span class="tag">${t('情绪:')}${esc(b.emotion.type)}</span>`:''}${JumpAnchor.group([
+          (d.script_scenes||[]).includes(sn)?JumpAnchor.link('script',d.project||$('#project').value.trim()||'demo',EP,'scene',sn):'',
+          (d.board_scene_nos||[]).includes(sn)?JumpAnchor.link('board',d.project||$('#project').value.trim()||'demo',EP,'scene',sn):''])}</h3>
       ${b.director_beat_note?`<div class="beat">🎯 ${esc(b.director_beat_note)}</div>`:''}</div>`;
     if(narrSceneTop[sn]&&seq===1)h+=narrBlock(narrSceneTop[sn]);
     bshots.forEach(s=>{
@@ -1571,6 +1575,11 @@ function render(d){
   else if(KEEP_SCROLL){box.scrollTop=prevScroll}
   else box.scrollTop=0;
   KEEP_SCROLL=false;
+  // 从剧本/故事板预览跳来:#scene=S01 → 该场次首块,#shot=sh020 → 镜卡,#group=grp011 → 组卡;用 jumpTo(白模面板懒建会撑高,需持续校正)
+  JumpAnchor.go({find:(k,id)=>{
+    if(k==='scene'){const n=NAV.find(x=>x.cls==='sc'&&x.sn===id);return n?document.getElementById(n.id):null}
+    return document.getElementById((k==='shot'?'a-s-':'a-g-')+aid(id));
+  },scroll:jumpTo});
 }
 let FIRST_RENDER=true,KEEP_SCROLL=false,scrollSaveTick=null,NAV=[];
 // 右侧导航:点击直接定位到对应场次/组。不用 smooth scrollIntoView:跳转后视口附近的白模面板才懒建
@@ -1671,7 +1680,7 @@ EP=_q.get('ep')||localStorage.getItem('sb-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}\uFE0F 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

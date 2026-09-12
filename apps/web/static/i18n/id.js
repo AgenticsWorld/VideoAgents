@@ -837,7 +837,7 @@ window.I18N_DICT = {
 "🎞️ 视频预览": "🎞️ Pratinjau Video",
 "🎨 生成模型": "🎨 Model Generatif",
 "🎨 生成模型设置": "🎨 Setelan Model Generatif",
-"🎬 分镜预览": "🎬 Pratinjau Storyboard",
+"🎦 分镜预览": "🎦 Pratinjau Storyboard",
 "🎬 视频模型": "🎬 Model Video",
 "🎵 音乐模型": "🎵 Model Musik",
 "🏔 场景预览": "🏔 Pratinjau Scene",
@@ -2675,4 +2675,12 @@ window.I18N_DICT = {
 "Marble 1.0 · 上一代": "Marble 1.0 · generasi sebelumnya",
 "Marble 1.0 Draft · 草稿版": "Marble 1.0 Draft · versi draf",
 "图像 / 视频 / 数字人 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型": "Kanal dan model Gambar / Video / Manusia digital / Musik / Narasi TTS / Model dunia",
+/* 预览页跨页跳转图标链接(2026-09-12) */
+"在剧本预览中查看该场次": "Lihat adegan ini di Pratinjau Naskah",
+"在故事板预览中查看该场次": "Lihat adegan ini di Papan Storyboard",
+"在分镜预览中查看该场次": "Lihat adegan ini di Pratinjau Storyboard",
+"在故事板预览中查看该镜": "Lihat shot ini di Papan Storyboard",
+"在分镜预览中查看该镜": "Lihat shot ini di Pratinjau Storyboard",
+"在分镜预览中查看该组": "Lihat grup ini di Pratinjau Storyboard",
+"本页没有找到 {id},可能尚未产出或编号已变": "{id} tidak ditemukan di halaman ini; mungkin belum dibuat atau nomornya berubah",
 };

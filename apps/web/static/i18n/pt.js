@@ -837,7 +837,7 @@ window.I18N_DICT = {
 "🎞️ 视频预览": "🎞️ Prévia de vídeo",
 "🎨 生成模型": "🎨 Modelos de geração",
 "🎨 生成模型设置": "🎨 Configuração de modelos de geração",
-"🎬 分镜预览": "🎬 Prévia do storyboard",
+"🎦 分镜预览": "🎦 Prévia do storyboard",
 "🎬 视频模型": "🎬 Modelo de vídeo",
 "🎵 音乐模型": "🎵 Modelo de música",
 "🏔 场景预览": "🏔 Prévia de cenários",
@@ -2675,4 +2675,12 @@ window.I18N_DICT = {
 "Marble 1.0 · 上一代": "Marble 1.0 · geração anterior",
 "Marble 1.0 Draft · 草稿版": "Marble 1.0 Draft · rascunho",
 "图像 / 视频 / 数字人 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型": "Canais e modelos de Imagem / Vídeo / Humano digital / Música / Narração TTS / Modelo de mundo",
+/* 预览页跨页跳转图标链接(2026-09-12) */
+"在剧本预览中查看该场次": "Ver esta cena na prévia do roteiro",
+"在故事板预览中查看该场次": "Ver esta cena no quadro de storyboard",
+"在分镜预览中查看该场次": "Ver esta cena na prévia do storyboard",
+"在故事板预览中查看该镜": "Ver este plano no quadro de storyboard",
+"在分镜预览中查看该镜": "Ver este plano na prévia do storyboard",
+"在分镜预览中查看该组": "Ver este grupo na prévia do storyboard",
+"本页没有找到 {id},可能尚未产出或编号已变": "{id} não encontrado nesta página; talvez ainda não gerado ou o número mudou",
 };

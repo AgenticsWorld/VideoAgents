@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
+<script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
@@ -131,6 +132,7 @@ td.c .cast{font-size:12px;color:var(--dim)}
 td.s{width:342px}
 td.s.portrait{width:213px}
 td.e{width:1%;white-space:nowrap;text-align:right}
+td.e .jumps{margin-right:6px;vertical-align:middle}
 .skbox{position:relative;width:318px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0d12;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .skbox.portrait{width:189px}
 .skbox img{width:100%;height:100%;object-fit:cover;display:block;filter:none}
@@ -245,6 +247,8 @@ function render(d){
   (d.scenes||[]).forEach(sc=>{h+=sceneCard(sc,d)});
   h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白挂点'))}</span><span>🎬 ${esc(t('动作'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);
+  // 从剧本/分镜预览跳来:#scene=S01 → 场次卡,#shot=S01-03 → 镜行
+  JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,offset:6});
   if(anyBusy())startPoll();
 }
 /* ---------- H3S 故事板签字(workflow.yaml g6s):答复总制片发的签字卡,与控制台同一条 ---------- */
@@ -330,6 +334,11 @@ function sceneCard(sc,d){
   let hd=`<div class="row1"><span class="no">${esc(sc.scene_no)}</span><span class="nm" data-no-i18n>${esc(sc.location||sc.scene_name||'')}</span>`;
   if(sc.scene_name&&sc.scene_name!==sc.location)hd+=`<span class="meta">${esc(sc.scene_name)}</span>`;
   hd+=`<span class="meta">${sc.scene_id?esc(sc.scene_id)+' · ':''}${sc.time_of_day?todIcon(sc.time_of_day)+' '+esc(sc.time_of_day)+' · ':''}⏱ ${esc(t('分配'))} ${secs(sc.alloc_s)} · ${esc(t('草案'))} ${secs(sc.draft_sum_s)}${sc.final_sum_s!=null?' · '+esc(t('定稿'))+' '+secs(sc.final_sum_s):''} · ${esc(I18N.f('{n} 镜 · {g} 组',{n:sc.shots.length,g:sc.group_count}))}</span><span class="spacer"></span>`;
+  // 跨页跳转(2026-09-12):头行右侧只放图标,目标(剧本/分镜表里的同号场次)存在才出链接
+  const proj0=$('#project').value.trim()||'demo';
+  hd+=JumpAnchor.group([
+    (d.script_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('script',proj0,ep,'scene',sc.scene_no):'',
+    (d.shot_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.scene_no):'']);
   hd+=`<span class="meta" title="${esc(t('已出草图 / 镜数;整集批量出图在上方标题行'))}">🖊 ${nDone}/${sc.shots.length}</span>`;
   hd+=editBtn(I18N.f('故事板 {ep} 场次 {no}{name}(文件 directing/{ep}/storyboard.json scenes[{no}])',{ep,no:sc.scene_no,name:sc.location?' '+sc.location:''}))+`</div>`;
   let as='';
@@ -363,7 +372,10 @@ function shotRow(sc,sh,ep){
   if(sh.beat)c+=`<div class="ln"><span class="k">🎯</span><span class="v dim">${esc(sh.beat)}</span></div>`;
   if(sh.notes)c+=`<div class="ln"><span class="k">📝</span><span class="v dim" title="${esc(sh.notes)}">${esc(clip(sh.notes,160))}</span></div>`;
   const loc=I18N.f('故事板 {ep} 场次 {no} 第 {o} 镜「{txt}」(文件 directing/{ep}/storyboard.json scenes[{no}].shots_draft[order:{o}])',{ep,no:sc.scene_no,o:sh.order,txt:clip(sh.content,24)});
-  return `<tr data-row="${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${editBtn(loc,'sm',t('反馈'))}</td></tr>`;
+  // 镜行右侧:每个定稿镜号一个 🎦(拆镜时一行草案对多镜,tooltip 带镜号区分)
+  const proj0=$('#project').value.trim()||'demo';
+  const jumps=JumpAnchor.group((sh.final||[]).map(f=>f.shot_id?JumpAnchor.link('storyboard',proj0,ep,'shot',f.shot_id):''));
+  return `<tr data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm',t('反馈'))}</td></tr>`;
 }
 
 function sketchCell(sc,sh,ep){
@@ -488,7 +500,7 @@ EP=_q.get('ep')||localStorage.getItem('board-ep:'+$('#project').value.trim())||'
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

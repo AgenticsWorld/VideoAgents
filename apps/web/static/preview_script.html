@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
+<script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -70,6 +71,7 @@ tr.ep td.l,tr.sh td.l{font-size:14.5px}
 tr.blk td.l .trn{font-size:13px}
 table.sc td.r{color:var(--dim);font-size:12.5px;line-height:1.6}
 table.sc td.e{width:1%;white-space:nowrap;text-align:right}
+tr.sh td.e .jumps{margin-right:8px;vertical-align:middle}
 table.sc tr.blk:hover td{background:rgba(108,158,248,.05)}
 tr.ep td{background:var(--panel2)}
 tr.sh td{background:#1a2033;border-top:2px solid var(--border)}
@@ -206,6 +208,8 @@ function render(d){
   h+=`</tbody></table>`;
   h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);
+  // 从故事板/分镜预览跳来:定位到 #scene=S01 对应场次行(表头置顶,留出其高度)
+  JumpAnchor.go({find:(k,id)=>k==='scene'?document.getElementById('sc-'+id):null,box,offset:((box.querySelector('table.sc thead')||{}).offsetHeight||32)+4});
   if(RUN)pollRun(RUN);
 }
 
@@ -269,7 +273,12 @@ function sceneRows(sc,bd,ep,A){
   trims.forEach(x=>r.push(['✂️',`${x.save_s!=null?`<b>−${secs(x.save_s)}</b> `:''}${esc(clip(x.how,110))}${x.risk?` (${esc(x.risk)})`:''}${x.stale?` ⚠ ${esc(clip(x.stale,60))}`:''} ${editBtn(A.pacing,I18N.f('删减建议 {ep} 场次 {no}(文件 {f})',{ep,no:sc.no,f:epFile(ep,'pacing.json')}),'sm')}`]));
   (sc.incompressible||[]).forEach(x=>r.push(['🔒',`${esc(x.item||'')}${x.s!=null?` (${secs(x.s)})`:''}`]));
   (sc.notes||[]).forEach(n=>r.push(['📝',esc(clip(n,120))]));
-  let h=`<tr class="sh"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+  // 跨页跳转(2026-09-12):场次头行右侧只放图标,目标(故事板/分镜表里的同号场次)存在才出链接
+  const proj0=$('#project').value.trim()||'demo';
+  const jumps=JumpAnchor.group([
+    (LAST.board_scenes||[]).includes(sc.no)?JumpAnchor.link('board',proj0,ep,'scene',sc.no):'',
+    (LAST.shot_scenes||[]).includes(sc.no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.no):'']);
+  let h=`<tr class="sh" id="sc-${esc(sc.no)}"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${jumps}${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}))}</td></tr>`;
   const blocks=sc.blocks&&sc.blocks.length?sc.blocks:fallbackBlocks(sc);
   let dn=0;
   blocks.forEach(b=>{
@@ -372,7 +381,7 @@ EP=_q.get('ep')||localStorage.getItem('sc-ep:'+$('#project').value.trim())||'';
 load();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3AC} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/post','\u{1F39A}\uFE0F 后期预览'],['/preview/videos','\u{1F39E}️ 视频预览']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

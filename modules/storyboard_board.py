@@ -293,6 +293,41 @@ def _shot_list_map(sl: dict) -> dict[tuple[str, int], list[dict]]:
     return m
 
 
+def board_scene_no(sc: dict, i: int) -> str:
+    """storyboard.json 场块的场次号(S01 式):scene_no 缺则回落 screenplay_ref / no / 序号。"""
+    return str(_first(sc, "scene_no", "screenplay_ref", "no", default=f"S{i + 1:02d}"))
+
+
+def _scene_drafts(sc: dict) -> list:
+    return sc.get("shots_draft") if isinstance(sc.get("shots_draft"), list) else \
+        (sc.get("shots") if isinstance(sc.get("shots"), list) else [])
+
+
+def _draft_order(d: dict, j: int) -> int:
+    order = d.get("order") if d.get("order") is not None else j + 1
+    try:
+        return int(order)
+    except Exception:
+        return j + 1
+
+
+def board_targets(sb: dict) -> tuple[list[str], set[str]]:
+    """跨预览页跳转用(2026-09-12):storyboard.json 里实际存在的 (场次号列表, 草案镜键集合 S01-03);
+    剧本/分镜预览只对存在的目标显示「📋 故事板」链接。"""
+    raw = sb.get("scenes") if isinstance(sb.get("scenes"), list) else []
+    nos: list[str] = []
+    keys: set[str] = set()
+    for i, sc in enumerate(raw):
+        if not isinstance(sc, dict):
+            continue
+        no = board_scene_no(sc, i)
+        nos.append(no)
+        for j, d in enumerate(_scene_drafts(sc)):
+            if isinstance(d, dict):
+                keys.add(shot_key(no, _draft_order(d, j)))
+    return nos, keys
+
+
 def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
     """归一化的故事板:{title, scenes[], totals, has_storyboard, shot_list}。scenes[].shots[] 是页面表格的行。"""
     sb = _read_json(base / "directing" / ep / "storyboard.json") or {}
@@ -306,10 +341,9 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
     for i, sc in enumerate(raw_scenes):
         if not isinstance(sc, dict):
             continue
-        scene_no = str(_first(sc, "scene_no", "screenplay_ref", "no", default=f"S{i + 1:02d}"))
+        scene_no = board_scene_no(sc, i)
         sid = sc.get("scene_id") or ""
-        drafts = sc.get("shots_draft") if isinstance(sc.get("shots_draft"), list) else \
-            (sc.get("shots") if isinstance(sc.get("shots"), list) else [])
+        drafts = _scene_drafts(sc)
         shots, cast_union, groups = [], [], sc.get("groups_draft") if isinstance(sc.get("groups_draft"), list) else []
         creatures, props = [], []
         # 组草案的出场角色 → 按 shot_orders/shot_ids 落到镜(有的项目如 liaozhai2 只在组上写 characters,镜上没有 cast)
@@ -332,11 +366,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
         for j, d in enumerate(drafts):
             if not isinstance(d, dict):
                 continue
-            order = d.get("order") if d.get("order") is not None else j + 1
-            try:
-                order = int(order)
-            except Exception:
-                order = j + 1
+            order = _draft_order(d, j)
             cast = [c for c in _as_list(_first(d, "cast", "characters", "cast_ids", default=[])) if isinstance(c, str)]
             finals = slmap.get((scene_no, order)) or []
             if not cast:   # 镜上没写 → 镜头表定稿镜的 characters → 所属组草案的 characters
