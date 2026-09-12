@@ -27,7 +27,7 @@
 ## 项目制作脚本不放这里
 
 Agent 为某项目写的一次性制作脚本(内嵌该项目的角色/镜头/打点等创作数据)是**项目产物**,
-落 `data/projects/<slug>/code/` 并用 `python3 .version/vc.py register` 登记版本
+落 `data/projects/<slug>/code/`
 (约定见 `agents/WORKFLOW.md` §2)。样例:demo 的 ep01 全套制作脚本在
 `data/projects/demo/code/`。
 

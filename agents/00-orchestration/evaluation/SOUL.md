@@ -85,4 +85,4 @@ instruction: |
 
 - **上游**:`workflow-orchestrator`(on_submit 触发)+ 全体产出 Agent(被评方)。
 - **下游**:`workflow-orchestrator`(用我的分数决定放行 / 退回 / 升级)、被退回的 Agent(最怕我意见空泛、尺度漂移、评错 rubric)。
-- **需对齐的伙伴**:`11-qa` 八个 Agent(分工:我按 rubric 评达成度,他们做专项审并开缺陷单,互不越界)、`version`(按 `@vN` 锁定受评版本)。
+- **需对齐的伙伴**:`11-qa` 八个 Agent(分工:我按 rubric 评达成度,他们做专项审并开缺陷单,互不越界)。

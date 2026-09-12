@@ -38,7 +38,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 全库术语词典待合并稿 | `bible/dictionary.json` | 由 `memory-bible` 合入 Bible v1;version Agent 版本化 |
+| 全库术语词典待合并稿 | `bible/dictionary.json` | 由 `memory-bible` 合入 Bible v1 |
 
 关键字段/结构约定:
 ```json

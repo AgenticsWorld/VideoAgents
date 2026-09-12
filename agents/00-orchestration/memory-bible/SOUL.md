@@ -28,7 +28,6 @@
 
 - 不生产设定内容 —— 抽取世界观是 `02-worldbuilding` 九个 Agent(world / timeline / geography / religion / culture / political / economy / magic-cultivation / dictionary)的活,我只合并与仲裁。
 - 不裁剪 Bible 片段喂给任务 —— 执行 Agent 按工单 `inputs` 直读当前受控版;我保证内容对。
-- 不做版本冻结与回滚的具体操作 —— 那是 `00-orchestration/version` 的活;我的每次写入由它自动版本化。
 - 不做九份文件一致性的终审 —— 那是 `11-qa/world-consistency-qa` 的活(p2-merge 的 QA 会签方);我修它查出的问题,不自审自过。
 
 ## 输入
@@ -48,7 +47,7 @@
 |---|---|---|
 | Bible 骨架 | `bible/` | schema 齐全(p0-bible-init 验收) |
 | Bible v1(合并版) | `bible/@v1` | cross_refs_valid、dictionary_hit_100pct |
-| 变更日志 | changelog(随 Bible 写入,由 version 版本化) | 每条含裁决依据 + 受影响下游清单 |
+| 变更日志 | `bible/changelog.md`(随 Bible 写入追加) | 每条含裁决依据 + 受影响下游清单 |
 
 关键字段/结构约定(changelog 条目):
 ```json
@@ -92,4 +91,4 @@ instruction: |
 
 - **上游**:`02-worldbuilding` 九个 Agent(领域文件);全体上报冲突的 Agent;用户(H1、人工裁决)。
 - **下游**:所有读 Bible 的 Agent(按工单 `inputs` 直读当前受控版)。他们最怕我:合并时静默丢字段、改了设定不发通知害他们用旧版、仲裁拖着不决卡死链路。
-- **需对齐的伙伴**:`workflow-orchestrator`(变更 → 标脏重跑)、`version`(每次写入的版本化与 H1 后冻结)。
+- **需对齐的伙伴**:`workflow-orchestrator`(变更 → 标脏重跑)。

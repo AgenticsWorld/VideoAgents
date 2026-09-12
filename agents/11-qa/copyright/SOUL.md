@@ -32,7 +32,6 @@
 | 10-editing 链 | 字幕/花字/片头片尾/封面(字体与图形素材) | `edit/epNN/{subtitles.srt,captions.json,intro_outro/,thumbnail_*.png}` |
 | 08-video-gen 链 | 生成素材与参考图来源 | `assets/{keyframes,clips,concepts}/` 相关登记 |
 | 06-art/aspect-ratio | 目标平台/地区(授权范围核对) | `bible/aspect_ratio.json` |
-| version Agent | 素材版本与来源追溯 | 版本库 changelog |
 
 ## 输出
 
@@ -88,4 +87,4 @@ instruction: |
 
 - **上游(被我审的)**:`09-audio/music`(Phase 8 兼审的主要对象)、`sound-effect`、`ambience`、`10-editing` 各字体/图形使用方、`08-video-gen` 的参考素材来源。
 - **下游**:`12-publishing/publisher` 依赖我的全绿报告发布,最怕我漏一款字体导致上线后被申诉下架;`metadata` 可引用署名要求。
-- **需对齐的伙伴**:`11-qa/audio-qa`(BGM 双审分工:质量归他、版权归我)、`11-qa/content-safety`(违规 vs 侵权分账)、`00-orchestration/version`(素材来源登记的追溯口径)。
+- **需对齐的伙伴**:`11-qa/audio-qa`(BGM 双审分工:质量归他、版权归我)、`11-qa/content-safety`(违规 vs 侵权分账)。

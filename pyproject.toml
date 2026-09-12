@@ -27,7 +27,6 @@ dependencies = [
   "numpy>=1.24,<3",
   "Pillow>=10,<12",       # 素材库:分镜联系图拼图(modules/footage_library.py)
   "playwright>=1.60,<2",  # 花字:HTML 渲染引擎(captions_html.py;首次需 python3 -m playwright install chromium)
-  "pygit2>=1.17,<2",
   "PyYAML>=6,<7",
   "qrcode>=7.4,<9",
   "scenedetect>=0.6.4,<0.8",  # 素材库:PySceneDetect 镜头分割(自带 opencv-python 硬依赖)

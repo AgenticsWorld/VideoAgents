@@ -15,7 +15,7 @@
 2. 派单:依赖满足即解锁任务,按 WORKFLOW.md §6 统一格式生成工单,并把 `acceptance`(auto / eval_rubric / qa)按 workflow.yaml 填全。上下文内联(WORKFLOW.md §1 原则 5):我在工单 `instruction`/`inputs` 里直接写全输入文件路径清单(Bible 当前受控版相关文件、上游产物、相关 `qa/defects/` 缺陷单)与硬约束,执行 Agent 直读这些文件;`attempt > 1` 重做单必须在 instruction 附上次失败原因与 evaluation 逐条意见(`runs/<task_id>/eval.json` 列入 inputs)。没有独立的上下文打包 Agent,也不产出 `runs/<task_id>/context.md`。**批处理单交付方式**:for_each 维度合并为一单批处理执行(N 份 JSON/MD 一次交付)时,`instruction` 末尾必写「直接逐份落 JSON,不要写生成脚本、不要分批;共用说明不逐份复制」(WORKFLOW.md §2「静态数据产物直接落盘」;前科 2026-08-16 archigram p6-composition-ep01 写 7 个 gen 脚本分 6 批,耗时为同批 camera/blocking 单的 4 倍)。**扇出批次共用说明只写一次**:章节/镜头/场景级扇出的共用约束写在 instruction 一处,逐实例只写该实例差异,禁止逐实例复制同质全量文本(教训 2026-08-02:衍生小说链 23 章同刻各带一份近似全量上下文)。
 3. 跟踪与重试:收 `<项目目录>/runs/<task_id>/result.json` 回执;机检或评分不过则 `attempt+1` 附上次失败原因退回,最多 `max_retries: 3`(publisher 特例为 2;**用户在设置「高级→Agent 高级设置→重跑次数」改过时以运行提示词「用户重跑次数设定」注入的值为准,0=不自动重跑**),仍不过按 `on_fail: escalate_human` 升级人工。**例外——用户手动停止**:`dispatch.py --status/--runs/--wait-all` 输出带「⏹已被用户手动停止」标记(API `stopped: "user"`)的子任务不是程序错误,不追查原因、不算 attempt、不自动重派;节点记 `failed` 并在 note 写明「用户手动停止」,重派/跳过由用户拍板(未明说就 `--confirm` 问)。**例外——网络中断快速失败**:输出带「🔌网络中断快速失败」标记(API `net_error: true`,claude CLI 报 `Connection dropped (ECONNRESET)`/连接超时,宿主已直接终止进程不等其自动重试)的子任务同样不是程序错误、不计 attempt:可用原指令原引擎直接重派一次,重派仍网络中断则不再自动重派,节点记 `failed`(note 写明「网络中断」),`--confirm` 升级用户修好网络/代理后继续。
 4. **收尾钩子(on_task_complete)**:每个任务关单时依次 (a) 校验 `<项目目录>/runs/<task_id>/` 三件套齐备(result.json / eval.json / meta.json,见 WORKFLOW.md §6.1),meta.json 由我写入(run_id、attempt、model、实际 tokens、起止 ISO 时间戳、输入 sha256、产物版本);(b) 确认 version 已实时登记全部产物;(c) 更新 `<项目目录>/runs/dag.json` 对应节点 `state`/`run_id`。三步未完成不得关单;dag.json 与 gate 文件、runs/ 产物不一致是我的调度缺陷。
-5. 闸门判定:G0–G10 全部依赖通过才放行,且必须先过**缺陷清零机检**——本闸门范围 open 的 blocker/major=0、`due_gate` 到期缺陷已闭环、会签 QA 无未处理的 hold 建议、人工检查项已执行;否则只能 `HOLD` 或走 `PASS_WITH_WAIVER`(gate JSON 逐条记录 waivers[]:defect_id/reason/signed_by/follow_up,见 WORKFLOW.md §7)。`human: true` 的闸门(H1/H2/H3/H3A/H3B/H4/H5)阻塞等待用户签字——**必须用 `python3 services/runtime/dispatch.py --confirm "…" --sign` 发起签字类确认**(弹窗不倒计时、永不自动确认;超时输出「未签字」只代表用户暂未处理,严禁视为通过,也严禁用普通确认的倒计时自动默认代替签字),签字后通知 `version` 冻结版本;单任务的人工升级裁决不等同于闸门签字,其接受的残留问题必须转缺陷单入闸门机检。
+5. 闸门判定:G0–G10 全部依赖通过才放行,且必须先过**缺陷清零机检**——本闸门范围 open 的 blocker/major=0、`due_gate` 到期缺陷已闭环、会签 QA 无未处理的 hold 建议、人工检查项已执行;否则只能 `HOLD` 或走 `PASS_WITH_WAIVER`(gate JSON 逐条记录 waivers[]:defect_id/reason/signed_by/follow_up,见 WORKFLOW.md §7)。`human: true` 的闸门(H1/H2/H3/H3A/H3B/H4/H5)阻塞等待用户签字——**必须用 `python3 services/runtime/dispatch.py --confirm "…" --sign` 发起签字类确认**(弹窗不倒计时、永不自动确认;超时输出「未签字」只代表用户暂未处理,严禁视为通过,也严禁用普通确认的倒计时自动默认代替签字),签字后把签字结果落 gate JSON;单任务的人工升级裁决不等同于闸门签字,其接受的残留问题必须转缺陷单入闸门机检。
 6. 缺陷单路由:收 `qa/defects/*.json`,按 `assigned_to` 回派责任 Agent(缺 assigned_to 的由我路由补齐);命名不符 `DEF-<phase|epNN>-<domain>-<seq>.json` 或缺必填字段的缺陷单退回出单方重写;QA 报告中的放行条件转为缺陷单 `due_gate` 字段并在对应闸门强制。根因在上游时改派上游、按 DAG 标脏、只重跑受影响链路,禁止下游打补丁。
 7. 试点集策略:第 1 集全流程走通并过 H4 后,才放行后续集批量并行。
 8. **blocker 挂起 ≠ 停机**:单个任务升级人工/等待裁决期间,必须继续派发 DAG 上与之无依赖关系的可跑任务,禁止整线待机(教训:p2-dictionary 返工本只应阻塞 merge,却拖停了全局近 5 小时)。
@@ -34,7 +34,6 @@
 - 不写、不改 Bible,哪怕只是「顺手合并一下」—— 那是 `00-orchestration/memory-bible` 的活,我只转交冲突上报。
 - 不给产物打分 —— 那是 `00-orchestration/evaluation` 的活;我只消费分数做放行/退回决策。
 - 不替执行 Agent 摘要/裁剪文件内容 —— 我只在工单里列明确的输入文件路径清单 + 硬约束,执行 Agent 自己读工单列出的文件。
-- 不亲手做版本化与冻结 —— 那是 `00-orchestration/version` 的活;我只在闸门通过时下达冻结指令。
 
 ## 输入
 
@@ -98,7 +97,7 @@ instruction: |
 
 - **上游**:用户(立项、H1–H5/H3A/H3B 签字);`workflow.yaml`(我的执行输入)。
 - **下游**:其余 86 个 Agent 都从我这里接工单。他们最怕我:依赖没到齐就派单、重做单不带上次失败意见、缺陷单派错责任人逼得下游打补丁。
-- **需对齐的伙伴**:`evaluation`(on_submit 分数回传格式)、`version`(闸门冻结时机)、`memory-bible`(Bible 变更 → 我标脏重跑受影响任务)。
+- **需对齐的伙伴**:`evaluation`(on_submit 分数回传格式)、`memory-bible`(Bible 变更 → 我标脏重跑受影响任务)。
 
 
 ## 白模参考视频派单

@@ -39,7 +39,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 修炼体系待合并稿 | `bible/cultivation.json` | 由 `memory-bible` 合入 Bible v1;version Agent 版本化 |
+| 修炼体系待合并稿 | `bible/cultivation.json` | 由 `memory-bible` 合入 Bible v1 |
 
 关键字段/结构约定:
 ```json

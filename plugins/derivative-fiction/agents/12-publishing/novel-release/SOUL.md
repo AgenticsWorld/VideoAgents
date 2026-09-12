@@ -77,4 +77,4 @@ instruction: |
 
 - **上游**:`line-editor`(定稿)、`chapter-planner`(章序)、version(冻结版本号)、用户(DH3 签字与平台选择)。
 - **下游**:用户(拿包发布);未来接自动发布时对齐内置 `12-publishing/publisher` 的回执规范。
-- **需对齐的伙伴**:`version`(冻结版取数口径)、`13-derivative-fiction/derivative-planner`(简介文案的题材口径)。
+- **需对齐的伙伴**:`13-derivative-fiction/derivative-planner`(简介文案的题材口径)。

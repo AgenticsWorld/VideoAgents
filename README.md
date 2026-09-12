@@ -19,7 +19,7 @@ workspace and are not committed by default.
 - 83 focused agents organized into 13 production departments
 - Declarative agent plugins add new roles and workflows; official derivative-fiction and fusion-fiction teams are bundled, while uploaded plugins live in the writable runtime data directory
 - Human approval gates for story, art direction, storyboards, cuts, and release
-- File-based artifacts with per-project versioning and auditable QA records
+- File-based artifacts with auditable QA records
 - Claude CLI, Codex CLI, and OpenAI-compatible DeepAgents execution engines
 - Configurable image, video, music, TTS, and object-storage providers
 - A multilingual local Web console with preview and storyboard tools
@@ -135,7 +135,7 @@ manager.
 ```text
 agents/          Agent role specifications, workflow documentation, and DAG
 code/            Repository-level validation and utility scripts
-modules/         Media, audio, versioning, and DeepAgents adapters
+modules/         Media, audio, and DeepAgents adapters
 services/api/    Independently runnable Python API service, schemas, and runtime state
 services/runtime/ Agent scheduling, project services, providers, and runtime tools
 apps/web/        Original static WebUI plus Python static server/API reverse proxy

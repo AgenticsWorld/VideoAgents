@@ -21,7 +21,6 @@ flowchart LR
     P --> S["SQLite 运行状态"]
     R --> A["agents / modules / code"]
     R --> D["data/projects 项目资源"]
-    D --> G["pygit2 项目版本库"]
 ```
 
 浏览器模式下，`apps/web/server.py` 原样提供原 WebUI 静态资源，并把 `/api/v1` 反向代理到独立的 `services/api`，因此请求天然同源，不需要 CORS。Electron 不实现第二套静态服务或代理，只负责启动同一个 Python Web 网关并打开其 URL；也可让该网关代理 `VIDEOAGENTS_API_URL` 指定的远程 API。
@@ -98,9 +97,7 @@ tests/             Python 产品接口、领域完整性和版本管理测试
 
 ## Git 的业务用途
 
-项目中的 Git 不是代码仓库操作，而是 `data/projects/<project>/.version` 内的视频项目资产版本历史，以及“从某版本克隆项目”的业务功能。本版本将这两处一次性迁到 `pygit2`：初始化、提交、读取、diff、标签、回滚和归档都不再调用系统 `git`/`tar` 命令。
-
-Codex 参数中的 `--skip-git-repo-check` 只是第三方 CLI 的运行选项，不属于业务文件版本管理，也不存在可替换的 Git 操作。
+项目不再维护业务文件版本库(原 `.version/` 嵌入式 pygit2 仓库与「从某版本克隆项目」功能已移除);运行时不依赖 `pygit2`,也不调用系统 `git`。Codex 参数中的 `--skip-git-repo-check` 只是第三方 CLI 的运行选项,与业务无关。
 
 ## 构建、更新和发布
 

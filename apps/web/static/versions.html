@@ -32,30 +32,13 @@ a.back:hover{color:var(--accent)}
 select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px}
 select:focus{outline:none;border-color:var(--accent)}
 main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:14px}
-.notice{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px}
-.batch-head{display:flex;align-items:flex-start;gap:12px}
-.batch-main{flex:1;min-width:0;cursor:pointer}
-.batch-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
-.batch-meta .tid{color:var(--accent);font-family:ui-monospace,Menlo,monospace}
-.badge{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim);white-space:nowrap}
-.badge.frozen{color:var(--yellow);border-color:var(--yellow)}
-.reason{margin-top:4px;font-size:13px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card.open .reason{display:block}
-.files{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;font-size:12px;font-family:ui-monospace,Menlo,monospace;color:var(--dim);max-height:260px;overflow:auto}
-.card.open .files{display:block}
-.files div{white-space:nowrap}
-.files .v{color:var(--purple)}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
 button:hover{border-color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
-button.clone{color:var(--accent)}
 #global-status{display:none;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--panel2)}
 #global-status.show{display:block}
-#global-status .ok{color:var(--green)}
 #global-status .err{color:var(--red)}
-#global-status a{color:var(--link)}
-.empty{color:var(--dim);text-align:center;padding:40px 0}
 .card.copy h3{font-size:13px;color:var(--accent);margin-bottom:6px}
 .card.copy p{font-size:12px;color:var(--dim);margin-bottom:10px}
 .copy-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -84,7 +67,6 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 <header>
   <a class="back" href="/">← 返回控制台</a>
   <h1>🧬 版本管理</h1>
-  <span class="badge" title="每个提交批次都是当时全部已登记产物的完整快照;克隆出全新项目,不影响源项目">从任一历史提交克隆全新项目</span>
   <div class="spacer"></div>
   <label style="font-size:12px;color:var(--dim)">项目</label>
   <select id="project"></select>
@@ -92,32 +74,17 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 <main>
   <div class="card copy" id="copy-card">
     <h3>📋 复制项目</h3>
-    <p>完整复制当前项目目录(全部产物、嵌入式版本库、运行记录)为一个全新项目;复制完成后自动切换到新项目的控制台。大项目可能占用较多磁盘空间。</p>
+    <p>完整复制当前项目目录(全部产物、运行记录)为一个全新项目;复制完成后自动切换到新项目的控制台。大项目可能占用较多磁盘空间。</p>
     <div class="copy-row">
       <input id="copy-name" placeholder="新项目名称" autocomplete="off" spellcheck="false">
       <button id="copy-btn">复制项目</button>
     </div>
     <div id="copy-status"></div>
   </div>
-  <div class="card" id="ver-toggle-card">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-      <input type="checkbox" id="ver-enabled" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-      <b>是否启用版本管理</b>
-      <span id="ver-status" style="font-size:12px"></span>
-    </label>
-    <div style="font-size:12px;color:var(--dim);margin-top:6px">默认关闭:Workflow 不派发版本管理 Agent 的工单(逐批次产物登记与闸门冻结跳过);开启后对之后派发的任务生效,照常登记/冻结。仅对当前项目生效</div>
-  </div>
-  <div class="notice">
-    每行是一个任务批次的产物落盘(版本管理 Agent 登记);「克隆」会把<b>截至该批次</b>的全部已登记产物
-    (含 settings.json / brief.md / runs/dag.json 等当时版本)导出为一个全新项目,版本历史重置为 v1 基线。
-    注意:runs/ 下的任务回执大多未登记进版本库,克隆项目续跑前 orchestrator 可能需补认;
-    大项目克隆将占用数百 MB ~ 数 GB 磁盘。
-  </div>
   <div id="global-status"></div>
-  <div id="list"><div class="empty">加载中…</div></div>
   <div class="card danger">
     <h3>⚠️ 危险操作:删除当前项目</h3>
-    <p>将永久删除项目 <b id="del-proj-name"></b> 的整个目录(全部产物、版本库、运行记录),<b style="color:var(--red)">不可恢复</b>。请输入项目名称以解锁删除按钮。</p>
+    <p>将永久删除项目 <b id="del-proj-name"></b> 的整个目录(全部产物、运行记录),<b style="color:var(--red)">不可恢复</b>。请输入项目名称以解锁删除按钮。</p>
     <div class="danger-row">
       <input id="del-confirm" placeholder="输入项目名称" autocomplete="off">
       <button class="red" id="del-btn" disabled>删除项目</button>
@@ -128,7 +95,7 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
   <div class="box">
     <h3>⚠️ 确认删除项目</h3>
     <p>即将永久删除项目 <b id="del-modal-name"></b> 的全部文件。</p>
-    <p class="sub">此操作不可恢复:产物、嵌入式版本库(repo.git)、运行记录将一并删除。删除后自动跳转到第一个项目。</p>
+    <p class="sub">此操作不可恢复:产物、运行记录将一并删除。删除后自动跳转到第一个项目。</p>
     <div class="btns">
       <button id="del-cancel">取消</button>
       <button class="red" id="del-ok">确认删除</button>
@@ -139,10 +106,8 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 const $=s=>document.querySelector(s);
 async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};const r=await fetch(p,o);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function fmtTime(ts){return (ts||'').replace('T',' ').replace(/\+.*$/,'')}
 
 const curProj=()=>$('#project').value;
-let CLONING=false;
 
 async function initProjects(){
   let list=[];try{list=await api('/api/v1/projects')}catch(e){}
@@ -152,7 +117,7 @@ async function initProjects(){
   const want=(new URLSearchParams(location.search).get('project'))
     ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project);
   sel.value=list.includes(want)?want:list[0];
-  sel.onchange=()=>{loadList();refreshDanger();loadVerToggle();refreshCopy()};
+  sel.onchange=()=>{refreshDanger();refreshCopy()};
 }
 
 /* ---------- 复制项目(整份复制当前项目目录 → 全新项目) ---------- */
@@ -221,26 +186,6 @@ $('#copy-btn').onclick=async()=>{
   pollCopy(src,name);
 };
 
-/* ---------- 版本管理开关(项目级设置 versioning.enabled,默认关) ---------- */
-async function loadVerToggle(){
-  const st=$('#ver-status');st.textContent='';
-  try{
-    const cfg=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config');
-    $('#ver-enabled').checked=!!(cfg.versioning&&cfg.versioning.enabled);
-  }catch(e){st.textContent='✗ '+esc(e.message);st.style.color='var(--red)'}
-}
-$('#ver-enabled').onchange=async()=>{
-  const st=$('#ver-status');st.textContent=t('保存中…');st.style.color='var(--dim)';
-  try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',
-      {project:curProj(),versioning:{enabled:$('#ver-enabled').checked}});
-    st.textContent=t('✓ 已保存,对之后派发的任务生效');st.style.color='var(--green)';
-  }catch(e){
-    st.textContent='✗ '+esc(e.message);st.style.color='var(--red)';
-    $('#ver-enabled').checked=!$('#ver-enabled').checked;   // 保存失败回滚显示
-  }
-};
-
 /* ---------- 危险操作:删除当前项目(输入项目名解锁 → 红色确认弹窗) ---------- */
 function refreshDanger(){
   $('#del-proj-name').textContent=curProj();
@@ -273,87 +218,13 @@ $('#del-ok').onclick=async()=>{
   }finally{btn.disabled=false;btn.textContent='确认删除'}
 };
 
-async function loadList(){
-  const box=$('#list');box.innerHTML='<div class="empty">加载中…</div>';
-  let data;
-  try{data=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/versions')}
-  catch(e){box.innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
-  const batches=data.batches||[];
-  if(!batches.length){box.innerHTML='<div class="empty">该项目还没有版本登记</div>';return}
-  box.innerHTML='';
-  batches.forEach(b=>{
-    const card=document.createElement('div');card.className='card';
-    const tags=b.frozen_tags.map(t=>`<span class="badge frozen">🔒 ${esc(t)}</span>`).join('');
-    card.innerHTML=`
-      <div class="batch-head">
-        <div class="batch-main" title="点击展开/收起文件明细">
-          <div class="batch-meta">
-            <span>${esc(fmtTime(b.timestamp))}</span>
-            <span class="tid">${esc(b.task_id)}</span>
-            <span class="badge">${esc(I18N.f('{n} 个文件',{n:b.files.length}))}</span>${tags}
-          </div>
-          <div class="reason">${esc(b.reason)||'<i>(无说明)</i>'}</div>
-          <div class="files">${b.files.map(f=>`<div>${esc(f.artifact)} <span class="v">@${esc(f.version)}</span></div>`).join('')}</div>
-        </div>
-        <button class="clone">克隆</button>
-      </div>`;
-    card.querySelector('.batch-main').onclick=()=>card.classList.toggle('open');
-    card.querySelector('button.clone').onclick=ev=>{ev.stopPropagation();doClone(b)};
-    box.appendChild(card);
-  });
-  setButtons(!CLONING);
-}
-
-function setButtons(enabled){
-  document.querySelectorAll('button.clone').forEach(x=>x.disabled=!enabled);
-}
 function showStatus(html){const g=$('#global-status');g.innerHTML=html;g.classList.add('show')}
-
-async function doClone(b){
-  if(CLONING)return;
-  const src=curProj();
-  const msg=I18N.f('基于该提交克隆全新项目?\n\n源项目:{src}\n提交时间:{ts}\n任务:{task}\n快照内容:截至该批次的全部已登记产物(含当时的 dag.json 等配置)\n\n将创建新项目「{src}-提交时间」,大项目可能占用数百 MB ~ 数 GB 磁盘,且需要几分钟登记基线。',
-    {src,ts:fmtTime(b.timestamp),task:b.task_id});
-  if(!confirm(msg))return;
-  let name;
-  try{
-    const r=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone',{project:src,snapshot_commit:b.snapshot_commit,task_id:b.task_id});
-    name=r.name;
-  }catch(e){showStatus(`<span class="err">✗ ${t('克隆启动失败:')}${esc(e.message)}</span>`);return}
-  CLONING=true;setButtons(false);
-  showStatus(`${t('⏳ 正在克隆 →')} <b>${esc(name)}</b> …`);
-  const timer=setInterval(async()=>{
-    let st;
-    try{st=await api('/api/v1/projects/'+encodeURIComponent(src)+'/versions/clone')}
-    catch(e){return}
-    if(st.state==='running'){
-      const [n,total]=st.progress||[0,0];
-      showStatus(`${t('⏳ 正在克隆 →')} <b>${esc(name)}</b>:${esc(st.step)}${total?` ${n}/${total}`:''}`);
-    }else{
-      clearInterval(timer);CLONING=false;setButtons(true);
-      if(st.state==='done'){
-        showStatus(`<span class="ok">✓ 克隆完成:</span><b>${esc(name)}</b> `
-          +`<a href="/?project=${encodeURIComponent(name)}">→ 在控制台打开</a>`);
-      }else{
-        showStatus(`<span class="err">✗ ${t('克隆失败:')}${esc(st.error||t('未知错误'))}</span>`);
-      }
-    }
-  },2000);
-}
 
 (async()=>{
   await initProjects();
   refreshDanger();
-  loadVerToggle();
   refreshCopy();
-  await loadList();
-  // 页面打开时若已有克隆在跑(如刷新页面),恢复轮询提示
-  try{
-    const st=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/versions/clone');
-    if(st.state==='running'){CLONING=true;setButtons(false);
-      showStatus(`${t('⏳ 已有克隆任务进行中 →')} <b>${esc(st.new_name)}</b>${t(',请稍候(刷新可更新进度)')}`)}
-  }catch(e){}
-  // 同理:已有整份复制在跑,恢复轮询并在完成后照常切换
+  // 页面打开时若已有整份复制在跑(如刷新页面),恢复轮询并在完成后照常切换
   try{
     const st=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/copy');
     if(st.state==='running'){

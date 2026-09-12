@@ -39,7 +39,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 坐骑设定 | `bible/creatures/mount.json` | 由 `memory-bible` 收编入 Bible;version Agent 版本化 |
+| 坐骑设定 | `bible/creatures/mount.json` | 由 `memory-bible` 收编入 Bible |
 
 关键字段/结构约定:
 ```json

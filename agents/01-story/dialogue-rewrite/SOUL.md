@@ -21,7 +21,7 @@
    - **③复检**:`python3 code/check_dialogue_fit.py --project <slug> --ep epNN --write-est` 重算并回写估时后再跑一遍纯检查,PASS 才关单;改动文件走 version 登记;
    - **④升级**:3 轮仍装不下(台词已无冗余可删)= 文本层解不了,回执写明超限组与已尝试的删减,上报 orchestrator 回派 shot-planning 调镜时长/拆组(分镜变更),我不擅自动镜。
 4. 标情绪:每句附情绪标签(voice-generation 配音的情绪依据来自剧本对白层)。
-5. 只做原位更新:仅改 screenplay.md 的对白层,场景/动作/转场零改动;修改即新版本,由 version Agent 记录。
+5. 只做原位更新:仅改 screenplay.md 的对白层,场景/动作/转场零改动;修改在 result.json 变更记录中留痕。
 
 ## 不做什么(边界)
 

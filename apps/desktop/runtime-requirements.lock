@@ -15,8 +15,6 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
     #   requests
-cffi==2.1.0
-    # via pygit2
 charset-normalizer==3.4.9
     # via requests
 click==8.4.2
@@ -90,16 +88,12 @@ platformdirs==4.11.4
     # via scenedetect
 protobuf==7.35.1
     # via onnxruntime
-pycparser==3.0 ; implementation_name != 'PyPy'
-    # via cffi
 pycryptodome==3.23.0
     # via lark-oapi
 pydantic==2.13.4
     # via fastapi
 pydantic-core==2.46.4
     # via pydantic
-pygit2==1.19.3
-    # via -r apps/desktop/runtime-requirements.in
 pytz==2026.3.post1
     # via tos
 pyyaml==6.0.3

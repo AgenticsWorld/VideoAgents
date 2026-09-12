@@ -39,7 +39,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 世界总览待合并稿 | `bible/world.json` | 由 `memory-bible` 在 `p2-merge` 合入 Bible v1;version Agent 版本化 |
+| 世界总览待合并稿 | `bible/world.json` | 由 `memory-bible` 在 `p2-merge` 合入 Bible v1 |
 
 关键字段/结构约定:
 ```json

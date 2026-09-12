@@ -33,7 +33,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 ## 1. 核心原则
 
 1. **单一事实源**:所有世界观/角色/场景设定只存在于 Project Bible(`bible/`),由 `memory-bible` 唯一管理。任何 Agent 发现冲突只能上报,不得擅自改 Bible。
-2. **产物皆文件、皆有版本**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),由 `version` Agent 版本化,不可变(修改 = 新版本)。
+2. **产物皆文件**:每个 Agent 的输出是落盘文件(JSON/MD/媒体),路径即契约;修改直接覆盖原路径。
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回重做,重跑次数默认 0(即默认不自动重跑,首次不过即升级人工;用户可在设置「高级→Agent 高级设置→重跑次数」全局改,运行提示词「用户重跑次数设定」注入的值覆盖本文档所有写死的 3 次/≤3 次/max_retries: 3),仍不过升级人工。
 5. **上下文按需组装**:Agent 不读全库。上下文由 orchestrator 派单时**内联进工单本体**:把该任务需要的输入文件路径清单(Bible 当前受控版片段所在文件、上游产物、相关 `qa/defects/` 缺陷单)+ 硬约束直接写进工单 `instruction`/`inputs`,执行 Agent 只读工单列出的文件,不自行读全库补料(缺料走回执上报)。`attempt > 1` 的重做单必须在 `instruction` 附上次失败原因与 evaluation 逐条修改意见(`runs/<task_id>/eval.json` 路径列入 `inputs`);扇出批次的共用说明只在 instruction 写一次,不逐实例复制。(2026-09-08:原「上下文管家」Agent 及 full/inline 两级 Context Package 已删除——每单先打包一次约 4 分钟,实测收益抵不过时间与 token 开销;`runs/<task_id>/context.md` 不再产出。)
@@ -88,7 +88,7 @@ data/projects/<slug>/
 ```
 
 **项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(批量出图/合成、机检、媒体处理等**确有计算或外部调用**的脚本)
-是项目产物,落 `data/projects/<slug>/code/` 并与其它产物一样用 `.version/vc.py register` 登记;
+是项目产物,落 `data/projects/<slug>/code/`;
 **不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`),也**不要**散落在 `runs/<task_id>/`
 (那里只放运行记录三件套 + 可选 lesson.md,§6.1)。脚本内定位仓库根
 用「向上找 modules/」标准头(见根 `code/README.md`),禁止硬编码绝对路径。
@@ -139,7 +139,7 @@ refs/
                           小说原文
                              │
               ┌──── Phase 0 摄入与立项 ────┐
-              │  orchestrator / version /  │
+              │  orchestrator /            │
               │  memory-bible / novel-parser│
               └─────────────┬──────────────┘
                         [G0 闸门]
@@ -196,7 +196,7 @@ refs/
      platform-adapter →(seo + metadata 并行)→ publisher
 ```
 
-调度层 4 个 Agent(orchestrator / memory-bible / version / evaluation)贯穿全程,不属于任何单一 Phase。
+调度层 3 个 Agent(orchestrator / memory-bible / evaluation)贯穿全程,不属于任何单一 Phase。
 
 ### 3.1 DAG 按集动态展开(强制)
 
@@ -258,7 +258,6 @@ refs/
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
 | workflow-orchestrator | 为小说 `<slug>` 立项:初始化目录、生成全流程 DAG、登记全部工单 | 小说原文、本文档、workflow.yaml | `<项目目录>/runs/dag.json`、工单队列 | 机检:DAG 无环、每个任务的依赖/产物路径合法 |
-| version | 初始化项目版本库,登记基线 | 项目目录 | 版本库 + changelog | 机检:能记录/回滚任一产物 |
 | memory-bible | 初始化空 Bible 骨架与写入规则 | 项目目录 | `bible/` 骨架 | 机检:骨架 schema 齐全 |
 | novel-parser(p0-scan) | 扫描 `novel/` 章节文件并分批:整章归组,每批 1–1.5 万字,短章合并、超长章独立成批,**不拆章** | `novel/`(仅目录与字数,不读正文) | `story/chapter_manifest.json` | 机检:schema;章节文件覆盖率 100%;批字数在目标区间 |
 | novel-parser(p0-parse,每章节批并行) | 解析本批章节:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式);跨批指代判不准标 UNKNOWN | 本批章节原文、chapter_manifest | `story/structured_story/chNNN.json`(每章一分片) | 机检:分片 schema;本批章节覆盖率 100%;说话人缺失率 <2%。评分:extraction_v1 ≥85(按批)。QA:抽样 3 章人工比对原文 |
@@ -544,8 +543,7 @@ refs/
 > 锚点**补生成**(image-generation 出概念库缺口的新画面,如服装状态/表情/道具特写锚;reuse-first 下仅限缺口,§7A)虽非修正,同受 ①② 约束(其缺概念图的
 > 情形已由 §6A 覆盖审计在 H3A 前拦截)。
 > **机检 `repair_ref_anchored`**(修正产物入库前强制):产物 meta 必须记录所用 refs 与风格锚命中
-> 情况——refs 含所涉实体在库概念图路径、prompt 风格锚命中;不满足则产物不得入库、不得作下游锚,
-> version 不予登记。
+> 情况——refs 含所涉实体在库概念图路径、prompt 风格锚命中;不满足则产物不得入库、不得作下游锚。
 
 ### 按需音频转写（09-audio/audio-transcription）
 
@@ -770,11 +768,10 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 | Agent | 何时被调用 | 职责要点 |
 |---|---|---|
-| workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录三件套、触发实时版本登记、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
+| workflow-orchestrator | 始终在线 | 按 DAG 解锁任务、派发工单、跟踪状态、失败重试、闸门判定(含缺陷清零机检与 waiver 记录,§7)、缺陷单路由;episode_plan 过 G5 后**按集展开 DAG**(§3.1,强制);**收尾钩子**:每个任务关单时校验运行记录三件套、同步更新 `<项目目录>/runs/dag.json` 节点状态(§6.1) |
 | memory-bible | 任何设定**写入**与冲突上报 | Bible 唯一写入口;冲突仲裁;变更走 changelog 并通知受影响下游。**读取受控版免仲裁**:任何 Agent 直读 `bible/` 当前受控版无需经过本 Agent |
-| version | 每个产物落盘时 | **实时**版本化(落盘即登记,禁止依赖事后审计补录)、打标签(通过闸门的版本冻结)、支持回滚与 diff;changelog 保留真实产出 task_id |
 | evaluation | 每个产物提交时 | 按 rubric 打分(0–100),<80 附具体修改意见退回(合格线以项目「审核设置·质量评委」为准,默认 60;设 0 则全程不派 evaluation 单、免验收评分);3 次不过升级人工 |
-| reviser(00-orchestration) | 用户在预览页点「✏️ 修改/反馈/编辑」时(hook: on_user_revision) | **修改师**:无状态可并发、非调度层;一单一进程,在用户指定对象范围内**代行**主责工位(宿主按对象类型把该工位 SOUL 附进提示词,映射表 core.py `REVISION_KIND_AGENTS`),自己改产物/重出/跑该工位机检/`.version/vc.py register` 登记/写 `runs/rev-<run_id>/result.json`;用户意见即用户裁决,**不派 evaluation/QA**;bible 可直接写但必须追加 `bible/changelog.md`;关单时宿主解析回执末尾「## 变更记录」写 `runs/revisions/<run_id>.json`——`rerun_downstream=是` 立即投递总制片,否 则随下一条自动运行状态检查消息附带;总制片对修改记录**只标脏/重建签字单,不重做**。工作流页「调整 dag.json」与已直发专门工位的按钮(草图重绘、全景锚点、白模面板、剧本各板块)不经修改师 |
+| reviser(00-orchestration) | 用户在预览页点「✏️ 修改/反馈/编辑」时(hook: on_user_revision) | **修改师**:无状态可并发、非调度层;一单一进程,在用户指定对象范围内**代行**主责工位(宿主按对象类型把该工位 SOUL 附进提示词,映射表 core.py `REVISION_KIND_AGENTS`),自己改产物/重出/跑该工位机检/写 `runs/rev-<run_id>/result.json`;用户意见即用户裁决,**不派 evaluation/QA**;bible 可直接写但必须追加 `bible/changelog.md`;关单时宿主解析回执末尾「## 变更记录」写 `runs/revisions/<run_id>.json`——`rerun_downstream=是` 立即投递总制片,否 则随下一条自动运行状态检查消息附带;总制片对修改记录**只标脏/重建签字单,不重做**。工作流页「调整 dag.json」与已直发专门工位的按钮(草图重绘、全景锚点、白模面板、剧本各板块)不经修改师 |
 
 **子任务「手动停止」不是错误**:用户可在运行面板对排队/运行中的子任务点「⏹」手动停止。此类运行的 `status` 仍为 `error`,但 `dispatch.py --status/--runs/--wait/--wait-all` 输出会附「⏹已被用户手动停止(非错误,无需追查原因)」标记(API 字段 `stopped: "user"`,该 Agent 对话记录里也以「⏹ 已被用户手动停止…」开头)。调度层见到此标记**不得**当作程序错误去追查失败原因、翻日志或试探性重跑:只把节点记为 `failed`(note 写明「用户手动停止」),是否重派、跳过或改指令一律由用户决定——用户当轮没有明说时,以 `--confirm` 询问,不要自行重派。
 
@@ -828,7 +825,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 | `eval.json` | evaluation | **所有产出型任务必须有评分**(含 p3 及以后各阶段);逐维度得分 + verdict;无 eval 的产物不得登记进受控版本(项目「审核设置·质量评委」设 0 时全程免评分,本行不适用) |
 | `meta.json` | orchestrator(收单钩子) | `run_id`(仅 12 位 hex,禁止自由文本)、`attempt`、`agent`、`model`(实际模型名)、`tokens`(实际输入/输出,非估算)、`started_at`/`finished_at`(ISO 8601,时区统一 `+08:00`)、`inputs[]`(路径 + sha256)、`outputs[]`(路径 + 登记版本 `@vN`) |
 
-**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验三件套齐备;(b) 调用 version 对全部产物**实时登记**(禁止依赖事后审计补录;补录仅限一次性历史修复,changelog 须标注 `backfill` 并保留真实产出 task_id);(c) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。三步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
+**任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验三件套齐备;(b) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。两步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
 **可选第四件:经验卡 `lesson.md`(2026-08-12,默认不写)**。仅当**同时满足**以下全部条件时,orchestrator 在收尾钩子随三件套补写 `runs/<task_id>/lesson.md`:① 该任务经历了缺陷单闭环(status: resolved)或 attempt ≥ 3 后才通过;② 教训是**机制性的**(工具用法/渠道参数/流程约束,换一个项目仍然成立),与本项目情节、人物、文本内容无关;③ 现有 SOUL.md/WORKFLOW.md 尚无同款条目。三条有一条不满足就**不写**——常规任务、内容性返工(写得不好重写)、已有规约覆盖的旧坑,一律不产出经验卡。格式:frontmatter(`title`/`category`(provider|workflow|tooling)/`severity`/`provider`/`model`/`agents`/`date`/`evidence`(run_id 或缺陷 ID))+ 正文两节「现象与根因」「怎么做才对」;**正文禁止引用项目原文、人物名与情节**,禁止出现绝对路径与 API Key。用途:设置菜单「高级→诊断数据」会扫描各项目 `runs/*/lesson.md` 供用户逐张预览勾选、打包进诊断导出 zip 手动提交给开发者(见 `modules/diagnostics.py`;永不自动上传),用于沉淀回 SOUL/WORKFLOW 规约。
 
@@ -876,7 +873,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 2. 达到重跑次数上限仍不过 → 升级人工,附全部尝试与意见;
 3. 缺陷根因在上游(如设定本身错)→ 不许下游打补丁,缺陷单改派上游,orchestrator 按 DAG 标脏并只重跑受影响链路;
 4. **返修中的一切重生成受 §7E 形象红线约束**:只准复用在库概念图作形象锚、prompt 必带 style.json 风格锚,所涉概念图缺失时停手上报补齐——严禁修正环节新造人物/场景/道具形象(机检 repair_ref_anchored);
-5. 通过闸门的版本由 version Agent 冻结,后续修改必须新开版本。
+5. 通过闸门的产物视为已签字定稿,后续修改必须走变更流程(标脏重跑 / 重建签字单),不得静默覆盖。
 6. **用户修改通道(2026-09-11)**:预览页「✏️ 修改」默认发给修改师 `00-orchestration/reviser`(§5),不经总制片派单;修改师改完只落 `runs/revisions/<run_id>.json` 变更记录,总制片据记录把受影响节点标脏(`state` 回 pending、note 写记录 id),`rerun_downstream=是` 才重派、否 只标脏不派;改动使 H3S/H3A/H3B 等签字过期的,按 §8 重新建签字单。修改师的重生成同受 §7E 形象红线与 §7B 分辨率闸门约束。
 
 **闸门放行硬约束(G0–G10 通用,含 H1–H5)**:
@@ -887,7 +884,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 5. **升级裁决与闸门分离**:单任务的人工升级裁决(如三次不过后选择接受)只解锁该任务,不等同于闸门/H 点签字;其接受的残留问题必须转成缺陷单进入闸门机检范围。
 6. **禁止事后补票**:阶段任务与评分必须在闸门判定前完成;`eval_mode: retroactive` 仅限一次性历史修复,常态流程出现即为调度缺陷。
 7. **gate JSON 统一 schema**:`{phase, gate, checkpoint, decided_by, decided_at(完整 ISO 8601 +08:00,取实际决策时刻), verdict: PASS|PASS_WITH_WAIVER|HOLD, status, waivers[], qa_reports[], inputs, note}`。
-8. **人工签字必须先建单**:`human:true` 节点依赖全部完成后,orchestrator 必须立即执行 `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project <slug>`；未收到明确「签字」不得把节点写成 `passed`。每次总制片运行结束前必须检查 DAG 前沿，有已解锁人工节点却没有签字单时不得仅以文字汇报后关单。运行时会为漏单补建相同语义的永久签字单作为兜底，但只建单、不自动放行；用户签字后仍由 orchestrator 重做本节机检、落 gate JSON 并派 version 冻结。
+8. **人工签字必须先建单**:`human:true` 节点依赖全部完成后,orchestrator 必须立即执行 `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project <slug>`；未收到明确「签字」不得把节点写成 `passed`。每次总制片运行结束前必须检查 DAG 前沿，有已解锁人工节点却没有签字单时不得仅以文字汇报后关单。运行时会为漏单补建相同语义的永久签字单作为兜底，但只建单、不自动放行；用户签字后仍由 orchestrator 重做本节机检、落 gate JSON。
 
 ## 8. 人工确认点汇总
 

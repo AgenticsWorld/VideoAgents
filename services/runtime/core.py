@@ -20,7 +20,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import threading
 import time
 import traceback
@@ -35,7 +34,6 @@ from datetime import datetime
 from pathlib import Path
 
 import base64
-import pygit2
 
 from modules.output_format import OUTPUT_ASPECTS, resolve_output
 from modules import skill_records
@@ -920,9 +918,6 @@ DEFAULT_GENCONFIG = {
     "packaging": {"intro_enabled": True, "intro_notes": "",
                   "outro_enabled": True, "outro_notes": "",
                   "teaser_enabled": True},
-    # 版本管理开关(版本管理页,按项目独立):默认关——orchestrator 不派
-    # 00-orchestration/version 工单(产物登记与闸门冻结跳过),开启后照常
-    "versioning": {"enabled": False},
     # 视频提示词技能(视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
     #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
     #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
@@ -1743,7 +1738,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "versioning", "prompt_skill", "project_skills")
+                         "packaging", "prompt_skill", "project_skills")
 
 
 def project_settings_path(project: str) -> Path:
@@ -1833,11 +1828,6 @@ def _validate_packaging(p: dict):
                 raise ServiceError(400, "Intro/outro requirement text too long (max 2000 chars)")
 
 
-def _validate_versioning(v: dict):
-    if "enabled" in v and not isinstance(v["enabled"], bool):
-        raise ServiceError(400, "versioning.enabled must be a boolean")
-
-
 PROMPT_SKILL_MODES = ("auto", "manual", "off")
 
 
@@ -1906,7 +1896,6 @@ AM_CATEGORY_TIERS = {
     "12-publishing": "low",
 }
 AM_AGENT_TIERS = {                                      # 分类内的例外
-    "00-orchestration/version": "low",                  # 版本快照 = 机械活
     "00-orchestration/evaluation": "low",               # 评分
     "00-orchestration/reviser": "high",                 # 修改师:跨工位代行改产物 = 创作核心,智能分配固定高档
     "01-story/event": "low",                            # 事件抽取索引
@@ -3016,12 +3005,6 @@ def build_role_prompt(agent_id: str, project: str,
   草稿/迭代/返工阶段的逐单环节,orchestrator 不派各维度 QA 单,QA 被派到也按 0 处理;
   判每个 G 闸门前,orchestrator 按上表力度对该闸门范围的产物统一补派 QA 审核(力度 0 的维度不补派),
   缺陷清零机检照常。本条只约束各维度 QA 审核;evaluation 对工单的 acceptance 验收评分按上方「质量评委」设定执行"""
-    p += ("\n\n## 用户版本管理设定(Web 客户端「版本管理」页开关,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 的版本化要求)\n"
-          + ("- 版本管理:**开启** —— 照常执行既有版本化纪律:任务关单时通知 00-orchestration/version 登记产物,闸门通过后下达冻结指令"
-             if (ps.get("versioning") or {}).get("enabled") else
-             "- 版本管理:**关闭(默认)** —— orchestrator 不派 00-orchestration/version 的任何工单,"
-             "逐批次产物登记与闸门冻结全部跳过;on_task_complete 收尾钩子免查「version 已登记」,"
-             "闸门判定不因未登记/未冻结而 HOLD;version Agent 被派到也只说明开关已关闭并结单,不做登记"))
     max_retries = max_retries_setting()
     p += ("\n\n## 用户重跑次数设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中写死的「最多 3 次」「≤3 次」「max_retries: 3」)\n"
           f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll,"
@@ -9495,7 +9478,7 @@ async def api_projconfig_get(project: str = "demo"):
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "时长设置",
                        "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
-                       "versioning": "版本管理", "prompt_skill": "提示词技能",
+                       "prompt_skill": "提示词技能",
                        "project_skills": "项目技能"}
 
 
@@ -9516,7 +9499,6 @@ async def api_projconfig_set(body: dict):
     _validate_output(cfg.get("output") or {})
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
-    _validate_versioning(cfg.get("versioning") or {})
     _validate_prompt_skill(cfg.get("prompt_skill") or {})
     _validate_project_skills(cfg.get("project_skills"))
     ensure_project(project)
@@ -11145,173 +11127,8 @@ async def api_projects_create(body: dict):
     return {"ok": True, "name": name}
 
 
-# ---------------- 版本克隆(设置菜单 → 版本克隆页) ----------------
-# 从项目 .version/repo.git 的任一历史提交(全量快照)克隆出全新项目:
-# pygit2 导出该 commit 整树 → vc.py install 建全新版本库 → 全部文件登记 v1 基线。
-# 对源项目纯只读(固定 commit),与在跑的流水线无写盘冲突。
-CLONE_JOBS: dict = {}                    # 源项目名 → 最近一次克隆任务状态
-CLONE_LOCK = threading.Lock()
-
-
-def _version_dir(base: Path) -> Path:
-    vdir = base / ".version"
-    if not (vdir / "changelog.jsonl").is_file():
-        raise ServiceError(404, f"Project has no version repository: {base.name}")
-    return vdir
-
-
-async def api_versions_log(project: str = "demo"):
-    """changelog.jsonl → 按 task_id 连续分组的提交批次,倒序。
-    仅取含 commit 字段的 register 记录(freeze_gate_record/backfill 等异构行跳过)。"""
-    base = _proj_base(project)
-    vdir = _version_dir(base)
-
-    def _load():
-        batches, cur = [], None
-        with open(vdir / "changelog.jsonl", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except Exception:
-                    continue
-                if not (rec.get("commit") and rec.get("artifact")):
-                    continue                      # 非 register 记录
-                tid = rec.get("task_id") or "?"
-                if cur is None or cur["task_id"] != tid:
-                    cur = {"task_id": tid, "reason": rec.get("reason") or "",
-                           "timestamp": rec.get("timestamp") or "",
-                           "files": [], "frozen_tags": [], "snapshot_commit": ""}
-                    batches.append(cur)
-                cur["files"].append({"artifact": rec["artifact"],
-                                     "version": rec.get("version") or ""})
-                cur["timestamp"] = rec.get("timestamp") or cur["timestamp"]
-                cur["snapshot_commit"] = rec["commit"]   # 批内最后一条 = 快照点
-                tag = rec.get("tag")
-                if tag and tag not in cur["frozen_tags"]:
-                    cur["frozen_tags"].append(tag)
-        return batches
-
-    batches = await asyncio.to_thread(_load)
-    batches.reverse()
-    return {"project": base.name, "batches": batches}
-
-
-def _clone_worker(project: str, gitdir: str, commit: str, task_id: str,
-                  commit_time: str, name: str):
-    job = CLONE_JOBS[project]
-    tmp = PROJECTS_DIR / f".clone-tmp-{name}"    # . 开头:构建期间不被 /api/projects 列出
-    try:
-        if tmp.exists():
-            shutil.rmtree(tmp)
-        tmp.mkdir(parents=True)
-
-        job["step"] = "导出快照"
-        repo = pygit2.Repository(gitdir)
-        snapshot = repo[pygit2.Oid(hex=commit)]
-        archive_path = tmp.parent / f".{name}.tar"
-        try:
-            with tarfile.open(archive_path, "w") as archive:
-                repo.write_archive(snapshot, archive)
-            with tarfile.open(archive_path, "r") as archive:
-                root = tmp.resolve()
-                for member in archive.getmembers():
-                    target = (tmp / member.name).resolve()
-                    if root != target and root not in target.parents:
-                        raise RuntimeError("版本快照包含非法路径")
-                archive.extractall(tmp)
-        finally:
-            archive_path.unlink(missing_ok=True)
-
-        job["step"] = "初始化版本库"
-        r = subprocess.run([sys.executable, str(ROOT / "modules" / "vc.py"),
-                            "install", str(tmp)],
-                           capture_output=True, text=True, cwd=str(ROOT))
-        if r.returncode:
-            raise RuntimeError(f"vc.py install 失败: {(r.stderr or r.stdout)[-500:]}")
-
-        files = sorted(f.relative_to(tmp).as_posix() for f in tmp.rglob("*")
-                       if f.is_file()
-                       and not f.relative_to(tmp).as_posix().startswith(".version/"))
-        total = len(files)
-        job["step"] = "登记 v1 基线"
-        job["progress"] = [0, total]
-        reason = (f"克隆自 {project}@{commit[:12]}(任务 {task_id or '?'}, "
-                  f"{commit_time}),全部产物重置为 v1 基线")
-        for i in range(0, total, 25):
-            chunk = files[i:i + 25]
-            r = subprocess.run([sys.executable, str(tmp / ".version" / "vc.py"),
-                                "register", *chunk,
-                                "--task-id", "p0-clone-baseline",
-                                "--attempt", "1", "--reason", reason],
-                               capture_output=True, text=True, cwd=str(tmp))
-            if r.returncode:
-                raise RuntimeError(f"基线登记失败: {(r.stderr or r.stdout)[-500:]}")
-            job["progress"] = [min(i + 25, total), total]
-
-        # manifest project 字段用最终名(install 时目录还叫 .clone-tmp-*)
-        mpath = tmp / ".version" / "manifest.json"
-        m = json.loads(mpath.read_text())
-        m["project"] = name
-        mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2))
-
-        os.rename(tmp, PROJECTS_DIR / name)      # 原子上线
-        job["step"] = "完成"
-        job["state"] = "done"
-    except Exception as e:
-        job["state"] = "error"
-        job["error"] = str(e)
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-async def api_versions_clone(body: dict):
-    project = safe_slug(body.get("project"))
-    base = _proj_base(project)
-    vdir = _version_dir(base)
-    commit = (body.get("snapshot_commit") or "").strip().lower()
-    task_id = (body.get("task_id") or "").strip()
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise ServiceError(400, "snapshot_commit must be a 40-char hex git commit")
-    gitdir = str(vdir / "repo.git")
-    try:
-        repo = pygit2.Repository(gitdir)
-        commit_obj = repo[pygit2.Oid(hex=commit)]
-        if not isinstance(commit_obj, pygit2.Commit):
-            raise KeyError(commit)
-    except (KeyError, ValueError, pygit2.GitError):
-        raise ServiceError(400, f"Commit not found in the repository of {project}: {commit[:12]}")
-
-    with CLONE_LOCK:
-        job = CLONE_JOBS.get(project)
-        if job and job.get("state") == "running":
-            raise ServiceError(409, f"A clone job is already in progress: {job.get('new_name')}")
-        # 新名 = 源名-提交时间(如 sample-20260712-215704);重名追加 -2/-3
-        ct = datetime.fromtimestamp(commit_obj.commit_time).astimezone().isoformat(timespec="seconds")
-        stamp = ct[:19].replace("-", "").replace(":", "").replace("T", "-")
-        name = f"{project}-{stamp}"
-        n = 2
-        while (PROJECTS_DIR / name).exists():
-            name = f"{project}-{stamp}-{n}"
-            n += 1
-        CLONE_JOBS[project] = {"state": "running", "step": "准备",
-                               "progress": [0, 0], "new_name": name,
-                               "source": project, "commit": commit,
-                               "task_id": task_id, "error": None}
-        threading.Thread(target=_clone_worker,
-                         args=(project, gitdir, commit, task_id, ct, name),
-                         daemon=True).start()
-    return {"ok": True, "name": name}
-
-
-async def api_versions_clone_status(project: str = "demo"):
-    return CLONE_JOBS.get(safe_slug(project)) or {"state": "idle"}
-
-
-# ---------------- 完整复制项目(版本管理页顶部「复制项目」板块) ----------------
-# 与「版本克隆」不同:不走版本库快照,而是把项目目录原样整份复制
-# (含 runs/、.version/ 嵌入式版本库、未登记文件),版本历史随目录一并带走。
+# ---------------- 完整复制项目(版本管理页「复制项目」板块) ----------------
+# 把项目目录原样整份复制(含 runs/ 运行记录与全部产物)为一个全新项目。
 COPY_JOBS: dict = {}                     # 源项目名 → 最近一次复制任务状态
 COPY_LOCK = threading.Lock()
 
@@ -11335,15 +11152,6 @@ def _copy_worker(project: str, src: Path, name: str):
             job["progress"] = [min(done, total), total]
 
         shutil.copytree(src, tmp, symlinks=True, copy_function=_cp)
-        # 嵌入式版本库随目录复制,manifest project 字段改为新名
-        mpath = tmp / ".version" / "manifest.json"
-        if mpath.is_file():
-            try:
-                m = json.loads(mpath.read_text())
-                m["project"] = name
-                mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2))
-            except Exception:
-                pass                             # manifest 损坏不阻断复制
         os.rename(tmp, PROJECTS_DIR / name)      # 原子上线
         job["step"] = "完成"
         job["state"] = "done"
@@ -11387,9 +11195,6 @@ async def api_projects_delete(body: dict):
     confirm = (body.get("confirm") or "").strip()
     if confirm != base.name:
         raise ServiceError(400, "Entered project name does not match the project to delete")
-    job = CLONE_JOBS.get(project)
-    if job and job.get("state") == "running":
-        raise ServiceError(409, "A clone job is in progress for this project; delete it after the job finishes")
     job = COPY_JOBS.get(project)
     if job and job.get("state") == "running":
         raise ServiceError(409, "A copy job is in progress for this project; delete it after the job finishes")
@@ -12056,7 +11861,7 @@ async def _continue_signed_gate(c: dict) -> str | None:
         f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
         f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
         "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
-        "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG 并派 version 冻结。"
+        "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG。"
         "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
         "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
         "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"

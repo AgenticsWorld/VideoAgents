@@ -42,7 +42,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 更新后的时间线 | `edit/epNN/timeline.json`(新版本,由 version Agent 版本化) | `transitions[]` 覆盖全部组边界 + `transitions_policy`(CLI 写入) |
+| 更新后的时间线 | `edit/epNN/timeline.json`(原位更新) | `transitions[]` 覆盖全部组边界 + `transitions_policy`(CLI 写入) |
 | 转场后成片 | `edit/epNN/cut_v2.mp4` | 时长 = cut_v1 ±1 帧;全片硬切时不产出 |
 | 机检台账 | `edit/epNN/transitions_render.json` | `check.items[]` 全 PASS;`black_frame_whitelist[]` 供黑帧豁免 |
 
@@ -97,5 +97,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`07-directing/shot-planning`(`transition_in` 定稿,唯一设计源)、`10-editing/edit`(timeline + cut_v1,组序与入出点必须与 cut 同版)、`07-directing/director`(转场清单,只经 shot_list 到我)。
-- **下游**:`subtitle` 与 `caption` 在我更新后的时轴上工作——pad 补偿保证时轴不变,但我每次更新 timeline 仍必须走 version Agent 出新版本;`edit` 终版封装取最高版 `cut_v*`;`11-qa/visual-qa` 抽检我的成品。
+- **下游**:`subtitle` 与 `caption` 在我更新后的时轴上工作——pad 补偿保证时轴不变,`edit` 终版封装取最高版 `cut_v*`;`11-qa/visual-qa` 抽检我的成品。
 - **需对齐的伙伴**:`10-editing/edit`(timeline 条目口径:group_id/in/out/speed 或 timeline_in/out)、`07-directing/shot-planning`(变更流程改字段)。

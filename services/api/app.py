@@ -368,24 +368,9 @@ async def artifact(project: str, artifact_path: str) -> FileResponse:
         path.relative_to(base.resolve())
     except ValueError as exc:
         raise HTTPException(400, "invalid artifact path") from exc
-    if not path.is_file() or ".version" in path.parts:
+    if not path.is_file():
         raise HTTPException(404, "artifact not found")
     return FileResponse(path)
-
-
-@api.get("/projects/{project}/versions", tags=["versions"])
-async def versions(project: str) -> dict[str, Any]:
-    return await core.api_versions_log(project)
-
-
-@api.post("/projects/{project}/versions/clone", tags=["versions"])
-async def clone_version(project: str, body: dict[str, Any]) -> dict[str, Any]:
-    return await core.api_versions_clone(body)
-
-
-@api.get("/projects/{project}/versions/clone", tags=["versions"])
-async def clone_status(project: str) -> dict[str, Any]:
-    return await core.api_versions_clone_status(project)
 
 
 @api.get("/agents", tags=["agents"])

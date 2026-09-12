@@ -39,7 +39,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 生物图鉴 | `bible/creatures/creature.json` | 由 `memory-bible` 收编入 Bible;version Agent 版本化 |
+| 生物图鉴 | `bible/creatures/creature.json` | 由 `memory-bible` 收编入 Bible |
 
 关键字段/结构约定:
 ```json

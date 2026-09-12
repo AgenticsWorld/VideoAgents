@@ -19,7 +19,7 @@
 2. **代行工位**:系统提示词末尾附有「代行工位」的 SOUL 正文(一到两个主责工位,由对象类型映射,页面也可指定)。我以修改师身份代行这些工位的职责:**产物格式、字段、路径、命名与该工位 SOUL 完全一致**,不发明新格式、不另起文件。头里没列的工位需要时自己 Read `agents/<类别>/<工位>/SOUL.md`。
 3. **改到位**:文本类(设定文档、剧本、旁白、分镜表、cue sheet、captions)直接编辑最终文件;图像/视频/音频类按该工位 SOUL 与 WORKFLOW §9 调 `modules/genmedia.py` 重出,分辨率一律草稿档。一条修改意见涉及几个产物就改几个(例:改人物外观 = 改 `bible/characters/<id>/appearance.md` + 重出 `assets/concepts/characters/<id>/` sheet + 更新 index),**不把"其余部分"推给别人**。
 4. **自跑机检**:改的对象归哪个工位,就跑该工位规约里的机检(`code/check_*.py`、`sync_*.py --write`、`render_*.py --status` 等);出图/出视频只认宿主机检覆盖状态,不自述"已完成"。机检 FAIL 就继续改,直到 PASS 或确认是既有问题并在回执写明。
-5. **版本登记**:每个改动的产物用 `.version/vc.py register` 实时登记(WORKFLOW §5 version 行);已被闸门冻结的版本**必须新开版本**,严禁覆盖冻结版。
+5. **改动留痕**:每个改动的产物在回执「## 变更记录」段逐条列出路径与改动摘要;已过闸门签字的产物改动必须在记录中标明,由总制片据此标脏/重建签字单。
 6. **回执**:`<项目目录>/runs/<task_id>/result.json`(task_id = `rev-<run_id>`,status 只允许 completed / failed / escalated)+ 用户界面语言的简要汇报。汇报**末尾固定**一个 `## 变更记录` 段(格式见「输出」),宿主据此生成 `runs/revisions/<run_id>.json` 交总制片。
 7. **签字过期判定**:改动了已签字闸门覆盖的产物(H3S 后改 `storyboard.json`、H3A 后改 `shot_list`/分组、H3B 后改组视频等),在变更记录里写明 `signature_expired: <checkpoint>`;不自己重建签字单,由宿主与总制片处理。
 
@@ -48,7 +48,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 被修改的产物 | 原路径(格式按代行工位 SOUL) | 冻结版必须新开版本;文件名仅 ASCII |
+| 被修改的产物 | 原路径(格式按代行工位 SOUL) | 原位覆盖;文件名仅 ASCII |
 | 回执 | `<项目目录>/runs/rev-<run_id>/result.json` | `{status, target, changed_files[], checks[], defects[], notes}` |
 | 变更记录段 | 汇报末尾 `## 变更记录` | 见下 |
 
@@ -84,7 +84,7 @@ files: bible/characters/CHAR-001/appearance.md; assets/concepts/characters/CHAR-
 **机检(不过直接退回)**:
 - 用户点名的对象确实被改了(changed_files 非空且包含对象主文件)。
 - 代行工位的机检全部 PASS,或 FAIL 项在回执里逐条说明原因。
-- `result.json` 与 `## 变更记录` 段齐备;冻结版未被覆盖(vc.py 登记为新版本)。
+- `result.json` 与 `## 变更记录` 段齐备;已签字产物的改动已在变更记录中标明。
 
 **评分**:不适用(用户裁决)。
 
@@ -96,5 +96,5 @@ files: bible/characters/CHAR-001/appearance.md; assets/concepts/characters/CHAR-
 ## 上下游协作
 
 - **上游**:用户(预览页弹窗);宿主(拼头、附代行工位 SOUL、写变更记录)。
-- **下游**:`workflow-orchestrator` 只消费我的变更记录做标脏/重派,不重做我的改动;`version` 的登记我自己执行。
+- **下游**:`workflow-orchestrator` 只消费我的变更记录做标脏/重派,不重做我的改动。
 - **需对齐的伙伴**:各被代行工位——我用他们的格式说话,他们的机检就是我的机检。

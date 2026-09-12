@@ -29,7 +29,7 @@
 
 --write-est:按文本+语速重算并回写 est_duration_s(shot_list.json 的 dialogue_lines/dialogue_est_s/dialogue_ratio/
   dialogue_capacity_s/dialogue_est_total_s;screenplay.md 与 dialogue.md 对白行 `{… est_duration_s: X …}` 只改数字),
-  供改短台词后同步估时;回写后仍以本脚本复检为准(改写的文件由 version Agent 登记版本)。
+  供改短台词后同步估时;回写后仍以本脚本复检为准。
 无 shot_list.json 时自动退化为「仅剧本层」模式(3/4/7 项;Phase 5 dialogue-rewrite 交付自检可用)。
 
 用法:python3 code/check_dialogue_fit.py --project <slug> --ep ep01              # 全批机检 + 写报告
