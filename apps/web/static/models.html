@@ -83,7 +83,7 @@ button:disabled{opacity:.5;cursor:default}
 <header>
   <a class="back" href="/">← 返回控制台</a>
   <h1>🎨 生成模型设置</h1>
-  <span class="pill">图像 / 视频 / 数字人 / 音乐 / TTS旁白 生成渠道与模型</span>
+  <span class="pill">图像 / 视频 / 数字人 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型</span>
   <div class="spacer"></div>
 </header>
 <main>
@@ -129,6 +129,18 @@ button:disabled{opacity:.5;cursor:default}
     </div>
     <!-- ComfyUI 面板由 buildPanel('digitalhuman','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub 国内/国际 -->
     <div class="panel" id="panel-dh-comfyui"></div>
+  </div>
+  <div class="card" id="card-world">
+    <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <div class="tabs" id="world-tabs">
+      <div class="tab active" id="tab-world-marble">✅ Marble(World Labs)</div>
+    </div>
+    <div class="panel show" id="panel-world-marble">
+      <div class="row"><label>API Key</label><input type="password" id="world-marble-key" placeholder="World Labs API Key"><button onclick="testWorldLabs()">验证 Key</button></div>
+      <div class="status" id="world-marble-status"></div>
+      <div class="row" id="world-marble-model-row"></div>
+      <div class="hint">按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 <a href="https://platform.worldlabs.ai/api-keys" target="_blank">platform.worldlabs.ai</a> 创建。Marble 1.1 Plus 在室外/大空间自动出更大的世界(消耗更多 credits)。</div>
+    </div>
   </div>
   <div class="card" id="card-text">
     <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
@@ -1039,6 +1051,20 @@ function showPanel(kind,p){
   });
 }
 
+/* 世界模型(World Labs Marble,2026-09-12):模型 ID 与 https://docs.worldlabs.ai/api/models 一致(modules/worldlabs.py MODELS 同步) */
+const WORLD_MODELS=[
+  ['marble-1.1','Marble 1.1 · 当前稳定版'],
+  ['marble-1.1-plus','Marble 1.1 Plus · 最新,室外/大空间自动出更大世界(耗更多 credits)'],
+  ['marble-1.0','Marble 1.0 · 上一代'],
+  ['marble-1.0-draft','Marble 1.0 Draft · 草稿版'],
+];
+async function testWorldLabs(){
+  const st=$('#world-marble-status');st.className='status';st.textContent='验证中…';
+  const r=await api('/api/v1/providers/worldlabs/test',{api_key:$('#world-marble-key').value.trim()}).catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.remaining_credits}):'✗ '+(r.error||t('验证失败'));
+}
+
 function showDigitalHumanPanel(provider){
   DH_PROVIDER=provider;
   const labels={heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
@@ -1408,6 +1434,9 @@ function loadIntoForm(){
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
   showDigitalHumanPanel(['heygen','klingai','comfyui'].includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':'heygen');
+  const wm=(CFG.world||{}).marble||{};
+  $('#world-marble-key').value=wm.api_key||'';
+  fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
   loadDeepagentsForm();
 }
 
@@ -1516,6 +1545,8 @@ function collect(){
       aspect_ratio:$('#dh-heygen-aspect').value},
     klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
     comfyui:collectComfy('digitalhuman')};
+  out.world={provider:'marble',
+    marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
@@ -1571,6 +1602,7 @@ $('#save').onclick=async()=>{
   // 数字人 ComfyUI 面板与图像/视频等段同构(运行方式 本地/Comfy Cloud/RunningHub),复用 buildPanel
   const dhPanel=buildPanel('digitalhuman','comfyui');dhPanel.id='panel-dh-comfyui';
   $('#panel-dh-comfyui').replaceWith(dhPanel);
+  $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),

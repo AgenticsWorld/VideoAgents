@@ -806,6 +806,13 @@ DEFAULT_GENCONFIG = {
                     "rh_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
     },
+    # 世界模型(2026-09-12):World Labs Marble,按场景全景生成可漫游 3D world(高斯泼溅);
+    # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。API 文档 https://docs.worldlabs.ai/api,
+    # Key 在 https://platform.worldlabs.ai/api-keys 创建;model 与 docs.worldlabs.ai/api/models 一致
+    "world": {
+        "provider": "marble",   # marble
+        "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
+    },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
@@ -6510,16 +6517,134 @@ def _preview_scenes(project: str):
                         a["panos"].pop(s)
             lt = adir / sid / (((_read_json_safe(adir / sid / "layout.json") or {}).get("layout_top")) or "layout_top.png")
             panos["layout_top_url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/{lt.name}?v={int(lt.stat().st_mtime)}" if lt.is_file() else None
+        # 世界模型(2026-09-12):assets/concepts/scenes/<sid>/world/world.json,预览页「🌍 世界模型」板块用 Spark 渲染 splats_*.spz;
+        # world_sources = 可作 world 输入的全景来源(锚点/方案),供板块下拉
+        world, world_sources = None, None
+        try:
+            from modules import worldlabs
+            world = worldlabs.preview_summary(base, sid, f"/projects/{base.name}")
+            if (adir / sid / "layout.json").is_file():
+                world_sources = worldlabs.list_sources(base, sid)
+        except Exception as e:  # noqa: BLE001
+            print(f"[preview-scenes] {sid} world 读取失败(忽略):{e}", flush=True)
         scenes.append({"id": sid, "name": meta.get("name") or sid,
                        "meta": meta, "docs": docs,
-                       # plates/ 与 panos/ 子目录不进概念图库,分别以「分镜背景图」「全景图」板块展示
-                       "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/"))],
-                       "plates": plates, "panos": panos})
-    return {"project": base.name, "scenes": scenes}
+                       # plates/ panos/ world/ 子目录不进概念图库,分别以「分镜背景图」「全景图」「世界模型」板块展示
+                       "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/", "world/"))],
+                       "plates": plates, "panos": panos, "world": world, "world_sources": world_sources,
+                       "world_job": _scene_world_job_view(base.name, sid)})
+    # 项目「白模」选项(output.spatial_blocking,默认开):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
+    whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is not False
+    return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled}
 
 
 async def api_preview_scenes(project: str = "demo"):
     return await asyncio.to_thread(_preview_scenes, project)
+
+
+# ---------------- 世界模型(World Labs Marble,2026-09-12) ----------------
+# 场景预览页「🌍 世界模型」板块:后台线程跑宿主 CLI code/worldlabs_world.py(约 5–10 分钟,含 Marble 轮询),
+# 逐行收集输出并发 SSE scene_world 事件;页面按事件刷新日志,done 后重载场景数据挂 Spark 视窗
+WORLD_JOBS: dict[str, dict] = {}      # "<project>/<sid>" -> {status, log[], started_at, finished_at, error, params}
+WORLD_LOG_TAIL = 80
+
+
+def _scene_world_job_view(project: str, sid: str) -> dict | None:
+    job = WORLD_JOBS.get(f"{project}/{sid}")
+    if not job:
+        return None
+    return {k: job.get(k) for k in ("status", "started_at", "finished_at", "error", "params")} | {"log": job["log"][-WORLD_LOG_TAIL:]}
+
+
+def _scene_world_worker(project: str, sid: str, jobkey: str, cmd: list[str]):
+    job = WORLD_JOBS[jobkey]
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(ROOT), env=env)
+        job["pid"] = proc.pid
+        for line in proc.stdout:   # type: ignore[union-attr]
+            line = line.rstrip()
+            if not line:
+                continue
+            job["log"].append(line)
+            HUB.publish({"type": "scene_world", "project": project, "scene": sid, "status": "running", "line": line})
+        rc = proc.wait()
+        if rc == 0:
+            job["status"] = "done"
+        else:
+            job["status"] = "failed"
+            # CLI 的错误行以「错误:」开头(其后可能跟多行 API 响应体),取该行起的片段;没有就取末尾几行
+            lines = job["log"]
+            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith("错误:")), max(len(lines) - 3, 0))
+            job["error"] = " ".join(x.strip() for x in lines[start:start + 4])[:500] or f"exit {rc}"
+            if rc == 2:
+                job["error"] = "项目「白模」选项已关闭,世界模型链跳过"
+    except Exception as e:  # noqa: BLE001
+        job["status"] = "failed"
+        job["error"] = str(e)[:500]
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "scene_world", "project": project, "scene": sid, "status": job["status"], "error": job.get("error", "")})
+
+
+async def api_scene_world_start(project: str, sid: str, body: dict):
+    """场景预览页「生成世界模型」:{source: scene_pano|depth2rgb, anchor?, scheme?, force?}。
+    仅项目「白模」选项开启且场景已建白模时可用;已有 world 须 force(旧版归档到 world/variants/)。"""
+    from modules import worldlabs
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    if not sid:
+        raise ServiceError(400, "scene id is required")
+    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is False:
+        raise ServiceError(409, "项目「白模」选项已关闭,不能生成世界模型")
+    if not (base / "assets" / "concepts" / "scenes" / sid / "layout.json").is_file():
+        raise ServiceError(404, f"{sid} 还没有场景白模(layout.json)")
+    source = str(body.get("source") or "scene_pano")
+    if source not in worldlabs.SOURCES:
+        raise ServiceError(400, f"source must be one of {list(worldlabs.SOURCES)}")
+    if not worldlabs.marble_config().get("api_key"):
+        raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
+    anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
+    scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or ""))
+    force = bool(body.get("force"))
+    if worldlabs.read_world(base, sid) and not force:
+        raise ServiceError(409, f"{sid} 已有世界模型;重新生成请传 force")
+    jobkey = f"{base.name}/{sid}"
+    if (WORLD_JOBS.get(jobkey) or {}).get("status") == "running":
+        raise ServiceError(409, f"{sid} 的世界模型正在生成中")
+    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source]
+    if anchor:
+        cmd += ["--anchor", anchor]
+    if scheme:
+        cmd += ["--scheme", scheme]
+    if force:
+        cmd.append("--force")
+    WORLD_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
+                          "params": {"source": source, "anchor": anchor, "scheme": scheme, "force": force}}
+    threading.Thread(target=_scene_world_worker, args=(base.name, sid, jobkey, cmd), daemon=True).start()
+    HUB.publish({"type": "scene_world", "project": base.name, "scene": sid, "status": "running", "line": ""})
+    return {"ok": True, "job": jobkey}
+
+
+async def api_scene_world_status(project: str, sid: str):
+    """世界模型任务状态 + 当前 world 摘要(页面打开时恢复进行中的日志)。"""
+    from modules import worldlabs
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    world = await asyncio.to_thread(worldlabs.preview_summary, base, sid, f"/projects/{base.name}")
+    return {"project": base.name, "scene": sid, "job": _scene_world_job_view(base.name, sid), "world": world}
+
+
+async def api_test_worldlabs(body: dict):
+    """验证 World Labs API Key(GET /marble/v1/credits,回余额)。"""
+    from modules import worldlabs
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        return {"ok": False, "error": "World Labs API Key 未填写"}
+    try:
+        credits = await asyncio.to_thread(worldlabs.get_credits, key)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:240]}
+    return {"ok": True, "provider": "marble", "remaining_credits": credits}
 
 
 def _preview_worldview(project: str):
@@ -9096,7 +9221,7 @@ async def api_genconfig_set(body: dict):
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "digital_human", "deepagents"):
+    for kind in ("image", "video", "music", "tts", "digital_human", "world", "deepagents"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")

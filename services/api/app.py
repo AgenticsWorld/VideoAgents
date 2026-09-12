@@ -349,6 +349,17 @@ async def board_sketch(project: str, ep: str, body: dict[str, Any]) -> dict[str,
     return await core.api_board_sketch_start(project, ep, body)
 
 
+@api.post("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
+async def scene_world_start(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「生成世界模型」(World Labs Marble):{source, anchor?, scheme?, force?}。"""
+    return await core.api_scene_world_start(project, sid, body)
+
+
+@api.get("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
+async def scene_world_status(project: str, sid: str) -> dict[str, Any]:
+    return await core.api_scene_world_status(project, sid)
+
+
 @api.get("/projects/{project}/artifacts/{artifact_path:path}", tags=["artifacts"])
 async def artifact(project: str, artifact_path: str) -> FileResponse:
     base = core.PROJECTS_DIR / core.safe_slug(project)
@@ -578,6 +589,11 @@ async def test_comfyui(body: ProviderProbe) -> dict[str, Any]:
 @api.post("/providers/digital-human/test", tags=["providers"])
 async def test_digital_human(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_digitalhuman(body.model_dump())
+
+
+@api.post("/providers/worldlabs/test", tags=["providers"])
+async def test_worldlabs(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_test_worldlabs(body.model_dump())
 
 
 @api.post("/providers/runninghub/workflow", tags=["providers"])

@@ -302,8 +302,9 @@ def is_indoor(base: Path, sid: str) -> bool:
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
-def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, log=print) -> dict:
-    """无头 Chromium 渲径向深度全景 + 白模彩色全景到 panos/<anchor>/。"""
+def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, log=print, out_dir: Path | None = None) -> dict:
+    """无头 Chromium 渲径向深度全景 + 白模彩色全景到 panos/<anchor>/(out_dir 指定则写到该目录,
+    世界模型链 modules/worldlabs.py 在场景没有锚点时把自动机位的全景渲进 world/,不进 panos 索引)。"""
     try:
         import numpy as np
         from PIL import Image
@@ -312,7 +313,7 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
         raise PanoError('缺少 numpy / Pillow / Playwright,请安装项目依赖并运行 python -m playwright install chromium') from e
     from modules.whitebox import load_scene
     scene = load_scene(base, sid)
-    out = panos_dir(base, sid) / anchor['anchor_id']
+    out = out_dir if out_dir is not None else panos_dir(base, sid) / anchor['anchor_id']
     out.mkdir(parents=True, exist_ok=True)
     width, height = DEPTH_SIZE
     camera = [float(v) for v in anchor['position']]
@@ -355,7 +356,11 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
 
 
 def whitebox_pano_stale(base: Path, sid: str, anchor: dict) -> bool:
-    out = panos_dir(base, sid) / anchor['anchor_id']
+    return whitebox_pano_stale_at(panos_dir(base, sid) / anchor['anchor_id'], anchor)
+
+
+def whitebox_pano_stale_at(out: Path, anchor: dict) -> bool:
+    """目录 out 下的白模深度全景是否缺失/与锚点位置、yaw 不符。"""
     rec = read(out / 'depth_pano.json', None)
     if not rec or not (out / 'depth_pano.npy').is_file() or not (out / 'whitebox_pano.jpg').is_file():
         return True

@@ -18,3 +18,11 @@ The offline whitebox viewer bundles Three.js 0.180.0 (MIT), including its core,
 WebGL renderer and OrbitControls. Copyright notice and license are retained in
 `apps/web/static/vendor/three/LICENSE`. OrbitControls' package import is changed
 to a relative local import. Upstream: https://github.com/mrdoob/three.js/tree/r180.
+The whitebox viewer also bundles Three.js' `addons/postprocessing/Pass.js` (MIT, same
+license file) for the world viewer.
+
+The scene world viewer bundles Spark (`@sparkjsdev/spark`, MIT, Copyright © 2025
+World Labs Technologies, Inc.) to render Gaussian-splat worlds (`.spz`) in the browser.
+License is retained in `apps/web/static/vendor/spark/LICENSE`. Upstream:
+https://github.com/sparkjsdev/spark. World generation itself calls the hosted World
+Labs Marble API (https://docs.worldlabs.ai/api) with the user's own API key.
