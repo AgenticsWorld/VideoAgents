@@ -7170,7 +7170,7 @@ async def api_preview_script(project: str = "demo", ep: str = ""):
 # 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.image_model_prefs.sketch),
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
 BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at};整集九宫格批量的 scene 段为 "*"
-BOARD_GRID_BATCH = 9                         # 整集批量:每 9 镜出一张 3×3 宫格图再切分(code/storyboard_sketch.py --grid --keys)
+BOARD_GRID_BATCH = 4                         # 整集批量:每 4 镜出一张 2×2 宫格图再切分(code/storyboard_sketch.py --grid --keys;2026-09-12 由 9/3×3 降下来)
 IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
 _BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
 
@@ -7483,8 +7483,8 @@ BOARD_ANIMATIC_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, sta
 
 def _board_sketch_batch_worker(project: str, ep: str, jobkey: str, targets: list[tuple[str, int]],
                                provider: str, model: str):
-    """后台线程(单集标题行「出草图」):待出的镜按集内顺序每 9 镜一批,每批调用一次宿主 CLI
-    `code/storyboard_sketch.py --grid --keys a,b,c`(一张 3×3 宫格图切成小图,台账由 CLI 写);每批结束发 SSE board_sketch。"""
+    """后台线程(单集标题行「出草图」):待出的镜按集内顺序每 4 镜一批,每批调用一次宿主 CLI
+    `code/storyboard_sketch.py --grid --keys a,b,c`(一张 2×2 宫格图切成小图,台账由 CLI 写);每批结束发 SSE board_sketch。"""
     job = BOARD_SKETCH_JOBS[jobkey]
     from modules import storyboard_board as sbb
     base = _proj_base(project)

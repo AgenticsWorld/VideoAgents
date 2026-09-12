@@ -2266,7 +2266,7 @@ window.I18N_DICT = {
 "草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)": "Bildkanal/-modell für Skizzen (getrennt von der globalen Einstellung „Generierungsmodelle“; ein günstiges Modell reicht; leer = global)",
 "草案": "Entwurf",
 "该场草图都已出过;按住 Shift 点击可全部重出": "Alle Skizzen dieser Szene existieren bereits; Shift+Klick zeichnet alle neu",
-"按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Skizzen mit dem aktuellen Skizzenmodell als 3×3-Kontaktbögen stapelweise zeichnen: ein Rasterbild je 9 Einstellungen, in 9 kleine Skizzen zerlegt (vorhandene werden übersprungen); Umschalt+Klick = alle neu zeichnen",
+"按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Skizzen mit dem aktuellen Skizzenmodell als 2×2-Kontaktbögen stapelweise zeichnen: ein Rasterbild je 4 Einstellungen, in 4 kleine Skizzen zerlegt (vorhandene werden übersprungen); Umschalt+Klick = alle neu zeichnen",
 "本集草图都已出过(或正在出);按住 Shift 点击可全部重出": "Alle Skizzen dieser Folge existieren bereits (oder werden gerade gezeichnet); Umschalt+Klick zeichnet alle neu",
 "已出草图 / 镜数;整集批量出图在上方标题行": "Gezeichnete Skizzen / Einstellungen; das Stapelzeichnen für die ganze Folge steht oben in der Titelzeile",
 "该集分镜层尚未产出 storyboard.json(directing/{ep}/);导演计划{p}": "Die Storyboard-Ebene hat für diese Episode noch keine storyboard.json erzeugt (directing/{ep}/); der Regieplan {p}",

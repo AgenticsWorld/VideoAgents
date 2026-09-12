@@ -2355,7 +2355,7 @@ window.I18N_DICT = {
 "草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)": "Image channel/model for sketches (separate from the global Generation Models setting; a cheap model is usually fine; empty = follow global)",
 "草案": "draft",
 "该场草图都已出过;按住 Shift 点击可全部重出": "All sketches of this scene already exist; Shift+click to redraw them all",
-"按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Batch-draw sketches with the current sketch model as 3×3 contact sheets: one grid image per 9 shots, split into 9 small sketches (existing ones are skipped); Shift+click = redraw all",
+"按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Batch-draw sketches with the current sketch model as 2×2 contact sheets: one grid image per 4 shots, split into 4 small sketches (existing ones are skipped); Shift+click = redraw all",
 "本集草图都已出过(或正在出);按住 Shift 点击可全部重出": "All sketches of this episode already exist (or are being drawn); Shift+click to redraw them all",
 "已出草图 / 镜数;整集批量出图在上方标题行": "Sketches drawn / shots; batch drawing for the whole episode is in the title row above",
 "该集分镜层尚未产出 storyboard.json(directing/{ep}/);导演计划{p}": "The storyboard layer has not produced storyboard.json for this episode (directing/{ep}/); the director plan {p}",

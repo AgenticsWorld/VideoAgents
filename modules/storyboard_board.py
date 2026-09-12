@@ -9,9 +9,14 @@
 - build_prompt / collect_refs:草图提示词(铅笔手绘分镜风格,英文风格句 + 原文画面内容)与参考图
   (只带出场人物 sheet,缩到 512px 长边;不带场景图——俯视布局图会误导图像模型,场景只靠文字描述;
   也不用风格参考图,铅笔风格全靠提示词——2026-09-11 用户拍板);
-- 九宫格批量(2026-09-11 用户拍板):单集标题行「出草图」一次出一张 3×3 宫格图(≤9 镜,按集内顺序分批),
-  split_grid 切成小图落到各镜的 <S01-01>.png(台账记 mode=grid + grid.file/cell);宫格原图存 _grids/。
-  单镜「出图/重出」仍是单张出图。宫格切出的小图比单张小(约 820×460),动态样片按画布等比缩放统一。
+  **人物优先、背景留白**(2026-09-12 用户拍板:没有合适的场景参考图,草图弱化场景展现,主要按分镜表现
+  镜头机位、人物比例、神态、动作):风格句要求人物线稿清晰、按景别画对人物比例、表情与肢体可读,背景只
+  两三笔示意或留白;地点只留一句短提示放在最后,不再拼场景卡描述;从 content/sketch/action 文字里自动推导
+  「Camera:」(角度/高度/镜头/朝向)与「Expressions:」(神态/视线)两句英文关键词加进提示词(camera_hint / expression_hint);
+- 宫格批量(2026-09-11 用户拍板,2026-09-12 由 3×3 降为 2×2):单集标题行「出草图」一次出一张 2×2 宫格图
+  (≤4 镜,按集内顺序分批),split_grid 切成小图落到各镜的 <S01-01>.png(台账记 mode=grid + grid.file/cell);
+  宫格原图存 _grids/。单镜「出图/重出」仍是单张出图。宫格切出的小图(约 1230×690)与单张(1280 长边)接近,
+  动态样片按画布等比缩放统一。降到 2×2 的原因:3×3 每格约 820×460,画不出可读的表情,且逐格文字预算太小。
 只读 storyboard.json / shot_list.json / bible 与概念图,不改任何分镜文件。
 """
 from __future__ import annotations
@@ -35,20 +40,29 @@ REF_MAX_EDGE = 512           # 参考图缩放长边(草图只需形象/空间�
 MAX_CAST_REFS = 3            # 人物参考图上限(多了反而稀释风格参考)
 STATUSES = ("queued", "running", "done", "failed")
 
+# 2026-09-12 用户拍板:人物优先、背景留白——草图只为看机位、人物比例、神态、动作,场景不展开(没有合适的场景参考图)。
 SKETCH_STYLE_PROMPT = (
-    "Film storyboard panel, rough pencil sketch: hand-drawn monochrome line art with loose hatching and "
-    "soft grey marker shading, quick gestural strokes, unfinished sketchbook look, white paper background. "
+    "Film storyboard panel, rough pencil sketch on white paper: hand-drawn monochrome line art with loose "
+    "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. "
+    "FIGURES FIRST: draw the characters with clear confident lines, correct body proportions and figure size "
+    "for the stated shot size, readable facial expressions, eye lines and body gestures; faces must be clear "
+    "enough to read the emotion. "
+    "BACKGROUND MINIMAL: only two or three loose lines or a little light hatching to hint at the space, most of "
+    "the paper left blank; no architectural detail, no furniture detail, no props unless mentioned. "
+    "The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
+    "angle, low angle, over-the-shoulder, profile, from behind). "
     "Strictly black-and-white, no color. A single frame, no panel borders, no text, no captions, no speech "
     "bubbles, no watermark. The attached images are the project's official character designs — keep each "
     "character's likeness, hairstyle and outfit, but redraw everything as a pencil sketch; the location is "
-    "described in text only."
+    "described in text only and stays a faint hint."
 )
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                    "text, letters, caption, watermark, logo, speech bubble, comic panel grid, multiple panels, "
-                   "border, frame lines")
+                   "border, frame lines, detailed background, cluttered environment, architectural rendering, "
+                   "interior design, landscape painting, scenery without people")
 
-GRID_MAX_PANELS = 9          # 一张宫格图最多 9 镜(3×3)
-GRID_MAX_CAST_REFS = 4       # 宫格模式人物参考图上限(9 镜的出场并集,按出场次数取前几位)
+GRID_MAX_PANELS = 4          # 一张宫格图最多 4 镜(2×2;2026-09-12 由 3×3/9 镜降下来:每格更大才画得出表情,逐格文字预算也更宽)
+GRID_MAX_CAST_REFS = 4       # 宫格模式人物参考图上限(4 镜的出场并集,按出场次数取前几位)
 GRID_CELL_TRIM = 0.02        # 切分时每格四边各裁掉 2%,去掉模型画的格线/留白
 GRID_DIR_REL = "assets/storyboard/{ep}/_grids"
 GRID_STYLE_PROMPT = (
@@ -56,14 +70,19 @@ GRID_STYLE_PROMPT = (
     "{cols} columns and {rows} rows, separated only by thin straight black gutter lines, panels read left to right, "
     "top to bottom, every panel filling its cell edge to edge with the same {aspect} framing. Each panel is a rough "
     "pencil sketch: hand-drawn monochrome line art with loose hatching and soft grey marker shading, quick gestural "
-    "strokes, unfinished sketchbook look. Strictly black-and-white, no color. No text, no numbers, no captions, no "
-    "speech bubbles, no watermark inside the panels. The attached images are the project's official character "
-    "designs — keep each character's likeness, hairstyle and outfit in every panel, but redraw everything as a "
-    "pencil sketch; locations are described in text only.{blank}"
+    "strokes, unfinished sketchbook look. FIGURES FIRST in every panel: clear confident lines for the characters, "
+    "correct body proportions and figure size for that panel's shot size, readable facial expressions, eye lines "
+    "and body gestures. BACKGROUND MINIMAL in every panel: only two or three loose lines to hint at the space, most "
+    "of the paper left blank; no architectural or furniture detail, no props unless mentioned. Each panel must show "
+    "its camera angle, height and lens exactly as described. Strictly black-and-white, no color. No text, no "
+    "numbers, no captions, no speech bubbles, no watermark inside the panels. The attached images are the project's "
+    "official character designs — keep each character's likeness, hairstyle and outfit in every panel, but redraw "
+    "everything as a pencil sketch; locations are described in text only and stay a faint hint.{blank}"
 )
 GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                  "text, letters, numbers, caption, watermark, logo, speech bubble, uneven panels, overlapping panels, "
-                 "panels of different sizes, decorative border")
+                 "panels of different sizes, decorative border, detailed background, cluttered environment, "
+                 "architectural rendering, interior design, scenery without people")
 
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
 _DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(CHAR-\d+|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")
@@ -448,17 +467,75 @@ def episode_shots(board: dict, scene_no: str | None = None) -> list[tuple[dict, 
 
 # ---------------- 草图提示词 + 参考图 ----------------
 
+# 机位/神态关键词表(中文分镜文字 → 英文提示词短语;按出现顺序拼进 Camera: / Expressions: 句,2026-09-12)。
+# 只做关键词命中,不做语义理解:分镜原文本身也整段进提示词,这里是把最影响构图与表演的信息再用英文点一次。
+_CAMERA_TERMS = (
+    ("俯拍", "high angle"), ("俯视", "high angle"), ("高机位", "high angle"), ("顶拍", "top-down"), ("顶视", "top-down"),
+    ("鸟瞰", "bird's-eye view"), ("仰拍", "low angle"), ("仰视", "low angle"), ("低机位", "low angle"), ("低角度", "low angle"),
+    ("平视", "eye level"), ("过肩", "over-the-shoulder"), ("主观", "POV"), ("POV", "POV"), ("正面", "frontal"),
+    ("正对", "frontal"), ("侧面", "profile"), ("侧拍", "profile"), ("侧身", "three-quarter view"), ("背影", "from behind"),
+    ("背对", "from behind"), ("背后", "from behind"), ("正反打", "shot/reverse shot"), ("反打", "reverse angle"),
+    ("广角", "wide lens"), ("长焦", "long lens"), ("鱼眼", "fisheye lens"), ("微距", "macro"),
+    ("倾斜", "dutch angle"), ("斜角", "dutch angle"), ("对称", "symmetrical composition"), ("剪影", "silhouette"),
+    ("前景", "foreground element framing"), ("门框", "framed by a doorway"), ("窗框", "framed by a window"),
+    ("推进", "push-in (draw the start frame)"), ("推近", "push-in (draw the start frame)"), ("拉远", "pull-out (draw the start frame)"),
+    ("拉开", "pull-out (draw the start frame)"), ("横移", "lateral tracking"), ("跟拍", "following shot"), ("跟随", "following shot"),
+    ("环绕", "orbit"), ("摇镜", "pan"), ("横摇", "pan"), ("摇摄", "pan"), ("升降", "crane"), ("手持", "handheld"),
+)
+_EXPRESSION_TERMS = (
+    ("微笑", "smiling"), ("带笑", "smiling"), ("大笑", "laughing"), ("狂笑", "laughing wildly"), ("冷笑", "sneering"),
+    ("苦笑", "wry smile"), ("皱眉", "frowning"), ("蹙眉", "frowning"), ("惊恐", "terrified"), ("惊讶", "surprised"),
+    ("震惊", "shocked"), ("吃惊", "surprised"), ("惊", "startled"), ("哭", "crying"), ("泪", "tears"), ("愤怒", "angry"),
+    ("怒", "angry"), ("冷漠", "cold and indifferent"), ("冷淡", "cold"), ("紧张", "tense"), ("恐惧", "fearful"),
+    ("害怕", "afraid"), ("疑惑", "puzzled"), ("困惑", "confused"), ("不解", "puzzled"), ("警惕", "wary"),
+    ("沉默", "silent, lips pressed"), ("悲伤", "sad"), ("难过", "sad"), ("疲惫", "exhausted"), ("得意", "smug"),
+    ("严肃", "stern"), ("面无表情", "blank face"), ("木然", "blank face"), ("呆滞", "dazed"), ("茫然", "blank, lost"),
+    ("瞪", "glaring"), ("凝视", "staring"), ("盯", "staring"), ("对视", "locking eyes"), ("低头", "head lowered"),
+    ("抬头", "looking up"), ("回头", "looking back over the shoulder"), ("侧目", "glancing sideways"),
+    ("视线", "clear eye line"), ("目光", "clear eye line"), ("看向", "looking toward"), ("闭眼", "eyes closed"),
+    ("咬牙", "jaw clenched"), ("颤抖", "trembling"), ("喘", "panting"), ("屏息", "holding breath"),
+    ("犹豫", "hesitant"), ("决绝", "resolute"), ("绝望", "despairing"), ("释然", "relieved"), ("温柔", "gentle"),
+    ("挣扎", "struggling"), ("蜷缩", "curled up"), ("瘫", "slumped"), ("僵住", "frozen stiff"), ("僵在", "frozen stiff"),
+)
+
+
+def _term_hits(text: str, table) -> list[str]:
+    """按关键词在文字里的出现位置排序,去重返回英文短语。"""
+    found = []
+    for zh, en in table:
+        i = text.find(zh)
+        if i >= 0 and en not in (e for _, e in found):
+            found.append((i, en))
+    return [en for _, en in sorted(found)]
+
+
+def camera_hint(shot: dict) -> str:
+    """从 sketch/content/action 推导机位英文短语(角度/高度/镜头/朝向/运镜),无命中返回空。"""
+    text = " ".join(str(shot.get(k) or "") for k in ("sketch", "content", "action"))
+    return ", ".join(_term_hits(text, _CAMERA_TERMS)[:6])
+
+
+def expression_hint(shot: dict) -> str:
+    """从 content/action/sketch 推导神态/视线英文短语,无命中返回空。"""
+    text = " ".join(str(shot.get(k) or "") for k in ("content", "action", "sketch"))
+    return ", ".join(_term_hits(text, _EXPRESSION_TERMS)[:8])
+
+
+def _space_hint(scene: dict, max_chars: int = 60) -> str:
+    """地点只留一句短提示(地点/场名 + 时段,截到 max_chars),不带场景卡描述——背景只是示意。"""
+    loc = " ".join(x for x in (scene.get("location") or scene.get("scene_name") or "", scene.get("time_of_day") or "")
+                   if x and x not in ("未知", "unknown"))
+    return _short(loc, max_chars)
+
+
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[str, str]:
+    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。"""
     parts = [SKETCH_STYLE_PROMPT]
     if shot.get("size_hint"):
         parts.append(f"Shot size: {shot['size_hint']}.")
-    # 场景只靠文字(2026-09-11 用户拍板:俯视图/场景图作参考会误导模型):地点 + 时段 + 场景卡描述
-    loc = " ".join(x for x in (scene.get("location") or scene.get("scene_name") or "", scene.get("time_of_day") or "") if x)
-    if loc:
-        parts.append(f"Setting: {loc}.")
-    desc = str(scene.get("scene_description") or "").strip()
-    if desc:
-        parts.append(f"Location details: {desc[:300]}")
+    cam = camera_hint(shot)
+    if cam:
+        parts.append(f"Camera: {cam}.")
     cast = [names.get(c, c) for c in shot.get("cast") or []]
     if cast:
         parts.append("Characters in frame: " + ", ".join(cast) + ".")
@@ -466,10 +543,17 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[
         parts.append(f"What we see: {shot['content']}")
     if shot.get("action") and shot["action"] not in (shot.get("content") or ""):
         parts.append(f"Action: {shot['action']}")
+    ex = expression_hint(shot)
+    if ex:
+        parts.append(f"Expressions and gestures to make readable: {ex}.")
     if shot.get("sketch"):
         parts.append(f"Composition: {shot['sketch']}")
     if shot.get("extras"):
-        parts.append(f"Background extras: {shot['extras']}")
+        parts.append(f"Background extras (loose figures only): {shot['extras']}")
+    # 场景只靠文字(2026-09-11 用户拍板);2026-09-12 起只留一句短地点提示,放最后,不再拼场景卡描述
+    space = _space_hint(scene)
+    if space:
+        parts.append(f"Space hint (background stays a few faint lines): {space}.")
     if note and note.strip():
         parts.append(f"Revision instruction (takes priority): {note.strip()}")
     return " ".join(parts), SKETCH_NEGATIVE
@@ -511,7 +595,8 @@ def collect_refs(base: Path, ep: str, scene: dict, shot: dict, catalog: dict) ->
 
 
 def grid_layout(n: int) -> tuple[int, int]:
-    """按镜数选宫格:1 镜单张(调用方走单镜路径)、2–4 镜 2×2、5–9 镜 3×3。返回 (cols, rows)。"""
+    """按镜数选宫格:1 镜单张(调用方走单镜路径)、2–4 镜 2×2(GRID_MAX_PANELS=4,2026-09-12 起不再出 3×3);
+    超过 4 镜只作兜底返回 3×3,正常调用方已按 GRID_MAX_PANELS 分批。返回 (cols, rows)。"""
     if n <= 1:
         return 1, 1
     if n <= 4:
@@ -524,17 +609,18 @@ def _short(s, n: int) -> str:
     return s if len(s) <= n else s[:n - 1].rstrip() + "…"
 
 
-GRID_PROMPT_MAX = 2400       # 宫格提示词字符上限(9 格合一,按三档收紧逐格文字直到不超)
-_GRID_CLIPS = ({"desc": 220, "content": 220, "action": 120, "sketch": 140, "note": 140},
-               {"desc": 120, "content": 140, "action": 0, "sketch": 80, "note": 100},
-               {"desc": 0, "content": 100, "action": 0, "sketch": 0, "note": 80})
+GRID_PROMPT_MAX = 2400       # 宫格提示词字符上限(4 格合一,按三档收紧逐格文字直到不超)
+# 2026-09-12 收紧顺序改为先砍地点(desc 第一档就不进),再压画面内容;机位/神态短语与构图最后才压——草图要的是机位、比例、神态、动作。
+_GRID_CLIPS = ({"desc": 0, "content": 260, "action": 160, "sketch": 200, "note": 160},
+               {"desc": 0, "content": 180, "action": 100, "sketch": 140, "note": 120},
+               {"desc": 0, "content": 120, "action": 60, "sketch": 90, "note": 90})
 
 
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
                       max_chars: int = GRID_PROMPT_MAX) -> tuple[str, str]:
-    """宫格提示词:风格总句 + 各场地点描述一次 + 逐格「Panel k (row r, col c)」景别/地点/出场/画面/构图(用台账 note)。
+    """宫格提示词:风格总句 + 各场地点短提示一次(只作示意) + 逐格「Panel k (row r, col c)」景别/机位/地点/出场/画面/动作/神态/构图(用台账 note)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
-    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(先砍动作/构图/地点描述,画面内容最后砍)。"""
+    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(2026-09-12:地点描述不进,先压画面内容,机位/神态/构图最后压)。"""
     n = len(panels)
     cells = cols * rows
     blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
@@ -548,15 +634,18 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
             if key in seen:
                 continue
             seen.append(key)
-            loc = " ".join(x for x in (sc.get("location") or sc.get("scene_name") or "", sc.get("time_of_day") or "") if x)
+            loc = _space_hint(sc)
             desc = _short(sc.get("scene_description"), clip["desc"]) if clip["desc"] else ""
             if loc or desc:
-                parts.append(f"Location {key}: {loc}{'. ' + desc if desc else ''}")
+                parts.append(f"Location {key} (background stays a few faint lines): {loc}{'. ' + desc if desc else ''}.")
         for k, (sc, shot) in enumerate(panels, 1):
             r, c = (k - 1) // cols + 1, (k - 1) % cols + 1
             seg = [f"Panel {k} (row {r}, column {c}):"]
             if shot.get("size_hint"):
                 seg.append(f"{shot['size_hint']} shot.")
+            cam = camera_hint(shot)
+            if cam:
+                seg.append(f"Camera: {cam}.")
             if len(seen) > 1:
                 seg.append(f"Location {sc.get('scene_no')}.")
             cast = [names.get(x, x) for x in shot.get("cast") or []]
@@ -566,6 +655,9 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
                 seg.append(_short(shot["content"], clip["content"]))
             if clip["action"] and shot.get("action") and shot["action"] not in (shot.get("content") or ""):
                 seg.append("Action: " + _short(shot["action"], clip["action"]))
+            ex = expression_hint(shot)
+            if ex:
+                seg.append(f"Expressions: {ex}.")
             if clip["sketch"] and shot.get("sketch"):
                 seg.append("Composition: " + _short(shot["sketch"], clip["sketch"]))
             note = str(shot.get("_note") or "").strip()
@@ -579,7 +671,7 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
 
 
 def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], catalog: dict) -> list[Path]:
-    """宫格模式参考图:各格出场人物并集,按出场格数降序取前 GRID_MAX_CAST_REFS 张 sheet(缩小后)。"""
+    """宫格模式参考图:各格(≤4)出场人物并集,按出场格数降序取前 GRID_MAX_CAST_REFS 张 sheet(缩小后)。"""
     cache = sketch_dir(base, ep) / "_refcache"
     freq: dict[str, int] = {}
     for _, shot in panels:
@@ -614,7 +706,7 @@ def split_grid(src: Path, cols: int, rows: int, n: int, outs: list[Path], trim: 
 
 
 def grid_size(provider: str, aspect: str) -> str:
-    """宫格图出图尺寸:所有渠道都按 3,686,400 像素当量(2560×1440)出,切 3×3 后每格约 850×480;不再压缩。"""
+    """宫格图出图尺寸:所有渠道都按 3,686,400 像素当量(2560×1440)出,切 2×2 后每格约 1230×690(裁边后);不再压缩。"""
     try:
         rw, rh = (int(x) for x in str(aspect or "16:9").split(":"))
     except Exception:

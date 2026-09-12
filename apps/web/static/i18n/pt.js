@@ -2266,7 +2266,7 @@ window.I18N_DICT = {
 "草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)": "Canal/modelo de imagem para esboços (separado da configuração global “Modelos de geração”; um modelo barato basta; vazio = seguir o global)",
 "草案": "rascunho",
 "该场草图都已出过;按住 Shift 点击可全部重出": "Todos os esboços desta cena já existem; Shift+clique para redesenhar todos",
-"按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Desenhar esboços em lote com o modelo de esboço atual em folhas de contato 3×3: uma imagem em grade a cada 9 planos, dividida em 9 esboços pequenos (os existentes são ignorados); Shift+clique = redesenhar todos",
+"按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Desenhar esboços em lote com o modelo de esboço atual em folhas de contato 2×2: uma imagem em grade a cada 4 planos, dividida em 4 esboços pequenos (os existentes são ignorados); Shift+clique = redesenhar todos",
 "本集草图都已出过(或正在出);按住 Shift 点击可全部重出": "Todos os esboços deste episódio já existem (ou estão sendo desenhados); Shift+clique para redesenhar todos",
 "已出草图 / 镜数;整集批量出图在上方标题行": "Esboços desenhados / planos; o desenho em lote do episódio inteiro fica na linha de título acima",
 "该集分镜层尚未产出 storyboard.json(directing/{ep}/);导演计划{p}": "A camada de storyboard ainda não produziu storyboard.json para este episódio (directing/{ep}/); o plano de direção {p}",

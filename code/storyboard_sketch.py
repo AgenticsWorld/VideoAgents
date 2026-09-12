@@ -4,19 +4,21 @@
 按 `directing/<ep>/storyboard.json` 的草案镜出**铅笔手绘风格的小草图**,落
 `assets/storyboard/<ep>/<S01-01>.png`,台账 `assets/storyboard/<ep>/index.json`(schema storyboard_sketches/1.0)。
 参考图:只带出场人物 sheet(≤3),缩到 512px 长边;场景只靠文字(俯视图会误导模型),不用风格参考图;画幅取项目「输出设置」的视频画幅;渠道/模型按 --provider/--model
+提示词(2026-09-12 用户拍板)**人物优先、背景留白**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;
+机位/神态从分镜文字自动推导成英文短语(modules/storyboard_board.py camera_hint / expression_hint)。
 (缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
 
 两种出图方式:
 - 单镜/逐镜:每镜一张图(--scene [--order]);
-- 九宫格批量(--grid,页面单集标题行「出草图」用):把待出的镜按集内顺序每 9 镜一批,一批出**一张 3×3 宫格图**
-  (不足 9 镜:2–4 镜 2×2、1 镜退回单张),切成小图落到各镜的 <S01-01>.png,台账记 mode=grid + grid{file,cols,rows,cell};
-  宫格原图存 assets/storyboard/<ep>/_grids/。切出的小图约 850×480,比单张(1280 长边)小,动态样片按画布等比缩放统一。
+- 宫格批量(--grid,页面单集标题行「出草图」用):把待出的镜按集内顺序每 4 镜一批,一批出**一张 2×2 宫格图**
+  (2026-09-12 由 3×3/9 镜降为 2×2/4 镜:每格更大才画得出表情;1 镜退回单张),切成小图落到各镜的 <S01-01>.png,
+  台账记 mode=grid + grid{file,cols,rows,cell};宫格原图存 assets/storyboard/<ep>/_grids/。切出的小图约 1230×690,动态样片按画布等比缩放统一。
 
 用法:
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --scene S01            # 整场逐镜出图(已出的跳过)
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --scene S01 --order 3  # 只出/重出这一镜
-  python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid                 # 整集九宫格批量(已出的跳过;--scene 限一场)
-  python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid --keys S01-01,S01-02,S02-01   # 指定键(≤9,宿主后台分批用;不论状态都出)
+  python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid                 # 整集 2×2 宫格批量(已出的跳过;--scene 限一场)
+  python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid --keys S01-01,S01-02,S02-01   # 指定键(≤4,宿主后台分批用;不论状态都出)
       [--note "修改意见/补充描述,会拼进提示词并存台账"] [--provider fal --model fal-ai/...] [--force] [--dry-run]
 退出码:0 全部成功、1 有镜失败、2 storyboard.json 缺失或场/镜不存在。
 宿主 CLI,Agent(07-directing/storyboard-sketch)只准调用,禁止复制/改写到项目 code/;不改 storyboard.json。
@@ -126,7 +128,7 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
 
 
 def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
-    """一批(≤9 镜)出一张宫格图并切分落盘。返回失败镜数。"""
+    """一批(≤4 镜,2×2)出一张宫格图并切分落盘。返回失败镜数。"""
     from modules.genmedia import generate_image, get_config
     keys = [sh["key"] for _, sh in panels]
     cols, rows = sbb.grid_layout(len(panels))
@@ -193,7 +195,7 @@ def main() -> int:
     def configure(ap):
         ap.add_argument("--scene", default="", help="场次号,如 S01(storyboard.json scenes[].scene_no);--grid 时可省=整集")
         ap.add_argument("--order", type=int, default=None, help="草案镜序号(shots_draft[].order);缺省整场")
-        ap.add_argument("--grid", action="store_true", help="九宫格批量:每 ≤9 镜出一张宫格图再切分(已出的跳过;--keys 指定则不论状态)")
+        ap.add_argument("--grid", action="store_true", help="宫格批量:每 ≤4 镜出一张 2×2 宫格图再切分(已出的跳过;--keys 指定则不论状态)")
         ap.add_argument("--keys", default="", help="--grid 时指定草图键,逗号分隔(≤9,如 S01-01,S01-02);宿主后台分批用")
         ap.add_argument("--note", default="", help="修改意见/补充描述:拼进提示词并写台账 note(空=沿用台账已有 note)")
         ap.add_argument("--clear-note", action="store_true", help="清掉台账里该镜的 note 后再出图")

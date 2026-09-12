@@ -2266,7 +2266,7 @@ window.I18N_DICT = {
 "草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)": "Kênh/model ảnh cho phác thảo (tách khỏi cài đặt toàn cục \"Model tạo sinh\"; model rẻ là đủ; để trống = theo toàn cục)",
 "草案": "nháp",
 "该场草图都已出过;按住 Shift 点击可全部重出": "Phác thảo của phân cảnh này đã có đủ; Shift+nhấp để vẽ lại tất cả",
-"按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Vẽ phác thảo hàng loạt bằng mô hình phác thảo hiện tại theo dạng bảng 3×3: mỗi 9 cảnh một ảnh lưới, cắt thành 9 phác thảo nhỏ (bỏ qua ảnh đã có); Shift+nhấp = vẽ lại tất cả",
+"按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出": "Vẽ phác thảo hàng loạt bằng mô hình phác thảo hiện tại theo dạng bảng 2×2: mỗi 4 cảnh một ảnh lưới, cắt thành 4 phác thảo nhỏ (bỏ qua ảnh đã có); Shift+nhấp = vẽ lại tất cả",
 "本集草图都已出过(或正在出);按住 Shift 点击可全部重出": "Tất cả phác thảo của tập này đã có (hoặc đang vẽ); Shift+nhấp để vẽ lại tất cả",
 "已出草图 / 镜数;整集批量出图在上方标题行": "Phác thảo đã vẽ / số cảnh; vẽ hàng loạt cả tập nằm ở dòng tiêu đề phía trên",
 "该集分镜层尚未产出 storyboard.json(directing/{ep}/);导演计划{p}": "Lớp storyboard chưa tạo storyboard.json cho tập này (directing/{ep}/); kế hoạch đạo diễn {p}",

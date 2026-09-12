@@ -313,14 +313,14 @@ function mergeRedraw(server){
   return out;
 }
 
-/* 单集标题行「出草图」:整集九宫格批量(每 9 镜一张 3×3 宫格图切成小图;已出的跳过;Shift = 全部重出)。单镜「出图/重出」仍是单张。 */
+/* 单集标题行「出草图」:整集宫格批量(每 4 镜一张 2×2 宫格图切成小图,2026-09-12 由 3×3 降下来;已出的跳过;Shift = 全部重出)。单镜「出图/重出」仍是单张。 */
 function batchBtnHtml(){
   if(!LAST)return '';
   const all=[];(LAST.scenes||[]).forEach(sc=>sc.shots.forEach(s=>all.push(s.key)));
   const nDone=all.filter(k=>(SK[k]||{}).status==='done').length;
   const job=JOBS['*'],busy=job&&job.status==='running';
   const prog=busy?` ${job.done+job.failed}/${job.total||job.keys.length}`:'';
-  return `<button class="editbtn pri sk-gen" data-all="1" ${busy?'disabled':''} title="${esc(t('按当前草图模型按 9 宫格批量出草图:每 9 镜出一张 3×3 宫格图切成 9 张小图(已出的跳过);按住 Shift 点击 = 全部重出'))}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${prog}${job.current?' · '+esc(job.current):''}`:(nDone>=all.length&&all.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:all.length-nDone})))}</button>`;
+  return `<button class="editbtn pri sk-gen" data-all="1" ${busy?'disabled':''} title="${esc(t('按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出'))}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${prog}${job.current?' · '+esc(job.current):''}`:(nDone>=all.length&&all.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:all.length-nDone})))}</button>`;
 }
 function renderBatchBtn(){const el=document.getElementById('skbatch');if(el&&LAST&&LAST.has_storyboard)el.innerHTML=batchBtnHtml()}
 
