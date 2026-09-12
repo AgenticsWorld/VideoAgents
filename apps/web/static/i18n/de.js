@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Zauber",
 "切换分集": "Episode wechseln",
 "无组视频": "keine Gruppen-Clips",
+"🎬 组视频": "🎬 Gruppenvideo",
+"上一集": "Vorherige Episode",
 };

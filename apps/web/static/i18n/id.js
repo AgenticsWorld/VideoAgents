@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Mantra",
 "切换分集": "Ganti episode",
 "无组视频": "tanpa klip grup",
+"🎬 组视频": "🎬 Video grup",
+"上一集": "Episode sebelumnya",
 };

@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20d%3D%27M6%203h8.5L20%208.5V19a2%202%200%200%201-2%202H6a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2z%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M14.5%203v5.5H20%27%20fill%3D%27%231c2130%27%2F%3E%3Cpath%20d%3D%27M7.5%2011.5h9M7.5%2014.5h9M7.5%2017.5h6%27%20stroke%3D%27%231c2130%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -303,16 +304,12 @@ function fallbackBlocks(sc){
   return out;
 }
 
+// 集行:≤12 集逐集按钮(带拆解状态角标),更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
 function renderEps(episodes){
-  const box=$('#eps');box.innerHTML='';
-  episodes.forEach(e=>{
-    const b=document.createElement('button');
-    b.className=e.ep===EP?'on':'';
-    b.innerHTML=esc(e.ep)+`<span class="st" title="${esc(e.has_breakdown?t('已有正式拆解表'):e.has_screenplay?t('仅剧本,尚未拆解'):t('无剧本'))}">${e.has_breakdown?'✅':e.has_screenplay?'⚠':'–'}</span>`;
-    if(e.title)b.title=e.title;
-    b.onclick=()=>{EP=e.ep;load()};
-    box.appendChild(b);
-  });
+  const glyph=e=>e.has_breakdown?'✅':e.has_screenplay?'⚠':'–';
+  EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()},{
+    btnTag:e=>`<span class="st" title="${esc(e.has_breakdown?t('已有正式拆解表'):e.has_screenplay?t('仅剧本,尚未拆解'):t('无剧本'))}">${glyph(e)}</span>`,
+    optTag:glyph});
 }
 
 /* 重新分析:派单给拆解表产出工位(owner_agent,当前 01-story/timeline-story)产出正式拆解表,轮询结束后刷新 */

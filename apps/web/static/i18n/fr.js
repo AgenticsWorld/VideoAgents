@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Sort",
 "切换分集": "Changer d’épisode",
 "无组视频": "aucun clip de groupe",
+"🎬 组视频": "🎬 Vidéo du groupe",
+"上一集": "Épisode précédent",
 };

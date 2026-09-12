@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Feitiço",
 "切换分集": "Trocar episódio",
 "无组视频": "sem clipes de grupo",
+"🎬 组视频": "🎬 Vídeo do grupo",
+"上一集": "Episódio anterior",
 };

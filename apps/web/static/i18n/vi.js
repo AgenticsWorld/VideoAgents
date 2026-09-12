@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Phép thuật",
 "切换分集": "Đổi tập",
 "无组视频": "chưa có clip nhóm",
+"🎬 组视频": "🎬 Video nhóm",
+"上一集": "Tập trước",
 };

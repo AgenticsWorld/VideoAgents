@@ -2720,4 +2720,6 @@ window.I18N_DICT = {
 "法术": "Spell",
 "切换分集": "Switch episode",
 "无组视频": "no group clips",
+"🎬 组视频": "🎬 Group video",
+"上一集": "Previous episode",
 };

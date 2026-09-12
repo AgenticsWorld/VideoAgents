@@ -2631,4 +2631,6 @@ window.I18N_DICT = {
 "法术": "Hechizo",
 "切换分集": "Cambiar episodio",
 "无组视频": "sin clips de grupo",
+"🎬 组视频": "🎬 Vídeo del grupo",
+"上一集": "Episodio anterior",
 };
