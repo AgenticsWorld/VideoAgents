@@ -231,7 +231,7 @@ table.tb input.f{width:100%}
 <div id="foot"></div>
 
 <div class="modal" id="m-recipe"><div class="box">
-  <div class="bh"><span id="mr-title">新处方</span><span class="sp"></span><button class="xs" data-close>✕</button></div>
+  <div class="bh"><span id="mr-title">新修改单</span><span class="sp"></span><button class="xs" data-close>✕</button></div>
   <div class="bb" id="mr-body"></div>
   <div class="bf"><span class="msg" id="mr-msg"></span><button id="mr-save">存为草稿</button><button id="mr-preview">快速预览</button><button class="pri" id="mr-go">出片</button></div>
 </div></div>
@@ -312,7 +312,7 @@ function schedulePoll(){
 function renderEps(){
   const s=D.summary||{},box=$('#eps');
   let h=`<select id="epsel" title="${esc(t('切换分集'))}">${D.episodes.map(e=>`<option value="${esc(e.ep)}" ${e.ep===EP?'selected':''}>${esc(e.ep)}${e.title?' · '+esc(e.title):''}${e.has_plan?' 📋':''}${!e.has_clips?' · '+esc(t('无组视频')):''}</option>`).join('')}</select>`;
-  h+=`<span class="stat">${esc(I18N.f('{n} 组 · {d} · 处方 {t}(采纳 {a} · 派单中 {p} · 草稿 {r})',{n:D.groups.length,d:tc(D.episode_duration),t:s.total||0,a:s.adopted||0,p:s.dispatched||0,r:(s.draft||0)+(s.applied||0)}))}</span>`;
+  h+=`<span class="stat">${esc(I18N.f('{n} 组 · {d} · 修改单 {t}(提交 {a} · 派单中 {p} · 草稿 {r})',{n:D.groups.length,d:tc(D.episode_duration),t:s.total||0,a:s.adopted||0,p:s.dispatched||0,r:(s.draft||0)+(s.applied||0)}))}</span>`;
   h+=`<span class="sp"></span><span id="gatebox">${gateHtml()}</span>`;
   h+=`<span class="lay">${esc(t('显示层'))} <label><input type="checkbox" data-layer="picture" ${LAYERS.picture?'checked':''}><i class="dot pic"></i>${esc(t('画面'))}</label><label><input type="checkbox" data-layer="pack" ${LAYERS.pack?'checked':''}><i class="dot pack"></i>${esc(t('包装'))}</label><label><input type="checkbox" data-layer="sound" ${LAYERS.sound?'checked':''}><i class="dot snd"></i>${esc(t('声音'))}</label></span>`;
   h+=`<button class="sm" id="btn-export" title="${esc(t('导出当前版本链的时间线(CSV/EDL),给 NLE 用的逃生口'))}">📤 ${esc(t('导出时间线'))}</button>`;
@@ -330,13 +330,13 @@ function gateHtml(){
     const c=g.pending[0];
     return `<span class="gate">🖋 ${esc(t('H3P 后期签字 · 待答复'))} <button class="signbtn pri" data-cid="${esc(c.id)}" data-answer="签字" title="${esc(c.question||'')}">✅ ${esc(t('签字确认'))}</button><button class="signbtn" data-cid="${esc(c.id)}" data-answer="暂缓">⏸ ${esc(t('暂缓'))}</button></span>`;
   }
-  if(g.signed&&g.stale)return `<span class="gate stale" title="${esc(t('签字后台账又改动过(处方/指针变化);等总制片重新建签字单'))}">⚠ ${esc(t('H3P 签字已过期'))}${g.signed_at?' · '+esc(g.signed_at):''}</span>`;
+  if(g.signed&&g.stale)return `<span class="gate stale" title="${esc(t('签字后台账又改动过(修改单/指针变化);等总制片重新建签字单'))}">⚠ ${esc(t('H3P 签字已过期'))}${g.signed_at?' · '+esc(g.signed_at):''}</span>`;
   if(g.signed)return `<span class="gate ok">✅ ${esc(t('H3P 已签字'))}${g.signed_at?' · '+esc(g.signed_at):''}</span>`;
   return `<span class="gate idle" title="${esc(t('等总制片建签字单(转场/字幕交付后自动);建好后这里出现「签字确认」按钮'))}">${esc(t('H3P 后期签字'))} · ${esc(g.state||'pending')}</span>`;
 }
 document.addEventListener('click',async e=>{
   const b=e.target.closest('.signbtn');if(!b||b.disabled||!D)return;
-  if(b.dataset.answer==='签字'&&!confirm(t('确认签字放行本集后期?签字后按保留规则清理旧版本文件(母本 + 最近两个已采纳版本保留),总制片将进入成片闸门。')))return;
+  if(b.dataset.answer==='签字'&&!confirm(t('确认签字放行本集后期?签字后按保留规则清理旧版本文件(母本 + 最近两个已提交版本保留),总制片将进入成片闸门。')))return;
   b.disabled=true;
   try{
     const j=await J(api('/signoff'),'POST',{confirm_id:b.dataset.cid,answer:b.dataset.answer});
@@ -345,9 +345,9 @@ document.addEventListener('click',async e=>{
   }catch(err){b.disabled=false;alert(I18N.f('签字失败:{e}',{e:err.message}))}
 });
 
-/* ---------- 处方派生 ---------- */
+/* ---------- 修改单派生 ---------- */
 function effective(gid){
-  // 某组实际生效的处方(自身 + 继承;同 kind 更具体作用域覆盖上级)
+  // 某组实际生效的修改单(自身 + 继承;同 kind 更具体作用域覆盖上级)
   const g=grpById(gid);if(!g)return[];
   const rows=(D.plan.recipes||[]).filter(r=>r.status!=='discarded'&&scopeHits(r.scope,g)).map(r=>({...r,inherited:r.scope.level==='episode'||r.scope.level==='scene'}));
   const deep={};rows.forEach(r=>{deep[r.kind]=Math.max(deep[r.kind]||0,lvl(r.scope.level))});
@@ -361,7 +361,7 @@ function scopeText(sc){
   if(sc.level==='range')return `${sc.group_id} ${num(sc.t0,1)}–${num(sc.t1,1)}s`;return sc.group_id;
 }
 function groupStatus(gid){
-  // 四格:画面(修补/特效) 画面(调色) 包装 声音;实心=有采纳,半=有出片/草稿
+  // 四格:画面(修补/特效) 画面(调色) 包装 声音;实心=有提交,半=有出片/草稿
   const rows=effective(gid).filter(r=>!r.overridden);
   const cell=secs=>{const rs=rows.filter(r=>secs.includes(r.section));if(rs.some(r=>r.status==='adopted'))return 'on';if(rs.length)return 'half';return ''};
   return {fill:cell(['fill','vfx']),grade:cell(['grade']),pack:cell(['pack']),snd:cell(['sound']),
@@ -587,7 +587,7 @@ function epAudioSync(start){
 function epAudioStop(){if(EPA){EPA.pause()}}
 function applyLayerAudio(){const va=$('#va');if(va&&MODE==='group')va.muted=!LAYERS.sound}
 function updateSubtitle(abs){
-  // 字幕样式预览:按包装层 subtitle_style 处方实时渲染(内容只做样式示意:取本组对白说话人)
+  // 字幕样式预览:按包装层 subtitle_style 修改单实时渲染(内容只做样式示意:取本组对白说话人)
   const el=$('#subt');const ss=(D.plan.recipes||[]).find(r=>r.kind==='subtitle_style'&&r.status!=='discarded');
   if(!LAYERS.pack||!ss){el.style.display='none';return}
   const g=grpById(SEL);const line=(g&&g.dialogue||[]).find(d=>abs-(MODE==='episode'?g.cum_start_s:0)>=d.t0&&abs-(MODE==='episode'?g.cum_start_s:0)<=d.t1);
@@ -637,14 +637,14 @@ function renderWaves(){
 function renderRight(){
   const g=grpById(SEL);
   const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
-  let h=`<div class="col-h">${esc(t('处方'))} <span class="lite" id="rc"></span><span class="sp"></span>${MULTI.size?`<span class="lite">${esc(I18N.f('已选 {n} 组',{n:MULTI.size}))}</span>`:''}</div>`;
+  let h=`<div class="col-h">${esc(t('修改单'))} <span class="lite" id="rc"></span><span class="sp"></span>${MULTI.size?`<span class="lite">${esc(I18N.f('已选 {n} 组',{n:MULTI.size}))}</span>`:''}</div>`;
   h+=`<div class="scope">${esc(t('作用域'))} <span class="seg">${scopes.map(([k,l])=>`<span data-s="${k}" class="${SCOPE===k?'on':''}" ${k==='range'&&!(RANGE&&RANGE.t1!=null)?'style="opacity:.5"':''}>${esc(l)}</span>`).join('')}</span></div>`;
   h+=`<div class="scroll" id="rlist">`;
   const all=g?effective(SEL):[];
   let count=0;
   for(const sec of SECS()){
     if(!LAYERS[sec.layer])continue;
-    // 当前作用域下显示:作用域=组 → 本组生效全部(继承灰显);=整集/场次 → 只显示该级处方;=时间段 → 本组 range 的
+    // 当前作用域下显示:作用域=组 → 本组生效全部(继承灰显);=整集/场次 → 只显示该级修改单;=时间段 → 本组 range 的
     let rows=all.filter(r=>r.section===sec.id);
     if(SCOPE==='episode')rows=(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.scope.level==='episode'&&r.status!=='discarded');
     else if(SCOPE==='scene')rows=(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.scope.level==='scene'&&r.scope.scene_id===(g||{}).scene_id&&r.status!=='discarded');
@@ -689,11 +689,11 @@ function recipeCard(r){
   if(inh){acts=A('override',t('在本组覆盖'))}
   else if(r.status==='draft'){
     if(r.exec==='ffmpeg')acts=A('preview',t('快速预览'))+A('apply',t('出片'),'pri');
-    else if(r.exec==='agent')acts=A('dispatch',t('派单'),'pri');
-    else acts=A('adopt',t('采纳'),'pri');
+    else if(r.exec==='agent')acts=A('dispatch',t('派单出片'),'pri');
+    else acts=A('adopt',t('提交'),'pri');
     acts+=A('edit',t('编辑'))+A('delete',t('删除'));
   }else if(r.status==='dispatched'){acts=`<span class="spin">⟳</span> `+(r.run_id&&r.run_id!=='host'?`<a href="/?project=${encodeURIComponent(proj())}&run=${encodeURIComponent(r.run_id)}" target="_blank" style="font-size:11px">${esc(t('查看运行'))}</a>`:`<span style="font-size:11px;color:var(--dim)">${esc(t('宿主出片中'))}</span>`)}
-  else if(r.status==='applied'){acts=A('ab',t('A|B 比对'),'pri')+A('adopt',t('采纳'))+A('discard',t('弃用'))+A('edit',t('改参数重出'))+(r.preview_url?'':'')}
+  else if(r.status==='applied'){acts=A('ab',t('A|B 比对'),'pri')+A('adopt',t('提交'))+A('discard',t('弃用'))+A('edit',t('改参数重出'))+(r.preview_url?'':'')}
   else if(r.status==='adopted'){acts=(r.exec==='record'&&D.catalog.record_agents[r.kind]?A('dispatch',t('派单落地')):'')+A('discard',r.exec==='record'?t('撤回'):t('弃用'))+A('copy',t('复制到…'))+(r.exec!=='record'?A('ab',t('看结果')):'')}
   else if(r.status==='failed'){acts=(r.exec==='ffmpeg'?A('apply',t('重试出片'),'pri'):A('dispatch',t('重新派单'),'pri'))+A('edit',t('编辑'))+A('delete',t('删除'))}
   else if(r.status==='discarded'){acts=A('reset',t('重置为草稿'))+A('delete',t('删除'))}
@@ -709,7 +709,7 @@ async function recipeAction(rid,act,btn){
     if(act==='override'){openRecipe({recipe:{...r,id:null,scope:{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)},status:'draft',output:null}});return}
     if(act==='ab'){const gid=r.scope.group_id||SEL;const vs=r.output&&r.output.versions||{};const v=(vs[gid]||Object.values(vs)[0]||{}).v;if(r.scope.group_id&&r.scope.group_id!==SEL)selectGroup(r.scope.group_id);if(v!=null){VA=v;VB=(grpById(SEL)||{}).current||0;if(VB===VA)VB=0;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)}return}
     if(act==='seepreview'){const va=$('#va');va.src=r.preview_url;va.dataset.src=r.preview_url;$('#tagA').textContent=t('预览 ')+r.kind_label;AB='a';applyAB();va.play().catch(()=>{});return}
-    if(act==='delete'){if(!confirm(t('删除这条处方?')))return;btn.disabled=true;await J(api('/recipes/'+rid),'DELETE');await load(true);return}
+    if(act==='delete'){if(!confirm(t('删除这条修改单?')))return;btn.disabled=true;await J(api('/recipes/'+rid),'DELETE');await load(true);return}
     if(act==='copy'){
       const gids=MULTI.size?Array.from(MULTI):(prompt(t('复制到哪些组?用逗号分隔(或先在左栏多选)'),'')||'').split(/[,，\s]+/).filter(Boolean);
       if(!gids.length)return;btn.disabled=true;const j=await J(api('/recipes/'+rid+'/copy'),'POST',{groups:gids});toast(I18N.f('已复制 {n} 条草稿',{n:(j.created||[]).length}));await load(true);return}
@@ -722,14 +722,14 @@ async function recipeAction(rid,act,btn){
     if(act==='adopt'&&r.exec!=='record'){
       // 同场次其余组套用提示
       const sid=sceneOfGroup(r.scope.group_id||SEL);const rest=D.groups.filter(g=>g.scene_id===sid&&g.group_id!==(r.scope.group_id||SEL)&&!(D.plan.recipes||[]).some(x=>x.kind===r.kind&&x.scope.group_id===g.group_id));
-      if(rest.length&&r.scope.level!=='scene'&&r.scope.level!=='episode'&&confirm(I18N.f('同场次还有 {n} 组未做「{k}」,复制同一处方为草稿?',{n:rest.length,k:r.kind_label}))){
+      if(rest.length&&r.scope.level!=='scene'&&r.scope.level!=='episode'&&confirm(I18N.f('同场次还有 {n} 组未做「{k}」,复制同一修改单为草稿?',{n:rest.length,k:r.kind_label}))){
         await J(api('/recipes/'+rid+'/copy'),'POST',{groups:rest.map(g=>g.group_id)});await load(true);
       }
     }
   }catch(e){alert(e.message);if(btn)btn.disabled=false}
 }
 
-/* ---------- 处方弹窗 ---------- */
+/* ---------- 修改单弹窗 ---------- */
 let MR=null;
 function openRecipe(opt){
   const r=opt.recipe||null;
@@ -738,7 +738,7 @@ function openRecipe(opt){
   MR={id:r&&r.id||null,section,kind:r?r.kind:null,scope,params:r?{...r.params}:{},refs:r?{...r.refs}:{},note:r?r.note:''};
   if(!MR.kind){const ks=D.catalog.kinds.filter(k=>k.section===section&&k.scopes.includes(scope.level));MR.kind=(ks[0]||D.catalog.kinds.find(k=>k.section===section)||{}).id}
   if(!r&&MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===(scope.scene_id||sceneOfGroup(SEL)));MR.params.palette=(sc&&sc.palette)||D.episode_palette||[]}
-  $('#mr-title').textContent=(r&&r.id?t('编辑处方 · '):t('新处方 · '))+(SECS().find(s=>s.id===section)||{}).label;
+  $('#mr-title').textContent=(r&&r.id?t('编辑修改单 · '):t('新修改单 · '))+(SECS().find(s=>s.id===section)||{}).label;
   renderRecipeForm();$('#m-recipe').classList.add('open');
 }
 function defaultScope(){
@@ -751,7 +751,7 @@ function renderRecipeForm(){
   const k=KIND(MR.kind)||{};
   const kinds=D.catalog.kinds.filter(x=>x.section===MR.section);
   const scopeOpts=[['episode',t('整集')],['scene',t('场次 ')+(MR.scope.scene_id||sceneOfGroup(SEL))],['group',t('分镜组 ')+(MR.scope.group_id||SEL)],['range',t('时间段 ')+(MR.scope.level==='range'?`${MR.scope.t0}–${MR.scope.t1}s`:(RANGE&&RANGE.t1!=null?`${RANGE.t0}–${RANGE.t1}s`:t('(先标记)')))]];
-  let h=`<div class="fld"><label>${esc(t('做法'))}</label><select id="mr-kind">${kinds.map(x=>`<option value="${x.id}" ${x.id===MR.kind?'selected':''}>${esc(x.label)} · ${esc({ffmpeg:t('本机出片'),agent:t('派单'),record:t('记台账')}[x.exec])}</option>`).join('')}</select><div class="hint">${esc(k.hint||'')}</div></div>`;
+  let h=`<div class="fld"><label>${esc(t('做法'))}</label><select id="mr-kind">${kinds.map(x=>`<option value="${x.id}" ${x.id===MR.kind?'selected':''}>${esc(x.label)} · ${esc({ffmpeg:t('立即出片'),agent:t('派单出片'),record:t('成片时生效')}[x.exec])}</option>`).join('')}</select><div class="hint">${esc(k.hint||'')}</div></div>`;
   h+=`<div class="fld"><label>${esc(t('作用域'))}</label><div class="chips">${scopeOpts.map(([v,l])=>`<span data-scope="${v}" class="${MR.scope.level===v?'on':''}" ${(k.scopes||[]).includes(v)?'':'style="opacity:.35;pointer-events:none"'}>${esc(l)}</span>`).join('')}</div></div>`;
   for(const p of (k.params||[])){
     const v=MR.params[p.key]??p.default;
@@ -770,11 +770,11 @@ function renderRecipeForm(){
     if(ref==='mask')h+=`<div class="fld"><label>${esc(t('蒙版'))}</label><div class="in">${cur?`<span class="ref">${esc(`${(cur.x*100).toFixed(0)},${(cur.y*100).toFixed(0)} ${(cur.w*100).toFixed(0)}×${(cur.h*100).toFixed(0)}%`)}</span>`:`<span class="ref" style="color:var(--dim)">${esc(t('未画'))}</span>`}<button class="xs" data-ref-mask ${MASK?'':'disabled'}>${esc(t('用画面上的蒙版'))}</button></div></div>`;
     if(ref==='asset')h+=`<div class="fld"><label>${esc(t('素材'))}</label><div class="in"><input type="text" data-ref-asset value="${esc(cur||'')}" placeholder="assets/post/${esc(EP)}/assets/xxx.png|mp4" style="flex:1"><button class="xs" data-ref-pick>${esc(t('选择'))}</button><label class="xs" style="border:1px solid var(--border);border-radius:4px;padding:0 6px;cursor:pointer">${esc(t('上传'))}<input type="file" data-ref-upload style="display:none" accept=".png,.jpg,.jpeg,.webp,.mp4,.mov,.webm"></label></div><div class="hint" id="mr-assets"></div></div>`;
   }
-  h+=`<div class="fld"><label>${esc(t('说明'))} *</label><textarea id="mr-note" placeholder="${esc(k.section==='vfx'?t('发生什么、从哪来、到哪去、多强'):t('给执行侧的一句话;执行侧能力不足时它就是给 agent 的指令'))}">${esc(MR.note||'')}</textarea></div>`;
-  h+=`<div class="fld"><label>${esc(t('预估'))}</label><span style="color:var(--dim);font-size:12px">${esc(k.exec==='ffmpeg'?t('ffmpeg 本机 · 秒级 · ¥0'):k.exec==='agent'?t('派单 10-editing/post-finishing · 按渠道计费'):t('只记台账 · 出成片时由对应工位落地'))}</span></div>`;
+  h+=`<div class="fld"><label>${esc(t('指令'))} *</label><textarea id="mr-note" placeholder="${esc(k.section==='vfx'?t('发生什么、从哪来、到哪去、多强'):t('给执行侧的一句话;执行侧能力不足时它就是给 agent 的指令'))}">${esc(MR.note||'')}</textarea></div>`;
+  h+=`<div class="fld"><label>${esc(t('预估'))}</label><span style="color:var(--dim);font-size:12px">${esc(k.exec==='ffmpeg'?t('ffmpeg 本机 · 秒级 · ¥0'):k.exec==='agent'?t('派单 10-editing/post-finishing · 按渠道计费'):t('成片时生效 · 由对应工位落地'))}</span></div>`;
   $('#mr-body').innerHTML=h;
   $('#mr-preview').style.display=k.exec==='ffmpeg'?'':'none';
-  $('#mr-go').textContent=k.exec==='ffmpeg'?t('出片'):k.exec==='agent'?t('派单'):t('采纳');
+  $('#mr-go').textContent=k.exec==='ffmpeg'?t('出片'):k.exec==='agent'?t('派单出片'):t('提交');
   $('#mr-msg').textContent='';$('#mr-msg').className='msg';
   $('#mr-kind').onchange=e=>{MR.kind=e.target.value;const kk=KIND(MR.kind);if(!(kk.scopes||[]).includes(MR.scope.level))MR.scope=kk.scopes.includes('group')?{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)}:kk.scopes.includes('episode')?{level:'episode'}:{level:'scene',scene_id:sceneOfGroup(SEL)};MR.params={};if(MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===sceneOfGroup(SEL));MR.params.palette=(sc&&sc.palette)||[]}renderRecipeForm()};
   $$('#mr-body [data-scope]').forEach(s=>s.onclick=()=>{
@@ -855,11 +855,11 @@ async function openPrecheck(){
 }
 function renderPrecheck(){
   const p=PRE,s=p.summary||{},items=((p.check||{}).check||{}).items||[],job=D.job||{};
-  let h=`<div class="kv"><dt>${esc(t('处方'))}</dt><dd>${esc(I18N.f('采纳 {a} · 已出片未裁决 {b} · 草稿 {c} · 派单中 {d} · 失败 {e}',{a:s.adopted||0,b:s.applied||0,c:s.draft||0,d:s.dispatched||0,e:s.failed||0}))}</dd>
+  let h=`<div class="kv"><dt>${esc(t('修改单'))}</dt><dd>${esc(I18N.f('提交 {a} · 已出片未裁决 {b} · 草稿 {c} · 派单中 {d} · 失败 {e}',{a:s.adopted||0,b:s.applied||0,c:s.draft||0,d:s.dispatched||0,e:s.failed||0}))}</dd>
     <dt>${esc(t('输入'))}</dt><dd>${p.has_cut_v1?'✓ cut_v1':'– cut_v1'} · ${p.has_final_audio?'✓ final_audio':'– final_audio('+esc(t('成片将无声'))+')'} · ${p.has_final?'✓ final.mp4('+esc(t('将被后期版覆盖,原版备份 final.pre_post.mp4'))+')':'– final.mp4'}</dd>
     <dt>${esc(t('包装'))}</dt><dd>${['intro_enabled','outro_enabled','teaser_enabled'].map(k=>(p.packaging||{})[k]?'✓':'–').join(' ')} ${esc(t('片头/片尾/预告'))}</dd>
     <dt>${esc(t('签字'))}</dt><dd>${p.gate&&p.gate.signed?(p.gate.stale?'⚠ '+esc(t('已过期')):'✅ '+esc(t('已签')))+'':esc(t('未签(出成片不要求先签;签字在成片确认后)'))}</dd></div>`;
-  if((p.sound_pending||[]).length)h+=`<div style="color:var(--yellow);font-size:12px">⚠ ${esc(I18N.f('{n} 条声音层处方采纳时间晚于混音文件,出成片前建议先「派单落地」重混',{n:p.sound_pending.length}))}</div>`;
+  if((p.sound_pending||[]).length)h+=`<div style="color:var(--yellow);font-size:12px">⚠ ${esc(I18N.f('{n} 条声音层修改单提交时间晚于混音文件,出成片前建议先「派单落地」重混',{n:p.sound_pending.length}))}</div>`;
   h+=`<div style="display:grid;gap:3px">${items.map(i=>`<div class="chk-item"><span class="s ${esc(i.status)}">${esc(i.status)}</span><span style="font-family:var(--mono);font-size:11px">${esc(i.name)}</span><span style="color:var(--dim)" data-no-i18n>${esc(i.detail||'')}</span></div>`).join('')||esc(t('机检未跑'))}</div>`;
   if(p.blockers.length)h+=`<div class="blockers">⛔ ${esc(t('阻断'))}:${esc(p.blockers.join(';'))}</div>`;
   h+=`<div style="color:var(--dim);font-size:11.5px">${esc(t('出成片 = 各组当前版本归一化拼正片(cut_post)→ 转场重渲(render_transitions)→ 终版封装(finalize_episode assemble,含片头平移与 intro_offset_ok 机检)→ 后期机检。全部宿主 CLI,几分钟量级。'))}</div>`;
@@ -903,7 +903,7 @@ function renderSfx(focus){
       <td><input class="f" type="text" data-k="file" value="${esc(r.file||'')}" list="sfxlib" placeholder="assets/audio/sfx/${esc(EP)}/patches/…"></td><td><input type="number" data-k="gain_db" value="${r.gain_db??-12}" step="1" style="width:56px"></td></tr>`;
   }
   h+=`</table><datalist id="sfxlib">${lib.map(s=>`<option value="${esc(s.file)}">${esc(s.id)} ${esc((s.tags||[]).join(' '))}</option>`).join('')}</datalist>`;
-  h+=`<div style="color:var(--dim);font-size:11.5px">${esc(t('来源=选库:文件填 data/sfx/manifest.json 里的条目或项目内路径;来源=生成:留空文件,点「派单生成缺项」让音效工位产出并回填;略过=显式不做。点位时间可在处方说明里让工位微调。'))}</div>`;
+  h+=`<div style="color:var(--dim);font-size:11.5px">${esc(t('来源=选库:文件填 data/sfx/manifest.json 里的条目或项目内路径;来源=生成:留空文件,点「派单生成缺项」让音效工位产出并回填;略过=显式不做。点位时间可在修改单指令里让工位微调。'))}</div>`;
   $('#ms-body').innerHTML=h;
   $$('#ms-body tr[data-id]').forEach(tr=>{tr.querySelectorAll('[data-k]').forEach(el=>el.onchange=()=>{const r=rows.find(x=>x.id===tr.dataset.id);r[el.dataset.k]=el.dataset.k==='gain_db'?+el.value:el.value})});
   if(focus){const el=$(`#ms-body tr[data-id="${focus}"]`);if(el)el.scrollIntoView({block:'center'})}
@@ -914,7 +914,7 @@ $('#ms-dispatch').onclick=async()=>{try{await J(api('/sfx'),'PUT',{rows:(SFX.sfx
 /* ---------- 版本链 / 导出 ---------- */
 function openVersions(gid){
   const g=grpById(gid);if(!g)return;
-  let h=`<div style="font-family:var(--mono);font-size:12px;margin-bottom:6px">${esc(gid)} · ${esc(t('当前'))} v${g.current||0}</div><table class="tb"><tr><th>v</th><th>${esc(t('处方'))}</th><th>${esc(t('创建'))}</th><th>${esc(t('采纳'))}</th><th></th></tr>`;
+  let h=`<div style="font-family:var(--mono);font-size:12px;margin-bottom:6px">${esc(gid)} · ${esc(t('当前'))} v${g.current||0}</div><table class="tb"><tr><th>v</th><th>${esc(t('修改单'))}</th><th>${esc(t('创建'))}</th><th>${esc(t('提交'))}</th><th></th></tr>`;
   for(const v of g.versions)h+=`<tr><td style="font-family:var(--mono)">v${v.v}${v.v===(g.current||0)?' ★':''}</td><td data-no-i18n>${esc((v.recipes||[]).map(r=>{const x=(D.plan.recipes||[]).find(y=>y.id===r);return x?x.kind_label:r}).join('+')||(v.v===0?t('母本'):''))}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.created_at||'')}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.adopted_at||'')}</td><td>${v.cleaned?'<span style="color:var(--faint)">'+esc(t('文件已清理'))+'</span>':v.v===(g.current||0)?'':`<button class="xs" data-roll="${v.v}">${esc(t('指针到此'))}</button>`}</td></tr>`;
   h+=`</table>`;
   $('#mv-body').innerHTML=h;$('#mv-msg').textContent='';$('#m-ver').classList.add('open');

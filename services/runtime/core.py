@@ -8326,7 +8326,7 @@ async def api_post_recipe_create(project: str, ep: str, body: dict):
                                body.get("refs") or {}, str(body.get("note") or ""))
         except ValueError as e:
             raise ServiceError(400, str(e)) from None
-        r["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if r["exec"] == "ffmpeg" else ("按渠道计费" if r["exec"] == "agent" else "记台账 · ¥0")
+        r["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if r["exec"] == "ffmpeg" else ("按渠道计费" if r["exec"] == "agent" else "成片时生效 · ¥0")
         plan["recipes"].append(r)
         pp.save_plan(base, ep2, plan)
         return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "summary": pp.summary(plan)}
@@ -8340,7 +8340,7 @@ async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
         if not r:
             raise ServiceError(404, "recipe not found")
         if r.get("status") in ("dispatched",):
-            raise ServiceError(409, "派单中的处方不能改;等回来或先弃用")
+            raise ServiceError(409, "派单中的修改单不能改;等回来或先弃用")
         kind = pp.KIND_BY_ID[r["kind"]]
         try:
             if "scope" in body:
@@ -8354,7 +8354,7 @@ async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
                 r["refs"] = {k: v for k, v in (body["refs"] or {}).items() if v is not None}
             if "note" in body:
                 if not str(body["note"]).strip():
-                    raise ValueError("处方说明(note)必填")
+                    raise ValueError("修改单指令(note)必填")
                 r["note"] = str(body["note"]).strip()[:2000]
         except ValueError as e:
             raise ServiceError(400, str(e)) from None
@@ -8374,9 +8374,9 @@ async def api_post_recipe_delete(project: str, ep: str, rid: str):
         if not r:
             raise ServiceError(404, "recipe not found")
         if r.get("status") == "adopted":
-            raise ServiceError(409, "已采纳的处方先「弃用」再删除")
+            raise ServiceError(409, "已提交的修改单先「弃用」再删除")
         if r.get("status") == "dispatched":
-            raise ServiceError(409, "派单中的处方不能删除")
+            raise ServiceError(409, "派单中的修改单不能删除")
         plan["recipes"] = [x for x in plan["recipes"] if x.get("id") != rid]
         pp.save_plan(base, ep2, plan)
         return {"ok": True, "summary": pp.summary(plan)}
@@ -8497,7 +8497,7 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
             alive = _post_run_alive(r.get("run_id"))
             job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
             if alive or (r.get("run_id") == "host" and job.get("status") == "running" and rid in (job.get("recipe_ids") or [])):
-                raise ServiceError(409, "处方还在派单运行中,等结束再重置")
+                raise ServiceError(409, "修改单还在派单运行中,等结束再重置")
         pp.set_status(r, "draft", error="")
         pp.save_plan(base, ep2, plan)
         return {"ok": True, "recipe": _post_recipe_public(base, ep2, r)}
@@ -8529,7 +8529,7 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
         return {"ok": True, "created": made, "summary": pp.summary(plan)}
     if action in ("apply", "preview"):
         if r.get("exec") != "ffmpeg":
-            raise ServiceError(400, "只有 ffmpeg 类处方能直接出片/预览;agent 类请「派单」")
+            raise ServiceError(400, "只有 ffmpeg 类修改单能直接出片/预览;agent 类请「派单」")
         if action == "apply" and r.get("status") == "dispatched":
             raise ServiceError(409, "已在派单中")
         extra = [str(x) for x in (body.get("with") or []) if pp.find_recipe(plan, str(x)) and (pp.find_recipe(plan, str(x)) or {}).get("exec") == "ffmpeg"]
@@ -8560,7 +8560,7 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
         return {"ok": True, "job": job, "recipe": _post_recipe_public(base, ep2, r)}
     if action == "dispatch":
         if r.get("exec") == "ffmpeg":
-            raise ServiceError(400, "ffmpeg 类处方用「出片」,不派 agent")
+            raise ServiceError(400, "ffmpeg 类修改单用「出片」,不派 agent")
         if r.get("status") == "dispatched":
             raise ServiceError(409, "已在派单中")
         groups, _ = _post_groups(base, ep2, plan)
@@ -8733,7 +8733,7 @@ def _post_precheck_sync(project: str, ep: str, run_check: bool = True) -> dict:
     job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
     blockers = []
     if s.get("dispatched"):
-        blockers.append(f"派单中 {s['dispatched']} 条处方")
+        blockers.append(f"派单中 {s['dispatched']} 条修改单")
     if fails:
         blockers.append("机检 FAIL:" + ", ".join(i["name"] for i in fails))
     if job.get("status") == "running":

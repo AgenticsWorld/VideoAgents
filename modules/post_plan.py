@@ -76,7 +76,7 @@ KINDS: list[dict] = [
     {"id": "local_repaint", "section": "fill", "label": "局部重绘", "exec": "agent", "scopes": ["group", "range"],
      "refs": ["mask", "frame"],
      "params": [{"key": "strength", "label": "改动幅度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
-     "hint": "蒙版内按说明重绘(V2V 编辑);说明写清「改什么、改成什么」"},
+     "hint": "蒙版内按指令重绘(V2V 编辑);指令写清「改什么、改成什么」"},
     {"id": "interpolate", "section": "fill", "label": "插帧", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "fps", "label": "目标帧率", "type": "select", "options": ["48", "60"], "default": "48"}],
      "hint": "RIFE 类工作流(可绑 RunningHub);成片帧率须全集一致,建议整集作用域"},
@@ -111,7 +111,7 @@ KINDS: list[dict] = [
      "hint": "光感低配版:高光晕染、暗角、胶片颗粒、冷暖偏向、烛光闪烁;重打光待模型选定后拆成独立分区"},
     {"id": "lighting_scheme", "section": "grade", "label": "跟随光照方案", "exec": "agent", "scopes": ["group", "scene"],
      "params": [{"key": "strength", "label": "强度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
-     "hint": "按组提示词里的 lighting_scheme_id 光位描述重打光(V2V);说明只写「哪里不对」"},
+     "hint": "按组提示词里的 lighting_scheme_id 光位描述重打光(V2V);指令只写「哪里不对」"},
     {"id": "relight_ref", "section": "grade", "label": "参考帧重打光", "exec": "agent", "scopes": ["group", "range"],
      "refs": ["frame"],
      "params": [{"key": "strength", "label": "强度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
@@ -127,7 +127,7 @@ KINDS: list[dict] = [
      "refs": ["mask", "frame"],
      "params": [{"key": "type", "label": "类型", "type": "select", "options": ["粒子", "光效", "天气", "法术", "其他"], "default": "光效"},
                 {"key": "strength", "label": "强度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.6}],
-     "hint": "说明必写四问:发生什么、从哪来、到哪去、多强"},
+     "hint": "指令必写四问:发生什么、从哪来、到哪去、多强"},
     # ---- 包装 ----
     {"id": "subtitle_style", "section": "pack", "label": "字幕样式", "exec": "record", "scopes": ["episode"],
      "params": [{"key": "font_size_pct", "label": "字高(% 画面高)", "type": "range", "min": 2.5, "max": 4, "step": 0.1, "default": 3.5},
@@ -146,11 +146,11 @@ KINDS: list[dict] = [
      "params": [{"key": "text", "label": "文字", "type": "text", "default": ""},
                 {"key": "position", "label": "位置", "type": "select", "options": ["top_left", "top_right", "bottom_left", "bottom_right", "center"], "default": "top_left"},
                 {"key": "type", "label": "类型", "type": "select", "options": ["headline", "keyword", "location"], "default": "keyword"}],
-     "hint": "记入台账,出成片前由花字工位按 captions.json 契约落地(须开启 output.caption_enabled)"},
+     "hint": "成片时生效,出成片前由花字工位按 captions.json 契约落地(须开启 output.caption_enabled)"},
     {"id": "transition", "section": "pack", "label": "组间转场(入)", "exec": "record", "scopes": ["group"],
      "params": [{"key": "type", "label": "类型", "type": "select", "options": ["hard_cut", "dissolve", "dip_black", "dip_white", "fade_black"], "default": "dissolve"},
                 {"key": "duration_s", "label": "时长 s", "type": "range", "min": 0.2, "max": 2, "step": 0.1, "default": 0.6}],
-     "hint": "采纳即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲"},
+     "hint": "提交即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲"},
     # ---- 音效与声音 ----
     {"id": "ambience", "section": "sound", "label": "环境声", "exec": "record", "scopes": ["scene", "episode"],
      "params": [{"key": "desc", "label": "描述", "type": "text", "default": ""},
@@ -325,7 +325,7 @@ def make_recipe(kind_id: str, scope: dict, params: dict | None = None, refs: dic
     if scope["level"] not in kind.get("scopes", []):
         raise ValueError(f"{kind['label']} 不支持作用域 {scope['level']}")
     if not str(note or "").strip():
-        raise ValueError("处方说明(note)必填:执行侧能力不足时退化为给 agent 的自然语言指令")
+        raise ValueError("修改单指令(note)必填:执行侧能力不足时退化为给 agent 的自然语言指令")
     sec = SECTION_BY_ID[kind["section"]]
     return {"id": new_id(), "scope": scope, "layer": sec["layer"], "section": kind["section"], "kind": kind_id,
             "exec": kind["exec"], "params": coerce_params(kind, params), "refs": dict(refs or {}),
@@ -431,7 +431,7 @@ def adopt_version(plan: dict, gid: str, v: int) -> dict:
     if v != 0 and not ver:
         raise ValueError(f"{gid} 没有版本 v{v}")
     if ver and ver.get("cleaned"):
-        raise ValueError(f"{gid} v{v} 文件已按保留规则清理,不能再采纳")
+        raise ValueError(f"{gid} v{v} 文件已按保留规则清理,不能再提交")
     plan.setdefault("current", {})[gid] = int(v)
     if ver:
         ver["adopted_at"] = _now()
@@ -442,7 +442,7 @@ def adopt_recipe(base: Path, ep: str, plan: dict, recipe: dict) -> dict:
     """采纳:ffmpeg/agent 类把产物版本设为当前指针;record 类直接记台账;转场类回写 shot_list.transition_in。"""
     if recipe.get("exec") in ("ffmpeg", "agent"):
         if recipe.get("status") != "applied" or not (recipe.get("output") or {}).get("versions"):
-            raise ValueError("只有「已出片」的处方才能采纳")
+            raise ValueError("只有「已出片」的修改单才能提交")
         for gid, info in recipe["output"]["versions"].items():
             adopt_version(plan, gid, int(info.get("v") or 0))
     elif recipe.get("kind") == "transition":
@@ -469,7 +469,7 @@ def write_transition_in(base: Path, ep: str, recipe: dict, remove: bool = False)
     sl_path = base / "directing" / ep / "shot_list.json"
     sl = read_json(sl_path)
     if not isinstance(sl, dict):
-        raise ValueError("shot_list.json 不存在,转场处方无处回写")
+        raise ValueError("shot_list.json 不存在,转场修改单无处回写")
     gid = recipe["scope"].get("group_id")
     hit = False
     for g in sl.get("generation_groups", []) or []:
