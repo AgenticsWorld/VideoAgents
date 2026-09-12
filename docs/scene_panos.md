@@ -32,7 +32,9 @@
 
 ## 图像模型能力
 
-全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户到控制台「🎨 生成模型」换图像模型，不得自行换模型或绕过。
+全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户换图像模型，不得自行换模型或绕过。
+
+全景用哪个图像模型（2026-09-12）：场景预览页顶栏图像模型分两块——「🎨 图像模型」（kind `scenes`，概念图 / 分镜背景图 / 布局图 / 四方向图）与「🌐 全景模型」（kind `panos`，本模块的 2:1 全景），各自可选不同渠道与该渠道的模型，存 `state.json` `image_model_prefs.scenes / .panos`，默认都跟随全局「生成模型」；全景空时按全局，**不回退到「图像模型」**。实现：`modules/genmedia.py` `image_kind_of_output` 把 `assets/concepts/scenes/<sid>/panos/` 下的输出判为 `panos`，`scene_panos.py` 的支持检查与出图都按 `image_pref_env('panos')`。用户切换：全景改「🌐 全景模型」，否则改控制台「🎨 生成模型」。
 
 ## 命令
 

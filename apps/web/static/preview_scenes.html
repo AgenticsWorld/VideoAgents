@@ -10,7 +10,7 @@
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/image-models.js?v=20260911"></script>
-<script src="/static/image-model-picker.js?v=20260911"></script>
+<script src="/static/image-model-picker.js?v=20260912"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -115,7 +115,8 @@ ul.arr>li{margin:2px 0}
   <a class="back" href="/">← 控制台</a>
   <h1>🏔 场景预览</h1>
   <div class="spacer"></div>
-  <span id="imp" title="本页场景资产(概念图/全景/分镜背景图/布局图)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局"></span>
+  <span id="imp" title="本页场景资产(概念图/分镜背景图/布局图/四方向图,全景图除外)出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局"></span>
+  <span id="impp" title="本页场景 2:1 全景图出图用的图像渠道/模型(须支持任意宽高比,如火山 Seedream),与全局设置及左侧「图像模型」分开;空=跟随全局"></span>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
@@ -367,7 +368,7 @@ async function mountPanoSection(whitebox,s){
   let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌐 ${esc(t('全景图'))} · ${esc(s.id)}</strong><span style="color:var(--dim)">${esc(I18N.f('{n} 个锚点',{n:anchors.length}))} · ${esc(panos.indoor?t('室内(补顶)'):t('室外'))}</span>`
     +`<button class="editbtn" data-loc="${esc(loc)}" data-agent="08-video-gen/shot-plates" title="${esc(t('对全景锚点提修改意见(移动/增删锚点、重出全景),直接发消息给分镜背景图 Agent'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   if(panos.blocked){
-    h+=`<div class="pano-blocked">⚠️ ${esc(I18N.f('当前图像模型 {model}({provider})不支持 2:1 全景,全景图与分镜背景图已暂停:请到控制台「🎨 生成模型」切换图像模型后重跑 code/render_shot_plates.py',{model:panos.blocked.model||'?',provider:panos.blocked.provider||'?'}))}${panos.blocked.detail?` — ${esc(panos.blocked.detail)}`:''}</div>`;
+    h+=`<div class="pano-blocked">⚠️ ${esc(I18N.f('当前全景图像模型 {model}({provider})不支持 2:1 全景,全景图与分镜背景图已暂停:请在本页顶部「🌐 全景模型」或控制台「🎨 生成模型」切换后重跑 code/render_shot_plates.py',{model:panos.blocked.model||'?',provider:panos.blocked.provider||'?'}))}${panos.blocked.detail?` — ${esc(panos.blocked.detail)}`:''}</div>`;
   }
   if(panos.layout_top_url){
     h+=`<div class="pano-map"><img src="${esc(bust(panos.layout_top_url))}" alt="">`
@@ -438,7 +439,10 @@ async function load(){
   }else $('#detail').innerHTML='<div class="empty">该项目还没有场景设定</div>';
 }
 $('#reload').onclick=load;
-mountImageModelPicker({kind:'scenes',host:'#imp',label:'🎨 图像模型'});
+// 顶栏图像模型分两块(2026-09-12):图像模型=概念图/分镜背景图/布局图/四方向图(kind scenes),全景模型=2:1 场景全景(kind panos);
+// 各自独立选渠道+模型,默认都跟随全局,全景空时不回退到图像模型(genmedia 按 scenes/<sid>/panos/ 路径判 panos)。
+mountImageModelPicker({kind:'scenes',host:'#imp',label:'🎨 图像模型',compact:true});
+mountImageModelPicker({kind:'panos',host:'#impp',label:'🌐 全景模型',compact:true});
 $('#search').oninput=renderList;
 $('#project').value=new URLSearchParams(location.search).get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';

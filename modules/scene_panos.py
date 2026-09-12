@@ -398,13 +398,13 @@ def mark_blocked(base: Path, sid: str, idx: dict, cfg: dict, reason: str):
 
 def check_pano_support(base: Path, sid: str, idx: dict, log=print) -> dict:
     from modules.genmedia import get_config, image_pref_env
-    with image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局)
+    with image_pref_env('panos'):   # 场景预览页「🌐 全景模型」的选择(空=全局,不回退到本页「🎨 图像模型」)
         cfg = get_config('image')
     ok, reason = pano_support(cfg)
     if not ok:
         mark_blocked(base, sid, idx, cfg, reason)
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 不支持 2:1 等距柱状全景({reason});"
-                              "全景图与分镜背景图已暂停。请用户切换图像模型(如火山 Seedream 5.0 pro)后重跑:场景预览页顶部「🎨 图像模型」有选则改那里,否则改控制台「🎨 生成模型」。")
+                              "全景图与分镜背景图已暂停。请用户切换图像模型(如火山 Seedream 5.0 pro)后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
     if idx.get('blocked'):
         idx.pop('blocked', None); save_index(base, sid, idx)
     return cfg
@@ -693,7 +693,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     """出一张 (锚点, 光照方案) 全景。模式:relight(同锚点已有其它方案)> chain(其它锚点已有同方案)> fresh。"""
     from PIL import Image
     from modules.genmedia import generate_image, get_config, image_pref_env
-    with image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局)
+    with image_pref_env('panos'):   # 场景预览页「🌐 全景模型」的选择(空=全局,不回退到本页「🎨 图像模型」)
         cfg = get_config('image')
     out = panos_dir(base, sid) / anchor['anchor_id']
     out.mkdir(parents=True, exist_ok=True)
@@ -737,7 +737,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         target.rename(target.with_suffix('.rejected.png'))
         mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
-                              "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🎨 图像模型」有选则改那里,否则改控制台「🎨 生成模型」。")
+                              "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
     if mode == 'chain':
         score = chain_consistency(chain, target)
         parent['consistency'] = score

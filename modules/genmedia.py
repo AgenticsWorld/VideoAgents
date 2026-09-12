@@ -4,7 +4,7 @@
 渠道与模型在 Web 客户端「生成服务」页配置(落盘 data/.videoagents/genconfig.json),
 本模块按配置自动路由到对应渠道;Agent 只管出 prompt 与产物路径,不挑模型。
 图像:输出落在 assets/concepts/<scenes|characters|creatures|props>/ 下时,自动套用控制台
-对应预览页顶部「🎨 图像模型」选的渠道/模型(state.json image_model_prefs,空=跟随全局);
+对应预览页顶部图像模型下拉选的渠道/模型(state.json image_model_prefs,空=跟随全局;场景页分「图像模型」「全景模型」);
 `image --provider/--model` 显式指定优先。
 
 CLI:
@@ -347,20 +347,27 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
 
 
 # ---------------- 预览页按资产类别单独选的图像模型(2026-09-11) ----------------
-# 场景/人物/生物/道具预览页顶部各有「🎨 图像模型」下拉(同故事板页草图模型),存控制台
+# 场景/人物/生物/道具预览页顶部各有图像模型下拉(同故事板页草图模型;场景页分平面/全景两块),存控制台
 # state.json image_model_prefs[<kind>] = {provider, model}(空 = 跟随全局「生成模型」设置)。
 # 出图时按 --output 路径所在目录 assets/concepts/<scenes|characters|creatures|props>/ 判定类别,
 # 没有显式 --provider/--model(环境变量)时套用该类别的偏好;Key 仍取该渠道在 genconfig 的配置。
-IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
+# 2026-09-12 场景页拆两块:scenes=「🎨 图像模型」(概念图/分镜背景图/布局图/四方向图,全景除外),panos=「🌐 全景模型」
+# (assets/concepts/scenes/<sid>/panos/ 下的 2:1 全景);两者独立、默认都跟随全局,panos 空时不回退到 scenes。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props")
 _IMAGE_KIND_RE = re.compile(r"(?:^|/)assets/concepts/(scenes|characters|creatures|props)/")
+_IMAGE_PANO_RE = re.compile(r"(?:^|/)assets/concepts/scenes/[^/]+/panos/")
 STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
 
 
 def image_kind_of_output(output: str | os.PathLike | None) -> str:
-    """按输出路径判定资产类别(scenes|characters|creatures|props),不属于概念图目录返回空。"""
+    """按输出路径判定资产类别(scenes|panos|characters|creatures|props),不属于概念图目录返回空;
+    scenes/<sid>/panos/ 下的场景全景判为 panos(场景预览页「🌐 全景模型」)。"""
     if not output:
         return ""
-    m = _IMAGE_KIND_RE.search(Path(output).as_posix())
+    posix = Path(output).as_posix()
+    if _IMAGE_PANO_RE.search(posix):
+        return "panos"
+    m = _IMAGE_KIND_RE.search(posix)
     return m.group(1) if m else ""
 
 

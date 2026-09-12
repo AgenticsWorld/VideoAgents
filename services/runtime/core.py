@@ -7204,10 +7204,12 @@ def _image_channels() -> list[dict]:
 
 
 # 预览页按类别单独选的图像渠道/模型(2026-09-11):sketch=故事板草图,scenes/characters/creatures/props=
-# 四个资产预览页顶部「🎨 图像模型」;存 STATE.image_model_prefs[<kind>](空 provider = 跟随全局)。
-# 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用(modules/genmedia.py image_pref_env),
-# 草图由 code/storyboard_sketch.py 显式传 --provider/--model。
-IMAGE_PREF_KINDS = ("sketch", "scenes", "characters", "creatures", "props")
+# 四个资产预览页顶部的图像模型下拉;存 STATE.image_model_prefs[<kind>](空 provider = 跟随全局)。
+# 2026-09-12 场景预览页拆成两块:scenes=「🎨 图像模型」(概念图/分镜背景图/布局图/四方向图,全景除外),
+# panos=「🌐 全景模型」(2:1 场景全景),各自独立选渠道+模型,默认都跟随全局(互不回退)。
+# 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用(modules/genmedia.py image_pref_env,
+# scenes/<sid>/panos/ 下判为 panos),草图由 code/storyboard_sketch.py 显式传 --provider/--model。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props")
 
 
 def image_model_pref(kind: str) -> dict:
