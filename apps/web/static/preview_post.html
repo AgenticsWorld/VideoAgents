@@ -186,6 +186,8 @@ body.masking .frame .maskpad{display:block}
 .modal .bf{display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--border);align-items:center;flex-wrap:wrap}
 .modal .bf .msg{flex:1;color:var(--dim);font-size:12px}
 .modal .bf .msg.err{color:var(--red)}
+.sfx-add{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 6px;padding:8px;border:1px dashed var(--border);border-radius:6px}
+.sfx-add .lb{color:var(--dim);font-size:12px}
 .fld{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
 .fld label{color:var(--dim);font-size:12px}
 .fld .in{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -736,6 +738,7 @@ function openRecipe(opt){
   const section=r?r.section:opt.section;
   const scope=r?r.scope:defaultScope();
   MR={id:r&&r.id||null,section,kind:r?r.kind:null,scope,params:r?{...r.params}:{},refs:r?{...r.refs}:{},note:r?r.note:''};
+  if(!MR.kind&&section==='sound')MR.kind='__sfx';
   if(!MR.kind){const ks=D.catalog.kinds.filter(k=>k.section===section&&k.scopes.includes(scope.level));MR.kind=(ks[0]||D.catalog.kinds.find(k=>k.section===section)||{}).id}
   if(!r&&MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===(scope.scene_id||sceneOfGroup(SEL)));MR.params.palette=(sc&&sc.palette)||D.episode_palette||[]}
   $('#mr-title').textContent=(r&&r.id?t('编辑修改单 · '):t('新修改单 · '))+(SECS().find(s=>s.id===section)||{}).label;
@@ -751,7 +754,10 @@ function renderRecipeForm(){
   const k=KIND(MR.kind)||{};
   const kinds=D.catalog.kinds.filter(x=>x.section===MR.section);
   const scopeOpts=[['episode',t('整集')],['scene',t('场次 ')+(MR.scope.scene_id||sceneOfGroup(SEL))],['group',t('分镜组 ')+(MR.scope.group_id||SEL)],['range',t('时间段 ')+(MR.scope.level==='range'?`${MR.scope.t0}–${MR.scope.t1}s`:(RANGE&&RANGE.t1!=null?`${RANGE.t0}–${RANGE.t1}s`:t('(先标记)')))]];
-  let h=`<div class="fld"><label>${esc(t('做法'))}</label><select id="mr-kind">${kinds.map(x=>`<option value="${x.id}" ${x.id===MR.kind?'selected':''}>${esc(x.label)} · ${esc({ffmpeg:t('立即出片'),agent:t('派单出片'),record:t('成片时生效')}[x.exec])}</option>`).join('')}</select><div class="hint">${esc(k.hint||'')}</div></div>`;
+  const sfxOpt=MR.section==='sound'?`<option value="__sfx" ${MR.kind==='__sfx'?'selected':''}>${esc(t('新增音效'))} · ${esc(t('加一条音效点位'))}</option>`:'';
+  $('#mr-save').style.display=$('#mr-preview').style.display='';
+  if(MR.kind==='__sfx'){renderSfxRecipeForm(sfxOpt);return}
+  let h=`<div class="fld"><label>${esc(t('做法'))}</label><select id="mr-kind">${sfxOpt}${kinds.map(x=>`<option value="${x.id}" ${x.id===MR.kind?'selected':''}>${esc(x.label)} · ${esc({ffmpeg:t('立即出片'),agent:t('派单出片'),record:t('成片时生效')}[x.exec])}</option>`).join('')}</select><div class="hint">${esc(k.hint||'')}</div></div>`;
   h+=`<div class="fld"><label>${esc(t('作用域'))}</label><div class="chips">${scopeOpts.map(([v,l])=>`<span data-scope="${v}" class="${MR.scope.level===v?'on':''}" ${(k.scopes||[]).includes(v)?'':'style="opacity:.35;pointer-events:none"'}>${esc(l)}</span>`).join('')}</div></div>`;
   for(const p of (k.params||[])){
     const v=MR.params[p.key]??p.default;
@@ -776,7 +782,7 @@ function renderRecipeForm(){
   $('#mr-preview').style.display=k.exec==='ffmpeg'?'':'none';
   $('#mr-go').textContent=k.exec==='ffmpeg'?t('出片'):k.exec==='agent'?t('派单出片'):t('提交');
   $('#mr-msg').textContent='';$('#mr-msg').className='msg';
-  $('#mr-kind').onchange=e=>{MR.kind=e.target.value;const kk=KIND(MR.kind);if(!(kk.scopes||[]).includes(MR.scope.level))MR.scope=kk.scopes.includes('group')?{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)}:kk.scopes.includes('episode')?{level:'episode'}:{level:'scene',scene_id:sceneOfGroup(SEL)};MR.params={};if(MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===sceneOfGroup(SEL));MR.params.palette=(sc&&sc.palette)||[]}renderRecipeForm()};
+  $('#mr-kind').onchange=e=>{MR.kind=e.target.value;if(MR.kind==='__sfx'){renderRecipeForm();return}const kk=KIND(MR.kind);if(!(kk.scopes||[]).includes(MR.scope.level))MR.scope=kk.scopes.includes('group')?{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)}:kk.scopes.includes('episode')?{level:'episode'}:{level:'scene',scene_id:sceneOfGroup(SEL)};MR.params={};if(MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===sceneOfGroup(SEL));MR.params.palette=(sc&&sc.palette)||[]}renderRecipeForm()};
   $$('#mr-body [data-scope]').forEach(s=>s.onclick=()=>{
     const v=s.dataset.scope;
     if(v==='range'&&!(MR.scope.level==='range'||(RANGE&&RANGE.t1!=null))){alert(t('先在监视器走带条上「标记时间段」'));return}
@@ -788,6 +794,45 @@ function renderRecipeForm(){
   const rm=$('#mr-body [data-ref-mask]');if(rm)rm.onclick=()=>{MR.refs.mask={...MASK};collectForm();renderRecipeForm()};
   const rp=$('#mr-body [data-ref-pick]');if(rp)rp.onclick=async()=>{const j=await J(api('/assets'));const box=$('#mr-assets');box.innerHTML=j.assets.length?j.assets.map(a=>`<span class="ref" style="cursor:pointer;margin:2px" data-pick="${esc(a.path)}">${a.video?'🎞':'🖼'} ${esc(a.name)}</span>`).join(''):esc(t('assets/post/'+EP+'/assets 与 refs/ 下没有 png/mp4 素材,先上传'));$$('#mr-assets [data-pick]').forEach(s=>s.onclick=()=>{MR.refs.asset=s.dataset.pick;collectForm();renderRecipeForm()})};
   const ru=$('#mr-body [data-ref-upload]');if(ru)ru.onchange=async()=>{const f=ru.files[0];if(!f)return;try{const r=await fetch(api('/assets')+'?filename='+encodeURIComponent(f.name),{method:'POST',body:f});const j=await r.json();if(!r.ok)throw new Error(j.detail||r.status);MR.refs.asset=j.path;collectForm();renderRecipeForm()}catch(e){alert(t('上传失败:')+e.message)}};
+}
+/* 「新增音效」:修改单弹窗里直接往音效点位表加一行(与点位表弹窗底部的新增栏共用 buildSfxRow) */
+function renderSfxRecipeForm(sfxOpt){
+  const f=MR.sfx=MR.sfx||{gid:SEL||(D.groups[0]||{}).group_id,shot:'',t:0.5,text:'',gain:-12};
+  const g=D.groups.find(x=>x.group_id===f.gid)||{};
+  let h=`<div class="fld"><label>${esc(t('做法'))}</label><select id="mr-kind">${sfxOpt}${D.catalog.kinds.filter(x=>x.section==='sound').map(x=>`<option value="${x.id}">${esc(x.label)} · ${esc(t('成片时生效'))}</option>`).join('')}</select><div class="hint">${esc(t('在指定时间点加一个音效,存进音效点位表;再到点位表里「派单生成缺项」由音效工位出文件'))}</div></div>`;
+  h+=`<div class="fld"><label>${esc(t('分镜组'))}</label><select id="sf-grp">${D.groups.map(x=>`<option value="${esc(x.group_id)}" ${x.group_id===f.gid?'selected':''}>${esc(x.group_id)} · ${tc(x.cum_start_s)} · ${num(x.duration,1)}s</option>`).join('')}</select></div>`;
+  h+=`<div class="fld"><label>${esc(t('镜(可选)'))}</label><select id="sf-shot"><option value="">—</option>${(g.shots||[]).map(sid=>`<option value="${esc(sid)}" ${sid===f.shot?'selected':''}>${esc(sid)}</option>`).join('')}</select></div>`;
+  h+=`<div class="fld"><label>${esc(t('组内第几秒'))}</label><div class="in"><input id="sf-t" type="number" min="0" step="0.1" value="${f.t}" style="width:80px"> s <span style="color:var(--dim);font-size:12px">${esc(I18N.f('本组时长 {d}s',{d:num(g.duration,1)}))}</span></div></div>`;
+  h+=`<div class="fld"><label>${esc(t('描述'))} *</label><input id="sf-text" type="text" value="${esc(f.text)}" placeholder="${esc(t('这一声是什么,如:女人尖叫'))}"></div>`;
+  h+=`<div class="fld"><label>dB</label><div class="in"><input id="sf-gain" type="range" min="-30" max="0" step="1" value="${f.gain}"><span class="val" id="sf-gain-v">${f.gain}</span></div></div>`;
+  h+=`<div class="fld"><label>${esc(t('预估'))}</label><span style="color:var(--dim);font-size:12px">${esc(t('派单 09-audio/sound-effect 生成音频 · 按渠道计费'))}</span></div>`;
+  $('#mr-body').innerHTML=h;
+  $('#mr-save').style.display=$('#mr-preview').style.display='none';
+  $('#mr-go').textContent=t('添加到点位表');
+  $('#mr-msg').textContent='';$('#mr-msg').className='msg';
+  const sync=()=>{f.gid=$('#sf-grp').value;f.shot=$('#sf-shot').value;f.t=+$('#sf-t').value||0;f.text=$('#sf-text').value;f.gain=+$('#sf-gain').value};
+  $('#mr-kind').onchange=e=>{MR.kind=e.target.value;if(MR.kind!=='__sfx'){const kk=KIND(MR.kind);if(!(kk.scopes||[]).includes(MR.scope.level))MR.scope=kk.scopes.includes('group')?{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)}:kk.scopes.includes('episode')?{level:'episode'}:{level:'scene',scene_id:sceneOfGroup(SEL)};MR.params={}}renderRecipeForm()};
+  $('#sf-grp').onchange=()=>{sync();f.shot='';renderSfxRecipeForm(sfxOpt)};
+  $('#sf-gain').oninput=()=>{$('#sf-gain-v').textContent=$('#sf-gain').value};
+  ['#sf-shot','#sf-t','#sf-text'].forEach(q=>$(q).onchange=sync);
+}
+function buildSfxRow(rows,{gid,shot,t:tt,text}){
+  const g=D.groups.find(x=>x.group_id===gid);text=(text||'').trim();tt=Math.max(0,+tt||0);
+  if(!g||!text)throw new Error(t('请选组并填写描述'));
+  if(g.duration&&tt>g.duration)throw new Error(I18N.f('组内时间超出该组时长 {d}s',{d:num(g.duration,1)}));
+  const n=rows.reduce((m,r)=>Math.max(m,+(String(r.id).match(/(\d+)$/)||[])[1]||0),0)+1,id=`sfx-${String(n).padStart(3,'0')}`;
+  const row={id,shot_id:shot||'',group_id:gid,t:+tt.toFixed(3),t_abs:+((g.cum_start_s||0)+tt).toFixed(3),text,event:text.slice(0,60),level:'key',source:'generate',file:'',gain_db:-12};
+  const at=rows.findIndex(r=>r.t_abs>row.t_abs);rows.splice(at<0?rows.length:at,0,row);
+  return row;
+}
+async function addSfxFromRecipe(){
+  const f=MR.sfx;f.gid=$('#sf-grp').value;f.shot=$('#sf-shot').value;f.t=+$('#sf-t').value||0;f.text=$('#sf-text').value;f.gain=+$('#sf-gain').value;
+  const cur=await J(api('/sfx'));const rows=((cur.sfx||{}).rows)||[];
+  const row=buildSfxRow(rows,f);row.gain_db=f.gain;
+  await J(api('/sfx'),'PUT',{rows});
+  closeModal('#m-recipe');await load(true);
+  toast(I18N.f('已加入点位表 {id},到点位表里「派单生成缺项」出文件',{id:row.id}));
+  openSfx(row.id);
 }
 function refUrl(rel){return '/api/v1/projects/'+encodeURIComponent(proj())+'/artifacts/'+rel}
 function collectForm(){
@@ -809,7 +854,7 @@ async function saveRecipe(){
 }
 $('#mr-save').onclick=async()=>{try{await saveRecipe();closeModal('#m-recipe');await load(true)}catch(e){$('#mr-msg').textContent=e.message;$('#mr-msg').className='msg err'}};
 $('#mr-preview').onclick=async()=>{try{const r=await saveRecipe();await J(api('/recipes/'+r.id+'/preview'),'POST',{});closeModal('#m-recipe');await load(true);toast(t('预览作业已开始,几十秒后本卡片出现「看预览」'))}catch(e){$('#mr-msg').textContent=e.message;$('#mr-msg').className='msg err'}};
-$('#mr-go').onclick=async()=>{try{const r=await saveRecipe();const k=KIND(r.kind);const act=k.exec==='ffmpeg'?'apply':k.exec==='agent'?'dispatch':'adopt';await J(api('/recipes/'+r.id+'/'+act),'POST',{});closeModal('#m-recipe');await load(true)}catch(e){$('#mr-msg').textContent=e.message;$('#mr-msg').className='msg err'}};
+$('#mr-go').onclick=async()=>{try{if(MR.kind==='__sfx'){await addSfxFromRecipe();return}const r=await saveRecipe();const k=KIND(r.kind);const act=k.exec==='ffmpeg'?'apply':k.exec==='agent'?'dispatch':'adopt';await J(api('/recipes/'+r.id+'/'+act),'POST',{});closeModal('#m-recipe');await load(true)}catch(e){$('#mr-msg').textContent=e.message;$('#mr-msg').className='msg err'}};
 
 /* ---------- 底栏 ---------- */
 function renderFoot(){
@@ -894,18 +939,26 @@ async function openSfx(focus){
 function renderSfx(focus){
   const rows=(SFX.sfx||{}).rows||[],lib=SFX.library||[];
   $('#ms-sub').textContent=I18N.f('{n} 条 · {s}',{n:rows.length,s:SFX.saved?t('已保存'):t('由分镜 sfx cue 生成,尚未保存')});
-  if(!rows.length){$('#ms-body').innerHTML=`<div class="empty" style="margin:20px">${esc(t('本集没有音效点位(assets/audio/sfx/'+EP+'/audio_cues.json 不存在或为空)'))}</div>`;return}
-  let h=`<table class="tb"><tr><th>${esc(t('时间'))}</th><th>${esc(t('组/镜'))}</th><th>${esc(t('分镜 cue'))}</th><th>${esc(t('来源'))}</th><th>${esc(t('文件'))}</th><th>dB</th></tr>`;
+  let h=rows.length?'':`<div class="empty" style="margin:20px">${esc(t('本集没有音效点位(assets/audio/sfx/'+EP+'/audio_cues.json 不存在或为空)'))}</div>`;
+  if(rows.length)h+=`<table class="tb"><tr><th>${esc(t('时间'))}</th><th>${esc(t('组/镜'))}</th><th>${esc(t('分镜 cue'))}</th><th>${esc(t('来源'))}</th><th>${esc(t('文件'))}</th><th>dB</th></tr>`;
   for(const r of rows){
     const ok=r.source==='skip'||(r.source&&r.file);
     h+=`<tr data-id="${esc(r.id)}" ${r.id===focus?'style="outline:1px solid var(--accent)"':''}><td style="font-family:var(--mono);white-space:nowrap"><span style="color:${ok?'var(--green)':'var(--red)'}">●</span> ${tc(r.t_abs)}<br><small style="color:var(--dim)">${esc(r.group_id)} +${num(r.t,2)}s</small></td><td style="font-family:var(--mono);font-size:10.5px">${esc(r.group_id)}<br>${esc(r.shot_id||'')}</td><td data-no-i18n style="max-width:280px"><b>${esc(r.event||'')}</b> ${esc(r.text||'')}</td>
       <td><select data-k="source"><option value="" ${!r.source?'selected':''}>${esc(t('未定'))}</option><option value="library" ${r.source==='library'?'selected':''}>${esc(t('选库'))}</option><option value="generate" ${r.source==='generate'?'selected':''}>${esc(t('生成'))}</option><option value="skip" ${r.source==='skip'?'selected':''}>${esc(t('略过'))}</option></select></td>
       <td><input class="f" type="text" data-k="file" value="${esc(r.file||'')}" list="sfxlib" placeholder="assets/audio/sfx/${esc(EP)}/patches/…"></td><td><input type="number" data-k="gain_db" value="${r.gain_db??-12}" step="1" style="width:56px"></td></tr>`;
   }
-  h+=`</table><datalist id="sfxlib">${lib.map(s=>`<option value="${esc(s.file)}">${esc(s.id)} ${esc((s.tags||[]).join(' '))}</option>`).join('')}</datalist>`;
+  h+=(rows.length?'</table>':'')+`<datalist id="sfxlib">${lib.map(s=>`<option value="${esc(s.file)}">${esc(s.id)} ${esc((s.tags||[]).join(' '))}</option>`).join('')}</datalist>`;
+  h+=`<div class="sfx-add"><span class="lb">${esc(t('新增点位'))}</span><select id="sa-grp">${D.groups.map(g=>`<option value="${esc(g.group_id)}">${esc(g.group_id)} · ${tc(g.cum_start_s)} · ${num(g.duration,1)}s</option>`).join('')}</select><select id="sa-shot"><option value="">${esc(t('镜(可选)'))}</option></select><input id="sa-t" type="number" min="0" step="0.1" value="0.5" title="${esc(t('组内第几秒'))}" style="width:64px"><span class="lb">s</span><input id="sa-text" type="text" placeholder="${esc(t('这一声是什么,如:女人尖叫'))}" style="flex:1;min-width:160px"><button id="sa-add">${esc(t('添加'))}</button></div>`;
   h+=`<div style="color:var(--dim);font-size:11.5px">${esc(t('来源=选库:文件填 data/sfx/manifest.json 里的条目或项目内路径;来源=生成:留空文件,点「派单生成缺项」让音效工位产出并回填;略过=显式不做。点位时间可在修改单指令里让工位微调。'))}</div>`;
   $('#ms-body').innerHTML=h;
   $$('#ms-body tr[data-id]').forEach(tr=>{tr.querySelectorAll('[data-k]').forEach(el=>el.onchange=()=>{const r=rows.find(x=>x.id===tr.dataset.id);r[el.dataset.k]=el.dataset.k==='gain_db'?+el.value:el.value})});
+  const fillShots=()=>{const g=D.groups.find(x=>x.group_id===$('#sa-grp').value)||{};$('#sa-shot').innerHTML=`<option value="">${esc(t('镜(可选)'))}</option>`+(g.shots||[]).map(sid=>`<option value="${esc(sid)}">${esc(sid)}</option>`).join('')};
+  $('#sa-grp').onchange=fillShots;fillShots();
+  $('#sa-add').onclick=()=>{
+    let row;try{row=buildSfxRow(rows,{gid:$('#sa-grp').value,shot:$('#sa-shot').value,t:$('#sa-t').value,text:$('#sa-text').value})}catch(e){$('#ms-msg').textContent=e.message;$('#ms-msg').className='msg err';return}
+    SFX.sfx=SFX.sfx||{};SFX.sfx.rows=rows;SFX.saved=false;$('#ms-msg').textContent=t('已加入,记得点「保存点位表」');$('#ms-msg').className='msg';
+    renderSfx(row.id);
+  };
   if(focus){const el=$(`#ms-body tr[data-id="${focus}"]`);if(el)el.scrollIntoView({block:'center'})}
 }
 $('#ms-save').onclick=async()=>{try{await J(api('/sfx'),'PUT',{rows:(SFX.sfx||{}).rows||[]});$('#ms-msg').textContent=t('已保存');SFX.saved=true;await load(true)}catch(e){$('#ms-msg').textContent=e.message;$('#ms-msg').className='msg err'}};
