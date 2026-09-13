@@ -85,3 +85,23 @@
 ## 重新分析
 
 按钮把固定工单(输入清单、只读拆解、逐场 summary/beat/purpose、cast role/arc、跑机检 PASS 后交付、不派其它工位)`POST /api/v1/runs` 给 `01-story/timeline-story`(拆解表产出工位,2026-09-11 用户指定;引擎/模型随顶栏全局设置),页面每 4s 轮询该 run,结束后重新拉数据;刷新页面时服务端从在跑 run 里识别同集拆解单继续显示「分析中」。老项目一集一按;DAG 新项目由 `p5-breakdown` 自动产出。
+
+## 用户关键点标记
+
+剧本预览页选中文字后提供「关键情节」（金色）与「关键细节」（蓝色）浮动按钮。
+支持跨段落选区、重叠标记；两类重叠处使用双色背景。标记保存在
+`story/episodes/<ep>/keypoints.json`，独立于拆解表，重新分析不会覆盖。
+原文无法重新定位时，清单仍展示原文并提示「原文已变化，仍须保留」。
+只有用户在清单中确认取消，才将该条记录置为 `removed: true`，保留记录以便追溯。
+
+所有 Agent 的项目提示词包含有效关键点，禁止自行删减、弱化或改写标记文件。
+故事板及定稿分镜的对应 `shots[]` 写入：
+
+```json
+{"keypoint_refs": [{"id": "KP-对应标记ID", "evidence": "本镜如何通过画面、动作、对白或声音体现该关键点"}]}
+```
+
+`07-directing/storyboard` 与 `07-directing/shot-planning` 完成后分别检查
+`storyboard.json` 与 `shot_list.json` 的逐镜关联；未覆盖则运行标记为失败。
+`code/check_generation_groups.py` 对标准 `directing/<ep>/shot_list.json` 布局执行同一必选检查。
+机器检查保证有关联及非空体现说明；镜头正文是否忠实体现原文仍由分镜设计与审核逐项核对。

@@ -3328,6 +3328,8 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
   存在任一已开工节点则一个不跳;闸门判定时 skipped 依赖视为已满足;用户其后要求推进被跳分支时恢复 pending 重新排产"""
     if agent_id == REVISER_ID:
         p += _revision_role_suffix(project, target)
+    from modules import script_keypoints as kp
+    p += kp.prompt(_proj_base(project))
     return p
 
 
@@ -3642,6 +3644,30 @@ def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
 # 提示词技能读取核验(prompt_skill_read):活动记录里出现该技能目录(Read/cat/read_file 任一
 # 形式)即算读过;codex 引擎不回传文件读取事件,无法核验(skill_read=None,不退回)。
 _NO_READ_TRACKING_ENGINES = {"codex"}
+
+
+def _keypoints_postcheck(run: dict):
+    if run.get("status") != "done" or run.get("agent") not in {"07-directing/storyboard", "07-directing/shot-planning"}:
+        return
+    from modules import script_keypoints as kp
+    try:
+        base = _proj_base(run["project"])
+        target_ep = (run.get("target") or {}).get("ep")
+        eps = {target_ep} if target_ep else set(re.findall(r"\bep[\w-]+\b", run.get("message") or ""))
+        if not eps:
+            eps = {p.parent.name for p in (base / "story" / "episodes").glob("*/keypoints.json")}
+        errors = []
+        filename = "storyboard.json" if run["agent"] == "07-directing/storyboard" else "shot_list.json"
+        for ep in sorted(eps):
+            missing = kp.coverage(base, ep, filename)
+            if missing:
+                errors.append(f"{ep}/{filename}: 缺少关键点镜头体现记录 {', '.join(missing)}")
+        if errors:
+            run["status"] = "error"
+            run["error"] = "关键点保留检查未通过：" + "; ".join(errors)
+    except Exception as error:
+        run["status"] = "error"
+        run["error"] = f"关键点保留检查失败：{error}"
 
 
 def _prompt_skill_postcheck(run: dict):
@@ -4102,6 +4128,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             run["ended"] = time.time()
             run.pop("progress", None)
             _prompt_skill_postcheck(run)
+            _keypoints_postcheck(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -7310,6 +7337,9 @@ def _preview_script(project: str, ep: str):
     data["ep"] = ep
     res = sb.load(base, ep)
     data.update({k: res[k] for k in ("source", "stale", "file", "mtime", "inputs", "errors")})
+    from modules import script_keypoints as kp
+    data["keypoints"] = kp.load(base, ep)
+    data["keypoints_missing"] = kp.coverage(base, ep)
     data["breakdown"] = res["breakdown"]
     data["breakdown_rel"] = sb.BREAKDOWN_REL.format(ep=ep)
     # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接

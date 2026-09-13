@@ -426,6 +426,15 @@ def main():
             print(f"已写回 {path}")
 
     errors = check(data)
+    if path.parent.parent.name == "directing":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from modules import script_keypoints as kp
+        try:
+            missing = kp.coverage(path.parent.parent.parent, path.parent.name, path.name)
+            if missing:
+                errors.append("script_keypoints_covered: 关键点缺少镜头体现记录 " + ", ".join(missing))
+        except (ValueError, OSError, KeyError) as error:
+            errors.append(f"script_keypoints_covered: 无法读取关键点记录: {error}")
     narration_on = project_narration_enabled(path)
     if not args.skip_7d:
         narr_text = None

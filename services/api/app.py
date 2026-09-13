@@ -229,6 +229,16 @@ async def delete_reference(project: str, body: dict[str, Any]) -> dict[str, Any]
     return await core.api_refs_delete(body)
 
 
+@api.post("/projects/{project}/script/{ep}/keypoints", tags=["artifacts"])
+async def script_keypoints(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    from modules import script_keypoints as kp
+    try:
+        items = await asyncio.to_thread(kp.mutate, core._proj_base(project), ep, body)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    return {"items": items}
+
+
 @api.get("/projects/{project}/previews/{kind}", tags=["artifacts"])
 async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
     handlers = {

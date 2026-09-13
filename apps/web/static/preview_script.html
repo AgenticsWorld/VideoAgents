@@ -138,6 +138,7 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
   <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
   <nav id="nav"></nav>
 </div>
+<script src="/static/script-keypoints.js?v=20260913"></script>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -214,6 +215,7 @@ function render(d){
   h+=`</tbody></table>`;
   h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);renderNav(bd);
+  ScriptKeypoints.render(d,$('#project').value.trim()||'demo',()=>load(true));
   // 从故事板/分镜预览跳来:定位到 #scene=S01 对应场次行(表头置顶,留出其高度)
   JumpAnchor.go({find:(k,id)=>k==='scene'?document.getElementById('sc-'+id):null,box,scroll:el=>PreviewStickbar.jumpTo(el)});
   if(RUN)pollRun(RUN);
@@ -370,6 +372,7 @@ async function pollRun(id){
 }
 
 async function load(keep){
+  ScriptKeypoints.clear();
   const proj=$('#project').value.trim()||'demo';
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
   SCROLL_HOLD=true;if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
