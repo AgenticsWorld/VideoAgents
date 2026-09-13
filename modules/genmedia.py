@@ -74,8 +74,9 @@ Python:
         无参考图走文生图端点、有 --ref 自动切 edit/multi 端点,填完整端点 ID 则原样使用;
         尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY)
         / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
-  视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务;Seedance 2.0/2.5
-        支持多参考图/参考视频/参考音频 input_references,上限同 BytePlus 直连,其它模型仅首尾帧)
+  视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务;Seedance 2.0/2.5 与
+        MiniMax H3(minimax/hailuo-3)支持多参考图/参考视频/参考音频 input_references,上限同各自直连,
+        其它模型仅首尾帧)
         / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
@@ -3051,12 +3052,74 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
 # OpenRouter 视频请求体(POST /api/v1/videos,openapi.json VideoGenerationRequest):首尾帧走
 # frame_images;参考素材走 input_references(image_url/video_url/audio_url 三类)。OpenRouter 说明
 # 音视频参考仅「BytePlus Seedance 2 代及以上」等支持的供应商采用,其余供应商静默丢弃——所以本模块
-# 只对 Seedance 2.x 放行参考素材,其它模型带参考仍报错,防止静默忽略。数量/时长上限 OpenRouter
-# 未公开,按 BytePlus 直连同口径预检(_seedance_precheck)。2026-09-13 接入,未真机实测:
-# 参考视频是否接受 data URL 未知,按方舟口径走对象存储预签名 URL;图片/音频内联 data URL。
+# 只对 Seedance 2.x 与 MiniMax H3(minimax/hailuo-3,目录 input_modalities 含 video/audio)放行参考素材,
+# 其它模型带参考仍报错,防止静默忽略。数量/时长上限 OpenRouter 未公开:Seedance 按 BytePlus 直连同口径
+# 预检(_seedance_precheck),H3 按 MiniMax 直连同口径(9 图/3 视频/3 音频,参考视频合计 ≤15s)。
+# 2026-09-13 接入,未真机实测:参考视频是否接受 data URL 未知,按方舟口径走对象存储预签名 URL;
+# 图片/音频内联 data URL。
 OPENROUTER_VIDEO_RESOLUTIONS = {"360p": "480p", "480p": "480p", "720p": "720p", "768p": "768p",
                                 "1080p": "1080p", "1k": "1K", "2k": "2K", "4k": "4K"}
 OPENROUTER_VIDEO_RATIOS = ("16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3", "21:9", "9:21")
+OPENROUTER_H3_MAX_VIDEO_REFS = 3      # 同 MiniMax 直连口径(core.video_model_caps)
+OPENROUTER_H3_MAX_AUDIO_REFS = 3
+OPENROUTER_H3_MAX_VIDEO_TOTAL_S = 15.2
+
+
+def _openrouter_is_h3(model: str) -> bool:
+    """OpenRouter 上的 MiniMax H3 模型 id 为 minimax/hailuo-3(不含 h3 字样,不走 core 的 is_minimax_h3);
+    H3 Max(hailuo-3-max)目录输入仅 text/image,不算。"""
+    m = (model or "").lower()
+    return m.startswith("minimax/hailuo-3") and not m.startswith("minimax/hailuo-3-max")
+
+
+def _openrouter_h3_precheck(prompt, first, last, duration, resolution, aspect, seed,
+                            refs, audio_refs, video_refs, gen_audio):
+    """OpenRouter MiniMax H3 前置机检与参数修正(目录:分辨率仅 2K、时长 5-15 整数秒、无 seed、
+    音画同生)。返回修正后的 (duration, resolution, aspect, seed, gen_audio)。"""
+    if refs and (first or last):
+        raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
+    if video_refs and (first or last):
+        raise RuntimeError("参考视频(--ref-video)与首帧/尾帧是互斥模式,不能同时传")
+    if len(refs) > MINIMAX_MAX_VIDEO_REFS:
+        raise RuntimeError(f"MiniMax H3 参考图最多 {MINIMAX_MAX_VIDEO_REFS} 张,收到 {len(refs)}")
+    if len(video_refs) > OPENROUTER_H3_MAX_VIDEO_REFS:
+        raise RuntimeError(f"MiniMax H3 参考视频最多 {OPENROUTER_H3_MAX_VIDEO_REFS} 个,收到 {len(video_refs)}")
+    if len(audio_refs) > OPENROUTER_H3_MAX_AUDIO_REFS:
+        raise RuntimeError(f"MiniMax H3 参考音频最多 {OPENROUTER_H3_MAX_AUDIO_REFS} 段,收到 {len(audio_refs)}")
+    for v in video_refs:
+        p = Path(v)
+        if p.is_file() and p.stat().st_size > MAX_VIDEOIN_BYTES:
+            raise RuntimeError(f"参考视频 {v} 超过 {MAX_VIDEOIN_BYTES // 1024 // 1024}MB,请先压缩")
+    vdurs = [_audio_duration_s(str(v)) for v in video_refs if Path(str(v)).is_file()]
+    if video_refs and len(vdurs) == len(video_refs) and all(d is not None for d in vdurs) \
+            and sum(vdurs) > OPENROUTER_H3_MAX_VIDEO_TOTAL_S:
+        raise RuntimeError(f"参考视频总时长 {sum(vdurs):.1f}s 超过 MiniMax H3 上限 "
+                           f"{OPENROUTER_H3_MAX_VIDEO_TOTAL_S}s,请先截短")
+    if duration:
+        d = int(round(duration))
+        if d != duration:
+            print(f"[genmedia] MiniMax H3 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
+        if not 5 <= d <= 15:
+            raise RuntimeError(f"OpenRouter MiniMax H3 时长须在 [5,15] 整数秒,收到 {d}")
+        duration = d
+    if resolution and resolution.lower() != "2k":
+        print(f"[genmedia] OpenRouter MiniMax H3 仅 2K 一档,分辨率 {resolution} 已改为 2K",
+              file=sys.stderr)
+    resolution = "2K"
+    if aspect and aspect not in MINIMAX_VIDEO_RATIOS:
+        if not (refs or video_refs or audio_refs or first or last):
+            raise RuntimeError(f"MiniMax H3 文生视频画幅仅支持 "
+                               f"{'/'.join(MINIMAX_VIDEO_RATIOS)},收到 {aspect}")
+        print(f"[genmedia] MiniMax H3 不支持画幅 {aspect},按参考素材自适应", file=sys.stderr)
+        aspect = ""
+    if seed is not None:
+        print("[genmedia] OpenRouter MiniMax H3 不支持 seed,已忽略", file=sys.stderr)
+        seed = None
+    if gen_audio is False:
+        print("[genmedia] MiniMax H3 原生音画同生,不支持关闭 generate_audio,已忽略",
+              file=sys.stderr)
+        gen_audio = None
+    return duration, resolution, aspect, seed, gen_audio
 
 
 def _openrouter_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
@@ -3068,12 +3131,21 @@ def _openrouter_video_body(cfg, prompt, first, last, duration, resolution, aspec
     model = cfg["model"]
     refs, audio_refs, video_refs = list(refs or []), list(audio_refs or []), list(video_refs or [])
     gen = _seedance_gen(model)
-    if (refs or audio_refs or video_refs) and gen < 2.0:
-        raise RuntimeError(f"OpenRouter 渠道仅 Seedance 2.0/2.5 支持多参考图/参考音频/参考视频"
-                           f"(当前模型 {model});请换 bytedance/seedance-2.0 或 bytedance/seedance-2.5,"
-                           "或在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal,或改用首尾帧模式")
+    h3 = _openrouter_is_h3(model)
+    audio_to_url = to_url
+    if (refs or audio_refs or video_refs) and gen < 2.0 and not h3:
+        raise RuntimeError(f"OpenRouter 渠道仅 Seedance 2.0/2.5 与 MiniMax H3 支持多参考图/参考音频/参考视频"
+                           f"(当前模型 {model});请换 bytedance/seedance-2.0、bytedance/seedance-2.5 或 "
+                           "minimax/hailuo-3,或在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal,或改用首尾帧模式")
     body = {"model": model, "prompt": prompt}
-    if gen >= 2.0:
+    if h3:
+        duration, resolution, aspect, seed, gen_audio = _openrouter_h3_precheck(
+            prompt, first, last, duration, resolution, aspect, seed,
+            refs, audio_refs, video_refs, gen_audio)
+        if to_url is _file_to_data_url:
+            # H3 按 MIME 子类型反推扩展名校验,audio/mpeg 等标准值会被拒,沿用直连的显式映射
+            audio_to_url = _minimax_audio_data_url
+    elif gen >= 2.0:
         resolution, aspect = _seedance_precheck(model, prompt, first, last, duration, resolution,
                                                 aspect, refs, audio_refs, video_refs,
                                                 vendor="OpenRouter(BytePlus)")
@@ -3112,10 +3184,10 @@ def _openrouter_video_body(cfg, prompt, first, last, duration, resolution, aspec
                            "image_url": {"url": to_url(path)}})
     if frames:
         body["frame_images"] = frames
-    # 顺序与方舟一致:图 → 视频 → 音频(prompt 里 [Image N]/视频N/音频N 按各自类别序号引用)
+    # 顺序与方舟/MiniMax 直连一致:图 → 视频 → 音频(prompt 里按各自类别序号引用)
     inputs = [{"type": "image_url", "image_url": {"url": to_url(p)}} for p in refs]
     inputs += [{"type": "video_url", "video_url": {"url": video_to_url(p)}} for p in video_refs]
-    inputs += [{"type": "audio_url", "audio_url": {"url": to_url(p)}} for p in audio_refs]
+    inputs += [{"type": "audio_url", "audio_url": {"url": audio_to_url(p)}} for p in audio_refs]
     if inputs:
         body["input_references"] = inputs
     return body
@@ -5224,7 +5296,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                               generate_audio, return_last_frame, video_refs,
                               ref_image_size=ref_image_size)
     if cfg["provider"] == "openrouter":
-        # 参考素材仅 Seedance 2.x 放行,其它模型在 _openrouter_video_body 内报错
+        # 参考素材仅 Seedance 2.x / MiniMax H3 放行,其它模型在 _openrouter_video_body 内报错
         return _video_openrouter(cfg, prompt, first_frame, last_frame, duration,
                                  resolution, aspect, seed, output,
                                  refs, audio_refs, generate_audio, return_last_frame,
@@ -5233,7 +5305,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
                            "请在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal"
-                           "(或 OpenRouter 的 Seedance 2.0/2.5)或改用首尾帧模式")
+                           "(或 OpenRouter 的 Seedance 2.0/2.5、MiniMax H3)或改用首尾帧模式")
     fn = {"comfyui": _video_comfyui}[cfg["provider"]]
     # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
     return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,

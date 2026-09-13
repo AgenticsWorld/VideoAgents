@@ -1018,7 +1018,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 
 | 渠道(按配置自动路由) | 图像 | 视频 | 音乐 | TTS | 说明 |
 |---|---|---|---|---|---|
-| OpenRouter | ✓ | ✓ | ✓ | ✓ | 云端;视频异步轮询;Seedance 2.0/2.5(bytedance/seedance-2.0、bytedance/seedance-2.5)支持多参考图/参考视频/参考音频(input_references,上限同 BytePlus 直连,参考视频需配置文件托管),其它视频模型仅首尾帧;音乐流式返回(Lyria 3 Pro 整曲 / Clip 30s);TTS 走 /audio/speech 字节流 |
+| OpenRouter | ✓ | ✓ | ✓ | ✓ | 云端;视频异步轮询;Seedance 2.0/2.5(bytedance/seedance-2.0、bytedance/seedance-2.5)与 MiniMax H3(minimax/hailuo-3,仅 2K、5-15s、无 seed)支持多参考图/参考视频/参考音频(input_references,上限同各自直连,参考视频需配置文件托管),其它视频模型仅首尾帧;音乐流式返回(Lyria 3 Pro 整曲 / Clip 30s);TTS 走 /audio/speech 字节流 |
 | 火山引擎(方舟) | ✓ | ✓ | — | — | 云端;图像 Seedream 系列同步返回,视频异步任务自动轮询 |
 | BytePlus(海外 ModelArk) | ✓ | ✓ | — | — | 云端;与方舟同构 API(ap-southeast-1),Seedream/Seedance 模型 ID 无 doubao- 前缀(Seedance 2.0/2.5 为 dreamina-seedance-2-*) |
 | Fal | ✓ | ✓ | — | — | 云端;queue.fal.run 异步队列。图像:托管 Seedream 5.0 Lite/4.5、Nano Banana Pro/2、GPT Image 2.5/2、FLUX.2 Pro/Max、FLUX Kontext Max、Qwen Image 3、HunyuanImage 3.0,模型 ID 填家族前缀(fal-ai/bytedance/seedream/v5/lite、fal-ai/nano-banana-pro…),无参考图走文生图端点、有参考图自动切 edit/multi;Key 图像/视频段共用。视频:托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0、Wan 3.0 等端点;模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro、alibaba/wan-3.0),genmedia 按输入自动补 text-/image-/reference-to-video 任务段;Seedance/Kling 无 seed 入参;Wan 3.0 单段 2-30s、参考 10 图/5 视频/5 音频(视频、音频各合计 ≤15s) |
