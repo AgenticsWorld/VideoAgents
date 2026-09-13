@@ -6572,6 +6572,13 @@ def _preview_scenes(project: str):
             for p in (rec.get("plates") or []) if isinstance(rec, dict) else []:
                 if isinstance(p, dict) and p.get("key"):
                     used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
+    # 各集白模机位一次读完按场景分组(逐场景读整集 JSON 在 260 场景项目上要 10s+)
+    try:
+        from modules.scene_panos import cameras_by_scene
+        cams_by_sid = cameras_by_scene(base)
+    except Exception as e:  # noqa: BLE001
+        print(f"[preview-scenes] 白模机位读取失败(忽略):{e}", flush=True)
+        cams_by_sid = None
     scenes = []
     for sid in sorted(ids):
         docs = {}
@@ -6608,7 +6615,7 @@ def _preview_scenes(project: str):
         if panos:
             try:
                 from modules.scene_panos import scene_scheme_options
-                panos["scheme_options"] = scene_scheme_options(base, sid)
+                panos["scheme_options"] = scene_scheme_options(base, sid, None if cams_by_sid is None else cams_by_sid.get(sid, []))
             except Exception as e:  # noqa: BLE001
                 print(f"[preview-scenes] {sid} 全景方案候选读取失败(忽略):{e}", flush=True)
                 panos["scheme_options"] = []

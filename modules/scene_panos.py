@@ -268,8 +268,14 @@ def plan_anchors(scene: dict, cameras: list, existing: list | None = None, heigh
 # ---------------------------------------------------------------- cameras across episodes
 def scene_cameras(base: Path, sid: str, eps: list | None = None) -> list:
     """本场景在各集白模里的全部机位(镜首 + 镜尾各一条)+ 组光照方案。"""
+    return cameras_by_scene(base, eps).get(sid, [])
+
+
+def cameras_by_scene(base: Path, eps: list | None = None) -> dict[str, list]:
+    """一次读完各集白模 episode.json + shot_list.json,按 scene_id 分组返回机位。
+    场景预览页要给每个场景算方案候选,逐场景调 scene_cameras 会把整集 JSON 反复解析(场景数 × 集数),须先调本函数再传 cameras=。"""
     from modules.shot_plates import plate_roles
-    out = []
+    out: dict[str, list] = {}
     for f in sorted((base / 'directing').glob('ep*/whitebox/episode.json')):
         ep = f.parent.parent.name
         if eps and ep not in eps:
@@ -278,7 +284,8 @@ def scene_cameras(base: Path, sid: str, eps: list | None = None) -> list:
         source = read(base / 'directing' / ep / 'shot_list.json', {}) or {}
         raw = {g['group_id']: g for g in source.get('generation_groups', [])}
         for g in episode.get('groups', []):
-            if g.get('scene_id') != sid:
+            sid = g.get('scene_id')
+            if not sid:
                 continue
             rg = raw.get(g['group_id'], {})
             scheme = scheme_slug(rg.get('lighting_scheme_id'), rg.get('time_of_day'))
@@ -286,7 +293,7 @@ def scene_cameras(base: Path, sid: str, eps: list | None = None) -> list:
                 roles = plate_roles(cam)['roles']
                 for role in roles:
                     key = cam['keyframes'][0] if role == 'start' else cam['keyframes'][-1]
-                    out.append({'ep': ep, 'group_id': g['group_id'], 'shot_id': cam['shot_id'], 'role': role,
+                    out.setdefault(sid, []).append({'ep': ep, 'group_id': g['group_id'], 'shot_id': cam['shot_id'], 'role': role,
                                 'position': list(key['position']), 'target': list(key['target']), 'fov': float(key['fov']),
                                 'scheme': scheme, 'time_of_day': rg.get('time_of_day')})
     return out
