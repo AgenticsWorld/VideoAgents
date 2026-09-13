@@ -9,8 +9,9 @@
       key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_w<母图fov°>,由首个需要它的机位命名,条目 master=true;
       母图 = 该机位一张广角图(垂直视场 ≥ 55°≈23 mm,朝向取同机位待出各镜的平均方向);分镜图 = 母图按本镜朝向/俯仰/焦距
       做纯旋转单应重采样(同机位下任意转向/焦距都是母图的精确单应,不需要深度),不再做生成式精修。派生条件:同场景、同光照方案、
-      同机高档、机位 ≤ 0.6 m、本镜视锥整个落在母图画幅内;不满足另出母图。旧口径(朝向 ±20°/机位 6 m/fov ±15° 容差复用 +
-      中心裁切)废止:窄焦距直接按全景重投影出图时参考图只剩一块纹理,模型把整间屋重造(liaozhai3 SCN-0005 反例)。
+      同一机位范围(水平距 ≤ 2 m 且 ≤ 主体距离 80%、机高差 ≤ 0.5 m、贴地只与贴地合;母图位置取所服务各镜机位的质心)、
+      本镜视锥整个落在母图画幅内;不满足另出母图。旧口径(朝向 ±20°/机位 6 m/fov ±15° 容差复用 + 中心裁切)废止:
+      窄焦距直接按全景重投影出图时参考图只剩一块纹理,模型把整间屋重造(liaozhai3 SCN-0005 反例)。
   - 集索引(分镜只记指纹):directing/<ep>/shot_plates.json —— 每镜 plates[]{role:start|end, key(母图), file(派生图), reuse:crop,
       crop{master_key, from_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, source_px}, camera(本镜)}
   - 运镜分档(按 camera.json movement + 白模机位几何):静态/推拉变焦/摇俯仰 = 只出镜首一张;横移跟拍 = 位移 < 机位到主体距离的
@@ -22,7 +23,8 @@
     (只擦到画幅边缘一线的几何不列)+ 风格串(剔除浅景深/虚化子句);白模干净帧仍渲(<key>.whitebox.jpg,预览/核对用)但不进 refs,
     俯视图不进 refs。库条目 pano_ref 记来源锚点/方案/空洞比;非母图的旧条目(legacy:无 pano_ref 的白模帧直出、或逐镜直出)
     不再被新决策复用,--repano 可把集内 legacy 记录整体重出。图像模型不支持 2:1 全景时整条链停下(PanoUnsupported,
-    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880、派生图长边 1920 按项目画幅;渠道 = 控制台默认图像模型。
+    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220)、
+    派生图长边 1920,按项目画幅;渠道 = 控制台默认图像模型。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -50,8 +52,15 @@ GC_KEY = 'Global constraints:'
 # 模型把整间屋(屋梁/坐榻/门帘/窗)凭空重造;b000 85 mm 变成烛台特写——参考图没有结构时模型只听场景描述,越窄越失控。
 MASTER_FOV_V_DEG = 55.0           # 母图垂直视场(≈23 mm 等效;16:9 下水平 ≈85°;28 mm 级重投影实测模型能守住结构,12 mm 级守不住)
 MASTER_FOV_MARGIN_DEG = 4.0       # 分镜本身比母图还宽时,母图视场 = 分镜视场 + 此余量
-MASTER_POSITION_M = 0.6           # 分镜机位离母图机位 ≤ 此距离才可派生(派生是纯旋转,不补视差;超出另出母图)
-MASTER_LONG_SIDE = 2880           # 母图长边像素(裁到 40 mm 仍有 ≈1500 px、85 mm ≈700 px;与场景全景同档尺寸,渠道已验证可出)
+# 同一母图能服务的机位范围(2026-09-14 二订,用户按 liaozhai3 SCN-0005 实跑裁定:0.6 m 时 20 镜出 13 张母图,朝向一致、
+# 相距 1 m 内的三个机位各出一张是浪费;派生是纯旋转不补视差,但背景板只作视频参考,中等视差可接受):
+MASTER_POSITION_M = 2.0           # 分镜机位离母图机位的水平距 ≤ 此值
+MASTER_POSITION_RATIO = 0.8       # 且 ≤ 本镜主体距离 × 此比例(贴着主体拍的近景不能拿 2 m 外的母图凑)
+MASTER_HEIGHT_M = 0.5             # 机高差 ≤ 此值即可共用(不再要求同机高档;贴地机位 <0.5 m 只与贴地合,地面透视完全不同)
+# 母图尺寸:长边 MASTER_LONG_SIDE,再按 MASTER_MAX_PIXELS 面积封顶——方舟 Seedream 5.0 pro 单图硬上限 4,624,220 px
+# (2026-09-14 实跑 2880×1620=4,665,600 全部被拒 "image area must be at most 4624220 pixels");16:9 下落到 2858×1608
+MASTER_LONG_SIDE = 2880
+MASTER_MAX_PIXELS = 4_600_000
 TRACK_STATIC_RATIO = 0.10         # 横移/跟拍位移 < 机位到主体距离的 10% 按静态
 
 COMPASS16 = ['north', 'north-north-east', 'north-east', 'east-north-east', 'east', 'east-south-east',
@@ -494,19 +503,31 @@ def derive_plate(base: Path, master: dict, facts: dict, aspect: float, width: in
     return out_rel, info
 
 
+def same_station(station: dict, facts: dict) -> bool:
+    """分镜机位 facts 能否用 station(母图机位:position/height_class)的母图:水平距 ≤ MASTER_POSITION_M 且 ≤ 主体距离 × MASTER_POSITION_RATIO,
+    机高差 ≤ MASTER_HEIGHT_M,贴地机位只与贴地合。"""
+    sp, fp = station['position'], facts['position']
+    if (station.get('height_class', height_class(sp[1])) == 0) != (facts['height_class'] == 0):
+        return False
+    if abs(sp[1] - fp[1]) > MASTER_HEIGHT_M:
+        return False
+    dist = math.hypot(sp[0] - fp[0], sp[2] - fp[2])
+    return dist <= MASTER_POSITION_M and dist <= MASTER_POSITION_RATIO * (facts.get('subject_distance_m') or 1e9)
+
+
 def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, require_file: bool = True):
-    """找能派生本镜的母图:同方案、同机高档、机位 ≤ MASTER_POSITION_M、本镜视锥整个落在母图画幅内;多个取最近/最同轴的。"""
+    """找能派生本镜的母图:同方案、同一机位范围(same_station)、本镜视锥整个落在母图画幅内;多个取最近/最同轴的。"""
     best = None
     shot_cam = cam_of_facts(facts)
     for e in lib.get('plates', []):
         c = e.get('camera') or {}
-        if not is_master(e) or e.get('lighting_scheme_id') != scheme or c.get('height_class') != facts['height_class']:
+        if not is_master(e) or e.get('lighting_scheme_id') != scheme or not same_station(c, facts):
             continue
         if require_file and not e.get('pending') and not (base/e['file']).is_file():
             continue
-        dist = math.dist(c['position'], facts['position'])
-        if dist > MASTER_POSITION_M or not view_fits(cam_of_facts(c), shot_cam, aspect):
+        if not view_fits(cam_of_facts(c), shot_cam, aspect):
             continue
+        dist = math.dist(c['position'], facts['position'])
         score = dist + angle_diff(c['bearing_deg'], facts['bearing_deg'])/90
         if best is None or score < best[0]:
             best = (score, e)
@@ -514,28 +535,34 @@ def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, 
 
 
 def plan_master(job: dict, peers: list, aspect: float) -> dict:
-    """母图机位 {'position','target','fov'}:位置取本镜机位;视场 ≥ MASTER_FOV_V_DEG 且 ≥ 本镜视场 + 余量;
-    朝向/俯仰取「同机位待出各镜」的平均方向——装不下的同伴逐个剔除(先剔离均值最远的),最后至少本镜自己装得下。"""
-    pos = list(job['facts']['position'])
+    """母图机位 {'position','target','fov'}:视场 ≥ MASTER_FOV_V_DEG 且 ≥ 本镜视场 + 余量;朝向/俯仰取「同一机位范围内待出各镜」的
+    平均方向,装不下的同伴逐个剔除(先剔离均值最远的);位置取留下各镜机位的质心(离质心超出 same_station 的再剔除),最少剩本镜自己。"""
     fov = max(MASTER_FOV_V_DEG, job['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG)
     reach = job['facts']['subject_distance_m'] or 1.0
     def direction(j):
         return norm(sub(j['facts']['target'], j['facts']['position']))
-    group = [job] + [p for p in peers if p['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG <= fov]
+    def centroid(js):
+        return [sum(j['facts']['position'][i] for j in js)/len(js) for i in range(3)]
+    group = [job] + [p for p in peers if p['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG <= fov and same_station(job['facts'], p['facts'])]
     while True:
-        mean = [sum(direction(j)[i] for j in group) for i in range(3)]
-        if math.hypot(*mean) < 1e-6:
-            mean = direction(job)
-        mean = norm(mean)
-        cam = {'position': pos, 'target': [pos[i] + mean[i]*reach for i in range(3)], 'fov_v_deg': fov}
-        bad = [j for j in group if not view_fits(cam, cam_of_facts(j['facts']), aspect)]
-        if not bad or len(group) == 1:
-            if bad:   # 只剩本镜仍装不下(不会发生:视场 ≥ 本镜 + 余量且同轴),兜底同轴
-                cam['target'] = list(job['facts']['target'])
+        # ① 方向:均值方向下装不下的逐个剔除
+        while True:
+            mean = [sum(direction(j)[i] for j in group) for i in range(3)]
+            mean = norm(mean) if math.hypot(*mean) > 1e-6 else direction(job)
+            pos = centroid(group)
+            cam = {'position': pos, 'target': [pos[i] + mean[i]*reach for i in range(3)], 'fov_v_deg': fov}
+            bad = [j for j in group if not view_fits(cam, cam_of_facts(j['facts']), aspect)]
+            if not bad or len(group) == 1:
+                if bad:   # 只剩本镜仍装不下(不会发生:视场 ≥ 本镜 + 余量且同轴),兜底同轴
+                    cam['target'] = [pos[i] + direction(job)[i]*reach for i in range(3)]
+                break
+            group.remove(max((j for j in group if j is not job), key=lambda j: -dot(direction(j), mean)))
+        # ② 位置:离质心超出机位范围的剔除(本镜自己不剔),有剔除则回到 ① 重算
+        station = {'position': pos, 'height_class': height_class(pos[1])}
+        kept = [j for j in group if j is job or same_station(station, j['facts'])]
+        if len(kept) == len(group):
             break
-        others = [j for j in group if j is not job]
-        far = max(others, key=lambda j: -dot(direction(j), mean))
-        group.remove(far)
+        group = kept
     return {'position': cam['position'], 'target': cam['target'], 'fov': fov}
 
 
@@ -681,9 +708,13 @@ def plate_size(fmt: dict) -> tuple[int, int]:
 
 
 def master_size(fmt: dict) -> tuple[int, int]:
-    """母图尺寸:长边 MASTER_LONG_SIDE 按项目画幅(偶数)。"""
-    w, h = fmt['width'], fmt['height']; scale = MASTER_LONG_SIDE/max(w, h)
-    return int(round(w*scale/2))*2, int(round(h*scale/2))*2
+    """母图尺寸:长边 MASTER_LONG_SIDE 按项目画幅,面积不超 MASTER_MAX_PIXELS(偶数边)。"""
+    w, h = fmt['width'], fmt['height']
+    scale = min(MASTER_LONG_SIDE/max(w, h), math.sqrt(MASTER_MAX_PIXELS/(w*h)))
+    mw, mh = int(w*scale/2)*2, int(h*scale/2)*2
+    while mw*mh > MASTER_MAX_PIXELS:
+        mw -= 2; mh = int(mw*h/w/2)*2
+    return mw, mh
 
 
 def camera_stale(recorded: dict, current: dict) -> bool:
@@ -821,10 +852,9 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             if master is not None:
                 decisions.append({**j, 'mode': 'derive', 'entry': master, 'file': None, 'crop': None, 'reuse': 'crop'})
                 continue
-            # 新母图:朝向取同场景/同方案/同机高档、机位 ≤ MASTER_POSITION_M 且尚未决策的各镜平均方向
+            # 新母图:朝向取同场景/同方案、同一机位范围(same_station)且尚未决策的各镜平均方向,位置取它们的质心
             peers = [p for p in jobs if id(p) not in decided and p['scene_id'] == sid and p['scheme'] == scheme
-                     and p['facts']['height_class'] == facts['height_class']
-                     and math.dist(p['facts']['position'], facts['position']) <= MASTER_POSITION_M]
+                     and same_station(facts, p['facts'])]
             mkey = plan_master(j, peers, aspect)
             ex, ez, texts = axes[sid]
             mfacts = camera_facts(mkey, fmt, ex, ez, texts)
