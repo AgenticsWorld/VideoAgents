@@ -4,17 +4,19 @@
 流程位置:白模调度(p6-whitebox,只编译)→ 用户签字 H3W-白模确认 → 白模调度导出 camera.mp4(p6-whitebox-export)→ 本脚本(p6-shot-plates)。
 本脚本要求所选组的白模视频已导出(assets/whitebox/<ep>/<grp>/manifest.json),否则拒跑——保证背景图只在用户确认白模之后生成。
 
-每镜按运镜分档决定出几张(静态/推拉/摇俯仰 = 镜首一张;横移跟拍/复杂轨迹按位移出镜首 + 镜尾),先查场景背景图库
-(assets/concepts/scenes/<sid>/plates/,按机位指纹容差复用、同轴更宽的库图裁切复用),缺的才出新图(长边 1920,控制台默认图像模型),
-入库并写集索引 directing/<ep>/shot_plates.json;最后自动跑 code/sync_shot_plates.py --write 把背景图接进已有组 prompt 的 refs。
+每镜按运镜分档决定出几张(静态/推拉/摇俯仰 = 镜首一张;横移跟拍/复杂轨迹按位移出镜首 + 镜尾),先查场景母图库
+(assets/concepts/scenes/<sid>/plates/;母图制 2026-09-14:同机位(≤0.6 m)、同方案、同机高档且本镜视锥落在母图画幅内 → 从广角母图
+按本镜朝向/俯仰/焦距单应派生,不出图),缺母图的机位才出一张广角母图(垂直视场 ≥55°、长边 2880,控制台默认图像模型)再派生本镜图
+(长边 1920),入库并写集索引 directing/<ep>/shot_plates.json;最后自动跑 code/sync_shot_plates.py --write 把背景图接进已有组 prompt 的 refs。
+窄焦距直接按全景重投影出图的反例见 docs/shot_plates.md「母图制」(参考图只剩一块纹理时模型把整间屋重造)。
 
 全景制(2026-09-10,docs/scene_panos.md):新图一律由场景全景按本镜机位重投影后二次生成——脚本先保证场景全景齐备
 (modules/scene_panos.py:按本集机位规划少数锚点 → 白模深度全景 → 图像模型出 2:1 全景,每个光照方案一张;可单独用
 code/render_scene_panos.py 预跑/改锚点),再把全景重投影成 <key>.pano.jpg 作 [Image 1] 出图;不再给白模帧 / 俯视图作参考图
 (多张背景图互不一致的根因)。当前图像模型不支持 2:1 全景时脚本退出码 2 并打印 [pano_unsupported],一张都不出——
 Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模型后重跑,不得自行换模型或绕过。
-库里 2026-09-10 前按旧法出的图(无 pano_ref,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜(WARN 不算 FAIL);
---repano 把这些镜整体按全景制重出(有费用,仅用户明确要求时用)。
+库里非母图的旧图(2026-09-10 前白模帧直出、2026-09-14 前逐镜全景直出,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜
+(WARN 不算 FAIL);--repano 把这些镜整体按母图制重出(有费用,仅用户明确要求时用)。
 
 用法:
   python code/render_shot_plates.py --project <slug> --ep ep01                 # 全集
@@ -83,8 +85,8 @@ def main():
         print(f"[shot_plates_complete] {args.project}/{ep}: {st['shots_ok']}/{st['shots_total']} 镜齐全,问题 {len(st['problems'])} 镜 "
               f"-> {'FAIL' if st['problems'] else 'PASS'}", flush=True)
         if st.get('legacy_shots'):
-            print(f"[shot_plates_complete] WARN: {len(st['legacy_shots'])} 镜仍用 2026-09-10 前非全景制背景图(legacy):{st['legacy_shots']};"
-                  "按全景制重出请用户确认后跑 --repano", flush=True)
+            print(f"[shot_plates_complete] WARN: {len(st['legacy_shots'])} 镜仍用非母图制背景图(legacy,2026-09-14 前逐镜直出/白模帧直出):"
+                  f"{st['legacy_shots']};按母图制重出请用户确认后跑 --repano", flush=True)
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,

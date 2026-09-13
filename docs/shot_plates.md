@@ -31,22 +31,24 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - `--status`：机检 `shot_plates_complete`，逐镜给出 ok / partial（缺镜尾）/ missing / stale / file_missing，有问题退出码 1。workflow.yaml 把它列为 p6-shot-plates 的验收机检，orchestrator 只认它，不采信回执自述。
 - SOUL 硬纪律：禁止 nohup / & / “后台继续”；结单前必跑 `--status` PASS。
 
-## 复用（按机位指纹建库，不按分镜建图）
+## 母图制（2026-09-14 起：按机位出广角母图，分镜图从母图派生）
 
-- 库：`assets/concepts/scenes/<sid>/plates/index.json` + `<key>.png` + `<key>.json`（提示词/refs/机位事实/渠道）+ `<key>.whitebox.jpg`（干净白模帧）。`key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_f<fov°>`，由首个生成它的机位命名，跨组、跨集共享。
-- 复用容差：同场景、同光照方案、同机高档（0 贴地 <0.5 m / 1 低机位 <1.2 m / 2 人眼 <2.0 m / 3 高机位）、朝向 ±20°、机位 6 m 内、fov ±15° 直接复用；同一机位同一朝向而库图更宽（fov 差 > 15°）时按 `tan(fov/2)` 比例从库图中心裁切复用（`<key>.crop_f<fov>.png`，裁切不低于原图 1/3）。反打（朝向差 180°）、换时段、跨机高档一律不复用。
-- 同一次运行按 fov 从宽到窄决策，窄景别可裁切同轴宽图；本次决定新出的机位也参与后续镜位的复用判断，不重复出图。
-- 集索引 `directing/<ep>/shot_plates.json`：每镜 `plates[]{role: start|end, key, file, reuse: new|library|crop, crop, camera}`，分镜只记指纹与文件；机位与当前 `episode.json` 不一致视为过期（机检 WARN）。
+**为什么改**：liaozhai3 SCN-0005 反例——40 mm 镜位的全景重投影只剩一面白墙加一张糊掉的案，二次生成把整间屋（屋梁、坐榻、门帘、窗）凭空重造；85 mm 镜位的重投影是一块橘色墙面，出图变成烛台特写。全景 2880 宽对应 360°，56° 水平视角只分到约 450 像素源，焦距越窄参考图越像一块纹理，模型权重接近零，只听场景描述；而「wide framing」这种人物景别词又在推它画广角整屋。28 mm 级（b188 f46）的重投影有窗、门、墙角，模型守住了结构——参考图有结构才有约束力。
 
-dzg6 ep01 全集 112 镜 dry-run：需 114 张背景图，新出 46、库复用 60、裁切 8。
+- **母图**：每个机位（同场景、同光照方案、同机高档、机位 ≤ 0.6 m）只出一张广角图，垂直视场 ≥ 55°（≈23 mm 等效，16:9 下水平 ≈85°；分镜本身更宽时 = 分镜视场 + 4°），朝向/俯仰取同机位待出各镜的平均方向（装不下的同伴逐个剔除），长边 2880。库 `assets/concepts/scenes/<sid>/plates/index.json` + `<key>.png` + `<key>.json` + `<key>.pano.jpg` + `<key>.whitebox.jpg`，条目 `master: true`，`key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_w<母图fov°>`，跨组、跨集共享。
+- **派生**：分镜图 = 母图按本镜朝向/俯仰/焦距做纯旋转单应重采样（同一机位下任意转向 + 焦距变化都是母图的精确单应，不需要深度；`view_maps` + `cv2.remap` Lanczos），文件 `<母图key>.view_b<朝向>_p<俯仰>_f<fov>.png`，长边 1920。派生条件：本镜视锥四角整个落在母图画幅内（`view_fits`），不满足另出母图。**不做生成式精修**——精修就是把参考图重造的动作。窄镜裁到 40 mm 仍有约 1500 像素源、85 mm 约 700 像素源，Lanczos 放大即可，背景板不需要更多细节。
+- 派生图没有浅景深：背景板本就该全幅清晰，景深由视频模型加；母图提示词与风格串因此剔除浅景深/虚化子句，负面词加 bokeh / shallow depth of field / vignette。
+- 同一次运行按 fov 从宽到窄决策，最宽的镜先定母图；本次决定新出的母图也参与后续镜位的派生判断，不重复出图。
+- 集索引 `directing/<ep>/shot_plates.json`：每镜 `plates[]{role: start|end, key（母图）, file（派生图）, reuse: crop, crop{master_key, from_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, source_px}, camera（本镜）}`；机位与当前 `episode.json` 不一致视为过期（机检 WARN）。统计口径：`new` = 新出母图张数，`crop` = 派生分镜图张数。
+- 旧口径（已废止）：按机位指纹容差复用（朝向 ±20°、机位 6 m、fov ±15°）+ 同轴更宽库图中心裁切 `<key>.crop_f<fov>.png`；2026-09-14 前逐镜直出的库条目（有 `pano_ref` 无 `master`）与更早的白模帧直出条目同为 legacy：已在集索引里的镜照旧引用，新决策不再复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
 
 ## 出图（2026-09-10 起全景制，见 `docs/scene_panos.md`）
 
 - 先保证场景全景齐备（`modules/scene_panos.py`：按本集机位规划少数锚点 → 白模深度全景 → 图像模型出 2:1 全景，每个光照方案一张；同方案第二个锚点起链式补洞，同锚点第二个方案起保结构重打光）。当前图像模型不支持 2:1 全景 → 退出码 2 `[pano_unsupported]`，一张背景图也不出，Agent 上报用户换模型。
-- refs：`[Image 1]` = 场景全景按本镜机位用白模几何重投影的透视图 `<key>.pano.jpg`（内容与位置权威，画质与空洞不作数，提示词要求重绘清晰）；镜尾图再加 `[Image 2]` 镜首成图。**白模干净帧与俯视图不再进 refs**（多张背景图各自基于白模帧出图互不一致，是改全景制的直接原因）；白模帧仍渲作 `<key>.whitebox.jpg` 供预览核对。库条目 `pano_ref{anchor_id, scheme, hole_fraction, distance_from_anchor_m}`；无 `pano_ref` 的旧条目为 legacy，不再被新决策复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
+- 只对母图出图（2026-09-14）：refs `[Image 1]` = 场景全景按**母图机位**（广角）用白模几何重投影的透视图 `<key>.pano.jpg`（内容与位置权威，画质与空洞不作数，提示词要求重绘清晰、视场以它为准不外扩、不添画外天花/家具、全幅深焦）；镜尾母图再加 `[Image 2]` 镜首母图。机位事实里的镜头口径按水平视场写（wide-angle / moderately wide / normal-lens / long-lens），不再用人物景别词；画内清单剔除只擦到画幅边缘一线的几何。**白模干净帧与俯视图不再进 refs**（多张背景图各自基于白模帧出图互不一致，是改全景制的直接原因）；白模帧仍渲作 `<key>.whitebox.jpg` 供预览核对。库条目 `pano_ref{anchor_id, scheme, hole_fraction, distance_from_anchor_m}`；无 `pano_ref` 的旧条目为 legacy，不再被新决策复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
 - 旧口径（2026-09-09，已废止）：`[Image 1]` 白模干净帧 → `[Image 2]` 场景俯视图；镜尾图在两者之间插镜首成图。
 - 提示词：空场景声明 + 组 `time_of_day` + 光照方案 `prompt_fragment_en` + 机位事实（景别、等效焦距、机高档、俯仰、机位落在哪个几何上、罗盘朝向、画左/画右/身后各是什么——由 `layout.json#orientation` 把白模坐标映射到东南西北）+ 白模帧用法 + 俯视图用法 + 画内自左向右清单（白模几何盒采样投影，按基名/地标归并）+ **画外不可见清单**（在画幅外/身后的地标，明令不画——实测没有这句时场景描述会把身后的大门院墙带进画面）+ 场景描述（architecture.json 的 form / arch_style / era_region / scale / materials / details，声明只作材质与年代参考）+ 禁人/禁网格/禁俯视 + `style_fragment_en`。negative = `negative_prompt_en` + architecture.negative + 人物/网格/俯视词。可选 `--sun <罗盘>` 写太阳相对机位方向。
-- 分辨率长边 1920 按项目画幅；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
+- 分辨率：母图长边 2880、派生分镜图长边 1920，按项目画幅；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
 
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）
 
