@@ -13,7 +13,7 @@
     w=w||{};
     return [`请重新生成 ${ep} 的白模样片(整集摄影机视角白模视频,烧入对白/旁白字幕)。`,
       `执行宿主 CLI:python code/concat_whitebox.py --project ${proj} --ep ${ep}`,
-      `把本集全部分镜组的 assets/whitebox/${ep}/<grp>/camera.mp4 按 shot_list 组序合并为一份整集视频 assets/whitebox/${ep}/${ep}-camera.mp4(方便连续查看);字幕由 CLI 按 shot_list 对白与 narration.md 旁白自动烧入,不要另写字幕。`,
+      `把本集全部分镜组的 assets/whitebox/${ep}/<grp>/camera.mp4 按 shot_list 组序合并为一份整集视频 assets/whitebox/${ep}/${ep}-camera.mp4(方便连续查看);字幕由 CLI 按 shot_list 对白与 narration.md 旁白自动烧入,不要另写字幕;项目开启「生成对白语音」时 CLI 会自动同步对白语音库并挂对白轨,不要另行合成语音。`,
       (w.groups_missing||[]).length?`当前缺少 ${w.groups_missing.length} 组 camera.mp4(${w.groups_missing.join(', ')}),请先按规约用 python code/render_whitebox.py --project ${proj} --ep ${ep} 补出这些组再合并;确实无法补出的组才用 --allow-missing 跳过并在回执说明。`
         :'各组 camera.mp4 已齐,直接合并即可;若合并前发现有组视频过期,先用 render_whitebox.py 重出该组。',
       '回执报告:样片路径、包含组数、总时长、字幕条数(对白/旁白)、缺失/跳过的组。'].join('\n');
@@ -41,6 +41,7 @@
     if(running)st=`<span class="warn">⏳ ${esc(tr('已派单给白模调度 Agent,运行中…(run {id})',{id:running}))}</span>`;
     else if(w.error)st=`<span class="err">${esc(w.error)}</span>`;
     else if(w.stale&&w.stale_reason==='subtitles')st=`<span class="warn">⚠ ${esc(tr('对白/旁白字幕已变,样片需重出'))}</span>`;
+    else if(w.stale&&w.stale_reason==='audio')st=`<span class="warn">⚠ ${esc(tr('对白语音已变(台词或音色更新),样片需重出'))}</span>`;
     else if(w.stale)st=`<span class="warn">⚠ ${esc(tr('分镜组白模视频已更新,样片可能过期'))}</span>`;
     else if(w.exists)st=`<span class="ok">✓ ${esc(tr('样片与各组白模视频一致'))}</span>`;
     if((w.groups_missing||[]).length)st+=` <span class="warn">${esc(tr('缺 {n} 组 camera.mp4:{list}',{n:w.groups_missing.length,list:w.groups_missing.slice(0,6).join(', ')+(w.groups_missing.length>6?'…':'')}))}</span>`;
@@ -51,6 +52,7 @@
     w=w||{};const sub=w.subtitles||{};
     return [w.size_mb!=null?w.size_mb+' MB':'',w.duration_s?Math.round(w.duration_s)+'s':'',w.groups?tr('{n} 组',{n:w.groups}):'',
       sub.cues?tr('字幕 {n} 条(对白 {d} · 旁白 {r})',{n:sub.cues,d:sub.dialogue||0,r:sub.narration||0}):tr('无字幕'),
+      w.audio&&w.audio.kind==='dialogue_tts'?tr('对白语音 {n} 句',{n:w.audio.lines||0})+(w.audio.overflow&&w.audio.overflow.length?' ⚠'+tr('{k} 句超出镜长',{k:w.audio.overflow.length}):''):tr('无声'),
       w.width&&w.height?w.width+'×'+w.height:'',w.fps?w.fps+'fps':''].filter(Boolean);
   }
   window.WhiteboxReel={AGENT,runId,setRun,message,dispatch,poll,statusHtml,metaList};

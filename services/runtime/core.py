@@ -905,6 +905,11 @@ DEFAULT_GENCONFIG = {
                "subtitle_burn_in": False, "caption_enabled": False,
                "narration_enabled": True,
                "dialogue_voice": "native",
+               # dialogue_tts=生成对白语音(2026-09-13,默认关):开启后不论 dialogue_voice 是原声还是后期配音,项目都维护
+               #   一份按 shot_list dialogue_lines 逐句、用人物嗓音模板合成的「对白语音库」assets/audio/voice/epNN/tts/
+               #   (modules/dialogue_tts.py,按台词/音色/样本哈希惰性同步,用时才补合成);消费方三处:故事板动态样片、
+               #   分镜白模样片挂对白轨,后期配音(p7-dub)先取库里自然语速音频再贴合;未选角的句子跳过并 WARN 不阻断
+               "dialogue_tts": False,
                "spatial_blocking": True,
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
@@ -1809,6 +1814,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
+    if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
+        raise ServiceError(400, "output.dialogue_tts must be a boolean")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -2883,6 +2890,15 @@ def build_role_prompt(agent_id: str, project: str,
         if dubbing else
         "视频原声(native,默认)—— 成片对白语音就是视频模型随组 clip 原生合成的语音,**全流程不做任何对白 TTS**"
         "(不派 p7-dub,严禁 TTS 音轨进成片对白——§8A 红线);voiceprint 样本照常出、只作生成期 reference_audio 音色锚")
+    dialogue_tts_line = (
+        "**开启** —— 项目维护一份「对白语音库」`assets/audio/voice/epNN/tts/`(modules/dialogue_tts.py,按 shot_list dialogue_lines 逐句、"
+        "用人物嗓音模板 casting.json/声纹卡/voiceprint 样本经 genmedia tts 合成的自然语速语音 + tts_manifest.json;台词/音色变了"
+        "在使用时惰性补合成,宿主 CLI `python3 code/dialogue_tts.py --project <slug> --ep epNN [--status]`);消费方三处自动取用:"
+        "故事板动态样片、分镜白模样片挂对白轨,后期配音 dub_group 先取库里音频再贴合。未选角(casting 缺条目/speaker 非人物编号)的句子"
+        "库里记 unbound 跳过并 WARN,不阻断样片;voice-generation 看到 unbound 清单应补选角。**该库仅供样片与后期配音,"
+        "视频原声模式下仍严禁把库音频混进成片对白(§8A 红线不变)**"
+        if out.get("dialogue_tts") is True else
+        "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨,后期配音模式下 dub_group 逐句自行合成")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -2990,6 +3006,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 花字:{caption_line}
 - 旁白:{narration_line}
 - 对白配音:{dialogue_voice}
+- 生成对白语音:{dialogue_tts_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 
@@ -6208,10 +6225,12 @@ def _character_voices(base: Path) -> dict[str, list[dict]]:
     casting = _read_json_safe(vdir / "casting.json") or {}
     voices: dict[str, list[dict]] = {}
     for c in casting.get("castings", []):
-        if not (isinstance(c, dict) and c.get("char_id")):
+        # casting.json 规约键是 character_id(voice-generation SOUL / dub_group 同口径);char_id 只作旧表兼容
+        cid = (c.get("character_id") or c.get("char_id")) if isinstance(c, dict) else None
+        if not cid:
             continue
         vp = c.get("voiceprint")
-        voices.setdefault(c["char_id"], []).append({
+        voices.setdefault(cid, []).append({
             "variant": c.get("variant") or "",
             "tts_model": c.get("tts_model") or "",
             "tts_voice": c.get("tts_voice") or "",
@@ -7160,6 +7179,7 @@ def _preview_storyboard(project: str, ep: str):
     data["generation_groups"] = groups
     # 白模样片(2026-09-11):分镜预览页顶部板块(成片发布页 2026-09-13 起不再展示)(整集摄影机视角 + 对白/旁白字幕)
     data["whitebox_reel"] = _ep_whitebox_reel(base, ep) if data["whitebox_enabled"] else {"exists": False, "disabled": True}
+    data["dialogue_tts"] = _dialogue_tts_status(base, ep)     # 对白语音库面板(2026-09-13)
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 covers_groups/beat_ref/scene 对位试听;
     # 兼容 music_cues.json 文件名与 file 写成项目根相对路径(2026-09-02 liaozhai2 三集)
     bdir = base / "assets" / "audio" / "bgm" / ep
@@ -7444,6 +7464,7 @@ def _preview_board(project: str, ep: str):
     data["redraw_runs"] = _board_redraw_runs(base.name, ep)
     data["sketch_dir"] = sbb.SKETCH_DIR_REL.format(ep=ep)
     data["animatic"] = _board_animatic(base, ep)
+    data["dialogue_tts"] = _dialogue_tts_status(base, ep)
     data["gate"] = _board_gate(base, ep)
     return data
 
@@ -7460,7 +7481,8 @@ async def api_board_sketches(project: str, ep: str):
     return {"sketches": _board_sketch_rows(base, ep, sbb.load_index(base, ep)),
             "jobs": {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items() if k.startswith(f"{base.name}/{ep}/")},
             "redraw_runs": _board_redraw_runs(base.name, ep),
-            "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep)}
+            "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep),
+            "dialogue_tts": _dialogue_tts_status(base, ep)}
 
 
 def _board_sketch_worker(project: str, ep: str, scene: str, jobkey: str, targets: list[tuple[str, int]],
@@ -7648,6 +7670,67 @@ async def api_board_animatic_start(project: str, ep: str, body: dict):
     threading.Thread(target=_board_animatic_worker, args=(base.name, ep, bool((body or {}).get("no_audio"))),
                      daemon=True).start()
     HUB.publish({"type": "board_animatic", "project": base.name, "ep": ep, "status": "running"})
+    return {"ok": True, "job": key}
+
+
+# ═══════════════ 对白语音库(2026-09-13,输出设置「生成对白语音」output.dialogue_tts;modules/dialogue_tts.py) ═══════════════
+DIALOGUE_TTS_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, finished_at}
+
+
+def _dialogue_tts_status(base: Path, ep: str) -> dict:
+    """故事板页/分镜页「对白语音」面板:库现状(总句/一致/过期/缺失/未选角)+ 后台同步任务状态。"""
+    from modules import dialogue_tts as dt
+    try:
+        out = dt.status(base, ep)
+    except Exception as error:  # noqa: BLE001
+        out = {"enabled": False, "error": str(error)[:300]}
+    job = DIALOGUE_TTS_JOBS.get(f"{base.name}/{ep}") or {}
+    out["running"] = job.get("status") == "running"
+    out["job_error"] = job.get("error") or ""
+    out["job_log"] = job.get("log") or ""
+    return out
+
+
+def _dialogue_tts_worker(project: str, ep: str, force: bool):
+    """后台线程:宿主 CLI code/dialogue_tts.py 惰性同步对白语音库(只补缺/过期句);结束发 SSE dialogue_tts。"""
+    key = f"{project}/{ep}"
+    job = DIALOGUE_TTS_JOBS[key]
+    cmd = [sys.executable, str(ROOT / "code" / "dialogue_tts.py"), "--project", project, "--ep", ep]
+    if force:
+        cmd.append("--force")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, cwd=str(ROOT))
+        job["log"] = (r.stdout or "").strip()[-2000:]
+        if r.returncode not in (0, 4):
+            raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}")
+        job.update(status="done", error="" if r.returncode == 0 else "部分句子合成失败(见 tts_manifest.json checks.failed_lines)")
+    except Exception as e:  # noqa: BLE001
+        job.update(status="failed", error=str(e)[:500])
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "dialogue_tts", "project": project, "ep": ep, "status": job["status"], "error": job.get("error", "")})
+
+
+async def api_dialogue_tts_get(project: str, ep: str):
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    return _dialogue_tts_status(base, ep)
+
+
+async def api_dialogue_tts_sync(project: str, ep: str, body: dict):
+    """「刷新对白语音」:{force?} 后台跑 code/dialogue_tts.py;开关关闭 400、同集在跑 409。"""
+    from modules import dialogue_tts as dt
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not dt.enabled(base):
+        raise ServiceError(400, "output.dialogue_tts is off for this project (输出设置→生成对白语音)")
+    if not (base / "directing" / ep / "shot_list.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/shot_list.json not found")
+    key = f"{base.name}/{ep}"
+    if (DIALOGUE_TTS_JOBS.get(key) or {}).get("status") == "running":
+        raise ServiceError(409, "dialogue tts sync is already running for this episode")
+    DIALOGUE_TTS_JOBS[key] = {"status": "running", "started_at": time.time(), "error": "", "log": ""}
+    threading.Thread(target=_dialogue_tts_worker, args=(base.name, ep, bool((body or {}).get("force"))), daemon=True).start()
+    HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "running"})
     return {"ok": True, "job": key}
 
 
@@ -8029,9 +8112,11 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     except Exception as error:  # noqa: BLE001  分镜组 ID 非法等,不影响其余板块
         return {"exists": False, "error": str(error), "agent": WHITEBOX_REEL_AGENT}
     cues = st.get("cues") or []
+    da = st.get("dialogue_audio") or {}
     out = {"exists": st["exists"], "stale": st["stale"], "stale_reason": st.get("stale_reason", ""), "path": st["path"],
            "groups_total": st["groups_total"], "groups_ready": len(st["groups_ready"]),
            "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT,
+           "dialogue_audio": {"enabled": da.get("enabled", False), "lines": da.get("lines", 0), "overflow": len(da.get("overflow") or [])},
            "subtitle_cues": len(cues), "subtitle_dialogue": sum(1 for c in cues if c["kind"] == "dialogue"),
            "subtitle_narration": sum(1 for c in cues if c["kind"] == "narration")}
     if st["exists"]:
@@ -8042,7 +8127,8 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
                     "url": f"/projects/{base.name}/{st['path']}?v={int(stat.st_mtime)}",
                     "duration_s": m.get("duration_s"), "groups": m.get("groups"),
                     "width": m.get("width"), "height": m.get("height"), "fps": m.get("fps"),
-                    "mode": m.get("mode"), "subtitles": m.get("subtitles") or {"cues": 0, "dialogue": 0, "narration": 0}})
+                    "mode": m.get("mode"), "subtitles": m.get("subtitles") or {"cues": 0, "dialogue": 0, "narration": 0},
+                    "audio": m.get("audio") or False})
     return out
 
 

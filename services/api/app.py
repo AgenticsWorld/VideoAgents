@@ -266,6 +266,19 @@ async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = No
     """故事板/成片发布页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
     return await core.api_board_animatic_start(project, ep, body or {})
 
+
+@api.get("/projects/{project}/episodes/{ep}/dialogue-tts", tags=["artifacts"])
+async def dialogue_tts_get(project: str, ep: str) -> dict[str, Any]:
+    """对白语音库现状(输出设置「生成对白语音」,2026-09-13):总句/一致/过期/缺失/未选角 + 后台同步状态。"""
+    return await core.api_dialogue_tts_get(project, ep)
+
+
+@api.post("/projects/{project}/episodes/{ep}/dialogue-tts/sync", tags=["artifacts"])
+async def dialogue_tts_sync(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """「刷新对白语音」:{force?} 宿主后台跑 code/dialogue_tts.py 惰性同步,结束发 SSE dialogue_tts。"""
+    return await core.api_dialogue_tts_sync(project, ep, body or {})
+
+
 # ---- 后期处理(/preview/post):处方台账 / 出片作业 / 音效点位 / 拼装预检 / H3P 签字(2026-09-11) ----
 @api.post("/projects/{project}/post/{ep}/recipes", tags=["artifacts"])
 async def post_recipe_create(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:

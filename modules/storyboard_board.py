@@ -788,12 +788,25 @@ def animatic_status(base: Path, ep: str) -> dict:
     out = {"exists": mp4.is_file(), "path": mp4.relative_to(base).as_posix(), "sketches_done": len(done)}
     if mp4.is_file():
         st = mp4.stat()
+        stale = latest > float(meta.get("inputs_mtime") or st.st_mtime) + 1
+        stale_reason = "inputs" if stale else ""
+        # 对白语音库(2026-09-13):开关开着且库指纹与样片记录的不一致(台词/音色变了、或样片出时还没开库)也算过期
+        try:
+            from modules import dialogue_tts as dt
+            if dt.enabled(base):
+                cur = dt.library_fingerprint(dt.load_manifest(base, ep))
+                rec = (meta.get("dialogue_tts") or {}).get("fingerprint", "")
+                if not stale and (cur != rec or not (meta.get("dialogue_tts") or {}).get("enabled")):
+                    stale, stale_reason = True, "dialogue_tts"
+        except Exception:  # noqa: BLE001
+            pass
         out.update({"name": mp4.name, "size_mb": round(st.st_size / 1048576, 1), "mtime": int(st.st_mtime),
                     "url": f"/projects/{base.name}/{out['path']}?v={int(st.st_mtime)}",
                     "duration_s": meta.get("duration_s"), "shots": meta.get("shots"),
                     "missing_sketches": meta.get("missing_sketches"), "duration_source": meta.get("duration_source"),
                     "audio_tracks": meta.get("audio_tracks"), "created_at": meta.get("created_at"),
-                    "stale": latest > float(meta.get("inputs_mtime") or st.st_mtime) + 1})
+                    "dialogue_tts": meta.get("dialogue_tts") or {},
+                    "stale": stale, "stale_reason": stale_reason})
     return out
 
 

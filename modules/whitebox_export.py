@@ -16,7 +16,7 @@ import threading
 from pathlib import Path
 
 from modules.whitebox import component, read, render_format
-from modules.whitebox_subtitles import cues_fingerprint, episode_subtitle_cues, write_subtitle_track
+from modules.whitebox_subtitles import cues_fingerprint, episode_dialogue_placements, episode_subtitle_cues, write_subtitle_track
 
 STATIC = Path(__file__).resolve().parents[1] / 'apps/web/static'
 _EXPORT_LOCK = threading.Lock()
@@ -201,21 +201,36 @@ def episode_reel_status(base, ep):
             durations[gid] = float((read(base/'assets/whitebox'/ep/gid/'manifest.json', {}) or {}).get('duration_s') or 0)
         except (ValueError, OSError, TypeError):
             durations[gid] = 0.0
+    # 对白语音库(2026-09-13,输出设置「生成对白语音」):库里可用的逐句音频按镜起点排到样片时间轴,作对白轨;
+    # 字幕按实际音频起止显示;库指纹进清单,任一句音频换了样片判过期(stale_reason=audio)。这里只读库不合成,合成在 concat_episode
+    from modules import dialogue_tts as dt
+    audio_on = dt.enabled(base)
+    lib = dt.load_manifest(base, ep) if audio_on else None
     try:
-        cues = episode_subtitle_cues(base, ep, ready, durations)
+        placements, overflow = episode_dialogue_placements(base, ep, ready, durations, dt.line_audio(base, ep, lib) if lib else None)
+    except Exception:  # noqa: BLE001
+        placements, overflow = [], []
+    audio_sha = dt.library_fingerprint(lib) if lib else ''
+    try:
+        cues = episode_subtitle_cues(base, ep, ready, durations, placements)
     except Exception:  # noqa: BLE001  字幕源坏了不拦合辑状态
         cues = []
     subtitles_sha = cues_fingerprint(cues) if cues else ''
     stale_reason = ''
     if exists:
+        rec_audio = manifest.get('audio') if isinstance(manifest.get('audio'), dict) else {}
         if manifest.get('group_sources') != sources or manifest.get('group_order') != [g['group_id'] for g in order]:
             stale_reason = 'groups'
         elif (manifest.get('subtitles') or {}).get('sha256', '') != subtitles_sha:
             stale_reason = 'subtitles'
+        elif audio_on and rec_audio.get('sha256', '') != audio_sha:
+            stale_reason = 'audio'
     return {'ep': ep, 'path': paths['video'], 'manifest_path': paths['manifest'], 'exists': exists,
             'stale': bool(stale_reason), 'stale_reason': stale_reason, 'groups_total': len(order), 'groups_ready': ready,
             'groups_missing': missing, 'sources': sources, 'order': order, 'manifest': manifest if exists else {},
-            'durations': durations, 'cues': cues, 'subtitles_sha256': subtitles_sha}
+            'durations': durations, 'cues': cues, 'subtitles_sha256': subtitles_sha,
+            'dialogue_audio': {'enabled': audio_on, 'lines': len(placements), 'sha256': audio_sha, 'overflow': overflow,
+                               'placements': placements}}
 
 
 def _probe_duration(path):
@@ -238,6 +253,10 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
     先在临时目录成片再 os.replace 发布,失败保留旧样片。
     """
     ep = component(ep)
+    # 对白语音库开着时先惰性同步(只补缺/过期句),样片才挂到最新台词的语音
+    from modules import dialogue_tts as dt
+    if dt.enabled(base):
+        dt.ensure(base, ep)
     status = episode_reel_status(base, ep)
     if not status['groups_total']:
         raise ValueError(f'{ep} 没有分镜组或白模视频,无法生成样片')
@@ -271,21 +290,33 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
         listing.write_text(''.join(f"file '{c.resolve().as_posix()}'\n" for c in clips), encoding='utf-8')
         target = staging/f'{ep}-camera.mp4'
         base_cmd = [ffmpeg, '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing)]
-        encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart']
+        # 对白轨(2026-09-13):对白语音库逐句音频按镜起点混成一条 wav,作最后一路输入;没有库时样片仍无声(-an)
+        dialogue = status.get('dialogue_audio') or {}
+        placements = dialogue.get('placements') or []
+        audio_wav = None
+        if placements:
+            from modules.dialogue_track import build_track
+            audio_wav = build_track(placements, expected, staging/'dialogue.wav')
+        audio_args = ['-c:a', 'aac', '-b:a', '160k'] if audio_wav else ['-an']
+        encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20', '-pix_fmt', 'yuv420p'] + audio_args + ['-movflags', '+faststart']
         normalize = f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps={fps}'
         track = None
         if cues:
             # 字幕带:PIL 画透明 PNG 按时段排片(本机 ffmpeg 无 subtitles/drawtext 滤镜),作第二路输入 overlay 到样片上
             track = write_subtitle_track(cues, int(width), int(height), expected, staging/'subs')
             chain = (f'[0:v]{normalize}[base];' if not uniform else '[0:v]null[base];') + '[base][1:v]overlay=0:0:format=auto,format=yuv420p[v]'
-            cmd = base_cmd + ['-f', 'concat', '-safe', '0', '-i', str(track['list']), '-filter_complex', chain, '-map', '[v]'] + encode + [str(target)]
+            cmd = base_cmd + ['-f', 'concat', '-safe', '0', '-i', str(track['list'])]
+            if audio_wav:
+                cmd += ['-i', str(audio_wav)]
+            cmd += ['-filter_complex', chain, '-map', '[v]'] + (['-map', '2:a'] if audio_wav else []) + encode + [str(target)]
             mode = 'burn'
         elif uniform:
-            cmd = base_cmd + ['-c', 'copy', '-movflags', '+faststart', str(target)]
+            cmd = base_cmd + (['-i', str(audio_wav), '-map', '0:v', '-map', '1:a', '-c:v', 'copy'] + audio_args if audio_wav
+                              else ['-c', 'copy']) + ['-movflags', '+faststart', str(target)]
             mode = 'copy'
         else:
             # 组视频规格不一(项目画幅/帧率中途变过):统一缩放到当前项目规格后重编码
-            cmd = base_cmd + ['-vf', normalize] + encode + [str(target)]
+            cmd = base_cmd + (['-i', str(audio_wav), '-map', '0:v', '-map', '1:a'] if audio_wav else []) + ['-vf', normalize] + encode + [str(target)]
             mode = 'reencode'
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if proc.returncode != 0 or not target.is_file() or target.stat().st_size == 0:
@@ -297,7 +328,9 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
         duration = actual if actual is not None else expected
         manifest = {'schema_version': 'whitebox_episode_export.v1', 'project': base.name, 'ep': ep,
                     'groups': len(status['groups_ready']), 'shots': sum(g['shots'] for g in status['order'] if g['group_id'] in records),
-                    'duration_s': round(duration, 3), 'width': width, 'height': height, 'fps': fps, 'audio': False, 'mode': mode,
+                    'duration_s': round(duration, 3), 'width': width, 'height': height, 'fps': fps, 'mode': mode,
+                    'audio': ({'kind': 'dialogue_tts', 'lines': len(placements), 'sha256': dialogue.get('sha256', ''),
+                               'overflow': dialogue.get('overflow') or []} if audio_wav else False),
                     'subtitles': {'cues': len(cues), 'dialogue': sum(1 for c in cues if c['kind'] == 'dialogue'),
                                   'narration': sum(1 for c in cues if c['kind'] == 'narration'),
                                   'sha256': cues_fingerprint(cues) if cues else '',

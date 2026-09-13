@@ -80,7 +80,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --verify-export   # �
 
 规则细节见 `docs/whitebox.md`「编译、输出与验证」「接入视频生成」。
 
-整集白模样片（2026-09-08，原名白模合辑；分镜预览页顶部「🧊 白模样片」板块;成片发布页自 2026-09-13 起不再展示）：用户点「重新生成白模样片」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。2026-09-11 起 CLI 默认把对白（shot_list `dialogue_lines`）与旁白（`narration.md` 按 `narration_anchors` 挂点）字幕烧进样片（台词黄、旁白紫），不得自写字幕或改字幕文本。只准调用宿主 CLI：
+整集白模样片（2026-09-08，原名白模合辑；分镜预览页顶部「🧊 白模样片」板块;成片发布页自 2026-09-13 起不再展示）：用户点「重新生成白模样片」会把指令派到本工位，要求把本集全部分镜组的 `assets/whitebox/<ep>/<grp>/camera.mp4` 按 shot_list 组序合并成一份整集摄影机视角视频 `assets/whitebox/<ep>/<ep>-camera.mp4`（清单 `episode-manifest.json`），方便连续查看。2026-09-11 起 CLI 默认把对白（shot_list `dialogue_lines`）与旁白（`narration.md` 按 `narration_anchors` 挂点）字幕烧进样片（台词黄、旁白紫），不得自写字幕或改字幕文本。2026-09-13 起项目开启「输出设置→生成对白语音」时，CLI 会先自动同步对白语音库（`assets/audio/voice/<ep>/tts/`，按人物嗓音模板逐句 TTS，只补台词/音色变了的句子）并把逐句语音按镜起点挂成样片对白轨、字幕随实际语音起止显示；未选角的句子跳过并 WARN，不阻断。我不另行合成语音、不手工混音；`--status` 的 `stale_reason=audio` 表示对白语音变了需重出。只准调用宿主 CLI：
 
 ```sh
 python code/concat_whitebox.py --project <slug> --ep ep02 --status   # 只看现状:是否存在/是否过期(组视频或字幕变了)/缺哪些组/可烧字幕条数

@@ -13,6 +13,7 @@
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
+<script src="/static/dialogue-tts.js?v=20260913"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -170,7 +171,7 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,ANIM={},GATE={};
+let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,DTTS={},ANIM={},GATE={};
 // 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
 // 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
 let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
@@ -227,7 +228,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#lb').style.disp
 
 /* ---------- 渲染 ---------- */
 function render(d){
-  LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};
+  LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};DTTS=d.dialogue_tts||{};
   PORTRAIT=aspectPortrait(d.aspect);
   renderEps(d.episodes||[]);
   const box=$('#content'),ep=d.ep;
@@ -237,7 +238,7 @@ function render(d){
   let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
   const sm=d.storyboard_meta||{};
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
-  if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div>`;
+  if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div><div id="dttsbox">${DialogueTTS.html(DTTS,$('#project').value.trim()||'demo',ep)}</div>`;
   if(d.directing_plan){
     h+=`<div class="doc closed"><h3 onclick="if(!event.target.closest('.editbtn'))this.parentNode.classList.toggle('closed')">🎬 ${esc(t('导演计划'))} <span class="meta">directing_plan.md${d.directing_plan_mtime?' · '+esc(new Date(d.directing_plan_mtime*1000).toLocaleString()):''}</span>${editBtn(I18N.f('导演计划 {ep}(文件 directing/{ep}/directing_plan.md)',{ep}))}</h3><div class="body"><div class="md" data-no-i18n>${MiniMD.render(d.directing_plan)}</div></div></div>`;
   }
@@ -290,6 +291,7 @@ function animHtml(){
   let st='';
   if(a.running)st=`<span class="spin">⏳</span> ${esc(t('生成中…'))}`;
   else if(a.error)st=`<span style="color:var(--red)">❌ ${esc(clip(a.error,80))}</span>`;
+  else if(a.exists&&a.stale&&a.stale_reason==='dialogue_tts')st=`<span style="color:var(--yellow)">⚠ ${esc(t('对白语音已变(台词或音色更新),建议重出样片'))}</span>`;
   else if(a.exists&&a.stale)st=`<span style="color:var(--yellow)">⚠ ${esc(t('样片已过期(草图或分镜时长变了),建议重出'))}</span>`;
   else if(a.exists)st=`<span style="color:var(--green)">✓ ${esc(a.created_at||'')}</span>`;
   const missTxt=missing?` · <span style="color:var(--yellow)">${esc(I18N.f('缺 {n} 张草图(占位卡顶替)',{n:missing}))}</span>`:'';
@@ -423,6 +425,7 @@ async function refreshSketches(){
     const oldSK=SK,oldJ=JOBS,oldR=REDRAW;
     SK=j.sketches||{};JOBS=j.jobs||{};REDRAW=mergeRedraw(j.redraw_runs||{});
     const oldA=JSON.stringify(ANIM),oldG=JSON.stringify(GATE);ANIM=j.animatic||ANIM;GATE=j.gate||GATE;
+    if(j.dialogue_tts){DTTS=j.dialogue_tts;DialogueTTS.render(DTTS)}
     if(JSON.stringify(ANIM)!==oldA||JSON.stringify(GATE)!==oldG)refreshTop();
     const keys=new Set([...Object.keys(oldSK),...Object.keys(SK),...Object.keys(oldR),...Object.keys(REDRAW)]);
     keys.forEach(k=>{if(JSON.stringify(oldSK[k])!==JSON.stringify(SK[k])||oldR[k]!==REDRAW[k])renderCell(k)});
@@ -442,7 +445,7 @@ try{
   es.onmessage=e=>{
     try{
       const ev=JSON.parse(e.data),proj=$('#project').value.trim()||'demo';
-      if((ev.type==='board_sketch'||ev.type==='board_animatic')&&ev.project===proj&&LAST&&ev.ep===LAST.ep)refreshSketches();
+      if((ev.type==='board_sketch'||ev.type==='board_animatic'||ev.type==='dialogue_tts')&&ev.project===proj&&LAST&&ev.ep===LAST.ep)refreshSketches();
       else if((ev.type==='confirm'||ev.type==='confirm_done')&&LAST)refreshSketches();   // 签字卡出现/答复 → 刷新签字条
       else if(ev.type==='run'&&ev.run&&ev.run.project===proj&&LAST&&ev.run.agent===(LAST.agents||{}).sketch)refreshSketches();
     }catch(_){}

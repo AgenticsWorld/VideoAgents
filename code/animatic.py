@@ -5,9 +5,11 @@
 输入:directing/<ep>/storyboard.json(草案镜与时长建议)、shot_list.json(有则用定稿时长 duration_s 与旁白挂点)、
      assets/storyboard/<ep>/index.json + <S01-01>.png(草图;缺图用占位卡:灰底 + 镜号 + 画面内容文字)、
      assets/audio/narration/<ep>/manifest.json|narration_track.json(旁白段,可选)、
-     assets/audio/voice/<ep>/... 对白干声(可选,按镜 shNNN 命名的 mp3/wav)。
+     对白语音库 assets/audio/voice/<ep>/tts/(2026-09-13,项目开启「生成对白语音」时先惰性同步 modules/dialogue_tts,
+     再按镜起点把逐句音频顺序排开挂入;有音频的镜按每句实际起止切成多帧,字幕随句显示)、
+     assets/audio/voice/<ep>/... 对白干声(旧兜底,按镜 shNNN 命名的 mp3/wav,未开库时才扫)。
 输出:assets/storyboard/<ep>/animatic.mp4 + animatic.json(shots[] 起止秒/是否有草图、duration_source=final|draft、
-     缺图数、inputs_mtime 供页面判「样片已过期」)。
+     缺图数、inputs_mtime 供页面判「样片已过期」;dialogue_tts 段记库指纹/挂入句数/overflow 超出镜长的句子)。
 
 用法:python3 code/animatic.py --project <slug> --ep ep01 [--fps 24] [--no-audio] [--dry-run]
 退出码:0 成功、1 ffmpeg 失败、2 storyboard.json 缺失。宿主 CLI,由故事板页按钮经宿主后台调用。
@@ -26,9 +28,12 @@ from _common import parse_args
 
 from modules import storyboard_board as sbb
 
-from modules.whitebox_subtitles import find_font as _font, wrap_text as _wrap   # 字体查找/折行与白模样片字幕共用
+from modules.whitebox_subtitles import find_font as _font, wrap_text as _wrap, character_names   # 字体查找/折行与白模样片字幕共用
+from modules import dialogue_tts as dt
+from modules.dialogue_track import place_lines
 
 DEFAULT_SHOT_S = 4.0
+MIN_WINDOW_S = 0.3      # 按对白句切帧时,比这短的无字幕空窗并入相邻窗
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg")
 
 
@@ -151,6 +156,33 @@ def _dialogue_audio(base: Path, ep: str, shot_start: dict[str, float]) -> list[t
     return out
 
 
+def _windows(t0: float, dur: float, pls: list[dict]) -> list[tuple[float, float, list[dict]]]:
+    """一镜按句切窗:[(start, end, 该窗在播的句子)],无对白音频时单窗;短于 MIN_WINDOW_S 的空窗并入后一窗。"""
+    t1 = t0 + dur
+    if not pls:
+        return [(t0, t1, [])]
+    bounds = {t0, t1}
+    for p in pls:
+        bounds.add(min(max(p["start"], t0), t1))
+        bounds.add(min(max(p["end"], t0), t1))
+    pts = sorted(bounds)
+    wins = []
+    for a, b in zip(pts, pts[1:]):
+        if b - a <= 1e-3:
+            continue
+        mid = (a + b) / 2
+        wins.append([a, b, [p for p in pls if p["start"] <= mid < p["end"]]])
+    merged: list = []
+    for w in wins:
+        if merged and not merged[-1][2] and merged[-1][1] - merged[-1][0] < MIN_WINDOW_S:
+            merged[-1] = [merged[-1][0], w[1], w[2]]      # 短空窗并入本窗
+        elif merged and not w[2] and w[1] - w[0] < MIN_WINDOW_S:
+            merged[-1][1] = w[1]                          # 短空窗并入前窗
+        else:
+            merged.append(w)
+    return [(a, b, act) for a, b, act in merged]
+
+
 def main() -> int:
     def configure(ap):
         ap.add_argument("--fps", type=int, default=24)
@@ -170,8 +202,13 @@ def main() -> int:
     aspect = sbb.resolve_aspect(root)
     size = _canvas_size(aspect)
     has_final = bool(sl.get("shots"))
+    # 对白语音库(输出设置「生成对白语音」):先惰性同步(只补缺/过期),再按镜起点排轨;关闭时 lib=None
+    lib = None if args.no_audio else dt.ensure(root, ep, log=print)
+    audio_lines = dt.line_audio(root, ep, lib) if lib else {}
+    names = character_names(root) if audio_lines else {}
     plan, t, missing = [], 0.0, 0
     shot_start: dict[str, float] = {}      # 定稿镜号 → 起始秒(音轨挂点用)
+    timeline: dict[str, dict] = {}         # 定稿镜号 → {start, end}(对白语音排轨用)
     inputs_mtime = max((root / "directing" / ep / f).stat().st_mtime for f in ("storyboard.json",)
                        if (root / "directing" / ep / f).is_file())
     if (root / "directing" / ep / "shot_list.json").is_file():
@@ -196,23 +233,43 @@ def main() -> int:
             off = 0.0
             for f in finals:
                 shot_start[f["shot_id"]] = t + off
+                timeline[f["shot_id"]] = {"start": t + off, "end": t + off + float(f["duration_s"])}
                 off += float(f["duration_s"])
             subs = [("dialogue", f"{l.get('name') or l.get('speaker') or ''}:{l['text']}" if l.get('name') or l.get('speaker') else l['text'])
                     for l in sh.get("dialogue") or [] if l.get("text")]
-            subs += [("narration", f"旁白 {n}") for n in (sh.get("narration_ref") or [])]
+            nsubs = [("narration", f"旁白 {n}") for n in (sh.get("narration_ref") or [])]
             plan.append({"key": sh["key"], "scene_no": sc["scene_no"], "order": sh["order"], "start_s": round(t, 2),
                          "duration_s": round(dur, 2), "has_sketch": bool(sk), "sketch": sk, "src": src,
                          "label": f"{sc['scene_no']} #{sh['order']}  {sh.get('size_hint') or ''}  {dur:g}s"
                                   + (f"  {finals[0]['shot_id']}" if finals else ""),
-                         "content": sh.get("content") or "", "subs": subs})
+                         "content": sh.get("content") or "", "subs": subs + nsubs, "nsubs": nsubs,
+                         "shot_ids": [f["shot_id"] for f in finals], "t0": t, "dur": dur})
             t += dur
     src_all = "final" if has_final and all(p["src"] == "final" for p in plan) else ("mixed" if has_final else "draft")
     out_dir = sbb.sketch_dir(root, ep)
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "animatic.mp4"
-    audio = [] if args.no_audio else _narration_audio(root, ep, sl, shot_start) + _dialogue_audio(root, ep, shot_start)
+    placements, overflow = place_lines(audio_lines, timeline) if audio_lines else ([], [])
+    by_shot: dict[str, list[dict]] = {}
+    for p in placements:
+        by_shot.setdefault(p["shot_id"], []).append(p)
+    # 帧计划:有对白音频的镜按句切窗(字幕随句显示),其余一镜一帧
+    frames = []
+    for p in plan:
+        pls = [x for sid in p["shot_ids"] for x in by_shot.get(sid, [])]
+        for a, b, active in _windows(p["t0"], p["dur"], pls):
+            subs = ([("dialogue", f"{names.get(x['speaker'], x['speaker'])}:{x['text']}" if x["speaker"] else x["text"])
+                     for x in active] + p["nsubs"]) if pls else p["subs"]
+            frames.append({"plan": p, "start": a, "dur": b - a, "subs": subs})
+    if args.no_audio:
+        audio = []
+    else:
+        audio = _narration_audio(root, ep, sl, shot_start) + [(p["path"], p["start"]) for p in placements]
+        if not lib:
+            audio += _dialogue_audio(root, ep, shot_start)
     if args.dry_run:
-        print(f"[dry-run] {len(plan)} 镜 Σ{t:.1f}s 缺草图 {missing} 时长口径 {src_all} 画布 {size} 音轨 {len(audio)} → {out.relative_to(root)}")
+        print(f"[dry-run] {len(plan)} 镜 {len(frames)} 帧 Σ{t:.1f}s 缺草图 {missing} 时长口径 {src_all} 画布 {size} 音轨 {len(audio)}"
+              f" 对白语音 {len(placements)} 句(超出镜长 {len(overflow)}) → {out.relative_to(root)}")
         return 0
     if not shutil.which("ffmpeg"):
         print("FAIL 未找到 ffmpeg")
@@ -220,11 +277,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="animatic_") as td:
         tdp = Path(td)
         lines = []
-        for i, p in enumerate(plan):
+        for i, fr in enumerate(frames):
+            p = fr["plan"]
             fp = tdp / f"f{i:04d}.png"
-            render_frame(fp, p["sketch"], size, p["label"], p["content"], p["subs"])
-            lines.append(f"file '{fp.as_posix()}'\nduration {p['duration_s']:.3f}")
-        lines.append(f"file '{(tdp / f'f{len(plan) - 1:04d}.png').as_posix()}'")   # concat demuxer 末帧须重复
+            render_frame(fp, p["sketch"], size, p["label"], p["content"], fr["subs"])
+            lines.append(f"file '{fp.as_posix()}'\nduration {fr['dur']:.3f}")
+        lines.append(f"file '{(tdp / f'f{len(frames) - 1:04d}.png').as_posix()}'")   # concat demuxer 末帧须重复
         (tdp / "list.txt").write_text("\n".join(lines) + "\n")
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(tdp / "list.txt")]
         for f, _ in audio:
@@ -243,9 +301,17 @@ def main() -> int:
     meta = {"schema": "animatic/1.0", "ep": ep, "file": out.relative_to(root).as_posix(), "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "duration_s": round(t, 2), "shots": len(plan), "missing_sketches": missing, "duration_source": src_all,
             "audio_tracks": len(audio), "fps": args.fps, "size": list(size), "inputs_mtime": int(inputs_mtime),
+            "frames": len(frames),
+            "dialogue_tts": {"enabled": bool(lib), "fingerprint": dt.library_fingerprint(lib) if lib else "",
+                             "lines": len(placements), "overflow": overflow,
+                             "unbound": (lib or {}).get("summary", {}).get("unbound", 0) if lib else 0},
             "timeline": [{k: v for k, v in p.items() if k in ("key", "scene_no", "order", "start_s", "duration_s", "has_sketch", "src")} for p in plan]}
     (out_dir / "animatic.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
-    print(f"OK {out.relative_to(root)} {len(plan)} 镜 Σ{t:.1f}s 缺草图 {missing} 时长口径 {src_all} 音轨 {len(audio)}")
+    print(f"OK {out.relative_to(root)} {len(plan)} 镜 Σ{t:.1f}s 缺草图 {missing} 时长口径 {src_all} 音轨 {len(audio)}"
+          + (f" 对白语音 {len(placements)} 句" if lib else ""))
+    if overflow:
+        print(f"WARN {len(overflow)} 句对白语音超出所在镜时长(见 animatic.json dialogue_tts.overflow):"
+              + ", ".join(f"{o['shot_id']}/l{o['idx']:02d}+{o['overflow_s']}s" for o in overflow[:8]))
     return 0
 
 

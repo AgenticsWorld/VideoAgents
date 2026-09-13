@@ -142,16 +142,30 @@ def shot_timeline(base: Path, ep: str, group_ids: list[str], group_durations: di
     return timeline
 
 
-def episode_subtitle_cues(base: Path, ep: str, group_ids: list[str], group_durations: dict[str, float]) -> list[dict]:
-    """样片字幕条:[{start,end,kind:dialogue|narration,text,shot_id,group_id}],按 start 排序。"""
+def episode_dialogue_placements(base: Path, ep: str, group_ids: list[str], group_durations: dict[str, float],
+                                audio: dict | None) -> tuple[list[dict], list[dict]]:
+    """对白语音库逐句音频在样片时间轴上的摆位(modules/dialogue_track.place_lines);audio 空则 ([], [])。"""
+    if not audio:
+        return [], []
+    from modules.dialogue_track import place_lines
+    timeline = shot_timeline(base, ep, group_ids, group_durations)
+    return place_lines(audio, timeline)
+
+
+def episode_subtitle_cues(base: Path, ep: str, group_ids: list[str], group_durations: dict[str, float],
+                          placements: list[dict] | None = None) -> list[dict]:
+    """样片字幕条:[{start,end,kind:dialogue|narration,text,shot_id,group_id}],按 start 排序。
+    placements(对白语音库排轨结果,2026-09-13)给出的句子按实际音频起止显示,其余句子按估时比例分配。"""
     sl = _read(base / "directing" / ep / "shot_list.json") or {}
     timeline = shot_timeline(base, ep, group_ids, group_durations, sl)
     names = character_names(base)
     cues: list[dict] = []
+    placed = {(p["shot_id"], p["idx"]): p for p in placements or []}
     shots = [s for s in sl.get("shots") or [] if isinstance(s, dict) and s.get("shot_id") in timeline]
-    # 对白:镜内按各句估时比例分配
+    # 对白:有库音频的句子按实际起止;其余镜内按各句估时比例分配
     for s in shots:
-        lines = [ln for ln in (s.get("dialogue_lines") or []) if isinstance(ln, dict) and str(ln.get("text") or "").strip()]
+        # 规约键 text;兼容写成 line 的出稿(与 dialogue_tts.collect_lines / dub_group 同口径,序号 idx 才能对上)
+        lines = [ln for ln in (s.get("dialogue_lines") or []) if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip()]
         if not lines:
             continue
         seg = timeline[s["shot_id"]]
@@ -161,12 +175,14 @@ def episode_subtitle_cues(base: Path, ep: str, group_ids: list[str], group_durat
             weights = [1.0] * len(lines)
         total_w = sum(weights)
         t = seg["start"]
-        for ln, w in zip(lines, weights):
+        for idx, (ln, w) in enumerate(zip(lines, weights)):
             dur = span * w / total_w
-            sp = str(ln.get("speaker") or "").strip()
+            sp = str(ln.get("speaker") or ln.get("character_id") or "").strip()
             name = names.get(sp, sp)
-            text = str(ln["text"]).strip()
-            cues.append({"start": round(t, 3), "end": round(t + dur, 3), "kind": "dialogue",
+            text = str(ln.get("text") or ln.get("line")).strip()
+            p = placed.get((s["shot_id"], idx))
+            start, end = (p["start"], max(p["end"], p["start"] + MIN_CUE_S)) if p else (t, t + dur)
+            cues.append({"start": round(start, 3), "end": round(end, 3), "kind": "dialogue",
                          "text": f"{name}:{text}" if name and name != "NARRATOR" else text,
                          "shot_id": s["shot_id"], "group_id": seg["group_id"]})
             t += dur

@@ -187,14 +187,16 @@ def load_group(proj: Path, ep: str, gid: str):
     shots = {s["shot_id"]: s for s in sl.get("shots", [])}
     lines = []
     for sid in g.get("shots", []):
+        idx = 0   # 镜内有台词句序号,与对白语音库(modules/dialogue_tts)的 (shot_id, idx) 口径一致
         for ln in (shots.get(sid) or {}).get("dialogue_lines") or []:
             # 规约键 text;兼容写成 line 的出稿(同 check_dialogue_fit / 预览接口)
             text = (ln.get("text") or ln.get("line") or "").strip()
             if not text:
                 continue
-            lines.append({"shot_id": sid, "speaker": ln.get("speaker") or ln.get("character_id"),
+            lines.append({"shot_id": sid, "idx": idx, "speaker": ln.get("speaker") or ln.get("character_id"),
                           "text": text, "est_duration_s": ln.get("est_duration_s"),
                           "emotion": ln.get("emotion") or ln.get("tone") or ""})
+            idx += 1
     return g, lines
 
 
@@ -318,10 +320,20 @@ def main(argv=None):
     # 描述+项目 voiceprint 样本自动锚定同一副嗓子,逐句合成不漂音色)
     desc_mode = provider == "volcengine" and tts_cfg.get("model") == "seed-audio-1.0"
 
+    # 对白语音库(2026-09-13,输出设置「生成对白语音」):开着时先惰性同步本组各镜,首轮直接取库里自然语速音频,
+    # 只有贴合需要改语速时才重新合成(重出仍落 dub 目录,不回写库)
+    from modules import dialogue_tts as dt
+    lib_audio = {}
+    if dt.enabled(proj) and not args.dry_run:
+        lib = dt.ensure(proj, ep, only_shots=set(group.get("shots") or []))
+        lib_audio = dt.line_audio(proj, ep, lib) if lib else {}
+        print(f"[dub] 对白语音库:本组 {sum(1 for ln in lines if (ln['shot_id'], ln['idx']) in lib_audio)}/{len(lines)} 句可直接取用")
+
     manifest = {"schema": "dub_manifest/v1", "group_id": gid, "episode": ep, "mode": "dubbing",
                 "clip": str(clip.relative_to(proj)), "clip_duration_s": round(total, 3),
                 "segment_source": seg_source, "tts_provider": provider,
                 "speed_range": [args.speed_min, args.speed_max], "duck_db": args.duck_db,
+                "dialogue_tts_library": bool(lib_audio),
                 "lines": [], "checks": {}}
     plan_only = args.dry_run
     fitted = []
@@ -345,8 +357,14 @@ def main(argv=None):
             entry.update({"status": "planned"})
             manifest["lines"].append(entry)
             continue
-        generate_tts(ln["text"], str(raw_mp3), voice, base_speed, ln.get("emotion") or "",
-                     ch, var if var != "default" else "", str(proj))
+        lib_entry = lib_audio.get((ln["shot_id"], ln["idx"]))
+        if lib_entry and lib_entry.get("variant", "default") == var and abs(float(lib_entry.get("speed") or 1.0) - base_speed) <= 0.02:
+            shutil.copyfile(lib_entry["path"], raw_mp3)
+            entry["source"] = f"dialogue_tts:{lib_entry['file']}"
+        else:
+            generate_tts(ln["text"], str(raw_mp3), voice, base_speed, ln.get("emotion") or "",
+                         ch, var if var != "default" else "", str(proj))
+            entry["source"] = "tts"
         d1 = probe_duration(raw_mp3)
         fit = plan_fit(d1, target, base_speed, args.speed_min, args.speed_max)
         used_speed = base_speed

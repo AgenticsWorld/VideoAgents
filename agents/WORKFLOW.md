@@ -77,6 +77,10 @@ data/projects/<slug>/
 │                   #   (2026-07-12 改版:选角登记从 epNN/refs/manifest.json 上收到项目级,治跨集音色漂移)
 │                   #   voice/epNN/dub/grpNNN/=后期配音逐句 TTS + dub_manifest.json(仅项目「对白配音=后期配音」,§8C;
 │                   #   clips/epNN/grpNNN.native_audio.wav 为替换前的原生轨备份)
+│                   #   voice/epNN/tts/=对白语音库(2026-09-13,仅项目「输出设置→生成对白语音」开启;modules/dialogue_tts.py):
+│                   #   按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS <shot>_l<idx>_<CHAR>.mp3 + tts_manifest.json,
+│                   #   台词/音色/样本/渠道任一变了在使用时惰性补合成(宿主 CLI code/dialogue_tts.py);消费方=故事板动态样片、
+│                   #   分镜白模样片(挂对白轨)、p7-dub(先取库音频再贴合);未选角句 unbound 跳过+WARN;视频原声模式下严禁进成片对白
 ├── edit/           # ep01/{timeline.json, cut_v1.mp4, subtitles.srt, subtitles_final.srt,
 │                   # captions.json, intro_outro/, thumbnail.png, final.mp4}
 │                   #   subtitles.srt=正片(cut)0 秒基准;subtitles_final.srt=成片基准
@@ -637,6 +641,9 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > **前置不变**:分镜/prompt/组生成与视频原声模式完全一致——对白组照写 `{}` 台词、照挂逐角色
 > voiceprint 音色锚、人物开口表演由模型原生生成(原生对白语音就是**开口时段的时间依据**,也是
 > 说话人对位的参照);§7D 对白估时闸门、speakers_le_3、audioref_bound 等全部照旧。
+> **对白语音库(2026-09-13,输出设置「生成对白语音」)**:开启时 `dub_group.py` 先惰性同步本组各镜的库(`assets/audio/voice/epNN/tts/`,
+>   自然语速、同一套 casting/声纹卡/voiceprint 嗓音模板),首轮直接取库音频、只在贴合需要改语速时才重新合成(重出仍落 dub 目录不回写库);
+>   关闭时行为不变(逐句自行合成)。
 > **p7-dub(09-audio/voice-generation,每个 audio_plan=dialogue 的组,p7-video 交付后必派)**:
 > ① 台词事实源=`shot_list.json` 组内各镜 `dialogue_lines`(speaker/text,冻结版一字不改;
 >   `dialogue_tail_from` 反打镜不重复挂);② 开口时段=组 clip 原生轨语音区间(silencedetect,
