@@ -6633,8 +6633,9 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
 
 
 async def api_scene_world_start(project: str, sid: str, body: dict):
-    """场景预览页「生成世界模型」:{source: scene_pano|depth2rgb, anchor?, scheme?, force?}。
-    仅项目「白模」选项开启且场景已建白模时可用;已有 world 须 force(旧版归档到 world/variants/)。"""
+    """场景预览页「生成世界模型」:{source: scene_pano, anchor?, scheme?, force?}。
+    仅项目「白模」选项开启且场景已建白模、且已有全景图时可用(2026-09-13 起世界模型必须基于全景图,
+    depth2rgb 白模深度转世界模型不再对页面开放,仅 CLI 保留);已有 world 须 force(旧版归档到 world/variants/)。"""
     from modules import worldlabs
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -6645,8 +6646,10 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
     if not (base / "assets" / "concepts" / "scenes" / sid / "layout.json").is_file():
         raise ServiceError(404, f"{sid} 还没有场景白模(layout.json)")
     source = str(body.get("source") or "scene_pano")
-    if source not in worldlabs.SOURCES:
-        raise ServiceError(400, f"source must be one of {list(worldlabs.SOURCES)}")
+    if source != "scene_pano":
+        raise ServiceError(400, "世界模型必须基于全景图(source=scene_pano);白模深度转世界模型选项已去掉")
+    if not any(a.get("schemes") for a in worldlabs.list_sources(base, sid).get("anchors") or []):
+        raise ServiceError(409, f"{sid} 还没有全景图:请先在场景预览页「🌐 全景图」板块创建全景图,再生成世界模型")
     if not worldlabs.marble_config().get("api_key"):
         raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
     anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))

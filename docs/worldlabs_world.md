@@ -14,9 +14,11 @@ Key 在 https://platform.worldlabs.ai/api-keys 创建,也可用环境变量 `WOR
 场景预览页(`/preview/scenes`)每个已建白模的场景,在「3D 白模」「全景图」板块之下有「🌍 世界模型」板块——**仅项目「白模」选项
 (`settings.json#output.spatial_blocking`)开启时显示**(预览 API 以 `whitebox_enabled` 下发;关闭时 `POST …/world` 返回 409)。
 
-- 「全景来源」下拉:
-  - `scene_pano` **场景全景图**(首选):`modules/scene_panos.py` 出的锚点全景 `panos/<anchor>/<scheme>.png`(内容按设定卡,机位/yaw 已知),按「锚点 / 光照方案」列出;
-  - `depth2rgb` **Marble 深度转全景**:用锚点的白模径向深度全景(`panos/<anchor>/depth_pano.npy`,缺则现渲)log 编码送 `pano:depth_to_rgb` 出全景(计费);
+- 「全景来源」下拉(**世界模型必须基于全景图**,2026-09-13):
+  - `scene_pano` **场景全景图**:`modules/scene_panos.py` 出的锚点全景 `panos/<anchor>/<scheme>.png`(内容按设定卡,机位/yaw 已知),按「锚点 / 光照方案」列出;
+    场景还没有全景图时按钮禁用,提示「请先创建全景图」并给「前往创建全景图」跳到下方「🌐 全景图」板块;`POST …/world` 此时返回 409。
+  - `depth2rgb` **Marble 深度转全景**(页面已去掉,仅 CLI `--source depth2rgb` 保留;`POST …/world` 传它返回 400):用锚点的白模径向深度全景
+    (`panos/<anchor>/depth_pano.npy`,缺则现渲)log 编码送 `pano:depth_to_rgb` 出全景(计费);
     场景还没规划锚点时自动在场景最空旷处取机位(`W0`,离地 1.6 m),深度全景渲进 `world/`,不进 `panos/index.json`。
 - 「生成世界模型」:`POST /api/v1/projects/<p>/scenes/<sid>/world {source, anchor?, scheme?, force?}` → 宿主后台线程跑
   `python code/worldlabs_world.py --project <p> --scene <sid> --source … [--anchor A1 --scheme LGT-…] [--force]`,输出逐行经 SSE `scene_world` 事件推到页面;

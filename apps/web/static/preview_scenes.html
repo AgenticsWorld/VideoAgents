@@ -275,16 +275,15 @@ function renderDetail(s){
 }
 
 // ---------------- 🌍 世界模型(World Labs Marble,2026-09-12) ----------------
-// 仅项目「白模」选项开启时显示:全景来源下拉(场景全景图锚点/方案,或 Marble 深度转全景)+「生成世界模型」按钮;
+// 仅项目「白模」选项开启时显示:全景来源下拉(场景全景图锚点/方案;2026-09-13 起必须基于全景图,白模深度转世界模型选项已去掉)+「生成世界模型」按钮;
+// 场景没有全景图时按钮禁用并提示先创建全景图(带「前往创建全景图」跳到下方全景图板块);
 // 后台任务日志经 SSE scene_world 事件逐行显示;已有 world 时用 Spark 挂可漫游视窗(world-viewer.js)
 let WORLD_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
 function worldSourceOptions(s){
   const src=s.world_sources,opts=[];
   const anchors=(src&&src.anchors)||[];
   anchors.forEach(a=>(a.schemes||[]).forEach(sc=>opts.push({v:`scene_pano|${a.anchor_id}|${sc}`,label:I18N.f('全景图 {a} / {s}',{a:a.anchor_id,s:sc})})));
-  if(anchors.length)anchors.forEach(a=>opts.push({v:`depth2rgb|${a.anchor_id}|`,label:I18N.f('Marble 深度转全景(锚点 {a})',{a:a.anchor_id})}));
-  else opts.push({v:'depth2rgb||',label:t('Marble 深度转全景(自动机位)')});
-  return opts;
+  return opts;   // 只列已出图的全景锚点/方案;没有全景图 = 不能生成世界模型
 }
 function mountWorldSection(whitebox,s){
   if(WB_ON===false)return;
@@ -310,7 +309,16 @@ function mountWorldSection(whitebox,s){
   }
   sec.innerHTML=h;
   const status=sec.querySelector('.ws-status'),log=sec.querySelector('.ws-log'),btn=sec.querySelector('.ws-gen'),sel=sec.querySelector('.ws-source');
-  if(!opts.length&&!running){btn.disabled=true;status.textContent=t('该场景还没有白模,不能生成世界模型');}
+  if(!opts.length&&!running){
+    btn.disabled=true;sel.disabled=true;
+    if(s.world_sources&&s.world_sources.has_whitebox===false)status.textContent=t('该场景还没有白模,不能生成世界模型');
+    else{   // 有白模没全景图:提示先创建全景图,按钮跳到下方「🌐 全景图」板块并打开创建表单
+      status.textContent=t('该场景还没有全景图,世界模型必须基于全景图:请先创建全景图')+' ';
+      const go=document.createElement('button');go.type='button';go.className='editbtn';go.style.marginLeft='6px';go.textContent=t('➕ 前往创建全景图');
+      go.onclick=()=>{const ps=whitebox.parentNode.querySelector('.pano-panel');if(!ps)return;ps.scrollIntoView({behavior:'smooth',block:'start'});const c=ps.querySelector('.ps-create');if(c&&!c.disabled)c.click();};
+      status.appendChild(go);
+    }
+  }
   let armed=null;
   btn.onclick=async()=>{
     const force=!!world;
