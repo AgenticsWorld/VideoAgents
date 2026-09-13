@@ -1237,7 +1237,34 @@ def _avatar_asset_uri(path: str) -> str | None:
 
 # ---------------- 图像:OpenRouter ----------------
 
+# 专用图像 API 目录(/images/models,公开免鉴权):纯出图模型(gpt-image / grok-imagine-image /
+# seedream / recraft / flux 等,output_modalities=["image"])只能走 POST /images,
+# chat/completions 会 404;图文双出模型(gemini-*-image / gpt-5-image)照旧走 chat。
+_OPENROUTER_IMAGE_CATALOG: tuple[float, dict] | None = None
+_OPENROUTER_IMAGE_CATALOG_TTL = 600
+
+
+def _openrouter_image_model_info(model: str) -> dict | None:
+    """该模型在 /images/models 目录里的条目(含 architecture / supported_parameters);取不到返回 None。"""
+    global _OPENROUTER_IMAGE_CATALOG
+    if not _OPENROUTER_IMAGE_CATALOG or time.time() - _OPENROUTER_IMAGE_CATALOG[0] > _OPENROUTER_IMAGE_CATALOG_TTL:
+        try:
+            data = _get_json(OPENROUTER_DIRECT_BASE + "/images/models", timeout=30).get("data") or []
+        except Exception:  # noqa: BLE001 — 目录不可用时退回 chat 请求 + 404 兜底
+            return None
+        _OPENROUTER_IMAGE_CATALOG = (time.time(), {m.get("id"): m for m in data if m.get("id")})
+    return _OPENROUTER_IMAGE_CATALOG[1].get(model)
+
+
+def _is_openrouter_image_api_error(e: "_HTTPStatusError") -> bool:
+    body = e.body or ""
+    return e.status == 404 and ("/api/v1/images" in body or "output modalities" in body)
+
+
 def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
+    info = _openrouter_image_model_info(cfg["model"])
+    if info and ((info.get("architecture") or {}).get("output_modalities") or []) == ["image"]:
+        return _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info)
     content = [{"type": "text", "text": prompt
                 + (f"\nNegative (avoid): {negative}" if negative else "")
                 + f"\nImage size: {width}x{height}"}]
@@ -1246,23 +1273,54 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
     body = {"model": cfg["model"],
             "messages": [{"role": "user", "content": content}],
             "modalities": ["image", "text"]}
-    url = (cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions"
-    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
     try:
-        resp = _post_json(url, body, headers, timeout=IMAGE_TIMEOUT)
+        resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions", body,
+                          {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
     except _HTTPStatusError as e:
-        # 纯出图模型(grok-imagine-image / seedream / gpt-image / flux 等,目录 output_modalities=["image"])
-        # 不接受 ["image","text"],路由报 404「No endpoints found that support the requested output modalities」
-        if e.status != 404 or "output modalities" not in e.body:
+        # 目录没取到/未收录的纯出图模型:chat 报 404「Use the /api/v1/images endpoint」
+        # 或「No endpoints found that support the requested output modalities」,改走图像 API
+        if not _is_openrouter_image_api_error(e):
             raise
-        body["modalities"] = ["image"]
-        resp = _post_json(url, body, headers, timeout=IMAGE_TIMEOUT)
+        return _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info)
     msg = (resp.get("choices") or [{}])[0].get("message") or {}
     images = msg.get("images") or []
     if not images:
         raise RuntimeError(f"OpenRouter 未返回图像(model={cfg['model']}):"
                            f"{(msg.get('content') or json.dumps(resp)[:400])!s:.400}")
     return _decode_data_url(images[0]["image_url"]["url"])
+
+
+def _ratio_value(r: str) -> float:
+    a, b = r.split(":")
+    return float(a) / float(b)
+
+
+def _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info):
+    """POST /images:按目录 supported_parameters 只发模型支持的字段,比例取最接近的受支持值。"""
+    params = (info or {}).get("supported_parameters") or {}
+    body = {"model": cfg["model"],
+            "prompt": prompt + (f"\nNegative (avoid): {negative}" if negative else "")}
+    ratios = [v for v in ((params.get("aspect_ratio") or {}).get("values") or []) if ":" in v]
+    want = width / height
+    if ratios:
+        body["aspect_ratio"] = min(ratios, key=lambda r: abs(_ratio_value(r) - want))
+    elif not params:   # 目录缺失:发归一化比例,由 OpenRouter 按供应商钳制
+        body["aspect_ratio"] = _closest_aspect(width, height)
+    if seed is not None and "seed" in params:
+        body["seed"] = seed
+    if refs:
+        body["input_references"] = [{"type": "image_url", "image_url": {"url": _file_to_data_url(r)}}
+                                    for r in refs]
+    resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/images", body,
+                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
+    data = resp.get("data") or []
+    if not data:
+        raise RuntimeError(f"OpenRouter 图像 API 未返回图像(model={cfg['model']}):{json.dumps(resp)[:400]}")
+    if data[0].get("b64_json"):
+        return base64.b64decode(data[0]["b64_json"])
+    if data[0].get("url"):
+        return _decode_data_url(data[0]["url"])
+    raise RuntimeError(f"OpenRouter 图像 API 返回格式异常:{json.dumps(data[0])[:400]}")
 
 
 def _closest_aspect(width: int, height: int) -> str:
