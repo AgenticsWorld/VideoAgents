@@ -8,6 +8,7 @@
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/jump-anchor.js?v=20260912"></script>
+<script src="/static/preview-stickbar.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
@@ -164,7 +165,7 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
   <button id="reload">刷新</button>
 </header>
 <div id="eps"></div>
-<div id="content"><div class="empty">加载中…</div></div>
+<div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -248,7 +249,7 @@ function render(d){
   h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白挂点'))}</span><span>🎬 ${esc(t('动作'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);
   // 从剧本/分镜预览跳来:#scene=S01 → 场次卡,#shot=S01-03 → 镜行
-  JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,offset:6});
+  JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,scroll:el=>PreviewStickbar.jumpTo(el)});
   if(anyBusy())startPoll();
 }
 /* ---------- H3S 故事板签字(workflow.yaml g6s):答复总制片发的签字卡,与控制台同一条 ---------- */
@@ -348,7 +349,7 @@ function sceneCard(sc,d){
   (sc.props||[]).forEach(c=>{as+=aChip('props',c,'🗡')});
   if(as)hd+=`<div class="assets">${as}</div>`;
   if(sc.note||sc.color)hd+=`<div class="note" data-no-i18n>${sc.note?`<b>🎯</b> ${esc(sc.note)}`:''}${sc.color?`${sc.note?'\n':''}<b>🎨</b> ${esc(sc.color)}`:''}</div>`;
-  let h=`<div class="scene" id="sc-${esc(sc.scene_no)}"><div class="hd">${hd}</div><table class="sb"><thead><tr><th>${esc(t('编号'))}</th><th>${esc(t('内容'))}</th><th class="${PORTRAIT?'portrait':''}">${esc(t('草图'))}</th><th></th></tr></thead><tbody>`;
+  let h=`<div class="scene" data-stick-scene="${esc(sc.scene_no)}" data-stick-label="${esc(sc.location||sc.scene_name||'')}" id="sc-${esc(sc.scene_no)}"><div class="hd">${hd}</div><table class="sb"><thead><tr><th>${esc(t('编号'))}</th><th>${esc(t('内容'))}</th><th class="${PORTRAIT?'portrait':''}">${esc(t('草图'))}</th><th></th></tr></thead><tbody>`;
   sc.shots.forEach(sh=>{h+=shotRow(sc,sh,ep)});
   return h+`</tbody></table></div>`;
 }
@@ -375,7 +376,7 @@ function shotRow(sc,sh,ep){
   // 镜行右侧:每个定稿镜号一个 🎦(拆镜时一行草案对多镜,tooltip 带镜号区分)
   const proj0=$('#project').value.trim()||'demo';
   const jumps=JumpAnchor.group((sh.final||[]).map(f=>f.shot_id?JumpAnchor.link('storyboard',proj0,ep,'shot',f.shot_id):''));
-  return `<tr data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm',t('反馈'))}</td></tr>`;
+  return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm',t('反馈'))}</td></tr>`;
 }
 
 function sketchCell(sc,sh,ep){
