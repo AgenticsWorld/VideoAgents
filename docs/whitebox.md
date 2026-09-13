@@ -122,6 +122,10 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 已审镜头的计划 camera 保存 `source_fingerprint` 和 `placement_fingerprint`，由 `modules.whitebox_camera` 生成。编译/预览/导出校验实际关键帧的固定机位、焦段对应 FOV、视高俯仰范围、运动距离方向与起停阶段，以及跨组重复机位。camera/composition/blocking、人物/道具轨迹或场景模型改变后，旧审查标记失效并报错，必须先重新检查取景与遮挡；不能只刷新指纹绕过审查。旧组未迁移时仍能编译，但不得声称完成此项验收。焦段沿用当前 24mm 垂直画幅换算口径，不得同时擅改画幅约定。
 
+**修改后的同步顺序与验收（2026-09-13）**：先完成计划及 camera/composition/blocking/shot_list 的全部回写、人物关联同步，再复核受影响组所有镜头及跨组 `match` 依赖的取景与遮挡，最后调用宿主指纹函数记录审查结果。同组 actors/scene_actors/extras/props、blocking_map/scene_presence 或场景白模改变会影响整组机位，不能只更新当前镜头。指纹写完后不得再修改被覆盖的源数据；必须继续修改时重新执行复核。收尾运行**不带组号的整集** `render_whitebox.py --project <slug> --ep <ep> --check-only`，确认退出码 0、`errors: []` 且组数与 shot_list 一致，然后 `--compile-only` 落盘。只对选中组编译成功不能证明其他组未受损；错误未清不得交付为 completed。只改文字、套用裁决或 JavaScript 重写 JSON 也须走此检查。
+
+指纹采用宿主 `v2:` 数值规范化：递归将等值整数与浮点数（如 `3`/`3.0`、`0`/`-0.0`）视为相同，布尔、字符串和实际数值变更仍区分；禁止 Agent 手写 JSON 哈希或复制旧算法。无前缀旧指纹仅在原始输入完全匹配时兼容。迁移已失效旧指纹须先证明历史输入哈希匹配旧审查且与当前输入仅有等值数值序列化差异，保留备份和逐项证据；无法证明则重新审查，不能批量刷指纹。回归案例：liaozhai3/ep01 整集 shot_list 回写把 `duration_s:3.0` 写成 `3`、轨迹 `0.0` 写成 `0`，旧文本哈希误报 source/placement changed，并连带使跨组重复机位报 missing matched shot。
+
 验收分别记录“设定数值一致”“几何与主体取景可用”“视觉符合构图”。前项通过不能冒充后项通过。采样覆盖镜内轨迹与各阶段边界，静态首尾相同仍可能中途移动。源设定与房间尺寸/站位无法同时成立时，列出具体冲突并明确取舍，回写 camera/composition/shot_list/prompt 和白模计划，保留决定，再导出和刷新参考视频。案例：liaozhai2/ep01 S06-14 经用户确认校准轨道、保留 1.85–3.15s；S07-01/09 经用户确认保留空间与站位、改更广焦段。
 
 ## 防穿模检查

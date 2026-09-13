@@ -9,7 +9,24 @@ import math
 from pathlib import Path
 
 
-def source_fingerprint(base, ep, shot):
+def _canonical_numbers(value):
+    """JSON round trips through JavaScript turn 3.0 into 3 (and -0 into 0)."""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _canonical_numbers(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_canonical_numbers(v) for v in value]
+    return value
+
+
+def _fingerprint(payload, *, legacy=False):
+    data = payload if legacy else _canonical_numbers(payload)
+    digest = hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return digest if legacy else 'v2:' + digest
+
+
+def _source_payload(base, ep, shot):
     def read(name):
         p = Path(base)/'directing'/ep/'shots'/shot['shot_id']/f'{name}.json'
         data = json.loads(p.read_text()) if p.is_file() else {}
@@ -17,10 +34,14 @@ def source_fingerprint(base, ep, shot):
                 or k in ('whitebox_contract', 'whitebox_spatial_resolution', 'whitebox_lens_resolution')}
     source = {'shot': {k: shot.get(k) for k in ('shot_id', 'duration_s', 'size', 'camera', 'camera_position', 'view_tile')},
               'camera': read('camera'), 'composition': read('composition'), 'blocking': read('blocking')}
-    return hashlib.sha256(json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return source
 
 
-def placement_fingerprint(base, ep, gid):
+def source_fingerprint(base, ep, shot, *, legacy=False):
+    return _fingerprint(_source_payload(base, ep, shot), legacy=legacy)
+
+
+def _placement_payload(base, ep, gid):
     def read(rel):
         p = Path(base)/rel
         return json.loads(p.read_text()) if p.is_file() else {}
@@ -30,7 +51,16 @@ def placement_fingerprint(base, ep, gid):
     payload = {'group': {k: group.get(k) for k in ('scene_id', 'scene_no', 'blocking_map', 'scene_presence')},
                'staging': {k: plan.get(k) for k in ('actors', 'scene_actors', 'extras', 'props')},
                'scene': read(f'bible/scenes/{group.get("scene_id")}/whitebox.json')}
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return payload
+
+
+def placement_fingerprint(base, ep, gid, *, legacy=False):
+    return _fingerprint(_placement_payload(base, ep, gid), legacy=legacy)
+
+
+def _matches_fingerprint(saved, payload):
+    # Read unchanged legacy plans without silently blessing stale reviews.
+    return saved == _fingerprint(payload) or saved == _fingerprint(payload, legacy=True)
 
 
 def direction(key):
@@ -52,9 +82,9 @@ def check_camera(base, ep, shot, camera, group_id=None):
     sid = shot['shot_id']; errors = []
     def fail(message):
         errors.append(f'{sid}: camera_contract: {message}')
-    if camera.get('source_fingerprint') != source_fingerprint(base, ep, shot):
+    if not _matches_fingerprint(camera.get('source_fingerprint'), _source_payload(base, ep, shot)):
         fail('source changed; review staging against camera/composition/blocking again')
-    if group_id and camera.get('placement_fingerprint') != placement_fingerprint(base, ep, group_id):
+    if group_id and not _matches_fingerprint(camera.get('placement_fingerprint'), _placement_payload(base, ep, group_id)):
         fail('actor/prop/scene placement changed; review framing and occlusion again')
     movement = source.get('movement') or shot.get('camera', {}).get('movement', 'static')
     if camera.get('movement') != movement:
