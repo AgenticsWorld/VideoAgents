@@ -1246,8 +1246,17 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
     body = {"model": cfg["model"],
             "messages": [{"role": "user", "content": content}],
             "modalities": ["image", "text"]}
-    resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions", body,
-                      {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
+    url = (cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    try:
+        resp = _post_json(url, body, headers, timeout=IMAGE_TIMEOUT)
+    except _HTTPStatusError as e:
+        # 纯出图模型(grok-imagine-image / seedream / gpt-image / flux 等,目录 output_modalities=["image"])
+        # 不接受 ["image","text"],路由报 404「No endpoints found that support the requested output modalities」
+        if e.status != 404 or "output modalities" not in e.body:
+            raise
+        body["modalities"] = ["image"]
+        resp = _post_json(url, body, headers, timeout=IMAGE_TIMEOUT)
     msg = (resp.get("choices") or [{}])[0].get("message") or {}
     images = msg.get("images") or []
     if not images:
