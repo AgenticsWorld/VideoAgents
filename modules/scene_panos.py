@@ -23,6 +23,8 @@
 
 全景中心(问题「自动还是手动」):默认自动(上述规划),预览页「全景图」板块显示每个锚点在俯视图中的坐标;用户要改就
 `code/render_scene_panos.py --anchor x,z --force` 或直接改 index.json 后 --force 重出。
+预览页「创建全景图」(2026-09-13):俯视图上点一个坐标 → add_manual_anchor 加锁定锚点 → ensure_scene_panos(only=[新锚点], schemes={所选方案})
+只出这一张(链式/重打光规则照旧),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw] --only-new --scheme <slug>。
 """
 from __future__ import annotations
 
@@ -786,22 +788,76 @@ def pano_ready(base: Path, sid: str, anchor: dict, scheme: str) -> bool:
     return bool(p) and (panos_dir(base, sid) / anchor['anchor_id'] / p.get('file', '')).is_file() and not whitebox_pano_stale(base, sid, anchor)
 
 
+def scene_scheme_options(base: Path, sid: str, cameras: list | None = None) -> list[dict]:
+    """可出全景的光照方案候选:各集机位实际用到的方案在前,其后补 bible lighting.json 里其余方案;都没有则 default。
+    每项 {scheme, time_of_day, in_use}。预览页「创建全景图」下拉与 CLI --scheme 校验共用。"""
+    sid = component(sid)
+    cams = scene_cameras(base, sid) if cameras is None else cameras
+    out, seen = [], set()
+    for c in cams:
+        if c['scheme'] not in seen:
+            seen.add(c['scheme'])
+            out.append({'scheme': c['scheme'], 'time_of_day': c.get('time_of_day'), 'in_use': True})
+    doc = read(base / 'bible/scenes' / sid / 'lighting.json', {}) or {}
+    for s in doc.get('schemes', []) if isinstance(doc, dict) else []:
+        slug = scheme_slug(s.get('scheme_id') or s.get('id'), s.get('time_of_day'))
+        if slug not in seen:
+            seen.add(slug)
+            out.append({'scheme': slug, 'time_of_day': s.get('time_of_day'), 'in_use': False})
+    if not out:
+        out.append({'scheme': scheme_slug(None), 'time_of_day': None, 'in_use': False})
+    return out
+
+
+def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None) -> dict:
+    """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度同规划默认,
+    serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。"""
+    from modules.whitebox import load_scene
+    sid = component(sid)
+    scene = load_scene(base, sid)
+    cams = scene_cameras(base, sid) if cameras is None else cameras
+    idx = load_index(base, sid)
+    w, _, d = scene['dimensions_m']
+    px = round(max(-w / 2 + .5, min(w / 2 - .5, float(x))), 3)
+    pz = round(max(-d / 2 + .5, min(d / 2 - .5, float(z))), 3)
+    height = idx['anchors'][0]['position'][1] if idx['anchors'] else default_anchor_height(cams)
+    used = {a['anchor_id'] for a in idx['anchors']}
+    n = len(idx['anchors']) + 1
+    while f'A{n}' in used:
+        n += 1
+    served = {k for a in idx['anchors'] for k in a.get('serves', [])}
+    pos = [px, height, pz]
+    serves = sorted(_cam_key(c) for c in cams if _cam_key(c) not in served and can_serve(pos, c, scene))
+    anchor = {'anchor_id': f'A{n}', 'position': pos, 'yaw_deg': float(yaw_deg or 0.0), 'source': 'manual', 'locked': True,
+              'serves': serves, 'panos': {}}
+    idx['anchors'].append(anchor)
+    save_index(base, sid, idx)
+    return anchor
+
+
 def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, schemes: dict | None = None, dry_run=False,
-                       force=False, replan=False, indoor: bool | None = None, seed=None, redo: list | None = None, log=print) -> dict:
+                       force=False, replan=False, indoor: bool | None = None, seed=None, redo: list | None = None,
+                       only: list | None = None, log=print) -> dict:
     """本场景全景齐备:规划锚点(增量)→ 渲白模全景 → 逐 (锚点, 方案) 出图。schemes={scheme: time_of_day};缺省取各集机位所用方案。
-    返回 {'anchors', 'new', 'pending', 'indoor'}。dry_run 只规划 + 渲白模全景,不调图像模型。"""
+    返回 {'anchors', 'new', 'pending', 'indoor'}。dry_run 只规划 + 渲白模全景,不调图像模型。
+    only=[anchor_id…](2026-09-13 预览页「创建全景图」):不规划/不补锚点,只给这些锚点出图(不看它们服务哪些机位),
+    没有机位也允许(方案须显式传 schemes)。"""
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
     cams = cameras if cameras is not None else scene_cameras(base, sid)
-    if not cams:
+    if not cams and not (only and schemes):
         raise PanoError(f'{sid}: 没有任何白模机位(先 render_whitebox.py --compile-only)')
     idx = load_index(base, sid)
     indoor = is_indoor(base, sid) if indoor is None else indoor
     idx['indoor'] = indoor
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
     new_cams = [c for c in cams if _cam_key(c) not in served]
-    if replan or not idx['anchors']:
+    if only:
+        missing = sorted(set(only) - {a['anchor_id'] for a in idx['anchors']})
+        if missing:
+            raise PanoError(f'{sid}: 锚点不存在:{missing}')
+    elif replan or not idx['anchors']:
         idx['anchors'] = plan_anchors(scene, cams, existing=idx['anchors'])
         idx['planned_at'] = _now()
     elif new_cams:
@@ -833,6 +889,8 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
             need.setdefault(c['scheme'], c.get('time_of_day'))
     stats = {'anchors': [a['anchor_id'] for a in idx['anchors']], 'new': 0, 'pending': [], 'indoor': indoor, 'scene_id': sid}
     for a in idx['anchors']:
+        if only and a['anchor_id'] not in only:
+            continue
         if force or whitebox_pano_stale(base, sid, a):
             render_whitebox_pano(base, sid, a, indoor=indoor, log=log)
             # 锚点位置/朝向变了或强制重出:旧全景与新几何不再对应,作废(文件改名保留)
@@ -844,8 +902,11 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
             save_index(base, sid, idx)
     # 只出本次机位用到的锚点(传了 cameras 时);顺序:先出服务机位最多的锚点(母全景),其余链式补洞
     keys = {_cam_key(c) for c in cams}
-    order = sorted((a for a in idx['anchors'] if cameras is None or set(a.get('serves', [])) & keys),
-                   key=lambda a: -len(a.get('serves', [])))
+    if only:
+        order = [a for a in idx['anchors'] if a['anchor_id'] in only]
+    else:
+        order = sorted((a for a in idx['anchors'] if cameras is None or set(a.get('serves', [])) & keys),
+                       key=lambda a: -len(a.get('serves', [])))
     todo = [(a, s, t) for s, t in need.items() for a in order if force or not pano_ready(base, sid, a, s)]
     if todo and not dry_run:
         check_pano_support(base, sid, idx, log=log)

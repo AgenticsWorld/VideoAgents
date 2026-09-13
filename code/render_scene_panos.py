@@ -10,6 +10,7 @@
   python code/render_scene_panos.py --project <slug> --scene SCN-0002               # 出缺的全景(各集机位所用光照方案)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --ep ep01     # 只按 ep01 的机位规划/出图
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --force   # 手动加锚点(x,z[,yaw°],锁定)并全部重出
+  python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --only-new --scheme L1   # 只加锚点并只出它这一张(预览页「创建全景图」走这条;不规划、其它锚点不动;没有机位也可)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --replan --force        # 重新规划(保留锁定锚点)并重出
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --redo A2 A3  # 只重出这两个锚点的全景(其余不动,链式参考其它已成全景)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --status      # 机检 scene_panos_ready:每 (锚点, 方案) 是否齐
@@ -36,6 +37,8 @@ def main():
         ap.add_argument('--force', action='store_true', help='重渲白模全景并重出全部方案全景(旧全景作废)')
         ap.add_argument('--replan', action='store_true', help='重新规划锚点(locked 锚点保留)')
         ap.add_argument('--anchor', action='append', default=[], help='手动锚点 x,z[,yaw°](白模米制坐标,锁定;可多次)')
+        ap.add_argument('--only-new', action='store_true', help='配合 --anchor:不重新规划,只给本次新加的锚点出全景(其它锚点/背景图不动)')
+        ap.add_argument('--scheme', default=None, help='只出这个光照方案(slug,见 --status 的 schemes);--only-new 时缺省取机位在用的第一个方案')
         ap.add_argument('--redo', nargs='+', default=None, help='只作废并重出这些锚点的全景(如 --redo A2 A3;旧图改名 .redo-<时间>.png 保留)')
         ap.add_argument('--indoor', action='store_true')
         ap.add_argument('--outdoor', action='store_true')
@@ -48,11 +51,33 @@ def main():
         return 0
     eps = [component(args.ep)] if args.ep and '--ep' in sys.argv else None
     cams = sp.scene_cameras(base, sid, eps)
-    if not cams:
+    if not cams and not (args.anchor and args.only_new):
         print(f'{sid}: 没有白模机位(先 python code/render_whitebox.py --project {args.project} --ep <ep> --compile-only)', file=sys.stderr)
         return 1
     idx = sp.load_index(base, sid)
-    if args.anchor:
+    only = None
+    schemes = None
+    if args.scheme:
+        opts = {o['scheme']: o for o in sp.scene_scheme_options(base, sid, cams)}
+        if args.scheme not in opts:
+            print(f'--scheme {args.scheme} 不在本场景方案里:{sorted(opts)}', file=sys.stderr)
+            return 1
+        schemes = {args.scheme: opts[args.scheme].get('time_of_day')}
+    if args.anchor and args.only_new:
+        # 预览页「创建全景图」:只加锚点、只出它这一张;不规划、不动其它锚点
+        only = []
+        for spec in args.anchor:
+            parts = [float(v) for v in spec.split(',')]
+            if len(parts) < 2:
+                print(f'--anchor 须为 x,z[,yaw]:{spec}', file=sys.stderr)
+                return 1
+            a = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams)
+            only.append(a['anchor_id'])
+            print(f"  + {a['anchor_id']} (manual, locked) 中心 x={a['position'][0]} z={a['position'][2]} 高 {a['position'][1]} m yaw {a['yaw_deg']}° 服务 {len(a['serves'])} 机位", flush=True)
+        if schemes is None:
+            o = sp.scene_scheme_options(base, sid, cams)[0]
+            schemes = {o['scheme']: o.get('time_of_day')}
+    elif args.anchor:
         height = sp.default_anchor_height(cams)
         for spec in args.anchor:
             parts = [float(v) for v in spec.split(',')]
@@ -81,8 +106,8 @@ def main():
         print(f"[scene_panos_ready] {args.project}/{sid}: 锚点 {len(idx['anchors'])},方案 {schemes},缺 {len(missing)},未覆盖机位 {len(unserved)} -> {'PASS' if ok else 'FAIL'}", flush=True)
         return 0 if ok else 1
     try:
-        stats = sp.ensure_scene_panos(base, sid, cameras=cams, dry_run=args.dry_run, force=args.force, replan=args.replan, indoor=indoor, seed=args.seed,
-                                      redo=args.redo)
+        stats = sp.ensure_scene_panos(base, sid, cameras=cams, schemes=schemes, dry_run=args.dry_run, force=args.force, replan=args.replan, indoor=indoor,
+                                      seed=args.seed, redo=args.redo, only=only)
     except sp.PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         return 2

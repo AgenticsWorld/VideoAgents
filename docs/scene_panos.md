@@ -42,9 +42,14 @@
 python code/render_scene_panos.py --project <slug> --scene SCN-0002 --dry-run        # 规划锚点 + 渲白模全景,不调图像模型
 python code/render_scene_panos.py --project <slug> --scene SCN-0002                  # 出缺的全景(各集机位所用方案)
 python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --force
+python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5,30 --only-new --scheme L1   # 只加锁定锚点并只出它这一张(预览页「创建全景图」;不规划、其它锚点不动;没有机位也可)
 python code/render_scene_panos.py --project <slug> --scene SCN-0002 --status         # 机检 scene_panos_ready
 python code/render_shot_plates.py --project <slug> --ep ep01 [grp…]                   # 自动保证全景 → 重投影 → 出背景图
 python code/render_shot_plates.py --project <slug> --ep ep01 [grp…] --repano          # 把 legacy(非全景制)背景图整体重出(用户确认后)
 ```
 
 全景与背景图一样在派发任务内前台跑完，禁止丢后台。库里 2026-09-10 前的旧背景图（无 `pano_ref`）视为 legacy：不再被新决策复用，`--status` 列为 WARN；整体重出有费用，由用户决定。
+
+## 预览页「创建全景图」（2026-09-13）
+
+场景预览页「🌐 全景图」板块始终显示（没有索引时锚点 0）。点「➕ 创建全景图」→ 在俯视图上点一个位置（或直接填 x/z，白模米制、原点在场景中心，`x = (u-0.5)×W`、`z = (v-0.5)×D`）→ 选光照方案（机位在用的方案在前，其后是 bible lighting.json 里其余方案）→ 「生成全景图」。后端 `POST /api/v1/projects/<p>/scenes/<sid>/panos {x, z, yaw?, scheme?}` 起后台任务跑上面的 `--only-new` 命令：`add_manual_anchor` 加一个锁定的 manual 锚点（坐标夹回地面内 0.5 m；serves 只接管尚无锚点服务的机位），`ensure_scene_panos(only=[新锚点], schemes={方案})` 只出这一张（链式/重打光规则照旧），其它锚点与背景图不动。进度经 SSE `scene_panos` 事件逐行显示；退出码 2（全景模型不支持 2:1）在板块显示红条。要求项目「白模」选项开启且场景有 layout.json。

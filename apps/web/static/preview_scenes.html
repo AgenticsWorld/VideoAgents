@@ -99,6 +99,19 @@ ul.arr>li{margin:2px 0}
 .pano-row figcaption{font-size:11px;color:var(--dim);margin-top:3px;max-width:300px}
 .pano-row figure.pano-wb img{height:90px;opacity:.85}
 .pano-blocked{border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px}
+/* 创建全景图(2026-09-13):俯视图点选坐标 → 黄色待定点 + 坐标/方案表单 + 后台日志 */
+.pano-map.picking{cursor:crosshair}
+.pano-map.picking img{outline:2px dashed var(--yellow);outline-offset:-2px}
+.pano-dot.new{background:var(--yellow);color:#000;pointer-events:none}
+.pano-panel .ps-hint{color:var(--dim);font-size:12px;margin:2px 0 6px}
+.pano-panel .ps-form[hidden],.pano-panel .ps-hint[hidden]{display:none}
+.pano-panel .ps-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px}
+.pano-panel .ps-form label{display:inline-flex;align-items:center;gap:4px;color:var(--dim)}
+.pano-panel .ps-form input[type=number]{width:78px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
+.pano-panel .ps-form select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
+.pano-panel .ps-log{background:#0b0e14;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:8px 0;max-height:220px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--dim)}
+.pano-panel .ps-status.err{color:var(--red)}
+.pano-panel .ps-status.ok{color:var(--green)}
 /* 世界模型板块(2026-09-12 World Labs Marble):来源下拉 + 生成按钮 + 后台日志 + Spark 视窗 */
 .world-panel .ws-log{background:#0b0e14;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:8px 0;max-height:220px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--dim)}
 .world-panel .ws-status.err{color:var(--red)}
@@ -243,7 +256,13 @@ function renderDetail(s){
   box.innerHTML=h;box.scrollTop=0;
   // Layout landmarks alone are not an authored scene model. An explicit empty
   // objects array is valid for a modeled open space; inferred scale is valid too.
-  if(!Array.isArray(s.docs?.whitebox?.objects))return;
+  if(!Array.isArray(s.docs?.whitebox?.objects)){
+    // 🌐 全景图板块始终显示(2026-09-13):没有白模也挂(只能看/提示先建白模),插在设定文档之前
+    const ph=document.createElement('section');
+    box.insertBefore(ph,box.querySelector('.doc'));
+    mountPanoSection(ph,s);
+    return;
+  }
   const whitebox=document.createElement('section');
   const gallery=box.querySelector('.gallery');
   if(gallery)gallery.after(whitebox);
@@ -251,7 +270,7 @@ function renderDetail(s){
   import('/static/whitebox-ui.js?v=20260913-camonly3').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
   // 🌍 世界模型(2026-09-12):挂在「分镜背景图」板块之后;场景没有背景图时退回白模之后(全景图板块随后插到白模与它之间)
   mountWorldSection(whitebox,s);
-  // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标
+  // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标;始终显示 + 「创建全景图」(2026-09-13)
   mountPanoSection(whitebox,s);
 }
 
@@ -337,44 +356,58 @@ try{
   es.onmessage=e=>{
     try{
       const ev=JSON.parse(e.data);
-      if(ev.type!=='scene_world'||ev.project!==($('#project').value.trim()||'demo'))return;
-      if(WORLD_LIVE&&WORLD_LIVE.sid===ev.scene&&CUR===ev.scene)WORLD_LIVE.onEvent(ev);
+      if(ev.project!==($('#project').value.trim()||'demo'))return;
+      if(ev.type==='scene_world'&&WORLD_LIVE&&WORLD_LIVE.sid===ev.scene&&CUR===ev.scene)WORLD_LIVE.onEvent(ev);
+      if(ev.type==='scene_panos'&&PANO_LIVE&&PANO_LIVE.sid===ev.scene&&CUR===ev.scene)PANO_LIVE.onEvent(ev);
     }catch(err){/* ignore */}
   };
 }catch(e){/* EventSource 不可用时页面仍可手动刷新 */}
 
-// 预览 API 未重启(旧服务不带 scenes[].panos)时直接读产物 panos/index.json 兜底
-async function mountPanoSection(whitebox,s){
+// 🌐 全景图板块:始终显示(2026-09-13)。锚点列全景 + 俯视图标锚点中心;「创建全景图」= 在俯视图上点一个坐标(或直接填 x/z)
+// → POST /scenes/<sid>/panos → 后台加锁定锚点并只出这一张(SSE scene_panos 逐行日志,done 后原位重载)。
+// 预览 API 未重启(旧服务不带 scenes[].panos)时直接读产物 panos/index.json 兜底(此时创建接口也不可用)。
+let PANO_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
+async function mountPanoSection(host,s){
   const proj=$('#project').value.trim()||'demo';
-  let panos=s.panos;
+  let panos=s.panos,legacy=false;
   if(panos===undefined){
+    legacy=true;
+    const dims=(s.docs?.whitebox?.dimensions_m)||[1,1,1];
+    const abase=`/api/v1/projects/${encodeURIComponent(proj)}/artifacts/assets/concepts/scenes/${encodeURIComponent(s.id)}/`;
+    panos={anchors:[],indoor:null,blocked:null,dimensions_m:dims,layout_top_url:abase+'layout_top.png',scheme_options:[],has_whitebox:Array.isArray(s.docs?.whitebox?.objects),job:null};
     try{
-      const abase=`/api/v1/projects/${encodeURIComponent(proj)}/artifacts/assets/concepts/scenes/${encodeURIComponent(s.id)}/`;
-      const r=await fetch(abase+'panos/index.json');if(!r.ok)return;
-      const idx=await r.json();if(!Array.isArray(idx.anchors))return;
-      const dims=(s.docs?.whitebox?.dimensions_m)||[1,1,1];
-      panos={anchors:idx.anchors.map(a=>({...a,xy:[a.position[0]/dims[0]+.5,a.position[2]/dims[2]+.5],
+      const r=await fetch(abase+'panos/index.json');
+      const idx=r.ok?await r.json():null;
+      if(idx&&Array.isArray(idx.anchors))Object.assign(panos,{anchors:idx.anchors.map(a=>({...a,xy:[a.position[0]/dims[0]+.5,a.position[2]/dims[2]+.5],
           whitebox_pano_url:abase+`panos/${a.anchor_id}/whitebox_pano.jpg`,
           panos:Object.fromEntries(Object.entries(a.panos||{}).map(([k,v])=>[k,{...v,url:abase+`panos/${a.anchor_id}/${v.file}`}]))})),
-        indoor:idx.indoor,blocked:idx.blocked,dimensions_m:dims,layout_top_url:abase+'layout_top.png'};
-    }catch(e){return}
+        indoor:idx.indoor,blocked:idx.blocked});
+    }catch(e){/* 没有索引也照常显示空板块 */}
   }
-  if(!panos||CUR!==s.id||!whitebox.isConnected)return;
-  const sec=document.createElement('section');sec.className='wb-panel pano-panel';whitebox.after(sec);
+  if(!panos||CUR!==s.id||!host.isConnected)return;
+  const sec=document.createElement('section');sec.className='wb-panel pano-panel';host.after(sec);
   const anchors=panos.anchors||[];
+  const dims=panos.dimensions_m||(s.docs?.whitebox?.dimensions_m)||[1,1,1];
+  const job=panos.job||null,running=job&&job.status==='running';
+  const canCreate=!legacy&&panos.has_whitebox!==false&&WB_ON!==false;
   const marker=`[panos:${proj}/${s.id}]`;
   const loc=I18N.f('全景锚点 {marker}(场景 {scene};索引 {file};锚点 {anchors};改动后重出:python code/render_scene_panos.py --project {proj} --scene {scene} --anchor x,z --force,再 python code/render_shot_plates.py --project {proj} --ep <ep> --repano)',
     {marker,scene:s.id,file:`assets/concepts/scenes/${s.id}/panos/index.json`,anchors:anchors.map(a=>`${a.anchor_id}(${a.position[0]},${a.position[2]})`).join(' ')||'-',proj});
-  let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌐 ${esc(t('全景图'))} · ${esc(s.id)}</strong><span style="color:var(--dim)">${esc(I18N.f('{n} 个锚点',{n:anchors.length}))} · ${esc(panos.indoor?t('室内(补顶)'):t('室外'))}</span>`
+  const createTitle=legacy?t('服务未重启:创建全景图接口不可用'):WB_ON===false?t('项目「白模」选项已关闭,不能生成全景图'):panos.has_whitebox===false?t('该场景还没有白模,不能出全景(先建场景白模)'):t('在俯视图上点一个坐标(或直接填 x/z),给该位置出一张 2:1 全景(只出这一张,其它锚点不动;消耗全景模型出图费用)');
+  let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌐 ${esc(t('全景图'))} · ${esc(s.id)}</strong><span style="color:var(--dim)">${esc(I18N.f('{n} 个锚点',{n:anchors.length}))}${panos.indoor==null?'':' · '+esc(panos.indoor?t('室内(补顶)'):t('室外'))}</span>`
+    +`<button type="button" class="ps-create"${(canCreate&&!running)?'':' disabled'} title="${esc(createTitle)}">${esc(running?t('生成中…'):t('➕ 创建全景图'))}</button>`
     +`<button class="editbtn" data-loc="${esc(loc)}" data-agent="08-video-gen/shot-plates" title="${esc(t('对全景锚点提修改意见(移动/增删锚点、重出全景),直接发消息给分镜背景图 Agent'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   if(panos.blocked){
     h+=`<div class="pano-blocked">⚠️ ${esc(I18N.f('当前全景图像模型 {model}({provider})不支持 2:1 全景,全景图与分镜背景图已暂停:请在本页顶部「🌐 全景模型」或控制台「🎨 生成模型」切换后重跑 code/render_shot_plates.py',{model:panos.blocked.model||'?',provider:panos.blocked.provider||'?'}))}${panos.blocked.detail?` — ${esc(panos.blocked.detail)}`:''}</div>`;
   }
+  h+=`<div class="wb-status ps-status">${esc(running?t('正在生成全景图…'):anchors.length?'':canCreate?t('该场景还没有全景图;点「创建全景图」在俯视图上选一个位置出图,或由分镜背景图链自动规划锚点'):'')}</div>`;
+  h+=`<div class="ps-hint" hidden></div><div class="ps-form" hidden></div>`;
   if(panos.layout_top_url){
-    h+=`<div class="pano-map"><img src="${esc(bust(panos.layout_top_url))}" alt="">`
+    h+=`<div class="pano-map"><img src="${esc(bust(panos.layout_top_url))}" alt="" draggable="false">`
       +anchors.map(a=>`<span class="pano-dot" style="left:${(a.xy[0]*100).toFixed(2)}%;top:${(a.xy[1]*100).toFixed(2)}%" title="${esc(a.anchor_id)} (${a.position[0]}, ${a.position[2]})">${esc(a.anchor_id)}</span>`).join('')
       +`</div>`;
   }
+  h+=`<pre class="ps-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`;
   const servesText=a=>{
     const by={};(a.serves||[]).forEach(k=>{const m=k.match(/^([^/]*)\/([^:]+)(?::(\w+))?$/);if(!m)return;(by[m[1]]=by[m[1]]||new Set()).add(m[2]);});
     return Object.keys(by).sort().map(ep=>`${ep}: ${[...by[ep]].sort().join(', ')}`).join(' · ');
@@ -382,7 +415,7 @@ async function mountPanoSection(whitebox,s){
   const modeText=(rec)=>rec.mode==='chain'?I18N.f('链式补洞(自 {a})',{a:rec.parent?.anchor_id||'?'}):rec.mode==='relight'?I18N.f('重打光(自 {s})',{s:rec.parent?.scheme||'?'}):t('独立出图');
   anchors.forEach(a=>{
     const p=a.position;
-    h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}`
+    h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}${a.source==='manual'?` · ${esc(t('手动'))}`:''}`
       +`<div style="color:var(--dim);font-size:12px">${esc((a.serves||[]).length?I18N.f('服务机位:{s}',{s:servesText(a)}):t('尚未服务任何机位'))}</div></div><div class="pano-row">`;
     Object.keys(a.panos||{}).sort().forEach(sch=>{const rec=a.panos[sch];if(!rec.url)return;
       h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn" title="${esc(sch)}">${esc(sch)}${rec.time_of_day?` · ${esc(rec.time_of_day)}`:''} · ${esc(modeText(rec))}</span></figcaption></figure>`;});
@@ -390,6 +423,64 @@ async function mountPanoSection(whitebox,s){
     h+='</div></div>';
   });
   sec.innerHTML=h;
+  // ---- 创建全景图:点选/填坐标 → 提交后台任务
+  const btn=sec.querySelector('.ps-create'),status=sec.querySelector('.ps-status'),log=sec.querySelector('.ps-log'),hint=sec.querySelector('.ps-hint'),form=sec.querySelector('.ps-form'),map=sec.querySelector('.pano-map');
+  const [W,,D]=dims;
+  let pick=null,dot=null,cancelPick=null;
+  const setDot=(x,z)=>{
+    if(!map)return;
+    if(!dot){dot=document.createElement('span');dot.className='pano-dot new';dot.textContent='+';map.appendChild(dot);}
+    dot.style.left=((x/W+.5)*100).toFixed(2)+'%';dot.style.top=((z/D+.5)*100).toFixed(2)+'%';
+    dot.title=`(${x}, ${z})`;
+  };
+  const openForm=()=>{
+    const opts=panos.scheme_options||[];
+    const nextId=(()=>{const used=new Set(anchors.map(a=>a.anchor_id));let n=anchors.length+1;while(used.has('A'+n))n++;return 'A'+n;})();
+    form.innerHTML=`<span>${esc(I18N.f('新锚点 {id}',{id:nextId}))}</span>`
+      +`<label>x <input type="number" class="ps-x" step="0.1" value="${pick?pick.x:0}"> m</label>`
+      +`<label>z <input type="number" class="ps-z" step="0.1" value="${pick?pick.z:0}"> m</label>`
+      +`<label>yaw <input type="number" class="ps-yaw" step="1" value="0">°</label>`
+      +`<label>${esc(t('光照方案'))} <select class="ps-scheme">${opts.map(o=>`<option value="${esc(o.scheme)}">${esc(o.scheme)}${o.time_of_day?' · '+esc(o.time_of_day):''}${o.in_use?'':' · '+esc(t('未被机位使用'))}</option>`).join('')||`<option value="">default</option>`}</select></label>`
+      +`<button type="button" class="ps-go">🌐 ${esc(t('生成全景图'))}</button><button type="button" class="ps-cancel">${esc(t('取消'))}</button>`;
+    form.hidden=false;
+    const ix=form.querySelector('.ps-x'),iz=form.querySelector('.ps-z');
+    const sync=()=>{const x=parseFloat(ix.value),z=parseFloat(iz.value);if(Number.isFinite(x)&&Number.isFinite(z)){pick={x,z};setDot(x,z);}};
+    ix.oninput=iz.oninput=sync;
+    form.querySelector('.ps-cancel').onclick=()=>{stopPick();form.hidden=true;form.innerHTML='';if(dot){dot.remove();dot=null;}pick=null;};
+    form.querySelector('.ps-go').onclick=async()=>{
+      const x=parseFloat(ix.value),z=parseFloat(iz.value),yaw=parseFloat(form.querySelector('.ps-yaw').value)||0,scheme=form.querySelector('.ps-scheme').value;
+      if(!Number.isFinite(x)||!Number.isFinite(z)){status.className='wb-status ps-status err';status.textContent=t('请先在俯视图上点一个位置,或填写 x/z 坐标');return;}
+      stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');
+      status.className='wb-status ps-status';status.textContent=t('正在生成全景图…');log.hidden=false;log.textContent='';
+      try{
+        const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,z,yaw,scheme})});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
+      }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');status.className='wb-status ps-status err';status.textContent=t('启动失败:')+e.message;log.hidden=true;form.hidden=false;}
+    };
+  };
+  const onMapClick=e=>{
+    const img=map.querySelector('img'),rc=img.getBoundingClientRect();
+    const u=(e.clientX-rc.left)/rc.width,v=(e.clientY-rc.top)/rc.height;
+    if(u<0||u>1||v<0||v>1)return;
+    const x=Math.round((u-.5)*W*100)/100,z=Math.round((v-.5)*D*100)/100;
+    pick={x,z};setDot(x,z);
+    const ix=form.querySelector('.ps-x'),iz=form.querySelector('.ps-z');
+    if(ix&&iz){ix.value=x;iz.value=z;}
+    hint.textContent=I18N.f('已选 ({x}, {z}) m;再点可改位置,确认后点「生成全景图」',{x,z});
+  };
+  const stopPick=()=>{if(map){map.classList.remove('picking');map.removeEventListener('click',onMapClick);}hint.hidden=true;};
+  cancelPick=stopPick;
+  btn.onclick=()=>{
+    if(map){map.classList.add('picking');map.addEventListener('click',onMapClick);hint.hidden=false;hint.textContent=t('在俯视图上点一下选择全景中心(坐标为白模米制,原点在场景中心)');}
+    else{hint.hidden=false;hint.textContent=t('该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)');}
+    openForm();
+  };
+  PANO_LIVE={sid:s.id,onEvent(ev){
+    if(ev.status==='running'){if(ev.line){log.hidden=false;log.textContent+=(log.textContent?'\n':'')+ev.line;log.scrollTop=log.scrollHeight;}btn.disabled=true;btn.textContent=t('生成中…');return;}
+    if(ev.status==='done'){status.className='wb-status ps-status ok';status.textContent=t('全景图生成完成');reloadKeep();}
+    else{status.className='wb-status ps-status err';status.textContent=t('全景图生成失败:')+(ev.error||'');btn.disabled=!canCreate;btn.textContent=t('➕ 创建全景图');reloadKeep();}   // 失败也重载:锚点/白模全景/blocked 红条已落盘
+  }};
 }
 
 // 图片 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留

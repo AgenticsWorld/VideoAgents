@@ -356,6 +356,12 @@ async def scene_world_start(project: str, sid: str, body: dict[str, Any]) -> dic
     return await core.api_scene_world_start(project, sid, body)
 
 
+@api.post("/projects/{project}/scenes/{sid}/panos", tags=["artifacts"])
+async def scene_pano_start(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「创建全景图」:{x, z, yaw?, scheme?}(白模米制坐标)→ 后台加锁定锚点并只出这一张全景;进度经 SSE scene_panos。"""
+    return await core.api_scene_pano_start(project, sid, body)
+
+
 @api.get("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
 async def scene_world_status(project: str, sid: str) -> dict[str, Any]:
     return await core.api_scene_world_status(project, sid)
