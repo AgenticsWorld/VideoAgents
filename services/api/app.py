@@ -22,6 +22,7 @@ from .schemas import (
 )
 from .state import RuntimeStore
 from .whitebox import router as whitebox_router
+from .director import router as director_router
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1199,6 +1200,7 @@ async def live_director_record(request: Request, seq: int, ext: str = "webm") ->
 
 
 api.include_router(whitebox_router)
+api.include_router(director_router)
 app.include_router(api)
 
 

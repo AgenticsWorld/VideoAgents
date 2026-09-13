@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>导演台 · VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Crect%20x%3D%273%27%20y%3D%276%27%20width%3D%2718%27%20height%3D%2713%27%20rx%3D%273%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M8%206l3-3M14%206l3-3%27%20stroke%3D%27%236c9ef8%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712.5%27%20r%3D%273%27%20fill%3D%27%231c2130%27%2F%3E%3C%2Fsvg%3E">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --panel3:#232a3b; --border:#2a3040; --border2:#39415a;
+  --text:#dde3ee; --dim:#8b93a7; --faint:#5c6478; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc; --cyan:#5eead4; --pink:#f472b6;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex-wrap:wrap;flex:none}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px}
+header a.back:hover{color:var(--accent)}
+header .spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;font-family:inherit}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.6;cursor:default}
+button.pri{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+button.warn{border-color:#6a2e2e;color:var(--red)}
+button.sm{font-size:11.5px;padding:2px 8px}
+button.xs{font-size:11px;padding:0 6px;line-height:1.7}
+header select,header input,select,input[type=text],input[type=number],textarea{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit}
+header select{cursor:pointer;max-width:260px}
+#eps{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none;align-items:center}
+#eps select#epsel{border-color:var(--accent);font-weight:600;cursor:pointer;max-width:320px;padding:4px 8px}
+#eps .stat{color:var(--dim);font-size:12px;margin-left:6px}
+#eps .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border2);border-radius:14px;padding:2px 10px;color:var(--dim)}
+.pill.run{color:var(--yellow);border-color:#5f4a17}
+.pill.ok{color:var(--green);border-color:#2b5a3c}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+.spin{display:inline-block;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== 三栏 ===== */
+#work{flex:1;min-height:0;display:grid;grid-template-columns:250px minmax(0,1fr) 360px}
+.col{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.col+.col{border-left:1px solid var(--border)}
+.col-h{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);background:var(--panel);font-weight:600;font-size:12.5px;flex:none}
+.col-h .sp{flex:1}
+.col-h .lite{font-weight:400;color:var(--dim);font-size:12px}
+.scroll{flex:1;min-height:0;overflow-y:auto}
+/* 左栏 */
+.scn{padding:5px 10px;color:var(--dim);font-size:11.5px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;cursor:pointer;user-select:none;position:sticky;top:0;z-index:1}
+.scn .sp{flex:1}
+.scn.closed+.grps{display:none}
+.grp{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:6px 10px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;font-size:12px}
+.grp:hover{background:var(--panel2)}
+.grp.sel{background:#1b2740;box-shadow:inset 3px 0 0 var(--accent)}
+.grp .id{font:500 11.5px var(--mono);color:var(--text)}
+.grp .sub{font-size:10.5px;color:var(--dim);display:flex;gap:5px;align-items:center;white-space:nowrap;overflow:hidden}
+.grp .n{font:10.5px var(--mono);color:var(--dim);text-align:right}
+.grp .cast{display:flex;gap:2px;grid-column:1/-1}
+.grp .cast i{width:9px;height:9px;border-radius:50%;display:block}
+.shots{display:none;padding:0 0 4px 18px;border-bottom:1px solid var(--border);background:#12151d}
+.grp.sel+.shots{display:block}
+.sh{display:flex;gap:6px;align-items:center;font:11px var(--mono);color:var(--dim);padding:2px 10px;cursor:pointer}
+.sh:hover,.sh.on{color:var(--text)}
+.sh.on{background:#1b2740}
+.sh .dur{color:var(--faint);margin-left:auto}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.dot.r{background:var(--red)}.dot.y{background:var(--yellow)}.dot.g{background:var(--green)}.dot.b{background:var(--accent)}
+/* 监视器 */
+.mon-top{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--panel);font-size:11.5px;flex-wrap:wrap;flex:none}
+.seg{display:inline-flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden}
+.seg span{padding:2px 8px;color:var(--dim);cursor:pointer;user-select:none;white-space:nowrap}
+.seg span.on{background:#274680;color:#fff}
+.vchip{font:500 11px var(--mono);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;color:var(--text);background:var(--panel2)}
+.vchip.a{border-color:#3d63b0;color:var(--accent)}
+.vchip.b{border-color:#7a4c25;color:var(--link)}
+.mon-top select{padding:1px 4px;font-size:11px}
+.screen{flex:none;position:relative;background:#05060a;display:flex;align-items:center;justify-content:center;padding:8px;height:46vh;min-height:220px}
+.frame{position:relative;max-width:100%;max-height:100%;aspect-ratio:16/9;background:#000;border-radius:4px;overflow:hidden;user-select:none;height:100%;margin:0 auto}
+.frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.frame canvas.b{clip-path:inset(0 0 0 50%)}
+.frame .split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff;box-shadow:0 0 0 1px #0008;pointer-events:none;z-index:3}
+.frame .knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#fff;color:#000;font:600 10px var(--mono);display:flex;align-items:center;justify-content:center;cursor:ew-resize;z-index:5}
+.frame .tag{position:absolute;bottom:8px;font:500 10.5px var(--mono);color:#fff;text-shadow:0 1px 2px #000;pointer-events:none;z-index:4;background:#0007;padding:0 5px;border-radius:3px}
+.frame .tag.a{left:8px}.frame .tag.b{right:8px}
+.frame .tc{position:absolute;top:6px;right:8px;font:10.5px var(--mono);color:#fffa;pointer-events:none;z-index:4}
+.frame .info{position:absolute;top:6px;left:8px;font:10.5px var(--mono);color:#fffa;pointer-events:none;z-index:4}
+.frame .pad{position:absolute;inset:0;z-index:2;cursor:crosshair;touch-action:none}
+.frame .pad.orbit{cursor:grab}
+.frame .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px;pointer-events:none;z-index:4}
+.xport{display:flex;gap:6px;align-items:center;padding:5px 10px;border-top:1px solid var(--border);background:var(--panel);font-size:11.5px;flex:none;flex-wrap:wrap}
+.xport .tl{flex:1;min-width:120px;height:10px;border-radius:4px;background:var(--panel3);position:relative;cursor:pointer}
+.xport .tl i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:4px;pointer-events:none;opacity:.55}
+.xport .tl b{position:absolute;top:-3px;width:2px;height:16px;background:#fff;pointer-events:none}
+.xport .tl s{position:absolute;top:0;bottom:0;width:1px;background:#fff6;pointer-events:none}
+.xport .tl u{position:absolute;top:11px;font:9px var(--mono);color:var(--faint);text-decoration:none;pointer-events:none}
+.xport .tc{font:11px var(--mono);color:var(--text);min-width:130px;text-align:center}
+.xport label{display:inline-flex;gap:4px;align-items:center;color:var(--dim);cursor:pointer}
+/* 对象表 + 分镜信息 */
+.midbody{flex:1;min-height:0;overflow-y:auto}
+.objs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;padding:8px 10px}
+.obj{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:center;padding:5px 8px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11.5px;background:var(--panel)}
+.obj:hover{border-color:var(--border2)}
+.obj.sel{border-color:var(--yellow);box-shadow:0 0 0 1px #fbbf2455}
+.obj.absent{opacity:.5}
+.av{width:34px;height:34px;border-radius:50%;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font:600 13px var(--mono);color:#fff;overflow:hidden;background:var(--panel3)}
+.av img{width:100%;height:100%;object-fit:cover;object-position:top}
+.obj .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.obj .meta{font:10px var(--mono);color:var(--dim);display:flex;gap:6px;flex-wrap:wrap}
+.obj .stt{font-size:10px;border:1px solid var(--border2);border-radius:3px;padding:0 4px;color:var(--dim)}
+.obj .stt.in{color:var(--green);border-color:#2b5a3c}.obj .stt.out{color:var(--yellow);border-color:#5f4a17}.obj .stt.off{color:var(--faint)}
+.sec-h{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--panel);font-weight:600;font-size:12px;position:sticky;top:0;z-index:1}
+.sec-h .lite{font-weight:400;color:var(--dim);font-size:11.5px}
+.shotinfo{padding:8px 10px;font-size:12px}
+.shotinfo .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.tag{font:10.5px var(--mono);border:1px solid var(--border2);border-radius:3px;padding:0 5px;color:var(--dim)}
+.shotinfo .content{color:var(--text);white-space:pre-wrap}
+.shotinfo .dl{color:var(--yellow);font-size:11.5px;margin-top:3px}
+.shotinfo .cam{color:var(--dim);font-size:11.5px;margin-top:3px}
+.shotinfo .media{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.shotinfo .media img{height:64px;border-radius:4px;border:1px solid var(--border);cursor:zoom-in}
+.shotinfo .warn{color:var(--dim);font-size:11px;margin-top:6px;white-space:pre-wrap}
+/* 右栏 */
+.acc{border-bottom:1px solid var(--border)}
+.acc-h{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--panel);font-weight:600;font-size:12px;cursor:pointer;user-select:none;position:sticky;top:0;z-index:1}
+.acc-h .cnt{font:10px var(--mono);color:var(--dim);font-weight:400}
+.acc-h .sp{flex:1}
+.acc-h .car{color:var(--faint)}
+.acc.closed .acc-b{display:none}
+.acc-b{padding:4px 0}
+.note{padding:6px 10px;border-top:1px solid var(--border);font-size:11.5px}
+.note .r1{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.note .r1 .sp{flex:1}
+.note .txt{margin-top:3px;white-space:pre-wrap;word-break:break-word}
+.note .r2{color:var(--dim);font:10.5px var(--mono);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+.note .r2 .err{color:var(--red);font-family:inherit}
+.note .r3{display:flex;gap:5px;margin-top:5px}
+.note.other{opacity:.7}
+.tg{display:inline-flex;align-items:center;gap:4px;font:10.5px var(--mono);border:1px solid var(--border2);border-radius:10px;padding:0 7px 0 3px;color:var(--text)}
+.tg i{width:9px;height:9px;border-radius:50%;display:block;background:var(--faint)}
+.st{font:10px var(--mono);border:1px solid var(--border2);border-radius:3px;padding:0 5px;color:var(--dim);white-space:nowrap}
+.st.draft{color:var(--dim)}.st.submitted{color:var(--yellow);border-color:#5f4a17}.st.applied{color:var(--green);border-color:#2b5a3c}.st.failed{color:var(--red);border-color:#6a2e2e}
+.st.running{color:var(--yellow);border-color:#5f4a17}.st.done{color:var(--green);border-color:#2b5a3c}.st.nochange{color:var(--dim)}
+.nform{padding:8px 10px;border-top:1px solid var(--border);display:grid;gap:6px;background:#12151d}
+.nform .row{display:grid;grid-template-columns:52px 1fr;gap:6px;align-items:center;font-size:11.5px}
+.nform .row label{color:var(--dim)}
+.nform select,.nform input,.nform textarea{width:100%;font-size:12px;padding:3px 6px}
+.nform textarea{min-height:56px;resize:vertical}
+.nform .btns{display:flex;gap:6px;justify-content:flex-end;align-items:center}
+.nform .msg{flex:1;color:var(--dim);font-size:11px}
+.nform .msg.err{color:var(--red)}
+.subrow{display:flex;gap:6px;padding:6px 10px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center;font-size:11.5px}
+.subrow .msg{flex:1;color:var(--dim);font-size:11px;min-width:80px}
+/* 待决项(样式随 whitebox.css wb-issue) */
+.iss{padding:6px 10px;border-top:1px solid var(--border);font-size:11.5px}
+.iss .h{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font:10.5px var(--mono);color:var(--dim)}
+.iss .sev{border:1px solid #6a2e2e;color:var(--red);border-radius:3px;padding:0 4px}
+.iss.advisory .sev{border-color:#5f4a17;color:var(--yellow)}
+.iss .q{margin-top:3px}
+.iss .prov{color:var(--dim);font-size:11px;margin-top:2px}
+.iss .opts{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.iss .opts button.on{border-color:var(--green);color:var(--green)}
+.iss .opts button.rec em{color:var(--yellow);font-style:normal;font-size:10px}
+.iss .state{font-size:11px;color:var(--green);margin-top:3px}
+.iss .state.warn{color:var(--yellow)}
+.ver{display:flex;gap:6px;align-items:center;padding:4px 10px;border-top:1px solid var(--border);font-size:11.5px;flex-wrap:wrap}
+.ver .v{font:600 11.5px var(--mono);color:var(--text)}
+.ver .lb{color:var(--dim);font-size:11px}
+.ver .sp{flex:1}
+.ver .cur{color:var(--accent);font-size:10px}
+.bat{padding:5px 10px;border-top:1px solid var(--border);font-size:11px;color:var(--dim)}
+.bat b{color:var(--text);font-family:var(--mono);font-weight:500}
+/* 底栏 */
+#foot{border-top:1px solid var(--border);background:var(--panel);font-size:10.5px;flex:none}
+#foot .fh{display:flex;align-items:center;gap:10px;padding:3px 12px;color:var(--dim)}
+#foot .fh .sp{flex:1}
+.tlrow{position:relative;height:26px;margin:0 12px 6px;border-bottom:1px solid #1d2230}
+.blk{position:absolute;top:2px;height:20px;border-radius:2px;background:var(--panel3);border:1px solid var(--border2);font:9px var(--mono);color:var(--dim);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;white-space:nowrap}
+.blk:hover{border-color:var(--accent)}
+.blk.sel{border-color:var(--accent);color:#fff;background:#1b2740}
+.blk .d{position:absolute;top:1px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--yellow)}
+.ph{position:absolute;top:0;bottom:0;width:1px;background:#fff;z-index:3;pointer-events:none}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
+#lb img{max-width:92vw;max-height:88vh;border-radius:8px}
+#toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:6px 14px;border-radius:8px;font-size:12.5px;z-index:120;box-shadow:0 6px 24px #000a;transition:opacity .3s;opacity:0;pointer-events:none}
+@media(max-width:1100px){#work{grid-template-columns:220px minmax(0,1fr) 300px}}
+@media(max-width:860px){#work{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto}.col{max-height:70vh}}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← 控制台</a>
+  <h1>🎬 导演台</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<div id="eps"></div>
+<div id="work"><div class="empty" style="grid-column:1/-1">加载中…</div></div>
+<div id="foot"></div>
+<div id="lb"><img alt=""></div>
+<div id="toast"></div>
+
+<script type="module">
+import * as THREE from '/static/vendor/three/three.module.js';
+import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
+import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20260909-realplate';
+import { projectRenderFormat } from '/static/whitebox-format.js?v=20260908-bedfoot-pour';
+
+const $=s=>document.querySelector(s);
+const $$=s=>Array.from(document.querySelectorAll(s));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=(v,d=1)=>v==null||isNaN(v)?'—':(+v).toFixed(d).replace(/\.0$/,'');
+const tc=v=>{v=Math.max(0,+v||0);const m=Math.floor(v/60),s=v-m*60;return (m?String(m).padStart(2,'0')+':':'')+s.toFixed(2).padStart(5,'0')};
+const FPS=24;
+const proj=()=>$('#project').value.trim()||'demo';
+const posKey=()=>'director-pos:'+proj()+':'+EP;
+function posLoad(){try{return JSON.parse(localStorage.getItem(posKey())||'{}')||{}}catch(_){return {}}}
+function posSave(patch){try{localStorage.setItem(posKey(),JSON.stringify({...posLoad(),...patch}))}catch(_){}}
+const api=p=>'/api/v1/projects/'+encodeURIComponent(proj())+'/director/'+encodeURIComponent(EP)+p;
+const wbApi=p=>'/api/v1/projects/'+encodeURIComponent(proj())+'/whitebox/'+p;
+const artifactBase=()=>'/api/v1/projects/'+encodeURIComponent(proj())+'/artifacts/';
+async function J(url,method,body){
+  const r=await fetch(url,{method:method||'GET',headers:body!==undefined?{'Content-Type':'application/json'}:{},body:body!==undefined?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||j.error||r.status);
+  return j;
+}
+function toast(msg,ms=3500){const el=$('#toast');el.textContent=msg;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0'},ms)}
+
+/* ---------- 状态 ---------- */
+const Q0=new URLSearchParams(location.search);
+let DD=null,WB=null,SB=null,FORMAT=null,EP='',SEL='',VIEW='overview',AB='a',VA='live',VB='live',TIME=0,PLAYING=false,LOOP=false,
+    PICK=null,OPEN_SCN=new Set(),CLOSED_ACC=new Set(),NOTE_SCOPE='group',POLL=null,LAST_MAXV={},URL_T=null,SHOWALL=false;
+const grpById=id=>WB&&WB.groups.find(g=>g.group_id===id);
+const groupIssues=gid=>(grpById(gid)||{}).issues||[];
+const groupNotes=gid=>((DD||{}).ledger||{}).notes.filter(n=>n.group_id===gid);
+const versionsOf=gid=>(((DD||{}).ledger||{}).versions||{})[gid]||[];
+const maxV=gid=>versionsOf(gid).reduce((m,v)=>Math.max(m,v.v),0);
+const runningBatches=()=>(((DD||{}).ledger||{}).batches||[]).filter(b=>b.status==='running');
+const shotOf=sid=>SB&&(SB.shots||[]).find(s=>s.shot_id===sid);
+const TL=k=>((DD||{}).labels||{}).target?.[k]||k;
+
+/* ---------- 加载 ---------- */
+async function load(keep){
+  history.replaceState(null,'','?project='+encodeURIComponent(proj())+(EP?'&ep='+encodeURIComponent(EP):'')+(SEL?'&grp='+encodeURIComponent(SEL):''));
+  if(!keep)$('#work').innerHTML='<div class="empty" style="grid-column:1/-1">'+esc(t('加载中…'))+'</div>';
+  try{
+    if(!FORMAT){FORMAT=projectRenderFormat(await J('/api/v1/projects/'+encodeURIComponent(proj())+'/config'))}
+    let dd;
+    try{dd=await J(api(''))}
+    catch(e){
+      // 未指定集或该集没有白模:先取分集列表再定集
+      if(!EP){const eps=await J('/api/v1/projects/'+encodeURIComponent(proj())+'/previews/storyboard').catch(()=>({episodes:[]}));
+        const first=(eps.episodes||[])[0];if(first){EP=first.ep;return load(keep)}}
+      throw e;
+    }
+    if(!(dd.episodes||[]).length){$('#eps').innerHTML='';$('#work').innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(t('该项目还没有分集数据'))}</div>`;return}
+    if(!dd.episodes.some(e=>e.ep===dd.ep)){EP=dd.episodes[0].ep;return load(keep)}
+    EP=dd.ep;localStorage.setItem('director-ep:'+proj(),EP);LAST_EPISODES=dd.episodes;
+    const [wb,sb]=await Promise.all([J(wbApi(encodeURIComponent(EP))),J('/api/v1/projects/'+encodeURIComponent(proj())+'/previews/storyboard?ep='+encodeURIComponent(EP)).catch(()=>null)]);
+    const first=!DD||DD.ep!==dd.ep;
+    const prevMax={...LAST_MAXV};
+    DD=dd;WB=wb;SB=sb;
+    LAST_MAXV={};for(const g of WB.groups)LAST_MAXV[g.group_id]=maxV(g.group_id);
+    if(first||!grpById(SEL)){
+      const pos=posLoad(),q=Q0;
+      const want=q.get('grp')&&grpById(q.get('grp'))?q.get('grp'):(pos.sel&&grpById(pos.sel)?pos.sel:(WB.groups[0]||{}).group_id)||'';
+      OPEN_SCN=new Set((pos.open||[]).length?pos.open:[]);
+      SEL='';URL_T=q.get('t')!=null?Number(q.get('t')):null;Q0.delete('grp');Q0.delete('t');
+      render(false);
+      if(want)selectGroup(want,true);
+    }else{
+      render(true);
+      // 新版本自动加载:本组版本号涨了 → A=当前实时,B=上一版
+      const nv=LAST_MAXV[SEL]||0;
+      if(nv>(prevMax[SEL]||0)){VA='live';VB=nv>1?String(nv-1):'live';renderVersionSelects();toast(I18N.f('{g} 新版本 v{v} 已加载到 A,B 为上一版',{g:SEL,v:nv}));if(AB==='a')setAB('split');reloadSources()}
+    }
+    schedulePoll();
+  }catch(e){
+    $('#work').innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(t('加载失败:'))}${esc(e.message)}</div>`;
+    // 该集没有白模/分镜表时仍保留选集下拉,能切回别的集
+    if(LAST_EPISODES.length){$('#eps').innerHTML=`<select id="epsel" title="${esc(t('切换分集'))}">${LAST_EPISODES.map(x=>`<option value="${esc(x.ep)}" ${x.ep===EP?'selected':''}>${esc(x.ep)}${x.title?' · '+esc(x.title):''}${x.has_whitebox?'':' · '+esc(t('无白模'))}</option>`).join('')}</select>`;
+      $('#epsel').onchange=()=>{EP=$('#epsel').value;SEL='';DD=null;disposeRenderers();load()}}
+  }
+}
+let LAST_EPISODES=[];
+function schedulePoll(){
+  const busy=runningBatches().length>0;
+  if(busy&&!POLL)POLL=setInterval(()=>load(true),6000);
+  if(!busy&&POLL){clearInterval(POLL);POLL=null}
+}
+
+/* ---------- 顶部集行 ---------- */
+function renderEps(){
+  const s=DD.summary||{},box=$('#eps');
+  let h=`<select id="epsel" title="${esc(t('切换分集'))}">${DD.episodes.map(e=>`<option value="${esc(e.ep)}" ${e.ep===EP?'selected':''}>${esc(e.ep)}${e.title?' · '+esc(e.title):''}${e.has_whitebox?'':' · '+esc(t('无白模'))}${e.has_notes?' ✎':''}</option>`).join('')}</select>`;
+  h+=`<span class="stat">${esc(I18N.f('{n} 组 · 注释 {t}(待提交 {d} · 已提交 {s} · 已套用 {a} · 未生效 {f})· 版本 {v}',{n:WB.groups.length,t:s.total||0,d:s.draft||0,s:s.submitted||0,a:s.applied||0,f:s.failed||0,v:s.versions||0}))}</span>`;
+  h+=`<span class="sp"></span>`;
+  const rb=runningBatches();
+  h+=rb.length?`<span class="pill run"><span class="spin">⟳</span> ${esc(I18N.f('{n} 个批次运行中',{n:rb.length}))} · ${esc(rb.map(b=>b.group_ids.join(',')).join(' | '))}</span>`:`<span class="pill">${esc(t('无批次运行'))}</span>`;
+  if(!DD.whitebox_enabled)h+=`<span class="pill" style="color:var(--yellow)">${esc(t('项目未开启「人物精确空间位置」,白模链未启用'))}</span>`;
+  if(WB.errors&&WB.errors.length)h+=`<span class="pill" style="color:var(--red)" title="${esc(WB.errors.map(e=>e.group_id+': '+e.error).join('\n'))}">${esc(I18N.f('{n} 组编译报错',{n:WB.errors.length}))}</span>`;
+  box.innerHTML=h;
+  $('#epsel').onchange=()=>{EP=$('#epsel').value;SEL='';DD=null;disposeRenderers();load()};
+}
+
+/* ---------- 主体 ---------- */
+function render(keep){
+  renderEps();
+  if(!keep||!$('#left')){
+    $('#work').innerHTML=`<div class="col" id="left"></div><div class="col" id="mid"></div><div class="col" id="right"></div>`;
+    renderMonitorShell();
+  }
+  renderLeft();renderRight();renderFoot();
+  if(keep){renderObjects();renderShotInfo();renderVersionSelects()}
+}
+/* 左栏 */
+function renderLeft(){
+  let h=`<div class="col-h">${esc(t('分镜组'))} <span class="lite">${WB.groups.length}</span><span class="sp"></span><span class="lite">${esc(t('点镜跳到该镜起点'))}</span></div><div class="scroll" id="glist">`;
+  const scenes=[];const seen={};
+  for(const g of WB.groups){const sid=g.scene_id||'?';if(!seen[sid]){seen[sid]={scene_id:sid,groups:[]};scenes.push(seen[sid])}seen[sid].groups.push(g)}
+  if(!OPEN_SCN.size)OPEN_SCN=new Set(scenes.slice(0,4).map(s=>s.scene_id));
+  for(const sc of scenes){
+    const open=OPEN_SCN.has(sc.scene_id),scn=WB.scenes[sc.scene_id]||{};
+    h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.scene_id)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(scn.name||'')}">${esc(sc.scene_id)} ${esc(scn.name&&scn.name!==sc.scene_id?scn.name:'')}</span><span class="sp"></span><span>${sc.groups.length}</span></div><div class="grps">`;
+    for(const g of sc.groups){
+      const notes=groupNotes(g.group_id),drafts=notes.filter(n=>n.status==='draft').length,sub=notes.filter(n=>n.status==='submitted').length;
+      const iss=groupIssues(g.group_id),pend=iss.filter(i=>i.status==='open'||i.status==='stale').length,blk=iss.filter(i=>i.severity==='blocking'&&(i.status==='open'||i.status==='stale')).length;
+      const cast=[...(g.actors||[]),...(g.extras||[])];
+      h+=`<div class="grp ${g.group_id===SEL?'sel':''}" data-g="${esc(g.group_id)}">
+        <div><div class="id">${esc(g.group_id)}</div><div class="sub">${num(g.duration_s,1)}s · ${(g.cameras||[]).length}${esc(t('镜'))}${blk?` <i class="dot r" title="${esc(t('有阻断级待决项'))}"></i>`:pend?` <i class="dot y" title="${esc(t('有待决项'))}"></i>`:''}${sub?` <i class="dot b" title="${esc(t('已提交,等 Agent 处理'))}"></i>`:''}</div></div>
+        <div class="n">${maxV(g.group_id)?'v'+maxV(g.group_id):'—'}${drafts?`<br>✎ ${drafts}`:''}</div>
+        <div class="cast">${cast.map(a=>`<i style="background:${esc(a.color)}" title="${esc(a.label)}"></i>`).join('')}</div></div>`;
+      h+=`<div class="shots">${(g.cameras||[]).map(c=>`<div class="sh" data-sh="${esc(c.shot_id)}" data-t="${c.start}"><span>${esc(c.shot_id)}</span><span class="dur">${num(c.start,1)}–${num(c.start+c.duration_s,1)}s${c.movement?' · '+esc(c.movement):''}</span></div>`).join('')}</div>`;
+    }
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  $('#left').innerHTML=h;
+  $$('#left .scn').forEach(s=>s.onclick=()=>{const id=s.dataset.scn;OPEN_SCN.has(id)?OPEN_SCN.delete(id):OPEN_SCN.add(id);posSave({open:[...OPEN_SCN]});renderLeft()});
+  $$('#left .grp').forEach(el=>el.onclick=()=>selectGroup(el.dataset.g));
+  $$('#left .sh').forEach(el=>el.onclick=e=>{e.stopPropagation();seek(Number(el.dataset.t)+0.001);PLAYING=false;updPlayBtn()});
+  const gl=$('#glist'),pos=posLoad();
+  if(gl&&pos.glist!=null)gl.scrollTop=pos.glist;
+  if(gl)gl.addEventListener('scroll',()=>posSave({glist:Math.round(gl.scrollTop)}));
+  const sel=$('#left .grp.sel');if(sel)sel.scrollIntoView({block:'nearest'});
+  markShot();
+}
+function markShot(){const sid=RA&&RA.shotId;$$('#left .sh').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid))}
+function selectGroup(gid,force){
+  if(gid===SEL&&!force)return;
+  SEL=gid;posSave({sel:gid});PICK=null;TIME=URL_T!=null?URL_T:0;URL_T=null;PLAYING=false;
+  const mv=maxV(gid);VA='live';VB=mv?String(mv):'live';
+  history.replaceState(null,'','?project='+encodeURIComponent(proj())+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(SEL));
+  renderLeft();renderRight();renderFoot();renderVersionSelects();setGroup();
+}
+
+/* ---------- 监视器 ---------- */
+let RA=null,RB=null,HELPER=null,DIRTY=true,PREV=0,RAF=0,PAD=null,ORBIT=null,SRC={a:null,b:null},STATE_TICK=0;
+function renderMonitorShell(){
+  $('#mid').innerHTML=`
+  <div class="mon-top">
+    <span class="seg" id="viewseg"><span data-v="overview" class="on">${esc(t('旋转视角'))}</span><span data-v="top">${esc(t('俯视图'))}</span><span data-v="real">${esc(t('实景图'))}</span><span data-v="camera">${esc(t('摄像机视角'))}</span></span>
+    <span class="seg" id="ab"><span data-ab="a" class="on">A</span><span data-ab="split">A|B</span><span data-ab="wipe">${esc(t('滑杆'))}</span><span data-ab="flash">${esc(t('闪切'))}</span></span>
+    <span class="vchip a">A</span><select id="selA"></select>
+    <span class="vchip b">B</span><select id="selB"></select>
+    <span style="flex:1"></span>
+    <button class="sm" id="b-first" title="${esc(t('回到开头'))}">⏮</button><button class="sm" id="b-fprev" title="${esc(t('上一帧'))}">◀</button><button class="sm" id="b-play">▶ ${esc(t('播放'))}</button><button class="sm" id="b-fnext" title="${esc(t('下一帧'))}">▶</button>
+    <label style="display:inline-flex;gap:4px;align-items:center;color:var(--dim);cursor:pointer"><input type="checkbox" id="loop"> ${esc(t('循环'))}</label>
+  </div>
+  <div class="screen" id="screen"><div class="frame" id="frame">
+    <canvas id="ca"></canvas><canvas id="cb" class="b" style="display:none"></canvas>
+    <div class="pad orbit" id="pad"></div>
+    <div class="split" id="split" style="display:none"></div><div class="knob" id="knob" style="display:none">A|B</div>
+    <div class="info" id="finfo"></div><div class="tc" id="ftc"></div>
+    <div class="tag a" id="tagA"></div><div class="tag b" id="tagB" style="display:none"></div>
+    <div class="hint" id="fhint">${esc(t('选择左侧分镜组'))}</div>
+  </div></div>
+  <div class="xport">
+    <span class="tc" id="xtc">00.00 / 00.00</span>
+    <div class="tl" id="xtl"><i id="xfill"></i><b id="xph"></b></div>
+    <span class="lite" id="xshot" style="font:11px var(--mono);color:var(--dim)"></span>
+  </div>
+  <div class="midbody">
+    <div class="sec-h">${esc(t('本组对象'))} <span class="lite" id="objcnt"></span><span class="sp" style="flex:1"></span><span class="lite">${esc(t('点对象 = 选中并写注释;摄影机在俯视/旋转视角里可点'))}</span></div>
+    <div class="objs" id="objs"></div>
+    <div class="sec-h">${esc(t('分镜信息'))} <span class="lite" id="shotlbl"></span></div>
+    <div class="shotinfo" id="shotinfo"></div>
+  </div>`;
+  $$('#viewseg span').forEach(s=>s.onclick=()=>{VIEW=s.dataset.v;$$('#viewseg span').forEach(x=>x.classList.toggle('on',x===s));$('#pad').classList.toggle('orbit',VIEW==='overview');DIRTY=true;kick();renderObjects()});
+  $$('#ab span').forEach(s=>s.onclick=()=>setAB(s.dataset.ab));
+  $('#selA').onchange=()=>{VA=$('#selA').value;reloadSources('a')};
+  $('#selB').onchange=()=>{VB=$('#selB').value;if(AB==='a')setAB('split');reloadSources('b')};
+  $('#b-first').onclick=()=>{seek(0);PLAYING=false;updPlayBtn()};
+  $('#b-fprev').onclick=()=>{PLAYING=false;seek(Math.max(0,TIME-1/FPS));updPlayBtn()};
+  $('#b-fnext').onclick=()=>{PLAYING=false;seek(TIME+1/FPS);updPlayBtn()};
+  $('#b-play').onclick=togglePlay;
+  $('#loop').onchange=e=>{LOOP=e.target.checked};
+  $('#xtl').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();const g=grpById(SEL);if(!g)return;seek((e.clientX-r.left)/r.width*g.duration_s)};
+  // 滑杆 A|B
+  const knob=$('#knob');let drag=false;
+  knob.onmousedown=e=>{drag=true;e.preventDefault()};
+  window.addEventListener('mouseup',()=>drag=false);
+  window.addEventListener('mousemove',e=>{if(!drag||AB!=='wipe')return;const r=$('#frame').getBoundingClientRect();setSplit(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)))});
+  document.addEventListener('keydown',e=>{
+    if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
+    if(e.code==='Space'){e.preventDefault();if(AB==='flash'){$('#cb').style.display=$('#cb').style.display==='none'?'block':'none';$('#cb').style.clipPath='none';DIRTY=true}else togglePlay()}
+    if(e.key==='ArrowLeft'){PLAYING=false;seek(Math.max(0,TIME-1/FPS));updPlayBtn()}
+    if(e.key==='ArrowRight'){PLAYING=false;seek(TIME+1/FPS);updPlayBtn()}
+    if(e.key==='Home'){seek(0)}
+    if(e.key==='Escape'){setPick(null)}
+  });
+  // 拾取:按下/抬起位移小于 4px 视为点击(旋转视角下拖动是 orbit)
+  PAD=$('#pad');let down=null;
+  PAD.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
+  PAD.addEventListener('pointerup',e=>{if(!down)return;const d=Math.hypot(e.clientX-down[0],e.clientY-down[1]);down=null;if(d<4)pick(e)});
+  $('#frame').style.aspectRatio=`${FORMAT.width} / ${FORMAT.height}`;
+}
+function updPlayBtn(){$('#b-play').textContent=(PLAYING?'⏸ '+t('暂停'):'▶ '+t('播放'))}
+function togglePlay(){const g=grpById(SEL);if(!g||!RA)return;if(TIME>=g.duration_s)TIME=0;PLAYING=!PLAYING;PREV=performance.now();updPlayBtn();kick()}
+function seek(s){const g=grpById(SEL);if(!g)return;TIME=Math.max(0,Math.min(g.duration_s,s));DIRTY=true;kick()}
+function setAB(mode){
+  AB=mode;$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab===mode));
+  const cb=$('#cb');
+  cb.style.display=mode==='a'?'none':'block';$('#tagB').style.display=mode==='a'?'none':'block';
+  $('#split').style.display=(mode==='split'||mode==='wipe')?'block':'none';$('#knob').style.display=mode==='wipe'?'block':'none';
+  if(mode==='split')setSplit(.5);else if(mode==='wipe')setSplit(.5);else cb.style.clipPath='none';
+  if(mode==='flash')cb.style.display='none';
+  DIRTY=true;kick();
+}
+function setSplit(p){const cb=$('#cb');cb.style.clipPath=`inset(0 0 0 ${(p*100).toFixed(2)}%)`;$('#split').style.left=(p*100)+'%';$('#knob').style.left=(p*100)+'%'}
+function disposeRenderers(){cancelAnimationFrame(RAF);RAF=0;if(ORBIT){ORBIT.dispose();ORBIT=null}if(RA){RA.dispose();RA=null}if(RB){RB.dispose();RB=null}HELPER=null}
+function makeRenderer(canvas){
+  canvas.width=FORMAT.width;canvas.height=FORMAT.height;
+  const rr=new WhiteboxRenderer(canvas,{...FORMAT,controls:false});
+  rr.assetBase=artifactBase();rr.onRealPlate=()=>{DIRTY=true;kick()};
+  return rr;
+}
+async function sourceData(sel,gid){
+  const g=grpById(gid);
+  if(sel==='live')return {scene:WB.scenes[g.scene_id],group:g,label:t('当前(实时)')};
+  const v=await J(api('/versions/'+encodeURIComponent(gid)+'/'+encodeURIComponent(sel)));
+  return {scene:v.scene,group:v.group,label:'v'+v.v+(v.label?' · '+v.label:'')};
+}
+async function setGroup(){
+  // 渲染器只建一次、换组只重载场景:同一 canvas 上 dispose(forceContextLoss)后再 new WebGLRenderer 拿到的是已丢失的上下文,
+  // three 读 getShaderPrecisionFormat 会报 Cannot read properties of null (reading 'precision')
+  cancelAnimationFrame(RAF);RAF=0;PLAYING=false;updPlayBtn();
+  if(HELPER&&RA&&RA.scene){RA.scene.remove(HELPER);HELPER.geometry.dispose()}HELPER=null;
+  const g=grpById(SEL);
+  $('#fhint').textContent=g?'':t('该组没有白模编译结果');
+  if(!g){renderObjects();renderShotInfo();return}
+  try{
+    if(!RA||!RA.canvas||!RA.canvas.isConnected){
+      disposeRenderers();
+      RA=makeRenderer($('#ca'));RB=makeRenderer($('#cb'));
+      ORBIT=new OrbitControls(RA.overview,PAD);ORBIT.enableDamping=false;ORBIT.maxPolarAngle=Math.PI*.49;ORBIT.addEventListener('change',()=>{DIRTY=true;kick()});
+    }
+    await reloadSources();
+  }catch(e){$('#fhint').textContent=t('3D 加载失败:')+e.message}
+}
+async function reloadSources(which){
+  const g=grpById(SEL);if(!g||!RA)return;
+  const jobs=[];
+  if(!which||which==='a')jobs.push(sourceData(VA,SEL).then(d=>{SRC.a=d;RA.load(d.scene,d.group);$('#tagA').textContent='A · '+d.label}));
+  if(!which||which==='b')jobs.push(sourceData(VB,SEL).then(d=>{SRC.b=d;RB.load(d.scene,d.group);$('#tagB').textContent='B · '+d.label}));
+  try{await Promise.all(jobs)}catch(e){toast(t('版本加载失败:')+e.message)}
+  // A 的旋转视角相机由 ORBIT 控制(渲染器自身 controls 关闭);target 取人物轨迹+场景包围盒中心,与渲染器取景一致
+  if(!which||which==='a')fitOrbit();
+  setPick(PICK,true);DIRTY=true;renderObjects(true);renderShotInfo();kick();
+}
+function fitOrbit(){
+  // 与 whitebox-renderer.load 的取景一致:以人物轨迹+场景包围盒中心为 orbit 目标
+  if(!RA||!RA.sceneData)return;
+  const [w,h,d]=RA.sceneData.dimensions_m;const b=new THREE.Box3(new THREE.Vector3(-w/2,0,-d/2),new THREE.Vector3(w/2,h,d/2));
+  for(const a of RA.actors)for(const k of a.data.keyframes)b.expandByPoint(new THREE.Vector3(...k.position));
+  ORBIT.target.copy(b.getCenter(new THREE.Vector3()));ORBIT.update();
+}
+function kick(){if(!RAF)RAF=requestAnimationFrame(loop)}
+function loop(now){
+  RAF=0;
+  const g=grpById(SEL);if(!g||!RA)return;
+  if(PLAYING){
+    TIME+=(now-PREV)/1000;
+    if(TIME>=g.duration_s){if(LOOP)TIME=0;else{TIME=g.duration_s;PLAYING=false;updPlayBtn()}}
+    DIRTY=true;
+  }
+  PREV=now;
+  if(DIRTY){
+    DIRTY=false;
+    RA.setTime(TIME);
+    if(HELPER)HELPER.update();
+    RA.render(VIEW);
+    if(AB!=='a'&&RB.scene){
+      RB.overview.position.copy(RA.overview.position);RB.overview.quaternion.copy(RA.overview.quaternion);RB.overview.zoom=RA.overview.zoom;RB.overview.updateProjectionMatrix();
+      RB.top.position.copy(RA.top.position);RB.top.zoom=RA.top.zoom;RB.top.updateProjectionMatrix();
+      RB.setTime(TIME);RB.render(VIEW);
+    }
+    $('#ftc').textContent=`${tc(TIME)} / ${tc(g.duration_s)} · ${RA.shotId||''}`;
+    $('#xtc').textContent=`${TIME.toFixed(2)} / ${g.duration_s.toFixed(2)} s`;
+    $('#xshot').textContent=RA.shotId||'';
+    $('#finfo').textContent=`${g.group_id} · ${g.scene_id} · ${VIEW==='camera'?t('摄像机视角'):VIEW==='top'?t('俯视图'):VIEW==='real'?t('实景图'):t('旋转视角')}`;
+    const p=(TIME/g.duration_s*100).toFixed(3)+'%';$('#xfill').style.width=p;$('#xph').style.left=p;
+    const ph=$('#fph');if(ph){const cum=cumStart(SEL);ph.style.left=((cum+TIME)/episodeDuration()*100).toFixed(3)+'%'}
+    if(now-STATE_TICK>250){STATE_TICK=now;updateObjectStates();markShot();if($('#shotlbl').dataset.sid!==RA.shotId)renderShotInfo()}
+  }
+  if(PLAYING)RAF=requestAnimationFrame(loop);
+}
+/* 拾取 */
+function pick(e){
+  if(!RA||!RA.scene)return;
+  const r=$('#frame').getBoundingClientRect();
+  const nd=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-(((e.clientY-r.top)/r.height)*2-1));
+  const cam=VIEW==='camera'?RA.camera:(VIEW==='overview'?RA.overview:RA.top);
+  cam.updateMatrixWorld(true);
+  const rc=new THREE.Raycaster();rc.setFromCamera(nd,cam);
+  rc.layers.set(0);if(VIEW!=='camera')rc.layers.enable(1);
+  const targets=[];
+  for(const a of RA.actors)if(a.root.visible)targets.push(a.root);
+  for(const p of RA.props)if(p.mesh.visible)targets.push(p.mesh);
+  if(VIEW!=='camera'&&RA.marker)targets.push(RA.marker);
+  for(const m of RA.solids.slice(2))targets.push(m);
+  const hits=rc.intersectObjects(targets,true);
+  const up=(obj,set)=>{for(let p=obj;p;p=p.parent)if(set(p))return p;return null};
+  const g=grpById(SEL);
+  const actorPick=a=>({kind:(a.data.id||'').startsWith('EXTRA')?'extra':'actor',id:a.data.id,label:a.data.label||a.data.id});
+  // 先按射线命中;俯视/旋转视角里人物只有几个像素,没打中人物时再按屏幕距离就近吸附(16px 内)
+  let picked=null,solidHit=null;
+  for(const h of hits){
+    const o=h.object;
+    const actor=RA.actors.find(a=>up(o,p=>p===a.root));if(actor){picked=actorPick(actor);break}
+    const prop=RA.props.find(p=>up(o,x=>x===p.mesh));if(prop){picked={kind:'prop',id:prop.data.id,label:prop.data.id};break}
+    if(up(o,p=>p===RA.marker)){picked={kind:'camera',id:RA.shotId,label:t('摄影机')+' '+RA.shotId};break}
+    const solid=RA.solids.slice(2).find(m=>up(o,x=>x===m));if(solid&&!solidHit)solidHit=solid;
+  }
+  if(!picked){
+    const tol=16/r.width*2;let best=null,bd=tol;
+    const cands=[];
+    for(const a of RA.actors)if(a.root.visible&&(VIEW!=='camera'||!(shotAt().visible_actor_ids&&!shotAt().visible_actor_ids.includes(a.data.id))))cands.push([a.root.position.clone().add(new THREE.Vector3(0,a.data.size_m[1]*.5,0)),actorPick(a)]);
+    for(const p of RA.props)if(p.mesh.visible)cands.push([p.mesh.position.clone(),{kind:'prop',id:p.data.id,label:p.data.id}]);
+    if(VIEW!=='camera'&&RA.marker)cands.push([RA.marker.position.clone(),{kind:'camera',id:RA.shotId,label:t('摄影机')+' '+RA.shotId}]);
+    for(const [pos,pk] of cands){const c=pos.project(cam);if(c.z>1||c.z<-1)continue;const d=Math.hypot((c.x-nd.x),(c.y-nd.y)*r.height/r.width);if(d<bd){bd=d;best=pk}}
+    picked=best;
+  }
+  if(!picked&&solidHit&&g)picked={kind:'scene',id:g.scene_id,label:t('场景物件')+' '+(solidHit.name||''),object:solidHit.name||''};
+  setPick(picked);
+}
+const shotAt=()=>{const g=grpById(SEL);return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1))||{}};
+function setPick(p,silent){
+  PICK=p;
+  if(HELPER&&RA&&RA.scene){RA.scene.remove(HELPER);HELPER.geometry.dispose();HELPER=null}
+  if(p&&RA&&RA.scene){
+    let obj=null;
+    if(p.kind==='actor'||p.kind==='extra'){const a=RA.actors.find(a=>a.data.id===p.id);obj=a&&a.root}
+    else if(p.kind==='prop'){const pr=RA.props.find(x=>x.data.id===p.id);obj=pr&&pr.mesh}
+    else if(p.kind==='camera')obj=RA.marker;
+    else if(p.kind==='scene')obj=RA.solids.find(m=>m.name===(p.object||p.id));
+    if(obj){HELPER=new THREE.BoxHelper(obj,0xffcc00);HELPER.layers.set(0);HELPER.layers.enable(1);HELPER.layers.enable(2);HELPER.material.depthTest=false;RA.scene.add(HELPER)}
+  }
+  DIRTY=true;kick();
+  $$('#objs .obj').forEach(el=>el.classList.toggle('sel',!!p&&el.dataset.kind===p.kind&&el.dataset.id===p.id));
+  if(!silent)fillNoteForm(p);
+}
+
+/* ---------- 对象表 ---------- */
+function objectRows(){
+  const g=grpById(SEL);if(!g)return [];
+  const rows=[];
+  for(const a of g.actors||[])rows.push({kind:a.kind==='creature'?'actor':'actor',id:a.id,label:a.label||a.id,color:a.color,size:a.size_m,sub:a.kind||'person'});
+  for(const a of g.extras||[])rows.push({kind:'extra',id:a.id,label:a.label||a.id,color:a.color,size:a.size_m,sub:'extra'});
+  for(const p of g.props||[])rows.push({kind:'prop',id:p.id,label:p.id,color:p.color||'#d2d5d4',size:p.size_m,sub:'prop'});
+  const present=new Set(rows.map(r=>r.id));
+  for(const c of g.scene_cast||[]){const id=typeof c==='string'?c:(c||{}).id;if(id&&!present.has(id))rows.push({kind:'actor',id,label:id,color:'#555',size:null,sub:'absent'})}
+  for(const c of g.cameras||[])rows.push({kind:'camera',id:c.shot_id,label:t('摄影机')+' '+c.shot_id,color:'#1b3d4b',size:null,sub:c.movement||'',cam:c});
+  rows.push({kind:'scene',id:g.scene_id,label:t('场景')+' '+g.scene_id,color:'#8d968d',size:null,sub:'scene'});
+  rows.push({kind:'group',id:g.group_id,label:t('整组')+' '+g.group_id,color:'#39415a',size:null,sub:'group'});
+  return rows;
+}
+function renderObjects(){
+  const rows=objectRows(),av=(DD||{}).avatars||{};
+  $('#objcnt').textContent=rows.length?String(rows.length):'';
+  $('#objs').innerHTML=rows.map(r=>{
+    const img=av[r.id];
+    const avatar=img?`<div class="av" style="border-color:${esc(r.color)}"><img src="${esc(img)}" alt="" loading="lazy"></div>`:`<div class="av" style="background:${esc(r.color)};border-color:${esc(r.color)}">${esc((r.label||'?').replace(/^(摄影机|场景|整组)\s*/,'').slice(0,1))}</div>`;
+    return `<div class="obj ${r.sub==='absent'?'absent':''} ${PICK&&PICK.kind===r.kind&&PICK.id===r.id?'sel':''}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" data-img="${esc(img||'')}" title="${esc(r.id)}">${avatar}<div><div class="nm">${esc(r.label)}</div><div class="meta"><span data-no-i18n>${esc(r.id)}</span>${r.size?`<span>${num(r.size[1],2)} m</span>`:''}${r.sub==='absent'?`<span class="stt off">${esc(t('同场次在场,本组白模未出现'))}</span>`:`<span class="stt" data-st></span>`}</div></div></div>`;
+  }).join('');
+  $$('#objs .obj').forEach(el=>{
+    el.onclick=e=>{
+      if(e.target.closest('.av')&&el.dataset.img){$('#lb img').src=el.dataset.img;$('#lb').style.display='flex';return}
+      const kind=el.dataset.kind,id=el.dataset.id;
+      const row=rows.find(r=>r.kind===kind&&r.id===id);
+      if(kind==='camera'&&row&&row.cam)seek(row.cam.start+0.001);
+      setPick({kind,id,label:row?row.label:id});
+    };
+  });
+  updateObjectStates();
+}
+function updateObjectStates(){
+  if(!RA||!RA.scene)return;
+  const g=grpById(SEL);if(!g)return;
+  const shot=g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1);
+  RA.camera.updateMatrixWorld(true);   // 非摄像机视角时机位相机不参与渲染,矩阵是旧的,投影前先刷新
+  const proj3=new THREE.Vector3();
+  $$('#objs .obj').forEach(el=>{
+    const st=el.querySelector('[data-st]');if(!st)return;
+    const kind=el.dataset.kind,id=el.dataset.id;
+    let txt='',cls='';
+    if(kind==='actor'||kind==='extra'){
+      const a=RA.actors.find(a=>a.data.id===id);if(!a)return;
+      if(!a.root.visible){txt=t('已退场/未入场');cls='off'}
+      else if(shot&&shot.visible_actor_ids&&!shot.visible_actor_ids.includes(id)){txt=t('镜头名单隐藏');cls='off'}
+      else{
+        const h=a.data.size_m[1];proj3.copy(a.root.position);proj3.y+=h*.6;const c=proj3.clone().project(RA.camera);
+        const inFront=c.z<1&&c.z>-1,inFrame=Math.abs(c.x)<=1.1&&Math.abs(c.y)<=1.1;
+        if(inFront&&inFrame){txt=t('入画');cls='in'}else{txt=t('画外');cls='out'}
+      }
+      const k=sample(a.data.keyframes,TIME);txt+=` · ${k.pose||'stand'} · (${k.position.map(v=>(+v).toFixed(1)).join(', ')})`;
+    }else if(kind==='prop'){
+      const p=RA.props.find(p=>p.data.id===id);if(!p)return;
+      txt=p.mesh.visible?t('入画/在场'):t('本镜不出现');cls=p.mesh.visible?'in':'off';
+    }else if(kind==='camera'){
+      const c=g.cameras.find(c=>c.shot_id===id);if(!c)return;
+      if(shot&&shot.shot_id===id){const k=sample(c.keyframes,TIME-c.start);txt=`${t('当前镜')} · fov ${num(k.fov,1)}° · ${t('机高')} ${num(k.position[1],2)} m`;cls='in'}
+      else{txt=`${num(c.start,1)}–${num(c.start+c.duration_s,1)}s`;cls='off'}
+    }else if(kind==='scene'){txt=(WB.scenes[id]||{}).dimensions_m?`${(WB.scenes[id].dimensions_m||[]).join(' × ')} m`:'';cls=''}
+    else if(kind==='group'){txt=`${num(g.duration_s,1)}s · ${g.cameras.length}${t('镜')}`}
+    st.textContent=txt;st.className='stt '+cls;
+  });
+}
+
+/* ---------- 分镜信息 ---------- */
+function renderShotInfo(){
+  const box=$('#shotinfo');if(!box)return;
+  const g=grpById(SEL);const sid=RA&&RA.shotId||(g&&g.cameras[0]&&g.cameras[0].shot_id)||'';
+  $('#shotlbl').textContent=sid;$('#shotlbl').dataset.sid=sid;
+  if(!g){box.innerHTML='';return}
+  const s=shotOf(sid),cam=(g.cameras||[]).find(c=>c.shot_id===sid)||{};
+  if(!s){box.innerHTML=`<div class="warn">${esc(SB?t('分镜表里没有这一镜的条目'):t('分镜信息未加载(分镜预览接口不可用)'))}</div>`;return}
+  const chars=(s.characters||[]).join(', ');
+  const dl=(s.dialogue_lines||[]).map(l=>`<div class="dl">🗣 ${esc(l.speaker_name||l.speaker||'')}:${esc(l.text||'')}</div>`).join('');
+  const imgs=[...(s.keyframes||[]),...(s.plates||[]).map(p=>({url:p.url,name:p.role||'plate'}))].filter(k=>k&&k.url).slice(0,6).map(k=>`<img src="${esc(k.url)}" alt="${esc(k.name||'')}" title="${esc(k.name||'')}" loading="lazy">`).join('');
+  box.innerHTML=`<div class="r1"><span class="tag" data-no-i18n>${esc(sid)}</span>${s.duration_s?`<span class="tag">${esc(s.duration_s)}s</span>`:''}${s.size?`<span class="tag">${esc(s.size)}</span>`:''}${chars?`<span class="tag">${esc(chars)}</span>`:''}${cam.movement?`<span class="tag">🎥 ${esc(cam.movement)}</span>`:''}${cam.visible_actor_ids?`<span class="tag" title="${esc(t('镜头可见名单'))}">👁 ${esc(cam.visible_actor_ids.join(', ')||'∅')}</span>`:''}
+    <a href="/preview/storyboard?project=${encodeURIComponent(proj())}&ep=${encodeURIComponent(EP)}#shot=${encodeURIComponent(sid)}" target="_blank" class="tag" style="text-decoration:none">🎦 ${esc(t('分镜预览'))}</a></div>
+    <div class="content">${esc(s.content||'')}</div>${dl}
+    ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}${s.camera_move?`<div class="cam">🎥 ${esc(typeof s.camera_move==='string'?s.camera_move:JSON.stringify(s.camera_move))}</div>`:''}
+    ${cam.basis?`<div class="cam" title="${esc(t('白模机位依据'))}">🧊 ${esc(cam.basis)}</div>`:''}
+    ${imgs?`<div class="media">${imgs}</div>`:''}
+    ${(g.warnings||[]).length?`<details><summary style="color:var(--dim);font-size:11px;cursor:pointer">${esc(I18N.f('本组建模依据与检查 ({n})',{n:g.warnings.length}))}</summary><div class="warn" data-no-i18n>${esc(g.warnings.join('\n'))}</div></details>`:''}`;
+  box.querySelectorAll('.media img').forEach(im=>im.onclick=()=>{$('#lb img').src=im.src;$('#lb').style.display='flex'});
+}
+
+/* ---------- 版本选择 ---------- */
+function renderVersionSelects(){
+  const vs=versionsOf(SEL).slice().sort((a,b)=>b.v-a.v);
+  const opts=`<option value="live">${esc(t('当前(实时)'))}</option>`+vs.map(v=>`<option value="${v.v}">v${v.v}${v.label?' · '+esc(v.label):''}</option>`).join('');
+  for(const [id,val] of [['#selA',VA],['#selB',VB]]){const s=$(id);if(!s)continue;s.innerHTML=opts;s.value=(val==='live'||vs.some(v=>String(v.v)===String(val)))?String(val):'live'}
+  VA=$('#selA')?$('#selA').value:'live';VB=$('#selB')?$('#selB').value:'live';
+}
+
+/* ---------- 右栏 ---------- */
+function renderRight(){
+  const g=grpById(SEL),gid=SEL;
+  const issues=groupIssues(gid),pend=issues.filter(i=>i.status==='open'||i.status==='stale'),decided=issues.filter(i=>i.status==='decided');
+  const notesAll=(DD.ledger.notes||[]),notes=NOTE_SCOPE==='group'?notesAll.filter(n=>n.group_id===gid):notesAll;
+  const drafts=notes.filter(n=>n.status==='draft'),draftsAll=notesAll.filter(n=>n.status==='draft'),draftsG=notesAll.filter(n=>n.status==='draft'&&n.group_id===gid);
+  const acc=(id,title,cnt,body)=>`<div class="acc ${CLOSED_ACC.has(id)?'closed':''}" data-acc="${id}"><div class="acc-h"><span class="car">${CLOSED_ACC.has(id)?'▸':'▾'}</span>${title}<span class="cnt">${cnt}</span><span class="sp"></span></div><div class="acc-b">${body}</div></div>`;
+  let h=`<div class="col-h">${esc(t('修改队列'))} <span class="lite">${esc(gid||'')}</span><span class="sp"></span><span class="seg" id="nscope"><span data-s="group" class="${NOTE_SCOPE==='group'?'on':''}">${esc(t('本组'))}</span><span data-s="all" class="${NOTE_SCOPE==='all'?'on':''}">${esc(t('全集'))}</span></span></div><div class="scroll" id="rscroll">`;
+  // 1. Agent 提问
+  h+=acc('iss',`⚠ ${esc(t('Agent 提问'))}`,issues.length?`${issues.length}${pend.length?' · '+esc(I18N.f('待答 {n}',{n:pend.length})):''}${decided.length?' · '+esc(I18N.f('已选 {n},提交时套用',{n:decided.length})):''}`:'0',
+    issues.length?issues.map(issueHtml).join(''):`<div class="bat">${esc(t('本组没有待决项(白模调度 Agent 没有拿不准的取舍)'))}</div>`);
+  // 2. 我的修改
+  const draftBody=`${notes.length?notes.slice().reverse().map(noteHtml).join(''):`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
+    <div class="nform" id="nform">
+      <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
+      <div class="row"><label>${esc(t('镜/时刻'))}</label><div style="display:flex;gap:6px;align-items:center"><select id="nf-shot" style="width:auto"></select><label style="display:inline-flex;gap:4px;align-items:center;color:var(--dim)"><input type="checkbox" id="nf-uset" checked> t=</label><input type="number" id="nf-t" step="0.1" min="0" style="width:70px"> s</div></div>
+      <div class="row"><label>${esc(t('要求'))}</label><textarea id="nf-text" placeholder="${esc(t('例:何香在 3 秒时往北挪 1 米,面向王三合;机位降到 1.2 m 平视'))}"></textarea></div>
+      <div class="btns"><span class="msg" id="nf-msg"></span><button class="sm" id="nf-clear">${esc(t('清空'))}</button><button class="sm pri" id="nf-save">${esc(t('加入队列'))}</button></div>
+    </div>
+    <div class="subrow"><span class="msg" id="sub-msg">${runningBatches().some(b=>b.group_ids.includes(gid))?esc(t('本组有批次运行中,等回收后再提交')):esc(t('提交 = 一次派单给白模调度 Agent = 一个新版本'))}</span>
+      <button class="sm" id="sub-group" ${draftsG.length||decided.length?'':'disabled'}>${esc(I18N.f('提交本组 ({n})',{n:draftsG.length+decided.length}))}</button>
+      <button class="sm pri" id="sub-all" ${draftsAll.length?'':'disabled'}>${esc(I18N.f('提交全部待提交 ({n})',{n:draftsAll.length}))}</button></div>`;
+  h+=acc('notes',`✎ ${esc(t('我的修改'))}`,`${notes.length}${drafts.length?' · '+esc(I18N.f('待提交 {n}',{n:drafts.length})):''}`,draftBody);
+  // 3. 已提交版本
+  const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
+  const batches=(DD.ledger.batches||[]).filter(b=>NOTE_SCOPE==='all'||b.group_ids.includes(gid)).slice().reverse();
+  const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;A|B 实时渲染比对'))}</span><button class="sm" id="snap">${esc(t('把当前存为版本'))}</button></div>
+    ${vs.map(v=>`<div class="ver"><span class="v">v${v.v}</span><span class="lb" data-no-i18n>${esc(v.label||'')}${v.batch_id?' · '+esc(v.batch_id):''}</span><span class="lb">${esc((v.created_at||'').slice(5,16))}</span><span class="sp"></span>${String(VA)===String(v.v)?'<span class="cur">A</span>':''}${String(VB)===String(v.v)?'<span class="cur">B</span>':''}<button class="xs" data-va="${v.v}">→A</button><button class="xs" data-vb="${v.v}">→B</button></div>`).join('')||`<div class="bat">${esc(t('还没有版本;首次提交会自动存一份基线'))}</div>`}
+    ${batches.length?`<div class="sec-h" style="position:static">${esc(t('批次'))} <span class="lite">${batches.length}</span></div>`:''}
+    ${batches.map(b=>`<div class="bat"><b>${esc(b.id)}</b> <span class="st ${esc(b.status)}">${esc((DD.labels.batch_status||{})[b.status]||b.status)}</span> · ${esc(b.group_ids.join(', '))} · ${esc(I18N.f('{n} 条注释',{n:(b.note_ids||[]).length}))}${(b.issue_ids||[]).length?' · '+esc(I18N.f('{n} 项裁决',{n:b.issue_ids.length})):''}${b.run_id?` · <a href="/?run=${encodeURIComponent(b.run_id)}" target="_blank" data-no-i18n>${esc(String(b.run_id).slice(0,8))}</a>`:''}${Object.keys(b.versions||{}).length?' → '+esc(Object.entries(b.versions).map(([g,v])=>g+' v'+v).join(', ')):''}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}<br><span data-no-i18n>${esc(b.created_at||'')}</span></div>`).join('')}`;
+  h+=acc('vers',`▣ ${esc(t('已提交版本'))}`,`${vs.length}`,vbody);
+  h+=`</div>`;
+  $('#right').innerHTML=h;
+  $$('#right .acc-h').forEach(el=>el.onclick=()=>{const id=el.parentElement.dataset.acc;CLOSED_ACC.has(id)?CLOSED_ACC.delete(id):CLOSED_ACC.add(id);renderRight()});
+  $$('#nscope span').forEach(s=>s.onclick=()=>{NOTE_SCOPE=s.dataset.s;renderRight()});
+  $$('#right [data-jump]').forEach(b=>b.onclick=()=>{seek(Number(b.dataset.jump));PLAYING=false;updPlayBtn()});
+  $$('#right [data-opt]').forEach(b=>b.onclick=()=>decideIssue(b.dataset.issue,b.dataset.opt,b));
+  $$('#right [data-del]').forEach(b=>b.onclick=()=>delNote(b.dataset.del));
+  $$('#right [data-edit]').forEach(b=>b.onclick=()=>editNote(b.dataset.edit));
+  $$('#right [data-va]').forEach(b=>b.onclick=()=>{VA=b.dataset.va;renderVersionSelects();reloadSources('a');renderRight()});
+  $$('#right [data-vb]').forEach(b=>b.onclick=()=>{VB=b.dataset.vb;renderVersionSelects();if(AB==='a')setAB('split');reloadSources('b');renderRight()});
+  $$('#right [data-gsel]').forEach(b=>b.onclick=()=>selectGroup(b.dataset.gsel));
+  const snap=$('#snap');if(snap)snap.onclick=async()=>{snap.disabled=true;try{const r=await J(api('/snapshot'),'POST',{group_id:gid});toast(I18N.f('已存为 v{v}',{v:r.version.v}));await load(true)}catch(e){toast(t('存版失败:')+e.message);snap.disabled=false}};
+  const sg=$('#sub-group');if(sg)sg.onclick=()=>submitBatch({group_ids:[gid]},sg);
+  const sa=$('#sub-all');if(sa)sa.onclick=()=>submitBatch({},sa);
+  const nc=$('#nf-clear');if(nc)nc.onclick=()=>{fillNoteForm(null);$('#nf-text').value='';EDIT_ID=null;$('#nf-save').textContent=t('加入队列')};
+  const ns=$('#nf-save');if(ns)ns.onclick=saveNote;
+  fillNoteForm(PICK,true);
+}
+function issueHtml(i){
+  const jumpT=i.camera_view?.t??i.t_range_s?.[0];
+  const chosen=i.decision?.choice;
+  const where=[i.shots?.length?i.shots.join(', '):'',i.t_range_s?I18N.f('{a}–{b} 秒',{a:(+i.t_range_s[0]).toFixed(1),b:(+i.t_range_s[1]).toFixed(1)}):'',i.actors?.length?i.actors.join(', '):''].filter(Boolean).join(' · ');
+  const opts=[...(i.options||[]).map(o=>`<button class="xs ${chosen===o.id?'on':''} ${i.recommended===o.id?'rec':''}" data-issue="${esc(i.issue_id)}" data-opt="${esc(o.id)}" title="${esc([o.consequence,o.cost].filter(Boolean).join(' · '))}">${esc(o.id)}. ${esc(o.label)}${i.recommended===o.id?' <em>'+esc(t('推荐方案'))+'</em>':''}</button>`),
+    i.provisional&&!(i.options||[]).some(o=>o.id==='provisional')?`<button class="xs ${chosen==='provisional'?'on':''}" data-issue="${esc(i.issue_id)}" data-opt="provisional">${esc(t('默认取舍'))}</button>`:''].join('');
+  let state='';
+  if(i.status==='applied')state=`<div class="state">✅ ${esc(t('已套用'))}${i.applied?.choice?' · '+esc(i.applied.choice):''}</div>`;
+  else if(i.status==='decided')state=`<div class="state">☑ ${esc(I18N.f('已选「{c}」· 提交本组时一并套用',{c:i.decision.choice}))}${i.decision.note?' · '+esc(i.decision.note):''}</div>`;
+  else if(i.status==='stale')state=`<div class="state warn">⚠ ${esc(t('答复已失效(问题已变),请重新选择'))}</div>`;
+  return `<div class="iss ${esc(i.severity)}"><div class="h"><span class="sev">${esc(i.severity==='blocking'?t('阻断'):t('建议'))}</span><span>${esc(i.kind||'')}</span><span data-no-i18n>${esc(i.issue_id)}</span>${where?`<span data-no-i18n>${esc(where)}</span>`:''}${jumpT!=null?`<button class="xs" data-jump="${jumpT}">▶ ${esc(t('看现场'))}</button>`:''}</div>
+    <div class="q" data-no-i18n>${esc(i.question)}</div>${i.provisional?`<div class="prov" data-no-i18n>${esc(t('默认取舍:'))}${esc(i.provisional)}</div>`:''}
+    ${i.status==='applied'?'':`<div class="opts">${opts}</div>`}${state}</div>`;
+}
+function noteHtml(n){
+  const tg=n.target||{},color=colorOf(tg.id);
+  const other=n.group_id!==SEL;
+  return `<div class="note ${other?'other':''}" data-nid="${esc(n.id)}"><div class="r1"><span class="tg"><i style="background:${esc(color)}"></i>${esc(TL(tg.kind))} ${esc(tg.label||tg.id||'')}</span>${other?`<button class="xs" data-gsel="${esc(n.group_id)}">${esc(n.group_id)}</button>`:''}${n.shot_id?`<span class="tag" data-no-i18n>${esc(n.shot_id)}</span>`:''}${n.t!=null?`<button class="xs" data-jump="${n.t}" title="${esc(t('跳到该时刻'))}">t=${esc(n.t)}s</button>`:''}<span class="sp"></span><span class="st ${esc(n.status)}">${esc((DD.labels.note_status||{})[n.status]||n.status)}</span></div>
+    <div class="txt" data-no-i18n>${esc(n.text)}</div>
+    <div class="r2"><span>${esc(n.id)}</span><span>${esc((n.updated_at||n.created_at||'').slice(5,16))}</span>${n.batch_id?`<span>${esc(n.batch_id)}</span>`:''}${n.version_after?`<span>→ v${esc(n.version_after)}</span>`:''}${n.error?`<span class="err">${esc(n.error)}</span>`:''}</div>
+    ${n.status==='draft'?`<div class="r3"><button class="xs" data-edit="${esc(n.id)}">${esc(t('编辑'))}</button><button class="xs warn" data-del="${esc(n.id)}">${esc(t('删除'))}</button></div>`:''}</div>`;
+}
+function colorOf(id){const g=grpById(SEL);if(!g)return '#5c6478';const a=[...(g.actors||[]),...(g.extras||[])].find(a=>a.id===id);return a?a.color:(WB.actor_colors||{})[id]||'#5c6478'}
+let EDIT_ID=null;
+function fillNoteForm(p,keepText){
+  const sel=$('#nf-target'),shot=$('#nf-shot'),tin=$('#nf-t');if(!sel)return;
+  const rows=objectRows();
+  sel.innerHTML=rows.map(r=>`<option value="${esc(r.kind)}|${esc(r.id)}" data-label="${esc(r.label)}">${esc(TL(r.kind))} · ${esc(r.label)}</option>`).join('');
+  if(p){sel.value=p.kind+'|'+p.id;if(sel.selectedIndex<0)sel.selectedIndex=0;const ta=$('#nf-text');if(p.object&&ta&&!ta.value)ta.value='['+p.object+'] '}
+  else if(sel.selectedIndex<0)sel.selectedIndex=0;
+  const g=grpById(SEL);
+  shot.innerHTML=`<option value="">${esc(t('不限镜'))}</option>`+(g?g.cameras.map(c=>`<option value="${esc(c.shot_id)}">${esc(c.shot_id)}</option>`).join(''):'');
+  shot.value=(RA&&RA.shotId)||'';
+  tin.value=TIME.toFixed(1);
+  if(!keepText){$('#nf-text').focus()}
+}
+async function saveNote(){
+  const btn=$('#nf-save'),msg=$('#nf-msg');
+  const [kind,id]=($('#nf-target').value||'|').split('|');const opt=$('#nf-target').selectedOptions[0];
+  const body={group_id:SEL,target:{kind,id,label:opt?opt.dataset.label:id},text:$('#nf-text').value,shot_id:$('#nf-shot').value||null,
+    t:$('#nf-uset').checked?Number($('#nf-t').value):null,view:VIEW,base_v:maxV(SEL)||null};
+  if(!body.text.trim()){msg.textContent=t('先写修改要求');msg.className='msg err';return}
+  btn.disabled=true;msg.textContent='';msg.className='msg';
+  try{
+    if(EDIT_ID)await J(api('/notes/'+encodeURIComponent(EDIT_ID)),'PUT',{text:body.text,t:body.t,shot_id:body.shot_id,target:body.target});
+    else await J(api('/notes'),'POST',body);
+    EDIT_ID=null;$('#nf-text').value='';toast(t('已加入队列'));await load(true);
+  }catch(e){msg.textContent=e.message;msg.className='msg err';btn.disabled=false}
+}
+function editNote(nid){
+  const n=(DD.ledger.notes||[]).find(n=>n.id===nid);if(!n)return;
+  if(n.group_id!==SEL){selectGroup(n.group_id);setTimeout(()=>editNote(nid),50);return}
+  EDIT_ID=nid;const tg=n.target||{};
+  fillNoteForm({kind:tg.kind,id:tg.id,label:tg.label},true);
+  $('#nf-text').value=n.text;$('#nf-shot').value=n.shot_id||'';$('#nf-uset').checked=n.t!=null;if(n.t!=null)$('#nf-t').value=n.t;
+  $('#nf-save').textContent=t('保存修改');$('#nf-text').focus();$('#nform').scrollIntoView({block:'nearest'});
+}
+async function delNote(nid){try{await J(api('/notes/'+encodeURIComponent(nid)),'DELETE');await load(true)}catch(e){toast(t('删除失败:')+e.message)}}
+async function decideIssue(issueId,choice,btn){
+  btn.disabled=true;
+  try{
+    const r=await J(wbApi(encodeURIComponent(EP)+'/issues/'+encodeURIComponent(issueId)+'/decision'),'POST',{choice});
+    const g=grpById(SEL);const idx=(g.issues||[]).findIndex(i=>i.issue_id===issueId);if(idx>=0)g.issues[idx]=r.issue;
+    renderRight();renderLeft();
+  }catch(e){toast(t('保存失败:')+e.message);btn.disabled=false}
+}
+async function submitBatch(body,btn){
+  btn.disabled=true;$('#sub-msg').textContent=t('派单中…');
+  try{
+    const r=await J(api('/submit'),'POST',body);
+    toast(I18N.f('已派单给白模调度 Agent(批次 {b},运行 {r});完成后自动加载新版本',{b:r.batch.id,r:String(r.run_id||'').slice(0,8)}),6000);
+    await load(true);
+  }catch(e){$('#sub-msg').textContent=t('派单失败:')+e.message;btn.disabled=false}
+}
+
+/* ---------- 底栏:整集时间线 ---------- */
+const episodeDuration=()=>WB.groups.reduce((s,g)=>s+(g.duration_s||0),0)||1;
+function cumStart(gid){let s=0;for(const g of WB.groups){if(g.group_id===gid)return s;s+=g.duration_s||0}return 0}
+function renderFoot(){
+  const T=episodeDuration();let cum=0;
+  let h=`<div class="fh"><span>${esc(t('整集时间线'))}</span><span>${esc(I18N.f('{n} 组 · {d}',{n:WB.groups.length,d:tc(T)}))}</span><span class="sp"></span><span>${esc(t('点组切换;黄点 = 有待提交注释'))}</span></div><div class="tlrow" id="ftl">`;
+  for(const g of WB.groups){
+    const w=(g.duration_s||0)/T*100,l=cum/T*100;cum+=g.duration_s||0;
+    const drafts=groupNotes(g.group_id).some(n=>n.status==='draft');
+    h+=`<div class="blk ${g.group_id===SEL?'sel':''}" style="left:${l.toFixed(3)}%;width:${Math.max(0.3,w).toFixed(3)}%" data-g="${esc(g.group_id)}" title="${esc(g.group_id)} · ${num(g.duration_s,1)}s">${w>3?esc(g.group_id.replace('grp','')):''}${drafts?'<i class="d"></i>':''}</div>`;
+  }
+  h+=`<div class="ph" id="fph" style="left:${((cumStart(SEL)+TIME)/T*100).toFixed(3)}%"></div></div>`;
+  $('#foot').innerHTML=h;
+  $$('#foot .blk').forEach(b=>b.onclick=()=>selectGroup(b.dataset.g));
+}
+
+/* ---------- 通用 ---------- */
+$('#lb').onclick=()=>{$('#lb').style.display='none'};
+try{
+  const es=new EventSource('/api/v1/events');
+  es.onmessage=e=>{try{const ev=JSON.parse(e.data);if(!DD)return;
+    if(ev.type==='director'&&ev.project===proj()&&ev.ep===EP)load(true);
+    else if(ev.type==='run'&&ev.run&&ev.run.project===proj()&&runningBatches().length&&ev.run.status&&ev.run.status!=='running'&&ev.run.status!=='queued')load(true);
+  }catch(_){}};
+}catch(_){}
+$('#reload').onclick=()=>load(true);
+// 调试/自动化钩子(页内测试用):当前渲染器、拾取、状态
+window.__director={get RA(){return RA},get RB(){return RB},get PICK(){return PICK},get TIME(){return TIME},get VIEW(){return VIEW},pick,setPick,seek,THREE};
+const _q=new URLSearchParams(location.search);
+$('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+EP=_q.get('ep')||localStorage.getItem('director-ep:'+$('#project').value.trim())||'';
+load();
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/director','\u{1F3AC} 导演台'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>

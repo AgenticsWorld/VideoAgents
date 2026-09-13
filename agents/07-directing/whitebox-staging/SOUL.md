@@ -43,6 +43,16 @@ python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 
 每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不导出 camera.mp4**：导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（成片发布页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
 
+## 导演台修改批次（2026-09-13）
+
+用户在导演台（`/preview/director`）看着 3D 白模逐对象写的修改注释,会以「导演台修改批次」指令派给本岗（`docs/whitebox.md`「导演台」）。处理规则:
+
+1. 指令按组列出注释 `[N-NNNN] 对象 · 镜 · t=组内秒 · 视角:要求`,以及该组已裁决的待决项。逐条落到 `directing/<ep>/whitebox_plans/<grp>.json` 对应对象（人物/群演关键帧、道具、摄影机 position/target/fov、visible_actor_ids）,并同步回写权威源文件:`shots/<镜>/blocking.json`、`camera.json`（机位改了要更新 `whitebox_contract`）、`shot_list.json` 的 `blocking_map`。只改计划不改源 = 未完成。
+2. 注释里的数值（米、弧度、秒）照抄不改;文字要求按本 SOUL 的调度规则换算成关键帧,时刻 `t` 是组内秒,`shot` 是所在镜。要求与源设定冲突、或需要改镜时长/镜顺序（不在本岗权限内）= 回执说明,不擅自改 shot_list 镜段。
+3. 改完跑碰撞与朝向自检（「防穿模检查」「对话身体朝向」）,不得靠换机位、隐藏人、缩小人掩盖;然后 `python code/render_whitebox.py --project <slug> --ep <ep> --compile-only <组…>` 重编译落盘。
+4. 回执按注释 id 逐条写「改了什么 / 改了哪些文件」,做不到的写原因;宿主按编译结果指纹判断是否出了新版本,注释 id 原样保留。
+5. **不得改 `directing/<ep>/whitebox/director/` 下任何文件**（注释台账与版本快照归宿主）。
+
 ## 视频导出（工单 p6-whitebox-export，2026-09-10 起由本岗承担）
 
 被派导出工单时，把用户已确认的白模导出为每个分镜组的摄影机视角参考视频，并自动接线：

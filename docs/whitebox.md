@@ -221,6 +221,18 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 - 旁白：文本取 `story/episodes/<ep>/narration.md` 的 `[N-xx | anchor … | est_duration_s: …]` 条目（与分镜预览 narration_items 同一正则），挂点取 shot_list `narration_anchors`（首个挂点镜起点起，显示 est_duration_s，不超出挂点镜窗口）；没有挂点表时按 `shots[].narration_ref`（如 `N-01(前段)`）覆盖的镜段兜底；正文缺失显示「旁白 N-xx」。
 - 状态：`episode_reel_status()` 返回 `cues`、`subtitles_sha256`、`stale_reason`；`--status` 回执带 `subtitle_cues`。
 
+## 导演台（2026-09-13，`/preview/director`）
+
+「分镜设定」组卡白模面板只能看和裁决待决项;导演台是同一份白模数据的大视窗工作台（页面壳同后期处理页:左 分镜组→镜、中 白模视窗、右 修改队列、底 整集时间线），入口在组卡白模面板「✏️ 编辑」旁的「🎬 导演台」（`/preview/director?project=&ep=&grp=&t=`）。v1 只看、写注释、提交、比版本,**不拖动对象**（覆盖层拖动属 v2）。
+
+- **视窗**:四视角与组卡一致（俯视 / 实景 / 旋转 / 摄像机），播放、逐帧（← →）、循环、点时间条跳时刻、点镜跳镜起点;点 3D 里的人物 / 群演 / 道具 / 摄影机机身 / 场景物件 = 选中（黄框）并把它填进注释表单;对象表列出本组白模里所有对象及当前时刻状态（入画 / 画外 / 已退场 / 镜头名单隐藏），同场次在场但本组白模未出现的人物置灰;分镜信息取自分镜预览同一接口。
+- **注释（note）**:`directing/<ep>/whitebox/director/notes.json`（宿主所有,schema `director_notes.v1`,Agent 只读）,每条 `{id: N-NNNN, group_id, target:{kind: actor|extra|prop|camera|scene|group, id, label}, shot_id, t(组内秒), view, text, status: draft→submitted→applied|failed, batch_id, base_v, version_after, error}`。draft 可改可删,其余只读。
+- **提交（batch）**:按组或全集把 draft 注释 + 该组已裁决未套用的待决项（`decided`）打成一个批次,一次派单给 `07-directing/whitebox-staging`（指令模板 `modules/director.build_message`,同后期页派单口径:改计划、回写源文件、`--compile-only`、逐条回执）。同一组同时只能有一个批次在跑。
+- **版本**:`directing/<ep>/whitebox/director/versions/<grp>/v<N>.json`（schema `director_version.v1` = 该组编译后的 group + 所用场景模型 + render/actor_colors + 指纹）。首次提交前自动落 v1「提交前基线」;批次运行结束后宿主在下次读取时**回收**（`modules/director.reconcile`）:组指纹（同 `whitebox_export.fingerprint` 口径,去 issues）变了 → 落新版本、注释 `applied`;没变 → 批次 `nochange`、注释 `failed`（运行结束但白模未变）;编译报错 → `failed`。也可手动「把当前存为版本」。版本不出 mp4;A|B（分屏 / 滑杆 / 闪切）由页面用两份快照各起一个渲染器实时画,与 H3W 后导出的 `camera.mp4` 无关。
+- **通知**:回收落新版本时宿主发 SSE `{"type":"director", project, ep, versions}`;页面同时监听通用 `run` 事件（本页在飞批次的运行结束即重拉）并在有批次运行时 6 秒轮询。新版本到达后自动 A=当前实时、B=上一版并切分屏。
+- **API**（`/api/v1/projects/<p>/director/<ep>`）:`GET`（台账 + 头像 + 回收）、`POST /notes`、`PUT|DELETE /notes/<id>`、`POST /submit {group_ids?|note_ids?, dry_run?}`、`POST /snapshot {group_id, label?}`、`GET /versions/<grp>/<v>`。待决项裁决仍走 `/whitebox/<ep>/issues/<id>/decision`。
+- **Agent 侧**:收到「导演台修改批次」指令时按注释逐条改 `whitebox_plans/<grp>.json` 并回写权威源文件（blocking / camera 含 whitebox_contract / shot_list blocking_map）,数值照抄,跑碰撞与朝向自检,`--compile-only` 重编译,回执按注释 id 逐条报告;**不得改 `directing/<ep>/whitebox/director/` 下任何文件**。
+
 ## 接入视频生成（2026-09-07）
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
