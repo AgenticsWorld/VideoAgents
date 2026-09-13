@@ -54,8 +54,23 @@ def _episodes(base: Path) -> list:
              'has_notes': (base / dm.LEDGER_REL.format(ep=e)).is_file()} for e in sorted(eps)]
 
 
+def _write_compiled(base: Path, ep: str, episode: dict) -> None:
+    """与 render_whitebox.py --compile-only 同款落盘:覆盖层改动后其它页面/导出立即看到。"""
+    import json
+    out = base / 'directing' / ep / 'whitebox'
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'episode.json').write_text(json.dumps(episode, ensure_ascii=False, indent=2), encoding='utf-8')
+    for sid, scene in episode['scenes'].items():
+        d = base / 'assets/concepts/scenes' / sid
+        if d.is_dir():
+            (d / 'whitebox.scene.json').write_text(json.dumps(scene, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
 def _reconcile(base: Path, ep: str, doc: dict, episode: dict) -> list:
-    created = dm.reconcile(base, ep, doc, episode, core._post_run_alive)
+    plain = None
+    if any(b.get('status') == 'running' for b in doc.get('batches', [])) and dm.load_overrides(base, ep).get('groups'):
+        plain = compile_episode(base, ep, apply_overrides=False)
+    created = dm.reconcile(base, ep, doc, episode, core._post_run_alive, plain_episode=plain)
     if created:
         dm.save_ledger(base, ep, doc)
         core.HUB.publish({'type': 'director', 'project': base.name, 'ep': ep,
@@ -79,6 +94,7 @@ def _public(base: Path, ep: str, doc: dict, episode: dict) -> dict:
     return {'project': base.name, 'ep': ep, 'episodes': _episodes(base), 'agent': dm.AGENT_ID,
             'whitebox_enabled': (settings.get('output') or {}).get('spatial_blocking', True) is not False,
             'ledger': {k: doc.get(k) for k in ('notes', 'batches', 'versions', 'current', 'updated_at')},
+            'overrides': dm.load_overrides(base, ep).get('groups', {}),
             'summary': dm.summary(doc), 'avatars': avatars,
             'labels': {'target': dm.TARGET_LABEL, 'note_status': dm.NOTE_STATUS_LABEL, 'batch_status': dm.BATCH_STATUS_LABEL}}
 
@@ -187,3 +203,51 @@ async def snapshot(project: str, ep: str, body: dict | None = None):
 async def version_get(project: str, ep: str, gid: str, v: int):
     base = project_path(project, ep, gid)
     return await checked(dm.load_version, base, ep, gid, v)
+
+
+# ---- 覆盖层(v2):拖动/数值改定的整条关键帧,按组按对象盖在 Agent 计划之上 ----
+def _compiled_group(episode: dict, gid: str) -> dict:
+    g = next((g for g in episode['groups'] if g['group_id'] == gid), None)
+    if not g:
+        err = next((e['error'] for e in episode.get('errors', []) if e.get('group_id') == gid), '本组没有白模编译结果')
+        raise ValueError(f'{gid}:{err}')
+    return g
+
+
+@router.put('/overrides/{gid}')
+async def overrides_set(project: str, ep: str, gid: str, body: dict):
+    """body = {actors:{id:{keyframes}|null}, extras:{}, props:{}, cameras:{shot:{keyframes}|null}};值 null 删除该对象覆盖。
+    保存后立即重编译落盘 episode.json,返回该组编译结果(含 overrides 标记)。"""
+    if not isinstance(body, dict):
+        raise HTTPException(422, 'body must be an object')
+
+    def _do():
+        base = project_path(project, ep, gid)
+        ov = dm.load_overrides(base, ep)
+        group_ov = dm.set_group_overrides(ov, gid, body)
+        dm.save_overrides(base, ep, ov)
+        episode = compile_episode(base, ep)
+        _write_compiled(base, ep, episode)
+        group = _compiled_group(episode, gid)
+        core.HUB.publish({'type': 'director', 'project': base.name, 'ep': ep, 'overrides': [gid]})
+        return {'ok': True, 'group': group, 'scene': episode['scenes'][group['scene_id']], 'overrides': group_ov,
+                'actor_colors': episode.get('actor_colors') or {}}
+    return await checked(_do)
+
+
+@router.delete('/overrides/{gid}')
+async def overrides_clear(project: str, ep: str, gid: str, kind: str = '', id: str = ''):
+    """丢弃覆盖(整组,或 ?kind=actors&id=CHAR-0001 单对象)→ 回到 Agent 计划。"""
+    def _do():
+        base = project_path(project, ep, gid)
+        if kind and kind not in dm.OVERRIDE_KINDS:
+            raise ValueError('kind 须为 ' + '|'.join(dm.OVERRIDE_KINDS))
+        ov = dm.load_overrides(base, ep)
+        dm.clear_group_overrides(ov, gid, kind or None, id or None)
+        dm.save_overrides(base, ep, ov)
+        episode = compile_episode(base, ep)
+        _write_compiled(base, ep, episode)
+        group = _compiled_group(episode, gid)
+        core.HUB.publish({'type': 'director', 'project': base.name, 'ep': ep, 'overrides': [gid]})
+        return {'ok': True, 'group': group, 'scene': episode['scenes'][group['scene_id']], 'overrides': ov.get('groups', {}).get(gid, {})}
+    return await checked(_do)

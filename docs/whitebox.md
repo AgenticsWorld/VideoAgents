@@ -233,6 +233,10 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 - **API**（`/api/v1/projects/<p>/director/<ep>`）:`GET`（台账 + 头像 + 回收）、`POST /notes`、`PUT|DELETE /notes/<id>`、`POST /submit {group_ids?|note_ids?, dry_run?}`、`POST /snapshot {group_id, label?}`、`GET /versions/<grp>/<v>`。待决项裁决仍走 `/whitebox/<ep>/issues/<id>/decision`。
 - **Agent 侧**:收到「导演台修改批次」指令时按注释逐条改 `whitebox_plans/<grp>.json` 并回写权威源文件（blocking / camera 含 whitebox_contract / shot_list blocking_map）,数值照抄,跑碰撞与朝向自检,`--compile-only` 重编译,回执按注释 id 逐条报告;**不得改 `directing/<ep>/whitebox/director/` 下任何文件**。
 
+**v2 拖动与覆盖层（2026-09-13）**:编辑栏「🔒 锁定」切成「🔓 编辑中」后（只作用于 A=当前实时）,可在旋转 / 俯视 / 实景 / 前视 / 侧视里直接拖人物、群演、道具、摄影机机身与机位目标点（移动 G / 旋转 R;按住 Shift 改高度,俯视图里没有竖直面故不能改高度）;摄像机视角里拖 = 转视线,WASD/QE 平移机位（Shift = 1 m 步长）。**有运动的对象在当前时刻自动打关键帧**（0.02 s 内已有帧则改该帧,否则按插值插一帧）;**全程静止的对象（固定机位、站着不动的人）整体挪**,不会造出一段来回。选中人物时显示路径点:拖小球改该帧位置,点折线插帧（时间按弧长比例）,Delete 删帧（首尾不可删）,标签显示时刻与段速度（>4 m/s 标黄）。多轨时间线（镜段 + 每对象一轨）里的菱形可左右拖改时间（首尾固定、不越过相邻帧、摄影机帧限在本镜内）;数值框直接改 X/Y/Z/朝向;每对象可锁定（L）;撤销 / 重做（Ctrl+Z / Ctrl+Shift+Z）;吸附 0.1 m / 15°。
+
+每次落点即写 `directing/<ep>/whitebox/director/overrides.json`（宿主所有,schema `director_overrides.v1`:`groups.<grp>.{actors|extras|props|cameras}.<id>` = 该对象**整条关键帧数组**,道具还可给 position/yaw/pitch/roll）,`compile_episode` 把它盖在 Agent 计划之上（`apply_overrides=False` 可编不带覆盖层的结果),无效覆盖只进 warnings 不套用;保存即重编译落盘 `episode.json`,所以分镜预览、导出、接线都立即看到改后的白模（camera.mp4 指纹随之变为过期,属正常）。对象卡与时间线标「✎ 已改」,编辑栏显示「未固化 n 个对象」,可「丢弃本组改动」或在数值框「还原」单个对象。提交批次时指令附上覆盖层原文,要求 Agent **数值原样固化进计划并回写源文件**;回收时对比不带覆盖层的编译结果,已一致的对象自动从覆盖层删掉,未一致的保留并记入批次 `overrides_pending`;只固化不改画面的批次也算 `done`。API:`PUT /director/<ep>/overrides/<grp>`（按对象合并,值 null 删）、`DELETE …/overrides/<grp>[?kind=&id=]`,`GET /director/<ep>` 返回 `overrides`。
+
 ## 接入视频生成（2026-09-07）
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：

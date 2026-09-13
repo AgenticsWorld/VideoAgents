@@ -602,7 +602,8 @@ def complete_scene_actors(groups, contexts, raw_groups, errors, colors=None):
                     actor['presence'] = copy.deepcopy(presence)
 
 
-def compile_episode(base: Path, ep: str):
+def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
+    """apply_overrides=False 时不合并导演台覆盖层(directing/<ep>/whitebox/director/overrides.json),用于判断覆盖是否已固化进计划。"""
     component(ep)
     source = read(base / 'directing' / ep / 'shot_list.json')
     if not source:
@@ -646,6 +647,14 @@ def compile_episode(base: Path, ep: str):
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
     complete_scene_actors(groups, contexts, raw_groups, errors, colors)
+    if apply_overrides:
+        # 导演台覆盖层(2026-09-13):用户拖动/改数值的整条关键帧按对象盖在 Agent 计划之上;无效覆盖只在 warnings 里报
+        from modules.director import apply_overrides as _apply_ov, load_overrides
+        ov_groups = load_overrides(base, ep).get('groups', {})
+        for group in groups:
+            ov = ov_groups.get(group['group_id'])
+            if ov:
+                _apply_ov(group, ov)
     for group in groups:
         try:
             validate_actor_colors(group['actors'])

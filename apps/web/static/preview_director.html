@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>导演台 · VideoAgents</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Crect%20x%3D%273%27%20y%3D%276%27%20width%3D%2718%27%20height%3D%2713%27%20rx%3D%273%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M8%206l3-3M14%206l3-3%27%20stroke%3D%27%236c9ef8%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712.5%27%20r%3D%273%27%20fill%3D%27%231c2130%27%2F%3E%3C%2Fsvg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Crect%20x%3D%273%27%20y%3D%276%27%20width%3D%2718%27%20height%3D%2712%27%20rx%3D%272.5%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M9%203l3%203%203-3%27%20stroke%3D%27%236c9ef8%27%20stroke-width%3D%271.8%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3Crect%20x%3D%275.5%27%20y%3D%278.5%27%20width%3D%2713%27%20height%3D%277%27%20rx%3D%271%27%20fill%3D%27%231c2130%27%2F%3E%3Cpath%20d%3D%27M8%2021h8%27%20stroke%3D%27%236c9ef8%27%20stroke-width%3D%271.8%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E">
 <script src="/static/i18n/i18n.js"></script>
 <script>
 /* 兜底:i18n 运行时未加载时保持中文界面可用 */
@@ -82,6 +82,8 @@ header select{cursor:pointer;max-width:260px}
 .seg{display:inline-flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden}
 .seg span{padding:2px 8px;color:var(--dim);cursor:pointer;user-select:none;white-space:nowrap}
 .seg span.on{background:#274680;color:#fff}
+#viewseg span{padding:2px 7px;display:inline-flex;align-items:center}
+#viewseg svg{width:15px;height:15px;display:block}
 .vchip{font:500 11px var(--mono);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;color:var(--text);background:var(--panel2)}
 .vchip.a{border-color:#3d63b0;color:var(--accent)}
 .vchip.b{border-color:#7a4c25;color:var(--link)}
@@ -194,6 +196,36 @@ header select{cursor:pointer;max-width:260px}
 #lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lb img{max-width:92vw;max-height:88vh;border-radius:8px}
 #toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:6px 14px;border-radius:8px;font-size:12.5px;z-index:120;box-shadow:0 6px 24px #000a;transition:opacity .3s;opacity:0;pointer-events:none}
+/* v2 编辑栏 / 多轨时间线 / 路径点标签 */
+.mon-edit{display:flex;gap:6px;align-items:center;padding:4px 10px;border-bottom:1px solid var(--border);background:var(--panel);font-size:11.5px;flex-wrap:wrap;flex:none}
+.mon-edit label{display:inline-flex;gap:4px;align-items:center;color:var(--dim);cursor:pointer}
+.mon-edit .numbox{display:inline-flex;gap:4px;align-items:center;font:11px var(--mono);color:var(--dim);flex-wrap:wrap}
+.mon-edit .numbox input{width:62px;padding:1px 4px;font:11px var(--mono)}
+.mon-edit .ovtag{color:var(--yellow);font-size:11.5px;font-weight:600;white-space:nowrap}
+.mon-ov{background:#1d1a12;border-bottom:1px solid #4a3b12}
+.mon-ov .lite{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+button.on{border-color:var(--accent);color:var(--accent)}
+.pad.edit{cursor:move}
+.lanes{border-top:1px solid var(--border);background:var(--panel);font:10px var(--mono);flex:none;max-height:170px;overflow-y:auto;position:relative}
+.lanes .ln{display:grid;grid-template-columns:116px 1fr;height:18px;border-bottom:1px solid #1d2230}
+.lanes .ln .lb{padding:0 6px;color:var(--dim);display:flex;align-items:center;gap:4px;overflow:hidden;white-space:nowrap;cursor:pointer;border-right:1px solid var(--border)}
+.lanes .ln .lb i{width:8px;height:8px;border-radius:50%;flex:none;display:block}
+.lanes .ln.sel .lb{color:var(--text);background:#1b2740}
+.lanes .ln .tr{position:relative;background:repeating-linear-gradient(90deg,transparent 0 10%,#ffffff05 10% 10.2%)}
+.lanes .kf{position:absolute;top:4px;width:9px;height:9px;transform:translate(-50%,0) rotate(45deg);background:var(--faint);border:1px solid var(--border2);cursor:ew-resize;border-radius:1px;z-index:1}
+.lanes .kf.on{background:var(--yellow);border-color:var(--yellow)}
+.lanes .kf.fixed{cursor:default;opacity:.7}
+.lanes .kf.ov{border-color:var(--yellow)}
+.lanes .sg{position:absolute;top:3px;height:12px;border:1px solid var(--border2);border-radius:2px;background:var(--panel3);color:var(--dim);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font-size:9px}
+.lanes .sg.on{border-color:var(--accent);color:#fff}
+.lanes .lph{position:absolute;top:0;bottom:0;width:1px;background:#fff;pointer-events:none;z-index:2}
+.waylbl{position:absolute;font:9.5px var(--mono);color:#fff;background:#0009;padding:0 3px;border-radius:2px;pointer-events:none;transform:translate(-50%,-150%);z-index:4;white-space:nowrap}
+.waylbl.warn{color:var(--yellow)}
+.waylbl.on{background:var(--yellow);color:#000}
+.objs .obj .lk{position:absolute;right:6px;top:4px;font-size:11px;cursor:pointer;opacity:.45}
+.objs .obj .lk.on{opacity:1}
+.objs .obj{position:relative}
+.objs .obj .stt.ov{color:var(--yellow);border-color:#5f4a17}
 @media(max-width:1100px){#work{grid-template-columns:220px minmax(0,1fr) 300px}}
 @media(max-width:860px){#work{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto}.col{max-height:70vh}}
 </style>
@@ -201,7 +233,7 @@ header select{cursor:pointer;max-width:260px}
 <body>
 <header>
   <a class="back" href="/">← 控制台</a>
-  <h1>🎬 导演台</h1>
+  <h1>📺 导演台</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
@@ -370,10 +402,32 @@ function selectGroup(gid,force){
 
 /* ---------- 监视器 ---------- */
 let RA=null,RB=null,HELPER=null,DIRTY=true,PREV=0,RAF=0,PAD=null,ORBIT=null,SRC={a:null,b:null},STATE_TICK=0;
+/* ---------- v2 编辑状态:解锁拖动 / 覆盖层 / 撤销 / 锁定 / 路径点 ---------- */
+let EDIT=false,TOOL='move',SNAP=true,LOCKS=new Set(),UNDO=[],REDO=[],DRAG=null,WAY=null,WAYSEL=-1,LANES_ON=true,FLY=null,FLY_TIMER=null,LANEDRAG=null;
+const KIND_KEY={actor:'actors',extra:'extras',prop:'props',camera:'cameras'};
+const OV=()=>((DD||{}).overrides||{})[SEL]||{};
+const ovHas=(kind,id)=>{const o=OV(),k=KIND_KEY[kind];return !!(k&&o[k]&&o[k][id])};
+const ovCount=()=>{const o=OV();return Object.values(KIND_KEY).reduce((n,k)=>n+Object.keys(o[k]||{}).length,0)};
+const ovList=()=>{const o=OV();return Object.values(KIND_KEY).flatMap(k=>Object.keys(o[k]||{}).map(id=>k+'/'+id))};
+const lockKey=(k,id)=>k+'|'+id;
+const locked=p=>!p||LOCKS.has(lockKey(p.kind,p.id));
+const editable=p=>!!p&&!!KIND_KEY[p.kind]&&!locked(p)&&VA==='live';
+const locksKey=()=>'director-locks:'+proj()+':'+EP+':'+SEL;
+function loadLocks(){try{LOCKS=new Set(JSON.parse(localStorage.getItem(locksKey())||'[]'))}catch(_){LOCKS=new Set()}}
+function saveLocks(){try{localStorage.setItem(locksKey(),JSON.stringify([...LOCKS]))}catch(_){}}
+// 视角按钮只显示图标(节省空间),文字进 title/aria-label
+const VIEW_ICONS=[
+  ['overview','<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 13 5v6L8 13.5 3 11V5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M3 5l5 2.5L13 5M8 7.5v6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M1.5 9.5A7 7 0 0 0 6 14.6" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M5 12.6l1.4 2.2-2.6.2" fill="currentColor"/></svg>','旋转视角'],
+  ['top','<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11" stroke="currentColor" stroke-width=".8" opacity=".7"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>','俯视图'],
+  ['real','<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.5 11.5 6.5 8l2.2 2.4L10.5 8.8 12.5 11.5z" fill="currentColor"/><circle cx="10.8" cy="6" r="1.2" fill="currentColor"/></svg>','实景图'],
+  ['front','<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 14V9.5A3.5 3.5 0 0 1 8 7a3.5 3.5 0 0 1 3.5 2.5V14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M4.5 14h7" stroke="currentColor" stroke-width="1.3"/><circle cx="7.2" cy="4" r=".5" fill="currentColor"/><circle cx="8.8" cy="4" r=".5" fill="currentColor"/></svg>','前视'],
+  ['side','<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 6.2a2 2 0 1 1 3.3-1.5l1.6.6-1.4.8v.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 14V9.6A2.6 2.6 0 0 1 8.6 7h.2A2.2 2.2 0 0 1 11 9.2V14" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 14h5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 8h2.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M3.3 6.9 4.6 8l-1.3 1.1z" fill="currentColor"/></svg>','侧视'],
+  ['camera','<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5" width="8.5" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 7.5 14.5 5.5v6L10 9.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="4.5" cy="8.5" r="1.3" fill="currentColor"/></svg>','摄像机视角'],
+];
 function renderMonitorShell(){
   $('#mid').innerHTML=`
   <div class="mon-top">
-    <span class="seg" id="viewseg"><span data-v="overview" class="on">${esc(t('旋转视角'))}</span><span data-v="top">${esc(t('俯视图'))}</span><span data-v="real">${esc(t('实景图'))}</span><span data-v="camera">${esc(t('摄像机视角'))}</span></span>
+    <span class="seg" id="viewseg">${VIEW_ICONS.map(([v,ic,lb])=>`<span data-v="${v}" class="${v===VIEW?'on':''}" title="${esc(t(lb))}" aria-label="${esc(t(lb))}">${ic}</span>`).join('')}</span>
     <span class="seg" id="ab"><span data-ab="a" class="on">A</span><span data-ab="split">A|B</span><span data-ab="wipe">${esc(t('滑杆'))}</span><span data-ab="flash">${esc(t('闪切'))}</span></span>
     <span class="vchip a">A</span><select id="selA"></select>
     <span class="vchip b">B</span><select id="selB"></select>
@@ -387,6 +441,7 @@ function renderMonitorShell(){
     <div class="split" id="split" style="display:none"></div><div class="knob" id="knob" style="display:none">A|B</div>
     <div class="info" id="finfo"></div><div class="tc" id="ftc"></div>
     <div class="tag a" id="tagA"></div><div class="tag b" id="tagB" style="display:none"></div>
+    <div id="waylabels" style="position:absolute;inset:0;pointer-events:none;z-index:4"></div>
     <div class="hint" id="fhint">${esc(t('选择左侧分镜组'))}</div>
   </div></div>
   <div class="xport">
@@ -394,13 +449,24 @@ function renderMonitorShell(){
     <div class="tl" id="xtl"><i id="xfill"></i><b id="xph"></b></div>
     <span class="lite" id="xshot" style="font:11px var(--mono);color:var(--dim)"></span>
   </div>
+  <div class="mon-edit" id="monedit">
+    <button class="sm" id="edit" title="${esc(t('解锁后可在 3D 里拖动人物/群演/道具/摄影机(移动 G / 旋转 R;按住 Shift 改高度)。有运动的对象在当前时刻自动打关键帧,全程静止的对象整体挪;改动即时写入覆盖层'))}">🔒 ${esc(t('锁定'))}</button>
+    <span class="seg" id="tool" style="display:none"><span data-tool="move" class="on">${esc(t('移动'))} G</span><span data-tool="rotate">${esc(t('旋转'))} R</span></span>
+    <label id="snaplbl" style="display:none"><input type="checkbox" id="snap" checked> ${esc(t('吸附 0.1 m / 15°'))}</label>
+    <button class="sm" id="undo" disabled title="${esc(t('撤销 (Ctrl+Z)'))}">↶</button><button class="sm" id="redo" disabled title="${esc(t('重做 (Ctrl+Shift+Z)'))}">↷</button>
+    <span class="numbox" id="numbox" style="display:none"></span>
+    <span style="flex:1"></span>
+    <button class="sm on" id="lanetoggle" title="${esc(t('多轨时间线:镜段 + 每个对象的关键帧(菱形可左右拖改时间)'))}">${esc(t('时间线'))}</button>
+  </div>
+  <div class="mon-edit mon-ov" id="ovrow" style="display:none"><span class="ovtag" id="ovtag"></span><span class="lite" style="color:var(--dim)">${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span><span style="flex:1"></span><button class="sm warn" id="ovdrop">${esc(t('丢弃本组改动'))}</button></div>
+  <div class="lanes" id="lanes"></div>
   <div class="midbody">
     <div class="sec-h">${esc(t('本组对象'))} <span class="lite" id="objcnt"></span><span class="sp" style="flex:1"></span><span class="lite">${esc(t('点对象 = 选中并写注释;摄影机在俯视/旋转视角里可点'))}</span></div>
     <div class="objs" id="objs"></div>
     <div class="sec-h">${esc(t('分镜信息'))} <span class="lite" id="shotlbl"></span></div>
     <div class="shotinfo" id="shotinfo"></div>
   </div>`;
-  $$('#viewseg span').forEach(s=>s.onclick=()=>{VIEW=s.dataset.v;$$('#viewseg span').forEach(x=>x.classList.toggle('on',x===s));$('#pad').classList.toggle('orbit',VIEW==='overview');DIRTY=true;kick();renderObjects()});
+  $$('#viewseg span').forEach(s=>s.onclick=()=>{VIEW=s.dataset.v;$$('#viewseg span').forEach(x=>x.classList.toggle('on',x===s));$('#pad').classList.toggle('orbit',VIEW==='overview'&&!EDIT);DIRTY=true;kick();renderObjects();renderNumbox()});
   $$('#ab span').forEach(s=>s.onclick=()=>setAB(s.dataset.ab));
   $('#selA').onchange=()=>{VA=$('#selA').value;reloadSources('a')};
   $('#selB').onchange=()=>{VB=$('#selB').value;if(AB==='a')setAB('split');reloadSources('b')};
@@ -421,12 +487,31 @@ function renderMonitorShell(){
     if(e.key==='ArrowLeft'){PLAYING=false;seek(Math.max(0,TIME-1/FPS));updPlayBtn()}
     if(e.key==='ArrowRight'){PLAYING=false;seek(TIME+1/FPS);updPlayBtn()}
     if(e.key==='Home'){seek(0)}
-    if(e.key==='Escape'){setPick(null)}
+    if(e.key==='Escape'){if(DRAG)endDrag(null,true);else setPick(null)}
+    if(EDIT){
+      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(e.shiftKey)redo();else undo();return}
+      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}
+      if(e.key==='g'||e.key==='G')setTool('move');
+      if(e.key==='r'||e.key==='R')setTool('rotate');
+      if(e.key==='l'||e.key==='L'){if(PICK&&KIND_KEY[PICK.kind])toggleLock(PICK.kind,PICK.id)}
+      if(e.key==='Delete'||e.key==='Backspace'){if(WAYSEL>=0){e.preventDefault();deleteWaypoint(WAYSEL)}}
+      if(VIEW==='camera'&&PICK&&PICK.kind==='camera'&&'wasdqeWASDQE'.includes(e.key)&&e.key){e.preventDefault();flyStep(e.key.toLowerCase(),e.shiftKey?1:0.25)}
+    }
   });
   // 拾取:按下/抬起位移小于 4px 视为点击(旋转视角下拖动是 orbit)
   PAD=$('#pad');let down=null;
-  PAD.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
-  PAD.addEventListener('pointerup',e=>{if(!down)return;const d=Math.hypot(e.clientX-down[0],e.clientY-down[1]);down=null;if(d<4)pick(e)});
+  PAD.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];if(EDIT&&e.button===0)beginDrag(e)});
+  PAD.addEventListener('pointermove',e=>{if(DRAG)moveDrag(e)});
+  PAD.addEventListener('pointerup',e=>{if(DRAG){const moved=endDrag(e);down=null;if(!moved)pick(e);return}if(!down)return;const d=Math.hypot(e.clientX-down[0],e.clientY-down[1]);down=null;if(d<4)pick(e)});
+  PAD.addEventListener('pointercancel',()=>{if(DRAG)endDrag(null)});
+  // 编辑栏
+  $('#edit').onclick=()=>setEdit(!EDIT);
+  $$('#tool span').forEach(x=>x.onclick=()=>setTool(x.dataset.tool));
+  $('#snap').onchange=e=>{SNAP=e.target.checked};
+  $('#undo').onclick=undo;$('#redo').onclick=redo;
+  $('#lanetoggle').onclick=()=>{LANES_ON=!LANES_ON;$('#lanetoggle').classList.toggle('on',LANES_ON);renderLanes()};
+  $('#ovdrop').onclick=async()=>{const b=$('#ovdrop');if(b.dataset.arm!=='1'){b.dataset.arm='1';b.textContent=t('确认丢弃?');setTimeout(()=>{b.dataset.arm='';b.textContent=t('丢弃本组改动')},2500);return}
+    b.disabled=true;try{const r=await J(api('/overrides/'+encodeURIComponent(SEL)),'DELETE');UNDO.length=0;REDO.length=0;updUndo();applyServerGroup(r);toast(t('已丢弃本组改动,回到 Agent 计划'))}catch(e){toast(t('丢弃失败:')+e.message)}b.disabled=false;b.dataset.arm='';b.textContent=t('丢弃本组改动')};
   $('#frame').style.aspectRatio=`${FORMAT.width} / ${FORMAT.height}`;
 }
 function updPlayBtn(){$('#b-play').textContent=(PLAYING?'⏸ '+t('暂停'):'▶ '+t('播放'))}
@@ -460,6 +545,7 @@ async function setGroup(){
   // three 读 getShaderPrecisionFormat 会报 Cannot read properties of null (reading 'precision')
   cancelAnimationFrame(RAF);RAF=0;PLAYING=false;updPlayBtn();
   if(HELPER&&RA&&RA.scene){RA.scene.remove(HELPER);HELPER.geometry.dispose()}HELPER=null;
+  UNDO.length=0;REDO.length=0;updUndo();DRAG=null;WAY=null;WAYSEL=-1;FLY=null;loadLocks();
   const g=grpById(SEL);
   $('#fhint').textContent=g?'':t('该组没有白模编译结果');
   if(!g){renderObjects();renderShotInfo();return}
@@ -472,15 +558,17 @@ async function setGroup(){
     await reloadSources();
   }catch(e){$('#fhint').textContent=t('3D 加载失败:')+e.message}
 }
-async function reloadSources(which){
+async function reloadSources(which,keepCam){
   const g=grpById(SEL);if(!g||!RA)return;
   const jobs=[];
-  if(!which||which==='a')jobs.push(sourceData(VA,SEL).then(d=>{SRC.a=d;RA.load(d.scene,d.group);$('#tagA').textContent='A · '+d.label}));
+  const saved=keepCam&&ORBIT?{pos:RA.overview.position.clone(),quat:RA.overview.quaternion.clone(),zoom:RA.overview.zoom,target:ORBIT.target.clone()}:null;
+  if(!which||which==='a')jobs.push(sourceData(VA,SEL).then(d=>{SRC.a=d;RA.load(d.scene,d.group);$('#tagA').textContent='A · '+d.label;
+    if(saved){RA.overview.position.copy(saved.pos);RA.overview.quaternion.copy(saved.quat);RA.overview.zoom=saved.zoom;RA.overview.updateProjectionMatrix();ORBIT.target.copy(saved.target);ORBIT.update()}}));
   if(!which||which==='b')jobs.push(sourceData(VB,SEL).then(d=>{SRC.b=d;RB.load(d.scene,d.group);$('#tagB').textContent='B · '+d.label}));
   try{await Promise.all(jobs)}catch(e){toast(t('版本加载失败:')+e.message)}
   // A 的旋转视角相机由 ORBIT 控制(渲染器自身 controls 关闭);target 取人物轨迹+场景包围盒中心,与渲染器取景一致
-  if(!which||which==='a')fitOrbit();
-  setPick(PICK,true);DIRTY=true;renderObjects(true);renderShotInfo();kick();
+  if((!which||which==='a')&&!saved)fitOrbit();
+  setPick(PICK,true);DIRTY=true;renderObjects(true);renderShotInfo();renderLanes();renderNumbox();renderOvState();kick();
 }
 function fitOrbit(){
   // 与 whitebox-renderer.load 的取景一致:以人物轨迹+场景包围盒中心为 orbit 目标
@@ -489,6 +577,25 @@ function fitOrbit(){
   for(const a of RA.actors)for(const k of a.data.keyframes)b.expandByPoint(new THREE.Vector3(...k.position));
   ORBIT.target.copy(b.getCenter(new THREE.Vector3()));ORBIT.update();
 }
+/* 前视/侧视:页面自有的正交相机,不改共享渲染器(改渲染器会让所有已导出 camera.mp4 的渲染器指纹过期) */
+function sideCam(rr,view){
+  const key=view==='front'?'_front':'_side';
+  if(!rr[key]){rr[key]=new THREE.OrthographicCamera(-10,10,6,-6,.05,3000);rr[key].layers.enable(1)}
+  const cam=rr[key];const [w,h,d]=rr.sceneData?rr.sceneData.dimensions_m:[10,3,10];
+  let top=h;for(const a of rr.actors||[])for(const k of a.data.keyframes)top=Math.max(top,k.position[1]+a.data.size_m[1]);
+  const aspect=rr.width/rr.height,span=(view==='front'?w:d)*1.12,ext=Math.max(span,(top+1)*aspect)/2,cy=Math.max(top,2)/2;
+  cam.left=-ext;cam.right=ext;cam.top=ext/aspect;cam.bottom=-ext/aspect;cam.far=Math.max(3000,Math.max(w,d,top)*6);
+  if(view==='front')cam.position.set(0,cy,Math.max(w,d,top)*3);else cam.position.set(Math.max(w,d,top)*3,cy,0);
+  cam.up.set(0,1,0);cam.lookAt(0,cy,0);cam.updateProjectionMatrix();cam.updateMatrixWorld(true);return cam;
+}
+function camOf(rr,view){return view==='camera'?rr.camera:view==='overview'?rr.overview:(view==='front'||view==='side')?sideCam(rr,view):rr.top}
+function renderView(rr,view){
+  if(view!=='front'&&view!=='side'){rr.render(view);return}
+  if(!rr.scene)return;
+  for(const m of rr.solids)m.visible=true;if(rr.realPlane)rr.realPlane.visible=false;rr.marker.visible=!!rr.group;rr.ray.visible=!!rr.group;
+  rr.renderer.render(rr.scene,sideCam(rr,view));
+}
+const VIEW_NAME=()=>({camera:t('摄像机视角'),top:t('俯视图'),real:t('实景图'),front:t('前视'),side:t('侧视')})[VIEW]||t('旋转视角');
 function kick(){if(!RAF)RAF=requestAnimationFrame(loop)}
 function loop(now){
   RAF=0;
@@ -503,16 +610,17 @@ function loop(now){
     DIRTY=false;
     RA.setTime(TIME);
     if(HELPER)HELPER.update();
-    RA.render(VIEW);
+    renderView(RA,VIEW);
     if(AB!=='a'&&RB.scene){
       RB.overview.position.copy(RA.overview.position);RB.overview.quaternion.copy(RA.overview.quaternion);RB.overview.zoom=RA.overview.zoom;RB.overview.updateProjectionMatrix();
       RB.top.position.copy(RA.top.position);RB.top.zoom=RA.top.zoom;RB.top.updateProjectionMatrix();
-      RB.setTime(TIME);RB.render(VIEW);
+      RB.setTime(TIME);renderView(RB,VIEW);
     }
     $('#ftc').textContent=`${tc(TIME)} / ${tc(g.duration_s)} · ${RA.shotId||''}`;
     $('#xtc').textContent=`${TIME.toFixed(2)} / ${g.duration_s.toFixed(2)} s`;
     $('#xshot').textContent=RA.shotId||'';
-    $('#finfo').textContent=`${g.group_id} · ${g.scene_id} · ${VIEW==='camera'?t('摄像机视角'):VIEW==='top'?t('俯视图'):VIEW==='real'?t('实景图'):t('旋转视角')}`;
+    $('#finfo').textContent=`${g.group_id} · ${g.scene_id} · ${VIEW_NAME()}${EDIT?' · '+t('编辑中'):''}`;
+    updateWayLabels();const lph=$('#lph');if(lph)lph.style.left=(TIME/g.duration_s*100).toFixed(3)+'%';
     const p=(TIME/g.duration_s*100).toFixed(3)+'%';$('#xfill').style.width=p;$('#xph').style.left=p;
     const ph=$('#fph');if(ph){const cum=cumStart(SEL);ph.style.left=((cum+TIME)/episodeDuration()*100).toFixed(3)+'%'}
     if(now-STATE_TICK>250){STATE_TICK=now;updateObjectStates();markShot();if($('#shotlbl').dataset.sid!==RA.shotId)renderShotInfo()}
@@ -520,14 +628,21 @@ function loop(now){
   if(PLAYING)RAF=requestAnimationFrame(loop);
 }
 /* 拾取 */
-function pick(e){
-  if(!RA||!RA.scene)return;
+function pick(e){const p=pickAt(e);if(p&&p.way!=null){WAYSEL=p.way;const info=keysOf(PICK);if(info&&info.keys[p.way])seek(info.keys[p.way].t+(info.isCam?info.shot.start:0));renderLanes();updateWay();return}if(p&&p.insert){insertWaypoint(p.insert);return}setPick(p)}
+function pickAt(e){
+  if(!RA||!RA.scene)return null;
   const r=$('#frame').getBoundingClientRect();
   const nd=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-(((e.clientY-r.top)/r.height)*2-1));
-  const cam=VIEW==='camera'?RA.camera:(VIEW==='overview'?RA.overview:RA.top);
+  const cam=camOf(RA,VIEW);
   cam.updateMatrixWorld(true);
   const rc=new THREE.Raycaster();rc.setFromCamera(nd,cam);
   rc.layers.set(0);if(VIEW!=='camera')rc.layers.enable(1);
+  // 编辑态:先试路径点/机位目标点/路径线(插帧)
+  if(EDIT&&VIEW!=='camera'){
+    if(WAY){const wh=rc.intersectObjects(WAY.children.filter(c=>c.isMesh),false);if(wh.length)return {...PICK,way:wh[0].object.userData.idx};}
+    if(TARGET_H&&TARGET_H.visible){const th=rc.intersectObject(TARGET_H,false);if(th.length)return {...PICK,target:true};}
+    if(WAY&&WAY.userData.line){rc.params.Line.threshold=0.25;const lh=rc.intersectObject(WAY.userData.line,false);if(lh.length)return {...PICK,insert:{index:lh[0].index,point:lh[0].point}};}
+  }
   const targets=[];
   for(const a of RA.actors)if(a.root.visible)targets.push(a.root);
   for(const p of RA.props)if(p.mesh.visible)targets.push(p.mesh);
@@ -536,6 +651,7 @@ function pick(e){
   const hits=rc.intersectObjects(targets,true);
   const up=(obj,set)=>{for(let p=obj;p;p=p.parent)if(set(p))return p;return null};
   const g=grpById(SEL);
+  if(rc.params&&rc.params.Line)rc.params.Line.threshold=1;
   const actorPick=a=>({kind:(a.data.id||'').startsWith('EXTRA')?'extra':'actor',id:a.data.id,label:a.data.label||a.data.id});
   // 先按射线命中;俯视/旋转视角里人物只有几个像素,没打中人物时再按屏幕距离就近吸附(16px 内)
   let picked=null,solidHit=null;
@@ -556,11 +672,12 @@ function pick(e){
     picked=best;
   }
   if(!picked&&solidHit&&g)picked={kind:'scene',id:g.scene_id,label:t('场景物件')+' '+(solidHit.name||''),object:solidHit.name||''};
-  setPick(picked);
+  return picked;
 }
 const shotAt=()=>{const g=grpById(SEL);return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1))||{}};
 function setPick(p,silent){
-  PICK=p;
+  const prev=PICK;PICK=p;
+  if(!p||!prev||p.kind!==prev.kind||p.id!==prev.id)WAYSEL=-1;
   if(HELPER&&RA&&RA.scene){RA.scene.remove(HELPER);HELPER.geometry.dispose();HELPER=null}
   if(p&&RA&&RA.scene){
     let obj=null;
@@ -572,7 +689,281 @@ function setPick(p,silent){
   }
   DIRTY=true;kick();
   $$('#objs .obj').forEach(el=>el.classList.toggle('sel',!!p&&el.dataset.kind===p.kind&&el.dataset.id===p.id));
+  rebuildWay();renderNumbox();renderLanes();
   if(!silent)fillNoteForm(p);
+}
+
+/* ---------- v2:编辑模式 / 拖动 / 关键帧 / 覆盖层 ---------- */
+function setEdit(on){
+  if(on&&VA!=='live'){VA='live';renderVersionSelects();reloadSources('a');toast(t('编辑只作用于「当前(实时)」,A 已切回实时'))}
+  EDIT=on;$('#edit').textContent=(on?'🔓 '+t('编辑中'):'🔒 '+t('锁定'));$('#edit').classList.toggle('on',on);
+  $('#tool').style.display=on?'':'none';$('#snaplbl').style.display=on?'':'none';
+  PAD.classList.toggle('edit',on);PAD.classList.toggle('orbit',VIEW==='overview'&&!on);
+  if(!on){DRAG=null;WAYSEL=-1}
+  rebuildWay();renderObjects();renderNumbox();renderLanes();DIRTY=true;kick();
+}
+function setTool(tl){TOOL=tl;$$('#tool span').forEach(x=>x.classList.toggle('on',x.dataset.tool===tl))}
+function toggleLock(kind,id){const k=lockKey(kind,id);LOCKS.has(k)?LOCKS.delete(k):LOCKS.add(k);saveLocks();renderObjects();renderNumbox();rebuildWay()}
+function keysOf(p){
+  const g=grpById(SEL);if(!p||!g||!RA)return null;
+  if(p.kind==='actor'||p.kind==='extra'){const a=RA.actors.find(a=>a.data.id===p.id);return a?{keys:a.data.keyframes,obj:a.data,kindKey:p.kind==='actor'?'actors':'extras',node:a.root}:null}
+  if(p.kind==='prop'){const pr=RA.props.find(x=>x.data.id===p.id);return pr?{keys:pr.data.keyframes||null,obj:pr.data,kindKey:'props',node:pr.mesh}:null}
+  if(p.kind==='camera'){const c=g.cameras.find(c=>c.shot_id===p.id);return c?{keys:c.keyframes,obj:c,kindKey:'cameras',isCam:true,shot:c,node:RA.marker}:null}
+  return null;
+}
+const localT=info=>info.isCam?Math.max(0,Math.min(info.shot.duration_s,TIME-info.shot.start)):TIME;
+const snapV=v=>SNAP?Math.round(v*10)/10:+v.toFixed(3);
+const snapA=a=>SNAP?Math.round(a/(Math.PI/12))*(Math.PI/12):a;
+// 自动打关键帧:当前时刻 0.02s 内已有帧就用它,否则按插值结果插一帧
+function keyIndexAt(keys,t){
+  let i=keys.findIndex(k=>Math.abs(k.t-t)<0.02);if(i>=0)return i;
+  const k={...JSON.parse(JSON.stringify(sample(keys,t))),t:+t.toFixed(3)};delete k.hold;delete k.easing;
+  i=keys.findIndex(k=>k.t>t);if(i<0){keys.push(k);return keys.length-1}keys.splice(i,0,k);return i;
+}
+const serialize=info=>info.keys?{keyframes:info.keys}:{position:info.obj.position,yaw:info.obj.yaw||0,pitch:info.obj.pitch||0,roll:info.obj.roll||0};
+// 静止对象(整条轨迹位置/朝向/目标都一样,如固定机位、全程站着不动的人):改动作用于全部关键帧 = 整体挪,不在当前时刻打帧造出一段来回
+const isStatic=keys=>!!keys&&keys.length>0&&keys.every(k=>k.position.every((v,i)=>Math.abs(v-keys[0].position[i])<1e-6)&&(!k.target||k.target.every((v,i)=>Math.abs(v-keys[0].target[i])<1e-6))&&Math.abs((k.yaw||0)-(keys[0].yaw||0))<1e-6);
+function keyTarget(info,all){if(!info.keys)return {idx:-1,all:false};if(all==null)all=isStatic(info.keys);return {idx:all?0:keyIndexAt(info.keys,localT(info)),all}}
+function spreadKey(info,idx,all){if(!all||!info.keys)return;const k=info.keys[idx];for(const o of info.keys){if(o===k)continue;o.position=[...k.position];if(k.target)o.target=[...k.target];if(k.yaw!==undefined)o.yaw=k.yaw}}
+const snapshotObj=info=>JSON.parse(JSON.stringify(serialize(info)));
+function restoreObj(info,data){if(data.keyframes&&info.keys){info.keys.length=0;info.keys.push(...JSON.parse(JSON.stringify(data.keyframes)))}else if(!info.keys)Object.assign(info.obj,JSON.parse(JSON.stringify(data)))}
+function updUndo(){const u=$('#undo'),r=$('#redo');if(u)u.disabled=!UNDO.length;if(r)r.disabled=!REDO.length}
+async function commit(p,info,before){
+  const after=snapshotObj(info);
+  if(JSON.stringify(before)===JSON.stringify(after))return;
+  UNDO.push({p,before,after});REDO.length=0;updUndo();
+  await pushOverride(p,info.kindKey,after);
+}
+async function pushOverride(p,kindKey,data){
+  try{const r=await J(api('/overrides/'+encodeURIComponent(SEL)),'PUT',{[kindKey]:{[p.id]:data}});applyServerGroup(r)}
+  catch(e){toast(t('保存改动失败:')+e.message)}
+}
+function applyServerGroup(r){
+  const g=grpById(SEL);const i=WB.groups.indexOf(g);if(i>=0&&r.group)WB.groups[i]=r.group;if(r.scene)WB.scenes[r.group.scene_id]=r.scene;
+  DD.overrides=DD.overrides||{};if(r.overrides&&Object.keys(r.overrides).length)DD.overrides[SEL]=r.overrides;else delete DD.overrides[SEL];
+  if(VA==='live')reloadSources('a',true);else{renderObjects();renderLanes();renderOvState()}
+  renderRight();renderLeft();
+}
+async function undo(){const u=UNDO.pop();if(!u)return;REDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.before);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.before)}}
+async function redo(){const u=REDO.pop();if(!u)return;UNDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.after);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.after)}}
+function renderOvState(){
+  const n=ovCount(),tag=$('#ovtag'),b=$('#ovdrop');if(!tag)return;
+  tag.textContent=n?I18N.f('未固化 {n} 个对象',{n}):'';$('#ovrow').style.display=n?'':'none';
+}
+function rayAt(e){
+  const r=$('#frame').getBoundingClientRect();
+  const nd=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-(((e.clientY-r.top)/r.height)*2-1));
+  const cam=camOf(RA,VIEW);cam.updateMatrixWorld(true);
+  const rc=new THREE.Raycaster();rc.setFromCamera(nd,cam);return {rc,cam,r};
+}
+function dragPlane(origin,cam,vertical){
+  if(!vertical)return new THREE.Plane(new THREE.Vector3(0,1,0),-origin.y);
+  const n=new THREE.Vector3();cam.getWorldDirection(n);n.y=0;
+  if(n.lengthSq()<1e-6)return null;   // 俯视图里没有竖直平面可拖
+  n.normalize();return new THREE.Plane(n,-n.dot(origin));
+}
+function beginDrag(e){
+  if(!RA||!RA.scene||!grpById(SEL))return;
+  if(VIEW==='camera'){if(PICK&&PICK.kind==='camera'&&editable(PICK)){DRAG={mode:'look',start:[e.clientX,e.clientY],moved:false,pid:e.pointerId};ORBIT.enabled=false;try{PAD.setPointerCapture(e.pointerId)}catch(_){}}return}
+  const hit=pickAt(e);if(!hit)return;
+  let mode=TOOL,idx=-1;
+  if(hit.way!=null){mode='way';idx=hit.way}
+  else if(hit.target){mode='target'}
+  else if(hit.insert){return}
+  else{if(!editable(hit))return;if(!PICK||PICK.kind!==hit.kind||PICK.id!==hit.id)setPick(hit,true)}
+  const info=keysOf(PICK);if(!info)return;
+  const before=snapshotObj(info);   // 先存快照,再自动打帧:撤销后不留多余关键帧
+  let all=false;
+  if(mode!=='way'){const kt=keyTarget(info);idx=kt.idx;all=kt.all}
+  const key=info.keys?info.keys[idx]:info.obj;
+  const origin=new THREE.Vector3(...(mode==='target'?key.target:key.position));
+  const {rc,cam}=rayAt(e);
+  const plane=dragPlane(origin,cam,e.shiftKey&&mode!=='rotate');
+  if(!plane){toast(t('俯视图里不能改高度:用前视/侧视或旋转视角按住 Shift 拖'));return}
+  const hit0=new THREE.Vector3();rc.ray.intersectPlane(plane,hit0);
+  ORBIT.enabled=false;try{PAD.setPointerCapture(e.pointerId)}catch(_){};
+  DRAG={mode,idx,all,info,before,origin,plane,hit0:hit0.clone(),vertical:!!(e.shiftKey&&mode!=='rotate'),start:[e.clientX,e.clientY],moved:false,pid:e.pointerId,
+        yaw0:mode==='rotate'?(info.isCam?0:(key.yaw||0)):0,target0:info.isCam?new THREE.Vector3(...key.target):null};
+  if(mode==='way'){WAYSEL=idx}
+}
+function moveDrag(e){
+  const d=DRAG;if(!d)return;
+  if(Math.hypot(e.clientX-d.start[0],e.clientY-d.start[1])>3)d.moved=true;
+  if(d.mode==='look'){flyLook(e);return}
+  const key=d.info.keys?d.info.keys[d.idx]:d.info.obj;
+  if(d.mode==='rotate'){
+    const dyaw=(e.clientX-d.start[0])*0.01;
+    if(d.info.isCam){const pos=new THREE.Vector3(...key.position),tg=d.target0.clone().sub(pos);tg.applyAxisAngle(new THREE.Vector3(0,1,0),snapA(dyaw));key.target=pos.clone().add(tg).toArray().map(v=>+v.toFixed(3))}
+    else key.yaw=+snapA(d.yaw0+dyaw).toFixed(4);
+  }else{
+    const {rc}=rayAt(e);const p=new THREE.Vector3();if(!rc.ray.intersectPlane(d.plane,p))return;
+    const delta=p.sub(d.hit0);
+    const np=d.origin.clone();
+    if(d.vertical)np.y=Math.max(0,d.origin.y+delta.y);else{np.x+=delta.x;np.z+=delta.z}
+    const arr=[snapV(np.x),d.vertical?snapV(np.y):+np.y.toFixed(3),snapV(np.z)];
+    if(d.mode==='target')key.target=arr;
+    else{
+      if(d.info.isCam){const off=new THREE.Vector3(...arr).sub(new THREE.Vector3(...key.position));key.target=new THREE.Vector3(...key.target).add(off).toArray().map(v=>+v.toFixed(3))}
+      key.position=arr;
+    }
+  }
+  spreadKey(d.info,d.idx,d.all);
+  updateWay();DIRTY=true;kick();renderNumbox(true);
+}
+function endDrag(e,cancel){
+  const d=DRAG;if(!d)return false;DRAG=null;ORBIT.enabled=true;
+  try{if(e)PAD.releasePointerCapture(e.pointerId);else PAD.releasePointerCapture(d.pid)}catch(_){}
+  if(d.mode==='look'){if(d.moved)scheduleFlyCommit();return d.moved}
+  if(cancel||!d.moved){restoreObj(d.info,d.before);updateWay();DIRTY=true;kick();renderNumbox();return false}
+  commit(PICK,d.info,d.before);renderLanes();return true;
+}
+/* 摄像机视角里飞机位:拖=转视线,WASD/QE=平移(Shift=1 m,默认 0.25 m);停手 600ms 后合并成一次改动 */
+function flyInfo(){const info=keysOf(PICK);if(!info||!info.isCam)return null;if(!FLY){FLY={info,before:snapshotObj(info)}}return info}
+function scheduleFlyCommit(){clearTimeout(FLY_TIMER);FLY_TIMER=setTimeout(()=>{if(FLY){commit(PICK,FLY.info,FLY.before);FLY=null;renderLanes()}},600)}
+function flyLook(e){
+  const info=flyInfo();if(!info)return;const {idx,all}=keyTarget(info),k=info.keys[idx];
+  const pos=new THREE.Vector3(...k.position),dir=new THREE.Vector3(...k.target).sub(pos);const len=dir.length();
+  const sph=new THREE.Spherical().setFromVector3(dir);
+  sph.theta-=(e.clientX-DRAG.start[0])*0.004;sph.phi=Math.max(0.05,Math.min(Math.PI-0.05,sph.phi+(e.clientY-DRAG.start[1])*0.004));DRAG.start=[e.clientX,e.clientY];
+  k.target=pos.add(new THREE.Vector3().setFromSpherical(sph.set(len,sph.phi,sph.theta))).toArray().map(v=>+v.toFixed(3));
+  spreadKey(info,idx,all);DIRTY=true;kick();renderNumbox(true);
+}
+function flyStep(keyName,step){
+  const info=flyInfo();if(!info)return;const {idx,all}=keyTarget(info),k=info.keys[idx];
+  const pos=new THREE.Vector3(...k.position),tg=new THREE.Vector3(...k.target),f=tg.clone().sub(pos);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize();
+  const right=new THREE.Vector3().crossVectors(f,new THREE.Vector3(0,1,0)).normalize();
+  const mv={w:f.clone().multiplyScalar(step),s:f.clone().multiplyScalar(-step),a:right.clone().multiplyScalar(-step),d:right.clone().multiplyScalar(step),q:new THREE.Vector3(0,-step,0),e:new THREE.Vector3(0,step,0)}[keyName];
+  if(!mv)return;pos.add(mv);tg.add(mv);if(pos.y<0.05){tg.y+=0.05-pos.y;pos.y=0.05}
+  k.position=pos.toArray().map(v=>+v.toFixed(3));k.target=tg.toArray().map(v=>+v.toFixed(3));
+  spreadKey(info,idx,all);DIRTY=true;kick();renderNumbox(true);scheduleFlyCommit();
+}
+/* 路径点:选中的人物/群演/带轨迹道具,在非摄像机视角显示关键帧小球 + 折线;拖球改该帧位置,点线插帧,Delete 删帧 */
+let TARGET_H=null;
+function rebuildWay(){
+  if(WAY&&RA&&RA.scene){RA.scene.remove(WAY);WAY.traverse(o=>{o.geometry?.dispose();o.material?.dispose()});WAY=null}
+  if(TARGET_H&&RA&&RA.scene){RA.scene.remove(TARGET_H);TARGET_H=null}
+  $('#waylabels').innerHTML='';
+  if(!EDIT||!PICK||!RA||!RA.scene||!editable(PICK))return;
+  const info=keysOf(PICK);if(!info)return;
+  if(info.isCam){
+    TARGET_H=new THREE.Mesh(new THREE.SphereGeometry(.12,12,8),new THREE.MeshBasicMaterial({color:0x1b3d4b}));TARGET_H.layers.set(1);TARGET_H.name='camera-target';RA.scene.add(TARGET_H);updateWay();return;
+  }
+  if(!info.keys)return;
+  WAY=new THREE.Group();WAY.layers.set(1);
+  const line=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xffcc00,transparent:true,opacity:.9}));line.layers.set(1);line.name='way-line';WAY.add(line);WAY.userData.line=line;
+  info.keys.forEach((k,i)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.13,12,8),new THREE.MeshBasicMaterial({color:0xffcc00}));m.layers.set(1);m.userData.idx=i;m.name='way-'+i;WAY.add(m)});
+  RA.scene.add(WAY);updateWay();
+}
+function updateWay(){
+  if(TARGET_H&&PICK&&PICK.kind==='camera'){const info=keysOf(PICK);if(info){const k=sample(info.keys,localT(info));TARGET_H.position.set(...k.target);TARGET_H.visible=true}}
+  if(!WAY)return;const info=keysOf(PICK);if(!info||!info.keys){return}
+  const pts=info.keys.map(k=>new THREE.Vector3(k.position[0],k.position[1]+.08,k.position[2]));
+  const line=WAY.userData.line;line.geometry.dispose();line.geometry=new THREE.BufferGeometry().setFromPoints(pts);
+  let i=0;for(const m of WAY.children){if(!m.isMesh)continue;const k=info.keys[m.userData.idx];if(!k){m.visible=false;continue}m.visible=true;m.position.set(k.position[0],k.position[1]+.08,k.position[2]);m.material.color.set(m.userData.idx===WAYSEL?0xff7a00:0xffcc00);i++}
+  if(WAY.children.filter(c=>c.isMesh).length!==info.keys.length)rebuildWay();
+}
+function updateWayLabels(){
+  const box=$('#waylabels');if(!box)return;
+  if(!WAY||VIEW==='camera'){if(box.childElementCount)box.innerHTML='';return}
+  const info=keysOf(PICK);if(!info||!info.keys)return;
+  const cam=camOf(RA,VIEW);cam.updateMatrixWorld(true);
+  const parts=[];
+  info.keys.forEach((k,i)=>{
+    const c=new THREE.Vector3(k.position[0],k.position[1]+.3,k.position[2]).project(cam);if(c.z>1||c.z<-1)return;
+    let speed='';if(i<info.keys.length-1){const n=info.keys[i+1],d=Math.hypot(n.position[0]-k.position[0],n.position[1]-k.position[1],n.position[2]-k.position[2]),dt=n.t-k.t;if(dt>0&&d>0.01)speed=(d/dt).toFixed(1)+' m/s'}
+    const v=speed?parseFloat(speed):0;
+    parts.push(`<span class="waylbl ${i===WAYSEL?'on':v>4?'warn':''}" style="left:${((c.x+1)/2*100).toFixed(2)}%;top:${((1-c.y)/2*100).toFixed(2)}%">${k.t.toFixed(1)}s${speed?' · '+speed:''}${k.pose&&k.pose!=='stand'?' · '+esc(k.pose):''}</span>`);
+  });
+  box.innerHTML=parts.join('');
+}
+async function insertWaypoint(ins){
+  const info=keysOf(PICK);if(!info||!info.keys)return;
+  const i=Math.max(0,Math.min(info.keys.length-2,ins.index));const a=info.keys[i],b=info.keys[i+1];
+  const pa=new THREE.Vector3(...a.position),pb=new THREE.Vector3(...b.position),len=pa.distanceTo(pb);
+  const u=len>1e-6?Math.max(0.02,Math.min(0.98,ins.point.clone().sub(pa).dot(pb.clone().sub(pa))/len/len)):0.5;
+  const tNew=+(a.t+(b.t-a.t)*u).toFixed(2);
+  if(tNew<=a.t+0.05||tNew>=b.t-0.05){toast(t('两帧之间太近,插不下新帧'));return}
+  const before=snapshotObj(info);const idx=keyIndexAt(info.keys,tNew);WAYSEL=idx;rebuildWay();DIRTY=true;kick();
+  await commit(PICK,info,before);
+}
+async function deleteWaypoint(idx){
+  const info=keysOf(PICK);if(!info||!info.keys)return;
+  if(idx<=0||idx>=info.keys.length-1){toast(t('首尾关键帧不能删'));return}
+  const before=snapshotObj(info);info.keys.splice(idx,1);WAYSEL=-1;rebuildWay();DIRTY=true;kick();
+  await commit(PICK,info,before);
+}
+/* 数值框:选中对象在当前时刻的 X/Y/Z/朝向,回车或「应用」= 在当前时刻打关键帧 */
+function renderNumbox(liveOnly){
+  const box=$('#numbox');if(!box)return;
+  if(!EDIT||!PICK||!KIND_KEY[PICK.kind]){box.style.display='none';box.innerHTML='';return}
+  const info=keysOf(PICK);if(!info){box.style.display='none';return}
+  const k=info.keys?sample(info.keys,localT(info)):info.obj;
+  const yawDeg=info.isCam?'':((k.yaw||0)*180/Math.PI).toFixed(0);
+  const vals={x:k.position[0],y:k.position[1],z:k.position[2],yaw:yawDeg};
+  if(liveOnly&&box.dataset.for===PICK.kind+'|'+PICK.id){for(const n of ['x','y','z','yaw']){const i=box.querySelector(`[data-n="${n}"]`);if(i&&document.activeElement!==i)i.value=typeof vals[n]==='number'?vals[n].toFixed(2):vals[n]}return}
+  box.style.display='';box.dataset.for=PICK.kind+'|'+PICK.id;
+  const lk=locked(PICK);
+  box.innerHTML=`<span data-no-i18n>${esc(PICK.label||PICK.id)}</span>${lk?`<span style="color:var(--yellow)">🔒 ${esc(t('已锁定'))}</span>`:['x','y','z'].map(n=>`<label>${n.toUpperCase()}<input type="number" step="0.1" data-n="${n}" value="${vals[n].toFixed(2)}"></label>`).join('')+(info.isCam?'':`<label>yaw°<input type="number" step="5" data-n="yaw" value="${vals.yaw}"></label>`)+`<button class="xs" id="numapply">${esc(t('应用'))}</button>`}${ovHas(PICK.kind,PICK.id)?`<button class="xs" id="numreset" title="${esc(t('丢弃这个对象的改动,回到 Agent 计划'))}">${esc(t('还原'))}</button>`:''}`;
+  const apply=async()=>{
+    const info2=keysOf(PICK);if(!info2)return;const before=snapshotObj(info2);
+    const {idx,all}=keyTarget(info2);const key=info2.keys?info2.keys[idx]:info2.obj;
+    const g=n=>{const i=box.querySelector(`[data-n="${n}"]`);return i?Number(i.value):NaN};
+    const np=[g('x'),g('y'),g('z')].map((v,j)=>isNaN(v)?key.position[j]:+v.toFixed(3));
+    if(info2.isCam){const off=new THREE.Vector3(...np).sub(new THREE.Vector3(...key.position));key.target=new THREE.Vector3(...key.target).add(off).toArray().map(v=>+v.toFixed(3))}
+    key.position=np;if(!info2.isCam&&!isNaN(g('yaw')))key.yaw=+(g('yaw')*Math.PI/180).toFixed(4);
+    spreadKey(info2,idx,all);updateWay();DIRTY=true;kick();await commit(PICK,info2,before);renderLanes();
+  };
+  const ab=$('#numapply');if(ab)ab.onclick=apply;
+  box.querySelectorAll('input').forEach(i=>i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply()}});
+  const rs=$('#numreset');if(rs)rs.onclick=async()=>{rs.disabled=true;try{const r=await J(api('/overrides/'+encodeURIComponent(SEL)+'?kind='+KIND_KEY[PICK.kind]+'&id='+encodeURIComponent(PICK.id)),'DELETE');UNDO.length=0;REDO.length=0;updUndo();applyServerGroup(r)}catch(e){toast(t('还原失败:')+e.message);rs.disabled=false}};
+}
+/* 多轨时间线:镜段 + 每个对象一轨,关键帧菱形可左右拖改时间(首尾固定;摄影机帧限在本镜内) */
+function renderLanes(){
+  const box=$('#lanes');if(!box)return;
+  const g=grpById(SEL);if(!LANES_ON||!g||!RA){box.innerHTML='';return}
+  const T=g.duration_s;const pct=v=>(v/T*100).toFixed(3)+'%';
+  const rows=[];
+  rows.push(`<div class="ln"><div class="lb">${esc(t('镜段'))}</div><div class="tr">${g.cameras.map(c=>`<div class="sg ${c.shot_id===RA.shotId?'on':''}" style="left:${pct(c.start)};width:${pct(c.duration_s)}" data-seek="${c.start}" data-no-i18n>${esc(c.shot_id)}</div>`).join('')}</div></div>`);
+  const lane=(kind,id,label,color,keys,offset,fixedEnds)=>{
+    const sel=PICK&&PICK.kind===kind&&PICK.id===id;const ov=ovHas(kind,id);
+    return `<div class="ln ${sel?'sel':''}" data-kind="${esc(kind)}" data-id="${esc(id)}"><div class="lb" title="${esc(id)}"><i style="background:${esc(color)}"></i><span data-no-i18n>${esc(label)}</span>${ov?' ✎':''}</div><div class="tr">${(keys||[]).map((k,i)=>`<div class="kf ${sel&&i===WAYSEL?'on':''} ${fixedEnds&&(i===0||i===keys.length-1)?'fixed':''} ${ov?'ov':''}" style="left:${pct(offset+k.t)}" data-kind="${esc(kind)}" data-id="${esc(id)}" data-idx="${i}" data-t="${offset+k.t}" title="${(offset+k.t).toFixed(2)}s${k.pose?' · '+esc(k.pose):''}"></div>`).join('')}</div></div>`;
+  };
+  for(const a of g.actors||[])rows.push(lane('actor',a.id,a.label||a.id,a.color,a.keyframes,0,true));
+  for(const a of g.extras||[])rows.push(lane('extra',a.id,a.label||a.id,a.color,a.keyframes,0,true));
+  for(const p of g.props||[])if(p.keyframes)rows.push(lane('prop',p.id,p.id,p.color||'#d2d5d4',p.keyframes,0,true));
+  for(const c of g.cameras||[])rows.push(lane('camera',c.shot_id,t('摄影机')+' '+c.shot_id,'#1b3d4b',c.keyframes,c.start,true));
+  box.innerHTML=rows.join('')+`<div class="lph" id="lph" style="left:calc(116px + ${pct(TIME)} * (100% - 116px) / 100%)"></div>`;
+  // 播放头覆盖整个 lanes 区:用 tr 的坐标系更简单——放进每行太重,这里用 padding-left 对齐
+  const lph=$('#lph');if(lph){lph.style.left='';lph.style.marginLeft='116px';lph.style.width='1px';lph.style.left=`calc(116px + (100% - 116px) * ${(TIME/T).toFixed(4)})`;lph.style.marginLeft='0'}
+  box.querySelectorAll('.sg').forEach(el=>el.onclick=()=>seek(Number(el.dataset.seek)+0.001));
+  box.querySelectorAll('.ln[data-kind] .lb').forEach(el=>el.onclick=()=>{const ln=el.parentElement;const rows=objectRows();const row=rows.find(r=>r.kind===ln.dataset.kind&&r.id===ln.dataset.id);setPick({kind:ln.dataset.kind,id:ln.dataset.id,label:row?row.label:ln.dataset.id})});
+  box.querySelectorAll('.kf').forEach(el=>{
+    el.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const kind=el.dataset.kind,id=el.dataset.id,idx=Number(el.dataset.idx);
+      const rows=objectRows();const row=rows.find(r=>r.kind===kind&&r.id===id);
+      if(!PICK||PICK.kind!==kind||PICK.id!==id)setPick({kind,id,label:row?row.label:id},true);
+      WAYSEL=idx;updateWay();
+      LANEDRAG={el,kind,id,idx,start:e.clientX,moved:false,tr:el.parentElement.getBoundingClientRect(),info:null,before:null};
+      if(EDIT&&!el.classList.contains('fixed')&&editable(PICK)){const info=keysOf(PICK);if(info&&info.keys){LANEDRAG.info=info;LANEDRAG.before=snapshotObj(info)}}
+      try{el.setPointerCapture(e.pointerId)}catch(_){}
+    });
+    el.addEventListener('pointermove',e=>{
+      const d=LANEDRAG;if(!d||d.el!==el)return;
+      if(Math.abs(e.clientX-d.start)>3)d.moved=true;
+      if(!d.moved||!d.info)return;
+      const g2=grpById(SEL),T2=g2.duration_s;let tAbs=(e.clientX-d.tr.left)/d.tr.width*T2;
+      const keys=d.info.keys,off=d.info.isCam?d.info.shot.start:0;let tl=tAbs-off;
+      const lo=keys[d.idx-1].t+0.05,hi=keys[d.idx+1].t-0.05;tl=Math.max(lo,Math.min(hi,tl));
+      if(SNAP)tl=Math.round(tl*10)/10;tl=Math.max(lo,Math.min(hi,tl));
+      keys[d.idx].t=+tl.toFixed(3);el.style.left=(((off+tl)/T2)*100).toFixed(3)+'%';el.title=(off+tl).toFixed(2)+'s';
+      DIRTY=true;kick();
+    });
+    const up=e=>{const d=LANEDRAG;if(!d||d.el!==el)return;LANEDRAG=null;try{el.releasePointerCapture(e.pointerId)}catch(_){}
+      if(d.moved&&d.info){commit(PICK,d.info,d.before);renderLanes();rebuildWay()}
+      else{seek(Number(el.dataset.t));renderLanes()}};
+    el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  });
 }
 
 /* ---------- 对象表 ---------- */
@@ -595,11 +986,12 @@ function renderObjects(){
   $('#objs').innerHTML=rows.map(r=>{
     const img=av[r.id];
     const avatar=img?`<div class="av" style="border-color:${esc(r.color)}"><img src="${esc(img)}" alt="" loading="lazy"></div>`:`<div class="av" style="background:${esc(r.color)};border-color:${esc(r.color)}">${esc((r.label||'?').replace(/^(摄影机|场景|整组)\s*/,'').slice(0,1))}</div>`;
-    return `<div class="obj ${r.sub==='absent'?'absent':''} ${PICK&&PICK.kind===r.kind&&PICK.id===r.id?'sel':''}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" data-img="${esc(img||'')}" title="${esc(r.id)}">${avatar}<div><div class="nm">${esc(r.label)}</div><div class="meta"><span data-no-i18n>${esc(r.id)}</span>${r.size?`<span>${num(r.size[1],2)} m</span>`:''}${r.sub==='absent'?`<span class="stt off">${esc(t('同场次在场,本组白模未出现'))}</span>`:`<span class="stt" data-st></span>`}</div></div></div>`;
+    return `<div class="obj ${r.sub==='absent'?'absent':''} ${PICK&&PICK.kind===r.kind&&PICK.id===r.id?'sel':''}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" data-img="${esc(img||'')}" title="${esc(r.id)}">${avatar}<div><div class="nm">${esc(r.label)}</div><div class="meta"><span data-no-i18n>${esc(r.id)}</span>${r.size?`<span>${num(r.size[1],2)} m</span>`:''}${r.sub==='absent'?`<span class="stt off">${esc(t('同场次在场,本组白模未出现'))}</span>`:`<span class="stt" data-st></span>`}${ovHas(r.kind,r.id)?`<span class="stt ov" title="${esc(t('已在 3D 里直接改定,尚未固化进 Agent 计划'))}">✎ ${esc(t('已改'))}</span>`:''}</div></div>${EDIT&&KIND_KEY[r.kind]&&r.sub!=='absent'?`<span class="lk ${LOCKS.has(lockKey(r.kind,r.id))?'on':''}" data-lock="${esc(r.kind)}|${esc(r.id)}" title="${esc(t('锁定/解锁此对象(L)'))}">${LOCKS.has(lockKey(r.kind,r.id))?'🔒':'🔓'}</span>`:''}</div>`;
   }).join('');
   $$('#objs .obj').forEach(el=>{
     el.onclick=e=>{
       if(e.target.closest('.av')&&el.dataset.img){$('#lb img').src=el.dataset.img;$('#lb').style.display='flex';return}
+      const lk=e.target.closest('[data-lock]');if(lk){const [k,id]=lk.dataset.lock.split('|');toggleLock(k,id);return}
       const kind=el.dataset.kind,id=el.dataset.id;
       const row=rows.find(r=>r.kind===kind&&r.id===id);
       if(kind==='camera'&&row&&row.cam)seek(row.cam.start+0.001);
@@ -682,7 +1074,9 @@ function renderRight(){
   h+=acc('iss',`⚠ ${esc(t('Agent 提问'))}`,issues.length?`${issues.length}${pend.length?' · '+esc(I18N.f('待答 {n}',{n:pend.length})):''}${decided.length?' · '+esc(I18N.f('已选 {n},提交时套用',{n:decided.length})):''}`:'0',
     issues.length?issues.map(issueHtml).join(''):`<div class="bat">${esc(t('本组没有待决项(白模调度 Agent 没有拿不准的取舍)'))}</div>`);
   // 2. 我的修改
-  const draftBody=`${notes.length?notes.slice().reverse().map(noteHtml).join(''):`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
+  const ovAll=Object.keys((DD.overrides||{})).filter(k=>NOTE_SCOPE==='all'||k===gid);
+  const ovRow=ovAll.map(k=>{const o=(DD.overrides||{})[k]||{};const list=Object.values(KIND_KEY).flatMap(kk=>Object.keys(o[kk]||{}).map(id=>kk+'/'+id));return list.length?`<div class="note ${k!==gid?'other':''}"><div class="r1"><span class="tg"><i style="background:var(--yellow)"></i>${esc(t('覆盖层'))}</span>${k!==gid?`<button class="xs" data-gsel="${esc(k)}">${esc(k)}</button>`:''}<span class="sp"></span><span class="st submitted">${esc(t('未固化'))}</span></div><div class="txt" data-no-i18n>${esc(I18N.f('{n} 个对象已在 3D 里直接改定:{list}',{n:list.length,list:list.join(', ')}))}</div><div class="r2"><span>${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span></div></div>`:''}).join('');
+  const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
     <div class="nform" id="nform">
       <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
       <div class="row"><label>${esc(t('镜/时刻'))}</label><div style="display:flex;gap:6px;align-items:center"><select id="nf-shot" style="width:auto"></select><label style="display:inline-flex;gap:4px;align-items:center;color:var(--dim)"><input type="checkbox" id="nf-uset" checked> t=</label><input type="number" id="nf-t" step="0.1" min="0" style="width:70px"> s</div></div>
@@ -690,8 +1084,8 @@ function renderRight(){
       <div class="btns"><span class="msg" id="nf-msg"></span><button class="sm" id="nf-clear">${esc(t('清空'))}</button><button class="sm pri" id="nf-save">${esc(t('加入队列'))}</button></div>
     </div>
     <div class="subrow"><span class="msg" id="sub-msg">${runningBatches().some(b=>b.group_ids.includes(gid))?esc(t('本组有批次运行中,等回收后再提交')):esc(t('提交 = 一次派单给白模调度 Agent = 一个新版本'))}</span>
-      <button class="sm" id="sub-group" ${draftsG.length||decided.length?'':'disabled'}>${esc(I18N.f('提交本组 ({n})',{n:draftsG.length+decided.length}))}</button>
-      <button class="sm pri" id="sub-all" ${draftsAll.length?'':'disabled'}>${esc(I18N.f('提交全部待提交 ({n})',{n:draftsAll.length}))}</button></div>`;
+      <button class="sm" id="sub-group" ${draftsG.length||decided.length||ovCount()?'':'disabled'}>${esc(I18N.f('提交本组 ({n})',{n:draftsG.length+decided.length+ovCount()}))}</button>
+      <button class="sm pri" id="sub-all" ${draftsAll.length||Object.keys(DD.overrides||{}).length?'':'disabled'}>${esc(I18N.f('提交全部待提交 ({n})',{n:draftsAll.length+Object.values(DD.overrides||{}).reduce((n,o)=>n+Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys(o[k]||{}).length,0),0)}))}</button></div>`;
   h+=acc('notes',`✎ ${esc(t('我的修改'))}`,`${notes.length}${drafts.length?' · '+esc(I18N.f('待提交 {n}',{n:drafts.length})):''}`,draftBody);
   // 3. 已提交版本
   const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
@@ -821,13 +1215,13 @@ try{
 }catch(_){}
 $('#reload').onclick=()=>load(true);
 // 调试/自动化钩子(页内测试用):当前渲染器、拾取、状态
-window.__director={get RA(){return RA},get RB(){return RB},get PICK(){return PICK},get TIME(){return TIME},get VIEW(){return VIEW},pick,setPick,seek,THREE};
+window.__director={get RA(){return RA},get RB(){return RB},get PICK(){return PICK},get TIME(){return TIME},get VIEW(){return VIEW},get EDIT(){return EDIT},get UNDO(){return UNDO},get DD(){return DD},get WB(){return WB},pick,pickAt,setPick,seek,setEdit,setTool,keysOf,commit,snapshotObj,keyIndexAt,rebuildWay,renderLanes,THREE};
 const _q=new URLSearchParams(location.search);
 $('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
 EP=_q.get('ep')||localStorage.getItem('director-ep:'+$('#project').value.trim())||'';
 load();
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/director','\u{1F3AC} 导演台'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板预览'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/director','\u{1F4FA} 导演台'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{const p=($('#project').value||'').trim()||'demo';location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
 </script>

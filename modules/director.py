@@ -13,7 +13,11 @@
   --compile-only 重编译;宿主在运行结束后回收(reconcile):组指纹变了 → 落一份新版本快照,注释置 applied;
   没变 → 注释置 failed(运行结束但白模未变)。
 - 版本 = 编译组快照,不出 mp4;A|B 由前端用两份快照实时渲染。首次提交前自动落 v1 基线,便于比对。
-- 拖动改数值(覆盖层)属 v2,本文件不涉及。
+- 覆盖层(v2,2026-09-13):用户在导演台拖动/改数值的结果写 directing/<ep>/whitebox/director/overrides.json
+  (宿主所有,schema director_overrides.v1),按组按对象**整条关键帧数组**覆盖 Agent 计划;编译器
+  (modules.whitebox.compile_episode)合并在计划之上,所以预览/导出/接线都立即看到,零 Agent 成本。
+  提交时批次指令附上覆盖层原文要 Agent 原样固化进计划并回写源文件;回收时对比「不带覆盖层的编译结果」,
+  已一致的对象自动从覆盖层删掉,未一致的保留并标「未固化」。
 """
 from __future__ import annotations
 
@@ -26,8 +30,11 @@ from pathlib import Path
 
 SCHEMA = "director_notes.v1"
 VERSION_SCHEMA = "director_version.v1"
+OVERRIDES_SCHEMA = "director_overrides.v1"
 DIR_REL = "directing/{ep}/whitebox/director"
 LEDGER_REL = DIR_REL + "/notes.json"
+OVERRIDES_REL = DIR_REL + "/overrides.json"
+OVERRIDE_KINDS = ("actors", "extras", "props", "cameras")
 AGENT_ID = "07-directing/whitebox-staging"
 
 TARGET_KINDS = ("actor", "extra", "prop", "camera", "scene", "group")
@@ -237,8 +244,9 @@ def _issue_lines(issue: dict) -> str:
     return f"  - 待决项 {issue.get('issue_id')}:{issue.get('question')} → {what}"
 
 
-def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=None, note_ids=None) -> dict:
-    """挑出要提交的 draft 注释与已裁决未套用的待决项,生成派单指令。不改 doc、不派单。"""
+def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=None, note_ids=None, overrides=None) -> dict:
+    """挑出要提交的 draft 注释、已裁决未套用的待决项与覆盖层,生成派单指令。不改 doc、不派单。"""
+    overrides = overrides if overrides is not None else load_overrides(base, ep)
     notes = [n for n in doc.get("notes", []) if n.get("status") == "draft"]
     if note_ids:
         wanted = set(note_ids)
@@ -256,17 +264,21 @@ def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=No
         rows = [i for i in g.get("issues", []) if i.get("status") == "decided"]
         if rows:
             issues[gid] = rows
-    groups = [gid for gid in groups_in if any(n["group_id"] == gid for n in notes) or gid in issues]
+    ov_groups = {g: v for g, v in overrides.get("groups", {}).items() if any(v.get(k) for k in OVERRIDE_KINDS)}
+    if not note_ids and not group_ids:
+        groups_in = sorted(set(groups_in) | set(ov_groups))
+    groups = [gid for gid in groups_in if any(n["group_id"] == gid for n in notes) or gid in issues or gid in ov_groups]
     if not groups:
-        raise ValueError("没有可提交的注释或已裁决的待决项")
+        raise ValueError("没有可提交的注释、已裁决的待决项或覆盖层改动")
     missing = [gid for gid in groups if gid not in compiled]
     if missing:
         raise ValueError("这些组没有白模编译结果,无法提交:" + ", ".join(missing))
-    return {"group_ids": groups, "notes": [n for n in notes if n["group_id"] in groups], "issues": issues,
-            "message": build_message(base, ep, groups, [n for n in notes if n["group_id"] in groups], issues, compiled)}
+    ovs = {g: ov_groups[g] for g in groups if g in ov_groups}
+    return {"group_ids": groups, "notes": [n for n in notes if n["group_id"] in groups], "issues": issues, "overrides": ovs,
+            "message": build_message(base, ep, groups, [n for n in notes if n["group_id"] in groups], issues, compiled, ovs)}
 
 
-def build_message(base: Path, ep: str, groups: list, notes: list, issues: dict, compiled: dict) -> str:
+def build_message(base: Path, ep: str, groups: list, notes: list, issues: dict, compiled: dict, overrides: dict | None = None) -> str:
     """派单指令(中文,同后期页 _post_agent_message / 白模面板 applyDecisions 口径)。"""
     proj = base.name
     lines = [f"导演台修改批次(项目 {proj} · {ep} · 组 {', '.join(groups)}):用户在 3D 白模现场逐对象写的修改要求,",
@@ -299,6 +311,7 @@ def build_message(base: Path, ep: str, groups: list, notes: list, issues: dict, 
             lines.append(head + ":" + n["text"].replace("\n", " "))
         for issue in issues.get(gid, []):
             lines.append(_issue_lines(issue))
+        lines.extend(overrides_message(ep, gid, (overrides or {}).get(gid) or {}))
         lines.append("")
     if issues:
         lines.append("待决项按 docs/whitebox.md「待决项与用户裁决」套用:改 issues[].status=applied 并写 applied:{choice,at,note},"
@@ -311,6 +324,7 @@ def commit_batch(base: Path, ep: str, doc: dict, episode: dict, prepared: dict, 
     batch = {"id": _next_id(doc["batches"], "B-"), "group_ids": list(prepared["group_ids"]),
              "note_ids": [n["id"] for n in prepared["notes"]],
              "issue_ids": [i.get("issue_id") for rows in prepared["issues"].values() for i in rows],
+             "override_objects": {g: [f"{k}/{o}" for k in OVERRIDE_KINDS for o in (v.get(k) or {})] for g, v in (prepared.get("overrides") or {}).items()},
              "run_id": run_id, "agent": agent, "status": "running", "error": "",
              "base_v": {}, "versions": {}, "created_at": _now(), "finished_at": None}
     for gid in batch["group_ids"]:
@@ -328,9 +342,12 @@ def commit_batch(base: Path, ep: str, doc: dict, episode: dict, prepared: dict, 
     return batch
 
 
-def reconcile(base: Path, ep: str, doc: dict, episode: dict, run_alive) -> list:
-    """回收已结束的批次:组指纹变了 → 新版本 + 注释 applied;没变 → nochange + 注释 failed。返回新落的版本记录。"""
+def reconcile(base: Path, ep: str, doc: dict, episode: dict, run_alive, plain_episode=None) -> list:
+    """回收已结束的批次:组指纹变了 → 新版本 + 注释 applied;没变 → nochange + 注释 failed。返回新落的版本记录。
+    plain_episode = 不带覆盖层的编译结果(有则用来判断覆盖层是否已固化并自动清理)。"""
     created = []
+    ov_doc = load_overrides(base, ep) if plain_episode is not None else None
+    ov_changed = False
     compiled = {g["group_id"]: g for g in episode.get("groups", [])}
     errors = {e.get("group_id"): e.get("error") for e in episode.get("errors", [])}
     for batch in doc.get("batches", []):
@@ -360,10 +377,27 @@ def reconcile(base: Path, ep: str, doc: dict, episode: dict, run_alive) -> list:
             else:
                 for n in notes:
                     n["status"], n["error"], n["updated_at"] = "failed", "运行已结束但本组白模没有变化(Agent 未改计划或未重编译)", _now()
-        batch["status"] = "done" if changed_any else ("failed" if failed_any else "nochange")
+        consolidated_any = False
+        if ov_doc is not None:
+            plain = {g["group_id"]: g for g in plain_episode.get("groups", [])}
+            still = {}
+            for gid in batch.get("group_ids", []):
+                if gid in plain and ov_doc.get("groups", {}).get(gid):
+                    before = json.dumps(ov_doc["groups"].get(gid), sort_keys=True)
+                    pending = consolidate_overrides(ov_doc, gid, plain[gid])
+                    if pending:
+                        still[gid] = pending
+                    if json.dumps(ov_doc.get("groups", {}).get(gid), sort_keys=True) != before:
+                        ov_changed = consolidated_any = True
+            if still:
+                batch["overrides_pending"] = still
+        # 覆盖层只固化不改画面:编译结果指纹不变也算 done(白模本来就已是用户改定的样子)
+        batch["status"] = "done" if (changed_any or (consolidated_any and not failed_any)) else ("failed" if failed_any else "nochange")
         batch["finished_at"] = _now()
         if alive is None:
             batch["error"] = "运行记录不存在(服务重启后回收)"
+    if ov_changed:
+        save_overrides(base, ep, ov_doc)
     return created
 
 
@@ -398,3 +432,208 @@ def avatar_rel(base: Path, oid: str) -> str | None:
         if f.suffix.lower() in _IMG_EXTS and f.is_file():
             return f"assets/concepts/{kind}/{oid}/{f.name}"
     return None
+
+
+# ---------------------------------------------------------------- 覆盖层(v2)
+def overrides_path(base: Path, ep: str) -> Path:
+    return base / OVERRIDES_REL.format(ep=ep)
+
+
+def load_overrides(base: Path, ep: str) -> dict:
+    doc = read_json(overrides_path(base, ep))
+    if not isinstance(doc, dict) or doc.get("schema") != OVERRIDES_SCHEMA or not isinstance(doc.get("groups"), dict):
+        return {"schema": OVERRIDES_SCHEMA, "ep": ep, "updated_at": _now(), "groups": {}}
+    return doc
+
+
+def save_overrides(base: Path, ep: str, doc: dict) -> None:
+    doc["schema"] = OVERRIDES_SCHEMA
+    doc["ep"] = ep
+    doc["updated_at"] = _now()
+    doc["groups"] = {g: v for g, v in doc.get("groups", {}).items() if any(v.get(k) for k in OVERRIDE_KINDS)}
+    if doc["groups"]:
+        write_json(overrides_path(base, ep), doc)
+    elif overrides_path(base, ep).is_file():
+        overrides_path(base, ep).unlink()
+
+
+def _clean_keyframes(keys) -> list:
+    if not isinstance(keys, list) or not keys:
+        raise ValueError("keyframes 须为非空数组")
+    out = []
+    for k in keys:
+        if not isinstance(k, dict) or "t" not in k or "position" not in k:
+            raise ValueError("每个关键帧须含 t 与 position")
+        item = {}
+        for name, v in k.items():
+            if name in ("position", "target", "left_hand", "right_hand", "scale"):
+                if not (isinstance(v, list) and len(v) == 3):
+                    raise ValueError(f"{name} 须为三维数组")
+                item[name] = [round(float(x), 4) for x in v]
+            elif name == "t":
+                item[name] = round(float(v), 3)
+            elif name in ("pose", "easing"):
+                item[name] = str(v)
+            elif name in ("visible", "hold"):
+                item[name] = bool(v)
+            elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                item[name] = round(float(v), 4)
+            else:
+                item[name] = v
+        out.append(item)
+    out.sort(key=lambda k: k["t"])
+    return out
+
+
+def set_group_overrides(doc: dict, gid: str, patch: dict) -> dict:
+    """按对象合并:patch = {actors:{id:{keyframes}|null}, extras:{}, props:{id:{keyframes}|{position,yaw,..}|null}, cameras:{shot:{keyframes}|null}}。
+    值为 null = 删除该对象的覆盖。返回该组合并后的覆盖。"""
+    if not _ID_RE.match(str(gid or "")):
+        raise ValueError("group_id 非法")
+    if not isinstance(patch, dict):
+        raise ValueError("patch 须为对象")
+    group = doc.setdefault("groups", {}).setdefault(gid, {})
+    for kind in OVERRIDE_KINDS:
+        items = patch.get(kind)
+        if items is None:
+            continue
+        if not isinstance(items, dict):
+            raise ValueError(f"{kind} 须为对象")
+        bucket = group.setdefault(kind, {})
+        for oid, val in items.items():
+            if not _ID_RE.match(str(oid or "")):
+                raise ValueError(f"{kind} id 非法:{oid}")
+            if val is None:
+                bucket.pop(oid, None)
+                continue
+            if not isinstance(val, dict):
+                raise ValueError(f"{kind}.{oid} 须为对象")
+            entry = {}
+            if "keyframes" in val:
+                entry["keyframes"] = _clean_keyframes(val["keyframes"])
+            if kind == "props":
+                for name in ("position", "yaw", "pitch", "roll", "scale", "visible"):
+                    if name in val and val[name] is not None:
+                        entry[name] = val[name]
+            if not entry:
+                raise ValueError(f"{kind}.{oid} 没有可用字段")
+            entry["updated_at"] = _now()
+            bucket[oid] = entry
+        if not bucket:
+            group.pop(kind, None)
+    group["updated_at"] = _now()
+    if not any(group.get(k) for k in OVERRIDE_KINDS):
+        doc["groups"].pop(gid, None)
+        return {}
+    return group
+
+
+def clear_group_overrides(doc: dict, gid: str, kind: str | None = None, oid: str | None = None) -> None:
+    group = doc.get("groups", {}).get(gid)
+    if not group:
+        return
+    if kind and oid:
+        group.get(kind, {}).pop(oid, None)
+        if not group.get(kind):
+            group.pop(kind, None)
+    elif kind:
+        group.pop(kind, None)
+    else:
+        doc["groups"].pop(gid, None)
+        return
+    if not any(group.get(k) for k in OVERRIDE_KINDS):
+        doc["groups"].pop(gid, None)
+
+
+def apply_overrides(group: dict, ov: dict) -> dict:
+    """把一组的覆盖层套到编译后的 group 上(原地);返回 {kind:[ids]} 记录哪些对象被覆盖。无效覆盖只警告不套用。"""
+    from modules.whitebox import validate_keys
+    applied = {k: [] for k in OVERRIDE_KINDS}
+    duration = group.get("duration_s", 0)
+    for kind in ("actors", "extras", "props"):
+        entries = ov.get(kind) or {}
+        for obj in group.get(kind, []):
+            e = entries.get(obj.get("id"))
+            if not e:
+                continue
+            try:
+                if "keyframes" in e:
+                    keys = json.loads(json.dumps(e["keyframes"]))
+                    validate_keys(keys, duration)
+                    obj["keyframes"] = keys
+                if kind == "props":
+                    for name in ("position", "yaw", "pitch", "roll", "scale", "visible"):
+                        if name in e:
+                            obj[name] = e[name]
+                applied[kind].append(obj["id"])
+            except (ValueError, KeyError, TypeError) as err:
+                group.setdefault("warnings", []).append(f"导演台覆盖层 {kind}/{obj.get('id')} 无效已忽略:{err}")
+    entries = ov.get("cameras") or {}
+    for cam in group.get("cameras", []):
+        e = entries.get(cam.get("shot_id"))
+        if not e or "keyframes" not in e:
+            continue
+        try:
+            keys = json.loads(json.dumps(e["keyframes"]))
+            validate_keys(keys, cam.get("duration_s", 0), camera=True)
+            cam["keyframes"] = keys
+            cam["overridden"] = True
+            applied["cameras"].append(cam["shot_id"])
+        except (ValueError, KeyError, TypeError) as err:
+            group.setdefault("warnings", []).append(f"导演台覆盖层 cameras/{cam.get('shot_id')} 无效已忽略:{err}")
+    applied = {k: v for k, v in applied.items() if v}
+    if applied:
+        group["overrides"] = applied
+    return applied
+
+
+def _same_keys(a, b) -> bool:
+    try:
+        return json.dumps(_clean_keyframes(a), sort_keys=True) == json.dumps(_clean_keyframes(b), sort_keys=True)
+    except ValueError:
+        return False
+
+
+def consolidate_overrides(doc: dict, gid: str, plain_group: dict) -> list:
+    """回收:plain_group = 不带覆盖层编译出的组。计划已与覆盖一致的对象从覆盖层删掉;返回仍未固化的 "kind/id" 列表。"""
+    group = doc.get("groups", {}).get(gid)
+    if not group:
+        return []
+    pending = []
+    for kind in ("actors", "extras", "props"):
+        objs = {o.get("id"): o for o in plain_group.get(kind, [])}
+        for oid, e in list((group.get(kind) or {}).items()):
+            obj = objs.get(oid)
+            ok = bool(obj) and ("keyframes" not in e or _same_keys(e["keyframes"], obj.get("keyframes") or [])) and \
+                all(obj.get(n) == e[n] for n in ("position", "yaw", "pitch", "roll", "scale", "visible") if n in e)
+            if ok:
+                group[kind].pop(oid)
+            else:
+                pending.append(f"{kind}/{oid}")
+        if kind in group and not group[kind]:
+            group.pop(kind)
+    cams = {c.get("shot_id"): c for c in plain_group.get("cameras", [])}
+    for sid, e in list((group.get("cameras") or {}).items()):
+        cam = cams.get(sid)
+        if cam and _same_keys(e.get("keyframes") or [], cam.get("keyframes") or []):
+            group["cameras"].pop(sid)
+        else:
+            pending.append(f"cameras/{sid}")
+    if "cameras" in group and not group["cameras"]:
+        group.pop("cameras")
+    if not any(group.get(k) for k in OVERRIDE_KINDS):
+        doc["groups"].pop(gid, None)
+    return pending
+
+
+def overrides_message(ep: str, gid: str, ov: dict) -> list:
+    """派单指令里的覆盖层段:逐对象给出完整关键帧 JSON,要求原样固化。"""
+    lines = []
+    for kind in OVERRIDE_KINDS:
+        for oid, e in (ov.get(kind) or {}).items():
+            body = {k: v for k, v in e.items() if k != "updated_at"}
+            lines.append(f"  - 覆盖层 {kind}/{oid}(用户在导演台直接改定,**数值原样写进计划**,不要重新推断):"
+                         f"{json.dumps(body, ensure_ascii=False, separators=(',', ':'))}")
+    if lines:
+        lines.insert(0, f"  覆盖层(directing/{ep}/whitebox/director/overrides.json 的 {gid} 段,编译时已合并在计划之上;固化进 whitebox_plans/{gid}.json 后宿主会自动清掉):")
+    return lines
