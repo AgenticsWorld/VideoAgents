@@ -36,6 +36,16 @@ LEDGER_REL = DIR_REL + "/notes.json"
 OVERRIDES_REL = DIR_REL + "/overrides.json"
 OVERRIDE_KINDS = ("actors", "extras", "props", "cameras")
 AGENT_ID = "07-directing/whitebox-staging"
+# 部门路由(v3):注释可发给不同工位;白模调度是默认,也是唯一会带待决项与覆盖层、并按编译指纹回收版本的路由
+ROUTES = {
+    "07-directing/whitebox-staging": "白模调度",
+    "05-scenes/scene-modeling": "场景建模",
+    "07-directing/shot-planning": "分镜",
+    "08-video-gen/prompt": "提示词",
+    "00-orchestration/reviser": "修改师",
+}
+MARKS_SCHEMA = "director_marks.v1"
+MARKS_REL = DIR_REL + "/marks.json"
 
 TARGET_KINDS = ("actor", "extra", "prop", "camera", "scene", "group")
 TARGET_LABEL = {"actor": "人物", "extra": "群演", "prop": "道具", "camera": "摄影机", "scene": "场景", "group": "整组"}
@@ -82,7 +92,7 @@ def load_ledger(base: Path, ep: str) -> dict:
     doc = read_json(ledger_path(base, ep))
     if not isinstance(doc, dict) or doc.get("schema") != SCHEMA:
         return empty_ledger(ep)
-    for k, d in (("notes", []), ("batches", []), ("versions", {}), ("current", {})):
+    for k, d in (("notes", []), ("batches", []), ("versions", {}), ("current", {}), ("approvals", {})):
         if not isinstance(doc.get(k), type(d)):
             doc[k] = d
     return doc
@@ -120,7 +130,14 @@ def normalize_target(target) -> dict:
     return {"kind": kind, "id": tid, "label": str(target.get("label") or tid or TARGET_LABEL[kind])[:80]}
 
 
-def make_note(group_id: str, target, text: str, *, t=None, shot_id=None, base_v=None, view=None) -> dict:
+def normalize_agent(agent) -> str:
+    agent = str(agent or "").strip() or AGENT_ID
+    if agent not in ROUTES:
+        raise ValueError("target_agent 须为 " + " | ".join(ROUTES))
+    return agent
+
+
+def make_note(group_id: str, target, text: str, *, t=None, shot_id=None, base_v=None, view=None, target_agent=None) -> dict:
     if not _ID_RE.match(str(group_id or "")):
         raise ValueError("group_id 非法")
     text = str(text or "").strip()
@@ -132,6 +149,7 @@ def make_note(group_id: str, target, text: str, *, t=None, shot_id=None, base_v=
             "t": None if t is None or t == "" else round(float(t), 2),
             "shot_id": (str(shot_id).strip() or None) if shot_id else None,
             "view": str(view)[:16] if view else None,
+            "target_agent": normalize_agent(target_agent),
             "status": "draft", "batch_id": None, "version_after": None, "error": "",
             "base_v": int(base_v) if base_v not in (None, "") else None,
             "created_at": _now(), "updated_at": _now()}
@@ -164,6 +182,8 @@ def update_note(note: dict, patch: dict) -> dict:
         note["shot_id"] = (str(patch["shot_id"]).strip() or None) if patch["shot_id"] else None
     if "target" in patch and patch["target"] is not None:
         note["target"] = normalize_target(patch["target"])
+    if "target_agent" in patch:
+        note["target_agent"] = normalize_agent(patch["target_agent"])
     note["updated_at"] = _now()
     return note
 
@@ -244,10 +264,14 @@ def _issue_lines(issue: dict) -> str:
     return f"  - 待决项 {issue.get('issue_id')}:{issue.get('question')} → {what}"
 
 
-def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=None, note_ids=None, overrides=None) -> dict:
-    """挑出要提交的 draft 注释、已裁决未套用的待决项与覆盖层,生成派单指令。不改 doc、不派单。"""
+def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=None, note_ids=None, overrides=None, agent=AGENT_ID) -> dict:
+    """挑出要提交的 draft 注释、已裁决未套用的待决项与覆盖层,生成派单指令。不改 doc、不派单。
+    agent ≠ 白模调度时只带该路由的注释(通用指令),不带待决项与覆盖层。"""
+    agent = normalize_agent(agent)
+    if agent != AGENT_ID:
+        return _prepare_generic(base, ep, doc, episode, agent, group_ids=group_ids, note_ids=note_ids)
     overrides = overrides if overrides is not None else load_overrides(base, ep)
-    notes = [n for n in doc.get("notes", []) if n.get("status") == "draft"]
+    notes = [n for n in doc.get("notes", []) if n.get("status") == "draft" and (n.get("target_agent") or AGENT_ID) == AGENT_ID]
     if note_ids:
         wanted = set(note_ids)
         notes = [n for n in notes if n.get("id") in wanted]
@@ -274,8 +298,58 @@ def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=No
     if missing:
         raise ValueError("这些组没有白模编译结果,无法提交:" + ", ".join(missing))
     ovs = {g: ov_groups[g] for g in groups if g in ov_groups}
-    return {"group_ids": groups, "notes": [n for n in notes if n["group_id"] in groups], "issues": issues, "overrides": ovs,
+    return {"agent": AGENT_ID, "group_ids": groups, "notes": [n for n in notes if n["group_id"] in groups], "issues": issues, "overrides": ovs,
             "message": build_message(base, ep, groups, [n for n in notes if n["group_id"] in groups], issues, compiled, ovs)}
+
+
+def _prepare_generic(base: Path, ep: str, doc: dict, episode: dict, agent: str, *, group_ids=None, note_ids=None) -> dict:
+    notes = [n for n in doc.get("notes", []) if n.get("status") == "draft" and n.get("target_agent") == agent]
+    if note_ids:
+        wanted = set(note_ids)
+        notes = [n for n in notes if n.get("id") in wanted]
+    if group_ids:
+        gs = set(group_ids)
+        notes = [n for n in notes if n.get("group_id") in gs]
+    if not notes:
+        raise ValueError(f"没有发给「{ROUTES[agent]}」的待提交注释")
+    groups = sorted({n["group_id"] for n in notes})
+    compiled = {g["group_id"]: g for g in episode.get("groups", [])}
+    proj = base.name
+    lines = [f"导演台注释批次(项目 {proj} · {ep} · 组 {', '.join(groups)} · 发给 {ROUTES[agent]}):",
+             "用户在导演台 3D 白模现场看着分镜组逐对象写下的修改要求,按本工位规约处理并回写你负责的产物;",
+             "对象 id 为人物/生物/道具/摄影机(镜号)/场景 id,t 为组内秒;超出本工位职责的条目回执说明并建议转给哪个工位。",
+             "回执按注释 id 逐条列出「做了什么 / 改了哪些文件」;不要改 directing/{ep}/whitebox/director/ 下任何文件(宿主台账)。".format(ep=ep), ""]
+    for gid in groups:
+        g = compiled.get(gid) or {}
+        shots = ", ".join(c.get("shot_id", "") for c in g.get("cameras", []))
+        lines.append(f"## {gid}(场景 {g.get('scene_id')};镜 {shots};时长 {g.get('duration_s')}s)")
+        for n in (x for x in notes if x["group_id"] == gid):
+            tg = n.get("target") or {}
+            where = [w for w in (f"镜 {n['shot_id']}" if n.get("shot_id") else "", f"t={n['t']}s" if n.get("t") is not None else "") if w]
+            head = f"  - [{n['id']}] {TARGET_LABEL.get(tg.get('kind'), tg.get('kind'))} {tg.get('label') or ''}"
+            if tg.get("id") and tg.get("id") != tg.get("label"):
+                head += f"({tg['id']})"
+            if where:
+                head += " · " + " · ".join(where)
+            lines.append(head + ":" + n["text"].replace("\n", " "))
+        lines.append("")
+    return {"agent": agent, "group_ids": groups, "notes": notes, "issues": {}, "overrides": {}, "message": "\n".join(lines).rstrip() + "\n"}
+
+
+def draft_agents(doc: dict, *, group_ids=None, note_ids=None) -> list:
+    """待提交注释涉及的路由(按首次出现顺序),白模调度永远排第一。"""
+    seen = []
+    for n in doc.get("notes", []):
+        if n.get("status") != "draft":
+            continue
+        if note_ids and n.get("id") not in set(note_ids):
+            continue
+        if group_ids and n.get("group_id") not in set(group_ids):
+            continue
+        a = n.get("target_agent") or AGENT_ID
+        if a not in seen:
+            seen.append(a)
+    return sorted(seen, key=lambda a: (a != AGENT_ID, a))
 
 
 def build_message(base: Path, ep: str, groups: list, notes: list, issues: dict, compiled: dict, overrides: dict | None = None) -> str:
@@ -357,6 +431,15 @@ def reconcile(base: Path, ep: str, doc: dict, episode: dict, run_alive, plain_ep
         if alive:
             continue
         # alive False = 运行已结束;None = 运行记录不存在(服务重启)→ 同样按结束处理
+        if (batch.get("agent") or AGENT_ID) != AGENT_ID:
+            # 其它工位:宿主没有可核验的产物指纹,运行结束即算已处理(注释 verified=false,回执在运行记录里)
+            for n in doc["notes"]:
+                if n.get("batch_id") == batch["id"]:
+                    n["status"], n["verified"], n["updated_at"] = "applied", False, _now()
+            batch["status"], batch["finished_at"] = "done", _now()
+            if alive is None:
+                batch["error"] = "运行记录不存在(服务重启后回收)"
+            continue
         changed_any, failed_any = False, False
         for gid in batch.get("group_ids", []):
             notes = [n for n in doc["notes"] if n.get("batch_id") == batch["id"] and n.get("group_id") == gid]
@@ -409,6 +492,7 @@ def summary(doc: dict) -> dict:
     out["batches"] = len(doc.get("batches", []))
     out["running"] = sum(1 for b in doc.get("batches", []) if b.get("status") == "running")
     out["versions"] = sum(len(v) for v in doc.get("versions", {}).values())
+    out["approved"] = len(doc.get("approvals", {}) or {})
     return out
 
 
@@ -637,3 +721,73 @@ def overrides_message(ep: str, gid: str, ov: dict) -> list:
     if lines:
         lines.insert(0, f"  覆盖层(directing/{ep}/whitebox/director/overrides.json 的 {gid} 段,编译时已合并在计划之上;固化进 whitebox_plans/{gid}.json 后宿主会自动清掉):")
     return lines
+
+
+# ---------------------------------------------------------------- 批准(v3)
+def set_approval(doc: dict, gid: str, sha: str | None, on: bool, by: str = "user:page") -> dict:
+    """组级「批准 ✓」:记当时编译指纹;白模再变即显示过期。"""
+    if not _ID_RE.match(str(gid or "")):
+        raise ValueError("group_id 非法")
+    approvals = doc.setdefault("approvals", {})
+    if not on:
+        approvals.pop(gid, None)
+        return {}
+    approvals[gid] = {"sha": sha, "at": _now(), "by": by}
+    return approvals[gid]
+
+
+def approvals_public(doc: dict, episode: dict) -> dict:
+    """{gid: {sha, at, by, stale}}:stale = 批准后该组编译指纹变了。"""
+    out = {}
+    current = {g["group_id"]: group_sha(episode, g) for g in episode.get("groups", []) if g.get("scene_id") in episode.get("scenes", {})}
+    for gid, rec in (doc.get("approvals") or {}).items():
+        out[gid] = {**rec, "stale": bool(rec.get("sha")) and current.get(gid) not in (None, rec.get("sha"))}
+    return out
+
+
+# ---------------------------------------------------------------- 地面定位标记(v3)
+def marks_path(base: Path, ep: str) -> Path:
+    return base / MARKS_REL.format(ep=ep)
+
+
+def load_marks(base: Path, ep: str) -> dict:
+    doc = read_json(marks_path(base, ep))
+    if not isinstance(doc, dict) or doc.get("schema") != MARKS_SCHEMA or not isinstance(doc.get("scenes"), dict):
+        return {"schema": MARKS_SCHEMA, "ep": ep, "updated_at": _now(), "scenes": {}}
+    return doc
+
+
+def save_marks(base: Path, ep: str, doc: dict) -> None:
+    doc["schema"] = MARKS_SCHEMA
+    doc["ep"] = ep
+    doc["updated_at"] = _now()
+    doc["scenes"] = {k: v for k, v in doc.get("scenes", {}).items() if v}
+    write_json(marks_path(base, ep), doc)
+
+
+def set_scene_marks(doc: dict, sid: str, marks) -> list:
+    """整表替换某场景的标记:[{id?, name, position:[x,y,z], color?}]。id 缺省按序补;名字不能空。"""
+    if not _ID_RE.match(str(sid or "")):
+        raise ValueError("scene_id 非法")
+    if not isinstance(marks, list):
+        raise ValueError("marks 须为数组")
+    out, used = [], set()
+    for i, m in enumerate(marks):
+        if not isinstance(m, dict):
+            raise ValueError("标记须为对象")
+        name = str(m.get("name") or "").strip()[:40]
+        if not name:
+            raise ValueError("标记名不能为空")
+        pos = m.get("position")
+        if not (isinstance(pos, list) and len(pos) == 3):
+            raise ValueError(f"标记 {name} 的 position 须为三维数组")
+        mid = str(m.get("id") or "").strip() or f"M{i + 1:02d}"
+        if not _ID_RE.match(mid) or mid in used:
+            mid = f"M{len(out) + 1:02d}"
+            while mid in used:
+                mid = mid + "x"
+        used.add(mid)
+        out.append({"id": mid, "name": name, "position": [round(float(x), 3) for x in pos],
+                    "color": str(m.get("color") or "")[:16] or None, "updated_at": _now()})
+    doc.setdefault("scenes", {})[sid] = out
+    return out

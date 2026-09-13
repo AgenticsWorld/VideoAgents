@@ -95,8 +95,35 @@ def _public(base: Path, ep: str, doc: dict, episode: dict) -> dict:
             'whitebox_enabled': (settings.get('output') or {}).get('spatial_blocking', True) is not False,
             'ledger': {k: doc.get(k) for k in ('notes', 'batches', 'versions', 'current', 'updated_at')},
             'overrides': dm.load_overrides(base, ep).get('groups', {}),
+            'marks': dm.load_marks(base, ep).get('scenes', {}),
+            'approvals': dm.approvals_public(doc, episode),
+            'gate': _gate(base, ep),
+            'routes': dm.ROUTES,
             'summary': dm.summary(doc), 'avatars': avatars,
             'labels': {'target': dm.TARGET_LABEL, 'note_status': dm.NOTE_STATUS_LABEL, 'batch_status': dm.BATCH_STATUS_LABEL}}
+
+
+def _gate(base: Path, ep: str) -> dict:
+    """H3W 白模签字状态(同后期页 _post_gate 口径):dag 里 g6w 节点 + 待答复的 H3W 签字卡。"""
+    node = None
+    for n in core._dag_load_nodes(base / 'runs' / 'dag.json'):
+        nid = str(n.get('id') or '')
+        if nid == 'g6w' or (nid.startswith('g6w-') and ep in nid) or (str(n.get('checkpoint') or '').upper().startswith('H3W') and ep in nid):
+            node = n
+            break
+    cards = []
+    for c in core.CONFIRMS.values():
+        if c.get('answer') is not None or c.get('kind') != 'sign' or c.get('project') != base.name:
+            continue
+        cp, q = str(c.get('checkpoint') or ''), str(c.get('question') or '')
+        if not (cp.upper().startswith('H3W') or 'H3W' in q or 'g6w' in str(c.get('gate_id') or '')):
+            continue
+        gid = str(c.get('gate_id') or '')
+        if ep in gid or ep in q or (not gid and ep not in q) or gid == 'g6w':
+            cards.append({k: c.get(k) for k in ('id', 'question', 'options', 'default', 'gate_id', 'checkpoint')})
+    signed = bool(node and node.get('state') in core._DONE_STATES)
+    return {'gate_id': (node or {}).get('id') or 'g6w', 'state': (node or {}).get('state'), 'in_dag': bool(node),
+            'pending': cards, 'signed': signed, 'checkpoint': 'H3W-白模确认'}
 
 
 def _load(project: str, ep: str):
@@ -121,7 +148,8 @@ async def note_create(project: str, ep: str, body: dict):
         base = project_path(project, ep)
         doc = dm.load_ledger(base, ep)
         note = dm.add_note(doc, dm.make_note(str(body.get('group_id') or ''), body.get('target'), body.get('text'),
-                                            t=body.get('t'), shot_id=body.get('shot_id'), base_v=body.get('base_v'), view=body.get('view')))
+                                            t=body.get('t'), shot_id=body.get('shot_id'), base_v=body.get('base_v'), view=body.get('view'),
+                                            target_agent=body.get('target_agent')))
         dm.save_ledger(base, ep, doc)
         return {'ok': True, 'note': note, 'summary': dm.summary(doc)}
     if not isinstance(body, dict):
@@ -158,27 +186,49 @@ async def note_delete(project: str, ep: str, nid: str):
 
 @router.post('/submit')
 async def submit(project: str, ep: str, body: dict | None = None):
-    """把 draft 注释(可按组/按 id 筛)+ 已裁决待决项打成一个批次派给白模调度 Agent;一批 = 一次运行 = 一个版本。"""
+    """把 draft 注释(可按组/按 id 筛)+ 已裁决待决项 + 覆盖层打成批次派单;按路由拆批:白模调度一批(带待决项/覆盖层),
+    其它工位各一批(只带该路由注释)。一批 = 一次运行;白模批次回收时按编译指纹落版本。"""
     body = body or {}
     base, doc, episode = await checked(_load, project, ep)
-    prepared = await checked(dm.prepare_batch, base, ep, doc, episode,
-                             group_ids=body.get('group_ids') or None, note_ids=body.get('note_ids') or None)
+    group_ids, note_ids = body.get('group_ids') or None, body.get('note_ids') or None
+    agents = dm.draft_agents(doc, group_ids=group_ids, note_ids=note_ids)
+    if dm.AGENT_ID not in agents:
+        agents.insert(0, dm.AGENT_ID)   # 没有白模注释也可能有待决项/覆盖层要提交
+    prepared_all, skipped = [], []
+    for agent in agents:
+        try:
+            prepared_all.append(await checked(dm.prepare_batch, base, ep, doc, episode, group_ids=group_ids, note_ids=note_ids, agent=agent))
+        except HTTPException as e:
+            if e.status_code == 422:
+                skipped.append({'agent': agent, 'reason': e.detail})
+                continue
+            raise
+    if not prepared_all:
+        raise HTTPException(422, skipped[0]['reason'] if skipped else '没有可提交的内容')
     if body.get('dry_run'):
-        return {'ok': True, 'dry_run': True, 'group_ids': prepared['group_ids'], 'notes': [n['id'] for n in prepared['notes']],
-                'issues': {k: [i.get('issue_id') for i in v] for k, v in prepared['issues'].items()}, 'message': prepared['message']}
-    if any(b.get('status') == 'running' and set(b.get('group_ids', [])) & set(prepared['group_ids']) for b in doc.get('batches', [])):
-        raise HTTPException(409, '这些组已有批次在运行,等它回收后再提交')
-    try:
-        res = await core.api_chat({'agent': dm.AGENT_ID, 'message': prepared['message'], 'project': base.name, 'source': 'user'})
-    except core.ServiceError as e:
-        raise HTTPException(e.status_code, e.detail) from e
+        return {'ok': True, 'dry_run': True, 'batches': [{'agent': p['agent'], 'group_ids': p['group_ids'], 'notes': [n['id'] for n in p['notes']],
+                                                         'issues': {k: [i.get('issue_id') for i in v] for k, v in p['issues'].items()}, 'message': p['message']} for p in prepared_all],
+                'skipped': skipped}
+    running = [b for b in doc.get('batches', []) if b.get('status') == 'running']
+    for p in prepared_all:
+        if any((b.get('agent') or dm.AGENT_ID) == p['agent'] and set(b.get('group_ids', [])) & set(p['group_ids']) for b in running):
+            raise HTTPException(409, f"「{dm.ROUTES[p['agent']]}」在这些组已有批次在运行,等它回收后再提交")
+    out = []
+    for p in prepared_all:
+        try:
+            res = await core.api_chat({'agent': p['agent'], 'message': p['message'], 'project': base.name, 'source': 'user'})
+        except core.ServiceError as e:
+            raise HTTPException(e.status_code, e.detail) from e
 
-    def _commit():
-        doc2 = dm.load_ledger(base, ep)
-        batch = dm.commit_batch(base, ep, doc2, episode, prepared, run_id=res.get('run_id'))
-        dm.save_ledger(base, ep, doc2)
-        return {'ok': True, 'batch': batch, 'run_id': res.get('run_id'), 'agent': dm.AGENT_ID, 'summary': dm.summary(doc2)}
-    return await checked(_commit)
+        def _commit(p=p, res=res):
+            doc2 = dm.load_ledger(base, ep)
+            batch = dm.commit_batch(base, ep, doc2, episode, p, run_id=res.get('run_id'), agent=p['agent'])
+            dm.save_ledger(base, ep, doc2)
+            return {'batch': batch, 'run_id': res.get('run_id'), 'agent': p['agent']}
+        out.append(await checked(_commit))
+    doc3 = dm.load_ledger(base, ep)
+    return {'ok': True, 'batches': out, 'batch': out[0]['batch'], 'run_id': out[0]['run_id'], 'agent': out[0]['agent'],
+            'skipped': skipped, 'summary': dm.summary(doc3)}
 
 
 @router.post('/snapshot')
@@ -251,3 +301,50 @@ async def overrides_clear(project: str, ep: str, gid: str, kind: str = '', id: s
         core.HUB.publish({'type': 'director', 'project': base.name, 'ep': ep, 'overrides': [gid]})
         return {'ok': True, 'group': group, 'scene': episode['scenes'][group['scene_id']], 'overrides': ov.get('groups', {}).get(gid, {})}
     return await checked(_do)
+
+
+# ---- v3:地面定位标记 / 组级批准 / H3W 签字 ----
+@router.put('/marks/{sid}')
+async def marks_set(project: str, ep: str, sid: str, body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(422, 'body must be an object')
+
+    def _do():
+        base = project_path(project, ep, sid)
+        doc = dm.load_marks(base, ep)
+        marks = dm.set_scene_marks(doc, sid, body.get('marks') or [])
+        dm.save_marks(base, ep, doc)
+        return {'ok': True, 'scene_id': sid, 'marks': marks}
+    return await checked(_do)
+
+
+@router.post('/approve')
+async def approve(project: str, ep: str, body: dict | None = None):
+    body = body or {}
+
+    def _do():
+        base, doc, episode = _load(project, ep)
+        gid = str(body.get('group_id') or '')
+        component(gid)
+        group = next((g for g in episode['groups'] if g['group_id'] == gid), None)
+        sha = dm.group_sha(episode, group) if group else None
+        rec = dm.set_approval(doc, gid, sha, bool(body.get('approve', True)))
+        dm.save_ledger(base, ep, doc)
+        return {'ok': True, 'group_id': gid, 'approval': rec, 'approvals': dm.approvals_public(doc, episode), 'summary': dm.summary(doc)}
+    return await checked(_do)
+
+
+@router.post('/signoff')
+async def signoff(project: str, ep: str, body: dict | None = None):
+    """答复 H3W 白模签字卡(与控制台同一条);阻断级待决项未清时宿主拒签(409)。"""
+    body = body or {}
+    base = project_path(project, ep)
+    cid = str(body.get('confirm_id') or '')
+    answer = str(body.get('answer') or '签字')
+    if not cid or cid not in core.CONFIRMS:
+        raise HTTPException(404, 'sign-off card not found (it may have been answered from the console)')
+    try:
+        res = await core.api_confirm_answer(cid, {'answer': answer})
+    except core.ServiceError as e:
+        raise HTTPException(e.status_code, e.detail) from e
+    return {'ok': True, 'confirm': res, 'gate': _gate(base, ep)}

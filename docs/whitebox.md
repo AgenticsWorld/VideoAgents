@@ -237,6 +237,15 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 每次落点即写 `directing/<ep>/whitebox/director/overrides.json`（宿主所有,schema `director_overrides.v1`:`groups.<grp>.{actors|extras|props|cameras}.<id>` = 该对象**整条关键帧数组**,道具还可给 position/yaw/pitch/roll）,`compile_episode` 把它盖在 Agent 计划之上（`apply_overrides=False` 可编不带覆盖层的结果),无效覆盖只进 warnings 不套用;保存即重编译落盘 `episode.json`,所以分镜预览、导出、接线都立即看到改后的白模（camera.mp4 指纹随之变为过期,属正常）。对象卡与时间线标「✎ 已改」,编辑栏显示「未固化 n 个对象」,可「丢弃本组改动」或在数值框「还原」单个对象。提交批次时指令附上覆盖层原文,要求 Agent **数值原样固化进计划并回写源文件**;回收时对比不带覆盖层的编译结果,已一致的对象自动从覆盖层删掉,未一致的保留并记入批次 `overrides_pending`;只固化不改画面的批次也算 `done`。API:`PUT /director/<ep>/overrides/<grp>`（按对象合并,值 null 删）、`DELETE …/overrides/<grp>[?kind=&id=]`,`GET /director/<ep>` 返回 `overrides`。
 
+**v3 导演位（2026-09-13）**:
+- **四联监看**:「▦ 四联」把视窗切成 2×2:白模机位(A|B 照旧)/ 故事板草图(`/previews/board` 的 sketches 按 `board_key`)/ 分镜背景图(按时刻取 start / end plate)/ 已生成成片(组视频 `assets/clips/<ep>/<grp>.mp4`,随播放头同步、播放时纠漂移)。
+- **辅助线与镜头数据条**:「辅助线」在摄像机视角叠三分线 / 中心十字 / 动作安全框;视窗下方常显镜头数据:焦段(fov → 24 mm 竖幅口径 `f = 12 / tan(fov/2)`)、机高、俯仰、最近入画主体的距离与按画高估算的景别(与分镜表 size 并列对照)。
+- **清距圈 / 轴线**:「清距」给每个人物画包围圆 + 0.2 m 净距,相交标红并在对象状态里报「与谁净距多少」;「轴线」画当前镜两位主要人物(分镜表 characters 前两位,缺则取离机位最近两人)的 180° 连线,标出机位在左/右侧,与上一镜比换了边即标「越轴」。
+- **定位标记**:`directing/<ep>/whitebox/director/marks.json`(schema `director_marks.v1`,按场景存 `{id,name,position}`,同场景各组共用)。编辑态「📍 标记」在选中对象当前位置放标记,标记行可删;拖动落点 0.35 m 内自动吸附到标记。API `PUT /director/<ep>/marks/<sid>`(整表替换)。
+- **测距**:编辑态工具「测距 M」,点两个对象(人物取脚下、道具取中心、摄影机取机身)或地面点,画线并显示米数;第三下重来。
+- **批准与 H3W 签字**:「✓ 批准本组」记当时编译指纹到台账 `approvals`(白模再变即标过期),左栏组行显示 ✓,顶栏显示「已批准 n/N」;顶栏 H3W 签字胶囊与后期页同款:有待答复的签字卡时出「签字确认 / 暂缓」(两次点击确认,答复的是控制台同一张卡,阻断级待决项未清时宿主 409 拒签),`GET /director/<ep>` 的 `gate` 给状态,`POST /director/<ep>/signoff {confirm_id, answer}` 答卡。
+- **部门路由**:注释新增 `target_agent`(`modules/director.ROUTES`:白模调度(默认)/ 场景建模 `05-scenes/scene-modeling` / 分镜 `07-directing/shot-planning` / 提示词 `08-video-gen/prompt` / 修改师 `00-orchestration/reviser`),表单「发给」选择。提交按路由拆批:白模调度一批(带待决项与覆盖层,按编译指纹回收版本),其它工位各一批(通用指令,只带该路由注释;运行结束即记 `applied` 且 `verified=false`,以运行回执为准)。
+
 ## 接入视频生成（2026-09-07）
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
