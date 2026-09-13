@@ -2504,6 +2504,8 @@ window.I18N_DICT = {
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Save the current frame of picture A as a reference frame (for reference matching / relighting / repaint)",
 "取参考帧": "Grab reference frame",
 "B 画面始终静音;此按钮切 A 的声音": "Picture B is always muted; this button toggles A's audio",
+"切换成片声音": "Toggle final-cut audio",
+"浏览器拦截了带声自动播放,成片已静音;点 🔇 恢复声音": "The browser blocked autoplay with sound; the final cut is muted. Click 🔇 to restore audio",
 "还没有成片 final.mp4(点右上「出成片」)": "No final.mp4 yet (click \"Render final\" at top right)",
 "本组没有视频文件": "This group has no video file",
 "各组当前版本": "Current version per group",

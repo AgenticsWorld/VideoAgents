@@ -2415,6 +2415,8 @@ window.I18N_DICT = {
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Lưu khung hình hiện tại của A làm khung tham chiếu (cho khớp tham chiếu / chiếu sáng lại / vẽ lại)",
 "取参考帧": "Lấy khung tham chiếu",
 "B 画面始终静音;此按钮切 A 的声音": "Hình B luôn tắt tiếng; nút này bật/tắt âm thanh của A",
+"切换成片声音": "Bật/tắt âm thanh bản dựng",
+"浏览器拦截了带声自动播放,成片已静音;点 🔇 恢复声音": "Trình duyệt chặn tự phát có tiếng; bản dựng đã tắt tiếng. Nhấn 🔇 để bật lại âm thanh",
 "还没有成片 final.mp4(点右上「出成片」)": "Chưa có final.mp4 (nhấn \"Xuất bản cuối\" ở góc trên bên phải)",
 "本组没有视频文件": "Nhóm này không có tệp video",
 "各组当前版本": "Phiên bản hiện tại từng nhóm",

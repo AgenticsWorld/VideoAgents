@@ -2415,6 +2415,8 @@ window.I18N_DICT = {
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Simpan frame saat ini dari A sebagai frame referensi (untuk pencocokan referensi / relight / repaint)",
 "取参考帧": "Ambil frame referensi",
 "B 画面始终静音;此按钮切 A 的声音": "Gambar B selalu bisu; tombol ini mengalihkan suara A",
+"切换成片声音": "Alihkan audio hasil akhir",
+"浏览器拦截了带声自动播放,成片已静音;点 🔇 恢复声音": "Browser memblokir putar otomatis bersuara; hasil akhir dibisukan. Klik 🔇 untuk memulihkan suara",
 "还没有成片 final.mp4(点右上「出成片」)": "Belum ada final.mp4 (klik \"Render final\" di kanan atas)",
 "本组没有视频文件": "Grup ini tidak punya file video",
 "各组当前版本": "Versi saat ini per grup",

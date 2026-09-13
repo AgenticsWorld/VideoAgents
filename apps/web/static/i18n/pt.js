@@ -2415,6 +2415,8 @@ window.I18N_DICT = {
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Salvar o quadro atual de A como referência (para correspondência de referência / reiluminação / repintura)",
 "取参考帧": "Capturar referência",
 "B 画面始终静音;此按钮切 A 的声音": "A imagem B está sempre muda; este botão alterna o áudio de A",
+"切换成片声音": "Alternar áudio do corte final",
+"浏览器拦截了带声自动播放,成片已静音;点 🔇 恢复声音": "O navegador bloqueou a reprodução automática com som; o corte final está mudo. Clique em 🔇 para restaurar o áudio",
 "还没有成片 final.mp4(点右上「出成片」)": "Ainda não há final.mp4 (clique em «Renderizar final» no canto superior direito)",
 "本组没有视频文件": "Este grupo não tem arquivo de vídeo",
 "各组当前版本": "Versão atual por grupo",
