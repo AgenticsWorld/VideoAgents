@@ -2929,4 +2929,10 @@ window.I18N_DICT = {
 "Qwen Image 3 Pro · 中文/小字渲染/世界知识": "Qwen Image 3 Pro · Mandarin/render teks kecil/pengetahuan dunia",
 "MAI-Image-2.6(微软)· 精度档,设计级画面/编辑": "MAI-Image-2.6 (Microsoft) · Tingkat presisi, visual siap desain/penyuntingan",
 "Muse Image(Meta)· 先推理后出图,复杂构图/编辑": "Muse Image (Meta) · Bernalar sebelum merender, komposisi kompleks/penyuntingan",
+"📑 场次": "📑 Adegan",
+"📑 场次 / 分镜": "📑 Adegan / Shot",
+"📑 场次 / 分镜组 /": "📑 Adegan / Grup shot /",
+"展开分镜": "Bentangkan shot",
+"折叠分镜": "Ciutkan shot",
+"展开/折叠该组分镜": "Bentangkan/ciutkan shot grup ini",
 };

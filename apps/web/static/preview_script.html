@@ -9,6 +9,7 @@
 <script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
+<script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -133,7 +134,10 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
   <button id="reload">刷新</button>
 </header>
 <div id="eps"></div>
-<div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+<div id="main">
+  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+  <nav id="nav"></nav>
+</div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -190,6 +194,7 @@ function render(d){
   renderEps(d.episodes||[]);
   const box=$('#content');
   const bd=d.breakdown,ep=d.ep,A=d.agents||{};
+  renderNav(bd);
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集/剧本数据(story/episodes 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   if(!bd){box.innerHTML=`<h2 class="title">${esc(ep)} ${esc(epi.title||'')}</h2><div class="empty">${esc(I18N.f('该集还没有剧本文件({f}),无法拆解',{f:epFile(ep,'screenplay.md')}))}</div>`;return}
@@ -208,10 +213,16 @@ function render(d){
   (bd.scenes||[]).forEach(sc=>{h+=sceneRows(sc,bd,ep,A)});
   h+=`</tbody></table>`;
   h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
-  box.innerHTML=h;restoreScroll(box,ep);
+  box.innerHTML=h;restoreScroll(box,ep);renderNav(bd);
   // 从故事板/分镜预览跳来:定位到 #scene=S01 对应场次行(表头置顶,留出其高度)
   JumpAnchor.go({find:(k,id)=>k==='scene'?document.getElementById('sc-'+id):null,box,scroll:el=>PreviewStickbar.jumpTo(el)});
   if(RUN)pollRun(RUN);
+}
+
+// 右侧快速定位(2026-09-13,同分镜预览):只列场次
+function renderNav(bd){
+  if(!window.PreviewNav)return;
+  PreviewNav.render('📑 场次',((bd&&bd.scenes)||[]).map(sc=>({cls:'sc',id:'sc-'+sc.no,label:sc.no+(sc.scene_name?' '+sc.scene_name:''),hint:sc.scene_id||'',badges:sc.alloc_s!=null?secs(sc.alloc_s):''})));
 }
 
 function statusHtml(d){
@@ -367,7 +378,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
-    if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集/剧本数据(story/episodes 为空)'))}</div>`;return}
+    if(!(d.episodes||[]).length){$('#eps').innerHTML='';renderNav(null);$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集/剧本数据(story/episodes 为空)'))}</div>`;return}
     if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
     localStorage.setItem('sc-ep:'+(d.project||proj),EP);
     if(d.reanalyze_run&&!RUN)RUN=d.reanalyze_run;

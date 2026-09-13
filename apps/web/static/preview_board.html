@@ -9,6 +9,7 @@
 <script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
+<script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
@@ -166,7 +167,10 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
   <button id="reload">刷新</button>
 </header>
 <div id="eps"></div>
-<div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+<div id="main">
+  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+  <nav id="nav"></nav>
+</div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -232,6 +236,7 @@ function render(d){
   PORTRAIT=aspectPortrait(d.aspect);
   renderEps(d.episodes||[]);
   const box=$('#content'),ep=d.ep;
+  renderNav(null);
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   const T=d.totals||{};
@@ -248,10 +253,21 @@ function render(d){
   }
   (d.scenes||[]).forEach(sc=>{h+=sceneCard(sc,d)});
   h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白挂点'))}</span><span>🎬 ${esc(t('动作'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
-  box.innerHTML=h;restoreScroll(box,ep);
+  box.innerHTML=h;restoreScroll(box,ep);renderNav(d);
   // 从剧本/分镜预览跳来:#scene=S01 → 场次卡,#shot=S01-03 → 镜行
   JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,scroll:el=>PreviewStickbar.jumpTo(el)});
   if(anyBusy())startPoll();
+}
+// 右侧快速定位(2026-09-13,同分镜预览):场次 + 镜
+function renderNav(d){
+  if(!window.PreviewNav)return;
+  const items=[];
+  ((d&&d.has_storyboard&&d.scenes)||[]).forEach(sc=>{
+    const nm=sc.location||sc.scene_name||'';
+    items.push({cls:'sc',id:'sc-'+sc.scene_no,label:sc.scene_no+(nm?' '+nm:''),hint:I18N.f('{n} 镜',{n:sc.shots.length}),badges:I18N.f('{n} 镜',{n:sc.shots.length})});
+    sc.shots.forEach(sh=>items.push({cls:'s',id:'sh-'+sh.key,label:`#${sh.order} ${sh.shot_id||sh.key}`,hint:clip(sh.content,60),badges:sh.duration_hint_s!=null?secs(sh.duration_hint_s):''}));
+  });
+  PreviewNav.render('📑 场次 / 分镜',items);
 }
 /* ---------- H3S 故事板签字(workflow.yaml g6s):答复总制片发的签字卡,与控制台同一条 ---------- */
 function gateHtml(){
@@ -491,7 +507,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
-    if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
+    if(!(d.episodes||[]).length){$('#eps').innerHTML='';renderNav(null);$('#content').innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
     if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
     localStorage.setItem('board-ep:'+(d.project||proj),EP);
     render(d);

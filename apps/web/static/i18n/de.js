@@ -2929,4 +2929,10 @@ window.I18N_DICT = {
 "Qwen Image 3 Pro · 中文/小字渲染/世界知识": "Qwen Image 3 Pro · Chinesisch/Darstellung kleiner Schrift/Weltwissen",
 "MAI-Image-2.6(微软)· 精度档,设计级画面/编辑": "MAI-Image-2.6 (Microsoft) · Präzisionsstufe, designreife Visuals/Bearbeitung",
 "Muse Image(Meta)· 先推理后出图,复杂构图/编辑": "Muse Image (Meta) · Denkt vor dem Rendern, komplexe Komposition/Bearbeitung",
+"📑 场次": "📑 Szenen",
+"📑 场次 / 分镜": "📑 Szenen / Einstellungen",
+"📑 场次 / 分镜组 /": "📑 Szenen / Einstellungsgruppen /",
+"展开分镜": "Einstellungen aufklappen",
+"折叠分镜": "Einstellungen zuklappen",
+"展开/折叠该组分镜": "Einstellungen dieser Gruppe auf-/zuklappen",
 };

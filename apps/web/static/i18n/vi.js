@@ -2929,4 +2929,10 @@ window.I18N_DICT = {
 "Qwen Image 3 Pro · 中文/小字渲染/世界知识": "Qwen Image 3 Pro · Tiếng Trung/hiển thị chữ nhỏ/kiến thức thế giới",
 "MAI-Image-2.6(微软)· 精度档,设计级画面/编辑": "MAI-Image-2.6 (Microsoft) · Bậc chính xác, hình ảnh chuẩn thiết kế/chỉnh sửa",
 "Muse Image(Meta)· 先推理后出图,复杂构图/编辑": "Muse Image (Meta) · Suy luận trước khi tạo ảnh, bố cục phức tạp/chỉnh sửa",
+"📑 场次": "📑 Cảnh",
+"📑 场次 / 分镜": "📑 Cảnh / Cảnh quay",
+"📑 场次 / 分镜组 /": "📑 Cảnh / Nhóm cảnh quay /",
+"展开分镜": "Mở rộng cảnh quay",
+"折叠分镜": "Thu gọn cảnh quay",
+"展开/折叠该组分镜": "Mở rộng/thu gọn các cảnh quay của nhóm này",
 };

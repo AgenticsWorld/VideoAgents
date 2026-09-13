@@ -3018,4 +3018,10 @@ window.I18N_DICT = {
 "Qwen Image 3 Pro · 中文/小字渲染/世界知识": "Qwen Image 3 Pro · Chinese/small-text rendering/world knowledge",
 "MAI-Image-2.6(微软)· 精度档,设计级画面/编辑": "MAI-Image-2.6 (Microsoft) · Precision tier, design-ready visuals/editing",
 "Muse Image(Meta)· 先推理后出图,复杂构图/编辑": "Muse Image (Meta) · Reasons before rendering, complex composition/editing",
+"📑 场次": "📑 Scenes",
+"📑 场次 / 分镜": "📑 Scenes / Shots",
+"📑 场次 / 分镜组 /": "📑 Scenes / Shot Groups /",
+"展开分镜": "Expand shots",
+"折叠分镜": "Collapse shots",
+"展开/折叠该组分镜": "Expand/collapse this group's shots",
 };

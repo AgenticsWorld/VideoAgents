@@ -79,7 +79,13 @@ header .ps-info select.ov{color:var(--accent)}
 #nav .nv .bd{flex:none;font-size:10px;color:var(--dim);white-space:nowrap}
 #nav .nv:hover{background:var(--panel2)}
 #nav .nv.sc{font-weight:600;margin-top:6px;color:var(--accent)}
-#nav .nv.g{padding-left:24px;color:var(--purple);font-size:11.5px}
+#nav .nv.g{padding-left:10px;color:var(--purple);font-size:11.5px}
+#nav .nv .ar{flex:none;width:14px;text-align:center;color:var(--dim);border-radius:3px}
+#nav .nv .ar:hover{color:var(--text);background:var(--border)}
+#nav .nv .ar.none{visibility:hidden}
+#nav .nv.s{padding-left:40px;color:var(--text);font-size:11px}
+#nav .ttl .xall{color:var(--accent);cursor:pointer}
+#nav .ttl .xall:hover{text-decoration:underline}
 #nav .nv.on{background:var(--panel2);outline:1px solid var(--border)}
 @media(max-width:900px){#nav{display:none}}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
@@ -1562,10 +1568,13 @@ function render(d){
         if(nNarr)badges.push('🎙'+nNarr);
         if(nMus)badges.push('🎵'+nMus);
         if((g.clips||[]).length)badges.push('🎬'+g.clips.length);
-        NAV.push({cls:'g',id:`a-g-${aid(g.group_id)}`,label:g.group_id,hint:I18N.f('{n} 镜',{n:gsids.length}),badges:badges.join(' ')});
+        const gAnchor=`a-g-${aid(g.group_id)}`,kids=gsids.filter(sid=>byId[sid]);
+        NAV.push({cls:'g',id:gAnchor,label:g.group_id,hint:I18N.f('{n} 镜',{n:gsids.length}),badges:badges.join(' '),kids:kids.length});
+        kids.forEach(sid=>NAV.push({cls:'s',id:`a-s-${aid(sid)}`,label:sid,g:gAnchor,hint:byId[sid].duration_s!=null?`${byId[sid].duration_s}s`:''}));
         h+=groupCard(g,(g.shots||[]).map(sid=>
           (musByShot[sid]?musBlock(musByShot[sid]):'')+(narrByShot[sid]?narrBlock(narrByShot[sid]):'')+(byId[sid]?shotCard(byId[sid],g.group_id):'')).join(''));
       }else if(!gMember[s.shot_id]){ // 未入组的镜:平铺(向后兼容旧数据)
+        NAV.push({cls:'s',id:`a-s-${aid(s.shot_id)}`,label:s.shot_id,hint:s.duration_s!=null?`${s.duration_s}s`:''});
         h+=(musByShot[s.shot_id]?musBlock(musByShot[s.shot_id]):'')+(narrByShot[s.shot_id]?narrBlock(narrByShot[s.shot_id]):'')+shotCard(s);
       }
     });
@@ -1574,9 +1583,7 @@ function render(d){
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
   if(WB_ON)import('/static/whitebox-ui.js?v=20260913-camonly3').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
-  $('#nav').innerHTML=NAV.length?'<div class="ttl">📑 场次 / 生成组</div>'+NAV.map(n=>
-    `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}"><span class="lb">${n.cls==='g'?'▸ ':''}${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`).join(''):'';
-  updateNavActive();
+  renderNav();
   // 滚动位置记忆:刷新页面回到原位;页内操作(保存注释/删线稿等 load(true))保持原位;切集/切项目回顶
   const skey='sb-scroll:'+(d.project||'')+':'+(d.ep||'');
   box.dataset.skey=skey;
@@ -1591,6 +1598,21 @@ function render(d){
   },scroll:jumpTo});
 }
 let FIRST_RENDER=true,KEEP_SCROLL=false,scrollSaveTick=null,NAV=[];
+// 右侧导航三层(2026-09-13):场次 → 分镜组 → 分镜。分镜默认折叠,点组前小箭头展开/折叠该组,
+// 标题行「展开分镜」一次展开全部;展开状态只存内存(页内刷新保留,重开页面回到全折叠)
+const NAV_OPEN=new Set();
+function renderNav(){
+  const nav=$('#nav');
+  if(!NAV.length){nav.innerHTML='';return}
+  const gids=NAV.filter(n=>n.cls==='g'&&n.kids).map(n=>n.id);
+  const allOpen=gids.length>0&&gids.every(id=>NAV_OPEN.has(id));
+  nav.innerHTML=`<div class="ttl">📑 场次 / 分镜组 / ${gids.length?`<span class="xall" data-open="${allOpen?0:1}">${allOpen?'折叠分镜':'展开分镜'}</span>`:'展开分镜'}</div>`+NAV.map(n=>{
+    if(n.cls==='s'&&n.g&&!NAV_OPEN.has(n.g))return '';
+    const ar=n.cls==='g'?`<span class="ar${n.kids?'':' none'}" data-tg="${esc(n.id)}" title="展开/折叠该组分镜">${NAV_OPEN.has(n.id)?'▾':'▸'}</span>`:'';
+    return `<button class="nv ${n.cls}" data-t="${esc(n.id)}" title="${esc(n.label)}${n.hint?' · '+esc(n.hint):''}${n.badges?' · '+esc(n.badges):''}">${ar}<span class="lb">${esc(n.label)}</span>${n.badges?`<span class="bd">${esc(n.badges)}</span>`:''}</button>`;
+  }).join('');
+  updateNavActive();
+}
 // 右侧导航:点击直接定位到对应场次/组。不用 smooth scrollIntoView:跳转后视口附近的白模面板才懒建
 // (占位文字 → 整块 3D 面板),上方内容撑高会把目标推走,之前要点好几次才到位;
 // 这里按滚动容器算目标 scrollTop 立即跳,再在 1.5s 内每帧校正锚点位置,用户一滚轮/触屏即停止校正
@@ -1610,6 +1632,10 @@ function jumpTo(el){
 }
 for(const ev of ['wheel','touchstart','keydown'])$('#content').addEventListener(ev,()=>{cancelAnimationFrame(navHold);navHold=0;},{passive:true});
 $('#nav').addEventListener('click',e=>{
+  const all=e.target.closest('.xall');
+  if(all){NAV.forEach(n=>{if(n.cls==='g'&&n.kids){if(all.dataset.open==='1')NAV_OPEN.add(n.id);else NAV_OPEN.delete(n.id)}});renderNav();return}
+  const tg=e.target.closest('.ar[data-tg]');
+  if(tg){if(tg.classList.contains('none'))return;const id=tg.dataset.tg;NAV_OPEN.has(id)?NAV_OPEN.delete(id):NAV_OPEN.add(id);renderNav();return}
   const b=e.target.closest('.nv');if(!b)return;
   const el=document.getElementById(b.dataset.t);
   if(el)jumpTo(el);
@@ -1628,9 +1654,11 @@ function updateNavActive(){
     if(!el)continue;
     const r=el.getBoundingClientRect();
     if(r.top-bt<=60)cur=n.id;else break;
-    if(r.top<th){if(n.cls==='sc'){sc=n;gp=null;gpEl=null}else{gp=n;gpEl=el}}
+    if(r.top<th){if(n.cls==='sc'){sc=n;gp=null;gpEl=null}else if(n.cls==='g'){gp=n;gpEl=el}}
   }
   if(gpEl&&gpEl.getBoundingClientRect().bottom<=th){gp=null}
+  const curN=NAV.find(n=>n.id===cur);
+  if(curN&&curN.cls==='s'&&curN.g&&!NAV_OPEN.has(curN.g))cur=curN.g;
   document.querySelectorAll('#nav .nv').forEach(b=>b.classList.toggle('on',b.dataset.t===cur));
   const on=document.querySelector('#nav .nv.on');
   if(on)on.scrollIntoView({block:'nearest'});
