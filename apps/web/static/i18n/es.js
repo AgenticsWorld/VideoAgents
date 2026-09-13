@@ -2122,6 +2122,7 @@ window.I18N_DICT = {
 "锁定": "bloqueada",
 "服务机位:{s}": "sirve a las cámaras: {s}",
 "尚未服务任何机位": "aún no sirve a ninguna cámara",
+"点击展开/收起": "Clic para expandir/contraer",
 "链式补洞(自 {a})": "relleno encadenado (desde {a})",
 "重打光(自 {s})": "reiluminado (desde {s})",
 "独立出图": "independiente",

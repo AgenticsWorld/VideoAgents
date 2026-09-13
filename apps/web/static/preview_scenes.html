@@ -91,13 +91,15 @@ ul.arr>li{margin:2px 0}
 .pano-map{position:relative;display:inline-block;max-width:420px;margin:6px 0 10px}
 .pano-map img{width:100%;display:block;border-radius:6px}
 .pano-dot{position:absolute;transform:translate(-50%,-50%);min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.45);cursor:default}
-.pano-anchor{border-top:1px solid var(--border);padding:8px 0 2px}
+.pano-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin:6px 0}
+.pano-anchor{width:320px;max-width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px}
 .pano-title{font-size:13px}
-.pano-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin:6px 0}
-.pano-row figure{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px;text-align:center}
-.pano-row img{height:140px;max-width:300px;object-fit:contain;display:block;border-radius:5px;cursor:zoom-in}
-.pano-row figcaption{font-size:11px;color:var(--dim);margin-top:3px;max-width:300px}
-.pano-row figure.pano-wb img{height:90px;opacity:.85}
+.pano-serves{color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.pano-serves.open{white-space:normal;overflow-wrap:anywhere}
+.pano-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin:6px 0 0}
+.pano-row figure{margin:0;width:100%;text-align:center}
+.pano-row img{width:100%;height:auto;display:block;border-radius:5px;cursor:zoom-in}
+.pano-row figcaption{font-size:11px;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pano-blocked{border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px}
 /* 创建全景图(2026-09-13):俯视图点选坐标 → 黄色待定点 + 坐标/方案表单 + 后台日志 */
 .pano-map.picking{cursor:crosshair}
@@ -421,16 +423,21 @@ async function mountPanoSection(host,s){
     return Object.keys(by).sort().map(ep=>`${ep}: ${[...by[ep]].sort().join(', ')}`).join(' · ');
   };
   const modeText=(rec)=>rec.mode==='chain'?I18N.f('链式补洞(自 {a})',{a:rec.parent?.anchor_id||'?'}):rec.mode==='relight'?I18N.f('重打光(自 {s})',{s:rec.parent?.scheme||'?'}):t('独立出图');
+  // 锚点卡片 flex 换行、一行多张(2026-09-13);服务机位默认单行省略、点击展开;白模全景不展示(仅世界模型面板保留)。
+  if(anchors.length)h+='<div class="pano-grid">';
   anchors.forEach(a=>{
     const p=a.position;
+    const serves=(a.serves||[]).length?I18N.f('服务机位:{s}',{s:servesText(a)}):t('尚未服务任何机位');
     h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}${a.source==='manual'?` · ${esc(t('手动'))}`:''}`
-      +`<div style="color:var(--dim);font-size:12px">${esc((a.serves||[]).length?I18N.f('服务机位:{s}',{s:servesText(a)}):t('尚未服务任何机位'))}</div></div><div class="pano-row">`;
+      +`<div class="pano-serves" title="${esc(t('点击展开/收起'))}">${esc(serves)}</div></div><div class="pano-row">`;
     Object.keys(a.panos||{}).sort().forEach(sch=>{const rec=a.panos[sch];if(!rec.url)return;
-      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn" title="${esc(sch)}">${esc(sch)}${rec.time_of_day?` · ${esc(rec.time_of_day)}`:''} · ${esc(modeText(rec))}</span></figcaption></figure>`;});
-    if(a.whitebox_pano_url)h+=`<figure class="pano-wb"><img src="${esc(bust(a.whitebox_pano_url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(t('白模全景'))}</span></figcaption></figure>`;
+      const cap=`${sch}${rec.time_of_day?` · ${rec.time_of_day}`:''} · ${modeText(rec)}`;
+      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
     h+='</div></div>';
   });
+  if(anchors.length)h+='</div>';
   sec.innerHTML=h;
+  sec.querySelectorAll('.pano-serves').forEach(el=>el.addEventListener('click',()=>el.classList.toggle('open')));
   // ---- 创建全景图:点选/填坐标 → 提交后台任务
   const btn=sec.querySelector('.ps-create'),status=sec.querySelector('.ps-status'),log=sec.querySelector('.ps-log'),hint=sec.querySelector('.ps-hint'),form=sec.querySelector('.ps-form'),map=sec.querySelector('.pano-map');
   const [W,,D]=dims;

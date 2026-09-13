@@ -2122,6 +2122,7 @@ window.I18N_DICT = {
 "锁定": "đã khóa",
 "服务机位:{s}": "phục vụ máy quay: {s}",
 "尚未服务任何机位": "chưa phục vụ máy quay nào",
+"点击展开/收起": "Nhấn để mở/thu gọn",
 "链式补洞(自 {a})": "lấp chuỗi (từ {a})",
 "重打光(自 {s})": "chiếu sáng lại (từ {s})",
 "独立出图": "độc lập",

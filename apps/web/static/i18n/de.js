@@ -2122,6 +2122,7 @@ window.I18N_DICT = {
 "锁定": "gesperrt",
 "服务机位:{s}": "bedient Kameras: {s}",
 "尚未服务任何机位": "bedient noch keine Kamera",
+"点击展开/收起": "Klicken zum Auf-/Zuklappen",
 "链式补洞(自 {a})": "verkettet ergänzt (aus {a})",
 "重打光(自 {s})": "neu beleuchtet (aus {s})",
 "独立出图": "eigenständig",

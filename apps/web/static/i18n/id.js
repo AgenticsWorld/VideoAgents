@@ -2122,6 +2122,7 @@ window.I18N_DICT = {
 "锁定": "terkunci",
 "服务机位:{s}": "melayani kamera: {s}",
 "尚未服务任何机位": "belum melayani kamera",
+"点击展开/收起": "Klik untuk membuka/menutup",
 "链式补洞(自 {a})": "isi berantai (dari {a})",
 "重打光(自 {s})": "pencahayaan ulang (dari {s})",
 "独立出图": "mandiri",

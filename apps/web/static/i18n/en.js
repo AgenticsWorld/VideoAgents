@@ -2211,6 +2211,7 @@ window.I18N_DICT = {
 "锁定": "locked",
 "服务机位:{s}": "serves cameras: {s}",
 "尚未服务任何机位": "serves no camera yet",
+"点击展开/收起": "Click to expand/collapse",
 "链式补洞(自 {a})": "chained fill (from {a})",
 "重打光(自 {s})": "relit (from {s})",
 "独立出图": "standalone",

@@ -2122,6 +2122,7 @@ window.I18N_DICT = {
 "锁定": "verrouillé",
 "服务机位:{s}": "dessert les caméras : {s}",
 "尚未服务任何机位": "ne dessert encore aucune caméra",
+"点击展开/收起": "Cliquer pour déplier/replier",
 "链式补洞(自 {a})": "complété en chaîne (depuis {a})",
 "重打光(自 {s})": "rééclairé (depuis {s})",
 "独立出图": "autonome",
