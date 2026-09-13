@@ -287,6 +287,7 @@ def _read_override_json(path: Path) -> dict:
 def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, global_model: str) -> dict:
     """层级解析本组生效的视频渠道/模型:全局 → 本集 settings_dir/episode.json → 本组 settings_dir/<grp>.json。
     集级(分镜预览顶部三下拉,2026-09-11)可切换渠道(provider_override=true,须该渠道已配 Key)或只换模型;
+    渠道为 comfyui 时 video_model 槽存的是运行方式(COMFY_MODES,2026-09-13),集级可切、组级不可;
     组级(组卡「🎛 模型」)只换模型,其 provider 须与本集生效渠道一致,否则视为失效。
     返回 {provider, video_model, source(global|episode|group), notes[]}(与 services.runtime.core.group_video_candidates 同口径)。"""
     out = {"provider": global_provider, "video_model": global_model, "source": "global", "notes": []}
@@ -299,7 +300,14 @@ def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, g
         except RuntimeError as e:
             out["notes"].append(f"集级视频渠道 {eprov} 不可用({e}),集级设定未生效,按全局执行")
     elif ov:
-        if global_provider == "comfyui" or not global_model:
+        if global_provider == "comfyui" and ov in COMFY_MODES:
+            # 集级切换 ComfyUI 运行方式(2026-09-13):model 槽存的是 local/cloud/rh_cn/rh_ai
+            try:
+                get_config("video", provider_override="comfyui", model_override=ov)
+                out.update(video_model=ov, source="episode")
+            except RuntimeError as e:
+                out["notes"].append(f"集级 ComfyUI 运行方式 {ov} 不可用({e}),集级设定未生效,按全局执行")
+        elif global_provider == "comfyui" or not global_model:
             out["notes"].append(f"集级模型 {ov} 未生效:当前渠道 {global_provider} 按工作流运行,无模型 id")
         elif eprov and eprov != global_provider:
             out["notes"].append(f"集级模型 {ov} 属渠道 {eprov},当前视频渠道为 {global_provider},该覆盖未生效")
@@ -332,7 +340,12 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
     if r["source"] == "global":
         return cfg
     scope = "集级" if r["source"] == "episode" else "组级"
-    if r["provider"] != cfg.get("provider"):
+    if r["provider"] == "comfyui":
+        # ComfyUI:video_model 槽存的是运行方式,整份配置按该运行方式重取(mode/站点工作流随之改写)
+        cfg = get_config("video", provider_override="comfyui", model_override=r["video_model"])
+        print(f"[genmedia] 组 {group} 按{scope}设定使用 ComfyUI 运行方式 "
+              f"{COMFY_MODE_LABELS.get(r['video_model'], r['video_model'])}", file=sys.stderr)
+    elif r["provider"] != cfg.get("provider"):
         cfg = get_config("video", provider_override=r["provider"], model_override=r["video_model"])
         print(f"[genmedia] 组 {group} 按{scope}设定切换视频渠道 {r['provider']} / 模型 {r['video_model']}",
               file=sys.stderr)
@@ -414,7 +427,9 @@ def image_pref_env(kind_or_output: str | os.PathLike | None):
         os.environ["VIDEOAGENTS_IMAGE_MODEL"] = pref["model"]
     else:
         os.environ.pop("VIDEOAGENTS_IMAGE_MODEL", None)
-    print(f"[genmedia] {kind} 按预览页设定使用图像渠道 {pref['provider']} 模型 {pref['model'] or '(该渠道默认)'}", file=sys.stderr)
+    what = "运行方式 " + COMFY_MODE_LABELS.get(pref["model"], pref["model"]) if pref["provider"] == "comfyui" \
+        else f"模型 {pref['model'] or '(该渠道默认)'}"
+    print(f"[genmedia] {kind} 按预览页设定使用图像渠道 {pref['provider']} {what}", file=sys.stderr)
     try:
         yield kind
     finally:
@@ -480,6 +495,15 @@ def get_config(kind: str, provider_override: str = "", model_override: str = "")
             raise RuntimeError(f"{kind} 渠道 {provider} 未选择模型")
     if ov_model and provider == "agentics":
         pc["profile_code"] = pc["model"] = ov_model
+    if ov_model and provider == "comfyui":
+        # ComfyUI 的二级选项是运行方式(本地/云端/RunningHub 国内/国际),不是模型 id
+        if ov_model not in COMFY_MODES:
+            raise RuntimeError(f"{kind} 渠道 comfyui 按工作流运行、无模型 id;二级选项只能是运行方式"
+                               f"({', '.join(COMFY_MODES)}),收到 {ov_model}")
+        if not comfy_mode_configured(pc, ov_model):
+            raise RuntimeError(f"{kind} 渠道 ComfyUI 的运行方式「{COMFY_MODE_LABELS[ov_model]}」未配置"
+                               "(「🎨 生成模型」页 ComfyUI 渠道填写地址/Key/工作流)")
+        pc = comfy_with_mode(pc, ov_model)
     return {"provider": provider, **pc}
 
 
@@ -1463,6 +1487,51 @@ COMFY_CLOUD_URL = "https://cloud.comfy.org/api"
 # 各自使用对应站点与 Key,账号不互通。
 RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
 RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
+# ComfyUI 渠道的「运行方式」(2026-09-13):预览页顶部图像/视频模型下拉选 ComfyUI 时,二级下拉选的不是模型
+# 而是运行方式,值走同一个 model 槽(image_model_prefs[kind].model / episode.json video_model),
+# get_config 遇 provider=comfyui 且 model 在此表内即改写 cfg["mode"](与「生成模型」页保存的全局 mode 平行)。
+COMFY_MODES = ("local", "cloud", "rh_cn", "rh_ai")
+COMFY_MODE_LABELS = {"local": "本地", "cloud": "云端(Comfy Cloud)",
+                     "rh_cn": "RunningHub 国内(.cn)", "rh_ai": "RunningHub 国际(.ai)"}
+
+
+def rh_workflow_for_site(pc: dict, mode: str) -> str:
+    """该 RunningHub 站点生效的工作流 id:rh_workflow_id 属该站点(或旧条目无 site)则用它,
+    否则取 rh_workflows 收藏里该站点的首个;都没有返回空。"""
+    wfs = [w for w in (pc.get("rh_workflows") or []) if isinstance(w, dict)]
+    cur = str(pc.get("rh_workflow_id") or "").strip()
+    if cur:
+        site = next((w.get("site") for w in wfs if str(w.get("id")) == cur), None)
+        if not site or site == mode:
+            return cur
+    return next((str(w.get("id")) for w in wfs if w.get("id") and (not w.get("site") or w.get("site") == mode)), "")
+
+
+def comfy_mode_configured(pc: dict, mode: str) -> bool:
+    """ComfyUI 渠道某运行方式是否已配置到能跑:本地=服务地址,云端=Comfy Cloud Key,
+    RunningHub=该站点 Key(旧版单一 rh_api_key/环境变量兜底)+ 该站点有可用工作流。"""
+    pc = pc if isinstance(pc, dict) else {}
+    if mode == "local":
+        return bool(str(pc.get("url") or "").strip())
+    if mode == "cloud":
+        return bool(str(pc.get("cloud_api_key") or "").strip())
+    if mode in RH_BASES:
+        key = (str(pc.get(f"rh_api_key_{mode[3:]}") or "").strip() or str(pc.get("rh_api_key") or "").strip()
+               or os.environ.get("RUNNINGHUB_API_KEY", "").strip())
+        return bool(key) and bool(rh_workflow_for_site(pc, mode))
+    return False
+
+
+def comfy_with_mode(pc: dict, mode: str) -> dict:
+    """按指定运行方式改写 ComfyUI 渠道配置副本:mode 换掉,RunningHub 站点的工作流 id 按站点重选
+    (rh_workflow_id 属另一站点时换成该站点收藏的首个,避免拿 .cn 的 id 去 .ai 跑)。"""
+    if mode not in COMFY_MODES:
+        raise RuntimeError(f"ComfyUI 运行方式 {mode} 无效(可选 {', '.join(COMFY_MODES)})")
+    out = dict(pc)
+    out["mode"] = mode
+    if mode in RH_BASES:
+        out["rh_workflow_id"] = rh_workflow_for_site(pc, mode)
+    return out
 RH_POLL_INTERVAL = 5
 RH_CREATE_WAIT_TIMEOUT = 7200
 

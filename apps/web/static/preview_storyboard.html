@@ -960,6 +960,8 @@ try{
 // 「🎬 [渠道] [模型] · 🧰 [技能]」,三项默认都跟随全局,选别的 = 集级覆盖 assets/group_settings/epNN/episode.json
 // {provider, provider_override, video_model, prompt_skill};个别组仍可用组卡「🎛 模型」单独指定且优先)。
 // 数据随 /previews/storyboard 返回的 video_model / prompt_skill(解析结果)与 episode_settings(存盘配置+可选清单)
+// ComfyUI(2026-09-13):渠道下拉可选 ComfyUI,二级下拉 = 运行方式(本地/云端/RunningHub 国内/国际),值走 video_model 槽,
+// 未配置的方式置灰;全局渠道就是 ComfyUI 时二级下拉同样可为本集切换运行方式(mode_switchable)。
 const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
 const provName=p=>t(PROVIDER_NAMES[p]||p||'');
 let PS_STATE=null;   // 当前集级存盘配置(三下拉共享;任一改动即整份 POST)
@@ -978,15 +980,16 @@ function psRender(d){
       +'</select>':'<b>'+esc(provName(vm.provider))+'</b>';
   // ② 模型:渠道跟随全局时 = 跟随全局(全局模型)+ 全局渠道目录;渠道已切换时 = 该渠道目录(必选其一)
   let modelSel;
+  const mlabel=m=>t(m.label||m.id)+(m.configured===false?'('+t('未配置')+')':'');   // ComfyUI 运行方式标签走 i18n、未配置置灰
   if(PS_STATE.provider){
     const pr=(es.providers||[]).find(p=>p.id===PS_STATE.provider)||{models:[]};
-    modelSel=`<select id="ps-model" class="ov">`+(pr.models||[]).map(m=>opt(m.id,m.label||m.id,m.id===PS_STATE.video_model)).join('')+'</select>';
-  }else if(vm.overridable&&(vm.candidates||[]).length){
+    modelSel=`<select id="ps-model" class="ov">`+(pr.models||[]).map(m=>opt(m.id,mlabel(m),m.id===PS_STATE.video_model,m.configured===false)).join('')+'</select>';
+  }else if((vm.overridable||vm.mode_switchable)&&(vm.candidates||[]).length){
     modelSel=`<select id="ps-model" class="${vm.source==='episode'?'ov':''}">`
-      +opt('',follow(vm.global_label||vm.global_model||'—'),!PS_STATE.video_model)
-      +(vm.candidates||[]).filter(c=>c.id!==vm.global_model).map(c=>opt(c.id,c.label||c.id,c.id===PS_STATE.video_model)).join('')
+      +opt('',follow(t(vm.global_label||vm.global_model||'—')),!PS_STATE.video_model)
+      +(vm.candidates||[]).filter(c=>c.id!==vm.global_model).map(c=>opt(c.id,mlabel(c),c.id===PS_STATE.video_model,c.configured===false)).join('')
       +'</select>';
-  }else modelSel='<b>'+esc(vm.label||vm.model||'—')+'</b>';
+  }else modelSel='<b>'+esc(t(vm.label||vm.model||'—'))+'</b>';
   // ③ 技能:跟随全局(项目设定的模式 → 技能)/ 自动(按本集模型)/ 手选各已安装技能 / 跳过
   const pj=es.project_skill||{};
   const modeTxt=m=>m==='off'?t('跳过'):m==='manual'?t('手选'):t('自动');
@@ -1009,14 +1012,17 @@ function psRender(d){
     load(true);
   };
   const sp=$('#ps-prov'),sm=$('#ps-model'),ss=$('#ps-skill');
-  if(sp)sp.onchange=()=>{   // 换渠道:模型改为该渠道在「生成模型」页保存的默认模型(后端按目录校验)
-    const pr=(es.providers||[]).find(p=>p.id===sp.value);
-    post({...PS_STATE,provider:sp.value||'',video_model:sp.value?((pr||{}).default_model||''):''});
+  if(sp)sp.onchange=()=>{   // 换渠道:模型改为该渠道在「生成模型」页保存的默认模型(后端按目录校验);ComfyUI 默认运行方式未配置时取首个已配置的
+    const pr=(es.providers||[]).find(p=>p.id===sp.value)||{};
+    let dm=pr.default_model||'';
+    const drow=(pr.models||[]).find(m=>m.id===dm);
+    if(drow&&drow.configured===false)dm=((pr.models||[]).find(m=>m.configured!==false)||{}).id||dm;
+    post({...PS_STATE,provider:sp.value||'',video_model:sp.value?dm:''});
   };
   if(sm)sm.onchange=()=>post({...PS_STATE,video_model:sm.value||''});
   if(ss)ss.onchange=()=>post({...PS_STATE,prompt_skill:ss.value.startsWith('manual:')?{mode:'manual',skill_id:ss.value.slice(7)}:{mode:ss.value,skill_id:''}});
   el.classList.toggle('warn',!!ps.warning);
-  const eff=provName(vm.provider)+' '+(vm.label||vm.model||'—')+' · '+modeTxt(ps.mode)+(ps.mode!=='off'?' → '+(ps.dir||ps.skill_id||t('无对应技能')):'');
+  const eff=provName(vm.provider)+' '+t(vm.label||vm.model||'—')+' · '+modeTxt(ps.mode)+(ps.mode!=='off'?' → '+(ps.dir||ps.skill_id||t('无对应技能')):'');
   el.title=t('本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先')
     +'\n'+I18N.f('本集生效:{e}',{e:eff})
     +(ps.warning?'\n⚠️ '+ps.warning:'');

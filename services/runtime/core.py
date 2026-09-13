@@ -1165,6 +1165,23 @@ def is_minimax_h3(model: str) -> bool:
 # 工作流 JSON 经 getJsonApiFormat 拉取后缓存,genmedia 运行时同读该目录
 RH_BASES = {"rh_cn": "https://www.runninghub.cn", "rh_ai": "https://www.runninghub.ai"}
 RH_CACHE_DIR = RUNTIME_DIR / "rh_workflows"
+# ComfyUI 渠道的「运行方式」(2026-09-13):预览页顶部图像/视频下拉选 ComfyUI 时二级下拉选它(不是模型 id),
+# 值走同一个 model 槽(image_model_prefs[kind].model / episode.json video_model);标签与「生成模型」页同词以便 i18n
+COMFY_MODES = ("local", "cloud", "rh_cn", "rh_ai")
+COMFY_MODE_LABELS = {"local": "本地", "cloud": "云端(Comfy Cloud)",
+                     "rh_cn": "RunningHub 国内(.cn)", "rh_ai": "RunningHub 国际(.ai)"}
+
+
+def comfy_mode_options(pc: dict | None) -> list[dict]:
+    """ComfyUI 渠道四种运行方式的可选清单 [{id, label, configured}](configured 口径与 genmedia.get_config 一致)。"""
+    from modules.genmedia import comfy_mode_configured
+    pc = pc if isinstance(pc, dict) else {}
+    return [{"id": m, "label": COMFY_MODE_LABELS[m], "configured": comfy_mode_configured(pc, m)} for m in COMFY_MODES]
+
+
+def comfy_global_mode(pc: dict | None) -> str:
+    m = (pc or {}).get("mode") if isinstance(pc, dict) else ""
+    return m if m in COMFY_MODES else "local"
 
 
 def _rh_cached_workflow(comfy: dict, wf_id: str = "") -> str:
@@ -4838,7 +4855,9 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
 
 
 def video_model_label(model: str, provider: str = "") -> str:
-    """模型的短标签:目录里有则取括号前的名字(如 Seedance 2.5),否则原 id。"""
+    """模型的短标签:目录里有则取括号前的名字(如 Seedance 2.5),否则原 id;comfyui 的 model 槽是运行方式,给运行方式名。"""
+    if provider == "comfyui" and model in COMFY_MODE_LABELS:
+        return COMFY_MODE_LABELS[model]
     for prov, rows in VIDEO_MODEL_CATALOG.items():
         if provider and prov != provider:
             continue
@@ -4948,6 +4967,8 @@ def video_provider_configured(cfg: dict, provider: str) -> bool:
     (与 genmedia.get_config 的取 Key 口径一致:minimax 双区域 Key 任一,fal 与图像段共用)。"""
     v = cfg.get("video") or {}
     pc = v.get(provider) or {}
+    if provider == "comfyui":
+        return any(m["configured"] for m in comfy_mode_options(pc))
     if provider == "minimax":
         return bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key")
                     or os.environ.get("MINIMAX_API_KEY"))
@@ -4967,7 +4988,20 @@ def video_provider_options(cfg: dict) -> list[dict]:
         dm = str(pc.get("custom_model") or pc.get("model") or "") or (rows[0][0] if rows else "")
         out.append({"id": pid, "configured": video_provider_configured(cfg, pid), "default_model": dm,
                     "models": [{"id": m, "label": lbl.split("(")[0]} for m, lbl in rows]})
+    # ComfyUI(2026-09-13):二级选项 = 运行方式,默认 = 「生成模型」页保存的运行方式;未配置的方式置灰
+    pc = v.get("comfyui") or {}
+    modes = comfy_mode_options(pc)
+    out.append({"id": "comfyui", "configured": any(m["configured"] for m in modes),
+                "default_model": comfy_global_mode(pc), "models": modes})
     return out
+
+
+def episode_provider_models(cfg: dict, provider: str) -> dict[str, bool]:
+    """集级可选渠道的二级选项 {id: 可选}:目录渠道 = 模型 id(全可选),comfyui = 运行方式(按已配置)。
+    渠道不支持按集切换返回空 dict。"""
+    if provider == "comfyui":
+        return {m["id"]: m["configured"] for m in comfy_mode_options((cfg.get("video") or {}).get("comfyui"))}
+    return {m: True for m, _ in VIDEO_MODEL_CATALOG.get(provider, [])}
 
 
 def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") -> dict:
@@ -4978,6 +5012,9 @@ def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") 
     cfg = cfg or load_genconfig()
     gprovider = active_video_provider(cfg)
     gmodel = effective_video_model(cfg)
+    if gprovider == "comfyui":
+        # ComfyUI 无模型 id:model 槽 = 运行方式(2026-09-13,集级可切、组级不可)
+        gmodel = comfy_global_mode((cfg.get("video") or {}).get("comfyui"))
     glabel = video_model_label(gmodel, gprovider) if gmodel else _video_model_label(cfg)
     provider, base_model, base_source, provider_source = gprovider, gmodel, "global", "global"
     episode_model, episode_provider, warning = "", "", ""
@@ -4988,26 +5025,37 @@ def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") 
         episode_model = ov
         if ov and es.get("provider_override") and eprov and eprov != gprovider:
             # 集级切换了渠道(2026-09-11):渠道须在目录内且已配 Key,否则整条集级设定按全局执行
+            # (comfyui:所选运行方式须已配置)
             episode_provider = eprov
-            if eprov in VIDEO_MODEL_CATALOG and video_provider_configured(cfg, eprov):
+            allowed = episode_provider_models(cfg, eprov)
+            if allowed and video_provider_configured(cfg, eprov) and (eprov != "comfyui" or allowed.get(ov)):
                 provider, base_model, base_source, provider_source = eprov, ov, "episode", "episode"
             else:
                 warning = (f"本集视频渠道 {eprov} 未配置 API Key 或不可按集切换,集级设定(模型 {ov})未生效,按全局执行;"
                            "请在控制台「生成模型」页配置该渠道或改回跟随全局")
         elif ov:
-            if gprovider == "comfyui" or not gmodel:
+            if gprovider == "comfyui":
+                if episode_provider_models(cfg, "comfyui").get(ov):
+                    base_model, base_source = ov, "episode"
+                else:
+                    warning = (f"本集 ComfyUI 运行方式 {COMFY_MODE_LABELS.get(ov, ov)} 未配置或无效,集级设定未生效,按全局执行;"
+                               "请在控制台「生成模型」页 ComfyUI 渠道配置该运行方式或改回跟随全局")
+            elif not gmodel:
                 warning = f"本集视频模型 {ov} 未生效:当前渠道 {gprovider} 无模型 id(按工作流运行),按全局执行"
             elif eprov and eprov != gprovider:
                 warning = (f"本集视频模型 {ov} 属渠道 {eprov},当前视频渠道已改为 {gprovider},"
                            "该覆盖未生效(按全局执行);请重新为本集选模型或改回跟随全局")
             else:
                 base_model, base_source = ov, "episode"
-    rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
-    if provider == gprovider and gmodel and gmodel not in {r["id"] for r in rows}:
-        rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
+    if provider == "comfyui":
+        rows = comfy_mode_options((cfg.get("video") or {}).get("comfyui"))
+    else:
+        rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
+        if provider == gprovider and gmodel and gmodel not in {r["id"] for r in rows}:
+            rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
     overridable = provider != "comfyui" and bool(base_model)
     return {"provider": provider, "provider_source": provider_source, "global_provider": gprovider,
-            "overridable": overridable,
+            "overridable": overridable, "mode_switchable": provider == "comfyui",
             "global_model": gmodel, "global_label": glabel, "candidates": rows,
             "base_model": base_model, "base_label": video_model_label(base_model, provider) if base_model else glabel,
             "base_source": base_source,
@@ -5062,7 +5110,8 @@ def resolve_episode_settings(project: str, ep: str, cfg: dict | None = None,
             "model_label": video_model_label(model, provider) if model else cand["global_label"],
             "global_model": cand["global_model"], "global_label": cand["global_label"],
             "episode_model": cand["episode_model"], "episode_provider": cand["episode_provider"],
-            "overridable": cand["overridable"], "candidates": cand["candidates"],
+            "overridable": cand["overridable"], "mode_switchable": cand.get("mode_switchable", False),
+            "candidates": cand["candidates"],
             "skill_id": sid, "skill_dir": c.get("dir", ""), "skill_path": c.get("path", ""),
             "skill_mode": smode, "episode_skill_mode": emode,
             "skill_source": "global" if emode == "global" else "episode",
@@ -5360,20 +5409,27 @@ async def api_epsettings_set(body: dict):
     if provider and provider == cand["provider"]:
         provider = ""   # 选了全局同款渠道 = 渠道跟随全局
     if provider:
-        if provider not in VIDEO_MODEL_CATALOG:
+        allowed = episode_provider_models(cfg, provider)
+        if not allowed:
             raise ServiceError(400, f"视频渠道 {provider} 无模型目录,不支持按集切换")
         if not video_provider_configured(cfg, provider):
             raise ServiceError(400, f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
-        allowed = {m for m, _ in VIDEO_MODEL_CATALOG[provider]}
         if not model:
             model = next(p["default_model"] for p in video_provider_options(cfg) if p["id"] == provider)
         if model not in allowed:
             raise ServiceError(400, f"模型 {model} 不在视频渠道 {provider} 的可选目录内")
+        if not allowed[model]:
+            raise ServiceError(400, f"ComfyUI 运行方式「{COMFY_MODE_LABELS.get(model, model)}」未配置,"
+                                    "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
     elif model:
-        if not cand["overridable"]:
+        if not (cand["overridable"] or cand.get("mode_switchable")):
             raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持按集切换模型")
-        if model not in {c["id"] for c in cand["candidates"]}:
+        row = next((c for c in cand["candidates"] if c["id"] == model), None)
+        if row is None:
             raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内")
+        if row.get("configured") is False:
+            raise ServiceError(400, f"ComfyUI 运行方式「{row.get('label', model)}」未配置,"
+                                    "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
         if model == cand["global_model"]:
             model = ""   # 选了全局同款 = 跟随全局
     ps = (body or {}).get("prompt_skill") or {}
@@ -7080,9 +7136,11 @@ def _preview_storyboard(project: str, ep: str):
                            "global_provider": eres["global_provider"],
                            "model": eres["video_model"],
                            "label": eres["model_label"], "overridable": eres["overridable"],
+                           "mode_switchable": eres.get("mode_switchable", False),
                            "source": eres["model_source"], "episode_model": eres["episode_model"],
                            "global_model": eres["global_model"], "global_label": eres["global_label"],
-                           "candidates": [{"id": c["id"], "label": video_model_label(c["id"], eres["provider"])}
+                           "candidates": [{"id": c["id"], "label": video_model_label(c["id"], eres["provider"]),
+                                           **({"configured": c["configured"]} if "configured" in c else {})}
                                           for c in eres["candidates"]]}
     data["prompt_skill"] = {"mode": eres["skill_mode"], "episode_mode": eres["episode_skill_mode"],
                             "source": eres["skill_source"], "skill_id": eres["skill_id"],
@@ -7283,8 +7341,13 @@ def _image_channels() -> list[dict]:
             configured = bool(os.environ.get("VIDEOAGENTS_USER_JWT"))
             model = str(pc.get("profile_code") or "")
         elif pid == "comfyui":
-            configured = bool(pc.get("url") or pc.get("cloud_api_key"))
-            model = str(pc.get("workflow") or "")
+            # 二级下拉 = 运行方式(本地/云端/RunningHub 国内/国际);model 槽存的是运行方式 id
+            modes = comfy_mode_options(pc)
+            configured = any(m["configured"] for m in modes)
+            model = comfy_global_mode(pc)
+            rows.append({"id": pid, "configured": configured, "model": model, "active": pid == img.get("provider"),
+                         "modes": modes})
+            continue
         elif pid == "minimax":
             configured = bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key"))
             model = str(pc.get("custom_model") or pc.get("model") or "")
@@ -7320,6 +7383,11 @@ def image_model_pref(kind: str) -> dict:
     return {"provider": provider, "model": str(sm.get("model") or "") if provider else ""}
 
 
+def comfy_mode_configured_image(mode: str) -> bool:
+    from modules.genmedia import comfy_mode_configured
+    return comfy_mode_configured((load_genconfig().get("image") or {}).get("comfyui"), mode)
+
+
 def sketch_model_pref() -> dict:
     return image_model_pref("sketch")
 
@@ -7328,8 +7396,9 @@ async def api_image_model_get(kind: str):
     if kind not in IMAGE_PREF_KINDS:
         raise ServiceError(404, f"kind must be one of {IMAGE_PREF_KINDS}")
     img = (load_genconfig().get("image") or {})
+    gmodel = comfy_global_mode(img.get("comfyui")) if img.get("provider") == "comfyui" else active_image_model()
     return {"kind": kind, **image_model_pref(kind), "channels": _image_channels(),
-            "global": {"provider": img.get("provider") or "", "model": active_image_model()}}
+            "global": {"provider": img.get("provider") or "", "model": gmodel}}
 
 
 async def api_image_model_set(kind: str, body: dict):
@@ -7340,6 +7409,14 @@ async def api_image_model_set(kind: str, body: dict):
     model = str(body.get("model") or "").strip()
     if provider and provider not in IMAGE_PROVIDERS:
         raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    if provider == "comfyui":
+        # ComfyUI 的二级选项是运行方式;空 = 沿用「生成模型」页保存的运行方式
+        model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))
+        if model not in COMFY_MODES:
+            raise ServiceError(400, f"ComfyUI 运行方式须为 {COMFY_MODES} 之一,收到 {model}")
+        if not comfy_mode_configured_image(model):
+            raise ServiceError(400, f"ComfyUI 运行方式「{COMFY_MODE_LABELS[model]}」未配置,"
+                                    "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
     prefs = STATE.get("image_model_prefs")
     if not isinstance(prefs, dict):
         prefs = STATE["image_model_prefs"] = {}

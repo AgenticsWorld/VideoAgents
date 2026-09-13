@@ -6,10 +6,13 @@
  * 数据:GET/POST /api/v1/config/image-model/<kind>(kind: sketch|scenes|characters|creatures|props),
  *      存服务端 state.json image_model_prefs[kind],与全局「生成模型」设置分开;空渠道 = 跟随全局。
  * 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用该类别的选择(草图由 storyboard_sketch.py 显式传)。
- * 模型清单 IMAGE_MODEL_LISTS 来自 image-models.js(与「生成模型」页共用)。 */
+ * 模型清单 IMAGE_MODEL_LISTS 来自 image-models.js(与「生成模型」页共用)。
+ * ComfyUI(2026-09-13):二级下拉不是模型而是运行方式(本地/云端/RunningHub 国内/国际),清单与已配置标记由
+ *      接口 channels[].modes 给出,值仍走 model 槽(local|cloud|rh_cn|rh_ai),未配置的方式置灰。 */
 (function(){
   'use strict';
   const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',comfyui:'ComfyUI'};
+  const COMFY_MODE_NAMES={local:'本地',cloud:'云端(Comfy Cloud)',rh_cn:'RunningHub 国内(.cn)',rh_ai:'RunningHub 国际(.ai)'};
   const tt=s=>(window.t?window.t(s):s);
   const ff=(s,p)=>(window.I18N&&window.I18N.f?window.I18N.f(s,p):s);
   const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
@@ -44,7 +47,16 @@
     function fillModels(model){
       const p=effProv();sm.innerHTML='';
       const ch=(D.channels||[]).find(c=>c.id===p)||{};
-      if(!p||p==='comfyui'){sm.hidden=true;ci.hidden=true;return}
+      if(!p){sm.hidden=true;ci.hidden=true;return}
+      if(p==='comfyui'){   // 二级 = 运行方式;默认 = 「生成模型」页保存的运行方式(ch.model)
+        ci.hidden=true;sm.hidden=false;
+        const modes=(ch.modes&&ch.modes.length)?ch.modes:Object.keys(COMFY_MODE_NAMES).map(id=>({id,configured:true}));
+        modes.forEach(m=>{const o=document.createElement('option');o.value=m.id;
+          o.textContent=tt(COMFY_MODE_NAMES[m.id]||m.label||m.id)+(m.configured?'':' ('+tt('未配置')+')');o.disabled=!m.configured;sm.appendChild(o)});
+        const want=(model&&modes.some(m=>m.id===model))?model:(ch.model||'local');
+        sm.value=modes.some(m=>m.id===want&&m.configured)?want:((modes.find(m=>m.configured)||{}).id||want);
+        return;
+      }
       sm.hidden=false;
       const list=((window.IMAGE_MODEL_LISTS||{})[p]||[]).slice();
       if(ch.model&&!list.some(x=>x[0]===ch.model))list.unshift([ch.model,ch.model+' ('+tt('当前全局')+')']);
@@ -58,7 +70,8 @@
       sp.innerHTML='';
       const g=D.global||{};
       const o0=document.createElement('option');o0.value='';
-      const gfull=ff('跟随全局({p} · {m})',{p:PROV_NAMES[g.provider]||g.provider||'—',m:clip(g.model||'—',28)});
+      const gm=g.provider==='comfyui'?tt(COMFY_MODE_NAMES[g.model]||g.model||'—'):(g.model||'—');
+      const gfull=ff('跟随全局({p} · {m})',{p:PROV_NAMES[g.provider]||g.provider||'—',m:clip(gm,28)});
       o0.textContent=opt.compact?tt('跟随全局'):gfull;o0.title=gfull;sp.appendChild(o0);
       if(opt.compact)sp.title=gfull;
       (D.channels||[]).forEach(c=>{const o=document.createElement('option');o.value=c.id;
