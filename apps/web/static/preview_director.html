@@ -1118,12 +1118,14 @@ function updateQuadMedia(){
 }
 function syncQuad(now){
   if(!QUAD)return;
+  // 镜切换 / 过镜中点即刷新草图与背景图;不走 QSYNC 节流(那个计时器被下面成片纠偏占用,播放中永远轮不到这里)
+  const shot=currentShot(),qk=shot?shot.shot_id+':'+(TIME>shot.start+shot.duration_s/2):'';
+  if($('#q-plate').dataset.shot!==qk){$('#q-plate').dataset.shot=qk;updateQuadMedia()}
   const v=$('#q-video video');if(!v||!v.dataset.src)return;
   if(PLAYING){if(v.paused){try{v.currentTime=TIME;v.muted=QMUTED;v.play().catch(err=>{
       // 无用户手势时带声播放会被浏览器拦(NotAllowedError):退回静音继续同步画面,并提示点喇叭恢复声音
       if(!QMUTED&&err&&err.name==='NotAllowedError'){QMUTED=true;v.muted=true;$('#q-mute').textContent='🔇';toast(t('浏览器拦截了带声自动播放,成片已静音;点 🔇 恢复声音'));v.play().catch(()=>{})}})}catch(_){}}else if(now-QSYNC>500){QSYNC=now;if(Math.abs(v.currentTime-TIME)>0.2)v.currentTime=TIME}}
   else{if(!v.paused)v.pause();if(Math.abs(v.currentTime-TIME)>0.06)v.currentTime=TIME}
-  if(now-QSYNC>500){QSYNC=now;const shot=currentShot();if(shot&&$('#q-plate').dataset.shot!==shot.shot_id+':'+(TIME>shot.start+shot.duration_s/2)){$('#q-plate').dataset.shot=shot.shot_id+':'+(TIME>shot.start+shot.duration_s/2);updateQuadMedia()}}
 }
 /* ---------- v3:镜头数据条(焦段 / 机高 / 俯仰 / 主体距离 / 景别)+ 轴线读数 ---------- */
 function subjectInfo(){
