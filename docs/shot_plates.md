@@ -37,10 +37,10 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 
 - **母图**：每个机位范围只出一张广角图，垂直视场 ≥ 55°（≈23 mm 等效，16:9 下水平 ≈85°；分镜本身更宽时 = 分镜视场 + 4°），朝向/俯仰取范围内待出各镜的平均方向（装不下的同伴逐个剔除），位置取这些镜机位的质心。**机位范围**（2026-09-14 二订，用户按 liaozhai3 SCN-0005 实跑裁定——0.6 m 时 20 镜出 13 张母图，朝向一致相距 1 m 内的三个机位各出一张是浪费）：同场景、同光照方案，水平距 ≤ 2 m 且 ≤ 本镜主体距离的 80%，机高差 ≤ 0.5 m（不再要求同机高档；贴地 <0.5 m 只与贴地合）。派生是纯旋转不补视差，背景板只作视频参考，中等视差可接受。
 - **母图尺寸**：长边 2880，面积封顶 4,600,000 px——方舟 Seedream 5.0 pro 单图硬上限 4,624,220 px（2026-09-14 实跑 2880×1620 全部被拒 `image area must be at most 4624220 pixels`），16:9 下落到 2858×1608。库 `assets/concepts/scenes/<sid>/plates/index.json` + `<key>.png` + `<key>.json` + `<key>.pano.jpg` + `<key>.whitebox.jpg`，条目 `master: true`，`key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_w<母图fov°>`，跨组、跨集共享。
-- **派生**：分镜图 = 母图按本镜朝向/俯仰/焦距做纯旋转单应重采样（同一机位下任意转向 + 焦距变化都是母图的精确单应，不需要深度；`view_maps` + `cv2.remap` Lanczos），文件 `<母图key>.view_b<朝向>_p<俯仰>_f<fov>.png`，长边 1920。派生条件：本镜视锥四角整个落在母图画幅内（`view_fits`），不满足另出母图。**不做生成式精修**——精修就是把参考图重造的动作。窄镜裁到 40 mm 仍有约 1500 像素源、85 mm 约 700 像素源，Lanczos 放大即可，背景板不需要更多细节。
-- 派生图没有浅景深：背景板本就该全幅清晰，景深由视频模型加；母图提示词与风格串因此剔除浅景深/虚化子句，负面词加 bokeh / shallow depth of field / vignette。
+- **分镜直接引用母图整图**（2026-09-14 三订，用户裁定）：不按本镜焦距裁窄——裁窄后画面信息太少，视频模型在生成时会自行发挥不存在的元素；宁可给视频模型一张比镜头更宽的图，由 `Shot plates:` 段说明「这是该机位的广角母图，镜头画面是其中更紧的一块，不得凭空添加图中没有的陈设」。哪些镜能用同一张母图仍按几何判：本镜视锥四角整个落在母图画幅内（`view_fits`），不满足另出母图。集索引每镜记 `view{master_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, distance_m}`（本镜在母图里的位置，只记录不裁切）。曾实现过的纯旋转单应派生（`view_maps` + `cv2.remap`，`<母图key>.view_b…_p…_f….png`）已删除。
+- 母图不要浅景深：背景板本就该全幅清晰，景深由视频模型加；母图提示词与风格串因此剔除浅景深/虚化子句，负面词加 bokeh / shallow depth of field / vignette。
 - 同一次运行按 fov 从宽到窄决策，最宽的镜先定母图；本次决定新出的母图也参与后续镜位的派生判断，不重复出图。
-- 集索引 `directing/<ep>/shot_plates.json`：每镜 `plates[]{role: start|end, key（母图）, file（派生图）, reuse: crop, crop{master_key, from_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, source_px}, camera（本镜）}`；机位与当前 `episode.json` 不一致视为过期（机检 WARN）。统计口径：`new` = 新出母图张数，`crop` = 派生分镜图张数。
+- 集索引 `directing/<ep>/shot_plates.json`：每镜 `plates[]{role: start|end, key（母图）, file（母图）, reuse: new|library, view{…}, camera（本镜）}`；机位与当前 `episode.json` 不一致视为过期（机检 WARN）。统计口径：`new` = 新出母图张数，`library` = 引用已有或本次母图的镜数。
 - 旧口径（已废止）：按机位指纹容差复用（朝向 ±20°、机位 6 m、fov ±15°）+ 同轴更宽库图中心裁切 `<key>.crop_f<fov>.png`；2026-09-14 前逐镜直出的库条目（有 `pano_ref` 无 `master`）与更早的白模帧直出条目同为 legacy：已在集索引里的镜照旧引用，新决策不再复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
 
 ## 出图（2026-09-10 起全景制，见 `docs/scene_panos.md`）

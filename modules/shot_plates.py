@@ -4,16 +4,17 @@
 (同一白模调度 Agent 导出 camera.mp4)→ p6-shot-plates(本模块)→ g6「H3A-分镜确认」→ p7-prompt(sync 把背景图接进组 refs)。
 
 数据:
-  - 库(母图制,2026-09-14;按机位建母图,不按分镜建图):assets/concepts/scenes/<sid>/plates/index.json + <key>.png(母图,长边 2880)
-      + <key>.json + <key>.pano.jpg + <key>.whitebox.jpg + <key>.view_b<朝向>_p<俯仰>_f<fov>.png(按镜派生图,长边 1920)
+  - 库(母图制,2026-09-14;按机位建母图,不按分镜建图):assets/concepts/scenes/<sid>/plates/index.json + <key>.png(母图,长边 2880、
+      面积 ≤ 4.6 MP)+ <key>.json + <key>.pano.jpg + <key>.whitebox.jpg
       key = <lighting_scheme_id>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_w<母图fov°>,由首个需要它的机位命名,条目 master=true;
-      母图 = 该机位一张广角图(垂直视场 ≥ 55°≈23 mm,朝向取同机位待出各镜的平均方向);分镜图 = 母图按本镜朝向/俯仰/焦距
-      做纯旋转单应重采样(同机位下任意转向/焦距都是母图的精确单应,不需要深度),不再做生成式精修。派生条件:同场景、同光照方案、
-      同一机位范围(水平距 ≤ 2 m 且 ≤ 主体距离 80%、机高差 ≤ 0.5 m、贴地只与贴地合;母图位置取所服务各镜机位的质心)、
-      本镜视锥整个落在母图画幅内;不满足另出母图。旧口径(朝向 ±20°/机位 6 m/fov ±15° 容差复用 + 中心裁切)废止:
+      母图 = 该机位范围一张广角图(垂直视场 ≥ 55°≈23 mm,朝向取范围内待出各镜的平均方向,位置取它们机位的质心);
+      **分镜直接引用母图整图作背景参考,不按本镜焦距裁窄**(2026-09-14 三订,用户裁定:裁窄后画面信息太少,视频模型会自行发挥
+      不存在的元素;组 prompt 的 Shot plates 段写明「广角母图,镜头画面是其中更紧的一块」)。复用条件:同场景、同光照方案、
+      同一机位范围(水平距 ≤ 2 m 且 ≤ 主体距离 80%、机高差 ≤ 0.5 m、贴地只与贴地合)、本镜视锥整个落在母图画幅内(view_fits);
+      不满足另出母图。旧口径(朝向 ±20°/机位 6 m/fov ±15° 容差复用 + 中心裁切、逐镜按本镜焦距重投影直出)废止:
       窄焦距直接按全景重投影出图时参考图只剩一块纹理,模型把整间屋重造(liaozhai3 SCN-0005 反例)。
-  - 集索引(分镜只记指纹):directing/<ep>/shot_plates.json —— 每镜 plates[]{role:start|end, key(母图), file(派生图), reuse:crop,
-      crop{master_key, from_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, source_px}, camera(本镜)}
+  - 集索引(分镜只记指纹):directing/<ep>/shot_plates.json —— 每镜 plates[]{role:start|end, key(母图), file(母图), reuse:new|library,
+      view{master_key, master_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, distance_m}(本镜在母图里的位置,只记录), camera(本镜)}
   - 运镜分档(按 camera.json movement + 白模机位几何):静态/推拉变焦/摇俯仰 = 只出镜首一张;横移跟拍 = 位移 < 机位到主体距离的
     10% 按静态、否则镜首 + 镜尾两张;复杂轨迹 = 镜首 + 镜尾。镜尾图以镜尾白模帧为第一参考图、镜首成图为第二参考图、同 seed。
   - 出图(2026-09-10 起全景制,2026-09-14 起只出母图):先保证场景全景齐备(modules/scene_panos.py:锚点规划 → 白模深度全景 →
@@ -23,8 +24,8 @@
     (只擦到画幅边缘一线的几何不列)+ 风格串(剔除浅景深/虚化子句);白模干净帧仍渲(<key>.whitebox.jpg,预览/核对用)但不进 refs,
     俯视图不进 refs。库条目 pano_ref 记来源锚点/方案/空洞比;非母图的旧条目(legacy:无 pano_ref 的白模帧直出、或逐镜直出)
     不再被新决策复用,--repano 可把集内 legacy 记录整体重出。图像模型不支持 2:1 全景时整条链停下(PanoUnsupported,
-    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220)、
-    派生图长边 1920,按项目画幅;渠道 = 控制台默认图像模型。
+    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220),按项目画幅;
+    渠道 = 控制台默认图像模型。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -451,56 +452,14 @@ def view_fits(master_cam: dict, shot_cam: dict, aspect: float, margin: float = 0
     return True
 
 
-def view_maps(master_cam: dict, shot_cam: dict, aspect: float, mw: int, mh: int, ow: int, oh: int):
-    """分镜图每个像素 → 母图像素坐标(cv2.remap 用的 mapx/mapy,float32 [oh, ow])。同机位纯旋转 + 焦距变化,不需要深度。"""
-    import numpy as np
-    f1, r1, u1 = camera_basis(master_cam); f2, r2, u2 = camera_basis(shot_cam)
-    tv1, th1 = _tans(master_cam, aspect); tv2, th2 = _tans(shot_cam, aspect)
-    xs = ((np.arange(ow) + .5)/ow*2 - 1)*th2
-    ys = (1 - (np.arange(oh) + .5)/oh*2)*tv2
-    gx, gy = np.meshgrid(xs, ys)
-    d = gx[..., None]*np.asarray(r2) + gy[..., None]*np.asarray(u2) + np.asarray(f2)
-    z = np.maximum(d @ np.asarray(f1), 1e-9)
-    x1 = (d @ np.asarray(r1))/z/th1
-    y1 = (d @ np.asarray(u1))/z/tv1
-    mapx = ((x1 + 1)/2*mw - .5).astype(np.float32)
-    mapy = ((1 - y1)/2*mh - .5).astype(np.float32)
-    return mapx, mapy
-
-
-def view_tag(facts: dict) -> str:
-    return f"view_b{int(round(facts['bearing_deg'])):03d}_p{int(round(facts['pitch_deg'])):+d}_f{int(round(facts['fov_v_deg']))}"
-
-
-def derive_info(master: dict, facts: dict, aspect: float, mw: int | None = None) -> dict:
+def view_info(master: dict, facts: dict) -> dict:
+    """本镜在母图里的位置(只记录,不裁切;2026-09-14 三订):本镜视场占母图的比例与朝向/俯仰偏差,供预览与排查。"""
     mc = master['camera']
     frac = math.tan(math.radians(facts['fov_v_deg']/2))/math.tan(math.radians(mc['fov_v_deg']/2))
-    info = {'master_key': master['key'], 'from_fov': mc['fov_v_deg'], 'fov': facts['fov_v_deg'], 'fraction': round(frac, 3),
+    return {'master_key': master['key'], 'master_fov': mc['fov_v_deg'], 'fov': facts['fov_v_deg'], 'fraction': round(frac, 3),
             'bearing_delta_deg': round(angle_diff(mc['bearing_deg'], facts['bearing_deg']), 1),
-            'pitch_delta_deg': round(facts['pitch_deg'] - mc.get('pitch_deg', 0), 1)}
-    if mw:
-        info['source_px'] = int(round(frac*mw))
-    return info
-
-
-def derive_plate(base: Path, master: dict, facts: dict, aspect: float, width: int, height: int) -> tuple[str, dict]:
-    """母图 → 本镜背景图:按本镜朝向/俯仰/焦距做纯旋转单应重采样(Lanczos)→ plates/<母图key>.view_b…_p…_f….png;
-    已存在且不旧于母图则复用。不做生成式精修(精修就是把参考图重造的动作)。"""
-    import cv2
-    src = base/master['file']
-    out_rel = str(Path(master['file']).with_name(f"{master['key']}.{view_tag(facts)}.png"))
-    out = base/out_rel
-    im = cv2.imread(str(src), cv2.IMREAD_COLOR)
-    if im is None:
-        raise FileNotFoundError(f'母图无法读取:{src}')
-    mh, mw = im.shape[:2]
-    info = derive_info(master, facts, aspect, mw)
-    if out.is_file() and out.stat().st_mtime >= src.stat().st_mtime:
-        return out_rel, info
-    mapx, mapy = view_maps(cam_of_facts(master['camera']), cam_of_facts(facts), aspect, mw, mh, width, height)
-    warped = cv2.remap(im, mapx, mapy, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
-    cv2.imwrite(str(out), warped)
-    return out_rel, info
+            'pitch_delta_deg': round(facts['pitch_deg'] - mc.get('pitch_deg', 0), 1),
+            'distance_m': round(math.dist(mc['position'], facts['position']), 2)}
 
 
 def same_station(station: dict, facts: dict) -> bool:
@@ -799,8 +758,8 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
 
 def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None,
                 repano=False) -> dict:
-    """出图主流程(母图制,2026-09-14):查母图库 → 能派生的镜直接从母图单应派生 → 缺的机位出广角母图(场景全景齐备 → 渲白模帧 →
-    全景按母图机位重投影 → 出图 → 入库)→ 再派生 → 写集索引。返回统计:new = 新出母图张数,crop = 从母图派生的分镜图张数。
+    """出图主流程(母图制,2026-09-14):查母图库 → 机位范围内且视锥装得下的镜直接引用母图整图 → 缺的机位出广角母图(场景全景齐备 →
+    渲白模帧 → 全景按母图机位重投影 → 出图 → 入库)→ 写集索引。返回统计:new = 新出母图张数,library = 引用已有/本次母图的镜数。
     repano:集索引里仍指向 legacy(非母图制)库图的镜视为需重做(可复用本次新出的母图)。
     图像模型不支持全景时抛 scene_panos.PanoUnsupported,一张背景图也不出。"""
     from modules import scene_panos
@@ -838,8 +797,11 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             decided.add(id(j))
             old = prev_plates.get(j['role'])
             cur = next((e for e in lib['plates'] if old and e['key'] == old.get('key')), None)
-            if (old and cur is not None and not force and not camera_stale(old.get('camera'), facts) and (base/old['file']).is_file()
-                    and not (repano and is_legacy(cur))):
+            derived = bool(old and '.view_' in Path(old.get('file') or '').name)   # 2026-09-14 三订前按镜裁出的派生图:改回引用母图整图,不出图
+            if derived and not dry_run and (base/old['file']).is_file():
+                (base/old['file']).unlink()
+            if (old and cur is not None and not force and not derived and not camera_stale(old.get('camera'), facts)
+                    and (base/old['file']).is_file() and not (repano and is_legacy(cur))):
                 decisions.append({**j, 'mode': 'fresh', 'entry': cur,
                                   'file': old['file'], 'crop': old.get('crop'), 'reuse': old.get('reuse') or 'library'})
                 stats['skipped_fresh'] += 1
@@ -850,7 +812,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             # --force:目标镜不查库、重出母图(同指纹 key 覆盖原库条目);其余镜照常派生
             master = None if force else find_master(view, scheme, facts, aspect, base, require_file=not dry_run)
             if master is not None:
-                decisions.append({**j, 'mode': 'derive', 'entry': master, 'file': None, 'crop': None, 'reuse': 'crop'})
+                decisions.append({**j, 'mode': 'library', 'entry': master, 'file': None, 'crop': None, 'reuse': 'library'})
                 continue
             # 新母图:朝向取同场景/同方案、同一机位范围(same_station)且尚未决策的各镜平均方向,位置取它们的质心
             peers = [p for p in jobs if id(p) not in decided and p['scene_id'] == sid and p['scheme'] == scheme
@@ -869,7 +831,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             pending.setdefault(sid, []).append({'key': key, 'file': f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png",
                                                 'camera': mfacts, 'lighting_scheme_id': scheme, 'pending': True, 'master': True})
             decisions.append({**j, 'mode': 'new', 'entry': None, 'key': key, 'master_key': mkey, 'master_facts': mfacts,
-                              'whitebox_frame': wb_rel, 'file': None, 'crop': None, 'reuse': 'crop'})
+                              'whitebox_frame': wb_rel, 'file': None, 'crop': None, 'reuse': 'new'})
     if pending_frames:   # 白模干净帧本地渲染无成本,dry-run 也渲,便于核对构图
         render_clean_frames(base, episode, pending_frames, wb_fmt['width'], wb_fmt['height'])
     # 场景全景齐备(2026-09-10):有新出决策的场景先保证锚点全景(按本集全部机位规划,按新决策所用光照方案出图);
@@ -899,7 +861,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             'movement': next((c.get('movement') for g in episode['groups'] for c in g['cameras'] if c['shot_id'] == shot_id), None),
             'tier': j0['tier'],
             'plates': [{'role': d['role'], 'key': d['entry']['key'], 'file': d['file'], 'reuse': d['reuse'],
-                        'crop': d.get('crop'), 'camera': d['facts'], 'whitebox_frame': d['entry'].get('whitebox_frame')}
+                        'crop': d.get('crop'), 'view': d.get('view'), 'camera': d['facts'], 'whitebox_frame': d['entry'].get('whitebox_frame')}
                        for d in ds],
             'written_at': dt.datetime.now().isoformat(timespec='seconds')}
         save_episode_index(base, ep, idx)
@@ -919,16 +881,6 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     group_first[g['group_id']] = {'key': p['key'], 'file': p['file']}   # 单镜重出时以同组已有成图为第二参考图
                     break
     channel = None
-
-    def derive(d, master):
-        """从母图派生本镜背景图(dry-run 只算文件名与派生信息)。"""
-        if dry_run:
-            d['file'] = str(Path(master['file']).with_name(f"{master['key']}.{view_tag(d['facts'])}.png"))
-            d['crop'] = derive_info(master, d['facts'], aspect)
-        else:
-            d['file'], d['crop'] = derive_plate(base, master, d['facts'], aspect, width, height)
-        stats['crop'] += 1
-
     for d in decisions:
         sid, shot_id, role = d['scene_id'], d['shot_id'], d['role']
         lib = libs[sid]
@@ -937,7 +889,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             generated[(shot_id, role)] = d['entry']; by_key[d['entry']['key']] = d['entry']
             group_first.setdefault(d['group_id'], d['entry'])
             continue
-        if d['mode'] == 'derive':
+        if d['mode'] == 'library':
+            # 2026-09-14 三订(用户裁定):分镜直接引用母图整图,不再按本镜焦距裁窄——裁窄后画面信息太少,视频模型会自行发挥不存在的元素
             entry = d['entry']
             if entry.get('pending'):
                 entry = by_key.get(entry['key'])
@@ -946,12 +899,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     stats['plates'] -= 1
                     continue
                 d['entry'] = entry
-            try:
-                derive(d, entry)
-            except Exception as error:  # noqa: BLE001
-                stats['errors'].append(f'{shot_id}/{role}: 母图派生失败 {error}')
-                stats['plates'] -= 1
-                continue
+            d['file'] = entry['file']; d['view'] = view_info(entry, d['facts'])
+            stats['library'] += 1
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
             group_first.setdefault(d['group_id'], entry)
             continue
@@ -1029,17 +978,10 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
             lib['plates'] = [e for e in lib['plates'] if e['key'] != entry['key']] + [entry]   # --force 同 key 覆盖
             save_library(base, sid, lib)
-            for stale in (base/out_rel).parent.glob(f"{entry['key']}.view_*.png"):
-                stale.unlink()   # 母图重出后旧派生图失效
-        d['entry'] = entry
+        d['entry'] = entry; d['file'] = out_rel; d['view'] = view_info(entry, d['facts'])
         by_key[entry['key']] = entry
         stats['new'] += 1
         log(f"saved: {out_rel}")
-        try:
-            derive(d, entry)
-        except Exception as error:  # noqa: BLE001
-            stats['errors'].append(f'{shot_id}/{role}: 母图派生失败 {error}')
-            continue
         generated[(shot_id, role)] = entry
         group_first.setdefault(d['group_id'], entry)
         flush_shot(shot_id)   # 本镜到此为止已落地的图先写索引(终点图若后续才出,再次 flush 覆盖)
@@ -1179,7 +1121,7 @@ def build_block_v25(plates: list) -> str:
         seen.add(p['file'])
         users = [f"Shot {q['shot_no']}" + ('落幅' if q['role'] == 'end' else '') for q in plates if q['file'] == p['file']]
         lines.append(f"场景{labels[p['file']]}（{'、'.join(users)} 的机位，空场景 background plate）参考 [Image {p['index']}]，"
-                     "只采用空间布局、建筑、材质和光线，不采用图中任何人物。")
+                     "这是该机位的广角母图，镜头画面是其中更紧的一块：只采用空间布局、建筑、材质和光线，不采用图中任何人物，不得凭空添加图中没有的陈设。")
     return (BLOCK_KEY + ' 【场景】' + ''.join(lines)
             + '各场景只在点名的镜头里激活；同一地点的不同机位是不同场景槽位，不得合并、不得把一个镜头的场景带进另一个镜头。'
             '背景图只作场景参照：画面不得停在空场，人物与动作按各 Shot 段描述。')
@@ -1204,17 +1146,18 @@ def build_block_h3(plates: list) -> str:
     for p in plates:
         n = p['index']
         role = 'end-of-move composition anchor' if p['role'] == 'end' else 'composition anchor'
-        parts.append(f"<Picture {n}> ([Image {n}]) is the empty background plate and {role} of [Shot {p['shot_no']}], photographed from "
-                     f"that shot's exact camera with nobody in it — reference generation for architecture, set dressing, lighting and camera space only")
-    return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each shot follows only its own plate for set and framing; the plates are set references, '
-            'never frames to hold on — keep the subjects and actions described in each shot.')
+        parts.append(f"<Picture {n}> ([Image {n}]) is the wide-angle empty background plate and {role} of [Shot {p['shot_no']}], photographed from "
+                     f"that shot's camera position with nobody in it — the shot frames a tighter view inside this plate; reference for architecture, "
+                     f"set dressing, lighting and camera space only, never invent set elements that are not in the plate")
+    return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each shot follows only its own plate for its set; the plates are wide set references, '
+            'never frames to hold on — keep the framing, subjects and actions described in each shot.')
 
 
 def anchor_line_h3(plates: list, shot_no: int) -> str:
     mine = [p for p in plates if p['shot_no'] == shot_no]
     others = [p for p in plates if p['shot_no'] != shot_no]
     use = ' and '.join(f"<Picture {p['index']}> ([Image {p['index']}])" + (' at the end of the move' if p['role'] == 'end' else '') for p in mine)
-    text = f"Plate anchor: this shot's set and framing correspond to {use}."
+    text = f"Plate anchor: this shot's set corresponds to {use} — a wide-angle plate, the shot frames a tighter view inside it."
     if others:
         seen = []
         for p in others:
@@ -1231,16 +1174,17 @@ def build_block(plates: list) -> str:
         n = p['index']
         if p['role'] == 'start':
             two = any(q['shot_id'] == p['shot_id'] and q['role'] == 'end' for q in plates)
-            parts.append(f"[Image {n}] is the empty background plate of Shot {p['shot_no']}"
+            parts.append(f"[Image {n}] is the wide-angle empty background plate of Shot {p['shot_no']}"
                          + (" (start plate, where the camera move begins)" if two else '')
-                         + ", photographed from that shot's exact camera with nobody in it — match its framing, perspective, camera height, "
-                           "set dressing and lighting, then add the characters")
+                         + ", photographed from that shot's camera position with nobody in it — the shot frames a tighter view inside this plate: "
+                           "keep its place, walls, furniture, materials, camera height and lighting, frame it as the Shot describes, never invent "
+                           "set elements that are not in the plate, then add the characters")
         else:
-            parts.append(f"[Image {n}] is the end plate of Shot {p['shot_no']} (where the camera move ends); the shot travels from the "
-                         "start plate's framing to this framing")
+            parts.append(f"[Image {n}] is the wide-angle end plate of Shot {p['shot_no']} (where the camera move ends); the shot travels from a "
+                         "tighter view inside the start plate to a tighter view inside this plate")
     return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each Shot uses only its own plate for its background and camera angle — do not carry one '
-            "Shot's plate into another Shot. Background plates are set references only: never freeze the shot on them, keep the characters and "
-            'motion described in each Shot.')
+            "Shot's plate into another Shot. Background plates are wide set references only: never freeze the shot on them, keep the framing, "
+            'characters and motion described in each Shot.')
 
 
 def _remap_images(text: str, old: list, new: list) -> tuple[str, list]:
