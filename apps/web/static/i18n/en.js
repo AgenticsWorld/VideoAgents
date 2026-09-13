@@ -1992,6 +1992,7 @@ window.I18N_DICT = {
 "建模依据与检查 ({count})": "Modeling basis and checks ({count})",
 "正在加载场景白模…": "Loading scene blockout…",
 "正在加载分镜组白模…": "Loading storyboard group blockout…",
+"如果长时间未完成加载，点击右上角刷新按钮": "If loading takes too long, click the Refresh button in the top-right corner",
 "3D 加载失败：{error}": "3D loading failed: {error}",
 "场景白模尚不可用：{error}": "Scene blockout unavailable: {error}",
 "白模加载失败：{error}": "Blockout loading failed: {error}",

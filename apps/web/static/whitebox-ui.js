@@ -142,7 +142,7 @@ function failGroup(host,message){
 }
 function retryGroup(host){
   pending.delete(host);groupPanels.delete(host);
-  host.textContent=t('正在加载分镜组白模…');
+  host.textContent=t('正在加载分镜组白模…')+' '+t('如果长时间未完成加载，点击右上角刷新按钮');
   if(groupObserver){groupObserver.unobserve(host);groupObserver.observe(host);}
 }
 async function acquireGroup(st){

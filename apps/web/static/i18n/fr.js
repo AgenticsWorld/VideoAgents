@@ -1953,6 +1953,7 @@ window.I18N_DICT = {
 "建模依据与检查 ({count})": "Bases de modélisation et contrôles ({count})",
 "正在加载场景白模…": "Chargement de la maquette de scène…",
 "正在加载分镜组白模…": "Chargement de la maquette du groupe de plans…",
+"如果长时间未完成加载，点击右上角刷新按钮": "Si le chargement prend trop de temps, cliquez sur le bouton Actualiser en haut à droite",
 "3D 加载失败：{error}": "Échec du chargement 3D : {error}",
 "场景白模尚不可用：{error}": "Maquette de scène indisponible : {error}",
 "白模加载失败：{error}": "Échec du chargement de la maquette : {error}",

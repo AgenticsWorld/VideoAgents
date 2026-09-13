@@ -1953,6 +1953,7 @@ window.I18N_DICT = {
 "建模依据与检查 ({count})": "Modellierungsgrundlagen und Prüfungen ({count})",
 "正在加载场景白模…": "Szenen-Blockmodell wird geladen…",
 "正在加载分镜组白模…": "Blockmodell der Einstellungsgruppe wird geladen…",
+"如果长时间未完成加载，点击右上角刷新按钮": "Wenn das Laden zu lange dauert, klicken Sie oben rechts auf „Aktualisieren“",
 "3D 加载失败：{error}": "3D-Laden fehlgeschlagen: {error}",
 "场景白模尚不可用：{error}": "Szenen-Blockmodell nicht verfügbar: {error}",
 "白模加载失败：{error}": "Laden des Blockmodells fehlgeschlagen: {error}",

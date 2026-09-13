@@ -1953,6 +1953,7 @@ window.I18N_DICT = {
 "建模依据与检查 ({count})": "Cơ sở dựng mô hình và kiểm tra ({count})",
 "正在加载场景白模…": "Đang tải mô hình khối cảnh…",
 "正在加载分镜组白模…": "Đang tải mô hình khối nhóm phân cảnh…",
+"如果长时间未完成加载，点击右上角刷新按钮": "Nếu tải quá lâu, hãy nhấn nút Làm mới ở góc trên bên phải",
 "3D 加载失败：{error}": "Tải 3D thất bại: {error}",
 "场景白模尚不可用：{error}": "Mô hình khối cảnh chưa khả dụng: {error}",
 "白模加载失败：{error}": "Tải mô hình khối thất bại: {error}",

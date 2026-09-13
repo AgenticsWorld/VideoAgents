@@ -1953,6 +1953,7 @@ window.I18N_DICT = {
 "建模依据与检查 ({count})": "Dasar pemodelan dan pemeriksaan ({count})",
 "正在加载场景白模…": "Memuat model blok adegan…",
 "正在加载分镜组白模…": "Memuat model blok grup storyboard…",
+"如果长时间未完成加载，点击右上角刷新按钮": "Jika pemuatan terlalu lama, klik tombol Muat ulang di pojok kanan atas",
 "3D 加载失败：{error}": "Gagal memuat 3D: {error}",
 "场景白模尚不可用：{error}": "Model blok adegan belum tersedia: {error}",
 "白模加载失败：{error}": "Gagal memuat model blok: {error}",
