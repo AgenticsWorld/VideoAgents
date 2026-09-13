@@ -227,7 +227,7 @@ phases:
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
                                costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
-      - { id: g6s, gate: true, human: true, checkpoint: H3S-故事板确认, depends_on: [p6-storyboard] }   # 2026-09-11:用户在「📋 故事板预览」页(/preview/board)看分镜草案逐场逐镜表(可按需出铅笔草图,草图不是签字前置)后签字;未签字不派 shot-planning;签字后 storyboard.json 又改动则页面标「签字已过期」,orchestrator 重新建单
+      - { id: g6s, gate: true, human: true, checkpoint: H3S-故事板确认, depends_on: [p6-storyboard] }   # 2026-09-11:用户在「📋 故事板」页(/preview/board)看分镜草案逐场逐镜表(可按需出铅笔草图,草图不是签字前置)后签字;未签字不派 shot-planning;签字后 storyboard.json 又改动则页面标「签字已过期」,orchestrator 重新建单
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [g6s],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
           validation: { auto: [duration_sum_pm_10pct, id_refs_valid, shot_ids_unique,

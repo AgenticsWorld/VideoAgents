@@ -1,5 +1,5 @@
 /* 对白语音库面板(2026-09-13,输出设置「生成对白语音」output.dialogue_tts)
-   故事板预览页(动态样片下方)与分镜预览页(白模样片下方)共用:显示库现状(总句/一致/过期/缺失/未选角)、
+   故事板页(动态样片下方)与分镜预览页(白模样片下方)共用:显示库现状(总句/一致/过期/缺失/未选角)、
    「刷新对白语音」按钮(POST /episodes/<ep>/dialogue-tts/sync,宿主后台跑 code/dialogue_tts.py),运行中自行轮询
    GET /episodes/<ep>/dialogue-tts 并把 #dttsbox 重绘;开关关闭只显示一行提示。库文件 assets/audio/voice/<ep>/tts/。 */
 (function(){

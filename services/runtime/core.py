@@ -4840,16 +4840,26 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "minimax": [
         ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
     ],
-    "openrouter": [
+    "openrouter": [   # 2026-09-13 对照 openrouter.ai/api/v1/videos/models 刷新
+        ("bytedance/seedance-2.5", "Seedance 2.5(字节;4-30 秒,480p/720p)"),
         ("bytedance/seedance-2.0", "Seedance 2.0(字节)"),
         ("bytedance/seedance-2.0-fast", "Seedance 2.0 Fast(字节)"),
+        ("bytedance/seedance-2.0-mini", "Seedance 2.0 Mini(字节;480p/720p)"),
+        ("minimax/hailuo-3-max", "MiniMax H3 Max(480p/768p)"),
+        ("minimax/hailuo-3", "MiniMax H3(2K)"),
         ("kwaivgi/kling-v3.0-pro", "Kling 3.0 Pro"),
         ("kwaivgi/kling-v3.0-std", "Kling 3.0 Standard"),
+        ("alibaba/wan-3.0", "Wan 3.0(阿里;2-30 秒)"),
+        ("alibaba/wan-3.0-prime", "Wan 3.0 Prime(阿里;快速版)"),
+        ("google/veo-3.1", "Veo 3.1(Google)"),
+        ("google/veo-3.1-fast", "Veo 3.1 Fast(Google)"),
+        ("google/veo-3.1-lite", "Veo 3.1 Lite(Google)"),
+        ("black-forest-labs/flux-3-video", "FLUX.3 Video(BFL)"),
+        ("runway/gen-4.5", "Runway Gen-4.5"),
+        ("x-ai/grok-imagine-video-1.5", "Grok Imagine Video 1.5(xAI)"),
         ("openai/sora-2-pro", "Sora 2 Pro"),
         ("minimax/hailuo-2.3", "Hailuo 2.3(MiniMax)"),
         ("alibaba/wan-2.7", "Wan 2.7(阿里)"),
-        ("google/veo-3.1", "Veo 3.1(Google)"),
-        ("google/veo-3.1-fast", "Veo 3.1 Fast(Google)"),
     ],
 }
 
@@ -6916,7 +6926,7 @@ def _preview_storyboard(project: str, ep: str):
     # 剧本/旁白全文 2026-09-11 起不再随分镜预览下发:剧情处理层产物统一在「剧本预览」页(api_preview_script)展示;
     # narration.md 这里只解析成逐条 narration_items 供分镜对位,原文不进载荷
     narration_md = _read_text(f"story/episodes/{ep}/narration.md")
-    # 导演计划 directing_plan.md 2026-09-11 起移到「故事板预览」页(api_preview_board)展示,本页不再下发
+    # 导演计划 directing_plan.md 2026-09-11 起移到「故事板」页(api_preview_board)展示,本页不再下发
     # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
     data["narration_items"] = [
         {"id": m.group(1), "anchor": m.group(2).strip(),
@@ -6983,7 +6993,7 @@ def _preview_storyboard(project: str, ep: str):
         return (drafts.get((m.group(1), int(m.group(2)))) if m else None) or {}
 
     def _board_key(s: dict) -> str | None:
-        # 本镜在故事板预览页的镜行键(S01-03),仅当故事板里真有这条草案镜才给(拆镜的多个镜指向同一行)
+        # 本镜在故事板页的镜行键(S01-03),仅当故事板里真有这条草案镜才给(拆镜的多个镜指向同一行)
         m = _SB_REF_RE.match(s.get("storyboard_ref") or "")
         key = sbb.shot_key(m.group(1), int(m.group(2))) if m else None
         return key if key in board_keys else None
@@ -7321,7 +7331,7 @@ async def api_preview_script(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_script, project, ep)
 
 
-# ---------------- 故事板预览(2026-09-11):分镜层产物 storyboard.json 的表格视图 + 分镜草图 ----------------
+# ---------------- 故事板(2026-09-11):分镜层产物 storyboard.json 的表格视图 + 分镜草图 ----------------
 # 页面 /preview/board:导演计划(Markdown 折叠)+ 每场资产头 + 逐镜表(编号/内容/草图);
 # 草图由 code/storyboard_sketch.py 出图(铅笔手绘小图,渠道/模型页面顶部单独选,存 STATE.image_model_prefs.sketch),
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
@@ -9829,13 +9839,22 @@ async def api_projconfig_set(body: dict):
     return {"ok": True, "project": project, "config": cfg}
 
 
+# 在线目录拉取失败时的兜底清单(2026-09-13 对照 /models?output_modalities=speech 刷新;Zonos 两款已下架)
 OPENROUTER_TTS_MODELS = [
     ("x-ai/grok-voice-tts-1.0", "Grok Voice TTS 1.0(xAI)· 20+语言/5音色(eve/ara/rex/sal/leo)"),
-    ("microsoft/mai-voice-2", "MAI-Voice-2(微软)· 英/西/法/德(en-US-Harper:MAI-Voice-2 等)"),
+    ("google/gemini-3.1-flash-tts-preview", "Gemini 3.1 Flash TTS(Google)· 多语言含中文,30 音色(Kore/Puck/Charon 等)"),
+    ("minimax/speech-2.8-hd", "MiniMax Speech 2.8 HD · 中文强/情绪丰富,任意 MiniMax 音色 ID"),
+    ("minimax/speech-2.8-turbo", "MiniMax Speech 2.8 Turbo · 低延迟,任意 MiniMax 音色 ID"),
+    ("fish-audio/s2.1-pro", "Fish Audio S2.1 Pro · 多语言含中文,自然语言控语气/多人对话"),
+    ("fish-audio/s2-pro", "Fish Audio S2 Pro · 多语言,旁白/多人对话"),
+    ("fish-audio/s1", "Fish Audio S1 · 多语言,括号标注控情绪"),
+    ("qwen/qwen-audio-3.0-tts-plus", "Qwen Audio 3.0 TTS Plus(阿里)· 中文高质量(longanlingxin/longanlufeng)"),
+    ("qwen/qwen-audio-3.0-tts-flash", "Qwen Audio 3.0 TTS Flash(阿里)· 中文快/省(loongjohn/longanhuan_v3.6)"),
+    ("microsoft/mai-voice-2", "MAI-Voice-2(微软)· 15 语言(en-US-Harper:MAI-Voice-2 等)"),
+    ("microsoft/mai-voice-2-flash", "MAI-Voice-2-Flash(微软)· 低延迟版(en-US-Harper:MAI-Voice-2 等)"),
+    ("deepgram/aura-2", "Deepgram Aura-2 · 多语言(aura-2-thalia-en 等)"),
     ("mistralai/voxtral-mini-tts-2603", "Voxtral Mini TTS(Mistral)· 英/法,音色带情绪(en_paul_neutral 等)"),
-    ("hexgrad/kokoro-82m", "Kokoro 82M · 唯一含中文音色(zf_xiaoxiao/zm_yunxi 等)/多语言/快"),
-    ("zyphra/zonos-v0.1-transformer", "Zonos v0.1 Transformer(Zyphra)· 英文 american/british 音色"),
-    ("zyphra/zonos-v0.1-hybrid", "Zonos v0.1 Hybrid(Zyphra)· 英文 american/british 音色"),
+    ("hexgrad/kokoro-82m", "Kokoro 82M · 8 语言含中文(zf_xiaobei/zm_yunxi 等)/快/便宜"),
     ("sesame/csm-1b", "CSM 1B(Sesame)· 英文对话/朗读音色(conversational/read_speech)"),
     ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
 ]
@@ -9909,18 +9928,19 @@ async def api_openrouter_models(modality: str = "image", refresh: bool = False):
     """列出 OpenRouter 目录里的模型(image/video/music/tts/text,带 10 分钟缓存)。"""
     if modality not in ("image", "video", "music", "tts", "text"):
         raise ServiceError(400, "modality must be one of image / video / music / tts / text")
-    if modality == "tts":
-        # TTS 模型无公开目录端点(/audio/speech 专用),返回内置清单;自定义 ID 走前端「自定义…」
-        return {"models": [{"id": i, "name": n} for i, n in OPENROUTER_TTS_MODELS], "cached": True}
     cached = _OPENROUTER_CACHE.get(modality)
     if cached and not refresh and time.time() - cached[0] < _OPENROUTER_TTL:
         return {"models": cached[1], "cached": True}
-    # image/video 有专门的媒体模型目录;music/text 无专目录,走总目录(music 按输出模态 audio 过滤)
+    # image/video 有专门的媒体模型目录;music/text 走总目录(music 按输出模态 audio 过滤);
+    # tts 走总目录 output_modalities=speech 过滤(默认只返回 text 输出,须显式传参)
     url = ("https://openrouter.ai/api/v1/models" if modality in ("music", "text")
+           else "https://openrouter.ai/api/v1/models?output_modalities=speech" if modality == "tts"
            else f"https://openrouter.ai/api/v1/{modality}s/models")
     try:
         data = await asyncio.to_thread(_http_get_json, url)
     except Exception as e:  # noqa: BLE001
+        if modality == "tts":   # 目录拉取失败:退回内置清单;自定义 ID 走前端「自定义…」
+            return {"models": [{"id": i, "name": n} for i, n in OPENROUTER_TTS_MODELS], "cached": True}
         raise ServiceError(502, f"Failed to fetch OpenRouter model list: {e}") from e
     models = []
     for m in data.get("data", []):
@@ -9930,6 +9950,8 @@ async def api_openrouter_models(modality: str = "image", refresh: bool = False):
         if modality == "music" and "audio" not in out_mods:
             continue
         if modality == "text" and "text" not in out_mods:
+            continue
+        if modality == "tts" and "speech" not in out_mods:
             continue
         models.append({"id": m.get("id"), "name": m.get("name") or m.get("id")})
     models.sort(key=lambda x: x["id"] or "")

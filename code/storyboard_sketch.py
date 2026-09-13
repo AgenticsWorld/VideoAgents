@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""分镜草图出图(故事板预览页,2026-09-11)。
+"""分镜草图出图(故事板页,2026-09-11)。
 
 按 `directing/<ep>/storyboard.json` 的草案镜出**铅笔手绘风格的小草图**,落
 `assets/storyboard/<ep>/<S01-01>.png`,台账 `assets/storyboard/<ep>/index.json`(schema storyboard_sketches/1.0)。

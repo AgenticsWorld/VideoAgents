@@ -14,9 +14,9 @@ window.JumpAnchor=(function(){
   var PAGES={script:['/preview/script','📜'],board:['/preview/board','📋'],storyboard:['/preview/storyboard','🎦']};
   var TIPS={
     'script:scene':'在剧本预览中查看该场次',
-    'board:scene':'在故事板预览中查看该场次',
+    'board:scene':'在故事板中查看该场次',
     'storyboard:scene':'在分镜预览中查看该场次',
-    'board:shot':'在故事板预览中查看该镜',
+    'board:shot':'在故事板中查看该镜',
     'storyboard:shot':'在分镜预览中查看该镜',
     'storyboard:group':'在分镜预览中查看该组'};
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

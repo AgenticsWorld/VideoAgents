@@ -74,7 +74,9 @@ Python:
         无参考图走文生图端点、有 --ref 自动切 edit/multi 端点,填完整端点 ID 则原样使用;
         尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY)
         / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
-  视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务) / volcengine(方舟 contents/generations/tasks)
+  视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务;Seedance 2.0/2.5
+        支持多参考图/参考视频/参考音频 input_references,上限同 BytePlus 直连,其它模型仅首尾帧)
+        / volcengine(方舟 contents/generations/tasks)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
@@ -3046,25 +3048,86 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
 
 # ---------------- 视频:OpenRouter ----------------
 
-def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, seed, output):
-    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
-    base = cfg.get("_base_url") or OPENROUTER_DIRECT_BASE
-    body = {"model": cfg["model"], "prompt": prompt}
+# OpenRouter 视频请求体(POST /api/v1/videos,openapi.json VideoGenerationRequest):首尾帧走
+# frame_images;参考素材走 input_references(image_url/video_url/audio_url 三类)。OpenRouter 说明
+# 音视频参考仅「BytePlus Seedance 2 代及以上」等支持的供应商采用,其余供应商静默丢弃——所以本模块
+# 只对 Seedance 2.x 放行参考素材,其它模型带参考仍报错,防止静默忽略。数量/时长上限 OpenRouter
+# 未公开,按 BytePlus 直连同口径预检(_seedance_precheck)。2026-09-13 接入,未真机实测:
+# 参考视频是否接受 data URL 未知,按方舟口径走对象存储预签名 URL;图片/音频内联 data URL。
+OPENROUTER_VIDEO_RESOLUTIONS = {"360p": "480p", "480p": "480p", "720p": "720p", "768p": "768p",
+                                "1080p": "1080p", "1k": "1K", "2k": "2K", "4k": "4K"}
+OPENROUTER_VIDEO_RATIOS = ("16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3", "21:9", "9:21")
+
+
+def _openrouter_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                           refs=None, audio_refs=None, gen_audio=None, video_refs=None,
+                           to_url=None, video_to_url=None) -> dict:
+    """构造 OpenRouter 视频请求体(dry-run 与正式提交共用;to_url/video_to_url 可替换文件 URL 化)。"""
+    to_url = to_url or _file_to_data_url
+    video_to_url = video_to_url or _storage_upload_url
+    model = cfg["model"]
+    refs, audio_refs, video_refs = list(refs or []), list(audio_refs or []), list(video_refs or [])
+    gen = _seedance_gen(model)
+    if (refs or audio_refs or video_refs) and gen < 2.0:
+        raise RuntimeError(f"OpenRouter 渠道仅 Seedance 2.0/2.5 支持多参考图/参考音频/参考视频"
+                           f"(当前模型 {model});请换 bytedance/seedance-2.0 或 bytedance/seedance-2.5,"
+                           "或在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal,或改用首尾帧模式")
+    body = {"model": model, "prompt": prompt}
+    if gen >= 2.0:
+        resolution, aspect = _seedance_precheck(model, prompt, first, last, duration, resolution,
+                                                aspect, refs, audio_refs, video_refs,
+                                                vendor="OpenRouter(BytePlus)")
+        if refs and _avatar_lib_enabled() and any(_is_portrait_ref(p) for p in refs):
+            print("[genmedia] OpenRouter 渠道无法使用虚拟人像库 asset:// 资产 URI,"
+                  "人物参考图按原图提交(可能触发真人脸审核)", file=sys.stderr)
+        if duration:
+            ver_name = "Seedance 2.5" if gen >= 2.5 else "Seedance 2.0"
+            dmax = 30 if gen >= 2.5 else 15
+            d = int(round(duration))
+            if d != duration:
+                print(f"[genmedia] {ver_name} 时长需整数,{duration} 取整为 {d}", file=sys.stderr)
+            if d == -1:
+                duration = None   # OpenRouter duration 须 ≥1,-1(模型自定)改为不传
+            elif not 4 <= d <= dmax:
+                raise RuntimeError(f"{ver_name} 时长须在 [4,{dmax}] 秒或 -1,收到 {d}")
+            else:
+                duration = d
     if duration:
         body["duration"] = duration
     if resolution:
-        body["resolution"] = resolution
+        body["resolution"] = OPENROUTER_VIDEO_RESOLUTIONS.get(resolution.lower(), resolution)
     if aspect:
-        body["aspect_ratio"] = aspect
+        if aspect in OPENROUTER_VIDEO_RATIOS:
+            body["aspect_ratio"] = aspect
+        elif aspect != "adaptive":
+            print(f"[genmedia] OpenRouter 不支持画幅 {aspect},已不传(由模型自适应)", file=sys.stderr)
     if seed is not None:
         body["seed"] = seed
+    if gen_audio is not None:
+        body["generate_audio"] = bool(gen_audio)
     frames = []
     for path, ftype in ((first, "first_frame"), (last, "last_frame")):
         if path:
             frames.append({"type": "image_url", "frame_type": ftype,
-                           "image_url": {"url": _file_to_data_url(path)}})
+                           "image_url": {"url": to_url(path)}})
     if frames:
         body["frame_images"] = frames
+    # 顺序与方舟一致:图 → 视频 → 音频(prompt 里 [Image N]/视频N/音频N 按各自类别序号引用)
+    inputs = [{"type": "image_url", "image_url": {"url": to_url(p)}} for p in refs]
+    inputs += [{"type": "video_url", "video_url": {"url": video_to_url(p)}} for p in video_refs]
+    inputs += [{"type": "audio_url", "audio_url": {"url": to_url(p)}} for p in audio_refs]
+    if inputs:
+        body["input_references"] = inputs
+    return body
+
+
+def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
+                      refs=None, audio_refs=None, gen_audio=None, return_last_frame="",
+                      video_refs=None):
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    base = cfg.get("_base_url") or OPENROUTER_DIRECT_BASE
+    body = _openrouter_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                                  refs, audio_refs, gen_audio, video_refs)
     job = _post_json(base + "/videos", body, headers)
     jid, poll = job.get("id"), job.get("polling_url")
     if not jid:
@@ -3078,7 +3141,11 @@ def _video_openrouter(cfg, prompt, first, last, duration, resolution, aspect, se
         if status == "completed":
             data = _request(f"{base}/videos/{jid}/content?index=0",
                             headers=headers, timeout=600)
-            return _save(data, output)
+            saved = _save(data, output)
+            if return_last_frame:
+                # OpenRouter 无尾帧返回参数,续接锚从成片本地抽取
+                _extract_last_frame(saved, return_last_frame)
+            return saved
         if status == "failed":
             raise RuntimeError(f"OpenRouter 视频生成失败:{json.dumps(st)[:400]}")
     raise RuntimeError(f"OpenRouter 视频超时({VIDEO_TIMEOUT}s),job={jid}")
@@ -3145,14 +3212,12 @@ _V25_EXTEND_RE = re.compile(
     + r"|续写\s*" + _V25_VREF)
 
 
-def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
-                    refs, audio_refs, gen_audio, want_last_frame,
-                    video_refs=None, to_url=None, video_to_url=None):
-    """构造方舟视频任务请求体(独立函数便于 dry-run 校验;to_url 可替换文件内联逻辑,
-    video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。"""
-    to_url = to_url or _file_to_data_url
-    video_to_url = video_to_url or to_url
-    gen = _seedance_gen(cfg["model"])
+def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
+                       refs, audio_refs, video_refs, vendor="方舟"):
+    """Seedance 参考素材/参数前置机检(方舟与 OpenRouter 共用,OpenRouter 的 Seedance 2.x
+    由 BytePlus 承接,硬限同口径):互斥模式、按代际的数量上限、参考音频/视频总时长、
+    2.5 的 ratio/分辨率修正。返回修正后的 (resolution, aspect);违规直接抛错。"""
+    gen = _seedance_gen(model)
     is_v2 = gen >= 2.0
     is_v25 = gen >= 2.5
     # 按模型代际取参考素材上限(2.5 全面放宽:30图/10视频/10音频,总时长各 ≤30s)
@@ -3175,13 +3240,13 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         durs = [_audio_duration_s(p) for p in audio_refs]
         if any(d is None for d in durs):
             print("[genmedia] 无法实测参考音频时长(ffprobe 不可用?),"
-                  f"跳过总时长预检(方舟硬限总时长 {max_atotal}s)",
+                  f"跳过总时长预检({vendor}硬限总时长 {max_atotal}s)",
                   file=sys.stderr)
         elif sum(durs) > max_atotal:
             detail = "、".join(f"{Path(p).name}={d:.1f}s"
                                for p, d in zip(audio_refs, durs))
             raise RuntimeError(
-                f"参考音频总时长 {sum(durs):.1f}s 超过方舟硬限 {max_atotal}s"
+                f"参考音频总时长 {sum(durs):.1f}s 超过{vendor}硬限 {max_atotal}s"
                 f"({ver_name};§7A):{detail}。"
                 "请截短样本后重试(voiceprint 规格 ≤5s/段,§8A;可用 "
                 "ffmpeg -i in.mp3 -t 4.9 -c copy out.mp3 截断)")
@@ -3196,15 +3261,15 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             p = Path(v)
             if p.is_file() and p.stat().st_size > MAX_VIDEOIN_BYTES:
                 raise RuntimeError(f"参考视频 {v} 超过 {MAX_VIDEOIN_BYTES // 1024 // 1024}MB"
-                                   "(方舟参考视频单文件上限),请先压缩")
-        # 参考视频总时长预检(2.0 ≤15s / 2.5 ≤30s;ffprobe 不可用则跳过交方舟拒绝)
+                                   f"({vendor}参考视频单文件上限),请先压缩")
+        # 参考视频总时长预检(2.0 ≤15s / 2.5 ≤30s;ffprobe 不可用则跳过交平台拒绝)
         vmax = V25_MAX_VIDEOIN_TOTAL_S if is_v25 else 15.2
         vdurs = [_audio_duration_s(str(v)) for v in video_refs
                  if Path(str(v)).is_file()]
         if len(vdurs) == len(video_refs) and all(d is not None for d in vdurs) \
                 and sum(vdurs) > vmax:
             raise RuntimeError(
-                f"参考视频总时长 {sum(vdurs):.1f}s 超过方舟硬限 {vmax}s({ver_name}),请先截短")
+                f"参考视频总时长 {sum(vdurs):.1f}s 超过{vendor}硬限 {vmax}s({ver_name}),请先截短")
     # Seedance 2.5 特殊任务约束(官方文档:违规将异步报错 TaskTypeConstraint):
     # 首帧/首尾帧任务 ratio 仅支持 adaptive → 自动改写;编辑/延长意图仅预警不拦截
     if is_v25 and aspect and aspect != "adaptive":
@@ -3225,6 +3290,22 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
               file=sys.stderr)
         resolution = "720p"
+    return resolution, aspect
+
+
+def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                    refs, audio_refs, gen_audio, want_last_frame,
+                    video_refs=None, to_url=None, video_to_url=None):
+    """构造方舟视频任务请求体(独立函数便于 dry-run 校验;to_url 可替换文件内联逻辑,
+    video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。"""
+    to_url = to_url or _file_to_data_url
+    video_to_url = video_to_url or to_url
+    gen = _seedance_gen(cfg["model"])
+    is_v2 = gen >= 2.0
+    is_v25 = gen >= 2.5
+    ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
+    resolution, aspect = _seedance_precheck(cfg["model"], prompt, first, last, duration,
+                                            resolution, aspect, refs, audio_refs, video_refs)
     text = prompt
     if resolution:
         text += f" --resolution {resolution}"
@@ -5142,16 +5223,21 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                               resolution, aspect, seed, output, refs, audio_refs,
                               generate_audio, return_last_frame, video_refs,
                               ref_image_size=ref_image_size)
+    if cfg["provider"] == "openrouter":
+        # 参考素材仅 Seedance 2.x 放行,其它模型在 _openrouter_video_body 内报错
+        return _video_openrouter(cfg, prompt, first_frame, last_frame, duration,
+                                 resolution, aspect, seed, output,
+                                 refs, audio_refs, generate_audio, return_last_frame,
+                                 video_refs)
     if refs or audio_refs or video_refs or return_last_frame or generate_audio is not None:
         raise RuntimeError(f"渠道 {cfg['provider']} 不支持多参考图/参考音频/参考视频"
                            "/return_last_frame/generate_audio,"
-                           "请在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal 或改用首尾帧模式")
-    fn = {"openrouter": _video_openrouter, "comfyui": _video_comfyui}[cfg["provider"]]
-    if fn is _video_comfyui:
-        # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
-        return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,
-                  seed, output, ref_image_size=ref_image_size)
-    return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect, seed, output)
+                           "请在生成模型页切换到火山引擎/BytePlus/MiniMax/Fal"
+                           "(或 OpenRouter 的 Seedance 2.0/2.5)或改用首尾帧模式")
+    fn = {"comfyui": _video_comfyui}[cfg["provider"]]
+    # 非 H3 的 ComfyUI 基础工作流:透传后由 _video_comfyui 内部拒绝,防静默忽略
+    return fn(cfg, prompt, first_frame, last_frame, duration, resolution, aspect,
+              seed, output, ref_image_size=ref_image_size)
 
 
 def _ark_reclaim_config() -> dict:
@@ -5497,6 +5583,16 @@ def _cmd_video(args):
             fields = {k: v for k, v in body.items() if k != "prompt"}
             line += (f"\n[dry-run] endpoint={FAL_QUEUE_BASE}/{endpoint}"
                      f"\n[dry-run] fields={json.dumps(fields, ensure_ascii=False)[:600]}")
+        elif cfg["provider"] == "openrouter":
+            body = _openrouter_video_body(dict(cfg, api_key="dry"), args.prompt,
+                                          args.first_frame, args.last_frame,
+                                          args.duration, resolution, args.aspect, args.seed,
+                                          args.ref, args.audio_ref, gen_audio,
+                                          video_refs=args.ref_video,
+                                          to_url=lambda p: f"file://{p}",
+                                          video_to_url=lambda p: f"file://{p}")
+            fields = {k: v for k, v in body.items() if k != "prompt"}
+            line += f"\n[dry-run] fields={json.dumps(fields, ensure_ascii=False)[:800]}"
         print(line)
         return
     out = generate_video(args.prompt, args.output, args.first_frame, args.last_frame,

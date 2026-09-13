@@ -1,17 +1,26 @@
-/* 图像模型清单(各渠道,2026-09-11 自 models.html 抽出):「生成模型」页 models.html 与「故事板预览」页
+/* 图像模型清单(各渠道,2026-09-11 自 models.html 抽出):「生成模型」页 models.html 与「故事板」页
  * preview_board.html(草图渠道/模型单独选)共用,改这里两处同时生效。
  * [模型 id, 说明];ID 与各渠道官方目录一致;openrouter 为推荐置顶清单(完整目录页面另拉 /providers/openrouter/models)。 */
 window.IMAGE_MODEL_LISTS={
-openrouter:[
+openrouter:[   // 2026-09-13 对照 openrouter.ai/api/v1/images/models 在线目录(52 个)刷新
   ['google/gemini-3.1-flash-image','Nano Banana 2(Gemini 3.1 Flash)· 快/画质高/角色一致性好'],
   ['google/gemini-3-pro-image','Nano Banana Pro(Gemini 3 Pro)· 专业设计/长文本/复杂构图'],
+  ['google/gemini-3.1-flash-lite-image','Nano Banana 2 Lite(Gemini 3.1 Flash Lite)· 最快/最省,批量草图'],
+  ['openai/gpt-image-2.5-sunburst','GPT Image 2.5 Sunburst · 精度档,细节/编辑'],
+  ['openai/gpt-image-2.5-flare','GPT Image 2.5 Flare · 速度档,量大日常出图'],
   ['openai/gpt-5.4-image-2','GPT-5.4 Image 2 · Prompt 理解强,插画/产品图/海报'],
-  ['openai/gpt-image-2','GPT Image 2 · 最新官方图片模型,支持编辑'],
+  ['openai/gpt-image-2','GPT Image 2 · 官方图片模型,支持编辑'],
   ['openai/gpt-image-1-mini','GPT Image 1 Mini · 低成本/快速'],
+  ['bytedance-seed/seedream-5-0-pro','Seedream 5.0 Pro · 精准编辑/写实场景,商业出图'],
+  ['bytedance-seed/seedream-5-0-lite','Seedream 5.0 Lite · 复杂 Prompt/多参考图'],
   ['bytedance-seed/seedream-4.5','Seedream 4.5 · 人像/美学/小文字渲染优秀'],
+  ['x-ai/grok-imagine-image-2.0','Grok Imagine Image 2.0 · 文生图/参考图编辑'],
   ['x-ai/grok-imagine-image-quality','Grok Imagine · 写实/人脸/Logo/海报'],
-  ['black-forest-labs/flux.2-pro','FLUX.2 Pro · 开源生态最成熟'],
+  ['qwen/qwen-image-3-pro','Qwen Image 3 Pro · 中文/小字渲染/世界知识'],
+  ['microsoft/mai-image-2.6','MAI-Image-2.6(微软)· 精度档,设计级画面/编辑'],
+  ['meta/muse-image','Muse Image(Meta)· 先推理后出图,复杂构图/编辑'],
   ['black-forest-labs/flux.2-max','FLUX.2 Max · FLUX 旗舰画质'],
+  ['black-forest-labs/flux.2-pro','FLUX.2 Pro · 开源生态最成熟'],
   ['black-forest-labs/flux.2-flex','FLUX.2 Flex · FLUX 灵活版'],
   ['recraft/recraft-v4.1-pro','Recraft V4.1 Pro · 设计/排版/品牌风格'],
 ],

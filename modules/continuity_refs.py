@@ -59,7 +59,10 @@ def tail_window(source, meta):
 
 def video_caps(model, provider):
     m = str(model).lower()
-    if provider not in ('volcengine', 'byteplus', 'fal', 'minimax'):
+    if provider == 'openrouter':   # OpenRouter 仅 Seedance 2.x 接了参考视频(input_references)
+        if 'seedance-2' not in m:
+            return None
+    elif provider not in ('volcengine', 'byteplus', 'fal', 'minimax'):
         return None
     if m.endswith(('/image-to-video', '/text-to-video')) or 'turbo' in m and 'h3' in m:
         return None

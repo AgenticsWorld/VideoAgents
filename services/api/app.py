@@ -251,7 +251,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
 
 @api.get("/projects/{project}/board/{ep}/sketches", tags=["artifacts"])
 async def board_sketches(project: str, ep: str) -> dict[str, Any]:
-    """故事板预览页:分镜草图台账 + 后台出图任务状态(轮询/SSE 兜底)。"""
+    """故事板页:分镜草图台账 + 后台出图任务状态(轮询/SSE 兜底)。"""
     return _artifact_urls(await core.api_board_sketches(project, ep), project)
 
 
@@ -359,7 +359,7 @@ async def post_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str,
 
 @api.post("/projects/{project}/board/{ep}/sketch", tags=["artifacts"])
 async def board_sketch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
-    """故事板预览页「出草图」:{scene, order?, note?, provider?, model?, force?}。"""
+    """故事板页「出草图」:{scene, order?, note?, provider?, model?, force?}。"""
     return await core.api_board_sketch_start(project, ep, body)
 
 
@@ -516,7 +516,7 @@ async def video_model() -> dict[str, Any]:
 
 @api.get("/config/sketch-model", tags=["configuration"])
 async def sketch_model() -> dict[str, Any]:
-    """故事板预览页顶部单独选的草图图像渠道/模型(空=跟随全局图像渠道)+ 各图像渠道配置状态。"""
+    """故事板页顶部单独选的草图图像渠道/模型(空=跟随全局图像渠道)+ 各图像渠道配置状态。"""
     return await core.api_sketch_model_get()
 
 

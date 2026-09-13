@@ -1,4 +1,4 @@
-"""故事板预览(2026-09-11):分镜层(07-directing/storyboard)产物 storyboard.json 的归一化视图 + 分镜草图台账。
+"""故事板(2026-09-11):分镜层(07-directing/storyboard)产物 storyboard.json 的归一化视图 + 分镜草图台账。
 
 页面 /preview/board 与草图 CLI code/storyboard_sketch.py 共用本模块:
 - load_board(base, ep):把各历史版本 storyboard.json(字段名多次演化)归一成同一结构,

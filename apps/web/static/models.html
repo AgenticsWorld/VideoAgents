@@ -187,21 +187,33 @@ async function api(p,body){const o=body?{method:'POST',headers:{'Content-Type':'
 let CFG=null;
 const CUSTOM='__custom';
 
-/* OpenRouter 推荐模型(置顶显示;ID 与 openrouter.ai/api/v1/images|videos/models 一致)
-   2026-07-11 对照在线目录校验:全部推荐 ID 仍在目录;补充 FLUX.2 Max/Recraft V4.1 Pro/
-   Seedance 2.0 Fast/Veo 3.1 Fast/GPT Audio Mini */
+/* OpenRouter 推荐模型(置顶显示;ID 与 openrouter.ai/api/v1/images|videos/models、
+   /models?output_modalities=audio|speech 在线目录一致)
+   2026-09-13 对照在线目录刷新:视频补 H3 Max/H3/Seedance 2.5/2.0 Mini/Wan 3.0/FLUX.3 Video/
+   Runway Gen-4.5/Grok Imagine Video 1.5/Veo 3.1 Lite;音乐目录无变化;TTS 下架 Zonos 两款,
+   补 Gemini 3.1 Flash TTS/MiniMax Speech 2.8/Fish Audio/Qwen TTS/Deepgram Aura-2/MAI-Voice-2-Flash */
 const OR_RECOMMENDED={
   image:IMAGE_MODEL_LISTS.openrouter,   // 图像清单见 image-models.js(与故事板页共用)
   video:[
+    ['bytedance/seedance-2.5','Seedance 2.5(字节)· 单段 4-30 秒/首尾帧/音画同生,480p/720p'],
+    ['bytedance/seedance-2.0','Seedance 2.0(字节)· 文/图生视频'],
+    ['bytedance/seedance-2.0-fast','Seedance 2.0 Fast(字节)· 快速版'],
+    ['bytedance/seedance-2.0-mini','Seedance 2.0 Mini(字节)· 轻量版/首尾帧,480p/720p'],
+    ['minimax/hailuo-3-max','MiniMax H3 Max · H3 后训练版,首尾帧,480p/768p,5-15 秒'],
+    ['minimax/hailuo-3','MiniMax H3 · 首尾帧/音画同生,2K,5-15 秒'],
     ['kwaivgi/kling-v3.0-pro','Kling 3.0 Pro · 人物动作自然/性价比高'],
     ['kwaivgi/kling-v3.0-std','Kling 3.0 Standard · 批量生成更省'],
+    ['alibaba/wan-3.0','Wan 3.0(阿里)· 2-30 秒/音画同生,最高 1080p'],
+    ['alibaba/wan-3.0-prime','Wan 3.0 Prime(阿里)· Wan 3.0 快速版'],
+    ['google/veo-3.1','Veo 3.1(Google)· 综合质量强'],
+    ['google/veo-3.1-fast','Veo 3.1 Fast(Google)· 快/省'],
+    ['google/veo-3.1-lite','Veo 3.1 Lite(Google)· 最低成本,首尾帧/原生音频'],
+    ['black-forest-labs/flux-3-video','FLUX.3 Video · 首尾关键帧/音画同生,5-20 秒,最高 1080p'],
+    ['runway/gen-4.5','Runway Gen-4.5 · 电影感运动质量,720p,2-10 秒'],
+    ['x-ai/grok-imagine-video-1.5','Grok Imagine Video 1.5 · 文/首帧生视频,最高 1080p'],
     ['openai/sora-2-pro','Sora 2 Pro · 故事理解/镜头语言,创意短片'],
     ['minimax/hailuo-2.3','Hailuo 2.3(MiniMax)· 中文 Prompt/人物表现优秀'],
     ['alibaba/wan-2.7','Wan 2.7(阿里)· 开源最佳之一'],
-    ['google/veo-3.1','Veo 3.1(Google)· 综合质量强'],
-    ['bytedance/seedance-2.0','Seedance 2.0(字节)· 文/图生视频'],
-    ['bytedance/seedance-2.0-fast','Seedance 2.0 Fast(字节)· 快速版'],
-    ['google/veo-3.1-fast','Veo 3.1 Fast(Google)· 快/省'],
   ],
   music:[
     ['google/lyria-3-clip-preview','Lyria 3 Clip · 30 秒音乐/Loop/Preview,$0.04/条'],
@@ -211,11 +223,18 @@ const OR_RECOMMENDED={
   ],
   tts:[
     ['x-ai/grok-voice-tts-1.0','Grok Voice TTS 1.0 · 20+语言/5音色(eve/ara/rex/sal/leo)'],
-    ['microsoft/mai-voice-2','MAI-Voice-2(微软)· 英/西/法/德(en-US-Harper:MAI-Voice-2 等)'],
+    ['google/gemini-3.1-flash-tts-preview','Gemini 3.1 Flash TTS(Google)· 多语言含中文,30 音色(Kore/Puck/Charon 等)'],
+    ['minimax/speech-2.8-hd','MiniMax Speech 2.8 HD · 中文强/情绪丰富,任意 MiniMax 音色 ID'],
+    ['minimax/speech-2.8-turbo','MiniMax Speech 2.8 Turbo · 低延迟,任意 MiniMax 音色 ID'],
+    ['fish-audio/s2.1-pro','Fish Audio S2.1 Pro · 多语言含中文,自然语言控语气/多人对话'],
+    ['fish-audio/s2-pro','Fish Audio S2 Pro · 多语言,旁白/多人对话'],
+    ['qwen/qwen-audio-3.0-tts-plus','Qwen Audio 3.0 TTS Plus(阿里)· 中文高质量(longanlingxin/longanlufeng)'],
+    ['qwen/qwen-audio-3.0-tts-flash','Qwen Audio 3.0 TTS Flash(阿里)· 中文快/省(loongjohn/longanhuan_v3.6)'],
+    ['microsoft/mai-voice-2','MAI-Voice-2(微软)· 15 语言(en-US-Harper:MAI-Voice-2 等)'],
+    ['microsoft/mai-voice-2-flash','MAI-Voice-2-Flash(微软)· 低延迟版(en-US-Harper:MAI-Voice-2 等)'],
+    ['deepgram/aura-2','Deepgram Aura-2 · 多语言(aura-2-thalia-en 等)'],
     ['mistralai/voxtral-mini-tts-2603','Voxtral Mini TTS(Mistral)· 英/法,音色带情绪(en_paul_neutral 等)'],
-    ['hexgrad/kokoro-82m','Kokoro 82M · 唯一含中文音色(zf_xiaoxiao/zm_yunxi 等)/多语言/快'],
-    ['zyphra/zonos-v0.1-transformer','Zonos v0.1 Transformer · 英文 american/british 音色'],
-    ['zyphra/zonos-v0.1-hybrid','Zonos v0.1 Hybrid · 英文 american/british 音色'],
+    ['hexgrad/kokoro-82m','Kokoro 82M · 8 语言含中文(zf_xiaobei/zm_yunxi 等)/快/便宜'],
     ['sesame/csm-1b','CSM 1B(Sesame)· 英文对话/朗读音色'],
     ['canopylabs/orpheus-3b-0.1-ft','Orpheus 3B · 英文 7 音色(tara/leah/leo 等)'],
   ],

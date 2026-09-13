@@ -1,6 +1,6 @@
-# 故事板预览(/preview/board)与分镜草图
+# 故事板(/preview/board)与分镜草图
 
-2026-09-11 起,分镜层(`agents/07-directing/storyboard`)的产物有一页专门的表格视图,让用户不读 JSON 也能看懂每场拆了哪些镜、并逐块提意见:控制台顶栏 📋 图标(分镜预览图标之前)/ 各预览页右上下拉「📋 故事板预览」(分镜预览之前)。
+2026-09-11 起,分镜层(`agents/07-directing/storyboard`)的产物有一页专门的表格视图,让用户不读 JSON 也能看懂每场拆了哪些镜、并逐块提意见:控制台顶栏 📋 图标(分镜预览图标之前)/ 各预览页右上下拉「📋 故事板」(分镜预览之前)。
 
 ## 页面结构
 
@@ -42,4 +42,4 @@
 
 ## 预览页互跳(2026-09-12)
 
-剧本预览、故事板预览、分镜预览三页在场次头行右侧、故事板镜行右侧和分镜镜卡首行右侧放图标链接(📜 剧本 / 📋 故事板 / 🎦 分镜,只显示图标,tooltip 带编号),点击跳到目标页并定位、高亮 2 秒。链接只对目标真实存在的场次/镜显示,存在性由端点给出:剧本端点 `board_scenes`/`shot_scenes`,故事板端点 `script_scenes`/`shot_scenes` + `shots[].final[].shot_id`,分镜端点 `script_scenes`/`board_scene_nos` + `shots[].board_key`(经 storyboard_ref 反查的故事板镜行键 S01-03)。URL 契约 `?project=&ep=#scene=S01 | #shot=sh020 | #shot=S01-03 | #group=grpNNN`,由 `static/jump-anchor.js` 在页面加载前读走 hash、渲染并恢复滚动位置后定位;找不到目标时页顶提示。场次以 `scene_no`(S01 式)对齐,三边写法不一致的场次(如 `S03(续)` vs `S03-cont`)或老 shot_list 没写 `scene_no` 的项目不出链接。
+剧本预览、故事板、分镜预览三页在场次头行右侧、故事板镜行右侧和分镜镜卡首行右侧放图标链接(📜 剧本 / 📋 故事板 / 🎦 分镜,只显示图标,tooltip 带编号),点击跳到目标页并定位、高亮 2 秒。链接只对目标真实存在的场次/镜显示,存在性由端点给出:剧本端点 `board_scenes`/`shot_scenes`,故事板端点 `script_scenes`/`shot_scenes` + `shots[].final[].shot_id`,分镜端点 `script_scenes`/`board_scene_nos` + `shots[].board_key`(经 storyboard_ref 反查的故事板镜行键 S01-03)。URL 契约 `?project=&ep=#scene=S01 | #shot=sh020 | #shot=S01-03 | #group=grpNNN`,由 `static/jump-anchor.js` 在页面加载前读走 hash、渲染并恢复滚动位置后定位;找不到目标时页顶提示。场次以 `scene_no`(S01 式)对齐,三边写法不一致的场次(如 `S03(续)` vs `S03-cont`)或老 shot_list 没写 `scene_no` 的项目不出链接。

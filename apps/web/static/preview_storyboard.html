@@ -1447,7 +1447,7 @@ function render(d){
   // 白模样片(2026-09-11):顶部折叠块,整集摄影机视角白模视频 + 对白/旁白字幕;「人物精确空间位置」关闭的项目不显示
   if(WB_ON&&d.whitebox_reel&&!d.whitebox_reel.disabled)h+=`<div id="wbreelbox">${wbReelHtml(d.whitebox_reel,d.ep)}</div>`;
   if(d.dialogue_tts)h+=`<div id="dttsbox">${DialogueTTS.html(d.dialogue_tts,$('#project').value.trim()||'demo',d.ep)}</div>`;
-  // 导演计划 directing_plan.md 2026-09-11 起移到「📋 故事板预览」页(Markdown 折叠显示);
+  // 导演计划 directing_plan.md 2026-09-11 起移到「📋 故事板」页(Markdown 折叠显示);
   // 剧本 screenplay.md 与旁白 narration.md 全文同日移到「📜 剧本预览」页,本页只保留旁白逐条对位到分镜的显示
 
   const boards={};(d.board_scenes||[]).forEach(b=>{if(b.scene_no)boards[b.scene_no]=b});
@@ -1584,7 +1584,7 @@ function render(d){
   else if(KEEP_SCROLL){box.scrollTop=prevScroll}
   else box.scrollTop=0;
   KEEP_SCROLL=false;
-  // 从剧本/故事板预览跳来:#scene=S01 → 该场次首块,#shot=sh020 → 镜卡,#group=grp011 → 组卡;用 jumpTo(白模面板懒建会撑高,需持续校正)
+  // 从剧本/故事板跳来:#scene=S01 → 该场次首块,#shot=sh020 → 镜卡,#group=grp011 → 组卡;用 jumpTo(白模面板懒建会撑高,需持续校正)
   JumpAnchor.go({find:(k,id)=>{
     if(k==='scene'){const n=NAV.find(x=>x.cls==='sc'&&x.sn===id);return n?document.getElementById(n.id):null}
     return document.getElementById((k==='shot'?'a-s-':'a-g-')+aid(id));
