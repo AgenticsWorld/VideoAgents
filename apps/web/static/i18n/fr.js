@@ -2266,6 +2266,7 @@ window.I18N_DICT = {
 "重绘中": "redessin en cours",
 "镜头表(shot_list.json)定稿镜号 · 时长 · 景别": "ID final · durée · valeur de plan de la liste de plans (shot_list.json)",
 "📋 故事板预览": "📋 Tableau storyboard",
+"📋 故事板": "📋 Storyboard",
 "🖊 草图模型": "🖊 Modèle de croquis",
 /* 故事板签字 + 动态样片(preview_board/preview_videos,2026-09-11) */
 "H3S 签字卡待答复:看完本集分镜草案(草图可选)后签字,签字后才派镜头表定稿(shot-planning)": "Signature H3S en attente : relisez le brouillon de storyboard (croquis facultatifs) puis signez ; shot-planning n'est lancé qu'après",

@@ -2355,6 +2355,7 @@ window.I18N_DICT = {
 "重绘中": "redrawing",
 "镜头表(shot_list.json)定稿镜号 · 时长 · 景别": "Final shot id · duration · shot size from the shot list (shot_list.json)",
 "📋 故事板预览": "📋 Storyboard Board",
+"📋 故事板": "📋 Storyboard",
 "🖊 草图模型": "🖊 Sketch model",
 /* 故事板签字 + 动态样片(preview_board/preview_videos,2026-09-11) */
 "H3S 签字卡待答复:看完本集分镜草案(草图可选)后签字,签字后才派镜头表定稿(shot-planning)": "H3S sign-off pending: review this episode's storyboard draft (sketches optional), then sign; shot-planning is dispatched only after signing",

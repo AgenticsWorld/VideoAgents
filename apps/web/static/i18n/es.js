@@ -2266,6 +2266,7 @@ window.I18N_DICT = {
 "重绘中": "redibujando",
 "镜头表(shot_list.json)定稿镜号 · 时长 · 景别": "ID final · duración · tamaño de plano de la lista de planos (shot_list.json)",
 "📋 故事板预览": "📋 Tablero de storyboard",
+"📋 故事板": "📋 Storyboard",
 "🖊 草图模型": "🖊 Modelo de bocetos",
 /* 故事板签字 + 动态样片(preview_board/preview_videos,2026-09-11) */
 "H3S 签字卡待答复:看完本集分镜草案(草图可选)后签字,签字后才派镜头表定稿(shot-planning)": "Firma H3S pendiente: revisa el borrador de storyboard del episodio (bocetos opcionales) y firma; shot-planning se despacha solo después",
