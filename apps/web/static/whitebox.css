@@ -26,15 +26,13 @@
 .wb-statusnote{color:#e3b66b;white-space:normal;max-width:260px}
 .wb-links a{color:#8fbaff;margin-right:16px}
 .wb-panel progress{width:100%}
-/* 分镜预览每组右半常驻面板:纵向堆叠(人物色标 → 播放 → 摄像机视角 → 俯视图 → 建模依据),画面占满右半宽 */
+/* 分镜预览每组右半常驻面板:纵向堆叠(播放 → 摄像机视角 → 空间与摄像机位置[固定旋转视角] → 人物色标 → 待决项),画面占满右半宽 */
 .wb-host{margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:12px;box-sizing:border-box;min-width:0}
 .wb-host .wb-toolbar,.wb-host .wb-transport,.wb-host .wb-cast{margin:0}
 .wb-host .wb-cast{gap:6px 12px}
 .wb-host figure{margin:0;width:100%;max-width:none}
 .wb-host figcaption{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 0;color:#99a8bb}
-.wb-host figcaption select{padding:1px 6px;font-size:11px}
 .wb-host canvas{width:100%;height:auto;aspect-ratio:var(--wb-aspect);border-radius:6px;display:block}
-.wb-host .wb-warnings{max-height:110px}
 /* 待决项(2026-09-09):Agent 调度时拿不准的取舍,用户看现场后点选项 */
 .wb-issues[hidden]{display:none}
 .wb-issues-box{border:1px solid #5a4a2a;border-radius:7px;padding:6px 10px;background:#1b1a17;color:#dde3ee;max-height:320px;overflow:auto}

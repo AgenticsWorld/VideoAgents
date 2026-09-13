@@ -83,10 +83,11 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   assert.ok(panel.innerHTML.includes(escape(wbText('文件状态未知，请重启服务后刷新。'))),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('白模时间'))}"`),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('摄像机白模'))}"`),lang);
-  assert.ok(panel.innerHTML.includes(`value="top" selected>${escape(wbText('俯视图'))}`),lang);
-  assert.ok(panel.innerHTML.includes(escape(wbText('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',params))),lang);
-  for(const value of ['王三合',scene.scale_basis,params.marker,params.plan,params.model,params.preview])assert.ok(panel.innerHTML.includes(value),`${lang}: lost ${value}`);
-  assert.ok(panel.innerHTML.includes(escape(wbMessage(scene.warnings[0]))),lang);
+  // 2026-09-13 起组面板只留摄像机视角 + 固定旋转视角的空间图:不再有视图选择与「建模依据与检查」
+  assert.ok(panel.innerHTML.includes(escape(wbText('空间与摄像机位置'))),lang);
+  assert.ok(!panel.innerHTML.includes('<select'),lang);
+  assert.ok(!panel.innerHTML.includes('wb-warnings'),lang);
+  for(const value of ['王三合',params.marker,params.plan,params.model,params.preview])assert.ok(panel.innerHTML.includes(value),`${lang}: lost ${value}`);
   const play=panel.querySelector('.wb-play');play.onclick();assert.equal(play.textContent,wbText('暂停'));
   play.onclick();assert.equal(play.textContent,wbText('播放'));
   play.onclick();tick(performance.now()+3000);assert.equal(play.textContent,wbText('重播'));
@@ -107,7 +108,6 @@ scene.inferred=false;scene.artifact_status={model:true};
 group.authored=false;group.artifact_status={plan:false,preview:false,video:false};
 globalThis.fetch=async url=>respond(url.endsWith('/config')?{output:{aspect_preset:'douyin'}}:episode);
 let statusPanel=await mountGroup(ui,'grp048','ep02');
-assert.ok(statusPanel.innerHTML.includes('已标定尺寸'));
 assert.ok(statusPanel.innerHTML.includes('场景模型：已有'));
 assert.ok(statusPanel.innerHTML.includes('调度计划：未生成'));
 assert.ok(statusPanel.innerHTML.includes('参考视频：未生成'));
@@ -119,7 +119,6 @@ assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
 ui.resetWhitebox();
 scene.inferred=true;
 statusPanel=await mountGroup(ui,'grp048','ep02');
-assert.ok(statusPanel.innerHTML.includes('推断尺寸'));
 assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
 ui.resetWhitebox();
 // A group missing from the compiled episode reports the compiler's reason.

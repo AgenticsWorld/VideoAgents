@@ -106,7 +106,7 @@ const projectSettings=project=>{
 };
 
 // ---- 分镜预览:每个生成组的镜卡列在左半,右半常驻该组的白模面板
-// (人物色标 → 播放 → 摄像机视角 → 俯视图 → 建模依据)。全页共用一个 WebGL 上下文,
+// (播放 → 摄像机视角 → 空间与摄像机位置[旋转视角] → 人物色标 → 待决项;2026-09-13 起不再有视图选择与「建模依据与检查」)。全页共用一个 WebGL 上下文,
 // 面板只在滚入视口附近时建 3D 场景、滚出即释放;单个 rAF 循环驱动全部面板,静止且无交互时不重绘 ----
 const groupPanels=new Map();   // host -> state
 let pending=new Map();         // host -> build promise(每次 mountGroups 重建)
@@ -127,7 +127,7 @@ function groupLoop(now){
     st.dirty=false;
     st.rr.setTime(st.time);
     st.rr.render('camera',st.els.camera);
-    st.rr.render(st.els.view.value,st.els.space);
+    st.rr.render('overview',st.els.space);   // 空间视图固定旋转视角(2026-09-13 起不再提供俯视图/实景图切换),可拖动旋转、滚轮缩放
     st.els.time.textContent=`${st.time.toFixed(2)} / ${st.end.toFixed(2)} s · ${st.rr.shotId}`;
     st.els.range.value=st.time;
   }
@@ -180,23 +180,21 @@ async function buildGroup(host,project,ep){
   const editLocation=t('3D 白模 {marker}（场景 {scene}；镜头 {shots}；调度 {plan}；模型 {model}；预览 {preview}）',{
     marker:`[whitebox:${project}/${ep}/${gid}]`,scene:scene.scene_id,shots:group.cameras.map(c=>c.shot_id).join(', '),
     plan:`directing/${ep}/whitebox_plans/${gid}.json`,model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`});
-  const warnings=group.warnings||scene.warnings||[];
   host.className='wb-panel wb-host';host.style.minHeight='';
   host.style.setProperty('--wb-aspect',`${format.width} / ${format.height}`);
   host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong><button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button><a class="editbtn wb-director" href="/preview/director?project=${encodeURIComponent(project)}&ep=${encodeURIComponent(ep)}&grp=${encodeURIComponent(gid)}" title="${esc(t('到导演台:大视窗看白模,逐对象写修改注释,批量提交并按版本 A|B 比对'))}">${esc(t('📺 导演台'))}</a></div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||!group.artifact_status?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div></div>
-    <div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>
     <div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div>
     <figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>
-    <figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span><select aria-label="${esc(t('空间视角'))}"><option value="top" selected>${esc(t('俯视图'))}</option><option value="real">${esc(t('实景图'))}</option><option value="overview">${esc(t('旋转视角'))}</option></select></figcaption></figure>
+    <figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span></figcaption></figure>
+    <div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>
     <div class="wb-issues"></div>
-    <details class="wb-warnings"><summary>${esc(t('建模依据与检查 ({count})',{count:warnings.length}))}</summary><div class="wb-status">${esc(t('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',{width:scene.dimensions_m[0],depth:scene.dimensions_m[2],height:scene.dimensions_m[1],aspect:format.aspect_ratio}))} · ${esc(t(scene.inferred?'推断尺寸':'已标定尺寸'))} · ${esc(t('切换旋转视角后可拖动旋转、滚轮缩放'))}</div><div data-no-i18n>${esc(scene.scale_basis)}</div>${warnings.map(w=>`<div data-no-i18n>${esc(wbMessage(w))}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
+    <div class="wb-status wb-result" role="status"></div>`;
   const q=x=>host.querySelector(x);
   Object.assign(st,{ready:true,scene,group,format,end:group.duration_s,
-    els:{camera:q('.wb-camera'),space:q('.wb-space'),view:q('select'),play:q('.wb-play'),range:q('input'),time:q('.wb-time'),result:q('.wb-result')}});
+    els:{camera:q('.wb-camera'),space:q('.wb-space'),play:q('.wb-play'),range:q('input'),time:q('.wb-time'),result:q('.wb-result')}});
   for(const c of [st.els.camera,st.els.space]){c.width=format.width;c.height=format.height;}
   const statusBtn=q('.wb-statusbtn'), statusPop=q('.wb-statuspop');
   statusBtn.onclick=e=>{e.stopPropagation();const open=!statusPop.classList.contains('open');document.querySelectorAll('.wb-statuspop.open').forEach(x=>x.classList.remove('open'));statusPop.classList.toggle('open',open);statusBtn.setAttribute('aria-expanded',String(open));};
-  st.els.view.onchange=()=>{st.dirty=true;kick();};
   st.els.play.onclick=()=>{if(!st.rr)return;if(st.time>=st.end)st.time=0;st.playing=!st.playing;st.previous=performance.now();st.els.play.textContent=t(st.playing?'暂停':'播放');kick();};
   st.els.range.oninput=e=>{st.time=Number(e.target.value);st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();};
   st.ep=ep;st.issues=q('.wb-issues');renderIssues(st);
@@ -271,11 +269,11 @@ export function mountGroups(root,project,ep){
   groupObserver?.disconnect();
   const hosts=[...root.querySelectorAll('.wb-host')];
   if(!hosts.length)return;
-  // 未建面板先按项目画幅预留高度(两块画面 + 工具条/色标/播放条/说明约 190px),
+  // 未建面板先按项目画幅预留高度(两块画面 + 工具条/色标/播放条约 160px),
   // 减少懒建时上方内容撑高把页面推走的位移(导航跳转靠 preview_storyboard.html jumpTo 再校正)
   projectSettings(project).then(settings=>{
     const f=projectRenderFormat(settings);
-    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+190)}px`;}
+    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+160)}px`;}
   }).catch(()=>{});
   pending=new Map();
   groupObserver=new IntersectionObserver(entries=>{
