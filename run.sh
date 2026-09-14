@@ -8,7 +8,10 @@ cd "$(dirname "$0")"
 
 PYTHON="${PYTHON:-}"
 if [ -z "$PYTHON" ]; then
-    if command -v python >/dev/null 2>&1; then
+    # 与 Makefile 一致:优先使用 .venv,避免落到缺少依赖的系统解释器。
+    if [ -x .venv/bin/python ]; then
+        PYTHON=.venv/bin/python
+    elif command -v python >/dev/null 2>&1; then
         PYTHON=python
     elif command -v python3 >/dev/null 2>&1; then
         PYTHON=python3
@@ -18,5 +21,10 @@ if [ -z "$PYTHON" ]; then
     fi
 fi
 
+if ! "$PYTHON" -c 'import uvicorn' >/dev/null 2>&1; then
+    echo "run.sh: 依赖未安装($PYTHON 缺少 uvicorn),请先执行 make install" >&2
+    exit 1
+fi
+
 export VIDEOAGENTS_PERMISSION_MODE="${VIDEOAGENTS_PERMISSION_MODE:-bypassPermissions}"
-exec "$PYTHON" webui/server.py "$@"
+exec "$PYTHON" apps/web/server.py "$@"
