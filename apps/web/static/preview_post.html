@@ -423,9 +423,16 @@ function renderLeft(){
 function selectGroup(gid){
   if(gid===SEL)return;
   SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;if(SCOPE==='range')SCOPE='group';
-  MODE='group';PLAYING_EP=false;
+  if(MODE==='episode'){
+    // 整集连播中点组:不退出连播,改从该组起继续连播;正在播就接着播
+    const va=$('#va');PLAYING_EP=!!(va&&va.src&&!va.paused);
+    const i=D.groups.findIndex(x=>x.group_id===gid);
+    epLoad(i<0?0:i,0);return;
+  }
+  setMode('group');
   renderLeft();renderRight();renderFoot();setMonitor();
 }
+function setMode(m){MODE=m;if(m!=='episode')PLAYING_EP=false;$$('#mode span').forEach(x=>x.classList.toggle('on',x.dataset.m===m))}
 
 /* ---------- 监视器 ---------- */
 function renderMonitorShell(){
@@ -460,7 +467,7 @@ function renderMonitorShell(){
   </div>
   <div class="waves" id="waves"></div>`;
   const va=$('#va'),vb=$('#vb');
-  $$('#mode span').forEach(s=>s.onclick=()=>{MODE=s.dataset.m;$$('#mode span').forEach(x=>x.classList.toggle('on',x===s));setMonitor()});
+  $$('#mode span').forEach(s=>s.onclick=()=>{setMode(s.dataset.m);setMonitor()});
   $$('#ab span').forEach(s=>s.onclick=()=>{AB=s.dataset.ab;$$('#ab span').forEach(x=>x.classList.toggle('on',x===s));applyAB()});
   $('#selA').onchange=e=>{VA=+e.target.value;setMonitor(true)};
   $('#selB').onchange=e=>{VB=+e.target.value;setMonitor(true)};
@@ -709,7 +716,7 @@ async function recipeAction(rid,act,btn){
   try{
     if(act==='edit'){openRecipe({recipe:r});return}
     if(act==='override'){openRecipe({recipe:{...r,id:null,scope:{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)},status:'draft',output:null}});return}
-    if(act==='ab'){const gid=r.scope.group_id||SEL;const vs=r.output&&r.output.versions||{};const v=(vs[gid]||Object.values(vs)[0]||{}).v;if(r.scope.group_id&&r.scope.group_id!==SEL)selectGroup(r.scope.group_id);if(v!=null){VA=v;VB=(grpById(SEL)||{}).current||0;if(VB===VA)VB=0;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)}return}
+    if(act==='ab'){const gid=r.scope.group_id||SEL;const vs=r.output&&r.output.versions||{};const v=(vs[gid]||Object.values(vs)[0]||{}).v;if(MODE!=='group')setMode('group');if(r.scope.group_id&&r.scope.group_id!==SEL)selectGroup(r.scope.group_id);if(v!=null){VA=v;VB=(grpById(SEL)||{}).current||0;if(VB===VA)VB=0;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)}return}
     if(act==='seepreview'){const va=$('#va');va.src=r.preview_url;va.dataset.src=r.preview_url;$('#tagA').textContent=t('预览 ')+r.kind_label;AB='a';applyAB();va.play().catch(()=>{});return}
     if(act==='delete'){if(!confirm(t('删除这条修改单?')))return;btn.disabled=true;await J(api('/recipes/'+rid),'DELETE');await load(true);return}
     if(act==='copy'){
