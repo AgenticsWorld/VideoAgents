@@ -30,6 +30,7 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - `--max-new N`：本次最多新出 N 张即返回，退出码 3 表示还有待出；Agent 在前台循环运行直到退出码 0，避免单次命令过长而被诱导丢后台。
 - `--status`：机检 `shot_plates_complete`，逐镜给出 ok / partial（缺镜尾）/ missing / stale / file_missing，有问题退出码 1。workflow.yaml 把它列为 p6-shot-plates 的验收机检，orchestrator 只认它，不采信回执自述。
 - SOUL 硬纪律：禁止 nohup / & / “后台继续”；结单前必跑 `--status` PASS。
+- 2026-09-14 补：工具单次超时**自动**转后台同样算丢后台（成员一结单进程即退出、子进程被杀）。预防：出图命令显式 `timeout=600000` + `--max-new 3` 分批；被转后台就 TaskOutput 阻塞等到退出码。宿主侧：claude 引擎 Bash 默认超时提到 1 小时（`BASH_DEFAULT_TIMEOUT_MS`）；CLI 退出后进程组仍有子进程时宿主代等其排空再收尾，`dispatch.py --status` 附「⚠️成员提前结单」标记（`orphaned_children`），总制片只认机检。
 
 ## 母图制（2026-09-14 起：按机位出广角母图，分镜图从母图派生）
 

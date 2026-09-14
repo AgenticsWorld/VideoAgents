@@ -3003,6 +3003,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 任务回执/评分/日志一律写 {proj_rel}/runs/<task_id>/(项目目录内);**严禁写工作区根 runs/**(文档中省略前缀的 runs/ 均指项目目录内)
 - 交付方式:JSON/MD/YAML 类设计产物**直接逐份写出最终文件**,严禁先写 Python 生成脚本(把数据写成 dict 再跑脚本落盘)、严禁按几份一批拆多轮;一单 N 份的批处理工单一次做完;同批产物的共用说明(输入清单/坐标系/画幅约定等)不逐份复制进每个文件,只写 SOUL 规定字段与本实例特有值。确需脚本(计算/媒体处理/机检/批量调用)才写,落 {proj_rel}/code/,不要放进 runs/<task_id>/(WORKFLOW.md §2)
 - 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
+- **进程寿命 = 本轮回复(WORKFLOW.md §5)**:你给出最终回复即本运行结束、进程退出,你启动的全部子进程一并被杀——包括被工具因单次超时**自动**转到后台的命令。有在飞子进程时禁止结单:回复里写「后台等待/完成后通知/稍后汇报/等退出码返回再继续」= 任务未做,验收按机检退回,是否「主动」丢后台不影响判定。命令被转到后台后唯一合规动作:立刻阻塞等待它退出(TaskOutput 阻塞等待该任务 ID)拿到退出码再继续。预防:耗时命令事先显式给工具足够大的 timeout,并按每批能在超时内跑完的粒度分批
 - 完成后:用{ui_lang}简要汇报做了什么、关键决策,并列出「创建/修改的文件路径」清单
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
 
@@ -3273,8 +3274,11 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    `python3 services/runtime/dispatch.py --wait-all <run_id...> --timeout 7200` 一次性等待全部完成
    (它会自动把等待进度实时上报到控制台,并在结束后打印每个子任务的结果摘要)。
    严禁自己写 sleep/轮询循环等待——那会让你的运行在界面上长时间无响应。
-   等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)
-3. 收到产物后做验收:检查文件存在、抽查内容是否达标;**出图/出视频类工单(概念图、分镜背景图、白模视频)只认宿主机检的覆盖状态(如 `code/render_shot_plates.py --status`、`render_whitebox.py --verify-export`),不采信成员“已派后台/完成后通知”的自述——成员任务结束其子进程即被杀,丢后台=未做**;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
+   等待类命令记得给 Bash 工具设置足够大的 timeout(如 7200000 毫秒)。
+   **派出子任务后本轮不得结束**:必须 --wait-all 等到全部回执再验收;--wait-all 超时输出「仍在后台运行」
+   就再次 --wait-all,直到结束或子任务被宿主超时终止。「我在后台等它完成 / 出完再汇报」这类结束语 = 违规
+   (你的运行一结束就没人收回执)。唯一例外:已发起 --confirm/--sign 等用户裁决(签字后宿主会唤醒你)
+3. 收到产物后做验收:检查文件存在、抽查内容是否达标;**出图/出视频类工单(概念图、分镜背景图、白模视频)只认宿主机检的覆盖状态(如 `code/render_shot_plates.py --status`、`render_whitebox.py --verify-export`),不采信成员“已派后台/完成后通知”的自述——成员任务结束其子进程即被杀,丢后台=未做;`--status/--wait-all` 输出带「⚠️成员提前结单」标记(API `orphaned_children: true`)的子任务是宿主代等其子进程退出后才收尾的,回执自述早于完成,一律跑机检定验收**;不达标就带着具体意见重新派单(最多 {max_retries} 次,用户设置「Agent 高级设置→重跑次数」,见上方「用户重跑次数设定」)
 4. 【重跑须先确认】每次准备让某个 Agent 重跑(返工/重新派单)之前,必须先征询用户:
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?"`
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,{confirm_timeout} 秒无人答复则输出默认值「重跑」
@@ -3575,7 +3579,8 @@ def run_public(run: dict) -> dict:
     return {k: run[k] for k in (
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
-        "net_error", "engine", "model", "tokens", "progress", "skill", "skill_read",
+        "net_error", "orphaned_children", "orphan_wait", "engine", "model", "tokens",
+        "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
         "files": run.get("files", [])[-20:],
@@ -3952,6 +3957,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                "WEBUI_PROJECT": run["project"]}
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        if engine == "claude":
+            # Bash 工具默认 2 分钟超时即把命令自动转到后台,成员一结单子进程就被杀
+            # (前科 p6-shot-plates 出图脚本);默认提到 1 小时、上限 2 小时(与运行超时缺省对齐),
+            # 用户环境已设则尊重
+            env.setdefault("BASH_DEFAULT_TIMEOUT_MS", "3600000")
+            env.setdefault("BASH_MAX_TIMEOUT_MS", "7200000")
         if engine == "opencode":   # 缓存目录不可写时改道,避免模型注册表过期
             env = opencode_env(env)
         if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
@@ -4049,6 +4060,9 @@ async def execute_run(run: dict, message: str, model: str | None):
                         _kill_proc_tree(proc)
                         break
                 await proc.wait()
+                # 成员结单但其进程组里还有派生子进程在跑(把长命令留在后台就回复了):
+                # 宿主代等其排空,已在跑的出图/出视频不白白被杀;标记透传给调度层
+                await _drain_orphaned_children(run, proc, deadline)
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine == "pi" and bool(run.get("error"))))
@@ -4169,6 +4183,12 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
                 reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
                 chat_entry["text"] = reply
+            elif run.get("orphaned_children"):
+                # 成员回复时子进程还在跑:回执写于完成之前,标明宿主已代等,验收只认机检
+                reply = ("⚠️ 成员提前结单:给出回复时其派生子进程仍在运行(违反「进程寿命 = 本轮回复」纪律),"
+                         f"宿主已代等其退出 {int(run.get('orphan_wait') or 0)}s;下文回执写于子进程完成之前,"
+                         "验收只认宿主机检。\n\n" + reply)
+                chat_entry.update(text=reply, orphaned_children=True)
             append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
             if agent_id == REVISER_ID:
@@ -11939,6 +11959,56 @@ def _kill_proc_tree(proc):
             proc.kill()
         except Exception:
             pass
+
+
+async def _drain_orphaned_children(run: dict, proc, deadline: float) -> None:
+    """CLI 正常退出后,若其进程组(start_new_session,组 id = CLI pid)里仍有存活子进程,
+    宿主不立即结单,代等进程组排空(受运行超时 deadline 约束;用户手动停止即杀组)。
+    置 run["orphaned_children"]=True / run["orphan_wait"]=秒数,随 run_public/对话记录/
+    dispatch.py 输出透传:调度层据此不采信成员自述、只认机检。Windows 不支持进程组探测。"""
+    if os.name == "nt" or proc is None:
+        return
+    import signal
+    pgid = proc.pid
+
+    def alive() -> bool:
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # 组里只剩我们无权发信号的进程(实测 macOS 上被 SIGKILL 后尚未回收的子进程
+            # 也会报 EPERM):等也等不到,视为已排空
+            return False
+        except Exception:
+            return False
+
+    if not alive():
+        return
+    t0 = time.time()
+    run["orphaned_children"] = True
+    print(f"[run {run['id']}] 成员已结单但派生子进程仍在运行,宿主代等其退出", flush=True)
+    while alive():
+        if run.get("stopped"):
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except Exception:
+                pass
+            break
+        if time.time() > deadline:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except Exception:
+                pass
+            run["orphan_wait"] = int(time.time() - t0)
+            raise TimeoutError("成员已结单,其派生子进程仍运行到运行超时")
+        run["orphan_wait"] = int(time.time() - t0)
+        run["progress"] = f"⚠️ 成员已结单,宿主代等其派生子进程退出 {run['orphan_wait']}s…"
+        publish_run(run)
+        await asyncio.sleep(2)
+    run["orphan_wait"] = int(time.time() - t0)
+    run.pop("progress", None)
 
 
 def _stop_run(run, by: str = "user") -> bool:

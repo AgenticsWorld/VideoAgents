@@ -74,6 +74,9 @@ def fmt_run(r: dict) -> str:
         tag = " ⏹服务关闭/重启时被中断(非错误,无需追查原因)"
     elif r.get("net_error"):
         tag = " 🔌网络中断快速失败(API 连接被重置,非程序错误,不计 attempt;修好网络后重派)"
+    elif r.get("orphaned_children"):
+        tag = (f" ⚠️成员提前结单(回复时子进程仍在跑,宿主已代等 {r.get('orphan_wait', 0)}s;"
+               "自述早于完成,验收只认机检)")
     return (f"[{r['status']:>7}] {r['id']} {r['agent']}{par}{dur} "
             f"| {r.get('message', '')[:60]}{tag}")
 
@@ -156,6 +159,9 @@ def wait_all(ids: list[str], timeout: int, interval: int = 5):
                 if r.get("result"):
                     print("  --- 结果 ---")
                     print("  " + (r["result"][:2000]).replace("\n", "\n  "))
+                if r.get("orphaned_children"):
+                    print(f"  ⚠️ 成员提前结单:回复时其派生子进程仍在运行,宿主已代等 "
+                          f"{r.get('orphan_wait', 0)}s 至其退出;上面的回执写于完成之前,验收只认宿主机检")
                 if r.get("status") != "done":
                     failed = True
                     if r.get("stopped"):
