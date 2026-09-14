@@ -11,7 +11,8 @@
   ③ `Global constraints:` 含禁白模外观句(no whitebox look …);
   ④ **白模人物参考图规约(2026-09-09)**:refs 只含本组白模摄影机视频里实际出现的人物/生物的参考图
      (`assets/concepts/characters|creatures/<id>/…`);未出现者(缺席/远程、整组 visible:false、各镜 visible_actor_ids
-     排除、整组不在画幅内)的图=违规,--write 自动移出并重排 [Image N](正文仍引用时不动,先改正文)。
+     排除、整组按姿态包围盒不在画幅内)的图=违规,--write 自动移出并重排 [Image N](正文仍引用时不动,先改正文);
+     **未出现者的 id/白模 label 出现在正文**(宿主固定段之外)也=违规 whitebox_hidden_mention(2026-09-14),须人工删正文描述。
 不带 --write 只机检(退出码 1 = 有违规);--write 幂等回写以上三项(原 prompt 首次备份到
 directing/<ep>/whitebox/prompt_backups/)。render_whitebox.py 导出后会自动 --write 一次;prompt 工位产出 prompt 后
 再跑一次 --write 即可补齐。开关关闭时报 skipped。

@@ -12,10 +12,14 @@
   - 机检 whitebox_ref_bound(code/sync_whitebox_refs.py 不带 --write)。
   - **白模人物参考图规约(2026-09-09)**:只有在本组白模摄影机视频里实际出现的人物/生物,其参考图
     (`assets/concepts/characters|creatures/<id>/…`)才进本组 refs。「出现」= 该 actor 在至少一镜里
-    presence 非 absent/remote、关键帧 visible 非 false、未被该镜 `visible_actor_ids` 排除,且包围球落在
-    该镜摄影机画幅内(画幅外 10% 容差,不算遮挡);见 appearing_cast()。sync_scene_cast 不再为其余人物
-    补图,--write 把已挂的多余人物图移出 refs 并重排 `[Image N]`,`Whitebox legend:` 也只列出现者;
-    正文仍引用被移除图时不动 refs、按违规上报由人工先改正文。
+    presence 非 absent/remote、关键帧 visible 非 false、未被该镜 `visible_actor_ids` 排除,且**包围盒**落在
+    该镜摄影机画幅内(画幅外 10% 容差,不算遮挡);见 appearing_cast()。
+    **2026-09-14 起入画判定改用按姿态的轴对齐包围盒**(站姿=size_m 全高、坐姿=0.8 身高+腿前伸、卧姿=0.35 身高×身长),
+    不再用包围球——1.7 m 人物的包围球半径 0.9 m,横向外扩近 4 倍身宽,把明明坐在画幅外的人(liaozhai3 ep01 grp014 范生)也判成入画。
+    sync_scene_cast 不再为其余人物补图,--write 把已挂的多余人物图移出 refs 并重排 `[Image N]`,`Whitebox legend:` 也只列出现者;
+    正文仍引用被移除图时不动 refs、按违规上报由人工先改正文。**未出现者也不得写进正文**(2026-09-14):
+    Shot 段 staging、【人物】/【主体设定】、Global constraints 里都不得提及其 id 或白模 label——模型只按文字生成,
+    写了「画幅外坐着」它也会把人画进来;机检 whitebox_hidden_mention 在宿主固定段之外发现其 id/label 即报违规。
 预算:按本组生效视频模型的参考视频数量/总时长上限判 camera.mp4(画面视角,定人物在画面里的位置)是否装得下;
 2026-09-08 起白模只导出摄影机视角、不再有 top.mp4 俯视视频(原 output.whitebox_top_video 开关废止);
 渠道不支持参考视频时不接、退回干净俯视图口径。
@@ -73,25 +77,50 @@ def _basis(cam):
     return r, u, f
 
 
-def sphere_in_frame(center, radius, cam, aspect, margin=FRAME_MARGIN):
-    """包围球(世界坐标)是否与该时刻摄影机视锥相交(不算遮挡)。cam: 采样后的摄影机关键帧(position/target/fov 竖向角度)。"""
+def actor_bounds(actor: dict, key: dict) -> tuple:
+    """人物在该关键帧的轴对齐包围盒(世界坐标):(center, half_extents)。按姿态取占位——
+    stand: size_m 全高、脚印 max(w,d);sit: 0.8 身高(头顶≈0.725h+头半径,与 whitebox-renderer.js 同比例)、脚印加腿前伸 0.2h;
+    lie: 0.35 身高、脚印 0.5 身长。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。"""
+    size = actor.get('size_m') or [0.5, 1.7, 0.4]
+    w = float(size[0]); h = float(size[1]) if len(size) > 1 else 1.7; d = float(size[2]) if len(size) > 2 else w
+    half_w = 0.5 * max(w, d)
+    pose = key.get('pose') or 'stand'
+    if pose == 'sit':
+        height, half_w = 0.8 * h, max(half_w, 0.2 * h)
+    elif pose == 'lie':
+        height, half_w = 0.35 * h, max(half_w, 0.5 * h)
+    else:
+        height = h
+    pos = key.get('position') or [0, 0, 0]
+    center = [float(pos[0]), float(pos[1]) + height / 2, float(pos[2])]
+    return center, [half_w, height / 2, half_w]
+
+
+def box_in_frame(center, half, cam, aspect, margin=FRAME_MARGIN):
+    """轴对齐包围盒(世界坐标)是否与该时刻摄影机视锥相交(不算遮挡):8 个角点全部落在视锥某一个面之外 → 不相交,否则算相交。
+    cam: 采样后的摄影机关键帧(position/target/fov 竖向角度)。"""
     basis = _basis(cam)
     if basis is None:
         return False
-    r_axis, u_axis, f_axis = basis
-    d = [c - p for c, p in zip(center, cam['position'])]
-    x = sum(a * b for a, b in zip(d, r_axis))
-    y = sum(a * b for a, b in zip(d, u_axis))
-    z = sum(a * b for a, b in zip(d, f_axis))
-    if z + radius < CAMERA_NEAR_M:
-        return False
     tv = math.tan(math.radians(float(cam.get('fov') or 50)) / 2) * (1 + margin)
     th = tv * float(aspect or 16 / 9)
-    for value, tan_half in ((x, th), (y, tv)):
-        norm = math.sqrt(1 + tan_half * tan_half)
-        if (z * tan_half - value) / norm < -radius or (z * tan_half + value) / norm < -radius:
-            return False
-    return True
+    corners = []
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                p = [center[0] + sx * half[0], center[1] + sy * half[1], center[2] + sz * half[2]]
+                d = [c - q for c, q in zip(p, cam['position'])]
+                corners.append([sum(a * b for a, b in zip(d, axis)) for axis in basis])
+    planes = (lambda x, y, z: z - CAMERA_NEAR_M,
+              lambda x, y, z: z * th - x, lambda x, y, z: z * th + x,
+              lambda x, y, z: z * tv - y, lambda x, y, z: z * tv + y)
+    return not any(all(plane(*c) < 0 for c in corners) for plane in planes)
+
+
+def in_frame(actor: dict, key: dict, cam, aspect, margin=FRAME_MARGIN) -> bool:
+    """该人物在该关键帧是否入画(包围盒 × 视锥,不计遮挡)。"""
+    center, half = actor_bounds(actor, key)
+    return box_in_frame(center, half, cam, aspect, margin)
 
 
 def _sample_times(start, duration, *keyframe_lists):
@@ -106,7 +135,8 @@ def _sample_times(start, duration, *keyframe_lists):
 def appearing_cast(group: dict, render: dict | None = None) -> dict:
     """本组白模摄影机视频里实际出现的人物/生物(含群演):{'visible': [id…], 'hidden': {id: 原因}, 'source'}。
     出现 = 至少一镜满足:presence 非 absent/remote、该时刻关键帧 visible 非 false、未被该镜 visible_actor_ids 排除、
-    包围球落在该镜摄影机画幅内(FRAME_MARGIN 容差;不计几何遮挡)。scene_cast 里没有 actor 的人物(缺席/远程)也记 hidden。"""
+    按姿态的包围盒落在该镜摄影机画幅内(FRAME_MARGIN 容差;不计几何遮挡;见 actor_bounds/box_in_frame)。
+    scene_cast 里没有 actor 的人物(缺席/远程)也记 hidden。"""
     render = render or {}
     aspect = None
     try:
@@ -131,9 +161,6 @@ def appearing_cast(group: dict, render: dict | None = None) -> dict:
         if keys and all(k.get('visible') is False for k in keys):
             hidden[aid] = '整组关键帧 visible:false(已离场/尚未入场)'
             continue
-        size = actor.get('size_m') or [0.5, 1.7, 0.4]
-        radius = 0.5 * math.sqrt(sum(float(v) * float(v) for v in size))
-        half_h = float(size[1]) / 2 if len(size) > 1 else 0.85
         excluded_everywhere, seen_frame = bool(cameras), not cameras   # 无机位数据(旧编译)时保守视为出现
         for cam in cameras:
             allowed = cam.get('visible_actor_ids')
@@ -149,9 +176,7 @@ def appearing_cast(group: dict, render: dict | None = None) -> dict:
                 k = sample(keys, t)
                 if k.get('visible') is False:
                     continue
-                pos = k.get('position') or [0, 0, 0]
-                center = [float(pos[0]), float(pos[1]) + half_h, float(pos[2])]
-                if sphere_in_frame(center, radius, sample(ckeys, t - start), aspect):
+                if in_frame(actor, k, sample(ckeys, t - start), aspect):
                     seen_frame = True
                     break
             if seen_frame:
@@ -197,6 +222,67 @@ def hidden_cast_refs(refs, cast) -> list:
 
 def cast_hidden_reason(cast, cid):
     return (cast or {}).get('hidden', {}).get(cid) or '不在本组白模人物列表'
+
+
+MENTION_MIN_LABEL = 2   # 单字 label(如「婢」)太易误报,只按 id 查
+# 句内出现这些词=「明令不出现」的否定句(SOUL §7A 既有做法:前组人物本组不该在时明令 must not appear),不算把人写进画面
+ABSENCE_WORDS = ('不出现', '不出场', '不在场', '不入画', '不入镜', '不进画', '未入场', '未入画', '未出场', '已离场', '已退场', '离场后',
+                 '不得出现', '不得生成', '不生成', '不在画面', '不在本组', '缺席', '不再出现',
+                 'must not appear', 'does not appear', 'do not appear', 'not appear', 'never appears', 'not present',
+                 'absent', 'off-screen', 'offscreen', 'no longer in')
+_SENT_SPLIT_RE = re.compile(r'(?<=[。．.!?！？;；\n])')
+
+
+DIRECTOR_NOTE_RE = re.compile(r"Director's note(?: \(user instruction, must follow\))?:.*?(?=\n\n|Global constraints:|$)", re.S)
+
+
+def verbatim_fragments(base: Path, ep: str, gid: str) -> list:
+    """正文里须逐字保留、且允许提到未出场人物的片段:shot_list 组 blocking_map 各角色/生物的 route_en(常含用户修正原文,
+    如「S04-19/20 少妇逐步变为 CRE-002」);机检 whitebox_hidden_mention 扫描前先剔除。"""
+    sl = read(Path(base) / 'directing' / component(ep) / 'shot_list.json', {}) or {}
+    g = next((x for x in sl.get('generation_groups', []) if x.get('group_id') == component(gid)), None) or {}
+    out = []
+    for rows in (g.get('blocking_map') or {}).values():
+        if isinstance(rows, list):
+            out += [str(r['route_en']).strip() for r in rows if isinstance(r, dict) and r.get('route_en')]
+    return [x for x in out if x]
+
+
+def hidden_cast_mentions(text: str, group: dict | None, cast, verbatim=()) -> list:
+    """正文把未在本组白模出现的人物写进了画面:[(id, 命中词)…]。命中词 = actor id,或白模 label(≥2 字);同一人物只报一次。
+    按句判断:含 ABSENCE_WORDS 的否定句(「X 已离场,不出现在画面中」)不算;别的人物 label 包含本 label 时不按子串误报。
+    扫描前剔除:宿主固定段 Scene presence / Whitebox reference(其中的不在场声明与图例由宿主生成)、用户导演注释
+    `Director's note …`(原句必须保留)、verbatim 里的逐字片段(blocking_map route_en 等用户原文)。"""
+    if not cast or not text:
+        return []
+    from modules.scene_cast import CAST_BLOCK_RE
+    body = DIRECTOR_NOTE_RE.sub('', _BLOCK_RE.sub('', CAST_BLOCK_RE.sub('', text)))
+    for frag in verbatim or ():
+        if frag:
+            body = body.replace(frag, '')
+    labels = {a.get('id'): str(a.get('label') or '').strip()
+              for a in list((group or {}).get('actors') or []) + list((group or {}).get('extras') or []) if a.get('id')}
+    sentences = [x for x in _SENT_SPLIT_RE.split(body) if x.strip()]
+    out = []
+    for cid in cast.get('hidden') or {}:
+        terms = [cid]
+        label = labels.get(cid) or ''
+        if len(label) >= MENTION_MIN_LABEL:
+            terms.append(label)
+        # 别的人物 label 包含本 label(韩生 ⊂ 韩生妻、画皮鬼 ⊂ 画皮鬼本相)时先抹掉更长的那个,避免子串误报
+        longer = [o for o in labels.values() if o and o != label and label and label in o]
+        hit = None
+        for sent in sentences:
+            probe = sent
+            for o in longer:
+                probe = probe.replace(o, '')
+            term = next((t for t in terms if t and t in probe), None)
+            if term and not any(w in sent for w in ABSENCE_WORDS):
+                hit = term
+                break
+        if hit:
+            out.append((cid, hit))
+    return out
 
 
 def strip_cast_refs(prompt: dict, drop: list):
@@ -301,7 +387,7 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
     cast = cast_filter(base, ep, gid)   # 本组白模实际出现的人物(None=项目未开白模链/本组未编译,不限制)
     if group is None or manifest is None:
         return {'camera': None, 'videos': [], 'group': group, 'budget': None, 'cast': cast, 'render': {},
-                'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
+                'verbatim': verbatim_fragments(base, ep, gid), 'skipped_reason': '白模视频未导出(先跑 code/render_whitebox.py)'}
     budget = video_budget(base, ep, gid)
     from modules.continuity_refs import plan as continuation_plan, probe, local, TAIL_VIDEO
     if continuation is None:
@@ -330,6 +416,7 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
         videos.append(cam)
     render = (read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}).get('render') or {}
     return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast, 'render': render,
+            'verbatim': verbatim_fragments(base, ep, gid),
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
 
 
@@ -438,7 +525,7 @@ def facing_rows(group: dict, cast: dict | None = None, render: dict | None = Non
     """逐镜、逐(在画内的)人物相对摄影机朝向:[{shot_no, shot_id, actors: [{id, label, phases, phrase}]}];
     phases 记整镜相位序列(结构化数据),phrase 只取开场相位。
     只算图例里的人物/生物(非骑手、白模里实际出现者);采样点取该镜 [start, start+duration) 内、关键帧 visible 非 false、
-    该镜 visible_actor_ids 允许、包围球在画幅内、摄影机不在其身体里、且未被更近人物的包围盒完全遮住的时刻;
+    该镜 visible_actor_ids 允许、包围盒在画幅内、摄影机不在其身体里、且未被更近人物的包围盒完全遮住的时刻;
     短于 min(0.5s, 20% 镜长)的相位不报(切点抖动/擦边)。"""
     render = render or {}
     aspect = None
@@ -480,16 +567,12 @@ def facing_rows(group: dict, cast: dict | None = None, render: dict | None = Non
         for a in people:
             if a not in in_shot:
                 continue
-            size = a.get('size_m') or [0.5, 1.7, 0.4]
-            radius = 0.5 * math.sqrt(sum(float(v) * float(v) for v in size))
-            half_h = float(size[1]) / 2 if len(size) > 1 else 0.85
             spans = []
             for t, ck, rects in frames:
                 if a['id'] not in rects:
                     continue
                 rect, k = rects[a['id']]
-                pos = k.get('position') or [0, 0, 0]
-                if not sphere_in_frame([float(pos[0]), float(pos[1]) + half_h, float(pos[2])], radius, ck, aspect):
+                if not in_frame(a, k, ck, aspect):
                     continue
                 if _occluded(rect, [r for cid, (r, _k) in rects.items() if cid != a['id']]):
                     continue
@@ -620,6 +703,9 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
         cid = cast_ref_id(r)
         errs.append(f"{gid}: refs 含未在本组白模出现的人物图 {r}({cid}:{cast_hidden_reason(cast, cid)});"
                     f"白模项目只挂白模里出现的人物参考图——删去正文对该图的引用后跑 code/sync_whitebox_refs.py --write 移出")
+    for cid, term in hidden_cast_mentions(vp, plan.get('group'), cast, plan.get('verbatim') or ()):
+        errs.append(f"{gid}: whitebox_hidden_mention: 正文提及未在本组白模出现的人物 {cid}(命中「{term}」;{cast_hidden_reason(cast, cid)});"
+                    f"画幅外/未入画人物不进视频提示词——删去 Shot 段 staging、【人物】/【主体设定】与 Global constraints 里对其的描述")
     if not plan['videos']:
         stale = [v for v in vrefs if '/whitebox/' in v]
         if stale:
