@@ -90,6 +90,16 @@ RELIGHT_RULE = (
 NEGATIVE = ('people, person, human figure, crowd, vehicles in motion, text, watermark, logo, grid lines, wireframe, grey untextured '
             'blocks, 3D render look, CGI, map, floor plan, split screen, collage, black borders, fisheye circle, cropped panorama, '
             'cube map, tiled grid')
+# 洞口光照规则(2026-09-14,liaozhai3 SCN-0005 反例:方案 LGT-0005-01 写明「夜里窗为纯黑背景面」,全景却把三扇窗画成透暖光,
+# 之后每张背景图与视频都跟着亮窗):夜间方案且主光不是窗/门外来光 → 全部窗/门洞口写成不透光暗面 + 负面词,出图后按白模洞口几何测亮度。
+OPENING_LUMA_MAX = 72            # 洞口在全景/背景图里的平均亮度上限(0–255;liaozhai3 SCN-0005 实测:整幅中位 27,不透光门洞 30,透光窗 87–151)
+OPENING_LUMA_RATIO = 1.8         # 且不得高于整幅中位亮度的此倍数(两条同时超才算透光)
+OPENING_MIN_PX = 40              # 洞口可见采样点少于此数不判(被遮挡/在画外)
+OPENING_RETRY = 1                # 透光违规时把违规洞口名写进提示词自动重出的次数
+NIGHT_WORDS = ('夜', '晚', 'night', 'midnight')
+WINDOW_SOURCE_WORDS = ('窗', 'window', 'daylight', 'sunlight', 'sun ', '日光', '月光', 'moon', 'skylight', '天光', 'outside', '门外')
+OPENINGS_RETRY_RULE = ('IMPORTANT — in the previous attempt light was glowing through {names}; that is wrong for this night scene: '
+                       'paint them as dark, unlit, opaque surfaces with no light coming through.')
 
 
 class PanoError(RuntimeError):
@@ -438,6 +448,136 @@ def lighting_scheme(base: Path, sid: str, scheme: str) -> dict:
     return {}
 
 
+def opening_apertures(scene: dict, layout: dict) -> list[dict]:
+    """白模里的窗/门洞口盒:墙段命名 room-<side>-<地标>-lintel(过梁)/-sill(窗台)→ 洞口 = 窗台顶到过梁底(无窗台的门洞自地面起),
+    平面范围取过梁段;名称/kind 取布局地标(opening / entrance)。返回 [{id, name, kind, position, size_m}]。"""
+    objs = {o['id']: o for o in scene.get('objects', []) if isinstance(o, dict) and o.get('id')}
+    landmarks = {lm['id']: lm for lm in layout.get('landmarks', []) if isinstance(lm, dict) and lm.get('id')}
+    out = []
+    for oid, o in objs.items():
+        m = re.fullmatch(r'room-([nsew])-(.+)-lintel', oid)
+        if not m:
+            continue
+        side, lid = m.groups()
+        sill = objs.get(f'room-{side}-{lid}-sill')
+        lx, ly, lz = o['position']; sx, sy, sz = o['size_m']
+        top = ly - sy / 2
+        bottom = (sill['position'][1] + sill['size_m'][1] / 2) if sill else 0.0
+        if top - bottom < 0.2:
+            continue
+        lm = landmarks.get(lid) or {}
+        out.append({'id': lid, 'name': lm.get('name_en') or lm.get('name') or lid.replace('_', ' '),
+                    'kind': lm.get('kind') or ('opening' if sill else 'entrance'),
+                    'position': [lx, (top + bottom) / 2, lz], 'size_m': [sx, top - bottom, sz]})
+    return out
+
+
+def openings_rule(scheme: dict, apertures: list, time_of_day: str | None = None) -> tuple[str, str]:
+    """(提示词句, 负面词):夜间方案且主光不是窗/门外来光 → 全部洞口写成不透光暗面;否则 ('', '')。"""
+    tod = str(((scheme.get('condition') or {}).get('time_of_day')) or time_of_day or '').lower()
+    blob = ' '.join(str(scheme.get(k) or '') for k in ('key_source', 'direction')).lower()
+    if not apertures or not any(w in tod for w in NIGHT_WORDS) or any(w in blob for w in WINDOW_SOURCE_WORDS):
+        return '', ''
+    names = ', '.join(dict.fromkeys(a['name'] for a in apertures))
+    sentence = (f"Every window and door opening of this location ({names}) is dark and unlit: paper or lattice windows read as dull, "
+                "opaque surfaces darker than the surrounding wall, door openings show only unlit darkness beyond, and no light of any kind "
+                "glows through or comes in from any window or doorway — the only light is the practical source named in the lighting sentence.")
+    negative = ('glowing window, light shining through window, backlit window, moonlight through window, daylight, sunlight, sky light, '
+                'bright doorway, light from outside')
+    return sentence, negative
+
+
+def openings_rule_zh(scheme: dict, apertures: list, time_of_day: str | None = None) -> str:
+    """同 openings_rule 的中文句(Seedance 2.5 中文提示词的【场景】段用)。"""
+    if not openings_rule(scheme, apertures, time_of_day)[0]:
+        return ''
+    names = '、'.join(dict.fromkeys(a['name'] for a in apertures))
+    return f"本场为夜景，所有窗户与门口（{names}）都是不透光的暗面，没有任何光从窗或门透进来；画内唯一光源按本组光照描述。"
+
+
+def openings_for(base: Path, sid: str, scheme_id: str | None, time_of_day: str | None = None) -> dict:
+    """场景洞口 + 本方案的洞口光照规则:{'apertures', 'rule', 'rule_zh', 'negative', 'scheme'}。scheme_id 可为 id 或 slug。"""
+    from modules.whitebox import load_scene
+    sid = component(sid)
+    try:
+        scene = load_scene(base, sid)
+    except Exception:  # noqa: BLE001
+        scene = read(base / 'assets/concepts/scenes' / sid / 'whitebox.scene.json', {}) or {}
+    layout = read(base / 'assets/concepts/scenes' / sid / 'layout.json', {}) or {}
+    sch = lighting_scheme(base, sid, scheme_slug(scheme_id, time_of_day))
+    apertures = opening_apertures(scene, layout)
+    rule, negative = openings_rule(sch, apertures, time_of_day)
+    return {'apertures': apertures, 'rule': rule, 'rule_zh': openings_rule_zh(sch, apertures, time_of_day), 'negative': negative, 'scheme': sch}
+
+
+def aperture_points(aperture: dict, n: int = 12) -> list:
+    """洞口面(墙中面)上的 n×n 采样点。"""
+    cx, cy, cz = aperture['position']; sx, sy, sz = aperture['size_m']
+    along_x = sx >= sz   # 薄的那一维是墙厚
+    pts = []
+    for i in range(n):
+        for j in range(n):
+            a = (i / (n - 1) - .5); b = (j / (n - 1) - .5)
+            pts.append([cx + a * sx, cy + b * sy, cz] if along_x else [cx, cy + b * sy, cz + a * sz])
+    return pts
+
+
+def openings_check(base: Path, sid: str, anchor: dict, scheme: str, apertures: list) -> dict:
+    """夜间全景机检:每个洞口按白模几何投到等距柱状全景,取可见采样点的平均亮度,与整幅中位亮度比较。
+    返回 {'room_median_luma', 'openings': {name: {luma, visible_px, ok}}, 'ok'}。"""
+    import cv2
+    import numpy as np
+    pano, depth0, cam0, yaw0, _indoor, _z_max = _load_pano(base, sid, anchor, scheme)
+    H, W = depth0.shape
+    gray = cv2.cvtColor(pano, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    median = float(np.median(gray))
+    limit = max(OPENING_LUMA_MAX, OPENING_LUMA_RATIO * median)
+    result = {'room_median_luma': round(median, 1), 'limit': round(limit, 1), 'openings': {}, 'ok': True}
+    cy, sy = math.cos(yaw0), math.sin(yaw0)
+    for a in apertures:
+        pts = np.array(aperture_points(a), dtype=np.float64)
+        v = pts - cam0
+        dist = np.linalg.norm(v, axis=1) + 1e-9
+        lx = cy * v[:, 0] - sy * v[:, 2]; lz = sy * v[:, 0] + cy * v[:, 2]; ly = v[:, 1]
+        theta = np.arctan2(lx, -lz); phi = np.arccos(np.clip(ly / dist, -1, 1))
+        u = np.clip(((theta + np.pi) / (2 * np.pi) * W).astype(np.int64), 0, W - 1)
+        r = np.clip((phi / np.pi * H).astype(np.int64), 0, H - 1)
+        visible = depth0[r, u] >= dist * 0.9 - 0.15   # 洞口方向的深度 ≥ 洞口距离 = 没被更近的实体挡住
+        n = int(visible.sum())
+        if n < OPENING_MIN_PX:
+            result['openings'][a['name']] = {'luma': None, 'visible_px': n, 'ok': True}
+            continue
+        luma = float(gray[r[visible], u[visible]].mean())
+        ok = luma <= limit
+        result['openings'][a['name']] = {'luma': round(luma, 1), 'visible_px': n, 'ok': ok}
+        result['ok'] = result['ok'] and ok
+    return result
+
+
+def openings_check_image(image_path: Path, boxes: dict) -> dict:
+    """透视图(背景图)版洞口亮度机检:boxes={name: (x0,y0,x1,y1) 归一化画幅坐标};同一阈值口径。"""
+    import cv2
+    import numpy as np
+    im = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if im is None:
+        return {'ok': True, 'openings': {}, 'error': 'unreadable'}
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    h, w = gray.shape
+    median = float(np.median(gray))
+    limit = max(OPENING_LUMA_MAX, OPENING_LUMA_RATIO * median)
+    result = {'room_median_luma': round(median, 1), 'limit': round(limit, 1), 'openings': {}, 'ok': True}
+    for name, (x0, y0, x1, y1) in boxes.items():
+        X0, X1 = int(max(0, x0) * w), int(min(1, x1) * w); Y0, Y1 = int(max(0, y0) * h), int(min(1, y1) * h)
+        if X1 - X0 < 4 or Y1 - Y0 < 4:
+            result['openings'][name] = {'luma': None, 'ok': True}
+            continue
+        luma = float(gray[Y0:Y1, X0:X1].mean())
+        ok = luma <= limit
+        result['openings'][name] = {'luma': round(luma, 1), 'box': [round(v, 3) for v in (x0, y0, x1, y1)], 'ok': ok}
+        result['ok'] = result['ok'] and ok
+    return result
+
+
 def object_inventory(scene: dict, layout: dict, anchor: dict) -> list[str]:
     """锚点四周每个白模物体一句:名称、尺寸、离机位距离、罗盘方位与画面横向位置、长轴走向、朝向(有 <id>_back 靠背块的座椅
     自动推出「靠背在 X 侧,面朝 Y」)。白模只是方块,不写这些模型会在每个锚点各自猜(dzg6 SCN-0002 A1/A2 座椅方向相反)。"""
@@ -527,6 +667,9 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
                      + ' '.join(inv) + ' Every long row, counter or wall must keep exactly this direction and every seat must face exactly the stated way.')
     if sch.get('prompt_fragment_en'):
         parts.append('Lighting: ' + sch['prompt_fragment_en'] + '.')
+    rule, _neg = openings_rule(sch, opening_apertures(scene, layout), time_of_day)
+    if rule:
+        parts.append(rule)
     desc = ' '.join(p.rstrip('.。;') + '.' for p in (_flat(arch.get(k2)) for k2 in ('form', 'arch_style', 'era_region', 'scale', 'materials', 'details')) if p)
     if desc:
         parts.append('Materials and era (reference only): ' + desc[:1200])
@@ -735,18 +878,45 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         if layout.is_file():
             refs.append(layout); rules.append(LAYOUT_REF_RULE.format(n=len(refs)))
     prompt = PANO_PROJECTION_RULES + ''.join(rules) + pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day)
+    openings = openings_for(base, sid, scheme, time_of_day)
+    negative = NEGATIVE + (', ' + openings['negative'] if openings['negative'] else '')
     if seed is None:
         import random
         seed = random.randint(1, 2 ** 31 - 1)
     target = out / f'{scheme}.png'
     log(f"   出全景 {anchor['anchor_id']}/{scheme} [{mode}] {cfg.get('provider')}/{cfg.get('model')} {PANO_SIZE},参考图 {len(refs)} 张 …")
-    generate_image(prompt, str(target), negative=NEGATIVE, refs=[str(r) for r in refs], size=PANO_SIZE, seed=seed)
-    im = Image.open(target); rw, rh = im.size
-    if abs(rw / rh - 2.0) > ASPECT_TOLERANCE:
-        target.rename(target.with_suffix('.rejected.png'))
-        mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
-        raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
-                              "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
+    attempts = []
+    check = None
+    use_prompt, use_seed = prompt, seed
+    for attempt in range(1 + (OPENING_RETRY if openings['rule'] else 0)):
+        generate_image(use_prompt, str(target), negative=negative, refs=[str(r) for r in refs], size=PANO_SIZE, seed=use_seed)
+        im = Image.open(target); rw, rh = im.size
+        if abs(rw / rh - 2.0) > ASPECT_TOLERANCE:
+            target.rename(target.with_suffix('.rejected.png'))
+            mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
+            raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
+                                  "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
+        seed = use_seed
+        if not openings['rule']:
+            break
+        # 洞口透光机检(夜间方案):按白模洞口几何在全景里测亮度;违规则把违规洞口名写进提示词换种子重出一次
+        check = openings_check(base, sid, anchor, scheme, openings['apertures'])
+        bad = [n for n, v in check['openings'].items() if not v['ok']]
+        attempts.append({'seed': use_seed, 'ok': check['ok'], 'bad': bad, 'openings': check['openings']})
+        if check['ok']:
+            break
+        log(f"   WARN 洞口透光:{', '.join(f'{n} 亮度 {check['openings'][n]['luma']}' for n in bad)} > 上限 {check['limit']}(整幅中位 {check['room_median_luma']})")
+        if attempt < OPENING_RETRY:
+            import random
+            rejected = target.with_name(f"{scheme}.rejected-openings-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.png")
+            target.rename(rejected)
+            use_prompt = prompt + ' ' + OPENINGS_RETRY_RULE.format(names=', '.join(bad))
+            use_seed = random.randint(1, 2 ** 31 - 1)
+            log(f"   透光违规,旧图存为 {rejected.name},把违规洞口写进提示词重出 …")
+    if check is not None:
+        check['attempts'] = attempts
+        if not check['ok']:
+            log(f"   WARN 洞口透光机检仍不过(scene_panos_ready 记 openings_violations):请在预览页核对,或 --redo {anchor['anchor_id']} 重出")
     if mode == 'chain':
         score = chain_consistency(chain, target)
         parent['consistency'] = score
@@ -755,10 +925,11 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     rec = {'file': target.name, 'scheme': scheme, 'mode': mode, 'parent': parent, 'time_of_day': time_of_day,
            'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
            'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
-           'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
-           'written_at': _now()}
+           'prompt': use_prompt, 'negative': negative, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
+           'openings_rule': openings['rule'], 'openings_check': check, 'written_at': _now()}
     (out / f'{scheme}.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     anchor.setdefault('panos', {})[scheme] = {k: rec[k] for k in ('file', 'mode', 'parent', 'channel', 'seed', 'size', 'time_of_day', 'written_at')}
+    anchor['panos'][scheme]['openings_ok'] = None if check is None else bool(check['ok'])
     save_index(base, sid, idx)
     log(f"saved: {target.relative_to(base)}")
     return rec
@@ -788,6 +959,41 @@ def chain_consistency(chain_ref: Path, result: Path) -> float | None:
 
 
 CONSISTENCY_WARN = 0.55
+
+
+def backfill_openings(base: Path, sid: str, idx: dict, schemes: set, log=print) -> list:
+    """给索引里没有 openings_ok 记录的既有全景补跑洞口透光机检(确定性、无费用),写回索引;返回违规 ["A1/scheme", …]。
+    规则不适用(白天/主光来自窗)的记 None。"""
+    changed = False
+    violations = []
+    for a in idx.get('anchors', []):
+        for s, rec in (a.get('panos') or {}).items():
+            if s not in schemes or not rec or not pano_ready(base, sid, a, s):
+                continue
+            if 'openings_ok' not in rec:
+                o = openings_for(base, sid, s, rec.get('time_of_day'))
+                if not o['rule']:
+                    rec['openings_ok'] = None
+                    changed = True
+                    continue
+                try:
+                    check = openings_check(base, sid, a, s, o['apertures'])
+                except Exception as error:  # noqa: BLE001
+                    log(f"   洞口机检失败 {a['anchor_id']}/{s}: {error}")
+                    continue
+                rec['openings_ok'] = bool(check['ok'])
+                rec['openings_luma'] = {n: v['luma'] for n, v in check['openings'].items()}
+                changed = True
+                p = panos_dir(base, sid) / a['anchor_id'] / f'{s}.json'
+                full = read(p, None)
+                if isinstance(full, dict):
+                    full['openings_check'] = check
+                    p.write_text(json.dumps(full, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+            if rec.get('openings_ok') is False:
+                violations.append(f"{a['anchor_id']}/{s}")
+    if changed:
+        save_index(base, sid, idx)
+    return violations
 
 
 def pano_ready(base: Path, sid: str, anchor: dict, scheme: str) -> bool:

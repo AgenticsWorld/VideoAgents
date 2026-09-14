@@ -99,11 +99,16 @@ def main():
         missing = [f"{a['anchor_id']}/{s}" for a in idx['anchors'] for s in schemes if not sp.pano_ready(base, sid, a, s)]
         served = {k for a in idx['anchors'] for k in a.get('serves', [])}
         unserved = [sp._cam_key(c) for c in cams if sp._cam_key(c) not in served]
+        # 洞口透光机检(2026-09-14):夜间方案的全景里窗/门洞口不得透光;既有全景没记录的现补跑(无费用),openings_ok=False → FAIL
+        openings_violations = sp.backfill_openings(base, sid, idx, set(schemes))
         st = {'scene_id': sid, 'anchors': [a['anchor_id'] for a in idx['anchors']], 'schemes': schemes, 'missing': missing,
-              'unserved_cameras': unserved, 'blocked': idx.get('blocked')}
+              'unserved_cameras': unserved, 'openings_violations': openings_violations, 'blocked': idx.get('blocked')}
         print(json.dumps({'scene_panos_ready': st}, ensure_ascii=False), flush=True)
-        ok = idx['anchors'] and not missing and not idx.get('blocked')
-        print(f"[scene_panos_ready] {args.project}/{sid}: 锚点 {len(idx['anchors'])},方案 {schemes},缺 {len(missing)},未覆盖机位 {len(unserved)} -> {'PASS' if ok else 'FAIL'}", flush=True)
+        ok = idx['anchors'] and not missing and not idx.get('blocked') and not openings_violations
+        print(f"[scene_panos_ready] {args.project}/{sid}: 锚点 {len(idx['anchors'])},方案 {schemes},缺 {len(missing)},未覆盖机位 {len(unserved)},"
+              f"洞口透光违规 {len(openings_violations)} -> {'PASS' if ok else 'FAIL'}", flush=True)
+        if openings_violations:
+            print(f"[scene_panos_ready] 洞口透光违规:{openings_violations}(夜间方案下窗/门洞口透光;--redo <锚点> 重出或在预览页核对)", flush=True)
         return 0 if ok else 1
     try:
         stats = sp.ensure_scene_panos(base, sid, cameras=cams, schemes=schemes, dry_run=args.dry_run, force=args.force, replan=args.replan, indoor=indoor,

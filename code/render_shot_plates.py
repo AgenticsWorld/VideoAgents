@@ -87,6 +87,9 @@ def main():
         if st.get('legacy_shots'):
             print(f"[shot_plates_complete] WARN: {len(st['legacy_shots'])} 镜仍用非母图制背景图(legacy,2026-09-14 前逐镜直出/白模帧直出):"
                   f"{st['legacy_shots']};按母图制重出请用户确认后跑 --repano", flush=True)
+        for shot_id, ws in (st.get('fidelity_warnings') or {}).items():
+            for w in ws:
+                print(f"[shot_plates_complete] WARN 母图保真 {shot_id} {w}(对照图 <key>.review.jpg;确认有问题用 --force <镜> 重出)", flush=True)
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,

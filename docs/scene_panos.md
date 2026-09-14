@@ -26,6 +26,14 @@
 
 **3. 全景中心自动还是手动**：默认自动（上述规划），预览页显示每个锚点在俯视图中的坐标。手动：`code/render_scene_panos.py --scene <sid> --anchor x,z[,yaw] --force`（锚点锁定，规划时保留，只为未覆盖机位补锚点）或直接改 `index.json` 后 `--replan --force`。
 
+## 洞口光照规则与透光机检（2026-09-14）
+
+反例 liaozhai3 SCN-0005：光照方案 LGT-0005-01 写明「南窗夜里为纯黑背景面、不掺一丝冷青」，A1 全景却把西窗、东双窗三扇都画成透暖光；全景是本场 24 镜背景图的共同源头，之后每张母图与视频都跟着亮窗，视频模型还把亮窗搬到了案后的北粉墙上。
+
+- **规则**（`openings_rule`）：方案 `condition.time_of_day`（或组 time_of_day）含夜/晚/night，且 `key_source`/`direction` 不含窗/日光/月光/window/moon 等「光从洞口来」的词 → 提示词加一句：所有窗/门洞口（按白模墙段几何自动列名）为不透光暗面、没有任何光从窗或门透入、唯一光源是光照句里的实用光；负面词加 glowing window / light shining through window / moonlight through window / daylight / bright doorway。白天或主光来自窗则不写。同一句也进母图提示词（`shot_plates.build_prompt`）与视频提示词【场景】段（中文，`sync_shot_plates --write`）。
+- **洞口几何**（`opening_apertures`）：白模墙段命名 `room-<n|s|e|w>-<地标>-lintel` / `-sill` → 洞口 = 窗台顶到过梁底（没有窗台的门洞自地面起），平面范围取过梁段，名称/kind 取布局地标（opening / entrance）。
+- **机检**（`openings_check`，出图后自动跑）：洞口面 12×12 采样点按锚点位置/yaw 投到等距柱状全景，用深度全景排除被更近实体挡住的点，取平均亮度；> max(`OPENING_LUMA_MAX`=72, 整幅中位亮度 × 1.8) 判透光（SCN-0005 实测：整幅中位 27、不透光门洞 30、透光窗 87–151）。违规 → 旧图存为 `<scheme>.rejected-openings-<时间>.png`，把违规洞口名写进提示词换种子自动重出 `OPENING_RETRY`=1 次；仍不过 → WARN，索引 `panos[scheme].openings_ok=false`，`--status` 列 `openings_violations` 并 FAIL（`--redo <锚点>` 重出）。既有全景没有记录的，`--status` 现补跑机检（无费用）写回索引。全景 JSON 记 `openings_rule` / `openings_check`（含每次尝试）。
+
 ## 重投影（backward warp）
 
 目标视图（分镜机位透视图 / 新锚点球面）每个像素：对白模几何（objects 盒 + 地板外扩 20 m + 室内天花板）射线求交得 3D 点 → 回到源全景按方向取色 → 用源深度全景做遮挡判定（源在该方向的深度明显小于点距 = 被遮挡 → 空洞）；目标射线无几何时按纯方向取色，但源在该方向有几何即视为遮挡。分镜图空洞 inpaint 后作 `[Image 1]`；空洞 > 50% 换下一锚点，都不行则在该机位加锚点出全景。实测 dzg6 SCN-0002：机位离锚点 0.1–2 m 空洞 0.3–4%，锚点间 5.4 m 链式重投影空洞 8%。
