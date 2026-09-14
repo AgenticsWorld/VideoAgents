@@ -21,6 +21,8 @@ LOCK = DESKTOP / "runtime-requirements.lock"
 DEFAULT_OUTPUT = DESKTOP / ".runtime"
 PYTHON_REQUEST = "3.12.13"
 SCHEMA = 1
+BROWSER_DIR = "playwright-browsers"
+BROWSER_READY = f"{BROWSER_DIR}/.chromium-ready"
 
 
 def uv_executable() -> str:
@@ -102,6 +104,7 @@ def main() -> None:
             manifest.get("requirementsSha256") == lock_hash
             and executable.is_file()
             and Path(manifest.get("executable", "")).parts[:1] == ("py",)
+            and (output / BROWSER_READY).is_file()
         ):
             if args.version and manifest.get("version") != args.version:
                 manifest["version"] = args.version
@@ -139,10 +142,29 @@ def main() -> None:
     compact_distribution = staging / "py"
     distribution.rename(compact_distribution)
     python = compact_distribution / executable_in_distribution
+    browser_dir = staging / BROWSER_DIR
+    browser_env = {
+        **env,
+        "PLAYWRIGHT_BROWSERS_PATH": str(browser_dir),
+        "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT": os.environ.get(
+            "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT", "120000"
+        ),
+    }
+    # The Python package is part of the managed runtime; Chromium is installed
+    # beside it so the whole renderer remains relocatable and travels with the
+    # runtime ZIP to end users.
+    run(str(python), "-m", "playwright", "install", "chromium", env=browser_env)
     # Validate after the final internal relocation.
     run(str(python), "-c",
-        "import cv2,fastapi,faster_whisper,lark_oapi,numpy,PIL,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
+        "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,PIL,playwright,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
         env=env)
+    run(str(python), "-c",
+        "import os\n"
+        "from playwright.sync_api import sync_playwright\n"
+        "with sync_playwright() as p:\n"
+        "    assert os.path.isfile(p.chromium.executable_path)",
+        env=browser_env)
+    (browser_dir / ".chromium-ready").write_text("1\n", encoding="utf-8")
     manifest = {
         "schema": SCHEMA,
         "version": args.version or f"cpython-{version}-{lock_hash[:12]}",
