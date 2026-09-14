@@ -411,3 +411,102 @@ def concat_segments(files: list[Path], dst: Path) -> None:
     finally:
         lst.unlink(missing_ok=True)
         tmp.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------- 分镜剪辑(两个版本按时间段拼接)
+def merge_ranges(cuts: list[dict], duration: float, fps: float) -> list[tuple[float, float]]:
+    """时间段规范化:裁到 [0,duration]、按帧对齐、排序、合并重叠/相邻;过短(<1 帧)的丢弃。"""
+    step = 1.0 / max(1.0, fps)
+    out: list[tuple[float, float]] = []
+    rows = []
+    for c in cuts or []:
+        try:
+            t0, t1 = float(c.get("t0") or 0), float(c.get("t1") or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        t0 = max(0.0, min(duration, round(t0 / step) * step))
+        t1 = max(0.0, min(duration, round(t1 / step) * step))
+        if t1 - t0 >= step - 1e-6:
+            rows.append((t0, t1))
+    for t0, t1 in sorted(rows):
+        if out and t0 <= out[-1][1] + 1e-6:
+            out[-1] = (out[-1][0], max(out[-1][1], t1))
+        else:
+            out.append((t0, t1))
+    return out
+
+
+def splice_plan(cuts: list[tuple[float, float]], duration: float) -> list[dict]:
+    """把「切掉的时间段」展开成整条时间线的分段表:[{src:'base'|'alt', t0, t1}],覆盖 [0,duration]。"""
+    segs, pos = [], 0.0
+    for t0, t1 in cuts:
+        if t0 > pos + 1e-6:
+            segs.append({"src": "base", "t0": pos, "t1": t0})
+        segs.append({"src": "alt", "t0": t0, "t1": t1})
+        pos = t1
+    if duration > pos + 1e-6:
+        segs.append({"src": "base", "t0": pos, "t1": duration})
+    return segs
+
+
+def splice(base_src: Path, alt_src: Path, dst: Path, cuts: list[dict]) -> dict:
+    """分镜剪辑:以 base 版本为时间线,cuts 里的时间段换成 alt 版本同一时间段的画面(与声音),
+    其余保留 base;各段归一到 base 的 w×h/fps 后 concat 一次编码出 dst。
+    alt 比 base 短、时间段超出 alt 尾部时,末帧克隆补齐(notes 里说明)。返回 {segments, duration, notes}。"""
+    require_tools("ffmpeg", "ffprobe")
+    bi, ai = probe(base_src), probe(alt_src)
+    w, h, fps = bi["width"], bi["height"], bi["fps"] or 24.0
+    if not w or not h or not bi["duration"]:
+        raise FxError(f"基准版本无法解析:{base_src.name}")
+    if not ai["width"] or not ai["duration"]:
+        raise FxError(f"替换版本无法解析:{alt_src.name}")
+    ranges = merge_ranges(cuts, bi["duration"], fps)
+    if not ranges:
+        raise FxError("没有有效的剪切时间段")
+    segs = splice_plan(ranges, bi["duration"])
+    notes: list[str] = []
+    audio = bool(bi["has_audio"])
+    if audio and not ai["has_audio"]:
+        notes.append("替换版本无声轨,替换段用静音")
+    if ai["duration"] + 0.05 < max(r[1] for r in ranges):
+        notes.append(f"替换版本时长 {ai['duration']:.2f}s 短于剪切段末尾,超出部分用替换版本末帧补齐")
+    if (ai["width"], ai["height"]) != (w, h):
+        notes.append(f"替换版本分辨率 {ai['width']}×{ai['height']} 已归一到 {w}×{h}")
+    parts, vlabels, alabels = [], [], []
+    for i, s in enumerate(segs):
+        idx = 0 if s["src"] == "base" else 1
+        info = bi if idx == 0 else ai
+        length = s["t1"] - s["t0"]
+        n = max(1, int(round(length * fps)))
+        t_end = min(s["t1"], info["duration"]) if idx == 1 else s["t1"]
+        parts.append(f"[{idx}:v]trim=start={s['t0']:.6f}:end={max(t_end, s['t0'] + 1e-3):.6f},setpts=PTS-STARTPTS,"
+                     f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,"
+                     f"setsar=1,fps={fps:g},format=yuv420p,tpad=stop=-1:stop_mode=clone,trim=end_frame={n},setpts=PTS-STARTPTS[v{i}]")
+        vlabels.append(f"[v{i}]")
+        if audio:
+            if info["has_audio"]:
+                parts.append(f"[{idx}:a]atrim=start={s['t0']:.6f}:end={max(t_end, s['t0'] + 1e-3):.6f},asetpts=PTS-STARTPTS,"
+                             f"aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur={length:.6f},atrim=end={length:.6f},asetpts=PTS-STARTPTS[a{i}]")
+            else:
+                parts.append(f"anullsrc=r=48000:cl=stereo:d={length:.6f}[a{i}]")
+            alabels.append(f"[a{i}]")
+    if audio:
+        parts.append("".join(v + a for v, a in zip(vlabels, alabels)) + f"concat=n={len(segs)}:v=1:a=1[vo][ao]")
+    else:
+        parts.append("".join(vlabels) + f"concat=n={len(segs)}:v=1:a=0[vo]")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.stem + ".rendering" + dst.suffix)
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(base_src), "-i", str(alt_src),
+           "-filter_complex", ";".join(parts), "-map", "[vo]"]
+    if audio:
+        cmd += ["-map", "[ao]", "-c:a", "aac", "-b:a", "192k"]
+    cmd += ENC_VIDEO + [str(tmp)]
+    try:
+        run(cmd, timeout=3600)
+        if dst.exists():
+            dst.unlink()
+        tmp.rename(dst)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return {"segments": segs, "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges],
+            "duration": round(bi["duration"], 3), "notes": notes}

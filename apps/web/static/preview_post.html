@@ -124,6 +124,22 @@ body.masking .frame .maskpad{display:block}
 .xport .tl b{position:absolute;top:-3px;width:2px;height:14px;background:#fff;pointer-events:none}
 .xport .tl s{position:absolute;top:0;bottom:0;background:rgba(244,114,182,.35);pointer-events:none}
 .xport .tc{font:11px var(--mono);color:var(--text);min-width:92px;text-align:center}
+.xport .tl s.cut{background:rgba(248,113,113,.55);border-left:1px solid var(--red);border-right:1px solid var(--red)}
+.xport .tl s.cut.on{background:rgba(248,113,113,.85)}
+/* 分镜剪辑面板 */
+.cutp{border-top:1px solid var(--border);background:var(--panel);padding:6px 10px;font-size:11.5px;flex:none;display:grid;gap:6px}
+.cutp .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cutp .row .lb{color:var(--dim);white-space:nowrap}
+.cutp .row .sp{flex:1}
+.cutp table{border-collapse:collapse;width:100%;font:11px var(--mono)}
+.cutp th{text-align:left;color:var(--dim);font-weight:500;padding:2px 6px;border-bottom:1px solid var(--border2)}
+.cutp td{padding:2px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
+.cutp tr.on td{background:#2a1c22}
+.cutp td input{width:72px;font:11px var(--mono);padding:1px 4px}
+.cutp .empty2{color:var(--faint);padding:4px 6px;font-size:11px}
+.cutp .msg{color:var(--dim);font-size:11px}
+.cutp .msg.err{color:var(--red)}
+.cutp .msg.ok{color:var(--green)}
 .waves{display:grid;grid-template-columns:52px 1fr;font:10px var(--mono);border-top:1px solid var(--border);flex:none;background:var(--panel)}
 .waves .lb{padding:0 8px;color:var(--dim);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;height:18px}
 .waves .tr{height:18px;border-bottom:1px solid var(--border);position:relative;background:repeating-linear-gradient(90deg,transparent 0 24px,#ffffff06 24px 25px);overflow:hidden}
@@ -422,7 +438,7 @@ function renderLeft(){
 }
 function selectGroup(gid){
   if(gid===SEL)return;
-  SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;if(SCOPE==='range')SCOPE='group';
+  SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;CUTS=[];CUT_ALT=null;if(SCOPE==='range')SCOPE='group';
   if(MODE==='episode'){
     // 整集连播中点组:不退出连播,改从该组起继续连播;正在播就接着播
     const va=$('#va');PLAYING_EP=!!(va&&va.src&&!va.paused);
@@ -464,7 +480,9 @@ function renderMonitorShell(){
     <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域)'))}">◇ ${esc(t('标记时间段'))}</button>
     <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
     <button class="sm" id="b-mute" title="${esc(t('B 画面始终静音;此按钮切 A 的声音'))}">🔊</button>
+    <button class="sm" id="b-cut" title="${esc(t('分镜剪辑:导入本组另一版本,在 A 上标时间段切掉,切掉的部分用另一版本同一时间段替代,拼成新版本'))}">✂ ${esc(t('分镜剪辑'))}</button>
   </div>
+  <div class="cutp" id="cutpanel" style="display:none"></div>
   <div class="waves" id="waves"></div>`;
   const va=$('#va'),vb=$('#vb');
   $$('#mode span').forEach(s=>s.onclick=()=>{setMode(s.dataset.m);setMonitor()});
@@ -479,6 +497,7 @@ function renderMonitorShell(){
   $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊'};
   $('#b-range').onclick=markRange;
   $('#b-frame').onclick=captureFrame;
+  $('#b-cut').onclick=()=>{if(MODE!=='group'){setMode('group');setMonitor()}CUT_ON=!CUT_ON;$('#b-cut').classList.toggle('pri',CUT_ON);renderCut();drawCuts()};
   va.addEventListener('timeupdate',onTime);
   va.addEventListener('play',()=>{$('#b-play').textContent='⏸ '+t('暂停');if(AB!=='a'&&MODE==='group'){vb.currentTime=va.currentTime;vb.play().catch(()=>{})}if(MODE==='episode')epAudioSync(true)});
   va.addEventListener('pause',()=>{$('#b-play').textContent='▶ '+t('播放');vb.pause();epAudioSync(false)});
@@ -503,10 +522,18 @@ function renderMonitorShell(){
   pad.onmouseup=()=>{m0=null;if(MASK&&(MASK.w<0.01||MASK.h<0.01))MASK=null;drawMask();document.body.classList.remove('masking');$('#b-mask').classList.remove('pri')};
 }
 function versionsOf(gid){const g=grpById(gid);return g?g.versions.filter(v=>v.url):[]}
+function verLabel(v){
+  const cur=(grpById(SEL)||{}).current||0;
+  let s=(v.v===0?t('母本 v0'):'v'+v.v)+(v.v===cur?' ★':'');
+  if(v.recipes&&v.recipes.length)s+=' · '+v.recipes.map(r=>{const x=(D.plan.recipes||[]).find(y=>y.id===r);return x?x.kind_label:r}).join('+');
+  else if(v.note)s+=' · '+v.note;
+  return esc(s);
+}
 function setMonitor(keepTime){
   const va=$('#va'),vb=$('#vb'),g=grpById(SEL);
   const t0=keepTime?va.currentTime:0;
   $('#fhint').style.display='none';
+  if(MODE!=='group'){CUT_ON=false;$('#b-cut').classList.remove('pri');renderCut();drawCuts()}
   if(MODE==='final'){
     const u=(D.finals||{}).final;
     $('#selA').innerHTML='';$('#selB').innerHTML='';vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
@@ -527,7 +554,7 @@ function setMonitor(keepTime){
   const cur=g.current||0;
   if(VA==null||!vs.some(v=>v.v===VA)){const applied=vs.filter(v=>v.v>cur);VA=applied.length?applied[applied.length-1].v:cur}
   if(VB==null||!vs.some(v=>v.v===VB)){VB=VA===cur?(vs.some(v=>v.v===0)?0:cur):cur}
-  const opt=(sel)=>vs.map(v=>`<option value="${v.v}" ${v.v===sel?'selected':''}>${v.v===0?t('母本 v0'):'v'+v.v}${v.v===cur?' ★':''}${v.recipes&&v.recipes.length?' · '+v.recipes.map(r=>{const x=(D.plan.recipes||[]).find(y=>y.id===r);return x?x.kind_label:r}).join('+'):''}</option>`).join('');
+  const opt=(sel)=>vs.map(v=>`<option value="${v.v}" ${v.v===sel?'selected':''}>${verLabel(v)}</option>`).join('');
   $('#selA').innerHTML=opt(VA);$('#selB').innerHTML=opt(VB);
   const fa=vs.find(v=>v.v===VA),fb=vs.find(v=>v.v===VB);
   if(va.dataset.src!==fa.url){va.src=fa.url;va.dataset.src=fa.url}
@@ -536,8 +563,8 @@ function setMonitor(keepTime){
   $('#tagA').textContent='A · '+(VA===0?'v0 母本':'v'+VA)+(VA===cur?' ★':'');
   $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
-  va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange()},{once:true});
-  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();
+  va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange();drawCuts()},{once:true});
+  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();
 }
 function refreshMonitorMeta(){
   const g=grpById(SEL);if(!g||MODE!=='group')return;
@@ -570,6 +597,7 @@ function onTime(){
   const fph=$('#foot .ph');if(fph&&D.episode_duration)fph.style.left=(abs/D.episode_duration*100)+'%';
   if(MODE==='episode')epAudioSync();
   updateSubtitle(abs);
+  if(CUT_ON){$$('#xtl s.cut').forEach(e=>{const l=parseFloat(e.style.left)/100*d,w=parseFloat(e.style.width)/100*d;e.classList.toggle('on',tcur>=l&&tcur<=l+w)})}
 }
 /* 整集连播 */
 let EPA=null;
@@ -615,10 +643,108 @@ function drawMask(){
 function markRange(){
   const va=$('#va'),tcur=va.currentTime||0;
   if(!RANGE||RANGE.t1!=null){RANGE={t0:+tcur.toFixed(2),t1:null};$('#b-range').textContent='◇ '+t('设为终点');}
-  else{if(tcur<=RANGE.t0){alert(t('终点须晚于起点'));return}RANGE.t1=+tcur.toFixed(2);$('#b-range').textContent='◇ '+t('标记时间段');SCOPE='range';renderRight()}
+  else{if(tcur<=RANGE.t0){alert(t('终点须晚于起点'));return}RANGE.t1=+tcur.toFixed(2);$('#b-range').textContent='◇ '+t('标记时间段');SCOPE='range';renderRight();if(CUT_ON){addCut(RANGE.t0,RANGE.t1);RANGE=null}}
   drawRange();
 }
 function drawRange(){const s=$('#xrange');const d=$('#va').duration||0;if(!RANGE||!d){s.style.display='none';return}s.style.display='block';s.style.left=(RANGE.t0/d*100)+'%';s.style.width=(((RANGE.t1??RANGE.t0+0.2)-RANGE.t0)/d*100)+'%'}
+/* ---------- 分镜剪辑 ---------- */
+function cutNorm(){
+  // 排序 + 合并重叠,和后端 merge_ranges 同口径(不做帧对齐)
+  const rows=CUTS.filter(c=>c.t1>c.t0).map(c=>({t0:+c.t0,t1:+c.t1})).sort((a,b)=>a.t0-b.t0),out=[];
+  for(const c of rows){if(out.length&&c.t0<=out[out.length-1].t1+1e-6)out[out.length-1].t1=Math.max(out[out.length-1].t1,c.t1);else out.push({...c})}
+  return out;
+}
+function addCut(t0,t1){CUTS.push({t0:+(+t0).toFixed(2),t1:+(+t1).toFixed(2)});CUTS=cutNorm();renderCut();drawCuts()}
+function drawCuts(){
+  $$('#xtl s.cut').forEach(e=>e.remove());
+  const d=$('#va').duration||0;if(!CUT_ON||!d||MODE!=='group')return;
+  const tl=$('#xtl'),tcur=$('#va').currentTime||0;
+  cutNorm().forEach(c=>{const e=document.createElement('s');e.className='cut'+(tcur>=c.t0&&tcur<=c.t1?' on':'');e.style.left=(c.t0/d*100)+'%';e.style.width=(Math.max(0.002,(c.t1-c.t0)/d)*100)+'%';e.title=tc(c.t0)+' – '+tc(c.t1);tl.appendChild(e)});
+}
+function renderCut(){
+  const box=$('#cutpanel');if(!box)return;
+  if(!CUT_ON||MODE!=='group'){box.style.display='none';return}
+  box.style.display='grid';
+  const g=grpById(SEL),vs=versionsOf(SEL),baseV=VA??((g||{}).current||0);
+  const alts=vs.filter(v=>v.v!==baseV);
+  if(CUT_ALT==null||!alts.some(v=>v.v===CUT_ALT))CUT_ALT=alts.length?alts[alts.length-1].v:null;
+  const cuts=cutNorm(),d=$('#va').duration||(g||{}).duration||0,cutLen=cuts.reduce((a,c)=>a+(c.t1-c.t0),0);
+  let h=`<div class="row"><span class="lb">✂ ${esc(t('分镜剪辑'))} · ${esc(SEL)}</span><span class="lb">${esc(t('基准 A'))}</span><b style="font-family:var(--mono)">v${baseV}</b>
+    <span class="lb">${esc(t('替换源'))}</span><select id="cut-alt" ${alts.length?'':'disabled'}>${alts.length?alts.map(v=>`<option value="${v.v}" ${v.v===CUT_ALT?'selected':''}>${verLabel(v)}</option>`).join(''):`<option>${esc(t('还没有其他版本'))}</option>`}</select>
+    <button class="xs" id="cut-pick" title="${esc(t('用本机文件对话框选另一版本视频(默认打开本组视频所在目录),导入为本组新版本'))}">📂 ${esc(t('导入另一版本…'))}</button><input type="file" id="cut-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv,.m4v" style="display:none">
+    <button class="xs" id="cut-ab" ${CUT_ALT==null?'disabled':''} title="${esc(t('把替换源放到 B 画面,切到 A|B 分屏比对'))}">A|B</button>
+    <span class="sp"></span><span class="lb">${esc(I18N.f('切 {n} 段 · {s}s / {d}s',{n:cuts.length,s:num(cutLen,2),d:num(d,2)}))}</span></div>`;
+  h+=`<div class="row"><span class="lb">${esc(t('切掉的时间段(A 的时间线,换成替换源同段)'))}</span><span class="sp"></span>
+    <button class="xs" id="cut-addr" ${RANGE&&RANGE.t1!=null?'':'disabled'} title="${esc(t('把走带条上「标记时间段」得到的段加入列表;剪辑面板打开时标记完成会自动加入'))}">＋ ${esc(t('加入标记段'))}</button>
+    <button class="xs" id="cut-addp" title="${esc(t('从当前时刻起加一段 1 秒的切段,再在表里改起止'))}">＋ ${esc(t('当前时刻'))}</button>
+    <button class="xs" id="cut-clear" ${CUTS.length?'':'disabled'}>${esc(t('清空'))}</button></div>`;
+  if(cuts.length){
+    h+=`<table><tr><th>#</th><th>${esc(t('起点'))}</th><th>${esc(t('终点'))}</th><th>${esc(t('时长'))}</th><th></th></tr>`;
+    const tcur=$('#va').currentTime||0;
+    cuts.forEach((c,i)=>{h+=`<tr class="${tcur>=c.t0&&tcur<=c.t1?'on':''}" data-i="${i}"><td>${i+1}</td><td><input type="number" step="0.04" min="0" value="${c.t0}" data-k="t0"></td><td><input type="number" step="0.04" min="0" value="${c.t1}" data-k="t1"></td><td>${num(c.t1-c.t0,2)}s</td>
+      <td><button class="xs" data-go="${c.t0}" title="${esc(t('跳到起点'))}">⏵ ${tc(c.t0)}</button> <button class="xs" data-go="${c.t1}" title="${esc(t('跳到终点'))}">⏵ ${tc(c.t1)}</button> <button class="xs" data-del="${i}">✕</button></td></tr>`});
+    h+=`</table>`;
+  }else h+=`<div class="empty2">${esc(t('还没有切段:播放 A 找到要换掉的部分,点「标记时间段」设起点、再点一次设终点,即加入列表;可标多段'))}</div>`;
+  const bv=vs.find(v=>v.v===baseV),curV=(g||{}).current||0;
+  h+=`<div class="row"><span class="msg" id="cut-msg"></span><span class="sp"></span>${bv&&bv.v!==curV&&(bv.created_by==='splice'||bv.created_by==='import')?`<button class="sm" id="cut-adopt" title="${esc(t('把当前指针挪到 A 这个版本(出成片用它)'))}">★ ${esc(I18N.f('v{v} 设为当前',{v:baseV}))}</button>`:''}<button class="pri sm" id="cut-go" ${cuts.length&&CUT_ALT!=null&&!CUT_BUSY?'':'disabled'}>${CUT_BUSY?'<span class="spin">⟳</span> '+esc(t('生成中…')):'🎞 '+esc(t('生成新版本'))}</button></div>`;
+  box.innerHTML=h;
+  $('#cut-alt').onchange=e=>{CUT_ALT=+e.target.value;renderCut()};
+  $('#cut-pick').onclick=cutPickFile;
+  $('#cut-file').onchange=cutUploadFile;
+  $('#cut-ab').onclick=()=>{if(CUT_ALT==null)return;VB=CUT_ALT;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)};
+  $('#cut-addr').onclick=()=>{if(RANGE&&RANGE.t1!=null){addCut(RANGE.t0,RANGE.t1);RANGE=null;drawRange()}};
+  $('#cut-addp').onclick=()=>{const va=$('#va'),t0=va.currentTime||0;addCut(t0,Math.min(va.duration||t0+1,t0+1))};
+  $('#cut-clear').onclick=()=>{CUTS=[];renderCut();drawCuts()};
+  $$('#cutpanel input[data-k]').forEach(inp=>inp.onchange=()=>{const i=+inp.closest('tr').dataset.i;const c=cutNorm()[i];if(!c)return;c[inp.dataset.k]=+(+inp.value).toFixed(2);if(c.t1<=c.t0){alert(t('终点须晚于起点'));renderCut();return}CUTS=cutNorm();CUTS[i]=c;CUTS=cutNorm();renderCut();drawCuts()});
+  $$('#cutpanel [data-go]').forEach(b=>b.onclick=()=>{$('#va').pause();seekTo(+b.dataset.go)});
+  $$('#cutpanel [data-del]').forEach(b=>b.onclick=()=>{CUTS=cutNorm();CUTS.splice(+b.dataset.del,1);renderCut();drawCuts()});
+  $('#cut-go').onclick=cutSplice;
+  const ad=$('#cut-adopt');if(ad)ad.onclick=async()=>{ad.disabled=true;try{await J(api('/rollback'),'POST',{group_id:SEL,to:baseV});await load(true);setMonitor(true);toast(I18N.f('{g} 当前指针 → v{v}',{g:SEL,v:baseV}))}catch(e){alert(e.message);ad.disabled=false}};
+}
+function cutMsg(m,cls){const el=$('#cut-msg');if(el){el.textContent=m||'';el.className='msg '+(cls||'')}}
+async function cutImported(j){
+  toast(I18N.f('已导入为 {g} v{v}',{g:j.group_id,v:j.v}));
+  await load(true);
+  CUT_ALT=j.v;VB=j.v;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true);
+}
+async function cutPickFile(){
+  const b=$('#cut-pick');b.disabled=true;cutMsg(t('已弹出本机文件对话框,请在对话框里选文件…'));
+  try{
+    const j=await J(api('/pick-file'),'POST',{group_id:SEL});
+    if(j.cancelled){cutMsg('');b.disabled=false;return}
+    cutMsg(I18N.f('导入 {n} …',{n:j.name}));
+    const r=await J(api('/import'),'POST',{group_id:SEL,path:j.path});
+    await cutImported(r);
+  }catch(e){
+    // 本机没有对话框(501)等情况退回浏览器上传
+    if(/501|文件选择对话框/.test(e.message)){cutMsg(t('本机无文件对话框,改用浏览器上传'));$('#cut-file').click()}
+    else{cutMsg(e.message,'err');alert(I18N.f('导入失败:{e}',{e:e.message}))}
+    b.disabled=false;
+  }
+}
+async function cutUploadFile(e){
+  const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
+  cutMsg(I18N.f('上传 {n} …',{n:f.name}));
+  try{
+    const r=await fetch(api('/import-upload')+'?group_id='+encodeURIComponent(SEL)+'&filename='+encodeURIComponent(f.name),{method:'POST',body:f});
+    const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    await cutImported(j);
+  }catch(err){cutMsg(err.message,'err');alert(I18N.f('导入失败:{e}',{e:err.message}))}
+}
+async function cutSplice(){
+  const cuts=cutNorm(),baseV=VA??((grpById(SEL)||{}).current||0);
+  if(!cuts.length||CUT_ALT==null||CUT_BUSY)return;
+  if(!confirm(I18N.f('以 v{a} 为基准,把 {n} 段换成 v{b} 的同一时间段,生成 {g} 的新版本?',{a:baseV,n:cuts.length,b:CUT_ALT,g:SEL})))return;
+  CUT_BUSY=true;renderCut();cutMsg(t('ffmpeg 拼接中…'));
+  try{
+    const j=await J(api('/splice'),'POST',{group_id:SEL,base_v:baseV,alt_v:CUT_ALT,cuts});
+    CUT_BUSY=false;CUTS=[];
+    toast(I18N.f('已生成 {g} v{v}({s}s)',{g:j.group_id,v:j.v,s:j.seconds}));
+    await load(true);
+    VA=j.v;VB=baseV;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor();
+    cutMsg((j.notes||[]).length?j.notes.join(';'):I18N.f('v{v} 已入版本链(A 画面);满意就点「设为当前」',{v:j.v}),'ok');
+  }catch(e){CUT_BUSY=false;renderCut();cutMsg(e.message,'err');alert(I18N.f('剪辑失败:{e}',{e:e.message}))}
+}
 async function captureFrame(){
   const b=$('#b-frame');b.disabled=true;
   try{const j=await J(api('/frame'),'POST',{group_id:SEL,v:VA??0,t:$('#va').currentTime||0});LAST_FRAME=j;toast(I18N.f('已存参考帧 {p}',{p:j.path}))}
@@ -626,6 +752,8 @@ async function captureFrame(){
   b.disabled=false;
 }
 let LAST_FRAME=null;
+/* 分镜剪辑(2026-09-14):CUT_ON 面板开关;CUTS=[{t0,t1}] 要切掉的时间段(基准 A 的时间线);CUT_ALT=替换源版本号;CUT_BUSY=生成中 */
+let CUT_ON=false,CUTS=[],CUT_ALT=null,CUT_BUSY=false;
 /* 波形四轨 */
 function waveWindow(){
   if(MODE==='group'){const g=grpById(SEL);return g?[g.cum_start_s,g.cum_start_s+(g.duration||$('#va').duration||0)]:[0,1]}
@@ -975,7 +1103,7 @@ $('#ms-dispatch').onclick=async()=>{try{await J(api('/sfx'),'PUT',{rows:(SFX.sfx
 function openVersions(gid){
   const g=grpById(gid);if(!g)return;
   let h=`<div style="font-family:var(--mono);font-size:12px;margin-bottom:6px">${esc(gid)} · ${esc(t('当前'))} v${g.current||0}</div><table class="tb"><tr><th>v</th><th>${esc(t('修改单'))}</th><th>${esc(t('创建'))}</th><th>${esc(t('提交'))}</th><th></th></tr>`;
-  for(const v of g.versions)h+=`<tr><td style="font-family:var(--mono)">v${v.v}${v.v===(g.current||0)?' ★':''}</td><td data-no-i18n>${esc((v.recipes||[]).map(r=>{const x=(D.plan.recipes||[]).find(y=>y.id===r);return x?x.kind_label:r}).join('+')||(v.v===0?t('母本'):''))}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.created_at||'')}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.adopted_at||'')}</td><td>${v.cleaned?'<span style="color:var(--faint)">'+esc(t('文件已清理'))+'</span>':v.v===(g.current||0)?'':`<button class="xs" data-roll="${v.v}">${esc(t('指针到此'))}</button>`}</td></tr>`;
+  for(const v of g.versions)h+=`<tr><td style="font-family:var(--mono)">v${v.v}${v.v===(g.current||0)?' ★':''}</td><td data-no-i18n>${esc((v.recipes||[]).map(r=>{const x=(D.plan.recipes||[]).find(y=>y.id===r);return x?x.kind_label:r}).join('+')||(v.v===0?t('母本'):'')||v.note||'')}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.created_at||'')}</td><td style="font-size:10.5px;color:var(--dim)">${esc(v.adopted_at||'')}</td><td>${v.cleaned?'<span style="color:var(--faint)">'+esc(t('文件已清理'))+'</span>':v.v===(g.current||0)?'':`<button class="xs" data-roll="${v.v}">${esc(t('指针到此'))}</button>`}</td></tr>`;
   h+=`</table>`;
   $('#mv-body').innerHTML=h;$('#mv-msg').textContent='';$('#m-ver').classList.add('open');
   $$('#mv-body [data-roll]').forEach(b=>b.onclick=async()=>{try{await J(api('/rollback'),'POST',{group_id:gid,to:+b.dataset.roll});closeModal('#m-ver');VA=null;VB=null;await load(true);setMonitor()}catch(e){$('#mv-msg').textContent=e.message}});

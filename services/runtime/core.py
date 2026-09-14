@@ -8440,6 +8440,8 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
             versions.append({"v": int(ver.get("v") or 0), "url": None if ver.get("cleaned") else _post_url(base, ver.get("file")),
                              "file": ver.get("file"), "recipes": ver.get("recipes") or [], "adopted_at": ver.get("adopted_at"),
                              "cleaned": bool(ver.get("cleaned")), "created_at": ver.get("created_at") or "",
+                             "created_by": ver.get("created_by") or "", "note": ver.get("note") or "",
+                             "base_v": int(ver.get("base_v") or 0), "splice": ver.get("splice"),
                              "label": f"v{ver.get('v')}"})
         thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
         rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": g.get("scene_no") or "",
@@ -8998,6 +9000,182 @@ async def api_post_frame(project: str, ep: str, body: dict):
         except Exception as e:  # noqa: BLE001
             raise ServiceError(500, f"抽帧失败:{str(e)[-300:]}") from None
         return {"ok": True, "path": rel, "url": _post_url(base, rel), "group_id": gid, "v": v, "t": t}
+    return await asyncio.to_thread(_do)
+
+
+# ---- 分镜剪辑(2026-09-14):导入另一版本 → 标时间段切掉 → 切掉段用另一版本同段替代 → 组成新版本 ----
+def _post_native_pick_file(start_dir: Path, title: str) -> str | None:
+    """本机原生「选择文件」对话框(macOS osascript / Windows PowerShell / Linux zenity|kdialog);
+    取消返回 None,平台无对话框能力抛 ServiceError(501),前端退回浏览器上传。"""
+    start_dir = start_dir if start_dir.is_dir() else Path.home()
+    try:
+        if sys.platform == "darwin":
+            script = (
+                'tell application "System Events" to activate\n'
+                f'set f to choose file with prompt {json.dumps(title, ensure_ascii=False)} '
+                f'default location (POSIX file {json.dumps(str(start_dir))}) '
+                'of type {"public.movie", "public.mpeg-4", "com.apple.quicktime-movie"}\n'
+                'POSIX path of f')
+            p = subprocess.run(["osascript", "-e", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+            if p.returncode != 0:
+                if "-128" in (p.stderr or "") or "canceled" in (p.stderr or "").lower():
+                    return None
+                raise ServiceError(500, f"文件对话框失败:{(p.stderr or '').strip()[-200:]}")
+            return p.stdout.strip() or None
+        if os.name == "nt":
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "$d = New-Object System.Windows.Forms.OpenFileDialog; "
+                f"$d.InitialDirectory = {json.dumps(str(start_dir))}; "
+                f"$d.Title = {json.dumps(title, ensure_ascii=False)}; "
+                "$d.Filter = 'Video|*.mp4;*.mov;*.webm;*.mkv;*.m4v|All|*.*'; "
+                "if ($d.ShowDialog() -eq 'OK') { Write-Output $d.FileName }")
+            p = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+            return p.stdout.strip() or None
+        if shutil.which("zenity"):
+            p = subprocess.run(["zenity", "--file-selection", f"--title={title}", f"--filename={start_dir}/",
+                                "--file-filter=Video | *.mp4 *.mov *.webm *.mkv *.m4v"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+            return p.stdout.strip() or None
+        if shutil.which("kdialog"):
+            p = subprocess.run(["kdialog", "--getopenfilename", str(start_dir), "video/*", "--title", title],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+            return p.stdout.strip() or None
+    except subprocess.TimeoutExpired:
+        return None
+    raise ServiceError(501, "本机没有可用的文件选择对话框,请用浏览器上传")
+
+
+def _post_group_guard(gid: str) -> str:
+    if not re.fullmatch(r"grp\d{1,4}", gid or ""):
+        raise ServiceError(400, "group_id 形如 grp012")
+    return gid
+
+
+def _post_import_version(base: Path, ep: str, plan: dict, gid: str, src: Path | None, data: bytes | None,
+                         filename: str, origin: str) -> dict:
+    """把一个外部视频文件复制进 assets/post/epNN/<grp>/import_<name>.mp4 并登记为该组新版本(不动当前指针)。"""
+    pp = _post_pp()
+    ext = Path(filename or (src.name if src else "")).suffix.lower()
+    if ext not in (".mp4", ".mov", ".webm", ".mkv", ".m4v"):
+        raise ServiceError(400, "只收 mp4/mov/webm/mkv/m4v 视频")
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename or src.name).stem)[:60] or "import"
+    d = pp.post_dir(base, ep) / gid
+    d.mkdir(parents=True, exist_ok=True)
+    dst, i = d / f"import_{stem}{ext}", 1
+    while dst.exists():
+        dst = d / f"import_{stem}_{i}{ext}"
+        i += 1
+    if src is not None:
+        try:
+            if src.resolve() == (base / "assets" / "clips" / ep / f"{gid}.mp4").resolve():
+                raise ServiceError(400, "选的是本组母本 v0 自己")
+        except OSError:
+            pass
+        shutil.copy2(src, dst)
+    else:
+        dst.write_bytes(data or b"")
+    try:
+        from modules import post_fx
+        info = post_fx.probe(dst)
+        if not info.get("width") or not info.get("duration"):
+            raise ValueError("不是可解析的视频")
+    except Exception as e:  # noqa: BLE001
+        dst.unlink(missing_ok=True)
+        raise ServiceError(400, f"导入的文件无法解析:{str(e)[-200:]}") from None
+    ver = pp.register_version(plan, base, ep, gid, str(dst.relative_to(base)), [], pp.current_version(plan, gid), by="import")
+    ver["note"] = f"导入 {Path(filename or src.name).name}"
+    ver["source"] = {"kind": "import", "origin": origin, "duration": round(float(info.get("duration") or 0), 3)}
+    pp.save_plan(base, ep, plan)
+    return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
+            "note": ver["note"], "duration": ver["source"]["duration"]}
+
+
+async def api_post_pick_file(project: str, ep: str, body: dict):
+    """弹本机文件对话框选另一版本视频,默认打开本组当前版本视频所在目录;返回 {path} 或 {cancelled:true}。"""
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = _post_group_guard(str(body.get("group_id") or ""))
+        cur = pp.current_file(base, ep2, gid, plan)
+        start = cur.parent if cur else (base / "assets" / "clips" / ep2)
+        path = _post_native_pick_file(start, f"选择 {gid} 的另一个版本视频")
+        if not path:
+            return {"ok": True, "cancelled": True}
+        return {"ok": True, "path": path, "name": Path(path).name}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_import(project: str, ep: str, body: dict):
+    """按本机路径导入另一版本:{group_id, path} → 登记为新版本。"""
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = _post_group_guard(str(body.get("group_id") or ""))
+        src = Path(str(body.get("path") or "")).expanduser()
+        if not src.is_file():
+            raise ServiceError(404, f"文件不存在:{src}")
+        return _post_import_version(base, ep2, plan, gid, src, None, src.name, str(src))
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_import_upload(project: str, ep: str, gid: str, data: bytes, filename: str):
+    """浏览器上传方式导入另一版本(原生对话框不可用时的退路)。"""
+    def _do():
+        pp, base, ep2, plan = _post_load(project, ep)
+        g = _post_group_guard(gid)
+        if not data:
+            raise ServiceError(400, "empty body")
+        if len(data) > 1024 * 1024 * 1024:
+            raise ServiceError(400, "file too large (>1GB)")
+        return _post_import_version(base, ep2, plan, g, None, data, filename or "upload.mp4", "upload")
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_splice(project: str, ep: str, body: dict):
+    """分镜剪辑出新版本:{group_id, base_v, alt_v, cuts:[{t0,t1}]};
+    base_v 时间线上 cuts 各段换成 alt_v 同段,其余保留,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记版本(不动指针)。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = _post_group_guard(str(body.get("group_id") or ""))
+        job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
+        if job.get("status") == "running":
+            raise ServiceError(409, f"本集有后期作业在跑({job.get('kind')}),请等它结束再剪")
+        try:
+            base_v = int(body.get("base_v") if body.get("base_v") is not None else pp.current_version(plan, gid))
+            alt_v = int(body.get("alt_v"))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "base_v / alt_v 须为版本号") from None
+        if base_v == alt_v:
+            raise ServiceError(400, "基准版本与替换版本不能相同")
+        cuts = body.get("cuts") or []
+        if not isinstance(cuts, list) or not cuts:
+            raise ServiceError(400, "至少标一个要切掉的时间段")
+        src_a = pp.version_file(base, ep2, gid, base_v, plan)
+        src_b = pp.version_file(base, ep2, gid, alt_v, plan)
+        if not src_a:
+            raise ServiceError(404, f"{gid} v{base_v} 没有视频文件")
+        if not src_b:
+            raise ServiceError(404, f"{gid} v{alt_v} 没有视频文件")
+        v = pp.next_version_no(plan, gid)
+        dst = pp.post_dir(base, ep2) / gid / f"v{v}.mp4"
+        t0 = time.time()
+        try:
+            res = post_fx.splice(src_a, src_b, dst, cuts)
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(500, f"剪辑失败:{str(e)[-400:]}") from None
+        # 拼接期间台账可能被别的操作改过(如导入),重读后再登记
+        plan2 = pp.load_plan(base, ep2)
+        if pp.next_version_no(plan2, gid) != v:
+            v2 = pp.next_version_no(plan2, gid)
+            dst2 = dst.with_name(f"v{v2}.mp4")
+            dst.rename(dst2)
+            dst, v = dst2, v2
+        ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="splice")
+        ver["splice"] = {"base_v": base_v, "alt_v": alt_v, "cuts": res["cuts"], "notes": res["notes"]}
+        ver["note"] = f"剪辑 v{base_v} · {len(res['cuts'])} 段换 v{alt_v}"
+        pp.save_plan(base, ep2, plan2)
+        return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
+                "base_v": base_v, "alt_v": alt_v, "cuts": res["cuts"], "segments": res["segments"], "notes": res["notes"],
+                "seconds": round(time.time() - t0, 1)}
     return await asyncio.to_thread(_do)
 
 

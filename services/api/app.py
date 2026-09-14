@@ -320,6 +320,31 @@ async def post_frame(project: str, ep: str, body: dict[str, Any]) -> dict[str, A
     return _artifact_urls(await core.api_post_frame(project, ep, body), project)
 
 
+@api.post("/projects/{project}/post/{ep}/pick-file", tags=["artifacts"])
+async def post_pick_file(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑:本机原生文件对话框选另一版本视频(默认打开本组当前视频所在目录)。"""
+    return await core.api_post_pick_file(project, ep, body)
+
+
+@api.post("/projects/{project}/post/{ep}/import", tags=["artifacts"])
+async def post_import(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑:{group_id, path} 按本机路径把另一版本视频登记为该组新版本。"""
+    return _artifact_urls(await core.api_post_import(project, ep, body), project)
+
+
+@api.post("/projects/{project}/post/{ep}/import-upload", tags=["artifacts"])
+async def post_import_upload(project: str, ep: str, request: Request, group_id: str = "", filename: str = "") -> dict[str, Any]:
+    """分镜剪辑:浏览器上传另一版本视频(原生对话框不可用时)。"""
+    data = await request.body()
+    return _artifact_urls(await core.api_post_import_upload(project, ep, group_id, data, filename), project)
+
+
+@api.post("/projects/{project}/post/{ep}/splice", tags=["artifacts"])
+async def post_splice(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑:{group_id, base_v, alt_v, cuts:[{t0,t1}]} → 切掉段换成 alt_v 同段,拼成新版本。"""
+    return _artifact_urls(await core.api_post_splice(project, ep, body), project)
+
+
 @api.post("/projects/{project}/post/{ep}/assets", tags=["artifacts"])
 async def post_asset_upload(project: str, ep: str, request: Request, filename: str = "", kind: str = "asset") -> dict[str, Any]:
     data = await request.body()
