@@ -994,8 +994,14 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
 
 
 # ---------------------------------------------------------------- prompt refs 接线(shot_plate_bound)
-_SPATIAL_RE = re.compile(r'\s*Spatial layout:.*?do not copy its tiling\.', re.S)
-_MAPUSE_RE = re.compile(r'\s*Map usage:.*?(?:described in that shot\.|in that shot\.)', re.S)
+# 俯视图/九宫格声明句按「句」剔除(句内无英文句号):图号 token 可有可无——remap 删过 token 的存量正文会留「Spatial layout: is the …」空悬句
+# (2026-09-14 liaozhai3 ep01 grp010–017:旧正则要求字面「tiling.」,「tiling, panel divisions … into the frame.」写法漏删)
+_MAP_TOK = r'(?:(?:\[Image\s*\d+\]|@Image\s*\d+)\s*)?'
+_SPATIAL_RE = re.compile(r'\s*Spatial layout:\s*' + _MAP_TOK + r'is the [^.]*?(?:layout map|multi-angle sheet)[^.]*\.')
+_GRID_RE = re.compile(r'(?:\s*(?:\[Image\s*\d+\]|@Image\s*\d+)(?:\s*and\s*(?:\[Image\s*\d+\]|@Image\s*\d+))?\s*|(?<=[.:。])\s*)'
+                      r'(?:is|are) the 3x3 multi-angle sheets?[^.]*\.')
+_MAPUSE_RE = re.compile(r'\s*Map usage:[^.]*\.')
+_MAPONLY_RE = re.compile(r',?\s*and use the map only to keep [^.,;]*? consistent(?=\.)')
 _TILE_RE = re.compile(r',?\s*framed like tile\s*\d+\s*of\s*\[Image\s*\d+\]', re.I)
 # 段落以自带结尾句终止(三种口径各一句),兜底到 Shot 1 段头或文末;H3 段内含「[Shot 1]」字样,不能拿段头当终止符
 _BLOCK_RE = re.compile(r'\s*Shot plates:.*?(?:described in each [Ss]hot\.|按各 Shot 段描述。|(?=\n?\[?Shot\s*1\s*[:：｜|])|$)', re.S)
@@ -1206,7 +1212,8 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False) 
     out = copy.deepcopy(prompt)
     old = [r for r in (out.get('refs') or []) if isinstance(r, str)]
     vp = out.get('video_prompt') or ''
-    vp = _SPATIAL_RE.sub('', vp); vp = _MAPUSE_RE.sub('', vp); vp = _TILE_RE.sub('', vp); vp = _BLOCK_RE.sub(' ', vp)
+    vp = _SPATIAL_RE.sub('', vp); vp = _GRID_RE.sub('', vp); vp = _MAPUSE_RE.sub('', vp); vp = _MAPONLY_RE.sub('', vp)
+    vp = _TILE_RE.sub('', vp); vp = _BLOCK_RE.sub(' ', vp)
     vp = _ACT_RE.sub('', vp); vp = _H3_ANCHOR_RE.sub('', vp)
     keep = [r for r in old if not is_scene_map(r) and f'/{PLATES_DIR}/' not in r]
     plates = [p['file'] for p in plan['plates']]
@@ -1254,7 +1261,7 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: 
     for r in refs:
         if is_scene_map(r):
             errs.append(f"{gid}: refs 含场景俯视图/九宫格 {r}(2026-09-09 起俯视图仅供分镜预览、九宫格已退役,不进视频参考图;跑 code/sync_shot_plates.py --write 清理)")
-    if _SPATIAL_RE.search(vp) or _MAPUSE_RE.search(vp):
+    if 'Spatial layout:' in vp or 'Map usage:' in vp or _GRID_RE.search(vp) or _MAPONLY_RE.search(vp):
         warns.append(f"{gid}: 正文残留 Spatial layout / Map usage 俯视图声明句,建议 --write 清理")
     for shot_id in plan['missing']:
         (errs if strict else warns).append(f"{gid}/{shot_id}: 尚无分镜背景图(白模签字并导出后由 p6-shot-plates 生成:code/render_shot_plates.py)")

@@ -25,8 +25,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
-SPATIAL_RE = re.compile(r"Spatial layout:\s*\[Image", re.I)
-MAPUSE_RE = re.compile(r"Map usage:\s*\[Image", re.I)
+# 不要求紧跟 [Image:图号 token 被 remap 删掉后残留的「Spatial layout: is the …」空悬句也要测出(2026-09-14)
+SPATIAL_RE = re.compile(r"Spatial layout:", re.I)
+MAPUSE_RE = re.compile(r"Map usage:", re.I)
 
 
 def norm(s: str) -> str:
