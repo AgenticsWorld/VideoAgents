@@ -433,7 +433,7 @@ function renderLeft(){
   const sel=$('#left .grp.sel');if(sel)sel.scrollIntoView({block:'nearest'});
   markShot();
 }
-function markShot(){const sid=RA&&RA.shotId;$$('#left .sh').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid))}
+function markShot(){const sid=RA&&RA.shotId;$$('#left .sh').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid));$$('#lanes .sg').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid))}
 function selectGroup(gid,force){
   if(gid===SEL&&!force)return;
   SEL=gid;posSave({sel:gid});PICK=null;TIME=URL_T!=null?URL_T:0;URL_T=null;PLAYING=false;MEASURE=[];
@@ -744,12 +744,13 @@ function loop(now){
     $('#ftc').textContent=`${tc(TIME)} / ${tc(g.duration_s)} · ${RA.shotId||''}`;
     $('#xtc').textContent=`${TIME.toFixed(2)} / ${g.duration_s.toFixed(2)} s`;
     $('#finfo').textContent=`${g.group_id} · ${g.scene_id} · ${VIEW_NAME()}${EDIT?' · '+t('编辑中'):''}`;
-    updateWayLabels();const lph=$('#lph');if(lph)lph.style.left=(TIME/g.duration_s*100).toFixed(3)+'%';
+    updateWayLabels();laneHead(g);
     $('#guides').style.display=(OVL.guides&&VIEW==='camera')?'':'none';
     updateOverlays();syncQuad(now);if(now-STATE_TICK>250)renderLens();
     const p=(TIME/g.duration_s*100).toFixed(3)+'%';$('#xfill').style.width=p;$('#xph').style.left=p;
     const ph=$('#fph');if(ph){const cum=cumStart(SEL);ph.style.left=((cum+TIME)/episodeDuration()*100).toFixed(3)+'%'}
-    if(now-STATE_TICK>250){STATE_TICK=now;updateObjectStates();markShot();if($('#shotlbl').dataset.sid!==RA.shotId)renderShotInfo()}
+    if(now-STATE_TICK>250){STATE_TICK=now;updateObjectStates()}
+    if($('#shotlbl').dataset.sid!==RA.shotId){markShot();renderShotInfo()}
   }
   if((PLAYING||moving)&&!document.hidden)kick();
 }
@@ -1048,12 +1049,14 @@ function renderNumbox(liveOnly){
   const rs=$('#numreset');if(rs)rs.onclick=async()=>{rs.disabled=true;try{const r=await J(api('/overrides/'+encodeURIComponent(SEL)+'?kind='+KIND_KEY[PICK.kind]+'&id='+encodeURIComponent(PICK.id)),'DELETE');UNDO.length=0;REDO.length=0;updUndo();applyServerGroup(r)}catch(e){toast(t('还原失败:')+e.message);rs.disabled=false}};
 }
 /* 多轨时间线:镜段 + 每个对象一轨,关键帧菱形可左右拖改时间(首尾固定;摄影机帧限在本镜内) */
+// 播放头位置:轨道区从 116px 标签列右侧开始,必须按该偏移换算,否则竖线会整体偏左
+function laneHead(g){const lph=$('#lph');if(!lph||!g)return;lph.style.left=`calc(116px + (100% - 116px) * ${(TIME/g.duration_s).toFixed(4)})`}
 function renderLanes(){
   const box=$('#lanes');if(!box)return;
   const g=playbackGroup();if(!LANES_ON||!g||!RA){box.innerHTML='';return}
   const T=g.duration_s;const pct=v=>(v/T*100).toFixed(3)+'%';
   const rows=[];
-  rows.push(`<div class="ln"><div class="lb">${esc(t('镜段'))}</div><div class="tr">${g.cameras.map(c=>`<div class="sg ${c.shot_id===RA.shotId?'on':''}" style="left:${pct(c.start)};width:${pct(c.duration_s)}" data-seek="${c.start}" data-no-i18n>${esc(c.shot_id)}</div>`).join('')}</div></div>`);
+  rows.push(`<div class="ln"><div class="lb">${esc(t('镜段'))}</div><div class="tr">${g.cameras.map(c=>`<div class="sg ${c.shot_id===RA.shotId?'on':''}" style="left:${pct(c.start)};width:${pct(c.duration_s)}" data-sh="${esc(c.shot_id)}" data-seek="${c.start}" data-no-i18n>${esc(c.shot_id)}</div>`).join('')}</div></div>`);
   const lane=(kind,id,label,color,keys,offset,fixedEnds)=>{
     const sel=PICK&&PICK.kind===kind&&PICK.id===id;const ov=ovHas(kind,id);
     return `<div class="ln ${sel?'sel':''}" data-kind="${esc(kind)}" data-id="${esc(id)}"><div class="lb" title="${esc(id)}"><i style="background:${esc(color)}"></i><span data-no-i18n>${esc(label)}</span>${ov?' ✎':''}</div><div class="tr">${(keys||[]).map((k,i)=>`<div class="kf ${sel&&i===WAYSEL?'on':''} ${fixedEnds&&(i===0||i===keys.length-1)?'fixed':''} ${ov?'ov':''}" style="left:${pct(offset+k.t)}" data-kind="${esc(kind)}" data-id="${esc(id)}" data-idx="${i}" data-t="${offset+k.t}" title="${(offset+k.t).toFixed(2)}s${k.pose?' · '+esc(k.pose):''}"></div>`).join('')}</div></div>`;
@@ -1062,9 +1065,8 @@ function renderLanes(){
   for(const a of g.extras||[])rows.push(lane('extra',a.id,a.label||a.id,a.color,a.keyframes,0,true));
   for(const p of g.props||[])if(p.keyframes)rows.push(lane('prop',p.id,p.id,p.color||'#d2d5d4',p.keyframes,0,true));
   for(const c of g.cameras||[])rows.push(lane('camera',c.shot_id,t('摄影机')+' '+c.shot_id,'#1b3d4b',c.keyframes,c.start,true));
-  box.innerHTML=rows.join('')+`<div class="lph" id="lph" style="left:calc(116px + ${pct(TIME)} * (100% - 116px) / 100%)"></div>`;
-  // 播放头覆盖整个 lanes 区:用 tr 的坐标系更简单——放进每行太重,这里用 padding-left 对齐
-  const lph=$('#lph');if(lph){lph.style.left='';lph.style.marginLeft='116px';lph.style.width='1px';lph.style.left=`calc(116px + (100% - 116px) * ${(TIME/T).toFixed(4)})`;lph.style.marginLeft='0'}
+  box.innerHTML=rows.join('')+`<div class="lph" id="lph"></div>`;
+  laneHead(g);
   box.querySelectorAll('.sg').forEach(el=>el.onclick=()=>seek(Number(el.dataset.seek)+0.001));
   box.querySelectorAll('.ln[data-kind] .lb').forEach(el=>el.onclick=()=>{const ln=el.parentElement;const rows=objectRows();const row=rows.find(r=>r.kind===ln.dataset.kind&&r.id===ln.dataset.id);setPick({kind:ln.dataset.kind,id:ln.dataset.id,label:row?row.label:ln.dataset.id})});
   box.querySelectorAll('.kf').forEach(el=>{
