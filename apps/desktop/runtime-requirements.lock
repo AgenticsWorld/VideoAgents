@@ -41,8 +41,12 @@ filelock==3.32.3
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
+fonttools==4.65.0
+    # via -r apps/desktop/runtime-requirements.in
 fsspec==2026.7.0
     # via huggingface-hub
+greenlet==3.5.5
+    # via playwright
 h11==0.16.0
     # via
     #   httpcore
@@ -86,6 +90,8 @@ pillow==11.3.0
     # via -r apps/desktop/runtime-requirements.in
 platformdirs==4.11.4
     # via scenedetect
+playwright==1.62.0
+    # via -r apps/desktop/runtime-requirements.in
 protobuf==7.35.1
     # via onnxruntime
 pycryptodome==3.23.0
@@ -94,6 +100,8 @@ pydantic==2.13.4
     # via fastapi
 pydantic-core==2.46.4
     # via pydantic
+pyee==13.0.1
+    # via playwright
 pytz==2026.3.post1
     # via tos
 pyyaml==6.0.3
@@ -136,6 +144,7 @@ typing-extensions==4.16.0
     #   huggingface-hub
     #   pydantic
     #   pydantic-core
+    #   pyee
     #   starlette
     #   typing-inspection
 typing-inspection==0.4.2

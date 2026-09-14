@@ -122,6 +122,16 @@ function desktopDataRoot(): string {
   return process.env.VIDEOAGENTS_DATA_DIR || path.join(app.getPath('userData'), 'data')
 }
 
+function bundledChromiumPath(userData: string, runtime: PythonRuntime): string | undefined {
+  // Packaged runtimes carry Chromium beside the compact `py/` distribution.
+  // Resolve from the versioned store rather than from the executable layout so
+  // this remains valid on both macOS and Windows.
+  if (runtime.source !== 'user' || !runtime.manifest?.version) {
+    return process.env.PLAYWRIGHT_BROWSERS_PATH || undefined
+  }
+  return path.join(runtimeStore(userData), 'versions', runtime.manifest.version, 'playwright-browsers')
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -552,6 +562,7 @@ async function ensureWebServer(): Promise<void> {
   const backend = backendRoot()
   activeRuntime = await ensurePythonRuntime(backend)
   console.log(`[runtime] ${activeRuntime.source}: ${activeRuntime.manifest?.version || activeRuntime.python}`)
+  const chromiumPath = bundledChromiumPath(app.getPath('userData'), activeRuntime)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopExecutablePath(),
@@ -571,6 +582,7 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_SERVICE_SSO_ORIGIN: authRegion?.ssoOrigin || '',
     VIDEOAGENTS_SERVICE_API_ORIGIN: authRegion?.apiOrigin || '',
     VIDEOAGENTS_OPENROUTER_WRAPPER_URL: authRegion?.openrouterWrapperUrl || '',
+    ...(chromiumPath ? {PLAYWRIGHT_BROWSERS_PATH: chromiumPath} : {}),
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
     cwd: backend,
