@@ -30,6 +30,7 @@ import os
 import re
 from pathlib import Path
 
+from modules.prompt_layout import paragraphize
 from modules.whitebox import component, read, sample
 
 # 与 modules/whitebox.PALETTE 同序(2026-09-11 扩到 16 色:整集固定身份色,人物多于 8 人时启用后 8 色)
@@ -215,7 +216,7 @@ def strip_cast_refs(prompt: dict, drop: list):
         return prompt, False
     out = copy.deepcopy(prompt)
     out['refs'] = new
-    out['video_prompt'] = text
+    out['video_prompt'] = paragraphize(text)
     if isinstance(out.get('scene_cast_refs'), list):
         for row in out['scene_cast_refs']:
             if isinstance(row, dict) and row.get('ref') in drop:
@@ -576,7 +577,7 @@ def apply_prompt(prompt: dict, plan: dict) -> dict:
             out['video_refs'] = others
         else:
             out.pop('video_refs', None)
-    out['video_prompt'] = vp
+    out['video_prompt'] = paragraphize(vp)
     # 白模人物参考图规约:未在本组白模出现的人物/生物图移出 refs(正文仍引用时不动,由 check_prompt 报违规)
     drop = hidden_cast_refs([r for r in (out.get('refs') or []) if isinstance(r, str)], plan.get('cast'))
     # 幂等:已移出的记录保留(只要该图仍不在 refs 里),本次新移出的并入

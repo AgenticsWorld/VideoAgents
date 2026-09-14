@@ -38,6 +38,7 @@ import base64
 
 from modules.output_format import OUTPUT_ASPECTS, resolve_output
 from modules import skill_records
+from modules.prompt_layout import paragraphize
 from services.runtime import rhythm as narrative_rhythm
 
 # ---------------- 配置 ----------------
@@ -5656,13 +5657,15 @@ async def api_grpnote_set(body: dict):
     d = json.loads(pf.read_text())
     vp = d["video_prompt"]
     old = _grpnote_get(project, ep, grp)
-    if old.get("prompt_sentence") and old["prompt_sentence"] in vp:
-        vp = vp.replace(old["prompt_sentence"], "", 1)
+    # 旧句存盘带前导空格;段落排版后前导空白变成空行,按去空白后的句子精确移除
+    old_sent = (old.get("prompt_sentence") or "").strip()
+    if old_sent and old_sent in vp:
+        vp = vp.replace(old_sent, "", 1)
     np = _grpnote_path(project, ep, grp)
     if text:
         sent = GRPNOTE_TMPL.format(text=text) + ("" if text.endswith(("。", ".", "!", "！")) else ".")
-        k = vp.rfind(" Global constraints:")
-        vp = (vp[:k] + sent + vp[k:]) if k != -1 else vp + sent
+        k = vp.rfind("Global constraints:")
+        vp = (vp[:k] + sent + " " + vp[k:]) if k != -1 else vp + sent
         np.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(np, {"text": text, "prompt_sentence": sent,
                                "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
@@ -5670,6 +5673,7 @@ async def api_grpnote_set(body: dict):
     else:
         np.unlink(missing_ok=True)
         d.setdefault("notes", []).append("组注释已清除并从 video_prompt 回滚(API storyboard notes)")
+    vp = paragraphize(vp)
     d["video_prompt"] = vp
     d["video_prompt_word_count"] = len(vp.split())
     atomic_write_json(pf, d)
@@ -5720,8 +5724,9 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
         if d["refs"][-1] != ref_rel:
             raise ServiceError(400, "This sketch is not the last ref; delete later-injected sketches first (to keep [Image N] numbering aligned)")
         d["refs"].pop()
+        sent = (sent or "").strip()
         if sent and sent in d["video_prompt"]:
-            d["video_prompt"] = d["video_prompt"].replace(sent, "", 1)
+            d["video_prompt"] = paragraphize(d["video_prompt"].replace(sent, "", 1))
             d["video_prompt_word_count"] = len(d["video_prompt"].split())
         d.setdefault("notes", []).append(f"手绘分镜删除并回滚:{ref_rel}")
         atomic_write_json(pf, d)
@@ -5880,7 +5885,7 @@ async def api_grpref_delete(body: dict):
             meta = _read_json_safe(mj) or {}
             if meta.get("ref_path") != ref:
                 continue
-            sent = meta.get("prompt_sentence") or ""
+            sent = (meta.get("prompt_sentence") or "").strip()
             # 早先删过前面的 ref 时,正文里这句的 [Image N] 已被重排,与 meta 存的原句对不上:
             # 再按线稿当前位置(第 i+1 张)改写序号试一次
             for cand in (sent, re.sub(r"\[Image \d+\]", f"[Image {i + 1}]", sent)):
@@ -5895,6 +5900,7 @@ async def api_grpref_delete(body: dict):
         vp, shifted, dropped = _grpref_renumber_prompt(vp, i + 1)
         if shifted or dropped:
             extra.append(f"正文引用重排 {shifted} 处、移除指向该图的引用 {dropped} 处")
+        vp = paragraphize(vp)
         d["video_prompt"] = vp
         d["video_prompt_word_count"] = len(vp.split())
     d.setdefault("notes", []).append(
@@ -6105,6 +6111,7 @@ async def api_grpvref_delete(body: dict):
         vp, shifted, dropped = _grpvref_renumber_prompt(vp, i + 1)
         if shifted or dropped:
             extra.append(f"正文引用重排 {shifted} 处、移除指向该视频的引用 {dropped} 处")
+        vp = paragraphize(vp)
         d["video_prompt"] = vp
         d["video_prompt_word_count"] = len(vp.split())
     if vrefs:

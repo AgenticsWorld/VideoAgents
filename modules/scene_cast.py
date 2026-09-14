@@ -14,6 +14,8 @@ import json
 import re
 from pathlib import Path
 
+from modules.prompt_layout import paragraphize
+
 
 def read_json(path, default=None):
     return json.loads(path.read_text(encoding='utf-8')) if path.is_file() else copy.deepcopy(default)
@@ -203,7 +205,7 @@ def complete_prompt_cast(prompt, rows, presence=None):
         # Definitions precede shot instructions, while existing reference indices stay stable.
         # 固定段规范顺序:Scene presence → Whitebox reference → Shot plates → Shot 1(各 sync 各自锚定,重跑不互换位置)
         text = text[:block_anchor(text)]+block+text[block_anchor(text):]
-    out['video_prompt'] = text
+    out['video_prompt'] = paragraphize(text)
     out['scene_cast'] = [r['id'] for r in rows]
     out['scene_cast_refs'] = copy.deepcopy(rows)
     if presence is not None:

@@ -13,6 +13,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from modules.prompt_layout import paragraphize, same_layout_insensitive
 from modules.whitebox import component, read
 
 START, END = 'Continuation reference:', 'End continuation reference.'
@@ -247,7 +248,7 @@ def apply_prompt(prompt, continuation):
     else:
         clause = ''
     out.update(refs=images_new, video_refs=videos_new,
-               video_prompt=(f'{START} {clause} {END}\n{text}' if clause else text),
+               video_prompt=paragraphize(f'{START} {clause} {END}\n{text}' if clause else text),
                continuity_ref=c)
     return out
 
@@ -277,9 +278,15 @@ def sync_group(base, ep, gid, write=False, prepare=False):
             tmp = path.with_suffix('.json.tmp')
             tmp.write_text(json.dumps(updated, ensure_ascii=False, indent=2)+'\n')
             os.replace(tmp, path)
-    elif changed:
+    elif changed and not layout_only(prompt, updated):
         raise ValueError(f'{gid}: 续接配置需同步，运行 sync_continuity_refs.py --write / --prepare')
     return {'group_id': gid, **c, 'updated': changed}
+
+
+def layout_only(before, after):
+    """仅 video_prompt 段落空白不同(存量单行正文未 --write 成分段排版)不算续接配置未同步。"""
+    return ({k: v for k, v in before.items() if k != 'video_prompt'} == {k: v for k, v in after.items() if k != 'video_prompt'}
+            and same_layout_insensitive(before.get('video_prompt'), after.get('video_prompt')))
 
 
 def validate_request(output, prompt, refs, videos, cfg, first='', last=''):

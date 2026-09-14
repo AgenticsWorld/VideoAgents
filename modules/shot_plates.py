@@ -41,6 +41,7 @@ import os
 import re
 from pathlib import Path
 
+from modules.prompt_layout import paragraphize
 from modules.whitebox import component, read, render_format
 
 SCHEMA_LIBRARY = 'shot_plate_library.v1'
@@ -1243,7 +1244,7 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False) 
                 head = re.compile(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)' % shot_no).search(vp, after)
                 if head:
                     vp = vp[:head.end()] + activation_line(indexed, shot_no) + vp[head.end():]
-    vp = re.sub(r'[ \t]{2,}', ' ', vp).strip()
+    vp = paragraphize(re.sub(r'[ \t]{2,}', ' ', vp))
     out['refs'] = new
     out['video_prompt'] = vp
     out['shot_plates'] = {'plates': [{k: p[k] for k in ('shot_id', 'role', 'key', 'file')} for p in plan['plates']],
