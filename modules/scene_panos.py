@@ -438,14 +438,10 @@ def lighting_scheme(base: Path, sid: str, scheme: str) -> dict:
     return {}
 
 
-# ---------------------------------------------------------------- 窗/门洞口(供母图与视频提示词用;全景阶段不用——2026-09-14 曾接入全景提示词与
-# 全景洞口透光机检,实测效果不佳已撤回。母图阶段 shot_plates.plate_fidelity / build_prompt 与视频接线 sync_shot_plates 仍用这些帮助函数。)
-OPENING_LUMA_MAX = 72            # 洞口在背景图里的平均亮度上限(0–255;liaozhai3 SCN-0005 实测:整幅中位 27,不透光门洞 30,透光窗 87–151)
-OPENING_LUMA_RATIO = 1.8         # 且不得高于整幅中位亮度的此倍数(两条同时超才算透光)
+# ---------------------------------------------------------------- 窗/门洞口(只供视频提示词接线 sync_shot_plates 的【场景】段用;
+# 2026-09-14 曾接入全景提示词/全景透光机检与母图提示词/母图保真机检,两处实测效果不佳均已回退,只保留视频提示词里的洞口暗面句。)
 NIGHT_WORDS = ('夜', '晚', 'night', 'midnight')
 WINDOW_SOURCE_WORDS = ('窗', 'window', 'daylight', 'sunlight', 'sun ', '日光', '月光', 'moon', 'skylight', '天光', 'outside', '门外')
-OPENINGS_RETRY_RULE = ('IMPORTANT — in the previous attempt light was glowing through {names}; that is wrong for this night scene: '
-                       'paint them as dark, unlit, opaque surfaces with no light coming through.')
 
 
 def opening_apertures(scene: dict, layout: dict) -> list[dict]:
@@ -508,42 +504,6 @@ def openings_for(base: Path, sid: str, scheme_id: str | None, time_of_day: str |
     apertures = opening_apertures(scene, layout)
     rule, negative = openings_rule(sch, apertures, time_of_day)
     return {'apertures': apertures, 'rule': rule, 'rule_zh': openings_rule_zh(sch, apertures, time_of_day), 'negative': negative, 'scheme': sch}
-
-
-def aperture_points(aperture: dict, n: int = 12) -> list:
-    """洞口面(墙中面)上的 n×n 采样点。"""
-    cx, cy, cz = aperture['position']; sx, sy, sz = aperture['size_m']
-    along_x = sx >= sz   # 薄的那一维是墙厚
-    pts = []
-    for i in range(n):
-        for j in range(n):
-            a = (i / (n - 1) - .5); b = (j / (n - 1) - .5)
-            pts.append([cx + a * sx, cy + b * sy, cz] if along_x else [cx, cy + b * sy, cz + a * sz])
-    return pts
-
-
-def openings_check_image(image_path: Path, boxes: dict) -> dict:
-    """透视图(背景图)洞口亮度机检:boxes={name: (x0,y0,x1,y1) 归一化画幅坐标};> max(OPENING_LUMA_MAX, 中位 × OPENING_LUMA_RATIO) 判透光。"""
-    import cv2
-    import numpy as np
-    im = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    if im is None:
-        return {'ok': True, 'openings': {}, 'error': 'unreadable'}
-    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    h, w = gray.shape
-    median = float(np.median(gray))
-    limit = max(OPENING_LUMA_MAX, OPENING_LUMA_RATIO * median)
-    result = {'room_median_luma': round(median, 1), 'limit': round(limit, 1), 'openings': {}, 'ok': True}
-    for name, (x0, y0, x1, y1) in boxes.items():
-        X0, X1 = int(max(0, x0) * w), int(min(1, x1) * w); Y0, Y1 = int(max(0, y0) * h), int(min(1, y1) * h)
-        if X1 - X0 < 4 or Y1 - Y0 < 4:
-            result['openings'][name] = {'luma': None, 'ok': True}
-            continue
-        luma = float(gray[Y0:Y1, X0:X1].mean())
-        ok = luma <= limit
-        result['openings'][name] = {'luma': round(luma, 1), 'box': [round(v, 3) for v in (x0, y0, x1, y1)], 'ok': ok}
-        result['ok'] = result['ok'] and ok
-    return result
 
 
 def object_inventory(scene: dict, layout: dict, anchor: dict) -> list[str]:

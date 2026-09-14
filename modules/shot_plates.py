@@ -54,19 +54,6 @@ GC_KEY = 'Global constraints:'
 # 模型把整间屋(屋梁/坐榻/门帘/窗)凭空重造;b000 85 mm 变成烛台特写——参考图没有结构时模型只听场景描述,越窄越失控。
 MASTER_FOV_V_DEG = 55.0           # 母图垂直视场(≈23 mm 等效;16:9 下水平 ≈85°;28 mm 级重投影实测模型能守住结构,12 mm 级守不住)
 MASTER_FOV_MARGIN_DEG = 4.0       # 分镜本身比母图还宽时,母图视场 = 分镜视场 + 此余量
-# 母图视场自适应(2026-09-14,liaozhai3 S04-09 反例:40 mm 近案机位按 55° 母图出图,模型把整屋画成远景,案头缩成小桌;视频模型再从
-# 这张远景图里「裁」不出本镜,自己重造了一面带窗的墙):主体近(≤ NEAR_SUBJECT_M)或本镜视锥内本就有 ≥ STRUCTURE_MIN_ITEMS 个占幅
-# ≥ STRUCTURE_MIN_AREA 的几何(参考图有结构就有约束力)时,母图 = 本镜视场 + NEAR_MASTER_MARGIN_DEG,不再放宽到 55°。
-NEAR_SUBJECT_M = 2.5
-NEAR_MASTER_MARGIN_DEG = 8.0
-STRUCTURE_MIN_ITEMS = 3
-STRUCTURE_MIN_AREA = 0.02
-# 母图保真机检(plate_fidelity):成图与重投影对照。scale_drift = 把成图中心裁到 s 倍再与重投影比结构相关,最佳 s ≤ SCALE_DRIFT_SCALE
-# 且相关提升 ≥ SCALE_DRIFT_GAIN 视为「模型退后了」(只 WARN,阈值按 liaozhai3 SCN-0005 十张母图标定,不自动重出);
-# 洞口透光(夜间方案,scene_panos.openings_check_image)为确定性判定,违规自动重出 OPENING_RETRY 次。
-SCALE_DRIFT_SCALE = 0.7
-SCALE_DRIFT_GAIN = 0.2
-PLATE_OPENING_RETRY = 1
 # 同一母图能服务的机位范围(2026-09-14 二订,用户按 liaozhai3 SCN-0005 实跑裁定:0.6 m 时 20 镜出 13 张母图,朝向一致、
 # 相距 1 m 内的三个机位各出一张是浪费;派生是纯旋转不补视差,但背景板只作视频参考,中等视差可接受):
 MASTER_POSITION_M = 2.0           # 分镜机位离母图机位的水平距 ≤ 此值
@@ -87,8 +74,7 @@ SIZE_WORDS = {'ECU': 'extreme close-up', 'CU': 'close-up', 'MCU': 'medium close-
 SYNONYMS = {'canopy': 'tree', 'crown': 'tree', 'trunk': 'tree', 'apartments': 'apartment', 'buildings': 'building'}
 NEGATIVE_EXTRA = ('people, person, human figure, silhouette, crowd, pedestrian, grey boxes, untextured 3D blocks, wireframe, '
                   "top-down view, bird's-eye view, map, tiled grid, split screen, collage, contact sheet")
-NEGATIVE_MASTER = ('shallow depth of field, bokeh, blurred background, out of focus, vignette, fisheye, barrel distortion, '
-                   'establishing shot, zoomed out, camera pulled back, wide shot of the whole room')   # 母图须全幅清晰可裁,且不得退后
+NEGATIVE_MASTER = 'shallow depth of field, bokeh, blurred background, out of focus, vignette, fisheye, barrel distortion'   # 母图须全幅清晰可裁
 
 
 # ---------------------------------------------------------------- vector helpers
@@ -490,8 +476,7 @@ def same_station(station: dict, facts: dict) -> bool:
 
 
 def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, require_file: bool = True):
-    """找能派生本镜的母图:同方案、同一机位范围(same_station)、本镜视锥整个落在母图画幅内;多个取最近/最同轴的,同分取视场更紧的
-    (细节更多)。"""
+    """找能派生本镜的母图:同方案、同一机位范围(same_station)、本镜视锥整个落在母图画幅内;多个取最近/最同轴的。"""
     best = None
     shot_cam = cam_of_facts(facts)
     for e in lib.get('plates', []):
@@ -503,38 +488,16 @@ def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, 
         if not view_fits(cam_of_facts(c), shot_cam, aspect):
             continue
         dist = math.dist(c['position'], facts['position'])
-        score = dist + angle_diff(c['bearing_deg'], facts['bearing_deg'])/90 + float(c.get('fov_v_deg') or 0)/1000
+        score = dist + angle_diff(c['bearing_deg'], facts['bearing_deg'])/90
         if best is None or score < best[0]:
             best = (score, e)
     return best[1] if best else None
 
 
-def structure_items(items: list) -> list:
-    """本镜视锥内「有结构」的几何:有白模物体且占幅 ≥ STRUCTURE_MIN_AREA 的清单项名称。"""
-    out = []
-    for it in items:
-        if not it.get('objects'):
-            continue
-        area = max(0.0, it['xmax'] - it['xmin']) / 2 * max(0.0, it['ymax'] - it['ymin']) / 2
-        if area >= STRUCTURE_MIN_AREA:
-            out.append(it['name'])
-    return out
-
-
-def master_fov_for(facts: dict, structure: list | None) -> tuple[float, str]:
-    """母图视场与口径:('near' = 本镜视场 + NEAR_MASTER_MARGIN_DEG;'wide' = max(55°, 本镜 + 4°))。
-    near 条件:主体距离 ≤ NEAR_SUBJECT_M,或本镜视锥内有结构的几何 ≥ STRUCTURE_MIN_ITEMS 个。"""
-    near = (facts.get('subject_distance_m') or 9e9) <= NEAR_SUBJECT_M or len(structure or []) >= STRUCTURE_MIN_ITEMS
-    if near:
-        return facts['fov_v_deg'] + NEAR_MASTER_MARGIN_DEG, 'near'
-    return max(MASTER_FOV_V_DEG, facts['fov_v_deg'] + MASTER_FOV_MARGIN_DEG), 'wide'
-
-
 def plan_master(job: dict, peers: list, aspect: float) -> dict:
-    """母图机位 {'position','target','fov','mode'}:视场按 master_fov_for(近机位/有结构 = 本镜视场 + 余量,否则 ≥ 55°);朝向/俯仰取
-    「同一机位范围内待出各镜」的平均方向,装不下的同伴逐个剔除(先剔离均值最远的);位置取留下各镜机位的质心(离质心超出 same_station
-    的再剔除),最少剩本镜自己。"""
-    fov, mode = master_fov_for(job['facts'], job.get('structure'))
+    """母图机位 {'position','target','fov'}:视场 ≥ MASTER_FOV_V_DEG 且 ≥ 本镜视场 + 余量;朝向/俯仰取「同一机位范围内待出各镜」的
+    平均方向,装不下的同伴逐个剔除(先剔离均值最远的);位置取留下各镜机位的质心(离质心超出 same_station 的再剔除),最少剩本镜自己。"""
+    fov = max(MASTER_FOV_V_DEG, job['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG)
     reach = job['facts']['subject_distance_m'] or 1.0
     def direction(j):
         return norm(sub(j['facts']['target'], j['facts']['position']))
@@ -560,7 +523,7 @@ def plan_master(job: dict, peers: list, aspect: float) -> dict:
         if len(kept) == len(group):
             break
         group = kept
-    return {'position': cam['position'], 'target': cam['target'], 'fov': fov, 'mode': mode}
+    return {'position': cam['position'], 'target': cam['target'], 'fov': fov}
 
 
 # ---------------------------------------------------------------- whitebox clean frames
@@ -626,18 +589,15 @@ def scene_description(base: Path, sid: str) -> tuple[str, str]:
     return desc[:1200], flat(arch.get('negative'))[:600]
 
 
-def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None, sibling=False,
-                 mode='wide', openings=''):
-    """母图提示词(2026-09-14):facts 为母图机位事实;镜头口径按视场写(不用人物景别词),要求全画幅深焦清晰、视场与尺度以重投影图
-    为准不外扩不退后(near 口径 = 本镜视场 + 小余量;wide 口径 = 广角母图,之后各镜从中取更紧的一块)。openings = 夜间洞口暗面句。"""
+def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None, sibling=False):
+    """母图提示词(2026-09-14):facts 为母图机位事实(广角);镜头口径按视场写(不用人物景别词),要求全画幅深焦清晰、
+    视场以重投影图为准不外扩——母图之后按各镜裁窄,画外多画的天花/家具会随裁切进画。"""
     size = lens_word(facts['fov_h_deg'])
     name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or scene.get('name') or scene['scene_id']).strip()
     head = f"Empty location background plate for one film shot, photographed with nobody present. Location: {name}."
     head += f" Time of day: {group.get('time_of_day', '')}."
     if lighting:
         head += f" Lighting: {lighting}."
-    if openings:
-        head += ' ' + openings
     cam = (f"Camera ({'end of the camera move' if role == 'end' else 'start of the shot'}): {size}, "
            f"{facts['lens_mm_equiv']}mm-equivalent lens ({facts['fov_h_deg']} degrees horizontal field of view), "
            f"camera height {facts['height_m']} m ({facts['height_word']}), "
@@ -655,14 +615,10 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
              f"and how it looks (walls, floors, ceilings, furniture, facades, roads, trees, poles, materials, colours, weather and light), keep "
              f"its perspective and its horizon line (about {facts['horizon_pct_from_top']}% down from the top edge), keep every element at the "
              f"position it has there, and repaint the whole frame sharp and photographic; never copy its smears, holes or soft focus.",
-             "The field of view is exactly what [Image 1] covers: do not widen it, do not step back, do not zoom out, and do not add a "
-             "ceiling, floor, walls, doorways, windows or furniture that [Image 1] does not show. Keep the scale and distance of everything "
-             "exactly as in [Image 1]: the nearest objects stay as large, as close and as low in the frame as they are there — do not shrink "
-             "the furniture and do not turn this into a wider establishing view of the whole room. "
-             + ("This plate covers the shot's own field of view plus a small margin, so " if mode == 'near' else
-                "This is the wide master view for this camera position and tighter shots will be cropped out of it, so ")
-             + "finish every part of the frame at full sharpness: deep focus from the nearest object to the farthest, no shallow depth of "
-             "field, no bokeh, no vignetting, no blur anywhere."]
+             "The field of view is exactly what [Image 1] covers: do not widen it, do not step back, and do not add a ceiling, floor, "
+             "walls, doorways, windows or furniture that [Image 1] does not show. This is the wide master view for this camera position "
+             "and several tighter shots will be cropped out of it, so finish every part of the frame at full sharpness: deep focus from "
+             "the nearest object to the farthest, no shallow depth of field, no bokeh, no vignetting, no blur anywhere."]
     if role == 'end':
         lines.append("[Image 2] is the finished master background plate of the same shot at the start of the camera move: keep exactly the same "
                      "location, materials, set dressing, weather, light direction and color grade, seen from this new camera; "
@@ -760,110 +716,6 @@ def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str,
     return scene_panos.reproject_to_camera(base, sid, anchor, scheme, camera, width, height, output)
 
 
-# ---------------------------------------------------------------- plate fidelity(母图保真机检,2026-09-14)
-def aperture_boxes(master_key: dict, fmt: dict, apertures: list) -> dict:
-    """洞口盒在母图画幅里的归一化框 {name: (x0,y0,x1,y1)};投不进画幅或太小的略去。"""
-    from modules.scene_panos import aperture_points
-    project = projector(master_key, fmt)
-    boxes = {}
-    for a in apertures:
-        hits = [p for p in (project(pt) for pt in aperture_points(a)) if p]
-        if len(hits) < 20:
-            continue
-        xs = [(h[0] + 1) / 2 for h in hits]; ys = [(1 - h[1]) / 2 for h in hits]
-        x0, x1 = max(0.0, min(xs)), min(1.0, max(xs)); y0, y1 = max(0.0, min(ys)), min(1.0, max(ys))
-        if x1 - x0 < .02 or y1 - y0 < .02:
-            continue
-        boxes[a['name']] = (x0, y0, x1, y1)
-    return boxes
-
-
-def scale_drift(pano_path: Path, plate_path: Path) -> dict | None:
-    """成图是否比重投影「退后了」:把成图中心裁到 s 倍(s=1.0…0.5,中心略微偏移)再与重投影比梯度结构相关,记最佳 s 与相关提升。
-    返回 {'corr_full','corr_best','best_scale','drift'};缺 cv2 返回 None。"""
-    try:
-        import cv2
-        import numpy as np
-    except ImportError:
-        return None
-    W, H = 512, 288
-    a = cv2.imread(str(pano_path), cv2.IMREAD_COLOR); b = cv2.imread(str(plate_path), cv2.IMREAD_COLOR)
-    if a is None or b is None:
-        return None
-    a = cv2.resize(a, (W, H)); b = cv2.resize(b, (W, H))
-    def gradmap(im):
-        g = cv2.GaussianBlur(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32), (5, 5), 0)
-        return np.hypot(cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1))
-    def cells(m, n=12):
-        h, w = m.shape
-        return m[:h // n * n, :w // n * n].reshape(n, h // n, n, w // n).mean(axis=(1, 3))
-    def zc(x, y):
-        zx = (x - x.mean()) / (x.std() + 1e-6); zy = (y - y.mean()) / (y.std() + 1e-6)
-        return float((zx * zy).mean())
-    hole = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY) < 6
-    gp = gradmap(a); gp[hole] = 0
-    cp = cells(gp)
-    best = (-9, 1.0)
-    full = None
-    for s in (1.0, .9, .8, .7, .6, .5):
-        for cx in ((.5,) if s == 1.0 else (.4, .5, .6)):
-            for cy in ((.5,) if s == 1.0 else (.5, .6)):
-                w, h = int(W * s), int(H * s)
-                x0 = int(max(0, min(W - w, cx * W - w / 2))); y0 = int(max(0, min(H - h, cy * H - h / 2)))
-                crop = cv2.resize(b[y0:y0 + h, x0:x0 + w], (W, H))
-                gc = gradmap(crop); gc[hole] = 0
-                c = zc(cp, cells(gc))
-                if s == 1.0:
-                    full = c
-                if c > best[0]:
-                    best = (c, s)
-    drift = bool(best[1] <= SCALE_DRIFT_SCALE and best[0] - (full or 0) >= SCALE_DRIFT_GAIN)
-    return {'corr_full': round(full or 0, 3), 'corr_best': round(best[0], 3), 'best_scale': best[1], 'drift': drift}
-
-
-def write_review_sheet(pano_path: Path, plate_path: Path, output: Path) -> bool:
-    """预览/人工核对用:重投影 | 成图 左右并排。"""
-    try:
-        import cv2
-    except ImportError:
-        return False
-    a = cv2.imread(str(pano_path), cv2.IMREAD_COLOR); b = cv2.imread(str(plate_path), cv2.IMREAD_COLOR)
-    if a is None or b is None:
-        return False
-    h = 540
-    a = cv2.resize(a, (int(a.shape[1] * h / a.shape[0]), h)); b = cv2.resize(b, (int(b.shape[1] * h / b.shape[0]), h))
-    import numpy as np
-    sheet = np.concatenate([a, np.full((h, 8, 3), 255, dtype=a.dtype), b], axis=1)
-    cv2.imwrite(str(output), sheet, [cv2.IMWRITE_JPEG_QUALITY, 88])
-    return True
-
-
-def plate_fidelity(base: Path, out_rel: str, pano_rel: str, master_key: dict, fmt: dict, apertures: list, night_rule: bool) -> dict:
-    """母图保真机检:scale_drift(退后,只 WARN)+ 夜间洞口透光(确定性,违规由调用方重出)+ 对照图 <key>.review.jpg。"""
-    result = {'scale_drift': None, 'openings': None, 'review': None, 'warnings': []}
-    plate = base / out_rel; pano = base / pano_rel
-    if not plate.is_file():
-        return result
-    if pano.is_file():
-        result['scale_drift'] = scale_drift(pano, plate)
-        if result['scale_drift'] and result['scale_drift']['drift']:
-            result['warnings'].append(f"疑似退后:成图中心裁到 {result['scale_drift']['best_scale']} 倍才与重投影最贴合"
-                                      f"(相关 {result['scale_drift']['corr_full']} → {result['scale_drift']['corr_best']})")
-        review = plate.with_name(plate.stem + '.review.jpg')
-        if write_review_sheet(pano, plate, review):
-            result['review'] = str(review.relative_to(base))
-    if night_rule and apertures:
-        from modules.scene_panos import openings_check_image
-        boxes = aperture_boxes(master_key, fmt, apertures)
-        if boxes:
-            result['openings'] = openings_check_image(plate, boxes)
-            bad = [n for n, v in result['openings']['openings'].items() if not v['ok']]
-            if bad:
-                result['warnings'].append('洞口透光:' + ', '.join(f"{n} 亮度 {result['openings']['openings'][n]['luma']}" for n in bad)
-                                          + f" > 上限 {result['openings']['limit']}")
-    return result
-
-
 # ---------------------------------------------------------------- generation driver
 def plan_episode(base: Path, ep: str, only=None) -> dict:
     """算出本集每镜需要的背景图与复用/裁切/新出决策(不出图)。only = 组号或镜号集合。"""
@@ -900,10 +752,8 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
                 t = cam['start'] if role == 'start' else cam['start'] + cam['duration_s'] - 1e-3
                 facts = camera_facts(key, fmt, ex, ez, texts)
                 facts['standing'] = standing_on(scene, layouts[sid], key)
-                items, _phr, _out = inventory(scene, layouts[sid], key, fmt)
                 jobs.append({'group_id': gid, 'shot_id': shot_id, 'scene_id': sid, 'role': role, 'keyframe': key, 't': t,
-                             'facts': facts, 'scheme': scheme, 'tier': roles, 'shot': shots.get(shot_id, {}), 'raw_group': raw,
-                             'structure': structure_items(items)})
+                             'facts': facts, 'scheme': scheme, 'tier': roles, 'shot': shots.get(shot_id, {}), 'raw_group': raw})
     return {'episode': episode, 'fmt': fmt, 'jobs': jobs, 'layouts': layouts, 'axes': axes, 'libs': libs, 'shots': shots}
 
 
@@ -1062,18 +912,14 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             continue
         layout = layouts[sid]; scene = episode['scenes'][sid]
         mfacts = d['master_facts']
-        mode = d['master_key'].get('mode', 'wide')
         items, phrases, out_of_frame = inventory(scene, layout, d['master_key'], fmt)
         stand = mfacts.get('standing', '')
         mfacts['standing_hidden'] = bool(stand.startswith('on ')) and not any(it['name'] == stand[3:] for it in items)
         lighting = lighting_fragment(base, sid, d['scheme'])
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, mfacts['bearing_deg']) if sun else None
-        openings = scene_panos.openings_for(base, sid, d['scheme'], d['raw_group'].get('time_of_day'))   # 夜间洞口暗面规则(与全景同口径)
-        prompt = build_prompt(mfacts, phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame,
-                              mode=mode, openings=openings['rule'])
-        negative = ', '.join(x for x in (style_doc.get('negative_prompt_en') or '', scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER,
-                                         openings['negative']) if x)
+        prompt = build_prompt(mfacts, phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame)
+        negative = ', '.join(x for x in (style_doc.get('negative_prompt_en') or '', scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER) if x)
         # [Image 1] = 场景全景按母图机位重投影(2026-09-10 全景制):规划里服务本机位的锚点优先,空洞过多换锚点,都不行就在本机位加锚点出全景
         scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
         pano_rel = str(Path(d['whitebox_frame']).with_name(f"{d['key']}.pano.jpg"))
@@ -1106,15 +952,13 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             import random
             use_seed = random.randint(1, 2**31-1)
         out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png"
-        entry = {'key': d['key'], 'master': True, 'master_mode': mode, 'structure': d.get('structure'), 'file': out_rel,
-                 'whitebox_frame': d['whitebox_frame'], 'lighting_scheme_id': d['scheme'],
+        entry = {'key': d['key'], 'master': True, 'file': out_rel, 'whitebox_frame': d['whitebox_frame'], 'lighting_scheme_id': d['scheme'],
                  'time_of_day': d['raw_group'].get('time_of_day'), 'camera': mfacts, 'size': f'{mwidth}x{mheight}', 'seed': use_seed,
                  'refs': refs, 'prompt': prompt, 'negative': negative, 'in_frame': items, 'pano_ref': pano_info,
                  'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': d['group_id'], 'role': role},
                  'written_at': dt.datetime.now().isoformat(timespec='seconds')}
-        log(f"== {shot_id} {role} ({d['group_id']}) new master {d['key']} [{mode}] facing {mfacts['facing']} h={mfacts['height_m']}m "
-            f"lens≈{mfacts['lens_mm_equiv']}mm ({mwidth}x{mheight});本镜 {d['facts']['lens_mm_equiv']}mm 从母图派生"
-            + (f";本镜视锥内有结构几何 {len(d.get('structure') or [])} 项" if mode == 'near' else ''))
+        log(f"== {shot_id} {role} ({d['group_id']}) new master {d['key']} facing {mfacts['facing']} h={mfacts['height_m']}m "
+            f"lens≈{mfacts['lens_mm_equiv']}mm ({mwidth}x{mheight});本镜 {d['facts']['lens_mm_equiv']}mm 从母图派生")
         if dry_run:
             entry['dry_run'] = True
             log(prompt); log('refs: ' + json.dumps(refs, ensure_ascii=False))
@@ -1126,33 +970,12 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     cfg = get_config('image')
                 channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
             entry['channel'] = channel
-            # 出图 + 保真机检;夜间洞口透光为确定性违规 → 把违规洞口写进提示词换种子重出 PLATE_OPENING_RETRY 次;退后只 WARN
-            use_prompt, cur_seed, fid, failed, attempts = prompt, use_seed, None, False, []
-            for attempt in range(1 + (PLATE_OPENING_RETRY if openings['rule'] else 0)):
-                try:
-                    generate_image(use_prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in refs],
-                                   aspect=fmt['aspect_ratio'], size=f'{mwidth}x{mheight}', seed=cur_seed)
-                except Exception as error:  # noqa: BLE001
-                    stats['errors'].append(f'{shot_id}/{role}: 母图出图失败 {error}')
-                    failed = True
-                    break
-                fid = plate_fidelity(base, out_rel, pano_rel, d['master_key'], fmt, openings['apertures'], bool(openings['rule']))
-                bad = [n for n, v in ((fid.get('openings') or {}).get('openings') or {}).items() if not v['ok']]
-                attempts.append({'seed': cur_seed, 'openings_ok': not bad, 'bad': bad})
-                for w in fid['warnings']:
-                    log(f"   WARN 母图保真 {d['key']}: {w}")
-                if not bad or attempt >= PLATE_OPENING_RETRY:
-                    break
-                import random
-                rejected = (base/out_rel).with_name(f"{d['key']}.rejected-openings-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.png")
-                (base/out_rel).rename(rejected)
-                use_prompt = prompt + ' ' + scene_panos.OPENINGS_RETRY_RULE.format(names=', '.join(bad))
-                cur_seed = random.randint(1, 2**31-1)
-                log(f"   洞口透光违规,旧图存为 {rejected.name},把违规洞口写进提示词重出 …")
-            if failed:
+            try:
+                generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in refs],
+                               aspect=fmt['aspect_ratio'], size=f'{mwidth}x{mheight}', seed=use_seed)
+            except Exception as error:  # noqa: BLE001
+                stats['errors'].append(f'{shot_id}/{role}: 母图出图失败 {error}')
                 continue
-            entry['prompt'] = use_prompt; entry['seed'] = cur_seed
-            entry['fidelity'] = {**(fid or {}), 'attempts': attempts}
             (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
             lib['plates'] = [e for e in lib['plates'] if e['key'] != entry['key']] + [entry]   # --force 同 key 覆盖
             save_library(base, sid, lib)
@@ -1731,12 +1554,10 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
                 legacy = True
         if legacy:
             legacy_shots.append(shot_id)
-        fid = [f"{p['key']}: {w}" for p in have.values() for w in ((lib_by_key.get(p.get('key')) or {}).get('fidelity') or {}).get('warnings') or []]
         shots[shot_id] = {'state': state, 'need': sorted(roles), 'have': sorted(have), 'legacy': legacy,
-                          'files': [p['file'] for p in have.values()], 'fidelity_warnings': fid}
+                          'files': [p['file'] for p in have.values()]}
     problems = {k: v['state'] for k, v in shots.items() if v['state'] != 'ok'}
-    # legacy(2026-09-10 前非全景制出的图)只作 WARN 不算问题:整体重出有费用,由用户决定(--repano);母图保真 WARN 同样只列不判
+    # legacy(2026-09-10 前非全景制出的图)只作 WARN 不算问题:整体重出有费用,由用户决定(--repano)
     return {'ep': component(ep), 'shots_total': len(shots), 'shots_ok': len(shots) - len(problems),
             'plates_needed': sum(len(v['need']) for v in shots.values()), 'problems': problems, 'shots': shots,
-            'legacy_shots': legacy_shots,
-            'fidelity_warnings': {k: v['fidelity_warnings'] for k, v in shots.items() if v['fidelity_warnings']}}
+            'legacy_shots': legacy_shots}
