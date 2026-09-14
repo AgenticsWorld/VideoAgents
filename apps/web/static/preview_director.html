@@ -298,7 +298,7 @@ function toast(msg,ms=3500){const el=$('#toast');el.textContent=msg;el.style.opa
 
 /* ---------- 状态 ---------- */
 const Q0=new URLSearchParams(location.search);
-let DD=null,WB=null,SB=null,FORMAT=null,EP='',SEL='',VIEW='overview',VERSION='live',TIME=0,PLAYING=false,LOOP=false,
+let DD=null,WB=null,SB=null,FORMAT=null,EP='',SEL='',VIEW='camera',VERSION='live',TIME=0,PLAYING=false,LOOP=false,
     PICK=null,OPEN_SCN=new Set(),CLOSED_ACC=new Set(),NOTE_SCOPE='group',POLL=null,LAST_MAXV={},URL_T=null,SHOWALL=false;
 const grpById=id=>WB&&WB.groups.find(g=>g.group_id===id);
 const groupIssues=gid=>(grpById(gid)||{}).issues||[];
@@ -485,7 +485,7 @@ function renderMonitorShell(){
   <div id="worldstatus" hidden style="padding:4px 10px;color:var(--dim);font-size:11px" role="status"></div>
   <div class="screen" id="screen" style="--ar:${FORMAT.width} / ${FORMAT.height}"><div class="frame" id="frame">
     <canvas id="ca"></canvas>
-    <div class="pad orbit" id="pad"></div>
+    <div class="pad${VIEW==='overview'?' orbit':''}" id="pad"></div>
     <div class="info" id="finfo"></div><div class="tc" id="ftc"></div>
     <div class="tag" id="versionTag"></div>
     <div id="waylabels" style="position:absolute;inset:0;pointer-events:none;z-index:4"></div>
