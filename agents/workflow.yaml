@@ -296,7 +296,7 @@ phases:
           outputs: ["assets/prompts/{ep}/{group}.json"],   # 组级多镜头 prompt;锚点图 prompt 在 {shot}.json
           validation: { auto: [anchor_checklist_full, prompt_lt_1000_words, refs_match_materials,
                                no_music_notation, negative_has_no_bgm, prop_scale_token_ok,
-                               prop_ref_listed,   # 组内出场剧情道具参考图必须列入 refs 清单(首现组必含比例锚图 scale_ref_01.png)——只有文字 token 没有图,道具样式全靠模型脑补
+                               prop_ref_listed,   # 组内出场剧情道具的比例锚图 scale_ref_01.png 必须列入 refs 清单(每道具默认仅此一张;样式图 main_01.png 仅细节特写镜头按需,2026-09-14)——只有文字 token 没有图,道具样式全靠模型脑补
                                creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
                                whitebox_ref_bound,   # 白模视频已导出的组:video_refs=camera.mp4(按生效模型参考视频预算取舍;2026-09-08 起无 top.mp4)+ 正文 Whitebox reference/legend 固定段 + Global constraints 禁白模外观句(code/sync_whitebox_refs.py,2026-09-07;开关关闭 skipped)

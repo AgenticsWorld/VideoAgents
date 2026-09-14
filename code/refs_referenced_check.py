@@ -12,6 +12,9 @@
   - prop_ref_bound:`assets/concepts/props/<PROP-id>/` 下的道具图除被引用外,须以绑定句
     `<道具名>@Image i` 形式绑定(道具首现 Shot 段,后接 scale.prompt_token);只写 `[Image i]`
     不带 `@` 按 WARN,--strict 时按违规。
+  - prop_ref_single(2026-09-14):同一道具目录 `assets/concepts/props/<PROP-id>/` 默认只挂比例锚图
+    `scale_ref_01.png` 一张;同一道具挂 ≥2 张、或只挂了样式图而无比例锚图,按 WARN 提示
+    (样式图 main_01 仅本组确有该道具细节特写镜头时按需追加,故不判违规)。
   - tailframe_declared:refs 含 `*.last_frame.png`(前组尾帧)时,正文必须有开场声明句
     `opening continues from [Image i]` 或改写句 `same location and lighting as [Image i]`
     (SOUL:有前组尾帧锚时开头声明;首镜含尾帧里不存在的角色时用改写句);缺句=尾帧白挂,
@@ -37,6 +40,7 @@ IMG_RE = re.compile(r"(?:\[Image\s*(\d+)\]|@Image\s*(\d+))(?!\d)")
 AUD_RE = re.compile(r"(?:\[Audio\s*(\d+)\]|@Audio\s*(\d+))(?!\d)")
 VID_RE = re.compile(r"(?:\[Video\s*(\d+)\]|@Video\s*(\d+))(?!\d)")
 TAIL_RE = re.compile(r"(?:opening continues from|same location and lighting as)\s*\[Image\s*(\d+)\]")
+PROP_DIR_RE = re.compile(r"/concepts/props/([^/]+)/")
 
 
 def _nums(rx, text):
@@ -83,6 +87,19 @@ def check_group(pf: Path, strict: bool):
         if is_prop and i not in bound:
             msg = f"{gid}: [Image {i}] {short} 道具图只写了 [Image {i}]、无 `<道具名>@Image {i}` 绑定句"
             (errs if strict else warns).append(msg)
+    # prop_ref_single:同一道具默认只挂 scale_ref_01.png 一张(2026-09-14)
+    by_prop: dict[str, list[tuple[int, str]]] = {}
+    for i, r in enumerate(refs, start=1):
+        m = PROP_DIR_RE.search(r)
+        if m:
+            by_prop.setdefault(m.group(1), []).append((i, Path(r).name))
+    for pid, items in by_prop.items():
+        names = [n for _, n in items]
+        if len(items) >= 2:
+            warns.append(f"{gid}: 道具 {pid} 挂了 {len(items)} 张图({', '.join(names)});默认只挂比例锚图 scale_ref_01.png,"
+                         "样式图仅本组确有该道具细节特写镜头时才追加")
+        elif not names[0].startswith("scale_ref"):
+            warns.append(f"{gid}: 道具 {pid} 只挂了样式图 {names[0]}、无比例锚图 scale_ref_01.png(默认应挂比例锚图)")
     for i, r in enumerate(arefs, start=1):
         if i not in used_aud:
             errs.append(f"{gid}: [Audio {i}] {Path(r).name} 正文未引用(须 `<角色>@Audio {i}` 绑定句)")
@@ -100,7 +117,7 @@ def check_group(pf: Path, strict: bool):
 
 def main():
     args, proj_root = parse_args(
-        "refs_all_referenced 机检:组 prompt refs/audio_refs 每份素材正文至少引用一次;道具图须 @Image 绑定;尾帧须开场声明句",
+        "refs_all_referenced 机检:组 prompt refs/audio_refs 每份素材正文至少引用一次;道具图须 @Image 绑定(同一道具默认只挂比例锚图一张);尾帧须开场声明句",
         configure=lambda ap: (
             ap.add_argument("groups", nargs="*", help="只查指定组(如 grp002),缺省全批"),
             ap.add_argument("--strict", action="store_true",
