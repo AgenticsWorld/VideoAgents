@@ -1323,8 +1323,11 @@ def build_block_h3(plates: list, openings_en: str = '') -> str:
 
 
 def anchor_line_h3(plates: list, shot_no: int) -> str:
+    """某镜的「Plate anchor:」句。同一张背景图被本组多个镜共用时(refs 去重后 index 相同),
+    「not used in this shot」只列本镜没用到的图,不能把本镜自己的图也写进去(否则同一段先说对应 <Picture N> 又说 <Picture N> 不用,模型会忽略这张构图图)。"""
     mine = [p for p in plates if p['shot_no'] == shot_no]
-    others = [p for p in plates if p['shot_no'] != shot_no]
+    used = {p['index'] for p in mine}
+    others = [p for p in plates if p['shot_no'] != shot_no and p['index'] not in used]
     use = ' and '.join(f"<Picture {p['index']}> ([Image {p['index']}])" + (' at the end of the move' if p['role'] == 'end' else '') for p in mine)
     text = f"Plate anchor: this shot's set corresponds to {use} — {view_phrase_en(mine[0]) if mine else 'the shot frames a tighter view inside it'}."
     if others:
