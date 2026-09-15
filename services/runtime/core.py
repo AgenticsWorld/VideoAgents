@@ -911,6 +911,11 @@ DEFAULT_GENCONFIG = {
                #   (modules/dialogue_tts.py,按台词/音色/样本哈希惰性同步,用时才补合成);消费方三处:故事板动态样片、
                #   分镜白模样片挂对白轨,后期配音(p7-dub)先取库里自然语速音频再贴合;未选角的句子跳过并 WARN 不阻断
                "dialogue_tts": False,
+               # dialogue_tts_speed=对白语音默认语速倍率(2026-09-15,0.5–2.0,默认 1.0):casting.json 条目没有数字 speed 的句子按此
+               #   合成(火山 speech_rate / minimax / elevenlabs / openrouter 同一倍率口径);改了对白语音库按 key 自动重出。
+               # dialogue_tts_max_pause=句中停顿上限秒(0=不压缩):库文件合成后一律裁首尾静音,>0 时句中长停顿也压到该值(后处理,不重合成)
+               "dialogue_tts_speed": 1.0,
+               "dialogue_tts_max_pause": 0,
                "spatial_blocking": True,
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
@@ -1834,6 +1839,14 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
+    if "dialogue_tts_speed" in o:
+        v = o["dialogue_tts_speed"]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0.5 <= v <= 2.0:
+            raise ServiceError(400, "output.dialogue_tts_speed must be a number between 0.5 and 2.0")
+    if "dialogue_tts_max_pause" in o:
+        v = o["dialogue_tts_max_pause"]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 5:
+            raise ServiceError(400, "output.dialogue_tts_max_pause must be a number of seconds between 0 and 5")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
@@ -6343,8 +6356,9 @@ def _character_voices(base: Path) -> dict[str, list[dict]]:
     vdir = base / "assets" / "audio" / "voice"
     casting = _read_json_safe(vdir / "casting.json") or {}
     voices: dict[str, list[dict]] = {}
-    for c in casting.get("castings", []):
-        # casting.json 规约键是 character_id(voice-generation SOUL / dub_group 同口径);char_id 只作旧表兼容
+    for c in casting.get("castings") or casting.get("entries") or []:
+        # casting.json 规约键是 character_id(voice-generation SOUL / dub_group 同口径);char_id 只作旧表兼容;
+        # 顶层键规约 castings,实际落表用过 entries,两者都认(modules/dialogue_tts.load_casting 同口径)
         cid = (c.get("character_id") or c.get("char_id")) if isinstance(c, dict) else None
         if not cid:
             continue

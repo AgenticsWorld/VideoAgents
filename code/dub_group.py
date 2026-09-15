@@ -206,8 +206,10 @@ def load_casting(proj: Path) -> dict:
         raise SystemExit(f"缺 {p}(选角注册表,合成前必查;缺条目先登记,SOUL.md §职责1)")
     d = json.loads(p.read_text(encoding="utf-8"))
     out = {}
-    for c in d.get("castings", []):
-        out[(c.get("character_id"), c.get("variant") or "default")] = c
+    # 规约键 castings;voice-generation 实际落表用过 entries,两者都认(与 modules/dialogue_tts.load_casting 同口径)
+    for c in d.get("castings") or d.get("entries") or []:
+        if isinstance(c, dict) and (c.get("character_id") or c.get("char_id")):
+            out[(c.get("character_id") or c.get("char_id"), c.get("variant") or "default")] = c
     return out
 
 
@@ -343,7 +345,8 @@ def main(argv=None):
         c = casting.get((ch, var)) or casting.get((ch, "default"))
         if not c:
             raise SystemExit(f"casting.json 无 {ch}/{var} 条目——先登记再合成(dub_speaker_casting_bound)")
-        base_speed = float(c.get("speed") or 1.0)
+        # casting 数字 speed 优先;描述文字(「常态(未传 --speed)」)视为未填 → 项目 output.dialogue_tts_speed(默认 1.0)
+        base_speed = dt.num_speed(c.get("speed")) or dt.default_speed(proj)
         voice = "" if (provider == "comfyui" or desc_mode) else (c.get("tts_voice") or "")
         target = b - a
         raw_mp3 = dub_dir / f"l{i:02d}_{ch}.mp3"

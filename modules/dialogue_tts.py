@@ -16,6 +16,11 @@
   seed-audio 按声纹卡描述+项目 voiceprint 样本锚定,ComfyUI 自动选参考音频,云渠道用 casting.json 的音色 ID。
   speaker 不是 CHAR-/CRE- 编号、或云渠道缺 casting 条目 → 该句 status=unbound 跳过并 WARN(样片照出、不阻断)。
 - 顺带机检:实测时长与 est_duration_s 偏差 >30% 记入 checks.est_vs_actual(WARN 级,给分镜规划做反馈)。
+- 语速(2026-09-15):每句 speed = casting 条目的数字 speed(倍率,如 1.15;描述文字视为未填)> 项目输出设置
+  output.dialogue_tts_speed(默认 1.0;CLI --speed 临时覆盖该默认值)。speed 进 key,改了自动重出。
+- 静音修剪(2026-09-15):合成原声落 _raw/,库文件为裁掉首尾静音的版本(首留 0.10s、尾留 0.15s;seed-audio
+  首尾常各带 0.4–1.0s 空白,短句尤甚);output.dialogue_tts_max_pause>0 时句中超过该秒数的停顿也压到该值(默认 0=不动)。
+  修剪是后处理,不进 key:参数变了从 _raw/ 重裁,不重新调 TTS;台账每句记 trim{lead_s,tail_s,pause_s,params}。
 """
 from __future__ import annotations
 
@@ -34,6 +39,12 @@ LIB_REL = "assets/audio/voice/{ep}/tts"
 _ID_RE = re.compile(r"^(CHAR|CRE)-\d+$")
 _VP_RE = re.compile(r"(CHAR-\d+)(?:_([A-Za-z0-9-]+))?_voiceprint")
 EST_TOLERANCE = 0.30      # 实测/估时偏差超过该比例记 WARN
+RAW_DIR = "_raw"          # 合成原声(未修剪)存放子目录
+TRIM_NOISE_DB = -35.0     # 静音判定阈值
+TRIM_MIN_SIL = 0.20       # 短于此的空白不算静音段
+TRIM_KEEP_HEAD = 0.10     # 开头保留的静音
+TRIM_KEEP_TAIL = 0.15     # 结尾保留的静音
+SPEED_RANGE = (0.5, 2.0)  # 语速倍率合法区间(火山 speech_rate -50..100 / minimax 0.5..2.0 同口径)
 
 
 # ---------------------------------------------------------------- 基础读取
@@ -54,6 +65,30 @@ def enabled(base: Path) -> bool:
 def dialogue_voice_mode(base: Path) -> str:
     st = _read(Path(base) / "settings.json") or {}
     return (st.get("output") or {}).get("dialogue_voice") or "native"
+
+
+def num_speed(v) -> float | None:
+    """语速倍率:数字(或数字串)且在 SPEED_RANGE 内才算;casting 里的描述文字(如「常态(未传 --speed)」)视为未填。"""
+    if isinstance(v, bool) or v is None or v == "":
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if SPEED_RANGE[0] <= f <= SPEED_RANGE[1] else None
+
+
+def default_speed(base: Path) -> float:
+    """项目输出设置 output.dialogue_tts_speed(全局默认语速倍率,默认 1.0);casting 条目有数字 speed 的句子不受影响。"""
+    st = _read(Path(base) / "settings.json") or {}
+    return num_speed((st.get("output") or {}).get("dialogue_tts_speed")) or 1.0
+
+
+def default_max_pause(base: Path) -> float:
+    """项目输出设置 output.dialogue_tts_max_pause:句中停顿上限(秒),0=不压缩。"""
+    st = _read(Path(base) / "settings.json") or {}
+    v = _f((st.get("output") or {}).get("dialogue_tts_max_pause"))
+    return v if v and v > 0 else 0.0
 
 
 def lib_dir(base: Path, ep: str) -> Path:
@@ -143,7 +178,8 @@ def load_casting(base: Path) -> dict[tuple[str, str], dict]:
     """assets/audio/voice/casting.json → {(character_id, variant): 条目};缺文件返回空表(不报错,库允许未选角)。"""
     d = _read(Path(base) / "assets" / "audio" / "voice" / "casting.json") or {}
     out = {}
-    for c in d.get("castings") or []:
+    # 规约键 castings;voice-generation 实际落表用过 entries,两者都认
+    for c in d.get("castings") or d.get("entries") or []:
         if isinstance(c, dict) and (c.get("character_id") or c.get("char_id")):
             out[(c.get("character_id") or c.get("char_id"), c.get("variant") or "default")] = c
     return out
@@ -196,12 +232,15 @@ def _desc_mode(provider: str, model: str) -> bool:
 
 # ---------------------------------------------------------------- 计划(纯读,不合成)
 
-def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str, str] | None = None) -> dict:
+def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str, str] | None = None,
+         speed: float | None = None) -> dict:
     """逐句计算 key 与现状:status ∈ fresh(库里有且 key 一致)| stale(key 变了)| missing(未合成)| unbound(不能合成)。
-    返回 {lines:[...], manifest, provider, model, removed:[旧台账里已不在台词中的文件]}。"""
+    speed:本次默认语速倍率(None=项目设置 output.dialogue_tts_speed);casting 条目有数字 speed 的句子优先用条目值。
+    返回 {lines:[...], manifest, provider, model, speed, removed:[旧台账里已不在台词中的文件]}。"""
     base = Path(base)
     provider, model = channel if channel else tts_channel()
     desc = _desc_mode(provider, model)
+    base_speed = num_speed(speed) or default_speed(base)
     casting = load_casting(base)
     variants = infer_variants(base, ep)
     old = load_manifest(base, ep) or {}
@@ -212,7 +251,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
     for ln in collect_lines(base, ep, shot_list):
         ch = ln["speaker"]
         var = (variants.get(ln["group_id"]) or {}).get(ch, "default") if ch else "default"
-        entry = dict(ln, variant=var, reason="", tts_voice="", tts_model="", speed=1.0, key="", file="")
+        entry = dict(ln, variant=var, reason="", tts_voice="", tts_model="", speed=base_speed, key="", file="")
         if not ch:
             entry.update(status="unbound", reason=f"speaker 不是人物/生物编号:{ln['speaker_raw'] or '(空)'}")
             lines.append(entry)
@@ -220,7 +259,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
         c = casting.get((ch, var)) or casting.get((ch, "default")) or {}
         if c:
             entry.update(tts_voice=str(c.get("tts_voice") or ""), tts_model=str(c.get("tts_model") or ""),
-                         speed=float(c.get("speed") or 1.0))
+                         speed=num_speed(c.get("speed")) or base_speed)
         vp = voiceprint_path(base, ch, var)
         if not c and not (desc or provider == "comfyui"):
             # 云渠道按音色 ID 合成,没有选角条目就没有该角色的嗓音;不用默认音色顶替(会全员同声)
@@ -246,7 +285,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
         lines.append(entry)
     wanted = {e["file"] for e in lines if e.get("file")}
     removed = [f for f in old_by_file if f not in wanted]
-    return {"lines": lines, "manifest": old, "provider": provider, "model": model, "removed": removed}
+    return {"lines": lines, "manifest": old, "provider": provider, "model": model, "speed": base_speed, "removed": removed}
 
 
 def status(base: Path, ep: str) -> dict:
@@ -279,6 +318,106 @@ def probe_duration(path: Path) -> float | None:
         return float(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else None
     except (ValueError, subprocess.SubprocessError, IndexError):
         return None
+
+
+# ---------------------------------------------------------------- 静音修剪(后处理)
+
+_SIL_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
+_SIL_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
+
+
+def detect_silences(path: Path, noise_db: float = TRIM_NOISE_DB, min_sil: float = TRIM_MIN_SIL) -> list[tuple[float, float]]:
+    """ffmpeg silencedetect → [(start, end)],按时间排序;末尾未闭合的静音段以文件时长封口。"""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return []
+    r = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-vn",
+                        "-af", f"silencedetect=noise={noise_db}dB:d={min_sil}", "-f", "null", "-"],
+                       capture_output=True, text=True, timeout=120)
+    out = (r.stderr or "") + (r.stdout or "")
+    starts = [float(x) for x in _SIL_START.findall(out)]
+    ends = [float(x) for x in _SIL_END.findall(out)]
+    if len(ends) < len(starts):
+        total = probe_duration(path)
+        ends.append(total if total is not None else starts[-1])
+    return sorted((max(0.0, a), b) for a, b in zip(starts, ends) if b > a)
+
+
+def trim_plan(silences: list[tuple[float, float]], total: float, keep_head: float = TRIM_KEEP_HEAD,
+              keep_tail: float = TRIM_KEEP_TAIL, max_pause: float = 0.0, eps: float = 0.05) -> dict:
+    """纯计算:给定静音段与总时长,算要保留的区间 keep=[(a,b),...] 与各处裁掉的秒数 lead_s/tail_s/pause_s。
+    开头静音留 keep_head、结尾静音留 keep_tail;max_pause>0 时句中长于它的静音压到 max_pause(中间掐掉)。
+    全是静音或无需裁剪时 keep=[(0,total)]。"""
+    lead = tail = pause = 0.0
+    start, end = 0.0, float(total)
+    sil = [(a, b) for a, b in silences if b > a]
+    if sil and sil[0][0] <= eps:
+        a, b = sil[0]
+        if b >= total - eps:                      # 整段静音:不裁
+            return {"keep": [(0.0, total)], "lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0}
+        start = max(0.0, b - keep_head)
+        lead = start
+        sil = sil[1:]
+    if sil and sil[-1][1] >= total - eps:
+        a, b = sil[-1]
+        end = min(total, a + keep_tail)
+        tail = total - end
+        sil = sil[:-1]
+    keep: list[tuple[float, float]] = []
+    cur = start
+    if max_pause > 0:
+        for a, b in sil:
+            if a < start or b > end or (b - a) <= max_pause:
+                continue
+            cut = (b - a) - max_pause
+            mid = (a + b) / 2
+            keep.append((cur, mid - cut / 2))
+            cur = mid + cut / 2
+            pause += cut
+    keep.append((cur, end))
+    keep = [(round(a, 4), round(b, 4)) for a, b in keep if b - a > 0.01]
+    if not keep:
+        keep = [(0.0, total)]
+        lead = tail = pause = 0.0
+    return {"keep": keep, "lead_s": round(lead, 3), "tail_s": round(tail, 3), "pause_s": round(pause, 3)}
+
+
+def apply_trim(src: Path, dst: Path, keep: list[tuple[float, float]]) -> None:
+    """按 keep 区间 atrim+concat 重编码到 dst(mp3 128k / 其它按扩展名默认编码器)。"""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("缺 ffmpeg,无法修剪静音")
+    parts = "".join(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[s{i}];" for i, (a, b) in enumerate(keep))
+    chain = "".join(f"[s{i}]" for i in range(len(keep)))
+    fc = f"{parts}{chain}concat=n={len(keep)}:v=0:a=1[out]"
+    codec = ["-c:a", "libmp3lame", "-b:a", "128k"] if dst.suffix.lower() == ".mp3" else []
+    tmp = dst.with_name(dst.stem + ".trim.tmp" + dst.suffix)
+    r = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-loglevel", "error", "-y", "-i", str(src),
+                        "-filter_complex", fc, "-map", "[out]", *codec, str(tmp)],
+                       capture_output=True, text=True, timeout=300)
+    if r.returncode != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(f"ffmpeg 修剪失败:{(r.stderr or '').strip()[-200:]}")
+    os.replace(tmp, dst)
+
+
+def trim_file(raw: Path, dst: Path, max_pause: float = 0.0, probe=None) -> dict:
+    """raw(合成原声)→ dst(修剪版);返回台账 trim 段 {lead_s, tail_s, pause_s, params}。无 ffmpeg 或无可裁时直接复制。"""
+    probe = probe or probe_duration
+    params = {"noise_db": TRIM_NOISE_DB, "keep_head": TRIM_KEEP_HEAD, "keep_tail": TRIM_KEEP_TAIL,
+              "max_pause": round(float(max_pause or 0.0), 3)}
+    total = probe(raw)
+    if not total or not shutil.which("ffmpeg"):
+        if raw.resolve() != dst.resolve():
+            shutil.copyfile(raw, dst)
+        return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params, "skipped": "no ffmpeg/duration"}
+    tp = trim_plan(detect_silences(raw), total, max_pause=max_pause)
+    if tp["keep"] == [(0.0, total)] or (tp["lead_s"] + tp["tail_s"] + tp["pause_s"]) < 0.02:
+        if raw.resolve() != dst.resolve():
+            shutil.copyfile(raw, dst)
+        return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params}
+    apply_trim(raw, dst, tp["keep"])
+    return {"lead_s": tp["lead_s"], "tail_s": tp["tail_s"], "pause_s": tp["pause_s"], "params": params}
 
 
 def _default_tts(base: Path):
@@ -316,21 +455,37 @@ class _Lock:
         self.fh.close()
 
 
-def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=print, only_shots=None) -> dict:
+def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=print, only_shots=None,
+         speed: float | None = None, trim: bool = True, max_pause: float | None = None) -> dict:
     """把库同步到当前台词:只合成 stale/missing(force=全部重出),删掉的句子文件移到 _prev/,写 tts_manifest.json。
     tts(entry, out_path) / probe(path)->秒 可注入(测试或替换合成器);任一句合成失败记 status=failed 不中断。
-    only_shots:仅同步这些镜(后期配音按组取用时用),其余句子沿用旧台账记录。"""
+    only_shots:仅同步这些镜(后期配音按组取用时用),其余句子沿用旧台账记录。
+    speed:本次默认语速倍率(None=项目设置);trim:合成后裁首尾静音(原声留 _raw/);max_pause:句中停顿上限秒
+    (None=项目设置 output.dialogue_tts_max_pause,0=不压缩)。已有句子修剪参数变了只从 _raw/ 重裁,不重新合成。"""
     base = Path(base)
     ldir = lib_dir(base, ep)
+    rdir = ldir / RAW_DIR
+    max_pause = float(max_pause) if max_pause is not None else default_max_pause(base)
     with _Lock(ldir / ".lock"):
-        p = plan(base, ep)
+        p = plan(base, ep, speed=speed)
         provider, model = p["provider"], p["model"]
         by_char = _desc_mode(provider, model) or provider == "comfyui"
         tts = tts or _default_tts(base)
         probe = probe or probe_duration
         old_lines = {e.get("file"): e for e in (p["manifest"] or {}).get("lines") or [] if isinstance(e, dict)}
-        done, failed, synth = [], 0, 0
+        done, failed, synth, retrim = [], 0, 0, 0
         t0 = time.time()
+
+        def finish(e: dict, raw: Path, out: Path) -> float | None:
+            """raw → out(修剪或原样),回填 trim 段与时长。"""
+            if trim:
+                e["trim"] = trim_file(raw, out, max_pause=max_pause, probe=probe)
+            else:
+                if raw.resolve() != out.resolve():
+                    shutil.copyfile(raw, out)
+                e["trim"] = None
+            return probe(out)
+
         for e in p["lines"]:
             e = dict(e)
             e.pop("speaker_raw", None)
@@ -342,25 +497,48 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
             if only_shots is not None and e["shot_id"] not in only_shots and e["status"] != "fresh":
                 prev = old_lines.get(e["file"]) or {}
                 e.update(status=prev.get("status") or "missing", duration_s=prev.get("duration_s"),
-                         generated_at=prev.get("generated_at"), reason=prev.get("reason", ""))
-                done.append(e)
-                continue
-            if not need:
-                e["status"] = "ok"
+                         generated_at=prev.get("generated_at"), reason=prev.get("reason", ""), trim=prev.get("trim"))
                 done.append(e)
                 continue
             out = ldir / e["file"]
+            raw = rdir / e["file"]
+            if not need:
+                prev = old_lines.get(e["file"]) or {}
+                e.update(status="ok", trim=prev.get("trim"))
+                # 修剪参数变了(或旧库从未修剪):从 _raw/ 重裁;没有原声则就地裁库文件(首尾静音再裁无损失)
+                want = {"noise_db": TRIM_NOISE_DB, "keep_head": TRIM_KEEP_HEAD, "keep_tail": TRIM_KEEP_TAIL,
+                        "max_pause": round(max_pause, 3)} if trim else None
+                have = (prev.get("trim") or {}).get("params") if prev.get("trim") else None
+                if trim and have != want:
+                    try:
+                        src = raw if raw.is_file() else out
+                        if src is out:
+                            rdir.mkdir(parents=True, exist_ok=True)
+                            shutil.copyfile(out, raw)
+                            src = raw
+                        dur = finish(e, src, out)
+                        e["duration_s"] = round(dur, 3) if dur is not None else e.get("duration_s")
+                        retrim += 1
+                        log(f"[dialogue-tts] 重裁 {e['shot_id']} l{e['idx']:02d} {e['speaker']} → {dur if dur is None else f'{dur:.2f}s'}")
+                    except Exception as err:  # noqa: BLE001  重裁失败沿用现有文件
+                        log(f"[dialogue-tts] WARN 重裁失败 {e['shot_id']} l{e['idx']:02d}:{str(err)[:160]}")
+                done.append(e)
+                continue
             e["_voice_by_character"] = by_char
             try:
                 ldir.mkdir(parents=True, exist_ok=True)
-                tts(e, out)
-                if not out.is_file() or out.stat().st_size == 0:
+                rdir.mkdir(parents=True, exist_ok=True)
+                tts(e, raw)
+                if not raw.is_file() or raw.stat().st_size == 0:
                     raise RuntimeError("合成器没有产出文件")
-                dur = probe(out)
+                dur = finish(e, raw, out)
                 e.update(status="ok", duration_s=round(dur, 3) if dur is not None else None,
                          generated_at=time.strftime("%Y-%m-%dT%H:%M:%S"), reason="")
                 synth += 1
-                log(f"[dialogue-tts] {e['shot_id']} l{e['idx']:02d} {e['speaker']}/{e['variant']} {dur if dur is None else f'{dur:.2f}s'}  {e['text'][:24]}")
+                tr = e.get("trim") or {}
+                cut = (tr.get("lead_s") or 0) + (tr.get("tail_s") or 0) + (tr.get("pause_s") or 0)
+                log(f"[dialogue-tts] {e['shot_id']} l{e['idx']:02d} {e['speaker']}/{e['variant']} "
+                    f"{dur if dur is None else f'{dur:.2f}s'}{f' (裁 {cut:.2f}s)' if cut else ''} x{e['speed']:g}  {e['text'][:24]}")
             except Exception as err:  # noqa: BLE001  单句失败不中断整集
                 failed += 1
                 e.update(status="failed", reason=str(err)[:300], duration_s=None)
@@ -378,6 +556,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                     if dst.exists():
                         dst = prev_dir / f"{Path(f).stem}.{int(time.time())}{Path(f).suffix}"
                     os.replace(src, dst)
+                (rdir / f).unlink(missing_ok=True)
         est_warn = []
         for e in done:
             est, act = e.get("est_duration_s"), e.get("duration_s")
@@ -387,10 +566,11 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
         sl_path = base / "directing" / ep / "shot_list.json"
         manifest = {
             "schema": SCHEMA, "ep": ep, "generated_by": "modules/dialogue_tts.py",
-            "note": "对白语音库:按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS;消费方(动态样片/白模样片/后期配音)只读此表",
+            "note": "对白语音库:按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS(库文件已裁首尾静音,合成原声在 _raw/);消费方(动态样片/白模样片/后期配音)只读此表",
             "source": f"directing/{ep}/shot_list.json", "source_mtime": int(sl_path.stat().st_mtime) if sl_path.is_file() else 0,
             "tts_provider": provider, "tts_model": model, "synced_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "sync_seconds": round(time.time() - t0, 1), "synthesized": synth,
+            "sync_seconds": round(time.time() - t0, 1), "synthesized": synth, "retrimmed": retrim,
+            "default_speed": p["speed"], "trim": {"enabled": bool(trim), "max_pause": round(max_pause, 3)},
             "lines": done,
             "summary": {"total": len(done), "ok": sum(1 for e in done if e["status"] == "ok"),
                         "unbound": sum(1 for e in done if e["status"] == "unbound"), "failed": failed,
