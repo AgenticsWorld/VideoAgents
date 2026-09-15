@@ -13104,10 +13104,13 @@ async def api_skills_set(body: dict):
 
 
 async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
-    """对话面板「技能」弹窗「加载技能」:上传技能 zip 包,解压安装到该 Agent 的 skills/ 目录。
-    请求体即 zip 原始字节(与插件安装同口径,免 multipart 依赖)。zip 根可以直接是技能内容
-    (SKILL.md 在根),也可以套一层技能目录;技能目录名取内层目录名,根级则取 zip 文件名;
-    解压前做路径穿越拦截,同名技能已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
+    """对话面板「技能」弹窗「加载技能」:上传技能包安装到该 Agent 的 skills/ 目录。
+    请求体即文件原始字节(与插件安装同口径,免 multipart 依赖),支持两种形态:
+    - zip 包:根可以直接是技能内容(SKILL.md 在根),也可以套一层技能目录;技能目录名取内层
+      目录名,根级则取 zip 文件名;解压前做路径穿越拦截;
+    - 单个 SKILL.md 文件(.md 后缀或非 zip 魔数):技能目录名优先取 frontmatter 的 name,
+      其次取文件名主干(文件名恰为 SKILL.md 时必须有 frontmatter name),装成 skills/<name>/SKILL.md。
+    同名技能已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
     d = agent_dir(str(agent_id or ""))
     if not d:
         raise ServiceError(404, f"no such agent: {agent_id}")
@@ -13115,28 +13118,53 @@ async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
         raise ServiceError(400, "empty upload body")
     if len(data) > MAX_PLUGIN_UPLOAD:
         raise ServiceError(400, "skill package too large (>50MB)")
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(data))
-        entries = [entry for entry in zf.infolist() if not entry.is_dir()]
-    except Exception as e:  # noqa: BLE001
-        raise ServiceError(400, f"invalid zip: {e}")
-    if len(entries) > MAX_PLUGIN_FILES:
-        raise ServiceError(400, f"skill package contains too many files (>{MAX_PLUGIN_FILES})")
-    if sum(entry.file_size for entry in entries) > MAX_PLUGIN_EXTRACTED:
-        raise ServiceError(400, "skill package is too large after extraction (>200MB)")
-    names = [entry.filename for entry in entries]
-    # 定位 SKILL.md:取层级最浅的一个,其所在目录即技能根(macOS 压缩的 __MACOSX 噪声排除)
-    manifests = sorted((n for n in names
-                        if Path(n).name == "SKILL.md" and not n.startswith("__MACOSX/")),
-                       key=lambda n: n.count("/"))
-    if not manifests:
-        raise ServiceError(400, "zip 内找不到 SKILL.md")
-    prefix = manifests[0][: -len("SKILL.md")]               # ""(根)或 "xxx/"
-    if prefix:
-        name = Path(prefix.rstrip("/")).name
-    else:                                                    # 根级内容:目录名取 zip 文件名
-        stem = Path(filename or "").stem
-        name = re.sub(r"[^A-Za-z0-9_\-]+", "-", stem).strip("-")
+    fname = Path(filename or "").name
+    is_zip = data[:2] == b"PK" and not fname.lower().endswith(".md")
+    files: list[tuple[str, bytes]] = []                      # (相对技能根路径, 内容)
+    if is_zip:
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            entries = [entry for entry in zf.infolist() if not entry.is_dir()]
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(400, f"invalid zip: {e}")
+        if len(entries) > MAX_PLUGIN_FILES:
+            raise ServiceError(400, f"skill package contains too many files (>{MAX_PLUGIN_FILES})")
+        if sum(entry.file_size for entry in entries) > MAX_PLUGIN_EXTRACTED:
+            raise ServiceError(400, "skill package is too large after extraction (>200MB)")
+        names = [entry.filename for entry in entries]
+        # 定位 SKILL.md:取层级最浅的一个,其所在目录即技能根(macOS 压缩的 __MACOSX 噪声排除)
+        manifests = sorted((n for n in names
+                            if Path(n).name == "SKILL.md" and not n.startswith("__MACOSX/")),
+                           key=lambda n: n.count("/"))
+        if not manifests:
+            raise ServiceError(400, "zip 内找不到 SKILL.md")
+        prefix = manifests[0][: -len("SKILL.md")]           # ""(根)或 "xxx/"
+        if prefix:
+            name = Path(prefix.rstrip("/")).name
+        else:                                                # 根级内容:目录名取 zip 文件名
+            name = re.sub(r"[^A-Za-z0-9_\-]+", "-", Path(fname).stem).strip("-")
+        for n in names:
+            if not n.startswith(prefix) or n.startswith("__MACOSX/"):
+                continue
+            rel = n[len(prefix):]
+            if not rel or Path(rel).name.startswith(".DS_Store"):
+                continue
+            files.append((rel, zf.read(n)))
+        if not files:
+            raise ServiceError(400, "zip 内没有可解压的技能文件")
+    else:                                                    # 单个 SKILL.md
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ServiceError(400, "不是 zip 包,也不是 UTF-8 文本的 SKILL.md") from exc
+        fm = _parse_skill_frontmatter(text)
+        stem = Path(fname).stem
+        raw = fm.get("name") or ("" if stem.upper() == "SKILL" else stem)
+        name = re.sub(r"[^A-Za-z0-9_\-]+", "-", raw).strip("-")
+        if not name:
+            raise ServiceError(400, "SKILL.md 缺少 frontmatter 的 name,且文件名不能作为技能目录名;"
+                                    "请在文件开头加 name: 字段,或把文件改名为 <技能名>.md 再上传")
+        files.append(("SKILL.md", text.encode("utf-8")))
     if not name or not _SKILL_DIR_RE.fullmatch(name):
         raise ServiceError(400, f"非法技能目录名:{name!r}(仅限字母/数字/_-,根级 zip 请用规范文件名)")
     (d / "skills").mkdir(exist_ok=True)
@@ -13145,30 +13173,21 @@ async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
         raise ServiceError(409, f"技能 {name} 已存在;请先删除 {target} 再安装")
     staging = d / "skills" / f".{name}.{uuid.uuid4().hex}.tmp"
     staging.mkdir()
-    extracted = 0
     try:
-        for n in names:
-            if not n.startswith(prefix) or n.startswith("__MACOSX/"):
-                continue
-            rel = n[len(prefix):]
-            if not rel or Path(rel).name.startswith(".DS_Store"):
-                continue
+        for rel, content in files:
             dest = (staging / rel).resolve()
             try:
                 dest.relative_to(staging.resolve())
             except ValueError as exc:
-                raise ServiceError(400, f"zip 含路径穿越条目:{n}") from exc
+                raise ServiceError(400, f"zip 含路径穿越条目:{rel}") from exc
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(zf.read(n))
-            extracted += 1
-        if not extracted:
-            raise ServiceError(400, "zip 内没有可解压的技能文件")
+            dest.write_bytes(content)
         staging.replace(target)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
     scan_agent_skills(refresh=True)
-    return {"ok": True, "name": name, "agent_id": agent_id, "files": extracted,
+    return {"ok": True, "name": name, "agent_id": agent_id, "files": len(files),
             **await api_skills_get()}
 
 

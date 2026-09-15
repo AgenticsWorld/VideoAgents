@@ -306,7 +306,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="title" id="c-title">选择一个 Agent 开始</span>
       <span class="sub" id="c-sub"></span>
       <span class="hbtns">
-        <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包安装到本 Agent">技能</button>
+        <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包或单个 SKILL.md 安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
         <button id="btn-soul">SOUL.md</button>
       </span>
@@ -736,11 +736,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="askill-modal" class="modal">
   <div class="box" style="width:620px">
     <h3>本 Agent 的技能 <span id="askill-agent" style="color:var(--dim);font-weight:400;font-size:12px;margin-left:6px"></span></h3>
-    <div class="note">点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。「加载技能」可上传技能 zip 包(内含 SKILL.md),解压安装到本 Agent 的 skills/ 目录。</div>
+    <div class="note">点击一项技能,把它的路径(如 skills/sd25-pe)插入输入框,然后在指令里说明要用该技能做什么。「加载技能」可上传技能 zip 包(内含 SKILL.md)或直接上传单个 SKILL.md(目录名取 frontmatter 的 name 或文件名),安装到本 Agent 的 skills/ 目录。</div>
     <div id="askill-list" style="max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
     <div class="err" id="askill-err"></div>
     <div class="actions">
-      <input type="file" id="askill-file" accept=".zip" style="display:none">
+      <input type="file" id="askill-file" accept=".zip,.md" style="display:none">
       <a href="#" id="askill-load" style="margin-right:auto;font-size:12px;color:var(--dim)">加载技能</a>
       <button id="askill-close">关闭</button>
     </div>
@@ -2007,7 +2007,7 @@ $('#conc-ok').onclick=async()=>{
 
 /* ---------- 对话面板顶栏「技能」按钮:选中 Agent 即显示(装了技能显示数量);点开列清单,
    点一项把技能路径(相对 Agent 目录:skills/<目录名>)插入输入框光标处,便于指定用该技能完成
-   某项工作;「加载技能」上传技能 zip 包解压安装到本 Agent 的 skills/ 目录 ---------- */
+   某项工作;「加载技能」上传技能 zip 包(解压)或单个 SKILL.md 安装到本 Agent 的 skills/ 目录 ---------- */
 const SKILL_KIND={conditional:'条件',always:'常驻',soul:'常驻',library:'依赖库',generic:'通用'};
 let SKILLS_ALL=null;   // 全部 Agent 的技能清单缓存(服务端本身带 TTL 缓存);上传技能后置空重取
 async function ensureSkills(refresh){
