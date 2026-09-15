@@ -2935,4 +2935,17 @@ window.I18N_DICT = {
 "展开分镜": "Déplier les plans",
 "折叠分镜": "Replier les plans",
 "展开/折叠该组分镜": "Déplier/replier les plans de ce groupe",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Recadrer",
+"图片加载失败": "Échec du chargement de l’image",
+"裁剪分镜背景图": "Recadrer la plaque de fond",
+"✂ 确认裁剪": "✂ Confirmer le recadrage",
+"裁剪中…": "Recadrage…",
+"裁剪失败:": "Échec du recadrage : ",
+"已裁剪并替换": "Recadrée et remplacée",
+"服务未重启:裁剪接口不可用": "Service non redémarré : API de recadrage indisponible",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Sélectionnez une zone (ratio verrouillé sur le format du projet) pour recadrer cette plaque ; la confirmation écrase l’original",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Glissez le cadre pour déplacer, les coins pour redimensionner ; ratio fixe {ar} (format du projet). Confirmer écrase l’original et conserve une sauvegarde .orig",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Sélection {w}×{h} px / original {W}×{H}",
 };

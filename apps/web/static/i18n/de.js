@@ -2935,4 +2935,17 @@ window.I18N_DICT = {
 "展开分镜": "Einstellungen aufklappen",
 "折叠分镜": "Einstellungen zuklappen",
 "展开/折叠该组分镜": "Einstellungen dieser Gruppe auf-/zuklappen",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Zuschneiden",
+"图片加载失败": "Bild konnte nicht geladen werden",
+"裁剪分镜背景图": "Hintergrundplatte zuschneiden",
+"✂ 确认裁剪": "✂ Zuschnitt bestätigen",
+"裁剪中…": "Wird zugeschnitten…",
+"裁剪失败:": "Zuschneiden fehlgeschlagen: ",
+"已裁剪并替换": "Zugeschnitten und ersetzt",
+"服务未重启:裁剪接口不可用": "Dienst nicht neu gestartet: Zuschneide-API nicht verfügbar",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Bereich aufziehen (Seitenverhältnis auf das Projektformat fixiert), um diese Platte zuzuschneiden; Bestätigen überschreibt das Original",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Rahmen ziehen zum Verschieben, Ecken ziehen zum Skalieren; Verhältnis fest {ar} (Projektformat). Bestätigen überschreibt das Original und behält eine .orig-Sicherung",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Auswahl {w}×{h} px / Original {W}×{H}",
 };

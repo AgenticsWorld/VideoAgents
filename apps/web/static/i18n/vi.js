@@ -2935,4 +2935,17 @@ window.I18N_DICT = {
 "展开分镜": "Mở rộng cảnh quay",
 "折叠分镜": "Thu gọn cảnh quay",
 "展开/折叠该组分镜": "Mở rộng/thu gọn các cảnh quay của nhóm này",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Cắt",
+"图片加载失败": "Không tải được ảnh",
+"裁剪分镜背景图": "Cắt tấm nền phân cảnh",
+"✂ 确认裁剪": "✂ Xác nhận cắt",
+"裁剪中…": "Đang cắt…",
+"裁剪失败:": "Cắt thất bại: ",
+"已裁剪并替换": "Đã cắt và thay thế",
+"服务未重启:裁剪接口不可用": "Dịch vụ chưa khởi động lại: API cắt không khả dụng",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Kéo chọn vùng (tỷ lệ khóa theo khung hình dự án) để cắt tấm nền này; xác nhận sẽ ghi đè ảnh gốc",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Kéo khung để di chuyển, kéo bốn góc để đổi kích cỡ; tỷ lệ cố định {ar} (khung hình dự án). Xác nhận ghi đè ảnh gốc và giữ bản sao .orig",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Vùng chọn {w}×{h} px / ảnh gốc {W}×{H}",
 };

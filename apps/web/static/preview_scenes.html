@@ -123,6 +123,26 @@ ul.arr>li{margin:2px 0}
 .world-panel .wv-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+/* ✂ 裁剪分镜背景图(2026-09-15):比例固定为项目画幅的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
+.cropbtn{font-size:11px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.cropbtn:hover{color:var(--accent);border-color:var(--accent)}
+.cropbtn.ok{color:var(--green);border-color:var(--green)}
+#cropper{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:100;padding:12px}
+#cropper .cr-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;color:var(--dim);font-size:13px;max-width:92vw;text-align:center}
+#cropper .cr-bar b{color:var(--text);font-weight:600}
+#cropper .cr-msg.err{color:var(--red)}
+#cropper .cr-msg.ok{color:var(--green)}
+#cropper .cr-stage{position:relative;overflow:hidden;user-select:none;touch-action:none;border-radius:4px;line-height:0}
+#cropper .cr-stage img{display:block;max-width:92vw;max-height:74vh;pointer-events:none}
+#cropper .cr-box{position:absolute;box-sizing:border-box;border:1.5px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.6);cursor:move;
+  background-image:linear-gradient(to right,rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.35) 1px,transparent 1px);
+  background-size:33.34% 100%,100% 33.34%;background-position:-1px 0,0 -1px}
+#cropper .cr-h{position:absolute;width:14px;height:14px;background:#fff;border:1px solid #000;border-radius:2px}
+#cropper .cr-h.nw{left:-1px;top:-1px;cursor:nwse-resize}
+#cropper .cr-h.ne{right:-1px;top:-1px;cursor:nesw-resize}
+#cropper .cr-h.sw{left:-1px;bottom:-1px;cursor:nesw-resize}
+#cropper .cr-h.se{right:-1px;bottom:-1px;cursor:nwse-resize}
+#cropper button:disabled{opacity:.5;cursor:default}
 </style>
 </head>
 <body>
@@ -144,6 +164,11 @@ ul.arr>li{margin:2px 0}
   <div id="detail"><div class="empty">加载中…</div></div>
 </main>
 <div id="lightbox"><img alt=""></div>
+<div id="cropper">
+  <div class="cr-bar"><b class="cr-title"></b><span class="cr-hint"></span></div>
+  <div class="cr-stage"><img alt=""><div class="cr-box"><i class="cr-h nw"></i><i class="cr-h ne"></i><i class="cr-h sw"></i><i class="cr-h se"></i></div></div>
+  <div class="cr-bar"><span class="cr-dim"></span><span class="cr-msg"></span><button type="button" class="cr-ok"></button><button type="button" class="cr-cancel"></button></div>
+</div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -246,7 +271,10 @@ function renderDetail(s){
         const used=(p.used_by||[]).join(', ');
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           p.pano_ref?I18N.f('全景 {a}',{a:p.pano_ref.anchor_id}):t('旧法(非全景制)')].filter(Boolean).join(' · ');
-        return `<figure title="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span></figcaption><figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
+        // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
+        return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span>`
+          +`<button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button></figcaption>`
+          +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
       }).join('')+'</div>';
   }
   const docs=Object.keys(s.docs||{});
@@ -354,7 +382,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;FORMAT=d.format||null;
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -508,6 +536,110 @@ function closeFolder(){openFolder(null)}
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 
+// ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 项目画幅(预览数据 format,
+// 缺失时退回图片自身比例);拖选框移动、拖四角缩放(对角固定);确认 → POST scenes/<sid>/plates/crop,服务端裁切覆盖原图后原地换图,不整页重载。
+let FORMAT=null;
+const CROP={sid:null,key:null,W:0,H:0,aspect:1,sel:null,drag:null};
+const CR=$('#cropper'),CR_IMG=CR.querySelector('img'),CR_BOX=CR.querySelector('.cr-box'),CR_STAGE=CR.querySelector('.cr-stage');
+function crMsg(txt,cls){const m=CR.querySelector('.cr-msg');m.textContent=txt||'';m.className='cr-msg'+(cls?' '+cls:'');}
+// 选区高由宽按固定比例推出(归一化坐标下 h = w·W/(aspect·H)),并整体收进 [0,1]
+function crFit(l,t,w){
+  const k=CROP.W/(CROP.aspect*CROP.H);
+  const minW=64*Math.max(1,CROP.aspect)/CROP.W;   // 裁后短边 ≥ 64 px(与服务端一致)
+  w=Math.min(Math.max(w,minW),1,1/k);
+  const h=w*k;
+  return {l:Math.min(Math.max(l,0),1-w),t:Math.min(Math.max(t,0),1-h),w,h};
+}
+function crLayout(){
+  const sel=CROP.sel;if(!sel)return;
+  const cw=CR_IMG.clientWidth,ch=CR_IMG.clientHeight;
+  CR_BOX.style.left=(sel.l*cw)+'px';CR_BOX.style.top=(sel.t*ch)+'px';CR_BOX.style.width=(sel.w*cw)+'px';CR_BOX.style.height=(sel.h*ch)+'px';
+  CR.querySelector('.cr-dim').textContent=I18N.f('选区 {w}×{h} px / 原图 {W}×{H}',{w:Math.round(sel.w*CROP.W),h:Math.round(sel.h*CROP.H),W:CROP.W,H:CROP.H});
+}
+function openCrop(sid,key,url){
+  CROP.sid=sid;CROP.key=key;CROP.sel=null;CROP.drag=null;
+  CR.querySelector('.cr-title').textContent=t('裁剪分镜背景图')+' · '+key;
+  CR.querySelector('.cr-hint').textContent='';CR.querySelector('.cr-dim').textContent='';crMsg(t('加载中…'));
+  const ok=CR.querySelector('.cr-ok'),cancel=CR.querySelector('.cr-cancel');
+  ok.textContent=t('✂ 确认裁剪');cancel.textContent=t('取消');ok.disabled=true;cancel.disabled=false;
+  CR_BOX.style.display='none';
+  CR_IMG.onload=()=>{
+    CROP.W=CR_IMG.naturalWidth;CROP.H=CR_IMG.naturalHeight;
+    CROP.aspect=(FORMAT&&FORMAT.width>0&&FORMAT.height>0)?FORMAT.width/FORMAT.height:CROP.W/CROP.H;
+    const gcd=(a,b)=>b?gcd(b,a%b):a;
+    const ar=(FORMAT&&FORMAT.width>0&&FORMAT.height>0)?(g=>`${FORMAT.width/g}:${FORMAT.height/g}`)(gcd(FORMAT.width,FORMAT.height)):CROP.aspect.toFixed(3);
+    CR.querySelector('.cr-hint').textContent=I18N.f('拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份',{ar});
+    const w0=.8;const f=crFit(0,0,w0);CROP.sel=crFit((1-f.w)/2,(1-f.h)/2,f.w);
+    CR_BOX.style.display='';crLayout();crMsg('');ok.disabled=false;
+  };
+  CR_IMG.onerror=()=>crMsg(t('图片加载失败'),'err');
+  CR_IMG.src=url;
+  CR.style.display='flex';
+}
+function closeCrop(){CR.style.display='none';CR_IMG.src='';CROP.sel=null;CROP.drag=null;}
+CR_STAGE.addEventListener('pointerdown',e=>{
+  if(!CROP.sel||e.button!==0)return;
+  const h=e.target.closest('.cr-h');
+  if(!h&&!e.target.closest('.cr-box'))return;
+  const rc=CR_IMG.getBoundingClientRect(),sel=CROP.sel;
+  const corner=h?[...h.classList].find(c=>/^(nw|ne|sw|se)$/.test(c)):null;
+  CROP.drag={mode:corner?'resize':'move',corner,rc,x0:e.clientX,y0:e.clientY,sel0:{...sel}};
+  CR_STAGE.setPointerCapture(e.pointerId);e.preventDefault();
+});
+CR_STAGE.addEventListener('pointermove',e=>{
+  const d=CROP.drag;if(!d)return;
+  const {rc,sel0}=d;
+  if(d.mode==='move'){
+    CROP.sel=crFit(sel0.l+(e.clientX-d.x0)/rc.width,sel0.t+(e.clientY-d.y0)/rc.height,sel0.w);
+  }else{
+    // 对角固定:锚点 = 所拖角的对角;沿宽/高两向取更大的延伸量,再按比例、按锚点到画幅边的余量收窄
+    const px=Math.min(Math.max((e.clientX-rc.left)/rc.width,0),1),py=Math.min(Math.max((e.clientY-rc.top)/rc.height,0),1);
+    const right=d.corner[1]==='e',down=d.corner[0]==='s';
+    const ax=right?sel0.l:sel0.l+sel0.w,ay=down?sel0.t:sel0.t+sel0.h;
+    const k=CROP.W/(CROP.aspect*CROP.H);
+    let w=Math.max(Math.abs(px-ax),Math.abs(py-ay)/k);
+    const availW=right?1-ax:ax,availH=down?1-ay:ay;
+    w=Math.min(w,availW,availH/k);
+    const f=crFit(0,0,w);w=f.w;const hh=f.h;
+    CROP.sel=crFit(right?ax:ax-w,down?ay:ay-hh,w);
+  }
+  crLayout();
+});
+const crEnd=e=>{if(CROP.drag){CROP.drag=null;try{CR_STAGE.releasePointerCapture(e.pointerId)}catch(_){}}};
+CR_STAGE.addEventListener('pointerup',crEnd);CR_STAGE.addEventListener('pointercancel',crEnd);
+window.addEventListener('resize',()=>{if(CR.style.display==='flex')crLayout()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&CR.style.display==='flex'&&!CR.querySelector('.cr-cancel').disabled)closeCrop()});
+CR.querySelector('.cr-cancel').onclick=closeCrop;
+CR.querySelector('.cr-ok').onclick=async()=>{
+  const sel=CROP.sel;if(!sel)return;
+  const proj=$('#project').value.trim()||'demo',ok=CR.querySelector('.cr-ok'),cancel=CR.querySelector('.cr-cancel');
+  ok.disabled=true;cancel.disabled=true;crMsg(t('裁剪中…'));
+  try{
+    const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(CROP.sid)}/plates/crop`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:CROP.key,left:sel.l,top:sel.t,width:sel.w,height:sel.h})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:裁剪接口不可用'):r.status));
+    // 原地换图 + 同步 DATA,不整页重载(世界模型/全景板块状态不动);?v= 是文件 mtime(秒级),再补 &t= 防同秒二次裁剪命中缓存
+    const url=d.url+(d.url.includes('?')?'&':'?')+'t='+Date.now();
+    const sc=DATA.find(x=>x.id===CROP.sid);
+    const pl=sc&&(sc.plates||[]).find(p=>p.key===CROP.key);
+    if(pl){pl.url=url;pl.size=d.size;}
+    document.querySelectorAll(`.gallery.plates figure[data-key="${CSS.escape(CROP.key)}"]`).forEach(fg=>{
+      const im=fg.querySelector('img');if(im)im.src=url;
+      const b=fg.querySelector('.cropbtn');if(b){b.classList.add('ok');b.textContent='✓ '+t('已裁剪并替换');setTimeout(()=>{b.classList.remove('ok');b.textContent='✂ '+t('裁剪')},2500);}
+    });
+    closeCrop();
+  }catch(e){crMsg(t('裁剪失败:')+e.message,'err');ok.disabled=false;cancel.disabled=false;}
+};
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.cropbtn');
+  if(!b||!b.dataset.key)return;
+  const sc=DATA.find(x=>x.id===b.dataset.sid);
+  const pl=sc&&(sc.plates||[]).find(p=>p.key===b.dataset.key);
+  if(!pl)return;
+  openCrop(b.dataset.sid,b.dataset.key,bust(pl.url));
+});
+
 // ✏️ 修改:在本页右下角弹出编辑浮窗(edit-popup.js),把修改对象预填进输入框,写完直接发给目标 Agent。
 // data-url=具体媒体文件路径;data-loc=结构化位置元数据(场景设定等无单一文件的对象)
 document.addEventListener('click',e=>{
@@ -527,7 +659,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;FORMAT=d.format||null;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   // 优先级:首次深链 id > 页内刷新前已选中的场景 > 列表第一项(切项目时旧 id 找不到自然回落)

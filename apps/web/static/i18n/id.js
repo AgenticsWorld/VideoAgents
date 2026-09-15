@@ -2935,4 +2935,17 @@ window.I18N_DICT = {
 "展开分镜": "Bentangkan shot",
 "折叠分镜": "Ciutkan shot",
 "展开/折叠该组分镜": "Bentangkan/ciutkan shot grup ini",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Potong",
+"图片加载失败": "Gagal memuat gambar",
+"裁剪分镜背景图": "Potong pelat latar",
+"✂ 确认裁剪": "✂ Konfirmasi potong",
+"裁剪中…": "Memotong…",
+"裁剪失败:": "Gagal memotong: ",
+"已裁剪并替换": "Dipotong dan diganti",
+"服务未重启:裁剪接口不可用": "Layanan belum dimulai ulang: API potong tidak tersedia",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Seret untuk memilih area (rasio terkunci pada format proyek) lalu potong pelat ini; konfirmasi akan menimpa gambar asli",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Seret kotak untuk memindahkan, seret sudut untuk mengubah ukuran; rasio tetap {ar} (format proyek). Konfirmasi menimpa gambar asli dan menyimpan cadangan .orig",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Seleksi {w}×{h} px / asli {W}×{H}",
 };

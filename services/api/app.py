@@ -410,6 +410,12 @@ async def scene_pano_start(project: str, sid: str, body: dict[str, Any]) -> dict
     return await core.api_scene_pano_start(project, sid, body)
 
 
+@api.post("/projects/{project}/scenes/{sid}/plates/crop", tags=["artifacts"])
+async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「✂ 裁剪」分镜背景图:{key, left, top, width, height}(0..1 归一化选区)→ 按项目画幅比例裁切并覆盖原图。"""
+    return _artifact_urls(await core.api_scene_plate_crop(project, sid, body), project)
+
+
 @api.get("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
 async def scene_world_status(project: str, sid: str) -> dict[str, Any]:
     return await core.api_scene_world_status(project, sid)

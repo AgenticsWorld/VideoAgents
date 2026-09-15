@@ -3063,4 +3063,17 @@ window.I18N_DICT = {
 "把当前指针挪到 A 这个版本(出成片用它)": "Move the current pointer to the version in A (used for the final cut)",
 "v{v} 设为当前": "Set v{v} current",
 "{g} 当前指针 → v{v}": "{g} current pointer → v{v}",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Crop",
+"图片加载失败": "Image failed to load",
+"裁剪分镜背景图": "Crop shot plate",
+"✂ 确认裁剪": "✂ Confirm crop",
+"裁剪中…": "Cropping…",
+"裁剪失败:": "Crop failed: ",
+"已裁剪并替换": "Cropped and replaced",
+"服务未重启:裁剪接口不可用": "Service not restarted: crop endpoint unavailable",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Drag a region (locked to the project aspect ratio) to crop this plate; confirming overwrites the original",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Drag the box to move, drag the corners to resize; ratio locked to {ar} (project format). Confirming overwrites the original and keeps a .orig backup",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Selection {w}×{h} px / source {W}×{H}",
 };

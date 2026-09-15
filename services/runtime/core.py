@@ -6679,11 +6679,109 @@ def _preview_scenes(project: str):
                        "world_job": _scene_world_job_view(base.name, sid)})
     # 项目「白模」选项(output.spatial_blocking,默认开):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
     whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is not False
-    return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled}
+    # 项目画幅(2026-09-15):预览页「✂ 裁剪」分镜背景图的固定选框比例(母图按项目画幅出图,裁后仍须同比例才能继续作组视频参考图)
+    fmt = None
+    try:
+        from modules.whitebox import read as _wb_read, render_format as _wb_fmt
+        _f = _wb_fmt(_wb_read(base / "settings.json", {}))
+        fmt = {"width": _f["width"], "height": _f["height"]}
+    except Exception as e:  # noqa: BLE001
+        print(f"[preview-scenes] 项目画幅读取失败(忽略):{e}", flush=True)
+    return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt}
 
 
 async def api_preview_scenes(project: str = "demo"):
     return await asyncio.to_thread(_preview_scenes, project)
+
+
+def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
+    """场景预览页「✂ 裁剪」分镜背景图(2026-09-15):{key, left, top, width, height}(选区,0..1 归一化到当前图)→ 按项目画幅比例
+    吸附/收进画幅后裁切母图并**原地覆盖同一文件**(首次裁剪把原图留作 <key>.orig.<ext> 便于回退),更新库 index.json 与 <key>.json
+    条目的 size / manual_crops。集索引 directing/<ep>/shot_plates.json 与组 prompt refs 都只记 key/路径,不必改动,下次 sync/出图自动用新图。
+    不放大回母图尺寸:裁切不会增加信息,保留原生像素。"""
+    from modules import shot_plates
+    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
+    try:
+        from PIL import Image
+    except ImportError:  # pragma: no cover
+        raise ServiceError(501, "缺少 Pillow,无法裁剪:pip install Pillow") from None
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    key = re.sub(r"[^\w\-.]", "", str(body.get("key") or ""))
+    if not sid or not key:
+        raise ServiceError(400, "scene id / plate key is required")
+    lib = shot_plates.load_library(base, sid)
+    entry = next((e for e in lib["plates"] if e.get("key") == key), None)
+    if not entry or not entry.get("file"):
+        raise ServiceError(404, f"{sid} 的背景图库里没有 {key}")
+    f = (base / str(entry["file"])).resolve()
+    try:
+        f.relative_to(base.resolve())
+    except ValueError:
+        raise ServiceError(400, "invalid plate path") from None
+    if not f.is_file():
+        raise ServiceError(404, f"背景图文件不存在:{entry['file']}")
+    try:
+        left, top, width, height = (float(body.get(k)) for k in ("left", "top", "width", "height"))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "left/top/width/height(选区,0..1 归一化)必填且须为数字") from None
+    if not all(math.isfinite(v) for v in (left, top, width, height)) or width <= 0 or height <= 0:
+        raise ServiceError(400, "选区宽高须为正数")
+    try:
+        _fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
+        aspect = _fmt["width"] / _fmt["height"]
+    except Exception:  # noqa: BLE001
+        aspect = None
+    with Image.open(f) as im:
+        im.load()
+        src_fmt = im.format or "PNG"
+        W, H = im.size
+        if aspect is None:
+            aspect = W / H
+        # 归一化 → 像素;以宽为准按项目画幅算高,越界则反过来以高为准;再整体收进画幅
+        l, t = min(max(left, 0.0), 1.0) * W, min(max(top, 0.0), 1.0) * H
+        w = min(width * W, W)
+        h = w / aspect
+        if h > H:
+            h = float(H); w = h * aspect
+        l = min(max(l, 0.0), W - w); t = min(max(t, 0.0), H - h)
+        # 先定整数宽,高由宽按比例取整(两边各自取整会差 1 px 偏离画幅),再收进图内
+        cw = max(1, min(int(round(w)), W)); ch = max(1, min(int(round(cw / aspect)), H))
+        x0 = min(max(int(round(l)), 0), W - cw); y0 = min(max(int(round(t)), 0), H - ch)
+        box = (x0, y0, x0 + cw, y0 + ch)
+        if min(cw, ch) < 64:
+            raise ServiceError(400, "选区太小:裁切后短边至少 64 px")
+        if (cw, ch) == (W, H):
+            raise ServiceError(400, "选区等于整图,无需裁剪")
+        orig = f.with_name(f"{f.stem}.orig{f.suffix}")
+        if not orig.exists():   # 只留最初那张原图;多次裁剪不覆盖备份
+            shutil.copy2(f, orig)
+        out = im.crop(box)
+        tmp = f.with_name(f.name + ".tmp")
+        if src_fmt == "JPEG":
+            out.save(tmp, format="JPEG", quality=95)
+        else:
+            out.save(tmp, format=src_fmt)
+    os.replace(tmp, f)
+    now = datetime.now().isoformat(timespec="seconds")
+    rec = {"box_px": [box[0], box[1], cw, ch], "source_size": f"{W}x{H}", "at": now}
+    entry["size"] = f"{cw}x{ch}"
+    entry.setdefault("manual_crops", []).append(rec)
+    entry["original_file"] = str(orig.relative_to(base.resolve()))
+    lib["plates"] = [entry if e.get("key") == key else e for e in lib["plates"]]
+    shot_plates.save_library(base, sid, lib)
+    side = f.with_suffix(".json")
+    if side.is_file():
+        sd = _read_json_safe(side)
+        if isinstance(sd, dict):
+            sd["size"] = entry["size"]; sd["manual_crops"] = entry["manual_crops"]; sd["original_file"] = entry["original_file"]
+            side.write_text(json.dumps(sd, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": True, "key": key, "file": entry["file"], "size": entry["size"], "box_px": rec["box_px"],
+            "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}"}
+
+
+async def api_scene_plate_crop(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plate_crop, project, sid, body)
 
 
 # ---------------- 世界模型(World Labs Marble,2026-09-12) ----------------

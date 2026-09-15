@@ -2935,4 +2935,17 @@ window.I18N_DICT = {
 "展开分镜": "Expandir planos",
 "折叠分镜": "Contraer planos",
 "展开/折叠该组分镜": "Expandir/contraer los planos de este grupo",
+
+// ✂ 裁剪分镜背景图(2026-09-15,场景预览页)
+"裁剪": "Recortar",
+"图片加载失败": "No se pudo cargar la imagen",
+"裁剪分镜背景图": "Recortar placa de fondo",
+"✂ 确认裁剪": "✂ Confirmar recorte",
+"裁剪中…": "Recortando…",
+"裁剪失败:": "Error al recortar: ",
+"已裁剪并替换": "Recortada y reemplazada",
+"服务未重启:裁剪接口不可用": "Servicio no reiniciado: API de recorte no disponible",
+"手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Selecciona una región (proporción fijada al formato del proyecto) para recortar esta placa; al confirmar se sobrescribe el original",
+"拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Arrastra el marco para mover y las esquinas para escalar; proporción fija {ar} (formato del proyecto). Confirmar sobrescribe el original y guarda una copia .orig",
+"选区 {w}×{h} px / 原图 {W}×{H}": "Selección {w}×{h} px / original {W}×{H}",
 };
