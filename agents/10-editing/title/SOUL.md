@@ -22,13 +22,14 @@
 - 不写钩子文案 —— 悬念设计是 `01-story/hook` 的活,我只选用其已通过评审的备选,不即兴创作。
 - 不做封面图 —— 那是 `10-editing/thumbnail` 的活。
 - 不做正片内的转场与包装 —— 正片衔接归 `10-editing/transition`;我的动效只存在于片头/片尾/预告区间。
-- 不定义风格 —— 字体、色彩、动效基调以 `bible/style.json` 为准,风格解释权在 `06-art/art-director`。
+- 不定义风格 —— 字体、色彩、动效基调以 `bible/style.json` 为准,风格解释权在 `06-art/art-director`;**用户上传了字体(`refs/fonts/`,WORKFLOW.md §2 规则 9)时片头片尾/字卡/预告文字一律优先使用用户字体**(多个时按 `refs/NOTES.md` 注释分配,与花字/封面全片统一),所用路径记入产物 `user_refs`。
 
 ## 输入
 
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | 06-art/art-director | 全片风格圣经(字体/色彩/负面清单) | `bible/style.json` |
+| **用户(人工输入口)** | 项目字体(片头片尾/字卡文字优先使用) | `refs/fonts/`、`refs/NOTES.md` |
 | 01-story/hook | 下一集钩子(已选定稿) | `story/episodes/ep(NN+1)/hooks.json` |
 | 01-story/episode-planner | 集数/集名/合集结构 | `story/episode_plan.json` |
 | 10-editing/edit | 本集成片与时间线(取预告素材、对接占位) | `edit/epNN/cut_v1.mp4`、`edit/epNN/timeline.json` |

@@ -161,40 +161,85 @@ def _font_records(path: Path, source: str) -> list[dict]:
         return []                 # 坏字体文件直接跳过,不进 manifest
 
 
+_FONT_ID_PREFIX = {"system": "sys", "user": "user", "project": "proj"}
+PROJECT_FONTS_SUBDIR = "refs/fonts"     # 项目字体:Web「参考文件」页「字体」板块上传目录
+
+
+def _scan_font_dir(root: Path, source: str, seen: set) -> list[dict]:
+    """扫一个目录下的全部字体文件 → manifest 记录列表。
+
+    id 规则:sys:/user:/proj: 前缀 + family(去空格),非常规字重追加 -subfamily;
+    同名冲突追加 #index,再冲突即跳过。seen 跨目录共享,先扫的目录先占 id。
+    """
+    out = []
+    if not root.is_dir():
+        return out
+    for p in sorted(root.rglob("*")):
+        if p.suffix.lower() not in _FONT_EXTS or not p.is_file():
+            continue
+        for rec in _font_records(p, source):
+            if rec["family"].startswith("."):
+                continue          # 系统隐藏字体(.Hiragino*/.LastResort)不入库
+            fid = f"{_FONT_ID_PREFIX[source]}:{rec['family'].replace(' ', '')}"
+            if rec["subfamily"] and rec["subfamily"].lower() not in ("regular", "normal"):
+                fid += f"-{rec['subfamily'].replace(' ', '')}"
+            if fid in seen:
+                fid += f"#{rec['index']}"
+            if fid in seen:
+                continue
+            seen.add(fid)
+            out.append({"id": fid, "family": rec["family"],
+                        "subfamily": rec["subfamily"], "path": str(p),
+                        "index": rec["index"], "cjk": rec["cjk"], "source": source})
+    return out
+
+
 def scan_fonts(user_dir: Path, out_path: Path | None = None) -> dict:
     """扫系统字体目录 + 用户外置目录(data/fonts,gitignored),生成 manifest。
 
     id 规则:sys:/user: 前缀 + family(去空格);同名冲突追加 #index。
     user 目录的字体在渲染时通过 subtitles=...:fontsdir= 生效,无需安装。
+    项目字体(refs/fonts/)不写进这份全局 manifest,由 load_fonts_manifest 按项目并入。
     """
     fonts, seen = [], set()
-    dirs = [(Path(d).expanduser(), "system") for d in _SYSTEM_FONT_DIRS] \
-        + [(Path(user_dir), "user")]
-    for root, source in dirs:
-        if not root.is_dir():
-            continue
-        for p in sorted(root.rglob("*")):
-            if p.suffix.lower() not in _FONT_EXTS or not p.is_file():
-                continue
-            for rec in _font_records(p, source):
-                if rec["family"].startswith("."):
-                    continue          # 系统隐藏字体(.Hiragino*/.LastResort)不入库
-                fid = f"{'user' if source == 'user' else 'sys'}:{rec['family'].replace(' ', '')}"
-                if rec["subfamily"] and rec["subfamily"].lower() not in ("regular", "normal"):
-                    fid += f"-{rec['subfamily'].replace(' ', '')}"
-                if fid in seen:
-                    fid += f"#{rec['index']}"
-                if fid in seen:
-                    continue
-                seen.add(fid)
-                fonts.append({"id": fid, "family": rec["family"],
-                              "subfamily": rec["subfamily"], "path": str(p),
-                              "index": rec["index"], "cjk": rec["cjk"], "source": source})
+    for root, source in [(Path(d).expanduser(), "system") for d in _SYSTEM_FONT_DIRS] \
+            + [(Path(user_dir), "user")]:
+        fonts += _scan_font_dir(root, source, seen)
     manifest = {"schema": "fonts.manifest.v1", "fonts": fonts}
     if out_path:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1),
                             encoding="utf-8")
+    return manifest
+
+
+def scan_project_fonts(proj_root: Path) -> list[dict]:
+    """扫项目 refs/fonts/(用户在「参考文件」页上传的字体)→ 记录列表,id 前缀 proj:。
+    每次调用现扫(文件少、无需缓存),增删字体立即生效,不必重跑 fonts-scan。"""
+    return _scan_font_dir(Path(proj_root) / PROJECT_FONTS_SUBDIR, "project", set())
+
+
+def load_fonts_manifest(manifest_path: Path, proj_root: Path | None = None,
+                        require: bool = False) -> dict:
+    """读全局 fonts manifest 并把项目字体并入(项目字体排前,便于设计 Agent 优先看到)。
+
+    require=True 且全局 manifest 缺失时抛 RuntimeError(渲染前置条件);
+    否则缺失视为空清单(机检口径由调用方决定)。
+    """
+    manifest_path = Path(manifest_path)
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    elif require:
+        raise RuntimeError(f"缺 {manifest_path};先跑 render_captions.py fonts-scan")
+    else:
+        manifest = {"schema": "fonts.manifest.v1", "fonts": []}
+    if proj_root is not None:
+        proj_fonts = scan_project_fonts(proj_root)
+        if proj_fonts:
+            ids = {f["id"] for f in proj_fonts}
+            manifest = {**manifest,
+                        "fonts": proj_fonts + [f for f in manifest.get("fonts", [])
+                                               if f["id"] not in ids]}
     return manifest
 
 
@@ -206,7 +251,8 @@ def resolve_font(font_id: str, manifest: dict) -> dict:
             return f
     raise RuntimeError(
         f"font_id {font_id!r} 不在 fonts manifest 中;先跑 render_captions.py fonts-scan,"
-        "或把字体文件放进 data/fonts/ 后重扫(外置字体不进 git 仓库)")
+        "或把字体文件放进 data/fonts/ 后重扫(外置字体不进 git 仓库);"
+        "项目字体请在 Web「参考文件」页「字体」板块上传(refs/fonts/,id 为 proj:<family>)")
 
 
 # ---------------------------------------------------------------- 音效 manifest

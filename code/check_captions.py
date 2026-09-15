@@ -119,7 +119,7 @@ def main():
     else:
         data = cap.load_captions(cj)
         shot_list = json.loads(sl_path.read_text(encoding="utf-8"))
-        fonts_m = json.loads((FONTS_DIR / "manifest.json").read_text(encoding="utf-8")) \
+        fonts_m = cap.load_fonts_manifest(FONTS_DIR / "manifest.json", proj) \
             if (FONTS_DIR / "manifest.json").is_file() else None
         sfx_m = json.loads((SFX_DIR / "manifest.json").read_text(encoding="utf-8")) \
             if (SFX_DIR / "manifest.json").is_file() else None
@@ -184,8 +184,7 @@ def main():
         by_grp = {}
         for c in data.get("captions", []):
             by_grp.setdefault(c.get("group_id"), []).append(c)
-        fonts_m = json.loads((FONTS_DIR / "manifest.json").read_text(encoding="utf-8")) \
-            if (FONTS_DIR / "manifest.json").is_file() else {"fonts": []}
+        fonts_m = cap.load_fonts_manifest(FONTS_DIR / "manifest.json", proj)
         missing, stale, spec_bad, audio_bad = [], [], [], []
         for grp, caps in sorted(by_grp.items()):
             src = proj / "assets" / "clips" / ep / f"{grp}.mp4"

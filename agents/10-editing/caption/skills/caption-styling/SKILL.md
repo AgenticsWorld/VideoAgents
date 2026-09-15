@@ -50,7 +50,9 @@ python3 code/render_captions.py doctor
 - 必须设 `window.__anchorEl = "<文字块元素 id>"`:合成端按它的 bbox 做锚点定位,
   **只包文字本体,不含装饰**(装饰可以出血,文字块不能越出画布);
 - 字体一律写 `font://<font_id>`(如 `font://user:MaShanZheng`,id 来自
-  data/fonts/manifest.json)。**禁止**直接写系统字体名——缺字形会静默回退;
+  data/fonts/manifest.json;用户在「参考文件」页上传到 `refs/fonts/` 的项目字体
+  自动并入,id 为 `proj:<family>`,**有则优先使用**,`render_captions.py fonts-list
+  --project <slug>` 可查)。**禁止**直接写系统字体名——缺字形会静默回退;
 - 参数经 URL query 注入:`text`、`dur`(总时长秒)、`params`(JSON,模版自定义:
   segments 分段色/box 底衬色/glow 辉光色等);
 - 入场/出场时长模版内定(入 0.25–0.55s、出 ≤0.4s);idle 段的非位移效果

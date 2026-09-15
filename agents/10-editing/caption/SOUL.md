@@ -21,7 +21,9 @@
 ### 设计(captions.json schema v3 + 项目风格系统)
 
 > **0. 项目首个花字工单先定视觉语言约定**(色板/字体/描边体系/动画性格边界,落
-> `edit/caption_templates/STYLE.md`);之后**动画按内容逐条创作**(2026-08-17 用户
+> `edit/caption_templates/STYLE.md`);**字体先盘点用户字体 `refs/fonts/`**(WORKFLOW.md
+> §2 规则 9):有则全片统一优先使用(`render_captions.py fonts-list --project <slug>` 查 id,
+> 前缀 `proj:`;多个字体按 refs/NOTES.md 注释分配,未注释的由我定标题/正文分工并写进 STYLE.md);之后**动画按内容逐条创作**(2026-08-17 用户
 > 裁定):情绪/语义/画面不同就写不同的模版代码,内容真正重复才复用换参;协议、
 > 编写规范、坑清单全在 skill 里。全集模版数机检上限 20(防失控,不是目标)。
 
@@ -81,6 +83,7 @@
 | 06-art/art-director | 全片风格(色彩规范) | `bible/style.json` |
 | 本工位 speech-align(`render_captions.py`) | 逐字语音时间轴(花字入出点的唯一依据) | `edit/epNN/word_track.json`(wordtrack.v1) |
 | 10-editing/subtitle(主流程) | 逐句字幕时间码(word_track 的台本源) | `edit/epNN/subtitles.srt` |
+| **用户(人工输入口)** | 项目字体(ttf/otf/ttc,全片统一优先使用)+ 可选逐文件用途注释 | `refs/fonts/`、`refs/NOTES.md`(引擎自动并入,id `proj:<family>`) |
 | 宿主字体库 | 可用字体(font_id/family/cjk) | `data/fonts/manifest.json` |
 | 宿主音效库 | 可用音效(sfx_id/tags/license) | `data/sfx/manifest.json` |
 | 08-video-gen 流水线 | 终版组 clip(超分后) | `assets/clips/epNN/grpNNN.mp4` |

@@ -11,6 +11,7 @@
                                      $VIDEOAGENTS_CAPTION_ASSETS_REPO=owner/name[@branch];
                                      未配置时跳过,继续用本地素材)
   fonts-scan                         扫系统字体 + data/fonts/(外置,gitignored)→ data/fonts/manifest.json
+  fonts-list [--project S] [--json]  列可用字体(项目 refs/fonts/ 用户字体排前,id 前缀 proj:,现扫不需重跑 fonts-scan)
   sfx-scan                           扫 data/sfx/ → data/sfx/manifest.json
   doctor                             HTML 引擎环境自检(playwright/Chromium/fonttools)
   render     --project X --ep epNN [--grp grpNNN ...] [--force]
@@ -81,7 +82,10 @@ def _groups_with_captions(data: dict) -> dict:
 
 
 def cmd_render(args, proj):
-    fonts = _load_manifest(FONTS_MANIFEST, "fonts")
+    try:                      # 全局 manifest + 项目 refs/fonts/ 用户字体(proj:*)
+        fonts = cap.load_fonts_manifest(FONTS_MANIFEST, proj, require=True)
+    except RuntimeError as e:
+        raise SystemExit(f"[FAIL] {e}")
     data, shot_list = _load_ep_inputs(proj, args.ep)
     ok, msg = chtml.chromium_ready()
     if not ok:
@@ -113,6 +117,22 @@ def cmd_render(args, proj):
             n_s += r["status"] == "skipped"
             print(f"[{'RENDER' if r['status'] == 'rendered' else 'SKIP  '}] {grp} → {r['out']}")
     print(f"[DONE] 渲染 {n_r} 组,幂等跳过 {n_s} 组,无花字 {len(targets) - n_r - n_s} 组")
+
+
+def cmd_fonts_list(args, proj):
+    """列出本项目可用字体:refs/fonts/ 项目字体排前,其后是 data/fonts/ 与系统字体。"""
+    m = cap.load_fonts_manifest(FONTS_MANIFEST, proj)
+    if args.json:
+        print(json.dumps(m, ensure_ascii=False, indent=1))
+        return
+    n_proj = sum(1 for f in m["fonts"] if f.get("source") == "project")
+    if not FONTS_MANIFEST.is_file():
+        print(f"[WARN] 缺 {FONTS_MANIFEST}(先跑 fonts-scan 才能看到系统/外置字体)")
+    print(f"[INFO] 项目字体 {n_proj} 个(refs/fonts/,Web「参考文件」页「字体」板块上传),"
+          f"其余 {len(m['fonts']) - n_proj} 个来自 data/fonts/ 与系统")
+    for f in m["fonts"]:
+        cjk = "CJK" if f.get("cjk") else ("?" if f.get("cjk") is None else "-")
+        print(f"  {f['id']:<48} {cjk:<4} {f['family']} {f.get('subfamily') or ''}".rstrip())
 
 
 def cmd_doctor(args, proj=None):
@@ -269,7 +289,8 @@ def cmd_speech_snap(args, proj):
 
 
 def main():
-    cmds = {"fonts-scan": None, "sfx-scan": None, "assets-sync": None,
+    cmds = {"fonts-scan": None, "fonts-list": cmd_fonts_list,
+            "sfx-scan": None, "assets-sync": None,
             "render": cmd_render, "doctor": None,
             "sfx-track": cmd_sfx_track, "mux": cmd_mux,
             "speech-align": cmd_speech_align, "speech-lookup": cmd_speech_lookup,
@@ -320,6 +341,7 @@ def main():
         ap.add_argument("--text", default=None, help="speech-lookup:要定位的花字文案")
         ap.add_argument("--near", type=float, default=None, help="speech-lookup:参考时刻(秒),多次出现时取最近")
         ap.add_argument("--dry-run", action="store_true", help="speech-snap:只打印不写回")
+        ap.add_argument("--json", action="store_true", help="fonts-list:输出合并后的 manifest JSON")
 
     args, proj = parse_args(__doc__, configure=configure)
     if sub == "mux" and not args.video:

@@ -14,7 +14,7 @@
 1. **盘点用户封面参考(先于制作,WORKFLOW.md §2)**:检查 `refs/thumbnail/` 与 `refs/NOTES.md`——用户放入的封面参考图(他人爆款封面截图、构图/版式/文字风格范例均可)是构图、文案排版、色彩策略的**优先依据**;逐图分析其可借鉴点(构图/主体占比/文字位置与字重/色彩对比),在 A/B 版策略中落实,并在送选清单 `user_refs` 字段记录所用参考图路径与借鉴点;目录为空则跳过,照常自行设计。
 2. **选高光帧**:从 `edit/epNN/cut_v1.mp4` 抽取本集高光候选帧(主角特写、冲突顶点、标志性场面),优先选 visual-qa 打分高、角色一致性好的镜头。
 3. **多画幅制作**:按 `bible/aspect_ratio.json` 的平台矩阵,为每个平台画幅各出 A/B 两版(如 `thumbnail_youtube_A.png` / `thumbnail_youtube_B.png`),A/B 采用不同构图或文案策略以便对比。
-4. **封面文案**:标题文字采用 `publish/seo.json` 的关键词(seo 未产出时按工单给定的候选词),字体/色彩遵循 `bible/style.json`;专有名词写法对照 `bible/dictionary.json`。
+4. **封面文案**:标题文字采用 `publish/seo.json` 的关键词(seo 未产出时按工单给定的候选词),字体/色彩遵循 `bible/style.json`;**用户上传了字体(`refs/fonts/`,WORKFLOW.md §2 规则 9)时封面文字一律优先使用用户字体**(多个时按 `refs/NOTES.md` 注释分配,与花字/片头片尾全片统一),所用字体路径记入送选清单 `user_refs`;专有名词写法对照 `bible/dictionary.json`。
 5. **合规排版**:核心元素(人脸、文字)落在各平台安全区内,避开平台 UI 遮挡区(时长角标、头像位)。
 6. **送选回执**:产出对照清单(每版用帧、文案、策略差异)写入 `<项目目录>/runs/<task_id>/result.json`,供人工挑选。
 
@@ -35,6 +35,7 @@
 | 12-publishing/seo | 关键词(可用时) | `publish/seo.json` |
 | 02-worldbuilding/dictionary | 专有名词写法 | `bible/dictionary.json` |
 | **用户(人工输入口)** | 封面参考图(构图/版式/文字风格,优先参考)+ 可选逐图说明 | `refs/thumbnail/`、`refs/NOTES.md` |
+| **用户(人工输入口)** | 项目字体(封面文字优先使用,与花字/片头片尾统一) | `refs/fonts/` |
 
 ## 输出
 
