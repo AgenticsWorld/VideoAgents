@@ -13,6 +13,10 @@
   镜头机位、人物比例、神态、动作):风格句要求人物线稿清晰、按景别画对人物比例、表情与肢体可读,背景只
   两三笔示意或留白;地点只留一句短提示放在最后,不再拼场景卡描述;从 content/sketch/action 文字里自动推导
   「Camera:」(角度/高度/镜头/朝向)与「Expressions:」(神态/视线)两句英文关键词加进提示词(camera_hint / expression_hint);
+  **人物姿态/动作(2026-09-14 用户拍板)**:每镜再加一句「Body poses and actions:」——优先用分镜层结构化字段
+  `shots_draft[].poses`(`{CHAR-id: {pose: stand|sit|lie|kneel|crouch|prone, action: "挥剑"}}`,pose 受控枚举由宿主映射成
+  英文,action 中文直通不翻译),存量项目没有该字段时退回从 content/action/sketch 文字按关键词表推导(pose_hint);
+  之前草图里人物站/坐/躺、奔跑/挥剑/闪躲全靠中文长散文,姿态词淹没在句中、宫格模式还会被截掉,模型基本不听;
 - 宫格批量(2026-09-11 用户拍板,2026-09-12 由 3×3 降为 2×2):单集标题行「出草图」一次出一张 2×2 宫格图
   (≤4 镜,按集内顺序分批),split_grid 切成小图落到各镜的 <S01-01>.png(台账记 mode=grid + grid.file/cell);
   宫格原图存 _grids/。单镜「出图/重出」仍是单张出图。宫格切出的小图(约 1230×690)与单张(1280 长边)接近,
@@ -46,7 +50,8 @@ SKETCH_STYLE_PROMPT = (
     "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. "
     "FIGURES FIRST: draw the characters with clear confident lines, correct body proportions and figure size "
     "for the stated shot size, readable facial expressions, eye lines and body gestures; faces must be clear "
-    "enough to read the emotion. "
+    "enough to read the emotion. Pose every figure exactly as stated (standing, sitting, kneeling, crouching, "
+    "lying down, running, swinging a weapon, dodging…); the body state is as important as the face. "
     "BACKGROUND MINIMAL: only two or three loose lines or a little light hatching to hint at the space, most of "
     "the paper left blank; no architectural detail, no furniture detail, no props unless mentioned. "
     "The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
@@ -72,7 +77,8 @@ GRID_STYLE_PROMPT = (
     "pencil sketch: hand-drawn monochrome line art with loose hatching and soft grey marker shading, quick gestural "
     "strokes, unfinished sketchbook look. FIGURES FIRST in every panel: clear confident lines for the characters, "
     "correct body proportions and figure size for that panel's shot size, readable facial expressions, eye lines "
-    "and body gestures. BACKGROUND MINIMAL in every panel: only two or three loose lines to hint at the space, most "
+    "and body gestures; pose every figure exactly as that panel states (standing, sitting, kneeling, crouching, "
+    "lying down, running, swinging, dodging…). BACKGROUND MINIMAL in every panel: only two or three loose lines to hint at the space, most "
     "of the paper left blank; no architectural or furniture detail, no props unless mentioned. Each panel must show "
     "its camera angle, height and lens exactly as described. Strictly black-and-white, no color. No text, no "
     "numbers, no captions, no speech bubbles, no watermark inside the panels. The attached images are the project's "
@@ -404,6 +410,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                 "sketch": str(_first(d, "sketch", "composition_sketch", "camera_intent", "camera_movement_intent", default="")),
                 "duration_hint_s": _first(d, "duration_hint_s", "duration_s", default=None),
                 "cast": cast,
+                "poses": normalize_poses(_first(d, "poses", "figure_states", default=None)),
                 "extras": str(_first(d, "extras", default="")),
                 "dialogue": dialogue,
                 "narration_ref": [str(x) for x in _as_list(_first(d, "narration_ref", "narration_refs", "narrator_ref", default=[]))],
@@ -528,6 +535,185 @@ _EXPRESSION_TERMS = (
     ("挣扎", "struggling"), ("蜷缩", "curled up"), ("瘫", "slumped"), ("僵住", "frozen stiff"), ("僵在", "frozen stiff"),
 )
 
+# ---------------- 人物姿态/动作(2026-09-14 用户拍板) ----------------
+# 受控枚举:分镜层 shots_draft[].poses[<CHAR-id>].pose 取值;白模关键帧 pose 同一套(modules/whitebox.py POSES),
+# 站/坐/躺沿用白模原三态,跪/蹲/趴为本次新增(白模渲染器与包围盒同步支持)。
+POSE_ENUM = ("stand", "sit", "lie", "kneel", "crouch", "prone")
+POSE_EN = {"stand": "standing", "sit": "sitting", "lie": "lying down", "kneel": "kneeling",
+           "crouch": "crouching", "prone": "lying face down"}
+POSE_ZH = {"stand": "站", "sit": "坐", "lie": "躺", "kneel": "跪", "crouch": "蹲", "prone": "趴"}
+# 各体位在站位片段/动线句里的可辨认写法(机检 pose 与 space_fragment_en 是否相符时用,中英都认)
+POSE_WORDS = {"stand": ("站", "立", "stand"), "sit": ("坐", "sit", "seat"), "lie": ("躺", "卧", "lying", "lie", "reclin"),
+              "kneel": ("跪", "kneel"), "crouch": ("蹲", "crouch", "squat"), "prone": ("趴", "俯卧", "匍匐", "prone", "face down")}
+
+# 关键词表:中文分镜文字 → 英文短语(与 _CAMERA_TERMS 同款,只做子串命中不做语义理解;
+# 单字项只收高精度的,易误命中的一律用双字;action 中文直通的项目也可能在 content 里写英文,英文项按整词匹配 _POSE_TERMS_EN)。
+_POSE_EXCLUDE = ("车站", "站台", "站牌", "驿站", "站位", "坐标", "坐落", "卧室", "卧房", "卧榻", "卧铺", "走廊", "走道", "走线",
+                 "跑道", "倒影", "倒像", "伏笔", "起伏", "埋伏", "闪光", "闪烁", "闪回", "闪电", "闪现", "闪过", "推进", "推近",
+                 "拉远", "拉开", "跟拍", "跟随", "扑面", "扑克", "拍摄", "俯拍", "侧拍", "仰拍", "顶拍", "跳切", "跳接", "跳动")
+_POSE_TERMS = (
+    # 静态体位
+    ("站立", "standing"), ("站着", "standing"), ("站在", "standing"), ("站定", "standing still"), ("站起", "standing up"),
+    ("起身", "rising to their feet"), ("直立", "standing upright"), ("伫立", "standing still"), ("肃立", "standing at attention"),
+    ("站", "standing"),
+    ("坐着", "sitting"), ("坐在", "sitting"), ("坐下", "sitting down"), ("落座", "sitting down"), ("端坐", "sitting upright"),
+    ("盘坐", "sitting cross-legged"), ("盘腿", "sitting cross-legged"), ("坐起", "sitting up"), ("坐", "sitting"),
+    ("平躺", "lying on the back"), ("仰卧", "lying on the back"), ("侧卧", "lying on one side"), ("侧躺", "lying on one side"),
+    ("躺", "lying down"), ("卧", "lying down"),
+    ("跪拜", "kowtowing"), ("跪地", "kneeling on the ground"), ("下跪", "kneeling"), ("跪", "kneeling"), ("屈膝", "kneeling"),
+    ("半蹲", "half crouch"), ("蹲", "crouching"),
+    ("俯卧", "lying face down"), ("趴", "lying face down"), ("匍匐", "crawling on the ground"), ("伏案", "hunched over the desk"),
+    ("靠着", "leaning against"), ("靠在", "leaning against"), ("倚着", "leaning against"), ("倚在", "leaning against"),
+    ("斜倚", "reclining"), ("弯腰", "bending over"), ("俯身", "bending forward"), ("躬身", "bowing"), ("鞠躬", "bowing"),
+    ("仰头", "head tilted back"), ("叉腰", "hands on hips"), ("抱臂", "arms crossed"), ("背手", "hands behind the back"),
+    ("握拳", "fists clenched"), ("攥紧", "gripping tightly"),
+    # 移动
+    ("行走", "walking"), ("踱步", "pacing"), ("走", "walking"), ("狂奔", "sprinting"), ("跑", "running"), ("奔", "running"),
+    ("追赶", "chasing"), ("追上", "catching up"), ("冲向", "charging at"), ("冲出", "rushing out"), ("冲进", "rushing in"),
+    ("退后", "stepping back"), ("后退", "stepping back"), ("倒退", "backing away"), ("跳起", "jumping up"), ("跳下", "jumping down"),
+    ("跃起", "leaping up"), ("一跃", "leaping"), ("飞跃", "leaping over"), ("攀爬", "climbing"), ("爬起", "getting up"),
+    ("爬上", "climbing onto"), ("蹒跚", "staggering"), ("踉跄", "staggering"), ("倒下", "collapsing"), ("倒地", "falling to the ground"),
+    ("跌", "falling"), ("摔", "falling"), ("转身", "turning around"), ("回身", "turning around"), ("迈步", "striding"),
+    ("骑马", "riding a horse"), ("骑着", "riding"), ("上马", "mounting"), ("下马", "dismounting"), ("拖着", "dragging"),
+    ("牵着", "leading by hand"), ("扛着", "carrying on the shoulder"), ("背着", "carrying on the back"), ("抬着", "carrying"),
+    ("提着", "carrying"), ("拎着", "carrying"), ("撑着", "propping up"),
+    # 动作
+    ("挥剑", "swinging a sword"), ("挥刀", "swinging a blade"), ("挥手", "waving a hand"), ("挥", "swinging"),
+    ("劈", "slashing down"), ("砍", "hacking"), ("刺向", "thrusting at"), ("刺出", "thrusting"), ("拔剑", "drawing a sword"),
+    ("拔刀", "drawing a blade"), ("持剑", "holding a sword"), ("握剑", "gripping a sword"), ("举剑", "raising a sword"),
+    ("抬手", "raising a hand"), ("举手", "hand raised"), ("伸手", "reaching out"), ("推门", "pushing the door"),
+    ("推开", "pushing open"), ("推搡", "shoving"), ("拉住", "grabbing hold"), ("搂住", "holding close"), ("抱", "embracing"),
+    ("扶", "supporting"), ("搀", "supporting"), ("指着", "pointing at"), ("指向", "pointing toward"), ("抓住", "grabbing"),
+    ("拽", "yanking"), ("掀", "lifting"), ("递", "handing over"), ("捧", "holding in both hands"), ("端起", "lifting up"),
+    ("拍打", "patting"), ("敲", "knocking"), ("捶", "pounding"), ("踢", "kicking"), ("踹", "kicking"), ("掷", "throwing"),
+    ("扔", "throwing"), ("擦", "wiping"), ("梳", "combing"), ("拨", "stirring"), ("抚摸", "stroking"), ("摸着", "touching"),
+    ("掩面", "covering the face"), ("捂住", "covering"), ("拱手", "cupping hands in salute"), ("作揖", "bowing with clasped hands"),
+    ("磕头", "kowtowing"), ("叩首", "kowtowing"),
+    # 反应
+    ("闪躲", "dodging"), ("闪身", "dodging aside"), ("闪开", "dodging away"), ("躲避", "dodging"), ("躲", "dodging"), ("闪", "dodging"),
+    ("退缩", "shrinking back"), ("缩身", "shrinking back"), ("扑向", "lunging at"), ("扑倒", "lunging down"), ("扑", "lunging"),
+    ("格挡", "parrying"), ("挡住", "blocking"), ("抱头", "covering the head"), ("捂脸", "covering the face"),
+    ("定住", "freezing"), ("愣", "freezing"),
+)
+_POSE_TERMS_EN = (
+    ("standing", "standing"), ("stands", "standing"), ("stand", "standing"), ("sitting", "sitting"), ("seated", "sitting"),
+    ("sits", "sitting"), ("sit", "sitting"), ("lying", "lying down"), ("lies", "lying down"), ("reclining", "reclining"),
+    ("kneeling", "kneeling"), ("kneels", "kneeling"), ("kneel", "kneeling"), ("crouching", "crouching"), ("crouch", "crouching"),
+    ("squatting", "squatting"), ("prone", "lying face down"), ("face down", "lying face down"), ("leaning", "leaning"),
+    ("running", "running"), ("runs", "running"), ("sprint", "sprinting"), ("walking", "walking"), ("walks", "walking"),
+    ("jumping", "jumping"), ("jumps", "jumping"), ("leaping", "leaping"), ("climbing", "climbing"), ("falling", "falling"),
+    ("falls", "falling"), ("collapses", "collapsing"), ("dodging", "dodging"), ("dodges", "dodging"), ("swinging", "swinging"),
+    ("swings", "swinging"), ("draws a sword", "drawing a sword"), ("thrusts", "thrusting"), ("lunges", "lunging"),
+    ("bowing", "bowing"), ("bows", "bowing"), ("kowtow", "kowtowing"), ("reaching", "reaching out"), ("pushing", "pushing"),
+    ("pulling", "pulling"), ("embracing", "embracing"), ("turning around", "turning around"), ("riding", "riding"),
+)
+
+
+_NEGATED_RE = re.compile(r"(不|没|未|别|勿|莫|无)(再|曾|有|要|敢|肯|能|会|去|想)?$")
+
+
+def _pose_term_hits(text: str) -> list[str]:
+    """从分镜文字命中姿态/动作英文短语(按出现位置排序、按短语去重);先剔除 _POSE_EXCLUDE 里的非肢体词。"""
+    t = str(text or "")
+    for bad in _POSE_EXCLUDE:
+        t = t.replace(bad, "﹍" * len(bad))    # 等长占位,保住位置
+    # 长词优先、占位去重:「侧卧」命中后同一处的「卧」不再单独命中(否则一句里 lying on one side / lying down 双报)
+    covered: list[tuple[int, int]] = []
+    hits: list[tuple[int, str]] = []
+    for zh, en in sorted(_POSE_TERMS, key=lambda kv: -len(kv[0])):
+        start = 0
+        while True:
+            i = t.find(zh, start)
+            if i < 0:
+                break
+            j = i + len(zh)
+            if not any(i < b and j > a for a, b in covered):
+                covered.append((i, j))
+                # 否定词紧邻在前(「不坐起来」「没回身」「不再站」)= 该动作没发生,占住位置但不命中
+                if not _NEGATED_RE.search(t[max(0, i - 3):i]) and en not in (e for _, e in hits):
+                    hits.append((i, en))
+            start = j
+    found = [en for _, en in sorted(hits)]
+    for m in re.finditer(r"[A-Za-z][A-Za-z ]+", t):
+        seg = m.group(0).lower()
+        for en_kw, en in _POSE_TERMS_EN:
+            if re.search(rf"\b{re.escape(en_kw)}\b", seg) and en not in found:
+                found.append(en)
+    return found
+
+
+def normalize_poses(v) -> dict:
+    """把 storyboard.json 里各种写法归一成 {id: {pose, action}}:
+    dict {id: {pose, action}} / {id: "sit"} / list [{id|character, pose, action}];非法/空 → {}。pose 小写去空格,不在枚举内原样保留(交机检报)。"""
+    out: dict = {}
+    items = []
+    if isinstance(v, dict):
+        items = [(k, rec) for k, rec in v.items()]
+    elif isinstance(v, list):
+        for rec in v:
+            if isinstance(rec, dict):
+                cid = rec.get("id") or rec.get("character") or rec.get("cast")
+                if isinstance(cid, str):
+                    items.append((cid, rec))
+    for cid, rec in items:
+        if not isinstance(cid, str) or not cid.strip():
+            continue
+        if isinstance(rec, str):
+            rec = {"pose": rec}
+        if not isinstance(rec, dict):
+            continue
+        pose = str(rec.get("pose") or rec.get("state") or "").strip().lower()
+        action = str(rec.get("action") or rec.get("action_zh") or "").strip()
+        if not pose and not action:
+            continue
+        out[cid.strip()] = {"pose": pose, "action": action}
+    return out
+
+
+def pose_hint(shot: dict, names: dict | None = None) -> str:
+    """每镜「Body poses and actions:」句:有结构化 `poses` 时逐角色 "<名> <体位英文>, <action 原文>"(action 中文直通,2026-09-14 拍板),
+    否则退回从 content/action/sketch 文字按关键词表推导(最多 10 个短语);都没有返回空。"""
+    poses = shot.get("poses") or {}
+    segs = []
+    for cid, rec in poses.items():
+        if not isinstance(rec, dict):
+            continue
+        name = (names or {}).get(cid, cid)
+        body = ", ".join(x for x in (POSE_EN.get(rec.get("pose") or "", ""), str(rec.get("action") or "").strip()) if x)
+        if body:
+            segs.append(f"{name} {body}")
+    if segs:
+        return "; ".join(segs)
+    text = " ".join(str(shot.get(k) or "") for k in ("content", "action", "sketch"))
+    return ", ".join(_pose_term_hits(text)[:10])
+
+
+def check_poses(board: dict, strict: bool = False) -> tuple[list[str], list[str]]:
+    """机检 pose_present(2026-09-14):每镜每个出场角色(CHAR-*)在 `poses` 有条目且 pose 在枚举内。
+    整镜没写 `poses` 的存量项目按 WARN(strict=True 按 FAIL);写了 `poses` 但漏角色/枚举外一律 FAIL;
+    生物(CRE-*)缺条目只 WARN;poses 里出现不在本镜/本场出场的 id 只 WARN。返回 (errors, warnings)。"""
+    errs, warns = [], []
+    for sc in board.get("scenes") or []:
+        scene_cast = set(sc.get("cast") or []) | set(sc.get("creatures") or [])
+        for sh in sc.get("shots") or []:
+            key, cast, poses = sh.get("key"), [c for c in (sh.get("cast") or []) if isinstance(c, str)], sh.get("poses") or {}
+            if not poses:
+                if cast:
+                    (errs if strict else warns).append(f"{key}: 缺 poses(出场 {', '.join(cast)} 的体位/动作未登记)")
+                continue
+            for cid, rec in poses.items():
+                pose = (rec or {}).get("pose") or ""
+                if pose and pose not in POSE_ENUM:
+                    errs.append(f"{key}/{cid}: pose {pose!r} 不在枚举 {'/'.join(POSE_ENUM)} 内")
+                elif not pose:
+                    errs.append(f"{key}/{cid}: 缺 pose(只写了 action)")
+                if cid not in cast and cid not in scene_cast:
+                    warns.append(f"{key}/{cid}: poses 里的 id 不在本镜/本场出场名单")
+            for cid in cast:
+                if cid not in poses:
+                    (warns if cid.startswith("CRE-") else errs).append(f"{key}/{cid}: 出场但 poses 无条目")
+    return errs, warns
+
 
 def _term_hits(text: str, table) -> list[str]:
     """按关键词在文字里的出现位置排序,去重返回英文短语。"""
@@ -559,7 +745,7 @@ def _space_hint(scene: dict, max_chars: int = 60) -> str:
 
 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[str, str]:
-    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。"""
+    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。"""
     parts = [SKETCH_STYLE_PROMPT]
     if shot.get("size_hint"):
         parts.append(f"Shot size: {shot['size_hint']}.")
@@ -569,6 +755,9 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[
     cast = [names.get(c, c) for c in shot.get("cast") or []]
     if cast:
         parts.append("Characters in frame: " + ", ".join(cast) + ".")
+    ph = pose_hint(shot, names)
+    if ph:
+        parts.append(f"Body poses and actions (draw exactly as stated): {ph}.")
     if shot.get("content"):
         parts.append(f"What we see: {shot['content']}")
     if shot.get("action") and shot["action"] not in (shot.get("content") or ""):
@@ -648,7 +837,7 @@ _GRID_CLIPS = ({"desc": 0, "content": 260, "action": 160, "sketch": 200, "note":
 
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
                       max_chars: int = GRID_PROMPT_MAX) -> tuple[str, str]:
-    """宫格提示词:风格总句 + 各场地点短提示一次(只作示意) + 逐格「Panel k (row r, col c)」景别/机位/地点/出场/画面/动作/神态/构图(用台账 note)。
+    """宫格提示词:风格总句 + 各场地点短提示一次(只作示意) + 逐格「Panel k (row r, col c)」景别/机位/地点/出场/姿态动作(不裁)/画面/动作/神态/构图(用台账 note)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
     总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(2026-09-12:地点描述不进,先压画面内容,机位/神态/构图最后压)。"""
     n = len(panels)
@@ -681,6 +870,9 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
             cast = [names.get(x, x) for x in shot.get("cast") or []]
             if cast:
                 seg.append("Characters: " + ", ".join(cast) + ".")
+            ph = pose_hint(shot, names)
+            if ph:      # 姿态/动作句不进三档裁剪(2026-09-14):它正是以前被长散文淹没、被截掉的信息
+                seg.append(f"Poses: {ph}.")
             if shot.get("content"):
                 seg.append(_short(shot["content"], clip["content"]))
             if clip["action"] and shot.get("action") and shot["action"] not in (shot.get("content") or ""):

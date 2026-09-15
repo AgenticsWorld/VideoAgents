@@ -108,9 +108,9 @@
 }
 ```
 
-人物关键帧 t 是组内秒，摄像机关键帧 t 是镜内秒；camera.start 是组内秒。关键帧严格递增，覆盖0到对应时长；摄像机分段与镜头顺序和时长一致。位置、target、fov、yaw 线性插值，yaw 走最短角；pose 离散切换。关键帧可带 hold=true（到下一帧前保持）或 easing="smooth"。定点停留建议写重复位置。镜头切换时直接切换机位。
+人物关键帧 t 是组内秒，摄像机关键帧 t 是镜内秒；camera.start 是组内秒。关键帧严格递增，覆盖0到对应时长；摄像机分段与镜头顺序和时长一致。位置、target、fov、yaw 线性插值，yaw 走最短角；pose 离散切换，受控六态 `stand / sit / lie / kneel / crouch / prone`（2026-09-14 起新增跪/蹲/趴，与分镜层 `poses` 枚举同一套：kneel 小腿平贴地面、大腿直立、上身与坐姿同高；crouch 小腿直立、大腿水平、髋在 0.175h、上身默认前俯 0.6 rad（关键帧可给 `bend` 覆盖）；prone = lie 绕身体长轴翻 π 面朝下，脚锚点与头向不变；入画包围盒 `whitebox_refs.actor_bounds` 同步按六态取占位）。关键帧可带 hold=true（到下一帧前保持）或 easing="smooth"。定点停留建议写重复位置。镜头切换时直接切换机位。
 
-旧数据编译优先消费数值 xy_start/xy_end、path/beat 的 t+xy/landmark/pose、camera.whitebox_keyframes。没有数值运动节拍时按组时长均匀分配动线节点，文字姿态只作粗略推断；身高默认1.7m，生物默认1.4m。机位先取 layout view_tile 视轴，再按景别和镜首人物位置估计距离；缺 view_tile 暂取第一机位，所有推断均出警告。只描述运动方式但没有幅度时，推拉按视距20%、横移按1m估计，必须由 whitebox-staging 校准。暂不支持的运镜按固定机位显示并警告。
+旧数据编译优先消费数值 xy_start/xy_end、path/beat 的 t+xy/landmark/pose、camera.whitebox_keyframes。没有数值运动节拍时按组时长均匀分配动线节点；体位优先取 blocking.json 每角色 `pose`，其次 shot_list 每镜 `poses[<id>].pose`（分镜层结构化字段，2026-09-14），最后才由 route_en / start_pos 文字粗推（趴/俯卧→prone、跪→kneel、蹲→crouch、躺/卧→lie、坐→sit、其余 stand）；身高默认1.7m，生物默认1.4m。机位先取 layout view_tile 视轴，再按景别和镜首人物位置估计距离；缺 view_tile 暂取第一机位，所有推断均出警告。只描述运动方式但没有幅度时，推拉按视距20%、横移按1m估计，必须由 whitebox-staging 校准。暂不支持的运镜按固定机位显示并警告。
 
 continuity 从源组 continuity_from 取前组。actors 默认 validate，camera 默认 cut。inherit 使用前组末位置/姿态或机位，不改后续目标；跨场景/场次或无前组时拒绝继承。validate 仅报告冲突，不擅自移动演员。同场次的时间跳跃也应显式 cut。
 

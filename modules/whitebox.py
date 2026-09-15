@@ -239,12 +239,36 @@ def load_scene(base: Path, sid: str):
             'warnings': warnings}
 
 
+# 姿态受控枚举(2026-09-14 扩为六态;与 modules/storyboard_board.POSE_ENUM 同一套):
+# 站/坐/躺沿用,跪/蹲/趴新增——渲染器 whitebox-renderer.js 与包围盒 whitebox_refs.actor_bounds 同步支持。
+POSES = ('stand', 'sit', 'lie', 'kneel', 'crouch', 'prone')
+_POSE_TEXT_RE = r'坐|躺|卧|趴|跪|蹲|seat|sitting|lying|kneel|crouch|squat|prone'
+
+
 def pose_from(text):
+    """文字姿态粗推(兜底;优先级低于 blocking.json `pose` 与 shot_list 每镜 `poses`)。"""
+    if re.search(r'趴|俯卧|匍匐|prone|face.?down', text, re.I):
+        return 'prone'
+    if re.search(r'跪|kneel', text, re.I):
+        return 'kneel'
+    if re.search(r'蹲|crouch|squat', text, re.I):
+        return 'crouch'
     if re.search(r'躺|卧|lying|lies|reclin', text, re.I):
         return 'lie'
     if re.search(r'坐|落座|seat|sitting|sits', text, re.I):
         return 'sit'
     return 'stand'
+
+
+def shot_pose_of(shot, cid):
+    """shot_list 每镜 `poses[<id>]`(分镜层 storyboard shots_draft[].poses 继承而来,2026-09-14)的体位;无/非法返回 None。"""
+    poses = shot.get('poses') if isinstance(shot, dict) else None
+    if not isinstance(poses, dict):
+        return None
+    rec = poses.get(cid)
+    pose = rec if isinstance(rec, str) else (rec.get('pose') if isinstance(rec, dict) else None)
+    pose = str(pose or '').strip().lower()
+    return pose if pose in POSES else None
 
 
 def sample(keys, t):
@@ -295,8 +319,8 @@ def validate_keys(keys, duration, camera=False):
             if not 1 <= number(key['fov'], 'fov') <= 150:
                 raise ValueError('fov must be 1..150 degrees')
         else:
-            if key.get('pose', 'stand') not in ('stand', 'sit', 'lie'):
-                raise ValueError('pose must be stand/sit/lie')
+            if key.get('pose', 'stand') not in POSES:
+                raise ValueError('pose must be ' + '/'.join(POSES))
             number(key.get('yaw', 0), 'yaw')
             for axis in ('pitch', 'roll'):
                 number(key.get(axis, 0), axis)
@@ -357,8 +381,10 @@ def compile_group(base, ep, group, shots, scene, colors=None):
                         key['position'][1] = number(entry[f'altitude_{suffix}_m'], 'altitude_m')
                 if any(field in entry for field in (f'position_{suffix}', f'xy_{suffix}', f'altitude_{suffix}_m')):
                     keyed[t] = key
-            initial_pose = entry.get('pose') or pose_from(entry.get('start_pos', ''))
-            if entry.get('pose') or re.search(r'坐|躺|卧|seat|sitting|lying', entry.get('start_pos', ''), re.I):
+            # 体位优先级:blocking.json 该角色 `pose` → shot_list 该镜 `poses[id].pose`(分镜层结构化字段)→ start_pos 文字粗推
+            shot_pose = shot_pose_of(shots[sid], cid)
+            initial_pose = entry.get('pose') or shot_pose or pose_from(entry.get('start_pos', ''))
+            if entry.get('pose') or shot_pose or re.search(_POSE_TEXT_RE, entry.get('start_pos', ''), re.I):
                 keyed[offset] = {**keyed.get(offset, sample(keys, offset)), 't': offset, 'pose': initial_pose}
                 pose_events[offset] = initial_pose
             for beat in entry.get('path', []) + entry.get('beats', []):

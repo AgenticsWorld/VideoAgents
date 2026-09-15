@@ -42,6 +42,7 @@ agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 !/tests/test_script_keypoints.py
 !/tests/test_scene_cast.py
 !/tests/test_continuity_refs.py
+!/tests/test_storyboard_board.py
 
 # Python
 .venv/

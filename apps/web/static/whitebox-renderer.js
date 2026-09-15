@@ -226,22 +226,27 @@ export class WhiteboxRenderer {
     for(const a of this.actors) {
       const k=sample(a.data.keyframes,t);a.root.position.fromArray(k.position);a.root.rotation.y=k.yaw||0;
       a.root.visible=k.visible!==false;
-      const h=a.data.size_m[1];
+      const h=a.data.size_m[1],ad=a.data.size_m[2];
+      // Poses (2026-09-14, six states shared with storyboard poses / modules/whitebox.POSES):
+      // stand, sit, lie (face up), kneel (shins flat on the ground, torso upright),
+      // crouch (squat: shins upright, thighs level, torso leaning forward), prone (lie face down).
+      const pose=k.pose||'stand',lying=pose==='lie'||pose==='prone',seated=pose==='sit',kneel=pose==='kneel',crouch=pose==='crouch',low=seated||kneel||crouch;
       // Bend hips/knees for sitting; keep dimensions and ground anchors in meters.
-      // Roll a lying performer about their longitudinal axis before lying/yaw.
-      a.body.rotation.set(k.pose==='lie'?-Math.PI/2:0,k.pose==='lie'?(k.body_roll||0):0,0,'XYZ');
+      // Roll a lying performer about their longitudinal axis before lying/yaw; prone = lie rolled by pi (face down, same foot anchor and head direction).
+      a.body.rotation.set(lying?-Math.PI/2:0,lying?((k.body_roll||0)+(pose==='prone'?Math.PI:0)):0,0,'XYZ');
       a.upper.rotation.y=k.torso_yaw||0;
-      a.body.position.y=k.pose==='lie'?h*.16:0;
+      a.body.position.y=lying?h*.16:0;
       if(a.torso){
-        const seated=k.pose==='sit';
-        a.torso.position.y=h*(seated?.4:.575);a.head.position.y=h*(seated?.725:.9)+(k.neck_extension||0);
+        a.torso.position.y=h*(low?.4:.575);a.head.position.y=h*(low?.725:.9)+(k.neck_extension||0);
         for(const {thigh,shin} of a.legs){
-          thigh.rotation.x=seated?Math.PI/2:0;thigh.position.y=h*(seated?.175:.2625);thigh.position.z=seated?h*.0875:0;
-          shin.position.z=seated?h*.175:0;
+          // sit / crouch: thighs level, shins upright in front; kneel: thighs upright from the ground, shins flat behind the knees.
+          thigh.rotation.x=(seated||crouch)?Math.PI/2:0;thigh.position.y=h*(seated||crouch?.175:kneel?.0875:.2625);thigh.position.z=(seated||crouch)?h*.0875:0;
+          shin.rotation.x=kneel?Math.PI/2:0;shin.position.y=kneel?ad*.4:h*.0875;shin.position.z=(seated||crouch)?h*.175:kneel?-h*.0875:0;
         }
         // Lean the upper body about the hips without turning a standing
         // performer into a horizontal, bed-anchored lying performer.
-        const bend=k.pose==='stand'?(k.bend||0):0,hip=h*.35;
+        // A crouch leans forward by default (0.6 rad about a low hip) unless the keyframe gives its own bend.
+        const bend=pose==='stand'?(k.bend||0):crouch?(k.bend??.6):0,hip=h*(crouch?.175:.35);
         a.torso.rotation.x=bend;
         a.torso.position.z=(a.torso.position.y-hip)*Math.sin(bend);
         a.torso.position.y=hip+(a.torso.position.y-hip)*Math.cos(bend);
@@ -249,13 +254,13 @@ export class WhiteboxRenderer {
         a.head.position.z=(a.head.position.y-hip)*Math.sin(bend);
         a.head.position.y=hip+(a.head.position.y-hip)*Math.cos(bend);
         if(a.neck){
-          const extension=k.neck_extension||0,cy=h*(seated?.625:.8)+extension/2;
+          const extension=k.neck_extension||0,cy=h*(low?.625:.8)+extension/2;
           a.neck.visible=extension>0;a.neck.scale.y=Math.max(.001,extension+.01);
           a.neck.rotation.x=bend;a.neck.position.set(0,hip+(cy-hip)*Math.cos(bend),(cy-hip)*Math.sin(bend));
         }
       }
       for(const arm of a.arms){
-        const shoulder=new THREE.Vector3(arm.side*a.data.size_m[0]*.52,h*(k.pose==='sit'?.58:.77),0);
+        const shoulder=new THREE.Vector3(arm.side*a.data.size_m[0]*.52,h*(low?.58:.77),0);
         const hand=new THREE.Vector3(...k[arm.key]);
         // Two equal arm segments: elbow bends outward, with a stable pole.
         const delta=hand.clone().sub(shoulder),distance=delta.length(),axis=delta.clone().normalize();

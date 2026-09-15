@@ -80,15 +80,20 @@ def _basis(cam):
 def actor_bounds(actor: dict, key: dict) -> tuple:
     """人物在该关键帧的轴对齐包围盒(世界坐标):(center, half_extents)。按姿态取占位——
     stand: size_m 全高、脚印 max(w,d);sit: 0.8 身高(头顶≈0.725h+头半径,与 whitebox-renderer.js 同比例)、脚印加腿前伸 0.2h;
-    lie: 0.35 身高、脚印 0.5 身长。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。"""
+    lie / prone: 0.35 身高、脚印 0.5 身长;kneel: 0.825 身高(小腿平贴地面,头顶 0.725h+头半径)、脚印加小腿后伸 0.175h;
+    crouch: 0.73 身高(髋在 0.175h、上身前俯 0.6 rad)、脚印加前俯 0.31h(2026-09-14 六态)。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。"""
     size = actor.get('size_m') or [0.5, 1.7, 0.4]
     w = float(size[0]); h = float(size[1]) if len(size) > 1 else 1.7; d = float(size[2]) if len(size) > 2 else w
     half_w = 0.5 * max(w, d)
     pose = key.get('pose') or 'stand'
     if pose == 'sit':
         height, half_w = 0.8 * h, max(half_w, 0.2 * h)
-    elif pose == 'lie':
+    elif pose in ('lie', 'prone'):
         height, half_w = 0.35 * h, max(half_w, 0.5 * h)
+    elif pose == 'kneel':
+        height, half_w = 0.825 * h, max(half_w, 0.175 * h)
+    elif pose == 'crouch':
+        height, half_w = 0.73 * h, max(half_w, 0.31 * h)
     else:
         height = h
     pos = key.get('position') or [0, 0, 0]

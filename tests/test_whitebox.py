@@ -161,6 +161,20 @@ def test_timed_trajectory_and_pose(project):
     assert sample(actor['keyframes'],4)['pose']=='sit'
 
 
+def test_shot_list_poses_feed_keyframes(project):
+    """体位优先级(2026-09-14):blocking.json pose → shot_list 每镜 poses → 文字粗推;六态都合法。"""
+    path,data=source(project);data['shots'][0]['poses']={'CHAR-1':{'pose':'kneel','action':'磕头'}};write(path,data)
+    actor=compile_episode(project,'ep01')['groups'][0]['actors'][0]
+    assert sample(actor['keyframes'],0)['pose']=='kneel' and sample(actor['keyframes'],4)['pose']=='kneel'
+    write(project/'directing/ep01/shots/sh1/blocking.json',{'characters':[{'id':'CHAR-1','pose':'crouch','start_pos':'门口'}]})
+    actor=compile_episode(project,'ep01')['groups'][0]['actors'][0]
+    assert sample(actor['keyframes'],0)['pose']=='crouch'
+    for pose in ('stand','sit','lie','kneel','crouch','prone'):
+        validate_keys([{'t':0,'position':[0,0,0],'pose':pose},{'t':4,'position':[1,0,0],'pose':pose}],4)
+    from modules.whitebox import pose_from
+    assert [pose_from(t) for t in ('趴在地上','跪在炉前','蹲下身','侧卧','落座','站定','face down on the floor','kneels')]==['prone','kneel','crouch','lie','sit','stand','prone','kneel']
+
+
 def test_mounted_creature_scale(project):
     path,data=source(project);g=data['generation_groups'][0]
     g['creatures_union']=['CRE-1'];g['blocking_map']['characters'][0]['mounted']='CRE-1'

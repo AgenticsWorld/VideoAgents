@@ -21,8 +21,8 @@
 
 ## 职责
 
-1. 读 `directing/<ep>/storyboard.json` 该场该镜(`content` / `sketch` / `cast` / `size_hint`)与台账里该镜现有的 `note` / `prompt` / `provider` / `model`,弄清现在这张图为什么不符合用户意见。
-2. 把用户意见翻成**一句可画的画面指令**(机位/景别/人物左右前后位置/朝向/动作/道具/光影,具体到能画;中英文都可),作为 `--note` 传给 CLI。台账已有 `note` 时**合并**成一句再传(CLI 的 `--note` 会替换台账 note,不合并会丢掉上一轮意见);用户明确说撤销之前的意见才用 `--clear-note`。
+1. 读 `directing/<ep>/storyboard.json` 该场该镜(`content` / `sketch` / `cast` / `size_hint` / `poses`——每角色体位+动作,CLI 会自动拼成 `Body poses and actions:` 句,没有该字段时 CLI 从文字按关键词推导)与台账里该镜现有的 `note` / `prompt` / `provider` / `model`,弄清现在这张图为什么不符合用户意见。
+2. 把用户意见翻成**一句可画的画面指令**(机位/景别/人物左右前后位置/朝向/动作/道具/光影,具体到能画;中英文都可),作为 `--note` 传给 CLI。台账已有 `note` 时**合并**成一句再传(CLI 的 `--note` 会替换台账 note,不合并会丢掉上一轮意见);用户明确说撤销之前的意见才用 `--clear-note`。用户意见是改人物体位/动作(「老道儿应该坐着」「这镜她在跪」)时照样只走 `--note`(修改意见句优先级高于自动拼的姿态句),不改 storyboard.json 的 `poses`——那是分镜层字段,回复里提醒用户如需固化到分镜请发总制片。
 3. 运行宿主 CLI(单镜调用默认就是重出):
    `python3 code/storyboard_sketch.py --project <slug> --ep epNN --scene S01 --order 3 --note "…"`
    渠道/模型**不传**:CLI 自动沿用 台账该镜上次用的 → 用户在故事板页顶部选的草图模型(state.json `sketch_model`)→ 全局图像渠道;只有用户在意见里明确点名模型时才传 `--provider/--model`。exit 0 即完成,图片已覆盖原文件、台账 status=done。
