@@ -3078,4 +3078,9 @@ window.I18N_DICT = {
 "手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Drag a region (locked to the project aspect ratio) to crop this plate; confirming overwrites the original",
 "拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Drag the box to move, drag the corners to resize; ratio locked to {ar} (project format). Confirming overwrites the original and keeps a .orig backup",
 "选区 {w}×{h} px / 原图 {W}×{H}": "Selection {w}×{h} px / source {W}×{H}",
+"🖊 草图": "🖊 Sketches",
+"从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)": "Pick a storyboard sketch to add to this group's refs (left: this episode's shots; right: that shot's sketches)",
+"按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Pick a category (🖊 Sketches = storyboard shot sketches: left lists this episode's shots, right shows that shot's sketches), then click an image to add it to this group's refs (double-click to zoom); it is passed to the video model as a reference when this group is regenerated",
+"(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(No storyboard sketches for this episode yet: generate them on the Storyboard page first)",
+"(本集还没有故事板,没有分镜草图可选)": "(This episode has no storyboard yet, so there are no sketches to pick)",
 };

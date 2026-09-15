@@ -2949,4 +2949,9 @@ window.I18N_DICT = {
 "手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Sélectionnez une zone (ratio verrouillé sur le format du projet) pour recadrer cette plaque ; la confirmation écrase l’original",
 "拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Glissez le cadre pour déplacer, les coins pour redimensionner ; ratio fixe {ar} (format du projet). Confirmer écrase l’original et conserve une sauvegarde .orig",
 "选区 {w}×{h} px / 原图 {W}×{H}": "Sélection {w}×{h} px / original {W}×{H}",
+"🖊 草图": "🖊 Croquis",
+"从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)": "Choisir un croquis du storyboard à ajouter aux références de ce groupe (gauche : plans de l'épisode ; droite : croquis de ce plan)",
+"按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Choisissez une catégorie (🖊 Croquis = croquis des plans du storyboard : à gauche les plans de l'épisode, à droite les croquis du plan) puis cliquez sur une image pour l'ajouter aux références du groupe (double-clic pour agrandir) ; elle est transmise au modèle vidéo comme référence lors de la régénération de ce groupe",
+"(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Cet épisode n'a pas encore de croquis de plans : générez-les d'abord sur la page Storyboard)",
+"(本集还没有故事板,没有分镜草图可选)": "(Cet épisode n'a pas encore de storyboard, donc aucun croquis à choisir)",
 };

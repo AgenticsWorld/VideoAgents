@@ -2949,4 +2949,9 @@ window.I18N_DICT = {
 "手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Kéo chọn vùng (tỷ lệ khóa theo khung hình dự án) để cắt tấm nền này; xác nhận sẽ ghi đè ảnh gốc",
 "拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Kéo khung để di chuyển, kéo bốn góc để đổi kích cỡ; tỷ lệ cố định {ar} (khung hình dự án). Xác nhận ghi đè ảnh gốc và giữ bản sao .orig",
 "选区 {w}×{h} px / 原图 {W}×{H}": "Vùng chọn {w}×{h} px / ảnh gốc {W}×{H}",
+"🖊 草图": "🖊 Phác thảo",
+"从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)": "Chọn một phác thảo storyboard để thêm vào ảnh tham chiếu của nhóm này (trái: các cảnh quay của tập, phải: phác thảo của cảnh đó)",
+"按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Chọn danh mục (🖊 Phác thảo = phác thảo cảnh quay storyboard: cột trái là các cảnh quay của tập, bên phải là phác thảo của cảnh đó), rồi bấm một ảnh để thêm vào ảnh tham chiếu của nhóm (nhấp đúp để phóng to); ảnh sẽ được truyền cho mô hình video làm tham chiếu khi tạo lại nhóm này",
+"(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Tập này chưa có phác thảo cảnh quay: hãy vào trang Storyboard bấm「Tạo phác thảo」trước)",
+"(本集还没有故事板,没有分镜草图可选)": "(Tập này chưa có storyboard nên không có phác thảo để chọn)",
 };

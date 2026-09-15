@@ -246,6 +246,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .assets .ast{display:flex;align-items:center;gap:6px;text-align:left;border:none;background:none;border-radius:6px;padding:4px 8px;font-size:12.5px;flex:none}
 #ar-modal .assets .ast .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #ar-modal .assets .ast .n{flex:none;font-size:10.5px;color:var(--dim)}
+#ar-modal .assets .ast .mine{flex:none;font-size:9.5px;line-height:1.4;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 3px}
+#ar-modal .assets .sub{font-size:10.5px;color:var(--dim);padding:4px 6px 0;flex:none}
 #ar-modal .assets .ast:hover{background:var(--panel2)}
 #ar-modal .assets .ast.on{background:var(--panel2);outline:1px solid var(--accent)}
 #ar-modal .imgs{flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:8px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
@@ -341,13 +343,14 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="ar-modal"><div class="box">
   <h3>🖼 添加参考图 — <span id="ar-grp" style="color:var(--purple)"></span><span class="cnt" id="ar-count"></span></h3>
-  <div class="hint">按分类选择资产,点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型</div>
+  <div class="hint">按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型</div>
   <div class="cur" id="ar-cur"></div>
   <div class="cats" id="ar-cats">
     <button data-cat="characters" class="on">👤 人物</button>
     <button data-cat="scenes">🏔 场景</button>
     <button data-cat="props">🗡 道具</button>
     <button data-cat="creatures">🐎 生物</button>
+    <button data-cat="sketches" title="从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)">🖊 草图</button>
     <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
@@ -473,7 +476,7 @@ $('#gn-ok').onclick=async()=>{
   }catch(e){$('#gn-err').textContent='保存失败:'+e.message}
 };
 
-// 🖼 图片:按 人物/场景/道具 分类浏览资产概念图,点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
+// 🖼 图片:按 人物/场景/道具/生物 分类浏览资产概念图,或按本集分镜浏览故事板草图(🖊 草图,2026-09-15),点选一张加入本组 refs(上限 9 张,与手绘线稿共用)
 // 每组参考图上限展示值:本组生效上限(组级覆盖模型的硬限,否则项目「模型限制」),随预览数据 refs_cap 取;
 // 2026-08-30 起不再按它硬拦添加——按实际需要加,超限由组卡黄条提示、用户决定「🎛 模型」换模型或删图;
 // 只以任何模型的极值 AR_HARD=30 兜底(与服务端 REF_CAP_HARD_MAX 同口径)
@@ -585,19 +588,39 @@ async function arLoadCat(cat){
   const proj=$('#project').value.trim()||'demo';
   try{
     if(!AR_CACHE[cat]){
-      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
-      if(!r.ok)throw new Error((await r.json()).detail||r.status);
-      const d=await r.json();
-      // 只列资产目录根下的主图;candidates/ 等候选/过程稿子目录(退役的比例锚图等)不进选图器
-      AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[])
-        .map(a=>({...a,images:(a.images||[]).filter(im=>!/(^|\/)candidates\//i.test(im.name||''))}))
-        .filter(a=>a.images.length);
+      if(cat==='sketches'){
+        // 🖊 草图:本集故事板草案镜(S01-01…按场次序)+ 每镜名下全部草图;结构对齐资产分类(id/name/images)复用同一套列表与网格
+        const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/board/'+encodeURIComponent(EP)+'/sketch-pick?v='+Date.now());
+        if(!r.ok)throw new Error((await r.json()).detail||r.status);
+        const d=await r.json();
+        const g=(LAST_DATA&&LAST_DATA.generation_groups||[]).find(x=>x.group_id===AR_GRP);
+        const gsids=new Set(g&&g.shots||[]);
+        AR_CACHE[cat]=(d.shots||[]).map(sh=>({id:sh.key,name:sh.key,sub:sh.content||'',scene:sh.scene_no,
+          mine:(sh.shot_ids||[]).some(x=>gsids.has(x)),images:sh.images||[]})).filter(a=>a.images.length);
+        AR_CACHE[cat].empty=d.has_storyboard?t('(本集还没有分镜草图:到故事板页「出草图」后再来选)'):t('(本集还没有故事板,没有分镜草图可选)');
+      }else{
+        const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/'+cat);
+        if(!r.ok)throw new Error((await r.json()).detail||r.status);
+        const d=await r.json();
+        // 只列资产目录根下的主图;candidates/ 等候选/过程稿子目录(退役的比例锚图等)不进选图器
+        AR_CACHE[cat]=(d.characters||d.scenes||d.props||d.creatures||[])
+          .map(a=>({...a,images:(a.images||[]).filter(im=>!/(^|\/)candidates\//i.test(im.name||''))}))
+          .filter(a=>a.images.length);
+      }
     }
     const list=AR_CACHE[cat];
-    if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+t('(该分类暂无资产图片)')+'</div>';return}
-    $('#ar-assets').innerHTML=list.map((a,i)=>
-      `<button class="ast" data-i="${i}" title="${esc(a.id)}"><span class="nm">${esc(a.name||a.id)}</span><span class="n">${a.images.length}</span></button>`).join('');
-    arShowAsset(0);
+    if(!list.length){$('#ar-imgs').innerHTML='<div class="ph">'+(list.empty||t('(该分类暂无资产图片)'))+'</div>';return}
+    // 草图分类:按场次加小标题分组,本组的镜(定稿镜号落在本组 shots 里)带「本组」标记并默认选中第一条
+    let lastScene=null;
+    $('#ar-assets').innerHTML=list.map((a,i)=>{
+      let h='';
+      if(cat==='sketches'&&a.scene!==lastScene){lastScene=a.scene;h+=`<div class="sub">${esc(a.scene)}</div>`}
+      return h+`<button class="ast" data-i="${i}" title="${esc(a.sub?a.id+' · '+a.sub:a.id)}"><span class="nm">${esc(a.name||a.id)}</span>${a.mine?`<span class="mine">${t('本组')}</span>`:''}<span class="n">${a.images.length}</span></button>`;
+    }).join('');
+    const first=cat==='sketches'?Math.max(0,list.findIndex(a=>a.mine)):0;
+    arShowAsset(first);
+    const on=document.querySelector('#ar-assets .ast.on');   // 只滚左列自身,不动弹窗/页面
+    if(on&&first>0){const box=$('#ar-assets');box.scrollTop=Math.max(0,on.offsetTop-box.clientHeight/2)}
   }catch(e){$('#ar-imgs').innerHTML='';arMsg(t('加载失败:')+e.message)}
 }
 function arShowAsset(i){

@@ -2949,4 +2949,9 @@ window.I18N_DICT = {
 "手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图": "Selecione uma região (proporção fixa no formato do projeto) para recortar esta placa; confirmar sobrescreve o original",
 "拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份": "Arraste a caixa para mover e os cantos para redimensionar; proporção fixa {ar} (formato do projeto). Confirmar sobrescreve o original e mantém um backup .orig",
 "选区 {w}×{h} px / 原图 {W}×{H}": "Seleção {w}×{h} px / original {W}×{H}",
+"🖊 草图": "🖊 Esboços",
+"从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)": "Escolha um esboço do storyboard para adicionar às referências deste grupo (esquerda: planos do episódio; direita: esboços desse plano)",
+"按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Escolha uma categoria (🖊 Esboços = esboços de planos do storyboard: à esquerda os planos do episódio, à direita os esboços do plano) e clique numa imagem para adicioná-la às referências do grupo (duplo clique para ampliar); é passada ao modelo de vídeo como referência ao regenerar este grupo",
+"(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Este episódio ainda não tem esboços de planos: gere-os primeiro na página Storyboard)",
+"(本集还没有故事板,没有分镜草图可选)": "(Este episódio ainda não tem storyboard, portanto não há esboços para escolher)",
 };

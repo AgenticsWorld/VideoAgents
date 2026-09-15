@@ -265,6 +265,12 @@ async def board_sketches(project: str, ep: str) -> dict[str, Any]:
     return _artifact_urls(await core.api_board_sketches(project, ep), project)
 
 
+@api.get("/projects/{project}/board/{ep}/sketch-pick", tags=["artifacts"])
+async def board_sketch_pick(project: str, ep: str) -> dict[str, Any]:
+    """分镜预览「添加参考图 → 🖊 草图」:本集故事板草案镜列表 + 每镜名下全部草图(选一张加入组 refs)。"""
+    return _artifact_urls(await core.api_board_sketch_pick(project, ep), project)
+
+
 @api.post("/projects/{project}/board/{ep}/signoff", tags=["artifacts"])
 async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """故事板页签字:{confirm_id, answer: 签字|暂缓} → 答复 H3S 签字卡并落 storyboard_signoff.json。"""

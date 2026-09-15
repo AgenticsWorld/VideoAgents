@@ -5751,7 +5751,8 @@ async def api_sketch_delete(project: str, ep: str, grp: str, name: str):
 ASSET_REF_PREFIXES = ("assets/concepts/characters/",
                       "assets/concepts/scenes/",      # 含分镜背景图 plates/(2026-09-09;俯视图/九宫格不再作 ref,用户手动追加不拦)
                       "assets/concepts/props/",
-                      "assets/concepts/creatures/")   # 生物/坐骑 sheet(2026-08-26)
+                      "assets/concepts/creatures/",   # 生物/坐骑 sheet(2026-08-26)
+                      "assets/storyboard/")           # 故事板分镜草图 <ep>/S01-01.png(2026-09-15,添加参考图弹窗「🖊 草图」分类)
 
 
 def _grpref_append(pf: Path, ref: str, src: str) -> int:
@@ -5784,11 +5785,11 @@ def _grpref_ctx(body_or_kw: dict) -> tuple[str, str, str, Path, Path]:
 
 
 async def api_grpref_add(body: dict):
-    """把人物/场景/道具概念图加入组 prompt 的 refs(随重出作为参考图传给视频模型)。"""
+    """把人物/场景/道具/生物概念图或故事板分镜草图加入组 prompt 的 refs(随重出作为参考图传给视频模型)。"""
     project, ep, grp, base, pf = _grpref_ctx(body)
     ref = (body.get("ref") or "").strip().lstrip("/")
     if ".." in ref.split("/") or not ref.startswith(ASSET_REF_PREFIXES):
-        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props|creatures)/")
+        raise ServiceError(400, "ref must be an image under assets/concepts/(characters|scenes|props|creatures)/ or assets/storyboard/")
     target = (base / ref).resolve()
     try:
         target.relative_to(base.resolve())
@@ -5796,7 +5797,8 @@ async def api_grpref_add(body: dict):
         raise ServiceError(400, "invalid ref path") from None
     if not target.is_file() or target.suffix.lower() not in IMG_EXTS:
         raise ServiceError(404, f"Ref image not found: {ref}")
-    return {"ref": ref, "refs": _grpref_append(pf, ref, "从资产库")}
+    src = "从分镜草图" if ref.startswith("assets/storyboard/") else "从资产库"
+    return {"ref": ref, "refs": _grpref_append(pf, ref, src)}
 
 
 MAX_GRPREF_UPLOAD = 30 * 1024 * 1024
@@ -7747,6 +7749,48 @@ async def api_board_sketches(project: str, ep: str):
             "redraw_runs": _board_redraw_runs(base.name, ep),
             "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep),
             "dialogue_tts": _dialogue_tts_status(base, ep)}
+
+
+def _board_sketch_pick(project: str, ep: str) -> dict:
+    """分镜预览「添加参考图 → 🖊 草图」选图器数据(2026-09-15):本集故事板的每条草案镜(S01-01…,按场次顺序)
+    + 该镜名下的全部草图文件。草图目录 assets/storyboard/<ep>/ 里文件名 = 镜键(S01-01.png)或镜键加后缀
+    (S01-01_v2.png 之类,给将来多版本留口),.new.png 出图临时件与 _grids/ 宫格原图不算。
+    每镜另给 shot_ids(定稿镜号,来自 shot_list.storyboard_ref),页面据此标出「本组」的镜并默认选中。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    board = sbb.load_board(base, ep, sbb.asset_catalog(base))
+    idx = sbb.load_index(base, ep)
+    sdir = sbb.sketch_dir(base, ep)
+    files = sorted(f for f in sdir.iterdir()
+                   if f.is_file() and f.suffix.lower() in IMG_EXTS and not f.name.startswith(("_", "."))
+                   and not f.name.endswith(".new.png")) if sdir.is_dir() else []
+    shots = []
+    for sc in board.get("scenes") or []:
+        for sh in sc.get("shots") or []:
+            key = sh.get("key") or ""
+            if not key:
+                continue
+            imgs = []
+            for f in files:
+                stem = f.stem
+                if stem != key and not (stem.startswith(key) and not stem[len(key):len(key) + 1].isdigit()):
+                    continue
+                rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{f.name}"
+                imgs.append({"name": f.name, "rel": rel,
+                             "url": f"/projects/{base.name}/{rel}?v={int(f.stat().st_mtime)}"})
+            imgs.sort(key=lambda x: (x["name"] != f"{key}.png", x["name"]))   # 台账主图在前,其余按名
+            rec = idx["shots"].get(key) if isinstance(idx["shots"].get(key), dict) else {}
+            shots.append({"key": key, "scene_no": sc.get("scene_no") or "", "scene_name": sc.get("scene_name") or sc.get("location") or "",
+                          "order": sh.get("order"), "content": sh.get("content") or "",
+                          "shot_ids": [f.get("shot_id") for f in sh.get("final") or [] if f.get("shot_id")],
+                          "status": rec.get("status") or "", "images": imgs})
+    return {"ep": ep, "has_storyboard": bool(board.get("has_storyboard")), "shots": shots,
+            "sketch_dir": sbb.SKETCH_DIR_REL.format(ep=ep)}
+
+
+async def api_board_sketch_pick(project: str, ep: str):
+    return await asyncio.to_thread(_board_sketch_pick, project, ep)
 
 
 def _board_sketch_worker(project: str, ep: str, scene: str, jobkey: str, targets: list[tuple[str, int]],
