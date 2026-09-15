@@ -2687,6 +2687,7 @@ window.I18N_DICT = {
 "在故事板中查看该场次": "Voir cette scène dans le tableau storyboard",
 "在分镜预览中查看该场次": "Voir cette scène dans l’aperçu du storyboard",
 "在故事板中查看该镜": "Voir ce plan dans le tableau storyboard",
+"在场景预览中查看这张背景图": "Voir cette image de fond dans l'aperçu des scènes",
 "在分镜预览中查看该镜": "Voir ce plan dans l’aperçu du storyboard",
 "在分镜预览中查看该组": "Voir ce groupe dans l’aperçu du storyboard",
 "本页没有找到 {id},可能尚未产出或编号已变": "{id} introuvable sur cette page ; pas encore produit ou numéro modifié",

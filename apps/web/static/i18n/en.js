@@ -2783,6 +2783,7 @@ window.I18N_DICT = {
 "在故事板中查看该场次": "View this scene in Storyboard",
 "在分镜预览中查看该场次": "View this scene in Storyboard Preview",
 "在故事板中查看该镜": "View this shot in Storyboard",
+"在场景预览中查看这张背景图": "View this plate in Scene Preview",
 "在分镜预览中查看该镜": "View this shot in Storyboard Preview",
 "在分镜预览中查看该组": "View this group in Storyboard Preview",
 "本页没有找到 {id},可能尚未产出或编号已变": "{id} not found on this page; it may not be produced yet or its id changed",

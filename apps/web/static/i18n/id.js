@@ -2687,6 +2687,7 @@ window.I18N_DICT = {
 "在故事板中查看该场次": "Lihat adegan ini di Papan Storyboard",
 "在分镜预览中查看该场次": "Lihat adegan ini di Pratinjau Storyboard",
 "在故事板中查看该镜": "Lihat shot ini di Papan Storyboard",
+"在场景预览中查看这张背景图": "Lihat gambar latar ini di Pratinjau Adegan",
 "在分镜预览中查看该镜": "Lihat shot ini di Pratinjau Storyboard",
 "在分镜预览中查看该组": "Lihat grup ini di Pratinjau Storyboard",
 "本页没有找到 {id},可能尚未产出或编号已变": "{id} tidak ditemukan di halaman ini; mungkin belum dibuat atau nomornya berubah",

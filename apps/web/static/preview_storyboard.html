@@ -124,6 +124,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .plates img{width:100px;height:auto;border-radius:4px;cursor:zoom-in;display:block;border:1px solid var(--border);background:#000}
 .shot .plates .pl{font-size:10px;color:var(--dim);text-align:center;width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
 .shot .plates .pl .editbtn{font-size:10px;padding:0 5px}
+.shot .plates .pl .pl-link{color:var(--dim);text-decoration:underline dotted;text-underline-offset:2px;cursor:pointer}
+.shot .plates .pl .pl-link:hover{color:var(--accent)}
 .shot .plateslabel{width:100%;font-size:11px;color:var(--dim)}
 .editbtn{font-size:10.5px;padding:0 6px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
@@ -1164,7 +1166,11 @@ function shotCard(s,grp){
     // ✏️ 修改:带上镜号/起止/文件/库 key 与重出命令,发给修改师处理这张背景图的问题
     const loc=I18N.f('分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)',
       {ep:EP,sid:s.shot_id,role,file:p.file||'',key:p.key||'',proj:$('#project').value.trim()||'demo'});
-    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${esc(role)} · ${esc(how)}</div><div class="pl"><button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
+    // 文字「起点 · 复用库图」链到场景预览页该库图(2026-09-15):?id=<场景>#plate=<库 key>,目标页选中场景并高亮那张图;scene_id 缺时从库文件路径推
+    const sid=p.scene_id||((p.file||'').match(/assets\/concepts\/scenes\/([^/]+)\/plates\//)||[])[1]||'';
+    const label=`${esc(role)} · ${esc(how)}`;
+    const lab=sid&&p.key?`<a class="pl-link" href="/preview/scenes?project=${encodeURIComponent($('#project').value.trim()||'demo')}&id=${encodeURIComponent(sid)}#plate=${encodeURIComponent(p.key)}" title="${esc(t('在场景预览中查看这张背景图'))} · ${esc(sid)} · ${esc(p.key)}">${label}</a>`:label;
+    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${lab}</div><div class="pl"><button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   });
   return `<div class="shot" id="a-s-${aid(s.shot_id)}">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}

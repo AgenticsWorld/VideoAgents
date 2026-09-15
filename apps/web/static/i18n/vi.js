@@ -2687,6 +2687,7 @@ window.I18N_DICT = {
 "在故事板中查看该场次": "Xem cảnh này trong Bảng storyboard",
 "在分镜预览中查看该场次": "Xem cảnh này trong Xem trước phân cảnh",
 "在故事板中查看该镜": "Xem cú máy này trong Bảng storyboard",
+"在场景预览中查看这张背景图": "Xem ảnh nền này trong Xem trước cảnh",
 "在分镜预览中查看该镜": "Xem cú máy này trong Xem trước phân cảnh",
 "在分镜预览中查看该组": "Xem nhóm này trong Xem trước phân cảnh",
 "本页没有找到 {id},可能尚未产出或编号已变": "Không tìm thấy {id} trên trang này; có thể chưa tạo hoặc số hiệu đã đổi",

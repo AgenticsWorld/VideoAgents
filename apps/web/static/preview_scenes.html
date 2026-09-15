@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/static/whitebox.css?v=20260913-camonly3">
 <script type="importmap">{"imports":{"three":"/static/vendor/three/three.module.js","three/addons/":"/static/vendor/three/addons/","@sparkjsdev/spark":"/static/vendor/spark/spark.module.js"}}</script>
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/jump-anchor.js?v=20260915"></script>
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
@@ -674,7 +675,22 @@ async function load(){
     renderDetail(cur);
     const a=$('#items .item.active');
     if(a)a.scrollIntoView({block:'center'});
+    jumpPlate();
   }else $('#detail').innerHTML='<div class="empty">该项目还没有场景设定</div>';
+}
+// 从分镜预览「起点 · 复用库图」跳来(2026-09-15):#plate=<库 key> → 定位「分镜背景图」板块里那张图并高亮(jump-anchor.js 的 .jump-hit);
+// 白模/全景板块是异步插在它前面的,会把它往下顶,所以定位后持续校正 1.5s(同分镜页 jumpTo)
+function jumpPlate(){
+  JumpAnchor.go({
+    find:(k,id)=>k==='plate'?document.querySelector(`.gallery.plates figure[data-key="${CSS.escape(id)}"]`):null,
+    scroll:el=>{
+      const box=$('#detail');
+      const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-12;
+      box.scrollTop=want();
+      const t0=performance.now();
+      const hold=()=>{const y=want();if(Math.abs(box.scrollTop-y)>1)box.scrollTop=y;if(performance.now()-t0<1500)requestAnimationFrame(hold)};
+      requestAnimationFrame(hold);
+    }});
 }
 $('#reload').onclick=load;
 // 顶栏图像模型分两块(2026-09-12):图像模型=概念图/分镜背景图/布局图/四方向图(kind scenes),全景模型=2:1 场景全景(kind panos);

@@ -7192,7 +7192,9 @@ def _preview_storyboard(project: str, ep: str):
             if not (isinstance(p, dict) and p.get("file") and f.is_file()):
                 continue
             rows.append({"role": p.get("role"), "key": p.get("key"), "reuse": p.get("reuse"), "crop": p.get("crop"),
-                         "file": p.get("file"), "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}"})
+                         "file": p.get("file"), "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}",
+                         # 场景 id(2026-09-15):分镜预览「起点 · 复用库图」文字链到场景预览页并高亮该库图(?id=<sid>#plate=<key>)
+                         "scene_id": sp_rec.get("scene_id")})
         shot_plates[str(sp_sid)] = rows
     # 组服装(2026-08-26):shot_list 组 costumes_by_char(权威)→ 缺则由镜 costumes 并集
     # → 再缺回落 continuity 的 costume_states(存量项目);经 costume_sheets.json 台账落到服装 sheet

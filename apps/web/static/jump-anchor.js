@@ -1,5 +1,6 @@
 /* 预览页之间的场次/分镜互跳(2026-09-12)
  * 链接:href="/preview/<page>?project=<p>&ep=<ep>#scene=S01" | "#shot=sh020"(分镜页) | "#shot=S01-03"(故事板镜行) | "#group=grp011"
+ *      | "/preview/scenes?project=<p>&id=<SCN-ID>#plate=<key>"(场景预览页分镜背景图,分镜页「起点 · 复用库图」文字链,2026-09-15)
  * 目标页:三页 load() 都会 replaceState 把 URL 改写成 ?project&ep(hash 随之丢失),所以本脚本在 <head> 里
  * 解析时就把 hash 读走存起来;页面渲染 + 滚动位置恢复之后调 JumpAnchor.go({find, scroll}) 定位并高亮,
  * 只消费一次(之后刷新回到 localStorage 记忆的位置)。找不到目标时页顶提示,停在原位。
@@ -8,7 +9,7 @@
 window.JumpAnchor=(function(){
   var want=null;
   (function take(){
-    var m=/^#(scene|shot|group)=(.+)$/.exec(location.hash||'');
+    var m=/^#(scene|shot|group|plate)=(.+)$/.exec(location.hash||'');   // plate=<库 key>:场景预览页分镜背景图(2026-09-15)
     if(m){try{want={kind:m[1],id:decodeURIComponent(m[2])}}catch(_){want={kind:m[1],id:m[2]}}}
   })();
   var PAGES={script:['/preview/script','📜'],board:['/preview/board','📋'],storyboard:['/preview/storyboard','🎦']};
