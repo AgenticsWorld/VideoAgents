@@ -890,3 +890,22 @@ def test_preview_pages_report_whitebox_reel_subtitles(subtitled_reel_project, mo
     w = core._preview_videos('demo', 'ep02')['whitebox']
     assert w['exists'] and w['mode'] == 'burn' and w['subtitles']['cues'] == 4 and w['stale_reason'] == ''
     assert core._preview_storyboard('demo', 'ep02')['whitebox_reel']['url'] == w['url']
+
+
+def test_preview_storyboard_shot_poses(subtitled_reel_project, monkeypatch):
+    """分镜预览人物动作(2026-09-15):shot_list 每镜 poses → 出名字+中文体位;缺则回落故事板草稿 poses;都没有给 []。"""
+    from services.runtime import core
+    base = subtitled_reel_project
+    monkeypatch.setattr(core, 'PROJECTS_DIR', base.parent)
+    sl = base/'directing/ep02/shot_list.json'; data = json.loads(sl.read_text())
+    data['shots'][1]['poses'] = {'CHAR-0001': {'pose': 'Sit', 'action': '低头'}, 'CHAR-0002': 'stand'}
+    data['shots'][2]['storyboard_ref'] = 'S01/order:1'
+    write(sl, data)
+    write(base/'directing/ep02/storyboard.json', {'scenes': [{'scene_no': 'S01', 'shots_draft': [
+        {'order': 1, 'content': 'x', 'poses': {'CHAR-0002': {'pose': 'kneel', 'action': ''}}}]}]})
+    shots = {s['shot_id']: s for s in core._preview_storyboard('demo', 'ep02')['shots']}
+    assert shots['sh0']['poses'] == []
+    assert shots['sh1']['poses'] == [
+        {'id': 'CHAR-0001', 'name': '老道儿', 'pose': 'sit', 'pose_zh': '坐', 'action': '低头'},
+        {'id': 'CHAR-0002', 'name': '王三合', 'pose': 'stand', 'pose_zh': '站', 'action': ''}]
+    assert shots['sh2']['poses'] == [{'id': 'CHAR-0002', 'name': '王三合', 'pose': 'kneel', 'pose_zh': '跪', 'action': ''}]

@@ -380,8 +380,6 @@ function shotRow(sc,sh,ep){
   (sh.final||[]).forEach(f=>{no+=`<div class="fin" title="${esc(t('镜头表(shot_list.json)定稿镜号 · 时长 · 景别'))}">${esc(f.shot_id||'')}${f.duration_s!=null?' · '+secs(f.duration_s):''}${f.size?' · '+esc(f.size):''}${f.group?` <span class="grp">${esc(f.group)}</span>`:''}</div>`});
   let c=`<div class="ct">${esc(sh.content)}</div>`;
   if(sh.action&&!(sh.content||'').includes(sh.action))c+=`<div class="ln"><span class="k">🎬</span><span class="v">${esc(sh.action)}</span></div>`;
-  const PZ=sh.poses||{},pk=Object.keys(PZ);   // 分镜层结构化姿态/动作(2026-09-14):每角色 体位·动作
-  if(pk.length)c+=`<div class="ln"><span class="k">🧍</span><span class="v">${pk.map(id=>{const r=PZ[id]||{};const pz=POSE_ZH[r.pose]?t(POSE_ZH[r.pose]):(r.pose||'');return esc([cname(id),[pz,r.action].filter(Boolean).join('·')].filter(Boolean).join(' '))}).join('；')}</span></div>`;
   (sh.dialogue||[]).forEach(l=>{
     if(l.ref)c+=`<div class="ln dl"><span class="k">💬</span><span class="v dim">${esc(l.ref)}</span></div>`;
     else c+=`<div class="ln dl"><span class="k">💬</span><span class="v"><span class="spk">${esc(l.name||cname(l.speaker)||'')}${l.name||l.speaker?':':''}</span> <span class="tx">${esc(l.text)}</span>${l.est_s!=null?`<span class="es">${secs(l.est_s)}</span>`:''}</span></div>`;
@@ -390,6 +388,8 @@ function shotRow(sc,sh,ep){
   if(sh.sketch)c+=`<div class="ln"><span class="k">📐</span><span class="v dim">${esc(sh.sketch)}</span></div>`;   // 构图草描用 📐,✏️ 留给「修改/反馈」按钮
   if(sh.extras)c+=`<div class="ln"><span class="k">👥</span><span class="v dim">${esc(sh.extras)}</span></div>`;
   if((sh.cast||[]).length)c+=`<div class="ln"><span class="k">👤</span><span class="v cast">${sh.cast.map(cname).map(esc).join('、')}</span></div>`;
+  const PZ=sh.poses||{},pk=Object.keys(PZ);   // 分镜层结构化姿态/动作(2026-09-14;2026-09-15 移到 👤 人物下方):每角色 体位·动作
+  if(pk.length)c+=`<div class="ln"><span class="k">🧍</span><span class="v">${pk.map(id=>{const r=PZ[id]||{};const pz=POSE_ZH[r.pose]?t(POSE_ZH[r.pose]):(r.pose||'');return esc([cname(id),[pz,r.action].filter(Boolean).join('·')].filter(Boolean).join(' '))}).join('；')}</span></div>`;
   if(sh.beat)c+=`<div class="ln"><span class="k">🎯</span><span class="v dim">${esc(sh.beat)}</span></div>`;
   if(sh.notes)c+=`<div class="ln"><span class="k">📝</span><span class="v dim" title="${esc(sh.notes)}">${esc(clip(sh.notes,160))}</span></div>`;
   const loc=I18N.f('故事板 {ep} 场次 {no} 第 {o} 镜「{txt}」(文件 directing/{ep}/storyboard.json scenes[{no}].shots_draft[order:{o}])',{ep,no:sc.scene_no,o:sh.order,txt:clip(sh.content,24)});

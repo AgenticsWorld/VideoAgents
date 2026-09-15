@@ -7181,6 +7181,14 @@ def _preview_storyboard(project: str, ep: str):
         dr = _shot_draft(s)
         return dr.get("content") or dr.get("subject_action") or ""
 
+    def _shot_poses(s: dict) -> list[dict]:
+        # 人物动作(2026-09-15):shot_list 每镜 poses → 缺则故事板草稿 poses;归一后按 bible 名字表出名字,
+        # 体位给中文(POSE_ZH,前端再走 i18n),枚举外原样透传
+        pz = sbb.normalize_poses(s.get("poses")) or sbb.normalize_poses(_shot_draft(s).get("poses"))
+        return [{"id": cid, "name": cname.get(cid) or cid, "pose": r["pose"],
+                 "pose_zh": sbb.POSE_ZH.get(r["pose"], r["pose"]), "action": r["action"]}
+                for cid, r in pz.items()]
+
     kroot = base / "assets" / "keyframes" / ep
     croot = base / "assets" / "clips" / ep
     clips = _asset_urls(base, croot, VIDEO_EXTS)
@@ -7299,6 +7307,9 @@ def _preview_storyboard(project: str, ep: str):
                             or " / ".join(ln["ref"] or ln["text"] for ln in dlines) or None,
             "dialogue_lines": dlines,
             "content": _shot_content(s),
+            # 人物动作(2026-09-15):镜 poses(shot-planning 照抄故事板)→ 缺则回落故事板草稿 poses;
+            # 预览页 📷 机位上方 🧍 行:每角色 名字 体位·动作
+            "poses": _shot_poses(s),
             # 运镜(2026-08-27):镜级 camera.json,预览页 📷 机位下方 🎥 行
             "camera_move": _shot_camera_move(base, ep, sid),
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),

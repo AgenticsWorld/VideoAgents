@@ -1172,6 +1172,11 @@ function lightHtml(g){
   if(!parts.length&&!warn)return '';
   return `<div class="glight"${tip?` title="${esc(tip)}"`:''}>💡 ${esc(parts.join(' · '))}${warn?`<span class="sub">${esc(warn)}</span>`:''}</div>`;
 }
+// 人物动作(2026-09-15):镜 poses[]{name,pose_zh,action} → 📷 机位上方 🧍 行,与故事板页同格式「名字 体位·动作；…」
+function posesHtml(s){
+  const pz=(s.poses||[]).map(r=>[r.name||r.id,[r.pose_zh?t(r.pose_zh):(r.pose||''),r.action].filter(Boolean).join('·')].filter(Boolean).join(' ')).filter(Boolean);
+  return pz.length?`<div class="cam poses" title="${esc(t('人物动作:每角色 体位·动作'))}">🧍 ${esc(pz.join('；'))}</div>`:'';
+}
 function shotCard(s,grp){
   const loc=I18N.f('分镜 {ep}/{sid}(场次 {sc}{grp};数据 directing/{ep}/shot_list.json 中 shot_id={sid},镜级 prompt assets/prompts/{ep}/{sid}.json)',
     {ep:EP,sid:s.shot_id,sc:s.scene_no||'?',grp:grp?I18N.f(' · 生成组 {g}',{g:grp}):''});
@@ -1207,6 +1212,7 @@ function shotCard(s,grp){
           s.board_key?JumpAnchor.group([JumpAnchor.link('board',$('#project').value.trim()||'demo',EP,'shot',s.board_key)]):''}</div>
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
+      ${posesHtml(s)}
       ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}
       ${camHtml(s)}
     </div>
