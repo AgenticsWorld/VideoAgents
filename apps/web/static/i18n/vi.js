@@ -2012,7 +2012,7 @@ window.I18N_DICT = {
 "文件超过 45MB(方舟参考视频单文件上限),请先压缩": "Tệp vượt 45MB (giới hạn mỗi video tham chiếu của Ark); hãy nén trước",
 "✅ 已上传并加入参考视频 [Video {n}];重出本组 prompt 时须补写该编号的说明句": "✅ Đã tải lên và thêm làm [Video {n}]; bổ sung câu cho số này khi tạo lại prompt của nhóm",
 "{n} 个参考视频": "{n} video tham chiếu",
-"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组": "⚠ {reason}: bấm “🎬 Video” để xóa video tham chiếu, hoặc “🎛 Mô hình” để đổi riêng cho nhóm này sang mô hình có giới hạn cao hơn (vd. Seedance 2.5 ≤10 / ≤30s, cùng kênh); sau đó tạo lại nhóm",
+"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型;处理后重出本组": "⚠ {reason}: bấm “🎬 Video” để xóa video tham chiếu, hoặc “🎛 Mô hình” để đổi riêng cho nhóm này sang mô hình có giới hạn cao hơn; sau đó tạo lại nhóm",
 "查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态": "Xem trạng thái tệp: mô hình cảnh / kế hoạch dàn cảnh / tệp xem trước / video tham chiếu",
 // ---------- 叙事节奏(2026-09-07:新建向导 / 创作定调弹窗) ----------
 "叙事节奏": "Nhịp kể chuyện",

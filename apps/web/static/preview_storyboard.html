@@ -1369,7 +1369,7 @@ function groupCard(g,inner){
     ${(chars||cosChips||creChips)?`<div class="gcast">${chars?`<span class="tag">${chars}</span>`:''}${cosChips}${creChips}</div>`:''}
     ${lightHtml(g)}
     ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组生效上限 {cap}({model}):点「🎛 模型」给本组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或手动删减本组参考图;处理后重出本组',{n:g.refs_total,cap:g.refs_cap,model:(g.group_settings||{}).model_label||''}))}</div>`:''}
-    ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
+    ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型;处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots${WB_ON?'':' nowb'}"><div class="glist">${inner}</div>${WB_ON?`<div class="wb-host" data-grp="${esc(g.group_id)}">${esc(t('正在加载分镜组白模…'))} ${esc(t('如果长时间未完成加载，点击右上角刷新按钮'))}</div>`:''}</div>
