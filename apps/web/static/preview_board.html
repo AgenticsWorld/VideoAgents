@@ -131,6 +131,10 @@ td.c .dl .tx{color:var(--yellow)}
 td.c .dl .es{color:var(--dim);font-size:11.5px;margin-left:6px}
 td.c .dim{color:var(--dim);font-size:12.5px}
 td.c .nar{color:var(--purple)}
+td.c .nar .nid{font-weight:600;margin-right:4px}
+td.c .nar .es{color:var(--dim);font-size:11.5px;margin-left:6px}
+.nsrc{display:inline-block;margin-left:6px;padding:0 5px;border:1px solid var(--border);border-radius:8px;color:var(--dim);font-size:11px;white-space:nowrap;cursor:help}
+.scene .hd .note.narun{color:var(--purple)}
 td.c .cast{font-size:12px;color:var(--dim)}
 td.s{width:342px}
 td.s.portrait{width:213px}
@@ -240,7 +244,7 @@ function render(d){
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   const T=d.totals||{};
-  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
+  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}${narrSummary(d)}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
   const sm=d.storyboard_meta||{};
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
   if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div><div id="dttsbox">${DialogueTTS.html(DTTS,$('#project').value.trim()||'demo',ep)}</div>`;
@@ -252,7 +256,7 @@ function render(d){
     box.innerHTML=h;restoreScroll(box,ep);return;
   }
   (d.scenes||[]).forEach(sc=>{h+=sceneCard(sc,d)});
-  h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白挂点'))}</span><span>🎬 ${esc(t('动作'))}</span><span>🧍 ${esc(t('姿态'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
+  h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白(正文·估时;灰标 = 宿主推定的挂点)'))}</span><span>🎬 ${esc(t('动作'))}</span><span>🧍 ${esc(t('姿态'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);renderNav(d);
   // 从剧本/分镜预览跳来:#scene=S01 → 场次卡,#shot=S01-03 → 镜行
   JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,scroll:el=>PreviewStickbar.jumpTo(el)});
@@ -347,6 +351,13 @@ function batchBtnHtml(){
 }
 function renderBatchBtn(){const el=document.getElementById('skbatch');if(el&&LAST&&LAST.has_storyboard)el.innerHTML=batchBtnHtml()}
 
+function narrSummary(d){
+  const N=d.narration||{};if(!d.has_storyboard||!N.items)return '';
+  const bs=N.by_source||{},guess=(bs.anchor_text||0)+(bs.scene||0)+(N.unplaced||[]).length;
+  let s=' · 🎙 '+I18N.f('{n} 条旁白 {s}s',{n:N.items,s:num(N.total_est_s,1)});
+  if(guess)s+=`<span class="nsrc" title="${esc(t('分镜草案没写 narration_ref、镜头表也还没定挂点,宿主按旁白稿锚点引文推定到镜;签字前请核对'))}">${esc(I18N.f('{n} 条推定挂点',{n:guess}))}</span>`;
+  return s;
+}
 function sceneCard(sc,d){
   const ep=d.ep;
   const nDone=sc.shots.filter(s=>(SK[s.key]||{}).status==='done').length;
@@ -367,6 +378,7 @@ function sceneCard(sc,d){
   (sc.props||[]).forEach(c=>{as+=aChip('props',c,'🗡')});
   if(as)hd+=`<div class="assets">${as}</div>`;
   if(sc.note||sc.color)hd+=`<div class="note" data-no-i18n>${sc.note?`<b>🎯</b> ${esc(sc.note)}`:''}${sc.color?`${sc.note?'\n':''}<b>🎨</b> ${esc(sc.color)}`:''}</div>`;
+  (sc.narration_unplaced||[]).forEach(n=>{hd+=`<div class="note narun"><b>🎙</b> <b>${esc(n.id)}</b> <span data-no-i18n>${esc(n.text)}</span>${n.est_s!=null?` <span class="dim">${secs(n.est_s)}</span>`:''}<span class="nsrc" title="${esc(I18N.f('旁白稿锚点:{a}',{a:n.anchor||'—'}))}">${esc(t('锚在本场,未定到镜'))}</span></div>`});
   let h=`<div class="scene" data-stick-scene="${esc(sc.scene_no)}" data-stick-label="${esc(sc.location||sc.scene_name||'')}" id="sc-${esc(sc.scene_no)}"><div class="hd">${hd}</div><table class="sb"><thead><tr><th>${esc(t('编号'))}</th><th>${esc(t('内容'))}</th><th class="${PORTRAIT?'portrait':''}">${esc(t('草图'))}</th><th></th></tr></thead><tbody>`;
   sc.shots.forEach(sh=>{h+=shotRow(sc,sh,ep)});
   return h+`</tbody></table></div>`;
@@ -384,7 +396,12 @@ function shotRow(sc,sh,ep){
     if(l.ref)c+=`<div class="ln dl"><span class="k">💬</span><span class="v dim">${esc(l.ref)}</span></div>`;
     else c+=`<div class="ln dl"><span class="k">💬</span><span class="v"><span class="spk">${esc(l.name||cname(l.speaker)||'')}${l.name||l.speaker?':':''}</span> <span class="tx">${esc(l.text)}</span>${l.est_s!=null?`<span class="es">${secs(l.est_s)}</span>`:''}</span></div>`;
   });
-  if((sh.narration_ref||[]).length)c+=`<div class="ln"><span class="k">🎙</span><span class="v nar">${esc(sh.narration_ref.join(' · '))}</span></div>`;
+  // 旁白(2026-09-15):宿主按 草案镜 narration_ref → shot_list narration_anchors → 锚点引文推定 的顺序挂到镜(modules/storyboard_board.attach_narration);
+  // 分镜师明确挂的不打标,推定的打灰标(悬停看锚点原文),让用户在 H3S 签字前能核对旁白落在哪一镜
+  (sh.narration||[]).forEach(n=>{
+    const tag=n.source==='storyboard'?'':n.source==='shot_list'?t('镜头表挂点'):t('按锚点推定');
+    c+=`<div class="ln nr"><span class="k">🎙</span><span class="v nar"><span class="nid">${esc(n.id)}</span><span class="tx">${esc(n.text||t('(旁白稿里没有这条)'))}</span>${n.est_s!=null?`<span class="es">${secs(n.est_s)}</span>`:''}${tag?`<span class="nsrc" title="${esc(I18N.f('旁白稿锚点:{a}',{a:n.anchor||'—'}))}">${esc(tag)}</span>`:''}</span></div>`;
+  });
   if(sh.sketch)c+=`<div class="ln"><span class="k">📐</span><span class="v dim">${esc(sh.sketch)}</span></div>`;   // 构图草描用 📐,✏️ 留给「修改/反馈」按钮
   if(sh.extras)c+=`<div class="ln"><span class="k">👥</span><span class="v dim">${esc(sh.extras)}</span></div>`;
   if((sh.cast||[]).length)c+=`<div class="ln"><span class="k">👤</span><span class="v cast">${sh.cast.map(cname).map(esc).join('、')}</span></div>`;

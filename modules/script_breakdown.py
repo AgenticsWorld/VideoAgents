@@ -470,11 +470,16 @@ def parse_narration_md(text: str) -> list[dict]:
         m = _NARR_RE.match(s)
         if not m:
             continue
-        meta = {}
+        meta, last = {}, None
         for part in m.group("meta").split("|"):
-            if ":" in part or "：" in part:
-                k, v = re.split(r"[:：]", part, 1)
-                meta[k.strip().lower()] = v.strip()
+            km = re.match(r"^\s*([A-Za-z_][\w]*)\s*[:：]\s*(.*)$", part)
+            if km:
+                last = km.group(1).lower()
+                meta[last] = km.group(2).strip()
+            elif last and part.strip():
+                # 锚点四段「S01 | SCN-0018 | ev1000 | 场首「…」一镜」用 | 分隔却只有首段带键名:
+                # 后续无键段拼回上一个键(2026-09-15 前只留首段,故事板挂镜要靠第四段引文)
+                meta[last] += " | " + part.strip()
         cur = {"id": m.group("id"), "anchor": meta.get("anchor"), "est_s": _num(meta.get("est_duration_s")),
                "tone": meta.get("tone"), "source": meta.get("source"), "text": ""}
     if cur is not None and cur["text"]:

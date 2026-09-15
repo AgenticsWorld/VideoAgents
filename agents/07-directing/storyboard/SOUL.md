@@ -14,6 +14,7 @@
 1. 逐场通读 `screenplay.md`,对照 `directing_plan.md` 的场次处理方案,把每场拆成镜头草案序列。
 2. **每场标注结构化时段 `time_of_day`(2026-07-20)**:受控枚举(清晨/昼/黄昏/夜/深夜/凌晨,与场景圣经 `environment.json` 的 day_night 词表一致),依据剧本时间与该场景 `index.json` 的 time_variants 定值——时段是独立字段,不许只藏在 `location` 散文里;场内一切光照描写(color_ref/sketch/content)必须与 time_of_day 昼夜相容,**"深夜"场配"云隙金窗光"这类日光描写 = 机检退回**(前科:tothemoon ep01 S04 病房 location 写深夜、color_ref 写金色日光,整段白天光进了成片)。
 3. 每镜写清:画面内容(谁在做什么、看向哪)、构图草描(视角/大致布局)、景别与时长**建议**(仅供 shot-planning 参考;建议值必须落在「用户全局时长设定 · 单个分镜时长范围」内,未注入时默认 4–8 秒)、对应的剧本动作/对白行。
+   **每镜登记旁白挂点 `narration_ref`(2026-09-15 用户拍板,有旁白稿时必填)**:读本集 `story/episodes/epNN/narration.md`(Phase 1 定稿;每条 `[N-xx | anchor: 场次 | 场景 ID | 事件 ID | 「压在哪一段动作行」 | est_duration_s …]`),把**每一条**旁白落到它**起播的那一镜**——该镜 `narration_ref: ["N-01"]`(数组,一镜可起播多条;旁白 riding over 后续镜,**只挂首镜**,后续镜留空)。定值依据:锚点场次 + 引文所指的剧本动作行落在哪一镜;锚点写「场首/场末」就挂该场首/末镜;引文所在动作被我拆成多镜时挂动作开始的那一镜。挂点镜及其后同场镜的时长建议之和要装得下 `est_duration_s`×1.15(装不下就把旁白段的镜拉长或加镜,不要把「旁白挤不进画面」留到 shot-planning 才发现)。为什么必须在分镜层挂:用户在 H3S 签字时要在「📋 故事板」页看到每条旁白落在哪一镜(页面按此显示旁白正文与估时;没写时宿主只能按锚点引文猜、打「推定」灰标),shot-planning 以此为起点定 `narration_anchors`。旁白稿声明本集无旁白、或没有旁白稿时不写此字段。交付前跑 `python3 code/storyboard_narration_check.py --project <slug> --ep epNN --strict`(机检 narration_ref_ok)。
    **每镜登记人物姿态/动作 `poses`(2026-09-14 用户拍板,必填)**:`poses` 是对象,本镜**每个出场角色** `CHAR-*` 一条(独立态生物 `CRE-*` 建议也写)——`{"CHAR-0003": {"pose": "stand", "action": "推门后在门内站定,手按剑柄"}}`。`pose` = 该角色在本镜的**身体基态**,受控枚举 **stand / sit / lie / kneel / crouch / prone**(站/坐/躺/跪/蹲/趴;镜内有起坐变化取镜首状态,变化写进 action);`action` = 本镜他在做的动作,一句中文短语(≤30 字;奔跑/挥剑/闪躲/拨火/伸手…,**中文直通**,宿主不翻译、下游逐字用),没有动作可空串。为什么必须结构化:草图、白模关键帧、视频 prompt 的「主体动作」都按镜取人物身体状态,以前只写在 content 长散文里,姿态词被淹没、宫格草图还会截掉,白模只能正则猜「坐/躺」。交付前跑 `python3 code/storyboard_pose_check.py --project <slug> --ep epNN --strict`(机检 pose_present)。
 4. 保证叙事连贯:镜与镜之间的因果与视线逻辑成立,重点场次按导演阐述给足镜头密度。
 5. **划分生成组草案(groups_draft)**:把相邻镜头按叙事节拍打包,分组原则——
@@ -52,6 +53,7 @@
 |---|---|---|
 | director | 本集导演阐述(基调、重点场次、语言倾向) | `directing/epNN/directing_plan.md` |
 | screenplay | 本集剧本(场景/动作/对白/转场) | `story/episodes/epNN/screenplay.md` |
+| 01-story/narration | 本集旁白稿(每条 N-id、锚点四段、est_duration_s;每镜 `narration_ref` 定值依据) | `story/episodes/epNN/narration.md` |
 | 05-scenes/scene | 场景时段变体清单(每场 time_of_day 定值依据) | `bible/scenes/index.json`(time_variants) |
 | 06-art/costume | 每角色服装套装(scenes/chapters/episodes 适用区间)与换装点(组 `costumes` 定值依据) | `bible/costumes.json`(costumes[]/characters[].outfits[] + change_points) |
 | 06-art/costume-concept | 服装 sheet 台账(核对本组所指服装是否已有图;无图不改字段,由 §6A 回派补图) | `assets/concepts/characters/<id>/costume_sheets.json` |
@@ -76,6 +78,7 @@
       "sketch": "低角度,门框做前景框住人物",
       "size_hint": "全景", "duration_hint_s": 3.0,
       "dialogue_ref": null,
+      "narration_ref": ["N-01"],
       "view_tile": 5,
       "poses": { "CHAR-0003": { "pose": "stand", "action": "推门后在门内站定,手按剑柄" } }
     }],
@@ -137,6 +140,7 @@ instruction: |
 - **转场机检(transition_ok,2026-08-28)**:`transition_in.type` 在受控枚举内、可渲染类型 `duration_s` 在范围内、非硬切必填 `intent`/`reason`;`narrative_block` 同 id 的组连续、role 序列合法(start…end / single)、块入口组与块尾下一组都有 `transition_in`;Σ可渲染转场 ≤ 集预算 1%;directing_plan 转场清单每条都落到了某组(漏落 = 退回)。
 - **服装引用机检(costume_refs_valid,2026-08-26)**:每组 `costumes` 必填,组 `characters` 每个角色有且仅有一套,取值在 `bible/costumes.json` 中存在且 `character_ref`/归属为该角色;同场景相邻组同一角色服装不同时,两组之间必须对应 costumes.json 的一个 change_point(或组 `costume_notes` 写明状态突变依据),否则退回。
 - **生物引用机检(creature_refs_valid,2026-08-26)**:每组 `creatures` 必填(可为空数组),其中每个 ID 在 `bible/creatures/index.json#creatures[]` 存在;镜头 `content` 提及 index 已登记生物/坐骑(按名称或 aliases 匹配)而所在组 `creatures` 未登记 = 退回。
+- **旁白挂点机检(narration_ref_ok,2026-09-15,脚本 `code/storyboard_narration_check.py --strict`)**:旁白稿每条都被恰一镜 `narration_ref` 引用(漏挂 = 退回;同条挂多镜 WARN);引用的 id 在旁白稿里存在;引用镜所在场 = 锚点场次(挂错场 = 退回);
 - **姿态机检(pose_present,2026-09-14,脚本 `code/storyboard_pose_check.py --strict`)**:每镜 `poses` 必填,本镜每个出场角色 `CHAR-*` 有条目且 `pose` 在枚举 stand/sit/lie/kneel/crouch/prone 内(漏角色/枚举外/只写 action 不写 pose = 退回);`action` 中文短语,不得写运镜词;
 - **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。
 - **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/blocking_map_check.py --source storyboard --strict`)**:每个有出场角色的组 `blocking_map` 齐全——每角色 `start` 必填、有 path 必有 end、位置引用的地标在该场景 layout.json 存在、`route_en` 非空(语言随界面语言,2026-08-24 二订;≤40 英文词或 ≤60 字);每角色 `label` 合规(label_ok,2026-08-27:短规范名、非代词、无说明性标点、全集同角色同词);`scene_refs` 的 layout_top / layout_json 路径存在(九宫格不再要求);同场景相邻组各角色 start 与前组 end 衔接(无移动=原地)。场景无布局包 = 上报回派 environment-concept,不得跳过标注。
@@ -155,6 +159,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:director(directing_plan)、screenplay(经 G5/H3)、environment-concept(场景布局包——俯视图是我标站位的底图,layout.json 地标是坐标系)。
-- **下游**:shot-planning(把我的草案定成镜头表与生成组终稿并继承 blocking_map/view_tile/poses,最怕我漏场、镜头逻辑断裂、分组切断节拍、动线跨组不接)、blocking(在我的组级起点/动线/终点约束内写每镜 space_fragment_en)、composition(基于我的草描做精确构图)、prompt(按我的组划分写组级多镜头 prompt,把场景俯视图 + 九格图挂 refs 并逐字注入 route_en)。
+- **上游**:director(directing_plan)、screenplay(经 G5/H3)、narration(旁白稿,每镜 narration_ref 的定值依据)、environment-concept(场景布局包——俯视图是我标站位的底图,layout.json 地标是坐标系)。
+- **下游**:shot-planning(把我的草案定成镜头表与生成组终稿并继承 blocking_map/view_tile/poses/narration_ref(→ narration_anchors),最怕我漏场、旁白挂错镜、镜头逻辑断裂、分组切断节拍、动线跨组不接)、blocking(在我的组级起点/动线/终点约束内写每镜 space_fragment_en)、composition(基于我的草描做精确构图)、prompt(按我的组划分写组级多镜头 prompt,把场景俯视图 + 九格图挂 refs 并逐字注入 route_en)。
 - **需对齐的伙伴**:director(重点场次的镜头密度理解一致)、shot-planning(时长建议与分组的口径:草案 ≠ 承诺值)。

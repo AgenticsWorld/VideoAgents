@@ -237,7 +237,8 @@ def main() -> int:
                 off += float(f["duration_s"])
             subs = [("dialogue", f"{l.get('name') or l.get('speaker') or ''}:{l['text']}" if l.get('name') or l.get('speaker') else l['text'])
                     for l in sh.get("dialogue") or [] if l.get("text")]
-            nsubs = [("narration", f"旁白 {n}") for n in (sh.get("narration_ref") or [])]
+            # 旁白字幕烧正文(2026-09-15;此前只烧「旁白 N-01」):挂镜由 storyboard_board.attach_narration 统一定
+            nsubs = [("narration", (n.get("text") or f"旁白 {n['id']}")) for n in (sh.get("narration") or [])]
             plan.append({"key": sh["key"], "scene_no": sc["scene_no"], "order": sh["order"], "start_s": round(t, 2),
                          "duration_s": round(dur, 2), "has_sketch": bool(sk), "sketch": sk, "src": src,
                          "label": f"{sc['scene_no']} #{sh['order']}  {sh.get('size_hint') or ''}  {dur:g}s"

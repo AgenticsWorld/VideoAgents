@@ -6,7 +6,7 @@
 
 1. **导演计划** `directing/<ep>/directing_plan.md`:从分镜预览页移到这里,Markdown 渲染(`/static/mini-md.js`,无第三方库),默认折叠;标题栏「✏️ 修改」发总制片。
 2. **每场一张卡**:场次头 = 场号 / 地点 / 场景 id / 时段 / ⏱ 分配·草案·定稿秒数 / 镜数·组数 / 🖊 已出草图数 + 资产条(场景缩略、出场人物 sheet 缩略、生物、道具)+ 场次备注(`unit_note` 等)与色彩段;右侧「✏️ 修改」(总制片)。批量出草图的按钮在**单集标题行最后**(「🖊 出草图(N)」,见下)。
-3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白挂点、📐 构图草描、👥 群演、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| ✏️ 反馈(总制片)。
+3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白(N-id + 正文 + 估时;挂镜见下节「旁白显示」)、📐 构图草描、👥 群演、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| ✏️ 反馈(总制片)。
 
 数据接口 `GET /api/v1/projects/<p>/previews/board?ep=epNN`(`services/runtime/core.py` `_preview_board`);归一化逻辑在 `modules/storyboard_board.py` `load_board`——storyboard.json 的字段名历经多版(`shots_draft/shots`、`content/subject_action`、`cast/characters`、`unit_alloc_s/alloc_s/…`),统一成一套供页面与 CLI 共用,并按 `shot_list.json` 的 `storyboard_ref`(`S01/order:1`,兼容 `/split:a`、`/shots_draft/`)把定稿镜对回草案镜。
 
@@ -27,6 +27,17 @@
 
 - 老项目没有 `storyboard.json` 时只显示导演计划与提示;场次缺 `scene_no` 按 `screenplay_ref`/序号兜底。
 - 分镜预览页不再下发/显示导演计划(`api_preview_storyboard` 去掉 `directing_plan` 字段)。
+
+## 旁白显示(2026-09-15)
+
+旁白稿 `story/episodes/<ep>/narration.md` 在 Phase 1 定稿,每条只锚到「场次 | 场景 ID | 事件 ID | 剧本动作行引文」,不到镜。页面每镜 🎙 行显示落在该镜的旁白 **N-id + 正文 + 估时**,挂镜由 `modules/storyboard_board.attach_narration` 统一定,优先级:
+
+1. **草案镜 `narration_ref`**(分镜师明确标的起播镜,2026-09-15 起有旁白稿时必填,机检 `code/storyboard_narration_check.py --strict`)——不打标;
+2. **shot_list `narration_anchors`**(H3S 之后 shot-planning 定稿)——`anchor_shots` 首镜反查草案镜,打「镜头表挂点」灰标;
+3. **锚点引文推定**(存量项目 / 分镜师漏写):锚点「…」引的剧本动作行(CHAR-id 换成人名)与各镜 content/action/sketch 做字符二元组覆盖率,≥0.25 取最高的镜;不够时「场首/场末」关键词兜底——打「按锚点推定」灰标,悬停显示锚点原文;
+4. 锚到本场但推不到镜的,列在场头「锚在本场,未定到镜」;连场次都对不上的进 `board.narration.unplaced`(标题行「N 条推定挂点」计数含之)。
+
+标题行统计「🎙 N 条旁白 Σs」+ 推定条数;动态样片的旁白字幕(紫)同样烧正文。锚点解析在 `modules/script_breakdown.parse_narration_md`(2026-09-15 起保留全部四段,此前只留场次号)。
 
 ## 故事板签字(H3S,2026-09-11)
 

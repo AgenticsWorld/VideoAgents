@@ -457,11 +457,14 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
             "group_count": len(groups),
             "shots": shots,
         })
+    narration = load_narration(base, ep)
+    narr_summary = attach_narration(scenes, narration, sl, names)
     return {
         "has_storyboard": bool(raw_scenes),
         "title": (sb.get("_meta") or {}).get("episode_title") or sb.get("title") or "",
         "storyboard_meta": {k: (sb.get("_meta") or {}).get(k) for k in ("task_id", "written_at", "status", "agent")},
         "scenes": scenes,
+        "narration": narr_summary,
         "totals": {"scenes": len(scenes), "shots": sum(len(s["shots"]) for s in scenes),
                    "groups": sum(s["group_count"] for s in scenes),
                    "draft_sum_s": round(sum(float(s["draft_sum_s"] or 0) for s in scenes), 1) if scenes else None,
@@ -479,6 +482,173 @@ def _scene_cast(sc: dict, cast_union: list, shots: list) -> list:
             if isinstance(sp, str) and sp.startswith("CHAR-") and sp not in out:
                 out.append(sp)
     return out
+
+
+# ---------------- 旁白挂镜(2026-09-15) ----------------
+# 旁白稿 story/episodes/<ep>/narration.md 在 Phase 1 就定稿,每条只锚到「场次 + 剧本动作行」;精确到镜的挂点有两个来源:
+#   ① 分镜师在草案镜写 narration_ref: ["N-01"](2026-09-15 起为必填,机检 narration_ref_ok);
+#   ② shot-planning 定稿的 shot_list narration_anchors(H3S 之后才有)。
+# 两者都没有(存量项目 / H3S 前)时按锚点文字推定:锚点里「…」引的剧本动作行与各镜 content/action 做字符二元组相似度,
+# 「场首/场末」关键词兜底;推不出的挂在场块顶部「未定位」。页面与动态样片都用这里的结果,不各自再猜。
+
+NARRATION_SOURCES = ("storyboard", "shot_list", "anchor_text", "scene", "unplaced")
+_NARR_SIM_MIN = 0.25         # 锚点引文二元组被镜文字覆盖的最低比例(liaozhai3 ep01 实测命中 0.4–0.9、误配 <0.15)
+_QUOTE_RE = re.compile(r"[「『“\"]([^」』”\"]{2,})[」』”\"]")
+
+
+def load_narration(base: Path, ep: str) -> list[dict]:
+    """本集旁白稿 → [{id, text, est_s, anchor, scene, tone}](复用 script_breakdown 的解析器;md 优先、json 兜底)。"""
+    from modules import script_breakdown as sbd
+    epdir = base / "story" / "episodes" / ep
+    md = sbd.read_text(epdir / "narration.md")
+    if md:
+        items = sbd.parse_narration_md(md)
+    else:
+        items = sbd.parse_narration_json(sbd.read_json(epdir / "narration.json") or {})
+    return [it for it in items if it.get("id") and it.get("text")]
+
+
+def _bigrams(s: str) -> set:
+    s = re.sub(r"[\s,，。.;；:：、!！?？「」『』“”\"'()（）\[\]…—-]", "", s or "")
+    return {s[i:i + 2] for i in range(len(s) - 1)} if len(s) > 1 else set()
+
+
+def _anchor_quote(anchor: str, names: dict) -> str:
+    """锚点第四段里「…」引的剧本动作行(多段引文拼一起);CHAR-id 换成人名,便于与镜文字比。"""
+    qs = _QUOTE_RE.findall(anchor or "")
+    q = "".join(qs) if qs else ""
+    for cid, nm in (names or {}).items():
+        q = q.replace(cid, nm)
+    return q
+
+
+def _guess_shot(anchor: str, shots: list[dict], names: dict) -> tuple[dict | None, float]:
+    """按锚点文字在场内定镜:引文相似度优先,其次 场首/场末 关键词;返回 (镜, 相似度)。"""
+    if not shots:
+        return None, 0.0
+    quote = _anchor_quote(anchor, names)
+    best, best_sc = None, 0.0
+    if quote:
+        qb = _bigrams(quote)
+        if qb:
+            for sh in shots:
+                body = " ".join([sh.get("content") or "", sh.get("action") or "", sh.get("sketch") or ""])
+                sc = len(qb & _bigrams(body)) / len(qb)
+                if sc > best_sc:
+                    best, best_sc = sh, sc
+    if best is not None and best_sc >= _NARR_SIM_MIN:
+        return best, round(best_sc, 2)
+    a = anchor or ""
+    if re.search(r"场首|开场|场头|片首|集首|开头", a):
+        return shots[0], 0.0
+    if re.search(r"场末|场尾|收尾|结尾|片尾|集末|末尾", a):
+        return shots[-1], 0.0
+    return None, round(best_sc, 2)
+
+
+def attach_narration(scenes: list[dict], narration: list[dict], sl: dict, names: dict | None = None) -> dict:
+    """把旁白条目挂到归一化场/镜上(就地改):每镜 narration[] = [{id, text, est_s, anchor, source, sim}],
+    每场 narration_unplaced[](锚到本场但定不到镜),返回集级汇总 {items, placed, by_source, unplaced[]}。
+    优先级:草案镜 narration_ref → shot_list narration_anchors → 锚点文字推定 → 场级未定位 → 集级未定位。"""
+    names = names or {}
+    by_id = {n["id"]: n for n in narration}
+    by_scene_no = {sc["scene_no"]: sc for sc in scenes}
+    by_scene_id = {sc["scene_id"]: sc for sc in scenes if sc.get("scene_id")}
+    for sc in scenes:
+        sc["narration_unplaced"] = []
+        for sh in sc["shots"]:
+            sh["narration"] = []
+    placed: dict[str, list] = {}
+
+    def _put(sh: dict, n: dict, source: str, sim: float = 0.0):
+        sh["narration"].append({"id": n["id"], "text": n.get("text") or "", "est_s": n.get("est_s"),
+                                "anchor": n.get("anchor") or "", "source": source, "sim": sim})
+        placed.setdefault(n["id"], []).append(source)
+
+    # ① 草案镜 narration_ref(分镜师明确挂点);引了旁白稿里没有的 id 也照显示(text 空),机检会报
+    for sc in scenes:
+        for sh in sc["shots"]:
+            for nid in sh.get("narration_ref") or []:
+                _put(sh, by_id.get(nid) or {"id": nid, "text": "", "est_s": None, "anchor": ""}, "storyboard")
+    # ② shot_list narration_anchors:首个挂点镜(定稿 shNNN)反查草案镜
+    draft_of_final = {f["shot_id"]: sh for sc in scenes for sh in sc["shots"] for f in sh.get("final") or [] if f.get("shot_id")}
+    for a in (sl or {}).get("narration_anchors") or []:
+        if not isinstance(a, dict):
+            continue
+        nid = a.get("narration_id")
+        n = by_id.get(nid)
+        if not n or nid in placed:
+            continue
+        for fid in _as_list(a.get("anchor_shots")):
+            sh = draft_of_final.get(fid)
+            if sh is not None:
+                _put(sh, n, "shot_list")
+                break
+    # ③ 锚点文字推定 / ④ 场级未定位 / ⑤ 集级未定位
+    unplaced_ep: list[dict] = []
+    for n in narration:
+        if n["id"] in placed:
+            continue
+        sc = by_scene_no.get(str(n.get("scene") or "").upper())
+        if sc is None and n.get("anchor"):
+            m = re.search(r"SCN-\d+", n["anchor"])
+            if m:
+                sc = by_scene_id.get(m.group(0))
+        rec = {"id": n["id"], "text": n.get("text") or "", "est_s": n.get("est_s"), "anchor": n.get("anchor") or ""}
+        if sc is None:
+            unplaced_ep.append({**rec, "source": "unplaced"})
+            continue
+        sh, sim = _guess_shot(n.get("anchor") or "", sc["shots"], names)
+        if sh is not None:
+            _put(sh, n, "anchor_text", sim)
+        else:
+            sc["narration_unplaced"].append({**rec, "source": "scene", "sim": sim})
+            placed.setdefault(n["id"], []).append("scene")
+    by_source: dict[str, int] = {}
+    for srcs in placed.values():
+        by_source[srcs[0]] = by_source.get(srcs[0], 0) + 1
+    return {"items": len(narration), "placed": sum(1 for n in narration if n["id"] in placed),
+            "by_source": by_source, "unplaced": unplaced_ep,
+            "total_est_s": round(sum(float(n.get("est_s") or 0) for n in narration), 1)}
+
+
+def check_narration(board: dict, narration: list[dict], strict: bool = False) -> tuple[list[str], list[str]]:
+    """旁白挂点机检 narration_ref_ok(2026-09-15):
+    - 草案镜 narration_ref 引的 id 必须在旁白稿里(FAIL);同一条挂到多镜 WARN(旁白只在一处起播);
+    - 旁白稿每条必须被某镜 narration_ref 引用(缺省 WARN——存量项目靠锚点推定;--strict FAIL,新项目交付前);
+    - 引用它的镜所在场与锚点场次不一致(FAIL:挂错场);
+    - 该镜(或所在场)时长建议明显装不下 est_duration_s(WARN,定稿窗口由 shot-planning 复核)。"""
+    errs, warns = [], []
+    by_id = {n["id"]: n for n in narration}
+    ref_at: dict[str, list[tuple[dict, dict]]] = {}
+    for sc in board["scenes"]:
+        for sh in sc["shots"]:
+            for nid in sh.get("narration_ref") or []:
+                ref_at.setdefault(nid, []).append((sc, sh))
+                if nid not in by_id:
+                    errs.append(f"{sh['key']}: narration_ref {nid} 不在旁白稿里")
+    for nid, locs in ref_at.items():
+        if len(locs) > 1:
+            warns.append(f"{nid}: 挂到了 {len(locs)} 镜({', '.join(sh['key'] for _, sh in locs)}),旁白只在首镜起播、其余镜应留空")
+        n = by_id.get(nid)
+        if not n:
+            continue
+        want = str(n.get("scene") or "").upper()
+        for sc, sh in locs:
+            if want and sc["scene_no"].upper() != want:
+                errs.append(f"{sh['key']}: {nid} 锚在 {want},却挂在 {sc['scene_no']}")
+        try:
+            est = float(n.get("est_s") or 0)
+            win = sum(float(x["duration_hint_s"] or 0) for _, x in locs)
+            if est and win and win * 1.15 < est * 0.5:
+                warns.append(f"{locs[0][1]['key']}: {nid} 估时 {est:g}s,所挂镜时长建议只有 {win:g}s(定稿窗口由 shot-planning 复核)")
+        except Exception:
+            pass
+    for n in narration:
+        if n["id"] not in ref_at:
+            msg = f"{n['id']}: 旁白稿条目没有任何镜引用(anchor: {n.get('anchor') or '—'})"
+            (errs if strict else warns).append(msg)
+    return errs, warns
 
 
 def find_shot(board: dict, scene_no: str, order=None) -> tuple[dict | None, list[dict]]:
