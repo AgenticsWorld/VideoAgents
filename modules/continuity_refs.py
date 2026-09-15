@@ -60,6 +60,14 @@ def tail_window(source, meta):
 
 def video_caps(model, provider):
     m = str(model).lower()
+    if provider in ('comfyui', 'runninghub'):
+        # 按工作流运行、无模型 id:只有 MiniMax-H3 Ref2VA 工作流(MiniMaxH3ReferenceToVideo 节点,
+        # 本地 / Comfy Cloud / RunningHub .cn/.ai 同一节点)接参考视频,≤3 段、≤15s
+        from modules.genmedia import comfy_h3_ref_video_caps, get_config
+        try:
+            return comfy_h3_ref_video_caps(get_config('video'))
+        except (RuntimeError, KeyError, ValueError, OSError):
+            return None
     if provider == 'openrouter':   # OpenRouter 仅 Seedance 2.x 与 MiniMax H3 接了参考视频(input_references)
         if m.startswith('minimax/hailuo-3') and not m.startswith('minimax/hailuo-3-max'):
             return 3, 15.
@@ -315,7 +323,7 @@ def validate_request(output, prompt, refs, videos, cfg, first='', last=''):
             raise ValueError('续接素材未准备或前组已重生成；运行 sync_continuity_refs.py --prepare')
         if first or last:
             raise ValueError('组级自动续接与首尾帧兜底互斥；拆段兜底请使用独立子片段输出路径')
-        if c['mode'] == 'tail_video' and not video_caps(cfg['model'], cfg['provider']):
+        if c['mode'] == 'tail_video' and not video_caps(cfg.get('model') or '', cfg.get('provider')):
             raise ValueError('当前实际模型不支持视频续接，请重新准备续接素材')
     def paths(values):
         return [(local(base, v) if str(v).startswith(('assets/', 'directing/')) else Path(v).resolve())

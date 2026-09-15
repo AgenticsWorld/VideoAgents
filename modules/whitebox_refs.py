@@ -22,7 +22,7 @@
     写了「画幅外坐着」它也会把人画进来;机检 whitebox_hidden_mention 在宿主固定段之外发现其 id/label 即报违规。
 预算:按本组生效视频模型的参考视频数量/总时长上限判 camera.mp4(画面视角,定人物在画面里的位置)是否装得下;
 2026-09-08 起白模只导出摄影机视角、不再有 top.mp4 俯视视频(原 output.whitebox_top_video 开关废止);
-渠道不支持参考视频时不接、退回干净俯视图口径。
+渠道不支持参考视频时不接、退回干净俯视图口径(comfyui/runninghub 仅 MiniMax-H3 Ref2VA 工作流可接)。
 数据源:directing/<ep>/whitebox/episode.json(actors/extras 的颜色与 label,render_whitebox.py 编译落盘)。
 """
 from __future__ import annotations
@@ -350,10 +350,12 @@ def _model_caps(model: str):
 def video_budget(base: Path, ep: str, gid: str) -> dict:
     """本组生效视频模型的参考视频预算:{max_videos, max_total_s, model, provider, source}。
     组级覆盖 assets/group_settings/<ep>/<grp>.json 优先,其次集级 <ep>/episode.json;全局模型按 genmedia 的提交配置解析(不可用时按项目
-    「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道不支持参考视频。"""
+    「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道按所配工作流:
+    含 MiniMaxH3ReferenceToVideo 节点(H3 Ref2VA)时 ≤3 段/≤15s(官方节点上限),其他工作流不支持参考视频。"""
     settings = read(base/'settings.json', {}) or {}
     sg = settings.get('shot_group') or {}
     sdir = base/'assets/group_settings'/component(ep)
+    cfg = None
     try:
         # Use the same layered provider/model resolution as submission (global → episode → group),
         # without importing the API service (pygit2/FastAPI are unnecessary for this media CLI).
@@ -373,8 +375,14 @@ def video_budget(base: Path, ep: str, gid: str) -> dict:
             model, provider, source = '', '', 'project_settings'
     caps = _model_caps(model)
     if provider in ('comfyui', 'runninghub'):
-        return {'max_videos': 0, 'max_total_s': 0, 'model': model, 'provider': provider, 'source': source,
-                'reason': f'渠道 {provider} 不支持参考视频(--ref-video)'}
+        h3 = None
+        if cfg is not None:
+            from modules.genmedia import comfy_h3_ref_video_caps
+            h3 = comfy_h3_ref_video_caps(cfg)
+        if not h3:
+            return {'max_videos': 0, 'max_total_s': 0, 'model': model, 'provider': provider, 'source': source,
+                    'reason': f'渠道 {provider} 当前工作流不是 MiniMax-H3 Ref2VA,不支持参考视频(--ref-video)'}
+        caps = {'max_ref_videos': h3[0], 'max_total_s': h3[1]}
     if caps:
         max_videos = caps['max_ref_videos']
         if source != 'group' and 'max_ref_videos' in sg:

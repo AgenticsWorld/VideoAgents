@@ -208,6 +208,19 @@ H3_DEFAULTS = {
     "ref_image_size": "match", "fps": 24,
 }
 H3_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
+# 官方 MiniMaxH3ReferenceToVideo 四组动态输入上限(ComfyUI comfy_extras/nodes_minimax_h3.py
+# 的 Autogrow max,2026-09-15 核对):ref_images ≤9、ref_videos ≤3(24fps 帧序列,每段 2-15s)、
+# ref_video_audios ≤3(按编号与同号参考视频配对的音轨)、ref_audios ≤3(独立参考音频)。
+# 本地 ComfyUI 与 RunningHub(.cn/.ai)同一节点、同一口径。
+COMFY_H3_MAX_IMAGE_REFS = 9
+COMFY_H3_MAX_VIDEO_REFS = 3
+COMFY_H3_MAX_VIDEO_AUDIO_REFS = 3
+COMFY_H3_MAX_AUDIO_REFS = 3
+COMFY_H3_REF_VIDEO_FPS = 24
+COMFY_H3_REF_VIDEO_MIN_S = 2.0
+COMFY_H3_REF_VIDEO_MAX_S = 15.0
+COMFY_H3_REF_VIDEO_MAX_EDGE = 1344   # 预处理时长边压到 H3 768P 画幅上限,节点内还会按输出画幅再缩
+H3_REF_VIDEO_CACHE_DIR = RUNTIME_DIR / "h3_ref_videos"
 # Comfy Cloud 的 Seedance 2.x 付费 API 节点(r2v);model 输入选版本("Seedance 2.0/2.5")
 SEEDANCE_REFERENCE_NODE = "ByteDance2ReferenceNode"
 LTX25_DEFAULTS = {
@@ -2288,41 +2301,136 @@ def _apply_h3_ref_image_size(workflow: dict, ref_image_size: str) -> None:
     _h3_node(workflow).setdefault("inputs", {})["ref_image_size"] = ref_image_size
 
 
-def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str]) -> None:
-    """Attach only submitted refs to H3's dynamic Ref2VA sockets."""
-    if len(image_names) > MAX_VIDEO_REFS:
-        raise RuntimeError(f"MiniMax-H3 参考图最多 {MAX_VIDEO_REFS} 张,收到 {len(image_names)}")
-    if len(audio_names) > MAX_AUDIO_REFS:
-        raise RuntimeError(f"MiniMax-H3 参考音频最多 {MAX_AUDIO_REFS} 段,收到 {len(audio_names)}")
-    if audio_names and not image_names:
-        raise RuntimeError("MiniMax-H3 参考音频必须与至少一张参考图一起使用")
+def _h3_prepare_ref_video(path: str) -> tuple[str, bool]:
+    """把参考视频整理成 MiniMaxH3ReferenceToVideo 要求的 24fps 帧序列源(2-15s):
+    ffprobe 实测,<2s 拒绝,>15s 截到 15s(stderr 提示),非 24fps / 非 mp4 / 长边 >1344 时
+    用 ffmpeg 转成 24fps h264 mp4(有音轨则保留为 aac,作为同号 ref_video_audio 配对音轨);
+    结果按 (路径, mtime, size) 缓存在 RUNTIME_DIR/h3_ref_videos,重试不重转。
+    返回 (可上传文件路径, 是否含音轨)。"""
+    src = Path(path)
+    if not src.is_file():
+        raise RuntimeError(f"参考视频不存在: {path}")
+    meta = _probe_video_meta(str(src))
+    if meta is None:
+        raise RuntimeError(f"无法实测参考视频规格(ffprobe 不可用或文件损坏): {path};"
+                           "MiniMax-H3 参考视频须为 24fps 帧序列,需 ffmpeg/ffprobe 预处理")
+    duration = _audio_duration_s(str(src))
+    if duration is None and meta["fps"]:
+        duration = meta["frames"] / meta["fps"]
+    if duration is not None and duration + 1e-6 < COMFY_H3_REF_VIDEO_MIN_S:
+        raise RuntimeError(f"MiniMax-H3 参考视频每段至少 {COMFY_H3_REF_VIDEO_MIN_S:g}s,"
+                           f"{src.name} 实测 {duration:.2f}s")
+    too_long = duration is not None and duration > COMFY_H3_REF_VIDEO_MAX_S + 1e-6
+    if too_long:
+        print(f"[genmedia] MiniMax-H3 参考视频每段最长 {COMFY_H3_REF_VIDEO_MAX_S:g}s,"
+              f"{src.name} 实测 {duration:.1f}s,截取前 {COMFY_H3_REF_VIDEO_MAX_S:g}s", file=sys.stderr)
+    compliant = (round(meta["fps"]) == COMFY_H3_REF_VIDEO_FPS and not too_long
+                 and src.suffix.lower() == ".mp4"
+                 and max(meta["width"], meta["height"]) <= COMFY_H3_REF_VIDEO_MAX_EDGE)
+    if compliant:
+        return str(src), meta["has_audio"]
+    st = src.stat()
+    digest = hashlib.sha1(f"{src.resolve()}|{st.st_mtime_ns}|{st.st_size}".encode()).hexdigest()[:16]
+    out = H3_REF_VIDEO_CACHE_DIR / f"{src.stem}-{digest}.mp4"
+    if not out.is_file():
+        H3_REF_VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        edge = COMFY_H3_REF_VIDEO_MAX_EDGE
+        vf = (f"fps={COMFY_H3_REF_VIDEO_FPS},"
+              f"scale='min(1,{edge}/max(iw,ih))*iw':'min(1,{edge}/max(iw,ih))*ih',"
+              "scale=trunc(iw/2)*2:trunc(ih/2)*2")
+        cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(src)]
+        if too_long:
+            cmd += ["-t", f"{COMFY_H3_REF_VIDEO_MAX_S:g}"]
+        cmd += ["-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-pix_fmt", "yuv420p"]
+        cmd += ["-c:a", "aac", "-b:a", "128k"] if meta["has_audio"] else ["-an"]
+        tmp = out.with_suffix(".part.mp4")
+        cmd += ["-movflags", "+faststart", str(tmp)]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+        except FileNotFoundError as exc:
+            raise RuntimeError("ffmpeg 不可用,无法把参考视频转成 MiniMax-H3 要求的 24fps 帧序列") from exc
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"参考视频 {src.name} 转 24fps 失败: {(exc.stderr or '')[-400:]}") from exc
+        tmp.replace(out)
+    return str(out), meta["has_audio"]
+
+
+def _add_h3_references(workflow: dict, image_names: list[str], audio_names: list[str],
+                       video_refs: list[tuple[str, bool]] | None = None) -> None:
+    """Attach only submitted refs to H3's dynamic Ref2VA sockets.
+
+    image_names → ref_images.ref_image_N(LoadImage);audio_names → ref_audios.ref_audio_N
+    (LoadAudio);video_refs [(fileName, has_audio)] → LoadVideo → GetVideoComponents,帧序列接
+    ref_videos.ref_video_N,含音轨时其音频接同号 ref_video_audios.ref_video_audio_N(官方按编号配对,
+    提示词里该音轨是紧接 <Video k> 前的 <Audio j>)。上限按官方节点 Autogrow:9 图 / 3 视频 / 3 音频。"""
+    video_refs = list(video_refs or [])
+    if len(image_names) > COMFY_H3_MAX_IMAGE_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考图最多 {COMFY_H3_MAX_IMAGE_REFS} 张,收到 {len(image_names)}")
+    if len(video_refs) > COMFY_H3_MAX_VIDEO_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考视频最多 {COMFY_H3_MAX_VIDEO_REFS} 段,收到 {len(video_refs)}")
+    if len(audio_names) > COMFY_H3_MAX_AUDIO_REFS:
+        raise RuntimeError(f"MiniMax-H3 参考音频最多 {COMFY_H3_MAX_AUDIO_REFS} 段,收到 {len(audio_names)}")
+    if audio_names and not (image_names or video_refs):
+        raise RuntimeError("MiniMax-H3 参考音频必须与至少一张参考图或一段参考视频一起使用")
     target = _h3_node(workflow)
     inputs = target.setdefault("inputs", {})
     # 先拆掉模板遗留的全部参考连线:云端导出件常带作者的演示素材,提交槽位数少于
-    # 模板时残留连线会把演示图/音频静默混入生产请求;拆线后不再被引用的
-    # LoadImage/LoadAudio 节点一并删除(其文件只存在于模板作者账号,留着会校验失败)
-    stale_ids = []
-    for key in [k for k in inputs if k.startswith(("ref_images.", "ref_audios."))]:
+    # 模板时残留连线会把演示图/音频/视频静默混入生产请求;拆线后不再被引用的
+    # LoadImage/LoadAudio/LoadVideo→GetVideoComponents 链一并删除(其文件只存在于模板作者账号,
+    # 留着会校验失败)。沿拆掉的连线逐级向上回收,只动这条链上失去下游的节点
+    ref_prefixes = ("ref_images.", "ref_videos.", "ref_video_audios.", "ref_audios.")
+    stale_ids = set()
+    for key in [k for k in inputs if k.startswith(ref_prefixes)]:
         link = inputs.pop(key)
         if _node_link(link):
-            stale_ids.append(str(link[0]))
-    referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
-                  for value in (node.get("inputs") or {}).values() if _node_link(value)}
-    for nid in stale_ids:
-        if nid not in referenced:
-            workflow.pop(nid, None)
+            stale_ids.add(str(link[0]))
+    while stale_ids:
+        referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
+                      for value in (node.get("inputs") or {}).values() if _node_link(value)}
+        removable = [nid for nid in stale_ids if nid not in referenced and nid in workflow]
+        if not removable:
+            break
+        stale_ids = set()
+        for nid in removable:
+            node = workflow.pop(nid)
+            for value in (node.get("inputs") or {}).values() if isinstance(node, dict) else ():
+                if _node_link(value):
+                    stale_ids.add(str(value[0]))
     node_ids = [int(key) for key in workflow if str(key).isdigit()]
     next_id = max(node_ids, default=0) + 1
+
+    def new_node(class_type: str, node_inputs: dict) -> str:
+        nonlocal next_id
+        node_id = str(next_id)
+        next_id += 1
+        workflow[node_id] = {"class_type": class_type, "inputs": node_inputs}
+        return node_id
+
     for index, name in enumerate(image_names):
-        node_id = str(next_id)
-        next_id += 1
-        workflow[node_id] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        node_id = new_node("LoadImage", {"image": name})
         inputs[f"ref_images.ref_image_{index}"] = [node_id, 0]
+    for index, (name, has_audio) in enumerate(video_refs):
+        load_id = new_node("LoadVideo", {"file": name})
+        parts_id = new_node("GetVideoComponents", {"video": [load_id, 0]})
+        inputs[f"ref_videos.ref_video_{index}"] = [parts_id, 0]
+        if has_audio:
+            inputs[f"ref_video_audios.ref_video_audio_{index}"] = [parts_id, 1]
     for index, name in enumerate(audio_names):
-        node_id = str(next_id)
-        next_id += 1
-        workflow[node_id] = {"class_type": "LoadAudio", "inputs": {"audio": name}}
+        node_id = new_node("LoadAudio", {"audio": name})
         inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
+
+
+def comfy_h3_ref_video_caps(cfg: dict) -> tuple[int, float] | None:
+    """comfyui 渠道(本地 / Comfy Cloud / RunningHub .cn/.ai)的参考视频硬限:配置的工作流含
+    MiniMaxH3ReferenceToVideo 节点时返回 (段数上限 3, 单段/合计时长上限 15s),其他工作流
+    (LTX-2.5、Seedance 云节点等)不接参考视频返回 None。供白模/续接预算与机检共用。"""
+    try:
+        if _is_h3_ref2va_workflow(cfg):
+            return COMFY_H3_MAX_VIDEO_REFS, COMFY_H3_REF_VIDEO_MAX_S
+    except Exception:
+        return None
+    return None
 
 
 def _add_seedance_references(workflow: dict, image_names: list[str]) -> None:
@@ -4459,9 +4567,18 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
 
     h3 = _is_h3_ref2va_workflow(cfg)
     if h3:
-        if first or last or video_refs:
-            raise RuntimeError("当前 MiniMax-H3 Ref2VA 工作流支持多图/音频参考;"
-                               "首尾帧与 --ref-video 请使用对应 H3 FL2VA/视频参考工作流")
+        if first or last:
+            raise RuntimeError("当前 MiniMax-H3 Ref2VA 工作流支持多图/视频/音频参考;"
+                               "首尾帧请使用对应 H3 FL2VA 工作流")
+        # 官方节点四组动态输入上限(本地 ComfyUI 与 RunningHub .cn/.ai 同口径):
+        # 9 图 / 3 视频(24fps,每段 2-15s)/ 3 段随视频配对音轨 / 3 段独立音频。上传前先拦
+        n_img, n_vid, n_aud = len(refs or []), len(video_refs or []), len(audio_refs or [])
+        if n_img > COMFY_H3_MAX_IMAGE_REFS:
+            raise RuntimeError(f"MiniMax-H3 参考图最多 {COMFY_H3_MAX_IMAGE_REFS} 张,收到 {n_img}")
+        if n_vid > COMFY_H3_MAX_VIDEO_REFS:
+            raise RuntimeError(f"MiniMax-H3 参考视频最多 {COMFY_H3_MAX_VIDEO_REFS} 段,收到 {n_vid}")
+        if n_aud > COMFY_H3_MAX_AUDIO_REFS:
+            raise RuntimeError(f"MiniMax-H3 参考音频最多 {COMFY_H3_MAX_AUDIO_REFS} 段,收到 {n_aud}")
         if generate_audio is False:
             raise RuntimeError("MiniMax-H3 Ref2VA 固定输出原生音频,不支持 --generate-audio off")
         settings = _h3_settings()
@@ -4490,8 +4607,10 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         _apply_h3_prompt(wf, prompt)
         _apply_h3_duration(wf, duration)
         _apply_h3_ref_image_size(wf, settings["ref_image_size"])
+        prepared = [_h3_prepare_ref_video(path) for path in video_refs or []]
         _add_h3_references(wf, [upload(path) for path in refs or []],
-                           [upload(path) for path in audio_refs or []])
+                           [upload(path) for path in audio_refs or []],
+                           [(upload(path), has_audio) for path, has_audio in prepared])
         saved = (_rh_run(cfg, wf, output, want_video=True) if rh
                  else _comfy_run(base, wf, output, want_video=True, headers=hdrs))
         if return_last_frame:
@@ -5236,7 +5355,9 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
 
     refs/audio_refs/generate_audio/return_last_frame 为多模态参考模式(Seedance 2.x
     多镜头组生成)专用,仅火山引擎/BytePlus/MiniMax(H3)/Fal(Seedance、MiniMax H3 端点)
-    及 ComfyUI(H3 Ref2VA / LTX-2.5 / Seedance 云工作流, 只有H3 Ref2VA 支持 audio_refs)
+    及 ComfyUI(H3 Ref2VA / LTX-2.5 / Seedance 云工作流;只有 H3 Ref2VA 支持 audio_refs 与
+    video_refs——本地/Comfy Cloud/RunningHub 同一节点:≤9 图、≤3 段参考视频(24fps,每段 2-15s,
+    提交前自动转码,有音轨则按编号配成 ref_video_audios)、≤3 段独立音频)
     渠道支持;refs 与 first/last_frame 互斥。fal 渠道:按输入自动选 text-/image-/
     reference-to-video 端点,Kling 仅首尾帧,return_last_frame 从成片本地抽帧。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),

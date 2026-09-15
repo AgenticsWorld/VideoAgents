@@ -254,7 +254,7 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
 
-- `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前（2026-09-08 起白模只有这一路，原 `output.whitebox_top_video` 开关废止）；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s，2.5 ≤10 个且 ≤30s，comfyui/runninghub 不支持参考视频则不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
+- `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前（2026-09-08 起白模只有这一路，原 `output.whitebox_top_video` 开关废止）；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s，2.5 ≤10 个且 ≤30s，comfyui/runninghub 仅 MiniMax-H3 Ref2VA 工作流可接(官方 MiniMaxH3ReferenceToVideo 节点:≤3 段、每段 2-15s、24fps,提交前自动转码;有音轨则按编号配成 ref_video_audios),其他工作流不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
 - 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，2026-09-09 起只列在摄影机视频里实际出现的人物/生物/群演，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
 - video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（长镜头自动选择尾段视频或尾帧图，详见 [自动续接](continuity.md)；摄影机白模与尾段共用参考视频预算）。
 

@@ -221,8 +221,15 @@ def test_model_budget_honors_global_limit_and_ignores_stale_provider(project, mo
     budget = video_budget(project, 'ep01', 'grp002')
     assert budget['source'] == 'global' and budget['provider'] == 'volcengine'
     assert budget['max_videos'] == 1 and budget['max_total_s'] == 30
+    # comfyui/runninghub 按工作流运行:非 H3 Ref2VA 工作流不接参考视频,回退尾帧
     monkeypatch.setattr(genmedia, 'get_config', lambda _: {'provider': 'comfyui', 'model': 'minimax-h3'})
+    monkeypatch.setattr(genmedia, '_is_h3_ref2va_workflow', lambda cfg: False)
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
+    # H3 Ref2VA 工作流(本地/RunningHub 同一 MiniMaxH3ReferenceToVideo 节点):≤3 段/≤15s,可挂视频尾段
+    monkeypatch.setattr(genmedia, '_is_h3_ref2va_workflow', lambda cfg: True)
+    budget = video_budget(project, 'ep01', 'grp002')
+    assert budget['provider'] == 'comfyui' and (budget['max_videos'], budget['max_total_s']) == (1, 15)
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'tail_video'
 
 
 def test_whitebox_can_export_before_continuity_plan(project):
