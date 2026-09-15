@@ -2051,7 +2051,7 @@ window.I18N_DICT = {
 "文件超过 45MB(方舟参考视频单文件上限),请先压缩": "File exceeds 45MB (Ark per-file reference-video limit); compress it first",
 "✅ 已上传并加入参考视频 [Video {n}];重出本组 prompt 时须补写该编号的说明句": "✅ Uploaded and added as [Video {n}]; add a sentence for that number when the group's prompt is regenerated",
 "{n} 个参考视频": "{n} reference videos",
-"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组": "⚠ {reason}: click “🎬 Video” to remove reference videos, or “🎛 Model” to give this group a video model with a higher reference-video limit (e.g. Seedance 2.5 ≤10 / ≤30s, same provider); then regenerate the group",
+"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型;处理后重出本组": "⚠ {reason}: click “🎬 Video” to remove reference videos, or “🎛 Model” to give this group a video model with a higher reference-video limit; then regenerate the group",
 "查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态": "Show file status of the scene model / staging plan / preview file / reference video",
 // ---------- 叙事节奏(2026-09-07:新建向导 / 创作定调弹窗) ----------
 "叙事节奏": "Narrative Rhythm",

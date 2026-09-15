@@ -2012,7 +2012,7 @@ window.I18N_DICT = {
 "文件超过 45MB(方舟参考视频单文件上限),请先压缩": "Fichier supérieur à 45 Mo (limite Ark par vidéo de référence) ; compressez-le d'abord",
 "✅ 已上传并加入参考视频 [Video {n}];重出本组 prompt 时须补写该编号的说明句": "✅ Importé et ajouté en [Video {n}] ; ajoutez une phrase pour ce numéro lors de la régénération du prompt du groupe",
 "{n} 个参考视频": "{n} vidéos de référence",
-"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型(如 Seedance 2.5 ≤10 个/≤30s,渠道不变);处理后重出本组": "⚠ {reason} : cliquez « 🎬 Vidéo » pour supprimer des vidéos de référence, ou « 🎛 Modèle » pour donner à ce groupe un modèle au plafond plus élevé (ex. Seedance 2.5 ≤10 / ≤30 s, même fournisseur) ; puis régénérez le groupe",
+"⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型;处理后重出本组": "⚠ {reason} : cliquez « 🎬 Vidéo » pour supprimer des vidéos de référence, ou « 🎛 Modèle » pour donner à ce groupe un modèle au plafond plus élevé ; puis régénérez le groupe",
 "查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态": "Afficher l'état des fichiers : modèle de scène / plan de mise en place / fichier d'aperçu / vidéo de référence",
 // ---------- 叙事节奏(2026-09-07:新建向导 / 创作定调弹窗) ----------
 "叙事节奏": "Rythme narratif",

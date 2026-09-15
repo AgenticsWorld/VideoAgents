@@ -5222,14 +5222,13 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     if ref_cap is None:
         ref_cap = max(0, min(REF_CAP_HARD_MAX, int(sg.get("max_ref_images", MAX_SKETCH_REFS))))
     # 参考视频上限(2026-09-07):个数同参考图口径(组级覆盖→模型硬限,否则项目「视频模型设置」);
-    # 总时长项目设置里没有,按本组生效模型(含跟随全局)的硬限,未知模型/comfyui 类渠道 = None(不判)
+    # 总时长项目设置里没有,按本组生效模型(含跟随全局)的硬限,未知模型/comfyui 类渠道 = None(不判)。
+    # 2026-09-15 起 comfyui/runninghub 渠道不再强判「不支持参考视频」,个数一律按项目「模型限制」设置
     vref_cap = (caps or {}).get("max_ref_videos") if caps else None
     if vref_cap is None:
         vref_cap = max(0, int(sg.get("max_ref_videos", 3) or 0))
     mcaps = video_model_caps(model) if model else None
     vref_cap_s = (mcaps or {}).get("max_ref_video_s")
-    if provider in ("comfyui", "runninghub"):
-        vref_cap, vref_cap_s = 0, None   # 工作流方式渠道不支持 --ref-video(与 modules/whitebox_refs.video_budget 同口径)
     # 提示词技能
     ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
     smode = ps.get("mode") if ps.get("mode") in GROUP_SKILL_MODES else "global"
