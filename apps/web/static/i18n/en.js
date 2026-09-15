@@ -3041,6 +3041,7 @@ window.I18N_DICT = {
 "导入另一版本…": "Import version…",
 "把替换源放到 B 画面,切到 A|B 分屏比对": "Put the replacement in B and switch to A|B split",
 "切 {n} 段 · {s}s / {d}s": "{n} cut(s) · {s}s / {d}s",
+"切 {n} 段": "{n} cut(s)",
 "切掉的时间段(A 的时间线,换成替换源同段)": "Ranges to cut (on A's timeline, replaced by the same ranges of the replacement)",
 "把走带条上「标记时间段」得到的段加入列表;剪辑面板打开时标记完成会自动加入": "Add the range from \"Mark range\"; while this panel is open a finished mark is added automatically",
 "加入标记段": "Add marked range",

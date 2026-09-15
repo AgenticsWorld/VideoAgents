@@ -126,8 +126,13 @@ body.masking .frame .maskpad{display:block}
 .xport .tc{font:11px var(--mono);color:var(--text);min-width:92px;text-align:center}
 .xport .tl s.cut{background:rgba(248,113,113,.55);border-left:1px solid var(--red);border-right:1px solid var(--red)}
 .xport .tl s.cut.on{background:rgba(248,113,113,.85)}
-/* 分镜剪辑面板 */
-.cutp{border-top:1px solid var(--border);background:var(--panel);padding:6px 10px;font-size:11.5px;flex:none;display:grid;gap:6px}
+/* 分镜剪辑面板(右栏,修改单上方,默认折叠,点标题展开) */
+.cutsec{flex:none;display:flex;flex-direction:column;min-height:0;max-height:55%;border-bottom:1px solid var(--border)}
+.cutsec .col-h{cursor:pointer;user-select:none}
+.cutsec .col-h .car{color:var(--faint);font-weight:400}
+.cutsec.on .col-h{color:var(--accent)}
+#rbody{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.cutp{background:var(--panel);padding:6px 10px;font-size:11.5px;display:grid;gap:6px;align-content:start;min-height:0;overflow-y:auto}
 .cutp .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .cutp .row .lb{color:var(--dim);white-space:nowrap}
 .cutp .row .sp{flex:1}
@@ -135,7 +140,7 @@ body.masking .frame .maskpad{display:block}
 .cutp th{text-align:left;color:var(--dim);font-weight:500;padding:2px 6px;border-bottom:1px solid var(--border2)}
 .cutp td{padding:2px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
 .cutp tr.on td{background:#2a1c22}
-.cutp td input{width:72px;font:11px var(--mono);padding:1px 4px}
+.cutp td input{width:64px;font:11px var(--mono);padding:1px 4px}
 .cutp .empty2{color:var(--faint);padding:4px 6px;font-size:11px}
 .cutp .msg{color:var(--dim);font-size:11px}
 .cutp .msg.err{color:var(--red)}
@@ -390,7 +395,10 @@ function groupStatus(gid){
 function render(keep){
   renderEps();
   if(!keep||!$('#left')){
-    $('#work').innerHTML=`<div class="col" id="left"></div><div class="col" id="mid"></div><div class="col" id="right"></div>`;
+    $('#work').innerHTML=`<div class="col" id="left"></div><div class="col" id="mid"></div><div class="col" id="right">
+      <div class="cutsec closed" id="cutsec"><div class="col-h" id="cut-h" title="${esc(t('分镜剪辑:导入本组另一版本,在 A 上标时间段切掉,切掉的部分用另一版本同一时间段替代,拼成新版本'))}"><span class="car">▸</span>✂ ${esc(t('分镜剪辑'))} <span class="lite" id="cut-gid"></span><span class="sp"></span><span class="lite" id="cut-sum"></span></div><div class="cutp" id="cutpanel" style="display:none"></div></div>
+      <div id="rbody"></div></div>`;
+    $('#cut-h').onclick=toggleCut;
     renderMonitorShell();
   }
   renderLeft();renderRight();renderFoot();
@@ -480,9 +488,7 @@ function renderMonitorShell(){
     <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域)'))}">◇ ${esc(t('标记时间段'))}</button>
     <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
     <button class="sm" id="b-mute" title="${esc(t('B 画面始终静音;此按钮切 A 的声音'))}">🔊</button>
-    <button class="sm" id="b-cut" title="${esc(t('分镜剪辑:导入本组另一版本,在 A 上标时间段切掉,切掉的部分用另一版本同一时间段替代,拼成新版本'))}">✂ ${esc(t('分镜剪辑'))}</button>
   </div>
-  <div class="cutp" id="cutpanel" style="display:none"></div>
   <div class="waves" id="waves"></div>`;
   const va=$('#va'),vb=$('#vb');
   $$('#mode span').forEach(s=>s.onclick=()=>{setMode(s.dataset.m);setMonitor()});
@@ -497,7 +503,6 @@ function renderMonitorShell(){
   $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊'};
   $('#b-range').onclick=markRange;
   $('#b-frame').onclick=captureFrame;
-  $('#b-cut').onclick=()=>{if(MODE!=='group'){setMode('group');setMonitor()}CUT_ON=!CUT_ON;$('#b-cut').classList.toggle('pri',CUT_ON);renderCut();drawCuts()};
   va.addEventListener('timeupdate',onTime);
   va.addEventListener('play',()=>{$('#b-play').textContent='⏸ '+t('暂停');if(AB!=='a'&&MODE==='group'){vb.currentTime=va.currentTime;vb.play().catch(()=>{})}if(MODE==='episode')epAudioSync(true)});
   va.addEventListener('pause',()=>{$('#b-play').textContent='▶ '+t('播放');vb.pause();epAudioSync(false)});
@@ -533,7 +538,7 @@ function setMonitor(keepTime){
   const va=$('#va'),vb=$('#vb'),g=grpById(SEL);
   const t0=keepTime?va.currentTime:0;
   $('#fhint').style.display='none';
-  if(MODE!=='group'){CUT_ON=false;$('#b-cut').classList.remove('pri');renderCut();drawCuts()}
+  if(MODE!=='group'){CUT_ON=false;renderCut();drawCuts()}
   if(MODE==='final'){
     const u=(D.finals||{}).final;
     $('#selA').innerHTML='';$('#selB').innerHTML='';vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
@@ -647,7 +652,8 @@ function markRange(){
   drawRange();
 }
 function drawRange(){const s=$('#xrange');const d=$('#va').duration||0;if(!RANGE||!d){s.style.display='none';return}s.style.display='block';s.style.left=(RANGE.t0/d*100)+'%';s.style.width=(((RANGE.t1??RANGE.t0+0.2)-RANGE.t0)/d*100)+'%'}
-/* ---------- 分镜剪辑 ---------- */
+/* ---------- 分镜剪辑(右栏折叠区块) ---------- */
+function toggleCut(){if(MODE!=='group'){setMode('group');setMonitor()}CUT_ON=!CUT_ON;renderCut();drawCuts()}
 function cutNorm(){
   // 排序 + 合并重叠,和后端 merge_ranges 同口径(不做帧对齐)
   const rows=CUTS.filter(c=>c.t1>c.t0).map(c=>({t0:+c.t0,t1:+c.t1})).sort((a,b)=>a.t0-b.t0),out=[];
@@ -662,14 +668,20 @@ function drawCuts(){
   cutNorm().forEach(c=>{const e=document.createElement('s');e.className='cut'+(tcur>=c.t0&&tcur<=c.t1?' on':'');e.style.left=(c.t0/d*100)+'%';e.style.width=(Math.max(0.002,(c.t1-c.t0)/d)*100)+'%';e.title=tc(c.t0)+' – '+tc(c.t1);tl.appendChild(e)});
 }
 function renderCut(){
-  const box=$('#cutpanel');if(!box)return;
-  if(!CUT_ON||MODE!=='group'){box.style.display='none';return}
+  const box=$('#cutpanel'),sec=$('#cutsec');if(!box||!sec)return;
+  const open=CUT_ON&&MODE==='group';
+  sec.classList.toggle('closed',!open);sec.classList.toggle('on',open);
+  $('#cut-h .car').textContent=open?'▾':'▸';
+  $('#cut-gid').textContent=MODE==='group'&&SEL?SEL:'';
+  $('#cut-sum').textContent='';
+  if(!open){box.style.display='none';return}
   box.style.display='grid';
   const g=grpById(SEL),vs=versionsOf(SEL),baseV=VA??((g||{}).current||0);
   const alts=vs.filter(v=>v.v!==baseV);
   if(CUT_ALT==null||!alts.some(v=>v.v===CUT_ALT))CUT_ALT=alts.length?alts[alts.length-1].v:null;
   const cuts=cutNorm(),d=$('#va').duration||(g||{}).duration||0,cutLen=cuts.reduce((a,c)=>a+(c.t1-c.t0),0);
-  let h=`<div class="row"><span class="lb">✂ ${esc(t('分镜剪辑'))} · ${esc(SEL)}</span><span class="lb">${esc(t('基准 A'))}</span><b style="font-family:var(--mono)">v${baseV}</b>
+  $('#cut-sum').textContent=cuts.length?I18N.f('切 {n} 段',{n:cuts.length}):'';
+  let h=`<div class="row"><span class="lb">${esc(t('基准 A'))}</span><b style="font-family:var(--mono)">v${baseV}</b>
     <span class="lb">${esc(t('替换源'))}</span><select id="cut-alt" ${alts.length?'':'disabled'}>${alts.length?alts.map(v=>`<option value="${v.v}" ${v.v===CUT_ALT?'selected':''}>${verLabel(v)}</option>`).join(''):`<option>${esc(t('还没有其他版本'))}</option>`}</select>
     <button class="xs" id="cut-pick" title="${esc(t('用本机文件对话框选另一版本视频(默认打开本组视频所在目录),导入为本组新版本'))}">📂 ${esc(t('导入另一版本…'))}</button><input type="file" id="cut-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv,.m4v" style="display:none">
     <button class="xs" id="cut-ab" ${CUT_ALT==null?'disabled':''} title="${esc(t('把替换源放到 B 画面,切到 A|B 分屏比对'))}">A|B</button>
@@ -682,7 +694,7 @@ function renderCut(){
     h+=`<table><tr><th>#</th><th>${esc(t('起点'))}</th><th>${esc(t('终点'))}</th><th>${esc(t('时长'))}</th><th></th></tr>`;
     const tcur=$('#va').currentTime||0;
     cuts.forEach((c,i)=>{h+=`<tr class="${tcur>=c.t0&&tcur<=c.t1?'on':''}" data-i="${i}"><td>${i+1}</td><td><input type="number" step="0.04" min="0" value="${c.t0}" data-k="t0"></td><td><input type="number" step="0.04" min="0" value="${c.t1}" data-k="t1"></td><td>${num(c.t1-c.t0,2)}s</td>
-      <td><button class="xs" data-go="${c.t0}" title="${esc(t('跳到起点'))}">⏵ ${tc(c.t0)}</button> <button class="xs" data-go="${c.t1}" title="${esc(t('跳到终点'))}">⏵ ${tc(c.t1)}</button> <button class="xs" data-del="${i}">✕</button></td></tr>`});
+      <td><button class="xs" data-go="${c.t0}" title="${esc(t('跳到起点'))+' '+tc(c.t0)}">⏵</button> <button class="xs" data-go="${c.t1}" title="${esc(t('跳到终点'))+' '+tc(c.t1)}">⏵</button> <button class="xs" data-del="${i}">✕</button></td></tr>`});
     h+=`</table>`;
   }else h+=`<div class="empty2">${esc(t('还没有切段:播放 A 找到要换掉的部分,点「标记时间段」设起点、再点一次设终点,即加入列表;可标多段'))}</div>`;
   const bv=vs.find(v=>v.v===baseV),curV=(g||{}).current||0;
@@ -752,7 +764,7 @@ async function captureFrame(){
   b.disabled=false;
 }
 let LAST_FRAME=null;
-/* 分镜剪辑(2026-09-14):CUT_ON 面板开关;CUTS=[{t0,t1}] 要切掉的时间段(基准 A 的时间线);CUT_ALT=替换源版本号;CUT_BUSY=生成中 */
+/* 分镜剪辑(2026-09-14;2026-09-15 移到右栏修改单上方,默认折叠):CUT_ON 区块展开开关;CUTS=[{t0,t1}] 要切掉的时间段(基准 A 的时间线);CUT_ALT=替换源版本号;CUT_BUSY=生成中 */
 let CUT_ON=false,CUTS=[],CUT_ALT=null,CUT_BUSY=false;
 /* 波形四轨 */
 function waveWindow(){
@@ -799,7 +811,7 @@ function renderRight(){
     h+=`</div></div>`;
   }
   h+=`</div>`;
-  $('#right').innerHTML=h;
+  $('#rbody').innerHTML=h;
   $('#rc').textContent=g?I18N.f('{g} 生效 {n} 条',{g:SCOPE==='episode'?t('整集'):SCOPE==='scene'?(g.scene_id):SEL,n:count}):'';
   $$('#right .scope .seg span').forEach(s=>s.onclick=()=>{if(s.dataset.s==='range'&&!(RANGE&&RANGE.t1!=null)){alert(t('先在监视器走带条上「标记时间段」'));return}SCOPE=s.dataset.s;renderRight()});
   $$('#right .acc-h').forEach(el=>el.onclick=e=>{if(e.target.dataset.add){openRecipe({section:e.target.dataset.add});return}const id=el.parentElement.dataset.sec;CLOSED_SEC.has(id)?CLOSED_SEC.delete(id):CLOSED_SEC.add(id);renderRight()});
