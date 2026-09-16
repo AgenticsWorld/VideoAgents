@@ -232,6 +232,29 @@ def test_model_budget_honors_global_limit_and_ignores_stale_provider(project, mo
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'tail_video'
 
 
+def test_episode_comfyui_override_reads_that_channel_workflow(project, monkeypatch):
+    """集级把渠道覆盖到 ComfyUI 时,参考视频上限须按 ComfyUI 那份配置的工作流判,
+    不能拿全局(volcengine,没有 mode/workflow 字段)那份去问(DEF-p7-video-011)。"""
+    from modules import genmedia
+    from modules.whitebox_refs import video_budget
+    def fake_get_config(kind, provider_override='', model_override=''):
+        if provider_override == 'comfyui':
+            return {'provider': 'comfyui', 'mode': model_override, 'rh_workflow_id': 'h3'}
+        return {'provider': 'volcengine', 'model': 'doubao-seedance-2-5'}
+    monkeypatch.setattr(genmedia, 'get_config', fake_get_config)
+    monkeypatch.setattr(genmedia, '_is_h3_ref2va_workflow', lambda cfg: cfg.get('provider') == 'comfyui')
+    write(project/'assets/group_settings/ep01/episode.json',
+          {'video_model': 'rh_cn', 'provider': 'comfyui', 'provider_override': True})
+    budget = video_budget(project, 'ep01', 'grp002')
+    assert budget['source'] == 'episode' and budget['provider'] == 'comfyui'
+    assert (budget['max_videos'], budget['max_total_s']) == (3, 15) and not budget['reason']
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'tail_video'
+    # 该渠道的工作流不接参考视频时仍如实判负
+    monkeypatch.setattr(genmedia, '_is_h3_ref2va_workflow', lambda cfg: False)
+    assert video_budget(project, 'ep01', 'grp002')['max_videos'] == 0
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
+
+
 def test_whitebox_can_export_before_continuity_plan(project):
     whitebox(project, 7)
     (project/'directing/ep01/continuity.json').unlink()

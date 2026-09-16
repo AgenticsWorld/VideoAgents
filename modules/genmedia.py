@@ -341,6 +341,21 @@ def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, g
     return out
 
 
+def video_cfg_for(cfg: dict, r: dict) -> dict:
+    """按 resolve_video_override 的解析结果取本组真正生效的整份视频配置(渠道 Key、ComfyUI 运行方式与工作流)。
+    集级可把渠道整个换掉,只改 cfg["model"] 会让下游继续按全局渠道的字段判断能力
+    (2026-09-16 DEF-p7-video-011:全局 volcengine + 集级 comfyui 时参考视频被误判为「本渠道不支持」)。
+    渠道不可用时按 get_config 抛 RuntimeError,调用方自行回落。"""
+    if r["source"] == "global":
+        return cfg
+    if r["provider"] == "comfyui":
+        # ComfyUI:video_model 槽存的是运行方式,整份配置按该运行方式重取(mode/站点工作流随之改写)
+        return get_config("video", provider_override="comfyui", model_override=r["video_model"])
+    if r["provider"] != cfg.get("provider"):
+        return get_config("video", provider_override=r["provider"], model_override=r["video_model"])
+    return dict(cfg, model=r["video_model"])
+
+
 def apply_group_video_override(cfg: dict, group: str) -> dict:
     """按集级/组级设定改写 video 生效渠道与模型(用户在分镜预览顶部三下拉 / 组卡「🎛 模型」指定):
     集级可切渠道(整份配置换成该渠道的),组级只换模型;失效的覆盖 stderr 提示并按全局执行。
@@ -357,19 +372,15 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
         return cfg
     scope = "集级" if r["source"] == "episode" else "组级"
     if r["provider"] == "comfyui":
-        # ComfyUI:video_model 槽存的是运行方式,整份配置按该运行方式重取(mode/站点工作流随之改写)
-        cfg = get_config("video", provider_override="comfyui", model_override=r["video_model"])
         print(f"[genmedia] 组 {group} 按{scope}设定使用 ComfyUI 运行方式 "
               f"{COMFY_MODE_LABELS.get(r['video_model'], r['video_model'])}", file=sys.stderr)
     elif r["provider"] != cfg.get("provider"):
-        cfg = get_config("video", provider_override=r["provider"], model_override=r["video_model"])
         print(f"[genmedia] 组 {group} 按{scope}设定切换视频渠道 {r['provider']} / 模型 {r['video_model']}",
               file=sys.stderr)
-    else:
-        if r["video_model"] != cfg.get("model"):
-            print(f"[genmedia] 组 {group} 按{scope}设定使用视频模型 {r['video_model']}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
-                  file=sys.stderr)
-        cfg["model"] = r["video_model"]
+    elif r["video_model"] != cfg.get("model"):
+        print(f"[genmedia] 组 {group} 按{scope}设定使用视频模型 {r['video_model']}(全局 {cfg.get('model')},渠道 {cfg.get('provider')} 不变)",
+              file=sys.stderr)
+    cfg = video_cfg_for(cfg, r)
     cfg["_group_override"] = group
     cfg["_override_scope"] = scope
     return cfg

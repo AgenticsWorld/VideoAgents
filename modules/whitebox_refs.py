@@ -348,7 +348,8 @@ def _model_caps(model: str):
 
 
 def video_budget(base: Path, ep: str, gid: str) -> dict:
-    """本组生效视频模型的参考视频预算:{max_videos, max_total_s, model, provider, source}。
+    """本组生效视频模型的参考视频预算:{max_videos, max_total_s, model, provider, source, ref_caps}。
+    ref_caps = 模型/工作流自身的 [段数, 合计秒数] 上限(不含项目设置的下调),不支持参考视频时为 None。
     组级覆盖 assets/group_settings/<ep>/<grp>.json 优先,其次集级 <ep>/episode.json;全局模型按 genmedia 的提交配置解析(不可用时按项目
     「视频模型设置」shot_group.max_ref_videos / max_group_s 回落)。comfyui/runninghub 渠道按所配工作流:
     含 MiniMaxH3ReferenceToVideo 节点(H3 Ref2VA)时 ≤3 段/≤15s(官方节点上限),其他工作流不支持参考视频。"""
@@ -359,12 +360,16 @@ def video_budget(base: Path, ep: str, gid: str) -> dict:
     try:
         # Use the same layered provider/model resolution as submission (global → episode → group),
         # without importing the API service (pygit2/FastAPI are unnecessary for this media CLI).
-        from modules.genmedia import get_config, resolve_video_override
+        from modules.genmedia import get_config, resolve_video_override, video_cfg_for
         cfg = get_config('video')
         r = resolve_video_override(sdir, component(gid), str(cfg.get('provider') or ''), str(cfg.get('model') or ''))
         model, provider, source = r['video_model'], r['provider'], r['source']
+        # 覆盖生效时必须换成该渠道的整份配置:全局(如 volcengine)那份没有 mode/workflow 字段,
+        # 拿它问 comfy_h3_ref_video_caps 会一律判成「本渠道不支持参考视频」(DEF-p7-video-011)
+        cfg = video_cfg_for(cfg, r)
     except (RuntimeError, KeyError, ValueError, OSError):
         # 提交配置不可用(无 Key 等):只按覆盖文件里的模型判上限,渠道未知
+        cfg = None
         ov = read(sdir/f'{component(gid)}.json', {}) or {}
         source = 'group'
         if not ov.get('video_model'):
@@ -380,17 +385,24 @@ def video_budget(base: Path, ep: str, gid: str) -> dict:
             from modules.genmedia import comfy_h3_ref_video_caps
             h3 = comfy_h3_ref_video_caps(cfg)
         if not h3:
+            # cfg 为 None = 生成模型配置读不到(无 Key 等),工作流未知,如实说明,别让调用方据此删已冻结的参考视频
+            reason = (f'渠道 {provider} 当前工作流不是 MiniMax-H3 Ref2VA,不支持参考视频(--ref-video)'
+                      if cfg is not None else
+                      f'渠道 {provider} 的生成模型配置读不到,无法判定工作流是否支持参考视频;'
+                      f'先在「🎨 生成模型」页确认该渠道配置再同步')
             return {'max_videos': 0, 'max_total_s': 0, 'model': model, 'provider': provider, 'source': source,
-                    'reason': f'渠道 {provider} 当前工作流不是 MiniMax-H3 Ref2VA,不支持参考视频(--ref-video)'}
+                    'ref_caps': None, 'reason': reason}
         caps = {'max_ref_videos': h3[0], 'max_total_s': h3[1]}
     if caps:
         max_videos = caps['max_ref_videos']
         if source != 'group' and 'max_ref_videos' in sg:
             max_videos = min(max_videos, int(sg['max_ref_videos'] or 0))
         return {'max_videos': max_videos, 'max_total_s': caps['max_total_s'], 'model': model,
-                'provider': provider, 'source': source, 'reason': ''}
+                'provider': provider, 'source': source, 'reason': '',
+                'ref_caps': ([caps['max_ref_videos'], float(caps['max_total_s'])]
+                             if caps['max_ref_videos'] else None)}
     return {'max_videos': int(sg.get('max_ref_videos', 3) or 0), 'max_total_s': float(sg.get('max_group_s', 15) or 15),
-            'model': model, 'provider': provider, 'source': source, 'reason': ''}
+            'model': model, 'provider': provider, 'source': source, 'reason': '', 'ref_caps': None}
 
 
 def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> dict:

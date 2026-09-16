@@ -58,14 +58,17 @@ def tail_window(source, meta):
     return duration, start, duration - start
 
 
-def video_caps(model, provider):
+def video_caps(model, provider, cfg=None):
+    """本模型/工作流的参考视频上限 (段数, 合计秒数),不支持时 None。
+    comfyui/runninghub 的上限取决于所配工作流,须传入本组生效的整份视频配置 cfg;
+    cfg 省略时只能回落到全局配置,集级覆盖到 ComfyUI 的组会被误判(DEF-p7-video-011)。"""
     m = str(model).lower()
     if provider in ('comfyui', 'runninghub'):
         # 按工作流运行、无模型 id:只有 MiniMax-H3 Ref2VA 工作流(MiniMaxH3ReferenceToVideo 节点,
         # 本地 / Comfy Cloud / RunningHub .cn/.ai 同一节点)接参考视频,≤3 段、≤15s
         from modules.genmedia import comfy_h3_ref_video_caps, get_config
         try:
-            return comfy_h3_ref_video_caps(get_config('video'))
+            return comfy_h3_ref_video_caps(cfg if cfg is not None else get_config('video'))
         except (RuntimeError, KeyError, ValueError, OSError):
             return None
     if provider == 'openrouter':   # OpenRouter 仅 Seedance 2.x 与 MiniMax H3 接了参考视频(input_references)
@@ -123,7 +126,10 @@ def plan(base, ep, gid, prepare=False, budget=None):
         if budget is None:
             from modules.whitebox_refs import video_budget
             budget = video_budget(base, ep, gid)
-        caps = video_caps(budget['model'], budget['provider'])
+        # comfyui/runninghub 的上限取决于所配工作流:预算已按本组生效渠道(集级/组级覆盖)算过,
+        # 直接取 ref_caps,不能再用 video_caps 回落到全局配置(DEF-p7-video-011)
+        caps = (budget.get('ref_caps') if budget['provider'] in ('comfyui', 'runninghub')
+                else video_caps(budget['model'], budget['provider']))
         if caps:
             result.update(mode='tail_video', video=f'assets/continuity/{ep}/{prev_id}{TAIL_VIDEO}',
                           duration_s=3., reason='连续动作，优先视频尾段')
@@ -323,7 +329,7 @@ def validate_request(output, prompt, refs, videos, cfg, first='', last=''):
             raise ValueError('续接素材未准备或前组已重生成；运行 sync_continuity_refs.py --prepare')
         if first or last:
             raise ValueError('组级自动续接与首尾帧兜底互斥；拆段兜底请使用独立子片段输出路径')
-        if c['mode'] == 'tail_video' and not video_caps(cfg.get('model') or '', cfg.get('provider')):
+        if c['mode'] == 'tail_video' and not video_caps(cfg.get('model') or '', cfg.get('provider'), cfg):
             raise ValueError('当前实际模型不支持视频续接，请重新准备续接素材')
     def paths(values):
         return [(local(base, v) if str(v).startswith(('assets/', 'directing/')) else Path(v).resolve())
