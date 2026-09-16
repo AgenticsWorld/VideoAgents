@@ -153,6 +153,8 @@ body.masking .frame .maskpad{display:block}
 .waves .tr i.cue{width:2px;background:var(--yellow);top:2px;height:14px;cursor:pointer}
 .waves .tr i.cue.miss{background:var(--red)}
 .waves .tr i.ph{width:1px;background:#fff;top:0;height:18px;border-radius:0}
+.waves .tr i.nofile{opacity:.35;outline:1px dashed #ffffff55}
+.waves .tr i.live{box-shadow:0 0 0 1px #fff;filter:brightness(1.45)}
 /* 右栏 */
 .scope{display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11.5px;align-items:center;flex:none;flex-wrap:wrap}
 .acc{border-bottom:1px solid var(--border)}
@@ -315,7 +317,7 @@ async function load(keep){
     if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
     localStorage.setItem('post-ep:'+(d.project||proj()),EP);
     const first=!D||D.ep!==d.ep;
-    D=d;
+    D=d;stemBuild();
     if(first||!grpById(SEL)){
       const pos=first?posLoad():{},open=(pos.open||[]).filter(id=>d.scenes.some(s=>s.scene_id===id));
       SEL=(pos.sel&&grpById(pos.sel)?pos.sel:(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id)||'';VA=null;VB=null;RANGE=null;MASK=null;
@@ -500,12 +502,13 @@ function renderMonitorShell(){
   $('#b-fprev').onclick=()=>{va.pause();seekTo(Math.max(0,va.currentTime-1/24))};
   $('#b-fnext').onclick=()=>{va.pause();seekTo(va.currentTime+1/24)};
   $('#b-mask').onclick=()=>{document.body.classList.toggle('masking');$('#b-mask').classList.toggle('pri',document.body.classList.contains('masking'))};
-  $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊'};
+  $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊';if(EPA)EPA.muted=va.muted;stemSync()};
   $('#b-range').onclick=markRange;
   $('#b-frame').onclick=captureFrame;
   va.addEventListener('timeupdate',onTime);
-  va.addEventListener('play',()=>{$('#b-play').textContent='⏸ '+t('暂停');if(AB!=='a'&&MODE==='group'){vb.currentTime=va.currentTime;vb.play().catch(()=>{})}if(MODE==='episode')epAudioSync(true)});
-  va.addEventListener('pause',()=>{$('#b-play').textContent='▶ '+t('播放');vb.pause();epAudioSync(false)});
+  va.addEventListener('play',()=>{$('#b-play').textContent='⏸ '+t('暂停');if(AB!=='a'&&MODE==='group'){vb.currentTime=va.currentTime;vb.play().catch(()=>{})}if(MODE==='episode')epAudioSync(true);stemSync()});
+  va.addEventListener('pause',()=>{$('#b-play').textContent='▶ '+t('播放');vb.pause();epAudioSync(false);stemSync()});
+  va.addEventListener('seeked',()=>stemSync());
   va.addEventListener('ended',()=>{if(MODE==='episode')epNext()});
   $('#xtl').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();seekTo((e.clientX-r.left)/r.width*(va.duration||0))};
   // 滑杆
@@ -543,7 +546,7 @@ function setMonitor(keepTime){
     const u=(D.finals||{}).final;
     $('#selA').innerHTML='';$('#selB').innerHTML='';vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
     if(!u){$('#fhint').style.display='flex';$('#fhint').textContent=t('还没有成片 final.mp4(点右上「出成片」)');va.removeAttribute('src');va.load();return}
-    va.src=u;va.muted=false;$('#tagA').textContent='final.mp4';$('#xgid').textContent=EP;$('#finfo').textContent='';epAudioStop();renderWaves();return;
+    va.src=u;va.muted=false;$('#tagA').textContent='final.mp4';$('#xgid').textContent=EP;$('#finfo').textContent='';epAudioStop();stemStop();renderWaves();return;
   }
   if(!g){return}
   const vs=versionsOf(SEL);
@@ -569,7 +572,7 @@ function setMonitor(keepTime){
   $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
   va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange();drawCuts()},{once:true});
-  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();
+  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();stemSync();
 }
 function refreshMonitorMeta(){
   const g=grpById(SEL);if(!g||MODE!=='group')return;
@@ -601,6 +604,7 @@ function onTime(){
   const ph=$('#waves .ph');if(ph){const win=waveWindow();ph.style.left=((abs-win[0])/(win[1]-win[0])*100)+'%'}
   const fph=$('#foot .ph');if(fph&&D.episode_duration)fph.style.left=(abs/D.episode_duration*100)+'%';
   if(MODE==='episode')epAudioSync();
+  stemSync();
   updateSubtitle(abs);
   if(CUT_ON){$$('#xtl s.cut').forEach(e=>{const l=parseFloat(e.style.left)/100*d,w=parseFloat(e.style.width)/100*d;e.classList.toggle('on',tcur>=l&&tcur<=l+w)})}
 }
@@ -612,7 +616,7 @@ function epLoad(i,t0){
   const vs=versionsOf(g.group_id);const cur=vs.find(v=>v.v===(g.current||0))||vs[0];
   const va=$('#va');
   if(!cur){epNext();return}
-  va.src=cur.url;va.dataset.src=cur.url;va.muted=true;
+  va.src=cur.url;va.dataset.src=cur.url;va.muted=!!(D.finals||{}).final_audio||!LAYERS.sound;
   $('#tagA').textContent=g.group_id+' · '+(cur.v?'v'+cur.v:'v0');$('#xgid').textContent=g.group_id;$('#finfo').textContent=t('整集连播')+' '+(i+1)+'/'+D.groups.length;
   renderLeft();renderRight();renderFoot();renderWaves();
   va.addEventListener('loadedmetadata',()=>{if(t0)va.currentTime=t0;if(PLAYING_EP)va.play().catch(()=>{})},{once:true});
@@ -627,7 +631,54 @@ function epAudioSync(start){
   if(start===true||(!va.paused&&EPA.paused)){PLAYING_EP=true;EPA.play().catch(()=>{})}
 }
 function epAudioStop(){if(EPA){EPA.pause()}}
-function applyLayerAudio(){const va=$('#va');if(va&&MODE==='group')va.muted=!LAYERS.sound}
+/* ---------- 分轨随播(2026-09-16):旁白 / BGM / 音效按集时间轴位置与 A 画面同步播放 ----------
+   单组:组视频原生轨(对白)+ 三路分轨叠放;整集连播:有混音成品 final_audio 就只放它(已含三路),没有则原生轨 + 分轨;看成片:只放 final.mp4 自带声音。
+   分轨条目来自 D.lanes(后端 _post_audio_lanes):file=可播放 URL,gain_db → 音量,BGM 另按 cue sheet 的 fade 做淡入淡出。 */
+const STEM={items:[],els:{},tick:null};
+const dbGain=db=>Math.min(1,Math.pow(10,(+db||0)/20));
+function stemBuild(){
+  const L=(D&&D.lanes)||{},out=[];
+  (L.narration||[]).forEach((x,i)=>{if(x.file)out.push({id:'n'+i,t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
+  (L.bgm||[]).forEach((x,i)=>{if(x.file)out.push({id:'m'+i,t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db),fi:+x.fade_in||0,fo:+x.fade_out||0})});
+  (L.sfx||[]).forEach((x,i)=>{if(x.file&&x.t_abs!=null)out.push({id:'s'+i,t0:+x.t_abs,t1:null,url:x.file,gain:dbGain(x.gain_db)})});
+  const keep=new Set(out.map(x=>x.id+'|'+x.url));
+  for(const k in STEM.els){if(!keep.has(k)){STEM.els[k].pause();STEM.els[k].removeAttribute('src');STEM.els[k].load();delete STEM.els[k]}}
+  STEM.items=out;
+}
+function stemEnabled(){
+  if(!D||!LAYERS.sound||MODE==='final')return false;
+  if(MODE==='episode'&&(D.finals||{}).final_audio)return false;
+  return true;
+}
+function stemAbs(){const va=$('#va');const g=MODE==='episode'?D.groups[EPIDX]:grpById(SEL);return ((g&&g.cum_start_s)||0)+(va.currentTime||0)}
+function stemSync(){
+  const va=$('#va');if(!va||!D)return;
+  const playing=stemEnabled()&&!!va.src&&!va.paused&&!va.ended,abs=stemAbs(),live=new Set();
+  for(const it of STEM.items){
+    const k=it.id+'|'+it.url,local=abs-it.t0;
+    let a=STEM.els[k];
+    if(!a){
+      // 只为 8s 内将到 / 正在窗口内的条目建元素,避免整集几十个音频一起拉
+      if(!playing||local<-8||(it.t1!=null&&local>=it.t1-it.t0)||(it.t1==null&&local>30))continue;
+      a=new Audio(it.url);a.preload='auto';STEM.els[k]=a;
+    }
+    const dur=a.duration||0,len=it.t1!=null?it.t1-it.t0:Infinity,end=Math.min(len,dur||Infinity);
+    const active=playing&&local>=0&&local<end&&!(it.t1==null&&!dur&&local>5);
+    if(!active){if(!a.paused)a.pause();continue}
+    live.add(it.id);
+    let g=it.gain;
+    if(it.fi>0)g*=Math.min(1,local/it.fi);
+    if(it.fo>0&&it.t1!=null)g*=Math.min(1,Math.max(0,(len-local)/it.fo));
+    a.volume=Math.max(0,Math.min(1,g));a.muted=va.muted;
+    if(Math.abs(a.currentTime-local)>0.3){try{a.currentTime=local}catch(_){}}
+    if(a.paused)a.play().catch(()=>{});
+  }
+  $$('#waves [data-stem]').forEach(e=>e.classList.toggle('live',live.has(e.dataset.stem)));
+  if(playing&&STEM.items.length){if(!STEM.tick)STEM.tick=setInterval(stemSync,80)}
+  else if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}
+}
+function stemStop(){for(const k in STEM.els)STEM.els[k].pause();if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}$$('#waves .live').forEach(e=>e.classList.remove('live'))}
+function applyLayerAudio(){const va=$('#va');if(!va)return;if(MODE==='group')va.muted=!LAYERS.sound;else if(MODE==='episode'){va.muted=!!(D.finals||{}).final_audio||!LAYERS.sound;epAudioSync()}renderWaves();stemSync()}
 function updateSubtitle(abs){
   // 字幕样式预览:按包装层 subtitle_style 修改单实时渲染(内容只做样式示意:取本组对白说话人)
   const el=$('#subt');const ss=(D.plan.recipes||[]).find(r=>r.kind==='subtitle_style'&&r.status!=='discarded');
@@ -775,9 +826,9 @@ function renderWaves(){
   const [w0,w1]=waveWindow(),W=Math.max(0.01,w1-w0),L=D.lanes||{};
   const pos=(a,b)=>`left:${((a-w0)/W*100).toFixed(2)}%;width:${(Math.max(0.15,b-a)/W*100).toFixed(2)}%`;
   const inWin=x=>x.t1>w0&&x.t0<w1;
-  const lane=(lb,items,cls)=>`<div class="lb">${esc(lb)}</div><div class="tr">${items.filter(inWin).map(x=>`<i class="${cls}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}"></i>`).join('')}${lb===t('对白')?'<i class="ph"></i>':''}</div>`;
+  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''}"></i>`:'').join('')}${lb===t('对白')?'<i class="ph"></i>':''}</div>`;
   let h=lane(t('对白'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
-  h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).filter(x=>x.t_abs>=w0&&x.t_abs<=w1).map(x=>`<i class="cue ${x.resolved?'':'miss'}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-sfx="${esc(x.id)}" title="${esc(x.label)}${x.resolved?'':' · '+esc(t('未落地'))}"></i>`).join('')}</div>`;
+  h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))}"></i>`:'').join('')}</div>`;
   $('#waves').innerHTML=LAYERS.sound?h:'';
   $$('#waves .cue').forEach(c=>c.onclick=()=>openSfx(c.dataset.sfx));
 }

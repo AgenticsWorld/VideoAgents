@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Referenzframe gespeichert: {p}",
 "取帧失败:{e}": "Bildaufnahme fehlgeschlagen: {e}",
 "未落地": "Nicht angewendet",
+"无音频文件": "Keine Audiodatei",
+"{n} 条可随播": "{n} mit Video abspielbar",
 "时间段": "Abschnitt",
 "处方": "Rezepte",
 "修改单": "Rezepte",

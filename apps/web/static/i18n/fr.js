@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Image de référence enregistrée : {p}",
 "取帧失败:{e}": "Échec de capture de l’image : {e}",
 "未落地": "Non appliqué",
+"无音频文件": "Pas de fichier audio",
+"{n} 条可随播": "{n} lisibles avec la vidéo",
 "时间段": "Plage",
 "处方": "Recettes",
 "修改单": "Recettes",

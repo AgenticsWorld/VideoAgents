@@ -2551,6 +2551,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Reference frame saved: {p}",
 "取帧失败:{e}": "Frame grab failed: {e}",
 "未落地": "Not applied",
+"无音频文件": "No audio file",
+"{n} 条可随播": "{n} playable with video",
 "时间段": "Range",
 "处方": "Recipes",
 "修改单": "Recipes",

@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Quadro de referência salvo: {p}",
 "取帧失败:{e}": "Falha ao capturar o quadro: {e}",
 "未落地": "Não aplicado",
+"无音频文件": "Sem arquivo de áudio",
+"{n} 条可随播": "{n} reproduzíveis com o vídeo",
 "时间段": "Trecho",
 "处方": "Receitas",
 "修改单": "Receitas",

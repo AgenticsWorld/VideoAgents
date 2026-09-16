@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Frame referensi disimpan: {p}",
 "取帧失败:{e}": "Gagal mengambil frame: {e}",
 "未落地": "Belum diterapkan",
+"无音频文件": "Tidak ada file audio",
+"{n} 条可随播": "{n} dapat diputar bersama video",
 "时间段": "Rentang",
 "处方": "Resep",
 "修改单": "Resep",

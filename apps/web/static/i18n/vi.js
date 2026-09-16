@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Đã lưu khung tham chiếu {p}",
 "取帧失败:{e}": "Lấy khung hình thất bại: {e}",
 "未落地": "Chưa áp dụng",
+"无音频文件": "Không có tệp âm thanh",
+"{n} 条可随播": "{n} phát cùng video",
 "时间段": "Đoạn",
 "处方": "Công thức",
 "修改单": "Công thức",

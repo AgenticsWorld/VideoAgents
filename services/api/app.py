@@ -446,6 +446,20 @@ async def artifact(project: str, artifact_path: str) -> FileResponse:
     return FileResponse(path)
 
 
+@api.get("/sfx-library/{sfx_path:path}", tags=["artifacts"])
+async def sfx_library_file(sfx_path: str) -> FileResponse:
+    """data/sfx/ 音效素材库文件(后期处理页音效点位随播用;只放音频)。"""
+    base = (core.DATA_DIR / "sfx").resolve()
+    path = (base / sfx_path).resolve()
+    try:
+        path.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(400, "invalid sfx path") from exc
+    if not path.is_file() or path.suffix.lower() not in core.AUDIO_EXTS:
+        raise HTTPException(404, "sfx not found")
+    return FileResponse(path)
+
+
 @api.get("/agents", tags=["agents"])
 async def agents(refresh: bool = False) -> list[dict[str, Any]]:
     return await core.api_agents(refresh)

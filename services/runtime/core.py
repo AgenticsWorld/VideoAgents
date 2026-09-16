@@ -8730,31 +8730,71 @@ def _post_sfx_rows(base: Path, ep: str, groups: list[dict], shot_start: dict) ->
     return {"schema": "post_sfx_cues/1.0", "ep": ep, "rows": rows}, False
 
 
+def _post_sfx_file_url(base: Path, rel: str | None) -> str | None:
+    """音效点位行的 file → 可播放 URL:项目相对路径(patches/ 等)优先;否则按 data/sfx/ 素材库条目(manifest file 字段)找。"""
+    if not rel or not isinstance(rel, str):
+        return None
+    rel = rel.strip().lstrip("/")
+    if not rel or ".." in Path(rel).parts:
+        return None
+    u = _post_url(base, rel)
+    if u:
+        return u
+    lib = (DATA_DIR / "sfx" / rel)
+    try:
+        lib.resolve().relative_to((DATA_DIR / "sfx").resolve())
+    except ValueError:
+        return None
+    if lib.is_file():
+        return f"/api/v1/sfx-library/{Path(rel).as_posix()}?v={int(lib.stat().st_mtime)}"
+    return None
+
+
 def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dict:
+    """监视器下方四轨 + 随播分轨(2026-09-16):旁白/BGM/音效条目带 file(可播放 URL)、gain_db、fade,前端按集时间轴位置与视频同步播放。"""
     cum = {g["group_id"]: g["cum_start_s"] for g in groups}
     lanes = {"dialogue": [], "narration": [], "bgm": [], "sfx": []}
+
+    def _f(v, default=0.0) -> float:
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
     for g in groups:
         for d in g.get("dialogue") or []:
             lanes["dialogue"].append({"group_id": g["group_id"], "t0": round(g["cum_start_s"] + d["t0"], 3),
                                       "t1": round(g["cum_start_s"] + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
-    man = _read_json_safe(base / "assets" / "audio" / "narration" / ep / "manifest.json") or {}
+    ndir = base / "assets" / "audio" / "narration" / ep
+    man = _read_json_safe(ndir / "manifest.json") or _read_json_safe(ndir / "narration_track.json") or {}
     for s in man.get("segments") or []:
         if not isinstance(s, dict):
             continue
-        gid = (s.get("anchor") or {}).get("group") or ""
+        anchor = s.get("anchor") if isinstance(s.get("anchor"), dict) else {}
+        gid = anchor.get("group") or s.get("anchor_group") or ""
         if gid in cum:
-            t0 = cum[gid]
-            lanes["narration"].append({"group_id": gid, "t0": round(t0, 3), "t1": round(t0 + float(s.get("duration_s") or 0), 3),
-                                       "label": s.get("num") or s.get("seg_id") or "", "file": _post_url(base, f"assets/audio/narration/{ep}/{s.get('file')}") if s.get("file") else None})
-    cue = _read_json_safe(base / "assets" / "audio" / "bgm" / ep / "cue_sheet.json") or {}
+            t0 = cum[gid] + _f(anchor.get("offset_s"))
+            f = s.get("file")
+            url = (_post_url(base, f"assets/audio/narration/{ep}/{f}") or _post_url(base, f)) if isinstance(f, str) and f else None
+            lanes["narration"].append({"group_id": gid, "t0": round(t0, 3), "t1": round(t0 + _f(s.get("duration_s")), 3),
+                                       "label": s.get("num") or s.get("seg_id") or "", "file": url,
+                                       "gain_db": _f(s.get("gain_db"))})
+    bdir = base / "assets" / "audio" / "bgm" / ep
+    cue = _read_json_safe(bdir / "cue_sheet.json") or _read_json_safe(bdir / "music_cues.json") or {}
     for c in cue.get("cues") or []:
-        if isinstance(c, dict) and c.get("status", "active") == "active":
-            lanes["bgm"].append({"t0": round(float(c.get("in_s") or 0), 3), "t1": round(float(c.get("out_s") or 0), 3),
+        if isinstance(c, dict) and (c.get("status") or "active") == "active":
+            f = c.get("file")
+            url = (_post_url(base, f"assets/audio/bgm/{ep}/{f}") or _post_url(base, f)) if isinstance(f, str) and f else None
+            fade = c.get("fade") if isinstance(c.get("fade"), dict) else {}
+            lanes["bgm"].append({"t0": round(_f(c.get("in_s")), 3), "t1": round(_f(c.get("out_s")), 3),
                                  "label": f"{c.get('cue_id') or ''} {c.get('mood') or ''}".strip(),
-                                 "file": _post_url(base, f"assets/audio/bgm/{ep}/{c.get('file')}") if c.get("file") else None})
+                                 "file": url, "gain_db": _f(c.get("gain_db")),
+                                 "fade_in": _f(fade.get("in_s", fade.get("in"))), "fade_out": _f(fade.get("out_s", fade.get("out")))})
     for r in sfx.get("rows") or []:
+        skip = r.get("source") == "skip"
         lanes["sfx"].append({"id": r.get("id"), "group_id": r.get("group_id"), "t": r.get("t"), "t_abs": r.get("t_abs"),
-                             "label": r.get("event") or r.get("text") or "", "resolved": bool(r.get("source") == "skip" or (r.get("source") and r.get("file")))})
+                             "label": r.get("event") or r.get("text") or "", "resolved": bool(skip or (r.get("source") and r.get("file"))),
+                             "file": None if skip else _post_sfx_file_url(base, r.get("file")), "gain_db": _f(r.get("gain_db"), -12.0)})
     return lanes
 
 

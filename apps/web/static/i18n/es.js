@@ -2446,6 +2446,8 @@ window.I18N_DICT = {
 "已存参考帧 {p}": "Fotograma de referencia guardado: {p}",
 "取帧失败:{e}": "Error al capturar el fotograma: {e}",
 "未落地": "Sin aplicar",
+"无音频文件": "Sin archivo de audio",
+"{n} 条可随播": "{n} reproducibles con el vídeo",
 "时间段": "Tramo",
 "处方": "Recetas",
 "修改单": "Recetas",
