@@ -291,7 +291,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="dd-sub-menu dropdown-box" id="lang-menu" data-no-i18n></div>
       </div>
       <a href="#" id="menu-account" style="display:none" title="账号:查看当前登录的账号 ID 与余额;未登录时在此登录,已登录可退出登录">账号</a>
-      <a href="https://shumati.cn/" target="_blank" rel="noopener">关于</a>
+      <a href="https://github.com/AgenticsWorld/VideoAgents" target="_blank" rel="noopener">关于</a>
     </div></div>
   </div>
 </header>
@@ -1633,10 +1633,10 @@ function syncSpatialHint(id){
   h.textContent=t(cb.checked?'建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)':'仅单张场景概念图流程,不建白模');
 }
 ['npo-spatial','out-spatial'].forEach(id=>{$('#'+id).addEventListener('change',()=>syncSpatialHint(id));syncSpatialHint(id);});
-// 新建向导:白模开关随第二步所选视频模型联动——Seedance 2.0 系列关闭,
-// 其余模型默认开启(2026-09-09 用户拍板);仅在模型限制步点选预设/改值时联动,用户之后在输出设置步仍可手动改
+// 新建向导:白模开关随「模型限制」步所选视频模型联动——仅 Seedance 2.5 默认开启,
+// 其余预设与手动值一律默认关闭(2026-09-16 用户拍板);仅在模型限制步点选预设/改值时联动,用户之后在输出设置步仍可手动改
 function npSpatialFromModel(){
-  $('#npo-spatial').checked=sgActivePreset('npsg')!=='sd20';syncSpatialHint('npo-spatial');
+  $('#npo-spatial').checked=sgActivePreset('npsg')==='sd25';syncSpatialHint('npo-spatial');
 }
 document.querySelectorAll('[data-sg-presets]').forEach(box=>{
   const pfx=box.dataset.sgPresets;
