@@ -298,6 +298,9 @@ REVISION_KIND_AGENTS: dict[str, list[str]] = {
     "narration":       ["01-story/narration"],
     "narration_audio": ["09-audio/narrator"],
     "bgm":             ["09-audio/music"],
+    # 后期处理页波形四轨「✏️ 发修改意见」(2026-09-16):对白段 / 音效点位
+    "dialogue":        ["09-audio/voice-generation", "08-video-gen/video-generation"],
+    "sfx":             ["09-audio/sound-effect", "09-audio/audio-mixing"],
 }
 REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
 REVISION_HISTORY_MAX = 3              # 修改单头里列出的同对象历史修改记录条数
@@ -8764,7 +8767,7 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
 
     for g in groups:
         for d in g.get("dialogue") or []:
-            lanes["dialogue"].append({"group_id": g["group_id"], "t0": round(g["cum_start_s"] + d["t0"], 3),
+            lanes["dialogue"].append({"group_id": g["group_id"], "shot_id": d.get("shot_id") or "", "t0": round(g["cum_start_s"] + d["t0"], 3),
                                       "t1": round(g["cum_start_s"] + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
     ndir = base / "assets" / "audio" / "narration" / ep
     man = _read_json_safe(ndir / "manifest.json") or _read_json_safe(ndir / "narration_track.json") or {}
@@ -8777,7 +8780,8 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
             t0 = cum[gid] + _f(anchor.get("offset_s"))
             f = s.get("file")
             url = (_post_url(base, f"assets/audio/narration/{ep}/{f}") or _post_url(base, f)) if isinstance(f, str) and f else None
-            lanes["narration"].append({"group_id": gid, "t0": round(t0, 3), "t1": round(t0 + _f(s.get("duration_s")), 3),
+            lanes["narration"].append({"group_id": gid, "num": s.get("num") or "", "seg_id": s.get("seg_id") or "",
+                                       "t0": round(t0, 3), "t1": round(t0 + _f(s.get("duration_s")), 3),
                                        "label": s.get("num") or s.get("seg_id") or "", "file": url,
                                        "gain_db": _f(s.get("gain_db"))})
     bdir = base / "assets" / "audio" / "bgm" / ep
@@ -8787,8 +8791,9 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
             f = c.get("file")
             url = (_post_url(base, f"assets/audio/bgm/{ep}/{f}") or _post_url(base, f)) if isinstance(f, str) and f else None
             fade = c.get("fade") if isinstance(c.get("fade"), dict) else {}
-            lanes["bgm"].append({"t0": round(_f(c.get("in_s")), 3), "t1": round(_f(c.get("out_s")), 3),
+            lanes["bgm"].append({"cue_id": c.get("cue_id") or "", "t0": round(_f(c.get("in_s")), 3), "t1": round(_f(c.get("out_s")), 3),
                                  "label": f"{c.get('cue_id') or ''} {c.get('mood') or ''}".strip(),
+                                 "sheet": "cue_sheet.json" if (bdir / "cue_sheet.json").is_file() else "music_cues.json",
                                  "file": url, "gain_db": _f(c.get("gain_db")),
                                  "fade_in": _f(fade.get("in_s", fade.get("in"))), "fade_out": _f(fade.get("out_s", fade.get("out")))})
     for r in sfx.get("rows") or []:

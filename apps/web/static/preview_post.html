@@ -157,6 +157,14 @@ body.masking .frame .maskpad{display:block}
 .waves .wph::before{content:'';position:absolute;top:0;left:-3px;border:3.5px solid transparent;border-top:5px solid #fff;border-bottom:0}
 .waves .tr i.nofile{opacity:.35;outline:1px dashed #ffffff55}
 .waves .tr i.live{box-shadow:0 0 0 1px #fff;filter:brightness(1.45)}
+/* 轨道条目选中(2026-09-16):点一条对白/旁白/BGM/音效 → 高亮 + 下方出现选中条(定位 / ✏️ 发修改意见给修改师) */
+.waves .tr i[data-i]{cursor:pointer}
+.waves .tr i.sel{outline:2px solid var(--accent);outline-offset:1px;z-index:2}
+.waves .wsel{grid-column:1/-1;display:flex;gap:6px;align-items:center;padding:3px 8px;border-bottom:1px solid var(--border);font:11.5px var(--font,system-ui);color:var(--text);background:var(--panel2)}
+.waves .wsel .kd{padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:10.5px;color:#0b1020}
+.waves .wsel .kd.v{background:#8fa3cf}.waves .wsel .kd.n{background:#b3a4d9}.waves .wsel .kd.m{background:#6fb3ac}.waves .wsel .kd.s{background:var(--yellow)}
+.waves .wsel .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.waves .wsel .tm{color:var(--dim);font-family:var(--mono);font-size:10.5px}
 /* 右栏 */
 .scope{display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11.5px;align-items:center;flex:none;flex-wrap:wrap}
 .acc{border-bottom:1px solid var(--border)}
@@ -450,7 +458,7 @@ function renderLeft(){
 }
 function selectGroup(gid){
   if(gid===SEL)return;
-  SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;CUTS=[];CUT_ALT=null;if(SCOPE==='range')SCOPE='group';
+  SEL=gid;posSave({sel:gid});RANGE=null;MASK=null;VA=null;VB=null;CUTS=[];CUT_ALT=null;WSEL=null;if(SCOPE==='range')SCOPE='group';
   if(MODE==='episode'){
     // 整集连播中点组:不退出连播,改从该组起继续连播;正在播就接着播
     const va=$('#va');PLAYING_EP=!!(va&&va.src&&!va.paused);
@@ -524,6 +532,7 @@ function renderMonitorShell(){
     if(e.code==='Space'){e.preventDefault();if(AB==='flash'){const on=vb.style.display!=='none';vb.style.display=on?'none':'block';vb.style.clipPath='none';$('#tagB').style.display=on?'none':'block'}else togglePlay()}
     if(e.key==='ArrowLeft'){va.pause();seekTo(Math.max(0,va.currentTime-1/24))}
     if(e.key==='ArrowRight'){va.pause();seekTo(va.currentTime+1/24)}
+    if(e.key==='Escape'&&WSEL){WSEL=null;renderWaves()}
   });
   // 蒙版
   const pad=$('#maskpad');let m0=null;
@@ -878,6 +887,8 @@ let LAST_FRAME=null;
 /* 分镜剪辑(2026-09-14;09-15 移到右栏修改单上方,默认折叠;09-16 按功能分三模块):CUT_ON 区块展开开关;CUT_MODE=delete 删段|replace 换段|dispatch 派单剪辑师;
    CUTS=[{t0,t1}] 时间段(基准 A 的时间线,三模块共用);CUT_ALT=换段的替换源版本号;CUT_INSTR=派单指令草稿;CUT_BUSY=生成/派单中 */
 let CUT_ON=false,CUT_MODE='delete',CUTS=[],CUT_ALT=null,CUT_INSTR='',CUT_BUSY=false;
+/* 波形轨道选中条目(2026-09-16):{lane:'dialogue'|'narration'|'bgm'|'sfx', i} */
+let WSEL=null;
 /* 波形四轨 */
 function waveWindow(){
   if(MODE==='group'){const g=grpById(SEL);return g?[g.cum_start_s,g.cum_start_s+(g.duration||$('#va').duration||0)]:[0,1]}
@@ -893,12 +904,56 @@ function renderWaves(){
   const [w0,w1]=waveWindow(),W=Math.max(0.01,w1-w0),L=D.lanes||{};
   const pos=(a,b)=>`left:${((a-w0)/W*100).toFixed(2)}%;width:${(Math.max(0.15,b-a)/W*100).toFixed(2)}%`;
   const inWin=x=>x.t1>w0&&x.t0<w1;
-  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''}"></i>`:'').join('')}</div>`;
+  const LANE_KEY={v:'dialogue',n:'narration',m:'bgm',s:'sfx'};
+  const isSel=(key,i)=>WSEL&&WSEL.lane===key&&WSEL.i===i;
+  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}${isSel(LANE_KEY[cls],i)?' sel':''}" data-lane="${LANE_KEY[cls]}" data-i="${i}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
   let h=lane(t('对白'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
-  h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))}"></i>`:'').join('')}</div>`;
+  h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}${isSel('sfx',i)?' sel':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-lane="sfx" data-i="${i}" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
+  h+=waveSelHtml();
   $('#waves').innerHTML=LAYERS.sound?h+'<i class="wph"></i>':'';
   waveHead();
-  $$('#waves .cue').forEach(c=>c.onclick=()=>openSfx(c.dataset.sfx));
+  $$('#waves .tr i[data-i]').forEach(el=>el.onclick=e=>{e.stopPropagation();const lane=el.dataset.lane,i=+el.dataset.i;WSEL=(WSEL&&WSEL.lane===lane&&WSEL.i===i)?null:{lane,i};renderWaves()});
+  bindWaveSel();
+}
+/* ---------- 轨道条目选中条:定位 / 打开点位表(音效)/ ✏️ 发修改意见给修改师 ---------- */
+function waveSelItem(){if(!WSEL||!D)return null;const x=((D.lanes||{})[WSEL.lane]||[])[WSEL.i];return x||null}
+function waveSelHtml(){
+  const x=waveSelItem();if(!x)return '';
+  const cls={dialogue:'v',narration:'n',bgm:'m',sfx:'s'}[WSEL.lane],kd={dialogue:t('对白'),narration:t('旁白'),bgm:t('BGM'),sfx:t('音效')}[WSEL.lane];
+  const tm=WSEL.lane==='sfx'?tc(x.t_abs):tc(x.t0)+'–'+tc(x.t1);
+  let nm=WSEL.lane==='dialogue'?`${x.group_id}${x.shot_id?' · '+x.shot_id:''}${x.label?' · '+x.label:''}`:WSEL.lane==='sfx'?`${x.id}${x.label?' · '+x.label:''} · ${x.group_id}`:x.label||'';
+  return `<div class="wsel"><span class="kd ${cls}">${esc(kd)}</span><span class="nm" title="${esc(nm)}">${esc(nm)}</span><span class="tm">${esc(tm)}</span>`+
+    `<button class="xs" data-ws="seek" title="${esc(t('把播放头定位到这一段起点'))}">⏵ ${esc(t('定位'))}</button>`+
+    (WSEL.lane==='sfx'?`<button class="xs" data-ws="sfx">${esc(t('点位表'))}</button>`:'')+
+    `<button class="xs pri" data-ws="edit" title="${esc(t('对这一段提修改意见,发给修改师处理'))}">✏️ ${esc(t('发修改意见'))}</button><button class="xs" data-ws="close" title="${esc(t('清除选中(Esc)'))}">✕</button></div>`;
+}
+function bindWaveSel(){
+  const box=$('#waves .wsel');if(!box)return;
+  box.querySelector('[data-ws="close"]').onclick=()=>{WSEL=null;renderWaves()};
+  box.querySelector('[data-ws="seek"]').onclick=()=>{const x=waveSelItem();if(!x)return;const abs=WSEL.lane==='sfx'?x.t_abs:x.t0;const g=grpById(x.group_id)||D.groups.find(g=>abs>=g.cum_start_s&&abs<g.cum_start_s+g.duration);if(!g)return;if(g.group_id!==SEL){const keep=WSEL;selectGroup(g.group_id);WSEL=keep;renderWaves()}$('#va').pause();seekTo(Math.max(0,abs-g.cum_start_s))};
+  const sb=box.querySelector('[data-ws="sfx"]');if(sb)sb.onclick=()=>openSfx(waveSelItem().id);
+  box.querySelector('[data-ws="edit"]').onclick=waveSelEdit;
+}
+const artPath=u=>u?decodeURIComponent(String(u).split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/')):'';
+function waveSelEdit(){
+  // 结构化定位 → 修改师(00-orchestration/reviser):服务端按 kind 附代行工位 SOUL(dialogue/narration_audio/bgm/sfx)
+  const x=waveSelItem();if(!x||!window.EditPopup)return;
+  const lane=WSEL.lane,files=[];let kind,id,loc;
+  if(lane==='dialogue'){
+    const g=grpById(x.group_id)||{},cur=versionsOf(x.group_id).find(v=>v.v===(g.current||0));if(cur&&cur.url)files.push(artPath(cur.url));
+    kind='dialogue';id=x.shot_id||x.group_id;
+    loc=I18N.f('对白 {ep}/{g}{sh}({sp};组内 {a}–{b}s,集时间 {c}–{d}s;数据 directing/{ep}/shot_list.json 镜 {shot} dialogue_lines,组视频见 files)',{ep:EP,g:x.group_id,sh:x.shot_id?'/'+x.shot_id:'',sp:x.label||'-',a:num(x.t0-(g.cum_start_s||0),2),b:num(x.t1-(g.cum_start_s||0),2),c:num(x.t0,2),d:num(x.t1,2),shot:x.shot_id||'-'});
+  }else if(lane==='narration'){
+    if(x.file)files.push(artPath(x.file));kind=x.file?'narration_audio':'narration';id=x.num||x.seg_id||x.label;
+    loc=I18N.f('旁白 {ep}/{id}(挂点组 {g};集时间 {c}–{d}s;数据 assets/audio/narration/{ep}/manifest.json 段 {id},文稿 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id,g:x.group_id,c:num(x.t0,2),d:num(x.t1,2)});
+  }else if(lane==='bgm'){
+    if(x.file)files.push(artPath(x.file));kind='bgm';id=x.cue_id||(x.label||'').split(' ')[0];
+    loc=I18N.f('配乐 {ep}/{id}({mood};集时间 {c}–{d}s;数据 assets/audio/bgm/{ep}/{sheet} 条目 {id})',{ep:EP,id,mood:((m=>m.length>60?m.slice(0,60)+'…':m)((x.label||'').slice(id.length).trim()))||'-',c:num(x.t0,2),d:num(x.t1,2),sheet:x.sheet||'cue_sheet.json'});
+  }else{
+    if(x.file)files.push(artPath(x.file));kind='sfx';id=x.id;
+    loc=I18N.f('音效 {ep}/{id}({ev};组 {g} 第 {t}s,集时间 {c}s;数据 assets/post/{ep}/sfx_cues.json 行 {id},{st})',{ep:EP,id,ev:x.label||'-',g:x.group_id,t:num(x.t,2),c:num(x.t_abs,2),st:x.resolved?(x.file?t('文件见 files'):t('已选来源但无文件')):t('尚未落地')});
+  }
+  EditPopup.open({project:proj(),compose:t('修改 ')+loc+'\n'+t('修改意见:'),target:{kind,id,ep:EP,files,label:loc}});
 }
 
 /* ---------- 右栏 ---------- */
