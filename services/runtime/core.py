@@ -8540,6 +8540,7 @@ POST_RECORD_AGENTS = {"level": "09-audio/audio-mixing", "mix_target": "09-audio/
                       "bgm_segment": "09-audio/music", "caption": "10-editing/caption", "subtitle_style": "10-editing/subtitle",
                       "transition": "10-editing/transition"}
 POST_SFX_AGENT = "09-audio/sound-effect"
+POST_EDIT_AGENT = "10-editing/edit"          # 分镜剪辑「派单剪辑师」模块的收件工位
 
 
 def _post_pp():
@@ -9461,6 +9462,106 @@ async def api_post_splice(project: str, ep: str, body: dict):
                 "base_v": base_v, "alt_v": alt_v, "cuts": res["cuts"], "segments": res["segments"], "notes": res["notes"],
                 "seconds": round(time.time() - t0, 1)}
     return await asyncio.to_thread(_do)
+
+
+def _post_cut_args(pp, plan: dict, gid: str, body: dict) -> tuple[int, list[dict]]:
+    """分镜剪辑三个模块共用的入参解析:基准版本号(缺省=当前指针)与时间段列表。"""
+    try:
+        base_v = int(body.get("base_v") if body.get("base_v") is not None else pp.current_version(plan, gid))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "base_v 须为版本号") from None
+    cuts = body.get("cuts") or []
+    if not isinstance(cuts, list):
+        raise ServiceError(400, "cuts 须为 [{t0,t1}] 列表")
+    return base_v, cuts
+
+
+async def api_post_cutout(project: str, ep: str, body: dict):
+    """分镜剪辑·删段:{group_id, base_v, cuts:[{t0,t1}]};base_v 时间线上 cuts 各段直接删除,
+    剩余内容按序拼成新版本(时长变短),ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针)。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = _post_group_guard(str(body.get("group_id") or ""))
+        job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
+        if job.get("status") == "running":
+            raise ServiceError(409, f"本集有后期作业在跑({job.get('kind')}),请等它结束再剪")
+        base_v, cuts = _post_cut_args(pp, plan, gid, body)
+        if not cuts:
+            raise ServiceError(400, "至少标一个要删除的时间段")
+        src = pp.version_file(base, ep2, gid, base_v, plan)
+        if not src:
+            raise ServiceError(404, f"{gid} v{base_v} 没有视频文件")
+        v = pp.next_version_no(plan, gid)
+        dst = pp.post_dir(base, ep2) / gid / f"v{v}.mp4"
+        t0 = time.time()
+        try:
+            res = post_fx.cut_out(src, dst, cuts)
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(500, f"删段失败:{str(e)[-400:]}") from None
+        plan2 = pp.load_plan(base, ep2)
+        if pp.next_version_no(plan2, gid) != v:
+            v2 = pp.next_version_no(plan2, gid)
+            dst2 = dst.with_name(f"v{v2}.mp4")
+            dst.rename(dst2)
+            dst, v = dst2, v2
+        ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="cutout")
+        ver["cutout"] = {"base_v": base_v, "cuts": res["cuts"], "removed": res["removed"],
+                         "duration": res["new_duration"], "notes": res["notes"]}
+        ver["note"] = f"删段 v{base_v} · {len(res['cuts'])} 段 · -{res['removed']:.2f}s"
+        ver["source"] = {"kind": "cutout", "duration": res["new_duration"]}
+        pp.save_plan(base, ep2, plan2)
+        return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
+                "base_v": base_v, "cuts": res["cuts"], "segments": res["segments"], "removed": res["removed"],
+                "duration": res["new_duration"], "notes": res["notes"], "seconds": round(time.time() - t0, 1)}
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_edit_dispatch(project: str, ep: str, body: dict):
+    """分镜剪辑·派单剪辑师:{group_id, base_v, instruction, cuts?:[{t0,t1}]} → 把用户指令(附基准版本、
+    时间段)发给 10-editing/edit,产物用 post_apply.py register --group --file 登记为本组新版本;工单记入台账 edit_orders。"""
+    pp, base, ep2, plan = _post_load(project, ep)
+    gid = _post_group_guard(str(body.get("group_id") or ""))
+    instruction = str(body.get("instruction") or "").strip()
+    if not instruction:
+        raise ServiceError(400, "请输入给剪辑师的指令")
+    base_v, cuts = _post_cut_args(pp, plan, gid, body)
+    src = pp.version_file(base, ep2, gid, base_v, plan)
+    if not src:
+        raise ServiceError(404, f"{gid} v{base_v} 没有视频文件")
+    if not agent_dir(POST_EDIT_AGENT):
+        raise ServiceError(404, f"Unknown agent: {POST_EDIT_AGENT}")
+    from modules import post_fx
+    info = {}
+    try:
+        info = post_fx.probe(src)
+    except Exception:  # noqa: BLE001
+        info = {}
+    ranges = post_fx.merge_ranges(cuts, float(info.get("duration") or 1e9), float(info.get("fps") or 24.0)) if cuts else []
+    oid = f"eo_{time.strftime('%Y%m%d_%H%M%S')}_{gid}"
+    out = f"assets/post/{ep2}/{gid}/{oid}.mp4"
+    vs = [v for v in pp.group_versions(plan, gid) if not v.get("cleaned")]
+    others = ", ".join(f"v{v.get('v')}={v.get('file')}" for v in vs if int(v.get("v") or 0) != base_v)
+    lines = [f"后期处理页·分镜剪辑工单 {oid}(项目 {base.name} · {ep2} · 组 {gid} · 基准 v{base_v})。",
+             f"源文件:{src.relative_to(base)}" + (f"({info.get('width')}×{info.get('height')} {info.get('fps')}fps {float(info.get('duration') or 0):.2f}s)" if info.get("width") else ""),
+             f"本组其它可用版本:{others or '无'}(母本 v0 = assets/clips/{ep2}/{gid}.mp4,永不覆盖)。"]
+    if ranges:
+        lines.append("用户在基准版本时间线上标出的时间段(组内秒,供指令引用):")
+        lines += [f"- 第 {i + 1} 段 {a:.2f}s – {b:.2f}s({b - a:.2f}s)" for i, (a, b) in enumerate(ranges)]
+    lines += ["用户指令:", instruction, "",
+              f"要求:只对本组这一条视频做剪辑(裁切/删段/换段/变速/接顺等,用 ffmpeg 或本工位技能),画幅与帧率与源一致;"
+              f"产物写到 {out},然后登记为本组新版本(不动当前指针):",
+              f"python3 code/post_apply.py register --project {base.name} --ep {ep2} --group {gid} --file {out} --note '{oid}'",
+              "完成后回执写明做了什么、产物时长;无法执行时回执说明原因,不要改母本、不要动 post_plan.json 其它字段。"]
+    res = await api_chat({"agent": POST_EDIT_AGENT, "message": "\n".join(lines), "project": base.name, "source": "user"})
+    plan = pp.load_plan(base, ep2)
+    order = {"id": oid, "group_id": gid, "base_v": base_v, "instruction": instruction,
+             "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges], "out": out,
+             "run_id": res.get("run_id"), "agent": POST_EDIT_AGENT, "created_at": pp._now()}
+    plan.setdefault("edit_orders", []).append(order)
+    plan["edit_orders"] = plan["edit_orders"][-200:]
+    pp.save_plan(base, ep2, plan)
+    return {"ok": True, "order": order, "run_id": res.get("run_id"), "agent": POST_EDIT_AGENT}
 
 
 async def api_post_asset_upload(project: str, ep: str, data: bytes, filename: str, kind: str = "asset"):

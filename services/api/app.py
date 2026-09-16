@@ -353,8 +353,20 @@ async def post_import_upload(project: str, ep: str, request: Request, group_id: 
 
 @api.post("/projects/{project}/post/{ep}/splice", tags=["artifacts"])
 async def post_splice(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
-    """分镜剪辑:{group_id, base_v, alt_v, cuts:[{t0,t1}]} → 切掉段换成 alt_v 同段,拼成新版本。"""
+    """分镜剪辑·换段:{group_id, base_v, alt_v, cuts:[{t0,t1}]} → 切掉段换成 alt_v 同段,拼成新版本。"""
     return _artifact_urls(await core.api_post_splice(project, ep, body), project)
+
+
+@api.post("/projects/{project}/post/{ep}/cutout", tags=["artifacts"])
+async def post_cutout(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑·删段:{group_id, base_v, cuts:[{t0,t1}]} → 选中段直接删除,剩余内容拼成新版本。"""
+    return _artifact_urls(await core.api_post_cutout(project, ep, body), project)
+
+
+@api.post("/projects/{project}/post/{ep}/edit-dispatch", tags=["artifacts"])
+async def post_edit_dispatch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑·派单剪辑师:{group_id, base_v, instruction, cuts?} → 指令发给 10-editing/edit,产物登记为本组新版本。"""
+    return await core.api_post_edit_dispatch(project, ep, body)
 
 
 @api.post("/projects/{project}/post/{ep}/assets", tags=["artifacts"])

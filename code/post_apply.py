@@ -11,6 +11,7 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
                对处方作用域内的每个组,在当前版本之上施加 ffmpeg 滤镜链出新版本(多条处方=同一版本一次链上);
                --preview 只出前 4 秒 480p 低清到 assets/post/epNN/<grp>/refs/preview_<id>.mp4,不进版本链
   register     --recipe <id> --file <路径> [--group grpNNN]   agent 类处方把外部产物登记为新版本(状态→已出片)
+  register     --group grpNNN --file <路径> [--note 工单号]   分镜剪辑「派单剪辑师」产物登记为本组新版本(无处方)
   adopt        --recipe <id>       采纳:版本指针指向该产物;转场处方回写 shot_list.transition_in
   discard      --recipe <id>       弃用:指针退回;文件不删
   rollback     --group grpNNN --to <v>   把某组指针挪到任一版本(0 = 母本)
@@ -187,10 +188,10 @@ def do_apply(proj: Path, ep: str, recipe_ids: list[str], only_group: str | None,
     return 0 if ok_all else 1
 
 
-def do_register(proj: Path, ep: str, rid: str, file: str, group: str | None) -> int:
+def do_register(proj: Path, ep: str, rid: str | None, file: str, group: str | None, note: str = "") -> int:
     plan = pp.load_plan(proj, ep)
-    r = pp.find_recipe(plan, rid)
-    if not r:
+    r = pp.find_recipe(plan, rid) if rid else None
+    if rid and not r:
         _log("FAIL", f"处方不存在:{rid}")
         return 2
     f = Path(file)
@@ -198,7 +199,7 @@ def do_register(proj: Path, ep: str, rid: str, file: str, group: str | None) -> 
     if not f.is_file():
         _log("FAIL", f"文件不存在:{file}")
         return 2
-    gid = group or r["scope"].get("group_id")
+    gid = group or (r["scope"].get("group_id") if r else None)
     if not gid:
         _log("FAIL", "整集/场次作用域的处方登记时须 --group 指明是哪一组的产物")
         return 2
@@ -208,6 +209,17 @@ def do_register(proj: Path, ep: str, rid: str, file: str, group: str | None) -> 
         _log("FAIL", "产物必须在项目目录内(建议 assets/post/epNN/<grp>/)")
         return 2
     base_v = pp.current_version(plan, gid)
+    if not r:
+        # 分镜剪辑「派单剪辑师」工单的产物:无处方,直接登记为本组新版本(不动指针),note 记工单号
+        ver = pp.register_version(plan, proj, ep, gid, str(f.relative_to(proj)), [], base_v, by="edit")
+        ver["note"] = note or f"剪辑师产物 {f.name}"
+        for o in plan.get("edit_orders") or []:
+            if note and o.get("id") == note:
+                o["v"] = ver["v"]
+                o["registered_at"] = pp._now()
+        pp.save_plan(proj, ep, plan)
+        _log("PASS", f"{gid} 登记 v{ver['v']} ← {ver['file']}(剪辑师产物,{ver['note']})")
+        return 0
     ver = pp.register_version(plan, proj, ep, gid, str(f.relative_to(proj)), [rid], base_v, by="register")
     out = (r.get("output") or {}).get("versions") or {}
     out[gid] = {"v": ver["v"], "file": ver["file"]}
@@ -517,6 +529,7 @@ def main(argv=None):
         ap.add_argument("--recipe", action="append", default=[], help="处方 id,可重复")
         ap.add_argument("--group", default=None, help="限定分镜组 grpNNN")
         ap.add_argument("--file", default=None, help="register:产物路径(项目内)")
+        ap.add_argument("--note", default="", help="register(无 --recipe):版本备注/分镜剪辑工单号")
         ap.add_argument("--to", type=int, default=0, help="rollback:目标版本号(0=母本)")
         ap.add_argument("--preview", action="store_true", help="apply:只出 4 秒 480p 低清预览")
         ap.add_argument("--json", action="store_true", help="status:JSON 输出")
@@ -532,10 +545,10 @@ def main(argv=None):
             return 2
         return do_apply(proj, ep, args.recipe, args.group, args.preview)
     if args.cmd == "register":
-        if not (args.recipe and args.file):
-            _log("FAIL", "register 需要 --recipe 与 --file")
+        if not args.file or not (args.recipe or args.group):
+            _log("FAIL", "register 需要 --file,以及 --recipe(处方产物)或 --group(分镜剪辑工单产物)")
             return 2
-        return do_register(proj, ep, args.recipe[0], args.file, args.group)
+        return do_register(proj, ep, args.recipe[0] if args.recipe else None, args.file, args.group, args.note)
     if args.cmd in ("adopt", "discard"):
         if not args.recipe:
             _log("FAIL", f"{args.cmd} 需要 --recipe")

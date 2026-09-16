@@ -413,7 +413,7 @@ def concat_segments(files: list[Path], dst: Path) -> None:
         tmp.unlink(missing_ok=True)
 
 
-# ---------------------------------------------------------------- 分镜剪辑(两个版本按时间段拼接)
+# ---------------------------------------------------------------- 分镜剪辑(换段:两个版本按时间段拼接)
 def merge_ranges(cuts: list[dict], duration: float, fps: float) -> list[tuple[float, float]]:
     """时间段规范化:裁到 [0,duration]、按帧对齐、排序、合并重叠/相邻;过短(<1 帧)的丢弃。"""
     step = 1.0 / max(1.0, fps)
@@ -510,3 +510,54 @@ def splice(base_src: Path, alt_src: Path, dst: Path, cuts: list[dict]) -> dict:
         tmp.unlink(missing_ok=True)
     return {"segments": segs, "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges],
             "duration": round(bi["duration"], 3), "notes": notes}
+
+
+# ---------------------------------------------------------------- 分镜剪辑(删段:切掉的时间段直接删除,其余按序拼接)
+def cut_out(src: Path, dst: Path, cuts: list[dict]) -> dict:
+    """删段:以 src 为时间线,cuts 里的时间段直接删除,剩下的段按原顺序拼接一次编码出 dst(时长变短)。
+    画面与声轨同步裁剪;返回 {segments(保留段), cuts(规范化后删除段), duration(原时长), new_duration, removed, notes}。"""
+    require_tools("ffmpeg", "ffprobe")
+    info = probe(src)
+    w, h, fps = info["width"], info["height"], info["fps"] or 24.0
+    if not w or not h or not info["duration"]:
+        raise FxError(f"基准版本无法解析:{src.name}")
+    ranges = merge_ranges(cuts, info["duration"], fps)
+    if not ranges:
+        raise FxError("没有有效的删除时间段")
+    keep = [s for s in splice_plan(ranges, info["duration"]) if s["src"] == "base"]
+    if not keep:
+        raise FxError("选中的时间段覆盖了整段视频,没有剩余内容可拼")
+    removed = sum(b - a for a, b in ranges)
+    audio = bool(info["has_audio"])
+    parts, vlabels, alabels = [], [], []
+    for i, s in enumerate(keep):
+        length = s["t1"] - s["t0"]
+        n = max(1, int(round(length * fps)))
+        parts.append(f"[0:v]trim=start={s['t0']:.6f}:end={max(s['t1'], s['t0'] + 1e-3):.6f},setpts=PTS-STARTPTS,"
+                     f"fps={fps:g},format=yuv420p,trim=end_frame={n},setpts=PTS-STARTPTS[v{i}]")
+        vlabels.append(f"[v{i}]")
+        if audio:
+            parts.append(f"[0:a]atrim=start={s['t0']:.6f}:end={max(s['t1'], s['t0'] + 1e-3):.6f},asetpts=PTS-STARTPTS,"
+                         f"aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur={length:.6f},atrim=end={length:.6f},asetpts=PTS-STARTPTS[a{i}]")
+            alabels.append(f"[a{i}]")
+    if audio:
+        parts.append("".join(v + a for v, a in zip(vlabels, alabels)) + f"concat=n={len(keep)}:v=1:a=1[vo][ao]")
+    else:
+        parts.append("".join(vlabels) + f"concat=n={len(keep)}:v=1:a=0[vo]")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.stem + ".rendering" + dst.suffix)
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-filter_complex", ";".join(parts), "-map", "[vo]"]
+    if audio:
+        cmd += ["-map", "[ao]", "-c:a", "aac", "-b:a", "192k"]
+    cmd += ENC_VIDEO + [str(tmp)]
+    try:
+        run(cmd, timeout=3600)
+        if dst.exists():
+            dst.unlink()
+        tmp.rename(dst)
+    finally:
+        tmp.unlink(missing_ok=True)
+    new_dur = sum(s["t1"] - s["t0"] for s in keep)
+    notes = [f"时长 {info['duration']:.2f}s → {new_dur:.2f}s,与镜头表/时间线的组时长不再一致,出成片前需同步 timeline"]
+    return {"segments": keep, "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges],
+            "duration": round(info["duration"], 3), "new_duration": round(new_dur, 3), "removed": round(removed, 3), "notes": notes}
