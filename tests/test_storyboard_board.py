@@ -168,3 +168,43 @@ def test_load_board_attaches_narration_from_md(tmp_path):
     assert [(n["id"], n["source"], n["text"]) for n in shots[0]["narration"]] == [("N-01", "storyboard", "夜深了。")]
     assert [(n["id"], n["source"]) for n in shots[1]["narration"]] == [("N-02", "anchor_text")]
     assert board["narration"]["items"] == 2 and board["narration"]["total_est_s"] == 7.0
+
+
+def test_notes_roundtrip(tmp_path):
+    """用户注释(2026-09-15):整集 * / 场次 S01 / 镜 S01-03 三级键,空文本删除,全空删文件,坏键拒收。"""
+    base = tmp_path
+    assert sbb.load_notes(base, "ep01")["notes"] == {}
+    d = sbb.update_note(base, "ep01", "S01-03", "  这一镜要仰拍,保留门框前景  ", {"scene_no": "S01", "order": 3, "content": "林昭推门"})
+    rec = d["notes"]["S01-03"]
+    assert rec["text"] == "这一镜要仰拍,保留门框前景" and rec["level"] == "shot" and rec["order"] == 3 and rec["content"] == "林昭推门"
+    assert rec["created_at"] and rec["updated_at"]
+    sbb.update_note(base, "ep01", "*", "整集节奏放慢")
+    sbb.update_note(base, "ep01", "S01", "本场多用中景")
+    saved = json.loads(sbb.notes_path(base, "ep01").read_text())
+    assert saved["schema"] == sbb.NOTES_SCHEMA and set(saved["notes"]) == {"S01-03", "*", "S01"} and "_readme" in saved
+    assert saved["notes"]["*"]["level"] == "episode" and saved["notes"]["S01"]["level"] == "scene"
+    # 改文本保留 created_at,清空删条目,全清删文件
+    created = rec["created_at"]
+    d = sbb.update_note(base, "ep01", "S01-03", "改成平视")
+    assert d["notes"]["S01-03"]["text"] == "改成平视" and d["notes"]["S01-03"]["created_at"] == created
+    sbb.update_note(base, "ep01", "S01-03", "")
+    assert "S01-03" not in sbb.load_notes(base, "ep01")["notes"]
+    sbb.update_note(base, "ep01", "*", "")
+    sbb.update_note(base, "ep01", "S01", "   ")
+    assert not sbb.notes_path(base, "ep01").exists() and sbb.load_notes(base, "ep01")["notes"] == {}
+    import pytest
+    with pytest.raises(ValueError):
+        sbb.update_note(base, "ep01", "../x", "bad")
+    with pytest.raises(ValueError):
+        sbb.update_note(base, "ep01", "S01", "x" * (sbb.NOTE_MAX_CHARS + 1))
+    assert sbb.note_key_ok("*") and sbb.note_key_ok("S01-03") and not sbb.note_key_ok("") and not sbb.note_key_ok("S01/03")
+
+
+def test_note_meta_from_board():
+    board = {"title": "初入", "scenes": [{"scene_no": "S01", "scene_id": "SCN-0012", "location": "大殿",
+                                          "shots": [{"key": "S01-01", "order": 1, "shot_id": "S01-D01", "content": "林昭推门" * 30}]}]}
+    assert sbb.note_meta(board, "*") == {"title": "初入"}
+    assert sbb.note_meta(board, "S01") == {"scene_no": "S01", "scene_id": "SCN-0012", "location": "大殿"}
+    m = sbb.note_meta(board, "S01-01")
+    assert m["scene_no"] == "S01" and m["order"] == 1 and m["shot_id"] == "S01-D01" and len(m["content"]) == 80
+    assert sbb.note_meta(board, "S09-09") == {}

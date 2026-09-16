@@ -13,7 +13,7 @@
 
 场次人物默认继承：每组保留 `scene_no`，以同集 `scene_no + scene_id` 建立完整 `scene_cast`，包含无对白、画外和静止陪衬人物。`characters_union` 是组内叙事角色合集，维持现有分组统计；完整在场集合单独记录，不再用叙事列表限制白模或引用人物。定稿后运行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write`，读取缺图报告并补交上游；同地点的不同时间、闪回不得混场。明确进退场与远程声音例外，不能把暂未入画解释为离场。
 
-1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…)、定终稿时长、景别、机位描述;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
+1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…)、定终稿时长、景别、机位描述;**先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读;键 `*` 整集 / `S01` 场次 / `S01-03` 场次-草案镜序,镜级条目带 scene_no/order/shot_id/content 便于对回草案镜)**——用户在故事板页写的分镜设计意见,定稿镜号/时长/景别/机位与分组时逐条对照落实,落实不了的在汇报里说明;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
 2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。
 3. 按 `pacing.json` 的逐场时长分配收敛总时长:Σ镜头时长 = 集时长 ±10%;超预算时按 pacing 的删减建议裁,并记录取舍。
 4. **定稿生成组(generation_groups)**:以 storyboard 的 groups_draft 为底稿逐组校验定稿——
@@ -48,6 +48,7 @@
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
 | storyboard | 镜头草案(含景别/时长建议) | `directing/epNN/storyboard.json` |
+| 用户(故事板页) | 分镜注释(整集/场次/镜,分镜设计的参考;2026-09-15) | `directing/epNN/storyboard_notes.json`(有则必读) |
 | pacing | 逐场时长分配、删减建议、集时长预算 | `story/episodes/epNN/pacing.json` |
 | narration | 本集旁白稿(每条带场景锚点与 est_duration_s) | `story/episodes/epNN/narration.md` |
 | character-manager / scene | 合法 ID 清单 | `bible/characters/index.json`、`bible/scenes/index.json` |
@@ -152,6 +153,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:storyboard(草案,含 scene_refs / blocking_map / view_tile)、pacing(时长预算与删减建议)、character-manager / scene(ID 权威)、environment-concept(场景布局包 layout.json,重切动线时的地标词源)。
+- **上游**:storyboard(草案,含 scene_refs / blocking_map / view_tile)、用户(故事板页注释 `storyboard_notes.json`)、pacing(时长预算与删减建议)、character-manager / scene(ID 权威)、environment-concept(场景布局包 layout.json,重切动线时的地标词源)。
 - **下游**:camera-movement / composition / blocking(每镜设计以我的镜头表为基准)、continuity-planning(检查表按我的镜序与组边界)、`08-video-gen/prompt` 与 `video-generation`(Phase 7 按 generation_groups 实例化,组总时长与组序是生成硬约束)、Phase 8 sound-effect(事件打点)、Phase 9 edit(按组序粗剪)、transition(按 `transition_in` 用宿主 CLI 实施组间转场)与 caption。他们最怕我:冻结后改镜号/组号、总时长失衡、ID 张冠李戴、组时长超 15s、转场没写进字段只留在散文里。
 - **需对齐的伙伴**:pacing(预算口径)、orchestrator(冻结与标脏规则)。

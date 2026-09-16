@@ -277,6 +277,12 @@ async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str
     return await core.api_board_signoff(project, ep, body)
 
 
+@api.post("/projects/{project}/board/{ep}/notes", tags=["artifacts"])
+async def board_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """故事板页「🗒 注释」:{key: '*'|'S01'|'S01-03', text}(空 text = 删除)→ directing/<ep>/storyboard_notes.json,供分镜设计参考。"""
+    return await core.api_board_note_set(project, ep, body)
+
+
 @api.post("/projects/{project}/board/{ep}/animatic", tags=["artifacts"])
 async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """故事板/成片发布页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""

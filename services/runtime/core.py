@@ -7747,11 +7747,36 @@ def _preview_board(project: str, ep: str):
     data["animatic"] = _board_animatic(base, ep)
     data["dialogue_tts"] = _dialogue_tts_status(base, ep)
     data["gate"] = _board_gate(base, ep)
+    data["notes"] = sbb.load_notes(base, ep)["notes"]      # 用户注释(2026-09-15):整集 * / 场次 S01 / 镜 S01-03
     return data
 
 
 async def api_preview_board(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_board, project, ep)
+
+
+def _board_note_set(project: str, ep: str, body: dict) -> dict:
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    key = str(body.get("key") or "").strip()
+    if not sbb.note_key_ok(key):
+        raise ServiceError(400, "key must be '*' (episode), 'S01' (scene) or 'S01-03' (shot)")
+    text = str(body.get("text") or "")
+    if len(text.strip()) > sbb.NOTE_MAX_CHARS:
+        raise ServiceError(400, f"note too long (>{sbb.NOTE_MAX_CHARS} chars)")
+    if not (base / "directing" / ep / "storyboard.json").is_file() and not sbb.notes_path(base, ep).is_file():
+        raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
+    meta = sbb.note_meta(sbb.load_board(base, ep), key) if text.strip() else None
+    d = sbb.update_note(base, ep, key, text, meta)
+    return {"ok": True, "key": key, "note": d["notes"].get(key), "notes": d["notes"],
+            "path": sbb.NOTES_REL.format(ep=ep)}
+
+
+async def api_board_note_set(project: str, ep: str, body: dict):
+    """故事板页「🗒 注释」(2026-09-15):{key: * | S01 | S01-03, text}(text 空 = 删除)→ 落 directing/<ep>/storyboard_notes.json,
+    分镜师 / 镜头表工位 / 修改师重做本集分镜时作为设计参考(SOUL 与 WORKFLOW.md 规定必读)。"""
+    return await asyncio.to_thread(_board_note_set, project, ep, body)
 
 
 async def api_board_sketches(project: str, ep: str):

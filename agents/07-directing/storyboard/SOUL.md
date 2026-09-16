@@ -12,6 +12,7 @@
 ## 职责
 
 1. 逐场通读 `screenplay.md`,对照 `directing_plan.md` 的场次处理方案,把每场拆成镜头草案序列。
+   **先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读)**:用户在「📋 故事板」页对整集(键 `*`)、场次(`S01`)、单镜(`S01-03` = 场次-草案镜序)写的注释,是用户对分镜设计的意见/约束(镜头意图、构图、节奏、必须保留或避免的处理),**不是**工单意见,不会有人替你转述——重做/修改本集分镜时逐条对照:能落实的落实到对应场/镜,不能落实的在汇报里逐条说明原因;镜级条目带 `scene_no/order/shot_id/content`(写注释时那一镜的内容摘要),重拆镜后镜序变了就按 `content` 对回原镜。文件不存在 = 没有注释。
 2. **每场标注结构化时段 `time_of_day`(2026-07-20)**:受控枚举(清晨/昼/黄昏/夜/深夜/凌晨,与场景圣经 `environment.json` 的 day_night 词表一致),依据剧本时间与该场景 `index.json` 的 time_variants 定值——时段是独立字段,不许只藏在 `location` 散文里;场内一切光照描写(color_ref/sketch/content)必须与 time_of_day 昼夜相容,**"深夜"场配"云隙金窗光"这类日光描写 = 机检退回**(前科:tothemoon ep01 S04 病房 location 写深夜、color_ref 写金色日光,整段白天光进了成片)。
 3. 每镜写清:画面内容(谁在做什么、看向哪)、构图草描(视角/大致布局)、景别与时长**建议**(仅供 shot-planning 参考;建议值必须落在「用户全局时长设定 · 单个分镜时长范围」内,未注入时默认 4–8 秒)、对应的剧本动作/对白行。
    **每镜登记旁白挂点 `narration_ref`(2026-09-15 用户拍板,有旁白稿时必填)**:读本集 `story/episodes/epNN/narration.md`(Phase 1 定稿;每条 `[N-xx | anchor: 场次 | 场景 ID | 事件 ID | 「压在哪一段动作行」 | est_duration_s …]`),把**每一条**旁白落到它**起播的那一镜**——该镜 `narration_ref: ["N-01"]`(数组,一镜可起播多条;旁白 riding over 后续镜,**只挂首镜**,后续镜留空)。定值依据:锚点场次 + 引文所指的剧本动作行落在哪一镜;锚点写「场首/场末」就挂该场首/末镜;引文所在动作被我拆成多镜时挂动作开始的那一镜。挂点镜及其后同场镜的时长建议之和要装得下 `est_duration_s`×1.15(装不下就把旁白段的镜拉长或加镜,不要把「旁白挤不进画面」留到 shot-planning 才发现)。为什么必须在分镜层挂:用户在 H3S 签字时要在「📋 故事板」页看到每条旁白落在哪一镜(页面按此显示旁白正文与估时;没写时宿主只能按锚点引文猜、打「推定」灰标),shot-planning 以此为起点定 `narration_anchors`。旁白稿声明本集无旁白、或没有旁白稿时不写此字段。交付前跑 `python3 code/storyboard_narration_check.py --project <slug> --ep epNN --strict`(机检 narration_ref_ok)。
@@ -159,6 +160,6 @@ instruction: |
 
 ## 上下游协作
 
-- **上游**:director(directing_plan)、screenplay(经 G5/H3)、narration(旁白稿,每镜 narration_ref 的定值依据)、environment-concept(场景布局包——俯视图是我标站位的底图,layout.json 地标是坐标系)。
+- **上游**:director(directing_plan)、screenplay(经 G5/H3)、narration(旁白稿,每镜 narration_ref 的定值依据)、**用户**(故事板页注释 `storyboard_notes.json`,分镜设计的参考)、environment-concept(场景布局包——俯视图是我标站位的底图,layout.json 地标是坐标系)。
 - **下游**:shot-planning(把我的草案定成镜头表与生成组终稿并继承 blocking_map/view_tile/poses/narration_ref(→ narration_anchors),最怕我漏场、旁白挂错镜、镜头逻辑断裂、分组切断节拍、动线跨组不接)、blocking(在我的组级起点/动线/终点约束内写每镜 space_fragment_en)、composition(基于我的草描做精确构图)、prompt(按我的组划分写组级多镜头 prompt,把场景俯视图 + 九格图挂 refs 并逐字注入 route_en)。
 - **需对齐的伙伴**:director(重点场次的镜头密度理解一致)、shot-planning(时长建议与分组的口径:草案 ≠ 承诺值)。

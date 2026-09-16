@@ -6,7 +6,7 @@
 
 1. **导演计划** `directing/<ep>/directing_plan.md`:从分镜预览页移到这里,Markdown 渲染(`/static/mini-md.js`,无第三方库),默认折叠;标题栏「✏️ 修改」发总制片。
 2. **每场一张卡**:场次头 = 场号 / 地点 / 场景 id / 时段 / ⏱ 分配·草案·定稿秒数 / 镜数·组数 / 🖊 已出草图数 + 资产条(场景缩略、出场人物 sheet 缩略、生物、道具)+ 场次备注(`unit_note` 等)与色彩段;右侧「✏️ 修改」(总制片)。批量出草图的按钮在**单集标题行最后**(「🖊 出草图(N)」,见下)。
-3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白(N-id + 正文 + 估时;挂镜见下节「旁白显示」)、📐 构图草描、👥 群演、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| ✏️ 反馈(总制片)。
+3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白(N-id + 正文 + 估时;挂镜见下节「旁白显示」)、📐 构图草描、👥 群演、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| 🗒 注释(用户,见下「用户注释」)+ ✏️ 反馈(总制片)。
 
 数据接口 `GET /api/v1/projects/<p>/previews/board?ep=epNN`(`services/runtime/core.py` `_preview_board`);归一化逻辑在 `modules/storyboard_board.py` `load_board`——storyboard.json 的字段名历经多版(`shots_draft/shots`、`content/subject_action`、`cast/characters`、`unit_alloc_s/alloc_s/…`),统一成一套供页面与 CLI 共用,并按 `shot_list.json` 的 `storyboard_ref`(`S01/order:1`,兼容 `/split:a`、`/shots_draft/`)把定稿镜对回草案镜。
 
@@ -38,6 +38,15 @@
 4. 锚到本场但推不到镜的,列在场头「锚在本场,未定到镜」;连场次都对不上的进 `board.narration.unplaced`(标题行「N 条推定挂点」计数含之)。
 
 标题行统计「🎙 N 条旁白 Σs」+ 推定条数;动态样片的旁白字幕(紫)同样烧正文。锚点解析在 `modules/script_breakdown.parse_narration_md`(2026-09-15 起保留全部四段,此前只留场次号)。
+
+## 用户注释(2026-09-15)
+
+用户在故事板页对**整集 / 场次 / 单镜**写注释,作为分镜设计的参考——与「✏️ 反馈/修改」不同,注释不派单、不叫任何 Agent 动手,只是把想法记在项目里,等分镜师(重做本集分镜)、镜头表工位(定稿镜头表)、修改师(按反馈改分镜)下次干活时必读、逐条落实(落实不了的在汇报里说明)。
+
+- **入口**:单集标题行「🗒 注释」(整集,✏️ 修改前)/ 场次头「🗒 注释」(✏️ 修改前)/ 镜行「🗒 注释」(✏️ 反馈前)。弹窗内 Shift+Enter 保存,「清除」删除。有注释的按钮变黄,注释正文以 🗒 黄字显示在标题下 / 场次头 / 镜内容列。
+- **存储** `directing/<ep>/storyboard_notes.json`(schema `storyboard_notes/1.0`,`modules/storyboard_board.load_notes / update_note`,flock 串行):`notes[<key>] = {text, level: episode|scene|shot, created_at, updated_at, …定位元数据}`,键 `*` = 整集、`S01` = 场次、`S01-03` = 场次-草案镜序;镜级条目另存 `scene_no/order/shot_id/content`(写注释时那一镜的内容摘要),场级存 `scene_id/location`——分镜重做后镜序可能变,Agent 靠 content 对回原镜。全部清空时文件删除。
+- **接口** `POST /api/v1/projects/<p>/board/<ep>/notes {key, text}`(空 text = 删除,≤2000 字),返回整份 `notes`;`GET …/previews/board` 下发 `notes`。
+- **Agent 侧**:storyboard / shot-planning / reviser 三份 SOUL 与 WORKFLOW.md storyboard 行都写明「有则必读」;文件自带 `_readme` 说明用途。
 
 ## 故事板签字(H3S,2026-09-11)
 

@@ -155,6 +155,93 @@ def update_index(base: Path, ep: str, key: str, patch: dict | None, remove: bool
     return d
 
 
+# ---------------- 用户注释(2026-09-15):故事板页「🗒 注释」,分镜设计的参考 ----------------
+NOTES_REL = "directing/{ep}/storyboard_notes.json"
+NOTES_SCHEMA = "storyboard_notes/1.0"
+NOTE_MAX_CHARS = 2000
+_NOTE_KEY_RE = re.compile(r"^(\*|[A-Za-z0-9_\-]{1,40})$")     # "*" 整集 / "S01" 场次 / "S01-03" 镜
+
+
+def notes_path(base: Path, ep: str) -> Path:
+    return base / NOTES_REL.format(ep=ep)
+
+
+def note_key_ok(key: str) -> bool:
+    return bool(_NOTE_KEY_RE.match(key or ""))
+
+
+def note_level(key: str) -> str:
+    """注释键的层级:episode(*)/ scene(S01)/ shot(S01-03)。"""
+    if key == "*":
+        return "episode"
+    return "shot" if "-" in key else "scene"
+
+
+def load_notes(base: Path, ep: str) -> dict:
+    """{schema, ep, notes: {key: {text, level, updated_at, scene_no?, order?, shot_id?, content?}}}。文件缺失/坏 → 空。"""
+    d = _read_json(notes_path(base, ep)) or {}
+    if not isinstance(d.get("notes"), dict):
+        d = {"schema": NOTES_SCHEMA, "ep": ep, "notes": {}}
+    d.setdefault("schema", NOTES_SCHEMA)
+    d.setdefault("ep", ep)
+    d["notes"] = {k: v for k, v in d["notes"].items() if isinstance(v, dict) and (v.get("text") or "").strip()}
+    return d
+
+
+def update_note(base: Path, ep: str, key: str, text: str, meta: dict | None = None) -> dict:
+    """写/改/删一条注释(flock 串行,与台账同一套路);text 空 = 删除。返回改后的整份文件内容。
+    meta(scene_no/order/shot_id/content 等)随条目存盘:分镜重做后镜序可能变,Agent 靠这些字段对回原镜。"""
+    if not note_key_ok(key):
+        raise ValueError(f"bad note key: {key!r}")
+    text = (text or "").strip()
+    if len(text) > NOTE_MAX_CHARS:
+        raise ValueError(f"note too long (>{NOTE_MAX_CHARS} chars)")
+    p = notes_path(base, ep)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    lock = p.with_suffix(".lock")
+    with open(lock, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            d = load_notes(base, ep)
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+            if not text:
+                d["notes"].pop(key, None)
+            else:
+                rec = d["notes"].get(key) or {"created_at": now}
+                rec.update({k: v for k, v in (meta or {}).items() if v not in (None, "")})
+                rec.update({"text": text, "level": note_level(key), "updated_at": now})
+                d["notes"][key] = rec
+            d["updated_at"] = now
+            d["_readme"] = ("用户在「📋 故事板」页写的注释,按键分三级:* = 整集,S01 = 场次,S01-03 = 场次-草案镜序。"
+                            "分镜师(storyboard)重做本集分镜、镜头表工位(shot-planning)定稿镜头表、修改师改分镜时,"
+                            "必须先读本文件,把每条注释当作用户对分镜设计的意见/约束:能落实的落实,不能落实的在汇报里说明原因。"
+                            "镜级条目带 scene_no/order/shot_id/content(写注释时那一镜的内容摘要),重拆镜后镜序变了就按 content 对回原镜。")
+            if not d["notes"]:
+                p.unlink(missing_ok=True)
+                d["notes"] = {}
+            else:
+                tmp = p.with_suffix(".json.tmp")
+                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+                os.replace(tmp, p)
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+    return d
+
+
+def note_meta(board: dict, key: str) -> dict:
+    """按注释键从归一化故事板取定位元数据(镜级:scene_no/order/shot_id/content 摘要;场级:scene_no/location)。"""
+    if key == "*":
+        return {"title": board.get("title") or ""}
+    for sc in board.get("scenes") or []:
+        if key == sc.get("scene_no"):
+            return {"scene_no": sc["scene_no"], "scene_id": sc.get("scene_id") or "", "location": sc.get("location") or ""}
+        for sh in sc.get("shots") or []:
+            if sh.get("key") == key:
+                return {"scene_no": sc["scene_no"], "order": sh.get("order"), "shot_id": sh.get("shot_id") or "",
+                        "content": (sh.get("content") or "")[:80]}
+    return {}
+
+
 # ---------------- 资产索引(人物/场景/生物/道具 名字 + 缩略图) ----------------
 
 def _first_image(d: Path, prefer: tuple[str, ...] = ()) -> Path | None:
