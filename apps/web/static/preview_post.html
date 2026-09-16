@@ -145,14 +145,16 @@ body.masking .frame .maskpad{display:block}
 .cutp .msg{color:var(--dim);font-size:11px}
 .cutp .msg.err{color:var(--red)}
 .cutp .msg.ok{color:var(--green)}
-.waves{display:grid;grid-template-columns:52px 1fr;font:10px var(--mono);border-top:1px solid var(--border);flex:none;background:var(--panel)}
+.waves{position:relative;display:grid;grid-template-columns:52px 1fr;font:10px var(--mono);border-top:1px solid var(--border);flex:none;background:var(--panel)}
 .waves .lb{padding:0 8px;color:var(--dim);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;height:18px}
 .waves .tr{height:18px;border-bottom:1px solid var(--border);position:relative;background:repeating-linear-gradient(90deg,transparent 0 24px,#ffffff06 24px 25px);overflow:hidden}
 .waves .tr i{position:absolute;top:4px;height:10px;border-radius:2px;background:var(--panel3)}
 .waves .tr i.v{background:#5a6b8e}.waves .tr i.n{background:#7a6c9e}.waves .tr i.m{background:#3e6f6a}
 .waves .tr i.cue{width:2px;background:var(--yellow);top:2px;height:14px;cursor:pointer}
 .waves .tr i.cue.miss{background:var(--red)}
-.waves .tr i.ph{width:1px;background:#fff;top:0;height:18px;border-radius:0}
+/* 四轨统一当前时间线(2026-09-16):贯穿对白/旁白/BGM/音效四轨,盖在轨道内容之上;left 由 waveHead() 按标签列 52px + 轨道宽度比例算 */
+.waves .wph{position:absolute;top:0;bottom:0;left:52px;width:1px;background:#fff;box-shadow:0 0 0 1px #0008;z-index:3;pointer-events:none}
+.waves .wph::before{content:'';position:absolute;top:0;left:-3px;border:3.5px solid transparent;border-top:5px solid #fff;border-bottom:0}
 .waves .tr i.nofile{opacity:.35;outline:1px dashed #ffffff55}
 .waves .tr i.live{box-shadow:0 0 0 1px #fff;filter:brightness(1.45)}
 /* 右栏 */
@@ -601,7 +603,7 @@ function onTime(){
   $('#ftc').textContent=(MODE==='episode'?tc(abs)+' · ':'')+tc(tcur)+' / '+tc(d)+' · 24fps';
   $('#xtc').textContent=tc(tcur)+' / '+tc(d);
   $('#xfill').style.width=(d?tcur/d*100:0)+'%';$('#xph').style.left=(d?tcur/d*100:0)+'%';
-  const ph=$('#waves .ph');if(ph){const win=waveWindow();ph.style.left=((abs-win[0])/(win[1]-win[0])*100)+'%'}
+  waveHead();
   const fph=$('#foot .ph');if(fph&&D.episode_duration)fph.style.left=(abs/D.episode_duration*100)+'%';
   if(MODE==='episode')epAudioSync();
   stemSync();
@@ -881,14 +883,21 @@ function waveWindow(){
   if(MODE==='group'){const g=grpById(SEL);return g?[g.cum_start_s,g.cum_start_s+(g.duration||$('#va').duration||0)]:[0,1]}
   return [0,D.episode_duration||1];
 }
+function waveHead(){
+  // 位置一律按集时间轴(组起点 + 组内时间)算,与 waveWindow() 同口径;单组 / 整集连播都适用
+  const ph=$('#waves .wph');if(!ph||!D)return;
+  const abs=stemAbs(),[w0,w1]=waveWindow(),f=Math.max(0,Math.min(1,(abs-w0)/Math.max(0.01,w1-w0)));
+  ph.style.left=`calc(52px + (100% - 52px) * ${f.toFixed(4)})`;
+}
 function renderWaves(){
   const [w0,w1]=waveWindow(),W=Math.max(0.01,w1-w0),L=D.lanes||{};
   const pos=(a,b)=>`left:${((a-w0)/W*100).toFixed(2)}%;width:${(Math.max(0.15,b-a)/W*100).toFixed(2)}%`;
   const inWin=x=>x.t1>w0&&x.t0<w1;
-  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''}"></i>`:'').join('')}${lb===t('对白')?'<i class="ph"></i>':''}</div>`;
+  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''}"></i>`:'').join('')}</div>`;
   let h=lane(t('对白'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
   h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))}"></i>`:'').join('')}</div>`;
-  $('#waves').innerHTML=LAYERS.sound?h:'';
+  $('#waves').innerHTML=LAYERS.sound?h+'<i class="wph"></i>':'';
+  waveHead();
   $$('#waves .cue').forEach(c=>c.onclick=()=>openSfx(c.dataset.sfx));
 }
 
