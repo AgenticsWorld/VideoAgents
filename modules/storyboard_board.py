@@ -5,6 +5,7 @@
   并按 shot_list.json 的 storyboard_ref 把定稿镜号/时长/台词对回草案镜;
 - 草图台账 assets/storyboard/<ep>/index.json(schema storyboard_sketches/1.0):
   shots[<S01-01>] = {file, status(queued|running|done|failed), error, prompt, note, provider, model, refs, updated_at}
+  (mode=hand / provider=hand_drawn 表示故事板页「✍️ 手绘」手机画布直接落盘的草图,2026-09-16,不经 AI;重出时渠道回落偏好)
   图片 assets/storyboard/<ep>/<S01-01>.png;台账写入经 flock 串行,宿主后台任务与 Agent 的 CLI 进程可并发;
 - build_prompt / collect_refs:草图提示词(铅笔手绘分镜风格,英文风格句 + 原文画面内容)与参考图
   (只带出场人物 sheet,缩到 512px 长边;不带场景图——俯视布局图会误导图像模型,场景只靠文字描述;
@@ -40,6 +41,7 @@ STORYBOARD_AGENT = "07-directing/storyboard"
 DIRECTOR_AGENT = "07-directing/director"
 SKETCH_AGENT = "07-directing/storyboard-sketch"
 SKETCH_DIR_REL = "assets/storyboard/{ep}"
+HAND_DRAWN_PROVIDER = "hand_drawn"           # 台账 provider 记号:故事板页「✍️ 手绘」直接落盘的草图(mode=hand),不是图像模型出的
 REF_MAX_EDGE = 512           # 参考图缩放长边(草图只需形象/空间提示,不需要高清)
 MAX_CAST_REFS = 3            # 人物参考图上限(多了反而稀释风格参考)
 STATUSES = ("queued", "running", "done", "failed")

@@ -35,7 +35,7 @@ from modules import storyboard_board as sbb
 
 def _default_channel(rec: dict) -> tuple[str, str]:
     """渠道/模型缺省链:台账该镜上次记录 → 控制台故事板页保存的偏好(state.json image_model_prefs.sketch)→ 空(全局)。"""
-    if rec.get("provider"):
+    if rec.get("provider") and rec.get("provider") != sbb.HAND_DRAWN_PROVIDER:   # 手绘落盘的草图没有渠道可沿用
         return str(rec.get("provider") or ""), str(rec.get("model") or "")
     try:
         from modules.genmedia import image_model_pref

@@ -170,6 +170,15 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 #np .btns .sp{flex:1}
 #np .err{color:var(--red);font-size:12px}
 #np button.pri{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#sd{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#sd .box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 22px;max-width:420px;text-align:center;box-shadow:0 10px 40px #000}
+#sd h3{font-size:14px;margin-bottom:4px}
+#sd .hint{color:var(--dim);font-size:12px}
+#sd .qr{background:#fff;border-radius:8px;padding:10px;margin:12px auto;width:240px;height:240px}
+#sd .qr svg{width:100%;height:100%}
+#sd .url{font-size:11px;color:var(--dim);word-break:break-all;margin:6px 0}
+#sd .st{font-size:13px;color:var(--yellow);margin:8px 0;min-height:20px}
+#sd button{margin-top:8px;font-size:12px;padding:3px 12px}
 #lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:96;cursor:zoom-out;flex-direction:column;gap:8px}
 #lb img{max-width:92vw;max-height:84vh;border-radius:8px;box-shadow:0 10px 40px #000}
 #lb .cap{color:var(--dim);font-size:12.5px;max-width:92vw;text-align:center}
@@ -193,6 +202,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
   <nav id="nav"></nav>
 </div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
+<div id="sd"><div class="box"><h3>✍️ 手绘分镜草图 — <span id="sd-key" data-no-i18n style="color:var(--accent)"></span></h3><div class="hint">手机扫码打开画布(同一局域网);画好提交后直接作为该分镜的草图,不经 AI 加工</div><div class="qr" id="sd-qr"></div><div class="url" id="sd-url" data-no-i18n></div><div class="st" id="sd-st">等待手机提交…</div><button class="editbtn sd-close">关闭</button></div></div>
 <div id="np"><div class="box"><h3>🗒 故事板注释</h3><div class="loc" data-no-i18n></div><textarea data-no-i18n placeholder="写下你对这里的想法:镜头意图、构图、节奏、必须保留或避免的处理…(Shift+Enter 保存)"></textarea><div class="hint">注释存到 directing/&lt;ep&gt;/storyboard_notes.json;分镜师、镜头表工位、修改师重做本集分镜时必读,作为分镜设计的参考</div><div class="btns"><span class="err"></span><span class="sp"></span><button class="np-clear">清除</button><button class="np-cancel">取消</button><button class="pri np-save">保存</button></div></div></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -508,8 +518,11 @@ function sketchCell(sc,sh,ep){
   let h=`<div class="skbox ${PORTRAIT?'portrait':''} ${busy?'busy':''}" style="aspect-ratio:${aspectCss(LAST.aspect)}" ${r.url?`data-img="${esc(r.url)}" data-cap="${esc(cap)}"`:''} title="${esc(r.status==='failed'?(r.error||''):(r.prompt||''))}">${r.url?`<img src="${esc(r.url)}" alt="" loading="lazy">`:`<div class="ph">${busy?'':'🖊 '+esc(t('未出草图'))}</div>`}${st?`<div class="st ${cls}">${st}</div>`:''}</div>`;
   h+=`<div class="skbtns"><button class="editbtn sk-gen" data-scene="${esc(sc.scene_no)}" data-order="${sh.order}" ${busy?'disabled':''} title="${esc(t('按当前草图模型出/重出这一镜的草图'))}">${r.url?'↻ '+esc(t('重出')):'🖊 '+esc(t('出图'))}</button>`;
   if(r.url)h+=`<button class="editbtn" data-agent="${esc((LAST.agents||{}).sketch||'07-directing/storyboard-sketch')}" data-key="${esc(sh.key)}" data-loc="${esc(I18N.f('[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})',{ep,key:sh.key,no:sc.scene_no,o:sh.order,p:LAST.project||'',dir:LAST.sketch_dir||('assets/storyboard/'+ep),txt:clip(sh.content,40)}))}" ${busy?'disabled':''}>✏️ ${esc(t('改草图'))}</button>`;
+  // ✍️ 手绘(2026-09-16):手机扫码画布(同 分镜预览「添加参考图 → 🎨 手绘参考图」的 /draw/<token> 机制),画的图直接作为该镜草图,不经 AI
+  h+=`<button class="editbtn sk-draw" data-key="${esc(sh.key)}" ${busy?'disabled':''} title="${esc(t('手机扫码画一张草图,直接作为这一镜的草图(不经 AI 加工)'))}">✍️ ${esc(t('手绘'))}</button>`;
   h+=`</div>`;
-  if(r.note||r.model)h+=`<div class="skinfo" title="${esc((r.note?t('修改意见:')+r.note+'\n':'')+(r.provider||'')+' '+(r.model||''))}">${r.note?'📝 '+esc(clip(r.note,30))+' · ':''}${esc(r.model||r.provider||'')}</div>`;
+  const src=r.mode==='hand'?'✍️ '+esc(t('手绘')):esc(r.model||r.provider||'');
+  if(r.note||src)h+=`<div class="skinfo" title="${esc((r.note?t('修改意见:')+r.note+'\n':'')+(r.mode==='hand'?t('手绘'):(r.provider||'')+' '+(r.model||'')))}">${r.note?'📝 '+esc(clip(r.note,30))+' · ':''}${src}</div>`;
   return h;
 }
 function renderCell(key){
@@ -558,7 +571,10 @@ try{
   es.onmessage=e=>{
     try{
       const ev=JSON.parse(e.data),proj=$('#project').value.trim()||'demo';
-      if((ev.type==='board_sketch'||ev.type==='board_animatic'||ev.type==='dialogue_tts')&&ev.project===proj&&LAST&&ev.ep===LAST.ep)refreshSketches();
+      if((ev.type==='board_sketch'||ev.type==='board_animatic'||ev.type==='dialogue_tts')&&ev.project===proj&&LAST&&ev.ep===LAST.ep){
+        refreshSketches();
+        if(ev.type==='board_sketch'&&ev.source==='hand'&&ev.status==='done'&&ev.key&&ev.key===SD_KEY)sdDone();
+      }
       else if((ev.type==='confirm'||ev.type==='confirm_done')&&LAST)refreshSketches();   // 签字卡出现/答复 → 刷新签字条
       else if(ev.type==='run'&&ev.run&&ev.run.project===proj&&LAST&&ev.run.agent===(LAST.agents||{}).sketch)refreshSketches();
     }catch(_){}
@@ -582,6 +598,39 @@ document.addEventListener('click',async e=>{
     await refreshSketches();startPoll();
   }catch(err){b.disabled=false;alert(I18N.f('出图失败:{e}',{e:err.message}))}
 });
+
+/* ---------- ✍️ 手绘草图(2026-09-16):POST /draw-sessions {kind:board_sketch,key} → 二维码 → 手机画好提交,
+   服务端直接落 assets/storyboard/<ep>/<key>.png 并写台账(不经 AI);SSE board_sketch(source=hand)为主,3s 轮询兜底 ---------- */
+let SD_KEY='',SD_POLL=null,SD_T0='';
+function sdClose(){$('#sd').style.display='none';SD_KEY='';clearInterval(SD_POLL);SD_POLL=null}
+function sdDone(){
+  if(!SD_KEY)return;
+  clearInterval(SD_POLL);SD_POLL=null;
+  $('#sd-st').textContent=t('✅ 已收到手绘草图,已作为该分镜的草图');
+  setTimeout(sdClose,1500);
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.sk-draw');if(!b||b.disabled||!LAST)return;
+  const proj=$('#project').value.trim()||'demo',ep=LAST.ep,key=b.dataset.key;
+  SD_KEY=key;SD_T0=(SK[key]||{}).updated_at||'';
+  $('#sd-key').textContent=ep+' / '+key;
+  $('#sd-qr').innerHTML='';$('#sd-url').textContent='';
+  $('#sd-st').textContent=t('正在创建会话…');
+  $('#sd').style.display='flex';
+  try{
+    const r=await fetch('/api/v1/draw-sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:proj,ep,kind:'board_sketch',key})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.detail||r.status);
+    if(SD_KEY!==key)return;
+    $('#sd-qr').innerHTML=d.qr_svg;
+    // 显式 http:// 链接:桌面端点击直达,避免地址栏手输被浏览器自动升级成 https(服务无 TLS)
+    $('#sd-url').innerHTML=`<a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a>`;
+    $('#sd-st').textContent=t('等待手机提交…(会话 30 分钟有效)');
+    clearInterval(SD_POLL);
+    SD_POLL=setInterval(async()=>{await refreshSketches();if(SD_KEY&&((SK[SD_KEY]||{}).updated_at||'')!==SD_T0)sdDone()},3000);
+  }catch(err){$('#sd-st').textContent=t('会话创建失败:')+err.message}
+});
+$('#sd').addEventListener('click',e=>{if(e.target.id==='sd'||e.target.closest('.sd-close'))sdClose()});
 
 /* ---------- 草图渠道/模型(顶栏;共用 image-model-picker.js,存服务端 STATE.image_model_prefs.sketch) ---------- */
 const SKM=mountImageModelPicker({kind:'sketch',host:'#skm',label:'🖊 草图模型'});

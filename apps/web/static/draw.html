@@ -73,8 +73,8 @@ canvas{background:#fff;border-radius:6px;max-width:100%;max-height:100%;touch-ac
 <body>
 <div id="app">
 <header>
-  <span>✏️ 手绘参考图</span><span class="grp" id="grp">…</span>
-  <span class="hint">黑白线稿·标注空间关系(如"手从环中间伸出")</span>
+  <span id="hd-title">✏️ 手绘参考图</span><span class="grp" id="grp">…</span>
+  <span class="hint" id="hd-hint">黑白线稿·标注空间关系(如"手从环中间伸出")</span>
 </header>
 <div id="stage"><canvas id="cv"></canvas></div>
 <div id="tools">
@@ -103,6 +103,9 @@ const $=s=>document.querySelector(s);
 const token=location.pathname.split('/').pop();
 const cv=$('#cv'),ctx=cv.getContext('2d');
 let W=1280,H=720,AR='16:9',strokes=[],cur=null,tool={size:4,erase:false};
+// 会话种类:group_ref = 分镜预览「添加参考图 → 手绘参考图」(线稿 + 组参考图后台生成成图,文字说明必填);
+// board_sketch = 故事板页「✍️ 手绘」(2026-09-16,画的图不经 AI 直接作为该镜草图,文字说明可选进台账 note)
+let KIND='group_ref';
 
 // 画幅:长边固定 1280,按比例算短边;横幅▭ / 竖幅▯ 按钮可随时互切(a:b ↔ b:a)
 function setAspect(a){
@@ -124,7 +127,14 @@ async function init(){
     const r=await fetch('/api/v1/draw-sessions/'+token);
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const info=await r.json();
-    $('#grp').textContent=info.project+' / '+info.ep+' / '+info.grp;
+    KIND=info.kind||'group_ref';
+    if(KIND==='board_sketch'){
+      $('#hd-title').textContent=t('✏️ 手绘分镜草图');
+      $('#hd-hint').textContent=t('画一张分镜草图,提交后直接作为该镜草图(不经 AI 加工)');
+      $('#note').placeholder=t('可选:备注(构图/意图说明,记入草图台账)');
+      document.title=t('手绘分镜草图 · Agentics：VideoAgents');
+    }
+    $('#grp').textContent=info.project+' / '+info.ep+' / '+(KIND==='board_sketch'?info.key:info.grp);
     setAspect(info.aspect||'16:9');
   }catch(e){toast('会话无效:'+e.message,false);$('#submit').disabled=true}
 }
@@ -216,7 +226,7 @@ $('#aspect').onclick=()=>{
 
 $('#submit').onclick=async()=>{
   const text=$('#note').value.trim();
-  if(!text)return toast('请先填写文字说明',false);
+  if(!text&&KIND!=='board_sketch')return toast('请先填写文字说明',false);
   if(!strokes.filter(s=>!s.erase).length)return toast('画布还是空的',false);
   $('#submit').disabled=true;
   try{
@@ -228,7 +238,9 @@ $('#submit').onclick=async()=>{
     strokes=[];$('#note').value='';redraw();
     // 提交成功即尝试自关页面(手机 Safari 手动关标签繁琐;扫码新开的无历史标签允许脚本自关)。
     // 关不掉(如页内有导航历史)则停留在成功遮罩,可手动关闭或点「再画一张」继续
-    $('#done-msg').textContent=I18N.f('✅ 已提交 {f},正在结合参考图按项目风格生成最终参考图,请回桌面端查看进度',{f:d.saved});
+    $('#done-msg').textContent=KIND==='board_sketch'
+      ?I18N.f('✅ 已提交 {f},已直接作为该分镜的草图,请回故事板页查看',{f:d.saved})
+      :I18N.f('✅ 已提交 {f},正在结合参考图按项目风格生成最终参考图,请回桌面端查看进度',{f:d.saved});
     $('#done').style.display='flex';
     setTimeout(()=>window.close(),1200);
   }catch(e){toast('提交失败:'+e.message,false)}

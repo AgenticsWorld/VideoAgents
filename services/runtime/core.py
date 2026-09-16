@@ -4825,14 +4825,27 @@ def _sketch_list(project: str, ep: str, grp: str) -> list[dict]:
 
 
 async def api_draw_session(body: dict):
-    """桌面发起手绘会话,返回手机页 URL 与二维码 SVG。"""
+    """桌面发起手绘会话,返回手机页 URL 与二维码 SVG。
+    kind 缺省 group_ref = 分镜预览「添加参考图 → 🎨 手绘参考图」(线稿 + 组 refs 后台生成成图);
+    kind=board_sketch(2026-09-16)= 故事板页「✍️ 手绘」:key 为草图键(S01-03),手机画的图不经 AI
+    直接落为该镜草图(见 _draw_submit_board_sketch)。"""
     project = safe_slug(body.get("project") or "")
     ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
     grp = re.sub(r"[^\w\-]", "", body.get("grp") or "")
-    if not _grp_prompt_path(project, ep, grp).is_file():
+    key = re.sub(r"[^\w\-]", "", body.get("key") or "")
+    kind = "board_sketch" if body.get("kind") == "board_sketch" else "group_ref"
+    if kind == "board_sketch":
+        from modules import storyboard_board as sbb
+        base = _proj_base(project)
+        if not (base / "directing" / ep / "storyboard.json").is_file():
+            raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
+        if not key or not sbb.find_shots_by_keys(sbb.load_board(base, ep), [key]):
+            raise ServiceError(404, f"Shot {key or '?'} not found in directing/{ep}/storyboard.json")
+        grp = ""
+    elif not _grp_prompt_path(project, ep, grp).is_file():
         raise ServiceError(404, f"Group prompt not found: {project}/{ep}/{grp}")
     token = uuid.uuid4().hex
-    DRAW_SESSIONS[token] = {"project": project, "ep": ep, "grp": grp,
+    DRAW_SESSIONS[token] = {"project": project, "ep": ep, "grp": grp, "kind": kind, "key": key,
                             "expires": time.time() + DRAW_TTL_S}
     url = f"http://{_lan_ip()}:{PUBLIC_PORT}/draw/{token}"
     return {"token": token, "url": url, "qr_svg": _qr_svg(url), "ttl_s": DRAW_TTL_S}
@@ -4842,7 +4855,8 @@ async def api_draw_info(token: str):
     s = _draw_session(token)
     ps = load_project_settings(s["project"])
     aspect, _, _ = resolve_output(ps)
-    return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect}
+    return {"project": s["project"], "ep": s["ep"], "grp": s["grp"], "aspect": aspect,
+            "kind": s.get("kind") or "group_ref", "key": s.get("key") or ""}
 
 
 MAX_SKETCH_REFS = 9   # 方舟多参考图上限(Seedance 2.0 口径;项目可经「视频模型设置」调整)
@@ -5611,8 +5625,6 @@ async def api_draw_submit(token: str, body: dict):
     s = _draw_session(token)
     text = (body.get("text") or "").strip()
     img = body.get("image") or ""
-    if not text:
-        raise ServiceError(400, "A text note is required (describe the spatial relationship the sketch expresses)")
     if img.startswith("data:image/png;base64,"):
         img = img.split(",", 1)[1]
     try:
@@ -5620,6 +5632,10 @@ async def api_draw_submit(token: str, body: dict):
         assert raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) < 8 * 1024 * 1024
     except Exception:
         raise ServiceError(400, "Image must be PNG (base64) and smaller than 8MB") from None
+    if s.get("kind") == "board_sketch":
+        return await asyncio.to_thread(_draw_submit_board_sketch, s, raw, text)
+    if not text:
+        raise ServiceError(400, "A text note is required (describe the spatial relationship the sketch expresses)")
     project, ep, grp = s["project"], s["ep"], s["grp"]
     key = f"{project}/{ep}/{grp}"
     if (SKETCHGEN_JOBS.get(key) or {}).get("status") == "running":
@@ -5647,6 +5663,37 @@ async def api_draw_submit(token: str, body: dict):
     HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
                  "status": "running", "src": png.name})
     return {"saved": png.name, "generating": True}
+
+
+def _draw_submit_board_sketch(s: dict, raw: bytes, text: str) -> dict:
+    """故事板页「✍️ 手绘」(2026-09-16):手机画布提交的 PNG 不经 AI 加工,直接落为该镜草图
+    assets/storyboard/<ep>/<key>.png 并写台账(mode=hand, provider=hand_drawn,文字说明进 note);
+    该镜草图正在出图(queued/running)时拒绝,避免与出图进程互相覆盖;落盘后发 SSE board_sketch(source=hand)。"""
+    from modules import storyboard_board as sbb
+    project, ep, key = s["project"], s["ep"], s["key"]
+    base = _proj_base(project)
+    found = sbb.find_shots_by_keys(sbb.load_board(base, ep), [key])
+    if not found:
+        raise ServiceError(404, f"Shot {key} not found in directing/{ep}/storyboard.json")
+    scene, shot = found[0]
+    rec = sbb.load_index(base, ep)["shots"].get(key) or {}
+    if rec.get("status") in ("queued", "running"):
+        raise ServiceError(409, f"Sketch {key} is being generated right now; wait for it to finish, then submit again")
+    rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{key}.png"
+    out = base / rel
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f"{out.stem}.new.png")
+    tmp.write_bytes(raw)
+    os.replace(tmp, out)
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    sbb.update_index(base, ep, key, {
+        "status": "done", "file": rel, "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
+        "shot_id": shot.get("shot_id") or "", "prompt": "", "note": text, "mode": "hand", "grid": None,
+        "provider": sbb.HAND_DRAWN_PROVIDER, "model": "", "aspect": sbb.resolve_aspect(base), "refs": [],
+        "source": "user_hand_drawn(api /draw-sessions kind=board_sketch)", "started_at": now, "finished_at": now})
+    HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene["scene_no"],
+                 "key": key, "status": "done", "error": "", "source": "hand"})
+    return {"saved": f"{key}.png", "generating": False, "kind": "board_sketch", "key": key}
 
 
 # ---------------- 组注释(用户对生成组的导演意图注释,注入组 prompt) ----------------
@@ -7651,7 +7698,7 @@ def _board_sketch_rows(base: Path, ep: str, idx: dict) -> dict[str, dict]:
     for key, rec in (idx.get("shots") or {}).items():
         if not isinstance(rec, dict):
             continue
-        rows[key] = {k: rec.get(k) for k in ("status", "error", "note", "provider", "model", "updated_at", "file")}
+        rows[key] = {k: rec.get(k) for k in ("status", "error", "note", "provider", "model", "mode", "updated_at", "file")}
         rows[key]["url"] = sbb.sketch_url(base, rec)
         if rows[key]["status"] == "done" and not rows[key]["url"]:
             rows[key]["status"] = "missing"      # 台账说出过图但文件没了
