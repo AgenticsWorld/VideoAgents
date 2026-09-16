@@ -202,7 +202,7 @@ def appearing_cast(group: dict, render: dict | None = None) -> dict:
 def cast_filter(base: Path, ep: str, gid: str):
     """项目开白模链且本组已编译进 directing/<ep>/whitebox/episode.json 时返回 appearing_cast 结果,否则 None(不限制)。"""
     settings = read(Path(base) / 'settings.json', {}) or {}
-    if (settings.get('output') or {}).get('spatial_blocking', True) is False:
+    if (settings.get('output') or {}).get('spatial_blocking') is not True:
         return None
     ep, gid = component(ep), component(gid)
     episode = read(Path(base) / 'directing' / ep / 'whitebox' / 'episode.json', {}) or {}

@@ -350,7 +350,7 @@ refs/
 | episode-planner | 全书拆集:每集事件范围、目标时长、卡点位置;**每集逐事件定取舍 `treatments[]`(2026-09-12,§5A):dramatize 演 / mention 带过 / merge 并入 / cut 删,演的事件数受集预算封顶**;产出总表 | story_graph、events、pacing 约束、目标平台 | `story/episode_plan.json` | 机检 `code/verify_episode_plan.py --project`:事件 100% 归类到唯一一集(events_classified_once)、treatments 齐全且 mention/merge/cut 有 reason(treatments_complete)、dramatize 数 ≤ ⌈集预算 ÷ 90s⌉(dramatize_within_cap)、卡点事件必须 dramatize(hook_points_dramatized)、cut 事件不在主线因果链上(cut_not_on_causal_chain)、merge_into 合法;每集时长在预算内。评分 writing_v1 |
 | screenplay(每集) | 把该集 **dramatize 事件**改写为剧本(场景标题/动作/对白/转场);mention 事件只在旁白候选/台词里一句带过、merge 事件并进 merge_into 事件的场、cut 事件不写(§5A);每场首行标 `[事件]` 行 | episode_plan(含 treatments)、structured_story、Bible | `story/episodes/epNN/screenplay.md` | 机检:场景/角色引用合法 ID;`code/check_screenplay_events.py --project --ep`:dramatize 事件全部成场(dramatized_events_covered)、cut 事件不出现(cut_events_absent)、每场至少挂一个 dramatize 事件(scene_has_dramatized_event)。评分 writing_v1 ≥80。QA:logic-qa 逐集审 |
 | dialogue-rewrite(每集) | 优化对白:符合各角色 dialogue_style、口语化、时长可控 | screenplay、dialogue_style | 更新 screenplay 的对白层 | 机检:风格卡命中率 ≥80%;单句时长估算 ≤ 配音上限(`code/check_dialogue_fit.py --project --ep` 仅剧本层模式:line_le_cap = shot_max_s×0.7、line_est_consistent,2026-08-30);**分镜定稿后另有 p6-dialogue-fit 精简环节回到本岗(§7D ①′)** |
-| narration(每集) | **仅「📤 输出设置」旁白开关(output.narration_enabled,新建项目默认关、存量项目缺省=开)开启时派发——关=全片无任何旁白,不派发、闸门不 HOLD(§7D)**;生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
+| narration(每集) | **仅「📤 输出设置」旁白开关(output.narration_enabled,默认关;2026-09-16 起未配置过的存量项目也视为关)开启时派发——关=全片无任何旁白,不派发、闸门不 HOLD(§7D)**;生成旁白稿:人称统一(默认第三人称)、补足画面外信息;**逐条挂场景锚点并标 `est_duration_s`(估时参数取 narrator 声线实测语速,不用通用字/秒经验值);接 §7D 无声组补写回派时新增条目并以新版本写回 narration.md(旁白唯一事实源)** | screenplay、structured_story | `epNN/narration.md` | 机检:人称一致性 100%;**每条有锚点(在本集 screenplay 内合法)与 est_duration_s**;QA:logic-qa 审「旁白-画面」冗余 |
 | hook(每集) | 设计开头 3 秒钩子与结尾悬念;给出备选 3 条 | screenplay、下一集 episode_plan | `epNN/hooks.json` | 评分 creative_v1;QA:人工从备选中挑选或要求重写 |
 | pacing(每集) | 节奏审定:逐场时长分配、情绪曲线、删减建议 | screenplay、color_script | `epNN/pacing.json` | 机检:总时长 = 预算 ±10%;QA:director 会签 |
 | timeline-story(p5-breakdown,每集,2026-09-11) | **剧本拆解表**:把本集剧情层全部产物拆成一份结构化 JSON(逐场 场次/场景/内外时段/出场/事件/一句话内容/节拍功能/情绪/节奏/预计时长(对白·旁白·无声)/台词逐句/旁白/钩子/人物表/情绪曲线/删减建议/分集计划/事件卡),供控制台「📜 剧本预览」页一张两列表展示(左列剧本按 `blocks[]` 小块逐行、右列该块关联信息:时长/情绪/节奏/事件/钩子/删减/估时)与逐块反馈;**只读拆解,不改写任何剧本/对白/旁白/钩子/节奏文件**;schema 与字段见 `docs/script_breakdown.md`。老项目没有该文件时预览页显示启发式推导视图并提供「重新分析」按钮直接派单本工位(拆解归 timeline-story;页面上对剧本/对白/旁白等内容的反馈仍发各自工位) | screenplay、dialogue、narration、hooks、pacing、episode_plan、events、story_graph、Bible 索引 | `epNN/script_breakdown.json` | 机检 `script_breakdown_ok`(`code/check_script_breakdown.py --project --ep`:schema/场次唯一/情绪 0–1/时长非负/台词 speaker+text/旁白锚点合法;比输入旧 = WARN 须重跑) |
@@ -481,7 +481,7 @@ refs/
 > 表演赶戏,只能整组重 roll。超长的解法优先级:改短台词(文本层,最便宜)> 调镜/拆组(分镜
 > 变更)>> 压语速念完(禁止——那是把缺陷烧进成片)。**检查分两级,另有生成侧联动:
 >
-> **旁白开关(「📤 输出设置」→ 旁白,`settings.json` `output.narration_enabled`;新建项目默认关、存量项目缺省=开;2026-09-01 增)**:
+> **旁白开关(「📤 输出设置」→ 旁白,`settings.json` `output.narration_enabled`;默认关,2026-09-16 起未配置过的存量项目也视为关;2026-09-01 增)**:
 > 关闭 = 用户约定**整个片子没有任何旁白**——p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺
 > narration.md/旁白轨而 HOLD(两工位被派到也只说明开关已关闭并结单);shot-planning 不写 narration_anchors,
 > `audio_plan` 禁用 narration_over——无对白组一律 ambient_only,`silent_rationale` 照常逐组核查,但纯画面

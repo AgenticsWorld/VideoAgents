@@ -561,10 +561,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="4k">4K</option>
       </select></div>
     <div class="row"><label>白模</label>
-      <input type="checkbox" id="out-spatial" style="flex:none" checked>
+      <input type="checkbox" id="out-spatial" style="flex:none">
       <span id="out-spatial-hint" style="color:var(--dim);font-size:12px">建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)</span></div>
     <div class="row"><label>旁白</label>
-      <input type="checkbox" id="out-narration" style="flex:none" checked>
+      <input type="checkbox" id="out-narration" style="flex:none">
       <span style="color:var(--dim);font-size:12px">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担</span></div>
     <div class="row"><label>对白配音</label>
       <select id="out-dialogue-voice" style="flex:1">
@@ -1514,10 +1514,10 @@ async function openOutModal(){
     sel.value=OUT_LANGS.includes(o.language)?o.language:'English';
     $('#out-draft-res').value=OUT_RESOLUTIONS.includes(o.draft_resolution)?o.draft_resolution:'480p';
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
-    $('#out-narration').checked=o.narration_enabled!==false;
+    $('#out-narration').checked=o.narration_enabled===true;   // 白模/旁白/生成对白语音三项:未配置过一律显示为关(2026-09-16)
     $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
     $('#out-dialogue-tts').checked=o.dialogue_tts===true;
-    $('#out-spatial').checked=o.spatial_blocking!==false;syncSpatialHint('out-spatial');
+    $('#out-spatial').checked=o.spatial_blocking===true;syncSpatialHint('out-spatial');
     const pf=Array.isArray(o.platforms)?o.platforms:['youtube','bilibili','tiktok','douyin'];
     document.querySelectorAll('.out-platform').forEach(c=>c.checked=pf.includes(c.value));
   }catch(e){}

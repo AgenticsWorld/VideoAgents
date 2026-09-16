@@ -116,7 +116,7 @@ async def start_export(project: str,ep: str,gid: str):
                 with _lock:_jobs[key]['progress']=pct
             records=render_videos(base,data,[gid],progress=progress)
             # 与 render_whitebox.py 同步:导出即接成该组视频生成的参考视频(仅「人物精确空间位置」开启,2026-09-07)
-            sync=sync_episode(base,ep,[gid],write=True) if (read(base/'settings.json',{}) or {}).get('output',{}).get('spatial_blocking',True) is not False else None
+            sync=sync_episode(base,ep,[gid],write=True) if (read(base/'settings.json',{}) or {}).get('output',{}).get('spatial_blocking') is True else None
             with _lock:_jobs[key]={'status':'complete','progress':100,'files':file_links(project,records[0]),
                                    'whitebox_refs':(sync['groups'][0] if sync and sync['groups'] else None)}
         except Exception as e:

@@ -680,6 +680,8 @@ def reel_project(tmp_path):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('ffmpeg unavailable')
     base = tmp_path/'demo'
+    # 白模开关(output.spatial_blocking)2026-09-16 起缺省=关,白模项目须显式开启
+    write(base/'settings.json', {'output': {'spatial_blocking': True}})
     groups = [('grp002', 3), ('grp001', 2), ('grp003', 4)]   # shot_list 顺序故意不按字典序
     write(base/'directing/ep02/shot_list.json', {'shots': [], 'generation_groups': [
         {'group_id': g, 'scene_id': 'SCN-1', 'shots': [f'sh{i}'], 'total_duration_s': d} for i, (g, d) in enumerate(groups)]})

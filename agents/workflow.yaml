@@ -8,7 +8,7 @@
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
 #   gate: 闸门任务,全部依赖通过才放行;human: true 表示需用户签字
-#   whitebox_requested: = 项目输出设置 output.spatial_blocking(「人物精确空间位置」,默认开)——2026-09-07 起该开关的含义即
+#   whitebox_requested: = 项目输出设置 output.spatial_blocking(「白模/人物精确空间位置」,默认关;2026-09-16 起未配置过的存量项目也视为关)——2026-09-07 起该开关的含义即
 #     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p4-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
 #     白模视频自动接成组视频生成的参考视频,分镜背景图自动接成组参考图;
 #     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
@@ -166,7 +166,7 @@ phases:
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           # 场景布局包(2026-08-19;2026-09-09 改版):俯视空间布局图 layout_top.png + layout.json(地标坐标/机位语义),替代单张主视角概念图;
           # 九宫格 grid_9views.png 自 2026-09-09 退役——不再生成、不进视频参考图(场景多角度参考由分镜背景图 p6-shot-plates 承担)
-          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认开)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound 五项机检脚本自动 skipped
+          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认关)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound 五项机检脚本自动 skipped
           outputs: ["assets/concepts/scenes/{id}/"],
           validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/blocking_map_check.py --scene <id>
       - { id: p4-scene-model, agent: 05-scenes/scene-modeling, for_each: scene,
@@ -203,7 +203,7 @@ phases:
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
-          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(默认关;2026-09-16 起未配置过的存量项目也视为关);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
           outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
           validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
       - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
@@ -367,7 +367,7 @@ phases:
                                lines_text_match_frozen_script, dialogue_fit_le_group_x0.8],
                         qa: [11-qa/audio-qa] } }
       - { id: p8-narrator, agent: 09-audio/narrator, outputs: ["assets/audio/narration/{ep}/"],
-          condition: narration_enabled,   # 「📤 输出设置」旁白开关(新建项目默认关,存量项目缺省=开);关=全片无旁白,不派发,p8-mix 只混原生轨+BGM 两路(§7D)
+          condition: narration_enabled,   # 「📤 输出设置」旁白开关(默认关;2026-09-16 起未配置过的存量项目也视为关);关=全片无旁白,不派发,p8-mix 只混原生轨+BGM 两路(§7D)
           # 先于 p7-video:提前合成正式旁白轨并逐条实测时长(manifest 记挂点/实测),供 §7D 旁白适配检查;
           # 超窗回派 01-story/narration 精简改稿(锚点不动,不改冻结 shot_list、不重签 H3A);
           # 交付前 code/check_narration_sync.py --stamp 把当前 narration_anchors 指纹盖进 manifest(§8B ①)

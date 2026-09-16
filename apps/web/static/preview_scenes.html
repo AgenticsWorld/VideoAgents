@@ -383,7 +383,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;FORMAT=d.format||null;
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -660,7 +660,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled!==false;FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;FORMAT=d.format||null;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   // 优先级:首次深链 id > 页内刷新前已选中的场景 > 列表第一项(切项目时旧 id 找不到自然回落)

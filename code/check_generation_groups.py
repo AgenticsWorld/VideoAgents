@@ -86,13 +86,13 @@ def project_max_group_s(shot_list_path: Path) -> int:
 
 
 def project_narration_enabled(shot_list_path: Path) -> bool:
-    """项目「📤 输出设置」旁白开关(output.narration_enabled,默认开):关=用户约定全片无任何旁白,
+    """项目「📤 输出设置」旁白开关(output.narration_enabled,默认关;未配置过的存量项目也视为关):关=用户约定全片无任何旁白,
     §7D ① 的 narration_anchors 系列机检跳过,audio_plan 禁 narration_over。"""
     try:
         st = json.loads((shot_list_path.resolve().parents[2] / "settings.json").read_text())
-        return (st.get("output") or {}).get("narration_enabled", True) is not False
+        return (st.get("output") or {}).get("narration_enabled") is True
     except Exception:
-        return True
+        return False
 
 
 def derive_narration_path(shot_list_path: Path) -> Path | None:

@@ -152,7 +152,7 @@ def plan(base, ep, gid, prepare=False, budget=None):
                 from modules.whitebox_refs import whitebox_group
                 _, manifest = whitebox_group(base, ep, gid)
                 camera_s = float((manifest or {}).get('duration_s') or 0) if (
-                    settings.get('output') or {}).get('spatial_blocking', True) else 0.
+                    settings.get('output') or {}).get('spatial_blocking') is True else 0.
                 pj = read(base/f'assets/prompts/{ep}/{gid}.json', {}) or {}
                 others = [v for v in pj.get('video_refs', [])
                           if '/whitebox/' not in v and not v.endswith(TAIL_VIDEO)]
@@ -273,7 +273,7 @@ def sync_group(base, ep, gid, write=False, prepare=False):
         c['ready'] = bool(target and local(Path(base), target).is_file())
     updated = apply_prompt(prompt, c)
     # Re-budget and renumber whitebox refs after continuation reservation.
-    if ((read(Path(base)/'settings.json', {}) or {}).get('output') or {}).get('spatial_blocking', True):
+    if ((read(Path(base)/'settings.json', {}) or {}).get('output') or {}).get('spatial_blocking') is True:
         from modules.whitebox_refs import apply_prompt as apply_whitebox, plan_refs
         updated = apply_whitebox(updated, plan_refs(Path(base), ep, gid, continuation=c, prompt=updated))
     changed = updated != prompt

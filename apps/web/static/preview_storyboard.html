@@ -1461,7 +1461,7 @@ document.addEventListener('click',async e=>{
 
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
-  WB_ON=d.whitebox_enabled!==false;
+  WB_ON=d.whitebox_enabled===true;
   import('/static/whitebox-ui.js?v=20260913-camonly3').then(m=>m.resetWhitebox({keepData:wbKeep}));
   LAST_DATA=d;
   renderEps(d.episodes||[]);

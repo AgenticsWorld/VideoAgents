@@ -92,7 +92,7 @@ def _public(base: Path, ep: str, doc: dict, episode: dict) -> dict:
             avatars[oid] = f'/api/v1/projects/{quote(base.name)}/artifacts/{rel}'
     settings = read(base / 'settings.json', {}) or {}
     return {'project': base.name, 'ep': ep, 'episodes': _episodes(base), 'agent': dm.AGENT_ID,
-            'whitebox_enabled': (settings.get('output') or {}).get('spatial_blocking', True) is not False,
+            'whitebox_enabled': (settings.get('output') or {}).get('spatial_blocking') is True,
             'ledger': {k: doc.get(k) for k in ('notes', 'batches', 'versions', 'current', 'updated_at')},
             'overrides': dm.load_overrides(base, ep).get('groups', {}),
             'marks': dm.load_marks(base, ep).get('scenes', {}),

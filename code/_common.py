@@ -54,12 +54,12 @@ def project_output_setting(proj_root: Path, key: str, default=None):
 
 
 def narration_enabled(proj_root: Path) -> bool:
-    """项目输出设置「旁白」(output.narration_enabled,默认开):关=用户约定全片没有任何旁白,
-    p5-narration/p8-narrator 不派发,narration 系列机检(§7D/§8B)一律跳过。"""
-    return project_output_setting(proj_root, "narration_enabled", True) is not False
+    """项目输出设置「旁白」(output.narration_enabled,默认关;2026-09-16 起未配置过的存量项目也视为关):
+    关=用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发,narration 系列机检(§7D/§8B)一律跳过。"""
+    return project_output_setting(proj_root, "narration_enabled") is True
 
 
 def spatial_blocking_enabled(proj_root: Path) -> bool:
-    """项目输出设置「人物精确空间位置」(output.spatial_blocking,默认开;2026-09-07 起含义=用白模摄影机视角视频给视频生成定位人物):开=场景布局包流程(俯视图/九格图/layout.json 直接进 refs + 组级 blocking_map 数据)+ 白模链(scene-modeling/whitebox-staging,导出视频自动接成组 video_refs,机检 whitebox_ref_bound);
+    """项目输出设置「白模/人物精确空间位置」(output.spatial_blocking,默认关,2026-09-16 起未配置过的存量项目也视为关;2026-09-07 起含义=用白模摄影机视角视频给视频生成定位人物):开=场景布局包流程(俯视图/九格图/layout.json 直接进 refs + 组级 blocking_map 数据)+ 白模链(scene-modeling/whitebox-staging,导出视频自动接成组 video_refs,机检 whitebox_ref_bound);
     关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
-    return project_output_setting(proj_root, "spatial_blocking", True) is not False
+    return project_output_setting(proj_root, "spatial_blocking") is True

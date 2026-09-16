@@ -894,13 +894,13 @@ DEFAULT_GENCONFIG = {
     # dialogue_voice=对白配音:native=视频原声(默认,对白语音由视频模型原生合成,不做任何对白 TTS)/
     #   dubbing=后期配音(组视频生成后按画面中人物开口的时间位置,结合角色 voice.json/casting.json
     #   用 TTS 逐句合成该角色对白并按开口时长贴合口型,替换组 clip 对白轨;workflow p7-dub)
-    # narration_enabled=旁白(2026-09-01):此处默认 True 只作存量项目缺键回退(老项目旁白链路照常);
-    #   **新建项目基线=False(旁白默认关闭)**——api_projects_create 置基线、向导默认不勾选(同 review 基线先例);
+    # narration_enabled=旁白(2026-09-01):默认关——新建向导默认不勾选;2026-09-16 起存量项目缺键也一律视为关
+    #   (此前缺键回退=开;用户拍板:白模/旁白/生成对白语音三项凡未配置过一律默认关闭);
     #   关闭=用户约定全片没有任何旁白——
     #   p5-narration/p8-narrator 不派发,shot_list 不写 narration_anchors、audio_plan 禁 narration_over
     #   (无对白组一律 ambient_only,silent_rationale 照常核查但不再回派补写旁白),混音只有原生轨+BGM 两路,
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
-    # spatial_blocking=人物精确空间位置(默认开)——2026-09-07 起含义=「用白模摄影机视角视频给视频生成定位人物」:
+    # spatial_blocking=人物精确空间位置/白模(默认关;2026-09-16 起存量项目缺键=关,此前缺键回退=开)——2026-09-07 起含义=「用白模摄影机视角视频给视频生成定位人物」:
     #   开=场景布局包流程(每场景俯视空间布局图+layout.json;九宫格 2026-09-09 退役,分镜组登记人物起点/动线/终点
     #   blocking_map)+ 白模链(p4-scene-model / p6-whitebox),导出的 camera.mp4(2026-09-08 起仅摄影机视角,不出俯视 top.mp4)自动接成组视频生成的
     #   参考视频(video_refs + Whitebox reference/legend 固定段,code/sync_whitebox_refs.py);白模签字 H3W 后导出视频、再出分镜背景图
@@ -910,7 +910,7 @@ DEFAULT_GENCONFIG = {
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
-               "narration_enabled": True,
+               "narration_enabled": False,
                "dialogue_voice": "native",
                # dialogue_tts=生成对白语音(2026-09-13,默认关):开启后不论 dialogue_voice 是原声还是后期配音,项目都维护
                #   一份按 shot_list dialogue_lines 逐句、用人物嗓音模板合成的「对白语音库」assets/audio/voice/epNN/tts/
@@ -922,7 +922,7 @@ DEFAULT_GENCONFIG = {
                # dialogue_tts_max_pause=句中停顿上限秒(0=不压缩):库文件合成后一律裁首尾静音,>0 时句中长停顿也压到该值(后处理,不重合成)
                "dialogue_tts_speed": 1.0,
                "dialogue_tts_max_pause": 0,
-               "spatial_blocking": True,
+               "spatial_blocking": False,
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
@@ -2878,9 +2878,9 @@ def build_role_prompt(agent_id: str, project: str,
         if out.get("caption_enabled") else
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
-    spatial_on = out.get("spatial_blocking", True) is not False
+    spatial_on = out.get("spatial_blocking") is True
     spatial_line = (
-        "**开启(默认)—— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
+        "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
         "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
         "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并跑宿主 CLI `code/blocking_map_check.py` 机检"
@@ -2892,19 +2892,19 @@ def build_role_prompt(agent_id: str, project: str,
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
         if spatial_on else
-        "**关闭 —— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "
+        "**关闭(默认)—— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "
         "`main_*.png` + 昼夜变体(不出 layout_top/layout.json,§6A 场景所需视图=主视角概念图+变体);"
         "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;blocking 不受 blocking_on_map 约束"
         "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
         "不跑 layout_map_bound_check.py / sync_shot_plates.py;scene_layout_pack_ok/blocking_map_present/"
         "blocking_on_map/layout_map_bound/shot_plate_bound 五项机检一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
-    narration_on = out.get("narration_enabled", True) is not False
+    narration_on = out.get("narration_enabled") is True
     narration_line = (
         "开启 —— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
         " audio_plan、narrator 在 p7-video 前合成实测、audio-mixing 三路混音,§7D/§8B 机检全数生效"
         if narration_on else
-        "**关闭 —— 用户约定整个片子没有任何旁白**:p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺"
+        "**关闭(默认)—— 用户约定整个片子没有任何旁白**:p5-narration/p8-narrator 一律不派发、不建卡,闸门不因缺"
         " narration.md/旁白轨而 HOLD(两工位被派到也只说明开关已关闭并结单);剧本/hook/片头片尾/预告等一切内容"
         "不得以画外音旁白形式呈现叙事;shot-planning 不写 narration_anchors(留空或省略),audio_plan 禁用 narration_over"
         "——无对白组一律 ambient_only 且照常逐组核查 silent_rationale,纯画面讲不清叙事时**不回派补写旁白**,"
@@ -6548,7 +6548,7 @@ def _preview_characters(project: str):
     # 伪角色——右侧展示旁白声线卡 assets/audio/voice/narrator.json(声线描述/选型/冻结样本,
     # 由 09-audio/voice-generation 设计并冻结,此后不随 TTS 设置变)与冻结样本试听
     if (load_project_settings(project).get("output") or {}) \
-            .get("narration_enabled", True) is not False:
+            .get("narration_enabled") is True:
         card = _read_json_safe(base / "assets" / "audio" / "voice" / "narrator.json") or {}
         vp = base / "assets" / "audio" / "voice" / "refs" / "NARRATOR_voiceprint.mp3"
         if card.get("voiceprint"):
@@ -6746,8 +6746,8 @@ def _preview_scenes(project: str):
                        "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/", "world/"))],
                        "plates": plates, "panos": panos, "world": world, "world_sources": world_sources,
                        "world_job": _scene_world_job_view(base.name, sid)})
-    # 项目「白模」选项(output.spatial_blocking,默认开):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
-    whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is not False
+    # 项目「白模」选项(output.spatial_blocking,默认关):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
+    whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is True
     # 项目画幅(2026-09-15):预览页「✂ 裁剪」分镜背景图的固定选框比例(母图按项目画幅出图,裁后仍须同比例才能继续作组视频参考图)
     fmt = None
     try:
@@ -6918,7 +6918,7 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
     sid = re.sub(r"[^\w\-]", "", sid)
     if not sid:
         raise ServiceError(400, "scene id is required")
-    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is False:
+    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is not True:
         raise ServiceError(409, "项目「白模」选项已关闭,不能生成全景图")
     if not (base / "assets" / "concepts" / "scenes" / sid / "layout.json").is_file():
         raise ServiceError(404, f"{sid} 还没有场景白模(layout.json),不能出全景")
@@ -6954,7 +6954,7 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
     sid = re.sub(r"[^\w\-]", "", sid)
     if not sid:
         raise ServiceError(400, "scene id is required")
-    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking", True) is False:
+    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is not True:
         raise ServiceError(409, "项目「白模」选项已关闭,不能生成世界模型")
     if not (base / "assets" / "concepts" / "scenes" / sid / "layout.json").is_file():
         raise ServiceError(404, f"{sid} 还没有场景白模(layout.json)")
@@ -7136,10 +7136,10 @@ def _preview_storyboard(project: str, ep: str):
                 for e in sorted(eps)]
     ep = ep or (episodes[0]["ep"] if episodes else "")
     data = {"project": base.name, "episodes": episodes, "ep": ep}
-    # 人物精确空间位置(output.spatial_blocking,默认开)关闭时,分镜预览页不显示各组白模面板,
+    # 人物精确空间位置(output.spatial_blocking,默认关)关闭时,分镜预览页不显示各组白模面板,
     # 分镜信息单栏铺满;开关状态随预览数据下发,页面据此决定是否渲染/挂载 3D 白模
     data["whitebox_enabled"] = ((load_project_settings(base.name).get("output") or {})
-                                .get("spatial_blocking", True) is not False)
+                                .get("spatial_blocking") is True)
     if not ep:
         return data
     ep = re.sub(r"[^\w\-]", "", ep)
@@ -7561,7 +7561,7 @@ def _preview_script(project: str, ep: str):
     data["board_scenes"] = sbb.board_targets(_read_json_safe(base / "directing" / ep / "storyboard.json") or {})[0]
     data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})
     out = (load_project_settings(base.name).get("output") or {})
-    data["narration_enabled"] = out.get("narration_enabled", True) is not False
+    data["narration_enabled"] = out.get("narration_enabled") is True
     # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
     data["reanalyze_run"] = next(
         (r["id"] for r in reversed(list(RUNS.values()))
@@ -12035,8 +12035,6 @@ async def api_projects_create(body: dict):
     settings = body.get("settings") or {}
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
     base["review"] = {"evaluation": 0, **{k: 0 for k in REVIEW_DIMENSIONS}}
-    # 新建项目旁白默认关闭(2026-09-01);DEFAULT_GENCONFIG 保持 True 仅作存量项目缺键回退
-    base["output"] = {**base["output"], "narration_enabled": False}
     # 新建项目片头/片尾/下集预告默认不启用(原向导「片头片尾」步的默认值;2026-09-13 该步删除后由此兜底,开关移到后期处理页)
     base["packaging"] = {**base["packaging"], "intro_enabled": False, "outro_enabled": False, "teaser_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
@@ -12082,7 +12080,7 @@ async def api_projects_create(body: dict):
         dur = cfg["duration"]
         ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
                    else f"每集约 {dur['episode_minutes']} 分钟")
-        narr_off = ("" if cfg["output"].get("narration_enabled", True) is not False
+        narr_off = ("" if cfg["output"].get("narration_enabled") is True
                     else "、**旁白已关闭(用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发)**")
         msg.append(
             f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
