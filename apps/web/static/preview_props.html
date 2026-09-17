@@ -29,8 +29,8 @@ a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600}
-header a.back{color:var(--dim);text-decoration:none;font-size:13px}
-header a.back:hover{color:var(--accent)}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
 header .spacer{flex:1}
 input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
@@ -89,7 +89,8 @@ ul.arr>li{margin:2px 0}
 </head>
 <body>
 <header>
-  <a class="back" href="/">← 控制台</a>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
   <h1>🗡 道具预览</h1>
   <div class="spacer"></div>
   <span id="imp" title="本页道具概念图出图用的图像渠道/模型,与全局「生成模型」设置分开;空=跟随全局"></span>

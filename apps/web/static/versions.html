@@ -27,8 +27,8 @@ body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFan
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
 header h1{font-size:15px;font-weight:600}
 header .spacer{flex:1}
-a.back{color:var(--dim);text-decoration:none;font-size:13px}
-a.back:hover{color:var(--accent)}
+a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+a.back:hover{color:var(--accent);border-color:var(--accent)}
 select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px}
 select:focus{outline:none;border-color:var(--accent)}
 main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:14px}
@@ -65,7 +65,8 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 </head>
 <body>
 <header>
-  <a class="back" href="/">← 返回控制台</a>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
   <h1>🧬 版本管理</h1>
   <div class="spacer"></div>
   <label style="font-size:12px;color:var(--dim)">项目</label>

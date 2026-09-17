@@ -245,6 +245,8 @@ window.I18N_DICT = {
 "· 非儿童向": "· Bukan untuk anak-anak",
 "——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。": "— Platform dengan rasio aspek berbeda dari rasio utama (mis. TikTok/Douyin saat rasio utama 16:9) diadaptasi oleh platform-adapter dengan memotong dari master pada tahap publikasi, video tidak dibuat ulang; bahasa membatasi naskah/dialog/narasi/subtitle/voice-over/materi publikasi (prompt bahasa Inggris untuk model generatif tidak terpengaruh); resolusi draft dipakai untuk versi iterasi/menunggu review, resolusi final cut adalah resolusi target versi akhir setelah konfirmasi review — jika berbeda dari draft, secara default diperoleh lewat upscale, tidak dibuat ulang; makin tinggi resolusi makin mahal biaya pembuatan video (4K hanya didukung Seedance 2.0 versi standar).",
 "← 控制台": "← Konsol",
+"后退": "Kembali",
+"控制台": "Konsol",
 "← 返回": "← Kembali",
 "← 返回控制台": "← Kembali ke Konsol",
 "↩ 撤销": "↩ Urungkan",

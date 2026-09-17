@@ -27,8 +27,8 @@ body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFan
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
 header h1{font-size:15px;font-weight:600}
 header .spacer{flex:1}
-a.back{color:var(--dim);text-decoration:none;font-size:13px}
-a.back:hover{color:var(--accent)}
+a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+a.back:hover{color:var(--accent);border-color:var(--accent)}
 main{max-width:680px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
@@ -63,7 +63,8 @@ ul.how b,ol.how b{color:var(--text);font-weight:600}
 </head>
 <body>
 <header>
-  <a class="back" href="/">← 返回控制台</a>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
   <h1>📱 手机消息</h1>
   <span class="pill">绑定微信 / 飞书 / WhatsApp,在手机上与总制片互发消息</span>
   <div class="spacer"></div>

@@ -245,6 +245,8 @@ window.I18N_DICT = {
 "· 非儿童向": "· Không dành cho trẻ em",
 "——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。": "— Các nền tảng có tỷ lệ khung hình khác với tỷ lệ chính (ví dụ TikTok/Douyin khi tỷ lệ chính là 16:9) sẽ được platform-adapter cắt từ bản gốc để thích ứng ở giai đoạn phát hành, không tạo lại video; ngôn ngữ ràng buộc kịch bản/lời thoại/thuyết minh/phụ đề/lồng tiếng/tài liệu phát hành (prompt tiếng Anh gửi cho mô hình tạo sinh không bị ảnh hưởng); độ phân giải bản nháp dùng cho phiên bản lặp/chờ duyệt, độ phân giải thành phẩm là độ phân giải mục tiêu của bản cuối sau khi duyệt xác nhận — nếu khác mức nháp thì mặc định thu được bằng siêu phân giải (upscale), không tạo lại; độ phân giải càng cao chi phí tạo video càng cao (4K chỉ Seedance 2.0 bản tiêu chuẩn hỗ trợ).",
 "← 控制台": "← Bảng điều khiển",
+"后退": "Quay lại",
+"控制台": "Bảng điều khiển",
 "← 返回": "← Quay lại",
 "← 返回控制台": "← Quay lại bảng điều khiển",
 "↩ 撤销": "↩ Hoàn tác",

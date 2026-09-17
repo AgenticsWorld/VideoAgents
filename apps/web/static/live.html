@@ -27,8 +27,8 @@ body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFan
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
 header h1{font-size:15px;font-weight:600}
 header .spacer{flex:1}
-a.back{color:var(--dim);text-decoration:none;font-size:13px}
-a.back:hover{color:var(--accent)}
+a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+a.back:hover{color:var(--accent);border-color:var(--accent)}
 main{max-width:1280px;margin:0 auto;padding:18px 18px 60px;display:grid;grid-template-columns:400px 1fr;gap:18px;align-items:start}
 @media (max-width:900px){main{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -133,7 +133,8 @@ details .body{padding:10px 0 2px}
 </head>
 <body>
 <header>
-  <a class="back" href="/">← 返回控制台</a>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
   <h1>📡 直播</h1>
   <span class="pill">参考图 + 提示词 → Fal 视频模型循环生成 480p 短段 → 尾帧续接 → 连续播放</span>
   <div class="spacer"></div>

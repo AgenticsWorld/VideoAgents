@@ -32,8 +32,8 @@ a{color:var(--link)}
 body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
 header h1{font-size:15px;font-weight:600}
-header a.back{color:var(--dim);text-decoration:none;font-size:13px}
-header a.back:hover{color:var(--accent)}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
 header .spacer{flex:1}
 input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
@@ -298,7 +298,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </head>
 <body>
 <header>
-  <a class="back" href="/">← 控制台</a>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
   <h1>🎦 分镜预览</h1>
   <div class="spacer"></div>
   <input type="hidden" id="project">
