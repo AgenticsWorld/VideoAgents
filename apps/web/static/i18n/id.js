@@ -3076,4 +3076,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Lembutkan (pelunakan frekuensi tinggi)",
 "半径(1080p 基准 px)": "Radius (px pada 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mencampur blur Gaussian dengan gambar asli sesuai kekuatan, menghilangkan detail halus tanpa mengaburkan kontur (kesan fokus lembut untuk kilas balik / mimpi); radius mengikuti tinggi gambar",
+"全部集": "Semua episode",
+"按集过滤:只显示该集出现的资产": "Filter per episode: hanya tampilkan aset yang muncul di episode itu",
 };

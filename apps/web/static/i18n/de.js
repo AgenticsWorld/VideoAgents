@@ -3076,4 +3076,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Weichzeichnen (Hochfrequenz-Glättung)",
 "半径(1080p 基准 px)": "Radius (px bei 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mischt einen Gaußschen Weichzeichner je nach Stärke mit dem Original und nimmt feine Details heraus, ohne Konturen zu verschmieren (Weichzeichner-Look für Rückblenden / Träume); der Radius skaliert mit der Bildhöhe",
+"全部集": "Alle Episoden",
+"按集过滤:只显示该集出现的资产": "Nach Episode filtern: nur Assets anzeigen, die darin vorkommen",
 };

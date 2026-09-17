@@ -3235,4 +3235,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Soften (high-frequency softening)",
 "半径(1080p 基准 px)": "Radius (px at 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Blends a Gaussian blur with the original by strength, removing fine detail without smearing outlines (soft-focus feel for flashback / dream segments); the radius scales with frame height",
+"全部集": "All episodes",
+"按集过滤:只显示该集出现的资产": "Filter by episode: show only assets that appear in it",
 };

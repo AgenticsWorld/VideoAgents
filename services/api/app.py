@@ -253,6 +253,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
         "videos": lambda: core.api_preview_videos(project, ep),
         "post": lambda: core.api_preview_post(project, ep),
         "workflow": lambda: core.api_preview_workflow(project),
+        "asset-episodes": lambda: core.api_preview_asset_episodes(project),
     }
     if kind not in handlers:
         raise HTTPException(404, "unknown preview type")

@@ -3076,4 +3076,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Làm mềm (làm dịu tần số cao)",
 "半径(1080p 基准 px)": "Bán kính (px ở 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Trộn làm mờ Gaussian với bản gốc theo cường độ, bỏ chi tiết nhỏ mà không nhòe đường nét (cảm giác nét mềm cho đoạn hồi tưởng / giấc mơ); bán kính tỉ lệ theo chiều cao khung hình",
+"全部集": "Tất cả tập",
+"按集过滤:只显示该集出现的资产": "Lọc theo tập: chỉ hiển thị tài sản xuất hiện trong tập đó",
 };

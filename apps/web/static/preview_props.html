@@ -9,6 +9,7 @@
 <script src="/static/edit-popup.js?v=20260911-reviser"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
+<script src="/static/ep-filter.js?v=20260917"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -136,10 +137,12 @@ function jrender(v){
   return esc(String(v));
 }
 
+// 按集过滤(ep-filter.js):搜索框前的分集下拉,选集后只留该集出现的条目
+const epOk=x=>x.narrator||EpFilter.match(x.id);
 function renderList(){
   const q=$('#search').value.trim().toLowerCase();
   const box=$('#items');box.innerHTML='';
-  DATA.filter(p=>!q||p.id.toLowerCase().includes(q)||(p.name||'').toLowerCase().includes(q)
+  DATA.filter(epOk).filter(p=>!q||p.id.toLowerCase().includes(q)||(p.name||'').toLowerCase().includes(q)
       ||(p.card.type||'').toLowerCase().includes(q))
     .forEach(p=>{
       const d=document.createElement('div');
@@ -238,11 +241,12 @@ async function load(){
   DATA.sort((a,b)=>((b.card.is_plot_prop||b.card.key_prop)?4:0)+(b.images.length?2:0)+(Object.keys(b.card).length?1:0)
     -(((a.card.is_plot_prop||a.card.key_prop)?4:0)+(a.images.length?2:0)+(Object.keys(a.card).length?1:0))
     ||a.id.localeCompare(b.id));
+  await EpFilter.load(proj);
   // 优先级:首次深链 id > 页内刷新前已选中的条目 > 列表第一项(切项目时旧 id 找不到自然回落)
   const keep=JUMP_ID||CUR;
   JUMP_ID=null;   // 只在首次加载生效
   const kept=keep?DATA.find(x=>x.id===keep):null;
-  CUR=kept?kept.id:(DATA.length?DATA[0].id:null);
+  CUR=kept?kept.id:((DATA.find(epOk)||DATA[0]||{}).id||null);
   syncUrl();
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -254,6 +258,7 @@ async function load(){
 }
 $('#reload').onclick=load;
 mountImageModelPicker({kind:'props',host:'#imp',label:'🎨 图像模型'});
+EpFilter.mount({kind:'props',onChange:renderList});
 $('#search').oninput=renderList;
 $('#project').value=new URLSearchParams(location.search).get('project')
   ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';

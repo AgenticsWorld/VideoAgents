@@ -6662,6 +6662,17 @@ async def api_preview_props(project: str = "demo"):
     return await asyncio.to_thread(_preview_props, project)
 
 
+def _preview_asset_episodes(project: str):
+    """场景/人物/生物/道具 预览页「按集过滤」下拉(2026-09-17):各类资产 id → 出现的分集,规则见 modules/asset_episodes.py。"""
+    from modules import asset_episodes
+    base = _proj_base(project)
+    return {"project": base.name, **asset_episodes.build(base)}
+
+
+async def api_preview_asset_episodes(project: str = "demo"):
+    return await asyncio.to_thread(_preview_asset_episodes, project)
+
+
 def _preview_creatures(project: str):
     """生物/坐骑设定聚合:bible/creatures/index.json 登记表(CRE-* 权威)+ 详情卡
     (index 条目 detail_file 指向 creature.json#creatures[] 或 mount.json#mounts[],

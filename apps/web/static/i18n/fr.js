@@ -3076,4 +3076,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Adoucir (adoucissement des hautes fréquences)",
 "半径(1080p 基准 px)": "Rayon (px en 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mélange un flou gaussien avec l'original selon l'intensité, atténuant les détails fins sans baver les contours (effet flou doux pour les flashbacks / rêves) ; le rayon suit la hauteur de l'image",
+"全部集": "Tous les épisodes",
+"按集过滤:只显示该集出现的资产": "Filtrer par épisode : n'afficher que les ressources qui y apparaissent",
 };

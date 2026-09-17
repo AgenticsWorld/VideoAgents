@@ -3076,4 +3076,6 @@ window.I18N_DICT = {
 "柔化(高频软化)": "Suavizar (suavizado de altas frecuencias)",
 "半径(1080p 基准 px)": "Radio (px a 1080p)",
 "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mezcla un desenfoque gaussiano con el original según la intensidad, quitando detalle fino sin emborronar los contornos (sensación de foco suave para flashbacks / sueños); el radio escala con la altura de la imagen",
+"全部集": "Todos los episodios",
+"按集过滤:只显示该集出现的资产": "Filtrar por episodio: mostrar solo los recursos que aparecen en él",
 };
