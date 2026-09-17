@@ -200,6 +200,7 @@ def list_projects() -> list[dict]:
         proj = _read_json(pj, {})
         src = proj.get("source") or {}
         out.append({"name": d.name, "title": str(proj.get("title") or ""),
+                    "tags": parse_tags(proj.get("tags") or []),
                     "created_at": proj.get("created_at", ""),
                     "updated_at": proj.get("updated_at", ""),
                     "status": proj.get("status", "empty"), "message": proj.get("message", ""),
@@ -223,7 +224,8 @@ def create_project(name: str | None = None) -> dict:
     (d / "clips").mkdir()
     proj = {"schema": SCHEMA_PROJECT, "name": name, "created_at": _now(),
             "status": "empty", "progress": 0, "message": "", "error": "",
-            "source": {}, "clip_count": 0, "analyzed_count": 0, "asr": {}}
+            "source": {}, "clip_count": 0, "analyzed_count": 0, "asr": {},
+            "analysis_prompt": DEFAULT_ANALYSIS_QUESTION}  # 新项目默认加载模板 1
     save_project(name, proj)
     save_clips(name, {"source": {}, "clips": []})
     return get_project(name)
@@ -236,14 +238,36 @@ def delete_project(name: str) -> dict:
     return {"ok": True, "name": name}
 
 
+MAX_TAGS, MAX_TAG_LEN = 30, 40
+_TAG_SPLIT_RE = re.compile(r"[\s,，、;；]+")
+
+
+def parse_tags(value) -> list[str]:
+    """标签解析(2026-09-17):接受 "#a #b" 这类字符串或列表;# 前缀可有可无,按空白/逗号/顿号切分,
+    去掉空项与重复(保留首次出现顺序),每个 ≤40 字,最多 30 个。"""
+    if isinstance(value, (list, tuple)):
+        raw = [str(x) for x in value]
+    else:
+        raw = _TAG_SPLIT_RE.split(str(value or ""))
+    out: list[str] = []
+    for tok in raw:
+        tag = tok.strip().lstrip("#").strip()[:MAX_TAG_LEN]
+        if tag and tag not in out:
+            out.append(tag)
+    return out[:MAX_TAGS]
+
+
 def update_settings(name: str, fields: dict) -> dict:
     """项目级设置:title(显示名称,任意文字,空=显示文件夹名;文件夹名 name 是引用 ID 不改)、
+    tags(标签,"#a #b" 字符串或列表,见 parse_tags;列表页可按标签过滤)、
     analysis_prompt(AI 分析问题,空=用默认)、
     min_scene_len_s(镜头分割最短镜头秒数,重新分割时生效)。"""
     with _LOCK:
         proj = load_project(name)
         if "title" in fields:
             proj["title"] = " ".join(str(fields.get("title") or "").split())[:120]
+        if "tags" in fields:
+            proj["tags"] = parse_tags(fields.get("tags"))
         if "analysis_prompt" in fields:
             proj["analysis_prompt"] = str(fields.get("analysis_prompt") or "").strip()[:4000]
         if "min_scene_len_s" in fields:
@@ -259,7 +283,9 @@ def update_settings(name: str, fields: dict) -> dict:
 def get_project(name: str) -> dict:
     _reap(name)
     proj = load_project(name)
+    proj["tags"] = parse_tags(proj.get("tags") or [])
     proj["analysis_prompt_default"] = DEFAULT_ANALYSIS_QUESTION
+    proj["analysis_prompt_templates"] = ANALYSIS_PROMPT_TEMPLATES
     proj["min_scene_len_s"] = _min_scene_len(proj)
     doc = load_clips(name)
     proj["running"] = _job_running(name)
@@ -622,9 +648,6 @@ def _pipeline(name: str) -> None:
         if _cancelled(name):
             return
 
-        wav = d / "source" / "audio.wav"
-        has_audio = info["has_audio"] and _extract_audio(src, wav)
-
         min_len = _min_scene_len(proj)
         _update(name, progress=15, message=f"检测镜头边界(PySceneDetect,最短镜头 {min_len}s)…")
         boundaries = _scenedetect_boundaries(proxy, min_len)
@@ -656,15 +679,9 @@ def _pipeline(name: str) -> None:
                     message=f"导出分镜 {n}/{len(clips)}…")
         source_meta = {**(load_project(name).get("source") or {})}
         save_clips(name, {"source": source_meta, "clips": clips})
-
-        asr = {"ok": False, "error": "视频无音轨", "segments": 0, "language": ""} if not has_audio \
-            else _run_asr(name, wav, clips)
-        save_clips(name, {"source": source_meta, "clips": clips})
-        msg = f"完成:{len(clips)} 个分镜"
-        msg += f",字幕 {asr.get('segments', 0)} 段({asr.get('language') or '?'})" if asr.get("ok") \
-            else f",字幕未生成({asr.get('error', '')})"
-        _update(name, status="ready", progress=100, message=msg, clip_count=len(clips),
-                analyzed_count=0, asr=asr, error="")
+        # 2026-09-17:导入流程不再自动语音转写;字幕由用户点「语音转字幕」按需生成(retranscribe)
+        _update(name, status="ready", progress=100, clip_count=len(clips), analyzed_count=0,
+                asr={}, error="", message=f"完成:{len(clips)} 个分镜(字幕可点「语音转字幕」生成)")
     except Exception as exc:  # noqa: BLE001
         detail = getattr(exc, "detail", None) or f"{type(exc).__name__}: {exc}"
         _update(name, status="failed", error=str(detail)[:600], message="")
@@ -686,7 +703,7 @@ def reprocess(name: str) -> dict:
 
 
 def retranscribe(name: str) -> dict:
-    """只重跑字幕(保留 clip 与画面信息;会覆盖字幕框)。"""
+    """语音转字幕(保留 clip 与画面信息;会覆盖字幕框)。导入流程不再自动转写,这是唯一的字幕入口。"""
     d = project_dir(name)
     if _job_running(name):
         raise FootageLibError(409, "该项目正在处理中")
@@ -834,17 +851,32 @@ def make_contact_sheet(name: str, clip_id: str) -> Path:
     return out
 
 
-DEFAULT_ANALYSIS_QUESTION = (
-    "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分七行回答(不要 JSON、不要 markdown、不要代码块):\n"
-    "画面:这个分镜整体呈现了什么,包括人物、物体、场景、动作与镜头运动。\n"
-    "主旨:提炼这个分镜传递的主旨或叙事信息。\n"
-    "风格:画面整体风格——媒介/艺术形式、色彩、质感、光影与氛围。\n"
-    "切口:画面是否在某两格之间发生硬切或场景突变。有则写「第N格(@角标秒数)与第N+1格(@角标秒数)之间」,可多处;没有写「无」。\n"
-    "稳定:最稳定可用的连续区间,用格子角标秒数表述(如「约 02:15.4 到 02:19.6」);有剧烈晃动、虚焦、遮挡的段落单独指出;整体稳定写「全程稳定」。\n"
-    "主体:主体人物的状态与情绪(在做什么、投入或松弛、情绪如何);无人物写「无人物」。\n"
-    "标签:3 到 6 个简短的画面标签,用顿号分隔。\n"
-    "不要只根据单个画面下结论,看不清的内容不要猜测。"
-)
+# AI 分析问题模板(2026-09-17):页面「模板」按钮可选;模板 1 为新建项目默认加载的问题
+ANALYSIS_PROMPT_TEMPLATES: list[dict] = [
+    {"id": "content", "title": "画面内容分镜", "text": (
+        "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分四行回答(不要 JSON、不要 markdown、不要代码块):\n"
+        "画面:这个分镜整体呈现了什么,包括人物、物体、场景、动作。\n"
+        "主旨:提炼这个分镜传递的主旨或叙事信息。\n"
+        "主体:主体人物的状态与情绪(在做什么、投入或松弛、情绪如何);无人物写「无人物」。\n"
+        "标签:3 到 6 个简短的画面标签,用顿号分隔。\n"
+        "不要只根据单个画面下结论,看不清的内容不要猜测。")},
+    {"id": "design", "title": "分镜设计分析", "text": (
+        "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分六行回答(不要 JSON、不要 markdown、不要代码块):\n"
+        "这个分镜的景別\n"
+        "这个分镜的灯光\n"
+        "这个分镜的运镜\n"
+        "这个分镜的画风\n"
+        "这个分镜的拍摄手法\n"
+        "这个分镜的布景\n"
+        "不要只根据单个画面下结论,看不清的内容不要猜测。")},
+    {"id": "style", "title": "画面风格分析", "text": (
+        "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分三行回答(不要 JSON、不要 markdown、不要代码块):\n"
+        "风格:画面整体风格——媒介/艺术形式、色彩、质感、光影与氛围。\n"
+        "切口:画面是否在某两格之间发生硬切或场景突变。有则写「第N格(@角标秒数)与第N+1格(@角标秒数)之间」,可多处;没有写「无」。\n"
+        "稳定:最稳定可用的连续区间,用格子角标秒数表述(如「约 02:15.4 到 02:19.6」);有剧烈晃动、虚焦、遮挡的段落单独指出;整体稳定写「全程稳定」。\n"
+        "不要只根据单个画面下结论,看不清的内容不要猜测。")},
+]
+DEFAULT_ANALYSIS_QUESTION = ANALYSIS_PROMPT_TEMPLATES[0]["text"]
 
 
 def build_vision_prompt(image_path: Path, question: str, lang: str = "zh") -> str:
