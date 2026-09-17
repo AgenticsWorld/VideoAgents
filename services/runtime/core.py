@@ -3344,6 +3344,8 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    `python3 services/runtime/dispatch.py --confirm "任务<task_id>验收未过:<一句话原因>。是否重跑?"`
    该命令会阻塞直到用户在控制台点击「重跑」或「跳过」,{confirm_timeout} 秒无人答复则输出默认值「重跑」
    (等待时长为用户设置「Agent 高级设置→重跑等待确认」,不要自行传 --timeout 覆盖)。
+   **超时默认「重跑」只适用于重跑额度内**:该任务已重跑次数达到上限({max_retries} 次;上限为 0 时首次不过即属此类)
+   的升级确认必须加 `--default 跳过`——无人答复 = 不重跑,严禁靠超时默认值绕过重跑次数上限。
    命令输出「重跑」→ 正常重新派单;输出「跳过」→ 不再重跑,把该问题记入
    data/projects/<project>/qa/defects/ 并在最终汇报中说明跳过原因。首次派单不需要确认,只有重跑需要
 5. 【人工签字点必须用 --sign】H1-H5 与每集 H3A 等人工签字闸门,必须用签字类确认:
@@ -12494,6 +12496,9 @@ async def api_confirm_create(body: dict):
             return {"confirm_id": fresh["id"]}
     fallback = ["签字", "暂缓"] if kind == "sign" else ["重跑", "跳过"]
     options = [str(o)[:40] for o in (body.get("options") or fallback)][:4]
+    # 重跑次数设为 0(不自动重跑)时,重跑类确认超时不得默认「重跑」——否则无人值守=无限自动重跑
+    if kind != "sign" and options[:2] == ["重跑", "跳过"] and max_retries_setting() == 0:
+        body = {**body, "default": "跳过"}
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
          "default": str(body.get("default") or options[0])[:40],
          "timeout": None if kind == "sign" else
@@ -12511,7 +12516,8 @@ async def api_confirm_create(body: dict):
     HUB.publish({"type": "confirm", **confirm_public(c)})
     notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
     # timeout 返回服务端实际生效值(经用户设置钳制),等待方(dispatch.py)据此对齐本地截止时间
-    return {"confirm_id": c["id"], "timeout": c["timeout"]}
+    # default 同理返回服务端生效值(重跑次数为 0 时重跑类确认被改为「跳过」)
+    return {"confirm_id": c["id"], "timeout": c["timeout"], "default": c["default"]}
 
 
 async def api_confirms():

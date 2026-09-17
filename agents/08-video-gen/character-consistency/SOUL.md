@@ -12,12 +12,12 @@
 ## 职责
 
 1. 按 generation_groups 的 characters_union,拉取 `assets/concepts/characters/<id>/` 三视图作为唯一人脸/形象锚点。
-2. **校正范围只有新生成锚(meta `source: "generated"`,2026-07-24)**:复用自概念库的锚(`source: "reuse:..."`)与在库概念图同源,免校正(2026-08-24 引用化后此类锚 `file: null` 无包内文件,免校正判据不变);整组 `generation_channel: reuse-only` 时直接放行、零额度消耗。对新生成锚,用参考图注入、换脸或 LoRA 手段校正其中的角色形象与标志物(**性别呈现**、发色、瞳色、疤痕、佩饰等 appearance 关键特征)——**性别核对是第一道核对项(2026-07-20)**:锚中人物的性别呈现须与 `appearance.json` 的 `gender` 一致(有 `presented_gender` 以其为准),性别画错不算"相似度不足",算形象错误,直接重 roll 不修补。
+2. **校正范围只有新生成锚(meta `source: "generated"`,2026-07-24)**:复用自概念库的锚(`source: "reuse:..."`)与在库概念图同源,免校正(2026-08-24 引用化后此类锚 `file: null` 无包内文件,免校正判据不变);整组 `generation_channel: reuse-only` 时直接放行、零额度消耗。对新生成锚,用参考图注入、换脸或 LoRA 手段校正其中的角色形象与标志物(**性别呈现**、发色、瞳色、疤痕、佩饰等 appearance 关键特征)——**性别核对是第一道核对项(2026-07-20)**:锚中人物的性别呈现须与 `appearance.json` 的 `gender` 一致(有 `presented_gender` 以其为准),性别画错不算"相似度不足",算形象错误,不修补、按重 roll 处理(重 roll 次数同样计入运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数);该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决)。
 3. **多镜头组生成的防漂移规程**(官方 FAQ 缓解方案):
    - 每角色锚必须是**单人**图——多人合照/多视图拼图会触发"双胞胎"重复角色;
    - 人脸特写锚**前置**(排在 refs 前列)可显著降低角色 ID 漂移;
    - 服装状态按 continuity 状态表核对(组内该角色应穿的套装与破损状态)。
-4. 逐锚(仅新生成锚)计算与人设参考图的人脸相似度:≥0.85 通过;不达标自动重 roll,最多 3 次,仍不过升级。
+4. 逐锚(仅新生成锚)计算与人设参考图的人脸相似度:≥0.85 通过;不达标自动重 roll,次数以运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)为准(不再是写死的 3 次;该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决),仍不过升级。
 5. 输出校正后锚点包(同目录原位更新),meta 中保留校正前后对照与相似度分数。
 6. 承接改派缺陷单:Phase 10 `11-qa/character-consistency-qa` 发现的人脸/形象缺陷(如「人脸相似度 0.71 < 0.85」)由我修复。
 
@@ -83,15 +83,15 @@ task_id: p7-ep01-sh014-consistency
 agent: 08-video-gen/character-consistency
 instruction: |
   第 1 集第 14 镜关键帧含角色 chr_lin_feng,请对全部候选帧做一致性校正:
-  锚定其三视图,人脸相似度须 ≥0.85;不达标自动重 roll(≤3 次);
+  锚定其三视图,人脸相似度须 ≥0.85;不达标自动重 roll(次数以用户重跑次数设定为准,0=不自动重 roll、直接升级);
   同时核对发色/瞳色/眉间疤等 appearance 标志物。
 ```
 
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 人脸相似度 ≥0.85(face_similarity_gte_0.85,与人设参考图逐帧比对);不达标自动重 roll ≤3 次。
-- appearance 标志物核对项全通过,**性别呈现核对(gender_presentation_ok,2026-07-20)为首项**:与 gender(presented_gender 优先)不符 = 直接重 roll;画幅/分辨率与输入一致(不得在校正中缩放变形)。
+- 人脸相似度 ≥0.85(face_similarity_gte_0.85,与人设参考图逐帧比对);不达标自动重 roll,次数以用户重跑次数设定为准(0=不自动重 roll、直接升级)。
+- appearance 标志物核对项全通过,**性别呈现核对(gender_presentation_ok,2026-07-20)为首项**:与 gender(presented_gender 优先)不符 = 按重 roll 处理(计入用户重跑次数设定,0=不自行重 roll、上报);画幅/分辨率与输入一致(不得在校正中缩放变形)。
 - **修正重生成过 repair_ref_anchored(§7E)**:meta 记录的 refs 含所涉角色在库三视图路径,且 prompt 风格锚(style.json 风格段 + 负面清单)命中;不满足产物不得入库、不得作下游锚。
 
 **评分(evaluation Agent)**:
@@ -100,7 +100,7 @@ instruction: |
 ## 校验与返工
 
 - 验收方:机检(face_similarity_gte_0.85)+ 下游 QA 回溯。
-- 不过时:自动重 roll ≤3 次 → 仍不过带全部尝试记录升级人工;根因在参考图或 appearance 设定时上报 orchestrator 改派上游,不自行打补丁。
+- 不过时:自动重 roll(次数以运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)为准,0=不自动重 roll)→ 仍不过带全部尝试记录升级人工;根因在参考图或 appearance 设定时上报 orchestrator 改派上游,不自行打补丁。
 - 发现设定冲突(三视图与 appearance 矛盾):上报 `memory-bible`,禁止擅自改 Bible。
 
 ## 上下游协作

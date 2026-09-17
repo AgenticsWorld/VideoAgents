@@ -104,6 +104,7 @@ def confirm(question: str, timeout: int | None, options: list[str], default: str
     cid = resp["confirm_id"]
     if not sign:
         timeout = resp.get("timeout") or timeout or 60
+        default = resp.get("default") or default   # 服务端可能改默认项(重跑次数=0 → 「跳过」)
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(2)
