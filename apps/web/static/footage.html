@@ -94,6 +94,11 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 th{color:var(--dim);font-weight:500;font-size:12px}
 tr:hover td{background:var(--panel2)}
+tbody tr.prow{cursor:pointer}
+td.name .tagbox{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:4px}
+td.name .tagbox .tag-edit{opacity:.55;padding:0 6px}
+td.name .tagbox .tag-edit:hover{opacity:1}
+td.name input.tag-in{font-size:12px;padding:3px 8px;min-width:220px;max-width:420px;margin-top:4px}
 td.name a{color:var(--text);font-weight:600;text-decoration:none}
 td.name a:hover{color:var(--accent)}
 td.src{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
@@ -324,13 +329,40 @@ function renderList(){
   if(!all.length){$('#list-box').innerHTML='<div class="empty">'+t('还没有素材项目,点「新建项目」开始')+'</div>';return}
   if(!rows.length){$('#list-box').innerHTML='<div class="empty">'+t('没有同时带这些标签的项目')+'</div>';return}
   $('#list-box').innerHTML=`<table><thead><tr><th>${t('项目')}</th><th>${t('来源')}</th><th>${t('状态')}</th><th>${t('分镜')}</th><th>${t('创建时间')}</th><th></th></tr></thead><tbody>`+
-      rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr>
-        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.title||p.name)}</a>${p.title?` <span class="hint">${esc(p.name)}</span>`:''} <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">⧉</button>${(p.tags||[]).length?`<div>${p.tags.map(x=>tagChip(x,active.includes(x.toLowerCase()))).join('')}</div>`:''}</td>
+      rows.map(p=>{const s=p.source||{};const src=s.title||s.filename||s.url||'';return `<tr class="prow" data-name="${esc(p.name)}" title="${t('点击进入项目')}">
+        <td class="name"><a href="#p=${esc(p.name)}">${esc(p.title||p.name)}</a>${p.title?` <span class="hint">${esc(p.name)}</span>`:''} <button class="small" title="${t('复制素材库相对路径')}" onclick="copyPath('${esc(p.name)}')">⧉</button>
+          <div class="tagbox">${(p.tags||[]).map(x=>tagChip(x,active.includes(x.toLowerCase()))).join('')}<button class="small tag-edit" data-name="${esc(p.name)}" title="${t('编辑标签')}" onclick="editListTags(this.dataset.name,this)">🏷✏️</button></div></td>
         <td class="src" title="${esc(s.url||s.filename||'')}">${s.type==='url'?'🔗 ':s.type==='upload'?'📤 ':''}${esc(src)}${s.duration_s?` <span class="hint">${fmtDur(s.duration_s)}</span>`:''}</td>
         <td>${chip(p.status,p.running)}${p.message&&RUNNING.has(p.status)?` <span class="hint">${esc(p.message)}</span>`:''}</td>
         <td>${p.clip_count||0}${p.clip_count?` <span class="hint">/ ${t('已分析')} ${p.analyzed_count||0}</span>`:''}</td>
         <td class="hint">${esc(fmtDate(p.created_at))}</td>
-        <td class="act"><button class="small" onclick="location.hash='#p=${esc(p.name)}'">${t('打开')}</button> <button class="small danger" onclick="deleteProject('${esc(p.name)}',true)">${t('删除')}</button></td></tr>`}).join('')+'</tbody></table>';
+        <td class="act"><button class="small danger" onclick="deleteProject('${esc(p.name)}',true)">${t('删除')}</button></td></tr>`}).join('')+'</tbody></table>';
+}
+/* 行点击进入项目(2026-09-17):按钮/链接/标签/输入框以外的区域都可点 */
+$('#list-box').addEventListener('click',e=>{
+  const tr=e.target.closest('tr.prow');if(!tr)return;
+  if(e.target.closest('button,a,input,textarea,select,label'))return;
+  if(window.getSelection&&String(window.getSelection()).trim())return;
+  location.hash='#p='+tr.dataset.name;
+});
+/* 列表内直接编辑标签:把标签区换成 #tag 输入框,Enter/失焦保存,Esc 取消 */
+function editListTags(name,btn){
+  const box=btn.closest('.tagbox');const row=LIST_ROWS.find(p=>p.name===name);if(!box||!row)return;
+  const orig=tagsText(row.tags);
+  box.style.display='none';
+  const inp=document.createElement('input');inp.type='text';inp.className='tag-in';inp.value=orig;inp.placeholder=t('#标签1 #标签2 …(用 # 开头、空格分隔可输多个;失焦自动保存)');
+  box.after(inp);inp.focus();inp.select();
+  let done=false;
+  const finish=async(save)=>{
+    if(done)return;done=true;
+    if(save&&parseTags(inp.value).join('\n')!==parseTags(orig).join('\n')){
+      try{const p=await api(`${API}/${encodeURIComponent(name)}/settings`,{tags:inp.value});row.tags=p.tags||[];msg(t('标签已保存'),'ok')}
+      catch(e){msg(t('保存失败:')+e.message,'err')}
+    }
+    inp.remove();box.style.display='';renderList();
+  };
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}});
+  inp.addEventListener('blur',()=>finish(true));
 }
 $('#refresh-btn').onclick=showList;
 $('#new-btn').onclick=async()=>{

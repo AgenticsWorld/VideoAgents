@@ -961,7 +961,7 @@ def make_contact_sheet(name: str, clip_id: str) -> Path:
 
 # AI 分析问题模板(2026-09-17):页面「模板」按钮可选;模板 1 为新建项目默认加载的问题
 ANALYSIS_PROMPT_TEMPLATES: list[dict] = [
-    {"id": "content", "title": "画面内容分镜", "text": (
+    {"id": "content", "title": "画面内容分析", "text": (
         "只分析画面,不分析音频/对白。综合多个画面后,用纯文本分四行回答(不要 JSON、不要 markdown、不要代码块):\n"
         "画面:这个分镜整体呈现了什么,包括人物、物体、场景、动作。\n"
         "主旨:提炼这个分镜传递的主旨或叙事信息。\n"
