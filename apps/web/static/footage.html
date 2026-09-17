@@ -208,7 +208,7 @@ textarea.info{min-height:96px}
               <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=… 或 https://www.bilibili.com/video/BV…">
               <button class="primary" id="url-btn">⬇ 下载并处理</button>
             </div>
-            <div class="hint" style="margin-top:6px">经 yt-dlp 按 ≤1080p 下载到项目文件夹,再压缩为小画幅代理用于分析;下载受网络与站点限制(Bilibili 高清可能需要登录 cookie)。</div>
+            <div class="hint" style="margin-top:6px">经 yt-dlp 按 ≤1080p 下载到项目文件夹,再压缩为小画幅代理用于分析;同时下载站点自带字幕(中/英,人工优先),「语音转字幕」会直接套用;下载受网络与站点限制(Bilibili 高清可能需要登录 cookie)。</div>
           </div>
         </div>
         <!-- 进度 -->
@@ -232,7 +232,8 @@ textarea.info{min-height:96px}
           </div>
           <div class="toolbar" style="margin-top:10px">
             <button id="analyze-all-btn" title="对所有还没有画面信息的分镜逐个调用默认 CLI 引擎分析(后台运行)">🤖 全部 AI 分析</button>
-            <button id="retranscribe-btn" title="语音转文字,填入(覆盖)各分镜字幕框">🎙 语音转字幕</button>
+            <button id="retranscribe-btn" title="有站点字幕时直接套用,否则本地语音识别;填入(覆盖)各分镜字幕框">🎙 语音转字幕</button>
+            <button id="whisper-btn" style="display:none" title="不用站点字幕,改用本地 Whisper 语音识别(覆盖字幕框)">🎙 Whisper 重新识别</button>
             <button id="reprocess-btn" title="重新镜头分割:清空现有分镜 clip 与已编辑的字幕/信息">✂ 重新分割</button>
             <button id="reimport-btn" title="重新上传或换链接(会清空现有分镜)">📤 重新导入</button>
             <span class="total" id="out-links"></span>
@@ -430,9 +431,11 @@ async function refresh(full){
       [t('时长 / 分辨率'),`${fmtDur(s.duration_s)} · ${s.width||'?'}×${s.height||'?'} · ${s.fps||'?'} fps`],
       [t('原片'),`<a href="${fileUrl(CUR,s.file)}" target="_blank">${esc(s.file)}</a>`],
       [t('分镜'),`${p.clip_count||0} · ${t('已分析')} ${p.analyzed_count||0}`],
+      [t('站点字幕'),(s.subtitles||[]).length?s.subtitles.map(x=>`<a href="${fileUrl(CUR,x.file)}" target="_blank">${esc(x.lang)}</a>${x.auto?` <span class="hint">(${t('自动字幕')})</span>`:''}`).join(' · '):t('无')],
       [t('字幕(ASR)'),asr.ok?I18N.f(t('{n} 段,语言 {lang},模型 {model}'),{n:asr.segments,lang:asr.language||'?',model:asr.model||'faster-whisper'}):esc(asr.error||t('未生成'))],
       [t('状态'),esc(p.message||'')],
     ].map(([k,v])=>`<div><span>${k}:</span> <b>${v}</b></div>`).join('');
+    $('#whisper-btn').style.display=(s.subtitles||[]).length?'':'none';
     $('#out-links').innerHTML=`${t('输出:')} <a href="${fileUrl(CUR,'clips.json')}" target="_blank">clips.json</a> · <code>${esc(p.dir||'')}/clips/</code>`;
   }
   const sig=JSON.stringify((p.clips||[]).map(c=>[c.id,c.file,c.analyzed_at]));
@@ -476,7 +479,9 @@ $('#url-btn').onclick=async()=>{
 $('#cancel-btn').onclick=async()=>{try{await api(`${API}/${encodeURIComponent(CUR)}/cancel`,{});refresh(true)}catch(e){msg(e.message,'err')}};
 $('#reimport-btn').onclick=async()=>{if(PROJ&&PROJ.clip_count&&!await uiConfirm(t('重新导入会清空现有分镜 clip 与已编辑的字幕/信息,继续?'),{danger:true}))return;$('#input-box').dataset.force='1';$('#input-box').style.display='';$('#input-box').scrollIntoView({behavior:'smooth'})};
 $('#reprocess-btn').onclick=async()=>{if(!await uiConfirm(t('重新分割会清空现有分镜 clip 与已编辑的字幕/信息,继续?'),{danger:true}))return;try{await api(`${API}/${encodeURIComponent(CUR)}/reprocess`,{});refresh(true)}catch(e){msg(e.message,'err')}};
-$('#retranscribe-btn').onclick=async()=>{if(((PROJ&&PROJ.clips)||[]).some(c=>c.subtitle)&&!await uiConfirm(t('转写会覆盖各分镜已有的字幕,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{});refresh(true)}catch(e){msg(e.message,'err')}};
+async function runTranscribe(forceAsr){if(((PROJ&&PROJ.clips)||[]).some(c=>c.subtitle)&&!await uiConfirm(t('转写会覆盖各分镜已有的字幕,继续?')))return;try{await api(`${API}/${encodeURIComponent(CUR)}/transcribe`,{force_asr:!!forceAsr});refresh(true)}catch(e){msg(e.message,'err')}}
+$('#retranscribe-btn').onclick=()=>runTranscribe(false);
+$('#whisper-btn').onclick=()=>runTranscribe(true);
 const promptTa=$('#analysis-prompt');promptTa.dataset.orig='';
 async function savePrompt(){
   if(promptTa.value===promptTa.dataset.orig)return;

@@ -67,6 +67,8 @@ _LOCK = threading.RLock()   # 可重入:analyze_clip/update_clip 持锁内再调
 _JOBS: dict[str, subprocess.Popen] = {}
 RUNNING_STATES = ("queued", "downloading", "processing", "transcribing", "analyzing")
 SKIP_ASR = os.environ.get("VIDEOAGENTS_FOOTAGE_SKIP_ASR", "").lower() in ("1", "true", "yes")
+# 链接导入时随视频下载的站点字幕语言(yt-dlp --sub-langs 正则,逗号分隔;先匹配的语言优先套用)
+SUB_LANGS = os.environ.get("VIDEOAGENTS_FOOTAGE_SUB_LANGS", "zh.*,en.*")
 
 
 class FootageLibError(Exception):
@@ -388,7 +390,7 @@ def _download_then_pipeline(name: str, url: str) -> None:
     d = project_dir(name)
     try:
         _update(name, status="downloading", progress=2, message="读取视频信息…")
-        title = ""
+        title, meta = "", {}
         r = _run(_ytdlp_base() + ["-J", url], timeout=180)
         if r.returncode == 0 and r.stdout:
             try:
@@ -420,9 +422,98 @@ def _download_then_pipeline(name: str, url: str) -> None:
             proj["source"].update(title=title or url, file=f"source/{out.name}",
                                   filename=out.name, size=out.stat().st_size)
             save_project(name, proj)
+        _update(name, progress=2, message="下载站点字幕…")
+        subs = _fetch_site_subtitles(d, url, meta)
+        with _LOCK:
+            proj = load_project(name)
+            proj["source"]["subtitles"] = subs
+            save_project(name, proj)
+        if _cancelled(name):
+            return
         _pipeline(name)
     except Exception as exc:  # noqa: BLE001
         _update(name, status="failed", error=f"下载失败:{exc}", message="")
+
+
+def _sub_lang_rank(lang: str) -> int:
+    """按 SUB_LANGS 的模式顺序给语言排序(zh.* 在 en.* 前);都不匹配排最后。"""
+    for i, pat in enumerate(x.strip() for x in SUB_LANGS.split(",") if x.strip()):
+        try:
+            if re.fullmatch(pat, lang, re.I):
+                return i
+        except re.error:
+            continue
+    return 99
+
+
+def _fetch_site_subtitles(d: Path, url: str, meta: dict | None) -> list[dict]:
+    """站点字幕(2026-09-17):视频下好后再单独调一次 yt-dlp --skip-download 拿 YouTube/Bilibili 自带字幕
+    (人工字幕优先,其次自动字幕;语言由 SUB_LANGS 决定),转成 source/source.<lang>.srt。
+    任何失败只记日志、不影响视频导入。返回 [{lang, file, auto}],按「人工优先 → 语言顺序」排好。"""
+    src_dir = d / "source"
+    for old in list(src_dir.glob("source.*.srt")) + list(src_dir.glob("source.*.vtt")):
+        old.unlink(missing_ok=True)
+    try:
+        _run(_ytdlp_base() + ["--skip-download", "--write-subs", "--write-auto-subs",
+                              "--sub-langs", SUB_LANGS, "--convert-subs", "srt",
+                              "-o", str(src_dir / "source.%(ext)s"), url], timeout=600)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[footage] site subtitles skipped: {exc}", flush=True)
+    manual = set((meta or {}).get("subtitles") or {})
+    found: list[dict] = []
+    for f in sorted(src_dir.glob("source.*.srt")) + sorted(src_dir.glob("source.*.vtt")):
+        parts = f.name.split(".")
+        if len(parts) < 3 or f.stat().st_size == 0:
+            continue
+        lang = ".".join(parts[1:-1])
+        if any(x["lang"] == lang for x in found):
+            continue
+        found.append({"lang": lang, "file": f"source/{f.name}", "auto": lang not in manual})
+    found.sort(key=lambda x: (x["auto"], _sub_lang_rank(x["lang"]), x["lang"]))
+    return found
+
+
+_SUB_TS_RE = re.compile(r"(?:(\d+):)?(\d\d):(\d\d)[.,](\d{1,3})\s*-->\s*(?:(\d+):)?(\d\d):(\d\d)[.,](\d{1,3})")
+_SUB_TAG_RE = re.compile(r"<[^>]+>|\{\\an\d\}")
+
+
+def _parse_subtitle_file(path: Path) -> list[dict]:
+    """SRT / WebVTT → [{start, end, text}];去掉样式标签,并去掉自动字幕逐行滚动造成的与上一条重复的行。"""
+    def _sec(h, m, sec, ms):
+        return int(h or 0) * 3600 + int(m) * 60 + int(sec) + int(ms.ljust(3, "0")) / 1000.0
+    rows: list[dict] = []
+    cur: dict | None = None
+    prev_lines: list[str] = []
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _SUB_TS_RE.search(raw)
+        if m:
+            g = m.groups()
+            cur = {"start": round(_sec(*g[:4]), 3), "end": round(_sec(*g[4:]), 3), "lines": []}
+            rows.append(cur)
+            continue
+        if cur is None:
+            continue
+        line = _SUB_TAG_RE.sub("", raw).replace("&nbsp;", " ").strip()
+        if not line:
+            cur = None
+            continue
+        cur["lines"].append(line)
+    out: list[dict] = []
+    for r in rows:
+        lines = [x for x in dict.fromkeys(r["lines"]) if x not in prev_lines]
+        prev_lines = r["lines"]
+        text = " ".join(lines).strip()
+        if text and r["end"] > r["start"]:
+            out.append({"start": r["start"], "end": r["end"], "text": text})
+    return out
+
+
+def _site_subtitle(proj: dict, d: Path) -> dict | None:
+    """项目已下载的站点字幕里最优先的那份(文件仍在)。"""
+    for sub in (proj.get("source") or {}).get("subtitles") or []:
+        if sub.get("file") and (d / sub["file"]).is_file():
+            return sub
+    return None
 
 
 # ---------------- 流水线:代理 → 镜头分割 → 导出 clip → 字幕 ----------------
@@ -702,8 +793,9 @@ def reprocess(name: str) -> dict:
     return {"ok": True, "started": True}
 
 
-def retranscribe(name: str) -> dict:
-    """语音转字幕(保留 clip 与画面信息;会覆盖字幕框)。导入流程不再自动转写,这是唯一的字幕入口。"""
+def retranscribe(name: str, force_asr: bool = False) -> dict:
+    """语音转字幕(保留 clip 与画面信息;会覆盖字幕框)。导入流程不再自动转写,这是唯一的字幕入口。
+    链接导入时下载到的站点字幕优先直接套用;force_asr=True 或没有站点字幕时用本地 Whisper。"""
     d = project_dir(name)
     if _job_running(name):
         raise FootageLibError(409, "该项目正在处理中")
@@ -712,16 +804,32 @@ def retranscribe(name: str) -> dict:
     doc = load_clips(name)
     if not doc.get("clips"):
         raise FootageLibError(400, "还没有分镜 clip,请先处理视频")
-    _update(name, status="transcribing", progress=90, message="语音转文字…", error="")
-    _start(name, "transcribe")
-    return {"ok": True, "started": True}
+    site = None if force_asr else _site_subtitle(proj, d)
+    _update(name, status="transcribing", progress=90, error="",
+            message=f"套用站点字幕({site['lang']})…" if site else "语音转文字…")
+    _start(name, "transcribe", job_args={"force_asr": bool(force_asr)})
+    return {"ok": True, "started": True, "source": "site" if site else "asr"}
 
 
-def _transcribe_job(name: str) -> None:
+def _transcribe_job(name: str, force_asr: bool = False) -> None:
     d = project_dir(name)
     try:
-        src = _source_path(d, load_project(name))
+        proj = load_project(name)
+        src = _source_path(d, proj)
         doc = load_clips(name)
+        site = None if force_asr else _site_subtitle(proj, d)
+        if site:
+            rows = _parse_subtitle_file(d / site["file"])
+            if rows:
+                _assign_subtitles(rows, doc["clips"])
+                save_clips(name, doc)
+                asr = {"ok": True, "language": site["lang"], "segments": len(rows), "error": "",
+                       "model": "站点自动字幕" if site.get("auto") else "站点字幕", "source": "site"}
+                _update(name, status="ready", progress=100, asr=asr,
+                        message=f"已套用站点字幕({site['lang']}):{len(rows)} 段")
+                return
+            print(f"[footage] site subtitle {site['file']} empty, fallback to ASR", flush=True)
+            _update(name, message="站点字幕为空,改用语音转文字…")
         wav = d / "source" / "audio.wav"
         if not wav.is_file() and not _extract_audio(src, wav):
             raise FootageLibError(500, "提取音频失败(视频可能无音轨)")
@@ -1123,7 +1231,7 @@ def _cli() -> int:
         elif a.mode == "download":
             _download_then_pipeline(a.name, a.extra[0])
         elif a.mode == "transcribe":
-            _transcribe_job(a.name)
+            _transcribe_job(a.name, bool(args.get("force_asr")))
         elif a.mode == "analyze-all":
             _analyze_all_job(a.name, args.get("spec") or {}, args.get("lang") or "zh", args.get("todo") or [])
         return 0

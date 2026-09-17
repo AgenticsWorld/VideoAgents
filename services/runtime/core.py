@@ -14091,8 +14091,8 @@ async def api_footage_reprocess(name: str):
     return _footage_call(lambda lib: lib.reprocess(name))
 
 
-async def api_footage_retranscribe(name: str):
-    return _footage_call(lambda lib: lib.retranscribe(name))
+async def api_footage_retranscribe(name: str, body: dict | None = None):
+    return _footage_call(lambda lib: lib.retranscribe(name, bool((body or {}).get("force_asr"))))
 
 
 async def api_footage_cancel(name: str):

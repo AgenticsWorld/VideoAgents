@@ -1176,8 +1176,8 @@ async def footage_reprocess(name: str) -> dict[str, Any]:
 
 
 @api.post("/footage/projects/{name}/transcribe", tags=["footage"])
-async def footage_transcribe(name: str) -> dict[str, Any]:
-    return await core.api_footage_retranscribe(name)
+async def footage_transcribe(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await core.api_footage_retranscribe(name, body or {})
 
 
 @api.post("/footage/projects/{name}/cancel", tags=["footage"])
