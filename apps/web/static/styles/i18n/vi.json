@@ -1,0 +1,610 @@
+{
+ "1780651424491_style": {
+  "name": "Atompunk khoa học viễn tưởng cổ điển",
+  "prompt": "Thẩm mỹ Atompunk khoa học viễn tưởng cổ điển thập niên 60, phong cách hình ảnh retro-futurism, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình mang chất khoa học viễn tưởng hoài cổ thập niên 60, tông màu chủ đạo là cam ấm cổ điển, xanh muối biển và màu phim tương phản cao bão hòa thấp, có hạt phim rõ rệt, ánh sáng mềm kiểu phim cổ điển nhẹ và quầng sáng mặt trời tự nhiên. Về ánh sáng, dùng ánh nắng tự nhiên, nắng chiếu trực tiếp mạnh và bóng đổ rõ nét, tương phản sáng tối mạnh, vùng sáng không cháy, vùng tối giữ trọn chi tiết, chuyển tiếp sáng tối tự nhiên, tổng thể toát lên cảm giác điện ảnh Atompunk tự nhiên có chiều sâu, hoài cổ và tinh tế."
+ },
+ "1780580870934_style": {
+  "name": "Cung đấu quyền mưu lạnh lùng",
+  "prompt": "Phong cách hình ảnh phim cung đấu quyền mưu, phong cách nhiếp ảnh lạnh lùng nghiêm nghị của phim cổ trang cung đấu, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình trang nghiêm kiềm chế, cảm giác trật tự không gian mạnh, tông màu chủ đạo là vàng nâu bão hòa thấp, đỏ sẫm, xám lạnh và màu gỗ đậm, ánh sáng dùng chiếu sáng low-key, cảm giác ánh nến, ánh sáng bên và bóng tối sâu, bố cục ngay ngắn chỉnh tề, tổng thể mang cảm giác áp lực quyền lực chốn cung đình và chất phim quyền mưu cổ trang."
+ },
+ "1780575862644_style": {
+  "name": "Trinh thám Trung Quốc tông lạnh",
+  "prompt": "Phong cách hình ảnh phim trinh thám hiện thực Trung Quốc, phong cách nhiếp ảnh hiện thực tông lạnh, phong cách người thật tả thực, tác phẩm nhiếp ảnh, không khí tổng thể căng thẳng ngột ngạt, tông màu chủ đạo là bão hòa thấp, xám lạnh, xanh lục sẫm, ánh sáng dùng chiếu sáng low-key, ánh sáng môi trường, bóng tối sâu, bố cục kiềm chế, khung hình mang chất phim trinh thám đô thị chân thực."
+ },
+ "1780575862643_style": {
+  "name": "Cổ trang ngôn tình ánh sáng mềm",
+  "prompt": "Phong cách hình ảnh phim thần tượng cổ trang cao cấp, phong cách nhiếp ảnh ánh sáng mềm của phim cổ trang ngôn tình, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình mềm mại duy mỹ, tông màu chủ đạo là trắng ấm, vàng nhạt, xanh lam nhạt và hồng bão hòa thấp, ánh sáng dùng ánh sáng mềm, ngược sáng, quầng sáng nhẹ, độ sâu trường ảnh nông, bố cục ngay ngắn tinh tế, tổng thể mang cảm giác mộng mơ tinh xảo của phim tình cảm cổ trang."
+ },
+ "1780575862642_style": {
+  "name": "Phim thanh xuân Nhật Bản",
+  "prompt": "Phim tham khảo là «Love Letter», phong cách hình ảnh phim thanh xuân Nhật Bản kiểu Iwai Shunji, phong cách nhiếp ảnh phim nhựa Nhật Bản thập niên 90, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình trong trẻo, mềm mại, mang cảm giác hồi ức, có hạt phim rõ rệt, nhiễu nhẹ, chất soft-focus và tông tương phản thấp, tông màu chủ đạo là bão hòa thấp, trắng lạnh, xanh lam nhạt, xanh lục nhạt, xám mềm, ánh sáng dùng ánh sáng tự nhiên, ngược sáng, ánh sáng cửa sổ, hơi dư sáng, vùng sáng dịu và lóa sáng đầy không khí, bố cục nhẹ nhàng nhiều khoảng trống, mang cảm giác khoảnh khắc đời thường như quay máy cầm tay, không khí tổng thể thuần khiết, u buồn, mờ ảo, thi vị."
+ },
+ "1780575862641_style": {
+  "name": "Đời thường Nhật Bản tự nhiên",
+  "prompt": "Phong cách hình ảnh phim đời thường Nhật Bản, phong cách nhiếp ảnh tự nhiên chủ nghĩa, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất đời sống chân thực, khung hình tĩnh lặng kiềm chế, bố cục nhiều khoảng trống, tông màu chủ đạo là bão hòa thấp, xám xanh nhạt, xanh lục lạnh, ánh sáng dùng ánh sáng tự nhiên, ánh sáng cửa sổ, ánh sáng môi trường, bóng đổ mềm, nhấn mạnh không gian thật và hơi thở thường nhật."
+ },
+ "1780575862640_style": {
+  "name": "Phim Hàn đô thị ánh sáng mềm",
+  "prompt": "Phong cách hình ảnh phim tình cảm đô thị Hàn Quốc, phong cách nhiếp ảnh ánh sáng mềm của phim Hàn, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình sạch sẽ tinh tế, tông màu chủ đạo là bão hòa thấp, cân bằng nóng lạnh dịu nhẹ, ánh sáng dùng ánh sáng mềm, ánh sáng môi trường, độ sâu trường ảnh nông, không khí tổng thể tinh tế, lãng mạn, kiềm chế."
+ },
+ "1780575862639_style": {
+  "name": "Đô thị Trung Quốc tả thực",
+  "prompt": "Phong cách hình ảnh phim truyền hình đô thị Trung Quốc hiện đại, phong cách nhiếp ảnh phim đô thị đời thường, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình tự nhiên kiềm chế, chất đời sống chân thực, tông màu chủ đạo là tông ấm trung tính, bão hòa thấp, ánh sáng dùng ánh sáng tự nhiên, ánh sáng nội thất dịu nhẹ, bố cục ngay ngắn, chất lượng tổng thể gần với phim đô thị đề tài hiện thực Trung Quốc."
+ },
+ "1780580870935_style": {
+  "name": "Võ hiệp giang hồ tả thực",
+  "prompt": "Phong cách hình ảnh phim võ hiệp giang hồ, phong cách nhiếp ảnh tả thực cho phim hành động cổ trang, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình mang khí chất giang hồ và cảm giác hành động, tông màu chủ đạo là xám xanh bão hòa thấp, xanh mực, vàng đất, tương phản nóng lạnh, ánh sáng dùng ánh sáng tự nhiên, ánh sáng bên, ngược sáng và bóng đổ môi trường, bố cục rộng mở có chiều sâu, chất phim võ hiệp thô ráp chân thực."
+ },
+ "1779094923802_style": {
+  "name": "Phim tả thực thập niên 90",
+  "prompt": "Phong cách phim tả thực thập niên 90, phong cách nhiếp ảnh điện ảnh hiện thực 1990s, 1990s, phong cách người thật tả thực, tác phẩm nhiếp ảnh, khung hình mang hơi thở đời sống hoài cổ, tông màu chủ đạo là vàng ấm, màu be, xám tường cũ, ánh sáng dùng ánh sáng tự nhiên và ánh sáng ngược bên lúc hoàng hôn, hạt phim rõ, tương phản dịu, bố cục tùy hứng gần gũi đời thường, tổng thể mang chất hoài cổ ấm áp của nhiếp ảnh phim nhựa thập niên 90."
+ },
+ "1779094923757_style": {
+  "name": "Phim tự sự cổ điển",
+  "prompt": "Phim tham khảo là «Titane», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác hỗn loạn và vẻ thời trang lạnh lùng, tông màu chủ đạo là nền sáng nhợt nhạt ngả lạnh, sự đối đầu hai màu giữa quầng sáng vàng ấm và ánh sáng xanh lạnh, ánh sáng dùng chiếu sáng cục bộ low-key, vùng sáng được ánh sáng ấm thắp lên còn phần lớn chìm trong bóng xanh lạnh, hạt phim mịn, khung hình xa cách kiềm chế, mang chất hình ảnh thể nghiệm của điện ảnh tác giả châu Âu."
+ },
+ "1779094923765_style": {
+  "name": "Hollywood cổ điển kiểu Mỹ",
+  "prompt": "Phim tham khảo là «Demons», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác cổ điển và u ám gothic, tông màu chủ đạo là low-key, đen lạnh khử bão hòa, xanh xám và trắng xám của đêm tuyết, ánh sáng dùng ánh sáng mềm và bóng tối sâu diện rộng, tương phản sáng tối trầm ổn, bố cục ngay ngắn mang trật tự trang nghiêm cổ điển, tổng thể mang chất cổ điển lạnh lẽo của phim kinh dị châu Âu thập niên 80."
+ },
+ "1779094923777_style": {
+  "name": "Phim cyber neon",
+  "prompt": "Phim tham khảo là «Mind», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa không khí thô ráp, cổ điển và mê hoặc của hộp đêm, tông màu chủ đạo là vùng tối low-key, cam đỏ ấm và xanh neon, phản quang sequin vàng, ánh sáng dùng ngược sáng, ánh sáng viền và các nguồn sáng điểm neon, tiền cảnh nhiều bóng đen (silhouette) bị ép tối, hạt phim thô, tổng thể mang chất mập mờ bí ẩn của câu lạc bộ cổ điển thập niên 70–80."
+ },
+ "1779094923813_style": {
+  "name": "Phim nông thôn Trung Quốc thập niên 90",
+  "prompt": "Phong cách điện ảnh nông thôn Trung Quốc thập niên 90, phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách phim nhựa nông thôn Trung Quốc những năm 1990, tông màu chủ đạo là vàng kim, vàng đất và bầu trời ấm ngả trắng, ánh sáng dùng ánh sáng tán xạ tự nhiên bình dị, hạt phim và cảm giác sương mờ nhẹ rõ rệt, bố cục đường chân trời rộng mở bằng phẳng, khung hình mộc mạc đầy đặn, mang chất thời đại của điện ảnh làng quê thế hệ đạo diễn thứ năm."
+ },
+ "1779094923774_style": {
+  "name": "Ấm Trung Hoa với quầng xanh",
+  "prompt": "Phim tham khảo là «One Hour Photo», phong cách người thật tả thực, tác phẩm nhiếp ảnh, tông màu chủ đạo là sự đối đầu mạnh giữa màu lửa cam ấm và quầng sáng xanh lạnh, tạo tương phản sáng tối kịch tính, ánh sáng dùng ánh sáng môi trường lạnh cộng nguồn sáng điểm ấm chiếu sáng chủ thể, hậu cảnh xóa phông với các đốm sáng bokeh, khung hình phân vùng nóng lạnh rõ rệt, tổng thể mang chất điện ảnh hiện đại với sức căng siêu thực."
+ },
+ "1779094923776_style": {
+  "name": "Công nghiệp cũ kỹ",
+  "prompt": "Phim tham khảo là «Nineteen Eighty-Four (1984)», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác cổ điển, công nghiệp và ngột ngạt, tông màu chủ đạo là nâu ô liu low-key, vàng ám khói và quầng sáng amber yếu ớt, ánh sáng dùng chiếu sáng low-key và ánh sáng đỉnh mờ tối, vùng tối sâu và nặng, hạt phim rõ, khung hình đầy chất kim loại cơ khí và cảm giác nặng nề lạnh lẽo của thời đại toàn trị."
+ },
+ "1779094923794_style": {
+  "name": "Phim đen trắng Nhật Bản",
+  "prompt": "Phong cách nhiếp ảnh phim đen trắng Nhật Bản, đen trắng, phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách nhiếp ảnh phim đen trắng Nhật Bản, dải xám tinh tế mềm mại, tương phản đen trắng trầm tĩnh kiềm chế, ánh sáng dùng ánh sáng tự nhiên tán xạ dịu như ngày âm u, hạt phim mịn dày, bố cục chú trọng khoảng trống, tĩnh lặng ngay ngắn, tổng thể mang chất wabi-sabi tĩnh lặng của mỹ học mono no aware Nhật Bản."
+ },
+ "1779094923778_style": {
+  "name": "Phim Hàn tông lạnh nhạt",
+  "prompt": "Phim tham khảo là «Memories of Murder», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác hiện thực căng thẳng, thô ráp, tông màu chủ đạo là khử bão hòa, xanh xám bão hòa thấp, xám ấm dịu, low-key, ánh sáng dùng ánh sáng môi trường và bóng đổ mềm, tương phản thoải, hạt phim tự nhiên, bố cục lạnh lùng quan sát, tổng thể mang chất lạnh nhạt kiềm chế của điện ảnh hiện thực Hàn Quốc."
+ },
+ "1779094923775_style": {
+  "name": "Phim miền hoang dã",
+  "prompt": "Phim tham khảo là «Once Upon a Time in the West», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác sử thi miền Tây căng thẳng hoang lạnh, tông màu chủ đạo là nâu bão hòa thấp, vàng đất, tông ấm đơn sắc bạc màu, bầu trời ngả trắng xám, ánh sáng dùng nắng gắt giữa trưa và cảm giác không khí mờ bụi, bố cục rộng mở, đường chân trời thấp và phẳng, mang chất phim nhựa của Western Ý thập niên 60."
+ },
+ "1779094923779_style": {
+  "name": "Phim tông cam vàng",
+  "prompt": "Phim tham khảo là «Kubi», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác căng thẳng, hỗn loạn, tông màu chủ đạo là cam vàng ấm của hoàng hôn, bầu trời và vùng sáng chuyển sắc vàng cam như đang cháy, ánh sáng dùng ngược sáng mạnh, chủ thể chìm vào vùng tối bán silhouette, viền mép có ánh sáng viền ấm, tương phản sáng tối đậm đặc, tổng thể mang chất điện ảnh bi tráng của chiều tà mênh mông."
+ },
+ "1779094923782_style": {
+  "name": "Phim chiến tranh cổ điển",
+  "prompt": "Phim tham khảo là «300», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác sử thi thô ráp, tông màu chủ đạo là đơn sắc xanh xám tương phản cao, low-key, khử bão hòa, ánh sáng dùng key light, ngược sáng mạnh, bóng đổ kịch tính và bố trí sáng kiểu Rembrandt, chùm sáng xuyên qua tạo ánh sáng thể tích, vùng tối bị ép đen diện rộng, hạt thô ráp, tổng thể mang chất điêu khắc của sử thi chiến tranh hardcore."
+ },
+ "1779094923781_style": {
+  "name": "Phim kinh dị",
+  "prompt": "Phim tham khảo là «The Autopsy of Jane Doe», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa không khí giật gân căng thẳng, ngột ngạt, tông màu chủ đạo là đơn sắc nâu gỉ, vàng úa màu da, ánh sáng dùng chiếu sáng low-key, nguồn sáng điểm ấm và bóng đổ kịch tính, vùng tối đậm đặc bao quanh bốn phía, độ sâu trường ảnh nông, hậu cảnh mờ ảo, tổng thể mang chất âm u thô ráp của phim kinh dị không gian kín."
+ },
+ "1779094923795_style": {
+  "name": "Nhiếp ảnh phim cổ điển",
+  "prompt": "Phong cách nhiếp ảnh phim retro, retro, phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách nhiếp ảnh phim nhựa cổ điển, tông màu chủ đạo là nâu ấm đậm đà bão hòa, xanh lục sẫm và trắng ngà, lên màu dày dặn như phim dương bản, ánh sáng dùng nắng trực tiếp tự nhiên gay gắt buổi chiều, bóng đổ sâu đen đậm, tương phản sáng tối rõ nét, hạt mịn, tổng thể mang chất retro kinh điển của phim màu Kodachrome giữa thế kỷ trước."
+ },
+ "1779094923780_style": {
+  "name": "Phim kỳ dị cổ điển kiểu Mỹ",
+  "prompt": "Phim tham khảo là «Human Highway», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác kỳ dị, cổ điển, siêu thực và tận thế, tông màu chủ đạo là neon đỏ tươi, đỏ thẫm bão hòa cao phủ nhuộm toàn khung hình, ánh sáng dùng chiếu sáng ánh màu đậm đặc, vùng tối chìm vào tím đen, bố cục góc nhìn phi truyền thống tăng cảm giác choáng váng, tổng thể mang chất phim nhựa ảo giác của phim cult hạng B."
+ },
+ "1779094923773_style": {
+  "name": "Phim high-key trắng phi lý",
+  "prompt": "Phim tham khảo là «Slack Bay», phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể chứa cảm giác quái dị, siêu thực và hài hước đen, tông màu chủ đạo là high-key sáng rực, màu sắc tươi mới bão hòa cao, ánh sáng dùng natural light nắng tự nhiên rực rỡ, bóng đổ nhẹ nông trong trẻo, khung hình sạch sẽ tươi sáng, bố cục chỉnh tề mang cảm giác sân khấu, tổng thể mang chất retro tươi vui của hài kịch đồng quê Pháp."
+ },
+ "1779094923823_style": {
+  "name": "Kết xuất hoạt hình cao cấp",
+  "prompt": "Phong cách kết xuất 3D (phong cách concept art CG cấp điện ảnh), phong cách kết xuất 3DCG, chất thiết kế concept môi trường cấp điện ảnh, tạo hình tự nhiên tả thực, chi tiết nhiều tầng lớp, vật liệu thể hiện độ nhám thật và phản xạ ẩm ướt, chiếu sáng chủ yếu bằng ánh sáng thể tích, tia Tyndall và chiếu sáng toàn cục, sương mù lan tỏa, cảm giác không khí mạnh, tông màu thiên về vàng ấm và xanh lam lục tự nhiên, tổng thể hùng vĩ duy mỹ, mang không khí trailer CG game cao cấp, 3D"
+ },
+ "1779094923846_style": {
+  "name": "Kết xuất 3D cách điệu",
+  "prompt": "Nhân vật 3D (kết xuất cách điệu), 3D cách điệu, trường phái kết xuất thời gian thực bằng game engine Âu Mỹ, tạo hình nằm giữa tả thực và hoạt hình, tỷ lệ phóng đại vừa phải, cấu trúc khái quát gọn gàng, vật liệu PBR mang cảm giác vẽ tay, vải mờ, kim loại có highlight sắc nét, da chuyển tiếp mềm mại, dùng key light kiểu chụp studio cộng ánh sáng viền lạnh, nền thuần sẫm màu, màu sắc bão hòa trầm ổn, tổng thể mang chất trưng bày nhân vật game cách điệu, 3D"
+ },
+ "1779094923768_style": {
+  "name": "Phim tông xanh cam",
+  "prompt": "Phim tham khảo là «Wanted», phong cách điện ảnh tông xanh cam, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất cảnh đêm phim hành động giật gân Hollywood, tông màu chủ đạo là xanh lam lạnh lùng, điểm xuyết nguồn sáng cam ấm cục bộ, tạo nên sự đối đầu bổ túc kinh điển teal and orange, ánh sáng dùng chiếu sáng low-key, nguồn sáng lạnh đơn điểm và bóng tối sâu diện rộng, vùng tối nhiều tầng lớp, khung hình u tối ngột ngạt nhưng toát lên sức căng kịch tính, có hạt phim nhẹ và không khí chỉnh màu cấp điện ảnh."
+ },
+ "1779094923772_style": {
+  "name": "Phim công nghiệp",
+  "prompt": "Phim tham khảo là «The Substance», phong cách điện ảnh công nghiệp, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất hình ảnh siêu thực lạnh lùng đương đại, tông màu chủ đạo là đơn sắc Monochromatic bão hòa cao, high-key, tông trắng, phụ trợ bởi bầu trời xanh trong lạnh, ánh sáng dùng Key Light nắng trực tiếp cứng, ranh giới sáng tối sắc bén, bóng đổ sạch gọn, khung hình sáng rực trong suốt gần như dư sáng, cảm giác trật tự về đường nét và phối cảnh cực mạnh, tổng thể sạch sẽ, kiềm chế, mang không khí công nghiệp tương lai xa cách."
+ },
+ "1779094923760_style": {
+  "name": "Mỹ thời thịnh vượng",
+  "prompt": "Phim tham khảo là «Pain & Gain», phong cách Mỹ thời kinh tế đi lên, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất hình ảnh văn hóa đại chúng Mỹ thập niên 90, tông màu chủ đạo là bão hòa cao, các màu gốc pop như đỏ tươi, xanh hồ, vàng sáng va chạm táo bạo, ánh sáng dùng nắng tươi sáng bình dị và chiếu sáng high-key, bóng đổ nhạt, khung hình màu sắc đậm đà rực rỡ, tương phản rõ nét, tổng thể tràn ngập không khí thời đại tiêu dùng Mỹ cổ điển lạc quan phô trương."
+ },
+ "1779094923767_style": {
+  "name": "Phim Hồng Kông thập niên 90",
+  "prompt": "Phim tham khảo là «Hải Thượng Hoa» (Flowers of Shanghai), phong cách phim Hồng Kông thập niên 90, phong cách người thật tả thực, tác phẩm nhiếp ảnh, tông màu chủ đạo là tông ấm, quầng sáng vàng, quầng sáng hổ phách như đèn tungsten bao bọc khung hình, ánh sáng dùng ánh sáng môi trường nội thất và ánh sáng chính diện dịu, màu da ấm mượt, vùng tối ngả ấm, có hạt phim rõ và quầng soft-focus nhẹ, khung hình hoài cổ và thân mật, tổng thể mang tình người phố thị và ánh sáng xưa cũ của phim Hồng Kông thập niên 90."
+ },
+ "1779094923770_style": {
+  "name": "Phim công nghệ cao",
+  "prompt": "Phim tham khảo là «True Lies», phong cách điện ảnh công nghệ, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chân dung nhân vật, chất studio của phim gián điệp giật gân Hollywood thập niên 90, phong cách tổng thể căng thẳng kiềm chế, tông màu chủ đạo là low-key, tông lạnh, xanh navy đậm, xám thép và bạc lạnh chiếm lĩnh khung hình, ánh sáng dùng key light tạo khối chính xác, gương mặt sáng còn môi trường chìm vào bóng tối, tương phản sáng tối rõ rệt, khung hình bóng bẩy sắc nét, mang không khí lạnh lùng xa cách kiểu tinh hoa đô thị."
+ },
+ "1779094923761_style": {
+  "name": "Phim kỳ bí",
+  "prompt": "Phim tham khảo là «The Nun», phong cách điện ảnh kỳ bí, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất hình ảnh phim kinh dị kỳ bí gothic, tông màu chủ đạo là khử bão hòa, xám lạnh, xám xanh và vàng úa tạo nên nền màu u ám xám xịt, ánh sáng dùng ánh sáng tự nhiên tán xạ ngày âm u, ánh sáng thoải không có highlight rõ, bầu trời nặng nề ngột ngạt, khung hình tiêu điều trống trải, có hạt nhẹ và cảm giác sương mù, tổng thể lan tỏa không khí kỳ bí gothic bất tường, cô quạnh và ngột ngạt."
+ },
+ "1779094923764_style": {
+  "name": "Phim thần thoại Hy Lạp",
+  "prompt": "Phim tham khảo là «Flash Gordon», phong cách điện ảnh thần thoại Hy Lạp, phong cách người thật tả thực, tác phẩm nhiếp ảnh, hình ảnh mộng ảo siêu thực kiểu space opera cổ điển, tông màu chủ đạo là quầng sáng xanh lam dịu, xanh trắng hòa cùng tím nhạt như lạc vào thánh địa mây mù, ánh sáng dùng ánh sáng mềm diện rộng và quầng sáng lan tỏa, gần như không có bóng cứng, khung hình sáng trong, có soft-focus đậm và hiệu ứng lóa sáng khuếch tán, tổng thể thánh khiết phiêu diêu, mang không khí siêu phàm thoát tục kiểu sử thi thần thoại."
+ },
+ "1779094923771_style": {
+  "name": "Phim cổ điển kiểu Mỹ",
+  "prompt": "Phim tham khảo là «Tron», phong cách điện ảnh cổ điển kiểu Mỹ, phong cách người thật tả thực, tác phẩm nhiếp ảnh, phong cách tổng thể retro, tông màu chủ đạo là low-key, bão hòa cao, tông neon, nền lạnh xanh lam và ánh neon cam đỏ tạo đối đầu nóng lạnh mạnh mẽ, ánh sáng dùng ánh sáng viền và nguồn sáng môi trường có màu, ánh sáng ấm len qua khe hở phác họa viền, vùng tối sâu thẳm, khung hình mê hoặc như đêm neon, tổng thể mang không khí retro-futurism đậm đặc thập niên 80."
+ },
+ "1779094923766_style": {
+  "name": "Phim đen trắng Hollywood",
+  "prompt": "Phim tham khảo là «The Man Who Wasn't There», phong cách phim đen trắng Hollywood, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất nhiếp ảnh film noir kinh điển, tông màu chủ đạo là tương phản cao, đơn sắc, low-key, dải xám đen trắng thuần khiết tinh tế, ánh sáng dùng bố trí sáng Rembrandt và bóng tối sâu, vùng sáng sạch, vùng tối đen đậm, tương phản sáng tối mạnh và giàu cảm giác điêu khắc, khung hình có hạt phim bạc mịn, tổng thể thanh lịch lạnh lùng, mang không khí trang nghiêm kịch tính của phim đen trắng Hollywood xưa."
+ },
+ "1779094923850_style": {
+  "name": "Tiểu cảnh hoạt hình 3D",
+  "prompt": "Một cảnh đơn theo phong cách kết xuất 3D (tiểu cảnh hoạt hình), chất cảnh thu nhỏ lập thể isometric, tạo hình low-poly bo tròn tối giản, tỷ lệ nhỏ nhắn đáng yêu, vật liệu mờ mềm như mô hình figure, nhiều yếu tố tự phát sáng điểm xuyết, chiếu sáng chủ yếu bằng ánh sáng không khí có màu và sương thể tích, tương phản sáng tối dịu, tông màu thiên về đêm xanh tím kết hợp ánh sáng điểm cam ấm, tổng thể mộng mơ tinh xảo, mang không khí thế giới thu nhỏ như hộp đồ chơi hoạt hình, 3D"
+ },
+ "1779094923826_style": {
+  "name": "Vẽ hoạt hình phương Tây 3D",
+  "prompt": "Phong cách minh họa kỳ ảo kiểu Mỹ, vẽ theo phong cách hoạt hình phương Tây 3D, kết hợp vẽ tay impasto với cảm giác khối 3D, tạo hình tỷ lệ phóng đại, sức căng động tác mạnh, nét bút khái quát, cạnh sắc cứng cáp, vật liệu mang chất hội họa thay vì tả thực ảnh, hiệu ứng ánh sáng ma thuật phóng đại, luồng năng lượng bao bọc khung hình, tông màu chủ đạo là tương phản xanh tím bão hòa cao với xám lạnh, sáng tối kịch tính, tổng thể mang không khí sử thi kỳ ảo đen tối kiểu tranh gốc thẻ bài, 3D"
+ },
+ "1779094923843_style": {
+  "name": "Kết xuất 3D cách điệu Âu Mỹ",
+  "prompt": "Nhân vật 3D (kết xuất 3D cách điệu Âu Mỹ), phong cách kết xuất 3D cách điệu Âu Mỹ, tạo hình nằm giữa tả thực và hoạt hình, tỷ lệ thon dài, đường nét ngũ quan rõ ràng, da mang chất mềm mại của tán xạ dưới bề mặt, vật liệu vải và môi trường giàu chi tiết, chiếu sáng chủ yếu bằng nguồn sáng điểm ấm kiểu ánh nến kết hợp vùng tối low-key, bóng đổ sâu nặng, không khí ngột ngạt, tông màu tương phản giữa nâu xám bão hòa thấp và vàng ấm, tổng thể mang chất phim hoạt hình kinh dị gothic, 3D"
+ },
+ "1779094923806_style": {
+  "name": "Điêu khắc kỹ thuật số 3D",
+  "prompt": "Nhân vật kết xuất 3D (mang phong cách tả thực như điện ảnh), phong cách kết xuất 3D độ chính xác cao, trường phái điêu khắc kỹ thuật số ZBrush, cấu trúc giải phẫu tả thực và điêu khắc kết cấu bề mặt tinh xảo, nếp nhăn da, vảy gai và khoang miệng ẩm ướt đều thể hiện tán xạ dưới bề mặt và chất bóng cao, từng sợi lông rõ ràng, nền studio đen thuần kết hợp ánh sáng viền ngược bên, tương phản sáng tối mạnh, tông màu trầm ổn tả thực, tổng thể mang chất trưng bày điêu khắc CG sinh vật cấp điện ảnh, 3D"
+ },
+ "1779094923784_style": {
+  "name": "Concept art nijigen",
+  "prompt": "Nhân vật anime 2D (phong cách concept art), phong cách concept art nijigen, lối vẽ thiết kế nhân vật kiểu Nhật Hàn, nét line sạch sẽ tinh tế kết hợp tô loang bán impasto, hoa văn trang phục và phụ kiện kim loại được khắc họa tinh xảo, tông màu phối giữa màu tối sâu thẳm với các màu quý phái như vàng ấm, đỏ thẫm, chuyển tiếp sáng tối mềm mại, highlight tiết chế, hậu cảnh thường để trống hoặc làm mờ để làm nổi chủ thể, tổng thể lộng lẫy tao nhã, không khí trầm ổn cao cấp, 2D"
+ },
+ "1779094923812_style": {
+  "name": "Kết xuất 3D quốc phong HD",
+  "prompt": "Phong cách kết xuất 3D quốc phong độ nét cao, trường phái hoạt hình CG tiên hiệp Trung Quốc, nhân vật đẹp tinh tế, ngũ quan lập thể mềm mại, da thể hiện chất tán xạ dưới bề mặt tinh tế, từng sợi tóc rõ ràng, vật liệu phụ kiện kim loại và tua rua chuỗi hạt độ chính xác cao, chiếu sáng low-key u tối, key light tím lam lạnh kết hợp fill light hồng ấm, vùng tối sâu thẳm, không khí thần bí hoa lệ, tông màu tím lam vàng bão hòa thấp đan xen, tổng thể mang chất series CG quốc phong cấp điện ảnh, 3D"
+ },
+ "1779094923758_style": {
+  "name": "Phim tông tím",
+  "prompt": "Phim tham khảo là «The Thin Red Line», phong cách điện ảnh tông tím, phong cách người thật tả thực, tác phẩm nhiếp ảnh, chất phim nhựa thi vị trữ tình, tông màu chủ đạo là tím, tím đỏ như hoàng hôn, tím sen và nâu sẫm đan xen, ánh sáng dùng ánh sáng tự nhiên qua cửa sổ và ánh sáng bên dịu, vùng tối dày ngả ấm, vùng sáng dịu không chói, có hạt phim rõ và loang màu nhẹ, khung hình tĩnh lặng uể oải, tổng thể lan tỏa không khí hoài cổ u sầu như hoàng hôn trên đường lữ hành."
+ },
+ "1779094923847_style": {
+  "name": "Mỹ thuật game hoạt hình Mỹ 3D",
+  "prompt": "Phong cách kết xuất hoạt hình 3D, phong cách kết xuất 3D, nhân hóa 3D, trường phái mỹ thuật game hoạt hình kiểu Mỹ, tạo hình tròn trịa phóng đại, tỷ lệ chibi đáng yêu, đường viền đầy đặn, vật liệu mang chất đất sét mờ và nhựa mềm, bề mặt mịn màng nhẵn bóng với highlight dịu, dùng ánh sáng studio mềm và nền màu đơn chuyển sắc sạch sẽ, màu sắc bão hòa cao va chạm táo bạo, tươi sáng sinh động, tổng thể mang không khí tinh nghịch thú vị của trưng bày thiết kế nhân vật game cách điệu, 3D"
+ },
+ "1779094923841_style": {
+  "name": "Sơn phủ blind box 3D",
+  "prompt": "Phong cách sơn phủ blind box 3D, phong cách hoạt hình 3D Pixar, chất art toy figure, tỷ lệ chibi đầu to, tạo hình bo tròn tối giản, bề mặt sơn phủ bóng mượt như vinyl và latex, vật liệu sạch không tì vết, chiếu sáng mềm và sáng, chiếu sáng toàn cục trong trẻo không bóng cứng, màu sắc chủ đạo là phối màu kẹo ngọt bão hòa cao, tươi tắn dễ thương, độ sâu trường ảnh mềm mại xóa phông, tổng thể mang không khí trưng bày đồ chơi blind box dễ thương chữa lành, 3D"
+ },
+ "1779094923845_style": {
+  "name": "Anime 3D giả 2D",
+  "prompt": "Phong cách hoạt hình nijigen 3D giả 2D, vẽ theo phong cách hoạt hình 3D lập thể, trường phái cel shading, tạo hình nhân vật giữ tỷ lệ đẹp kiểu anime, tóc và vải có mảng highlight kiểu nijigen, sáng tối chuyển tiếp bằng phân màu cạnh cứng, bổ sung quầng sáng dịu và hiệu ứng hạt sáng bay lơ lửng, tông màu nền tối làm nổi màu tóc bão hòa cao và điểm xuyết vàng tím, không khí duy mỹ mộng mơ, tổng thể mang chất keyframe của anime movie, 3D"
+ },
+ "1779094923801_style": {
+  "name": "Kết xuất 3D siêu thực",
+  "prompt": "Phong cách kết xuất 3D siêu thực, kết xuất tả thực độ nét cao, mô hình 3D, trường phái CG cutscene game cấp điện ảnh, giải phẫu nhân vật và chất lỗ chân lông da cực kỳ tả thực, tán xạ dưới bề mặt tinh tế, trang phục trang bị mang vật liệu PBR chính xác, kim loại và vải phân biệt rõ, chiếu sáng chủ yếu bằng ánh sáng không khí cảnh đêm lạnh xanh lam kết hợp quầng sáng neon, độ sâu trường ảnh điện ảnh hóa, tông màu lạnh bão hòa thấp, tổng thể mang không khí bom tấn khoa học viễn tưởng tả thực, 3D"
+ },
+ "1779094923842_style": {
+  "name": "Kết xuất tả thực UE5",
+  "prompt": "Kết xuất CG tả thực, kết xuất 3D độ nét cao, trường phái kết xuất thời gian thực tả thực cấp UE5, tạo hình tuân theo giải phẫu tả thực nghiêm ngặt, cấu trúc cơ gân rõ ràng, kết cấu da thô ráp và highlight của xương thể hiện chất PBR chính xác, chi tiết điêu khắc dày đặc, nền studio đen thuần kết hợp ánh sáng bên cứng và ánh sáng viền, tương phản sáng tối mạnh, bóng đổ sâu thẳm, tông màu xám lạnh bão hòa thấp, tổng thể mang chất cấp điện ảnh của thiết kế concept sinh vật đen tối, 3D"
+ },
+ "1779094923848_style": {
+  "name": "Kết xuất HD quốc phong 3D",
+  "prompt": "Phong cách kết xuất 3D hoạt hình Trung Quốc, kết xuất 3D độ nét cao, trường phái hoạt hình CG tiên hiệp võ hiệp Trung Quốc, nhân vật tả thực thiên về đẹp, tóc bay bổng từng sợi rõ ràng, vật liệu giáp cổ trang và vải tinh xảo, chất da mịn màng trong trẻo, chiếu sáng chủ yếu bằng ngược sáng chiều tà và ánh sáng trời ấm, ánh sáng viền rõ nét, tông màu vàng cam ấm kết hợp hậu cảnh xám xanh, bố cục giàu cảm giác điện ảnh, tổng thể mang không khí sử thi duy mỹ của series CG quốc phong, 3D"
+ },
+ "1779094923849_style": {
+  "name": "Kết xuất hoạt hình 3D",
+  "prompt": "Phong cách hoạt hình 3D của Pixar, trường phái kết xuất phim hoạt hình kiểu Mỹ, tạo hình tròn trịa phóng đại, tỷ lệ hoạt hình hóa, biểu cảm sinh động, vật liệu lông tơ từng sợi mịn màng bồng bềnh, thực vật và môi trường mang chất tối giản cách điệu, chiếu sáng sáng và mềm, chiếu sáng toàn cục trong trẻo, cảm giác nắng mạnh, bóng đổ sạch, màu sắc bão hòa cao tươi sáng, xanh mướt tràn đầy, tổng thể mang không khí vui tươi chữa lành của phim hoạt hình dài gia đình, 3D"
+ },
+ "1779094923821_style": {
+  "name": "Kết xuất 3D hoạt hình Mỹ",
+  "prompt": "Phong cách kỳ ảo kết xuất 3D, kết xuất 3D hoạt hình kiểu Mỹ, trường phái thiết kế concept đạo cụ ma thuật, tạo hình phóng đại mà chi tiết phức tạp, da thuộc có kết cấu mài mòn làm cũ, kim loại có vết xước và highlight, vật liệu đều là chất PBR tả thực độ chính xác cao, nền studio tối kết hợp key light kiểu spotlight, cảm giác khối sáng tối mạnh, tông màu chủ đạo là nâu ấm điểm xuyết trắng xương và đỏ sẫm, tổng thể mang chất sưu tầm tinh xảo của mỹ thuật board game ma thuật, 3D"
+ },
+ "1779094923822_style": {
+  "name": "Impasto 3D",
+  "prompt": "Phong cách kết xuất 3D, phong cách impasto CG tranh gốc, chất concept art game hòa quyện với kết xuất ba chiều, tô màu mang cảm giác nét bút impasto, tạo hình thiên về tả thực với sức căng động tác phóng đại, vật liệu giàu chi tiết, cảm giác khối mạnh, kết xuất ngược sáng mạnh và ánh sáng thể tích, bụi sương và đốm sáng tôn lên không khí sử thi, tông màu chủ đạo là tương phản giữa vàng ấm, nâu đất và ánh trời trắng lạnh, bố cục động mạnh mẽ giàu sức va chạm, tổng thể mang chất tranh gốc CG cấp bom tấn kỳ ảo, 3D"
+ },
+ "1779094923827_style": {
+  "name": "Kết xuất PBR tả thực 3D",
+  "prompt": "Phong cách kết xuất 3D (kết xuất PBR tả thực), chất CG cấp điện ảnh, kết xuất vật liệu PBR dựa trên vật lý, kim loại xước chải, mài mòn oxy hóa và chi tiết kết cấu phù điêu tinh xảo, highlight và phản xạ tuân theo quy luật vật lý thật, ngược sáng ấm và ánh lửa môi trường soi chiếu, hậu cảnh mờ ảo với tia lửa bay, tương phản sáng tối mạnh, tông màu chủ đạo là nâu sẫm, đồng cổ, cam rực, không khí nặng nề sử thi, tổng thể mang chất tả thực cấp trailer CG thế hệ mới, 3D"
+ },
+ "1779094923844_style": {
+  "name": "Kết xuất game 3D",
+  "prompt": "Phong cách kết xuất game 3D, kết xuất 3D độ nét cao, chất cutscene thời gian thực của game engine thế hệ mới, mô hình nhân vật tả thực, tán xạ dưới bề mặt của da tinh tế, tóc kết xuất từng lọn, kết cấu vật liệu trang phục tinh xảo, chiếu sáng tối low-key kết hợp ánh sáng viền dịu, hậu cảnh sâu thẳm xóa phông, tầng lớp sáng tối điện ảnh hóa, tông màu chủ đạo là đen sâu, nâu ấm và xám lạnh, không khí trầm tĩnh nội liễm, tổng thể mang chất kết xuất thời gian thực cấp điện ảnh của game AAA, 3D"
+ },
+ "1779094923825_style": {
+  "name": "Nhân vật 3D (hoạt hình tối giản)",
+  "prompt": "Nhân vật 3D (phong cách kết xuất 3D hoạt hình kiểu Mỹ), kết xuất cách điệu bằng game engine, tạo hình bo tròn tối giản, tỷ lệ ngũ quan phóng đại vừa phải, biểu cảm sinh động, kiểu tóc xử lý thành từng mảng khối, vật liệu mịn với highlight dịu, chất PBR tối giản sạch sẽ tươi sáng, ánh sáng studio mềm kết hợp ánh sáng viền, nền đơn sắc làm nổi chủ thể, màu sắc bão hòa tươi sáng, tương phản rõ nét, tổng thể mang chất tinh xảo và không khí sức sống của nhân vật game cách điệu Âu Mỹ, 3D"
+ },
+ "1779094923803_style": {
+  "name": "Hoạt hình 3D cartoon",
+  "prompt": "Phong cách kết xuất hoạt hình 3D, hoạt hình 3D, chất hoạt hình gia đình kiểu Pixar, tạo hình nhân vật bo tròn tối giản, tỷ lệ đầu thân hoạt hình hóa, bề mặt mịn màng với highlight dịu, đạo cụ bề mặt cứng sạch gọn, chiếu sáng toàn cục đều và mềm, hậu cảnh chuyển sắc màu nhạt tươi mát trong trẻo, màu sắc tươi sáng, xanh trắng tươi mới kết hợp màu nhấn sức sống, khung hình sạch sẽ sáng sủa, tổng thể mang không khí phim hoạt hình ba chiều thân thiện chữa lành, 3D"
+ },
+ "1779094923816_style": {
+  "name": "Concept art game Mỹ",
+  "prompt": "Nhân vật anime 2D (phong cách concept art game Mỹ), phong cách fan art Overwatch, phong cách concept art game Mỹ, lối vẽ thiết kế nhân vật kết xuất hoạt hình Âu Mỹ, tạo hình khối phóng đại cứng cáp, chất cơ giáp bề mặt cứng được khắc họa chắc tay, sáng tối phân mảng kiểu cel kết hợp highlight bóng mượt, màu sắc bão hòa cao tươi sáng, thường điểm xuyết màu phát sáng công nghệ, hậu cảnh tô phẳng đơn giản làm nổi chủ thể, tổng thể đầy khí chất anh hùng, chất mỹ thuật quảng bá game sạch gọn, 2D"
+ },
+ "1779094923790_style": {
+  "name": "Kỳ ảo Y2K cổ điển",
+  "prompt": "Chân dung thế giới ngoại cảm, phong cách siêu thực retro Y2K, chất cắt dán siêu thực thiên niên kỷ cổ điển, kết xuất soft-focus kiểu poster airbrush, yếu tố trang trí highlight khúc xạ kim loại chồng lên cảnh đêm mộng ảo, sao lấp lánh, hạt ngân hà lan tỏa, tông màu chủ đạo là xanh đậm, tím violet và bạc trắng, điểm xuyết xanh huỳnh quang, hiệu ứng sáng mờ ảo phát quang, không khí thanh thoát thần bí, tổng thể mang chất siêu thực hoài cổ của poster fantasy dreamcore cuối thập niên 90, 3D"
+ },
+ "1779094923834_style": {
+  "name": "Minh họa tô phẳng Nhật Bản",
+  "prompt": "Cel Nhật Bản, phong cách minh họa tô phẳng Nhật Bản, lối vẽ nijigen như khung hình trích từ anime, nét line mảnh sạch, tô phẳng diện rộng, tầng lớp sáng tối tối giản, gần như không thêm bóng đổ phức tạp, tông màu tươi mới dịu nhẹ thiên về bão hòa thấp, chủ thể rõ nét sắc sảo còn hậu cảnh xử lý xóa phông như độ sâu trường ảnh nhiếp ảnh, tạo tương phản trước nét sau mờ, tổng thể tĩnh lặng trong trẻo, cảm giác đời thường mạnh, mang không khí tinh tế của anime thanh xuân Nhật Bản, 2D"
+ },
+ "1779094923838_style": {
+  "name": "Minh họa vaporwave",
+  "prompt": "Phong cách vaporwave minh họa anime cổ điển thập niên 80, phong cách minh họa vaporwave, lối vẽ nền hoạt hình cel cổ điển thời Showa, nét line rõ hơi run tay vẽ, tô phẳng chồng thêm kết cấu làm cũ nhẹ, tông màu ghép từ các mảng màu bão hòa cao cổ điển như vàng ấm, cam đỏ, xanh bạc hà, ánh sáng bình dị ít chuyển sắc, bố cục chỉnh tề như thiết kế mỹ thuật hoạt hình, tổng thể tràn ngập tình điệu vaporwave kiểu City Pop như phố thị hoài cổ, 2D"
+ },
+ "1779094923808_style": {
+  "name": "Game RPG ma huyễn 3D",
+  "prompt": "Kết xuất CG tả thực phong cách gothic đen tối, kết xuất 3D độ nét cao, chất nhân vật game RPG ma huyễn đen tối, tạo hình tả thực điêu khắc tinh xảo, chi tiết phức tạp, da nhợt nhạt lạnh lùng với tán xạ dưới bề mặt, phụ kiện kim loại và da thuộc màu tối có highlight sắc bén, điểm xuyết yếu tố màu máu, nền đen sâu chiếu sáng low-key, tương phản sáng tối mạnh tạo khối, tông màu chủ đạo là đen mực, bạc trắng, đỏ thẫm, không khí nguy hiểm yêu dị, tổng thể mang chất cấp trailer CG của bom tấn kỳ ảo đen tối, 3D"
+ },
+ "1779094923836_style": {
+  "name": "Minh họa số cyberpunk",
+  "prompt": "Phong cách minh họa kỹ thuật số cyberpunk, lối vẽ impasto kỹ thuật số concept art khoa học viễn tưởng, chất kết xuất tả thực tinh tế, không có nét line rõ, cấu trúc kim loại và bề mặt cứng được khắc họa chính xác, tông màu chủ đạo là xanh xám lạnh, màu đêm tối, điểm xuyết nguồn sáng công nghệ như xanh huỳnh quang, cam ấm, phối cảnh không khí như khói mù hoàng hôn tạo chiều sâu, ánh sáng nhiều tầng lớp, tương phản sáng tối kịch tính, tổng thể lạnh lùng ngột ngạt mà đầy hơi thở hoang tàn tương lai, chất concept art cấp điện ảnh, 2D"
+ },
+ "1779094923817_style": {
+  "name": "Concept art game",
+  "prompt": "Nhân vật phong cách anime 2D (phong cách concept art game), phong cách concept art game, lối vẽ tranh đứng nhân vật game kiểu Nhật Hàn, bán impasto kết hợp nét line tinh xảo, vật liệu trang phục và huy hiệu kim loại được khắc họa cầu kỳ, chuyển tiếp sáng tối mềm mại và highlight tiết chế, tông màu trầm ổn tao nhã, phối màu ấm bão hòa thấp với dải màu tối, hậu cảnh thường là bố cục bản thiết kế tô phẳng đơn sắc có khung viền trang trí, tổng thể tinh xảo hoa lệ, có độ hoàn thiện như tranh đứng thẻ bài, 2D"
+ },
+ "1779094923828_style": {
+  "name": "Nijigen hoạt hình Trung Quốc",
+  "prompt": "Phong cách anime nijigen (phong cách Bách Yêu Phổ), phong cách nijigen thường dùng của hoạt hình Trung Quốc, lối vẽ cel hoạt hình cổ phong Trung Quốc, nét line mảnh mượt, tô phẳng kết hợp một chút chuyển sắc mềm, tông màu thanh nhã ấm dịu, chủ đạo là xanh lục bão hòa thấp, trắng gạo, màu gỗ, xử lý sáng tối mỏng nhẹ hàm súc, hậu cảnh xóa phông soft-focus làm nổi nhân vật, mày mắt nhân vật tinh tế cổ điển, tổng thể ôn nhu tĩnh lặng, mang cổ vận phương Đông và chất series hoạt hình Trung Quốc chữa lành, 2D"
+ },
+ "1779094923799_style": {
+  "name": "Hoạt hình đất sét",
+  "prompt": "Phong cách hoạt hình đất sét, chất thủ công stop-motion, nhân vật và cảnh như nặn từ đất sét và nỉ thủ công, tạo hình tròn trịa ngây ngô, cạnh mềm, bề mặt giữ lại vết tay làm tinh tế và kết cấu mờ, đạo cụ bối cảnh thu nhỏ đầy chi tiết thủ công, ánh đèn ấm dịu bao bọc, ánh sáng ấm áp như sân khấu cổ tích, tông màu chủ đạo là cam kem ấm, nâu gỗ và màu nhấn dịu, tổng thể mang không khí hoạt hình stop-motion thủ công ấm áp chữa lành, 3D"
+ },
+ "1779094923807_style": {
+  "name": "Kết xuất hoạt hình 3D nâng cao",
+  "prompt": "Phong cách kết xuất hoạt hình 3D, tổng thể có chất mô hình 3D mịn màng tinh tế, kết xuất nhân vật cấp phim hoạt hình Âu Mỹ, tạo hình vừa góc cạnh vừa bo tròn, đường nét ngũ quan cứng cáp phóng đại, da mịn với kết cấu nhẹ và tán xạ dưới bề mặt, highlight vật liệu kim loại và vải cầu kỳ, nền tối chiếu sáng kiểu spotlight làm nổi khối, chuyển tiếp sáng tối mềm mại lập thể, màu sắc đầy đặn dày dặn, tổng thể mang chất cận cảnh nhân vật của bom tấn hoạt hình tinh xảo, 3D"
+ },
+ "1779094923805_style": {
+  "name": "Hoạt hình kỳ ảo Trung Quốc 3D",
+  "prompt": "Phong cách kết xuất 3D, chất CG cấp điện ảnh đề tài kỳ ảo Trung Quốc, mô hình nhân vật tả thực tinh xảo, da trắng trong trẻo với tán xạ dưới bề mặt, tóc và hoa văn trang phục được chạm khắc từng chi tiết, chất trang phục phương Đông hoa lệ dày dặn, nền tối bố trí sáng low-key, key light mềm kết hợp bóng lạnh tối, tương phản sáng tối kịch tính, tông màu chủ đạo là đỏ tươi, vàng mạ, đen mực, không khí sắc bén duy mỹ, tổng thể mang chất kết xuất CG độ nét cao của bom tấn ma huyễn phương Đông, 3D"
+ },
+ "1779094923810_style": {
+  "name": "Kết xuất latex bóng 3D",
+  "prompt": "Nhân vật 3D (phong cách kết xuất độ nét cao), phong cách kết xuất latex 3D, chất nhân vật CG cấp điện ảnh, tạo hình phóng đại đầy sức căng, cấu trúc đầy đặn, bề mặt da bóng ẩm như latex, highlight sắc bén phản xạ mạnh, kết cấu chi tiết và vật liệu vải chạm khắc tinh xảo, tầng lớp chất PBR rõ ràng, nền tối kết hợp đốm sáng bokeh, key light lạnh tạo khối lập thể, tông màu chủ đạo là xanh lạnh, trắng xám và môi trường tối, không khí quỷ dị mạnh mẽ, tổng thể mang chất kết xuất nhân vật cấp điện ảnh, 3D"
+ },
+ "1779094923811_style": {
+  "name": "Nhựa thạch 3D",
+  "prompt": "Phong cách nhựa dạng thạch 3D, kết xuất chất nhựa bán trong suốt như thạch, tạo hình trôi chảy bo tròn như thủy tinh thổi, vật liệu trong suốt khúc xạ, bên trong tỏa ánh sáng dịu, giọt nước và highlight trên bề mặt lấp lánh trong trẻo, tổng thể nhẹ nhàng mộng mơ như điêu khắc gel, chiếu sáng toàn cục sáng trong, tông màu chủ đạo là xanh băng, tím nhạt và ráng chiều hồng cam, không khí trong trẻo duy mỹ, tổng thể mang chất nghệ thuật 3D bán trong suốt mộng mơ lấp lánh, 3D, bầu trời chuyển sắc"
+ },
+ "1779094923833_style": {
+  "name": "Phong cách Dalí",
+  "prompt": "Phong cách tả thực siêu thực chủ nghĩa của Salvador Dalí, lối vẽ sơn dầu siêu thực cổ điển, nét bút tinh tế mịn màng gần như không dấu vết, vật thể được miêu tả chính xác bằng thủ pháp tả thực nhưng đặt cạnh nhau phi lý để tạo cảm giác giấc mơ, tông màu trầm tĩnh, chủ đạo là xanh xám, xám sương và màu bão hòa thấp, ánh sáng mềm đều như ánh sáng tán xạ ngày âm u, bố cục ngay ngắn mang vẻ tĩnh mịch cổ điển, tổng thể lý tính kiềm chế mà quỷ quyệt siêu nhiên, đầy không khí siêu thực mang tính triết tư, 2D"
+ },
+ "1779094923798_style": {
+  "name": "Hoạt hình stop-motion",
+  "prompt": "Phong cách hoạt hình stop-motion, chất hoạt hình rối stop-motion kiểu Laika, nhân vật như rối gỗ và vải thủ công, tạo hình mắt to ngây ngô linh hoạt, bề mặt mờ với kết cấu thủ công tinh tế, đạo cụ bối cảnh thực thu nhỏ tinh xảo chân thực, ánh sáng tự nhiên ấm xuyên qua cửa sổ kết hợp ánh nến điểm xuyết, độ sâu trường ảnh nông, hậu cảnh soft-focus, tông màu chủ đạo là nâu ấm, hổ phách và màu đất dịu, tổng thể mang không khí phim hoạt hình stop-motion ấm áp hoài cổ, 3D"
+ },
+ "1779094923792_style": {
+  "name": "Thủy mặc đen trắng",
+  "prompt": "Phong cách minh họa concept thủy mặc đen trắng Ghost of Tsushima, phong cách thủy mặc đen trắng, lối vẽ minh họa concept thủy mặc đen trắng, thuần đen trắng không màu, vận bút thô phóng khoáng, nét phi bạch và đường tốc độ quét ra động thế mạnh mẽ, tương phản đậm nhạt của mực rõ ràng, khoảng trống lớn và mảng mực đậm va chạm nhau, đường nét như bút khô chém quét đầy sức mạnh, tổng thể cứng cỏi sắc bén, khí vận lưu chuyển, vừa mang thủy mặc tả ý vừa mang không khí sát phạt của concept art đề tài samurai, 2D"
+ },
+ "1779094923809_style": {
+  "name": "Hoạt hình phương Tây 3D",
+  "prompt": "Phong cách kết xuất hoạt hình phương Tây 3D, kết xuất nhân vật cách điệu Âu Mỹ, tạo hình tinh giản, tỷ lệ ngũ quan phóng đại tinh nghịch, kiểu tóc mảng khối bóng mượt, bề mặt mịn màng với highlight dịu và tán xạ dưới bề mặt, key light tươi sáng kết hợp ánh sáng viền xanh tím, nền tối đơn sắc làm nổi nhân vật, tương phản màu rõ nét, chuyển tiếp sáng tối sạch sẽ, không khí tinh nghịch linh hoạt, tổng thể mang chất kết xuất tinh xảo của nhân vật hoạt hình 3D cách điệu Âu Mỹ, 3D"
+ },
+ "1779094923793_style": {
+  "name": "Kết xuất tả thực 3D HD",
+  "prompt": "Phong cách kết xuất tả thực 3D độ nét cao, kết xuất tả thực 3D HD, chất nhân vật CG cấp điện ảnh, mô hình tinh xảo chân thực, tán xạ dưới bề mặt và kết cấu vi mô của da chân thật, tóc từng lọn, vật liệu trang phục giàu chi tiết, bố trí sáng low-key điện ảnh hóa, key light mềm và bóng sâu tạo khối, hậu cảnh tối sâu xóa phông, tông màu chủ đạo là tương phản giữa đen sâu, xám lạnh và màu da ấm, không khí trầm ổn điện ảnh, tổng thể mang chất kết xuất CG chân thực như ảnh chụp, 3D"
+ },
+ "1779094923814_style": {
+  "name": "Minh họa hoạt hình comic Mỹ",
+  "prompt": "Phong cách minh họa hoạt hình comic Mỹ, phong cách minh họa hoạt hình comic Mỹ, lối vẽ trang nội dung comic siêu anh hùng Mỹ, nét mực dày đậm viền cứng cáp mạnh mẽ, mảng bóng và highlight lớn kiểu cel cắt khối, phối cảnh phóng đại, bố cục động giàu sức va chạm, màu sắc bão hòa cao đậm đà, thường dùng hiệu ứng ánh sáng năng lượng tạo không khí, tương phản sáng tối mạnh gần như silhouette, tổng thể nhiệt huyết phô trương, mang sức căng kịch tính như bìa comic DC, Marvel, 2D"
+ },
+ "1779094923840_style": {
+  "name": "Minh họa ảo giác kết cấu cổ điển",
+  "prompt": "Phong cách minh họa ảo giác kết cấu cổ điển, lối vẽ minh họa kỹ thuật số cảm giác in ấn cổ điển, toàn bộ phủ hạt nhiễu mịn dày và kết cấu như in riso, không có nét line rõ, tạo hình bằng mảng màu và đốm sáng, màu sắc bão hòa cao ảo giác, tông chủ đạo xanh lục lam tím và điểm xuyết nhảy vọt màu huỳnh quang, ánh sáng thể hiện thành gợn sóng màu chảy trôi và đốm sáng loang lổ, tổng thể mộng mơ mơ hồ, mát lạnh trong trẻo, đầy thi vị ảo giác kiểu poster cổ điển, 2D"
+ },
+ "1779094923839_style": {
+  "name": "Minh họa sáp màu trẻ em",
+  "prompt": "Phong cách minh họa phẳng phương Tây, phong cách minh họa vẽ tay sáp màu trẻ em, lối vẽ hoạt hình sách tranh Âu Mỹ, tạo hình tròn trịa phóng đại đầy thú vị trẻ thơ, tô phẳng mảng màu không nét line hoặc nét line yếu, viền hơi mang kết cấu chà khô như sáp màu vẽ tay, màu sắc tươi sáng ấm áp, ghép trực tiếp các mảng màu lớn bão hòa, sáng tối cực giản gần như không chuyển sắc, hậu cảnh tô phẳng đơn giản kiểu để trống, tổng thể sống động vui tươi, mộc mạc thân thiện, mang cảm giác tự sự của trang sách tranh trẻ em, 2D"
+ },
+ "1779094923815_style": {
+  "name": "Hoạt hình graphic novel đen trắng",
+  "prompt": "Phong cách hoạt hình graphic novel 2D đen trắng (phong cách IP Persepolis), phong cách hoạt hình truyện tranh 2D đen trắng, lối vẽ tiểu thuyết đồ họa đen trắng châu Âu, thang màu hai cực thuần đen trắng, gần như không dùng xám trung gian, hình thể tối giản khái quát cao độ, nét line đều và sạch, bóng đen đặc diện rộng và khoảng trống cắt đối mạnh mẽ, ánh sáng thể hiện bằng mảng khối kiểu tranh khắc, bố cục phẳng hóa giàu trật tự, tổng thể lạnh lùng kiềm chế, hơi xa cách, mang khí chất văn nghệ của hoạt hình độc lập vẽ tay, 2D"
+ },
+ "1779094923835_style": {
+  "name": "Manga nhiệt huyết 2D chất lượng cao",
+  "prompt": "Phong cách manga nhiệt huyết 2D chất lượng cao, lối vẽ anime shounen nhiệt huyết Nhật Bản, nét line sắc bén cứng cáp, tô màu phân mảng cel kết hợp sáng tối tương phản mạnh, biểu cảm và động tác nhân vật phóng đại đầy sức bùng nổ, khung hình tràn ngập hiệu ứng vẽ sáng như tia sét năng lượng, đường tốc độ và mảnh vụn văng, tông màu bão hòa cao, tô bằng các màu bùng cháy như vàng ấm, cam đỏ, hiệu ứng ngược sáng và quầng sáng mạnh, tổng thể khí thế cuồn cuộn, chất anime cao cấp với sức căng chiến đấu tột đỉnh, 2D"
+ },
+ "1779094923831_style": {
+  "name": "Phong cách Otomo Katsuhiro",
+  "prompt": "Phong cách anime nijigen Otomo Katsuhiro (Akira) kinh điển, lối vẽ hoạt hình cel movie Nhật Bản thập niên 80–90, mật độ mỹ thuật nền vẽ tay cực cao, nét line nghiêm cẩn tả thực, chi tiết kiến trúc thực vật chồng lớp khắc họa tỉ mỉ, tô phẳng chồng thêm phân tầng sáng tối tinh tế, tông màu thiên về xanh xám, màu hoài cổ cảm giác phim bão hòa thấp, ánh sáng mộc mạc tự nhiên, tổng thể trầm tĩnh tả thực, mang hơi thở đô thị cuối thời Showa và chất thời đại của anime cũ, 2D"
+ },
+ "1779094923818_style": {
+  "name": "Minh họa impasto tông tối",
+  "prompt": "Nhân vật vẽ tay 2D (phong cách minh họa impasto tối), minh họa phong cách impasto tông tối, tranh concept impasto tả thực, không có nét line rõ, dùng nét bút dày chồng lớp để tạo khối và chất thô ráp, tông màu chủ đạo là nâu xám, xanh lục sẫm, vàng úa, độ sáng tổng thể cực thấp, ánh sáng nhấn mạnh nguồn sáng hẹp xuyên qua và bóng tối sâu nặng, chi tiết dày đặc tầng lớp dày dặn, lan tỏa không khí ngột ngạt hoang lạnh như hoang tàn tận thế, 2D"
+ },
+ "1779094923830_style": {
+  "name": "Hoạt hình thời Tezuka Osamu",
+  "prompt": "Lối vẽ hoạt hình thời Tezuka Osamu, phong cách hoạt hình cel cổ điển Showa, chất hoạt hình vẽ tay Nhật Bản thập niên 80, nét line vẽ tay sạch sẽ trôi chảy, tô phẳng cel, màu sắc trong trẻo tươi sáng, highlight và bóng phân mảng đơn giản, tạo hình mềm mại tao nhã mang khí chất shoujo manga, khung hình tươi sáng trong trẻo, có cảm giác ánh sáng mềm kiểu phim nhẹ, không khí tổng thể tươi mới hoài cổ, thuần khiết duy mỹ, 2D"
+ },
+ "1779094923832_style": {
+  "name": "Phong cách Shanghai Animation",
+  "prompt": "Phong cách anime nijigen (phong cách Xưởng phim hoạt hình Thượng Hải), lối vẽ hoạt hình vẽ tay kinh điển của Xưởng phim Thượng Hải, phong cách mỹ thuật dân tộc Trung Quốc mang tính trang trí cực mạnh, đường nét mảnh mai trôi chảy, tạo hình đồ án hóa cao độ, tô phẳng cel kết hợp nền bột màu tả ý, tông màu chủ đạo là phối màu quốc phong tao nhã như xanh lục, lam đen, hồng trắng, tầng lớp sáng tối hàm súc mềm mại, hậu cảnh mờ ảo như khói, tổng thể tao nhã cổ vận, giàu vẻ đẹp trang trí phương Đông, 2D"
+ },
+ "1779094923819_style": {
+  "name": "Thần thoại Trung Quốc",
+  "prompt": "Nhân vật vẽ tay 2D, phong cách thần thoại Trung Quốc, phong cách thần thoại Trung Quốc, minh họa nét vẽ miêu kim, kết hợp công bút trọng thái và loang màu thủy mặc, giữa các nét line mảnh mượt dùng miêu kim (vẽ vàng) làm sáng, tông màu nền là nâu ấm, trắng gạo, vàng đất son, điểm xuyết đỏ chu sa, thạch thanh và vàng kim, vân mây bóng núi trải ra theo lối tả ý, ánh sáng mềm mang cảm giác hào quang thần thánh, khung hình phiêu dật hùng vĩ, đầy khí vận thần thoại tiên hiệp phương Đông, 2D"
+ },
+ "1779094923800_style": {
+  "name": "Minh họa hoạt hình 2D",
+  "prompt": "Phong cách minh họa hoạt hình 2D cách điệu, phong cách minh họa hoạt hình hai chiều, nét line sẫm màu sạch gọn, tô phẳng cel, màu sắc tươi sáng bão hòa, tương phản mát mắt, bóng đổ khái quát bằng mảng màu cạnh cứng, sức căng phối cảnh mạnh, chiều sâu không gian rõ rệt, chi tiết phong phú mà ngăn nắp, cảm giác ánh sáng trong trẻo như nắng ngày đẹp trời, tổng thể tươi sống sáng rõ, mang khí chất mát mẻ như mỹ thuật nền anime Nhật Bản, 2D"
+ },
+ "1779094923786_style": {
+  "name": "Concept art đen tối",
+  "prompt": "Phong cách Black Myth Wukong, phong cách impasto dày concept art kỳ ảo đen tối, phong cách concept tranh gốc đen tối, hội họa kỹ thuật số impasto kỳ ảo đen tối kiểu Hắc Thần Thoại, không nét line, tạo hình bằng chồng lớp nét bút, tông màu nền đen sâu, trong vùng tối diện rộng chỉ nổi lên một ít màu nặng bão hòa cao như đỏ thẫm, tương phản sáng tối cực mạnh, ánh sáng hội tụ kịch tính, chi tiết điêu khắc tinh xảo chất lạnh lùng, tổng thể quỷ quyệt ngột ngạt, đầy cảm giác nghi thức và sức căng kinh dị, 2D"
+ },
+ "1779094923797_style": {
+  "name": "Minh họa múa rối bóng",
+  "prompt": "Phong cách minh họa múa rối bóng, phong cách minh họa rối bóng, mỹ học khắc rỗng cắt giấy của rối bóng truyền thống Trung Quốc, tạo hình phẳng kiểu bóng nghiêng, đường viền khắc rỗng tinh xảo, hoa văn dày đặc như chạm hoa, nền giấy vàng nhạt tôn lên các màu nhuộm truyền thống như vàng ấm, đỏ son, đen mực, xanh ngọc, màu sắc ấm dịu cổ kính, ánh sáng phẳng hóa như bóng đèn xuyên qua, mang cảm giác bán trong suốt của da và nền vân giấy, tổng thể cổ nhã tinh xảo, đậm đà phong vị dân gian, 2D"
+ },
+ "1779094923788_style": {
+  "name": "Minh họa đen tối kiểu Mỹ",
+  "prompt": "Phong cách comic Mỹ, phong cách comic Âu Mỹ, phong cách minh họa đen tối kiểu Mỹ, nét mực thô khỏe mạnh mẽ, tạo khối sáng tối bằng mảng cứng cáp, bóng đen mực diện rộng đè đáy, tông màu chủ đạo là xanh lam lạnh, xám xanh, xanh đậm, điểm xuyết highlight ấm như ánh lửa, tương phản ánh sáng mạnh như film noir, sợi mưa và đường tốc độ tăng cường động thế, tổng thể lạnh cứng sát phạt, đầy không khí noir tội phạm của comic Mỹ, 2D"
+ },
+ "1779094923787_style": {
+  "name": "Minh họa kỳ ảo đen tối",
+  "prompt": "Phong cách minh họa kỳ ảo đen tối, phong cách tranh gốc cổ điển kiểu Mỹ, hội họa kỹ thuật số impasto kỳ ảo Âu Mỹ, không có nét line rõ, nét bút mềm dày chuyển tiếp tinh tế, tông màu chủ đạo là xanh mực, xanh đậm, xám đen, dùng hiệu ứng ánh sáng ma thuật xanh lục u tối làm nguồn sáng chủ đạo, tương phản sáng tối mạnh, ánh sáng viền phác họa đường nét, sương mù lan tỏa, độ sâu mờ ảo, tổng thể thần bí u tối, đầy hơi thở cổ tích đen tối và ma huyễn, 2D"
+ },
+ "1779094923785_style": {
+  "name": "Manga đen tối",
+  "prompt": "Nhân vật anime 2D (phong cách manga đen tối), phong cách manga đen tối, lối vẽ manga Nhật Bản đen trắng, nét bút sắt mảnh dày đặc, đen trắng tương phản cao, gần như không chừa xám trung gian, bóng đen mực diện rộng tôn lên khoảng trống, hoa văn trang trí như dây leo hoa cỏ với đường nét phức tạp hoa lệ, thể hiện tầng lớp sáng tối bằng mật độ nét, mang thú vị trang trí gothic, tổng thể u uất duy mỹ, suy đồi tinh xảo, 2D"
+ },
+ "1779094923791_style": {
+  "name": "Minh họa tối giản",
+  "prompt": "Phong cách minh họa phẳng hiện đại, phong cách minh họa tối giản, minh họa phẳng tối giản hiện đại, không viền nét hoặc viền nét cực yếu, tô phẳng mảng màu lớn, tạo hình tối giản bo tròn khái quát, phối màu dịu bão hòa thấp, chủ đạo là các màu dịu dàng như trắng gạo, kem, nâu nhạt, gần như không làm tầng lớp ánh sáng, chỉ một ít bóng mềm, hậu cảnh để trống diện rộng thuần khiết, khung hình sạch sẽ trong trẻo, tổng thể tươi mới chữa lành, tĩnh lặng kiềm chế, 2D"
+ },
+ "1779094923796_style": {
+  "name": "Gothic tối halftone cổ điển",
+  "prompt": "Phong cách minh họa gothic đen tối halftone cổ điển, phong cách gothic tông tối halftone cổ điển, minh họa chất in comic cổ điển, nét line đen dày kết hợp chấm halftone thể hiện mặt xám và bóng, tông màu chủ đạo là đen mực, đỏ sẫm, vàng lục bệnh hoạn, phối màu u ám tương phản cao, khung hình có nhiễu in cũ và kết cấu vết xước, nét phi bạch điểm xuyết cảm giác bất an, tổng thể suy đồi quỷ mị, đầy khí chất comic gothic đen tối, 2D"
+ },
+ "1779094923789_style": {
+  "name": "Thủy mặc phương Đông",
+  "prompt": "Phong cách minh họa trang trí thủy mặc phương Đông, lối vẽ thủy mặc phương Đông, minh họa trang trí thủy mặc, nét mảnh công bút kết hợp mặc vận tả ý, nhiều khoảng trống, mực biến hóa phong phú đậm nhạt khô ướt, tông màu chủ đạo là trắng giấy tuyên và xám đen thủy mặc, loang nhẹ vàng kim, vàng đất son và điểm xuyết một ít đỏ chu sa, đường nét phiêu dật linh động, nếp áo vân mây xoay chuyển lưu động, ánh sáng phẳng hóa hàm súc, tổng thể thanh thoát tao nhã, đậm đà thi vị cổ điển, 2D"
+ },
+ "1779094923783_style": {
+  "name": "Pixel art",
+  "prompt": "Phong cách pixel art retro 16-bit, phong cách pixel, nghệ thuật pixel 16-bit cổ điển, hạt pixel và cạnh răng cưa nhìn rõ, bảng màu hạn chế kết hợp chuyển tiếp dithering, phối màu bão hòa tươi sáng, tương phản mạnh, tạo hình khái quát chi tiết bằng khối pixel, sáng tối thể hiện bằng phân tầng bậc màu, mang chất màn hình máy game cổ điển, tổng thể tinh xảo hoài cổ, đầy vẻ đẹp pixel của trò chơi điện tử retro, 2D"
+ },
+ "1786674799159_style": {
+  "name": "Ký họa graffiti đen trắng",
+  "prompt": "Phong cách hoạt hình ký họa graffiti đen trắng vẽ tay, nét bút chì thô và bút marker tùy hứng thư giãn, tạo hình nhân vật ngây ngô phóng đại, mảng tóc đen thuần diện rộng và mặt giấy trống tạo tương phản mạnh, hậu cảnh chỉ phác bằng nét chì nhạt ẩn hiện, khung hình giữ kết cấu giấy và cảm giác run tay vẽ, tổng thể toát lên chất graffiti tùy hứng giàu cảm xúc như phim hoạt hình ngắn độc lập."
+ },
+ "1786674799296_style": {
+  "name": "Hoạt hình mid-century cổ điển",
+  "prompt": "Phong cách hoạt hình chủ nghĩa hiện đại mid-century thập niên 50–60, tạo hình phẳng hình học hóa, nét line thô đơn giản và tô phẳng mảng màu lớn, tỷ lệ nhân vật cách điệu cao độ, má hồng chấm tròn mắt to, hậu cảnh dùng trang trí họa tiết như sọc chéo, tông màu chủ đạo là cam đỏ và be cổ điển, khung hình có hạt phim nhẹ và cảm giác làm cũ, tổng thể cổ điển tinh nghịch, đầy hơi thở hoạt hình quảng cáo thời hoàng kim."
+ },
+ "1786674799433_style": {
+  "name": "Đô thị vẽ tay Matsumoto Taiyo",
+  "prompt": "Phong cách hoạt hình manga đô thị vẽ tay kiểu Matsumoto Taiyo, nét bút sắt nghiêng lệch lỏng lẻo mà đầy sức căng, mật độ biển hiệu dây điện phố xá cực cao, phối cảnh phóng đại nghiêng lệch, nhân vật gầy dài linh hoạt, màu sắc tô tay phẳng bằng vàng ấm xanh lam bão hòa, viền không đều với màu nước tràn ra, tổng thể toát lên chất hoạt hình độc lập Nhật Bản vừa mang hơi ấm phố thị vừa cuồng tưởng."
+ },
+ "1786674799570_style": {
+  "name": "Tô phẳng pop ảo giác",
+  "prompt": "Phong cách hoạt hình tô phẳng pop ảo giác, nét viền thô biến dạng tự do, màu bão hòa cao va chạm ghép nối táo bạo, phối cảnh và tỷ lệ vặn vẹo phóng đại theo cảm xúc, đồ đạc và họa tiết nội thất phủ kín khung hình, động tác phóng khoáng nét bút tùy hứng, tổng thể toát lên chất hoạt hình thể nghiệm cuồng nhiệt nhảy nhót, năng lượng bùng nổ."
+ },
+ "1786674799707_style": {
+  "name": "Đô thị sơn dầu cổ điển kiểu Âu",
+  "prompt": "Phong cách hoạt hình đô thị cổ điển comic châu Âu, tông màu làm cũ chủ đạo là xanh ô liu và vàng đất, chi tiết nhà cửa khu phố dày đặc, lan can sắt rèn và dây phơi quần áo đầy hơi thở đời sống, nét line nhân vật tinh tế, tạo hình tả thực hơi phóng đại, ánh sáng mềm mang hơi thở chiều vàng úa, khung hình có nhiễu in cổ điển, tổng thể toát lên chất phố thị uể oải của hoạt hình người lớn kiểu Pháp."
+ },
+ "1786674799844_style": {
+  "name": "Sách tranh bút sắt màu nhạt",
+  "prompt": "Phong cách hoạt hình sách tranh bút sắt tô màu nhạt, nét bút sắt run rẩy vụn vặt phác họa kiến trúc và đồ đạc, mực loang cộng phủ màu nhạt, tông màu chủ đạo là nâu xám trắng gạo, thỉnh thoảng điểm xuyết ánh sáng ấm, nhân vật nhỏ bé ngây ngô đặt trong đại cảnh, khung hình như trang minh họa sách truyện vẽ tay, tổng thể tĩnh lặng hoài cổ, mang chút thi vị cô đơn."
+ },
+ "1786674799981_style": {
+  "name": "Hoạt hình phác thảo bút chì",
+  "prompt": "Phong cách hoạt hình phác thảo bút chì, giữ lại nét ký họa và đường phụ trợ cấu trúc mang cảm giác chưa hoàn thành, nét gạch xám nhạt tạo khối, chỉ điểm màu nhạt ở má và con ngươi, chất giấy và vết tẩy nhìn rõ, ánh mắt nhân vật tinh tế cảm xúc đậm đà, tổng thể toát lên sức hút vẽ tay nguyên bản như cuốn sổ phác thảo tự cử động."
+ },
+ "1786674800118_style": {
+  "name": "Pop graffiti huỳnh quang",
+  "prompt": "Phong cách MV pop graffiti huỳnh quang, viền đen dày kết hợp tô màu graffiti bằng bút marker, các mảng màu sáng rực như hồng đào, xanh da trời, vàng chanh tô phẳng diện rộng, tạo hình nhân vật tối giản thành ký hiệu đồ họa, kết hợp các yếu tố graffiti như tia phóng xạ và nốt nhạc, khung hình trực diện vui nhộn, tổng thể toát lên chất minh họa thời thượng kết hợp sticker đường phố và hoạt hình âm nhạc."
+ },
+ "1786674800255_style": {
+  "name": "Sách tranh trẻ em bột màu",
+  "prompt": "Phong cách hoạt hình sách tranh trẻ em bột màu, nét bột màu có hạt dày dặn ấm dịu, màu sắc tươi sáng bão hòa, tường xanh lam lục và trang phục vàng ấm tương phản rõ rệt, nhân vật tròn trịa mộc mạc biểu cảm chân thành, chi tiết môi trường đầy hơi thở trường học và đời sống, ánh sáng mềm như lớp học buổi chiều, tổng thể toát lên chất sách tranh trẻ em ấm áp chữa lành."
+ },
+ "1786674800392_style": {
+  "name": "Minh họa trẻ em tranh Tết cổ điển",
+  "prompt": "Phong cách minh họa trẻ em tranh Tết Trung Quốc thập niên 50–60, tạo hình em bé mũm mĩm tròn trịa vui tươi, má đỏ mắt to, tô phẳng bột màu kết hợp loang màu tinh tế, màu sắc tươi rực sáng sủa với đỏ tươi xanh ngọc làm chủ đạo, hậu cảnh hoa cỏ giàu tính trang trí, giấy hơi ngả vàng mang cảm giác năm tháng, tổng thể toát lên thú vị trẻ thơ kiểu Trung Hoa kinh điển của tranh cổ động hoài cổ và em bé tranh Tết."
+ },
+ "1786674800529_style": {
+  "name": "Minh họa phẳng cảm xúc xanh tím",
+  "prompt": "Phong cách minh họa cảm xúc đơn sắc xanh tím, đám đông khái quát bằng mảng màu xanh tím thống nhất, mặt mũi mờ nhòa, nhân vật chính được thắp sáng bằng một ít màu ấm tạo tương phản cô đơn, tạo hình phẳng không line khái quát gọn gàng, nét bút mang kết cấu chải khô, bố cục nhấn mạnh sự xa cách giữa cá thể và dòng người, tổng thể toát lên chất sách tranh cảm xúc đô thị tĩnh lặng kiềm chế."
+ },
+ "1786674800666_style": {
+  "name": "Minh họa neon chuyển sắc huỳnh quang",
+  "prompt": "Phong cách minh họa neon chuyển sắc huỳnh quang, chuyển sắc màu kẹo hồng tím xanh lam lan tỏa toàn tranh, nhân vật mắt to highlight lấp lánh, tóc mang chất cầu vồng bán trong suốt, hậu cảnh thành phố với biển hiệu neon và dải sáng hologram đan xen, viền phát sáng mềm mại, tổng thể toát lên chất minh họa thế hệ mới mộng mơ rực rỡ, bốc hơi cảm giác tương lai."
+ },
+ "1786674800803_style": {
+  "name": "Kết cấu phù điêu đồng",
+  "prompt": "Phong cách hoạt hình kết cấu phù điêu đồng, khung hình như phù điêu trên tấm đồng gò, nhân vật và hoa văn thể hiện bằng chất kim loại lồi lõm, tông màu đồng cổ kết hợp đốm đen oxy hóa, đường viền tạo từ điểm và nét gõ đập, ánh bóng chảy trôi theo hình khối nhấp nhô, tổng thể toát lên chất độc đáo đan xen giữa công nghệ kim loại cổ xưa và cảm giác nghi thức thần bí."
+ },
+ "1786674800940_style": {
+  "name": "Minh họa tự sự phẳng màu nhạt",
+  "prompt": "Phong cách hoạt hình tự sự phẳng màu nhạt, nét line tinh giản kết hợp tô phẳng màu xám nhạt bão hòa thấp, tạo hình nhân vật gầy gò tả thực, bối cảnh để trống kiềm chế, thỉnh thoảng điểm xuyết mảng màu glitch pixel tạo vết nứt siêu thực, cảm xúc lạnh lùng xa cách, tổng thể toát lên chất tự sự văn học của hoạt hình độc lập Trung Quốc."
+ },
+ "1786674801077_style": {
+  "name": "Cắt dán giấy trẻ thơ",
+  "prompt": "Phong cách stop-motion cắt dán giấy trẻ thơ, nhân vật như hình người giấy cắt dán từ graffiti sáp màu, hậu cảnh là giấy kraft nhăn và giấy màu nước cắt dán, bố cục ngây ngô phối cảnh nghiêng lệch, màu sắc dịu mang hạt sáp màu, bóng đổ của giấy nhìn thấy thật, tổng thể toát lên hơi ấm thủ công như tập tranh trẻ em được thổi sự sống."
+ },
+ "1786674801214_style": {
+  "name": "Impasto thanh xuân mạ vàng",
+  "prompt": "Phong cách hoạt hình impasto thanh xuân ngược sáng mạ vàng, ánh hoàng hôn vàng kim rải khắp khung hình, nét impasto nhân vật tinh tế, làn da tỏa ánh ấm, lưới hậu cảnh và bóng cây xóa phông thành đốm sáng, highlight tràn ra tạo quầng sáng mờ ảo, tổng thể toát lên chất ký ức thanh xuân rực cháy mà chóng tàn như được năm tháng mạ vàng."
+ },
+ "1786674801351_style": {
+  "name": "Bột màu nhiễu hạt hoài cổ",
+  "prompt": "Phong cách hoạt hình bột màu nhiễu hạt hoài cổ, tông màu cổ điển bão hòa thấp chủ đạo là xám xanh và đỏ gỉ, tô phẳng bột màu với nhiễu hạt và vân in rõ rệt, tạo hình nhân vật mộc mạc đậm cảm giác thời đại, bài trí bối cảnh hoài cổ, ánh sáng vàng úa mềm mại, tổng thể toát lên chất trầm uất đan xen giữa họa báo cũ và ký ức lịch sử."
+ },
+ "1786674801488_style": {
+  "name": "Manga quần tượng nét đen trắng",
+  "prompt": "Phong cách manga quần tượng nét vẽ đen trắng, nét mảnh đều phác họa phố xá và đám đông dày đặc, chỉ dùng một ít cam vàng điểm xuyết nhân vật chính, bố cục ngang tầm mắt lia ngang như tranh cuộn dài, tạo hình nhân vật hài hước tròn trịa, khung hình lượng thông tin lớn mà ngăn nắp, tổng thể toát lên chất hài lạnh kiềm chế của comic trường phái ligne claire."
+ },
+ "1786674801625_style": {
+  "name": "Hoạt hình neon cổ điển kiểu Mỹ",
+  "prompt": "Phong cách hoạt hình neon cổ điển kiểu Mỹ, yếu tố phố phường Mỹ thập niên 50 và xe cổ, nét viền thô kết hợp màu kẹo bão hòa cao, biển hiệu neon phát sáng dưới bầu trời đêm, tạo hình nhân vật phóng đại dáng vẻ sinh động, tương phản màu mạnh náo nhiệt sôi động, tổng thể toát lên chất hoạt hình cổ điển pha trộn thời hoàng kim Mỹ và pop đường phố."
+ },
+ "1786674801762_style": {
+  "name": "Minh họa chất sáp dầu",
+  "prompt": "Phong cách minh họa chất sáp dầu, nét sáp dầu thô ráp dày nặng chồng lớp, màu sắc đậm đà với cam đỏ vàng sáng xanh hồ va chạm, tạo hình ngây ngô tròn trịa mang vẻ hồn nhiên của tranh trẻ em, hướng nét bút mạnh mẽ, hạt sáp nhìn thấy, tổng thể toát lên chất sách tranh sáp dầu ấm áp thô mộc, đầy cảm giác tay vẽ."
+ },
+ "1786674801899_style": {
+  "name": "Manga seinen tả thực",
+  "prompt": "Phong cách hoạt hình manga seinen tả thực, gương mặt nhân vật khắc họa tả thực tinh tế, nếp nhăn và giọt mồ hôi hiện rõ, tô màu cel kiềm chế trầm ổn, ánh sáng tự nhiên như lát cắt đời sống, các bối cảnh như văn phòng và sân bóng đầy kết cấu hiện thực, tổng thể toát lên chất tả thực trầm uất của hoạt hình chính kịch dành cho người lớn."
+ },
+ "1786674802036_style": {
+  "name": "Sách tranh màu nước mộng ảo",
+  "prompt": "Phong cách hoạt hình sách tranh màu nước giấc mơ, loang màu nước mềm mại hòa quyện với nét chì phác, cảnh giấc mơ tỷ lệ siêu thực, những ý tượng dịu dàng kỳ ảo như người khổng lồ nằm ngang thị trấn và đường hầm chăn đệm, tông màu hồng cam vàng ngỗng ấm áp bão hòa thấp, nét bút thư giãn trẻ thơ, tổng thể toát lên chất giấc mơ như sách truyện trước giờ ngủ."
+ },
+ "1786674802173_style": {
+  "name": "Liên hoàn họa màu nước đồng quê",
+  "prompt": "Phong cách màu nước liên hoàn họa cũ Trung Quốc, lối vẽ sách thiếu nhi thập niên 50–60, màu nước thanh nhã trong suốt, đồng quê xanh mướt và cảnh nhà nông, nhân vật đầu tròn mặt tròn mặc áo vải giày vải, nét line tỉ mỉ mềm mại, khoảng trống giàu cảm giác thở, tổng thể toát lên chất liên hoàn họa đồng quê thú vị trẻ thơ hoài cổ kinh điển."
+ },
+ "1786674802310_style": {
+  "name": "Thiếu nữ màu nước u sầu",
+  "prompt": "Phong cách minh họa thiếu nữ màu nước u sầu, đồng cỏ xanh xám và hoa trắng loang bằng kỹ thuật ướt, thiếu nữ tóc đen với nét bút lỏng lẻo như than pha màu nước, tông màu u ám lạnh lẽo, ánh mắt nhân vật trống rỗng cảm xúc đậm đặc, khung hình chừa nhiều không gian thở, tổng thể toát lên chất minh họa mong manh mà thi vị như nhật ký riêng tư."
+ },
+ "1786674802447_style": {
+  "name": "Đô thị ngây ngô nghiêng lệch",
+  "prompt": "Phong cách minh họa đô thị ngây ngô nghiêng lệch, nhà cửa thành phố xiêu vẹo được tô bằng sáp màu và bút marker, phối cảnh cố ý mất cân bằng, màu sắc đậm đà nét bút phóng khoáng, nhân vật tối giản như tranh trẻ em nhưng cảm xúc chân thực, bầu trời đêm và ánh đèn bôi ra năng lượng bồn chồn, tổng thể toát lên chất vẽ tay mãnh liệt như tranh trẻ em theo chủ nghĩa biểu hiện."
+ },
+ "1786674802584_style": {
+  "name": "Sổ tay ký họa stop-motion",
+  "prompt": "Phong cách stop-motion ký họa sổ tay thật, quay thật quá trình vẽ bằng bút chì, than và màu nước trên trang giấy sổ tay, nhân vật trong tranh cử động trên mặt giấy, vết tẩy và vân giấy rõ ràng, mặt bàn và bàn tay cầm bút thỉnh thoảng vào khung hình, tổng thể toát lên chất thủ công riêng tư khi chính quá trình sáng tác trở thành hoạt hình."
+ },
+ "1786674802721_style": {
+  "name": "Nét graffiti gothic",
+  "prompt": "Phong cách nét vẽ graffiti gothic, nét mảnh run rẩy thần kinh phác họa nhân vật gầy guộc, chủ đạo đen trắng kết hợp hậu cảnh họa tiết như bia ngắm và xoắn ốc, tạo hình bệnh hoạn đáng yêu, đầu to chi mảnh với yếu tố đường khâu, ánh sáng thể hiện bằng nét gạch tỏa tia, tổng thể toát lên chất hài quái dị của graffiti cổ tích đen tối."
+ },
+ "1786674802858_style": {
+  "name": "Liên hoàn họa công bút trọng thái",
+  "prompt": "Phong cách liên hoàn họa công bút trọng thái quốc phong, nét thiết tuyến miêu kết hợp màu khoáng đậm, hôn phục đỏ tươi và trang sức mạ vàng nồng đậm trang nghiêm, khai diện nhân vật cổ điển tinh tế, bố cục quần tượng dày đặc như tranh cuộn cổ, thỉnh thoảng chuyển cảnh bằng loang thủy mặc, tổng thể toát lên chất quốc phong hoa mỹ của liên hoàn họa truyền thống và công bút trọng thái."
+ },
+ "1786674802995_style": {
+  "name": "Sách tranh impasto kết cấu acrylic",
+  "prompt": "Phong cách sách tranh impasto kết cấu acrylic, màu chồng lớp trên canvas thật, kết cấu dao bay và nét bút nổi gồ nhìn thấy, bầu trời và bãi cỏ bôi bằng nét lớn phóng khoáng, viền nhân vật xù xì hòa vào hậu cảnh, màu sắc tươi mới mang hơi ấm vẽ tay, tổng thể toát lên chất nghệ thuật nguyên bản của hoạt hình từng khung từ tranh vẽ thực thể."
+ },
+ "1786674803132_style": {
+  "name": "Khắc nét tranh in đen trắng",
+  "prompt": "Phong cách khắc nét tranh in đen trắng, nét khắc dương thô mộc như tranh khắc gỗ và khắc cao su, trên nền đen khắc ra mảng màu trắng kem và xanh hồ, giọt mưa và đường viền nhân vật đều thành vết khắc đồ án hóa, bố cục phẳng giàu tính trang trí, tổng thể toát lên vẻ đẹp đồ họa cổ mộc mạnh mẽ như tranh in thủ công."
+ },
+ "1786674803269_style": {
+  "name": "Sử thi silhouette ngược sáng",
+  "prompt": "Phong cách hoạt hình sử thi silhouette ngược sáng, nhân vật và binh khí hóa thành bóng đen thuần, hậu cảnh ráng chiều mây đỏ nhiều tầng đậm đặc, bố cục trải ngang như tranh cuộn sử thi, silhouette động đầy sức căng, ánh sáng viền phác họa đường nét, tổng thể toát lên mỹ học silhouette ngược sáng bi tráng hoang lạnh."
+ },
+ "1786674803406_style": {
+  "name": "Minh họa impasto tả thực hoàng hôn",
+  "prompt": "Phong cách minh họa impasto tả thực hoàng hôn, ánh sáng giao thoa nóng lạnh lúc chạng vạng được tô impasto tinh tế, đồng phục thiếu nữ và tóc với nét bút lỏng tả thực, lan can đường cao tốc và núi xa thực ảo đan xen, tông màu xám xanh hòa cùng hồng cam, cảm xúc tĩnh lặng bâng khuâng, tổng thể toát lên chất thi vị hoàng hôn của minh họa thanh xuân Nhật Bản."
+ },
+ "1786674803543_style": {
+  "name": "Impasto biển đêm",
+  "prompt": "Phong cách hoạt hình impasto biển đêm tối, mặt biển xanh đen và bọt sóng cuộn trào bằng nét impasto, nhân vật được ánh sáng vàng ấm yếu ớt thắp lên thành nguồn sáng duy nhất, tương phản sáng tối cực mạnh, động thái sóng biển đặc quánh mạnh mẽ, tổng thể toát lên chất sơn dầu kịch tính của một điểm ấm áp trong bóng tối."
+ },
+ "1786674803680_style": {
+  "name": "Tô phẳng động cam xanh bão hòa cao",
+  "prompt": "Phong cách tô phẳng động cam xanh bão hòa cao, nhà cửa cam gạch và bầu trời xanh lam đối đầu, mây trắng đồ họa hóa như cắt giấy, nhân vật chạy nhảy, phối cảnh nghiêng táo bạo, mảng màu không line sạch gọn, đường tốc độ và mảnh vỡ tăng cường động thế, tổng thể toát lên mỹ học vận động sắc bén sảng khoái như phân cảnh manga."
+ },
+ "1786674803817_style": {
+  "name": "Minh họa sách tranh kết cấu hạt",
+  "prompt": "Phong cách minh họa sách tranh kết cấu hạt, hạt bột than và phấn màu phủ đầy khung hình, cảnh bãi biển gió biển tông xám ấm dịu, tóc nhân vật rối bù nét bút mộc mạc, đạo cụ tả thực như điện thoại cũ vào khung tạo tương phản, tổng thể toát lên chất sách tranh vẽ tay vừa thô ráp vừa dịu dàng."
+ },
+ "1786674803954_style": {
+  "name": "Hoạt hình cel đô thị tông lạnh",
+  "prompt": "Phong cách hoạt hình cel đô thị tông lạnh, tông màu bão hòa thấp chủ đạo là xanh lam xám, xe hơi và phố xá phác bằng nét cứng gọn gàng, tô phẳng cel sáng tối chia hai, tạo hình nhân vật lạnh lùng thời thượng, khung hình để trống tĩnh lặng, tổng thể toát lên mỹ học cel hiện đại kiềm chế sắc bén như phim tội phạm đô thị."
+ },
+ "1786674804091_style": {
+  "name": "Hoạt hình Pháp tươi sáng",
+  "prompt": "Phong cách hoạt hình Pháp tươi sáng, hành lang vàng ấm và lan can xanh lục chất bột màu, màu sắc rực rỡ ánh sáng trong trẻo, động tác nhân vật phóng đại trôi chảy đầy nhịp điệu hài kịch, viền nét bút mềm mại, bố cục góc ngẩng cúi đa dạng, tổng thể toát lên chất nhẹ nhàng linh hoạt của phim hoạt hình ngắn Pháp."
+ },
+ "1786674804228_style": {
+  "name": "Tô phẳng siêu thực quỷ dị",
+  "prompt": "Phong cách tô phẳng siêu thực quỷ dị, nhân vật nhợt nhạt đặt cạnh thảo nguyên u ám, khói đen bốc lên phía xa tạo bất an, màu sắc xám xanh bão hòa thấp, nét bút bình thản tinh tế làm nổi bật không khí quỷ dị, bố cục đối xứng tĩnh lặng như sân khấu, tổng thể toát lên cảm giác áp lực tâm lý siêu thực lạnh lùng."
+ },
+ "1786674804365_style": {
+  "name": "Ghép vẽ tay lên quay thật",
+  "prompt": "Phong cách ghép vẽ tay lên cảnh quay thật, nhân vật 2D vẽ tay chồng lên cảnh nhiếp ảnh thật, tạo hình người que bạch miêu cực tối giản, tạo tương phản dễ thương với cảnh thật, ánh sáng và phối cảnh khớp tự nhiên với cảnh quay, tổng thể toát lên thú vị truyền thông hỗn hợp khi hiện thực và chiều không gian graffiti xâm nhập lẫn nhau."
+ },
+ "1786674804502_style": {
+  "name": "Sách tranh ngây ngô Dã thú",
+  "prompt": "Phong cách sách tranh ngây ngô trường phái Dã thú, mảng màu đậm đà viền thô ráp như cắt dán giấy, vàng mù tạt, xanh thiên thanh, xanh ultramarine va chạm, tạo hình nhân vật quái dị mà ngây ngô đáng yêu, cột điện và cảnh hoang dã đồ họa hóa cực giản, tổng thể toát lên chất sách tranh phi lý của phối màu Dã thú và tạo hình tranh trẻ em."
+ },
+ "1786674804639_style": {
+  "name": "Impasto cổ tích ánh sáng ấm",
+  "prompt": "Phong cách hoạt hình impasto cổ tích ánh sáng ấm, ánh sáng ấm quán rượu tương phản với tông lạnh đêm mưa, tạo hình cậu bé tròn trịa, impasto tinh tế, chùm sáng rọi xuống từ song cửa với bụi nhìn thấy, màu sắc đầy đặn như kẹo nhưng mang bộ lọc thời xưa, tổng thể toát lên chất phim cổ tích ấm áp chữa lành."
+ },
+ "1786674804776_style": {
+  "name": "Minh họa họa tiết trang trí cổ điển",
+  "prompt": "Phong cách minh họa họa tiết trang trí cổ điển, khung hình phủ đầy hoa văn trang trí dày đặc và kết cấu in hoa, phối màu làm cũ chủ đạo là vàng đất và xanh ô liu, nội thất xe hơi và đồ vật đều xử lý đồ án hóa, nét line cổ mộc như tranh in, tổng thể toát lên chất minh họa cổ điển đan xen giữa vải dệt mid-century và nghệ thuật trang trí."
+ },
+ "1786674804913_style": {
+  "name": "Anime hoài cổ Nhật Bản thập niên 90",
+  "prompt": "Phong cách anime hoài cổ Nhật Bản thập niên 90, tô màu cel mềm mại, tạo hình nhân vật giản dị thân thiện, cảnh đêm bốt điện thoại và cảnh tưởng tượng bầu trời sao đan xen, tông màu ấm dịu mang bộ lọc năm tháng, ánh sáng tinh tế hàm súc, tổng thể toát lên chất hoài cổ dịu dàng của anime đời thường thời băng video."
+ },
+ "1786674805050_style": {
+  "name": "Cắt dán giấy siêu thực cổ điển",
+  "prompt": "Phong cách cắt dán giấy siêu thực cổ điển, giấy làm cũ và kết cấu vải tạo thành bầu trời và sóng biển, các ý tượng siêu thực như diều cá khổng lồ lơ lửng trong khung hình, nhân vật nhỏ bé như bóng đen, tông màu nâu trà xám xanh như ảnh cũ, tổng thể toát lên chất tĩnh lặng siêu thực như bài thơ cắt dán từ đồ vật cũ."
+ },
+ "1786674805187_style": {
+  "name": "Thị trấn graffiti kỳ ảo",
+  "prompt": "Phong cách hoạt hình thị trấn graffiti kỳ ảo, nhà cửa và đường phố vặn vẹo uốn lượn phủ đầy chi tiết graffiti, ánh đèn cam ấm loang trong màn đêm, nhân vật chibi đầu to đầy sức sống, màu sắc đậm đà như siro, tổng thể toát lên chất minh họa kỳ ảo mật độ bùng nổ như công viên giải trí cuồng tưởng."
+ },
+ "1786674805324_style": {
+  "name": "Hoạt hình phẳng ấm áp kiểu Âu",
+  "prompt": "Phong cách hoạt hình phẳng ấm áp kiểu Âu, tô phẳng mềm mại kết hợp kết cấu vân giấy nhẹ, cảnh nắng sớm trong bếp đầy hơi thở đời sống, tạo hình nhân vật khái quát hình học, động tác thư giãn tự nhiên, tông màu ấm dịu như kem, ánh sáng đơn giản hóa thành mảng màu mềm, tổng thể toát lên chất hoạt hình châu Âu đời thường ấm áp."
+ },
+ "1786674805461_style": {
+  "name": "Hội họa acrylic biểu hiện",
+  "prompt": "Phong cách hội họa acrylic chủ nghĩa biểu hiện, nét bút đậm đặc bôi trực tiếp, làn da xanh và căn bếp vàng sáng tạo tương phản chói mắt, nhân vật biến dạng kéo dài cảm xúc bộc lộ, cảm giác rung của vẽ từng khung mạnh mẽ, khói và ánh sáng thô ráp chảy trôi, tổng thể toát lên chất biểu hiện chủ nghĩa mãnh liệt của hoạt hình nghệ thuật dành cho người lớn."
+ },
+ "1786674805598_style": {
+  "name": "Manga bút sắt màu nhạt quái dị",
+  "prompt": "Phong cách manga bút sắt màu nhạt quái dị, nét bút sắt nghiêng lệch run rẩy phác họa căn phòng và hành lang từ góc nhìn thứ nhất, tô phẳng màu nhạt chủ đạo là xanh mù tạt và be, phối cảnh biến dạng mắt cá, chi tiết graffiti dày đặc hài hước quái dị, tổng thể toát lên chất tự sự phi lý như manga độc lập được chuyển thành hoạt hình."
+ },
+ "1786674805735_style": {
+  "name": "Comic Pháp cổ điển",
+  "prompt": "Phong cách comic Pháp cổ điển, gương mặt nhân vật tô phẳng màu vàng gừng kết hợp ngũ quan phóng đại, nét thô phác họa biểu cảm thần kinh, phố Paris và xe cổ mang chất màu nước hoài cổ, bố cục chen chúc náo nhiệt, tông màu cổ điển hơi bạc màu, tổng thể toát lên chất hài cay nồng của hoạt hình chuyển thể từ comic châm biếm Pháp."
+ },
+ "1786674805872_style": {
+  "name": "Minh họa trang trí dân tộc",
+  "prompt": "Phong cách minh họa trang trí dân tộc, ý tượng ca múa thảo nguyên và tuấn mã trải ra theo lối đồ án hóa, phối màu đậm đà như thảm dệt với xanh sapphire, đỏ thẫm, vàng sáng đan xen, hoa văn trang phục nhân vật dày đặc tinh tế, bố cục vòng tròn đối xứng đầy cảm giác nghi thức, tổng thể toát lên vẻ đẹp chủ nghĩa trang trí kết hợp vải dệt dân tộc và hội họa dân gian."
+ },
+ "1786674806009_style": {
+  "name": "Manga chấm điểm đen trắng",
+  "prompt": "Phong cách manga chấm điểm đen trắng, khung hình tạo từ chấm dithering pixel 1-bit, nhân vật viền thô đen trắng rõ ràng, chuyển sắc chấm điểm mô phỏng thang xám, như phần mềm máy tính cũ pha trộn comic photocopy, tổng thể toát lên chất đồ họa độc đáo retro kỹ thuật số lo-fi."
+ },
+ "1786674806146_style": {
+  "name": "Minh họa phố thị bột màu đậm",
+  "prompt": "Phong cách minh họa phố thị bột màu đậm, cảnh quán ăn đêm khuya với ánh đèn cam ấm nồng đậm, nét impasto bột màu gọn gàng, màu sắc bão hòa cao, thần thái nhân vật sinh động đầy hơi thở phố thị, chi tiết món ăn và bàn bếp ngon mắt hấp dẫn, tổng thể toát lên chất minh họa bột màu đậm đà tràn đầy hơi ấm đời thường."
+ },
+ "1786674806283_style": {
+  "name": "Stop-motion cắt dán ảnh cổ",
+  "prompt": "Phong cách hoạt hình stop-motion cắt dán ảnh cổ, ảnh chụp thật và chất liệu cắt giấy ghép thành cảnh sân khấu hóa, nhân vật như bóng đen ảnh cũ pha vẽ tay, các yếu tố cổ điển như màn nhung đỏ và TV cũ chồng chất, phối cảnh phẳng cảm giác sân khấu mạnh, tổng thể toát lên chất stop-motion cắt dán như nhà hát album ảnh cũ siêu thực."
+ },
+ "1786674806420_style": {
+  "name": "Stop-motion búp bê thật",
+  "prompt": "Phong cách hoạt hình stop-motion búp bê thật, quay thật từng khung búp bê khớp cầu, trang điểm tinh xảo, từng lọn tóc chân thực, độ sâu trường ảnh nông, ánh sáng như studio thu nhỏ, tỷ lệ đạo cụ đồ chơi hóa, tổng thể toát lên chất stop-motion vừa tinh xảo vừa quỷ dị tinh tế của nhiếp ảnh búp bê."
+ },
+ "1786674806557_style": {
+  "name": "Cổ tích stop-motion búp bê vải",
+  "prompt": "Phong cách cổ tích stop-motion búp bê vải thủ công, búp bê khâu tay với tóc len và thân vải, cảnh ngôi nhà nhỏ dựng bằng bìa cứng và vải, gia công giữ lại đường khâu và mép xơ, màu sắc ấm áp cũ kỹ, tổng thể toát lên chất stop-motion vừa thô ráp vừa dịu dàng như nhà hát búp bê thủ công."
+ },
+ "1786674806694_style": {
+  "name": "3D mờ tối giản",
+  "prompt": "Phong cách kết xuất 3D mờ tối giản, người tí hon đen trắng trong không gian trắng thuần không trọng lực, tạo hình tối giản cao độ như quân cờ bo tròn, vật liệu mờ phản xạ dịu, ánh sáng sạch sẽ tầng lớp tinh tế, bố cục nhiều khoảng trống, tổng thể toát lên mỹ học 3D tối giản lạnh lùng thanh lịch như nghệ thuật sắp đặt."
+ },
+ "1786674806831_style": {
+  "name": "Kết xuất hoạt hình macaron xanh lam",
+  "prompt": "Phong cách kết xuất hoạt hình macaron xanh lam, nhân vật 3D tô phẳng như minh họa 2D, phối màu macaron xanh lam hồng trắng tươi mát thống nhất, lớp học và đường phố tạo hình bo tròn tối giản, ánh sáng mềm không bóng cứng, tổng thể toát lên chất hoạt hình 3D giả 2D bão hòa thấp tươi mới chữa lành."
+ },
+ "1786674806968_style": {
+  "name": "Stop-motion len chọc",
+  "prompt": "Phong cách hoạt hình stop-motion len chọc, búp bê và động vật làm từ len chọc kim với chất sợi bồng bềnh nhìn thấy, cảnh thu nhỏ dựng bằng gỗ mỏng và đồ vật thật, ánh sáng như quay studio phim tài liệu, tạo hình nhân vật nhân hóa hài hước, tổng thể toát lên chất stop-motion len chọc thủ công ấm áp."
+ }
+}

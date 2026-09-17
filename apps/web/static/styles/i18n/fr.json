@@ -1,0 +1,610 @@
+{
+ "1780651424491_style": {
+  "name": "Atompunk SF rétro",
+  "prompt": "Esthétique Atompunk de science-fiction rétro des années 60, style visuel rétrofuturiste, style réaliste en prises de vue réelles, œuvre photographique, l'image possède une texture de science-fiction rétro des années 60, la palette est dominée par un orange chaud rétro, un bleu sel de mer et des couleurs de pellicule à fort contraste et faible saturation, avec un grain de film marqué, une légère lumière douce de pellicule rétro et des halos de lumière du jour naturelle. Côté éclairage, on utilise la lumière du jour naturelle, un soleil direct intense et des ombres portées nettes, avec un fort contraste clair-obscur, des hautes lumières non brûlées, des ombres qui conservent tous leurs détails et des transitions tonales naturelles ; l'ensemble dégage une sensation cinématographique Atompunk naturelle et volumique, nostalgique et raffinée."
+ },
+ "1780580870934_style": {
+  "name": "Intrigues de palais froides",
+  "prompt": "Style visuel de drame d'intrigues de palais, style photographique froid et sévère de drame en costumes de luttes de cour, style réaliste en prises de vue réelles, œuvre photographique, image solennelle et retenue avec un fort sens de l'ordre spatial, la palette est dominée par un doré brun désaturé, un rouge sombre, un gris froid et des bois foncés, côté éclairage on utilise un éclairage low-key, une ambiance de bougies, une lumière latérale et des ombres profondes, composition droite et rigoureuse ; l'ensemble dégage l'oppression du pouvoir de cour et la texture d'un drame d'intrigues en costumes."
+ },
+ "1780575862644_style": {
+  "name": "Suspense chinois tons froids",
+  "prompt": "Style visuel de drame de suspense réaliste chinois, style photographique réaliste en tons froids, style réaliste en prises de vue réelles, œuvre photographique, atmosphère générale tendue et oppressante, la palette est dominée par une faible saturation, un gris froid et un vert sombre, côté éclairage on utilise un éclairage low-key, la lumière ambiante et des ombres profondes, composition retenue ; l'image possède la texture d'un drame de suspense urbain réaliste."
+ },
+ "1780575862643_style": {
+  "name": "Romance en costumes lumière douce",
+  "prompt": "Style visuel de drame idol en costumes haut de gamme, style photographique en lumière douce de romance en costumes, style réaliste en prises de vue réelles, œuvre photographique, image douce et esthétisante, la palette est dominée par un blanc chaud, un doré pâle, un cyan clair et un rose désaturé, côté éclairage on utilise une lumière douce, un contre-jour, un léger halo et une faible profondeur de champ, composition droite et raffinée ; l'ensemble dégage la sensation onirique et raffinée d'une romance en costumes."
+ },
+ "1780575862642_style": {
+  "name": "Film de jeunesse japonais",
+  "prompt": "Film de référence : « Love Letter », style visuel de cinéma de jeunesse japonais à la Shunji Iwai, style photographique argentique japonais des années 90, style réaliste en prises de vue réelles, œuvre photographique, image limpide, douce et empreinte de souvenir, avec un grain de film marqué, un léger bruit, une texture en flou artistique et une tonalité à faible contraste, la palette est dominée par une faible saturation, un blanc froid, un bleu pâle, un vert clair et un gris doux, côté éclairage on utilise la lumière naturelle, le contre-jour, la lumière de fenêtre, une légère surexposition, des hautes lumières douces et des flares aériens, composition légère avec des vides, avec la sensation d'instant de vie d'une caméra à l'épaule ; l'atmosphère générale est pure, mélancolique, brumeuse et poétique."
+ },
+ "1780575862641_style": {
+  "name": "Quotidien japonais naturel",
+  "prompt": "Style visuel de drame japonais du quotidien, style photographique naturaliste, style réaliste en prises de vue réelles, œuvre photographique, texture de vie réelle, image calme et retenue, composition avec des vides, la palette est dominée par une faible saturation, un gris cyan pâle et un vert froid, côté éclairage on utilise la lumière naturelle, la lumière de fenêtre, la lumière ambiante et des ombres douces, en soulignant l'espace réel et l'air du quotidien."
+ },
+ "1780575862640_style": {
+  "name": "Drama coréen urbain lumière douce",
+  "prompt": "Style visuel de drame romantique urbain coréen, style photographique en lumière douce de K-drama, style réaliste en prises de vue réelles, œuvre photographique, image propre et raffinée, la palette est dominée par une faible saturation et un équilibre doux entre chaud et froid, côté éclairage on utilise une lumière douce, la lumière ambiante et une faible profondeur de champ ; l'atmosphère générale est délicate, romantique et retenue."
+ },
+ "1780575862639_style": {
+  "name": "Urbain chinois réaliste",
+  "prompt": "Style visuel de série télévisée urbaine chinoise moderne, style photographique de drame urbain du quotidien, style réaliste en prises de vue réelles, œuvre photographique, image naturelle et retenue, texture de vie réelle, la palette est dominée par des tons chauds neutres et une faible saturation, côté éclairage on utilise la lumière naturelle et une lumière d'intérieur douce, composition ordonnée ; la texture générale se rapproche d'un drame urbain chinois à sujet réaliste."
+ },
+ "1780580870935_style": {
+  "name": "Wuxia réaliste",
+  "prompt": "Style visuel de drame wuxia d'arts martiaux, style photographique réaliste d'action en costumes, style réaliste en prises de vue réelles, œuvre photographique, l'image possède un air de jianghu et une sensation d'action, la palette est dominée par un gris cyan désaturé, un vert encre, un jaune terre et un contraste chaud-froid, côté éclairage on utilise la lumière naturelle, la lumière latérale, le contre-jour et les ombres ambiantes, composition ample et profonde ; texture rugueuse et réaliste de drame wuxia."
+ },
+ "1779094923802_style": {
+  "name": "Cinéma réaliste années 90",
+  "prompt": "Style de cinéma réaliste des années 90, style de photographie cinématographique réaliste 1990s, 1990s, style réaliste en prises de vue réelles, œuvre photographique, l'image porte un air de vie nostalgique, la palette est dominée par un jaune chaud, un beige et un gris de vieux mur, côté éclairage on utilise la lumière naturelle et un contre-jour latéral de crépuscule, grain de film marqué, contraste doux, composition spontanée proche du quotidien ; l'ensemble dégage la texture chaleureuse et nostalgique de la photographie argentique des années quatre-vingt-dix."
+ },
+ "1779094923757_style": {
+  "name": "Cinéma narratif rétro",
+  "prompt": "Film de référence : « Titane », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une sensation de chaos et une froideur élégante, la palette est dominée par des fonds lumineux pâles et froids et par le choc bicolore entre un halo jaune chaud et une lumière bleue froide, côté éclairage on utilise un éclairage local low-key, les zones claires sont allumées par une lumière chaude tandis que de larges surfaces plongent dans une ombre bleu froid, grain de film fin, image distante et retenue ; avec la texture visuelle expérimentale du cinéma d'auteur européen."
+ },
+ "1779094923765_style": {
+  "name": "Hollywood rétro américain",
+  "prompt": "Film de référence : « Demons », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle le rétro et une atmosphère gothique sombre, la palette est dominée par un low-key, un noir froid désaturé, un gris bleuté et un blanc grisâtre de nuit enneigée, côté éclairage on utilise une lumière douce et de larges zones d'ombre profonde, contraste clair-obscur posé, composition droite avec un ordre solennel classique ; l'ensemble dégage la texture rétro et glaciale du cinéma d'horreur européen des années 80."
+ },
+ "1779094923777_style": {
+  "name": "Cinéma cyber néon",
+  "prompt": "Film de référence : « Mind », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une atmosphère de boîte de nuit rugueuse, rétro et enivrante, la palette est dominée par des ombres low-key, un orange-rouge chaud et un vert néon, avec des reflets de paillettes dorées, côté éclairage on utilise le contre-jour, la lumière de contour et des sources ponctuelles néon, de nombreuses silhouettes assombries au premier plan, grain de film grossier ; l'ensemble dégage la texture ambiguë et mystérieuse des clubs rétro des années 70-80."
+ },
+ "1779094923813_style": {
+  "name": "Cinéma rural chinois années 90",
+  "prompt": "Style cinématographique rural chinois des années 90, style réaliste en prises de vue réelles, œuvre photographique, style de cinéma argentique de la campagne chinoise des années quatre-vingt-dix, la palette est dominée par un jaune doré, un jaune terre et un ciel chaud blanchi, côté éclairage on utilise une lumière naturelle diffuse et sobre, grain de film et légère brume marqués, composition d'horizon ample et plate, image sobre et dense ; avec la texture d'époque du cinéma rural de la cinquième génération de réalisateurs."
+ },
+ "1779094923774_style": {
+  "name": "Chaud chinois halo bleu",
+  "prompt": "Film de référence : « One Hour Photo », style réaliste en prises de vue réelles, œuvre photographique, la palette est dominée par le choc violent entre un orange chaud couleur de feu et un halo bleu froid, créant un contraste clair-obscur dramatique, côté éclairage on utilise une lumière ambiante froide plus une source ponctuelle chaude qui éclaire le sujet, arrière-plan flou avec bokeh, image aux zones chaudes et froides nettement séparées ; l'ensemble dégage une texture cinématographique moderne à la tension surréaliste."
+ },
+ "1779094923776_style": {
+  "name": "Industriel d'époque",
+  "prompt": "Film de référence : « Nineteen Eighty-Four (1984) », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle le rétro, l'industriel et l'oppression, la palette est dominée par un brun olive low-key, un jaune enfumé et un faible halo amber, côté éclairage on utilise un éclairage low-key et une lumière zénithale terne, ombres profondes et lourdes, grain de film marqué ; l'image est saturée de texture métallique mécanique et de la lourdeur sinistre d'une ère totalitaire."
+ },
+ "1779094923794_style": {
+  "name": "Argentique japonais noir et blanc",
+  "prompt": "Style de photographie argentique japonaise en noir et blanc, noir et blanc, style réaliste en prises de vue réelles, œuvre photographique, style de photographie argentique japonaise en noir et blanc, échelle de gris délicate et douce, contraste noir et blanc serein et retenu, côté éclairage on utilise une lumière naturelle diffuse et douce comme par temps couvert, grain de film fin et dense, composition soignée dans ses vides, silencieuse et droite ; l'ensemble dégage la texture wabi-sabi paisible de l'esthétique japonaise du mono no aware."
+ },
+ "1779094923778_style": {
+  "name": "Cinéma coréen froid et sobre",
+  "prompt": "Film de référence : « Memories of Murder », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une sensation réaliste tendue et rugueuse, la palette est dominée par la désaturation, un vert grisâtre désaturé, des tons doux de gris chaud et un low-key, côté éclairage on utilise la lumière ambiante et des ombres douces, contraste plat, grain de film naturel, composition froide et observatrice ; l'ensemble dégage la texture retenue et sobre du cinéma réaliste coréen."
+ },
+ "1779094923775_style": {
+  "name": "Cinéma des grands espaces",
+  "prompt": "Film de référence : « Once Upon a Time in the West », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une sensation d'épopée western tendue et désolée, la palette est dominée par des tons bruns désaturés, un jaune terre et des tons chauds monochromes délavés, ciel blanchi et grisâtre, côté éclairage on utilise la lumière naturelle intense de midi et la sensation atmosphérique brumeuse de la poussière soulevée, composition ample avec un horizon bas et plat ; avec la texture argentique du western italien des années 60."
+ },
+ "1779094923779_style": {
+  "name": "Cinéma tons orangés",
+  "prompt": "Film de référence : « Kubi », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle tension et chaos, la palette est dominée par des tons chauds orange-jaune de coucher de soleil, le ciel et les hautes lumières présentent un dégradé doré-orange incandescent, côté éclairage on utilise un contre-jour intense, le sujet plonge dans une ombre en demi-silhouette, les bords portent une lumière de contour chaude, contraste clair-obscur dense ; l'ensemble dégage la texture cinématographique tragique et solennelle d'un crépuscule immense."
+ },
+ "1779094923782_style": {
+  "name": "Film de guerre rétro",
+  "prompt": "Film de référence : « 300 », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une sensation épique rugueuse, la palette est dominée par un monochrome gris cyan à fort contraste, low-key et désaturé, côté éclairage on utilise une lumière principale, un contre-jour intense, des ombres dramatiques et un éclairage à la Rembrandt, des faisceaux traversants forment une lumière volumétrique, de larges zones d'ombre écrasées dans le noir, grain grossier ; l'ensemble dégage la texture sculpturale d'une épopée guerrière brutale."
+ },
+ "1779094923781_style": {
+  "name": "Film d'horreur",
+  "prompt": "Film de référence : « The Autopsy of Jane Doe », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle une atmosphère de thriller tendue et oppressante, la palette est dominée par un monochrome brun rouille et des tons chair jaunâtres, côté éclairage on utilise un éclairage low-key, des sources ponctuelles chaudes et des ombres dramatiques, des ombres denses cernent l'image de toutes parts, faible profondeur de champ et arrière-plan brumeux ; l'ensemble dégage la texture froide et rugueuse de l'horreur claustrophobe."
+ },
+ "1779094923795_style": {
+  "name": "Photographie argentique rétro",
+  "prompt": "Style de photographie argentique rétro, rétro, style réaliste en prises de vue réelles, œuvre photographique, style de photographie argentique vintage, la palette est dominée par un brun chaud riche et saturé, un vert profond et un blanc ivoire, avec un rendu des couleurs dense comme une diapositive, côté éclairage on utilise une lumière naturelle directe et intense d'après-midi, ombres profondes d'un noir dense, contraste clair-obscur net, grain fin ; l'ensemble dégage la texture rétro classique de la pellicule couleur Kodachrome du milieu du siècle dernier."
+ },
+ "1779094923780_style": {
+  "name": "Cinéma rétro étrange américain",
+  "prompt": "Film de référence : « Human Highway », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle l'étrange, le rétro, le surréalisme et une sensation de fin du monde, la palette est dominée par des tons néon magenta et écarlate très saturés qui teintent toute l'image, côté éclairage on utilise un éclairage coloré intense, les ombres plongent dans un violet noirâtre, composition aux angles non conventionnels qui renforcent le vertige ; l'ensemble dégage la texture argentique psychédélique d'un film culte de série B."
+ },
+ "1779094923773_style": {
+  "name": "Cinéma absurde high-key blanc",
+  "prompt": "Film de référence : « Slack Bay (Ma Loute) », style réaliste en prises de vue réelles, œuvre photographique, le style général mêle le grotesque, le surréalisme et l'humour noir, la palette est dominée par un high-key lumineux et des couleurs fraîches très saturées, côté éclairage on utilise natural light, un soleil naturel radieux, des ombres légères et transparentes, image propre et éclatante, composition ordonnée avec une dimension théâtrale ; l'ensemble dégage la texture rétro enjouée d'une comédie champêtre française."
+ },
+ "1779094923823_style": {
+  "name": "Rendu d'animation haut de gamme",
+  "prompt": "Style de rendu 3D (style concept art CG de niveau cinématographique), style de rendu 3DCG, texture de design conceptuel d'environnement de niveau cinématographique, modelé naturel et réaliste aux détails riches en couches, matériaux avec une rugosité réelle et des reflets humides, éclairage dominé par la lumière volumétrique, les rayons de Tyndall et l'illumination globale, brume enveloppante et forte sensation atmosphérique, palette de couleurs naturelles tirant vers un doré chaud et un vert bleuté, ensemble grandiose et esthétisant, avec l'atmosphère d'un trailer CG de jeu vidéo haut de gamme, 3D"
+ },
+ "1779094923846_style": {
+  "name": "Rendu 3D stylisé",
+  "prompt": "Personnage 3D (rendu stylisé), 3D stylisé, école du rendu temps réel des moteurs de jeu occidentaux, modelé à mi-chemin entre réalisme et cartoon, proportions modérément exagérées, structure synthétique et nette, matériaux PBR à la touche peinte à la main, tissus mats, métaux aux reflets tranchants, peau aux transitions douces, lumière principale de studio plus lumière de contour froide, fond sombre et épuré, couleurs saturées et posées, l'ensemble possède la texture d'une présentation de personnage de jeu stylisé, 3D"
+ },
+ "1779094923768_style": {
+  "name": "Cinéma tons bleu et orange",
+  "prompt": "Film de référence : « Wanted », style cinématographique en tons bleu et orange, style réaliste en prises de vue réelles, œuvre photographique, texture de scène nocturne de thriller d'action hollywoodien, la palette est dominée par un bleu cyan froid et sévère, ponctué de sources de lumière orange chaud, formant le choc classique de complémentaires teal and orange, côté éclairage on utilise un éclairage low-key, une source froide unique et de larges zones d'ombre profonde, ombres riches en nuances, image sombre et oppressante d'où sourd une tension dramatique, avec un léger grain de film et une atmosphère d'étalonnage de niveau cinématographique."
+ },
+ "1779094923772_style": {
+  "name": "Cinéma industriel",
+  "prompt": "Film de référence : « The Substance », style de cinéma industriel, style réaliste en prises de vue réelles, œuvre photographique, texture visuelle surréaliste, froide et contemporaine, la palette est dominée par un schéma Monochromatic très saturé, high-key et à tonalité blanche, complété par un ciel bleu froid et limpide, côté éclairage on utilise une Key Light de soleil direct et dur, avec des frontières clair-obscur tranchantes et des ombres propres et nettes, image lumineuse et transparente presque surexposée, très fort sens de l'ordre dans les lignes et la perspective ; l'ensemble est propre, retenu et porte une atmosphère industrielle futuriste et distante."
+ },
+ "1779094923760_style": {
+  "name": "Amérique en plein essor",
+  "prompt": "Film de référence : « Pain & Gain », style d'Amérique en essor économique, style réaliste en prises de vue réelles, œuvre photographique, texture visuelle de la culture pop américaine des années 90, la palette est dominée par une forte saturation, avec des couleurs primaires pop comme un rouge franc, un bleu lac et un jaune vif qui se heurtent avec audace, côté éclairage on utilise une lumière du jour vive et simple et un éclairage high-key, ombres légères, image aux couleurs intenses et éclatantes au contraste marqué ; l'ensemble respire l'atmosphère optimiste et ostentatoire de l'ère de consommation rétro américaine."
+ },
+ "1779094923767_style": {
+  "name": "Cinéma hongkongais années 90",
+  "prompt": "Film de référence : « Les Fleurs de Shanghai » (Flowers of Shanghai), style de cinéma hongkongais des années 90, style réaliste en prises de vue réelles, œuvre photographique, la palette est dominée par des tons chauds et un halo jaune, un halo ambré comme d'une lampe au tungstène enveloppe l'image, côté éclairage on utilise la lumière ambiante d'intérieur et une lumière frontale douce, carnations chaudes et veloutées, ombres tirant vers le chaud, avec un grain de film marqué et un léger halo de flou artistique, image nostalgique et intime ; l'ensemble dégage la chaleur populaire et l'éclat d'antan du cinéma hongkongais des années 90."
+ },
+ "1779094923770_style": {
+  "name": "Cinéma high-tech",
+  "prompt": "Film de référence : « True Lies », style de cinéma technologique, style réaliste en prises de vue réelles, œuvre photographique, portrait de personnage, texture de studio de thriller d'espionnage hollywoodien des années 90, style général tendu et retenu, la palette est dominée par un low-key et des tons froids, un bleu marine profond, un gris acier et un argent froid occupent l'image, côté éclairage on utilise une lumière principale qui sculpte avec précision, visage lumineux et environnement plongé dans l'ombre, contraste clair-obscur marqué, image lisse et nette, avec une atmosphère froide et distante d'élite urbaine."
+ },
+ "1779094923761_style": {
+  "name": "Cinéma de suspense",
+  "prompt": "Film de référence : « The Nun », style de cinéma de suspense, style réaliste en prises de vue réelles, œuvre photographique, texture visuelle de film d'horreur et de suspense gothique, la palette est dominée par la désaturation, un gris froid, un gris cyan et un jaune fané forment une base chromatique morne et sombre, côté éclairage on utilise une lumière naturelle diffuse de temps couvert, lumière plate sans hautes lumières marquées, ciel lourd et oppressant, image désolée et vide, avec un léger grain et une sensation de brume ; l'ensemble baigne dans une atmosphère gothique de suspense inquiétante, solitaire et oppressante."
+ },
+ "1779094923764_style": {
+  "name": "Cinéma de mythologie grecque",
+  "prompt": "Film de référence : « Flash Gordon », style de cinéma de mythologie grecque, style réaliste en prises de vue réelles, œuvre photographique, image onirique et surréaliste de space opera rétro, la palette est dominée par un doux halo bleu, un bleu blanchi et un lilas qui se fondent comme dans un sanctuaire de nuages, côté éclairage on utilise une lumière douce en grande surface et un halo diffus, presque sans ombres dures, image lumineuse et transparente, avec un flou artistique prononcé et un effet de halo diffusant ; l'ensemble est sacré et éthéré, avec une atmosphère surnaturelle d'épopée mythologique."
+ },
+ "1779094923771_style": {
+  "name": "Cinéma rétro américain",
+  "prompt": "Film de référence : « Tron », style de cinéma rétro américain, style réaliste en prises de vue réelles, œuvre photographique, style général rétro, la palette est dominée par un low-key, une forte saturation et des tons néon, une base froide bleu cyan et des lumières néon orange-rouge forment un violent choc chaud-froid, côté éclairage on utilise la lumière de contour et des sources ambiantes colorées, la lumière chaude s'infiltre par les interstices pour souligner les contours, ombres profondes, image enivrante comme une nuit de néons ; l'ensemble dégage l'atmosphère rétrofuturiste dense des années 80."
+ },
+ "1779094923766_style": {
+  "name": "Cinéma hollywoodien noir et blanc",
+  "prompt": "Film de référence : « The Man Who Wasn't There », style de cinéma hollywoodien en noir et blanc, style réaliste en prises de vue réelles, œuvre photographique, texture photographique classique de film noir, la palette est dominée par un fort contraste, un monochrome et un low-key, échelle de gris pure et délicate en noir et blanc, côté éclairage on utilise un éclairage à la Rembrandt et des ombres profondes, hautes lumières propres et ombres d'un noir dense, contraste clair-obscur intense et sculptural, image au fin grain de film argentique ; l'ensemble est élégant et froid, avec l'atmosphère solennelle et dramatique du cinéma hollywoodien classique en noir et blanc."
+ },
+ "1779094923850_style": {
+  "name": "Miniature cartoon 3D",
+  "prompt": "Scène unique en style de rendu 3D (paysage miniature cartoon), texture de scène miniature isométrique, modelé low poly arrondi et simplifié, proportions menues et adorables, matériaux mats et doux comme une figurine, nombreux éléments auto-lumineux en accents, éclairage dominé par une lumière d'ambiance colorée et un brouillard volumétrique, contraste clair-obscur doux, palette de nuit bleu-violet avec des points de lumière orange chaud, ensemble onirique et raffiné, avec l'atmosphère d'un monde miniature comme une boîte de jouets cartoon, 3D"
+ },
+ "1779094923826_style": {
+  "name": "Dessin cartoon occidental 3D",
+  "prompt": "Style d'illustration fantasy américaine, dessin en style cartoon occidental 3D, alliance de peinture à la main en empâtement et de volume 3D, proportions exagérées et forte tension dynamique, touches synthétiques et bords durs, matériaux à la texture picturale plutôt que photoréaliste, effets lumineux magiques et exagérés avec des flux d'énergie qui enveloppent l'image, palette dominée par le contraste d'un bleu-violet très saturé et d'un gris froid, clair-obscur dramatique, l'ensemble possède une atmosphère d'épopée dark fantasy digne d'une illustration de carte à collectionner, 3D"
+ },
+ "1779094923843_style": {
+  "name": "Rendu 3D stylisé occidental",
+  "prompt": "Personnage 3D (rendu 3D stylisé occidental), style de rendu 3D stylisé occidental, modelé à mi-chemin entre réalisme et cartoon, proportions élancées, traits du visage bien dessinés, peau à la texture douce du subsurface scattering, tissus et matériaux d'environnement riches en détails, éclairage dominé par des sources ponctuelles chaudes de bougie avec des ombres low-key, ombres profondes et lourdes, atmosphère oppressante, palette contrastant un brun grisâtre désaturé et un jaune chaud, l'ensemble possède la texture d'un film d'animation d'horreur gothique, 3D"
+ },
+ "1779094923806_style": {
+  "name": "Sculpture numérique 3D",
+  "prompt": "Personnage rendu en 3D (au style réaliste cinématographique), style de rendu 3D haute précision, école de la sculpture numérique ZBrush, structure anatomique réaliste et sculpture fine des textures, plis de peau, écailles, épines et cavité buccale humide présentent un subsurface scattering et une brillance élevée, fibres de poils distinctes une à une, fond de studio noir pur avec une lumière de contour latérale en contre-jour, fort contraste clair-obscur, palette posée et réaliste, l'ensemble possède la texture d'une présentation de sculpture CG de créature de niveau cinématographique, 3D"
+ },
+ "1779094923784_style": {
+  "name": "Concept art anime",
+  "prompt": "Personnage anime 2D (style concept art), style concept art anime, style de fiches de design de personnages nippo-coréen, lineart propre et délicat soutenu par des dégradés en semi-empâtement, motifs des vêtements et ornements métalliques finement rendus, palette mariant des sombres profonds à des couleurs nobles comme un doré chaud et un cramoisi, transitions clair-obscur douces, reflets retenus, arrière-plan souvent laissé vide ou flouté pour mettre le sujet en valeur, l'ensemble est somptueux et élégant, avec une atmosphère posée et haut de gamme, 2D"
+ },
+ "1779094923812_style": {
+  "name": "Rendu 3D HD de style chinois",
+  "prompt": "Style de rendu 3D haute définition de style chinois, école de l'animation CG xianxia chinoise, personnages beaux et raffinés aux traits volumiques et doux, peau à la délicate texture de subsurface scattering, cheveux distincts mèche par mèche, ornements métalliques, pompons et perles aux matériaux haute précision, éclairage low-key et sombre avec une lumière principale violet-bleu froide et une lumière d'appoint rose chaud, ombres profondes, atmosphère mystérieuse et somptueuse, palette désaturée entremêlant violet, bleu et doré, l'ensemble possède la texture d'une série CG de style chinois de niveau cinématographique, 3D"
+ },
+ "1779094923758_style": {
+  "name": "Cinéma tons violets",
+  "prompt": "Film de référence : « The Thin Red Line », style de cinéma en tons violets, style réaliste en prises de vue réelles, œuvre photographique, texture de pellicule cinématographique poétique et lyrique, la palette est dominée par des tons violets, entremêlant un pourpre crépusculaire, un mauve et un brun sombre, côté éclairage on utilise la lumière naturelle de fenêtre et une lumière latérale douce, ombres denses et chaudes, hautes lumières douces qui n'éblouissent pas, avec un grain de film marqué et une légère diffusion des couleurs, image sereine et alanguie ; l'ensemble baigne dans une atmosphère mélancolique et nostalgique comme un crépuscule de voyage."
+ },
+ "1779094923847_style": {
+  "name": "Art de jeu cartoon américain 3D",
+  "prompt": "Style de rendu 3D cartoon, style de rendu 3D, anthropomorphisme 3D, école de l'art de jeu vidéo cartoon américain, modelé rond et exagéré, proportions chibi adorables, silhouettes pleines, matériaux à la texture d'argile mate et de gomme souple, surfaces lisses et fines aux reflets doux, lumière de studio douce et fond uni en dégradé propre, couleurs très saturées aux chocs audacieux, vives et enjouées, l'ensemble possède l'atmosphère espiègle et ludique d'une présentation de design de personnage de jeu stylisé, 3D"
+ },
+ "1779094923841_style": {
+  "name": "Peinture blind box 3D",
+  "prompt": "Style de peinture de blind box 3D, style d'animation 3D Pixar, texture d'art toy, proportions chibi à grosse tête, modelé arrondi et simplifié, surface à la peinture lisse et brillante comme du vinyle et du latex, matériaux propres et sans défaut, éclairage doux et lumineux, illumination globale transparente sans ombres dures, couleurs dominées par une palette bonbon très saturée, vives et charmantes, profondeur de champ douce et floutée, l'ensemble possède l'atmosphère adorable et réconfortante d'une exposition de jouets blind box, 3D"
+ },
+ "1779094923845_style": {
+  "name": "Anime 3D façon 2D",
+  "prompt": "Style cartoon anime 3D façon 2D, dessin en style cartoon 3D volumique, école du cel shading, le modelé des personnages conserve les belles proportions de l'anime, cheveux et tissus avec des aplats de reflets façon anime, clair-obscur à transitions de bords durs, complété par un halo doux et des effets de particules lumineuses flottantes, palette à fond sombre qui rehausse des couleurs de cheveux très saturées et des accents doré et violet, atmosphère esthétisante et onirique, l'ensemble possède la texture d'une image clé de film d'anime, 3D"
+ },
+ "1779094923801_style": {
+  "name": "Rendu 3D hyperréaliste",
+  "prompt": "Style de rendu 3D hyperréaliste, rendu réaliste haute définition, modélisation 3D, école des cinématiques CG de jeu de niveau cinématographique, anatomie des personnages et texture des pores de la peau hautement réalistes, subsurface scattering délicat, vêtements et équipements aux matériaux PBR précis, métal et tissu nettement distincts, éclairage dominé par une lumière ambiante nocturne bleu cyan froide avec un halo néon, profondeur de champ cinématographique, palette froide désaturée, l'ensemble possède l'atmosphère d'un blockbuster de science-fiction réaliste, 3D"
+ },
+ "1779094923842_style": {
+  "name": "Rendu réaliste UE5",
+  "prompt": "Rendu CG réaliste, rendu 3D haute définition, école du rendu temps réel réaliste de niveau UE5, modelé fidèle à une anatomie réaliste rigoureuse avec une structure claire des muscles et tendons, texture rugueuse de la peau et reflets osseux en PBR précis, détails sculptés denses, fond de studio noir pur avec une lumière latérale dure et une lumière de contour, fort contraste clair-obscur et ombres profondes, palette gris froid désaturée, l'ensemble possède la texture de niveau cinématographique du design conceptuel de créatures sombres, 3D"
+ },
+ "1779094923848_style": {
+  "name": "Rendu 3D HD style chinois",
+  "prompt": "Style de rendu 3D d'animation chinoise, rendu 3D haute définition, école de l'animation CG xianxia et wuxia chinoise, personnages réalistes tirant vers la beauté, cheveux flottants distincts mèche par mèche, armures d'époque et tissus aux matériaux fins, peau délicate et translucide, éclairage dominé par un contre-jour de soleil couchant et une lumière de ciel chaude, lumière de contour marquée, palette de tons chauds doré-orange avec des lointains gris cyan, composition très cinématographique, l'ensemble possède l'atmosphère épique et esthétisante d'une série CG de style chinois, 3D"
+ },
+ "1779094923849_style": {
+  "name": "Rendu cartoon 3D",
+  "prompt": "Style d'animation 3D de Pixar, école du rendu des films d'animation américains, modelé rond et exagéré, proportions cartoonesques, expressions vivantes, matériaux de fourrure moelleux et distincts poil par poil, végétation et environnements à la texture stylisée et épurée, éclairage lumineux et doux, illumination globale transparente, forte sensation d'ensoleillement et ombres propres, couleurs vives très saturées et verdure luxuriante, l'ensemble possède l'atmosphère joyeuse et réconfortante d'un long métrage d'animation familial, 3D"
+ },
+ "1779094923821_style": {
+  "name": "Rendu 3D cartoon américain",
+  "prompt": "Style fantasy rendu en 3D, rendu 3D cartoon américain, école du design conceptuel d'objets magiques, modelé exagéré aux détails complexes, cuir à la texture usée et vieillie, métal aux rayures et reflets, tous les matériaux en PBR réaliste haute précision, fond sombre de studio avec une lumière principale de type projecteur, fort volume clair-obscur, palette dominée par des bruns chauds ponctués de blanc os et de rouge sombre, l'ensemble possède la texture raffinée et collector de l'art de jeu de plateau fantasy, 3D"
+ },
+ "1779094923822_style": {
+  "name": "Empâtement 3D",
+  "prompt": "Style de rendu 3D, style d'empâtement CG d'illustration originale, fusion de la texture du concept art de jeu et du rendu tridimensionnel, mise en couleur à la touche d'empâtement, modelé tirant vers le réalisme avec une tension dynamique exagérée, matériaux riches en détails et fort volume, rendu en contre-jour intense et lumière volumétrique, poussière, brume et taches de lumière qui exaltent l'atmosphère épique, palette dominée par le contraste entre un doré chaud, un brun terre et une lumière de ciel blanc froid, composition très dynamique et percutante, l'ensemble possède la texture d'illustration CG d'un blockbuster fantasy, 3D"
+ },
+ "1779094923827_style": {
+  "name": "Rendu PBR réaliste 3D",
+  "prompt": "Style de rendu 3D (rendu PBR réaliste), texture CG de niveau cinématographique, rendu de matériaux PBR basé sur la physique, métal brossé, usure oxydée et détails de texture en relief très fins, reflets et réflexions fidèles aux lois physiques réelles, contre-jour chaud et lueur de feu ambiante, arrière-plan brumeux avec des étincelles qui volent, fort contraste clair-obscur, palette dominée par un brun sombre, un bronze antique et un orange incandescent, atmosphère dense et épique, l'ensemble possède la texture réaliste d'un trailer CG nouvelle génération, 3D"
+ },
+ "1779094923844_style": {
+  "name": "Rendu de jeu 3D",
+  "prompt": "Style de rendu de jeu 3D, rendu 3D haute définition, texture de cinématique temps réel de moteur de jeu nouvelle génération, modélisation réaliste des personnages, subsurface scattering délicat de la peau, cheveux rendus mèche par mèche, textures de vêtements fines, éclairage sombre low-key avec une lumière de contour douce, arrière-plan profond et flouté, couches clair-obscur cinématographiques, palette dominée par un noir profond, un brun chaud et un gris froid, atmosphère calme et retenue, l'ensemble possède la texture de rendu temps réel de niveau cinématographique d'un jeu AAA, 3D"
+ },
+ "1779094923825_style": {
+  "name": "Personnage 3D (cartoon épuré)",
+  "prompt": "Personnage 3D (style de rendu 3D cartoon américain), rendu stylisé de moteur de jeu, modelé rond et simplifié, proportions du visage modérément exagérées, expressions vivantes, coiffure traitée en mèches et masses, matériaux lisses aux reflets doux, PBR simplifié propre et lumineux, lumière de studio douce avec lumière de contour, fond uni qui met le sujet en valeur, couleurs saturées et lumineuses au contraste marqué, l'ensemble possède la texture raffinée et l'atmosphère pleine de vie d'un personnage de jeu stylisé occidental, 3D"
+ },
+ "1779094923803_style": {
+  "name": "Animation cartoon 3D",
+  "prompt": "Style de rendu 3D cartoon, cartoon 3D, texture d'animation familiale façon Pixar, personnages au modelé rond et simplifié, rapport tête-corps cartoonesque, surfaces lisses et fines aux reflets doux, accessoires hard surface propres et nets, illumination globale uniforme et douce, fond en dégradé clair, frais et transparent, couleurs vives, bleu et blanc frais avec des accents de couleur pleins de vie, image propre et lumineuse, l'ensemble possède l'atmosphère chaleureuse et réconfortante d'un film d'animation en trois dimensions, 3D"
+ },
+ "1779094923816_style": {
+  "name": "Concept art de jeu américain",
+  "prompt": "Personnage anime 2D (style concept art de jeu américain), style fan art Overwatch, style concept art de jeu américain, style de design de personnages en rendu cartoon occidental, volumes exagérés et anguleux, texture hard surface de mécha rendue avec solidité, clair-obscur en aplats façon cel avec des reflets lisses, couleurs vives très saturées, souvent ponctuées d'accents lumineux high-tech, fond en aplat simple qui met le sujet en valeur, l'ensemble est héroïque, avec la texture propre et nette de l'art promotionnel de jeu vidéo, 2D"
+ },
+ "1779094923790_style": {
+  "name": "Fantasy rétro Y2K",
+  "prompt": "Portrait de monde extrasensoriel, style surréaliste rétro Y2K, texture de collage surréaliste rétro du millénaire, rendu en flou artistique façon affiche à l'aérographe, éléments décoratifs de reflets réfractés métalliques superposés à un paysage nocturne onirique, étoiles scintillantes et particules galactiques diffuses, palette dominée par un bleu profond, un violet et un blanc argenté, ponctuée de vert fluo, effets lumineux brumeux et rayonnants, atmosphère éthérée et mystérieuse, l'ensemble possède la texture surréaliste et nostalgique d'une affiche fantasy dreamcore de la fin des années 90, 3D"
+ },
+ "1779094923834_style": {
+  "name": "Illustration japonaise en aplats",
+  "prompt": "Cel japonais, style d'illustration japonaise en aplats, style anime aux allures d'image extraite d'une animation, lineart fin et propre, larges aplats de couleur, couches clair-obscur minimalistes presque sans ombres complexes, palette fraîche et douce tirant vers une faible saturation, sujet net et précis tandis que l'arrière-plan porte un flou de profondeur de champ photographique, créant un contraste entre premier plan net et fond flou, l'ensemble est calme et limpide avec un fort sentiment de quotidien, avec l'atmosphère délicate de l'anime de jeunesse japonais, 2D"
+ },
+ "1779094923838_style": {
+  "name": "Illustration vaporwave",
+  "prompt": "Style vaporwave d'illustration anime rétro des années 80, style d'illustration vaporwave, style de décors d'animation cel rétro de l'ère Showa, lineart net au léger tremblement manuel, aplats de couleur avec une légère texture vieillie en surimpression, palette assemblée de blocs de couleurs rétro très saturées comme un jaune chaud, un orange-rouge et un vert menthe, éclairage plat avec peu de dégradés, composition ordonnée comme un design de décor d'animation, l'ensemble respire l'ambiance vaporwave façon City Pop d'un paysage urbain nostalgique, 2D"
+ },
+ "1779094923808_style": {
+  "name": "RPG dark fantasy 3D",
+  "prompt": "Rendu CG réaliste de style gothique sombre, rendu 3D haute définition, texture de personnage de RPG dark fantasy, modelé réaliste finement sculpté aux détails complexes, peau pâle et froide avec subsurface scattering, ornements métalliques et cuir sombre aux reflets tranchants, accents d'éléments sanglants, fond noir profond en éclairage low-key, fort contraste clair-obscur sculptant, palette dominée par un noir encre, un blanc argenté et un écarlate, atmosphère dangereuse et sinistre, l'ensemble possède la texture de trailer CG d'une grande production dark fantasy, 3D"
+ },
+ "1779094923836_style": {
+  "name": "Illustration numérique cyberpunk",
+  "prompt": "Style d'illustration numérique cyberpunk, style de peinture numérique en empâtement de concept art de science-fiction, texture de rendu réaliste délicate, sans lineart marqué, structures métalliques et hard surface rendues avec précision, palette dominée par un gris bleuté froid et des tons nocturnes, ponctuée de sources lumineuses high-tech comme un vert fluo et un orange chaud, perspective atmosphérique de brume crépusculaire qui crée la profondeur, lumières riches en couches et clair-obscur dramatique, l'ensemble est froid et oppressant mais chargé d'un souffle de terre désolée futuriste, avec une texture de concept art de niveau cinématographique, 2D"
+ },
+ "1779094923817_style": {
+  "name": "Concept art de jeu",
+  "prompt": "Personnage de style anime 2D (style concept art de jeu), style concept art de jeu, style d'illustrations de personnage de jeu nippo-coréen, semi-empâtement combiné à un lineart fin, matériaux des vêtements et emblèmes métalliques rendus avec soin, transitions clair-obscur douces et reflets modérés, palette posée et élégante mariant des chauds désaturés à des tons sombres, arrière-plan le plus souvent en format de fiche de design à aplat monochrome avec un cadre décoratif, l'ensemble est raffiné et somptueux, avec le fini d'une illustration de carte à collectionner, 2D"
+ },
+ "1779094923828_style": {
+  "name": "Anime chinois courant",
+  "prompt": "Style anime (style Fox Spirit Matchmaker / Bai Yao Pu), style anime courant de l'animation chinoise, style cel d'animation chinoise en costumes anciens, lineart fin et fluide, aplats avec quelques dégradés doux, palette élégante et chaleureuse dominée par un vert bleuté désaturé, un blanc riz et des tons bois, clair-obscur léger et subtil, arrière-plan flouté en flou artistique qui met les personnages en valeur, traits des personnages raffinés et classiques, l'ensemble est doux et serein, avec un charme oriental antique et la texture d'une série d'animation chinoise réconfortante, 2D"
+ },
+ "1779094923799_style": {
+  "name": "Animation en pâte à modeler",
+  "prompt": "Style d'animation en pâte à modeler, texture artisanale de stop motion, personnages et décors comme modelés à la main en argile et en feutre, modelé rond et naïf aux bords souples, surfaces conservant de subtiles traces de fabrication et une texture mate, décors miniatures pleins de détails faits main, lumière chaude et douce enveloppante, éclairage chaleureux comme un théâtre de conte, palette dominée par un orange crème chaud, un brun bois et des accents doux, l'ensemble possède l'atmosphère chaleureuse et réconfortante d'une animation stop motion artisanale, 3D"
+ },
+ "1779094923807_style": {
+  "name": "Rendu cartoon 3D renforcé",
+  "prompt": "Style de rendu 3D cartoon, l'ensemble possède une texture de modélisation 3D lisse et fine, rendu de personnages de niveau film d'animation occidental, modelé mêlant angles et rondeurs, traits du visage anguleux et exagérés, peau fine à la légère texture avec subsurface scattering, reflets soignés sur les métaux et tissus, éclairage de type projecteur sur fond sombre qui souligne le volume, transitions clair-obscur douces et volumiques, couleurs pleines et denses, l'ensemble possède la texture de gros plan de personnage d'un blockbuster d'animation soigné, 3D"
+ },
+ "1779094923805_style": {
+  "name": "Animation fantasy chinoise 3D",
+  "prompt": "Style de rendu 3D, texture CG de niveau cinématographique de fantasy chinoise, modélisation des personnages réaliste et fine, peau claire et translucide avec subsurface scattering, cheveux et motifs des vêtements ciselés un à un, texture somptueuse et dense des costumes orientaux, fond sombre en éclairage low-key, lumière principale douce avec des ombres froides et sombres, clair-obscur dramatique, palette dominée par un rouge franc, un doré et un noir encre, atmosphère tranchante et esthétisante, l'ensemble possède la texture de rendu CG haute définition d'une grande production de fantasy orientale, 3D"
+ },
+ "1779094923810_style": {
+  "name": "Rendu 3D latex brillant",
+  "prompt": "Personnage 3D (style de rendu haute définition), style de rendu 3D latex, texture de personnage CG de niveau cinématographique, modelé exagéré et plein de tension à la structure pleine, peau lustrée et humide comme du latex, reflets tranchants et réflexions fortes, textures de détail et matériaux textiles finement sculptés, couches PBR bien distinctes, fond sombre avec bokeh, lumière principale froide qui sculpte le volume, palette dominée par un bleu froid, un blanc grisâtre et un environnement sombre, atmosphère inquiétante et intense, l'ensemble possède la texture de rendu de personnage de niveau cinématographique, 3D"
+ },
+ "1779094923811_style": {
+  "name": "Plastique gélatineux 3D",
+  "prompt": "Style plastique gélatineux 3D, rendu à la texture de plastique translucide gélatineux, modelé fluide et arrondi comme du verre soufflé, matériaux translucides et réfractants avec une lueur douce intérieure, gouttes d'eau et reflets cristallins en surface, ensemble léger et onirique comme une sculpture de gel, illumination globale lumineuse et transparente, palette dominée par un bleu glacier, un lilas et des lueurs crépusculaires rose-orange, atmosphère limpide et esthétisante, l'ensemble possède une texture artistique 3D translucide, onirique et cristalline, 3D, ciel en dégradé"
+ },
+ "1779094923833_style": {
+  "name": "Style Dalí",
+  "prompt": "Style réaliste surréaliste de Salvador Dalí, style de peinture à l'huile surréaliste classique, touche délicate et lisse presque sans trace, objets décrits avec une précision réaliste mais juxtaposés de façon absurde pour créer une sensation de rêve, palette calme dominée par un bleu grisâtre, un gris brume et des couleurs désaturées, lumière douce et uniforme comme la lumière diffuse d'un jour couvert, composition droite à la quiétude classique, l'ensemble est rationnel et retenu mais étrange et surnaturel, empli d'une atmosphère surréaliste philosophique, 2D"
+ },
+ "1779094923798_style": {
+  "name": "Animation stop motion",
+  "prompt": "Style d'animation stop motion, texture d'animation de marionnettes stop motion façon Laika, personnages comme des marionnettes de bois et de tissu faites main, modelé aux grands yeux naïf et expressif, surfaces mates à la fine texture artisanale, décors et accessoires miniatures détaillés et crédibles, lumière naturelle chaude entrant par la fenêtre avec des touches de bougie, faible profondeur de champ et arrière-plan en flou artistique, palette dominée par un brun chaud, un ambre et des tons terre doux, l'ensemble possède l'atmosphère chaleureuse et nostalgique d'un film d'animation stop motion, 3D"
+ },
+ "1779094923792_style": {
+  "name": "Encre de Chine noir et blanc",
+  "prompt": "Style d'illustration conceptuelle à l'encre en noir et blanc de Ghost of Tsushima, style encre de Chine noir et blanc, style d'illustration conceptuelle à l'encre en noir et blanc, noir et blanc pur sans couleur, coup de pinceau énergique et débridé, traits de pinceau sec et lignes de vitesse qui balaient avec un dynamisme intense, contraste net entre encres denses et diluées, larges vides qui se heurtent aux masses d'encre lourde, lignes comme des coups de pinceau sec pleines de force, l'ensemble est vigoureux et tranchant, avec une énergie qui circule, alliant l'encre expressive à l'atmosphère meurtrière du concept art de samouraïs, 2D"
+ },
+ "1779094923809_style": {
+  "name": "Cartoon occidental 3D",
+  "prompt": "Style de rendu 3D cartoon occidental, rendu de personnages stylisé occidental, modelé épuré, proportions du visage exagérées et espiègles, coiffure en masses lisses, surfaces lisses et fines aux reflets doux avec subsurface scattering, lumière principale vive avec une lumière de contour bleu-violet, fond uni sombre qui met le personnage en valeur, contraste de couleurs marqué et transitions clair-obscur propres, atmosphère espiègle et vive, l'ensemble possède la texture de rendu raffinée d'un personnage d'animation 3D stylisé occidental, 3D"
+ },
+ "1779094923793_style": {
+  "name": "Rendu 3D réaliste HD",
+  "prompt": "Style de rendu 3D réaliste haute définition, rendu 3D réaliste HD, texture de personnage CG de niveau cinématographique, modélisation fine et crédible, subsurface scattering et microtextures de la peau réels, cheveux mèche par mèche, matériaux de vêtements riches en détails, éclairage cinématographique low-key, lumière principale douce et ombres profondes qui sculptent le volume, arrière-plan sombre et flouté, palette dominée par le contraste entre un noir profond, un gris froid et des carnations chaudes, atmosphère posée et cinématographique, l'ensemble possède la texture de rendu CG au réalisme photographique, 3D"
+ },
+ "1779094923814_style": {
+  "name": "Illustration comics animée américaine",
+  "prompt": "Style d'illustration d'animation de comics américain, style d'illustration d'animation de comics américain, style de pages intérieures de comics de super-héros américain, traits d'encre épais et fermes aux contours durs et puissants, larges aplats d'ombre et de lumière façon cel qui découpent le volume, perspective exagérée et composition dynamique percutante, couleurs intenses très saturées, souvent avec des effets lumineux d'énergie pour créer l'atmosphère, clair-obscur intense presque en silhouette, l'ensemble est fougueux et ostentatoire, avec la tension dramatique d'une couverture de comics DC ou Marvel, 2D"
+ },
+ "1779094923840_style": {
+  "name": "Illustration psychédélique texture rétro",
+  "prompt": "Style d'illustration psychédélique à texture rétro, style d'illustration numérique à l'allure d'impression rétro, toute l'image couverte d'un grain fin et d'une texture façon impression riso, sans lineart marqué, formes construites par blocs de couleur et taches de lumière, couleurs psychédéliques très saturées dominées par le bleu, le vert et le violet avec des sauts d'accents fluo, lumières exprimées en ondulations de couleur fluides et taches de lumière mouchetées, l'ensemble est onirique et évanescent, frais et lumineux, empli de la poésie psychédélique d'une affiche rétro, 2D"
+ },
+ "1779094923839_style": {
+  "name": "Illustration enfantine aux craies grasses",
+  "prompt": "Style d'illustration plate occidentale, style d'illustration enfantine aux craies grasses dessinée à la main, style cartoon d'album jeunesse occidental, modelé rond et exagéré plein de charme enfantin, aplats de couleur sans lineart ou au lineart faible, bords à la texture de frottis sec comme une craie grasse dessinée à la main, couleurs vives et chaudes avec de larges aplats saturés juxtaposés directement, clair-obscur minimaliste presque sans dégradés, fond simple en aplat avec des vides, l'ensemble est joyeux et enjoué, simple et chaleureux, avec le sens narratif d'une page de livre d'images pour enfants, 2D"
+ },
+ "1779094923815_style": {
+  "name": "Roman graphique animé noir et blanc",
+  "prompt": "Style d'animation de roman graphique 2D en noir et blanc (style de l'IP Persepolis), style d'animation de bande dessinée 2D en noir et blanc, style de roman graphique européen en noir et blanc, échelle tonale à deux pôles noir et blanc purs presque sans gris intermédiaires, formes hautement simplifiées et synthétiques, lineart uniforme et propre, larges silhouettes de noir plein en fort contraste avec les vides, lumières exprimées en aplats façon gravure, composition aplatie au fort sens de l'ordre, l'ensemble est froid et retenu, légèrement distant, avec le tempérament artistique de l'animation indépendante dessinée à la main, 2D"
+ },
+ "1779094923835_style": {
+  "name": "Manga shōnen 2D haute qualité",
+  "prompt": "Style de manga shōnen 2D haute qualité, style d'anime shōnen d'action japonais, lineart tranchant et ferme, mise en couleur en aplats façon cel avec un clair-obscur à fort contraste, expressions et mouvements des personnages exagérés et explosifs, image parsemée d'effets lumineux comme des éclairs d'énergie, des lignes de vitesse et des débris projetés, palette très saturée teintée de couleurs ardentes comme un doré chaud et un orange-rouge, effets intenses de contre-jour et de halo, l'ensemble est déferlant, avec la texture d'une série d'anime haut de gamme à la tension de combat maximale, 2D"
+ },
+ "1779094923831_style": {
+  "name": "Style Katsuhiro Otomo",
+  "prompt": "Style anime classique de Katsuhiro Otomo (Akira), style d'animation cel de films japonais des années 80-90, décors dessinés à la main d'une très haute densité artistique, lineart rigoureux et réaliste, bâtiments, végétation et autres détails superposés en couches et rendus minutieusement, aplats avec des couches clair-obscur délicates, palette tirant vers un vert grisâtre avec des couleurs nostalgiques désaturées à l'allure de pellicule, lumières simples et naturelles, l'ensemble est calme et réaliste, avec l'air urbain de la fin de l'ère Showa et la texture d'époque de l'animation ancienne, 2D"
+ },
+ "1779094923818_style": {
+  "name": "Illustration en empâtement tons sombres",
+  "prompt": "Personnage dessiné à la main 2D (style d'illustration en empâtement sombre), illustration de style empâtement en tons sombres, peinture conceptuelle réaliste en empâtement, sans lineart marqué, volume et texture rugueuse construits par des touches épaisses superposées, palette dominée par un brun grisâtre, un vert sombre et un jaune terne, luminosité générale très basse, lumières soulignant des sources étroites qui percent et des ombres profondes, détails denses et couches lourdes, baignant dans une atmosphère oppressante et désolée de terre dévastée post-apocalyptique, 2D"
+ },
+ "1779094923830_style": {
+  "name": "Cartoon de l'ère Osamu Tezuka",
+  "prompt": "Style cartoon de l'ère Osamu Tezuka, style d'animation cel rétro de l'ère Showa, texture d'animation japonaise dessinée à la main des années 80, lineart manuel propre et fluide, aplats cel, couleurs limpides et lumineuses, reflets et ombres en aplats simples, modelé doux et élégant au tempérament de manga shōjo, image lumineuse et transparente avec une légère lumière douce de pellicule, atmosphère générale fraîche et nostalgique, pure et esthétisante, 2D"
+ },
+ "1779094923832_style": {
+  "name": "Style Shanghai Animation Film Studio",
+  "prompt": "Style anime (style Shanghai Animation Film Studio), style classique d'animation dessinée à la main du studio de Shanghai, style artistique national chinois hautement décoratif, lignes fines et fluides, modelé très stylisé en motifs, aplats cel combinés à des décors expressifs à la gouache, palette dominée par des couleurs élégantes de style chinois comme un vert bleuté, un bleu indigo et un blanc rosé, couches clair-obscur subtiles et douces, arrière-plans brumeux comme de la fumée, l'ensemble est élégant et d'allure antique, riche d'une beauté décorative orientale, 2D"
+ },
+ "1779094923819_style": {
+  "name": "Mythologie chinoise",
+  "prompt": "Personnage dessiné à la main 2D, style de mythologie chinoise, style mythologie chinoise, illustration aux lignes rehaussées d'or, alliance du gongbi aux couleurs riches et des lavis d'encre, lineart fin et fluide rehaussé de traits d'or, palette de base brun chaud, blanc riz et jaune ocre, ponctuée de rouge vermillon, de bleu azurite et de doré, motifs de nuages et silhouettes de montagnes déployés dans un style expressif, lumière douce avec une sensation de halo divin, image aérienne et grandiose, emplie du souffle de la mythologie xianxia orientale, 2D"
+ },
+ "1779094923800_style": {
+  "name": "Illustration cartoon 2D",
+  "prompt": "Style d'illustration cartoon 2D stylisée, style d'illustration cartoon bidimensionnelle, lineart sombre propre et net, aplats cel, couleurs vives et saturées au contraste frais, ombres synthétisées en aplats à bords durs, forte tension de perspective et profondeur spatiale nette, détails riches mais ordonnés, sensation de lumière transparente comme un soleil de beau temps, l'ensemble est vif et lumineux, avec l'air frais de l'art des décors d'anime japonais, 2D"
+ },
+ "1779094923786_style": {
+  "name": "Concept art sombre",
+  "prompt": "Style Black Myth: Wukong, style d'empâtement épais d'illustration originale dark fantasy, style concept art sombre, peinture numérique en empâtement dark fantasy façon Black Myth, sans lineart, formes construites par superposition de touches, palette de base noir profond, dans de larges zones d'ombre n'émergent que quelques couleurs lourdes très saturées comme l'écarlate, clair-obscur extrême et lumière dramatique focalisée, détails finement sculptés à la texture froide, l'ensemble est étrange et oppressant, empli de solennité rituelle et de tension horrifique, 2D"
+ },
+ "1779094923797_style": {
+  "name": "Illustration théâtre d'ombres",
+  "prompt": "Style d'illustration de théâtre d'ombres, style d'illustration d'ombres chinoises, esthétique traditionnelle chinoise des silhouettes ajourées et du papier découpé, modelé plat en silhouette de profil, contours finement ajourés aux motifs denses comme des sculptures, fond de papier jauni rehaussé de teintes traditionnelles comme un doré chaud, un rouge ocre, un noir encre et un vert émeraude, couleurs chaudes et rustiques, lumières aplaties comme la lueur d'une lampe à travers la figure, avec la translucidité du cuir et un fond à texture de papier, l'ensemble est antique, élégant et délicat, à la forte saveur folklorique, 2D"
+ },
+ "1779094923788_style": {
+  "name": "Illustration sombre américaine",
+  "prompt": "Style de comics américain, style de bande dessinée occidentale, style d'illustration sombre américaine, traits d'encre énergiques et puissants, modelé clair-obscur en aplats durs, larges zones d'ombre noir encre en base, palette dominée par un cyan froid, un vert grisâtre et un bleu sombre, ponctuée de reflets chauds comme des lueurs de feu, contraste lumineux intense comme dans le film noir, fils de pluie et lignes de vitesse qui renforcent le dynamisme, l'ensemble est froid, dur et meurtrier, empli de l'atmosphère noire et criminelle des comics américains, 2D"
+ },
+ "1779094923787_style": {
+  "name": "Illustration dark fantasy",
+  "prompt": "Style d'illustration dark fantasy, style d'illustration originale rétro américaine, peinture numérique en empâtement fantasy occidentale, sans lineart marqué, touches douces et épaisses aux transitions délicates, palette dominée par un vert encre, un bleu sombre et un gris noirâtre, avec un effet de lumière magique vert spectral comme source lumineuse dominante, clair-obscur intense et lumière de contour qui souligne les silhouettes, brume enveloppante et profondeur floue, l'ensemble est mystérieux et ténébreux, empli d'un souffle de conte sombre et de magie, 2D"
+ },
+ "1779094923785_style": {
+  "name": "Manga sombre",
+  "prompt": "Personnage anime 2D (style manga sombre), style manga sombre, style de manga japonais en noir et blanc, lineart à la plume fin et dense, fort contraste noir et blanc presque sans gris intermédiaires, larges silhouettes noir encre qui répondent aux vides, motifs décoratifs de lierres et de fleurs aux lignes complexes et somptueuses, couches clair-obscur exprimées par la densité des lignes, avec un goût décoratif gothique, l'ensemble est sombre et esthétisant, décadent et raffiné, 2D"
+ },
+ "1779094923791_style": {
+  "name": "Illustration épurée",
+  "prompt": "Style d'illustration plate moderne, style d'illustration épurée, illustration plate minimaliste moderne, sans contour ou au contour très faible, larges aplats de couleur, modelé simple, rond et synthétique, palette douce et désaturée dominée par des couleurs tendres comme un blanc riz, un crème et un brun clair, presque sans couches de lumière, seulement quelques ombres douces, fond aux larges vides purs, image propre et transparente, l'ensemble est frais et réconfortant, calme et retenu, 2D"
+ },
+ "1779094923796_style": {
+  "name": "Gothique sombre trame rétro",
+  "prompt": "Style d'illustration gothique sombre à trame rétro, style gothique en tons sombres à trame rétro, illustration à la texture d'impression de bande dessinée rétro, lineart noir épais combiné à des trames de demi-teinte pour les gris et les ombres, palette dominée par un noir encre, un rouge sombre et un vert jaunâtre maladif, combinaison chromatique morne à fort contraste, image au bruit d'impression ancienne et à la texture de rayures, touches de pinceau sec qui ajoutent de l'inquiétude, l'ensemble est décadent et inquiétant, empli du tempérament de la bande dessinée gothique sombre, 2D"
+ },
+ "1779094923789_style": {
+  "name": "Encre orientale",
+  "prompt": "Style d'illustration décorative à l'encre orientale, style de peinture à l'encre orientale, illustration décorative à l'encre, lignes fines de gongbi combinées au souffle expressif de l'encre, nombreux vides, encre riche en variations de densité et d'humidité, palette dominée par le blanc du papier xuan et le gris noirâtre de l'encre, lavis de doré pâle et de jaune ocre avec quelques accents de rouge vermillon, lignes aériennes et vives, plis de vêtements et nuages qui tournoient et s'écoulent, lumières aplaties et subtiles, l'ensemble est éthéré et élégant, à la forte poésie classique, 2D"
+ },
+ "1779094923783_style": {
+  "name": "Pixel art",
+  "prompt": "Style pixel art rétro 16 bits, style pixel, art pixel rétro 16 bits, pixels et bords crénelés nettement visibles, palette limitée avec des transitions en dithering, couleurs saturées et vives au fort contraste, formes qui synthétisent les détails en blocs de pixels, clair-obscur exprimé par paliers de couleur, avec une texture d'écran de console rétro, l'ensemble est raffiné et nostalgique, empli de la beauté pixelisée des jeux vidéo rétro, 2D"
+ },
+ "1786674799159_style": {
+  "name": "Croquis gribouillé noir et blanc",
+  "prompt": "Style d'animation de croquis gribouillé en noir et blanc dessiné à la main, traits de crayon et de marqueur bruts, libres et détendus, personnages au modelé naïf et exagéré, larges masses de cheveux noir pur en fort contraste avec le papier blanc, arrière-plan à peine esquissé de traits de crayon pâles, image conservant la texture du papier et le tremblement du dessin à la main ; l'ensemble dégage une texture de gribouillage spontanée et chargée d'émotion comme un court métrage d'animation indépendant."
+ },
+ "1786674799296_style": {
+  "name": "Cartoon rétro mid-century",
+  "prompt": "Style cartoon du modernisme mid-century des années 50-60, formes plates et géométriques, lineart épais et simple avec de larges aplats de couleur, proportions des personnages hautement stylisées, joues à pois roses et grands yeux, arrière-plans décorés de motifs comme des rayures diagonales, palette dominée par un orange-rouge et un beige rétro, image au léger grain de film et à l'aspect vieilli ; l'ensemble est rétro et espiègle, empli du souffle de l'animation publicitaire de l'âge d'or."
+ },
+ "1786674799433_style": {
+  "name": "Urbain à la main de Taiyō Matsumoto",
+  "prompt": "Style d'animation de manga urbain dessiné à la main façon Taiyō Matsumoto, traits de plume tordus et relâchés mais pleins de tension, rues à la très haute densité d'enseignes et de câbles, perspective exagérée et penchée, personnages longilignes et vifs, couleurs saturées de jaune chaud et de bleu cyan posées en aplats à la main, bords irréguliers avec des débordements d'aquarelle ; l'ensemble dégage une texture d'animation indépendante japonaise où cohabitent l'effervescence populaire et la fantaisie."
+ },
+ "1786674799570_style": {
+  "name": "Aplats pop psychédéliques",
+  "prompt": "Style d'animation pop psychédélique en aplats, contours épais qui se déforment librement, chocs audacieux de couleurs très saturées, perspective et proportions tordues et exagérées au gré de l'émotion, bric-à-brac et motifs d'intérieur qui remplissent l'image, mouvement débridé aux touches spontanées ; l'ensemble dégage une texture d'animation expérimentale frénétique, bondissante et à l'énergie débordante."
+ },
+ "1786674799707_style": {
+  "name": "Urbain rétro peint façon BD européenne",
+  "prompt": "Style d'animation urbaine rétro de bande dessinée européenne, palette vieillie dominée par un vert olive et un jaune terre, immeubles du quartier aux détails denses, garde-corps en fer forgé et cordes à linge pleins de vie quotidienne, lineart des personnages délicat au modelé réaliste légèrement exagéré, lumière douce à l'air d'après-midi jaunissant, image au bruit d'impression rétro ; l'ensemble dégage la texture populaire et alanguie de l'animation française pour adultes."
+ },
+ "1786674799844_style": {
+  "name": "Album jeunesse plume et lavis",
+  "prompt": "Style d'animation d'album jeunesse à la plume et au lavis, traits de plume fins et tremblés qui dessinent bâtiments et bric-à-brac, encre diffusée et glacis de couleurs légères, palette dominée par un brun grisâtre et un blanc riz avec parfois des touches de lumière chaude, personnages menus et naïfs placés dans de vastes décors, image comme une page de livre d'histoires dessiné à la main ; l'ensemble est calme et nostalgique, avec une pointe de poésie solitaire."
+ },
+ "1786674799981_style": {
+  "name": "Animation esquisse au crayon",
+  "prompt": "Style d'animation d'esquisse au crayon, conservant des traits de croquis et des lignes de construction à l'aspect inachevé, hachures gris clair qui modèlent le volume, touches de couleur légère seulement sur les joues et les pupilles, texture du papier et traces de gomme nettement visibles, regards délicats et émotions intenses des personnages ; l'ensemble dégage le charme brut du dessin à la main, comme un carnet de croquis qui s'anime."
+ },
+ "1786674800118_style": {
+  "name": "Pop gribouillage fluo",
+  "prompt": "Style de clip pop en gribouillage fluo, contours noirs épais avec un remplissage gribouillé au marqueur, larges aplats de couleurs éclatantes comme un rose pêche, un bleu ciel et un jaune citron, personnages simplifiés en symboles graphiques, accompagnés d'éléments gribouillés comme des lignes radiales et des notes de musique, image directe et joyeuse ; l'ensemble dégage une texture d'illustration tendance qui unit stickers de rue et animation musicale."
+ },
+ "1786674800255_style": {
+  "name": "Album jeunesse à la gouache",
+  "prompt": "Style d'animation d'album jeunesse à la gouache, touches de gouache granuleuses, épaisses et chaleureuses, couleurs vives et saturées au contraste net entre des murs bleu-vert et des vêtements jaune chaud, personnages ronds et simples aux expressions sincères, détails d'environnement pleins d'air d'école et de quotidien, lumière douce comme une salle de classe l'après-midi ; l'ensemble dégage la texture chaleureuse et réconfortante d'un livre d'images pour enfants."
+ },
+ "1786674800392_style": {
+  "name": "Illustration enfantine nianhua rétro",
+  "prompt": "Style d'illustration enfantine de nianhua (estampes du Nouvel An) chinoises des années 50-60, bébés joufflus au modelé rond et festif, joues rouges et grands yeux, aplats de gouache avec des dégradés délicats, couleurs vives et lumineuses dominées par un rouge franc et un vert émeraude, arrière-plans floraux très décoratifs, papier légèrement jauni avec une sensation de temps passé ; l'ensemble dégage le charme enfantin chinois classique des affiches nostalgiques et des bébés d'estampes du Nouvel An."
+ },
+ "1786674800529_style": {
+  "name": "Illustration plate émotionnelle bleu-violet",
+  "prompt": "Style d'illustration émotionnelle monochrome bleu-violet, foule synthétisée en aplats uniformes bleu-violet aux visages flous, protagoniste éclairé de quelques touches chaudes qui créent un contraste de solitude, formes plates sans lineart synthétisées avec netteté, touches à la texture de brosse sèche, composition soulignant la distance entre l'individu et la marée humaine ; l'ensemble dégage la texture d'un album émotionnel urbain calme et retenu."
+ },
+ "1786674800666_style": {
+  "name": "Illustration néon dégradé fluo",
+  "prompt": "Style d'illustration néon en dégradés fluo, dégradés de couleurs bonbon rose, violet, cyan et bleu qui envahissent toute l'image, personnages aux grands yeux aux reflets scintillants et aux cheveux à la texture d'arc-en-ciel translucide, décor urbain où s'entremêlent enseignes néon et bandes de lumière holographique, bords au halo doux ; l'ensemble dégage une texture d'illustration nouvelle génération onirique et éclatante, exhalant le futurisme."
+ },
+ "1786674800803_style": {
+  "name": "Texture relief sur cuivre",
+  "prompt": "Style d'animation à texture de relief sur cuivre, image comme un relief martelé sur une plaque de cuivre, personnages et motifs présentés en texture métallique en relief, tons de bronze antique avec des taches noires d'oxydation, contours formés de points et de lignes de martelage, lustre qui s'écoule au gré des ondulations des formes ; l'ensemble dégage une texture unique où s'entremêlent l'artisanat métallique ancien et une solennité rituelle mystérieuse."
+ },
+ "1786674800940_style": {
+  "name": "Illustration narrative plate tons légers",
+  "prompt": "Style d'animation narrative plate en tons légers, lineart épuré avec des aplats gris désaturés, personnages au modelé mince et réaliste, décors aux vides retenus, quelques aplats de glitch pixelisé qui créent des fissures surréalistes, émotion froide et distante ; l'ensemble dégage la texture narrative littéraire de l'animation indépendante chinoise."
+ },
+ "1786674801077_style": {
+  "name": "Collage papier enfantin",
+  "prompt": "Style stop motion de collage papier enfantin, personnages comme des bonshommes de papier découpés dans des gribouillages aux craies grasses, arrière-plans en collage de papier kraft froissé et de papier aquarelle, composition naïve à la perspective de guingois, couleurs douces au grain de craie grasse, ombres réelles du papier visibles ; l'ensemble dégage la chaleur artisanale d'un album de dessins d'enfant auquel on aurait donné vie."
+ },
+ "1786674801214_style": {
+  "name": "Empâtement de jeunesse doré",
+  "prompt": "Style d'animation de jeunesse en empâtement à contre-jour doré, lumière de soleil couchant dorée qui inonde toute l'image, touches d'empâtement délicates sur les personnages à la peau qui irradie une lumière chaude, grillages et ombres d'arbres de l'arrière-plan floutés en taches de lumière, reflets qui débordent en halos brumeux ; l'ensemble dégage la texture d'un souvenir de jeunesse ardent et fugace, comme doré par les années."
+ },
+ "1786674801351_style": {
+  "name": "Gouache nostalgique granuleuse",
+  "prompt": "Style d'animation à la gouache nostalgique granuleuse, palette rétro désaturée dominée par un gris bleuté et un rouge rouille, aplats de gouache au grain marqué et à la trame d'impression, personnages au modelé simple au fort parfum d'époque, décors nostalgiques, lumière jaunissante et douce ; l'ensemble dégage une texture mélancolique où s'entremêlent les vieilles revues illustrées et la mémoire historique."
+ },
+ "1786674801488_style": {
+  "name": "BD de foule au trait noir et blanc",
+  "prompt": "Style de bande dessinée de foule au trait en noir et blanc, lignes fines et uniformes qui dessinent des rues et des foules denses, seules quelques touches orange-jaune signalent les protagonistes, composition à hauteur d'œil en travelling latéral comme un long rouleau, personnages au modelé humoristique et rond, image très riche en informations mais ordonnée ; l'ensemble dégage la texture d'humour froid et retenu de la bande dessinée en ligne claire."
+ },
+ "1786674801625_style": {
+  "name": "Cartoon néon rétro américain",
+  "prompt": "Style cartoon néon rétro américain, éléments de rues américaines des années 50 et de voitures anciennes, lineart épais avec des couleurs bonbon très saturées, enseignes néon qui brillent sous le ciel nocturne, personnages au modelé exagéré et aux postures vivantes, contraste de couleurs intense, tapageur et animé ; l'ensemble dégage une texture d'animation rétro qui mêle l'âge d'or américain et le pop de rue."
+ },
+ "1786674801762_style": {
+  "name": "Illustration texture pastel à l'huile",
+  "prompt": "Style d'illustration à texture de pastel à l'huile, touches de pastel à l'huile rugueuses et épaisses superposées couche après couche, couleurs intenses où se heurtent orange-rouge, jaune vif et bleu lac, modelé naïf et rond à l'innocence du dessin d'enfant, forte directionnalité des touches au grain cireux visible ; l'ensemble dégage une texture d'album jeunesse au pastel à l'huile chaleureuse, brute et pleine de sensation manuelle."
+ },
+ "1786674801899_style": {
+  "name": "Manga seinen réaliste",
+  "prompt": "Style d'animation de manga seinen réaliste, visages des personnages rendus avec réalisme et finesse, rides et gouttes de sueur visibles, mise en couleur cel retenue et posée, lumières naturelles comme une tranche de vie, décors comme des bureaux et des terrains de sport pleins de texture réelle ; l'ensemble dégage la texture réaliste et mélancolique de l'animation dramatique pour adultes."
+ },
+ "1786674802036_style": {
+  "name": "Album aquarelle onirique",
+  "prompt": "Style d'animation d'album jeunesse onirique à l'aquarelle, diffusions douces d'aquarelle fondues au crayonné, scènes de rêve aux proportions surréalistes, images tendres et fantastiques comme un géant couché sur un village ou des tunnels de couettes, palette chaude et désaturée de rose, d'orange et de jaune pâle, touches détendues et enfantines ; l'ensemble dégage la texture de rêve d'un livre d'histoires du soir."
+ },
+ "1786674802173_style": {
+  "name": "Lianhuanhua champêtre à l'aquarelle",
+  "prompt": "Style aquarelle de lianhuanhua (bande dessinée) chinois ancien, style de livres pour enfants des années 50-60, aquarelle élégante et transparente, campagnes verdoyantes et scènes de ferme, personnages à tête ronde en vêtements et chaussures de toile, lineart minutieux et doux, vides qui laissent respirer ; l'ensemble dégage la texture classique et nostalgique d'un lianhuanhua champêtre au charme enfantin."
+ },
+ "1786674802310_style": {
+  "name": "Jeune fille mélancolique à l'aquarelle",
+  "prompt": "Style d'illustration de jeune fille mélancolique à l'aquarelle, prairies gris-vert et fleurs blanches diffusées dans l'humide, jeune fille aux cheveux noirs aux touches relâchées comme du fusain mêlé d'aquarelle, palette sombre et froide, regard vide et émotion intense du personnage, image laissant beaucoup d'espace pour respirer ; l'ensemble dégage une texture d'illustration fragile et poétique comme un journal intime."
+ },
+ "1786674802447_style": {
+  "name": "Ville naïve et de guingois",
+  "prompt": "Style d'illustration urbaine naïve et de guingois, immeubles de la ville bancals barbouillés aux craies grasses et au marqueur, perspective volontairement déséquilibrée, couleurs intenses aux touches brutes, personnages simplifiés comme des dessins d'enfant mais aux émotions vraies, ciel nocturne et lumières barbouillés d'une énergie fébrile ; l'ensemble dégage une texture de dessin à la main viscérale comme un dessin d'enfant expressionniste."
+ },
+ "1786674802584_style": {
+  "name": "Stop motion de carnet de croquis",
+  "prompt": "Style stop motion de croquis de carnet réel, processus de dessin au crayon, au fusain et à l'aquarelle filmé sur de vraies pages de carnet, les personnages dessinés se déplacent sur le papier, traces de gomme et grain du papier nettement visibles, la table et la main qui tient le crayon entrent parfois dans le cadre ; l'ensemble dégage une texture artisanale intime où le processus de création lui-même devient animation."
+ },
+ "1786674802721_style": {
+  "name": "Traits gribouillés gothiques",
+  "prompt": "Style de traits gribouillés gothiques, lignes fines et tremblées, nerveuses, qui dessinent des personnages osseux, noir et blanc dominant avec des arrière-plans à motifs de cibles et de spirales, modelé maladif et mignon à grosse tête, membres grêles et éléments de coutures, lumières exprimées par des hachures radiales ; l'ensemble dégage la texture grotesque et humoristique d'un gribouillage de conte sombre."
+ },
+ "1786674802858_style": {
+  "name": "Lianhuanhua gongbi couleurs riches",
+  "prompt": "Style de lianhuanhua gongbi aux couleurs riches de style chinois, trait de fer combiné à des pigments minéraux intenses, robes de mariage rouge vif et parures dorées somptueuses et solennelles, visages des personnages classiques et délicats, compositions de foule denses comme un rouleau de peinture ancien, transitions occasionnelles en lavis d'encre ; l'ensemble dégage la texture magnifique de style chinois du lianhuanhua traditionnel et du gongbi aux couleurs riches."
+ },
+ "1786674802995_style": {
+  "name": "Album empâtement texture acrylique",
+  "prompt": "Style d'album jeunesse en empâtement à texture acrylique, peinture superposée sur une vraie toile avec des textures de couteau et des touches en relief visibles, ciel et herbe posés à larges touches débridées, bords des personnages ébouriffés qui se fondent dans le fond, couleurs fraîches à la chaleur du fait main ; l'ensemble dégage la texture artistique brute d'une animation image par image en peinture physique."
+ },
+ "1786674803132_style": {
+  "name": "Gravure noir et blanc lignes taillées",
+  "prompt": "Style de gravure en noir et blanc aux lignes taillées, lignes énergiques en relief comme une gravure sur bois ou sur lino, sur fond noir se taillent des aplats blanc crème et bleu lac, gouttes de pluie et contours des personnages transformés en entailles stylisées, composition plate et très décorative ; l'ensemble dégage la beauté graphique rustique et puissante d'une estampe gravée à la main."
+ },
+ "1786674803269_style": {
+  "name": "Épopée en silhouettes à contre-jour",
+  "prompt": "Style d'animation épique en silhouettes à contre-jour, personnages et armes réduits à des silhouettes noir pur, arrière-plan de nuages rouges du couchant aux couches intenses, composition déployée horizontalement comme un rouleau épique, silhouettes dynamiques pleines de tension, lumière de bord qui souligne les contours ; l'ensemble dégage une esthétique de silhouettes à contre-jour tragique et désolée."
+ },
+ "1786674803406_style": {
+  "name": "Illustration réaliste en empâtement au crépuscule",
+  "prompt": "Style d'illustration réaliste en empâtement au crépuscule, lumière crépusculaire à la frontière du chaud et du froid peinte en empâtement délicat, uniforme et cheveux de la jeune fille aux touches relâchées et réalistes, glissières de la route et montagnes lointaines entre net et flou, palette où se fondent un gris bleuté et un rose orangé, émotion calme et mélancolique ; l'ensemble dégage la texture poétique crépusculaire de l'illustration de jeunesse japonaise."
+ },
+ "1786674803543_style": {
+  "name": "Empâtement d'océan nocturne",
+  "prompt": "Style d'animation en empâtement d'océan nocturne, mer bleu-noir et vagues qui s'enroulent en touches d'empâtement, personnage éclairé d'une faible lueur jaune chaud qui devient l'unique source de lumière, clair-obscur extrême, mouvement des vagues dense et puissant ; l'ensemble dégage une texture de peinture à l'huile dramatique d'un point de chaleur dans l'obscurité."
+ },
+ "1786674803680_style": {
+  "name": "Aplats dynamiques orange-bleu saturés",
+  "prompt": "Style d'aplats dynamiques orange-bleu très saturés, immeubles orange brique qui se heurtent à un ciel bleu cyan, nuages blancs stylisés comme du papier découpé, personnages qui courent et sautent avec une perspective audacieusement penchée, aplats sans lineart propres et nets, lignes de vitesse et fragments qui renforcent le dynamisme ; l'ensemble dégage une esthétique du mouvement tranchante et grisante comme un storyboard de manga."
+ },
+ "1786674803817_style": {
+  "name": "Illustration d'album texture granuleuse",
+  "prompt": "Style d'illustration d'album jeunesse à texture granuleuse, grain de poudre de fusain et de pastel qui couvre toute l'image, scène de plage et de brise marine aux tons gris chaleureux, cheveux ébouriffés des personnages aux touches rustiques, accessoires réalistes comme de vieux téléphones qui créent un contraste ; l'ensemble dégage la texture d'un album dessiné à la main à la fois rugueux et tendre."
+ },
+ "1786674803954_style": {
+  "name": "Cel urbain tons froids",
+  "prompt": "Style d'animation cel urbaine en tons froids, palette désaturée dominée par un bleu cyan grisâtre, voitures et rues dessinées de lignes dures et nettes, aplats cel en clair-obscur à deux tons, personnages au modelé froid et élégant, image aux vides calmes ; l'ensemble dégage une esthétique cel moderne retenue et tranchante comme un film criminel urbain."
+ },
+ "1786674804091_style": {
+  "name": "Animation française lumineuse",
+  "prompt": "Style d'animation française lumineuse, cages d'escalier jaune chaud et rampes vertes à la texture de gouache, couleurs éclatantes et lumière transparente, mouvements des personnages exagérés et fluides pleins de rythme comique, bords des touches souples, composition aux plongées et contre-plongées variées ; l'ensemble dégage la texture légère et vive d'un court métrage d'animation français."
+ },
+ "1786674804228_style": {
+  "name": "Aplats surréalistes inquiétants",
+  "prompt": "Style d'aplats surréalistes et inquiétants, personnages blafards juxtaposés à des prairies mornes, fumée noire qui s'élève au loin en créant le malaise, couleurs gris-vert désaturées, touches calmes et délicates qui soulignent par contraste l'atmosphère étrange, composition symétrique et figée comme une scène de théâtre ; l'ensemble dégage une oppression psychologique surréaliste et froide."
+ },
+ "1786674804365_style": {
+  "name": "Compositing dessin sur prise de vue réelle",
+  "prompt": "Style de compositing de dessin à la main sur prise de vue réelle, personnages 2D dessinés à la main superposés à des scènes photographiques réelles, bonshommes au trait minimalistes qui créent un contraste attendrissant avec le décor réel, lumières et perspective accordées naturellement à la prise de vue ; l'ensemble dégage l'intérêt de médias mixtes d'une réalité et d'une dimension gribouillée qui s'envahissent mutuellement."
+ },
+ "1786674804502_style": {
+  "name": "Album naïf fauviste",
+  "prompt": "Style d'album jeunesse naïf fauviste, aplats intenses aux bords rugueux comme un collage de papier découpé, choc de jaune moutarde, de bleu céleste et de bleu outremer, personnages grotesques mais attendrissants, poteaux électriques et paysages désolés stylisés à l'extrême ; l'ensemble dégage la texture d'album absurde qui unit la palette fauviste et les formes du dessin d'enfant."
+ },
+ "1786674804639_style": {
+  "name": "Empâtement de conte lumière chaude",
+  "prompt": "Style d'animation de conte en empâtement à lumière chaude, contraste entre la lumière chaude d'une taverne et les tons froids d'une nuit de pluie, garçon au modelé rond à l'empâtement délicat, faisceaux de lumière tombant des croisées avec une poussière visible, couleurs pleines comme des bonbons mais avec un filtre d'autrefois ; l'ensemble dégage la texture chaleureuse et réconfortante d'un film de conte de fées."
+ },
+ "1786674804776_style": {
+  "name": "Illustration motifs décoratifs rétro",
+  "prompt": "Style d'illustration à motifs décoratifs rétro, image couverte de motifs ornementaux denses et de textures imprimées, palette vieillie dominée par un jaune terre et un vert olive, intérieurs de voiture et objets traités en motifs, lineart rustique comme une gravure ; l'ensemble dégage une texture d'illustration rétro où s'entremêlent les textiles mid-century et les arts décoratifs."
+ },
+ "1786674804913_style": {
+  "name": "Anime nostalgique japonais années 90",
+  "prompt": "Style d'anime nostalgique japonais des années 90, mise en couleur cel douce, personnages au modelé simple et chaleureux, alternance de scènes nocturnes de cabine téléphonique et de scènes fantastiques de ciel étoilé, palette chaleureuse au filtre du temps, lumières délicates et subtiles ; l'ensemble dégage la texture tendre et nostalgique de l'anime du quotidien de l'ère des cassettes vidéo."
+ },
+ "1786674805050_style": {
+  "name": "Collage papier surréaliste rétro",
+  "prompt": "Style de collage papier surréaliste rétro, papier vieilli et textures de toile qui forment ciels et vagues, images surréalistes comme des cerfs-volants en forme de poisson géant qui flottent dans l'image, personnages minuscules comme des silhouettes, palette brun thé et gris bleuté comme une vieille photographie ; l'ensemble dégage une texture calme et surréaliste comme un poème en collage de vieux objets."
+ },
+ "1786674805187_style": {
+  "name": "Bourgade fantastique gribouillée",
+  "prompt": "Style d'animation de bourgade fantastique gribouillée, immeubles et rues tordus et sinueux couverts de détails gribouillés, lumières orange chaud qui se diffusent dans la nuit, personnages chibi à grosse tête pleins de vitalité, couleurs denses comme du sirop ; l'ensemble dégage une texture d'illustration fantastique à la densité explosive comme un parc d'attractions délirant."
+ },
+ "1786674805324_style": {
+  "name": "Animation plate chaleureuse européenne",
+  "prompt": "Style d'animation plate chaleureuse européenne, aplats doux avec une légère texture de papier, scène de lumière matinale dans une cuisine pleine de vie quotidienne, personnages au modelé géométrique synthétique aux mouvements détendus et naturels, palette chaleureuse comme de la crème, lumières simplifiées en aplats doux ; l'ensemble dégage la texture chaleureuse et quotidienne de l'animation européenne."
+ },
+ "1786674805461_style": {
+  "name": "Peinture acrylique expressionniste",
+  "prompt": "Style de peinture acrylique expressionniste, touches intenses posées directement, peau bleue et cuisine jaune vif en contraste criard, personnages déformés et étirés aux émotions à vif, fort tremblement de la peinture image par image, fumée et lumières rugueuses et mouvantes ; l'ensemble dégage la texture expressionniste viscérale de l'animation artistique pour adultes."
+ },
+ "1786674805598_style": {
+  "name": "BD grotesque plume et lavis",
+  "prompt": "Style de bande dessinée grotesque à la plume et au lavis, traits de plume tordus et tremblés qui dessinent des pièces et des couloirs à la première personne, aplats légers dominés par un vert moutarde et un beige, perspective déformée en fisheye, détails gribouillés denses, humoristiques et grotesques ; l'ensemble dégage une texture narrative absurde comme une bande dessinée indépendante adaptée en animation."
+ },
+ "1786674805735_style": {
+  "name": "BD française rétro",
+  "prompt": "Style de bande dessinée française rétro, visages des personnages en aplat jaune gingembre aux traits exagérés, lignes épaisses qui dessinent des expressions nerveuses, rues de Paris et voitures anciennes à la texture d'aquarelle nostalgique, composition bondée et animée, palette rétro légèrement délavée ; l'ensemble dégage la texture d'humour mordant d'une animation adaptée de la bande dessinée satirique française."
+ },
+ "1786674805872_style": {
+  "name": "Illustration décorative ethnique",
+  "prompt": "Style d'illustration décorative ethnique, images de danses de la steppe et de chevaux déployées en motifs, couleurs riches comme une tapisserie tissée où s'entremêlent bleu saphir, cramoisi et jaune vif, motifs des costumes des personnages denses et fins, composition circulaire et symétrique pleine de solennité rituelle ; l'ensemble dégage la beauté décorative qui unit textiles ethniques et peinture populaire."
+ },
+ "1786674806009_style": {
+  "name": "BD trame de points noir et blanc",
+  "prompt": "Style de bande dessinée à trame de points en noir et blanc, image formée de points de dithering pixelisés 1 bit, personnages aux contours épais nettement noir et blanc, dégradés de trames qui simulent l'échelle de gris, comme un mélange de vieux logiciel informatique et de bande dessinée photocopiée ; l'ensemble dégage une texture graphique unique de rétro numérique basse fidélité."
+ },
+ "1786674806146_style": {
+  "name": "Illustration populaire gouache intense",
+  "prompt": "Style d'illustration populaire à la gouache aux couleurs intenses, scène de cantine nocturne à la lumière orange chaud et dense, touches d'empâtement à la gouache nettes et couleurs très saturées, personnages aux expressions vivantes pleins d'air populaire, plats et plans de travail aux détails appétissants ; l'ensemble dégage une texture d'illustration à la gouache intense et débordante de chaleur humaine."
+ },
+ "1786674806283_style": {
+  "name": "Stop motion collage photo rétro",
+  "prompt": "Style d'animation stop motion en collage de photos rétro, photographies réelles et matériaux de papier découpé assemblés en décors théâtraux, personnages comme des silhouettes de vieilles photos mêlées de dessin à la main, éléments rétro comme des rideaux rouges et de vieux téléviseurs empilés, perspective plate au fort sentiment de scène ; l'ensemble dégage la texture de collage stop motion d'un théâtre de vieil album photo surréaliste."
+ },
+ "1786674806420_style": {
+  "name": "Stop motion de poupées réelles",
+  "prompt": "Style d'animation stop motion de poupées réelles, poupées à articulations sphériques filmées image par image, maquillage raffiné et cheveux réels mèche par mèche, faible profondeur de champ, lumière comme un studio miniature, accessoires aux proportions de jouets ; l'ensemble dégage une texture stop motion de photographie de poupées où cohabitent le raffinement et une subtile étrangeté."
+ },
+ "1786674806557_style": {
+  "name": "Conte stop motion poupées de tissu",
+  "prompt": "Style de conte stop motion en poupées de tissu artisanales, poupées cousues main aux cheveux de laine et au corps de tissu, décors de maisonnettes construits en carton et en tissu, fabrication conservant points de couture et bords effilochés, couleurs chaudes et vieillies ; l'ensemble dégage une texture stop motion rugueuse et tendre comme un théâtre de poupées artisanal."
+ },
+ "1786674806694_style": {
+  "name": "3D mat minimaliste",
+  "prompt": "Style de rendu 3D mat minimaliste, petits personnages noir et blanc dans un espace blanc pur sans gravité, modelé hautement simplifié comme des pièces d'échecs arrondies, matériaux mats aux reflets doux, lumières propres aux couches délicates, composition aux larges vides ; l'ensemble dégage une esthétique 3D minimaliste froide et élégante comme une installation artistique."
+ },
+ "1786674806831_style": {
+  "name": "Rendu cartoon macaron bleu cyan",
+  "prompt": "Style de rendu cartoon macaron bleu cyan, personnages 3D en ombrage plat comme une illustration 2D, palette macaron bleu cyan, rose et blanc fraîche et unifiée, salles de classe et rues au modelé rond et simplifié, lumières douces sans ombres dures ; l'ensemble dégage une texture cartoon 3D façon 2D désaturée, fraîche et réconfortante."
+ },
+ "1786674806968_style": {
+  "name": "Stop motion en laine feutrée",
+  "prompt": "Style d'animation stop motion en laine feutrée, poupées et animaux en laine feutrée à l'aiguille à la texture fibreuse et moelleuse visible, décors miniatures construits en plaquettes de bois et en objets réels, lumière comme un tournage documentaire en studio, personnages anthropomorphes et humoristiques ; l'ensemble dégage une texture stop motion en laine feutrée chaleureuse et artisanale."
+ }
+}

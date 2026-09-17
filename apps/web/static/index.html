@@ -521,7 +521,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="style-zoom" class="modal">
   <img id="style-zoom-img" src="" alt="">
-  <div class="zoom-cap"><span id="style-zoom-nm"></span><span class="cat" id="style-zoom-cat"></span></div>
+  <div class="zoom-cap"><span id="style-zoom-nm" data-no-i18n></span><span class="cat" id="style-zoom-cat"></span></div>
 </div>
 <div id="out-modal" class="modal">
   <div class="box">
@@ -1438,14 +1438,26 @@ function rhythmCollect(prefix){
 
 /* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
 let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';
+// 风格库多语言:styles/i18n/<lang>.json 按风格 id 存 {name,prompt} 译文;按当前界面语言合并为
+// s.tname/s.tprompt(缺译文回退中文原文),卡片显示与填入「画面风格」的内容都跟界面语言走
 async function loadStyleLib(){
   if(!STYLE_LIB){
     const r=await fetch('/static/styles/style_library.json');
     if(!r.ok)throw new Error('HTTP '+r.status);
-    STYLE_LIB=await r.json();
+    const lib=await r.json();
+    const lang=(window.I18N&&I18N.lang)||'zh';
+    let tr={};
+    if(lang!=='zh'){
+      try{const r2=await fetch('/static/styles/i18n/'+lang+'.json');if(r2.ok)tr=await r2.json()}
+      catch(e){/* 无译文:回退中文 */}
+    }
+    lib.forEach(s=>{const x=tr[s.id]||{};s.tname=x.name||s.name;s.tprompt=x.prompt||s.prompt});
+    STYLE_LIB=lib;
   }
   return STYLE_LIB;
 }
+// 当前输入框内容是否就是某风格(任一语言版本均算命中,已保存的旧语言译文切换界面语言后仍高亮)
+const styleIs=(s,cur)=>cur===s.tprompt||cur===s.prompt;
 function styleChipsRender(){
   const bar=$('#style-cats');bar.innerHTML='';
   ['全部',...new Set(STYLE_LIB.map(s=>s.category))].forEach(cat=>{
@@ -1462,27 +1474,27 @@ function styleGridRender(){
   const cur=($(STYLE_TARGET).value||'').trim();
   // 第一个卡片:自定义(关闭弹窗,回到设计风格输入框自行填写)
   const c=document.createElement('div');
-  c.className='style-card custom'+(cur&&!STYLE_LIB.some(s=>s.prompt===cur)?' on':'');
+  c.className='style-card custom'+(cur&&!STYLE_LIB.some(s=>styleIs(s,cur))?' on':'');
   c.textContent=t('自定义风格提示词');
   c.onclick=()=>{$('#style-modal').style.display='none';$(STYLE_TARGET).focus()};
   grid.appendChild(c);
-  STYLE_LIB.filter(s=>(STYLE_CAT==='全部'||s.category===STYLE_CAT)
-      &&(!kw||s.name.toLowerCase().includes(kw)||s.prompt.toLowerCase().includes(kw)))
+  const hit=s=>[s.tname,s.tprompt,s.name,s.prompt].some(v=>v.toLowerCase().includes(kw));
+  STYLE_LIB.filter(s=>(STYLE_CAT==='全部'||s.category===STYLE_CAT)&&(!kw||hit(s)))
     .forEach(s=>{
       const d=document.createElement('div');
-      d.className='style-card'+(cur===s.prompt?' on':'');
+      d.className='style-card'+(styleIs(s,cur)?' on':'');
       d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
         +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
-        +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
-      d.title=s.prompt;
-      d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+        +`<span class="cat">${esc(t(s.category))}</span><span class="nm" data-no-i18n>${esc(s.tname)}</span>`;
+      d.title=s.tprompt;
+      d.onclick=()=>{$(STYLE_TARGET).value=s.tprompt;$('#style-modal').style.display='none'};
       d.querySelector('.zoom').onclick=ev=>{ev.stopPropagation();styleZoomShow(s)};
       grid.appendChild(d);
     });
 }
 function styleZoomShow(s){
   $('#style-zoom-img').src='/static/styles/'+s.image;
-  $('#style-zoom-nm').textContent=s.name;
+  $('#style-zoom-nm').textContent=s.tname;
   $('#style-zoom-cat').textContent=t(s.category);
   $('#style-zoom').style.display='flex';
 }

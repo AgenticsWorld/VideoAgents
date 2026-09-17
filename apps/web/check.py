@@ -36,6 +36,18 @@ def main() -> None:
         raise SystemExit("Legacy API paths remain in: " + ", ".join(legacy))
     if len(list((STATIC / "styles" / "images").glob("*.webp"))) != 152:
         raise SystemExit("The original style image library is incomplete")
+    # 风格库多语言:每种界面语言(中文除外)一份 styles/i18n/<lang>.json,须覆盖全部风格 id
+    import json
+    ids = {s["id"] for s in json.loads((STATIC / "styles" / "style_library.json").read_text(encoding="utf-8"))}
+    langs = sorted(p.stem for p in (STATIC / "i18n").glob("*.js") if p.stem != "i18n")
+    for lang in langs:
+        f = STATIC / "styles" / "i18n" / f"{lang}.json"
+        if not f.is_file():
+            raise SystemExit(f"Missing style library translation: styles/i18n/{lang}.json")
+        tr = json.loads(f.read_text(encoding="utf-8"))
+        bad = [k for k in ids if not (tr.get(k, {}).get("name") and tr.get(k, {}).get("prompt"))]
+        if set(tr) != ids or bad:
+            raise SystemExit(f"Style library translation styles/i18n/{lang}.json does not cover all styles")
     print("WebUI static package is complete; all application requests use /api/v1.")
 
 

@@ -1,0 +1,610 @@
+{
+ "1780651424491_style": {
+  "name": "Atompunk Fiksi Ilmiah Retro",
+  "prompt": "Estetika Atompunk fiksi ilmiah retro tahun 60-an, gaya visual retro-futuristik, gaya realistis live-action, karya fotografi; gambar memiliki nuansa fiksi ilmiah retro 60-an, palet warna didominasi oranye hangat retro, biru garam laut, dan warna film kontras tinggi saturasi rendah, dengan film grain yang jelas, soft light film retro yang ringan, dan halo cahaya matahari alami. Pencahayaan menggunakan cahaya matahari alami, sinar matahari langsung yang kuat, dan bayangan yang tegas, kontras terang-gelap kuat, highlight tidak overexposed, area gelap mempertahankan detail penuh, transisi terang-gelap alami; secara keseluruhan menampilkan nuansa sinematik Atompunk yang alami, berdimensi, nostalgis, dan halus."
+ },
+ "1780580870934_style": {
+  "name": "Intrik Istana Dingin",
+  "prompt": "Gaya visual drama intrik istana, gaya fotografi dingin drama kostum intrik harem, gaya realistis live-action, karya fotografi; gambar khidmat dan terkendali dengan tatanan ruang yang kuat, palet warna didominasi cokelat keemasan saturasi rendah, merah gelap, abu-abu dingin, dan warna kayu tua, pencahayaan menggunakan low-key, nuansa cahaya lilin, cahaya samping, dan bayangan dalam, komposisi tegak dan rapi; secara keseluruhan memiliki tekanan kekuasaan istana dan nuansa drama kostum intrik politik."
+ },
+ "1780575862644_style": {
+  "name": "Misteri Tiongkok Nada Dingin",
+  "prompt": "Gaya visual drama misteri realistis Tiongkok, gaya fotografi realisme bernada dingin, gaya realistis live-action, karya fotografi; suasana keseluruhan tegang dan menekan, palet warna didominasi nada saturasi rendah, abu-abu dingin, dan hijau gelap, pencahayaan menggunakan low-key, cahaya ambien, dan bayangan dalam, komposisi terkendali; gambar memiliki nuansa drama misteri perkotaan yang nyata."
+ },
+ "1780575862643_style": {
+  "name": "Romansa Kostum Cahaya Lembut",
+  "prompt": "Gaya visual drama idola kostum kuno berkualitas tinggi, gaya fotografi soft light drama romansa kostum, gaya realistis live-action, karya fotografi; gambar lembut dan indah, palet warna didominasi putih hangat, emas muda, biru-hijau pucat, dan merah muda saturasi rendah, pencahayaan menggunakan soft light, backlight, glow ringan, dan depth of field dangkal, komposisi tegak dan halus; secara keseluruhan memiliki nuansa halus dan seperti mimpi dari drama percintaan kostum kuno."
+ },
+ "1780575862642_style": {
+  "name": "Film Remaja Jepang",
+  "prompt": "Film referensi: Love Letter, gaya visual film remaja Jepang ala Shunji Iwai, gaya fotografi film Jepang tahun 90-an, gaya realistis live-action, karya fotografi; gambar jernih, lembut, dan bernuansa kenangan, dengan film grain yang jelas, noise ringan, tekstur soft focus, dan tonal kontras rendah, palet warna didominasi saturasi rendah, putih dingin, biru muda, hijau muda, dan abu-abu lembut, pencahayaan menggunakan cahaya alami, backlight, cahaya jendela, sedikit overexposure, highlight lembut, dan lens flare yang lapang, komposisi ringan dengan ruang kosong, dengan kesan momen keseharian seperti kamera genggam; suasana keseluruhan murni, sendu, samar, dan puitis."
+ },
+ "1780575862641_style": {
+  "name": "Keseharian Jepang Natural",
+  "prompt": "Gaya visual drama kehidupan Jepang, gaya fotografi naturalis, gaya realistis live-action, karya fotografi, tekstur kehidupan nyata; gambar tenang dan terkendali, komposisi dengan ruang kosong, palet warna didominasi saturasi rendah, abu-abu kebiruan pucat, dan hijau dingin, pencahayaan menggunakan cahaya alami, cahaya jendela, cahaya ambien, dan bayangan lembut, menekankan ruang nyata dan atmosfer keseharian."
+ },
+ "1780575862640_style": {
+  "name": "Drama Korea Urban Cahaya Lembut",
+  "prompt": "Gaya visual drama percintaan urban Korea, gaya fotografi soft light drama Korea, gaya realistis live-action, karya fotografi; gambar bersih dan halus, palet warna didominasi saturasi rendah dengan keseimbangan hangat-dingin yang lembut, pencahayaan menggunakan soft light, cahaya ambien, dan depth of field dangkal; suasana keseluruhan halus, romantis, dan terkendali."
+ },
+ "1780575862639_style": {
+  "name": "Drama Urban Tiongkok Realistis",
+  "prompt": "Gaya visual serial TV urban Tiongkok modern, gaya fotografi drama urban bernuansa keseharian, gaya realistis live-action, karya fotografi; gambar alami dan terkendali, tekstur kehidupan nyata, palet warna didominasi nada hangat netral dan saturasi rendah, pencahayaan menggunakan cahaya alami dan cahaya interior lembut, komposisi rapi; nuansa keseluruhan mendekati drama urban bertema realistis Tiongkok."
+ },
+ "1780580870935_style": {
+  "name": "Wuxia Jianghu Realistis",
+  "prompt": "Gaya visual drama wuxia jianghu, gaya fotografi realistis laga kostum kuno, gaya realistis live-action, karya fotografi; gambar memiliki aura jianghu dan kesan laga, palet warna didominasi abu-abu kebiruan saturasi rendah, hijau tinta, kuning tanah, dan kontras hangat-dingin, pencahayaan menggunakan cahaya alami, cahaya samping, backlight, dan bayangan lingkungan, komposisi luas dan berkedalaman; nuansa drama wuxia yang kasar dan nyata."
+ },
+ "1779094923802_style": {
+  "name": "Film Realistis 90-an",
+  "prompt": "Gaya film realistis tahun 90-an, 1990s realistic cinematic film photography style, 1990s, gaya realistis live-action, karya fotografi; gambar membawa atmosfer kehidupan nostalgis, palet warna didominasi kuning hangat, krem, dan abu-abu tembok tua, pencahayaan menggunakan cahaya alami dan backlight samping senja, film grain jelas, kontras lembut, komposisi santai dan dekat dengan keseharian; secara keseluruhan memiliki nuansa hangat nostalgis fotografi film tahun sembilan puluhan."
+ },
+ "1779094923757_style": {
+  "name": "Film Naratif Retro",
+  "prompt": "Film referensi: Titane, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan kacau dan modis yang dingin, palet warna didominasi latar terang pucat kedinginan serta benturan dua warna antara glow kuning hangat dan cahaya biru dingin, pencahayaan menggunakan penerangan lokal low-key, bagian terang disinari cahaya hangat sementara area luas tenggelam dalam bayangan biru dingin, film grain halus, gambar berjarak dan terkendali, dengan nuansa visual eksperimental sinema auteur Eropa."
+ },
+ "1779094923765_style": {
+  "name": "Hollywood Retro Amerika",
+  "prompt": "Film referensi: Demons, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan retro dan kesuraman gotik, palet warna didominasi hitam dingin, abu-abu kebiruan, dan putih keabuan malam bersalju yang low-key dan desaturasi, pencahayaan menggunakan soft light dan bayangan dalam yang luas, kontras terang-gelap tenang, komposisi tegak dengan tatanan khidmat klasik; secara keseluruhan memiliki nuansa retro dingin film horor Eropa tahun delapan puluhan."
+ },
+ "1779094923777_style": {
+  "name": "Sinema Neon Cyber",
+  "prompt": "Film referensi: Mind, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan kasar, retro, dan atmosfer klub malam yang samar, palet warna didominasi area gelap low-key, oranye-merah hangat, hijau neon, dan pantulan manik-manik emas, pencahayaan menggunakan backlight, rim light, dan sumber cahaya titik neon, banyak siluet gelap di latar depan, film grain kasar; secara keseluruhan memiliki nuansa ambigu dan misterius klub retro tahun tujuh puluhan-delapan puluhan."
+ },
+ "1779094923813_style": {
+  "name": "Film Pedesaan Tiongkok 90-an",
+  "prompt": "90s Chinese rural cinematic style, gaya realistis live-action, karya fotografi, gaya film seluloid pedesaan Tiongkok tahun sembilan puluhan, palet warna didominasi kuning keemasan, kuning tanah, dan langit hangat yang memutih, pencahayaan menggunakan cahaya alami tersebar yang sederhana, film grain dan kabut tipis terlihat jelas, komposisi garis horizon luas dan datar, gambar sederhana dan bersahaja, dengan nuansa zaman film pedesaan sutradara generasi kelima."
+ },
+ "1779094923774_style": {
+  "name": "Nada Hangat Glow Biru",
+  "prompt": "Film referensi: One Hour Photo, gaya realistis live-action, karya fotografi, palet warna didominasi benturan kuat antara warna api oranye hangat dan glow biru dingin, menciptakan kontras terang-gelap dramatis, pencahayaan menggunakan cahaya ambien dingin ditambah sumber cahaya titik hangat yang menyinari subjek, latar blur dengan bokeh, zona hangat dan dingin gambar terpisah jelas; secara keseluruhan memiliki nuansa sinematik modern dengan ketegangan surealis."
+ },
+ "1779094923776_style": {
+  "name": "Sinema Industri Jadul",
+  "prompt": "Film referensi: Nineteen Eighty-Four (1984), gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan retro, industrial, dan atmosfer menekan, palet warna didominasi cokelat zaitun low-key, kuning berasap, dan glow amber yang redup, pencahayaan menggunakan low-key dan cahaya atas yang temaram, area gelap pekat dan berat, film grain jelas; gambar dipenuhi tekstur logam mekanis dan kesan suram mencekam era totaliter."
+ },
+ "1779094923794_style": {
+  "name": "Fotografi Film Hitam Putih Jepang",
+  "prompt": "Japanese black and white film photography style, black and white, gaya realistis live-action, karya fotografi, gaya fotografi film hitam putih Jepang, gradasi abu-abu halus dan lembut, kontras hitam putih tenang dan terkendali, pencahayaan menggunakan cahaya alami tersebar lembut seperti hari mendung, film grain halus dan rapat, komposisi cermat dengan ruang kosong, hening dan tegak; secara keseluruhan memiliki nuansa wabi-sabi yang tenang dari estetika mono no aware Jepang."
+ },
+ "1779094923778_style": {
+  "name": "Sinema Korea Dingin",
+  "prompt": "Film referensi: Memories of Murder, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan ketegangan dan realisme yang kasar, palet warna didominasi hijau keabuan desaturasi saturasi rendah, abu-abu hangat lembut, dan low-key, pencahayaan menggunakan cahaya ambien dan bayangan lembut, kontras landai, film grain alami, komposisi mengamati dengan tenang; secara keseluruhan memiliki nuansa dingin dan terkendali film realis Korea."
+ },
+ "1779094923775_style": {
+  "name": "Sinema Alam Liar Western",
+  "prompt": "Film referensi: Once Upon a Time in the West, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan epik western yang tegang dan gersang, palet warna didominasi nada cokelat saturasi rendah, kuning tanah, dan nada hangat monokrom yang pudar, langit memutih keabuan, pencahayaan menggunakan cahaya alami tengah hari yang kuat dan kesan udara berkabut dari debu beterbangan, komposisi luas dengan horizon rendah dan datar, dengan nuansa film western Italia tahun enam puluhan."
+ },
+ "1779094923779_style": {
+  "name": "Sinema Oranye Kuning",
+  "prompt": "Film referensi: Kubi, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan ketegangan dan kekacauan, palet warna didominasi nada hangat matahari terbenam oranye kuning, langit dan highlight menampilkan gradasi emas-oranye seperti terbakar, pencahayaan menggunakan backlight kuat, subjek tenggelam dalam bayangan semi-siluet, tepian bersinar rim light hangat, kontras terang-gelap pekat; secara keseluruhan memiliki nuansa sinematik tragis senja yang luas."
+ },
+ "1779094923782_style": {
+  "name": "Film Perang Retro",
+  "prompt": "Film referensi: 300, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan kesan epik yang kasar, palet warna didominasi monokrom abu-abu kebiruan kontras tinggi, low-key, dan desaturasi, pencahayaan menggunakan key light, backlight kuat, bayangan dramatis, dan pencahayaan Rembrandt, berkas cahaya menembus membentuk volumetric light, area gelap luas ditekan menjadi hitam, grain kasar; secara keseluruhan memiliki nuansa pahatan epik perang yang keras."
+ },
+ "1779094923781_style": {
+  "name": "Film Horor",
+  "prompt": "Film referensi: The Autopsy of Jane Doe, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan atmosfer thriller yang tegang dan menekan, palet warna didominasi monokrom cokelat karat dan nada kulit kekuningan yang redup, pencahayaan menggunakan low-key, sumber cahaya titik hangat, dan bayangan dramatis, area gelap pekat mengelilingi sekitar, depth of field dangkal, latar samar; secara keseluruhan memiliki nuansa dingin dan kasar film horor klaustrofobik."
+ },
+ "1779094923795_style": {
+  "name": "Fotografi Film Retro",
+  "prompt": "Retro film photography style, Retro, gaya realistis live-action, karya fotografi, gaya fotografi film retro, palet warna didominasi cokelat hangat pekat jenuh, hijau tua, dan putih gading, dengan reproduksi warna tebal seperti slide film, pencahayaan menggunakan cahaya alami langsung sore hari yang kuat, bayangan pekat dan hitam, kontras terang-gelap tegas, grain halus; secara keseluruhan memiliki nuansa retro klasik film warna Kodachrome pertengahan abad lalu."
+ },
+ "1779094923780_style": {
+  "name": "Sinema Aneh Retro Amerika",
+  "prompt": "Film referensi: Human Highway, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan keanehan, retro, surealisme, dan kesan akhir zaman, palet warna didominasi nada neon magenta dan merah tua saturasi tinggi yang melapisi seluruh gambar, pencahayaan menggunakan cahaya berwarna yang pekat, area gelap tenggelam dalam ungu kehitaman, komposisi sudut pandang tak lazim memperkuat rasa pusing; secara keseluruhan memiliki nuansa film psikedelik B-movie kultus."
+ },
+ "1779094923773_style": {
+  "name": "Sinema Absurd High-Key Putih",
+  "prompt": "Film referensi: Slack Bay, gaya realistis live-action, karya fotografi; gaya keseluruhan memadukan keganjilan, surealisme, dan humor gelap, palet warna didominasi high-key terang dan warna segar saturasi tinggi, pencahayaan menggunakan natural light sinar matahari alami yang cerah, bayangan ringan dan transparan, gambar bersih dan cerah, komposisi rapi dengan kesan panggung; secara keseluruhan memiliki nuansa retro ceria komedi pedesaan Prancis."
+ },
+ "1779094923823_style": {
+  "name": "Render Animasi Berkualitas Tinggi",
+  "prompt": "Gaya render 3D (gaya seni konsep CG kelas sinema), gaya render 3DCG, nuansa desain konsep lingkungan kelas film, bentuk alami dan realistis dengan lapisan detail yang kaya, material menampilkan kekasaran dan pantulan basah yang nyata, pencahayaan didominasi volumetric light, berkas cahaya Tyndall, dan global illumination, kabut menyelimuti dengan kesan udara yang kuat, palet warna cenderung emas hangat dan hijau kebiruan alami, secara keseluruhan megah dan indah, dengan atmosfer trailer CG game kelas atas, 3D"
+ },
+ "1779094923846_style": {
+  "name": "Render 3D Stilisasi",
+  "prompt": "Karakter 3D (render stilisasi), stilisasi 3D, aliran render real-time game engine Barat, bentuk di antara realistis dan kartun, proporsi sedikit dilebih-lebihkan, struktur disederhanakan dengan tegas, material PBR bernuansa lukisan tangan, kain matte, highlight logam tajam, transisi kulit lembut, menggunakan key light ala studio ditambah rim light dingin, latar gelap bersih, warna jenuh dan tenang, secara keseluruhan memiliki nuansa showcase karakter game stilisasi, 3D"
+ },
+ "1779094923768_style": {
+  "name": "Sinema Teal and Orange",
+  "prompt": "Film referensi: Wanted, gaya sinema nada biru-oranye, gaya realistis live-action, karya fotografi, nuansa adegan malam film thriller aksi Hollywood, palet warna didominasi biru kehijauan dingin dengan aksen sumber cahaya oranye hangat lokal, membentuk benturan warna komplementer teal and orange klasik, pencahayaan menggunakan low-key, satu sumber cahaya dingin, dan bayangan dalam yang luas, gradasi area gelap kaya, gambar suram dan menekan namun memancarkan ketegangan dramatis, dengan film grain ringan dan atmosfer color grading kelas sinema."
+ },
+ "1779094923772_style": {
+  "name": "Sinema Industrial",
+  "prompt": "Film referensi: The Substance, gaya sinema industrial, gaya realistis live-action, karya fotografi, nuansa visual surealis dingin kontemporer, palet warna didominasi Monochromatic saturasi tinggi, high-key, dan nada putih, dilengkapi langit biru yang sejuk, pencahayaan menggunakan Key Light sinar matahari langsung yang keras, batas terang-gelap tajam, bayangan bersih dan tegas, gambar sangat terang dan transparan nyaris overexposed, kesan keteraturan garis dan perspektif sangat kuat; secara keseluruhan bersih, terkendali, dengan atmosfer industrial futuristik yang berjarak."
+ },
+ "1779094923760_style": {
+  "name": "Era Ekonomi Naik Amerika",
+  "prompt": "Film referensi: Pain & Gain, gaya era kemakmuran Amerika, gaya realistis live-action, karya fotografi, nuansa visual budaya pop Amerika tahun sembilan puluhan, palet warna didominasi saturasi tinggi, warna primer pop seperti merah menyala, biru danau, dan kuning cerah bertabrakan dengan berani, pencahayaan menggunakan cahaya siang yang terang dan sederhana serta pencahayaan high-key, bayangan tipis, warna gambar pekat dan cerah dengan kontras tegas; secara keseluruhan memancarkan atmosfer optimis dan flamboyan era konsumsi retro Amerika."
+ },
+ "1779094923767_style": {
+  "name": "Film Hong Kong 90-an",
+  "prompt": "Film referensi: Flowers of Shanghai, gaya film Hong Kong tahun 90-an, gaya realistis live-action, karya fotografi, palet warna didominasi nada hangat dan glow kuning, halo amber seperti lampu tungsten membungkus gambar, pencahayaan menggunakan cahaya ambien interior dan cahaya frontal lembut, warna kulit hangat, area gelap cenderung hangat, dengan film grain jelas dan halo soft focus ringan, gambar nostalgis dan intim; secara keseluruhan memiliki kehangatan rakyat dan kilau masa lalu film Hong Kong tahun sembilan puluhan."
+ },
+ "1779094923770_style": {
+  "name": "Sinema Bernuansa Teknologi",
+  "prompt": "Film referensi: True Lies, gaya sinema bernuansa teknologi, gaya realistis live-action, karya fotografi, potret tokoh, nuansa studio film thriller spionase Hollywood tahun sembilan puluhan, gaya keseluruhan tegang dan terkendali, palet warna didominasi low-key dan nada dingin, biru navy gelap, abu-abu baja, dan perak dingin memenuhi gambar, pencahayaan menggunakan key light yang membentuk dengan presisi, wajah terang sementara lingkungan tenggelam dalam bayangan, kontras terang-gelap tegas, gambar bersih dan tajam, dengan atmosfer dingin berjarak ala elite urban."
+ },
+ "1779094923761_style": {
+  "name": "Sinema Misteri",
+  "prompt": "Film referensi: The Nun, gaya sinema misteri, gaya realistis live-action, karya fotografi, nuansa visual film horor misteri gotik, palet warna didominasi desaturasi, abu-abu dingin, abu-abu kebiruan, dan kuning layu membentuk dasar warna suram dan muram, pencahayaan menggunakan cahaya alami difus hari mendung, cahaya landai tanpa highlight jelas, langit menekan dan berat, gambar sunyi dan lengang, dengan sedikit grain dan kesan kabut; secara keseluruhan dipenuhi atmosfer misteri gotik yang tidak menyenangkan, sepi, dan menekan."
+ },
+ "1779094923764_style": {
+  "name": "Sinema Mitologi Yunani",
+  "prompt": "Film referensi: Flash Gordon, gaya sinema mitologi Yunani, gaya realistis live-action, karya fotografi, visual surealis seperti mimpi ala space opera retro, palet warna didominasi glow biru lembut, biru-putih dan ungu pucat berpadu seperti berada di ranah suci berawan dan berkabut, pencahayaan menggunakan soft light luas dan glow yang menyebar, nyaris tanpa bayangan keras, gambar terang dan transparan, dengan soft focus pekat dan efek difusi halo; secara keseluruhan suci dan melayang, dengan atmosfer luar biasa seperti epik mitologi."
+ },
+ "1779094923771_style": {
+  "name": "Sinema Retro Amerika",
+  "prompt": "Film referensi: Tron, gaya sinema retro Amerika, gaya realistis live-action, karya fotografi, gaya keseluruhan retro, palet warna didominasi low-key, saturasi tinggi, dan nada neon, dasar dingin biru kehijauan dan cahaya neon oranye-merah membentuk benturan hangat-dingin yang kuat, pencahayaan menggunakan rim light dan sumber cahaya ambien berwarna, cahaya hangat merembes dari celah menggarisi tepian, area gelap dalam, gambar samar seperti malam neon; secara keseluruhan memiliki atmosfer pekat retro-futurisme tahun delapan puluhan."
+ },
+ "1779094923766_style": {
+  "name": "Film Hitam Putih Hollywood",
+  "prompt": "Film referensi: The Man Who Wasn't There, gaya film hitam putih Hollywood, gaya realistis live-action, karya fotografi, nuansa sinematografi film noir klasik, palet warna didominasi kontras tinggi, monokrom, dan low-key, gradasi abu-abu hitam putih murni yang halus, pencahayaan menggunakan pencahayaan Rembrandt dan bayangan dalam, highlight bersih, area gelap pekat, kontras terang-gelap kuat dan berkesan pahatan, gambar dengan film grain perak halida yang halus; secara keseluruhan elegan dan dingin, dengan atmosfer khidmat dramatis film hitam putih Hollywood lama."
+ },
+ "1779094923850_style": {
+  "name": "Miniatur Kartun 3D",
+  "prompt": "Satu adegan bergaya render 3D (lanskap miniatur kartun), nuansa adegan miniatur isometrik tiga dimensi, bentuk low poly membulat dan disederhanakan, proporsi mungil dan imut, material matte lembut seperti figur mainan, banyak elemen self-illuminated sebagai aksen, pencahayaan didominasi cahaya atmosfer berwarna dan volumetric fog, kontras terang-gelap lembut, palet warna cenderung malam biru-ungu dengan cahaya titik oranye hangat, secara keseluruhan seperti mimpi dan halus, dengan atmosfer dunia miniatur seperti diorama mainan kartun, 3D"
+ },
+ "1779094923826_style": {
+  "name": "Lukisan Kartun Barat 3D",
+  "prompt": "Gaya ilustrasi fantasi Amerika, lukisan bergaya kartun Barat 3D, memadukan lukisan tangan impasto dengan kesan volume 3D, proporsi bentuk dilebih-lebihkan dengan ketegangan dinamis kuat, sapuan kuas ringkas dengan tepi tegas, material bernuansa lukisan alih-alih fotorealistis, efek cahaya magis dan berlebihan, aliran energi bercahaya membungkus gambar, palet warna didominasi kontras biru-ungu saturasi tinggi dengan abu-abu dingin, terang-gelap dramatis, secara keseluruhan memiliki atmosfer epik fantasi gelap ala ilustrasi kartu, 3D"
+ },
+ "1779094923843_style": {
+  "name": "Render 3D Stilisasi Barat",
+  "prompt": "Karakter 3D (render 3D stilisasi Barat), gaya render 3D stilisasi Barat, bentuk di antara realistis dan kartun, proporsi ramping, fitur wajah tegas, kulit bernuansa subsurface scattering yang lembut, material kain dan lingkungan kaya detail, pencahayaan didominasi sumber cahaya titik hangat cahaya lilin dengan area gelap low-key, bayangan pekat dan atmosfer menekan, palet warna kontras cokelat keabuan saturasi rendah dengan kuning hangat, secara keseluruhan memiliki nuansa film animasi thriller gotik, 3D"
+ },
+ "1779094923806_style": {
+  "name": "Pahatan Digital 3D",
+  "prompt": "Karakter hasil render 3D (dengan gaya realistis sinematik), gaya render 3D presisi tinggi, aliran pahatan digital ZBrush, struktur anatomi realistis dan tekstur pahatan yang halus, lipatan kulit, sisik berduri, dan rongga mulut basah menampilkan subsurface scattering dan material berkilau tinggi, serat rambut terlihat helai demi helai, latar hitam pekat studio dengan rim light samping-belakang, kontras terang-gelap kuat, palet warna tenang dan realistis, secara keseluruhan memiliki nuansa showcase pahatan CG makhluk kelas film, 3D"
+ },
+ "1779094923784_style": {
+  "name": "Seni Konsep Anime",
+  "prompt": "2D anime character (concept art style), gaya seni konsep anime, gaya gambar lembar konsep karakter Jepang-Korea, garis bersih dan halus dibantu gradasi semi-impasto, motif busana dan aksesori logam digambar dengan halus, palet warna memadukan warna gelap yang dalam dengan warna mewah seperti emas hangat dan merah tua, transisi terang-gelap lembut, highlight terkendali, latar sering dibiarkan kosong atau di-blur untuk menonjolkan subjek, secara keseluruhan megah dan elegan, dengan atmosfer tenang dan berkelas, 2D"
+ },
+ "1779094923812_style": {
+  "name": "Render HD 3D Gaya Tiongkok",
+  "prompt": "Gaya render HD 3D gaya Tiongkok, aliran animasi CG xianxia Tiongkok, karakter cantik dan halus, fitur wajah berdimensi dan lembut, kulit menampilkan nuansa subsurface scattering yang halus, rambut terlihat helai demi helai, material aksesori logam, rumbai, dan untaian manik presisi tinggi, pencahayaan low-key dan temaram dengan key light ungu-biru dingin dan fill light merah muda hangat, area gelap pekat, atmosfer misterius dan mewah, palet warna ungu, biru, dan emas saturasi rendah yang saling terjalin, secara keseluruhan memiliki nuansa serial CG gaya Tiongkok kelas sinema, 3D"
+ },
+ "1779094923758_style": {
+  "name": "Sinema Nada Ungu",
+  "prompt": "Film referensi: The Thin Red Line, gaya sinema nada ungu, gaya realistis live-action, karya fotografi, nuansa film seluloid yang puitis dan liris, palet warna didominasi nada ungu, merah keunguan senja, ungu teratai, dan cokelat gelap saling terjalin, pencahayaan menggunakan cahaya alami jendela dan cahaya samping lembut, area gelap tebal dan cenderung hangat, highlight lembut tidak menyilaukan, dengan film grain jelas dan sedikit rembesan warna, gambar hening dan malas; secara keseluruhan dipenuhi atmosfer melankolis nostalgis seperti senja dalam perjalanan."
+ },
+ "1779094923847_style": {
+  "name": "Seni Game Kartun Amerika 3D",
+  "prompt": "Gaya render kartun 3D, gaya render 3D, antropomorfisme 3D, aliran seni game kartun Amerika, bentuk membulat dan dilebih-lebihkan, proporsi chibi imut, kontur penuh, material bernuansa tanah liat matte dan karet lembut, permukaan halus dan mulus dengan highlight lembut, menggunakan cahaya studio lembut dan latar gradasi polos yang bersih, warna saturasi tinggi dengan benturan warna berani, cerah dan ceria, secara keseluruhan memiliki atmosfer jenaka showcase desain karakter game stilisasi, 3D"
+ },
+ "1779094923841_style": {
+  "name": "Figur Blind Box 3D",
+  "prompt": "Gaya cat blind box 3D, gaya animasi 3D Pixar, nuansa mainan koleksi art toy, proporsi chibi kepala besar, bentuk membulat dan disederhanakan, permukaan dengan lapisan cat halus mengilap seperti vinil dan lateks, material bersih tanpa cela, pencahayaan lembut dan terang, global illumination transparan tanpa bayangan keras, warna didominasi paduan warna permen saturasi tinggi, cerah dan menggemaskan, depth of field lembut dan blur, secara keseluruhan memiliki atmosfer imut dan menenangkan showcase mainan blind box, 3D"
+ },
+ "1779094923845_style": {
+  "name": "Anime 3D-ke-2D Cel Shading",
+  "prompt": "Gaya kartun anime 3D-ke-2D, lukisan kartun 3D tiga dimensi, aliran cel shading, bentuk karakter mempertahankan proporsi cantik anime, rambut dan kain dengan blok highlight khas anime, terang-gelap dengan pemisahan warna bertepi tegas, dilengkapi glow lembut dan efek partikel cahaya melayang, palet dasar gelap menonjolkan warna rambut saturasi tinggi dan aksen emas-ungu, atmosfer indah seperti mimpi, secara keseluruhan memiliki nuansa keyframe film layar lebar anime, 3D"
+ },
+ "1779094923801_style": {
+  "name": "Render 3D Hiperrealis",
+  "prompt": "Gaya render 3D hiperrealis, render realistis definisi tinggi, pemodelan 3D, aliran CG cutscene game kelas sinema, anatomi tokoh dan tekstur pori kulit sangat realistis, subsurface scattering halus, pakaian dan perlengkapan dengan material PBR presisi, tekstur logam dan kain terbedakan jelas, pencahayaan didominasi cahaya atmosfer malam biru kehijauan dingin dengan glow neon, depth of field sinematik, palet warna nada dingin saturasi rendah, secara keseluruhan memiliki atmosfer blockbuster fiksi ilmiah realistis, 3D"
+ },
+ "1779094923842_style": {
+  "name": "Render Realistis UE5",
+  "prompt": "Render CG realistis, render HD 3D, aliran render real-time realistis kelas UE5, bentuk mengikuti anatomi realistis yang ketat dengan struktur otot dan tendon jelas, tekstur kulit kasar dan kilau tulang dalam PBR presisi, pahatan detail rapat, latar hitam pekat studio dengan cahaya samping keras dan rim light, kontras terang-gelap kuat, bayangan dalam, palet warna abu-abu dingin saturasi rendah, secara keseluruhan memiliki nuansa kelas film desain konsep makhluk gelap, 3D"
+ },
+ "1779094923848_style": {
+  "name": "Render HD 3D Epik Tiongkok",
+  "prompt": "Gaya render 3D animasi Tiongkok, render HD 3D, aliran animasi CG xianxia wuxia Tiongkok, karakter realistis cenderung cantik, rambut melambai terlihat helai demi helai, zirah kostum kuno dan material kain halus, tekstur kulit halus dan transparan, pencahayaan didominasi backlight matahari senja dan cahaya langit hangat dengan rim light tegas, palet warna nada hangat emas-oranye dengan latar jauh abu-abu kebiruan, komposisi sangat sinematik, secara keseluruhan memiliki atmosfer epik indah serial CG gaya Tiongkok, 3D"
+ },
+ "1779094923849_style": {
+  "name": "Render Kartun 3D",
+  "prompt": "Gaya animasi 3D Pixar, aliran render film animasi Amerika, bentuk membulat dan dilebih-lebihkan, proporsi kartun, ekspresi hidup, material bulu halus dan mengembang helai demi helai, vegetasi dan lingkungan bernuansa stilisasi sederhana, pencahayaan terang dan lembut, global illumination transparan, kesan sinar matahari kuat, bayangan bersih, warna saturasi tinggi dan cerah dengan hijau yang subur, secara keseluruhan memiliki atmosfer ceria dan menenangkan film animasi keluarga, 3D"
+ },
+ "1779094923821_style": {
+  "name": "Render 3D Kartun Amerika",
+  "prompt": "Gaya fantasi hasil render 3D, render 3D kartun Amerika, aliran desain konsep properti magis, bentuk dilebih-lebihkan dengan detail rumit, kulit dengan tekstur usang, logam dengan goresan dan highlight, semua material bernuansa PBR realistis presisi tinggi, latar gelap studio dengan key light ala spotlight, kesan dimensi terang-gelap kuat, palet warna didominasi cokelat hangat dengan aksen putih tulang dan merah gelap, secara keseluruhan memiliki nuansa halus kelas koleksi seni fantasi board game, 3D"
+ },
+ "1779094923822_style": {
+  "name": "Impasto 3D",
+  "prompt": "Gaya render 3D, gaya impasto CG ilustrasi konsep, perpaduan nuansa ilustrasi konsep game dengan render tiga dimensi, pewarnaan bernuansa sapuan impasto, bentuk cenderung realistis dengan ketegangan dinamis yang dilebih-lebihkan, material kaya detail dengan kesan volume kuat, render backlight kuat dan volumetric light, debu, kabut, dan bercak cahaya membangun atmosfer epik, palet warna didominasi kontras emas hangat, cokelat tanah, dan cahaya langit putih dingin, komposisi dinamis dan berdampak kuat, secara keseluruhan memiliki nuansa ilustrasi konsep CG kelas blockbuster fantasi, 3D"
+ },
+ "1779094923827_style": {
+  "name": "Render PBR Realistis 3D",
+  "prompt": "Gaya render 3D (render PBR realistis), nuansa CG kelas sinema, render material PBR berbasis fisika, detail logam brushed, oksidasi usang, dan tekstur relief yang halus, highlight dan pantulan mengikuti hukum fisika nyata, backlight hangat dan pantulan api lingkungan, latar samar dengan percikan api beterbangan, kontras terang-gelap kuat, palet warna didominasi cokelat gelap, perunggu, dan oranye membara, atmosfer berat dan epik, secara keseluruhan memiliki nuansa realistis kelas trailer CG next-gen, 3D"
+ },
+ "1779094923844_style": {
+  "name": "Render Game 3D",
+  "prompt": "Gaya render game 3D, render HD 3D, nuansa animasi cutscene real-time game engine next-gen, pemodelan tokoh realistis, subsurface scattering kulit halus, rambut dirender helai demi helai, tekstur material pakaian halus, pencahayaan gelap low-key dengan rim light lembut, latar dalam dan blur, gradasi terang-gelap sinematik, palet warna didominasi hitam pekat, cokelat hangat, dan abu-abu dingin, atmosfer tenang dan tertahan, secara keseluruhan memiliki nuansa render real-time kelas sinema game AAA, 3D"
+ },
+ "1779094923825_style": {
+  "name": "Karakter 3D Kartun Sederhana",
+  "prompt": "Karakter 3D (gaya render 3D kartun Amerika), render stilisasi game engine, bentuk membulat dan disederhanakan, proporsi fitur wajah sedikit dilebih-lebihkan, ekspresi hidup, rambut diolah menjadi blok berkelompok, material halus dengan highlight lembut, PBR sederhana yang bersih dan cerah, cahaya studio lembut dengan rim light, latar polos menonjolkan subjek, warna jenuh dan terang dengan kontras tegas, secara keseluruhan memiliki nuansa halus dan atmosfer energik karakter game stilisasi Barat, 3D"
+ },
+ "1779094923803_style": {
+  "name": "Animasi Kartun 3D",
+  "prompt": "Gaya render kartun 3D, kartun 3D, nuansa animasi keluarga ala Pixar, bentuk karakter membulat dan disederhanakan, proporsi kepala-badan kartun, permukaan halus dan mulus dengan highlight lembut, properti hard surface bersih dan tegas, global illumination merata dan lembut, latar gradasi terang yang segar dan transparan, warna cerah dengan biru-putih segar dan aksen warna energik, gambar bersih dan terang, secara keseluruhan memiliki atmosfer ramah dan menenangkan film animasi tiga dimensi, 3D"
+ },
+ "1779094923816_style": {
+  "name": "Seni Konsep Game Amerika",
+  "prompt": "2D anime character (American game concept art style), Overwatch fan art style, gaya seni konsep game Amerika, gaya desain karakter render kartun Barat, blok bentuk dilebih-lebihkan dan tegas, tekstur mecha hard surface digarap solid, blok terang-gelap ala cel shading dipadukan highlight halus, warna saturasi tinggi dan cerah, sering dihiasi warna bercahaya bernuansa teknologi, latar datar sederhana menonjolkan subjek, secara keseluruhan penuh aura heroik, nuansa seni promosi game yang bersih dan tegas, 2D"
+ },
+ "1779094923790_style": {
+  "name": "Fantasi Retro Y2K",
+  "prompt": "Extrasensory world portraiture, Y2K retro surrealist style, nuansa kolase surealis retro milenium, render soft focus ala poster airbrush, elemen dekoratif highlight refraksi logam ditumpuk dengan pemandangan malam seperti mimpi, bintang berkilau, partikel galaksi menyebar, palet warna didominasi biru tua, violet, dan putih perak dengan aksen hijau fluoresen, efek cahaya samar bersinar, atmosfer eteris dan misterius, secara keseluruhan memiliki nuansa surealis nostalgis poster fantasi dreamcore akhir tahun sembilan puluhan, 3D"
+ },
+ "1779094923834_style": {
+  "name": "Ilustrasi Flat Jepang",
+  "prompt": "Cel shading Jepang, gaya ilustrasi flat Jepang, gaya anime seperti frame animasi, garis tipis dan bersih, pewarnaan flat area luas, gradasi terang-gelap sangat minimal nyaris tanpa bayangan rumit, palet warna segar, lembut, dan cenderung saturasi rendah, subjek jelas dan tajam sementara latar diproses blur seperti depth of field fotografi, membentuk kontras depan tajam belakang samar, secara keseluruhan tenang, jernih, dan bernuansa keseharian, dengan atmosfer halus anime remaja Jepang, 2D"
+ },
+ "1779094923838_style": {
+  "name": "Ilustrasi Vaporwave",
+  "prompt": "Gaya vaporwave ilustrasi anime retro tahun 80-an, gaya ilustrasi vaporwave, gaya lukisan latar animasi cel retro era Showa, garis jelas dengan sedikit getaran gambar tangan, pewarnaan flat ditumpuk tekstur usang ringan, palet warna berupa blok warna retro saturasi tinggi seperti kuning hangat, oranye-merah, dan hijau mint yang disatukan, cahaya sederhana dengan sedikit gradasi, komposisi rapi seperti desain latar animasi, secara keseluruhan memancarkan suasana vaporwave ala City Pop pemandangan kota yang nostalgis, 2D"
+ },
+ "1779094923808_style": {
+  "name": "RPG Fantasi Gelap 3D",
+  "prompt": "Render CG realistis gaya gotik gelap, render HD 3D, nuansa karakter game RPG fantasi gelap, bentuk realistis dipahat halus dengan detail rumit, kulit pucat dingin dengan subsurface scattering, aksesori logam dan kulit gelap dengan highlight tajam, aksen elemen warna darah, latar hitam pekat dengan pencahayaan low-key, kontras terang-gelap kuat membentuk dimensi, palet warna didominasi hitam tinta, putih perak, dan merah tua, atmosfer berbahaya dan menyeramkan, secara keseluruhan memiliki nuansa kelas promosi CG mahakarya fantasi gelap, 3D"
+ },
+ "1779094923836_style": {
+  "name": "Ilustrasi Digital Cyberpunk",
+  "prompt": "Gaya ilustrasi digital cyberpunk, gaya lukisan impasto digital seni konsep fiksi ilmiah, tekstur render realistis yang halus, tanpa garis kontur jelas, struktur logam dan hard surface digambar presisi, palet warna didominasi biru keabuan dingin dan warna malam gelap, dengan aksen sumber cahaya teknologi seperti hijau fluoresen dan oranye hangat, perspektif atmosfer seperti kabut senja membangun kedalaman, gradasi cahaya kaya dengan kontras terang-gelap dramatis, secara keseluruhan dingin dan menekan namun penuh nuansa wasteland futuristik, kualitas gambar konsep kelas sinema, 2D"
+ },
+ "1779094923817_style": {
+  "name": "Seni Konsep Game",
+  "prompt": "2D anime-style character (game concept art style), gaya seni konsep game, gaya ilustrasi karakter game Jepang-Korea, semi-impasto dipadukan garis halus, material busana dan lambang logam digarap cermat, transisi terang-gelap lembut dengan highlight terkendali, palet warna tenang dan elegan memadukan warna hangat saturasi rendah dengan warna gelap, latar umumnya berupa tata letak lembar desain flat satu warna dengan bingkai dekoratif, secara keseluruhan halus dan mewah, dengan tingkat penyelesaian seperti ilustrasi karakter kartu, 2D"
+ },
+ "1779094923828_style": {
+  "name": "Gaya Umum Anime Tiongkok",
+  "prompt": "Gaya anime (gaya Bai Yao Pu / Fairies Album), gaya umum anime Tiongkok, gaya cel animasi Tiongkok bernuansa kuno, garis tipis dan mengalir, pewarnaan flat dengan sedikit gradasi lembut, palet warna anggun dan hangat didominasi hijau kebiruan saturasi rendah, putih krem, dan warna kayu, pengolahan terang-gelap tipis dan tersirat, latar blur soft focus menonjolkan tokoh, alis dan mata tokoh halus dan klasik, secara keseluruhan lembut dan tenang, dengan pesona kuno Timur dan nuansa serial anime Tiongkok yang menenangkan, 2D"
+ },
+ "1779094923799_style": {
+  "name": "Animasi Tanah Liat",
+  "prompt": "Gaya animasi tanah liat, nuansa kerajinan animasi stop-motion, karakter dan set seperti dibentuk dari tanah liat dan felt buatan tangan, bentuk membulat dan naif dengan tepi lembut, permukaan mempertahankan jejak buatan tangan yang halus dan tekstur matte, set dan properti miniatur penuh detail kerajinan tangan, cahaya lampu hangat membungkus lembut, cahaya dan bayangan hangat seperti teater dongeng, palet warna didominasi oranye krem, cokelat kayu, dan warna aksen lembut, secara keseluruhan memiliki atmosfer hangat dan menenangkan animasi stop-motion buatan tangan, 3D"
+ },
+ "1779094923807_style": {
+  "name": "Render Kartun 3D Versi Kuat",
+  "prompt": "Gaya render kartun 3D, secara keseluruhan bernuansa pemodelan 3D halus dan mulus, render karakter kelas film animasi Barat, bentuk memadukan sudut tegas dan lekuk membulat, kontur fitur wajah tegas dan dilebih-lebihkan, kulit halus dengan sedikit tekstur dan subsurface scattering, highlight material logam dan kain digarap cermat, latar gelap dengan pencahayaan ala spotlight menonjolkan volume, transisi terang-gelap lembut dan berdimensi, warna penuh dan pekat, secara keseluruhan memiliki nuansa close-up karakter film animasi berkualitas tinggi, 3D"
+ },
+ "1779094923805_style": {
+  "name": "Animasi Fantasi Tiongkok 3D",
+  "prompt": "Gaya render 3D, nuansa CG kelas sinema bertema fantasi Tiongkok, pemodelan tokoh realistis dan halus, kulit putih transparan dengan subsurface scattering, helai rambut dan motif busana dipahat satu per satu, busana Timur bernuansa mewah dan berat, latar gelap dengan pencahayaan low-key, key light lembut dengan bayangan dingin gelap, kontras terang-gelap dramatis, palet warna didominasi merah menyala, emas sepuh, dan hitam tinta, atmosfer tajam dan indah, secara keseluruhan memiliki nuansa render CG HD mahakarya fantasi Timur, 3D"
+ },
+ "1779094923810_style": {
+  "name": "Render Lateks Mengilap 3D",
+  "prompt": "Karakter 3D (gaya render HD), gaya render lateks 3D, nuansa karakter CG kelas sinema, bentuk dilebih-lebihkan penuh ketegangan dengan struktur penuh, kulit mengilap dan basah seperti lateks, highlight tajam dengan pantulan kuat, tekstur detail dan material kain dipahat halus, gradasi nuansa PBR jelas, latar gelap dengan bercak cahaya bokeh, key light dingin membentuk dimensi, palet warna didominasi biru dingin, putih keabuan, dan lingkungan gelap, atmosfer ganjil dan intens, secara keseluruhan memiliki nuansa render karakter kelas film, 3D"
+ },
+ "1779094923811_style": {
+  "name": "Plastik Jeli 3D",
+  "prompt": "3D Jelly-like plastic style, render bernuansa plastik semi-transparan seperti jeli, bentuk mengalir dan membulat seperti kaca tiup, material tembus cahaya dan membias dengan glow lembut di dalamnya, tetesan air dan highlight di permukaan berkilau bening, secara keseluruhan ringan dan seperti mimpi bagaikan pahatan gel, global illumination terang dan transparan, palet warna didominasi biru es, ungu pucat, dan senja merah muda-oranye, atmosfer jernih dan indah, secara keseluruhan memiliki nuansa seni 3D semi-transparan yang berkilau seperti mimpi, 3D, langit gradasi"
+ },
+ "1779094923833_style": {
+  "name": "Gaya Dalí",
+  "prompt": "Gaya realisme surealis Salvador Dalí, gaya lukisan cat minyak surealisme klasik, sapuan kuas halus dan mulus nyaris tanpa jejak, objek digambarkan secara realistis dan presisi namun disandingkan secara absurd untuk menciptakan kesan mimpi, palet warna tenang didominasi biru keabuan, abu-abu kabut, dan warna saturasi rendah, cahaya lembut dan merata seperti cahaya difus hari mendung, komposisi tegak dengan kekhidmatan klasik, secara keseluruhan rasional dan terkendali namun ganjil dan transenden, penuh atmosfer surealis yang filosofis, 2D"
+ },
+ "1779094923798_style": {
+  "name": "Animasi Stop-Motion",
+  "prompt": "Gaya animasi stop-motion, nuansa animasi boneka stop-motion ala Laika, karakter seperti boneka kayu dan kain buatan tangan, bentuk bermata besar yang naif dan hidup, permukaan matte dengan tekstur buatan tangan yang halus, set dan properti miniatur nyata yang halus dan realistis, cahaya alami hangat masuk melalui jendela dengan aksen cahaya lilin, depth of field dangkal, latar soft focus, palet warna didominasi cokelat hangat, amber, dan warna tanah lembut, secara keseluruhan memiliki atmosfer hangat nostalgis film animasi stop-motion, 3D"
+ },
+ "1779094923792_style": {
+  "name": "Tinta Hitam Putih",
+  "prompt": "Ghost of Tsushima black and white ink conceptual illustration style, gaya tinta hitam putih, gaya ilustrasi konsep tinta hitam putih, murni hitam putih tanpa warna, sapuan kuas kasar dan bebas, efek kuas kering dan garis kecepatan menyapu dinamika kuat, kontras pekat-tipis tinta tegas, ruang kosong luas dan blok tinta pekat saling berbenturan, garis seperti sabetan kuas kering penuh tenaga, secara keseluruhan tegas dan tajam dengan energi mengalir, memadukan kebebasan lukisan tinta dengan atmosfer mencekam gambar konsep bertema samurai, 2D"
+ },
+ "1779094923809_style": {
+  "name": "Kartun Barat 3D",
+  "prompt": "Gaya render kartun Barat 3D, render karakter stilisasi Barat, bentuk ringkas, proporsi fitur wajah dilebih-lebihkan dan jenaka, rambut berblok halus, permukaan halus dan mulus dengan highlight lembut dan subsurface scattering, key light cerah dengan rim light biru-ungu, latar gelap polos menonjolkan tokoh, kontras warna tegas, transisi terang-gelap bersih, atmosfer jenaka dan lincah, secara keseluruhan memiliki nuansa render halus karakter animasi 3D stilisasi Barat, 3D"
+ },
+ "1779094923793_style": {
+  "name": "Render Realistis HD 3D",
+  "prompt": "High-definition 3D realistic rendering style, render realistis HD 3D, nuansa tokoh CG kelas sinema, pemodelan halus dan realistis, subsurface scattering kulit dan tekstur mikro yang nyata, rambut helai demi helai, material pakaian kaya detail, pencahayaan low-key sinematik, key light lembut dan bayangan dalam membentuk volume, latar gelap dan blur, palet warna didominasi kontras hitam pekat, abu-abu dingin, dan warna kulit hangat, atmosfer tenang dan sinematik, secara keseluruhan memiliki nuansa render CG fotorealistis, 3D"
+ },
+ "1779094923814_style": {
+  "name": "Ilustrasi Komik Amerika",
+  "prompt": "American comic animation illustration style, gaya ilustrasi animasi komik Amerika, gaya halaman dalam komik superhero Amerika, garis tinta tebal dan kuat, blok bayangan dan highlight ala cel shading memotong volume, perspektif dilebih-lebihkan, komposisi dinamis berdampak kuat, warna saturasi tinggi dan pekat, sering menggunakan efek cahaya energi untuk membangun atmosfer, kontras terang-gelap kuat nyaris siluet, secara keseluruhan berapi-api dan flamboyan, dengan ketegangan dramatis seperti sampul komik DC dan Marvel, 2D"
+ },
+ "1779094923840_style": {
+  "name": "Ilustrasi Psikedelik Retro Bertekstur",
+  "prompt": "Gaya ilustrasi psikedelik retro bertekstur, gaya ilustrasi digital bernuansa cetak retro, seluruh gambar dilapisi butiran noise halus dan tekstur seperti cetak stensil riso, tanpa garis kontur jelas, bentuk dibangun dari blok warna dan bercak cahaya, warna psikedelik saturasi tinggi didominasi biru, hijau, dan ungu dengan aksen fluoresen yang melompat, cahaya dan bayangan tampil sebagai riak warna mengalir dan bercak cahaya belang, secara keseluruhan seperti mimpi dan melayang, sejuk dan terang, penuh puisi psikedelik ala poster retro, 2D"
+ },
+ "1779094923839_style": {
+  "name": "Ilustrasi Krayon Anak",
+  "prompt": "Gaya ilustrasi flat Barat, gaya ilustrasi krayon gambar tangan anak-anak, gaya kartun buku bergambar Barat, bentuk membulat dan dilebih-lebihkan penuh keceriaan anak, pewarnaan blok datar tanpa garis atau bergaris tipis, tepi dengan sedikit tekstur gosokan kering seperti krayon, warna cerah dan hangat dengan blok warna jenuh yang disatukan langsung, terang-gelap sangat minimal nyaris tanpa gradasi, latar flat sederhana dengan ruang kosong, secara keseluruhan lincah dan ceria, sederhana dan akrab, dengan kesan naratif halaman buku bergambar anak, 2D"
+ },
+ "1779094923815_style": {
+  "name": "Animasi Novel Grafis Hitam Putih",
+  "prompt": "Black and white 2D graphic novel animation style (Persepolis IP style), gaya animasi komik 2D hitam putih, gaya novel grafis hitam putih Eropa, dua kutub hitam putih murni nyaris tanpa abu-abu tengah, bentuk sangat disederhanakan dan diringkas, garis merata dan bersih, siluet hitam pekat luas dan ruang kosong saling memotong dengan kuat, cahaya dan bayangan diekspresikan dalam blok ala cetak grafis, komposisi datar dengan kesan keteraturan kuat, secara keseluruhan tenang dan terkendali dengan sedikit rasa berjarak, dengan cita rasa artistik animasi independen gambar tangan, 2D"
+ },
+ "1779094923835_style": {
+  "name": "Manga Shonen Berkualitas Tinggi",
+  "prompt": "Gaya manga shonen 2D berkualitas tinggi, gaya animasi anime aksi shonen Jepang, garis tajam dan tegas, pewarnaan blok cel shading dipadukan kontras terang-gelap kuat, ekspresi dan gerakan tokoh dilebih-lebihkan penuh daya ledak, gambar dipenuhi efek cahaya seperti kilat energi, garis kecepatan, dan serpihan beterbangan, palet warna saturasi tinggi didominasi warna membara seperti emas hangat dan oranye-merah, efek backlight dan glow kuat, secara keseluruhan bergelora dengan ketegangan pertarungan maksimal berkualitas serial premium, 2D"
+ },
+ "1779094923831_style": {
+  "name": "Gaya Katsuhiro Otomo",
+  "prompt": "Gaya anime klasik Katsuhiro Otomo (Akira), gaya animasi cel film layar lebar Jepang tahun 80-90an, seni latar gambar tangan berkepadatan sangat tinggi, garis ketat dan realistis, detail bangunan dan vegetasi ditumpuk lapis demi lapis dengan teliti, pewarnaan flat ditumpuk lapisan terang-gelap halus, palet warna cenderung hijau keabuan saturasi rendah bernuansa film nostalgis, cahaya sederhana dan alami, secara keseluruhan tenang dan realistis, dengan suasana kota akhir era Showa dan nuansa zaman animasi lama, 2D"
+ },
+ "1779094923818_style": {
+  "name": "Ilustrasi Impasto Nada Gelap",
+  "prompt": "2D Hand-drawn Character (Dark Impasto Illustration Style), ilustrasi impasto nada gelap, lukisan konsep impasto realistis, tanpa garis kontur jelas, sapuan kuas tebal ditumpuk membentuk volume dan tekstur kasar, palet warna didominasi cokelat keabuan, hijau gelap, dan kuning redup, tingkat kecerahan keseluruhan sangat rendah, cahaya menekankan sumber cahaya sempit yang menembus dan bayangan pekat, detail rapat dengan lapisan tebal, dipenuhi atmosfer menekan dan gersang seperti wasteland pasca-kiamat, 2D"
+ },
+ "1779094923830_style": {
+  "name": "Kartun Era Osamu Tezuka",
+  "prompt": "Gaya kartun era Osamu Tezuka, gaya animasi cel retro Showa, nuansa animasi gambar tangan Jepang tahun delapan puluhan, garis gambar tangan bersih dan mengalir, pewarnaan flat cel, warna jernih dan terang, highlight dan bayangan berblok sederhana, bentuk lembut dan elegan bernuansa manga shoujo, gambar cerah dan transparan dengan sedikit soft light film, secara keseluruhan beratmosfer segar nostalgis, murni dan indah, 2D"
+ },
+ "1779094923832_style": {
+  "name": "Gaya Shanghai Animation Studio",
+  "prompt": "Gaya anime (gaya Shanghai Animation Film Studio), gaya animasi gambar tangan klasik studio Shanghai, gaya seni rakyat Tiongkok yang sangat dekoratif, garis tipis dan mengalir, bentuk sangat berpola, pewarnaan flat cel dipadukan latar gouache bebas, palet warna didominasi paduan warna Tiongkok anggun seperti hijau kebiruan, biru indigo, dan putih merah muda, gradasi terang-gelap tersirat dan lembut, latar samar seperti asap, secara keseluruhan elegan dan bernuansa kuno, kaya keindahan dekoratif Timur, 2D"
+ },
+ "1779094923819_style": {
+  "name": "Mitologi Tiongkok",
+  "prompt": "2D hand-drawn character, Chinese mythology style, gaya mitologi Tiongkok, ilustrasi garis sepuhan emas, memadukan lukisan gongbi warna pekat dengan gradasi tinta, garis tipis mengalir dengan sorotan emas, palet warna berdasar cokelat hangat, putih krem, dan kuning oker, dengan aksen merah cinnabar, biru azurit, dan emas, motif awan dan siluet gunung ditata bebas, cahaya lembut dengan halo bernuansa ilahi, gambar melayang dan megah, penuh aura mitologi xianxia Timur, 2D"
+ },
+ "1779094923800_style": {
+  "name": "Ilustrasi Kartun 2D",
+  "prompt": "Stylized 2D cartoon illustration style, gaya ilustrasi kartun dua dimensi, garis gelap bersih dan tegas, pewarnaan flat cel, warna cerah jenuh dengan kontras segar, bayangan diringkas dalam blok warna bertepi tegas, ketegangan perspektif kuat dengan kedalaman ruang jelas, detail kaya namun rapi, kesan cahaya seperti sinar matahari cerah yang transparan, secara keseluruhan hidup dan terang, dengan cita rasa segar seperti seni latar anime Jepang, 2D"
+ },
+ "1779094923786_style": {
+  "name": "Konsep Ilustrasi Gelap",
+  "prompt": "Black Myth Wukong style, dark fantasy original art thick impasto style, gaya konsep ilustrasi gelap, lukisan digital impasto fantasi gelap ala Black Myth, tanpa garis kontur, bentuk dibangun dari tumpukan sapuan kuas, palet warna berdasar hitam pekat, dari area gelap luas hanya menonjolkan sedikit warna berat saturasi tinggi seperti merah tua, kontras terang-gelap sangat kuat dengan fokus cahaya dramatis, detail dipahat halus dengan tekstur dingin, secara keseluruhan ganjil dan menekan, penuh nuansa ritual dan ketegangan horor, 2D"
+ },
+ "1779094923797_style": {
+  "name": "Ilustrasi Wayang Kulit",
+  "prompt": "Shadow puppetry illustration style, gaya ilustrasi wayang kulit, estetika ukiran dan kertas potong wayang kulit tradisional Tiongkok, bentuk datar bergaya siluet profil, kontur halus berlubang dengan motif rapat seperti ukiran, dasar kertas kuning krem dengan pewarnaan tradisional emas hangat, merah oker, hitam tinta, dan hijau zamrud, warna hangat dan kuno, cahaya datar seperti tembusan cahaya lampu bayangan, dengan kesan semi-transparan kulit dan tekstur kertas di dasar, secara keseluruhan kuno, halus, dan kental cita rasa rakyat, 2D"
+ },
+ "1779094923788_style": {
+  "name": "Ilustrasi Gelap Amerika",
+  "prompt": "Gaya komik Amerika, gaya komik Barat, gaya ilustrasi gelap Amerika, garis tinta kasar dan bertenaga, pembentukan terang-gelap berblok tegas, bayangan hitam tinta luas sebagai dasar, palet warna didominasi cyan dingin, hijau keabuan, dan biru gelap, dengan aksen highlight hangat seperti cahaya api, kontras cahaya kuat seperti film noir, garis hujan dan garis kecepatan memperkuat dinamika, secara keseluruhan dingin dan mencekam, penuh atmosfer noir kriminal komik Amerika, 2D"
+ },
+ "1779094923787_style": {
+  "name": "Ilustrasi Fantasi Gelap",
+  "prompt": "Gaya ilustrasi fantasi gelap, gaya ilustrasi konsep retro Amerika, lukisan digital impasto fantasi Barat, tanpa garis kontur jelas, sapuan kuas lembut dan tebal dengan transisi halus, palet warna didominasi hijau tinta, biru gelap, dan abu-abu kehitaman, efek cahaya sihir hijau redup sebagai sumber cahaya utama, kontras terang-gelap kuat, rim light menggarisi kontur, kabut menyelimuti dengan kedalaman samar, secara keseluruhan misterius dan suram, penuh nuansa dongeng gelap dan sihir, 2D"
+ },
+ "1779094923785_style": {
+  "name": "Manga Gelap",
+  "prompt": "2D anime character (dark manga style), gaya manga gelap, gaya manga Jepang hitam putih, garis pena tipis dan rapat, hitam putih kontras tinggi nyaris tanpa abu-abu tengah, siluet hitam tinta luas berpadu dengan ruang kosong, motif dekoratif seperti sulur dan bunga dengan garis rumit dan megah, gradasi terang-gelap diekspresikan lewat kepadatan garis, bernuansa dekoratif gotik, secara keseluruhan muram dan indah, dekaden dan halus, 2D"
+ },
+ "1779094923791_style": {
+  "name": "Ilustrasi Minimalis",
+  "prompt": "Flat modern illustration style, gaya ilustrasi minimalis, ilustrasi flat modern sederhana, tanpa garis atau bergaris sangat tipis, pewarnaan flat blok besar, bentuk sederhana membulat dan ringkas, paduan warna lembut saturasi rendah didominasi warna lembut seperti putih krem, krem, dan cokelat muda, nyaris tanpa gradasi cahaya, hanya sedikit bayangan lembut, latar ruang kosong luas dan bersih, gambar bersih dan transparan, secara keseluruhan segar dan menenangkan, tenang dan terkendali, 2D"
+ },
+ "1779094923796_style": {
+  "name": "Gotik Halftone Retro Gelap",
+  "prompt": "Retro halftone dark gothic illustration style, gaya gotik nada gelap halftone retro, ilustrasi bernuansa cetak komik retro, garis hitam tebal dipadukan titik halftone untuk area abu-abu dan bayangan, palet warna didominasi hitam tinta, merah gelap, dan hijau kekuningan pucat, paduan warna suram kontras tinggi, gambar dengan noise cetak lama dan tekstur goresan, sapuan kuas kering menambah rasa gelisah, secara keseluruhan dekaden dan menyeramkan, penuh cita rasa komik gotik gelap, 2D"
+ },
+ "1779094923789_style": {
+  "name": "Lukisan Tinta Timur",
+  "prompt": "Eastern ink decorative illustration style, gaya lukisan tinta Timur, ilustrasi dekoratif tinta, garis tipis gongbi dipadukan nuansa tinta bebas, ruang kosong luas, variasi pekat-tipis dan kering-basah tinta yang kaya, palet warna didominasi putih kertas xuan dan abu-abu hitam tinta, gradasi emas pucat dan kuning oker dengan sedikit aksen merah cinnabar, garis melayang dan lincah, lipatan busana dan uap awan berputar mengalir, cahaya datar dan tersirat, secara keseluruhan eteris dan anggun, kental puisi klasik, 2D"
+ },
+ "1779094923783_style": {
+  "name": "Pixel Art",
+  "prompt": "16-bit retro pixel art style, gaya pixel, seni pixel retro 16-bit, butiran pixel dan tepi bergerigi terlihat jelas, palet warna terbatas dengan transisi dithering, paduan warna jenuh dan cerah dengan kontras kuat, detail diringkas dalam blok pixel, terang-gelap diekspresikan lewat lapisan gradasi warna, dengan nuansa layar konsol game retro, secara keseluruhan halus dan nostalgis, penuh estetika pixel video game retro, 2D"
+ },
+ "1786674799159_style": {
+  "name": "Sketsa Coretan Hitam Putih",
+  "prompt": "Gaya animasi sketsa coretan hitam putih gambar tangan, garis pensil dan spidol kasar yang santai dan longgar, bentuk tokoh naif dan dilebih-lebihkan, rambut hitam pekat area luas membentuk kontras kuat dengan permukaan kertas kosong, latar hanya digariskan samar dengan sketsa pensil tipis, gambar mempertahankan tekstur kertas dan getaran gambar tangan; secara keseluruhan menampilkan nuansa coretan santai dan penuh emosi seperti film pendek animasi independen."
+ },
+ "1786674799296_style": {
+  "name": "Kartun Retro Mid-Century",
+  "prompt": "Gaya kartun modernisme mid-century tahun 50-60an, bentuk datar dan geometris, garis kasar sederhana dengan blok warna flat besar, proporsi tokoh sangat stilisasi dengan pipi merah bulat dan mata besar, latar dihiasi pola seperti garis diagonal dan belang, palet warna didominasi oranye-merah dan kuning krem retro, gambar dengan sedikit film grain dan kesan usang; secara keseluruhan retro dan jenaka, penuh nuansa animasi iklan era keemasan."
+ },
+ "1786674799433_style": {
+  "name": "Gaya Urban Taiyo Matsumoto",
+  "prompt": "Gaya animasi manga urban gambar tangan ala Taiyo Matsumoto, garis pena miring dan longgar namun penuh ketegangan, papan nama dan kabel listrik pemandangan jalan berkepadatan sangat tinggi, perspektif dilebih-lebihkan dan miring, tokoh kurus tinggi dan lincah, warna kuning hangat dan biru cyan jenuh diwarnai flat dengan tangan, tepi tidak rapi dengan rembesan cat air; secara keseluruhan menampilkan nuansa animasi independen Jepang di mana kehidupan jalanan dan khayalan liar berdampingan."
+ },
+ "1786674799570_style": {
+  "name": "Flat Pop Psikedelik",
+  "prompt": "Gaya animasi flat pop psikedelik, garis kontur tebal berubah bentuk bebas, benturan warna saturasi tinggi disatukan dengan berani, perspektif dan proporsi terdistorsi dan dilebih-lebihkan mengikuti emosi, barang-barang interior dan pola memenuhi gambar, sapuan kuas dinamis dan bebas; secara keseluruhan menampilkan nuansa animasi eksperimental yang liar, melompat, dan meledak energi."
+ },
+ "1786674799707_style": {
+  "name": "Komik Eropa Urban Retro",
+  "prompt": "Gaya animasi komik Eropa urban retro, palet warna usang didominasi hijau zaitun dan kuning tanah, detail blok bangunan rapat, pagar besi tempa dan tali jemuran penuh nuansa kehidupan, garis tokoh halus dengan bentuk realistis sedikit dilebih-lebihkan, cahaya lembut bernuansa sore kekuningan, gambar dengan noise cetak retro; secara keseluruhan menampilkan nuansa jalanan yang santai dari animasi dewasa Prancis."
+ },
+ "1786674799844_style": {
+  "name": "Buku Bergambar Pena dan Cat Air",
+  "prompt": "Gaya animasi buku bergambar pena dan cat air tipis, garis pena halus bergetar menggambar bangunan dan barang-barang, gradasi tinta ditambah lapisan cat air tipis, palet warna didominasi cokelat keabuan dan putih krem dengan sesekali aksen cahaya hangat, tokoh kecil dan naif ditempatkan di adegan luas, gambar seperti halaman buku cerita gambar tangan; secara keseluruhan tenang dan nostalgis, dengan sedikit puisi kesepian."
+ },
+ "1786674799981_style": {
+  "name": "Animasi Sketsa Pensil",
+  "prompt": "Gaya animasi sketsa pensil, garis sketsa dan garis bantu struktur yang mempertahankan kesan belum selesai, arsiran abu-abu muda membentuk volume, hanya pipi dan pupil yang diberi aksen warna tipis, tekstur kertas dan bekas penghapus terlihat jelas, tatapan tokoh halus dengan emosi pekat; secara keseluruhan menampilkan pesona gambar tangan asli seperti buku sketsa yang langsung bergerak."
+ },
+ "1786674800118_style": {
+  "name": "Pop Grafiti Fluoresen",
+  "prompt": "Gaya video musik pop grafiti fluoresen, kontur hitam tebal dengan isian grafiti spidol, blok warna terang seperti merah muda persik, biru langit, dan kuning lemon diwarnai flat area luas, bentuk karakter disederhanakan menjadi simbol grafis, dipadukan elemen grafiti seperti garis radial dan not musik, gambar lugas dan ceria; secara keseluruhan menampilkan nuansa ilustrasi trendi perpaduan stiker jalanan dan animasi musik."
+ },
+ "1786674800255_style": {
+  "name": "Buku Bergambar Anak Gouache",
+  "prompt": "Gaya animasi buku bergambar anak gouache, sapuan kuas gouache berbutir yang tebal dan hangat, warna cerah jenuh, dinding biru-hijau dan pakaian kuning hangat berkontras tegas, tokoh membulat dan lugu dengan ekspresi tulus, detail lingkungan penuh suasana sekolah dan kehidupan, cahaya lembut seperti ruang kelas sore hari; secara keseluruhan menampilkan nuansa hangat dan menenangkan buku bergambar anak."
+ },
+ "1786674800392_style": {
+  "name": "Ilustrasi Anak Nianhua Retro",
+  "prompt": "Gaya ilustrasi anak nianhua (lukisan Tahun Baru) Tiongkok tahun 50-60an, bentuk bayi gembul membulat dan meriah dengan pipi merah dan mata besar, pewarnaan flat gouache dengan gradasi halus, warna cerah dan meriah didominasi merah menyala dan hijau zamrud, latar bunga dan tanaman sangat dekoratif, kertas sedikit menguning dengan kesan termakan usia; secara keseluruhan menampilkan keceriaan khas Tiongkok klasik dari poster propaganda nostalgis dan bayi nianhua."
+ },
+ "1786674800529_style": {
+  "name": "Ilustrasi Flat Emosi Biru Ungu",
+  "prompt": "Gaya ilustrasi emosi monokrom biru ungu, kerumunan diringkas dalam blok warna biru ungu seragam dengan wajah samar, tokoh utama disinari sedikit warna hangat membentuk kontras kesepian, bentuk flat tanpa garis yang ringkas dan tegas, sapuan kuas bertekstur kuas kering, komposisi menekankan keterasingan individu dari arus manusia; secara keseluruhan menampilkan nuansa buku bergambar emosi urban yang tenang dan terkendali."
+ },
+ "1786674800666_style": {
+  "name": "Ilustrasi Neon Gradasi Fluoresen",
+  "prompt": "Gaya ilustrasi neon gradasi fluoresen, gradasi warna permen merah muda, ungu, dan biru cyan menyelimuti seluruh gambar, mata besar tokoh dengan highlight berkilau, rambut bernuansa pelangi semi-transparan, latar kota dengan papan neon dan pita cahaya hologram saling terjalin, tepi bercahaya lembut; secara keseluruhan menampilkan nuansa ilustrasi generasi baru yang penuh warna seperti mimpi dan menguarkan kesan futuristik."
+ },
+ "1786674800803_style": {
+  "name": "Tekstur Relief Tembaga",
+  "prompt": "Gaya animasi tekstur relief tembaga, gambar seperti relief pada lempeng tembaga tempa, tokoh dan motif ditampilkan dalam tekstur logam timbul, nada perunggu tua dengan bercak hitam oksidasi, kontur dibentuk dari titik dan garis ketukan, kilau mengalir mengikuti lekuk bentuk; secara keseluruhan menampilkan nuansa unik perpaduan kerajinan logam kuno dan kesan ritual misterius."
+ },
+ "1786674800940_style": {
+  "name": "Ilustrasi Naratif Flat Warna Tipis",
+  "prompt": "Gaya animasi naratif flat warna tipis, garis ringkas dipadukan pewarnaan flat abu-abu saturasi rendah, bentuk tokoh kurus dan realistis, ruang kosong adegan terkendali, sesekali blok warna glitch pixel sebagai aksen menciptakan retakan surealis, emosi tenang dan berjarak; secara keseluruhan menampilkan nuansa naratif sastrawi animasi independen Tiongkok."
+ },
+ "1786674801077_style": {
+  "name": "Kolase Kertas Kekanakan",
+  "prompt": "Gaya stop-motion kolase seni kertas kekanakan, tokoh seperti potongan kertas dari coretan krayon yang ditempel, latar berupa kolase kertas cokelat berkerut dan kertas cat air, komposisi naif dengan perspektif miring, warna lembut dengan butiran krayon, bayangan kertas terlihat nyata; secara keseluruhan menampilkan kehangatan kerajinan tangan seperti buku gambar anak yang dihidupkan."
+ },
+ "1786674801214_style": {
+  "name": "Impasto Remaja Keemasan",
+  "prompt": "Gaya animasi impasto remaja backlight keemasan, cahaya matahari senja kuning keemasan menyirami seluruh gambar, sapuan impasto tokoh halus dengan kulit memancarkan cahaya hangat, kisi-kisi dan bayangan pohon di latar memudar menjadi bercak cahaya, highlight meluap membentuk halo samar; secara keseluruhan menampilkan nuansa kenangan masa muda yang membara namun cepat berlalu, seperti disepuh emas oleh waktu."
+ },
+ "1786674801351_style": {
+  "name": "Gouache Noise Nostalgis",
+  "prompt": "Gaya animasi gouache noise nostalgis, palet warna retro saturasi rendah didominasi abu-abu kebiruan dan merah karat, pewarnaan flat gouache dengan noise berbutir jelas dan pola raster cetak, bentuk tokoh lugu dengan kesan zaman yang kuat, tata adegan nostalgis, cahaya kekuningan dan lembut; secara keseluruhan menampilkan nuansa muram perpaduan majalah bergambar lama dan ingatan sejarah."
+ },
+ "1786674801488_style": {
+  "name": "Manga Garis Hitam Putih Kerumunan",
+  "prompt": "Gaya manga garis hitam putih adegan kerumunan, garis tipis merata menggambar pemandangan jalan dan kerumunan yang rapat, hanya sedikit oranye kuning sebagai aksen tokoh utama, komposisi sejajar mata bergeser horizontal seperti gulungan panjang, bentuk tokoh jenaka dan membulat, gambar padat informasi namun tertata; secara keseluruhan menampilkan nuansa humor dingin dan terkendali komik aliran ligne claire."
+ },
+ "1786674801625_style": {
+  "name": "Kartun Neon Retro Amerika",
+  "prompt": "Gaya kartun neon retro Amerika, elemen pemandangan jalan Amerika dan mobil antik tahun lima puluhan, garis tebal dengan warna permen saturasi tinggi, papan neon bersinar di bawah langit malam, bentuk tokoh dilebih-lebihkan dengan postur hidup, kontras warna kuat, ramai dan meriah; secara keseluruhan menampilkan nuansa animasi retro perpaduan era keemasan Amerika dan pop jalanan."
+ },
+ "1786674801762_style": {
+  "name": "Ilustrasi Tekstur Oil Pastel",
+  "prompt": "Gaya ilustrasi tekstur oil pastel, sapuan oil pastel kasar dan tebal ditumpuk lapis demi lapis, warna pekat dengan benturan oranye-merah, kuning cerah, dan biru danau, bentuk naif membulat dengan kepolosan gambar anak, arah sapuan kuat dengan butiran lilin terlihat; secara keseluruhan menampilkan nuansa buku bergambar oil pastel yang hangat, kasar, dan penuh sentuhan tangan."
+ },
+ "1786674801899_style": {
+  "name": "Manga Seinen Realistis",
+  "prompt": "Gaya animasi manga seinen realistis, wajah tokoh digambar realistis dan halus, kerutan dan tetesan keringat terlihat jelas, pewarnaan cel terkendali dan tenang, cahaya alami seperti potongan kehidupan, adegan seperti kantor dan lapangan olahraga penuh tekstur realitas; secara keseluruhan menampilkan nuansa realistis muram animasi drama dewasa."
+ },
+ "1786674802036_style": {
+  "name": "Buku Bergambar Cat Air Mimpi",
+  "prompt": "Gaya animasi mimpi buku bergambar cat air, gradasi cat air lembut berpadu dengan sketsa pensil, adegan mimpi berproporsi surealis, citra lembut dan fantastis seperti raksasa berbaring di atas kota kecil dan terowongan selimut, palet warna hangat saturasi rendah merah muda-oranye dan kuning angsa, sapuan kuas santai dan kekanakan; secara keseluruhan menampilkan nuansa mimpi seperti buku cerita pengantar tidur."
+ },
+ "1786674802173_style": {
+  "name": "Lianhuanhua Cat Air Pedesaan",
+  "prompt": "Gaya cat air lianhuanhua (komik strip) Tiongkok lama, gaya bacaan anak tahun 50-60an, cat air lembut dan transparan, pedesaan hijau kebiruan dan adegan rumah petani, tokoh berkepala bulat mengenakan pakaian dan sepatu kain, garis halus dan lembut, ruang kosong bernapas lega; secara keseluruhan menampilkan nuansa lianhuanhua pedesaan klasik nostalgis penuh keceriaan anak."
+ },
+ "1786674802310_style": {
+  "name": "Gadis Cat Air Melankolis",
+  "prompt": "Gaya ilustrasi gadis cat air melankolis, padang rumput hijau keabuan dan bunga putih dengan gradasi teknik basah, gadis berambut hitam dengan sapuan longgar seperti arang bercampur cat air, palet warna muram dan sejuk, tatapan tokoh kosong dengan emosi pekat, gambar menyisakan banyak ruang bernapas; secara keseluruhan menampilkan nuansa ilustrasi rapuh dan puitis seperti buku harian pribadi."
+ },
+ "1786674802447_style": {
+  "name": "Gambar Kota Naif Miring",
+  "prompt": "Gaya ilustrasi kota naif dan miring, gedung-gedung kota dicoret dengan krayon dan spidol hingga condong ke sana kemari, perspektif sengaja dibuat tak seimbang, warna pekat dengan sapuan kasar, tokoh disederhanakan seperti gambar anak namun emosinya nyata, langit malam dan lampu dicoret memancarkan energi gelisah; secara keseluruhan menampilkan nuansa gambar tangan yang liar seperti gambar anak ekspresionis."
+ },
+ "1786674802584_style": {
+  "name": "Stop-Motion Sketsa Jurnal",
+  "prompt": "Gaya stop-motion sketsa jurnal nyata, proses melukis dengan pensil, arang, dan cat air di halaman buku catatan yang difilmkan langsung, karakter dalam gambar bergerak di atas kertas, bekas penghapus dan tekstur kertas terlihat jelas, meja dan tangan yang memegang pena sesekali masuk frame; secara keseluruhan menampilkan nuansa kerajinan tangan intim di mana proses berkarya itu sendiri menjadi animasi."
+ },
+ "1786674802721_style": {
+  "name": "Garis Coretan Gotik",
+  "prompt": "Gaya garis coretan gotik, garis tipis bergetar gelisah menggambar tokoh kurus kering, didominasi hitam putih dengan latar pola seperti sasaran tembak dan spiral, bentuk sakit namun imut dengan kepala besar, anggota tubuh kurus, dan elemen jahitan, cahaya dan bayangan diekspresikan dengan arsiran radial; secara keseluruhan menampilkan nuansa humor ganjil coretan dongeng gelap."
+ },
+ "1786674802858_style": {
+  "name": "Lianhuanhua Gongbi Warna Pekat",
+  "prompt": "Gaya lianhuanhua gongbi warna pekat gaya Tiongkok, garis kawat besi dipadukan warna mineral pekat, gaun pengantin merah menyala dan perhiasan sepuh emas yang mewah dan khidmat, wajah tokoh klasik dan halus, komposisi kerumunan rapat seperti gulungan lukisan kuno, sesekali transisi gradasi tinta; secara keseluruhan menampilkan nuansa gaya Tiongkok megah perpaduan lianhuanhua tradisional dan gongbi warna pekat."
+ },
+ "1786674802995_style": {
+  "name": "Buku Bergambar Impasto Akrilik",
+  "prompt": "Gaya buku bergambar impasto bertekstur akrilik, cat ditumpuk di atas kanvas nyata dengan tekstur pisau palet dan sapuan kuas yang menonjol terlihat, langit dan rumput dioles bebas dengan sapuan besar, tepi tokoh kasar menyatu dengan latar, warna segar dengan kehangatan lukisan tangan; secara keseluruhan menampilkan nuansa seni asli animasi frame demi frame dari lukisan fisik."
+ },
+ "1786674803132_style": {
+  "name": "Cukil Hitam Putih",
+  "prompt": "Gaya garis cukil hitam putih, garis timbul kasar seperti cukil kayu dan cetak lino, blok warna putih susu dan biru danau dicukil di atas dasar hitam, tetesan hujan dan kontur tokoh menjadi torehan berpola, komposisi datar sangat dekoratif; secara keseluruhan menampilkan keindahan grafis yang kuno dan bertenaga seperti cetakan grafis buatan tangan."
+ },
+ "1786674803269_style": {
+  "name": "Epik Siluet Backlight",
+  "prompt": "Gaya animasi epik siluet backlight, tokoh dan senjata menjadi siluet hitam murni, latar awan merah senja berlapis pekat, komposisi membentang horizontal seperti gulungan epik, siluet dinamis penuh ketegangan, tepi cahaya menggarisi kontur; secara keseluruhan menampilkan estetika siluet backlight yang tragis dan sunyi."
+ },
+ "1786674803406_style": {
+  "name": "Ilustrasi Impasto Realistis Senja",
+  "prompt": "Gaya ilustrasi impasto realistis senja, cahaya batas hangat-dingin senja dilukis impasto dengan halus, sapuan seragam sekolah dan rambut gadis longgar dan realistis, pagar jalan raya dan gunung jauh berselang antara tajam dan samar, palet warna abu-abu kebiruan berpadu merah muda-oranye, emosi tenang dan sendu; secara keseluruhan menampilkan nuansa puitis senja ilustrasi remaja Jepang."
+ },
+ "1786674803543_style": {
+  "name": "Impasto Lautan Malam",
+  "prompt": "Gaya animasi impasto lautan malam, permukaan laut dan ombak biru kehitaman bergulung dalam sapuan impasto, tokoh disinari cahaya kuning hangat redup sebagai satu-satunya sumber cahaya, kontras terang-gelap sangat kuat, dinamika ombak pekat dan bertenaga; secara keseluruhan menampilkan nuansa lukisan cat minyak dramatis tentang setitik kehangatan dalam kegelapan."
+ },
+ "1786674803680_style": {
+  "name": "Flat Dinamis Oranye Biru",
+  "prompt": "Gaya flat dinamis oranye biru saturasi tinggi, gedung oranye bata bertabrakan dengan langit biru cyan, awan putih digrafiskan seperti kertas potong, tokoh berlari dan melompat dengan perspektif miring berani, blok warna tanpa garis yang bersih dan tegas, garis kecepatan dan serpihan memperkuat dinamika; secara keseluruhan menampilkan estetika gerak yang tajam dan menyegarkan seperti storyboard manga."
+ },
+ "1786674803817_style": {
+  "name": "Ilustrasi Buku Bergambar Bertekstur Butir",
+  "prompt": "Gaya ilustrasi buku bergambar bertekstur butir, butiran arang dan pastel memenuhi gambar, adegan pantai dan angin laut bernada abu-abu hangat, rambut tokoh acak-acakan dengan sapuan lugu, properti realistis seperti ponsel lama masuk gambar menciptakan kontras; secara keseluruhan menampilkan nuansa buku bergambar gambar tangan yang kasar namun lembut."
+ },
+ "1786674803954_style": {
+  "name": "Animasi Cel Urban Nada Dingin",
+  "prompt": "Gaya animasi cel urban nada dingin, palet saturasi rendah didominasi biru cyan dan abu-abu, mobil dan pemandangan jalan digariskan dengan garis keras tegas, pewarnaan flat cel dengan dua tingkat terang-gelap, bentuk tokoh dingin dan modis, ruang kosong gambar tenang; secara keseluruhan menampilkan estetika cel modern yang terkendali dan tajam seperti film kriminal urban."
+ },
+ "1786674804091_style": {
+  "name": "Animasi Prancis Ceria",
+  "prompt": "Gaya animasi Prancis ceria, lorong tangga kuning hangat dan pagar hijau kebiruan bernuansa gouache, warna cerah dengan cahaya transparan, gerakan tokoh dilebih-lebihkan dan mengalir penuh ritme komedi, tepi sapuan lembut, komposisi bervariasi dari sudut atas dan bawah; secara keseluruhan menampilkan nuansa ringan dan lincah film pendek animasi Prancis."
+ },
+ "1786674804228_style": {
+  "name": "Flat Surealis Ganjil",
+  "prompt": "Gaya flat surealis ganjil, tokoh pucat disandingkan dengan padang rumput suram, asap hitam membubung di kejauhan menciptakan kegelisahan, warna hijau keabuan saturasi rendah, sapuan kuas tenang dan halus justru menonjolkan atmosfer ganjil, komposisi simetris dan statis seperti panggung; secara keseluruhan menampilkan tekanan psikologis surealis yang dingin."
+ },
+ "1786674804365_style": {
+  "name": "Komposit Live-Action dan Gambar Tangan",
+  "prompt": "Gaya komposit live-action dan gambar tangan, karakter 2D gambar tangan ditumpangkan pada adegan foto nyata, sosok garis putih sangat minimalis yang kontras menggemaskan dengan set nyata, cahaya dan perspektif selaras alami dengan rekaman nyata; secara keseluruhan menampilkan keunikan media campuran di mana realitas dan dimensi coretan saling menerobos."
+ },
+ "1786674804502_style": {
+  "name": "Buku Bergambar Naif Fauvisme",
+  "prompt": "Gaya buku bergambar naif fauvisme, blok warna pekat dengan tepi kasar seperti kolase kertas potong, kuning mustard, biru langit, dan biru ultramarin bertabrakan, bentuk karakter ganjil namun lucu dan polos, tiang listrik dan adegan tanah gersang digrafiskan sangat minimalis; secara keseluruhan menampilkan nuansa buku bergambar absurd perpaduan paduan warna fauvisme dan bentuk gambar anak."
+ },
+ "1786674804639_style": {
+  "name": "Impasto Dongeng Cahaya Hangat",
+  "prompt": "Gaya animasi impasto dongeng cahaya hangat, kontras cahaya hangat kedai dengan nada dingin malam hujan, bentuk anak laki-laki membulat dengan impasto halus, berkas cahaya menembus kisi jendela dengan debu terlihat, warna penuh seperti permen namun dengan filter masa lalu; secara keseluruhan menampilkan nuansa film dongeng yang hangat dan menenangkan."
+ },
+ "1786674804776_style": {
+  "name": "Ilustrasi Pola Dekoratif Retro",
+  "prompt": "Gaya ilustrasi pola dekoratif retro, gambar dipenuhi motif dekoratif rapat dan tekstur cetak motif, paduan warna usang didominasi kuning tanah dan hijau zaitun, interior mobil dan benda-benda diolah menjadi pola, garis kuno seperti cetak grafis; secara keseluruhan menampilkan nuansa ilustrasi retro perpaduan tekstil mid-century dan seni dekoratif."
+ },
+ "1786674804913_style": {
+  "name": "Anime Nostalgis Jepang 90-an",
+  "prompt": "Gaya animasi nostalgis Jepang tahun sembilan puluhan, pewarnaan cel lembut, bentuk tokoh sederhana dan akrab, adegan malam bilik telepon dan fantasi langit berbintang silih berganti, palet warna hangat dengan filter waktu, cahaya halus dan tersirat; secara keseluruhan menampilkan nuansa nostalgis lembut anime slice-of-life era kaset video."
+ },
+ "1786674805050_style": {
+  "name": "Kolase Kertas Surealis Retro",
+  "prompt": "Gaya surealis kolase seni kertas retro, kertas usang dan tekstur kain membentuk langit dan ombak, citra surealis seperti layang-layang ikan raksasa melayang di gambar, tokoh kecil seperti siluet, palet warna cokelat teh dan abu-abu kebiruan seperti foto lama; secara keseluruhan menampilkan nuansa surealis hening seperti puisi kolase barang lama."
+ },
+ "1786674805187_style": {
+  "name": "Kota Kecil Coretan Fantasi",
+  "prompt": "Gaya animasi kota kecil coretan fantasi, gedung dan jalan yang meliuk terpelintir dipenuhi detail coretan, cahaya oranye hangat berpendar dalam malam, tokoh chibi berkepala besar penuh energi, warna pekat seperti sirup; secara keseluruhan menampilkan nuansa ilustrasi fantasi berkepadatan meledak seperti taman hiburan khayalan."
+ },
+ "1786674805324_style": {
+  "name": "Animasi Flat Hangat Eropa",
+  "prompt": "Gaya animasi flat hangat Eropa, pewarnaan flat lembut dengan sedikit tekstur kertas, adegan dapur cahaya pagi penuh nuansa kehidupan, bentuk tokoh diringkas geometris dengan gerakan santai dan alami, palet warna hangat seperti krim, cahaya dan bayangan disederhanakan menjadi blok warna lembut; secara keseluruhan menampilkan nuansa animasi Eropa keseharian yang hangat."
+ },
+ "1786674805461_style": {
+  "name": "Lukisan Akrilik Ekspresionis",
+  "prompt": "Gaya lukisan akrilik ekspresionis, sapuan kuas pekat dioles langsung, kulit biru dan dapur kuning cerah membentuk kontras menyilaukan, tokoh terdistorsi memanjang dengan emosi terpampang, getaran lukisan frame demi frame sangat kuat, asap dan cahaya-bayangan mengalir kasar; secara keseluruhan menampilkan nuansa ekspresionis liar animasi seni dewasa."
+ },
+ "1786674805598_style": {
+  "name": "Komik Pena Cat Air Ganjil",
+  "prompt": "Gaya komik pena dan cat air tipis yang ganjil, garis pena miring bergetar menggambar kamar dan lorong dari sudut pandang orang pertama, pewarnaan flat tipis didominasi hijau mustard dan kuning krem, distorsi perspektif fisheye, detail coretan rapat yang jenaka dan ganjil; secara keseluruhan menampilkan nuansa naratif absurd seperti komik independen yang dijadikan animasi."
+ },
+ "1786674805735_style": {
+  "name": "Komik Retro Prancis",
+  "prompt": "Gaya komik retro Prancis, wajah tokoh diwarnai flat kuning jahe dengan fitur dilebih-lebihkan, garis tebal menggambar ekspresi gelisah, pemandangan jalan Paris dan mobil antik bernuansa cat air nostalgis, komposisi padat dan ramai, palet warna retro sedikit pudar; secara keseluruhan menampilkan nuansa humor pedas animasi adaptasi komik satir Prancis."
+ },
+ "1786674805872_style": {
+  "name": "Ilustrasi Dekoratif Etnik",
+  "prompt": "Gaya ilustrasi dekoratif etnik, citra tarian padang rumput dan kuda gagah ditata berpola, paduan warna pekat seperti permadani tenun dengan biru safir, merah tua, dan kuning cerah saling terjalin, motif busana tokoh rapat, komposisi melingkar simetris penuh kesan ritual; secara keseluruhan menampilkan keindahan dekoratif perpaduan tekstil etnik dan lukisan rakyat."
+ },
+ "1786674806009_style": {
+  "name": "Komik Dither Hitam Putih",
+  "prompt": "Gaya komik dot matrix hitam putih, gambar dibentuk dari titik dithering pixel 1-bit, kontur tokoh tebal dengan hitam putih tegas, gradasi titik mensimulasikan tingkat abu-abu, seperti perpaduan perangkat lunak komputer lama dan komik fotokopi; secara keseluruhan menampilkan nuansa grafis unik retro digital low-fi."
+ },
+ "1786674806146_style": {
+  "name": "Ilustrasi Gouache Pekat Jalanan",
+  "prompt": "Gaya ilustrasi gouache pekat kehidupan jalanan, adegan kedai makan tengah malam dengan cahaya lampu oranye hangat yang pekat, sapuan impasto gouache tegas dengan warna saturasi tinggi, ekspresi tokoh hidup penuh nuansa rakyat, detail makanan dan meja kerja menggugah selera; secara keseluruhan menampilkan nuansa ilustrasi gouache pekat yang sarat kehangatan kehidupan."
+ },
+ "1786674806283_style": {
+  "name": "Stop-Motion Kolase Foto Retro",
+  "prompt": "Gaya animasi stop-motion kolase foto retro, foto nyata dan bahan kertas potong dikolase menjadi adegan bergaya panggung, tokoh perpaduan siluet foto lama dan gambar tangan, elemen retro seperti tirai merah dan televisi lama ditumpuk, perspektif datar dengan kesan panggung kuat; secara keseluruhan menampilkan nuansa stop-motion kolase surealis seperti teater album foto lama."
+ },
+ "1786674806420_style": {
+  "name": "Stop-Motion Boneka Nyata",
+  "prompt": "Gaya animasi stop-motion boneka nyata, boneka ball-jointed difilmkan frame demi frame, riasan halus, helai rambut nyata, depth of field dangkal, cahaya seperti studio foto miniatur, proporsi properti seperti mainan; secara keseluruhan menampilkan nuansa stop-motion fotografi boneka yang halus sekaligus samar-samar menyeramkan."
+ },
+ "1786674806557_style": {
+  "name": "Dongeng Stop-Motion Boneka Kain",
+  "prompt": "Gaya dongeng stop-motion boneka kain buatan tangan, boneka jahitan tangan dengan rambut benang wol dan tubuh kain, adegan rumah kecil dari karton dan kain, pengerjaan mempertahankan jahitan dan tepi berserabut, warna hangat dan usang; secara keseluruhan menampilkan nuansa stop-motion yang kasar namun lembut seperti teater boneka kerajinan tangan."
+ },
+ "1786674806694_style": {
+  "name": "3D Matte Minimalis",
+  "prompt": "Gaya render 3D matte minimalis, sosok hitam putih di ruang putih murni tanpa gravitasi, bentuk sangat disederhanakan seperti bidak catur membulat, material matte dengan pantulan lembut, cahaya dan bayangan bersih dengan gradasi halus, komposisi dengan ruang kosong luas; secara keseluruhan menampilkan estetika 3D minimalis yang tenang dan elegan seperti seni instalasi."
+ },
+ "1786674806831_style": {
+  "name": "Render Kartun Cyan Macaron",
+  "prompt": "Gaya render kartun cyan macaron, karakter 3D diwarnai flat seperti ilustrasi dua dimensi, paduan warna macaron cyan, merah muda, dan putih yang segar dan seragam, bentuk ruang kelas dan jalan membulat dan disederhanakan, cahaya lembut tanpa bayangan keras; secara keseluruhan menampilkan nuansa kartun 3D-ke-2D saturasi rendah yang segar dan menenangkan."
+ },
+ "1786674806968_style": {
+  "name": "Stop-Motion Felt Wol",
+  "prompt": "Gaya animasi stop-motion felt wol, boneka dan hewan dari wol needle felting dengan tekstur serat mengembang yang terlihat, adegan miniatur dibangun dari potongan kayu dan benda nyata, cahaya seperti pengambilan gambar studio dokumenter, bentuk karakter antropomorfik dan jenaka; secara keseluruhan menampilkan nuansa stop-motion felt wol buatan tangan yang hangat."
+ }
+}
