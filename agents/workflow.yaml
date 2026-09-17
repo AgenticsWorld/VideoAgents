@@ -8,6 +8,9 @@
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
 #   gate: 闸门任务,全部依赖通过才放行;human: true 表示需用户签字
+#   scene_plates_requested: = NOT whitebox_requested(白模关闭,2026-09-17)——白模关闭项目的场景一致性走「场景图(正向/反向)」A 方案(docs/scene_plates.md):
+#     p4 environment-concept 出正向图 main_01.png 并登记 scene_plates.json;分镜每镜写 plate_view;p6-scene-plates 按项目 output.scene_plates(auto|single|pair,场景级可覆盖)
+#     以正向图为母版补反向图 reverse_01.png(code/render_scene_plates.py);prompt 由 code/sync_scene_plates.py --write 挂图并逐镜点名(机检 scene_plate_bound)。白模开启时该节点不实例化、机检报 skipped
 #   whitebox_requested: = 项目输出设置 output.spatial_blocking(「白模/人物精确空间位置」,默认关;2026-09-16 起未配置过的存量项目也视为关)——2026-09-07 起该开关的含义即
 #     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p4-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
 #     白模视频自动接成组视频生成的参考视频,分镜背景图自动接成组参考图;
@@ -166,7 +169,7 @@ phases:
       - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
           # 场景布局包(2026-08-19;2026-09-09 改版):俯视空间布局图 layout_top.png + layout.json(地标坐标/机位语义),替代单张主视角概念图;
           # 九宫格 grid_9views.png 自 2026-09-09 退役——不再生成、不进视频参考图(场景多角度参考由分镜背景图 p6-shot-plates 承担)
-          # 受项目输出设置 output.spatial_blocking(人物精确空间位置,默认关)控制:关闭时沿用单张场景概念图旧流程,scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound 五项机检脚本自动 skipped
+          # 受项目输出设置 output.spatial_blocking(白模,默认关)控制:关闭时走「场景图(正向/反向)」流程(2026-09-17):只出正向图 main_01.png + 登记 scene_plates.json(pair 模式同时出反向图),不出布局包;scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound 五项机检脚本自动 skipped
           outputs: ["assets/concepts/scenes/{id}/"],
           validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/blocking_map_check.py --scene <id>
       - { id: p4-scene-model, agent: 05-scenes/scene-modeling, for_each: scene,
@@ -280,11 +283,14 @@ phases:
           outputs: ["directing/{ep}/shot_plates.json"],   # 背景图本体入场景库 assets/concepts/scenes/<sid>/plates/(按机位指纹复用,跨组跨集)
           validation: { auto: [shot_plates_complete, shot_plate_bound], qa: [11-qa/visual-qa] } }   # shot_plates_complete=render_shot_plates.py --status 逐镜齐全(验收以此为准,不采信自述;前科 Agent 丢后台结单一张没出);code/render_shot_plates.py:运镜分档出镜首/镜尾、查库复用/裁切、缺的出新图(长边 1920,控制台默认图像模型)并自动 sync_shot_plates --write;机检 code/sync_shot_plates.py
           # 全景制(2026-09-10,docs/scene_panos.md):脚本先保证场景全景齐备(modules/scene_panos.py 按机位规划少数锚点、每光照方案一张 2:1 全景),背景图一律由全景按机位重投影后二次生成,不再基于白模帧+俯视图;图像模型不支持 2:1 全景 → 退出码 2 [pano_unsupported] 一张不出,Agent 上报用户换图像模型(不得自行换)
+      - { id: p6-scene-plates, agent: 06-art/environment-concept, condition: scene_plates_requested, depends_on: [p6-shots, p6-camera],
+          outputs: ["assets/concepts/scenes/{id}/scene_plates.json"],   # 场景图(正向/反向,2026-09-17,白模关闭项目):分镜定稿后按 shot_list 每镜 plate_view 与项目/场景模式,用 code/render_scene_plates.py --ep epNN 以正向图为母版补出需要的反向图并自动 sync_scene_plates --write
+          validation: { auto: [scene_plates_complete], qa: [11-qa/visual-qa] } }   # scene_plates_complete = render_scene_plates.py --status:每场景正向图在、需要反向图的场景反向图在(验收以此为准,不采信自述)
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
                         qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·costume-concept(本集各组 costumes_by_char 所指非默认服装的 sheet_<COS-id>.png)·environment-concept·prop·creature-concept 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)
-      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit, p6-shot-plates] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit, p6-shot-plates, p6-scene-plates] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
 
   - id: p7
     name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)
@@ -301,6 +307,7 @@ phases:
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
                                whitebox_ref_bound,   # 白模视频已导出的组:video_refs=camera.mp4(按生效模型参考视频预算取舍;2026-09-08 起无 top.mp4)+ 正文 Whitebox reference/legend 固定段 + Global constraints 禁白模外观句(code/sync_whitebox_refs.py,2026-09-07;开关关闭 skipped)
                                layout_map_bound,  # 2026-09-09 改版:refs 不得含场景俯视图 layout_top*.png / 九宫格 grid_9views*.png / 已退役的 blocking_maps/(俯视图只供分镜预览),逐角色 route_en 逐字命中、主体定义句用 blocking_map label(code/layout_map_bound_check.py)
+                               scene_plate_bound,  # 场景图(正向/反向,2026-09-17,白模关闭项目):refs 在角色/生物 sheet 之后挂该场景正向图(+有镜标 reverse 时的反向图)、不再挂该场景旧概念图/俯视图,正文 Shot 1: 前固定段 Scene plates: + 每个 Shot 段头 Scene plate: this shot uses [Image N] … and not [Image M].(code/sync_scene_plates.py;白模开启 skipped)
                                shot_plate_bound,  # 分镜背景图已生成的组:refs 在角色/生物 sheet 之后按镜序挂各镜背景图(两张图的镜 start+end 都挂,不走首尾帧模式)+ 正文 Shot 1: 前固定段 Shot plates:(逐镜 [Image N] 说明句);背景图机位与当前白模不一致 WARN 过期(code/sync_shot_plates.py,2026-09-09;开关关闭 skipped)
                                nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
                                prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py

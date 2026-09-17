@@ -176,6 +176,8 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 let DATA=[], CUR=null, FOLDER=null;
 // 项目「白模」选项(output.spatial_blocking,随预览数据 whitebox_enabled 下发):关闭时不显示世界模型板块/生成按钮
 let WB_ON=true;
+// 项目「场景图」设置(output.scene_plates,随预览数据 scene_plates_mode 下发):白模关闭项目的场景一致性方案,场景级可覆盖
+let SP_MODE='auto';
 // 深链定位:分镜预览页参考图标签跳转 ?id=<SCN-ID>,首次加载直接选中该场景
 let JUMP_ID=new URLSearchParams(location.search).get('id');
 // 把当前项目+选中场景写回地址栏(?project=&id=),刷新/分享后仍停在同一场景
@@ -264,6 +266,26 @@ function renderDetail(s){
   }else{
     h+='<div class="meta-line">(暂无概念图)</div>';
   }
+  // 场景图(正向/反向,2026-09-17,白模关闭项目的场景一致性 A 方案):scene_plates.json 登记 + 模式覆盖(继承项目/只出正向/正反两张)
+  if(s.scene_plates&&!WB_ON){
+    const sp=s.scene_plates;
+    const modeName={auto:t('自动:正向必出,反向按分镜按需'),single:t('只出正向'),pair:t('正反两张都出')};
+    const card=(v,role)=>{
+      if(!v||!v.url)return `<figure><div class="fthumb" style="display:flex;align-items:center;justify-content:center;min-height:120px;color:var(--dim)">${esc(role==='front'?t('正向图未出(环境概念工位出 main_01.png 并登记)'):(sp.reverse_needed?t('反向图未出:分镜定稿后由 p6-scene-plates 补出(code/render_scene_plates.py)'):t('本场景不需要反向图')))}</div><figcaption><span class="fn">${esc(role==='front'?t('正向图'):t('反向图'))}</span></figcaption></figure>`;
+      const cap=[v.standing_en?I18N.f('站位 {s}',{s:v.standing_en}):'',v.looking_en?I18N.f('看向 {s}',{s:v.looking_en}):''].filter(Boolean).join(' · ');
+      const inf=(v.in_frame_en||[]).join(', ');
+      const stale=role==='reverse'&&sp.reverse_stale?` <span style="color:#e6b422">⚠ ${esc(t('过期:正向图已重出,需重出反向图'))}</span>`:'';
+      return `<figure title="${esc(v.file||'')}"><img src="${esc(bust(v.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(role==='front'?t('正向图(门口往内看)'):t('反向图(从里回望门口)'))} · ${esc(v.file||'')}${stale}</span></figcaption>`
+        +(cap?`<figcaption><span class="fn">${esc(cap)}</span></figcaption>`:'')+(inf?`<figcaption><span class="fn">${esc(I18N.f('画内:{s}',{s:inf}))}</span></figcaption>`:'')+`</figure>`;
+    };
+    h+=`<h3 class="sec">🖼 ${t('场景图(正向 / 反向)')} <span style="color:var(--dim);font-weight:400">${esc(I18N.f('生效模式 {m}',{m:modeName[sp.effective]||sp.effective}))}${sp.legacy?' · '+esc(t('旧版主图,未登记站位')):''}</span></h3>`
+      +`<div class="meta-line">${esc(t('本场景模式'))}: <select class="sp-mode" data-sid="${esc(s.id)}"${sp.legacy?' disabled title="'+esc(t('旧版主图尚未登记站位/画内清单,先回派环境概念工位补登记再改模式'))+'"':''}>`
+      +`<option value="inherit"${sp.mode==='inherit'?' selected':''}>${esc(I18N.f('继承项目({m})',{m:modeName[SP_MODE]||SP_MODE}))}</option>`
+      +`<option value="single"${sp.mode==='single'?' selected':''}>${esc(t('只出正向'))}</option>`
+      +`<option value="pair"${sp.mode==='pair'?' selected':''}>${esc(t('正反两张都出'))}</option></select>`
+      +` <span style="color:var(--dim)">${esc(sp.reverse_reason||'')}${(sp.needed_by||[]).length?' · '+esc(I18N.f('用到反向图的镜:{s}',{s:sp.needed_by.join(', ')})):''}</span></div>`
+      +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`;
+  }
   // 分镜背景图(2026-09-09):场景库 plates/index.json,按机位指纹入库,标注被哪些集/镜引用
   if((s.plates||[]).length){
     h+=`<h3 class="sec">🖼 ${t('分镜背景图')} <span style="color:var(--dim);font-weight:400">${esc(I18N.f('{n} 张',{n:s.plates.length}))}</span></h3><div class="gallery plates">`
@@ -285,6 +307,15 @@ function renderDetail(s){
     h+='<div class="meta-line">(暂无 bible 设定文档)</div>';
   }
   box.innerHTML=h;box.scrollTop=0;
+  // 场景图模式切换(2026-09-17):POST /scenes/<sid>/plates/mode,成功后刷新本场景
+  box.querySelectorAll('select.sp-mode').forEach(sel=>sel.onchange=async()=>{
+    try{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent($('#project').value.trim()||'demo')}/scenes/${encodeURIComponent(sel.dataset.sid)}/plates/mode`,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:sel.value})});
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      await load();
+    }catch(e){alert(t('保存失败')+': '+e.message);}
+  });
   // Layout landmarks alone are not an authored scene model. An explicit empty
   // objects array is valid for a modeled open space; inferred scale is valid too.
   if(!Array.isArray(s.docs?.whitebox?.objects)){
@@ -383,7 +414,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -660,7 +691,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   // 优先级:首次深链 id > 页内刷新前已选中的场景 > 列表第一项(切项目时旧 id 找不到自然回落)

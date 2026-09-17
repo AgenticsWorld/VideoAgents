@@ -1188,6 +1188,12 @@ function shotCard(s,grp){
   const cres=(s.creatures||[]).join('、');
   // 分镜背景图(2026-09-09):directing/<ep>/shot_plates.json 关联到本镜的背景图,全部显示、宽 100px、点击放大
   const plates=(s.plates||[]).map(p=>{
+    // 场景图(正向/反向,2026-09-17,白模关闭项目):role scene_front / scene_reverse,按 shot_list plate_view 选图
+    if(p.reuse==='scene'){
+      const v=p.role==='scene_reverse'?t('反向场景图(从里回望门口)'):t('正向场景图(门口往内看)');
+      const pv=p.plate_view?'':' · '+t('未写 plate_view,按正向');
+      return `<div title="${esc(v)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(v)}"><div class="pl">${esc(v)}${esc(pv)}</div></div>`;
+    }
     const role=p.role==='end'?t('终点'):t('起点');
     const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):t('本镜新出');
     const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
@@ -1217,7 +1223,7 @@ function shotCard(s,grp){
       ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
-    ${plates.length?`<div class="plates"><div class="plateslabel">🖼 ${t('分镜背景图')}</div>${plates.join('')}</div>`:''}
+    ${plates.length?`<div class="plates"><div class="plateslabel">🖼 ${(s.plates||[]).some(p=>p.reuse==='scene')?t('场景图'):t('分镜背景图')}</div>${plates.join('')}</div>`:''}
   </div>`;
 }
 
