@@ -59,10 +59,31 @@ SKETCH_STYLE_PROMPT = (
     "The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
     "angle, low angle, over-the-shoulder, profile, from behind). "
     "Strictly black-and-white, no color. A single frame, no panel borders, no text, no captions, no speech "
-    "bubbles, no watermark. The attached images are the project's official character designs — keep each "
-    "character's likeness, hairstyle and outfit, but redraw everything as a pencil sketch; the location is "
-    "described in text only and stays a faint hint."
+    "bubbles, no watermark. "
 )
+# 风格句结尾按有无参考图二选一(2026-09-17):有参考图 → 附图是人物设定;无参考图(comfyui 纯文生图)→ 人物按文字画
+SKETCH_REFS_SENTENCE = (
+    "The attached images are the project's official character designs — keep each character's likeness, "
+    "hairstyle and outfit, but redraw everything as a pencil sketch; the location is described in text only "
+    "and stays a faint hint."
+)
+# 纯文生图整句风格提示(2026-09-17):不用 SKETCH_STYLE_PROMPT——Z-Image 这类 cfg=1 的本地模型不吃 negative,
+# 会把风格句里列举的姿态(standing, sitting, kneeling…)和「no panel borders」之类否定句照字面画成多格姿势表;
+# 这里只写正向描述、不列举姿态、不出现「panel/sheet/grid」字样。
+SKETCH_STYLE_PROMPT_TEXT_ONLY = (
+    "One rough pencil sketch on white paper filling the whole page: hand-drawn monochrome line art with loose "
+    "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. It is a single "
+    "moment from a film, seen through the camera once, drawn as one picture. FIGURES FIRST: clear confident "
+    "lines for the characters, correct body proportions and figure size for the stated shot size, readable "
+    "facial expressions, eye lines and body gestures; each figure holds exactly the body position the shot "
+    "describes. BACKGROUND MINIMAL: two or three loose lines or a little light hatching to hint at the space, "
+    "most of the paper left blank. The framing shows the stated camera angle, camera height and lens. "
+    "Strictly black-and-white. Characters are drawn from the text description alone (age, build, hairstyle, "
+    "outfit as stated); the location is described in text only and stays a faint hint."
+)
+# 纯文生图渠道(2026-09-17 用户拍板):comfyui(本地 / Comfy Cloud / RunningHub)的「参考图」是 img2img 初始画面,
+# 传人物 sheet 会把构图锁死成设定稿且压不住写实底图,多张还直接报错;草图一律不传参考图,按提示词画铅笔草图。
+TEXT_ONLY_SKETCH_PROVIDERS = ("comfyui",)
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                    "text, letters, caption, watermark, logo, speech bubble, comic panel grid, multiple panels, "
                    "border, frame lines, detailed background, cluttered environment, architectural rendering, "
@@ -1003,9 +1024,15 @@ def _space_hint(scene: dict, max_chars: int = 60) -> str:
     return _short(loc, max_chars)
 
 
-def build_prompt(scene: dict, shot: dict, names: dict, note: str = "") -> tuple[str, str]:
-    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。"""
-    parts = [SKETCH_STYLE_PROMPT]
+def sketch_text_only(provider: str) -> bool:
+    """该图像渠道出草图是否走纯文生图(不传人物参考图,宫格批量也退化为逐镜单张):comfyui 各运行方式皆是,见 TEXT_ONLY_SKETCH_PROVIDERS。"""
+    return str(provider or "").strip().lower() in TEXT_ONLY_SKETCH_PROVIDERS
+
+
+def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True) -> tuple[str, str]:
+    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。
+    with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。"""
+    parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE if with_refs else SKETCH_STYLE_PROMPT_TEXT_ONLY]
     if shot.get("size_hint"):
         parts.append(f"Shot size: {shot['size_hint']}.")
     cam = camera_hint(shot)

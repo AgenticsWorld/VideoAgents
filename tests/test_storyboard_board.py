@@ -208,3 +208,16 @@ def test_note_meta_from_board():
     m = sbb.note_meta(board, "S01-01")
     assert m["scene_no"] == "S01" and m["order"] == 1 and m["shot_id"] == "S01-D01" and len(m["content"]) == 80
     assert sbb.note_meta(board, "S09-09") == {}
+
+
+def test_sketch_text_only_for_comfyui_drops_ref_sentence():
+    """2026-09-17 用户拍板:渠道 comfyui(含 RunningHub 运行方式)出草图走纯文生图,提示词不再说「附图是人物设定」。"""
+    assert sbb.sketch_text_only("comfyui") and sbb.sketch_text_only("ComfyUI")
+    assert not sbb.sketch_text_only("volcengine") and not sbb.sketch_text_only("")
+    scene = {"scene_no": "S01", "location": "居室", "time": "夜"}
+    shot = {"key": "S01-01", "order": 1, "cast": ["CHAR-1"], "content": "她抬头", "size_hint": "近景"}
+    with_refs, _ = sbb.build_prompt(scene, shot, {"CHAR-1": "韩生妻"})
+    no_refs, _ = sbb.build_prompt(scene, shot, {"CHAR-1": "韩生妻"}, with_refs=False)
+    assert "attached images" in with_refs and "attached images" not in no_refs
+    assert "drawn from the text description" in no_refs and "韩生妻" in no_refs
+    assert "standing, sitting" not in no_refs and "panel" not in no_refs.split("Shot size")[0]

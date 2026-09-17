@@ -4,6 +4,8 @@
 按 `directing/<ep>/storyboard.json` 的草案镜出**铅笔手绘风格的小草图**,落
 `assets/storyboard/<ep>/<S01-01>.png`,台账 `assets/storyboard/<ep>/index.json`(schema storyboard_sketches/1.0)。
 参考图:只带出场人物 sheet(≤3),缩到 512px 长边;场景只靠文字(俯视图会误导模型),不用风格参考图;画幅取项目「输出设置」的视频画幅;渠道/模型按 --provider/--model
+渠道为 comfyui(本地 / Comfy Cloud / RunningHub 任一运行方式)时**不传参考图**,走纯文生图工作流按提示词画铅笔草图
+(2026-09-17 用户拍板:ComfyUI 的参考图是 img2img 初始画面,传 sheet 会把构图锁成设定稿、多张还报错)。
 提示词(2026-09-12 用户拍板)**人物优先、背景留白**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;
 机位/神态从分镜文字自动推导成英文短语(modules/storyboard_board.py camera_hint / expression_hint)。
 (缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
@@ -11,6 +13,7 @@
 两种出图方式:
 - 单镜/逐镜:每镜一张图(--scene [--order]);
 - 宫格批量(--grid,页面单集标题行「出草图」用):把待出的镜按集内顺序每 4 镜一批,一批出**一张 2×2 宫格图**
+  (渠道为 comfyui 时退化为逐镜单张:本地模型跟不了严格宫格排版,台账记 mode=single)
   (2026-09-12 由 3×3/9 镜降为 2×2/4 镜:每格更大才画得出表情;1 镜退回单张),切成小图落到各镜的 <S01-01>.png,
   台账记 mode=grid + grid{file,cols,rows,cell};宫格原图存 assets/storyboard/<ep>/_grids/。切出的小图约 1230×690,动态样片按画布等比缩放统一。
 
@@ -79,8 +82,6 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
     from modules.genmedia import generate_image, get_config
     key = shot["key"]
     note = "" if args.clear_note else (args.note.strip() or str(rec.get("note") or ""))
-    prompt, negative = sbb.build_prompt(scene, shot, names, note)
-    refs = sbb.collect_refs(root, ep, scene, shot, catalog)
     provider, model = (args.provider, args.model) if (args.provider or args.model) else _default_channel(rec)
     _set_channel(provider, model)
     rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{key}.png"
@@ -93,10 +94,13 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
             sbb.update_index(root, ep, key, {"status": "failed", "error": str(e)[:500],
                                              "scene_no": scene["scene_no"], "order": shot["order"]})
         return False
+    text_only = sbb.sketch_text_only(eff_provider)     # comfyui:纯文生图,不传人物 sheet
+    prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only)
+    refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog)
     if args.dry_run:
         print(f"[dry-run] {key} via {eff_provider} model={eff_model or '-'} aspect={aspect} size={sbb.sketch_size(eff_provider, aspect)} → {rel}")
         print(f"  prompt: {prompt}")
-        print(f"  refs: {', '.join(str(r) for r in refs) or '-'}")
+        print(f"  refs: {', '.join(str(r) for r in refs) or ('-(comfyui 纯文生图)' if text_only else '-')}")
         return True
     sbb.update_index(root, ep, key, {
         "status": "running", "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
@@ -135,8 +139,6 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
     for _, sh in panels:
         rec = index["shots"].get(sh["key"]) or {}
         sh["_note"] = "" if args.clear_note else (args.note.strip() or str(rec.get("note") or ""))
-    prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect)
-    refs = sbb.collect_grid_refs(root, ep, panels, catalog)
     provider, model = (args.provider, args.model) if (args.provider or args.model) else _default_channel({})
     _set_channel(provider, model)
     try:
@@ -149,6 +151,18 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
                 sbb.update_index(root, ep, sh["key"], {"status": "failed", "error": str(e)[:500],
                                                        "scene_no": sc["scene_no"], "order": sh["order"]})
         return len(panels)
+    if sbb.sketch_text_only(eff_provider):
+        # comfyui(本地 / Comfy Cloud / RunningHub):本地模型跟不了严格 2×2 排版(实测 Z-Image 画成 3×2、
+        # 带标题文字、上色,切格全错),宫格批量退化为逐镜单张纯文生图;渠道沿用本批解析结果,台账记 mode=single。
+        import copy
+        one = copy.copy(args)
+        one.provider, one.model = provider or eff_provider, model
+        print(f"INFO {eff_provider} 渠道不出宫格,{', '.join(keys)} 退化为逐镜单张纯文生图")
+        return sum(0 if _sketch_one(root, ep, sc, sh, names, catalog, aspect, one,
+                                    index["shots"].get(sh["key"]) or {}) else 1
+                   for sc, sh in panels)
+    prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect)
+    refs = sbb.collect_grid_refs(root, ep, panels, catalog)
     size = sbb.grid_size(eff_provider, aspect)
     grid_rel = f"{sbb.GRID_DIR_REL.format(ep=ep)}/{time.strftime('%Y%m%d-%H%M%S')}_{keys[0]}_{keys[-1]}.png"
     if args.dry_run:
