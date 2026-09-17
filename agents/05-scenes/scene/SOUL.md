@@ -17,6 +17,7 @@
 4. 记录出场章节列表与首次出场位置,标注高频/关键场景,供 `06-art/environment-concept` 排优先级。
 5. 移动场景(马车内、船上)单独标 `mobile: true`,地理挂靠记为路径区间而非固定点。
 6. **一个 SCN 只登记一个空间(2026-09-07)**:一个场景 ID 对应一个能画成**一张俯视图、一套地标**的物理空间。剧本把两处空间写进同一场次(平行剪辑的路边/后厨、候机厅→机舱、中国马路/新加坡街道、一楼客厅/前院/二楼房间)时,按空间**分别发 ID**(同一建筑内的房间各立 room 级 ID 挂 parent;移动场景也按「一段能画成一张平面的路途/一种交通工具内」各立一条),**禁止**用 `sub_settings` / `sub_spaces` / `type_mixed` / A-B 形态把多个空间塞进一个 ID。原因:下游 architecture/lighting 一卡一空间、environment-concept 一目录一套布局包、白模/动线机检只认 layout.json 主 `landmarks`,多空间共 ID 会让第二个空间没有可用的锚(前科 dzg6 SCN-0075/0076/0079,2026-09-07 拆为 SCN-0254/0255/0256;SCN-0081/0231 待拆)。已冻结的 index 需拆 ID 时走 version 开新版本,新 ID 记 `split_from`、旧 ID 记 `split_children`。
+7. **内外景登记与内外分立(2026-09-17)**:每条登记 `int_ext` ∈ `INT` / `EXT` / `INT/EXT`(`INT/EXT` 只给一张俯视图同时容纳内外的半开放空间:亭、敞廊、洞口、敞篷车)。同一处地点(总兵府、客栈、山洞)**只有在原著里室内、室外两边都有走位的戏**(人物在里面对坐/对峙/进出,不是路过或一句带过)时,才按上条分立两条 ID:院落/门前立一条 `EXT`,厅内/房内立 room 级 `INT` 挂 parent;只有一边有戏就只立那一条,**不为每栋建筑预拆内外**(每多一个 ID 下游就多一套布局包与白模)。分立后 `purpose` 各写各的戏,EXT 条目不得把厅内走位写进自己的 purpose。原因:院落级布局包里厅堂只是外观地标,白模厅内无物,INT 场次挂上去没有可用的站位锚(前科 fengshen3 SCN-0108 院落包承载 ep06 S08/S12 厅内戏,人工补立 SCN-0140)。
 
 ## 不做什么(边界)
 
@@ -77,6 +78,7 @@ instruction: |
 - `parent` 引用为合法场景 ID 且层级无环;
 - `geo_ref` 100% 命中 geography.json 节点(豁免项必须有上报记录);
 - 每个场景出场章节非空;structured_story 中的场景切分 100% 能归入某个 ID。
+- **scene_int_ext_match(2026-09-17,`python3 code/check_scene_int_ext.py --project <slug>`,宿主 CLI 只准调用)**:每条 `int_ext` 为合法枚举;存量 index 未登记只 WARN,本次工单新增/改动的条目必须登记。
 - **scene_single_space(2026-09-07)**:条目不得含 `sub_spaces` / `sub_settings` / `type_mixed` 字段,`name` 不得以「/」并列两处空间(「路边/火锅店」「机场候机/飞机舱内」即违规);下游布局包机检 `code/blocking_map_check.py --scene` 同时拒收含 `landmarks_*` 子空间键的 layout.json。
 
 **评分(evaluation Agent)**:

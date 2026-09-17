@@ -213,12 +213,14 @@ def _parse_heading(text: str) -> dict | None:
         words = re.split(r"\s+", f)
         matched = False
         for w in words:
-            key = w.upper().replace("→", "/").replace("->", "/")
+            # 「INT(水下)」「EXT(水下)→EXT」:括注不影响内外景判定
+            key = re.sub(r"[((][^))]*[))]", "", w.upper()).replace("→", "/").replace("->", "/")
+            m2 = re.fullmatch(r"(INT|EXT)[/\-]+(INT|EXT)", key)
             if key in _INT_EXT and not sc["int_ext"]:
                 sc["int_ext"] = _INT_EXT[key]
                 matched = True
-            elif re.fullmatch(r"(INT|EXT)[/→\-]+(INT|EXT)", key) and not sc["int_ext"]:
-                sc["int_ext"] = "INT/EXT"
+            elif m2 and not sc["int_ext"]:
+                sc["int_ext"] = m2.group(1) if m2.group(1) == m2.group(2) else "INT/EXT"
                 matched = True
             elif _tod(w) and not sc["time_of_day"]:
                 sc["time_of_day"] = _tod(w)

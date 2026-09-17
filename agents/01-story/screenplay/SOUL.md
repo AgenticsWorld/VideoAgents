@@ -71,6 +71,7 @@ instruction: |
 - 场景/角色引用 100% 合法 ID(对照 `bible/scenes/index.json`、`bible/characters/index.json`)。
 - **事件取舍机检(§5A,`python3 code/check_screenplay_events.py --project <slug> --ep epNN`,宿主 CLI 只准调用)**:dramatized_events_covered(本集每个 dramatize 事件至少在一场的 [事件] 行出现)、cut_events_absent(cut 事件不得出现)、scene_has_dramatized_event(每场至少挂一个 dramatize 事件,带过/并入的事件不得独立成场);场次数 > dramatize 事件 ×2 记 WARN(平铺信号)。
 - 场景块格式可解析,每场有 [事件] 行。
+- **内外景一致(scene_int_ext_match,2026-09-17,`python3 code/check_scene_int_ext.py --project <slug> --ep epNN`,宿主 CLI 只准调用)**:场头 INT/EXT 与所挂 SCN 的 `int_ext` 相容。不相容时机检会列出同一处地点里对得上的现成 ID → 改挂;**没有现成 ID 时不硬挂室外/室内的那一条,也不自造 ID**:场头先挂最近的父级 ID,回执写 `scene_gaps[]`(`{scene, header, hung_on, need: "该地点的 INT/EXT 空间", staging: 本场用到的固定位/陈设}`),由 orchestrator 派 scene 新立 ID、environment-concept 补布局包后回来改挂(只改场景 ID/场景名,正文不动)。存量 index 未登记 `int_ext` 时机检按名称推断只 WARN,WARN 逐条在回执里写明是改挂、上报还是误判。
 
 **评分(evaluation Agent,rubric writing_v1,阈值 80)**:
 - 忠实原著(15):演的情节不走样,改编有注记;按 treatments 带过/并入/删减不算不忠实。
