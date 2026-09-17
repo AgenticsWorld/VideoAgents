@@ -1289,6 +1289,10 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "生效视频模型为阿里 Wan 3.0(Fal 托管 alibaba/wan-3.0 系列)"},
     "08-video-gen/prompt/performance-direction": {
         "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
+    "08-video-gen/prompt/fight-choreography": {
+        "kind": "soul", "condition": "组内含交手/武打动作镜(引擎无关,按项目技能契约触发)"},
+    "08-video-gen/prompt/high-density-fight": {
+        "kind": "soul", "condition": "组内交手镜时长 ≥ 组总时长 60% 的整组连续打斗(引擎无关,按项目技能契约触发)"},
     "08-video-gen/upscale/minimax-regenerate-2k": {
         "kind": "conditional", "condition": "MiniMax API Key 已配置"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
