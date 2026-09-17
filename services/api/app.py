@@ -863,6 +863,11 @@ async def diagnostics_summary() -> dict[str, Any]:
     return await core.api_diagnostics_get()
 
 
+@api.get("/config/diagnostics", tags=["diagnostics"])
+async def get_diagnostics_flags() -> dict[str, Any]:
+    return await core.api_diagnostics_flags()
+
+
 @api.post("/config/diagnostics", tags=["diagnostics"])
 async def set_diagnostics(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_diagnostics_set(body)

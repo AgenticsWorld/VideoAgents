@@ -13667,18 +13667,34 @@ def diagnostics_enabled() -> bool:
     return bool(STATE.get("diagnostics_enabled", True))
 
 
+def debug_mode() -> bool:
+    """Debug 模式(设置→高级→诊断数据;默认关)。开启后控制台各 Agent 面板才显示
+    SOUL.md 按钮等面向开发者的入口;不影响采集/导出。"""
+    return bool(STATE.get("debug_mode", False))
+
+
 async def api_diagnostics_get():
     d = await asyncio.to_thread(lambda: _diagnostics().summary())
     d["enabled"] = diagnostics_enabled()   # STATE 为准,避开文件读取的 TTL 缓存
+    d["debug_mode"] = debug_mode()
     return d
 
 
+async def api_diagnostics_flags():
+    """只读两个开关(不扫事件文件),供页面启动时决定 Debug 入口显隐。"""
+    return {"enabled": diagnostics_enabled(), "debug_mode": debug_mode()}
+
+
 async def api_diagnostics_set(body: dict):
-    if body.get("diagnostics_enabled") is None:
-        raise ServiceError(400, "diagnostics_enabled must be a boolean")
-    STATE["diagnostics_enabled"] = bool(body["diagnostics_enabled"])
+    en, dbg = body.get("diagnostics_enabled"), body.get("debug_mode")
+    if en is None and dbg is None:
+        raise ServiceError(400, "diagnostics_enabled or debug_mode must be a boolean")
+    if en is not None:
+        STATE["diagnostics_enabled"] = bool(en)
+    if dbg is not None:
+        STATE["debug_mode"] = bool(dbg)
     save_state(STATE)
-    return {"enabled": diagnostics_enabled()}
+    return {"enabled": diagnostics_enabled(), "debug_mode": debug_mode()}
 
 
 async def api_diagnostics_lessons():

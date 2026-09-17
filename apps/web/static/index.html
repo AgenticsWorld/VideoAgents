@@ -308,7 +308,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="hbtns">
         <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包或单个 SKILL.md 安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
-        <button id="btn-soul">SOUL.md</button>
+        <button id="btn-soul" style="display:none" title="查看该 Agent 的 SOUL.md 原文(Debug 模式,设置→高级→诊断数据)">SOUL.md</button>
       </span>
     </div>
     <div id="messages"><div class="empty">左侧选择 Agent;跟「总制片」对话可自动调度整个团队</div></div>
@@ -822,6 +822,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="note">开启时在运行结束与生成结束处按字段白名单记录结构化事件(引擎/Agent/渠道/状态/时长/脱敏后的错误模板),只写入本机 data/.videoagents/telemetry/,不含提示词、项目内容、文件路径与 API Key,永不自动上传。「导出诊断包」生成一个 zip(事件 + 环境摘要 + 下方勾选的经验卡),由你自行提交给开发者(如 GitHub issue 附件),用于改进产品。</div>
     <div id="diag-stats" class="note">读取中…</div>
+    <div class="row"><label>Debug 模式</label>
+      <input type="checkbox" id="diag-debug" style="width:auto">
+      <span class="note" style="flex:1">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;不影响采集与导出</span></div>
     <div class="row"><label>经验卡</label>
       <span class="note" style="flex:1">任务闭环时沉淀的机制性教训(各项目 runs/&lt;task_id&gt;/lesson.md);默认全部不导出,逐张预览、勾选后才会进入诊断包</span></div>
     <div id="diag-lessons" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
@@ -2158,6 +2161,17 @@ $('#voice-dl').onclick=async()=>{
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
 let DIAG_LESSONS=[];
+let DEBUG_MODE=false;   // 设置→高级→诊断数据「Debug 模式」,默认关;控制 SOUL.md 等开发者入口显隐
+function applyDebugMode(){
+  $('#btn-soul').style.display=DEBUG_MODE?'':'none';
+  if(!DEBUG_MODE&&$('#soul-view').style.display==='block'){   // 关闭时若正在看 SOUL 原文,退回对话
+    $('#soul-view').style.display='none';$('#messages').style.display='flex';
+  }
+}
+async function loadDebugMode(){
+  try{DEBUG_MODE=!!(await api('/api/v1/config/diagnostics')).debug_mode}catch(e){DEBUG_MODE=false}
+  applyDebugMode();
+}
 function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
 function diagStats(d){
   let s=I18N.f('已采集 {n} 条事件,占用 {kb} KB',{n:d.total_events,kb:(d.outbox_bytes/1024).toFixed(1)});
@@ -2184,6 +2198,7 @@ async function openDiagModal(){
   try{
     const d=await api('/api/v1/diagnostics');
     $('#diag-on').checked=!!d.enabled;
+    DEBUG_MODE=!!d.debug_mode;$('#diag-debug').checked=DEBUG_MODE;applyDebugMode();
     diagStats(d);
   }catch(e){$('#diag-on').checked=true;$('#diag-err').textContent='读取失败:'+e.message}
   diagSt();
@@ -2199,6 +2214,11 @@ $('#diag-close').onclick=()=>$('#diag-modal').style.display='none';
 $('#diag-on').onchange=async()=>{
   diagSt();
   try{await api('/api/v1/config/diagnostics',{diagnostics_enabled:$('#diag-on').checked})}
+  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
+};
+$('#diag-debug').onchange=async()=>{
+  DEBUG_MODE=$('#diag-debug').checked;applyDebugMode();
+  try{await api('/api/v1/config/diagnostics',{debug_mode:DEBUG_MODE})}
   catch(e){$('#diag-err').textContent='保存失败:'+e.message}
 };
 $('#diag-clear').onclick=async()=>{
@@ -2775,7 +2795,7 @@ $('#am-ok').onclick=async()=>{
 
 /* ---------- SOUL 查看 ---------- */
 $('#btn-soul').onclick=async()=>{
-  if(!CURRENT)return;
+  if(!CURRENT||!DEBUG_MODE)return;
   const sv=$('#soul-view');
   if(sv.style.display==='block'){sv.style.display='none';$('#messages').style.display='flex';return}
   const r=await api('/api/v1/agents/'+encodeURIComponent(CURRENT)+'/soul');
@@ -3043,6 +3063,7 @@ function liveBox(runId){
     syncDaProvider();
   });
   await restorePrefs();
+  loadDebugMode();   // Debug 模式开关(默认关):决定 SOUL.md 按钮显隐,不阻塞启动
   checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
   // 外部入口预填通道:?project=xx&compose=预填指令(选中总制片并填入输入框);预览页「✏️ 修改」已改为页内编辑浮窗(edit-popup.js)直发,不再经此跳转;
   // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片
