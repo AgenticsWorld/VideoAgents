@@ -15,8 +15,9 @@
 current[grp] = 当前指针(0 = 母本 assets/clips/epNN/grpNNN.mp4)。回滚只挪指针不删文件;
 H3P 签字时 cleanup 只保留母本 + 最近两个已采纳版本(文件删、记录留,标 cleaned)。
 
-作用域四级继承:episode → scene → group → range(组内时间段);下级覆盖上级,
-effective_recipes() 返回某组实际生效的处方(继承来的带 inherited=True)。
+作用域五级继承:episode → scene → block(叙事块:闪回/梦境/蒙太奇/想象段,2026-09-17)→ group → range(组内时间段);
+下级覆盖上级,effective_recipes() 返回某组实际生效的处方(继承来的带 inherited=True)。
+工位(如 10-editing/grade-planner)开处方只走 propose_recipe()(宿主 CLI post_apply.py propose),幂等、不采纳。
 """
 from __future__ import annotations
 
@@ -81,18 +82,18 @@ KINDS: list[dict] = [
      "params": [{"key": "fps", "label": "目标帧率", "type": "select", "options": ["48", "60"], "default": "48"}],
      "hint": "RIFE 类工作流(可绑 RunningHub);成片帧率须全集一致,建议整集作用域"},
     # ---- 调色与光感 ----
-    {"id": "basic", "section": "grade", "label": "基础校正", "exec": "ffmpeg", "scopes": ["group", "range", "scene", "episode"],
+    {"id": "basic", "section": "grade", "label": "基础校正", "exec": "ffmpeg", "scopes": ["group", "range", "block", "scene", "episode"],
      "params": [{"key": "brightness", "label": "亮度", "type": "range", "min": -0.3, "max": 0.3, "step": 0.01, "default": 0},
                 {"key": "contrast", "label": "对比", "type": "range", "min": 0.5, "max": 1.8, "step": 0.02, "default": 1},
                 {"key": "saturation", "label": "饱和", "type": "range", "min": 0, "max": 2, "step": 0.05, "default": 1},
                 {"key": "gamma", "label": "伽马", "type": "range", "min": 0.5, "max": 2, "step": 0.02, "default": 1},
                 {"key": "temperature", "label": "色温(K)", "type": "range", "min": 3000, "max": 9000, "step": 100, "default": 6500}],
      "hint": "曝光/对比/白平衡/饱和四件套;色温 6500 = 不动"},
-    {"id": "lut", "section": "grade", "label": "LUT 预设", "exec": "ffmpeg", "scopes": ["group", "range", "scene", "episode"],
+    {"id": "lut", "section": "grade", "label": "LUT 预设", "exec": "ffmpeg", "scopes": ["group", "range", "block", "scene", "episode"],
      "params": [{"key": "preset", "label": "预设", "type": "select", "options": [p["id"] for p in LUT_PRESETS], "default": "teal_orange"},
                 {"key": "strength", "label": "强度", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0.6}],
      "hint": "内置五档参数化预设;项目 assets/post/luts/*.cube 与 data/luts/*.cube 会自动列进预设"},
-    {"id": "scene_palette", "section": "grade", "label": "场次色板", "exec": "ffmpeg", "scopes": ["scene", "group", "range"],
+    {"id": "scene_palette", "section": "grade", "label": "场次色板", "exec": "ffmpeg", "scopes": ["scene", "block", "group", "range"],
      "params": [{"key": "palette", "label": "目标色板", "type": "palette", "default": []},
                 {"key": "strength", "label": "强度", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0.5},
                 {"key": "saturation", "label": "饱和", "type": "range", "min": 0.5, "max": 1.5, "step": 0.05, "default": 1}],
@@ -102,13 +103,17 @@ KINDS: list[dict] = [
      "params": [{"key": "strength", "label": "强度", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0.8},
                 {"key": "match_contrast", "label": "同时匹配反差", "type": "bool", "default": True}],
      "hint": "把本组的色彩统计匹配到一帧参考(通常取同场次已定稿的组),解决跨组偏色"},
-    {"id": "atmos", "section": "grade", "label": "氛围 · 光感", "exec": "ffmpeg", "scopes": ["group", "range", "scene", "episode"],
+    {"id": "atmos", "section": "grade", "label": "氛围 · 光感", "exec": "ffmpeg", "scopes": ["group", "range", "block", "scene", "episode"],
      "params": [{"key": "glow", "label": "光晕", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0},
                 {"key": "vignette", "label": "暗角", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0},
                 {"key": "grain", "label": "颗粒", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0},
                 {"key": "tint", "label": "色调偏向", "type": "select", "options": ["none", "warm", "cool", "candle"], "default": "none"},
                 {"key": "flicker", "label": "烛光闪烁", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0}],
      "hint": "光感低配版:高光晕染、暗角、胶片颗粒、冷暖偏向、烛光闪烁;重打光待模型选定后拆成独立分区"},
+    {"id": "soften", "section": "grade", "label": "柔化(高频软化)", "exec": "ffmpeg", "scopes": ["group", "range", "block", "scene", "episode"],
+     "params": [{"key": "radius", "label": "半径(1080p 基准 px)", "type": "range", "min": 0.5, "max": 8, "step": 0.5, "default": 2},
+                {"key": "strength", "label": "强度", "type": "range", "min": 0, "max": 1, "step": 0.05, "default": 0.5}],
+     "hint": "高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放"},
     {"id": "lighting_scheme", "section": "grade", "label": "跟随光照方案", "exec": "agent", "scopes": ["group", "scene"],
      "params": [{"key": "strength", "label": "强度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
      "hint": "按组提示词里的 lighting_scheme_id 光位描述重打光(V2V);指令只写「哪里不对」"},
@@ -178,7 +183,10 @@ KINDS: list[dict] = [
 ]
 KIND_BY_ID = {k["id"]: k for k in KINDS}
 SECTION_BY_ID = {s["id"]: s for s in SECTIONS}
-SCOPE_ORDER = {"episode": 0, "scene": 1, "group": 2, "range": 3}
+# block = 叙事块(shot_list.generation_groups[].narrative_block.id,闪回/梦境/蒙太奇/想象段;2026-09-17):
+# 同一场景常被现实段与闪回段共用,按 scene 开处方会误伤现实段,故叙事块单列一级
+SCOPE_ORDER = {"episode": 0, "scene": 1, "block": 2, "group": 3, "range": 4}
+INHERITED_LEVELS = ("episode", "scene", "block")
 
 
 # ---------------------------------------------------------------- 文件读写
@@ -262,10 +270,14 @@ def new_id() -> str:
 def normalize_scope(scope: dict | None) -> dict:
     scope = dict(scope or {})
     level = scope.get("level") or ("range" if scope.get("t1") is not None else "group" if scope.get("group_id") else
-                                   "scene" if scope.get("scene_id") else "episode")
+                                   "block" if scope.get("block_id") else "scene" if scope.get("scene_id") else "episode")
     if level not in SCOPE_ORDER:
         raise ValueError(f"unknown scope level: {level}")
     out = {"level": level}
+    if level == "block":
+        if not scope.get("block_id"):
+            raise ValueError("block scope needs block_id")
+        out["block_id"] = str(scope["block_id"])
     if level in ("scene", "group", "range"):
         if level == "scene":
             if not scope.get("scene_id"):
@@ -351,13 +363,58 @@ def set_status(recipe: dict, status: str, **extra) -> None:
         recipe[k] = v
 
 
+def group_block_id(group: dict) -> str:
+    """组所属叙事块 id:行里已摊平的 block_id 优先,否则读 shot_list 原样的 narrative_block.id。"""
+    if group.get("block_id"):
+        return str(group["block_id"])
+    nb = group.get("narrative_block")
+    return str(nb.get("id") or "") if isinstance(nb, dict) else ""
+
+
+def narrative_blocks(groups: list[dict]) -> list[dict]:
+    """按组序汇总叙事块:[{block_id, kind, groups[], scene_ids[]}](groups 为 shot_list generation_groups 或已摊平的组行)。"""
+    out: dict[str, dict] = {}
+    for g in groups:
+        bid = group_block_id(g)
+        if not bid:
+            continue
+        nb = g.get("narrative_block") if isinstance(g.get("narrative_block"), dict) else {}
+        row = out.setdefault(bid, {"block_id": bid, "kind": str(g.get("block_kind") or nb.get("kind") or ""), "groups": [], "scene_ids": []})
+        row["groups"].append(g.get("group_id"))
+        if g.get("scene_id") and g["scene_id"] not in row["scene_ids"]:
+            row["scene_ids"].append(g["scene_id"])
+    return list(out.values())
+
+
+def propose_recipe(plan: dict, kind_id: str, scope: dict, params: dict | None, refs: dict | None, note: str, by: str) -> tuple[dict, str]:
+    """工位开处方的唯一入口(宿主 CLI post_apply.py propose):同一 (by, kind, scope) 幂等——
+    已有未裁决处方(草稿/已出片/失败)就地更新参数与说明并退回草稿,已采纳/已派单的不动、另开一条;
+    重跑不堆重复处方。返回 (recipe, "created"|"updated"|"unchanged")。"""
+    if not str(by or "").strip() or by == "user":
+        raise ValueError("propose 需要 --by <工位 id>(用户处方请在后期处理页开)")
+    fresh = make_recipe(kind_id, scope, params, refs, note, by=by)
+    for r in plan.get("recipes", []):
+        if r.get("created_by") == by and r.get("kind") == kind_id and r.get("scope") == fresh["scope"] \
+                and r.get("status") in ("draft", "applied", "failed"):
+            if r.get("params") == fresh["params"] and r.get("note") == fresh["note"] and (r.get("refs") or {}) == fresh["refs"]:
+                return r, "unchanged"
+            r["params"], r["refs"], r["note"] = fresh["params"], fresh["refs"], fresh["note"]
+            set_status(r, "draft", error="")
+            return r, "updated"
+    fresh["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if fresh["exec"] == "ffmpeg" else ("按渠道计费" if fresh["exec"] == "agent" else "成片时生效 · ¥0")
+    plan.setdefault("recipes", []).append(fresh)
+    return fresh, "created"
+
+
 def scope_matches_group(scope: dict, group: dict) -> bool:
-    """group = {group_id, scene_id};判断处方作用域是否覆盖该组。"""
+    """group = {group_id, scene_id, block_id};判断处方作用域是否覆盖该组。"""
     lv = scope.get("level")
     if lv == "episode":
         return True
     if lv == "scene":
         return scope.get("scene_id") == group.get("scene_id")
+    if lv == "block":
+        return bool(scope.get("block_id")) and scope.get("block_id") == group_block_id(group)
     return scope.get("group_id") == group.get("group_id")
 
 
@@ -370,7 +427,7 @@ def effective_recipes(plan: dict, group: dict, include_status: tuple = ("draft",
             continue
         if scope_matches_group(r.get("scope", {}), group):
             row = dict(r)
-            row["inherited"] = r["scope"]["level"] in ("episode", "scene")
+            row["inherited"] = r["scope"]["level"] in INHERITED_LEVELS
             rows.append(row)
     # 覆盖判定:同 kind 更具体的作用域存在 → 上级 overridden
     by_kind: dict[str, list[dict]] = {}
@@ -379,7 +436,7 @@ def effective_recipes(plan: dict, group: dict, include_status: tuple = ("draft",
     for kind, lst in by_kind.items():
         deepest = max(SCOPE_ORDER[x["scope"]["level"]] for x in lst)
         for x in lst:
-            x["overridden"] = SCOPE_ORDER[x["scope"]["level"]] < deepest and x["scope"]["level"] in ("episode", "scene")
+            x["overridden"] = SCOPE_ORDER[x["scope"]["level"]] < deepest and x["scope"]["level"] in INHERITED_LEVELS
     rows.sort(key=lambda x: (SECTION_BY_ID[x["section"]]["order"], SCOPE_ORDER[x["scope"]["level"]], x.get("created_at") or ""))
     return rows
 

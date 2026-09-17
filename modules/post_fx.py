@@ -271,6 +271,17 @@ def stage_atmos(r: dict, ctx: Ctx) -> str:
     return out + "{out}"
 
 
+def stage_soften(r: dict, ctx: Ctx) -> str:
+    """柔化:高斯模糊与原片按强度混合(压高频不糊轮廓);半径以 1080p 为基准随画面高度缩放。"""
+    p, en = r["params"], _en(r["scope"])
+    k = float(p.get("strength", 0.5))
+    if k <= 0:
+        return "{in}null{out}"
+    sigma = max(0.3, float(p.get("radius", 2)) * ctx.h / 1080.0)
+    ctx.notes.append(f"soften sigma={sigma:.2f} mix={k:.2f}")
+    return _blend_wrap(f"gblur=sigma={sigma:.3f}", k, ctx, en)
+
+
 def stage_deflicker(r: dict, ctx: Ctx) -> str:
     p, en = r["params"], _en(r["scope"])
     size = int(p.get("size", 5))
@@ -327,7 +338,7 @@ def stage_watermark(r: dict, ctx: Ctx) -> str:
 
 
 STAGES = {"basic": stage_basic, "lut": stage_lut, "scene_palette": stage_scene_palette, "match_ref": stage_match_ref,
-          "atmos": stage_atmos, "deflicker": stage_deflicker, "delogo": stage_delogo,
+          "atmos": stage_atmos, "soften": stage_soften, "deflicker": stage_deflicker, "delogo": stage_delogo,
           "overlay_asset": stage_overlay_asset, "watermark": stage_watermark}
 FFMPEG_KINDS = set(STAGES)
 

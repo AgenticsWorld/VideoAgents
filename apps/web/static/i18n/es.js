@@ -3072,4 +3072,9 @@ window.I18N_DICT = {
 "黑场 {s}s · {g}": "Negro {s}s · {g}",
 "黑场声音": "Sonido bajo el negro",
 "黑屏": "Negro",
+"叙事块 ": "Bloque narrativo ",
+"工位自动开的修改单:": "Orden de cambio abierta automáticamente por la estación: ",
+"柔化(高频软化)": "Suavizar (suavizado de altas frecuencias)",
+"半径(1080p 基准 px)": "Radio (px a 1080p)",
+"高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mezcla un desenfoque gaussiano con el original según la intensidad, quitando detalle fino sin emborronar los contornos (sensación de foco suave para flashbacks / sueños); el radio escala con la altura de la imagen",
 };

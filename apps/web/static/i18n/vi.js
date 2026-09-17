@@ -3072,4 +3072,9 @@ window.I18N_DICT = {
 "黑场 {s}s · {g}": "Đen {s}s · {g}",
 "黑场声音": "Âm thanh dưới màn đen",
 "黑屏": "Đen",
+"叙事块 ": "Khối tự sự ",
+"工位自动开的修改单:": "Phiếu sửa do công đoạn tự động mở: ",
+"柔化(高频软化)": "Làm mềm (làm dịu tần số cao)",
+"半径(1080p 基准 px)": "Bán kính (px ở 1080p)",
+"高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Trộn làm mờ Gaussian với bản gốc theo cường độ, bỏ chi tiết nhỏ mà không nhòe đường nét (cảm giác nét mềm cho đoạn hồi tưởng / giấc mơ); bán kính tỉ lệ theo chiều cao khung hình",
 };

@@ -8847,7 +8847,10 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
                              "time_ops": ver.get("time_ops") or [], "pad": ver.get("pad"),
                              "label": f"v{ver.get('v')}"})
         thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
+        nb = g.get("narrative_block") if isinstance(g.get("narrative_block"), dict) else {}
         rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": g.get("scene_no") or "",
+                     # 叙事块(闪回/梦境/蒙太奇/想象段):block 级处方的作用域键(2026-09-17)
+                     "block_id": str(nb.get("id") or ""), "block_kind": str(nb.get("kind") or ""),
                      "order": i, "cum_start_s": round(cum, 3), "duration": round(dur, 3), "shots": g.get("shots") or [],
                      "time_of_day": g.get("time_of_day") or "", "lighting_scheme_id": g.get("lighting_scheme_id") or "",
                      "has_clip": clip.is_file(), "thumb": _post_url(base, f"assets/clips/{ep}/{gid}.last_frame.png") if thumb.is_file() else None,
@@ -9296,6 +9299,8 @@ def _post_scope_text(r: dict) -> str:
         return "整集"
     if lv == "scene":
         return f"场次 {sc.get('scene_id')}"
+    if lv == "block":
+        return f"叙事块 {sc.get('block_id')}"
     if lv == "range":
         return f"分镜组 {sc.get('group_id')} 第 {sc.get('t0')}–{sc.get('t1')} 秒"
     return f"分镜组 {sc.get('group_id')}"
@@ -9310,7 +9315,7 @@ def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[d
     head = [f"后期处方 {r['id']}「{kind['label']}」(项目 {base.name} · {ep} · {_post_scope_text(r)})。",
             f"参数:{params or '无'};参考:{refs or '无'}。", f"用户说明:{r.get('note', '')}"]
     if r.get("exec") == "agent":
-        targets = [g for g in groups if pp.scope_matches_group(r["scope"], {"group_id": g["group_id"], "scene_id": g["scene_id"]})]
+        targets = [g for g in groups if pp.scope_matches_group(r["scope"], g)]
         lines = head + ["逐组处理(源 = 该组当前版本文件,产物帧率/时长/画幅与源一致,严禁改时长;母本 assets/clips 永不覆盖):"]
         for g in targets[:80]:
             f = pp.current_file(base, ep, g["group_id"], plan)
@@ -9379,8 +9384,9 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
             sc = dict(r["scope"])
             sc["group_id"] = gid
             sc["scene_id"] = scene_of[gid]
-            if sc["level"] in ("episode", "scene"):
+            if sc["level"] in pp.INHERITED_LEVELS:
                 sc["level"] = "group"
+                sc.pop("block_id", None)
                 sc.pop("t0", None)
                 sc.pop("t1", None)
             try:

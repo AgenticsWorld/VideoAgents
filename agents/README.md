@@ -1,6 +1,6 @@
 # agents/ — 小说→视频 多 Agent 制作团队
 
-基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:90 个 Agent、13 个类别。
+基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:91 个 Agent、13 个类别。
 每个 Agent 一个目录,目录下的 `SOUL.md` 定义它的职责、输入输出、工作指令格式与质量标准。
 
 - **流程权威**:`WORKFLOW.md`(人读)/ `workflow.yaml`(orchestrator 执行输入)
@@ -20,7 +20,7 @@
 | `07-directing/` | 导演 | 9 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging |
 | `08-video-gen/` | 视频生成 | 8 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates |
 | `09-audio/` | 音频 | 7 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing, audio-transcription |
-| `10-editing/` | 剪辑 | 7 | edit, transition, subtitle, caption, title, thumbnail, post-finishing |
+| `10-editing/` | 剪辑 | 8 | edit, transition, subtitle, caption, title, thumbnail, post-finishing, grade-planner |
 | `11-qa/` | 审核 | 8 | logic-qa, character-consistency-qa, timeline-qa, world-consistency-qa, visual-qa, audio-qa, content-safety, copyright |
 | `12-publishing/` | 发布 | 4 | platform-adapter, seo, metadata, publisher |
 

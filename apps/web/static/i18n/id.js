@@ -3072,4 +3072,9 @@ window.I18N_DICT = {
 "黑场 {s}s · {g}": "Hitam {s}s · {g}",
 "黑场声音": "Suara di bawah hitam",
 "黑屏": "Hitam",
+"叙事块 ": "Blok naratif ",
+"工位自动开的修改单:": "Perintah ubah yang dibuka otomatis oleh stasiun: ",
+"柔化(高频软化)": "Lembutkan (pelunakan frekuensi tinggi)",
+"半径(1080p 基准 px)": "Radius (px pada 1080p)",
+"高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mencampur blur Gaussian dengan gambar asli sesuai kekuatan, menghilangkan detail halus tanpa mengaburkan kontur (kesan fokus lembut untuk kilas balik / mimpi); radius mengikuti tinggi gambar",
 };

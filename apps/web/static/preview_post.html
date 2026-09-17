@@ -394,15 +394,16 @@ document.addEventListener('click',async e=>{
 function effective(gid){
   // 某组实际生效的修改单(自身 + 继承;同 kind 更具体作用域覆盖上级)
   const g=grpById(gid);if(!g)return[];
-  const rows=(D.plan.recipes||[]).filter(r=>r.status!=='discarded'&&scopeHits(r.scope,g)).map(r=>({...r,inherited:r.scope.level==='episode'||r.scope.level==='scene'}));
+  const rows=(D.plan.recipes||[]).filter(r=>r.status!=='discarded'&&scopeHits(r.scope,g)).map(r=>({...r,inherited:INH(r.scope.level)}));
   const deep={};rows.forEach(r=>{deep[r.kind]=Math.max(deep[r.kind]||0,lvl(r.scope.level))});
   rows.forEach(r=>{r.overridden=r.inherited&&lvl(r.scope.level)<deep[r.kind]});
   return rows;
 }
-const lvl=l=>({episode:0,scene:1,group:2,range:3})[l]||0;
-function scopeHits(sc,g){if(sc.level==='episode')return true;if(sc.level==='scene')return sc.scene_id===g.scene_id;return sc.group_id===g.group_id}
+const lvl=l=>({episode:0,scene:1,block:2,group:3,range:4})[l]||0;
+const INH=l=>l==='episode'||l==='scene'||l==='block';
+function scopeHits(sc,g){if(sc.level==='episode')return true;if(sc.level==='scene')return sc.scene_id===g.scene_id;if(sc.level==='block')return !!sc.block_id&&sc.block_id===g.block_id;return sc.group_id===g.group_id}
 function scopeText(sc){
-  if(sc.level==='episode')return t('整集');if(sc.level==='scene')return sc.scene_id;
+  if(sc.level==='episode')return t('整集');if(sc.level==='scene')return sc.scene_id;if(sc.level==='block')return t('叙事块 ')+sc.block_id;
   if(sc.level==='range')return `${sc.group_id} ${num(sc.t0,1)}–${num(sc.t1,1)}s`;return sc.group_id;
 }
 function groupStatus(gid){
@@ -1085,7 +1086,8 @@ function waveSelEdit(){
 /* ---------- 右栏 ---------- */
 function renderRight(){
   const g=grpById(SEL);
-  const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
+  if(SCOPE==='block'&&!(g&&g.block_id))SCOPE='group';
+  const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],...(g&&g.block_id?[['block',t('叙事块 ')+g.block_id]]:[]),['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
   let h=`<div class="col-h">${esc(t('修改单'))} <span class="lite" id="rc"></span><span class="sp"></span>${MULTI.size?`<span class="lite">${esc(I18N.f('已选 {n} 组',{n:MULTI.size}))}</span>`:''}</div>`;
   h+=`<div class="scope">${esc(t('作用域'))} <span class="seg">${scopes.map(([k,l])=>`<span data-s="${k}" class="${SCOPE===k?'on':''}" ${k==='range'&&!(RANGE&&RANGE.t1!=null)?'style="opacity:.5"':''}>${esc(l)}</span>`).join('')}</span></div>`;
   h+=`<div class="scroll" id="rlist">`;
@@ -1097,6 +1099,7 @@ function renderRight(){
     let rows=all.filter(r=>r.section===sec.id);
     if(SCOPE==='episode')rows=(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.scope.level==='episode'&&r.status!=='discarded');
     else if(SCOPE==='scene')rows=(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.scope.level==='scene'&&r.scope.scene_id===(g||{}).scene_id&&r.status!=='discarded');
+    else if(SCOPE==='block')rows=(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.scope.level==='block'&&r.scope.block_id===(g||{}).block_id&&r.status!=='discarded');
     else if(SCOPE==='range')rows=rows.filter(r=>r.scope.level==='range');
     const disc=SCOPE==='group'?(D.plan.recipes||[]).filter(r=>r.section===sec.id&&r.status==='discarded'&&r.scope.group_id===SEL):[];
     count+=rows.length;
@@ -1112,7 +1115,7 @@ function renderRight(){
   }
   h+=`</div>`;
   $('#rbody').innerHTML=h;
-  $('#rc').textContent=g?I18N.f('{g} 生效 {n} 条',{g:SCOPE==='episode'?t('整集'):SCOPE==='scene'?(g.scene_id):SEL,n:count}):'';
+  $('#rc').textContent=g?I18N.f('{g} 生效 {n} 条',{g:SCOPE==='episode'?t('整集'):SCOPE==='scene'?(g.scene_id):SCOPE==='block'?(t('叙事块 ')+g.block_id):SEL,n:count}):'';
   $$('#right .scope .seg span').forEach(s=>s.onclick=()=>{if(s.dataset.s==='range'&&!(RANGE&&RANGE.t1!=null)){alert(t('先在监视器走带条上「标记时间段」'));return}SCOPE=s.dataset.s;renderRight()});
   $$('#right .acc-h').forEach(el=>el.onclick=e=>{if(e.target.dataset.add){openRecipe({section:e.target.dataset.add});return}const id=el.parentElement.dataset.sec;CLOSED_SEC.has(id)?CLOSED_SEC.delete(id):CLOSED_SEC.add(id);renderRight()});
   $$('#right [data-act]').forEach(b=>b.onclick=()=>recipeAction(b.dataset.rid,b.dataset.act,b));
@@ -1147,7 +1150,7 @@ function recipeCard(r){
   else if(r.status==='failed'){acts=(r.exec==='ffmpeg'?A('apply',t('重试出片'),'pri'):A('dispatch',t('重新派单'),'pri'))+A('edit',t('编辑'))+A('delete',t('删除'))}
   else if(r.status==='discarded'){acts=A('reset',t('重置为草稿'))+A('delete',t('删除'))}
   if(r.preview_url&&(r.status==='draft'||r.status==='failed'))acts+=A('seepreview',t('看预览'));
-  return `<div class="rec ${inh?'inh':''} ${over?'over':''}" data-rid="${esc(r.id)}"><div class="r1"><span class="nm" data-no-i18n>${esc(r.kind_label||r.kind)}</span><span class="st ${esc(r.status)}">${esc(r.status_label||r.status)}${r.status==='applied'&&out?' '+esc(out):''}</span><span class="sp"></span><span class="sc" data-no-i18n>${inh?esc(t('继承'))+' ':''}${esc(scopeText(r.scope))}</span></div>
+  return `<div class="rec ${inh?'inh':''} ${over?'over':''}" data-rid="${esc(r.id)}"><div class="r1"><span class="nm" data-no-i18n>${esc(r.kind_label||r.kind)}</span>${r.created_by&&r.created_by!=='user'?`<span class="st" title="${esc(t('工位自动开的修改单:'))+esc(r.created_by)}">🤖 ${esc(t('自动'))}</span>`:''}<span class="st ${esc(r.status)}">${esc(r.status_label||r.status)}${r.status==='applied'&&out?' '+esc(out):''}</span><span class="sp"></span><span class="sc" data-no-i18n>${inh?esc(t('继承'))+' ':''}${esc(scopeText(r.scope))}</span></div>
     <div class="r2" data-no-i18n>${params}${refs}${r.cost&&r.cost.actual?`<span>${esc(r.cost.actual)}</span>`:r.cost&&r.cost.estimate?`<span>${esc(t('预估'))} ${esc(r.cost.estimate)}</span>`:''}${r.error?`<span class="err">${esc(r.error.slice(0,160))}</span>`:''}</div>
     ${r.note?`<div class="note" data-no-i18n title="${esc(r.note)}">${esc(r.note)}</div>`:''}<div class="r3">${acts}</div></div>`;
 }
@@ -1171,7 +1174,7 @@ async function recipeAction(rid,act,btn){
     if(act==='adopt'&&r.exec!=='record'){
       // 同场次其余组套用提示
       const sid=sceneOfGroup(r.scope.group_id||SEL);const rest=D.groups.filter(g=>g.scene_id===sid&&g.group_id!==(r.scope.group_id||SEL)&&!(D.plan.recipes||[]).some(x=>x.kind===r.kind&&x.scope.group_id===g.group_id));
-      if(rest.length&&r.scope.level!=='scene'&&r.scope.level!=='episode'&&confirm(I18N.f('同场次还有 {n} 组未做「{k}」,复制同一修改单为草稿?',{n:rest.length,k:r.kind_label}))){
+      if(rest.length&&!INH(r.scope.level)&&confirm(I18N.f('同场次还有 {n} 组未做「{k}」,复制同一修改单为草稿?',{n:rest.length,k:r.kind_label}))){
         await J(api('/recipes/'+rid+'/copy'),'POST',{groups:rest.map(g=>g.group_id)});await load(true);
       }
     }
@@ -1194,13 +1197,15 @@ function openRecipe(opt){
 function defaultScope(){
   if(SCOPE==='episode')return {level:'episode'};
   if(SCOPE==='scene')return {level:'scene',scene_id:sceneOfGroup(SEL)};
+  if(SCOPE==='block'&&(grpById(SEL)||{}).block_id)return {level:'block',block_id:grpById(SEL).block_id};
   if(SCOPE==='range'&&RANGE&&RANGE.t1!=null)return {level:'range',group_id:SEL,scene_id:sceneOfGroup(SEL),t0:RANGE.t0,t1:RANGE.t1};
   return {level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)};
 }
 function renderRecipeForm(){
   const k=KIND(MR.kind)||{};
   const kinds=D.catalog.kinds.filter(x=>x.section===MR.section);
-  const scopeOpts=[['episode',t('整集')],['scene',t('场次 ')+(MR.scope.scene_id||sceneOfGroup(SEL))],['group',t('分镜组 ')+(MR.scope.group_id||SEL)],['range',t('时间段 ')+(MR.scope.level==='range'?`${MR.scope.t0}–${MR.scope.t1}s`:(RANGE&&RANGE.t1!=null?`${RANGE.t0}–${RANGE.t1}s`:t('(先标记)')))]];
+  const mrBlock=MR.scope.block_id||(grpById(SEL)||{}).block_id||'';
+  const scopeOpts=[['episode',t('整集')],['scene',t('场次 ')+(MR.scope.scene_id||sceneOfGroup(SEL))],...(mrBlock?[['block',t('叙事块 ')+mrBlock]]:[]),['group',t('分镜组 ')+(MR.scope.group_id||SEL)],['range',t('时间段 ')+(MR.scope.level==='range'?`${MR.scope.t0}–${MR.scope.t1}s`:(RANGE&&RANGE.t1!=null?`${RANGE.t0}–${RANGE.t1}s`:t('(先标记)')))]];
   const sfxOpt=MR.section==='sound'?`<option value="__sfx" ${MR.kind==='__sfx'?'selected':''}>${esc(t('新增音效'))} · ${esc(t('加一条音效点位'))}</option>`:'';
   $('#mr-save').style.display=$('#mr-preview').style.display='';
   if(MR.kind==='__sfx'){renderSfxRecipeForm(sfxOpt);return}
@@ -1233,7 +1238,7 @@ function renderRecipeForm(){
   $$('#mr-body [data-scope]').forEach(s=>s.onclick=()=>{
     const v=s.dataset.scope;
     if(v==='range'&&!(MR.scope.level==='range'||(RANGE&&RANGE.t1!=null))){alert(t('先在监视器走带条上「标记时间段」'));return}
-    MR.scope=v==='episode'?{level:'episode'}:v==='scene'?{level:'scene',scene_id:MR.scope.scene_id||sceneOfGroup(SEL)}:v==='group'?{level:'group',group_id:MR.scope.group_id||SEL,scene_id:MR.scope.scene_id||sceneOfGroup(SEL)}:{level:'range',group_id:MR.scope.group_id||SEL,scene_id:MR.scope.scene_id||sceneOfGroup(SEL),t0:MR.scope.t0??RANGE.t0,t1:MR.scope.t1??RANGE.t1};
+    MR.scope=v==='episode'?{level:'episode'}:v==='block'?{level:'block',block_id:MR.scope.block_id||(grpById(SEL)||{}).block_id}:v==='scene'?{level:'scene',scene_id:MR.scope.scene_id||sceneOfGroup(SEL)}:v==='group'?{level:'group',group_id:MR.scope.group_id||SEL,scene_id:MR.scope.scene_id||sceneOfGroup(SEL)}:{level:'range',group_id:MR.scope.group_id||SEL,scene_id:MR.scope.scene_id||sceneOfGroup(SEL),t0:MR.scope.t0??RANGE.t0,t1:MR.scope.t1??RANGE.t1};
     renderRecipeForm()});
   $$('#mr-body input[type=range]').forEach(i=>i.oninput=()=>{$('#v-'+i.dataset.p).textContent=i.value});
   const rf=$('#mr-body [data-ref-frame]');if(rf)rf.onclick=async()=>{rf.disabled=true;try{const j=await J(api('/frame'),'POST',{group_id:SEL,v:VA??0,t:$('#va').currentTime||0});LAST_FRAME=j;MR.refs.frame=j.path;collectForm();renderRecipeForm()}catch(e){alert(e.message);rf.disabled=false}};
@@ -1321,7 +1326,7 @@ function renderFoot(){
       if(r.layer!==layer||r.status==='discarded')continue;
       const st=r.status==='adopted'?'':(r.status==='applied'||r.status==='draft'||r.status==='failed')?'draft':'';
       if(r.scope.level==='episode')h+=`<div class="bar ${cls} dim" style="left:0;width:100%" title="${esc(r.kind_label)} · ${esc(t('整集'))}" data-rid="${esc(r.id)}"></div>`;
-      else if(r.scope.level==='scene'){const gs=D.groups.filter(g=>g.scene_id===r.scope.scene_id);if(gs.length){const a=gs[0].cum_start_s,b=gs[gs.length-1].cum_start_s+gs[gs.length-1].duration;h+=`<div class="bar ${cls} dim" style="left:${(a/T*100).toFixed(3)}%;width:${((b-a)/T*100).toFixed(3)}%" title="${esc(r.kind_label)} · ${esc(r.scope.scene_id)}" data-rid="${esc(r.id)}"></div>`}}
+      else if(r.scope.level==='scene'||r.scope.level==='block'){const gs=D.groups.filter(g=>scopeHits(r.scope,g));if(gs.length){const a=gs[0].cum_start_s,b=gs[gs.length-1].cum_start_s+gs[gs.length-1].duration;h+=`<div class="bar ${cls} dim" style="left:${(a/T*100).toFixed(3)}%;width:${((b-a)/T*100).toFixed(3)}%" title="${esc(r.kind_label)} · ${esc(scopeText(r.scope))}" data-rid="${esc(r.id)}"></div>`}}
       else{const g=grpById(r.scope.group_id);if(!g)continue;let a=g.cum_start_s,b=g.cum_start_s+g.duration;if(r.scope.level==='range'){a=g.cum_start_s+r.scope.t0;b=g.cum_start_s+r.scope.t1}h+=`<div class="bar ${cls} ${st}" style="left:${(a/T*100).toFixed(3)}%;width:${Math.max(0.2,(b-a)/T*100).toFixed(3)}%" title="${esc(r.kind_label)} · ${esc(r.status_label)}" data-rid="${esc(r.id)}"></div>`}
     }
     h+=`</div>`;

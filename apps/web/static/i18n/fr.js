@@ -3072,4 +3072,9 @@ window.I18N_DICT = {
 "黑场 {s}s · {g}": "Noir {s}s · {g}",
 "黑场声音": "Son sous le noir",
 "黑屏": "Noir",
+"叙事块 ": "Bloc narratif ",
+"工位自动开的修改单:": "Ordre de modification ouvert automatiquement par le poste : ",
+"柔化(高频软化)": "Adoucir (adoucissement des hautes fréquences)",
+"半径(1080p 基准 px)": "Rayon (px en 1080p)",
+"高斯模糊与原片按强度混合,压掉高频细节而不糊轮廓(回忆/梦境段的柔焦感);半径随画面高度等比缩放": "Mélange un flou gaussien avec l'original selon l'intensité, atténuant les détails fins sans baver les contours (effet flou doux pour les flashbacks / rêves) ; le rayon suit la hauteur de l'image",
 };
