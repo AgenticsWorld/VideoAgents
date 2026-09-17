@@ -20,14 +20,23 @@
 
 ## 职责
 
-1. **读意图,逐块定参数**:每个块先定「它是哪一种变体」——同是闪回,色彩脚本可能按空间家族给不同偏移(例:人间闪回暖偏 +150K、仙家闪回只 +80K);块跨多个场景时按各场景节拍说明取值,取不齐以变体总则为准。把文字意图翻成处方参数,**翻译口径固定**(同一项目各集同一口径,跨集一致):
+1. **读意图,逐块定参数**:`post_apply.py blocks --json` 除了叙事块,还给出色彩脚本的 `variants`(变体总则:`note` / `palette` / `grade` 数值)与 `variant_acts`(本集标了 `variant` 的段落:`scene_ids` / `events` / `note` / `variant_grade` 覆盖值)——**有 `grade` 数值就照数执行**(段落的 `variant_grade` 覆盖总则同名键),下表的「意图措辞」口径只在存量项目没有数值(`variants.<kind>.legacy: true` 或 `grade` 为空)时用来翻文字。块与段落按 `scene_ids`(块的 `scene_ids` ∩ 段落的 `scene_ids`)对应,对不上再看 `events` 与剧本场次头。每个块先定「它是哪一种变体」——同是闪回,色彩脚本可能按空间家族给不同偏移(例:人间闪回暖偏 +150K、仙家闪回只 +80K);块跨多个场景时按各场景节拍说明取值,取不齐以变体总则为准。把文字意图翻成处方参数,**翻译口径固定**(同一项目各集同一口径,跨集一致):
 
-   | 意图措辞 | 处方 | 参数口径 |
+   | `grade` 数值 | 处方参数 |
+   |---|---|
+   | `contrast` | `basic.contrast` 原值 |
+   | `temperature_shift_k`(正 = 暖偏) | `basic.temperature` = 6500 − 该值(数值越低越暖) |
+   | `saturation` | `basic.saturation` 原值 |
+   | `soften` | `soften.strength` 原值,`radius` 2 |
+   | `grain` | `atmos.grain` 原值 |
+   | `luma_step_pct` | 不是处方参数,是职责 4 的自检阈值 |
+
+   | 意图措辞(无数值时) | 处方 | 参数口径 |
    |---|---|---|
    | 降对比一档 / 半档 | `basic` | `contrast` 0.90 / 0.95 |
    | 暖偏 +N K / 冷偏 −N K | `basic` | `temperature`:6500 = 不动,**数值越低越暖**(暖偏 +150K → 6350,冷偏 −150K → 6650;与 `atmos` 的 warm=5200 / cool=8000 同向);偏移 <50K 宿主视为不动 |
    | 降饱和 / 褪色 | `basic` | `saturation` 每档 −0.10 |
-   | 指定色板(旧纸暖白 / 褪褐…) | `scene_palette` | `palette` **必须显式填**色彩脚本给的色值(CLI 的「留空自动读脚本」只认 `episodes[].segments[].scenes` 结构,读不到就报错);`strength` 0.35–0.5 |
+   | 指定色板(旧纸暖白 / 褪褐…) | `scene_palette` | `palette` **显式填变体的色值**(`variants.<kind>.palette`);留空时宿主取的是该场景**现实段**的色板(场次号 → SCN-id → 整集色板),不是闪回变体的,会调错方向;`strength` 0.35–0.5 |
    | 高频细节软化 / 柔焦 | `soften` | `radius` 1.5–2.5,`strength` 0.35–0.5(一档≈0.4) |
    | 颗粒加重半档 / 一档 | `atmos` | `grain` 0.2 / 0.35 |
    | 暗角 / 光晕 | `atmos` | `vignette` / `glow` 按意图,没写就 0 |

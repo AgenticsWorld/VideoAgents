@@ -44,19 +44,52 @@
 |---|---|---|
 | 全片色彩曲线 | `bible/color_script.json` | 每集/每幕的主色调、情绪标签、趋势与峰值点 |
 
-关键字段/结构约定:
+**字段契约(2026-09-17 锁死,机检 `color_script_ok`)**:字段名与层级照下面写,**不换名、不换层**——宿主(后期处理页场次色块、`scene_palette` 处方自动取色、调色规划工位)按这些键读;此前各项目写成 `segments` / `beats`、`ep: 1` / `episode`、色名代替色值等十来种结构,下游一律读空。需要的额外信息**加字段**,不要改这些字段。
+
 ```json
 {
+  "variants": {
+    "flashback": {
+      "note": "闪回:降对比一档、暖偏 +150K、高频细节软化、颗粒加重半档;仍为 3D 渲染",
+      "palette": ["#D8C9AE", "#8C7355", "#3A3128"],
+      "grade": { "contrast": 0.90, "temperature_shift_k": 150, "saturation": 1.0, "soften": 0.4, "grain": 0.2, "luma_step_pct": 15 }
+    }
+  },
   "episodes": [{
-    "ep": 1,
+    "episode_id": "ep01",
+    "key_palette": ["#2B3A55", "#C9A66B", "#E8DCC4"],
     "acts": [{
-      "act": 1, "palette": ["#2B3A55", "#C9A66B"], "mood": "压抑中的微光",
-      "saturation": "low→mid", "rationale": "对应主线弧线『初入宗门』受挫段"
+      "act": 1, "event_refs": ["ev0001", "ev0002"], "scene_ids": ["SCN-0008"],
+      "palette": ["#2B3A55", "#C9A66B"], "mood": "压抑中的微光",
+      "saturation": "low→mid", "brightness": "low", "rationale": "对应主线弧线『初入宗门』受挫段"
+    }, {
+      "act": 2, "event_refs": ["ev0003"], "scene_ids": ["SCN-0046"],
+      "palette": ["#DCE3E8", "#8C7355"], "mood": "旧事回望", "saturation": "low", "brightness": "mid",
+      "rationale": "金光洞传法旨的闪回,仙家闪回比人间闪回冷半档",
+      "variant": "flashback", "variant_note": "底色取天界冷银白", "variant_grade": { "temperature_shift_k": 80 }
     }]
   }],
-  "peaks": [{ "ep": 7, "act": 3, "type": "dark_moment" }]
+  "peaks": [{ "episode_id": "ep07", "act": 3, "type": "dark_moment" }]
 }
 ```
+
+| 字段 | 必填 | 约定 |
+|---|---|---|
+| `episodes[].episode_id` | ✓ | 字符串 `"epNN"`,与 `episode_plan.json` 的集号一一对应(不写 `ep: 1` / `episode`) |
+| `episodes[].key_palette` | ✓ | 整集 3–6 个主色,`#RRGGBB` |
+| `episodes[].acts[]` | ✓ | 段落一律叫 `acts`(不叫 segments / beats);`act` 为集内序号 |
+| `acts[].event_refs` | ✓ | 本段对应 `episode_plan` 的事件 id——剧本场次号此时还不存在(剧本在 Phase 5),不要写 `S01` |
+| `acts[].scene_ids` | ✓ | 本段发生的场景圣经 id `SCN-…`(事件地点;下游按场景取色板)。确无固定场景的段落写 `[]` 并在 rationale 说明 |
+| `acts[].palette` | ✓ | **直接写色值** `#RRGGBB`(2–5 个,主色在前);色名另放 `palette_names`,不得只写色名 |
+| `acts[].mood` / `rationale` | ✓ | 情绪标签;剧情依据(对应哪条弧线 / 哪个转折,可回查) |
+| `acts[].saturation` / `brightness` | ✓ | 趋势或档位 |
+| `acts[].variant` | 条件 | 本段是闪回 / 梦境 / 蒙太奇 / 想象段时填 `flashback` / `dream` / `montage` / `imagination`(与 shot_list `narrative_block.kind` 同一枚举);现实段不填 |
+| `acts[].variant_note` / `variant_grade` | 可选 | 本段相对变体总则的差异:文字说明 / 数值覆盖(键同 `variants.<kind>.grade`) |
+| `variants.<kind>` | 条件 | **只要有段落标了 `variant` 就必须定义**:`note`(意图文字)、`palette`(色值)、`grade`(数值,见下) |
+| `peaks[]` | ✓ | `episode_id` + `act` + `type` |
+
+`variants.<kind>.grade` 是给 Phase 9 调色规划工位(`10-editing/grade-planner`)的**可执行数值**,文字意图必须同时落成数:
+`contrast`(1 = 不动,降一档 0.90、半档 0.95)、`temperature_shift_k`(正 = 暖偏的开尔文数,负 = 冷偏)、`saturation`(1 = 不动)、`soften`(柔化强度 0–1,一档≈0.4)、`grain`(颗粒 0–1,半档≈0.2)、`luma_step_pct`(与前后现实段的最小明度台阶 %)。不需要的键不写。
 
 ## 接受的工作指令(Work Order)
 
@@ -75,9 +108,11 @@ instruction: |
 
 ## 质量标准(Definition of Done)
 
-**机检(不过直接退回)**:
-- episode_plan 中的每一集都有条目,幕级切分完整;
-- 每段落 `palette` / `mood` / `rationale` 非空,色值格式合法。
+**机检 `color_script_ok`(`python3 code/check_color_script.py --project <slug> --strict`,交付前必跑,不过直接退回)**:
+- episode_plan 中的每一集都有条目(`episode_id: "epNN"`),每集有 `key_palette` 与 `acts[]`;
+- 每段落 `palette`(直接写色值)/ `mood` / `rationale` 非空,`event_refs` 与 `scene_ids` 齐备;
+- `variant` 在枚举内,用到的变体在顶层 `variants.<kind>` 有定义且带色值与 `grade` 数值;`peaks` 指向存在的集。
+- 存量项目的旧结构宿主仍能读(`modules/color_script.py` 兼容),不带 `--strict` 时契约字段只 WARN;**重跑 / 增补集数时按新契约整份写回**,不要新旧混写。
 
 **评分(evaluation Agent,rubric creative_v1,阈值 80)**:
 - 契合原著气质(30):曲线走向与剧情弧线对得上,rationale 可回查;
@@ -94,5 +129,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:story-structure(story_graph)、episode-planner(episode_plan)、art-director(style.json)。
-- **下游**:pacing(每集节奏审定引用我的情绪曲线)、`07-directing/director`(导演阐述输入)、music(Phase 8 按曲线选/生成 BGM)。他们最怕我:曲线与剧情错位、集/幕编号对不上 episode_plan。
+- **下游**:pacing(每集节奏审定引用我的情绪曲线)、`07-directing/director`(导演阐述输入)、music(Phase 8 按曲线选/生成 BGM)、**后期处理页(按 `scene_ids` 显示场次色板、`scene_palette` 处方自动取色)与 `10-editing/grade-planner`(按 `variants.<kind>.grade` 给闪回 / 梦境段开调色处方)——这两家是宿主程序 / 照数执行的工位,读不懂换了名字的字段**。他们最怕我:曲线与剧情错位、集/幕编号对不上 episode_plan。
 - **需对齐的伙伴**:art-director(会签方,基调边界)、cinematography(幕级色调→镜头级色温的衔接口径)。

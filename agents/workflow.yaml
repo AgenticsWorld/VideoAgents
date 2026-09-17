@@ -188,7 +188,7 @@ phases:
       - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json],
           validation: { auto: [no_unknown_placeholder] } }
       - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
-          outputs: [bible/color_script.json], validation: { rubric: creative_v1, qa: [06-art/art-director] } }
+          outputs: [bible/color_script.json], validation: { auto: [color_script_ok], rubric: creative_v1, qa: [06-art/art-director] } }   # color_script_ok = code/check_color_script.py --strict(字段契约 2026-09-17 锁死:episode_id/key_palette/acts[].event_refs·scene_ids·palette 色值/variants.<kind>.grade)
       - { id: p4-aspect, agent: 06-art/aspect-ratio, outputs: [bible/aspect_ratio.json],
           validation: { auto: [platform_spec_match] } }
       - { id: g4, gate: true, human: true, checkpoint: H2-美术风格锁定,

@@ -8732,18 +8732,10 @@ def _post_scene_catalog(base: Path, ep: str) -> dict:
 
 
 def _post_scene_palettes(base: Path, ep: str) -> dict:
-    """scene_no -> palette(色彩脚本 episodes[ep].segments[].scenes)。"""
-    cs = _read_json_safe(base / "bible" / "color_script.json") or {}
-    out = {}
-    for e in cs.get("episodes", []) or []:
-        if not isinstance(e, dict) or (e.get("episode") or e.get("episode_id")) != ep:
-            continue
-        for seg in e.get("segments", []) or []:
-            if isinstance(seg, dict):
-                for sn in seg.get("scenes") or []:
-                    out[str(sn)] = [c for c in (seg.get("palette") or []) if isinstance(c, str)]
-        out["_episode"] = [c for c in (e.get("key_palette") or []) if isinstance(c, str)]
-    return out
+    """场次号 | SCN-id -> palette,"_episode" -> 整集色板。色彩脚本各项目写法不一(acts/segments/beats、ep/episode/episode_id、
+    色值/色名图例),统一走 modules/color_script.py 的兼容读取(2026-09-17)。"""
+    from modules import color_script
+    return color_script.scene_palettes(color_script.load(base), ep)
 
 
 def _tl_num(t: dict, *keys):
@@ -9088,7 +9080,7 @@ def _preview_post(project: str, ep: str):
             label = " · ".join(x for x in (info.get("name") or sid, info.get("tod") or g.get("time_of_day") or "", info.get("type") or "") if x)
             seen[sid] = {"scene_id": sid, "scene_no": g["scene_no"], "label": label, "name": info.get("name") or sid,
                          "tod": info.get("tod") or g.get("time_of_day") or "", "type": info.get("type") or "",
-                         "palette": pals.get(g["scene_no"]) or [], "groups": []}
+                         "palette": pals.get(g["scene_no"]) or pals.get(g["scene_id"]) or [], "groups": []}
             scenes.append(seen[sid])
         seen[sid]["groups"].append(g["group_id"])
     sfx, sfx_saved = _post_sfx_rows(base, ep, groups, shot_start)

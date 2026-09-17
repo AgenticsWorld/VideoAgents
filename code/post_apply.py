@@ -57,6 +57,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, REPO_ROOT, DATA_DIR  # noqa: E402  副作用:modules/ 入 sys.path
 
+import color_script  # noqa: E402
 import post_fx as fx  # noqa: E402
 import post_plan as pp  # noqa: E402
 import timemap  # noqa: E402
@@ -111,17 +112,9 @@ def lut_files(proj: Path) -> dict[str, str]:
     return {p["id"]: p["file"] for p in pp.lut_presets(proj, DATA_DIR) if p.get("file")}
 
 
-def scene_palette_from_script(proj: Path, ep: str, scene_no: str) -> list[str]:
-    """color_script.json:episodes[ep].segments[].scenes 含 scene_no → palette。"""
-    cs = pp.read_json(proj / "bible" / "color_script.json") or {}
-    for e in cs.get("episodes", []) or []:
-        if not isinstance(e, dict) or (e.get("episode") or e.get("episode_id")) != ep:
-            continue
-        for seg in e.get("segments", []) or []:
-            if isinstance(seg, dict) and scene_no in (seg.get("scenes") or []):
-                return [c for c in (seg.get("palette") or []) if isinstance(c, str)]
-        return [c for c in (e.get("key_palette") or []) if isinstance(c, str)]
-    return []
+def scene_palette_from_script(proj: Path, ep: str, scene_no: str, scene_id: str = "") -> list[str]:
+    """场次色板留空时的取值:场次号 → SCN-id → 整集色板(modules/color_script.py 兼容各项目的色彩脚本写法)。"""
+    return color_script.palette_for(color_script.load(proj), ep, scene_no, scene_id)
 
 
 # ---------------------------------------------------------------- apply / register
@@ -166,7 +159,7 @@ def do_apply(proj: Path, ep: str, recipe_ids: list[str], only_group: str | None,
         # 场次色板留空 → 自动读色彩脚本
         for r in recipes:
             if r["kind"] == "scene_palette" and not r["params"].get("palette"):
-                r["params"]["palette"] = scene_palette_from_script(proj, ep, g.get("scene_no") or "")
+                r["params"]["palette"] = scene_palette_from_script(proj, ep, g.get("scene_no") or "", g.get("scene_id") or "")
         try:
             tail = fx.preview_scale_tail() if preview else ""
             graph = fx.build_graph(recipes, ctx, tail)
@@ -304,7 +297,11 @@ def do_blocks(proj: Path, ep: str, as_json: bool, stats: bool, verify_by: str = 
         detail = "; ".join(bad[:10]) if bad else (f"{mine_total} 条处方全部已出片" if mine_total else f"{verify_by} 未开任何处方(无叙事块或无调色意图)")
         print(f"[CHECK] grade_plan_proposed: {'FAIL' if bad else 'PASS'}  {detail}", flush=True)
     if as_json:
-        print(json.dumps({"ep": ep, "blocks": blocks}, ensure_ascii=False))
+        # 色彩脚本写给叙事块的调色意图(变体总则 + 本集标了 variant 的段落),调色规划工位据此定参数
+        cs = color_script.load(proj)
+        acts = [{k: a[k] for k in ("id", "variant", "note", "variant_grade", "scene_ids", "scenes", "events", "palette")}
+                for a in color_script.segments(color_script.episode_entry(cs, ep), color_script.legend(cs)) if a["variant"]]
+        print(json.dumps({"ep": ep, "blocks": blocks, "variants": color_script.variants(cs), "variant_acts": acts}, ensure_ascii=False))
         return rc
     if not blocks:
         _log("INFO", "本集 shot_list 没有 narrative_block(无闪回/梦境/蒙太奇/想象段)")
