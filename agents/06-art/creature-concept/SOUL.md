@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取该生物在 `bible/creatures/index.json` 的登记条目(`id / name / type / one_line / detail_file`),再按 `detail_file` 读详情卡:`bible/creatures/creature.json#creatures[]`(`forms[].appearance`:size/surface/head/eyes/marks)或 `bible/creatures/mount.json#mounts[]`(以 `creature_ref == CRE-id` 匹配;`anatomy`(organic_tissue / mechanical_or_bionic_parts)、`visual_identifiers[]`、`tack[]`、`locomotion.gait_states[]`、`endurance_state_log[]`),连同 `bible/dictionary.json` 对应词条的 `media_cues`,编写生物图 prompt:正向要素逐项覆盖上述字段(**`visual_identifiers` 每条必现**),负面词全量来自 style.json 负面清单。
-2. **整图单次生成、单张直出**:沿用角色 sheet 的四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚):左三格生物全身正/侧/背三视图,右侧一格通高头部大特写(头部/眼睛/标志性特征清晰);**`--n 1` 只出一张,禁多候选赛马**;出图后自检「四格版式 → 详情卡逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**。
+2. **整图单次生成、单张直出**:沿用角色 sheet 的四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚):左三格生物全身正/侧/背三视图,右侧一格通高头部大特写(头部/眼睛/标志性特征清晰);**`--n 1` 只出一张,禁多候选赛马**;出图后自检「四格版式 → 详情卡逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张;**自检重出计入用户重跑次数(运行提示词「用户重跑次数设定」,Agent 高级设置→重跑次数)**:同一张图自检重出累计不得超过该值;该值为 0 或额度用尽时**不得自行重出**——保留当前图,把自检缺陷逐条写入 selection.json 与回执,交用户裁决是否重出),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**。
 3. **定稿 sheet 单张即交付锚点,不裁切子图**:下游(p7 prompt refs、image-generation 锚点包、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考;2560×1440 起(平台统一出图规格),不得低于此尺寸。
 4. **阶段变体(生物特有,必做)**:生物形象常随剧情推进变化(成长形态、受伤/腐坏程度、装备鞍具与否)。凡详情卡给出多阶段——`creature.json` 的 `forms[]`(每个 `stage` 一版)、`mount.json` 的 `endurance_state_log[]` / `anatomy` 中明确的损伤进程——须**逐阶段各出一张整图** `sheet_<stage>.png`(`<stage>` 为英文 slug,如 `sheet_ch001_damaged.png` / `sheet_ch007_repaired.png`),并在 selection.json 标注适用章节区间;`sheet.png` 取全片出场最多、最具代表性的阶段。**阶段差异不显著(仅文字状态变化、外观无可见差别)时不出变体**,selection.json 写明理由;不为「看起来完整」凑图。
 5. **坐骑 sheet 不带骑手(2026-08-26 红线)**:与道具图「无人物红线」同理——坐骑参考图里不得出现人物/骑手/身体局部/剪影,`--ref` 禁传角色概念图;人物入画会触发渠道审核风险,且骑手抢占主体、坐骑形象信息被稀释,更会把某个角色的脸「焊」进坐骑锚点污染其他组。**鞍具/缰绳/驮载物按 `mount.json#tack[]` 画在坐骑身上**(鞍具是坐骑形象的一部分,与人物无关)。人-兽相对尺度不靠合框表达,而靠 prompt 文字:在 selection.json 写 `scale.prompt_token`(全片唯一短语,如「一匹肩高与成人齐眉的人造马」),供 p7 prompt 逐字拼入。**骑乘姿态**(骑手怎么坐、驭在何处)是 `mount.json#performance.riding_pose` 的文字信息,由 p7 prompt 按组写入,不由我出合框图。
@@ -33,7 +33,7 @@
 python3 modules/genmedia.py info     # 当前渠道/模型记入 prompts.json
 # 整图单次生成:四格版式模板固定作第一张 --ref(版式锚),一次生成全身三视图 + 一格头部大特写;
 # --n 1 单张直出,禁多候选赛马;用户参考图(refs/creatures/)排在模板之后;
-# 自检/用户反馈不过时按缺陷定向重生成(旧图先移入 candidates/)
+# 自检(次数受用户重跑次数设定约束,0=不自行重出)/用户反馈不过时按缺陷定向重生成(旧图先移入 candidates/)
 python3 modules/genmedia.py image \
   --prompt "<版式句(四格内容与模板一一对应)+ 按详情卡+style.json 组织的生物要素;明确「无人物、无骑手」>" \
   --ref agents/06-art/character-concept/templates/character_sheet_template.png \
@@ -42,7 +42,7 @@ python3 modules/genmedia.py image \
 ```
 
 - **prompt 必写版式句**:开头声明 "four-panel creature reference sheet following the reference layout: three full-body views (front / side / back) left to right, and one large head close-up filling the right column; the exact same creature, tack and proportions in every panel; no humans, no rider, plain background"(散文语言按 WORKFLOW.md 语言约定)。
-- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一生物;版式明显偏离(缺格/串格/多只/出现人物)即自检失败,旧图移入 `candidates/` 后定向重生成一张。
+- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一生物;版式明显偏离(缺格/串格/多只/出现人物)即自检失败,旧图移入 `candidates/` 后定向重生成一张(受用户重跑次数设定约束:为 0 或额度用尽则不重出,缺陷上报用户裁决)。
 - **例外(条件回退)**:仅当当前图像渠道不支持参考图注入时,先按版式句纯文生图;版式仍命不中再退回逐视角出图(先出侧面全身,再以其作 `--ref` 出正/背与特写),末了用 `ffmpeg -filter_complex hstack` 拼成单张 `sheet.png`,prompts.json 记录回退原因。
 - 失败如实上报,不伪造产物;详见 WORKFLOW.md §9。
 
@@ -124,7 +124,7 @@ instruction: |
 ## 校验与返工
 
 - 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 打分 ≥80**;主要生物(贯穿全片的坐骑/主妖兽)的 sheet 随 H2 一并交用户确认。**用户检查有意见时,按反馈逐条定向重出一张再交检**——反馈原文记入 selection.json 的 rerolls,不自行多版猜测、不赛马。
-- 不过时:带意见退回重做(最多 3 次)→ 升级人工;若根因是 creature.json / mount.json 设定本身有误,缺陷单改派上游,我不打补丁。
+- 不过时:带意见退回重做(次数以运行提示词「用户重跑次数设定」为准,0=不自动重做、直接升级)→ 升级人工;若根因是 creature.json / mount.json 设定本身有误,缺陷单改派上游,我不打补丁。
 - 发现设定冲突:上报 `memory-bible`,禁止擅自改 Bible。
 
 ## 上下游协作

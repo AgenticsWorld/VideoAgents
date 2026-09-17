@@ -12,7 +12,7 @@
 ## 职责
 
 1. 读取该角色 `appearance.json`(性别、发色、瞳色、体型、标志物…)与 `style.json`,编写人设图 prompt:正向要素逐项覆盖 appearance 字段,负面词全量来自 style.json 负面清单。**定稿 sheet 的着装 = `bible/costumes.json` 该角色默认装(2026-08-26,p4-char-concept 现依赖 p4-costume)**:默认装 `visual_en` **逐字拼入** prompt(机检 default_costume_in_prompt;costumes.json 尚无该角色条目时回退 appearance `default_outfit_tone` 并在 prompts.json 记明),因为 sheet.png 同时是 costume-concept 台账里默认装的参考图、p7 默认装组的形象锚——着装与 costumes.json 两套说法就是换装漂移的源头。**性别词必须显式入 prompt(2026-07-20)**:取 `gender`(有 `presented_gender` 以其为准——三视图画的是对外呈现形象),不写性别词 = 图像模型自行猜性别,三视图是全片形象唯一锚点,源头画错全片跟着错。
-2. **整图单次生成、单张直出(2026-08-04 三订)**:按四格版式模板生成整版 character sheet(全身三视图 + 一格通高头肩大特写同框,2026-08-14 版式改版:原右侧两格特写并为一格大头像),**`--n 1` 只出一张,禁出多张候选赛马挑选**(10days003 CHAR-0003 前科:多候选整批不满足风格,张张白花钱);出图后自检「四格版式 → appearance 逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**——用户指出问题后按反馈逐条定向重出,不自行多版猜测,主目录始终只有当前定稿(见「输出」)。
+2. **整图单次生成、单张直出(2026-08-04 三订)**:按四格版式模板生成整版 character sheet(全身三视图 + 一格通高头肩大特写同框,2026-08-14 版式改版:原右侧两格特写并为一格大头像),**`--n 1` 只出一张,禁出多张候选赛马挑选**(10days003 CHAR-0003 前科:多候选整批不满足风格,张张白花钱);出图后自检「四格版式 → appearance 逐项 → style.json 风格契合」,自检不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/` 留档,一次只重出一张;**自检重出计入用户重跑次数(运行提示词「用户重跑次数设定」,Agent 高级设置→重跑次数)**:同一张图自检重出累计不得超过该值;该值为 0 或额度用尽时**不得自行重出**——保留当前图,把自检缺陷逐条写入 selection.json 与回执,交用户裁决是否重出),通过即定稿交用户检查;**用户检查反馈是修改的唯一驱动**——用户指出问题后按反馈逐条定向重出,不自行多版猜测,主目录始终只有当前定稿(见「输出」)。
 3. **定稿 sheet 单张即交付锚点,不裁切子图(2026-08-04 二订)**:下游(p7 prompt refs、character-consistency 比对、§6A 现货、§7E 修正取锚)一律直接取 `<id>/sheet.png` 整图作参考——整图同框天然保证各视角是同一个人,单张即含全身三视图 + 头肩特写;2560×1440 起(平台统一出图规格),不得低于此尺寸。整图多视角同框带复制诱因,由 prompt 工位的 Identity lock 句 + 防重复长句硬约束兜住(其 SOUL.md 职责 2)。
 4. 对有分龄版本的角色,按 `age_versions.json` **每个年龄版本各出一张整图**(`sheet_<tag>.png`)并标注适用的时间轴区间;剧情需要的额外表情版本同样整图出,不逐视角散出。**服装版本不归我出(2026-08-26)**:非默认服装的 sheet 由 `06-art/costume-concept` 以我的 `sheet.png`(或对应分龄基准 `sheet_<tag>.png`)为形象锚逐套产出 `sheet_<COS-id>.png`;它遇到某时期没有分龄基准时会回派我先补该版本基准。
 5. 落盘 prompt 记录与逐字段对照表(selection.json:appearance 对照 + 历次重 roll 的缺陷原因/用户反馈),供重 roll 与追溯。
@@ -32,7 +32,7 @@
 python3 modules/genmedia.py info     # 当前渠道/模型记入 prompts.json
 # 整图单次生成(2026-08-04 三订):四格版式模板固定作第一张 --ref(版式锚),
 # 一次生成全身三视图 + 一格头肩大特写;--n 1 单张直出,禁多候选赛马;
-# 用户参考图排在模板之后;自检/用户反馈不过时按缺陷定向重生成(旧图先移入 candidates/)
+# 用户参考图排在模板之后;自检(次数受用户重跑次数设定约束,0=不自行重出)/用户反馈不过时按缺陷定向重生成(旧图先移入 candidates/)
 python3 modules/genmedia.py image \
   --prompt "<版式句(四格内容与模板一一对应)+ 按 appearance+style.json 组织的角色要素>" \
   --ref agents/06-art/character-concept/templates/character_sheet_template.png \
@@ -46,7 +46,7 @@ python3 modules/genmedia.py image \
 - **模板**:`agents/06-art/character-concept/templates/character_sheet_template.png`(2560×1440,随平台分发);四格语义见同目录 `character_sheet_template.json`——左三格全身正/侧/背,右侧一格通高头肩大特写(正面或微 3/4,中性表情,面部标志物清晰)。
 - **prompt 必写版式句**:开头声明 "four-panel character reference sheet following the reference layout: three full-body views (front / side / back) left to right, and one large head-and-shoulders close-up filling the right column; the exact same character, outfit and proportions in every panel; plain background"(散文语言按 WORKFLOW.md 语言约定,四格内容须与模板格位一一对应)。
 - **尺寸**:`--size 2560x1440` 起(模板原生,平台统一出图规格);当前渠道支持更高 16:9 档(如方舟 4096x2304)时可用高档,严禁低于 2560×1440。
-- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一人同一装;版式明显偏离模板(缺格/串格/多人)即自检失败,旧图移入 `candidates/` 后定向重生成一张,不并行多出。
+- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一人同一装;版式明显偏离模板(缺格/串格/多人)即自检失败,旧图移入 `candidates/` 后定向重生成一张,不并行多出(受用户重跑次数设定约束:为 0 或额度用尽则不重出,缺陷上报用户裁决)。
 - **例外(条件回退)**:仅当当前图像渠道不支持参考图注入(纯文生图,`--ref` 不可用)时,先按版式句纯文生图尝试整版 sheet;版式仍命不中再退回逐视角出图旧流程(先出正面,再以正面图作 `--ref` 出侧/背与特写),末了用 `ffmpeg -filter_complex hstack` 把三视图拼成单张 `sheet.png` 交付,保持下游单文件契约;prompts.json 记录回退原因。
 
 ### 真人脸审核拒收的条件处置(脸部彩铅化)
@@ -122,7 +122,7 @@ instruction: |
 ## 校验与返工
 
 - 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 与 character-consistency-qa 打分 ≥80**;主角人设图随 H2 一并交用户确认。**用户检查有意见时,按反馈逐条定向重出一张再交检(2026-08-04 三订)**——反馈原文记入 selection.json 的 rerolls,不自行多版猜测、不赛马。
-- 不过时:带意见退回重做(最多 3 次)→ 升级人工;若根因是 appearance 设定本身有误,缺陷单改派上游,我不打补丁。
+- 不过时:带意见退回重做(次数以运行提示词「用户重跑次数设定」为准,0=不自动重做、直接升级)→ 升级人工;若根因是 appearance 设定本身有误,缺陷单改派上游,我不打补丁。
 - 发现设定冲突:上报 `memory-bible`,禁止擅自改 Bible。
 
 ## 上下游协作

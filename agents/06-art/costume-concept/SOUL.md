@@ -13,7 +13,7 @@
 
 1. **读取服装矩阵**:从 `bible/costumes.json` 取该角色全部服装条目——两种既有 schema 都要认:平台约定 `characters[].outfits[]`(默认装由条目 `default: true` 或角色级 `default_outfit_id` / `default_outfit` / `default_costume` 指定),以及扁平 `costumes[]` / `entries[]`(以 `character_ref` / `character_id` 归属)。每条取 `id / label|name / occasion / period / layers / material / color / condition_and_wear / distinctive_details / variants / visual_en / scenes / chapters / episodes / default`。
 2. **默认装不重画,登记复用**:character-concept 的定稿 `sheet.png` 就是该角色默认装(其 SOUL 职责 1 按 costumes.json 默认装 `visual_en` 逐字入 prompt),台账里默认装条目 `file: "sheet.png"`、`reuse: true`;发现 `sheet.png` 着装与默认装明显不符(character-concept 早于 costumes.json 出图的存量项目常见)时上报 orchestrator 回派 character-concept 重出基准,不由我打补丁。
-3. **逐套整图单次生成、单张直出**:沿用角色四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚),**该角色定稿 `sheet.png` 固定作第二张 `--ref`(形象锚,缺一即退回)**,用户参考图(`refs/props/costumes/`、`refs/characters/`)排其后;`--n 1` 只出一张,禁多候选赛马;prompt 结构固定为「版式句 + 同一人声明句 + 性别词与 2–3 个稳定身份特征(取 appearance.json) + **该套服装 `visual_en` 逐字拼入**(严禁改写/翻译——它同时是 p7 prompt 逐字注入的服装串,图文必须同源)+ `condition_and_wear` 磨损/血污/破损状态 + style.json 风格串」,负面词全量取 `negative_prompt_en`。出图后自检「四格版式 → 同一人(脸/发/体型与 sheet.png 一致)→ 服装逐项(层次/材质/颜色/破损/标志细节)→ 风格契合」,不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/`,一次只重出一张),通过即定稿;**用户检查反馈是修改的唯一驱动**。
+3. **逐套整图单次生成、单张直出**:沿用角色四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚),**该角色定稿 `sheet.png` 固定作第二张 `--ref`(形象锚,缺一即退回)**,用户参考图(`refs/props/costumes/`、`refs/characters/`)排其后;`--n 1` 只出一张,禁多候选赛马;prompt 结构固定为「版式句 + 同一人声明句 + 性别词与 2–3 个稳定身份特征(取 appearance.json) + **该套服装 `visual_en` 逐字拼入**(严禁改写/翻译——它同时是 p7 prompt 逐字注入的服装串,图文必须同源)+ `condition_and_wear` 磨损/血污/破损状态 + style.json 风格串」,负面词全量取 `negative_prompt_en`。出图后自检「四格版式 → 同一人(脸/发/体型与 sheet.png 一致)→ 服装逐项(层次/材质/颜色/破损/标志细节)→ 风格契合」,不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/`,一次只重出一张;**自检重出计入用户重跑次数(运行提示词「用户重跑次数设定」,Agent 高级设置→重跑次数)**:同一张图自检重出累计不得超过该值;该值为 0 或额度用尽时**不得自行重出**——保留当前图,把自检缺陷逐条写入 selection.json 与回执,交用户裁决是否重出),通过即定稿;**用户检查反馈是修改的唯一驱动**。
 4. **姿态与画面纪律**:服装 sheet 画的是「这套衣服在这个人身上的状态」,四格一律中性站姿、纯色背景——倒地/受伤/被缚等剧情姿态**不入 sheet**(姿态是分镜与 p7 prompt 的事),伤口/血污/破口作为服装与体表状态照画;`variants[]` 子状态(如「裤腿脓水浸透档」「半露档」)默认不单独出图,由 continuity `state` 短语在 p7 文字承担,仅当子状态外观差异显著且被 §6A 点名时追加 `sheet_<COS-id>_<slug>.png`。
 5. **复合躯体 / 跨角色共享外观**:同一具身体上挂着多个角色卡(polan:CHAR-0001 胸前面容与 CHAR-0002 躯体)时,涉及对方可见部位的服装状态(敞襟/裸露态)须把对方定稿 sheet 一并作 `--ref`,并在台账 `extra_identity_refs[]` 登记;costumes.json 的 `cross_ref` / `hidden_state_ref` 指明两套服装实为同一物理状态时,可登记 `reuse_of: <对方 sheet 路径>` 而不重画。
 6. **分龄/异体版本先有基准再出服装**:服装所属时期对应 `age_versions.json` 的某个版本(前史的完整原身、少年期等),而该版本的基准 `sheet_<tag>.png` 尚不存在时,**不得拿现有 sheet.png 硬当锚**(体型/年龄会串);台账该条写 `file: null` + `blocked_on: "character-concept sheet_<tag>.png"` 并上报 orchestrator 先回派 character-concept 出该版本基准,基准入库后再补服装 sheet。
@@ -46,7 +46,7 @@ python3 modules/genmedia.py image \
 
 - **prompt 必写版式句**:开头声明 "four-panel character reference sheet following the reference layout: three full-body views (front / side / back) left to right, and one large head-and-shoulders close-up filling the right column; the exact same character as the second reference image — same face, hair, skin and build — wearing a different outfit; plain background"(散文语言按 WORKFLOW.md 语言约定)。
 - **尺寸**:`--size 2560x1440` 起(平台统一出图规格),严禁更低。
-- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一人同一装;版式偏离(缺格/串格/多人)或**脸换了人**即自检失败,旧图移入 `candidates/` 后定向重生成一张。
+- **版式自检**:四格齐全、每格恰含一个完整视角、四格互为同一人同一装;版式偏离(缺格/串格/多人)或**脸换了人**即自检失败,旧图移入 `candidates/` 后定向重生成一张(受用户重跑次数设定约束:为 0 或额度用尽则不重出,缺陷上报用户裁决)。
 - **例外(条件回退)**:仅当当前图像渠道不支持参考图注入时,先按版式句纯文生图(prompt 补写 appearance 全量外观串);版式仍命不中再退回逐视角出图并 `ffmpeg hstack` 拼成单张,prompts.json 记录回退原因。
 - 失败如实上报,不伪造产物;详见 WORKFLOW.md §9。
 
@@ -129,7 +129,7 @@ instruction: |
 ## 校验与返工
 
 - 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 与 character-consistency-qa 打分 ≥80**;主角服装 sheet 随 H2 一并交用户确认(人物预览页「👕 服装」区逐套审看)。**用户检查有意见时,按反馈逐条定向重出一张再交检**——反馈原文记入 selection.json 的 `costume_rerolls`,不自行多版猜测、不赛马。
-- 不过时:带意见退回重做(最多 3 次)→ 升级人工;若根因是 costumes.json 设定或 sheet.png 基准本身有误,缺陷单改派上游,我不打补丁。
+- 不过时:带意见退回重做(次数以运行提示词「用户重跑次数设定」为准,0=不自动重做、直接升级)→ 升级人工;若根因是 costumes.json 设定或 sheet.png 基准本身有误,缺陷单改派上游,我不打补丁。
 - 发现设定冲突:上报 `memory-bible`,禁止擅自改 Bible。
 
 ## 上下游协作

@@ -3093,9 +3093,10 @@ def build_role_prompt(agent_id: str, project: str,
   缺陷清零机检照常。本条只约束各维度 QA 审核;evaluation 对工单的 acceptance 验收评分按上方「质量评委」设定执行"""
     max_retries = max_retries_setting()
     p += ("\n\n## 用户重跑次数设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中写死的「最多 3 次」「≤3 次」「max_retries: 3」)\n"
-          f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll,"
+          f"- 自动重跑/重 roll 次数上限:**{max_retries}** —— 验收/评分/QA 不过带意见退回重做、媒体生成机检不达标自动重 roll、"
+          f"**Agent 出图/出视频后自检不过的「定向重生成/重出」(人物/生物/服装概念图 sheet 等,SOUL 写了自检不过即重出的也算)**,"
           f"同一任务/同一产物累计最多 {max_retries} 次"
-          + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做)" if max_retries == 0 else
+          + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做;自检不过时保留当前产物,缺陷逐条写进回执交用户裁决,不得自行重新生成)" if max_retries == 0 else
              f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
           + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
     plug = plugin_of_agent(agent_id)
