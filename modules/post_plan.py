@@ -149,8 +149,13 @@ KINDS: list[dict] = [
      "hint": "成片时生效,出成片前由花字工位按 captions.json 契约落地(须开启 output.caption_enabled)"},
     {"id": "transition", "section": "pack", "label": "组间转场(入)", "exec": "record", "scopes": ["group"],
      "params": [{"key": "type", "label": "类型", "type": "select", "options": ["hard_cut", "dissolve", "dip_black", "dip_white", "fade_black"], "default": "dissolve"},
-                {"key": "duration_s", "label": "时长 s", "type": "range", "min": 0.2, "max": 2, "step": 0.1, "default": 0.6}],
-     "hint": "提交即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲"},
+                {"key": "duration_s", "label": "时长 s", "type": "range", "min": 0.2, "max": 1.5, "step": 0.1, "default": 0.6},
+                # 节奏垫片(2026-09-17,§9C):本组前黑场停留 / 前组尾帧定格,组边界插入帧,成片变长,声轨字幕按 timemap 平移
+                {"key": "freeze_s", "label": "前组尾帧定格 s", "type": "range", "min": 0, "max": 3, "step": 0.04, "default": 0},
+                {"key": "hold_s", "label": "黑场停留 s", "type": "range", "min": 0, "max": 3, "step": 0.04, "default": 0},
+                {"key": "hold_audio", "label": "黑场声音", "type": "select", "options": ["sustain", "fade", "mute"], "default": "sustain"}],
+     "hint": "提交即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲;定格/黑场停留会插入帧使成片变长,"
+             "外挂声轨与字幕由 finalize_episode 按同一张 timemap 平移(黑场停留只配 hard_cut/dip_black/fade_black)"},
     # ---- 音效与声音 ----
     {"id": "ambience", "section": "sound", "label": "环境声", "exec": "record", "scopes": ["scene", "episode"],
      "params": [{"key": "desc", "label": "描述", "type": "text", "default": ""},
@@ -425,6 +430,61 @@ def register_version(plan: dict, base: Path, ep: str, gid: str, rel_file: str, r
     return ver
 
 
+# ---------------------------------------------------------------- 版本的时长编辑(timemap,2026-09-17)
+def version_time_ops(plan: dict, gid: str, v: int) -> list[dict]:
+    """版本 v 相对**其基准版本**的时长编辑表(插黑/定格/删段登记在版本条目 time_ops;换段不改时长)。"""
+    if v <= 0:
+        return []
+    for ver in group_versions(plan, gid):
+        if int(ver.get("v") or 0) == v:
+            return list(ver.get("time_ops") or [])
+    return []
+
+
+def effective_time_ops(plan: dict, gid: str, v: int | None = None) -> list[dict]:
+    """从母本 v0 到版本 v 的合成时长编辑表(组内秒,母本基准):沿 base_v 链回溯,逐层 compose。"""
+    try:
+        import timemap
+    except ImportError:  # 服务端以 modules.post_* 包路径导入时
+        from modules import timemap
+    v = current_version(plan, gid) if v is None else int(v)
+    chain, seen = [], set()
+    while v > 0 and v not in seen:
+        seen.add(v)
+        ver = next((x for x in group_versions(plan, gid) if int(x.get("v") or 0) == v), None)
+        if not ver:
+            break
+        chain.append(ver)
+        v = int(ver.get("base_v") or 0)
+    ops: list[dict] = []
+    for ver in reversed(chain):
+        ops = timemap.compose(ops, ver.get("time_ops") or [])
+    return ops
+
+
+def episode_time_ops(plan: dict, groups: list[dict]) -> list[dict]:
+    """整集正片(原粗剪 0 秒基准)的时长编辑表:各组当前版本的组内 ops 平移到组起点。groups 须含 group_id 与
+    **原始**累计起点 cum_start_s(与 final_audio / subtitles 同基准)。"""
+    try:
+        import timemap
+    except ImportError:  # 服务端以 modules.post_* 包路径导入时
+        from modules import timemap
+    out = []
+    for g in groups:
+        gid = g.get("group_id")
+        if not gid:
+            continue
+        base = float(g.get("cum_start_s") or 0.0)
+        for o in effective_time_ops(plan, gid):
+            row = dict(o)
+            row["src_t0"] = round(base + float(o["src_t0"]), 6)
+            row["src_t1"] = round(base + float(o["src_t1"]), 6)
+            row["group_id"] = gid
+            row.setdefault("kind", "version_edit")
+            out.append(row)
+    return timemap.normalize_ops(out)
+
+
 def adopt_version(plan: dict, gid: str, v: int) -> dict:
     vs = group_versions(plan, gid)
     ver = next((x for x in vs if int(x.get("v") or 0) == int(v)), None)
@@ -486,9 +546,21 @@ def write_transition_in(base: Path, ep: str, recipe: dict, remove: bool = False)
                 prev = g.get("transition_in")
                 if isinstance(prev, dict) and prev.get("source") == "post_plan":
                     prev = prev.get("_post_prev")
-                g["transition_in"] = {"type": str(p.get("type") or "dissolve"), "duration_s": float(p.get("duration_s") or 0.6),
-                                      "intent": "post", "reason": recipe.get("note", ""), "source": "post_plan",
-                                      "recipe_id": recipe["id"], "_post_prev": prev if isinstance(prev, dict) else {}}
+                ty = str(p.get("type") or "dissolve")
+                t_in = {"type": ty, "intent": "other", "reason": recipe.get("note", ""), "source": "post_plan",
+                        "recipe_id": recipe["id"], "_post_prev": prev if isinstance(prev, dict) else {}}
+                if ty != "hard_cut":
+                    t_in["duration_s"] = float(p.get("duration_s") or 0.6)
+                # 节奏垫片:0 不写字段(与 transition_ok 契约一致);黑场停留只配「到黑」类型
+                fz, hd = float(p.get("freeze_s") or 0), float(p.get("hold_s") or 0)
+                if fz > 0:
+                    t_in["freeze_s"] = round(fz, 4)
+                if hd > 0:
+                    if ty not in ("hard_cut", "dip_black", "fade_black"):
+                        raise ValueError(f"黑场停留只配 hard_cut / dip_black / fade_black,当前类型 {ty}")
+                    t_in["hold_s"] = round(hd, 4)
+                    t_in["hold_audio"] = str(p.get("hold_audio") or "sustain")
+                g["transition_in"] = t_in
     if not hit:
         raise ValueError(f"shot_list 里没有组 {gid}")
     write_json(sl_path, sl)

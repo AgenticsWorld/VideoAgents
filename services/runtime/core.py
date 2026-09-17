@@ -8690,6 +8690,7 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
                              "cleaned": bool(ver.get("cleaned")), "created_at": ver.get("created_at") or "",
                              "created_by": ver.get("created_by") or "", "note": ver.get("note") or "",
                              "base_v": int(ver.get("base_v") or 0), "splice": ver.get("splice"),
+                             "time_ops": ver.get("time_ops") or [], "pad": ver.get("pad"),
                              "label": f"v{ver.get('v')}"})
         thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
         rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": g.get("scene_no") or "",
@@ -8993,6 +8994,29 @@ def _post_recipe_public(base: Path, ep: str, r: dict) -> dict:
     return out
 
 
+def _post_transition_hold_resolve(base: Path, ep: str, plan: dict, r: dict) -> str:
+    """转场处方带黑场停留且声音=延续时,按前组尾 1 s 内有无语音落定策略(改写 params.hold_audio),返回说明。"""
+    if r.get("kind") != "transition":
+        return ""
+    p = r.get("params") or {}
+    if float(p.get("hold_s") or 0) <= 0 or p.get("hold_audio") != "sustain":
+        return ""
+    gid = r["scope"].get("group_id")
+    try:
+        groups, _ = _post_groups(base, ep, plan)
+    except Exception:  # noqa: BLE001
+        return ""
+    idx = next((i for i, g in enumerate(groups) if g["group_id"] == gid), -1)
+    if idx <= 0:
+        return ""
+    prev = groups[idx - 1]
+    audio, why = _post_resolve_hold_audio(base, ep, plan, prev["group_id"], float(prev.get("duration") or 0), "sustain")
+    if audio != "sustain":
+        p["hold_audio"] = audio
+        r["hold_audio_note"] = why
+    return why
+
+
 async def api_post_recipe_create(project: str, ep: str, body: dict):
     def _do():
         pp, base, ep2, plan = _post_load(project, ep)
@@ -9002,9 +9026,20 @@ async def api_post_recipe_create(project: str, ep: str, body: dict):
         except ValueError as e:
             raise ServiceError(400, str(e)) from None
         r["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if r["exec"] == "ffmpeg" else ("按渠道计费" if r["exec"] == "agent" else "成片时生效 · ¥0")
+        note = _post_transition_hold_resolve(base, ep2, plan, r)
         plan["recipes"].append(r)
+        adopted = False
+        if body.get("adopt") and r["exec"] == "record":
+            # 记录类处方允许创建即提交(后期页「插黑 / 定格」一键写回 shot_list.transition_in)
+            try:
+                pp.adopt_recipe(base, ep2, plan, r)
+                adopted = True
+            except ValueError as e:
+                plan["recipes"].remove(r)
+                raise ServiceError(400, str(e)) from None
         pp.save_plan(base, ep2, plan)
-        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "summary": pp.summary(plan)}
+        return {"ok": True, "recipe": _post_recipe_public(base, ep2, r), "summary": pp.summary(plan), "adopted": adopted,
+                "hold_audio_note": note}
     return await asyncio.to_thread(_do)
 
 
@@ -9025,6 +9060,7 @@ async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
                 r["scope"] = sc
             if "params" in body:
                 r["params"] = pp.coerce_params(kind, body["params"])
+                _post_transition_hold_resolve(base, ep2, plan, r)
             if "refs" in body:
                 r["refs"] = {k: v for k, v in (body["refs"] or {}).items() if v is not None}
             if "note" in body:
@@ -9513,12 +9549,103 @@ async def api_post_cutout(project: str, ep: str, body: dict):
         ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="cutout")
         ver["cutout"] = {"base_v": base_v, "cuts": res["cuts"], "removed": res["removed"],
                          "duration": res["new_duration"], "notes": res["notes"]}
+        # 时长编辑表(2026-09-17):删段 = 源区间 → 0 长;出成片时外挂声轨/字幕按 timemap 同步(post_apply sync-timeline)
+        ver["time_ops"] = [{"src_t0": c["t0"], "src_t1": c["t1"], "out_len": 0.0, "kind": "cutout"} for c in res["cuts"]]
         ver["note"] = f"删段 v{base_v} · {len(res['cuts'])} 段 · -{res['removed']:.2f}s"
         ver["source"] = {"kind": "cutout", "duration": res["new_duration"]}
         pp.save_plan(base, ep2, plan2)
         return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
                 "base_v": base_v, "cuts": res["cuts"], "segments": res["segments"], "removed": res["removed"],
                 "duration": res["new_duration"], "notes": res["notes"], "seconds": round(time.time() - t0, 1)}
+    return await asyncio.to_thread(_do)
+
+
+def _post_speech_near(base: Path, ep: str, plan: dict, gid: str, t_local: float, window_s: float = 1.0) -> str | None:
+    """插入点前 window_s 秒(组内秒)内有没有对白 / 旁白在响:有则返回描述(黑场「延续」策略会把这段循环,应退为淡出)。"""
+    try:
+        groups, _ = _post_groups(base, ep, plan)
+    except Exception:  # noqa: BLE001
+        return None
+    g = next((x for x in groups if x["group_id"] == gid), None)
+    if not g:
+        return None
+    lo, hi = t_local - window_s, t_local + 0.05
+    for d in g.get("dialogue") or []:
+        if d["t0"] < hi and (d["t1"] or d["t0"]) > lo:
+            return f"对白 {d.get('shot_id') or ''}({d['t0']:.1f}–{d['t1']:.1f}s)"
+    try:
+        lanes = _post_audio_lanes(base, ep, groups, {"rows": []})
+    except Exception:  # noqa: BLE001
+        return None
+    abs_lo, abs_hi = g["cum_start_s"] + lo, g["cum_start_s"] + hi
+    for n in lanes.get("narration") or []:
+        if n["t0"] < abs_hi and n["t1"] > abs_lo:
+            return f"旁白 {n.get('label') or ''}({n['t0']:.1f}–{n['t1']:.1f}s)"
+    return None
+
+
+def _post_resolve_hold_audio(base: Path, ep: str, plan: dict, gid: str, t_local: float, audio: str) -> tuple[str, str]:
+    """黑场声音策略落定:sustain 且插入点前有语音 → fade;返回 (策略, 说明)。"""
+    audio = audio if audio in ("sustain", "fade", "mute") else "sustain"
+    if audio != "sustain":
+        return audio, ""
+    hit = _post_speech_near(base, ep, plan, gid, t_local)
+    if hit:
+        return "fade", f"插入点前有{hit},「延续」会重复这段语音,已改为淡出"
+    return "sustain", ""
+
+
+async def api_post_insert_hold(project: str, ep: str, body: dict):
+    """分镜剪辑·插黑 / 定格(组内):{group_id, base_v, t, freeze_s, hold_s, audio} → 在 base_v 的 t 秒处插入
+    [前一帧定格 freeze_s] + [黑场 hold_s],其余原样,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针);
+    版本条目记 time_ops,出成片时 post_apply sync-timeline 汇成 timemap,外挂声轨/字幕随之平移(§9B/§9C)。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        gid = _post_group_guard(str(body.get("group_id") or ""))
+        job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
+        if job.get("status") == "running":
+            raise ServiceError(409, f"本集有后期作业在跑({job.get('kind')}),请等它结束再剪")
+        base_v, _ = _post_cut_args(pp, plan, gid, body)
+        try:
+            t = float(body.get("t") or 0.0)
+            freeze_s = max(0.0, float(body.get("freeze_s") or 0.0))
+            hold_s = max(0.0, float(body.get("hold_s") or 0.0))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "t / freeze_s / hold_s 须为秒数") from None
+        if freeze_s <= 0 and hold_s <= 0:
+            raise ServiceError(400, "定格与黑场时长至少一项 > 0")
+        if freeze_s > 3.0 or hold_s > 3.0:
+            raise ServiceError(400, "定格 / 黑场单处最长 3 秒(节奏垫片不是暂停键)")
+        src = pp.version_file(base, ep2, gid, base_v, plan)
+        if not src:
+            raise ServiceError(404, f"{gid} v{base_v} 没有视频文件")
+        audio, why = _post_resolve_hold_audio(base, ep2, plan, gid, t, str(body.get("audio") or "sustain"))
+        v = pp.next_version_no(plan, gid)
+        dst = pp.post_dir(base, ep2) / gid / f"v{v}.mp4"
+        t0 = time.time()
+        try:
+            res = post_fx.insert_pad(src, dst, t, freeze_s, hold_s, audio)
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(500, f"插黑失败:{str(e)[-400:]}") from None
+        plan2 = pp.load_plan(base, ep2)
+        if pp.next_version_no(plan2, gid) != v:
+            v2 = pp.next_version_no(plan2, gid)
+            dst2 = dst.with_name(f"v{v2}.mp4")
+            dst.rename(dst2)
+            dst, v = dst2, v2
+        ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="pad")
+        ver["pad"] = {"base_v": base_v, "t": res["t"], "freeze_s": res["freeze_s"], "hold_s": res["hold_s"], "audio": audio,
+                      "audio_requested": str(body.get("audio") or "sustain"), "audio_note": why, "duration": res["new_duration"]}
+        ver["time_ops"] = res["time_ops"]
+        parts = ([f"定格 {res['freeze_s']:.2f}s"] if res["freeze_s"] else []) + ([f"黑场 {res['hold_s']:.2f}s"] if res["hold_s"] else [])
+        ver["note"] = f"插黑 v{base_v} @{res['t']:.2f}s · " + " + ".join(parts)
+        ver["source"] = {"kind": "pad", "duration": res["new_duration"]}
+        pp.save_plan(base, ep2, plan2)
+        notes = list(res.get("notes") or []) + ([why] if why else [])
+        return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
+                "base_v": base_v, "t": res["t"], "freeze_s": res["freeze_s"], "hold_s": res["hold_s"], "audio": audio,
+                "duration": res["new_duration"], "time_ops": res["time_ops"], "notes": notes, "seconds": round(time.time() - t0, 1)}
     return await asyncio.to_thread(_do)
 
 

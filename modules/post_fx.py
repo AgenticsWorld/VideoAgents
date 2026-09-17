@@ -561,3 +561,71 @@ def cut_out(src: Path, dst: Path, cuts: list[dict]) -> dict:
     notes = [f"时长 {info['duration']:.2f}s → {new_dur:.2f}s,与镜头表/时间线的组时长不再一致,出成片前需同步 timeline"]
     return {"segments": keep, "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges],
             "duration": round(info["duration"], 3), "new_duration": round(new_dur, 3), "removed": round(removed, 3), "notes": notes}
+
+
+# ---------------------------------------------------------------- 分镜剪辑(插黑 / 定格:组内某时刻插入定格帧 + 黑场,时长变长)
+def insert_pad(src: Path, dst: Path, t: float, freeze_s: float = 0.0, hold_s: float = 0.0, audio: str = "sustain") -> dict:
+    """在 src 的 t 秒处插入 [定格 freeze_s(t 前一帧克隆)] + [黑场 hold_s],其余原样,一次编码出 dst(时长变长)。
+    画面按帧量化;声轨按 modules/timemap 同一策略重映射(sustain 延续前段 / fade 淡出 / mute 静音)。
+    返回 {t, freeze_s, hold_s, audio, duration, new_duration, time_ops(组内秒,基准 = src)}。"""
+    try:
+        import timemap
+    except ImportError:  # 服务端以 modules.post_* 包路径导入时
+        from modules import timemap
+    require_tools("ffmpeg", "ffprobe")
+    info = probe(src)
+    w, h, fps = info["width"], info["height"], info["fps"] or 24.0
+    if not w or not h or not info["duration"]:
+        raise FxError(f"基准版本无法解析:{src.name}")
+    step = 1.0 / fps
+    tf = int(round(float(t) * fps))
+    total_f = int(round(info["duration"] * fps))
+    tf = max(0, min(total_f, tf))
+    fz_f, hd_f = int(round(float(freeze_s or 0) * fps)), int(round(float(hold_s or 0) * fps))
+    if fz_f <= 0 and hd_f <= 0:
+        raise FxError("定格与黑场时长至少一项 > 0")
+    if fz_f > 0 and tf == 0:
+        raise FxError("开头 0 秒处没有前一帧可定格,请改用黑场或把时刻后移")
+    audio = audio if audio in timemap.AUDIO_POLICIES else "sustain"
+    t_q = tf * step
+    parts, labels = [], []
+    base = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps={fps:g},format=yuv420p,settb=AVTB"
+    if tf > 0:
+        f = f"[0:v]trim=end_frame={tf},setpts=PTS-STARTPTS,{base}"
+        if fz_f:
+            f += f",tpad=stop_mode=clone:stop_duration={fz_f / fps:.6f}"
+        parts.append(f + f",setpts=N/({fps:g}*TB)[va]")
+        labels.append("[va]")
+    if hd_f:
+        parts.append(f"color=c=black:s={w}x{h}:r={fps:g}:d={hd_f / fps:.6f},format=yuv420p,setsar=1,settb=AVTB,"
+                     f"trim=end_frame={hd_f},setpts=N/({fps:g}*TB)[vk]")
+        labels.append("[vk]")
+    if tf < total_f:
+        parts.append(f"[0:v]trim=start_frame={tf},setpts=PTS-STARTPTS,{base},setpts=N/({fps:g}*TB)[vb]")
+        labels.append("[vb]")
+    parts.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0,setpts=N/({fps:g}*TB)[vo]")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp_v = dst.with_name(dst.stem + ".rendering.video" + dst.suffix)
+    tmp = dst.with_name(dst.stem + ".rendering" + dst.suffix)
+    a_tmp = dst.with_name(dst.stem + ".rendering.wav")
+    ops = [{"src_t0": round(t_q, 6), "src_t1": round(t_q, 6), "out_len": round((fz_f + hd_f) / fps, 6),
+            "freeze_s": round(fz_f / fps, 6), "hold_s": round(hd_f / fps, 6), "audio": audio, "kind": "insert_pad"}]
+    try:
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-filter_complex", ";".join(parts), "-map", "[vo]", "-an",
+             "-frames:v", str(total_f + fz_f + hd_f)] + ENC_VIDEO + [str(tmp_v)], timeout=3600)
+        if info["has_audio"]:
+            timemap.remap_audio(src, a_tmp, ops, src_dur=info["duration"])
+            run(["ffmpeg", "-y", "-v", "error", "-i", str(tmp_v), "-i", str(a_tmp), "-map", "0:v:0", "-map", "1:a:0",
+                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)], timeout=3600)
+        else:
+            tmp_v.rename(tmp)
+        if dst.exists():
+            dst.unlink()
+        tmp.rename(dst)
+    finally:
+        for x in (tmp_v, tmp, a_tmp):
+            x.unlink(missing_ok=True)
+    new_dur = probe(dst)["duration"]
+    return {"t": round(t_q, 3), "freeze_s": round(fz_f / fps, 3), "hold_s": round(hd_f / fps, 3), "audio": audio,
+            "duration": round(info["duration"], 3), "new_duration": round(new_dur, 3), "time_ops": ops,
+            "notes": [f"时长 {info['duration']:.2f}s → {new_dur:.2f}s;出成片时外挂声轨/字幕按 timemap 自动平移"]}

@@ -2,6 +2,18 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Post-processing: black / freeze pacing pads (`/preview/post` › Shot editing › "⬛ Black / freeze")**: control the rhythm of a cut by inserting a freeze of the previous frame and/or a stretch of pure black. At the playhead it builds a new version of the group (`POST …/post/<ep>/insert-hold`); at the group's start or end it is written as that group's "Group transition (in)" recipe (`transition_in.hold_s / freeze_s / hold_audio`, optionally submitted at once) and rendered by `render_transitions.py` at finalize — `hard_cut`+hold cuts to black and holds, `dip_black`+hold fades out/in around the hold, `fade_black`+hold fades out then cuts in. Sound under black can sustain the previous second, fade or mute; when dialogue or narration sits right before the insert point the host downgrades "sustain" to "fade" and says so. Episode playback previews the freeze and the black between groups; the group list marks padded entries with ⬛. Contract check `transition_pad_valid` (0–3 s each, black only with to-black types, not on the first group, reason required, Σ ≤ 5 % of the episode budget).
+- **Time map for runtime edits (`modules/timemap.py`)**: pads, mid-group inserts and range deletions change the length of the cut, which used to break the 0-second base of the external mix and subtitles. Every such edit is now a deterministic op (`[src_t0, src_t1) → out_len`); `post_apply.py sync-timeline` writes `edit/epNN/timemap.json` for version-level edits and `render_transitions.py` records boundary pads in `transitions_render.json#timemap`. `finalize_episode.py` composes both layers, remaps the external mix to `final_audio_timemapped.wav` (sustain / fade / mute under black), shifts every subtitle cue piecewise before adding the intro offset, and checks `subtitle_offset_all_cues` / `audio_offset_measured` against the map. Nothing changes for episodes without such edits.
+
+### Changed
+
+- `render_transitions.py check`: `duration_unchanged` becomes `duration_as_planned` (= source + Σ pads ± 1 frame) when pads exist; `audio_stream_intact`, `transition_frames_verified` (black midpoint, freeze frame = previous group's last frame) and `hard_cut_positions_intact` are pad-aware; the black-frame whitelist includes pad windows.
+- `post_apply.py check` `transitions_synced` now compares the pad fields as well as type and duration; shot cut-outs register their removed ranges as `time_ops` so the mix and subtitles follow them at finalize.
+
 ## [1.0.31] - 2026-09-16
 
 ### Added
