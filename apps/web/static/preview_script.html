@@ -109,6 +109,8 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
 .chip .cid{color:var(--dim);font-size:10px;margin-left:3px;font-family:ui-monospace,Menlo,monospace}
 /* 概念图小图(2026-09-17,同故事板页):人物/生物 chip 圆头像(描边=台词配色),场次头宽图;点开当页放大层 #lb */
 .chip.pic{padding-left:2px}
+.chip.cre{border-style:dashed}
+.chip .cico{font-size:11px;line-height:1}
 .chip img{width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:top;background:#0f1117;flex:none;border:1.5px solid var(--border);cursor:zoom-in}
 .scthumb{display:inline-block;width:72px;height:46px;border-radius:6px;object-fit:cover;background:#0f1117;border:1px solid var(--border);cursor:zoom-in;flex:none}
 tr.sh td.l .schd{display:flex;gap:10px;align-items:flex-start}
@@ -190,10 +192,11 @@ const assetHref=(kind,id)=>`/preview/${kind}?project=${encodeURIComponent($('#pr
 const cname=id=>NAMES[id]||((arec('characters',id)||arec('creatures',id)||{}).name)||id||'?';
 const dot=id=>`<i style="background:${CAST_COLOR[id]||'#5b6478'}"></i>`;
 // 人物 chip:名字 + 编号(有的剧本只写编号没人名,编号是唯一可对照 bible 的标识);有概念图时圆头像替代色点(描边沿用配色),点开放大
-function chip(id){
-  const kind=/^CRE-/.test(id)?'creatures':'characters',rec=arec(kind,id);
-  const head=rec&&rec.url?`<img src="${esc(rec.url)}" alt="" loading="lazy" style="border-color:${CAST_COLOR[id]||'var(--border)'}" data-img="${esc(rec.url)}" data-cap="${esc(cname(id)+' '+id)}" data-href="${esc(assetHref(kind,id))}">`:dot(id);
-  return `<span class="chip ${rec&&rec.url?'pic':''}" title="${esc(id)}${rec&&!rec.url?' · '+esc(t('尚无概念图')):''}">${head}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
+function chip(id,_i,_a,forceKind){
+  // 种类按生物库判定(生物 id 不一定是 CRE- 前缀,如 cre_sibuxiang);生物无图时用 🐎 占位而不是人物色点
+  const kind=forceKind||(arec('creatures',id)&&!arec('characters',id)?'creatures':'characters'),rec=arec(kind,id);
+  const head=rec&&rec.url?`<img src="${esc(rec.url)}" alt="" loading="lazy" style="border-color:${CAST_COLOR[id]||'var(--border)'}" data-img="${esc(rec.url)}" data-cap="${esc(cname(id)+' '+id)}" data-href="${esc(assetHref(kind,id))}">`:(kind==='creatures'?'<span class="cico">🐎</span>':dot(id));
+  return `<span class="chip ${rec&&rec.url?'pic':''} ${kind==='creatures'?'cre':''}" title="${esc(id)}${rec&&!rec.url?' · '+esc(t('尚无概念图')):''}">${head}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
 }
 
 /* ✏️ 反馈:直发负责 Agent */

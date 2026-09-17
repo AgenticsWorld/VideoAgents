@@ -7691,6 +7691,7 @@ def _preview_script(project: str, ep: str):
     from modules import storyboard_board as sbb
     bd = res["breakdown"] or {}
     used = {"characters": set(), "scenes": set(), "creatures": set()}
+    catalog = sbb.asset_catalog(base)
     for sc in bd.get("scenes") or []:
         if not isinstance(sc, dict):
             continue
@@ -7698,12 +7699,12 @@ def _preview_script(project: str, ep: str):
             used["scenes"].add(str(sc["scene_id"]))
         for c in sc.get("cast") or []:
             if isinstance(c, str) and c:
-                used["creatures" if c.startswith("CRE-") else "characters"].add(c)
+                used["creatures" if c in catalog["creatures"] else "characters"].add(c)
     for c in bd.get("cast") or []:
         cid = c.get("id") if isinstance(c, dict) else None
         if cid:
-            used["creatures" if str(cid).startswith("CRE-") else "characters"].add(str(cid))
-    data["assets"] = _asset_thumbs(base, sbb.asset_catalog(base), used)
+            used["creatures" if str(cid) in catalog["creatures"] else "characters"].add(str(cid))
+    data["assets"] = _asset_thumbs(base, catalog, used)
     # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接
     data["board_scenes"] = sbb.board_targets(_read_json_safe(base / "directing" / ep / "storyboard.json") or {})[0]
     data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})

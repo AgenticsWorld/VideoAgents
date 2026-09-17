@@ -314,7 +314,7 @@ def asset_catalog(base: Path) -> dict:
             out["scenes"][s["id"]] = {"name": s.get("name") or s["id"], "type": s.get("type") or "",
                                      "description": scene_text(base, s["id"]) or str(s.get("description") or "")[:200]}
     cr = _read_json(base / "bible" / "creatures" / "index.json") or {}
-    for c in cr.get("creatures", []) or []:
+    for c in cr.get("creatures") or cr.get("entries") or []:      # 有的项目(liaozhai3)生物库顶层键是 entries
         if isinstance(c, dict) and c.get("id"):
             out["creatures"][c["id"]] = {"name": c.get("name") or c["id"]}
     pr = _read_json(base / "bible" / "props.json") or {}
@@ -467,7 +467,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
         grp_cast_by_id: dict[str, list] = {}
         for g in groups:
             if isinstance(g, dict):
-                for c in _as_list(g.get("creatures")):
+                for c in _as_list(g.get("creatures")) + _as_list(g.get("creatures_union")):
                     if isinstance(c, str) and c not in creatures:
                         creatures.append(c)
                 gcast = [c for c in _as_list(_first(g, "characters", "cast", "cast_ids", default=[])) if isinstance(c, str)]
@@ -485,6 +485,10 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
             order = _draft_order(d, j)
             cast = [c for c in _as_list(_first(d, "cast", "characters", "cast_ids", default=[])) if isinstance(c, str)]
             finals = slmap.get((scene_no, order)) or []
+            # 本场出场生物(2026-09-17):组草案之外,镜草案 / 镜头表定稿镜上登记的也算(有的项目只在镜上写 creatures)
+            for c in _as_list(d.get("creatures")) + [x for f in finals for x in _as_list(f.get("creatures"))]:
+                if isinstance(c, str) and c not in creatures:
+                    creatures.append(c)
             if not cast:   # 镜上没写 → 镜头表定稿镜的 characters → 所属组草案的 characters
                 for f in finals:
                     for c in _as_list(_first(f, "characters", "cast", default=[])):
