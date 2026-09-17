@@ -2250,6 +2250,7 @@ window.I18N_DICT = {
 "对这张草图提修改意见,由分镜草图工位重绘": "Pedido de alteração deste esboço; o agente de esboços redesenha",
 "导演计划": "Plano de direção",
 "尚无概念图": "ainda sem arte conceitual",
+"打开该资产的预览页查看更多信息": "Abrir a página de pré-visualização deste recurso para mais detalhes",
 "已在上方": "está acima",
 "已有分镜草案": "Rascunho de storyboard disponível",
 "当前全局": "global atual",

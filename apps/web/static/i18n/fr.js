@@ -2250,6 +2250,7 @@ window.I18N_DICT = {
 "对这张草图提修改意见,由分镜草图工位重绘": "Demande de modification sur ce croquis ; l'agent croquis de storyboard le redessine",
 "导演计划": "Plan de mise en scène",
 "尚无概念图": "pas encore de concept art",
+"打开该资产的预览页查看更多信息": "Ouvrir la page d'aperçu de cet élément pour plus de détails",
 "已在上方": "est affiché ci-dessus",
 "已有分镜草案": "Brouillon de storyboard disponible",
 "当前全局": "global actuel",

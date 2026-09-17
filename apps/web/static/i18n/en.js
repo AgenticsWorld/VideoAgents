@@ -2346,6 +2346,7 @@ window.I18N_DICT = {
 "对这张草图提修改意见,由分镜草图工位重绘": "Leave a change request on this sketch; the Storyboard Sketch Agent redraws it",
 "导演计划": "Director plan",
 "尚无概念图": "no concept art yet",
+"打开该资产的预览页查看更多信息": "Open this asset's preview page for more details",
 "已在上方": "is shown above",
 "已有分镜草案": "Storyboard draft available",
 "当前全局": "current global",

@@ -2250,6 +2250,7 @@ window.I18N_DICT = {
 "对这张草图提修改意见,由分镜草图工位重绘": "Permintaan perubahan pada sketsa ini; Agen Sketsa Storyboard akan menggambar ulang",
 "导演计划": "Rencana sutradara",
 "尚无概念图": "belum ada concept art",
+"打开该资产的预览页查看更多信息": "Buka halaman pratinjau aset ini untuk detail lebih lanjut",
 "已在上方": "ditampilkan di atas",
 "已有分镜草案": "Draf storyboard tersedia",
 "当前全局": "global saat ini",

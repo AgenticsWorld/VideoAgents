@@ -2250,6 +2250,7 @@ window.I18N_DICT = {
 "对这张草图提修改意见,由分镜草图工位重绘": "Yêu cầu sửa phác thảo này; agent phác thảo storyboard sẽ vẽ lại",
 "导演计划": "Kế hoạch đạo diễn",
 "尚无概念图": "chưa có concept art",
+"打开该资产的预览页查看更多信息": "Mở trang xem trước của tài nguyên này để xem thêm chi tiết",
 "已在上方": "đã hiển thị ở trên",
 "已有分镜草案": "Đã có bản nháp storyboard",
 "当前全局": "toàn cục hiện tại",
