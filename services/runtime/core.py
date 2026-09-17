@@ -12978,6 +12978,10 @@ def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
     for n in nodes:
         if n.get("state") in _DONE_STATES:
             continue
+        # skipped/cancelled/waived 是不再执行的终态(如已下线的 p0-version-init)、
+        # blocked 是用户明确暂缓:都不算待办,否则看门狗每轮都会据此空唤醒总制片
+        if n.get("state") in _WF_TERMINAL_SKIP or n.get("state") == "blocked":
+            continue
         if not all(d in done for d in (n.get("depends_on") or [])):
             continue
         if n.get("human"):
