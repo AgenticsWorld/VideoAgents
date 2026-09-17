@@ -619,7 +619,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
     <div class="row"><label>提示词技能</label><select id="sg-skill" class="ps-select" style="flex:1"></select>
       <button type="button" class="info-btn" data-info="sg-info-skill" title="说明">i</button></div>
-    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-prompt-writing,MiniMax H3→h3-prompt-writing);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
+    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
     <div class="note ps-hint" id="sg-skill-hint" style="display:none"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>

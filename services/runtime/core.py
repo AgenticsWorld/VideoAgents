@@ -940,8 +940,9 @@ DEFAULT_GENCONFIG = {
     # 视频提示词技能(视频模型设置弹窗 / H3A 签字弹窗 / 分镜预览页,按项目独立,2026-08-28):
     #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
     #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
-    #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-prompt-writing / MiniMax H3(任意渠道)→
-    #     h3-prompt-writing,解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)= 无技能并提醒手选;
+    #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-pe / MiniMax H3(任意渠道)→
+    #     h3-pe / 阿里 Wan 3.0(Fal 托管)→wan3-pe,解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)
+    #     = 无技能并提醒手选;
     #   mode=manual:skill_id 为用户从该工位已安装技能里指定的一项(与生效模型不匹配只告警不阻塞);
     #   mode=off:本项目不套用技能(回执 skill_applied.id=null, reason=user_skipped)。
     #   effective=运行时解析快照 {skill_id, mode, resolved_from, reason, decided_at}——派 prompt 工单、
@@ -1160,9 +1161,9 @@ def is_seedance20(model: str) -> bool:
     return "seedance-2" in (model or "").lower() and not is_seedance25(model)
 
 
-# Seedance 2.0 官方提示词写作 skill(sd20-prompt-writing):仅当生效视频模型为
+# Seedance 2.0 官方提示词写作 skill(sd20-pe):仅当生效视频模型为
 # 2.0 系列(含 fast/mini)时注入加载指令给 prompt agent;随仓库分发
-SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-prompt-writing/SKILL.md"
+SD20_PE_SKILL = "agents/08-video-gen/prompt/skills/sd20-pe/SKILL.md"
 
 
 def is_minimax_h3(model: str) -> bool:
@@ -1214,6 +1215,11 @@ def is_wan30(model: str) -> bool:
     return "wan-3.0" in m or "wan-3-0" in m or "wan3.0" in m or "wan-3" in m
 
 
+# 阿里 Wan 3.0 官方请求整理 skill(wan3-pe,2026-09-17):仅当生效视频模型为 Wan 3.0(Fal 托管
+# alibaba/wan-3.0 系列)时注入加载指令给 prompt agent;随仓库分发
+WAN30_PE_SKILL = "agents/08-video-gen/prompt/skills/wan3-pe/SKILL.md"
+
+
 def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     """生效视频渠道是否 MiniMax H3(引擎无关,统一按 is_minimax_h3「名字含 minimax 与 h3」判定):
     OpenRouter/MiniMax/RunningHub 直绑等按生效模型 id,ComfyUI 本地/Comfy Cloud 按所选工作流
@@ -1229,10 +1235,10 @@ def is_minimax_h3_active(cfg: dict | None = None) -> bool:
     return is_minimax_h3(effective_video_model(cfg))
 
 
-# MiniMax H3 官方提示词写作 skill(h3-prompt-writing):仅当生效视频模型/工作流名含 minimax+h3
+# MiniMax H3 官方提示词写作 skill(h3-pe):仅当生效视频模型/工作流名含 minimax+h3
 # 时注入加载指令给 prompt agent(H3 开源,任何渠道跑 H3 都触发);经 npx skills add
 # MiniMax-AI/MiniMax-H3 安装后随仓库分发
-H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-prompt-writing/SKILL.md"
+H3_PE_SKILL = "agents/08-video-gen/prompt/skills/h3-pe/SKILL.md"
 
 
 def minimax_region_key(mm: dict) -> str:
@@ -1275,10 +1281,12 @@ AUDIO_TRANSCRIPTION_SKILL = (
 SKILL_ACTIVATIONS: dict[str, dict] = {
     "08-video-gen/prompt/sd25-pe": {
         "kind": "conditional", "condition": "生效视频模型为 Seedance 2.5"},
-    "08-video-gen/prompt/sd20-prompt-writing": {
+    "08-video-gen/prompt/sd20-pe": {
         "kind": "conditional", "condition": "生效视频模型为 Seedance 2.0 系列"},
-    "08-video-gen/prompt/h3-prompt-writing": {
+    "08-video-gen/prompt/h3-pe": {
         "kind": "conditional", "condition": "生效视频模型/工作流名含 minimax 与 h3(任意渠道)"},
+    "08-video-gen/prompt/wan3-pe": {
+        "kind": "conditional", "condition": "生效视频模型为阿里 Wan 3.0(Fal 托管 alibaba/wan-3.0 系列)"},
     "08-video-gen/prompt/performance-direction": {
         "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
     "08-video-gen/upscale/minimax-regenerate-2k": {
@@ -1405,7 +1413,8 @@ def project_skill_enabled(skill_id: str, project: str, *, default: bool | None =
     """
     if not skill_enabled(skill_id):
         return False
-    overrides = (load_project_settings(project).get("project_skills") or {}).get("overrides") or {}
+    overrides = {canon_skill_id(k): v for k, v in
+                 ((load_project_settings(project).get("project_skills") or {}).get("overrides") or {}).items()}
     if skill_id in overrides:
         return overrides[skill_id] is True
     if default is not None:
@@ -1416,7 +1425,8 @@ def project_skill_enabled(skill_id: str, project: str, *, default: bool | None =
 def list_project_skills(project: str, refresh: bool = False) -> list[dict]:
     skills = list_agent_skills(refresh)
     default_id = resolve_prompt_skill(project, apply_project=False)["skill_id"]
-    overrides = (load_project_settings(project).get("project_skills") or {}).get("overrides") or {}
+    overrides = {canon_skill_id(k): v for k, v in
+                 ((load_project_settings(project).get("project_skills") or {}).get("overrides") or {}).items()}
     return [dict(s, selected=s["enabled"] and overrides.get(s["id"], s["id"] == default_id),
                  default_selected=s["id"] == default_id) for s in skills]
 
@@ -1548,8 +1558,21 @@ async def api_project_skills_set(project: str, body: dict):
 # skill_applied 回执 → 机检 code/prompt_skill_check.py(prompt_skill_applied)对照 effective 快照。
 PROMPT_SKILL_CHECK = "code/prompt_skill_check.py"
 PROMPT_SKILL_SD25 = f"{PROMPT_AGENT_ID}/sd25-pe"
-PROMPT_SKILL_SD20 = f"{PROMPT_AGENT_ID}/sd20-prompt-writing"
-PROMPT_SKILL_H3 = f"{PROMPT_AGENT_ID}/h3-prompt-writing"
+PROMPT_SKILL_SD20 = f"{PROMPT_AGENT_ID}/sd20-pe"
+PROMPT_SKILL_H3 = f"{PROMPT_AGENT_ID}/h3-pe"
+PROMPT_SKILL_WAN30 = f"{PROMPT_AGENT_ID}/wan3-pe"
+# 2026-09-17 改名:sd20-prompt-writing→sd20-pe、h3-prompt-writing→h3-pe(与 sd25-pe/wan3-pe 同一命名口径)。
+# 存量项目 settings.json / episode.json 里手选或快照的旧 id 一律按新 id 解释,不要求用户重选
+LEGACY_PROMPT_SKILL_IDS = {
+    f"{PROMPT_AGENT_ID}/sd20-prompt-writing": PROMPT_SKILL_SD20,
+    f"{PROMPT_AGENT_ID}/h3-prompt-writing": PROMPT_SKILL_H3,
+}
+
+
+def canon_skill_id(skill_id) -> str:
+    """技能 id 归一:旧目录名(改名前)映射到现名,其余原样返回(空值返 "")。"""
+    sid = str(skill_id or "")
+    return LEGACY_PROMPT_SKILL_IDS.get(sid, sid)
 PROMPT_SKILL_REASONS = ("", "user_skipped", "no_match", "disabled", "missing")
 
 
@@ -1593,6 +1616,8 @@ def auto_prompt_skill_for_model(model: str) -> str:
         return PROMPT_SKILL_SD25
     if is_seedance20(model):
         return PROMPT_SKILL_SD20
+    if is_wan30(model):
+        return PROMPT_SKILL_WAN30
     return ""
 
 
@@ -1603,7 +1628,7 @@ def resolve_prompt_skill(project: str, cfg: dict | None = None, *, apply_project
     cfg = cfg or load_genconfig()
     ps = load_project_settings(project).get("prompt_skill") or {}
     mode = ps.get("mode") if ps.get("mode") in PROMPT_SKILL_MODES else "auto"
-    manual_id = str(ps.get("skill_id") or "")
+    manual_id = canon_skill_id(ps.get("skill_id"))
     auto_id, resolved_from = auto_prompt_skill(cfg)
     cands = {c["id"]: c for c in prompt_skill_candidates()}
     reason, warning = "", ""
@@ -3153,7 +3178,7 @@ def build_role_prompt(agent_id: str, project: str,
 
 ## Seedance 2.0 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成模型是 Seedance 2.0 系列。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
-- Skill 文件:{SD20_PE_SKILL}(官方 sd20-prompt-writing,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
+- Skill 文件:{SD20_PE_SKILL}(官方 sd20-pe,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
 - 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
@@ -3162,12 +3187,22 @@ def build_role_prompt(agent_id: str, project: str,
 
 ## MiniMax H3 提示词写作 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
 当前项目的视频生成走 MiniMax H3 模型(H3 为开源模型,不限渠道:MiniMax/OpenRouter API、RunningHub、ComfyUI H3 工作流等)。撰写或优化组级 video_prompt 前,**先阅读官方提示词写作技能并按其方法执行**:
-- Skill 文件:{H3_PE_SKILL}(官方 h3-prompt-writing,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
+- Skill 文件:{H3_PE_SKILL}(官方 h3-pe,已随仓库安装,直接 Read 全文,再按其指引读同目录 references/ 下对应模式的指南)
 - 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
-    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3):
+    if psk_id == PROMPT_SKILL_WAN30:
+        p += f"""
+
+## Wan 3.0 视频生成请求整理 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
+当前项目的视频生成模型是阿里 Wan 3.0(Fal 托管 alibaba/wan-3.0 系列)。撰写或优化组级 video_prompt 前,**先阅读官方请求整理技能并按其方法执行**:
+- Skill 文件:{WAN30_PE_SKILL}(官方 wan3-pe,已随仓库安装,直接 Read 全文)
+- 应用其中的:【核心任务】【情节概要】【音频风格】【运镜与核心约束】【负面提示词】五段结构(核心任务与情节概要必出,音频/运镜按详略取舍,负面提示词仅在有明确排除项时输出)、素材参考集中写在【核心任务】且逐份写明采用范围(`人物A对应图1，采用五官、发型和服装`)、音色参考「<角色>的音色参考音频N」+ 说话节点「使用音频N的音色说：'逐字原文'」、主体基数匹配(单人图对应一个人物)、事实与观察分离、不滥加约束
+- 素材编号纪律:skill 的 `图N`/`视频N`/`音频N` 按上传顺序在各模态内独立编号,与本团队 `[Image N]`/`[Video N]`/`[Audio N]`(1-based,与 refs/video_refs/audio_refs 数组顺序严格一致)一一对应,两套标签须同时满足、序号不得错位
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的情节节点按团队 `Shot N:` 顺序落地,不得以 skill 模板为由拆掉团队锚点结构;skill「只整理不丰富」的原则在本岗对应「只按 shot_list/blocking 既定内容写,不自行加戏」
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率/帧率由 genmedia 命令行参数传递,不写进 prompt 正文;镜头时间戳只在 shot_list 给出时按原文带入情节节点(`镜头N xx-xx秒`),否则各节点保持纯编号"""
+    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3, PROMPT_SKILL_WAN30):
         p += f"""
 
 ## 提示词技能 `{psk['dir']}`(项目「提示词技能」设定:{psk_how},当前已生效)
@@ -3194,7 +3229,7 @@ def build_role_prompt(agent_id: str, project: str,
 {contract}{warn}
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执
 - 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检
-- 生效技能为 h3-prompt-writing(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入"""
+- 生效技能为 h3-pe(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
             and project_skill_enabled("08-video-gen/upscale/minimax-regenerate-2k", project):
         p += f"""
@@ -5184,7 +5219,7 @@ def resolve_episode_settings(project: str, ep: str, cfg: dict | None = None,
             reason = "no_match"
             warning = (warning + " · " if warning else "") + f"本集视频模型 {model or '(未知)'} 没有对应的提示词技能"
     elif mode_eff == "manual":
-        smode, sid, reason, warning = "manual", str(eps.get("skill_id") or ""), "", cand["episode_warning"]
+        smode, sid, reason, warning = "manual", canon_skill_id(eps.get("skill_id")), "", cand["episode_warning"]
         if sid not in cands:
             warning = (warning + " · " if warning else "") + f"本集指定的提示词技能 {sid or '(空)'} 未安装,本集按无技能处理"
             sid, reason = "", "missing"
@@ -5283,7 +5318,7 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
     elif smode_eff == "off":
         sid, reason = "", "user_skipped"
     elif smode_eff == "manual":
-        sid = str(ps.get("skill_id") or "")
+        sid = canon_skill_id(ps.get("skill_id"))
         if sid not in cands:
             warning = (warning + " · " if warning else "") + f"组指定的提示词技能 {sid or '(空)'} 未安装,本组按无技能处理"
             sid, reason = "", "missing"

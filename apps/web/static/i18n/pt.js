@@ -1714,7 +1714,7 @@ window.I18N_DICT = {
 "按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Monta uma folha de contato com vários instantes do clipe, envia-a com a pergunta de análise do projeto ao motor CLI padrão e coloca o texto da resposta diretamente na caixa de notas",
 "点「AI 自动分析」自动生成,或自己看画面后填写": "Clique em “Análise IA” para gerar, ou assista ao clipe e escreva você mesmo",
 "提示词技能": "Skill de prompt",
-"视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-prompt-writing,MiniMax H3→h3-prompt-writing);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结": "Skill de prompt de vídeo: o skill oficial de escrita de prompts que o engenheiro de prompts deve aplicar ao escrever os prompts de vídeo por grupo. Auto = resolvido pelo modelo que realmente executa a geração de vídeo (Seedance 2.5→sd25-pe, família Seedance 2.0→sd20-prompt-writing, MiniMax H3→h3-prompt-writing); sem correspondência, escolha manualmente ou pule. Reconfirmado e congelado na assinatura H3A do storyboard",
+"视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结": "Skill de prompt de vídeo: o skill oficial de escrita de prompts que o engenheiro de prompts deve aplicar ao escrever os prompts de vídeo por grupo. Auto = resolvido pelo modelo que realmente executa a geração de vídeo (Seedance 2.5→sd25-pe, família Seedance 2.0→sd20-pe, MiniMax H3→h3-pe, Wan 3.0→wan3-pe); sem correspondência, escolha manualmente ou pule. Reconfirmado e congelado na assinatura H3A do storyboard",
 "自动(按生效视频模型)": "Auto (pelo modelo de vídeo ativo)",
 "自动(生效视频模型无对应技能)": "Auto (nenhum skill corresponde ao modelo de vídeo ativo)",
 "跳过(不套用技能)": "Pular (sem skill)",

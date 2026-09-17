@@ -33,6 +33,7 @@ def runtime(monkeypatch, tmp_path):
     for sid, kind in [(core.PROMPT_SKILL_SD25, "conditional"),
                       (core.PROMPT_SKILL_SD20, "conditional"),
                       (core.PROMPT_SKILL_H3, "conditional"),
+                      (core.PROMPT_SKILL_WAN30, "conditional"),
                       (PERFORMANCE, "soul"), (CUSTOM, "generic"), (PLUGIN, "generic"),
                       ("09-audio/audio-transcription/audio-transcription", "always"),
                       ("08-video-gen/video-generation/agentics-media-generation", "conditional")]:
@@ -55,7 +56,7 @@ def selected(core, project):
     return {s["id"] for s in core.list_project_skills(project) if s["selected"]}
 
 
-@pytest.mark.parametrize("directory", ["sd25-pe", "sd20-prompt-writing", "h3-prompt-writing"])
+@pytest.mark.parametrize("directory", ["sd25-pe", "sd20-pe", "h3-pe", "wan3-pe"])
 def test_only_model_prompt_skill_defaults_on(runtime, directory):
     core, model = runtime
     model["id"] = f"{PROMPT}/{directory}"
@@ -63,7 +64,7 @@ def test_only_model_prompt_skill_defaults_on(runtime, directory):
     assert not core.project_skill_enabled(PERFORMANCE, "one")
     # Opening the dialog is read-only and includes every installed skill, including plugins.
     response = asyncio.run(core.api_project_skills_get("one"))
-    assert len(response["skills"]) == 8
+    assert len(response["skills"]) == 9
     assert any(s["id"] == PLUGIN for s in response["skills"])
     assert not core.project_settings_path("one").exists()
 

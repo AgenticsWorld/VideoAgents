@@ -1,4 +1,4 @@
 interface:
   display_name: "Seedance 2.0 Prompt Writing"
   short_description: "Write Seedance 2.0 omni-modal reference, edit, and extension video prompts"
-  default_prompt: "Use $sd20-prompt-writing to rewrite this multimodal request into a Doubao Seedance 2.0 generation prompt."
+  default_prompt: "Use $sd20-pe to rewrite this multimodal request into a Doubao Seedance 2.0 generation prompt."

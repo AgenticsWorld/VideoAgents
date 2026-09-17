@@ -1714,7 +1714,7 @@ window.I18N_DICT = {
 "按分镜多时间点拼成联系图,连同本项目的分析问题发给当前默认 CLI 引擎,回答文本直接填入信息框并自动保存": "Menyusun lembar kontak dari beberapa momen klip, mengirimnya bersama pertanyaan analisis proyek ke mesin CLI default, lalu mengisi kotak catatan langsung dengan teks jawabannya",
 "点「AI 自动分析」自动生成,或自己看画面后填写": "Klik “Analisis AI” untuk membuat otomatis, atau tonton klip lalu tulis sendiri",
 "提示词技能": "Skill prompt",
-"视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-prompt-writing,MiniMax H3→h3-prompt-writing);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结": "Skill prompt video: skill penulisan prompt resmi yang wajib diterapkan Prompt Engineer saat menulis prompt video per grup. Otomatis = ditentukan dari model yang benar-benar menjalankan pembuatan video (Seedance 2.5→sd25-pe, keluarga Seedance 2.0→sd20-prompt-writing, MiniMax H3→h3-prompt-writing); jika tidak cocok, pilih manual atau lewati. Dikonfirmasi ulang dan dibekukan saat tanda tangan storyboard H3A",
+"视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结": "Skill prompt video: skill penulisan prompt resmi yang wajib diterapkan Prompt Engineer saat menulis prompt video per grup. Otomatis = ditentukan dari model yang benar-benar menjalankan pembuatan video (Seedance 2.5→sd25-pe, keluarga Seedance 2.0→sd20-pe, MiniMax H3→h3-pe, Wan 3.0→wan3-pe); jika tidak cocok, pilih manual atau lewati. Dikonfirmasi ulang dan dibekukan saat tanda tangan storyboard H3A",
 "自动(按生效视频模型)": "Otomatis (menurut model video aktif)",
 "自动(生效视频模型无对应技能)": "Otomatis (tidak ada skill untuk model video aktif)",
 "跳过(不套用技能)": "Lewati (tanpa skill)",
