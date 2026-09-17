@@ -1,7 +1,7 @@
 /* 对白语音库面板(2026-09-13,输出设置「生成对白语音」output.dialogue_tts)
-   故事板页(动态样片下方)与分镜预览页(白模样片下方)共用:显示库现状(总句/一致/过期/缺失/未选角)、
+   分镜预览页(白模样片下方;故事板页 2026-09-17 起不再显示——那时还没有 shot_list,无台词可合成):显示库现状(总句/一致/过期/缺失/未选角)、
    「刷新对白语音」按钮(POST /episodes/<ep>/dialogue-tts/sync,宿主后台跑 code/dialogue_tts.py),运行中自行轮询
-   GET /episodes/<ep>/dialogue-tts 并把 #dttsbox 重绘;开关关闭只显示一行提示。库文件 assets/audio/voice/<ep>/tts/。 */
+   GET /episodes/<ep>/dialogue-tts 并把 #dttsbox 重绘;开关关闭时整块不显示。库文件 assets/audio/voice/<ep>/tts/。 */
 (function(){
   const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tr=(k,p)=>(window.I18N&&I18N.f)?I18N.f(k,p||{}):Object.keys(p||{}).reduce((s,x)=>s.split('{'+x+'}').join(p[x]),k);
@@ -11,7 +11,7 @@
   function url(proj,ep,tail){return '/api/v1/projects/'+encodeURIComponent(proj)+'/episodes/'+encodeURIComponent(ep)+'/dialogue-tts'+(tail||'')}
   function html(st,proj,ep){
     st=st||{};CUR={proj,ep,st};
-    if(!st.enabled)return `<div class="doc closed dtts"><h3 onclick="this.parentNode.classList.toggle('closed')">🗣 ${esc(t('对白语音'))} <span class="meta">${esc(t('未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音'))}</span></h3><div class="body"></div></div>`;
+    if(!st.enabled&&!st.error)return '';   // 未开启「生成对白语音」不显示面板(2026-09-17)
     let line='';
     if(st.running)line=`<span class="spin">⏳</span> ${esc(t('对白语音同步中…(只补合成台词或音色变了的句子)'))}`;
     else if(st.job_error)line=`<span style="color:var(--red)">❌ ${esc(st.job_error.slice(0,120))}</span>`;

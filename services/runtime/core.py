@@ -7949,7 +7949,6 @@ def _preview_board(project: str, ep: str):
     data["redraw_runs"] = _board_redraw_runs(base.name, ep)
     data["sketch_dir"] = sbb.SKETCH_DIR_REL.format(ep=ep)
     data["animatic"] = _board_animatic(base, ep)
-    data["dialogue_tts"] = _dialogue_tts_status(base, ep)
     data["gate"] = _board_gate(base, ep)
     data["notes"] = sbb.load_notes(base, ep)["notes"]      # 用户注释(2026-09-15):整集 * / 场次 S01 / 镜 S01-03
     return data
@@ -7991,8 +7990,7 @@ async def api_board_sketches(project: str, ep: str):
     return {"sketches": _board_sketch_rows(base, ep, sbb.load_index(base, ep)),
             "jobs": {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items() if k.startswith(f"{base.name}/{ep}/")},
             "redraw_runs": _board_redraw_runs(base.name, ep),
-            "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep),
-            "dialogue_tts": _dialogue_tts_status(base, ep)}
+            "animatic": _board_animatic(base, ep), "gate": _board_gate(base, ep)}
 
 
 def _board_sketch_pick(project: str, ep: str) -> dict:

@@ -14,7 +14,6 @@
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
-<script src="/static/dialogue-tts.js?v=20260913"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -208,7 +207,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,DTTS={},ANIM={},GATE={},NOTES={};
+let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,ANIM={},GATE={},NOTES={};
 // 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
 // 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
 let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
@@ -321,7 +320,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 
 /* ---------- 渲染 ---------- */
 function render(d){
-  LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};DTTS=d.dialogue_tts||{};NOTES=d.notes||{};
+  LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};NOTES=d.notes||{};
   PORTRAIT=aspectPortrait(d.aspect);
   renderEps(d.episodes||[]);
   const box=$('#content'),ep=d.ep;
@@ -333,7 +332,7 @@ function render(d){
   if(d.has_storyboard)h+=`<div id="epnote">${epNoteHtml()}</div>`;
   const sm=d.storyboard_meta||{};
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
-  if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div><div id="dttsbox">${DialogueTTS.html(DTTS,$('#project').value.trim()||'demo',ep)}</div>`;
+  if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div>`;
   if(d.directing_plan){
     h+=`<div class="doc closed"><h3 onclick="if(!event.target.closest('.editbtn'))this.parentNode.classList.toggle('closed')">🎬 ${esc(t('导演计划'))} <span class="meta">directing_plan.md${d.directing_plan_mtime?' · '+esc(new Date(d.directing_plan_mtime*1000).toLocaleString()):''}</span>${editBtn(I18N.f('导演计划 {ep}(文件 directing/{ep}/directing_plan.md)',{ep}))}</h3><div class="body"><div class="md" data-no-i18n>${MiniMD.render(d.directing_plan)}</div></div></div>`;
   }
@@ -552,7 +551,6 @@ async function refreshSketches(){
     const oldSK=SK,oldJ=JOBS,oldR=REDRAW;
     SK=j.sketches||{};JOBS=j.jobs||{};REDRAW=mergeRedraw(j.redraw_runs||{});
     const oldA=JSON.stringify(ANIM),oldG=JSON.stringify(GATE);ANIM=j.animatic||ANIM;GATE=j.gate||GATE;
-    if(j.dialogue_tts){DTTS=j.dialogue_tts;DialogueTTS.render(DTTS)}
     if(JSON.stringify(ANIM)!==oldA||JSON.stringify(GATE)!==oldG)refreshTop();
     const keys=new Set([...Object.keys(oldSK),...Object.keys(SK),...Object.keys(oldR),...Object.keys(REDRAW)]);
     keys.forEach(k=>{if(JSON.stringify(oldSK[k])!==JSON.stringify(SK[k])||oldR[k]!==REDRAW[k])renderCell(k)});

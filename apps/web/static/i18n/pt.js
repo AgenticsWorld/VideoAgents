@@ -2947,7 +2947,6 @@ window.I18N_DICT = {
 "生成对白语音": "Gerar voz de diálogo",
 "开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音": "Quando ativado, seja qual for o modo de voz de diálogo, o projeto mantém uma biblioteca TTS linha a linha de todo o diálogo com o modelo de voz de cada personagem (atualizada ao usar se falas ou vozes mudarem); usada pelo animatic, pelo compilado whitebox e pela dublagem de pós-produção",
 "对白语音": "Voz de diálogo",
-"未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音": "“Gerar voz de diálogo” está desligado (configurações do projeto → saída); quando ligado, o animatic e o compilado whitebox trazem diálogo sintetizado com a voz de cada personagem",
 "对白语音同步中…(只补合成台词或音色变了的句子)": "Sincronizando voz de diálogo… (só as linhas cujo texto ou voz mudou são ressintetizadas)",
 "本集还没有 shot_list.json,定稿分镜后才有台词可合成": "Este episódio ainda não tem shot_list.json; a síntese é possível após a lista de planos ser fechada",
 "对白语音库已过期(台词或音色变了),出样片时会自动更新,也可现在刷新": "A biblioteca de voz de diálogo está desatualizada (falas ou vozes mudaram); atualiza sozinha ao gerar um compilado, ou atualize agora",

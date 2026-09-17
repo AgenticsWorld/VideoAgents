@@ -2947,7 +2947,6 @@ window.I18N_DICT = {
 "生成对白语音": "Buat suara dialog",
 "开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音": "Jika aktif, apa pun mode suara dialog, proyek memelihara pustaka TTS per baris untuk semua dialog dengan templat suara tiap karakter (diperbarui otomatis saat dipakai bila baris atau suara berubah); dipakai oleh animatik, kompilasi whitebox, dan sulih suara pascaproduksi",
 "对白语音": "Suara dialog",
-"未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音": "“Buat suara dialog” nonaktif (pengaturan proyek → keluaran); jika aktif, animatik/kompilasi whitebox membawa dialog yang disintesis dengan suara tiap karakter",
 "对白语音同步中…(只补合成台词或音色变了的句子)": "Menyinkronkan suara dialog… (hanya baris yang teks atau suaranya berubah yang disintesis ulang)",
 "本集还没有 shot_list.json,定稿分镜后才有台词可合成": "Episode ini belum punya shot_list.json; sintesis bisa dilakukan setelah daftar shot final",
 "对白语音库已过期(台词或音色变了),出样片时会自动更新,也可现在刷新": "Pustaka suara dialog sudah usang (baris atau suara berubah); diperbarui otomatis saat kompilasi dibuat, atau segarkan sekarang",

@@ -2947,7 +2947,6 @@ window.I18N_DICT = {
 "生成对白语音": "Générer la voix des dialogues",
 "开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音": "Activé, quel que soit le mode de voix des dialogues, le projet maintient une bibliothèque TTS ligne par ligne de tous les dialogues avec le modèle vocal de chaque personnage (mise à jour à l'usage si les répliques ou les voix changent) ; utilisée par l'animatique, le montage whitebox et le doublage",
 "对白语音": "Voix des dialogues",
-"未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音": "« Générer la voix des dialogues » est désactivé (réglages du projet → sortie) ; activé, l'animatique et le montage whitebox portent des dialogues synthétisés avec la voix de chaque personnage",
 "对白语音同步中…(只补合成台词或音色变了的句子)": "Synchronisation de la voix des dialogues… (seules les lignes dont le texte ou la voix a changé sont resynthétisées)",
 "本集还没有 shot_list.json,定稿分镜后才有台词可合成": "Pas encore de shot_list.json pour cet épisode ; la synthèse est possible une fois la liste de plans figée",
 "对白语音库已过期(台词或音色变了),出样片时会自动更新,也可现在刷新": "La bibliothèque de voix des dialogues est obsolète (répliques ou voix modifiées) ; elle se met à jour lors de la génération d'un montage, ou actualisez maintenant",

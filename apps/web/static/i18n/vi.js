@@ -2947,7 +2947,6 @@ window.I18N_DICT = {
 "生成对白语音": "Tạo giọng thoại",
 "开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音": "Khi bật, bất kể chế độ lồng tiếng, dự án duy trì một thư viện TTS từng câu cho toàn bộ thoại theo mẫu giọng nhân vật (tự cập nhật khi dùng nếu lời thoại hoặc giọng thay đổi); dùng cho animatic, bản ghép whitebox và lồng tiếng hậu kỳ",
 "对白语音": "Giọng thoại",
-"未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音": "“Tạo giọng thoại” đang tắt (cài đặt dự án → đầu ra); khi bật, animatic/bản ghép whitebox sẽ có thoại tổng hợp theo giọng nhân vật",
 "对白语音同步中…(只补合成台词或音色变了的句子)": "Đang đồng bộ giọng thoại… (chỉ tổng hợp lại câu có lời hoặc giọng thay đổi)",
 "本集还没有 shot_list.json,定稿分镜后才有台词可合成": "Tập này chưa có shot_list.json; chốt danh sách cảnh xong mới tổng hợp được",
 "对白语音库已过期(台词或音色变了),出样片时会自动更新,也可现在刷新": "Thư viện giọng thoại đã cũ (lời thoại hoặc giọng thay đổi); sẽ tự cập nhật khi xuất bản ghép, hoặc làm mới ngay",

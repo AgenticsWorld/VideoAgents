@@ -3052,7 +3052,6 @@ window.I18N_DICT = {
 "生成对白语音": "Generate dialogue speech",
 "开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音": "When on, regardless of the dialogue voice mode, the project keeps a line-by-line TTS library of all dialogue using each character's voice template (auto-updated on use when lines or voices change); used by the animatic, the whitebox reel and post-production dubbing",
 "对白语音": "Dialogue speech",
-"未开启「生成对白语音」(项目设置→输出设置);开启后动态样片/白模样片会挂上按人物嗓音合成的对白语音": "“Generate dialogue speech” is off (project settings → output); when on, the animatic and whitebox reel carry dialogue synthesized with each character's voice",
 "对白语音同步中…(只补合成台词或音色变了的句子)": "Syncing dialogue speech… (only lines whose text or voice changed are re-synthesized)",
 "本集还没有 shot_list.json,定稿分镜后才有台词可合成": "No shot_list.json for this episode yet; lines can be synthesized once the shot list is final",
 "对白语音库已过期(台词或音色变了),出样片时会自动更新,也可现在刷新": "Dialogue speech library is stale (lines or voices changed); it updates automatically when a reel is rendered, or refresh now",
