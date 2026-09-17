@@ -7591,8 +7591,24 @@ def _preview_script(project: str, ep: str):
     data["keypoints_missing"] = kp.coverage(base, ep)
     data["breakdown"] = res["breakdown"]
     data["breakdown_rel"] = sb.BREAKDOWN_REL.format(ep=ep)
-    # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接
+    # 场景/人物/生物缩略图(2026-09-17,同故事板页):场次头 scene_id 与出场 cast 的 id → 概念图小图,页内放大看
     from modules import storyboard_board as sbb
+    bd = res["breakdown"] or {}
+    used = {"characters": set(), "scenes": set(), "creatures": set()}
+    for sc in bd.get("scenes") or []:
+        if not isinstance(sc, dict):
+            continue
+        if sc.get("scene_id"):
+            used["scenes"].add(str(sc["scene_id"]))
+        for c in sc.get("cast") or []:
+            if isinstance(c, str) and c:
+                used["creatures" if c.startswith("CRE-") else "characters"].add(c)
+    for c in bd.get("cast") or []:
+        cid = c.get("id") if isinstance(c, dict) else None
+        if cid:
+            used["creatures" if str(cid).startswith("CRE-") else "characters"].add(str(cid))
+    data["assets"] = _asset_thumbs(base, sbb.asset_catalog(base), used)
+    # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接
     data["board_scenes"] = sbb.board_targets(_read_json_safe(base / "directing" / ep / "storyboard.json") or {})[0]
     data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})
     out = (load_project_settings(base.name).get("output") or {})
@@ -7757,6 +7773,24 @@ def _board_redraw_runs(project: str, ep: str) -> dict[str, str]:
     return out
 
 
+def _asset_thumbs(base: Path, catalog: dict, used: dict[str, set]) -> dict:
+    """预览页资产缩略(故事板/剧本预览共用):{kind:{id:{name,url}}},只带 used 里的 id;
+    url 为 /projects/<p>/<file>?v=mtime(经 app.py _artifact_urls 改写),无图 url=None。"""
+    assets: dict[str, dict] = {}
+    for kind, ids in used.items():
+        assets[kind] = {}
+        for i in ids:
+            rec = (catalog.get(kind) or {}).get(i)
+            if not rec:
+                if i:
+                    assets[kind][i] = {"name": i, "url": None}
+                continue
+            f = base / rec["file"] if rec.get("file") else None
+            assets[kind][i] = {"name": rec.get("name") or i,
+                               "url": f"/projects/{base.name}/{rec['file']}?v={int(f.stat().st_mtime)}" if f and f.is_file() else None}
+    return assets
+
+
 def _preview_board(project: str, ep: str):
     from modules import storyboard_board as sbb
     base = _proj_base(project)
@@ -7811,19 +7845,7 @@ def _preview_board(project: str, ep: str):
             for ln in sh.get("dialogue") or []:
                 if ln.get("speaker"):
                     used["characters"].add(ln["speaker"])
-    assets = {}
-    for kind, ids in used.items():
-        assets[kind] = {}
-        for i in ids:
-            rec = catalog[kind].get(i)
-            if not rec:
-                if i:
-                    assets[kind][i] = {"name": i, "url": None}
-                continue
-            f = base / rec["file"] if rec.get("file") else None
-            assets[kind][i] = {"name": rec.get("name") or i,
-                               "url": f"/projects/{base.name}/{rec['file']}?v={int(f.stat().st_mtime)}" if f and f.is_file() else None}
-    data["assets"] = assets
+    data["assets"] = _asset_thumbs(base, catalog, used)
     data["sketches"] = _board_sketch_rows(base, ep, sbb.load_index(base, ep))
     data["jobs"] = {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items()
                     if k.startswith(f"{base.name}/{ep}/")}

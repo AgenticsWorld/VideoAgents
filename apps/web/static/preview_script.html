@@ -107,6 +107,15 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 7px 0 4px;margin:1px 3px 1px 0;white-space:nowrap;background:var(--panel)}
 .chip i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
 .chip .cid{color:var(--dim);font-size:10px;margin-left:3px;font-family:ui-monospace,Menlo,monospace}
+/* 概念图小图(2026-09-17,同故事板页):人物/生物 chip 圆头像(描边=台词配色),场次头宽图;点开当页放大层 #lb */
+.chip.pic{padding-left:2px}
+.chip img{width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:top;background:#0f1117;flex:none;border:1.5px solid var(--border);cursor:zoom-in}
+.scthumb{display:inline-block;width:72px;height:46px;border-radius:6px;object-fit:cover;background:#0f1117;border:1px solid var(--border);cursor:zoom-in;flex:none}
+tr.sh td.l .schd{display:flex;gap:10px;align-items:flex-start}
+tr.sh td.l .schd>div{min-width:0;flex:1}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:96;cursor:zoom-out;flex-direction:column;gap:8px}
+#lb img{max-width:92vw;max-height:84vh;border-radius:8px;box-shadow:0 10px 40px #000}
+#lb .cap{color:var(--dim);font-size:12.5px;max-width:92vw;text-align:center}
 .chip.ev{color:var(--dim);padding:0 6px;border-style:dashed}
 .bar{display:inline-block;width:110px;height:8px;border-radius:4px;background:var(--c-silent);vertical-align:middle;overflow:hidden}
 .bar>i{display:block;height:100%;float:left}
@@ -138,6 +147,7 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
   <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
   <nav id="nav"></nav>
 </div>
+<div id="lb"><img alt=""><div class="cap"></div></div>
 <script src="/static/script-keypoints.js?v=20260913"></script>
 <script>
 const $=s=>document.querySelector(s);
@@ -170,10 +180,17 @@ function todIcon(s){
 const face=i=>i==null?'':i<=0.3?'😌':i<=0.5?'🙂':i<=0.7?'😮':i<=0.85?'😨':'😱';
 const TEMPO={slow:['🐢',t('慢')],medium:['▶️',t('中')],fast:['⚡',t('快')]};
 let CAST_COLOR={},NAMES={};
-const cname=id=>NAMES[id]||id||'?';
+// 概念图缩略(2026-09-17):接口 assets{characters,creatures,scenes}[id]={name,url},只含本集用到的 id
+const AS=()=>(LAST&&LAST.assets)||{characters:{},scenes:{},creatures:{}};
+const arec=(kind,id)=>(AS()[kind]||{})[id]||null;
+const cname=id=>NAMES[id]||((arec('characters',id)||arec('creatures',id)||{}).name)||id||'?';
 const dot=id=>`<i style="background:${CAST_COLOR[id]||'#5b6478'}"></i>`;
-// 人物 chip:名字 + 编号(有的剧本只写编号没人名,编号是唯一可对照 bible 的标识)
-const chip=id=>`<span class="chip" title="${esc(id)}">${dot(id)}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
+// 人物 chip:名字 + 编号(有的剧本只写编号没人名,编号是唯一可对照 bible 的标识);有概念图时圆头像替代色点(描边沿用配色),点开放大
+function chip(id){
+  const rec=arec(/^CRE-/.test(id)?'creatures':'characters',id);
+  const head=rec&&rec.url?`<img src="${esc(rec.url)}" alt="" loading="lazy" style="border-color:${CAST_COLOR[id]||'var(--border)'}" data-img="${esc(rec.url)}" data-cap="${esc(cname(id)+' '+id)}">`:dot(id);
+  return `<span class="chip ${rec&&rec.url?'pic':''}" title="${esc(id)}${rec&&!rec.url?' · '+esc(t('尚无概念图')):''}">${head}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
+}
 
 /* ✏️ 反馈:直发负责 Agent */
 const AGENT_NAMES={'01-story/timeline-story':'剧情时间轴','01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
@@ -182,11 +199,17 @@ function editBtn(agent,loc,cls,label){
   return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`;
 }
 document.addEventListener('click',e=>{
+  const lbimg=e.target.closest('[data-img]');
+  if(lbimg&&lbimg.dataset.img){showLb(lbimg.dataset.img,lbimg.dataset.cap);return}
   const b=e.target.closest('.editbtn');if(!b||!b.dataset.loc)return;
   const proj=$('#project').value.trim()||'demo';
   const loc=b.dataset.loc, target={kind:'script',id:'',ep:(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
   EditPopup.open({project:proj,compose:t('修改 ')+loc+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // 无 data-agent(标题行整体反馈)→ 修改师
 });
+// 当页放大层(同故事板页):点小图打开,点遮罩 / Esc 关闭,不跳转其它页面
+function showLb(url,cap){const lb=$('#lb');lb.querySelector('img').src=url;lb.querySelector('.cap').textContent=cap||'';lb.style.display='flex'}
+$('#lb').onclick=()=>{$('#lb').style.display='none'};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#lb').style.display==='flex')$('#lb').style.display='none'});
 const epFile=(ep,f)=>`story/episodes/${ep}/${f}`;
 const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
 
@@ -269,6 +292,8 @@ function sceneRows(sc,bd,ep,A){
   const trims=(bd.trim_suggestions||[]).filter(x=>x.scene===sc.no);
   let l=`<span class="no">${esc(sc.no)}</span>${esc(sc.scene_name||'')}<span class="meta">${sc.scene_id?esc(sc.scene_id)+' · ':''}${IE[sc.int_ext]||''}${sc.time_of_day?` ${todIcon(sc.time_of_day)} ${esc(sc.time_of_day)}`:''}${sc.pacing_only?' · '+esc(t('仅节奏表单元')):''}</span>`;
   if((sc.cast||[]).length)l+=`<span class="cast">${sc.cast.map(chip).join('')}</span>`;
+  const srec=sc.scene_id?arec('scenes',sc.scene_id):null;
+  if(srec&&srec.url)l=`<div class="schd"><img class="scthumb" src="${esc(srec.url)}" alt="" loading="lazy" title="${esc((srec.name||'')+' '+sc.scene_id)}" data-img="${esc(srec.url)}" data-cap="${esc((srec.name||sc.scene_name||'')+' '+sc.scene_id)}"><div>${l}</div></div>`;
   const r=[];
   if(sc.alloc_s!=null){
     const a=sc.alloc_s,dl=sc.dialogue_s||0,nr=sc.narration_s||0,si=sc.silent_s!=null?sc.silent_s:Math.max(0,a-dl-nr);
