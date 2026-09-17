@@ -18,7 +18,7 @@ H3A 签字时刷新)。逐个 assets/prompts/<ep>/grp*.json 核对回执字段 s
 
 用法:
   python3 code/prompt_skill_check.py --project <slug> --ep ep01 [grp002 grp003 …]
-  python3 code/prompt_skill_check.py --project <slug> --ep ep01 --expect 08-video-gen/prompt/sd20-prompt-writing
+  python3 code/prompt_skill_check.py --project <slug> --ep ep01 --expect 08-video-gen/prompt/sd20-pe
   python3 code/prompt_skill_check.py --project <slug> --ep ep01 --expect none
 退出码:0 = PASS(允许 WARN),1 = FAIL。
 """
@@ -32,7 +32,15 @@ from _common import REPO_ROOT, parse_args
 CHECK = "prompt_skill_applied"
 NONE_REASONS = ("user_skipped", "no_match", "disabled", "missing")
 STRUCT_CHECK = "sd25_prompt_structure"   # 2026-09-09:生效技能为 sd25-pe 时,正文必须按 Seedance 2.5 官方结构写
-H3_CHECK = "h3_prompt_structure"         # 2026-09-09:生效技能为 h3-prompt-writing 时,正文必须按 H3 Ref2VA 六段结构写
+H3_CHECK = "h3_prompt_structure"         # 2026-09-09:生效技能为 h3-pe 时,正文必须按 H3 Ref2VA 六段结构写
+# 2026-09-17 技能目录改名(sd20-prompt-writing→sd20-pe / h3-prompt-writing→h3-pe):存量快照与回执里的旧 id 按新 id 解释
+LEGACY_SKILL_IDS = {"08-video-gen/prompt/sd20-prompt-writing": "08-video-gen/prompt/sd20-pe",
+                    "08-video-gen/prompt/h3-prompt-writing": "08-video-gen/prompt/h3-pe"}
+
+
+def canon_skill_id(sid) -> str:
+    s = str(sid or "")
+    return LEGACY_SKILL_IDS.get(s, s)
 
 
 def h3_structure_errors(d: dict, name: str) -> list[str]:
@@ -127,7 +135,7 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
 
 def skill_md_path(skill_id: str) -> Path:
     """skill_id = "<agent_id>/<技能目录>" → agents/<agent_id>/skills/<目录>/SKILL.md。"""
-    agent_id, _, sdir = skill_id.rpartition("/")
+    agent_id, _, sdir = canon_skill_id(skill_id).rpartition("/")
     return REPO_ROOT / "agents" / agent_id / "skills" / sdir / "SKILL.md"
 
 
@@ -139,7 +147,7 @@ def main() -> int:
     def configure(ap):
         ap.add_argument("groups", nargs="*", help="只核对这些组(缺省全部 grp*.json)")
         ap.add_argument("--expect", default=None,
-                        help="覆盖对照基准:技能 id(如 08-video-gen/prompt/sd20-prompt-writing)或 none")
+                        help="覆盖对照基准:技能 id(如 08-video-gen/prompt/sd20-pe)或 none")
         ap.add_argument("--strict", action="store_true", help="WARN 也按 FAIL 计")
 
     args, proj_root = parse_args("机检 prompt_skill_applied:组级 prompt 是否按项目提示词技能设定套用技能",
@@ -153,7 +161,7 @@ def main() -> int:
     expected: str | None      # "" = 不套用;None = 未知
     exp_reason = ""
     if args.expect is not None:
-        expected = "" if args.expect.strip().lower() in ("none", "null", "off", "") else args.expect.strip()
+        expected = "" if args.expect.strip().lower() in ("none", "null", "off", "") else canon_skill_id(args.expect.strip())
         basis = f"--expect {args.expect}"
     else:
         try:
@@ -162,7 +170,7 @@ def main() -> int:
             ps = {}
         eff = ps.get("effective") if isinstance(ps.get("effective"), dict) else None
         if eff and "skill_id" in eff:
-            expected = str(eff.get("skill_id") or "")
+            expected = canon_skill_id(eff.get("skill_id"))
             exp_reason = str(eff.get("reason") or "")
             basis = f"settings.json#prompt_skill.effective(mode={eff.get('mode')}, resolved_from={eff.get('resolved_from')})"
         elif ps.get("mode") == "off":
@@ -213,7 +221,7 @@ def main() -> int:
             except Exception:
                 geff = {}
             if isinstance(geff, dict) and "skill_id" in geff:
-                expected, exp_reason = str(geff.get("skill_id") or ""), str(geff.get("reason") or "")
+                expected, exp_reason = canon_skill_id(geff.get("skill_id")), str(geff.get("reason") or "")
                 exp_sha = ""
                 if expected:
                     gsmd = skill_md_path(expected)
@@ -226,13 +234,13 @@ def main() -> int:
         target = str(expected or "")
         if target.endswith("/sd25-pe"):
             struct_errs.extend(sd25_structure_errors(d, f.name))
-        if target.endswith("/h3-prompt-writing"):
+        if target.endswith("/h3-pe"):
             h3_errs.extend(h3_structure_errors(d, f.name))
         if not isinstance(sa, dict):
             errs.append(f"{f.name}: 缺 skill_applied 回执字段(须为对象:套用技能时 {{id, sha256, checklist}},"
                         "不套用时 {id: null, reason})")
             continue
-        sid = sa.get("id")
+        sid = canon_skill_id(sa.get("id")) or sa.get("id")
         if expected == "":
             if sid:
                 errs.append(f"{f.name}: 项目设定不套用技能(reason={exp_reason or '?'}),但 skill_applied.id={sid}")
@@ -269,7 +277,7 @@ def main() -> int:
         # Seedance 2.5 结构机检(sd25_prompt_structure):套用 sd25-pe 时正文必须按官方结构写,自述 checklist 不算数
         if not target and str(sid).endswith("/sd25-pe"):
             struct_errs.extend(sd25_structure_errors(d, f.name))
-        if not target and str(sid).endswith("/h3-prompt-writing"):
+        if not target and str(sid).endswith("/h3-pe"):
             h3_errs.extend(h3_structure_errors(d, f.name))
 
     if args.strict:
@@ -287,7 +295,7 @@ def main() -> int:
           f"{n} 组核对, 违规 {len(errs)} 条, WARN {len(warns)} 条 -> {'FAIL' if errs else 'PASS'}")
     if str(expected or "").endswith("/sd25-pe") or struct_errs:
         print(f"[{STRUCT_CHECK}] {args.project}/{args.ep}: 违规 {len(struct_errs)} 条 -> {'FAIL' if struct_errs else 'PASS'}")
-    if str(expected or "").endswith("/h3-prompt-writing") or h3_errs:
+    if str(expected or "").endswith("/h3-pe") or h3_errs:
         print(f"[{H3_CHECK}] {args.project}/{args.ep}: 违规 {len(h3_errs)} 条 -> {'FAIL' if h3_errs else 'PASS'}")
     return 1 if (errs or struct_errs or h3_errs) else 0
 

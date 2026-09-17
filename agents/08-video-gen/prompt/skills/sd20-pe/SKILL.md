@@ -1,5 +1,5 @@
 ---
-name: sd20-prompt-writing
+name: sd20-pe
 description: Write Doubao Seedance 2.0 series video generation prompts. Use when composing or rewriting prompts for Seedance 2.0 omni-modal reference generation (image/video/audio reference), video editing (add/modify/delete elements), video extension (forward/backward), track completion, storyboard-style shot sequencing, on-screen text generation, or when troubleshooting ID drift, twins, subtitles, style drift, or audio artifacts.
 ---
 

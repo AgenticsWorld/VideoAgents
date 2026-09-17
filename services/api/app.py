@@ -363,6 +363,12 @@ async def post_cutout(project: str, ep: str, body: dict[str, Any]) -> dict[str, 
     return _artifact_urls(await core.api_post_cutout(project, ep, body), project)
 
 
+@api.post("/projects/{project}/post/{ep}/insert-hold", tags=["artifacts"])
+async def post_insert_hold(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑·插黑 / 定格:{group_id, base_v, t, freeze_s, hold_s, audio} → 在 t 秒处插入定格帧 + 黑场,拼成新版本(时长变长,出成片时声轨/字幕按 timemap 平移)。"""
+    return _artifact_urls(await core.api_post_insert_hold(project, ep, body), project)
+
+
 @api.post("/projects/{project}/post/{ep}/edit-dispatch", tags=["artifacts"])
 async def post_edit_dispatch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """分镜剪辑·派单剪辑师:{group_id, base_v, instruction, cuts?} → 指令发给 10-editing/edit,产物登记为本组新版本。"""
@@ -867,6 +873,11 @@ async def voice_input_transcribe(request: Request, lang: str = "") -> dict[str, 
 @api.get("/diagnostics", tags=["diagnostics"])
 async def diagnostics_summary() -> dict[str, Any]:
     return await core.api_diagnostics_get()
+
+
+@api.get("/config/diagnostics", tags=["diagnostics"])
+async def get_diagnostics_flags() -> dict[str, Any]:
+    return await core.api_diagnostics_flags()
 
 
 @api.post("/config/diagnostics", tags=["diagnostics"])

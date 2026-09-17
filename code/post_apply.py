@@ -23,7 +23,8 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
                  transitions_synced    已采纳转场处方与 shot_list.transition_in 一致(FAIL)
   sync-timeline 把各组当前指针写进 edit/epNN/timeline.json:tracks.video[].src 指向 build-cut 归一化的后期段文件
                (assets/post/epNN/_cut/<grp>.mp4,与 render_transitions 分段流拷贝口径一致),原值存 src_orig/in_orig/out_orig,
-               首次改写备份 timeline.pre_post.json
+               首次改写备份 timeline.pre_post.json;同时把各组当前版本的时长编辑(插黑/定格/删段,版本条目 time_ops)
+               平移到原粗剪基准写成 edit/epNN/timemap.json(post_versions 层),finalize_episode 据此平移外挂声轨/字幕(§9B)
   build-cut    按 timeline 组序把各组当前版本归一化后拼成 edit/epNN/cut_post.mp4(整集级 ffmpeg 处方如水印在此施加)
   finalize     build-cut → sync-timeline → render_transitions.py render(--src cut_post.mp4 --out cut_post_v2.mp4)
                → finalize_episode.py assemble --cut <cut_post_v2|cut_post> → check;原 final.mp4 首次备份为 final.pre_post.mp4
@@ -50,6 +51,7 @@ from _common import parse_args, REPO_ROOT, DATA_DIR  # noqa: E402  副作用:mod
 
 import post_fx as fx  # noqa: E402
 import post_plan as pp  # noqa: E402
+import timemap  # noqa: E402
 
 CHECK_NAME = "post_ok"
 DELTA_E_WARN = 14.0
@@ -338,7 +340,12 @@ def do_check(proj: Path, ep: str, write: bool = True) -> tuple[bool, list[dict]]
         if r.get("kind") == "transition" and r.get("status") == "adopted":
             gid = r["scope"].get("group_id")
             t = tin.get(gid) or {}
-            if str(t.get("type")) != str(r["params"].get("type")) or abs(float(t.get("duration_s") or 0) - float(r["params"].get("duration_s") or 0)) > 1e-3:
+            pr = r["params"]
+            if str(t.get("type")) != str(pr.get("type")) \
+                    or (str(pr.get("type")) != "hard_cut" and abs(float(t.get("duration_s") or 0) - float(pr.get("duration_s") or 0)) > 1e-3) \
+                    or abs(float(t.get("hold_s") or 0) - float(pr.get("hold_s") or 0)) > 1e-3 \
+                    or abs(float(t.get("freeze_s") or 0) - float(pr.get("freeze_s") or 0)) > 1e-3 \
+                    or (float(pr.get("hold_s") or 0) > 0 and str(t.get("hold_audio") or "sustain") != str(pr.get("hold_audio") or "sustain")):
                 mism.append(gid)
     rec("transitions_synced", not mism, "shot_list 与已采纳转场处方不一致:" + ", ".join(mism) if mism else "转场处方与 shot_list 一致")
 
@@ -395,11 +402,31 @@ def do_sync_timeline(proj: Path, ep: str) -> int:
             t["in"], t["out"] = t.get("in_orig") or 0.0, t.get("out_orig") or t.get("out")
         t["post_v"] = v
         versions[gid] = {"v": v, "src": t["src"]}
+    # 时长编辑表(2026-09-17):各组当前版本的 time_ops(组内秒)按**原始**组序累计起点平移到原粗剪基准;
+    # 起点按 in_orig/out_orig 顺序累加(与 final_audio / subtitles 同基准),不信任 agent 写的 cum_start_s
+    orig, acc = [], 0.0
+    for t in ((tl.get("tracks") or {}).get("video") or []):
+        if not isinstance(t, dict):
+            continue
+        t_in = float(t.get("in_orig") if t.get("in_orig") is not None else (t.get("in") or 0.0))
+        t_out = t.get("out_orig") if t.get("out_orig") is not None else t.get("out")
+        dur = max(0.0, float(t_out or 0.0) - t_in) / float(t.get("speed") or 1.0)
+        if t.get("group_id"):
+            orig.append({"group_id": t["group_id"], "cum_start_s": acc})
+        acc += dur
+    ops = pp.episode_time_ops(plan, orig)
+    tm_p = proj / "edit" / ep / timemap.TIMEMAP_FILE
+    pp.write_json(tm_p, {"schema": "timemap/1.0", "episode": ep, "written_at": pp._now(), "cli": "code/post_apply.py sync-timeline",
+                         "basis": "原粗剪 cut_v1 / final_audio / subtitles 的正片 0 秒基准",
+                         "layer": "post_versions", "ops": ops, "delta_s": timemap.total_delta(ops),
+                         "plan_fingerprint": pp.plan_fingerprint(plan)})
     tl["post"] = {"schema": "post_sync/1.0", "synced_at": pp._now(), "cut": f"edit/{ep}/{pp.CUT_POST}", "versions": versions,
-                  "segments": n_seg, "plan_fingerprint": pp.plan_fingerprint(plan)}
+                  "segments": n_seg, "plan_fingerprint": pp.plan_fingerprint(plan),
+                  "timemap": f"edit/{ep}/{timemap.TIMEMAP_FILE}", "timemap_delta_s": timemap.total_delta(ops)}
     pp.write_json(tlp, tl)
     n = sum(1 for v in versions.values() if v["v"] > 0)
-    _log("DONE", f"timeline#post 同步 {len(versions)} 组(段文件 {n_seg}),其中 {n} 组指向后期版本")
+    _log("DONE", f"timeline#post 同步 {len(versions)} 组(段文件 {n_seg}),其中 {n} 组指向后期版本;"
+                 f"timemap {timemap.describe(ops)} → {tm_p.relative_to(proj)}")
     return 0
 
 

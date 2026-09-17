@@ -8,7 +8,8 @@
 (前科 2026-07-18 thedoor ep01–06 字幕整体偏早一个片头)。本 CLI 把平移做成确定性工序:
 
   probe     实测各段时长(ffprobe),与 placement.json 声明值交叉核对,写台账 edit/epNN/final_layout.json
-  shift     subtitles.srt(+ .ass)整体 +片头实测时长 → subtitles_final.srt(+ .ass);无片头 = 原样拷贝
+  shift     subtitles.srt(+ .ass)整体 +片头实测时长 → subtitles_final.srt(+ .ass);无片头 = 原样拷贝;
+            正片带**时长编辑表**(timemap,见下)时先逐条按表平移,再 +片头
   assemble  intro + cut(画面)+ final_audio(声轨)+ outro + teaser 一次拼成 final.mp4——
             声轨随正片段一起进 concat,片头偏移由拼接**天然**产生,不需要也不允许再手算 -itsoffset;
             拼完自动跑 shift + check
@@ -21,6 +22,14 @@
               audio_offset_measured     成片声轨 vs final_audio 互相关实测滞后 == 片头实测(±80ms),
                                         取首/中/尾三段窗口分别测,三段一致 = 无累计漂移
               placement_declared_match  placement.json 声明时长与实测一致(±100ms,WARN 不拦)
+
+时长编辑表 timemap(2026-09-17,§9B/§9C 节奏垫片):后期页的「插黑 / 定格」「删段」与组间黑场停留会改变正片时长,
+  外挂声轨/字幕的正片 0 秒基准随之失效。宿主把这些编辑记成确定性映射表(modules/timemap.py):
+    edit/epNN/timemap.json               post_apply.py sync-timeline 写,各组后期版本的组内插黑/定格/删段(原粗剪基准)
+    edit/epNN/transitions_render.json    render_transitions.py 写,组边界垫片(其 src_cut 基准)
+  本 CLI 在正片 = 转场产物(out_cut)或后期拼片(cut_post*)时把两层复合成一张总表:外挂声轨按表重映射为
+  edit/epNN/final_audio_timemapped.wav(黑场声音按 hold_audio:延续/淡出/静音)再进 concat;字幕逐条按表平移再 +片头;
+  check 的 subtitle_offset_all_cues / audio_offset_measured 按表对位(期望滞后仍 = 片头)。无表 = 行为与以前完全一致。
 
 约定:
   - 段序默认 intro,cut,outro,teaser(--layout 可改);settings.json#packaging 关闭的段与不存在的文件自动跳过;
@@ -44,6 +53,7 @@ from pathlib import Path
 
 from _common import parse_args  # 副作用:modules/ 入 sys.path
 from avsync import probe_duration, require_tools
+import timemap
 
 SEGMENTS = ("intro", "cut", "outro", "teaser")
 SEG_FILES = {"intro": ["intro.mp4"], "outro": ["outro.mp4"],
@@ -177,6 +187,55 @@ def _declared_duration(placement, seg):
     return None, node.get("file")
 
 
+def load_timemap(proj, ep, cut, notes=None):
+    """正片 cut 相对「原粗剪 / final_audio / subtitles 基准」的时长编辑总表(ops)。
+    层 1 post_versions(edit/epNN/timemap.json,基准 = 原粗剪):仅当 cut 是后期拼片(cut_post*)或转场产物的源是后期拼片时生效;
+    层 2 boundary_pads(transitions_render.json#timemap,基准 = 其 src_cut):仅当 cut 就是该台账的 out_cut 时生效。
+    返回 (ops, info)。"""
+    notes = notes if notes is not None else []
+    ed = proj / "edit" / ep
+    cut_rel = str(Path(cut).resolve().relative_to(proj.resolve())) if Path(cut).resolve().is_relative_to(proj.resolve()) else Path(cut).name
+    info = {"cut": cut_rel, "layers": []}
+    post_ops, pad_ops, pad_src = [], [], None
+    tr = ed / "transitions_render.json"
+    if tr.is_file():
+        try:
+            d = json.loads(tr.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            d = {}
+        tm = d.get("timemap") or {}
+        if d.get("out_cut") and Path(d["out_cut"]).name == Path(cut).name and tm.get("ops"):
+            pad_ops = timemap.normalize_ops(tm["ops"])
+            pad_src = d.get("src_cut")
+            info["layers"].append({"layer": "boundary_pads", "file": str(tr.relative_to(proj)), "basis": tm.get("basis"),
+                                   "ops": len(pad_ops), "delta_s": timemap.total_delta(pad_ops)})
+    tmp = ed / timemap.TIMEMAP_FILE
+    post_basis_cut = Path(cut).name.startswith("cut_post") or (pad_src and Path(pad_src).name.startswith("cut_post"))
+    if tmp.is_file() and post_basis_cut:
+        post_ops = timemap.load_layer(tmp)
+        if post_ops:
+            info["layers"].append({"layer": "post_versions", "file": str(tmp.relative_to(proj)),
+                                   "ops": len(post_ops), "delta_s": timemap.total_delta(post_ops)})
+    ops = timemap.compose(post_ops, pad_ops) if post_ops else pad_ops
+    info["ops"] = ops
+    info["delta_s"] = timemap.total_delta(ops)
+    if ops:
+        notes.append(f"正片带时长编辑表 timemap:{timemap.describe(ops)}(" + " + ".join(l["layer"] for l in info["layers"])
+                     + "),外挂声轨/字幕按表平移")
+    return ops, info
+
+
+def timemapped_audio(proj, ep, audio, ops, notes=None):
+    """外挂声轨按 timemap 重映射(缓存于 edit/epNN/final_audio_timemapped.wav);无 ops 原样返回。"""
+    if not ops or audio is None:
+        return audio
+    dst = proj / "edit" / ep / "final_audio_timemapped.wav"
+    out, res = timemap.remap_audio_cached(audio, dst, ops)
+    if notes is not None:
+        notes.append(f"外挂声轨 {Path(audio).name} 按 timemap 重映射 → {dst.name}({res.get('src_duration')}s → {res.get('out_duration')}s)")
+    return out
+
+
 def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, notes=None):
     """返回有序段列表:[{name, path, v_dur, a_dur, dur, has_audio, declared}]。"""
     notes = notes if notes is not None else []
@@ -188,6 +247,10 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
         if name == "cut":
             cut = find_cut(proj, ep, cut_override)
             audio = find_audio(proj, ep, audio_override)
+            ops, tm_info = load_timemap(proj, ep, cut, notes)
+            audio_src = audio
+            if audio is not None and ops:
+                audio = timemapped_audio(proj, ep, audio, ops, notes)
             v = probe_duration(cut)
             st = _probe_streams(cut)
             if audio is not None:
@@ -201,6 +264,7 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
                 notes.append(f"⚠ 正片画面 {v:.3f}s 与声轨 {a:.3f}s 相差 {abs(a - v):.3f}s(>0.5s);"
                              "按较长者封装,画面不足用末帧补齐、严禁截音频;差异过大请先回 edit 对齐")
             segs.append({"name": "cut", "path": str(cut), "audio": str(audio) if audio else None,
+                         "audio_src": str(audio_src) if audio_src else None, "timemap": tm_info,
                          "v_dur": v, "a_dur": a, "dur": max(v, a), "has_audio": True,
                          "declared": None, "streams": st})
             continue
@@ -314,19 +378,25 @@ def shift_ass_text(text, delta):
     return "\n".join(out) + "\n"
 
 
-def do_shift(proj, ep, intro_s):
+def do_shift(proj, ep, intro_s, ops=None):
     ed = proj / "edit" / ep
     done = []
-    for ext, shifter in ((".srt", shift_srt_text), (".ass", shift_ass_text)):
+    ops = timemap.normalize_ops(ops or [])
+    fn = timemap.map_fn(ops, intro_s)
+    for ext, shifter, mapper in ((".srt", shift_srt_text, timemap.remap_srt_text), (".ass", shift_ass_text, timemap.remap_ass_text)):
         src, dst = ed / f"subtitles{ext}", ed / f"subtitles_final{ext}"
         if not src.is_file():
             continue
         text = src.read_text(encoding="utf-8-sig")
-        dst.write_text(shifter(text, intro_s) if intro_s > 0 else text, encoding="utf-8")
+        if ops:
+            out = mapper(text, fn)
+        else:
+            out = shifter(text, intro_s) if intro_s > 0 else text
+        dst.write_text(out, encoding="utf-8")
         n = len(parse_srt(src) if ext == ".srt" else parse_ass(src))
         done.append((dst, n))
-        print(f"[DONE] {dst.relative_to(proj)}:{n} 条 cue 整体 +{intro_s:.3f}s"
-              + ("(无片头,原样拷贝)" if intro_s <= 0 else ""))
+        print(f"[DONE] {dst.relative_to(proj)}:{n} 条 cue " + (f"按 timemap 逐条平移({timemap.describe(ops)})再 " if ops else "整体 ")
+              + f"+{intro_s:.3f}s" + ("(无片头,原样拷贝)" if intro_s <= 0 and not ops else ""))
     if not done:
         print(f"[WARN ] {ed} 下无 subtitles.srt/.ass,未生成成片基准字幕(subtitle 尚未交付?)")
     return done
@@ -346,9 +416,11 @@ def write_ledger(proj, ep, segs, extra=None):
                 "进入 final.mp4 都要 +cut_offset_s;字幕/发布只用 subtitles_final.*。",
         "cut_offset_s": round(intro_s, 6),
         "total_expected_s": round(total, 6),
+        "timemap": next((s.get("timemap") for s in segs if s["name"] == "cut"), None),
         "segments": [{
             "name": s["name"], "file": str(Path(s["path"]).relative_to(proj)),
             "audio": (str(Path(s["audio"]).relative_to(proj)) if s.get("audio") else None),
+            "audio_src": (str(Path(s["audio_src"]).relative_to(proj)) if s.get("audio_src") else None),
             "start_s": round(offs[s["name"]], 6), "duration_s": round(s["dur"], 6),
             "video_s": round(s["v_dur"], 6), "audio_s": round(s["a_dur"], 6),
             "declared_s": s["declared"], "sha256_16": _sha256(s["path"]),
@@ -503,6 +575,9 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
     intro_s = offs["cut"]
     ed = proj / "edit" / ep
     print_layout(proj, segs, notes)
+    cut_seg = next(s for s in segs if s["name"] == "cut")
+    tm_ops = ((cut_seg.get("timemap") or {}).get("ops")) or []
+    cue_fn = timemap.map_fn(tm_ops, intro_s)
 
     # 0. placement 声明 vs 实测(WARN)
     mism = [s for s in segs if s["declared"] is not None and abs(s["dur"] - s["declared"]) > PLACEMENT_TOL_S]
@@ -528,7 +603,7 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
             rec("subtitles_final_present", False, "有 subtitles.srt 但缺 subtitles_final.srt(先跑 shift)")
         else:
             rec("subtitles_final_present", True, fin_srt.name)
-            _check_cues("subtitle_offset_all_cues", rec, parse_srt(base_srt), parse_srt(fin_srt), intro_s)
+            _check_cues("subtitle_offset_all_cues", rec, parse_srt(base_srt), parse_srt(fin_srt), intro_s, cue_fn if tm_ops else None)
             if fdur is not None:
                 fin = parse_srt(fin_srt)
                 last = max((e for _, e in fin), default=0.0)
@@ -541,7 +616,7 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
         if not fin_ass.is_file():
             rec("subtitle_ass_offset", False, "有 subtitles.ass 但缺 subtitles_final.ass")
         else:
-            _check_cues("subtitle_ass_offset", rec, parse_ass(base_ass), parse_ass(fin_ass), intro_s)
+            _check_cues("subtitle_ass_offset", rec, parse_ass(base_ass), parse_ass(fin_ass), intro_s, cue_fn if tm_ops else None)
 
     # 3. 声轨偏移实测
     cut = next(s for s in segs if s["name"] == "cut")
@@ -551,6 +626,8 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
     elif ref is None:
         rec("audio_offset_measured", True, "正片用自带音轨,无外挂 final_audio 可对照(跳过)", warn=True)
     else:
+        if tm_ops:
+            print(f"[INFO ] 声轨对照基准 = 按 timemap 重映射后的 {Path(ref).name}(源 {Path(cut.get('audio_src') or ref).name});期望滞后仍 = 片头")
         try:
             res = measure_audio_lag(final_path, ref, cut["a_dur"], intro_s)
         except Exception as e:  # noqa: BLE001
@@ -590,21 +667,24 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
     return ok
 
 
-def _check_cues(name, rec, base, fin, intro_s):
+def _check_cues(name, rec, base, fin, intro_s, fn=None):
+    """fn:正片基准 → 成片基准的映射(含片头);缺省 = +intro_s。"""
     if not base:
         rec(name, True, "基准字幕无 cue", warn=True)
         return
     if len(base) != len(fin):
         rec(name, False, f"cue 条数不一致:基准 {len(base)} vs final {len(fin)}")
         return
+    mapped = fn is not None
+    fn = fn or (lambda t: t + intro_s)
     worst = 0.0
     worst_i = None
     for i, ((a0, a1), (b0, b1)) in enumerate(zip(base, fin)):
-        d = max(abs(b0 - (a0 + intro_s)), abs(b1 - (a1 + intro_s)))
+        d = max(abs(b0 - fn(a0)), abs(b1 - fn(a1)))
         if d > worst:
             worst, worst_i = d, i + 1
     ok = worst <= SUB_TOL_S
-    detail = f"{len(base)} 条,期望整体 +{intro_s:.3f}s,最大偏差 {worst * 1000:.0f}ms"
+    detail = f"{len(base)} 条,期望整体 +{intro_s:.3f}s" + ("(另按 timemap 逐条平移)" if mapped else "") + f",最大偏差 {worst * 1000:.0f}ms"
     if not ok:
         detail += f"(cue #{worst_i};若 ≈{intro_s * 1000:.0f}ms 即未平移,直接拷贝了正片基准 SRT)"
     rec(name, ok, detail)
@@ -640,9 +720,10 @@ def main(argv=None):
         print(f"[DONE ] 台账 {p.relative_to(proj)}")
         return 0
 
+    cut_ops = ((next(s for s in segs if s["name"] == "cut").get("timemap") or {}).get("ops")) or []
     if args.cmd == "shift":
         print_layout(proj, segs, notes)
-        do_shift(proj, args.ep, offsets_of(segs)[0]["cut"])
+        do_shift(proj, args.ep, offsets_of(segs)[0]["cut"], cut_ops)
         p, _ = write_ledger(proj, args.ep, segs)
         print(f"[DONE ] 台账 {p.relative_to(proj)}")
         return 0
@@ -656,7 +737,7 @@ def main(argv=None):
         print_layout(proj, segs, notes)
         out = proj / "edit" / args.ep / args.out
         do_assemble(proj, args.ep, segs, out, crf=args.crf, preset=args.preset)
-        do_shift(proj, args.ep, offsets_of(segs)[0]["cut"])
+        do_shift(proj, args.ep, offsets_of(segs)[0]["cut"], cut_ops)
         ok = do_check(proj, args.ep, segs, [], out, tol_ms=args.tol_ms)
         return 0 if ok else 1
 

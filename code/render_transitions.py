@@ -14,15 +14,24 @@ transition Agent 按 directing_plan 自由文本自写 ffmpeg xfade,一项目一
            两侧各用 tpad 克隆 duration/2 的尾帧/首帧再 xfade,**成片总时长严格不变**,边界之外的一切
            时刻都不动,外挂声轨(final_audio)/字幕/旁白挂点/intro_offset_ok 全部不受影响;声轨原样
            流拷贝(-c:a copy),不碰;
+           **节奏垫片(2026-09-17,§9C)**:transition_in 带 hold_s(本组前黑场停留)/ freeze_s(前组尾帧定格)
+           时在组边界**插入**帧——前组尾(可定格 freeze_s)→ 黑场 hold_s → 本组首;dip_black 配 hold 时前组尾
+           淡出半个 duration 到黑、本组首自黑淡入半个 duration,fade_black 配 hold 时前组尾淡出整段、本组硬入,
+           hard_cut 配 hold 即切黑停留再硬入。成片按 Σ垫片变长,同时把这张「时长编辑表」写进台账
+           (timemap.ops,源 cut 基准),源 cut 若带声轨则按表重映射(黑场声音按 hold_audio:sustain 延续前段
+           /fade 淡出/mute 静音);外挂声轨与字幕由 finalize_episode.py 读同一张表平移(§9B)。
   check    机检 transition_render_ok(封装前必跑,FAIL 即不交付):
              transitions_planned          timeline.transitions 覆盖全部组边界,每边界恰一条
-             transitions_match_shot_list  非硬切条目与 shot_list transition_in 一一对应(类型/时长);
+             transitions_match_shot_list  非硬切条目与 shot_list transition_in 一一对应(类型/时长/垫片);
                                           timeline 里多出的非硬切 = Agent 自创,FAIL
-             duration_unchanged           cut_v2 时长 = cut_v1 ±1 帧
-             audio_stream_intact          有/无声轨与源一致,声轨时长一致(流拷贝)
+             duration_unchanged           cut_v2 时长 = cut_v1 ±1 帧(无垫片时)
+             duration_as_planned          cut_v2 时长 = cut_v1 + Σ垫片 ±1 帧(有垫片时)
+             audio_stream_intact          有/无声轨与源一致,声轨时长一致(流拷贝;有垫片时 = 源 + Σ垫片)
              transition_frames_verified   逐处抽帧:叠化中点 ≈ 前后帧 50/50 混合;dip 中点近黑/近白;
-                                          fade 尾帧近黑/近白;硬切边界两侧帧与源一致(无时间漂移)
-           台账 edit/epNN/transitions_render.json(含 dip/fade 黑场白名单窗口,供 no_black_frames 豁免)
+                                          fade 尾帧近黑/近白;黑场垫片中点近黑、定格帧 = 前组末帧;
+                                          硬切边界两侧帧与源一致(无时间漂移,有垫片时按 timemap 对位)
+           台账 edit/epNN/transitions_render.json(含 dip/fade/黑场垫片白名单窗口,供 no_black_frames 豁免;
+           pads[] 与 timemap.ops 供 finalize_episode.py 平移外挂声轨/字幕)
 
 转场类型(与 code/check_generation_groups.py 的 transition_ok 同源):
   可渲染  dissolve(xfade=fade)· dip_black / dip_white(xfade=fadeblack/fadewhite)·
@@ -47,7 +56,8 @@ from footage import count_frames as count_frames_of
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_generation_groups import (TRANSITION_ANNOTATION, TRANSITION_RENDERABLE,  # noqa: E402
-                                     transition_of)
+                                     transition_of, pad_of)
+import timemap  # noqa: E402  modules/(_common 副作用入 sys.path)
 
 LEDGER = "transitions_render.json"
 DEFAULT_SRC = "cut_v1.mp4"
@@ -230,7 +240,13 @@ def make_plan(shot_list, timeline, proj, src_path=None):
             ent["duration_s"] = float(t.get("duration_s") or 0.0)
         if ty in TRANSITION_ANNOTATION:
             ent["renders_as"] = "hard_cut"
-        if ty != "hard_cut":
+        freeze_s, hold_s, hold_audio = pad_of(t)
+        if freeze_s > 0:
+            ent["freeze_s"] = round(freeze_s, 4)
+        if hold_s > 0:
+            ent["hold_s"] = round(hold_s, 4)
+            ent["hold_audio"] = hold_audio
+        if ty != "hard_cut" or hold_s or freeze_s:
             ent["intent"] = t.get("intent")
             ent["reason"] = t.get("reason")
             ent["source"] = "shot_list.transition_in"
@@ -239,23 +255,51 @@ def make_plan(shot_list, timeline, proj, src_path=None):
         entries.append(ent)
 
     # shot_list 有非硬切设计、timeline 却没有对应边界(组缺席 / 不在边界)= 设计落不了地
-    planned_to = {e["to_group"] for e in entries if e["type"] != "hard_cut"}
+    planned_to = {e["to_group"] for e in entries if e["type"] != "hard_cut" or _pad_s(e)}
     for g in groups:
         t = transition_of(g)
-        if t["type"] != "hard_cut" and g.get("group_id") not in planned_to:
+        if (t["type"] != "hard_cut" or sum(pad_of(t)[:2]) > 0) and g.get("group_id") not in planned_to:
             problems.append(f"{g.get('group_id')} transition_in={t['type']} 在 timeline video 轨上没有对应的组入口边界"
                             f"(组缺席或不在边界)")
     renderable = [e for e in entries if e["type"] in TRANSITION_RENDERABLE]
+    pads = [e for e in entries if _pad_s(e)]
     policy = {
-        "cli": "code/render_transitions.py", "compensation": "pad",
+        "cli": "code/render_transitions.py", "compensation": "pad" + ("+insert" if pads else ""),
         "source": "shot_list.generation_groups[].transition_in",
         "planned_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "src_cut": str(src_path.name) if src_path else None,
         "boundaries": len(bounds), "renderable": len(renderable),
         "renderable_total_s": round(sum(e["duration_s"] for e in renderable), 3),
+        "pads": len(pads), "pad_total_s": round(sum(_pad_s(e) for e in pads), 3),
         "timeline_total_s": round(total, 3),
     }
     return entries, policy, problems
+
+
+def _pad_s(e):
+    """条目的垫片总秒数(定格 + 黑场)。"""
+    return float(e.get("freeze_s") or 0.0) + float(e.get("hold_s") or 0.0)
+
+
+def _pad_frames(e, fps):
+    """(定格帧数, 黑场帧数),按帧量化。"""
+    return _frames(e.get("freeze_s") or 0.0, fps), _frames(e.get("hold_s") or 0.0, fps)
+
+
+def pad_ops(entries, fps):
+    """垫片 → timemap ops(源 cut 基准;插入点 = 组边界源时刻,块 = 定格 + 黑场)。"""
+    ops = []
+    for e in entries:
+        fz, hd = _pad_frames(e, fps)
+        if not (fz or hd) or e.get("from_group") is None:
+            continue
+        t = _frames(e.get("cut_time_s") or 0.0, fps) / fps
+        ops.append({"src_t0": round(t, 6), "src_t1": round(t, 6), "out_len": round((fz + hd) / fps, 6),
+                    "freeze_s": round(fz / fps, 6), "hold_s": round(hd / fps, 6),
+                    "audio": e.get("hold_audio") or "sustain", "kind": "boundary_pad",
+                    "at_shot": e.get("at_shot"), "from_group": e.get("from_group"), "to_group": e.get("to_group"),
+                    "type": e.get("type")})
+    return timemap.normalize_ops(ops)
 
 
 def do_plan(proj, ep, src_path, dry_run=False):
@@ -277,9 +321,12 @@ def do_plan(proj, ep, src_path, dry_run=False):
     print(f"[PLAN ] 组边界 {policy['boundaries']} 处 → 转场条目 {len(entries)}(非硬切 {n_non},"
           f"可渲染 {policy['renderable']} 处 / Σ{policy['renderable_total_s']}s);成片 {_fmt(policy['timeline_total_s'])}")
     for e in entries:
-        if e["type"] != "hard_cut":
+        if e["type"] != "hard_cut" or _pad_s(e):
+            pad = (f"  定格 {e['freeze_s']}s" if e.get("freeze_s") else "") + (f"  黑场 {e['hold_s']}s/{e.get('hold_audio')}" if e.get("hold_s") else "")
             print(f"         {e['at_shot']:<18} @{_fmt(e['cut_time_s'])}  {e['type']}"
-                  f"{'' if 'duration_s' not in e else ' ' + str(e['duration_s']) + 's'}  {e.get('intent') or ''}")
+                  f"{'' if 'duration_s' not in e else ' ' + str(e['duration_s']) + 's'}{pad}  {e.get('intent') or ''}")
+    if policy.get("pads"):
+        print(f"[PLAN ] 节奏垫片 {policy['pads']} 处,成片将变长 +{policy['pad_total_s']}s(声轨/字幕按 timemap 重映射)")
     for p in problems:
         print(f"[FAIL ] {p}")
     if dry_run:
@@ -354,6 +401,90 @@ def build_filter(entries, total_s, fps):
     return ";".join(parts), len(xf)
 
 
+def build_run_filter(chunks, bounds, fps, w, h, open_fade=None):
+    """渲染段(run)的通用滤镜图:chunks = 各段帧数(段 = 相邻无边界组合并),bounds[i] = 段 i|i+1 之间的条目
+    (xfade 类 / 垫片类 / fade 类);open_fade = 集首淡入条目(仅 run 从位置 0 起时)。
+    xfade 边界:两侧 tpad 克隆半长再 xfade(pad 补偿,长度不变);
+    垫片 / fade 边界:前段尾 [定格 freeze 帧] → [黑场 hold 帧] → 后段首,dip 类前段尾淡出 d/2、后段首淡入 d/2,
+    fade 类前段尾淡出 d、后段硬入;一律按帧量化,返回 (filter, 期望输出帧数)。"""
+    k = len(chunks)
+    def is_xf(e):
+        # 叠化/穿黑穿白仍走 xfade;但带黑场停留(hold)的 dip 走垫片路径(前段淡出 → 黑场 → 后段淡入);
+        # 只带定格(freeze)的 xfade 类:前段尾先克隆定格帧,再照常 xfade
+        return e is not None and e.get("type") in XFADE_OF and _pad_frames(e, fps)[1] == 0
+    def half(e):
+        df = max(2, 2 * round(_frames(e.get("duration_s") or 0, fps) / 2))
+        return df // 2, df - df // 2, df
+    labels = "".join(f"[p{i}]" for i in range(k))
+    parts = [f"[0:v]scale=in_range=auto:out_range=tv,format=yuv420p,split={k}{labels}"]
+    starts = [sum(chunks[:i]) for i in range(k)]
+    seg_len = []
+    for i in range(k):
+        L, R = bounds.get(i - 1), bounds.get(i)
+        # 统一时基(settb=AVTB):color 黑场源默认 1/1000000,与解码段 1/12288 不同,xfade 拒绝不同时基的输入
+        f = f"[p{i}]trim=start_frame={starts[i]}:end_frame={starts[i] + chunks[i]},setpts=PTS-STARTPTS,settb=AVTB"
+        length = chunks[i]
+        if i == 0 and open_fade is not None:
+            d = _frames(open_fade.get("duration_s") or 0, fps)
+            if d > 0:
+                f += f",fade=t=in:st=0:d={d / fps:.6f}:color={FADE_COLOR.get(open_fade['type'], 'black')}"
+        if L is not None:
+            if is_xf(L):
+                ha, _, _ = half(L)
+                f += f",tpad=start_mode=clone:start_duration={ha / fps:.6f}"
+                length += ha
+            elif L.get("type") in ("dip_black", "dip_white"):
+                _, hb, _ = half(L)
+                f += f",setpts=N/({fps:g}*TB),fade=t=in:st=0:d={hb / fps:.6f}:color={'black' if L['type'] == 'dip_black' else 'white'}"
+        if R is not None:
+            if is_xf(R):
+                _, hb, _ = half(R)
+                fz, _ = _pad_frames(R, fps)
+                f += f",tpad=stop_mode=clone:stop_duration={(fz + hb) / fps:.6f}"
+                length += fz + hb
+            else:
+                fz, _ = _pad_frames(R, fps)
+                if fz:
+                    f += f",tpad=stop_mode=clone:stop_duration={fz / fps:.6f}"
+                    length += fz
+                f += f",setpts=N/({fps:g}*TB)"
+                if R.get("type") in ("dip_black", "dip_white"):
+                    ha, _, _ = half(R)
+                    f += f",fade=t=out:st={(length - ha) / fps:.6f}:d={ha / fps:.6f}:color={'black' if R['type'] == 'dip_black' else 'white'}"
+                elif R.get("type") in FADE_COLOR:
+                    d = _frames(R.get("duration_s") or 0, fps)
+                    if d > 0:
+                        f += f",fade=t=out:st={(length - d) / fps:.6f}:d={d / fps:.6f}:color={FADE_COLOR[R['type']]}"
+        parts.append(f + f",setpts=N/({fps:g}*TB)[s{i}]")
+        seg_len.append(length)
+    cur, cur_len = "[s0]", seg_len[0]
+    for i in range(k - 1):
+        e = bounds.get(i)
+        lab = "[vout]" if i == k - 2 else f"[x{i}]"
+        if e is None:
+            parts.append(f"{cur}[s{i + 1}]concat=n=2:v=1:a=0,setpts=N/({fps:g}*TB){lab}")
+            cur_len += seg_len[i + 1]
+        elif is_xf(e):
+            _, _, df = half(e)
+            # 前段已含 half_b 的尾克隆:窗口 = 前段末 df 帧,offset = 前段长 − df(与 build_filter 的 cut − half_a 同值)
+            parts.append(f"{cur}[s{i + 1}]xfade=transition={XFADE_OF[e['type']]}:duration={df / fps:.6f}"
+                         f":offset={(cur_len - df) / fps:.6f},setpts=N/({fps:g}*TB){lab}")
+            cur_len += seg_len[i + 1] - df
+        else:
+            _, hd = _pad_frames(e, fps)
+            if hd:
+                parts.append(f"color=c=black:s={w}x{h}:r={fps:g}:d={hd / fps:.6f},format=yuv420p,setsar=1,settb=AVTB,"
+                             f"trim=end_frame={hd},setpts=N/({fps:g}*TB)[blk{i}]")
+                parts.append(f"{cur}[blk{i}][s{i + 1}]concat=n=3:v=1:a=0,setpts=N/({fps:g}*TB){lab}")
+            else:
+                parts.append(f"{cur}[s{i + 1}]concat=n=2:v=1:a=0,setpts=N/({fps:g}*TB){lab}")
+            cur_len += hd + seg_len[i + 1]
+        cur = lab
+    if k == 1:
+        parts[-1] = parts[-1].replace("[s0]", "[vout]")
+    return ";".join(parts), cur_len
+
+
 def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     require_tools("ffmpeg", "ffprobe")
     if not src_path.is_file():
@@ -375,19 +506,25 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
         print(f"[INFO ] {rq} 处边界按组片段实际帧数重量化(timeline 浮点截断补正)")
     xf_entries = [e for e in entries if e["type"] in XFADE_OF]
     n_fade = sum(1 for e in entries if e["type"] in FADE_COLOR)
-    if not xf_entries and not n_fade:
+    pads = [e for e in entries if sum(_pad_frames(e, fps)) > 0 and e.get("from_group") is not None]
+    if not xf_entries and not n_fade and not pads:
         print("[INFO ] 无可渲染转场:全片硬切,不产出 cut_v2(cut_v1 即转场定稿)")
         write_ledger(proj, ep, src_path, None, entries, policy, checks=None)
         return None
-    if n_fade:
+    if n_fade and not pads:
         # fade 类须对整片施加,退回整片路径(现役场景只有 dissolve,此路径极少走)
         return _render_wholefile(proj, ep, src_path, out_path, entries, src_dur, fps,
                                  crf, preset, policy)
-    # ★分段式渲染(v4.2,清晰度改造):成片 = 各组片段 concat 而来,组边界必是
-    # 关键帧——**未涉叠化的组直接引用原组片段文件流拷贝(零再编码)**,只把叠化
-    # 边界两侧的组合并重编码。相比整片重编码(两遍式=全片 3 代),成片除叠化段外
-    # 保持 1 代编码,清晰度损失只发生在 5×几十帧的窗口内;且每个渲染段输入参数
-    # 恒定,天然规避 ffmpeg 8 的 filtergraph reinit 帧计数清零坑。
+    return _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, preset, src_dur, info, bool(pads))
+
+
+def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, preset, src_dur, info, with_pads):
+    """★分段式渲染(v4.2,清晰度改造;2026-09-17 扩展垫片/fade 边界):成片 = 各组片段 concat 而来,组边界必是
+    关键帧——**未涉边界效果的组直接引用原组片段文件流拷贝(零再编码)**,只把叠化 / 垫片 / 淡出边界两侧
+    的组合并重编码。相比整片重编码(两遍式=全片 3 代),成片除边界段外保持 1 代编码;且每个渲染段输入
+    参数恒定,天然规避 ffmpeg 8 的 filtergraph reinit 帧计数清零坑。有垫片时成片按 Σ垫片变长,源声轨按
+    timemap 重映射(黑场声音按 hold_audio)。"""
+    xf_entries = [e for e in entries if e["type"] in XFADE_OF]
     vids = ((tl.get("tracks") or {}).get("video")) or tl.get("video") or []
     order, files, gframes = [], [], []          # 按**位置**索引:同组 id 重复出现也不坍缩
     for i, v in enumerate(vids):
@@ -398,8 +535,13 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
         order.append(gid)
         files.append(proj / src)
         gframes.append(count_frames_of(str(proj / src)))
-    # 边界定位:按相邻位置对有序消费匹配 xf 条目(重复邻接不坍缩、不匹配到错误出现处)
-    remaining = list(xf_entries)
+    # 热边界 = 叠化 + 垫片 +(有垫片时)fade 类;按相邻位置对有序消费匹配(重复邻接不坍缩)
+    def hot(e):
+        if e.get("from_group") is None:
+            return False
+        return e["type"] in XFADE_OF or sum(_pad_frames(e, fps)) > 0 or (with_pads and e["type"] in FADE_COLOR)
+    remaining = [e for e in entries if hot(e)]
+    open_fade = next((e for e in entries if e.get("from_group") is None and e["type"] in FADE_COLOR), None) if with_pads else None
     boundary_at = {}                            # 位置 i → 该条目(边界在 order[i]|order[i+1] 之间)
     for i in range(len(order) - 1):
         key = (order[i], order[i + 1])
@@ -409,11 +551,13 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
                 remaining.remove(e)
                 break
     if remaining:
-        raise SystemExit(f"[FAIL] {len(remaining)} 条叠化边界在 timeline 组序里找不到相邻位置:"
+        raise SystemExit(f"[FAIL] {len(remaining)} 条转场边界在 timeline 组序里找不到相邻位置:"
                          f"{[(e['from_group'], e['to_group']) for e in remaining][:3]}")
-    hot = sorted({i for i in boundary_at} | {i + 1 for i in boundary_at})
+    hot_pos = {i for i in boundary_at} | {i + 1 for i in boundary_at}
+    if open_fade is not None and order:
+        hot_pos.add(0)
     runs, cur = [], []
-    for i in hot:
+    for i in sorted(hot_pos):
         if cur and i == cur[-1] + 1:
             cur.append(i)
         else:
@@ -423,9 +567,12 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     if cur:
         runs.append(cur)
     run_of = {i: r for r, run in enumerate(runs) for i in run}
+    w, h = int((info.get("video") or {}).get("width") or 0), int((info.get("video") or {}).get("height") or 0)
     tmp_dir = out_path.parent
     seg_paths, cleanup = [], []
+    pad_frames_total = 0
     for r, run in enumerate(runs):
+        run_gids = [order[i] for i in run]
         run_frames = sum(gframes[i] for i in run)
         lst = tmp_dir / f".xfrun{r}.txt"
         lst.write_text("".join(f"file '{files[i].resolve()}'\n" for i in run))
@@ -442,23 +589,40 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
               str(run_src)], timeout=1200)
         if count_frames_of(str(run_src)) != run_frames:
             raise SystemExit(f"[FAIL] 渲染段源 {run_gids[0]}..{run_gids[-1]} 归一后帧数不符")
-        # run 内边界的相对时刻 = run 内前序组帧和(帧准;boundary_at 按位置,无键碰撞)
-        local, acc = [], 0
-        for i in run[:-1]:
-            acc += gframes[i]
-            e = boundary_at.get(i)
-            if e:
-                local.append({**e, "cut_time_s": acc / fps})
-        fc, _ = build_filter(local, run_frames / fps, fps)
+        local_entries = [boundary_at[i] for i in run[:-1] if i in boundary_at]
+        only_xf = all(e["type"] in XFADE_OF for e in local_entries) and not (open_fade is not None and run[0] == 0)
+        if only_xf:
+            # run 内边界的相对时刻 = run 内前序组帧和(帧准;boundary_at 按位置,无键碰撞)
+            local, acc = [], 0
+            for i in run[:-1]:
+                acc += gframes[i]
+                e = boundary_at.get(i)
+                if e:
+                    local.append({**e, "cut_time_s": acc / fps})
+            fc, _ = build_filter(local, run_frames / fps, fps)
+            expect = run_frames
+        else:
+            # 段 = 相邻且中间无边界的组合并;bounds 按段索引
+            chunks, bounds, acc = [], {}, 0
+            for i in run:
+                acc += gframes[i]
+                if i in boundary_at and i != run[-1]:
+                    chunks.append(acc)
+                    bounds[len(chunks) - 1] = boundary_at[i]
+                    acc = 0
+            if acc:
+                chunks.append(acc)
+            fc, expect = build_run_filter(chunks, bounds, fps, w, h, open_fade if run[0] == 0 else None)
+            pad_frames_total += sum(sum(_pad_frames(e, fps)) for e in local_entries)
         run_out = tmp_dir / f".xfrun{r}.out.mp4"
         _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(run_src),
               "-filter_complex", fc, "-map", "[vout]", "-an",
               "-c:v", "libx264", "-crf", str(max(14, crf - 2)), "-preset", preset,
               "-pix_fmt", "yuv420p", "-color_range", "tv", str(run_out)], timeout=7200)
         got = count_frames_of(str(run_out))
-        if got != run_frames:
+        if got != expect:
             raise SystemExit(f"[FAIL] 渲染段 {run_gids[0]}..{run_gids[-1]} 帧数不符:"
-                             f"want {run_frames} got {got}")
+                             f"want {expect} got {got}")
         seg_paths.append((run[0], run_out))
         cleanup += [lst, run_src, run_out]
     # 总装 concat 列表:copy 组按原文件、渲染 run 按渲染段,严格组序
@@ -477,17 +641,26 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     cleanup.append(final_lst)
     tmp = out_path.with_name(out_path.stem + ".rendering.mp4")
     n_copy = sum(1 for i in range(len(order)) if i not in run_of)
-    print(f"[RUN  ] 分段式转场渲染:{len(xf_entries)} 处叠化 / {len(runs)} 个渲染段"
+    n_pad = sum(1 for e in boundary_at.values() if sum(_pad_frames(e, fps)) > 0)
+    print(f"[RUN  ] 分段式转场渲染:{len(xf_entries)} 处叠化 + {n_pad} 处垫片 / {len(runs)} 个渲染段"
           f"(重编码 {len(order) - n_copy} 组)+ {n_copy} 组流拷贝 → {out_path.relative_to(proj)}")
-    # 源 cut 带声轨时随总装流拷贝带回(模块契约:声轨 -c:a copy 不碰;mashup 的 cut 无声则跳过)
+    ops = pad_ops(entries, fps)
+    # 源 cut 带声轨时随总装带回:无垫片流拷贝(模块契约:声轨不碰);有垫片按 timemap 重映射(黑场声音按 hold_audio)
     has_audio = bool((_probe(src_path).get("audio") or {}))
-    a_args = (["-i", str(src_path), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "copy"]
-              if has_audio else [])
+    a_args, a_tmp = [], None
+    if has_audio and ops:
+        a_tmp = tmp_dir / ".xf_audio.remap.wav"
+        res = timemap.remap_audio(src_path, a_tmp, ops, src_dur=src_dur)
+        cleanup.append(a_tmp)
+        print(f"[RUN  ] 源声轨按 timemap 重映射:{timemap.describe(ops)} → {res['out_duration']:.3f}s")
+        a_args = ["-i", str(a_tmp), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+    elif has_audio:
+        a_args = ["-i", str(src_path), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "copy"]
     _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
           "-i", str(final_lst), *a_args, "-c:v", "copy",
           "-movflags", "+faststart", str(tmp)],
          timeout=1200)
-    total_frames = sum(gframes)
+    total_frames = sum(gframes) + pad_frames_total
     got = count_frames_of(str(tmp))
     if got != total_frames:
         raise SystemExit(f"[FAIL] 总装帧数不符:want {total_frames} got {got}")
@@ -497,7 +670,8 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
         out_path.unlink()
     tmp.rename(out_path)
     print(f"[DONE ] {out_path.relative_to(proj)} = {_fmt(probe_duration(out_path))}"
-          f"(源 {_fmt(src_dur)};{got} 帧,{n_copy}/{len(order)} 组零再编码)")
+          f"(源 {_fmt(src_dur)};{got} 帧,{n_copy}/{len(order)} 组零再编码"
+          + (f",垫片 +{pad_frames_total} 帧" if pad_frames_total else "") + ")")
     return out_path
 
 
@@ -598,13 +772,19 @@ def do_check(proj, ep, src_path, out_path, write=True):
             mism.append(f"{e.get('at_shot')}:{e.get('type')}≠shot_list {t['type'] if t else None}")
         elif e.get("type") in TRANSITION_RENDERABLE and abs(float(e.get("duration_s") or 0) - float(t.get("duration_s") or 0)) > 1e-6:
             mism.append(f"{e.get('at_shot')}:duration {e.get('duration_s')}≠{t.get('duration_s')}")
-    planned_to = {e.get("to_group") for e in planned if e.get("type") not in (None, "hard_cut")}
+        pf, ph, pa = pad_of(t)
+        if abs(float(e.get("freeze_s") or 0) - pf) > 1e-6 or abs(float(e.get("hold_s") or 0) - ph) > 1e-6 \
+                or (ph > 0 and (e.get("hold_audio") or "sustain") != pa):
+            mism.append(f"{e.get('at_shot')}:垫片 freeze/hold/audio {e.get('freeze_s')}/{e.get('hold_s')}/{e.get('hold_audio')}"
+                        f"≠shot_list {pf}/{ph}/{pa}")
+    planned_to = {e.get("to_group") for e in planned if e.get("type") not in (None, "hard_cut") or _pad_s(e)}
     for gid, t in by_gid.items():
-        if t["type"] != "hard_cut" and gid not in planned_to:
+        if (t["type"] != "hard_cut" or sum(pad_of(t)[:2]) > 0) and gid not in planned_to:
             mism.append(f"{gid}:shot_list {t['type']} 未进 timeline")
     rec("transitions_match_shot_list", not mism, f"非硬切 {len(planned_to)} 处" + (f";不一致 {mism[:5]}" if mism else ""))
 
-    renderable = [e for e in planned if e.get("type") in TRANSITION_RENDERABLE]
+    renderable = [e for e in planned if e.get("type") in TRANSITION_RENDERABLE or _pad_s(e)]
+    pads = [e for e in planned if _pad_s(e) and e.get("from_group") is not None]
     if not renderable:
         rec("duration_unchanged", True, "无可渲染转场,cut_v1 即定稿,无 cut_v2 需核")
         ok = fails == 0
@@ -619,25 +799,61 @@ def do_check(proj, ep, src_path, out_path, write=True):
     fps = _fps(src_i["video"])
     tol = 1.0 / fps + 0.005
     sd, od = probe_duration(src_path), probe_duration(out_path)
-    rec("duration_unchanged", abs(sd - od) <= tol, f"源 {_fmt(sd)} / 转场后 {_fmt(od)}(容差 ±1 帧 = {tol:.3f}s)")
+    # 抽帧核对(边界先按组片段实际帧数重量化,与渲染同口径);垫片 → timemap(源基准 → 成片基准)
+    requantize_cuts(planned, timeline, proj, fps)
+    ops = pad_ops(planned, fps)
+    m = timemap.map_fn(ops)
+    pad_s = timemap.total_delta(ops)
+    if pads:
+        rec("duration_as_planned", abs(sd + pad_s - od) <= tol,
+            f"源 {_fmt(sd)} + 垫片 {pad_s:.3f}s = 期望 {_fmt(sd + pad_s)} / 转场后 {_fmt(od)}(容差 ±1 帧 = {tol:.3f}s;{len(pads)} 处垫片)")
+    else:
+        rec("duration_unchanged", abs(sd - od) <= tol, f"源 {_fmt(sd)} / 转场后 {_fmt(od)}(容差 ±1 帧 = {tol:.3f}s)")
     if bool(src_i["audio"]) != bool(out_i["audio"]):
         rec("audio_stream_intact", False, f"声轨有无不一致:源 {bool(src_i['audio'])} / 转场后 {bool(out_i['audio'])}")
     elif src_i["audio"]:
         sa, oa = float(src_i["audio"].get("duration") or sd), float(out_i["audio"].get("duration") or od)
-        rec("audio_stream_intact", abs(sa - oa) <= 0.05, f"声轨时长 源 {_fmt(sa)} / 转场后 {_fmt(oa)}(流拷贝)")
+        if pads:
+            rec("audio_stream_intact", abs(sa + pad_s - oa) <= 0.10, f"声轨时长 源 {_fmt(sa)} + 垫片 {pad_s:.3f}s / 转场后 {_fmt(oa)}(timemap 重映射)")
+        else:
+            rec("audio_stream_intact", abs(sa - oa) <= 0.05, f"声轨时长 源 {_fmt(sa)} / 转场后 {_fmt(oa)}(流拷贝)")
     else:
         rec("audio_stream_intact", True, "源无声轨,转场后亦无")
 
-    # 抽帧核对(边界先按组片段实际帧数重量化,与渲染同口径)
-    requantize_cuts(planned, timeline, proj, fps)
     w, h = 160, 90
     problems, verified, whitelist = [], 0, []
     step = 1.0 / fps
     for e in planned:
         ty, t, d = e.get("type"), float(e.get("cut_time_s") or 0), float(e.get("duration_s") or 0)
         t = round(t * fps) / fps        # 量化到整帧:渲染按帧号切界,-ss 用未量化秒会错位 1 帧
+        fz, hd = (x / fps for x in _pad_frames(e, fps))
+        to = m(t)                        # 本组首帧在成片上的时刻(垫片之后)
         try:
-            if ty == "dissolve":
+            if (fz or hd) and e.get("from_group") is not None:
+                # 垫片:黑场中点近黑;定格帧 ≈ 前组末帧(源 t−1 帧);dip/fade 类前组尾淡出末帧近黑
+                if hd:
+                    mu = _mean(_gray_frame(out_path, to - hd / 2, w, h))
+                    if mu > DARK_MAX:
+                        problems.append(f"{e['at_shot']} 黑场垫片中点灰度均值 {mu:.0f}")
+                    whitelist.append({"at_shot": e["at_shot"], "type": f"{ty}+hold", "start_s": round(to - hd, 3), "end_s": round(to, 3)})
+                if fz:
+                    ref = _gray_frame(src_path, t - step, w, h)
+                    x = _gray_frame(out_path, to - hd - fz / 2, w, h)
+                    mad = _mad(x, ref)
+                    if ty in ("dip_black", "dip_white") or ty in FADE_COLOR:
+                        pass                      # 定格段叠着淡出,不与源帧比对
+                    elif mad > SAME_TOL + 4:
+                        problems.append(f"{e['at_shot']} 定格帧与前组末帧差 {mad:.1f}")
+                if ty in ("dip_black", "fade_black"):
+                    mu = _mean(_gray_frame(out_path, to - hd - step, w, h))
+                    if mu > DARK_MAX:
+                        problems.append(f"{e['at_shot']} {ty}+垫片 前组尾淡出末帧灰度均值 {mu:.0f}")
+                    dd = d / 2 if ty == "dip_black" else d
+                    whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(to - hd - dd, 3), "end_s": round(to - hd, 3)})
+                    if ty == "dip_black":
+                        whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(to, 3), "end_s": round(to + d / 2, 3)})
+                verified += 1
+            elif ty == "dissolve":
                 # 参考帧取**叠化窗口之外**两侧(±(d/2+2 帧)):纯前组帧与纯后组帧的
                 # 50/50 合成对比窗口中点。窗口内帧是克隆冻结的,窗口外 2 帧余量还
                 # 容忍名义边界与实拼内容 1–2 帧的历史偏差(timeline 浮点截断遗留)
@@ -645,30 +861,30 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 margin = round(_frames(d, fps) / 2) / fps + 2 * step
                 a = _gray_frame(src_path, t - margin, w, h)
                 b = _gray_frame(src_path, t + margin, w, h)
-                x = _gray_frame(out_path, t, w, h)
-                m = _blend_mad(x, a, b)
+                x = _gray_frame(out_path, to, w, h)
+                mm = _blend_mad(x, a, b)
                 # 阈值随前后组画面差自适应:参考帧在窗口外 ±2 帧,运动内容下与窗口内
                 # 冻结克隆帧的差 ∝ 前后组差;静止组 _mad(a,b)≈0 仍按 BLEND_TOL 严卡
                 tol = max(BLEND_TOL, 0.45 * _mad(a, b))
-                if m > tol:
-                    problems.append(f"{e['at_shot']} dissolve 中点与前后帧 50/50 混合差 {m:.1f}>{tol:.1f}")
+                if mm > tol:
+                    problems.append(f"{e['at_shot']} dissolve 中点与前后帧 50/50 混合差 {mm:.1f}>{tol:.1f}")
                 verified += 1
             elif ty in ("dip_black", "dip_white"):
                 # ffmpeg fadeblack/fadewhite 的纯黑/纯白峰值不在窗口正中(实测约 1/3 处),窗口内取三点极值
-                mus = [_mean(_gray_frame(out_path, t + k * d / 4, w, h)) for k in (-1, 0, 1)]
+                mus = [_mean(_gray_frame(out_path, to + k * d / 4, w, h)) for k in (-1, 0, 1)]
                 mu = min(mus) if ty == "dip_black" else max(mus)
                 ok = mu <= DARK_MAX if ty == "dip_black" else mu >= BRIGHT_MIN
                 if not ok:
                     problems.append(f"{e['at_shot']} {ty} 窗口内灰度极值 {mu:.0f}(三点 {[round(m) for m in mus]})")
-                whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(t - d / 2, 3), "end_s": round(t + d / 2, 3)})
+                whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(to - d / 2, 3), "end_s": round(to + d / 2, 3)})
                 verified += 1
             elif ty in FADE_COLOR:
                 if e.get("from_group") is None:
                     x = _gray_frame(out_path, 0.0, w, h)
                     whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": 0.0, "end_s": round(d, 3)})
                 else:
-                    x = _gray_frame(out_path, t - step, w, h)
-                    whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(t - d, 3), "end_s": round(t, 3)})
+                    x = _gray_frame(out_path, to - step, w, h)
+                    whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(to - d, 3), "end_s": round(to, 3)})
                 mu = _mean(x)
                 ok = mu <= DARK_MAX if ty == "fade_black" else mu >= BRIGHT_MIN
                 if not ok:
@@ -677,32 +893,34 @@ def do_check(proj, ep, src_path, out_path, write=True):
         except RuntimeError as ex:
             problems.append(f"{e.get('at_shot')} 抽帧失败:{str(ex)[-160:]}")
     # 硬切边界两侧 + 非转场区不得漂移:抽最多 4 个硬切边界(均匀取)与片尾前 0.5s
-    hard = [e for e in planned if e.get("type") in (None, "hard_cut") or e.get("renders_as") == "hard_cut"]
+    hard = [e for e in planned if (e.get("type") in (None, "hard_cut") or e.get("renders_as") == "hard_cut") and not _pad_s(e)]
     pick = hard[:: max(1, len(hard) // 4)][:4] if hard else []
     samples = [(f"{e['at_shot']} +0.25s", float(e["cut_time_s"]) + 0.25) for e in pick]
     samples.append(("片尾 −0.5s", max(0.0, sd - 0.5)))
     drift = []
     for label, t in samples:
         try:
-            m = _mad(_gray_frame(out_path, t, w, h), _gray_frame(src_path, t, w, h))
-            if m > SAME_TOL:
-                drift.append(f"{label} 差 {m:.1f}")
+            mm = _mad(_gray_frame(out_path, m(t), w, h), _gray_frame(src_path, t, w, h))
+            if mm > SAME_TOL:
+                drift.append(f"{label} 差 {mm:.1f}")
         except RuntimeError as ex:
             drift.append(f"{label} 抽帧失败:{str(ex)[-120:]}")
     rec("transition_frames_verified", not problems, f"核 {verified}/{len(renderable)} 处"
         + (f";异常 {problems[:4]}" if problems else ""))
-    rec("hard_cut_positions_intact", not drift, f"抽样 {len(samples)} 点与源帧比对" + (f";漂移 {drift[:4]}" if drift else ""))
+    rec("hard_cut_positions_intact", not drift, f"抽样 {len(samples)} 点与源帧比对" + ("(按 timemap 对位)" if pads else "")
+        + (f";漂移 {drift[:4]}" if drift else ""))
 
     ok = fails == 0
     if write:
-        write_ledger(proj, ep, src_path, out_path, planned, timeline.get("transitions_policy") or {}, results, whitelist)
+        write_ledger(proj, ep, src_path, out_path, planned, timeline.get("transitions_policy") or {}, results, whitelist, ops)
     print(f"[{'PASS' if ok else 'FAIL'} ] transition_render_ok:{len(results)} 项,FAIL {fails}")
     return ok, results
 
 
-def write_ledger(proj, ep, src_path, out_path, entries, policy, checks, whitelist=None):
+def write_ledger(proj, ep, src_path, out_path, entries, policy, checks, whitelist=None, ops=None):
     ed = proj / "edit" / ep
     ed.mkdir(parents=True, exist_ok=True)
+    ops = timemap.normalize_ops(ops or [])
     data = {
         "file": f"edit/{ep}/{LEDGER}", "episode": ep,
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -711,6 +929,10 @@ def write_ledger(proj, ep, src_path, out_path, entries, policy, checks, whitelis
         "out_cut": str(out_path.relative_to(proj)) if out_path and out_path.exists() else None,
         "transitions": entries,
         "black_frame_whitelist": whitelist or [],
+        # 节奏垫片(2026-09-17):成片相对 src_cut 的时长编辑表,finalize_episode.py 据此平移外挂声轨/字幕(§9B)
+        "pads": [e for e in entries if _pad_s(e) and e.get("from_group") is not None],
+        "timemap": {"basis": str(src_path.relative_to(proj)) if src_path and src_path.exists() else None,
+                    "ops": ops, "delta_s": timemap.total_delta(ops)},
         "check": {"name": "transition_render_ok",
                   "result": "PASS" if checks is not None and all(r["result"] != "FAIL" for r in checks) else ("n/a" if checks is None else "FAIL"),
                   "items": checks or []},

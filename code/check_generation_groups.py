@@ -26,6 +26,9 @@
                                        首组只能 hard_cut / fade_black / fade_white(淡入),没有前组可叠
   10. transition_reason_required      非 hard_cut(含标注型 smash_cut/match_cut)必填 reason 与 intent(可溯 directing_plan 转场清单)
   11. transition_budget_le_1pct       Σ可渲染转场 duration_s ≤ 集预算 budget_s × 1%
+  11b. transition_pad_valid           节奏垫片(2026-09-17,§9C):hold_s(组前黑场停留)/ freeze_s(前组尾帧定格)各 ∈ [0,3]s,
+                                       hold_s 只配 hard_cut / dip_black / fade_black,hold_audio ∈ sustain|fade|mute,
+                                       首组不得 hold/freeze;带垫片必填 reason;Σ(hold+freeze) ≤ 集预算 5%
   12. narrative_block_paired          narrative_block 同 id 的组必须连续,role 序列 start[/middle…]/end(单组 single);
                                        块首组必有 transition_in(可为显式 hard_cut + reason),块尾组的下一组同样必有
 
@@ -67,6 +70,12 @@ TRANSITION_TYPES = ("hard_cut",) + tuple(TRANSITION_RENDERABLE) + TRANSITION_ANN
 TRANSITION_INTENTS = ("flashback_in", "flashback_out", "time_skip", "scene_change", "montage",
                       "dream_in", "dream_out", "chapter", "episode_open", "other")
 TRANSITION_BUDGET_RATIO = 0.01     # Σ可渲染转场时长 ≤ 集预算 1%
+# —— 节奏垫片(2026-09-17,§9C):transition_in 可选 hold_s(本组前黑场停留)/ freeze_s(前组尾帧定格)/ hold_audio
+#    由 render_transitions.py 在组边界**插入**帧(成片变长,声轨/字幕按 timemap 重映射);后期页「插黑 / 定格」写入
+PAD_MAX_S = 3.0
+PAD_BUDGET_RATIO = 0.05            # Σ(hold_s+freeze_s) ≤ 集预算 5%
+HOLD_TYPES = ("hard_cut", "dip_black", "fade_black")     # 黑场停留只配「到黑」的转场
+HOLD_AUDIO = ("sustain", "fade", "mute")
 BLOCK_KINDS = ("flashback", "dream", "montage", "imagination")
 BLOCK_ROLES = ("start", "middle", "end", "single")
 # narration.md 条目头:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]
@@ -309,13 +318,29 @@ def check_7d(shot_list: dict, narration_md: str | None,
 
 
 def transition_of(group: dict) -> dict:
-    """组入口转场,规范化:缺省 / None / 空对象 = hard_cut。"""
+    """组入口转场,规范化:缺省 / None / 空对象 = hard_cut;垫片字段 hold_s / freeze_s 数值化(缺省 0)。"""
     t = group.get("transition_in")
     if not isinstance(t, dict) or not t:
         return {"type": "hard_cut"}
     t = dict(t)
     t["type"] = str(t.get("type") or "hard_cut")
+    for k in ("hold_s", "freeze_s"):
+        try:
+            v = float(t.get(k) or 0.0)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v > 0:
+            t[k] = v
+        else:
+            t.pop(k, None)
+    if t.get("hold_s"):
+        t["hold_audio"] = str(t.get("hold_audio") or "sustain")
     return t
+
+
+def pad_of(t: dict) -> tuple[float, float, str]:
+    """(freeze_s, hold_s, hold_audio) —— 组边界要插入的定格 / 黑场时长(秒)与黑场声音策略。"""
+    return float(t.get("freeze_s") or 0.0), float(t.get("hold_s") or 0.0), str(t.get("hold_audio") or "sustain")
 
 
 def check_transitions(shot_list: dict) -> list[str]:
@@ -325,6 +350,7 @@ def check_transitions(shot_list: dict) -> list[str]:
     budget = shot_list.get("budget_s") or shot_list.get("total_duration_s") \
         or sum(g.get("total_duration_s") or 0 for g in groups)
     render_total = 0.0
+    pad_total = 0.0
     has_tr = {}
     for i, g in enumerate(groups):
         gid = g.get("group_id", "?")
@@ -358,9 +384,34 @@ def check_transitions(shot_list: dict) -> list[str]:
             if t.get("intent") not in TRANSITION_INTENTS:
                 errors.append(f"{gid} transition_reason_required: {ty} intent={t.get('intent')!r}"
                               f" 不在枚举 {list(TRANSITION_INTENTS)}")
+        # 节奏垫片(2026-09-17)
+        raw_t = raw if isinstance(raw, dict) else {}
+        for k in ("hold_s", "freeze_s"):
+            rv = raw_t.get(k)
+            if rv is None:
+                continue
+            if isinstance(rv, bool) or not isinstance(rv, (int, float)):
+                errors.append(f"{gid} transition_pad_valid: {k}={rv!r} 须为秒数")
+            elif rv < 0 or rv > PAD_MAX_S + 1e-9:
+                errors.append(f"{gid} transition_pad_valid: {k}={rv} ∉ [0,{PAD_MAX_S:g}]")
+        freeze_s, hold_s, hold_audio = pad_of(t)
+        if hold_s or freeze_s:
+            pad_total += hold_s + freeze_s
+            if i == 0:
+                errors.append(f"{gid} transition_pad_valid: 首组不得 hold_s/freeze_s(集首用 fade_black 淡入)")
+            if not str(t.get("reason") or "").strip():
+                errors.append(f"{gid} transition_pad_valid: 带 hold_s/freeze_s 须写 reason(节奏意图)")
+        if hold_s:
+            if ty not in HOLD_TYPES:
+                errors.append(f"{gid} transition_pad_valid: hold_s 只配 {list(HOLD_TYPES)}(黑场停留须「到黑」),得到 {ty}")
+            if hold_audio not in HOLD_AUDIO:
+                errors.append(f"{gid} transition_pad_valid: hold_audio={hold_audio!r} 不在枚举 {list(HOLD_AUDIO)}")
     if budget and render_total > float(budget) * TRANSITION_BUDGET_RATIO + 1e-9:
         errors.append(f"transition_budget_le_1pct: Σ可渲染转场 {render_total:g}s >"
                       f" 集预算 {budget}s × {TRANSITION_BUDGET_RATIO:g} = {float(budget) * TRANSITION_BUDGET_RATIO:.2f}s")
+    if budget and pad_total > float(budget) * PAD_BUDGET_RATIO + 1e-9:
+        errors.append(f"transition_pad_valid: Σ黑场停留+定格 {pad_total:g}s > 集预算 {budget}s × {PAD_BUDGET_RATIO:g}"
+                      f" = {float(budget) * PAD_BUDGET_RATIO:.2f}s")
 
     # narrative_block:同 id 连续、role 序列合法、块首与块尾下一组都有 transition_in
     blocks: dict[str, list[tuple[int, str, str]]] = {}

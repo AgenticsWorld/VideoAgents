@@ -308,7 +308,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="hbtns">
         <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包或单个 SKILL.md 安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
-        <button id="btn-soul">SOUL.md</button>
+        <button id="btn-soul" style="display:none" title="查看该 Agent 的 SOUL.md 原文(Debug 模式,设置→高级→诊断数据)">SOUL.md</button>
       </span>
     </div>
     <div id="messages"><div class="empty">左侧选择 Agent;跟「总制片」对话可自动调度整个团队</div></div>
@@ -528,7 +528,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
 </div>
 <div id="style-zoom" class="modal">
   <img id="style-zoom-img" src="" alt="">
-  <div class="zoom-cap"><span id="style-zoom-nm"></span><span class="cat" id="style-zoom-cat"></span></div>
+  <div class="zoom-cap"><span id="style-zoom-nm" data-no-i18n></span><span class="cat" id="style-zoom-cat"></span></div>
 </div>
 <div id="out-modal" class="modal">
   <div class="box">
@@ -633,7 +633,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
     <div class="row"><label>提示词技能</label><select id="sg-skill" class="ps-select" style="flex:1"></select>
       <button type="button" class="info-btn" data-info="sg-info-skill" title="说明">i</button></div>
-    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-prompt-writing,MiniMax H3→h3-prompt-writing);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
+    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
     <div class="note ps-hint" id="sg-skill-hint" style="display:none"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>
@@ -831,16 +831,19 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box" style="width:600px">
     <h3>🩺 诊断数据</h3>
     <div class="row"><label>本地采集</label>
-      <input type="checkbox" id="diag-on" style="width:auto">
+      <input type="checkbox" id="diag-on" style="flex:none;margin:0">
       <span id="diag-st" style="font-size:12px;color:var(--dim)"></span>
     </div>
     <div class="note">开启时在运行结束与生成结束处按字段白名单记录结构化事件(引擎/Agent/渠道/状态/时长/脱敏后的错误模板),只写入本机 data/.videoagents/telemetry/,不含提示词、项目内容、文件路径与 API Key,永不自动上传。「导出诊断包」生成一个 zip(事件 + 环境摘要 + 下方勾选的经验卡),由你自行提交给开发者(如 GitHub issue 附件),用于改进产品。</div>
     <div id="diag-stats" class="note">读取中…</div>
+    <div class="row"><label>Debug 模式</label>
+      <input type="checkbox" id="diag-debug" style="flex:none;margin:0">
+      <span class="note" style="flex:1">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;不影响采集与导出</span></div>
     <div class="row"><label>经验卡</label>
       <span class="note" style="flex:1">任务闭环时沉淀的机制性教训(各项目 runs/&lt;task_id&gt;/lesson.md);默认全部不导出,逐张预览、勾选后才会进入诊断包</span></div>
     <div id="diag-lessons" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
     <div class="row"><label>包含事件</label>
-      <input type="checkbox" id="diag-inc-events" checked style="width:auto">
+      <input type="checkbox" id="diag-inc-events" checked style="flex:none;margin:0">
       <span class="note" style="flex:1">诊断包中包含已采集的结构化事件文件</span></div>
     <div class="err" id="diag-err"></div>
     <div class="actions">
@@ -1450,14 +1453,26 @@ function rhythmCollect(prefix){
 
 /* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
 let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';
+// 风格库多语言:styles/i18n/<lang>.json 按风格 id 存 {name,prompt} 译文;按当前界面语言合并为
+// s.tname/s.tprompt(缺译文回退中文原文),卡片显示与填入「画面风格」的内容都跟界面语言走
 async function loadStyleLib(){
   if(!STYLE_LIB){
     const r=await fetch('/static/styles/style_library.json');
     if(!r.ok)throw new Error('HTTP '+r.status);
-    STYLE_LIB=await r.json();
+    const lib=await r.json();
+    const lang=(window.I18N&&I18N.lang)||'zh';
+    let tr={};
+    if(lang!=='zh'){
+      try{const r2=await fetch('/static/styles/i18n/'+lang+'.json');if(r2.ok)tr=await r2.json()}
+      catch(e){/* 无译文:回退中文 */}
+    }
+    lib.forEach(s=>{const x=tr[s.id]||{};s.tname=x.name||s.name;s.tprompt=x.prompt||s.prompt});
+    STYLE_LIB=lib;
   }
   return STYLE_LIB;
 }
+// 当前输入框内容是否就是某风格(任一语言版本均算命中,已保存的旧语言译文切换界面语言后仍高亮)
+const styleIs=(s,cur)=>cur===s.tprompt||cur===s.prompt;
 function styleChipsRender(){
   const bar=$('#style-cats');bar.innerHTML='';
   ['全部',...new Set(STYLE_LIB.map(s=>s.category))].forEach(cat=>{
@@ -1474,27 +1489,27 @@ function styleGridRender(){
   const cur=($(STYLE_TARGET).value||'').trim();
   // 第一个卡片:自定义(关闭弹窗,回到设计风格输入框自行填写)
   const c=document.createElement('div');
-  c.className='style-card custom'+(cur&&!STYLE_LIB.some(s=>s.prompt===cur)?' on':'');
+  c.className='style-card custom'+(cur&&!STYLE_LIB.some(s=>styleIs(s,cur))?' on':'');
   c.textContent=t('自定义风格提示词');
   c.onclick=()=>{$('#style-modal').style.display='none';$(STYLE_TARGET).focus()};
   grid.appendChild(c);
-  STYLE_LIB.filter(s=>(STYLE_CAT==='全部'||s.category===STYLE_CAT)
-      &&(!kw||s.name.toLowerCase().includes(kw)||s.prompt.toLowerCase().includes(kw)))
+  const hit=s=>[s.tname,s.tprompt,s.name,s.prompt].some(v=>v.toLowerCase().includes(kw));
+  STYLE_LIB.filter(s=>(STYLE_CAT==='全部'||s.category===STYLE_CAT)&&(!kw||hit(s)))
     .forEach(s=>{
       const d=document.createElement('div');
-      d.className='style-card'+(cur===s.prompt?' on':'');
+      d.className='style-card'+(styleIs(s,cur)?' on':'');
       d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
         +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
-        +`<span class="cat">${esc(s.category)}</span><span class="nm">${esc(s.name)}</span>`;
-      d.title=s.prompt;
-      d.onclick=()=>{$(STYLE_TARGET).value=s.prompt;$('#style-modal').style.display='none'};
+        +`<span class="cat">${esc(t(s.category))}</span><span class="nm" data-no-i18n>${esc(s.tname)}</span>`;
+      d.title=s.tprompt;
+      d.onclick=()=>{$(STYLE_TARGET).value=s.tprompt;$('#style-modal').style.display='none'};
       d.querySelector('.zoom').onclick=ev=>{ev.stopPropagation();styleZoomShow(s)};
       grid.appendChild(d);
     });
 }
 function styleZoomShow(s){
   $('#style-zoom-img').src='/static/styles/'+s.image;
-  $('#style-zoom-nm').textContent=s.name;
+  $('#style-zoom-nm').textContent=s.tname;
   $('#style-zoom-cat').textContent=t(s.category);
   $('#style-zoom').style.display='flex';
 }
@@ -2180,6 +2195,17 @@ $('#voice-dl').onclick=async()=>{
 
 /* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
 let DIAG_LESSONS=[];
+let DEBUG_MODE=false;   // 设置→高级→诊断数据「Debug 模式」,默认关;控制 SOUL.md 等开发者入口显隐
+function applyDebugMode(){
+  $('#btn-soul').style.display=DEBUG_MODE?'':'none';
+  if(!DEBUG_MODE&&$('#soul-view').style.display==='block'){   // 关闭时若正在看 SOUL 原文,退回对话
+    $('#soul-view').style.display='none';$('#messages').style.display='flex';
+  }
+}
+async function loadDebugMode(){
+  try{DEBUG_MODE=!!(await api('/api/v1/config/diagnostics')).debug_mode}catch(e){DEBUG_MODE=false}
+  applyDebugMode();
+}
 function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
 function diagStats(d){
   let s=I18N.f('已采集 {n} 条事件,占用 {kb} KB',{n:d.total_events,kb:(d.outbox_bytes/1024).toFixed(1)});
@@ -2194,7 +2220,7 @@ function diagLessonRow(c,i){
   d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px';
   const meta=[c.project,c.meta.category,c.meta.provider,c.meta.date].filter(Boolean).map(esc).join(' · ');
   d.innerHTML=`<label style="display:flex;gap:8px;align-items:baseline;cursor:pointer">
-      <input type="checkbox" class="diag-pick" data-i="${i}" style="width:auto">
+      <input type="checkbox" class="diag-pick" data-i="${i}" style="flex:none;margin:0">
       <span style="flex:1">${esc(c.title)} <span style="color:var(--dim);font-size:12px">${meta}</span></span></label>
     <details style="margin-top:4px"><summary style="cursor:pointer;color:var(--dim);font-size:12px">${t('预览全文')}</summary>
       <pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(c.body)}</pre></details>`;
@@ -2206,6 +2232,7 @@ async function openDiagModal(){
   try{
     const d=await api('/api/v1/diagnostics');
     $('#diag-on').checked=!!d.enabled;
+    DEBUG_MODE=!!d.debug_mode;$('#diag-debug').checked=DEBUG_MODE;applyDebugMode();
     diagStats(d);
   }catch(e){$('#diag-on').checked=true;$('#diag-err').textContent='读取失败:'+e.message}
   diagSt();
@@ -2221,6 +2248,11 @@ $('#diag-close').onclick=()=>$('#diag-modal').style.display='none';
 $('#diag-on').onchange=async()=>{
   diagSt();
   try{await api('/api/v1/config/diagnostics',{diagnostics_enabled:$('#diag-on').checked})}
+  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
+};
+$('#diag-debug').onchange=async()=>{
+  DEBUG_MODE=$('#diag-debug').checked;applyDebugMode();
+  try{await api('/api/v1/config/diagnostics',{debug_mode:DEBUG_MODE})}
   catch(e){$('#diag-err').textContent='保存失败:'+e.message}
 };
 $('#diag-clear').onclick=async()=>{
@@ -2797,7 +2829,7 @@ $('#am-ok').onclick=async()=>{
 
 /* ---------- SOUL 查看 ---------- */
 $('#btn-soul').onclick=async()=>{
-  if(!CURRENT)return;
+  if(!CURRENT||!DEBUG_MODE)return;
   const sv=$('#soul-view');
   if(sv.style.display==='block'){sv.style.display='none';$('#messages').style.display='flex';return}
   const r=await api('/api/v1/agents/'+encodeURIComponent(CURRENT)+'/soul');
@@ -3065,6 +3097,7 @@ function liveBox(runId){
     syncDaProvider();
   });
   await restorePrefs();
+  loadDebugMode();   // Debug 模式开关(默认关):决定 SOUL.md 按钮显隐,不阻塞启动
   checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
   // 外部入口预填通道:?project=xx&compose=预填指令(选中总制片并填入输入框);预览页「✏️ 修改」已改为页内编辑浮窗(edit-popup.js)直发,不再经此跳转;
   // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片

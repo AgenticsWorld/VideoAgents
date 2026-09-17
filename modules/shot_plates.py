@@ -1051,7 +1051,7 @@ def group_is_h3(base: Path, ep: str, gid: str) -> bool:
     H3 的图片绑定用官方 <Picture N> 关键帧/构图锚语法逐镜写,2.0 式 Shot plates 段不适用。"""
     def h3(text):
         t = str(text or '').lower()
-        return ('minimax' in t and 'h3' in t) or t.endswith('/h3-prompt-writing')
+        return ('minimax' in t and 'h3' in t) or t.endswith('/h3-pe') or t.endswith('/h3-prompt-writing')
     gs = _group_or_episode_settings(base, ep, gid)
     if h3(gs.get('video_model')) or h3((gs.get('effective') or {}).get('skill_id')) or h3((gs.get('effective') or {}).get('resolved_from')):
         return True

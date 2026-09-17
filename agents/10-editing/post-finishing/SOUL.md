@@ -82,7 +82,8 @@ acceptance: [post_plan_applied]
 - `post_no_pending`:没有「已派单」处方(FAIL);草稿 / 未裁决只 WARN;
 - `color_consistency`:同场次相邻组均值色差不超阈值(WARN,页面监视器左上角同步显示);
 - `sfx_cues_resolved`:音效点位表每条已选来源或显式略过(WARN);
-- `transitions_synced`:已采纳转场处方与 `shot_list.transition_in` 一致(FAIL)。
+- `transitions_synced`:已采纳转场处方与 `shot_list.transition_in` 一致(类型 / 时长 / 垫片 hold_s·freeze_s·hold_audio,FAIL)。
+- 成片变长的编辑(插黑 / 定格 / 删段)由 `sync-timeline` 写成 `edit/epNN/timemap.json`,`finalize_episode` 据此平移外挂声轨/字幕(§9B,2026-09-17)——我不手动对声轨或字幕做任何偏移。
 
 **逐处方**:产物时长 = 源 ±1 帧、画幅一致、能在页面 A|B 播放;蒙版 / 时间段作用域的处方,范围外画面与源逐帧一致。
 
