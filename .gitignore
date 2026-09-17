@@ -34,6 +34,7 @@ agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 /tests/*
 !/tests/test_smoke.py
 !/tests/test_project_skills.py
+!/tests/test_release_notes.py
 !/tests/test_skill_records.py
 !/tests/test_whitebox.py
 !/tests/test_whitebox_camera.py

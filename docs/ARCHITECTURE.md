@@ -106,7 +106,7 @@ tests/             Python 产品接口、领域完整性和版本管理测试
 - Python runtime：`make desktop-runtime` 以当前 Git 短 hash 为版本，生成当前平台的可迁移 CPython ZIP、SHA-256 和元数据。正式发布时 macOS arm64 与 Windows x64 环境使用 tag 版本，并上传到 `s3://agentics-prod/packages/video-agents/python/`。
 - Agent 插件：官方声明式插件随服务端发布在 `backend/plugins/`；用户上传插件写入 `VIDEOAGENTS_DATA_DIR/plugins/`，不会修改只读的 Desktop App。插件通过 `/api/v1/plugins` 安装、启停和删除，动态注册的 Agent 与工作流继续使用同一运行状态、审批和事件 API。
 - Desktop Release：`v*` tag 指向 `main` 中的提交时，同一工作流构建 macOS arm64 ZIP 和 Windows x64 NSIS，并规范化为 `mac/VideoAgents-<version>.zip` 与 `win/VideoAgents-<version>.zip`；两个目录中的 `VideoAgents.zip` 始终覆盖为最新版。
-- GitHub Actions：Pull Request 由 CI 验证；`desktop.yaml` 只由 `main` 提交上的 `v*` tag 触发，构建 macOS/Windows 桌面端及对应 Python 环境，并向 GitHub Release 上传 4 个可区分平台的 ZIP 资产。
+- GitHub Actions：Pull Request 由 CI 验证；`desktop.yaml` 只由 `main` 提交上的 `v*` tag 触发，构建 macOS/Windows 桌面端及对应 Python 环境，并向 GitHub Release 上传 4 个可区分平台的 ZIP 资产；Release 说明取自 `CHANGELOG.md` 中对应版本的段落（`scripts/release_notes.py`），缺少该段落时回退为 GitHub 自动生成的说明。
 - 发布工作流支持可选签名密钥：macOS 使用 `MAC_CSC_LINK`/`MAC_CSC_KEY_PASSWORD` 及 Apple notarization secrets，Windows 使用 `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD`。未配置时仍可产出无签名测试包；面向普通用户发布及 macOS 自动更新时应配置签名。
 - 客户端安装包不包含 Python。首次启动若没有可用环境，客户端读取 `https://s3.agentics.world/packages/video-agents/metadata.json`，选择 `python.mac.<arch>` 或 `python.win.<arch>`，下载 `packages/video-agents/python/macos-python-<version>-<arch>.zip` 或 Windows 对应包。
 - 独立运行时安装到用户数据目录 `python-runtimes/versions/<version>/`，由 `active.json` 选择。已有可用环境时启动不访问远程索引；只有首次安装或桌面菜单手动更新才检查。下载后必须通过大小、SHA-256、平台、架构、版本和目录越界校验。

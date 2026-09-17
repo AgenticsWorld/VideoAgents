@@ -229,13 +229,31 @@ jobs:
           cp runtime-artifacts/python-runtime-windows-x64/*.zip release-assets/
           asset_count="$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')"
           test "$asset_count" = 6
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if python scripts/release_notes.py "$RELEASE_VERSION" > "$RUNNER_TEMP/release-notes.md"; then
+            echo "file=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CHANGELOG.md has no section for $RELEASE_VERSION; using auto-generated notes"
+          fi
       - name: Publish GitHub release assets
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES_FILE: ${{ steps.notes.outputs.file }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release-assets/*.zip --clobber
+            if [ -n "$NOTES_FILE" ]; then
+              gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
+            fi
+          elif [ -n "$NOTES_FILE" ]; then
+            gh release create "$GITHUB_REF_NAME" release-assets/*.zip \
+              --verify-tag --notes-file "$NOTES_FILE" --title "$GITHUB_REF_NAME"
           else
             gh release create "$GITHUB_REF_NAME" release-assets/*.zip \
               --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
