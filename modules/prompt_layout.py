@@ -14,6 +14,7 @@ _HEADS = (
     r"Whitebox legend:",
     r"Whitebox facing:",
     r"Shot plates:",
+    r"Scene plates:",
     r"Director's note \(user instruction",
     r"Global constraints:",
 )

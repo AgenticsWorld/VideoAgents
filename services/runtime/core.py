@@ -923,6 +923,11 @@ DEFAULT_GENCONFIG = {
                "dialogue_tts_speed": 1.0,
                "dialogue_tts_max_pause": 0,
                "spatial_blocking": False,
+               # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
+               #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
+               #   p6-scene-plates 以正向图为母版补出反向图(从里回望入口);single=只出正向(平面动画/单面布景);pair=每场景正反两张 p4 一并出。
+               #   场景级可在场景预览页覆盖(scene_plates.json mode)。组 prompt 由 code/sync_scene_plates.py --write 挂图并逐镜点名用哪张(机检 scene_plate_bound)
+               "scene_plates": "auto",
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
@@ -1010,6 +1015,8 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
+SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
+
 
 
 def resolve_platforms(cfg: dict) -> list[tuple[str, str, str]]:
@@ -1843,6 +1850,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.dialogue_voice must be one of {DIALOGUE_VOICE_MODES}")
     if "spatial_blocking" in o and not isinstance(o["spatial_blocking"], bool):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
+    if "scene_plates" in o and o["scene_plates"] not in SCENE_PLATES_MODES:
+        raise ServiceError(400, f"output.scene_plates must be one of {SCENE_PLATES_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
     if "dialogue_tts_speed" in o:
@@ -2879,6 +2888,7 @@ def build_role_prompt(agent_id: str, project: str,
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
     spatial_on = out.get("spatial_blocking") is True
+    scene_plates_mode = out.get("scene_plates") if out.get("scene_plates") in SCENE_PLATES_MODES else "auto"
     spatial_line = (
         "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
         "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"
@@ -2892,13 +2902,16 @@ def build_role_prompt(agent_id: str, project: str,
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
         if spatial_on else
-        "**关闭(默认)—— 沿用单张场景概念图流程,不建白模、不接参考视频**(用户判断本片不需要精确人物位置;p4-scene-model / p6-whitebox 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound 报 skipped):Phase 4 environment-concept 只出主视角场景概念图 "
-        "`main_*.png` + 昼夜变体(不出 layout_top/layout.json,§6A 场景所需视图=主视角概念图+变体);"
-        "storyboard/shot-planning **不写** scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;blocking 不受 blocking_on_map 约束"
-        "(space_fragment_en 地标词按场景空间描述自拟,2026-07-23 规则照旧);prompt 场景锚挂场景概念图(`[Image N]` 普通绑定),"
-        "不跑 layout_map_bound_check.py / sync_shot_plates.py;scene_layout_pack_ok/blocking_map_present/"
-        "blocking_on_map/layout_map_bound/shot_plate_bound 五项机检一律跳过(报 `skipped: spatial_blocking off`)——"
-        "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款**不适用**")
+        "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p4-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
+        f"本项目「场景图」设置 = **{scene_plates_mode}**(auto=正向必出、反向按分镜 plate_view 按需;single=只出正向;pair=每场景正反两张;场景级可在场景预览页覆盖)。"
+        "Phase 4 environment-concept 每场景出**正向场景图** `main_01.png`(站在入口往内看的主视角,整间主体陈设一次入画,无人)并登记 `assets/concepts/scenes/<sid>/scene_plates.json`"
+        "(front 的站位 standing_en / 看向 looking_en / 画内清单 in_frame_en / 身后不入画 behind_en;pair 模式同时用宿主 `code/render_scene_plates.py --scene <sid>` 出反向图);不出 layout_top/layout.json、九宫格;"
+        "storyboard/shot-planning 每镜写 `plate_view: front|reverse`(本镜机位看的是正向图那一面还是回望入口那一面;语义判定,不写坐标),不写 scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;"
+        "blocking 不受 blocking_on_map 约束(space_fragment_en 地标词按场景空间描述自拟);"
+        "Phase 6 分镜定稿后 p6-scene-plates(06-art/environment-concept)跑 `code/render_scene_plates.py --ep epNN`:auto 模式只给有镜标 reverse 的场景以正向图为母版补出反向图 `reverse_01.png`(机检 scene_plates_complete = `--status`);"
+        "Phase 7 prompt 场景锚 = 该场景正向图(+反向图),**由宿主 `code/sync_scene_plates.py --project <slug> --ep epNN --write` 挂进 refs(角色/生物 sheet 之后)、在 `Shot 1:` 前写 `Scene plates:` 段、每个 Shot 段头写 `Scene plate: this shot uses [Image N] … and not [Image M].`**——prompt 工位不手写该段、不手挑场景图,产出后必跑 `--write`(机检 scene_plate_bound);refs 不得再挂该场景旧概念图/俯视图/九宫格;"
+        "scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound/whitebox_ref_bound 一律跳过(报 `skipped: spatial_blocking off`)——"
+        "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款与白模链条款**不适用**")
     narration_on = out.get("narration_enabled") is True
     narration_line = (
         "开启 —— 旁白链路照常:narration 出稿(narration.md)、shot-planning 定挂点(narration_anchors)与逐组"
@@ -6740,8 +6753,27 @@ def _preview_scenes(project: str):
                 world_sources = worldlabs.list_sources(base, sid)
         except Exception as e:  # noqa: BLE001
             print(f"[preview-scenes] {sid} world 读取失败(忽略):{e}", flush=True)
+        # 场景图(正向/反向,2026-09-17,白模关闭项目的 A 方案):scene_plates.json 登记 + 各集 shot_list plate_view 统计
+        scene_plates_view = None
+        try:
+            from modules import scene_plates as _scp
+            spr = _scp.load_scene_plates(base, sid)
+            if spr:
+                need = _scp.reverse_needed(base, sid, spr)
+                def _pl(view):
+                    v = spr.get(view) or {}
+                    f = _scp.plate_file(base, sid, spr, view)
+                    return {"file": v.get("file"), "url": f"/projects/{base.name}/assets/concepts/scenes/{sid}/{f.name}?v={int(f.stat().st_mtime)}" if f else None,
+                            "standing_en": v.get("standing_en"), "looking_en": v.get("looking_en"), "in_frame_en": v.get("in_frame_en") or [],
+                            "behind_en": v.get("behind_en") or [], "generated_at": v.get("generated_at")} if (v or f) else None
+                scene_plates_view = {"mode": spr.get("mode", "inherit"), "effective": need["mode"], "legacy": bool(spr.get("legacy")),
+                                     "front": _pl("front"), "reverse": _pl("reverse"),
+                                     "reverse_needed": need["needed"], "reverse_reason": need["reason"], "needed_by": need["needed_by"],
+                                     "reverse_stale": _scp.reverse_stale(base, sid, spr)}   # 正向图重出后与母版不一致(2026-09-17)
+        except Exception as e:  # noqa: BLE001
+            print(f"[preview-scenes] {sid} scene_plates 读取失败(忽略):{e}", flush=True)
         scenes.append({"id": sid, "name": meta.get("name") or sid,
-                       "meta": meta, "docs": docs,
+                       "meta": meta, "docs": docs, "scene_plates": scene_plates_view,
                        # plates/ panos/ world/ 子目录不进概念图库,分别以「分镜背景图」「全景图」「世界模型」板块展示
                        "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/", "world/"))],
                        "plates": plates, "panos": panos, "world": world, "world_sources": world_sources,
@@ -6756,11 +6788,42 @@ def _preview_scenes(project: str):
         fmt = {"width": _f["width"], "height": _f["height"]}
     except Exception as e:  # noqa: BLE001
         print(f"[preview-scenes] 项目画幅读取失败(忽略):{e}", flush=True)
-    return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt}
+    try:
+        from modules.scene_plates import project_mode as _sp_project_mode
+        scene_plates_mode = _sp_project_mode(base)
+    except Exception:  # noqa: BLE001
+        scene_plates_mode = "auto"
+    return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt,
+            "scene_plates_mode": scene_plates_mode}
 
 
 async def api_preview_scenes(project: str = "demo"):
     return await asyncio.to_thread(_preview_scenes, project)
+
+
+def _scene_plates_set_mode(project: str, sid: str, mode: str):
+    """场景预览页:场景级「场景图」模式覆盖(scene_plates.json mode ∈ inherit|single|pair;白模关闭项目的 A 方案,2026-09-17)。"""
+    from modules import scene_plates as _scp
+    base = _proj_base(project)
+    from modules.whitebox import component as _component
+    sid = _component(sid)
+    if mode not in _scp.SCENE_MODES:
+        raise ServiceError(400, f"mode must be one of {_scp.SCENE_MODES}")
+    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is True:
+        raise ServiceError(409, "项目「白模」已开启,场景一致性走白模视频 + 分镜背景图链,场景图模式不生效")
+    rec = _scp.load_scene_plates(base, sid)
+    if not rec:
+        raise ServiceError(404, f"{sid}: 尚无场景图登记(scene_plates.json / main_01.png),先由环境概念工位出正向图")
+    if rec.get("legacy"):
+        raise ServiceError(409, f"{sid}: 只有旧版 main_01.png、尚无 scene_plates.json 登记(站位/画内清单为空),先回派 environment-concept 补登记再改模式")
+    rec["mode"] = mode
+    _scp.save_scene_plates(base, sid, rec)
+    need = _scp.reverse_needed(base, sid, rec)
+    return {"ok": True, "scene_id": sid, "mode": mode, "effective": need["mode"], "reverse_needed": need["needed"], "reverse_reason": need["reason"]}
+
+
+async def api_scene_plates_mode(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plates_set_mode, project, sid, str((body or {}).get("mode") or ""))
 
 
 def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
@@ -7249,6 +7312,31 @@ def _preview_storyboard(project: str, ep: str):
     # 分镜背景图(2026-09-09):directing/<ep>/shot_plates.json 每镜 plates[](起点/终点、复用来源)→ 分镜预览 shNNN 模块缩略
     sp_idx = _read_json_safe(base / "directing" / ep / "shot_plates.json") or {}
     shot_plates: dict[str, list] = {}
+    # 场景图(正向/反向,2026-09-17):白模关闭项目每镜按 shot_list plate_view 显示该场景的正向/反向图缩略(role scene_front / scene_reverse)
+    scene_plate_rows: dict[str, list] = {}
+    if not data.get("whitebox_enabled"):
+        try:
+            from modules import scene_plates as _scp
+            # 与 sync_scene_plates --write 同一套判定(plan_group:single 模式改用正向、反向未出/过期改用正向),预览所见即 prompt 所绑
+            for _g in (sl.get("generation_groups") or []) if isinstance(sl, dict) else []:
+                if not _g.get("group_id"):
+                    continue
+                _plan = _scp.plan_group(base, ep, _g["group_id"])
+                if not _plan.get("front"):
+                    continue
+                for _ps in _plan["shots"]:
+                    _rel = _plan["reverse"] if (_ps["view"] == "reverse" and _plan.get("reverse")) else _plan["front"]
+                    _view = "reverse" if _rel == _plan.get("reverse") else "front"
+                    _f = base / _rel
+                    if not _f.is_file():
+                        continue
+                    scene_plate_rows[str(_ps["shot_id"])] = [{"role": f"scene_{_view}", "reuse": "scene", "key": None, "crop": None,
+                                                              "file": _rel, "url": f"/projects/{base.name}/{_rel}?v={int(_f.stat().st_mtime)}",
+                                                              "scene_id": _plan.get("scene_id"),
+                                                              "plate_view": next((str(x.get("plate_view") or "").strip().lower() or None
+                                                                                  for x in (sl.get("shots") or []) if x.get("shot_id") == _ps["shot_id"]), None)}]
+        except Exception as e:  # noqa: BLE001
+            print(f"[preview-storyboard] scene_plates 读取失败(忽略):{e}", flush=True)
     for sp_sid, sp_rec in (sp_idx.get("shots") or {}).items():
         rows = []
         for p in (sp_rec.get("plates") or []) if isinstance(sp_rec, dict) else []:
@@ -7369,7 +7457,8 @@ def _preview_storyboard(project: str, ep: str):
             "keyframes": _asset_urls(base, _id_dir(kroot, sid), IMG_EXTS),
             "clips": [c for c in clips
                       if sid and _id_name_match(sid, c["name"], any_segment=True)],
-            "plates": shot_plates.get(sid, []),
+            "plates": shot_plates.get(sid, []) or scene_plate_rows.get(sid, []),
+            "plate_view": (str(s.get("plate_view") or "").strip().lower() or None),
             "board_key": _board_key(s),
         })
     data["shots"] = shots

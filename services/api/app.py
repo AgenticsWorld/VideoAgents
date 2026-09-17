@@ -440,6 +440,12 @@ async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict
     return _artifact_urls(await core.api_scene_plate_crop(project, sid, body), project)
 
 
+
+@api.post("/projects/{project}/scenes/{sid}/plates/mode", tags=["artifacts"])
+async def scene_plates_mode(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景级「场景图」模式覆盖(inherit|single|pair;白模关闭项目的正向/反向场景图方案,2026-09-17)。"""
+    return await core.api_scene_plates_mode(project, sid, body)
+
 @api.get("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
 async def scene_world_status(project: str, sid: str) -> dict[str, Any]:
     return await core.api_scene_world_status(project, sid)

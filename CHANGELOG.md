@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Scene plates (front / reverse) for projects with the whitebox switched off** (`docs/scene_plates.md`): the scene-consistency scheme for every video model other than Seedance 2.5's whitebox chain. Phase 4 environment-concept produces a *front* plate (`main_01.png`, standing at the entrance looking in) and registers standing / looking / in-frame / behind lists in `assets/concepts/scenes/<sid>/scene_plates.json`; storyboard and shot-planning tag every shot with `plate_view: front|reverse`; the new `p6-scene-plates` node (`code/render_scene_plates.py`, condition = whitebox off) renders a *reverse* plate (looking back at the entrance, front plate as `--ref`) only for scenes that need one; `code/sync_scene_plates.py --write` attaches the plates after the character sheets, writes the `Scene plates:` block and a per-shot `Scene plate: this shot uses [Image N] … and not [Image M].` line (check `scene_plate_bound`). New output setting `output.scene_plates` = `auto` (default: reverse on demand) / `single` (front only, e.g. flat animation) / `pair` (both at Phase 4), with a per-scene override on the scene preview page; the storyboard preview shows which plate each shot uses. The whitebox chain (whitebox video + panorama + shot plates) is untouched and remains the Seedance 2.5 default.
+
 ## [1.0.31] - 2026-09-16
 
 ### Added
