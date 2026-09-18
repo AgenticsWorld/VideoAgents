@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Desktop: the DeepAgents engine (the desktop default, Agentics channel) failed to start** with "DeepAgents Python runtime not found … `backend/.venv-deepagents/bin/python`": the bundled Python runtime did not ship the `deepagents` stack, so the interpreter lookup fell through to a project-root venv that never exists inside the app bundle. `apps/desktop/runtime-requirements.in` now pins `deepagents`, `langchain-openai` and `langgraph-checkpoint-sqlite` (lock regenerated — pure additions, no existing pin changed; about +135 MB unpacked), and `build_runtime.py` import-checks them. The desktop app picks the new runtime up automatically on launch (lock hash mismatch → runtime update).
+
 ## [1.0.32] - 2026-09-18
 
 ### Added
