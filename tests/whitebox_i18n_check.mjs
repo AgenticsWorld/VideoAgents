@@ -53,10 +53,10 @@ const ui=await import('data:text/javascript;base64,'+Buffer.from(uiSource).toStr
 function host(){
   const children={};
   return {isConnected:true,innerHTML:'',textContent:'',className:'',dataset:{},style:{setProperty(){}},
-    querySelector(sel){return children[sel]||=(sel==='select'?{value:'top'}:{});},
+    querySelector(sel){return children[sel]||=(sel==='figcaption select'?{value:'overview'}:{});},
     remove(){this.isConnected=false;}};
 }
-const scene={scene_id:'SCN-0075',dimensions_m:[9,3,16],inferred:true,objects:[],
+const scene={scene_id:'SCN-0075',dimensions_m:[9,3,16],inferred:true,objects:[],layout_top:'bible/scenes/SCN-0075/layout_top.png',
   scale_basis:'按门宽推断，项目原文',warnings:['机位与 grp047 不连续。']};
 const group={group_id:'grp048',scene_id:scene.scene_id,duration_s:2,
   actors:[{id:'CHAR-0001',label:'王三合',color:'#fff',size_m:[.5,1.7,.4]}],
@@ -83,9 +83,11 @@ for(const lang of ['zh','en','ja','ko','vi','es','fr','de','id','pt','ru','ar'])
   assert.ok(panel.innerHTML.includes(escape(wbText('文件状态未知，请重启服务后刷新。'))),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('白模时间'))}"`),lang);
   assert.ok(panel.innerHTML.includes(`aria-label="${escape(wbText('摄像机白模'))}"`),lang);
-  // 2026-09-13 起组面板只留摄像机视角 + 固定旋转视角的空间图:不再有视图选择与「建模依据与检查」
+  // 空间图默认旋转视角;场景有 layout_top 时可切「场景俯视图」(2026-09-18 加回),白模俯视图(top)与「建模依据与检查」不提供
   assert.ok(panel.innerHTML.includes(escape(wbText('空间与摄像机位置'))),lang);
-  assert.ok(!panel.innerHTML.includes('<select'),lang);
+  assert.ok(panel.innerHTML.includes(`value="overview" selected>${escape(wbText('旋转视角'))}`),lang);
+  assert.ok(panel.innerHTML.includes(`value="real">${escape(wbText('场景俯视图'))}`),lang);
+  assert.ok(!panel.innerHTML.includes('value="top"'),lang);
   assert.ok(!panel.innerHTML.includes('wb-warnings'),lang);
   for(const value of ['王三合',params.marker,params.plan,params.model,params.preview])assert.ok(panel.innerHTML.includes(value),`${lang}: lost ${value}`);
   const play=panel.querySelector('.wb-play');play.onclick();assert.equal(play.textContent,wbText('暂停'));

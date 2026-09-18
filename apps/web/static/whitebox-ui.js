@@ -106,7 +106,7 @@ const projectSettings=project=>{
 };
 
 // ---- 分镜预览:每个生成组的镜卡列在左半,右半常驻该组的白模面板
-// (播放 → 摄像机视角 → 空间与摄像机位置[旋转视角] → 人物色标 → 待决项;2026-09-13 起不再有视图选择与「建模依据与检查」)。全页共用一个 WebGL 上下文,
+// (播放 → 摄像机视角 → 空间与摄像机位置[旋转视角 / 场景俯视图] → 人物色标 → 待决项;2026-09-13 起不再有「建模依据与检查」)。全页共用一个 WebGL 上下文,
 // 面板只在滚入视口附近时建 3D 场景、滚出即释放;单个 rAF 循环驱动全部面板,静止且无交互时不重绘 ----
 const groupPanels=new Map();   // host -> state
 let pending=new Map();         // host -> build promise(每次 mountGroups 重建)
@@ -127,7 +127,7 @@ function groupLoop(now){
     st.dirty=false;
     st.rr.setTime(st.time);
     st.rr.render('camera',st.els.camera);
-    st.rr.render('overview',st.els.space);   // 空间视图固定旋转视角(2026-09-13 起不再提供俯视图/实景图切换),可拖动旋转、滚轮缩放
+    st.rr.render(st.els.view?.value||'overview',st.els.space);   // 空间视图默认旋转视角(可拖动旋转、滚轮缩放);场景有 layout_top 时可切「场景俯视图」(2026-09-18 加回,白模俯视图不提供)
     st.els.time.textContent=`${st.time.toFixed(2)} / ${st.end.toFixed(2)} s · ${st.rr.shotId}`;
     st.els.range.value=st.time;
   }
@@ -199,17 +199,18 @@ async function buildGroup(host,project,ep){
   host.innerHTML=`${draft?`<div class="wb-draft-banner">${esc(t('自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。'))}</div>`:''}<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong>${draft?'':`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button><a class="editbtn wb-director" href="/preview/director?project=${encodeURIComponent(project)}&ep=${encodeURIComponent(ep)}&grp=${encodeURIComponent(gid)}" title="${esc(t('到导演台:大视窗看白模,逐对象写修改注释,批量提交并按版本 A|B 比对'))}">${esc(t('📺 导演台'))}</a>`}</div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||!group.artifact_status?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div></div>
     <div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div>
     <figure data-draft="${draftTag}"><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>
-    <figure data-draft="${draftTag}"><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span></figcaption></figure>
+    <figure data-draft="${draftTag}"><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span>${scene.layout_top?`<select aria-label="${esc(t('空间视角'))}"><option value="overview" selected>${esc(t('旋转视角'))}</option><option value="real">${esc(t('场景俯视图'))}</option></select>`:''}</figcaption></figure>
     <div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>
     <div class="wb-issues"></div>
     <div class="wb-status wb-result" role="status"></div>`;
   const q=x=>host.querySelector(x);
   Object.assign(st,{ready:true,scene,group,format,end:group.duration_s,
-    els:{camera:q('.wb-camera'),space:q('.wb-space'),play:q('.wb-play'),range:q('input'),time:q('.wb-time'),result:q('.wb-result')}});
+    els:{camera:q('.wb-camera'),space:q('.wb-space'),view:q('figcaption select'),play:q('.wb-play'),range:q('input'),time:q('.wb-time'),result:q('.wb-result')}});
   for(const c of [st.els.camera,st.els.space]){c.width=format.width;c.height=format.height;}
   const statusBtn=q('.wb-statusbtn'), statusPop=q('.wb-statuspop');
   statusBtn.onclick=e=>{e.stopPropagation();const open=!statusPop.classList.contains('open');document.querySelectorAll('.wb-statuspop.open').forEach(x=>x.classList.remove('open'));statusPop.classList.toggle('open',open);statusBtn.setAttribute('aria-expanded',String(open));};
   st.els.play.onclick=()=>{if(!st.rr)return;if(st.time>=st.end)st.time=0;st.playing=!st.playing;st.previous=performance.now();st.els.play.textContent=t(st.playing?'暂停':'播放');kick();};
+  if(st.els.view)st.els.view.onchange=()=>{st.dirty=true;kick();};
   st.els.range.oninput=e=>{st.time=Number(e.target.value);st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();};
   st.ep=ep;st.issues=q('.wb-issues');if(draft)st.issues.hidden=true;else renderIssues(st);
   return st;

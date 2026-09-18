@@ -1967,6 +1967,7 @@ window.I18N_DICT = {
 "俯视图": "Góc nhìn từ trên",
 "实景图": "Ảnh thực cảnh",
 "旋转视角": "Góc nhìn xoay",
+"场景俯视图": "Ảnh nhìn từ trên của cảnh",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Cao {height} m · Lưới 1 m · Tỷ lệ {aspect}",
 "推断尺寸": "Kích thước ước tính",
 "已标定尺寸": "Kích thước đã hiệu chuẩn",

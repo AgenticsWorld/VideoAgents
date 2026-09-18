@@ -1967,6 +1967,7 @@ window.I18N_DICT = {
 "俯视图": "Draufsicht",
 "实景图": "Realansicht",
 "旋转视角": "Drehansicht",
+"场景俯视图": "Szenen-Draufsicht",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Höhe {height} m · Raster 1 m · Format {aspect}",
 "推断尺寸": "Geschätzte Maße",
 "已标定尺寸": "Kalibrierte Maße",

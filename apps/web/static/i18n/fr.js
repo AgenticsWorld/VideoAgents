@@ -1967,6 +1967,7 @@ window.I18N_DICT = {
 "俯视图": "Vue de dessus",
 "实景图": "Vue réelle",
 "旋转视角": "Vue orbitale",
+"场景俯视图": "Vue de dessus de la scène",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Hauteur {height} m · Grille 1 m · Format {aspect}",
 "推断尺寸": "Dimensions estimées",
 "已标定尺寸": "Dimensions calibrées",

@@ -1967,6 +1967,7 @@ window.I18N_DICT = {
 "俯视图": "Tampilan atas",
 "实景图": "Tampilan nyata",
 "旋转视角": "Tampilan putar",
+"场景俯视图": "Tampak atas adegan",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Tinggi {height} m · Kisi 1 m · Rasio {aspect}",
 "推断尺寸": "Dimensi perkiraan",
 "已标定尺寸": "Dimensi terkalibrasi",

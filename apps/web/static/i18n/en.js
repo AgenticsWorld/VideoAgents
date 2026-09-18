@@ -2006,6 +2006,7 @@ window.I18N_DICT = {
 "俯视图": "Top view",
 "实景图": "Real-scene view",
 "旋转视角": "Orbit view",
+"场景俯视图": "Scene top-down image",
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Height {height} m · Grid 1 m · Aspect {aspect}",
 "推断尺寸": "Estimated dimensions",
 "已标定尺寸": "Calibrated dimensions",
