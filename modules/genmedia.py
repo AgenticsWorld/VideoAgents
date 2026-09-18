@@ -2928,13 +2928,15 @@ def _rh_resolve_text_slot(workflow: dict, node_inputs: dict, text_key: str):
 
 
 def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
-    """种子直绑:采样器种子字面值位,或经 noise 连线的 RandomNoise 类节点。
+    """种子直绑:采样器种子字面值位、种子位连线的上游种子节点(Seed (rgthree) 一类),
+    或经 noise 连线的 RandomNoise 类节点。
     定位不到只如实提醒不报错——种子不注入只影响重跑变化,不产生错误内容。"""
     inputs = sampler.setdefault("inputs", {})
     candidates = [(inputs, ("seed", "noise_seed"))]
-    if _node_link(inputs.get("noise")):
-        upstream = (workflow.get(str(inputs["noise"][0])) or {}).setdefault("inputs", {})
-        candidates.append((upstream, ("noise_seed", "seed", "value")))
+    for key in ("seed", "noise_seed", "noise"):
+        if _node_link(inputs.get(key)):
+            upstream = (workflow.get(str(inputs[key][0])) or {}).setdefault("inputs", {})
+            candidates.append((upstream, ("noise_seed", "seed", "value")))
     for container, keys in candidates:
         for key in keys:
             value = container.get(key)
@@ -3010,8 +3012,53 @@ def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> No
         workflow.pop(nid)
 
 
+# 云端模板直绑宽高时初始 latent 的像素上限:平台出图规格 2560x1440(3.7 MP)远超多数模型
+# (Qwen-Image / Ideogram 4 等)的原生生成分辨率,latent 按宽高比压到此上限内、取 16 的倍数,
+# 目标尺寸交给模板末端的 ImageScale 放大节点。
+RH_IMAGE_LATENT_MAX_PIXELS = 1_600_000
+
+
+def _apply_rh_image_size(workflow: dict, sampler: dict, width: int, height: int) -> bool:
+    """宽高直绑:主采样器 latent_image 连的空 latent 节点(Empty*Latent*)的 width/height
+    (字面值或上游 Int primitive——与 scheduler 共用同一 primitive 时一并生效),
+    再把直连 Save 节点的唯一 ImageScale 绑到本次请求尺寸。latent 来自输入图(VAEEncode,
+    原图重绘模板)时生成尺寸随输入图、只绑末端 ImageScale。两处都定位不到返回 False 由调用方提醒。"""
+    link = (sampler.get("inputs") or {}).get("latent_image")
+    latent = workflow.get(str(link[0])) if _node_link(link) else None
+    cls = str((latent or {}).get("class_type") or "")
+    generated = ""
+    if cls.startswith("Empty") and "Latent" in cls:
+        scale = min(1.0, (RH_IMAGE_LATENT_MAX_PIXELS / float(width * height)) ** 0.5)
+        gen_w, gen_h = (max(256, int(round(v * scale / 16)) * 16) for v in (width, height))
+        probe = json.loads(json.dumps(workflow))      # 两项都绑得上才落笔,不留半绑状态
+        probe_inputs = probe[str(link[0])]["inputs"]
+        if _rh_bind_number(probe, probe_inputs, "width", gen_w) \
+                and _rh_bind_number(probe, probe_inputs, "height", gen_h):
+            inputs = latent.setdefault("inputs", {})
+            _rh_bind_number(workflow, inputs, "width", gen_w)
+            _rh_bind_number(workflow, inputs, "height", gen_h)
+            generated = f"{gen_w}x{gen_h}"
+    savers = [node for node in workflow.values() if isinstance(node, dict)
+              and "save" in str(node.get("class_type") or "").lower()]
+    feeding = {str(value[0]) for node in savers
+               for value in (node.get("inputs") or {}).values() if _node_link(value)}
+    resizers = [workflow[nid] for nid in feeding
+                if (workflow.get(nid) or {}).get("class_type") == "ImageScale"]
+    resized = len(resizers) == 1 and all(
+        _rh_bind_number(workflow, resizers[0].setdefault("inputs", {}), key, value)
+        for key, value in (("width", width), ("height", height)))
+    if not generated and not resized:
+        return False
+    head = f"按本次宽高比直绑 latent {generated}" if generated else "生成尺寸随模板/输入图"
+    tail = f",末端 ImageScale 放大到 {width}x{height}" if resized else \
+        ("" if generated == f"{width}x{height}" else f";模板无可绑的末端 ImageScale,成图即 {generated}")
+    print(f"[genmedia] RunningHub 图像工作流{head}{tail}", file=sys.stderr)
+    return True
+
+
 def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: str,
-                             ref_names: list[str] | None, seed) -> None:
+                             ref_names: list[str] | None, seed,
+                             width: int | None = None, height: int | None = None) -> None:
     """RunningHub 图像云工作流的无占位符直绑兜底(与视频 H3 同款语义)。
 
     云端工作区导出件常无 {{TOKEN}} 占位符而是作者演示字面值,占位符替换空转,
@@ -3040,16 +3087,26 @@ def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: st
         slot = _image_cond_text_slot(workflow, sampler(), "negative")
         target = None if slot is None else _rh_resolve_text_slot(workflow, slot[0], slot[1])
         if target is None or (id(target[0]), target[1]) == prompt_target:
-            raise RuntimeError(
-                "当前 RunningHub 图像工作流无独立负面文本位,--negative 无法注入;"
-                "请在「🎨 生成模型」页把 ComfyUI 负面模式改为「并入正面提示词」"
-                "(append_exclusions),或改用带 {{NEGATIVE}} 占位符的模板")
-        target[0][target[1]] = negative
+            # 模板无独立负面文本位(ConditioningZeroOut / 负面与正面同位):自动并入正面提示词,
+            # 与负面模式「并入正面提示词」(append_exclusions)同一写法;正面文本位也定位不到才报错
+            positive = _image_cond_text_slot(workflow, sampler(), "positive")
+            container, key = (None, None) if positive is None \
+                else _rh_resolve_text_slot(workflow, positive[0], positive[1])
+            if container is None or not isinstance(container.get(key), str):
+                raise RuntimeError(
+                    "当前 RunningHub 图像工作流无独立负面文本位,也未定位到可追加的正面文本位,"
+                    "--negative 无法注入;请改用带 {{NEGATIVE}} 占位符的模板")
+            container[key] = f"{container[key]}\nExclude from the image: {negative}"
+            print("[genmedia] RunningHub 图像工作流无独立负面文本位,--negative 已自动并入正面提示词"
+                  "(Exclude from the image: …)", file=sys.stderr)
+        else:
+            target[0][target[1]] = negative
     if seed is not None and "{{SEED}}" not in raw:
         _apply_rh_image_seed(workflow, sampler(), seed)
     if "{{WIDTH}}" not in raw and "{{HEIGHT}}" not in raw:
-        print("[genmedia] RunningHub 图像工作流无分辨率占位符,--aspect/--size 不进云端,"
-              "按模板内分辨率节点出图", file=sys.stderr)
+        if not (width and height and _apply_rh_image_size(workflow, sampler(), int(width), int(height))):
+            print("[genmedia] RunningHub 图像工作流无分辨率占位符且未定位到可绑的空 latent 宽高位,"
+                  "--aspect/--size 不进云端,按模板内分辨率节点出图", file=sys.stderr)
     if ref_names:
         if "{{FIRST_FRAME}}" not in raw:
             _apply_rh_image_reference(workflow, ref_names)
@@ -3249,7 +3306,7 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     if rh:
         # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
         _apply_rh_image_bindings(_rh_workflow_text(workflow_cfg), wf, prompt,
-                                 negative, rh_ref_names, seed)
+                                 negative, rh_ref_names, seed, width, height)
         return _rh_run(workflow_cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
