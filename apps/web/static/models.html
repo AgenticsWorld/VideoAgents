@@ -1642,7 +1642,7 @@ $('#save').onclick=async()=>{
     if(draft.deepagents.provider==='agentics')agenticsKinds.push('text');
     if(agenticsKinds.length&&!agenticsBridge())throw new Error(t('AgenticsLLM 仅支持桌面客户端'));
     if(agenticsKinds.length&&!AGENTICS_ACCOUNT)throw new Error(t('请先登录 AgenticsLLM 账号'));
-    const empty=agenticsKinds.filter(kind=>!$(`#${kind}-agentics-model`).value);
+    const empty=agenticsKinds.filter(kind=>agenticsModelSelects(kind).some(([,sel])=>!sel||!sel.value));
     if(empty.length)throw new Error(t('AgenticsLLM 暂无可用模型'));
     const proj=(new URLSearchParams(location.search).get('project'))
       ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
