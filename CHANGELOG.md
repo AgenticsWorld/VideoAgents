@@ -2,10 +2,16 @@
 
 All notable public changes to VideoAgents are documented here.
 
-## [Unreleased]
+## [1.0.33] - 2026-09-18
+
+### Changed
+
+- **Groups without a whitebox plan no longer auto-play a whitebox draft**: in the director console, scene preview and storyboard preview an unplanned group shows a placeholder instead of silently playing a host-derived draft; drafts stay view-only with a watermark.
 
 ### Fixed
 
+- **Director console no longer fails to open when the first episode has no data**: an episode without a shot list now shows a "no shot list" notice and lets you switch to an episode that has one (11 languages).
+- **Desktop: Generation Models → Image model → Agentics raised an error on save**: the empty-model check read a single select that no longer exists now that Agentics image has separate text-to-image / image-to-image profiles.
 - **Desktop: the DeepAgents engine (the desktop default, Agentics channel) failed to start** with "DeepAgents Python runtime not found … `backend/.venv-deepagents/bin/python`": the bundled Python runtime did not ship the `deepagents` stack, so the interpreter lookup fell through to a project-root venv that never exists inside the app bundle. `apps/desktop/runtime-requirements.in` now pins `deepagents`, `langchain-openai` and `langgraph-checkpoint-sqlite` (lock regenerated — pure additions, no existing pin changed; about +135 MB unpacked), and `build_runtime.py` import-checks them. The desktop app picks the new runtime up automatically on launch (lock hash mismatch → runtime update).
 
 ## [1.0.32] - 2026-09-18
