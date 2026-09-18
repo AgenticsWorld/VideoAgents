@@ -360,7 +360,7 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
 const SEL_PROVIDER={image:'agentics',video:'agentics',music:'agentics',tts:'agentics'};
 
-let DH_PROVIDER='heygen';
+let DH_PROVIDER='agentics';
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);
@@ -1499,8 +1499,9 @@ function loadIntoForm(){
   // 旧版独立 runninghub 段由后端 load_genconfig 迁移为 comfyui+mode=站点
   loadComfyForm('digitalhuman',{...co,url:co.url||'http://127.0.0.1:8188',
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
+  // 兜底与图像/视频等段一致:落到渠道清单首位 Agentics(DEFAULT_GENCONFIG 也是 agentics)
   showDigitalHumanPanel(DH_PROVIDERS.includes(dh.provider)?dh.provider
-    :dh.provider==='runninghub'?'comfyui':'heygen');
+    :dh.provider==='runninghub'?'comfyui':DH_PROVIDERS[0]);
   loadAgenticsModels('digitalhuman');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';

@@ -703,7 +703,9 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 
 DEFAULT_GENCONFIG = {
     "image": {
-        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
+        # 首次安装默认渠道一律 Agentics(2026-09-18):桌面端登录账号即开箱可用,
+        # 不必先去各家平台申请 Key。已保存过配置的安装不受影响(saved 里的 provider 优先)
+        "provider": "agentics",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
         # Agentics 图像分文生图/图生图两个 profile(2026-09-18,同 ComfyUI 的 workflow/ref_workflow 两套):
         # genmedia 无参考图用 t2i、带参考图用 i2i,agent 无需也不能按镜手选;
         # 预览页顶部图像下拉选 Agentics 时二级只有「跟随全局」。旧字段 profile_code 由 _migrate_genconfig 迁入两侧
@@ -739,7 +741,7 @@ DEFAULT_GENCONFIG = {
                     "rh_workflows": [], "rh_instance_type": "standard"},
     },
     "video": {
-        "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
+        "provider": "agentics",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "bytedance/seedance-2.0",
                        "custom_model": ""},
@@ -762,7 +764,7 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "openrouter",   # openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        "provider": "agentics",   # agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
@@ -783,7 +785,7 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "tts": {
-        "provider": "volcengine",   # openrouter | volcengine(豆包语音) | minimax | elevenlabs
+        "provider": "agentics",   # agentics | openrouter | volcengine(豆包语音) | minimax | elevenlabs
         "agentics": {"profile_code": ""},
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
@@ -812,7 +814,7 @@ DEFAULT_GENCONFIG = {
     # ComfyUI 渠道与图像/视频等段同口径:运行方式 mode=local(本地 InfiniteTalk)/
     # cloud(Comfy Cloud)/rh_cn/rh_ai(RunningHub 云端工作区工作流,rh_* 字段)
     "digital_human": {
-        "provider": "heygen",  # agentics | heygen | klingai | comfyui
+        "provider": "agentics",  # agentics | heygen | klingai | comfyui
         # Agentics(2026-09-18):登录桌面端账号调用数字人 profile(media_type=DigitalHuman,
         # 现有 infiniteTalk-1char / infiniteTalk-2char),profile_code 与视频等段同口径
         "agentics": {"profile_code": ""},
@@ -835,7 +837,7 @@ DEFAULT_GENCONFIG = {
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
-        "provider": "local",   # agentics | local | cloud | openrouter
+        "provider": "agentics",   # agentics | local | cloud | openrouter
         "agentics": {"model": "z-ai/glm-5.3-flash", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
@@ -1156,7 +1158,7 @@ def active_video_provider(cfg: dict | None = None) -> str:
     「每 Agent 模型配置」曾可按 Agent 覆盖图像/视频渠道,因易被遗忘而导致实际渠道与页面
     显示不符,已整体移除;存量 agentmodels.json 里的 image_provider/video_provider 一律忽略。"""
     v = (cfg or load_genconfig()).get("video") or {}
-    return str(v.get("provider") or "volcengine")
+    return str(v.get("provider") or DEFAULT_GENCONFIG["video"]["provider"])
 
 
 def active_video_model(cfg: dict | None = None) -> str:
@@ -1754,7 +1756,7 @@ def is_runninghub_video_active(cfg: dict | None = None) -> bool:
     v = (cfg or load_genconfig()).get("video") or {}
     comfy = v.get("comfyui") or {}
     rh_mode = (comfy.get("mode") or "local") in RH_BASES
-    return (v.get("provider") or "volcengine") == "comfyui" and rh_mode
+    return (v.get("provider") or DEFAULT_GENCONFIG["video"]["provider"]) == "comfyui" and rh_mode
 
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
