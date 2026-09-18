@@ -2945,19 +2945,73 @@ def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
           file=sys.stderr)
 
 
-def _apply_rh_image_reference(workflow: dict, file_name: str) -> None:
-    """把已上传的 --ref 绑进图生图模板唯一的 LoadImage 输入图节点。"""
-    loads = [node for node in workflow.values()
+_RH_IMAGE_SLOT_RE = re.compile(r"^image_?(\d+)$")
+
+
+def _rh_image_load_order(workflow: dict) -> list[str]:
+    """图生图模板的 LoadImage 节点按「第几张参考图」排序。
+
+    顺下游连线找最小的 imageN 输入位(TextEncodeQwenImageEditPlus 的 image1/2/3 一类,
+    途经缩放等透传节点继续下探)定序;没有编号位的按节点 id 数值序垫后。"""
+    consumers: dict[str, list[tuple[str, str]]] = {}
+    for nid, node in workflow.items():
+        if not isinstance(node, dict):
+            continue
+        for key, value in (node.get("inputs") or {}).items():
+            if _node_link(value):
+                consumers.setdefault(str(value[0]), []).append((nid, key))
+
+    def slot_of(load_id: str) -> int:
+        best, seen, stack = 10 ** 6, {load_id}, [load_id]
+        while stack:
+            for nid, key in consumers.get(stack.pop(), []):
+                m = _RH_IMAGE_SLOT_RE.match(key)
+                if m:
+                    best = min(best, int(m.group(1)))
+                if nid not in seen:
+                    seen.add(nid)
+                    stack.append(nid)
+        return best
+
+    loads = [nid for nid, node in workflow.items()
              if isinstance(node, dict) and node.get("class_type") == "LoadImage"]
-    if len(loads) != 1:
-        raise RuntimeError(
-            f"RunningHub 图生图工作流须恰好 1 个 LoadImage 输入图节点(找到 {len(loads)} 个),"
-            "无法定位 --ref 绑定位;请精简模板或改用 {{FIRST_FRAME}} 占位符")
-    loads[0].setdefault("inputs", {})["image"] = file_name
+    return sorted(loads, key=lambda nid: (slot_of(nid), int(nid) if nid.isdigit() else 10 ** 9, nid))
+
+
+def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> None:
+    """把已上传的 --ref 按顺序绑进图生图模板的 LoadImage 输入图节点(第 N 张 → 第 N 个,
+    顺序见 _rh_image_load_order)。
+
+    模板 LoadImage 多于本次参考图时,多出的节点连同它接的可选图位(image2/image3…)一并摘掉——
+    留着会把作者演示图静默混入生产请求;多出的节点接在必需输入位上则提交前报错不发请求。"""
+    names = [file_names] if isinstance(file_names, str) else list(file_names)
+    order = _rh_image_load_order(workflow)
+    if not order:
+        raise RuntimeError("RunningHub 图生图工作流没有 LoadImage 输入图节点,无法定位 --ref 绑定位;"
+                           "请改选图生图模板或改用 {{FIRST_FRAME}} 占位符")
+    if len(names) > len(order):
+        raise RuntimeError(f"RunningHub 图生图工作流只有 {len(order)} 个 LoadImage 输入图节点,"
+                           f"收到 {len(names)} 张 --ref;请减少参考图或改用支持更多输入图的模板")
+    for nid, name in zip(order, names):
+        workflow[nid].setdefault("inputs", {})["image"] = name
+    for nid in order[len(names):]:
+        for cid, node in workflow.items():
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs") or {}
+            for key in [k for k, v in inputs.items() if _node_link(v) and str(v[0]) == nid]:
+                m = _RH_IMAGE_SLOT_RE.match(key)
+                if not m or int(m.group(1)) < 2:
+                    raise RuntimeError(
+                        f"RunningHub 图生图工作流第 {order.index(nid) + 1} 个 LoadImage(节点 {nid})"
+                        f"接在节点 {cid} 的必需输入 {key} 上,本次只有 {len(names)} 张 --ref,"
+                        "摘不掉会混入作者演示图;请补足参考图或把多出的输入图只接可选图位(image2/image3)")
+                inputs.pop(key)
+        workflow.pop(nid)
 
 
 def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: str,
-                             ref_name: str | None, seed) -> None:
+                             ref_names: list[str] | None, seed) -> None:
     """RunningHub 图像云工作流的无占位符直绑兜底(与视频 H3 同款语义)。
 
     云端工作区导出件常无 {{TOKEN}} 占位符而是作者演示字面值,占位符替换空转,
@@ -2996,9 +3050,12 @@ def _apply_rh_image_bindings(raw: str, workflow: dict, prompt: str, negative: st
     if "{{WIDTH}}" not in raw and "{{HEIGHT}}" not in raw:
         print("[genmedia] RunningHub 图像工作流无分辨率占位符,--aspect/--size 不进云端,"
               "按模板内分辨率节点出图", file=sys.stderr)
-    if ref_name:
+    if ref_names:
         if "{{FIRST_FRAME}}" not in raw:
-            _apply_rh_image_reference(workflow, ref_name)
+            _apply_rh_image_reference(workflow, ref_names)
+        elif len(ref_names) > 1:
+            raise RuntimeError("RunningHub 图生图工作流用 {{FIRST_FRAME}} 占位符只接一张输入图,"
+                               f"收到 {len(ref_names)} 张 --ref;多张参考图请用不带该占位符的多 LoadImage 模板")
         return
     # 无 --ref:文生图模板残留被引用的 LoadImage 会把作者演示图静默混入
     # (H3 残留素材同款纪律);未被引用的孤儿节点不进执行图,不拦
@@ -3169,8 +3226,9 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
               "WIDTH": width, "HEIGHT": height, "SEED": seed,
               "CHECKPOINT": cfg.get("checkpoint") or ""}
     workflow_cfg = cfg
+    rh_ref_names = None
     if refs:
-        if len(refs) > 1:
+        if len(refs) > 1 and not rh:
             raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref")
         if rh:
             ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
@@ -3178,7 +3236,9 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
                 raise RuntimeError("ComfyUI 图片渠道未配置 RunningHub 图生图工作流"
                                    "(「🎨 生成模型」页验证并添加后选择)")
             workflow_cfg = {**cfg, "rh_workflow_id": ref_id}
-            tokens["FIRST_FRAME"] = _rh_upload(cfg, refs[0])
+            # 多张 --ref 按顺序绑模板的多个 LoadImage(张数上限 = 模板 LoadImage 个数,绑定时校验)
+            rh_ref_names = [_rh_upload(cfg, ref) for ref in refs]
+            tokens["FIRST_FRAME"] = rh_ref_names[0]
         else:
             ref_workflow = (cfg.get("ref_workflow") or "").strip()
             if not ref_workflow:
@@ -3189,7 +3249,7 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     if rh:
         # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
         _apply_rh_image_bindings(_rh_workflow_text(workflow_cfg), wf, prompt,
-                                 negative, tokens.get("FIRST_FRAME"), seed)
+                                 negative, rh_ref_names, seed)
         return _rh_run(workflow_cfg, wf, output, want_video=False)
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
