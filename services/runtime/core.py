@@ -698,7 +698,10 @@ GENCONFIG_PATH = RUNTIME_DIR / "genconfig.json"
 DEFAULT_GENCONFIG = {
     "image": {
         "provider": "volcengine",   # agentics | openrouter | volcengine | byteplus | fal | minimax | comfyui
-        "agentics": {"profile_code": ""},
+        # Agentics 图像分文生图/图生图两个 profile(2026-09-18,同 ComfyUI 的 workflow/ref_workflow 两套):
+        # genmedia 无参考图用 t2i、带参考图用 i2i,agent 无需也不能按镜手选;
+        # 预览页顶部图像下拉选 Agentics 时二级只有「跟随全局」。旧字段 profile_code 由 _migrate_genconfig 迁入两侧
+        "agentics": {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
@@ -824,7 +827,7 @@ DEFAULT_GENCONFIG = {
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
         "provider": "local",   # agentics | local | cloud | openrouter
-        "agentics": {"model": "anthropic/claude-sonnet-5", "custom_model": ""},
+        "agentics": {"model": "z-ai/glm-5.3-flash", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
         "cloud": {"base_url": "https://api.deepseek.com",
@@ -1100,7 +1103,21 @@ def _migrate_genconfig(config: dict) -> None:
         if dh.get("provider") == "runninghub":
             dh["provider"] = "comfyui"
             comfy["mode"] = rh.get("site") if rh.get("site") in RH_BASES else "rh_cn"
+    ia = (config.get("image") or {}).get("agentics") if isinstance(config.get("image"), dict) else None
+    if isinstance(ia, dict):
+        # 旧版单一 profile_code → 文生图/图生图两侧(保留原选择);空值视为未选,回落 DEFAULT_GENCONFIG 默认
+        legacy = str(ia.pop("profile_code", "") or "").strip()
+        for side in ("t2i", "i2i"):
+            if not str(ia.get(side) or "").strip():
+                ia.pop(side, None)
+                if legacy:
+                    ia[side] = legacy
     da = config.get("deepagents")
+    if isinstance(da, dict) and isinstance(da.get("agentics"), dict):
+        # Agentics 渠道模型为空 = 从未选过 → 去掉空值让 DEFAULT_GENCONFIG 的默认模型生效
+        aa = da["agentics"]
+        if not str(aa.get("model") or "").strip() and not str(aa.get("custom_model") or "").strip():
+            aa.pop("model", None)
     if (isinstance(da, dict) and os.environ.get("VIDEOAGENTS_USER_JWT")
             and da.get("provider") == "openrouter"
             and not str((da.get("openrouter") or {}).get("api_key")
@@ -5005,6 +5022,8 @@ def video_model_label(model: str, provider: str = "") -> str:
     """模型的短标签:目录里有则取括号前的名字(如 Seedance 2.5),否则原 id;comfyui 的 model 槽是运行方式,给运行方式名。"""
     if provider == "comfyui" and model in COMFY_MODE_LABELS:
         return COMFY_MODE_LABELS[model]
+    if provider == "agentics":
+        return next((r["label"] for r in _AGENTICS_VIDEO_LAST if r["id"] == model), model)
     for prov, rows in VIDEO_MODEL_CATALOG.items():
         if provider and prov != provider:
             continue
@@ -5116,6 +5135,8 @@ def video_provider_configured(cfg: dict, provider: str) -> bool:
     pc = v.get(provider) or {}
     if provider == "comfyui":
         return any(m["configured"] for m in comfy_mode_options(pc))
+    if provider == "agentics":
+        return bool(os.environ.get("VIDEOAGENTS_USER_JWT"))    # 桌面端已登录即可,无 Key
     if provider == "minimax":
         return bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key")
                     or os.environ.get("MINIMAX_API_KEY"))
@@ -5125,11 +5146,49 @@ def video_provider_configured(cfg: dict, provider: str) -> bool:
     return bool(pc.get("api_key") or os.environ.get(VIDEO_PROVIDER_ENV_KEYS.get(provider, ""), ""))
 
 
+# Agentics 视频 profile 目录(2026-09-18):分镜预览顶部渠道下拉可选 Agentics 并按集切 profile。
+# 清单来自登录账号的服务端目录(genmedia._agentics_profiles 自带 60s 缓存);未登录不请求,
+# 拉取失败 60s 内不重试(负缓存),此时只列「生成模型」页已保存的 profile。
+_AGENTICS_VIDEO_FAIL_AT = 0.0
+_AGENTICS_VIDEO_LAST: list[dict] = []
+
+
+def agentics_video_profiles() -> list[dict]:
+    """登录账号可用的 Agentics 视频 profile:[{id, label}](label = profile 名);未登录/拉取失败返上次结果或 []。"""
+    global _AGENTICS_VIDEO_FAIL_AT, _AGENTICS_VIDEO_LAST
+    if not os.environ.get("VIDEOAGENTS_USER_JWT"):
+        return []
+    if time.time() - _AGENTICS_VIDEO_FAIL_AT < 60:
+        return _AGENTICS_VIDEO_LAST
+    try:
+        from modules.genmedia import _agentics_profiles
+        _AGENTICS_VIDEO_LAST = [{"id": str(p["profile_code"]), "label": str(p.get("name") or p["profile_code"])}
+                                for p in _agentics_profiles("video")]
+    except Exception as e:  # noqa: BLE001
+        _AGENTICS_VIDEO_FAIL_AT = time.time()
+        print(f"[core] Agentics video profile list unavailable: {str(e)[:200]}", file=sys.stderr, flush=True)
+    return _AGENTICS_VIDEO_LAST
+
+
+def agentics_video_rows(cfg: dict) -> list[dict]:
+    """集级/组级可选的 Agentics 视频 profile 行:服务端目录 + 「生成模型」页已保存的 profile(不在目录也列出)。"""
+    rows = list(agentics_video_profiles())
+    saved = str(((cfg.get("video") or {}).get("agentics") or {}).get("profile_code") or "")
+    if saved and saved not in {r["id"] for r in rows}:
+        rows.insert(0, {"id": saved, "label": saved})
+    return rows
+
+
 def video_provider_options(cfg: dict) -> list[dict]:
     """集级可切换的视频渠道清单(目录内有模型 id 的渠道):[{id, configured, default_model, models[{id,label}]}];
-    default_model = 该渠道在「生成模型」页保存的模型(custom_model 优先),没有则目录首项。"""
+    default_model = 该渠道在「生成模型」页保存的模型(custom_model 优先),没有则目录首项。
+    Agentics(2026-09-18)列在首位:models = 登录账号的视频 profile,configured = 桌面端已登录。"""
     v = cfg.get("video") or {}
     out = []
+    arows = agentics_video_rows(cfg)
+    out.append({"id": "agentics", "configured": bool(os.environ.get("VIDEOAGENTS_USER_JWT")),
+                "default_model": str((v.get("agentics") or {}).get("profile_code") or "") or (arows[0]["id"] if arows else ""),
+                "models": arows})
     for pid, rows in VIDEO_MODEL_CATALOG.items():
         pc = v.get(pid) or {}
         dm = str(pc.get("custom_model") or pc.get("model") or "") or (rows[0][0] if rows else "")
@@ -5148,6 +5207,8 @@ def episode_provider_models(cfg: dict, provider: str) -> dict[str, bool]:
     渠道不支持按集切换返回空 dict。"""
     if provider == "comfyui":
         return {m["id"]: m["configured"] for m in comfy_mode_options((cfg.get("video") or {}).get("comfyui"))}
+    if provider == "agentics":
+        return {r["id"]: True for r in agentics_video_rows(cfg)}
     return {m: True for m, _ in VIDEO_MODEL_CATALOG.get(provider, [])}
 
 
@@ -5197,7 +5258,8 @@ def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") 
     if provider == "comfyui":
         rows = comfy_mode_options((cfg.get("video") or {}).get("comfyui"))
     else:
-        rows = [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])]
+        rows = (agentics_video_rows(cfg) if provider == "agentics"
+                else [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])])
         if provider == gprovider and gmodel and gmodel not in {r["id"] for r in rows}:
             rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})
     overridable = provider != "comfyui" and bool(base_model)
@@ -5557,9 +5619,11 @@ async def api_epsettings_set(body: dict):
     if provider:
         allowed = episode_provider_models(cfg, provider)
         if not allowed:
-            raise ServiceError(400, f"视频渠道 {provider} 无模型目录,不支持按集切换")
+            raise ServiceError(400, "Agentics 视频 profile 目录不可用(桌面端未登录或目录拉取失败),暂不能按集切换"
+                               if provider == "agentics" else f"视频渠道 {provider} 无模型目录,不支持按集切换")
         if not video_provider_configured(cfg, provider):
-            raise ServiceError(400, f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
+            raise ServiceError(400, "视频渠道 agentics 须登录桌面端账号(控制台「生成模型」页登录)" if provider == "agentics"
+                               else f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
         if not model:
             model = next(p["default_model"] for p in video_provider_options(cfg) if p["id"] == provider)
         if model not in allowed:
@@ -7752,7 +7816,11 @@ def _image_channels() -> list[dict]:
         pc = img.get(pid) if isinstance(img.get(pid), dict) else {}
         if pid == "agentics":
             configured = bool(os.environ.get("VIDEOAGENTS_USER_JWT"))
-            model = str(pc.get("profile_code") or "")
+            # 文生图/图生图两个 profile 由「生成模型」页定,预览页二级只有「跟随全局」;model 槽仅作展示
+            t2i, i2i = str(pc.get("t2i") or ""), str(pc.get("i2i") or "")
+            rows.append({"id": pid, "configured": configured, "model": agentics_image_model_label(pc),
+                         "active": pid == img.get("provider"), "t2i": t2i, "i2i": i2i})
+            continue
         elif pid == "comfyui":
             # 二级下拉 = 运行方式(本地/云端/RunningHub 国内/国际);model 槽存的是运行方式 id
             modes = comfy_mode_options(pc)
@@ -7822,6 +7890,9 @@ async def api_image_model_set(kind: str, body: dict):
     model = str(body.get("model") or "").strip()
     if provider and provider not in IMAGE_PROVIDERS:
         raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    if provider == "agentics":
+        # Agentics 图像无二级模型:文生图/图生图 profile 按「生成模型」页设置,出图时按有无参考图自动选
+        model = ""
     if provider == "comfyui":
         # ComfyUI 的二级选项是运行方式;空 = 沿用「生成模型」页保存的运行方式
         model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))
@@ -7848,9 +7919,18 @@ async def api_sketch_model_set(body: dict):
     return await api_image_model_set("sketch", body)
 
 
+def agentics_image_model_label(pc: dict | None) -> str:
+    """Agentics 图像渠道的展示用模型名:文生图/图生图两个 profile 合写(无单一模型 id)。"""
+    pc = pc if isinstance(pc, dict) else {}
+    t2i, i2i = str(pc.get("t2i") or ""), str(pc.get("i2i") or "")
+    return f"{t2i or '—'} / {i2i or '—'}" if (t2i or i2i) else ""
+
+
 def active_image_model() -> str:
     img = (load_genconfig().get("image") or {})
     pc = img.get(img.get("provider") or "") or {}
+    if img.get("provider") == "agentics":
+        return agentics_image_model_label(pc)
     return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "") if isinstance(pc, dict) else ""
 
 

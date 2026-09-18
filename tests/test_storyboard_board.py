@@ -221,3 +221,18 @@ def test_sketch_text_only_for_comfyui_drops_ref_sentence():
     assert "attached images" in with_refs and "attached images" not in no_refs
     assert "drawn from the text description" in no_refs and "韩生妻" in no_refs
     assert "standing, sitting" not in no_refs and "panel" not in no_refs.split("Shot size")[0]
+
+
+def test_sketch_text_only_for_agentics_keeps_grid_but_drops_refs():
+    """2026-09-18 用户拍板:agentics 出草图默认文生图(不传参考图,走文生图 profile);宫格照出,只有 comfyui 退化为单张。"""
+    assert sbb.sketch_text_only("agentics") and not sbb.sketch_single_only("agentics")
+    assert sbb.sketch_text_only("comfyui") and sbb.sketch_single_only("comfyui")
+    assert not sbb.sketch_single_only("volcengine")
+    scene = {"scene_no": "S01", "location": "居室", "time": "夜"}
+    panels = [(scene, {"key": "S01-01", "order": 1, "cast": ["CHAR-1"], "content": "她抬头", "size_hint": "近景"}),
+              (scene, {"key": "S01-02", "order": 2, "cast": ["CHAR-1"], "content": "她起身", "size_hint": "中景"})]
+    with_refs, _ = sbb.build_grid_prompt(panels, {"CHAR-1": "韩生妻"}, 2, 2)
+    no_refs, _ = sbb.build_grid_prompt(panels, {"CHAR-1": "韩生妻"}, 2, 2, with_refs=False)
+    assert "attached images" in with_refs and "attached images" not in no_refs
+    assert "drawn from the text description" in no_refs and "韩生妻" in no_refs
+    assert "2x2 grid" in no_refs and "stay blank white" in no_refs

@@ -994,6 +994,8 @@ try{
 // 数据随 /previews/storyboard 返回的 video_model / prompt_skill(解析结果)与 episode_settings(存盘配置+可选清单)
 // ComfyUI(2026-09-13):渠道下拉可选 ComfyUI,二级下拉 = 运行方式(本地/云端/RunningHub 国内/国际),值走 video_model 槽,
 // 未配置的方式置灰;全局渠道就是 ComfyUI 时二级下拉同样可为本集切换运行方式(mode_switchable)。
+// Agentics(2026-09-18):渠道下拉可选 Agentics(未登录桌面端时置灰),二级下拉 = 登录账号的视频 profile(服务端目录),
+// 值走 video_model 槽(profile_code);全局渠道就是 Agentics 时二级下拉同样可为本集换 profile,组卡「🎛 模型」亦可。
 const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
 const provName=p=>t(PROVIDER_NAMES[p]||p||'');
 let PS_STATE=null;   // 当前集级存盘配置(三下拉共享;任一改动即整份 POST)
@@ -1008,7 +1010,7 @@ function psRender(d){
   const provs=(es.providers||[]).filter(p=>p.id!==vm.global_provider);
   const provSel=provs.length?`<select id="ps-prov" class="${vm.provider_source==='episode'?'ov':''}">`
       +opt('',follow(provName(vm.global_provider)),!PS_STATE.provider)
-      +provs.map(p=>opt(p.id,provName(p.id)+(p.configured?'':'('+t('未配 Key')+')'),PS_STATE.provider===p.id,!p.configured)).join('')
+      +provs.map(p=>opt(p.id,provName(p.id)+(p.configured?'':'('+t(p.id==='agentics'?'未登录':'未配 Key')+')'),PS_STATE.provider===p.id,!p.configured)).join('')
       +'</select>':'<b>'+esc(provName(vm.provider))+'</b>';
   // ② 模型:渠道跟随全局时 = 跟随全局(全局模型)+ 全局渠道目录;渠道已切换时 = 该渠道目录(必选其一)
   let modelSel;

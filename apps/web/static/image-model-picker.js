@@ -8,7 +8,9 @@
  * 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用该类别的选择(草图由 storyboard_sketch.py 显式传)。
  * 模型清单 IMAGE_MODEL_LISTS 来自 image-models.js(与「生成模型」页共用)。
  * ComfyUI(2026-09-13):二级下拉不是模型而是运行方式(本地/云端/RunningHub 国内/国际),清单与已配置标记由
- *      接口 channels[].modes 给出,值仍走 model 槽(local|cloud|rh_cn|rh_ai),未配置的方式置灰。 */
+ *      接口 channels[].modes 给出,值仍走 model 槽(local|cloud|rh_cn|rh_ai),未配置的方式置灰。
+ * Agentics(2026-09-18):图像分文生图/图生图两个 profile,均在「生成模型」页设置,出图时按有无参考图自动选;
+ *      二级下拉只有「跟随全局」一项(model 存空),title 列出两个 profile(channels[].t2i / i2i)。 */
 (function(){
   'use strict';
   const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',comfyui:'ComfyUI'};
@@ -48,6 +50,13 @@
       const p=effProv();sm.innerHTML='';
       const ch=(D.channels||[]).find(c=>c.id===p)||{};
       if(!p){sm.hidden=true;ci.hidden=true;return}
+      if(p==='agentics'){  // 二级只有「跟随全局」:文生图/图生图 profile 按「生成模型」页设置,出图时按有无参考图自动选
+        ci.hidden=true;sm.hidden=false;
+        const o=document.createElement('option');o.value='';o.textContent=tt('跟随全局');
+        o.title=ff('文生图 {t} · 图生图 {i}',{t:ch.t2i||'—',i:ch.i2i||'—'});sm.appendChild(o);sm.value='';sm.title=o.title;
+        return;
+      }
+      sm.title='';
       if(p==='comfyui'){   // 二级 = 运行方式;默认 = 「生成模型」页保存的运行方式(ch.model)
         ci.hidden=true;sm.hidden=false;
         const modes=(ch.modes&&ch.modes.length)?ch.modes:Object.keys(COMFY_MODE_NAMES).map(id=>({id,configured:true}));

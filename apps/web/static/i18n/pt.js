@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"文生图模型": "Modelo texto→imagem",
+"图生图模型": "Modelo imagem→imagem",
+"文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」": "O modelo texto→imagem é usado sem imagem de referência e o modelo imagem→imagem com referências; a escolha é automática a cada geração, e o seletor no topo das páginas de pré-visualização só oferece “Seguir global” para Agentics",
+"文生图 {t} · 图生图 {i}": "Texto→imagem {t} · Imagem→imagem {i}",
 "开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Continuidade automática: ações contínuas usam os últimos 2–3 segundos do grupo anterior. Cortes, modelos incompatíveis ou clipes inadequados usam o último quadro. Desativado: apenas texto.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Continuações repetidas a partir de quadros ou finais de vídeo de baixa resolução podem degradar a qualidade e a consistência dos personagens",
 "⛓ 续接 {g} 尾段视频": "⛓ Continuar do final do vídeo de {g}",

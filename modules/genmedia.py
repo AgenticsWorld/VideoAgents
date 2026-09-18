@@ -497,10 +497,17 @@ def get_config(kind: str, provider_override: str = "", model_override: str = "")
         pc["api_key"] = _minimax_key(pc)
     if provider == "agentics":
         _agentics_connection()
-        pc["profile_code"] = str(pc.get("profile_code") or "").strip()
-        # Keep the common model field aligned so existing group-level video
-        # overrides can target another Agentics profile without a special path.
-        pc["model"] = pc["profile_code"]
+        if kind == "image":
+            # 图像分文生图(t2i)/图生图(i2i)两个 profile(2026-09-18):出图时按有无参考图自动选,
+            # 单一 model/profile_code 只在调用方显式 --model 时才有值(见下 ov_model)
+            pc["t2i"] = str(pc.get("t2i") or "").strip()
+            pc["i2i"] = str(pc.get("i2i") or "").strip()
+            pc["profile_code"] = pc["model"] = ""
+        else:
+            pc["profile_code"] = str(pc.get("profile_code") or "").strip()
+            # Keep the common model field aligned so existing group-level video
+            # overrides can target another Agentics profile without a special path.
+            pc["model"] = pc["profile_code"]
     elif provider != "comfyui":
         if provider == "openrouter":
             base_url, key, uses_wrapper = _openrouter_connection(pc.get("api_key") or "")
@@ -5303,7 +5310,14 @@ def _generate_image(prompt: str, output: str, negative: str = "",
         width, height = ASPECT_SIZES.get(aspect or "16:9", ASPECT_SIZES["16:9"])
     seed = seed if seed is not None else random.randint(1, 2**31)
     if cfg["provider"] == "agentics":
-        data = _agentics_generate("image", cfg, {
+        # 显式 --model 优先;否则带参考图走图生图 profile、无参考图走文生图 profile
+        code = str(cfg.get("model") or (cfg.get("i2i") if refs else cfg.get("t2i")) or "").strip()
+        if not code:
+            raise RuntimeError("image 渠道 agentics 未选择" + ("图生图" if refs else "文生图")
+                               + "模型(「🎨 生成模型」页图像 › Agentics)")
+        print(f"[genmedia] agentics 图像按{'图生图' if refs else '文生图'} profile {code} 出图",
+              file=sys.stderr, flush=True)
+        data = _agentics_generate("image", {**cfg, "model": code, "profile_code": code}, {
             "prompt": prompt, "negative_prompt": negative,
             "width": width, "height": height, "aspect_ratio": aspect or "16:9",
             "seed": seed, "num_images": 1, "output_format": _output_format(output),

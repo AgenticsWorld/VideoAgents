@@ -1,4 +1,8 @@
 window.I18N_DICT = {
+"文生图模型": "Text-zu-Bild-Modell",
+"图生图模型": "Bild-zu-Bild-Modell",
+"文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」": "Ohne Referenzbild wird das Text-zu-Bild-Modell verwendet, mit Referenzbildern das Bild-zu-Bild-Modell; die Wahl erfolgt automatisch pro Anfrage, und die Auswahl oben auf den Vorschauseiten bietet für Agentics nur „Global folgen“",
+"文生图 {t} · 图生图 {i}": "Text-zu-Bild {t} · Bild-zu-Bild {i}",
 "开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Automatischer Anschluss: Fortlaufende Aktionen nutzen bevorzugt die letzten 2–3 Sekunden der Vorgruppe. Bei Schnitten, ungeeigneten Clips oder nicht unterstützten Modellen wird das Endbild verwendet. Aus: nur Textanschluss.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Wiederholte Anschlüsse mit niedrig aufgelösten Endbildern oder Videoenden können Bildqualität und Figurenkonsistenz verschlechtern",
 "⛓ 续接 {g} 尾段视频": "⛓ Anschluss an das Videoende von {g}",

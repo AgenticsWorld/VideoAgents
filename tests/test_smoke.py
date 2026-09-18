@@ -561,3 +561,51 @@ def test_openrouter_never_implicitly_uses_agentics_account(monkeypatch):
         "api_key": "",
         "uses_wrapper": False,
     }
+
+
+def test_agentics_image_config_splits_text_to_image_and_image_to_image(monkeypatch, tmp_path):
+    """图像 Agentics 渠道分文生图/图生图两个 profile:无参考图用 t2i、带参考图用 i2i,显式 --model 优先。"""
+    from modules import genmedia
+
+    cfg_path = tmp_path / "genconfig.json"
+    cfg_path.write_text(json.dumps({"image": {
+        "provider": "agentics",
+        "agentics": {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"}}}))
+    monkeypatch.setattr(genmedia, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(genmedia, "_agentics_connection", lambda: ("https://api.agentics.world", "jwt"))
+    monkeypatch.delenv("VIDEOAGENTS_IMAGE_PROVIDER", raising=False)
+    monkeypatch.delenv("VIDEOAGENTS_IMAGE_MODEL", raising=False)
+    monkeypatch.setattr(genmedia, "_forbid_dispatch_layer", lambda kind: None)
+
+    cfg = genmedia.get_config("image")
+    assert cfg["t2i"] == "ideogram-4-t2i" and cfg["i2i"] == "qwen-image-i2i"
+    assert cfg["model"] == "" and cfg["profile_code"] == ""
+
+    calls = []
+    monkeypatch.setattr(genmedia, "_agentics_generate",
+                        lambda kind, cfg, values, files, **kwargs: calls.append(
+                            (cfg["profile_code"], files)) or b"result")
+    monkeypatch.setattr(genmedia, "_save", lambda data, output: output)
+    genmedia._generate_image("hello", "out.png")
+    genmedia._generate_image("hello", "out.png", refs=["ref.png"])
+    assert calls[0][0] == "ideogram-4-t2i" and calls[0][1] == {"input_images": []}
+    assert calls[1][0] == "qwen-image-i2i" and calls[1][1] == {"input_images": ["ref.png"]}
+
+    # 显式 --model(环境变量)优先于两侧默认
+    monkeypatch.setenv("VIDEOAGENTS_IMAGE_MODEL", "custom-i2i")
+    assert genmedia.get_config("image")["profile_code"] == "custom-i2i"
+
+
+def test_genconfig_migrates_legacy_agentics_image_profile_and_empty_defaults():
+    from services.runtime import core
+
+    legacy = {"image": {"agentics": {"profile_code": "old-image"}}}
+    core._migrate_genconfig(legacy)
+    assert legacy["image"]["agentics"] == {"t2i": "old-image", "i2i": "old-image"}
+
+    empty = {"image": {"agentics": {"profile_code": "", "t2i": "", "i2i": ""}},
+             "deepagents": {"agentics": {"model": "", "custom_model": ""}}}
+    core._migrate_genconfig(empty)
+    merged = core._merge(core.DEFAULT_GENCONFIG, empty)
+    assert merged["image"]["agentics"] == {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"}
+    assert merged["deepagents"]["agentics"]["model"] == "z-ai/glm-5.3-flash"

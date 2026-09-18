@@ -85,7 +85,10 @@ SKETCH_STYLE_PROMPT_TEXT_ONLY = (
 )
 # 纯文生图渠道(2026-09-17 用户拍板):comfyui(本地 / Comfy Cloud / RunningHub)的「参考图」是 img2img 初始画面,
 # 传人物 sheet 会把构图锁死成设定稿且压不住写实底图,多张还直接报错;草图一律不传参考图,按提示词画铅笔草图。
-TEXT_ONLY_SKETCH_PROVIDERS = ("comfyui",)
+# 2026-09-18 用户拍板:agentics 同样默认文生图——图像 Agentics 分文生图/图生图两个 profile,草图不传参考图即走文生图 profile。
+TEXT_ONLY_SKETCH_PROVIDERS = ("comfyui", "agentics")
+# 宫格批量退化为逐镜单张的渠道:只有 comfyui(本地模型跟不了严格 2×2 排版);agentics 文生图仍出宫格(不带参考图)
+SINGLE_ONLY_SKETCH_PROVIDERS = ("comfyui",)
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                    "text, letters, caption, watermark, logo, speech bubble, comic panel grid, multiple panels, "
                    "border, frame lines, detailed background, cluttered environment, architectural rendering, "
@@ -106,9 +109,17 @@ GRID_STYLE_PROMPT = (
     "lying down, running, swinging, dodging…). BACKGROUND MINIMAL in every panel: only two or three loose lines to hint at the space, most "
     "of the paper left blank; no architectural or furniture detail, no props unless mentioned. Each panel must show "
     "its camera angle, height and lens exactly as described. Strictly black-and-white, no color. No text, no "
-    "numbers, no captions, no speech bubbles, no watermark inside the panels. The attached images are the project's "
-    "official character designs — keep each character's likeness, hairstyle and outfit in every panel, but redraw "
-    "everything as a pencil sketch; locations are described in text only and stay a faint hint.{blank}"
+    "numbers, no captions, no speech bubbles, no watermark inside the panels. {refs}{blank}"
+)
+# 宫格风格句结尾按有无参考图二选一(2026-09-18):有参考图 → 附图是人物设定;无参考图(agentics 文生图)→ 人物按文字画
+GRID_REFS_SENTENCE = (
+    "The attached images are the project's official character designs — keep each character's likeness, hairstyle "
+    "and outfit in every panel, but redraw everything as a pencil sketch; locations are described in text only and "
+    "stay a faint hint."
+)
+GRID_TEXT_ONLY_SENTENCE = (
+    "Characters are drawn from the text description alone (age, build, hairstyle, outfit as stated) and stay "
+    "consistent across panels; locations are described in text only and stay a faint hint."
 )
 GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
                  "text, letters, numbers, caption, watermark, logo, speech bubble, uneven panels, overlapping panels, "
@@ -1031,8 +1042,13 @@ def _space_hint(scene: dict, max_chars: int = 60) -> str:
 
 
 def sketch_text_only(provider: str) -> bool:
-    """该图像渠道出草图是否走纯文生图(不传人物参考图,宫格批量也退化为逐镜单张):comfyui 各运行方式皆是,见 TEXT_ONLY_SKETCH_PROVIDERS。"""
+    """该图像渠道出草图是否走纯文生图(不传人物参考图):comfyui 各运行方式、agentics(走文生图 profile),见 TEXT_ONLY_SKETCH_PROVIDERS。"""
     return str(provider or "").strip().lower() in TEXT_ONLY_SKETCH_PROVIDERS
+
+
+def sketch_single_only(provider: str) -> bool:
+    """该图像渠道宫格批量是否退化为逐镜单张:只有 comfyui(本地模型跟不了严格 2×2 排版),见 SINGLE_ONLY_SKETCH_PROVIDERS。"""
+    return str(provider or "").strip().lower() in SINGLE_ONLY_SKETCH_PROVIDERS
 
 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True) -> tuple[str, str]:
@@ -1128,14 +1144,16 @@ _GRID_CLIPS = ({"desc": 0, "content": 260, "action": 160, "sketch": 200, "note":
 
 
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
-                      max_chars: int = GRID_PROMPT_MAX) -> tuple[str, str]:
+                      max_chars: int = GRID_PROMPT_MAX, with_refs: bool = True) -> tuple[str, str]:
     """宫格提示词:风格总句 + 各场地点短提示一次(只作示意) + 逐格「Panel k (row r, col c)」景别/机位/地点/出场/姿态动作(不裁)/画面/动作/神态/构图(用台账 note)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
-    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(2026-09-12:地点描述不进,先压画面内容,机位/神态/构图最后压)。"""
+    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(2026-09-12:地点描述不进,先压画面内容,机位/神态/构图最后压)。
+    with_refs=False(agentics 文生图宫格)时风格句结尾换成 GRID_TEXT_ONLY_SENTENCE(人物按文字画)。"""
     n = len(panels)
     cells = cols * rows
     blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
-    head = GRID_STYLE_PROMPT.format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank)
+    head = GRID_STYLE_PROMPT.format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank,
+                                    refs=GRID_REFS_SENTENCE if with_refs else GRID_TEXT_ONLY_SENTENCE)
     prompt = ""
     for clip in _GRID_CLIPS:
         parts = [head]

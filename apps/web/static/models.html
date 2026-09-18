@@ -474,14 +474,27 @@ async function agenticsAuth(button){
     else await bridge.login();
   }finally{button.disabled=false;await refreshAgenticsAccount()}
 }
+/* Agentics 图像渠道分文生图/图生图两个 profile(2026-09-18,同 ComfyUI 的 workflow/参考图工作流两套):
+   genmedia 无参考图用 t2i、带参考图用 i2i;其余类别仍是单一模型。ids: image-agentics-model-t2i / -i2i */
+const AGENTICS_IMAGE_SIDES=[['t2i','文生图模型'],['i2i','图生图模型']];
+function agenticsModelSelects(kind){
+  return kind==='image'?AGENTICS_IMAGE_SIDES.map(([side])=>[side,$(`#${kind}-agentics-model-${side}`)])
+                       :[['',$(`#${kind}-agentics-model`)]];
+}
 function agenticsModelRow(kind){
-  const row=el('div',{className:'row'});
-  row.appendChild(el('label',{},'模型'));
-  row.appendChild(el('select',{id:`${kind}-agentics-model`}));
-  const refresh=el('button',{},'刷新列表');
-  refresh.onclick=()=>kind==='text'?loadAgenticsModels(kind,true):refreshAgenticsMediaModels();
-  row.appendChild(refresh);
-  return row;
+  const build=(id,label)=>{
+    const row=el('div',{className:'row'});
+    row.appendChild(el('label',{},label));
+    row.appendChild(el('select',{id}));
+    const refresh=el('button',{},'刷新列表');
+    refresh.onclick=()=>kind==='text'?loadAgenticsModels(kind,true):refreshAgenticsMediaModels();
+    row.appendChild(refresh);
+    return row;
+  };
+  if(kind!=='image')return build(`${kind}-agentics-model`,'模型');
+  const frag=document.createDocumentFragment();
+  AGENTICS_IMAGE_SIDES.forEach(([side,label])=>frag.appendChild(build(`${kind}-agentics-model-${side}`,label)));
+  return frag;
 }
 
 function buildPanel(kind,p){
@@ -496,6 +509,8 @@ function buildPanel(kind,p){
     d.appendChild(agenticsModelRow(kind));
     d.appendChild(el('div',{className:'hint',id:`${kind}-agentics-hint`},
       t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
+    if(kind==='image')d.appendChild(el('div',{className:'hint'},
+      t('文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」')));
   }else if(p==='openrouter'){
     d.appendChild(keyRow(`${kind}-or-key`,'sk-or-v1-…'));
     const vr=el('div',{className:'row'});
@@ -1153,44 +1168,59 @@ function refreshAgenticsMediaModels(){
 function agenticsProfileLabel(profile){
   return profile.name||profile.profile_code;
 }
+/* 已保存的 Agentics 模型:text 用 custom_model/model,image 分 t2i/i2i 两侧,其余类别 profile_code */
+function agenticsWanted(kind,saved,side){
+  if(kind==='text')return saved.custom_model||saved.model||'';
+  if(kind==='image')return saved[side]||'';
+  return saved.profile_code||'';
+}
 async function loadAgenticsModels(kind,refresh=false){
-  const sel=$(`#${kind}-agentics-model`),hint=$(`#${kind}-agentics-hint`);
+  const targets=agenticsModelSelects(kind),hint=$(`#${kind}-agentics-hint`);
   const saved=agenticsSaved(kind);
+  const fillAll=(text)=>targets.forEach(([,sel])=>{sel.innerHTML='';sel.appendChild(el('option',{value:'',textContent:text}));sel.disabled=true});
   if(!agenticsBridge()){
-    sel.innerHTML='';sel.appendChild(el('option',{value:'',textContent:t('仅支持桌面客户端')}));sel.disabled=true;
+    fillAll(t('仅支持桌面客户端'));
     hint.textContent=t('AgenticsLLM 暂不兼容网页版');return;
   }
   if(!AGENTICS_ACCOUNT_READY)await refreshAgenticsAccount();
   if(!AGENTICS_ACCOUNT){
-    sel.innerHTML='';sel.appendChild(el('option',{value:'',textContent:t('请先登录')}));sel.disabled=true;
+    fillAll(t('请先登录'));
     hint.textContent=t('登录后可加载 AgenticsLLM 模型列表');return;
   }
-  sel.disabled=true;hint.textContent=t('正在拉取 AgenticsLLM 模型列表…');
+  targets.forEach(([,sel])=>sel.disabled=true);hint.textContent=t('正在拉取 AgenticsLLM 模型列表…');
   try{
     const r=kind==='text'
       ?await api(`/api/v1/providers/agentics/models?modality=text${refresh?'&refresh=1':''}`)
       :await agenticsMediaCatalog(refresh);
     const section=kind==='text'?r:(r.media?.[kind]||{});
     const models=section.models||[],profiles=section.profiles||[];
-    const profileByCode=new Map(profiles.map(p=>[p.profile_code,p]));sel.innerHTML='';
-    models.forEach(m=>{
-      const profile=profileByCode.get(m.id);
-      sel.appendChild(el('option',{value:m.id,textContent:profile?agenticsProfileLabel(profile):(m.name||m.id)}));
-    });
-    const wanted=kind==='text'?(saved.custom_model||saved.model):(saved.profile_code||'');
-    if(wanted&&models.some(m=>m.id===wanted))sel.value=wanted;
+    const profileByCode=new Map(profiles.map(p=>[p.profile_code,p]));
     const renderHint=()=>{hint.textContent=kind==='text'
       ?I18N.f('AgenticsLLM 共 {n} 个可用模型',{n:models.length})
       :''};
-    sel.onchange=renderHint;renderHint();
-    if(!models.length)sel.appendChild(el('option',{value:'',textContent:t('暂无可用模型')}));
+    targets.forEach(([side,sel])=>{
+      sel.innerHTML='';
+      models.forEach(m=>{
+        const profile=profileByCode.get(m.id);
+        sel.appendChild(el('option',{value:m.id,textContent:profile?agenticsProfileLabel(profile):(m.name||m.id)}));
+      });
+      const wanted=agenticsWanted(kind,saved,side);
+      // 已保存/默认的 profile 不在目录里也单列一项,免得保存时被清空
+      if(wanted&&!models.some(m=>m.id===wanted))sel.appendChild(el('option',{value:wanted,textContent:wanted}));
+      if(wanted)sel.value=wanted;
+      sel.onchange=renderHint;
+      if(!models.length&&!wanted)sel.appendChild(el('option',{value:'',textContent:t('暂无可用模型')}));
+    });
+    renderHint();
   }catch(e){
-    sel.innerHTML='';
-    const wanted=kind==='text'?(saved.custom_model||saved.model):(saved.profile_code||'');
-    if(wanted)sel.appendChild(el('option',{value:wanted,textContent:wanted}));
-    else sel.appendChild(el('option',{value:'',textContent:t('列表加载失败')}));
+    targets.forEach(([side,sel])=>{
+      sel.innerHTML='';
+      const wanted=agenticsWanted(kind,saved,side);
+      if(wanted)sel.appendChild(el('option',{value:wanted,textContent:wanted}));
+      else sel.appendChild(el('option',{value:'',textContent:t('列表加载失败')}));
+    });
     hint.textContent=I18N.f('⚠ AgenticsLLM 列表拉取失败:{msg}',{msg:e.message});
-  }finally{sel.disabled=false}
+  }finally{targets.forEach(([,sel])=>sel.disabled=false)}
 }
 async function loadOpenRouterModels(kind,refresh=false){
   const sel=$(`#${kind}-or-model`),hint=$(`#${kind}-or-hint`);
@@ -1385,8 +1415,11 @@ function loadIntoForm(){
   for(const kind of Object.keys(SECTIONS)){
     const c=CFG[kind];
     const ac=c.agentics||{};
-    const asel=$(`#${kind}-agentics-model`);asel.innerHTML='';
-    if(ac.profile_code)asel.appendChild(el('option',{value:ac.profile_code,textContent:ac.profile_code}));
+    agenticsModelSelects(kind).forEach(([side,asel])=>{
+      asel.innerHTML='';
+      const w=agenticsWanted(kind,ac,side);
+      if(w)asel.appendChild(el('option',{value:w,textContent:w}));
+    });
     $(`#${kind}-or-key`).value=c.openrouter.api_key||'';
     // 先用已保存值预填,避免列表拉取完成前保存把模型清空
     fillSelect($(`#${kind}-or-model`),
@@ -1512,7 +1545,9 @@ function collectComfy(kind){
 function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
-    const c={agentics:{profile_code:$(`#${kind}-agentics-model`).value||''},
+    const c={agentics:kind==='image'
+        ?Object.fromEntries(agenticsModelSelects(kind).map(([side,sel])=>[side,sel.value||'']))
+        :{profile_code:$(`#${kind}-agentics-model`).value||''},
       openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
     if(SECTIONS[kind].providers.includes('comfyui'))
