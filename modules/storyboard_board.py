@@ -34,6 +34,8 @@ import re
 import time
 from pathlib import Path
 
+from modules.entity_ids import is_creature_id
+
 ROOT = Path(__file__).resolve().parent.parent
 
 SCHEMA_VERSION = "storyboard_sketches/1.0"
@@ -995,7 +997,7 @@ def check_poses(board: dict, strict: bool = False) -> tuple[list[str], list[str]
                     warns.append(f"{key}/{cid}: poses 里的 id 不在本镜/本场出场名单")
             for cid in cast:
                 if cid not in poses:
-                    (warns if cid.startswith("CRE-") else errs).append(f"{key}/{cid}: 出场但 poses 无条目")
+                    (warns if is_creature_id(cid) else errs).append(f"{key}/{cid}: 出场但 poses 无条目")
     return errs, warns
 
 

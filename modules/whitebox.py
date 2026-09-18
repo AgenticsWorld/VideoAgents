@@ -12,6 +12,7 @@ import re
 from fractions import Fraction
 from pathlib import Path
 
+from modules.entity_ids import is_creature_id
 from modules.output_format import resolve_output
 from modules.scene_cast import scene_cast_groups
 
@@ -359,7 +360,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         times = [0] + [p.get('t', duration*i/(len(pts)-1)) if isinstance(p, dict) else duration*i/(len(pts)-1)
                        for i, p in enumerate(pts[1:-1], 1)] + [duration]
         cid = component(route['id']); posture = route.get('pose') or pose_from(route.get('route_en', ''))
-        height = route.get('height_m', 1.4 if cid.startswith('CRE-') else 1.7)
+        height = route.get('height_m', 1.4 if is_creature_id(cid) else 1.7)
         keys = []
         for i, (pos, t) in enumerate(zip(positions, times)):
             nxt = positions[min(i+1, len(positions)-1)]
@@ -410,7 +411,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         for key in keys:
             key['pose'] = pose_events[max(t for t in pose_events if t <= key['t'])]
         actor = {'id': cid, 'label': route.get('label', cid), 'letter': LETTERS[index % 26],
-                 'color': colors.get(cid) or palette_color(index), 'kind': 'creature' if cid.startswith('CRE-') else 'person',
+                 'color': colors.get(cid) or palette_color(index), 'kind': 'creature' if is_creature_id(cid) else 'person',
                  'size_m': route.get('size_m', [height*.28, height, height*.22]), 'keyframes': keys}
         actors.append(actor)
         if route.get('mounted'):

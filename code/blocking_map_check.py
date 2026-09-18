@@ -49,6 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
+from modules.entity_ids import is_creature_id  # noqa: E402
 
 MIN_PIXELS = 3_686_400          # 布局包出图规格下限(2560x1440 当量,平台统一出图规格;旧火山硬限 2026-09-01 已废止)
 LAYOUT_SCHEMA = "scene_layout.v1"
@@ -182,7 +183,7 @@ def resolve_pt(pt, landmarks: dict, gid: str, cid: str, what: str, errs: list):
 
 def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=None, strict: bool = False):
     """blocking_map 结构机检;返回 (routes, errs, warns)。
-    routes=[(id, label, start, path, end, route_en, kind)],kind ∈ {"character", "creature"}(id 以 CRE- 开头为生物)。"""
+    routes=[(id, label, start, path, end, route_en, kind)],kind ∈ {"character", "creature"}(id 以 CRE-/cre_ 开头为生物,不区分大小写,见 modules/entity_ids)。"""
     errs, warns, routes = [], [], []
     if not isinstance(bm, dict) or not isinstance(bm.get("characters"), list):
         return routes, [f"{gid}: blocking_map 缺 characters 数组"], warns
@@ -192,13 +193,13 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
         if cid in seen:
             errs.append(f"{gid}: blocking_map 条目重复 {cid}")
         seen.add(cid)
-        kind = "creature" if cid.startswith("CRE-") else "character"
+        kind = "creature" if is_creature_id(cid) else "character"
         m = ch.get("mounted")
         if m:
             if kind == "creature":
                 errs.append(f"{gid}/{cid}: 生物条目不得带 mounted")
-            elif not str(m).startswith("CRE-"):
-                errs.append(f"{gid}/{cid}: mounted {m!r} 须是 CRE-* 生物 ID")
+            elif not is_creature_id(m):
+                errs.append(f"{gid}/{cid}: mounted {m!r} 须是生物 ID(CRE-* / cre_*)")
             else:
                 mounted[m] = cid
         start = resolve_pt(ch.get("start"), landmarks, gid, cid, "start", errs)
@@ -220,8 +221,8 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
             errs.append(f"{gid}/{cid}: {bad}")
         routes.append((cid, (ch.get("label") or cid).strip() if isinstance(ch.get("label"), str) else cid,
                        start, path, end, route_en if isinstance(route_en, str) else "", kind))
-    char_ids = {c for c in seen if not c.startswith("CRE-")}
-    cre_ids = {c for c in seen if c.startswith("CRE-")}
+    char_ids = {c for c in seen if not is_creature_id(c)}
+    cre_ids = {c for c in seen if is_creature_id(c)}
     if chars_union is not None:
         a, b = char_ids, set(chars_union)
         if a != b:

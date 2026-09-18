@@ -14,6 +14,7 @@ import json
 import re
 from pathlib import Path
 
+from modules.entity_ids import is_creature_id
 from modules.prompt_layout import paragraphize
 
 
@@ -107,7 +108,7 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                 continue
             if context.get('presence', {}).get(cid, {}).get('state') == 'absent':
                 continue
-            kind = 'creatures' if cid.startswith('CRE-') else 'characters'
+            kind = 'creatures' if is_creature_id(cid) else 'characters'
             prefix = f'assets/concepts/{kind}/{cid}/'
             costume = None
             for i in peers:
