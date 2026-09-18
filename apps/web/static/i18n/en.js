@@ -1663,6 +1663,7 @@ window.I18N_DICT = {
 "账号 ID": "Account ID",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "After signing out the app restarts; you can sign in again or continue without signing in",
 "退出登录": "Sign out",
+"充值": "Top up",
 "登录": "Sign in",
 "登录状态切换失败": "Failed to change sign-in state",
 // 素材库(设置→高级→素材库,footage.html)

@@ -1624,6 +1624,7 @@ window.I18N_DICT = {
 "账号 ID": "ID akun",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Setelah keluar, aplikasi akan dimulai ulang; Anda dapat masuk lagi atau melanjutkan tanpa masuk",
 "退出登录": "Keluar",
+"充值": "Isi saldo",
 "登录": "Masuk",
 "登录状态切换失败": "Gagal mengubah status masuk",
 // 素材库(设置→高级→素材库,footage.html)

@@ -2486,6 +2486,13 @@ async function renderResources(fresh){
     const known=typeof b.balance==='number';
     return `<div class="res-bal"><span class="nm">${name}</span><span class="amt${known?'':' unknown'}">${known?sym+b.balance.toFixed(2):t('未知')}</span></div>`;
   };
+  // Agentics 余额:桌面端账号已登录即显示,不受「资源消耗 设置」开关控制(余额来自桌面桥,不经 /resources)
+  const bridge=desktopAuthBridge();
+  if(bridge){
+    let acct=null;
+    try{acct=await bridge.account()}catch(e){}
+    if(acct)h+=bal('Agentics '+t('余额'),{balance:Number.isFinite(Number(acct.balance))?Number(acct.balance):null},bridge.distribution==='oss'?'¥':'$');   // SMT(oss)版人民币,AGT(s3)版美元
+  }
   if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
   if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
   if(r.runninghub&&r.runninghub.configured){

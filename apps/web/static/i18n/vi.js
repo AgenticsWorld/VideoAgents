@@ -1624,6 +1624,7 @@ window.I18N_DICT = {
 "账号 ID": "ID tài khoản",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Sau khi đăng xuất ứng dụng sẽ khởi động lại; bạn có thể đăng nhập lại hoặc tiếp tục dùng mà không đăng nhập",
 "退出登录": "Đăng xuất",
+"充值": "Nạp tiền",
 "登录": "Đăng nhập",
 "登录状态切换失败": "Đổi trạng thái đăng nhập thất bại",
 // 素材库(设置→高级→素材库,footage.html)

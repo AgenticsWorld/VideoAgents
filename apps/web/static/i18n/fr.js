@@ -1624,6 +1624,7 @@ window.I18N_DICT = {
 "账号 ID": "ID du compte",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Après la déconnexion, l'application redémarre ; vous pouvez vous reconnecter ou continuer sans vous connecter",
 "退出登录": "Se déconnecter",
+"充值": "Recharger",
 "登录": "Se connecter",
 "登录状态切换失败": "Échec du changement d'état de connexion",
 // 素材库(设置→高级→素材库,footage.html)

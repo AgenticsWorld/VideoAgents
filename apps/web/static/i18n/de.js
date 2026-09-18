@@ -1624,6 +1624,7 @@ window.I18N_DICT = {
 "账号 ID": "Konto-ID",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Nach dem Abmelden startet die App neu; du kannst dich erneut anmelden oder ohne Anmeldung weiterarbeiten",
 "退出登录": "Abmelden",
+"充值": "Aufladen",
 "登录": "Anmelden",
 "登录状态切换失败": "Anmeldestatus konnte nicht geändert werden",
 // 素材库(设置→高级→素材库,footage.html)

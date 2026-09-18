@@ -1624,6 +1624,7 @@ window.I18N_DICT = {
 "账号 ID": "ID da conta",
 "退出登录后应用会重新启动,可重新登录或暂不登录继续使用": "Após sair, o aplicativo reinicia; você pode entrar novamente ou continuar sem fazer login",
 "退出登录": "Sair",
+"充值": "Recarregar",
 "登录": "Entrar",
 "登录状态切换失败": "Falha ao alterar o estado de login",
 // 素材库(设置→高级→素材库,footage.html)
