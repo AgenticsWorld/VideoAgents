@@ -2790,6 +2790,8 @@ window.I18N_DICT = {
 "整集时间线": "Episoden-Zeitleiste",
 "无批次运行": "Kein Batch läuft",
 "无白模": "Kein Whitebox",
+"无分镜表": "Keine Shotliste",
+"{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集": "{ep} hat noch keine Shotliste, das Regiepult ist daher leer; oben zu einer Folge mit Shotliste wechseln",
 "有待决项": "Offene Entscheidungen vorhanden",
 "有阻断级待决项": "Blockierende offene Entscheidungen vorhanden",
 "未生效": "Nicht übernommen",

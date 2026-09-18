@@ -2790,6 +2790,8 @@ window.I18N_DICT = {
 "整集时间线": "Dòng thời gian cả tập",
 "无批次运行": "Không có lô đang chạy",
 "无白模": "Không có whitebox",
+"无分镜表": "Không có danh sách cảnh quay",
+"{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集": "{ep} chưa có danh sách cảnh quay nên bàn đạo diễn đang trống; hãy chuyển ở trên sang tập đã có",
 "有待决项": "Có mục chờ quyết định",
 "有阻断级待决项": "Có mục chờ quyết định mức chặn",
 "未生效": "Chưa có hiệu lực",

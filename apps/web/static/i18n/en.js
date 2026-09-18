@@ -2895,6 +2895,8 @@ window.I18N_DICT = {
 "整集时间线": "Episode timeline",
 "无批次运行": "No batch running",
 "无白模": "No whitebox",
+"无分镜表": "No shot list",
+"{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集": "{ep} has no shot list yet, so the director console is empty; switch above to an episode that has one",
 "有待决项": "Has open decisions",
 "有阻断级待决项": "Has blocking open decisions",
 "未生效": "Not applied",

@@ -2790,6 +2790,8 @@ window.I18N_DICT = {
 "整集时间线": "Chronologie de l’épisode",
 "无批次运行": "Aucun lot en cours",
 "无白模": "Pas de whitebox",
+"无分镜表": "Pas de liste de plans",
+"{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集": "{ep} n'a pas encore de liste de plans, la console du réalisateur est donc vide ; passez ci-dessus à un épisode qui en a une",
 "有待决项": "Décisions en attente",
 "有阻断级待决项": "Décisions bloquantes en attente",
 "未生效": "Non appliqué",

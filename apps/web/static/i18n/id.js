@@ -2790,6 +2790,8 @@ window.I18N_DICT = {
 "整集时间线": "Linimasa episode",
 "无批次运行": "Tidak ada batch berjalan",
 "无白模": "Tidak ada whitebox",
+"无分镜表": "Tidak ada daftar shot",
+"{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集": "{ep} belum memiliki daftar shot, jadi konsol sutradara kosong; beralihlah di atas ke episode yang sudah memilikinya",
 "有待决项": "Ada keputusan tertunda",
 "有阻断级待决项": "Ada keputusan tertunda tingkat blokir",
 "未生效": "Tidak diterapkan",

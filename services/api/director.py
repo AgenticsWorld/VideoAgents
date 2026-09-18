@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from modules import director as dm
 from modules.whitebox import compile_episode, component, read
@@ -50,6 +51,7 @@ def _episodes(base: Path) -> list:
         if d.is_dir():
             eps |= {x.name for x in d.iterdir() if x.is_dir() and not x.name.startswith('.')}
     return [{'ep': e, 'title': titles.get(e, ''),
+             'has_shots': (base / 'directing' / e / 'shot_list.json').is_file(),
              'has_whitebox': (base / 'directing' / e / 'whitebox' / 'episode.json').is_file() or (base / 'directing' / e / 'whitebox_plans').is_dir(),
              'has_notes': (base / dm.LEDGER_REL.format(ep=e)).is_file()} for e in sorted(eps)]
 
@@ -136,7 +138,12 @@ def _load(project: str, ep: str):
 @router.get('')
 async def director_get(project: str, ep: str):
     def _do():
-        base, doc, episode = _load(project, ep)
+        base = project_path(project, ep)
+        try:
+            base, doc, episode = _load(project, ep)
+        except FileNotFoundError as e:
+            # 该集还没有分镜表/白模:404 仍带分集列表,页面才能出选集下拉切到有数据的集
+            return JSONResponse({'detail': str(e), 'episodes': _episodes(base)}, status_code=404)
         _reconcile(base, ep, doc, episode)
         return _public(base, ep, doc, episode)
     return await checked(_do)

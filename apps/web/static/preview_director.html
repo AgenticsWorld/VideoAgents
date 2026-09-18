@@ -294,7 +294,7 @@ const artifactBase=()=>'/api/v1/projects/'+encodeURIComponent(proj())+'/artifact
 async function J(url,method,body){
   const r=await fetch(url,{method:method||'GET',headers:body!==undefined?{'Content-Type':'application/json'}:{},body:body!==undefined?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.detail||j.error||r.status);
+  if(!r.ok){const e=new Error(j.detail||j.error||r.status);e.body=j;throw e}
   return j;
 }
 function toast(msg,ms=3500){const el=$('#toast');el.textContent=msg;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0'},ms)}
@@ -352,9 +352,11 @@ async function load(keep){
     }
     schedulePoll();
   }catch(e){
-    $('#work').innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(t('加载失败:'))}${esc(e.message)}</div>`;
+    const noShots=e.body&&Array.isArray(e.body.episodes);
+    $('#work').innerHTML=`<div class="empty" style="grid-column:1/-1">${noShots?esc(I18N.f('{ep} 还没有分镜表,导演台暂无内容;请在上方切换到已有分镜表的集',{ep:EP})):esc(t('加载失败:'))+esc(e.message)}</div>`;
     // 该集没有白模/分镜表时仍保留选集下拉,能切回别的集
-    if(LAST_EPISODES.length){$('#eps').innerHTML=`<select id="epsel" title="${esc(t('切换分集'))}">${LAST_EPISODES.map(x=>`<option value="${esc(x.ep)}" ${x.ep===EP?'selected':''}>${esc(x.ep)}${x.title?' · '+esc(x.title):''}${x.has_whitebox?'':' · '+esc(t('无白模'))}</option>`).join('')}</select>`;
+    if(e.body&&Array.isArray(e.body.episodes)&&e.body.episodes.length)LAST_EPISODES=e.body.episodes;
+    if(LAST_EPISODES.length){$('#eps').innerHTML=`<select id="epsel" title="${esc(t('切换分集'))}">${LAST_EPISODES.map(x=>`<option value="${esc(x.ep)}" ${x.ep===EP?'selected':''}>${esc(x.ep)}${x.title?' · '+esc(x.title):''}${x.has_shots===false?' · '+esc(t('无分镜表')):(x.has_whitebox?'':' · '+esc(t('无白模')))}</option>`).join('')}</select>`;
       $('#epsel').onchange=()=>{EP=$('#epsel').value;SEL='';DD=null;disposeRenderers();load()}}
   }
 }
@@ -368,7 +370,7 @@ function schedulePoll(){
 /* ---------- 顶部集行 ---------- */
 function renderEps(){
   const s=DD.summary||{},box=$('#eps');
-  let h=`<select id="epsel" title="${esc(t('切换分集'))}">${DD.episodes.map(e=>`<option value="${esc(e.ep)}" ${e.ep===EP?'selected':''}>${esc(e.ep)}${e.title?' · '+esc(e.title):''}${e.has_whitebox?'':' · '+esc(t('无白模'))}${e.has_notes?' ✎':''}</option>`).join('')}</select>`;
+  let h=`<select id="epsel" title="${esc(t('切换分集'))}">${DD.episodes.map(e=>`<option value="${esc(e.ep)}" ${e.ep===EP?'selected':''}>${esc(e.ep)}${e.title?' · '+esc(e.title):''}${e.has_shots===false?' · '+esc(t('无分镜表')):(e.has_whitebox?'':' · '+esc(t('无白模')))}${e.has_notes?' ✎':''}</option>`).join('')}</select>`;
   h+=`<span class="stat">${esc(I18N.f('{n} 组 · 注释 {t}(待提交 {d} · 已提交 {s} · 已套用 {a} · 未生效 {f})· 版本 {v}',{n:WB.groups.length,t:s.total||0,d:s.draft||0,s:s.submitted||0,a:s.applied||0,f:s.failed||0,v:s.versions||0}))}</span>`;
   h+=`<span class="sp"></span>`;
   const rb=runningBatches();
