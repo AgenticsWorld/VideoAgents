@@ -147,6 +147,7 @@ async def note_create(project: str, ep: str, body: dict):
     def _do():
         base = project_path(project, ep)
         doc = dm.load_ledger(base, ep)
+        dm.require_plan(base, ep, [component(str(body.get('group_id') or ''))])
         note = dm.add_note(doc, dm.make_note(str(body.get('group_id') or ''), body.get('target'), body.get('text'),
                                             t=body.get('t'), shot_id=body.get('shot_id'), base_v=body.get('base_v'), view=body.get('view'),
                                             target_agent=body.get('target_agent')))
@@ -205,6 +206,7 @@ async def submit(project: str, ep: str, body: dict | None = None):
             raise
     if not prepared_all:
         raise HTTPException(422, skipped[0]['reason'] if skipped else '没有可提交的内容')
+    await checked(dm.require_plan, base, ep, [g for p in prepared_all for g in p['group_ids']])
     if body.get('dry_run'):
         return {'ok': True, 'dry_run': True, 'batches': [{'agent': p['agent'], 'group_ids': p['group_ids'], 'notes': [n['id'] for n in p['notes']],
                                                          'issues': {k: [i.get('issue_id') for i in v] for k, v in p['issues'].items()}, 'message': p['message']} for p in prepared_all],
@@ -240,6 +242,7 @@ async def snapshot(project: str, ep: str, body: dict | None = None):
         base, doc, episode = _load(project, ep)
         gid = str(body.get('group_id') or '')
         component(gid)
+        dm.require_plan(base, ep, [gid])
         group = next((g for g in episode['groups'] if g['group_id'] == gid), None)
         if group and dm.latest_sha(doc, gid) == dm.group_sha(episode, group):
             raise ValueError('当前白模与最新版本相同,不必重复存版')
@@ -273,6 +276,7 @@ async def overrides_set(project: str, ep: str, gid: str, body: dict):
 
     def _do():
         base = project_path(project, ep, gid)
+        dm.require_plan(base, ep, [gid])
         ov = dm.load_overrides(base, ep)
         group_ov = dm.set_group_overrides(ov, gid, body)
         dm.save_overrides(base, ep, ov)
@@ -326,6 +330,8 @@ async def approve(project: str, ep: str, body: dict | None = None):
         base, doc, episode = _load(project, ep)
         gid = str(body.get('group_id') or '')
         component(gid)
+        if body.get('approve', True):
+            dm.require_plan(base, ep, [gid])
         group = next((g for g in episode['groups'] if g['group_id'] == gid), None)
         sha = dm.group_sha(episode, group) if group else None
         rec = dm.set_approval(doc, gid, sha, bool(body.get('approve', True)))

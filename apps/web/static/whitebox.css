@@ -60,3 +60,11 @@
 /* 导演台入口(2026-09-13):组卡白模面板「✏️ 编辑」旁的链接,样式随 .editbtn */
 a.wb-director,.wb-heading a.wb-director{display:inline-block;box-sizing:border-box;font-size:10.5px;line-height:normal;padding:0 6px;flex:none;background:var(--panel2,#222a36);border:1px solid var(--border,#3b4658);border-radius:5px;color:var(--dim,#8b93a7);cursor:pointer;text-decoration:none;font-family:inherit}
 a.wb-director:hover,.wb-heading a.wb-director:hover{color:var(--accent);border-color:var(--accent)}
+/* 未经白模调度的组:默认只出占位;点开的自动推断草稿带横幅 + 画面水印,不给修改入口 */
+.wb-unplanned{justify-content:center;gap:6px;border-style:dashed}
+.wb-unplanned-msg{color:#dde3ee;font-size:13px}
+.wb-unplanned-hint{color:#99a8bb}
+.wb-draft{border-color:#6b5a2e}
+.wb-draft-banner{padding:6px 9px;border-radius:6px;background:#2e2716;border:1px solid #6b5a2e;color:#e3b66b}
+.wb-draft figure{position:relative}
+.wb-draft figure::after{content:attr(data-draft);position:absolute;top:8px;inset-inline-start:8px;padding:2px 8px;border-radius:4px;background:rgba(46,39,22,.85);border:1px solid #6b5a2e;color:#e3b66b;font-size:11px;pointer-events:none}

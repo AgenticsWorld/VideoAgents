@@ -118,6 +118,18 @@ def _next_id(items: list, prefix: str) -> str:
     return f"{prefix}{n + 1:04d}"
 
 
+def plan_path(base: Path, ep: str, gid: str) -> Path:
+    return base / "directing" / ep / "whitebox_plans" / f"{gid}.json"
+
+
+def require_plan(base: Path, ep: str, gids) -> None:
+    """未经白模调度的组(没有 whitebox_plans/<grp>.json)编译出来的只是宿主自动推断的草稿:
+    只看不改——对草稿提的注释/覆盖层/批准会被正式调度整组重写,一律拒收。"""
+    missing = [g for g in dict.fromkeys(gids) if g and not plan_path(base, ep, g).is_file()]
+    if missing:
+        raise ValueError("这些组尚未白模调度(当前只是系统自动推断的草稿),白模调度完成后再提修改:" + ", ".join(missing))
+
+
 def normalize_target(target) -> dict:
     if not isinstance(target, dict):
         raise ValueError("target 须为对象 {kind, id, label}")

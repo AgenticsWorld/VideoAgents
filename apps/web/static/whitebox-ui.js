@@ -172,6 +172,19 @@ async function buildGroup(host,project,ep){
   let format;
   try{format=projectRenderFormat(settings);}catch(e){host.textContent=wbMessage(e.message);return st;}
   const scene=data.scenes[group.scene_id];
+  // 未经白模调度的组(没有 whitebox_plans/<grp>.json)编译出来的只是宿主按存量分镜推断的草稿:默认不播,
+  // 只出占位 + 「查看自动推断草稿」;点开后带草稿水印,且不给 ✏️ 编辑 / 📺 导演台 / 待决项入口(对草稿提意见会被正式调度整组重写)。
+  // 只认明确的 plan===false;状态未知(静态 episode.json 回退、旧服务)按已调度处理
+  const draft=group.artifact_status?.plan===false;
+  if(draft&&!host.dataset.wbDraftOpen){
+    host.className='wb-panel wb-host wb-unplanned';host.style.minHeight='';
+    host.innerHTML=`<div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong></div>
+      <div class="wb-unplanned-msg">${esc(t('本组尚未白模调度，当前没有可审看的白模。'))}</div>
+      <div class="wb-unplanned-hint">${esc(t('白模调度 Agent 完成本集工单后这里会显示正式白模；在此之前无需对白模提修改意见。'))}</div>
+      <div><button type="button" class="editbtn wb-draft-open" title="${esc(t('系统按分镜与动线自动推断的粗略白模，机位、走位、朝向多为估计值，不是白模调度的交付物'))}">${esc(t('查看自动推断草稿（仅供参考，不接受修改）'))}</button></div>`;
+    host.querySelector('.wb-draft-open').onclick=()=>{host.dataset.wbDraftOpen='1';retryGroup(host);};
+    return st;
+  }
   const fileState=value=>value===true?t('已有'):value===false?t('未生成'):t('未知');
   const statusItems=[t('场景模型：{state}',{state:fileState(scene.artifact_status?.model)}),
     t('调度计划：{state}',{state:fileState(group.artifact_status?.plan)}),
@@ -180,12 +193,13 @@ async function buildGroup(host,project,ep){
   const editLocation=t('3D 白模 {marker}（场景 {scene}；镜头 {shots}；调度 {plan}；模型 {model}；预览 {preview}）',{
     marker:`[whitebox:${project}/${ep}/${gid}]`,scene:scene.scene_id,shots:group.cameras.map(c=>c.shot_id).join(', '),
     plan:`directing/${ep}/whitebox_plans/${gid}.json`,model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`});
-  host.className='wb-panel wb-host';host.style.minHeight='';
+  host.className='wb-panel wb-host'+(draft?' wb-draft':'');host.style.minHeight='';
   host.style.setProperty('--wb-aspect',`${format.width} / ${format.height}`);
-  host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong><button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button><a class="editbtn wb-director" href="/preview/director?project=${encodeURIComponent(project)}&ep=${encodeURIComponent(ep)}&grp=${encodeURIComponent(gid)}" title="${esc(t('到导演台:大视窗看白模,逐对象写修改注释,批量提交并按版本 A|B 比对'))}">${esc(t('📺 导演台'))}</a></div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||!group.artifact_status?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div></div>
+  const draftTag=esc(t('自动推断草稿'));
+  host.innerHTML=`${draft?`<div class="wb-draft-banner">${esc(t('自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。'))}</div>`:''}<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)} / ${esc(gid)}</strong>${draft?'':`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button><a class="editbtn wb-director" href="/preview/director?project=${encodeURIComponent(project)}&ep=${encodeURIComponent(ep)}&grp=${encodeURIComponent(gid)}" title="${esc(t('到导演台:大视窗看白模,逐对象写修改注释,批量提交并按版本 A|B 比对'))}">${esc(t('📺 导演台'))}</a>`}</div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||!group.artifact_status?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div></div>
     <div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div>
-    <figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>
-    <figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span></figcaption></figure>
+    <figure data-draft="${draftTag}"><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>
+    <figure data-draft="${draftTag}"><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption><span>${esc(t('空间与摄像机位置'))}</span></figcaption></figure>
     <div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>
     <div class="wb-issues"></div>
     <div class="wb-status wb-result" role="status"></div>`;
@@ -197,7 +211,7 @@ async function buildGroup(host,project,ep){
   statusBtn.onclick=e=>{e.stopPropagation();const open=!statusPop.classList.contains('open');document.querySelectorAll('.wb-statuspop.open').forEach(x=>x.classList.remove('open'));statusPop.classList.toggle('open',open);statusBtn.setAttribute('aria-expanded',String(open));};
   st.els.play.onclick=()=>{if(!st.rr)return;if(st.time>=st.end)st.time=0;st.playing=!st.playing;st.previous=performance.now();st.els.play.textContent=t(st.playing?'暂停':'播放');kick();};
   st.els.range.oninput=e=>{st.time=Number(e.target.value);st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();};
-  st.ep=ep;st.issues=q('.wb-issues');renderIssues(st);
+  st.ep=ep;st.issues=q('.wb-issues');if(draft)st.issues.hidden=true;else renderIssues(st);
   return st;
 }
 

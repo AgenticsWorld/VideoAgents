@@ -38,7 +38,7 @@ const tick=now=>{const fns=[...frames.values()];frames.clear();for(const fn of f
 globalThis.TestRenderer=class {load(){} dispose(){} setTime(){} render(){} shotId='sh085';};
 // The storyboard page mounts one panel per generation group as it scrolls into
 // view; here every observed host intersects immediately.
-globalThis.IntersectionObserver=class {constructor(cb){this.cb=cb;} observe(el){this.cb([{target:el,isIntersecting:true}]);} disconnect(){}};
+globalThis.IntersectionObserver=class {constructor(cb){this.cb=cb;} observe(el){this.cb([{target:el,isIntersecting:true}]);} unobserve(){} disconnect(){}};
 globalThis.document={createElement(){return host();},addEventListener(){},querySelectorAll(){return [];}};
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r));};
 async function mountGroup(ui,gid,ep='ep01'){
@@ -108,6 +108,17 @@ scene.inferred=false;scene.artifact_status={model:true};
 group.authored=false;group.artifact_status={plan:false,preview:false,video:false};
 globalThis.fetch=async url=>respond(url.endsWith('/config')?{output:{aspect_preset:'douyin'}}:episode);
 let statusPanel=await mountGroup(ui,'grp048','ep02');
+// 未经白模调度的组默认只出占位:不播推断草稿,不给 ✏️ 编辑 / 📺 导演台入口
+assert.ok(statusPanel.className.includes('wb-unplanned'));
+assert.ok(statusPanel.innerHTML.includes('本组尚未白模调度'));
+for(const gone of ['wb-camera','wb-edit','wb-director','wb-play'])assert.ok(!statusPanel.innerHTML.includes(gone),`unplanned placeholder leaked ${gone}`);
+// 点「查看自动推断草稿」才渲染:带草稿横幅/水印,仍无修改入口与待决项
+statusPanel.querySelector('.wb-draft-open').onclick();await settle();
+assert.ok(statusPanel.className.includes('wb-draft'));
+assert.ok(statusPanel.innerHTML.includes('wb-draft-banner'));
+assert.ok(statusPanel.innerHTML.includes('wb-camera'));
+for(const gone of ['wb-edit','wb-director'])assert.ok(!statusPanel.innerHTML.includes(gone),`draft leaked ${gone}`);
+assert.equal(statusPanel.querySelector('.wb-issues').hidden,true);
 assert.ok(statusPanel.innerHTML.includes('场景模型：已有'));
 assert.ok(statusPanel.innerHTML.includes('调度计划：未生成'));
 assert.ok(statusPanel.innerHTML.includes('参考视频：未生成'));
@@ -116,6 +127,7 @@ ui.resetWhitebox();
 group.authored=true;group.artifact_status={plan:true,preview:true,video:true};
 statusPanel=await mountGroup(ui,'grp048','ep02');
 assert.ok(statusPanel.innerHTML.includes('参考视频：已有'));
+assert.ok(statusPanel.innerHTML.includes('wb-edit')&&statusPanel.innerHTML.includes('wb-director')&&!statusPanel.className.includes('wb-draft'));
 ui.resetWhitebox();
 scene.inferred=true;
 statusPanel=await mountGroup(ui,'grp048','ep02');

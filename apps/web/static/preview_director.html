@@ -76,6 +76,8 @@ header select{cursor:pointer;max-width:260px}
 .sh:hover,.sh.on{color:var(--text)}
 .sh.on{background:#1b2740}
 .sh .dur{color:var(--faint);margin-left:auto}
+.unpl{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid var(--yellow);color:var(--yellow);font-size:10px;line-height:15px}
+.unpl-bar{margin:8px 10px;padding:6px 9px;border-radius:6px;border:1px solid var(--yellow);color:var(--yellow);font-size:12px;line-height:1.5}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
 .dot.r{background:var(--red)}.dot.y{background:var(--yellow)}.dot.g{background:var(--green)}.dot.b{background:var(--accent)}
 /* 监视器 */
@@ -302,6 +304,9 @@ const Q0=new URLSearchParams(location.search);
 let DD=null,WB=null,SB=null,FORMAT=null,EP='',SEL='',VIEW='camera',VERSION='live',TIME=0,PLAYING=false,LOOP=false,
     PICK=null,OPEN_SCN=new Set(),CLOSED_ACC=new Set(),NOTE_SCOPE='group',POLL=null,LAST_MAXV={},URL_T=null,SHOWALL=false;
 const grpById=id=>WB&&WB.groups.find(g=>g.group_id===id);
+// 未经白模调度的组(没有 whitebox_plans/<grp>.json):画面只是宿主自动推断的草稿,只看不改——注释/编辑/批准/存版/提交一律关(后端同拦)
+const unplanned=id=>{const g=grpById(id);return !!(g&&g.artifact_status&&g.artifact_status.plan===false)};
+const UNPLANNED_MSG=()=>t('本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改');
 const groupIssues=gid=>(grpById(gid)||{}).issues||[];
 const groupNotes=gid=>((DD||{}).ledger||{}).notes.filter(n=>n.group_id===gid);
 const versionsOf=gid=>(((DD||{}).ledger||{}).versions||{})[gid]||[];
@@ -416,7 +421,7 @@ function renderLeft(){
       const iss=groupIssues(g.group_id),pend=iss.filter(i=>i.status==='open'||i.status==='stale').length,blk=iss.filter(i=>i.severity==='blocking'&&(i.status==='open'||i.status==='stale')).length;
       const cast=[...(g.actors||[]),...(g.extras||[])];
       h+=`<div class="grp ${g.group_id===SEL?'sel':''}" data-g="${esc(g.group_id)}">
-        <div><div class="id">${esc(g.group_id)}</div><div class="sub">${num(g.duration_s,1)}s · ${(g.cameras||[]).length}${esc(t('镜'))}${blk?` <i class="dot r" title="${esc(t('有阻断级待决项'))}"></i>`:pend?` <i class="dot y" title="${esc(t('有待决项'))}"></i>`:''}${sub?` <i class="dot b" title="${esc(t('已提交,等 Agent 处理'))}"></i>`:''}</div></div>
+        <div><div class="id">${esc(g.group_id)}</div><div class="sub">${num(g.duration_s,1)}s · ${(g.cameras||[]).length}${esc(t('镜'))}${unplanned(g.group_id)?` <span class="unpl" title="${esc(UNPLANNED_MSG())}">${esc(t('未调度'))}</span>`:''}${blk?` <i class="dot r" title="${esc(t('有阻断级待决项'))}"></i>`:pend?` <i class="dot y" title="${esc(t('有待决项'))}"></i>`:''}${sub?` <i class="dot b" title="${esc(t('已提交,等 Agent 处理'))}"></i>`:''}</div></div>
         <div class="n">${(DD.approvals||{})[g.group_id]?`<span class="apv ${(DD.approvals||{})[g.group_id].stale?'stale':''}" title="${esc((DD.approvals||{})[g.group_id].stale?t('批准后白模又变过'):t('已批准'))}">✓</span> `:''}${maxV(g.group_id)?'v'+maxV(g.group_id):'—'}${drafts?`<br>✎ ${drafts}`:''}</div>
         <div class="cast">${cast.map(a=>`<i style="background:${esc(a.color)}" title="${esc(a.label)}"></i>`).join('')}</div></div>`;
       h+=`<div class="shots">${(g.cameras||[]).map(c=>`<div class="sh" data-sh="${esc(c.shot_id)}" data-t="${c.start}"><span>${esc(c.shot_id)}</span><span class="dur">${num(c.start,1)}–${num(c.start+c.duration_s,1)}s${c.movement?' · '+esc(c.movement):''}</span></div>`).join('')}</div>`;
@@ -456,7 +461,7 @@ const ovCount=()=>{const o=OV();return Object.values(KIND_KEY).reduce((n,k)=>n+O
 const ovList=()=>{const o=OV();return Object.values(KIND_KEY).flatMap(k=>Object.keys(o[k]||{}).map(id=>k+'/'+id))};
 const lockKey=(k,id)=>k+'|'+id;
 const locked=p=>!p||LOCKS.has(lockKey(p.kind,p.id));
-const editable=p=>SOURCE_READY&&!!p&&!!KIND_KEY[p.kind]&&!locked(p)&&VERSION==='live';
+const editable=p=>SOURCE_READY&&!!p&&!!KIND_KEY[p.kind]&&!locked(p)&&VERSION==='live'&&!unplanned(SEL);
 const locksKey=()=>'director-locks:'+proj()+':'+EP+':'+SEL;
 function loadLocks(){try{LOCKS=new Set(JSON.parse(localStorage.getItem(locksKey())||'[]'))}catch(_){LOCKS=new Set()}}
 function saveLocks(){try{localStorage.setItem(locksKey(),JSON.stringify([...LOCKS]))}catch(_){}}
@@ -823,6 +828,7 @@ function setPick(p,silent){
 
 /* ---------- v2:编辑模式 / 拖动 / 关键帧 / 覆盖层 ---------- */
 function setEdit(on){
+  if(on&&unplanned(SEL)){toast(UNPLANNED_MSG());return}
   if(on&&VIEW==='world'){setView('overview');toast(t('编辑对象已切回白模视角'))}
   if(on&&VERSION!=='live'){VERSION='live';renderVersionSelects();renderRight();reloadSource();toast(t('编辑只作用于「当前(实时)」,已切回实时'))}
   EDIT=on;$('#edit').textContent=(on?'🔓 '+t('编辑中'):'🔒 '+t('锁定'));$('#edit').classList.toggle('on',on);
@@ -1236,6 +1242,7 @@ function updateMarkLabels(box,cam){
 /* 批准 */
 function renderApproveBtn(){const b=$('#approve');if(!b)return;const ap=(DD.approvals||{})[SEL];b.classList.toggle('on',!!ap);b.textContent=(ap?'✓ '+t('已批准')+(ap.stale?' ⚠':''):'✓ '+t('批准本组'));b.title=ap&&ap.stale?t('批准后白模又变过;再点一次按当前状态重新批准'):b.title}
 async function toggleApprove(){
+  if(unplanned(SEL)){toast(UNPLANNED_MSG());return}
   const ap=(DD.approvals||{})[SEL];const on=!ap||ap.stale;
   try{const r=await J(api('/approve'),'POST',{group_id:SEL,approve:on});DD.approvals=r.approvals;DD.summary=r.summary;renderApproveBtn();renderLeft();renderEps();toast(on?t('已批准本组'):t('已取消批准'))}
   catch(e){toast(t('批准失败:')+e.message)}
@@ -1353,6 +1360,8 @@ function renderRight(){
   const drafts=notes.filter(n=>n.status==='draft'),draftsAll=notesAll.filter(n=>n.status==='draft'),draftsG=notesAll.filter(n=>n.status==='draft'&&n.group_id===gid);
   const acc=(id,title,cnt,body)=>`<div class="acc ${CLOSED_ACC.has(id)?'closed':''}" data-acc="${id}"><div class="acc-h"><span class="car">${CLOSED_ACC.has(id)?'▸':'▾'}</span>${title}<span class="cnt">${cnt}</span><span class="sp"></span></div><div class="acc-b">${body}</div></div>`;
   let h=`<div class="col-h">${esc(t('修改队列'))} <span class="lite">${esc(gid||'')}</span><span class="sp"></span><span class="seg" id="nscope"><span data-s="group" class="${NOTE_SCOPE==='group'?'on':''}">${esc(t('本组'))}</span><span data-s="all" class="${NOTE_SCOPE==='all'?'on':''}">${esc(t('全集'))}</span></span></div><div class="scroll" id="rscroll">`;
+  const draftOnly=unplanned(gid);
+  if(draftOnly)h+=`<div class="unpl-bar">${esc(t('自动推断草稿'))} · ${esc(UNPLANNED_MSG())}</div>`;
   // 1. Agent 提问
   h+=acc('iss',`⚠ ${esc(t('Agent 提问'))}`,issues.length?`${issues.length}${pend.length?' · '+esc(I18N.f('待答 {n}',{n:pend.length})):''}${decided.length?' · '+esc(I18N.f('已选 {n},提交时套用',{n:decided.length})):''}`:'0',
     issues.length?issues.map(issueHtml).join(''):`<div class="bat">${esc(t('本组没有待决项(白模调度 Agent 没有拿不准的取舍)'))}</div>`);
@@ -1360,7 +1369,7 @@ function renderRight(){
   const ovAll=Object.keys((DD.overrides||{})).filter(k=>NOTE_SCOPE==='all'||k===gid);
   const ovRow=ovAll.map(k=>{const o=(DD.overrides||{})[k]||{};const list=Object.values(KIND_KEY).flatMap(kk=>Object.keys(o[kk]||{}).map(id=>kk+'/'+id));return list.length?`<div class="note ${k!==gid?'other':''}"><div class="r1"><span class="tg"><i style="background:var(--yellow)"></i>${esc(t('覆盖层'))}</span>${k!==gid?`<button class="xs" data-gsel="${esc(k)}">${esc(k)}</button>`:''}<span class="sp"></span><span class="st submitted">${esc(t('未固化'))}</span></div><div class="txt" data-no-i18n>${esc(I18N.f('{n} 个对象已在 3D 里直接改定:{list}',{n:list.length,list:list.join(', ')}))}</div><div class="r2"><span>${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span></div></div>`:''}).join('');
   const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
-    <div class="nform" id="nform">
+    <div class="nform" id="nform"${draftOnly?' style="display:none"':''}>
       <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
       <div class="row"><label>${esc(t('发给'))}</label><select id="nf-agent">${Object.entries(DD.routes||{}).map(([a,l])=>`<option value="${esc(a)}">${esc(l)}${a===DD.agent?' · '+esc(t('默认')):''}</option>`).join('')}</select></div>
       <div class="row"><label>${esc(t('镜/时刻'))}</label><div style="display:flex;gap:6px;align-items:center"><select id="nf-shot" style="width:auto"></select><label style="display:inline-flex;gap:4px;align-items:center;color:var(--dim)"><input type="checkbox" id="nf-uset" checked> t=</label><input type="number" id="nf-t" step="0.1" min="0" style="width:70px"> s</div></div>
@@ -1374,7 +1383,7 @@ function renderRight(){
   // 3. 已提交版本
   const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
   const batches=(DD.ledger.batches||[]).filter(b=>NOTE_SCOPE==='all'||b.group_ids.includes(gid)).slice().reverse();
-  const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;选择一个版本预览播放'))}</span><button class="sm" id="snap">${esc(t('把当前存为版本'))}</button></div>
+  const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;选择一个版本预览播放'))}</span><button class="sm" id="snap"${draftOnly?' disabled':''}>${esc(t('把当前存为版本'))}</button></div>
     ${vs.map(v=>`<div class="ver"><span class="v">v${v.v}</span><span class="lb" data-no-i18n>${esc(v.label||'')}${v.batch_id?' · '+esc(v.batch_id):''}</span><span class="lb">${esc((v.created_at||'').slice(5,16))}</span><span class="sp"></span>${String(VERSION)===String(v.v)?`<span class="cur">${esc(t('当前选择'))}</span>`:''}<button class="xs" data-version="${v.v}">${esc(t('预览'))}</button></div>`).join('')||`<div class="bat">${esc(t('还没有版本;首次提交会自动存一份基线'))}</div>`}
     ${batches.length?`<div class="sec-h" style="position:static">${esc(t('批次'))} <span class="lite">${batches.length}</span></div>`:''}
     ${batches.map(b=>`<div class="bat"><b>${esc(b.id)}</b> <span class="st ${esc(b.status)}">${esc((DD.labels.batch_status||{})[b.status]||b.status)}</span> · ${esc(b.group_ids.join(', '))} · ${esc(I18N.f('{n} 条注释',{n:(b.note_ids||[]).length}))}${(b.issue_ids||[]).length?' · '+esc(I18N.f('{n} 项裁决',{n:b.issue_ids.length})):''}${b.run_id?` · <a href="/?run=${encodeURIComponent(b.run_id)}" target="_blank" data-no-i18n>${esc(String(b.run_id).slice(0,8))}</a>`:''}${Object.keys(b.versions||{}).length?' → '+esc(Object.entries(b.versions).map(([g,v])=>g+' v'+v).join(', ')):''}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}<br><span data-no-i18n>${esc(b.created_at||'')}</span></div>`).join('')}`;
@@ -1436,6 +1445,7 @@ function fillNoteForm(p,keepText){
 }
 async function saveNote(){
   const btn=$('#nf-save'),msg=$('#nf-msg');
+  if(unplanned(SEL)){msg.textContent=UNPLANNED_MSG();msg.className='msg err';return}
   const [kind,id]=($('#nf-target').value||'|').split('|');const opt=$('#nf-target').selectedOptions[0];
   const body={group_id:SEL,target:{kind,id,label:opt?opt.dataset.label:id},text:$('#nf-text').value,shot_id:$('#nf-shot').value||null,
     t:$('#nf-uset').checked?Number($('#nf-t').value):null,view:VIEW,base_v:maxV(SEL)||null,target_agent:$('#nf-agent')?$('#nf-agent').value:undefined};
