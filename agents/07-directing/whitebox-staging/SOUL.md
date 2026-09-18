@@ -45,6 +45,20 @@ python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 
 每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不导出 camera.mp4**：导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（成片发布页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
 
+## 白模自检（2026-09-18，条件式：仅运行提示词「白模自检设定」写明**开启**时执行）
+
+数值自检与 `--check-only` 只能证明“设定数值一致”“几何可用”，证明不了“画面符合构图”（dzg6 grp011 背影被读成正脸即此类）。开关开启时，用宿主出的静帧补上这一项：
+
+```sh
+python code/render_whitebox.py --project <slug> --ep <ep> --stills grp011 grp012   # 同 --compile-only 编译落盘 + 出联系表
+```
+
+- **适用白名单**：本单**新建或改动过**的组（调度工单、导演台修改批次、套用已裁决项、用户点名的修改）。同场景模型/同组人物道具变更波及的组一并算改动。**不适用**：未改动的组、`p6-whitebox-export` 导出工单、样片工单、纯 `--verify-export` 核验；开关关闭时整节不执行。整集首次调度组数多时按场次分批传组号，不要求一条命令跑完。
+- 输出 `directing/<ep>/whitebox/stills/<grp>.jpg`：每镜一行，`cam` 格是该镜首/中/尾及机位关键帧时刻的摄影机视角，末格 `space` 是空间视角，角标为 `镜号 视角 t=组内秒`。用读图工具逐张查看，对照该镜 camera/composition/blocking 核对：① 主体在画内且落在构图指定的画面位置；② 未被墙、道具、前景人物挡住，机位没有隔墙或埋进几何体；③ 正面/侧面/背影与 blocking 朝向一致（白模背影无眼鼻，见到眼睛=面向镜头）；④ 景别与 shot_list 大致相符；⑤ 首尾帧之间的运动方向与 motion_direction 一致；⑥ 不该入画的人没有入画。
+- 发现问题回到计划改数值（不得靠隐藏人物、缩小人物、换掉导演指定机位来掩盖），属于取舍的照常开 `issues[]`；改后对该组重跑 `--stills` 复看。改数值重编译没有生成成本，不属于「用户重跑次数设定」约束的重 roll；但同一组自检修正最多 2 轮，仍不满意就保留当前方案、把问题写进回执交用户在预览页裁决。
+- 只用这条宿主命令：禁止自写 Playwright/浏览器脚本、打开预览页截图或导出 camera.mp4 来代替（`--stills` 全本地、无生成成本，不写 manifest、不接 refs，不属于 H3W 签字前禁止的导出）。命令因缺 Chromium/Playwright 失败时如实上报，回执写 `"stills_checked": "unavailable"`，不阻断交付。
+- 回执增加 `stills_checked`：开启时为逐组 `{"group_id","sheet","result":"ok|fixed|issue","notes"}` 数组；关闭时写 `"disabled"`。读图结论只是交付前自检，不代替用户 H3W 签字。
+
 ## 导演台修改批次（2026-09-13）
 
 用户在导演台（`/preview/director`）看着 3D 白模逐对象写的修改注释,会以「导演台修改批次」指令派给本岗（`docs/whitebox.md`「导演台」）。处理规则:

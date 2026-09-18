@@ -911,3 +911,54 @@ def test_preview_storyboard_shot_poses(subtitled_reel_project, monkeypatch):
         {'id': 'CHAR-0001', 'name': '老道儿', 'pose': 'sit', 'pose_zh': '坐', 'action': '低头'},
         {'id': 'CHAR-0002', 'name': '王三合', 'pose': 'stand', 'pose_zh': '站', 'action': ''}]
     assert shots['sh2']['poses'] == [{'id': 'CHAR-0002', 'name': '王三合', 'pose': 'kneel', 'pose_zh': '跪', 'action': ''}]
+
+
+def test_stills_sample_times_cover_edges_keyframes_and_cap():
+    from modules.whitebox_stills import sample_times
+    static=sample_times({'start':6.0,'duration_s':6.0,'keyframes':[{'t':0},{'t':6.0}]})
+    assert len(static)==3 and 6.0<static[0]<6.1 and static[1]==9.0 and 11.9<static[2]<12.0
+    moving=sample_times({'start':0,'duration_s':4.0,'keyframes':[{'t':0},{'t':1.5},{'t':4.0}]})
+    assert 1.5 in moving and len(moving)==3
+    dense=sample_times({'start':0,'duration_s':10.0,'keyframes':[{'t':i} for i in range(11)]})
+    assert len(dense)==5 and dense[0]<0.1 and dense[-1]>9.9 and dense==sorted(dense)
+
+
+def test_cli_stills_compiles_and_writes_contact_sheet_without_export(project,monkeypatch):
+    """--stills = compile-only + one contact sheet per selected group; never exports camera.mp4."""
+    import base64
+    import io
+    from PIL import Image
+    import playwright.sync_api
+    buf=io.BytesIO();Image.new('RGB',(96,54),'blue').save(buf,format='JPEG');frame=base64.b64encode(buf.getvalue()).decode()
+    views=[]
+    class FakePage:
+        def add_init_script(self,*a):pass
+        def goto(self,url):assert url.endswith('whitebox-stills.html')
+        def wait_for_function(self,*a,**kw):pass
+        def evaluate(self,fn,arg):
+            if '.frame(' in fn:views.append(arg[1]);return frame
+    class FakeBrowser:
+        def new_page(self,**kw):return FakePage()
+        def close(self):pass
+    class FakePlaywright:
+        def __init__(self):self.chromium=self
+        def __enter__(self):return self
+        def __exit__(self,*a):pass
+        def launch(self,**kw):return FakeBrowser()
+    monkeypatch.setattr(playwright.sync_api,'sync_playwright',FakePlaywright)
+    cli=whitebox_cli(monkeypatch,project,'--stills','grp1')
+    monkeypatch.setattr(cli,'ensure_videos',lambda *a,**kw:pytest.fail('--stills exported video'))
+    assert cli.main()==0
+    sheet=project/'directing/ep01/whitebox/stills/grp1.jpg'
+    assert sheet.is_file() and (project/'directing/ep01/whitebox/episode.json').is_file()
+    assert not (project/'assets/whitebox').exists()
+    shots=len(compile_episode(project,'ep01')['groups'][0]['cameras'])
+    assert views.count('overview')==shots and views.count('camera')>=3*shots
+    with Image.open(sheet) as im:assert im.width>448 and im.height>=shots*200
+
+
+def test_export_renderer_fingerprint_ignores_stills_page():
+    """Stills page must stay out of the export fingerprint, or every saved camera.mp4 turns stale."""
+    import inspect
+    from modules import whitebox_export
+    assert 'whitebox-stills' not in inspect.getsource(whitebox_export.renderer_fingerprint)

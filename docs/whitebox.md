@@ -206,6 +206,18 @@ API（前缀 `/api/v1/projects/<project>/whitebox`）：GET `/scenes/<sid>`、GE
 
 `dzg6/ep01` 的8个场景已按其俯视图写入带比例依据的白模。它们位于用户项目 data 目录（按仓库约定不提交）。数值轨迹尚有遗留推断，不能把粗模视为最终镜头调度。最终视频模型画面仍在原分镜组卡中，白模输出不会自动上传到生成渠道。
 
+## 白模自检静帧（2026-09-18，`modules/whitebox_stills.py`）
+
+「设置→高级→Agent 高级设置」的「白模自检」开关（全局，默认开，`state.json` 键 `whitebox_selfcheck`）经运行提示词只注入白模调度 Agent。开启时该工位在编译通过后对**本单改动过的组**运行：
+
+```sh
+python code/render_whitebox.py --project dzg6 --ep ep01 --stills grp011 grp012
+```
+
+行为同 `--compile-only`（编译、落盘 episode.json 与场景模型），随后用无头 Chromium 加载 `apps/web/static/whitebox-stills.html`（与预览/导出同一 `WhiteboxRenderer`）逐镜采样：首、尾各向内收一帧，加镜内机位关键帧，不足 3 个补中点，每镜最多 5 格摄影机视角，再加 1 格空间视角；按项目画幅缩到长边 448px 拼成每组一张联系表 `directing/<ep>/whitebox/stills/<grp>.jpg`，stdout 的 `stills[]` 给出各组表路径与采样时刻。Agent 读图核对主体在画内、遮挡、朝向、景别、运动方向（细则见白模调度 SOUL「白模自检」），回执 `stills_checked` 留证，对应上文“视觉符合构图”一项的交付前自检；最终仍以用户在预览页审看与 H3W 签字为准。
+
+全本地渲染、不调用生成模型；不写 manifest、不产出 camera.mp4、不接 refs，因此不受“签字前不得导出”约束。静帧页独立于 `whitebox-export.html`，后者计入导出渲染器指纹，改它会让全部已导出视频过期。依赖同导出（Playwright + Chromium，桌面运行时已内置）；缺依赖时命令报错，Agent 上报 `unavailable` 不阻断交付。关闭开关后 Agent 不跑 `--stills`，只做数值自检与宿主机检。
+
 ## 实景图视图（2026-09-09）
 
 分镜预览组卡与场景预览页的「空间与摄像机位置」视角下拉新增「实景图」：把该场景的俯视布局图 `layout_top.png` 按 `dimensions_m` 铺在地面（图上缘 = 北 = -Z），隐藏灰盒几何、地板与网格，只留实景俯视图 + 人物模型 + 机位与视线，用于比对分镜背景图的方向与画内内容是否正确。贴图经项目 artifacts 接口加载，导出页不加载；俯视图本身不进视频参考图。

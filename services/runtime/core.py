@@ -473,6 +473,12 @@ def max_retries_setting() -> int:
     return max(0, min(n, MAX_RETRIES_MAX))
 
 
+def whitebox_selfcheck_setting() -> bool:
+    """白模自检开关(默认开;设置菜单「高级→Agent 高级设置」):开启时白模调度工位编译后
+    用宿主 `render_whitebox.py --stills` 出静帧联系表并读图核对取景,关闭时只做数值自检。"""
+    return bool(STATE.get("whitebox_selfcheck", True))
+
+
 def confirm_timeout_setting() -> int:
     """重跑类确认弹窗倒计时时长(秒,CONFIRM_TIMEOUT_MIN..CONFIRM_TIMEOUT_MAX,越界钳制;
     设置菜单「高级→Agent 高级设置」)。签字类确认永不超时,不受此项影响。"""
@@ -3129,6 +3135,15 @@ def build_role_prompt(agent_id: str, project: str,
           + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做;自检不过时保留当前产物,缺陷逐条写进回执交用户裁决,不得自行重新生成)" if max_retries == 0 else
              f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
           + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
+    if agent_id == WHITEBOX_REEL_AGENT:
+        p += ("\n\n## 白模自检设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
+              + ("- 白模自检:**开启** —— 白模调度/修改类工单在 `--compile-only` 通过后,**仅对本单新建或改动过的组**运行 "
+                 "`python code/render_whitebox.py --project <slug> --ep <ep> --stills <组号…>`(宿主无头渲染,本地、无生成成本,"
+                 "不属于「签字前不得导出」的 camera.mp4),用读图工具查看输出的联系表逐镜核对取景,细则见 SOUL.md「白模自检」;"
+                 "未改动的组、导出工单(p6-whitebox-export)、样片工单不跑;禁止自写浏览器/截图脚本或打开预览页代替"
+                 if whitebox_selfcheck_setting() else
+                 "- 白模自检:**关闭** —— 不运行 `render_whitebox.py --stills`、不自行开浏览器截图验证白模,只做数值自检与宿主机检;"
+                 "回执 `stills_checked` 写 `\"disabled\"`"))
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -13581,6 +13596,7 @@ async def api_agent_advanced_get():
               "thinking_effort": thinking_effort_setting(),
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
               "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
+              "whitebox_selfcheck": whitebox_selfcheck_setting(),
               "max_turns": max_turns_setting(),
               "max_turns_default": MAX_TURNS_DEFAULT,
               "max_turns_min": MAX_TURNS_MIN,
@@ -13598,6 +13614,8 @@ async def api_agent_advanced_set(body: dict):
       到点无人答复自动落默认答案;签字类不受影响;持久化,对后续发起的确认生效
     - thinking_effort:思考深度统一设置(THINKING_EFFORT_LEVELS 之一,空串=引擎默认),
       派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效
+    - whitebox_selfcheck:白模自检开关(布尔,默认开):开启时经运行提示词让白模调度工位在编译后
+      跑 `render_whitebox.py --stills` 读静帧联系表核对取景;持久化,对后续启动的运行生效
     - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
       引擎有 --max-turns 参数,撞上限即被切断且无续跑,大批量工位需放宽);持久化,
       对后续启动的运行生效"""
@@ -13616,6 +13634,8 @@ async def api_agent_advanced_set(body: dict):
             raise ServiceError(400, "thinking_effort must be one of: "
                                + ", ".join(x or "(default)" for x in THINKING_EFFORT_LEVELS))
         updates["thinking_effort"] = lv
+    if body.get("whitebox_selfcheck") is not None:
+        updates["whitebox_selfcheck"] = bool(body.get("whitebox_selfcheck"))
     if body.get("max_retries") is not None:
         try:
             n = int(body.get("max_retries"))
@@ -13645,7 +13665,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("global_concurrency", "agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:

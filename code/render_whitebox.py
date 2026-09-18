@@ -23,6 +23,7 @@ def main():
         parser.add_argument('--check-only',action='store_true')
         parser.add_argument('--verify-export',action='store_true',help='机检 whitebox_videos_exported:编译后核对所选组 camera.mp4/manifest 存在且源指纹为当前值,不导出;缺/过期退出码 1')
         parser.add_argument('--compile-only',action='store_true',help='只编译并落盘 episode.json / whitebox.scene.json,不导出视频、不接线(白模调度阶段,待用户签字后再导出)')
+        parser.add_argument('--stills',action='store_true',help='白模自检(Agent 高级设置「白模自检」开启时):同 --compile-only 编译落盘后,无头渲染所选组每镜若干时刻的摄影机视角+空间视角,拼成联系表 directing/<ep>/whitebox/stills/<grp>.jpg 供 Agent 读图核对取景;不导出 camera.mp4、不接线')
         parser.add_argument('--width',type=int,help='Override together with --height; must preserve project aspect')
         parser.add_argument('--height',type=int,help='Default dimensions follow project aspect (960px long edge)')
         parser.add_argument('--fps',type=int,default=24)
@@ -69,6 +70,11 @@ def main():
         print(json.dumps({'whitebox_videos_exported':{'groups':len(report),'ok':len(report)-len(bad),'problems':bad}},ensure_ascii=False),flush=True)
         print(f"[whitebox_videos_exported] {args.project}/{args.ep}: {len(bad)} 组缺/过期 -> {'FAIL' if bad else 'PASS'}",flush=True)
         return 1 if bad else 0
+    if args.stills:
+        from modules.whitebox_stills import render_stills
+        sheets=render_stills(base,episode,sorted(selected) if scoped else None,progress=lambda gid:print(f'{gid}: stills ok',flush=True))
+        print(json.dumps({'compiled':[g['group_id'] for g in episode['groups']],'stills':sheets,'videos':'skipped(--stills:仅自检静帧,不导出)'},ensure_ascii=False),flush=True)
+        return 0
     if args.compile_only:
         print(json.dumps({'compiled':[g['group_id'] for g in episode['groups']],'videos':'skipped(--compile-only:待用户签字 H3W-白模确认后再导出)'},ensure_ascii=False),flush=True)
         return 0

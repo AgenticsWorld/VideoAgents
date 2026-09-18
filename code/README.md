@@ -45,4 +45,6 @@ _REPO = next(p for p in _Path(__file__).resolve().parents if (p / "modules").is_
 _sys.path[:0] = [str(_REPO / "modules"), str(_REPO / "code")]
 ```
 
+白模自检静帧(2026-09-18,Agent 高级设置「白模自检」开启时由白模调度工位对改动过的组执行):`python code/render_whitebox.py --project <slug> --ep ep01 --stills grp011` 同 --compile-only 编译落盘后无头渲染每镜首/中/尾等时刻的摄影机视角+空间视角,拼成 `directing/<ep>/whitebox/stills/<grp>.jpg` 供 Agent 读图核对取景;不导出 camera.mp4、不接线(docs/whitebox.md「白模自检静帧」)。
+
 白模摄影机视角参考视频(2026-09-08 起白模只导出摄影机视角 camera.mp4,不再导出俯视 top.mp4(俯视仅在预览页交互查看))：`python code/render_whitebox.py --project <slug> --ep ep01` 默认编译并自动保存 camera.mp4、manifest.json 至 `assets/whitebox/<ep>/<grp>/`。可追加组号，或用 `--scene <sid>` 更新引用该场景的所有组；完整且指纹/规格匹配的视频自动复用，`--force` 强制重出。`--check-only` 仅校验，不完成视频交付；旧 `--export` 保留兼容。尺度、关键帧与 Agent 分工见 [白模规约](../docs/whitebox.md)。
