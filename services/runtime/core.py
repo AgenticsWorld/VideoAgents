@@ -812,7 +812,10 @@ DEFAULT_GENCONFIG = {
     # ComfyUI 渠道与图像/视频等段同口径:运行方式 mode=local(本地 InfiniteTalk)/
     # cloud(Comfy Cloud)/rh_cn/rh_ai(RunningHub 云端工作区工作流,rh_* 字段)
     "digital_human": {
-        "provider": "heygen",  # heygen | klingai | comfyui
+        "provider": "heygen",  # agentics | heygen | klingai | comfyui
+        # Agentics(2026-09-18):登录桌面端账号调用数字人 profile(media_type=DigitalHuman,
+        # 现有 infiniteTalk-1char / infiniteTalk-2char),profile_code 与视频等段同口径
+        "agentics": {"profile_code": ""},
         "heygen": {"api_key": "", "resolution": "720p", "aspect_ratio": "16:9"},
         "klingai": {"api_key": "", "mode": "std"},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
@@ -10545,7 +10548,7 @@ async def api_genconfig_set(body: dict):
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
     if any((cfg.get(kind) or {}).get("provider") == "agentics"
-           for kind in ("image", "video", "music", "tts", "deepagents")):
+           for kind in ("image", "video", "music", "tts", "digital_human", "deepagents")):
         resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
     if dh_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
@@ -10879,7 +10882,8 @@ OPENROUTER_TTS_MODELS = [
     ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
 ]
 
-AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4}
+# 与 modules/genmedia.py 同步;digital_human(2026-09-18)=数字人 profile(infiniteTalk-1char 等)
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5}
 
 
 def _agentics_response_data(payload: dict) -> dict:
@@ -10897,7 +10901,7 @@ async def api_agentics_models(modality: str = "image", refresh: bool = False):
     """List signed-in Agentics media profiles or AgenticsLLM text models."""
     del refresh  # Service-side ordering and freshness are authoritative.
     if modality not in (*AGENTICS_MEDIA_TYPES, "media", "text"):
-        raise ServiceError(400, "modality must be one of image / video / music / tts / media / text")
+        raise ServiceError(400, "modality must be one of image / video / music / tts / digital_human / media / text")
     connection = resolve_agentics_connection()
     headers = {"Authorization": f"Bearer {connection['api_key']}"}
     try:
@@ -11762,9 +11766,20 @@ COMFY_CLOUD_API = "https://cloud.comfy.org/api"
 
 
 async def api_test_digitalhuman(body: dict):
-    """测试数字人渠道凭证;Kling 固定北京;ComfyUI 按运行方式测本地/Comfy Cloud/RunningHub。"""
+    """测试数字人渠道凭证;Agentics 验登录态并列出数字人 profile;Kling 固定北京;
+    ComfyUI 按运行方式测本地/Comfy Cloud/RunningHub。"""
     provider = (body.get("provider") or "").strip()
     key = (body.get("api_key") or "").strip()
+    if provider == "agentics":
+        try:
+            catalog = await api_agentics_models("digital_human")
+        except ServiceError as e:
+            return {"ok": False, "error": e.detail}
+        models = catalog.get("models") or []
+        wanted = str(body.get("profile_code") or "").strip()
+        if wanted and not any(m.get("id") == wanted for m in models):
+            return {"ok": False, "error": f"Agentics 数字人 profile 不存在或已下线:{wanted}"}
+        return {"ok": True, "provider": provider, "models": models}
     if provider == "heygen":
         if not key:
             return {"ok": False, "error": "HeyGen API Key 未填写"}
@@ -11809,7 +11824,7 @@ async def api_test_digitalhuman(body: dict):
         return {**result, "provider": provider, "mode": mode, "infinitetalk_nodes": nodes,
                 "infinitetalk_ready": all(nodes.values()),
                 "workflow_exists": workflow.is_file()}
-    raise ServiceError(400, "provider must be heygen, klingai or comfyui")
+    raise ServiceError(400, "provider must be agentics, heygen, klingai or comfyui")
 
 
 async def api_test_comfyui(body: dict, extra_nodes: tuple[str, ...] = ()):

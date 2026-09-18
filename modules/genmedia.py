@@ -189,7 +189,12 @@ AGENTICS_SERVICE_ORIGINS = {
     "https://devapi.agentics.world",
     "https://api.shumati.cn",
 }
-AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4}
+# Agentics 媒体 profile 的 media_type 枚举(与 services/runtime/core.py 同步)。
+# digital_human(2026-09-18)=数字人:人物图 + 对白音频出说话片段,现有 profile
+# infiniteTalk-1char / infiniteTalk-2char;数值按服务端枚举顺序取 5
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5}
+# 长任务类别:等待上限同视频,超时不自动取消服务端任务(可 reclaim 继续等)
+AGENTICS_LONG_KINDS = {"video", "digital_human"}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -808,12 +813,22 @@ _AGENTICS_FIXED_FILES = {
     "music": {"reference_audios", "vocal_audio"},
     "tts": {"reference_audios"},
 }
+# 数字人 profile 与视频同一套固定字段/附件 token:人物图走 first_frame 或
+# reference_images(按 profile 实际映射),对白音频走 reference_audios
+_AGENTICS_FIXED_PARAMETERS["digital_human"] = _AGENTICS_FIXED_PARAMETERS["video"]
+_AGENTICS_FIXED_FILES["digital_human"] = _AGENTICS_FIXED_FILES["video"]
+# token_schema.media_type 文本别名 -> 本地 kind
+_AGENTICS_SCHEMA_KIND_ALIASES = {
+    "digital_human": "digital_human", "digitalhuman": "digital_human",
+    "digital-human": "digital_human", "avatar": "digital_human",
+}
 
 
 def _agentics_profile_kind(profile: dict, schema: dict) -> str:
     expected = next((kind for kind, media_type in AGENTICS_MEDIA_TYPES.items()
                      if media_type == profile.get("media_type")), "")
     actual = str(schema.get("media_type") or "")
+    actual = _AGENTICS_SCHEMA_KIND_ALIASES.get(actual.lower(), actual)
     if schema.get("version") != 1 or not expected or actual != expected:
         raise RuntimeError(
             f"AgenticsLLM profile {profile.get('profile_code')} 不是有效的 media-generation/v1 映射")
@@ -966,11 +981,12 @@ def _agentics_download(task_id: str, artifact_url: str, deadline: float) -> byte
 
 def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
     """Wait for one existing task; transport failures never create a replacement task."""
-    timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "image": IMAGE_TIMEOUT,
-               "music": MUSIC_TIMEOUT, "tts": TTS_TIMEOUT}.get(kind, 600)
+    timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "digital_human": AGENTICS_VIDEO_TIMEOUT,
+               "image": IMAGE_TIMEOUT, "music": MUSIC_TIMEOUT, "tts": TTS_TIMEOUT}.get(kind, 600)
     started = time.time()
     deadline = started + timeout
-    poll_interval = VIDEO_POLL_INTERVAL if kind == "video" else 2
+    long_task = kind in AGENTICS_LONG_KINDS
+    poll_interval = VIDEO_POLL_INTERVAL if long_task else 2
     last_status: int | None = None
     last_beat = 0.0
     failures = 0
@@ -1015,10 +1031,10 @@ def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
                         f"{task.get('error_message') or '未知错误'}")
 
             if time.time() >= deadline:
-                if kind != "video":
+                if not long_task:
                     _agentics_cancel(task_id)
                 action = ("任务未被取消，可用 reclaim --task-id 继续等待，切勿重新提交"
-                          if kind == "video" else "任务已请求取消")
+                          if long_task else "任务已请求取消")
                 raise RuntimeError(
                     f"AgenticsLLM {kind} 等待超过 {timeout}s，任务 {task_id} 未确认终态；"
                     f"{action}")
@@ -1048,7 +1064,10 @@ def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
 
 
 def _agentics_generate(kind: str, cfg: dict, values: dict,
-                        available_files: dict[str, list[str]], profile: dict | None = None) -> bytes:
+                        available_files: dict[str, list[str]], profile: dict | None = None,
+                        on_submit=None) -> bytes:
+    """创建一个 Agentics 媒体任务并等待产物;on_submit(task_id) 在任务创建后立即回调
+    (数字人台账据此记录 task_id,进程中断后可接着轮询同一任务)。"""
     configured = str(cfg.get("model") or cfg.get("profile_code") or "")
     profile = profile or _agentics_profile(kind, configured)
     parameters, files = _agentics_payload(profile, values, available_files)
@@ -1100,6 +1119,8 @@ def _agentics_generate(kind: str, cfg: dict, values: dict,
         raise RuntimeError("AgenticsLLM 媒体任务未返回 task_id")
     print(f"[genmedia] AgenticsLLM {kind} 任务已创建 {task_id}"
           f" (profile={profile['profile_code']})", file=sys.stderr, flush=True)
+    if on_submit is not None:
+        on_submit(task_id)
     return _agentics_wait(kind, task_id, task)
 
 

@@ -2,6 +2,7 @@
 """数字人单人片段生成器。
 
 输入一张人物图和一段该人物的对白音频，按「生成模型 → 数字人」配置自动路由到
+Agentics（登录桌面端账号，数字人 profile 如 infiniteTalk-1char / infiniteTalk-2char）、
 HeyGen、Kling AI（北京）或 ComfyUI 渠道；ComfyUI 渠道再按运行方式走本地 InfiniteTalk、
 Comfy Cloud 或 RunningHub 云端工作区工作流（与图像/视频等段的 comfyui 配置同口径）。
 最终母带封装由 ``modules/dialogue_video.py`` 完成；渠道返回的音轨不会进入成片。
@@ -23,14 +24,16 @@ from pathlib import Path
 try:
     from modules.avsync import probe_duration
     from modules.genmedia import (
-        CONFIG_PATH, RH_BASES, _comfy_endpoint, _comfy_fill_workflow,
+        CONFIG_PATH, RH_BASES, _agentics_generate, _agentics_profile, _agentics_wait,
+        _comfy_endpoint, _comfy_fill_workflow,
         _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
         _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
 except ModuleNotFoundError:  # python modules/digitalhuman.py ...
     from avsync import probe_duration
     from genmedia import (
-        CONFIG_PATH, RH_BASES, _comfy_endpoint, _comfy_fill_workflow,
+        CONFIG_PATH, RH_BASES, _agentics_generate, _agentics_profile, _agentics_wait,
+        _comfy_endpoint, _comfy_fill_workflow,
         _comfy_run, _comfy_upload, _get_json, _node_link, _post_json, _request,
         _resolve_comfy_workflow_path, _rh_run, _rh_upload, _rh_workflow_text,
     )
@@ -54,10 +57,14 @@ def get_config() -> dict:
     section = dict(root.get("digital_human") or {})
     _migrate_legacy_runninghub(section)
     provider = section.get("provider")
-    if provider not in {"heygen", "klingai", "comfyui"}:
-        raise RuntimeError("数字人渠道未配置；请选择 HeyGen、Kling AI 或 ComfyUI")
+    if provider not in {"agentics", "heygen", "klingai", "comfyui"}:
+        raise RuntimeError("数字人渠道未配置；请选择 Agentics、HeyGen、Kling AI 或 ComfyUI")
     cfg = dict(section.get(provider) or {})
-    if provider == "heygen":
+    if provider == "agentics":
+        # 登录态由 genmedia._agentics_connection 按桌面端注入的环境变量解析;
+        # profile_code 为空时用目录里第一个数字人 profile
+        cfg["profile_code"] = str(cfg.get("profile_code") or "")
+    elif provider == "heygen":
         cfg["api_key"] = cfg.get("api_key") or os.environ.get("HEYGEN_API_KEY", "")
         cfg["api_base"] = HEYGEN_BASE
     elif provider == "klingai":
@@ -339,6 +346,46 @@ def _comfy(image: str, audio: str, output: str, prompt: str,
     )
 
 
+def _agentics(image: str, audio: str, output: str, prompt: str,
+              seed: int | None, cfg: dict, job_path: str | None = None) -> str:
+    """Agentics 数字人 profile:人物图按 profile 映射走 first_frame 或 reference_images,
+    对白音频走 reference_audios;duration 仅在 profile 标记必填时按音频时长传入
+    (InfiniteTalk 类模型按音频长度出片,不必填时交给服务端)。台账记录 task_id,
+    中断后同一台账恢复即接着轮询同一任务,不会重复提交。"""
+    task_id = _task_id(job_path, "agentics")
+    if task_id:
+        print(f"[digitalhuman] 恢复等待 Agentics 任务 {task_id}", file=sys.stderr, flush=True)
+        data = _agentics_wait("digital_human", task_id)
+        return _write_output(data, output)
+    profile = _agentics_profile("digital_human", cfg.get("profile_code") or "")
+    schema = profile.get("token_schema") or {}
+    file_mappings = schema.get("files") if isinstance(schema, dict) else {}
+    file_mappings = file_mappings if isinstance(file_mappings, dict) else {}
+    image_token = "first_frame" if "first_frame" in file_mappings else "reference_images"
+    files = {image_token: [image], "reference_audios": [audio]}
+    values: dict = {
+        "prompt": prompt or "natural speaking, subtle head movement, steady camera",
+        "seed": seed if seed is not None else random.randrange(1, 2**31),
+    }
+    mappings = schema.get("parameters") if isinstance(schema, dict) else {}
+    duration_mapping = (mappings or {}).get("duration") if isinstance(mappings, dict) else None
+    if isinstance(duration_mapping, dict) and duration_mapping.get("required"):
+        values["duration"] = max(1, int(-(-probe_duration(audio) // 1)))
+    data = _agentics_generate(
+        "digital_human", cfg, values, files, profile=profile,
+        on_submit=lambda tid: _submitted(job_path, "agentics", tid))
+    return _write_output(data, output)
+
+
+def _write_output(data: bytes, output: str) -> str:
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".part")
+    partial.write_bytes(data)
+    partial.replace(target)
+    return output
+
+
 def _rh_active_loads(workflow: dict, class_type: str) -> list[tuple[str, dict]]:
     """返回真正连入执行图的加载节点；未被消费的作者孤岛素材不参与歧义计数。"""
     referenced = {str(value[0]) for node in workflow.values() if isinstance(node, dict)
@@ -503,6 +550,8 @@ def generate_avatar(image: str, audio: str, output: str, prompt: str = "",
     try:
         if transport == "runninghub":
             result = _runninghub(image, audio, output, prompt, seed, cfg, job_path)
+        elif cfg["provider"] == "agentics":
+            result = _agentics(image, audio, output, prompt, seed, cfg, job_path)
         elif cfg["provider"] == "comfyui":
             result = _comfy(image, audio, output, prompt, seed, cfg, job_path)
         else:

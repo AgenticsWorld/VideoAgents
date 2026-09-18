@@ -111,6 +111,7 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-digital-human">
     <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
     <div class="tabs" id="digital-human-tabs">
+      <div class="tab" id="tab-dh-agentics">Agentics</div>
       <div class="tab" id="tab-dh-heygen">HeyGen</div>
       <div class="tab" id="tab-dh-klingai">Kling AI</div>
       <div class="tab" id="tab-dh-comfyui">ComfyUI</div>
@@ -128,6 +129,9 @@ button:disabled{opacity:.5;cursor:default}
       <div class="status" id="dh-klingai-status"></div>
       <div class="hint">首版固定使用中国北京接口 <code>api-beijing.klingai.com</code>，采用 Bearer API Key 鉴权。</div>
     </div>
+    <!-- Agentics 面板由 buildPanel('digitalhuman','agentics') 生成:账号 + 数字人 profile(media_type=DigitalHuman,
+         如 infiniteTalk-1char / infiniteTalk-2char),数据源与视频等段同一份 Agentics 媒体目录 -->
+    <div class="panel" id="panel-dh-agentics"></div>
     <!-- ComfyUI 面板由 buildPanel('digitalhuman','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub 国内/国际 -->
     <div class="panel" id="panel-dh-comfyui"></div>
   </div>
@@ -511,6 +515,8 @@ function buildPanel(kind,p){
       t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
     if(kind==='image')d.appendChild(el('div',{className:'hint'},
       t('文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」')));
+    if(kind==='digitalhuman')d.appendChild(el('div',{className:'hint'},
+      t('数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段')));
   }else if(p==='openrouter'){
     d.appendChild(keyRow(`${kind}-or-key`,'sk-or-v1-…'));
     const vr=el('div',{className:'row'});
@@ -1100,9 +1106,10 @@ async function testWorldLabs(){
   st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.remaining_credits}):'✗ '+(r.error||t('验证失败'));
 }
 
+const DH_PROVIDERS=['agentics','heygen','klingai','comfyui'];
 function showDigitalHumanPanel(provider){
   DH_PROVIDER=provider;
-  const labels={heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
+  const labels={agentics:'Agentics',heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
   Object.keys(labels).forEach(p=>{
     const tab=$(`#tab-dh-${p}`);
     tab.classList.toggle('active',p===provider);
@@ -1110,7 +1117,7 @@ function showDigitalHumanPanel(provider){
     $(`#panel-dh-${p}`).classList.toggle('show',p===provider);
   });
 }
-['heygen','klingai','comfyui'].forEach(p=>{
+DH_PROVIDERS.forEach(p=>{
   $(`#tab-dh-${p}`).onclick=()=>showDigitalHumanPanel(p);
 });
 
@@ -1150,7 +1157,10 @@ async function testDigitalHuman(provider){
 
 /* ---------- OpenRouter 模型列表 ---------- */
 const orSaved=kind=>kind==='text'?(CFG.deepagents?.openrouter||{}):CFG[kind].openrouter;
-const agenticsSaved=kind=>kind==='text'?(CFG.deepagents?.agentics||{}):(CFG[kind].agentics||{});
+/* 数字人在页面里 kind='digitalhuman'(与 ComfyUI 段 id 同口径),配置段与 Agentics 目录键都是 digital_human */
+const AGENTICS_MEDIA_KINDS=[...Object.keys(SECTIONS),'digitalhuman'];
+const agenticsCfgKey=kind=>kind==='digitalhuman'?'digital_human':kind;
+const agenticsSaved=kind=>kind==='text'?(CFG.deepagents?.agentics||{}):((CFG[agenticsCfgKey(kind)]||{}).agentics||{});
 let AGENTICS_MEDIA_CATALOG_PROMISE=null;
 function agenticsMediaCatalog(refresh=false){
   if(refresh)AGENTICS_MEDIA_CATALOG_PROMISE=null;
@@ -1163,7 +1173,7 @@ function agenticsMediaCatalog(refresh=false){
 function refreshAgenticsMediaModels(){
   AGENTICS_MEDIA_CATALOG_PROMISE=null;
   return agenticsMediaCatalog(true)
-    .then(()=>Promise.all(Object.keys(SECTIONS).map(kind=>loadAgenticsModels(kind))));
+    .then(()=>Promise.all(AGENTICS_MEDIA_KINDS.map(kind=>loadAgenticsModels(kind))));
 }
 function agenticsProfileLabel(profile){
   return profile.name||profile.profile_code;
@@ -1192,7 +1202,7 @@ async function loadAgenticsModels(kind,refresh=false){
     const r=kind==='text'
       ?await api(`/api/v1/providers/agentics/models?modality=text${refresh?'&refresh=1':''}`)
       :await agenticsMediaCatalog(refresh);
-    const section=kind==='text'?r:(r.media?.[kind]||{});
+    const section=kind==='text'?r:(r.media?.[agenticsCfgKey(kind)]||{});
     const models=section.models||[],profiles=section.profiles||[];
     const profileByCode=new Map(profiles.map(p=>[p.profile_code,p]));
     const renderHint=()=>{hint.textContent=kind==='text'
@@ -1476,6 +1486,10 @@ function loadIntoForm(){
     loadOpenRouterModels(kind);
   }
   const dh=CFG.digital_human||{},hg=dh.heygen||{},kl=dh.klingai||{},co=dh.comfyui||{};
+  // Agentics:先用已保存的 profile_code 预填,再拉数字人目录(与视频等段同一份媒体目录)
+  const dhAgentics=$('#digitalhuman-agentics-model');dhAgentics.innerHTML='';
+  const dhWanted=agenticsWanted('digitalhuman',dh.agentics||{},'');
+  if(dhWanted)dhAgentics.appendChild(el('option',{value:dhWanted,textContent:dhWanted}));
   $('#dh-heygen-key').value=hg.api_key||'';
   $('#dh-heygen-resolution').value=hg.resolution||'720p';
   $('#dh-heygen-aspect').value=hg.aspect_ratio||'16:9';
@@ -1485,8 +1499,9 @@ function loadIntoForm(){
   // 旧版独立 runninghub 段由后端 load_genconfig 迁移为 comfyui+mode=站点
   loadComfyForm('digitalhuman',{...co,url:co.url||'http://127.0.0.1:8188',
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
-  showDigitalHumanPanel(['heygen','klingai','comfyui'].includes(dh.provider)?dh.provider
+  showDigitalHumanPanel(DH_PROVIDERS.includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':'heygen');
+  loadAgenticsModels('digitalhuman');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1595,6 +1610,7 @@ function collect(){
     out[kind]=c;
   }
   out.digital_human={provider:DH_PROVIDER,
+    agentics:{profile_code:$('#digitalhuman-agentics-model').value||''},
     heygen:{api_key:$('#dh-heygen-key').value.trim(),
       resolution:$('#dh-heygen-resolution').value,
       aspect_ratio:$('#dh-heygen-aspect').value},
@@ -1621,6 +1637,7 @@ $('#save').onclick=async()=>{
   try{
     const draft=collect();
     const agenticsKinds=Object.keys(SECTIONS).filter(kind=>draft[kind].provider==='agentics');
+    if(draft.digital_human.provider==='agentics')agenticsKinds.push('digitalhuman');
     if(draft.deepagents.provider==='agentics')agenticsKinds.push('text');
     if(agenticsKinds.length&&!agenticsBridge())throw new Error(t('AgenticsLLM 仅支持桌面客户端'));
     if(agenticsKinds.length&&!AGENTICS_ACCOUNT)throw new Error(t('请先登录 AgenticsLLM 账号'));
@@ -1657,6 +1674,9 @@ $('#save').onclick=async()=>{
   // 数字人 ComfyUI 面板与图像/视频等段同构(运行方式 本地/Comfy Cloud/RunningHub),复用 buildPanel
   const dhPanel=buildPanel('digitalhuman','comfyui');dhPanel.id='panel-dh-comfyui';
   $('#panel-dh-comfyui').replaceWith(dhPanel);
+  // 数字人 Agentics 面板:账号行 + 数字人 profile 下拉,目录来自同一份 Agentics 媒体目录(media_type=DigitalHuman)
+  const dhAgenticsPanel=buildPanel('digitalhuman','agentics');dhAgenticsPanel.id='panel-dh-agentics';
+  $('#panel-dh-agentics').replaceWith(dhAgenticsPanel);
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
