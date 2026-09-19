@@ -1474,7 +1474,9 @@ function fillNoteForm(p,keepText){
   else if(sel.selectedIndex<0)sel.selectedIndex=0;
   const g=grpById(SEL);
   shot.innerHTML=`<option value="">${esc(t('不限镜'))}</option>`+(g?g.cameras.map(c=>`<option value="${esc(c.shot_id)}">${esc(c.shot_id)}</option>`).join(''):'');
-  shot.value=(RA&&RA.shotId)||'';
+  // RA.shotId 要等下一帧渲染才跟上 seek;点摄影机时直接取该镜,其余按当前 TIME 现算
+  shot.value=(p&&p.kind==='camera'&&p.id)||shotAt().shot_id||(RA&&RA.shotId)||'';
+  if(shot.selectedIndex<0)shot.value='';
   tin.value=TIME.toFixed(1);
   if(!keepText){$('#nf-text').focus()}
 }
