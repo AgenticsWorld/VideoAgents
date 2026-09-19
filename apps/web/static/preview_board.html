@@ -204,7 +204,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
   <nav id="nav"></nav>
 </div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
-<div id="sd"><div class="box"><h3>✍️ 手绘分镜草图 — <span id="sd-key" data-no-i18n style="color:var(--accent)"></span></h3><div class="hint">手机扫码打开画布(同一局域网);画好提交后直接作为该分镜的草图,不经 AI 加工</div><div class="qr" id="sd-qr"></div><div class="url" id="sd-url" data-no-i18n></div><div class="st" id="sd-st">等待手机提交…</div><button class="editbtn sd-close">关闭</button></div></div>
+<div id="sd"><div class="box"><h3>✍️ 手绘分镜草图 — <span id="sd-key" data-no-i18n style="color:var(--accent)"></span></h3><div class="hint">手机扫码打开画布(同一局域网);画好提交后由 AI 按分镜草图风格重绘作为该分镜的草图;画布页取消勾选「AI 加工」则手绘原图直接作为草图</div><div class="qr" id="sd-qr"></div><div class="url" id="sd-url" data-no-i18n></div><div class="st" id="sd-st">等待手机提交…</div><button class="editbtn sd-close">关闭</button></div></div>
 <div id="np"><div class="box"><h3>🗒 故事板注释</h3><div class="loc" data-no-i18n></div><textarea data-no-i18n placeholder="写下你对这里的想法:镜头意图、构图、节奏、必须保留或避免的处理…(Shift+Enter 保存)"></textarea><div class="hint">注释存到 directing/&lt;ep&gt;/storyboard_notes.json;分镜师、镜头表工位、修改师重做本集分镜时必读,作为分镜设计的参考</div><div class="btns"><span class="err"></span><span class="sp"></span><button class="np-clear">清除</button><button class="np-cancel">取消</button><button class="pri np-save">保存</button></div></div></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -528,10 +528,10 @@ function sketchCell(sc,sh,ep){
   h+=`<div class="skbtns"><button class="editbtn sk-gen" data-scene="${esc(sc.scene_no)}" data-order="${sh.order}" ${busy?'disabled':''} title="${esc(t('按当前草图模型出/重出这一镜的草图'))}">${r.url?'↻ '+esc(t('重出')):'🖊 '+esc(t('出图'))}</button>`;
   if(r.url)h+=`<button class="editbtn" data-agent="${esc((LAST.agents||{}).sketch||'07-directing/storyboard-sketch')}" data-key="${esc(sh.key)}" data-loc="${esc(I18N.f('[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})',{ep,key:sh.key,no:sc.scene_no,o:sh.order,p:LAST.project||'',dir:LAST.sketch_dir||('assets/storyboard/'+ep),txt:clip(sh.content,40)}))}" ${busy?'disabled':''}>✏️ ${esc(t('改草图'))}</button>`;
   // ✍️ 手绘(2026-09-16):手机扫码画布(同 分镜预览「添加参考图 → 🎨 手绘参考图」的 /draw/<token> 机制),画的图直接作为该镜草图,不经 AI
-  h+=`<button class="editbtn sk-draw" data-key="${esc(sh.key)}" ${busy?'disabled':''} title="${esc(t('手机扫码画一张草图,直接作为这一镜的草图(不经 AI 加工)'))}">✍️ ${esc(t('手绘'))}</button>`;
+  h+=`<button class="editbtn sk-draw" data-key="${esc(sh.key)}" ${busy?'disabled':''} title="${esc(t('手机扫码画一张草图;默认由 AI 按分镜草图风格重绘,画布页取消勾选「AI 加工」则原图直接作为这一镜的草图'))}">✍️ ${esc(t('手绘'))}</button>`;
   h+=`</div>`;
-  const src=r.mode==='hand'?'✍️ '+esc(t('手绘')):esc(r.model||r.provider||'');
-  if(r.note||src)h+=`<div class="skinfo" title="${esc((r.note?t('修改意见:')+r.note+'\n':'')+(r.mode==='hand'?t('手绘'):(r.provider||'')+' '+(r.model||'')))}">${r.note?'📝 '+esc(clip(r.note,30))+' · ':''}${src}</div>`;
+  const src=r.mode==='hand'?'✍️ '+esc(t('手绘')):(r.mode==='hand_ai'?'✍️✨ ':'')+esc(r.model||r.provider||'');
+  if(r.note||src)h+=`<div class="skinfo" title="${esc((r.note?t('修改意见:')+r.note+'\n':'')+(r.mode==='hand'?t('手绘')+(r.error?'\n'+r.error:''):(r.mode==='hand_ai'?t('手绘稿 AI 加工')+' · ':'')+(r.provider||'')+' '+(r.model||'')))}">${r.note?'📝 '+esc(clip(r.note,30))+' · ':''}${src}</div>`;
   return h;
 }
 function renderCell(key){
@@ -580,8 +580,8 @@ try{
     try{
       const ev=JSON.parse(e.data),proj=$('#project').value.trim()||'demo';
       if((ev.type==='board_sketch'||ev.type==='board_animatic'||ev.type==='dialogue_tts')&&ev.project===proj&&LAST&&ev.ep===LAST.ep){
-        refreshSketches();
-        if(ev.type==='board_sketch'&&ev.source==='hand'&&ev.status==='done'&&ev.key&&ev.key===SD_KEY)sdDone();
+        const pr=refreshSketches();
+        if(ev.type==='board_sketch'&&ev.source==='hand'&&ev.key&&ev.key===SD_KEY)pr.then(sdDone);   // AI 加工时 status=running,sdDone 按台账状态给文案
       }
       else if((ev.type==='confirm'||ev.type==='confirm_done')&&LAST)refreshSketches();   // 签字卡出现/答复 → 刷新签字条
       else if(ev.type==='run'&&ev.run&&ev.run.project===proj&&LAST&&ev.run.agent===(LAST.agents||{}).sketch)refreshSketches();
@@ -608,13 +608,15 @@ document.addEventListener('click',async e=>{
 });
 
 /* ---------- ✍️ 手绘草图(2026-09-16):POST /draw-sessions {kind:board_sketch,key} → 二维码 → 手机画好提交,
-   服务端直接落 assets/storyboard/<ep>/<key>.png 并写台账(不经 AI);SSE board_sketch(source=hand)为主,3s 轮询兜底 ---------- */
+   服务端落 assets/storyboard/<ep>/<key>.png 并写台账(画布页「AI 加工」默认勾选 = 按草图风格重绘 mode=hand_ai,不勾选 = 原图 mode=hand);SSE board_sketch(source=hand)为主,3s 轮询兜底 ---------- */
 let SD_KEY='',SD_POLL=null,SD_T0='';
 function sdClose(){$('#sd').style.display='none';SD_KEY='';clearInterval(SD_POLL);SD_POLL=null}
 function sdDone(){
   if(!SD_KEY)return;
   clearInterval(SD_POLL);SD_POLL=null;
-  $('#sd-st').textContent=t('✅ 已收到手绘草图,已作为该分镜的草图');
+  const busy=['queued','running'].includes((SK[SD_KEY]||{}).status);
+  $('#sd-st').textContent=busy?t('✅ 已收到手绘稿,AI 正在按分镜草图风格重绘…'):t('✅ 已收到手绘草图,已作为该分镜的草图');
+  if(busy)startPoll();
   setTimeout(sdClose,1500);
 }
 document.addEventListener('click',async e=>{

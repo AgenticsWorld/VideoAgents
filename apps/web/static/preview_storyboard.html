@@ -352,7 +352,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
     <button data-cat="props">🗡 道具</button>
     <button data-cat="creatures">🐎 生物</button>
     <button data-cat="sketches" title="从故事板的分镜草图里选一张加入本组参考图(左列本集分镜,右侧该镜草图)">🖊 草图</button>
-    <button id="ar-sketch" title="手机扫码手绘构图线稿,结合已有参考图按项目风格生成最终参考图并自动加入本组">🎨 手绘参考图</button>
+    <button id="ar-sketch" title="手机扫码手绘构图线稿;勾选「AI 加工」(默认)结合已有参考图按项目风格生成最终参考图,不勾选则手绘原图直接加入本组">🎨 手绘参考图</button>
     <button id="ar-up" title="从本地上传一张图片,直接加入本组参考图">⬆ 本地上传</button>
     <input type="file" id="ar-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" style="display:none">
   </div>
@@ -379,7 +379,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 </div></div>
 <div id="sk-modal"><div class="box">
   <h3>🎨 手绘参考图 — <span id="sk-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">手机扫码打开画布(同一局域网);画构图线稿并配文字说明,提交后结合本组已有参考图与项目风格生成最终参考图,自动加入本组</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">手机扫码打开画布(同一局域网);画构图线稿并配文字说明,提交后结合本组已有参考图与项目风格生成最终参考图,自动加入本组;画布页取消勾选「AI 加工」则手绘原图直接加入本组</div>
   <div class="qr" id="sk-qr"></div>
   <div class="url" id="sk-url"></div>
   <div class="st" id="sk-st">等待手机提交…</div>
@@ -419,13 +419,13 @@ function sgApply(grp,st){
   if(grp===AR_GRP&&AR_GEN!==running){AR_GEN=running;if($('#ar-modal').style.display==='flex')arCur()}
   if($('#sk-modal').style.display==='flex'&&$('#sk-grp').textContent===grp){
     if(running)$('#sk-st').innerHTML='<span class="spin"></span>'+esc(t('正在基于手绘生成最终的参考图…(约 1-2 分钟)'));
-    else if(st.status==='done')$('#sk-st').textContent=t('✅ 已生成并加入本组参考图');
+    else if(st.status==='done')$('#sk-st').textContent=t(st.ai===false?'✅ 手绘原图已加入本组参考图':'✅ 已生成并加入本组参考图');
     else if(st.status==='failed')$('#sk-st').textContent=t('生成失败:')+(st.error||'');
   }
   const seen=grp+':'+(st.src||'');
   if(st.status==='done'&&SG_SEEN!==seen){
     SG_SEEN=seen;
-    if(grp===AR_GRP&&$('#ar-modal').style.display==='flex'){arReload();arMsg(t('✅ 已生成并加入本组参考图'),true)}
+    if(grp===AR_GRP&&$('#ar-modal').style.display==='flex'){arReload();arMsg(t(st.ai===false?'✅ 手绘原图已加入本组参考图':'✅ 已生成并加入本组参考图'),true)}
     load(true);
   }
   if(st.status==='failed'&&grp===AR_GRP&&$('#ar-modal').style.display==='flex')arMsg(t('生成失败:')+(st.error||''));

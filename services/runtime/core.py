@@ -5761,11 +5761,14 @@ async def api_sketchgen_status(project: str, ep: str, grp: str):
 
 
 async def api_draw_submit(token: str, body: dict):
-    """手机提交线稿:PNG dataURL + 文字说明。线稿仅存档(不入 refs 不注入 prompt),
-    后台以线稿为构图底、既有组参考图为形象锚、按项目风格生成一张成图并加入组 refs;
-    进度经 SSE sketchgen 事件 + /storyboard/sketchgen 轮询对外。"""
+    """手机提交线稿:PNG dataURL + 文字说明 + ai(画布页「AI 加工」勾选,2026-09-19;缺省 = 勾选)。
+    group_ref:ai=true 线稿仅存档(不入 refs 不注入 prompt),后台以线稿为构图底、既有组参考图为形象锚、
+    按项目风格生成一张成图并加入组 refs,进度经 SSE sketchgen 事件 + /storyboard/sketchgen 轮询对外;
+    ai=false 手绘原图直接落 assets/uploads/ 并加入组 refs(文字说明可空)。
+    board_sketch:ai=true 手绘稿作构图底、按分镜草图风格重绘(见 _draw_submit_board_sketch);ai=false 原图即草图。"""
     s = _draw_session(token)
     text = (body.get("text") or "").strip()
+    ai = body.get("ai") is not False
     img = body.get("image") or ""
     if img.startswith("data:image/png;base64,"):
         img = img.split(",", 1)[1]
@@ -5775,8 +5778,8 @@ async def api_draw_submit(token: str, body: dict):
     except Exception:
         raise ServiceError(400, "Image must be PNG (base64) and smaller than 8MB") from None
     if s.get("kind") == "board_sketch":
-        return await asyncio.to_thread(_draw_submit_board_sketch, s, raw, text)
-    if not text:
+        return await asyncio.to_thread(_draw_submit_board_sketch, s, raw, text, ai)
+    if ai and not text:
         raise ServiceError(400, "A text note is required (describe the spatial relationship the sketch expresses)")
     project, ep, grp = s["project"], s["ep"], s["grp"]
     key = f"{project}/{ep}/{grp}"
@@ -5787,6 +5790,8 @@ async def api_draw_submit(token: str, body: dict):
     # 用户决定删图或给本组换更高上限的模型(🎛 模型);只以模型极值 30 兜底
     if len(pd.get("refs") or []) >= REF_CAP_HARD_MAX:
         raise ServiceError(400, f"This group already has {REF_CAP_HARD_MAX} refs (the hard maximum of any video model); cannot add more")
+    if not ai:
+        return await asyncio.to_thread(_draw_submit_group_ref_raw, project, ep, grp, raw, text)
     d = _sketch_dir(project, ep, grp)
     d.mkdir(parents=True, exist_ok=True)
     n = 1
@@ -5807,10 +5812,84 @@ async def api_draw_submit(token: str, body: dict):
     return {"saved": png.name, "generating": True}
 
 
-def _draw_submit_board_sketch(s: dict, raw: bytes, text: str) -> dict:
-    """故事板页「✍️ 手绘」(2026-09-16):手机画布提交的 PNG 不经 AI 加工,直接落为该镜草图
-    assets/storyboard/<ep>/<key>.png 并写台账(mode=hand, provider=hand_drawn,文字说明进 note);
-    该镜草图正在出图(queued/running)时拒绝,避免与出图进程互相覆盖;落盘后发 SSE board_sketch(source=hand)。"""
+def _draw_submit_group_ref_raw(project: str, ep: str, grp: str, raw: bytes, text: str) -> dict:
+    """分镜预览「🎨 手绘参考图」未勾选「AI 加工」(2026-09-19):手绘原图直接落 assets/uploads/<ep>/<grp>/hand_NN.png
+    并加入组 refs(同本地上传);发 SSE sketchgen done 让桌面端即时刷新。"""
+    base = _proj_base(project)
+    out_dir = base / "assets" / "uploads" / ep / grp
+    out_dir.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while (out_dir / f"hand_{n:02d}.png").exists():
+        n += 1
+    out = out_dir / f"hand_{n:02d}.png"
+    out.write_bytes(raw)
+    ref = out.relative_to(base).as_posix()
+    try:
+        refs = _grpref_append(_grp_prompt_path(project, ep, grp), ref, "手绘(未经 AI 加工)")
+    except Exception:
+        out.unlink(missing_ok=True)
+        raise
+    atomic_write_json(out.with_suffix(".json"), {
+        "text": text, "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source": "user_hand_drawn(api /draw-sessions ai=false)",
+        "purpose": "手绘原图直接作组参考图(未经 AI 加工)"})
+    SKETCHGEN_JOBS[f"{project}/{ep}/{grp}"] = {
+        "status": "done", "src": out.name, "ref": ref, "refs": refs, "ai": False, "text": text[:120],
+        "url": f"/api/v1/projects/{base.name}/artifacts/{ref}?v={int(out.stat().st_mtime)}"}
+    HUB.publish({"type": "sketchgen", "project": project, "ep": ep, "grp": grp,
+                 "status": "done", "src": out.name, "error": "", "ai": False})
+    return {"saved": out.name, "generating": False, "ai": False}
+
+
+def _board_hand_land(base: Path, ep: str, key: str, scene: dict, shot: dict, raw: bytes, text: str, error: str = "") -> None:
+    """手绘原图落为该镜草图并写台账(mode=hand);error 非空 = AI 加工失败后的回落,原因留在台账 error 供页面提示。"""
+    from modules import storyboard_board as sbb
+    rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{key}.png"
+    out = base / rel
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f"{out.stem}.new.png")
+    tmp.write_bytes(raw)
+    os.replace(tmp, out)
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    sbb.update_index(base, ep, key, {
+        "status": "done", "file": rel, "error": error, "scene_no": scene["scene_no"], "order": shot["order"],
+        "shot_id": shot.get("shot_id") or "", "prompt": "", "note": text, "mode": "hand", "grid": None, "layout": None,
+        "provider": sbb.HAND_DRAWN_PROVIDER, "model": "", "aspect": sbb.resolve_aspect(base), "refs": [],
+        "source": "user_hand_drawn(api /draw-sessions kind=board_sketch)", "started_at": now, "finished_at": now})
+
+
+def _board_hand_ai_worker(project: str, ep: str, key: str, scene: dict, shot: dict, layout_rel: str, raw: bytes, text: str):
+    """后台线程:宿主 CLI code/storyboard_sketch.py --layout 以手绘稿为构图底、按分镜草图风格重绘(渠道/模型走
+    CLI 缺省链:台账上次 → 故事板页所选偏好 → 全局);失败则回落手绘原图作草图,原因记台账 error。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    cmd = [sys.executable, str(ROOT / "code" / "storyboard_sketch.py"), "--project", project, "--ep", ep,
+           "--scene", scene["scene_no"], "--order", str(shot["order"]), "--layout", layout_rel, "--force"]
+    cmd += ["--note", text] if text else ["--clear-note"]
+    status, err = "done", ""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        if r.returncode != 0:
+            rec = sbb.load_index(base, ep)["shots"].get(key) or {}
+            err = str(rec.get("error") or "") or (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
+    except Exception as e:  # noqa: BLE001
+        err = str(e)[:500]
+    if err:
+        err = f"AI 加工失败,已先用手绘原图:{err}"[:500]
+        try:
+            _board_hand_land(base, ep, key, scene, shot, raw, text, error=err)
+        except Exception as e:  # noqa: BLE001
+            status = "failed"
+            sbb.update_index(base, ep, key, {"status": "failed", "error": f"{err};回落失败:{e}"[:500]})
+    HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene["scene_no"],
+                 "key": key, "status": status, "error": err, "source": "hand"})
+
+
+def _draw_submit_board_sketch(s: dict, raw: bytes, text: str, ai: bool = True) -> dict:
+    """故事板页「✍️ 手绘」(2026-09-16):手机画布提交的 PNG 落为该镜草图 assets/storyboard/<ep>/<key>.png。
+    ai=false(未勾选「AI 加工」):原图直接落盘并写台账(mode=hand, provider=hand_drawn,文字说明进 note),发 SSE board_sketch(source=hand);
+    ai=true(2026-09-19,默认):原稿存 _hand/<key>.png,后台按分镜草图风格重绘(mode=hand_ai,见 _board_hand_ai_worker)。
+    该镜草图正在出图(queued/running)时拒绝,避免与出图进程互相覆盖。"""
     from modules import storyboard_board as sbb
     project, ep, key = s["project"], s["ep"], s["key"]
     base = _proj_base(project)
@@ -5821,18 +5900,17 @@ def _draw_submit_board_sketch(s: dict, raw: bytes, text: str) -> dict:
     rec = sbb.load_index(base, ep)["shots"].get(key) or {}
     if rec.get("status") in ("queued", "running"):
         raise ServiceError(409, f"Sketch {key} is being generated right now; wait for it to finish, then submit again")
-    rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{key}.png"
-    out = base / rel
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(f"{out.stem}.new.png")
-    tmp.write_bytes(raw)
-    os.replace(tmp, out)
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
-    sbb.update_index(base, ep, key, {
-        "status": "done", "file": rel, "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
-        "shot_id": shot.get("shot_id") or "", "prompt": "", "note": text, "mode": "hand", "grid": None,
-        "provider": sbb.HAND_DRAWN_PROVIDER, "model": "", "aspect": sbb.resolve_aspect(base), "refs": [],
-        "source": "user_hand_drawn(api /draw-sessions kind=board_sketch)", "started_at": now, "finished_at": now})
+    if ai:
+        layout_rel = f"{sbb.HAND_DIR_REL.format(ep=ep)}/{key}.png"
+        (base / layout_rel).parent.mkdir(parents=True, exist_ok=True)
+        (base / layout_rel).write_bytes(raw)
+        sbb.update_index(base, ep, key, {"status": "queued", "error": "", "scene_no": scene["scene_no"], "order": shot["order"]})
+        threading.Thread(target=_board_hand_ai_worker, args=(project, ep, key, scene, shot, layout_rel, raw, text),
+                         daemon=True).start()
+        HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene["scene_no"],
+                     "key": key, "status": "running", "error": "", "source": "hand"})
+        return {"saved": f"{key}.png", "generating": True, "kind": "board_sketch", "key": key}
+    _board_hand_land(base, ep, key, scene, shot, raw, text)
     HUB.publish({"type": "board_sketch", "project": project, "ep": ep, "scene": scene["scene_no"],
                  "key": key, "status": "done", "error": "", "source": "hand"})
     return {"saved": f"{key}.png", "generating": False, "kind": "board_sketch", "key": key}

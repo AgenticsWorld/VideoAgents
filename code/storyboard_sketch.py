@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
 from _common import DATA_DIR, parse_args
 
@@ -100,12 +101,29 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
     # comfyui / agentics:配了收参考图的图生图(RunningHub 多 LoadImage 模板 / agentics 图生图 profile)才传人物 sheet,
     # 张数以其容量封顶;否则纯文生图(2026-09-19)
     ref_cap = sbb.sketch_ref_capacity(eff_provider, cfg)
-    text_only = ref_cap == 0
-    refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog, limit=ref_cap)
-    text_only = text_only or (ref_cap is not None and not refs)     # 出场人物都没 sheet:仍走文生图写法
-    ref_names = [names.get(c, c) for c in sbb.ref_cast_ids(root, shot, catalog, ref_cap)] if refs else []
+    # --layout(2026-09-19 手绘稿 AI 加工):手绘稿占参考图最后一张作构图底,人物 sheet 少带一张;渠道收不了参考图则无从加工
+    layout = None
+    if getattr(args, "layout", ""):
+        layout = (Path(args.layout) if os.path.isabs(args.layout) else root / args.layout).resolve()
+        err = "" if layout.is_file() else f"手绘稿不存在:{args.layout}"
+        if not err and ref_cap == 0:
+            err = f"草图渠道 {eff_provider} 未配置可收参考图的图生图,无法对手绘稿做 AI 加工"
+        if err:
+            print(f"FAIL {key} {err}")
+            if not args.dry_run:
+                sbb.update_index(root, ep, key, {"status": "failed", "error": err,
+                                                 "scene_no": scene["scene_no"], "order": shot["order"]})
+            return False
+    cast_cap = ref_cap if (layout is None or ref_cap is None) else ref_cap - 1
+    text_only = cast_cap == 0
+    refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog, limit=cast_cap)
+    text_only = text_only or ((ref_cap is not None or layout is not None) and not refs)     # 出场人物都没 sheet:仍走文生图写法
+    ref_names = [names.get(c, c) for c in sbb.ref_cast_ids(root, shot, catalog, cast_cap)] if refs else []
     prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only,
-                                        plain_style=sbb.sketch_plain_style(eff_provider), ref_names=ref_names)
+                                        plain_style=sbb.sketch_plain_style(eff_provider), ref_names=ref_names,
+                                        layout=layout is not None)
+    if layout is not None:
+        refs = refs + [layout]
     if args.dry_run:
         print(f"[dry-run] {key} via {eff_provider} model={eff_model or '-'} aspect={aspect} size={sbb.sketch_size(eff_provider, aspect)} → {rel}")
         print(f"  prompt: {prompt}")
@@ -113,8 +131,9 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
         return True
     sbb.update_index(root, ep, key, {
         "status": "running", "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
-        "shot_id": shot.get("shot_id") or "", "prompt": prompt, "note": note, "mode": "single", "grid": None,
-        "provider": eff_provider, "model": eff_model, "aspect": aspect,
+        "shot_id": shot.get("shot_id") or "", "prompt": prompt, "note": note,
+        "mode": "hand_ai" if layout is not None else "single", "layout": (args.layout if layout is not None else None),
+        "grid": None, "provider": eff_provider, "model": eff_model, "aspect": aspect,
         "refs": [_ref_rel(r, root) for r in refs], "started_at": _now()})
     out = root / rel
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -223,6 +242,7 @@ def main() -> int:
         ap.add_argument("--order", type=int, default=None, help="草案镜序号(shots_draft[].order);缺省整场")
         ap.add_argument("--grid", action="store_true", help="宫格批量:每 ≤4 镜出一张 2×2 宫格图再切分(已出的跳过;--keys 指定则不论状态)")
         ap.add_argument("--keys", default="", help="--grid 时指定草图键,逗号分隔(≤9,如 S01-01,S01-02);宿主后台分批用")
+        ap.add_argument("--layout", default="", help="手绘稿路径(项目内相对路径或绝对路径;须配 --order):作构图底、按草图风格 AI 重绘(故事板页「✍️ 手绘 · AI 加工」宿主用)")
         ap.add_argument("--note", default="", help="修改意见/补充描述:拼进提示词并写台账 note(空=沿用台账已有 note)")
         ap.add_argument("--clear-note", action="store_true", help="清掉台账里该镜的 note 后再出图")
         ap.add_argument("--provider", default="", help="图像渠道(须已在「生成模型」页配置);缺省见文件头")

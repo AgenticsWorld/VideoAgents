@@ -5,7 +5,7 @@
   并按 shot_list.json 的 storyboard_ref 把定稿镜号/时长/台词对回草案镜;
 - 草图台账 assets/storyboard/<ep>/index.json(schema storyboard_sketches/1.0):
   shots[<S01-01>] = {file, status(queued|running|done|failed), error, prompt, note, provider, model, refs, updated_at}
-  (mode=hand / provider=hand_drawn 表示故事板页「✍️ 手绘」手机画布直接落盘的草图,2026-09-16,不经 AI;重出时渠道回落偏好)
+  (mode=hand_ai = 手绘稿经 AI 按草图风格重绘,layout 记手绘原稿路径,2026-09-19;mode=hand / provider=hand_drawn 表示故事板页「✍️ 手绘」手机画布直接落盘的草图,2026-09-16,不经 AI;重出时渠道回落偏好)
   图片 assets/storyboard/<ep>/<S01-01>.png;台账写入经 flock 串行,宿主后台任务与 Agent 的 CLI 进程可并发;
 - build_prompt / collect_refs:草图提示词(铅笔手绘分镜风格,英文风格句 + 原文画面内容)与参考图
   (只带出场人物 sheet,缩到 512px 长边;不带场景图——俯视布局图会误导图像模型,场景只靠文字描述;
@@ -98,6 +98,16 @@ SKETCH_STYLE_PROMPT_TEXT_ONLY = (
 # 作条件输入、空 latent)才传人物 sheet,张数以模板 LoadImage 个数封顶。agentics 同理:图生图 profile 收几张传几张,
 # 没配或取不到详情走文生图 profile。容量判定见 genmedia.image_ref_capacity。
 REF_CONDITIONAL_SKETCH_PROVIDERS = ("comfyui", "agentics")
+# 手绘稿 AI 加工(2026-09-19,故事板页「✍️ 手绘」勾选「AI 加工」):手绘稿排在参考图**最后一张**作构图底
+# (人物 sheet 的 Picture N 编号不变),按草图风格重绘;只写正向句,各渠道通用。
+SKETCH_LAYOUT_SENTENCE = (
+    "One exception among the attached pictures: the last one is not a character design but the director's own rough "
+    "hand-drawn layout for this shot. Keep its composition "
+    "exactly — framing, camera angle, where each figure sits in the frame, figure sizes and poses — and redraw it "
+    "cleanly in the pencil storyboard style described above, with correct anatomy and readable faces; it is a "
+    "layout guide only, its wobbly line quality is not the target."
+)
+HAND_DIR_REL = "assets/storyboard/{ep}/_hand"   # 手绘原稿存档(AI 加工的构图底;加工失败时回落为该镜草图)
 # 宫格批量退化为逐镜单张的渠道:只有 comfyui(本地模型跟不了严格 2×2 排版);agentics 文生图仍出宫格(不带参考图)
 SINGLE_ONLY_SKETCH_PROVIDERS = ("comfyui",)
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
@@ -1097,7 +1107,8 @@ def sketch_single_only(provider: str) -> bool:
 
 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True,
-                 plain_style: bool = False, ref_names: list[str] | None = None) -> tuple[str, str]:
+                 plain_style: bool = False, ref_names: list[str] | None = None,
+                 layout: bool = False) -> tuple[str, str]:
     """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。
     with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。"""
     # plain_style(comfyui / agentics,2026-09-19)带参考图:正向风格句 + 逐张点名的参考图句,不用含否定句/姿态列举的 SKETCH_STYLE_PROMPT
@@ -1107,6 +1118,8 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs
         parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY[:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
     else:
         parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE]
+    if layout:      # 手绘稿 AI 加工:手绘稿是最后一张参考图(调用方保证已挂)
+        parts.append(SKETCH_LAYOUT_SENTENCE)
     if shot.get("size_hint"):
         parts.append(f"Shot size: {shot['size_hint']}.")
     cam = camera_hint(shot)
