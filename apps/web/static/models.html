@@ -471,7 +471,7 @@ async function refreshAgenticsAccount(){
   return AGENTICS_ACCOUNT;
 }
 /* 充值控制台按打包渠道标识(build-info.json distribution):oss=SMT → shumati.cn,s3=AGT → agentics.world */
-const AGENTICS_CONSOLE_URLS={oss:'https://console.shumati.cn/',s3:'https://console.agentics.world/'};
+const AGENTICS_CONSOLE_URLS={oss:'https://console.shumati.cn/#/wallet',s3:'https://console.agentics.world/#/wallet'};
 async function agenticsAuth(button){
   const bridge=agenticsBridge();if(!bridge)return;
   if(AGENTICS_ACCOUNT){
