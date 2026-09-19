@@ -615,26 +615,52 @@ function installMediaPermissionHandler(): void {
   })
 }
 
-async function createWindow(): Promise<void> {
-  await ensureWebServer()
-  installMediaPermissionHandler()
-  window = new BrowserWindow({
-    width: 1440, height: 920, minWidth: 980, minHeight: 680,
+/** 应用页面窗口(主窗口与「新建窗口」共用):都连同一个本机 Web 服务,不另起后台进程。 */
+const appWindows = new Set<BrowserWindow>()
+
+async function openAppWindow(): Promise<BrowserWindow> {
+  // 新窗口相对当前窗口错开一点,避免完全盖住
+  const anchor = BrowserWindow.getFocusedWindow() ?? window
+  const position = anchor && !anchor.isDestroyed() && appWindows.has(anchor) && !anchor.isMaximized() && !anchor.isFullScreen()
+    ? {x: anchor.getPosition()[0] + 28, y: anchor.getPosition()[1] + 28}
+    : {}
+  const created = new BrowserWindow({
+    width: 1440, height: 920, minWidth: 980, minHeight: 680, ...position,
     backgroundColor: '#0c0d11', title: 'VideoAgents',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false, contextIsolation: true, sandbox: true
     }
   })
+  appWindows.add(created)
+  if (!window || window.isDestroyed()) window = created
   mainWindowWasCreated = true
-  window.webContents.setWindowOpenHandler(({url}) => {
+  created.on('closed', () => {
+    appWindows.delete(created)
+    // 主窗口关掉后,把对话框/登录回跳的宿主让给剩下的窗口
+    if (window === created) window = [...appWindows][0]
+  })
+  created.webContents.setWindowOpenHandler(({url}) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return {action:'deny'}
   })
-  window.webContents.on('will-navigate', (event, url) => {
+  created.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(webOrigin)) event.preventDefault()
   })
-  await window.loadURL(webOrigin)
+  await created.loadURL(webOrigin)
+  return created
+}
+
+async function createWindow(): Promise<void> {
+  await ensureWebServer()
+  installMediaPermissionHandler()
+  await openAppWindow()
+}
+
+async function openNewWindow(): Promise<void> {
+  if (!mainWindowWasCreated || requiredDesktopUpdateActive) return
+  await ensureWebServer()
+  await openAppWindow()
 }
 
 async function updatePythonRuntimeManually(): Promise<void> {
@@ -679,7 +705,10 @@ function installApplicationMenu(): void {
     }] : [{label: '环境', submenu: [updateItem]}]),
     {label: '编辑', submenu: [{role: 'undo'}, {role: 'redo'}, {type: 'separator'},
       {role: 'cut'}, {role: 'copy'}, {role: 'paste'}, {role: 'selectAll'}]},
-    {label: '窗口', submenu: [{role: 'reload'}, {role: 'toggleDevTools'}, {type: 'separator'},
+    {label: '窗口', submenu: [
+      {label: '新建窗口', accelerator: 'CmdOrCtrl+N',
+        click: () => {void openNewWindow().catch(error => console.error(error))}},
+      {type: 'separator'}, {role: 'reload'}, {role: 'toggleDevTools'}, {type: 'separator'},
       {role: 'minimize'}, {role: 'close'}]},
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
@@ -783,7 +812,8 @@ ipcMain.handle('desktop:open-external', async (_event, value: unknown) => {
   await shell.openExternal(value)
 })
 ipcMain.handle('desktop:restart-backend', async () => {
-  stopWebServerTree(); await ensureWebServer(); window?.reload()
+  stopWebServerTree(); await ensureWebServer()
+  for (const item of appWindows) item.reload()
 })
 ipcMain.handle('desktop:runtime-info', () => ({
   source: activeRuntime?.source,
