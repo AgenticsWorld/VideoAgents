@@ -1,7 +1,7 @@
 window.I18N_DICT = {
 "文生图模型": "Text-to-image model",
 "图生图模型": "Image-to-image model",
-"文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」": "The text-to-image model is used when there is no reference image, the image-to-image model when references are attached; the choice is automatic per request, and the preview-page picker only offers “Follow global” for Agentics",
+"文生图模型用于无参考图出图,图生图模型用于带参考图出图": "The text-to-image model is used when there is no reference image, the image-to-image model when references are attached",
 "文生图 {t} · 图生图 {i}": "Text-to-image {t} · Image-to-image {i}",
 "执行记录": "Execution records",
 "技能执行记录": "Skill execution records",

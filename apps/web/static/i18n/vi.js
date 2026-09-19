@@ -1,7 +1,7 @@
 window.I18N_DICT = {
 "文生图模型": "Mô hình văn bản→ảnh",
 "图生图模型": "Mô hình ảnh→ảnh",
-"文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」": "Mô hình văn bản→ảnh dùng khi không có ảnh tham chiếu, mô hình ảnh→ảnh dùng khi có ảnh tham chiếu; việc chọn là tự động mỗi lần tạo, và bộ chọn trên đầu trang xem trước chỉ có “Theo toàn cục” cho Agentics",
+"文生图模型用于无参考图出图,图生图模型用于带参考图出图": "Mô hình văn bản→ảnh dùng khi không có ảnh tham chiếu, mô hình ảnh→ảnh dùng khi có ảnh tham chiếu",
 "文生图 {t} · 图生图 {i}": "Văn bản→ảnh {t} · Ảnh→ảnh {i}",
 "开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Nối tự động: hành động liên tục ưu tiên 2–3 giây cuối của nhóm trước. Cắt cảnh, mô hình không hỗ trợ hoặc clip không phù hợp dùng khung hình cuối. Tắt: chỉ nối bằng văn bản.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Nối nhiều lần từ khung hình hoặc đoạn cuối video độ phân giải thấp có thể làm giảm chất lượng và độ nhất quán nhân vật",

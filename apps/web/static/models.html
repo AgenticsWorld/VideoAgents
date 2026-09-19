@@ -520,7 +520,7 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint',id:`${kind}-agentics-hint`},
       t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
     if(kind==='image')d.appendChild(el('div',{className:'hint'},
-      t('文生图模型用于无参考图出图,图生图模型用于带参考图出图;出图时按有无参考图自动选用,预览页顶部选 Agentics 时二级只有「跟随全局」')));
+      t('文生图模型用于无参考图出图,图生图模型用于带参考图出图')));
     if(kind==='digitalhuman')d.appendChild(el('div',{className:'hint'},
       t('数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段')));
   }else if(p==='openrouter'){
