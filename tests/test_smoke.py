@@ -296,6 +296,29 @@ def test_agentics_generation_entrypoints_use_fixed_contract_fields(monkeypatch):
     assert music[1]["output_format"] == "wav"
 
 
+def test_agentics_image_negative_merges_into_prompt_without_negative_slot(monkeypatch):
+    """profile 未声明 negative_prompt 时 --negative 并入正面提示词(同 RunningHub 直绑写法),声明了则原样传。"""
+    from modules import genmedia
+
+    calls = []
+    params = {"prompt": {}}
+    monkeypatch.setattr(genmedia, "get_config", lambda kind: {
+        "provider": "agentics", "t2i": "t2i-demo", "i2i": "i2i-demo"})
+    monkeypatch.setattr(genmedia, "_agentics_profile", lambda kind, code, refresh=False: {
+        "profile_code": code, "token_schema": {"parameters": params}})
+    monkeypatch.setattr(genmedia, "_agentics_generate",
+                        lambda kind, cfg, values, files, **kwargs: calls.append(values) or b"result")
+    monkeypatch.setattr(genmedia, "_save", lambda data, output: output)
+
+    genmedia._generate_image("a cat", "out.png", "dogs", refs=["ref.png"])
+    assert calls[0]["prompt"] == "a cat\nExclude from the image: dogs"
+    assert calls[0]["negative_prompt"] == ""
+
+    params["negative_prompt"] = {}
+    genmedia._generate_image("a cat", "out.png", "dogs", refs=["ref.png"])
+    assert calls[1]["prompt"] == "a cat" and calls[1]["negative_prompt"] == "dogs"
+
+
 def test_agentics_media_task_is_polled_and_downloaded_with_idempotency(monkeypatch):
     from modules import genmedia
 

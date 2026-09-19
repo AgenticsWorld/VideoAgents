@@ -5534,11 +5534,20 @@ def _generate_image(prompt: str, output: str, negative: str = "",
                                + "模型(「🎨 生成模型」页图像 › Agentics)")
         print(f"[genmedia] agentics 图像按{'图生图' if refs else '文生图'} profile {code} 出图",
               file=sys.stderr, flush=True)
+        profile = _agentics_profile("image", code) if negative else None
+        if profile and "negative_prompt" not in (
+                (profile.get("token_schema") or {}).get("parameters") or {}):
+            # profile 未声明负面文本位(如 cfg=1 的 Lightning 工作流):自动并入正面提示词,
+            # 与 RunningHub 直绑同一写法,否则 --negative 会被静默丢弃
+            prompt = f"{prompt}\nExclude from the image: {negative}"
+            negative = ""
+            print(f"[genmedia] AgenticsLLM profile {code} 无独立负面文本位,--negative 已自动并入"
+                  "正面提示词(Exclude from the image: …)", file=sys.stderr, flush=True)
         data = _agentics_generate("image", {**cfg, "model": code, "profile_code": code}, {
             "prompt": prompt, "negative_prompt": negative,
             "width": width, "height": height, "aspect_ratio": aspect or "16:9",
             "seed": seed, "num_images": 1, "output_format": _output_format(output),
-        }, {"input_images": list(refs or [])})
+        }, {"input_images": list(refs or [])}, profile=profile)
         return _save(data, output)
     if cfg["provider"] == "openrouter":
         return _save(_image_openrouter(cfg, prompt, negative, refs, width, height, seed), output)
