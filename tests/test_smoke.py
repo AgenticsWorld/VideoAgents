@@ -608,4 +608,4 @@ def test_genconfig_migrates_legacy_agentics_image_profile_and_empty_defaults():
     core._migrate_genconfig(empty)
     merged = core._merge(core.DEFAULT_GENCONFIG, empty)
     assert merged["image"]["agentics"] == {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"}
-    assert merged["deepagents"]["agentics"]["model"] == "deepseek/deepseek-v4-flash-0731"
+    assert merged["deepagents"]["agentics"]["model"] == "openai/gpt-5.6-luna"
