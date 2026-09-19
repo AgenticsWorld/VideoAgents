@@ -10150,7 +10150,8 @@ async def api_post_signoff(project: str, ep: str, body: dict):
 
 
 def _preview_videos(project: str, ep: str):
-    """成片发布聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料、审核缺陷工单。"""
+    """成片发布聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料。
+    审核缺陷工单 2026-09-19 起移到独立「缺陷单」页(_preview_defects)。"""
     base = _proj_base(project)
     plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
     plan_eps = {e.get("ep"): e for e in plan.get("episodes", [])
@@ -10200,7 +10201,15 @@ def _preview_videos(project: str, ep: str):
     except Exception as error:  # noqa: BLE001
         data["animatic"] = {"exists": False, "error": str(error)}
 
-    # 审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要
+    return data
+
+
+async def api_preview_videos(project: str = "demo", ep: str = ""):
+    return await asyncio.to_thread(_preview_videos, project, ep)
+
+
+def _project_defects(base: Path) -> list[dict]:
+    """审核缺陷工单 qa/defects/:JSON 结构化工单;MD/TXT 文字工单取首行做摘要。"""
     defects = []
     ddir = base / "qa" / "defects"
     if ddir.is_dir():
@@ -10215,7 +10224,7 @@ def _preview_videos(project: str, ep: str):
                         "defect_id", "severity", "blocking", "type", "status",
                         "artifact", "found_by", "task_id", "date", "violated",
                         "evidence", "impact", "recommended_fix", "assigned_to",
-                        "resolution", "waiver")}
+                        "resolution", "waiver", "due_gate")}
                     row["defect_id"] = row["defect_id"] or f.stem
             elif f.suffix.lower() in (".md", ".txt"):
                 try:
@@ -10231,13 +10240,25 @@ def _preview_videos(project: str, ep: str):
             blob = " ".join(str(row.get(k) or "") for k in
                             ("defect_id", "task_id", "artifact", "violated"))
             row["eps"] = sorted(set(re.findall(r"ep\d+", blob.lower())))
+            row["file"] = f"qa/defects/{f.name}"
             defects.append(row)
-    data["defects"] = defects
-    return data
+    return defects
 
 
-async def api_preview_videos(project: str = "demo", ep: str = ""):
-    return await asyncio.to_thread(_preview_videos, project, ep)
+def _preview_defects(project: str):
+    """缺陷单页(项目设置 → 缺陷单,/defects):全项目 qa/defects/ 工单 + 分集列表(供按集过滤)。"""
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    titles = {e.get("ep"): e.get("title", "") for e in plan.get("episodes", [])
+              if isinstance(e, dict) and e.get("ep")}
+    defects = _project_defects(base)
+    eps = set(titles) | {e for d in defects for e in d["eps"]}
+    return {"project": base.name, "defects": defects,
+            "episodes": [{"ep": e, "title": titles.get(e, "")} for e in sorted(eps)]}
+
+
+async def api_preview_defects(project: str = "demo"):
+    return await asyncio.to_thread(_preview_defects, project)
 
 
 # ---------------- 工作流预览(DAG 可视化) ----------------

@@ -2340,6 +2340,32 @@ def _apply_h3_ref_image_size(workflow: dict, ref_image_size: str) -> None:
     _h3_node(workflow).setdefault("inputs", {})["ref_image_size"] = ref_image_size
 
 
+def _apply_h3_size(workflow: dict, width: int, height: int) -> None:
+    """宽高直绑到 Ref2VA 节点自身的 width/height 位:云端导出件这两位是作者写死的字面值,
+    或连到 ResolutionSelector 一类分辨率节点(宽高比/像素量也是作者字面值),--aspect/--resolution
+    进不了云端。两位都是 INT 输入,统一覆写为本次字面值;断开后无下游的分辨率节点由
+    _rh_prune_inert_nodes 在提交前剪除(占位符模板下为幂等覆写)。"""
+    inputs = _h3_node(workflow).setdefault("inputs", {})
+    inputs["width"], inputs["height"] = int(width), int(height)
+
+
+def _apply_h3_seed(workflow: dict, seed) -> None:
+    """种子直绑:定位以 Ref2VA 节点 LATENT 输出为 latent_image 的采样器,复用图像路径的
+    种子走线(采样器种子位 / noise 连线的 RandomNoise)。云端导出件的种子是写死的字面值,
+    不绑则同提示词同参考的重出逐帧相同(占位符模板下为幂等覆写)。"""
+    h3_id = next((nid for nid, node in workflow.items() if isinstance(node, dict)
+                  and node.get("class_type") == H3_REFERENCE_NODE), None)
+    for node in workflow.values():
+        if not isinstance(node, dict) or node.get("class_type") not in IMAGE_SAMPLER_CLASSES:
+            continue
+        link = (node.get("inputs") or {}).get("latent_image")
+        if _node_link(link) and str(link[0]) == h3_id:
+            _apply_rh_image_seed(workflow, node, seed)
+            return
+    print("[genmedia] MiniMax-H3 工作流未定位到接 Ref2VA 潜变量的采样器,seed 未注入"
+          "(按模板内种子生成)", file=sys.stderr)
+
+
 def _h3_prepare_ref_video(path: str) -> tuple[str, bool]:
     """把参考视频整理成 MiniMaxH3ReferenceToVideo 要求的 24fps 帧序列源(2-15s):
     ffprobe 实测,<2s 拒绝,>15s 截到 15s(stderr 提示),非 24fps / 非 mp4 / 长边 >1344 时
@@ -4758,11 +4784,13 @@ def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed,
         }
         wf = _comfy_workflow(cfg, tokens, "video")
         # 云端导出件(尤其 RunningHub 工作区模板)常无 {{TOKEN}} 占位符而是作者演示
-        # 字面值,占位符替换会空转;顺 H3 节点连线直接绑定本次 prompt 与时长,
-        # 防止演示提示词/模板默认时长静默混入生产请求(占位符模板下为幂等覆写)
+        # 字面值,占位符替换会空转;顺 H3 节点连线直接绑定本次 prompt、时长、宽高与种子,
+        # 防止演示提示词/模板默认时长、分辨率、固定种子静默混入生产请求(占位符模板下为幂等覆写)
         _apply_h3_prompt(wf, prompt)
         _apply_h3_duration(wf, duration)
         _apply_h3_ref_image_size(wf, settings["ref_image_size"])
+        _apply_h3_size(wf, width, height)
+        _apply_h3_seed(wf, seed)
         prepared = [_h3_prepare_ref_video(path) for path in video_refs or []]
         _add_h3_references(wf, [upload(path) for path in refs or []],
                            [upload(path) for path in audio_refs or []],

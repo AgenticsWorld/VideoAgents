@@ -444,6 +444,11 @@ async def versions():
     return _page("versions.html")
 
 
+@app.get("/defects")
+async def defects():
+    return _page("defects.html")
+
+
 @app.get("/clawbot")
 async def clawbot():
     return _page("clawbot.html")
