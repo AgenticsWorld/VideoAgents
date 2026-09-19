@@ -52,17 +52,17 @@
 
 编译器给遗漏人物沿用同场次最近前组的尾位置/姿态；无前组锚点才用后组首锚，并记录推断。关键帧 `visible:false` 的退场状态继续继承，不让已离场人物复活；仅在画外不等于退场。补充人物的精确轨迹写入计划 `scene_actors`（结构与 actors 一样），不改变旧动线图字母；找不到同场次空间锚点则报错，不放到原点凑数。组级 `scene_presence: {"CHAR-…":{"state":"absent|remote|present","reason":"…"}}` 可明确整组的缺席、远程声音或在场状态；镜内进退场仍用关键帧。只有完成场次同步的组才启用新名单规则：无 `visibility_override_reason` 的摄像机名单被忽略；未迁移的旧组保留原名单，避免在本次选择范围外改镜头。
 
-原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。颜色是整集固定的身份色（2026-09-11 起）：编译器按 generation_groups 顺序、组内 blocking_map 数组顺序、再按同场次名单顺序记人物首次出场，依次取固定调色板（16 命名色，用尽后按黄金角等距生成、不循环），同一人物/生物在本集所有组里同色；`episode.json` 顶层 `actor_colors` 给出整集 ID→颜色表，分镜预览组卡的人物 chip 读同一张表。只作坐骑的生物不占色位、与骑手同色。字母字段只保留在数据中作兼容（2026-09-07 起字母动线图 `directing/<ep>/blocking_maps/` 已退役，人物空间位置参考改由本白模视频承担），白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
+原始输入：`directing/<ep>/shot_list.json` 的 generation_groups、blocking_map 和 shots，逐镜 camera.json/blocking.json，场景 layout.json。颜色是整集固定的身份色（2026-09-11 起）：编译器按 generation_groups 顺序、组内 blocking_map 数组顺序、再按同场次名单顺序记人物首次出场，依次取固定调色板（16 命名色，用尽后按黄金角等距生成、不循环），同一人物/生物在本集所有组里同色；`episode.json` 顶层 `actor_colors` 给出整集 ID→颜色表，分镜预览组卡的人物 chip 读同一张表。生物与人物一样有自己的整集固定色（2026-09-19）：独立态、骑乘态同色，不再随骑手变色；只作坐骑的生物排在全部独立角色之后取色，存量人物色位不因此移动。字母字段只保留在数据中作兼容（2026-09-07 起字母动线图 `directing/<ep>/blocking_maps/` 已退役，人物空间位置参考改由本白模视频承担），白模画面不绘制头顶字母、编号或字幕，通过模型颜色和画面外的角色色点图例区分。
 
 进退场必须另做时间核对，`scene_cast` 是同场身份总表，不代表每组同时在场。退场镜末写 `visible:false`，首个完整缺席组写 `scene_presence` 的 `absent` 与来源原因；同一 `scene_no + scene_id` 后续自动延续缺席，优先于缓存或复制的 `scene_actors`，直到用 `present` 明确声明重新入场。`remote` 同样不生成实体；`present` 只解除此前缺席，不覆盖新轨迹中的镜内退场。状态不跨场次/地点继承；时间跳切需重新核对。同步参考图时，不给 absent 人物新增在场绑定，旧图片序号保持不动，并在 prompt 写明缺席，避免把身份参考误解为出场要求。
 
 调度验收按“已入场 / 仍在场但画外 / 已离场 / 尚未入场 / 远程声音”逐组核对，不用是否有对白或是否列入 shot.characters 代替。原文只写“出去”不会自动变成数值退场；工位必须落实为关键帧与 scene_presence。反例 liaozhai2/ep01 grp021–grp034：母亲退场仅保留在文字里，门口可见尾帧被复制进后续 scene_actors，造成她一直留在房内。回归测试覆盖缺席延续、复制轨迹覆盖、重新入场、场次隔离及提示词同步。
 
-**角色颜色唯一性（2026-09-10，2026-09-11 改整集固定）**：颜色是整集身份标记，由编译器统一拥有。`actors`、显式 `scene_actors`、自动继承人物一律按整集 `actor_colors` 表取色（同一人物各组不变），禁止手填颜色/字母；整集表漏项才从本组未用色兜底。旧服务兼容迁移可将宿主已计算的颜色回填为缓存，新编译器始终忽略此缓存并重新分配。所有在场人物与生物（含镜头外和隐藏角色）完成补齐后必须校验颜色唯一性；只有明确 `rider` 关系的坐骑与骑手可同色，独立生物、背负的人物不能借此豁免。调色板用尽时按黄金角生成新色，不循环复用。预览图例、模型和 prompt 的 Whitebox legend 均以编译后 actor.color 为准；修改后重新编译，已有导出视频须重出并同步参考说明。验收同时核对 actor ID→颜色及独立角色无撞色，不能只检查颜色格式。反例 liaozhai2/ep02 grp033–035：女尸作为 scene_actors 沿用前组蓝色，与本组第二位人物撞色；补充人物也必须经过宿主配色。
+**角色颜色唯一性（2026-09-10，2026-09-11 改整集固定）**：颜色是整集身份标记，由编译器统一拥有。`actors`、显式 `scene_actors`、自动继承人物一律按整集 `actor_colors` 表取色（同一人物各组不变），禁止手填颜色/字母；整集表漏项才从本组未用色兜底。旧服务兼容迁移可将宿主已计算的颜色回填为缓存，新编译器始终忽略此缓存并重新分配。所有在场人物与生物（含镜头外和隐藏角色）完成补齐后必须校验颜色唯一性；2026-09-19 起坐骑与骑手同色同样算撞色（此前的 `rider` 同色豁免废止），独立生物、坐骑、背负的人物一律各占一色。调色板用尽时按黄金角生成新色，不循环复用。预览图例、模型和 prompt 的 Whitebox legend 均以编译后 actor.color 为准；修改后重新编译，已有导出视频须重出并同步参考说明。验收同时核对 actor ID→颜色及独立角色无撞色，不能只检查颜色格式。反例 liaozhai2/ep02 grp033–035：女尸作为 scene_actors 沿用前组蓝色，与本组第二位人物撞色；补充人物也必须经过宿主配色。
 
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
-计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动。预览与导出共用这些规则。
+计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。群演（人或生物）颜色缺失或与本组登记角色撞色时，宿主改派本组未用色并记 warning；群演之间可共用一色（2026-09-19）。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动。预览与导出共用这些规则。
 
 人物和生物的头部均有白色眼睛、深色瞳孔与突出的白色鼻尖，用于识别正脸方向。模型局部 +Z 为正前方，yaw=0 朝 +Z，yaw=π/2 朝 +X；面部随转身和坐卧姿态变化，在空间、俯视、摄像机预览与导出视频中保持一致。
 
@@ -277,7 +277,7 @@ python code/render_whitebox.py --project dzg6 --ep ep01 --stills grp011 grp012
 项目「输出设置 → 人物精确空间位置」开启即启用整条白模链（workflow.yaml `whitebox_requested` = 该开关），并把导出的视频自动接成该分镜组视频生成的参考视频：`render_whitebox.py` 导出后自动执行 `python code/sync_whitebox_refs.py --project <slug> --ep <ep> --write [grp…]`（不带 `--write` 为机检 `whitebox_ref_bound`）。对已有组 prompt `assets/prompts/<ep>/<grp>.json`：
 
 - `video_refs`：`camera.mp4`（画面视角，`[Video 1]`）在前（2026-09-08 起白模只有这一路，原 `output.whitebox_top_video` 开关废止）；预算按本组生效视频模型（组级覆盖优先）——Seedance 2.0 参考视频 ≤3 个且总时长 ≤15s，2.5 ≤10 个且 ≤30s，comfyui/runninghub 仅 MiniMax-H3 Ref2VA 工作流可接(官方 MiniMaxH3ReferenceToVideo 节点:≤3 段、每段 2-15s、24fps,提交前自动转码;有音轨则按编号配成 ref_video_audios),其他工作流不挂；取舍与原因写入 `whitebox_refs.skipped_reason`。
-- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，2026-09-09 起只列在摄影机视频里实际出现的人物/生物/群演，骑乘生物「riding the same-colored creature」，群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
+- 正文 `Shot 1:` 前插入固定英文段：`Whitebox reference:`（camera-view 视频作用：定机位/构图/人物画面位置/景深/朝向/节奏）+ `Whitebox legend:`（按 episode.json 该组 `actors[]` 逐人 `<color> figure = <label> (<id>)`，2026-09-09 起只列在摄影机视频里实际出现的人物/生物/群演，骑乘生物「riding the <color> creature」（2026-09-19 起坐骑自有色），群演 extras；眼睛与鼻尖=朝向；摄像机本体不出现在画面视角里）+ 禁复现白模外观句；`Global constraints:` 并入 `No whitebox look …`。段落幂等刷新，原 prompt 首次备份到 `directing/<ep>/whitebox/prompt_backups/`。
 - video-generation 按 `video_refs` 顺序传 `--ref-video`；方舟/MiniMax 的 reference_video 须公网 URL，须先在「设置 → 文件托管」配置对象存储。参考视频与首尾帧模式互斥（长镜头自动选择尾段视频或尾帧图，详见 [自动续接](continuity.md)；摄影机白模与尾段共用参考视频预算）。
 
 尚无 prompt 的组由 prompt 工位产出后再跑一次 `--write`；场景/调度更新重出视频后再跑即自动刷新。开关关闭的项目不接、脚本报 skipped。

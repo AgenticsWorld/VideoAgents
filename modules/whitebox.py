@@ -46,29 +46,27 @@ def episode_actor_colors(source, contexts=None):
     """整集人物/生物 → 固定身份色(2026-09-11)。
 
     同一人物在本集所有分镜组里同色:按 generation_groups 顺序、组内 blocking_map.characters 顺序、
-    再按同场次名单顺序记首次出场,依次取 palette_color。只作坐骑(从不作独立角色)的生物不占色位,
-    与其骑手同色;独立出场过的生物有自己的色位,被骑乘的那一组仍按规约临时改用骑手色。
+    再按同场次名单顺序记首次出场,依次取 palette_color。生物与人物一样有自己的整集固定色
+    (2026-09-19):独立态、骑乘态同色,不再随骑手变色。只作坐骑(从不作独立角色)的生物排在
+    全部独立角色之后取色,存量人物色位不因此移动。
     """
     contexts = contexts if contexts is not None else scene_cast_groups(source)
-    order, riders = [], {}
+    order = []
     groups = source.get('generation_groups', [])
-    routes = [(g, r) for g in groups for r in (g.get('blocking_map') or {}).get('characters', []) if isinstance(r, dict)]
-    independent = {r.get('id') for _, r in routes}
-    for _, route in routes:
+    routes = [r for g in groups for r in (g.get('blocking_map') or {}).get('characters', []) if isinstance(r, dict)]
+    independent = {r.get('id') for r in routes}
+    mounts = []
+    for route in routes:
         mount = route.get('mounted')
-        if mount and mount not in independent:
-            riders.setdefault(mount, route.get('id'))
+        if isinstance(mount, str) and mount and mount not in independent and mount not in mounts:
+            mounts.append(mount)
     for group in groups:
         ids = [r.get('id') for r in (group.get('blocking_map') or {}).get('characters', []) if isinstance(r, dict)]
         ids += contexts.get(group.get('group_id'), {}).get('actor_ids', [])
         for cid in ids:
-            if isinstance(cid, str) and cid and cid not in order and cid not in riders:
+            if isinstance(cid, str) and cid and cid not in order and cid not in mounts:
                 order.append(cid)
-    colors = {cid: palette_color(i) for i, cid in enumerate(order)}
-    for mount, rider in riders.items():
-        if rider in colors:
-            colors[mount] = colors[rider]
-    return colors
+    return {cid: palette_color(i) for i, cid in enumerate(order + mounts)}
 
 
 def validate_actor_colors(actors):
@@ -79,13 +77,12 @@ def validate_actor_colors(actors):
         if not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
             raise ValueError(f"{actor['id']}: actor.color must be a hex color")
         rider = actor.get('rider')
-        if rider and (rider not in by_id or actor.get('kind') != 'creature'
-                      or color.lower() != by_id[rider].get('color', '').lower()):
-            raise ValueError(f"{actor['id']}: mount color must match its rider")
-        owner = rider or actor['id']
-        previous = owners.setdefault(color.lower(), owner)
-        if previous != owner:
-            raise ValueError(f"{previous}/{owner}: independent actors share color {color}")
+        if rider and (rider not in by_id or actor.get('kind') != 'creature'):
+            raise ValueError(f"{actor['id']}: mount needs a creature kind and a rider in the group")
+        # 2026-09-19:坐骑也有自己的整集固定色,与骑手同色同样算撞色。
+        previous = owners.setdefault(color.lower(), actor['id'])
+        if previous != actor['id']:
+            raise ValueError(f"{previous}/{actor['id']}: actors share color {color}")
 
 
 def component(value):
@@ -416,11 +413,14 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         actors.append(actor)
         if route.get('mounted'):
             actors.append({'id': component(route['mounted']), 'label': route['mounted'], 'letter': '',
-                           'color': actor['color'], 'kind': 'creature', 'size_m': [0.65, 1.5, 2.1],
+                           'color': colors.get(route['mounted'], ''), 'kind': 'creature', 'size_m': [0.65, 1.5, 2.1],
                            'rider': cid, 'keyframes': copy.deepcopy(keys)})
             for key in actor['keyframes']:
                 key['position'][1] += 1.45
                 key['pose'] = 'sit'
+    for actor in actors:   # 整集配色表漏项(坐骑等)从本组未用色兜底
+        if not actor['color']:
+            actor['color'] = free_color(actors)
     if 'actors' not in plan:
         warnings.append('存量人物身高、文字姿态及未标时动线按规约推断；精确节拍可在白模计划中覆盖。')
     cameras = []; offset = 0
@@ -683,6 +683,13 @@ def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
             if ov:
                 _apply_ov(group, ov)
     for group in groups:
+        # 群演(人/生物)颜色是计划手填的:缺色或与登记角色撞色时宿主改派本组未用色;群演之间可共用一色。
+        taken = {a.get('color', '').lower() for a in group['actors']}
+        for extra in group.get('extras', []):
+            color = str(extra.get('color') or '')
+            if not re.fullmatch(r'#[0-9a-fA-F]{6}', color) or color.lower() in taken:
+                extra['color'] = free_color(group['actors'] + group['extras'])
+                group['warnings'].append(f"{extra['id']}: 群演颜色{'缺失' if not color else '与登记角色撞色'}，宿主改为 {extra['color']}。")
         try:
             validate_actor_colors(group['actors'])
         except ValueError as error:

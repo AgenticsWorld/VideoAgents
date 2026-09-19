@@ -459,12 +459,13 @@ def legend_rows(group: dict, cast: dict | None = None) -> list:
         if a.get('kind') == 'creature':
             row = f"{color_name(a.get('color'))} creature = {a.get('label') or a['id']} ({a['id']})"
         for m in rider_mounts:
-            row += f", riding the same-colored creature {m.get('label') or m['id']} ({m['id']})"
+            row += f", riding the {color_name(m.get('color'))} creature {m.get('label') or m['id']} ({m['id']})"
         rows.append(row)
     for x in group.get('extras', []) or []:
         if shown is not None and x.get('id') not in shown:
             continue
-        rows.append(f"{color_name(x.get('color'))} figure = {x.get('label') or x.get('id')} ({x.get('id')}, background extra)")
+        noun = 'creature' if x.get('kind') == 'creature' else 'figure'
+        rows.append(f"{color_name(x.get('color'))} {noun} = {x.get('label') or x.get('id')} ({x.get('id')}, background extra)")
     return rows
 
 
@@ -754,7 +755,7 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
         legend = block[block.index(LEGEND_KEY):]
         shown = set(cast['visible']) if cast else None
         for a in (plan['group'] or {}).get('actors', []):
-            if a.get('rider') or (shown is not None and a['id'] not in shown):
+            if shown is not None and (a.get('rider') or a['id']) not in shown:   # 坐骑随骑手入图例
                 continue
             if a['id'] not in legend or color_name(a.get('color')) not in legend:
                 errs.append(f"{gid}: 图例缺 {color_name(a.get('color'))} = {a.get('label') or a['id']} ({a['id']})")

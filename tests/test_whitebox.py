@@ -93,12 +93,12 @@ def test_authored_scene_actor_cannot_copy_an_occupied_color(project):
     assert compile_episode(project, 'ep01')['groups'][0]['actors'] == actors
 
 
-def test_actor_colors_allow_only_explicit_mount_sharing():
+def test_actor_colors_are_unique_including_mounts():
     from modules.whitebox import PALETTE, free_color, palette_color, validate_actor_colors
     actors = [{'id': 'CHAR-1', 'color': PALETTE[0]},
-              {'id': 'CRE-1', 'kind': 'creature', 'color': PALETTE[0], 'rider': 'CHAR-1'}]
+              {'id': 'CRE-1', 'kind': 'creature', 'color': PALETTE[1], 'rider': 'CHAR-1'}]
     validate_actor_colors(actors)
-    del actors[1]['rider']
+    actors[1]['color'] = PALETTE[0]   # 2026-09-19:坐骑与骑手同色也算撞色
     with pytest.raises(ValueError, match='share color'):
         validate_actor_colors(actors)
     # 调色板用尽不报错:按黄金角生成新色,且与已有色不重复
@@ -126,12 +126,12 @@ def test_actor_colors_are_fixed_across_groups(project):
     write(path, data)
     result = compile_episode(project, 'ep01'); assert not result['errors']
     colors = result['actor_colors']
-    assert colors == {'CHAR-1': '#e63946', 'CRE-horse': '#e63946', 'CHAR-2': '#1d78d8', 'CHAR-3': '#2ea043'}
+    assert colors == {'CHAR-1': '#e63946', 'CRE-horse': '#f59e0b', 'CHAR-2': '#1d78d8', 'CHAR-3': '#2ea043'}
     for group in result['groups']:
         for actor in group['actors']:
             assert actor['color'] == colors[actor['id']], (group['group_id'], actor['id'])
     grp2 = {a['id']: a['color'] for a in result['groups'][1]['actors']}
-    assert grp2 == {'CHAR-2': '#1d78d8', 'CHAR-1': '#e63946', 'CRE-horse': '#e63946'}  # 顺序反了颜色不变;坐骑继承
+    assert grp2 == {'CHAR-2': '#1d78d8', 'CHAR-1': '#e63946', 'CRE-horse': '#f59e0b'}  # 顺序反了颜色不变;坐骑自有色(排在人物之后)
 
 
 def test_scene_cast_enables_physical_visibility_and_explicit_exceptions(project):
@@ -181,8 +181,27 @@ def test_mounted_creature_scale(project):
     write(path,data);result=compile_episode(project,'ep01');assert not result['errors']
     rider,mount=result['groups'][0]['actors']
     assert mount['letter']=='' and mount['kind']=='creature'
+    assert (rider['color'],mount['color'])==('#e63946','#1d78d8') and result['actor_colors']['CRE-1']=='#1d78d8'
     assert rider['keyframes'][0]['pose']=='sit'
     assert rider['keyframes'][0]['position'][1]-mount['keyframes'][0]['position'][1]==1.45
+
+
+def test_creature_color_fixed_across_independent_and_mounted_groups():
+    from modules.whitebox import episode_actor_colors
+    src={'generation_groups':[
+        {'group_id':'g1','shots':[],'blocking_map':{'characters':[{'id':'CHAR-1','mounted':'CRE-2'},{'id':'CRE-1'}]}},
+        {'group_id':'g2','shots':[],'blocking_map':{'characters':[{'id':'CHAR-2','mounted':'CRE-1'}]}}]}
+    colors=episode_actor_colors(src,{})
+    # 独立角色按出场序占位,只作坐骑的 CRE-2 排在最后;CRE-1 被骑乘时不随骑手变色
+    assert list(colors)==['CHAR-1','CRE-1','CHAR-2','CRE-2'] and len(set(colors.values()))==4
+
+
+def test_extra_color_clash_is_reassigned(project):
+    first=compile_episode(project,'ep01')['groups'][0]['actors'][0]
+    horse={**copy.deepcopy(first),'id':'EXTRA-HORSE-1','label':'horse','kind':'creature'}
+    write(project/'directing/ep01/whitebox_plans/grp1.json',{'extras':[horse]})
+    group=compile_episode(project,'ep01')['groups'][0]
+    assert group['extras'][0]['color']!=first['color'] and any('EXTRA-HORSE-1' in w for w in group['warnings'])
 
 
 def test_missing_cast_blocks_instead_of_disappearing(project):
