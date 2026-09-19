@@ -364,7 +364,7 @@ async function load(keep){
 let LAST_EPISODES=[];
 function schedulePoll(){
   const busy=runningBatches().length>0;
-  if(busy&&!POLL)POLL=setInterval(()=>load(true),6000);
+  if(busy&&!POLL)POLL=setInterval(()=>load(true),60000);
   if(!busy&&POLL){clearInterval(POLL);POLL=null}
 }
 
@@ -1376,6 +1376,12 @@ function renderRight(){
   // 2. 我的修改
   const ovAll=Object.keys((DD.overrides||{})).filter(k=>NOTE_SCOPE==='all'||k===gid);
   const ovRow=ovAll.map(k=>{const o=(DD.overrides||{})[k]||{};const list=Object.values(KIND_KEY).flatMap(kk=>Object.keys(o[kk]||{}).map(id=>kk+'/'+id));return list.length?`<div class="note ${k!==gid?'other':''}"><div class="r1"><span class="tg"><i style="background:var(--yellow)"></i>${esc(t('覆盖层'))}</span>${k!==gid?`<button class="xs" data-gsel="${esc(k)}">${esc(k)}</button>`:''}<span class="sp"></span><span class="st submitted">${esc(t('未固化'))}</span></div><div class="txt" data-no-i18n>${esc(I18N.f('{n} 个对象已在 3D 里直接改定:{list}',{n:list.length,list:list.join(', ')}))}</div><div class="r2"><span>${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span></div></div>`:''}).join('');
+  // 提交按钮只有一个,范围跟随顶部「本组 / 全集」:计数 = 待提交注释 + 已裁决待决项 + 3D 直改项(全集口径同后端:只带有注释或直改的组的待决项)
+  const ovItems=o=>Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys((o||{})[k]||{}).length,0);
+  const subGroups=new Set([...draftsAll.map(n=>n.group_id),...Object.keys(DD.overrides||{}).filter(k=>ovItems(DD.overrides[k]))]);
+  const subN=NOTE_SCOPE==='all'
+    ?draftsAll.length+[...subGroups].reduce((n,k)=>n+groupIssues(k).filter(i=>i.status==='decided').length+ovItems((DD.overrides||{})[k]),0)
+    :draftsG.length+decided.length+ovCount();
   const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
     <div class="nform" id="nform"${draftOnly?' style="display:none"':''}>
       <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
@@ -1385,8 +1391,7 @@ function renderRight(){
       <div class="btns"><span class="msg" id="nf-msg"></span><button class="sm" id="nf-clear">${esc(t('清空'))}</button><button class="sm pri" id="nf-save">${esc(t('加入队列'))}</button></div>
     </div>
     <div class="subrow"><span class="msg" id="sub-msg">${runningBatches().some(b=>b.group_ids.includes(gid))?esc(t('本组有批次运行中,等回收后再提交')):esc(t('提交 = 一次派单给白模调度 Agent = 一个新版本'))}</span>
-      <button class="sm" id="sub-group" ${draftsG.length||decided.length||ovCount()?'':'disabled'}>${esc(I18N.f('提交本组 ({n})',{n:draftsG.length+decided.length+ovCount()}))}</button>
-      <button class="sm pri" id="sub-all" ${draftsAll.length||Object.keys(DD.overrides||{}).length?'':'disabled'}>${esc(I18N.f('提交全部待提交 ({n})',{n:draftsAll.length+Object.values(DD.overrides||{}).reduce((n,o)=>n+Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys(o[k]||{}).length,0),0)}))}</button></div>`;
+      <button class="sm pri" id="sub-go" ${subN?'':'disabled'} title="${esc(NOTE_SCOPE==='all'?t('提交全集所有待提交内容;切到「本组」只提交当前组'):t('只提交当前组;切到「全集」一次提交所有组的待提交内容'))}">${esc(I18N.f(NOTE_SCOPE==='all'?'提交全集 ({n})':'提交本组 ({n})',{n:subN}))}</button></div>`;
   h+=acc('notes',`✎ ${esc(t('我的修改'))}`,`${notes.length}${drafts.length?' · '+esc(I18N.f('待提交 {n}',{n:drafts.length})):''}`,draftBody);
   // 3. 已提交版本
   const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
@@ -1408,8 +1413,7 @@ function renderRight(){
   $$('#right [data-version]').forEach(b=>b.onclick=()=>selectVersion(b.dataset.version));
   $$('#right [data-gsel]').forEach(b=>b.onclick=()=>selectGroup(b.dataset.gsel));
   const snap=$('#snap');if(snap)snap.onclick=async()=>{snap.disabled=true;try{const r=await J(api('/snapshot'),'POST',{group_id:gid});toast(I18N.f('已存为 v{v}',{v:r.version.v}));await load(true)}catch(e){toast(t('存版失败:')+e.message);snap.disabled=false}};
-  const sg=$('#sub-group');if(sg)sg.onclick=()=>submitBatch({group_ids:[gid]},sg);
-  const sa=$('#sub-all');if(sa)sa.onclick=()=>submitBatch({},sa);
+  const sg=$('#sub-go');if(sg)sg.onclick=()=>submitBatch(NOTE_SCOPE==='all'?{}:{group_ids:[gid]},sg);
   const nc=$('#nf-clear');if(nc)nc.onclick=()=>{fillNoteForm(null);$('#nf-text').value='';EDIT_ID=null;$('#nf-save').textContent=t('加入队列')};
   const ns=$('#nf-save');if(ns)ns.onclick=saveNote;
   // 语音输入(设置 → 高级 开启时才显示麦克风):共用 voice-input.js,识别结果插到光标处
@@ -1441,7 +1445,7 @@ function noteHtml(n){
 }
 function colorOf(id){const g=grpById(SEL);if(!g)return '#5c6478';const a=[...(g.actors||[]),...(g.extras||[])].find(a=>a.id===id);return a?a.color:(WB.actor_colors||{})[id]||'#5c6478'}
 let EDIT_ID=null;
-// 右栏整块重渲(批次轮询 6s 一次、3D 改动、折叠/切本组全集)会重建注释表单:重渲前按组存下未保存的输入,
+// 右栏整块重渲(批次轮询 60s 一次、3D 改动、折叠/切本组全集)会重建注释表单:重渲前按组存下未保存的输入,
 // 重渲后原样放回(含光标/焦点),否则正在写的「要求」会被清空;切到别的组再切回来也还在
 const NOTE_FORM={};let FORM_GID='';
 function keepNoteForm(){
