@@ -61,6 +61,7 @@ header select{cursor:pointer;max-width:260px}
 /* 左栏 */
 .scn{padding:5px 10px;color:var(--dim);font-size:11.5px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;cursor:pointer;user-select:none;position:sticky;top:0;z-index:1}
 .scn .sp{flex:1}
+.scn .lite{opacity:.65;font-size:10.5px;margin-left:4px}
 .scn.closed+.grps{display:none}
 .grp{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:6px 10px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;font-size:12px}
 .grp:hover{background:var(--panel2)}
@@ -412,12 +413,17 @@ function render(keep){
 /* 左栏 */
 function renderLeft(){
   let h=`<div class="col-h">${esc(t('分镜组'))} <span class="lite">${WB.groups.length}</span><span class="sp"></span><span class="lite">${esc(t('点镜跳到该镜起点'))}</span></div><div class="scroll" id="glist">`;
-  const scenes=[];const seen={};
-  for(const g of WB.groups){const sid=g.scene_id||'?';if(!seen[sid]){seen[sid]={scene_id:sid,groups:[]};scenes.push(seen[sid])}seen[sid].groups.push(g)}
-  if(!OPEN_SCN.size)OPEN_SCN=new Set(scenes.slice(0,4).map(s=>s.scene_id));
+  // 分组按场次(scene_no,取组内首镜;与分镜预览页一致:按组序连续成块,同场次拆多块标 段号/总段数);分镜数据缺失时退回 scene_id
+  const snOf=g=>{for(const c of g.cameras||[]){const s=shotOf(c.shot_id);if(s&&s.scene_no)return String(s.scene_no)}return g.scene_id||'?'};
+  const scenes=[];
+  for(const g of WB.groups){const sn=snOf(g),last=scenes.at(-1);if(last&&last.sn===sn)last.groups.push(g);else scenes.push({sn,groups:[g]})}
+  const snParts={},snSeen={};scenes.forEach(b=>{snParts[b.sn]=(snParts[b.sn]||0)+1});
+  scenes.forEach(b=>{const seq=(snSeen[b.sn]=(snSeen[b.sn]||0)+1);b.key=b.sn+(seq>1?'#'+seq:'');b.label=b.sn+(snParts[b.sn]>1?` ${seq}/${snParts[b.sn]}`:'')});
+  if(!scenes.some(b=>OPEN_SCN.has(b.key)))OPEN_SCN=new Set(scenes.slice(0,4).map(b=>b.key));
   for(const sc of scenes){
-    const open=OPEN_SCN.has(sc.scene_id),scn=WB.scenes[sc.scene_id]||{};
-    h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.scene_id)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(scn.name||'')}">${esc(sc.scene_id)} ${esc(scn.name&&scn.name!==sc.scene_id?scn.name:'')}</span><span class="sp"></span><span>${sc.groups.length}</span></div><div class="grps">`;
+    const open=OPEN_SCN.has(sc.key),scns=[...new Set(sc.groups.map(g=>g.scene_id).filter(Boolean))].filter(id=>id!==sc.sn);
+    const scnTip=scns.map(id=>id+((WB.scenes[id]||{}).name&&WB.scenes[id].name!==id?' '+WB.scenes[id].name:'')).join(' · ');
+    h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.key)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(scnTip)}">${esc(sc.label)}${scns.length?` <span class="lite">${esc(scns.join(' '))}</span>`:''}</span><span class="sp"></span><span>${sc.groups.length}</span></div><div class="grps">`;
     for(const g of sc.groups){
       const notes=groupNotes(g.group_id),drafts=notes.filter(n=>n.status==='draft').length,sub=notes.filter(n=>n.status==='submitted').length;
       const iss=groupIssues(g.group_id),pend=iss.filter(i=>i.status==='open'||i.status==='stale').length,blk=iss.filter(i=>i.severity==='blocking'&&(i.status==='open'||i.status==='stale')).length;
@@ -1391,6 +1397,7 @@ function renderRight(){
     ${batches.map(b=>`<div class="bat"><b>${esc(b.id)}</b> <span class="st ${esc(b.status)}">${esc((DD.labels.batch_status||{})[b.status]||b.status)}</span> · ${esc(b.group_ids.join(', '))} · ${esc(I18N.f('{n} 条注释',{n:(b.note_ids||[]).length}))}${(b.issue_ids||[]).length?' · '+esc(I18N.f('{n} 项裁决',{n:b.issue_ids.length})):''}${b.run_id?` · <a href="/?run=${encodeURIComponent(b.run_id)}" target="_blank" data-no-i18n>${esc(String(b.run_id).slice(0,8))}</a>`:''}${Object.keys(b.versions||{}).length?' → '+esc(Object.entries(b.versions).map(([g,v])=>g+' v'+v).join(', ')):''}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}<br><span data-no-i18n>${esc(b.created_at||'')}</span></div>`).join('')}`;
   h+=acc('vers',`▣ ${esc(t('已提交版本'))}`,`${vs.length}`,vbody);
   h+=`</div>`;
+  keepNoteForm();
   $('#right').innerHTML=h;
   $$('#right .acc-h').forEach(el=>el.onclick=()=>{const id=el.parentElement.dataset.acc;CLOSED_ACC.has(id)?CLOSED_ACC.delete(id):CLOSED_ACC.add(id);renderRight()});
   $$('#nscope span').forEach(s=>s.onclick=()=>{NOTE_SCOPE=s.dataset.s;renderRight()});
@@ -1408,6 +1415,7 @@ function renderRight(){
   // 语音输入(设置 → 高级 开启时才显示麦克风):共用 voice-input.js,识别结果插到光标处
   if(window.VoiceInput&&$('#nf-text'))VoiceInput.attach($('#nf-text'));
   fillNoteForm(PICK,true);
+  restoreNoteForm();
 }
 function issueHtml(i){
   const jumpT=i.camera_view?.t??i.t_range_s?.[0];
@@ -1433,6 +1441,27 @@ function noteHtml(n){
 }
 function colorOf(id){const g=grpById(SEL);if(!g)return '#5c6478';const a=[...(g.actors||[]),...(g.extras||[])].find(a=>a.id===id);return a?a.color:(WB.actor_colors||{})[id]||'#5c6478'}
 let EDIT_ID=null;
+// 右栏整块重渲(批次轮询 6s 一次、3D 改动、折叠/切本组全集)会重建注释表单:重渲前按组存下未保存的输入,
+// 重渲后原样放回(含光标/焦点),否则正在写的「要求」会被清空;切到别的组再切回来也还在
+const NOTE_FORM={};let FORM_GID='';
+function keepNoteForm(){
+  const ta=$('#nf-text');if(!ta||!FORM_GID)return;
+  const v=id=>($(id)||{}).value;
+  if(!ta.value&&!EDIT_ID){delete NOTE_FORM[FORM_GID];return}
+  NOTE_FORM[FORM_GID]={text:ta.value,target:v('#nf-target'),agent:v('#nf-agent'),shot:v('#nf-shot'),uset:!!($('#nf-uset')||{}).checked,t:v('#nf-t'),edit:EDIT_ID,
+    focus:document.activeElement===ta,a:ta.selectionStart,b:ta.selectionEnd,scroll:ta.scrollTop};
+}
+function restoreNoteForm(){
+  const ta=$('#nf-text'),k=NOTE_FORM[SEL];
+  if(FORM_GID!==SEL&&!k)EDIT_ID=null;
+  FORM_GID=SEL;
+  if(!ta||!k)return;
+  const set=(id,val)=>{const el=$(id);if(el&&val!=null&&(el.tagName!=='SELECT'||[...el.options].some(o=>o.value===val)))el.value=val};
+  ta.value=k.text;set('#nf-target',k.target);set('#nf-agent',k.agent);set('#nf-shot',k.shot);set('#nf-t',k.t);
+  if($('#nf-uset'))$('#nf-uset').checked=k.uset;
+  EDIT_ID=k.edit||null;if(EDIT_ID&&$('#nf-save'))$('#nf-save').textContent=t('保存修改');
+  if(k.focus){ta.focus();try{ta.setSelectionRange(k.a,k.b)}catch(e){}ta.scrollTop=k.scroll||0}
+}
 function fillNoteForm(p,keepText){
   const sel=$('#nf-target'),shot=$('#nf-shot'),tin=$('#nf-t');if(!sel)return;
   const rows=objectRows();
