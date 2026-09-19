@@ -3170,8 +3170,8 @@ def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
                              duration: float, seed, lyrics_configured: bool) -> None:
     """RunningHub 音乐云工作流的无占位符直绑兜底(与图像分支同款语义)。
 
-    风格提示词绑主采样器 positive 连线上的音频文本编码节点(ACE 系的 tags 位,
-    兜底 text/prompt),歌词绑同节点 lyrics 位(模板演示歌词不得混入,未配歌词
+    风格提示词绑主采样器 positive 连线上的音频文本编码节点(ACE 系的 tags 位、
+    MiniMax Music 3 的 caption 位,兜底 text/prompt),歌词绑同节点 lyrics 位(模板演示歌词不得混入,未配歌词
     时按 [Instrumental] 覆写);时长绑编码节点 duration 位与各节点 seconds 位
     (ACE 两处常同连一个 Float primitive);prompt/时长定位不到提交前报错
     不发请求不计费。带占位符模板逐项跳过,兜底幂等。
@@ -3182,7 +3182,7 @@ def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
         if "slot" not in cache:
             cache["sampler"] = _image_primary_sampler(workflow)
             cache["slot"] = _image_cond_text_slot(
-                workflow, cache["sampler"], "positive", ("tags", "text", "prompt"))
+                workflow, cache["sampler"], "positive", ("tags", "caption", "text", "prompt"))
         return cache["slot"]
 
     def encode_slot_soft():
@@ -3196,7 +3196,7 @@ def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
         slot = encode_slot()
         if slot is None:
             raise RuntimeError(
-                "RunningHub 音乐工作流顺 positive 连线未找到风格文本位(tags/text/prompt),"
+                "RunningHub 音乐工作流顺 positive 连线未找到风格文本位(tags/caption/text/prompt),"
                 "无法注入本次风格提示词;请把模板改接文本节点或改用 {{PROMPT}} 占位符")
         container, key = _rh_resolve_text_slot(workflow, slot[0], slot[1])
         container[key] = prompt
@@ -3213,13 +3213,15 @@ def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
     if "{{DURATION}}" not in raw:
         # 编码节点 duration 与 latent seconds 常同连一个 Float primitive,分别尝试即可
         slot = encode_slot_soft()
-        bound = bool(slot) and _rh_bind_number(workflow, slot[0], "duration", duration)
+        bound = False
+        for key in ("duration", "max_duration"):  # MiniMax Music 3 编码节点叫 max_duration
+            bound = (bool(slot) and _rh_bind_number(workflow, slot[0], key, duration)) or bound
         for node in workflow.values():
             if isinstance(node, dict) and "seconds" in (node.get("inputs") or {}):
                 bound = _rh_bind_number(workflow, node["inputs"], "seconds", duration) or bound
         if not bound:
             raise RuntimeError(
-                "RunningHub 音乐工作流未定位到时长位(duration/seconds 数值或其上游 primitive),"
+                "RunningHub 音乐工作流未定位到时长位(duration/max_duration/seconds 数值或其上游 primitive),"
                 "无法注入时长,模板默认时长会照单计费;请改模板或用 {{DURATION}} 占位符")
     if seed is not None and "{{SEED}}" not in raw:
         slot = encode_slot_soft()
