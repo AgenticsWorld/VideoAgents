@@ -72,6 +72,16 @@ SKETCH_REFS_SENTENCE = (
 # 纯文生图整句风格提示(2026-09-17):不用 SKETCH_STYLE_PROMPT——Z-Image 这类 cfg=1 的本地模型不吃 negative,
 # 会把风格句里列举的姿态(standing, sitting, kneeling…)和「no panel borders」之类否定句照字面画成多格姿势表;
 # 这里只写正向描述、不列举姿态、不出现「panel/sheet/grid」字样。
+SKETCH_TEXT_ONLY_TAIL = ("Characters are drawn from the text description alone (age, build, hairstyle, "
+                         "outfit as stated); the location is described in text only and stays a faint hint.")
+# 上面这类渠道带参考图时的结尾(2026-09-19):同样只写正向句;逐张点名是谁(Qwen-Image-Edit 按 Picture N 认图),
+# 并写单实例——设定 sheet 多视角同框,不写会把一个人画成几个。{who} 由 ref_sentence_plain 填。
+SKETCH_REFS_SENTENCE_PLAIN = (
+    "The attached pictures are character design sheets: {who}. Each sheet shows one single person from several "
+    "views; in the drawing that person appears exactly once, with the likeness, hairstyle and outfit of the "
+    "sheet, redrawn as a monochrome pencil sketch in the pose and framing described here. The location is "
+    "described in text only and stays a faint hint."
+)
 SKETCH_STYLE_PROMPT_TEXT_ONLY = (
     "One rough pencil sketch on white paper filling the whole page: hand-drawn monochrome line art with loose "
     "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. It is a single "
@@ -80,13 +90,14 @@ SKETCH_STYLE_PROMPT_TEXT_ONLY = (
     "facial expressions, eye lines and body gestures; each figure holds exactly the body position the shot "
     "describes. BACKGROUND MINIMAL: two or three loose lines or a little light hatching to hint at the space, "
     "most of the paper left blank. The framing shows the stated camera angle, camera height and lens. "
-    "Strictly black-and-white. Characters are drawn from the text description alone (age, build, hairstyle, "
-    "outfit as stated); the location is described in text only and stays a faint hint."
+    "Strictly black-and-white. " + SKETCH_TEXT_ONLY_TAIL
 )
-# 纯文生图渠道(2026-09-17 用户拍板):comfyui(本地 / Comfy Cloud / RunningHub)的「参考图」是 img2img 初始画面,
-# 传人物 sheet 会把构图锁死成设定稿且压不住写实底图,多张还直接报错;草图一律不传参考图,按提示词画铅笔草图。
-# 2026-09-18 用户拍板:agentics 同样默认文生图——图像 Agentics 分文生图/图生图两个 profile,草图不传参考图即走文生图 profile。
-TEXT_ONLY_SKETCH_PROVIDERS = ("comfyui", "agentics")
+# 参考图按「图生图是否配置」决定的渠道(2026-09-19 用户拍板,取代 09-17/09-18 的一律纯文生图):
+# comfyui 的本地 / Comfy Cloud 参考图工作流与原图重绘(img2img)模板,「参考图」是初始画面,传人物 sheet 会把构图
+# 锁死成设定稿——仍不传、纯文生图;RunningHub 选了真正收参考图的图生图工作流(如 Qwen-Image-Edit,多个 LoadImage
+# 作条件输入、空 latent)才传人物 sheet,张数以模板 LoadImage 个数封顶。agentics 同理:图生图 profile 收几张传几张,
+# 没配或取不到详情走文生图 profile。容量判定见 genmedia.image_ref_capacity。
+REF_CONDITIONAL_SKETCH_PROVIDERS = ("comfyui", "agentics")
 # 宫格批量退化为逐镜单张的渠道:只有 comfyui(本地模型跟不了严格 2×2 排版);agentics 文生图仍出宫格(不带参考图)
 SINGLE_ONLY_SKETCH_PROVIDERS = ("comfyui",)
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
@@ -1041,9 +1052,43 @@ def _space_hint(scene: dict, max_chars: int = 60) -> str:
     return _short(loc, max_chars)
 
 
-def sketch_text_only(provider: str) -> bool:
-    """该图像渠道出草图是否走纯文生图(不传人物参考图):comfyui 各运行方式、agentics(走文生图 profile),见 TEXT_ONLY_SKETCH_PROVIDERS。"""
-    return str(provider or "").strip().lower() in TEXT_ONLY_SKETCH_PROVIDERS
+def sketch_ref_capacity(provider: str, cfg: dict | None = None) -> int | None:
+    """该图像渠道出草图最多传几张人物参考图:None = 不另设限(各直连渠道,沿用 MAX_CAST_REFS / GRID_MAX_CAST_REFS),
+    0 = 纯文生图。只有 REF_CONDITIONAL_SKETCH_PROVIDERS(comfyui / agentics)看图生图配置,见 genmedia.image_ref_capacity;
+    cfg 传调用方已取的生效图像渠道配置(省一次读取),缺省现取。"""
+    if str(provider or "").strip().lower() not in REF_CONDITIONAL_SKETCH_PROVIDERS:
+        return None
+    from modules.genmedia import get_config, image_ref_capacity
+    try:
+        return image_ref_capacity(cfg if cfg is not None else get_config("image")) or 0
+    except Exception:  # noqa: BLE001  渠道未配置等:按纯文生图
+        return 0
+
+
+def sketch_text_only(provider: str, cfg: dict | None = None) -> bool:
+    """该图像渠道出草图是否走纯文生图(不传人物参考图):comfyui / agentics 没配置可用的图生图时。"""
+    return sketch_ref_capacity(provider, cfg) == 0
+
+
+def sketch_plain_style(provider: str) -> bool:
+    """该渠道的模型多为 cfg=1 蒸馏模型(不吃 negative、会把否定句与姿态列举照字面画):风格句只用正向写法。"""
+    return str(provider or "").strip().lower() in REF_CONDITIONAL_SKETCH_PROVIDERS
+
+
+def ref_cast_ids(base: Path, shot: dict, catalog: dict, limit: int | None = None) -> list[str]:
+    """单镜参考图对应的出场人物/生物 id(collect_refs 同序同上限)。"""
+    cap = MAX_CAST_REFS if limit is None else min(MAX_CAST_REFS, limit)
+    ids: list[str] = []
+    for cid in shot.get("cast") or []:
+        rec = catalog["characters"].get(cid) or catalog["creatures"].get(cid) or {}
+        if rec.get("file") and (base / rec["file"]).is_file() and len(ids) < cap:
+            ids.append(cid)
+    return ids
+
+
+def ref_sentence_plain(ref_names: list[str]) -> str:
+    who = "; ".join(f"Picture {i} is {n}" for i, n in enumerate(ref_names, 1)) or "one sheet per character"
+    return SKETCH_REFS_SENTENCE_PLAIN.format(who=who)
 
 
 def sketch_single_only(provider: str) -> bool:
@@ -1051,10 +1096,17 @@ def sketch_single_only(provider: str) -> bool:
     return str(provider or "").strip().lower() in SINGLE_ONLY_SKETCH_PROVIDERS
 
 
-def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True) -> tuple[str, str]:
+def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True,
+                 plain_style: bool = False, ref_names: list[str] | None = None) -> tuple[str, str]:
     """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。
     with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。"""
-    parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE if with_refs else SKETCH_STYLE_PROMPT_TEXT_ONLY]
+    # plain_style(comfyui / agentics,2026-09-19)带参考图:正向风格句 + 逐张点名的参考图句,不用含否定句/姿态列举的 SKETCH_STYLE_PROMPT
+    if not with_refs:
+        parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY]
+    elif plain_style:
+        parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY[:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
+    else:
+        parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE]
     if shot.get("size_hint"):
         parts.append(f"Shot size: {shot['size_hint']}.")
     cam = camera_hint(shot)
@@ -1108,17 +1160,15 @@ def _shrink(src: Path, cache: Path) -> Path:
         return src
 
 
-def collect_refs(base: Path, ep: str, scene: dict, shot: dict, catalog: dict) -> list[Path]:
-    """只带出场人物 sheet(≤MAX_CAST_REFS),缩小后返回绝对路径。不带场景图(俯视图会误导模型,场景靠文字)、不带风格参考图。"""
+def collect_refs(base: Path, ep: str, scene: dict, shot: dict, catalog: dict, limit: int | None = None) -> list[Path]:
+    """只带出场人物 sheet(≤MAX_CAST_REFS,limit 再封顶——comfyui / agentics 图生图能收的张数),缩小后返回绝对路径。
+    不带场景图(俯视图会误导模型,场景靠文字)、不带风格参考图。"""
     cache = sketch_dir(base, ep) / "_refcache"
-    refs: list[Path] = []
-    n = 0
-    for cid in shot.get("cast") or []:
+    out = []
+    for cid in ref_cast_ids(base, shot, catalog, limit):
         rec = catalog["characters"].get(cid) or catalog["creatures"].get(cid) or {}
-        if rec.get("file") and (base / rec["file"]).is_file() and n < MAX_CAST_REFS:
-            refs.append(_shrink(base / rec["file"], cache))
-            n += 1
-    return refs
+        out.append(_shrink(base / rec["file"], cache))
+    return out
 
 
 def grid_layout(n: int) -> tuple[int, int]:
@@ -1202,8 +1252,11 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
     return prompt, GRID_NEGATIVE
 
 
-def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], catalog: dict) -> list[Path]:
-    """宫格模式参考图:各格(≤4)出场人物并集,按出场格数降序取前 GRID_MAX_CAST_REFS 张 sheet(缩小后)。"""
+def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], catalog: dict,
+                      limit: int | None = None) -> list[Path]:
+    """宫格模式参考图:各格(≤4)出场人物并集,按出场格数降序取前 GRID_MAX_CAST_REFS 张 sheet(缩小后);
+    limit 再封顶(agentics 图生图 profile 能收的张数)。"""
+    cap = GRID_MAX_CAST_REFS if limit is None else min(GRID_MAX_CAST_REFS, limit)
     cache = sketch_dir(base, ep) / "_refcache"
     freq: dict[str, int] = {}
     for _, shot in panels:
@@ -1214,7 +1267,7 @@ def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], cata
         rec = catalog["characters"].get(cid) or catalog["creatures"].get(cid) or {}
         if rec.get("file") and (base / rec["file"]).is_file():
             refs.append(_shrink(base / rec["file"], cache))
-        if len(refs) >= GRID_MAX_CAST_REFS:
+        if len(refs) >= cap:
             break
     return refs
 

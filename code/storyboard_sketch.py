@@ -4,10 +4,11 @@
 按 `directing/<ep>/storyboard.json` 的草案镜出**铅笔手绘风格的小草图**,落
 `assets/storyboard/<ep>/<S01-01>.png`,台账 `assets/storyboard/<ep>/index.json`(schema storyboard_sketches/1.0)。
 参考图:只带出场人物 sheet(≤3),缩到 512px 长边;场景只靠文字(俯视图会误导模型),不用风格参考图;画幅取项目「输出设置」的视频画幅;渠道/模型按 --provider/--model
-渠道为 comfyui(本地 / Comfy Cloud / RunningHub 任一运行方式)时**不传参考图**,走纯文生图工作流按提示词画铅笔草图
-(2026-09-17 用户拍板:ComfyUI 的参考图是 img2img 初始画面,传 sheet 会把构图锁成设定稿、多张还报错)。
-渠道为 agentics 时同样**不传参考图**(2026-09-18 用户拍板):图像 Agentics 分文生图/图生图两个 profile,草图默认走文生图 profile;
-宫格批量照常出宫格(只是不带参考图)。
+渠道为 comfyui / agentics 时**只有配置了收参考图的图生图才传参考图**(2026-09-19 用户拍板,取代 09-17/09-18 的一律纯文生图):
+comfyui 须是 RunningHub 运行方式且「图生图工作流」选的是真正收参考图的模板(如 Qwen-Image-Edit:多个 LoadImage 作条件输入、空 latent),
+张数以模板 LoadImage 个数封顶;本地 / Comfy Cloud 的参考图工作流与原图重绘(img2img)模板是把图当初始画面,传 sheet 会把构图锁成
+设定稿,仍不传、走纯文生图。agentics 看图生图 profile 的 input_images.max_items,没配或取不到详情走文生图 profile。
+这两个渠道带参考图时风格句用正向写法 + 逐张点名(Picture N 是谁)+ 单实例句(cfg=1 蒸馏模型不吃 negative)。
 提示词(2026-09-12 用户拍板)**人物优先、背景留白**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;
 机位/神态从分镜文字自动推导成英文短语(modules/storyboard_board.py camera_hint / expression_hint)。
 (缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
@@ -15,7 +16,7 @@
 两种出图方式:
 - 单镜/逐镜:每镜一张图(--scene [--order]);
 - 宫格批量(--grid,页面单集标题行「出草图」用):把待出的镜按集内顺序每 4 镜一批,一批出**一张 2×2 宫格图**
-  (渠道为 comfyui 时退化为逐镜单张:本地模型跟不了严格宫格排版,台账记 mode=single;agentics 仍出宫格、不带参考图)
+  (渠道为 comfyui 时退化为逐镜单张:本地模型跟不了严格宫格排版,台账记 mode=single;agentics 仍出宫格,参考图同上按图生图 profile 容量)
   (2026-09-12 由 3×3/9 镜降为 2×2/4 镜:每格更大才画得出表情;1 镜退回单张),切成小图落到各镜的 <S01-01>.png,
   台账记 mode=grid + grid{file,cols,rows,cell};宫格原图存 assets/storyboard/<ep>/_grids/。切出的小图约 1230×690,动态样片按画布等比缩放统一。
 
@@ -96,9 +97,15 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
             sbb.update_index(root, ep, key, {"status": "failed", "error": str(e)[:500],
                                              "scene_no": scene["scene_no"], "order": shot["order"]})
         return False
-    text_only = sbb.sketch_text_only(eff_provider)     # comfyui / agentics:纯文生图,不传人物 sheet
-    prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only)
-    refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog)
+    # comfyui / agentics:配了收参考图的图生图(RunningHub 多 LoadImage 模板 / agentics 图生图 profile)才传人物 sheet,
+    # 张数以其容量封顶;否则纯文生图(2026-09-19)
+    ref_cap = sbb.sketch_ref_capacity(eff_provider, cfg)
+    text_only = ref_cap == 0
+    refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog, limit=ref_cap)
+    text_only = text_only or (ref_cap is not None and not refs)     # 出场人物都没 sheet:仍走文生图写法
+    ref_names = [names.get(c, c) for c in sbb.ref_cast_ids(root, shot, catalog, ref_cap)] if refs else []
+    prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only,
+                                        plain_style=sbb.sketch_plain_style(eff_provider), ref_names=ref_names)
     if args.dry_run:
         print(f"[dry-run] {key} via {eff_provider} model={eff_model or '-'} aspect={aspect} size={sbb.sketch_size(eff_provider, aspect)} → {rel}")
         print(f"  prompt: {prompt}")
@@ -163,9 +170,11 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
         return sum(0 if _sketch_one(root, ep, sc, sh, names, catalog, aspect, one,
                                     index["shots"].get(sh["key"]) or {}) else 1
                    for sc, sh in panels)
-    text_only = sbb.sketch_text_only(eff_provider)     # agentics:宫格照出,但不传人物 sheet(走文生图 profile)
+    # agentics:宫格照出;图生图 profile 收参考图才传人物 sheet(张数以其容量封顶),否则走文生图 profile(2026-09-19)
+    ref_cap = sbb.sketch_ref_capacity(eff_provider, cfg)
+    refs = [] if ref_cap == 0 else sbb.collect_grid_refs(root, ep, panels, catalog, limit=ref_cap)
+    text_only = ref_cap is not None and not refs
     prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect, with_refs=not text_only)
-    refs = [] if text_only else sbb.collect_grid_refs(root, ep, panels, catalog)
     size = sbb.grid_size(eff_provider, aspect)
     grid_rel = f"{sbb.GRID_DIR_REL.format(ep=ep)}/{time.strftime('%Y%m%d-%H%M%S')}_{keys[0]}_{keys[-1]}.png"
     if args.dry_run:

@@ -210,9 +210,12 @@ def test_note_meta_from_board():
     assert sbb.note_meta(board, "S09-09") == {}
 
 
-def test_sketch_text_only_for_comfyui_drops_ref_sentence():
-    """2026-09-17 用户拍板:渠道 comfyui(含 RunningHub 运行方式)出草图走纯文生图,提示词不再说「附图是人物设定」。"""
-    assert sbb.sketch_text_only("comfyui") and sbb.sketch_text_only("ComfyUI")
+def test_sketch_text_only_for_comfyui_drops_ref_sentence(monkeypatch):
+    """2026-09-17 用户拍板:渠道 comfyui 没配收参考图的图生图时出草图走纯文生图,提示词不再说「附图是人物设定」
+    (2026-09-19:改为按图生图配置判定,见 test_sketch_refs_follow_i2i_capacity)。"""
+    import modules.genmedia as gm
+    monkeypatch.setattr(gm, "image_ref_capacity", lambda cfg: 0)
+    assert sbb.sketch_text_only("comfyui", {}) and sbb.sketch_text_only("ComfyUI", {})
     assert not sbb.sketch_text_only("volcengine") and not sbb.sketch_text_only("")
     scene = {"scene_no": "S01", "location": "居室", "time": "夜"}
     shot = {"key": "S01-01", "order": 1, "cast": ["CHAR-1"], "content": "她抬头", "size_hint": "近景"}
@@ -223,10 +226,12 @@ def test_sketch_text_only_for_comfyui_drops_ref_sentence():
     assert "standing, sitting" not in no_refs and "panel" not in no_refs.split("Shot size")[0]
 
 
-def test_sketch_text_only_for_agentics_keeps_grid_but_drops_refs():
-    """2026-09-18 用户拍板:agentics 出草图默认文生图(不传参考图,走文生图 profile);宫格照出,只有 comfyui 退化为单张。"""
-    assert sbb.sketch_text_only("agentics") and not sbb.sketch_single_only("agentics")
-    assert sbb.sketch_text_only("comfyui") and sbb.sketch_single_only("comfyui")
+def test_sketch_text_only_for_agentics_keeps_grid_but_drops_refs(monkeypatch):
+    """2026-09-18 用户拍板:agentics 没配图生图时出草图走文生图(不传参考图);宫格照出,只有 comfyui 退化为单张。"""
+    import modules.genmedia as gm
+    monkeypatch.setattr(gm, "image_ref_capacity", lambda cfg: 0)
+    assert sbb.sketch_text_only("agentics", {}) and not sbb.sketch_single_only("agentics")
+    assert sbb.sketch_text_only("comfyui", {}) and sbb.sketch_single_only("comfyui")
     assert not sbb.sketch_single_only("volcengine")
     scene = {"scene_no": "S01", "location": "居室", "time": "夜"}
     panels = [(scene, {"key": "S01-01", "order": 1, "cast": ["CHAR-1"], "content": "她抬头", "size_hint": "近景"}),
@@ -236,3 +241,34 @@ def test_sketch_text_only_for_agentics_keeps_grid_but_drops_refs():
     assert "attached images" in with_refs and "attached images" not in no_refs
     assert "drawn from the text description" in no_refs and "韩生妻" in no_refs
     assert "2x2 grid" in no_refs and "stay blank white" in no_refs
+
+
+def test_sketch_refs_follow_i2i_capacity(monkeypatch, tmp_path):
+    """2026-09-19 用户拍板:comfyui / agentics 只有配置了收参考图的图生图才传人物 sheet,张数以其容量封顶;
+    带参考图时用正向风格句 + 逐张点名 + 单实例句。"""
+    import modules.genmedia as gm
+    monkeypatch.setattr(gm, "image_ref_capacity", lambda cfg: 2)
+    assert sbb.sketch_ref_capacity("comfyui", {}) == 2 and not sbb.sketch_text_only("agentics", {})
+    assert sbb.sketch_ref_capacity("volcengine") is None
+    for i in (1, 2, 3):
+        (tmp_path / f"c{i}.png").write_bytes(b"x")
+    catalog = {"characters": {f"CHAR-{i}": {"file": f"c{i}.png"} for i in (1, 2, 3)}, "creatures": {}}
+    shot = {"key": "S01-01", "order": 1, "cast": ["CHAR-1", "CHAR-2", "CHAR-3"], "content": "三人对峙", "size_hint": "中景"}
+    assert sbb.ref_cast_ids(tmp_path, shot, catalog, 2) == ["CHAR-1", "CHAR-2"]
+    assert sbb.ref_cast_ids(tmp_path, shot, catalog) == ["CHAR-1", "CHAR-2", "CHAR-3"]
+    prompt, _ = sbb.build_prompt({"scene_no": "S01"}, shot, {}, plain_style=True, ref_names=["甲", "乙"])
+    head = prompt.split("Shot size")[0]
+    assert "Picture 1 is 甲; Picture 2 is 乙" in head and "appears exactly once" in head
+    assert "standing, sitting" not in head and "drawn from the text description" not in head
+
+
+def test_rh_image_ref_slots_counts_loadimages_and_rejects_img2img():
+    import modules.genmedia as gm
+    base = {"3": {"class_type": "KSampler", "inputs": {"latent_image": ["5", 0], "positive": ["6", 0]}},
+            "5": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1024, "height": 1024}},
+            "6": {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"prompt": "", "image1": ["7", 0], "image2": ["8", 0]}},
+            "7": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+            "8": {"class_type": "LoadImage", "inputs": {"image": "b.png"}}}
+    assert gm._rh_image_ref_slots(base) == 2
+    img2img = {**base, "5": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0]}}}
+    assert gm._rh_image_ref_slots(img2img) == 0

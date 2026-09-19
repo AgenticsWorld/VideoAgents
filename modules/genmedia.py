@@ -3294,6 +3294,55 @@ def _apply_rh_tts_bindings(raw: str, workflow: dict, text: str, ref_audio: str,
                   file=sys.stderr)
 
 
+def _rh_image_ref_slots(workflow: dict) -> int:
+    """RunningHub 图生图模板能当「参考图」收几张:LoadImage 个数;输入图经 VAEEncode 作主采样器
+    初始 latent 的原图重绘(img2img)模板返回 0——那张图锁死构图,不是参考图。"""
+    try:
+        link = (_image_primary_sampler(workflow).get("inputs") or {}).get("latent_image")
+    except RuntimeError:
+        return 0
+    seen: set[str] = set()
+    stack = [str(link[0])] if _node_link(link) else []
+    while stack:
+        nid = stack.pop()
+        node = workflow.get(nid)
+        if nid in seen or not isinstance(node, dict):
+            continue
+        seen.add(nid)
+        if node.get("class_type") == "LoadImage":
+            return 0
+        stack.extend(str(v[0]) for v in (node.get("inputs") or {}).values() if _node_link(v))
+    return len(_rh_image_load_order(workflow))
+
+
+def image_ref_capacity(cfg: dict) -> int | None:
+    """生效图像渠道的「图生图」一次能收几张参考图;None = 渠道自身不设此限(各直连渠道),
+    0 = 没配置可用的图生图(调用方应走纯文生图、不传参考图)。
+
+    comfyui:仅 RunningHub 运行方式且已选图生图工作流时,按模板 LoadImage 个数(原图重绘模板算 0);
+    本地 / Comfy Cloud 的参考图工作流是单图 img2img,算 0。
+    agentics:图生图 profile(显式 --model 优先)的 input_images.max_items;未选或 profile 不收图算 0。
+    取不到模板/详情(未登录、断网)按 0,只提醒不报错。"""
+    provider = cfg.get("provider")
+    try:
+        if provider == "comfyui":
+            ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
+            if not _comfy_is_rh(cfg) or not ref_id:
+                return 0
+            return _rh_image_ref_slots(json.loads(_rh_workflow_text({**cfg, "rh_workflow_id": ref_id})))
+        if provider == "agentics":
+            code = str(cfg.get("model") or cfg.get("i2i") or "").strip()
+            if not code:
+                return 0
+            schema = _agentics_profile("image", code).get("token_schema") or {}
+            mapping = (schema.get("files") or {}).get("input_images")
+            return max(0, int((mapping or {}).get("max_items") or 0)) if isinstance(mapping, dict) else 0
+    except Exception as error:  # noqa: BLE001
+        print(f"[genmedia] {provider} 图生图参考图容量未取到,按不传参考图处理:{str(error)[:200]}", file=sys.stderr)
+        return 0
+    return None
+
+
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None
