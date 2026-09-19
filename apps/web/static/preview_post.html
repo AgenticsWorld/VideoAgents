@@ -76,6 +76,7 @@ header select:hover{border-color:var(--accent)}
 .flt span.on{color:var(--text);border-color:var(--border2);background:var(--panel2)}
 .scn{padding:5px 10px;color:var(--dim);font-size:11.5px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;cursor:pointer;user-select:none;position:sticky;top:0;z-index:1}
 .scn .sp{flex:1}
+.scn .lite{opacity:.65;font-size:10.5px;margin-left:4px}
 .scn .pal{display:inline-flex;gap:2px}
 .scn .pal i{width:9px;height:9px;border-radius:2px;display:block}
 .scn.closed+.grps{display:none}
@@ -337,11 +338,14 @@ async function load(keep){
     if(!d.episodes.some(e=>e.ep===EP)){EP=d.episodes[0].ep;load(keep);return}
     localStorage.setItem('post-ep:'+(d.project||proj()),EP);
     const first=!D||D.ep!==d.ep;
+    // 同一 grp 多行(旧服务端按 timeline 逐镜切条出行)并成一行:时长累加,场景的组清单去重
+    {const m=new Map();for(const g of d.groups||[]){const x=m.get(g.group_id);if(x)x.duration=Math.round((x.duration+(g.duration||0))*1000)/1000;else m.set(g.group_id,g)}d.groups=[...m.values()];
+     for(const sc of d.scenes||[])sc.groups=[...new Set(sc.groups)]}
     D=d;stemBuild();
     if(first||!grpById(SEL)){
-      const pos=first?posLoad():{},open=(pos.open||[]).filter(id=>d.scenes.some(s=>s.scene_id===id));
+      const pos=first?posLoad():{},blks=snBlocks(),open=(pos.open||[]).filter(id=>blks.some(x=>x.key===id));
       SEL=(pos.sel&&grpById(pos.sel)?pos.sel:(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id)||'';VA=null;VB=null;RANGE=null;MASK=null;
-      OPEN_SCN=new Set(open.length?open:d.scenes.slice(0,3).map(s=>s.scene_id));
+      OPEN_SCN=new Set(open.length?open:blks.slice(0,3).map(x=>x.key));
     }
     render(!first&&keep);
     schedulePoll();
@@ -349,7 +353,7 @@ async function load(keep){
 }
 function schedulePoll(){
   const busy=(D.summary||{}).dispatched>0||(D.job||{}).status==='running';
-  if(busy&&!POLL)POLL=setInterval(()=>load(true),5000);
+  if(busy&&!POLL)POLL=setInterval(()=>load(true),60000);
   if(!busy&&POLL){clearInterval(POLL);POLL=null}
 }
 
@@ -428,19 +432,34 @@ function render(keep){
   if(!keep)setMonitor();else{refreshMonitorMeta();renderWaves();drawRange()}
 }
 /* 左栏 */
+// 左栏分组按场次(scene_no;与分镜预览页/导演台一致:按组序连续成块,同场次拆多块标 段号/总段数),无 scene_no 退回 scene_id;
+// SCN 场景号作小字附在场次名后。D.scenes(按 SCN)仍供「场次」作用域处方/色板使用,不动
+function snBlocks(){
+  const out=[];
+  for(const g of D.groups){const sn=g.scene_no||g.scene_id||'?',last=out.at(-1);if(last&&last.sn===sn)last.groups.push(g);else out.push({sn,groups:[g]})}
+  const parts={},seen={};out.forEach(b=>{parts[b.sn]=(parts[b.sn]||0)+1});
+  for(const b of out){
+    const seq=(seen[b.sn]=(seen[b.sn]||0)+1);b.key=b.sn+(seq>1?'#'+seq:'');b.label=b.sn+(parts[b.sn]>1?` ${seq}/${parts[b.sn]}`:'');
+    b.scns=[...new Set(b.groups.map(g=>g.scene_id).filter(Boolean))].filter(id=>id!==b.sn);
+    const infos=b.scns.map(id=>D.scenes.find(s=>s.scene_id===id)).filter(Boolean);
+    b.tip=infos.map(s=>s.scene_id+' '+s.label).join('\n');b.tod=(infos[0]||{}).tod||'';
+    b.palette=((D.scenes.find(s=>s.scene_no===b.sn&&s.palette.length)||infos.find(s=>s.palette.length)||{}).palette)||[];
+  }
+  return out;
+}
 function renderLeft(){
   const defects={};(D.defects||[]).forEach(d=>(d.groups||[]).forEach(g=>{(defects[g]=defects[g]||[]).push(d)}));
   let h=`<div class="col-h">${esc(t('分镜组'))} <span class="lite">${D.groups.length}</span><span class="sp"></span><label class="lite" style="cursor:pointer"><input type="checkbox" id="multi" ${document.body.classList.contains('multi')?'checked':''}> ${esc(t('多选'))}</label></div>`;
   h+=`<div class="flt">${[['all','全部'],['draft','有草稿'],['busy','派单中'],['defect','有缺陷'],['untouched','未动过']].map(([k,l])=>`<span class="${FILTER===k?'on':''}" data-f="${k}">${esc(t(l))}</span>`).join('')}</div>`;
   h+=`<div class="scroll" id="glist">`;
-  for(const sc of D.scenes){
-    const gs=sc.groups.map(grpById).filter(Boolean).filter(g=>{
+  for(const sc of snBlocks()){
+    const gs=sc.groups.filter(g=>{
       const st=groupStatus(g.group_id);
       if(FILTER==='draft')return effective(g.group_id).some(r=>!r.inherited&&(r.status==='draft'||r.status==='applied'));
       if(FILTER==='busy')return st.busy;if(FILTER==='defect')return !!defects[g.group_id];if(FILTER==='untouched')return !st.n&&!g.current;return true});
     if(!gs.length&&FILTER!=='all')continue;
-    const open=OPEN_SCN.has(sc.scene_id);
-    h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.scene_id)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(sc.label)}">${esc(sc.scene_id)} ${esc(sc.name!==sc.scene_id?sc.name:'')}${sc.tod?' · '+esc(sc.tod):''}${sc.type?' · '+esc(sc.type):''}</span><span class="sp"></span>${sc.palette.length?`<span class="pal" title="${esc(t('色彩脚本色板'))}">${sc.palette.slice(0,5).map(c=>`<i style="background:${esc(c)}"></i>`).join('')}</span>`:''}<span>${gs.length}</span></div><div class="grps">`;
+    const open=OPEN_SCN.has(sc.key);
+    h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.key)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(sc.tip)}">${esc(sc.label)}${sc.scns.length?` <span class="lite">${esc(sc.scns.join(' '))}</span>`:''}${sc.tod?' · '+esc(sc.tod):''}</span><span class="sp"></span>${sc.palette.length?`<span class="pal" title="${esc(t('色彩脚本色板'))}">${sc.palette.slice(0,5).map(c=>`<i style="background:${esc(c)}"></i>`).join('')}</span>`:''}<span>${gs.length}</span></div><div class="grps">`;
     for(const g of gs){
       const st=groupStatus(g.group_id),def=defects[g.group_id];
       h+=`<div class="grp ${g.group_id===SEL?'sel':''} ${g.has_clip?'':'nofile'}" data-g="${esc(g.group_id)}">

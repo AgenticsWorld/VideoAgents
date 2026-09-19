@@ -8985,7 +8985,13 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
             if start is None:
                 start = acc
             if t.get("group_id"):
-                order.append((t["group_id"], start, dur))
+                # 剪辑 agent 可能按镜切条(同一组多条,src 同一 grpNNN.mp4):并成一行,起点取首条、时长累加,
+                # 否则左栏/时间线同一 grp 重复出现(tothemoon ep01,2026-09-19)
+                hit = next((k for k, o in enumerate(order) if o[0] == t["group_id"]), None)
+                if hit is None:
+                    order.append((t["group_id"], start, dur))
+                else:
+                    order[hit] = (order[hit][0], order[hit][1], order[hit][2] + dur)
             acc = start + dur
     else:
         cum = 0.0
@@ -9027,7 +9033,10 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
                              "label": f"v{ver.get('v')}"})
         thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
         nb = g.get("narrative_block") if isinstance(g.get("narrative_block"), dict) else {}
-        rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": g.get("scene_no") or "",
+        # 场次号:组 → 组内首镜 → storyboard_group_ref("S01/group_order:1")前缀(存量项目组/镜都没 scene_no)
+        scene_no = (g.get("scene_no") or next((shots[x].get("scene_no") for x in (g.get("shots") or []) if (shots.get(x) or {}).get("scene_no")), "")
+                    or (str(g.get("storyboard_group_ref") or "").split("/")[0] if "/" in str(g.get("storyboard_group_ref") or "") else ""))
+        rows.append({"group_id": gid, "scene_id": g.get("scene_id") or "", "scene_no": str(scene_no or ""),
                      # 叙事块(闪回/梦境/蒙太奇/想象段):block 级处方的作用域键(2026-09-17)
                      "block_id": str(nb.get("id") or ""), "block_kind": str(nb.get("kind") or ""),
                      "order": i, "cum_start_s": round(cum, 3), "duration": round(dur, 3), "shots": g.get("shots") or [],
