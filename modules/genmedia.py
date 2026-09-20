@@ -123,7 +123,7 @@ Python:
 ComfyUI 自定义工作流占位符(文本替换):
   字符串位: "{{PROMPT}}" "{{NEGATIVE}}" "{{CHECKPOINT}}" "{{FIRST_FRAME}}" "{{LAST_FRAME}}"
             "{{TEXT}}" "{{LYRICS}}" "{{VOICE}}" "{{REF_AUDIO}}"
-  数值位: "{{WIDTH}}" "{{HEIGHT}}" "{{SEED}}" "{{DURATION}}" "{{FRAMES}}"
+  数值位: "{{WIDTH}}" "{{HEIGHT}}" "{{GEN_WIDTH}}" "{{GEN_HEIGHT}}" "{{SEED}}" "{{DURATION}}" "{{FRAMES}}"
           "{{LTX_FRAMES}}" "{{SPEED}}"
   Seedance 云工作流(ByteDance2ReferenceNode,专用分支注入):"{{RESOLUTION}}"
           "{{RATIO}}" "{{GENERATE_AUDIO}}";参考图不走占位符,动态挂
@@ -3046,10 +3046,10 @@ def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> No
     names = [file_names] if isinstance(file_names, str) else list(file_names)
     order = _rh_image_load_order(workflow)
     if not order:
-        raise RuntimeError("RunningHub 图生图工作流没有 LoadImage 输入图节点,无法定位 --ref 绑定位;"
+        raise RuntimeError("图生图工作流没有 LoadImage 输入图节点,无法定位 --ref 绑定位;"
                            "请改选图生图模板或改用 {{FIRST_FRAME}} 占位符")
     if len(names) > len(order):
-        raise RuntimeError(f"RunningHub 图生图工作流只有 {len(order)} 个 LoadImage 输入图节点,"
+        raise RuntimeError(f"图生图工作流只有 {len(order)} 个 LoadImage 输入图节点,"
                            f"收到 {len(names)} 张 --ref;请减少参考图或改用支持更多输入图的模板")
     for nid, name in zip(order, names):
         workflow[nid].setdefault("inputs", {})["image"] = name
@@ -3064,7 +3064,7 @@ def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> No
                 m = _RH_IMAGE_SLOT_RE.match(key)
                 if not m or int(m.group(1)) < 2:
                     raise RuntimeError(
-                        f"RunningHub 图生图工作流第 {order.index(nid) + 1} 个 LoadImage(节点 {nid})"
+                        f"图生图工作流第 {order.index(nid) + 1} 个 LoadImage(节点 {nid})"
                         f"接在节点 {cid} 的必需输入 {key} 上,本次只有 {len(names)} 张 --ref,"
                         "摘不掉会混入作者演示图;请补足参考图或把多出的输入图只接可选图位(image2/image3)")
                 inputs.pop(key)
@@ -3473,8 +3473,13 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
         negative = ""
     elif negative and negative_mode == "unsupported":
         raise RuntimeError("当前 ComfyUI 图片工作流不支持 negative prompt")
+    # GEN_WIDTH / GEN_HEIGHT:同宽高比压到 RH_IMAGE_LATENT_MAX_PIXELS 内、取 16 倍数的原生生成尺寸,供原生分辨率
+    # 低于平台出图规格的模型(Qwen-Image-Edit / Ideogram 4 / Krea 2…)的本地模板用:latent 填 GEN_*,
+    # 末端 ImageScale 填 WIDTH/HEIGHT(与 RunningHub 直绑 _apply_rh_image_size 同一口径)
+    gen_scale = min(1.0, (RH_IMAGE_LATENT_MAX_PIXELS / float(width * height)) ** 0.5)
+    gen_w, gen_h = (max(256, int(round(v * gen_scale / 16)) * 16) for v in (width, height))
     tokens = {"PROMPT": prompt, "NEGATIVE": negative or "",
-              "WIDTH": width, "HEIGHT": height, "SEED": seed,
+              "WIDTH": width, "HEIGHT": height, "GEN_WIDTH": gen_w, "GEN_HEIGHT": gen_h, "SEED": seed,
               "CHECKPOINT": cfg.get("checkpoint") or ""}
     workflow_cfg = cfg
     rh_ref_names = None
