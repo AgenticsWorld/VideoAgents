@@ -38,6 +38,17 @@
 2. **提示词**：外景加 `EXTERIOR_PROJECTION_RULES`（无单一视向、地平线贯穿整幅、身后在两缘且接得上、天底拉伸不得是清晰前景、日/月只占一个方位）与 `GUIDES_REF_RULE`（引导线只示意曲率、不得画出）；所有全景末尾加 `PANO_PROJECTION_TAIL` 复述投影；风格段经 `pano_style` 只留材质/色调/颗粒分句，剔除 subject / layers of depth / backlight / god rays 等单镜头构图用语。
 3. **投影机检** `projection_check`：主判据天底横向细节比（底部 5% 行 ÷ 中段，合格 0.14–0.55、广角 0.85–2.6，> 0.7 FAIL）；辅判据极区行方差 + 左右缘接缝比同时超限 FAIL；仅接缝比 > 3 为 WARN（合格全景也常见）。FAIL → 成图改名 `<scheme>.rejected-projection-<时间>.png`、不入索引、抛 `PanoProjectionError`，**本批立即停下**（链式补洞会把错误投影传给后续锚点），CLI 打印 `[pano_projection_fail]` 退出码 3（`render_shot_plates.py` 同）。宿主不自动重出；Agent 用 `--only <锚点>` 重出，次数计入用户设定的重跑次数，用尽原文上报用户。结果记入成图 sidecar `projection_check`。
 
+## 锚点可见性（2026-09-20）
+
+一个 SCN 同时含室内外时（fengshen3 SCN-0046：云台 + 洞内主室 + 侧室），按整场景写的内容会把墙外的东西全喂给模型——洞内锚点 A1 被画成「洞府外观定场图」。`anchor_view(scene, anchor, indoor)` 在锚点处对白模几何逐射线求最近命中（720×360；贴地薄块按地板命中点落在占地内归还），得每物体可见像素 / 无遮挡应占像素、前右后左四向「看得出去」占比；提示词只写看得见的：
+
+1. **物体清单**：可见像素 < 10 的物体不写；可见比例 < 35% 的注明「mostly hidden… never bring it into full view」。
+2. **四向文字**：俯视图四边说明只在该向看得出去时成立。该向被墙挡死（地平线带看得出去 < 10%）**且**墙外还有一大截地图（墙距 < 到图边距离的 60%）→ 改写为 `sector_sentence`：该向看得清的具名地标 + 「近处的实墙」，只从开口瞥见的另说。单间房（墙即图边）照旧。
+3. **封闭室内锚点**（室内且四向全挡死，`view['enclosed']`）：不下发 `note_en` 全域说明；材质 / 光照段经 `indoor_clauses` 剔除讲墙外的分句（看不见的地标用词 + 室外词命中数 > 看得清的地标用词命中数；光照段连逗号也切）；**不挂整场景俯视图**；追加 `ENCLOSED_RULE`（镜头在室内、四周与头顶是实体，不得画建筑外观 / 天空 / 云海，开口处除外）。
+4. **白模一致性机检** `conformity_check`：白模深度全景的轮廓线在成图 3 px 内找得到边缘的比例 s0，对横向错位基线 null 的 z 分。s0 < 0.30 且 z < 1 → FAIL（改名 `.rejected-conformity-*`、整批停、退出码 3，同投影机检）；z < 2 → WARN；成图边缘过密（null ≥ 0.75，如机场大厅）不判。标定：liaozhai3 SCN-0005 0.88/0.31、SCN-0140 A1 0.86/0.53 PASS；SCN-0046 A1 0.13/0.24 FAIL。
+
+`is_indoor` 补判：子场景只有 whitebox.json、没有 lighting / architecture 时再看 `bible/scenes/index.json` 的 `int_ext` 与场景名「内景 / 室内」（fengshen3 SCN-0140「…前厅正堂(内景)」原被判成室外 → 不补顶、厅堂上方画成天空）。室内外判定变了的锚点在出全景前本机重渲白模，不作废已有全景。
+
 ## 图像模型能力
 
 全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户换图像模型，不得自行换模型或绕过。
