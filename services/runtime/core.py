@@ -767,7 +767,9 @@ DEFAULT_GENCONFIG = {
     },
     "music": {
         "provider": "agentics",   # agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
-        "agentics": {"profile_code": ""},
+        # 默认 profile 2026-09-20 定为 minimax-music-3(此前为空 = 取服务目录首个);存量空值由
+        # _migrate_genconfig 视为未选、回落到此默认
+        "agentics": {"profile_code": "minimax-music-3"},
         "openrouter": {"api_key": "", "model": "google/lyria-3-clip-preview",
                        "custom_model": ""},
         # Eleven Music:POST /v1/music;force_instrumental 默认 true(BGM 场景纯音乐)
@@ -1125,6 +1127,10 @@ def _migrate_genconfig(config: dict) -> None:
                 ia.pop(side, None)
                 if legacy:
                     ia[side] = legacy
+    ma = (config.get("music") or {}).get("agentics") if isinstance(config.get("music"), dict) else None
+    if isinstance(ma, dict) and not str(ma.get("profile_code") or "").strip():
+        # 音乐 Agentics profile 为空 = 从未选过 → 去掉空值让 DEFAULT_GENCONFIG 的默认 profile 生效
+        ma.pop("profile_code", None)
     da = config.get("deepagents")
     if isinstance(da, dict) and isinstance(da.get("agentics"), dict):
         # Agentics 渠道模型为空 = 从未选过 → 去掉空值让 DEFAULT_GENCONFIG 的默认模型生效
