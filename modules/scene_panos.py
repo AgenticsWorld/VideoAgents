@@ -70,6 +70,15 @@ EXTERIOR_PROJECTION_RULES = (
     "detailed foreground. Straight things (shorelines, paths, boats, walls, poles rows) bend into curves exactly as the blocks in the "
     "blockout do. The sun or moon occupies one single compass direction only; the rest of the sky is lit accordingly. "
 )
+GROUND_PLAN_RULE = (
+    "The ground of [Image {n}] carries the top-down plan of this location re-projected onto the floor from this exact camera: it shows "
+    "precisely what the ground is under and around the camera — open water, shallows, sand, gravel, grass, mud, paving, paths — and where "
+    "each shoreline or edge runs, already bent into this projection. Follow it exactly: where it shows water directly beneath the camera, "
+    "the camera is standing in the water, so the nadir and the whole near foreground are water surface (ripples, reflections, the bed "
+    "showing through shallows), never dry land; keep every shoreline, path edge and patch boundary where the texture puts it. It is a "
+    "map, not a photo: render real ground seen from eye level, and ignore the flattened top views of objects printed on it — the blocks "
+    "are the objects. "
+)
 GUIDES_REF_RULE = (
     "The curved grid lines on the sky and ground of [Image {n}] and the short tick marks on its horizon are projection guides only: they "
     "show how straight lines on the ground and overhead bend in this equirectangular projection and where the nadir and zenith are — "
@@ -530,14 +539,17 @@ def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: boo
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
-GUIDES_VERSION = 1               # 外景白模全景投影引导线版本;depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
+GUIDES_VERSION = 2               # 外景白模全景投影引导线版本;depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
 SKY_PLANE_M = 25.0               # 虚拟天空网格平面离镜头的高度
 
 
-def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float):
+def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *, ground_plan=None, cam_xz=(0.0, 0.0), floor_wd=None):
     """开阔外景白模只有几个小盒子贴着地平线,上半幅纯色、下半幅淡地面,看上去就是一张普通广角构图,图像模型读不出等距柱状投影
     (fengshen3 SCN-0110:2:1 成图是广角照片)。给无几何的天空与地面补世界直角网格:直线在等距柱状里弯成向天顶/天底汇聚的曲线,
-    是这种投影最强的视觉签名;地平线补四向刻度。只画在无几何的天空与地面像素上,不盖白模块体;不动深度全景。"""
+    是这种投影最强的视觉签名;地平线补四向刻度。只画在无几何的天空与地面像素上,不盖白模块体;不动深度全景。
+    ground_plan(俯视布局图)+ cam_xz + floor_wd=(宽, 深):把俯视图按地面世界坐标贴到白模地面上(v2,2026-09-20)。白模地面是一整块
+    平面,不分水 / 沙 / 草 / 路——fengshen3 SCN-0110 站在水里的 A2 / A5 / A7 锚点,成图脚下全是砂砾滩,水只在远处。贴上俯视图后
+    [Image 1] 直接给出这个锚点脚下与四周是什么、岸线在哪(已按等距柱状弯好)。按像素在地面上的跨度选降采样层,免掠射处闪烁。"""
     import numpy as np
     from PIL import Image
     h, w = depth.shape
@@ -563,7 +575,27 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float):
     ground = (dy < 0) & (~valid | (np.abs(depth - t_ground) < 0.03 * t_ground + 0.05))
     sky = (dy > 0) & ~valid
     tg = np.where(np.isfinite(t_ground), t_ground, 1e9); ts = np.where(np.isfinite(t_sky), t_sky, 1e9)
+    if ground_plan is not None and floor_wd:
+        fw, fd = float(floor_wd[0]), float(floor_wd[1])
+        gx = cam_xz[0] + dirs[..., 0] * tg; gz = cam_xz[1] + dirs[..., 2] * tg
+        u = gx / fw + .5; v = gz / fd + .5                                 # 俯视图:上缘 = -Z,左缘 = -X,整幅铺满白模地面
+        inside = ground                                                    # 图幅之外按边缘延伸(水边外还是水),不留一圈「白地」被读成陆地
+        u = np.clip(u, 0, 1 - 1e-6); v = np.clip(v, 0, 1 - 1e-6)
+        foot = tg * pix / np.maximum(np.abs(dy), 1e-3)                     # 一像素在地面上的跨度(米)
+        plan = ground_plan.convert('RGB')
+        m_per_px = fw / plan.width
+        level = np.clip(np.floor(np.log2(np.maximum(foot / m_per_px, 1.0))), 0, 6).astype(int)
+        for lv in range(7):
+            sel = inside & (level == lv)
+            if not sel.any():
+                continue
+            small = np.asarray(plan.resize((max(1, plan.width >> lv), max(1, plan.height >> lv)), Image.BOX), dtype=np.float64)
+            yy = np.clip((v[sel] * small.shape[0]).astype(int), 0, small.shape[0] - 1)
+            xx = np.clip((u[sel] * small.shape[1]).astype(int), 0, small.shape[1] - 1)
+            img[sel] = img[sel] * .15 + small[yy, xx] * .85
     a_ground = np.maximum(grid(tg, 1.0) * .8, grid(tg, 5.0)) * ground      # 5 = 奇数倍,粗线与细线重合
+    if ground_plan is not None:
+        a_ground = a_ground * .45                                           # 地面已有俯视图纹理:网格只留淡淡一层示意投影
     a_sky = np.maximum(grid(ts, 10.0) * .8, grid(ts, 50.0)) * sky
     for alpha, rgb in ((a_ground, (70, 96, 70)), (a_sky, (96, 108, 128))):
         img += (np.array(rgb, dtype=np.float64) - img) * (alpha * .85)[..., None]
@@ -627,8 +659,12 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
         (out / 'whitebox_pano.jpg').write_bytes(color_jpeg)
     else:
         import io
-        draw_projection_guides(Image.open(io.BytesIO(color_jpeg)), valid, raw_depth, camera[1],
-                               float(anchor.get('yaw_deg') or 0)).save(out / 'whitebox_pano.jpg', quality=92)
+        sdir = base / 'assets/concepts/scenes' / component(sid)
+        plan_file = sdir / ((read(sdir / 'layout.json', {}) or {}).get('layout_top') or 'layout_top.png')
+        plan = Image.open(plan_file) if plan_file.is_file() else None
+        draw_projection_guides(Image.open(io.BytesIO(color_jpeg)), valid, raw_depth, camera[1], float(anchor.get('yaw_deg') or 0),
+                               ground_plan=plan, cam_xz=(camera[0], camera[2]),
+                               floor_wd=(scene['dimensions_m'][0], scene['dimensions_m'][2])).save(out / 'whitebox_pano.jpg', quality=92)
     record = {'schema_version': SCHEMA, 'scene_id': sid, 'anchor_id': anchor['anchor_id'], 'written_at': _now(),
               'camera': {'position': camera, 'yaw_deg': float(anchor.get('yaw_deg') or 0), 'height_m': camera[1]},
               'size': [width, height], 'cube': DEPTH_CUBE, 'indoor': indoor, 'guides': 0 if indoor else GUIDES_VERSION, 'valid_fraction': round(float(valid.mean()), 4),
@@ -1296,6 +1332,8 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
             refs.append(layout); rules.append(LAYOUT_REF_RULE.format(n=len(refs)))
     if not indoor:
         rules.append(GUIDES_REF_RULE.format(n=refs.index(wb) + 1))
+        if int((read(out / 'depth_pano.json', {}) or {}).get('guides') or 0) >= 2:
+            rules.append(GROUND_PLAN_RULE.format(n=refs.index(wb) + 1))
     prompt = PANO_PROJECTION_RULES + ''.join(rules) + pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day)
     if seed is None:
         import random
