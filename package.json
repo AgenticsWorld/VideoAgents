@@ -1,7 +1,7 @@
 {
   "name": "videoagents-product",
   "private": true,
-  "version": "1.0.33",
+  "version": "1.0.34",
   "workspaces": ["apps/desktop"],
   "dependencies": {
     "baileys": "^6.7.18"
