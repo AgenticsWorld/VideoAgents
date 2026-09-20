@@ -5030,6 +5030,7 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("minimax/h3-max", "MiniMax H3 Max(Fal 托管;H3 后训练版,提示遵循更强)"),
         ("minimax/h3", "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)"),
         ("minimax/h3-max-turbo", "MiniMax H3 Max Turbo(Fal 托管;速度优先版,仅文生/首尾帧,480P/768P,不支持参考素材)"),
+        ("minimax/h3-max/lip-sync/image-to-video", "MiniMax H3 Max Lip Sync(Fal 托管;对口型:1 张人物图 + 1 段 5–14.8 秒音频,无提示词,成片时长随音频,480P/768P/1080P/2K)"),
         ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
         ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
         ("alibaba/wan-3.0", "Wan 3.0(Fal 托管;文生/首尾帧/多模态参考,2-30 秒,参考 10 图/5 视频/5 音频(视频、音频各合计 ≤15s),480p/720p/1080p)"),
@@ -5087,6 +5088,10 @@ def video_model_caps(model: str) -> dict | None:
     (按项目「视频模型设置」执行)。"""
     # max_ref_video_s:参考视频总时长硬限(秒;genmedia 提交前按 2.0≤15.2/2.5≤30.2 预检)——
     # Seedance 官方口径;MiniMax H3 官方未见明示,按组时长上限 15s 同口径(2026-09-07 假定,待实测)
+    if "lip-sync" in (model or "").lower():
+        # Fal minimax/h3-max/lip-sync:只收 1 张人物图 + 1 段驱动音频(≤14.8s),无提示词;须先于 is_minimax_h3
+        return {"max_ref_images": 1, "max_ref_videos": 0, "max_ref_audios": 1, "max_group_s": 14,
+                "max_ref_video_s": 0}
     if is_seedance25(model):
         return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30,
                 "max_ref_video_s": 30}
@@ -14535,6 +14540,11 @@ def _live_decorate(res: dict) -> dict:
     video = load_genconfig().get("video") or {}
     provider = str((res.get("settings") or {}).get("provider") or "fal")
     fal = video.get("fal") or {}
+    tts = load_genconfig().get("tts") or {}
+    tts_provider = str(tts.get("provider") or "")
+    tts_sub = tts.get(tts_provider) if isinstance(tts.get(tts_provider), dict) else {}
+    tts_model = str(tts_sub.get("custom_model") or tts_sub.get("model") or tts_sub.get("clone") or "")
+    res = {**res, "tts_label": " · ".join(x for x in (tts_provider, tts_model) if x)}   # 对口型模式:台词用这套 TTS 合成
     return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get(provider, [])],
             "model_catalogs": {p: [list(m) for m in rows] for p, rows in VIDEO_MODEL_CATALOG.items()
                                if p in ("fal", "comfyui")},

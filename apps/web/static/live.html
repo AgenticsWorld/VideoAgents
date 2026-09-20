@@ -164,10 +164,11 @@ details .body{padding:10px 0 2px}
         </label>
         <div class="hint">人物/场景/风格锚图;每一轮都会连同上一段的尾帧一起作为参考提交,保持人物一致。启动后冻结,停止后可改。</div>
       </div>
-      <div>
-        <div class="row" style="margin-bottom:6px"><label style="width:auto">✍️ 提示词</label><span class="hint">画面主体、动作、氛围;不要写秒数与分辨率</span></div>
+      <div id="prompt-box">
+        <div class="row" style="margin-bottom:6px"><label style="width:auto" id="prompt-label">✍️ 提示词</label><span class="hint" id="prompt-hint">画面主体、动作、氛围;不要写秒数与分辨率</span></div>
         <textarea id="prompt" placeholder="例如:一位年轻主播坐在暖光直播间里,面对镜头微笑聊天,偶尔喝一口咖啡,背景霓虹灯牌缓慢闪烁"></textarea>
         <div class="row" id="prompt-apply-row" style="display:none;margin-top:6px"><button class="small" id="prompt-apply">✏️ 更新提示词(下一段生效)</button><span class="hint" id="prompt-pending"></span></div>
+        <div class="hint" id="script-hint" style="display:none"></div>
       </div>
       <div class="row"><label>渠道</label><select id="provider"></select></div>
       <div class="row"><label>模型</label><select id="model"></select></div>
@@ -244,8 +245,8 @@ function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 
 let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='',MODEL_CATALOGS={};
-const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
-const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],wan:[2,30],generic:[3,30]};
+const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('lip-sync')||m.includes('lipsync'))?'lipsync':(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
+const DUR_RANGE={lipsync:[5,13],h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],wan:[2,30],generic:[3,30]};
 
 /* ---------- 设置表单 ---------- */
 const isDirector=()=>$('#link-mode').value==='director';
@@ -278,6 +279,14 @@ function onModelChange(){
   ['#duration','#max-pending','#max-rounds'].forEach(x=>$(x).disabled=locked||director);
   $('#memory-row').style.display=director?'':'none';
   $('#cost-hint').textContent=director?t('导演模式按秒计费(最少 60 秒),单会话默认最长 2 分钟(更长需向 fal 申请);关闭页面即结束'):t('启动后按段持续计费,直到停止;单段通常要 1–3 分钟');
+  const lip=!director&&$('#provider').value==='fal'&&FAMILY(sel.value)==='lipsync';   // 对口型:图 + 驱动音频,无提示词
+  // 对口型:提示词框改作「台词」,逐段用生成模型页当前 TTS 配置合成语音再驱动口型
+  $('#prompt-label').textContent=lip?t('💬 台词'):t('✍️ 提示词');
+  $('#prompt-hint').textContent=lip?t('人物要说的话;按句分段,逐段语音合成后驱动口型'):t('画面主体、动作、氛围;不要写秒数与分辨率');
+  $('#prompt').placeholder=lip?t('例如:大家好,欢迎来到我的直播间!今天想和大家聊一聊最近在看的一本书。'):t('例如:一位年轻主播坐在暖光直播间里,面对镜头微笑聊天,偶尔喝一口咖啡,背景霓虹灯牌缓慢闪烁');
+  $('#script-hint').style.display=lip?'':'none';
+  if(lip)$('#script-hint').textContent=I18N.f(t('语音用「生成模型」页当前的 TTS 配置与默认音色合成({tts})。台词念完不会停播,会等你更新台词:在原文后面追加的部分接着念,整段改写则从头念新台词。'),{tts:(STATE&&STATE.tts_label)||'—'});
+  $('#aspect').disabled=locked||lip;
   if(director){
     $('#dur-hint').textContent=t('导演模式:fal 侧按约 10 秒一块连续生成,单段时长/待播上限/最多段数不适用');
     $('#model-hint').textContent=t('导演模式:MiniMax H3 Max Director 实时连续生成,视频经 WebRTC 直推本页,自带前文记忆不需尾帧衔接;参考图只取第 1 张作首帧;分辨率 480p/768p');
@@ -285,6 +294,12 @@ function onModelChange(){
   }
   const fam=FAMILY(sel.value);const [lo,hi]=DUR_RANGE[fam];
   $('#duration').min=lo;$('#duration').max=hi;
+  if(lip){
+    const d=parseInt($('#duration').value,10)||hi;$('#duration').value=Math.min(hi,Math.max(lo,d));
+    $('#dur-hint').textContent=I18N.f(t('对口型:台词按句打包成每段约该秒数({lo}–{hi} 秒)的小段;每段成片时长 = 该段语音时长(不足 5 秒补静音)'),{lo,hi});
+    $('#model-hint').textContent=$('#link-mode').value==='none'?t('MiniMax H3 Max Lip Sync:每段都用第 1 张参考图作人物图(画面不漂,但段与段之间会跳);画幅随图片'):t('MiniMax H3 Max Lip Sync:首轮用第 1 张参考图作人物图,之后每轮用上一段尾帧(衔接模式选「不衔接」则每段都用第 1 张参考图);画幅随图片');
+    $('#gen-audio').disabled=true;return;
+  }
   $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
   const turbo=fam==='h3'&&$('#model').value.toLowerCase().includes('turbo');   // H3 Max Turbo 只有文生/首帧端点,同 Kling 走尾帧作首帧
   const noLink=$('#link-mode').value==='none';
@@ -322,7 +337,7 @@ function setInputsLocked(locked){
   $('#drop').classList.toggle('disabled',locked);
   document.querySelectorAll('.ref button').forEach(b=>b.disabled=locked);
   $('#prompt-apply-row').style.display=locked?'':'none';
-  $('#prompt-apply').textContent=locked&&STATE&&STATE.session&&STATE.session.mode==='director'?t('✏️ 更新提示词(立即生效)'):t('✏️ 更新提示词(下一段生效)');
+  $('#prompt-apply').textContent=locked&&STATE&&STATE.session&&STATE.session.mode==='director'?t('✏️ 更新提示词(立即生效)'):locked&&STATE&&STATE.session&&FAMILY(STATE.session.model)==='lipsync'?t('✏️ 更新台词'):t('✏️ 更新提示词(下一段生效)');
   $('#start-btn').style.display=locked?'none':'';$('#stop-btn').style.display=locked?'':'none';
 }
 
@@ -352,7 +367,10 @@ async function uploadRefs(files){
 /* ---------- 启动 / 停止 / 提示词 ---------- */
 $('#start-btn').onclick=async()=>{
   const s=collect();
-  if(!s.prompt&&!(STATE&&STATE.refs&&STATE.refs.length)){msg(t('提示词与参考图至少填一样'),'err');return}
+  const lip=s.provider==='fal'&&s.link_mode!=='director'&&FAMILY(s.model)==='lipsync';
+  if(lip&&!(STATE&&STATE.refs&&STATE.refs.length)){msg(t('对口型模型需要至少 1 张参考图(第 1 张作为人物图)'),'err');return}
+  if(lip&&!s.prompt){msg(t('对口型模型需要填写台词(人物要说的话)'),'err');return}
+  if(!lip&&!s.prompt&&!(STATE&&STATE.refs&&STATE.refs.length)){msg(t('提示词与参考图至少填一样'),'err');return}
   $('#start-btn').disabled=true;
   const director=s.link_mode==='director';
   if(director&&!s.prompt){msg(t('导演模式必须填提示词'),'err');$('#start-btn').disabled=false;return}
@@ -378,7 +396,7 @@ $('#prompt-apply').onclick=async()=>{
       const v=(r.session&&r.session.director&&r.session.director.prompt_version)||(DIRECTOR.promptVersion+1);
       if(directorSend({type:'prompt',prompt_version:v,prompt})){DIRECTOR.promptVersion=v;msg(t('提示词已发送,实时生效'),'ok')}
       else msg(t('控制通道未就绪,提示词未发送'),'err');
-    }else msg(t('提示词已更新,下一段生效'),'ok')}
+    }else msg(FAMILY($('#model').value)==='lipsync'?t('台词已更新'):t('提示词已更新,下一段生效'),'ok')}
   catch(e){msg(t('更新失败:')+e.message,'err')}
 };
 $('#open-folder').onclick=async()=>{try{await api('/actions/open-live-folder',{})}catch(e){msg(t('打开文件夹失败:')+e.message,'err')}};

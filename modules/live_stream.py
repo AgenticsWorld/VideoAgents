@@ -31,6 +31,13 @@ MediaRecorder 把收到的流分块上传(segments/recording.*),停止后转码�
 历史会话回放与「从上次尾帧继续」由此仍然可用。官方限制:单会话默认最长 2 分钟(更长需申请),
 最少按 60 秒计费。
 
+对口型模式(模型 minimax/h3-max/lip-sync/image-to-video):该端点只收「1 张人物图 + 1 段 5–14.8 秒音频」,
+没有提示词。页面的提示词框改作「台词」:作业把台词按句打包成每段约「单段时长」秒的小段,逐段用
+「🎨 生成模型」页当前的 TTS 配置(genmedia tts,默认音色)合成语音,再用这段语音驱动口型;不足 5 秒的
+语音尾部补静音,超过 14.8 秒的把该段台词对半再合成。人物图首轮取第 1 张参考图,之后取上一段尾帧
+(衔接模式选「不衔接」则每轮都用第 1 张参考图,画面不漂但段间会跳)。台词念完不停播,原地等新台词:
+运行中「更新台词」——在原文后追加的部分接着念,整段改写则丢弃未念部分从头念新台词。
+
 已知取舍(页面提示里也有说明):
   * 单段生成通常要 1-3 分钟而片段只有几秒到十几秒,真正的"实时"做不到——前端在新段未到时
     重播最新一段,新段到了再接上;段越长,重播占比越低,但单段等得越久。
@@ -66,6 +73,9 @@ MAX_REFS = 8
 MAX_REF_BYTES = 20 * 1024 * 1024
 REF_MAX_SIDE = 1536            # 快照时长边超过此值缩小(内联 data URI 提交,控制请求体)
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+LIPSYNC_AUDIO_RANGE = (5.0, 14.8)   # 对口型驱动音频秒数:端点要求 ≥5s,超 14.8s 会被平台截断
+LIPSYNC_TARGET_RANGE = (5, 13)      # 台词打包的目标秒数(取「单段时长」设置;留余量,语速估算不准)
+TTS_TIMEOUT_S = 600
 RESOLUTIONS = ("480p", "768p")   # 页面档位;768p 提交时按 genmedia 口径传 720p(H3 → 768P,Seedance → 720p)
 DEFAULT_RESOLUTION = "480p"
 ASPECTS = ("16:9", "9:16")
@@ -300,6 +310,11 @@ def delete_ref(ref_id: str) -> dict:
     return {"ok": True, "refs": list_refs()}
 
 
+def is_lipsync(model: str) -> bool:
+    m = (model or "").lower()
+    return "lip-sync" in m or "lipsync" in m
+
+
 # ---------------- 会话 ----------------
 
 def _state() -> dict:
@@ -491,9 +506,15 @@ def start(fields: dict) -> dict:
                 raise LiveError(400, "FastH3 本地 ComfyUI 模式必须填写提示词")
             if refs:
                 raise LiveError(400, "FastH3 Preview v1 目前是 T2VA,不支持参考图;请清空参考图")
-        if not s["prompt"] and not refs:
+        lipsync = s["provider"] == "fal" and is_lipsync(s["model"])
+        if lipsync:
+            if not refs:
+                raise LiveError(400, "对口型模型需要至少 1 张参考图(第 1 张作为人物图)")
+            if not s["prompt"]:
+                raise LiveError(400, "对口型模型需要填写台词(人物要说的话)")
+        elif not s["prompt"] and not refs:
             raise LiveError(400, "提示词与参考图至少填一样")
-        if s["link_mode"] == "none" and not s["prompt"]:
+        if s["link_mode"] == "none" and not s["prompt"] and not lipsync:
             raise LiveError(400, "不衔接(文生视频)模式不提交参考图与尾帧,必须填提示词")
         director = s["link_mode"] == "director"
         if director and not s["prompt"]:
@@ -763,6 +784,8 @@ def _genmedia_family(model: str) -> str:
         return "fasth3"
     if "seedance" in m:
         return "seedance"
+    if is_lipsync(m):
+        return "lipsync"
     if "minimax" in m and "h3" in m:
         return "h3"
     if "kling" in m:
@@ -1105,6 +1128,78 @@ def _shrink_refs(d: Path, rels: list[str]) -> list[str]:
     return out
 
 
+_SENT_RE = re.compile(r"[^。！？!?；;…\n]+[。！？!?；;…]*[”」』\"')）]*|\n+")
+
+
+def _speech_est_s(text: str) -> float:
+    """粗估念完要几秒:CJK 约 4 字/秒,其余(拉丁字母等)约 14 字符/秒;只用于打包,实际以合成结果为准。"""
+    cjk = sum(1 for c in text if "\u2e80" <= c <= "\u9fff" or "\uac00" <= c <= "\ud7af")
+    other = sum(1 for c in text if not c.isspace()) - cjk
+    return cjk * 0.25 + other * 0.07
+
+
+def _halve_text(text: str) -> list[str]:
+    """超长台词对半:优先在最靠中点的标点/空白处断开;断不开(单个长词)原样返回。"""
+    text = text.strip()
+    mid = len(text) // 2
+    cuts = [m.end() for m in re.finditer(r"[,，、:：;；。！？!?\s]+", text) if 0 < m.end() < len(text)]
+    if not cuts:
+        return [text] if len(text) < 8 else [text[:mid], text[mid:]]
+    at = min(cuts, key=lambda i: abs(i - mid))
+    return [x for x in (text[:at].strip(), text[at:].strip()) if x]
+
+
+def _split_script(text: str, target_s: int) -> list[str]:
+    """台词 → 小段列表:按句号类标点/换行分句,相邻句子打包到估算时长不超过 target_s;单句超长再对半。"""
+    lo, hi = LIPSYNC_TARGET_RANGE
+    target = min(max(int(target_s or hi), lo), hi)
+    sents = [x.strip() for x in _SENT_RE.findall(text or "") if x.strip()]
+    pieces: list[str] = []
+    for sent in sents:
+        stack = [sent]
+        while stack:
+            cur = stack.pop(0)
+            halves = _halve_text(cur) if _speech_est_s(cur) > target else [cur]
+            if len(halves) > 1:
+                stack = halves + stack
+                continue
+            if pieces and _speech_est_s(pieces[-1]) + _speech_est_s(cur) <= target:
+                pieces[-1] = f"{pieces[-1]} {cur}" if pieces[-1][-1:].isascii() else pieces[-1] + cur
+            else:
+                pieces.append(cur)
+    return pieces
+
+
+def _tts_piece(d: Path, seq: int, text: str, fake: bool) -> tuple[Path, float]:
+    """一小段台词 → 驱动音频(单声道 44.1k WAV,不足 5s 尾部补静音),返回 (路径, 语音实际秒数)。
+    走 genmedia tts 子进程=「🎨 生成模型」页当前 TTS 渠道 + 默认音色;不传角色/项目。"""
+    adir = d / "audio"
+    adir.mkdir(parents=True, exist_ok=True)
+    raw, wav = adir / f"tts_{seq:04d}.mp3", adir / f"tts_{seq:04d}.wav"
+    for f in (raw, wav):
+        if f.exists():
+            f.unlink()
+    if fake:
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+               f"sine=frequency=330:duration={max(_speech_est_s(text), 1.0):.2f}", str(raw)]
+    else:
+        cmd = [sys.executable, str(ROOT / "modules" / "genmedia.py"), "tts", "--text", text, "--output", str(raw)]
+    env = {k: v for k, v in os.environ.items() if k not in ("VIDEOAGENTS_PROJECT", "WEBUI_PROJECT")}
+    r = subprocess.run(cmd, cwd=str(ROOT), env=env, capture_output=True, text=True, timeout=TTS_TIMEOUT_S)
+    if r.returncode or not raw.is_file() or not raw.stat().st_size:
+        raise RuntimeError(f"TTS 合成失败(检查「🎨 生成模型」页 TTS 配置):{(r.stderr or r.stdout)[-400:]}")
+    dur = _probe_duration(raw)
+    if not dur:
+        raise RuntimeError("TTS 产物读不出时长")
+    r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-vn",
+                        "-af", f"apad=whole_dur={LIPSYNC_AUDIO_RANGE[0] + 0.1}", "-ac", "1", "-ar", "44100",
+                        str(wav)], capture_output=True, text=True, timeout=300)
+    if r.returncode or not wav.is_file():
+        raise RuntimeError(f"驱动音频转码失败:{r.stderr[-300:]}")
+    raw.unlink()
+    return wav, dur
+
+
 def _fal_generate(gm, key: str, endpoint: str, body: dict, output: Path, stop: threading.Event,
                   on_status, should_stop) -> Path:
     headers = {"Authorization": f"Key {key}"}
@@ -1154,7 +1249,8 @@ def _fal_generate(gm, key: str, endpoint: str, body: dict, output: Path, stop: t
             return output
 
 
-def _fake_generate(seq: int, sess: dict, output: Path, stop: threading.Event, on_status) -> Path:
+def _fake_generate(seq: int, sess: dict, output: Path, stop: threading.Event, on_status,
+                   audio: Path | None = None) -> Path:
     """本地联调用(VIDEOAGENTS_LIVE_FAKE=1):不调 Fal,ffmpeg 合成带段号的测试画面 + 提示音,
     模拟 6s 生成等待;用于验证循环/闸门/停止/播放,不产生费用。"""
     for i in range(3):
@@ -1166,9 +1262,12 @@ def _fake_generate(seq: int, sess: dict, output: Path, stop: threading.Event, on
     if sess.get("aspect") == "9:16":
         w, h = h, w
     dur = int(sess.get("duration") or 5)
+    if audio is not None:   # 对口型联调:片段时长随音频小段,声轨直接用它
+        dur = _probe_duration(audio) or dur
     # testsrc2 自带走秒时钟,hue 偏移区分段号(不依赖 drawtext/字体)
     cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", f"testsrc2=s={w}x{h}:d={dur}:r=24",
-           "-f", "lavfi", "-i", f"sine=frequency={220 + seq * 40}:duration={dur}",
+           *(["-i", str(audio)] if audio is not None
+             else ["-f", "lavfi", "-i", f"sine=frequency={220 + seq * 40}:duration={dur}"]),
            "-vf", f"hue=h={(seq * 60) % 360}",
            "-shortest", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac",
            "-movflags", "+faststart", str(output)]
@@ -1215,11 +1314,17 @@ def _job(sid: str) -> int:
     # 首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧(link_mode 不起作用)
     first_only = family == "kling" or (family == "h3" and "turbo" in str(sess["model"]).lower())
     refs = _shrink_refs(d, list(sess.get("refs") or []))
+    queue: list[str] = _split_script(str(sess.get("prompt") or ""), int(sess.get("duration") or 0)) \
+        if family == "lipsync" else []
+    waiting = False
     prev_frame = str(sess.get("start_frame") or "")
     if sess.get("segments"):
         prev_frame = _last_frame_of(sess) or prev_frame
     no_link = (sess.get("link_mode") or "refs_tail") == "none"
-    if no_link:
+    if family == "lipsync":
+        print(f"[live] 对口型模型:台词分 {len(queue)} 小段,逐段 TTS 合成后驱动口型;人物图="
+              + ("每轮都用第 1 张参考图" if no_link else "首轮第 1 张参考图,之后用上一段尾帧"), flush=True)
+    elif no_link:
         print("[live] 衔接模式=不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交", flush=True)
     elif first_only and refs:
         print(f"[live] {sess['model']} 端点不支持参考图:首轮用第 1 张参考图作首帧,其余参考图不生效",
@@ -1258,12 +1363,29 @@ def _job(sid: str) -> int:
         if stop.is_set() or ctrl.get("stop"):
             break
         if ctrl.get("prompt") is not None and ctrl["prompt"] != sess.get("prompt"):
+            if family == "lipsync":   # 更新台词:原文后追加 → 接着念追加部分;整段改写 → 丢弃未念的,从头念新台词
+                old, new = str(sess.get("prompt") or ""), str(ctrl["prompt"])
+                added = _split_script(new[len(old):] if old and new.startswith(old) else new,
+                                      int(sess.get("duration") or 0))
+                queue = queue + added if old and new.startswith(old) else added
+                print(f"[live] 台词已更新,待念 {len(queue)} 小段", flush=True)
             save(prompt=ctrl["prompt"])
+        if family == "lipsync" and not queue:
+            if not waiting:
+                waiting = True
+                save(message="台词已念完,等待新台词(在左侧改写或追加台词后点「更新台词」)…",
+                     gen_started_at=None, script_pending=0)
+            stop.wait(2)
+            continue
+        waiting = False
         seq += 1
         prompt = str(sess.get("prompt") or "")
         link_mode = sess.get("link_mode") or "refs_tail"
-        first, round_refs = "", []
-        if family == "fasth3":
+        first, round_refs, round_audio = "", [], []
+        if family == "lipsync":
+            prompt = ""
+            first = (refs[0] if refs else "") if no_link else (prev_frame or (refs[0] if refs else ""))
+        elif family == "fasth3":
             # FastH3 Preview v1 is T2VA only. Continuity is expressed in text;
             # image/last-frame conditioning was not distilled into this checkpoint.
             prompt = (prompt + "\n\n[Continuity] Continue the same live-stream subject and action naturally from the previous segment; keep the scene and camera coherent, with no cut.").strip() if prev_frame else prompt
@@ -1275,7 +1397,9 @@ def _job(sid: str) -> int:
             first = prev_frame
         else:
             round_refs = list(refs) + ([prev_frame] if prev_frame else [])
-        if prev_frame and link_mode != "none":
+        if family == "lipsync":
+            pass                                   # 端点无提示词入参
+        elif prev_frame and link_mode != "none":
             prompt = (prompt + (CONTINUITY_FIRST if first else CONTINUITY_REFS)).strip()
         elif not prompt:
             prompt = "A continuous live-stream shot of the subject in the reference images."
@@ -1283,6 +1407,18 @@ def _job(sid: str) -> int:
         frame = d / "segments" / f"seg_{seq:04d}.png"
         save(round=seq, message=f"第 {seq} 段:提交中…", gen_started_at=time.time(), error="")
         try:
+            if family == "lipsync":
+                save(message=f"第 {seq} 段:语音合成中…")
+                while True:
+                    wav, spoken = _tts_piece(d, seq, queue[0], fake)
+                    halves = _halve_text(queue[0]) if spoken > LIPSYNC_AUDIO_RANGE[1] else []
+                    if len(halves) < 2:
+                        break
+                    print(f"[live] 第 {seq} 段语音 {spoken:.1f}s 超过 {LIPSYNC_AUDIO_RANGE[1]}s,台词对半重新合成", flush=True)
+                    queue[0:1] = halves
+                if stop.is_set() or _load_control(sid).get("stop"):
+                    raise _Cancelled()
+                round_audio = [str(wav)]
             # 768p 档按 genmedia 口径传 720p:H3 映射为 768P,Seedance 为 720p,Kling 无分辨率参数
             gm_res = "720p" if str(sess.get("resolution") or "480p") == "768p" else "480p"
             if family == "fasth3":
@@ -1298,8 +1434,9 @@ def _job(sid: str) -> int:
                 wf = gm._comfy_workflow(cfg, tokens, "video")  # noqa: SLF001
             else:
                 endpoint, body = gm._fal_video_body(  # noqa: SLF001
-                    cfg, prompt, str(d / first) if first else "", "", sess["duration"], gm_res,
-                    sess["aspect"], None, [str(d / r) for r in round_refs], None,
+                    cfg, prompt, str(d / first) if first else "", "",
+                    None if family == "lipsync" else sess["duration"], gm_res,
+                    None if family == "lipsync" else sess["aspect"], None, [str(d / r) for r in round_refs], round_audio,
                     bool(sess.get("generate_audio", True)) if family != "h3" else None, None)
 
             def on_status(state, pos, _seq=seq):
@@ -1309,7 +1446,8 @@ def _job(sid: str) -> int:
                      + f",已等待 {waited}s")
 
             if fake:
-                _fake_generate(seq, sess, out, stop, on_status)
+                _fake_generate(seq, sess, out, stop, on_status,
+                               Path(round_audio[0]) if round_audio else None)
             elif family == "fasth3":
                 base, hdrs = gm._comfy_endpoint(cfg)  # noqa: SLF001
                 gm._comfy_run(base, wf, str(out), want_video=True, headers=hdrs,
@@ -1325,7 +1463,11 @@ def _job(sid: str) -> int:
             segs.append({"seq": seq, "file": f"segments/{out.name}", "frame": f"segments/{frame.name}",
                          "duration_s": dur, "size": out.stat().st_size, "created_at": _now(),
                          "gen_seconds": int(time.time() - (sess.get("gen_started_at") or time.time())),
-                         "prompt": prompt})
+                         "prompt": prompt, **({"text": queue[0], "audio": f"audio/{Path(round_audio[0]).name}"}
+                                              if round_audio else {})})
+            if round_audio:
+                queue.pop(0)
+                sess["script_pending"] = len(queue)
             prev_frame = f"segments/{frame.name}"
             fails = 0
             save(segments=segs, fails=0, message=f"第 {seq} 段完成,准备下一段…", gen_started_at=None)

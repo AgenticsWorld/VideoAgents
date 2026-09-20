@@ -4275,6 +4275,13 @@ FAL_WAN_MAX_IMAGE_REFS = 10
 FAL_WAN_MAX_VIDEO_REFS = 5
 FAL_WAN_MAX_AUDIO_REFS = 5
 FAL_WAN_REF_TOTAL_S = 15.2   # 参考视频 / 参考音频各自合计硬限(同 Seedance 2.0 的 15s+容差口径)
+# MiniMax H3 Max Lip Sync(minimax/h3-max/lip-sync/image-to-video,官方 OpenAPI 2026-09-20 抄录):
+# 入参只有 image_url(宽高比 0.4-2.5)+ audio_url(≥5s;超 14.8s 平台自动截到前 14.8s,成片时长=音频时长)
+# + resolution 480P/768P/1080P/2K(默认 768P)+ enable_transcription + seed;没有 prompt / duration / aspect_ratio
+FAL_LIPSYNC_RESOLUTION_MAP = {"360p": "480P", "480p": "480P", "720p": "768P", "768p": "768P",
+                              "1080p": "1080P", "2k": "2K", "4k": "2K"}
+FAL_LIPSYNC_MIN_AUDIO_S = 5.0
+FAL_LIPSYNC_MAX_AUDIO_S = 14.8
 
 
 def _fal_family(model: str) -> str:
@@ -4284,6 +4291,8 @@ def _fal_family(model: str) -> str:
     m = (model or "").lower()
     if "seedance" in m:
         return "seedance"
+    if "lip-sync" in m or "lipsync" in m:   # 须先于 h3:minimax/h3-max/lip-sync 入参完全不同(图+音频,无提示词)
+        return "lipsync"
     if "minimax" in m and "h3" in m:
         return "h3"
     if "kling" in m:
@@ -4316,6 +4325,8 @@ def _fal_endpoint(model: str, task: str) -> str:
 
 def _fal_plan(cfg, first, last, refs, audio_refs, video_refs) -> tuple[str, str, str]:
     """(family, task, endpoint);dry-run 与正式提交共用。"""
+    if _fal_family(cfg["model"]) == "lipsync":   # 对口型只有 image-to-video 一个端点
+        return "lipsync", "image-to-video", _fal_endpoint(cfg["model"], "image-to-video")
     task = _fal_task(first, last, refs, audio_refs, video_refs)
     return _fal_family(cfg["model"]), task, _fal_endpoint(cfg["model"], task)
 
@@ -4329,6 +4340,42 @@ def _fal_int_duration(duration, lo: int, hi: int, default: int, label: str) -> i
     return d
 
 
+def _fal_lipsync_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                      refs, audio_refs, video_refs, to_url) -> tuple[str, dict]:
+    """MiniMax H3 Max Lip Sync:一张人物图(--first,未给则取第 1 张 --ref)+ 一段音频(--audio-ref),
+    成片口型对齐该音频、时长随音频;提示词/时长/画幅该端点都不收。"""
+    image = first or (refs[0] if refs else "")
+    if not image:
+        raise RuntimeError("Fal MiniMax H3 Max Lip Sync 需要一张人物图:用 --first(或 --ref)传入")
+    if len(audio_refs) != 1:
+        raise RuntimeError(f"Fal MiniMax H3 Max Lip Sync 需要且只收 1 段驱动音频(--audio-ref),收到 {len(audio_refs)}")
+    if last or video_refs or len(refs) > (0 if first else 1):
+        raise RuntimeError("Fal MiniMax H3 Max Lip Sync 只收 1 张图 + 1 段音频,不支持尾帧/参考视频/多张参考图")
+    dur = _audio_duration_s(audio_refs[0])
+    if dur is not None and dur < FAL_LIPSYNC_MIN_AUDIO_S:
+        raise RuntimeError(f"Fal MiniMax H3 Max Lip Sync 驱动音频须 ≥{FAL_LIPSYNC_MIN_AUDIO_S:g}s,实测 {dur:.2f}s")
+    if dur is not None and dur > FAL_LIPSYNC_MAX_AUDIO_S:
+        print(f"[genmedia] Lip Sync 驱动音频 {dur:.2f}s 超过 {FAL_LIPSYNC_MAX_AUDIO_S}s,平台只取前 "
+              f"{FAL_LIPSYNC_MAX_AUDIO_S}s(成片同长)", file=sys.stderr)
+    if (prompt or "").strip():
+        print("[genmedia] Fal MiniMax H3 Max Lip Sync 端点无 prompt 入参,提示词已忽略", file=sys.stderr)
+    if duration or aspect:
+        print("[genmedia] Lip Sync 成片时长随音频、画幅随图片,--duration/--aspect 已忽略", file=sys.stderr)
+    body: dict = {"image_url": to_url(image), "audio_url": to_url(audio_refs[0])}
+    res = (resolution or "").lower()
+    if res:
+        mapped = FAL_LIPSYNC_RESOLUTION_MAP.get(res)
+        if not mapped:
+            raise RuntimeError(f"Fal MiniMax H3 Max Lip Sync 分辨率无法映射 {res}"
+                               f"(可映射档位:{'/'.join(sorted(FAL_LIPSYNC_RESOLUTION_MAP))})")
+        if mapped != res.upper():
+            print(f"[genmedia] Lip Sync 分辨率 {res} 已映射为 {mapped}", file=sys.stderr)
+        body["resolution"] = mapped
+    if seed is not None:
+        body["seed"] = seed
+    return _fal_endpoint(cfg["model"], "image-to-video"), body
+
+
 def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                     refs, audio_refs, gen_audio, video_refs=None,
                     to_url=None, video_to_url=None) -> tuple[str, dict]:
@@ -4338,6 +4385,9 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     to_url = to_url or _file_to_data_url
     video_to_url = video_to_url or _storage_upload_url
     refs, audio_refs, video_refs = list(refs or []), list(audio_refs or []), list(video_refs or [])
+    if _fal_family(cfg["model"]) == "lipsync":   # 图+音频同传,不适用下面的互斥规则
+        return _fal_lipsync_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
+                                 refs, audio_refs, video_refs, to_url)
     if (refs or video_refs or audio_refs) and (first or last):
         raise RuntimeError("首帧/尾帧与参考素材(--ref/--ref-video/--audio-ref)是互斥模式,不能同时传")
     if last and not first:

@@ -338,7 +338,7 @@ def _model_caps(model: str):
         return {'max_ref_videos': 10, 'max_total_s': 30}
     if 'seedance-2' in m or 'seedance2' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
-    if 'turbo' in m and 'h3' in m or 'kling' in m:
+    if 'turbo' in m and 'h3' in m or 'kling' in m or 'lip-sync' in m:
         return {'max_ref_videos': 0, 'max_total_s': 0}
     if 'minimax' in m and 'h3' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
