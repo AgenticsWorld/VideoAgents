@@ -292,7 +292,14 @@ function onModelChange(){
   $('#gen-audio').disabled=fam==='h3';
 }
 $('#model').onchange=onModelChange;$('#link-mode').onchange=onModelChange;
-$('#provider').onchange=()=>{fillModels(MODEL_CATALOGS[$('#provider').value]||[],null);onModelChange()};
+$('#provider').onchange=()=>{
+  // 切渠道不沿用旧渠道的模型(否则会被 fillModels 当自定义值硬插进新目录):Fal 回到生成模型页配置的模型,其余落到新目录第一项
+  const p=$('#provider').value;const rows=MODEL_CATALOGS[p]||[];
+  const pref=p==='fal'&&STATE&&STATE.genconfig_model;
+  if(p==='comfyui'&&isDirector())$('#link-mode').value='refs_tail';   // 后端拒绝 ComfyUI + 导演模式
+  $('#model').innerHTML='';
+  fillModels(rows,pref||(rows[0]?rows[0][0]:null));
+};
 function fillSettings(s){
   if(SETTINGS_FILLED)return;SETTINGS_FILLED=true;
   if(s.provider&&[...$('#provider').options].some(o=>o.value===s.provider))$('#provider').value=s.provider;
