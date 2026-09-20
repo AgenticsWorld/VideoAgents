@@ -218,25 +218,70 @@ OUTDOOR_SERVE_SIDE_RATIO = 0.25  # 室外场景的最小服务半径 = 白模地
 OUTDOOR_SERVE_MIN_MAX_M = 8.0
 
 
-def serve_min_m(scene: dict) -> float:
+WALLED_MIN = 0.7                 # 地平线带里「最近命中是通顶高墙」的射线占比 ≥ 此值 = 这个点在屋里
+_WALLED_CACHE: dict = {}
+
+
+def point_walled(scene: dict, pos) -> float:
+    """白模里某点四周被通顶高墙围住的程度 0–1:地平线上 0°/10°/20° 三圈各 48 条射线,最近命中是高墙
+    (顶 ≥ max(0.6 × 场景高, 该点高 + 1.5 m))的占比。院墙、家具矮于此不算。内外混合场景逐点判室内外用(锚点、机位、规划候选点)。"""
+    import numpy as np
+    objs = scene.get('objects', [])
+    key = (id(objs), len(objs), round(float(pos[0]), 2), round(float(pos[1]), 2), round(float(pos[2]), 2))
+    if key in _WALLED_CACHE:
+        return _WALLED_CACHE[key]
+    az = np.linspace(0, 2 * np.pi, 48, endpoint=False)
+    dirs = np.concatenate([np.stack([np.cos(e) * np.sin(az), np.full_like(az, np.sin(e)), -np.cos(e) * np.cos(az)], axis=1)
+                           for e in np.radians([0.0, 10.0, 20.0])])
+    origin = [float(v) for v in pos]
+    tall_top = max(0.6 * float(scene['dimensions_m'][1]), origin[1] + 1.5)
+    best = np.full(len(dirs), np.inf); tall_hit = np.zeros(len(dirs), dtype=bool)
+    for o in objs:
+        box = (tuple(float(v) for v in o['position']), tuple(float(v) for v in o['size_m']), float(o.get('yaw') or 0))
+        t = raycast(origin, dirs, [box])
+        nearer = t < best
+        tall_hit = np.where(nearer, float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top, tall_hit)
+        best = np.where(nearer, t, best)
+    val = round(float(tall_hit.mean()), 3)
+    if len(_WALLED_CACHE) > 20000:
+        _WALLED_CACHE.clear()
+    _WALLED_CACHE[key] = val
+    return val
+
+
+def _wall_clearance(scene: dict, pos) -> float:
+    tall_top = max(0.6 * float(scene['dimensions_m'][1]), float(pos[1]) + 1.5)
+    tall = [o for o in scene.get('objects', []) if float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top]
+    return _clearance(pos, tall) if tall else 1e9
+
+
+def serve_min_m(scene: dict, anchor_pos=None, cam_pos=None) -> float:
     """锚点最小服务半径。室内 3 m(近处家具多,锚点一偏遮挡关系就变)。室外按白模地面短边放宽(2026-09-20 用户定):场景越大越开阔、
     背景越远视差越小;地面是白模已知几何,重投影对地面精确;近处块体背后的空洞由 PLATE_HOLE_MAX 换锚点 / 加锚点兜底。
     取短边不取宽:狭长场景(街道 60×8)不被长边带偏。fengshen3 SCN-0110(40×22.5,63 机位)5.6 m:锚点 13 → 7;SCN-0121(320×180)8 m:9 → 4。
-    室内外由调用方写在 scene['_outdoor'](ensure_scene_panos / add_manual_anchor),没写按室内。"""
-    if not scene.get('_outdoor'):
-        return SERVE_MIN_M
+    内外混合场景(scene['_mixed'],如 SCN-0046 云台 + 洞内主室)逐点判:锚点与机位都在室外(point_walled < WALLED_MIN)才放宽,
+    且不超过锚点到最近通顶高墙的距离——整块地面的短边含着室内那一半,开阔的只是墙外那片。
+    室内外由调用方写在 scene['_outdoor'] / scene['_mixed'](ensure_scene_panos / add_manual_anchor),没写按室内。"""
     w, _, d = scene['dimensions_m']
-    return round(min(OUTDOOR_SERVE_MIN_MAX_M, max(SERVE_MIN_M, OUTDOOR_SERVE_SIDE_RATIO * min(w, d))), 2)
+    wide = round(min(OUTDOOR_SERVE_MIN_MAX_M, max(SERVE_MIN_M, OUTDOOR_SERVE_SIDE_RATIO * min(w, d))), 2)
+    if scene.get('_outdoor'):
+        return wide
+    if scene.get('_mixed') and anchor_pos is not None and cam_pos is not None:
+        if point_walled(scene, anchor_pos) < WALLED_MIN and point_walled(scene, [cam_pos[0], anchor_pos[1], cam_pos[2]]) < WALLED_MIN:
+            return round(max(SERVE_MIN_M, min(wide, _wall_clearance(scene, anchor_pos))), 2)
+    return SERVE_MIN_M
 
 
 def can_serve(anchor_pos, cam: dict, scene: dict) -> bool:
     pos, tgt = cam['position'], cam['target']
     subject = math.hypot(tgt[0] - pos[0], tgt[2] - pos[2])
-    limit = min(SERVE_MAX_M, max(serve_min_m(scene), SERVE_RATIO * subject))
     # 机位在白模地面之外(远景 / 高空大全景,SCN-0110 有 17 个,最远 126 m):它的锚点本来就只能夹回地面边缘内 0.5 m,
     # 所以按夹回点算距离——否则这些机位谁也服务不了,各自落成一个 auto-self 锚点(各出一张全景),而夹回点彼此只隔几米。
     w, _, d = scene['dimensions_m']
     pos = [max(-w / 2 + .5, min(w / 2 - .5, pos[0])), pos[1], max(-d / 2 + .5, min(d / 2 - .5, pos[2]))]
+    if math.hypot(anchor_pos[0] - pos[0], anchor_pos[2] - pos[2]) > SERVE_MAX_M:
+        return False                        # 先按上限粗筛,混合场景的逐点围合判定只对够近的候选做
+    limit = min(SERVE_MAX_M, max(serve_min_m(scene, anchor_pos, pos), SERVE_RATIO * subject))
     if math.hypot(anchor_pos[0] - pos[0], anchor_pos[2] - pos[2]) > limit:
         return False
     objs = scene.get('objects', [])
@@ -472,9 +517,6 @@ def is_indoor(base: Path, sid: str) -> bool:
     return scene_indoor(base, sid) is True
 
 
-WALLED_MIN = 0.7                 # 地平线带里「最近命中是通顶高墙」的射线占比 ≥ 此值 = 这个锚点在屋里
-
-
 def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: bool | None = None) -> bool:
     """这个锚点出全景时要不要补天花板 / 按室内写提示词。场景级有定论就用它;内外混合(fengshen3 SCN-0046 云台 + 洞内主室、
     SCN-0127 宫门前 + 正殿)按白模围合逐锚点判:四周最近命中大多是通顶高墙(顶 ≥ max(0.6 × 场景高, 镜头高 + 1.5 m))= 室内;
@@ -484,8 +526,7 @@ def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: boo
     flag = scene_indoor(base, sid)
     if flag is not None:
         return flag
-    view = anchor_view(scene, anchor, False)
-    return sum(v['walled'] for v in view['sectors'].values()) / len(view['sectors']) >= WALLED_MIN
+    return point_walled(scene, anchor['position']) >= WALLED_MIN      # 与服务半径的逐点判定同一口径
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
@@ -1504,6 +1545,7 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     sid = component(sid)
     scene = load_scene(base, sid)
     scene['_outdoor'] = scene_indoor(base, sid) is False
+    scene['_mixed'] = scene_indoor(base, sid) is None
     cams = scene_cameras(base, sid) if cameras is None else cameras
     idx = load_index(base, sid)
     w, _, d = scene['dimensions_m']
@@ -1542,7 +1584,8 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
     override = indoor
     flag = scene_indoor(base, sid) if override is None else bool(override)
     idx['indoor'] = flag                     # None = 内外混合,逐锚点见 anchors[].indoor
-    scene['_outdoor'] = flag is False        # 混合场景的服务半径按室内口径(保守)
+    scene['_outdoor'] = flag is False
+    scene['_mixed'] = flag is None           # 混合场景的服务半径逐点判(锚点与机位都在室外才放宽)
     idx['serve_min_m'] = serve_min_m(scene)
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
     new_cams = [c for c in cams if _cam_key(c) not in served]
