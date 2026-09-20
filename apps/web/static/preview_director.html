@@ -137,6 +137,9 @@ header select{cursor:pointer;max-width:260px}
 .acc-h .cnt{font:10px var(--mono);color:var(--dim);font-weight:400}
 .acc-h .sp{flex:1}
 .acc-h .car{color:var(--faint)}
+.objs[hidden],.shotinfo[hidden]{display:none}
+.fold{cursor:pointer;user-select:none}.fold .car{color:var(--faint)}
+.mon-edit .fold{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12px;color:var(--text)}
 .acc.closed .acc-b{display:none}
 .acc-b{padding:4px 0}
 .note{padding:6px 10px;border-top:1px solid var(--border);font-size:11.5px}
@@ -459,7 +462,10 @@ function selectGroup(gid,force){
 /* ---------- 监视器 ---------- */
 let RA=null,HELPER=null,DIRTY=true,PREV=0,RAF=0,PAD=null,ORBIT=null,SOURCE_LOAD=0,SOURCE_READY=false,STATE_TICK=0;
 /* ---------- v2 编辑状态:解锁拖动 / 覆盖层 / 撤销 / 锁定 / 路径点 ---------- */
-let EDIT=false,TOOL='move',SNAP=true,LOCKS=new Set(),UNDO=[],REDO=[],DRAG=null,WAY=null,WAYSEL=-1,LANES_ON=true,FLY=null,FLY_TIMER=null,LANEDRAG=null;
+// 中栏折叠状态(时间线 / 本组对象 / 分镜信息),跨项目记在本机
+let MID_CLOSED=new Set();try{MID_CLOSED=new Set(JSON.parse(localStorage.getItem('director-mid-closed')||'[]'))}catch(_){}
+const midFoldSave=()=>{try{localStorage.setItem('director-mid-closed',JSON.stringify([...MID_CLOSED]))}catch(_){}};
+let EDIT=false,TOOL='move',SNAP=true,LOCKS=new Set(),UNDO=[],REDO=[],DRAG=null,WAY=null,WAYSEL=-1,LANES_ON=!MID_CLOSED.has('lanes'),FLY=null,FLY_TIMER=null,LANEDRAG=null;
 const KIND_KEY={actor:'actors',extra:'extras',prop:'props',camera:'cameras'};
 let QUAD=false,QMUTED=false,BOARD=null,OVL={guides:false,clearance:false,axis:false},MEASURE=[],MEASGRP=null,MARKGRP=null,CLRGRP=null,AXISGRP=null,QSYNC=0;
 const marksOf=()=>{const g=grpById(SEL);return g?(((DD||{}).marks||{})[g.scene_id]||[]):[]};
@@ -518,6 +524,8 @@ function renderMonitorShell(){
     <label><input type="checkbox" id="loop"> ${esc(t('循环'))}</label>
   </div>
   <div class="mon-edit" id="monedit">
+    <span class="fold" id="lanetoggle" title="${esc(t('多轨时间线:镜段 + 每个对象的关键帧(菱形可左右拖改时间)'))}"><span class="car">${MID_CLOSED.has('lanes')?'▸':'▾'}</span>${esc(t('时间线'))}</span>
+    <span style="flex:1"></span>
     <button class="sm" id="edit" title="${esc(t('解锁后可在 3D 里拖动人物/群演/道具/摄影机(移动 G / 旋转 R;按住 Shift 改高度)。有运动的对象在当前时刻自动打关键帧,全程静止的对象整体挪;改动即时写入覆盖层'))}">🔒 ${esc(t('锁定'))}</button>
     <span class="seg" id="tool" style="display:none"><span data-tool="move" class="on">${esc(t('移动'))} G</span><span data-tool="rotate">${esc(t('旋转'))} R</span><span data-tool="measure" title="${esc(t('测距:点两个对象或地面点,显示距离;第三下重来'))}">${esc(t('测距'))} M</span></span>
     <button class="sm" id="markadd" style="display:none" title="${esc(t('在选中对象当前位置放一个地面定位标记(拖动时会吸附到标记)'))}">📍 ${esc(t('标记'))}</button>
@@ -525,16 +533,14 @@ function renderMonitorShell(){
     <label id="snaplbl" style="display:none"><input type="checkbox" id="snap" checked> ${esc(t('吸附 0.1 m / 15°'))}</label>
     <button class="sm" id="undo" disabled title="${esc(t('撤销 (Ctrl+Z)'))}">↶</button><button class="sm" id="redo" disabled title="${esc(t('重做 (Ctrl+Shift+Z)'))}">↷</button>
     <span class="numbox" id="numbox" style="display:none"></span>
-    <span style="flex:1"></span>
-    <button class="sm on" id="lanetoggle" title="${esc(t('多轨时间线:镜段 + 每个对象的关键帧(菱形可左右拖改时间)'))}">${esc(t('时间线'))}</button>
   </div>
   <div class="mon-edit mon-ov" id="ovrow" style="display:none"><span class="ovtag" id="ovtag"></span><span class="lite" style="color:var(--dim)">${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span><span style="flex:1"></span><button class="sm warn" id="ovdrop">${esc(t('丢弃本组改动'))}</button></div>
   <div class="markrow" id="markrow" style="display:none"></div>
   <div class="lanes" id="lanes"></div>
   <div class="midbody">
-    <div class="sec-h">${esc(t('本组对象'))} <span class="lite" id="objcnt"></span><span class="sp" style="flex:1"></span><span class="lite">${esc(t('点对象 = 选中并写注释;摄影机在俯视/旋转视角里可点'))}</span></div>
+    <div class="sec-h fold" data-fold="objs"><span class="car"></span>${esc(t('本组对象'))} <span class="lite" id="objcnt"></span><span class="sp" style="flex:1"></span><span class="lite">${esc(t('点对象 = 选中并写注释;摄影机在俯视/旋转视角里可点'))}</span></div>
     <div class="objs" id="objs"></div>
-    <div class="sec-h">${esc(t('分镜信息'))} <span class="lite" id="shotlbl"></span></div>
+    <div class="sec-h fold" data-fold="shotinfo"><span class="car"></span>${esc(t('分镜信息'))} <span class="lite" id="shotlbl"></span></div>
     <div class="shotinfo" id="shotinfo"></div>
   </div>`;
   $$('#viewseg span').forEach(s=>s.onclick=()=>setView(s.dataset.v));
@@ -579,7 +585,10 @@ function renderMonitorShell(){
   $$('#tool span').forEach(x=>x.onclick=()=>setTool(x.dataset.tool));
   $('#snap').onchange=e=>{SNAP=e.target.checked};
   $('#undo').onclick=undo;$('#redo').onclick=redo;
-  $('#lanetoggle').onclick=()=>{LANES_ON=!LANES_ON;$('#lanetoggle').classList.toggle('on',LANES_ON);renderLanes()};
+  $('#lanetoggle').onclick=()=>{LANES_ON=!LANES_ON;LANES_ON?MID_CLOSED.delete('lanes'):MID_CLOSED.add('lanes');midFoldSave();$('#lanetoggle .car').textContent=LANES_ON?'▾':'▸';renderLanes()};
+  const applyFold=()=>$$('#mid .sec-h.fold').forEach(h=>{const id=h.dataset.fold,c=MID_CLOSED.has(id);h.querySelector('.car').textContent=c?'▸':'▾';$('#'+id).hidden=c});
+  $$('#mid .sec-h.fold').forEach(h=>h.onclick=()=>{const id=h.dataset.fold;MID_CLOSED.has(id)?MID_CLOSED.delete(id):MID_CLOSED.add(id);midFoldSave();applyFold()});
+  applyFold();
   $('#quad').onclick=()=>setQuad(!QUAD);
   $('#approve').onclick=toggleApprove;
   $$('#ovl span').forEach(x=>x.onclick=()=>{OVL[x.dataset.ovl]=!OVL[x.dataset.ovl];x.classList.toggle('on',OVL[x.dataset.ovl]);rebuildOverlays();DIRTY=true;kick()});
