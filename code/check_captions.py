@@ -56,7 +56,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import DATA_DIR, parse_args                          # noqa: E402
+from _common import DATA_DIR, parse_args, reexec_with_host_python                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
 import captions_html as chtml                                     # noqa: E402
@@ -92,6 +92,7 @@ def main():
         ap.add_argument("--shot-list", default=None, help="显式指定 shot_list.json 路径")
 
     args, proj = parse_args(__doc__, configure=configure)
+    reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
     ep = args.ep
     checks: list[tuple[str, bool]] = []
 

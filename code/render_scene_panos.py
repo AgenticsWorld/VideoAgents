@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_args, spatial_blocking_enabled  # noqa: E402
+from _common import parse_args, reexec_with_host_python, spatial_blocking_enabled  # noqa: E402
 from modules import scene_panos as sp  # noqa: E402
 from modules.whitebox import component  # noqa: E402
 
@@ -45,6 +45,7 @@ def main():
         ap.add_argument('--seed', type=int, default=None)
         ap.add_argument('--status', action='store_true', help='机检 scene_panos_ready:各 (锚点, 光照方案) 全景是否齐,缺则退出码 1')
     args, base = parse_args(__doc__, configure=configure)
+    reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
     sid = component(args.scene)
     if not spatial_blocking_enabled(base):
         print(f"[scene_panos] {args.project}: skipped: spatial_blocking off(项目输出设置「人物精确空间位置」已关闭)")

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from _common import parse_args
+from _common import parse_args, reexec_with_host_python
 from modules.whitebox import compile_episode, component
 from modules.whitebox_export import concat_episode, ensure_videos, episode_reel_status
 from modules.whitebox_refs import sync_episode
@@ -29,6 +29,9 @@ def main():
         parser.add_argument('--fps',type=int,default=24)
     args,base=parse_args(__doc__,configure=configure)
     component(args.project);component(args.ep)
+    if not (args.check_only or args.verify_export or (args.compile_only and not args.stills)):
+        # 静帧/导出要无头 Chromium:当前解释器缺 Playwright 就换宿主解释器重跑(Agent 写 python3 落到别的环境的前科)
+        reexec_with_host_python()
     if args.scene:
         component(args.scene)
         if args.groups:raise ValueError('Use either group IDs or --scene, not both')

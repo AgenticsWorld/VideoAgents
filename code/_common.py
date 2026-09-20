@@ -5,6 +5,7 @@ import 本模块的副作用:把 modules/ 加入 sys.path,之后可直接
 """
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +18,32 @@ if str(MODULES_DIR) not in sys.path:
 # CLI 也要能解析 `modules.*`,因此仓库根同样入 sys.path
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
+
+
+def reexec_with_host_python(argv=None):
+    """当前解释器缺 Playwright 时,换宿主派单注入的解释器(VIDEOAGENTS_PYTHON=服务自身 sys.executable)重跑一次。
+
+    前科(2026-09-20 fengshen3 ep06):codex 的登录 shell 里 python3 → Homebrew 3.13(无 Playwright),
+    python → conda(齐全),Agent 写 python3 即报「缺少 Playwright」。须在 CLI 产生任何输出/副作用之前调用(各入口 parse_args 之后第一件事),免得 stdout 重复。
+    不满足条件(有 Playwright / 未注入 / 已是宿主解释器 / 已重跑过)时原样返回,由后续 import 照常报错。
+    """
+    try:
+        import playwright  # noqa: F401
+        return
+    except ImportError:
+        pass
+    host = os.environ.get('VIDEOAGENTS_PYTHON', '').strip()
+    if not host or os.environ.get('VIDEOAGENTS_PYTHON_REEXEC') or not Path(host).is_file():
+        return
+    try:
+        if os.path.samefile(host, sys.executable):
+            return
+    except OSError:
+        pass
+    print(f'{Path(sys.argv[0]).name}: {sys.executable} 缺少 Playwright,改用宿主解释器 {host} 重跑', file=sys.stderr, flush=True)
+    sys.stdout.flush()
+    code = subprocess.call([host, *(argv or sys.argv)], env={**os.environ, 'VIDEOAGENTS_PYTHON_REEXEC': '1'})
+    sys.exit(code)
 
 
 def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):

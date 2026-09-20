@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import DATA_DIR, parse_args                          # noqa: E402
+from _common import DATA_DIR, parse_args, reexec_with_host_python                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
 import captions_html as chtml                                     # noqa: E402
@@ -298,6 +298,7 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         raise SystemExit(f"用法:render_captions.py {{{'|'.join(cmds)}}} ...")
+    reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common;须在 pop 子命令之前,argv 原样传递)
     sub = sys.argv.pop(1)
     if sub == "doctor":
         cmd_doctor(None)

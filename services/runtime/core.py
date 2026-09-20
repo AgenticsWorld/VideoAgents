@@ -4088,6 +4088,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                "VIDEOAGENTS_PROJECT": run["project"], "VIDEOAGENTS_ENGINE": engine,
                "VIDEOAGENTS_AGENT": agent_id,
                "VIDEOAGENTS_WORKSPACE_ROOT": str(ROOT),
+               # 宿主解释器:成员写 python3 落到缺依赖的环境时,宿主 CLI 据此换回来重跑(code/_common.py reexec_with_host_python)
+               "VIDEOAGENTS_PYTHON": sys.executable,
                "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
                # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
                "WEBUI_PROJECT": run["project"]}

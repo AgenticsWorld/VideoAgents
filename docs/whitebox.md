@@ -226,7 +226,7 @@ python code/render_whitebox.py --project dzg6 --ep ep01 --stills grp011 grp012
 
 行为同 `--compile-only`（编译、落盘 episode.json 与场景模型），随后用无头 Chromium 加载 `apps/web/static/whitebox-stills.html`（与预览/导出同一 `WhiteboxRenderer`）逐镜采样：首、尾各向内收一帧，加镜内机位关键帧，不足 3 个补中点，每镜最多 5 格摄影机视角，再加 1 格空间视角；按项目画幅缩到长边 448px 拼成每组一张联系表 `directing/<ep>/whitebox/stills/<grp>.jpg`，stdout 的 `stills[]` 给出各组表路径与采样时刻。Agent 读图核对主体在画内、遮挡、朝向、景别、运动方向（细则见白模调度 SOUL「白模自检」），回执 `stills_checked` 留证，对应上文“视觉符合构图”一项的交付前自检；最终仍以用户在预览页审看与 H3W 签字为准。
 
-全本地渲染、不调用生成模型；不写 manifest、不产出 camera.mp4、不接 refs，因此不受“签字前不得导出”约束。静帧页独立于 `whitebox-export.html`，后者计入导出渲染器指纹，改它会让全部已导出视频过期。依赖同导出（Playwright + Chromium，桌面运行时已内置）；缺依赖时命令报错，Agent 上报 `unavailable` 不阻断交付。关闭开关后 Agent 不跑 `--stills`，只做数值自检与宿主机检。
+全本地渲染、不调用生成模型；不写 manifest、不产出 camera.mp4、不接 refs，因此不受“签字前不得导出”约束。静帧页独立于 `whitebox-export.html`，后者计入导出渲染器指纹，改它会让全部已导出视频过期。依赖同导出（Playwright + Chromium，桌面运行时已内置）；Agent 用的解释器缺 Playwright 时（前科：codex 登录 shell 里 `python3` → Homebrew，`python` → 宿主环境），`render_whitebox.py` 在编译前按派单注入的 `VIDEOAGENTS_PYTHON`（宿主 `sys.executable`）自动换解释器重跑一次（`code/_common.py` 的 `reexec_with_host_python`；导出、`render_shot_plates.py`、`render_scene_panos.py`、`render_captions.py`、`check_captions.py` 同样接了）；仍缺依赖时命令报错，Agent 上报 `unavailable` 不阻断交付。关闭开关后 Agent 不跑 `--stills`，只做数值自检与宿主机检。
 
 ## 实景图视图（2026-09-09）
 

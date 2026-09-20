@@ -39,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_args, spatial_blocking_enabled  # noqa: E402
+from _common import parse_args, reexec_with_host_python, spatial_blocking_enabled  # noqa: E402
 from modules.scene_panos import PanoUnsupported  # noqa: E402
 from modules.shot_plates import run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
@@ -57,6 +57,7 @@ def main():
         ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
         ap.add_argument('--repano', action='store_true', help='集索引里仍指向 legacy(非全景制)库图的镜视为需重做,按全景制重出(有费用,仅用户明确要求时)')
     args, base = parse_args(__doc__, configure=configure)
+    reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
     ep = component(args.ep)
     if not spatial_blocking_enabled(base):
         print(f"[shot_plates] {args.project}: skipped: spatial_blocking off(项目输出设置「人物精确空间位置」已关闭,不出分镜背景图)")
