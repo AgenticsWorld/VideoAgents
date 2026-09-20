@@ -930,7 +930,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             try:
                 pano_info = reproject_for_plate(base, sid, pano_idx[sid], cam_of(d), scheme_key, mfacts, mwidth, mheight, base/pano_rel,
                                                 indoor=stats['panos'][sid]['indoor'], seed=seed, log=log)
-            except scene_panos.PanoUnsupported:
+            except (scene_panos.PanoUnsupported, scene_panos.PanoProjectionError):   # 投影机检 FAIL:不逐镜吞掉,否则每镜都再花钱出一张坏全景
                 raise
             except Exception as error:  # noqa: BLE001
                 stats['errors'].append(f'{shot_id}/{role}: 全景重投影失败 {error}')

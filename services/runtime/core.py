@@ -7206,7 +7206,7 @@ def _scene_job_worker(jobs: dict, etype: str, project: str, sid: str, jobkey: st
             job["status"] = "failed"
             # CLI 的错误行以「错误:」/「[pano_unsupported]」开头(其后可能跟多行响应体),取该行起的片段;没有就取末尾几行
             lines = job["log"]
-            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "scene_panos:"))),
+            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "[pano_projection_fail]", "scene_panos:"))),
                          max(len(lines) - 3, 0))
             job["error"] = " ".join(x.strip() for x in lines[start:start + 4])[:500] or f"exit {rc}"
             if rc == 2 and rc2_error:

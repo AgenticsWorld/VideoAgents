@@ -40,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, reexec_with_host_python, spatial_blocking_enabled  # noqa: E402
-from modules.scene_panos import PanoUnsupported  # noqa: E402
+from modules.scene_panos import PanoProjectionError, PanoUnsupported  # noqa: E402
 from modules.shot_plates import run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
 
@@ -96,6 +96,10 @@ def main():
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_unsupported', 'detail': str(error)}}, ensure_ascii=False), flush=True)
         return 2
+    except PanoProjectionError as error:
+        print(f"[pano_projection_fail] {error}", file=sys.stderr, flush=True)
+        print(json.dumps({'shot_plates': {'blocked': 'pano_projection_fail', 'detail': str(error)}}, ensure_ascii=False), flush=True)
+        return 3
     print(json.dumps({'shot_plates': stats}, ensure_ascii=False), flush=True)
     if not args.dry_run:
         sync = sync_episode(base, ep, groups, write=True)

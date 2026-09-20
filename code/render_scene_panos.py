@@ -17,7 +17,8 @@
   可选 --indoor / --outdoor 覆盖室内外判定(室内渲全景补天花板);--seed N 固定种子。
 
 退出码:0 完成;1 出错;2 当前图像模型不支持 2:1 全景(打印 [pano_unsupported],请用户到控制台「🎨 生成模型」换图像模型,
-Agent 不得自行换模型)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
+Agent 不得自行换模型);3 成图不是等距柱状投影(打印 [pano_projection_fail],成图已改名 .rejected-projection-*,本批停下;
+重出 --only <锚点>,次数计入用户设定的重跑次数,用尽上报用户)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
 """
 import json
 import sys
@@ -112,6 +113,9 @@ def main():
     except sp.PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         return 2
+    except sp.PanoProjectionError as error:
+        print(f"[pano_projection_fail] {error}", file=sys.stderr, flush=True)
+        return 3
     idx = sp.load_index(base, sid)
     for a in idx['anchors']:
         p = a['position']

@@ -30,6 +30,14 @@
 
 目标视图（分镜机位透视图 / 新锚点球面）每个像素：对白模几何（objects 盒 + 地板外扩 20 m + 室内天花板）射线求交得 3D 点 → 回到源全景按方向取色 → 用源深度全景做遮挡判定（源在该方向的深度明显小于点距 = 被遮挡 → 空洞）；目标射线无几何时按纯方向取色，但源在该方向有几何即视为遮挡。分镜图空洞 inpaint 后作 `[Image 1]`；空洞 > 50% 换下一锚点，都不行则在该机位加锚点出全景。实测 dzg6 SCN-0002：机位离锚点 0.1–2 m 空洞 0.3–4%，锚点间 5.4 m 链式重投影空洞 8%。
 
+## 投影保障（2026-09-20）
+
+开阔外景的白模全景只有几个小盒子贴着地平线，看上去像一张普通广角构图，图像模型会交出「2:1 的广角风景照」（fengshen3 SCN-0110 A1–A12：左右缘接不上、天顶/天底不成色带、底部是清晰前景）。三道保障：
+
+1. **外景白模投影引导线**：`render_whitebox_pano` 对室外场景调 `draw_projection_guides`，在无几何的天空（虚拟平面高 25 m）与地面像素上画世界直角网格（镜头居格心，无线穿过天顶/天底）+ 地平线四向刻度（无文字）；直线弯成向两极汇聚的曲线是等距柱状最强的视觉签名。只改 `whitebox_pano.jpg`，不动深度全景。`depth_pano.json#guides` 记版本；存量外景白模在**出全景前**本机重渲（不作废已有全景）。室内不画。
+2. **提示词**：外景加 `EXTERIOR_PROJECTION_RULES`（无单一视向、地平线贯穿整幅、身后在两缘且接得上、天底拉伸不得是清晰前景、日/月只占一个方位）与 `GUIDES_REF_RULE`（引导线只示意曲率、不得画出）；所有全景末尾加 `PANO_PROJECTION_TAIL` 复述投影；风格段经 `pano_style` 只留材质/色调/颗粒分句，剔除 subject / layers of depth / backlight / god rays 等单镜头构图用语。
+3. **投影机检** `projection_check`：主判据天底横向细节比（底部 5% 行 ÷ 中段，合格 0.14–0.55、广角 0.85–2.6，> 0.7 FAIL）；辅判据极区行方差 + 左右缘接缝比同时超限 FAIL；仅接缝比 > 3 为 WARN（合格全景也常见）。FAIL → 成图改名 `<scheme>.rejected-projection-<时间>.png`、不入索引、抛 `PanoProjectionError`，**本批立即停下**（链式补洞会把错误投影传给后续锚点），CLI 打印 `[pano_projection_fail]` 退出码 3（`render_shot_plates.py` 同）。宿主不自动重出；Agent 用 `--only <锚点>` 重出，次数计入用户设定的重跑次数，用尽原文上报用户。结果记入成图 sidecar `projection_check`。
+
 ## 图像模型能力
 
 全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户换图像模型，不得自行换模型或绕过。

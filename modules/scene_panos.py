@@ -61,6 +61,36 @@ PANO_PROJECTION_RULES = (
     "the sky or ceiling zenith is stretched along the top edge, the ground directly below the camera (nadir) along the bottom edge, "
     "the horizon runs along the middle row, and the left and right edges continue into each other. "
 )
+# 开阔外景的成图先验是「一张 2:1 的广角风景照」(fengshen3 SCN-0110):外景另加硬约束,并在提示词末尾再说一遍(首段会被长清单稀释)
+EXTERIOR_PROJECTION_RULES = (
+    "This is NOT a wide-angle landscape photograph and has no single viewing direction: the image width is the full 360-degree turn, so the "
+    "horizon line crosses the entire width at mid-height, the scenery continues all the way around, and what lies behind the camera appears "
+    "at the far left and far right edges, which must join seamlessly. The top rows are the sky straight overhead smeared across the full "
+    "width; the bottom rows are the ground right under the camera smeared across the full width, soft and heavily stretched, never a sharp "
+    "detailed foreground. Straight things (shorelines, paths, boats, walls, poles rows) bend into curves exactly as the blocks in the "
+    "blockout do. The sun or moon occupies one single compass direction only; the rest of the sky is lit accordingly. "
+)
+GUIDES_REF_RULE = (
+    "The curved grid lines on the sky and ground of [Image {n}] and the short tick marks on its horizon are projection guides only: they "
+    "show how straight lines on the ground and overhead bend in this equirectangular projection and where the nadir and zenith are — "
+    "reproduce that curvature and stretching in the real ground texture, shoreline and clouds, and never draw the lines or ticks themselves. "
+)
+PANO_PROJECTION_TAIL = (
+    "Final check before output: full-sphere equirectangular projection, zenith smeared along the top edge, nadir smeared along the bottom "
+    "edge, horizon on the middle row across the whole width, left and right edges are the same direction and match pixel for pixel."
+)
+# 风格段里的单镜头构图 / 布光 / 人物用语:全景没有「主体」和「前中后景」,留着会把模型推回单视角电影画面
+STYLE_COMPOSITION_WORDS = ('subject', 'layers of depth', 'depth of field', 'foreground', 'middle ground', 'midground', 'background',
+                           'backlight', 'rim-lit', 'rim light', 'rimming', 'god ray', 'composition', 'framing', 'framed', 'close-up',
+                           'bokeh', 'lens', 'silhouette', 'hair', 'skin', 'face', 'costume', 'hemp', 'silk', 'gauze', 'leather',
+                           'colossal structure', 'sea of clouds')
+
+
+def pano_style(style: str) -> str:
+    """全景用的风格段:只留材质 / 色调 / 颗粒等与视角无关的分句。"""
+    keep = [c.strip() for c in re.split(r'[;,。;,]', style or '') if c.strip()
+            and not any(w in c.lower() for w in STYLE_COMPOSITION_WORDS)]
+    return ', '.join(keep)
 WHITEBOX_REF_RULE = (
     "[Image {n}] is a plain untextured 3D blockout render of exactly this panorama from exactly this camera: keep its "
     "projection, horizon height, and the position, size and outline of every block (walls, columns, counters, shelves, seats, "
@@ -94,6 +124,10 @@ NEGATIVE = ('people, person, human figure, crowd, vehicles in motion, text, wate
 
 class PanoError(RuntimeError):
     pass
+
+
+class PanoProjectionError(PanoError):
+    """成图不是等距柱状投影(2:1 的广角照片)→ 成图已改名 .rejected,本批停下(链式补洞会把错误投影一路传下去)。"""
 
 
 class PanoUnsupported(PanoError):
@@ -311,6 +345,53 @@ def is_indoor(base: Path, sid: str) -> bool:
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
+GUIDES_VERSION = 1               # 外景白模全景投影引导线版本;depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
+SKY_PLANE_M = 25.0               # 虚拟天空网格平面离镜头的高度
+
+
+def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float):
+    """开阔外景白模只有几个小盒子贴着地平线,上半幅纯色、下半幅淡地面,看上去就是一张普通广角构图,图像模型读不出等距柱状投影
+    (fengshen3 SCN-0110:2:1 成图是广角照片)。给无几何的天空与地面补世界直角网格:直线在等距柱状里弯成向天顶/天底汇聚的曲线,
+    是这种投影最强的视觉签名;地平线补四向刻度。只画在无几何的天空与地面像素上,不盖白模块体;不动深度全景。"""
+    import numpy as np
+    from PIL import Image
+    h, w = depth.shape
+    img = np.asarray(color.convert('RGB').resize((w, h)), dtype=np.float64).copy()
+    dirs = _equirect_rays(yaw_deg, w, h).reshape(h, w, 3)
+    dy = dirs[..., 1]
+    pix = math.pi / h                                        # 每像素弧度
+    cam_h = max(float(cam_h), 0.3)
+
+    def grid(t, spacing):
+        """平面上世界直角网格的线覆盖度 0–1:线宽恒 ~1.6 px,格子小于 ~6 px 时淡出(免地平线处摩尔纹)。"""
+        x = dirs[..., 0] * t; z = dirs[..., 2] * t
+        foot = np.maximum(t * pix / np.maximum(np.abs(dy), 1e-3), 1e-6)   # 一像素在该平面上的跨度(含掠射拉长)
+        # 网格线落在相对镜头 (k+½)·spacing 处:镜头在格心,没有线穿过天顶/天底(穿过的线会成整幅高的竖直线,反而像分屏)
+        d = np.minimum(np.abs(x / spacing % 1 - .5), np.abs(z / spacing % 1 - .5)) * spacing
+        line = np.clip(1.6 - d / foot, 0, 1)
+        return line * np.clip((spacing / foot - 6) / 10, 0, 1)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t_ground = np.where(dy < -1e-4, cam_h / -dy, np.inf)
+        t_sky = np.where(dy > 1e-4, SKY_PLANE_M / dy, np.inf)
+    # 地面像素 = 下半球且(无几何 或 深度落在 y=0 平面上);天空像素 = 上半球无几何
+    ground = (dy < 0) & (~valid | (np.abs(depth - t_ground) < 0.03 * t_ground + 0.05))
+    sky = (dy > 0) & ~valid
+    tg = np.where(np.isfinite(t_ground), t_ground, 1e9); ts = np.where(np.isfinite(t_sky), t_sky, 1e9)
+    a_ground = np.maximum(grid(tg, 1.0) * .8, grid(tg, 5.0)) * ground      # 5 = 奇数倍,粗线与细线重合
+    a_sky = np.maximum(grid(ts, 10.0) * .8, grid(ts, 50.0)) * sky
+    for alpha, rgb in ((a_ground, (70, 96, 70)), (a_sky, (96, 108, 128))):
+        img += (np.array(rgb, dtype=np.float64) - img) * (alpha * .85)[..., None]
+    # 地平线四向刻度(无文字,免模型照抄标签):前/右/后/左各一道竖线,只落在天空/地面像素
+    free = ground | sky
+    mid = h // 2
+    for frac in (0.0, .25, .5, .75, 1.0):
+        c = min(w - 1, int(round(frac * (w - 1))))
+        band = np.zeros((h, w), dtype=bool); band[mid - h // 24: mid + h // 24, max(0, c - 1): c + 2] = True
+        img[band & free] = (60, 60, 60)
+    return Image.fromarray(np.clip(img, 0, 255).astype('uint8'))
+
+
 def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, log=print, out_dir: Path | None = None) -> dict:
     """无头 Chromium 渲径向深度全景 + 白模彩色全景到 panos/<anchor>/(out_dir 指定则写到该目录,
     世界模型链 modules/worldlabs.py 在场景没有锚点时把自动机位的全景渲进 world/,不进 panos 索引)。"""
@@ -350,15 +431,22 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
             browser.close()
     depth = np.frombuffer(base64.b64decode(result['depth_base64']), dtype='<f4').reshape(height, width).copy()
     valid = depth > 0
+    raw_depth = depth.copy()
     if valid.mean() < 0.1:   # 开放场景(室外/机位在白模地面外)天地本就无几何,只拦「什么都没渲出来」
         raise PanoError(f"{anchor['anchor_id']}: 深度全景有效像素只有 {valid.mean():.0%},场景几何可能没渲染出来")
     z_max = float(depth[valid].max())
     depth[~valid] = z_max * 4      # 无几何(漏天/漏地)按远处理
     np.save(out / 'depth_pano.npy', depth)
-    (out / 'whitebox_pano.jpg').write_bytes(base64.b64decode(result['color_jpeg']))
+    color_jpeg = base64.b64decode(result['color_jpeg'])
+    if indoor:
+        (out / 'whitebox_pano.jpg').write_bytes(color_jpeg)
+    else:
+        import io
+        draw_projection_guides(Image.open(io.BytesIO(color_jpeg)), valid, raw_depth, camera[1],
+                               float(anchor.get('yaw_deg') or 0)).save(out / 'whitebox_pano.jpg', quality=92)
     record = {'schema_version': SCHEMA, 'scene_id': sid, 'anchor_id': anchor['anchor_id'], 'written_at': _now(),
               'camera': {'position': camera, 'yaw_deg': float(anchor.get('yaw_deg') or 0), 'height_m': camera[1]},
-              'size': [width, height], 'cube': DEPTH_CUBE, 'indoor': indoor, 'valid_fraction': round(float(valid.mean()), 4),
+              'size': [width, height], 'cube': DEPTH_CUBE, 'indoor': indoor, 'guides': 0 if indoor else GUIDES_VERSION, 'valid_fraction': round(float(valid.mean()), 4),
               'z_max': round(z_max, 3)}
     (out / 'depth_pano.json').write_text(json.dumps(record, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     return record
@@ -577,6 +665,8 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
     tod = (sch.get('condition') or {}).get('time_of_day') or time_of_day or ''
     if tod:
         parts.append(f"Time of day: {tod}.")
+    if not indoor:
+        parts.append(EXTERIOR_PROJECTION_RULES.strip())
     parts.append(f"The camera stands {standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})}, "
                  f"lens {anchor['position'][1]} m above the floor, level horizon.")
     if centre:
@@ -600,8 +690,10 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
         parts.append('Materials and era (reference only): ' + desc[:1200])
     parts.append('Empty location: no people, no characters, no human figures or silhouettes, no animals, no moving vehicles, no text, '
                  'no watermark, one single seamless equirectangular photograph.')
+    style = pano_style(style)
     if style:
-        parts.append('Style: ' + style)
+        parts.append('Look (materials, palette and grain only): ' + style.rstrip('.') + '.')
+    parts.append(PANO_PROJECTION_TAIL)
     return ' '.join(p.strip() for p in parts if p and p.strip())
 
 
@@ -777,6 +869,8 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     wb = out / 'whitebox_pano.jpg'
     if not wb.is_file():
         raise PanoError(f"{anchor['anchor_id']}: 先渲白模全景")
+    if not indoor and int((read(out / 'depth_pano.json', {}) or {}).get('guides') or 0) < GUIDES_VERSION:
+        render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)   # 存量外景白模没有投影引导线:本机重渲,不作废已有全景
     w, h = _pano_dims()
     refs, rules, parent, mode = [], [], None, 'fresh'
     others = {s: p for s, p in anchor.get('panos', {}).items() if s != scheme and (out / p.get('file', '')).is_file()}
@@ -802,6 +896,8 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         layout = base / 'assets/concepts/scenes' / sid / ((read(base / 'assets/concepts/scenes' / sid / 'layout.json', {}) or {}).get('layout_top') or 'layout_top.png')
         if layout.is_file():
             refs.append(layout); rules.append(LAYOUT_REF_RULE.format(n=len(refs)))
+    if not indoor:
+        rules.append(GUIDES_REF_RULE.format(n=refs.index(wb) + 1))
     prompt = PANO_PROJECTION_RULES + ''.join(rules) + pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day)
     if seed is None:
         import random
@@ -815,6 +911,15 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
                               "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
+    proj = projection_check(target)
+    if proj and proj['verdict'] == 'FAIL':
+        rejected = target.with_suffix('.rejected-projection-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S') + '.png')
+        target.rename(rejected)
+        raise PanoProjectionError(
+            f"{sid}/{anchor['anchor_id']}/{scheme}: 成图不是等距柱状全景({proj['reason']}),已改名 {rejected.name},本批停下。"
+            f"重出:render_scene_panos.py --only {anchor['anchor_id']}(换 seed);重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出。")
+    if proj and proj['verdict'] == 'WARN':
+        log(f"   WARN 投影机检:{proj['reason']}")
     if mode == 'chain':
         score = chain_consistency(chain, target)
         parent['consistency'] = score
@@ -823,13 +928,47 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     rec = {'file': target.name, 'scheme': scheme, 'mode': mode, 'parent': parent, 'time_of_day': time_of_day,
            'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
            'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
-           'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
+           'prompt': prompt, 'negative': NEGATIVE, 'projection_check': proj, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
            'written_at': _now()}
     (out / f'{scheme}.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     anchor.setdefault('panos', {})[scheme] = {k: rec[k] for k in ('file', 'mode', 'parent', 'channel', 'seed', 'size', 'time_of_day', 'written_at')}
     save_index(base, sid, idx)
     log(f"saved: {target.relative_to(base)}")
     return rec
+
+
+NADIR_DETAIL_FAIL = 0.7          # 底部 5% 行的横向细节 / 中段横向细节;等距柱状里天底被横向拉伸,实测合格 0.14–0.55、广角照片 0.85–2.6
+NADIR_DETAIL_SOFT = 0.4
+SEAM_RATIO_WARN = 3.0            # 左右缘色差 / 相邻列色差基线;接缝不上只 WARN(合格全景也常见),与极区指标同时超限才 FAIL
+
+
+def projection_check(path: Path) -> dict | None:
+    """成图是不是等距柱状:① 天底横向细节比(主判据)② 天顶/天底行方差 ③ 左右缘接缝。
+    标定样本:dzg6 SCN-0002 / liaozhai3 SCN-0005 / fengshen3 SCN-0140、0046(合格)对 fengshen3 SCN-0110 A1–A12(2:1 广角照片)。"""
+    try:
+        import numpy as np
+        from PIL import Image
+        im = Image.open(path).convert('RGB')
+        g = np.asarray(im.convert('L').resize((1024, 512), Image.BOX), dtype=np.float64)
+        dx = np.abs(np.diff(g, axis=1))
+        mid = max(float(dx[154:358].mean()), 1e-3)
+        nadir, zenith = float(dx[-26:].mean()) / mid, float(dx[:26].mean()) / mid
+        s = np.asarray(im.resize((256, 128), Image.BOX), dtype=np.float64)
+        seam = float(np.abs(s[:, 0] - s[:, -1]).mean())
+        inner = float(np.mean([np.abs(s[:, c] - s[:, c + 1]).mean() for c in range(8, 247, 8)]))
+        seam_ratio = seam / max(inner, 2.0)
+        top_std, bot_std = float(s[:3].std(axis=1).mean()), float(s[-3:].std(axis=1).mean())
+    except Exception:  # noqa: BLE001
+        return None
+    rec = {'nadir_detail': round(nadir, 2), 'zenith_detail': round(zenith, 2), 'seam_ratio': round(seam_ratio, 1),
+           'top_row_std': round(top_std, 1), 'bottom_row_std': round(bot_std, 1)}
+    if nadir > NADIR_DETAIL_FAIL:
+        return {**rec, 'verdict': 'FAIL', 'reason': f"天底未拉伸:底部横向细节比 {nadir:.2f} > {NADIR_DETAIL_FAIL}(像广角照片的清晰前景)"}
+    if nadir > NADIR_DETAIL_SOFT and top_std > 25 and bot_std > 15 and seam_ratio > SEAM_RATIO_WARN:
+        return {**rec, 'verdict': 'FAIL', 'reason': f"天顶/天底不成色带(行方差 {top_std:.0f}/{bot_std:.0f})且左右缘接不上(接缝比 {seam_ratio:.1f})"}
+    if seam_ratio > SEAM_RATIO_WARN:
+        return {**rec, 'verdict': 'WARN', 'reason': f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN}),请在预览页核对"}
+    return {**rec, 'verdict': 'PASS', 'reason': ''}
 
 
 def chain_consistency(chain_ref: Path, result: Path) -> float | None:
