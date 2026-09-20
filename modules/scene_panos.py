@@ -1313,6 +1313,20 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         refs.append(wb); rules.append(WHITEBOX_REF_RULE.format(n=1))
         donors = [a for a in idx['anchors'] if a['anchor_id'] != anchor['anchor_id']
                   and (panos_dir(base, sid) / a['anchor_id'] / f'{scheme}.png').is_file()]
+        # 没跟白模的全景不当链式父图:重投影用的是白模深度,成图与白模对不上时参考图是一片拉花、还与白模参考图互相矛盾,
+        # 子锚点两张都不跟(fengshen3 SCN-0121:A1 对齐 30% / 基线 34% → A2、A3、A4 整条链带歪)。出图前停,不花钱。
+        # 正在重出的就是带歪整条链的那个根锚点时,它的后代直接不用(没有别的父图就不带父图新出),不拦它自己。
+        donors = [a for a in donors if _chain_distrust(base, sid, a['anchor_id'], scheme)[0] != anchor['anchor_id']]
+        untrusted = [a for a in donors if chain_donor_distrust(base, sid, a, scheme)]
+        donors = [a for a in donors if a not in untrusted]
+        if untrusted and not donors:
+            why = ';'.join(f"{a['anchor_id']}({chain_donor_distrust(base, sid, a, scheme)})" for a in untrusted)
+            raise PanoProjectionError(
+                f"{sid}/{anchor['anchor_id']}/{scheme}: 可作链式父图的全景都没跟白模:{why},未出图、本批停下。"
+                f"请用户在预览页对照白模全景核对父锚点:确实画偏 → render_scene_panos.py --redo <父锚点>(重出次数计入用户设定的重跑次数);"
+                f"用户目视认可 → render_scene_panos.py --trust <父锚点>(不花钱;Agent 不得自行使用)。")
+        if untrusted:
+            log(f"   跳过没跟白模的链式父图 {[a['anchor_id'] for a in untrusted]},改用次近的锚点")
         if donors:
             donors.sort(key=lambda a: math.dist(a['position'], anchor['position']))
             src = donors[0]
@@ -1362,7 +1376,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
             rejected.with_suffix('.json').write_text(json.dumps({**rec, 'file': rejected.name, 'rejected': kind}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
             raise PanoProjectionError(
                 f"{sid}/{anchor['anchor_id']}/{scheme}: {what}({res['reason']}),已改名 {rejected.name},本批停下。"
-                f"重出:render_scene_panos.py --only {anchor['anchor_id']}(换 seed),重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出;"
+                f"重出:render_scene_panos.py --redo {anchor['anchor_id']}(换 seed),重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出;"
                 f"用户目视认可这张时:render_scene_panos.py --adopt {anchor['anchor_id']}(不花钱;Agent 不得自行认领)。")
         if res and res['verdict'] == 'WARN':
             log(f"   WARN {'投影机检' if kind == 'projection' else '白模一致性'}:{res['reason']}")
@@ -1482,6 +1496,7 @@ def projection_check(path: Path, usage: dict | None = None) -> dict | None:
 CONFORMITY_BUSY_NULL = 0.75      # 成图处处是边缘(机场大厅)时错位也能对上,指标失效 → 不判
 CONFORMITY_FAIL_S0 = 0.30
 CONFORMITY_WARN_Z = 2.0
+CHAIN_DONOR_MIN_ALIGNED = 0.40   # 链式父图保护:对齐度低于此且不高于错位基线才不当父图
 
 
 def conformity_check(result: Path, depth_npy: Path) -> dict | None:
@@ -1520,6 +1535,48 @@ def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     if z < CONFORMITY_WARN_Z:
         return {**rec, 'verdict': 'WARN', 'reason': f"成图与白模轮廓对齐度不高于错位基线(对齐 {s0:.0%} / 基线 {mean:.0%}),请在预览页对照白模全景核对"}
     return {**rec, 'verdict': 'PASS', 'reason': ''}
+
+
+def _chain_distrust(base: Path, sid: str, anchor_id: str, scheme: str, _seen: tuple = ()) -> tuple:
+    """(根锚点, 原因);可用则 (None, '')。"""
+    rec = read(panos_dir(base, sid) / anchor_id / f'{scheme}.json', {}) or {}
+    conf = rec.get('conformity_check') or {}
+    if rec.get('adopted') or rec.get('conformity_ack'):
+        return None, ''
+    up = (rec.get('parent') or {}).get('anchor_id') if rec.get('mode') == 'chain' else None
+    if up and up != anchor_id and up not in _seen:          # 它自己就是从没跟白模的父图链出来的:同样带歪
+        root, why = _chain_distrust(base, sid, up, scheme, _seen + (anchor_id,))
+        if why:
+            return root, f"链自 {up}:{why}"
+    if conf.get('verdict') != 'WARN' or float(conf.get('z') or 0) > 0:
+        return None, ''
+    if float(conf.get('aligned') or 0) >= CHAIN_DONOR_MIN_ALIGNED:
+        return None, ''                                     # 错位基线本身就高的开阔外景(fengshen3 SCN-0110 对齐 45–68% / 基线 65–73%):指标不灵,不拦
+    return anchor_id, f"对齐 {conf.get('aligned', 0):.0%} 不高于错位基线 {conf.get('null', 0):.0%}"
+
+
+def chain_donor_distrust(base: Path, sid: str, anchor: dict, scheme: str) -> str:
+    """该锚点全景不宜当链式父图的原因,可用则返回 ''。判据比 conformity_check 的 WARN 窄:白模轮廓对齐度不高于错位基线(z ≤ 0)且绝对值
+    < CHAIN_DONOR_MIN_ALIGNED 才算,岩洞 / 暗场那类「对齐度低但仍高于基线」的 WARN 照常可用;从这种父图链出来的子全景同样不用。
+    用户认领(--adopt)或认可(--trust)过的不拦。"""
+    return _chain_distrust(base, sid, anchor['anchor_id'], scheme)[1]
+
+
+def trust_pano(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print) -> list:
+    """用户目视认可该锚点全景跟了白模(机检误报):sidecar 记 conformity_ack,之后可当链式父图。不花钱。"""
+    out = panos_dir(base, sid) / anchor_id
+    sides = [out / f'{scheme}.json'] if scheme else [p for p in sorted(out.glob('*.json')) if p.name != 'depth_pano.json' and '.re' not in p.name]
+    done = []
+    for side in sides:
+        rec = read(side, None)
+        if not rec or not (out / rec.get('file', '')).is_file():
+            continue
+        rec['conformity_ack'] = {'by': 'user', 'at': _now()}
+        side.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        done.append(side.stem); log(f"   已认可 {anchor_id}/{side.stem} 可作链式父图")
+    if not done:
+        raise PanoError(f"{sid}/{anchor_id}: 没有可认可的全景" + (f"(方案 {scheme})" if scheme else ''))
+    return done
 
 
 def chain_consistency(chain_ref: Path, result: Path) -> float | None:

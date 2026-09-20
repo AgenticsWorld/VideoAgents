@@ -19,7 +19,7 @@
 
 退出码:0 完成;1 出错;2 当前图像模型不支持 2:1 全景(打印 [pano_unsupported],请用户到控制台「🎨 生成模型」换图像模型,
 Agent 不得自行换模型);3 成图不是等距柱状投影(打印 [pano_projection_fail],成图已改名 .rejected-projection-*,本批停下;
-重出 --only <锚点>,次数计入用户设定的重跑次数,用尽上报用户)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
+重出 --redo <锚点>,次数计入用户设定的重跑次数,用尽上报用户)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
 """
 import json
 import sys
@@ -47,6 +47,8 @@ def main():
         ap.add_argument('--seed', type=int, default=None)
         ap.add_argument('--adopt', action='append', default=[], metavar='ANCHOR',
                         help='用户目视认可后,把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱;可配 --scheme;Agent 不得自行使用)')
+        ap.add_argument('--trust', action='append', default=[], metavar='ANCHOR',
+                        help='用户目视认可该锚点全景跟了白模(白模一致性机检误报),之后可当链式父图(不花钱;可配 --scheme;Agent 不得自行使用)')
         ap.add_argument('--status', action='store_true', help='机检 scene_panos_ready:各 (锚点, 光照方案) 全景是否齐,缺则退出码 1')
     args, base = parse_args(__doc__, configure=configure)
     reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
@@ -63,6 +65,14 @@ def main():
         try:
             for aid in args.adopt:
                 sp.adopt_rejected(base, sid, aid, args.scheme or None)
+        except sp.PanoError as error:
+            print(f"错误:{error}", file=sys.stderr, flush=True)
+            return 1
+        return 0
+    if args.trust:
+        try:
+            for aid in args.trust:
+                sp.trust_pano(base, sid, aid, args.scheme or None)
         except sp.PanoError as error:
             print(f"错误:{error}", file=sys.stderr, flush=True)
             return 1
