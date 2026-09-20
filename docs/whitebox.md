@@ -176,7 +176,7 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 **用户侧**：`directing/<ep>/whitebox/decisions.json`（宿主写，禁止 Agent 手改）：`{"decisions": {"<issue_id>": {choice, note, by, at, issue_hash}}}`。`choice` ∈ 选项 id | `provisional`（接受默认取舍）| `custom`（note 必填）；`by` ∈ `user:page`（预览页按钮）/ `user:chat`（聊天答复，总制片用 CLI 落盘）/ `sign:g6w`（签字自动接受）。`issue_hash` 绑定答复时的问题文本：问题/默认取舍/选项/严重级任一变化，旧答复即 **stale**，须重答。
 
-**有效状态**（编译合并，预览页/API/CLI 一致）：`applied` > `decided` > `stale` > `open`。另有 `waived`（2026-09-20）：导演台点「✓ 批准本组」时，该组未答复（open/stale）的待决项——含阻断级——由宿主记为 `choice=approved, by=approve:director`，含义是「按当前白模原样接受」：不再算待裁决、不拦 H3W 签字与导出、无须 Agent 套用（不进 `--pending`）；用户之后仍可改选具体方案（转 `decided`）。问题文本再变 → `stale` 重新待裁决；取消批准 → 撤回这些记录（用户自己答过的不动）。整集汇总在 `episode.json#issues_summary`（total/open/blocking_open/decided/applied/stale/groups_open/blocking_ids）。裁决状态不进视频指纹，答题不会让 camera.mp4 显示过期。
+**有效状态**（编译合并，预览页/API/CLI 一致）：`applied` > `decided` > `stale` > `open`。另有 `waived`（2026-09-20）：导演台点「✓ 批准本组」时，该组未套用（open/stale，以及用户选过方案但 Agent 尚未套用的 decided）的待决项——含阻断级——由宿主记为 `choice=approved, by=approve:director`，含义是「按当前白模原样接受」：不再算待裁决、不拦 H3W 签字与导出、无须 Agent 套用（不进 `--pending`）；用户之后仍可改选具体方案（转 `decided`）。问题文本再变 → `stale` 重新待裁决；取消批准 → 撤回这些记录（被顶掉的用户答复存在 `superseded`，此时还原）。整集汇总在 `episode.json#issues_summary`（total/open/blocking_open/decided/applied/stale/groups_open/blocking_ids）。裁决状态不进视频指纹，答题不会让 camera.mp4 显示过期。
 
 **入口**：
 - 预览页组卡「🧊白模」面板「⚠ 待决项」：徽标计数、逐条问题 + 默认取舍 + 「▶ 看现场」+ 选项按钮（推荐项带标记）+「默认取舍」+「自定义…」（走 ✏️ 修改同款通道，把 `[whitebox-issue:<proj>/<ep>/<grp>/<issue_id>]` 标记发给总制片）；有已裁决项时出「🔄 应用 n 项决定并重编译」派单给 whitebox-staging。

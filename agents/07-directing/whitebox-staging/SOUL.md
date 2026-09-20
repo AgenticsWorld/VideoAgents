@@ -74,7 +74,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --stills grp011 grp012
 
 被派导出工单时，把用户已确认的白模导出为每个分镜组的摄影机视角参考视频，并自动接线：
 
-1. 先核对 `runs/dag.json` 里 `g6w`（H3W-白模确认）已签字放行；未签字 = 上报 orchestrator，不导出，只核对闸门状态并结单。再跑 `python code/whitebox_issues.py --project <slug> --ep <ep> --status`（docs/whitebox.md「待决项与用户裁决」）：有阻断级待决未清（退出码 1）或有已裁决待套用项（`decided`）= 白模尚未定稿，先按上文「套用已裁决项」修改计划、回写源文件并 `--compile-only`，经 g6w 重签后再导出；不得带着未套用的决定出视频。
+1. 先核对 `runs/dag.json` 里 `g6w`（H3W-白模确认）已签字放行；未签字 = 上报 orchestrator，不导出，只核对闸门状态并结单。再跑 `python code/whitebox_issues.py --project <slug> --ep <ep> --status`（docs/whitebox.md「待决项与用户裁决」）：有阻断级待决未清（退出码 1）或有已裁决待套用项（`decided`）= 白模尚未定稿，先按上文「套用已裁决项」修改计划、回写源文件并 `--compile-only`，经 g6w 重签后再导出；不得带着未套用的决定出视频。`waived`（用户在导演台「批准本组」= 按当前白模原样接受，by=approve:director）不是待办：不套用、不回派源工位、不拦导出与白模样片，即使计划文件里该条仍是 open。
 2. 执行宿主 CLI（禁止复制/改写脚本，禁止自绘）：
 
 ```sh

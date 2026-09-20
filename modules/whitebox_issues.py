@@ -264,19 +264,24 @@ def _save_decisions(base: Path, ep: str, decisions: dict) -> None:
 
 
 def waive_group(base: Path, ep: str, gid: str, on: bool, by: str = APPROVED_BY) -> list:
-    """导演台「批准本组」:该组未答复(open/stale)的待决项记为 approved=按当前白模原样接受(有效状态 waived,
-    阻断级也不再拦 H3W 签字/导出);取消批准则撤回这些记录(用户自己答过的不动)。返回处理的 issue_id。"""
+    """导演台「批准本组」:该组未套用(open/stale/decided)的待决项记为 approved=按当前白模原样接受(有效状态 waived,
+    阻断级也不再拦 H3W 签字/导出);取消批准则撤回这些记录(被顶掉的用户答复还原)。返回处理的 issue_id。"""
     decisions = load_decisions(base, ep)
     group = next((g for g in collect(base, ep)['groups'] if g['group_id'] == gid), None)
     touched = []
     for issue in (group or {}).get('issues', []):
         iid = issue['issue_id']
-        if on and issue['status'] in ('open', 'stale'):
+        if on and issue['status'] in ('open', 'stale', 'decided'):
+            # decided = 用户选过方案但 Agent 还没套用:批准的是当前白模,未套用的选择同样让位(原答复留在 superseded,取消批准时还原)
             decisions[iid] = {'choice': APPROVED, 'note': '批准本组即按当前白模接受', 'by': by,
                               'at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'), 'issue_hash': issue['issue_hash']}
+            if issue['status'] == 'decided':
+                decisions[iid]['superseded'] = issue['decision']
             touched.append(iid)
         elif not on and (decisions.get(iid) or {}).get('choice') == APPROVED:
-            decisions.pop(iid)
+            old = decisions.pop(iid).get('superseded')
+            if old:
+                decisions[iid] = old
             touched.append(iid)
     if touched:
         _save_decisions(base, ep, decisions)
