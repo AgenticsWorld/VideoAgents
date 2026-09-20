@@ -1403,6 +1403,8 @@ function renderRight(){
   h+=acc('vers',`▣ ${esc(t('已提交版本'))}`,`${vs.length}`,vbody);
   h+=`</div>`;
   keepNoteForm();
+  // 整块重渲会把滚动位置归零(答 Agent 提问、折叠、轮询都会重渲):同组重渲保留滚动位置,切组才回顶
+  const rs0=$('#rscroll'),keepTop=rs0&&FORM_GID===SEL?rs0.scrollTop:0;
   $('#right').innerHTML=h;
   $$('#right .acc-h').forEach(el=>el.onclick=()=>{const id=el.parentElement.dataset.acc;CLOSED_ACC.has(id)?CLOSED_ACC.delete(id):CLOSED_ACC.add(id);renderRight()});
   $$('#nscope span').forEach(s=>s.onclick=()=>{NOTE_SCOPE=s.dataset.s;renderRight()});
@@ -1420,6 +1422,7 @@ function renderRight(){
   if(window.VoiceInput&&$('#nf-text'))VoiceInput.attach($('#nf-text'));
   fillNoteForm(PICK,true);
   restoreNoteForm();
+  if(keepTop&&$('#rscroll'))$('#rscroll').scrollTop=keepTop;
 }
 function issueHtml(i){
   const jumpT=i.camera_view?.t??i.t_range_s?.[0];
