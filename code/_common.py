@@ -5,6 +5,7 @@ import 本模块的副作用:把 modules/ 加入 sys.path,之后可直接
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -46,6 +47,21 @@ def reexec_with_host_python(argv=None):
     sys.exit(code)
 
 
+_NEGATIVE_VALUE = re.compile(r'^-\.?\d[\d.,eE+\-]*$')      # -8,5 / -1,0.85,0 / -.5,2:负数开头的坐标串
+
+
+def _glue_negative_values(argv: list) -> list:
+    """`--anchor -1,0.85,0`:argparse 只把纯数字(-1 / -0.5)认作负数值,带逗号的坐标串会被当成选项而报
+    「expected one argument」。把「--选项 负数坐标串」并成 `--选项=值`;已写成 --opt=… 的、纯负数的原样不动。"""
+    out = []
+    for tok in argv:
+        if out and _NEGATIVE_VALUE.match(tok) and ',' in tok and out[-1].startswith('--') and '=' not in out[-1]:
+            out[-1] = f'{out[-1]}={tok}'
+        else:
+            out.append(tok)
+    return out
+
+
 def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):
     """统一入参。返回 (args, proj_root)。
 
@@ -64,7 +80,7 @@ def parse_args(desc: str = "", ep: bool = True, argv=None, configure=None):
         ap.add_argument("--ep", default="ep01", help="集号,缺省 ep01")
     ap.add_argument("--out-root", default=None,
                     help="产物根目录,缺省 $VIDEOAGENTS_DATA_DIR/projects/<project>;验证时可指向 scratch")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(_glue_negative_values(sys.argv[1:] if argv is None else list(argv)))
     proj_root = Path(args.out_root) if args.out_root \
         else DATA_DIR / "projects" / args.project
     return args, proj_root

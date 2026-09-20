@@ -7,6 +7,7 @@
 
 用法:
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --dry-run     # 规划锚点 + 渲白模全景,不调图像模型
+  python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --dry-run   # 只预演这个锚点(落点 / 服务机位数),不写索引
   python code/render_scene_panos.py --project <slug> --scene SCN-0002               # 出缺的全景(各集机位所用光照方案)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --ep ep01     # 只按 ep01 的机位规划/出图
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --force   # 手动加锚点(x,z[,yaw°],锁定)并全部重出
@@ -75,6 +76,20 @@ def main():
             print(f'--scheme {args.scheme} 不在本场景方案里:{sorted(opts)}', file=sys.stderr)
             return 1
         schemes = {args.scheme: opts[args.scheme].get('time_of_day')}
+    if args.anchor and args.dry_run:
+        # --dry-run 配 --anchor:加锁定锚点是对索引的显式改动,预演不落盘(2026-09-20:验证命令曾给正式项目留下测试锚点);
+        # 只报这个锚点会落在哪、能服务几个机位。不带 --anchor 的 --dry-run 照旧(规划 + 渲白模,规划是确定性的,写索引无害)。
+        for spec in args.anchor:
+            parts = [float(v) for v in spec.split(',')]
+            if len(parts) < 2:
+                print(f'--anchor 须为 x,z[,yaw]:{spec}', file=sys.stderr)
+                return 1
+            a = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams, persist=False)
+            print(f"  [dry-run] 将新增 {a['anchor_id']} (manual, locked) 中心 x={a['position'][0]} z={a['position'][2]} 高 {a['position'][1]} m "
+                  f"yaw {a['yaw_deg']}° 服务 {len(a['serves'])} 机位;未写索引、未渲白模、未出图", flush=True)
+        print(json.dumps({'scene_panos': {'scene_id': sid, 'dry_run': True, 'anchors': [a['anchor_id'] for a in idx['anchors']],
+                                          'would_add': len(args.anchor)}}, ensure_ascii=False), flush=True)
+        return 0
     if args.anchor and args.only_new:
         # 预览页「创建全景图」:只加锚点、只出它这一张;不规划、不动其它锚点
         only = []

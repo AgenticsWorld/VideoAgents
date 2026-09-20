@@ -34,7 +34,7 @@ def main():
         ap.add_argument('--force-geometry', action='store_true', help='重算视点/重画标点图')
         ap.add_argument('--assign-only', action='store_true', help='不出图,只按现有四张重算逐镜选图')
         ap.add_argument('--only', default=None, help='只出这些方向,逗号分隔,如 north,south')
-        ap.add_argument('--at', default=None, help='视点 x,z(白模米制;负数写 --at=-3,4);缺省俯视图正中心')
+        ap.add_argument('--at', default=None, help='视点 x,z(白模米制;负数直接写 --at -3,4 即可);缺省俯视图正中心')
         ap.add_argument('--height', type=float, default=None, help='视点镜头高度 m(缺省机高中位数,≥1.4)')
         ap.add_argument('--lens', type=float, default=cp.DEFAULT_LENS_MM, help='等效焦距 mm,缺省 12')
         ap.add_argument('--size', default=cp.PLATE_SIZE, help=f'成图尺寸,缺省 {cp.PLATE_SIZE}')

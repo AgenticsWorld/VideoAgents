@@ -214,10 +214,29 @@ def tall_objects(scene: dict, height: float) -> list:
     return [o for o in scene.get('objects', []) if (o['position'][1] + o['size_m'][1] / 2) > height - 0.3]
 
 
+OUTDOOR_SERVE_SIDE_RATIO = 0.25  # 室外场景的最小服务半径 = 白模地面短边 × 此值,夹在 [SERVE_MIN_M, OUTDOOR_SERVE_MIN_MAX_M]
+OUTDOOR_SERVE_MIN_MAX_M = 8.0
+
+
+def serve_min_m(scene: dict) -> float:
+    """锚点最小服务半径。室内 3 m(近处家具多,锚点一偏遮挡关系就变)。室外按白模地面短边放宽(2026-09-20 用户定):场景越大越开阔、
+    背景越远视差越小;地面是白模已知几何,重投影对地面精确;近处块体背后的空洞由 PLATE_HOLE_MAX 换锚点 / 加锚点兜底。
+    取短边不取宽:狭长场景(街道 60×8)不被长边带偏。fengshen3 SCN-0110(40×22.5,63 机位)5.6 m:锚点 13 → 7;SCN-0121(320×180)8 m:9 → 4。
+    室内外由调用方写在 scene['_outdoor'](ensure_scene_panos / add_manual_anchor),没写按室内。"""
+    if not scene.get('_outdoor'):
+        return SERVE_MIN_M
+    w, _, d = scene['dimensions_m']
+    return round(min(OUTDOOR_SERVE_MIN_MAX_M, max(SERVE_MIN_M, OUTDOOR_SERVE_SIDE_RATIO * min(w, d))), 2)
+
+
 def can_serve(anchor_pos, cam: dict, scene: dict) -> bool:
     pos, tgt = cam['position'], cam['target']
     subject = math.hypot(tgt[0] - pos[0], tgt[2] - pos[2])
-    limit = min(SERVE_MAX_M, max(SERVE_MIN_M, SERVE_RATIO * subject))
+    limit = min(SERVE_MAX_M, max(serve_min_m(scene), SERVE_RATIO * subject))
+    # 机位在白模地面之外(远景 / 高空大全景,SCN-0110 有 17 个,最远 126 m):它的锚点本来就只能夹回地面边缘内 0.5 m,
+    # 所以按夹回点算距离——否则这些机位谁也服务不了,各自落成一个 auto-self 锚点(各出一张全景),而夹回点彼此只隔几米。
+    w, _, d = scene['dimensions_m']
+    pos = [max(-w / 2 + .5, min(w / 2 - .5, pos[0])), pos[1], max(-d / 2 + .5, min(d / 2 - .5, pos[2]))]
     if math.hypot(anchor_pos[0] - pos[0], anchor_pos[2] - pos[2]) > limit:
         return False
     objs = scene.get('objects', [])
@@ -252,6 +271,67 @@ def _cam_key(c):
     return f"{c.get('ep', '')}/{c['shot_id']}:{c.get('role', 'start')}"
 
 
+# ---------------------------------------------------------------- which part of the pano the served cameras actually use
+# 分镜背景图按母图(垂直 55°、16:9 下水平 ≈85°)从全景重投影:一个机位用到的全景范围 ≈ 朝向 ±50°(含母图朝向取平均与锚点视差的余量)、
+# 俯仰 ±32°。接缝(画面左右缘 = 镜头身后)是图像模型最容易画坏的一列;天底是第二处。
+USE_HALF_H_DEG = 50.0
+USE_HALF_V_DEG = 32.0
+NADIR_USE_LAT_DEG = -45.0        # 机位视域下沿低于此纬度 = 用到天底带(全景最下 ~25%)
+
+
+def _cam_angles(cam: dict) -> tuple[float, float, float, float]:
+    """(方位角°, 俯仰角°, 水平半视角°, 垂直半视角°);方位角 0 = 世界 -Z(俯视图上方),顺时针 90 = +X(图右)。"""
+    dx, dy, dz = (cam['target'][i] - cam['position'][i] for i in range(3))
+    az = math.degrees(math.atan2(dx, -dz)) % 360
+    el = math.degrees(math.atan2(dy, max(math.hypot(dx, dz), 1e-6)))
+    fov = float(cam.get('fov') or cam.get('fov_v_deg') or 0)
+    return az, el, max(USE_HALF_H_DEG, fov * 16 / 9 / 2 + 8), max(USE_HALF_V_DEG, fov / 2 + 5)
+
+
+def _ang_dist(a: float, b: float) -> float:
+    return abs((a - b + 180) % 360 - 180)
+
+
+def seam_azimuth(yaw_deg: float) -> float:
+    """接缝(镜头身后)的世界方位角。画面中心 = 局部 -Z 绕 Y 转 yaw → 世界 (-sin yaw, -cos yaw);身后反向。"""
+    y = math.radians(yaw_deg)
+    return math.degrees(math.atan2(math.sin(y), -math.cos(y))) % 360
+
+
+def pick_seam_yaw(cams: list) -> float:
+    """在 0/90/180/270 里选 yaw(四向文字按 90° 取整,不取任意角),让接缝落在服务机位最少看到的方向。
+    代价 = Σ 机位视域与接缝的重叠深度;并列时让画面中心(模型画得最好的一列)尽量朝机位最集中的方向,再并列取 0。"""
+    if not cams:
+        return 0.0
+    angles = [_cam_angles(c) for c in cams]
+    best = None
+    for yaw in (0.0, 90.0, 180.0, 270.0):
+        seam = seam_azimuth(yaw); centre = (seam + 180) % 360
+        cost = sum(max(0.0, 1 - _ang_dist(az, seam) / half) for az, _el, half, _v in angles)
+        facing = sum(1 for az, _el, half, _v in angles if _ang_dist(az, centre) <= 45)
+        key = (round(cost, 3), -facing, yaw)
+        if best is None or key < best[0]:
+            best = (key, yaw)
+    return best[1]
+
+
+def anchor_usage(anchor: dict, cams: list) -> dict:
+    """本锚点服务的机位里,哪些的视域碰到接缝、哪些用到天底带。cams 里没有它服务的机位时返回 known=False(不知道就按碰到算)。"""
+    serves = set(anchor.get('serves', []))
+    mine = [c for c in cams or [] if _cam_key(c) in serves]
+    if not mine:
+        return {'known': False, 'cameras': 0, 'seam': [], 'nadir': []}
+    seam = seam_azimuth(float(anchor.get('yaw_deg') or 0))
+    out = {'known': True, 'cameras': len(mine), 'seam': [], 'nadir': []}
+    for c in mine:
+        az, el, half_h, half_v = _cam_angles(c)
+        if _ang_dist(az, seam) <= half_h:
+            out['seam'].append(_cam_key(c))
+        if el - half_v <= NADIR_USE_LAT_DEG:
+            out['nadir'].append(_cam_key(c))
+    return out
+
+
 def plan_anchors(scene: dict, cameras: list, existing: list | None = None, height: float | None = None) -> list:
     """贪心集合覆盖 → anchors[]{anchor_id, position, yaw_deg, source, locked, serves}。existing 里 locked 的锚点原样保留。"""
     height = height or default_anchor_height(cameras)
@@ -282,13 +362,13 @@ def plan_anchors(scene: dict, cameras: list, existing: list | None = None, heigh
         if best is None:
             break
         _, p, served = best
-        anchors.append({'anchor_id': '', 'position': [round(v, 3) for v in p], 'yaw_deg': 0.0, 'source': 'auto',
+        anchors.append({'anchor_id': '', 'position': [round(v, 3) for v in p], 'yaw_deg': pick_seam_yaw(served), 'source': 'auto',
                         'locked': False, 'serves': [_cam_key(c) for c in served]})
         uncovered = [c for c in uncovered if c not in served]
     for c in uncovered:   # 仍无法覆盖(被实体包死的机位):以机位自身为锚点(同样夹回地面范围)
         anchors.append({'anchor_id': '', 'position': [round(max(-w / 2 + .5, min(w / 2 - .5, c['position'][0])), 3), height,
                                                        round(max(-d / 2 + .5, min(d / 2 - .5, c['position'][2])), 3)],
-                        'yaw_deg': 0.0, 'source': 'auto-self', 'locked': False, 'serves': [_cam_key(c)]})
+                        'yaw_deg': pick_seam_yaw([c]), 'source': 'auto-self', 'locked': False, 'serves': [_cam_key(c)]})
     used = {a['anchor_id'] for a in anchors if a.get('anchor_id')}
     n = 1
     for a in anchors:
@@ -1074,7 +1154,7 @@ def _pano_dims():
 
 
 def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *, indoor: bool, seed: int | None = None,
-                  time_of_day: str | None = None, log=print) -> dict:
+                  time_of_day: str | None = None, log=print, cameras: list | None = None) -> dict:
     """出一张 (锚点, 光照方案) 全景。模式:relight(同锚点已有其它方案)> chain(其它锚点已有同方案)> fresh。"""
     from PIL import Image
     from modules.genmedia import generate_image, get_config, image_pref_env
@@ -1137,7 +1217,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
            'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
            'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
            'written_at': _now()}
-    rec['projection_check'] = proj = projection_check(target)
+    rec['projection_check'] = proj = projection_check(target, usage=anchor_usage(anchor, cameras if cameras is not None else scene_cameras(base, sid)))
     rec['conformity_check'] = conf = conformity_check(target, out / 'depth_pano.npy')
     for kind, res, what in (('projection', proj, '成图不是等距柱状全景'), ('conformity', conf, '成图没有跟白模')):
         if res and res['verdict'] == 'FAIL':
@@ -1209,7 +1289,10 @@ NADIR_DETAIL_WARN = 0.7          # 底部横向细节 / 中段横向细节:中�
 SEAM_RATIO_WARN = 3.0            # 左右缘色差 / 相邻列色差基线;接缝不上只 WARN(合格全景也常见),与极区指标同时超限才 FAIL
 
 
-def projection_check(path: Path) -> dict | None:
+SEAM_RATIO_FAIL = 5.0            # 接缝比超过此值、且确有服务机位的视域跨过接缝 → FAIL(接缝会落进背景图正中)
+
+
+def projection_check(path: Path, usage: dict | None = None) -> dict | None:
     """成图是不是等距柱状:① 天底带各向异性(主判据,自归一,不受中段内容影响)② 天顶/天底行方差 ③ 左右缘接缝。
     标定样本:dzg6 SCN-0002 / liaozhai3 SCN-0005 / fengshen3 SCN-0140、0046(合格)对 fengshen3 SCN-0110 首批 A1–A12(2:1 广角照片);
     2026-09-20 重出的 SCN-0110 A1(地平线居中、直线已弯、天底已拉丝,但中段是平滑水面)曾被旧主判据「底部/中段横向细节比」误拒。"""
@@ -1236,14 +1319,29 @@ def projection_check(path: Path) -> dict | None:
         return {**rec, 'verdict': 'FAIL', 'reason': f"天底未拉伸:底部纹理横/纵细节比 {aniso:.2f} > {NADIR_ANISO_FAIL}(像广角照片的清晰前景)"}
     if aniso > NADIR_ANISO_SOFT and top_std > 25 and bot_std > 15 and seam_ratio > SEAM_RATIO_WARN:
         return {**rec, 'verdict': 'FAIL', 'reason': f"天顶/天底不成色带(行方差 {top_std:.0f}/{bot_std:.0f})且左右缘接不上(接缝比 {seam_ratio:.1f})"}
-    warns = []
+    # 局部缺陷按服务机位的实际视域判:没有机位碰到的只记 notes 不拦不警;碰到的才 WARN / FAIL。usage 未知(没传机位)按碰到算。
+    # 注意主判据(天底各向异性)不在此列:它超限说明整张图不是等距柱状,哪个方向重投影都是错的。
+    known = bool(usage and usage.get('known'))
+    seam_hit = (usage or {}).get('seam') or []; nadir_hit = (usage or {}).get('nadir') or []
+    if known:
+        rec['usage'] = {'cameras': usage['cameras'], 'seam': seam_hit, 'nadir': nadir_hit}
+    names = lambda ks: '、'.join(ks[:4]) + (f' 等 {len(ks)} 个' if len(ks) > 4 else '')
+    warns, notes = [], []
     if nadir > NADIR_DETAIL_WARN:
-        warns.append(f"近地前景偏实(底部/中段横向细节比 {nadir:.2f});俯拍机位的背景图留意地面纹理尺度")
+        if known and not nadir_hit:
+            notes.append(f"近地前景偏实({nadir:.2f}),但没有服务机位俯拍到天底带,不影响")
+        else:
+            warns.append(f"近地前景偏实(底部/中段横向细节比 {nadir:.2f})" + (f",俯拍机位 {names(nadir_hit)} 的背景图留意地面纹理尺度" if nadir_hit else ''))
     if seam_ratio > SEAM_RATIO_WARN:
-        warns.append(f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN}),朝镜头身后的机位留意接缝")
+        if known and not seam_hit:
+            notes.append(f"左右缘接不上(接缝比 {seam_ratio:.1f}),但接缝方向没有服务机位看到,不影响")
+        elif known and seam_ratio > SEAM_RATIO_FAIL:
+            return {**rec, 'verdict': 'FAIL', 'reason': f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_FAIL}),且机位 {names(seam_hit)} 的视域跨过接缝,接缝会落进背景图"}
+        else:
+            warns.append(f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN})" + (f",机位 {names(seam_hit)} 的视域跨过接缝,其背景图留意接缝" if seam_hit else ''))
     if warns:
-        return {**rec, 'verdict': 'WARN', 'reason': ';'.join(warns) + ',请在预览页核对'}
-    return {**rec, 'verdict': 'PASS', 'reason': ''}
+        return {**rec, 'verdict': 'WARN', 'reason': ';'.join(warns) + ',请在预览页核对', 'notes': notes}
+    return {**rec, 'verdict': 'PASS', 'reason': '', 'notes': notes}
 
 
 CONFORMITY_BUSY_NULL = 0.75      # 成图处处是边缘(机场大厅)时错位也能对上,指标失效 → 不判
@@ -1254,7 +1352,8 @@ CONFORMITY_WARN_Z = 2.0
 def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     """成图有没有跟白模:白模深度全景的轮廓线(墙脚 / 墙角 / 门洞 / 家具外缘)在成图里 3 px 内找得到边缘的比例 s0,
     与把轮廓横向错开后的比例(null)比。跟了白模:s0 明显高于 null(liaozhai3 SCN-0005 0.88 对 0.31、fengshen3 SCN-0140 A1 0.86 对 0.53);
-    画成了别的视点(fengshen3 SCN-0046 A1 洞内锚点画成洞府外观):s0 0.13、低于 null。只看投影形态的 projection_check 拦不住这类。"""
+    画成了别的视点(fengshen3 SCN-0046 A1 洞内锚点画成洞府外观):s0 0.13、低于 null。
+    **只出 WARN / PASS / N/A,不出 FAIL**(见函数内说明)。"""
     try:
         import cv2
         import numpy as np
@@ -1277,8 +1376,12 @@ def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     rec = {'aligned': round(s0, 2), 'null': round(mean, 2), 'z': round(z, 1)}
     if mean >= CONFORMITY_BUSY_NULL:
         return {**rec, 'verdict': 'N/A', 'reason': '成图边缘过密,对齐度指标失效'}
+    # 只警不拦(2026-09-20 晚订正):本指标看的是白模轮廓在成图里有没有边缘,而白模轮廓大头是墙顶线 / 墙角线——岩洞、暗场、
+    # 有机形体里模型把它们画成连续岩面是对的,没有边缘;暗图 Canny 也提不出边。实测 SCN-0046 A1 两张同样跟了白模的洞内全景
+    # (法宝架、丹炉逐块对位)对齐度 27% 与 26%,只因错位基线 22% / 15% 的噪声一张被拒一张放行。不足以当花钱重出的闸门。
     if s0 < CONFORMITY_FAIL_S0 and z < 1.0:
-        return {**rec, 'verdict': 'FAIL', 'reason': f"成图没有跟白模:白模轮廓只有 {s0:.0%} 在成图里找得到(错位基线 {mean:.0%}),多半画成了别的视点 / 建筑外观"}
+        return {**rec, 'verdict': 'WARN', 'reason': f"白模轮廓只有 {s0:.0%} 在成图里找得到(错位基线 {mean:.0%}):若成图是别的视点 / 建筑外观请重出;"
+                                                     "暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可"}
     if z < CONFORMITY_WARN_Z:
         return {**rec, 'verdict': 'WARN', 'reason': f"成图与白模轮廓对齐度不高于错位基线(对齐 {s0:.0%} / 基线 {mean:.0%}),请在预览页对照白模全景核对"}
     return {**rec, 'verdict': 'PASS', 'reason': ''}
@@ -1336,12 +1439,15 @@ def scene_scheme_options(base: Path, sid: str, cameras: list | None = None) -> l
     return out
 
 
-def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None) -> dict:
+def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None,
+                      persist: bool = True) -> dict:
     """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度同规划默认,
-    serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。"""
+    serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。
+    persist=False(CLI --dry-run):只算出这个锚点会是什么样,不写索引。"""
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
+    scene['_outdoor'] = not is_indoor(base, sid)
     cams = scene_cameras(base, sid) if cameras is None else cameras
     idx = load_index(base, sid)
     w, _, d = scene['dimensions_m']
@@ -1357,8 +1463,9 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     serves = sorted(_cam_key(c) for c in cams if _cam_key(c) not in served and can_serve(pos, c, scene))
     anchor = {'anchor_id': f'A{n}', 'position': pos, 'yaw_deg': float(yaw_deg or 0.0), 'source': 'manual', 'locked': True,
               'serves': serves, 'panos': {}}
-    idx['anchors'].append(anchor)
-    save_index(base, sid, idx)
+    if persist:
+        idx['anchors'].append(anchor)
+        save_index(base, sid, idx)
     return anchor
 
 
@@ -1378,6 +1485,8 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
     idx = load_index(base, sid)
     indoor = is_indoor(base, sid) if indoor is None else indoor
     idx['indoor'] = indoor
+    scene['_outdoor'] = not indoor
+    idx['serve_min_m'] = serve_min_m(scene)
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
     new_cams = [c for c in cams if _cam_key(c) not in served]
     if only:
@@ -1402,6 +1511,16 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
                     n += 1
                 a['anchor_id'] = f'A{n}'; used.add(a['anchor_id'])
             idx['anchors'].extend(extra)
+    # 存量自动锚点 yaw 都是 0:还没出过任何图(含被拒待认领的)的,按服务机位重选接缝朝向——只重渲白模,不花钱;出过图的不动
+    by_key = {_cam_key(c): c for c in cams}
+    for a in idx['anchors']:
+        adir = panos_dir(base, sid) / a['anchor_id']
+        if a.get('locked') or not str(a.get('source') or '').startswith('auto') or a.get('panos') or (adir.is_dir() and any(adir.glob('*.png'))):
+            continue
+        yaw = pick_seam_yaw([by_key[k] for k in a.get('serves', []) if k in by_key])
+        if abs(yaw - float(a.get('yaw_deg') or 0)) > .5:
+            log(f"   {a['anchor_id']}: 接缝朝向改到机位最少看到的一侧,yaw {a.get('yaw_deg', 0)}° → {yaw}°")
+            a['yaw_deg'] = yaw
     for a in idx['anchors']:
         if redo and a['anchor_id'] in redo:
             for rec in a.get('panos', {}).values():
@@ -1441,7 +1560,7 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
         if dry_run:
             stats['pending'].append(f"{a['anchor_id']}/{s}")
             continue
-        generate_pano(base, sid, idx, a, s, indoor=indoor, seed=seed, time_of_day=t, log=log)
+        generate_pano(base, sid, idx, a, s, indoor=indoor, seed=seed, time_of_day=t, log=log, cameras=cams)
         stats['new'] += 1
     return stats
 
