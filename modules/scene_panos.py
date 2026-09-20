@@ -530,11 +530,32 @@ def _flat(v):
     return ''
 
 
+def scene_ancestors(base: Path, sid: str) -> list[str]:
+    """[sid, 父, 祖父 …]:子场景(index.json#parent)常常只有 whitebox.json,光照方案 / 建筑设定挂在上级
+    (fengshen3 SCN-0140 → SCN-0108 → SCN-0036,机位用的方案就叫 LGT-SCN-0036-DAY-B)。"""
+    idx = read(base / 'bible/scenes/index.json', {}) or {}
+    parents = {it.get('id'): it.get('parent') or it.get('parent_id')
+               for it in ((idx.get('scenes') if isinstance(idx, dict) else idx) or []) if isinstance(it, dict)}
+    chain = [sid]
+    while parents.get(chain[-1]) and parents[chain[-1]] not in chain and len(chain) < 6:
+        chain.append(parents[chain[-1]])
+    return chain
+
+
+def scene_name_of(base: Path, sid: str) -> str:
+    idx = read(base / 'bible/scenes/index.json', {}) or {}
+    for it in (idx.get('scenes') if isinstance(idx, dict) else idx) or []:
+        if isinstance(it, dict) and it.get('id') == sid:
+            return str(it.get('name') or '')
+    return ''
+
+
 def lighting_scheme(base: Path, sid: str, scheme: str) -> dict:
-    doc = read(base / 'bible/scenes' / component(sid) / 'lighting.json', {}) or {}
-    for s in doc.get('schemes', []):
-        if scheme_slug(s.get('scheme_id') or s.get('id')) == scheme:
-            return s
+    for owner in scene_ancestors(base, sid):
+        doc = read(base / 'bible/scenes' / component(owner) / 'lighting.json', {}) or {}
+        for s in doc.get('schemes', []):
+            if scheme_slug(s.get('scheme_id') or s.get('id')) == scheme:
+                return s
     return {}
 
 
@@ -616,6 +637,11 @@ SECTOR_OPEN_MAX = 0.10           # 某向地平线带里「看得出去」的像
 OPEN_DISTANCE_M = 25.0
 OUTDOOR_WORDS = ('云海', '云面', '云台', '台外', '山道', '星月', '星空', '月光', '月色', '天空', '天幕', '日光', '阳光', '崖前', '下不见底',
                  'sky', 'cloud', 'moon', 'star', 'sunlight', 'terrace', 'horizon', 'outdoor', 'exterior')
+INDOOR_RULE = (
+    "The camera is INSIDE a roofed room: the dark band across the top of the blockout is the solid ceiling / roof structure overhead and "
+    "the tall blocks are solid walls — paint them as the real ceiling and walls. Open sky, clouds or outdoor scenery may appear only "
+    "through the door and window openings of the blockout, at exactly their position and size, never above the walls or in place of them. "
+)
 ENCLOSED_RULE = (
     "The camera is INSIDE an enclosed room: solid walls stand on every side and a solid ceiling is overhead, exactly as the blockout "
     "shows. This is not an exterior or establishing view of the building: never show the outside of the structure, open sky, moon, stars, "
@@ -805,6 +831,19 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
     bdir = base / 'bible/scenes' / component(sid)
     layout = read(sdir / 'layout.json', {}) or {}
     arch = read(bdir / 'architecture.json', {}) or {}
+    if not arch:      # 子场景没有建筑设定:只从上级继承与空间无关的样式 / 年代 / 材质,形制、尺度、细部讲的是上级那个大空间,不继承
+        for owner in scene_ancestors(base, sid)[1:]:
+            up = read(base / 'bible/scenes' / component(owner) / 'architecture.json', {}) or {}
+            if up:
+                # 上级的材质表是整个大场景的(陈塘关:关墙 / 河滩 / 渔村 / 行宫 / 总兵府…):只留与本场景名或本场景地标同词的分句
+                own = ' '.join([str(layout.get('scene_name') or ''), str(scene_name_of(base, sid))]
+                               + [str(lm.get('name') or '') for lm in layout.get('landmarks', [])])
+                own_words = {run[i:i + 2] for run in re.findall(r'[\u4e00-\u9fff]+', own) for i in range(len(run) - 1)
+                             if not set(run[i:i + 2]) & _FUNCTION_CHARS}
+                mats = [c.strip() for c in re.split(r'[;;。]', _flat(up.get('materials')) or '') if c.strip()
+                        and any(w in c for w in own_words)]
+                arch = {'arch_style': up.get('arch_style'), 'era_region': up.get('era_region'), 'materials': '; '.join(mats)}
+                break
     style = (read(base / 'bible/style.json', {}) or {}).get('style_fragment_en') or ''
     sch = lighting_scheme(base, sid, scheme)
     scene = load_scene(base, sid)
@@ -837,6 +876,8 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
         parts.append(EXTERIOR_PROJECTION_RULES.strip())
     if enclosed:
         parts.append(ENCLOSED_RULE.strip())
+    elif indoor:
+        parts.append(INDOOR_RULE.strip())
     parts.append(f"The camera stands {standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})}, "
                  f"lens {anchor['position'][1]} m above the floor, level horizon.")
     if centre:

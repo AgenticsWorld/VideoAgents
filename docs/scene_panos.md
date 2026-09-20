@@ -49,6 +49,8 @@
 
 `is_indoor` 补判：子场景只有 whitebox.json、没有 lighting / architecture 时再看 `bible/scenes/index.json` 的 `int_ext` 与场景名「内景 / 室内」（fengshen3 SCN-0140「…前厅正堂(内景)」原被判成室外 → 不补顶、厅堂上方画成天空）。室内外判定变了的锚点在出全景前本机重渲白模，不作废已有全景。
 
+子场景继承（同日）：`scene_ancestors` 沿 `index.json#parent` 上溯；`lighting_scheme` 在本场景找不到方案时到上级找（SCN-0140 的机位方案 `LGT-SCN-0036-DAY-B` 挂在祖父 SCN-0036，原先光照段整段缺失）；本场景没有 architecture.json 时只从上级继承样式 / 年代，材质只留与本场景名或地标同词的分句，形制 / 尺度 / 细部不继承。室内但未封闭（有门窗通外）的锚点加 `INDOOR_RULE`：白模顶部暗带是实体屋顶，天空只能出现在门窗洞口里。
+
 ## 图像模型能力
 
 全景要求任意宽高（2880×1440）。`pano_support(cfg)`：火山/BytePlus Seedream、ComfyUI、Agentics、Fal 的 Seedream/FLUX.2/Qwen 家族可出；Fal 的 Nano Banana/GPT Image/Kontext（固定比例枚举）、MiniMax、OpenRouter 不可。不可、或返回图宽高比偏离 2:1 超过 3% 时：`index.json#blocked` 写入原因，CLI 打印 `[pano_unsupported]` 退出码 2，**一张背景图也不出**；预览页红条提示。Agent 须原文上报请用户换图像模型，不得自行换模型或绕过。
