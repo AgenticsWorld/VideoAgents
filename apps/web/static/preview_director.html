@@ -439,8 +439,8 @@ function renderLeft(){
   h+=`</div>`;
   $('#left').innerHTML=h;
   $$('#left .scn').forEach(s=>s.onclick=()=>{const id=s.dataset.scn;OPEN_SCN.has(id)?OPEN_SCN.delete(id):OPEN_SCN.add(id);posSave({open:[...OPEN_SCN]});renderLeft()});
-  $$('#left .grp').forEach(el=>el.onclick=()=>selectGroup(el.dataset.g));
-  $$('#left .sh').forEach(el=>el.onclick=e=>{e.stopPropagation();seek(Number(el.dataset.t)+0.001);PLAYING=false;updPlayBtn()});
+  $$('#left .grp').forEach(el=>el.onclick=()=>{selectGroup(el.dataset.g);aimNoteForm('group',el.dataset.g,'',0)});
+  $$('#left .sh').forEach(el=>el.onclick=e=>{e.stopPropagation();seek(Number(el.dataset.t)+0.001);PLAYING=false;updPlayBtn();aimNoteForm('camera',el.dataset.sh,el.dataset.sh,Number(el.dataset.t))});
   const gl=$('#glist'),pos=posLoad();
   if(gl&&pos.glist!=null)gl.scrollTop=pos.glist;
   if(gl)gl.addEventListener('scroll',()=>posSave({glist:Math.round(gl.scrollTop)}));
@@ -1422,6 +1422,7 @@ function renderRight(){
   if(window.VoiceInput&&$('#nf-text'))VoiceInput.attach($('#nf-text'));
   fillNoteForm(PICK,true);
   restoreNoteForm();
+  if(AIM&&AIM.gid===SEL&&!NOTE_FORM[SEL])aimNoteForm(AIM.kind,AIM.id,AIM.shotId,AIM.tSec,true);
   if(keepTop&&$('#rscroll'))$('#rscroll').scrollTop=keepTop;
 }
 function issueHtml(i){
@@ -1479,10 +1480,20 @@ function fillNoteForm(p,keepText){
   const g=grpById(SEL);
   shot.innerHTML=`<option value="">${esc(t('不限镜'))}</option>`+(g?g.cameras.map(c=>`<option value="${esc(c.shot_id)}">${esc(c.shot_id)}</option>`).join(''):'');
   // RA.shotId 要等下一帧渲染才跟上 seek;点摄影机时直接取该镜,其余按当前 TIME 现算
-  shot.value=(p&&p.kind==='camera'&&p.id)||shotAt().shot_id||(RA&&RA.shotId)||'';
+  shot.value=p&&p.kind==='group'?'':(p&&p.kind==='camera'&&p.id)||shotAt().shot_id||(RA&&RA.shotId)||'';
   if(shot.selectedIndex<0)shot.value='';
-  tin.value=TIME.toFixed(1);
-  if(!keepText){$('#nf-text').focus()}
+  tin.value=(p&&p.kind==='group'?0:TIME).toFixed(1);
+  if(!keepText){AIM=null;$('#nf-text').focus()}
+}
+// 左栏点 grpNNN / shNNN:把「我的修改」对准整组(不限镜)或该镜摄影机(该镜 + 起始秒);正在改已有条目时不动,已写的要求不清
+// AIM 记住这次对准,右栏整块重渲(60s 轮询等)后原样放回;在 3D 里点对象或「清空」即作废
+var AIM=null;
+function aimNoteForm(kind,id,shotId,tSec,again){
+  if(!again)AIM={gid:SEL,kind,id,shotId,tSec:tSec!=null?tSec:TIME};
+  const sel=$('#nf-target'),shot=$('#nf-shot'),tin=$('#nf-t');if(!sel||!shot||EDIT_ID)return;
+  const val=kind+'|'+id;if([...sel.options].some(o=>o.value===val))sel.value=val;
+  shot.value=shotId||'';if(shot.selectedIndex<0)shot.value='';
+  if(tin)tin.value=(tSec!=null?tSec:TIME).toFixed(1);
 }
 async function saveNote(){
   const btn=$('#nf-save'),msg=$('#nf-msg');
