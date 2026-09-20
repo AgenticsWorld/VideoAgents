@@ -2911,6 +2911,7 @@ window.I18N_DICT = {
 "左": "Trái",
 "已取消批准": "Đã hủy phê duyệt",
 "已批准": "Đã phê duyệt",
+"已随本组批准接受现状": "Đã chấp nhận nguyên trạng khi phê duyệt nhóm này",
 "已批准本组": "Đã phê duyệt nhóm này",
 "已暂缓": "Đã hoãn lại",
 "已生成成片": "Video đã tạo",

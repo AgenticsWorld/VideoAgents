@@ -1252,7 +1252,7 @@ function renderApproveBtn(){const b=$('#approve');if(!b)return;const ap=(DD.appr
 async function toggleApprove(){
   if(unplanned(SEL)){toast(UNPLANNED_MSG());return}
   const ap=(DD.approvals||{})[SEL];const on=!ap||ap.stale;
-  try{const r=await J(api('/approve'),'POST',{group_id:SEL,approve:on});DD.approvals=r.approvals;DD.summary=r.summary;renderApproveBtn();renderLeft();renderEps();toast(on?t('已批准本组'):t('已取消批准'))}
+  try{const r=await J(api('/approve'),'POST',{group_id:SEL,approve:on});DD.approvals=r.approvals;DD.summary=r.summary;if(r.issues){const g=grpById(SEL);if(g)g.issues=r.issues;renderRight()}renderApproveBtn();renderLeft();renderEps();toast(on?t('已批准本组'):t('已取消批准'))}
   catch(e){toast(t('批准失败:')+e.message)}
 }
 
@@ -1433,6 +1433,7 @@ function issueHtml(i){
   let state='';
   if(i.status==='applied')state=`<div class="state">✅ ${esc(t('已套用'))}${i.applied?.choice?' · '+esc(i.applied.choice):''}</div>`;
   else if(i.status==='decided')state=`<div class="state">☑ ${esc(I18N.f('已选「{c}」· 提交本组时一并套用',{c:i.decision.choice}))}${i.decision.note?' · '+esc(i.decision.note):''}</div>`;
+  else if(i.status==='waived')state=`<div class="state">✓ ${esc(t('已随本组批准接受现状'))}</div>`;
   else if(i.status==='stale')state=`<div class="state warn">⚠ ${esc(t('答复已失效(问题已变),请重新选择'))}</div>`;
   return `<div class="iss ${esc(i.severity)}"><div class="h"><span class="sev">${esc(i.severity==='blocking'?t('阻断'):t('建议'))}</span><span>${esc(i.kind||'')}</span><span data-no-i18n>${esc(i.issue_id)}</span>${where?`<span data-no-i18n>${esc(where)}</span>`:''}${jumpT!=null?`<button class="xs" data-jump="${jumpT}">▶ ${esc(t('看现场'))}</button>`:''}</div>
     <div class="q" data-no-i18n>${esc(i.question)}</div>${i.provisional?`<div class="prov" data-no-i18n>${esc(t('默认取舍:'))}${esc(i.provisional)}</div>`:''}

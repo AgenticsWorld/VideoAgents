@@ -176,7 +176,7 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 **用户侧**：`directing/<ep>/whitebox/decisions.json`（宿主写，禁止 Agent 手改）：`{"decisions": {"<issue_id>": {choice, note, by, at, issue_hash}}}`。`choice` ∈ 选项 id | `provisional`（接受默认取舍）| `custom`（note 必填）；`by` ∈ `user:page`（预览页按钮）/ `user:chat`（聊天答复，总制片用 CLI 落盘）/ `sign:g6w`（签字自动接受）。`issue_hash` 绑定答复时的问题文本：问题/默认取舍/选项/严重级任一变化，旧答复即 **stale**，须重答。
 
-**有效状态**（编译合并，预览页/API/CLI 一致）：`applied` > `decided` > `stale` > `open`。整集汇总在 `episode.json#issues_summary`（total/open/blocking_open/decided/applied/stale/groups_open/blocking_ids）。裁决状态不进视频指纹，答题不会让 camera.mp4 显示过期。
+**有效状态**（编译合并，预览页/API/CLI 一致）：`applied` > `decided` > `stale` > `open`。另有 `waived`（2026-09-20）：导演台点「✓ 批准本组」时，该组未答复（open/stale）的待决项——含阻断级——由宿主记为 `choice=approved, by=approve:director`，含义是「按当前白模原样接受」：不再算待裁决、不拦 H3W 签字与导出、无须 Agent 套用（不进 `--pending`）；用户之后仍可改选具体方案（转 `decided`）。问题文本再变 → `stale` 重新待裁决；取消批准 → 撤回这些记录（用户自己答过的不动）。整集汇总在 `episode.json#issues_summary`（total/open/blocking_open/decided/applied/stale/groups_open/blocking_ids）。裁决状态不进视频指纹，答题不会让 camera.mp4 显示过期。
 
 **入口**：
 - 预览页组卡「🧊白模」面板「⚠ 待决项」：徽标计数、逐条问题 + 默认取舍 + 「▶ 看现场」+ 选项按钮（推荐项带标记）+「默认取舍」+「自定义…」（走 ✏️ 修改同款通道，把 `[whitebox-issue:<proj>/<ep>/<grp>/<issue_id>]` 标记发给总制片）；有已裁决项时出「🔄 应用 n 项决定并重编译」派单给 whitebox-staging。
@@ -269,7 +269,7 @@ python code/render_whitebox.py --project dzg6 --ep ep01 --stills grp011 grp012
 - **清距圈 / 轴线**:「清距」给每个人物画包围圆 + 0.2 m 净距,相交标红并在对象状态里报「与谁净距多少」;「轴线」画当前镜两位主要人物(分镜表 characters 前两位,缺则取离机位最近两人)的 180° 连线,标出机位在左/右侧,与上一镜比换了边即标「越轴」。
 - **定位标记**:`directing/<ep>/whitebox/director/marks.json`(schema `director_marks.v1`,按场景存 `{id,name,position}`,同场景各组共用)。编辑态「📍 标记」在选中对象当前位置放标记,标记行可删;拖动落点 0.35 m 内自动吸附到标记。API `PUT /director/<ep>/marks/<sid>`(整表替换)。
 - **测距**:编辑态工具「测距 M」,点两个对象(人物取脚下、道具取中心、摄影机取机身)或地面点,画线并显示米数;第三下重来。
-- **批准与 H3W 签字**:「✓ 批准本组」记当时编译指纹到台账 `approvals`(白模再变即标过期),左栏组行显示 ✓,顶栏显示「已批准 n/N」;顶栏 H3W 签字胶囊与后期页同款:有待答复的签字卡时出「签字确认 / 暂缓」(两次点击确认,答复的是控制台同一张卡,阻断级待决项未清时宿主 409 拒签),`GET /director/<ep>` 的 `gate` 给状态,`POST /director/<ep>/signoff {confirm_id, answer}` 答卡。
+- **批准与 H3W 签字**:「✓ 批准本组」记当时编译指纹到台账 `approvals`(白模再变即标过期),同时把该组未答复的待决项按现状接受(`waived`,见「待决项与用户裁决」),流程不再卡在这些项上,左栏组行显示 ✓,顶栏显示「已批准 n/N」;顶栏 H3W 签字胶囊与后期页同款:有待答复的签字卡时出「签字确认 / 暂缓」(两次点击确认,答复的是控制台同一张卡,阻断级待决项未清时宿主 409 拒签),`GET /director/<ep>` 的 `gate` 给状态,`POST /director/<ep>/signoff {confirm_id, answer}` 答卡。
 - **部门路由**:注释新增 `target_agent`(`modules/director.ROUTES`:白模调度(默认)/ 场景建模 `05-scenes/scene-modeling` / 分镜 `07-directing/shot-planning` / 提示词 `08-video-gen/prompt` / 修改师 `00-orchestration/reviser`),表单「发给」选择。提交按路由拆批:白模调度一批(带待决项与覆盖层,按编译指纹回收版本),其它工位各一批(通用指令,只带该路由注释;运行结束即记 `applied` 且 `verified=false`,以运行回执为准)。
 
 ## 接入视频生成（2026-09-07）

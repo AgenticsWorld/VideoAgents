@@ -2911,6 +2911,7 @@ window.I18N_DICT = {
 "左": "Kiri",
 "已取消批准": "Persetujuan dibatalkan",
 "已批准": "Disetujui",
+"已随本组批准接受现状": "Diterima apa adanya bersama persetujuan grup ini",
 "已批准本组": "Grup ini disetujui",
 "已暂缓": "Ditunda",
 "已生成成片": "Footage hasil generasi",

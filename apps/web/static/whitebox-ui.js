@@ -239,6 +239,7 @@ function renderIssues(st){
     let state='';
     if(i.status==='applied')state=`<div class="wb-issue-state ok">✅ ${esc(t('已套用'))}${i.applied?.choice?' · '+esc(i.applied.choice):''}</div>`;
     else if(i.status==='decided')state=`<div class="wb-issue-state ok">☑ ${esc(t('已选「{choice}」· {by}',{choice:i.decision.choice,by:i.decision.by||''}))}${i.decision.note?' · '+esc(i.decision.note):''}</div>`;
+    else if(i.status==='waived')state=`<div class="wb-issue-state ok">✓ ${esc(t('已随本组批准接受现状'))}</div>`;
     else if(i.status==='stale')state=`<div class="wb-issue-state warn">⚠ ${esc(t('答复已失效(问题已变),请重新选择'))}</div>`;
     return `<div class="wb-issue sev-${esc(i.severity)} st-${esc(i.status)}" data-issue="${esc(i.issue_id)}">
       <div class="wb-issue-head"><span class="wb-sev">${esc(t(i.severity==='blocking'?'阻断':'建议'))}</span><span class="wb-kind">${esc(kindLabel(i.kind))}</span><code data-no-i18n>${esc(i.issue_id)}</code>${where?`<span class="wb-where" data-no-i18n>${esc(where)}</span>`:''}${jumpT!=null?`<button type="button" class="wb-jump" data-t="${jumpT}">${esc(t('▶ 看现场'))}</button>`:''}</div>

@@ -2913,6 +2913,7 @@ window.I18N_DICT = {
 "左": "Izquierda",
 "已取消批准": "Aprobación retirada",
 "已批准": "Aprobado",
+"已随本组批准接受现状": "Aceptado tal cual con la aprobación de este grupo",
 "已批准本组": "Este grupo está aprobado",
 "已暂缓": "Aplazado",
 "已生成成片": "Metraje generado",

@@ -343,7 +343,15 @@ async def approve(project: str, ep: str, body: dict | None = None):
         sha = dm.group_sha(episode, group) if group else None
         rec = dm.set_approval(doc, gid, sha, bool(body.get('approve', True)))
         dm.save_ledger(base, ep, doc)
-        return {'ok': True, 'group_id': gid, 'approval': rec, 'approvals': dm.approvals_public(doc, episode), 'summary': dm.summary(doc)}
+        # 批准本组 = 该组未答复的待决项按当前白模接受(waived),流程不再卡在这些项上;取消批准则撤回
+        from modules.whitebox_issues import collect, waive_group
+        waived = waive_group(base, ep, gid, bool(body.get('approve', True)))
+        col = collect(base, ep) if waived else None
+        out = {'ok': True, 'group_id': gid, 'approval': rec, 'approvals': dm.approvals_public(doc, episode), 'summary': dm.summary(doc), 'waived': waived}
+        if col:
+            out['issues'] = next((g['issues'] for g in col['groups'] if g['group_id'] == gid), [])
+            out['issues_summary'] = col['summary']
+        return out
     return await checked(_do)
 
 

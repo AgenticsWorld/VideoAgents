@@ -8,7 +8,8 @@
 Agent 把该条 `status` 置 `applied` 并回写源文件。规约见 docs/whitebox.md「待决项与用户裁决」。
 
 有效状态(编译时合并):applied(Agent 已套用)> decided(有答复且答复对应的问题文本未变)
-> stale(问题文本已变,旧答复失效)> open。阻断级(blocking)待决未清时 H3W 签字被拒;
+> stale(问题文本已变,旧答复失效)> open;另有 waived(2026-09-20:导演台「批准本组」时未答复的项
+按当前白模原样接受,不再待裁决、无须套用;问题文本再变同样转 stale)。阻断级(blocking)待决未清时 H3W 签字被拒;
 建议级(advisory)未答复的在签字时自动按默认取舍记为已决(by=sign:g6w)。
 """
 from __future__ import annotations
@@ -25,6 +26,8 @@ SEVERITIES = ('blocking', 'advisory')
 PLAN_STATUSES = ('open', 'applied')
 PROVISIONAL = 'provisional'          # 用户/签字接受默认取舍时的 choice 值
 CUSTOM = 'custom'                    # 自定义答复(note 必填)
+APPROVED = 'approved'                # 导演台「批准本组」写入:按当前白模原样接受(有效状态 waived,无须套用)
+APPROVED_BY = 'approve:director'
 SCHEMA = 'whitebox_decisions.v1'
 _ID_RE = re.compile(r'^WBI-(?P<ep>[A-Za-z0-9_-]+)-(?P<gid>[A-Za-z0-9_-]+)-(?P<seq>\d{3})$')
 
@@ -155,7 +158,11 @@ def merge_decision(issue: dict, decision: dict | None) -> dict:
     if issue.get('plan_status') == 'applied':
         out['status'] = 'applied'
     elif decision:
-        out['status'] = 'decided' if decision.get('issue_hash') == issue['issue_hash'] else 'stale'
+        if decision.get('issue_hash') != issue['issue_hash']:
+            out['status'] = 'stale'
+        else:
+            # 导演台「批准本组」= 按当前白模原样接受:不再待裁决、也无须 Agent 套用
+            out['status'] = 'waived' if decision.get('choice') == APPROVED else 'decided'
     else:
         out['status'] = 'open'
     out['decision'] = decision
@@ -163,8 +170,8 @@ def merge_decision(issue: dict, decision: dict | None) -> dict:
 
 
 def summarize(groups: list) -> dict:
-    """按有效状态汇总:open/blocking_open/decided/applied/stale;groups_open 列有未清项的组。"""
-    counts = {'total': 0, 'open': 0, 'blocking_open': 0, 'decided': 0, 'applied': 0, 'stale': 0}
+    """按有效状态汇总:open/blocking_open/decided/applied/stale/waived;groups_open 列有未清项的组。"""
+    counts = {'total': 0, 'open': 0, 'blocking_open': 0, 'decided': 0, 'applied': 0, 'stale': 0, 'waived': 0}
     groups_open, blocking_ids = [], []
     for group in groups:
         pending = False
@@ -247,6 +254,35 @@ def decide(base: Path, ep: str, issue_id: str, choice: str, note: str = '', by: 
     return merge_decision(issue, decisions[issue_id])
 
 
+def _save_decisions(base: Path, ep: str, decisions: dict) -> None:
+    path = decisions_path(base, ep)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix('.json.tmp')
+    tmp.write_text(json.dumps({'schema_version': SCHEMA, 'ep': ep, 'decisions': decisions},
+                              ensure_ascii=False, indent=2), encoding='utf-8')
+    tmp.replace(path)
+
+
+def waive_group(base: Path, ep: str, gid: str, on: bool, by: str = APPROVED_BY) -> list:
+    """导演台「批准本组」:该组未答复(open/stale)的待决项记为 approved=按当前白模原样接受(有效状态 waived,
+    阻断级也不再拦 H3W 签字/导出);取消批准则撤回这些记录(用户自己答过的不动)。返回处理的 issue_id。"""
+    decisions = load_decisions(base, ep)
+    group = next((g for g in collect(base, ep)['groups'] if g['group_id'] == gid), None)
+    touched = []
+    for issue in (group or {}).get('issues', []):
+        iid = issue['issue_id']
+        if on and issue['status'] in ('open', 'stale'):
+            decisions[iid] = {'choice': APPROVED, 'note': '批准本组即按当前白模接受', 'by': by,
+                              'at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'), 'issue_hash': issue['issue_hash']}
+            touched.append(iid)
+        elif not on and (decisions.get(iid) or {}).get('choice') == APPROVED:
+            decisions.pop(iid)
+            touched.append(iid)
+    if touched:
+        _save_decisions(base, ep, decisions)
+    return touched
+
+
 def accept_provisional(base: Path, ep: str, by: str = 'sign:g6w') -> list:
     """签字时把未答复的建议级待决项按默认取舍(recommended 选项,否则 provisional)记为已决;返回处理的 issue_id。"""
     accepted = []
@@ -282,6 +318,8 @@ def format_summary(summary: dict) -> str:
         return '白模待决项:0'
     pending = summary['open'] + summary['stale']
     text = f"白模待决项:待处理 {pending}(阻断 {summary['blocking_open']})、已裁决待套用 {summary['decided']}、已套用 {summary['applied']}"
+    if summary.get('waived'):
+        text += f"、随组批准接受 {summary['waived']}"
     if summary.get('groups_open'):
         text += ';涉及 ' + ', '.join(summary['groups_open'][:8]) + ('…' if len(summary['groups_open']) > 8 else '')
     return text

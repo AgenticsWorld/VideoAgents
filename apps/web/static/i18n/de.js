@@ -2911,6 +2911,7 @@ window.I18N_DICT = {
 "左": "Links",
 "已取消批准": "Genehmigung zurückgezogen",
 "已批准": "Genehmigt",
+"已随本组批准接受现状": "Mit der Genehmigung dieser Gruppe unverändert akzeptiert",
 "已批准本组": "Diese Gruppe ist genehmigt",
 "已暂缓": "Zurückgestellt",
 "已生成成片": "Generiertes Material",

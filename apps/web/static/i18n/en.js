@@ -3016,6 +3016,7 @@ window.I18N_DICT = {
 "左": "Left",
 "已取消批准": "Approval revoked",
 "已批准": "Approved",
+"已随本组批准接受现状": "Accepted as-is with this group's approval",
 "已批准本组": "This group approved",
 "已暂缓": "On hold",
 "已生成成片": "Generated footage",

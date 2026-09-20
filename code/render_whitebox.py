@@ -47,7 +47,7 @@ def main():
     # 待决项汇总(docs/whitebox.md「待决项与用户裁决」):回执须原样带上;阻断级未清时 H3W 签字会被拒
     from modules.whitebox_issues import format_summary
     summary=episode.get('issues_summary') or {}
-    print(json.dumps({'issues':{k:summary.get(k) for k in ('total','open','blocking_open','decided','applied','stale','groups_open','blocking_ids')},
+    print(json.dumps({'issues':{k:summary.get(k) for k in ('total','open','blocking_open','decided','applied','stale','waived','groups_open','blocking_ids')},
                       'issues_text':format_summary(summary)},ensure_ascii=False),flush=True)
     if errors:return 1
     if args.check_only:return 0
