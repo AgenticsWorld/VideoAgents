@@ -1041,6 +1041,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 2. 换 seed 重 roll 用 `--seed`;候选批量用 `--n`,不要自己写循环脚本拼文件名;
 3. 生成失败(未配 Key、渠道超时、内容拦截)**如实写入回执并上报,严禁伪造或占位产物**;
 4. 模型能力不满足工单要求(如运镜类型不支持)→ 上报 orchestrator,不擅自降级替换。
+5. **仅当工单要求改动一张已有图片(镜像 / 旋转 / 裁切 / 缩放)时**:用宿主 `python code/image_edit.py <图片> --flip-h|--flip-v|--rotate N|--crop x0,y0,x1,y1|--resize WxH`,它按**原编码**写回并自动备份原件;不要自己用 PIL `im.save('x.png')`。原因:本库图像资产按契约一律叫 `*.png`,但图像模型返回的是 JPEG 字节、genmedia 原样落盘——`.png` 只是名字,内容以文件头为准;按扩展名另存会变成 4–5 MB 的真 PNG,作为参考图内联时请求体过大被接口拒绝(HTTP 400 `Error when parsing request`,2026-09-20 fengshen3 SCN-0036 镜像改图后全景出不了图)。确需自己写图时(叠标注、合成等)无透明通道的一律 `im.convert('RGB').save(path, 'JPEG', quality=92)`(文件名照契约不变),带透明通道的才存 PNG。不改图的工单不适用本条,不要为此巡检或批量转码存量图片。
 
 ## 10. Agent 插件机制(团队扩展)
 

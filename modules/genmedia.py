@@ -614,12 +614,43 @@ def _output_format(output: str) -> str:
     return "jpeg" if suffix == "jpg" else suffix
 
 
-def _file_to_data_url(path: str) -> str:
+_IMAGE_MAGIC = ((b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "image/png"), (b"GIF8", "image/gif"), (b"RIFF", "image/webp"))
+REF_INLINE_MAX_BYTES = 2 * 1024 * 1024   # 方舟图像接口内联参考图的单张上限(见 _file_to_data_url)
+
+
+def _file_to_data_url(path: str, max_bytes: int | None = None) -> str:
+    """参考图 → data URL。MIME 按文件头判(本库出的图常是 JPEG 字节配 .png 扩展名),不按扩展名。
+    max_bytes:超过就在内存里转 JPEG(透明底铺白;质量 92→80 逐级降,仍超再按 0.85 逐级缩),**不改磁盘上的原图**。
+    2026-09-20 fengshen3 SCN-0036:layout_top.png 是被 Agent 用 PIL 镜像后另存的真 PNG(4.4 MB,同项目其余为 0.3–0.6 MB 的 JPEG 字节),
+    两张参考图的请求体 6.3 MB,方舟 images/generations 直接回 HTTP 400「Error when parsing request」,同批同模型其余场景(≈1 MB)全部成功。"""
     p = Path(path)
     if not p.is_file():
         raise RuntimeError(f"参考图不存在: {path}")
-    mime = mimetypes.guess_type(p.name)[0] or "image/png"
-    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+    data = p.read_bytes()
+    mime = next((m for magic, m in _IMAGE_MAGIC if data.startswith(magic)), None) or mimetypes.guess_type(p.name)[0] or "image/png"
+    if max_bytes and len(data) > max_bytes:
+        import io
+        from PIL import Image, ImageFile
+        im = Image.open(io.BytesIO(data))
+        ImageFile.MAXBLOCK = max(ImageFile.MAXBLOCK, im.size[0] * im.size[1] * 4)   # optimize=True 对高熵大图会撑爆默认缓冲
+        if im.mode in ("RGBA", "LA", "P"):
+            rgba = im.convert("RGBA")
+            im = Image.new("RGB", rgba.size, (255, 255, 255)); im.paste(rgba, mask=rgba.split()[-1])
+        else:
+            im = im.convert("RGB")
+        before = len(data)
+        for _ in range(8):
+            for quality in (92, 86, 80):
+                buf = io.BytesIO(); im.save(buf, "JPEG", quality=quality, optimize=True)
+                if buf.tell() <= max_bytes:
+                    break
+            if buf.tell() <= max_bytes:
+                break
+            im = im.resize((max(64, int(im.width * .85)), max(64, int(im.height * .85))), Image.LANCZOS)
+        data, mime = buf.getvalue(), "image/jpeg"
+        print(f"[genmedia] 参考图 {p.name} {before / 1e6:.1f} MB 超过内联上限 {max_bytes / 1e6:.1f} MB,已在内存里转 JPEG "
+              f"{im.width}x{im.height} {len(data) / 1e6:.1f} MB 后发送(原图未改)", file=sys.stderr, flush=True)
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
 
 
 def _decode_data_url(url: str) -> bytes:
@@ -1415,7 +1446,7 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
     if seed is not None:
         body["seed"] = seed
     if refs:
-        urls = [_file_to_data_url(r) for r in refs]
+        urls = [_file_to_data_url(r, REF_INLINE_MAX_BYTES) for r in refs]
         body["image"] = urls[0] if len(urls) == 1 else urls   # Seedream 4.x 图生图/多图融合
     resp = _post_json(f"{_ark_base(cfg)}/images/generations", body,
                       {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
