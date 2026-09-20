@@ -805,7 +805,9 @@ _AGENTICS_FIXED_PARAMETERS = {
     },
     "tts": {
         "text": ("string", 1, None), "voice_id": ("string", None, None),
-        # 嗓音文字描述(Voice Design profile 声明其一即可):voice_description 为首选名,instructions 为兼容名
+        # 嗓音文字描述(Voice Design profile 声明其一即可):instruct 为首选名——与 RunningHub 工作流里
+        # Qwen3-TTS VoiceDesign 节点的输入位同名(_RH_TTS_DESIGN_DESC_KEYS 首项);其余为兼容名
+        "instruct": ("string", None, None), "voice_instruction": ("string", None, None),
         "voice_description": ("string", None, None), "instructions": ("string", None, None),
         "language": ("string", None, None), "speed": ("number", 0.1, None),
         "pitch": ("number", None, None), "volume": ("number", 0, None),
@@ -5598,6 +5600,10 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
     )
 
 
+# Agentics Voice Design profile 的嗓音描述参数名:首选与 RunningHub 节点输入位一致的 instruct
+_AGENTICS_TTS_DESC_KEYS = ("instruct", "voice_instruction", "voice_description", "instructions")
+
+
 def _is_voiceprint_sample(output: str) -> bool:
     """输出是否为嗓音样本文件(assets/audio/voice/refs/<CHAR|NARRATOR>[_<variant>]_voiceprint.*):
     出样本 = 人物嗓音设计,走 Voice Design;其余(对白/旁白)走 Voice Clone。"""
@@ -5989,7 +5995,7 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
         if not explicit and design_code and not voice_file and _is_voiceprint_sample(output):
             profile = _agentics_profile("tts", design_code)
             declared = ((profile.get("token_schema") or {}).get("parameters") or {})
-            desc_keys = [k for k in ("voice_description", "instructions") if k in declared]
+            desc_keys = [k for k in _AGENTICS_TTS_DESC_KEYS if k in declared]
             if desc_keys:
                 desc, tone = _seedaudio_desc(voice, instructions, character, variant, project, output)
                 if tone and tone != "平静自然":
@@ -6002,7 +6008,7 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
                 }, {"reference_audios": []}, profile=profile)
                 return _save(data, output)
             print(f"[genmedia] AgenticsLLM Voice Design profile {design_code} 未声明嗓音描述参数"
-                  "(voice_description / instructions),无法按描述出声;本次改按 Voice Clone profile 处理",
+                  f"({' / '.join(_AGENTICS_TTS_DESC_KEYS)}),无法按描述出声;本次改按 Voice Clone profile 处理",
                   file=sys.stderr, flush=True)
         code = explicit or str(cfg.get("clone") or "").strip()
         if not code:
