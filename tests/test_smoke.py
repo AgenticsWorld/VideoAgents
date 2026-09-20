@@ -632,3 +632,59 @@ def test_genconfig_migrates_legacy_agentics_image_profile_and_empty_defaults():
     merged = core._merge(core.DEFAULT_GENCONFIG, empty)
     assert merged["image"]["agentics"] == {"t2i": "flux2-dev-t2i", "i2i": "flux2-dev-i2i-10ref"}
     assert merged["deepagents"]["agentics"]["model"] == "z-ai/glm-5.3"
+
+
+def test_agentics_tts_config_splits_voice_design_and_voice_clone(monkeypatch, tmp_path):
+    """TTS Agentics 渠道分 Voice Design / Voice Clone 两个 profile:出嗓音样本(*_voiceprint.*)用 design 并带嗓音描述,
+    其余台词用 clone;design profile 未声明描述参数时回落 clone。"""
+    from modules import genmedia
+
+    cfg_path = tmp_path / "genconfig.json"
+    cfg_path.write_text(json.dumps({"tts": {
+        "provider": "agentics",
+        "agentics": {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"}}}))
+    monkeypatch.setattr(genmedia, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(genmedia, "_agentics_connection", lambda: ("https://api.agentics.world", "jwt"))
+    monkeypatch.setattr(genmedia, "_forbid_dispatch_layer", lambda kind: None)
+
+    cfg = genmedia.get_config("tts")
+    assert cfg["design"] == "qwen3tts-voicedesign" and cfg["clone"] == "qwen3tts-clone"
+    assert cfg["model"] == "" and cfg["profile_code"] == ""
+
+    profiles = {
+        "qwen3tts-voicedesign": {"profile_code": "qwen3tts-voicedesign", "token_schema": {
+            "parameters": {"text": {}, "voice_description": {}}, "files": {}}},
+        "qwen3tts-clone": {"profile_code": "qwen3tts-clone", "token_schema": {
+            "parameters": {"text": {}}, "files": {}}},
+    }
+    monkeypatch.setattr(genmedia, "_agentics_profile", lambda kind, code, refresh=False: profiles[code])
+    monkeypatch.setattr(genmedia, "_agentics_profile_kind", lambda profile, schema: "tts")
+    monkeypatch.setattr(genmedia, "_seedaudio_desc", lambda *a: ("女性,音高中低", "平静自然"))
+    calls = []
+    monkeypatch.setattr(genmedia, "_agentics_generate",
+                        lambda kind, cfg, values, files, **kwargs: calls.append(
+                            (cfg["profile_code"], values)) or b"result")
+    monkeypatch.setattr(genmedia, "_save", lambda data, output: output)
+
+    genmedia.generate_tts("样本句", "refs/CHAR-0001_voiceprint.mp3", character="CHAR-0001")
+    genmedia.generate_tts("台词句", "lines/ep01_line.mp3", voice="narrator-id")
+    assert calls[0][0] == "qwen3tts-voicedesign" and calls[0][1]["voice_description"] == "女性,音高中低"
+    assert calls[1][0] == "qwen3tts-clone" and "voice_description" not in calls[1][1]
+
+    # design profile 未声明嗓音描述参数 → 回落 Voice Clone profile
+    profiles["qwen3tts-voicedesign"]["token_schema"]["parameters"] = {"text": {}}
+    genmedia.generate_tts("样本句", "refs/CHAR-0001_voiceprint.mp3", voice="narrator-id")
+    assert calls[2][0] == "qwen3tts-clone"
+
+
+def test_genconfig_migrates_legacy_agentics_tts_profile_and_empty_defaults():
+    from services.runtime import core
+
+    legacy = {"tts": {"agentics": {"profile_code": "old-tts"}}}
+    core._migrate_genconfig(legacy)
+    assert legacy["tts"]["agentics"] == {"design": "old-tts", "clone": "old-tts"}
+
+    empty = {"tts": {"agentics": {"profile_code": "", "design": "", "clone": ""}}}
+    core._migrate_genconfig(empty)
+    merged = core._merge(core.DEFAULT_GENCONFIG, empty)
+    assert merged["tts"]["agentics"] == {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"}

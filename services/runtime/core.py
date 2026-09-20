@@ -790,7 +790,10 @@ DEFAULT_GENCONFIG = {
     },
     "tts": {
         "provider": "agentics",   # agentics | openrouter | volcengine(豆包语音) | minimax | elevenlabs
-        "agentics": {"profile_code": ""},
+        # Agentics TTS 分 Voice Design / Voice Clone 两个 profile(2026-09-20,同 ComfyUI TTS 两套工作流、同图像 t2i/i2i):
+        # genmedia 出嗓音样本(*_voiceprint.*)用 design(按嗓音文字描述出声),其余对白/旁白用 clone(嗓音样本 + 台词)。
+        # 旧字段 profile_code 由 _migrate_genconfig 迁入两侧
+        "agentics": {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"},
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
                        "custom_model": "", "voice": "eve"},
         # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
@@ -1130,6 +1133,15 @@ def _migrate_genconfig(config: dict) -> None:
                 ia.pop(side, None)
                 if legacy:
                     ia[side] = legacy
+    ta = (config.get("tts") or {}).get("agentics") if isinstance(config.get("tts"), dict) else None
+    if isinstance(ta, dict):
+        # 旧版单一 profile_code → Voice Design / Voice Clone 两侧(保留原选择);空值视为未选,回落默认
+        legacy = str(ta.pop("profile_code", "") or "").strip()
+        for side in ("design", "clone"):
+            if not str(ta.get(side) or "").strip():
+                ta.pop(side, None)
+                if legacy:
+                    ta[side] = legacy
     ma = (config.get("music") or {}).get("agentics") if isinstance(config.get("music"), dict) else None
     if isinstance(ma, dict) and not str(ma.get("profile_code") or "").strip():
         # 音乐 Agentics profile 为空 = 从未选过 → 去掉空值让 DEFAULT_GENCONFIG 的默认 profile 生效

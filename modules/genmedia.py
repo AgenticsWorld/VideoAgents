@@ -508,6 +508,12 @@ def get_config(kind: str, provider_override: str = "", model_override: str = "")
             pc["t2i"] = str(pc.get("t2i") or "").strip()
             pc["i2i"] = str(pc.get("i2i") or "").strip()
             pc["profile_code"] = pc["model"] = ""
+        elif kind == "tts":
+            # TTS 分 Voice Design / Voice Clone 两个 profile(2026-09-20):按用途自动选(见 generate_tts),
+            # 单一 model/profile_code 只在调用方显式指定模型时才有值
+            pc["design"] = str(pc.get("design") or "").strip()
+            pc["clone"] = str(pc.get("clone") or "").strip()
+            pc["profile_code"] = pc["model"] = ""
         else:
             pc["profile_code"] = str(pc.get("profile_code") or "").strip()
             # Keep the common model field aligned so existing group-level video
@@ -799,6 +805,8 @@ _AGENTICS_FIXED_PARAMETERS = {
     },
     "tts": {
         "text": ("string", 1, None), "voice_id": ("string", None, None),
+        # 嗓音文字描述(Voice Design profile 声明其一即可):voice_description 为首选名,instructions 为兼容名
+        "voice_description": ("string", None, None), "instructions": ("string", None, None),
         "language": ("string", None, None), "speed": ("number", 0.1, None),
         "pitch": ("number", None, None), "volume": ("number", 0, None),
         "seed": ("integer", None, None), "sample_rate_hz": ("integer", 8000, None),
@@ -5973,8 +5981,36 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
     if cfg["provider"] == "agentics":
-        profile = _agentics_profile(
-            "tts", str(cfg.get("model") or cfg.get("profile_code") or ""))
+        # 显式模型优先;否则出嗓音样本(*_voiceprint.*,且未显式给本地参考音频)走 Voice Design profile,其余走 Voice Clone
+        explicit = str(cfg.get("model") or cfg.get("profile_code") or "").strip()
+        voice_file = bool(voice) and any(p.is_file() for p in (
+            [Path(voice)] if Path(voice).is_absolute() else [Path.cwd() / voice, ROOT / voice]))
+        design_code = str(cfg.get("design") or "").strip()
+        if not explicit and design_code and not voice_file and _is_voiceprint_sample(output):
+            profile = _agentics_profile("tts", design_code)
+            declared = ((profile.get("token_schema") or {}).get("parameters") or {})
+            desc_keys = [k for k in ("voice_description", "instructions") if k in declared]
+            if desc_keys:
+                desc, tone = _seedaudio_desc(voice, instructions, character, variant, project, output)
+                if tone and tone != "平静自然":
+                    desc = f"{desc},语气:{tone}"
+                print(f"[genmedia] agentics TTS 按 Voice Design profile {design_code} 出嗓音样本:{desc}",
+                      file=sys.stderr, flush=True)
+                data = _agentics_generate("tts", {**cfg, "model": design_code, "profile_code": design_code}, {
+                    "text": text, **{k: desc for k in desc_keys},
+                    "speed": speed, "output_format": _output_format(output),
+                }, {"reference_audios": []}, profile=profile)
+                return _save(data, output)
+            print(f"[genmedia] AgenticsLLM Voice Design profile {design_code} 未声明嗓音描述参数"
+                  "(voice_description / instructions),无法按描述出声;本次改按 Voice Clone profile 处理",
+                  file=sys.stderr, flush=True)
+        code = explicit or str(cfg.get("clone") or "").strip()
+        if not code:
+            raise RuntimeError("tts 渠道 agentics 未选择 Voice Clone 模型(「🎨 生成模型」页 TTS › Agentics)")
+        if not explicit:
+            print(f"[genmedia] agentics TTS 按 Voice Clone profile {code} 出声", file=sys.stderr, flush=True)
+        cfg = {**cfg, "model": code, "profile_code": code}
+        profile = _agentics_profile("tts", code)
         schema = profile.get("token_schema") or {}
         _agentics_profile_kind(profile, schema)
         file_mappings = schema.get("files") if isinstance(schema, dict) else {}
@@ -6004,6 +6040,12 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
                     voice_path = str(voiceprint.resolve())
                     print(f"[genmedia] AgenticsLLM TTS 使用旁白声线卡冻结样本 {voiceprint.name}",
                           file=sys.stderr)
+            if not voice_path and character and not (voice or "").strip():
+                # 角色对白:优先用项目冻结的嗓音样本(Voice Design 出的 *_voiceprint),全片同一副嗓子
+                frozen = _seedaudio_ref(character, variant, project, output)
+                if frozen is not None:
+                    voice_path = str(frozen.resolve())
+                    print(f"[genmedia] AgenticsLLM TTS 使用项目嗓音样本 {frozen.name}", file=sys.stderr)
             # 必填文件必须补齐；可选参考音频仅在用户没有明确 voice ID 时自动附加。
             if not voice_path and (requires_reference_audio or not (voice or "").strip()):
                 try:
@@ -6126,6 +6168,10 @@ def _cmd_info(args):
                 cfg = apply_group_video_override(cfg, group)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
+            if cfg["provider"] == "agentics" and not cfg.get("model"):
+                sides = {"image": ("t2i", "i2i"), "tts": ("design", "clone")}.get(kind)
+                if sides:   # 两个 profile 按用途自动选,没有单一模型 id
+                    desc = " ".join(f"{side}={cfg.get(side) or '—'}" for side in sides)
             if cfg.get("_group_override"):
                 g = get_config("video")
                 desc += f"  (组 {group} {cfg.get('_override_scope') or '组级'}覆盖;全局 {g['provider']} model={g['model']})"

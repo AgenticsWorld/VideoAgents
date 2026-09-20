@@ -494,9 +494,13 @@ async function agenticsAuth(button){
 /* Agentics 图像渠道分文生图/图生图两个 profile(2026-09-18,同 ComfyUI 的 workflow/参考图工作流两套):
    genmedia 无参考图用 t2i、带参考图用 i2i;其余类别仍是单一模型。ids: image-agentics-model-t2i / -i2i */
 const AGENTICS_IMAGE_SIDES=[['t2i','文生图模型'],['i2i','图生图模型']];
+/* TTS 同理分 Voice Design / Voice Clone 两个 profile(2026-09-20):出嗓音样本用 design、对白/旁白用 clone。
+   ids: tts-agentics-model-design / -clone */
+const AGENTICS_SIDES={image:AGENTICS_IMAGE_SIDES,
+                      tts:[['design','Voice Design 模型'],['clone','Voice Clone 模型']]};
 function agenticsModelSelects(kind){
-  return kind==='image'?AGENTICS_IMAGE_SIDES.map(([side])=>[side,$(`#${kind}-agentics-model-${side}`)])
-                       :[['',$(`#${kind}-agentics-model`)]];
+  return AGENTICS_SIDES[kind]?AGENTICS_SIDES[kind].map(([side])=>[side,$(`#${kind}-agentics-model-${side}`)])
+                             :[['',$(`#${kind}-agentics-model`)]];
 }
 function agenticsModelRow(kind){
   const build=(id,label)=>{
@@ -508,9 +512,9 @@ function agenticsModelRow(kind){
     row.appendChild(refresh);
     return row;
   };
-  if(kind!=='image')return build(`${kind}-agentics-model`,'模型');
+  if(!AGENTICS_SIDES[kind])return build(`${kind}-agentics-model`,'模型');
   const frag=document.createDocumentFragment();
-  AGENTICS_IMAGE_SIDES.forEach(([side,label])=>frag.appendChild(build(`${kind}-agentics-model-${side}`,label)));
+  AGENTICS_SIDES[kind].forEach(([side,label])=>frag.appendChild(build(`${kind}-agentics-model-${side}`,label)));
   return frag;
 }
 
@@ -528,6 +532,8 @@ function buildPanel(kind,p){
       t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
     if(kind==='image')d.appendChild(el('div',{className:'hint'},
       t('文生图模型用于无参考图出图,图生图模型用于带参考图出图')));
+    if(kind==='tts')d.appendChild(el('div',{className:'hint'},
+      t('Voice Design 模型按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用),Voice Clone 模型按嗓音样本 + 对白文字生成对白')));
     if(kind==='digitalhuman')d.appendChild(el('div',{className:'hint'},
       t('数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段')));
   }else if(p==='openrouter'){
@@ -1196,7 +1202,7 @@ function agenticsProfileLabel(profile){
 /* 已保存的 Agentics 模型:text 用 custom_model/model,image 分 t2i/i2i 两侧,其余类别 profile_code */
 function agenticsWanted(kind,saved,side){
   if(kind==='text')return saved.custom_model||saved.model||'';
-  if(kind==='image')return saved[side]||'';
+  if(AGENTICS_SIDES[kind])return saved[side]||'';
   return saved.profile_code||'';
 }
 async function loadAgenticsModels(kind,refresh=false){
@@ -1576,7 +1582,7 @@ function collectComfy(kind){
 function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
-    const c={agentics:kind==='image'
+    const c={agentics:AGENTICS_SIDES[kind]
         ?Object.fromEntries(agenticsModelSelects(kind).map(([side,sel])=>[side,sel.value||'']))
         :{profile_code:$(`#${kind}-agentics-model`).value||''},
       openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
