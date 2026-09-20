@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""直播(live stream):参考图(≤8 张)+ 提示词 → Fal 渠道视频模型循环生成 480p 短段,
+"""直播(live stream):参考图(≤8 张)+ 提示词 → Fal 或本地 ComfyUI 视频模型循环生成短段,
 每一轮把上一段的尾帧截图一并作为参考(或作首帧),前端把新段接在已播内容之后连续播放,
 形成"一直在播"的直播效果。设置菜单「高级 → 直播」页(/live)的业务实现;API 由
 services/runtime/core.py 的 api_live_* 薄封装调用,本模块不依赖 core。
@@ -78,8 +78,16 @@ DIRECTOR_STALE_S = 45                        # 导演模式:页面轮询/心跳�
 DIRECTOR_MEMORY_RANGE = (1, 50)              # configure.memory:保留多少段前文提示词作上下文
 DIRECTOR_INLINE_MAX_SIDE = 480               # fal 存储不可用时首帧内联 data URI 的长边(受数据通道消息上限约束)
 RECORD_MAX_BYTES = 4 * 1024 ** 3             # 单会话录像上限
-PROVIDERS = ("fal",)
+PROVIDERS = ("fal", "comfyui")
 DEFAULT_MODEL = "minimax/h3-max"
+FASTH3_MODEL = "FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree"
+FASTH3_WORKFLOW = "comfy/video-fasth3-vsa-t2va-api.json"
+FASTH3_DEFAULTS = {
+    "unet": "minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+}
 DEFAULTS = {"prompt": "", "provider": "fal", "model": DEFAULT_MODEL, "duration": 10,
             "aspect": "16:9", "resolution": DEFAULT_RESOLUTION, "link_mode": "refs_tail",
             "max_rounds": 0, "idle_stop_min": 10, "max_pending": 3,
@@ -170,10 +178,16 @@ def normalize_settings(s: dict, strict: bool = True) -> dict:
     provider = str(s.get("provider") or "fal").strip()
     if provider not in PROVIDERS:
         if strict:
-            raise LiveError(400, "直播目前只支持 Fal 渠道")
+            raise LiveError(400, "直播渠道只能选择 Fal 或本地 ComfyUI")
         provider = "fal"
     out["provider"] = provider
     out["model"] = str(s.get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    if provider == "comfyui":
+        if str(s.get("link_mode") or "refs_tail") == "director":
+            if strict:
+                raise LiveError(400, "本地 ComfyUI FastH3 模式不能使用导演模式")
+            out["link_mode"] = "refs_tail"
+        out["model"] = FASTH3_MODEL
     try:
         out["duration"] = int(round(float(s.get("duration", DEFAULTS["duration"]))))
     except (TypeError, ValueError):
@@ -469,9 +483,14 @@ def start(fields: dict) -> dict:
     with _LOCK:
         if _current_running():
             raise LiveError(409, "直播已在进行中,先停止再启动")
-        if not fal_api_key() and not _fake_mode():
+        if s["provider"] == "fal" and not fal_api_key() and not _fake_mode():
             raise LiveError(400, "Fal API Key 未配置:请先在「🎨 生成模型」页 视频 → Fal 标签页填写并保存")
         refs = list_refs()
+        if s["provider"] == "comfyui":
+            if not s["prompt"]:
+                raise LiveError(400, "FastH3 本地 ComfyUI 模式必须填写提示词")
+            if refs:
+                raise LiveError(400, "FastH3 Preview v1 目前是 T2VA,不支持参考图;请清空参考图")
         if not s["prompt"] and not refs:
             raise LiveError(400, "提示词与参考图至少填一样")
         if s["link_mode"] == "none" and not s["prompt"]:
@@ -740,6 +759,8 @@ def resolve_file(rel: str) -> Path:
 
 def _genmedia_family(model: str) -> str:
     m = (model or "").lower()
+    if "fasth3" in m or "fastvideo" in m:
+        return "fasth3"
     if "seedance" in m:
         return "seedance"
     if "minimax" in m and "h3" in m:
@@ -1177,13 +1198,19 @@ def _job(sid: str) -> int:
     save(pid=os.getpid())
 
     fake = _fake_mode()
+    provider = str(sess.get("provider") or "fal")
     key = fal_api_key() or ("fake" if fake else "")
-    if not key:
+    if provider == "fal" and not key:
         save(status="failed", error="Fal API Key 未配置", gen_started_at=None)
         return 1
     gm = _genmedia()
-    cfg = {"provider": "fal", "api_key": key, "model": sess["model"]}
-    family = gm._fal_family(sess["model"])  # noqa: SLF001
+    if provider == "comfyui":
+        video_cfg = (_read_json(CONFIG_PATH, {}).get("video") or {}).get("comfyui") or {}
+        cfg = {"provider": "comfyui", **video_cfg, "workflow": FASTH3_WORKFLOW}
+        family = "fasth3"
+    else:
+        cfg = {"provider": "fal", "api_key": key, "model": sess["model"]}
+        family = gm._fal_family(sess["model"])  # noqa: SLF001
     # 仅首帧端点(无 reference-to-video):Kling 系列、MiniMax H3 Max Turbo——参考图不生效,
     # 首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧(link_mode 不起作用)
     first_only = family == "kling" or (family == "h3" and "turbo" in str(sess["model"]).lower())
@@ -1236,7 +1263,11 @@ def _job(sid: str) -> int:
         prompt = str(sess.get("prompt") or "")
         link_mode = sess.get("link_mode") or "refs_tail"
         first, round_refs = "", []
-        if link_mode == "none":
+        if family == "fasth3":
+            # FastH3 Preview v1 is T2VA only. Continuity is expressed in text;
+            # image/last-frame conditioning was not distilled into this checkpoint.
+            prompt = (prompt + "\n\n[Continuity] Continue the same live-stream subject and action naturally from the previous segment; keep the scene and camera coherent, with no cut.").strip() if prev_frame else prompt
+        elif link_mode == "none":
             pass                                   # 不衔接:纯文生视频,不带参考图与尾帧,也不加续接句
         elif first_only:
             first = prev_frame or (refs[0] if refs else "")
@@ -1254,10 +1285,22 @@ def _job(sid: str) -> int:
         try:
             # 768p 档按 genmedia 口径传 720p:H3 映射为 768P,Seedance 为 720p,Kling 无分辨率参数
             gm_res = "720p" if str(sess.get("resolution") or "480p") == "768p" else "480p"
-            endpoint, body = gm._fal_video_body(  # noqa: SLF001
-                cfg, prompt, str(d / first) if first else "", "", sess["duration"], gm_res,
-                sess["aspect"], None, [str(d / r) for r in round_refs], None,
-                bool(sess.get("generate_audio", True)) if family != "h3" else None, None)
+            if family == "fasth3":
+                width, height = gm._h3_dimensions(sess["aspect"], gm_res)  # noqa: SLF001
+                tokens = {"PROMPT": prompt, "SEED": seq, "WIDTH": width, "HEIGHT": height,
+                          "FPS": 24, "H3_FRAMES": gm._comfy_h3_frame_count(  # noqa: SLF001
+                              sess["duration"], 24),
+                          "H3_UNET": FASTH3_DEFAULTS["unet"],
+                          "H3_TEXT_ENCODER": FASTH3_DEFAULTS["text_encoder"],
+                          "H3_VIDEO_VAE": FASTH3_DEFAULTS["video_vae"],
+                          "H3_AUDIO_VAE": FASTH3_DEFAULTS["audio_vae"],
+                          "H3_WEIGHT_DTYPE": "default", "H3_CLIP_DEVICE": "default"}
+                wf = gm._comfy_workflow(cfg, tokens, "video")  # noqa: SLF001
+            else:
+                endpoint, body = gm._fal_video_body(  # noqa: SLF001
+                    cfg, prompt, str(d / first) if first else "", "", sess["duration"], gm_res,
+                    sess["aspect"], None, [str(d / r) for r in round_refs], None,
+                    bool(sess.get("generate_audio", True)) if family != "h3" else None, None)
 
             def on_status(state, pos, _seq=seq):
                 waited = int(time.time() - (sess.get("gen_started_at") or time.time()))
@@ -1267,6 +1310,11 @@ def _job(sid: str) -> int:
 
             if fake:
                 _fake_generate(seq, sess, out, stop, on_status)
+            elif family == "fasth3":
+                base, hdrs = gm._comfy_endpoint(cfg)  # noqa: SLF001
+                gm._comfy_run(base, wf, str(out), want_video=True, headers=hdrs,
+                              on_status=lambda state: on_status(state, None),
+                              should_stop=lambda: stop.is_set() or bool(_load_control(sid).get("stop")))
             else:
                 _fal_generate(gm, key, endpoint, body, out, stop, on_status,
                               lambda: bool(_load_control(sid).get("stop")))
@@ -1288,6 +1336,8 @@ def _job(sid: str) -> int:
                     p.unlink()
             break
         except Exception as exc:  # noqa: BLE001
+            if stop.is_set() or _load_control(sid).get("stop"):
+                break
             seq -= 1
             fails += 1
             err = f"第 {seq + 1} 段生成失败({fails}/{MAX_CONSEC_FAILS}):{str(exc)[:600]}"

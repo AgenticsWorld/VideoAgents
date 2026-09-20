@@ -169,7 +169,7 @@ details .body{padding:10px 0 2px}
         <textarea id="prompt" placeholder="例如:一位年轻主播坐在暖光直播间里,面对镜头微笑聊天,偶尔喝一口咖啡,背景霓虹灯牌缓慢闪烁"></textarea>
         <div class="row" id="prompt-apply-row" style="display:none;margin-top:6px"><button class="small" id="prompt-apply">✏️ 更新提示词(下一段生效)</button><span class="hint" id="prompt-pending"></span></div>
       </div>
-      <div class="row"><label>渠道</label><select id="provider"><option value="fal">Fal</option></select></div>
+      <div class="row"><label>渠道</label><select id="provider"></select></div>
       <div class="row"><label>模型</label><select id="model"></select></div>
       <div class="hint" id="model-hint"></div>
       <div class="row"><label>画幅</label><select id="aspect" style="flex:none;width:100px"><option value="16:9">16:9 横屏</option><option value="9:16">9:16 竖屏</option></select></div>
@@ -243,7 +243,7 @@ function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls|
 function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?(n/1e6).toFixed(1)+' MB':Math.round(n/1e3)+' KB'}
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 
-let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='';
+let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='',MODEL_CATALOGS={};
 const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
 const DUR_RANGE={h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],wan:[2,30],generic:[3,30]};
 
@@ -258,6 +258,11 @@ function fillModels(models,cur){
   if([...sel.options].some(o=>o.value===want))sel.value=want;
   else if(want){sel.insertAdjacentHTML('afterbegin',`<option value="${esc(want)}">${esc(want)}</option>`);sel.value=want}
   onModelChange();
+}
+function fillProviders(rows,cur){
+  const sel=$('#provider');const want=cur||sel.value||'fal';
+  sel.innerHTML=(rows||[]).map(([id,label])=>`<option value="${esc(id)}">${esc(t(label))}</option>`).join('');
+  if([...sel.options].some(o=>o.value===want))sel.value=want;
 }
 function onModelChange(){
   const sel=$('#model');const director=isDirector();
@@ -283,12 +288,14 @@ function onModelChange(){
   $('#dur-hint').textContent=I18N.f(t('该模型单段 {lo}–{hi} 秒;越长重播占比越低,但每段等得越久'),{lo,hi});
   const turbo=fam==='h3'&&$('#model').value.toLowerCase().includes('turbo');   // H3 Max Turbo 只有文生/首帧端点,同 Kling 走尾帧作首帧
   const noLink=$('#link-mode').value==='none';
-  $('#model-hint').textContent=noLink?t('不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续'):fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):fam==='wan'?t('Wan 3.0:参考图 + 尾帧合计 ≤10 张,单段 2–30 秒'):'';
+  $('#model-hint').textContent=$('#provider').value==='comfyui'?t('FastH3 本地 ComfyUI:仅文字生成音视频(T2VA),不支持参考图/首尾帧;参考图必须清空,连续性通过提示词表达'):noLink?t('不衔接:每段仅按提示词文生视频,参考图与尾帧都不提交,段与段之间画面不连续'):fam==='kling'?t('⚠ Kling 端点不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧'):turbo?t('⚠ H3 Max Turbo 无参考端点,不支持参考图:首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧;分辨率仅 480p/768p'):fam==='h3'?t('MiniMax H3:参考图 + 尾帧合计 ≤12 件,原生音画同生'):fam==='seedance'?t('Seedance 2.0:参考图 + 尾帧合计 ≤9 张'):fam==='wan'?t('Wan 3.0:参考图 + 尾帧合计 ≤10 张,单段 2–30 秒'):'';
   $('#gen-audio').disabled=fam==='h3';
 }
 $('#model').onchange=onModelChange;$('#link-mode').onchange=onModelChange;
+$('#provider').onchange=()=>{fillModels(MODEL_CATALOGS[$('#provider').value]||[],null);onModelChange()};
 function fillSettings(s){
   if(SETTINGS_FILLED)return;SETTINGS_FILLED=true;
+  if(s.provider&&[...$('#provider').options].some(o=>o.value===s.provider))$('#provider').value=s.provider;
   $('#prompt').value=s.prompt||'';$('#aspect').value=s.aspect||'16:9';$('#duration').value=s.duration||10;
   $('#link-mode').value=s.link_mode||'refs_tail';$('#max-rounds').value=s.max_rounds||0;$('#idle-stop').value=s.idle_stop_min??10;
   $('#memory').value=s.memory||12;if(s.link_mode==='director')onModelChange();
@@ -441,10 +448,17 @@ async function poll(){
 }
 function applyState(r){
   STATE=r;
-  fillModels(r.models||[],SETTINGS_FILLED?null:(r.settings&&r.settings.model));
-  fillSettings(r.settings||{});
-  $('#key-chip').textContent=r.fal_key_configured?t('Fal Key:已配置(与生成模型页共用)'):t('⚠ Fal Key 未配置:请到「生成模型」页 视频 → Fal 填写');
-  $('#key-chip').style.color=r.fal_key_configured?'':'var(--yellow)';
+  // Polling only refreshes runtime/session state. Rebuild form controls only on
+  // initial load or an explicit session reset/load, so user edits are preserved.
+  if(!SETTINGS_FILLED){
+    MODEL_CATALOGS=r.model_catalogs||{};
+    fillProviders(r.providers||[['fal','Fal']],r.settings&&r.settings.provider);
+    fillSettings(r.settings||{});
+    fillModels(r.models||[],r.settings&&r.settings.model);
+  }
+  const localComfy=$('#provider').value==='comfyui';
+  $('#key-chip').textContent=localComfy?t('本地 ComfyUI:使用「生成模型」页视频 ComfyUI 地址'):r.fal_key_configured?t('Fal Key:已配置(与生成模型页共用)'):t('⚠ Fal Key 未配置:请到「生成模型」页 视频 → Fal 填写');
+  $('#key-chip').style.color=localComfy||r.fal_key_configured?'':'var(--yellow)';
   const sess=r.session;const running=!!(sess&&sess.running);
   if(r.director_model)DIRECTOR_MODEL=r.director_model;
   renderRefs(r.refs||[],running);
