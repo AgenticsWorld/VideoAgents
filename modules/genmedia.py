@@ -3006,12 +3006,43 @@ def _rh_image_load_order(workflow: dict) -> list[str]:
     return sorted(loads, key=lambda nid: (slot_of(nid), int(nid) if nid.isdigit() else 10 ** 9, nid))
 
 
+def _rh_bypass_reference_chain(workflow: dict, load_id: str) -> bool:
+    """FLUX.2 式参考链(LoadImage → 缩放 → VAEEncode → ReferenceLatent 串联)的整条摘除:
+    顺 load_id 单线下探到 ReferenceLatent 的 latent 位,把该 ReferenceLatent 的下游改接它的
+    conditioning 上游(等同界面 Bypass),再删掉沿途节点。沿途节点另有旁支消费者时不动、返回 False。"""
+    chain, cur = [load_id], load_id
+    for _ in range(8):
+        users = [(cid, key) for cid, node in workflow.items() if isinstance(node, dict)
+                 for key, value in (node.get("inputs") or {}).items()
+                 if _node_link(value) and str(value[0]) == cur]
+        if len(users) != 1:
+            return False
+        cid, key = users[0]
+        node = workflow[cid]
+        if node.get("class_type") == "ReferenceLatent":
+            upstream = (node.get("inputs") or {}).get("conditioning")
+            if key != "latent" or not _node_link(upstream):
+                return False
+            for other in workflow.values():
+                inputs = other.get("inputs") if isinstance(other, dict) else None
+                for k, value in list((inputs or {}).items()):
+                    if _node_link(value) and str(value[0]) == cid:
+                        inputs[k] = list(upstream)
+            for nid in chain + [cid]:
+                workflow.pop(nid, None)
+            return True
+        chain.append(cid)
+        cur = cid
+    return False
+
+
 def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> None:
     """把已上传的 --ref 按顺序绑进图生图模板的 LoadImage 输入图节点(第 N 张 → 第 N 个,
     顺序见 _rh_image_load_order)。
 
     模板 LoadImage 多于本次参考图时,多出的节点连同它接的可选图位(image2/image3…)一并摘掉——
-    留着会把作者演示图静默混入生产请求;多出的节点接在必需输入位上则提交前报错不发请求。"""
+    留着会把作者演示图静默混入生产请求;走 ReferenceLatent 串联链的(FLUX.2)整条旁路摘除;
+    多出的节点接在其它必需输入位上则提交前报错不发请求。"""
     names = [file_names] if isinstance(file_names, str) else list(file_names)
     order = _rh_image_load_order(workflow)
     if not order:
@@ -3023,6 +3054,8 @@ def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> No
     for nid, name in zip(order, names):
         workflow[nid].setdefault("inputs", {})["image"] = name
     for nid in order[len(names):]:
+        if _rh_bypass_reference_chain(workflow, nid):
+            continue
         for cid, node in workflow.items():
             if not isinstance(node, dict):
                 continue
@@ -3317,19 +3350,37 @@ def _rh_image_ref_slots(workflow: dict) -> int:
     return len(_rh_image_load_order(workflow))
 
 
+def _comfy_local_ref_slots(cfg: dict) -> int:
+    """本地 / Comfy Cloud 参考图工作流(ref_workflow)的 LoadImage 个数;未配置或读不到按 1(单图模板)。"""
+    try:
+        path = _resolve_comfy_workflow_path((cfg.get("ref_workflow") or "").strip())
+        workflow = json.loads(path.read_text())
+        return sum(1 for node in workflow.values()
+                   if isinstance(node, dict) and node.get("class_type") == "LoadImage") or 1
+    except Exception:  # noqa: BLE001
+        return 1
+
+
 def image_ref_capacity(cfg: dict) -> int | None:
     """生效图像渠道的「图生图」一次能收几张参考图;None = 渠道自身不设此限(各直连渠道),
     0 = 没配置可用的图生图(调用方应走纯文生图、不传参考图)。
 
-    comfyui:仅 RunningHub 运行方式且已选图生图工作流时,按模板 LoadImage 个数(原图重绘模板算 0);
-    本地 / Comfy Cloud 的参考图工作流是单图 img2img,算 0。
+    comfyui:RunningHub 运行方式且已选图生图工作流时,按模板 LoadImage 个数(原图重绘模板算 0);
+    本地 / Comfy Cloud 的 ref_workflow 是多 LoadImage 参考链模板时同样按槽位数,单图 img2img 模板算 0。
     agentics:图生图 profile(显式 --model 优先)的 input_images.max_items;未选或 profile 不收图算 0。
     取不到模板/详情(未登录、断网)按 0,只提醒不报错。"""
     provider = cfg.get("provider")
     try:
         if provider == "comfyui":
             ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
-            if not _comfy_is_rh(cfg) or not ref_id:
+            if not _comfy_is_rh(cfg):
+                # 本地 / Comfy Cloud:多 LoadImage 参考链模板按槽位数;单图 img2img 模板仍算 0
+                slots = _comfy_local_ref_slots(cfg)
+                if slots < 2:
+                    return 0
+                path = _resolve_comfy_workflow_path((cfg.get("ref_workflow") or "").strip())
+                return _rh_image_ref_slots(json.loads(path.read_text()))
+            if not ref_id:
                 return 0
             return _rh_image_ref_slots(json.loads(_rh_workflow_text({**cfg, "rh_workflow_id": ref_id})))
         if provider == "agentics":
@@ -3361,9 +3412,11 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
               "CHECKPOINT": cfg.get("checkpoint") or ""}
     workflow_cfg = cfg
     rh_ref_names = None
+    local_ref_names = None
     if refs:
-        if len(refs) > 1 and not rh:
-            raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref")
+        if len(refs) > 1 and not rh and _comfy_local_ref_slots(cfg) < 2:
+            raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref"
+                               "(多张参考图请选多 LoadImage 模板,如 comfy/image-flux2-dev-fp8-ref10-api.json)")
         if rh:
             ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
             if not ref_id:
@@ -3377,9 +3430,13 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
             ref_workflow = (cfg.get("ref_workflow") or "").strip()
             if not ref_workflow:
                 raise RuntimeError("ComfyUI 图片渠道未配置参考图工作流(ref_workflow)")
-            tokens["FIRST_FRAME"] = _comfy_upload(base, refs[0], hdrs)
+            local_ref_names = [_comfy_upload(base, ref, hdrs) for ref in refs]
+            tokens["FIRST_FRAME"] = local_ref_names[0]
             workflow_cfg = {**cfg, "workflow": ref_workflow}
     wf = _comfy_workflow(workflow_cfg, tokens, "image")
+    if local_ref_names and len(_rh_image_load_order(wf)) > 1:
+        # 多 LoadImage 模板(FLUX.2 参考链一类):按序绑 --ref,多出的槽位整条摘除,与 RunningHub 同一逻辑
+        _apply_rh_image_reference(wf, local_ref_names)
     if rh:
         # 云端工作区模板常无占位符,占位符替换空转;缺哪项就顺连线直绑哪项
         _apply_rh_image_bindings(_rh_workflow_text(workflow_cfg), wf, prompt,

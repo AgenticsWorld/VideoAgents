@@ -593,7 +593,7 @@ def test_agentics_image_config_splits_text_to_image_and_image_to_image(monkeypat
     cfg_path = tmp_path / "genconfig.json"
     cfg_path.write_text(json.dumps({"image": {
         "provider": "agentics",
-        "agentics": {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"}}}))
+        "agentics": {"t2i": "flux2-dev-t2i", "i2i": "flux2-dev-i2i-10ref"}}}))
     monkeypatch.setattr(genmedia, "CONFIG_PATH", cfg_path)
     monkeypatch.setattr(genmedia, "_agentics_connection", lambda: ("https://api.agentics.world", "jwt"))
     monkeypatch.delenv("VIDEOAGENTS_IMAGE_PROVIDER", raising=False)
@@ -601,7 +601,7 @@ def test_agentics_image_config_splits_text_to_image_and_image_to_image(monkeypat
     monkeypatch.setattr(genmedia, "_forbid_dispatch_layer", lambda kind: None)
 
     cfg = genmedia.get_config("image")
-    assert cfg["t2i"] == "ideogram-4-t2i" and cfg["i2i"] == "qwen-image-i2i"
+    assert cfg["t2i"] == "flux2-dev-t2i" and cfg["i2i"] == "flux2-dev-i2i-10ref"
     assert cfg["model"] == "" and cfg["profile_code"] == ""
 
     calls = []
@@ -611,8 +611,8 @@ def test_agentics_image_config_splits_text_to_image_and_image_to_image(monkeypat
     monkeypatch.setattr(genmedia, "_save", lambda data, output: output)
     genmedia._generate_image("hello", "out.png")
     genmedia._generate_image("hello", "out.png", refs=["ref.png"])
-    assert calls[0][0] == "ideogram-4-t2i" and calls[0][1] == {"input_images": []}
-    assert calls[1][0] == "qwen-image-i2i" and calls[1][1] == {"input_images": ["ref.png"]}
+    assert calls[0][0] == "flux2-dev-t2i" and calls[0][1] == {"input_images": []}
+    assert calls[1][0] == "flux2-dev-i2i-10ref" and calls[1][1] == {"input_images": ["ref.png"]}
 
     # 显式 --model(环境变量)优先于两侧默认
     monkeypatch.setenv("VIDEOAGENTS_IMAGE_MODEL", "custom-i2i")
@@ -630,5 +630,5 @@ def test_genconfig_migrates_legacy_agentics_image_profile_and_empty_defaults():
              "deepagents": {"agentics": {"model": "", "custom_model": ""}}}
     core._migrate_genconfig(empty)
     merged = core._merge(core.DEFAULT_GENCONFIG, empty)
-    assert merged["image"]["agentics"] == {"t2i": "ideogram-4-t2i", "i2i": "qwen-image-i2i"}
+    assert merged["image"]["agentics"] == {"t2i": "flux2-dev-t2i", "i2i": "flux2-dev-i2i-10ref"}
     assert merged["deepagents"]["agentics"]["model"] == "z-ai/glm-5.3"

@@ -93,8 +93,9 @@ SKETCH_STYLE_PROMPT_TEXT_ONLY = (
     "Strictly black-and-white. " + SKETCH_TEXT_ONLY_TAIL
 )
 # 参考图按「图生图是否配置」决定的渠道(2026-09-19 用户拍板,取代 09-17/09-18 的一律纯文生图):
-# comfyui 的本地 / Comfy Cloud 参考图工作流与原图重绘(img2img)模板,「参考图」是初始画面,传人物 sheet 会把构图
-# 锁死成设定稿——仍不传、纯文生图;RunningHub 选了真正收参考图的图生图工作流(如 Qwen-Image-Edit,多个 LoadImage
+# comfyui 的单图原图重绘(img2img)模板,「参考图」是初始画面,传人物 sheet 会把构图
+# 锁死成设定稿——仍不传、纯文生图;选了真正收参考图的图生图工作流(RunningHub 的 Qwen-Image-Edit / FLUX.2,
+# 或本地 / Comfy Cloud 的多 LoadImage 参考链模板 comfy/image-flux2-dev-fp8-ref10-api.json:多个 LoadImage
 # 作条件输入、空 latent)才传人物 sheet,张数以模板 LoadImage 个数封顶。agentics 同理:图生图 profile 收几张传几张,
 # 没配或取不到详情走文生图 profile。容量判定见 genmedia.image_ref_capacity。
 REF_CONDITIONAL_SKETCH_PROVIDERS = ("comfyui", "agentics")
