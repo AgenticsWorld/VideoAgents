@@ -28,7 +28,7 @@ import re
 from pathlib import Path
 
 from modules.prompt_layout import paragraphize
-from modules.shot_plates import _remap_images, GC_KEY, _SPATIAL_RE, _GRID_RE, _MAPUSE_RE, _MAPONLY_RE, _TILE_RE
+from modules.shot_plates import plate_style, plate_negative, _remap_images, GC_KEY, _SPATIAL_RE, _GRID_RE, _MAPUSE_RE, _MAPONLY_RE, _TILE_RE
 from modules.whitebox import component, read
 
 SCHEMA = 'scene_plates.v1'
@@ -248,7 +248,7 @@ def _style(base: Path) -> tuple[str, str]:
         frag = ', '.join(x for x in (str(sp.get('base') or ''), str(sp.get('register_day') or '')) if x)
     drop = re.compile(r'character|skin|hair|garment|fabric|embroider|face|costume|depth of field|bokeh', re.I)
     frag = ', '.join(c.strip() for c in str(frag).split(',') if c.strip() and not drop.search(c))
-    return frag, str(neg)
+    return plate_style(frag), plate_negative(str(neg))
 
 
 def _scene_docs(base: Path, sid: str) -> tuple[str, str, str]:

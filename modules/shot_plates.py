@@ -142,6 +142,34 @@ def strip_dof(style: str) -> str:
     return out
 
 
+# 空场景图(背景图/母图/场景视角图)里的人物用语。实证 fengshen3 SCN-0110 仰拍天空母图:参考图几乎全空时,
+# 风格串的「hair solved strand by strand / hemp and leather / rimming the subject」与并进正文的人脸负面词
+# (方舟等渠道没有独立负面通道,negative 以「避免出现:…」拼进 prompt)一起把一个白须老人画了出来。
+_PLATE_STYLE_PERSON_RE = re.compile(
+    r'\b(subject|character|figure|portrait|hair|skin|face|facial|eyes?|costume|garment|fabric|embroider\w*|'
+    r'hemp|silk|gauze|leather)\b', re.I)
+_PLATE_NEG_PERSON_RE = re.compile(
+    r'\b(face|facial|skin|eyes?|iris|pupils?|sclera|hair|beard|wrinkles?|age spots?|elderly|old (man|woman)|baby|toddler|'
+    r'child|cheeks?|nose|limbs?|organs?|anatomy|character|protagonist|figure|creature|selfie|id photo|passport photo|'
+    r'paparazzi|bustier|swimwear|lingerie|clothing|chibi|proportions|super deformed|'
+    r'scale reference|foreground)\b', re.I)   # 末两项:「须有前景/比例参照物」类条目对空场景图等于要求补一个主体
+
+
+def plate_style(style: str) -> str:
+    """空场景图用的风格串:按逗号分句剔除描述人物(主体/发丝/皮肤/服装面料)的子句,分号分组保留。"""
+    groups = []
+    for grp in re.split(r'[;;]', style or ''):
+        keep = [c.strip() for c in re.split(r'[,,]', grp) if c.strip() and not _PLATE_STYLE_PERSON_RE.search(c)]
+        if keep:
+            groups.append(', '.join(keep))
+    return '; '.join(groups)
+
+
+def plate_negative(negative: str) -> str:
+    """空场景图用的风格负面词:剔除人脸/人物/服装类条目,只留场景、画风与构图类。"""
+    return ', '.join(c.strip() for c in re.split(r'[,,]', negative or '') if c.strip() and not _PLATE_NEG_PERSON_RE.search(c))
+
+
 # ---------------------------------------------------------------- camera facts / projection
 def camera_facts(key, fmt, ex, ez, texts):
     pos, tgt, fov = key['position'], key['target'], key['fov']
@@ -634,7 +662,7 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
         lines.append("General location description for materials and era only (only the elements listed above are in frame): " + desc)
     lines.append("Empty location plate: no people, no characters, no human figures or silhouettes, no animals, no moving vehicles, "
                  "no text, no watermark, no grid lines, no split screen, one single full-frame photograph.")
-    style = strip_dof(style)
+    style = plate_style(strip_dof(style))
     if style:
         lines.append("Style: " + style)
     return '\n'.join(lines)
@@ -921,7 +949,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, mfacts['bearing_deg']) if sun else None
         prompt = build_prompt(mfacts, phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame)
-        negative = ', '.join(x for x in (style_doc.get('negative_prompt_en') or '', scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER) if x)
+        negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER) if x)
         # [Image 1] = 场景全景按母图机位重投影(2026-09-10 全景制):规划里服务本机位的锚点优先,空洞过多换锚点,都不行就在本机位加锚点出全景
         scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
         pano_rel = str(Path(d['whitebox_frame']).with_name(f"{d['key']}.pano.jpg"))

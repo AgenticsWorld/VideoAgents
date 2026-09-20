@@ -30,7 +30,7 @@ from pathlib import Path
 
 from modules.whitebox import component, read, image_size
 from modules.shot_plates import (orientation_axes, bearing_deg, compass, cardinal, strip_compass, sun_relative,
-                                 _SPATIAL_RE, _GRID_RE, _MAPUSE_RE, _MAPONLY_RE, _TILE_RE, _remap_images, GC_KEY)
+                                 _SPATIAL_RE, _GRID_RE, _MAPUSE_RE, _MAPONLY_RE, _TILE_RE, _remap_images, GC_KEY, plate_style, plate_negative)
 from modules.cardinal_plates import lens_fov, NEGATIVE as CARDINAL_NEGATIVE
 from modules.prompt_layout import paragraphize
 
@@ -475,7 +475,7 @@ def _style(base: Path, time_of_day: str) -> tuple[str, str]:
         frag = ', '.join(x for x in (str(sp.get('base') or ''), str(reg)) if x)
     drop = re.compile(r'character|skin|hair|garment|fabric|embroider|face|costume|depth of field|bokeh', re.I)
     frag = ', '.join(c.strip() for c in str(frag).split(',') if c.strip() and not drop.search(c))
-    return frag, str(neg)
+    return plate_style(frag), plate_negative(str(neg))
 
 
 def lighting_scheme(base: Path, sid: str, scheme_id: str | None) -> dict:
