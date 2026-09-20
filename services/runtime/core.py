@@ -807,11 +807,14 @@ DEFAULT_GENCONFIG = {
                        "custom_model": "", "voice": ""},
         # ComfyUI:本地 TTS,按角色内容自动选本地参考音频;工作流由用户选择。
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
-                    "workflow": "",
+                    # 两套工作流(2026-09-20,同图像的文生图/图生图):workflow / rh_workflow_id = Voice Clone
+                    # (嗓音样本 + 台词出对白);design_workflow / rh_design_workflow_id = Voice Design
+                    # (按角色嗓音文字描述出嗓音样本)。genmedia 按用途自动选,未配 Voice Design 时一律 Clone
+                    "workflow": "", "design_workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
-                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_workflow_id": "", "rh_design_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
     },
     # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling 固定中国北京接口；
@@ -1093,7 +1096,7 @@ def _migrate_genconfig(config: dict) -> None:
         if not isinstance(comfy, dict):
             continue
         _split_legacy_key(comfy, "rh_api_key", ("rh_api_key_cn", "rh_api_key_ai"))
-        for key in ("workflow", "ref_workflow"):
+        for key in ("workflow", "ref_workflow", "design_workflow"):
             value = comfy.get(key)
             if isinstance(value, str) and value.startswith("data/comfy/"):
                 comfy[key] = "comfy/" + value[len("data/comfy/"):]
@@ -10603,7 +10606,7 @@ async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
                or str(comfy.get("rh_api_key") or "").strip())
         if not key:
             continue
-        for field in ("rh_workflow_id", "rh_ref_workflow_id"):
+        for field in ("rh_workflow_id", "rh_ref_workflow_id", "rh_design_workflow_id"):
             wf_id = str(comfy.get(field) or "").strip()
             if wf_id:
                 jobs.setdefault((mode, wf_id), key)

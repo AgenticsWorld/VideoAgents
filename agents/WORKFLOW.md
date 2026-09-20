@@ -1021,6 +1021,7 @@ python3 modules/genmedia.py tts \
   [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;火山 seed-audio-1.0 描述定制:禁传,speaker 名会被忽略;ComfyUI 禁止手填>] \
   [--speed 1.0] [--instructions "<语气/情绪指令;OpenAI 系模型生效,火山注入情绪指令,ComfyUI 参与音色匹配>"]
 # ComfyUI TTS 会读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
+# **仅当** ComfyUI TTS 渠道同时配置了 Voice Design 工作流时(「生成模型」页 TTS › ComfyUI 两个下拉都已选;未配则上一行旧行为不变):输出文件名以 `_voiceprint` 结尾(出角色/旁白嗓音样本)= 宿主自动走 Voice Design,按 voice.json 声学字段(旁白按声线卡/--instructions)拼嗓音文字描述出声,不用参考音频;其余合成(对白/旁白)= 自动走 Voice Clone,参考音频取项目冻结样本 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`(旁白 NARRATOR_voiceprint.mp3),样本缺失才回退 TimbreModel 选型并在 stderr 提醒。调用方式不变(照传 --character/--variant,禁手填 --voice);casting 的 tts_voice 此时登记为该冻结样本文件名。
 # 火山渠道模型为 seed-audio-1.0(Doubao-音频生成 1.0,描述定制嗓音)时同 ComfyUI 纪律:角色传 --character、旁白靠 --instructions 描述声线,禁传 --voice;声线描述由 voice.json 声学字段自动拼装,项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚(逐句/逐段合成不漂音色,§8A)。
 ```
 

@@ -326,6 +326,13 @@ const PROVIDER_META={
   comfyui:{label:'ComfyUI'},
   elevenlabs:{label:'ElevenLabs'},
 };
+// ComfyUI 渠道按用途分两套工作流的板块(主工作流 + 第二工作流):图像=文生图/图生图;
+// TTS=Voice Clone(按嗓音样本+台词出对白)/Voice Design(按嗓音文字描述出角色嗓音样本)
+const SECOND_WF={
+  image:{mainRh:'云端文生图工作流',rh:'云端图生图工作流',mainApi:'文生图API',api:'图生图API',
+         rhField:'rh_ref_workflow_id',wfField:'ref_workflow'},
+  tts:{mainRh:'云端 Voice Clone 工作流',rh:'云端 Voice Design 工作流',mainApi:'Voice Clone API',api:'Voice Design API',
+       rhField:'rh_design_workflow_id',wfField:'design_workflow'}};
 const SECTIONS={
   image:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
   video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
@@ -752,16 +759,16 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
     // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
     const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
-    rw.appendChild(el('label',{},kind==='image'?'云端文生图工作流':dh?'云端数字人工作流':'云端工作流'));
+    rw.appendChild(el('label',{},SECOND_WF[kind]?SECOND_WF[kind].mainRh:dh?'云端数字人工作流':'云端工作流'));
     const rsel=el('select',{id:`${kind}-comfy-rhwf`});
     rw.appendChild(rsel);
     const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
     rmb.onclick=()=>rhRemoveWf(kind);
     rw.appendChild(rmb);d.appendChild(rw);
-    if(kind==='image'){
-      const rw2=el('div',{className:'row',id:'image-comfy-rhrefwf-row',style:'display:none'});
-      rw2.appendChild(el('label',{},'云端图生图工作流'));
-      rw2.appendChild(el('select',{id:'image-comfy-rhrefwf'}));
+    if(SECOND_WF[kind]){
+      const rw2=el('div',{className:'row',id:`${kind}-comfy-rhrefwf-row`,style:'display:none'});
+      rw2.appendChild(el('label',{},SECOND_WF[kind].rh));
+      rw2.appendChild(el('select',{id:`${kind}-comfy-rhrefwf`}));
       d.appendChild(rw2);
     }
     const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
@@ -789,11 +796,11 @@ function buildPanel(kind,p){
       sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
       cr.appendChild(sel);d.appendChild(cr);
     }
-    const wr=wfRow(kind,`${kind}-comfy-wf`,kind==='image'?'文生图API':dh?'InfiniteTalk 工作流':'工作流 API');
+    const wr=wfRow(kind,`${kind}-comfy-wf`,SECOND_WF[kind]?SECOND_WF[kind].mainApi:dh?'InfiniteTalk 工作流':'工作流 API');
     wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
-    if(kind==='image'){
-      const wr2=wfRow(kind,'image-comfy-ref-wf','图生图API');
-      wr2.id='image-comfy-ref-wf-row';d.appendChild(wr2);
+    if(SECOND_WF[kind]){
+      const wr2=wfRow(kind,`${kind}-comfy-ref-wf`,SECOND_WF[kind].api);
+      wr2.id=`${kind}-comfy-ref-wf-row`;d.appendChild(wr2);
     }
     // 数字人:本地/云端跑 InfiniteTalk API 工作流;RunningHub 工作流普通导出件按唯一 LoadImage/LoadAudio 自动绑定
     const dhWf='API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符';
@@ -823,6 +830,8 @@ function buildPanel(kind,p){
         +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长'));
     }
     if(kind==='tts'){
+      d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-modes'},
+        'Voice Design:按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用);Voice Clone:按嗓音样本 + 对白文字生成对白。两者按用途自动选择;未配置 Voice Design 时一律走 Voice Clone'));
       d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-extra'},
         '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
         +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
@@ -845,9 +854,9 @@ function comfyModeUI(kind){
   $(`#${kind}-comfy-wf-row`).style.display=rh?'none':'';
   $(`#${kind}-comfy-rhinst-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-rhinst-hint`).style.display=rh?'':'none';
-  if(kind==='image'){
-    $('#image-comfy-rhrefwf-row').style.display=rh?'':'none';
-    $('#image-comfy-ref-wf-row').style.display=rh?'none':'';
+  if(SECOND_WF[kind]){
+    $(`#${kind}-comfy-rhrefwf-row`).style.display=rh?'':'none';
+    $(`#${kind}-comfy-ref-wf-row`).style.display=rh?'none':'';
   }
   $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
@@ -857,7 +866,7 @@ function comfyModeUI(kind){
   // 收藏按站点过滤(.cn/.ai 账号不互通),切换运行方式后重建下拉
   if(rh){
     fillRhWfSelect(kind,`${kind}-comfy-rhwf`,$(`#${kind}-comfy-rhwf`).value);
-    if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+    if(SECOND_WF[kind])fillRhWfSelect(kind,`${kind}-comfy-rhrefwf`,$(`#${kind}-comfy-rhrefwf`).value);
   }
 }
 
@@ -908,7 +917,7 @@ async function rhAddWf(kind){
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
   RH_WFS[kind].push({id:r.id,note,site:mode});
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,r.id);
-  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  if(SECOND_WF[kind])fillRhWfSelect(kind,`${kind}-comfy-rhrefwf`,$(`#${kind}-comfy-rhrefwf`).value);
   $(`#${kind}-comfy-rhadd`).value='';$(`#${kind}-comfy-rhnote`).value='';
   st.className='status ok';
   st.textContent=I18N.f('✓ 已添加 {id}({n} 个节点)',{id:r.id,n:r.node_count})
@@ -922,7 +931,7 @@ function rhRemoveWf(kind){
   const mode=$(`#${kind}-comfy-mode`).value;
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
-  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',$('#image-comfy-rhrefwf').value);
+  if(SECOND_WF[kind])fillRhWfSelect(kind,`${kind}-comfy-rhrefwf`,$(`#${kind}-comfy-rhrefwf`).value);
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -1416,10 +1425,10 @@ function loadComfyForm(kind,cc){
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,cc.rh_workflow_id||'');
   $(`#${kind}-comfy-rhinst`).value=['standard','plus','ultra'].includes(cc.rh_instance_type)
     ?cc.rh_instance_type:'standard';
-  if(kind==='image')fillRhWfSelect('image','image-comfy-rhrefwf',cc.rh_ref_workflow_id||'');
+  if(SECOND_WF[kind])fillRhWfSelect(kind,`${kind}-comfy-rhrefwf`,cc[SECOND_WF[kind].rhField]||'');
   $(`#${kind}-comfy-url`).value=cc.url||'';
   fillWfSelect(`${kind}-comfy-wf`,kind,cc.workflow||'');
-  if(kind==='image')fillWfSelect('image-comfy-ref-wf','image',cc.ref_workflow||'');
+  if(SECOND_WF[kind])fillWfSelect(`${kind}-comfy-ref-wf`,kind,cc[SECOND_WF[kind].wfField]||'');
   const sel=$(`#${kind}-comfy-ckpt`);
   if(sel&&cc.checkpoint){
     sel.appendChild(el('option',{value:cc.checkpoint,textContent:cc.checkpoint}));
@@ -1580,6 +1589,8 @@ function collect(){
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',
+                 design_workflow:pickWf('tts-comfy-ref-wf'),
+                 rh_design_workflow_id:$('#tts-comfy-rhrefwf').value,
                  timbre_dir:'data/TimbreModel',
                  timbre_catalog:'data/TimbreModel/catalog.json'}:{})};
     if(SECTIONS[kind].providers.includes('volcengine'))

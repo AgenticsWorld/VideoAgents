@@ -3267,9 +3267,18 @@ def _apply_rh_music_bindings(raw: str, workflow: dict, prompt: str, lyrics: str,
                 _rh_bind_number(workflow, slot[0], "seed", seed)
 
 
+# TTS 生成节点的台词输入位名:多数节点叫 text,Qwen3-TTS 克隆节点(FB_Qwen3TTSVoiceClone)叫 target_text
+_RH_TTS_TEXT_KEYS = ("text", "target_text")
+
+
+def _rh_tts_text_key(inputs: dict) -> str:
+    return next((key for key in _RH_TTS_TEXT_KEYS
+                 if isinstance(inputs.get(key), str) or _node_link(inputs.get(key))), "")
+
+
 def _rh_tts_generate_node(workflow: dict) -> dict:
     """TTS 生成节点定位:从 SaveAudio*/PreviewAudio 落盘节点顺 audio/samples 连线
-    上溯到第一个带 text 输入的节点(TTS 工作流通常无采样器,主采样器锚点不适用)。"""
+    上溯到第一个带台词输入位(text / target_text)的节点(TTS 工作流通常无采样器,主采样器锚点不适用)。"""
     sinks = sorted((node for node in workflow.values() if isinstance(node, dict)
                     and str(node.get("class_type") or "").startswith(("SaveAudio", "PreviewAudio"))),
                    key=lambda n: 0 if str(n.get("class_type")).startswith("SaveAudio") else 1)
@@ -3282,8 +3291,7 @@ def _rh_tts_generate_node(workflow: dict) -> dict:
             if not isinstance(node, dict):
                 break
             inputs = node.setdefault("inputs", {})
-            value = inputs.get("text")
-            if isinstance(value, str) or _node_link(value):
+            if _rh_tts_text_key(inputs):
                 return node
             link = inputs.get("audio") or inputs.get("samples")
     raise RuntimeError(
@@ -3308,7 +3316,8 @@ def _apply_rh_tts_bindings(raw: str, workflow: dict, text: str, ref_audio: str,
         return cache[0]
 
     if "{{TEXT}}" not in raw and "{{PROMPT}}" not in raw:
-        container, key = _rh_resolve_text_slot(workflow, gen_node()["inputs"], "text")
+        inputs = gen_node()["inputs"]
+        container, key = _rh_resolve_text_slot(workflow, inputs, _rh_tts_text_key(inputs))
         container[key] = text
     if "{{REF_AUDIO}}" not in raw and "{{VOICE}}" not in raw:
         loads = [node for node in workflow.values()
@@ -3327,6 +3336,63 @@ def _apply_rh_tts_bindings(raw: str, workflow: dict, text: str, ref_audio: str,
         if not _rh_bind_number(workflow, gen_node()["inputs"], "speed", float(speed)):
             print("[genmedia] RunningHub TTS 工作流无 speed 输入位,--speed 未注入(按模板语速出声)",
                   file=sys.stderr)
+
+
+# Voice Design 生成节点的输入位名:台词位(TTS-Audio-Suite 的 Voice Designer 叫 reference_text)与嗓音描述位
+_RH_TTS_DESIGN_TEXT_KEYS = ("text", "target_text", "reference_text")
+_RH_TTS_DESIGN_DESC_KEYS = ("instruct", "voice_instruction", "voice_description", "description")
+
+
+def _apply_rh_tts_design_bindings(raw: str, workflow: dict, text: str, desc: str, seed) -> None:
+    """RunningHub Voice Design 云工作流的无占位符直绑:台词绑生成节点台词位、嗓音文字描述绑
+    instruct / voice_instruction 位、seed 绑生成节点。该模式不用参考音频——模板里在用的
+    LoadAudio 会把作者演示音色混进来,提交前报错。定位不到台词/描述位一律提交前报错不发请求。"""
+    sinks = sorted((node for node in workflow.values() if isinstance(node, dict)
+                    and str(node.get("class_type") or "").startswith(("SaveAudio", "PreviewAudio"))),
+                   key=lambda n: 0 if str(n.get("class_type")).startswith("SaveAudio") else 1)
+    gen = None
+    for sink in sinks:
+        link = (sink.get("inputs") or {}).get("audio")
+        for _ in range(16):
+            if not _node_link(link):
+                break
+            node = workflow.get(str(link[0]))
+            if not isinstance(node, dict):
+                break
+            inputs = node.setdefault("inputs", {})
+            if any(isinstance(inputs.get(k), str) or _node_link(inputs.get(k))
+                   for k in _RH_TTS_DESIGN_DESC_KEYS):
+                gen = inputs
+                break
+            link = inputs.get("audio") or inputs.get("samples")
+        if gen is not None:
+            break
+    if gen is None:
+        raise RuntimeError(
+            "RunningHub Voice Design 工作流未定位到带嗓音描述输入位(instruct / voice_instruction)的生成节点"
+            "(从 SaveAudio 顺 audio 连线上溯);请检查模板或改用 {{VOICE_DESC}} 占位符")
+    if "{{TEXT}}" not in raw and "{{PROMPT}}" not in raw:
+        key = next((k for k in _RH_TTS_DESIGN_TEXT_KEYS
+                    if isinstance(gen.get(k), str) or _node_link(gen.get(k))), "")
+        if not key:
+            raise RuntimeError("RunningHub Voice Design 工作流的生成节点没有台词输入位"
+                               "(text / target_text / reference_text),无法注入本次文本")
+        container, slot = _rh_resolve_text_slot(workflow, gen, key)
+        container[slot] = text
+    if "{{VOICE_DESC}}" not in raw:
+        key = next(k for k in _RH_TTS_DESIGN_DESC_KEYS
+                   if isinstance(gen.get(k), str) or _node_link(gen.get(k)))
+        container, slot = _rh_resolve_text_slot(workflow, gen, key)
+        container[slot] = desc
+    referenced = {str(v[0]) for node in workflow.values() if isinstance(node, dict)
+                  for v in (node.get("inputs") or {}).values() if _node_link(v)}
+    if any(isinstance(node, dict) and node.get("class_type") == "LoadAudio" and nid in referenced
+           for nid, node in workflow.items()):
+        raise RuntimeError("RunningHub Voice Design 工作流含在用的 LoadAudio 参考音频节点,作者演示音色会混入;"
+                           "该模板请配置为 Voice Clone 工作流,或改选纯描述出声的模板")
+    if seed is not None and "{{SEED}}" not in raw:
+        if not _rh_bind_number(workflow, gen, "seed", seed):
+            print("[genmedia] RunningHub Voice Design 工作流未定位到种子位,seed 未注入", file=sys.stderr)
 
 
 def _rh_image_ref_slots(workflow: dict) -> int:
@@ -5233,7 +5299,7 @@ def _seedaudio_char_desc(character: str, variant: str, project: str, output: str
     gender = str(v.get("presented_gender") or v.get("gender") or "").strip()
     parts = []
     if gender:
-        parts.append({"男": "男性", "女": "女性"}.get(gender, gender))
+        parts.append({"男": "男性", "女": "女性", "male": "男性", "female": "女性"}.get(gender.casefold(), gender))
     for label, key in (("音高", "pitch"), ("音色:", "timbre"), ("口音:", "accent")):
         val = str(sel.get(key) or v.get(key) or "").strip()
         if val:
@@ -5519,6 +5585,46 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
     )
 
 
+def _is_voiceprint_sample(output: str) -> bool:
+    """输出是否为嗓音样本文件(assets/audio/voice/refs/<CHAR|NARRATOR>[_<variant>]_voiceprint.*):
+    出样本 = 人物嗓音设计,走 Voice Design;其余(对白/旁白)走 Voice Clone。"""
+    return Path(output).stem.casefold().endswith("_voiceprint")
+
+
+def _comfy_tts_design_cfg(cfg: dict) -> dict | None:
+    """ComfyUI TTS 渠道的 Voice Design 工作流配置(与图像 ref_workflow 同款:主工作流位换成设计工作流);
+    未配置返回 None = 单工作流旧行为。RunningHub 取 rh_design_workflow_id,本地 / Comfy Cloud 取 design_workflow。"""
+    if _comfy_is_rh(cfg):
+        wf_id = str(cfg.get("rh_design_workflow_id") or "").strip()
+        return {**cfg, "rh_workflow_id": wf_id} if wf_id else None
+    path = (cfg.get("design_workflow") or "").strip()
+    return {**cfg, "workflow": path} if path else None
+
+
+def _tts_comfyui_design(cfg, text, output, voice, instructions, character, variant, project):
+    """Voice Design:按嗓音文字描述出声(不用参考音频)。描述来源与火山 seed-audio 描述定制同口径:
+    角色取声纹卡 voice.json 声学字段(--voice 传描述文本可覆盖),旁白取旁白声线卡 / --instructions / 内置描述。"""
+    desc, tone = _seedaudio_desc(voice, instructions, character, variant, project, output)
+    if tone and tone != "平静自然":
+        desc = f"{desc},语气:{tone}"
+    print(f"[genmedia] Voice Design:{character or 'NARRATOR'}{'/' + variant if variant else ''} → {desc}",
+          file=sys.stderr)
+    rh = _comfy_is_rh(cfg)
+    base = hdrs = None
+    if not rh:
+        base, hdrs = _comfy_endpoint(cfg)
+    seed = random.randint(0, 2**31 - 1)
+    tokens = {"TEXT": text, "PROMPT": text, "VOICE_DESC": desc, "SEED": seed}
+    wf = _comfy_workflow(cfg, tokens, "tts")
+    if rh:
+        _apply_rh_tts_design_bindings(_rh_workflow_text(cfg), wf, text, desc, seed)
+    try:
+        return (_rh_run(cfg, wf, output, want_video=False) if rh
+                else _comfy_run(base, wf, output, want_video=False, headers=hdrs))
+    except RuntimeError as exc:
+        raise RuntimeError(f"ComfyUI Voice Design 后端执行失败:{exc}") from exc
+
+
 def _tts_comfyui(cfg, text, output, voice, speed, instructions,
                  character="", variant="", project=""):
     rh = _comfy_is_rh(cfg)
@@ -5528,8 +5634,25 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
         if not (cfg.get("workflow") or "").strip():
             raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
                                "(推荐 comfy/tts-indextts2-api.json)")
-    selection = _resolve_tts_reference(
-        cfg, text, output, voice, character, variant, project, instructions)
+    design_cfg = _comfy_tts_design_cfg(cfg)
+    local_voice = bool(voice) and any(p.is_file() for p in (
+        [Path(voice)] if Path(voice).is_absolute() else [Path.cwd() / voice, ROOT / voice]))
+    if design_cfg and not local_voice and _is_voiceprint_sample(output):
+        return _tts_comfyui_design(design_cfg, text, output, voice, instructions,
+                                   character, variant, project)
+    frozen = None if (local_voice or not design_cfg) else _seedaudio_ref(character, variant, project, output)
+    if frozen:
+        # 两套工作流模式:对白/旁白按项目冻结的嗓音样本克隆(样本由 Voice Design 出),不再走 TimbreModel 选型
+        selection = {"path": str(frozen), "file": frozen.name, "score": None,
+                     "reason": "project voiceprint sample", "character": character or "narrator",
+                     "variant": variant or "default", "profile": {}}
+    else:
+        if design_cfg and not local_voice:
+            print(f"[genmedia] Voice Clone:项目里还没有 {character or 'NARRATOR'} 的嗓音样本"
+                  "(assets/audio/voice/refs/*_voiceprint.mp3),本次回退 TimbreModel 自动选型;"
+                  "先出该角色的嗓音样本(Voice Design)即可固定音色", file=sys.stderr)
+        selection = _resolve_tts_reference(
+            cfg, text, output, voice, character, variant, project, instructions)
     ref = selection["path"]
     print("[genmedia] 自动音色:"
           f"{selection['character']}/{selection['variant']} → {selection['file']}"
