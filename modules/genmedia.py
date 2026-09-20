@@ -2696,7 +2696,7 @@ def _comfy_cloud_job(base: str, pid: str, headers: dict | None):
 
 def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
                headers: dict | None = None, prompt_id: str | None = None,
-               on_submit=None, on_status=None) -> str:
+               on_submit=None, on_status=None, should_stop=None) -> str:
     """提交工作流,轮询完成,下载首个产物到 output。
 
     want_video=True 优先选视频扩展名;want_video=False 时若 output 是音频扩展名
@@ -2722,6 +2722,12 @@ def _comfy_run(base: str, workflow: dict, output: str, want_video: bool,
     seen_in_queue = False
     is_cloud = base.rstrip("/") == COMFY_CLOUD_URL
     while time.time() < deadline:
+        if should_stop and should_stop():
+            try:
+                _post_json(f"{base}/interrupt", {}, headers)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[genmedia] ComfyUI 中断请求失败(忽略):{str(exc)[:200]}", file=sys.stderr)
+            raise RuntimeError("ComfyUI 任务已取消")
         time.sleep(2)
         try:
             if is_cloud:

@@ -5034,6 +5034,10 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
         ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
+    "comfyui": [
+        ("FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree",
+         "FastH3 Preview v1 VSA DataFree(本地 ComfyUI;T2VA,不支持参考图/尾帧)")
+    ],
     "minimax": [
         ("MiniMax-H3", "MiniMax H3(多模态生视频,768P/2K,4-15 秒)"),
     ],
@@ -14506,7 +14510,7 @@ def footage_file_path(name: str, rel: str) -> Path:
 
 # ---------------- 直播(设置菜单「高级→直播」:data/live/) ----------------
 # 业务实现在 modules/live_stream.py(零 core 依赖,可独立 CLI 排障);这里只做薄封装:
-# LiveError → ServiceError 映射,并注入「🎨 生成模型」页的 Fal 模型目录(与 Key 共用同一配置)。
+# LiveError → ServiceError 映射,并注入 Fal / 本地 ComfyUI 模型目录。
 
 def _live_lib():
     mods = str(ROOT / "modules")
@@ -14526,9 +14530,13 @@ def _live_call(fn, *args, **kw):
 
 def _live_decorate(res: dict) -> dict:
     """状态附带 Fal 模型目录(与生成模型页同一份 VIDEO_MODEL_CATALOG)与生效渠道的模型。"""
-    fal = (load_genconfig().get("video") or {}).get("fal") or {}
-    return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get("fal", [])],
-            "providers": [["fal", "Fal"]],
+    video = load_genconfig().get("video") or {}
+    provider = str((res.get("settings") or {}).get("provider") or "fal")
+    fal = video.get("fal") or {}
+    return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get(provider, [])],
+            "model_catalogs": {p: [list(m) for m in rows] for p, rows in VIDEO_MODEL_CATALOG.items()
+                               if p in ("fal", "comfyui")},
+            "providers": [["fal", "Fal"], ["comfyui", "本地 ComfyUI"]],
             "genconfig_model": str(fal.get("custom_model") or fal.get("model") or "")}
 
 
