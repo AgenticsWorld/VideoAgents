@@ -1132,49 +1132,87 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         mark_blocked(base, sid, idx, cfg, f'返回 {rw}x{rh},不是 2:1 全景')
         raise PanoUnsupported(f"当前图像模型 {cfg.get('provider')}/{cfg.get('model')} 返回 {rw}x{rh},不是 2:1 全景;"
                               "全景图与分镜背景图已暂停。请用户切换图像模型后重跑:场景预览页顶部「🌐 全景模型」有选则改那里,否则改控制台「🎨 生成模型」。")
-    proj = projection_check(target)
-    if proj and proj['verdict'] == 'FAIL':
-        rejected = target.with_suffix('.rejected-projection-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S') + '.png')
-        target.rename(rejected)
-        raise PanoProjectionError(
-            f"{sid}/{anchor['anchor_id']}/{scheme}: 成图不是等距柱状全景({proj['reason']}),已改名 {rejected.name},本批停下。"
-            f"重出:render_scene_panos.py --only {anchor['anchor_id']}(换 seed);重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出。")
-    if proj and proj['verdict'] == 'WARN':
-        log(f"   WARN 投影机检:{proj['reason']}")
-    conf = conformity_check(target, out / 'depth_pano.npy')
-    if conf and conf['verdict'] == 'FAIL':
-        rejected = target.with_suffix('.rejected-conformity-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S') + '.png')
-        target.rename(rejected)
-        raise PanoProjectionError(
-            f"{sid}/{anchor['anchor_id']}/{scheme}: {conf['reason']};已改名 {rejected.name},本批停下。"
-            f"重出:render_scene_panos.py --only {anchor['anchor_id']}(换 seed);重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出。")
-    if conf and conf['verdict'] == 'WARN':
-        log(f"   WARN 白模一致性:{conf['reason']}")
+    rec = {'file': target.name, 'scheme': scheme, 'mode': mode, 'parent': parent, 'time_of_day': time_of_day,
+           'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
+           'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
+           'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
+           'written_at': _now()}
+    rec['projection_check'] = proj = projection_check(target)
+    rec['conformity_check'] = conf = conformity_check(target, out / 'depth_pano.npy')
+    for kind, res, what in (('projection', proj, '成图不是等距柱状全景'), ('conformity', conf, '成图没有跟白模')):
+        if res and res['verdict'] == 'FAIL':
+            rejected = target.with_suffix(f'.rejected-{kind}-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S') + '.png')
+            target.rename(rejected)
+            # 被拒图也留 sidecar(提示词 / seed / 机检数值):判据有误拒时用户目视认可后 --adopt 免费认领,不必再花钱重出
+            rejected.with_suffix('.json').write_text(json.dumps({**rec, 'file': rejected.name, 'rejected': kind}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+            raise PanoProjectionError(
+                f"{sid}/{anchor['anchor_id']}/{scheme}: {what}({res['reason']}),已改名 {rejected.name},本批停下。"
+                f"重出:render_scene_panos.py --only {anchor['anchor_id']}(换 seed),重出次数计入用户设定的重跑次数,用尽即上报用户,不得无限重出;"
+                f"用户目视认可这张时:render_scene_panos.py --adopt {anchor['anchor_id']}(不花钱;Agent 不得自行认领)。")
+        if res and res['verdict'] == 'WARN':
+            log(f"   WARN {'投影机检' if kind == 'projection' else '白模一致性'}:{res['reason']}")
     if mode == 'chain':
         score = chain_consistency(chain, target)
         parent['consistency'] = score
         if score is not None and score < CONSISTENCY_WARN:
             log(f"   WARN 链式一致性 {score:.2f} < {CONSISTENCY_WARN}:请在预览页对照 {parent['anchor_id']} 全景核对,不一致用 render_scene_panos.py --redo {anchor['anchor_id']} 重出")
-    rec = {'file': target.name, 'scheme': scheme, 'mode': mode, 'parent': parent, 'time_of_day': time_of_day,
-           'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
-           'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
-           'prompt': prompt, 'negative': NEGATIVE, 'projection_check': proj, 'conformity_check': conf, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
-           'written_at': _now()}
-    (out / f'{scheme}.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    anchor.setdefault('panos', {})[scheme] = {k: rec[k] for k in ('file', 'mode', 'parent', 'channel', 'seed', 'size', 'time_of_day', 'written_at')}
-    save_index(base, sid, idx)
+    _commit_pano(base, sid, idx, anchor, scheme, rec)
     log(f"saved: {target.relative_to(base)}")
     return rec
 
 
-NADIR_DETAIL_FAIL = 0.7          # 底部 5% 行的横向细节 / 中段横向细节;等距柱状里天底被横向拉伸,实测合格 0.14–0.55、广角照片 0.85–2.6
-NADIR_DETAIL_SOFT = 0.4
+def _commit_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, rec: dict):
+    out = panos_dir(base, sid) / anchor['anchor_id']
+    (out / f'{scheme}.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    anchor.setdefault('panos', {})[scheme] = {k: rec.get(k) for k in ('file', 'mode', 'parent', 'channel', 'seed', 'size', 'time_of_day', 'written_at')}
+    save_index(base, sid, idx)
+
+
+def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print) -> dict:
+    """用户目视认可后把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱)。仍过一遍 2:1 与当前判据,结果照实记入 sidecar
+    (adopted.checks_at_adopt);已有正式全景时不覆盖。存量被拒图没有 sidecar 时 seed / 提示词记空。"""
+    from PIL import Image
+    idx = load_index(base, sid)
+    anchor = next((a for a in idx['anchors'] if a['anchor_id'] == anchor_id), None)
+    if not anchor:
+        raise PanoError(f'{sid}: 锚点不存在:{anchor_id}')
+    out = panos_dir(base, sid) / anchor_id
+    files = sorted((f for f in out.glob('*.rejected-*.png') if scheme is None or f.name.startswith(scheme + '.')), key=lambda f: f.stat().st_mtime)
+    if not files:
+        raise PanoError(f'{sid}/{anchor_id}: 没有被拒的成图可认领')
+    src = files[-1]
+    scheme = scheme or src.name.split('.rejected-')[0]
+    target = out / f'{scheme}.png'
+    if target.is_file():
+        raise PanoError(f'{sid}/{anchor_id}/{scheme}: 已有正式全景 {target.name},不覆盖(要换先 --redo 或手工挪走)')
+    rw, rh = Image.open(src).size
+    if abs(rw / rh - 2.0) > ASPECT_TOLERANCE:
+        raise PanoError(f'{src.name}: {rw}x{rh} 不是 2:1,不能认领')
+    side = read(src.with_suffix('.json'), {}) or {}
+    checks = {'projection_check': projection_check(src), 'conformity_check': conformity_check(src, out / 'depth_pano.npy')}
+    rec = {'mode': 'fresh', 'parent': None, 'time_of_day': None, 'channel': None, 'seed': None, 'refs': [], 'prompt': None, 'negative': None,
+           **{k: v for k, v in side.items() if k not in ('rejected',)}, **checks,
+           'file': target.name, 'scheme': scheme, 'size': [rw, rh], 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
+           'adopted': {'from': src.name, 'by': 'user', 'at': _now(), 'rejected_as': side.get('rejected') or src.name.split('.rejected-')[1].split('-')[0]},
+           'written_at': _now()}
+    src.rename(target)
+    if src.with_suffix('.json').is_file():
+        src.with_suffix('.json').unlink()
+    _commit_pano(base, sid, idx, anchor, scheme, rec)
+    log(f"   已认领 {src.name} → {target.name};当前判据:投影 {(checks['projection_check'] or {}).get('verdict')} / 白模一致性 {(checks['conformity_check'] or {}).get('verdict')}")
+    return rec
+
+
+NADIR_ANISO_FAIL = 0.65          # 天底带 横向细节 / 纵向细节:等距柱状里天底被横向拉伸,纹理成横向拉丝 → 实测合格 0.34–0.58、广角照片 0.71–0.76
+NADIR_ANISO_SOFT = 0.55
+NADIR_DETAIL_WARN = 0.7          # 底部横向细节 / 中段横向细节:中段是水面 / 雾 / 纯墙时会被放大(SCN-0110 重出图 1.37 却是合格全景,误拒)→ 只作 WARN
 SEAM_RATIO_WARN = 3.0            # 左右缘色差 / 相邻列色差基线;接缝不上只 WARN(合格全景也常见),与极区指标同时超限才 FAIL
 
 
 def projection_check(path: Path) -> dict | None:
-    """成图是不是等距柱状:① 天底横向细节比(主判据)② 天顶/天底行方差 ③ 左右缘接缝。
-    标定样本:dzg6 SCN-0002 / liaozhai3 SCN-0005 / fengshen3 SCN-0140、0046(合格)对 fengshen3 SCN-0110 A1–A12(2:1 广角照片)。"""
+    """成图是不是等距柱状:① 天底带各向异性(主判据,自归一,不受中段内容影响)② 天顶/天底行方差 ③ 左右缘接缝。
+    标定样本:dzg6 SCN-0002 / liaozhai3 SCN-0005 / fengshen3 SCN-0140、0046(合格)对 fengshen3 SCN-0110 首批 A1–A12(2:1 广角照片);
+    2026-09-20 重出的 SCN-0110 A1(地平线居中、直线已弯、天底已拉丝,但中段是平滑水面)曾被旧主判据「底部/中段横向细节比」误拒。"""
     try:
         import numpy as np
         from PIL import Image
@@ -1183,6 +1221,8 @@ def projection_check(path: Path) -> dict | None:
         dx = np.abs(np.diff(g, axis=1))
         mid = max(float(dx[154:358].mean()), 1e-3)
         nadir, zenith = float(dx[-26:].mean()) / mid, float(dx[:26].mean()) / mid
+        band = g[-40:-4]
+        aniso = float(np.abs(np.diff(band, axis=1)).mean()) / max(float(np.abs(np.diff(band, axis=0)).mean()), 1e-3)
         s = np.asarray(im.resize((256, 128), Image.BOX), dtype=np.float64)
         seam = float(np.abs(s[:, 0] - s[:, -1]).mean())
         inner = float(np.mean([np.abs(s[:, c] - s[:, c + 1]).mean() for c in range(8, 247, 8)]))
@@ -1190,14 +1230,19 @@ def projection_check(path: Path) -> dict | None:
         top_std, bot_std = float(s[:3].std(axis=1).mean()), float(s[-3:].std(axis=1).mean())
     except Exception:  # noqa: BLE001
         return None
-    rec = {'nadir_detail': round(nadir, 2), 'zenith_detail': round(zenith, 2), 'seam_ratio': round(seam_ratio, 1),
+    rec = {'nadir_aniso': round(aniso, 2), 'nadir_detail': round(nadir, 2), 'zenith_detail': round(zenith, 2), 'seam_ratio': round(seam_ratio, 1),
            'top_row_std': round(top_std, 1), 'bottom_row_std': round(bot_std, 1)}
-    if nadir > NADIR_DETAIL_FAIL:
-        return {**rec, 'verdict': 'FAIL', 'reason': f"天底未拉伸:底部横向细节比 {nadir:.2f} > {NADIR_DETAIL_FAIL}(像广角照片的清晰前景)"}
-    if nadir > NADIR_DETAIL_SOFT and top_std > 25 and bot_std > 15 and seam_ratio > SEAM_RATIO_WARN:
+    if aniso > NADIR_ANISO_FAIL:
+        return {**rec, 'verdict': 'FAIL', 'reason': f"天底未拉伸:底部纹理横/纵细节比 {aniso:.2f} > {NADIR_ANISO_FAIL}(像广角照片的清晰前景)"}
+    if aniso > NADIR_ANISO_SOFT and top_std > 25 and bot_std > 15 and seam_ratio > SEAM_RATIO_WARN:
         return {**rec, 'verdict': 'FAIL', 'reason': f"天顶/天底不成色带(行方差 {top_std:.0f}/{bot_std:.0f})且左右缘接不上(接缝比 {seam_ratio:.1f})"}
+    warns = []
+    if nadir > NADIR_DETAIL_WARN:
+        warns.append(f"近地前景偏实(底部/中段横向细节比 {nadir:.2f});俯拍机位的背景图留意地面纹理尺度")
     if seam_ratio > SEAM_RATIO_WARN:
-        return {**rec, 'verdict': 'WARN', 'reason': f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN}),请在预览页核对"}
+        warns.append(f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN}),朝镜头身后的机位留意接缝")
+    if warns:
+        return {**rec, 'verdict': 'WARN', 'reason': ';'.join(warns) + ',请在预览页核对'}
     return {**rec, 'verdict': 'PASS', 'reason': ''}
 
 

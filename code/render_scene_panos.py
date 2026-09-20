@@ -44,6 +44,8 @@ def main():
         ap.add_argument('--indoor', action='store_true')
         ap.add_argument('--outdoor', action='store_true')
         ap.add_argument('--seed', type=int, default=None)
+        ap.add_argument('--adopt', action='append', default=[], metavar='ANCHOR',
+                        help='用户目视认可后,把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱;可配 --scheme;Agent 不得自行使用)')
         ap.add_argument('--status', action='store_true', help='机检 scene_panos_ready:各 (锚点, 光照方案) 全景是否齐,缺则退出码 1')
     args, base = parse_args(__doc__, configure=configure)
     reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
@@ -56,6 +58,14 @@ def main():
     if not cams and not (args.anchor and args.only_new):
         print(f'{sid}: 没有白模机位(先 python code/render_whitebox.py --project {args.project} --ep <ep> --compile-only)', file=sys.stderr)
         return 1
+    if args.adopt:
+        try:
+            for aid in args.adopt:
+                sp.adopt_rejected(base, sid, aid, args.scheme or None)
+        except sp.PanoError as error:
+            print(f"错误:{error}", file=sys.stderr, flush=True)
+            return 1
+        return 0
     idx = sp.load_index(base, sid)
     only = None
     schemes = None

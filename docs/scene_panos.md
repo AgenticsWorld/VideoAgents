@@ -36,7 +36,7 @@
 
 1. **外景白模投影引导线**：`render_whitebox_pano` 对室外场景调 `draw_projection_guides`，在无几何的天空（虚拟平面高 25 m）与地面像素上画世界直角网格（镜头居格心，无线穿过天顶/天底）+ 地平线四向刻度（无文字）；直线弯成向两极汇聚的曲线是等距柱状最强的视觉签名。只改 `whitebox_pano.jpg`，不动深度全景。`depth_pano.json#guides` 记版本；存量外景白模在**出全景前**本机重渲（不作废已有全景）。室内不画。
 2. **提示词**：外景加 `EXTERIOR_PROJECTION_RULES`（无单一视向、地平线贯穿整幅、身后在两缘且接得上、天底拉伸不得是清晰前景、日/月只占一个方位）与 `GUIDES_REF_RULE`（引导线只示意曲率、不得画出）；所有全景末尾加 `PANO_PROJECTION_TAIL` 复述投影；风格段经 `pano_style` 只留材质/色调/颗粒分句，剔除 subject / layers of depth / backlight / god rays 等单镜头构图用语。
-3. **投影机检** `projection_check`：主判据天底横向细节比（底部 5% 行 ÷ 中段，合格 0.14–0.55、广角 0.85–2.6，> 0.7 FAIL）；辅判据极区行方差 + 左右缘接缝比同时超限 FAIL；仅接缝比 > 3 为 WARN（合格全景也常见）。FAIL → 成图改名 `<scheme>.rejected-projection-<时间>.png`、不入索引、抛 `PanoProjectionError`，**本批立即停下**（链式补洞会把错误投影传给后续锚点），CLI 打印 `[pano_projection_fail]` 退出码 3（`render_shot_plates.py` 同）。宿主不自动重出；Agent 用 `--only <锚点>` 重出，次数计入用户设定的重跑次数，用尽原文上报用户。结果记入成图 sidecar `projection_check`。
+3. **投影机检** `projection_check`：主判据**天底带各向异性**（底部带横向细节 ÷ 纵向细节；等距柱状里天底被横向拉伸、纹理成横向拉丝；自归一，不受中段内容影响；合格 0.34–0.58、广角照片 0.68–0.76，> 0.65 FAIL）；辅判据极区行方差 + 左右缘接缝比同时超限 FAIL；「底部 ÷ 中段横向细节比」> 0.7 与接缝比 > 3 只 WARN（前者在中段是水面 / 雾 / 纯墙时会被放大——SCN-0110 重出图 1.37 却是合格全景，曾被误拒，2026-09-20 改）。FAIL → 成图改名 `<scheme>.rejected-projection-<时间>.png` **并留同名 sidecar .json（提示词 / seed / 机检数值）**、不入索引、抛 `PanoProjectionError`，**本批立即停下**（链式补洞会把错误投影传给后续锚点），CLI 打印 `[pano_projection_fail]` 退出码 3（`render_shot_plates.py` 同）。宿主不自动重出；Agent 用 `--only <锚点>` 重出，次数计入用户设定的重跑次数，用尽原文上报用户。**判据误拒时**用户目视认可后 `render_scene_panos.py --scene <sid> --adopt <锚点> [--scheme <方案>]` 把最新一张被拒图认领为正式全景（不花钱；已有正式全景时不覆盖；sidecar 记 `adopted`）；Agent 不得自行认领。结果记入成图 sidecar `projection_check`。
 
 ## 锚点可见性（2026-09-20）
 
