@@ -271,7 +271,7 @@ def prepare_pano(base: Path, sid: str, *, source: str, anchor_id: str | None = N
         return record
     # depth2rgb:锚点的白模深度全景 → Marble API 出 RGB 全景
     anchor = _anchor(base, sid, anchor_id)
-    indoor = sp.is_indoor(base, sid)
+    indoor = sp.anchor_indoor(base, sid, load_scene(base, sid), anchor) if anchor else sp.is_indoor(base, sid)
     if anchor:
         adir = sp.panos_dir(base, sid) / anchor['anchor_id']
         if sp.whitebox_pano_stale(base, sid, anchor):
@@ -279,6 +279,7 @@ def prepare_pano(base: Path, sid: str, *, source: str, anchor_id: str | None = N
     else:
         scene = load_scene(base, sid)
         anchor = {'anchor_id': AUTO_ANCHOR_ID, 'position': choose_camera(scene), 'yaw_deg': 0.0, 'source': 'auto'}
+        indoor = sp.anchor_indoor(base, sid, scene, anchor)
         adir = out
         if force or sp.whitebox_pano_stale_at(adir, anchor):
             log(f"场景没有全景锚点,自动取机位 {anchor['position']}(离墙/家具最远处,离地 {CAMERA_HEIGHT_M} m)")

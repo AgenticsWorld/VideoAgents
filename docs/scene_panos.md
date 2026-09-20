@@ -38,6 +38,14 @@
 2. **提示词**：外景加 `EXTERIOR_PROJECTION_RULES`（无单一视向、地平线贯穿整幅、身后在两缘且接得上、天底拉伸不得是清晰前景、日/月只占一个方位）与 `GUIDES_REF_RULE`（引导线只示意曲率、不得画出）；所有全景末尾加 `PANO_PROJECTION_TAIL` 复述投影；风格段经 `pano_style` 只留材质/色调/颗粒分句，剔除 subject / layers of depth / backlight / god rays 等单镜头构图用语。
 3. **投影机检** `projection_check`：主判据**天底带各向异性**（底部带横向细节 ÷ 纵向细节；等距柱状里天底被横向拉伸、纹理成横向拉丝；自归一，不受中段内容影响；合格 0.34–0.58、广角照片 0.68–0.76，> 0.65 FAIL）；辅判据极区行方差 + 左右缘接缝比同时超限 FAIL；「底部 ÷ 中段横向细节比」> 0.7 与接缝比 > 3 只 WARN（前者在中段是水面 / 雾 / 纯墙时会被放大——SCN-0110 重出图 1.37 却是合格全景，曾被误拒，2026-09-20 改）。FAIL → 成图改名 `<scheme>.rejected-projection-<时间>.png` **并留同名 sidecar .json（提示词 / seed / 机检数值）**、不入索引、抛 `PanoProjectionError`，**本批立即停下**（链式补洞会把错误投影传给后续锚点），CLI 打印 `[pano_projection_fail]` 退出码 3（`render_shot_plates.py` 同）。宿主不自动重出；Agent 用 `--only <锚点>` 重出，次数计入用户设定的重跑次数，用尽原文上报用户。**判据误拒时**用户目视认可后 `render_scene_panos.py --scene <sid> --adopt <锚点> [--scheme <方案>]` 把最新一张被拒图认领为正式全景（不花钱；已有正式全景时不覆盖；sidecar 记 `adopted`）；Agent 不得自行认领。结果记入成图 sidecar `projection_check`。
 
+## 室内外判定（2026-09-20 重写）
+
+旧 `is_indoor` 对整份 lighting.json 做子串搜索，搜到的是**字段名 `"indoor"` 自己**：fengshen3 65 个有光照设定的场景里 57 个明写 `"indoor": false`（陈塘关全城、战场、山道…）全被判成室内——出全景会补天花板、按室内写提示词。现分两级：
+
+- **场景级** `scene_indoor(base, sid)` → True / False / **None（内外混合或判不出）**，依据按可信度：① `index.json#int_ext`（INT / EXT；INT/EXT = 混合）② lighting.json 显式 `indoor` 布尔，`enclosure` 写「内外交替 / 半室外」= 混合 ③ 场景名「内景 / 外景」④ 旧版设定（dzg6 / liaozhai3 无 indoor 字段）沿用旧口径，但只搜**值**不搜键名 ⑤ 只有白模的子场景跟上级。`is_indoor` = `scene_indoor is True`（不分锚点的地方用；混合按室外）。
+- **锚点级** `anchor_indoor(base, sid, scene, anchor, override)`：场景级有定论用它；None 时按白模围合判——地平线带里最近命中是通顶高墙（顶 ≥ max(0.6 × 场景高, 镜头高 + 1.5 m)）的射线平均占比 ≥ 0.7 = 室内（院墙矮于此不算）。结果写 `index.json anchors[].indoor`；`ensure_scene_panos` / 分镜背景图补锚点 / 世界模型都按锚点取。CLI `--indoor / --outdoor` 仍可整场景覆盖。
+- fengshen3 实测：39 个场景由室内改判室外、20 个为混合（逐锚点）、7 个室内不变；SCN-0046 洞内 A1 逐锚点 = 室内，SCN-0110 跟上级 SCN-0037 = 室外，SCN-0140 按名字「内景」= 室内；dzg6 / liaozhai3 判定结果逐场景与旧版一致。室内外判定变了的锚点在下次出全景前本机重渲白模，不作废已有全景。
+
 ## 服务半径（2026-09-20）
 
 锚点能服务的机位：水平距离 ≤ clamp(0.5 × 机位到主体距离, 最小半径, 10 m)，且锚点到机位、到主体的连线不被高实体挡住。**最小半径** `serve_min_m(scene)`：室内 3 m；室外 = 白模地面**短边** × 0.25，夹在 3–8 m（场景越大越开阔、背景越远视差越小；地面是已知几何、重投影精确；近处块体背后的空洞由 `PLATE_HOLE_MAX` 换 / 加锚点兜底；取短边是为了狭长街道不被长边带偏）。机位在白模地面之外（远景 / 航拍）按夹回地面边缘内 0.5 m 的点算距离——其锚点本来就只能落在那里。fengshen3 SCN-0110（40×22.5 m、63 机位、长焦近景为主）：21 → 13（界外机位合并）→ 7（室外半径 5.6 m）。盲区：只看尺寸不看拥挤程度，摆满摊位的大场景会偏松，靠空洞兜底；需要时调 `OUTDOOR_SERVE_SIDE_RATIO`。

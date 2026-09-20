@@ -688,7 +688,7 @@ def camera_stale(recorded: dict, current: dict) -> bool:
 
 # ---------------------------------------------------------------- pano reprojection for one plate
 def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str, facts: dict, width: int, height: int, output: Path,
-                        *, indoor: bool, seed=None, log=print) -> dict:
+                        *, indoor: bool | None, seed=None, log=print) -> dict:
     """按锚点优先级重投影;空洞 > PLATE_HOLE_MAX 换下一锚点;全部不合格 → 在本机位加锚点、出该方案全景后再重投影(保证每张背景图都基于全景)。"""
     from modules import scene_panos
     camera = {'position': facts['position'], 'target': facts['target'], 'fov_v_deg': facts['fov_v_deg']}
@@ -706,8 +706,10 @@ def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str,
     n = len(idx['anchors']) + 1
     while f'A{n}' in used:
         n += 1
-    anchor = {'anchor_id': f'A{n}', 'position': [round(cam['position'][0], 3), height_m, round(cam['position'][2], 3)], 'yaw_deg': 0.0,
-              'source': 'auto-self', 'locked': False, 'serves': [scene_panos._cam_key(cam)], 'panos': {}}
+    anchor = {'anchor_id': f'A{n}', 'position': [round(cam['position'][0], 3), height_m, round(cam['position'][2], 3)],
+              'yaw_deg': scene_panos.pick_seam_yaw([cam]), 'source': 'auto-self', 'locked': False, 'serves': [scene_panos._cam_key(cam)], 'panos': {}}
+    from modules.whitebox import load_scene
+    indoor = anchor['indoor'] = scene_panos.anchor_indoor(base, sid, load_scene(base, sid), anchor, indoor)   # 场景级 None(内外混合)→ 按这个锚点的围合判
     idx['anchors'].append(anchor)
     scene_panos.save_index(base, sid, idx)
     scene_panos.render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)

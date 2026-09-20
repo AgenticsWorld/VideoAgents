@@ -413,27 +413,79 @@ def cameras_by_scene(base: Path, eps: list | None = None) -> dict[str, list]:
     return out
 
 
-def is_indoor(base: Path, sid: str) -> bool:
-    """室内 = 渲染全景时补天花板。依据:lighting.json 任一方案 weather 含「室内」/indoor,或 architecture.json 文本含室内词。"""
-    bdir = base / 'bible/scenes' / component(sid)
-    text = json.dumps(read(bdir / 'lighting.json', {}) or {}, ensure_ascii=False)
-    arch = json.dumps((read(bdir / 'architecture.json', {}) or {}).get('form') or '', ensure_ascii=False)
-    blob = (text + arch).lower()
-    if any(k in blob for k in ('室内', 'indoor', 'interior')) and not any(k in arch.lower() for k in ('室外', 'outdoor', 'exterior', 'street')):
-        return True
-    # 子场景常常只有 whitebox.json、没有 lighting / architecture(fengshen3 SCN-0140「…前厅正堂(内景)」被判成室外 → 不补顶、厅堂上方画成天空):
-    # 再看场景登记的 int_ext 与场景名
-    layout = read(base / 'assets/concepts/scenes' / component(sid) / 'layout.json', {}) or {}
+_INDOOR_WORDS = ('室内', '内景', 'indoor', 'interior')
+_OUTDOOR_NAME_WORDS = ('室外', '外景', 'outdoor', 'exterior', 'street')
+_MIXED_WORDS = ('内外交替', '半室外', '半室内', '内外各半', 'int/ext', 'ext/int')
+
+
+def _json_values(o) -> str:
+    """JSON 里所有**值**拼成的文本(不含键名)。2026-09-20:旧判定对整份 lighting.json 做子串搜索,搜到的是字段名 "indoor" 自己——
+    fengshen3 65 个场景里 57 个明写 "indoor": false 的室外场景(陈塘关全城、战场、山道…)全被判成室内、补了天花板。"""
+    if isinstance(o, dict):
+        return ' '.join(_json_values(v) for v in o.values())
+    if isinstance(o, list):
+        return ' '.join(_json_values(v) for v in o)
+    return '' if isinstance(o, bool) or o is None else str(o)
+
+
+def scene_indoor(base: Path, sid: str, _depth: int = 0) -> bool | None:
+    """场景级室内外:True 室内 / False 室外 / None 内外混合或判不出(→ 逐锚点按白模围合判,见 anchor_indoor)。依据按可信度:
+    ① 场景登记 index.json#int_ext(INT / EXT;INT/EXT = 混合)② lighting.json 显式 indoor 布尔 + enclosure(写「内外交替 / 半室外」= 混合)
+    ③ 场景名里的「内景 / 外景」(子场景常只有 whitebox.json)④ 旧版设定沿用旧口径(值里有室内词、形制没有室外词)⑤ 什么设定都没有 → 跟上级场景。"""
+    sid = component(sid)
+    bdir = base / 'bible/scenes' / sid
     entry = {}
     idx = read(base / 'bible/scenes/index.json', {}) or {}
     for it in (idx.get('scenes') if isinstance(idx, dict) else idx) or []:
         if isinstance(it, dict) and it.get('id') == sid:
             entry = it
-    int_ext = str(entry.get('int_ext') or '').upper()
+    int_ext = str(entry.get('int_ext') or '').upper().replace(' ', '')
     if int_ext:
+        if 'INT' in int_ext and 'EXT' in int_ext:
+            return None
         return int_ext.startswith('INT')
+    lighting = read(bdir / 'lighting.json', {}) or {}
+    if isinstance(lighting.get('indoor'), bool):
+        if any(w in str(lighting.get('enclosure') or '').lower() for w in _MIXED_WORDS):
+            return None
+        return lighting['indoor']
+    layout = read(base / 'assets/concepts/scenes' / sid / 'layout.json', {}) or {}
     name = f"{entry.get('name') or ''} {layout.get('scene_name') or ''}".lower()
-    return any(k in name for k in ('内景', '室内', 'interior', '(int')) and not any(k in name for k in ('外景', '室外', 'exterior'))
+    if any(w in name for w in _INDOOR_WORDS) != any(w in name for w in _OUTDOOR_NAME_WORDS):
+        return any(w in name for w in _INDOOR_WORDS)
+    # 旧版 lighting.json(dzg6 / liaozhai3:没有 indoor 字段)沿用旧口径——整份光照设定的**值**里有室内词、且建筑形制没有室外词
+    form = _json_values((read(bdir / 'architecture.json', {}) or {}).get('form'))
+    blob = (_json_values(lighting) + ' ' + form).lower()
+    if lighting or form:
+        if any(w in _json_values(lighting.get('enclosure')).lower() for w in _MIXED_WORDS):
+            return None
+        return any(w in blob for w in _INDOOR_WORDS if w != '内景') and not any(w in form.lower() for w in _OUTDOOR_NAME_WORDS)
+    # 只有白模的子场景(fengshen3 SCN-0110 ← SCN-0037):名字也看不出 → 跟上级;上级也没有定论 → None,逐锚点按围合判
+    if _depth < 5:
+        for owner in scene_ancestors(base, sid)[1:2]:
+            return scene_indoor(base, owner, _depth + 1)
+    return None
+
+
+def is_indoor(base: Path, sid: str) -> bool:
+    """场景级布尔口径(世界模型、服务半径等不分锚点的地方用):混合 / 判不出按室外。分锚点的地方用 anchor_indoor。"""
+    return scene_indoor(base, sid) is True
+
+
+WALLED_MIN = 0.7                 # 地平线带里「最近命中是通顶高墙」的射线占比 ≥ 此值 = 这个锚点在屋里
+
+
+def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: bool | None = None) -> bool:
+    """这个锚点出全景时要不要补天花板 / 按室内写提示词。场景级有定论就用它;内外混合(fengshen3 SCN-0046 云台 + 洞内主室、
+    SCN-0127 宫门前 + 正殿)按白模围合逐锚点判:四周最近命中大多是通顶高墙(顶 ≥ max(0.6 × 场景高, 镜头高 + 1.5 m))= 室内;
+    院墙矮于此,不算。override = CLI --indoor / --outdoor。"""
+    if override is not None:
+        return bool(override)
+    flag = scene_indoor(base, sid)
+    if flag is not None:
+        return flag
+    view = anchor_view(scene, anchor, False)
+    return sum(v['walled'] for v in view['sectors'].values()) / len(view['sectors']) >= WALLED_MIN
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
@@ -766,11 +818,15 @@ def anchor_view(scene: dict, anchor: dict, indoor: bool) -> dict:
                             'cols': np.nonzero((nearest == n_fixed + i).reshape(h, w).any(axis=0))[0]}
     ids = nearest.reshape(h, w); t = tmin.reshape(h, w)
     band = slice(int(h * (90 - 20) / 180), int(h * (90 + 3) / 180))   # 地平线上 20° 到下 3°:越过矮家具、不看脚下地面
+    tall_top = max(0.6 * float(scene['dimensions_m'][1]), origin[1] + 1.5)
+    tall_ids = [n_fixed + i for i, o in enumerate(scene.get('objects', [])) if float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top]
+    walled = np.isin(ids, tall_ids)
     sectors = {}
     for name, c0 in (('centre', .5), ('right', .75), ('behind', 0.0), ('left', .25)):
         cols = (np.arange(int((c0 - .125) * w), int((c0 + .125) * w)) % w)
         tt = t[band][:, cols]
         sectors[name] = {'open': round(float((~np.isfinite(tt) | (tt > OPEN_DISTANCE_M)).mean()), 3),
+                         'walled': round(float(walled[band][:, cols].mean()), 3),
                          'wall_m': round(float(np.median(tt[np.isfinite(tt)])), 1) if np.isfinite(tt).any() else None,
                          'cols': set(cols.tolist())}
     view = {'objects': objects, 'sectors': sectors,
@@ -1447,7 +1503,7 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
-    scene['_outdoor'] = not is_indoor(base, sid)
+    scene['_outdoor'] = scene_indoor(base, sid) is False
     cams = scene_cameras(base, sid) if cameras is None else cameras
     idx = load_index(base, sid)
     w, _, d = scene['dimensions_m']
@@ -1483,9 +1539,10 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
     if not cams and not (only and schemes):
         raise PanoError(f'{sid}: 没有任何白模机位(先 render_whitebox.py --compile-only)')
     idx = load_index(base, sid)
-    indoor = is_indoor(base, sid) if indoor is None else indoor
-    idx['indoor'] = indoor
-    scene['_outdoor'] = not indoor
+    override = indoor
+    flag = scene_indoor(base, sid) if override is None else bool(override)
+    idx['indoor'] = flag                     # None = 内外混合,逐锚点见 anchors[].indoor
+    scene['_outdoor'] = flag is False        # 混合场景的服务半径按室内口径(保守)
     idx['serve_min_m'] = serve_min_m(scene)
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
     new_cams = [c for c in cams if _cam_key(c) not in served]
@@ -1533,12 +1590,13 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
     if not need:
         for c in cams:
             need.setdefault(c['scheme'], c.get('time_of_day'))
-    stats = {'anchors': [a['anchor_id'] for a in idx['anchors']], 'new': 0, 'pending': [], 'indoor': indoor, 'scene_id': sid}
+    stats = {'anchors': [a['anchor_id'] for a in idx['anchors']], 'new': 0, 'pending': [], 'indoor': flag, 'scene_id': sid}   # indoor: None = 内外混合(逐锚点判)
     for a in idx['anchors']:
         if only and a['anchor_id'] not in only:
             continue
+        a['indoor'] = anchor_indoor(base, sid, scene, a, override)
         if force or whitebox_pano_stale(base, sid, a):
-            render_whitebox_pano(base, sid, a, indoor=indoor, log=log)
+            render_whitebox_pano(base, sid, a, indoor=a['indoor'], log=log)
             # 锚点位置/朝向变了或强制重出:旧全景与新几何不再对应,作废(文件改名保留)
             for rec in a.get('panos', {}).values():
                 f = panos_dir(base, sid) / a['anchor_id'] / str(rec.get('file') or '')
@@ -1560,7 +1618,7 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
         if dry_run:
             stats['pending'].append(f"{a['anchor_id']}/{s}")
             continue
-        generate_pano(base, sid, idx, a, s, indoor=indoor, seed=seed, time_of_day=t, log=log, cameras=cams)
+        generate_pano(base, sid, idx, a, s, indoor=a['indoor'], seed=seed, time_of_day=t, log=log, cameras=cams)
         stats['new'] += 1
     return stats
 
