@@ -1,0 +1,43 @@
+{
+  "1": {
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "{{REF_AUDIO}}"
+    }
+  },
+  "2": {
+    "class_type": "FB_Qwen3TTSVoiceClone",
+    "inputs": {
+      "ref_audio": [
+        "1",
+        0
+      ],
+      "target_text": "{{TEXT}}",
+      "model_choice": "1.7B",
+      "device": "auto",
+      "precision": "bf16",
+      "language": "Auto",
+      "ref_text": "",
+      "seed": "{{SEED}}",
+      "max_new_tokens": 2048,
+      "top_p": 1.0,
+      "top_k": 50,
+      "temperature": 0.9,
+      "repetition_penalty": 1.05,
+      "x_vector_only": true,
+      "attention": "auto",
+      "unload_model_after_generate": false
+    }
+  },
+  "3": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": [
+        "2",
+        0
+      ],
+      "filename_prefix": "videoagents/qwen3tts-clone",
+      "quality": "320k"
+    }
+  }
+}
