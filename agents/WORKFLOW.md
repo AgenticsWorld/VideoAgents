@@ -94,7 +94,7 @@ data/projects/<slug>/
 **项目制作脚本约定(code/)**:Agent 为某任务编写的一次性脚本(批量出图/合成、机检、媒体处理等**确有计算或外部调用**的脚本)
 是项目产物,落 `data/projects/<slug>/code/`;
 **不要**写到仓库根 `code/`(那里只放项目无关的通用工具,共享库在 `modules/`),也**不要**散落在 `runs/<task_id>/`
-(那里只放运行记录三件套 + 可选 lesson.md,§6.1)。脚本内定位仓库根
+(那里只放运行记录三件套,§6.1)。脚本内定位仓库根
 用「向上找 modules/」标准头(见根 `code/README.md`),禁止硬编码绝对路径。
 **宿主 `code/` 下的 CLI(`blocking_map_check.py`、`finalize_episode.py`、`render_captions.py`、各机检脚本等)只准按其用法调用:禁止复制到项目 `code/`、禁止改写成项目本地版本、禁止自写同功能替代脚本**(前科 2026-08-26 polan2:agent 重写了动线图渲染器,产物偏离规范);宿主脚本报错或功能不合需求 = 上报 orchestrator,由宿主侧修改(2026-08-27)。
 
@@ -846,7 +846,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 
 **任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验三件套齐备;(b) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。两步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
-**可选第四件:经验卡 `lesson.md`(2026-08-12,默认不写)**。仅当**同时满足**以下全部条件时,orchestrator 在收尾钩子随三件套补写 `runs/<task_id>/lesson.md`:① 该任务经历了缺陷单闭环(status: resolved)或 attempt ≥ 3 后才通过;② 教训是**机制性的**(工具用法/渠道参数/流程约束,换一个项目仍然成立),与本项目情节、人物、文本内容无关;③ 现有 SOUL.md/WORKFLOW.md 尚无同款条目。三条有一条不满足就**不写**——常规任务、内容性返工(写得不好重写)、已有规约覆盖的旧坑,一律不产出经验卡。格式:frontmatter(`title`/`category`(provider|workflow|tooling)/`severity`/`provider`/`model`/`agents`/`date`/`evidence`(run_id 或缺陷 ID))+ 正文两节「现象与根因」「怎么做才对」;**正文禁止引用项目原文、人物名与情节**,禁止出现绝对路径与 API Key。用途:设置菜单「高级→诊断数据」会扫描各项目 `runs/*/lesson.md` 供用户逐张预览勾选、打包进诊断导出 zip 手动提交给开发者(见 `modules/diagnostics.py`;永不自动上传),用于沉淀回 SOUL/WORKFLOW 规约。
+**Issue 反馈(2026-09-21,取代原经验卡 `lesson.md`;由运行提示词按开关注入,默认开)**。仅当运行提示词中出现「Issue 反馈:开启」一节、且成员本轮工作中已**定位确认**问题属于 ① 宿主代码缺陷(`code/`、`modules/`、`services/`、`apps/`、`plugins/` 下的仓库自带程序,或 SOUL/WORKFLOW 规约自相矛盾)或 ② 需要宿主新增功能(现有宿主 CLI/接口确实做不到)时,才用 `python code/report_issue.py --type bug|feature --title … --component … --body-file …` 提交一条 issue,由宿主脱敏、签名去重后登记,用户在「设置→高级→诊断数据」点「在浏览器中提交」确认发到 GitHub Issues(见 `modules/issue_feedback.py`)。两种情形都不满足、或提示词中没有该节(开关关闭)就**不提交**——项目数据问题、用法错误、渠道/网络/额度故障、模型生成质量、内容性返工一律不属此列,不得为提交 issue 专门排查或每单例行提交。正文只写机制(现象/复现命令/期望行为/原因或建议),**禁止出现剧情、人物名、台词、提示词原文、项目名、绝对路径与 API Key**;提交 issue 不改变「宿主代码禁止自行改写、照常上报 orchestrator」的纪律,回执里注明已提交的 issue。存量 `runs/*/lesson.md` 不再读取、不再产出。
 
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 

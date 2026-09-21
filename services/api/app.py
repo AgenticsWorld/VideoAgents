@@ -872,11 +872,6 @@ async def voice_input_transcribe(request: Request, lang: str = "") -> dict[str, 
         await request.body(), request.headers.get("content-type", ""), lang)
 
 
-@api.get("/diagnostics", tags=["diagnostics"])
-async def diagnostics_summary() -> dict[str, Any]:
-    return await core.api_diagnostics_get()
-
-
 @api.get("/config/diagnostics", tags=["diagnostics"])
 async def get_diagnostics_flags() -> dict[str, Any]:
     return await core.api_diagnostics_flags()
@@ -887,26 +882,19 @@ async def set_diagnostics(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_diagnostics_set(body)
 
 
-@api.get("/diagnostics/lessons", tags=["diagnostics"])
-async def diagnostics_lessons() -> dict[str, Any]:
-    return await core.api_diagnostics_lessons()
+@api.get("/issue-feedback", tags=["diagnostics"])
+async def issue_feedback_list() -> dict[str, Any]:
+    return await core.api_issue_feedback_get()
 
 
-@api.post("/diagnostics/clear", tags=["diagnostics"])
-async def diagnostics_clear() -> dict[str, Any]:
-    return await core.api_diagnostics_clear()
+@api.post("/issue-feedback/{issue_id}/submitted", tags=["diagnostics"])
+async def issue_feedback_submitted(issue_id: str) -> dict[str, Any]:
+    return await core.api_issue_feedback_submitted(issue_id)
 
 
-@api.post("/diagnostics/export", tags=["diagnostics"])
-async def diagnostics_export(body: dict[str, Any]) -> dict[str, Any]:
-    return await core.api_diagnostics_export(body)
-
-
-@api.get("/diagnostics/export/{name}", tags=["diagnostics"])
-async def diagnostics_export_download(name: str) -> FileResponse:
-    # 仓库首个出站文件下载端点:文件名格式白名单 + 仅限 telemetry/export 目录
-    path = core.diagnostics_export_path(name)
-    return FileResponse(path, media_type="application/zip", filename=name)
+@api.post("/issue-feedback/publish", tags=["diagnostics"])
+async def issue_feedback_publish() -> dict[str, Any]:
+    return await core.api_issue_feedback_publish()
 
 
 @api.get("/network/proxy", tags=["network"])

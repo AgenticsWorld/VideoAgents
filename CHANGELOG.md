@@ -2,6 +2,16 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Settings › Advanced › Diagnostic Data › Issue feedback** (on by default): when an agent confirms during a run that a problem is a defect in the host code, or that the host needs a new feature, it files an issue with `code/report_issue.py`; the host scrubs it (paths, project names, keys), de-duplicates it by signature and lists it in the dialog, where **Submit in browser** opens a pre-filled GitHub "new issue" page for you to confirm (GitHub does not accept anonymous issues, so nothing is posted without you). The Diagnostic Data menu item shows the number of issues waiting. Headless setups can set the environment variable `VIDEOAGENTS_GITHUB_TOKEN` (classic token, `public_repo`) to let the host publish directly.
+
+### Removed
+
+- **Diagnostic Data: local event collection, lesson cards (`runs/<task_id>/lesson.md`) and the diagnostic bundle export** (`modules/diagnostics.py`, the `/diagnostics*` endpoints, the `diagnostics_enabled` setting). The Debug mode switch is kept. Existing files under `data/.videoagents/telemetry/` are no longer read and can be deleted.
+
 ## [1.0.34] - 2026-09-20
 
 ### Added

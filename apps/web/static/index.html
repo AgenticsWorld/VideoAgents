@@ -283,7 +283,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-voice" title="语音输入:开启后控制台与预览页「修改」浮窗的输入框出现麦克风按钮,录音由本机 faster-whisper 转成文字,音频不出本机">语音输入</a>
-          <a href="#" id="menu-diag" title="诊断数据:本地记录运行事件与经验卡,手动导出诊断包提交给开发者;永不自动上传">诊断数据</a>
+          <a href="#" id="menu-diag" title="诊断数据:Debug 模式与 Issue 反馈(Agent 发现宿主代码问题时整理成 GitHub issue)">诊断数据<span id="menu-diag-n"></span></a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
       </div>
@@ -841,25 +841,17 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="diag-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🩺 诊断数据</h3>
-    <div class="row"><label>本地采集</label>
-      <input type="checkbox" id="diag-on" style="flex:none;margin:0">
-      <span id="diag-st" style="font-size:12px;color:var(--dim)"></span>
-    </div>
-    <div class="note">开启时在运行结束与生成结束处按字段白名单记录结构化事件(引擎/Agent/渠道/状态/时长/脱敏后的错误模板),只写入本机 data/.videoagents/telemetry/,不含提示词、项目内容、文件路径与 API Key,永不自动上传。「导出诊断包」生成一个 zip(事件 + 环境摘要 + 下方勾选的经验卡),由你自行提交给开发者(如 GitHub issue 附件),用于改进产品。</div>
-    <div id="diag-stats" class="note">读取中…</div>
     <div class="row"><label>Debug 模式</label>
       <input type="checkbox" id="diag-debug" style="flex:none;margin:0">
-      <span class="note" style="flex:1">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;不影响采集与导出</span></div>
-    <div class="row"><label>经验卡</label>
-      <span class="note" style="flex:1">任务闭环时沉淀的机制性教训(各项目 runs/&lt;task_id&gt;/lesson.md);默认全部不导出,逐张预览、勾选后才会进入诊断包</span></div>
-    <div id="diag-lessons" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"><div class="empty">读取中…</div></div>
-    <div class="row"><label>包含事件</label>
-      <input type="checkbox" id="diag-inc-events" checked style="flex:none;margin:0">
-      <span class="note" style="flex:1">诊断包中包含已采集的结构化事件文件</span></div>
+      <span class="note" style="flex:1">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文</span></div>
+    <div class="row"><label>Issue 反馈</label>
+      <input type="checkbox" id="diag-issue" style="flex:none;margin:0">
+      <span class="note" style="flex:1">默认开。Agent 运行中确认问题属于宿主代码缺陷、或需要宿主新增功能时,自动整理成 issue 列在下方,点「在浏览器中提交」即打开预填好的 GitHub 页面由你确认提交。正文只写机制,宿主已脱敏(路径、项目名、密钥),不含剧情、提示词与项目内容</span></div>
+    <div class="note"><span id="diag-auth"></span> <a id="diag-repo" href="https://github.com/AgenticsWorld/VideoAgents/issues" target="_blank" rel="noopener">github.com/AgenticsWorld/VideoAgents/issues ↗</a></div>
+    <div id="diag-issues" style="max-height:36vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
     <div class="err" id="diag-err"></div>
     <div class="actions">
-      <button id="diag-clear" style="margin-right:auto">🗑 清空事件</button>
-      <button id="diag-export">⬇ 导出诊断包</button>
+      <button id="diag-republish" style="margin-right:auto;display:none">↻ 重新发布未成功的</button>
       <button id="diag-close" class="primary">关闭</button>
     </div>
   </div>
@@ -2206,8 +2198,7 @@ $('#voice-dl').onclick=async()=>{
   catch(e){$('#voice-err').textContent=t('下载失败')+':'+e.message;$('#voice-dl').disabled=false}
 };
 
-/* ---------- 诊断数据弹窗(设置菜单「高级」;本地采集+手动导出,永不自动上传) ---------- */
-let DIAG_LESSONS=[];
+/* ---------- 诊断数据弹窗(设置菜单「高级」;Debug 模式 + Issue 反馈) ---------- */
 let DEBUG_MODE=false;   // 设置→高级→诊断数据「Debug 模式」,默认关;控制 SOUL.md 等开发者入口显隐
 function applyDebugMode(){
   $('#btn-soul').style.display=DEBUG_MODE?'':'none';
@@ -2216,72 +2207,59 @@ function applyDebugMode(){
   }
 }
 async function loadDebugMode(){
-  try{DEBUG_MODE=!!(await api('/api/v1/config/diagnostics')).debug_mode}catch(e){DEBUG_MODE=false}
+  try{const d=await api('/api/v1/config/diagnostics');DEBUG_MODE=!!d.debug_mode;diagBadge(d.issue_pending)}catch(e){DEBUG_MODE=false}
   applyDebugMode();
 }
-function diagSt(){$('#diag-st').textContent=$('#diag-on').checked?t('✓ 本地采集中(不上传)'):t('已关闭:不再记录新事件')}
-function diagStats(d){
-  let s=I18N.f('已采集 {n} 条事件,占用 {kb} KB',{n:d.total_events,kb:(d.outbox_bytes/1024).toFixed(1)});
-  if(d.latest_ts)s+=' · '+t('最近:')+esc(d.latest_ts);
-  if(d.top_errors&&d.top_errors.length)
-    s+='<br>'+t('高频错误:')+'<br>'+d.top_errors.slice(0,3)
-      .map(e=>`· ${esc(e.template)||e.signature} ×${e.count}`).join('<br>');
-  $('#diag-stats').innerHTML=s;
-}
-function diagLessonRow(c,i){
+function diagBadge(n){$('#menu-diag-n').textContent=n?' ('+n+')':''}   // 菜单项后缀:待提交的 issue 数
+const DIAG_ISSUE_STATE={published:'✓ 已发布',submitted:'✓ 已在浏览器提交',duplicate:'≡ 已有同款 issue',pending:'… 待提交',failed:'✗ 发布失败'};
+function diagIssueRow(r){
   const d=document.createElement('div');
-  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px';
-  const meta=[c.project,c.meta.category,c.meta.provider,c.meta.date].filter(Boolean).map(esc).join(' · ');
-  d.innerHTML=`<label style="display:flex;gap:8px;align-items:baseline;cursor:pointer">
-      <input type="checkbox" class="diag-pick" data-i="${i}" style="flex:none;margin:0">
-      <span style="flex:1">${esc(c.title)} <span style="color:var(--dim);font-size:12px">${meta}</span></span></label>
-    <details style="margin-top:4px"><summary style="cursor:pointer;color:var(--dim);font-size:12px">${t('预览全文')}</summary>
-      <pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(c.body)}</pre></details>`;
+  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px';
+  const meta=[r.kind==='bug'?t('宿主缺陷'):t('功能需求'),r.agent,r.component,(r.created_at||'').slice(0,16).replace('T',' ')].filter(Boolean).map(esc).join(' · ');
+  const st=t(DIAG_ISSUE_STATE[r.state]||r.state)+(r.state==='failed'&&r.error?':'+esc(r.error):'');
+  const title=r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>`:esc(r.title);
+  const manual=r.manual_url?` · <a class="diag-manual" href="${esc(r.manual_url)}" target="_blank" rel="noopener">${t('在浏览器中提交 ↗')}</a>`:'';
+  d.innerHTML=`<div>${title}</div><div style="color:var(--dim);font-size:12px">${meta} · ${st}${manual}</div>`;
+  const a=d.querySelector('.diag-manual');
+  if(a)a.onclick=()=>{api(`/api/v1/issue-feedback/${encodeURIComponent(r.id)}/submitted`,{}).then(loadDiag).catch(()=>{})};
   return d;
 }
-async function openDiagModal(){
+function diagRender(d){
+  $('#diag-debug').checked=DEBUG_MODE=!!d.debug_mode;applyDebugMode();
+  $('#diag-issue').checked=!!d.issue_feedback;
+  $('#diag-repo').href=d.repo_url;
+  $('#diag-auth').textContent=d.auth?t('已设置 VIDEOAGENTS_GITHUB_TOKEN:宿主直接发布'):'';
+  $('#diag-republish').style.display=d.auth?'':'none';diagBadge(d.issue_pending);
+  const box=$('#diag-issues');box.innerHTML='';
+  if(!(d.items||[]).length)box.innerHTML=`<div class="empty">${t('暂无 Agent 提交的 issue')}</div>`;
+  (d.items||[]).forEach(r=>box.appendChild(diagIssueRow(r)));
+}
+async function loadDiag(){
+  try{diagRender(await api('/api/v1/issue-feedback'))}
+  catch(e){$('#diag-err').textContent=t('读取失败')+':'+e.message}
+}
+function openDiagModal(){
   $('#diag-err').textContent='';
   $('#diag-modal').style.display='flex';
-  try{
-    const d=await api('/api/v1/diagnostics');
-    $('#diag-on').checked=!!d.enabled;
-    DEBUG_MODE=!!d.debug_mode;$('#diag-debug').checked=DEBUG_MODE;applyDebugMode();
-    diagStats(d);
-  }catch(e){$('#diag-on').checked=true;$('#diag-err').textContent='读取失败:'+e.message}
-  diagSt();
-  try{
-    DIAG_LESSONS=(await api('/api/v1/diagnostics/lessons')).lessons||[];
-    const box=$('#diag-lessons');box.innerHTML='';
-    if(!DIAG_LESSONS.length)box.innerHTML=`<div class="empty">${t('暂无经验卡(任务闭环时按 WORKFLOW.md §6.1 沉淀 lesson.md)')}</div>`;
-    DIAG_LESSONS.forEach((c,i)=>box.appendChild(diagLessonRow(c,i)));
-  }catch(e){}
+  loadDiag();
 }
 $('#menu-diag').onclick=e=>{e.preventDefault();openDiagModal()};
 $('#diag-close').onclick=()=>$('#diag-modal').style.display='none';
-$('#diag-on').onchange=async()=>{
-  diagSt();
-  try{await api('/api/v1/config/diagnostics',{diagnostics_enabled:$('#diag-on').checked})}
-  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
-};
-$('#diag-debug').onchange=async()=>{
-  DEBUG_MODE=$('#diag-debug').checked;applyDebugMode();
-  try{await api('/api/v1/config/diagnostics',{debug_mode:DEBUG_MODE})}
-  catch(e){$('#diag-err').textContent='保存失败:'+e.message}
-};
-$('#diag-clear').onclick=async()=>{
-  if(!confirm(t('清空本机已采集的事件文件?(不影响经验卡)')))return;
-  try{
-    await api('/api/v1/diagnostics/clear',{});
-    const d=await api('/api/v1/diagnostics');diagStats(d);
-  }catch(e){$('#diag-err').textContent=e.message}
-};
-$('#diag-export').onclick=async()=>{
+async function diagSave(body){
   $('#diag-err').textContent='';
-  const picked=[...document.querySelectorAll('.diag-pick:checked')].map(el=>DIAG_LESSONS[+el.dataset.i].path);
-  try{
-    const r=await api('/api/v1/diagnostics/export',{lessons:picked,include_events:$('#diag-inc-events').checked});
-    location.href='/api/v1/diagnostics/export/'+encodeURIComponent(r.name);   // 浏览器直接下载 zip
-  }catch(e){$('#diag-err').textContent='导出失败:'+e.message}
+  try{await api('/api/v1/config/diagnostics',body)}
+  catch(e){$('#diag-err').textContent=t('保存失败')+':'+e.message}
+}
+$('#diag-debug').onchange=()=>{
+  DEBUG_MODE=$('#diag-debug').checked;applyDebugMode();
+  diagSave({debug_mode:DEBUG_MODE});
+};
+$('#diag-issue').onchange=()=>diagSave({issue_feedback:$('#diag-issue').checked});
+$('#diag-republish').onclick=async()=>{
+  $('#diag-err').textContent='';$('#diag-republish').disabled=true;
+  try{await api('/api/v1/issue-feedback/publish',{})}
+  catch(e){$('#diag-err').textContent=e.message}
+  $('#diag-republish').disabled=false;loadDiag();
 };
 
 /* ---------- 网络检测弹窗(设置菜单「高级」;VPN/代理在命令行环境是否生效) ---------- */

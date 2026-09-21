@@ -3163,6 +3163,20 @@ def build_role_prompt(agent_id: str, project: str,
           + ("(即不自动重跑:首次不过就升级用户裁决,不得自行重做;自检不过时保留当前产物,缺陷逐条写进回执交用户裁决,不得自行重新生成)" if max_retries == 0 else
              f",第 {max_retries} 次仍不过升级用户裁决(--confirm),不得超额自行重试")
           + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
+    if issue_feedback_enabled():
+        # 只在开关开启时注入(条件白名单式写法:codex 逐字守规,无条件条款=每单必跑)
+        p += ("\n\n## Issue 反馈:开启(Web 客户端「设置→高级→诊断数据」全局设置,实时生效)\n"
+              "- **仅当**本轮工作中你已经**定位确认**以下两种情形之一时,才提交一条 issue;没遇到就什么都不做,"
+              "不要为提交 issue 而专门排查、不要每单例行提交:\n"
+              "  ① **宿主代码缺陷** —— 问题出在仓库自带程序(`code/`、`modules/`、`services/`、`apps/`、`plugins/` 下的代码,"
+              "或 SOUL.md/WORKFLOW.md 规约自相矛盾),而不是项目数据、你的用法、渠道/网络/额度、模型生成质量;\n"
+              "  ② **需要宿主新增功能** —— 工单要求的事现有宿主 CLI/接口确实做不到,只能靠你自写替代脚本或手工绕过。\n"
+              "- 提交方式(一条命令,宿主负责脱敏、去重并交用户确认提交到 GitHub,退出码恒 0,不影响工单):"
+              "`python code/report_issue.py --type bug|feature --title \"<一句话标题>\" --component <仓库相对路径> --body-file <正文.md>`;"
+              "正文写「现象 / 复现命令与参数 / 期望行为 / 已定位的原因或建议方案」,正文草稿放 `runs/<task_id>/`。\n"
+              "- **只写机制,不写项目内容**:正文与标题禁止出现剧情、人物名、台词、提示词原文、项目名、绝对路径、API Key。\n"
+              "- 提交 issue **不改变**既有纪律:宿主代码仍然禁止自行修改/改写,照常上报 orchestrator 并在回执里注明已提交的 issue;"
+              "同一问题只提交一次(重复提交会被签名去重)。")
     if agent_id == WHITEBOX_REEL_AGENT:
         p += ("\n\n## 白模自检设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
               + ("- 白模自检:**开启** —— 白模调度/修改类工单在 `--compile-only` 通过后,**仅对本单新建或改动过的组**运行 "
@@ -4335,10 +4349,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                 except Exception as e:  # noqa: BLE001
                     print(f"[revision] 修改记录落盘失败:{e}", flush=True)
             try:
-                # 诊断事件旁路(设置「高级→诊断数据」,modules/diagnostics.py):
-                # 白名单字段本地落盘,错误消息模板化、项目名只存哈希;绝不出网
-                from modules.diagnostics import record_run_event
-                record_run_event(run)
+                # Issue 反馈旁路(设置「高级→诊断数据」,modules/issue_feedback.py):成员经
+                # code/report_issue.py 登记、子进程内没发出去的 issue,在此由宿主补发
+                if issue_feedback_enabled():
+                    from modules import issue_feedback
+                    await asyncio.to_thread(issue_feedback.publish_pending)
             except Exception:
                 pass
             # Agent 结束前即使漏掉 dispatch.py --confirm --sign，也不能让已解锁的
@@ -14205,82 +14220,71 @@ async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str =
 
 
 # ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
-# 本地结构化事件(run 收敛处与 genmedia CLI 出口按「字段白名单」落盘
-# telemetry/outbox,错误消息模板化聚签名)与经验卡(runs/<task_id>/lesson.md,
-# WORKFLOW.md §6.1)的汇总、预览与手动导出。只落盘、只导出,永不自动上传——
-# 导出 zip 由用户自行提交(如 GitHub issue 附件)。实现在 modules/diagnostics.py
-# (genmedia 子进程与本服务共用);懒加载 + 采集端全静默,旁路故障不影响主链路。
-
-
-def _diagnostics():
-    from modules import diagnostics
-    return diagnostics
-
-
-def diagnostics_enabled() -> bool:
-    """诊断采集开关(默认开;仅本地落盘,无任何上传)。"""
-    return bool(STATE.get("diagnostics_enabled", True))
+# 两个开关:Debug 模式(开发者入口显隐)与 Issue 反馈(成员运行中确认问题属于宿主
+# 代码缺陷/需要宿主新增功能时,经 code/report_issue.py 整理成 issue,用户在设置页一键到浏览器提交 GitHub;
+# 运行提示词只在开关开启时注入该节,见 build_role_prompt)。实现在 modules/issue_feedback.py。
 
 
 def debug_mode() -> bool:
-    """Debug 模式(设置→高级→诊断数据;默认关)。开启后控制台各 Agent 面板才显示
-    SOUL.md 按钮等面向开发者的入口;不影响采集/导出。"""
+    """Debug 模式(默认关)。开启后控制台各 Agent 面板才显示 SOUL.md 按钮等面向开发者的入口。"""
     return bool(STATE.get("debug_mode", False))
 
 
-async def api_diagnostics_get():
-    d = await asyncio.to_thread(lambda: _diagnostics().summary())
-    d["enabled"] = diagnostics_enabled()   # STATE 为准,避开文件读取的 TTL 缓存
-    d["debug_mode"] = debug_mode()
-    return d
+def issue_feedback_enabled() -> bool:
+    """Issue 反馈开关(默认开)。"""
+    return bool(STATE.get("issue_feedback", True))
 
 
 async def api_diagnostics_flags():
-    """只读两个开关(不扫事件文件),供页面启动时决定 Debug 入口显隐。"""
-    return {"enabled": diagnostics_enabled(), "debug_mode": debug_mode()}
+    from modules import issue_feedback as fb
+    return {"debug_mode": debug_mode(), "issue_feedback": issue_feedback_enabled(),
+            "issue_pending": await asyncio.to_thread(fb.pending_count)}
 
 
 async def api_diagnostics_set(body: dict):
-    en, dbg = body.get("diagnostics_enabled"), body.get("debug_mode")
-    if en is None and dbg is None:
-        raise ServiceError(400, "diagnostics_enabled or debug_mode must be a boolean")
-    if en is not None:
-        STATE["diagnostics_enabled"] = bool(en)
+    dbg, fb = body.get("debug_mode"), body.get("issue_feedback")
+    if dbg is None and fb is None:
+        raise ServiceError(400, "nothing to update: pass debug_mode / issue_feedback")
     if dbg is not None:
         STATE["debug_mode"] = bool(dbg)
+    if fb is not None:
+        STATE["issue_feedback"] = bool(fb)
     save_state(STATE)
-    return {"enabled": diagnostics_enabled(), "debug_mode": debug_mode()}
+    return await api_diagnostics_flags()
 
 
-async def api_diagnostics_lessons():
-    return {"lessons": await asyncio.to_thread(lambda: _diagnostics().scan_lessons())}
+def _issue_public(r: dict) -> dict:
+    d = {k: r.get(k) for k in ("id", "kind", "title", "agent", "component",
+                               "created_at", "state", "url", "error")}
+    if r.get("state") in ("pending", "failed", "submitted"):   # 预填链接;submitted 仍保留(用户可能没点 Submit 就关了页)
+        from modules import issue_feedback as fb
+        d["manual_url"] = fb.manual_url(r)
+    return d
 
 
-async def api_diagnostics_clear():
-    return {"ok": True,
-            "removed": await asyncio.to_thread(lambda: _diagnostics().clear_outbox())}
+async def api_issue_feedback_get():
+    """设置页:开关、凭据来源(env|空=浏览器提交)与最近登记的 issue。"""
+    from modules import issue_feedback as fb
+    auth, items = await asyncio.gather(asyncio.to_thread(fb.auth_source),
+                                       asyncio.to_thread(fb.list_issues, 30))
+    return {**await api_diagnostics_flags(), "auth": auth, "repo_url": fb.ISSUES_URL,
+            "items": [_issue_public(r) for r in items]}
 
 
-async def api_diagnostics_export(body: dict):
-    """构建诊断导出包:事件(可选)+ 聚合摘要 + 用户勾选的经验卡。
-    经验卡路径在 diagnostics 侧对照 scan_lessons() 白名单,防任意文件打包。"""
-    lessons = body.get("lessons") or []
-    if not isinstance(lessons, list) or not all(isinstance(x, str) for x in lessons):
-        raise ServiceError(400, "lessons must be a list of paths")
-    include_events = bool(body.get("include_events", True))
-    path = Path(await asyncio.to_thread(
-        lambda: _diagnostics().build_export(lessons, include_events)))
-    return {"ok": True, "name": path.name, "bytes": path.stat().st_size}
+async def api_issue_feedback_submitted(issue_id: str):
+    """用户点了「在浏览器中提交」。"""
+    from modules import issue_feedback as fb
+    rec = await asyncio.to_thread(fb.mark_submitted, issue_id)
+    if not rec:
+        raise ServiceError(404, "issue not found")
+    return {"ok": True, "item": _issue_public(rec)}
 
 
-def diagnostics_export_path(name: str) -> Path:
-    """导出包下载路径校验:仅放行 telemetry/export 下本服务生成的文件名格式。"""
-    if not re.fullmatch(r"diagnostics-\d{8}-\d{6}\.zip", name or ""):
-        raise ServiceError(400, "invalid export name")
-    p = _diagnostics().EXPORT_DIR / name
-    if not p.is_file():
-        raise ServiceError(404, "export not found")
-    return p
+async def api_issue_feedback_publish():
+    """手动重发 pending/failed(不受自动补发次数上限限制)。"""
+    from modules import issue_feedback as fb
+    done = await asyncio.to_thread(fb.publish_pending, True)
+    return {"ok": True, "results": [_issue_public(r) for r in done]}
 
 
 async def api_usage():
