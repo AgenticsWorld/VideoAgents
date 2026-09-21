@@ -2098,6 +2098,7 @@ window.I18N_DICT = {
 "机高 {h} m": "Độ cao máy quay {h} m",
 "用于分镜:{s}": "Dùng cho cảnh: {s}",
 "尚未被分镜引用": "Chưa được cảnh nào dùng",
+"图库": "Thư viện ảnh",
 // 白模待决项(2026-09-09,whitebox-ui.js)
 "待决项 ({count})": "Mục chờ quyết định ({count})",
 "待处理 {count}": "{count} chờ xử lý",

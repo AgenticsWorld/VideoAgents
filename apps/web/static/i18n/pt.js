@@ -2100,6 +2100,7 @@ window.I18N_DICT = {
 "机高 {h} m": "Altura da câmera {h} m",
 "用于分镜:{s}": "Usado nos planos: {s}",
 "尚未被分镜引用": "Ainda não usado por nenhum plano",
+"图库": "Galeria",
 // 白模待决项(2026-09-09,whitebox-ui.js)
 "待决项 ({count})": "Decisões pendentes ({count})",
 "待处理 {count}": "{count} por tratar",

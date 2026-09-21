@@ -68,6 +68,20 @@ h2.title .id{color:var(--dim);font-size:13px;font-weight:400}
 .gallery figure.folder:hover{border-color:var(--accent)}
 .gallery figure.folder img{cursor:pointer}
 .sec{margin:18px 0 6px;font-size:14px}
+/* 板块(2026-09-21):详情页按板块排,点标题折叠/展开;折叠态按 data-blk 记 localStorage,切场景/刷新保持。
+   白模/全景/世界模型面板(.wb-panel)同样带 data-blk,点面板标题折叠(用属性不用 class:whitebox-ui 会整写 className) */
+.blk{border:1px solid var(--border);border-radius:10px;margin:14px 0;overflow:hidden}
+.blk>.blk-h{background:var(--panel);padding:9px 14px;font-size:13.5px;cursor:pointer;user-select:none}
+.blk>.blk-h::before{content:'▾ ';color:var(--dim)}
+.blk[data-closed]>.blk-h::before{content:'▸ '}
+.blk>.blk-body{padding:2px 14px 6px}
+.blk[data-closed]>.blk-body{display:none}
+.blk-h .cnt{color:var(--dim);font-weight:400}
+.wb-panel[data-blk] .wb-heading>strong{cursor:pointer;user-select:none}
+.wb-panel[data-blk] .wb-heading>strong::before{content:'▾ ';color:var(--dim)}
+.wb-panel[data-blk][data-closed] .wb-heading>strong::before{content:'▸ '}
+.wb-panel[data-blk][data-closed]>.wb-toolbar{margin-bottom:0}
+.wb-panel[data-blk][data-closed]>.wb-toolbar~*,.wb-panel[data-blk][data-closed]>.wb-toolbar>:not(.wb-heading),.wb-panel[data-blk][data-closed] .wb-heading>:not(strong){display:none!important}
 .gallery.plates img{height:150px}
 .gallery.plates figcaption{max-width:270px}
 .fthumb{position:relative}
@@ -196,6 +210,20 @@ function syncUrl(){
 const DOC_NAMES={architecture:'建筑/空间结构',environment:'环境设定',lighting:'光照设定'};
 const NOISE=new Set(['$schema_version','schema_version','file','owner_agent','task_id','project','source_inputs','write_via','agent']);
 
+// ---- 板块折叠(2026-09-21):折叠态按板块 key 存 localStorage(全场景共用),渲染时回填 data-closed
+const BLK_KEY='pv_scenes_blk_closed';
+function blkClosed(){try{return new Set(JSON.parse(localStorage.getItem(BLK_KEY)||'[]'))}catch(e){return new Set()}}
+function blk(key,title,body){return `<section class="blk" data-blk="${key}"${blkClosed().has(key)?' data-closed':''}><h3 class="blk-h">${title}</h3><div class="blk-body">${body}</div></section>`}
+function blkMark(el,key){el.dataset.blk=key;el.toggleAttribute('data-closed',blkClosed().has(key))}
+function blkOpen(el){const b=el&&el.closest('[data-blk]');if(b)b.removeAttribute('data-closed')}   // 跳转定位用:只展开当前这次,不改记忆
+document.addEventListener('click',e=>{
+  const h=e.target.closest('.blk>.blk-h,.wb-panel[data-blk] .wb-heading>strong');
+  if(!h||e.target.closest('button,select,a,input,label'))return;
+  const b=h.closest('[data-blk]'),closed=b.toggleAttribute('data-closed');
+  const set=blkClosed();closed?set.add(b.dataset.blk):set.delete(b.dataset.blk);
+  try{localStorage.setItem(BLK_KEY,JSON.stringify([...set]))}catch(_){}
+});
+
 function jrender(v){
   if(v===null||v===undefined||v==='')return '<span style="color:var(--dim)">—</span>';
   if(Array.isArray(v)){
@@ -260,12 +288,14 @@ function renderDetail(s){
     const nm=strip?im.name.slice(strip.length+1):im.name;
     return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></figcaption></figure>`;
   };
+  // 🖼 图库板块:场景目录下全部图(grid_9views.png / layout_top.png / 概念图…)+ archive、candidates 等子文件夹
+  let g='';
   if(FOLDER){
     const ims=folders[FOLDER];
-    h+=`<div class="foldbar"><button onclick="closeFolder()">${t('← 返回')}</button><span class="fname">📁 ${esc(FOLDER)}</span><span class="fcnt">${esc(I18N.f('{n} 张',{n:ims.length}))}</span></div>`;
-    h+='<div class="gallery">'+ims.map(im=>fig(im,FOLDER)).join('')+'</div>';
+    g+=`<div class="foldbar"><button onclick="closeFolder()">${t('← 返回')}</button><span class="fname">📁 ${esc(FOLDER)}</span><span class="fcnt">${esc(I18N.f('{n} 张',{n:ims.length}))}</span></div>`;
+    g+='<div class="gallery">'+ims.map(im=>fig(im,FOLDER)).join('')+'</div>';
   }else if(s.images.length){
-    h+='<div class="gallery">'+rootImgs.map(im=>fig(im)).join('')
+    g+='<div class="gallery">'+rootImgs.map(im=>fig(im)).join('')
       +Object.keys(folders).sort().map(d=>{
         const ims=folders[d];
         return `<figure class="folder" data-d="${esc(d)}" onclick="openFolder(this.dataset.d)" title="${esc(d)}">`
@@ -273,8 +303,9 @@ function renderDetail(s){
           +`<figcaption><span class="fn">📁 ${esc(d)}</span><span class="fcnt">${esc(I18N.f('{n} 张',{n:ims.length}))}</span></figcaption></figure>`;
       }).join('')+'</div>';
   }else{
-    h+='<div class="meta-line">(暂无概念图)</div>';
+    g+='<div class="meta-line">(暂无概念图)</div>';
   }
+  h+=blk('gallery',`🖼 ${esc(t('图库'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:s.images.length}))}</span>`,g);
   // 场景图(正向/反向,2026-09-17,白模关闭项目的场景一致性 A 方案):scene_plates.json 登记 + 模式覆盖(继承项目/只出正向/正反两张)
   if(s.scene_plates&&!WB_ON){
     const sp=s.scene_plates;
@@ -287,17 +318,17 @@ function renderDetail(s){
       return `<figure title="${esc(v.file||'')}"><img src="${esc(bust(v.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(role==='front'?t('正向图(门口往内看)'):t('反向图(从里回望门口)'))} · ${esc(v.file||'')}${stale}</span></figcaption>`
         +(cap?`<figcaption><span class="fn">${esc(cap)}</span></figcaption>`:'')+(inf?`<figcaption><span class="fn">${esc(I18N.f('画内:{s}',{s:inf}))}</span></figcaption>`:'')+`</figure>`;
     };
-    h+=`<h3 class="sec">🖼 ${t('场景图(正向 / 反向)')} <span style="color:var(--dim);font-weight:400">${esc(I18N.f('生效模式 {m}',{m:modeName[sp.effective]||sp.effective}))}${sp.legacy?' · '+esc(t('旧版主图,未登记站位')):''}</span></h3>`
-      +`<div class="meta-line">${esc(t('本场景模式'))}: <select class="sp-mode" data-sid="${esc(s.id)}"${sp.legacy?' disabled title="'+esc(t('旧版主图尚未登记站位/画内清单,先回派环境概念工位补登记再改模式'))+'"':''}>`
+    h+=blk('scene_plates',`🖼 ${esc(t('场景图(正向 / 反向)'))} <span class="cnt">${esc(I18N.f('生效模式 {m}',{m:modeName[sp.effective]||sp.effective}))}${sp.legacy?' · '+esc(t('旧版主图,未登记站位')):''}</span>`,
+      `<div class="meta-line">${esc(t('本场景模式'))}: <select class="sp-mode" data-sid="${esc(s.id)}"${sp.legacy?' disabled title="'+esc(t('旧版主图尚未登记站位/画内清单,先回派环境概念工位补登记再改模式'))+'"':''}>`
       +`<option value="inherit"${sp.mode==='inherit'?' selected':''}>${esc(I18N.f('继承项目({m})',{m:modeName[SP_MODE]||SP_MODE}))}</option>`
       +`<option value="single"${sp.mode==='single'?' selected':''}>${esc(t('只出正向'))}</option>`
       +`<option value="pair"${sp.mode==='pair'?' selected':''}>${esc(t('正反两张都出'))}</option></select>`
       +` <span style="color:var(--dim)">${esc(sp.reverse_reason||'')}${(sp.needed_by||[]).length?' · '+esc(I18N.f('用到反向图的镜:{s}',{s:sp.needed_by.join(', ')})):''}</span></div>`
-      +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`;
+      +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`);
   }
   // 分镜背景图(2026-09-09):场景库 plates/index.json,按机位指纹入库,标注被哪些集/镜引用
   if((s.plates||[]).length){
-    h+=`<h3 class="sec">🖼 ${t('分镜背景图')} <span style="color:var(--dim);font-weight:400">${esc(I18N.f('{n} 张',{n:s.plates.length}))}</span></h3><div class="gallery plates">`
+    h+=blk('shot_plates',`🎦 ${esc(t('分镜背景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:s.plates.length}))}</span>`,`<div class="gallery plates">`
       +s.plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
@@ -307,7 +338,7 @@ function renderDetail(s){
         return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span>`
           +`<button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button></figcaption>`
           +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
-      }).join('')+'</div>';
+      }).join('')+'</div>');
   }
   const docs=Object.keys(s.docs||{});
   if(docs.length){
@@ -330,12 +361,14 @@ function renderDetail(s){
   if(!Array.isArray(s.docs?.whitebox?.objects)){
     // 🌐 全景图板块始终显示(2026-09-13):没有白模也挂(只能看/提示先建白模),插在设定文档之前
     const ph=document.createElement('section');
-    box.insertBefore(ph,box.querySelector('.doc'));
+    const gb=box.querySelector('.blk[data-blk="gallery"]');
+    if(gb)gb.after(ph);else box.insertBefore(ph,box.querySelector('.doc'));
     mountPanoSection(ph,s);
     return;
   }
   const whitebox=document.createElement('section');
-  const gallery=box.querySelector('.gallery');
+  blkMark(whitebox,'whitebox');
+  const gallery=box.querySelector('.blk[data-blk="gallery"]');
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
   import('/static/whitebox-ui.js?v=20260918-orbit').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
@@ -359,8 +392,8 @@ function worldSourceOptions(s){
 function mountWorldSection(whitebox,s){
   if(WB_ON===false)return;
   const proj=$('#project').value.trim()||'demo';
-  const sec=document.createElement('section');sec.className='wb-panel world-panel';
-  (whitebox.parentNode.querySelector('.gallery.plates')||whitebox).after(sec);
+  const sec=document.createElement('section');sec.className='wb-panel world-panel';blkMark(sec,'world');
+  (whitebox.parentNode.querySelector('.blk[data-blk="shot_plates"]')||whitebox).after(sec);
   const world=s.world||null,job=s.world_job||null;
   const opts=worldSourceOptions(s);
   const inp=(world&&world.input)||{};
@@ -386,7 +419,7 @@ function mountWorldSection(whitebox,s){
     else{   // 有白模没全景图:提示先创建全景图,按钮跳到下方「🌐 全景图」板块并打开创建表单
       status.textContent=t('该场景还没有全景图,世界模型必须基于全景图:请先创建全景图')+' ';
       const go=document.createElement('button');go.type='button';go.className='editbtn';go.style.marginLeft='6px';go.textContent=t('➕ 前往创建全景图');
-      go.onclick=()=>{const ps=whitebox.parentNode.querySelector('.pano-panel');if(!ps)return;ps.scrollIntoView({behavior:'smooth',block:'start'});const c=ps.querySelector('.ps-create');if(c&&!c.disabled)c.click();};
+      go.onclick=()=>{const ps=whitebox.parentNode.querySelector('.pano-panel');if(!ps)return;blkOpen(ps);ps.scrollIntoView({behavior:'smooth',block:'start'});const c=ps.querySelector('.ps-create');if(c&&!c.disabled)c.click();};
       status.appendChild(go);
     }
   }
@@ -464,7 +497,7 @@ async function mountPanoSection(host,s){
     }catch(e){/* 没有索引也照常显示空板块 */}
   }
   if(!panos||CUR!==s.id||!host.isConnected)return;
-  const sec=document.createElement('section');sec.className='wb-panel pano-panel';host.after(sec);
+  const sec=document.createElement('section');sec.className='wb-panel pano-panel';blkMark(sec,'panos');host.after(sec);
   const anchors=panos.anchors||[];
   const dims=panos.dimensions_m||(s.docs?.whitebox?.dimensions_m)||[1,1,1];
   const job=panos.job||null,running=job&&job.status==='running';
@@ -767,6 +800,7 @@ function jumpPlate(){
   JumpAnchor.go({
     find:(k,id)=>k==='plate'?document.querySelector(`.gallery.plates figure[data-key="${CSS.escape(id)}"]`):null,
     scroll:el=>{
+      blkOpen(el);
       const box=$('#detail');
       const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-12;
       box.scrollTop=want();
