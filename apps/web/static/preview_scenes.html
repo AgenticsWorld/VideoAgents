@@ -376,7 +376,7 @@ function mountWorldSection(whitebox,s){
     +`<div class="ws-viewer"></div>`;
   if(world&&world.previews){
     const caps=[['pano','输入全景'],['whitebox_pano','白模全景'],['depth_pano','深度全景']].filter(([k])=>world.previews[k]);
-    if(caps.length)h+=`<div class="gallery plates" style="margin-top:8px">${caps.map(([k,cap])=>`<figure><img src="${esc(world.previews[k])}" alt="${esc(t(cap))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(t(cap))}</span></figcaption></figure>`).join('')}</div>`;
+    if(caps.length)h+=`<div class="gallery plates" style="margin-top:8px">${caps.map(([k,cap])=>`<figure><img src="${esc(world.previews[k])}" alt="${esc(t(cap))}" loading="lazy" onclick="zoomPano(this.src)"><figcaption><span class="fn">${esc(t(cap))}</span></figcaption></figure>`).join('')}</div>`;
   }
   sec.innerHTML=h;
   const status=sec.querySelector('.ws-status'),log=sec.querySelector('.ws-log'),btn=sec.querySelector('.ws-gen'),sel=sec.querySelector('.ws-source');
@@ -501,7 +501,7 @@ async function mountPanoSection(host,s){
       +`<div class="pano-serves" title="${esc(t('点击展开/收起'))}">${esc(serves)}</div></div><div class="pano-row">`;
     Object.keys(a.panos||{}).sort().forEach(sch=>{const rec=a.panos[sch];if(!rec.url)return;
       const cap=`${sch}${rec.time_of_day?` · ${rec.time_of_day}`:''} · ${modeText(rec)}`;
-      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
+      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoomPano(this.src)" title="${esc(t('点击打开 360° 预览'))}"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
     h+='</div></div>';
   });
   if(anchors.length)h+='</div>';
@@ -616,6 +616,8 @@ function closeFolder(){openFolder(null)}
 
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
+// 全景图(2:1 等距柱状)点击 → 可拖动的 360° 预览(pano-viewer.js,three 内翻球);模块加载失败时退回平面灯箱
+function zoomPano(src){import('/static/pano-viewer.js?v=20260921').then(m=>m.openPano360(src)).catch(()=>zoom(src))}
 
 // ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 项目画幅(预览数据 format,
 // 缺失时退回图片自身比例);拖选框移动、拖四角缩放(对角固定);确认 → POST scenes/<sid>/plates/crop,服务端裁切覆盖原图后原地换图,不整页重载。

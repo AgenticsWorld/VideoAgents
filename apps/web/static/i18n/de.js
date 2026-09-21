@@ -3148,4 +3148,10 @@ window.I18N_DICT = {
 "✏️ 更新台词": "✏️ Sprechtext aktualisieren",
 "台词已更新": "Sprechtext aktualisiert",
 "对口型模型需要填写台词(人物要说的话)": "Das Lip-Sync-Modell benötigt einen Sprechtext (was die Figur sagt)",
+"点击打开 360° 预览": "Klicken, um die 360°-Vorschau zu öffnen",
+"360° 预览": "360°-Vorschau",
+"平面原图": "Flaches Originalbild",
+"拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Ziehen zum Umsehen (360°), Mausrad zum Zoomen, Doppelklick zum Zurücksetzen, Esc zum Schließen",
+"全景加载中…": "Panorama wird geladen…",
+"全景图加载失败": "Panorama konnte nicht geladen werden",
 };

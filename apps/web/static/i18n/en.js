@@ -3307,4 +3307,10 @@ window.I18N_DICT = {
 "✏️ 更新台词": "✏️ Update script",
 "台词已更新": "Script updated",
 "对口型模型需要填写台词(人物要说的话)": "The lip-sync model needs a script (what the character says)",
+"点击打开 360° 预览": "Click to open the 360° preview",
+"360° 预览": "360° preview",
+"平面原图": "Flat image",
+"拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Drag to look around 360°, scroll to zoom, double-click to reset, Esc to close",
+"全景加载中…": "Loading panorama…",
+"全景图加载失败": "Failed to load panorama",
 };

@@ -3150,4 +3150,10 @@ window.I18N_DICT = {
 "✏️ 更新台词": "✏️ Atualizar fala",
 "台词已更新": "Fala atualizada",
 "对口型模型需要填写台词(人物要说的话)": "O modelo de sincronia labial precisa de uma fala (o que o personagem diz)",
+"点击打开 360° 预览": "Clique para abrir a pré-visualização 360°",
+"360° 预览": "Pré-visualização 360°",
+"平面原图": "Imagem plana",
+"拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Arraste para olhar em 360°, role para dar zoom, clique duplo para redefinir, Esc para fechar",
+"全景加载中…": "Carregando panorama…",
+"全景图加载失败": "Falha ao carregar o panorama",
 };

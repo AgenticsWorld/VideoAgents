@@ -3148,4 +3148,10 @@ window.I18N_DICT = {
 "✏️ 更新台词": "✏️ Perbarui naskah",
 "台词已更新": "Naskah diperbarui",
 "对口型模型需要填写台词(人物要说的话)": "Model sinkronisasi bibir memerlukan naskah (apa yang diucapkan tokoh)",
+"点击打开 360° 预览": "Klik untuk membuka pratinjau 360°",
+"360° 预览": "Pratinjau 360°",
+"平面原图": "Gambar datar",
+"拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Seret untuk melihat sekeliling 360°, gulir untuk zoom, klik ganda untuk reset, Esc untuk menutup",
+"全景加载中…": "Memuat panorama…",
+"全景图加载失败": "Gagal memuat panorama",
 };

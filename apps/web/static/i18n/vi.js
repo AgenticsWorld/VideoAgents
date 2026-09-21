@@ -3148,4 +3148,10 @@ window.I18N_DICT = {
 "✏️ 更新台词": "✏️ Cập nhật lời thoại",
 "台词已更新": "Đã cập nhật lời thoại",
 "对口型模型需要填写台词(人物要说的话)": "Mô hình khớp khẩu hình cần có lời thoại (những gì nhân vật nói)",
+"点击打开 360° 预览": "Nhấp để mở xem trước 360°",
+"360° 预览": "Xem trước 360°",
+"平面原图": "Ảnh phẳng gốc",
+"拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Kéo để nhìn quanh 360°, cuộn để thu phóng, nhấp đúp để đặt lại, Esc để đóng",
+"全景加载中…": "Đang tải ảnh toàn cảnh…",
+"全景图加载失败": "Tải ảnh toàn cảnh thất bại",
 };
