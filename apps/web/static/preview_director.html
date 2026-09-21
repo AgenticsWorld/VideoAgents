@@ -1166,7 +1166,8 @@ function subjectInfo(){
   }
   return best;
 }
-const sizeName=f=>f>1.1?t('特写'):f>0.75?t('近景'):f>0.45?t('中景'):f>0.22?t('全景'):t('远景');
+// f = 主体全身高 / 画面高:全身入画 ≤1(全景),腰膝以上 1–2(中景),胸以上 2–3.5(近景),只剩脸 >3.5(特写)
+const sizeName=f=>f>3.5?t('特写'):f>2?t('近景'):f>1.05?t('中景'):f>0.4?t('全景'):t('远景');
 function renderLens(){
   const box=$('#lens');if(!box)return;const g=viewedGroup(),shot=currentShot();
   if(!g||!shot||!RA||!RA.scene){box.innerHTML='';return}
