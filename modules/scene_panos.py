@@ -1008,7 +1008,10 @@ def object_inventory(scene: dict, layout: dict, anchor: dict, view: dict | None 
         dx, dz = cx - ax, cz - az
         dist = math.hypot(dx, dz)
         b = bearing_deg(dx, dz, ex, ez)
-        lx = math.cos(-yaw) * dx - math.sin(-yaw) * dz; lz = math.sin(-yaw) * dx + math.cos(-yaw) * dz
+        # 世界 → 相机局部:全景渲染是 世界 = M·局部(_equirect_rays 的 wx/wz),这里必须用 M 的逆,
+        # 用成 M 本身会把列位转反 2×yaw —— yaw 90/270 时整整差 180°,左右半幅对调,成图与白模参考图永远对不上
+        # (DEF-p6-pano-001,2026-09-21 fengshen3 SCN-0110:提示词说石台 23%,白模全景里在 72%)。
+        lx = math.cos(yaw) * dx - math.sin(yaw) * dz; lz = math.sin(yaw) * dx + math.cos(yaw) * dz
         col = int(round((math.atan2(lx, -lz) + math.pi) / (2 * math.pi) * 100))
         name = _object_name(oid, landmarks, names)[0]
         top = cy + sy / 2
@@ -1315,8 +1318,13 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
                   and (panos_dir(base, sid) / a['anchor_id'] / f'{scheme}.png').is_file()]
         # 没跟白模的全景不当链式父图:重投影用的是白模深度,成图与白模对不上时参考图是一片拉花、还与白模参考图互相矛盾,
         # 子锚点两张都不跟(fengshen3 SCN-0121:A1 对齐 30% / 基线 34% → A2、A3、A4 整条链带歪)。出图前停,不花钱。
-        # 正在重出的就是带歪整条链的那个根锚点时,它的后代直接不用(没有别的父图就不带父图新出),不拦它自己。
-        donors = [a for a in donors if _chain_distrust(base, sid, a['anchor_id'], scheme)[0] != anchor['anchor_id']]
+        # 环保护(含「正在重出的就是带歪整条链的那个根锚点」:后代直接不用,没有别的父图就不带父图新出,不拦它自己):
+        # 任何(直接或间接)从本锚点链出来的全景都不当父图 —— 重出本锚点时拿自己的子孙当参考,等于把上一版的偏差
+        # 绕回来再叠一层(fengshen3 SCN-0110:A7 链自旧 A2,重出 A2 时按距离又选中 A7,接缝比 4.8 → 20.8)。不看一致性,一律排除。
+        offspring = [a for a in donors if _descends_from(base, sid, a['anchor_id'], anchor['anchor_id'], scheme)]
+        if offspring:
+            donors = [a for a in donors if a not in offspring]
+            log(f"   跳过本锚点的子孙全景 {[a['anchor_id'] for a in offspring]}(它们是从本锚点链出来的,当父图会把偏差绕回来)")
         untrusted = [a for a in donors if chain_donor_distrust(base, sid, a, scheme)]
         donors = [a for a in donors if a not in untrusted]
         if untrusted and not donors:
@@ -1397,18 +1405,36 @@ def _commit_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, rec
     save_index(base, sid, idx)
 
 
-def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print) -> dict:
+def _pose_differs(side: dict, anchor: dict) -> bool:
+    """被拒图 sidecar 记下的出图位姿与锚点当前位姿不符(出图后锚点挪过 / 改过 yaw)。sidecar 没记位姿的存量图按相符算。"""
+    rec = side.get('anchor') or {}
+    if not rec.get('position'):
+        return False
+    return (math.dist(rec['position'], anchor['position']) > .05
+            or abs(float(rec.get('yaw_deg') or 0) - float(anchor.get('yaw_deg') or 0)) > .5)
+
+
+def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print, pick: str | None = None) -> dict:
     """用户目视认可后把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱)。仍过一遍 2:1 与当前判据,结果照实记入 sidecar
-    (adopted.checks_at_adopt);已有正式全景时不覆盖。存量被拒图没有 sidecar 时 seed / 提示词记空。"""
+    (adopted.checks_at_adopt);已有正式全景时不覆盖。存量被拒图没有 sidecar 时 seed / 提示词记空。
+    pick = 文件名片段(如时间戳 20260921-084915)时只认领那一张。按别的位姿出的被拒图不认领:列位随 yaw 平移,认领后重投影的
+    分镜背景图整体转向(fengshen3 SCN-0110 A2:yaw 270 / 180 两种被拒图并存,最新一张恰是试过又撤回的 180)。"""
     from PIL import Image
     idx = load_index(base, sid)
     anchor = next((a for a in idx['anchors'] if a['anchor_id'] == anchor_id), None)
     if not anchor:
         raise PanoError(f'{sid}: 锚点不存在:{anchor_id}')
     out = panos_dir(base, sid) / anchor_id
-    files = sorted((f for f in out.glob('*.rejected-*.png') if scheme is None or f.name.startswith(scheme + '.')), key=lambda f: f.stat().st_mtime)
+    files = sorted((f for f in out.glob('*.rejected-*.png') if (scheme is None or f.name.startswith(scheme + '.')) and (not pick or pick in f.name)),
+                   key=lambda f: f.stat().st_mtime)
     if not files:
-        raise PanoError(f'{sid}/{anchor_id}: 没有被拒的成图可认领')
+        raise PanoError(f'{sid}/{anchor_id}: 没有被拒的成图可认领' + (f'(文件名含 {pick})' if pick else ''))
+    moved = [f for f in files if _pose_differs(read(f.with_suffix('.json'), {}) or {}, anchor)]
+    files = [f for f in files if f not in moved]
+    if moved:
+        log(f"   跳过按别的位姿出的被拒图 {[f.name for f in moved]}(锚点当前 yaw {anchor.get('yaw_deg', 0)}°)")
+    if not files:
+        raise PanoError(f'{sid}/{anchor_id}: 被拒成图都是按别的锚点位姿出的,不能认领(锚点当前 yaw {anchor.get("yaw_deg", 0)}°)')
     src = files[-1]
     scheme = scheme or src.name.split('.rejected-')[0]
     target = out / f'{scheme}.png'
@@ -1418,6 +1444,8 @@ def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = No
     if abs(rw / rh - 2.0) > ASPECT_TOLERANCE:
         raise PanoError(f'{src.name}: {rw}x{rh} 不是 2:1,不能认领')
     side = read(src.with_suffix('.json'), {}) or {}
+    if (out / 'depth_pano.json').is_file() and whitebox_pano_stale_at(out, anchor):                 # 白模深度是按别的位姿渲的(改过 yaw 又撤回):一致性判据与之后的重投影都会错位
+        render_whitebox_pano(base, sid, anchor, indoor=bool(anchor.get('indoor', (read(out / 'depth_pano.json', {}) or {}).get('indoor'))), log=log)
     checks = {'projection_check': projection_check(src), 'conformity_check': conformity_check(src, out / 'depth_pano.npy')}
     rec = {'mode': 'fresh', 'parent': None, 'time_of_day': None, 'channel': None, 'seed': None, 'refs': [], 'prompt': None, 'negative': None,
            **{k: v for k, v in side.items() if k not in ('rejected',)}, **checks,
@@ -1496,7 +1524,7 @@ def projection_check(path: Path, usage: dict | None = None) -> dict | None:
 CONFORMITY_BUSY_NULL = 0.75      # 成图处处是边缘(机场大厅)时错位也能对上,指标失效 → 不判
 CONFORMITY_FAIL_S0 = 0.30
 CONFORMITY_WARN_Z = 2.0
-CHAIN_DONOR_MIN_ALIGNED = 0.40   # 链式父图保护:对齐度低于此且不高于错位基线才不当父图
+CHAIN_DONOR_MIN_ALIGNED = 0.50   # 链式父图保护:对齐度低于此且不高于错位基线才不当父图
 
 
 def conformity_check(result: Path, depth_npy: Path) -> dict | None:
@@ -1537,6 +1565,21 @@ def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     return {**rec, 'verdict': 'PASS', 'reason': ''}
 
 
+def _descends_from(base: Path, sid: str, anchor_id: str, ancestor_id: str, scheme: str, _seen: tuple = ()) -> bool:
+    """anchor_id 的全景是否(直接或间接)从 ancestor_id 链式补洞而来。重出 ancestor_id 时用它排除自己的子孙,避免偏差绕环放大。"""
+    if anchor_id == ancestor_id:
+        return True
+    if anchor_id in _seen:
+        return False
+    rec = read(panos_dir(base, sid) / anchor_id / f'{scheme}.json', {}) or {}
+    if rec.get('mode') != 'chain':
+        return False
+    up = (rec.get('parent') or {}).get('anchor_id')
+    if not up or up == anchor_id:
+        return False
+    return _descends_from(base, sid, up, ancestor_id, scheme, _seen + (anchor_id,))
+
+
 def _chain_distrust(base: Path, sid: str, anchor_id: str, scheme: str, _seen: tuple = ()) -> tuple:
     """(根锚点, 原因);可用则 (None, '')。"""
     rec = read(panos_dir(base, sid) / anchor_id / f'{scheme}.json', {}) or {}
@@ -1551,7 +1594,8 @@ def _chain_distrust(base: Path, sid: str, anchor_id: str, scheme: str, _seen: tu
     if conf.get('verdict') != 'WARN' or float(conf.get('z') or 0) > 0:
         return None, ''
     if float(conf.get('aligned') or 0) >= CHAIN_DONOR_MIN_ALIGNED:
-        return None, ''                                     # 错位基线本身就高的开阔外景(fengshen3 SCN-0110 对齐 45–68% / 基线 65–73%):指标不灵,不拦
+        return None, ''                                     # 错位基线本身就高的开阔外景(fengshen3 SCN-0110 对齐 50–68% / 基线 65–73%):指标不灵,不拦
+                                                            # (0.40 → 0.50:SCN-0110 对齐 < 50% 的几张是列位文字转反画偏的 DEF-p6-pano-001,不是指标失灵)
     return anchor_id, f"对齐 {conf.get('aligned', 0):.0%} 不高于错位基线 {conf.get('null', 0):.0%}"
 
 
