@@ -222,6 +222,14 @@ def normalize_settings(s: dict, strict: bool = True) -> dict:
     out["resolution"] = res
     lm = str(s.get("link_mode") or "refs_tail")
     out["link_mode"] = lm if lm in LINK_MODES else "refs_tail"
+    # 衔接模式跟模型能力走:模型做不到的模式 strict 时报 400,否则回落到该模型的第一个可用模式
+    allowed = allowed_link_modes(provider, out["model"])
+    if out["link_mode"] not in allowed:
+        if strict:
+            names = {"refs_tail": "参考图+尾帧", "first_frame": "尾帧作首帧", "none": "不衔接", "director": "导演模式"}
+            raise LiveError(400, f"模型 {out['model']} 不支持衔接模式「{names.get(out['link_mode'], out['link_mode'])}」,"
+                                 f"可选:{' / '.join(names[a] for a in allowed)}")
+        out["link_mode"] = allowed[0]
     # 导演模式模型固定;离开导演模式时把固定模型换回默认(它不是队列端点,循环模式用不了)
     if out["link_mode"] == "director":
         out["model"] = DIRECTOR_MODEL
@@ -776,6 +784,17 @@ def resolve_file(rel: str) -> Path:
     if not p.is_file():
         raise LiveError(404, "文件不存在")
     return p
+
+
+def allowed_link_modes(provider: str, model: str) -> tuple[str, ...]:
+    """模型 → 可选衔接模式(页面 live.html 的 LINK_ALLOWED 与此同表,改一处须同步另一处)。
+    FastH3 仅文生;Kling / H3 Max Turbo 无 reference-to-video 端点;对口型只吃一张人物图。"""
+    if provider == "comfyui":
+        return ("none",)
+    fam = _genmedia_family(model)
+    if fam == "lipsync" or fam == "kling" or (fam == "h3" and "turbo" in (model or "").lower()):
+        return ("first_frame", "none", "director")
+    return LINK_MODES
 
 
 def _genmedia_family(model: str) -> str:

@@ -250,6 +250,19 @@ const DUR_RANGE={lipsync:[5,13],h3:[4,15],seedance:[4,15],seedance25:[4,30],klin
 
 /* ---------- 设置表单 ---------- */
 const isDirector=()=>$('#link-mode').value==='director';
+// 模型 → 可选衔接模式(与 modules/live_stream.py 的 allowed_link_modes 同表):FastH3 仅文生;Kling / H3 Max Turbo 无参考端点;对口型只吃一张人物图
+function linkAllowed(provider,model){
+  if(provider==='comfyui')return ['none'];
+  const fam=FAMILY(model);
+  if(fam==='lipsync'||fam==='kling'||(fam==='h3'&&(model||'').toLowerCase().includes('turbo')))return ['first_frame','none','director'];
+  return ['refs_tail','first_frame','none','director'];
+}
+function syncLinkModes(){   // 当前模型做不到的衔接模式置灰;已选中的失效项落到第一个可用项。导演模式下模型被固定,按切入前的模型判
+  const lm=$('#link-mode');const model=lm.value==='director'?(DIRECTOR_PREV_MODEL||''):$('#model').value;
+  const ok=linkAllowed($('#provider').value,model);
+  [...lm.options].forEach(o=>{o.disabled=!ok.includes(o.value)});
+  if(!ok.includes(lm.value))lm.value=ok[0];
+}
 function fillModels(models,cur){
   const sel=$('#model');const old=sel.value;
   sel.innerHTML=models.map(([id,label])=>`<option value="${esc(id)}">${esc(t(label))}</option>`).join('');
@@ -266,6 +279,7 @@ function fillProviders(rows,cur){
   if([...sel.options].some(o=>o.value===want))sel.value=want;
 }
 function onModelChange(){
+  syncLinkModes();
   const sel=$('#model');const director=isDirector();
   if(director){   // 导演模式:模型固定为 director 端点(非队列端点,不进生成模型目录),记住原模型以便切回
     if(sel.value!==DIRECTOR_MODEL){DIRECTOR_PREV_MODEL=sel.value||DIRECTOR_PREV_MODEL;if(![...sel.options].some(o=>o.value===DIRECTOR_MODEL))sel.insertAdjacentHTML('afterbegin',`<option value="${esc(DIRECTOR_MODEL)}">${esc(t('MiniMax H3 Max Director(导演模式专用,实时 WebRTC)'))}</option>`);sel.value=DIRECTOR_MODEL}
@@ -311,7 +325,7 @@ $('#provider').onchange=()=>{
   // 切渠道不沿用旧渠道的模型(否则会被 fillModels 当自定义值硬插进新目录):Fal 回到生成模型页配置的模型,其余落到新目录第一项
   const p=$('#provider').value;const rows=MODEL_CATALOGS[p]||[];
   const pref=p==='fal'&&STATE&&STATE.genconfig_model;
-  if(p==='comfyui'&&isDirector())$('#link-mode').value='refs_tail';   // 后端拒绝 ComfyUI + 导演模式
+  if(p==='comfyui'&&isDirector())$('#link-mode').value='none';   // 后端拒绝 ComfyUI + 导演模式
   $('#model').innerHTML='';
   fillModels(rows,pref||(rows[0]?rows[0][0]:null));
 };
@@ -320,7 +334,7 @@ function fillSettings(s){
   if(s.provider&&[...$('#provider').options].some(o=>o.value===s.provider))$('#provider').value=s.provider;
   $('#prompt').value=s.prompt||'';$('#aspect').value=s.aspect||'16:9';$('#duration').value=s.duration||10;
   $('#link-mode').value=s.link_mode||'refs_tail';$('#max-rounds').value=s.max_rounds||0;$('#idle-stop').value=s.idle_stop_min??10;
-  $('#memory').value=s.memory||12;if(s.link_mode==='director')onModelChange();
+  $('#memory').value=s.memory||12;onModelChange();   // 回填的衔接模式须按当前模型重新过一遍可选表
   $('#resolution').value=s.resolution||'480p';$('#max-pending').value=s.max_pending||3;
   $('#gen-audio').checked=s.generate_audio!==false;$('#continue-last').checked=!!s.continue_last;
 }
