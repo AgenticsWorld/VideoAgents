@@ -46,7 +46,7 @@ def main():
         ap.add_argument('--outdoor', action='store_true')
         ap.add_argument('--seed', type=int, default=None)
         ap.add_argument('--adopt', action='append', default=[], metavar='ANCHOR',
-                        help='用户目视认可后,把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱;可配 --scheme;Agent 不得自行使用)')
+                        help='用户目视认可后,把该锚点最新一张归档成图(.rejected-* 被拒图 / .redo-* 重出时归档的上一版)认领为正式全景(不花钱;可配 --scheme;Agent 不得自行使用)')
         ap.add_argument('--pick', default=None, metavar='STAMP',
                         help='配合 --adopt:只认领文件名含这段的那张被拒图(如时间戳 20260921-084915);缺省取最新一张')
         ap.add_argument('--trust', action='append', default=[], metavar='ANCHOR',

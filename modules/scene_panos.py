@@ -1410,8 +1410,11 @@ def _commit_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, rec
     save_index(base, sid, idx)
 
 
+ARCHIVED_PANO_RE = re.compile(r'\.(?:rejected-[a-z]+|redo)-')   # 归档成图文件名:<scheme>.rejected-<判据>-<时间>.png / <scheme>.redo-<时间>.png
+
+
 def _pose_differs(side: dict, anchor: dict) -> bool:
-    """被拒图 sidecar 记下的出图位姿与锚点当前位姿不符(出图后锚点挪过 / 改过 yaw)。sidecar 没记位姿的存量图按相符算。"""
+    """归档图 sidecar 记下的出图位姿与锚点当前位姿不符(出图后锚点挪过 / 改过 yaw)。sidecar 没记位姿的存量图按相符算。"""
     rec = side.get('anchor') or {}
     if not rec.get('position'):
         return False
@@ -1420,9 +1423,10 @@ def _pose_differs(side: dict, anchor: dict) -> bool:
 
 
 def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print, pick: str | None = None) -> dict:
-    """用户目视认可后把该锚点最新一张 .rejected-* 成图认领为正式全景(不花钱)。仍过一遍 2:1 与当前判据,结果照实记入 sidecar
-    (adopted.checks_at_adopt);已有正式全景时不覆盖。存量被拒图没有 sidecar 时 seed / 提示词记空。
-    pick = 文件名片段(如时间戳 20260921-084915)时只认领那一张。按别的位姿出的被拒图不认领:列位随 yaw 平移,认领后重投影的
+    """用户目视认可后把该锚点最新一张归档成图认领为正式全景(不花钱):既认 .rejected-*(判据拒掉的),也认 .redo-*
+    (--redo 重出时归档的上一版正式全景——重出反而更差时用户可以要回旧的)。仍过一遍 2:1 与当前判据,结果照实记入 sidecar
+    (adopted.checks_at_adopt);已有正式全景时不覆盖。存量归档图没有 sidecar 时 seed / 提示词记空。
+    pick = 文件名片段(如时间戳 20260921-084915)时只认领那一张。按别的位姿出的归档图不认领:列位随 yaw 平移,认领后重投影的
     分镜背景图整体转向(fengshen3 SCN-0110 A2:yaw 270 / 180 两种被拒图并存,最新一张恰是试过又撤回的 180)。"""
     from PIL import Image
     idx = load_index(base, sid)
@@ -1430,10 +1434,11 @@ def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = No
     if not anchor:
         raise PanoError(f'{sid}: 锚点不存在:{anchor_id}')
     out = panos_dir(base, sid) / anchor_id
-    files = sorted((f for f in out.glob('*.rejected-*.png') if (scheme is None or f.name.startswith(scheme + '.')) and (not pick or pick in f.name)),
+    files = sorted((f for f in out.glob('*.png') if ARCHIVED_PANO_RE.search(f.name)
+                    and (scheme is None or f.name.startswith(scheme + '.')) and (not pick or pick in f.name)),
                    key=lambda f: f.stat().st_mtime)
     if not files:
-        raise PanoError(f'{sid}/{anchor_id}: 没有被拒的成图可认领' + (f'(文件名含 {pick})' if pick else ''))
+        raise PanoError(f'{sid}/{anchor_id}: 没有可认领的归档成图(.rejected-* / .redo-*)' + (f'(文件名含 {pick})' if pick else ''))
     moved = [f for f in files if _pose_differs(read(f.with_suffix('.json'), {}) or {}, anchor)]
     files = [f for f in files if f not in moved]
     if moved:
@@ -1441,7 +1446,7 @@ def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = No
     if not files:
         raise PanoError(f'{sid}/{anchor_id}: 被拒成图都是按别的锚点位姿出的,不能认领(锚点当前 yaw {anchor.get("yaw_deg", 0)}°)')
     src = files[-1]
-    scheme = scheme or src.name.split('.rejected-')[0]
+    scheme = scheme or ARCHIVED_PANO_RE.split(src.name)[0]
     target = out / f'{scheme}.png'
     if target.is_file():
         raise PanoError(f'{sid}/{anchor_id}/{scheme}: 已有正式全景 {target.name},不覆盖(要换先 --redo 或手工挪走)')
@@ -1455,7 +1460,8 @@ def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = No
     rec = {'mode': 'fresh', 'parent': None, 'time_of_day': None, 'channel': None, 'seed': None, 'refs': [], 'prompt': None, 'negative': None,
            **{k: v for k, v in side.items() if k not in ('rejected',)}, **checks,
            'file': target.name, 'scheme': scheme, 'size': [rw, rh], 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
-           'adopted': {'from': src.name, 'by': 'user', 'at': _now(), 'rejected_as': side.get('rejected') or src.name.split('.rejected-')[1].split('-')[0]},
+           'adopted': {'from': src.name, 'by': 'user', 'at': _now(),
+                       'rejected_as': side.get('rejected') or (src.name.split('.rejected-')[1].split('-')[0] if '.rejected-' in src.name else 'redo')},
            'written_at': _now()}
     src.rename(target)
     if src.with_suffix('.json').is_file():
