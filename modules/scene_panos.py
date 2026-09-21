@@ -1588,6 +1588,12 @@ def _chain_distrust(base: Path, sid: str, anchor_id: str, scheme: str, _seen: tu
         return None, ''
     up = (rec.get('parent') or {}).get('anchor_id') if rec.get('mode') == 'chain' else None
     if up and up != anchor_id and up not in _seen:          # 它自己就是从没跟白模的父图链出来的:同样带歪
+        # 父锚点在它之后重出 / 换过图:它链的是旧版父图。链式参考图压过文字,子全景的朝向整张继承父图——旧父图画反,子图跟着反,
+        # 且白模一致性 z 在开阔外景分不出来(fengshen3 SCN-0110:四张提示词列位同样转反 50%,A3←A1、A6←A3 方向正确,
+        # A5、A7←旧 A2(空洞 37% 文字占上风画反)跟着反;z 却是 A3 −2.7 最低)。父图换了就不再当父图,等用户核对(--trust)或重出。
+        up_rec = read(panos_dir(base, sid) / up / f'{scheme}.json', {}) or {}
+        if up_rec.get('written_at') and rec.get('written_at') and str(up_rec['written_at']) > str(rec['written_at']):
+            return anchor_id, f"链自 {up} 的旧版全景({up} 已于 {up_rec['written_at']} 换图)"
         root, why = _chain_distrust(base, sid, up, scheme, _seen + (anchor_id,))
         if why:
             return root, f"链自 {up}:{why}"
