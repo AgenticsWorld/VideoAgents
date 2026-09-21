@@ -158,8 +158,9 @@ _PLATE_NEG_PERSON_RE = re.compile(
 def plate_style(style: str) -> str:
     """空场景图用的风格串:按逗号分句剔除描述人物(主体/发丝/皮肤/服装面料)的子句,分号分组保留。"""
     groups = []
-    # 方舟文本预检:「shadows never crushed to black」与「four to six layers of depth」同现即 InputTextSensitiveContentDetected
-    # (2026-09-21 fengshen3 SCN-0110 探针二分实证,单句均过),空场景图路径改写为同义句
+    # 方舟文本预检:下面剔除人物子句后,「shadows never crushed to black」与「four to six layers of depth」变成直接相邻,
+    # 相邻即 InputTextSensitiveContentDetected(2026-09-21 fengshen3 SCN-0110 探针二分实证,单句均过;
+    # 原串两句间隔着一条 subject 子句时一直过审,故不必改 bible/style.json),空场景图路径改写为同义句
     style = (style or '').replace('shadows never crushed to black', 'shadow areas always keep visible detail and colour')
     for grp in re.split(r'[;;]', style):
         keep = [c.strip() for c in re.split(r'[,,]', grp) if c.strip() and not _PLATE_STYLE_PERSON_RE.search(c)]
