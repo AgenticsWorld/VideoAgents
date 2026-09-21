@@ -720,24 +720,34 @@ def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str,
     """按锚点优先级重投影;空洞 > PLATE_HOLE_MAX 换下一锚点;全部不合格 → 在本机位加锚点、出该方案全景后再重投影(保证每张背景图都基于全景)。"""
     from modules import scene_panos
     camera = {'position': facts['position'], 'target': facts['target'], 'fov_v_deg': facts['fov_v_deg']}
-    tried = []
+    tried, tried_anchors = [], []
     for a in scene_panos.anchor_for_camera(base, sid, idx, cam, scheme):
         info = scene_panos.reproject_to_camera(base, sid, a, scheme, camera, width, height, output)
-        tried.append((info['hole_fraction'], a['anchor_id']))
+        tried.append((info['hole_fraction'], a['anchor_id'])); tried_anchors.append(a)
         if info['hole_fraction'] <= scene_panos.PLATE_HOLE_MAX:
             if len(tried) > 1:
                 log(f"   锚点 {a['anchor_id']} 重投影空洞 {info['hole_fraction']:.0%}(前序锚点 {tried[:-1]})")
             return info
+    from modules.whitebox import load_scene
+    scene = load_scene(base, sid)
+    # 兜底锚点同规划口径夹回白模地面边缘内 0.5 m(scene_panos.plan_anchors / can_serve):场外没有几何,在那里出的全景基本是空的。
+    w, _, d = scene['dimensions_m']
+    px = max(-w / 2 + .5, min(w / 2 - .5, cam['position'][0])); pz = max(-d / 2 + .5, min(d / 2 - .5, cam['position'][2]))
+    near = [(h, a) for (h, _), a in zip(tried, tried_anchors) if math.hypot(a['position'][0] - px, a['position'][2] - pz) <= scene_panos.SERVE_MIN_M]
+    if near:   # 夹回点旁边已有试过的锚点:再出一张全景也是同一个视点、同样的空洞,不花这笔钱,用空洞最小的那张
+        hole, a = min(near, key=lambda x: x[0])
+        log(f"   ⚠ 现有锚点重投影空洞都超 {scene_panos.PLATE_HOLE_MAX:.0%}:{tried};机位 {cam['shot_id']} 的兜底锚点位置({px:.1f}, {pz:.1f})"
+            f"距 {a['anchor_id']} 不足 {scene_panos.SERVE_MIN_M} m,不另出全景,沿用 {a['anchor_id']}(空洞 {hole:.0%})")
+        return dict(scene_panos.reproject_to_camera(base, sid, a, scheme, camera, width, height, output), hole_warn=True)
     log(f"   现有锚点重投影空洞都超 {scene_panos.PLATE_HOLE_MAX:.0%}:{tried};在机位 {cam['shot_id']} 处加锚点出全景")
     height_m = idx['anchors'][0]['position'][1] if idx['anchors'] else 1.6
     used = {a['anchor_id'] for a in idx['anchors']}
     n = len(idx['anchors']) + 1
     while f'A{n}' in used:
         n += 1
-    anchor = {'anchor_id': f'A{n}', 'position': [round(cam['position'][0], 3), height_m, round(cam['position'][2], 3)],
+    anchor = {'anchor_id': f'A{n}', 'position': [round(px, 3), height_m, round(pz, 3)],
               'yaw_deg': scene_panos.pick_seam_yaw([cam]), 'source': 'auto-self', 'locked': False, 'serves': [scene_panos._cam_key(cam)], 'panos': {}}
-    from modules.whitebox import load_scene
-    indoor = anchor['indoor'] = scene_panos.anchor_indoor(base, sid, load_scene(base, sid), anchor, indoor)   # 场景级 None(内外混合)→ 按这个锚点的围合判
+    indoor = anchor['indoor'] = scene_panos.anchor_indoor(base, sid, scene, anchor, indoor)   # 场景级 None(内外混合)→ 按这个锚点的围合判
     idx['anchors'].append(anchor)
     scene_panos.save_index(base, sid, idx)
     scene_panos.render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)

@@ -1132,9 +1132,14 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
 # ---------------------------------------------------------------- reprojection (numpy, backward warp)
 # 目标视图每个像素先对白模几何射线求交得 3D 点(密集、无散射空洞),再回到源全景取色,并用源深度全景做遮挡判定;
 # 只有真被遮挡处才是空洞。几何 = 白模 objects(盒;球/柱按盒近似)+ 地板(外扩 20 m,机位可在白模地面外)+ 室内天花板。
-def scene_boxes(scene: dict, indoor: bool) -> list:
+# reach = 目标机位坐标:地板再外扩到机位脚下。超长焦远景机位(fengshen3 SCN-0052 ep06 sh001,场外 178 m)的下半幅射线否则从地板盒
+# 底下穿过算成空洞(54.7% 里占 43%),白白触发 auto-self 兜底锚点。
+def scene_boxes(scene: dict, indoor: bool, reach=None) -> list:
     w, h, d = scene['dimensions_m']
-    boxes = [((0.0, -0.05, 0.0), (w + 40.0, 0.05, d + 40.0), 0.0)]
+    gw, gd = w + 40.0, d + 40.0
+    if reach is not None:
+        gw, gd = max(gw, 2 * abs(float(reach[0])) + 40.0), max(gd, 2 * abs(float(reach[2])) + 40.0)
+    boxes = [((0.0, -0.05, 0.0), (gw, 0.05, gd), 0.0)]
     if indoor:
         boxes.append(((0.0, h + 0.025, 0.0), (w, 0.05, d), 0.0))
     for o in scene.get('objects', []):
@@ -1232,7 +1237,7 @@ def _warp(base, sid, anchor, scheme, origin, dirs, bw, bh):
     import numpy as np
     from modules.whitebox import load_scene
     pano, depth0, cam0, yaw0, indoor, z_max = _load_pano(base, sid, anchor, scheme)
-    boxes = scene_boxes(load_scene(base, sid), indoor)
+    boxes = scene_boxes(load_scene(base, sid), indoor, reach=origin)
     t = raycast(origin, dirs, boxes)
     infinite = ~np.isfinite(t)
     tt = np.where(infinite, 1e4, t)
