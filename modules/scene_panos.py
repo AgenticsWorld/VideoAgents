@@ -296,28 +296,90 @@ def can_serve(anchor_pos, cam: dict, scene: dict) -> bool:
     objs = scene.get('objects', [])
     if segment_blocked(anchor_pos, [pos[0], anchor_pos[1], pos[2]], objs):
         return False
+    if abs(anchor_pos[1] - pos[1]) > SURFACE_LEVEL_TOL_M and segment_blocked(anchor_pos, pos, objs):
+        return False                        # 不同层(墙下锚点 ↔ 墙顶机位):到机位本身的连线也不能穿实体
     return not segment_blocked(anchor_pos, tgt, objs)
 
 
-def default_anchor_height(cameras: list) -> float:
-    # 不低于 1.6 m:锚点高于座椅背/柜台等中高家具,遮挡少(重投影按机位射线求交,锚点高度不必等于机高)
-    hs = sorted(c['position'][1] for c in cameras) or [1.6]
+# ---------------------------------------------------------------- standing surface (2026-09-21)
+# 锚点高度 = 脚下站立面 + 眼高,不再按绝对 y 夹在 1.6–2.0 m:机位在城墙顶 / 高台 / 楼上时(fengshen3 SCN-0036 关墙顶 y≈15 m),
+# 绝对 2 m 落在墙体实心体块里,白模全景渲的是体块内部、分镜背景重投影全空(「该机位看不到全景的任何内容」)。
+SURFACE_MIN_M = 1.0              # 顶面低于此的体块(台基/矮凳/门槛)不算站立面,按地面算——眼高本来就高过它们
+SURFACE_LEVEL_TOL_M = 1.0        # 候选点的站立面与某个机位的站立面相差 ≤ 此值才算同一层(规划只在有机位的那几层撒候选点)
+
+
+def _top(o) -> float:
+    return float(o['position'][1]) + float(o['size_m'][1]) / 2
+
+
+def surfaces_at(scene: dict, x: float, z: float) -> list:
+    """(x, z) 处自下而上的站立面高度:地面 0 + 水平盖住该点、顶面 ≥ SURFACE_MIN_M 的体块顶面。"""
+    tops = {0.0}
+    for o in scene.get('objects', []):
+        if _top(o) >= SURFACE_MIN_M and _inside([x, o['position'][1], z], o):
+            tops.add(round(_top(o), 3))
+    return sorted(tops)
+
+
+def standing_surface(scene: dict, pos) -> float:
+    """机位 pos 脚下的站立面:它正下方最高的那个面(顶面不高于机位);机位下面没有体块 = 地面 0。"""
+    below = [t for t in surfaces_at(scene, pos[0], pos[2]) if t <= float(pos[1]) + .05]
+    return below[-1] if below else 0.0
+
+
+def _free_at(scene: dict, p) -> bool:
+    return not any(_inside(p, o) for o in scene.get('objects', []))
+
+
+def default_anchor_height(cameras: list, scene: dict | None = None) -> float:
+    """眼高(相对脚下站立面,不是绝对 y)。不低于 1.6 m:锚点高于座椅背/柜台等中高家具,遮挡少
+    (重投影按机位射线求交,锚点高度不必等于机高)。不传 scene 时按地面 0 算(老口径)。"""
+    hs = sorted(c['position'][1] - (standing_surface(scene, c['position']) if scene else 0.0) for c in cameras) or [1.6]
     return round(min(2.0, max(1.6, hs[len(hs) // 2])), 2)
 
 
-def candidate_points(scene: dict, height: float) -> list:
+def anchor_pos_at(scene: dict, x: float, z: float, cameras: list, eye: float) -> list:
+    """(x, z) 处的锚点位置 [x, 站立面 + 眼高, z]:先取与最近机位同层的站立面,没有同层的自下而上取第一个不在实体内的;
+    都不行(被体块包死)就用最近机位自己的高度——机位本身总在可见空间里。"""
+    surfs = surfaces_at(scene, x, z)
+    near = sorted(cameras or [], key=lambda c: math.hypot(c['position'][0] - x, c['position'][2] - z))
+    for c in near:
+        level = standing_surface(scene, c['position'])
+        for s in surfs:
+            p = [round(x, 3), round(s + eye, 3), round(z, 3)]
+            if abs(s - level) <= SURFACE_LEVEL_TOL_M and _free_at(scene, p):
+                return p
+    for s in surfs:
+        p = [round(x, 3), round(s + eye, 3), round(z, 3)]
+        if _free_at(scene, p):
+            return p
+    y = near[0]['position'][1] if near else surfs[-1] + eye
+    return [round(x, 3), round(float(y), 3), round(z, 3)]
+
+
+def candidate_points(scene: dict, height: float, levels: list | None = None) -> list:
+    """网格候选点。height = 眼高;levels = 各机位的站立面(缺省只有地面):每个网格点在与某层机位同层的站立面上各出一个候选。
+    贴墙/贴家具的间距只看高出本站立面的实体(脚下的墙体、低处的房子不算)。"""
     w, _, d = scene['dimensions_m']
-    tall = tall_objects(scene, height)
+    levels = sorted(set(levels or [0.0]))
+    objs = scene.get('objects', [])
+    elevated = any(l > 0 for l in levels)
     pts = []
     nx, nz = int(w / GRID_STEP_M), int(d / GRID_STEP_M)
     for i in range(1, nx):
         for j in range(1, nz):
-            p = [round(-w / 2 + i * GRID_STEP_M, 3), height, round(-d / 2 + j * GRID_STEP_M, 3)]
-            if any(_inside(p, o) for o in scene.get('objects', [])):
-                continue
-            if _clearance(p, tall) < ANCHOR_CLEARANCE_M or _clearance(p, scene.get('objects', [])) < ANCHOR_LOW_CLEARANCE_M:
-                continue
-            pts.append(p)
+            x, z = round(-w / 2 + i * GRID_STEP_M, 3), round(-d / 2 + j * GRID_STEP_M, 3)
+            for s in (surfaces_at(scene, x, z) if elevated else [0.0]):
+                if not any(abs(s - l) <= SURFACE_LEVEL_TOL_M for l in levels):
+                    continue
+                p = [x, round(s + height, 3), z]
+                if any(_inside(p, o) for o in objs):
+                    continue
+                around = [o for o in objs if _top(o) > s + .05]
+                tall = [o for o in around if _top(o) > p[1] - 0.3]
+                if _clearance(p, tall) < ANCHOR_CLEARANCE_M or _clearance(p, around) < ANCHOR_LOW_CLEARANCE_M:
+                    continue
+                pts.append(p)
     return pts
 
 
@@ -387,8 +449,10 @@ def anchor_usage(anchor: dict, cams: list) -> dict:
 
 
 def plan_anchors(scene: dict, cameras: list, existing: list | None = None, height: float | None = None) -> list:
-    """贪心集合覆盖 → anchors[]{anchor_id, position, yaw_deg, source, locked, serves}。existing 里 locked 的锚点原样保留。"""
-    height = height or default_anchor_height(cameras)
+    """贪心集合覆盖 → anchors[]{anchor_id, position, yaw_deg, source, locked, serves}。existing 里 locked 的锚点原样保留。
+    height = 眼高(相对脚下站立面);锚点绝对高度逐点 = 站立面 + 眼高(城墙顶/高台/楼上的机位,锚点跟着上去)。"""
+    height = height or default_anchor_height(cameras, scene)
+    levels = [standing_surface(scene, c['position']) for c in cameras]
     anchors = [dict(a, serves=[]) for a in (existing or []) if a.get('locked')]
     uncovered = list(cameras)
     for a in anchors:
@@ -396,12 +460,16 @@ def plan_anchors(scene: dict, cameras: list, existing: list | None = None, heigh
         served = [c for c in uncovered if can_serve(a['position'], c, scene)]
         a['serves'] = [_cam_key(c) for c in served]
         uncovered = [c for c in uncovered if c not in served]
-    cands = candidate_points(scene, height)
+    cands = candidate_points(scene, height, levels)
     # 机位本身也作候选(空旷处网格点可能都太远);机位在白模地面之外时夹回地面边缘内 0.5 m(白模外半球没有几何,全景只能瞎补)
     w, _, d = scene['dimensions_m']
+
+    def at_camera(c):
+        return anchor_pos_at(scene, max(-w / 2 + .5, min(w / 2 - .5, c['position'][0])),
+                             max(-d / 2 + .5, min(d / 2 - .5, c['position'][2])), [c], height)
     for c in cameras:
-        p = [max(-w / 2 + .5, min(w / 2 - .5, c['position'][0])), height, max(-d / 2 + .5, min(d / 2 - .5, c['position'][2]))]
-        if not any(_inside(p, o) for o in scene.get('objects', [])):
+        p = at_camera(c)
+        if _free_at(scene, p):
             cands.append(p)
     while uncovered and cands:
         best = None
@@ -410,7 +478,7 @@ def plan_anchors(scene: dict, cameras: list, existing: list | None = None, heigh
             if not served:
                 continue
             spread = sum(math.hypot(p[0] - c['position'][0], p[2] - c['position'][2]) for c in served) / len(served)
-            score = (len(served), -spread, _clearance(p, tall_objects(scene, height)))
+            score = (len(served), -spread, _clearance(p, tall_objects(scene, p[1])))
             if best is None or score > best[0]:
                 best = (score, p, served)
         if best is None:
@@ -419,9 +487,8 @@ def plan_anchors(scene: dict, cameras: list, existing: list | None = None, heigh
         anchors.append({'anchor_id': '', 'position': [round(v, 3) for v in p], 'yaw_deg': pick_seam_yaw(served), 'source': 'auto',
                         'locked': False, 'serves': [_cam_key(c) for c in served]})
         uncovered = [c for c in uncovered if c not in served]
-    for c in uncovered:   # 仍无法覆盖(被实体包死的机位):以机位自身为锚点(同样夹回地面范围)
-        anchors.append({'anchor_id': '', 'position': [round(max(-w / 2 + .5, min(w / 2 - .5, c['position'][0])), 3), height,
-                                                       round(max(-d / 2 + .5, min(d / 2 - .5, c['position'][2])), 3)],
+    for c in uncovered:   # 仍无法覆盖(被实体包死的机位):以机位自身为锚点(同样夹回地面范围;高度随机位那一层,不落进实体)
+        anchors.append({'anchor_id': '', 'position': at_camera(c),
                         'yaw_deg': pick_seam_yaw([c]), 'source': 'auto-self', 'locked': False, 'serves': [_cam_key(c)]})
     used = {a['anchor_id'] for a in anchors if a.get('anchor_id')}
     n = 1
@@ -1039,6 +1106,14 @@ def object_inventory(scene: dict, layout: dict, anchor: dict, view: dict | None 
     return lines
 
 
+def _lens_height_words(scene: dict, pos) -> str:
+    floor = standing_surface(scene, pos)
+    eye = round(float(pos[1]) - floor, 2)
+    if floor < SURFACE_MIN_M:
+        return f'{eye} m above the floor'
+    return f'{eye} m above the surface it stands on, which is itself raised {round(floor, 1)} m above the ground below'
+
+
 def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool, mode: str, time_of_day: str | None = None) -> str:
     """空场景全景文字:场所 + 锚点站位 + 四向内容(俯视图四边说明,按 yaw 归到画面中心/左右/身后)+ 光照方案 + 材质年代 + 风格。"""
     from modules.shot_plates import standing_on, orientation_axes, strip_compass
@@ -1095,7 +1170,7 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
     elif indoor:
         parts.append(INDOOR_RULE.strip())
     parts.append(f"The camera stands {standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})}, "
-                 f"lens {anchor['position'][1]} m above the floor, level horizon.")
+                 f"lens {_lens_height_words(scene, anchor['position'])}, level horizon.")
     if centre:
         parts.append('Looking straight ahead (image centre): ' + centre + '.')
     if right:
@@ -1694,7 +1769,7 @@ def scene_scheme_options(base: Path, sid: str, cameras: list | None = None) -> l
 
 def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None,
                       persist: bool = True) -> dict:
-    """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度同规划默认,
+    """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度 = 该点站立面 + 眼高(城墙顶/楼上随最近机位那一层),
     serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。
     persist=False(CLI --dry-run):只算出这个锚点会是什么样,不写索引。"""
     from modules.whitebox import load_scene
@@ -1707,13 +1782,12 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     w, _, d = scene['dimensions_m']
     px = round(max(-w / 2 + .5, min(w / 2 - .5, float(x))), 3)
     pz = round(max(-d / 2 + .5, min(d / 2 - .5, float(z))), 3)
-    height = idx['anchors'][0]['position'][1] if idx['anchors'] else default_anchor_height(cams)
     used = {a['anchor_id'] for a in idx['anchors']}
     n = len(idx['anchors']) + 1
     while f'A{n}' in used:
         n += 1
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
-    pos = [px, height, pz]
+    pos = anchor_pos_at(scene, px, pz, cams, default_anchor_height(cams, scene))   # 该点站立面 + 眼高(与最近机位同层)
     serves = sorted(_cam_key(c) for c in cams if _cam_key(c) not in served and can_serve(pos, c, scene))
     anchor = {'anchor_id': f'A{n}', 'position': pos, 'yaw_deg': float(yaw_deg or 0.0), 'source': 'manual', 'locked': True,
               'serves': serves, 'panos': {}}
@@ -1759,7 +1833,7 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
             a['serves'] = sorted(set(a['serves']) | {_cam_key(c) for c in add})
             new_cams = [c for c in new_cams if c not in add]
         if new_cams:
-            extra = plan_anchors(scene, new_cams, existing=[], height=idx['anchors'][0]['position'][1])
+            extra = plan_anchors(scene, new_cams, existing=[])
             used = {a['anchor_id'] for a in idx['anchors']}
             n = 1
             for a in extra:

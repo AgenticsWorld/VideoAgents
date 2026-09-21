@@ -117,7 +117,9 @@ def main():
             o = sp.scene_scheme_options(base, sid, cams)[0]
             schemes = {o['scheme']: o.get('time_of_day')}
     elif args.anchor:
-        height = sp.default_anchor_height(cams)
+        from modules.whitebox import load_scene
+        scene_wb = load_scene(base, sid)
+        eye = sp.default_anchor_height(cams, scene_wb)
         for spec in args.anchor:
             parts = [float(v) for v in spec.split(',')]
             if len(parts) < 2:
@@ -127,7 +129,7 @@ def main():
             used = {a['anchor_id'] for a in idx['anchors']}
             while f'A{n}' in used:
                 n += 1
-            idx['anchors'].append({'anchor_id': f'A{n}', 'position': [parts[0], height, parts[1]], 'yaw_deg': parts[2] if len(parts) > 2 else 0.0,
+            idx['anchors'].append({'anchor_id': f'A{n}', 'position': sp.anchor_pos_at(scene_wb, parts[0], parts[1], cams, eye), 'yaw_deg': parts[2] if len(parts) > 2 else 0.0,
                                    'source': 'manual', 'locked': True, 'serves': [], 'panos': {}})
         sp.save_index(base, sid, idx)
         args.replan = True

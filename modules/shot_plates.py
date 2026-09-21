@@ -740,12 +740,12 @@ def reproject_for_plate(base: Path, sid: str, idx: dict, cam: dict, scheme: str,
             f"距 {a['anchor_id']} 不足 {scene_panos.SERVE_MIN_M} m,不另出全景,沿用 {a['anchor_id']}(空洞 {hole:.0%})")
         return dict(scene_panos.reproject_to_camera(base, sid, a, scheme, camera, width, height, output), hole_warn=True)
     log(f"   现有锚点重投影空洞都超 {scene_panos.PLATE_HOLE_MAX:.0%}:{tried};在机位 {cam['shot_id']} 处加锚点出全景")
-    height_m = idx['anchors'][0]['position'][1] if idx['anchors'] else 1.6
     used = {a['anchor_id'] for a in idx['anchors']}
     n = len(idx['anchors']) + 1
     while f'A{n}' in used:
         n += 1
-    anchor = {'anchor_id': f'A{n}', 'position': [round(px, 3), height_m, round(pz, 3)],
+    # 高度 = 机位脚下站立面 + 眼高:墙顶/楼上的机位不再落到绝对 2 m 的实心体块里
+    anchor = {'anchor_id': f'A{n}', 'position': scene_panos.anchor_pos_at(scene, px, pz, [cam], scene_panos.default_anchor_height([cam], scene)),
               'yaw_deg': scene_panos.pick_seam_yaw([cam]), 'source': 'auto-self', 'locked': False, 'serves': [scene_panos._cam_key(cam)], 'panos': {}}
     indoor = anchor['indoor'] = scene_panos.anchor_indoor(base, sid, scene, anchor, indoor)   # 场景级 None(内外混合)→ 按这个锚点的围合判
     idx['anchors'].append(anchor)
