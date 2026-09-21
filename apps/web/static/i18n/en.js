@@ -2236,6 +2236,7 @@ window.I18N_DICT = {
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Click a position on the top view first, or fill in x/z",
 "已选 ({x}, {z}) m;再点可改位置,确认后点「生成全景图」": "Selected ({x}, {z}) m; click again to move, then press “Generate panorama”",
 "在俯视图上点一下选择全景中心(坐标为白模米制,原点在场景中心)": "Click the top view to choose the panorama centre (whitebox metres, origin at the scene centre)",
+"滚轮缩放,拖动平移,双击复位": "Scroll to zoom, drag to pan, double-click to reset",
 "该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)": "This scene has no top view; type x/z directly (whitebox metres, origin at the scene centre)",
 "全景图生成完成": "Panorama generated",
 "全景图生成失败:": "Panorama generation failed: ",

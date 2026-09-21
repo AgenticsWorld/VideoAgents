@@ -2147,6 +2147,7 @@ window.I18N_DICT = {
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Klik posisi pada tampilan atas dulu, atau isi x/z",
 "已选 ({x}, {z}) m;再点可改位置,确认后点「生成全景图」": "Dipilih ({x}, {z}) m; klik lagi untuk memindah, lalu tekan “Buat panorama”",
 "在俯视图上点一下选择全景中心(坐标为白模米制,原点在场景中心)": "Klik tampilan atas untuk memilih pusat panorama (meter whitebox, titik asal di pusat adegan)",
+"滚轮缩放,拖动平移,双击复位": "Gulir untuk zoom, seret untuk geser, klik ganda untuk reset",
 "该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)": "Adegan ini tidak punya tampilan atas; isi x/z langsung (meter whitebox, titik asal di pusat adegan)",
 "全景图生成完成": "Panorama selesai dibuat",
 "全景图生成失败:": "Gagal membuat panorama: ",

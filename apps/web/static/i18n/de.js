@@ -2147,6 +2147,7 @@ window.I18N_DICT = {
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Zuerst eine Position in der Draufsicht anklicken oder x/z eingeben",
 "已选 ({x}, {z}) m;再点可改位置,确认后点「生成全景图」": "({x}, {z}) m gewählt; erneut klicken zum Verschieben, dann „Panorama erzeugen“",
 "在俯视图上点一下选择全景中心(坐标为白模米制,原点在场景中心)": "In der Draufsicht klicken, um das Panorama-Zentrum zu wählen (Whitebox-Meter, Ursprung in der Szenenmitte)",
+"滚轮缩放,拖动平移,双击复位": "Scrollen zum Zoomen, Ziehen zum Verschieben, Doppelklick zum Zurücksetzen",
 "该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)": "Diese Szene hat keine Draufsicht; x/z direkt eingeben (Whitebox-Meter, Ursprung in der Szenenmitte)",
 "全景图生成完成": "Panorama erzeugt",
 "全景图生成失败:": "Panorama-Erzeugung fehlgeschlagen: ",

@@ -2147,6 +2147,7 @@ window.I18N_DICT = {
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Hãy nhấp một vị trí trên hình nhìn từ trên trước, hoặc nhập x/z",
 "已选 ({x}, {z}) m;再点可改位置,确认后点「生成全景图」": "Đã chọn ({x}, {z}) m; nhấp lại để dời, rồi nhấn “Tạo toàn cảnh”",
 "在俯视图上点一下选择全景中心(坐标为白模米制,原点在场景中心)": "Nhấp vào hình nhìn từ trên để chọn tâm toàn cảnh (mét whitebox, gốc tại tâm cảnh)",
+"滚轮缩放,拖动平移,双击复位": "Cuộn để thu phóng, kéo để di chuyển, nhấp đúp để đặt lại",
 "该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)": "Cảnh này không có hình nhìn từ trên; nhập trực tiếp x/z (mét whitebox, gốc tại tâm cảnh)",
 "全景图生成完成": "Đã tạo xong toàn cảnh",
 "全景图生成失败:": "Tạo toàn cảnh thất bại: ",

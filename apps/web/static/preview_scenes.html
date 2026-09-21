@@ -90,9 +90,14 @@ dl.kv dl.kv{margin:2px 0 6px;padding-left:10px;border-left:1px solid var(--borde
 ul.arr{padding-left:18px}
 ul.arr>li{margin:2px 0}
 /* 全景图板块(2026-09-10):俯视图上标锚点中心 + 每锚点各光照方案全景 */
-.pano-map{position:relative;display:inline-block;max-width:420px;margin:6px 0 10px}
-.pano-map img{width:100%;display:block;border-radius:6px}
-.pano-dot{position:absolute;transform:translate(-50%,-50%);min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.45);cursor:default}
+/* 2026-09-21:宽度跟随上方白模画布(JS 同步,兜底 760px);滚轮缩放、拖动平移、双击复位,锚点标记反向缩放保持大小 */
+.pano-map{position:relative;display:block;width:100%;max-width:760px;margin:6px 0 10px;overflow:hidden;border-radius:6px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;--k:1}
+.pano-map.panning{cursor:grabbing}
+.pano-map-inner{position:relative;transform-origin:0 0;will-change:transform}
+.pano-map img{width:100%;display:block;-webkit-user-drag:none}
+.pano-zoom{position:absolute;top:6px;inset-inline-end:6px;display:flex;gap:4px;z-index:2}
+.wb-panel .pano-zoom button{padding:0;width:24px;height:24px;line-height:1;background:rgba(22,26,35,.8)}
+.pano-dot{position:absolute;transform:translate(-50%,-50%) scale(calc(1/var(--k)));min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.45);cursor:default}
 .pano-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin:6px 0}
 .pano-anchor{width:320px;max-width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px}
 .pano-title{font-size:13px}
@@ -477,9 +482,9 @@ async function mountPanoSection(host,s){
   h+=`<div class="wb-status ps-status">${esc(running?t('正在生成全景图…'):anchors.length?'':canCreate?t('该场景还没有全景图;点「创建全景图」在俯视图上选一个位置出图,或由分镜背景图链自动规划锚点'):'')}</div>`;
   h+=`<div class="ps-hint" hidden></div><div class="ps-form" hidden></div>`;
   if(panos.layout_top_url){
-    h+=`<div class="pano-map"><img src="${esc(bust(panos.layout_top_url))}" alt="" draggable="false">`
+    h+=`<div class="pano-map" title="${esc(t('滚轮缩放,拖动平移,双击复位'))}"><div class="pano-map-inner"><img src="${esc(bust(panos.layout_top_url))}" alt="" draggable="false">`
       +anchors.map(a=>`<span class="pano-dot" style="left:${(a.xy[0]*100).toFixed(2)}%;top:${(a.xy[1]*100).toFixed(2)}%" title="${esc(a.anchor_id)} (${a.position[0]}, ${a.position[2]})">${esc(a.anchor_id)}</span>`).join('')
-      +`</div>`;
+      +`</div><div class="pano-zoom"><button type="button" data-z="in">+</button><button type="button" data-z="out">−</button><button type="button" data-z="reset">⟲</button></div></div>`;
   }
   h+=`<pre class="ps-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`;
   const servesText=a=>{
@@ -506,9 +511,48 @@ async function mountPanoSection(host,s){
   const btn=sec.querySelector('.ps-create'),status=sec.querySelector('.ps-status'),log=sec.querySelector('.ps-log'),hint=sec.querySelector('.ps-hint'),form=sec.querySelector('.ps-form'),map=sec.querySelector('.pano-map');
   const [W,,D]=dims;
   let pick=null,dot=null,cancelPick=null;
+  const inner=map&&map.querySelector('.pano-map-inner');
+  let dragged=false;   // 刚拖动过:吞掉随后的 click,不当作点选
+  if(map){
+    // 宽度跟随上方白模画布(白模异步挂载/窗口缩放都会触发 host 尺寸变化);没有白模时用 CSS 兜底 760px
+    const syncW=()=>{const fig=host.querySelector('.wb-views figure');const w=fig&&fig.clientWidth;if(w)map.style.maxWidth=w+'px';};
+    syncW();
+    if(window.ResizeObserver){const ro=new ResizeObserver(()=>{if(!map.isConnected){ro.disconnect();return;}syncW();});ro.observe(host);}
+    // 缩放/平移:k∈[1,8],平移夹在图像边界内
+    let k=1,tx=0,ty=0;
+    const apply=()=>{
+      const w=map.clientWidth,hh=map.clientHeight;
+      tx=Math.min(0,Math.max(w*(1-k),tx));ty=Math.min(0,Math.max(hh*(1-k),ty));
+      inner.style.transform=`translate(${tx}px,${ty}px) scale(${k})`;map.style.setProperty('--k',k);
+    };
+    const zoomAt=(cx,cy,nk)=>{nk=Math.min(8,Math.max(1,nk));tx=cx-(cx-tx)*nk/k;ty=cy-(cy-ty)*nk/k;k=nk;apply();};
+    map.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const rc=map.getBoundingClientRect();
+      zoomAt(e.clientX-rc.left,e.clientY-rc.top,k*Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)));
+    },{passive:false});
+    let drag=null;
+    map.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('.pano-zoom'))return;dragged=false;drag={x:e.clientX,y:e.clientY,tx,ty};});
+    map.addEventListener('pointermove',e=>{
+      if(!drag)return;
+      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(!dragged&&Math.hypot(dx,dy)<4)return;
+      if(!dragged){dragged=true;map.classList.add('panning');map.setPointerCapture(e.pointerId);}
+      tx=drag.tx+dx;ty=drag.ty+dy;apply();
+    });
+    const endDrag=()=>{drag=null;map.classList.remove('panning');};
+    map.addEventListener('pointerup',endDrag);map.addEventListener('pointercancel',endDrag);
+    map.addEventListener('dblclick',e=>{if(e.target.closest('.pano-zoom')||map.classList.contains('picking'))return;k=1;tx=ty=0;apply();});
+    map.querySelector('.pano-zoom').addEventListener('click',e=>{
+      e.stopPropagation();
+      const z=e.target.closest('button')?.dataset.z;if(!z)return;
+      if(z==='reset'){k=1;tx=ty=0;apply();}
+      else zoomAt(map.clientWidth/2,map.clientHeight/2,k*(z==='in'?1.5:1/1.5));
+    });
+  }
   const setDot=(x,z)=>{
     if(!map)return;
-    if(!dot){dot=document.createElement('span');dot.className='pano-dot new';dot.textContent='+';map.appendChild(dot);}
+    if(!dot){dot=document.createElement('span');dot.className='pano-dot new';dot.textContent='+';inner.appendChild(dot);}
     dot.style.left=((x/W+.5)*100).toFixed(2)+'%';dot.style.top=((z/D+.5)*100).toFixed(2)+'%';
     dot.title=`(${x}, ${z})`;
   };
@@ -539,6 +583,7 @@ async function mountPanoSection(host,s){
     };
   };
   const onMapClick=e=>{
+    if(dragged){dragged=false;return;}
     const img=map.querySelector('img'),rc=img.getBoundingClientRect();
     const u=(e.clientX-rc.left)/rc.width,v=(e.clientY-rc.top)/rc.height;
     if(u<0||u>1||v<0||v>1)return;
