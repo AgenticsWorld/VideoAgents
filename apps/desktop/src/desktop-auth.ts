@@ -22,8 +22,10 @@ export interface ServiceRegion {
 }
 
 export interface UserAccount {
-  email: string
-  balance: number
+  id: number
+  email?: string
+  phone?: string
+  balance?: number
 }
 
 export interface StoredAuth {
@@ -229,9 +231,17 @@ export async function fetchUserAccount(region: ServiceRegion, token: string): Pr
     redirect: 'error',
     signal: AbortSignal.timeout(15_000),
   })
-  const data = await responseData<{user?: {email?: string; balance?: number} | null}>(response)
-  const email = data.user?.email
-  const balance = data.user?.balance
-  if (!email || typeof balance !== 'number') throw new Error('登录服务返回的用户信息无效')
-  return {email, balance}
+  const data = await responseData<{
+    user?: {id: number; email?: string; phone?: string; balance?: number} | null
+  }>(response)
+  const user = data.user
+  if (!user || typeof user.id !== 'number' || !Number.isFinite(user.id)) {
+    throw new Error('登录服务返回的用户信息无效')
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    phone: user.phone,
+    balance: user.balance,
+  }
 }
