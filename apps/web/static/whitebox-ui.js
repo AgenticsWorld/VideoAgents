@@ -247,7 +247,9 @@ function renderIssues(st){
       ${i.provisional?`<div class="wb-prov" data-no-i18n>${esc(t('默认取舍:{text}',{text:i.provisional}))}</div>`:''}
       ${i.status==='applied'?'':`<div class="wb-opts">${opts}</div>`}${state}</div>`;
   };
-  box.innerHTML=`<details class="wb-issues-box" open><summary>⚠ ${esc(t('待决项 ({count})',{count:issues.length}))}${pending.length?` · <b class="wb-pending">${esc(t('待处理 {count}',{count:pending.length}))}</b>`:''}${blocking?` · <b class="wb-blocking">${esc(t('阻断 {count}',{count:blocking}))}</b>`:''}</summary>
+  // 2026-09-22 起默认折叠;点选决定后重渲染时保留用户已展开的状态
+  const wasOpen=!!box.querySelector('.wb-issues-box')?.open;
+  box.innerHTML=`<details class="wb-issues-box"${wasOpen?' open':''}><summary>⚠ ${esc(t('待决项 ({count})',{count:issues.length}))}${pending.length?` · <b class="wb-pending">${esc(t('待处理 {count}',{count:pending.length}))}</b>`:''}${blocking?` · <b class="wb-blocking">${esc(t('阻断 {count}',{count:blocking}))}</b>`:''}</summary>
     ${issues.map(item).join('')}
     ${decided.length?`<div class="wb-apply"><button type="button" class="wb-apply-btn">${esc(t('🔄 应用 {count} 项决定并重编译',{count:decided.length}))}</button><span class="wb-apply-msg" role="status"></span></div>`:''}</details>`;
   box.querySelectorAll('.wb-jump').forEach(b=>b.onclick=()=>{st.time=Math.min(st.end,Number(b.dataset.t));st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();});
