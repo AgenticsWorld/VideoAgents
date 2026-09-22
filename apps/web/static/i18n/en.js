@@ -3266,7 +3266,7 @@ window.I18N_DICT = {
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "This group has not been through whitebox staging; what you see is an auto-inferred draft and is view-only. Send revisions after whitebox staging completes",
 "未调度": "Not staged",
 "缺陷单": "Defects",
-"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理(新页面打开)": "Defects: this project's qa/defects/ review feedback; send any ticket to the Workflow Orchestrator for handling (opens in a new page)",
+"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理": "Defects: this project's qa/defects/ review feedback; send any ticket to the Workflow Orchestrator for handling",
 "成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料": "Final Release: Per-episode final video + thumbnail + publishing materials",
 "成片 {f} · 封面 {t}": "Final cut {f} · thumbnail {t}",
 "🧾 缺陷单 —": "🧾 Defects —",

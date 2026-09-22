@@ -3107,7 +3107,7 @@ window.I18N_DICT = {
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Diese Gruppe wurde noch nicht per Whitebox-Staging bearbeitet; zu sehen ist ein automatisch abgeleiteter Entwurf, nur zur Ansicht. Änderungen bitte nach Abschluss des Whitebox-Stagings",
 "未调度": "Nicht gestaged",
 "缺陷单": "Mängeltickets",
-"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理(新页面打开)": "Mängeltickets: Review-Feedback dieses Projekts aus qa/defects/; einzelne Tickets an den Produzenten zur Bearbeitung senden (öffnet in neuer Seite)",
+"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理": "Mängeltickets: Review-Feedback dieses Projekts aus qa/defects/; einzelne Tickets an den Produzenten zur Bearbeitung senden",
 "成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料": "Endfassung & Veröffentlichung: Pro Episode: final-Video + thumbnail + Veröffentlichungsmaterial",
 "成片 {f} · 封面 {t}": "Endfassung {f} · Thumbnail {t}",
 "🧾 缺陷单 —": "🧾 Mängeltickets —",

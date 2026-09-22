@@ -3107,7 +3107,7 @@ window.I18N_DICT = {
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Grup ini belum melalui penataan whitebox; yang tampil adalah draf inferensi otomatis dan hanya bisa dilihat. Kirim revisi setelah penataan whitebox selesai",
 "未调度": "Belum ditata",
 "缺陷单": "Tiket Cacat",
-"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理(新页面打开)": "Tiket cacat: umpan balik review qa/defects/ proyek ini; kirim tiap tiket ke Produser Utama untuk ditangani (dibuka di halaman baru)",
+"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理": "Tiket cacat: umpan balik review qa/defects/ proyek ini; kirim tiap tiket ke Produser Utama untuk ditangani",
 "成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料": "Hasil Akhir & Publikasi: Video final cut tiap episode + thumbnail sampul + materi publikasi",
 "成片 {f} · 封面 {t}": "Hasil akhir {f} · sampul {t}",
 "🧾 缺陷单 —": "🧾 Tiket Cacat —",

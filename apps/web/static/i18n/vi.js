@@ -3107,7 +3107,7 @@ window.I18N_DICT = {
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Nhóm này chưa được dàn dựng whitebox; nội dung đang hiển thị là bản nháp tự suy luận, chỉ xem được. Hãy gửi chỉnh sửa sau khi dàn dựng whitebox hoàn tất",
 "未调度": "Chưa dàn dựng",
 "缺陷单": "Phiếu lỗi",
-"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理(新页面打开)": "Phiếu lỗi: phản hồi vấn đề kiểm duyệt qa/defects/ của dự án này; gửi từng phiếu cho Giám đốc sản xuất xử lý (mở trong trang mới)",
+"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理": "Phiếu lỗi: phản hồi vấn đề kiểm duyệt qa/defects/ của dự án này; gửi từng phiếu cho Giám đốc sản xuất xử lý",
 "成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料": "Bản hoàn chỉnh & phát hành: Video final mỗi tập + ảnh bìa thumbnail + tài liệu phát hành",
 "成片 {f} · 封面 {t}": "Bản hoàn chỉnh {f} · ảnh bìa {t}",
 "🧾 缺陷单 —": "🧾 Phiếu lỗi —",

@@ -3109,7 +3109,7 @@ window.I18N_DICT = {
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Este grupo aún no ha pasado por la puesta en escena whitebox; lo que ves es un borrador inferido automáticamente, solo de consulta. Envía cambios cuando termine la puesta en escena whitebox",
 "未调度": "Sin puesta en escena",
 "缺陷单": "Tickets de defectos",
-"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理(新页面打开)": "Tickets de defectos: comentarios de revisión de qa/defects/ de este proyecto; envía cada ticket al Productor Ejecutivo para gestionarlo (se abre en una página nueva)",
+"缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理": "Tickets de defectos: comentarios de revisión de qa/defects/ de este proyecto; envía cada ticket al Productor Ejecutivo para gestionarlo",
 "成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料": "Versión final y publicación: vídeo final por episodio + thumbnail + materiales de publicación",
 "成片 {f} · 封面 {t}": "Versión final {f} · portada {t}",
 "🧾 缺陷单 —": "🧾 Tickets de defectos —",
