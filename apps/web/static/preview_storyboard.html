@@ -134,6 +134,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .cpid.ok{opacity:1;color:var(--green,#3a9d5d);border-color:transparent}
 .shot .info{flex:1;min-width:220px}
 .shot .r1{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.wb-seek[hidden]{display:none}   /* 📍 看现场:jumplink 的 display 会盖掉 hidden,这里显式收起 */
 .shot .sid{font-weight:600;color:var(--accent)}
 .shot .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .shot .content{margin:6px 0 4px}
@@ -400,6 +401,13 @@ $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 // ✏️ 修改:在本页右下角弹出编辑浮窗(edit-popup.js),把修改对象预填进输入框,写完直接发给目标 Agent。
 // data-url=具体媒体文件路径;data-loc=结构化位置元数据(分镜/生成组/旁白等无单一文件的对象);
 // data-agent=改发给指定 Agent(白模面板的编辑/自定义决定直发 07-directing/whitebox-staging)
+// 📍 看现场:白模面板时间轴跳到该镜起点(whitebox-ui.js seekShot,不自动播放)
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.wb-seek');if(!b)return;
+  const host=document.querySelector(`.wb-host[data-grp="${CSS.escape(b.dataset.grp)}"]`);
+  if(host)host.scrollIntoView({block:'nearest'});   // 面板可能还没滚入视口(未建 3D),先让观察器建面板
+  wbModule().then(m=>m.seekShot(b.dataset.grp,b.dataset.shot)).then(ok=>{if(!ok)JumpAnchor.toast(t('本镜没有白模镜头,无法跳转'));}).catch(err=>console.warn('seekShot',err));
+});
 document.addEventListener('click',e=>{
   const b=e.target.closest('.editbtn');
   if(!b||(!b.dataset.url&&!b.dataset.loc))return;
@@ -1218,7 +1226,10 @@ function shotCard(s,grp){
         ${chars?`<span class="tag">${esc(chars)}</span>`:''}
         ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
         <button class="editbtn" data-kind="shot" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发给修改师处理">✏️ 修改</button>${
-          s.board_key?JumpAnchor.group([JumpAnchor.link('board',$('#project').value.trim()||'demo',EP,'shot',s.board_key)]):''}</div>
+          JumpAnchor.group([
+            // 📍 看现场(2026-09-22):右侧白模时间轴跳到本镜起点(不自动播放);默认 hidden,白模面板建好后由 whitebox-ui.js 按本组 cameras 揭示,没白模的镜不显示
+            WB_ON&&grp?`<button type="button" class="jumplink wb-seek" hidden data-grp="${esc(grp)}" data-shot="${esc(s.shot_id)}" title="${esc(t('看现场:右侧白模跳到本镜起点'))}" data-no-i18n>📍</button>`:'',
+            s.board_key?JumpAnchor.link('board',$('#project').value.trim()||'demo',EP,'shot',s.board_key):''])}</div>
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
       ${posesHtml(s)}
@@ -1468,10 +1479,14 @@ document.addEventListener('click',async e=>{
   }catch(err){b.disabled=false;alert(I18N.f('派单失败:{e}',{e:err.message}))}
 });
 
+// 白模模块只 import 一次并复用同一个 promise:首屏时 render 里 resetWhitebox 与 mountGroups 各自 import() 的回调顺序不保证,
+// 曾出现 mountGroups 先跑、随后 resetWhitebox 把刚建的观察器断掉,面板永远停在「正在加载」(2026-09-22 无头实测复现)
+let WB_MOD=null;
+const wbModule=()=>WB_MOD||(WB_MOD=import('/static/whitebox-ui.js?v=20260922-seek'));
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
   WB_ON=d.whitebox_enabled===true;
-  import('/static/whitebox-ui.js?v=20260918-layouttop').then(m=>m.resetWhitebox({keepData:wbKeep}));
+  wbModule().then(m=>m.resetWhitebox({keepData:wbKeep}));
   LAST_DATA=d;
   renderEps(d.episodes||[]);
   const box=$('#content');
@@ -1626,7 +1641,7 @@ function render(d){
   const prevScroll=box.scrollTop;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
-  if(WB_ON)import('/static/whitebox-ui.js?v=20260918-layouttop').then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
+  if(WB_ON)wbModule().then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
   renderNav();
   // 滚动位置记忆:刷新页面回到原位;页内操作(保存注释/删线稿等 load(true))保持原位;切集/切项目回顶
   const skey='sb-scroll:'+(d.project||'')+':'+(d.ep||'');

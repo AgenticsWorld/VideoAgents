@@ -213,7 +213,32 @@ async function buildGroup(host,project,ep){
   if(st.els.view)st.els.view.onchange=()=>{st.dirty=true;kick();};
   st.els.range.oninput=e=>{st.time=Number(e.target.value);st.playing=false;st.els.play.textContent=t('播放');st.dirty=true;kick();};
   st.ep=ep;st.issues=q('.wb-issues');if(draft)st.issues.hidden=true;else renderIssues(st);
+  revealSeekButtons(st);
   return st;
+}
+// ---- 📍 看现场(2026-09-22):分镜行的 .wb-seek 按钮默认 hidden,本组白模面板建好后按 cameras 揭示;
+// 点击把该组时间轴跳到该镜起点(camera.start),不自动播放;面板已释放(滚出视口)时先重新建 3D ----
+function revealSeekButtons(st){
+  const grp=typeof st.host.closest==='function'?st.host.closest('.grp'):null;if(!grp)return;   // 测试桩 DOM 没有 closest
+  const shots=new Set((st.group.cameras||[]).map(c=>c.shot_id));
+  for(const b of grp.querySelectorAll('.wb-seek'))b.hidden=!shots.has(b.dataset.shot);
+}
+export async function seekShot(gid,shotId){
+  let st=[...groupPanels.values()].find(x=>x.host.dataset.grp===gid);
+  if(!st){   // 面板尚未开始建(未滚入视口):等观察器把它建起来(调用方已 scrollIntoView)
+    const host=document.querySelector(`.wb-host[data-grp="${CSS.escape(gid)}"]`);
+    for(let i=0;i<20&&host&&!pending.has(host);i++)await new Promise(r=>setTimeout(r,100));
+    if(host&&pending.has(host))st=await pending.get(host);
+  }
+  if(!st?.ready)return false;
+  const cam=(st.group.cameras||[]).find(c=>c.shot_id===shotId);
+  if(!cam)return false;
+  st.time=Math.max(0,Math.min(st.end,Number(cam.start)||0));
+  st.playing=false;st.els.play.textContent=t('播放');
+  st.els.range.value=st.time;st.els.time.textContent=`${st.time.toFixed(2)} / ${st.end.toFixed(2)} s · ${shotId}`;
+  st.dirty=true;
+  if(st.rr)kick();else acquireGroup(st);
+  return true;
 }
 
 // ---- 待决项(docs/whitebox.md「待决项与用户裁决」,2026-09-09):白模调度 Agent 拿不准的取舍列在组面板,
