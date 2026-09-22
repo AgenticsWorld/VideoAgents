@@ -12883,6 +12883,13 @@ def confirm_public(c: dict) -> dict:
     for key in ("project", "gate_id", "checkpoint"):
         if c.get(key):
             public[key] = c[key]
+    if c.get("kind") == "sign" and c.get("gate_id"):
+        try:   # 闸门显示名按当前界面语言拼(2026-09-22),前端签字弹窗顶部展示
+            label = _gate_display_by_id(_approval_project(c), c["gate_id"])
+            if label:
+                public["gate_label"] = label
+        except Exception:  # noqa: BLE001
+            pass
     return public | {"remaining": remaining}
 
 
@@ -13336,6 +13343,77 @@ def _gate_checkpoint(node: dict) -> str:
     return str(node.get("checkpoint") or node.get("id") or "人工闸门")
 
 
+# 人工闸门显示名(2026-09-22):DAG 的 checkpoint 是总制片自由写的中文文本(写法不一,常缺省回落节点 id),
+# 面向用户的文案改为「代号 + 按界面语言的标签」拼出;代号从 checkpoint 文本抽,抽不到按节点 id 推。
+# 中文出中文,其余界面语言统一出英文。_gate_checkpoint 仍原样保留给签字单与 DAG 节点的绑定匹配。
+GATE_LABELS = {
+    "H1": ("世界圣经确认", "World bible sign-off"),
+    "H1A": ("角色与资产确认", "Characters & assets sign-off"),
+    "H2": ("美术风格锁定", "Art style lock"),
+    "H3": ("剧本确认", "Screenplay sign-off"),
+    "H3A": ("分镜确认", "Storyboard & shot list sign-off"),
+    "H3S": ("故事板确认", "Storyboard sign-off"),
+    "H3W": ("白模确认", "Whitebox sign-off"),
+    "H3B": ("视觉生成确认", "Visual generation sign-off"),
+    "H3P": ("后期确认", "Post-production sign-off"),
+    "H4": ("首集成片确认", "First-episode final cut sign-off"),
+    "H5": ("发布签字", "Release sign-off"),
+}
+# 节点 id 前缀 → 代号(按最长前缀匹配,g6s/g6w 先于 g6)
+_GATE_ID_CODES = (("g6s", "H3S"), ("g6w", "H3W"), ("g10", "H5"), ("g2", "H1"), ("g3", "H1A"),
+                  ("g4", "H2"), ("g5", "H3"), ("g6", "H3A"), ("g7", "H3B"), ("g9", "H4"))
+
+
+def _gate_code(node: dict) -> str:
+    """闸门代号:checkpoint 文本开头的 H3W/DH1 之类,否则按节点 id 推;推不出返回空串。"""
+    m = re.match(r"\s*[【\[]?\s*(D?H\d{1,2}[A-Z]?)(?![A-Za-z0-9])", _gate_checkpoint(node), re.I)
+    if m:
+        return m.group(1).upper()
+    nid = str(node.get("id") or "").lower()
+    for prefix, code in _GATE_ID_CODES:
+        if nid == prefix or nid.startswith(prefix + "-"):
+            return code
+    return ""
+
+
+def _gate_episode(node: dict) -> str:
+    """闸门对应的集:for_each.episode → 节点 id 里的 epNN → checkpoint 文本里的「第N集」。"""
+    fe = node.get("for_each")
+    if isinstance(fe, dict) and fe.get("episode"):
+        return str(fe["episode"])
+    m = re.search(r"(?<![A-Za-z0-9])(ep\d+)(?![A-Za-z0-9])", str(node.get("id") or ""), re.I)
+    if m:
+        return m.group(1).lower()
+    m = re.search(r"第\s*(\d+)\s*集", _gate_checkpoint(node))
+    return f"ep{int(m.group(1)):02d}" if m else ""
+
+
+def _gate_display(node: dict, lang: str | None = None) -> str:
+    """面向用户的闸门显示名:zh「H3W-白模确认(ep06)」/ 其他语言「H3W Whitebox sign-off (ep06)」;
+    代号不在表内时回落 checkpoint 原文。"""
+    lang = lang if lang is not None else (ui_lang_code() or "zh")
+    code, ep = _gate_code(node), _gate_episode(node)
+    raw = _gate_checkpoint(node)
+    if code not in GATE_LABELS:
+        return raw
+    zh, en = GATE_LABELS[code]
+    if lang == "zh":
+        # 原文已是「代号-中文名」写法时沿用原文(保留总制片写的集次等细节)
+        if re.match(rf"\s*[【\[]?\s*{code}\s*[-—–]\s*\S", raw, re.I):
+            return re.sub(r"\s*[(（]\s*--sign\s*[)）]", "", raw).strip("【】[] ")
+        return f"{code}-{zh}" + (f"({ep})" if ep else "")
+    return f"{code} {en}" + (f" ({ep})" if ep else "")
+
+
+def _gate_display_by_id(proj: str | None, gate_id: str | None, lang: str | None = None) -> str:
+    """按项目 + 节点 id 取显示名(签字单对外字段用);找不到节点返回空串。"""
+    if not proj or not gate_id:
+        return ""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    node = next((n for n in _dag_load_nodes(dag_path) if n.get("id") == gate_id), None)
+    return _gate_display(node, lang) if node else ""
+
+
 def _ready_human_gates(proj: str) -> list[dict]:
     """返回依赖均完成、状态仍为 pending 的人工闸门节点。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
@@ -13401,14 +13479,19 @@ def _whitebox_issue_question(proj: str, gate_id: str | None, question: str) -> s
     """签字卡问题末尾追加各集待决项摘要(总长仍受 500 字上限)。"""
     try:
         from modules.whitebox_issues import collect, format_summary
+        lang = ui_lang_code() or "zh"
         lines = []
         for ep in _whitebox_gate_episodes(proj, gate_id):
             summary = collect(PROJECTS_DIR / proj, ep)["summary"]
             if summary["total"]:
-                lines.append(f"{ep} {format_summary(summary)}")
+                lines.append(f"{ep} {format_summary(summary, lang)}")
         if not lines:
             return question
-        tail = "｜".join(lines) + ";请在「分镜设定」预览页组卡🧊白模面板逐条裁决;阻断级未清不能签字"
+        if lang == "zh":
+            tail = "｜".join(lines) + ";请在「分镜设定」预览页组卡🧊白模面板逐条裁决;阻断级未清不能签字"
+        else:
+            tail = (" | ".join(lines) + "; decide each item in the 🧊 Whitebox panel of the group card on the "
+                    "Shot Setup preview page; blocking items must be cleared before sign-off")
         return question[: max(40, 500 - len(tail) - 1)] + "\n" + tail
     except Exception as e:  # noqa: BLE001
         print(f"[whitebox_issues] 签字卡摘要失败:{e}", flush=True)
@@ -13469,11 +13552,20 @@ async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> l
                     except Exception as e:  # noqa: BLE001
                         signed["continuation_error"] = str(e)[:300]
             continue
-        checkpoint = _gate_checkpoint(node)
+        # 文案随界面语言:中文出中文,其余语言统一出英文(2026-09-22);闸门名按 _gate_display 拼;
+        # options/default 仍是中文键(前端按词典译成按钮文字,服务端按 "签字" 比对答复)
+        lang = ui_lang_code() or "zh"
+        checkpoint = _gate_display(node, lang)
+        if lang == "zh":
+            question = (f"【{checkpoint}｜项目 {proj}】前置任务已完成。"
+                        "请审阅对应产物后签字；签字后由总制片复核闸门并冻结版本，"
+                        "暂缓则保持阻塞。")
+        else:
+            question = (f"[{checkpoint} | project {proj}] Upstream tasks are complete. "
+                        "Review the deliverables and sign off; after sign-off the Producer "
+                        "re-checks the gate and freezes the version. Hold keeps it blocked.")
         result = await api_confirm_create({
-            "question": (f"【{checkpoint}｜项目 {proj}】前置任务已完成。"
-                         "请审阅对应产物后签字；签字后由总制片复核闸门并冻结版本，"
-                         "暂缓则保持阻塞。"),
+            "question": question,
             "kind": "sign", "options": ["签字", "暂缓"], "default": "签字",
             "project": proj, "gate_id": gate_id, "parent": parent,
             "origin": "runtime_gate_guard",

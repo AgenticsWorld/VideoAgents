@@ -317,14 +317,27 @@ def decided_pending(collected: dict, group_ids: list | None = None) -> list:
     return rows
 
 
-def format_summary(summary: dict) -> str:
-    """签字卡/回执用的一行摘要。"""
+def format_summary(summary: dict, lang: str = 'zh') -> str:
+    """签字卡/回执用的一行摘要。lang='zh' 出中文,其余一律英文(2026-09-22,随界面语言)。"""
+    groups = summary.get('groups_open') or []
+    tail_groups = ', '.join(groups[:8]) + ('…' if len(groups) > 8 else '')
+    if lang != 'zh':
+        if not summary.get('total'):
+            return 'Whitebox open decisions: 0'
+        pending = summary['open'] + summary['stale']
+        text = (f"Whitebox open decisions: {pending} pending ({summary['blocking_open']} blocking), "
+                f"{summary['decided']} decided awaiting apply, {summary['applied']} applied")
+        if summary.get('waived'):
+            text += f", {summary['waived']} accepted with group approval"
+        if groups:
+            text += '; groups: ' + tail_groups
+        return text
     if not summary.get('total'):
         return '白模待决项:0'
     pending = summary['open'] + summary['stale']
     text = f"白模待决项:待处理 {pending}(阻断 {summary['blocking_open']})、已裁决待套用 {summary['decided']}、已套用 {summary['applied']}"
     if summary.get('waived'):
         text += f"、随组批准接受 {summary['waived']}"
-    if summary.get('groups_open'):
-        text += ';涉及 ' + ', '.join(summary['groups_open'][:8]) + ('…' if len(summary['groups_open']) > 8 else '')
+    if groups:
+        text += ';涉及 ' + tail_groups
     return text

@@ -180,6 +180,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .confirm-box{background:var(--panel2);border:1px solid var(--yellow);border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .confirm-box.sign{border-color:var(--red)}
 .confirm-box.sign .cd{color:var(--red)}
+.confirm-box .gate{font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px;letter-spacing:.02em}
 .confirm-box .q{font-size:13px;line-height:1.5;margin-bottom:10px;word-break:break-all}
 .confirm-box .row{display:flex;flex-direction:column;align-items:stretch;gap:6px}
 .confirm-box .row button{width:100%;text-align:center;white-space:normal;word-break:break-word;line-height:1.45;padding:7px 12px}
@@ -3008,6 +3009,9 @@ function showConfirm(c){
   if(!box){box=document.createElement('div');box.id='confirms';document.body.appendChild(box)}
   const sign=c.kind==='sign';
   const d=document.createElement('div');d.className='confirm-box'+(sign?' sign':'');d.dataset.id=c.id;
+  if(sign&&c.gate_label){   // 闸门显示名(服务端按界面语言拼,2026-09-22)
+    const g=document.createElement('div');g.className='gate';g.setAttribute('data-no-i18n','');g.textContent='🚧 '+c.gate_label;d.appendChild(g);
+  }
   const q=document.createElement('div');q.className='q';q.textContent=(sign?'✍️ ':'❓ ')+c.question;d.appendChild(q);
   if(sign&&c.project&&String(c.checkpoint||'').toUpperCase().startsWith('H3A')){
     // H3A 分镜签字:在弹窗里确认本项目的视频提示词技能(改动即保存;签字时服务端冻结快照)

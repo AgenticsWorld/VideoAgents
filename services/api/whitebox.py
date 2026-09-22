@@ -66,7 +66,7 @@ async def issues(project: str,ep: str):
     from modules.whitebox_issues import collect,format_summary
     base=project_path(project,ep)
     data=await checked(collect,base,ep)
-    data['text']=format_summary(data['summary'])
+    data['text']=format_summary(data['summary'],core.ui_lang_code() or 'zh')   # 随界面语言(2026-09-22)
     return data
 
 
@@ -78,7 +78,7 @@ async def decide_issue(project: str,ep: str,issue_id: str,body: dict):
     if not isinstance(body,dict):raise HTTPException(422,'body must be an object')
     issue=await checked(decide,base,ep,issue_id,str(body.get('choice') or ''),str(body.get('note') or ''),'user:page')
     summary=(await checked(collect,base,ep))['summary']
-    return {'issue':issue,'summary':summary,'text':format_summary(summary)}
+    return {'issue':issue,'summary':summary,'text':format_summary(summary,core.ui_lang_code() or 'zh')}
 
 
 def file_links(project,record):
