@@ -911,14 +911,14 @@ async function rhAddWf(kind){
     const audioToken=toks.has('AUDIO')||toks.has('REF_AUDIO');
     if((!imageToken&&imgs.length!==1)||(!audioToken&&auds.length!==1)){
       st.className='status err';
-      st.textContent='✗ 无法唯一定位数字人输入：在用 LoadImage '+imgs.length
-        +' 个、LoadAudio '+auds.length+' 个；请精简到各 1 个，或使用对应占位符';
+      st.textContent=I18N.f('✗ 无法唯一定位数字人输入：在用 LoadImage {i} 个、LoadAudio {a} 个；请精简到各 1 个，或使用对应占位符',
+        {i:imgs.length,a:auds.length});
       return;
     }
     const auto=[];
     if(!imageToken)auto.push('LoadImage#'+imgs[0]);
     if(!audioToken)auto.push('LoadAudio#'+auds[0]);
-    dhBinding=auto.length?' · 自动绑定 '+auto.join(' / '):' · 使用占位符绑定';
+    dhBinding=auto.length?I18N.f(' · 自动绑定 {b}',{b:auto.join(' / ')}):t(' · 使用占位符绑定');
   }
   const note=$(`#${kind}-comfy-rhnote`).value.trim();
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===r.id&&w.site===mode));
@@ -1168,11 +1168,11 @@ async function testDigitalHuman(provider){
     const missing=Object.entries(r.infinitetalk_nodes||{}).filter(([,v])=>!v).map(([k])=>k);
     st.className='status '+(r.infinitetalk_ready&&r.workflow_exists?'ok':'err');
     st.textContent=r.infinitetalk_ready&&r.workflow_exists
-      ?`✓ InfiniteTalk 就绪 · ${r.version}`
-      :`✗ ${!r.workflow_exists?'工作流文件不存在':('缺少节点: '+missing.join(', '))}`;
+      ?I18N.f('✓ InfiniteTalk 就绪 · {v}',{v:r.version})
+      :(!r.workflow_exists?t('✗ 工作流文件不存在'):I18N.f('✗ 缺少节点: {n}',{n:missing.join(', ')}));
   }else{
-    st.textContent='✓ Key 有效'+(r.region?' · '+r.region:'')
-      +(r.remaining_quota!=null?' · 余额 '+r.remaining_quota:'');
+    st.textContent=t('✓ Key 有效')+(r.region?' · '+r.region:'')
+      +(r.remaining_quota!=null?' · '+I18N.f('余额 {q}',{q:r.remaining_quota}):'');
   }
 }
 
