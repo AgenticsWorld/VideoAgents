@@ -2505,7 +2505,7 @@ async function updateConnTitle(connected){
   $('#conn').title=text;
 }
 /* ---------- 账号(设置菜单「账号」;仅桌面端有登录桥接时显示)----------
-   未登录:弹窗只给「登录」;已登录:显示账号 ID(邮箱)与余额 + 「退出登录」。
+   未登录:弹窗只给「登录」;已登录:显示账号 ID 与余额 + 「退出登录」。
    登录/退出都由桌面端完成并自动重启应用;取消则状态不变。顶栏不再显示账号与余额。 */
 let DESKTOP_ACCOUNT=null;   // 最近一次 bridge.account() 结果;null = 未登录或取不到
 function desktopAuthBridge(){
@@ -2524,8 +2524,10 @@ function renderAccountModal(){
   $('#acct-login').style.display=u?'none':'';
   $('#acct-logout').style.display=u?'':'none';
   if(u){
-    $('#acct-id').textContent=u.email;
-    $('#acct-bal').textContent=Number(u.balance).toLocaleString(undefined,{maximumFractionDigits:4});
+    $('#acct-id').textContent=u.email||u.phone||String(u.id);
+    $('#acct-bal').textContent=typeof u.balance==='number'
+      ?u.balance.toLocaleString(undefined,{maximumFractionDigits:4})
+      :t('未知');
   }
 }
 async function openAccountModal(){
