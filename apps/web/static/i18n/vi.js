@@ -3196,4 +3196,18 @@ window.I18N_DICT = {
 "(留空/不使用)": "(để trống / không dùng)",
 "自定义工作流路径,如 comfy/my.json": "Đường dẫn workflow tùy chỉnh, ví dụ comfy/my.json",
 "查看同名 .md 说明文档": "Xem tài liệu .md cùng tên",
+// 运行日志进度行 / 工具回执(2026-09-22):core.py run_progress / tool_receipt 推到运行卡与实时框的状态文案;以空格结尾的 key 为前缀规则(后接工具名 / ≈N tokens)
+"⏳ 等待模型下一步…": "⏳ Đang chờ bước tiếp theo của mô hình…",
+"⚙ 执行命令中…": "⚙ Đang chạy lệnh…",
+"⚙ 执行工具中…": "⚙ Đang chạy công cụ…",
+"⚙ 执行工具中… ": "⚙ Đang chạy công cụ… ",
+"⚙ 生成工具调用参数…": "⚙ Đang tạo tham số gọi công cụ…",
+"⚙ 生成工具调用参数… ": "⚙ Đang tạo tham số gọi công cụ… ",
+"✍ 输出中…": "✍ Đang xuất…",
+"💭 思考中…": "💭 Đang suy nghĩ…",
+"💭 思考中 ": "💭 Đang suy nghĩ ",
+"💭 模型思考中…": "💭 Mô hình đang suy nghĩ…",
+"✗ 工具报错": "✗ Lỗi công cụ",
+"✗ 工具报错 · ": "✗ Lỗi công cụ · ",
+"✗ 报错 · ": "✗ Lỗi · ",
 };

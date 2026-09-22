@@ -3352,4 +3352,18 @@ window.I18N_DICT = {
 "✗ 无法唯一定位数字人输入：在用 LoadImage {i} 个、LoadAudio {a} 个；请精简到各 1 个，或使用对应占位符": "✗ Cannot uniquely locate the digital-human inputs: {i} active LoadImage node(s), {a} active LoadAudio node(s); reduce each to exactly 1, or use the matching placeholders",
 "· 自动绑定 {b}": "· auto-bound {b}",
 "· 使用占位符绑定": "· bound via placeholders",
+// 运行日志进度行 / 工具回执(2026-09-22):core.py run_progress / tool_receipt 推到运行卡与实时框的状态文案;以空格结尾的 key 为前缀规则(后接工具名 / ≈N tokens)
+"⏳ 等待模型下一步…": "⏳ Waiting for the model's next step…",
+"⚙ 执行命令中…": "⚙ Running command…",
+"⚙ 执行工具中…": "⚙ Running tool…",
+"⚙ 执行工具中… ": "⚙ Running tool… ",
+"⚙ 生成工具调用参数…": "⚙ Generating tool arguments…",
+"⚙ 生成工具调用参数… ": "⚙ Generating tool arguments… ",
+"✍ 输出中…": "✍ Writing…",
+"💭 思考中…": "💭 Thinking…",
+"💭 思考中 ": "💭 Thinking ",
+"💭 模型思考中…": "💭 Model is thinking…",
+"✗ 工具报错": "✗ Tool error",
+"✗ 工具报错 · ": "✗ Tool error · ",
+"✗ 报错 · ": "✗ Error · ",
 };

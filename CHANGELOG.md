@@ -13,6 +13,10 @@ All notable public changes to VideoAgents are documented here.
 
 - **Diagnostic Data: local event collection, lesson cards (`runs/<task_id>/lesson.md`) and the diagnostic bundle export** (`modules/diagnostics.py`, the `/diagnostics*` endpoints, the `diagnostics_enabled` setting). The Debug mode switch is kept. Existing files under `data/.videoagents/telemetry/` are no longer read and can be deleted.
 
+### Fixed
+
+- **Run-log progress line and tool receipts were always Chinese** regardless of the UI language ("💭 思考中…", "⚙ 执行工具中…", "⏳ 等待模型下一步…", "✗ 工具报错" …). These are host status strings pushed by the runtime over the `progress` / `tool` SSE events; they now have entries in all 11 UI dictionaries, and the variable parts (tool name, argument size, thinking-token estimate) are placed after the fixed text so the prefix rule translates the whole line.
+
 ## [1.0.34] - 2026-09-20
 
 ### Added

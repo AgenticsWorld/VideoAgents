@@ -4434,7 +4434,11 @@ def tool_receipt(run: dict, output, is_error: bool = False, label: str = ""):
     first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
     if len(first) > 100:
         first = first[:100] + "…"
-    head = f"✗ {label or '工具'}报错" if is_error else f"↩ {label + ' ' if label else ''}{_fmt_bytes(size)}"
+    # 中文原文即前端词典 key:固定文案在前、工具名等变量在后,前缀规则才能整句翻译
+    if is_error:
+        head = f"✗ 报错 · {label}" if label else "✗ 工具报错"
+    else:
+        head = f"↩ {label + ' ' if label else ''}{_fmt_bytes(size)}"
     desc = f"{head} · {first}" if first else head
     HUB.publish({"type": "tool", "run_id": run["id"], "agent": run["agent"],
                  "desc": desc, "kind": "result"})
@@ -4586,7 +4590,7 @@ def handle_pi_event(run: dict, obj: dict):
             d = len(update.get("delta") or "")
             n = run["_pi_thinking_chars"] = (run.get("_pi_thinking_chars") or 0) + d
             if d and n // 200 != (n - d) // 200:   # 每 ~200 字刷一次
-                run_progress(run, f"💭 思考中 ≈{n} 字")
+                run_progress(run, f"💭 思考中 ≈{n} chars")
         elif ut == "toolcall_start":
             run_progress(run, "⚙ 生成工具调用参数…")
         return
@@ -4792,7 +4796,7 @@ def _claude_stream_event(run: dict, ev: dict):
         elif bt == "text":
             run_progress(run, "✍ 输出中…")
         elif bt == "tool_use":
-            run_progress(run, f"⚙ 生成 {cb.get('name') or '工具'} 调用参数…")
+            run_progress(run, "⚙ 生成工具调用参数…" + (f" {cb.get('name')}" if cb.get('name') else ""))
     elif et == "content_block_delta":
         d = ev.get("delta") or {}
         dt = d.get("type")
@@ -4808,7 +4812,8 @@ def _claude_stream_event(run: dict, ev: dict):
             add = len(d.get("partial_json") or "")
             n = blk["json_len"] = blk.get("json_len", 0) + add
             if add and n // 2048 != (n - add) // 2048:   # 每 2KB 刷一次
-                run_progress(run, f"⚙ 生成 {blk.get('name') or '工具'} 调用参数 {_fmt_bytes(n)}…")
+                run_progress(run, "⚙ 生成工具调用参数… " + " ".join(
+                    x for x in (blk.get('name'), _fmt_bytes(n)) if x))
         elif dt == "thinking_delta":
             est = d.get("estimated_tokens")
             if est:
@@ -4863,7 +4868,7 @@ def handle_claude_event(run: dict, obj: dict):
                 HUB.publish({"type": "tool", "run_id": run["id"],
                              "agent": run["agent"], "desc": desc})
                 publish_run(run)
-                run_progress(run, f"⚙ 执行 {c.get('name') or '工具'} 中…")
+                run_progress(run, "⚙ 执行工具中…" + (f" {c.get('name')}" if c.get('name') else ""))
     elif t == "user":
         # 工具执行结果回到模型:给前端一条回执(体积+首行),否则「命令跑完了」无任何反馈
         for c in (obj.get("message") or {}).get("content", []) or []:
