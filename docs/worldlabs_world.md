@@ -41,6 +41,10 @@ world 原点 = 全景相机位,OpenCV 系(y 向下、z 向前 = 全景中心列)
 (y 向上);再绕 Y 转全景相机 yaw、平移到全景相机位即为白模坐标(viewer 外层 Group = yaw + 平移,内层 SplatMesh = scale + y offset + 绕 X 180°)。
 `ground_plane_offset` 应 ≈ 全景相机离地高度,`scale_fix = 相机高 / ground_plane_offset` 作米制修正(实测室外场景模型高估 1.7 倍)。
 
+## 作为分镜背景图的参考来源（背景图模式「世界模型」，2026-09-22）
+
+输出设置「背景图模式」（白模开启时显示；场景预览页「分镜背景图」板块可按场景覆盖）选「世界模型」后，`code/render_shot_plates.py` 不再自动规划锚点出全景，而是要求该场景已有 world：在 world 里按母图机位截图（`modules/worldlabs.py#render_world_views`，渲染页 `apps/web/static/world-view-export.html`，与 `world-viewer.js` 同一套对齐变换；`world_missing()` 判定 world.json + splats 文件是否齐）作 `[Image 1]` 二次生成。没有 world → 退出码 4 `[world_missing]`，由用户在本板块生成后重跑；Agent 不得自行生成。截图精度取 `full_res` 优先（`VIEW_RES_ORDER`），JPEG 落库 `<key>.world.jpg`。细则见 `docs/shot_plates.md`「背景图模式」。
+
 ## 已知限制
 
 - 贴图对深度几何「loosely adhere」,world 生成又会重估几何,墙线与白模有偏差,靠线框比对。

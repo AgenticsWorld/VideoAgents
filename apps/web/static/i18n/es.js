@@ -3154,4 +3154,16 @@ window.I18N_DICT = {
 "拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Arrastra para mirar en 360°, rueda para hacer zoom, doble clic para restablecer, Esc para cerrar",
 "全景加载中…": "Cargando panorama…",
 "全景图加载失败": "No se pudo cargar el panorama",
+
+// 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
+"背景图模式": "Modo de fondo de plano",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Fuente de referencia de los fondos de plano con whitebox activado (ajuste global; se puede sobrescribir por escena en la vista previa de escenas): Panorama = los anclajes se planifican automáticamente desde las posiciones de cámara del whitebox, se generan panoramas, se reproyectan según la dirección del plano y se regeneran; Modelo del mundo = eliges un anclaje en la vista previa de escenas para crear un panorama, generas un modelo del mundo a partir de él (World Labs Marble, con coste) y luego se regeneran capturas tomadas dentro del modelo según la dirección del plano",
+"本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Fuente de referencia de los fondos de plano de esta escena; por defecto sigue el ajuste de salida del proyecto «Modo de fondo de plano» y se puede sobrescribir aquí",
+"跟随全局({m})": "Seguir global ({m})",
+"本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "El modo de fondo de esta escena es «Modelo del mundo» pero aún no se ha generado ninguno: la cadena de fondos se detendrá (código de salida 4). Genéralo primero en el panel «🌍 Modelo del mundo» de arriba",
+"前往世界模型": "Ir al modelo del mundo",
+"世界模型(全景 {a})": "Modelo del mundo (panorama {a})",
+"(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Aún no hay fondos de plano; la cadena de fondos los genera tras la firma H3W del whitebox y su exportación)",
+"生效 {m}": "en vigor {m}",
+"服务未重启:背景图模式接口不可用": "Servicio no reiniciado: el endpoint del modo de fondo no está disponible",
 };

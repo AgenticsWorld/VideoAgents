@@ -15,6 +15,10 @@
 code/render_scene_panos.py 预跑/改锚点),再把全景重投影成 <key>.pano.jpg 作 [Image 1] 出图;不再给白模帧 / 俯视图作参考图
 (多张背景图互不一致的根因)。当前图像模型不支持 2:1 全景时脚本退出码 2 并打印 [pano_unsupported],一张都不出——
 Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模型后重跑,不得自行换模型或绕过。
+背景图模式(2026-09-22,项目输出设置「背景图模式」,白模开启时显示;场景预览页「分镜背景图」板块可按场景覆盖):
+  全景图(默认)= 上述全景制;世界模型 = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble),
+  本脚本在 world 里按母图机位截图作 [Image 1] 二次生成。世界模型模式的场景没有 world 时退出码 4 并打印 [world_missing],
+  一张都不出——Agent 须原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;不得自行生成世界模型。
 库里非母图的旧图(2026-09-10 前白模帧直出、2026-09-14 前逐镜全景直出,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜
 (WARN 不算 FAIL);--repano 把这些镜整体按母图制重出(有费用,仅用户明确要求时用)。
 
@@ -27,7 +31,7 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   python code/render_shot_plates.py --project <slug> --ep ep01 --status      # 验收机检 shot_plates_complete:逐镜覆盖状态,不齐退出码 1
   python code/render_shot_plates.py --project <slug> --ep ep01 grp027 --repano  # 把仍指向 legacy(非全景制)图的镜重出(用户明确要求时)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
-  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出。
+  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成)。
 
 纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
   本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
@@ -41,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, reexec_with_host_python, spatial_blocking_enabled  # noqa: E402
 from modules.scene_panos import PanoProjectionError, PanoUnsupported  # noqa: E402
-from modules.shot_plates import run_episode, status_episode, sync_episode  # noqa: E402
+from modules.shot_plates import WorldMissing, run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
 
 
@@ -100,6 +104,10 @@ def main():
         print(f"[pano_projection_fail] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_projection_fail', 'detail': str(error)}}, ensure_ascii=False), flush=True)
         return 3
+    except WorldMissing as error:
+        print(f"[world_missing] {error}", file=sys.stderr, flush=True)
+        print(json.dumps({'shot_plates': {'blocked': 'world_missing', 'scenes': error.scenes, 'detail': str(error)}}, ensure_ascii=False), flush=True)
+        return 4
     print(json.dumps({'shot_plates': stats}, ensure_ascii=False), flush=True)
     if not args.dry_run:
         sync = sync_episode(base, ep, groups, write=True)

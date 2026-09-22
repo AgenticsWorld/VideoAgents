@@ -952,6 +952,12 @@ DEFAULT_GENCONFIG = {
                #   p6-scene-plates 以正向图为母版补出反向图(从里回望入口);single=只出正向(平面动画/单面布景);pair=每场景正反两张 p4 一并出。
                #   场景级可在场景预览页覆盖(scene_plates.json mode)。组 prompt 由 code/sync_scene_plates.py --write 挂图并逐镜点名用哪张(机检 scene_plate_bound)
                "scene_plates": "auto",
+               # plate_mode=背景图模式(2026-09-22,仅白模开启时显示/生效;docs/shot_plates.md「背景图模式」):pano(默认)=分镜背景图由
+               #   场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划);world=用户在场景预览页自选锚点创建全景图 → 基于它
+               #   生成世界模型(World Labs Marble)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
+               #   「分镜背景图」板块覆盖(库 plates/index.json#mode)。世界模型模式的场景没有 world 时 render_shot_plates.py 退出码 4
+               #   [world_missing],由用户生成(计费),Agent 不得自行生成
+               "plate_mode": "pano",
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
@@ -1041,6 +1047,7 @@ VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
+PLATE_MODES = ("pano", "world")   # 输出设置「背景图模式」(2026-09-22,仅白模开启时生效):全景图 / 世界模型(与 modules.shot_plates.PLATE_MODES 同步)
 
 
 
@@ -1932,6 +1939,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "scene_plates" in o and o["scene_plates"] not in SCENE_PLATES_MODES:
         raise ServiceError(400, f"output.scene_plates must be one of {SCENE_PLATES_MODES}")
+    if "plate_mode" in o and o["plate_mode"] not in PLATE_MODES:
+        raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
     if "dialogue_tts_speed" in o:
@@ -2969,6 +2978,7 @@ def build_role_prompt(agent_id: str, project: str,
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
     spatial_on = out.get("spatial_blocking") is True
     scene_plates_mode = out.get("scene_plates") if out.get("scene_plates") in SCENE_PLATES_MODES else "auto"
+    plate_mode = out.get("plate_mode") if out.get("plate_mode") in PLATE_MODES else "pano"
     spatial_line = (
         "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
         "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"
@@ -2980,7 +2990,11 @@ def build_role_prompt(agent_id: str, project: str,
         "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
-        "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效"
+        "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
+        f"**背景图模式(2026-09-22)= {'世界模型 world' if plate_mode == 'world' else '全景图 pano'}**(项目输出设置 output.plate_mode;场景级可在场景预览页「分镜背景图」板块覆盖,以 `render_shot_plates.py` 日志里各场景实际生效的模式为准):"
+        "pano = 分镜背景图由场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划,`render_scene_panos.py`);"
+        "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
+        "**世界模型模式的场景没有世界模型时脚本退出码 4 并打印 `[world_missing]`,一张背景图也不出:原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;Agent 不得自行跑 `worldlabs_world.py` 生成世界模型、不得改模式绕过**"
         if spatial_on else
         "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p4-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
         f"本项目「场景图」设置 = **{scene_plates_mode}**(auto=正向必出、反向按分镜 plate_view 按需;single=只出正向;pair=每场景正反两张;场景级可在场景预览页覆盖)。"
@@ -6971,7 +6985,8 @@ def _preview_scenes(project: str):
                            "lighting_scheme_id": p.get("lighting_scheme_id"), "time_of_day": p.get("time_of_day"),
                            "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
                            # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
-                           "pano_ref": {k: pr.get(k) for k in ("anchor_id", "scheme", "hole_fraction")} if pr else None,
+                           # 2026-09-22 kind = pano|world(世界模型截图作参考出的母图)
+                           "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction")} if pr else None,
                            "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
         # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
         panos = None
@@ -7036,8 +7051,16 @@ def _preview_scenes(project: str):
                                      "reverse_stale": _scp.reverse_stale(base, sid, spr)}   # 正向图重出后与母版不一致(2026-09-17)
         except Exception as e:  # noqa: BLE001
             print(f"[preview-scenes] {sid} scene_plates 读取失败(忽略):{e}", flush=True)
+        # 背景图模式(2026-09-22):场景级 inherit|pano|world(库 plates/index.json#mode)+ 生效值 + 是否已有世界模型
+        plate_mode_view = None
+        try:
+            from modules import shot_plates as _shp
+            plate_mode_view = {"mode": _shp.scene_plate_mode(base, sid), "effective": _shp.effective_plate_mode(base, sid),
+                               "has_world": bool(world and (world.get("files") or {}).get("splats"))}
+        except Exception as e:  # noqa: BLE001
+            print(f"[preview-scenes] {sid} plate_mode 读取失败(忽略):{e}", flush=True)
         scenes.append({"id": sid, "name": meta.get("name") or sid,
-                       "meta": meta, "docs": docs, "scene_plates": scene_plates_view,
+                       "meta": meta, "docs": docs, "scene_plates": scene_plates_view, "plate_mode": plate_mode_view,
                        # plates/ panos/ world/ 子目录不进概念图库,分别以「分镜背景图」「全景图」「世界模型」板块展示
                        "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/", "world/"))],
                        "plates": plates, "panos": panos, "world": world, "world_sources": world_sources,
@@ -7057,8 +7080,13 @@ def _preview_scenes(project: str):
         scene_plates_mode = _sp_project_mode(base)
     except Exception:  # noqa: BLE001
         scene_plates_mode = "auto"
+    try:
+        from modules.shot_plates import project_plate_mode as _pm
+        plate_mode = _pm(base)
+    except Exception:  # noqa: BLE001
+        plate_mode = "pano"
     return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt,
-            "scene_plates_mode": scene_plates_mode}
+            "scene_plates_mode": scene_plates_mode, "plate_mode": plate_mode}
 
 
 async def api_preview_scenes(project: str = "demo"):
@@ -7088,6 +7116,32 @@ def _scene_plates_set_mode(project: str, sid: str, mode: str):
 
 async def api_scene_plates_mode(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_plates_set_mode, project, sid, str((body or {}).get("mode") or ""))
+
+
+def _scene_plate_mode_set(project: str, sid: str, mode: str):
+    """场景预览页「分镜背景图」板块:场景级「背景图模式」覆盖(2026-09-22;inherit|pano|world,存库 plates/index.json#mode)。
+    仅白模开启项目可改;world 模式不要求此刻已有世界模型(出图时没有才停下,退出码 4 [world_missing])。"""
+    from modules import shot_plates as _shp
+    from modules.whitebox import component as _component
+    base = _proj_base(project)
+    sid = _component(sid)
+    if mode not in _shp.SCENE_PLATE_MODES:
+        raise ServiceError(400, f"mode must be one of {_shp.SCENE_PLATE_MODES}")
+    if (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is not True:
+        raise ServiceError(409, "项目「白模」选项已关闭,分镜背景图链不生效,背景图模式无从设置")
+    if not (base / "assets" / "concepts" / "scenes" / sid).is_dir() and not (base / "bible" / "scenes" / sid).is_dir():
+        raise ServiceError(404, f"场景 {sid} 不存在")
+    _shp.set_scene_plate_mode(base, sid, mode)
+    try:
+        from modules import worldlabs as _wl
+        has_world = not _wl.world_missing(base, sid)
+    except Exception:  # noqa: BLE001
+        has_world = False
+    return {"ok": True, "scene_id": sid, "mode": mode, "effective": _shp.effective_plate_mode(base, sid), "has_world": has_world}
+
+
+async def api_scene_plate_mode(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plate_mode_set, project, sid, str((body or {}).get("mode") or ""))
 
 
 def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
@@ -7221,7 +7275,7 @@ def _scene_job_worker(jobs: dict, etype: str, project: str, sid: str, jobkey: st
             job["status"] = "failed"
             # CLI 的错误行以「错误:」/「[pano_unsupported]」开头(其后可能跟多行响应体),取该行起的片段;没有就取末尾几行
             lines = job["log"]
-            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "[pano_projection_fail]", "scene_panos:"))),
+            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "[pano_projection_fail]", "[world_missing]", "scene_panos:"))),
                          max(len(lines) - 3, 0))
             job["error"] = " ".join(x.strip() for x in lines[start:start + 4])[:500] or f"exit {rc}"
             if rc == 2 and rc2_error:

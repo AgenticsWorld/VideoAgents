@@ -3152,4 +3152,16 @@ window.I18N_DICT = {
 "拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Seret untuk melihat sekeliling 360°, gulir untuk zoom, klik ganda untuk reset, Esc untuk menutup",
 "全景加载中…": "Memuat panorama…",
 "全景图加载失败": "Gagal memuat panorama",
+
+// 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
+"背景图模式": "Mode pelat latar",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Sumber referensi pelat latar shot saat whitebox aktif (pengaturan global; dapat ditimpa per adegan di pratinjau adegan): Panorama = jangkar direncanakan otomatis dari posisi kamera whitebox, panorama dibuat, diproyeksikan ulang sesuai arah shot lalu dibuat ulang; Model dunia = Anda memilih jangkar di pratinjau adegan untuk membuat panorama, membangun model dunia darinya (World Labs Marble, berbayar), lalu tangkapan layar di dalam model dunia sesuai arah shot dibuat ulang",
+"本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Sumber referensi pelat shot adegan ini; secara default mengikuti pengaturan output proyek 「Mode pelat latar」, dapat ditimpa di sini",
+"跟随全局({m})": "Ikuti global ({m})",
+"本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Mode pelat adegan ini adalah 「Model dunia」 tetapi model dunia belum dibuat: rantai pelat akan berhenti (kode keluar 4). Buat dulu di panel 「🌍 Model dunia」 di atas",
+"前往世界模型": "Ke model dunia",
+"世界模型(全景 {a})": "Model dunia (panorama {a})",
+"(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Belum ada pelat latar shot; dibuat oleh rantai pelat setelah whitebox disetujui di H3W dan diekspor)",
+"生效 {m}": "berlaku {m}",
+"服务未重启:背景图模式接口不可用": "Layanan belum dimulai ulang: endpoint mode pelat tidak tersedia",
 };

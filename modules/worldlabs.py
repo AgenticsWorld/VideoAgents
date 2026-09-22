@@ -498,3 +498,118 @@ def preview_summary(base: Path, sid: str, url_prefix: str) -> dict | None:
                                       ('thumbnail', 'thumbnail.jpg'))
                          if (wdir / n).is_file()}
     return world
+
+
+# ---------------------------------------------------------------- 背景图模式「世界模型」:在 world 里按母图机位截图(2026-09-22)
+STATIC = ROOT / 'apps/web/static'
+VIEW_RES_ORDER = ('full_res', '1000k', '500k', '150k', '100k')   # 截图用的 splats 精度:有全精度用全精度
+
+
+def world_missing(base: Path, sid: str) -> bool:
+    """场景是否还没有可用 world(world.json + 至少一个 splats 文件)。"""
+    wj = read_world(base, sid)
+    if not wj:
+        return True
+    splats = (wj.get('files') or {}).get('splats') or {}
+    return not any((world_dir(base, sid) / n).is_file() for n in splats.values())
+
+
+def _pick_splat(base: Path, sid: str, wj: dict, res: str | None = None) -> tuple[str, str]:
+    splats = {r: n for r, n in ((wj.get('files') or {}).get('splats') or {}).items() if (world_dir(base, sid) / n).is_file()}
+    if not splats:
+        raise WorldLabsError(f'{sid}: world.json 没有可用的 splats 文件(先生成世界模型)')
+    if res and res in splats:
+        return res, splats[res]
+    for r in VIEW_RES_ORDER:
+        if r in splats:
+            return r, splats[r]
+    r = sorted(splats)[0]
+    return r, splats[r]
+
+
+def _launch_kwargs(gpu: bool) -> dict:
+    """无头 Chromium 启动参数:gpu=True 先试真 GPU(mac 用 Metal;高斯泼溅 swiftshader 每帧 8–30 s,GPU 不到 1 s),
+    不可用再退回 swiftshader(与 scene_panos.render_whitebox_pano 同参数)。VIDEOAGENTS_WORLD_GPU=0 强制 swiftshader。"""
+    import sys as _sys
+    if gpu:
+        args = ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--allow-file-access-from-files']
+        if _sys.platform == 'darwin':
+            args.append('--use-angle=metal')
+    else:
+        args = ['--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--allow-file-access-from-files']
+    kwargs = {'headless': True, 'args': args}
+    if os.environ.get('VIDEOAGENTS_CHROMIUM'):
+        kwargs['executable_path'] = os.environ['VIDEOAGENTS_CHROMIUM']
+    return kwargs
+
+
+def render_world_views(base: Path, sid: str, requests: list[dict], *, width: int, height: int, res: str | None = None,
+                       log=print) -> list[dict]:
+    """在无头 Chromium(Spark)里加载场景 world,按各机位截图落盘(JPEG)。requests[i] = {'camera': {position, target, fov_v_deg},
+    'output': Path};返回与 requests 等长的记录 [{file, kind:'world', world_id, anchor_id, scheme, res, size, render_s}]。
+    一次进程只加载一次 world,逐张出图;渲染页报错逐张记 error 字段(不抛),缺 Playwright / world 才抛 WorldLabsError。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        raise WorldLabsError('缺少 Playwright,请安装项目依赖并运行 python -m playwright install chromium') from e
+    wj = read_world(base, sid)
+    if not wj or world_missing(base, sid):
+        raise WorldLabsError(f'{sid}: 还没有世界模型(assets/concepts/scenes/{sid}/world/world.json),请先在场景预览页「🌍 世界模型」板块生成')
+    res_used, splat_name = _pick_splat(base, sid, wj, res)
+    splat_path = world_dir(base, sid) / splat_name
+    data = splat_path.read_bytes()
+    inp = wj.get('input') or {}
+    results: list[dict] = []
+    gpu_pref = os.environ.get('VIDEOAGENTS_WORLD_GPU', '1') != '0'
+    with sync_playwright() as p:
+        attempts = [True, False] if gpu_pref else [False]
+        browser = page = None
+        info = None
+        for gpu in attempts:
+            browser = p.chromium.launch(**_launch_kwargs(gpu))
+            try:
+                page = browser.new_page(viewport={'width': width, 'height': height})
+                errors: list[str] = []
+                page.on('pageerror', lambda e: errors.append(str(e)))
+                # 本地 SPZ 经 route 以 http 供给 Spark 的 fetch(file:// 下 fetch 本地文件不可靠)
+                page.route('http://world-assets.local/**', lambda route: route.fulfill(status=200, body=data, headers={
+                    'Content-Type': 'application/octet-stream', 'Access-Control-Allow-Origin': '*'}))
+                page.goto((STATIC / 'world-view-export.html').as_uri())
+                page.wait_for_function('window.worldViewReady === true', timeout=60000)
+                log(f"   加载世界模型 {sid} {splat_name}({len(data) // 1024 // 1024} MB,{'GPU' if gpu else 'swiftshader'})…")
+                info = page.evaluate('(o) => window.worldView.load(o)', {
+                    'url': f'http://world-assets.local/{splat_name}', 'alignment': wj.get('alignment') or {}, 'width': width, 'height': height})
+                if errors:
+                    raise RuntimeError(' | '.join(errors)[:600])
+                break
+            except Exception as e:  # noqa: BLE001
+                browser.close()
+                browser = page = None
+                if gpu and len(attempts) > 1:
+                    log(f'   GPU 无头渲染不可用({str(e)[:160]}),改用 swiftshader(慢)')
+                    continue
+                raise WorldLabsError(f'{sid}: 世界模型渲染页加载失败:{e}') from e
+        assert browser is not None and page is not None
+        try:
+            log(f"   {info.get('numSplats')} splats · {info.get('renderer') or '?'} · 待出 {len(requests)} 张 {width}x{height}")
+            for r in requests:
+                cam = r['camera']
+                out = Path(r['output'])
+                out.parent.mkdir(parents=True, exist_ok=True)
+                t0 = time.time()
+                rec = {'kind': 'world', 'file': str(out), 'world_id': wj.get('world_id'), 'anchor_id': inp.get('anchor_id'),
+                       'scheme': inp.get('scheme'), 'res': res_used, 'size': [width, height], 'hole_fraction': None}
+                try:
+                    errors.clear()
+                    jpg = page.evaluate('(c) => window.worldView.shoot(c)',
+                                        {'position': list(cam['position']), 'target': list(cam['target']), 'fov': float(cam['fov_v_deg'])})
+                    if errors:
+                        raise RuntimeError(' | '.join(errors)[:300])
+                    out.write_bytes(base64.b64decode(jpg))
+                    rec['render_s'] = round(time.time() - t0, 1)
+                except Exception as e:  # noqa: BLE001
+                    rec['error'] = str(e)[:300]
+                results.append(rec)
+        finally:
+            browser.close()
+    return results

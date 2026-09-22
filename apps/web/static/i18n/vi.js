@@ -3152,4 +3152,16 @@ window.I18N_DICT = {
 "拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Kéo để nhìn quanh 360°, cuộn để thu phóng, nhấp đúp để đặt lại, Esc để đóng",
 "全景加载中…": "Đang tải ảnh toàn cảnh…",
 "全景图加载失败": "Tải ảnh toàn cảnh thất bại",
+
+// 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
+"背景图模式": "Chế độ nền cảnh quay",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Nguồn tham chiếu cho ảnh nền cảnh quay khi bật whitebox (cài đặt toàn cục, có thể ghi đè theo cảnh ở trang xem trước cảnh): Toàn cảnh = tự lập kế hoạch điểm neo từ vị trí máy quay whitebox, tạo ảnh toàn cảnh, chiếu lại theo hướng cảnh quay rồi tạo lại; Mô hình thế giới = bạn chọn điểm neo ở trang xem trước cảnh để tạo ảnh toàn cảnh, dựng mô hình thế giới từ đó (World Labs Marble, tính phí), rồi chụp màn hình trong mô hình thế giới theo hướng cảnh quay và tạo lại",
+"本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Nguồn tham chiếu cho ảnh nền cảnh quay của cảnh này; mặc định theo cài đặt đầu ra của dự án 「Chế độ nền cảnh quay」, có thể ghi đè riêng",
+"跟随全局({m})": "Theo toàn cục ({m})",
+"本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Chế độ nền của cảnh này là 「Mô hình thế giới」 nhưng chưa tạo mô hình thế giới: chuỗi tạo ảnh nền sẽ dừng (mã thoát 4). Hãy tạo trước trong bảng 「🌍 Mô hình thế giới」 ở trên",
+"前往世界模型": "Đến mô hình thế giới",
+"世界模型(全景 {a})": "Mô hình thế giới (toàn cảnh {a})",
+"(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Chưa có ảnh nền cảnh quay; chuỗi ảnh nền sẽ tạo sau khi whitebox được ký duyệt H3W và xuất)",
+"生效 {m}": "hiệu lực {m}",
+"服务未重启:背景图模式接口不可用": "Dịch vụ chưa khởi động lại: API chế độ nền cảnh quay không khả dụng",
 };

@@ -199,6 +199,9 @@ let DATA=[], CUR=null, FOLDER=null;
 let WB_ON=true;
 // 项目「场景图」设置(output.scene_plates,随预览数据 scene_plates_mode 下发):白模关闭项目的场景一致性方案,场景级可覆盖
 let SP_MODE='auto';
+// 项目「背景图模式」(output.plate_mode,随预览数据 plate_mode 下发,2026-09-22):白模开启项目分镜背景图的参考来源,场景级可覆盖
+let PLATE_MODE='pano';
+const PLATE_MODE_NAMES={pano:'全景图',world:'世界模型'};
 // 深链定位:分镜预览页参考图标签跳转 ?id=<SCN-ID>,首次加载直接选中该场景
 let JUMP_ID=new URLSearchParams(location.search).get('id');
 // 把当前项目+选中场景写回地址栏(?project=&id=),刷新/分享后仍停在同一场景
@@ -327,18 +330,33 @@ function renderDetail(s){
       +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`);
   }
   // 分镜背景图(2026-09-09):场景库 plates/index.json,按机位指纹入库,标注被哪些集/镜引用
-  if((s.plates||[]).length){
-    h+=blk('shot_plates',`🎦 ${esc(t('分镜背景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:s.plates.length}))}</span>`,`<div class="gallery plates">`
-      +s.plates.map(p=>{
+  // 背景图模式(2026-09-22):白模开启时板块常显,标题后「背景图模式」= 跟随全局 / 全景图 / 世界模型(POST scenes/<sid>/plates/plate-mode)
+  const pm=s.plate_mode||null;
+  if((s.plates||[]).length||(WB_ON&&pm)){
+    const plates=s.plates||[];
+    const pmSel=pm?` <select class="pm-mode" data-sid="${esc(s.id)}" title="${esc(t('本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖'))}">`
+      +`<option value="inherit"${pm.mode==='inherit'?' selected':''}>${esc(I18N.f('跟随全局({m})',{m:t(PLATE_MODE_NAMES[PLATE_MODE]||PLATE_MODE)}))}</option>`
+      +`<option value="pano"${pm.mode==='pano'?' selected':''}>${esc(t('全景图'))}</option>`
+      +`<option value="world"${pm.mode==='world'?' selected':''}>${esc(t('世界模型'))}</option></select>`:'';
+    let body='';
+    if(pm&&pm.effective==='world'&&!pm.has_world){
+      body+=`<div class="meta-line pm-warn" style="color:#e6b422">⚠ ${esc(t('本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成'))} `
+        +`<button type="button" class="editbtn pm-goworld">${esc(t('前往世界模型'))}</button></div>`;
+    }
+    body+=plates.length?`<div class="gallery plates">`
+      +plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
+        const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
-          p.pano_ref?I18N.f('全景 {a}',{a:p.pano_ref.anchor_id}):t('旧法(非全景制)')].filter(Boolean).join(' · ');
+          src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
         return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span>`
           +`<button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button></figcaption>`
           +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
-      }).join('')+'</div>');
+      }).join('')+'</div>':`<div class="meta-line">${esc(t('(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)'))}</div>`;
+    h+=blk('shot_plates',`🎦 ${esc(t('分镜背景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:plates.length}))}</span>`
+      +(pm?`<span class="cnt">· ${esc(t('背景图模式'))}${pmSel}${pm.mode!=='inherit'?' <span style="color:var(--dim);font-weight:400">'+esc(I18N.f('生效 {m}',{m:t(PLATE_MODE_NAMES[pm.effective]||pm.effective)}))+'</span>':''}</span>`:''),body);
   }
   const docs=Object.keys(s.docs||{});
   if(docs.length){
@@ -356,6 +374,17 @@ function renderDetail(s){
       await load();
     }catch(e){alert(t('保存失败')+': '+e.message);}
   });
+  // 背景图模式切换(2026-09-22):POST /scenes/<sid>/plates/plate-mode,成功后原位重载
+  box.querySelectorAll('select.pm-mode').forEach(sel=>sel.onchange=async()=>{
+    try{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent($('#project').value.trim()||'demo')}/scenes/${encodeURIComponent(sel.dataset.sid)}/plates/plate-mode`,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:sel.value})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:背景图模式接口不可用'):r.status));
+      await reloadKeep();
+    }catch(e){sel.value=(s.plate_mode||{}).mode||'inherit';const w=sel.closest('.blk').querySelector('.blk-body');const n=document.createElement('div');n.className='meta-line';n.style.color='var(--red)';n.textContent=t('保存失败')+': '+e.message;w.prepend(n);}
+  });
+  box.querySelectorAll('.pm-goworld').forEach(b=>b.onclick=()=>{const ws=box.querySelector('.world-panel');if(!ws)return;blkOpen(ws);ws.scrollIntoView({behavior:'smooth',block:'start'});});
   // Layout landmarks alone are not an authored scene model. An explicit empty
   // objects array is valid for a modeled open space; inferred scale is valid too.
   if(!Array.isArray(s.docs?.whitebox?.objects)){
@@ -372,7 +401,7 @@ function renderDetail(s){
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
   import('/static/whitebox-ui.js?v=20260918-orbit').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
-  // 🌍 世界模型(2026-09-12):挂在「分镜背景图」板块之后;场景没有背景图时退回白模之后(全景图板块随后插到白模与它之间)
+  // 🌍 世界模型(2026-09-12;2026-09-22 挪到「分镜背景图」板块之上):有背景图板块插其前,否则白模之后(全景图板块随后插到白模与它之间)
   mountWorldSection(whitebox,s);
   // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标;始终显示 + 「创建全景图」(2026-09-13)
   mountPanoSection(whitebox,s);
@@ -393,7 +422,8 @@ function mountWorldSection(whitebox,s){
   if(WB_ON===false)return;
   const proj=$('#project').value.trim()||'demo';
   const sec=document.createElement('section');sec.className='wb-panel world-panel';blkMark(sec,'world');
-  (whitebox.parentNode.querySelector('.blk[data-blk="shot_plates"]')||whitebox).after(sec);
+  const spBlk=whitebox.parentNode.querySelector('.blk[data-blk="shot_plates"]');
+  if(spBlk)spBlk.before(sec);else whitebox.after(sec);
   const world=s.world||null,job=s.world_job||null;
   const opts=worldSourceOptions(s);
   const inp=(world&&world.input)||{};
@@ -456,7 +486,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'pano';
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -775,7 +805,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'pano';
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   await EpFilter.load(proj);

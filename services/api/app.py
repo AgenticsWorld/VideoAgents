@@ -454,6 +454,12 @@ async def scene_plates_mode(project: str, sid: str, body: dict[str, Any]) -> dic
     """场景级「场景图」模式覆盖(inherit|single|pair;白模关闭项目的正向/反向场景图方案,2026-09-17)。"""
     return await core.api_scene_plates_mode(project, sid, body)
 
+@api.post("/projects/{project}/scenes/{sid}/plates/plate-mode", tags=["artifacts"])
+async def scene_plate_mode(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景级「背景图模式」覆盖(inherit|pano|world;白模开启项目的分镜背景图参考来源:全景图重投影 / 世界模型截图,2026-09-22)。"""
+    return await core.api_scene_plate_mode(project, sid, body)
+
+
 @api.get("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
 async def scene_world_status(project: str, sid: str) -> dict[str, Any]:
     return await core.api_scene_world_status(project, sid)

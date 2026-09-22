@@ -52,6 +52,16 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - 提示词：空场景声明 + 组 `time_of_day` + 光照方案 `prompt_fragment_en` + 机位事实（景别、等效焦距、机高档、俯仰、机位落在哪个几何上、罗盘朝向、画左/画右/身后各是什么——由 `layout.json#orientation` 把白模坐标映射到东南西北）+ 白模帧用法 + 俯视图用法 + 画内自左向右清单（白模几何盒采样投影，按基名/地标归并）+ **画外不可见清单**（在画幅外/身后的地标，明令不画——实测没有这句时场景描述会把身后的大门院墙带进画面）+ 场景描述（architecture.json 的 form / arch_style / era_region / scale / materials / details，声明只作材质与年代参考）+ 禁人/禁网格/禁俯视 + `style_fragment_en`。negative = `negative_prompt_en` + architecture.negative + 人物/网格/俯视词。**空场景图去人物用语(2026-09-20)**:`style_fragment_en` 过 `plate_style()` 剔除描述人物的分句(subject / hair / skin / 服装面料),`negative_prompt_en` 过 `plate_negative()` 剔除人脸/人物/服装类条目及「须有前景/比例参照物」类条目——方舟等渠道没有独立负面通道,negative 以「避免出现:…」并进正文,参考图几乎全空(仰拍天空/大片水雾)时这些词会被当内容画出来(实证 fengshen3 SCN-0110 母图画出白须老人);场景视角图 `scene_plates.py` / `scene_pair_plates.py` 同用这两个函数。可选 `--sun <罗盘>` 写太阳相对机位方向。
 - 分辨率：母图长边 2880、派生分镜图长边 1920，按项目画幅；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
 
+## 背景图模式（2026-09-22：全景图 | 世界模型）
+
+分镜背景图的参考来源分两种模式，**全局设置**在输出设置（新建向导与项目设置「输出设置」均有，仅白模开启时显示）`output.plate_mode`，**场景级覆盖**在场景预览页「🎦 分镜背景图」板块标题后的「按场景选择」（跟随全局 / 全景图 / 世界模型，存库 `assets/concepts/scenes/<sid>/plates/index.json#mode`，`POST /projects/<p>/scenes/<sid>/plates/plate-mode`）。生效值 = 场景级非 inherit 时取场景级，否则取项目级；`modules/shot_plates.py#effective_plate_mode`。
+
+- **全景图（pano，默认）**：即上节全景制——按白模机位自动规划锚点出 2:1 全景，每张母图把全景按母图机位重投影成 `<key>.pano.jpg` 作 `[Image 1]` 二次生成。
+- **世界模型（world）**：用户在场景预览页「🌐 全景图」板块**自选锚点**创建全景图 → 在「🌍 世界模型」板块基于该全景生成世界模型（World Labs Marble，1500 credits/次，`docs/worldlabs_world.md`）→ `render_shot_plates.py` 在 world 里按母图机位（position/target/fov，白模坐标）用无头 Chromium + Spark 截图 `<key>.world.jpg`（`modules/worldlabs.py#render_world_views`，渲染页 `apps/web/static/world-view-export.html`；先试 GPU 无头，不可用退回 swiftshader，`VIDEOAGENTS_WORLD_GPU=0` 强制 swiftshader）作 `[Image 1]` 二次生成。提示词口径改为「world 内渲染截图，可能糊/噪，内容与位置权威」；其余（母图制、复用、接线、机检）与全景制完全一致，两种模式的母图同库同键。**场景没有世界模型时整条链停下**：`WorldMissing` → CLI 退出码 4 并打印 `[world_missing]`（列出场景），一张都不出；由用户到场景预览页生成世界模型（计费）或把该场景/项目改回全景图；Agent 不得自行跑 `worldlabs_world.py`。`--dry-run` 不要求已有 world，只列决策并标注模式。
+- 世界模型模式**不跑** `ensure_scene_panos`（锚点规划/自动出全景）：全景由用户手选锚点在预览页出；光照方案只影响提示词，world 只有一个（按生成时选的全景方案）。
+- 库条目 `pano_ref.kind = pano | world`（world 条目另记 `world_id` / 来源锚点 / 方案 / splats 精度），`plate_mode` 记出图时的模式；`is_legacy` 判定不分模式（有 `pano_ref` 且 `master` 即非 legacy）。场景预览页背景图 caption 显示「世界模型(全景 A1)」；分镜预览页不区分。
+- 预览数据：`/previews/scenes` 顶层 `plate_mode`（项目级），`scenes[].plate_mode{mode, effective, has_world}`；世界模型模式且尚无 world 的场景板块内有黄字提示 + 「前往世界模型」。世界模型板块自 2026-09-22 起挂在「分镜背景图」板块之上（全景图 → 世界模型 → 分镜背景图，与流程顺序一致）。
+
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）
 
 grp003 的 sh005 背景图（机位在路上、朝南南西横看绿化带，54 mm）被画成了朝西沿马路望向夕阳的纵深街景，视频模型因此把 sh006 的图当成整组唯一背景，两镜同景。原因是提示词里「画左/画右」引用了布局图 orientation 的四边文字（「马路向路口延伸、夕阳压在这一端」），加上路端方向地标出现在画幅边缘时仍写成「马路向远处延伸」。现在：

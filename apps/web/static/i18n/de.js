@@ -3152,4 +3152,16 @@ window.I18N_DICT = {
 "拖动环视 360°,滚轮缩放,双击复位,Esc 关闭": "Ziehen zum Umsehen (360°), Mausrad zum Zoomen, Doppelklick zum Zurücksetzen, Esc zum Schließen",
 "全景加载中…": "Panorama wird geladen…",
 "全景图加载失败": "Panorama konnte nicht geladen werden",
+
+// 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
+"背景图模式": "Hintergrundplatten-Modus",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Referenzquelle der Shot-Hintergrundplatten bei aktivierter Whitebox (globale Einstellung; pro Szene in der Szenenvorschau überschreibbar): Panorama = Anker werden automatisch aus den Whitebox-Kamerapositionen geplant, Panoramen erzeugt, je Shot-Richtung reprojiziert und neu generiert; Weltmodell = du wählst in der Szenenvorschau einen Anker, erzeugst daraus ein Panorama und ein Weltmodell (World Labs Marble, kostenpflichtig); anschließend werden Screenshots aus dem Weltmodell je Shot-Richtung neu generiert",
+"本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Referenzquelle der Shot-Platten dieser Szene; folgt standardmäßig der Projekt-Ausgabeeinstellung „Hintergrundplatten-Modus“, hier überschreibbar",
+"跟随全局({m})": "Global folgen ({m})",
+"本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Der Plattenmodus dieser Szene ist „Weltmodell“, aber es wurde noch kein Weltmodell erzeugt: die Plattenkette stoppt (Exit-Code 4). Bitte zuerst im Panel „🌍 Weltmodell“ oben erzeugen",
+"前往世界模型": "Zum Weltmodell",
+"世界模型(全景 {a})": "Weltmodell (Panorama {a})",
+"(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Noch keine Shot-Hintergrundplatten; die Plattenkette erzeugt sie nach H3W-Freigabe und Export der Whitebox)",
+"生效 {m}": "wirksam {m}",
+"服务未重启:背景图模式接口不可用": "Dienst nicht neu gestartet: der Plattenmodus-Endpunkt ist nicht verfügbar",
 };

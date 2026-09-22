@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>世界模型视角截图渲染</title>
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/","@sparkjsdev/spark":"./vendor/spark/spark.module.js"}}</script>
+</head><body><canvas id="c"></canvas>
+<script type="module">
+// 背景图模式「世界模型」(2026-09-22):在无头 Chromium 里加载场景 world(SPZ 高斯泼溅),按 world.json#alignment 对齐到白模坐标
+// (与 world-viewer.js 同一套变换),按母图机位(position/target/fov,白模米制坐标)逐张渲染空场景截图,
+// 供 modules/worldlabs.py#render_world_views 落盘为 <key>.world.jpg 作分镜背景图二次生成的 [Image 1]。
+import * as THREE from 'three';
+import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+const canvas=document.getElementById('c');
+let renderer,scene,camera,outer,splat;
+window.worldView={
+  async load({url,alignment,width,height}){
+    canvas.width=width;canvas.height=height;
+    renderer=new THREE.WebGLRenderer({canvas,antialias:false,preserveDrawingBuffer:true});renderer.setPixelRatio(1);renderer.setSize(width,height,false);
+    scene=new THREE.Scene();scene.background=new THREE.Color(0x101418);
+    camera=new THREE.PerspectiveCamera(50,width/height,.02,500);
+    scene.add(new SparkRenderer({renderer}));
+    outer=new THREE.Group();scene.add(outer);
+    const al=alignment||{},cam0=al.camera?.position||[0,1.6,0],fix=Number(al.scale_fix||1);
+    const s=(al.metric_scale_factor||1)*fix,off=(al.ground_plane_offset||0)*fix;
+    outer.rotation.set(0,THREE.MathUtils.degToRad((al.yaw_deg||0)+Number(al.yaw_fix_deg||0)),0);
+    outer.position.set(cam0[0],cam0[1]-off,cam0[2]);
+    splat=new SplatMesh({url});splat.scale.setScalar(s);splat.quaternion.set(1,0,0,0);splat.position.set(0,off,0);
+    outer.add(splat);
+    await splat.initialized;
+    const gl=renderer.getContext();
+    return {numSplats:splat.numSplats,renderer:(gl.getExtension('WEBGL_debug_renderer_info')?gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL):'')};
+  },
+  async shoot({position,target,fov}){
+    camera.position.fromArray(position);camera.lookAt(new THREE.Vector3(...target));camera.fov=fov;camera.updateProjectionMatrix();
+    // Spark 的排序在后台线程异步完成:先渲几帧触发排序,等一小段再出正式帧
+    for(let i=0;i<3;i++){renderer.render(scene,camera);await new Promise(r=>setTimeout(r,150));}
+    await new Promise(r=>setTimeout(r,400));
+    renderer.render(scene,camera);
+    return canvas.toDataURL('image/jpeg',0.92).split(',')[1];
+  }
+};
+window.worldViewReady=true;
+</script></body></html>

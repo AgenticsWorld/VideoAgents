@@ -17,7 +17,7 @@ REQUIRED = {
     "whitebox.css", "whitebox-export.html", "whitebox-i18n.js", "vendor/three/three.module.js",
     "vendor/three/three.core.js", "vendor/three/OrbitControls.js", "vendor/three/LICENSE",
     "vendor/three/addons/postprocessing/Pass.js", "vendor/spark/spark.module.js", "vendor/spark/LICENSE",
-    "world-viewer.js", "director-world.js", "preview_director.html",
+    "world-viewer.js", "director-world.js", "preview_director.html", "world-view-export.html",
 }
 
 

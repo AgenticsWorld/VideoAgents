@@ -26,6 +26,11 @@
     不再被新决策复用,--repano 可把集内 legacy 记录整体重出。图像模型不支持 2:1 全景时整条链停下(PanoUnsupported,
     CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220),按项目画幅;
     渠道 = 控制台默认图像模型。
+  - 背景图模式(2026-09-22,项目输出设置 output.plate_mode,白模开启时显示;场景级可在场景预览页覆盖,存库 index.json#mode):
+    pano(默认)= 上面的全景制;world = 用户先在场景预览页按自选锚点创建全景图、再基于它生成世界模型(World Labs Marble,
+    modules/worldlabs.py),出图时在 world 里按母图机位截图 <key>.world.jpg 作 [Image 1] 二次生成(modules/worldlabs.py#render_world_views,
+    无头 Chromium + Spark);场景没有 world 时整条链停下(WorldMissing,CLI 退出码 4 [world_missing]),不自动生成世界模型(计费,用户决定)。
+    库条目 pano_ref.kind = pano|world 记来源;两种模式的母图同库同键,复用判定不分模式。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -455,6 +460,50 @@ def is_legacy(entry: dict) -> bool:
     return not entry.get('pending') and not (entry.get('pano_ref') and is_master(entry))
 
 
+# ---------------------------------------------------------------- 背景图模式(2026-09-22):全景图 | 世界模型
+PLATE_MODES = ('pano', 'world')                  # 项目输出设置 output.plate_mode(白模开启时显示;默认 pano)
+SCENE_PLATE_MODES = ('inherit', 'pano', 'world')  # 场景级覆盖:库 assets/concepts/scenes/<sid>/plates/index.json#mode(默认 inherit)
+DEFAULT_PLATE_MODE = 'pano'
+
+
+class WorldMissing(RuntimeError):
+    """世界模型模式下场景还没有 world:整条链停下,由用户在场景预览页创建全景图 → 生成世界模型(计费)后重跑;不自动生成。"""
+
+    def __init__(self, scenes: list):
+        self.scenes = list(scenes)
+        super().__init__('以下场景的背景图模式为「世界模型」但尚未生成世界模型:' + ', '.join(self.scenes)
+                         + ';请在场景预览页该场景的「🌍 世界模型」板块选择全景来源生成世界模型(或把该场景/项目改回「全景图」模式)后重跑')
+
+
+def project_plate_mode(base: Path) -> str:
+    st = read(base / 'settings.json', {}) or {}
+    m = str(((st.get('output') or {}).get('plate_mode')) or DEFAULT_PLATE_MODE).strip().lower()
+    return m if m in PLATE_MODES else DEFAULT_PLATE_MODE
+
+
+def scene_plate_mode(base: Path, sid: str) -> str:
+    """场景级原始设置(inherit|pano|world),存库 index.json#mode;没有库文件 = inherit。"""
+    lib = read(library_dir(base, sid) / 'index.json', None)
+    m = str((lib or {}).get('mode') or 'inherit').strip().lower() if isinstance(lib, dict) else 'inherit'
+    return m if m in SCENE_PLATE_MODES else 'inherit'
+
+
+def effective_plate_mode(base: Path, sid: str) -> str:
+    m = scene_plate_mode(base, sid)
+    return m if m in PLATE_MODES else project_plate_mode(base)
+
+
+def set_scene_plate_mode(base: Path, sid: str, mode: str):
+    if mode not in SCENE_PLATE_MODES:
+        raise ValueError(f'mode must be one of {SCENE_PLATE_MODES}')
+    lib = load_library(base, sid)
+    if mode == 'inherit':
+        lib.pop('mode', None)
+    else:
+        lib['mode'] = mode
+    save_library(base, sid, lib)
+
+
 # ---------------------------------------------------------------- master plate geometry(同机位纯旋转单应)
 def camera_basis(cam: dict):
     """cam={'position','target'} → (f 前, r 右, u 上) 单位向量,约定同 projector / scene_panos._view_rays。"""
@@ -621,7 +670,7 @@ def scene_description(base: Path, sid: str) -> tuple[str, str]:
     return desc[:1200], flat(arch.get('negative'))[:600]
 
 
-def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None, sibling=False):
+def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, desc, role, sun=None, out_of_frame=None, sibling=False, ref_kind='pano'):
     """母图提示词(2026-09-14):facts 为母图机位事实(广角);镜头口径按视场写(不用人物景别词),要求全画幅深焦清晰、
     视场以重投影图为准不外扩——母图之后按各镜裁窄,画外多画的天花/家具会随裁切进画。"""
     size = lens_word(facts['fov_h_deg'])
@@ -641,12 +690,21 @@ def build_prompt(facts, phrases, shot, group, scene, layout, style, lighting, de
     if sun:
         cam += f" The low sun is in the {sun['compass']}, {sun['relative']}; long shadows fall {sun['shadows']}."
     # 2026-09-10 全景制:[Image 1] = 场景全景按本镜机位的深度重投影(内容与位置权威,画质与空洞不作数);不再给白模帧/俯视图
-    lines = [head, cam,
-             f"[Image 1] is a photograph of this exact location re-projected to this exact camera from the scene's 360 panorama taken a few "
-             f"metres away, so it may show smearing, stretching or blank holes: treat it as the authoritative reference for what stands where "
-             f"and how it looks (walls, floors, ceilings, furniture, facades, roads, trees, poles, materials, colours, weather and light), keep "
-             f"its perspective and its horizon line (about {facts['horizon_pct_from_top']}% down from the top edge), keep every element at the "
-             f"position it has there, and repaint the whole frame sharp and photographic; never copy its smears, holes or soft focus.",
+    # 2026-09-22 世界模型模式:[Image 1] = 在场景 3D 世界模型(高斯泼溅)里按本机位渲染的截图(同样内容与位置权威,画质不作数)
+    if ref_kind == 'world':
+        ref_line = (f"[Image 1] is a render of this exact location from this exact camera inside the scene's 3D world model that was "
+                    f"reconstructed from its 360 panorama, so it may look soft, smeared or noisy with blurry patches near the camera: treat it "
+                    f"as the authoritative reference for what stands where and how it looks (walls, floors, ceilings, furniture, facades, roads, "
+                    f"trees, poles, materials, colours, weather and light), keep its perspective and its horizon line (about "
+                    f"{facts['horizon_pct_from_top']}% down from the top edge), keep every element at the position it has there, and repaint "
+                    f"the whole frame sharp and photographic; never copy its blur, noise or smears.")
+    else:
+        ref_line = (f"[Image 1] is a photograph of this exact location re-projected to this exact camera from the scene's 360 panorama taken a few "
+                    f"metres away, so it may show smearing, stretching or blank holes: treat it as the authoritative reference for what stands where "
+                    f"and how it looks (walls, floors, ceilings, furniture, facades, roads, trees, poles, materials, colours, weather and light), keep "
+                    f"its perspective and its horizon line (about {facts['horizon_pct_from_top']}% down from the top edge), keep every element at the "
+                    f"position it has there, and repaint the whole frame sharp and photographic; never copy its smears, holes or soft focus.")
+    lines = [head, cam, ref_line,
              "The field of view is exactly what [Image 1] covers: do not widen it, do not step back, and do not add a ceiling, floor, "
              "walls, doorways, windows or furniture that [Image 1] does not show. This is the wide master view for this camera position "
              "and several tighter shots will be cropped out of it, so finish every part of the frame at full sharpness: deep focus from "
@@ -822,7 +880,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     style = style_doc.get('style_fragment_en') or ''
     idx = load_episode_index(base, ep)
     stats = {'shots': 0, 'plates': 0, 'new': 0, 'library': 0, 'crop': 0, 'skipped_fresh': 0, 'errors': [], 'pending_new': 0,
-             'legacy': 0, 'panos': {}}
+             'legacy': 0, 'panos': {}, 'modes': {}}
     # 先决定每个 job 的来源;起点先于终点;同场景按 fov 从宽到窄(最宽的镜先定母图,母图朝向取同机位各镜平均方向)
     jobs = sorted(plan['jobs'], key=lambda j: (j['scene_id'], j['role'] == 'end', -j['facts']['fov_v_deg']))
     by_shot = {}
@@ -885,8 +943,37 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         return {'ep': ep, 'group_id': j['group_id'], 'shot_id': j['shot_id'], 'role': j['role'], 'position': list(j['keyframe']['position']),
                 'target': list(j['keyframe']['target']), 'fov': float(j['keyframe']['fov']),
                 'scheme': scene_panos.scheme_slug(j['scheme'], j['raw_group'].get('time_of_day')), 'time_of_day': j['raw_group'].get('time_of_day')}
+    # 背景图模式(2026-09-22):pano = 场景全景按母图机位重投影作 [Image 1](下方 ensure_scene_panos + reproject_for_plate);
+    # world = 在场景世界模型里按母图机位截图作 [Image 1](用户已在场景预览页创建全景图 → 生成世界模型;没有 world 整条链停下,不自动生成)
     pano_idx = {}
-    for sid in {d['scene_id'] for d in decisions if d['mode'] == 'new'}:
+    new_scenes = sorted({d['scene_id'] for d in decisions if d['mode'] == 'new'})
+    for sid in new_scenes:
+        stats['modes'][sid] = effective_plate_mode(base, sid)
+    world_scenes = [sid for sid in new_scenes if stats['modes'][sid] == 'world']
+    if world_scenes:
+        from modules import worldlabs
+        missing = [sid for sid in world_scenes if worldlabs.world_missing(base, sid)]
+        if missing and not dry_run:
+            raise WorldMissing(missing)
+        for sid in world_scenes:
+            wj = worldlabs.read_world(base, sid) or {}
+            inp = wj.get('input') or {}
+            log(f"== {sid} 背景图模式:世界模型" + (f"(world {wj.get('world_id')},全景来源 {inp.get('anchor_id')}/{inp.get('scheme')})" if wj else
+                                             "(尚未生成世界模型,dry-run 只列决策)"))
+            reqs = [d for d in decisions if d['scene_id'] == sid and d['mode'] == 'new']
+            for d in reqs:
+                d['world_rel'] = str(Path(d['whitebox_frame']).with_name(f"{d['key']}.world.jpg"))
+            if dry_run or not reqs or not wj:
+                continue
+            try:
+                views = worldlabs.render_world_views(base, sid, [{'camera': cam_of_facts(d['master_facts']), 'output': base/d['world_rel']} for d in reqs],
+                                                     width=mwidth, height=mheight, log=log)
+            except worldlabs.WorldLabsError as error:
+                stats['errors'].append(f'{sid}: 世界模型截图失败 {error}')
+                views = [{'error': str(error)} for _ in reqs]
+            for d, v in zip(reqs, views):
+                d['world_view'] = v
+    for sid in [x for x in new_scenes if stats['modes'][x] != 'world']:
         schemes = {}
         for d in decisions:
             if d['scene_id'] == sid and d['mode'] == 'new':
@@ -962,14 +1049,26 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         lighting = lighting_fragment(base, sid, d['scheme'])
         desc, scene_neg = scene_description(base, sid)
         sun_rel = sun_relative(sun, mfacts['bearing_deg']) if sun else None
-        prompt = build_prompt(mfacts, phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame)
+        plate_mode = stats['modes'].get(sid, 'pano')
+        prompt = build_prompt(mfacts, phrases, d['shot'], d['raw_group'], scene, layout, style, lighting, desc, role, sun_rel, out_of_frame,
+                              ref_kind=plate_mode)
         negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER) if x)
         # [Image 1] = 场景全景按母图机位重投影(2026-09-10 全景制):规划里服务本机位的锚点优先,空洞过多换锚点,都不行就在本机位加锚点出全景
+        # 世界模型模式(2026-09-22):[Image 1] = 上面已在 world 里按母图机位截好的 <key>.world.jpg
         scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
-        pano_rel = str(Path(d['whitebox_frame']).with_name(f"{d['key']}.pano.jpg"))
+        pano_rel = d['world_rel'] if plate_mode == 'world' else str(Path(d['whitebox_frame']).with_name(f"{d['key']}.pano.jpg"))
         pano_info = None
-        if dry_run:
-            pano_info = {'anchor_id': '(dry-run)', 'scheme': scheme_key, 'hole_fraction': None}
+        if plate_mode == 'world':
+            wv = d.get('world_view') or {}
+            if dry_run:
+                pano_info = {'kind': 'world', 'anchor_id': '(dry-run)', 'scheme': None, 'hole_fraction': None}
+            elif wv.get('error') or not wv:
+                stats['errors'].append(f"{shot_id}/{role}: 世界模型截图失败 {wv.get('error') or '未渲染'}")
+                continue
+            else:
+                pano_info = {k: v for k, v in wv.items() if k != 'file'}
+        elif dry_run:
+            pano_info = {'kind': 'pano', 'anchor_id': '(dry-run)', 'scheme': scheme_key, 'hole_fraction': None}
         else:
             try:
                 pano_info = reproject_for_plate(base, sid, pano_idx[sid], cam_of(d), scheme_key, mfacts, mwidth, mheight, base/pano_rel,
@@ -980,6 +1079,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 stats['errors'].append(f'{shot_id}/{role}: 全景重投影失败 {error}')
                 continue
         pano_info['file'] = pano_rel
+        pano_info.setdefault('kind', 'pano')
         refs = [pano_rel]
         start_entry = generated.get((shot_id, 'start')) if role == 'end' else None
         if role == 'end':
@@ -998,11 +1098,12 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png"
         entry = {'key': d['key'], 'master': True, 'file': out_rel, 'whitebox_frame': d['whitebox_frame'], 'lighting_scheme_id': d['scheme'],
                  'time_of_day': d['raw_group'].get('time_of_day'), 'camera': mfacts, 'size': f'{mwidth}x{mheight}', 'seed': use_seed,
-                 'refs': refs, 'prompt': prompt, 'negative': negative, 'in_frame': items, 'pano_ref': pano_info,
+                 'refs': refs, 'prompt': prompt, 'negative': negative, 'in_frame': items, 'pano_ref': pano_info, 'plate_mode': plate_mode,
                  'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': d['group_id'], 'role': role},
                  'written_at': dt.datetime.now().isoformat(timespec='seconds')}
         log(f"== {shot_id} {role} ({d['group_id']}) new master {d['key']} facing {mfacts['facing']} h={mfacts['height_m']}m "
-            f"lens≈{mfacts['lens_mm_equiv']}mm ({mwidth}x{mheight});本镜 {d['facts']['lens_mm_equiv']}mm 从母图派生")
+            f"lens≈{mfacts['lens_mm_equiv']}mm ({mwidth}x{mheight});本镜 {d['facts']['lens_mm_equiv']}mm 从母图派生"
+            f"{';参考图 = 世界模型截图' if plate_mode == 'world' else ''}")
         if dry_run:
             entry['dry_run'] = True
             log(prompt); log('refs: ' + json.dumps(refs, ensure_ascii=False))
