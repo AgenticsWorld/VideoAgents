@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Modelo imagem→imagem",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "O modelo texto→imagem é usado sem imagem de referência e o modelo imagem→imagem com referências",
 "文生图 {t} · 图生图 {i}": "Texto→imagem {t} · Imagem→imagem {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Continuidade automática: ações contínuas usam os últimos 2–3 segundos do grupo anterior. Cortes, modelos incompatíveis ou clipes inadequados usam o último quadro. Desativado: apenas texto.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Quando ativado, os grupos encadeiam pelo modo de ligação escolhido, seja a fronteira um corte ou uma ação contínua: Imagem do último quadro = o grupo seguinte referencia a captura do último quadro do grupo anterior; Clipe final do vídeo = o grupo seguinte prolonga os últimos 2–3 s de vídeo do grupo anterior (volta ao último quadro se o modelo ou o material não cumprirem). Quando desativado, só o texto garante a continuidade.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Continuações repetidas a partir de quadros ou finais de vídeo de baixa resolução podem degradar a qualidade e a consistência dos personagens",
 "⛓ 续接 {g} 尾段视频": "⛓ Continuar do final do vídeo de {g}",
 
@@ -1796,6 +1796,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "O canal de vídeo atual {p} executa um workflow sem id de modelo; este grupo não pode trocar de modelo (a habilidade ainda pode ser definida)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(acima do limite efetivo do grupo: troque para um modelo com limite maior em 🎛 Modelo ou remova imagens)",
 "长镜头": "Plano-sequência",
+"连接方式": "Modo de ligação",
+"尾帧图片": "Imagem do último quadro",
+"尾段视频": "Clipe final do vídeo",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Ativado, cada grupo de planos anexa a captura do último quadro do grupo anterior como imagem de referência para dar continuidade; desativado (padrão), nenhuma referência de último quadro é anexada e a continuidade depende só do texto (frase de abertura com reenquadramento)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ A resolução de rascunho atual é baixa; não é recomendável ativar o plano-sequência: um último quadro de baixa resolução como referência degradará visivelmente a qualidade da imagem e a consistência dos personagens",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (hospedado na Fal; clipe único de 4–30 s, referências 30 imagens/10 vídeos/10 áudios, 480p/720p/1080p)",

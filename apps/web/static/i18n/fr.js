@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Modèle image→image",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "Le modèle texte→image sert aux générations sans image de référence, le modèle image→image à celles avec références",
 "文生图 {t} · 图生图 {i}": "Texte→image {t} · Image→image {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Raccord automatique : les actions continues utilisent les 2–3 dernières secondes du groupe précédent. Pour les coupes, modèles non compatibles ou clips inadaptés, utiliser la dernière image. Désactivé : raccord textuel uniquement.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Si activé, les groupes s’enchaînent selon le mode de raccord choisi, que la frontière soit une coupe ou une action continue : Image de dernière frame = le groupe suivant référence la capture de la dernière frame du groupe précédent ; Extrait de fin vidéo = le groupe suivant prolonge les 2–3 dernières secondes de vidéo du groupe précédent (retour à la dernière frame si le modèle ou le matériel ne convient pas). Si désactivé, seul le texte assure la continuité.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Les raccords répétés à partir d’images ou de fins de vidéo basse résolution peuvent dégrader la qualité et la cohérence des personnages",
 "⛓ 续接 {g} 尾段视频": "⛓ Raccord depuis la fin vidéo de {g}",
 
@@ -1796,6 +1796,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Le canal vidéo actuel {p} exécute un workflow sans id de modèle ; ce groupe ne peut pas changer de modèle (la compétence reste réglable)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(dépasse la limite effective du groupe : passez à un modèle à limite plus élevée via 🎛 Modèle ou retirez des images)",
 "长镜头": "Plan-séquence",
+"连接方式": "Mode de raccord",
+"尾帧图片": "Image de dernière frame",
+"尾段视频": "Extrait de fin vidéo",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Activé : chaque groupe de plans joint la capture de la dernière image du groupe précédent comme image de référence pour assurer la continuité ; désactivé (par défaut), aucune référence de dernière image n'est jointe et la continuité repose uniquement sur le texte (phrase d'ouverture recadrée)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ La résolution de brouillon actuelle est basse ; activer le plan-séquence n'est pas recommandé : une dernière image basse résolution utilisée comme référence dégradera nettement la qualité d'image et la cohérence des personnages",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (hébergé sur Fal ; clip unique de 4–30 s, références 30 images/10 vidéos/10 audios, 480p/720p/1080p)",

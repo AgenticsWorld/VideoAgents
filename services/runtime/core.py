@@ -894,8 +894,11 @@ DEFAULT_GENCONFIG = {
     # 截图列入下组 refs+开场声明句);关=所有组交界 anchor: none、refs 不挂任何
     # *.last_frame.png,仅靠换构图文字承接开场句续接(低分辨率草稿档下低清尾帧作
     # 参考图会拖累续接组画质与人脸一致性,故默认关闭;续接链不存在,组可并行生成)
+    # long_take_mode=连接方式(2026-09-23,仅长镜头开启时生效):last_frame=下组挂上组尾帧
+    # 截图(默认);tail_video=下组挂上组最后 2–3s 视频向后续写(模型不支持/尾段不足/预算
+    # 不足回退尾帧)。由设置决定,不区分连戏规划的 cut / continuous
     "duration": {"episode_minutes": 10, "shot_min_s": 1, "shot_max_s": 10,
-                 "long_take": False},
+                 "long_take": False, "long_take_mode": "last_frame"},
     # 视频模型设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
@@ -1892,8 +1895,9 @@ def _validate_duration(d: dict):
         mx = float(d.get("shot_max_s", 10))
         assert (ep == "auto" or float(ep) > 0) and 0 < mn <= mx
         assert isinstance(d.get("long_take", False), bool)
+        assert d.get("long_take_mode", "last_frame") in ("last_frame", "tail_video")
     except (TypeError, ValueError, AssertionError):
-        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean") from None
+        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean; long_take_mode must be last_frame or tail_video") from None
 
 
 SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30")   # 与 index.html SG_PRESETS 同步
@@ -3097,13 +3101,19 @@ def build_role_prompt(agent_id: str, project: str,
     sg_vid = int(sg.get("max_ref_videos", 3))
     sg_aud = int(sg.get("max_ref_audios", 3))
     long_take = dur.get("long_take") is True
+    join_mode = dur.get("long_take_mode") or "last_frame"
+    join_line = (
+        "**连接方式=尾段视频**:同场景组界一律优先取前组最后 2–3 秒视频(video_refs 的 .continuation.mp4)向后续写,"
+        "模型不支持视频参考/尾镜不足2秒/视频预算不足时回退前组尾帧图"
+        if join_mode == "tail_video" else
+        "**连接方式=尾帧图片(默认)**:同场景组界一律挂前组尾帧截图(refs 的 .last_frame.png),不裁尾段视频")
     long_take_line = (
-        "**开启——自动续接**:continuity 的 group_transitions 新增 boundary_type: continuous(同一动作/运镜跨组)"
-        "或 cut(反打/换构图连戏,旧数据缺省);跨场景/转场仍 anchor:none。同场景 anchor:last_frame 表示续接意图,"
-        "实际模式由宿主选择:continuous 优先前组最后 2–3 秒视频向后续写,cut/模型不支持/尾镜不足2秒/视频预算不足回退尾帧。"
+        f"**开启——自动续接**:{join_line}。连接方式由用户在时长设置中选定,不区分 boundary_type;"
+        "continuity 的 group_transitions 仍标 boundary_type: continuous(同一动作/运镜跨组,首镜不得切镜)"
+        "或 cut(反打/换构图连戏,旧数据缺省),只影响宿主写入的开场声明句;跨场景/转场仍 anchor:none。"
         "prompt 产出后运行 python3 code/sync_continuity_refs.py --project <slug> --ep <epNN> --write;"
         "生成前必须等前组出片,单组运行同命令 <grpNNN> --prepare,再重新读取 JSON 原序提交 refs/video_refs。"
-        "continuity_ref.mode=tail_video 使用明确向后延长语义,开场不得 cut/reverse angle,不重复挂尾帧图;"
+        "continuity_ref.mode=tail_video 使用明确向后延长语义(continuous 边界开场不得 cut/reverse angle),不重复挂尾帧图;"
         "角色/场景高清图保留。白模与尾段共用数量/时长预算,摄影机白模优先,可选俯视预算不足不挂。"
         "尾段只含画面不带原对白,声音按本组指令生成。续接链及重生成影响判据必须同时看 refs 尾帧和 video_refs 尾段,"
         "不得把无尾帧图的视频续接当硬断点。重生成前组后必须重新 prepare 后组并复查接缝。"
@@ -3138,7 +3148,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 每集目标时长:{ep_line}
 - 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-08-30)**:每组 Σ台词估时 ≤ 组时长×0.7、每镜 Σ ≤ 镜长、单句 ≤ {shot_max}×0.7 秒(估时 = 有效字符 ÷ 角色 voice.json speed_cpm 中点 ÷60);storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
-- 长镜头(时长设置「长镜头」开关,自动选择尾段视频或尾帧):{long_take_line}
+- 长镜头(时长设置「长镜头」开关 + 「连接方式」尾帧图片/尾段视频):{long_take_line}
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、场景干净俯视图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)

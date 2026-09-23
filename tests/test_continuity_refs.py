@@ -18,7 +18,8 @@ def write(path, value):
 @pytest.fixture
 def project(tmp_path):
     base = tmp_path/'demo'
-    write(base/'settings.json', {'duration': {'long_take': True}, 'output': {'spatial_blocking': False}})
+    write(base/'settings.json', {'duration': {'long_take': True, 'long_take_mode': 'tail_video'},
+                                 'output': {'spatial_blocking': False}})
     write(base/'directing/ep01/shot_list.json', {'generation_groups': [
         {'group_id': 'grp001', 'scene_id': 'room'}, {'group_id': 'grp002', 'scene_id': 'room'}]})
     write(base/'directing/ep01/continuity.json', {'group_transitions': [
@@ -48,8 +49,18 @@ def test_selection_legacy_off_scene_transition(project):
     assert cr.plan(project, 'ep01', 'grp001')['mode'] == 'none'
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'tail_video'
     cp = project/'directing/ep01/continuity.json'
+    # 连接方式由设置决定,不区分 cut / continuous(2026-09-23)
     edit(cp, lambda d: d['group_transitions'][0].pop('boundary_type'))
+    p = cr.plan(project, 'ep01', 'grp002')
+    assert p['mode'] == 'tail_video' and p['boundary'] == 'cut'
+    edit(project/'settings.json', lambda d: d['duration'].update(long_take_mode='last_frame'))
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
+    edit(cp, lambda d: d['group_transitions'][0].update(boundary_type='continuous'))
+    p = cr.plan(project, 'ep01', 'grp002')
+    assert p['mode'] == 'last_frame' and p['boundary'] == 'continuous'
+    edit(project/'settings.json', lambda d: d['duration'].pop('long_take_mode'))   # 缺键=尾帧图片
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
+    edit(project/'settings.json', lambda d: d['duration'].update(long_take_mode='tail_video'))
     edit(cp, lambda d: d['group_transitions'][0].update(transition={'type': 'dissolve'}))
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'none'
     edit(project/'settings.json', lambda d: d['duration'].update(long_take=False))
@@ -141,6 +152,14 @@ def test_continuous_rejects_cut_instruction(project):
     p = {'refs': [], 'video_prompt': 'Shot 1: cut to a reverse angle.'}
     with pytest.raises(ValueError, match='切镜'):
         cr.apply_prompt(p, cr.plan(project, 'ep01', 'grp002'))
+    # cut 边界允许开场换构图,声明句改为承接结尾而非向后延长
+    edit(project/'directing/ep01/continuity.json', lambda d: d['group_transitions'][0].update(boundary_type='cut'))
+    out = cr.apply_prompt(p, cr.plan(project, 'ep01', 'grp002'))
+    assert 'Continue from the final moment of [Video 1]' in out['video_prompt']
+    assert 'Extend [Video 1]' not in out['video_prompt']
+    edit(project/'settings.json', lambda d: d['duration'].update(long_take_mode='last_frame'))
+    out = cr.apply_prompt(p, cr.plan(project, 'ep01', 'grp002'))
+    assert 'same location and lighting as [Image 1]' in out['video_prompt']
 
 
 def test_disable_removes_only_continuation(project):

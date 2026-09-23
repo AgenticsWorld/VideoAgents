@@ -1,18 +1,23 @@
 # 长镜头自动续接
 
-开启项目 `settings.json` 的 `duration.long_take` 后，连戏规划在
-`directing/epNN/continuity.json`（兼容 `continuity_plan.json`）的 `group_transitions` 中指定：
+开启项目 `settings.json` 的 `duration.long_take` 后，连接素材由同处的「连接方式」`duration.long_take_mode` 决定（2026-09-23，向导与时长设置弹窗都可选）：
 
-- `boundary_type: "continuous"`：同一动作或运镜跨组，首镜不切镜；优先向后续写前组最后 2–3 秒。
-- `boundary_type: "cut"`：反打、换机位等切镜连戏，使用前组尾帧参考图。旧数据缺省按 cut 处理，不能仅根据开关猜测镜头意图。
+- `last_frame`（默认）：同场景组界一律使用前组尾帧参考图。
+- `tail_video`：同场景组界一律优先向后续写前组最后 2–3 秒视频；模型不支持视频参考、尾段不足 2 秒或视频预算不足时回退尾帧。
+
+连接方式不区分连戏规划在 `directing/epNN/continuity.json`（兼容 `continuity_plan.json`）`group_transitions` 里标的 `boundary_type`，后者只影响宿主写入的开场声明句：
+
+- `boundary_type: "continuous"`：同一动作或运镜跨组，首镜不切镜；声明句要求向后延长、开场不得 cut/反打。
+- `boundary_type: "cut"`：反打、换机位等切镜连戏；声明句只要求同场景/光线/人物位置承接，允许按规划换构图。旧数据缺省按 cut。
 - `anchor: "none"`：明确断点。跨场景、叠化/淡入淡出等转场始终不续接。
 
 `anchor: last_frame` 保留为兼容旧规划的续接意图；实际选择在组 prompt 的 `continuity_ref.mode`
-（`none` / `last_frame` / `tail_video`）中记录。图片继续存入 `refs`，尾段存入 `video_refs`，不混用数组。
+（`none` / `last_frame` / `tail_video`）中记录，`continuity_ref.boundary` 记录 continuous/cut。图片继续存入 `refs`，尾段存入 `video_refs`，不混用数组。
+切换连接方式后须重新运行 `sync_continuity_refs.py --write`（已出片的组 `--prepare`）同步。
 
 ## 执行顺序
 
-1. 连戏规划标明 boundary_type；连续边界核对姿态、道具、机位、运动方向和速度，不写换构图切镜开场。
+1. 连戏规划标明 boundary_type（只决定声明句，不决定素材）；连续边界核对姿态、道具、机位、运动方向和速度，不写换构图切镜开场。
 2. prompt 工位写好整组 prompt 后，执行 `python3 code/sync_continuity_refs.py --project <slug> --ep epNN --write`。
    此时允许前组视频不存在，保留续接依赖和参考路径，不能因此删掉引用。
 3. video-generation 按链串行，前组交付后执行

@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Long take › Join method** (`duration.long_take_mode`, shown in the new-project wizard and the Duration Settings dialog only while Long take is on): `last_frame` (default) chains every same-scene group boundary on the previous group's last-frame screenshot; `tail_video` chains on the previous group's last 2–3 s of video (`.continuation.mp4` in `video_refs`), falling back to the last frame when the model takes no reference video, the tail is shorter than 2 s or the video budget is full. The choice applies regardless of the continuity plan's `boundary_type`: previously only a `continuous` boundary ever produced a tail video, and since continuity-planning marks reverse angles and reframes as `cut`, most projects never got one. `boundary_type` now only shapes the opening declaration the host writes into the prompt (`continuous`: extend forward, no cut at the opening; `cut`: same location/lighting/positions, then the planned framing) and is recorded as `continuity_ref.boundary`. Cross-scene boundaries, transitions and `anchor: none` remain hard breaks. Existing projects default to `last_frame`; after changing the join method re-run `sync_continuity_refs.py --write` (`--prepare` for groups whose predecessor is already rendered). A running instance must be restarted.
+
 ## [1.0.35] - 2026-09-23
 
 ### Added

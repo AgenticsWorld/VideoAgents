@@ -10,9 +10,11 @@
 
 ## 长镜头自动续接（2026-09-07，优先于下文旧尾帧条款）
 
-统一规则见 `docs/continuity.md`。项目 long_take 开启时，`group_transitions.boundary_type=continuous`
-表示同一动作/运镜跨组，优先使用前组最后 2–3 秒视频向后续写；`cut` 或旧数据缺省用尾帧连戏。
-跨场景/转场仍 anchor:none。continuous 首镜不得换构图切镜；角色进入画面必须有连续走位，不能瞬移。
+统一规则见 `docs/continuity.md`。项目 long_take 开启时，实际连接素材由时长设置的「连接方式」
+`duration.long_take_mode` 决定（2026-09-23）：`last_frame`（默认）同场景组界一律挂前组尾帧图；
+`tail_video` 一律优先取前组最后 2–3 秒视频向后续写，模型不支持/尾段不足/预算不足回退尾帧。
+不区分 `group_transitions.boundary_type`：`continuous`（同一动作/运镜跨组）与 `cut`（反打/换构图，旧数据缺省）
+只影响宿主写入的开场声明句。跨场景/转场仍 anchor:none。continuous 首镜不得换构图切镜；角色进入画面必须有连续走位，不能瞬移。
 prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep epNN --write`；
 生成前等前组出片，再对本组跑同命令 `<grpNNN> --prepare`，重新读取 JSON 后提交。
 宿主裁剪尾段、回退尾帧、统一白模预算与素材编号，机检/生成前校验不通过不得提交。

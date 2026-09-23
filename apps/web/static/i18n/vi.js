@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Mô hình ảnh→ảnh",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "Mô hình văn bản→ảnh dùng khi không có ảnh tham chiếu, mô hình ảnh→ảnh dùng khi có ảnh tham chiếu",
 "文生图 {t} · 图生图 {i}": "Văn bản→ảnh {t} · Ảnh→ảnh {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Nối tự động: hành động liên tục ưu tiên 2–3 giây cuối của nhóm trước. Cắt cảnh, mô hình không hỗ trợ hoặc clip không phù hợp dùng khung hình cuối. Tắt: chỉ nối bằng văn bản.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Khi bật, các nhóm được nối theo cách nối đã chọn, bất kể ranh giới là cắt cảnh hay hành động liên tục: Ảnh khung hình cuối = nhóm sau tham chiếu ảnh chụp khung hình cuối của nhóm trước; Đoạn video cuối = nhóm sau kéo dài 2–3 giây video cuối của nhóm trước (quay về khung hình cuối nếu mô hình hoặc tư liệu không đạt điều kiện). Khi tắt, chỉ dùng văn bản để nối.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Nối nhiều lần từ khung hình hoặc đoạn cuối video độ phân giải thấp có thể làm giảm chất lượng và độ nhất quán nhân vật",
 "⛓ 续接 {g} 尾段视频": "⛓ Nối từ đoạn cuối video {g}",
 
@@ -1794,6 +1794,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Kênh video hiện tại {p} chạy theo workflow, không có id mô hình nên nhóm này không đổi được mô hình (vẫn chọn được kỹ năng)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(vượt giới hạn hiệu lực của nhóm: đổi mô hình giới hạn cao hơn qua 🎛 Mô hình hoặc bớt ảnh)",
 "长镜头": "Cảnh quay dài (long take)",
+"连接方式": "Cách nối",
+"尾帧图片": "Ảnh khung hình cuối",
+"尾段视频": "Đoạn video cuối",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Bật: mỗi nhóm cảnh dùng ảnh chụp khung hình cuối của nhóm trước làm ảnh tham chiếu để nối tiếp hình ảnh; Tắt (mặc định): không đính ảnh tham chiếu khung cuối, chỉ nối tiếp bằng văn bản (câu mở đầu đổi bố cục)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Độ phân giải bản nháp hiện tại thấp, không nên bật cảnh quay dài: khung hình cuối độ phân giải thấp dùng làm ảnh tham chiếu sẽ làm giảm rõ chất lượng hình ảnh và tính nhất quán nhân vật",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (host trên Fal; một clip 4–30 s, tham chiếu 30 ảnh/10 video/10 audio, 480p/720p/1080p)",

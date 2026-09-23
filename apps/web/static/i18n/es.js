@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Modelo imagen→imagen",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "El modelo texto→imagen se usa sin imagen de referencia y el modelo imagen→imagen con referencias",
 "文生图 {t} · 图生图 {i}": "Texto→imagen {t} · Imagen→imagen {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Continuidad automática: las acciones continuas usan los últimos 2–3 segundos del grupo anterior. Para cortes, modelos no compatibles o clips inadecuados, se usa el último fotograma. Desactivado: solo texto.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Si está activado, los grupos se encadenan según el modo de enlace elegido, sea la frontera un corte o una acción continua: Imagen del último fotograma = el siguiente grupo referencia la captura del último fotograma del grupo anterior; Clip final de vídeo = el siguiente grupo prolonga los últimos 2–3 s de vídeo del grupo anterior (vuelve al último fotograma si el modelo o el material no cumplen). Si está desactivado, solo el texto mantiene la continuidad.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Continuar repetidamente desde fotogramas o finales de vídeo de baja resolución puede degradar la calidad y la coherencia de los personajes",
 "⛓ 续接 {g} 尾段视频": "⛓ Continuar desde el final del vídeo de {g}",
 
@@ -1796,6 +1796,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "El canal de vídeo actual {p} ejecuta un flujo de trabajo sin id de modelo; este grupo no puede cambiar de modelo (la habilidad sí)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(supera el límite efectivo del grupo: cambie a un modelo con mayor límite en 🎛 Modelo o elimine imágenes)",
 "长镜头": "Plano secuencia",
+"连接方式": "Modo de enlace",
+"尾帧图片": "Imagen del último fotograma",
+"尾段视频": "Clip final de vídeo",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Al activarlo, cada grupo de planos adjunta la captura del último fotograma del grupo anterior como imagen de referencia para dar continuidad; desactivado (por defecto) no se adjunta esa referencia y la continuidad se apoya solo en el texto (frase de apertura con reencuadre)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ La resolución de borrador actual es baja; no se recomienda activar el plano secuencia: usar un último fotograma de baja resolución como referencia degradará notablemente la calidad de imagen y la consistencia de los personajes",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (alojado en Fal; clip único de 4–30 s, referencias 30 imágenes/10 vídeos/10 audios, 480p/720p/1080p)",

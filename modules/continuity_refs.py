@@ -1,8 +1,11 @@
 """Plan and prepare inter-group continuation, without calling a generation API.
 
-Only an explicit boundary_type=continuous opts into video extension. Legacy
-last_frame boundaries remain cuts. Prepared references are invalidated when the
-predecessor changes; generated media is never modified by this module.
+The join medium is chosen by the project setting duration.long_take_mode
+(last_frame = previous group's last-frame image, default; tail_video = previous
+group's last 2-3 s of video) regardless of the planned boundary_type (cut /
+continuous), which only shapes the opening declaration. Prepared references are
+invalidated when the predecessor changes; generated media is never modified by
+this module.
 """
 from __future__ import annotations
 
@@ -120,9 +123,13 @@ def plan(base, ep, gid, prepare=False, budget=None):
     if not tr:
         raise ValueError(f'{gid}: 缺 group_transitions，先完成连戏规划')
     prev_id = component(prev['group_id'])
-    result.update(mode='last_frame', from_group=prev_id,
-                  image=f'assets/clips/{ep}/{prev_id}{TAIL_IMAGE}', reason='切镜连戏/旧版边界')
-    if tr.get('boundary_type') == 'continuous' and transition == 'hard_cut':
+    # 连接方式由设置决定(2026-09-23):尾帧图片(默认)/尾段视频,不区分 cut / continuous;
+    # boundary_type 只影响开场声明句(continuous 要求首镜不切镜、cut 允许按规划换构图)
+    boundary = 'continuous' if tr.get('boundary_type') == 'continuous' else 'cut'
+    join = (settings.get('duration') or {}).get('long_take_mode') or 'last_frame'
+    result.update(mode='last_frame', from_group=prev_id, boundary=boundary,
+                  image=f'assets/clips/{ep}/{prev_id}{TAIL_IMAGE}', reason='连接方式=尾帧图片')
+    if join == 'tail_video':
         if budget is None:
             from modules.whitebox_refs import video_budget
             budget = video_budget(base, ep, gid)
@@ -132,7 +139,7 @@ def plan(base, ep, gid, prepare=False, budget=None):
                 else video_caps(budget['model'], budget['provider']))
         if caps:
             result.update(mode='tail_video', video=f'assets/continuity/{ep}/{prev_id}{TAIL_VIDEO}',
-                          duration_s=3., reason='连续动作，优先视频尾段')
+                          duration_s=3., reason='连接方式=尾段视频')
             source = base/f'assets/clips/{ep}/{prev_id}.mp4'
             meta_path = source.with_suffix('.meta.json')
             if source.is_file():
@@ -245,19 +252,27 @@ def apply_prompt(prompt, continuation):
         videos_new = videos
     text = remap(remap(text, 'Image', old_i, images_new), 'Video', old_v, videos_new)
     text = text.strip()
+    continuous = c.get('boundary') == 'continuous'
     if c['mode'] == 'tail_video':
-        if re.search(r'cut to|reverse angle|切镜|反打', text.split('Shot 2:')[0], re.I):
+        if continuous and re.search(r'cut to|reverse angle|切镜|反打', text.split('Shot 2:')[0], re.I):
             raise ValueError('连续动作边界的开场仍有切镜指令，请调整首镜 prompt/分镜')
         n = videos_new.index(c['video']) + 1
-        clause = (f'向后延长 [Video {n}]。Extend [Video {n}] forward from its final frame. '
-                  'Generate only the new continuation, never replay the supplied clip. '
-                  'Keep pose, props, lighting, camera framing, motion direction and speed continuous at the join; '
-                  'no cut or restart at the opening. Character images define identity and detail. '
-                  'Whitebox references guide subsequent staging, never override the continuation boundary. '
-                  'The continuation clip is visual only; follow this group’s dialogue and sound instructions.')
+        if continuous:
+            clause = (f'向后延长 [Video {n}]。Extend [Video {n}] forward from its final frame. '
+                      'Generate only the new continuation, never replay the supplied clip. '
+                      'Keep pose, props, lighting, camera framing, motion direction and speed continuous at the join; '
+                      'no cut or restart at the opening. ')
+        else:
+            clause = (f'承接 [Video {n}] 的结尾。Continue from the final moment of [Video {n}]: same location, '
+                      'lighting, character positions and prop state, then open on the planned framing of Shot 1 '
+                      '(a new camera setup is allowed). Generate only the new continuation, never replay the supplied clip. ')
+        clause += ('Character images define identity and detail. '
+                   'Whitebox references guide subsequent staging, never override the continuation boundary. '
+                   'The continuation clip is visual only; follow this group’s dialogue and sound instructions.')
     elif c['mode'] == 'last_frame':
-        clause = f'opening continues from [Image {len(images_new)}]. Preserve identity, lighting and prop state.'
-        if c.get('reason') == '切镜连戏/旧版边界':
+        if continuous:
+            clause = f'opening continues from [Image {len(images_new)}]. Preserve identity, lighting and prop state.'
+        else:
             clause = f'same location and lighting as [Image {len(images_new)}]. Follow the planned opening framing.'
     else:
         clause = ''

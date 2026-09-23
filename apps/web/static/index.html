@@ -421,7 +421,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div>
       <div class="row"><label>长镜头</label>
         <input type="checkbox" id="npd-longtake" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
+        <span style="color:var(--dim);font-size:12px">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</span></div>
+      <div class="row" id="npd-longtake-mode-row" style="display:none"><label>连接方式</label>
+        <select id="npd-longtake-mode"><option value="last_frame">尾帧图片</option><option value="tail_video">尾段视频</option></select></div>
       <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
       <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
     </div>
@@ -639,7 +641,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>长镜头</label>
       <input type="checkbox" id="dur-longtake" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。</span></div>
+      <span style="color:var(--dim);font-size:12px">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</span></div>
+    <div class="row" id="dur-longtake-mode-row" style="display:none"><label>连接方式</label>
+      <select id="dur-longtake-mode"><option value="last_frame">尾帧图片</option><option value="tail_video">尾段视频</option></select></div>
     <div class="note" id="dur-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
     <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="dur-err"></div>
@@ -1237,12 +1241,14 @@ $('#dur-ep-auto').onchange=()=>{$('#dur-ep').disabled=$('#dur-ep-auto').checked}
 // 长镜头低分辨率提示:草稿档 ≤480p 时尾帧低清,作参考图会拖累续接组画质与人脸一致性
 const LONGTAKE_LOWRES=['360p','480p'];
 function npdLongtakeWarn(){$('#npd-longtake-warn').style.display=
-  ($('#npd-longtake').checked&&LONGTAKE_LOWRES.includes($('#npo-draft-res').value))?'':'none'}
+  ($('#npd-longtake').checked&&LONGTAKE_LOWRES.includes($('#npo-draft-res').value))?'':'none';
+  $('#npd-longtake-mode-row').style.display=$('#npd-longtake').checked?'':'none'}   // 连接方式只在长镜头开启时显示
 $('#npd-longtake').onchange=npdLongtakeWarn;
 $('#npo-draft-res').addEventListener('change',npdLongtakeWarn);
 let DUR_DRAFT_RES='480p';   // 视频节奏弹窗打开时取当前项目输出设置的草稿分辨率
 function durLongtakeWarn(){$('#dur-longtake-warn').style.display=
-  ($('#dur-longtake').checked&&LONGTAKE_LOWRES.includes(DUR_DRAFT_RES))?'':'none'}
+  ($('#dur-longtake').checked&&LONGTAKE_LOWRES.includes(DUR_DRAFT_RES))?'':'none';
+  $('#dur-longtake-mode-row').style.display=$('#dur-longtake').checked?'':'none'}
 $('#dur-longtake').onchange=durLongtakeWarn;
 $('#npo-aspect').onchange=()=>{
   $('#npo-custom-row').style.display=$('#npo-aspect').value==='custom'?'':'none'};
@@ -1258,7 +1264,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=1;$('#npd-smax').value=10;
-  $('#npd-longtake').checked=false;npdLongtakeWarn();   // 长镜头默认关闭
+  $('#npd-longtake').checked=false;$('#npd-longtake-mode').value='last_frame';npdLongtakeWarn();   // 长镜头默认关闭,连接方式默认尾帧图片
   sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动白模开关
 }
 function openNpModal(){
@@ -1303,7 +1309,7 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value),
-      long_take:$('#npd-longtake').checked},
+      long_take:$('#npd-longtake').checked,long_take_mode:$('#npd-longtake-mode').value},
     shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
       max_ref_images:parseInt($('#npsg-imgs').value),
       max_ref_videos:parseInt($('#npsg-vids').value),
@@ -1667,6 +1673,7 @@ async function openDurModal(){
     $('#dur-smin').value=d.shot_min_s??1;
     $('#dur-smax').value=d.shot_max_s??10;
     $('#dur-longtake').checked=d.long_take===true;
+    $('#dur-longtake-mode').value=d.long_take_mode==='tail_video'?'tail_video':'last_frame';
     DUR_DRAFT_RES=(cfg.output||{}).draft_resolution||'480p';
     durLongtakeWarn();
   }catch(e){}
@@ -1684,7 +1691,7 @@ $('#dur-ok').onclick=async()=>{
   if(!epAuto&&!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value}});
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}

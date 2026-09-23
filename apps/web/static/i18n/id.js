@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Model gambar→gambar",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "Model teks→gambar dipakai saat tanpa gambar referensi, model gambar→gambar saat ada referensi",
 "文生图 {t} · 图生图 {i}": "Teks→gambar {t} · Gambar→gambar {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Sambungan otomatis: aksi berkelanjutan mengutamakan 2–3 detik terakhir grup sebelumnya. Potongan, model yang tidak mendukung, atau klip yang tidak sesuai memakai bingkai terakhir. Nonaktif: teks saja.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Jika aktif, grup disambung sesuai cara sambung yang dipilih, baik batasnya potongan maupun aksi berkelanjutan: Gambar frame terakhir = grup berikutnya merujuk tangkapan frame terakhir grup sebelumnya; Klip ekor video = grup berikutnya melanjutkan 2–3 detik terakhir video grup sebelumnya (kembali ke frame terakhir jika model atau materi tidak memenuhi syarat). Jika nonaktif, hanya teks yang menjaga kesinambungan.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Sambungan berulang dari bingkai atau akhir video beresolusi rendah dapat menurunkan kualitas dan konsistensi karakter",
 "⛓ 续接 {g} 尾段视频": "⛓ Sambung dari akhir video {g}",
 
@@ -1794,6 +1794,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Saluran video saat ini {p} berjalan sebagai workflow tanpa id model, jadi grup ini tidak bisa ganti model (skill masih bisa diatur)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(melebihi batas efektif grup: ganti ke model berbatas lebih tinggi lewat 🎛 Model atau hapus gambar)",
 "长镜头": "Long take",
+"连接方式": "Cara sambung",
+"尾帧图片": "Gambar frame terakhir",
+"尾段视频": "Klip ekor video",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Jika aktif, setiap grup shot melampirkan tangkapan frame terakhir grup sebelumnya sebagai gambar referensi untuk melanjutkan gambar; jika nonaktif (default), referensi frame terakhir tidak dilampirkan dan kesinambungan hanya mengandalkan teks (kalimat pembuka dengan komposisi baru)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Resolusi draf saat ini rendah, tidak disarankan mengaktifkan Long take: frame terakhir beresolusi rendah sebagai referensi akan menurunkan kualitas gambar dan konsistensi karakter secara nyata",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (dihosting di Fal; satu klip 4–30 dtk, referensi 30 gambar/10 video/10 audio, 480p/720p/1080p)",

@@ -3,7 +3,7 @@ window.I18N_DICT = {
 "图生图模型": "Bild-zu-Bild-Modell",
 "文生图模型用于无参考图出图,图生图模型用于带参考图出图": "Ohne Referenzbild wird das Text-zu-Bild-Modell verwendet, mit Referenzbildern das Bild-zu-Bild-Modell",
 "文生图 {t} · 图生图 {i}": "Text-zu-Bild {t} · Bild-zu-Bild {i}",
-"开启后自动续接:连续动作优先使用上一组最后 2–3 秒视频;切镜连戏、模型不支持或素材不满足条件时使用尾帧。关闭后仅靠文字承接。": "Automatischer Anschluss: Fortlaufende Aktionen nutzen bevorzugt die letzten 2–3 Sekunden der Vorgruppe. Bei Schnitten, ungeeigneten Clips oder nicht unterstützten Modellen wird das Endbild verwendet. Aus: nur Textanschluss.",
+"开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。": "Wenn aktiviert, werden Gruppen nach der gewählten Verbindungsart verkettet, unabhängig davon, ob die Grenze ein Schnitt oder eine durchgehende Aktion ist: Letztes Einzelbild = die nächste Gruppe referenziert das letzte Einzelbild der vorherigen Gruppe; Video-Endclip = die nächste Gruppe setzt die letzten 2–3 s Video der vorherigen Gruppe fort (Rückfall auf das letzte Einzelbild, wenn Modell oder Material nicht geeignet sind). Wenn deaktiviert, trägt nur der Text die Kontinuität.",
 "⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移": "⚠ Wiederholte Anschlüsse mit niedrig aufgelösten Endbildern oder Videoenden können Bildqualität und Figurenkonsistenz verschlechtern",
 "⛓ 续接 {g} 尾段视频": "⛓ Anschluss an das Videoende von {g}",
 
@@ -1794,6 +1794,9 @@ window.I18N_DICT = {
 "当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)": "Der aktuelle Videokanal {p} läuft als Workflow ohne Modell-ID; diese Gruppe kann das Modell nicht wechseln (Skill bleibt wählbar)",
 "(已超本组生效上限:用「🎛 模型」换更高上限的模型或删图)": "(über dem wirksamen Limit der Gruppe: per 🎛 Modell auf ein Modell mit höherem Limit wechseln oder Bilder entfernen)",
 "长镜头": "Plansequenz",
+"连接方式": "Verbindungsart",
+"尾帧图片": "Letztes Einzelbild",
+"尾段视频": "Video-Endclip",
 "开启后每个分镜组把上一组的尾帧截图作为参考图续接画面;关闭(默认)则不挂尾帧参考图,仅靠文字承接上一组结尾(换构图开场句)": "Aktiviert hängt jede Shot-Gruppe den Screenshot des letzten Frames der Vorgruppe als Referenzbild an, um das Bild fortzuführen; deaktiviert (Standard) wird kein Endframe-Referenzbild angehängt und der Anschluss erfolgt nur über Text (Eröffnungssatz mit neuem Bildausschnitt)",
 "⚠ 当前草稿分辨率较低,不建议开启长镜头:低清尾帧作参考图会导致画面质量与人物一致性明显下降": "⚠ Die aktuelle Entwurfsauflösung ist niedrig; Plansequenz wird nicht empfohlen: Ein niedrig aufgelöster Endframe als Referenzbild verschlechtert Bildqualität und Figurenkonsistenz deutlich",
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (auf Fal gehostet; einzelner Clip 4–30 s, Referenzen 30 Bilder/10 Videos/10 Audios, 480p/720p/1080p)",
