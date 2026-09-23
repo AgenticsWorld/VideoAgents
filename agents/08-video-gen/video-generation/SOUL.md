@@ -36,7 +36,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 4. 生成后跑**切变边界检测**,把组内实际镜头边界写入 `grpNNN.meta.json`(供剪辑/QA/字幕对位):
    `ffmpeg -i grpNNN.mp4 -vf "select='gt(scene,0.3)',metadata=print" -f null - 2>&1 | grep pts_time`
    边界数应 = 组内镜数-1(±1 容忍,模型可能合并或加切);同时 ffprobe 核时长/fps/音轨。
-5. 提交前自检运动伪影、主体漂移、主体出画、道具尺度突变(前科 DEF-p7-visual-0001/0004);明显废片先内部重跑再提交(**内部重跑计入运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)**:同一组累计不超过该值;该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决,废片缺陷如实写进回执,不得自行再生成一条);严禁出现 style.json 负面清单元素。
+5. 提交前自检运动伪影、主体漂移、主体出画、道具尺度突变(前科 DEF-p7-visual-0001/0004);明显废片先内部重跑再提交(**内部重跑计入运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)**:同一组累计不超过该值;该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决,废片缺陷如实写进回执,不得自行再生成一条);严禁出现 style.json 负面清单元素。**对白音轨自检只做机检,禁止自发语音识别(2026-09-23)**:核对对白/口型只跑 ffprobe 音轨存在与时长、§8A 的 voice_f0_check 声学快检;严禁自行调用 faster-whisper/WhisperModel/`modules/transcription.py` 等本地 ASR 转写台词「核查对白音轨」(会下载整套模型权重、空耗数十分钟;前科 fengshen3 p7-video-ep06-grp020,宿主 hook 已硬拦截)。台词是否说对说全不是本工位机检项——听感疑点写进回执 `notes` 交用户裁决,用户明确要求转写时由调度层派 09-audio/audio-transcription。
 6. 记录生成参数(模型、完整请求体摘要、锚点包版本、前组尾帧版本)入 meta——**Seedance 2.0 不支持 seed,重跑靠 prompt 微调**,可复现性靠留档完整请求体。
 7. 写回执 `<项目目录>/runs/<task_id>/result.json`。
 

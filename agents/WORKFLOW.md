@@ -569,6 +569,8 @@ faster-whisper 模型自动下载到 `data/models/faster-whisper/` 并复用；�
 cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digital_human=false` 时付费生成保持
 阻塞。已有用户稿件则跳过转写且不覆盖。
 
+> **语音识别不是自检手段(2026-09-23)**:除本节 audio-transcription、§9A 花字 `render_captions.py speech-align`、数字人 `dh0-transcribe`、混剪 `mashup_align` 这些**固定工序**外,任何工位(含 08-video-gen 各工位、11-qa、调度层)都**禁止自发**调用 faster-whisper/WhisperModel/`modules/transcription.py`/speechalign 等本地 ASR 去「核查对白音轨」「抽检口型/台词」——每次都要下载整套模型权重并做长时推理(前科 fengshen3 p7-video-ep06-grp020:视频生成成员出片后自发 small→medium 两轮转写,单次工单空耗数十分钟,用户手动停止)。产物验收只按 SOUL/工单 acceptance 列出的机检(ffprobe 音轨存在/时长、voice_f0_check 声学快检等);台词疑点写进回执交用户裁决。只有用户**明确要求**转写/听写核对时,调度层才派 audio-transcription(或按宿主 `VIDEOAGENTS_ALLOW_ASR=1` 放行);claude 引擎下 `.claude/hooks/orchestrator_guard.py` 对非转写工位硬拦截(deny),codex/deepagents 等引擎靠本条纪律。
+
 > **§7F 视频提示词技能触发契约(prompt_skill,2026-08-28)**:prompt 工位(08-video-gen/prompt)写组级 video_prompt 时套用的官方提示词技能(`agents/08-video-gen/prompt/skills/` 下 sd25-pe / sd20-pe / h3-pe / wan3-pe 及用户自装技能;2026-09-17 起四个官方技能目录统一为 `<模型>-pe` 命名,旧 id sd20-prompt-writing / h3-prompt-writing 在存量项目设置与回执里按新 id 解释)**不再靠系统提示词软提醒,而是项目级显式设定 + 工单契约 + 双重机检**——前科:polan2(2026-08-27)运行时按全局渠道判定注入后,prompt 工位仍未读取 sd20-pe,需用户手动补指令,且没有任何环节能发现。
 > ① **设定**:项目 `settings.json#prompt_skill {mode: auto|manual|off, skill_id}`。auto(默认)按「生成模型」页当前生效的视频模型解析;解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)= 无技能并提醒手选。manual = 用户从该工位已安装技能里指定一项(与生效模型不匹配只告警)。off = 本项目不套用。入口:「视频模型设置」弹窗、H3A 签字弹窗、分镜预览页头部,三处同一设定。
 > ② **快照**:运行时把解析结果写 `prompt_skill.effective {skill_id, mode, resolved_from, reason, decided_at}`——派 prompt 工单、保存设置、H3A 签字时刷新;机检以快照为基准,用户事后改技能/换模型,已写好的组 json 会因 id/sha256 不符而退回,退回单按新技能重做。

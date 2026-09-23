@@ -3185,6 +3185,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 交付方式:JSON/MD/YAML 类设计产物**直接逐份写出最终文件**,严禁先写 Python 生成脚本(把数据写成 dict 再跑脚本落盘)、严禁按几份一批拆多轮;一单 N 份的批处理工单一次做完;同批产物的共用说明(输入清单/坐标系/画幅约定等)不逐份复制进每个文件,只写 SOUL 规定字段与本实例特有值。确需脚本(计算/媒体处理/机检/批量调用)才写,落 {proj_rel}/code/,不要放进 runs/<task_id>/(WORKFLOW.md §2)
 - 发现设定冲突:记录到 {proj_rel}/qa/defects/,不要擅自改 bible/ 已确认内容
 - **进程寿命 = 本轮回复(WORKFLOW.md §5)**:你给出最终回复即本运行结束、进程退出,你启动的全部子进程一并被杀——包括被工具因单次超时**自动**转到后台的命令。有在飞子进程时禁止结单:回复里写「后台等待/完成后通知/稍后汇报/等退出码返回再继续」= 任务未做,验收按机检退回,是否「主动」丢后台不影响判定。命令被转到后台后唯一合规动作:立刻阻塞等待它退出(TaskOutput 阻塞等待该任务 ID)拿到退出码再继续。预防:耗时命令事先显式给工具足够大的 timeout,并按每批能在超时内跑完的粒度分批
+- **禁止自发语音识别核查(2026-09-23)**:自检/验收产物时,严禁自行调用 faster-whisper/WhisperModel、`modules/transcription.py`、speechalign 或任何要下载模型权重的本地 ASR 去转写对白音轨(前科 fengshen3 p7-video-ep06-grp020:出片后「核查对白音轨」自发 WhisperModel('small')→('medium') 逐个下载模型,单次工单空耗数十分钟;claude 引擎下 .claude/hooks 已硬拦截)。对白/音轨验收只做 SOUL 与工单 acceptance 列出的机检(ffprobe 音轨存在/时长、voice_f0_check 等),工单没写的转写核查一律不做;想核对台词而无授权时把疑点写进回执交用户裁决。语音转写只在两种情形合规:① 用户明确要求转写/听写核对(工单 instruction 原文可证,由调度层派 09-audio/audio-transcription);② 本工位 SOUL 把宿主 ASR 入口列为固定工序(audio-transcription、caption speech-align、数字人 dh0-transcribe、混剪声画对齐)
 - 完成后:用{ui_lang}简要汇报做了什么、关键决策,并列出「创建/修改的文件路径」清单
 - 一切面向用户的对话/汇报/进度说明一律使用 {ui_lang}(用户的界面语言设置);工作产物的内容语言不受此影响,仍按下方「输出语言」设定执行
 
