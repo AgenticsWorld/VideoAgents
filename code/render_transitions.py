@@ -14,6 +14,10 @@ transition Agent 按 directing_plan 自由文本自写 ffmpeg xfade,一项目一
            两侧各用 tpad 克隆 duration/2 的尾帧/首帧再 xfade,**成片总时长严格不变**,边界之外的一切
            时刻都不动,外挂声轨(final_audio)/字幕/旁白挂点/intro_offset_ok 全部不受影响;声轨原样
            流拷贝(-c:a copy),不碰;
+           **组占帧以 timeline 为准(2026-09-24,DEF-ep06-edit-0002)**:每条 video 条目的成片占帧
+           n = round(占时×fps),从组片段取 in 起的帧,不足以尾帧克隆补齐(edit 为对齐组 clip 原生声轨
+           常在组尾补 1 帧,timeline 记 tail_pad_frames);整文件原样的组才流拷贝,带补帧/修剪的组单独
+           重编码——以前直接引用整个组片段文件,补帧丢失 → 成片少帧、片尾画面超前声轨;
            **节奏垫片(2026-09-17,§9C)**:transition_in 带 hold_s(本组前黑场停留)/ freeze_s(前组尾帧定格)
            时在组边界**插入**帧——前组尾(可定格 freeze_s)→ 黑场 hold_s → 本组首;dip_black 配 hold 时前组尾
            淡出半个 duration 到黑、本组首自黑淡入半个 duration,fade_black 配 hold 时前组尾淡出整段、本组硬入,
@@ -145,33 +149,60 @@ def _entry_gid(e, idx):
     return str(e.get("group_id") or e.get("id") or e.get("name") or f"entry{idx:03d}")
 
 
+_FRAMES_CACHE = {}
+
+
+def _file_frames(path):
+    """组片段逐帧计数(进程内缓存:plan/render/check 反复用同一批文件)。"""
+    key = str(Path(path).resolve())
+    if key not in _FRAMES_CACHE:
+        _FRAMES_CACHE[key] = count_frames_of(key)
+    return _FRAMES_CACHE[key]
+
+
+def _entry_frames(e, idx, proj, fps):
+    """timeline video 条目的**成片占帧计划**(物理口径;渲染 / 边界重量化 / 核验同源):
+      n     = round(成片占时 × fps):条目在成片上占的帧数——edit 的 cut 就是按这个时长拼的;
+      start = round(in × fps):从组片段取帧的起点;
+      take  = min(n, 文件帧数 − start):实际取自文件的帧数;
+      pad   = n − take:不足部分以尾帧克隆补齐(edit 为对齐组 clip 原生声轨常在组尾补 1 帧,timeline
+              记作 tail_pad_frames;2026-09-24 DEF-ep06-edit-0002:渲染曾忽略它 → 成片少帧、片尾画面超前声轨)。
+    start == 0 且 n == 文件帧数 ⇔ 整文件原样,可流拷贝。变速条目分段渲染无法表达 → FAIL。"""
+    gid = _entry_gid(e, idx)
+    src = e.get("src")
+    if not src:
+        raise SystemExit(f"[FAIL] timeline video 条目 {idx}({gid})缺 src,无从按帧规划")
+    if abs(float(e.get("speed") or 1.0) - 1.0) > 1e-9:
+        raise SystemExit(f"[FAIL] timeline 条目 {idx}({gid})speed={e.get('speed')}:分段渲染不支持变速条目,"
+                         "请 edit 先把变速烘进组片段再落 timeline")
+    n = int(round(_entry_dur(e, proj) * fps))
+    start = int(round(float(e.get("in") or 0.0) * fps))
+    total = _file_frames(proj / src)
+    avail = total - start
+    if n <= 0 or avail <= 0:
+        raise SystemExit(f"[FAIL] timeline 条目 {idx}({gid})in={e.get('in')} 超出组片段({total} 帧)或占时为 0")
+    take = min(n, avail)
+    return {"gid": gid, "src": proj / src, "start": start, "n": n, "take": take, "pad": n - take,
+            "file_frames": total, "verbatim": start == 0 and n == total}
+
+
 def requantize_cuts(entries, timeline, proj, fps):
-    """把非硬切条目的 cut_time_s 重量化为**各组片段实际帧数的累计**(物理口径)。
+    """把非硬切条目的 cut_time_s 重量化为**各条目成片占帧的累计**(物理口径,_entry_frames)。
 
     timeline 的 in/out 常见毫秒截断(3.545),几十组浮点累加后可偏过半帧线,
-    round(累计秒×fps) 会与 concat 实拼的帧边界差 1 帧——渲染窗口与像素核验双双
-    错位(2026-09-03 leijun2 实测)。concat 拼的就是组片段文件,按文件帧数累计
-    即与成片逐帧一致。就地更新 entries,返回重量化条数。"""
+    round(累计秒×fps) 会与实拼的帧边界差 1 帧——渲染窗口与像素核验双双错位
+    (2026-09-03 leijun2 实测)。渲染按每条目 round(占时×fps) 取帧/补帧,按同一口径
+    逐条累计即与成片逐帧一致。就地更新 entries,返回重量化条数。"""
     vids = ((timeline.get("tracks") or {}).get("video")) or timeline.get("video") or []
-    if not vids:
-        return 0
+    if not vids or any(not e.get("src") for e in vids):
+        return 0                        # 条目缺 src,无从按帧累计,保持原值
     cum, walk = 0, []                   # walk: 有序边界表 [(from,to,t), ...]
     prev = None
     for i, e in enumerate(vids):
         gid = _entry_gid(e, i)
         if prev is not None and gid != prev:
             walk.append([prev, gid, cum / fps])
-        src = e.get("src")
-        if not src:
-            return 0                    # 条目缺 src,无从按帧累计,保持原值
-        # 防御:条目做了子区间修剪或变速时,文件帧数 ≠ 成片占帧,帧准口径不成立,整体放弃
-        if e.get("timeline_in_s") is not None or e.get("timeline_in") is not None                 or (e.get("speed") or 1.0) != 1.0:
-            return 0
-        frames = count_frames_of(str(proj / src))
-        dur = _entry_dur(e, proj)
-        if abs(frames / fps - dur) > 1.5 / fps:   # in/out 只取了文件一段 → 同样放弃
-            return 0
-        cum += frames
+        cum += _entry_frames(e, i, proj, fps)["n"]
         prev = gid
     # 有序消费匹配:同一 (from,to) 邻接重复出现时按边界顺序一一对应,不坍缩到最后一处
     n = 0
@@ -518,6 +549,33 @@ def do_render(proj, ep, src_path, out_path, crf=18, preset="medium"):
     return _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, preset, src_dur, info, bool(pads))
 
 
+def _norm_chain(k, p, fps):
+    """输入 k 的归一链:按帧计划修剪(start..start+take)→ 尾帧克隆补 pad 帧 → 色域/像素格式/SAR 归一 → 逐帧重打时间戳。"""
+    f = f"[{k}:v]trim=start_frame={p['start']}:end_frame={p['start'] + p['take']},setpts=PTS-STARTPTS"
+    if p["pad"]:
+        f += f",tpad=stop_mode=clone:stop={p['pad']}"
+    return f + f",scale=in_range=auto:out_range=tv,format=yuv420p,setsar=1,setpts=N/({fps:g}*TB)"
+
+
+def _encode_entries(plans_sel, out, fps, n_frames, crf, preset, timeout, label):
+    """若干条目(按序)各自修剪 + 尾帧补齐 + 归一后拼成一段,重编码为恰好 n_frames 帧(不符即 FAIL)。"""
+    ins = [a for p in plans_sel for a in ("-i", str(p["src"]))]
+    chains = [_norm_chain(k, p, fps) for k, p in enumerate(plans_sel)]
+    if len(chains) == 1:
+        fc = chains[0] + "[v]"
+    else:
+        fc = ";".join(c + f"[g{k}]" for k, c in enumerate(chains)) + ";" + \
+            "".join(f"[g{k}]" for k in range(len(chains))) + f"concat=n={len(chains)}:v=1:a=0,setpts=N/({fps:g}*TB)[v]"
+    _run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", fc, "-map", "[v]",
+          "-fps_mode", "passthrough", "-frames:v", str(n_frames),
+          "-c:v", "libx264", "-crf", str(crf), "-preset", preset,
+          "-pix_fmt", "yuv420p", "-color_range", "tv", "-an", str(out)], timeout=timeout)
+    got = count_frames_of(str(out))
+    if got != n_frames:
+        raise SystemExit(f"[FAIL] {label} 归一后帧数不符:want {n_frames} got {got}")
+    return out
+
+
 def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, preset, src_dur, info, with_pads):
     """★分段式渲染(v4.2,清晰度改造;2026-09-17 扩展垫片/fade 边界):成片 = 各组片段 concat 而来,组边界必是
     关键帧——**未涉边界效果的组直接引用原组片段文件流拷贝(零再编码)**,只把叠化 / 垫片 / 淡出边界两侧
@@ -526,15 +584,15 @@ def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, prese
     timemap 重映射(黑场声音按 hold_audio)。"""
     xf_entries = [e for e in entries if e["type"] in XFADE_OF]
     vids = ((tl.get("tracks") or {}).get("video")) or tl.get("video") or []
-    order, files, gframes = [], [], []          # 按**位置**索引:同组 id 重复出现也不坍缩
-    for i, v in enumerate(vids):
-        gid = _entry_gid(v, i)
-        src = v.get("src")
-        if not src:
-            raise SystemExit(f"[FAIL] timeline video 条目 {i}({gid})缺 src,分段渲染无从引用组片段")
-        order.append(gid)
-        files.append(proj / src)
-        gframes.append(count_frames_of(str(proj / src)))
+    # 按**位置**索引(同组 id 重复出现也不坍缩);每条目一份帧计划:成片占帧 n = 文件取帧 take + 尾帧补齐 pad
+    plans = [_entry_frames(v, i, proj, fps) for i, v in enumerate(vids)]
+    order = [p["gid"] for p in plans]
+    files = [p["src"] for p in plans]
+    gframes = [p["n"] for p in plans]
+    for v, p in zip(vids, plans):
+        tp = v.get("tail_pad_frames")
+        if isinstance(tp, (int, float)) and int(tp) != p["pad"]:
+            print(f"[WARN ] {p['gid']} timeline 标注 tail_pad_frames={int(tp)} 与按占时推算的补帧 {p['pad']} 不符,以占时为准")
     # 热边界 = 叠化 + 垫片 +(有垫片时)fade 类;按相邻位置对有序消费匹配(重复邻接不坍缩)
     def hot(e):
         if e.get("from_group") is None:
@@ -574,21 +632,12 @@ def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, prese
     for r, run in enumerate(runs):
         run_gids = [order[i] for i in run]
         run_frames = sum(gframes[i] for i in run)
-        lst = tmp_dir / f".xfrun{r}.txt"
-        lst.write_text("".join(f"file '{files[i].resolve()}'\n" for i in run))
         run_src = tmp_dir / f".xfrun{r}.src.mp4"
-        # run 源直接归一重编码(不 -c copy):组片段间哪怕只有 color_range 标签之差,
-        # concat 后进 filter 也会触发 ffmpeg 8 的 filtergraph reinit 清零 trim 计数
-        # (实测 143 帧渲染段截成 97);run 仅数秒,重编码代价近零且反正要过 xfade
-        _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-              "-i", str(lst),
-              "-vf", "scale=in_range=auto:out_range=tv,format=yuv420p,setsar=1",
-              "-fps_mode", "passthrough", "-frames:v", str(run_frames),
-              "-c:v", "libx264", "-crf", "14", "-preset", "fast",
-              "-pix_fmt", "yuv420p", "-color_range", "tv", "-an",
-              str(run_src)], timeout=1200)
-        if count_frames_of(str(run_src)) != run_frames:
-            raise SystemExit(f"[FAIL] 渲染段源 {run_gids[0]}..{run_gids[-1]} 归一后帧数不符")
+        # run 源直接归一重编码(不 -c copy):各组片段各走一条输入链(修剪 + 尾帧补齐 + 归一)再 concat 滤镜,
+        # 输入参数逐链恒定,规避 ffmpeg 8 concat demuxer 混 color_range 触发 filtergraph reinit 清零 trim
+        # 计数的坑(实测 143 帧渲染段截成 97);run 仅数秒,重编码代价近零且反正要过 xfade
+        _encode_entries([plans[i] for i in run], run_src, fps, run_frames, crf=14, preset="fast", timeout=1200,
+                        label=f"渲染段源 {run_gids[0]}..{run_gids[-1]}")
         local_entries = [boundary_at[i] for i in run[:-1] if i in boundary_at]
         only_xf = all(e["type"] in XFADE_OF for e in local_entries) and not (open_fade is not None and run[0] == 0)
         if only_xf:
@@ -623,27 +672,52 @@ def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, prese
         if got != expect:
             raise SystemExit(f"[FAIL] 渲染段 {run_gids[0]}..{run_gids[-1]} 帧数不符:"
                              f"want {expect} got {got}")
-        seg_paths.append((run[0], run_out))
-        cleanup += [lst, run_src, run_out]
-    # 总装 concat 列表:copy 组按原文件、渲染 run 按渲染段,严格组序
+        seg_paths.append((run[0], run_out, got))
+        cleanup += [run_src, run_out]
+    # 非渲染段的组:整文件原样 → 流拷贝;带补帧/修剪的 → 单独按成片画质重编码为恰好 n 帧(DEF-ep06-edit-0002)
+    fixed = []
+    for i, p in enumerate(plans):
+        if i in run_of:
+            continue
+        if p["verbatim"]:
+            # 只取视频流(流拷贝,零再编码):组 clip 自带 AAC 声轨首包 pts 为负(编码器 priming ≈ −0.032s),
+            # concat demuxer 即使只 -map 视频也会把这个偏移带进成片时间戳(2026-09-24 实测整片 +0.031s 脱格)
+            gp = tmp_dir / f".xfgrp{i}.v.mp4"
+            _run(["ffmpeg", "-y", "-v", "error", "-i", str(p["src"]), "-map", "0:v:0", "-c", "copy", str(gp)], timeout=600)
+            files[i] = gp
+            cleanup.append(gp)
+            continue
+        gp = tmp_dir / f".xfgrp{i}.mp4"
+        _encode_entries([p], gp, fps, p["n"], crf=crf, preset=preset, timeout=1800, label=f"组 {p['gid']}")
+        files[i] = gp
+        cleanup.append(gp)
+        fixed.append(p["gid"] + (f" +{p['pad']}帧" if p["pad"] else "")
+                     + (" 修剪" if p["start"] or p["take"] < p["file_frames"] else ""))
+    # 总装 concat 列表:copy 组按原文件(或补帧版)、渲染 run 按渲染段,严格组序
+    # 每个文件显式钉 duration = 占帧/fps:concat demuxer 默认按**容器时长**(组 clip 原生声轨常比画面长几十 ms)
+    # 推下一文件的起点,视频 pts 会脱离 1/fps 网格、成片流时长虚长(2026-09-24 ep06 实测 +0.12s,抽帧核对漂移)
     final_lst = tmp_dir / ".xf_final.txt"
     lines, i = [], 0
-    seg_by_start = {s: p for s, p in seg_paths}
+    seg_by_start = {s: (p, n) for s, p, n in seg_paths}
     while i < len(order):
         if i in run_of:
             run = runs[run_of[i]]
-            lines.append(f"file '{seg_by_start[run[0]].resolve()}'\n")
+            seg, n = seg_by_start[run[0]]
+            lines.append(f"file '{seg.resolve()}'\nduration {n / fps:.6f}\n")
             i = run[-1] + 1
         else:
-            lines.append(f"file '{files[i].resolve()}'\n")
+            lines.append(f"file '{files[i].resolve()}'\nduration {gframes[i] / fps:.6f}\n")
             i += 1
     final_lst.write_text("".join(lines))
     cleanup.append(final_lst)
     tmp = out_path.with_name(out_path.stem + ".rendering.mp4")
-    n_copy = sum(1 for i in range(len(order)) if i not in run_of)
+    n_copy = sum(1 for i in range(len(order)) if i not in run_of) - len(fixed)
     n_pad = sum(1 for e in boundary_at.values() if sum(_pad_frames(e, fps)) > 0)
     print(f"[RUN  ] 分段式转场渲染:{len(xf_entries)} 处叠化 + {n_pad} 处垫片 / {len(runs)} 个渲染段"
-          f"(重编码 {len(order) - n_copy} 组)+ {n_copy} 组流拷贝 → {out_path.relative_to(proj)}")
+          f"(重编码 {len(order) - n_copy - len(fixed)} 组)+ {len(fixed)} 组补帧/修剪重编码 + {n_copy} 组流拷贝"
+          f" → {out_path.relative_to(proj)}")
+    if fixed:
+        print(f"[INFO ] 按 timeline 占帧补齐/修剪的组:{', '.join(fixed)}")
     ops = pad_ops(entries, fps)
     # 源 cut 带声轨时随总装带回:无垫片流拷贝(模块契约:声轨不碰);有垫片按 timemap 重映射(黑场声音按 hold_audio)
     has_audio = bool((_probe(src_path).get("audio") or {}))
@@ -664,6 +738,9 @@ def _render_segmented(proj, ep, src_path, out_path, entries, tl, fps, crf, prese
     got = count_frames_of(str(tmp))
     if got != total_frames:
         raise SystemExit(f"[FAIL] 总装帧数不符:want {total_frames} got {got}")
+    vdur = float((_probe(tmp).get("video") or {}).get("duration") or 0)
+    if abs(vdur - total_frames / fps) > 1.0 / fps + 0.005:
+        raise SystemExit(f"[FAIL] 总装视频流时长 {_fmt(vdur)} ≠ 帧数/fps {_fmt(total_frames / fps)}(时间戳脱离帧网格)")
     for p in cleanup:
         p.unlink(missing_ok=True)
     if out_path.exists():

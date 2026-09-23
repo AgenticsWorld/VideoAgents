@@ -19,6 +19,8 @@ All notable public changes to VideoAgents are documented here.
 
 ### Fixed
 
+- `code/render_transitions.py` dropped the tail frames the edit step pads onto group clips: the segmented renderer referenced whole group files, so a timeline whose entries are longer than their clips (fengshen3 ep06: 10 groups padded by one frame each to cover the clip's native audio, recorded as `tail_pad_frames`) produced a `cut_v2` 10 frames short with the picture running 0.42 s ahead of the audio at the end (`hard_cut_positions_intact` FAIL, DEF-ep06-edit-0002). Every timeline entry now gets a frame plan (`round(duration × fps)` frames: taken from the clip from `in`, the remainder cloned from the last frame); only verbatim whole-file groups are stream-copied, padded or trimmed groups are re-encoded to exactly their planned length, render-run sources are built per input through `filter_complex` instead of the concat demuxer, and boundary requantisation uses the same frame plan (it previously bailed out on entries carrying `timeline_in`).
+
 - `modules/timemap.compose` mis-composed nested edits: a second-layer edit falling *inside* a first-layer interval (slow motion then cutting that same span, or partially deleting an inserted hold) was appended as a parallel op whose delta cancelled the first one, so `effective_time_ops`, `build-cut` in/out mapping and the legacy audio/subtitle remap were wrong for such version chains (fengshen3 ep06 grp019 composed to Δ0 instead of −0.71 s). Compose now scans source-basis breakpoints and derives each segment's output length through both layers.
 
 ### Changed
