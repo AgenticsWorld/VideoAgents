@@ -17,7 +17,16 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
   apply        --recipe <id>[ --recipe <id2>...] [--group grpNNN] [--preview]
                对处方作用域内的每个组,在当前版本之上施加 ffmpeg 滤镜链出新版本(多条处方=同一版本一次链上);
                --preview 只出前 4 秒 480p 低清到 assets/post/epNN/<grp>/refs/preview_<id>.mp4,不进版本链
-  register     --recipe <id> --file <路径> [--group grpNNN]   agent 类处方把外部产物登记为新版本(状态→已出片)
+  register     --recipe <id> --file <路径> [--group grpNNN] [--time-ops '<JSON>']
+               agent 类处方把外部产物登记为新版本(状态→已出片)。时长核对(2026-09-23,agent 处方**可以**改时长):
+               改时长类做法(慢动作)按处方参数推导 time_ops,产物须 = 源 + Σ变长 ±1 帧,否则拒登记;其他做法产物与源
+               同长(±1 帧)直接登记;改了时长而没给 --time-ops(组内秒、基准 = 源版本)时,按整段等比变速记一条
+               retime_auto 并 WARN——变长量都进版本条目 time_ops,出成片时声轨/字幕按 timemap 平移
+  slowmo       --recipe <id> --group grpNNN [--interp <RIFE 补帧片段> [--interp-whole]]
+               慢动作处方的宿主出片:源 = 该组当前版本,按处方作用域(组内时间段 / 整组)与倍率把该段放慢拼回
+               (段前段后原样),声轨按处方 audio 策略重映射,产物 assets/post/epNN/<grp>/agent_<id>.mp4 并 register;
+               --interp 是 agent 用 RIFE 类工作流对该时间段补出的高帧率片段(--interp-whole 表示补的是整段源);
+               不给时用 ffmpeg minterpolate 光流补帧兜底(画质次之)
   register     --group grpNNN --file <路径> [--note 工单号]   分镜剪辑「派单剪辑师」产物登记为本组新版本(无处方)
   adopt        --recipe <id>       采纳:版本指针指向该产物;转场处方回写 shot_list.transition_in
   discard      --recipe <id>       弃用:指针退回;文件不删
@@ -41,6 +50,7 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
 
 用法:
   python3 code/post_apply.py apply    --project <slug> --ep epNN --recipe rcp-xxxx [--preview]
+  python3 code/post_apply.py slowmo   --project <slug> --ep epNN --recipe rcp-xxxx --group grpNNN [--interp <片段>]
   python3 code/post_apply.py check    --project <slug> --ep epNN
   python3 code/post_apply.py finalize --project <slug> --ep epNN
 退出码:0 成功/全 PASS;1 处方执行失败或任一 FAIL(WARN 不影响);2 参数/文件缺失。
@@ -312,7 +322,7 @@ def do_blocks(proj: Path, ep: str, as_json: bool, stats: bool, verify_by: str = 
     return rc
 
 
-def do_register(proj: Path, ep: str, rid: str | None, file: str, group: str | None, note: str = "") -> int:
+def do_register(proj: Path, ep: str, rid: str | None, file: str, group: str | None, note: str = "", time_ops_json: str = "") -> int:
     plan = pp.load_plan(proj, ep)
     r = pp.find_recipe(plan, rid) if rid else None
     if rid and not r:
@@ -344,13 +354,90 @@ def do_register(proj: Path, ep: str, rid: str | None, file: str, group: str | No
         pp.save_plan(proj, ep, plan)
         _log("PASS", f"{gid} 登记 v{ver['v']} ← {ver['file']}(剪辑师产物,{ver['note']})")
         return 0
+    # 时长核对(2026-09-23):agent 处方可以改时长,但变长/变短量必须成为版本 time_ops(出成片时声轨/字幕按 timemap 平移)
+    src = pp.version_file(proj, ep, gid, base_v, plan)
+    ops: list[dict] = []
+    dur_note = ""
+    if src:
+        try:
+            si, pi = fx.probe(src), fx.probe(f)
+        except Exception as e:  # noqa: BLE001
+            _log("FAIL", f"无法探测源/产物时长:{str(e)[-200:]}")
+            return 1
+        fps = float(si.get("fps") or 24.0)
+        tol = 1.0 / fps + 1e-3
+        sd, pd = float(si.get("duration") or 0), float(pi.get("duration") or 0)
+        if r.get("kind") in pp.RETIME_KINDS:
+            ops = pp.recipe_time_ops(r, sd, fps)
+            want = sd + timemap.total_delta(ops)
+            if abs(pd - want) > tol:
+                _log("FAIL", f"{gid} 产物时长 {pd:.3f}s ≠ 源 {sd:.3f}s + 处方变长 {timemap.total_delta(ops):+.3f}s = {want:.3f}s(容差 ±1 帧);"
+                             f"慢动作请走 post_apply.py slowmo 由宿主变速拼接,或按处方倍率/时间段重做")
+                return 1
+            dur_note = f";时长 {sd:.2f}s → {pd:.2f}s({timemap.describe(ops)})"
+        elif time_ops_json:
+            try:
+                ops = timemap.normalize_ops(json.loads(time_ops_json))
+            except (ValueError, TypeError) as e:
+                _log("FAIL", f"--time-ops 不是合法 JSON 数组:{e}")
+                return 2
+            want = sd + timemap.total_delta(ops)
+            if abs(pd - want) > tol:
+                _log("FAIL", f"{gid} 产物时长 {pd:.3f}s ≠ 源 {sd:.3f}s + --time-ops 变长 {timemap.total_delta(ops):+.3f}s(容差 ±1 帧)")
+                return 1
+            dur_note = f";时长 {sd:.2f}s → {pd:.2f}s({timemap.describe(ops)})"
+        elif abs(pd - sd) > tol:
+            ops = timemap.normalize_ops([{"src_t0": 0.0, "src_t1": round(sd, 6), "out_len": round(pd, 6), "audio": "stretch", "kind": "retime_auto"}])
+            _log("WARN", f"{gid} 产物时长 {pd:.3f}s ≠ 源 {sd:.3f}s 且未给 --time-ops:按整段等比变速记一条 retime_auto,"
+                         f"声轨保音高拉伸、字幕按比例平移;如实际是局部改动请带 --time-ops 重登记")
+            dur_note = f";时长 {sd:.2f}s → {pd:.2f}s(retime_auto)"
     ver = pp.register_version(plan, proj, ep, gid, str(f.relative_to(proj)), [rid], base_v, by="register")
+    if ops:
+        ver["time_ops"] = ops
     out = (r.get("output") or {}).get("versions") or {}
     out[gid] = {"v": ver["v"], "file": ver["file"]}
     pp.set_status(r, "applied", output={"versions": out}, error="", applied_at=pp._now())
     pp.save_plan(proj, ep, plan)
-    _log("DONE", f"{gid} v{ver['v']} 登记 {ver['file']}(处方 {rid} → 已出片)")
+    _log("DONE", f"{gid} v{ver['v']} 登记 {ver['file']}(处方 {rid} → 已出片{dur_note})")
     return 0
+
+
+def do_slowmo(proj: Path, ep: str, rid: str, gid: str, interp: str | None, interp_whole: bool) -> int:
+    """慢动作处方的宿主出片:按处方作用域与倍率把该组当前版本的时间段放慢拼回,声轨同表重映射,产物登记为新版本。"""
+    plan = pp.load_plan(proj, ep)
+    r = pp.find_recipe(plan, rid)
+    if not r:
+        _log("FAIL", f"处方不存在:{rid}")
+        return 2
+    if r.get("kind") not in pp.RETIME_KINDS:
+        _log("FAIL", f"处方 {rid} 是「{pp.KIND_BY_ID.get(r.get('kind'), {}).get('label', r.get('kind'))}」,slowmo 只处理慢动作处方")
+        return 2
+    gid = gid or r["scope"].get("group_id")
+    if not gid or (r["scope"].get("group_id") and gid != r["scope"]["group_id"]):
+        _log("FAIL", f"须 --group 指明处方作用域内的组({r['scope'].get('group_id') or '?'})")
+        return 2
+    src = pp.current_file(proj, ep, gid, plan)
+    if not src:
+        _log("FAIL", f"{gid} 没有视频文件")
+        return 2
+    ip = None
+    if interp:
+        ip = Path(interp)
+        ip = ip if ip.is_absolute() else proj / interp
+        if not ip.is_file():
+            _log("FAIL", f"补帧片段不存在:{interp}")
+            return 2
+    sc, prm = r.get("scope") or {}, r.get("params") or {}
+    t0, t1 = (sc.get("t0"), sc.get("t1")) if sc.get("level") == "range" else (None, None)
+    out_rel = f"assets/post/{ep}/{gid}/agent_{rid}.mp4"
+    try:
+        res = fx.slow_motion(src, proj / out_rel, t0, t1, float(prm.get("rate") or 2.0), ip, interp_whole, str(prm.get("audio") or "stretch"))
+    except Exception as e:  # noqa: BLE001
+        _log("FAIL", f"慢动作出片失败:{str(e)[-400:]}")
+        return 1
+    _log("RUN", f"{gid} 第 {res['t0']}–{res['t1']} 秒 ×{res['rate']:g}({res['method']},声音 {res['audio']}):"
+                f"{res['duration']}s → {res['new_duration']}s ← {src.relative_to(proj)}")
+    return do_register(proj, ep, rid, out_rel, gid)
 
 
 def do_adopt(proj: Path, ep: str, rid: str, discard: bool = False) -> int:
@@ -599,15 +686,19 @@ def do_build_cut(proj: Path, ep: str) -> int:
         if not src:
             _log("SKIP", f"{gid} 无文件(timeline skipped_groups 或未出片)")
             continue
-        key = f"{pp.file_fingerprint(src)}_{g['in']:.3f}_{g['out']:.3f}_{w}x{h}_{fps:g}"
+        # 组入出点是原粗剪(母本)基准;当前版本若带时长编辑(插黑/定格/删段/慢动作,版本 time_ops),
+        # 入出点须经同一张表映射到版本自己的时间轴,否则变长的版本会被截回原长、变短的会被末帧补齐(2026-09-23)
+        vops = pp.effective_time_ops(plan, gid)
+        t_in = timemap.map_time(vops, g["in"]) if vops else g["in"]
+        t_out = (timemap.map_time(vops, g["out"]) if vops else g["out"]) if g["out"] > g["in"] else fx.probe(src)["duration"]
+        key = f"{pp.file_fingerprint(src)}_{t_in:.3f}_{t_out:.3f}_{w}x{h}_{fps:g}"
         seg = cache / f"{gid}.mp4"
         meta = cache / f"{gid}.json"
         cached = pp.read_json(meta) or {}
         if seg.is_file() and cached.get("key") == key:
             segs.append(seg)
             continue
-        t_out = g["out"] if g["out"] > g["in"] else fx.probe(src)["duration"]
-        n = fx.normalize_segment(src, seg, w, h, fps, g["in"], t_out)
+        n = fx.normalize_segment(src, seg, w, h, fps, t_in, t_out)
         pp.write_json(meta, {"key": key, "frames": n, "fps": fps, "src": str(src.relative_to(proj)), "v": pp.current_version(plan, gid)})
         _log("RUN", f"{gid} 归一 {n} 帧 ← {src.relative_to(proj)}")
         segs.append(seg)
@@ -691,12 +782,15 @@ def do_status(proj: Path, ep: str, as_json: bool) -> int:
 
 def main(argv=None):
     def configure(ap):
-        ap.add_argument("cmd", choices=("blocks", "propose", "apply", "register", "adopt", "discard", "rollback", "check", "sync-timeline",
+        ap.add_argument("cmd", choices=("blocks", "propose", "apply", "register", "slowmo", "adopt", "discard", "rollback", "check", "sync-timeline",
                                         "build-cut", "finalize", "cleanup", "status"))
         ap.add_argument("--recipe", action="append", default=[], help="处方 id,可重复")
         ap.add_argument("--group", default=None, help="限定分镜组 grpNNN")
         ap.add_argument("--file", default=None, help="register:产物路径(项目内)")
         ap.add_argument("--note", default="", help="register(无 --recipe):版本备注/分镜剪辑工单号")
+        ap.add_argument("--time-ops", default="", help="register:产物相对源版本的时长编辑表 JSON(组内秒;改时长的非慢动作做法用)")
+        ap.add_argument("--interp", default=None, help="slowmo:RIFE 类工作流补出的高帧率片段(默认为处方时间段)")
+        ap.add_argument("--interp-whole", action="store_true", help="slowmo:--interp 是整段源的补帧版本而非时间段")
         ap.add_argument("--to", type=int, default=0, help="rollback:目标版本号(0=母本)")
         ap.add_argument("--preview", action="store_true", help="apply:只出 4 秒 480p 低清预览")
         ap.add_argument("--json", action="store_true", help="status / blocks:JSON 输出")
@@ -743,7 +837,12 @@ def main(argv=None):
         if not args.file or not (args.recipe or args.group):
             _log("FAIL", "register 需要 --file,以及 --recipe(处方产物)或 --group(分镜剪辑工单产物)")
             return 2
-        return do_register(proj, ep, args.recipe[0] if args.recipe else None, args.file, args.group, args.note)
+        return do_register(proj, ep, args.recipe[0] if args.recipe else None, args.file, args.group, args.note, args.time_ops)
+    if args.cmd == "slowmo":
+        if not args.recipe:
+            _log("FAIL", "slowmo 需要 --recipe(慢动作处方)")
+            return 2
+        return do_slowmo(proj, ep, args.recipe[0], args.group, args.interp, args.interp_whole)
     if args.cmd in ("adopt", "discard"):
         if not args.recipe:
             _log("FAIL", f"{args.cmd} 需要 --recipe")

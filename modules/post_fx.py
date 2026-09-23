@@ -640,3 +640,98 @@ def insert_pad(src: Path, dst: Path, t: float, freeze_s: float = 0.0, hold_s: fl
     return {"t": round(t_q, 3), "freeze_s": round(fz_f / fps, 3), "hold_s": round(hd_f / fps, 3), "audio": audio,
             "duration": round(info["duration"], 3), "new_duration": round(new_dur, 3), "time_ops": ops,
             "notes": [f"时长 {info['duration']:.2f}s → {new_dur:.2f}s;出成片时外挂声轨/字幕按 timemap 自动平移"]}
+
+
+# ---------------------------------------------------------------- 慢动作(画面修补 slow_motion,2026-09-23:时间段按倍率拉长,时长变长)
+SLOWMO_RATES = (1.5, 2.0, 3.0, 4.0)
+
+
+def slow_motion(src: Path, dst: Path, t0: float | None, t1: float | None, rate: float, interp: Path | None = None,
+                interp_whole: bool = False, audio: str = "stretch") -> dict:
+    """把 src 的时间段 [t0, t1)(None = 整段)按 rate 倍拉长:段前 / 段后原样,段内用高帧率补帧素材 setpts 回放
+    (慢动作),一次编码出 dst;声轨按 modules/timemap 同一策略重映射(stretch 保音高拉伸 / sustain / fade / mute)。
+    interp = agent 用 RIFE 类工作流对该时间段(interp_whole=True 时为整段源)补出的高帧率片段;不给则用 ffmpeg
+    minterpolate 光流补帧兜底(画质次之)。返回 {t0, t1, rate, method, audio, duration, new_duration, time_ops(组内秒,基准 = src)}。"""
+    try:
+        import timemap
+    except ImportError:  # 服务端以 modules.post_* 包路径导入时
+        from modules import timemap
+    require_tools("ffmpeg", "ffprobe")
+    info = probe(src)
+    w, h, fps = info["width"], info["height"], info["fps"] or 24.0
+    if not w or not h or not info["duration"]:
+        raise FxError(f"基准版本无法解析:{src.name}")
+    rate = float(rate)
+    if not (1.0 < rate <= 8.0):
+        raise FxError(f"倍率须在 (1, 8] 之间:{rate}")
+    total_f = int(round(info["duration"] * fps))
+    f0 = 0 if t0 is None else max(0, min(total_f, int(round(float(t0) * fps))))
+    f1 = total_f if t1 is None else max(0, min(total_f, int(round(float(t1) * fps))))
+    if f1 - f0 < 2:
+        raise FxError("时间段至少 2 帧")
+    span_f = f1 - f0
+    out_f = int(round(span_f * rate))          # 慢放段输出帧数
+    audio = audio if audio in timemap.AUDIO_POLICIES else "stretch"
+    base = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,format=yuv420p,settb=AVTB"
+    inputs = ["-i", str(src)]
+    parts, labels = [], []
+    if f0 > 0:
+        parts.append(f"[0:v]trim=end_frame={f0},setpts=PTS-STARTPTS,{base},fps={fps:g},setpts=N/({fps:g}*TB)[va]")
+        labels.append("[va]")
+    if interp is not None:
+        inputs += ["-i", str(interp)]
+        ii = probe(interp)
+        if not ii.get("width") or not ii.get("duration"):
+            raise FxError(f"补帧片段无法解析:{Path(interp).name}")
+        method = "interp"
+        seg = "[1:v]"
+        if interp_whole:
+            # 整段源的补帧版本:先按源时间取出 [t0, t1)
+            seg += f"trim=start={f0 / fps:.6f}:end={f1 / fps:.6f},setpts=PTS-STARTPTS,"
+        else:
+            seg += "setpts=PTS-STARTPTS,"
+        # 高帧率片段按倍率放慢时间戳,再重采样到源帧率:补出的中间帧成为慢放里的真实帧
+        parts.append(f"{seg}setpts={rate:.6f}*PTS,{base},fps={fps:g},trim=end_frame={out_f},"
+                     f"tpad=stop_mode=clone:stop=-1,trim=end_frame={out_f},setpts=N/({fps:g}*TB)[vm]")
+    else:
+        method = "minterpolate"
+        mi_fps = fps * rate
+        parts.append(f"[0:v]trim=start_frame={f0}:end_frame={f1},setpts=PTS-STARTPTS,{base},"
+                     f"minterpolate=fps={mi_fps:g}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,"
+                     f"setpts={rate:.6f}*PTS,fps={fps:g},trim=end_frame={out_f},tpad=stop_mode=clone:stop=-1,trim=end_frame={out_f},"
+                     f"setpts=N/({fps:g}*TB)[vm]")
+    labels.append("[vm]")
+    if f1 < total_f:
+        parts.append(f"[0:v]trim=start_frame={f1},setpts=PTS-STARTPTS,{base},fps={fps:g},setpts=N/({fps:g}*TB)[vb]")
+        labels.append("[vb]")
+    if len(labels) == 1:
+        parts.append(f"{labels[0]}null[vo]")
+    else:
+        parts.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0,setpts=N/({fps:g}*TB)[vo]")
+    n_total = f0 + out_f + (total_f - f1)
+    ops = [{"src_t0": round(f0 / fps, 6), "src_t1": round(f1 / fps, 6), "out_len": round(out_f / fps, 6),
+            "rate": rate, "audio": audio, "kind": "slow_motion"}]
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp_v = dst.with_name(dst.stem + ".rendering.video" + dst.suffix)
+    tmp = dst.with_name(dst.stem + ".rendering" + dst.suffix)
+    a_tmp = dst.with_name(dst.stem + ".rendering.wav")
+    try:
+        run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(parts), "-map", "[vo]", "-an",
+             "-frames:v", str(n_total)] + ENC_VIDEO + [str(tmp_v)], timeout=7200)
+        if info["has_audio"]:
+            timemap.remap_audio(src, a_tmp, ops, src_dur=info["duration"])
+            run(["ffmpeg", "-y", "-v", "error", "-i", str(tmp_v), "-i", str(a_tmp), "-map", "0:v:0", "-map", "1:a:0",
+                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)], timeout=3600)
+        else:
+            tmp_v.rename(tmp)
+        if dst.exists():
+            dst.unlink()
+        tmp.rename(dst)
+    finally:
+        for x in (tmp_v, tmp, a_tmp):
+            x.unlink(missing_ok=True)
+    new_dur = probe(dst)["duration"]
+    return {"t0": round(f0 / fps, 3), "t1": round(f1 / fps, 3), "rate": rate, "method": method, "audio": audio,
+            "duration": round(info["duration"], 3), "new_duration": round(new_dur, 3), "time_ops": ops,
+            "notes": [f"时长 {info['duration']:.2f}s → {new_dur:.2f}s(第 {f0 / fps:.2f}–{f1 / fps:.2f} 秒 ×{rate:g},"
+                      f"{'RIFE 补帧片段' if method == 'interp' else 'ffmpeg minterpolate 光流补帧兜底'});出成片时外挂声轨/字幕按 timemap 自动平移"]}

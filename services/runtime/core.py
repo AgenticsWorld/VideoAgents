@@ -9744,15 +9744,30 @@ def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[d
             f"参数:{params or '无'};参考:{refs or '无'}。", f"用户说明:{r.get('note', '')}"]
     if r.get("exec") == "agent":
         targets = [g for g in groups if pp.scope_matches_group(r["scope"], g)]
-        lines = head + ["逐组处理(源 = 该组当前版本文件,产物帧率/时长/画幅与源一致,严禁改时长;母本 assets/clips 永不覆盖):"]
+        retime = r.get("kind") in pp.RETIME_KINDS
+        lines = head + [("逐组处理(源 = 该组当前版本文件,产物帧率/画幅与源一致;本做法**改时长**:产物 = 源 + 处方变长量,register 核对并登记 timemap;母本 assets/clips 永不覆盖):"
+                         if retime else
+                         "逐组处理(源 = 该组当前版本文件,产物帧率/画幅与源一致,时长默认与源一致——改了时长须在 register 带 --time-ops 说明;母本 assets/clips 永不覆盖):")]
         for g in targets[:80]:
             f = pp.current_file(base, ep, g["group_id"], plan)
             src = str(f.relative_to(base)) if f else f"assets/clips/{ep}/{g['group_id']}.mp4"
             out = f"assets/post/{ep}/{g['group_id']}/agent_{r['id']}.mp4"
-            lines.append(f"- {g['group_id']}:源 {src}(v{pp.current_version(plan, g['group_id'])}) → 产物 {out};完成后登记:"
-                         f"python3 code/post_apply.py register --project {base.name} --ep {ep} --recipe {r['id']} --file {out} --group {g['group_id']}")
-        lines.append("超分走 python3 modules/genmedia.py upscale(见 08-video-gen/upscale 技能);局部重绘/重打光/特效走 V2V(genmedia.py video --ref-video)或已配置的 ComfyUI/RunningHub 工作流。"
-                     "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
+            if retime:
+                sc = r.get("scope") or {}
+                seg = f"第 {sc.get('t0')}–{sc.get('t1')} 秒" if sc.get("level") == "range" else "整组"
+                lines.append(f"- {g['group_id']}:源 {src}(v{pp.current_version(plan, g['group_id'])}),{seg} ×{(r.get('params') or {}).get('rate', 2)};"
+                             f"① 用 RIFE 类插帧工作流(ComfyUI / RunningHub)只对该时间段补出高帧率片段(≥ 源帧率 × 倍率)存 assets/post/{ep}/{g['group_id']}/refs/;"
+                             f"② 交宿主变速拼接 + 声轨重映射 + 登记:python3 code/post_apply.py slowmo --project {base.name} --ep {ep} --recipe {r['id']} --group {g['group_id']} --interp <片段>"
+                             f"(补的是整段源加 --interp-whole;没有可用插帧工作流时不带 --interp,宿主用 ffmpeg minterpolate 光流补帧兜底并在回执注明画质次之)")
+            else:
+                lines.append(f"- {g['group_id']}:源 {src}(v{pp.current_version(plan, g['group_id'])}) → 产物 {out};完成后登记:"
+                             f"python3 code/post_apply.py register --project {base.name} --ep {ep} --recipe {r['id']} --file {out} --group {g['group_id']}")
+        if retime:
+            lines.append("慢动作的变速、拼接、声轨拉伸与 timemap 登记全由宿主 slowmo 完成,不要自写 setpts/minterpolate 出整组产物再 register。"
+                         "无法补帧 = 回执说明原因,不要改台账其它字段、不要改母本。")
+        else:
+            lines.append("超分走 python3 modules/genmedia.py upscale(见 08-video-gen/upscale 技能);局部重绘/重打光/特效走 V2V(genmedia.py video --ref-video)或已配置的 ComfyUI/RunningHub 工作流。"
+                         "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
         return pp.AGENT_ID, "\n".join(lines)
     agent = POST_RECORD_AGENTS.get(r["kind"], pp.AGENT_ID)
     lines = head + ["这是后期处理页记入台账(edit/%s/post_plan.json)的「记录类」处方,请按本工位规约把它落地到对应产物" % ep]

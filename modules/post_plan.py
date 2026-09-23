@@ -81,6 +81,13 @@ KINDS: list[dict] = [
     {"id": "interpolate", "section": "fill", "label": "插帧", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "fps", "label": "目标帧率", "type": "select", "options": ["48", "60"], "default": "48"}],
      "hint": "RIFE 类工作流(可绑 RunningHub);成片帧率须全集一致,建议整集作用域"},
+    # 慢动作(2026-09-23):唯一会改组时长的画面处方——时间段(range 作用域;group = 整组)按倍率拉长,agent 用 RIFE 类
+    # 工作流补帧后交宿主 `post_apply.py slowmo` 变速拼接;变长量写进版本 time_ops,出成片时声轨/字幕按 timemap 平移
+    {"id": "slow_motion", "section": "fill", "label": "慢动作", "exec": "agent", "scopes": ["group", "range"], "retime": True,
+     "params": [{"key": "rate", "label": "倍率", "type": "select", "options": ["1.5", "2", "3", "4"], "default": "2"},
+                {"key": "audio", "label": "声音", "type": "select", "options": ["stretch", "sustain", "fade", "mute"], "default": "stretch"}],
+     "hint": "把时间段按倍率放慢(1s ×2 = 2s):RIFE 类工作流补帧后由宿主变速拼接,成片按拉长量变长,外挂声轨与字幕按 timemap 自动平移;"
+             "声音 stretch = 保音高拉伸(段内有台词时改 sustain / fade / mute)"},
     # ---- 调色与光感 ----
     {"id": "basic", "section": "grade", "label": "基础校正", "exec": "ffmpeg", "scopes": ["group", "range", "block", "scene", "episode"],
      "params": [{"key": "brightness", "label": "亮度", "type": "range", "min": -0.3, "max": 0.3, "step": 0.01, "default": 0},
@@ -182,6 +189,7 @@ KINDS: list[dict] = [
      "hint": "整集响度目标,派混音工位重跑"},
 ]
 KIND_BY_ID = {k["id"]: k for k in KINDS}
+RETIME_KINDS = {k["id"] for k in KINDS if k.get("retime")}      # 会改组时长的做法(慢动作)
 SECTION_BY_ID = {s["id"]: s for s in SECTIONS}
 # block = 叙事块(shot_list.generation_groups[].narrative_block.id,闪回/梦境/蒙太奇/想象段;2026-09-17):
 # 同一场景常被现实段与闪回段共用,按 scene 开处方会误伤现实段,故叙事块单列一级
@@ -540,6 +548,25 @@ def episode_time_ops(plan: dict, groups: list[dict]) -> list[dict]:
             row.setdefault("kind", "version_edit")
             out.append(row)
     return timemap.normalize_ops(out)
+
+
+def recipe_time_ops(recipe: dict, src_duration: float, fps: float = 24.0) -> list[dict]:
+    """改时长类处方(RETIME_KINDS)按参数与作用域推导的时长编辑表(组内秒,基准 = 源版本);其他做法返回 []。
+    慢动作:区间 [t0, t1)(group 作用域 = 整组)→ out_len = 区间长 × rate,按源帧率量化,与 post_fx.slow_motion 同口径。"""
+    if recipe.get("kind") not in RETIME_KINDS:
+        return []
+    sc = recipe.get("scope") or {}
+    prm = recipe.get("params") or {}
+    fps = float(fps or 24.0)
+    total_f = int(round(float(src_duration) * fps))
+    f0 = max(0, min(total_f, int(round(float(sc.get("t0") or 0.0) * fps)))) if sc.get("level") == "range" else 0
+    f1 = max(0, min(total_f, int(round(float(sc.get("t1")) * fps)))) if sc.get("level") == "range" and sc.get("t1") is not None else total_f
+    if f1 - f0 < 2:
+        return []
+    rate = float(prm.get("rate") or 2.0)
+    out_f = int(round((f1 - f0) * rate))
+    return [{"src_t0": round(f0 / fps, 6), "src_t1": round(f1 / fps, 6), "out_len": round(out_f / fps, 6),
+             "rate": rate, "audio": str(prm.get("audio") or "stretch"), "kind": recipe.get("kind")}]
 
 
 def adopt_version(plan: dict, gid: str, v: int) -> dict:

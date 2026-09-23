@@ -9,8 +9,10 @@
 一条 op = 源基准上的一段区间 [src_t0, src_t1) 被替换成 out_len 秒的输出:
   插入(黑场/定格) src_t0 == src_t1, out_len > 0 ,可带 freeze_s / hold_s / audio(sustain|fade|mute)
   删除(删段)     src_t0 <  src_t1, out_len == 0
+  拉长/压缩(慢动作 slow_motion,2026-09-23)  src_t0 < src_t1, out_len > 0 且 ≠ 区间长,可带 rate / audio(stretch|sustain|fade|mute)
 映射规则(map_time):源时刻 t 的输出时刻 = t + Σ(out_len − 区间长) 对所有 src_t1 <= t 的 op;
-落在被删区间内的 t 折到该区间输出起点;恰在插入点上的 t(下一组首帧)排在插入块**之后**。
+落在被删区间内的 t 折到该区间输出起点;落在拉长区间内的 t 按比例映射(字幕跟着慢下来);
+恰在插入点上的 t(下一组首帧)排在插入块**之后**。
 
 层的复合(compose):后期版本层(组内删段/插黑,基准 = 原粗剪)之上再叠组间垫片层(基准 = 后期拼出的
 cut_post)。compose 把第二层的时刻经第一层逆映射折回原基准,得到一张总表,声轨/字幕只重映射一次。
@@ -18,7 +20,9 @@ cut_post)。compose 把第二层的时刻经第一层逆映射折回原基准,�
 音频重映射(remap_audio):按 ops 切开源声轨,插入块按策略生成——
   sustain  取插入点前 ≤1s 的源声轨循环铺满(两端 40ms 淡化);若 op 带 bed_file(场景床音)则循环床音;
   fade     插入块为静音,前段末 150ms 淡出、后段首 150ms 淡入;
-  mute     插入块为数字静音(不淡化)。
+  mute     插入块为数字静音(不淡化);
+  stretch  仅拉长/压缩区间:区间内源声轨按 atempo 保音高变速铺满 out_len(慢动作默认;环境声自然拖长,
+           台词会被拉慢——区间内有对白时创建方应改选 sustain / fade / mute)。
 「延续」策略是否合适(插入点前有无对白/旁白)由创建 op 的一方判定后写入 audio 字段;本模块只执行。
 """
 from __future__ import annotations
@@ -29,7 +33,8 @@ import re
 import subprocess
 from pathlib import Path
 
-AUDIO_POLICIES = ("sustain", "fade", "mute")
+AUDIO_POLICIES = ("sustain", "fade", "mute", "stretch")
+STRETCH_ONLY = ("stretch",)   # 只对 src_t1 > src_t0 且 out_len > 0 的区间有意义
 SUSTAIN_WINDOW_S = 1.0        # 延续策略取插入点前最多 1 s 源声轨循环
 SUSTAIN_MIN_S = 0.25
 FADE_S = 0.15                 # fade 策略两侧淡化时长
@@ -61,6 +66,8 @@ def normalize_ops(ops) -> list[dict]:
         row.update({"src_t0": round(t0, 6), "src_t1": round(t1, 6), "out_len": round(ln, 6)})
         au = str(row.get("audio") or "").lower()
         if ln > 0:
+            if au in STRETCH_ONLY and t1 - t0 <= EPS:
+                au = "sustain"                # 纯插入块没有源可拉伸
             row["audio"] = au if au in AUDIO_POLICIES else "sustain"
         out.append(row)
     out.sort(key=lambda r: (r["src_t0"], r["src_t1"]))
@@ -230,7 +237,10 @@ def build_audio_plan(ops, src_dur: float) -> list[dict]:
         t0, t1 = o["src_t0"], o["src_t1"]
         if t0 > pos + EPS:
             segs.append({"kind": "src", "t0": pos, "t1": min(t0, src_dur)})
-        if o["out_len"] > EPS:
+        if o["out_len"] > EPS and t1 - t0 > EPS and o.get("audio") == "stretch":
+            # 拉长/压缩区间:区间内源声轨保音高变速铺满 out_len
+            segs.append({"kind": "stretch", "op": o, "t0": t0, "t1": min(t1, src_dur), "len": o["out_len"]})
+        elif o["out_len"] > EPS:
             segs.append({"kind": "pad", "op": o, "len": o["out_len"]})
         pos = max(pos, t1)
     if src_dur > pos + EPS:
@@ -244,6 +254,20 @@ def build_audio_plan(ops, src_dur: float) -> list[dict]:
         if i + 1 < len(segs) and segs[i + 1]["kind"] == "src":
             segs[i + 1]["fade_in"] = min(FADE_S, segs[i + 1]["t1"] - segs[i + 1]["t0"])
     return [s for s in segs if s["kind"] == "pad" or s["t1"] - s["t0"] > EPS]
+
+
+def atempo_chain(tempo: float) -> str:
+    """ffmpeg atempo 单级只收 [0.5, 100],慢动作 4× 需 0.25 → 链式 atempo=0.5,atempo=0.5。"""
+    tempo = max(1e-3, float(tempo))
+    parts = []
+    while tempo < 0.5 - 1e-9:
+        parts.append("atempo=0.5")
+        tempo /= 0.5
+    while tempo > 100.0 + 1e-9:
+        parts.append("atempo=100")
+        tempo /= 100.0
+    parts.append(f"atempo={tempo:.6f}")
+    return ",".join(parts)
 
 
 def remap_audio(src: Path, dst: Path, ops, sample_rate: int = 48000, src_dur: float | None = None) -> dict:
@@ -270,6 +294,10 @@ def remap_audio(src: Path, dst: Path, ops, sample_rate: int = 48000, src_dur: fl
             if s.get("fade_in"):
                 f += f",afade=t=in:st=0:d={_fmt(s['fade_in'])}"
             parts.append(f + lab)
+        elif s["kind"] == "stretch":
+            ln, span = float(s["len"]), max(EPS, float(s["t1"]) - float(s["t0"]))
+            parts.append(f"[0:a]aresample={sample_rate}:async=1:first_pts=0,atrim=start={_fmt(s['t0'])}:end={_fmt(s['t1'])},asetpts=PTS-STARTPTS,{fmt},"
+                         f"{atempo_chain(span / ln)},apad=whole_dur={_fmt(ln)},atrim=end={_fmt(ln)},asetpts=PTS-STARTPTS{lab}")
         else:
             o, ln = s["op"], float(s["len"])
             policy = o.get("audio") or "sustain"
@@ -355,8 +383,14 @@ def describe(ops) -> str:
     ops = normalize_ops(ops)
     if not ops:
         return "无时长编辑"
-    ins = [o for o in ops if o["out_len"] > EPS]
+    ins = [o for o in ops if o["out_len"] > EPS and o["src_t1"] - o["src_t0"] <= EPS]
     dele = [o for o in ops if o["out_len"] <= EPS]
-    return (f"{len(ins)} 处插入 +{sum(o['out_len'] for o in ins):.2f}s"
-            + (f",{len(dele)} 处删除 −{sum(o['src_t1'] - o['src_t0'] for o in dele):.2f}s" if dele else "")
-            + f",合计 {total_delta(ops):+.2f}s")
+    ret = [o for o in ops if o["out_len"] > EPS and o["src_t1"] - o["src_t0"] > EPS]
+    bits = []
+    if ins:
+        bits.append(f"{len(ins)} 处插入 +{sum(o['out_len'] for o in ins):.2f}s")
+    if ret:
+        bits.append(f"{len(ret)} 处变速 {sum(delta_of(o) for o in ret):+.2f}s")
+    if dele:
+        bits.append(f"{len(dele)} 处删除 −{sum(o['src_t1'] - o['src_t0'] for o in dele):.2f}s")
+    return ",".join(bits) + f",合计 {total_delta(ops):+.2f}s"
