@@ -10644,10 +10644,15 @@ def _wf_family_of(n: dict, by_id: dict) -> str:
     return nid
 
 
-def _wf_run_stats(run_id: str | None) -> float | None:
+def _wf_run_stats(run_id) -> float | None:
     """从 data/.videoagents/runs/<run_id>.jsonl 末尾的 result 事件取 duration_s
-    (claude/kimi 引擎的 stream-json 才有该事件)。会话日志会按 TTL 清理,查不到属正常。"""
-    if not run_id or not re.fullmatch(r"[\w.\-]+", run_id):
+    (claude/kimi 引擎的 stream-json 才有该事件)。会话日志会按 TTL 清理,查不到属正常。
+    run_id 可能被总制片写成数组(分片并行派单,如 fengshen3 p6-shot-plates-ep06
+    五路 run):各分片并行,墙钟时长取其中最长者;非字符串元素一律忽略。"""
+    if isinstance(run_id, (list, tuple)):
+        vals = [v for v in (_wf_run_stats(x) for x in run_id) if v is not None]
+        return max(vals) if vals else None
+    if not isinstance(run_id, str) or not run_id or not re.fullmatch(r"[\w.\-]+", run_id):
         return None
     p = RUNS_DIR / f"{run_id}.jsonl"
     if not p.is_file():
