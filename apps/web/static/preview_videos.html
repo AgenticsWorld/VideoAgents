@@ -51,6 +51,17 @@ h3.sec .n{color:var(--dim);font-size:12px;font-weight:400}
 .vcard video{width:100%;border-radius:6px;background:#000;display:block}
 .vcard .cap{font-size:12px;color:var(--dim);margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .vcard .cap .fn{color:var(--text);font-weight:600}
+/* 组 clip 超分方法标签 */
+.grows{display:flex;flex-direction:column;gap:6px}
+.grow{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px}
+.grow a{color:var(--text);font-weight:600;text-decoration:none}
+.grow a:hover{color:var(--accent)}
+.grow .ut{font-size:11.5px;border:1px solid var(--border);border-radius:10px;padding:1px 8px;color:var(--dim)}
+.grow .ut.ok{color:var(--green);border-color:var(--green)}
+.grow .ut.warn{color:var(--yellow);border-color:var(--yellow)}
+.grow .ur{color:var(--dim);font-size:12px}
+.grow .ud{color:var(--dim);font-size:12px}
+.grow .sz{margin-left:auto;color:var(--dim);font-size:12px}
 /* 封面 */
 .thumbs{display:flex;gap:14px;flex-wrap:wrap}
 .thumbs .t{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px}
@@ -180,6 +191,27 @@ function render(d){
     `<div class="vcard"><video controls preload="metadata" src="${esc(f.url)}"></video>
      <div class="cap"><span class="fn">${esc(f.name)}</span><span>${f.size_mb} MB</span></div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有 final 成片(edit/{ep}/*final*.mp4)',{ep:d.ep}))+'</div>';
+
+  // 组 clip 超分方法标签(2026-09-23):meta.json upscale 段(genmedia.py upscale 写入);一眼分辨插值 / 真超分
+  const groups=d.groups||[];
+  h+=`<h3 class="sec">🧩 组 clip 与超分方法<span class="n">${esc(I18N.f('{n} 组 · assets/clips/{ep}/',{n:groups.length,ep:d.ep}))}</span></h3>`;
+  h+=groups.length?`<div class="grows">${groups.map(g=>{
+    const u=g.upscale;
+    let tag,cls,detail='';
+    const m=u?String(u.method||u.provider||''):'';
+    const pr=(u&&u.params)||{};
+    if(!u){tag=t('未超分');cls='';detail=g.gen_resolution?I18N.f('生成档 {r}',{r:g.gen_resolution}):'';}
+    else if(m==='ffmpeg'||/ffmpeg|lanczos|bicubic|spline|bilinear/i.test(m)||/scale=/.test(String(pr.vf||''))){
+      // 宿主 CLI 的 ffmpeg 渠道,或存量 agent 自写 ffmpeg 放大(fengshen3 ep06 口径)
+      tag=t('插值放大');cls='';detail='ffmpeg '+(pr.filter||(String(pr.vf||'').match(/flags=(\w+)/)||[])[1]||'')+(pr.crf!==undefined?' crf'+pr.crf:'');}
+    else if(['volcengine','minimax','comfyui'].includes(m)){tag=t('AI 超分');cls='ok';detail={volcengine:t('火山样片模式 1080p 原片'),minimax:'MiniMax Regenerate-2K',comfyui:'SeedVR2 · '+(u.workflow||'')}[m];}
+    else{tag=t('未知方法');cls='warn';detail=m.slice(0,80);}
+    const res=u?(u.target||u.resolution||''):'';
+    return `<div class="grow"><a href="${esc(g.url)}" target="_blank">🎬 ${esc(g.group)}</a><span class="ut ${cls}">${esc(tag)}</span>`
+      +(res?`<span class="ur">${esc(res)}</span>`:'')+(detail?`<span class="ud">${esc(detail)}</span>`:'')
+      +(g.draft_task?`<span class="ud">📝 ${esc(t('已记 Draft 任务'))}</span>`:'')+`<span class="sz">${g.size_mb} MB</span></div>`;
+  }).join('')}</div>`
+    :'<div class="none">'+esc(I18N.f('该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)',{ep:d.ep}))+'</div>';
 
   h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
   h+=thumbs.length?`<div class="thumbs">${thumbs.map(t=>

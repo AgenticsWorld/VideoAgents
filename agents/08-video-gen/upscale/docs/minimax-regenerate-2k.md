@@ -1,17 +1,9 @@
----
-name: minimax-regenerate-2k
-description: Use when the upscale agent needs to super-resolve a MiniMax-H3 768P clip to 2K via the MiniMax video regeneration API (POST /v2/video_regeneration), only if a MiniMax API key is configured and the source clip meets the H3 768P output spec.
-metadata:
-  skill_version: 0.1.0
-  owner: upscale
-  tags:
-    - minimax
-    - regenerate-2k
-    - video-upscale
-  api_doc: https://platform.minimax.io/docs/api-reference/video-generation-v2-regeneration
----
+# MiniMax Regenerate-2K 视频超分(参考文档)
 
-# MiniMax Regenerate-2K 视频超分
+> **2026-09-23 起本文只是参考文档,不再是技能**:超分渠道由「🎨 生成模型 → 超分」标签页决定
+> (genconfig.upscale.provider),选了 `minimax` 就由 `genmedia.py upscale` 内部走 Regenerate-2K,
+> 不再经过项目技能总闸/系统提示词注入;凭证填在超分段自己的 MiniMax 标签页(接口区域 + Key),不再引用视频段。Agent 只准调用 CLI,不得按本文自写请求。
+> 下文的「适用条件/调用」保留作 CLI 行为说明。
 
 ## 目的
 

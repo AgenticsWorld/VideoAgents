@@ -836,6 +836,27 @@ DEFAULT_GENCONFIG = {
                     "rh_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
     },
+    # 超分(2026-09-23):终版组 clip 由草稿档放大到成片档的唯一入口 genmedia.py upscale,渠道只看这里,
+    # 不再跟随 video.provider;生成模型页「🔍 超分」标签(数字人下方)。
+    #   ffmpeg     = 内置非 AI 插值放大(默认;filter lanczos/bicubic,crf,preset)
+    #   volcengine = Seedance 2.5 样片(Draft)模式:激活后视频渠道为方舟且模型为 Seedance 2.5、草稿档 480p 时
+    #                生成一律 draft=true 并把 Draft 任务 ID 记进 clip meta,超分=用该 ID 生成 1080p 原片
+    #                (docs.volcengine.com/docs/ark/seedance-2-5 样片模式;无独立凭证/模型设置)
+    #   minimax    = Regenerate-2K(自有凭证:接口区域 + 两区域 Key,model 固定 MiniMax-H3;仅收 H3 768P 直出规格源片)
+    #   comfyui    = SeedVR2 类工作流,自有连接/工作流(comfy/scale-* 模板;RunningHub 用自有 rh_workflow_id)
+    # 无降级开关(用户拍板 2026-09-23):所选渠道预检失败/出错即工单报错交用户,不静默换手段;选 ffmpeg 就是插值放大
+    "upscale": {
+        "provider": "ffmpeg",   # ffmpeg | volcengine | minimax | comfyui
+        "ffmpeg": {"filter": "lanczos", "crf": 18, "preset": "slow"},
+        "volcengine": {},
+        "minimax": {"api_key_io": "", "api_key_cn": "",
+                    "api_base": "https://api.minimax.io", "model": "MiniMax-H3"},
+        "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
+                    "workflow": "comfy/scale-seedvr2-api.json",
+                    "rh_api_key_cn": "", "rh_api_key_ai": "",
+                    "rh_workflow_id": "", "rh_workflows": [],
+                    "rh_instance_type": "standard"},
+    },
     # 世界模型(2026-09-12):World Labs Marble,按场景全景生成可漫游 3D world(高斯泼溅);
     # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。API 文档 https://docs.worldlabs.ai/api,
     # Key 在 https://platform.worldlabs.ai/api-keys 创建;model 与 docs.worldlabs.ai/api/models 一致
@@ -1045,8 +1066,13 @@ OUTPUT_PLATFORMS = {
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
 # 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
-# genmedia 越档自动压回;方舟 API 取小写)
-VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "4k")
+# genmedia 越档自动压回;方舟 API 取小写)。2k(2560x1440@16:9,2026-09-23)主要作成片档:
+# MiniMax Regenerate-2K 原生出 2K,SeedVR2/ffmpeg 按短边 1440 放大
+VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "2k", "4k")
+# 超分设置枚举(genconfig.upscale,2026-09-23;与 modules/genmedia.py 同步)
+UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui")
+UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
+UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
@@ -1087,8 +1113,12 @@ def _split_legacy_key(cfg: dict, legacy_field: str, site_fields: tuple[str, str]
 def _migrate_genconfig(config: dict) -> None:
     """Keep configurations saved by older versions usable(comfy 模板路径迁出 data/;
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
-    for kind in ("image", "video", "music", "tts", "digital_human"):
+    for kind in ("image", "video", "music", "tts", "digital_human", "upscale"):
         section = config.get(kind, {})
+        if not isinstance(section, dict):
+            continue
+        if kind == "upscale":
+            section.pop("fallback", None)   # 降级开关只存在过一天(2026-09-23),存量键丢弃
         # Ideogram 图像渠道已整体移除(2026-09-11):存量配置里的该段丢弃,曾选中它的回落到默认渠道
         if kind == "image" and isinstance(section, dict):
             section.pop("ideogram", None)
@@ -1316,17 +1346,32 @@ def minimax_region_key(mm: dict) -> str:
     return str(mm.get(field) or mm.get("api_key") or "").strip()
 
 
-def is_minimax_upscale_available(cfg: dict | None = None) -> bool:
-    """MiniMax Regenerate-2K 超分可用性:「生成模型」页视频 MiniMax 标签页已填当前
-    接口区域的 API Key(或设环境变量 MINIMAX_API_KEY)即可,与生效视频渠道无关
-    (genmedia 超分凭证同口径)。"""
-    v = (cfg or load_genconfig()).get("video") or {}
-    key = minimax_region_key(v.get("minimax") or {})
-    return bool(key or os.environ.get("MINIMAX_API_KEY", "").strip())
-
-
-# MiniMax Regenerate-2K 超分 skill:仅当 MiniMax Key 已配置时注入加载指令给 upscale agent
-MINIMAX_UPSCALE_SKILL = "agents/08-video-gen/upscale/skills/minimax-regenerate-2k/SKILL.md"
+def upscale_settings(cfg: dict | None = None) -> dict:
+    """「生成模型」页超分段(genconfig.upscale,2026-09-23):provider 与渠道摘要。
+    MiniMax Regenerate-2K 曾靠技能注入(Key 存在 + 项目技能总闸)触发,已退役:渠道选了
+    minimax 就由 genmedia.py upscale 内部走,凭证取超分段自有的 upscale.minimax。无降级开关:
+    所选渠道失败即报错。"""
+    cfg = cfg or load_genconfig()
+    up = cfg.get("upscale") or {}
+    provider = str(up.get("provider") or DEFAULT_GENCONFIG["upscale"]["provider"])
+    detail = ""
+    if provider == "ffmpeg":
+        ff = up.get("ffmpeg") or {}
+        detail = (f"filter={ff.get('filter') or 'lanczos'} crf={ff.get('crf', 18)} "
+                  f"preset={ff.get('preset') or 'slow'}(非 AI 插值放大)")
+    elif provider == "volcengine":
+        detail = ("Seedance 2.5 样片(Draft)模式:草稿由 draft=true 生成并记 Draft 任务 ID,"
+                  "超分=按该 ID 生成 1080p 原片(仅方舟 Seedance 2.5、草稿档 480p、成片档 1080p)")
+    elif provider == "minimax":
+        key = minimax_region_key(up.get("minimax") or {}) or os.environ.get("MINIMAX_API_KEY", "").strip()
+        detail = ("Regenerate-2K(模型固定 MiniMax-H3,输出 2K 后由 CLI 缩到成片档;源片须为 H3 768P 直出规格)"
+                  + ("" if key else ";⚠ 超分段 MiniMax 标签页尚未填当前接口区域的 Key,提交必失败"))
+    elif provider == "comfyui":
+        pc = up.get("comfyui") or {}
+        mode = str(pc.get("mode") or "local")
+        detail = (f"运行方式 {mode} · " + (f"云端工作流 {pc.get('rh_workflow_id') or '(未选)'}"
+                  if mode in RH_BASES else f"工作流 {pc.get('workflow') or 'comfy/scale-seedvr2-api.json'}"))
+    return {"provider": provider, "detail": detail}
 
 
 # RunningHub 云端工作流参数化调用 skill:仅当视频渠道为 ComfyUI RunningHub 运行方式时
@@ -1361,8 +1406,6 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "soul", "condition": "组内含交手/武打动作镜(引擎无关,按项目技能契约触发)"},
     "08-video-gen/prompt/high-density-fight": {
         "kind": "soul", "condition": "组内交手镜时长 ≥ 组总时长 60% 的整组连续打斗(引擎无关,按项目技能契约触发)"},
-    "08-video-gen/upscale/minimax-regenerate-2k": {
-        "kind": "conditional", "condition": "MiniMax API Key 已配置"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
         "kind": "conditional", "condition": "视频渠道为 ComfyUI RunningHub 运行方式"},
     "08-video-gen/video-generation/agentics-media-generation": {
@@ -2959,6 +3002,7 @@ def build_role_prompt(agent_id: str, project: str,
     out = ps.get("output") or {}
     draft_res = out.get("draft_resolution") or "480p"
     final_res = out.get("final_resolution") or "480p"
+    upscale_provider = upscale_settings()["provider"]
     burn_in = (
         "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt(正片 0 秒基准)后,由 edit 在封装终版时"
         "先用宿主 CLI `code/finalize_episode.py shift`(或 assemble 自动跑)按片头实测时长整体平移生成成片基准"
@@ -3164,6 +3208,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 生成对白语音:{dialogue_tts_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
+- 超分渠道:「🎨 生成模型 → 超分」当前 = **{upscale_provider}**;超分只准 `modules/genmedia.py upscale`,渠道由该设置决定、失败即报错不降级,工单不得指定别的手段(WORKFLOW.md §7B)
 
 ## 用户审核设定(Web 客户端项目设置,当前项目实时生效,优先级高于 SOUL.md 与 WORKFLOW.md 中的固定阈值/闸门线)
 {eval_line}
@@ -3350,19 +3395,16 @@ def build_role_prompt(agent_id: str, project: str,
 - 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检
 - 生效技能为 h3-pe(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入
 - **镜次时长(shot_timing_bound,2026-09-23)**:写完 prompt 后另跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write`——宿主按 shot_list 每镜 duration_s 与本组生效模型写法机器写入(Seedance 2.5 / Wan 3.0 连续整数秒时间段标在段首镜段头后;MiniMax H3 Shot k≥2 切点 `At MM:SS.mmm,`;Seedance 2.0 不写、剔除),再不带 --write 机检:标签齐全、连续不重叠、末段止于 round(total_duration_s)、Σ duration_s = total_duration_s;不过=不交付"""
-    if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
-            and project_skill_enabled("08-video-gen/upscale/minimax-regenerate-2k", project):
+    if agent_id == "08-video-gen/upscale":
+        ups = upscale_settings()
         p += f"""
 
-## MiniMax Regenerate-2K 超分 Skill(仅当 MiniMax API Key 已配置时注入,当前已生效)
-MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅读技能文件并按其判定条件与流程执行**:
-- Skill 文件:{MINIMAX_UPSCALE_SKILL}(直接 Read 全文)
-- 适用条件(两条都满足才走本 skill,否则按 SOUL.md 常规超分手段执行并在回执说明):
-  1. MiniMax 已配置(本段出现即满足);
-  2. 源 clip 满足 API 输入规格——MiniMax-H3 768P 直出成片口径(24fps、含音轨、宽高均被 32 整除、面积 ≤768×1344、约 4-15s);`upscale` 命令提交前会用 ffprobe 自动预检,不合规会明确报错,可先 `--dry-run` 只跑预检
-- 调用:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <路径.mp4> --prompt "<该组生成时的原始 video_prompt,取 prompts.json>"`(固定输出 2K;也可 `--source-task-id <任务id>` 用 7 天内 succeeded 的 MiniMax 生成任务直接重生成,免传源视频)
-- 输出 2K 与「输出设置」成片档像素尺寸不一致时,按 skill 指引用 ffmpeg 缩放到 aspect_ratio.json 目标尺寸;fps/时长/画幅/音画同步严禁改变
-- 冲突时以 SOUL.md 为准;不适用或失败时回退常规超分手段,回执如实记录所用模型与参数(按 output_seconds 计费,严禁对同一 clip 反复盲重试)"""
+## 超分设置(「🎨 生成模型」页超分段,当前实时生效;2026-09-23 起唯一路由源,不看视频渠道)
+- 超分渠道:**{ups['provider']}** —— {ups['detail']}
+- 无降级:所选渠道预检失败/出错时 CLI 直接报错(退出码非 0),**不得自行换手段、不得改用 ffmpeg 插值**,把报错原文写进回执、状态 failed 交用户裁决(用户在「🎨 生成模型 → 超分」改渠道后重派)
+- **红线:超分只准 `python3 modules/genmedia.py upscale --input <源clip> --output <终版clip>`(可先 `--dry-run` 只跑预检);禁止自写 ffmpeg/scale 滤镜、禁止自写脚本直连 ComfyUI/RunningHub/MiniMax/方舟绕过路由、禁止改写项目 code/ 里的旧超分脚本再用**(与花字「只准宿主 CLI」同款;目标尺寸由 CLI 按「输出设置」成片档 × aspect_ratio.json 画幅自动换算,不需也不得手传 --resolution 越档)
+- 伪影机检只准宿主 CLI `python3 code/check_upscale_artifacts.py --project {project} --ep epNN --group grpNNN`(按 meta.upscale.provider 自动选判据:插值型看往返光晕/涂抹,生成型看时序闪烁 + 下采样回源结构相似度),结果原样写进回执 artifact_sample_check
+- CLI 会把 upscale{{provider, method, params, source, target…}} 写进终版 clip 同名 .meta.json;回执 method 段照抄该字段,不得另写"""
     if agent_id == "08-video-gen/video-generation" and is_runninghub_video_active() \
             and project_skill_enabled("08-video-gen/video-generation/runninghub-cloud-workflow", project):
         p += f"""
@@ -9766,7 +9808,7 @@ def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[d
             lines.append("慢动作的变速、拼接、声轨拉伸与 timemap 登记全由宿主 slowmo 完成,不要自写 setpts/minterpolate 出整组产物再 register。"
                          "无法补帧 = 回执说明原因,不要改台账其它字段、不要改母本。")
         else:
-            lines.append("超分走 python3 modules/genmedia.py upscale(见 08-video-gen/upscale 技能);局部重绘/重打光/特效走 V2V(genmedia.py video --ref-video)或已配置的 ComfyUI/RunningHub 工作流。"
+            lines.append("超分只准 python3 modules/genmedia.py upscale(渠道按「🎨 生成模型 → 超分」设置,禁止自写 ffmpeg 放大);局部重绘/重打光/特效走 V2V(genmedia.py video --ref-video)或已配置的 ComfyUI/RunningHub 工作流。"
                          "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
         return pp.AGENT_ID, "\n".join(lines)
     agent = POST_RECORD_AGENTS.get(r["kind"], pp.AGENT_ID)
@@ -10493,6 +10535,37 @@ async def api_post_signoff(project: str, ep: str, body: dict):
 
 
 
+def _ep_clip_upscale_rows(base: Path, ep: str) -> list[dict]:
+    """成片发布页「组 clip」板块:assets/clips/<ep>/grpNNN.mp4 + 同名 meta.json 的 upscale / usage / draft_task 摘要。"""
+    cdir = base / "assets" / "clips" / ep
+    if not cdir.is_dir():
+        return []
+    rows = []
+    for f in sorted(cdir.glob("grp*.mp4")):
+        if not f.is_file():
+            continue
+        meta = _read_json_safe(f.with_suffix(".meta.json")) or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        up = meta.get("upscale") if isinstance(meta.get("upscale"), dict) else None
+        usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
+        draft = meta.get("draft_task") if isinstance(meta.get("draft_task"), dict) else {}
+        st = f.stat()
+        rows.append({
+            "group": f.stem,
+            "name": f.name,
+            "size_mb": round(st.st_size / 1048576, 1),
+            "url": f"/projects/{base.name}/{f.relative_to(base).as_posix()}?v={int(st.st_mtime)}",
+            "gen_resolution": usage.get("resolution") or "",
+            "gen_model": usage.get("model") or "",
+            "draft_task": bool(draft.get("id")),
+            "upscale": ({k: up.get(k) for k in ("provider", "method", "target", "resolution",
+                                                 "model", "workflow", "params", "recorded_at")}
+                        if up else None),
+        })
+    return rows
+
+
 def _preview_videos(project: str, ep: str):
     """成片发布聚合:分集列表 + 指定集的成片(final)视频、封面 thumbnail、发布物料。
     审核缺陷工单 2026-09-19 起移到独立「缺陷单」页(_preview_defects)。"""
@@ -10538,6 +10611,9 @@ def _preview_videos(project: str, ep: str):
     data["finals"] = _files(("final", "master"), VIDEO_EXTS)
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
+    # 组 clip 超分方法标签(2026-09-23):每组终版 clip 同名 meta.json 的 upscale 段(genmedia.py upscale 写入),
+    # 页面一眼分辨插值放大 / 真超分;缺段 = 未经宿主 CLI 超分(草稿档或 agent 自写命令的存量)
+    data["groups"] = _ep_clip_upscale_rows(base, ep)
     # 白模样片 / 动态样片:成片发布页 2026-09-13 起不再展示,字段保留供兼容与测试(tests/test_whitebox.py)
     data["whitebox"] = _ep_whitebox_reel(base, ep)
     try:
@@ -10861,9 +10937,11 @@ async def _refresh_rh_wf_caches(cfg: dict) -> list[dict]:
             wf_id = str(comfy.get(field) or "").strip()
             if wf_id:
                 jobs.setdefault((mode, wf_id), key)
-    # 数字人的 ComfyUI 渠道同口径(mode=rh_* + rh_* 字段)
-    dh = cfg.get("digital_human") or {}
-    if dh.get("provider") == "comfyui":
+    # 数字人 / 超分的 ComfyUI 渠道同口径(mode=rh_* + rh_* 字段)
+    for section_key in ("digital_human", "upscale"):
+        dh = cfg.get(section_key) or {}
+        if dh.get("provider") != "comfyui":
+            continue
         comfy = dh.get("comfyui") or {}
         mode = str(comfy.get("mode") or "local")
         if mode in RH_BASES:
@@ -10915,10 +10993,29 @@ async def api_genconfig_set(body: dict):
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "digital_human", "world", "deepagents"):
+    for kind in ("image", "video", "music", "tts", "digital_human", "upscale", "world", "deepagents"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    up = cfg.get("upscale") or {}
+    up.pop("fallback", None)   # 降级开关已删(2026-09-23),旧客户端带上来也丢弃
+    up_ff = up.get("ffmpeg") or {}
+    if up_ff.get("filter") not in UPSCALE_FFMPEG_FILTERS:
+        raise ServiceError(400, f"upscale.ffmpeg.filter must be one of {UPSCALE_FFMPEG_FILTERS}")
+    if up_ff.get("preset") not in UPSCALE_FFMPEG_PRESETS:
+        raise ServiceError(400, f"upscale.ffmpeg.preset must be one of {UPSCALE_FFMPEG_PRESETS}")
+    try:
+        up_ff["crf"] = int(up_ff.get("crf", 18))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "upscale.ffmpeg.crf must be an integer")
+    if not 0 <= up_ff["crf"] <= 51:
+        raise ServiceError(400, "upscale.ffmpeg.crf must be within 0..51")
+    up_comfy = up.get("comfyui") or {}
+    if up_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
+        raise ServiceError(400, "upscale.comfyui.mode must be local, cloud, "
+                                f"or one of {sorted(RH_BASES)}")
+    if up_comfy.get("rh_instance_type") not in {"standard", "plus", "ultra"}:
+        raise ServiceError(400, "upscale.comfyui.rh_instance_type must be standard, plus or ultra")
     if any((cfg.get(kind) or {}).get("provider") == "agentics"
            for kind in ("image", "video", "music", "tts", "digital_human", "deepagents")):
         resolve_agentics_connection()
@@ -12294,7 +12391,7 @@ async def api_test_comfyui(body: dict, extra_nodes: tuple[str, ...] = ()):
             "minimax_h3_ready": custom_nodes.get("MiniMaxH3ReferenceToVideo", False)}
 
 
-COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts", "digitalhuman")
+COMFY_WORKFLOW_KINDS = ("image", "video", "music", "tts", "digitalhuman", "scale")   # scale=超分(comfy/scale-*)
 
 
 async def api_comfy_workflows():

@@ -77,7 +77,7 @@ KINDS: list[dict] = [
      "refs": ["mask"], "params": [], "hint": "在监视器上画一个矩形蒙版,用周围像素填补(适合小水印/小杂物)"},
     {"id": "upscale", "section": "fill", "label": "超分", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "resolution", "label": "目标分辨率", "type": "select", "options": ["1080p", "2k", "4k"], "default": "1080p"}],
-     "hint": "走 genmedia.py upscale(SeedVR2 / MiniMax),逐组决定哪些值得超分"},
+     "hint": "只准走 genmedia.py upscale(渠道按「🎨 生成模型 → 超分」设置:ffmpeg / 火山样片模式 / MiniMax / ComfyUI SeedVR2),逐组决定哪些值得超分"},
     {"id": "interpolate", "section": "fill", "label": "插帧", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "fps", "label": "目标帧率", "type": "select", "options": ["48", "60"], "default": "48"}],
      "hint": "RIFE 类工作流(可绑 RunningHub);成片帧率须全集一致,建议整集作用域"},

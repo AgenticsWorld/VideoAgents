@@ -451,7 +451,7 @@ refs/
 | voice-generation(p7-dub,**仅项目「对白配音=后期配音」**,每对白组,p7-video 后) | **后期配音(§8C)**:`python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN` 一站式——从组 clip 原生轨实测每句台词开口起止(silencedetect,按 shot_list `dialogue_lines` 顺序对位;原生轨杂音重、自动检测不可靠时先 `--detect-only` 目检/听审再 `--segments` 手工给定),按 casting.json 该角色×形态条目(形态按组 audio_refs 样本名推断)TTS 逐句合成**冻结版台词一字不改**,语速 ±25% + atempo ±10% 贴合开口时长、起点对齐开口起点,原生轨在开口时段压低(-26dB,保留环境声/音效)叠上 TTS,画面流原样封装回 `grpNNN.mp4`(时长/fps/分辨率不变,原生轨备份 `.native_audio.wav`,重跑幂等);语速上限内仍装不下的句子记 overflow **上报回派 dialogue-rewrite 改短或整组重生成,严禁硬塞/剪画面**;视频原声模式脚本自动拒跑 | 组 clip+meta、shot_list dialogue_lines、casting.json、组 prompt audio_refs | `assets/audio/voice/epNN/dub/grpNNN/{lNN_<CHAR>.mp3,.fit.wav,dub_manifest.json}` + 组 clip 新版本(meta 追加 dialogue_voice 段) | 机检:dub_lines_text_match_frozen_script、dub_speaker_casting_bound(缺 casting 条目=FAIL)、dub_fit_ok(每句 fit_ratio ∈[0.9,1.1] 且无 overflow)、clip_duration_unchanged/video_stream_unchanged、av_offset_lt_80ms;QA:audio-qa 听审音色与 voice.json 相符、开口/闭口与语音起止贴合(明显对不上=开缺陷单,回派重测时段或整组重生成) |
 | lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线);后期配音模式下对 p7-dub 交付的 clip 做同样的整体时移对齐兜底(仍不重驱口型画面,§8C) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
 | animation | 动作补间/局部重绘修复(按 QA 缺陷单触发;**重绘涉及人物/场景/道具形象的,素材与 prompt 受 §7E 形象红线约束**) | 组 clip、缺陷单 | 修复后组 clip | 复检原缺陷项通过;**涉形象重绘过 repair_ref_anchored(§7E)** |
-| upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)** | 组 clip | 终版组 clip | 机检:目标分辨率、无超分伪影抽检 |
+| upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)**;**只准宿主 CLI `modules/genmedia.py upscale`,渠道按「🎨 生成模型 → 超分」设置(2026-09-23)** | 组 clip(样片模式下 meta 含 draft_task) | 终版组 clip(meta 含 `upscale` 段) | 机检:目标分辨率、`code/check_upscale_artifacts.py` 伪影机检(按渠道类型分判据) |
 
 **G7 闸门 + H3B 视觉生成确认(每集)**:全集生成组 QA 通过率 100%(允许 ≤5% 组人工豁免);**人工抽检每集 10% 组**;机检/抽检通过后,orchestrator 经 confirm 机制(`--sign`)向用户发起**视觉生成签字**——用户在「成片发布」页审看本集各组 clip 后签字,未签字不进 Phase 9 剪辑合成。签字确认的是组内容质量;成片方式(超分路径)仍按 §7B 自动执行,不另设确认。
 
@@ -461,6 +461,8 @@ refs/
 > - 成片分辨率 ≠ 草稿分辨率:**默认且仅走 upscale(超分)**——草稿档组 clip 由 upscale 超分至成片分辨率,不花生成费,画面与过审版完全一致;**严禁按成片档重新生成**(生成费用高、耗时长,且 Seedance 2.0 无 seed,画面与过审版有随机差异);
 >
 > 唯一例外:QA 判定超分不达标的组,按缺陷兜底走成片档重出(video-generation 用同一 prompt+锚点包按成片分辨率重生成,**重出组须 visual-qa 复检**),不需询问用户。
+>
+> **超分渠道(2026-09-23)**:超分**只准** `python3 modules/genmedia.py upscale`,渠道由「🎨 生成模型 → 超分」标签页(`genconfig.upscale.provider`)决定,**不再跟随视频渠道**:`ffmpeg`(内置插值放大,默认)/ `volcengine`(Seedance 2.5 样片模式:激活后方舟 Seedance 2.5 + 草稿档 480p 的组一律 `draft=true` 生成并把 Draft 任务 ID 记进 `grpNNN.meta.json#draft_task`,超分 = 按该 ID 生成 1080p 原片,ID 7 天有效、成片档须 1080p)/ `minimax`(Regenerate-2K,超分段自有接口区域/Key,仅收 H3 768P 直出规格源片,2K 后缩到成片档)/ `comfyui`(SeedVR2 类工作流,超分段自有连接与 `comfy/scale-*` 模板)。**无降级开关**(用户拍板):所选渠道预检失败/出错即超分工单失败交用户改渠道后重派,不静默换手段;选 ffmpeg 就是明确要插值放大。**Agent 禁止自写 ffmpeg 放大、禁止绕过 CLI 直连各家 API、禁止复用项目 code/ 下旧超分脚本**(与花字「只准宿主 CLI」同款红线)。CLI 成功后把 `upscale{provider, method, params, source, target…}` 合并写进终版 clip 同名 meta.json,成片发布页每组按此显示方法标签;伪影机检只准 `code/check_upscale_artifacts.py`(插值型看往返光晕/涂抹,生成型看时序闪烁 + 下采样回源 SSIM)。MiniMax 超分技能注入已退役(技能文件降为 `agents/08-video-gen/upscale/docs/` 参考文档)。
 
 > **§7C 重 roll 前向接缝规则(2026-07-10)**:尾帧续接链是**单向前向**的——整组重 roll grpN 时,
 > grpN+1 已按 grpN 的**旧尾帧**生成,而新尾帧必然不同(无 seed)——grpN→grpN+1 的前向接缝是盲区。

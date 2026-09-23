@@ -4,7 +4,7 @@
 
 ## English
 
-[`upscale-seedvr2-api.json`](upscale-seedvr2-api.json) is the API-format ComfyUI
+[`scale-seedvr2-api.json`](scale-seedvr2-api.json) is the API-format ComfyUI
 workflow for [ByteDance SeedVR2](https://iceclear.github.io/projects/seedvr2/)
 video upscaling. It is a **standalone upscale channel**, not a video-generation
 template: configure it under `🎨 生成模型 -> 超分 -> ComfyUI`, never under the
@@ -44,7 +44,7 @@ the SeedVR2 core nodes and weights). The video ComfyUI dropdown does not list
 this file (`upscale-` prefix):
 
 ```text
-comfy/upscale-seedvr2-api.json
+comfy/scale-seedvr2-api.json
 ```
 
 The ComfyUI URL / Cloud Key / RunningHub settings on this tab are independent
@@ -110,7 +110,7 @@ after a 1080p smoke test succeeds.
 
 ## 中文
 
-[`upscale-seedvr2-api.json`](upscale-seedvr2-api.json) 是
+[`scale-seedvr2-api.json`](scale-seedvr2-api.json) 是
 [ByteDance SeedVR2](https://iceclear.github.io/projects/seedvr2/) 视频超分的
 API 格式 ComfyUI 工作流。它是**独立超分渠道**,不是视频生成模板:在
 `🎨 生成模型 -> 超分 -> ComfyUI` 中配置,不要放到视频标签页(那里是 MiniMax-H3 /
@@ -144,7 +144,7 @@ ComfyUI/models/
 (`upscale-` 前缀):
 
 ```text
-comfy/upscale-seedvr2-api.json
+comfy/scale-seedvr2-api.json
 ```
 
 本标签页的 ComfyUI 地址 / Cloud Key / RunningHub 与 `🎬 视频模型` 完全独立;

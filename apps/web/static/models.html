@@ -84,7 +84,7 @@ button:disabled{opacity:.5;cursor:default}
   <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
   <a class="back" href="/">控制台</a>
   <h1>🎨 生成模型设置</h1>
-  <span class="pill">图像 / 视频 / 数字人 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型</span>
+  <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型</span>
   <div class="spacer"></div>
 </header>
 <main>
@@ -134,6 +134,43 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-dh-agentics"></div>
     <!-- ComfyUI 面板由 buildPanel('digitalhuman','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub 国内/国际 -->
     <div class="panel" id="panel-dh-comfyui"></div>
+  </div>
+  <div class="card" id="card-upscale">
+    <h2>🔍 超分 <span class="cur">生效渠道=当前选中的标签页(✅),不再跟随视频渠道,保存后生效</span></h2>
+    <div class="tabs" id="upscale-tabs">
+      <div class="tab" id="tab-up-ffmpeg">ffmpeg</div>
+      <div class="tab" id="tab-up-volcengine">火山引擎</div>
+      <div class="tab" id="tab-up-minimax">MiniMax</div>
+      <div class="tab" id="tab-up-comfyui">ComfyUI</div>
+    </div>
+    <div class="panel" id="panel-up-ffmpeg">
+      <div class="row"><label>缩放算法</label>
+        <select id="up-ff-filter">
+          <option value="lanczos">lanczos(默认,较锐利)</option>
+          <option value="bicubic">bicubic(平滑)</option>
+          <option value="spline">spline</option>
+          <option value="bilinear">bilinear(最软)</option>
+        </select></div>
+      <div class="row"><label>CRF</label><input type="number" id="up-ff-crf" min="0" max="51" step="1" value="18" style="max-width:120px"><span class="cur">0–51,越小画质越高体积越大;18 ≈ 视觉无损</span></div>
+      <div class="row"><label>编码预设</label>
+        <select id="up-ff-preset">
+          <option value="ultrafast">ultrafast</option>
+          <option value="fast">fast</option>
+          <option value="medium">medium</option>
+          <option value="slow">slow(默认)</option>
+          <option value="veryslow">veryslow</option>
+        </select></div>
+      <div class="hint">内置非 AI 插值放大:ffmpeg scale 滤镜 + libx264 重编码,音轨流拷贝,fps/时长/画幅不变。不生成新细节,只是像素变多;不花生成费,适合只需过发布规格的项目。目标尺寸由「输出设置」成片分辨率 × 画幅自动换算。</div>
+    </div>
+    <div class="panel" id="panel-up-volcengine">
+      <div class="hint">Seedance 2.5 样片(Draft)模式:选中即激活,无需另填 Key 或模型,凭证与模型沿用视频生成的火山引擎标签页。</div>
+      <div class="hint">激活条件:视频生效渠道为火山引擎(或 BytePlus,方舟同一 API)且模型为 Seedance 2.5;项目「输出设置」草稿分辨率 = 480p、成片分辨率 = 1080p(官方:样片仅 480p,出原片仅 1080p)。不满足时视频照常按普通模式生成,并在日志提示。</div>
+      <div class="hint">工作方式:① 生成阶段自动带 draft=true 出 480p 样片(token 用量与普通 480p 一致),Draft 任务 ID 写进组 clip 同名 meta.json 的 draft_task 段;② 超分阶段 genmedia.py upscale 按该 ID 让方舟复用同一提示词/素材/时长/画幅/seed/音频设置生成 1080p 原片(正常推理计费),画面关键要素与过审样片一致;③ Draft 任务 ID 自创建起 7 天有效,过期只能重出样片。</div>
+    </div>
+    <!-- MiniMax 面板由 buildUpscaleMinimaxPanel() 生成:接口区域 / API Key(两区域分存)/ 模型(仅 Regenerate-2K)+ 适用条件 -->
+    <div class="panel" id="panel-up-minimax"></div>
+    <!-- ComfyUI 面板由 buildPanel('scale','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub;工作流下拉列 comfy/scale-* 模板 -->
+    <div class="panel" id="panel-up-comfyui"></div>
   </div>
   <div class="card" id="card-world">
     <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
@@ -719,6 +756,7 @@ function buildPanel(kind,p){
     // / RunningHub 国内(.cn)/国际(.ai) 第三方云托管(私有 REST,工作流存云端工作区)
     // kind='digitalhuman' 时同一面板服务数字人卡片(InfiniteTalk 工作流,无 checkpoint 行)
     const dh=kind==='digitalhuman';
+    const sc=kind==='scale';   // 超分板块(配置段 upscale):SeedVR2 类工作流,无 checkpoint 行
     const mr=el('div',{className:'row'});
     mr.appendChild(el('label',{},'运行方式'));
     const msel=el('select',{id:`${kind}-comfy-mode`});
@@ -743,10 +781,12 @@ function buildPanel(kind,p){
         st.className='status ok';
         st.textContent=I18N.f('✓ 已连接({v})· {n} 个 checkpoint',
           {v:r.version+(r.devices?.length?' · '+r.devices.join(', '):''),n:r.checkpoints.length});
-        const sel=$(`#${kind}-comfy-ckpt`);const cur=CFG[kind].comfyui.checkpoint;
-        sel.innerHTML='<option value="">(默认/由工作流决定)</option>';
-        r.checkpoints.forEach(c=>sel.appendChild(el('option',{value:c,textContent:c})));
-        if(cur)sel.value=cur;
+        const sel=$(`#${kind}-comfy-ckpt`);const cur=((cfgSection(kind)||{}).comfyui||{}).checkpoint;
+        if(sel){
+          sel.innerHTML='<option value="">(默认/由工作流决定)</option>';
+          r.checkpoints.forEach(c=>sel.appendChild(el('option',{value:c,textContent:c})));
+          if(cur)sel.value=cur;
+        }
       }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
     };
     mr.appendChild(tb);d.appendChild(mr);
@@ -766,7 +806,7 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
     // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
     const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
-    rw.appendChild(el('label',{},SECOND_WF[kind]?SECOND_WF[kind].mainRh:dh?'云端数字人工作流':'云端工作流'));
+    rw.appendChild(el('label',{},SECOND_WF[kind]?SECOND_WF[kind].mainRh:dh?'云端数字人工作流':sc?'云端超分工作流':'云端工作流'));
     const rsel=el('select',{id:`${kind}-comfy-rhwf`});
     rw.appendChild(rsel);
     const rmb=el('button',{title:'从收藏中移除所选工作流'},'移除');
@@ -796,14 +836,14 @@ function buildPanel(kind,p){
     ir.appendChild(isel);d.appendChild(ir);
     d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-rhinst-hint`,style:'display:none'},
       'RunningHub 机器规格:Standard 24G 显存,Plus 48G,Ultra 更高;规格越高按秒单价越高,以 RunningHub 网页端计费说明为准'));
-    if(!dh){
+    if(!dh&&!sc){
       const cr=el('div',{className:'row',id:`${kind}-comfy-ckpt-row`});
       cr.appendChild(el('label',{},'Checkpoint'));
       const sel=el('select',{id:`${kind}-comfy-ckpt`});
       sel.appendChild(el('option',{value:'',textContent:'(默认/由工作流决定)'}));
       cr.appendChild(sel);d.appendChild(cr);
     }
-    const wr=wfRow(kind,`${kind}-comfy-wf`,SECOND_WF[kind]?SECOND_WF[kind].mainApi:dh?'InfiniteTalk 工作流':'工作流 API');
+    const wr=wfRow(kind,`${kind}-comfy-wf`,SECOND_WF[kind]?SECOND_WF[kind].mainApi:dh?'InfiniteTalk 工作流':sc?'超分工作流 API':'工作流 API');
     wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
     if(SECOND_WF[kind]){
       const wr2=wfRow(kind,`${kind}-comfy-ref-wf`,SECOND_WF[kind].api);
@@ -813,8 +853,11 @@ function buildPanel(kind,p){
     const dhWf='API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符';
     const rhBind=dh
       ?'请先在工作区跑通数字人工作流,再把工作流 ID 或页面链接粘贴到「添加工作流」验证;普通导出件只要执行图中各有唯一的 <code>LoadImage</code>、<code>LoadAudio</code>,系统就会自动覆盖示例素材,也兼容 <code>{{IMAGE}}</code>/<code>{{FIRST_FRAME}}</code>、<code>{{AUDIO}}</code>/<code>{{REF_AUDIO}}</code> 等占位符;'
+      :sc
+      ?'请先在工作区跑通 SeedVR2 类超分工作流,再把工作流 ID 或页面链接粘贴到「添加工作流」验证;无占位符的普通导出件系统会直绑唯一的源视频加载节点(LoadVideo 系)+ SeedVR2Preprocess 上游的缩放节点(目标边长/宽高)+ 采样器种子,也兼容 VIDEO/WIDTH/HEIGHT/SEED 占位符;这里的工作流收藏与视频生成板块各自独立;'
       :'工作流须先在网页端跑通,并把 {{PROMPT}} 等占位符写入对应节点输入位(约定与本地工作流一致),再把工作流 ID 或页面链接粘贴到「添加工作流」验证;';
-    d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},dh
+    // 超分板块本地模式不放说明文案(用户拍板 2026-09-23)
+    if(!sc)d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-local`},dh
       ?'本地 ComfyUI + InfiniteTalk;使用本地服务地址和 <code>comfy/</code> 中的 API JSON(「测试连接」会检查 MultiTalk 节点是否就绪);'+dhWf
       :'连接本地 ComfyUI(启动时加 <code>--listen</code> 可跨机访问);「测试连接」会列出可用 checkpoint;'
       +'工作流下拉列出 <code>comfy/</code> 目录中同类前缀的 API 工作流,点 📖 查看同名 .md 说明(安装/模型下载/参数)'));
@@ -822,6 +865,7 @@ function buildPanel(kind,p){
       '工作流在 <a href="https://cloud.comfy.org/" target="_blank">Comfy Cloud</a> 官方云端执行,无需本地部署;'
       +'API Key 在 <a href="https://platform.comfy.org" target="_blank">platform.comfy.org</a> 创建(需 Comfy Cloud 订阅,与网页版共用月度额度,免费档无 API 权限);'
       +(dh?'工作流下拉与本地一致(InfiniteTalk API JSON,'+dhWf+');MultiTalk 等自定义节点在云端可能不可用,以「测试连接」结果为准'
+        :sc?'工作流下拉与本地一致(comfy/scale-* 模板;SeedVR2 节点 ComfyUI 官方内置,云端可用);长片 1080p 以上在云端可能显存不足,以任务结果为准'
           :'工作流下拉与本地一致(须为 API 格式);依赖自定义节点的工作流(如 ACE-Step/IndexTTS-2/MiniMax-H3)在云端可能不可用,以「测试连接」结果为准')));
     d.appendChild(el('div',{className:'hint',id:`${kind}-comfy-hint-rh-cn`,style:'display:none'},
       '工作流在 <a href="https://www.runninghub.cn/workspace" target="_blank">RunningHub 国内站工作区</a>'
@@ -865,7 +909,7 @@ function comfyModeUI(kind){
     $(`#${kind}-comfy-rhrefwf-row`).style.display=rh?'':'none';
     $(`#${kind}-comfy-ref-wf-row`).style.display=rh?'none':'';
   }
-  $(`#${kind}-comfy-hint-local`).style.display=m==='local'?'':'none';
+  const hl=$(`#${kind}-comfy-hint-local`);if(hl)hl.style.display=m==='local'?'':'none';   // 超分板块无本地说明
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
   $(`#${kind}-comfy-hint-rh-cn`).style.display=m==='rh_cn'?'':'none';
   $(`#${kind}-comfy-hint-rh-ai`).style.display=m==='rh_ai'?'':'none';
@@ -878,7 +922,7 @@ function comfyModeUI(kind){
 }
 
 /* ---------- RunningHub 云端工作流收藏(genconfig 的 comfyui.rh_workflows 持久化) ---------- */
-let RH_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[]};
+let RH_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[],scale:[]};
 
 function fillRhWfSelect(kind,id,value){
   const mode=$(`#${kind}-comfy-mode`).value;
@@ -943,7 +987,7 @@ function rhRemoveWf(kind){
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
 /* comfy/ 目录工作流清单(按文件名前缀 image-/video-/music-/tts- 分类),初始化时拉取 */
-let COMFY_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[]};
+let COMFY_WFS={image:[],video:[],music:[],tts:[],digitalhuman:[],scale:[]};
 
 function wfRow(kind,id,label){
   const d=el('div',{className:'row'});
@@ -1142,6 +1186,45 @@ function showDigitalHumanPanel(provider){
 DH_PROVIDERS.forEach(p=>{
   $(`#tab-dh-${p}`).onclick=()=>showDigitalHumanPanel(p);
 });
+
+/* 页面 kind → genconfig 配置段(数字人 digitalhuman→digital_human,超分 scale→upscale,其余同名) */
+function cfgSection(kind){
+  if(!CFG)return null;
+  return kind==='digitalhuman'?CFG.digital_human:kind==='scale'?CFG.upscale:CFG[kind];
+}
+
+/* 超分板块(2026-09-23,配置段 upscale):渠道 ffmpeg / 火山引擎样片模式 / MiniMax Regenerate-2K / ComfyUI SeedVR2;
+   唯一路由源,不再跟随视频渠道;无降级开关(渠道失败即报错) */
+const UP_PROVIDERS=['ffmpeg','volcengine','minimax','comfyui'];
+let UP_PROVIDER='ffmpeg';
+function showUpscalePanel(provider){
+  UP_PROVIDER=provider;
+  const labels={ffmpeg:'ffmpeg',volcengine:'火山引擎',minimax:'MiniMax',comfyui:'ComfyUI'};
+  UP_PROVIDERS.forEach(p=>{
+    const tab=$(`#tab-up-${p}`);
+    tab.classList.toggle('active',p===provider);
+    tab.textContent=(p===provider?'✅ ':'')+window.t(labels[p]);
+    $(`#panel-up-${p}`).classList.toggle('show',p===provider);
+  });
+}
+UP_PROVIDERS.forEach(p=>{
+  $(`#tab-up-${p}`).onclick=()=>showUpscalePanel(p);
+});
+/* 超分 MiniMax 面板(kind='scale',配置段 upscale.minimax,自有凭证):接口区域 + 两区域 Key + 模型(仅 Regenerate-2K,
+   请求 model 固定 MiniMax-H3、endpoint /v2/video_regeneration)+ 适用条件 */
+const UP_MINIMAX_MODELS=[['MiniMax-H3','MiniMax Regenerate-2K']];
+function buildUpscaleMinimaxPanel(){
+  const d=el('div',{className:'panel',id:'panel-up-minimax'});
+  d.appendChild(mmBaseRow('scale'));
+  mmKeyRows('scale').forEach(r=>d.appendChild(r));
+  const mr=el('div',{className:'row'});
+  mr.appendChild(el('label',{},'模型'));
+  const sel=el('select',{id:'scale-mm-model'});
+  UP_MINIMAX_MODELS.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  mr.appendChild(sel);d.appendChild(mr);
+  d.appendChild(el('div',{className:'hint'},'适用条件(源 clip 必须是 MiniMax-H3 768P 直出规格):含音轨;24 fps;宽高均能被 32 整除;面积 ≤ 768×1344;107–362 帧(约 4–15 秒)。'));
+  return d;
+}
 
 async function testDigitalHuman(provider){
   const st=provider==='comfyui'?$('#digitalhuman-comfy-status'):$(`#dh-${provider}-status`);
@@ -1525,6 +1608,19 @@ function loadIntoForm(){
   showDigitalHumanPanel(DH_PROVIDERS.includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':DH_PROVIDERS[0]);
   loadAgenticsModels('digitalhuman');
+  const up=CFG.upscale||{},uff=up.ffmpeg||{},uco=up.comfyui||{};
+  $('#up-ff-filter').value=['lanczos','bicubic','spline','bilinear'].includes(uff.filter)?uff.filter:'lanczos';
+  $('#up-ff-crf').value=Number.isInteger(uff.crf)?uff.crf:18;
+  $('#up-ff-preset').value=['ultrafast','fast','medium','slow','veryslow'].includes(uff.preset)?uff.preset:'slow';
+  loadComfyForm('scale',{...uco,url:uco.url||'http://127.0.0.1:8188',
+    workflow:uco.workflow||'comfy/scale-seedvr2-api.json'});
+  const umm=up.minimax||{};
+  $('#scale-mm-base').value=MINIMAX_BASES.some(([v])=>v===umm.api_base)?umm.api_base:MINIMAX_BASES[0][0];
+  $('#scale-mm-key-io').value=umm.api_key_io||'';
+  $('#scale-mm-key-cn').value=umm.api_key_cn||'';
+  mmRegionUI('scale');
+  $('#scale-mm-model').value=UP_MINIMAX_MODELS[0][0];
+  showUpscalePanel(UP_PROVIDERS.includes(up.provider)?up.provider:'ffmpeg');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1641,6 +1737,14 @@ function collect(){
       aspect_ratio:$('#dh-heygen-aspect').value},
     klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
     comfyui:collectComfy('digitalhuman')};
+  const crf=parseInt($('#up-ff-crf').value,10);
+  out.upscale={provider:UP_PROVIDER,
+    ffmpeg:{filter:$('#up-ff-filter').value,crf:Number.isInteger(crf)?Math.min(51,Math.max(0,crf)):18,
+            preset:$('#up-ff-preset').value},
+    volcengine:{},
+    minimax:{api_key_io:$('#scale-mm-key-io').value.trim(),api_key_cn:$('#scale-mm-key-cn').value.trim(),
+             api_base:$('#scale-mm-base').value,model:$('#scale-mm-model').value||'MiniMax-H3'},
+    comfyui:collectComfy('scale')};
   out.world={provider:'marble',
     marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
@@ -1702,13 +1806,17 @@ $('#save').onclick=async()=>{
   // 数字人 Agentics 面板:账号行 + 数字人 profile 下拉,目录来自同一份 Agentics 媒体目录(media_type=DigitalHuman)
   const dhAgenticsPanel=buildPanel('digitalhuman','agentics');dhAgenticsPanel.id='panel-dh-agentics';
   $('#panel-dh-agentics').replaceWith(dhAgenticsPanel);
+  // 超分 ComfyUI 面板同构(kind='scale',配置段 upscale.comfyui;工作流下拉列 comfy/scale-* 模板)
+  const upPanel=buildPanel('scale','comfyui');upPanel.id='panel-up-comfyui';
+  $('#panel-up-comfyui').replaceWith(upPanel);
+  $('#panel-up-minimax').replaceWith(buildUpscaleMinimaxPanel());
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),
   ]);
   CFG=cfg;
-  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[],digitalhuman:[]},wfs.workflows||{});
+  COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[],digitalhuman:[],scale:[]},wfs.workflows||{});
   await refreshAgenticsAccount();
   loadIntoForm();
 })();

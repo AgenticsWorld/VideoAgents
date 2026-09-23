@@ -470,6 +470,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="480p">480p</option>
           <option value="720p">720p</option>
           <option value="1080p">1080p</option>
+          <option value="2k">2K</option>
           <option value="4k">4K</option>
         </select></div>
       <div class="row"><label>白模</label>
@@ -580,6 +581,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="480p">480p</option>
         <option value="720p">720p</option>
         <option value="1080p">1080p</option>
+        <option value="2k">2K</option>
         <option value="4k">4K</option>
       </select></div>
     <div class="row"><label>白模</label>
@@ -1609,7 +1611,7 @@ $('#style-search').oninput=()=>styleGridRender();
 
 /* ---------- 输出设置弹窗(画幅/语言) ---------- */
 const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Español','français','Deutsch','Indonesia','Português','русский','عربي'];
-const OUT_RESOLUTIONS=['360p','480p','720p','1080p','4k'];
+const OUT_RESOLUTIONS=['360p','480p','720p','1080p','2k','4k'];   // 2k 仅成片档下拉提供(2026-09-23,MiniMax Regenerate-2K 原生档)
 const DIALOGUE_VOICE_MODES=['native','dubbing'];
 async function openOutModal(){
   $('#out-err').textContent='';

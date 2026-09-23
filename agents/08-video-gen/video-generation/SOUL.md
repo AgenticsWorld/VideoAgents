@@ -200,6 +200,9 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 mi
 `grpNNN.meta.json` 的 `usage` 字段(含 `completion_tokens`/`total_tokens`/`task_id` 等),并在
 `assets/clips/epNN/usage_ledger.jsonl` 追加一行累计台账(API 分集 token 统计的权威来源,勿删勿改)。
 你在生成后补写/重写 meta.json 时**必须先读出已有 `usage` 字段原样保留**,不得用占位 note 覆盖;
+**`draft_task` 字段同样必须原样保留**(2026-09-23,Seedance 2.5 样片模式:「🎨 生成模型 → 超分」选火山引擎且本组由方舟
+Seedance 2.5 按 480p 生成时,genmedia 自动带 `draft=true` 并在任务建成时把 Draft 任务 ID 写进该字段;超分工位按它生成 1080p
+原片,丢了 = 该组只能重出草稿);
 重出组把旧版挪入 archive 时,台账文件留在原目录不动(累计口径包含重roll)。
 
 ## 接受的工作指令(Work Order)

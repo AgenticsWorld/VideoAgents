@@ -36,22 +36,25 @@ CLI:
   (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 ID 见提交日志的
   「任务已创建」行;方舟任务也可用 code/ark_task_list.py 按创建时间核对。
 
-  python3 modules/genmedia.py upscale --input in.mp4 --output out_2k.mp4 \
+  python3 modules/genmedia.py upscale --input in.mp4 --output out.mp4 \
       [--prompt "<该组原始 video_prompt>"] [--source-task-id <任务id>] \
       [--resolution 1080p] [--aspect 16:9] [--seed 1234] [--dry-run]
 
-  超分:视频配置生效渠道为 ComfyUI 时走 SeedVR2,复用「生成模型」页视频 ComfyUI
-  的连接配置:本地/Comfy Cloud 固定使用 comfy/video-upscale-seedvr2-api.json;
-  RunningHub 运行方式用 RunningHub 渠道选中的云端超分工作流(无占位符时直绑源视频
-  加载节点 + SeedVR2Preprocess 上游缩放节点的目标边长/宽高 + 采样器种子;按边缩放
-  的模板画幅跟随源视频,源视频 ≤30MB)。目标尺寸由 --resolution/--aspect 指定
-  (缺省取项目成片档/16:9),fps、时长和音轨跟随源视频。
-  其他视频渠道走 MiniMax Regenerate-2K:固定输出 2K,凭证共用「生成模型」页视频
-  MiniMax 的 Key/接口区域(环境变量 MINIMAX_API_KEY 兜底)。base_video 模式的源视频
-  须为 MiniMax-H3 768P 直出成片规格(24fps、含音轨、宽高均被 32 整除、面积≤768×1344、
-  107-362 帧≈4-15s;提交前 ffprobe 预检,>45MB 走对象存储预签名 URL);或
-  --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频。
-  MiniMax 按 output_seconds 计费,SeedVR2 按 ComfyUI 配置计费。
+  超分(2026-09-23 起唯一路由源 =「生成模型」页超分段 genconfig.upscale,不看视频渠道):
+    ffmpeg     内置非 AI 插值放大(默认):scale=W:H:flags=<filter> + libx264 crf/preset,音轨流拷贝
+    volcengine Seedance 2.5 样片(Draft)模式:源 clip meta.json 的 draft_task.id(样片模式生成时
+               自动记录;或 --source-task-id)→ 方舟按该 ID 生成 1080p 原片(仅成片档 1080p,ID 7 天有效)
+    minimax    Regenerate-2K(POST /v2/video_regeneration,模型固定 MiniMax-H3,输出 2K 后自动缩到
+               成片档):凭证取超分段自有的 MiniMax 标签页(接口区域 + Key);源视频须为 H3 768P 直出规格(24fps、含音轨、
+               宽高均被 32 整除、面积≤768×1344、107-362 帧≈4-15s;>45MB 走对象存储预签名 URL);
+               或 --source-task-id 传 7 天内 succeeded 的 MiniMax 生成任务 id 免传源视频
+    comfyui    SeedVR2 类工作流,自有连接配置:本地/Comfy Cloud 用超分段选中的 comfy/scale-* 模板
+               (默认 scale-seedvr2-api.json);RunningHub 用超分段自有的云端工作流(无占位符时直绑
+               源视频加载节点 + SeedVR2Preprocess 上游缩放节点 + 采样器种子;源视频 ≤30MB)
+  目标尺寸 = --resolution(缺省项目成片档)短边 × 画幅(--aspect 缺省跟随源视频实测宽高),
+  fps、时长和音轨跟随源视频。无降级:所选渠道预检失败/出错直接报错(退出码非 0),不自动改用
+  ffmpeg。成功后把 upscale{provider, method, params, source, target…} 合并写进输出同名
+  .meta.json(成片发布页按此显示方法标签)。
 
   python3 modules/genmedia.py music --prompt "<音乐描述>" --output bgm.mp3 [--dry-run]
   python3 modules/genmedia.py tts --text "<旁白文本>" --output narr.mp3 \
@@ -90,10 +93,10 @@ Python:
         (视频与音频各合计 ≤15s);环境变量兜底 FAL_KEY)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
-  超分: seedvr2(ComfyUI SeedVR2 视频超分;复用视频 ComfyUI 配置,本地/Cloud 固定
-        工作流 video-upscale-seedvr2-api.json,RunningHub 用选中的云端超分工作流)
-        / minimax(POST /v2/video_regeneration,
-        Regenerate-2K 异步任务;模型固定 MiniMax-H3,分辨率固定 2K)
+  超分: ffmpeg(内置插值放大,默认)/ volcengine(Seedance 2.5 样片模式按 Draft 任务 ID 出 1080p 原片)
+        / minimax(POST /v2/video_regeneration Regenerate-2K;模型固定 MiniMax-H3,2K 后缩到成片档)
+        / comfyui(SeedVR2 类工作流,超分段自有连接;本地/Cloud 用 comfy/scale-* 模板,RunningHub 用
+        自有云端工作流)——渠道只看「生成模型」页超分段,失败即报错不降级
   音乐: agentics(登录账号 + 后端 profile) / openrouter(chat completions 流式, modalities=audio;Lyria 3 Pro 完整歌曲 /
         Lyria 3 Clip 30s 片段;输出格式按扩展名 mp3/wav/flac/opus)
         / elevenlabs(POST /v1/music,Eleven Music v1/v2;--duration 指定时长 3–600s,
@@ -3873,11 +3876,35 @@ def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
     return resolution, aspect
 
 
+def _draft_mode_active(cfg, resolution: str) -> bool:
+    """Seedance 2.5 样片(Draft)模式是否对本次生成生效(2026-09-23):「生成模型」页超分渠道选了
+    volcengine(样片模式超分)、当前视频渠道是方舟(火山引擎/BytePlus 同 API)、模型为 Seedance 2.5、
+    且本次分辨率为 480p(官方:Draft 仅支持 480p,其他分辨率报错)。不满足时按普通生成,
+    超分阶段会因缺 Draft 任务 ID 报错——这里只提示不拦截。"""
+    try:
+        provider = _upscale_config()["provider"]
+    except Exception:
+        return False
+    if provider != "volcengine":
+        return False
+    if (cfg.get("provider") or "") not in ARK_API_BASES or _seedance_gen(cfg.get("model") or "") < 2.5:
+        print("[genmedia] 超分渠道为「火山引擎样片模式」,但当前视频渠道/模型不是方舟 Seedance 2.5,"
+              "本次按普通生成(该组后续无法按 Draft 任务 ID 出原片)", file=sys.stderr)
+        return False
+    if (resolution or "").lower() != "480p":
+        print(f"[genmedia] 超分渠道为「火山引擎样片模式」,但本次分辨率 {resolution or '(未指定)'} ≠ 480p"
+              "(Draft 仅支持 480p),本次按普通生成;请把「输出设置」草稿档设为 480p", file=sys.stderr)
+        return False
+    return True
+
+
 def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                     refs, audio_refs, gen_audio, want_last_frame,
-                    video_refs=None, to_url=None, video_to_url=None):
+                    video_refs=None, to_url=None, video_to_url=None, draft=False):
     """构造方舟视频任务请求体(独立函数便于 dry-run 校验;to_url 可替换文件内联逻辑,
-    video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。"""
+    video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。
+    draft=True 为 Seedance 2.5 样片模式:请求体顶层 draft=true + resolution=480p(官方样例写法),
+    文本参数串里不再重复 --resolution,避免两处分辨率冲突。"""
     to_url = to_url or _file_to_data_url
     video_to_url = video_to_url or to_url
     gen = _seedance_gen(cfg["model"])
@@ -3886,8 +3913,10 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
     resolution, aspect = _seedance_precheck(cfg["model"], prompt, first, last, duration,
                                             resolution, aspect, refs, audio_refs, video_refs)
+    if draft and (not is_v25 or (resolution or "").lower() != "480p"):
+        raise RuntimeError(f"样片模式仅限 Seedance 2.5 + 480p(当前 {cfg['model']} / {resolution or '-'})")
     text = prompt
-    if resolution:
+    if resolution and not draft:
         text += f" --resolution {resolution}"
     if duration:
         if is_v2:
@@ -3933,11 +3962,51 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         content.append({"type": "audio_url", "role": "reference_audio",
                         "audio_url": {"url": to_url(path)}})
     body = {"model": cfg["model"], "content": content}
+    if draft:
+        body["draft"] = True
+        body["resolution"] = "480p"
     if gen_audio is not None:
         body["generate_audio"] = bool(gen_audio)
     if want_last_frame:
         body["return_last_frame"] = True
     return body
+
+
+DRAFT_TASK_TTL_S = 7 * 86400   # 官方:Draft 视频任务 ID 自 created_at 起 7 天内可用于生成原片
+
+
+def _record_draft_task(output: str, task_id: str, cfg: dict) -> None:
+    """样片模式:任务一建成就把 Draft 任务 ID 合并写进输出同名 .meta.json(draft_task 段),
+    超分阶段 genmedia.py upscale(渠道 volcengine)据此按 ID 生成 1080p 原片;写在轮询之前,
+    进程中途被掐也不丢 ID。下游 agent 重写 meta 时须原样保留该段(同 usage 字段规则)。"""
+    now = time.time()
+    rec = {"id": task_id, "provider": cfg.get("provider"), "model": cfg.get("model"),
+           "resolution": "480p",
+           "created_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
+           "expires_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now + DRAFT_TASK_TTL_S)),
+           "created_ts": int(now)}
+    try:
+        _merge_meta(output, "draft_task", rec)
+        print(f"[genmedia] 样片模式:Draft 任务 {task_id} 已记入 "
+              f"{Path(output).with_suffix('.meta.json').name}(7 天内可按此 ID 出 1080p 原片)",
+              file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[genmedia] Draft 任务 ID 写入 meta.json 失败(请人工记录 {task_id}):{e}", file=sys.stderr)
+
+
+def _merge_meta(output: str, key: str, value) -> None:
+    """把一个字段合并写进 output 同名 .meta.json(已有内容保留;非法 JSON 视为空)。"""
+    meta_path = Path(output).with_suffix(".meta.json")
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    meta[key] = value
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _find_recent_ark_task(tasks_url, headers, since_ts: float, duration=None,
@@ -4049,9 +4118,13 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
                video_refs=None):
     tasks_url = f"{_ark_base(cfg)}/contents/generations/tasks"
     headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    draft = _draft_mode_active(cfg, resolution)
     body = _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                            refs, audio_refs, gen_audio, bool(return_last_frame),
-                           video_refs=video_refs, video_to_url=_storage_upload_url)
+                           video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft)
+    if draft:
+        print("[genmedia] Seedance 2.5 样片模式(draft=true,480p):成片阶段按本任务 ID 生成 1080p 原片",
+              file=sys.stderr, flush=True)
     submit_ts = time.time()
     try:
         task = _post_json(tasks_url, body, headers)
@@ -4071,6 +4144,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     if not tid:
         raise RuntimeError(f"方舟视频任务创建失败:{json.dumps(task)[:400]}")
     print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    if draft:
+        _record_draft_task(output, str(tid), cfg)
     return _ark_wait_and_download(cfg, tid, output, resolution, duration, return_last_frame)
 
 
@@ -4668,7 +4743,40 @@ def _video_fal(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     return saved
 
 
-# ---------------- 超分:MiniMax / ComfyUI SeedVR2 ----------------
+# ---------------- 超分:ffmpeg / 火山样片模式 / MiniMax / ComfyUI SeedVR2 ----------------
+# 2026-09-23 起唯一路由源 = genconfig.upscale(「生成模型」页超分段),不再跟随 video.provider。
+
+UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui")
+UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
+UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
+UPSCALE_DEFAULTS = {"provider": "ffmpeg",
+                    "ffmpeg": {"filter": "lanczos", "crf": 18, "preset": "slow"}}
+UPSCALE_SHORT_SIDES = {"360p": 360, "480p": 480, "720p": 720, "1080p": 1080, "2k": 1440, "4k": 2160}
+
+
+def _upscale_config() -> dict:
+    """读取「生成模型」页超分段;旧版 genconfig 无该段时按默认 ffmpeg(升级后首次保存即落盘)。
+    无降级开关:所选渠道失败即由 generate_upscale 抛错。"""
+    try:
+        up = dict((json.loads(CONFIG_PATH.read_text())).get("upscale") or {})
+    except Exception:
+        up = {}
+    provider = str(up.get("provider") or UPSCALE_DEFAULTS["provider"]).lower()
+    if provider not in UPSCALE_PROVIDERS:
+        raise RuntimeError(f"超分渠道无效: {provider},可选 {'/'.join(UPSCALE_PROVIDERS)}"
+                           "(「🎨 生成模型」页超分段)")
+    ff = dict(UPSCALE_DEFAULTS["ffmpeg"], **(up.get("ffmpeg") or {}))
+    if ff.get("filter") not in UPSCALE_FFMPEG_FILTERS:
+        ff["filter"] = "lanczos"
+    if ff.get("preset") not in UPSCALE_FFMPEG_PRESETS:
+        ff["preset"] = "slow"
+    try:
+        ff["crf"] = max(0, min(51, int(ff.get("crf", 18))))
+    except (TypeError, ValueError):
+        ff["crf"] = 18
+    return {"provider": provider, "ffmpeg": ff,
+            "comfyui": dict(up.get("comfyui") or {}), "raw": up}
+
 
 # /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
 # 直出成片规格,不合规提交即拒——提交前用 ffprobe 预检拦下并给出修法
@@ -4679,16 +4787,15 @@ MINIMAX_UPSCALE_MAX_AREA = 768 * 1344   # 1,032,192 px
 
 
 def _minimax_upscale_config() -> dict:
-    """超分共用「生成模型」页视频段的 MiniMax 凭证(api_key/api_base),与生效视频
-    渠道无关——只要 MiniMax Key 已配置(或设环境变量 MINIMAX_API_KEY)即可用。"""
-    try:
-        pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("minimax") or {})
-    except Exception:
-        pc = {}
+    """超分渠道 minimax 的凭证取「生成模型」页超分段自有的 MiniMax 标签页(upscale.minimax:
+    接口区域 api_base + 两区域 Key,按 api_base 取用);环境变量 MINIMAX_API_KEY 兜底。
+    请求 model 固定 MINIMAX_UPSCALE_MODEL,与配置里的 model 无关。"""
+    pc = dict(_upscale_config()["raw"].get("minimax") or {})
+    pc.setdefault("api_base", "https://api.minimax.io")
     pc["api_key"] = _minimax_key(pc) or os.environ.get(ENV_KEYS["minimax"], "")
     if not pc["api_key"]:
         raise RuntimeError("超分渠道 minimax 未配置 API Key(Web 控制台「🎨 生成模型」"
-                           "视频生成的 MiniMax 标签页填入当前接口区域的 Key,"
+                           "超分段的 MiniMax 标签页填入当前接口区域的 Key,"
                            "或设环境变量 MINIMAX_API_KEY)")
     return {"provider": "minimax", **pc}
 
@@ -4774,10 +4881,11 @@ def _upscale_minimax(cfg, input_video: str, prompt: str, source_task_id: str,
     return _minimax_video_task(cfg, "/v2/video_regeneration", body, output)
 
 
-SEEDVR2_WORKFLOW = "comfy/video-upscale-seedvr2-api.json"
+SEEDVR2_WORKFLOW = "comfy/scale-seedvr2-api.json"
 
 
-def _seedvr2_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
+def _upscale_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
+    """目标像素尺寸 = 档位短边 × 画幅(8 的倍数取整)。"""
     ratio_text = aspect or "16:9"
     try:
         numerator, denominator = (float(x.strip()) for x in ratio_text.split(":", 1))
@@ -4786,11 +4894,9 @@ def _seedvr2_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
             raise ValueError
     except (TypeError, ValueError, ZeroDivisionError):
         raise RuntimeError(f"超分画幅无效: {aspect or ratio_text},应为如 16:9")
-    short_side = {"360p": 360, "480p": 480, "720p": 720,
-                  "1080p": 1080, "2k": 1440, "4k": 2160}.get(
-                      (resolution or "1080p").lower())
+    short_side = UPSCALE_SHORT_SIDES.get((resolution or "1080p").lower())
     if not short_side:
-        raise RuntimeError(f"超分分辨率不支持: {resolution},可选 360p/480p/720p/1080p/2k/4k")
+        raise RuntimeError(f"超分分辨率不支持: {resolution},可选 {'/'.join(UPSCALE_SHORT_SIDES)}")
     if ratio >= 1:
         width, height = short_side * ratio, short_side
     else:
@@ -4798,17 +4904,32 @@ def _seedvr2_dimensions(aspect: str, resolution: str) -> tuple[int, int]:
     return max(8, round(width / 8) * 8), max(8, round(height / 8) * 8)
 
 
+_seedvr2_dimensions = _upscale_dimensions   # 旧名兼容
+
+
+def _upscale_target(input_video: str, resolution: str, aspect: str) -> tuple[int, int, str]:
+    """目标尺寸:--aspect 给了按它;否则跟随源视频实测宽高比(无源视频时 16:9)。返回 (w, h, 画幅串)。"""
+    if not aspect and input_video and Path(input_video).is_file():
+        meta = _probe_video_meta(input_video)
+        if meta and meta.get("width") and meta.get("height"):
+            aspect = f"{meta['width']}:{meta['height']}"
+    aspect = aspect or "16:9"
+    w, h = _upscale_dimensions(aspect, resolution)
+    return w, h, aspect
+
+
 def _seedvr2_config() -> dict:
-    """读取「生成模型」页视频段的 ComfyUI 配置,超分工作流使用内置模板。"""
-    try:
-        pc = dict((json.loads(CONFIG_PATH.read_text()).get("video") or {}).get("comfyui") or {})
-    except Exception:
-        pc = {}
+    """超分渠道 comfyui:读「生成模型」页超分段自有的 ComfyUI 连接(不再借用视频段);
+    本地/Comfy Cloud 用超分段选中的 comfy/scale-* 模板(缺省 scale-seedvr2-api.json),
+    RunningHub 用超分段自有的云端工作流(rh_workflow_id),节点直绑见 _apply_rh_upscale_bindings。"""
+    pc = dict(_upscale_config()["comfyui"] or {})
     if not pc:
-        raise RuntimeError("SeedVR2 超分需要先在「🎨 生成模型」页配置视频 ComfyUI 渠道")
-    # 本地 / Comfy Cloud 用内置模板;RunningHub 运行方式改用「🎨 生成模型」页 RunningHub
-    # 渠道选中的云端超分工作流(rh_workflow_id),节点直绑见 _apply_rh_upscale_bindings
-    pc["workflow"] = SEEDVR2_WORKFLOW
+        raise RuntimeError("超分渠道 comfyui 需要先在「🎨 生成模型」页超分段配置 ComfyUI 连接")
+    if not (pc.get("workflow") or "").strip():
+        pc["workflow"] = SEEDVR2_WORKFLOW
+    if _comfy_is_rh(pc) and not str(pc.get("rh_workflow_id") or "").strip():
+        raise RuntimeError("超分渠道 comfyui(RunningHub)未选中云端超分工作流:在「🎨 生成模型」页超分段"
+                           "「添加工作流」验证 SeedVR2 类工作流后选中并保存")
     return {"provider": "comfyui", **pc}
 
 
@@ -4821,6 +4942,109 @@ def _upscale_default_resolution() -> str:
         except Exception:
             pass
     return "1080p"
+
+
+def _upscale_ffmpeg(ff: dict, input_video: str, output: str, width: int, height: int) -> str:
+    """内置非 AI 插值放大:scale 滤镜 + libx264,音轨流拷贝,fps/时长不变。"""
+    p = Path(input_video or "")
+    if not input_video or not p.is_file():
+        raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(p),
+           "-vf", f"scale={width}:{height}:flags={ff['filter']}",
+           "-c:v", "libx264", "-preset", ff["preset"], "-crf", str(ff["crf"]),
+           "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", output]
+    print(f"[genmedia] ffmpeg 插值放大 {p.name} → {width}x{height}"
+          f"(flags={ff['filter']} crf={ff['crf']} preset={ff['preset']})", file=sys.stderr, flush=True)
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0 or not Path(output).is_file():
+        raise RuntimeError(f"ffmpeg 放大失败:{(r.stderr or '').strip()[-400:]}")
+    return str(Path(output).resolve())
+
+
+def _rescale_to(path: str, width: int, height: int) -> bool:
+    """产物尺寸 ≠ 目标(如 MiniMax 固定 2K)时用 lanczos 缩放到成片档,原地替换;已一致返回 False。"""
+    meta = _probe_video_meta(path)
+    if meta and meta["width"] == width and meta["height"] == height:
+        return False
+    tmp = str(Path(path).with_name(Path(path).stem + ".rescale.tmp.mp4"))
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", path,
+           "-vf", f"scale={width}:{height}:flags=lanczos", "-c:v", "libx264", "-preset", "slow",
+           "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", tmp]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0 or not Path(tmp).is_file():
+        raise RuntimeError(f"缩放到成片档失败:{(r.stderr or '').strip()[-400:]}")
+    os.replace(tmp, path)
+    print(f"[genmedia] 产物已缩放到成片档 {width}x{height}(原 "
+          f"{meta['width'] if meta else '?'}x{meta['height'] if meta else '?'})", file=sys.stderr)
+    return True
+
+
+def _ark_key_for(provider: str) -> dict:
+    """方舟渠道(volcengine/byteplus)的 Key:视频段该渠道配置,环境变量兜底。"""
+    try:
+        raw = json.loads(CONFIG_PATH.read_text()).get("video") or {}
+    except Exception:
+        raw = {}
+    pc = dict(raw.get(provider) or {})
+    key = pc.get("api_key") or os.environ.get(ENV_KEYS.get(provider, ""), "")
+    if not key:
+        raise RuntimeError(f"超分渠道 volcengine(样片模式)需要方舟 {provider} 的 API Key:"
+                           f"在「🎨 生成模型」页视频段填入,或设环境变量 {ENV_KEYS.get(provider, '')}")
+    return {"provider": provider, **pc, "api_key": key,
+            "model": pc.get("custom_model") or pc.get("model") or ""}
+
+
+def _volc_draft_task(input_video: str, source_task_id: str) -> dict:
+    """样片模式超分的 Draft 任务信息:--source-task-id 优先,否则读源 clip 同名 meta.json 的 draft_task 段。"""
+    draft = {}
+    if input_video:
+        mp = Path(input_video).with_suffix(".meta.json")
+        if mp.is_file():
+            try:
+                meta = json.loads(mp.read_text(encoding="utf-8"))
+                draft = dict(meta.get("draft_task") or {}) if isinstance(meta, dict) else {}
+            except Exception:
+                draft = {}
+    if source_task_id:
+        draft["id"] = source_task_id
+    if not draft.get("id"):
+        raise RuntimeError(
+            f"源 clip {Path(input_video).name if input_video else '(未传 --input)'} 未记录 Draft 任务 ID"
+            "(meta.json 无 draft_task 段):该组不是样片模式生成的——样片模式须在生成前就把「生成模型 → 超分」"
+            "选为火山引擎且视频渠道为方舟 Seedance 2.5、草稿档 480p;存量组只能重出草稿或改用其他超分渠道")
+    ts = draft.get("created_ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool) and time.time() - float(ts) > DRAFT_TASK_TTL_S:
+        raise RuntimeError(f"Draft 任务 {draft['id']} 已超过 7 天有效期(created_at {draft.get('created_at')}),"
+                           "方舟不再接受按该 ID 出原片;须重出草稿")
+    return draft
+
+
+def _upscale_volcengine(input_video: str, source_task_id: str, output: str, resolution: str) -> tuple[str, dict]:
+    """Seedance 2.5 样片模式出原片:POST /contents/generations/tasks,content 只放 draft_task.id,
+    resolution 固定 1080p(官方:仅支持 1080p;提示词/素材/时长/画幅/seed/音频由模型自动复用,禁止再传)。"""
+    if (resolution or "").lower() != "1080p":
+        raise RuntimeError(f"样片模式出原片仅支持 1080p,当前成片档 {resolution}:"
+                           "请把「输出设置」成片分辨率改为 1080p,或改用其他超分渠道")
+    draft = _volc_draft_task(input_video, source_task_id)
+    cfg = _ark_key_for(draft.get("provider") or "volcengine")
+    model = draft.get("model") or cfg.get("model")
+    if not model or _seedance_gen(model) < 2.5:
+        raise RuntimeError(f"Draft 任务 {draft['id']} 记录的模型 {model or '-'} 不是 Seedance 2.5,无法按样片出原片")
+    cfg["model"] = model
+    body = {"model": model,
+            "content": [{"type": "draft_task", "draft_task": {"id": draft["id"]}}],
+            "resolution": "1080p"}
+    tasks_url = f"{_ark_base(cfg)}/contents/generations/tasks"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    print(f"[genmedia] 样片模式出原片:Draft {draft['id']} → 1080p({model})", file=sys.stderr, flush=True)
+    task = _post_json(tasks_url, body, headers)
+    tid = task.get("id")
+    if not tid:
+        raise RuntimeError(f"方舟原片任务创建失败:{json.dumps(task, ensure_ascii=False)[:400]}")
+    print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
+    saved = _ark_wait_and_download(cfg, tid, output, "1080p", None, "")
+    return saved, {"draft_task_id": draft["id"], "task_id": tid, "model": model, "provider": cfg["provider"]}
 
 
 def _rh_bind_number_like(workflow: dict, inputs: dict, key: str, value) -> bool:
@@ -6018,26 +6242,67 @@ def reclaim_video(task_id: str, output: str, return_last_frame: str = "") -> str
 def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
                      source_task_id: str = "", resolution: str = "",
                      aspect: str = "", seed: int | None = None) -> str:
-    """视频超分,返回保存的绝对路径。
-
-    视频配置生效渠道为 comfyui 时使用 SeedVR2 工作流,复用视频 ComfyUI 配置;
-    其他渠道使用 MiniMax Regenerate-2K。SeedVR2 的 resolution/aspect/seed 控制
-    目标尺寸与随机种子,输出视频的 fps、时长和音轨跟随源视频。MiniMax 的
-    base_video 模式传 input_video + prompt,source_task_id 模式传 7 天内 succeeded
-    的任务 id 免传源视频。
+    """视频超分,返回保存的绝对路径。渠道只看「生成模型」页超分段(genconfig.upscale):
+    ffmpeg 插值放大 / volcengine 样片模式按 Draft 任务 ID 出 1080p 原片 / minimax Regenerate-2K
+    (2K 后缩到成片档)/ comfyui SeedVR2 类工作流。目标尺寸 = 成片档短边 × 画幅(缺省跟随源视频)。
+    所选渠道预检失败/出错直接抛错,不降级(用户拍板 2026-09-23)。
+    成功后把 upscale 段合并写进输出同名 .meta.json。
     """
     _forbid_dispatch_layer("超分")
+    up = _upscale_config()
+    provider = up["provider"]
+    resolution = (resolution or _upscale_default_resolution()).lower()
+    width, height, aspect = _upscale_target(input_video, resolution, aspect)
+    rec = {"provider": provider, "method": provider, "resolution": resolution,
+           "target": f"{width}x{height}", "aspect": aspect,
+           "source": Path(input_video).name if input_video else "",
+           "source_task_id": source_task_id or ""}
+    src_meta = _probe_video_meta(input_video) if input_video and Path(input_video).is_file() else None
+    if src_meta:
+        rec["source_resolution"] = f"{src_meta['width']}x{src_meta['height']}"
     try:
-        video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
-        provider = str(video_cfg.get("provider") or "")
-    except Exception:
-        provider = ""
-    if provider == "comfyui":
-        resolution = resolution or _upscale_default_resolution()
-        return _upscale_seedvr2(_seedvr2_config(), input_video, output, resolution,
-                                aspect, seed if seed is not None else random.randint(1, 2**31))
-    cfg = _minimax_upscale_config()
-    return _upscale_minimax(cfg, input_video, prompt, source_task_id, output)
+        if provider == "ffmpeg":
+            saved = _upscale_ffmpeg(up["ffmpeg"], input_video, output, width, height)
+            rec["params"] = dict(up["ffmpeg"])
+        elif provider == "volcengine":
+            saved, info = _upscale_volcengine(input_video, source_task_id, output, resolution)
+            rec.update(info)
+            rec["params"] = {"draft": True, "resolution": "1080p"}
+            if _rescale_to(saved, width, height):
+                rec["rescaled_to_target"] = True
+        elif provider == "minimax":
+            cfg = _minimax_upscale_config()
+            saved = _upscale_minimax(cfg, input_video, prompt, source_task_id, output)
+            rec["model"] = MINIMAX_UPSCALE_MODEL
+            rec["params"] = {"resolution": "2K", "api_base": _minimax_base(cfg)}
+            if _rescale_to(saved, width, height):
+                rec["rescaled_to_target"] = True
+        elif provider == "comfyui":
+            cfg = _seedvr2_config()
+            seed = seed if seed is not None else random.randint(1, 2**31)
+            saved = _upscale_seedvr2(cfg, input_video, output, resolution, aspect, seed)
+            rec["workflow"] = (cfg.get("rh_workflow_id") if _comfy_is_rh(cfg) else cfg.get("workflow"))
+            rec["params"] = {"mode": cfg.get("mode") or "local", "seed": seed,
+                             "site": cfg.get("mode") if _comfy_is_rh(cfg) else ""}
+            if _rescale_to(saved, width, height):
+                rec["rescaled_to_target"] = True
+        else:
+            raise RuntimeError(f"超分渠道无效: {provider}")
+    except SystemExit:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"超分渠道 {provider} 失败(不降级;在「🎨 生成模型 → 超分」改渠道后重跑):{e}") from e
+    out_meta = _probe_video_meta(saved)
+    if out_meta:
+        rec["output_resolution"] = f"{out_meta['width']}x{out_meta['height']}"
+    rec["recorded_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        _merge_meta(saved, "upscale", rec)
+    except Exception as e:
+        print(f"[genmedia] upscale 段写入 meta.json 失败(不影响产出):{e}", file=sys.stderr)
+    print(f"[genmedia] 超分完成:{rec['method']} → {rec.get('output_resolution') or rec['target']}",
+          file=sys.stderr, flush=True)
+    return saved
 
 
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
@@ -6319,18 +6584,20 @@ def _cmd_video(args):
         line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
+            draft = _draft_mode_active(cfg, resolution)
             body = _ark_video_body(dict(cfg, api_key="dry"), args.prompt,
                                    args.first_frame, args.last_frame,
                                    args.duration, resolution, args.aspect, args.seed,
                                    args.ref, args.audio_ref,
                                    gen_audio, bool(args.return_last_frame),
                                    video_refs=args.ref_video,
-                                   to_url=lambda p: f"file://{p}")
+                                   to_url=lambda p: f"file://{p}", draft=draft)
             roles = [c.get("role") for c in body["content"] if c["type"] != "text"]
             line += (f"\n[dry-run] text={body['content'][0]['text'][:200]}"
                      f"\n[dry-run] roles={roles}"
                      f" generate_audio={body.get('generate_audio')}"
-                     f" return_last_frame={body.get('return_last_frame')}")
+                     f" return_last_frame={body.get('return_last_frame')}"
+                     f" draft={body.get('draft', False)} body_resolution={body.get('resolution', '-')}")
         elif cfg["provider"] == "fal":
             # 同样走真实构造逻辑校验(家族/任务段/上限/时长),不发请求、不内联文件
             endpoint, body = _fal_video_body(dict(cfg, api_key="dry"), args.prompt,
@@ -6372,33 +6639,44 @@ def _cmd_reclaim(args):
 def _cmd_upscale(args):
     _check_id_digits(args.output)
     if args.dry_run:
-        try:
-            video_cfg = json.loads(CONFIG_PATH.read_text()).get("video") or {}
-            provider = str(video_cfg.get("provider") or "")
-        except Exception:
-            provider = ""
-        if provider == "comfyui":
-            cfg = _seedvr2_config()
-            resolution = args.resolution or _upscale_default_resolution()
-            width, height = _seedvr2_dimensions(args.aspect, resolution)
-            if _comfy_is_rh(cfg):
-                # 只读校验云端工作流可直绑(不上传、不建任务)
-                wf = json.loads(_rh_workflow_text(cfg))
-                summary = _apply_rh_upscale_bindings(wf, "<uploaded>", width, height, args.seed)
-                print(f"[dry-run] upscale via runninghub workflow={cfg.get('rh_workflow_id')}"
-                      f" site={cfg.get('mode')} target={summary.get('target')}"
-                      f" seed={args.seed if args.seed is not None else '(random)'} → {args.output}")
-                return
-            print(f"[dry-run] upscale via seedvr2 workflow={SEEDVR2_WORKFLOW}"
-                  f" size={width}x{height} seed={args.seed if args.seed is not None else '(random)'}"
-                  f" mode={cfg.get('mode') or 'local'} → {args.output}")
+        up = _upscale_config()
+        provider = up["provider"]
+        resolution = (args.resolution or _upscale_default_resolution()).lower()
+        width, height, aspect = _upscale_target(args.input, resolution, args.aspect)
+        head = f"[dry-run] upscale via {provider} target={width}x{height}({resolution} {aspect})"
+        if provider == "ffmpeg":
+            ff = up["ffmpeg"]
+            if not args.input or not Path(args.input).is_file():
+                raise RuntimeError(f"源视频不存在: {args.input or '(未传 --input)'}")
+            print(f"{head} flags={ff['filter']} crf={ff['crf']} preset={ff['preset']} → {args.output}")
             return
-        cfg = _minimax_upscale_config()
-        if args.input and not args.source_task_id:
-            _minimax_upscale_precheck(args.input)
-            print(f"[dry-run] 源视频 {args.input} 通过 Regenerate-2K 输入规格预检")
-        print(f"[dry-run] upscale via minimax model={MINIMAX_UPSCALE_MODEL}"
-              f" resolution=2K api_base={_minimax_base(cfg)} → {args.output}")
+        if provider == "volcengine":
+            if resolution != "1080p":
+                raise RuntimeError(f"样片模式出原片仅支持 1080p,当前成片档 {resolution}")
+            draft = _volc_draft_task(args.input, args.source_task_id)
+            cfg = _ark_key_for(draft.get("provider") or "volcengine")
+            print(f"{head} draft_task={draft['id']} model={draft.get('model') or cfg.get('model')}"
+                  f" expires_at={draft.get('expires_at') or '?'} → {args.output}")
+            return
+        if provider == "minimax":
+            cfg = _minimax_upscale_config()
+            if args.input and not args.source_task_id:
+                _minimax_upscale_precheck(args.input)
+                print(f"[dry-run] 源视频 {args.input} 通过 Regenerate-2K 输入规格预检")
+            print(f"{head} model={MINIMAX_UPSCALE_MODEL} resolution=2K(→缩到 {width}x{height})"
+                  f" api_base={_minimax_base(cfg)} → {args.output}")
+            return
+        cfg = _seedvr2_config()
+        if _comfy_is_rh(cfg):
+            # 只读校验云端工作流可直绑(不上传、不建任务)
+            wf = json.loads(_rh_workflow_text(cfg))
+            summary = _apply_rh_upscale_bindings(wf, "<uploaded>", width, height, args.seed)
+            print(f"{head} runninghub workflow={cfg.get('rh_workflow_id')} site={cfg.get('mode')}"
+                  f" bound={summary.get('target')} seed={args.seed if args.seed is not None else '(random)'}"
+                  f" → {args.output}")
+            return
+        print(f"{head} workflow={cfg.get('workflow')} mode={cfg.get('mode') or 'local'}"
+              f" seed={args.seed if args.seed is not None else '(random)'} → {args.output}")
         return
     out = generate_upscale(args.input, args.output, args.prompt, args.source_task_id,
                             args.resolution, args.aspect, args.seed)
@@ -6523,17 +6801,17 @@ def main():
     pr.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(原提交带 --return-last-frame 时才有产物)")
 
-    pu = sub.add_parser("upscale", help="视频超分(ComfyUI SeedVR2 或 MiniMax Regenerate-2K)")
+    pu = sub.add_parser("upscale", help="视频超分(渠道按「生成模型」页超分段:ffmpeg / 火山样片模式 / MiniMax / ComfyUI)")
     pu.add_argument("--input", default="",
-                    help="源视频路径;MiniMax 须为 H3 768P 直出规格,与 --source-task-id 二选一")
+                    help="源视频路径(ffmpeg/comfyui 必传;volcengine 读其同名 meta.json 的 draft_task;MiniMax 须为 H3 768P 直出规格)")
     pu.add_argument("--output", required=True, help="输出 mp4 路径")
     pu.add_argument("--prompt", default="",
-                    help="MiniMax base_video 模式所需的原始 video_prompt;SeedVR2 忽略")
+                    help="MiniMax base_video 模式所需的原始 video_prompt;其他渠道忽略")
     pu.add_argument("--source-task-id", default="",
-                    help="MiniMax 7 天内 succeeded 的任务 id(免传源视频,与 --input 互斥;SeedVR2 不使用)")
-    pu.add_argument("--resolution", default="", help="SeedVR2 目标分辨率,如 1080p/4k")
-    pu.add_argument("--aspect", default="", help="SeedVR2 目标画幅,如 16:9")
-    pu.add_argument("--seed", type=int, default=None, help="SeedVR2 随机种子")
+                    help="volcengine:Draft 任务 ID(缺省读源 clip meta);MiniMax:7 天内 succeeded 的任务 id(与 --input 互斥)")
+    pu.add_argument("--resolution", default="", help="目标档位,缺省项目成片档(360p/480p/720p/1080p/2k/4k)")
+    pu.add_argument("--aspect", default="", help="目标画幅,如 16:9;缺省跟随源视频实测宽高")
+    pu.add_argument("--seed", type=int, default=None, help="ComfyUI SeedVR2 随机种子")
     pu.add_argument("--dry-run", action="store_true")
 
     pt = sub.add_parser("tts", help="TTS 旁白/语音合成")
