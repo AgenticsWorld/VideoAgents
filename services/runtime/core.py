@@ -12818,6 +12818,122 @@ async def api_projects_delete(body: dict):
     return {"ok": True, "deleted": project, "next": remain[0] if remain else ""}
 
 
+# ---------------- 导入项目(顶栏项目下拉「› 导入项目…」,2026-09-23) ----------------
+MAX_PROJECT_IMPORT = 20 * 1024 * 1024 * 1024        # zip 上限 20 GB(项目包含成片视频,远大于插件/技能包)
+MAX_PROJECT_IMPORT_FILES = 200_000
+_PROJECT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+# 项目根的标志物:zip 顶层唯一目录若是这些子目录之一,说明 zip 直接打包的是项目内容而非套了一层项目目录
+_PROJECT_ROOT_MARKERS = {"settings.json", "brief.md", "refs", "runs", "novel", "bible", "story", "assets",
+                         "directing", "edit", "publish", "qa", "code", "chat", "footage", "whitebox"}
+
+
+def _import_zip_layout(names: list[str]) -> tuple[str, str]:
+    """判定 zip 布局 → (项目根前缀, 建议项目名)。
+    顶层恰有一个目录且所有条目都在其下、且它不是项目子目录名 → 套了一层项目目录:前缀 "<dir>/",
+    项目名取该目录名;否则 zip 根即项目根:前缀 "",项目名由调用方取 zip 文件名主干。"""
+    tops = {n.split("/", 1)[0] for n in names}
+    if len(tops) == 1:
+        top = next(iter(tops))
+        if all("/" in n for n in names) and top not in _PROJECT_ROOT_MARKERS:
+            return top + "/", top
+    return "", ""
+
+
+def _free_project_name(name: str) -> str:
+    """同名项目已存在时自动加序号后缀(name-2、name-3…),导入不弹改名对话框。"""
+    if not (PROJECTS_DIR / name).exists():
+        return name
+    for i in range(2, 1000):
+        cand = f"{name}-{i}"
+        if len(cand) <= 80 and not (PROJECTS_DIR / cand).exists():
+            return cand
+    raise ServiceError(409, f"Project already exists: {name}")
+
+
+def _import_project_zip(zip_path: Path, filename: str, want_name: str, zh: bool) -> dict:
+    """把落盘的 zip 解压成一个新项目(线程内执行):先解到 . 开头的暂存目录(不被项目列表看到),
+    完整无误后原子改名上线;路径穿越/空包/超量一律拒绝并清理暂存。"""
+    try:
+        zf = zipfile.ZipFile(zip_path)
+    except zipfile.BadZipFile as exc:
+        raise ServiceError(400, "不是有效的 zip 包" if zh else "Not a valid zip file") from exc
+    with zf:
+        entries = [e for e in zf.infolist()
+                   if not e.is_dir()
+                   and not e.filename.startswith("__MACOSX/")
+                   and Path(e.filename).name not in (".DS_Store", "Thumbs.db")]
+        if not entries:
+            raise ServiceError(400, "zip 包里没有文件" if zh else "The zip file contains no files")
+        if len(entries) > MAX_PROJECT_IMPORT_FILES:
+            raise ServiceError(400, (f"zip 包文件数超过 {MAX_PROJECT_IMPORT_FILES}" if zh
+                                     else f"The zip file has more than {MAX_PROJECT_IMPORT_FILES} files"))
+        names = [e.filename for e in entries]
+        prefix, dir_name = _import_zip_layout(names)
+        raw = (want_name or "").strip() or dir_name or Path(filename or "").stem
+        name = re.sub(r"[^A-Za-z0-9_\-]+", "-", raw).strip("-_")[:80]
+        if not name or not _PROJECT_NAME_RE.fullmatch(name):
+            raise ServiceError(400, ("无法从 zip 目录名/文件名得出合法项目名(仅限字母、数字、- 和 _):"
+                                     f"{raw!r}" if zh else
+                                     "Cannot derive a valid project name (ASCII letters, digits, '-' and '_' only) "
+                                     f"from the zip folder/file name: {raw!r}"))
+        if want_name and (PROJECTS_DIR / name).exists():
+            raise ServiceError(409, f"项目已存在:{name}" if zh else f"Project already exists: {name}")
+        final = _free_project_name(name)
+        staging = PROJECTS_DIR / f".import-tmp-{final}"
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir()
+        root = staging.resolve()
+        count = 0
+        try:
+            for entry in entries:
+                rel = entry.filename[len(prefix):]
+                if not rel or rel.endswith("/"):
+                    continue
+                dest = (staging / rel).resolve()
+                try:
+                    dest.relative_to(root)
+                except ValueError as exc:
+                    raise ServiceError(400, (f"zip 含路径穿越条目:{entry.filename}" if zh
+                                             else f"The zip contains a path-traversal entry: {entry.filename}")) from exc
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(entry) as src, dest.open("wb") as out:
+                    shutil.copyfileobj(src, out, 1024 * 1024)
+                count += 1
+            if not count:
+                raise ServiceError(400, "zip 包里没有文件" if zh else "The zip file contains no files")
+            os.rename(staging, PROJECTS_DIR / final)      # 原子上线
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+    ensure_project(final)                                 # 补 refs/ 骨架(只建缺的目录)
+    return {"ok": True, "name": final, "files": count,
+            "renamed_from": name if final != name else None}
+
+
+async def api_projects_import(chunks, filename: str = "", name: str = ""):
+    """顶栏项目下拉「› 导入项目…」:请求体即 zip 原始字节(与插件/技能包同口径,免 multipart 依赖),
+    流式落盘到 projects/.import-*.zip(项目包可达数 GB,不整包进内存)再解压为新项目。
+    zip 可以是项目目录本身打包(根含 settings.json/refs/…),也可以外套一层项目目录;
+    项目名 = 外层目录名 > zip 文件名主干(可用 name 参数指定),同名自动加 -2/-3 后缀。"""
+    zh = (ui_lang_code() or "zh") == "zh"
+    tmp_zip = PROJECTS_DIR / f".import-{uuid.uuid4().hex}.zip"
+    size = 0
+    try:
+        with tmp_zip.open("wb") as f:
+            async for chunk in chunks:
+                size += len(chunk)
+                if size > MAX_PROJECT_IMPORT:
+                    raise ServiceError(413, ("zip 包超过 20 GB 上限" if zh
+                                             else "The zip file exceeds the 20 GB limit"))
+                f.write(chunk)
+        if not size:
+            raise ServiceError(400, "上传内容为空" if zh else "Empty upload body")
+        return await asyncio.to_thread(_import_project_zip, tmp_zip, filename, name, zh)
+    finally:
+        tmp_zip.unlink(missing_ok=True)
+
+
 async def api_history(agent: str, project: str = "demo", limit: int = 200):
     p = chat_path(agent, project)
     if not p.is_file():

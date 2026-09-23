@@ -129,6 +129,13 @@ async def create_project(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_create(body)
 
 
+@api.post("/projects/import", tags=["projects"])
+async def import_project(request: Request, filename: str = "", name: str = "") -> dict[str, Any]:
+    """顶栏项目下拉「› 导入项目…」:请求体即 zip 原始字节,流式落盘后解压到 data/projects/<name>/。
+    须注册在 /projects/{project} 之前,否则 "import" 会被当项目名路由到删除接口。"""
+    return await core.api_projects_import(request.stream(), filename, name)
+
+
 @api.post("/projects/{project}", tags=["projects"])
 async def delete_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_delete(body)
