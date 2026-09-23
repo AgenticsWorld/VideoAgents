@@ -248,7 +248,8 @@ def select_timbre(text: str, output: str, character: str = "", variant: str = ""
         for raw_tag in entry.get("tags") or []:
             tag = str(raw_tag).casefold()
             if any(prefix + tag in profile["text"]
-                   for prefix in ("不", "非", "避免", "不要", "拒绝")):
+                   for prefix in ("不", "非", "避免", "不要", "拒绝",
+                                  "no ", "not ", "avoid ", "avoiding ", "without ", "never ", "don't ", "do not ", "isn't ", "is not ")):   # 英文卡片否定写法
                 score -= 10
                 avoided.append(str(raw_tag))
             elif tag in profile["voice_text"]:

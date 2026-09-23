@@ -204,14 +204,14 @@ function chip(id,_i,_a,forceKind){
 const AGENT_NAMES={'01-story/timeline-story':'剧情时间轴','01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
 const agentName=id=>t(AGENT_NAMES[id]||id);
 function editBtn(agent,loc,cls,label){
-  return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`;
+  return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-ep="${esc(EP)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`;
 }
 document.addEventListener('click',e=>{
   const lbimg=e.target.closest('[data-img]');
   if(lbimg&&lbimg.dataset.img){showLb(lbimg.dataset.img,lbimg.dataset.cap,lbimg.dataset.href);return}
   const b=e.target.closest('.editbtn');if(!b||!b.dataset.loc)return;
   const proj=$('#project').value.trim()||'demo';
-  const loc=b.dataset.loc, target={kind:'script',id:'',ep:(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
+  const loc=b.dataset.loc, target={kind:'script',id:'',ep:b.dataset.ep||EP||(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
   EditPopup.open({project:proj,compose:t('修改 ')+loc+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // 无 data-agent(标题行整体反馈)→ 修改师
 });
 // 当页放大层(同故事板页):点小图打开,点遮罩 / Esc 关闭,不跳转其它页面
@@ -294,7 +294,7 @@ function episodeRow(d,bd,ep,A){
   if(p.title||p.beats)r.push(['🗂',`${esc(t('分集计划'))} ${editBtn(A.plan,I18N.f('分集计划 {ep}(文件 story/episode_plan.json)',{ep}),'sm')}`]);
   const iss=bd.issues||[];
   if(iss.length)r.push(['⚠',`<span class="issues">${iss.slice(0,4).map(i=>`<div class="${i.level==='info'?'info':''}">${esc(i.text)}</div>`).join('')}${iss.length>4?`<div class="info">… ${esc(I18N.f('共 {n} 条',{n:iss.length}))}</div>`:''}</span>`]);
-  return `<tr class="ep"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${editBtn(A.overview,I18N.f('剧本 {ep} 整体(文件 {f})',{ep,f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+  return `<tr class="ep"><td class="l" data-no-i18n>${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${editBtn(A.overview,I18N.f('剧本 {ep} 整体(文件 {f})',{ep,f:epFile(ep,'screenplay.md')}))}</td></tr>`;
 }
 
 /* 场次头 + 场内小块 */
@@ -329,7 +329,7 @@ function sceneRows(sc,bd,ep,A){
   const jumps=JumpAnchor.group([
     (LAST.board_scenes||[]).includes(sc.no)?JumpAnchor.link('board',proj0,ep,'scene',sc.no):'',
     (LAST.shot_scenes||[]).includes(sc.no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.no):'']);
-  let h=`<tr class="sh" data-stick-scene="${esc(sc.no)}" data-stick-label="${esc(sc.scene_name||'')}" id="sc-${esc(sc.no)}"><td class="l">${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${jumps}${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+  let h=`<tr class="sh" data-stick-scene="${esc(sc.no)}" data-stick-label="${esc(sc.scene_name||'')}" id="sc-${esc(sc.no)}"><td class="l" data-no-i18n>${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${jumps}${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}))}</td></tr>`;
   const blocks=sc.blocks&&sc.blocks.length?sc.blocks:fallbackBlocks(sc);
   let dn=0;
   blocks.forEach(b=>{
@@ -340,16 +340,16 @@ function sceneRows(sc,bd,ep,A){
       const right=lines.map((x,i)=>`<div class="rl"><span class="i">${from+i}</span><span class="em">${esc(x.emotion||'')}</span><span class="es">${x.est_s!=null?secs(x.est_s):''}</span>${(x.style_hits||[]).length?`<span class="sh" title="${esc(x.style_hits.join(', '))}">✓</span>`:''}</div>`).join('')
         +(lines.length>1&&tot?`<div class="rl" style="margin-top:3px;color:var(--text)"><span class="i"></span><span>Σ ${secs(tot)}</span></div>`:'');
       const first=lines[0]||{};
-      h+=`<tr class="blk"><td class="l">${left}</td><td class="r">${right}</td><td class="e">${editBtn(A.dialogue,I18N.f('对白 {ep}/{no} 第 {a}–{b} 句(起「{spk}:{txt}」;对白层文件 {f})',{ep,no:sc.no,a:from,b:dn,spk:first.speaker_name||cname(first.speaker),txt:clip(first.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+      h+=`<tr class="blk"><td class="l" data-no-i18n>${left}</td><td class="r">${right}</td><td class="e">${editBtn(A.dialogue,I18N.f('对白 {ep}/{no} 第 {a}–{b} 句(起「{spk}:{txt}」;对白层文件 {f})',{ep,no:sc.no,a:from,b:dn,spk:first.speaker_name||cname(first.speaker),txt:clip(first.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
     }else if(b.type==='narration'){
       const right=b.final===false||!b.id
         ?`<span class="cand">${esc(bd.narration&&bd.narration.length?t('剧本内旁白候选,未进旁白定稿'):t('旁白候选(尚无旁白定稿)'))}</span>${b.est_s!=null?` · ${secs(b.est_s)}`:''}`
         :`<b style="color:var(--purple)">${esc(b.id)}</b>${b.est_s!=null?` · ${secs(b.est_s)}`:''}${b.tone?` · ${esc(b.tone)}`:''}${b.anchor?`<div>📍 ${esc(clip(b.anchor,60))}</div>`:''}`;
-      h+=`<tr class="blk"><td class="l"><div class="nar">🎙 ${b.speaker?`<span class="nid">${esc(b.speaker)}</span>`:''}${esc(b.text)}</div></td><td class="r">${right}</td><td class="e">${editBtn(A.narration,b.id?I18N.f('旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})',{ep,id:b.id,a:b.anchor||'',f:epFile(ep,'narration.md')}):I18N.f('旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+      h+=`<tr class="blk"><td class="l" data-no-i18n><div class="nar">🎙 ${b.speaker?`<span class="nid">${esc(b.speaker)}</span>`:''}${esc(b.text)}</div></td><td class="r">${right}</td><td class="e">${editBtn(A.narration,b.id?I18N.f('旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})',{ep,id:b.id,a:b.anchor||'',f:epFile(ep,'narration.md')}):I18N.f('旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
     }else if(b.type==='transition'){
-      h+=`<tr class="blk"><td class="l"><span class="trn">${esc(b.text)}</span></td><td class="r"></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 转场「{txt}」(文件 {f})',{ep,no:sc.no,txt:b.text,f:epFile(ep,'screenplay.md')}),'sm')}</td></tr>`;
+      h+=`<tr class="blk"><td class="l" data-no-i18n><span class="trn">${esc(b.text)}</span></td><td class="r"></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 转场「{txt}」(文件 {f})',{ep,no:sc.no,txt:b.text,f:epFile(ep,'screenplay.md')}),'sm')}</td></tr>`;
     }else{
-      h+=`<tr class="blk"><td class="l"><div class="${b.type==='sound'?'snd':'act'}">${esc(b.text)}</div></td><td class="r">${b.type==='sound'?'🔊':''}</td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 动作段「{txt}」(文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
+      h+=`<tr class="blk"><td class="l" data-no-i18n><div class="${b.type==='sound'?'snd':'act'}">${esc(b.text)}</div></td><td class="r">${b.type==='sound'?'🔊':''}</td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 动作段「{txt}」(文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}))}</td></tr>`;
     }
   });
   return h;

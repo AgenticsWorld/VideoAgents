@@ -2245,7 +2245,7 @@ window.I18N_DICT = {
 "📜 剧本预览": "📜 Aperçu du scénario",
 /* 故事板页(preview_board.html,2026-09-11) */
 " · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)": " · final {f}s / budget {b}s ({s} plans, {g} groupes)",
-"[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "[草图 {ep}/{key}] Réviser le croquis de storyboard {ep} scène {no} plan {o} (projet {p} ; image {dir}/{key}.png, registre {dir}/index.json ; contenu : {txt})",
+"修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "Réviser le croquis de storyboard {ep} scène {no} plan {o} (projet {p} ; image {dir}/{key}.png, registre {dir}/index.json ; contenu : {txt})",
 "agent·分镜草图师": "Agent croquis de storyboard",
 "{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s": "{n} scènes · {m} plans brouillon · {g} groupes brouillon · brouillon Σ {d}s",
 "{n} 镜 · {g} 组": "{n} plans · {g} groupes",

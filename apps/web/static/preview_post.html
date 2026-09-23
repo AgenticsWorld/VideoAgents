@@ -598,7 +598,7 @@ function setMonitor(keepTime){
     // 整集连播:A 单画面按组序连播各组当前版本,声音走 final_audio
     EPIDX=D.groups.findIndex(x=>x.group_id===SEL);if(EPIDX<0)EPIDX=0;
     vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
-    $('#selA').innerHTML=`<option>${esc(t('各组当前版本'))}</option>`;$('#selB').innerHTML='';
+    $('#selA').innerHTML=`<option value="">${esc(t('各组当前版本'))}</option>`;$('#selB').innerHTML='';
     epLoad(EPIDX,t0);return;
   }
   epAudioStop();

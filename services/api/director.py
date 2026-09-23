@@ -361,7 +361,9 @@ async def signoff(project: str, ep: str, body: dict | None = None):
     body = body or {}
     base = project_path(project, ep)
     cid = str(body.get('confirm_id') or '')
-    answer = str(body.get('answer') or '签字')
+    answer = core.canonical_choice(body.get('answer'), 'sign')   # 各语言译文归一;缺答复不默认成签字
+    if not answer:
+        raise HTTPException(400, 'answer must be 签字 or 暂缓')
     if not cid or cid not in core.CONFIRMS:
         raise HTTPException(404, 'sign-off card not found (it may have been answered from the console)')
     try:

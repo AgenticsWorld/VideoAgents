@@ -2243,7 +2243,7 @@ window.I18N_DICT = {
 "📜 剧本预览": "📜 Drehbuch-Vorschau",
 /* 故事板页(preview_board.html,2026-09-11) */
 " · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)": " · final {f}s / Budget {b}s ({s} Shots, {g} Gruppen)",
-"[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "[草图 {ep}/{key}] Storyboard-Skizze überarbeiten {ep} Szene {no} Shot {o} (Projekt {p}; Bild {dir}/{key}.png, Register {dir}/index.json; Inhalt: {txt})",
+"修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "Storyboard-Skizze überarbeiten {ep} Szene {no} Shot {o} (Projekt {p}; Bild {dir}/{key}.png, Register {dir}/index.json; Inhalt: {txt})",
 "agent·分镜草图师": "Storyboard-Skizzen-Agent",
 "{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s": "{n} Szenen · {m} Shot-Entwürfe · {g} Gruppen-Entwürfe · Entwurf Σ {d}s",
 "{n} 镜 · {g} 组": "{n} Shots · {g} Gruppen",

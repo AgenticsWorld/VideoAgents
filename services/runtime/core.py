@@ -3144,7 +3144,7 @@ def build_role_prompt(agent_id: str, project: str,
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
 - 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出;提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
-- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**空间布局链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(这些词只进 prompt、不上图,无字体限制——2026-09-07 起俯视图直接引用、不再叠加人物动线标注;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版)
+- 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**空间布局链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(这些词只进 prompt、不上图,无字体限制——2026-09-07 起俯视图直接引用、不再叠加人物动线标注;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版);Seedance 2.5 的结构标签(`【人物】`/`【动作与声音】`/「使用：/不采用：」/`【未采用素材】`/`【保持一致】`)是官方段落标签,非中文界面用机检认可的固定英文标签(`【Characters】`/`【Action & sound】`/「Use:/Not used:」/`【Unused assets】`/`【Consistency】`),两套等价、不得自造
 - 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
 - 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
 - 内嵌字幕:{burn_in}
@@ -3449,10 +3449,14 @@ MiniMax 云端超分模型 Regenerate-2K 可用。执行超分工单前,**先阅
    的升级确认必须加 `--default 跳过`——无人答复 = 不重跑,严禁靠超时默认值绕过重跑次数上限。
    命令输出「重跑」→ 正常重新派单;输出「跳过」→ 不再重跑,把该问题记入
    data/projects/<project>/qa/defects/ 并在最终汇报中说明跳过原因。首次派单不需要确认,只有重跑需要
+   (弹窗按钮文字由界面按用户语言自动显示,不要为了界面语言用 --options 传英文/其他语言选项;
+   命令 stdout 恒为中文原键「重跑」/「跳过」,用户点了任何语言的按钮都归一为这两个词)
 5. 【人工签字点必须用 --sign】H1-H5 与每集 H3A 等人工签字闸门,必须用签字类确认:
    `python3 services/runtime/dispatch.py --confirm "【H1 <闸门名>】<要点与放行影响>" --sign`
    弹窗按钮为「签字/暂缓」,不倒计时、永不自动确认,保留到用户操作;命令默认最多等 4 小时。
-   输出「签字」→ 闸门通过,走冻结流程;「暂缓」或「未签字」(等待超时)→ 记为等待人工,
+   按钮文字由界面按用户语言自动显示(英文界面即 Sign off / Hold),**不要为了界面语言用 --options 传
+   英文/其他语言选项**;问题正文可用用户语言。命令 stdout 恒为中文原键:**只有恰好输出「签字」才算通过**,
+   走冻结流程;「暂缓」「未签字」(等待超时)及其他任何输出一律 = 未签字 → 记为等待人工,
    继续推进无依赖任务后正常结束运行。严禁把超时当签字通过,严禁用普通确认({confirm_timeout}s 自动默认)代替签字
 6. 你自己不做成员职责内的具体创作,你的产出是:任务拆解、派单、验收、向用户汇报进度与结果
    派 for_each 批处理单(一单交付 N 份 JSON/MD)时,指令末尾必写「直接逐份落 JSON,不要写生成脚本、不要分批;共用说明不逐份复制」
@@ -3604,9 +3608,17 @@ def _revision_header(project: str, target: dict | None, message: str) -> str:
     return "\n".join(lines) + "\n" + message
 
 
+_REV_NONE = {"none", "null", "n/a", "na", "-", "无", "無", "なし", "없음", "keine", "ninguno", "aucun", "tidak ada", "nenhum", "нет", "لا شيء", "không"}
+
+
 def _parse_revision_block(text: str) -> dict:
-    """解析修改师汇报末尾「## 变更记录」段(一行一键,键名英文);缺段返回空 dict。"""
-    m = re.search(r"^##\s*变更记录\s*$(.*)", text or "", re.M | re.S)
+    """解析修改师汇报末尾「## 变更记录」段(一行一键,键名英文);缺段返回空 dict。
+    汇报按界面语言写,标题接受中文原文与各语言常见译法(2026-09-23;规约要求非中文界面写 `## Change log`)。"""
+    m = re.search(r"^##\s*(?:变更记录|变更纪录|變更記錄|change\s*-?\s*(?:log|record|s)|changes|revision\s*(?:log|record)"
+                  r"|変更記録|変更履歴|변경\s*기록|변경\s*사항|änderungsprotokoll|änderungen|registro\s+de\s+cambios"
+                  r"|journal\s+des\s+modifications|catatan\s+perubahan|registro\s+de\s+alterações"
+                  r"|журнал\s+изменений|سجل\s+التغييرات|nhật\s+ký\s+thay\s+đổi)\s*$(.*)",
+                  text or "", re.M | re.S | re.I)
     if not m:
         return {}
     rec: dict = {}
@@ -3616,9 +3628,9 @@ def _parse_revision_block(text: str) -> dict:
             continue
         k, v = mm.group(1), mm.group(2).strip()
         if k in ("changed_files", "dirty_nodes", "checks"):
-            rec[k] = [x.strip() for x in re.split(r"[,;,;]", v) if x.strip() and x.strip().lower() != "none"]
+            rec[k] = [x.strip() for x in re.split(r"[,;,;]", v) if x.strip() and x.strip().lower() not in _REV_NONE]
         elif k in ("signature_expired", "notes"):
-            rec[k] = "" if v.lower() == "none" else v[:1000]
+            rec[k] = "" if v.lower() in _REV_NONE else v[:1000]
     return rec
 
 
@@ -6525,7 +6537,7 @@ def _dialogue_index(text: str) -> dict[str, dict]:
                 low = [c.lower() for c in cells]
                 text_col = next((i for i, c in enumerate(low)
                                  if any(k in c for k in _DLG_TEXT_COL)
-                                 and not any(k in c for k in ("原句", "字数", "编号", "id"))), None)
+                                 and not any(k in c for k in ("原句", "字数", "编号", "id", "original", "source", "chars", "count", "length", "index", "no."))), None)
                 spk_col = next((i for i, c in enumerate(low) if any(k in c for k in _DLG_SPK_COL)), None)
                 continue
             if text_col is not None and text_col < len(cells):
@@ -6545,7 +6557,7 @@ def _dialogue_index(text: str) -> dict[str, dict]:
             continue
         if cur_id:
             # ③ 标题块内的「定稿」条目
-            m3 = re.match(r"^-\s*\*\*定稿\*\*\s*[:：]\s*(.+)$", line)
+            m3 = re.match(r"^-\s*\*\*(?:定稿|final|final line)\*\*\s*[:：]\s*(.+)$", line)
             if m3:
                 _put(cur_id, cur_spk, m3.group(1))
                 cur_id = None
@@ -8404,7 +8416,7 @@ def _board_gate(base: Path, ep: str) -> dict:
     rec = _read_json_safe(base / BOARD_SIGNOFF_REL.format(ep=ep)) or {}
     sbf = base / "directing" / ep / "storyboard.json"
     sb_mtime = int(sbf.stat().st_mtime) if sbf.is_file() else None
-    signed = bool(node and node.get("state") in _DONE_STATES) or (rec.get("answer") == "签字")
+    signed = bool(node and node.get("state") in _DONE_STATES) or (canonical_choice(rec.get("answer"), "sign") == "签字")
     stale = bool(signed and rec.get("storyboard_mtime") and sb_mtime and sb_mtime > int(rec["storyboard_mtime"]) + 1)
     return {"gate_id": (node or {}).get("id") or f"{BOARD_GATE_ID}-{ep}", "state": (node or {}).get("state"),
             "in_dag": bool(node), "pending": cards, "signed": signed, "stale": stale,
@@ -8417,7 +8429,9 @@ async def api_board_signoff(project: str, ep: str, body: dict):
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)
     cid = str(body.get("confirm_id") or "")
-    answer = str(body.get("answer") or "签字")
+    answer = canonical_choice(body.get("answer"), "sign")   # 各语言译文归一;缺答复不默认成签字
+    if not answer:
+        raise ServiceError(400, "answer must be 签字 or 暂缓")
     if not cid or cid not in CONFIRMS:
         raise ServiceError(404, "sign-off card not found (it may have been answered from the console)")
     res = await api_confirm_answer(cid, {"answer": answer})
@@ -8943,7 +8957,7 @@ def _ep_publish_info(base: Path, ep: str):
             "lint_total": len(lint),
             "lint_flagged": {k: str(v) for k, v in lint.items()
                              if isinstance(v, str)
-                             and v.lower() != "pass" and not v.startswith("pass（")},
+                             and not re.match(r"pass\s*(?:[（(]|$)", v.strip(), re.I)},
             "files": files})
     return info
 
@@ -9305,7 +9319,7 @@ def _post_gate(base: Path, ep: str, plan: dict) -> dict:
             cards.append({k: c.get(k) for k in ("id", "question", "options", "default", "gate_id", "checkpoint")})
     rec = _read_json_safe(base / pp.SIGNOFF_REL.format(ep=ep)) or {}
     fp = pp.plan_fingerprint(plan)
-    signed = bool(node and node.get("state") in _DONE_STATES) or (rec.get("answer") == "签字")
+    signed = bool(node and node.get("state") in _DONE_STATES) or (canonical_choice(rec.get("answer"), "sign") == "签字")
     stale = bool(signed and rec.get("plan_fingerprint") and rec.get("plan_fingerprint") != fp)
     return {"gate_id": (node or {}).get("id") or f"{POST_GATE_ID}-{ep}", "state": (node or {}).get("state"), "in_dag": bool(node),
             "pending": cards, "signed": signed, "stale": stale, "signed_at": rec.get("signed_at"), "signed_answer": rec.get("answer"),
@@ -10328,7 +10342,9 @@ async def api_post_signoff(project: str, ep: str, body: dict):
     签字后按保留规则清理版本文件(母本 + 最近两个已采纳版本)。"""
     pp, base, ep2, plan = _post_load(project, ep)
     cid = str(body.get("confirm_id") or "")
-    answer = str(body.get("answer") or "签字")
+    answer = canonical_choice(body.get("answer"), "sign")   # 各语言译文归一;缺答复不默认成签字
+    if not answer:
+        raise ServiceError(400, "answer must be 签字 or 暂缓")
     if not cid or cid not in CONFIRMS:
         raise ServiceError(404, "sign-off card not found (it may have been answered from the console)")
     res = await api_confirm_answer(cid, {"answer": answer})
@@ -12881,6 +12897,60 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
         pass
 
 
+# ---------------- 确认/签字答复的语言归一(2026-09-23) ----------------
+# 弹窗按钮文字由前端按界面语言词典翻译(static/i18n/<lang>.js:"签字"→"Sign off"、"暂缓"→"Hold"…),
+# 服务端比对、等待方 dispatch.py 的 stdout、总制片规约("输出「签字」→通过")都只认中文原键。
+# 英文界面下总制片曾自行传 --options "Sign off,Hold" 建签字单:用户点 Hold 回来的「Hold」既不是「暂缓」
+# 也不是「未签字」,被当成签字通过(桌面端反馈)。这里把各语言译文与常见同义写法归一回中文原键:
+# 建单时归一 options/default(前端再按词典译回按钮文字),答复时归一 answer;签字类空答复不再默认成「签字」。
+_CHOICE_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "签字": ("sign off", "signoff", "sign-off", "sign", "signed", "approve", "approved", "签署", "通过", "放行", "同意"),
+    "暂缓": ("hold", "on hold", "hold on", "defer", "deferred", "postpone", "postponed", "wait",
+           "搁置", "暂停", "不放行", "暂不放行", "暂不签字"),
+    "重跑": ("rerun", "re-run", "retry", "redo", "重试", "重做"),
+    "跳过": ("skip", "skipped", "ignore", "略过", "不重跑"),
+}
+_CHOICE_KIND_KEYS = {"sign": ("签字", "暂缓"), "confirm": ("重跑", "跳过")}
+_CHOICE_DICT_PATTERN = re.compile(r'^"(签字确认|签字|暂缓|重跑|跳过)":\s*"([^"]+)"', re.M)
+_CHOICE_ALIASES: dict[str, str] | None = None
+
+
+def _choice_aliases() -> dict[str, str]:
+    """小写译文/同义词 -> 中文原键。译文从 apps/web/static/i18n/<lang>.js 词典读(与前端按钮文字同源),
+    词典缺失时只用内置同义表;结果缓存进程内(词典改动须重启)。"""
+    global _CHOICE_ALIASES
+    if _CHOICE_ALIASES is not None:
+        return _CHOICE_ALIASES
+    table: dict[str, str] = {}
+    for canon, syns in _CHOICE_SYNONYMS.items():
+        table[canon] = canon
+        for s in syns:
+            table[s.casefold()] = canon
+    for f in sorted((ROOT / "apps" / "web" / "static" / "i18n").glob("*.js")):
+        if f.name == "i18n.js":
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for key, val in _CHOICE_DICT_PATTERN.findall(text):
+            table.setdefault(val.strip().casefold(), "签字" if key == "签字确认" else key)
+    _CHOICE_ALIASES = table
+    return table
+
+
+def canonical_choice(text, kind: str = "sign") -> str:
+    """确认/签字的选项或答复文字归一:命中该类确认的译文或同义词返回中文原键(签字类→签字/暂缓,
+    重跑类→重跑/跳过),其余(自定义选项如「暂缓,先跑其余组」)去首尾空白原样返回;空值返回空串。"""
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    canon = _choice_aliases().get(s.casefold())
+    if canon is None or canon not in _CHOICE_KIND_KEYS.get(kind, ()):
+        return s
+    return canon
+
+
 def confirm_public(c: dict) -> dict:
     remaining = (None if c["timeout"] is None else
                  max(0, int(c["created"] + c["timeout"] - time.time())))
@@ -12933,12 +13003,15 @@ async def api_confirm_create(body: dict):
         if fresh and time.time() - fresh["answered"] < 600:
             return {"confirm_id": fresh["id"]}
     fallback = ["签字", "暂缓"] if kind == "sign" else ["重跑", "跳过"]
-    options = [str(o)[:40] for o in (body.get("options") or fallback)][:4]
+    # 选项归一回中文原键(Agent 按界面语言传的 "Sign off,Hold" / "Rerun,Skip" 等),前端再按词典译成按钮文字
+    options = list(dict.fromkeys(canonical_choice(str(o)[:40], kind)
+                                 for o in (body.get("options") or fallback)))[:4]
+    options = [o for o in options if o] or fallback
     # 重跑次数设为 0(不自动重跑)时,重跑类确认超时不得默认「重跑」——否则无人值守=无限自动重跑
     if kind != "sign" and options[:2] == ["重跑", "跳过"] and max_retries_setting() == 0:
         body = {**body, "default": "跳过"}
     c = {"id": uuid.uuid4().hex[:8], "question": q[:500], "options": options,
-         "default": str(body.get("default") or options[0])[:40],
+         "default": canonical_choice(str(body.get("default") or "")[:40], kind) or options[0],
          "timeout": None if kind == "sign" else
          min(confirm_timeout_setting(),
              max(CONFIRM_TIMEOUT_MIN, int(body.get("timeout")
@@ -12978,7 +13051,12 @@ async def api_confirm_answer(cid: str, body: dict):
     if not c:
         raise ServiceError(404, "no such confirm")
     if c["answer"] is None:
-        answer = str(body.get("answer") or "")[:40] or c["default"]
+        # 答复归一回中文原键(各语言按钮译文 / 同义写法);签字类空答复不得默认成「签字」
+        answer = canonical_choice(str(body.get("answer") or "")[:40], c.get("kind") or "confirm")
+        if not answer:
+            if c.get("kind") == "sign":
+                raise ServiceError(400, "sign-off answer must not be empty (签字 / 暂缓)")
+            answer = c["default"]
         if (c.get("kind") == "sign" and c.get("gate_id") and answer == "签字"
                 and str(c.get("checkpoint") or "").upper().startswith("H3W")):
             # H3W 白模确认:阻断级待决项未清 → 拒签(弹窗保留,前端显示原因);
@@ -13390,7 +13468,9 @@ def _gate_episode(node: dict) -> str:
     m = re.search(r"(?<![A-Za-z0-9])(ep\d+)(?![A-Za-z0-9])", str(node.get("id") or ""), re.I)
     if m:
         return m.group(1).lower()
-    m = re.search(r"第\s*(\d+)\s*集", _gate_checkpoint(node))
+    cp = _gate_checkpoint(node)
+    m = (re.search(r"第\s*(\d+)\s*集", cp)
+         or re.search(r"(?<![A-Za-z0-9])(?:ep|episode)\s*(\d{1,3})(?![A-Za-z0-9])", cp, re.I))   # 非中文界面写法
     return f"ep{int(m.group(1)):02d}" if m else ""
 
 
@@ -13449,6 +13529,20 @@ def _sign_gate_binding(proj: str, question: str,
     if len(matches) == 1:
         node = matches[0]
         return node["id"], _gate_checkpoint(node)
+    # 语言无关匹配(2026-09-23):非中文界面下总制片用英文等写问题("[H3W Whitebox sign-off (ep06) | project x]"),
+    # 上面的中文 checkpoint 全文匹配必落空;这里从问题里抽「代号 + 集号」与节点比对,多集同代号闸门同时就绪也能绑对
+    q_code = re.search(r"(?<![A-Za-z0-9])(D?H\d{1,2}[A-Z]?)(?![A-Za-z0-9])", question, re.I)
+    if q_code:
+        code = q_code.group(1).upper()
+        m_ep = (re.search(r"(?<![A-Za-z0-9])ep\s*(\d{1,3})(?![A-Za-z0-9])", question, re.I)
+                or re.search(r"第\s*(\d{1,3})\s*集", question)
+                or re.search(r"(?<![A-Za-z0-9])episode\s*(\d{1,3})(?![A-Za-z0-9])", question, re.I))
+        q_ep = f"ep{int(m_ep.group(1)):02d}" if m_ep else ""
+        same_code = [n for n in ready if _gate_code(n) == code]
+        by_ep = [n for n in same_code if not q_ep or _gate_episode(n) in ("", q_ep)]
+        if len(by_ep) == 1:
+            node = by_ep[0]
+            return node["id"], _gate_checkpoint(node)
     matches = []
     for node in ready:
         checkpoint = _gate_checkpoint(node)

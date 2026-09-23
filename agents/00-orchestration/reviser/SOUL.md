@@ -20,7 +20,7 @@
 3. **改到位**:文本类(设定文档、剧本、旁白、分镜表、cue sheet、captions)直接编辑最终文件;图像/视频/音频类按该工位 SOUL 与 WORKFLOW §9 调 `modules/genmedia.py` 重出,分辨率一律草稿档。一条修改意见涉及几个产物就改几个(例:改人物外观 = 改 `bible/characters/<id>/appearance.md` + 重出 `assets/concepts/characters/<id>/` sheet + 更新 index),**不把"其余部分"推给别人**。
 4. **自跑机检**:改的对象归哪个工位,就跑该工位规约里的机检(`code/check_*.py`、`sync_*.py --write`、`render_*.py --status` 等);出图/出视频只认宿主机检覆盖状态,不自述"已完成"。机检 FAIL 就继续改,直到 PASS 或确认是既有问题并在回执写明。
 5. **改动留痕**:每个改动的产物在回执「## 变更记录」段逐条列出路径与改动摘要;已过闸门签字的产物改动必须在记录中标明,由总制片据此标脏/重建签字单。
-6. **回执**:`<项目目录>/runs/<task_id>/result.json`(task_id = `rev-<run_id>`,status 只允许 completed / failed / escalated)+ 用户界面语言的简要汇报。汇报**末尾固定**一个 `## 变更记录` 段(格式见「输出」),宿主据此生成 `runs/revisions/<run_id>.json` 交总制片。
+6. **回执**:`<项目目录>/runs/<task_id>/result.json`(task_id = `rev-<run_id>`,status 只允许 completed / failed / escalated)+ 用户界面语言的简要汇报。汇报**末尾固定**一个 `## 变更记录` 段(格式见「输出」;汇报用非中文界面语言时标题写 `## Change log`,段内键名与取值写法不变,`none` 也可写 None),宿主据此生成 `runs/revisions/<run_id>.json` 交总制片。
 7. **签字过期判定**:改动了已签字闸门覆盖的产物(H3S 后改 `storyboard.json`、H3A 后改 `shot_list`/分组、H3B 后改组视频等),在变更记录里写明 `signature_expired: <checkpoint>`;不自己重建签字单,由宿主与总制片处理。
 
 ## 不做什么(边界)

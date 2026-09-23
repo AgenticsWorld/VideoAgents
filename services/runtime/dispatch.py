@@ -15,6 +15,8 @@
                                                   # 签字类确认(H1-H5/H3A 人工签字点专用):弹窗不倒计时、
                                                   # 永不自动确认,保留到用户点「签字」;本命令等待至答复或
                                                   # --timeout(默认 4h),超时 stdout 输出「未签字」——超时不是
+                                                  # 通过。按钮文字由界面按用户语言显示,不要用 --options 传译文;
+                                                  # stdout 恒为中文原键「签字」/「暂缓」(服务端把各语言按钮归一)
                                                   # 通过,应把任务记为等待人工后正常结束,弹窗仍保留
 
 零依赖(仅标准库)。通过公开 API 派单,所以所有客户端都能实时看到。
@@ -94,7 +96,8 @@ def heartbeat(note: str):
 def confirm(question: str, timeout: int | None, options: list[str], default: str,
             sign: bool = False, project: str = DEFAULT_PROJECT):
     """发起用户确认;阻塞至答复或超时。stdout 只输出最终选项(供调用方脚本读取)。
-    sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。
+    选项与答复由服务端归一成中文原键(界面各语言的 Sign off/Hold、Rerun/Skip 等译文 → 签字/暂缓、重跑/跳过),
+    调用方只需比对中文原键。sign=True 为签字类:弹窗永不自动确认;本函数超时输出「未签字」,不得视为通过。
     重跑类 timeout=None 表示用服务端「Agent 高级设置→重跑等待确认」设置;等待截止
     时间一律对齐服务端返回的实际生效时长(显式传值也可能被钳短)。"""
     resp = api("/approvals", {"question": question, "timeout": timeout,
@@ -211,7 +214,9 @@ def main():
     ap.add_argument("--confirm", metavar="QUESTION")
     ap.add_argument("--sign", action="store_true",
                     help="签字类确认:弹窗不自动确认,等用户点「签字」")
-    ap.add_argument("--options", default=None)
+    ap.add_argument("--options", default=None,
+                    help="逗号分隔的按钮选项(默认 签字,暂缓 / 重跑,跳过);按钮文字由界面按用户语言显示,"
+                         "不要为了界面语言传译文,各语言译文会被归一回中文原键")
     ap.add_argument("--default", default=None, dest="default_opt")
     args = ap.parse_args()
 

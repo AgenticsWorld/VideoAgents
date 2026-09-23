@@ -246,7 +246,7 @@ function aChip(kind,id,icon){
 }
 /* ✏️ 修改:默认发修改师(一人改完,牵涉上下游时由总制片按变更记录标脏);草图修改另发草图工位(data-agent) */
 function editBtn(loc,cls,label,agent){
-  return `<button class="editbtn ${cls||''}" data-loc="${esc(loc)}"${agent?` data-agent="${esc(agent)}"`:''} title="${esc(agent?t('对这张草图提修改意见,由分镜草图工位重绘'):t('对这一块提修改意见,发给修改师处理(牵涉上下游时由总制片按变更记录标脏)'))}">✏️ ${esc(label||t('修改'))}</button>`;
+  return `<button class="editbtn ${cls||''}" data-ep="${esc(EP)}" data-loc="${esc(loc)}"${agent?` data-agent="${esc(agent)}"`:''} title="${esc(agent?t('对这张草图提修改意见,由分镜草图工位重绘'):t('对这一块提修改意见,发给修改师处理(牵涉上下游时由总制片按变更记录标脏)'))}">✏️ ${esc(label||t('修改'))}</button>`;
 }
 /* 🗒 注释(2026-09-15):用户对整集(*)/场次(S01)/镜(S01-03)写的设计意见,存 directing/<ep>/storyboard_notes.json,
    分镜师 / 镜头表工位 / 修改师重做分镜时必读;按钮放在 ✏️ 反馈/修改 前面 */
@@ -315,7 +315,7 @@ document.addEventListener('click',e=>{
       onSent:j=>{LOCAL_REDRAW[key]=Date.now();REDRAW[key]=j.run_id||'?';renderCell(key);startPoll()}});
     return;
   }
-  const loc=b.dataset.loc, target={kind:'storyboard',id:'',ep:(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
+  const loc=b.dataset.loc, target={kind:'storyboard',id:'',ep:b.dataset.ep||EP||(loc.match(/\bep\d{2,}\b/)||[''])[0],files:[],label:loc};
   EditPopup.open({project:proj,compose:t('修改 ')+loc+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // 无 data-agent → 修改师
 });
 // 资产大图下方文字 → 该资产的预览页(同剧本预览页;场景/人物/生物页都认 ?project&id 定位);草图无 href 仍为纯文字
@@ -526,7 +526,7 @@ function sketchCell(sc,sh,ep){
   const cap=`${ep} ${sc.scene_no} #${sh.order} · ${clip(sh.content,60)}`;
   let h=`<div class="skbox ${PORTRAIT?'portrait':''} ${busy?'busy':''}" style="aspect-ratio:${aspectCss(LAST.aspect)}" ${r.url?`data-img="${esc(r.url)}" data-cap="${esc(cap)}"`:''} title="${esc(r.status==='failed'?(r.error||''):(r.prompt||''))}">${r.url?`<img src="${esc(r.url)}" alt="" loading="lazy">`:`<div class="ph">${busy?'':'🖊 '+esc(t('未出草图'))}</div>`}${st?`<div class="st ${cls}">${st}</div>`:''}</div>`;
   h+=`<div class="skbtns"><button class="editbtn sk-gen" data-scene="${esc(sc.scene_no)}" data-order="${sh.order}" ${busy?'disabled':''} title="${esc(t('按当前草图模型出/重出这一镜的草图'))}">${r.url?'↻ '+esc(t('重出')):'🖊 '+esc(t('出图'))}</button>`;
-  if(r.url)h+=`<button class="editbtn" data-agent="${esc((LAST.agents||{}).sketch||'07-directing/storyboard-sketch')}" data-key="${esc(sh.key)}" data-loc="${esc(I18N.f('[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})',{ep,key:sh.key,no:sc.scene_no,o:sh.order,p:LAST.project||'',dir:LAST.sketch_dir||('assets/storyboard/'+ep),txt:clip(sh.content,40)}))}" ${busy?'disabled':''}>✏️ ${esc(t('改草图'))}</button>`;
+  if(r.url)h+=`<button class="editbtn" data-agent="${esc((LAST.agents||{}).sketch||'07-directing/storyboard-sketch')}" data-key="${esc(sh.key)}" data-loc="${esc('[草图 '+ep+'/'+sh.key+'] '+I18N.f('修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})',{ep,key:sh.key,no:sc.scene_no,o:sh.order,p:LAST.project||'',dir:LAST.sketch_dir||('assets/storyboard/'+ep),txt:clip(sh.content,40)}))}" ${busy?'disabled':''}>✏️ ${esc(t('改草图'))}</button>`;
   // ✍️ 手绘(2026-09-16):手机扫码画布(同 分镜预览「添加参考图 → 🎨 手绘参考图」的 /draw/<token> 机制),画的图直接作为该镜草图,不经 AI
   h+=`<button class="editbtn sk-draw" data-key="${esc(sh.key)}" ${busy?'disabled':''} title="${esc(t('手机扫码画一张草图;默认由 AI 按分镜草图风格重绘,画布页取消勾选「AI 加工」则原图直接作为这一镜的草图'))}">✍️ ${esc(t('手绘'))}</button>`;
   h+=`</div>`;

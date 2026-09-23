@@ -142,7 +142,7 @@ def parse_screenplay_lines(md_text: str) -> list:
             in_narr = False
             continue
         if s.startswith("### ") or s.startswith("#### "):
-            in_narr = "旁白" in s
+            in_narr = "旁白" in s or "narration" in s.lower() or "narrator" in s.lower()
             continue
         if in_narr:
             continue
@@ -178,7 +178,7 @@ def parse_dialogue_md(md_text: str) -> tuple:
             if not cells or not _DLG_ID_RE.match(cells[0]):
                 low = [c.lower() for c in cells]
                 text_col = next((k for k, c in enumerate(low) if any(t in c for t in _DLG_TEXT_COL)
-                                 and not any(t in c for t in ("原句", "字数", "编号", "id"))), None)
+                                 and not any(t in c for t in ("原句", "字数", "编号", "id", "original", "source", "chars", "count", "length", "index", "no."))), None)
                 spk_col = next((k for k, c in enumerate(low) if any(t in c for t in _DLG_SPK_COL)), None)
                 continue
             if text_col is not None and text_col < len(cells):
@@ -196,7 +196,7 @@ def parse_dialogue_md(md_text: str) -> tuple:
                 cur_id, cur_spk = m.group(1), rest
             continue
         if cur_id:
-            m3 = re.match(r"^-\s*\*\*定稿\*\*\s*[:：]\s*(.+)$", line)
+            m3 = re.match(r"^-\s*\*\*(?:定稿|final|final line)\*\*\s*[:：]\s*(.+)$", line)
             if m3:
                 _put(cur_id, cur_spk, m3.group(1))
                 cur_id = None

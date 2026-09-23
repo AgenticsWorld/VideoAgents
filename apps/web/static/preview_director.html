@@ -1275,9 +1275,9 @@ function objectRows(){
   for(const p of g.props||[])rows.push({kind:'prop',id:p.id,label:p.id,color:p.color||'#d2d5d4',size:p.size_m,sub:'prop'});
   const present=new Set(rows.map(r=>r.id));
   for(const c of g.scene_cast||[]){const id=typeof c==='string'?c:(c||{}).id;if(id&&!present.has(id))rows.push({kind:'actor',id,label:id,color:'#555',size:null,sub:'absent'})}
-  for(const c of g.cameras||[])rows.push({kind:'camera',id:c.shot_id,label:t('摄影机')+' '+c.shot_id,color:'#1b3d4b',size:null,sub:c.movement||'',cam:c});
-  rows.push({kind:'scene',id:g.scene_id,label:t('场景')+' '+g.scene_id,color:'#8d968d',size:null,sub:'scene'});
-  rows.push({kind:'group',id:g.group_id,label:t('整组')+' '+g.group_id,color:'#39415a',size:null,sub:'group'});
+  for(const c of g.cameras||[])rows.push({kind:'camera',id:c.shot_id,label:t('摄影机')+' '+c.shot_id,stored:c.shot_id,color:'#1b3d4b',size:null,sub:c.movement||'',cam:c});
+  rows.push({kind:'scene',id:g.scene_id,label:t('场景')+' '+g.scene_id,stored:g.scene_id,color:'#8d968d',size:null,sub:'scene'});
+  rows.push({kind:'group',id:g.group_id,label:t('整组')+' '+g.group_id,stored:g.group_id,color:'#39415a',size:null,sub:'group'});
   return rows;
 }
 function renderObjects(){
@@ -1285,7 +1285,7 @@ function renderObjects(){
   $('#objcnt').textContent=rows.length?String(rows.length):'';
   $('#objs').innerHTML=rows.map(r=>{
     const img=av[r.id];
-    const avatar=img?`<div class="av" style="border-color:${esc(r.color)}"><img src="${esc(img)}" alt="" loading="lazy"></div>`:`<div class="av" style="background:${esc(r.color)};border-color:${esc(r.color)}">${esc((r.label||'?').replace(/^(摄影机|场景|整组)\s*/,'').slice(0,1))}</div>`;
+    const avatar=img?`<div class="av" style="border-color:${esc(r.color)}"><img src="${esc(img)}" alt="" loading="lazy"></div>`:`<div class="av" style="background:${esc(r.color)};border-color:${esc(r.color)}">${esc((r.stored||r.label||'?').slice(0,1))}</div>`;
     return `<div class="obj ${r.sub==='absent'?'absent':''} ${PICK&&PICK.kind===r.kind&&PICK.id===r.id?'sel':''}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" data-img="${esc(img||'')}" title="${esc(r.id)}">${avatar}<div><div class="nm">${esc(r.label)}</div><div class="meta"><span data-no-i18n>${esc(r.id)}</span>${r.size?`<span>${num(r.size[1],2)} m</span>`:''}${r.sub==='absent'?`<span class="stt off">${esc(t('同场次在场,本组白模未出现'))}</span>`:`<span class="stt" data-st></span>`}${ovHas(r.kind,r.id)?`<span class="stt ov" title="${esc(t('已在 3D 里直接改定,尚未固化进 Agent 计划'))}">✎ ${esc(t('已改'))}</span>`:''}</div></div>${EDIT&&KIND_KEY[r.kind]&&r.sub!=='absent'?`<span class="lk ${LOCKS.has(lockKey(r.kind,r.id))?'on':''}" data-lock="${esc(r.kind)}|${esc(r.id)}" title="${esc(t('锁定/解锁此对象(L)'))}">${LOCKS.has(lockKey(r.kind,r.id))?'🔒':'🔓'}</span>`:''}</div>`;
   }).join('');
   $$('#objs .obj').forEach(el=>{
@@ -1484,7 +1484,7 @@ function restoreNoteForm(){
 function fillNoteForm(p,keepText){
   const sel=$('#nf-target'),shot=$('#nf-shot'),tin=$('#nf-t');if(!sel)return;
   const rows=objectRows();
-  sel.innerHTML=rows.map(r=>`<option value="${esc(r.kind)}|${esc(r.id)}" data-label="${esc(r.label)}">${esc(TL(r.kind))} · ${esc(r.label)}</option>`).join('');
+  sel.innerHTML=rows.map(r=>`<option value="${esc(r.kind)}|${esc(r.id)}" data-label="${esc(r.stored||r.label)}">${esc(TL(r.kind))} · ${esc(r.label)}</option>`).join('');
   if(p){sel.value=p.kind+'|'+p.id;if(sel.selectedIndex<0)sel.selectedIndex=0;const ta=$('#nf-text');if(p.object&&ta&&!ta.value)ta.value='['+p.object+'] '}
   else if(sel.selectedIndex<0)sel.selectedIndex=0;
   const g=grpById(SEL);
@@ -1509,7 +1509,7 @@ async function saveNote(){
   const btn=$('#nf-save'),msg=$('#nf-msg');
   if(unplanned(SEL)){msg.textContent=UNPLANNED_MSG();msg.className='msg err';return}
   const [kind,id]=($('#nf-target').value||'|').split('|');const opt=$('#nf-target').selectedOptions[0];
-  const body={group_id:SEL,target:{kind,id,label:opt?opt.dataset.label:id},text:$('#nf-text').value,shot_id:$('#nf-shot').value||null,
+  const body={group_id:SEL,target:{kind,id,label:opt?opt.dataset.label:id}   /* label 存语言无关值(摄影机/场景/整组存 id),显示时由 TL(kind) 拼 */,text:$('#nf-text').value,shot_id:$('#nf-shot').value||null,
     t:$('#nf-uset').checked?Number($('#nf-t').value):null,view:VIEW,base_v:maxV(SEL)||null,target_agent:$('#nf-agent')?$('#nf-agent').value:undefined};
   if(!body.text.trim()){msg.textContent=t('先写修改要求');msg.className='msg err';return}
   btn.disabled=true;msg.textContent='';msg.className='msg';

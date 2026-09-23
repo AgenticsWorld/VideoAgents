@@ -99,7 +99,11 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
     vp = str(d.get("video_prompt") or "")
     errs = []
     refs = [r for r in (d.get("refs") or []) if isinstance(r, str)]
-    has_people = "【人物】" in vp or "【参考素材职责】" in vp
+    # 正文散文随界面语言书写(运行提示词「视频生成 prompt 语言」),结构标签两套等价(2026-09-23):
+    # 中文官方标签 / 非中文界面用固定英文标签(SOUL.md「sd25_prompt_structure」列出),机检两套都认
+    def _has(*pats):
+        return any(re.search(p, vp, re.I) for p in pats)
+    has_people = _has(r"【\s*(?:人物|参考素材职责|characters?|cast|reference\s+roles?|asset\s+roles?)\s*】")
     if not has_people:
         errs.append(f"{name}: 缺【人物】(或【参考素材职责】)分组段——2.5 规范要求逐份素材职责,不得用总括句")
     for i, r in enumerate(refs, 1):
@@ -108,13 +112,13 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
                 errs.append(f"{name}: refs[{i-1}] 角色/生物图缺 `<名>@Image {i}` 绑定句")
     vrefs = [v for v in (d.get("video_refs") or []) if isinstance(v, str)]
     arefs = [a for a in (d.get("audio_refs") or []) if isinstance(a, str)]
-    if (vrefs or arefs) and not ("【动作与声音】" in vp or "【参考素材职责】" in vp):
+    if (vrefs or arefs) and not _has(r"【\s*(?:动作与声音|参考素材职责|(?:action|motion)s?\s*(?:&|and)\s*sound|reference\s+roles?|asset\s+roles?)\s*】"):
         errs.append(f"{name}: 有参考视频/音频但缺【动作与声音】(或【参考素材职责】)分组段")
     for i in range(1, len(vrefs) + 1):
-        if not re.search(r"\[Video\s*%d\][^。\n]{0,40}用于" % i, vp):
+        if not re.search(r"\[Video\s*%d\][^\n]{0,60}(?:用于|(?:used\s+)?for\b|provides|drives)" % i, vp, re.I):
             errs.append(f"{name}: 缺 `[Video {i}] 用于…` 职责句")
     for i in range(1, len(arefs) + 1):
-        if not re.search(r"\[Audio\s*%d\][^。\n]{0,60}(用于|只用于|是)" % i, vp):
+        if not re.search(r"\[Audio\s*%d\][^\n]{0,60}(?:用于|只用于|是|(?:used\s+)?(?:only\s+)?for\b|\bis\b|provides)" % i, vp, re.I):
             errs.append(f"{name}: 缺 `[Audio {i}] 用于…` 职责句")
     heads = list(re.finditer(r"Shot\s*(\d+)\s*(?:[:：]|[｜|][^。\n]*。)", vp))
     if not heads:
@@ -122,14 +126,14 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
     for k, h in enumerate(heads):
         end = heads[k + 1].start() if k + 1 < len(heads) else (vp.find("Global constraints:") if "Global constraints:" in vp else len(vp))
         body = vp[h.end():end]
-        if "使用：" not in body:
-            errs.append(f"{name}: Shot {h.group(1)} 段缺「使用：」激活清单(本镜激活的人物/场景/动作/声音)")
-        if "不采用：" not in body:
-            errs.append(f"{name}: Shot {h.group(1)} 段缺「不采用：」清单(本镜不激活的素材;无则写「无」)")
-    if "【未采用素材】" not in vp:
-        errs.append(f"{name}: 缺【未采用素材】段(全部素材都用到也要写「无」)")
-    if "【保持一致】" not in vp and not re.search(r"保持一致\s*[:：]", vp):
-        errs.append(f"{name}: 缺【保持一致】段")
+        if not re.search(r"(?:使用|(?:^|[\s(（])(?:use|used|uses|activate|activated))\s*[:：]", body, re.I | re.M):
+            errs.append(f"{name}: Shot {h.group(1)} 段缺「使用：」(英文 Use:)激活清单(本镜激活的人物/场景/动作/声音)")
+        if not re.search(r"(?:不采用|not\s+used|do\s+not\s+use|don't\s+use|unused|exclude[ds]?)\s*[:：]", body, re.I):
+            errs.append(f"{name}: Shot {h.group(1)} 段缺「不采用：」(英文 Not used:)清单(本镜不激活的素材;无则写「无」/None)")
+    if not _has(r"【\s*(?:未采用素材|unused\s+(?:assets?|references?|materials?|inputs?))\s*】"):
+        errs.append(f"{name}: 缺【未采用素材】(英文【Unused assets】)段(全部素材都用到也要写「无」/None)")
+    if not _has(r"【\s*(?:保持一致|consistency|keep\s+consistent)\s*】", r"(?:保持一致|consistency|keep\s+consistent)\s*[:：]"):
+        errs.append(f"{name}: 缺【保持一致】(英文【Consistency】)段")
     return errs
 
 

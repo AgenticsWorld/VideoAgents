@@ -2243,7 +2243,7 @@ window.I18N_DICT = {
 "📜 剧本预览": "📜 Pratinjau Naskah",
 /* 故事板页(preview_board.html,2026-09-11) */
 " · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)": " · final {f}d / anggaran {b}d ({s} shot, {g} grup)",
-"[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "[草图 {ep}/{key}] Revisi sketsa storyboard {ep} adegan {no} shot {o} (proyek {p}; gambar {dir}/{key}.png, buku besar {dir}/index.json; isi: {txt})",
+"修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "Revisi sketsa storyboard {ep} adegan {no} shot {o} (proyek {p}; gambar {dir}/{key}.png, buku besar {dir}/index.json; isi: {txt})",
 "agent·分镜草图师": "Agen Sketsa Storyboard",
 "{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s": "{n} adegan · {m} shot draf · {g} grup draf · draf Σ {d}d",
 "{n} 镜 · {g} 组": "{n} shot · {g} grup",

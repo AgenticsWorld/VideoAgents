@@ -688,9 +688,9 @@ def _guess_shot(anchor: str, shots: list[dict], names: dict) -> tuple[dict | Non
     if best is not None and best_sc >= _NARR_SIM_MIN:
         return best, round(best_sc, 2)
     a = anchor or ""
-    if re.search(r"场首|开场|场头|片首|集首|开头", a):
+    if re.search(r"场首|开场|场头|片首|集首|开头|scene\s*(?:start|open|opening|head|top)|(?:start|top|beginning|opening)\s+of\s+(?:the\s+)?(?:scene|episode)|cold\s*open", a, re.I):
         return shots[0], 0.0
-    if re.search(r"场末|场尾|收尾|结尾|片尾|集末|末尾", a):
+    if re.search(r"场末|场尾|收尾|结尾|片尾|集末|末尾|scene\s*(?:end|close|closing|tail|out)|(?:end|ending|close|tail)\s+of\s+(?:the\s+)?(?:scene|episode)|outro", a, re.I):
         return shots[-1], 0.0
     return None, round(best_sc, 2)
 

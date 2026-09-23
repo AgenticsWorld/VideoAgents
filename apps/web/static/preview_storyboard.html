@@ -339,7 +339,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 <div id="pv-modal"><div class="box">
   <h3>📄 组视频 Prompt — <span id="pv-grp" style="color:var(--purple)"></span></h3>
   <div style="color:var(--dim);font-size:12.5px;margin-top:6px">传给视频生成模型的文字 prompt(点「编辑」可手动修改并保存)</div>
-  <pre id="pv-text"></pre>
+  <pre id="pv-text" data-no-i18n></pre>
   <textarea id="pv-editbox" style="display:none" spellcheck="false"></textarea>
   <div class="actions"><span class="meta"><span id="pv-bytes"></span><span id="pv-meta"></span></span><button id="pv-edit">编辑</button><button id="pv-copy">复制</button><button id="pv-close">关闭</button></div>
 </div></div>
@@ -852,7 +852,7 @@ async function openCaption(grp){
   }catch(e){$('#cp-list').innerHTML='<div class="cp-meta">'+esc(String(e.message||e))+'</div>'}
 }
 $('#cp-close').onclick=()=>{$('#cp-modal').style.display='none'};
-let PV_GRP='';
+let PV_GRP='',PV_RAW='';   // PV_RAW=video_prompt 原文(编辑/复制以此为准,不回读可能被界面词典改写的 DOM 文本,2026-09-23)
 function pvSetEdit(on){
   $('#pv-editbox').style.display=on?'block':'none';
   $('#pv-text').style.display=on?'none':'block';
@@ -878,7 +878,7 @@ async function openPrompt(grp){
     if(!r.ok)throw new Error(r.status===404?t('该组 prompt 文件尚未生成'):r.status);
     const d=await r.json();
     const p=d.video_prompt||'';
-    $('#pv-text').textContent=p||t('(video_prompt 为空)');
+    PV_RAW=p||'';$('#pv-text').textContent=p||t('(video_prompt 为空)');
     pvBytes(p);
     if(p)$('#pv-edit').disabled=false;
     const m=[];
@@ -892,7 +892,7 @@ async function openPrompt(grp){
 $('#pv-edit').onclick=async()=>{
   const btn=$('#pv-edit');
   if($('#pv-editbox').style.display==='none'){          // 只读 → 编辑
-    $('#pv-editbox').value=$('#pv-text').textContent;
+    $('#pv-editbox').value=PV_RAW;
     pvSetEdit(true);
     $('#pv-editbox').focus();
     return;
@@ -911,7 +911,7 @@ $('#pv-edit').onclick=async()=>{
       body:JSON.stringify({project:proj,ep:EP,grp:PV_GRP,text})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||r.status);
-    $('#pv-text').textContent=text;
+    PV_RAW=text;$('#pv-text').textContent=text;
     pvBytes(text);
     pvSetEdit(false);
   }catch(e){
@@ -923,7 +923,7 @@ $('#pv-edit').onclick=async()=>{
 $('#pv-close').onclick=()=>$('#pv-modal').style.display='none';
 $('#pv-copy').onclick=async()=>{
   try{
-    const src=$('#pv-editbox').style.display==='none'?$('#pv-text').textContent:$('#pv-editbox').value;
+    const src=$('#pv-editbox').style.display==='none'?PV_RAW:$('#pv-editbox').value;
     await navigator.clipboard.writeText(src);
     $('#pv-copy').textContent=t('已复制');
     setTimeout(()=>{$('#pv-copy').textContent=t('复制')},1200);

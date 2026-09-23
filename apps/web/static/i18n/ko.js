@@ -2243,7 +2243,7 @@ window.I18N_DICT = {
 "📜 剧本预览": "📜 대본 미리보기",
 /* 故事板页(preview_board.html,2026-09-11) */
 " · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)": " · 확정 {f}s / 예산 {b}s({s}샷 {g}그룹)",
-"[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "[草图 {ep}/{key}] 스토리보드 스케치 수정 {ep} 씬 {no} {o}번 샷(프로젝트 {p}; 이미지 {dir}/{key}.png, 대장 {dir}/index.json; 내용: {txt})",
+"修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "스토리보드 스케치 수정 {ep} 씬 {no} {o}번 샷(프로젝트 {p}; 이미지 {dir}/{key}.png, 대장 {dir}/index.json; 내용: {txt})",
 "agent·分镜草图师": "스토리보드 스케치 담당",
 "{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s": "{n}씬 · {m}샷 초안 · {g}그룹 초안 · 초안 Σ {d}s",
 "{n} 镜 · {g} 组": "{n}샷 · {g}그룹",

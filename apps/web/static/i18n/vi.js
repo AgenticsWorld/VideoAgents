@@ -2243,7 +2243,7 @@ window.I18N_DICT = {
 "📜 剧本预览": "📜 Xem trước kịch bản",
 /* 故事板页(preview_board.html,2026-09-11) */
 " · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)": " · chốt {f}s / ngân sách {b}s ({s} cảnh quay, {g} nhóm)",
-"[草图 {ep}/{key}] 修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "[草图 {ep}/{key}] Sửa phác thảo storyboard {ep} phân cảnh {no} cảnh quay {o} (dự án {p}; ảnh {dir}/{key}.png, sổ {dir}/index.json; nội dung: {txt})",
+"修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})": "Sửa phác thảo storyboard {ep} phân cảnh {no} cảnh quay {o} (dự án {p}; ảnh {dir}/{key}.png, sổ {dir}/index.json; nội dung: {txt})",
 "agent·分镜草图师": "Agent phác thảo storyboard",
 "{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s": "{n} phân cảnh · {m} cảnh quay nháp · {g} nhóm nháp · nháp Σ {d}s",
 "{n} 镜 · {g} 组": "{n} cảnh quay · {g} nhóm",
