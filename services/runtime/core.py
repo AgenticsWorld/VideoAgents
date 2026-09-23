@@ -3288,7 +3288,8 @@ def build_role_prompt(agent_id: str, project: str,
 - Skill 文件:{SD25_PE_SKILL}(官方 sd25-pe,已随仓库安装,直接 Read 全文)
 - 应用其中的:任务模板(文生视频/参考生视频/首尾帧/视频编辑/延长)、素材职责逐份映射与【未采用素材】清单、主体基数匹配、事件状态与因果保持、情绪表演/运镜/声音表达技法
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 用于提升散文表达质量、素材职责说明与模板化组织,不得以 skill 模板为由拆掉团队锚点结构
-- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文"""
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文
+- **镜次时长(2026-09-23)**:shot_list 每镜 duration_s 按 2.5 官方「连续整数秒时间段」写法(时间段 = 事件预算,不能精确到 0.5 秒)标在各段第一镜的 Shot 段头后——中文界面 `Shot 1: 0-2秒：…`、亚秒快切合并段 `Shot 5: 8-10秒（Shot 5–Shot 8）：…`,非中文界面 `0-2s:` / `8-10s (Shot 5–Shot 8):`;自 0 起、首尾相接、末段止于 round(total_duration_s)。写完 prompt 后必跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 由宿主按 shot_list 机器写入/校正(幂等),机检 `shot_timing_bound`;每段事件密度按其秒数规划"""
     if psk_id == PROMPT_SKILL_SD20:
         p += f"""
 
@@ -3297,7 +3298,7 @@ def build_role_prompt(agent_id: str, project: str,
 - Skill 文件:{SD20_PE_SKILL}(官方 sd20-pe,已随仓库安装,直接 Read 全文;需要情绪外化对照表/文字生成模板/常见问题排查时再读同目录 references/guide-zh.md)
 - 应用其中的:任务类型基础公式(全模态参考/编辑视频/延长视频/组合任务,编辑与延长直接用 `<视频N>` 指代、不写「参考」)、主体先定义后逐次同标签指代、每镜「运镜+主体动作表情+位置空间+音频」四要素、动作量化与情绪外化技法、符号约定(`（）`音乐/`<>`音效/`{{}}`台词/`【】`字幕)与「保持无字幕」等约束词、ID 漂移/双胞胎/风格漂移排查
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的 `<图片N>`/「镜头N」指代按团队 `[Image N]`/`Shot N:` 约定落地,不得以 skill 模板为由拆掉团队锚点结构
-- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏"""
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;不写精确秒数时间段,用镜头顺序让模型自然分配节奏(官方指南:模型对精确时间的支持不稳定;机检 `shot_timing_bound` 发现秒数标签即退回,换过模型的存量 prompt 跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 剔除)"""
     if psk_id == PROMPT_SKILL_H3:
         p += f"""
 
@@ -3307,7 +3308,8 @@ def build_role_prompt(agent_id: str, project: str,
 - 模式选择:带多参考图/参考音频的组级默认路径(--ref/--audio-ref)用 **Ref2VA 六段改写格式**(subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music,读 references/ref-en.txt);纯文本或首尾帧兜底路径用 **base 结构**(integrated_multimodal_description/overall_soundscape/non_diegetic_music,读 references/base-en.txt),按 T2VA/I2VA/FL2VA/L2VA 对号入座
 - 参考标签纪律:skill 的 reference 标签体系与本团队 `[Image N]`/`[Audio N]` 序号约定(1-based,与 refs/audio_refs 数组顺序严格一致)必须同时满足——标签在各段间保持一致,严禁出现未定义/未解析的标签
 - **优先级边界(冲突时以本团队规范为准)**:上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律原样保留;对白/歌词/画面内文字保持原语言,其余改写段用英文(与 skill 口径一致);SOUL.md 机检清单仍逐项过检
-- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文;prompt 内时间标注须与工单组时长(Σ)吻合"""
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文
+- **镜次时长(2026-09-23)**:Shot k(k≥2)段头后写官方切点 `At MM:SS.mmm,` = 前 k-1 镜 shot_list duration_s 累计(首镜不写),严格递增且小于组时长;写完 prompt 后必跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 由宿主机器写入/校正,机检 `shot_timing_bound`(切点 = 累计时长、Σ duration_s = total_duration_s)"""
     if psk_id == PROMPT_SKILL_WAN30:
         p += f"""
 
@@ -3317,7 +3319,8 @@ def build_role_prompt(agent_id: str, project: str,
 - 应用其中的:【核心任务】【情节概要】【音频风格】【运镜与核心约束】【负面提示词】五段结构(核心任务与情节概要必出,音频/运镜按详略取舍,负面提示词仅在有明确排除项时输出)、素材参考集中写在【核心任务】且逐份写明采用范围(`人物A对应图1，采用五官、发型和服装`)、音色参考「<角色>的音色参考音频N」+ 说话节点「使用音频N的音色说：'逐字原文'」、主体基数匹配(单人图对应一个人物)、事实与观察分离、不滥加约束
 - 素材编号纪律:skill 的 `图N`/`视频N`/`音频N` 按上传顺序在各模态内独立编号,与本团队 `[Image N]`/`[Video N]`/`[Audio N]`(1-based,与 refs/video_refs/audio_refs 数组顺序严格一致)一一对应,两套标签须同时满足、序号不得错位
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的情节节点按团队 `Shot N:` 顺序落地,不得以 skill 模板为由拆掉团队锚点结构;skill「只整理不丰富」的原则在本岗对应「只按 shot_list/blocking 既定内容写,不自行加戏」
-- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率/帧率由 genmedia 命令行参数传递,不写进 prompt 正文;镜头时间戳只在 shot_list 给出时按原文带入情节节点(`镜头N xx-xx秒`),否则各节点保持纯编号"""
+- skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率/帧率由 genmedia 命令行参数传递,不写进 prompt 正文
+- **镜次时长(2026-09-23)**:shot_list 每镜 duration_s 一律按官方 `镜头N xx-xx秒` 口径写成连续整数秒时间段,标在各段第一镜的 Shot 段头后(中文界面 `Shot 1: 0-3秒：`、亚秒快切合并段 `Shot 5: 8-10秒（Shot 5–Shot 8）：`;非中文界面 `0-3s:`),自 0 起、首尾相接、末段止于 round(total_duration_s);写完 prompt 后必跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 由宿主机器写入/校正,机检 `shot_timing_bound`"""
     if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3, PROMPT_SKILL_WAN30):
         p += f"""
 
@@ -3345,7 +3348,8 @@ def build_role_prompt(agent_id: str, project: str,
 {contract}{warn}
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执
 - 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检
-- 生效技能为 h3-pe(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入"""
+- 生效技能为 h3-pe(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入
+- **镜次时长(shot_timing_bound,2026-09-23)**:写完 prompt 后另跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write`——宿主按 shot_list 每镜 duration_s 与本组生效模型写法机器写入(Seedance 2.5 / Wan 3.0 连续整数秒时间段标在段首镜段头后;MiniMax H3 Shot k≥2 切点 `At MM:SS.mmm,`;Seedance 2.0 不写、剔除),再不带 --write 机检:标签齐全、连续不重叠、末段止于 round(total_duration_s)、Σ duration_s = total_duration_s;不过=不交付"""
     if agent_id == "08-video-gen/upscale" and is_minimax_upscale_available() \
             and project_skill_enabled("08-video-gen/upscale/minimax-regenerate-2k", project):
         p += f"""
