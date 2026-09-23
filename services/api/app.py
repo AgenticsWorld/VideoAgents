@@ -987,6 +987,18 @@ async def storyboard_ref_upload(
     return await core.api_grpref_upload(data, project, ep, grp, filename)
 
 
+@api.get("/projects/{project}/storyboard/{ep}/plates/{shot_id}/candidates", tags=["storyboard"])
+async def storyboard_plate_candidates(project: str, ep: str, shot_id: str) -> dict[str, Any]:
+    """分镜预览「🔁 换图」:本镜所在场景背景图库全部图 + 本镜当前起点/终点所用 key(2026-09-23)。"""
+    return _artifact_urls(await core.api_shot_plate_candidates(project, ep, shot_id), project)
+
+
+@api.post("/projects/{project}/storyboard/{ep}/plates/{shot_id}/swap", tags=["storyboard"])
+async def storyboard_plate_swap(project: str, ep: str, shot_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜预览「🔁 换图」:{role: start|end, key} → 本镜该角色背景图改指向库里这张图,并 sync 本组 prompt refs。"""
+    return _artifact_urls(await core.api_shot_plate_swap(project, ep, shot_id, body), project)
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/vrefs", tags=["storyboard"])
 async def storyboard_vrefs_get(project: str, ep: str, grp: str) -> dict[str, Any]:
     """本组参考视频清单(video_refs + 实测时长 + 本组生效模型上限;分镜预览「🎬 视频」弹窗)。"""

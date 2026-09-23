@@ -91,6 +91,7 @@ grp003 的 sh005 背景图（机位在路上、朝南南西横看绿化带，54 
 ## 预览
 
 - 分镜预览页（`/preview/storyboard`）每个 shNNN 模块底部「🖼 分镜背景图」：关联的全部背景图缩略（宽 100 px，起点/终点 · 新出/复用库图/裁自宽景），点击放大。数据来自 `api_preview_storyboard` 的 `shots[].plates`。
+- 「🔁 换图」（2026-09-23，每张背景图「✏️ 修改」按钮之前）：弹窗列出本镜所在场景背景图库的全部图（母图/旧法图，含朝向/机高/焦距/时段/来源全景与被哪些镜引用，当前这张标 ✓），点选一张确认后替换本镜该角色（起点/终点）的背景图：`GET /projects/{p}/storyboard/{ep}/plates/{shot}/candidates` 列图，`POST …/plates/{shot}/swap {role, key}` 改写 `directing/<ep>/shot_plates.json` 该条目（`reuse: manual`，记 `swapped_from` / `swapped_at`，机位指纹 `camera` 不动、`view` 按新母图重算）并立即 `sync_group(write=True)` 把新图接进本组 prompt 的 refs / `Shot plates:` 段与逐镜激活句。非 `--force` 重出按「记录仍新鲜」保留手选，`--force` 才按机位重新决策；分镜预览显示为「起点 · 手动换图」。
 - 场景预览页（`/preview/scenes`）「🖼 分镜背景图」板块：按库列出，标注朝向/机高/焦距/时段与被哪些集/镜引用；`plates/` 子目录不再混进概念图库。
 
 ## 实测记录（dzg6 ep01 grp002，doubao-seedream-5-0-pro，1920×1080）

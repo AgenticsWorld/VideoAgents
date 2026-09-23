@@ -3482,4 +3482,13 @@ window.I18N_DICT = {
 "确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。": "Bỏ đánh dấu «{k}»? Sau khi bỏ, nội dung này không còn là điểm then chốt mà phân cảnh bắt buộc phải giữ.",
 "关键点保存失败：": "Lưu điểm then chốt thất bại:",
 "本地 ComfyUI": "ComfyUI cục bộ",
+"换图": "Đổi ảnh",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Chọn một ảnh khác trong thư viện phông nền của cảnh này để thay ảnh phông nền phân cảnh (ghi lại chỉ mục tập và đồng bộ ảnh tham chiếu prompt của nhóm)",
+"手动换图": "đổi thủ công",
+"🔁 换分镜背景图 —": "🔁 Đổi ảnh phông nền phân cảnh —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Chọn một ảnh trong thư viện phông nền của cảnh này (nhấp đúp để phóng to); khi xác nhận sẽ thay ảnh phông nền của phân cảnh: ghi lại chỉ mục tập directing/<ep>/shot_plates.json và đồng bộ ảnh tham chiếu prompt của nhóm. Có hiệu lực khi tạo lại nhóm; tạo lại không cưỡng bức sẽ không tự đổi về",
+"✔ 替换为这张": "✔ Thay bằng ảnh này",
+"(本场景背景图库为空)": "(Thư viện phông nền của cảnh này trống)",
+"替换失败:": "Thay thất bại: ",
+"已替换,但本组 prompt 同步有问题:": "Đã thay, nhưng đồng bộ prompt của nhóm gặp vấn đề: ",
 };

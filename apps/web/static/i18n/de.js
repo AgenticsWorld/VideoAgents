@@ -3482,4 +3482,13 @@ window.I18N_DICT = {
 "确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。": "Markierung „{k}“ wirklich entfernen? Danach ist dieser Inhalt kein Schlüsselpunkt mehr, den das Storyboard enthalten muss.",
 "关键点保存失败：": "Schlüsselpunkt konnte nicht gespeichert werden: ",
 "本地 ComfyUI": "Lokales ComfyUI",
+"换图": "Tauschen",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Ein anderes Bild aus der Hintergrundbibliothek dieser Szene wählen, um diesen Shot-Hintergrund zu ersetzen (schreibt den Episodenindex neu und synchronisiert die Prompt-Referenzen der Gruppe)",
+"手动换图": "manuell getauscht",
+"🔁 换分镜背景图 —": "🔁 Shot-Hintergrund tauschen —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Wählen Sie ein Bild aus der Hintergrundbibliothek dieser Szene (Doppelklick zum Vergrößern); nach Bestätigung ersetzt es den Hintergrund dieses Shots: der Index directing/<ep>/shot_plates.json wird neu geschrieben und die Prompt-Referenzen der Gruppe werden synchronisiert. Wirkt beim Neurendern der Gruppe; ein nicht erzwungenes Neurendern setzt es nicht zurück",
+"✔ 替换为这张": "✔ Durch dieses ersetzen",
+"(本场景背景图库为空)": "(Die Hintergrundbibliothek dieser Szene ist leer)",
+"替换失败:": "Ersetzen fehlgeschlagen: ",
+"已替换,但本组 prompt 同步有问题:": "Ersetzt, aber die Prompt-Synchronisierung der Gruppe hatte Probleme: ",
 };

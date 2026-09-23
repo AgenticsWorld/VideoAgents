@@ -3484,4 +3484,13 @@ window.I18N_DICT = {
 "确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。": "Retirer la marque « {k} » ? Une fois retirée, ce contenu ne sera plus un point clé que la liste de plans doit conserver.",
 "关键点保存失败：": "Échec de l'enregistrement du point clé : ",
 "本地 ComfyUI": "ComfyUI local",
+"换图": "Remplacer",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Choisir une autre image dans la bibliothèque de fonds de cette scène pour remplacer ce fond de plan (réécrit l'index de l'épisode et synchronise les références du prompt du groupe)",
+"手动换图": "remplacé manuellement",
+"🔁 换分镜背景图 —": "🔁 Remplacer le fond de plan —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Choisissez une image dans la bibliothèque de fonds de cette scène (double-clic pour agrandir) ; à la confirmation elle remplace le fond de ce plan : l'index directing/<ep>/shot_plates.json est réécrit et les références du prompt du groupe sont synchronisées. Prend effet à la régénération du groupe ; une régénération non forcée ne le rétablit pas",
+"✔ 替换为这张": "✔ Remplacer par celle-ci",
+"(本场景背景图库为空)": "(La bibliothèque de fonds de cette scène est vide)",
+"替换失败:": "Échec du remplacement : ",
+"已替换,但本组 prompt 同步有问题:": "Remplacé, mais la synchronisation du prompt du groupe a rencontré des problèmes : ",
 };

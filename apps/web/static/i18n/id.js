@@ -3482,4 +3482,13 @@ window.I18N_DICT = {
 "确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。": "Hapus tanda “{k}”? Setelah dihapus, konten ini tidak lagi menjadi poin kunci yang wajib dipertahankan di daftar shot.",
 "关键点保存失败：": "Gagal menyimpan poin kunci:",
 "本地 ComfyUI": "ComfyUI lokal",
+"换图": "Ganti",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Pilih gambar lain dari pustaka latar adegan ini untuk mengganti latar shot ini (menulis ulang indeks episode dan menyinkronkan referensi prompt grup)",
+"手动换图": "diganti manual",
+"🔁 换分镜背景图 —": "🔁 Ganti latar shot —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Pilih satu gambar dari pustaka latar adegan ini (klik dua kali untuk memperbesar); setelah konfirmasi latar shot ini diganti: indeks directing/<ep>/shot_plates.json ditulis ulang dan referensi prompt grup disinkronkan. Berlaku saat grup dirender ulang; render ulang tanpa paksaan tidak akan mengembalikannya",
+"✔ 替换为这张": "✔ Ganti dengan yang ini",
+"(本场景背景图库为空)": "(Pustaka latar adegan ini kosong)",
+"替换失败:": "Gagal mengganti: ",
+"已替换,但本组 prompt 同步有问题:": "Sudah diganti, tetapi sinkronisasi prompt grup bermasalah: ",
 };

@@ -3493,4 +3493,13 @@ window.I18N_DICT = {
 "按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 ": "Generates an explorable 3D world (Gaussian splatting) from a scene's whitebox and panoramas; view it in the 🌍 World Model section of the scene preview page. Create a key at ",
 " 创建。": ".",
 "本地 ComfyUI": "Local ComfyUI",
+"换图": "Swap",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Pick another image from this scene's plate library to replace this shot plate (rewrites the episode index and syncs this group's prompt references)",
+"手动换图": "manually swapped",
+"🔁 换分镜背景图 —": "🔁 Swap Shot Plate —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Pick one image from this scene's plate library (double-click to enlarge); on confirm it replaces this shot's plate: the episode index directing/<ep>/shot_plates.json is rewritten and this group's prompt references are synced. Takes effect when the group is re-rendered; a non-forced re-render will not revert it",
+"✔ 替换为这张": "✔ Replace with this one",
+"(本场景背景图库为空)": "(This scene's plate library is empty)",
+"替换失败:": "Replace failed: ",
+"已替换,但本组 prompt 同步有问题:": "Replaced, but syncing this group's prompt had problems: ",
 };

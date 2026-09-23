@@ -261,6 +261,25 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
 #ar-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
 #ar-modal #ar-ok:disabled{opacity:.5;cursor:default}
+/* 🔁 换分镜背景图弹窗(2026-09-23):列本场景背景图库全部图,点选一张替换本镜起点/终点背景图 */
+#pw-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+#pw-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:820px;max-width:94vw;height:80vh;display:flex;flex-direction:column}
+#pw-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
+#pw-modal .hint{color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.6;flex:none}
+#pw-modal .cur{display:flex;gap:10px;align-items:center;margin-top:8px;flex:none;font-size:12.5px;color:var(--dim)}
+#pw-modal .cur img{height:56px;display:block;border-radius:6px;cursor:zoom-in;border:1px solid var(--border)}
+#pw-modal .imgs{flex:1;min-height:0;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:8px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;margin-top:10px}
+#pw-modal .imgs .ph{color:var(--dim);font-size:12.5px;margin:auto}
+#pw-modal .imgs .cell{position:relative;cursor:pointer;border:2px solid transparent;border-radius:8px;flex:none;width:236px;padding:4px}
+#pw-modal .imgs .cell img{width:100%;display:block;border-radius:6px;background:#000}
+#pw-modal .imgs .cell .cap{font-size:10.5px;color:var(--dim);line-height:1.45;margin-top:3px;word-break:break-all}
+#pw-modal .imgs .cell .cap b{color:var(--text);font-weight:500}
+#pw-modal .imgs .cell.sel{border-color:var(--accent)}
+#pw-modal .imgs .cell.used{opacity:.5;cursor:default}
+#pw-modal .imgs .cell .uk{position:absolute;left:8px;top:8px;font-size:10px;background:rgba(0,0,0,.65);color:var(--green);border-radius:4px;padding:0 4px;white-space:nowrap}
+#pw-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
+#pw-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
+#pw-modal #pw-ok:disabled{opacity:.5;cursor:default}
 #vr-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #vr-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:820px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column}
 #vr-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
@@ -363,6 +382,14 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
   </div>
   <div class="err" id="ar-err"></div>
   <div class="actions"><button id="ar-cancel">关闭</button><button id="ar-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">➕ 加入参考图</button></div>
+</div></div>
+<div id="pw-modal"><div class="box">
+  <h3>🔁 换分镜背景图 — <span id="pw-shot" style="color:var(--purple)"></span><span class="cnt" id="pw-count"></span></h3>
+  <div class="hint">从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/&lt;ep&gt;/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回</div>
+  <div class="cur" id="pw-cur"></div>
+  <div class="imgs" id="pw-imgs"></div>
+  <div class="err" id="pw-err"></div>
+  <div class="actions"><button id="pw-cancel">关闭</button><button id="pw-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">✔ 替换为这张</button></div>
 </div></div>
 <div id="vr-modal"><div class="box">
   <h3>🎬 参考视频 — <span id="vr-grp" style="color:var(--purple)"></span><span class="cnt" id="vr-count"></span></h3>
@@ -943,9 +970,66 @@ async function copyId(btn){
   setTimeout(()=>{btn.classList.remove('ok');btn.textContent='⧉'},1000);
 }
 
+// 🔁 换分镜背景图(2026-09-23):GET /projects/{p}/storyboard/{ep}/plates/{shot}/candidates 列本场景库图 → POST …/swap {role,key}
+let PW_SHOT='',PW_ROLE='start',PW_KEY='',PW_SEL='';
+const pwMsg=m=>{$('#pw-err').textContent=m||''};
+function pwOkState(){$('#pw-ok').disabled=!PW_SEL||PW_SEL===PW_KEY}
+async function openPlateSwap(shot,role,key){
+  PW_SHOT=shot;PW_ROLE=role||'start';PW_KEY=key||'';PW_SEL='';pwOkState();pwMsg('');
+  $('#pw-shot').textContent=shot+' · '+(PW_ROLE==='end'?t('终点'):t('起点'));
+  $('#pw-count').textContent='';$('#pw-cur').innerHTML='';
+  $('#pw-imgs').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
+  $('#pw-modal').style.display='flex';
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/plates/'+encodeURIComponent(shot)+'/candidates?v='+Date.now());
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    const d=await r.json();
+    const list=d.plates||[];
+    $('#pw-count').textContent=(d.scene_id||'')+' · '+I18N.f('{n} 张',{n:list.length});
+    const cur=list.find(p=>p.key===PW_KEY);
+    $('#pw-cur').innerHTML=cur?`<span>${esc(t('当前'))}:</span><img src="${esc(bust(cur.url))}" onclick="zoom(this.src)" title="${esc(cur.key)}"><span>${esc(cur.key)}</span>`:`<span>${esc(t('当前'))}: ${esc(PW_KEY||'-')}</span>`;
+    if(!list.length){$('#pw-imgs').innerHTML='<div class="ph">'+t('(本场景背景图库为空)')+'</div>';return}
+    $('#pw-imgs').innerHTML=list.map(p=>{
+      const cam=p.camera||{};
+      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+      const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',src].filter(Boolean).join(' · ');
+      const used=(p.used_by||[]).join(', ');
+      const isCur=p.key===PW_KEY;
+      return `<div class="cell${isCur?' used':''}" data-key="${esc(p.key)}" title="${esc(p.key)}"><img src="${esc(bust(p.url))}" loading="lazy">${isCur?`<span class="uk">✓ ${esc(t('当前'))}</span>`:''}<div class="cap"><b>${esc(p.key)}</b><br>${esc(cap)}<br>${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</div></div>`;
+    }).join('');
+  }catch(e){$('#pw-imgs').innerHTML='';pwMsg(t('加载失败:')+e.message)}
+}
+$('#pw-imgs').addEventListener('click',e=>{
+  const c=e.target.closest('.cell');
+  if(!c||c.classList.contains('used'))return;
+  PW_SEL=c.dataset.key;
+  document.querySelectorAll('#pw-imgs .cell').forEach(x=>x.classList.toggle('sel',x===c));
+  pwOkState();
+});
+$('#pw-imgs').addEventListener('dblclick',e=>{const im=e.target.closest('.cell img');if(im)zoom(im.src)});
+$('#pw-cancel').onclick=()=>$('#pw-modal').style.display='none';
+$('#pw-ok').onclick=async()=>{
+  if(!PW_SEL||PW_SEL===PW_KEY)return;
+  pwMsg('');$('#pw-ok').disabled=true;
+  const proj=$('#project').value.trim()||'demo';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/plates/'+encodeURIComponent(PW_SHOT)+'/swap',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({role:PW_ROLE,key:PW_SEL})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    const d=await r.json();
+    const errs=(d.sync&&d.sync.errors)||[];
+    load(true);
+    if(errs.length){PW_KEY=PW_SEL;PW_SEL='';pwMsg(t('已替换,但本组 prompt 同步有问题:')+errs.join('; '));return}
+    $('#pw-modal').style.display='none';
+  }catch(e){pwMsg(t('替换失败:')+e.message);pwOkState()}
+};
+
 document.addEventListener('click',async e=>{
   const cp=e.target.closest('.cpid');
   if(cp){e.preventDefault();e.stopPropagation();return copyId(cp)}
+  const pw=e.target.closest('.plswap');
+  if(pw)return openPlateSwap(pw.dataset.shot,pw.dataset.role,pw.dataset.key);
   const pb=e.target.closest('.promptbtn');
   if(pb)return openPrompt(pb.dataset.grp);
   const rb=e.target.closest('.refpickbtn');
@@ -1206,7 +1290,7 @@ function shotCard(s,grp){
       return `<div title="${esc(v)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(v)}"><div class="pl">${esc(v)}${esc(pv)}</div></div>`;
     }
     const role=p.role==='end'?t('终点'):t('起点');
-    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):t('本镜新出');
+    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):t('本镜新出');
     const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
     // ✏️ 修改:带上镜号/起止/文件/库 key 与重出命令,发给修改师处理这张背景图的问题
     const loc=I18N.f('分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)',
@@ -1215,7 +1299,7 @@ function shotCard(s,grp){
     const sid=p.scene_id||((p.file||'').match(/assets\/concepts\/scenes\/([^/]+)\/plates\//)||[])[1]||'';
     const label=`${esc(role)} · ${esc(how)}`;
     const lab=sid&&p.key?`<a class="pl-link" href="/preview/scenes?project=${encodeURIComponent($('#project').value.trim()||'demo')}&id=${encodeURIComponent(sid)}#plate=${encodeURIComponent(p.key)}" title="${esc(t('在场景预览中查看这张背景图'))} · ${esc(sid)} · ${esc(p.key)}">${label}</a>`:label;
-    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${lab}</div><div class="pl"><button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
+    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${lab}</div><div class="pl"><button class="editbtn plswap" data-shot="${esc(s.shot_id)}" data-role="${esc(p.role||'start')}" data-key="${esc(p.key||'')}" title="${esc(t('从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)'))}">🔁 ${esc(t('换图'))}</button> <button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   });
   return `<div class="shot" id="a-s-${aid(s.shot_id)}">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}

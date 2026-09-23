@@ -3484,4 +3484,13 @@ window.I18N_DICT = {
 "确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。": "¿Quitar la marca «{k}»? Una vez quitada, este contenido dejará de ser un punto clave que la lista de planos deba conservar.",
 "关键点保存失败：": "Error al guardar el punto clave:",
 "本地 ComfyUI": "ComfyUI local",
+"换图": "Cambiar",
+"从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)": "Elegir otra imagen de la biblioteca de fondos de esta escena para reemplazar este fondo de plano (reescribe el índice del episodio y sincroniza las referencias del prompt del grupo)",
+"手动换图": "cambio manual",
+"🔁 换分镜背景图 —": "🔁 Cambiar fondo de plano —",
+"从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/<ep>/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回": "Elija una imagen de la biblioteca de fondos de esta escena (doble clic para ampliar); al confirmar reemplaza el fondo de este plano: se reescribe el índice directing/<ep>/shot_plates.json y se sincronizan las referencias del prompt del grupo. Se aplica al regenerar el grupo; una regeneración no forzada no lo revierte",
+"✔ 替换为这张": "✔ Reemplazar con esta",
+"(本场景背景图库为空)": "(La biblioteca de fondos de esta escena está vacía)",
+"替换失败:": "Error al reemplazar: ",
+"已替换,但本组 prompt 同步有问题:": "Reemplazado, pero la sincronización del prompt del grupo tuvo problemas: ",
 };
