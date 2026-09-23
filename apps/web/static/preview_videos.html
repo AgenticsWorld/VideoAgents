@@ -192,7 +192,17 @@ function render(d){
      <div class="cap"><span class="fn">${esc(f.name)}</span><span>${f.size_mb} MB</span></div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有 final 成片(edit/{ep}/*final*.mp4)',{ep:d.ep}))+'</div>';
 
-  // 组 clip 超分方法标签(2026-09-23):meta.json upscale 段(genmedia.py upscale 写入);一眼分辨插值 / 真超分
+  h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
+  h+=thumbs.length?`<div class="thumbs">${thumbs.map(t=>
+    `<div class="t"><img src="${esc(t.url)}" loading="lazy" onclick="zoom(this.src)">
+     <div class="cap" title="${esc(t.name)}">${esc(t.name)}</div></div>`).join('')}</div>`
+    :'<div class="none">'+esc(I18N.f('该集还没有封面(edit/{ep}/thumbnail_*.png)',{ep:d.ep}))+'</div>';
+
+  const pub=d.publish,pubN=pub?[pub.metadata?1:0,pub.seo?1:0].reduce((a,b)=>a+b,0)+(pub.platforms||[]).length:0;
+  h+=`<h3 class="sec">📤 发布相关<span class="n">publish/${esc(d.ep)}/${pub?esc(I18N.f(' · {n} 项物料',{n:pubN})):''}</span></h3>`;
+  h+=pubHtml(pub,d.ep);
+
+  // 组 clip 超分方法标签(2026-09-23;2026-09-23 移到页面最下、发布相关之后):meta.json upscale 段(genmedia.py upscale 写入);一眼分辨插值 / 真超分
   const groups=d.groups||[];
   h+=`<h3 class="sec">🧩 组 clip 与超分方法<span class="n">${esc(I18N.f('{n} 组 · assets/clips/{ep}/',{n:groups.length,ep:d.ep}))}</span></h3>`;
   h+=groups.length?`<div class="grows">${groups.map(g=>{
@@ -212,16 +222,6 @@ function render(d){
       +(g.draft_task?`<span class="ud">📝 ${esc(t('已记 Draft 任务'))}</span>`:'')+`<span class="sz">${g.size_mb} MB</span></div>`;
   }).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)',{ep:d.ep}))+'</div>';
-
-  h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
-  h+=thumbs.length?`<div class="thumbs">${thumbs.map(t=>
-    `<div class="t"><img src="${esc(t.url)}" loading="lazy" onclick="zoom(this.src)">
-     <div class="cap" title="${esc(t.name)}">${esc(t.name)}</div></div>`).join('')}</div>`
-    :'<div class="none">'+esc(I18N.f('该集还没有封面(edit/{ep}/thumbnail_*.png)',{ep:d.ep}))+'</div>';
-
-  const pub=d.publish,pubN=pub?[pub.metadata?1:0,pub.seo?1:0].reduce((a,b)=>a+b,0)+(pub.platforms||[]).length:0;
-  h+=`<h3 class="sec">📤 发布相关<span class="n">publish/${esc(d.ep)}/${pub?esc(I18N.f(' · {n} 项物料',{n:pubN})):''}</span></h3>`;
-  h+=pubHtml(pub,d.ep);
   // 审核问题反馈(qa/defects/)2026-09-19 移到独立页:项目设置 → 缺陷单(/defects)
 
   $('#content').innerHTML=h;restoreScroll($('#content'),d.ep);
