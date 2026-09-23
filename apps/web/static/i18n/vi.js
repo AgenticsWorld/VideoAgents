@@ -3227,6 +3227,7 @@ window.I18N_DICT = {
 
 // 场景图(2026-09-17 功能补译,2026-09-22):输出设置「场景图」下拉/说明 + 场景预览页「场景图(正向 / 反向)」板块
 "场景图": "Ảnh bối cảnh",
+"场景图模式": "Chế độ ảnh bối cảnh",
 "自动:正向必出,反向按分镜按需": "Tự động: luôn xuất chính diện, ảnh ngược theo nhu cầu cảnh quay",
 "只出正向": "Chỉ chính diện",
 "正反两张都出": "Cả chính diện và ngược",

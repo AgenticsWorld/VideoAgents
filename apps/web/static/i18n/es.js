@@ -3229,6 +3229,7 @@ window.I18N_DICT = {
 
 // 场景图(2026-09-17 功能补译,2026-09-22):输出设置「场景图」下拉/说明 + 场景预览页「场景图(正向 / 反向)」板块
 "场景图": "Imágenes de escena",
+"场景图模式": "Modo de imágenes de escena",
 "自动:正向必出,反向按分镜按需": "Auto: frontal siempre, inversa según necesiten los planos",
 "只出正向": "Solo frontal",
 "正反两张都出": "Frontal e inversa",

@@ -482,7 +482,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         </select>
         <button type="button" class="info-btn" data-info="npo-plate-mode-hint" title="说明">i</button></div>
       <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成</div>
-      <div class="row" id="npo-scene-plates-row"><label>场景图</label>
+      <div class="row" id="npo-scene-plates-row"><label>场景图模式</label>
         <select id="npo-scene-plates" style="flex:none">
           <option value="auto">自动:正向必出,反向按分镜按需</option>
           <option value="single">只出正向</option>
@@ -592,7 +592,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </select>
       <button type="button" class="info-btn" data-info="out-plate-mode-hint" title="说明">i</button></div>
     <div class="note info-note" id="out-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成</div>
-    <div class="row" id="out-scene-plates-row"><label>场景图</label>
+    <div class="row" id="out-scene-plates-row"><label>场景图模式</label>
       <select id="out-scene-plates" style="flex:none">
         <option value="auto">自动:正向必出,反向按分镜按需</option>
         <option value="single">只出正向</option>
@@ -1747,11 +1747,11 @@ const PLATE_MODES=['pano','world'];   // 输出设置「背景图模式」(2026-
 function syncSpatialHint(id){
   const cb=$('#'+id),h=$('#'+id+'-hint');if(!cb||!h)return;
   h.textContent=t(cb.checked?'建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)':'走「场景图(正向/反向)」流程,不建白模');
-  // 场景图选项只在白模关闭时生效:白模开启时置灰(白模项目的场景一致性由白模视频 + 分镜背景图承担)
+  // 场景图模式只在白模关闭时显示(2026-09-23,原为置灰):白模项目的场景一致性由白模视频 + 分镜背景图承担
   const pfx=id==='out-spatial'?'out':'npo';
-  const sel=$('#'+pfx+'-scene-plates'),hint=$('#'+pfx+'-scene-plates-hint');
-  if(sel){sel.disabled=cb.checked;}
-  if(hint){hint.textContent=t(cb.checked?'白模已开启:场景一致性由白模视频 + 分镜背景图承担,本项不生效':'白模关闭时的场景一致性方案:每场景一张正向图(门口往内看),分镜看回望方向时再补一张反向图;平面动画/单面布景选「只出正向」');}
+  const spRow=$('#'+pfx+'-scene-plates-row'),spHint=$('#'+pfx+'-scene-plates-hint');
+  if(spRow)spRow.style.display=cb.checked?'none':'';
+  if(spHint&&cb.checked){spHint.classList.remove('on');const ib=spRow&&spRow.querySelector('.info-btn');if(ib)ib.classList.remove('on');}
   // 背景图模式(2026-09-22)只在白模开启时显示(全局设置;场景预览页可按场景覆盖)
   const pmRow=$('#'+pfx+'-plate-mode-row'),pmHint=$('#'+pfx+'-plate-mode-hint');
   if(pmRow)pmRow.style.display=cb.checked?'':'none';

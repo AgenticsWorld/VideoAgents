@@ -3227,6 +3227,7 @@ window.I18N_DICT = {
 
 // 场景图(2026-09-17 功能补译,2026-09-22):输出设置「场景图」下拉/说明 + 场景预览页「场景图(正向 / 反向)」板块
 "场景图": "Gambar adegan",
+"场景图模式": "Mode gambar adegan",
 "自动:正向必出,反向按分镜按需": "Otomatis: tampak depan selalu, tampak balik sesuai kebutuhan shot",
 "只出正向": "Hanya tampak depan",
 "正反两张都出": "Tampak depan dan balik",
