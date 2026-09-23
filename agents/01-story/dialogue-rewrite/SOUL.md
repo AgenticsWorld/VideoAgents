@@ -45,7 +45,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 对白层更新 | 更新 `story/episodes/epNN/screenplay.md`(新版本) | 只有对白行 diff;每句带情绪与时长估算 |
+| 对白层更新 | 更新 `story/episodes/epNN/screenplay.md`(新版本) | 只有对白行 diff;每句带情绪与时长估算;`dialogue.md` 条目块 `### [LN-…] 名(CHAR-…)` + `- **定稿**:`(非中文输出语言写 `- **final**:`),表格列名与旁白段标题的中英写法见 `docs/screenplay_anchors.md`(2026-09-23) |
 | 对白时长适配报告(p6-dialogue-fit) | `directing/epNN/dialogue_fit.json` | `code/check_dialogue_fit.py` 产出:逐组/镜/句估时、超限量、trim_targets;`pass: true` 方可关单 |
 | 精简同步(p6-dialogue-fit,仅超限时) | `dialogue.md`、`directing/epNN/shot_list.json`(新版本) | 只改对白文本与 est_duration_s(`--write-est`),结构零改动 |
 

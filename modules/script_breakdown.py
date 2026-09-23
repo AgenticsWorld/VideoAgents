@@ -40,21 +40,38 @@ INPUT_FILES = ("story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogu
                "story/episodes/{ep}/narration.json", "story/episodes/{ep}/hooks.json",
                "story/episodes/{ep}/pacing.json", "story/episode_plan.json")
 
-_SCENE_TOKEN = re.compile(r"^(S\d{1,3}[A-Za-z]?(?:[-–]\d+)?(?:[（(]续[)）])?|\d{1,2}-\d{1,2}|OH|EC|FRAME[-_]\w+)(?=$|[\s|｜·:：—\-])", re.I)
+# 剧本机器锚点契约(docs/screenplay_anchors.md,2026-09-23):方括号标签/行首关键词/场头字段位置固定不随输出语言变,
+# 中文旧写法与英文规范写法等价(EVENTS/CAST/DURATION、ACTION/TRANSITION/TIME/SOUND/SFX/MUSIC/NARRATION、NO DIALOGUE…)
+_SCENE_TOKEN = re.compile(r"^(S\d{1,3}[A-Za-z]?(?:[-–]\d+)?(?:[（(](?:续|cont'?d|continued)[)）])?|\d{1,2}-\d{1,2}|OH|EC|FRAME[-_]\w+)(?=$|[\s|｜·:：—\-])", re.I)
 _CHAR_RE = re.compile(r"CHAR-\d+")
 _SCN_RE = re.compile(r"SCN-\d+")
 _EV_RE = re.compile(r"\bev[a-z]*[-_]?(?:ch\d+[-_])?\d+\b", re.I)
 _DUR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:s\b|秒)")
 _TOD_WORDS = ("黄昏", "傍晚", "清晨", "凌晨", "黎明", "深夜", "午后", "正午", "白天", "夜晚", "傍午",
-              "日", "夜", "晨", "暮", "午", "夕", "未知", "晚", "早")
+              "日", "夜", "晨", "暮", "午", "夕", "未知", "晚", "早",
+              # 英文/其它输出语言的时段词(场头第四段按位置也认,见 _parse_heading)
+              "dawn", "sunrise", "morning", "noon", "midday", "afternoon", "dusk", "sunset", "evening", "night",
+              "midnight", "day", "later", "continuous", "same time", "unknown")
 _INT_EXT = {"INT": "INT", "EXT": "EXT", "内": "INT", "外": "EXT", "内景": "INT", "外景": "EXT",
-            "室内": "INT", "室外": "EXT", "INT/EXT": "INT/EXT", "EXT/INT": "INT/EXT"}
+            "室内": "INT", "室外": "EXT", "INT/EXT": "INT/EXT", "EXT/INT": "INT/EXT",
+            "INT.": "INT", "EXT.": "EXT", "INTERIOR": "INT", "EXTERIOR": "EXT", "INT./EXT.": "INT/EXT", "I/E": "INT/EXT"}
 # 冒号行里不是台词说话人的前缀(动作/声音/元信息等)
 _NOT_SPEAKER = {"动作", "转场", "时段", "声音", "旁白", "画面", "音效", "音乐", "镜头", "字幕", "字卡", "备注", "注",
                 "场景", "时间", "地点", "人物", "出场", "事件", "时长", "目标时长", "活跃时间线", "分配事件",
                 "主场景", "片头", "片尾", "下集预告", "片头文字", "讲述文本", "环境", "光线", "氛围", "道具",
                 "adaptation_note", "source", "视觉", "听觉", "情绪", "节奏", "提示", "说明", "logline",
-                "集号", "章节范围", "覆盖事件", "开场钩子", "结尾悬念", "叙述人称", "主要角色", "本集看点"}
+                "集号", "章节范围", "覆盖事件", "开场钩子", "结尾悬念", "叙述人称", "主要角色", "本集看点",
+                # 英文锚点/元信息前缀(大小写不敏感,比对时 upper)
+                "ACTION", "VISUAL", "TRANSITION", "TIME", "SOUND", "SFX", "MUSIC", "NARRATION", "NARRATOR", "V.O.", "VO", "O.S.", "OS",
+                "NOTE", "NOTES", "SCENE", "LOCATION", "SETTING", "CAST", "PRESENT", "EVENT", "EVENTS", "DURATION", "DUR", "TARGET DURATION",
+                "PROPS", "LIGHTING", "MOOD", "ATMOSPHERE", "TITLE", "TITLE CARD", "CAPTION", "SUBTITLE", "CAMERA", "SHOT", "AUDIO",
+                "SOURCE", "TEASER", "RECAP", "INTRO", "OUTRO", "NEXT EPISODE", "HOOK", "PACE", "TEMPO", "EMOTION", "POV", "LOGLINE",
+                "EPISODE", "CHAPTERS", "MAIN CAST", "OPENING HOOK", "CLIFFHANGER", "ADAPTATION_NOTE"}
+
+
+def _not_speaker(spk: str) -> bool:
+    s = _strip_md(spk).strip()
+    return s in _NOT_SPEAKER or s.upper().rstrip(".") in _NOT_SPEAKER or s.upper() in _NOT_SPEAKER
 _DLG_META_RE = re.compile(r"\{[^{}]*\}\s*$")
 
 
@@ -131,7 +148,7 @@ def _tod(field: str) -> str | None:
 def _speaker(raw: str) -> tuple[str | None, str | None, bool]:
     """说话人段 → (CHAR id, 名字, 是否画外/旁白)。"""
     raw = _strip_md(raw or "")
-    vo = bool(re.search(r"V\.?O\.?|O\.?S\.?|画外|旁白|叙述", raw, re.I))
+    vo = bool(re.search(r"V\.?O\.?|O\.?S\.?|画外|旁白|叙述|narrat|voice[- ]?over|off[- ]?screen", raw, re.I))
     m = _CHAR_RE.search(raw)
     cid = m.group(0) if m else None
     name = _CHAR_RE.sub("", raw)
@@ -202,11 +219,11 @@ def _parse_heading(text: str) -> dict | None:
         if ch:
             sc["cast"] = ch
             continue
-        m = _DUR_RE.fullmatch(f) or re.fullmatch(r"\[?时长\]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*s?", f)
+        m = _DUR_RE.fullmatch(f) or re.fullmatch(r"\[?(?:时长|DURATION|DUR)\]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*s?", f, re.I)
         if m:
             sc["alloc_s"] = float(m.group(1))
             continue
-        m = re.match(r"^(段\s*\d+)", f)
+        m = re.match(r"^(段\s*\d+|SEG(?:MENT)?\s*\d+)", f, re.I)
         if m:
             sc["segment"] = m.group(1)
             continue
@@ -230,6 +247,11 @@ def _parse_heading(text: str) -> dict | None:
                 matched = True
             else:
                 leftovers.append(w)
+        if (not matched and f0 and not sc["time_of_day"] and sc["scene_id"] and f is fields[-1]
+                and len(f0) <= 14 and (sc["scene_name"] or len(fields) >= 4)):
+            sc["time_of_day"] = f0          # 场头末段按位置认作时段(输出语言任意,不靠时段词表)
+            leftovers = [w for w in leftovers if w not in f0.split()]
+            matched = True
         if not matched and f0 and not sc["scene_name"] and len(f0) <= 40:
             sc["scene_name"] = f0
             leftovers = [w for w in leftovers if w not in f0.split()]
@@ -246,7 +268,7 @@ _DLG_PATTERNS = [
     # CHAR-0002:「佳宁？」 {…}   /  CHAR-0011:「早安，九位。」
     re.compile(r"^(?:[-*]\s*)?(?P<spk>CHAR-\d+)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>.+)$"),
     # 老者：「……」(仅接受引号包裹的台词,避免把「动作:」「声音:」当说话人)
-    re.compile(r"^(?:[-*]\s*)?(?P<spk>[^\s:：「「\[\]*|#>]{1,14}?)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>[「“\"].+)$"),
+    re.compile(r"^(?:[-*]\s*)?(?P<spk>[^\s:：「「\[\]*|#>][^:：「「\[\]*|#>]{0,19}?)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>[「“\"].+)$"),   # 英文名可含空格(Old Man)
 ]
 
 
@@ -256,16 +278,16 @@ def _match_dialogue(line: str, known: set[str] | None = None) -> dict | None:
         if not m:
             continue
         spk = m.group("spk").strip()
-        if i == 3 and (spk.strip("*") in _NOT_SPEAKER or spk.startswith("旁白候选")):
+        if i == 3 and (_not_speaker(spk) or re.match(r"^(?:旁白候选|NARRATION)", spk, re.I)):
             return None
-        if _strip_md(spk) in _NOT_SPEAKER or re.search(r"[|｜]", spk):
+        if _not_speaker(spk) or re.search(r"[|｜]", spk):
             return None
         text = m.group("text").strip()
         meta = _DLG_META_RE.search(text)
         fields = _dlg_meta(meta.group(0) if meta else None)
         if meta:
             text = text[: meta.start()].strip()
-        if i == 0 and not _CHAR_RE.search(spk) and "est_s" not in fields and not re.search(r"V\.?O\.?|O\.?S\.?|画外|旁白", spk, re.I):
+        if i == 0 and not _CHAR_RE.search(spk) and "est_s" not in fields and not re.search(r"V\.?O\.?|O\.?S\.?|画外|旁白|narrat", spk, re.I):
             nm = _speaker(spk)[1] or ""
             # 粗体前缀 + 冒号的说明行(- **约束**:…)不是台词:无 ID 时只认已知角色名或短名+引号台词
             if not (nm in (known or ()) or (len(nm) <= 4 and re.match(r"^[「“\"]", text))):
@@ -273,7 +295,7 @@ def _match_dialogue(line: str, known: set[str] | None = None) -> dict | None:
         km = re.search(r"〔([^〕]*)〕", spk)
         kind = km.group(1).strip() if km else ""
         cid, name, vo = _speaker(spk)
-        if kind and re.search(r"OV|VO|OS|画外|旁白", kind, re.I):
+        if kind and re.search(r"OV|VO|OS|画外|旁白|narrat", kind, re.I):
             vo = True
         paren = m.groupdict().get("paren")
         if paren is None:
@@ -339,12 +361,15 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
                 block = None
                 continue
             if cur is not None:     # 场内子块
-                block = ("narration" if "旁白" in htxt else "dialogue" if "对白" in htxt
-                         else "sound" if ("声" in htxt or "音" in htxt) else "action")
+                hl = htxt.lower()
+                block = ("narration" if ("旁白" in htxt or "narrat" in hl or "v.o." in hl) else
+                         "dialogue" if ("对白" in htxt or "dialog" in hl) else
+                         "sound" if ("声" in htxt or "音" in htxt or "sound" in hl or "sfx" in hl or "music" in hl or "audio" in hl)
+                         else "action")
             continue
         if cur is None:
             # 集级元信息
-            m = re.search(r"(?:时长预算|目标时长|正片净时长|duration_budget_s)\**\s*[:：]?\s*[—-]*\s*\**\s*(\d+(?:\.\d+)?)", s)
+            m = re.search(r"(?:时长预算|目标时长|正片净时长|duration_budget_s|duration budget|target duration|runtime)\**\s*[:：]?\s*[—-]*\s*\**\s*(\d+(?:\.\d+)?)", s, re.I)
             if m and out["budget_s"] is None:
                 out["budget_s"] = float(m.group(1))
             m = re.search(r"(?:本集看点|logline)\**\s*[:：—]+\s*(.+)$", s, re.I)
@@ -357,27 +382,29 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
         if s.startswith("|") or s.startswith(">"):
             continue
         # 场内键值元信息行(scene_id: … / 时长估算:~175s / bible_scene: …)不是画面
-        if re.match(r"^(?:[-*]\s*)?[*`]*(scene_id|scene|bible_scene|scene_refs|event|events|event_refs|refs|时长估算|时长|事件|场景|地点|出场角色|人物)[*`]*\s*[:：]", s, re.I):
+        if re.match(r"^(?:[-*]\s*)?[*`]*(scene_id|scene|bible_scene|scene_refs|event|events|event_refs|refs|时长估算|时长|事件|场景|地点|出场角色|人物|cast|characters|present|location|duration|est_duration)[*`]*\s*[:：]", s, re.I):
             ch = _CHAR_RE.findall(s)
-            if ch and re.match(r"^(?:[-*]\s*)?\**(出场角色|人物)", s):
+            if ch and re.match(r"^(?:[-*]\s*)?\**(出场角色|人物|cast|characters|present)", s, re.I):
                 cur["cast"] = list(dict.fromkeys(cur["cast"] + ch))
-            m = re.search(r"(?:时长估算|时长)\**\s*[:：]\s*~?\s*(\d+(?:\.\d+)?)\s*s", s)
+            m = re.search(r"(?:时长估算|时长|duration|est_duration)\**\s*[:：]\s*~?\s*(\d+(?:\.\d+)?)\s*s", s, re.I)
             if m and cur["alloc_s"] is None:
                 cur["alloc_s"] = float(m.group(1))
             continue
         # 元信息行:[事件] / [出场] / [时长]
-        if re.search(r"[\[〔]\s*(事件|出场|出场角色|时长|在场)", s) or re.match(r"^(?:[-*]\s*)?(在场|出场)\s*[:：]", s):
+        if (re.search(r"[\[〔]\s*(事件|出场|出场角色|时长|在场|EVENTS?|CAST|PRESENT|DURATION|DUR)(?![A-Za-z])", s, re.I)
+                or re.match(r"^(?:[-*]\s*)?(在场|出场|CAST|PRESENT)\s*[:：]", s, re.I)):
             ch = _CHAR_RE.findall(s)
             if ch:
                 cur["cast"] = list(dict.fromkeys(cur["cast"] + ch))
             ev = [e for e in _EV_RE.findall(s) if e.lower() != "ev"]
             if ev and not cur["events"]:
                 cur["events"] = ev
-            m = re.search(r"\[\s*时长\s*\]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*s?", s)
+            m = re.search(r"\[\s*(?:时长|DURATION|DUR)\s*\]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*s?", s, re.I)
             if m and cur["alloc_s"] is None:
                 cur["alloc_s"] = float(m.group(1))
             continue
-        m = re.match(r"^(?:[-*]\s*)?\**转场\**\s*[:：]\s*\**(.+?)\**\s*$", s)
+        m = (re.match(r"^(?:[-*]\s*)?\**(?:转场|TRANSITION)\**\s*[:：]\s*\**(.+?)\**\s*$", s, re.I)
+             or re.match(r"^\**((?:SMASH |MATCH |JUMP )?CUT TO(?: BLACK)?|FADE (?:IN|OUT|TO BLACK)|DISSOLVE TO|WIPE TO|CROSSFADE|INTERCUT)\s*[:.]?\**\s*$", s, re.I))
         if m:
             cur["transition"] = _strip_md(m.group(1))
             _push(cur, "transition", cur["transition"])
@@ -386,10 +413,10 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
         if m:
             cur["notes"].append(m.group(1).strip())
             continue
-        m = re.match(r"^[\[〔]?旁白候选\s*[（(]([^)）]*)[)）]\s*[〕\]]?\s*[:：]?\s*(.*)$", s)
+        m = re.match(r"^[\[〔]?(?:旁白候选|NARRATION(?: CANDIDATE)?|V\.?O\.?)\s*(?:[（(]([^)）]*)[)）])?\s*[〕\]]?\s*[:：]?\s*(.*)$", s, re.I)
         if m:
             if m.group(2).strip():
-                cur["narration_candidates"].append({"speaker": _strip_md(m.group(1)), "text": _clean_line(m.group(2))})
+                cur["narration_candidates"].append({"speaker": _strip_md(m.group(1) or "") or None, "text": _clean_line(m.group(2))})
                 _push(cur, "narration", cur["narration_candidates"][-1])
             else:
                 block = "narration"      # 〔旁白候选(…)〕标题行:其后的列表项都是旁白候选
@@ -398,11 +425,11 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
             cur["narration_candidates"].append({"speaker": None, "text": _clean_line(re.sub(r"^[-*]\s+", "", s).split("〔")[0])})
             _push(cur, "narration", cur["narration_candidates"][-1])
             continue
-        if re.match(r"^[〔\[]本场无对白", s):
+        if re.match(r"^[〔\[]\s*(?:本场无对白|NO DIALOGUE)", s, re.I):
             continue
-        m = re.match(r"^(?:[-*]\s*)?(时段|声音|音效|音乐)\s*[:：]\s*(.+)$", s)
+        m = re.match(r"^(?:[-*]\s*)?(时段|声音|音效|音乐|TIME|SOUND|SFX|MUSIC|AUDIO)\s*[:：]\s*(.+)$", s, re.I)
         if m:
-            if m.group(1) == "时段" and not cur["time_of_day"]:
+            if m.group(1).upper() in ("时段", "TIME") and not cur["time_of_day"]:
                 cur["time_of_day"] = _tod(m.group(2).split("(")[0][:14]) or m.group(2)[:14]
             else:
                 cur["sound"].append(_strip_md(m.group(2)))
@@ -423,7 +450,7 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
                 _push(cur, "dialogue", d)
             continue
         # 动作/画面:动作:… / △… / 【画面/动作】子块的自由段落 / 列表镜头描述
-        m = re.match(r"^(?:[-*]\s*)?\**(?:动作|画面|画面/动作)\**\s*[:：]\s*(.+)$", s)
+        m = re.match(r"^(?:[-*]\s*)?\**(?:动作|画面|画面/动作|ACTION|VISUAL)\**\s*[:：]\s*(.+)$", s, re.I)
         if m:
             block = None
             cur["action"].append(_strip_md(re.sub(r"〔[^〕]*〕", "", m.group(1))))
@@ -753,7 +780,7 @@ def derive(base: Path, ep: str) -> dict:
     hooks = normalize_hooks(read_json(epdir / "hooks.json"))
     narr_md = read_text(epdir / "narration.md")
     narration = parse_narration_md(narr_md) if narr_md else parse_narration_json(read_json(epdir / "narration.json") or {})
-    narration_off = bool(narr_md and re.search(r"本集无旁白|无需旁白|全片零旁白|不设旁白", narr_md[:600]))
+    narration_off = bool(narr_md and re.search(r"本集无旁白|无需旁白|全片零旁白|不设旁白|NO NARRATION|no narration (?:in|for) this episode", narr_md[:600], re.I))
     plan = _plan_episode(read_json(base / "story" / "episode_plan.json"), ep)
     issues: list[dict] = []
 

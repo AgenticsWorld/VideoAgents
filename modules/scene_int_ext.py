@@ -10,18 +10,25 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from modules import script_breakdown as sb
 
 VALUES = ("INT", "EXT", "INT/EXT")
 _ALIASES = {"INT": "INT", "EXT": "EXT", "INT/EXT": "INT/EXT", "EXT/INT": "INT/EXT", "内": "INT", "外": "EXT",
-            "内景": "INT", "外景": "EXT", "室内": "INT", "室外": "EXT", "半开放": "INT/EXT", "半室外": "INT/EXT"}
+            "内景": "INT", "外景": "EXT", "室内": "INT", "室外": "EXT", "半开放": "INT/EXT", "半室外": "INT/EXT",
+            "INT.": "INT", "EXT.": "EXT", "INTERIOR": "INT", "EXTERIOR": "EXT", "INT./EXT.": "INT/EXT", "I/E": "INT/EXT", "SEMI-OPEN": "INT/EXT"}
 # 存量推断用词:只在一边命中时才下结论,两边都命中或都不命中 → 不推断
 _INT_WORDS = ("内景", "室内", "厅", "堂", "室", "房", "舱", "帐内", "洞", "殿内", "宫内", "阁内", "楼内", "车内", "牢", "窖", "密道")
 _EXT_WORDS = ("外景", "室外", "庭院", "院落", "前院", "后院", "空场", "广场", "校场", "演武场", "街", "巷", "路", "道旁", "野", "山",
               "岭", "峰", "崖", "谷", "河", "江", "湖", "海", "岸", "滩", "渡口", "桥", "林", "城门", "城外", "城楼", "城墙", "关外",
-              "战场", "阵前", "营外", "辕门", "云端", "天空", "码头", "田", "村口")
+              "战场", "阵前", "营外", "辕门", "云端", "天空", "码头", "田", "村口",
+              "courtyard", "yard", "square", "plaza", "street", "alley", "road", "field", "wild", "mountain", "ridge", "peak", "cliff",
+              "valley", "river", "lake", "sea", "shore", "beach", "dock", "pier", "bridge", "forest", "woods", "gate", "city wall",
+              "battlefield", "camp", "sky", "rooftop", "garden", "village", "market")
+_INT_WORDS = _INT_WORDS + ("interior", "indoor", "hall", "room", "chamber", "cabin", "tent", "cave", "palace hall", "cellar",
+                           "dungeon", "prison", "tunnel", "corridor", "kitchen", "bedroom", "study", "office", "shop", "temple hall")
 
 
 def norm(v) -> str | None:
@@ -33,8 +40,9 @@ def norm(v) -> str | None:
 def infer(entry: dict) -> str | None:
     """存量条目无 int_ext 时的推断;拿不准返回 None。"""
     name = str(entry.get("name") or entry.get("canonical_name") or "")
-    hit_int = any(w in name for w in _INT_WORDS)
-    hit_ext = any(w in name for w in _EXT_WORDS)
+    low = name.lower()
+    hit_int = any((w in name) if any(ord(c) > 127 for c in w) else re.search(r"\b" + re.escape(w) + r"\b", low) for w in _INT_WORDS)
+    hit_ext = any((w in name) if any(ord(c) > 127 for c in w) else re.search(r"\b" + re.escape(w) + r"\b", low) for w in _EXT_WORDS)
     if hit_int != hit_ext:
         return "INT" if hit_int else "EXT"
     if not hit_int and str(entry.get("level") or "").lower() in ("room", "房间"):

@@ -48,6 +48,7 @@
 [N-03 | anchor: S03开场 | est_duration_s: 4.5 | source: ch017#p01]
 三年后,林潇再入藏经阁。
 ```
+条目头的键名(`anchor`/`est_duration_s`/`source`)固定英文;锚点位置词中文写「场首/场末」、非中文输出语言写 `scene start`/`end of scene`;声明本集无旁白时中文稿首写「本集无旁白」、非中文写 `[NO NARRATION]`(`docs/screenplay_anchors.md`,2026-09-23)。
 
 ## 接受的工作指令(Work Order)
 

@@ -49,6 +49,15 @@ char-linxiao:「师父,这卷经书……」
 (adaptation_note: 合并原文 ch017 两段对话;source: ch017#p04-p21)
 ```
 
+**机器锚点不随输出语言变(2026-09-23,`docs/screenplay_anchors.md`)**:场头字段位置、`[事件]/[出场]/[时长]` 方括号标签、`动作:/转场:/时段:/声音:/旁白候选(…):/〔本场无对白〕` 行首关键词是宿主解析用的锚点。输出语言不是中文时,正文(动作、台词、场景名、时段词)按输出语言写,锚点改用**英文规范写法**:`**[EVENTS] ev… | [CAST] CHAR-… | [DURATION] 40s**`、`ACTION:`、`TRANSITION:`(或独立一行 `CUT TO:`)、`TIME:`/`SOUND:`/`SFX:`/`MUSIC:`、`[NARRATION (narrator)]:`、`[NO DIALOGUE]`、场头 `## S03 | INT | SCN-0012 Sutra hall | night`;说话人一律带 `CHAR-` ID,英文台词用双引号。不得把标签翻成别的语言或自造写法——解析器只认这两套。示例:
+```markdown
+## S03 | INT | SCN-0012 Sutra hall | night
+**[EVENTS] ev0021, ev0022 (merged) | [CAST] CHAR-0001, CHAR-0002 | [DURATION] 40s**
+ACTION: Lin pushes the door open; the candle flickers.
+CHAR-0001: "Master, this scroll…"
+TRANSITION: CUT TO
+```
+
 ## 接受的工作指令(Work Order)
 
 工单统一格式见 `WORKFLOW.md` §6。我关心的字段:`instruction`(任务描述)、`inputs`、`expected_output`、`acceptance`。
