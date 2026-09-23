@@ -3,7 +3,7 @@
 
 后期处理页(/preview/post,WORKFLOW.md §9D,2026-09-11)的原子记录是「处方」(recipe):
 一条处方说清楚作用在哪(scope)、做什么(section/kind)、参数与参考(params/refs)、说明(note)、
-到哪一步了(status)、产物(output)。五个分区(细节填充/调色与光感/特效/包装/音效与声音)共用同一套
+到哪一步了(status)、产物(output)。五个分区(画面修补/调色与光感/特效/包装/音效与声音)共用同一套
 字段与状态机,差别只在 kind 的参数表。
 
 三种执行方式(exec):
@@ -47,7 +47,7 @@ STATUS_LABEL = {"draft": "草稿", "dispatched": "已派单", "applied": "已出
                 "adopted": "已采纳", "discarded": "已弃用", "failed": "失败"}
 LAYERS = {"picture": "画面", "pack": "包装", "sound": "声音"}
 SECTIONS = [
-    {"id": "fill", "label": "细节填充", "layer": "picture", "order": 1},
+    {"id": "fill", "label": "画面修补", "layer": "picture", "order": 1},
     {"id": "grade", "label": "调色与光感", "layer": "picture", "order": 2},
     {"id": "vfx", "label": "特效", "layer": "picture", "order": 3},
     {"id": "pack", "label": "包装", "layer": "pack", "order": 4},
@@ -64,7 +64,11 @@ LUT_PRESETS = [
 # 处方目录:params 的 type ∈ number|range|select|text|bool|palette|asset;
 # refs ∈ frame(参考帧)|mask(蒙版)|asset(素材);preview=True 表示可快速预览(仅 ffmpeg 类)
 KINDS: list[dict] = [
-    # ---- 细节填充 ----
+    # ---- 画面修补(2026-09-23 由「细节填充」改名;局部重绘排首位作新修改单默认做法) ----
+    {"id": "local_repaint", "section": "fill", "label": "局部重绘", "exec": "agent", "scopes": ["group", "range"],
+     "refs": ["mask", "frame"],
+     "params": [{"key": "strength", "label": "改动幅度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
+     "hint": "蒙版内按指令重绘(V2V 编辑);指令写清「改什么、改成什么」"},
     {"id": "deflicker", "section": "fill", "label": "去闪烁", "exec": "ffmpeg", "scopes": ["group", "range", "scene"],
      "params": [{"key": "size", "label": "窗口(帧)", "type": "range", "min": 3, "max": 15, "step": 2, "default": 5},
                 {"key": "strength", "label": "强度", "type": "range", "min": 0, "max": 1, "step": 0.1, "default": 0.8}],
@@ -74,10 +78,6 @@ KINDS: list[dict] = [
     {"id": "upscale", "section": "fill", "label": "超分", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "resolution", "label": "目标分辨率", "type": "select", "options": ["1080p", "2k", "4k"], "default": "1080p"}],
      "hint": "走 genmedia.py upscale(SeedVR2 / MiniMax),逐组决定哪些值得超分"},
-    {"id": "local_repaint", "section": "fill", "label": "局部重绘", "exec": "agent", "scopes": ["group", "range"],
-     "refs": ["mask", "frame"],
-     "params": [{"key": "strength", "label": "改动幅度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
-     "hint": "蒙版内按指令重绘(V2V 编辑);指令写清「改什么、改成什么」"},
     {"id": "interpolate", "section": "fill", "label": "插帧", "exec": "agent", "scopes": ["group", "scene", "episode"],
      "params": [{"key": "fps", "label": "目标帧率", "type": "select", "options": ["48", "60"], "default": "48"}],
      "hint": "RIFE 类工作流(可绑 RunningHub);成片帧率须全集一致,建议整集作用域"},

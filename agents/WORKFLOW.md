@@ -727,7 +727,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > **§9D 后期处方与后期处理页(2026-09-11 增,归 `10-editing/post-finishing`,页面 `/preview/post`)**
 >
 > - **问题**:H3B 签字后的调色 / 特效 / 光感 / 细节修补 / 包装 / 音效没有入口,用户只能在编辑弹窗里写一段话等 agent;调色 / 特效 / 光感在流水线里只有创作意图(color_script、lighting)没有执行工序。
-> - **模型**:三层(画面 / 包装 / 声音)、一张处方表、五级作用域(整集 → 场次 → **叙事块 `block`**(`narrative_block.id`:闪回 / 梦境 / 蒙太奇 / 想象段,2026-09-17;同一场景常被现实段与闪回段共用,按场次开处方会误伤现实段,故单列一级)→ 分镜组 → 组内时间段,下级覆盖上级)。每项调整 = 一条处方 `{id, scope, section, kind, exec, params, refs, note, status, output}`,五个分区(细节填充 / 调色与光感 / 特效 / 包装 / 音效与声音)共用状态机 `草稿 → 已派单 → 已出片 → 已采纳 | 已弃用`(记录类采纳即生效)。**说明 `note` 必填**:执行侧能力不足时退化为给 agent 的自然语言指令,不允许静默跳过。
+> - **模型**:三层(画面 / 包装 / 声音)、一张处方表、五级作用域(整集 → 场次 → **叙事块 `block`**(`narrative_block.id`:闪回 / 梦境 / 蒙太奇 / 想象段,2026-09-17;同一场景常被现实段与闪回段共用,按场次开处方会误伤现实段,故单列一级)→ 分镜组 → 组内时间段,下级覆盖上级)。每项调整 = 一条处方 `{id, scope, section, kind, exec, params, refs, note, status, output}`,五个分区(画面修补 / 调色与光感 / 特效 / 包装 / 音效与声音)共用状态机 `草稿 → 已派单 → 已出片 → 已采纳 | 已弃用`(记录类采纳即生效)。**说明 `note` 必填**:执行侧能力不足时退化为给 agent 的自然语言指令,不允许静默跳过。
 > - **母本永不覆盖**:`assets/clips/epNN/grpNNN.mp4` 是 v0;产物按版本另存 `assets/post/epNN/grpNNN/v{n}.mp4`,台账 `edit/epNN/post_plan.json` 记版本链与当前指针,回滚只挪指针;H3P 签字时按保留规则清理(母本 + 最近两个已采纳版本 + 当前指针,更早的删文件留记录)。
 > - **唯一工序**:宿主 CLI `code/post_apply.py`——`apply`(ffmpeg 类出片 / `--preview` 4 秒 480p 低清预览)、`register`(agent 类登记产物)、`adopt/discard/rollback`、`check`(机检 `post_ok`)、`finalize`(出成片:各组当前版本归一化拼 `cut_post.mp4` → `sync-timeline` 把 timeline `tracks.video[].src` 指向归一化段文件、原值存 `src_orig`,首次备份 `timeline.pre_post.json`,并把各组当前版本的时长编辑(插黑 / 定格 / 删段,版本条目 `time_ops`)按原始组序累计起点写成 `edit/epNN/timemap.json`(§9B,2026-09-17) → `render_transitions.py render --src cut_post.mp4 --out cut_post_v2.mp4` → `finalize_episode.py assemble --cut …` → `check`;原 `final.mp4` 首次备份为 `final.pre_post.mp4`)。**禁止 Agent 自写 ffmpeg 改母本、禁止复制 / 改写脚本到项目 `code/`**。快速预览只给 ffmpeg 类处方;V2V 类没有便宜预览,只有派单。
 > - **机检 `post_ok`**(`post_apply.py check`,出成片前必跑;台账 `edit/epNN/post_check.json` 记台账指纹,指纹不符 = 结果过期):`post_plan_applied` 已采纳产物存在且指纹一致(FAIL);`post_no_pending` 无派单中处方(FAIL)、草稿 / 未裁决 WARN;`color_consistency` 同场次相邻组均值色差(WARN);`sfx_cues_resolved` 音效点位表逐条已选来源或显式略过(WARN);`flashback_graded` 闪回块每组的当前版本带已采纳的调色处方(WARN,无闪回块 PASS,2026-09-17);`transitions_synced` 已采纳转场处方与 shot_list 一致(类型 / 时长 / 垫片 hold_s·freeze_s·hold_audio,FAIL)。
@@ -918,7 +918,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 | H3S(每集) | p6-storyboard 后、shot-planning 前 | 本集分镜草案(「📋 故事板」页审看逐场逐镜表:编号/内容(含台词、旁白正文与挂点镜,2026-09-15)/铅笔草图 + 导演计划;草图按需出、不是签字前置;意见发总制片改分镜后重新建单;签字后 storyboard.json 再改动即视为签字过期,orchestrator 重新建单,2026-09-11) |
 | H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D);**同时确认本项目「视频提示词技能」:自动(按生效视频模型)/手选/跳过,签字即冻结快照(§7F)** |
 | H3B(每集) | G7 后、Phase 9 前 | 本集全部生成组终版 clip(「成片发布」页审看组画面/原生音频质量;签字前不进剪辑合成) |
-| H3P(每集) | p9-subtitle 后、p9-post / G9 前 | 本集后期处方(「🎚️ 后期处理」页:分镜组母本上的特效/包装/细节填充/光感/调色/音效处方,A|B 比对后采纳,拼装预检通过;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再改动即视为签字过期,orchestrator 重新建单;签字时清理旧版本文件,§9D,2026-09-11) |
+| H3P(每集) | p9-subtitle 后、p9-post / G9 前 | 本集后期处方(「🎚️ 后期处理」页:分镜组母本上的特效/包装/画面修补/光感/调色/音效处方,A|B 比对后采纳,拼装预检通过;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再改动即视为签字过期,orchestrator 重新建单;签字时清理旧版本文件,§9D,2026-09-11) |
 | H4 | G9 后 | 第 1 集成片(试点集全片审看) |
 | H5 | G10 后 | 发布签字 |
 
