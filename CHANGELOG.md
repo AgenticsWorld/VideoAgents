@@ -2,17 +2,29 @@
 
 All notable public changes to VideoAgents are documented here.
 
-## [Unreleased]
+## [1.0.35] - 2026-09-23
 
 ### Added
 
 - **Project dropdown › Import Project…** (above "New Project…"): pick a `.zip` of a project folder (either the folder itself or its contents at the zip root); the host streams it to disk, extracts it into `data/projects/<name>/` (name = the zip's top-level folder, else the file name; a clashing name gets a `-2`/`-3` suffix; path-traversal entries and `__MACOSX`/`.DS_Store` noise are rejected or dropped) and the console switches to the new project. `POST /api/v1/projects/import?filename=…&name=…` with the raw zip as the body.
 - **Output settings › Background plate mode** (`output.plate_mode`, shown only when whitebox is on; in the new-project wizard and in project settings): `pano` (default) keeps the existing flow — panorama anchors planned from whitebox camera positions, panoramas re-projected per shot direction and regenerated; `world` lets you pick the anchor yourself on the scene preview page, generate a world model (World Labs Marble) from that panorama, and `render_shot_plates.py` then screenshots the world model per master-camera direction (`modules/worldlabs.py#render_world_views`, headless Chromium + Spark) as the reference for the regenerated plate. Per-scene override in the scene preview "Shot background plates" panel (`POST /projects/<p>/scenes/<sid>/plates/plate-mode`, stored in `plates/index.json#mode`). Scenes in world mode without a world model stop the chain with exit code 4 `[world_missing]`; the world model is never generated automatically. The "World model" panel now sits above "Shot background plates" on the scene preview page.
 - **Settings › Advanced › Diagnostic Data › Issue feedback** (on by default): when an agent confirms during a run that a problem is a defect in the host code, or that the host needs a new feature, it files an issue with `code/report_issue.py`; the host scrubs it (paths, project names, keys), de-duplicates it by signature and lists it in the dialog, where **Submit in browser** opens a pre-filled GitHub "new issue" page for you to confirm (GitHub does not accept anonymous issues, so nothing is posted without you). The Diagnostic Data menu item shows the number of issues waiting. Headless setups can set the environment variable `VIDEOAGENTS_GITHUB_TOKEN` (classic token, `public_repo`) to let the host publish directly.
+- **Scene preview: 360° panorama viewer** — clicking a rendered panorama now opens a draggable 360° view (toggle back to the flat image); the anchor map drawn on the top view can be zoomed and panned.
+- **Storyboard preview: 📍 "View set" button per shot** (whitebox on): jumps that group's whitebox timeline to the shot's start without playing; shown only for shots that have a whitebox camera.
+- **Live page: local ComfyUI channel next to Fal** — a prompt is required and reference images are not used on ComfyUI; new `FastH3 VSA T2VA` workflow template and model catalogue. The list of linking modes (last-frame linking, no linking, …) now follows the selected model.
+- **Scene panoramas: `render_scene_panos.py --adopt` also accepts `.redo-*` archives** (the previous official panorama archived by `--redo`), so a worse re-render can be rolled back without paying for a new one.
 
 ### Removed
 
 - **Diagnostic Data: local event collection, lesson cards (`runs/<task_id>/lesson.md`) and the diagnostic bundle export** (`modules/diagnostics.py`, the `/diagnostics*` endpoints, the `diagnostics_enabled` setting). The Debug mode switch is kept. Existing files under `data/.videoagents/telemetry/` are no longer read and can be deleted.
+
+### Changed
+
+- **Desktop: the default language-model engine on first launch is now Claude** (model = smart allocation), the same as the web console; it used to be DeepAgents / Agentics.
+- **Host-generated text follows the UI language**: gate / guard messages, agent receipts, whitebox issue text, engine status, the digital-human panel, the scene image panel and the background-plate machine sentences are Chinese on a Chinese UI and English on every other language; the 11 UI dictionaries were completed for these areas.
+- **Scene preview page is laid out in sections** (panorama, world model, background plates, whitebox, …).
+- **Storyboard preview: the whitebox issues panel is collapsed by default** and keeps the open state once you expand it.
+- **Scene panoramas: anchor placement and coverage** — the anchor height is now the standing surface plus eye height (anchors on raised whitebox blocks no longer end up inside solid volumes, anchors over water are handled); the service radius is scaled from the top-view width and relaxed per indoor / outdoor anchor (mixed scenes included); each anchor is classified indoor / outdoor so an indoor anchor no longer renders as an outdoor / sky-visible panorama; open exteriors get panorama projection cues; a parent anchor whose whitebox-consistency check is WARN is not used as the chained reference.
 
 ### Fixed
 
@@ -21,6 +33,13 @@ All notable public changes to VideoAgents are documented here.
 - **Seedance 2.5 background-plate machine sentences now follow the UI language.** The host-written `【场景】` slot block and the per-shot "场景激活：/本镜画内…/构图层次：" sentences that `sync_shot_plates.py --write` injects into `video_prompt` were always Chinese, even inside an English prompt; they are now written in English (`【Scene】 … reference [Image N]`, `Scene activation: use Scene A ([Image 2]); do not use …`, `In frame left to right:`, `Composition layers:`) whenever the UI language is not Chinese. Both wordings are recognised by `shot_plate_bound`, both are stripped and rewritten on the next `--write` so switching the UI language leaves no leftovers, and a `Shot N｜title.` heading ending in an English period is now accepted as a shot heading.
 - **Other host checks and parsers that assumed Chinese text** (found in the same audit): the reviser's `## 变更记录` report section is now recognised under its English and other UI-language headings (`## Change log`, …), so downstream dirty-marking and stale-signature rebuilds no longer silently drop when the report is written in English; the Seedance 2.5 structure check accepts a fixed English label set (`【Characters】` / `【Action & sound】` / `Use:` / `Not used:` / `【Unused assets】` / `【Consistency】`) next to the official Chinese labels, and the prompt rules list them; sign-off cards bind to the right DAG gate from an English question (`H3W … (ep06)`) even when several episodes' gates are open; gate episode numbers, screenplay narration anchors (`scene start` / `end of scene`), `dialogue.md` `**final**` lines and table headers, voice-card negations (`avoid …`), and publishing lint values with half-width parentheses are read in English as well. On the web UI, the storyboard prompt editor and the copy button now use the stored `video_prompt` instead of reading back page text the UI dictionary may have rewritten, screenplay cells on the script preview are excluded from dictionary translation so key-point anchors keep the original text, edit buttons carry the episode in `data-ep` instead of scraping it from a translated label, director-console note targets store the id rather than a translated label, and the storyboard redraw marker is no longer part of a translatable string.
 - **Run-log progress line and tool receipts were always Chinese** regardless of the UI language ("💭 思考中…", "⚙ 执行工具中…", "⏳ 等待模型下一步…", "✗ 工具报错" …). These are host status strings pushed by the runtime over the `progress` / `tool` SSE events; they now have entries in all 11 UI dictionaries, and the variable parts (tool name, argument size, thinking-token estimate) are placed after the fixed text so the prefix rule translates the whole line.
+- **Scene panoramas: the column ↔ yaw formula was inverted** (panoramas came out facing the wrong way), panoramas were sometimes rendered outside the set, and a mis-classified panorama could pass the check.
+- **Background plates: people appeared in empty-set plates** (Ark merges the negative prompt into the positive text) — person words are filtered from plate prompts; the layout PNG no longer grows too large after a direction change; a plate prompt rejected by Ark's text pre-check as sensitive content (two style sentences becoming adjacent once the subject clause is removed) is rewritten.
+- **Director console: shot size labels** (wide / medium / close-up / extreme close-up) used wrong thresholds.
+- **Desktop: logging in with a phone number failed.**
+- **Defect tickets menu item did not open inside the desktop app.**
+- **Live page: switching channels** could leave the model / linking-mode selectors out of sync.
+- **Whitebox: the check run after sign-off** raised on groups whose issues had all been decided; whitebox rendering uses the host-injected interpreter path when Playwright is missing.
 
 ## [1.0.34] - 2026-09-20
 
