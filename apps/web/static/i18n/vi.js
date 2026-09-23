@@ -3525,4 +3525,5 @@ window.I18N_DICT = {
 "火山样片模式 1080p 原片": "Bản chính 1080p chế độ nháp Volcano",
 "已记 Draft 任务": "Đã ghi tác vụ Draft",
 "该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)": "Tập này chưa có clip nhóm (assets/clips/{ep}/grpNNN.mp4)",
+"后期配音模式下必须开启": "Bắt buộc ở chế độ lồng tiếng hậu kỳ",
 };

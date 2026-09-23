@@ -3525,4 +3525,5 @@ window.I18N_DICT = {
 "火山样片模式 1080p 原片": "1080p-Final aus Volcano-Draft-Modus",
 "已记 Draft 任务": "Draft-Task erfasst",
 "该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)": "Diese Episode hat noch keine Gruppenclips (assets/clips/{ep}/grpNNN.mp4)",
+"后期配音模式下必须开启": "Im Nachsynchronisationsmodus erforderlich",
 };

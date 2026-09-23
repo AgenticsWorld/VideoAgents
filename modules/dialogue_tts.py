@@ -57,9 +57,11 @@ def _read(p: Path):
 
 
 def enabled(base: Path) -> bool:
-    """项目输出设置 output.dialogue_tts(默认关)。"""
+    """项目输出设置 output.dialogue_tts(默认关);对白配音=后期配音(output.dialogue_voice=dubbing)时必开
+    (2026-09-23 用户拍板:UI 锁死、服务端保存归一,这里再兜底让未重新保存的存量项目同口径)。"""
     st = _read(Path(base) / "settings.json") or {}
-    return (st.get("output") or {}).get("dialogue_tts") is True
+    out = st.get("output") or {}
+    return out.get("dialogue_tts") is True or out.get("dialogue_voice") == "dubbing"
 
 
 def dialogue_voice_mode(base: Path) -> str:

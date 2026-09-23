@@ -504,6 +504,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
       <div class="row"><label>生成对白语音</label>
         <input type="checkbox" id="npo-dialogue-tts" style="flex:none">
+      <span class="note" id="npo-dialogue-tts-lock" style="display:none;margin:0;flex:1">后期配音模式下必须开启</span>
         <button type="button" class="info-btn" data-info="npo-info-dialogue-tts" title="说明">i</button></div>
       <div class="note info-note" id="npo-info-dialogue-tts">开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音</div>
     </div>
@@ -615,6 +616,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note info-note" id="out-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
     <div class="row"><label>生成对白语音</label>
       <input type="checkbox" id="out-dialogue-tts" style="flex:none">
+    <span class="note" id="out-dialogue-tts-lock" style="display:none;margin:0;flex:1">后期配音模式下必须开启</span>
       <button type="button" class="info-btn" data-info="out-info-dialogue-tts" title="说明">i</button></div>
     <div class="note info-note" id="out-info-dialogue-tts">开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音</div>
     <div class="err" id="out-err"></div>
@@ -1262,7 +1264,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='1080p';   // 新建项目成片分辨率默认 1080p(2026-09-13 用户拍板);服务端默认仍为 480p 仅作存量项目缺键回退
   $('#npo-dialogue-voice').value='native';   // 花字/内嵌字幕开关 2026-09-13 移到后期处理页,新建默认关由服务端兜底
-  $('#npo-dialogue-tts').checked=false;   // 生成对白语音默认关(2026-09-13)
+  $('#npo-dialogue-tts').checked=false;syncDialogueTtsLock('npo');   // 生成对白语音默认关(2026-09-13);后期配音时锁死为开
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=1;$('#npd-smax').value=10;
@@ -1628,7 +1630,7 @@ async function openOutModal(){
     $('#out-final-res').value=OUT_RESOLUTIONS.includes(o.final_resolution)?o.final_resolution:'480p';
     $('#out-narration').checked=o.narration_enabled===true;   // 白模/旁白/生成对白语音三项:未配置过一律显示为关(2026-09-16)
     $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
-    $('#out-dialogue-tts').checked=o.dialogue_tts===true;
+    $('#out-dialogue-tts').checked=o.dialogue_tts===true;syncDialogueTtsLock('out');   // 后期配音时勾上并锁死
     $('#out-spatial').checked=o.spatial_blocking===true;syncSpatialHint('out-spatial');
     $('#out-scene-plates').value=SCENE_PLATES_MODES.includes(o.scene_plates)?o.scene_plates:'auto';   // 场景图(2026-09-17,仅白模关闭时生效)
     $('#out-plate-mode').value=PLATE_MODES.includes(o.plate_mode)?o.plate_mode:'pano';   // 背景图模式(2026-09-22,仅白模开启时显示)
@@ -1760,6 +1762,17 @@ function syncSpatialHint(id){
   if(pmHint&&!cb.checked){pmHint.classList.remove('on');const ib=pmRow&&pmRow.querySelector('.info-btn');if(ib)ib.classList.remove('on');}
 }
 ['npo-spatial','out-spatial'].forEach(id=>{$('#'+id).addEventListener('change',()=>syncSpatialHint(id));syncSpatialHint(id);});
+// 对白配音=后期配音时「生成对白语音」必须开启(2026-09-23 用户拍板):勾上并锁死不可取消(p7-dub 取库里音频再贴合);
+// 视频原声时解锁、保留用户原值。服务端 _validate_output 同样兜底(保存时 dubbing 一律写 dialogue_tts=true)
+function syncDialogueTtsLock(pfx){
+  const sel=$('#'+pfx+'-dialogue-voice'),cb=$('#'+pfx+'-dialogue-tts'),lock=$('#'+pfx+'-dialogue-tts-lock');
+  if(!sel||!cb)return;
+  const dub=sel.value==='dubbing';
+  if(dub)cb.checked=true;
+  cb.disabled=dub;
+  if(lock)lock.style.display=dub?'':'none';
+}
+['npo','out'].forEach(pfx=>{$('#'+pfx+'-dialogue-voice').addEventListener('change',()=>syncDialogueTtsLock(pfx));syncDialogueTtsLock(pfx);});
 // 新建向导:白模开关随「模型限制」步所选视频模型联动——仅 Seedance 2.5 默认开启,
 // 其余预设与手动值一律默认关闭(2026-09-16 用户拍板);仅在模型限制步点选预设/改值时联动,用户之后在输出设置步仍可手动改
 function npSpatialFromModel(){

@@ -960,7 +960,7 @@ DEFAULT_GENCONFIG = {
                "subtitle_burn_in": False, "caption_enabled": False,
                "narration_enabled": False,
                "dialogue_voice": "native",
-               # dialogue_tts=生成对白语音(2026-09-13,默认关):开启后不论 dialogue_voice 是原声还是后期配音,项目都维护
+               # dialogue_tts=生成对白语音(2026-09-13,默认关;dialogue_voice=dubbing 时必开,保存时归一为 True):开启后项目都维护
                #   一份按 shot_list dialogue_lines 逐句、用人物嗓音模板合成的「对白语音库」assets/audio/voice/epNN/tts/
                #   (modules/dialogue_tts.py,按台词/音色/样本哈希惰性同步,用时才补合成);消费方三处:故事板动态样片、
                #   分镜白模样片挂对白轨,后期配音(p7-dub)先取库里自然语速音频再贴合;未选角的句子跳过并 WARN 不阻断
@@ -1990,6 +1990,10 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
+    # 对白配音=后期配音时「生成对白语音」为必选(2026-09-23 用户拍板):UI 勾上锁死,这里兜底归一,
+    # 直接调 API / 存量项目再保存时同样写成 True(p7-dub 取库里自然语速音频再贴合,库不可缺)
+    if o.get("dialogue_voice") == "dubbing":
+        o["dialogue_tts"] = True
     if "dialogue_tts_speed" in o:
         v = o["dialogue_tts_speed"]
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0.5 <= v <= 2.0:
@@ -3078,7 +3082,7 @@ def build_role_prompt(agent_id: str, project: str,
         "以语速(--speed,±25% 内)贴合开口时长、起点对齐开口起点,替换该组 clip 的对白轨(画面流不变、时长不变;"
         "原生轨备份 `.native_audio.wav`),产物 `assets/audio/voice/epNN/dub/grpNNN/`;p7-lipsync 只在其后做不换语音的"
         "对齐兜底(av_offset_lt_80ms);upscale/edit/mix 一律取配音后的组 clip。**§8A「TTS 严禁进成片对白」红线在本模式下"
-        "由用户设置显式解除**,但仍禁止用 TTS 干声重驱/重绘口型画面(仅换音轨、以时段贴合)"
+        "由用户设置显式解除**,但仍禁止用 TTS 干声重驱/重绘口型画面(仅换音轨、以时段贴合);本模式下「生成对白语音」强制开启(见下条)"
         if dubbing else
         "视频原声(native,默认)—— 成片对白语音就是视频模型随组 clip 原生合成的语音,**全流程不做任何对白 TTS**"
         "(不派 p7-dub,严禁 TTS 音轨进成片对白——§8A 红线);voiceprint 样本照常出、只作生成期 reference_audio 音色锚")
@@ -3089,8 +3093,8 @@ def build_role_prompt(agent_id: str, project: str,
         "故事板动态样片、分镜白模样片挂对白轨,后期配音 dub_group 先取库里音频再贴合。未选角(casting 缺条目/speaker 非人物编号)的句子"
         "库里记 unbound 跳过并 WARN,不阻断样片;voice-generation 看到 unbound 清单应补选角。**该库仅供样片与后期配音,"
         "视频原声模式下仍严禁把库音频混进成片对白(§8A 红线不变)**"
-        if out.get("dialogue_tts") is True else
-        "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨,后期配音模式下 dub_group 逐句自行合成")
+        if (out.get("dialogue_tts") is True or dubbing) else
+        "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨")
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)

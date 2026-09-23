@@ -3525,4 +3525,5 @@ window.I18N_DICT = {
 "火山样片模式 1080p 原片": "Volcano ドラフトモード 1080p 本編",
 "已记 Draft 任务": "Draft タスク記録済み",
 "该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)": "このエピソードにはまだグループクリップがありません(assets/clips/{ep}/grpNNN.mp4)",
+"后期配音模式下必须开启": "アフレコモードでは必須",
 };

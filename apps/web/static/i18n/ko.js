@@ -3525,4 +3525,5 @@ window.I18N_DICT = {
 "火山样片模式 1080p 原片": "Volcano 드래프트 모드 1080p 원본",
 "已记 Draft 任务": "Draft 작업 기록됨",
 "该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)": "이 에피소드에는 아직 그룹 클립이 없습니다(assets/clips/{ep}/grpNNN.mp4)",
+"后期配音模式下必须开启": "후시 더빙 모드에서는 필수",
 };
