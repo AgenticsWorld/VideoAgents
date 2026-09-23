@@ -3138,6 +3138,10 @@ window.I18N_DICT = {
 "折叠分镜": "Collapse shots",
 "展开/折叠该组分镜": "Expand/collapse this group's shots",
 "分镜剪辑": "Shot editing",
+"待确认": "Pending review",
+"{g} 有 {n} 个新版本待确认": "{g} has {n} new version(s) pending review",
+"对比 v{v}": "Compare v{v}",
+"把当前指针挪到 v{v}(出成片用它)": "Move the current pointer to v{v} (used for the final cut)",
 "分镜剪辑,三个模块:① 删段——选中的时间段直接删除,剩余拼成新版本;② 换段——切掉的时间段用本组另一版本同段替代;③ 派单剪辑师——输入指令发给剪辑师工位,产物登记为新版本": "Shot editing, three modules: ① Delete — remove the marked ranges and build a new version from what remains; ② Replace — swap the marked ranges with the same ranges from another version of this group; ③ Send to editor — type an instruction for the editor agent, whose output is registered as a new version",
 // 分镜剪辑三模块(2026-09-16)
 "删段": "Delete",

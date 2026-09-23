@@ -13,6 +13,10 @@ All notable public changes to VideoAgents are documented here.
 - **Host artifact check for upscales** (`code/check_upscale_artifacts.py`): interpolation outputs are judged by round-trip halo / smear / flicker; generative outputs (SeedVR2 / MiniMax / Draft-mode finals) by flicker + downsample-to-source SSIM, so real super-resolution is no longer failed by the halo detector.
 - **Publish page** (`/preview/videos`) now lists every group clip with its upscale method tag (interpolated / AI upscale / not upscaled) read from meta.json.
 
+### Changed
+
+- **Post page: groups with new versions pending review are now obvious.** The left group list shows a yellow `v{n} pending review` badge (plus a yellow edge bar) on any group that has a shot-editing / import / insert-hold version newer than its current pointer, a new *Pending review* filter lists them, and the defect / dispatched dots moved from the second line to the group-id line so they are no longer clipped by the status box. The right column gets a highlighted bar above *Shot editing* with `Compare v{n}` (A|B against the current version) and a yellow `Set v{n} current` button, so adopting a cut no longer requires opening the collapsed Shot editing panel. All 11 language dictionaries updated.
+
 ### Fixed
 
 - `modules/timemap.compose` mis-composed nested edits: a second-layer edit falling *inside* a first-layer interval (slow motion then cutting that same span, or partially deleting an inserted hold) was appended as a parallel op whose delta cancelled the first one, so `effective_time_ops`, `build-cut` in/out mapping and the legacy audio/subtitle remap were wrong for such version chains (fengshen3 ep06 grp019 composed to Δ0 instead of −0.71 s). Compose now scans source-basis breakpoints and derives each segment's output length through both layers.

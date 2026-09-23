@@ -86,7 +86,16 @@ header select:hover{border-color:var(--accent)}
 .grp .chk{display:none;width:14px}
 body.multi .grp .chk{display:block}
 .thumb{width:46px;height:26px;border-radius:3px;background:#0b0d13 center/cover no-repeat;border:1px solid var(--border)}
-.grp .id{font:500 11.5px var(--mono);color:var(--text)}
+.grp>div:nth-child(3){min-width:0}
+.grp .id{font:500 11.5px var(--mono);color:var(--text);display:flex;gap:5px;align-items:center;white-space:nowrap}
+.grp .pend{font:600 9.5px var(--mono);color:#0b1020;background:var(--yellow);border-radius:3px;padding:0 4px;line-height:1.6;letter-spacing:.2px}
+.grp.pending:not(.sel){box-shadow:inset 3px 0 0 var(--yellow)}
+/* 右栏顶部:本组有待确认的新版本(2026-09-23):高亮横幅,一键对比 / 设为当前 */
+.pendbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border);background:#2a2412;box-shadow:inset 3px 0 0 var(--yellow);font-size:12px;flex:none}
+.pendbar:empty{display:none}
+.pendbar b{color:var(--yellow);font-weight:600}
+.pendbar button.hot{background:var(--yellow);border-color:var(--yellow);color:#0b1020;font-weight:600}
+.pendbar button.hot:hover{filter:brightness(1.08)}
 .grp .sub{font-size:10.5px;color:var(--dim);display:flex;gap:5px;align-items:center;white-space:nowrap;overflow:hidden}
 .grp .st{display:flex;gap:3px;flex-direction:column;align-items:flex-end}
 .dots{display:flex;gap:3px}
@@ -423,6 +432,7 @@ function render(keep){
   renderEps();
   if(!keep||!$('#left')){
     $('#work').innerHTML=`<div class="col" id="left"></div><div class="col" id="mid"></div><div class="col" id="right">
+      <div class="pendbar" id="pendbar"></div>
       <div class="cutsec closed" id="cutsec"><div class="col-h" id="cut-h" title="${esc(t('分镜剪辑,四个模块:① 删段——选中的时间段直接删除,剩余拼成新版本;② 换段——切掉的时间段用本组另一版本同段替代;③ 插黑 / 定格——在当前时刻或组边界插入定格帧 + 黑场控制切换节奏;④ 派单剪辑师——输入指令发给剪辑师工位,产物登记为新版本'))}"><span class="car">▸</span>✂ ${esc(t('分镜剪辑'))} <span class="lite" id="cut-gid"></span><span class="sp"></span><span class="lite" id="cut-sum"></span></div><div class="cutp" id="cutpanel" style="display:none"></div></div>
       <div id="rbody"></div></div>`;
     $('#cut-h').onclick=toggleCut;
@@ -450,22 +460,22 @@ function snBlocks(){
 function renderLeft(){
   const defects={};(D.defects||[]).forEach(d=>(d.groups||[]).forEach(g=>{(defects[g]=defects[g]||[]).push(d)}));
   let h=`<div class="col-h">${esc(t('分镜组'))} <span class="lite">${D.groups.length}</span><span class="sp"></span><label class="lite" style="cursor:pointer"><input type="checkbox" id="multi" ${document.body.classList.contains('multi')?'checked':''}> ${esc(t('多选'))}</label></div>`;
-  h+=`<div class="flt">${[['all','全部'],['draft','有草稿'],['busy','派单中'],['defect','有缺陷'],['untouched','未动过']].map(([k,l])=>`<span class="${FILTER===k?'on':''}" data-f="${k}">${esc(t(l))}</span>`).join('')}</div>`;
+  h+=`<div class="flt">${[['all','全部'],['pending','待确认'],['draft','有草稿'],['busy','派单中'],['defect','有缺陷'],['untouched','未动过']].map(([k,l])=>`<span class="${FILTER===k?'on':''}" data-f="${k}">${esc(t(l))}</span>`).join('')}</div>`;
   h+=`<div class="scroll" id="glist">`;
   for(const sc of snBlocks()){
     const gs=sc.groups.filter(g=>{
       const st=groupStatus(g.group_id);
       if(FILTER==='draft')return effective(g.group_id).some(r=>!r.inherited&&(r.status==='draft'||r.status==='applied'));
-      if(FILTER==='busy')return st.busy;if(FILTER==='defect')return !!defects[g.group_id];if(FILTER==='untouched')return !st.n&&!g.current;return true});
+      if(FILTER==='pending')return pendingVersions(g.group_id).length>0;if(FILTER==='busy')return st.busy;if(FILTER==='defect')return !!defects[g.group_id];if(FILTER==='untouched')return !st.n&&!g.current;return true});
     if(!gs.length&&FILTER!=='all')continue;
     const open=OPEN_SCN.has(sc.key);
     h+=`<div class="scn ${open?'':'closed'}" data-scn="${esc(sc.key)}"><span>${open?'▾':'▸'}</span><span data-no-i18n title="${esc(sc.tip)}">${esc(sc.label)}${sc.scns.length?` <span class="lite">${esc(sc.scns.join(' '))}</span>`:''}${sc.tod?' · '+esc(sc.tod):''}</span><span class="sp"></span>${sc.palette.length?`<span class="pal" title="${esc(t('色彩脚本色板'))}">${sc.palette.slice(0,5).map(c=>`<i style="background:${esc(c)}"></i>`).join('')}</span>`:''}<span>${gs.length}</span></div><div class="grps">`;
     for(const g of gs){
-      const st=groupStatus(g.group_id),def=defects[g.group_id];
-      h+=`<div class="grp ${g.group_id===SEL?'sel':''} ${g.has_clip?'':'nofile'}" data-g="${esc(g.group_id)}">
+      const st=groupStatus(g.group_id),def=defects[g.group_id],pend=pendingVersions(g.group_id);
+      h+=`<div class="grp ${g.group_id===SEL?'sel':''} ${g.has_clip?'':'nofile'} ${pend.length?'pending':''}" data-g="${esc(g.group_id)}">
         <input type="checkbox" class="chk" ${MULTI.has(g.group_id)?'checked':''}>
         <div class="thumb" ${g.thumb?`style="background-image:url('${esc(g.thumb)}')"`:''}></div>
-        <div><div class="id">${esc(g.group_id)}</div><div class="sub">${num(g.duration,1)}s · ${(g.shots||[]).length}${esc(t('镜'))}${(g.transition_in&&(+g.transition_in.hold_s>0||+g.transition_in.freeze_s>0))?` <span title="${esc(t('入口垫片:')+padDesc(g.transition_in))}">⬛</span>`:''}${def?` <i class="dot r" title="${esc(def.map(d=>d.defect_id+' '+d.title).join('\n'))}"></i>`:''}${st.busy?' <i class="dot y" title="'+esc(t('派单中'))+'"></i>':''}</div></div>
+        <div><div class="id">${esc(g.group_id)}${def?`<i class="dot r" title="${esc(def.map(d=>d.defect_id+' '+d.title).join('\n'))}"></i>`:''}${st.busy?'<i class="dot y" title="'+esc(t('派单中'))+'"></i>':''}${pend.length?`<span class="pend" title="${esc(I18N.f('{g} 有 {n} 个新版本待确认',{g:g.group_id,n:pend.length}))}">v${pend[pend.length-1].v} ${esc(t('待确认'))}</span>`:''}</div><div class="sub">${num(g.duration,1)}s · ${(g.shots||[]).length}${esc(t('镜'))}${(g.transition_in&&(+g.transition_in.hold_s>0||+g.transition_in.freeze_s>0))?` <span title="${esc(t('入口垫片:')+padDesc(g.transition_in))}">⬛</span>`:''}</div></div>
         <div class="st"><div class="dots"><i class="${st.fill==='on'?'pic':st.fill==='half'?'half':''}"></i><i class="${st.grade==='on'?'pic':st.grade==='half'?'half':''}"></i><i class="${st.pack==='on'?'pack':''}"></i><i class="${st.snd==='on'?'snd':''}"></i></div><div class="n">${g.current?'v'+g.current:'v0'}${st.n?' · '+st.n:''}</div></div></div>`;
     }
     h+=`</div>`;
@@ -572,6 +582,22 @@ function renderMonitorShell(){
   pad.onmouseup=()=>{m0=null;if(MASK&&(MASK.w<0.01||MASK.h<0.01))MASK=null;drawMask();document.body.classList.remove('masking');$('#b-mask').classList.remove('pri')};
 }
 function versionsOf(gid){const g=grpById(gid);return g?g.versions.filter(v=>v.url):[]}
+// 待确认的新版本(2026-09-23):分镜剪辑 / 导入 / 插黑定格产出、比当前指针新、文件还在的版本——它们不走处方「采纳」,只能「设为当前」
+const CUT_KINDS=['splice','import','cutout','edit','pad'];
+function pendingVersions(gid){const g=grpById(gid);if(!g)return [];const cur=g.current||0;return g.versions.filter(v=>v.url&&!v.cleaned&&v.v>cur&&CUT_KINDS.includes(v.created_by)).sort((a,b)=>a.v-b.v)}
+function renderPend(){
+  const bar=$('#pendbar');if(!bar)return;
+  const pend=MODE==='group'&&SEL?pendingVersions(SEL):[];
+  if(!pend.length){bar.innerHTML='';return}
+  const cur=(grpById(SEL)||{}).current||0;
+  let h=`<b>🆕 ${esc(I18N.f('{g} 有 {n} 个新版本待确认',{g:SEL,n:pend.length}))}</b>`;
+  for(const v of pend){
+    h+=`<span style="display:inline-flex;gap:4px;align-items:center"><button class="sm" data-pend-ab="${v.v}" title="${esc((v.note||'')+(v.created_at?' · '+v.created_at.slice(5,16):''))}">👁 ${esc(I18N.f('对比 v{v}',{v:v.v}))}</button><button class="sm hot" data-pend-adopt="${v.v}" title="${esc(I18N.f('把当前指针挪到 v{v}(出成片用它)',{v:v.v}))}">★ ${esc(I18N.f('v{v} 设为当前',{v:v.v}))}</button></span>`;
+  }
+  bar.innerHTML=h;
+  $$('#pendbar [data-pend-ab]').forEach(b=>b.onclick=()=>{VA=+b.dataset.pendAb;VB=cur;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)});
+  $$('#pendbar [data-pend-adopt]').forEach(b=>b.onclick=async()=>{const v=+b.dataset.pendAdopt;$$('#pendbar button').forEach(x=>x.disabled=true);try{await J(api('/rollback'),'POST',{group_id:SEL,to:v});await load(true);setMonitor(true);toast(I18N.f('{g} 当前指针 → v{v}',{g:SEL,v:v}))}catch(e){alert(e.message);renderPend()}});
+}
 function verLabel(v){
   const cur=(grpById(SEL)||{}).current||0;
   let s=(v.v===0?t('母本 v0'):'v'+v.v)+(v.v===cur?' ★':'');
@@ -1104,6 +1130,7 @@ function waveSelEdit(){
 
 /* ---------- 右栏 ---------- */
 function renderRight(){
+  renderPend();
   const g=grpById(SEL);
   if(SCOPE==='block'&&!(g&&g.block_id))SCOPE='group';
   const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],...(g&&g.block_id?[['block',t('叙事块 ')+g.block_id]]:[]),['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
