@@ -1348,7 +1348,7 @@ async function loadDaModels(p,refresh=false){
     }else if(p==='openrouter'){
       const r=await api('/api/v1/providers/openrouter/models?modality=text'+(refresh?'&refresh=1':''));
       const rec=TEXT_LISTS.openrouter,recIds=new Set(rec.map(o=>o[0]));
-      list=[...rec.map(([v,l])=>[v,'⭐ '+l]),...(r.models||[]).filter(m=>!recIds.has(m.id)).map(m=>[m.id,m.name||m.id])];
+      list=[...rec.map(([v,l])=>[v,'⭐ '+t(l)]),...(r.models||[]).filter(m=>!recIds.has(m.id)).map(m=>[m.id,m.name||m.id])];
     }else{
       const r=await api('/api/v1/providers/deepagents/models?provider='+p);
       list=(r.models||[]).map(id=>[id,id]);
@@ -1357,7 +1357,7 @@ async function loadDaModels(p,refresh=false){
     DA_LIST_ERR[p]='';
   }catch(e){
     DA_LIST_ERR[p]=e.message||String(e);
-    if(p==='openrouter')list=TEXT_LISTS.openrouter.map(([v,l])=>[v,'⭐ '+l]);
+    if(p==='openrouter')list=TEXT_LISTS.openrouter.map(([v,l])=>[v,'⭐ '+t(l)]);
     else if(p==='cloud')list=TEXT_LISTS.cloud;
   }
   if(seq!==DA_SEQ[p])return;

@@ -1410,7 +1410,7 @@ async function openSfx(focus){
 function renderSfx(focus){
   const rows=(SFX.sfx||{}).rows||[],lib=SFX.library||[];
   $('#ms-sub').textContent=I18N.f('{n} 条 · {s}',{n:rows.length,s:SFX.saved?t('已保存'):t('由分镜 sfx cue 生成,尚未保存')});
-  let h=rows.length?'':`<div class="empty" style="margin:20px">${esc(t('本集没有音效点位(assets/audio/sfx/'+EP+'/audio_cues.json 不存在或为空)'))}</div>`;
+  let h=rows.length?'':`<div class="empty" style="margin:20px">${esc(I18N.f('本集没有音效点位(assets/audio/sfx/{ep}/audio_cues.json 不存在或为空)',{ep:EP}))}</div>`;
   if(rows.length)h+=`<table class="tb"><tr><th>${esc(t('时间'))}</th><th>${esc(t('组/镜'))}</th><th>${esc(t('分镜 cue'))}</th><th>${esc(t('来源'))}</th><th>${esc(t('文件'))}</th><th>dB</th></tr>`;
   for(const r of rows){
     const ok=r.source==='skip'||(r.source&&r.file);

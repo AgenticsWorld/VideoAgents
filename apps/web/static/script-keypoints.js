@@ -51,7 +51,7 @@ window.ScriptKeypoints = (() => {
     }
     document.querySelector('.kp-list')?.remove();
     const list = document.createElement('details'); list.className='kp-list'; list.open=active().length>0;
-    const summary=document.createElement('summary'); summary.textContent=`剧本关键点（${active().length}）`;list.append(summary);
+    const summary=document.createElement('summary'); summary.textContent=I18N.f('剧本关键点（{n}）',{n:active().length});list.append(summary);
     const note=document.createElement('div');note.className='kp-note';note.textContent='选中剧本文字可标记「关键情节」或「关键细节」。关键点必须在分镜中体现；取消需确认。';list.append(note);
     for(const item of active()) {
       const row=document.createElement('div');row.className='kp-item';
@@ -59,7 +59,7 @@ window.ScriptKeypoints = (() => {
       const quote=document.createElement('span');quote.className='kp-quote';quote.textContent=item.parts.map(p=>p.quote).join('\n');row.append(quote);
       const status=document.createElement('span');status.className='kp-note';status.textContent=unresolved.has(item.id)?'原文已变化，仍须保留':(state.data.keypoints_missing||[]).includes(item.id)?'待分镜体现':'已关联分镜';row.append(status);
       const button=document.createElement('button');button.textContent='取消标记';button.disabled=busy;
-      button.onclick=()=>{if(confirm(`确认取消「${label(item)}」？取消后，该内容不再作为分镜必须保留的关键点。\n\n${item.parts.map(p=>p.quote).join('\n')}`))save({action:'remove',id:item.id,confirmed:true});};row.append(button);list.append(row);
+      button.onclick=()=>{if(confirm(I18N.f('确认取消「{k}」？取消后，该内容不再作为分镜必须保留的关键点。',{k:label(item)})+'\n\n'+item.parts.map(p=>p.quote).join('\n')))save({action:'remove',id:item.id,confirmed:true});};row.append(button);list.append(row);
     }
     document.querySelector('table.sc')?.before(list);
   }

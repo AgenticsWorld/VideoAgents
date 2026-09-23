@@ -70,7 +70,7 @@
       const list=((window.IMAGE_MODEL_LISTS||{})[p]||[]).slice();
       if(ch.model&&!list.some(x=>x[0]===ch.model))list.unshift([ch.model,ch.model+' ('+tt('当前全局')+')']);
       if(!model)model=ch.model||(list[0]||[''])[0];
-      list.forEach(([id,label])=>{const o=document.createElement('option');o.value=id;o.textContent=clip(label||id,clipN);o.title=id;sm.appendChild(o)});
+      list.forEach(([id,label])=>{const o=document.createElement('option');o.value=id;o.textContent=clip(tt(label||id),clipN);o.title=id;sm.appendChild(o)});
       const oc=document.createElement('option');oc.value='__custom__';oc.textContent=tt('自定义…');sm.appendChild(oc);
       if(list.some(x=>x[0]===model))sm.value=model;else{sm.value='__custom__';ci.value=model}
       ci.hidden=sm.value!=='__custom__';
@@ -80,11 +80,11 @@
       const g=D.global||{};
       const o0=document.createElement('option');o0.value='';
       const gm=g.provider==='comfyui'?tt(COMFY_MODE_NAMES[g.model]||g.model||'—'):(g.model||'—');
-      const gfull=ff('跟随全局({p} · {m})',{p:PROV_NAMES[g.provider]||g.provider||'—',m:clip(gm,28)});
+      const gfull=ff('跟随全局({p} · {m})',{p:tt(PROV_NAMES[g.provider]||g.provider||'—'),m:clip(gm,28)});
       o0.textContent=opt.compact?tt('跟随全局'):gfull;o0.title=gfull;sp.appendChild(o0);
       if(opt.compact)sp.title=gfull;
       (D.channels||[]).forEach(c=>{const o=document.createElement('option');o.value=c.id;
-        o.textContent=(PROV_NAMES[c.id]||c.id)+(c.configured?'':' ('+tt('未配置')+')');o.disabled=!c.configured;sp.appendChild(o)});
+        o.textContent=tt(PROV_NAMES[c.id]||c.id)+(c.configured?'':' ('+tt('未配置')+')');o.disabled=!c.configured;sp.appendChild(o)});
       sp.value=(D.channels||[]).some(c=>c.id===D.provider&&c.configured)?D.provider:'';
       fillModels(D.model||'');
     }

@@ -1263,7 +1263,7 @@ async function loadOpenRouterModels(kind,refresh=false){
     const r=await api(`/api/v1/providers/openrouter/models?modality=${kind}${refresh?'&refresh=1':''}`);
     // 推荐置顶(⭐+说明),其余按目录列出
     const recIds=new Set(rec.map(o=>o[0]));
-    const opts=[...rec.map(([v,l])=>[v,'⭐ '+l]),
+    const opts=[...rec.map(([v,l])=>[v,'⭐ '+t(l)]),
                 ...r.models.filter(m=>!recIds.has(m.id)).map(m=>[m.id,m.name])];
     fillSelect(sel,opts,saved.model,saved.custom_model);
     hint.innerHTML=I18N.f('{or} {kind}生成目录共 {n} 个模型(⭐ 为推荐);也可选「自定义…」手填模型 ID',
@@ -1271,7 +1271,7 @@ async function loadOpenRouterModels(kind,refresh=false){
        kind:t(KIND_LABEL[kind]),n:r.models.length});
   }catch(e){
     // 拉取失败时仍可用内置推荐列表
-    fillSelect(sel,rec.map(([v,l])=>[v,'⭐ '+l]),saved.model,saved.custom_model);
+    fillSelect(sel,rec.map(([v,l])=>[v,'⭐ '+t(l)]),saved.model,saved.custom_model);
     hint.textContent=I18N.f('⚠ 在线列表拉取失败:{msg}(已显示内置推荐;稍后点「刷新列表」重试)',{msg:e.message});
   }
 }

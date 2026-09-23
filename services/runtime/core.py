@@ -11504,14 +11504,20 @@ def _avatar_storage_check() -> dict:
     sdk_ok = importlib.util.find_spec(mod) is not None
     out = {"ok": configured and sdk_ok, "provider": provider, "bucket": bucket,
            "configured": configured, "sdk_ok": sdk_ok, "sdk": pkg, "detail": ""}
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言(2026-09-23),非中文一律英文
     if not configured:
         out["detail"] = (f"文件托管「{provider}」未配齐 bucket/Access Key/Secret Key"
-                         "(⚙️ 设置 → 文件托管);方舟入库只收公网 URL,须先配置对象存储")
+                         "(⚙️ 设置 → 文件托管);方舟入库只收公网 URL,须先配置对象存储") if zh else (
+                        f"File hosting \u201c{provider}\u201d is missing bucket / Access Key / Secret Key "
+                        "(⚙️ Settings → File hosting). Ark only accepts public URLs, so object storage must be configured first")
     elif not sdk_ok:
         out["detail"] = (f"当前 Python 运行时缺少 {provider} 存储 SDK(模块 {mod}):"
-                         f"请执行 `{sys.executable} -m pip install {pkg}` 后重试")
+                         f"请执行 `{sys.executable} -m pip install {pkg}` 后重试") if zh else (
+                        f"The current Python runtime is missing the {provider} storage SDK (module {mod}): "
+                        f"run `{sys.executable} -m pip install {pkg}` and try again")
     else:
-        out["detail"] = f"{provider} 桶 {bucket},SDK {pkg} 已就绪"
+        out["detail"] = (f"{provider} 桶 {bucket},SDK {pkg} 已就绪" if zh
+                         else f"{provider} bucket {bucket}; SDK {pkg} is ready")
     return out
 
 
