@@ -120,7 +120,7 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
     for i in range(1, len(arefs) + 1):
         if not re.search(r"\[Audio\s*%d\][^\n]{0,60}(?:用于|只用于|是|(?:used\s+)?(?:only\s+)?for\b|\bis\b|provides)" % i, vp, re.I):
             errs.append(f"{name}: 缺 `[Audio {i}] 用于…` 职责句")
-    heads = list(re.finditer(r"Shot\s*(\d+)\s*(?:[:：]|[｜|][^。\n]*。)", vp))
+    heads = list(re.finditer(r"Shot\s*(\d+)\s*(?:[:：]|[｜|][^。.\n]*[。.])", vp))
     if not heads:
         errs.append(f"{name}: 正文无 Shot N 段")
     for k, h in enumerate(heads):

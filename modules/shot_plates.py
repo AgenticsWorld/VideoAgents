@@ -1186,7 +1186,8 @@ def group_is_v25(base: Path, ep: str, gid: str) -> bool:
 
 
 # 机器持有的逐镜句:「场景激活：…。」+ 其后的「本镜画内…：…。」「画外不入画…：…。」「本镜背景：…。」「构图层次：…。」(2026-09-14),整段剔除后重写
-_ACT_RE = re.compile(r'\s*场景激活：[^。]*。(?:\s*(?:本镜画内|画外不入画|本镜背景|构图层次)[^：。]*：[^。]*。)*')
+_ACT_RE = re.compile(r'\s*场景激活：[^。]*。(?:\s*(?:本镜画内|画外不入画|本镜背景|构图层次)[^：。]*：[^。]*。)*'
+                     r'|\s*Scene activation:[^.]*\.(?:\s*(?:In frame left to right|Not in frame \(never paint them into this shot\)|Backdrop behind the subject|Composition layers):[^.]*\.)*')   # 英文机器句(非中文界面,2026-09-23)
 _H3_ANCHOR_RE = re.compile(r'\s*Plate anchor:[^.]*\.(?:[^.]*not used in this shot\.)?'
                            r'(?:\s*(?:In frame left to right|Not in frame \(never paint them into this shot\)|Backdrop behind the subject):[^.]*\.)*')
 
@@ -1348,6 +1349,35 @@ def _zh(text) -> str:
     return re.sub(r'\s+', ' ', str(text or '')).replace('。', '；').strip(' ；;')
 
 
+def _en(text) -> str:
+    """英文机器句同理:句内不得出现英文句号(按「Prefix: ….」整句剔除/重写),换成分号。"""
+    return _zh(text).replace('.', ';').strip(' ;')
+
+
+def ui_lang_is_zh() -> bool:
+    """宿主注入的 Seedance 2.5 机器句随界面语言:中文界面出中文,其余一律英文(2026-09-23,用户裁决)。
+    读法与 services/runtime/core.ui_lang_code 一致(state.json ui_lang → genconfig ui_language → 缺省中文),
+    不 import core(本模块由 CLI 直接调用);测试可用环境变量 VIDEOAGENTS_UI_LANG 覆盖。"""
+    import os
+    forced = os.environ.get('VIDEOAGENTS_UI_LANG')
+    if forced:
+        return forced.strip().lower().startswith('zh')
+    data_dir = Path(os.environ.get('VIDEOAGENTS_DATA_DIR', Path(__file__).resolve().parents[1] / 'data')).expanduser()
+    runtime = Path(os.environ.get('VIDEOAGENTS_RUNTIME_DIR', data_dir / '.videoagents')).expanduser()
+    lang = ''
+    try:
+        lang = str((json.loads((runtime / 'state.json').read_text(encoding='utf-8')) or {}).get('ui_lang') or '')
+    except Exception:  # noqa: BLE001
+        pass
+    if not lang:
+        try:
+            cfg = Path(os.environ.get('VIDEOAGENTS_CONFIG_PATH', runtime / 'genconfig.json')).expanduser()
+            lang = str((json.loads(cfg.read_text(encoding='utf-8')) or {}).get('ui_language') or '')
+        except Exception:  # noqa: BLE001
+            pass
+    return (lang or 'zh').lower().startswith('zh')
+
+
 def shot_extras_zh(p: dict) -> str:
     """Seedance 2.5:某镜段头「场景激活：」之后的机器句(画内/画外/背景/构图层次)。"""
     parts = []
@@ -1363,14 +1393,18 @@ def shot_extras_zh(p: dict) -> str:
     return ''.join(parts)
 
 
-def shot_extras_en(p: dict) -> str:
+def shot_extras_en(p: dict, with_layers: bool = False) -> str:
+    """2.0 口径的英文画内/画外/背景句;with_layers=True 为 2.5 英文机器句(与 shot_extras_zh 逐句对应,含构图层次)。"""
     parts = []
     if p.get('in_frame'):
-        parts.append('In frame left to right: ' + ', '.join(_zh(n) for n in p['in_frame']) + '.')
+        parts.append('In frame left to right: ' + ', '.join(_en(n) for n in p['in_frame']) + '.')
     if p.get('out_of_frame'):
-        parts.append('Not in frame (never paint them into this shot): ' + ', '.join(_zh(n) for n in p['out_of_frame']) + '.')
+        parts.append('Not in frame (never paint them into this shot): ' + ', '.join(_en(n) for n in p['out_of_frame']) + '.')
     if p.get('backdrop'):
-        parts.append('Backdrop behind the subject: ' + _zh(p['backdrop']) + '.')
+        parts.append('Backdrop behind the subject: ' + _en(p['backdrop']) + '.')
+    layers = p.get('layers') or {}
+    if with_layers and layers:
+        parts.append('Composition layers: ' + '; '.join(f"{lab} {_en(layers[k])}" for k, lab in (('fg', 'foreground'), ('mg', 'midground'), ('bg', 'background')) if layers.get(k)) + '.')
     return ' '.join(parts)
 
 
@@ -1438,6 +1472,40 @@ def build_block_v25(plates: list, openings_zh: str = '') -> str:
             + '各场景只在点名的镜头里激活；同一地点的不同机位是不同场景槽位，不得合并、不得把一个镜头的场景带进另一个镜头。'
             + (_zh(openings_zh) + '。' if openings_zh else '')
             + '背景图只作场景参照：画面不得停在空场，人物与动作按各 Shot 段描述。')
+
+
+def build_block_v25_en(plates: list, openings_en: str = '') -> str:
+    """build_block_v25 的英文版(非中文界面):同样的【场景】槽位结构,句子用英文;结尾句须以 described in each Shot. 收束(_BLOCK_RE 终止符)。"""
+    labels = scene_labels(plates)
+    lines = []
+    seen = set()
+    for p in plates:
+        if p['file'] in seen:
+            continue
+        seen.add(p['file'])
+        users = [f"Shot {q['shot_no']}" + (' end' if q['role'] == 'end' else '') for q in plates if q['file'] == p['file']]
+        lines.append(f"Scene {labels[p['file']]} (camera position of {', '.join(users)}; empty background plate) reference [Image {p['index']}], "
+                     f"{view_phrase_en(p)}: use only its spatial layout, architecture, materials and lighting; do not use any person in the image; "
+                     "never invent set dressing that is not in the plate, especially windows, doorways and furniture. ")
+    return (BLOCK_KEY + ' 【Scene】' + ''.join(lines)
+            + 'Each scene is activated only in the shots that name it; different camera positions of the same location are separate scene slots — '
+              'never merge them or carry one shot\'s scene into another. '
+            + (_en(openings_en) + '. ' if openings_en else '')
+            + 'Background plates are set references only: never hold the shot on an empty set; characters and motion described in each Shot.')
+
+
+def activation_line_en(plates: list, shot_no: int) -> str:
+    """activation_line 的英文版:「Scene activation: use Scene A ([Image 1], start) and Scene B ([Image 2], end); do not use Scene C ([Image 3]).」+ 英文机器句。"""
+    labels = scene_labels(plates)
+    mine = [p for p in plates if p['shot_no'] == shot_no]
+    others = sorted({labels[p['file']] for p in plates if p['shot_no'] != shot_no} - {labels[p['file']] for p in mine})
+    use = ' and '.join(f"Scene {labels[p['file']]} ([Image {p['index']}]" + (', end' if p['role'] == 'end' else (', start' if len(mine) > 1 else '')) + ')' for p in mine)
+    text = f"Scene activation: use {use}"
+    if others:
+        text += '; do not use ' + ', '.join(f"Scene {o} ([Image {next(p['index'] for p in plates if labels[p['file']] == o)}])" for o in others)
+    start = next((p for p in mine if p['role'] == 'start'), mine[0] if mine else None)
+    extras = shot_extras_en(start, with_layers=True) if start else ''
+    return ' ' + text + '.' + (' ' + extras if extras else '') + ' '
 
 
 def activation_line(plates: list, shot_no: int) -> str:
@@ -1521,7 +1589,7 @@ def _remap_images(text: str, old: list, new: list) -> tuple[str, list]:
     return _IMG_RE.sub(replace, text), warns
 
 
-def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False) -> tuple[dict, list]:
+def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False, zh: bool | None = None) -> tuple[dict, list]:
     """幂等回写:剔除俯视图/九宫格 refs 与其声明句,角色/生物 sheet 之后插入本组背景图,重排编号,写 Shot plates 段。
     v25=True(Seedance 2.5):Shot plates 段改写为【场景】分组,并在每个 Shot 段头插入「场景激活：」句(逐镜点名激活/不采用)。"""
     out = copy.deepcopy(prompt)
@@ -1543,22 +1611,25 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False) 
         indexed = []
         for p in plan['plates']:
             indexed.append({**p, 'index': new.index(p['file']) + 1})
-        block = (build_block_v25(indexed, plan.get('openings_zh', '')) if v25 else build_block_h3(indexed, plan.get('openings_en', '')) if h3
+        if zh is None:
+            zh = ui_lang_is_zh()   # 2.5 机器句随界面语言(2026-09-23):中文界面中文,其余英文;机检两套都认
+        block = ((build_block_v25(indexed, plan.get('openings_zh', '')) if zh else build_block_v25_en(indexed, plan.get('openings_en', ''))) if v25
+                 else build_block_h3(indexed, plan.get('openings_en', '')) if h3
                  else build_block(indexed, plan.get('openings_en', '')))
         m = re.search(r'\[?Shot\s*1\s*[:：｜|\]]', vp)
         vp = (vp[:m.start()].rstrip() + ' ' + block + ' ' + vp[m.start():]) if m else (vp.rstrip() + ' ' + block)
         after = vp.find(block) + len(block)   # 段头只在 Shot plates 段之后找(H3 段文本里含「[Shot k]」字样)
         if h3:
             for shot_no in sorted({p['shot_no'] for p in indexed}):
-                head = re.compile(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。\n]*。)' % shot_no).search(vp, after)
+                head = re.compile(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。.\n]*[。.])' % shot_no).search(vp, after)
                 if head:
                     vp = vp[:head.end()] + ' ' + anchor_line_h3(indexed, shot_no) + vp[head.end():]
         if v25:
             # 每个 Shot 段头(Shot k: / Shot k｜标题。)之后插入机器持有的「场景激活：」句,Agent 自己的「使用：/不采用：」清单不动
             for shot_no in sorted({p['shot_no'] for p in indexed}):
-                head = re.compile(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)' % shot_no).search(vp, after)
+                head = re.compile(r'Shot\s*%d\s*(?:[:：]|[｜|][^。.\n]*[。.])' % shot_no).search(vp, after)
                 if head:
-                    vp = vp[:head.end()] + activation_line(indexed, shot_no) + vp[head.end():]
+                    vp = vp[:head.end()] + (activation_line(indexed, shot_no) if zh else activation_line_en(indexed, shot_no)) + vp[head.end():]
     vp = paragraphize(re.sub(r'[ \t]{2,}', ' ', vp))
     out['refs'] = new
     out['video_prompt'] = vp
@@ -1593,21 +1664,22 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: 
             continue
         n = refs.index(p['file']) + 1
         if v25:
-            if not re.search(r'场景[A-Z]（[^）]*background plate）参考 \[Image\s*%d\]' % n, block):
+            if not (re.search(r'场景[A-Z]（[^）]*background plate）参考 \[Image\s*%d\]' % n, block)
+                    or re.search(r'Scene [A-Z] \([^)]*background plate\) reference \[Image\s*%d\]' % n, block)):
                 errs.append(f"{gid}/{p['shot_id']}: Seedance 2.5 口径 {BLOCK_KEY} 段缺【场景】槽位「场景X（… background plate）参考 [Image {n}]」(跑 code/sync_shot_plates.py --write)")
             shot_no = p['shot_no']
-            seg = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。\n]*。)(.*?)(?=Shot\s*\d+\s*[:：｜|]|Global constraints:|$)' % shot_no, body_text, re.S)
+            seg = re.search(r'Shot\s*%d\s*(?:[:：]|[｜|][^。.\n]*[。.])(.*?)(?=Shot\s*\d+\s*[:：｜|]|Global constraints:|$)' % shot_no, body_text, re.S)
             body = seg.group(1) if seg else ''
-            if not re.search(r'场景激活：使用[^。]*\[Image\s*%d\]' % n, body):
+            if not (re.search(r'场景激活：使用[^。]*\[Image\s*%d\]' % n, body) or re.search(r'Scene activation: use[^.]*\[Image\s*%d\]' % n, body)):
                 errs.append(f"{gid}/{p['shot_id']}: Shot {shot_no} 段缺「场景激活：使用场景X（[Image {n}]）…」句(2.5 逐镜激活;跑 --write)")
-            elif p['role'] == 'start' and p.get('in_frame') and '本镜画内' not in body:
+            elif p['role'] == 'start' and p.get('in_frame') and '本镜画内' not in body and 'In frame left to right' not in body:
                 errs.append(f"{gid}/{p['shot_id']}: Shot {shot_no} 段缺「本镜画内自左向右：…。画外不入画…」机器句(按本镜视锥算的画内/画外清单;跑 --write)")
-            elif p['role'] == 'start' and p.get('layers') and '构图层次：' not in body:
+            elif p['role'] == 'start' and p.get('layers') and '构图层次：' not in body and 'Composition layers:' not in body:
                 warns.append(f"{gid}/{p['shot_id']}: Shot {shot_no} 段缺「构图层次：」句(composition.json layers 未注入;跑 --write)")
         elif h3:
             if not re.search(r'<Picture\s*%d>\s*\(\[Image\s*%d\]\)[^.;]*composition anchor of \[Shot\s*%d\]' % (n, n, p['shot_no']), block):
                 errs.append(f"{gid}/{p['shot_id']}: H3 口径 {BLOCK_KEY} 段缺「<Picture {n}> ([Image {n}]) … composition anchor of [Shot {p['shot_no']}]」(跑 code/sync_shot_plates.py --write)")
-            seg = re.search(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。\n]*。)(.*?)(?=\[?Shot\s*\d+\s*[:：｜|\]]|Global constraints:|overall_soundscape:|$)' % p['shot_no'], body_text, re.S)
+            seg = re.search(r'\[?Shot\s*%d\s*(?:[:：\]]|[｜|][^。.\n]*[。.])(.*?)(?=\[?Shot\s*\d+\s*[:：｜|\]]|Global constraints:|overall_soundscape:|$)' % p['shot_no'], body_text, re.S)
             body = seg.group(1) if seg else ''
             if not re.search(r'Plate anchor:[^.]*<Picture\s*%d>' % n, body):
                 errs.append(f"{gid}/{p['shot_id']}: Shot {p['shot_no']} 段缺「Plate anchor: … <Picture {n}>」句(H3 逐镜构图锚;跑 --write)")
