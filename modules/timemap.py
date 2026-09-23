@@ -127,17 +127,80 @@ def inverse_time(ops, t_out: float) -> float:
     return round(src, 6)
 
 
+def _is_insert(o: dict) -> bool:
+    return o["src_t1"] - o["src_t0"] <= EPS
+
+
 def compose(first, second) -> list[dict]:
-    """first:源基准 → 中间基准;second:中间基准 → 输出。返回源基准 → 输出的一张总表。"""
+    """first:源基准 → 中间基准;second:中间基准 → 输出。返回源基准 → 输出的一张总表。
+
+    按断点扫描逐段复合(2026-09-23 重写):两层 op 的端点全部折回源基准,每个源区段在中间基准上的像再经第二层
+    映射得到输出长度;与源长相同的区段不入表。这样第二层落在第一层区间**内部**的编辑(慢动作后再删同一段、
+    插黑块被部分删除)也能正确合成——旧实现只把第二层端点折回源基准后并列追加,两条同区间 op 的 delta 会互相抵消。"""
     first = normalize_ops(first)
-    out = list(first)
-    for o in normalize_ops(second):
-        row = dict(o)
-        row["src_t0"] = inverse_time(first, o["src_t0"])
-        row["src_t1"] = inverse_time(first, o["src_t1"]) if o["src_t1"] > o["src_t0"] else row["src_t0"]
-        row.setdefault("layer", "second")
-        out.append(row)
-    return normalize_ops(out)
+    second = normalize_ops(second)
+    if not first:
+        out = []
+        for o in second:
+            row = dict(o)
+            row.setdefault("layer", "second")
+            out.append(row)
+        return normalize_ops(out)
+    if not second:
+        return first
+    first_ins = [o for o in first if _is_insert(o)]
+    first_edit = [o for o in first if not _is_insert(o)]
+    sec_ins = [o for o in second if _is_insert(o)]
+    sec_edit = [o for o in second if not _is_insert(o)]
+    out: list[dict] = []
+
+    def _attrs(base: dict, layer_second: bool) -> dict:
+        row = {k: v for k, v in base.items() if k not in ("src_t0", "src_t1", "out_len")}
+        if layer_second:
+            row.setdefault("layer", "second")
+        return row
+
+    # 第二层的纯插入块:折回源基准上的一个点(落在第一层插入块内时折到该插入点)
+    for o in sec_ins:
+        s = inverse_time(first, o["src_t0"])
+        out.append({**_attrs(o, True), "src_t0": s, "src_t1": s, "out_len": o["out_len"]})
+    # 第一层的纯插入块:中间基准上 [p+prior, p+prior+L),经第二层(不含其插入块)后剩多少就是多少
+    for o in first_ins:
+        ib = map_time(first, o["src_t0"])
+        ia = ib - o["out_len"]
+        ln = map_time(sec_edit, ib) - map_time(sec_edit, ia)
+        if ln > EPS:
+            out.append({**_attrs(o, False), "src_t0": o["src_t0"], "src_t1": o["src_t0"], "out_len": ln})
+    # 源基准断点:两层 op 的全部端点
+    pts = set()
+    for o in first:
+        pts.update((o["src_t0"], o["src_t1"]))
+    for o in second:
+        pts.update((inverse_time(first, o["src_t0"]), inverse_time(first, o["src_t1"])))
+    pts = sorted(round(float(x), 6) for x in pts)
+    for a, b in zip(pts, pts[1:]):
+        if b - a <= EPS:
+            continue
+        ia = map_time(first, a)
+        # b 恰为第一层插入点时 map_time 会把插入块算进去,这里取「块之前」的像
+        ib = map_time(first, b) - sum(o["out_len"] for o in first_ins if abs(o["src_t0"] - b) <= EPS)
+        ln = max(0.0, map_time(sec_edit, ib) - map_time(sec_edit, ia))
+        if abs(ln - (b - a)) <= EPS:
+            continue
+        cov2 = next((o for o in sec_edit if o["src_t0"] - EPS <= ia and ib <= o["src_t1"] + EPS and ib - ia > EPS), None)
+        cov1 = next((o for o in first_edit if o["src_t0"] - EPS <= a and b <= o["src_t1"] + EPS), None)
+        base = cov2 or cov1 or {}
+        out.append({**_attrs(base, cov2 is not None), "src_t0": a, "src_t1": b, "out_len": 0.0 if ln <= 1e-5 else ln})
+    # 相邻同类删除段合并(两层端点取整差异会切出毫秒级碎片)
+    merged: list[dict] = []
+    for o in normalize_ops(out):
+        prev = merged[-1] if merged else None
+        if (prev and prev["out_len"] <= EPS and o["out_len"] <= EPS and abs(prev["src_t1"] - o["src_t0"]) <= 1e-3
+                and prev.get("kind") == o.get("kind") and prev.get("layer") == o.get("layer")):
+            prev["src_t1"] = o["src_t1"]
+            continue
+        merged.append(dict(o))
+    return normalize_ops(merged)
 
 
 def map_fn(ops, extra_shift: float = 0.0):

@@ -389,11 +389,13 @@ phases:
       # TTS 进成片对白=严重口型问题);对白语音/口型缺陷走 p7-video 整组重生成
       - { id: p8-mix, agent: 09-audio/audio-mixing,
           depends_on: [p7-video, p7-dub, p8-narrator, p8-music],       # 原生轨来自全部组 clip(后期配音模式下即配音后 clip,§8C)
-          outputs: ["assets/audio/final/{ep}.wav"],
+          outputs: ["assets/audio/final/{ep}.wav", "assets/audio/final/{ep}.mix.json"],
+          # 原生轨取源按后期页当前采纳版本(§8B ④,2026-09-23):只准 code/mix_basis.py sources 列出的 src / cum_start_s,
+          # 交付前 code/mix_basis.py stamp --task-id 盖章;无盖章 = 旧口径(出成片时整条轨按 timemap 硬切)
           # 铺旁白前必跑 code/check_narration_sync.py(只检):指纹失配=shot_list 挂点已改版,停手上报
           # 回派 narrator 重签/重合成,严禁按旧 narration_track 人工连续铺排(§8B ②,前科 DEF-ep05-audio-0005)
           # 旁白开关关闭时:无旁白轨,两路混音(原生轨+BGM),narration_anchor_sync 自动跳过(skipped: narration off)
-          validation: { auto: [narration_anchor_sync, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
+          validation: { auto: [narration_anchor_sync, mix_basis_current, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
       - { id: g8, gate: true, depends_on: [p8-mix] }
 
   - id: p9

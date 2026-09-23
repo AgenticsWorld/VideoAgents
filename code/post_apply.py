@@ -68,6 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, REPO_ROOT, DATA_DIR  # noqa: E402  副作用:modules/ 入 sys.path
 
 import color_script  # noqa: E402
+import mix_manifest  # noqa: E402
 import post_fx as fx  # noqa: E402
 import post_plan as pp  # noqa: E402
 import timemap  # noqa: E402
@@ -509,6 +510,12 @@ def do_check(proj: Path, ep: str, write: bool = True) -> tuple[bool, list[dict]]
         rec("post_no_pending", True, f"草稿 {s.get('draft', 0)} 条、已出片未裁决 {s.get('applied', 0)} 条(不进成片)", warn=True)
     else:
         rec("post_no_pending", True, "无待办处方")
+
+    # 2b mix_basis_current(2026-09-23,§8B ④):p8-mix 按采纳版本混音的盖章清单 vs 当前指针;
+    # 清单过期且混音带后期时轴 = FAIL(finalize 会拒封装,须重跑 p8-mix);无清单 / 纯 v0 盖章 = WARN(旧口径 timemap 兜底)
+    mres = mix_manifest.compare(proj, ep, plan)
+    mtag, mdetail = mix_manifest.check_row(mres)
+    rec(mix_manifest.CHECK_NAME, mtag != "FAIL", mdetail, warn=(mtag == "WARN"))
 
     # 3 color_consistency(同场次相邻组,当前版本中间帧均值)
     warn_pairs = []

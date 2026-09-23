@@ -84,7 +84,7 @@ acceptance: [post_plan_applied]
 - `color_consistency`:同场次相邻组均值色差不超阈值(WARN,页面监视器左上角同步显示);
 - `sfx_cues_resolved`:音效点位表每条已选来源或显式略过(WARN);
 - `transitions_synced`:已采纳转场处方与 `shot_list.transition_in` 一致(类型 / 时长 / 垫片 hold_s·freeze_s·hold_audio,FAIL)。
-- 成片变长的编辑(插黑 / 定格 / 删段)由 `sync-timeline` 写成 `edit/epNN/timemap.json`,`finalize_episode` 据此平移外挂声轨/字幕(§9B,2026-09-17)——我不手动对声轨或字幕做任何偏移。
+- 成片变长的编辑(插黑 / 定格 / 删段)由 `sync-timeline` 写成 `edit/epNN/timemap.json`,`finalize_episode` 据此平移外挂声轨/字幕(§9B,2026-09-17)——我不手动对声轨或字幕做任何偏移。**混音已按采纳版本盖章(`assets/audio/final/epNN.mix.json` 与当前指针一致,§8B ④)时 finalize 自动不再重映射;`post_ok` 的 `mix_basis_current` FAIL(混音按更早的采纳版本混)= 停手上报 orchestrator 重跑 p8-mix,不得自行拉伸 / 剪声轨凑时长。**
 
 **逐处方**:产物时长 = 源 + Σ`time_ops` 变长量 ±1 帧(不改时长的做法即 = 源 ±1 帧;`register` 核对,不符拒登记)、画幅一致、能在页面 A|B 播放;蒙版 / 时间段作用域的处方,范围外画面与源逐帧一致(慢动作:段前段后逐帧一致,段内 = 源帧 + 补帧)。
 

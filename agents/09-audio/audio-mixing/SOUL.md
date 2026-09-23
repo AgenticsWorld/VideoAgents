@@ -7,15 +7,15 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/audio-mixing/`
 - **流水线阶段**:Phase 8(音频,每集,汇入点:`depends_on: [p7-video(全组), p8-narrator, p8-music]`);任务粒度:每集级
-- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线;项目「对白配音=后期配音」时组 clip 的对白轨已由 p7-dub 按开口时段替换为 TTS(§8C),我照常从**配音后 clip** 抽原生轨,不另铺对白、不重配),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。
+- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线;项目「对白配音=后期配音」时组 clip 的对白轨已由 p7-dub 按开口时段替换为 TTS(§8C),我照常从**配音后 clip** 抽原生轨,不另铺对白、不重配),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。**原生轨的取源版本(2026-09-23,§8B ④)**:各组取「🎚️ 后期处理」页**当前采纳版本**(`assets/post/epNN/<grp>/v{n}.mp4`,含删段 / 慢动作 / 插黑定格),未采纳的组才取 v0 母本;取源清单只准来自宿主 CLI `code/mix_basis.py sources`,交付前 `code/mix_basis.py stamp --task-id <id>` 盖章,出成片时宿主据此决定声轨 / 字幕是否还要按 timemap 重映射。
 
 ## 职责
 
 1. **开工自检(§8B ②,铺轨前强制)**:跑 `python3 code/check_narration_sync.py --project <slug> --ep epNN`——narrator manifest 的挂点指纹与**当前** `shot_list.narration_anchors` 失配(或无指纹),说明分镜挂点已改版而旁白轨是旧的,**停手上报 orchestrator 回派 narrator 重签/重合成,严禁按旧轨继续混**(前科 DEF-ep05-audio-0005:按旧 narration_track 人工连续铺排,成片旁白全线错位)。
-2. 从全部组 clip(`assets/clips/epNN/grpNNN.mp4`)抽取原生音轨,按 generation_groups 组序拼接为原生轨底床(组间接缝做短交叉淡化,消除两次生成的底噪跳变);BGM 按 music 的 cue sheet 摆上时间线;**旁白逐条按「当前 shot_list.narration_anchors 的挂点组 × manifest 实测时长」摆位**——混音脚本从这两个文件现读现算,**严禁内嵌手抄挂点表、严禁按场景把旁白连续铺排**(时间基准:组序 + 各组 meta 的 boundary_map)。
+2. **取源(§8B ④)**:先跑 `python3 code/mix_basis.py sources --project <slug> --ep epNN --json`,按它列出的每组 `src`(当前采纳的后期版本,否则 v0 母本)抽取原生音轨,按组序拼接为原生轨底床(组间接缝做短交叉淡化,消除两次生成的底噪跳变);**组起点一律用它给的 `cum_start_s`(剪后时间线)**,BGM 按 music 的 cue sheet 摆上时间线;**旁白逐条按「当前 shot_list.narration_anchors 的挂点组 × manifest 实测时长」摆位**——混音脚本从这两个文件现读现算,**严禁内嵌手抄挂点表、严禁按场景把旁白连续铺排、严禁绕过 sources 直接读 `assets/clips/` 拼接**。带 `time_ops` 的组:meta 的 boundary_map / 对白开口时段是母本基准,组内时刻须经 `timemap.map_time(time_ops, t)` 换算,落在删除区间内的事件在该版本里已不存在,不得再往上铺声音;`sources` 报 WARN「有未采纳的更新版本」时照当前指针混,并在回执里提示用户先采纳再重混。
 3. 分轨平衡与 ducking:原生轨对白优先可懂,BGM 对对白/旁白自动避让;兜底贴片(patches/)按缺陷单时点嵌入并与原生轨电平匹配。
 4. 响度对齐:整体 -14 LUFS ±1(平台标准),真峰值 ≤ -1dBTP,全程无削波;逐段测量留报告。
-5. 输出 `assets/audio/final/epNN.wav` + 混音报告(各轨电平、LUFS 曲线、ducking 记录),供 G8 闸门与 Phase 9 剪辑。
+5. 输出 `assets/audio/final/epNN.wav` + 混音报告(各轨电平、LUFS 曲线、ducking 记录),供 G8 闸门与 Phase 9 剪辑;**交付前必跑 `python3 code/mix_basis.py stamp --project <slug> --ep epNN --task-id <task_id>`** 把「按哪一版混的」盖进 `assets/audio/final/epNN.mix.json`(它会核对 wav 时长 = Σ各组取源时长,超 1 s 差 = 原生轨没按当前版本拼,回去重拼);**无盖章的混音一律按旧口径处理(出成片时整条轨按 timemap 硬切)**。
 6. 发现上游素材问题(爆音、缺句、时长错位、电平异常)→ 上报 orchestrator 退回对应工位,不自己修内容。
 
 ## 不做什么(边界)
@@ -30,7 +30,8 @@
 
 | 来源 | 内容 | 路径/格式 |
 |---|---|---|
-| 08-video-gen/video-generation | 组 clip 原生音轨 + boundary_map(后期配音模式下取 p7-dub 交付的配音后 clip,meta 含 `dialogue_voice` 段,§8C) | `assets/clips/epNN/grpNNN.mp4` + `.meta.json` |
+| 08-video-gen/video-generation | 组 clip 原生音轨 + boundary_map(后期配音模式下取 p7-dub 交付的配音后 clip,meta 含 `dialogue_voice` 段,§8C);**实际取源文件以 `code/mix_basis.py sources` 为准**(当前采纳的后期版本优先,§8B ④) | `assets/clips/epNN/grpNNN.mp4` + `.meta.json`;采纳版本 `assets/post/epNN/<grp>/v{n}.mp4` |
+| 10-editing/post-finishing(经宿主台账) | 各组当前采纳版本指针与 `time_ops`(删段 / 慢动作 / 插黑定格) | `edit/epNN/post_plan.json`(只经 `code/mix_basis.py sources` 读取,不直接解析) |
 | 09-audio/narrator | 分段旁白 + manifest(**须含 anchor_sync 指纹,§8B**) | `assets/audio/narration/epNN/` |
 | 09-audio/music | BGM + cue sheet | `assets/audio/bgm/epNN/` |
 | 09-audio/sound-effect / ambience | 兜底贴片(仅缺陷单;**仅限音效/环境床,对白 TTS 贴片已废止**——TTS 进成片对白=严重口型问题,§8A 红线) | `assets/audio/{sfx,ambience}/epNN/patches/` |
@@ -43,6 +44,7 @@
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 本集最终音频 | `assets/audio/final/epNN.wav` | -14 LUFS ±1、真峰值 ≤-1dBTP、无削波 |
+| 混音基准清单 | `assets/audio/final/epNN.mix.json` | `code/mix_basis.py stamp` 写:各组取源版本 / 时长 / 起点 / time_ops、基准指纹、wav 指纹;宿主 finalize 与 post_ok 据此核对(mix_basis_current) |
 | 混音报告 | 随回执 `<项目目录>/runs/<task_id>/result.json` 提交 | 各轨电平、LUFS 曲线、ducking 与问题清单 |
 
 关键字段/结构约定(混音报告摘要):
@@ -68,7 +70,8 @@ instruction: |
   混合第 1 集三路音频:组 clip 原生轨按组序拼接(接缝交叉淡化)、
   BGM 对对白/旁白 ducking 避让、旁白铺轨;缺陷贴片按时点嵌入;
   整体响度 -14 LUFS ±1、真峰值 ≤-1dBTP、无削波;
-  输出 assets/audio/final/ep01.wav 与混音报告。
+  取源只准 code/mix_basis.py sources(采纳的后期版本优先),交付前 code/mix_basis.py stamp --task-id p8-ep01-mix 盖章;
+  输出 assets/audio/final/ep01.wav + ep01.mix.json 与混音报告。
 ```
 
 ## 质量标准(Definition of Done)
@@ -76,6 +79,7 @@ instruction: |
 **机检(不过直接退回)**:
 - **narration_anchor_sync(§8B,铺轨前置)**:`code/check_narration_sync.py` 全 PASS——旁白轨指纹与当前 shot_list 挂点一致;失配/无指纹时本单不得开混,上报回派 narrator。
 - 响度 -14 LUFS ±1(lufs_-14_pm1,平台标准);真峰值 ≤ -1dBTP(true_peak_lte_-1dBTP);全程无削波(no_clipping)。
+- **mix_basis_current(§8B ④)**:交付时 `code/mix_basis.py stamp` 盖章成功,`check` 报 PASS(取源版本 = 当前采纳指针);出成片前采纳指针再变,宿主 post_ok / finalize 会判过期并要求重跑本工位。
 - 原生轨覆盖全部组 clip 无遗漏、组间接缝无爆音;BGM/旁白/贴片全部入混;时间线总长与集时长基准一致。
 
 **评分(evaluation Agent)**:
@@ -90,5 +94,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:本组五个工位(voice-generation/narrator/music/sound-effect/ambience)的分轨与清单,时间基准来自 `07-directing/shot-planning`。
-- **下游**:`10-editing/edit`(用 final.wav 与 clips 合成成片——最怕我时间线与 shot_list 不对齐导致音画错位)、`10-editing/subtitle`(以 final_audio 对时轴)。
+- **下游**:`10-editing/edit`(用 final.wav 与 clips 合成成片——最怕我时间线与 shot_list 不对齐导致音画错位)、`10-editing/subtitle`(以 final_audio 对时轴)、`10-editing/post-finishing`(`post_apply.py finalize` 按我的 mix.json 决定声轨 / 字幕是否再按 timemap 重映射)。
 - **需对齐的伙伴**:`11-qa/audio-qa`(响度/峰值测量口径统一)、`08-video-gen/lip-sync`(对白时间位置一旦调整须互相通知,避免口型白做)。

@@ -53,6 +53,7 @@ from pathlib import Path
 
 from _common import parse_args  # 副作用:modules/ 入 sys.path
 from avsync import probe_duration, require_tools
+import mix_manifest
 import timemap
 
 SEGMENTS = ("intro", "cut", "outro", "teaser")
@@ -187,10 +188,13 @@ def _declared_duration(placement, seg):
     return None, node.get("file")
 
 
-def load_timemap(proj, ep, cut, notes=None):
+def load_timemap(proj, ep, cut, notes=None, audio_used=True):
     """正片 cut 相对「原粗剪 / final_audio / subtitles 基准」的时长编辑总表(ops)。
     层 1 post_versions(edit/epNN/timemap.json,基准 = 原粗剪):仅当 cut 是后期拼片(cut_post*)或转场产物的源是后期拼片时生效;
     层 2 boundary_pads(transitions_render.json#timemap,基准 = 其 src_cut):仅当 cut 就是该台账的 out_cut 时生效。
+    混音基准(2026-09-23,§8B ④):p8-mix 已按采纳版本混音并盖章(assets/audio/final/epNN.mix.json)且与当前台账一致时,
+    final_audio / subtitles 本身就是后期基准,层 1 不再套用;清单过期且混音带后期时轴 = FAIL(须重跑 p8-mix);
+    无清单或混音按纯 v0 盖章 = 旧口径(层 1 照旧重映射)。
     返回 (ops, info)。"""
     notes = notes if notes is not None else []
     ed = proj / "edit" / ep
@@ -216,6 +220,7 @@ def load_timemap(proj, ep, cut, notes=None):
         if post_ops:
             info["layers"].append({"layer": "post_versions", "file": str(tmp.relative_to(proj)),
                                    "ops": len(post_ops), "delta_s": timemap.total_delta(post_ops)})
+    post_ops = _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio_used)
     ops = timemap.compose(post_ops, pad_ops) if post_ops else pad_ops
     info["ops"] = ops
     info["delta_s"] = timemap.total_delta(ops)
@@ -223,6 +228,45 @@ def load_timemap(proj, ep, cut, notes=None):
         notes.append(f"正片带时长编辑表 timemap:{timemap.describe(ops)}(" + " + ".join(l["layer"] for l in info["layers"])
                      + "),外挂声轨/字幕按表平移")
     return ops, info
+
+
+def _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio_used=True):
+    """按混音基准清单决定层 1(post_versions)是否套用;返回生效的 post_ops(可能被清空)。"""
+    res = mix_manifest.compare(proj, ep)
+    info["mix_basis"] = {k: res.get(k) for k in ("status", "stamped_at", "task_id", "mix_ops_fp", "cur_ops_fp",
+                                                   "mix_delta_s", "cur_delta_s", "changed_groups")}
+    st = res.get("status")
+    if st == mix_manifest.STATUS_NONE:
+        return post_ops
+    if st in (mix_manifest.STATUS_CURRENT, mix_manifest.STATUS_VERSIONS_CHANGED):
+        if st == mix_manifest.STATUS_VERSIONS_CHANGED:
+            notes.append("⚠ 混音后采纳版本号有变但时轴未变(声音内容可能与画面版本不同):" + "; ".join(res.get("changed_groups") or [])[:300])
+        if res.get("cur_has_ops"):
+            if not post_basis_cut:
+                msg = (f"混音按后期采纳版本基准(Δ{res.get('cur_delta_s', 0):+.3f}s,盖章 {res.get('stamped_at')})而正片 {Path(cut).name} "
+                       f"是原粗剪基准;请用 code/post_apply.py finalize 出后期拼片再封装,或重跑 p8-mix")
+                if audio_used:
+                    raise SystemExit("[FAIL] " + msg)
+                notes.append("⚠ " + msg)
+                return post_ops
+            if post_ops:
+                info["layers"] = [l for l in info["layers"] if l.get("layer") != "post_versions"]
+                info["layers"].append({"layer": "post_versions", "skipped": True, "reason": "mix_basis_current",
+                                       "ops": len(post_ops), "delta_s": timemap.total_delta(post_ops)})
+                notes.append(f"混音已按采纳版本基准(盖章 {res.get('stamped_at')} / {res.get('task_id')},"
+                             f"{timemap.describe(post_ops)}),final_audio / 字幕不再套 post_versions 层重映射")
+            return []
+        return post_ops
+    # stale
+    if res.get("mix_has_ops"):
+        msg = "混音基准过期:" + res.get("detail", "") + ";请重跑 p8-mix(或在后期页回滚到混音时的采纳版本)"
+        if audio_used:
+            raise SystemExit("[FAIL] " + msg)
+        notes.append("⚠ " + msg)
+        return post_ops
+    notes.append("⚠ 混音按 v0 母本基准盖章而采纳版本已变:" + "; ".join(res.get("changed_groups") or [])[:300]
+                 + ";按 timemap 重映射兜底(旧口径:BGM 剪点无交叉淡化、跨剪点旁白会被切断,建议重跑 p8-mix)")
+    return post_ops
 
 
 def timemapped_audio(proj, ep, audio, ops, notes=None):
@@ -247,7 +291,7 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
         if name == "cut":
             cut = find_cut(proj, ep, cut_override)
             audio = find_audio(proj, ep, audio_override)
-            ops, tm_info = load_timemap(proj, ep, cut, notes)
+            ops, tm_info = load_timemap(proj, ep, cut, notes, audio_used=audio is not None)
             audio_src = audio
             if audio is not None and ops:
                 audio = timemapped_audio(proj, ep, audio, ops, notes)
