@@ -3414,6 +3414,8 @@ window.I18N_DICT = {
 "剪辑失败:{e}": "Falha na edição: {e}",
 "把当前指针挪到 A 这个版本(出成片用它)": "Mover o ponteiro atual para esta versão em A (é ela que vai para o corte final)",
 "v{v} 设为当前": "Definir v{v} como atual",
+"提交 v{v}": "Enviar v{v}",
+"提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)": "Enviar estas {n} ordens de alteração e mover o ponteiro atual para v{v} (usado no corte final)",
 "{g} 当前指针 → v{v}": "{g} ponteiro atual → v{v}",
 "🎚️ 后期处理": "🎚️ Pós-produção",
 "后期处理": "Pós-produção",

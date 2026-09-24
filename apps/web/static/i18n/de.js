@@ -3412,6 +3412,8 @@ window.I18N_DICT = {
 "剪辑失败:{e}": "Schnitt fehlgeschlagen: {e}",
 "把当前指针挪到 A 这个版本(出成片用它)": "Den aktuellen Zeiger auf die Version in A setzen (sie wird für die Endfassung verwendet)",
 "v{v} 设为当前": "v{v} als aktuell setzen",
+"提交 v{v}": "v{v} übernehmen",
+"提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)": "Diese {n} Änderungsaufträge übernehmen und den aktuellen Zeiger auf v{v} setzen (für den Final Cut)",
 "{g} 当前指针 → v{v}": "{g} aktueller Zeiger → v{v}",
 "🎚️ 后期处理": "🎚️ Postproduktion",
 "后期处理": "Postproduktion",

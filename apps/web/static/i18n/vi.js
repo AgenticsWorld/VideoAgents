@@ -3412,6 +3412,8 @@ window.I18N_DICT = {
 "剪辑失败:{e}": "Dựng thất bại: {e}",
 "把当前指针挪到 A 这个版本(出成片用它)": "Chuyển con trỏ hiện tại sang phiên bản đang ở A (dùng nó khi xuất bản cuối)",
 "v{v} 设为当前": "Đặt v{v} làm hiện tại",
+"提交 v{v}": "Gửi v{v}",
+"提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)": "Gửi {n} phiếu chỉnh sửa này và chuyển con trỏ hiện tại sang v{v} (dùng cho bản dựng cuối)",
 "{g} 当前指针 → v{v}": "{g} con trỏ hiện tại → v{v}",
 "🎚️ 后期处理": "🎚️ Hậu kỳ",
 "后期处理": "Hậu kỳ",

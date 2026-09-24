@@ -3196,6 +3196,8 @@ window.I18N_DICT = {
 "剪辑失败:{e}": "Splice failed: {e}",
 "把当前指针挪到 A 这个版本(出成片用它)": "Move the current pointer to the version in A (used for the final cut)",
 "v{v} 设为当前": "Set v{v} current",
+"提交 v{v}": "Submit v{v}",
+"提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)": "Submit these {n} change orders and move the current pointer to v{v} (used for the final cut)",
 "{g} 当前指针 → v{v}": "{g} current pointer → v{v}",
 
 // ✂ 裁剪分镜背景图(2026-09-15,场景预览页)

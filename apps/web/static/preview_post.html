@@ -196,10 +196,13 @@ body.masking .frame .maskpad{display:block}
 .rec{padding:6px 10px;border-top:1px solid var(--border);font-size:11.5px}
 .rec.inh{opacity:.55}
 .rec.over{opacity:.35}
-.rec .r1{display:flex;gap:6px;align-items:center}
-.rec .r1 .nm{font-weight:600}
+.rec .r1{display:flex;gap:3px 6px;align-items:center;flex-wrap:wrap}
+.rec .r1 .nm{font-weight:600;white-space:nowrap}
 .rec .r1 .sp{flex:1}
-.rec .r1 .sc{color:var(--dim);font-size:10.5px;white-space:nowrap}
+.rec .r1 .sc{color:var(--dim);font-size:10.5px;white-space:nowrap;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-left:auto}
+/* 出片版本另起一行、可换行,不再塞进状态徽标把处方名挤成竖排(2026-09-24) */
+.rec .out{display:flex;flex-wrap:wrap;gap:2px 5px;margin-top:3px;font:10px var(--mono);color:var(--dim)}
+.rec .out span{border:1px solid var(--border);border-radius:3px;padding:0 4px;white-space:nowrap}
 .st{font:10px var(--mono);border:1px solid var(--border2);border-radius:3px;padding:0 5px;color:var(--dim);white-space:nowrap}
 .st.draft{color:var(--dim)}.st.dispatched{color:var(--yellow);border-color:#5f4a17}.st.applied{color:var(--accent);border-color:#3d63b0}.st.adopted{color:var(--green);border-color:#2b5a3c}.st.failed{color:var(--red);border-color:#6a2e2e}.st.discarded{color:var(--faint)}
 .rec .r2{color:var(--dim);font-size:10.5px;margin-top:2px;display:flex;flex-wrap:wrap;gap:3px 10px}
@@ -214,7 +217,8 @@ body.masking .frame .maskpad{display:block}
 .capcat label .d{display:block;color:var(--dim);font-size:10.5px}
 .capcat label.na{opacity:.45;cursor:not-allowed}
 .capcat.ex label{opacity:.5;cursor:default}
-.rec .note{color:var(--text);font-size:11px;margin-top:2px;white-space:pre-wrap;word-break:break-word;max-height:48px;overflow:hidden}
+.rec .note{color:var(--text);font-size:11px;line-height:1.4;margin-top:3px;white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.rec .note.open{display:block;-webkit-line-clamp:unset}
 .rec .r3{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
 .pal{display:inline-flex;gap:2px;vertical-align:middle}
 .pal i{width:10px;height:10px;border-radius:2px;display:block}
@@ -598,8 +602,15 @@ function renderMonitorShell(){
 }
 function versionsOf(gid){const g=grpById(gid);return g?g.versions.filter(v=>v.url):[]}
 // 待确认的新版本(2026-09-23):分镜剪辑 / 导入 / 插黑定格产出、比当前指针新、文件还在的版本——它们不走处方「采纳」,只能「设为当前」
+// 2026-09-24 扩展:处方出片版本(调色/填充等,不论用户手动还是工位自动开的单)同样算待确认——其处方仍停在「已出片」,确认=提交这些处方(指针随之挪过去)
 const CUT_KINDS=['splice','import','cutout','edit','pad'];
-function pendingVersions(gid){const g=grpById(gid);if(!g)return [];const cur=g.current||0;return g.versions.filter(v=>v.url&&!v.cleaned&&v.v>cur&&CUT_KINDS.includes(v.created_by)).sort((a,b)=>a.v-b.v)}
+function pendRecipes(v){const ids=v.recipes||[];if(!ids.length)return [];return ids.map(id=>(D.plan.recipes||[]).find(r=>r.id===id)).filter(r=>r&&r.status==='applied')}
+function pendingVersions(gid){const g=grpById(gid);if(!g)return [];const cur=g.current||0;return g.versions.filter(v=>v.url&&!v.cleaned&&v.v>cur&&(CUT_KINDS.includes(v.created_by)||pendRecipes(v).length)).sort((a,b)=>a.v-b.v)}
+function pendDesc(v){
+  const rs=pendRecipes(v);
+  if(rs.length){const auto=[...new Set(rs.filter(r=>r.created_by&&r.created_by!=='user').map(r=>r.created_by.split('/').pop()))];return rs.map(r=>r.kind_label||r.kind).join('+')+(auto.length?' · 🤖 '+t('自动')+'('+auto.join(',')+')':'')}
+  return v.note||'';
+}
 function renderPend(){
   const bar=$('#pendbar');if(!bar)return;
   const pend=MODE==='group'&&SEL?pendingVersions(SEL):[];
@@ -607,11 +618,19 @@ function renderPend(){
   const cur=(grpById(SEL)||{}).current||0;
   let h=`<b>🆕 ${esc(I18N.f('{g} 有 {n} 个新版本待确认',{g:SEL,n:pend.length}))}</b>`;
   for(const v of pend){
-    h+=`<span style="display:inline-flex;gap:4px;align-items:center"><button class="sm" data-pend-ab="${v.v}" title="${esc((v.note||'')+(v.created_at?' · '+v.created_at.slice(5,16):''))}">👁 ${esc(I18N.f('对比 v{v}',{v:v.v}))}</button><button class="sm hot" data-pend-adopt="${v.v}" title="${esc(I18N.f('把当前指针挪到 v{v}(出成片用它)',{v:v.v}))}">★ ${esc(I18N.f('v{v} 设为当前',{v:v.v}))}</button></span>`;
+    const rs=pendRecipes(v),desc=pendDesc(v),when=v.created_at?' · '+v.created_at.slice(5,16):'';
+    h+=`<span style="display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;flex-basis:100%">${desc?`<span class="lite" data-no-i18n style="flex-basis:100%;white-space:normal;line-height:1.35">v${v.v} · ${esc(desc)}${esc(when)}</span>`:''}<button class="sm" data-pend-ab="${v.v}" title="${esc(desc+when)}">👁 ${esc(I18N.f('对比 v{v}',{v:v.v}))}</button>`;
+    if(rs.length)h+=`<button class="sm hot" data-pend-adopt-rcp="${esc(rs.map(r=>r.id).join(','))}" data-v="${v.v}" title="${esc(I18N.f('提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)',{n:rs.length,v:v.v}))}">★ ${esc(I18N.f('提交 v{v}',{v:v.v}))}</button>`;
+    else h+=`<button class="sm hot" data-pend-adopt="${v.v}" title="${esc(I18N.f('把当前指针挪到 v{v}(出成片用它)',{v:v.v}))}">★ ${esc(I18N.f('v{v} 设为当前',{v:v.v}))}</button>`;
+    h+=`</span>`;
   }
   bar.innerHTML=h;
   $$('#pendbar [data-pend-ab]').forEach(b=>b.onclick=()=>{VA=+b.dataset.pendAb;VB=cur;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor(true)});
   $$('#pendbar [data-pend-adopt]').forEach(b=>b.onclick=async()=>{const v=+b.dataset.pendAdopt;$$('#pendbar button').forEach(x=>x.disabled=true);try{await J(api('/rollback'),'POST',{group_id:SEL,to:v});await load(true);setMonitor(true);toast(I18N.f('{g} 当前指针 → v{v}',{g:SEL,v:v}))}catch(e){alert(e.message);renderPend()}});
+  $$('#pendbar [data-pend-adopt-rcp]').forEach(b=>b.onclick=async()=>{
+    const ids=b.dataset.pendAdoptRcp.split(','),v=+b.dataset.v;$$('#pendbar button').forEach(x=>x.disabled=true);
+    try{for(const id of ids)await J(api('/recipes/'+id+'/adopt'),'POST',{});await load(true);setMonitor(true);toast(I18N.f('{g} 当前指针 → v{v}',{g:SEL,v:v}))}catch(e){alert(e.message);renderPend()}
+  });
 }
 function verLabel(v){
   const cur=(grpById(SEL)||{}).current||0;
@@ -1183,6 +1202,7 @@ function renderRight(){
   $$('#right .scope .seg span').forEach(s=>s.onclick=()=>{if(s.dataset.s==='range'&&!(RANGE&&RANGE.t1!=null)){alert(t('先在监视器走带条上「标记时间段」'));return}SCOPE=s.dataset.s;renderRight()});
   $$('#right .acc-h').forEach(el=>el.onclick=e=>{if(e.target.dataset.add){openRecipe({section:e.target.dataset.add});return}const id=el.parentElement.dataset.sec;CLOSED_SEC.has(id)?CLOSED_SEC.delete(id):CLOSED_SEC.add(id);renderRight()});
   $$('#right [data-act]').forEach(b=>b.onclick=()=>recipeAction(b.dataset.rid,b.dataset.act,b));
+  $$('#right .rec .note').forEach(n=>n.onclick=()=>n.classList.toggle('open'));   // 备注默认 3 行截断,点击展开/收起
   $$('#right [data-sfx-open]').forEach(b=>b.onclick=()=>openSfx());
   $$('#right select[data-cm]').forEach(sel=>sel.onchange=()=>{
     if(sel.value==='manual')openCapTypes('confirm',()=>{sel.value='auto'});   // 切手动=先选类型,取消即回自动
@@ -1204,7 +1224,7 @@ function recipeCard(r){
     if(Array.isArray(v))return `<span class="pal">${v.slice(0,6).map(c=>`<i style="background:${esc(c)}"></i>`).join('')}</span>`;
     return `<span>${esc(spec.label)} ${esc(typeof v==='boolean'?(v?'✓':'✗'):v)}</span>`}).join('');
   const refs=Object.entries(r.refs||{}).map(([key,v])=>`<span title="${esc(typeof v==='string'?v:JSON.stringify(v))}">${esc({frame:t('参考帧'),mask:t('蒙版'),asset:t('素材')}[key]||key)} ✓</span>`).join('');
-  const out=r.output&&r.output.versions?Object.entries(r.output.versions).map(([g,v])=>`${g}=v${v.v}`).join(' '):'';
+  const out=r.output&&r.output.versions?Object.entries(r.output.versions).map(([g,v])=>`<span>${esc(g)}=v${esc(v.v)}</span>`).join(''):'';
   let acts='';
   const A=(act,label,cls)=>`<button class="xs ${cls||''}" data-act="${act}" data-rid="${esc(r.id)}">${esc(label)}</button>`;
   if(inh){acts=A('override',t('在本组覆盖'))}
@@ -1219,8 +1239,8 @@ function recipeCard(r){
   else if(r.status==='failed'){acts=(r.exec==='ffmpeg'?A('apply',t('重试出片'),'pri'):A('dispatch',t('重新派单'),'pri'))+A('edit',t('编辑'))+A('delete',t('删除'))}
   else if(r.status==='discarded'){acts=A('reset',t('重置为草稿'))+A('delete',t('删除'))}
   if(r.preview_url&&(r.status==='draft'||r.status==='failed'))acts+=A('seepreview',t('看预览'));
-  return `<div class="rec ${inh?'inh':''} ${over?'over':''}" data-rid="${esc(r.id)}"><div class="r1"><span class="nm" data-no-i18n>${esc(r.kind_label||r.kind)}</span>${r.created_by&&r.created_by!=='user'?`<span class="st" title="${esc(t('工位自动开的修改单:'))+esc(r.created_by)}">🤖 ${esc(t('自动'))}</span>`:''}<span class="st ${esc(r.status)}">${esc(r.status_label||r.status)}${r.status==='applied'&&out?' '+esc(out):''}</span><span class="sp"></span><span class="sc" data-no-i18n>${inh?esc(t('继承'))+' ':''}${esc(scopeText(r.scope))}</span></div>
-    <div class="r2" data-no-i18n>${params}${refs}${r.cost&&r.cost.actual?`<span>${esc(r.cost.actual)}</span>`:r.cost&&r.cost.estimate?`<span>${esc(t('预估'))} ${esc(r.cost.estimate)}</span>`:''}${r.error?`<span class="err">${esc(r.error.slice(0,160))}</span>`:''}</div>
+  return `<div class="rec ${inh?'inh':''} ${over?'over':''}" data-rid="${esc(r.id)}"><div class="r1"><span class="nm" data-no-i18n>${esc(r.kind_label||r.kind)}</span>${r.created_by&&r.created_by!=='user'?`<span class="st" title="${esc(t('工位自动开的修改单:'))+esc(r.created_by)}">🤖 ${esc(t('自动'))}</span>`:''}<span class="st ${esc(r.status)}">${esc(r.status_label||r.status)}</span><span class="sp"></span><span class="sc" data-no-i18n title="${esc(scopeText(r.scope))}">${inh?esc(t('继承'))+' ':''}${esc(scopeText(r.scope))}</span></div>
+    ${r.status==='applied'&&out?`<div class="out" data-no-i18n>${out}</div>`:''}<div class="r2" data-no-i18n>${params}${refs}${r.cost&&r.cost.actual?`<span>${esc(r.cost.actual)}</span>`:r.cost&&r.cost.estimate?`<span>${esc(t('预估'))} ${esc(r.cost.estimate)}</span>`:''}${r.error?`<span class="err">${esc(r.error.slice(0,160))}</span>`:''}</div>
     ${r.note?`<div class="note" data-no-i18n title="${esc(r.note)}">${esc(r.note)}</div>`:''}<div class="r3">${acts}</div></div>`;
 }
 async function recipeAction(rid,act,btn){

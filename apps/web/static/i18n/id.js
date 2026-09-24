@@ -3412,6 +3412,8 @@ window.I18N_DICT = {
 "剪辑失败:{e}": "Penyambungan gagal: {e}",
 "把当前指针挪到 A 这个版本(出成片用它)": "Pindahkan penunjuk versi saat ini ke versi di A (dipakai untuk render final)",
 "v{v} 设为当前": "Jadikan v{v} versi saat ini",
+"提交 v{v}": "Ajukan v{v}",
+"提交这 {n} 条修改单,当前指针挪到 v{v}(出成片用它)": "Ajukan {n} perintah perubahan ini dan pindahkan penunjuk saat ini ke v{v} (dipakai untuk potongan final)",
 "{g} 当前指针 → v{v}": "Penunjuk saat ini {g} → v{v}",
 "🎚️ 后期处理": "🎚️ Pascaproduksi",
 "后期处理": "Pascaproduksi",
