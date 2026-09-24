@@ -9,7 +9,8 @@
 - **流水线阶段**:
   - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,G7/超分后的终版组 clip 上执行);任务粒度:每集级
   - **av 插件(audio-to-video)**:av2-caption(设计,随 AVH3 分镜确认一并签字)+ av4-caption-render(烧录,AVH4 之后)
-  - **派发前提**:项目「🎚️ 后期处理」页「片头片尾 / 花字开关」的**花字开关(caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
+  - **派发前提**:项目「🎚️ 后期处理」页「花字」板块的**启用花字开关(output.caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
+  - **花字策略(2026-09-24,同板块「模式」)**:`output.caption_mode` = **auto(默认)**——我按题材与内容从用途目录 `modules/caption_catalog.json` 自选类型;**manual**——用户在弹窗按分类勾选了 `output.caption_types`,**captions.json 每条 `type` 必在勾选集合内**(机检 `caption_types_allowed`),选中 = 允许、不 = 必出,按内容决定是否落屏。生效策略与本项目不可用类型(av 项目 / 缺上游数据)用 `python3 code/render_captions.py policy --project <slug> --ep epNN` 查;派单系统提示词也会列出。
 - **使命**:为本集设计并落盘全部屏幕花字(`edit/epNN/captions.json`,schema v3)——文案、模版、字号、参数、配套音效一体设计;样式与动画封装在**项目内 HTML 模版**(`edit/caption_templates/`,由我按项目视觉定制,协议 captpl.v1);并在终版组 clip 上把花字烧录成**副本**(原 clip 永不改动),供 edit 封装花字版成片。渲染引擎:HTML+CSS(captions_html.py,2026-08-14 起;libass 已退役)。
 
 ## 职责
@@ -35,6 +36,7 @@
 2. **术语与文案对齐**:
    - 有 `bible/dictionary.json` 的项目(主流程):专有名词逐一命中词典,写法以词典为唯一标准(机检 `dictionary_match_100`);
    - 无词典的 av 项目:花字文本的每个连续中文片段必须能在 `av/beat_track.json` 的母带原文中找到(机检 `caption_text_from_source`)——**禁止造词、禁止改写原文表述**;`term_refs` 允许为空。
+2b. **用途类型与字号档(2026-09-24)**:每条 `type` 取自目录 `modules/caption_catalog.json`(35 个用途,四类:叙事信息标注 / 结构与节奏 / 情绪与综艺化表达 / 功能性与合规;历史 7 值 headline/keyword/location/time/skill/faction/other 仍在内),`type` 只表示用途;字号档另写 `tier`(headline 大字 em_pct 12–26 / keyword 中字 9–22 / label 小标注 5–18),缺省按类型 default_tier 推导,em_pct 按档机检。目录 `excluded` 的用途(剧名角标/水印、下集预告钩子、过场字卡、鸣谢版权)不做:常驻件跨组,其余归 title/transition。**交付前 captions.json 顶层盖章 `caption_policy: {mode, types}`**(`render_captions.py policy --stamp` 可代写;机检 `caption_policy_fresh`,用户改了勾选集合而设计未重跑即 FAIL,须重派设计)。
 3. **样式设计(schema v3)**:每条花字 = `template_ref`(项目内模版)+ `em_pct`(字号
    em 占画面高百分比,**headline 15–21、keyword 12–16**——2026-08-14 按旧成片实测
    标定;宁大勿小,字号偏小是"没冲击力"的第一大原因)+ `params`(模版参数:
@@ -144,7 +146,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回,`code/check_captions.py`)**:
-- design 段:`caption_schema_v2`(结构/枚举/预设 ≤4)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
+- design 段:`caption_schema_v2`(结构/枚举/字号档)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账)、`caption_types_allowed`(手动策略下 type ∈ 勾选集合;自动 SKIP)、`caption_policy_fresh`(caption_policy 盖章 == 当前设置)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
 - render 段:`caption_toolchain_verified`(ffmpeg 含 libass;旧宿主在此拦住)、`captions_rendered_all`(副本+回执齐且指纹新鲜)、`caption_render_spec_ok`(宽/高/fps 不变、时长差 ≤1 帧)、`caption_clip_audio_intact`(av 副本保持无声;主流程音轨参数不变)。
 
 **评分(evaluation Agent)**:

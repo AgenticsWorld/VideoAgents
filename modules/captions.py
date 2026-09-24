@@ -37,8 +37,15 @@ SFX_SR = 48000
 SFX_BITRATE = "192k"
 DEFAULT_SFX_GAIN_DB = -6.0                    # 基准:弱于母带人声
 
-CAPTION_TYPES = ("headline", "keyword",
-                 "location", "time", "skill", "faction", "other")
+# 花字用途类型:唯一源 modules/caption_catalog.json(2026-09-24 起;后期处理页「花字」弹窗、
+# 机检 caption_types_allowed、派单注入共用)。历史 7 值(headline/keyword/location/time/skill/faction/other)仍在目录内。
+try:
+    from caption_catalog import type_ids as _catalog_type_ids, tier_of as _tier_of, \
+        tier_em_range as _tier_em_range, load_catalog as _load_catalog
+except ImportError:                                   # 宿主内以 modules.* 方式导入时
+    from modules.caption_catalog import type_ids as _catalog_type_ids, tier_of as _tier_of, \
+        tier_em_range as _tier_em_range, load_catalog as _load_catalog
+CAPTION_TYPES = _catalog_type_ids()
 
 # position 关键词 → (x 比例, y 比例, ASS \an 锚点)。刻意不提供 bottom 贴底位——
 # 底部是 subtitle 烧录安全区(subtitle SOUL:下边距 2-4%、≤2 行),花字不得进入。
@@ -377,10 +384,15 @@ def validate_captions(data: dict, shot_list: dict,
                 issues.extend(f"{tag}: 模版 {ref} {x}" for x in pi)
             except RuntimeError as e:
                 issues.append(f"{tag}: {e}")
+        # 字号档(tier):显式 tier > 类型 default_tier;em_pct 按档校验(目录 tiers.em_pct)
+        if c.get("tier") is not None and c.get("tier") not in _load_catalog()["tiers"]:
+            issues.append(f"{tag}: tier {c.get('tier')!r} 不在 {tuple(_load_catalog()['tiers'])}")
+        tier = _tier_of(c)
+        lo, hi = _tier_em_range(tier)
         em = c.get("em_pct")
-        if not (isinstance(em, (int, float)) and 7.0 <= em <= 26.0):
-            issues.append(f"{tag}: em_pct {em!r} 不在 [7, 26]"
-                          "(headline 15-21,keyword 12-16,按成片实测标定)")
+        if not (isinstance(em, (int, float)) and lo <= em <= hi):
+            issues.append(f"{tag}: em_pct {em!r} 不在 {tier} 档 [{lo:g}, {hi:g}]"
+                          "(headline 建议 15-21,keyword 12-16,按成片实测标定)")
         if c.get("params") is not None and not isinstance(c["params"], dict):
             issues.append(f"{tag}: params 须为对象")
         pos = c.get("position") or "center"

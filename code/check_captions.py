@@ -24,6 +24,12 @@
                                   render_captions.py speech-align 生成;speech_free:true
                                   的画面标注型花字豁免,av 项目不得豁免;有台本时间码
                                   却缺/过期 word_track 即 FAIL)
+   6b. caption_types_allowed     花字策略=手动(settings.json output.caption_mode=manual)时,
+                                  每条 type 必在用户勾选集合 output.caption_types 内
+                                  (目录 modules/caption_catalog.json;auto 模式 SKIP)
+   6c. caption_policy_fresh      captions.json 顶层 caption_policy 盖章 == 当前设置
+                                  (manual 缺章即 FAIL;auto 缺章按 auto 兼容存量;
+                                  改了勾选集合而设计未重跑即 FAIL)
 
   [render] 烧录阶段(av4/p9 caption-render 交付前必跑)
     7. caption_toolchain_verified playwright + Chromium 可启动(HTML 引擎)
@@ -59,6 +65,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import DATA_DIR, parse_args, reexec_with_host_python                          # noqa: E402
 
 import captions as cap                                            # noqa: E402
+import caption_catalog as ccat                                    # noqa: E402
 import captions_html as chtml                                     # noqa: E402
 import avsync                                                     # noqa: E402
 import speechalign as sa                                          # noqa: E402
@@ -169,6 +176,15 @@ def main():
                 sp_issues = [f"word_track 无法读取:{e}"]
             check("caption_speech_aligned", not sp_issues,
                   (f"({len(sp_issues)} 条)" + "; ".join(sp_issues[:3])) if sp_issues else "")
+        # 花字策略(2026-09-24):手动模式只准出用户勾选的类型 + 盖章与设置一致
+        policy = ccat.load_project_policy(proj)
+        allowed_bad, fresh_bad = ccat.policy_issues(data, policy)
+        if policy["mode"] == "manual":
+            check("caption_types_allowed", not allowed_bad,
+                  (f"允许 {policy['types']};" if allowed_bad else "") + "; ".join(allowed_bad[:3]))
+        else:
+            skip("caption_types_allowed", "花字策略=自动(output.caption_mode=auto)")
+        check("caption_policy_fresh", not fresh_bad, "; ".join(fresh_bad[:2]))
         bad = [str(p) for p in (cj, proj / "assets" / "clips_caption" / ep)
                if p.exists() and p.name != p.name.encode("ascii", "ignore").decode()]
         bad += avsync_non_ascii(proj / "assets" / "clips_caption" / ep)

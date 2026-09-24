@@ -129,6 +129,15 @@ seek(0);
 </script></body></html>
 ```
 
+## 用途类型与策略(2026-09-24)
+
+- 每条花字的 `type` 取用途目录 `modules/caption_catalog.json`(35 个用途 / 四类),`tier` 写字号档
+  (headline / keyword / label,缺省按类型推导,em_pct 按档机检);
+- 动笔前跑 `python3 code/render_captions.py policy --project <slug> --ep epNN`:策略 auto = 按下表题材
+  自选类型(不必每类都出);manual = 只准出用户勾选的类型(选中 = 允许,不 = 必出),不可用类型
+  (av 项目 / 缺上游数据)也在输出里;
+- 交付前 `render_captions.py policy --stamp` 把 `caption_policy` 盖进 captions.json(机检 `caption_policy_fresh`)。
+
 ## 题材 → 风格语言(设计模版时的方向,不再是预设名)
 
 | 题材 | headline 语言 | keyword 语言 | 动画性格 | 音效族 | 密度 |

@@ -204,6 +204,16 @@ body.masking .frame .maskpad{display:block}
 .st.draft{color:var(--dim)}.st.dispatched{color:var(--yellow);border-color:#5f4a17}.st.applied{color:var(--accent);border-color:#3d63b0}.st.adopted{color:var(--green);border-color:#2b5a3c}.st.failed{color:var(--red);border-color:#6a2e2e}.st.discarded{color:var(--faint)}
 .rec .r2{color:var(--dim);font-size:10.5px;margin-top:2px;display:flex;flex-wrap:wrap;gap:3px 10px}
 .rec .r2 .err{color:var(--red)}
+/* 花字类型弹窗(2026-09-24) */
+.capcat{border:1px solid var(--border);border-radius:8px;padding:6px 10px 8px}
+.capcat .ch{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;margin-bottom:4px}
+.capcat .ch .sp{flex:1}
+.capcat .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:3px 10px}
+.capcat label{display:flex;gap:6px;align-items:flex-start;line-height:1.35;cursor:pointer}
+.capcat label input{margin-top:3px}
+.capcat label .d{display:block;color:var(--dim);font-size:10.5px}
+.capcat label.na{opacity:.45;cursor:not-allowed}
+.capcat.ex label{opacity:.5;cursor:default}
 .rec .note{color:var(--text);font-size:11px;margin-top:2px;white-space:pre-wrap;word-break:break-word;max-height:48px;overflow:hidden}
 .rec .r3{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
 .pal{display:inline-flex;gap:2px;vertical-align:middle}
@@ -294,6 +304,11 @@ table.tb input.f{width:100%}
   <div class="bh">🎬 拼装预检 · 出成片<span class="sp"></span><button class="xs" data-close>✕</button></div>
   <div class="bb" id="mp-body"></div>
   <div class="bf"><span class="msg" id="mp-msg"></span><button id="mp-recheck">重跑机检</button><button class="pri" id="mp-go">出成片</button></div>
+</div></div>
+<div class="modal" id="m-cap"><div class="box" style="width:820px">
+  <div class="bh">✨ 花字类型<span class="sp"></span><span class="lite" id="mc-sub" style="font-weight:400;color:var(--dim);font-size:12px"></span><button class="xs" data-close>✕</button></div>
+  <div class="bb" id="mc-body"></div>
+  <div class="bf"><span class="msg" id="mc-msg"></span><select id="mc-preset" style="font-size:12px"></select><button class="pri" id="mc-save">保存</button></div>
 </div></div>
 <div class="modal" id="m-sfx"><div class="box" style="width:840px">
   <div class="bh">🔊 音效点位表<span class="sp"></span><span class="lite" id="ms-sub" style="font-weight:400;color:var(--dim);font-size:12px"></span><button class="xs" data-close>✕</button></div>
@@ -1155,8 +1170,11 @@ function renderRight(){
     for(const r of disc)h+=recipeCard(r);
     if(sec.id==='sound'){const sf=D.sfx||{};const n=(sf.rows||[]).length,miss=(sf.rows||[]).filter(r=>!(r.source==='skip'||(r.source&&r.file))).length;
       h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('音效点位表'))}</span><span class="st ${miss?'draft':'adopted'}">${n?esc(I18N.f('{n} 条 · 缺 {m}',{n,m:miss})):esc(t('无点位'))}</span><span class="sp"></span><span class="sc">${esc(t('整集'))}</span></div><div class="r3"><button class="xs" data-sfx-open>${esc(t('打开点位表'))}</button></div></div>`;}
-    if(sec.id==='pack'){const pk=(D.settings||{}).packaging||{},ou=(D.settings||{}).output||{};
-      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('片头片尾 / 花字开关'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2"><label><input type="checkbox" data-pk="intro_enabled" ${pk.intro_enabled?'checked':''}> ${esc(t('片头'))}</label><label><input type="checkbox" data-pk="outro_enabled" ${pk.outro_enabled?'checked':''}> ${esc(t('片尾'))}</label><label><input type="checkbox" data-pk="teaser_enabled" ${pk.teaser_enabled?'checked':''}> ${esc(t('预告'))}</label><label><input type="checkbox" data-ou="caption_enabled" ${ou.caption_enabled?'checked':''}> ${esc(t('花字'))}</label><label><input type="checkbox" data-ou="subtitle_burn_in" ${ou.subtitle_burn_in?'checked':''}> ${esc(t('字幕烧录'))}</label></div></div>`;}
+    if(sec.id==='pack'){const pk=(D.settings||{}).packaging||{},ou=(D.settings||{}).output||{},cc=D.caption_catalog||{},pol=cc.policy||{mode:'auto',types:[]};
+      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('片头片尾'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2"><label><input type="checkbox" data-pk="intro_enabled" ${pk.intro_enabled?'checked':''}> ${esc(t('片头'))}</label><label><input type="checkbox" data-pk="outro_enabled" ${pk.outro_enabled?'checked':''}> ${esc(t('片尾'))}</label><label><input type="checkbox" data-pk="teaser_enabled" ${pk.teaser_enabled?'checked':''}> ${esc(t('预告'))}</label><label><input type="checkbox" data-ou="subtitle_burn_in" ${ou.subtitle_burn_in?'checked':''}> ${esc(t('字幕烧录'))}</label></div></div>`;
+      // 花字:独立板块(2026-09-24)——启用开关 + 模式(自动/手动)+ 手动时按分类勾选用途类型(弹窗)
+      const nAvail=(cc.availability||[]).filter(a=>a.available).length,nSel=(pol.types||[]).length,on=!!ou.caption_enabled;
+      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('花字'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2" style="align-items:center"><label><input type="checkbox" data-ou="caption_enabled" ${on?'checked':''}> ${esc(t('启用花字'))}</label><span>${esc(t('模式'))}</span><select data-cm ${on?'':'disabled'} style="font-size:11px"><option value="auto" ${pol.mode!=='manual'?'selected':''}>${esc(t('自动'))}</option><option value="manual" ${pol.mode==='manual'?'selected':''}>${esc(t('手动'))}</option></select>${pol.mode==='manual'?`<button class="xs" data-cap-open="edit" ${on?'':'disabled'}>${esc(I18N.f('选择类型… 已选 {n}/{m}',{n:nSel,m:nAvail}))}</button>`:`<span style="color:var(--faint)">${esc(t('由花字 Agent 按题材自选类型'))}</span><button class="xs" data-cap-open="view">${esc(t('查看目录'))}</button>`}</div></div>`;}
     h+=`</div></div>`;
   }
   h+=`</div>`;
@@ -1166,6 +1184,11 @@ function renderRight(){
   $$('#right .acc-h').forEach(el=>el.onclick=e=>{if(e.target.dataset.add){openRecipe({section:e.target.dataset.add});return}const id=el.parentElement.dataset.sec;CLOSED_SEC.has(id)?CLOSED_SEC.delete(id):CLOSED_SEC.add(id);renderRight()});
   $$('#right [data-act]').forEach(b=>b.onclick=()=>recipeAction(b.dataset.rid,b.dataset.act,b));
   $$('#right [data-sfx-open]').forEach(b=>b.onclick=()=>openSfx());
+  $$('#right select[data-cm]').forEach(sel=>sel.onchange=()=>{
+    if(sel.value==='manual')openCapTypes('confirm',()=>{sel.value='auto'});   // 切手动=先选类型,取消即回自动
+    else saveOutput({caption_mode:'auto'});
+  });
+  $$('#right [data-cap-open]').forEach(b=>b.onclick=()=>openCapTypes(b.dataset.capOpen));
   $$('#right input[data-pk],#right input[data-ou]').forEach(c=>c.onchange=async()=>{
     const body={project:proj()};
     if(c.dataset.pk)body.packaging={...((D.settings||{}).packaging||{}),[c.dataset.pk]:c.checked};
@@ -1430,6 +1453,48 @@ function pollJob(){
 
 /* ---------- 音效点位表 ---------- */
 let SFX=null;
+/* ---------- 花字类型(2026-09-24):目录 modules/caption_catalog.json,策略 output.caption_mode/caption_types ---------- */
+let CAPST=null;
+async function saveOutput(patch){
+  try{await J('/api/v1/projects/'+encodeURIComponent(proj())+'/config','POST',{project:proj(),output:patch});await load(true)}catch(e){alert(t('保存失败:')+e.message);await load(true)}
+}
+function openCapTypes(mode,onCancel){
+  // mode: view=只读目录(自动模式)| edit=改手动勾选 | confirm=切换到手动前先勾选(取消回自动)
+  const cc=D.caption_catalog||{},pol=cc.policy||{mode:'auto',types:[]},av={};(cc.availability||[]).forEach(a=>av[a.id]=a);
+  const editable=mode!=='view',pre=new Set(mode==='view'?[]:(pol.types||[]));
+  CAPST={mode,onCancel,saved:false};
+  $('#mc-sub').textContent=mode==='view'?t('自动模式:花字 Agent 按题材从下列目录自选'):t('只出勾选的类型,不保证每种都出现');
+  let h='';
+  for(const c of (cc.categories||[])){
+    const items=(cc.types||[]).filter(x=>x.category===c.id);
+    h+=`<div class="capcat" data-cat="${esc(c.id)}"><div class="ch"><span>${esc(c.label)}</span><span class="sp"></span>${editable?`<button class="xs" data-all="1">${esc(t('全选'))}</button><button class="xs" data-all="0">${esc(t('清空'))}</button>`:''}</div><div class="items">`;
+    for(const x of items){const a=av[x.id]||{available:true},na=!a.available;
+      h+=`<label class="${na?'na':''}" title="${esc(na?a.reason:'')}"><input type="checkbox" data-tid="${esc(x.id)}" ${pre.has(x.id)&&!na?'checked':''} ${(na||!editable)?'disabled':''}><span><span>${esc(x.label)}</span><span class="d">${esc(x.desc)}</span>${na?`<span class="d" style="color:var(--yellow)">${esc(a.reason)}</span>`:''}</span></label>`}
+    h+=`</div></div>`;
+  }
+  if((cc.excluded||[]).length){
+    h+=`<div class="capcat ex"><div class="ch"><span>${esc(t('一期不进目录'))}</span></div><div class="items">`;
+    for(const x of cc.excluded)h+=`<label title="${esc(x.reason)}"><input type="checkbox" disabled><span><span>${esc(x.label)}</span><span class="d">${esc(x.reason)}</span></span></label>`;
+    h+=`</div></div>`;
+  }
+  $('#mc-body').innerHTML=h;$('#mc-msg').textContent='';$('#mc-msg').className='msg';
+  const ps=$('#mc-preset');ps.innerHTML=`<option value="">${esc(t('按题材推荐…'))}</option>`+Object.entries(cc.presets||{}).map(([k,v])=>`<option value="${esc(k)}">${esc(v.label)}</option>`).join('');
+  ps.style.display=editable?'':'none';$('#mc-save').style.display=editable?'':'none';
+  ps.onchange=()=>{const pv=(cc.presets||{})[ps.value];if(!pv)return;const want=new Set(pv.types);$$('#mc-body input[data-tid]').forEach(i=>{if(!i.disabled)i.checked=want.has(i.dataset.tid)});ps.value='';updCapCount()};
+  $$('#mc-body [data-all]').forEach(b=>b.onclick=()=>{b.closest('.capcat').querySelectorAll('input[data-tid]:not(:disabled)').forEach(i=>i.checked=b.dataset.all==='1');updCapCount()});
+  $$('#mc-body input[data-tid]').forEach(i=>i.onchange=updCapCount);
+  updCapCount();
+  $('#m-cap').classList.add('open');
+}
+function capChecked(){return $$('#mc-body input[data-tid]:checked').map(i=>i.dataset.tid)}
+function updCapCount(){if(CAPST&&CAPST.mode!=='view'){const n=capChecked().length;$('#mc-msg').textContent=I18N.f('已选 {n} 项',{n});$('#mc-msg').className='msg'}}
+$('#mc-save').onclick=async()=>{
+  const types=capChecked();
+  if(!types.length){$('#mc-msg').textContent=t('手动模式至少勾选一项');$('#mc-msg').className='msg err';return}
+  try{await J('/api/v1/projects/'+encodeURIComponent(proj())+'/config','POST',{project:proj(),output:{caption_mode:'manual',caption_types:types}});CAPST.saved=true;closeModal('#m-cap');toast(t('已保存'));await load(true)}
+  catch(e){$('#mc-msg').textContent=e.message;$('#mc-msg').className='msg err'}
+};
+
 async function openSfx(focus){
   $('#ms-body').innerHTML=`<div class="empty" style="margin:20px">${esc(t('加载中…'))}</div>`;$('#m-sfx').classList.add('open');$('#ms-msg').textContent='';
   try{SFX=await J(api('/sfx'));renderSfx(focus)}catch(e){$('#ms-body').innerHTML=`<div class="blockers">${esc(e.message)}</div>`}
@@ -1481,7 +1546,7 @@ function exportTimeline(){
 }
 
 /* ---------- 通用 ---------- */
-function closeModal(sel){$(sel).classList.remove('open')}
+function closeModal(sel){$(sel).classList.remove('open');if(sel==='#m-cap'&&CAPST&&!CAPST.saved){const cb=CAPST.onCancel;CAPST=null;if(cb)cb()}}
 function toast(msg){let el=$('#toast');if(!el){el=document.createElement('div');el.id='toast';el.style.cssText='position:fixed;left:50%;bottom:130px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:6px 14px;border-radius:8px;font-size:12.5px;z-index:120;box-shadow:0 6px 24px #000a;transition:opacity .3s';document.body.appendChild(el)}el.textContent=msg;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0'},3500)}
 $$('.modal [data-close]').forEach(b=>b.onclick=()=>closeModal('#'+b.closest('.modal').id));
 $$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal('#'+m.id)}));

@@ -14,6 +14,10 @@
   fonts-list [--project S] [--json]  列可用字体(项目 refs/fonts/ 用户字体排前,id 前缀 proj:,现扫不需重跑 fonts-scan)
   sfx-scan                           扫 data/sfx/ → data/sfx/manifest.json
   doctor                             HTML 引擎环境自检(playwright/Chromium/fonttools)
+  policy     --project X --ep epNN [--stamp]
+                                     打印生效的花字策略(output.caption_mode auto|manual、
+                                     允许类型、本项目不可用类型);--stamp 把 caption_policy
+                                     盖章写进 captions.json(机检 caption_policy_fresh)
   render     --project X --ep epNN [--grp grpNNN ...] [--force]
                                      逐组烧录:assets/clips/{ep}/{grp}.mp4 + captions.json
                                      → assets/clips_caption/{ep}/{grp}.mp4(原 clip 不动;
@@ -288,8 +292,26 @@ def cmd_speech_snap(args, proj):
         raise SystemExit(1)
 
 
+def cmd_policy(args, proj):
+    """打印本项目生效的花字策略(模式/允许类型/可用性);--stamp 把盖章写进 captions.json。"""
+    import caption_catalog as ccat
+    policy = ccat.load_project_policy(proj)
+    avail = {a["id"]: a for a in ccat.availability(proj)}
+    print(json.dumps({"mode": policy["mode"], "types": policy["types"],
+                      "allowed": list(ccat.allowed_types(policy)),
+                      "unavailable": {k: v["reason"] for k, v in avail.items() if not v["available"]}},
+                     ensure_ascii=False, indent=1))
+    if args.stamp:
+        cj = proj / "edit" / args.ep / "captions.json"
+        data = cap.load_captions(cj)
+        ccat.stamp(data, policy)
+        cj.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[DONE] {cj}:caption_policy 盖章 {data[ccat.POLICY_KEY]}")
+
+
 def main():
     cmds = {"fonts-scan": None, "fonts-list": cmd_fonts_list,
+            "policy": cmd_policy,
             "sfx-scan": None, "assets-sync": None,
             "render": cmd_render, "doctor": None,
             "sfx-track": cmd_sfx_track, "mux": cmd_mux,
@@ -332,6 +354,7 @@ def main():
     def configure(ap):
         ap.add_argument("--grp", nargs="*", default=None, help="只处理指定组(可多个)")
         ap.add_argument("--force", action="store_true", help="忽略幂等回执强制重渲")
+        ap.add_argument("--stamp", action="store_true", help="policy:把当前花字策略盖章写进 captions.json")
         ap.add_argument("--video", default=None, help="mux:花字版拼装视频路径")
         ap.add_argument("--out", default=None, help="输出路径(相对项目根)")
         ap.add_argument("--backend", default="auto", choices=("auto", "interp", "whisper", "import"),

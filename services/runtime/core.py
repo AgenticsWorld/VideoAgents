@@ -39,6 +39,7 @@ import base64
 from modules.output_format import OUTPUT_ASPECTS, resolve_output
 from modules import skill_records
 from modules.prompt_layout import paragraphize
+from modules import caption_catalog as _ccat
 from services.runtime import rhythm as narrative_rhythm
 
 # ---------------- 配置 ----------------
@@ -965,6 +966,10 @@ DEFAULT_GENCONFIG = {
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
+               # caption_mode / caption_types=花字策略(2026-09-24,后期处理页「花字」板块):auto(默认)=花字 Agent 按题材从
+               #   modules/caption_catalog.json 目录自选用途类型;manual=只准出 caption_types 勾选的类型(选中=允许,不=必出,
+               #   manual 至少勾一项);机检 caption_types_allowed / caption_policy_fresh(captions.json 顶层 caption_policy 盖章)
+               "caption_mode": "auto", "caption_types": [],
                "narration_enabled": False,
                "dialogue_voice": "native",
                # dialogue_tts=生成对白语音(2026-09-13,默认关;dialogue_voice=dubbing 时必开,保存时归一为 True):开启后项目都维护
@@ -1994,6 +1999,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
     if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
         raise ServiceError(400, "output.caption_enabled must be a boolean")
+    for err in _ccat.validate_output(o):
+        raise ServiceError(400, err)
     if "narration_enabled" in o and not isinstance(o["narration_enabled"], bool):
         raise ServiceError(400, "output.narration_enabled must be a boolean")
     if o.get("dialogue_voice") and o["dialogue_voice"] not in DIALOGUE_VOICE_MODES:
@@ -3040,7 +3047,9 @@ def build_role_prompt(agent_id: str, project: str,
         "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
         "另封装花字版成片 edit/{ep}/final_caption.mp4(a:0=声轨+SFX 预混、a:1=声轨存档);"
         "干净版 final.mp4 照常产出,双版本并列;渲染/封装只准宿主 CLI code/render_captions.py,"
-        "机检 code/check_captions.py 三阶段"
+        "机检 code/check_captions.py 三阶段;"
+        + ("花字策略=**手动**(只准出用户勾选类型:" + "、".join(_ccat.normalize_policy(out)["types"]) + ")"
+           if _ccat.normalize_policy(out)["mode"] == "manual" else "花字策略=自动(Agent 按题材从目录自选类型)")
         if out.get("caption_enabled") else
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
@@ -3326,15 +3335,17 @@ def build_role_prompt(agent_id: str, project: str,
   `--speaker-order`；用户明确男/女声或低/高音映射时用 `--pitch-map`。不得逐行交替，不得从图片推断性别；
   `ready_for_digital_human=false` 时必须阻塞付费生成"""
     if agent_id in CAPTION_AGENTS and out.get("caption_enabled"):
+        _cpol = _ccat.normalize_policy(out)
         p += """
 
-## 用户花字设定(Web 客户端「输出设置」花字开关,当前项目已开启;详细规范 WORKFLOW.md §9A)
-- 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v2**——全集 ≤4 个 style_presets(font_id 引用 data/fonts/manifest.json,优先 CJK 字体;用户上传到 refs/fonts/ 的项目字体自动并入,id 为 proj:<family>,有则优先选用);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度:headline 每集 2–5 处、keyword ≤1 条/分钟、同屏最多 1 条、不入底部字幕安全区。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
+## 用户花字设定(「🎚️ 后期处理」页「花字」板块,当前项目已开启;详细规范 WORKFLOW.md §9A)
+- 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v3**(HTML 引擎)——样式与动画封装在项目内 HTML 模版 edit/caption_templates/(协议 captpl.v1,动画按内容逐条创作,全集模版数 ≤20);每条 template_ref + em_pct + params;字体 font://<font_id>(用户上传到 refs/fonts/ 的项目字体自动并入,id 为 proj:<family>,有则优先);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;**入出点 = 语音里这段文字被念出的起止**(render_captions.py speech-align / speech-snap,机检 caption_speech_aligned;语音里没念的画面标注型文字标 speech_free:true,av 项目不允许);音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度按 caption SOUL(平均 8–12 秒一条、同屏 ≤2 条且错位、不入底部字幕安全区)。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
+""" + _ccat.prompt_block(_cpol, PROJECTS_DIR / safe_slug(project)) + """
 - 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;产物是 assets/clips_caption/ 副本,原组 clip 永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
 - 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,用 clips_caption 副本替换对应组按同一 EDL 重拼,SFX 轨与封装走 `render_captions.py sfx-track` + `mux`——**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest
 - 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
 - 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
-- 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点写入相关工单 instruction"""
+- 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点(含花字策略与允许类型)写入相关工单 instruction"""
     # 视频提示词技能:按项目 prompt_skill 设定解析(auto=生效视频模型;manual=用户指定;off=跳过),
     # 而非只看全局渠道;解析结果同步快照进 settings.json(机检基准)
     psk = None
@@ -9756,7 +9767,11 @@ def _preview_post(project: str, ep: str):
                    "final_pre_post": _post_url(base, f"edit/{ep}/final.pre_post.mp4")},
         "episode_duration": round(_post_episode_duration(tl, groups), 3),
         "settings": {"packaging": settings.get("packaging") or {}, "output": {k: (settings.get("output") or {}).get(k)
-                                                                              for k in ("subtitle_burn_in", "caption_enabled", "narration_enabled", "final_resolution")}},
+                                                                              for k in ("subtitle_burn_in", "caption_enabled", "caption_mode", "caption_types",
+                                                                                        "narration_enabled", "final_resolution")}},
+        # 花字用途目录(modules/caption_catalog.json)+ 本项目逐类型可用性(av 项目 / 缺数据灰显)+ 当前策略
+        "caption_catalog": {**{k: _ccat.load_catalog()[k] for k in ("tiers", "categories", "types", "excluded", "presets")},
+                            "availability": _ccat.availability(base), "policy": _ccat.normalize_policy(settings.get("output") or {})},
         "episode_palette": pals.get("_episode") or [],
     })
     return data

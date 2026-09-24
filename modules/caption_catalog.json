@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "_doc": "花字用途目录(唯一源,2026-09-24):后期处理页「花字」弹窗、captions.json type 枚举、机检 caption_types_allowed、派单注入都从这里读。type=用途;tier=字号档(headline 大字/keyword 中字/label 小标注),captions.json 缺 tier 时按 default_tier 推导。av_ok=false 的类型文字通常不是念出来的,av 项目(文案须来自母带原文并按语音起止对齐)不可选。requires=项目里须存在的数据文件/目录(任一命中即可),缺失时弹窗灰显。excluded=一期不进目录的用途及原因。",
+  "tiers": {
+    "headline": {"label": "大字", "em_pct": [12, 26]},
+    "keyword": {"label": "中字", "em_pct": [9, 22]},
+    "label": {"label": "小标注", "em_pct": [5, 18]}
+  },
+  "categories": [
+    {"id": "info", "label": "叙事信息标注"},
+    {"id": "structure", "label": "结构与节奏"},
+    {"id": "emotion", "label": "情绪与综艺化表达"},
+    {"id": "function", "label": "功能性与合规"}
+  ],
+  "types": [
+    {"id": "location", "category": "info", "label": "地点定位", "desc": "场景名、地名、国名,如「长安 · 大明宫」", "default_tier": "label", "av_ok": true, "requires": []},
+    {"id": "time", "category": "info", "label": "时间定位", "desc": "年号、日期、时刻、时间跳跃,如「贞观十七年」「三日后」", "default_tier": "label", "av_ok": true, "requires": []},
+    {"id": "name_card", "category": "info", "label": "人物出场名牌", "desc": "姓名加身份、称号、所属势力、境界;多人同框可做阵列名牌", "default_tier": "label", "av_ok": true, "requires": ["bible/characters"]},
+    {"id": "relation", "category": "info", "label": "人物关系标注", "desc": "「师兄」「同父异母」「杀父仇人」,配连线或箭头", "default_tier": "label", "av_ok": false, "requires": ["bible/characters"]},
+    {"id": "faction", "category": "info", "label": "势力 / 阵营", "desc": "帮派、门派、朝代、军团", "default_tier": "label", "av_ok": true, "requires": []},
+    {"id": "skill", "category": "info", "label": "招式 / 功法 / 技能", "desc": "出招瞬间的招式名", "default_tier": "keyword", "av_ok": true, "requires": ["bible/cultivation.json"]},
+    {"id": "rank", "category": "info", "label": "境界 / 等级 / 战力", "desc": "按修炼体系等级表落屏,如「筑基三层」「战力榜第七」", "default_tier": "label", "av_ok": true, "requires": ["bible/cultivation.json"]},
+    {"id": "prop_card", "category": "info", "label": "道具 / 法宝名牌", "desc": "道具卡的名字加品阶,如「玄铁剑 · 上古神兵」", "default_tier": "label", "av_ok": true, "requires": ["bible/props.json"]},
+    {"id": "creature_card", "category": "info", "label": "生物 / 妖兽名牌", "desc": "生物卡的名字加品阶", "default_tier": "label", "av_ok": true, "requires": ["bible/creatures"]},
+    {"id": "footnote", "category": "info", "label": "术语脚注", "desc": "词典条目的小字解释,「注:xx 指 ……」", "default_tier": "label", "av_ok": false, "requires": ["bible/dictionary.json"]},
+    {"id": "gloss", "category": "info", "label": "古文 / 外语释义", "desc": "古文台词的现代文注释、外语翻译", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "source_cite", "category": "info", "label": "史料出处", "desc": "历史纪实题材引用,如「《资治通鉴》卷二百」", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "rule_card", "category": "info", "label": "设定 / 规则提示卡", "desc": "世界观规则一句话说明", "default_tier": "label", "av_ok": false, "requires": ["bible/world.json"]},
+
+    {"id": "headline", "category": "structure", "label": "章节 / 分幕标题", "desc": "大标题:回目名、幕名、朝代更替、重大战役、定场收束", "default_tier": "headline", "av_ok": true, "requires": []},
+    {"id": "flashback_tag", "category": "structure", "label": "回忆 / 闪回 / 梦境角标", "desc": "「三年前」「回忆」,进出闪回时打标", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "pov_switch", "category": "structure", "label": "视角切换 / 双线并行", "desc": "「另一边」「同一时刻」「与此同时」", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "countdown", "category": "structure", "label": "倒计时 / 进度", "desc": "「距大战还有 3 天」「第 7 关」,可做递减数字", "default_tier": "keyword", "av_ok": false, "requires": []},
+    {"id": "recap_tag", "category": "structure", "label": "前情提要", "desc": "集头「上集回顾」标签", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "closing_slogan", "category": "structure", "label": "收束标语", "desc": "「未完待续」「全剧终」「第一季完」", "default_tier": "headline", "av_ok": false, "requires": []},
+
+    {"id": "keyword", "category": "emotion", "label": "情绪关键词提炼", "desc": "旁白或台词里的情绪词、口语强调词,综艺体多色分词", "default_tier": "keyword", "av_ok": true, "requires": []},
+    {"id": "quote", "category": "emotion", "label": "金句 / 台词放大", "desc": "把一句关键台词做成大字强调;对白字幕本身仍归 subtitle", "default_tier": "headline", "av_ok": true, "requires": []},
+    {"id": "inner_voice", "category": "emotion", "label": "内心 OS / 吐槽", "desc": "「内心:完了」「离谱」综艺式旁注", "default_tier": "keyword", "av_ok": false, "requires": []},
+    {"id": "mood_tag", "category": "emotion", "label": "心理状态标签", "desc": "「慌」「怒」「尴尬」贴在人物旁", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "onomatopoeia", "category": "emotion", "label": "拟声效果字", "desc": "「砰!」「咔嚓」「噗」漫画式效果字,配音效", "default_tier": "keyword", "av_ok": false, "requires": []},
+    {"id": "stat_change", "category": "emotion", "label": "游戏化属性变化", "desc": "「好感度 +1」「HP -20」「获得:玄铁剑」", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "vs_board", "category": "emotion", "label": "对比 / VS 板", "desc": "两方阵营或战力对比,「前」「后」对照", "default_tier": "headline", "av_ok": false, "requires": []},
+    {"id": "ranking", "category": "emotion", "label": "排名 / 榜单", "desc": "「天下第一」「十大高手」榜单式叠字", "default_tier": "keyword", "av_ok": false, "requires": []},
+    {"id": "interactive", "category": "emotion", "label": "互动引导", "desc": "「你猜是谁?」「评论区见」「前方高能」", "default_tier": "keyword", "av_ok": false, "requires": []},
+    {"id": "meme", "category": "emotion", "label": "梗 / 流行语点题", "desc": "都市轻喜题材用", "default_tier": "keyword", "av_ok": false, "requires": []},
+
+    {"id": "number", "category": "function", "label": "数字 / 数据强调", "desc": "「三十万大军」「十年」把数量做大字或计数动画", "default_tier": "keyword", "av_ok": true, "requires": []},
+    {"id": "map_route", "category": "function", "label": "地图 / 路线标注", "desc": "在画面上标「A → B」路线", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "poem_lyric", "category": "function", "label": "诗词 / 歌词题写", "desc": "插曲歌词、人物题诗,竖排书法体", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "disclaimer", "category": "function", "label": "免责 / 说明", "desc": "「本片纯属虚构」「历史改编,细节演绎」", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "warning", "category": "function", "label": "内容警示", "desc": "「请勿模仿」「以下画面为想象」", "default_tier": "label", "av_ok": false, "requires": []},
+    {"id": "other", "category": "function", "label": "其他", "desc": "以上都不适用的画面标注(兜底,慎用)", "default_tier": "label", "av_ok": true, "requires": []}
+  ],
+  "excluded": [
+    {"id": "brand_corner", "label": "剧名角标 / 水印", "reason": "跨组常驻;花字契约每条只挂一个组,需另做常驻覆盖层机制"},
+    {"id": "teaser_hook", "label": "下集预告钩子", "reason": "归 10-editing/title(预告位字卡)"},
+    {"id": "transition_card", "label": "过场字卡", "reason": "归 10-editing/transition(过场设计板块)"},
+    {"id": "credits", "label": "鸣谢 / 赞助 / 版权", "reason": "归 10-editing/title(片尾字卡)"}
+  ],
+  "presets": {
+    "historical": {"label": "历史正剧 / 纪实", "types": ["headline", "keyword", "location", "time", "name_card", "faction", "number", "source_cite", "footnote"]},
+    "suspense": {"label": "悬疑 / 惊悚", "types": ["location", "time", "name_card", "flashback_tag", "pov_switch", "countdown"]},
+    "urban_comedy": {"label": "都市 / 轻喜 / 综艺", "types": ["keyword", "inner_voice", "mood_tag", "onomatopoeia", "stat_change", "interactive", "meme", "name_card", "time"]},
+    "scifi": {"label": "科幻 / 未来", "types": ["location", "time", "name_card", "rule_card", "countdown", "number", "pov_switch"]},
+    "xianxia": {"label": "仙侠 / 玄幻", "types": ["headline", "keyword", "location", "name_card", "faction", "skill", "rank", "prop_card", "creature_card"]},
+    "romance": {"label": "情感 / 文艺", "types": ["headline", "time", "location", "quote", "poem_lyric", "flashback_tag"]}
+  }
+}
