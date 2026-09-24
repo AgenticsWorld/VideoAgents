@@ -17,6 +17,7 @@ All notable public changes to VideoAgents are documented here.
 
 ### Changed
 
+- **codex / pi engines gain `gpt-6-sol` and `gpt-6-luna`.** Both appear at the top of the codex model dropdowns (top bar and per-agent model dialog); the pi dropdown keeps listing whatever `pi --list-models` returns. Smart Assignment for both engines now resolves the high tier to `gpt-6-sol` and the low tier to `gpt-6-luna` (codex: was `gpt-6-astra` / `gpt-5.6-terra`; pi: was `openai-codex/gpt-5.6-sol` / `openai-codex/gpt-5.6-terra`). The tier is resolved at dispatch time, so existing installs on a smart policy pick it up after a restart; the top-bar tooltips and all 11 i18n dictionaries are updated.
 - **Post page: groups with new versions pending review are now obvious.** The left group list shows a yellow `v{n} pending review` badge (plus a yellow edge bar) on any group that has a shot-editing / import / insert-hold version newer than its current pointer, a new *Pending review* filter lists them, and the defect / dispatched dots moved from the second line to the group-id line so they are no longer clipped by the status box. The right column gets a highlighted bar above *Shot editing* with `Compare v{n}` (A|B against the current version) and a yellow `Set v{n} current` button, so adopting a cut no longer requires opening the collapsed Shot editing panel. All 11 language dictionaries updated.
 
 ### Fixed

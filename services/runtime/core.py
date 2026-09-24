@@ -2088,9 +2088,9 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 # 避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
 #   global       全部 Agent 跟随顶栏全局设置
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus 最新版 low→sonnet)
-#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6-astra low→gpt-5.6-terra)
+#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6-sol low→gpt-6-luna)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
-#   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-5.6-sol low→openai-codex/gpt-5.6-terra)
+#   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-6-sol low→openai-codex/gpt-6-luna)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
 #   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.6 low→Grok 4.5)
 AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
@@ -2125,13 +2125,13 @@ AM_MODE_MODELS = {
     # opus 不锁版本号:CLI 侧别名始终指向最新 opus
     "smart_claude": {"high": {"engine": "claude", "model": "opus"},
                      "low": {"engine": "claude", "model": "sonnet"}},
-    "smart_codex": {"high": {"engine": "codex", "model": "gpt-6-astra"},
-                    "low": {"engine": "codex", "model": "gpt-5.6-terra"}},
+    "smart_codex": {"high": {"engine": "codex", "model": "gpt-6-sol"},
+                    "low": {"engine": "codex", "model": "gpt-6-luna"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
     # pi 引擎经 openai-codex 渠道调用(模型 id 为 pi --list-models 的 provider/model)
-    "smart_pi": {"high": {"engine": "pi", "model": "openai-codex/gpt-5.6-sol"},
-                 "low": {"engine": "pi", "model": "openai-codex/gpt-5.6-terra"}},
+    "smart_pi": {"high": {"engine": "pi", "model": "openai-codex/gpt-6-sol"},
+                 "low": {"engine": "pi", "model": "openai-codex/gpt-6-luna"}},
     # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
     # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},

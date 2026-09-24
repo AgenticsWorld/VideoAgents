@@ -997,9 +997,9 @@ const SMART='__smart';
 const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek',grok:'smart_grok'};
 const SMART_TITLES={
   claude:'按 Agent 任务复杂度自动选 claude 模型:创作核心→opus(最新) 其余→sonnet',
-  codex:'按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-astra 其余→gpt-5.6-terra',
+  codex:'按 Agent 任务复杂度自动选 codex 模型:创作核心→gpt-6-sol 其余→gpt-6-luna',
   kimi:'按 Agent 任务复杂度自动选 kimi 模型:创作核心→K3 其余→K2.7 Coding',
-  pi:'按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-5.6-sol 其余→openai-codex · gpt-5.6-terra',
+  pi:'按 Agent 任务复杂度自动选 pi 模型:创作核心→openai-codex · gpt-6-sol 其余→openai-codex · gpt-6-luna',
   opencode:'按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash',
   grok:'按 Agent 任务复杂度自动选 grok 模型:创作核心→Grok 4.6 其余→Grok 4.5',
 };
@@ -1023,7 +1023,7 @@ const MODEL_OPTIONS={
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
-  codex:[[SMART,'智能分配'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
+  codex:[[SMART,'智能分配'],['gpt-6-sol','gpt-6-sol'],['gpt-6-luna','gpt-6-luna'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
          ['gpt-5.6-luna','gpt-5.6-luna'],['gpt-5.5','gpt-5.5'],['gpt-5.4','gpt-5.4'],
          ['gpt-5.4-mini','gpt-5.4-mini'],['gpt-5.3-codex-spark','gpt-5.3-codex-spark'],
          ['__custom','自定义…']],
@@ -2926,7 +2926,7 @@ const AM_MODEL_OPTIONS={
           ['sonnet','sonnet'],['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
-  codex:[['','默认'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
+  codex:[['','默认'],['gpt-6-sol','gpt-6-sol'],['gpt-6-luna','gpt-6-luna'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
          ['gpt-5.6-luna','gpt-5.6-luna'],['gpt-5.5','gpt-5.5'],['gpt-5.4','gpt-5.4'],
          ['gpt-5.4-mini','gpt-5.4-mini'],['gpt-5.3-codex-spark','gpt-5.3-codex-spark'],
          ['__custom','自定义…']],
