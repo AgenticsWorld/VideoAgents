@@ -226,6 +226,8 @@ window.I18N_DICT = {
 "lm-studio(本地端点可随意填)": "lm-studio (endpoint cục bộ có thể điền tùy ý)",
 "lm-studio(本地端点随意填)": "lm-studio (endpoint cục bộ điền tùy ý)",
 "opus(最新)": "opus (mới nhất)",
+"sonnet(最新)": "sonnet (mới nhất)",
+"fable(最新)": "fable (mới nhất)",
 "package/ 发布包尚未产出": "package/ gói phát hành chưa được tạo ra",
 "publish/{ep}/ 目录存在,但还没有可展示的物料": "Thư mục publish/{ep}/ tồn tại nhưng chưa có tài liệu để hiển thị",
 "qa/defects/ · 显示 {a}/{b} 条,点击行展开详情": "qa/defects/ · Hiển thị {a}/{b} mục, nhấn vào hàng để xem chi tiết",

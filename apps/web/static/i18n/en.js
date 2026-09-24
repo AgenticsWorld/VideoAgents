@@ -253,6 +253,8 @@ window.I18N_DICT = {
 "lm-studio(本地端点可随意填)": "lm-studio (anything works for local endpoints)",
 "lm-studio(本地端点随意填)": "lm-studio (any value for local endpoints)",
 "opus(最新)": "opus (latest)",
+"sonnet(最新)": "sonnet (latest)",
+"fable(最新)": "fable (latest)",
 "package/ 发布包尚未产出": "package/ release bundle not produced yet",
 "publish/{ep}/ 目录存在,但还没有可展示的物料": "publish/{ep}/ directory exists, but no displayable materials yet",
 "qa/defects/ · 显示 {a}/{b} 条,点击行展开详情": "qa/defects/ · showing {a}/{b} items; click a row to expand details",

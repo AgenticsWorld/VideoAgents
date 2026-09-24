@@ -226,6 +226,8 @@ window.I18N_DICT = {
 "lm-studio(本地端点可随意填)": "lm-studio(로컬 엔드포인트는 아무 값이나 가능)",
 "lm-studio(本地端点随意填)": "lm-studio(로컬 엔드포인트는 아무 값이나 입력)",
 "opus(最新)": "opus(최신)",
+"sonnet(最新)": "sonnet(최신)",
+"fable(最新)": "fable(최신)",
 "package/ 发布包尚未产出": "package/ 배포 패키지가 아직 생성되지 않았습니다",
 "publish/{ep}/ 目录存在,但还没有可展示的物料": "publish/{ep}/ 디렉터리는 있지만 표시할 자료가 아직 없습니다",
 "qa/defects/ · 显示 {a}/{b} 条,点击行展开详情": "qa/defects/ · {a}/{b}건 표시, 행을 클릭하면 상세 내용 표시",

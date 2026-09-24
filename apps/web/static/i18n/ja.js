@@ -226,6 +226,8 @@ window.I18N_DICT = {
 "lm-studio(本地端点可随意填)": "lm-studio(ローカルエンドポイントは任意の値で可)",
 "lm-studio(本地端点随意填)": "lm-studio(ローカルエンドポイントは任意入力で可)",
 "opus(最新)": "opus(最新)",
+"sonnet(最新)": "sonnet(最新)",
+"fable(最新)": "fable(最新)",
 "package/ 发布包尚未产出": "package/ 公開パッケージは未生成です",
 "publish/{ep}/ 目录存在,但还没有可展示的物料": "publish/{ep}/ ディレクトリは存在しますが、表示できる素材はまだありません",
 "qa/defects/ · 显示 {a}/{b} 条,点击行展开详情": "qa/defects/ · {a}/{b} 件を表示中。行をクリックで詳細を展開",

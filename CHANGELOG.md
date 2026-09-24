@@ -4,6 +4,10 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Claude Opus 5.5 in the language-model menus** (`claude-opus-5-5`, listed as `opus-5.5` right above `opus-5` in both the top-bar model dropdown and the per-agent model dialog). The `sonnet` alias is now labelled "sonnet (latest)" and sits directly below "opus (latest)", followed by a new "fable (latest)" entry (the CLI `fable` alias, currently resolving to claude-fable-5-1); model ids are unchanged, so existing settings keep working. Not a default: Smart Assignment still maps to opus / sonnet.
+
 ### Fixed
 
 - **Transition title cards and overlay captions now use the project's fonts** (`refs/fonts/`, WORKFLOW §2 rule 9). `render_transitions.py build` used to pick the first usable face from the global `data/fonts/` directory or the system, ignoring fonts uploaded on the Reference Files page, and `settings.json#transitions.card_style` was never read at render time. The host now resolves the card font once per project (`modules/transition_design.py resolve_card_font`): the optional new `transitions.card_font` setting (a project-relative path such as `refs/fonts/huiwen.ttf`, or a caption-engine id such as `proj:Huiwen-mincho`) wins, otherwise the first file in `refs/fonts/` is used for every card and overlay in the project, otherwise the previous global/system order applies. The font file (name / size / mtime) is part of the build fingerprint whenever a boundary renders text, so a changed or newly uploaded font rebuilds the affected cards on the next `build` / `render` without `--force`; projects without project fonts keep their existing fingerprints. Build logs and `meta.json` record the face that was used. `render_transitions.py check` gains a staleness test inside `inserts_built`: a segment or overlay built after the transition cut was rendered (e.g. `build` after a font change without `render`) now fails with "构建晚于成片(重跑 render)" instead of passing and showing the boundary as rendered on the storyboard page.

@@ -226,6 +226,8 @@ window.I18N_DICT = {
 "lm-studio(本地端点可随意填)": "lm-studio (endpoint lokal boleh diisi bebas)",
 "lm-studio(本地端点随意填)": "lm-studio (isi bebas untuk endpoint lokal)",
 "opus(最新)": "opus (terbaru)",
+"sonnet(最新)": "sonnet (terbaru)",
+"fable(最新)": "fable (terbaru)",
 "package/ 发布包尚未产出": "Paket rilis package/ belum dihasilkan",
 "publish/{ep}/ 目录存在,但还没有可展示的物料": "Direktori publish/{ep}/ ada, tetapi belum ada materi yang bisa ditampilkan",
 "qa/defects/ · 显示 {a}/{b} 条,点击行展开详情": "qa/defects/ · Menampilkan {a}/{b} entri, klik baris untuk membuka detail",
