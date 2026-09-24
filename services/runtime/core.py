@@ -301,6 +301,8 @@ REVISION_KIND_AGENTS: dict[str, list[str]] = {
     # 后期处理页波形四轨「✏️ 发修改意见」(2026-09-16):对白段 / 音效点位
     "dialogue":        ["09-audio/voice-generation", "08-video-gen/video-generation"],
     "sfx":             ["09-audio/sound-effect", "09-audio/audio-mixing"],
+    # 分镜预览页「过场卡」✏️ 反馈(2026-09-24):组边界过场设计(shot_list transition_in / directing/epNN/transition_design.json)
+    "transition":      ["07-directing/shot-planning", "10-editing/transition"],
 }
 REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
 REVISION_HISTORY_MAX = 3              # 修改单头里列出的同对象历史修改记录条数
@@ -920,6 +922,11 @@ DEFAULT_GENCONFIG = {
     # 不足回退尾帧)。由设置决定,不区分连戏规划的 cut / continuous
     "duration": {"episode_minutes": 10, "shot_min_s": 1, "shot_max_s": 10,
                  "long_take": False, "long_take_mode": "last_frame"},
+    # 过场模式(2026-09-24,docs/transition_design.md):minimal(现状:硬切为主,只按导演清单做叠化/黑白场)/ classic(字卡、全景扫动定场、
+    # 叠字幕、定格、风格接缝)/ cinematic(定场+叠字、闪回生成式桥接、成对运镜)/ custom(六类边界逐项选 + 四附属项自填)。
+    # 说明性字卡 / 插入预算 % / 生成式过场 / 新场景首镜定场 四项非 custom 时由 modules.transition_design.MODE_TABLE 派生、不落盘。
+    # 存量项目无此段 = minimal;新建向导默认 classic(api_create_project 兜底)。集级覆盖:assets/group_settings/<ep>/episode.json#transitions_mode
+    "transitions": {"mode": "minimal", "card_style": "caption_default", "card_language": "script"},
     # 视频模型设置:生成组总时长上限与每组参考素材数量上限——须与所选视频生成模型的
     # 能力匹配(Seedance 2.0 系列:≤15s/9图/3视频/3音频;Seedance 2.5:≤30s/30图/
     # 10视频/10音频;MiniMax H3:≤15s/9图/0视频/2音频),默认值按 2.0 口径(界面
@@ -1914,7 +1921,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "prompt_skill", "project_skills")
+                         "packaging", "prompt_skill", "project_skills", "transitions")
 
 
 def project_settings_path(project: str) -> Path:
@@ -1941,6 +1948,15 @@ def _validate_duration(d: dict):
         assert d.get("long_take_mode", "last_frame") in ("last_frame", "tail_video")
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean; long_take_mode must be last_frame or tail_video") from None
+
+
+def _validate_transitions(t: dict) -> dict:
+    """过场模式设置(settings.json#transitions):校验并规范化(非 custom 只留 mode + 样式项)。"""
+    from modules import transition_design as _td
+    try:
+        return _td.normalize_settings(t or {})
+    except ValueError as ex:
+        raise ServiceError(400, f"Invalid transitions settings: {ex}") from None
 
 
 SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30")   # 与 index.html SG_PRESETS 同步
@@ -5828,6 +5844,138 @@ async def api_epsettings_set(body: dict):
     return out
 
 
+# ---------------- 过场设计(2026-09-24,docs/transition_design.md;modules/transition_design.py + code/render_transitions.py) ----------------
+# 分镜预览页「过场卡」:GET 载荷 / 集级模式 / 出建议 / 裁决(接受·候选·保持硬切·改字·反馈)/ 边界预览小片(宿主 CLI render_transitions.py preview)
+
+def _transitions_payload(base: Path, ep: str) -> dict:
+    from modules import transition_design as _td
+    _td.ensure_head_thumbs(base, ep)
+    return _td.payload(base, ep)
+
+
+def _tr_ep(ep: str) -> str:
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    if not ep:
+        raise ServiceError(400, "ep is required")
+    return ep
+
+
+def _tr_bid(bid: str) -> str:
+    bid = re.sub(r"[^\w\-]", "", bid or "")
+    if not bid.startswith("B-"):
+        raise ServiceError(400, "boundary id must look like B-grpA-grpB")
+    return bid
+
+
+async def api_transitions_get(project: str, ep: str):
+    base = _proj_base(project)
+    return await asyncio.to_thread(_transitions_payload, base, _tr_ep(ep))
+
+
+async def api_transitions_mode(project: str, ep: str, body: dict):
+    """集级过场模式覆盖:{mode: minimal|classic|cinematic|custom|project(=跟随项目), propose?: bool(默认 true)}。改模式 = 重出建议(不自动接受)。"""
+    from modules import transition_design as _td
+    base = _proj_base(project)
+    ep = _tr_ep(ep)
+    mode = str((body or {}).get("mode") or "project")
+    if mode not in (*_td.MODES, "project"):
+        raise ServiceError(400, f"mode must be one of {list(_td.MODES)} or project")
+
+    def work():
+        eff = _td.set_episode_mode(base, ep, None if mode == "project" else mode)
+        if (body or {}).get("propose", True):
+            _td.propose(base, ep)
+        return eff
+    eff = await asyncio.to_thread(work)
+    HUB.publish({"type": "transition_design", "project": base.name, "ep": ep, "mode": eff["mode"]})
+    return await asyncio.to_thread(_transitions_payload, base, ep)
+
+
+async def api_transitions_propose(project: str, ep: str, body: dict):
+    from modules import transition_design as _td
+    base = _proj_base(project)
+    ep = _tr_ep(ep)
+    await asyncio.to_thread(_td.propose, base, ep, force=bool((body or {}).get("force")))
+    HUB.publish({"type": "transition_design", "project": base.name, "ep": ep, "proposed": True})
+    return await asyncio.to_thread(_transitions_payload, base, ep)
+
+
+async def api_transitions_decide(project: str, ep: str, bid: str, body: dict):
+    """{action: accept|reject|design|card|feedback, alt?: int, transition_in?: {}, lines?: [], text?: str, note?: str}。
+    accept/reject/design/card 会 apply 到 shot_list(经宿主保真写回);已有成片时页面提示需重跑 p9-transition。"""
+    from modules import transition_design as _td
+    base = _proj_base(project)
+    ep, bid = _tr_ep(ep), _tr_bid(bid)
+    action = str((body or {}).get("action") or "")
+    if action not in ("accept", "reject", "design", "card", "feedback"):
+        raise ServiceError(400, "action must be accept|reject|design|card|feedback")
+
+    def work():
+        if action == "accept":
+            alt = (body or {}).get("alt")
+            return _td.accept(base, ep, bid, alt=int(alt) if alt is not None else None, by="user")
+        if action == "reject":
+            return _td.reject(base, ep, bid, by="user", note=str((body or {}).get("note") or ""))
+        if action == "design":
+            t = (body or {}).get("transition_in")
+            if not isinstance(t, dict) or not t.get("type"):
+                raise ValueError("transition_in must be an object with type")
+            return _td.accept(base, ep, bid, transition_in=t, by="user")
+        if action == "card":
+            lines = (body or {}).get("lines")
+            if not isinstance(lines, list) or not [x for x in lines if str(x).strip()]:
+                raise ValueError("lines must be a non-empty list")
+            return _td.set_card_lines(base, ep, bid, [str(x) for x in lines])
+        text = str((body or {}).get("text") or "").strip()
+        if not text:
+            raise ValueError("text is required")
+        return _td.add_feedback(base, ep, bid, text, by="user")
+    try:
+        row = await asyncio.to_thread(work)
+    except (KeyError, ValueError, FileNotFoundError) as ex:
+        raise ServiceError(400, str(ex)) from None
+    # 设计改了(accept/reject/design/card)→ 机检 transition_ok 立即回执,页面提示;不自动派单
+    check = None
+    if action != "feedback":
+        try:
+            import sys as _sys
+            if str(ROOT / "code") not in _sys.path:
+                _sys.path.insert(0, str(ROOT / "code"))
+            from check_generation_groups import check_transitions as _ct  # noqa: E402
+            from modules import transition_design as _td2
+            sl = json.loads((base / "directing" / ep / "shot_list.json").read_text())
+            errs = [e for e in _ct(sl, _td2.effective(base, ep)["insert_budget_pct"]) if "transition_" in e]
+            check = {"ok": not errs, "errors": errs[:6]}
+        except Exception as ex:  # noqa: BLE001
+            check = {"ok": None, "errors": [str(ex)[-200:]]}
+    HUB.publish({"type": "transition_design", "project": base.name, "ep": ep, "boundary": bid, "action": action})
+    payload = await asyncio.to_thread(_transitions_payload, base, ep)
+    return {"boundary": next((b for b in payload["boundaries"] if b["id"] == bid), row), "check": check, "summary": payload["summary"]}
+
+
+async def api_transitions_preview(project: str, ep: str, bid: str, body: dict):
+    """边界预览小片(宿主 CLI `code/render_transitions.py preview --boundary`,同步等待,通常 10–40s):返回该边界的最新载荷行。"""
+    base = _proj_base(project)
+    ep, bid = _tr_ep(ep), _tr_bid(bid)
+    cmd = [sys.executable, "-u", str(ROOT / "code" / "render_transitions.py"), "preview", "--project", base.name, "--ep", ep, "--boundary", bid]
+    if (body or {}).get("force"):
+        cmd.append("--force")
+    env = {**os.environ, "VIDEOAGENTS_DATA_DIR": str(DATA_DIR), "VIDEOAGENTS_PYTHON": sys.executable}
+
+    def work():
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=env, cwd=str(ROOT))
+    try:
+        r = await asyncio.to_thread(work)
+    except subprocess.TimeoutExpired:
+        raise ServiceError(504, "预览渲染超时(15 分钟)") from None
+    if r.returncode != 0:
+        tail = (r.stdout or "").strip().splitlines()[-6:] + (r.stderr or "").strip().splitlines()[-4:]
+        raise ServiceError(500, "预览渲染失败:" + " | ".join(x for x in tail if x))
+    payload = await asyncio.to_thread(_transitions_payload, base, ep)
+    row = next((b for b in payload["boundaries"] if b["id"] == bid), None)
+    return {"boundary": row, "log": (r.stdout or "").strip().splitlines()[-8:]}
+
+
 SKETCHGEN_JOBS: dict[str, dict] = {}   # "project/ep/grp" -> 手绘生成任务状态(单机内存态)
 SKETCHGEN_PROMPT_TMPL = (
     "Image 1 is a rough black-and-white hand-drawn layout sketch by the director. "
@@ -8078,6 +8226,11 @@ def _preview_storyboard(project: str, ep: str):
     # 白模样片(2026-09-11):分镜预览页顶部板块(成片发布页 2026-09-13 起不再展示)(整集摄影机视角 + 对白/旁白字幕)
     data["whitebox_reel"] = _ep_whitebox_reel(base, ep) if data["whitebox_enabled"] else {"exists": False, "disabled": True}
     data["dialogue_tts"] = _dialogue_tts_status(base, ep)     # 对白语音库面板(2026-09-13)
+    # 过场卡(2026-09-24,docs/transition_design.md):每两组之间的边界诊断 / 设计 / 候选 / 状态 / 预览;顶部汇总条与集级模式下拉
+    try:
+        data["transitions"] = _transitions_payload(base, ep)
+    except Exception as ex:  # noqa: BLE001  过场板块出错不拖垮整页
+        data["transitions"] = {"error": str(ex)[-300:], "boundaries": [], "summary": {}, "settings": {}}
     # 配乐 cue:bgm/<ep>/cue_sheet.json → 预览页按 covers_groups/beat_ref/scene 对位试听;
     # 兼容 music_cues.json 文件名与 file 写成项目根相对路径(2026-09-02 liaozhai2 三集)
     bdir = base / "assets" / "audio" / "bgm" / ep
@@ -11295,6 +11448,7 @@ async def api_projconfig_get(project: str = "demo"):
 
 
 PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "视频节奏",
+                       "transitions": "过场模式",
                        "shot_group": "视频模型设置",
                        "review": "审核设置", "packaging": "片头片尾",
                        "prompt_skill": "提示词技能",
@@ -11320,6 +11474,11 @@ async def api_projconfig_set(body: dict):
     _validate_packaging(cfg.get("packaging") or {})
     _validate_prompt_skill(cfg.get("prompt_skill") or {})
     _validate_project_skills(cfg.get("project_skills"))
+    if "transitions" in (body or {}):
+        # 用户整段提交(非 _merge 叠加):custom 的附属项与 custom_map 以提交为准,切回预设时附属项不落盘
+        cfg["transitions"] = _validate_transitions(body["transitions"])
+    else:
+        cfg["transitions"] = _validate_transitions(cfg.get("transitions") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
@@ -12917,6 +13076,9 @@ async def api_projects_create(body: dict):
     base["packaging"] = {**base["packaging"], "intro_enabled": False, "outro_enabled": False, "teaser_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
                         if k in PROJECT_SETTINGS_KEYS})
+    # 过场模式(2026-09-24):新项目默认经典;向导传了整段则以其为准
+    cfg["transitions"] = _validate_transitions(settings.get("transitions") if isinstance(settings.get("transitions"), dict)
+                                               else {**cfg.get("transitions", {}), "mode": "classic"})
     _validate_duration(cfg["duration"])
     _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])

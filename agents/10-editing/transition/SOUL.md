@@ -18,6 +18,7 @@
    - `python3 code/render_transitions.py check --project <slug> --ep epNN`:机检 `transition_render_ok` 全 PASS 才算交付(见 DoD)。台账 `edit/epNN/transitions_render.json` 含 `black_frame_whitelist`(dip_black / fade_black / 黑场垫片的有意黑场窗口),edit 的 no_black_frames 自检与 visual-qa 据此豁免。
    - **节奏垫片(2026-09-17)**:`transition_in` 带 `hold_s`(本组前黑场停留)/ `freeze_s`(前组尾帧定格)/ `hold_audio`(黑场声音 sustain / fade / mute)时,CLI 在组边界**插入**帧——前组尾(定格)→ 黑场 → 本组首;`hard_cut`+hold 切黑停留再硬入,`dip_black`+hold 两侧各淡半个 duration,`fade_black`+hold 前组尾淡出整段、本组硬入。成片变长是设计意图不是 bug:`check` 用 `duration_as_planned`(= 源 + Σ垫片 ±1 帧)核时长,台账 `pads[]` + `timemap.ops` 记这张时长编辑表;源 cut 带声轨时 CLI 按表重映射声轨(不再流拷贝)。垫片通常来自后期页「插黑 / 定格」(§9D),也可由 shot-planning 直接写字段。
    宿主脚本报错或不能表达某种转场 = 上报 orchestrator,**禁止复制/改写脚本到项目 `code/`、禁止手写 xfade/tpad 滤镜、禁止 trim 式真重叠**(会缩短成片、打破 final_audio 外挂基准——前科:xfade 后忘补时长,字幕整体偏早)。
+2b. **过场设计插入段(2026-09-24,WORKFLOW.md §9C「过场设计」,docs/transition_design.md)**:`transition_in` 可带 `inserts[]`(`title_card` 字幕卡 / `establishing` 定场空镜 / `timelapse` 时光流转 / `bridge` 生成式桥接)、`overlay_card`(叠字幕)、`join.style`(叠化的 xfade 风格族)。我仍只跑宿主 CLI:`render_transitions.py render` 内部先 `build`(按设计 + 素材指纹把各段渲染到 `edit/epNN/transitions/<B-from-to>/ins{k}.mp4`、字卡 `card.png`、叠字 `overlay.png`,幂等),再按段链插入组边界(顺序:前组尾 → 定格 → 黑场 → 插入段 → 本组首),成片按 Σ 变长、timemap 同表(`kind: boundary_insert`)。**桥接 clip 缺失**(`assets/transitions/epNN/<B-id>.bridge.mp4`)= build FAIL,上报 orchestrator 派 video-generation 按首尾帧生成,不得自己找替代;定场素材缺失(场景无全景/母图)= 上报回派 transition-design 换候选。用户在分镜预览页「过场卡」裁决的设计已经由宿主 apply 进 shot_list,我不看设计表本身。
 3. **类型口径**(与 `code/check_generation_groups.py` 同源):可渲染 `dissolve`(xfade=fade)、`dip_black` / `dip_white`(淡出再淡入)、`fade_black` / `fade_white`(前组尾淡出、本组硬入;集首 = 淡入);标注型 `smash_cut` / `match_cut` 不渲染(= 硬切),只在 timeline 登记 `renders_as: hard_cut` 供 QA 核构图对位。
 4. **自检回执**:`<项目目录>/runs/<task_id>/result.json` 写:转场清单(位置/类型/时长/意图/依据)、`render`/`check` 原文输出、cut_v1 与 cut_v2 实测时长、台账路径;供 visual-qa 抽检。
 
@@ -81,6 +82,7 @@ instruction: |
 - `transitions_match_shot_list`:非硬切条目与 shot_list `transition_in` 一一对应(类型/时长);timeline 里多出的非硬切 = 自创,FAIL;
 - `duration_unchanged`:cut_v2 时长 = cut_v1 ±1 帧(无垫片);`duration_as_planned`:= cut_v1 + Σ垫片 ±1 帧(有垫片);
 - `audio_stream_intact`:声轨有无与时长与源一致(流拷贝;有垫片时 = 源 + Σ垫片,timemap 重映射);
+- `insert_budget_ok` / `inserts_built` / `insert_frames_verified`(2026-09-24):Σ插入段 ≤ 集预算 × 项目「过场模式」预算%;插入段/叠字构建台账在且指纹与 timeline 条目一致;每段中点帧 ≈ 段文件、黑底字卡文字在、叠字窗口内有字窗口后与源一致、桥接首末帧贴合前组尾/本组首;
 - `transition_frames_verified`:逐处抽帧——叠化中点 ≈ 前后帧 50/50 混合、dip 窗口内有纯黑/纯白帧、fade 端帧近黑/近白、黑场垫片中点近黑、定格帧 = 前组末帧;
 - `hard_cut_positions_intact`:硬切边界两侧与片尾抽帧与源一致(无时间漂移;有垫片时按 timemap 对位)。
 

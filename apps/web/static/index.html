@@ -150,6 +150,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .modal .rhythm-kind{flex:none;width:60px;color:var(--dim);font-size:12px}
 .modal .rhythm-detail{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;line-height:1.6}
+/* 过场模式「自定义」附属项:限高滚动,弹窗不随之变长(2026-09-24) */
+.modal .trcustom{max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 10px;background:var(--panel)}
+.modal .trcustom .row{margin:6px 0}
 .modal .rhythm-detail b{color:var(--text);font-weight:500}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
@@ -421,11 +424,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div>
       <div class="row"><label>长镜头</label>
         <input type="checkbox" id="npd-longtake" style="flex:none">
-        <span style="color:var(--dim);font-size:12px">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</span></div>
+      <button type="button" class="info-btn" data-info="npd-longtake-info" title="说明">i</button></div>
+      <div class="note info-note" id="npd-longtake-info">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</div>
       <div class="row" id="npd-longtake-mode-row" style="display:none"><label>连接方式</label>
         <select id="npd-longtake-mode"><option value="last_frame">尾帧图片</option><option value="tail_video">尾段视频</option></select></div>
       <div class="note" id="npd-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
-      <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计</div>
+      <div class="row"><label>过场模式</label>
+        <select id="npd-trmode" style="flex:none;width:120px"><option value="minimal">极简</option><option value="classic">经典</option><option value="cinematic">电影感</option><option value="custom">自定义</option></select>
+        <button type="button" class="info-btn" data-info="npd-trmode-info" title="说明">i</button></div>
+      <div class="note info-note" id="npd-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
+      <div class="rhythm-detail" id="npd-trmode-detail"></div>
+      <div id="npd-trcustom" class="trcustom" style="display:none">
+        <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
+          <div id="npd-trmap" style="flex:1;display:grid;grid-template-columns:1fr;gap:4px 12px;font-size:12px"></div></div>
+        <div class="row"><label>说明性字卡</label>
+          <label style="width:auto;flex:none;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="npd-trcards" value="1" checked>允许</label>
+          <label style="width:auto;flex:none;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="npd-trcards" value="0">禁止</label>
+          <span style="color:var(--dim);font-size:12px">禁止 = 整集不出时间/地点/章节文字,过场只用画面手段</span></div>
+        <div class="row"><label>过场时长预算</label><input type="number" id="npd-trpct" min="0" max="30" step="1" value="8" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">% 每集 · 单段 ≤ 4 s · 单边界 ≤ 6 s(固定)</span></div>
+        <div class="row"><label>生成式过场</label><input type="checkbox" id="npd-trgen" style="flex:none"><span style="color:var(--dim);font-size:12px">允许生成式桥接 / 图生视频定场(调用视频模型,按次计费;开启后过场卡逐处显示预估成本再点)</span></div>
+        <div class="row"><label>新场景首镜</label><input type="checkbox" id="npd-trestab" style="flex:none"><span style="color:var(--dim);font-size:12px">必须先出定场镜头(设计期规则,storyboard / shot-planning 照做)</span></div>
+      </div>
     </div>
     <div class="np-step" data-step="3" style="display:none">
       <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
@@ -635,7 +654,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="rhythm-detail" id="dur-rhythm-season-detail" style="display:none"></div>
         <textarea id="dur-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
       </div></div>
-    <div class="note">叙事节奏保存在项目的 brief.md 并注入每个 Agent 的系统提示词,节拍链约束剧本分集/分场与分镜节拍</div>
     <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
       <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
     <div class="row"><label>分镜时长(秒)</label>
@@ -645,11 +663,27 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="row"><label>长镜头</label>
       <input type="checkbox" id="dur-longtake" style="flex:none">
-      <span style="color:var(--dim);font-size:12px">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</span></div>
+      <button type="button" class="info-btn" data-info="dur-longtake-info" title="说明">i</button></div>
+      <div class="note info-note" id="dur-longtake-info">开启后按所选连接方式自动续接,不区分切镜或连续动作:尾帧图片=下一组挂上一组的尾帧截图;尾段视频=下一组挂上一组最后 2–3 秒视频向后续写(模型不支持或素材不满足条件时回退尾帧)。关闭后仅靠文字承接。</div>
     <div class="row" id="dur-longtake-mode-row" style="display:none"><label>连接方式</label>
       <select id="dur-longtake-mode"><option value="last_frame">尾帧图片</option><option value="tail_video">尾段视频</option></select></div>
     <div class="note" id="dur-longtake-warn" style="display:none;color:#e8a33d">⚠ 低清尾帧或视频尾段反复续接都可能累积画质与人物漂移</div>
-    <div class="note">每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+      <div class="row"><label>过场模式</label>
+        <select id="dur-trmode" style="flex:none;width:120px"><option value="minimal">极简</option><option value="classic">经典</option><option value="cinematic">电影感</option><option value="custom">自定义</option></select>
+        <button type="button" class="info-btn" data-info="dur-trmode-info" title="说明">i</button></div>
+      <div class="note info-note" id="dur-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
+      <div class="rhythm-detail" id="dur-trmode-detail"></div>
+      <div id="dur-trcustom" class="trcustom" style="display:none">
+        <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
+          <div id="dur-trmap" style="flex:1;display:grid;grid-template-columns:1fr;gap:4px 12px;font-size:12px"></div></div>
+        <div class="row"><label>说明性字卡</label>
+          <label style="width:auto;flex:none;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="dur-trcards" value="1" checked>允许</label>
+          <label style="width:auto;flex:none;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="dur-trcards" value="0">禁止</label>
+          <span style="color:var(--dim);font-size:12px">禁止 = 整集不出时间/地点/章节文字,过场只用画面手段</span></div>
+        <div class="row"><label>过场时长预算</label><input type="number" id="dur-trpct" min="0" max="30" step="1" value="8" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">% 每集 · 单段 ≤ 4 s · 单边界 ≤ 6 s(固定)</span></div>
+        <div class="row"><label>生成式过场</label><input type="checkbox" id="dur-trgen" style="flex:none"><span style="color:var(--dim);font-size:12px">允许生成式桥接 / 图生视频定场(调用视频模型,按次计费;开启后过场卡逐处显示预估成本再点)</span></div>
+        <div class="row"><label>新场景首镜</label><input type="checkbox" id="dur-trestab" style="flex:none"><span style="color:var(--dim);font-size:12px">必须先出定场镜头(设计期规则,storyboard / shot-planning 照做)</span></div>
+      </div>
     <div class="err" id="dur-err"></div>
     <div class="actions"><button id="dur-cancel">取消</button><button class="primary" id="dur-ok">确定</button></div>
   </div>
@@ -1254,6 +1288,49 @@ function durLongtakeWarn(){$('#dur-longtake-warn').style.display=
   ($('#dur-longtake').checked&&LONGTAKE_LOWRES.includes(DUR_DRAFT_RES))?'':'none';
   $('#dur-longtake-mode-row').style.display=$('#dur-longtake').checked?'':'none'}
 $('#dur-longtake').onchange=durLongtakeWarn;
+/* ---------- 过场模式(2026-09-24,docs/transition_design.md §3.3;新建向导第二步 / 视频节奏弹窗共用):settings.json#transitions
+   非自定义只有一个下拉 + 说明框(附属值由模式派生、不落盘);自定义展开六类边界处理 + 四附属项 ---------- */
+const TR_MODE_DETAIL={   // 每模式的说明行 [标签, 内容],渲染样式与叙事节奏 rhythm-detail 一致
+  minimal:[['默认','硬切;只有导演转场清单点名的边界做叠化/黑场/白场,不出字卡与定场空镜'],
+           ['附属','说明性字卡 禁止 · 过场时长 0%(只保留接缝 1% / 垫片 5%)· 不用生成式 · 新场景首镜不强制定场']],
+  classic:[['换场景','定场空镜 2.5s(首镜已是远景则改叠地点字幕)'],['跳时间','时间字卡 2.5s'],
+           ['进闪回/梦境','白场 1.0s + 定格 + 叠「N 日前·地点」+ 回忆调色'],['出闪回/梦境','匹配剪辑,可叠「当下」'],
+           ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],
+           ['附属','说明性字卡 允许 · 过场时长 ≤ 8%(≈24 s @ 300 s)· 不用生成式 · 新场景首镜不强制定场']],
+  cinematic:[['换场景','定场空镜 + 叠地点字幕'],['跳时间','时间字卡 + 定场空镜'],
+             ['进闪回/梦境','白场 + 定格 + 叠字(生成式桥接为候选)'],['出闪回/梦境','匹配剪辑,可叠「当下」'],
+             ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],
+             ['附属','说明性字卡 允许 · 过场时长 ≤ 10% · 允许生成式过场(仍逐处点、显示成本)· 新场景首镜必须先出定场镜头(设计期规则)']],
+  custom:[['自定义','六类边界逐项选处理方式,四个附属项自填']]};
+const TR_MAP_ROWS=[['scene_change','换场景'],['time_jump','跳时间'],['block_enter','进闪回/梦境'],['block_exit','出闪回/梦境'],['same_scene','同场景同时段'],['episode_open','集首']];
+const TR_MAP_OPTS=[['director','沿导演清单'],['hard_cut','硬切'],['dissolve','叠化'],['dip_black','黑场'],['dip_white','白场'],['title_card','时间字卡'],['overlay_card','地点字幕叠加'],['establishing','定场空镜'],['establishing_overlay','定场+叠字'],['timelapse','时光流转'],['bridge','生成式桥接']];
+const TR_MAP_DEFAULT={scene_change:'establishing',time_jump:'title_card',block_enter:'dip_white',block_exit:'director',same_scene:'hard_cut',episode_open:'director'};
+function trModeInit(prefix){
+  const sel=$('#'+prefix+'-trmode');if(!sel||sel.dataset.ready)return;sel.dataset.ready='1';
+  const tr_=s=>(window.t?window.t(s):s);   // 运行时拼的文案走词典(DOM 精确匹配翻译不到)
+  $('#'+prefix+'-trmap').innerHTML=TR_MAP_ROWS.map(([k,l])=>`<label style="display:flex;align-items:center;gap:6px"><span style="width:110px;flex:none;color:var(--dim)">${tr_(l)}</span><select data-trmap="${k}" style="flex:1">${TR_MAP_OPTS.map(([v,txt])=>`<option value="${v}">${tr_(txt)}</option>`).join('')}</select></label>`).join('');
+  const sync=()=>{$('#'+prefix+'-trmode-detail').innerHTML=(TR_MODE_DETAIL[sel.value]||[]).map(([k,v])=>`<div><b>${esc(tr_(k))}:</b>${esc(tr_(v))}</div>`).join('');$('#'+prefix+'-trcustom').style.display=sel.value==='custom'?'':'none'};
+  sel.onchange=sync;sync();
+}
+function trModeApply(prefix,cfg){
+  trModeInit(prefix);cfg=cfg||{};
+  const sel=$('#'+prefix+'-trmode');sel.value=['minimal','classic','cinematic','custom'].includes(cfg.mode)?cfg.mode:'classic';
+  const m={...TR_MAP_DEFAULT,...(cfg.custom_map||{})};
+  document.querySelectorAll('#'+prefix+'-trmap select').forEach(s=>{s.value=m[s.dataset.trmap]||'hard_cut'});
+  const cards=cfg.allow_cards!==false;document.querySelector(`input[name="${prefix}-trcards"][value="${cards?'1':'0'}"]`).checked=true;
+  $('#'+prefix+'-trpct').value=cfg.insert_budget_pct??8;
+  $('#'+prefix+'-trgen').checked=cfg.allow_generative===true;
+  $('#'+prefix+'-trestab').checked=cfg.establishing_first_shot===true;
+  sel.onchange();
+}
+function trModeCollect(prefix){
+  const mode=$('#'+prefix+'-trmode').value;
+  if(mode!=='custom')return {mode};
+  const custom_map={};document.querySelectorAll('#'+prefix+'-trmap select').forEach(s=>{custom_map[s.dataset.trmap]=s.value});
+  return {mode,custom_map,allow_cards:document.querySelector(`input[name="${prefix}-trcards"]:checked`).value==='1',
+    insert_budget_pct:parseFloat($('#'+prefix+'-trpct').value)||0,allow_generative:$('#'+prefix+'-trgen').checked,
+    establishing_first_shot:$('#'+prefix+'-trestab').checked};
+}
 $('#npo-aspect').onchange=()=>{
   $('#npo-custom-row').style.display=$('#npo-aspect').value==='custom'?'':'none'};
 function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置的服务端默认一致)
@@ -1279,6 +1356,7 @@ function openNpModal(){
   api('/api/v1/config/video-model').then(m=>{NP_VIDEO_MODEL=m;npsgModelHint()}).catch(()=>{});
   rhythmInit('np').then(()=>rhythmApply('np',null));
   npShowStep(1);
+  trModeApply('npd',{mode:'classic'});   // 过场模式(2026-09-24):新项目默认经典
   $('#np-modal').style.display='flex';
   $('#np-name').focus();
 }
@@ -1293,14 +1371,18 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
       return '自定义画幅格式:宽:高,如 21:9';
     if(!document.querySelectorAll('.npo-platform:checked').length)return '至少选择一个发布平台';
   }else if(n===2){   // 视频节奏(时长)
+    trModeInit('npd');
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
+    if($('#npd-trmode').value==='custom'){const pct=parseFloat($('#npd-trpct').value);if(!(pct>=0&&pct<=30))return '过场时长预算需在 0–30% 之间'}
     if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
   }
   return '';
 }
 function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 0 跳过+各维度 0)由服务端建项目时兜底
+  trModeInit('npd');
   return {
+    transitions:trModeCollect('npd'),   // 过场模式(2026-09-24):新项目默认经典
     output:{aspect_preset:$('#npo-aspect').value,aspect_custom:$('#npo-custom').value.trim(),
       language:$('#npo-lang').value,
       draft_resolution:$('#npo-draft-res').value,final_resolution:$('#npo-final-res').value,
@@ -1680,6 +1762,7 @@ async function openDurModal(){
     $('#dur-longtake-mode').value=d.long_take_mode==='tail_video'?'tail_video':'last_frame';
     DUR_DRAFT_RES=(cfg.output||{}).draft_resolution||'480p';
     durLongtakeWarn();
+    trModeApply('dur',cfg.transitions||{mode:'minimal'});   // 存量项目无此段 = 极简(服务端同口径)
   }catch(e){}
   $('#dur-modal').style.display='flex';
 }
@@ -1694,8 +1777,10 @@ $('#dur-ok').onclick=async()=>{
   const ep=parseFloat($('#dur-ep').value),mn=parseFloat($('#dur-smin').value),mx=parseFloat($('#dur-smax').value);
   if(!epAuto&&!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
+  const trc=trModeCollect('dur');
+  if(trc.mode==='custom'&&!(trc.insert_budget_pct>=0&&trc.insert_budget_pct<=30)){$('#dur-err').textContent='过场时长预算需在 0–30% 之间';return}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value}});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value},transitions:trc});
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}

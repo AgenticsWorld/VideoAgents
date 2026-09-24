@@ -29,6 +29,12 @@
   11b. transition_pad_valid           节奏垫片(2026-09-17,§9C):hold_s(组前黑场停留)/ freeze_s(前组尾帧定格)各 ∈ [0,3]s,
                                        hold_s 只配 hard_cut / dip_black / fade_black,hold_audio ∈ sustain|fade|mute,
                                        首组不得 hold/freeze;带垫片必填 reason;Σ(hold+freeze) ≤ 集预算 5%
+  11c. transition_join_valid          过场设计(2026-09-24,§9C 二期):dissolve 可带 join.style(受控 xfade 风格族:wipe/blur_through/
+                                       zoom_through/iris/pixelize/fadegrays);其它类型不配 style
+  11d. transition_insert_valid        组边界插入段 inserts[](title_card 字幕卡 / establishing 定场空镜 / timelapse 时光流转 / bridge 生成式桥接):
+                                       kind 在枚举内、单段 ∈ [0.5,4]s、单边界 Σ ≤ 6s、join_out 在枚举内、首组不得插入;
+                                       Σ插入 ≤ 集预算 × 项目「过场模式」预算%(极简 0 / 经典 8 / 电影感 10 / 自定义自填);
+                                       overlay_card(叠字幕,不变长)duration_s ≤ 6s;audio_lead_s ∈ [0,1]
   12. narrative_block_paired          narrative_block 同 id 的组必须连续,role 序列 start[/middle…]/end(单组 single);
                                        块首组必有 transition_in(可为显式 hard_cut + reason),块尾组的下一组同样必有
 
@@ -76,6 +82,28 @@ PAD_MAX_S = 3.0
 PAD_BUDGET_RATIO = 0.05            # Σ(hold_s+freeze_s) ≤ 集预算 5%
 HOLD_TYPES = ("hard_cut", "dip_black", "fade_black")     # 黑场停留只配「到黑」的转场
 HOLD_AUDIO = ("sustain", "fade", "mute")
+# —— 过场设计(2026-09-24,§9C 二期;docs/transition_design.md):transition_in 扩 join.style / inserts[] / overlay_card / audio_lead_s ——
+# join.style 只配 dissolve:把 xfade=fade 换成风格族里的模式(render_transitions.xfade_name 同源)
+JOIN_STYLES = {
+    "wipe": {"direction": ("left", "right", "up", "down"), "softness": ("hard", "slide", "smooth")},
+    "blur_through": {},       # xfade=hblur
+    "zoom_through": {},       # xfade=zoomin
+    "iris": {"direction": ("open", "close")},   # circleopen / circleclose
+    "pixelize": {},           # 梦境/数字感
+    "fadegrays": {},          # 回忆去色
+}
+INSERT_KINDS = ("title_card", "establishing", "timelapse", "bridge")
+INSERT_MIN_S, INSERT_MAX_S = 0.5, 4.0          # 单段
+BOUNDARY_INSERT_MAX_S = 6.0                    # 单边界 Σinserts
+INSERT_JOINS = ("hard_cut", "dissolve", "dip_black", "dip_white", "fade_black", "fade_white")   # 插入段 → 下一段的接缝
+INSERT_JOIN_DEFAULT_S = 0.4
+INSERT_AUDIO = ("mute", "sustain", "bed")
+CARD_BG = ("black", "white", "color", "blur_prev")
+ESTABLISHING_MODES = ("pano_sweep", "plate_kenburns", "i2v")
+OVERLAY_POSITIONS = ("bottom_left", "bottom_right", "center", "top_left", "top_right")
+OVERLAY_MAX_S = 6.0
+AUDIO_LEAD_MAX_S = 1.0
+INSERT_BUDGET_DEFAULT_PCT = 8.0               # 读不到项目「过场模式」时的兜底(经典档)
 BLOCK_KINDS = ("flashback", "dream", "montage", "imagination")
 BLOCK_ROLES = ("start", "middle", "end", "single")
 # narration.md 条目头:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]
@@ -335,7 +363,76 @@ def transition_of(group: dict) -> dict:
             t.pop(k, None)
     if t.get("hold_s"):
         t["hold_audio"] = str(t.get("hold_audio") or "sustain")
+    # 过场设计(2026-09-24):inserts[] 规范化为对象列表、duration_s 数值化;join / overlay_card 非对象即丢弃;audio_lead_s 数值化
+    ins = t.get("inserts")
+    if isinstance(ins, list) and ins:
+        norm = []
+        for x in ins:
+            if not isinstance(x, dict) or not x.get("kind"):
+                continue
+            x = dict(x)
+            try:
+                x["duration_s"] = float(x.get("duration_s") or 0.0)
+            except (TypeError, ValueError):
+                x["duration_s"] = 0.0
+            x["join_out"] = str(x.get("join_out") or "hard_cut")
+            if x["join_out"] != "hard_cut":
+                try:
+                    x["join_out_s"] = float(x.get("join_out_s") or INSERT_JOIN_DEFAULT_S)
+                except (TypeError, ValueError):
+                    x["join_out_s"] = INSERT_JOIN_DEFAULT_S
+            x["audio"] = str(x.get("audio") or "mute")
+            norm.append(x)
+        t["inserts"] = norm
+    else:
+        t.pop("inserts", None)
+    if not isinstance(t.get("join"), dict) or not t["join"].get("style"):
+        t.pop("join", None)
+    oc = t.get("overlay_card")
+    if isinstance(oc, dict) and [l for l in (oc.get("lines") or []) if str(l).strip()]:
+        oc = dict(oc)
+        oc["lines"] = [str(l) for l in oc.get("lines") if str(l).strip()]
+        try:
+            oc["duration_s"] = float(oc.get("duration_s") or 2.5)
+        except (TypeError, ValueError):
+            oc["duration_s"] = 2.5
+        oc["position"] = str(oc.get("position") or "bottom_left")
+        t["overlay_card"] = oc
+    else:
+        t.pop("overlay_card", None)
+    try:
+        al = float(t.get("audio_lead_s") or 0.0)
+    except (TypeError, ValueError):
+        al = 0.0
+    if al > 0:
+        t["audio_lead_s"] = al
+    else:
+        t.pop("audio_lead_s", None)
     return t
+
+
+def inserts_of(t: dict) -> list[dict]:
+    """组边界插入段(已规范化的 transition_in → inserts[]),无则空列表。"""
+    return list(t.get("inserts") or []) if isinstance(t, dict) else []
+
+
+def insert_total_s(t: dict) -> float:
+    return float(sum(float(x.get("duration_s") or 0.0) for x in inserts_of(t)))
+
+
+def project_insert_budget_pct(shot_list_path: Path) -> float:
+    """项目「过场模式」的插入段时长预算(% 集预算):settings.json#transitions(经 modules.transition_design.effective 按模式展开,
+    集级覆盖 assets/group_settings/<ep>/episode.json#transitions_mode 优先);读不到按经典档 8%。"""
+    try:
+        base = shot_list_path.resolve().parents[2]
+        ep = shot_list_path.resolve().parent.name
+        root = Path(__file__).resolve().parents[1]
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from modules.transition_design import effective
+        return float(effective(base, ep)["insert_budget_pct"])
+    except Exception:
+        return INSERT_BUDGET_DEFAULT_PCT
 
 
 def pad_of(t: dict) -> tuple[float, float, str]:
@@ -343,14 +440,83 @@ def pad_of(t: dict) -> tuple[float, float, str]:
     return float(t.get("freeze_s") or 0.0), float(t.get("hold_s") or 0.0), str(t.get("hold_audio") or "sustain")
 
 
-def check_transitions(shot_list: dict) -> list[str]:
-    """transition_ok(2026-08-28):组入口转场 transition_in + 叙事块 narrative_block 机检。"""
+def _check_join(gid: str, t: dict) -> list[str]:
+    j = t.get("join")
+    if not j:
+        return []
+    errs = []
+    style = str(j.get("style") or "")
+    if style not in JOIN_STYLES:
+        errs.append(f"{gid} transition_join_valid: join.style={style!r} 不在枚举 {list(JOIN_STYLES)}")
+        return errs
+    if t.get("type") != "dissolve":
+        errs.append(f"{gid} transition_join_valid: join.style 只配 dissolve(接缝风格是叠化的 xfade 模式替换),当前 type={t.get('type')}")
+    for k, allowed in JOIN_STYLES[style].items():
+        v = j.get(k)
+        if v is not None and v not in allowed:
+            errs.append(f"{gid} transition_join_valid: join.{k}={v!r} 不在 {style} 的枚举 {list(allowed)}")
+    return errs
+
+
+def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]:
+    ins = inserts_of(t)
+    if not ins:
+        return [], 0.0
+    errs, total = [], 0.0
+    if is_first:
+        errs.append(f"{gid} transition_insert_valid: 首组不得带 inserts(集首字卡归片头包装,本期不支持)")
+    if not str(t.get("reason") or "").strip():
+        errs.append(f"{gid} transition_insert_valid: 带 inserts 须写 reason(过场意图)")
+    for k, x in enumerate(ins):
+        kind, d = x.get("kind"), float(x.get("duration_s") or 0)
+        tag = f"{gid} inserts[{k}]"
+        if kind not in INSERT_KINDS:
+            errs.append(f"{tag} transition_insert_valid: kind={kind!r} 不在枚举 {list(INSERT_KINDS)}")
+            continue
+        if not (INSERT_MIN_S - 1e-9 <= d <= INSERT_MAX_S + 1e-9):
+            errs.append(f"{tag} transition_insert_valid: {kind} duration_s={d:g} ∉ [{INSERT_MIN_S:g},{INSERT_MAX_S:g}]")
+        total += d
+        if x.get("join_out") not in INSERT_JOINS:
+            errs.append(f"{tag} transition_insert_valid: join_out={x.get('join_out')!r} 不在枚举 {list(INSERT_JOINS)}")
+        if x.get("audio") not in INSERT_AUDIO:
+            errs.append(f"{tag} transition_insert_valid: audio={x.get('audio')!r} 不在枚举 {list(INSERT_AUDIO)}")
+        if kind == "title_card":
+            card = x.get("card") if isinstance(x.get("card"), dict) else {}
+            lines = [str(l) for l in (card.get("lines") or []) if str(l).strip()]
+            if not lines:
+                errs.append(f"{tag} transition_insert_valid: title_card 缺 card.lines(至少一行文字)")
+            if len(lines) > 3:
+                errs.append(f"{tag} transition_insert_valid: title_card 最多 3 行,得到 {len(lines)}")
+            if card.get("bg", "black") not in CARD_BG:
+                errs.append(f"{tag} transition_insert_valid: card.bg={card.get('bg')!r} 不在枚举 {list(CARD_BG)}")
+        elif kind in ("establishing", "timelapse"):
+            src = x.get("source") if isinstance(x.get("source"), dict) else {}
+            if not src.get("scene_id"):
+                errs.append(f"{tag} transition_insert_valid: {kind} 缺 source.scene_id")
+            if kind == "establishing" and src.get("mode", "pano_sweep") not in ESTABLISHING_MODES:
+                errs.append(f"{tag} transition_insert_valid: source.mode={src.get('mode')!r} 不在枚举 {list(ESTABLISHING_MODES)}")
+            if kind == "timelapse" and not (src.get("scheme_from") and src.get("scheme_to")):
+                errs.append(f"{tag} transition_insert_valid: timelapse 须给 source.scheme_from / scheme_to(同锚点两个光照方案)")
+        elif kind == "bridge":
+            if t.get("motion_pair"):
+                errs.append(f"{tag} transition_insert_valid: bridge 与 motion_pair 互斥")
+    if total > BOUNDARY_INSERT_MAX_S + 1e-9:
+        errs.append(f"{gid} transition_insert_valid: 单边界 Σinserts {total:g}s > {BOUNDARY_INSERT_MAX_S:g}s")
+    return errs, total
+
+
+def check_transitions(shot_list: dict, insert_budget_pct: float | None = None) -> list[str]:
+    """transition_ok(2026-08-28):组入口转场 transition_in + 叙事块 narrative_block 机检。
+    insert_budget_pct:插入段预算(% 集预算,过场设计 2026-09-24);None = 按经典档 INSERT_BUDGET_DEFAULT_PCT。"""
     errors = []
     groups = shot_list.get("generation_groups") or []
     budget = shot_list.get("budget_s") or shot_list.get("total_duration_s") \
         or sum(g.get("total_duration_s") or 0 for g in groups)
     render_total = 0.0
     pad_total = 0.0
+    insert_total = 0.0
+    if insert_budget_pct is None:
+        insert_budget_pct = INSERT_BUDGET_DEFAULT_PCT
     has_tr = {}
     for i, g in enumerate(groups):
         gid = g.get("group_id", "?")
@@ -406,6 +572,22 @@ def check_transitions(shot_list: dict) -> list[str]:
                 errors.append(f"{gid} transition_pad_valid: hold_s 只配 {list(HOLD_TYPES)}(黑场停留须「到黑」),得到 {ty}")
             if hold_audio not in HOLD_AUDIO:
                 errors.append(f"{gid} transition_pad_valid: hold_audio={hold_audio!r} 不在枚举 {list(HOLD_AUDIO)}")
+        # 过场设计(2026-09-24):接缝风格 / 插入段 / 叠字幕 / 音先入
+        errors += _check_join(gid, t)
+        ins_errs, ins_s = _check_inserts(gid, t, i == 0)
+        errors += ins_errs
+        insert_total += ins_s
+        oc = t.get("overlay_card")
+        if oc:
+            if not (0 < float(oc.get("duration_s") or 0) <= OVERLAY_MAX_S + 1e-9):
+                errors.append(f"{gid} transition_insert_valid: overlay_card.duration_s={oc.get('duration_s')} ∉ (0,{OVERLAY_MAX_S:g}]")
+            if oc.get("position") not in OVERLAY_POSITIONS:
+                errors.append(f"{gid} transition_insert_valid: overlay_card.position={oc.get('position')!r} 不在枚举 {list(OVERLAY_POSITIONS)}")
+        if t.get("audio_lead_s") and float(t["audio_lead_s"]) > AUDIO_LEAD_MAX_S + 1e-9:
+            errors.append(f"{gid} transition_insert_valid: audio_lead_s={t['audio_lead_s']} > {AUDIO_LEAD_MAX_S:g}")
+    if budget and insert_total > float(budget) * insert_budget_pct / 100.0 + 1e-9:
+        errors.append(f"transition_insert_budget: Σ插入段 {insert_total:g}s > 集预算 {budget}s × {insert_budget_pct:g}%"
+                      f" = {float(budget) * insert_budget_pct / 100.0:.2f}s(项目「过场模式」预算;极简档为 0)")
     if budget and render_total > float(budget) * TRANSITION_BUDGET_RATIO + 1e-9:
         errors.append(f"transition_budget_le_1pct: Σ可渲染转场 {render_total:g}s >"
                       f" 集预算 {budget}s × {TRANSITION_BUDGET_RATIO:g} = {float(budget) * TRANSITION_BUDGET_RATIO:.2f}s")
@@ -494,7 +676,7 @@ def main():
             narr_text = narr_path.read_text() if narr_path and narr_path.is_file() else None
         errors += check_7d(data, narr_text, narration_on)
     if not args.skip_transition:
-        errors += check_transitions(data)
+        errors += check_transitions(data, project_insert_budget_pct(Path(args.shot_list)))
     if errors:
         print(f"机检未通过({len(errors)} 项):")
         for e in errors:

@@ -1033,6 +1033,32 @@ async def storyboard_episode_settings_set(project: str, ep: str, body: dict[str,
     return await core.api_epsettings_set({**(body or {}), "project": project, "ep": ep})
 
 
+@api.get("/projects/{project}/transitions/{ep}", tags=["storyboard"])
+async def transitions_get(project: str, ep: str) -> dict[str, Any]:
+    """过场设计载荷(分镜预览页过场卡,2026-09-24):逐边界诊断/设计/候选/状态/预览 + 汇总 + 生效模式。"""
+    return _artifact_urls(await core.api_transitions_get(project, ep), project)
+
+
+@api.post("/projects/{project}/transitions/{ep}/mode", tags=["storyboard"])
+async def transitions_mode(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_transitions_mode(project, ep, body), project)
+
+
+@api.post("/projects/{project}/transitions/{ep}/propose", tags=["storyboard"])
+async def transitions_propose(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _artifact_urls(await core.api_transitions_propose(project, ep, body or {}), project)
+
+
+@api.post("/projects/{project}/transitions/{ep}/{bid}/decide", tags=["storyboard"])
+async def transitions_decide(project: str, ep: str, bid: str, body: dict[str, Any]) -> dict[str, Any]:
+    return _artifact_urls(await core.api_transitions_decide(project, ep, bid, body), project)
+
+
+@api.post("/projects/{project}/transitions/{ep}/{bid}/preview", tags=["storyboard"])
+async def transitions_preview(project: str, ep: str, bid: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _artifact_urls(await core.api_transitions_preview(project, ep, bid, body or {}), project)
+
+
 @api.get("/projects/{project}/storyboard/{ep}/{grp}/settings", tags=["storyboard"])
 async def storyboard_group_settings_get(project: str, ep: str, grp: str) -> dict[str, Any]:
     """组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」弹窗)。"""

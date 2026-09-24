@@ -1,0 +1,1170 @@
+"""过场设计(transition design,2026-09-24;方案 docs/transition_design.md,WORKFLOW.md §9C 二期)。
+
+把「组边界」当一等对象:每集一张过场设计表 directing/<ep>/transition_design.json(逐边界:变化诊断 + 设计 + 候选 + 状态 + 反馈),
+shot_list.generation_groups[].transition_in 仍是唯一定稿字段,只由本模块 apply() 从设计表投影写回(json 读写保真,不经 agent JS 整写)。
+
+设置:settings.json#transitions {mode: minimal|classic|cinematic|custom, …};非 custom 模式的四个附属项(说明性字卡 / 插入预算 / 生成式 /
+新场景首镜定场)由 MODES 表派生、页面不显示、文件里不写;集级覆盖 assets/group_settings/<ep>/episode.json#transitions_mode。
+存量项目 settings.json 无 transitions 段 = minimal(现状不变);新建向导默认 classic。
+
+契约常量与机检在 code/check_generation_groups.py(transition_ok);渲染与成片机检在 code/render_transitions.py(plan → build → render → check)。
+本模块提供:effective() 模式展开、diagnose() 边界诊断、propose() 按模式出建议、accept/reject/apply、check()、payload()(分镜预览页过场卡数据)、
+字卡 PNG 与全景视窗渲染(build 与页面预览共用)。
+"""
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import json
+import math
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "code") not in sys.path:
+    sys.path.insert(0, str(ROOT / "code"))
+
+SCHEMA = "transition_design.v1"
+DESIGN_FILE = "transition_design.json"
+MODES = ("minimal", "classic", "cinematic", "custom")
+# 三个预设模式的固定附属值(§3.3 已拍板):说明性字卡 / 插入预算 % / 生成式过场 / 新场景首镜定场
+MODE_TABLE = {
+    "minimal":   {"allow_cards": False, "insert_budget_pct": 0.0,  "allow_generative": False, "establishing_first_shot": False},
+    "classic":   {"allow_cards": True,  "insert_budget_pct": 8.0,  "allow_generative": False, "establishing_first_shot": False},
+    "cinematic": {"allow_cards": True,  "insert_budget_pct": 10.0, "allow_generative": True,  "establishing_first_shot": True},
+}
+CUSTOM_DEFAULTS = {"allow_cards": True, "insert_budget_pct": 8.0, "allow_generative": False, "establishing_first_shot": False}
+# 自定义模式六类边界 → 处理方式(custom_map 的键与可选值)
+BOUNDARY_CLASSES = ("scene_change", "time_jump", "block_enter", "block_exit", "same_scene", "episode_open")
+CUSTOM_OPTIONS = ("director", "hard_cut", "dissolve", "dip_black", "dip_white", "title_card", "overlay_card",
+                  "establishing", "establishing_overlay", "timelapse", "bridge")
+CUSTOM_MAP_DEFAULT = {"scene_change": "establishing", "time_jump": "title_card", "block_enter": "dip_white",
+                      "block_exit": "director", "same_scene": "hard_cut", "episode_open": "director"}
+DEFAULT_SETTINGS = {"mode": "minimal", "card_style": "caption_default", "card_language": "script"}
+CARD_S, ESTAB_S, CARD_JOIN_S = 2.5, 2.5, 0.4
+WIDE_SIZES = ("大远景", "远景", "全景", "大全景", "EWS", "WS", "LS", "ELS", "extreme wide", "wide", "establishing")
+# 相对时间词(只认「跨日/跨期」关系词;单纯时段词 清晨/午后/黄昏 不算——那些由 time_of_day 派生并打「推定」)
+TIME_WORD_RE = re.compile(r"(次日清晨|次日晨|翌日清晨|次日|翌日|当晚|当夜|同日|同一天|数日[前后]|数月[前后]|数年[前后]|多年[前后]|"
+                          r"[一二三四五六七八九十两\d]+\s*(?:个)?(?:天|日|月|年|载)[前后])")
+TOD_WORD = {"昼": "日间", "日": "日间", "白天": "日间", "清晨": "清晨", "晨": "清晨", "黎明": "黎明", "午后": "午后", "黄昏": "黄昏", "傍晚": "傍晚",
+            "夜": "夜", "夜晚": "夜", "深夜": "深夜", "阴天": "阴天", "雨": "雨天"}
+DIRECTOR_NOCARD_RE = re.compile(r"(无|不加|没有|禁)[^。;,\n]{0,12}?(字幕板|字卡|说明性字幕)")
+SCREENPLAY_HEAD_RE = re.compile(r"^##\s*(S\d+)\s*\|\s*(INT|EXT|内|外)[^|]*\|\s*(SCN-\d+)\s*([^|]*)\|\s*(.+?)\s*$", re.M)
+
+
+# ---------------------------------------------------------------- settings / mode
+
+def _read(p: Path, default=None):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8")) if Path(p).is_file() else default
+    except (ValueError, OSError):
+        return default
+
+
+def _write(p: Path, data) -> None:
+    p = Path(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(p)
+
+
+def normalize_settings(raw: dict | None) -> dict:
+    """settings.json#transitions 规范化(服务端校验与保存共用)。非 custom 只保留 mode + 样式项;custom 保留四附属项与 custom_map。"""
+    raw = raw if isinstance(raw, dict) else {}
+    mode = str(raw.get("mode") or DEFAULT_SETTINGS["mode"])
+    if mode not in MODES:
+        raise ValueError(f"transitions.mode must be one of {list(MODES)}")
+    out = {"mode": mode, "card_style": str(raw.get("card_style") or DEFAULT_SETTINGS["card_style"]),
+           "card_language": str(raw.get("card_language") or DEFAULT_SETTINGS["card_language"])}
+    if mode == "custom":
+        out["allow_cards"] = bool(raw.get("allow_cards", CUSTOM_DEFAULTS["allow_cards"]))
+        try:
+            pct = float(raw.get("insert_budget_pct", CUSTOM_DEFAULTS["insert_budget_pct"]))
+        except (TypeError, ValueError):
+            raise ValueError("transitions.insert_budget_pct must be a number") from None
+        if not (0 <= pct <= 30):
+            raise ValueError("transitions.insert_budget_pct must be 0-30")
+        out["insert_budget_pct"] = pct
+        out["allow_generative"] = bool(raw.get("allow_generative", CUSTOM_DEFAULTS["allow_generative"]))
+        out["establishing_first_shot"] = bool(raw.get("establishing_first_shot", CUSTOM_DEFAULTS["establishing_first_shot"]))
+        cm = raw.get("custom_map") if isinstance(raw.get("custom_map"), dict) else {}
+        m = dict(CUSTOM_MAP_DEFAULT)
+        for k, v in cm.items():
+            if k in BOUNDARY_CLASSES:
+                if v not in CUSTOM_OPTIONS:
+                    raise ValueError(f"transitions.custom_map.{k}={v!r} not in {list(CUSTOM_OPTIONS)}")
+                m[k] = v
+        out["custom_map"] = m
+    return out
+
+
+def expand(settings: dict | None) -> dict:
+    """按模式展开四个附属项(非 custom 由表派生)。"""
+    st = normalize_settings(settings)
+    mode = st["mode"]
+    if mode == "custom":
+        return dict(st)
+    return {**st, **MODE_TABLE[mode], "custom_map": None}
+
+
+def project_settings(base: Path) -> dict:
+    st = _read(Path(base) / "settings.json", {}) or {}
+    return st.get("transitions") if isinstance(st.get("transitions"), dict) else {}
+
+
+def episode_mode_override(base: Path, ep: str) -> str | None:
+    d = _read(Path(base) / "assets" / "group_settings" / ep / "episode.json", {}) or {}
+    m = d.get("transitions_mode")
+    return m if m in MODES else None
+
+
+def effective(base: Path, ep: str | None = None) -> dict:
+    """本集生效的过场设置:项目 settings.json#transitions(无 = minimal)+ 集级 transitions_mode 覆盖(只换模式,附属项随模式派生;
+    集级切到 custom 时沿用项目 custom 附属项)。返回含 mode / mode_source / project_mode。"""
+    base = Path(base)
+    proj = project_settings(base)
+    try:
+        proj_eff = expand(proj)
+    except ValueError:
+        proj_eff = expand(None)
+    out = dict(proj_eff)
+    out["project_mode"] = proj_eff["mode"]
+    out["mode_source"] = "project"
+    if ep:
+        ov = episode_mode_override(base, ep)
+        if ov and ov != proj_eff["mode"]:
+            if ov == "custom":
+                out = {**expand({**proj, "mode": "custom"}), "project_mode": proj_eff["mode"]}
+            else:
+                out = {**proj_eff, "mode": ov, **MODE_TABLE[ov], "custom_map": None, "project_mode": proj_eff["mode"]}
+            out["mode_source"] = "episode"
+    return out
+
+
+def set_episode_mode(base: Path, ep: str, mode: str | None) -> dict:
+    """写 / 清集级模式覆盖(assets/group_settings/<ep>/episode.json#transitions_mode;None 或与项目同 = 删键)。"""
+    p = Path(base) / "assets" / "group_settings" / ep / "episode.json"
+    d = _read(p, {}) or {}
+    if mode is not None and mode not in MODES:
+        raise ValueError(f"mode must be one of {list(MODES)}")
+    proj_mode = effective(base)["mode"]
+    if mode is None or mode == proj_mode:
+        d.pop("transitions_mode", None)
+    else:
+        d["transitions_mode"] = mode
+    if d:
+        _write(p, d)
+    elif p.is_file():
+        p.unlink()
+    return effective(base, ep)
+
+
+# ---------------------------------------------------------------- data access
+
+def design_path(base: Path, ep: str) -> Path:
+    return Path(base) / "directing" / ep / DESIGN_FILE
+
+
+def load_design(base: Path, ep: str) -> dict | None:
+    d = _read(design_path(base, ep))
+    return d if isinstance(d, dict) and isinstance(d.get("boundaries"), list) else None
+
+
+def _shot_list(base: Path, ep: str) -> dict:
+    return _read(Path(base) / "directing" / ep / "shot_list.json", {}) or {}
+
+
+def _scenes_index(base: Path) -> dict:
+    d = _read(Path(base) / "bible" / "scenes" / "index.json", {}) or {}
+    rows = d.get("scenes") if isinstance(d, dict) else d
+    out = {}
+    for r in rows or []:
+        if isinstance(r, dict) and r.get("id"):
+            out[r["id"]] = r
+    return out
+
+
+def scene_display_name(base: Path, sid: str, scenes: dict | None = None) -> str:
+    scenes = scenes if scenes is not None else _scenes_index(base)
+    r = scenes.get(sid) or {}
+    name = str(r.get("name") or sid)
+    return name
+
+
+def _screenplay(base: Path, ep: str) -> dict:
+    """场次头与场尾「转场:」行:{scene_no: {header, int_ext, scene_id, name, tod, transition_out(本场末的转场句), transition_in(上一场末的转场句)}}"""
+    p = Path(base) / "story" / "episodes" / ep / "screenplay.md"
+    try:
+        text = p.read_text(encoding="utf-8") if p.is_file() else ""
+    except OSError:
+        text = ""
+    heads = list(SCREENPLAY_HEAD_RE.finditer(text))
+    out, prev_out = {}, None
+    for i, m in enumerate(heads):
+        seg = text[m.end(): heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        tr = None
+        for line in seg.splitlines():
+            if line.strip().startswith("转场"):
+                tr = line.strip()
+        out[m.group(1)] = {"header": m.group(0).strip(), "int_ext": m.group(2), "scene_id": m.group(3),
+                           "name": m.group(4).strip(), "tod": m.group(5).strip(), "transition_out": tr,
+                           "transition_in": prev_out}
+        prev_out = tr
+    return out
+
+
+def _director_notes(base: Path, ep: str) -> list[str]:
+    p = Path(base) / "directing" / ep / "directing_plan.md"
+    try:
+        text = p.read_text(encoding="utf-8") if p.is_file() else ""
+    except OSError:
+        return []
+    notes = []
+    for line in text.splitlines():
+        if DIRECTOR_NOCARD_RE.search(line) and len(line) < 400:
+            notes.append(line.strip().lstrip("> ").strip())
+    # 去重保序,最多 3 条
+    seen, out = set(), []
+    for n in notes:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out[:3]
+
+
+def _continuity(base: Path, ep: str) -> dict:
+    cp = _read(Path(base) / "directing" / ep / "continuity_plan.json", {}) or {}
+    return {(x.get("from_group"), x.get("to_group")): x for x in (cp.get("group_transitions") or []) if isinstance(x, dict)}
+
+
+def _shot_plates(base: Path, ep: str) -> dict:
+    d = _read(Path(base) / "directing" / ep / "shot_plates.json", {}) or {}
+    return d.get("shots") if isinstance(d.get("shots"), dict) else {}
+
+
+def _panos_index(base: Path, sid: str) -> dict:
+    return _read(Path(base) / "assets" / "concepts" / "scenes" / sid / "panos" / "index.json", {}) or {}
+
+
+# ---------------------------------------------------------------- diagnosis
+
+def _block(g: dict) -> dict:
+    nb = g.get("narrative_block")
+    return nb if isinstance(nb, dict) and nb.get("id") else {}
+
+
+def _first_shot(g: dict, shots: dict) -> dict:
+    sid = (g.get("shots") or [None])[0]
+    return shots.get(sid) or {}
+
+
+def _is_wide(shot: dict) -> bool:
+    size = str(shot.get("size") or shot.get("shot_size") or "")
+    return any(w.lower() in size.lower() for w in WIDE_SIZES)
+
+
+def establishing_source(base: Path, ep: str, g: dict, shots: dict, plates: dict | None = None) -> dict | None:
+    """本组场景可用的定场素材:① 全景(优先服务本组首镜的锚点 + 本组光照方案)→ pano_sweep;② 首镜起点母图 → plate_kenburns;③ None。"""
+    sid, scheme = g.get("scene_id"), g.get("lighting_scheme_id")
+    if not sid:
+        return None
+    first = (g.get("shots") or [None])[0]
+    idx = _panos_index(base, sid)
+    anchors = [a for a in (idx.get("anchors") or []) if isinstance(a, dict) and a.get("anchor_id")]
+    pdir = Path(base) / "assets" / "concepts" / "scenes" / sid / "panos"
+
+    def has(a, sch):
+        p = (a.get("panos") or {}).get(sch) or {}
+        return bool(p.get("file")) and (pdir / a["anchor_id"] / p["file"]).is_file()
+
+    pick, pick_scheme = None, None
+    for want_serve in (True, False):
+        for a in anchors:
+            if want_serve and not any(str(s).startswith(f"{ep}/{first}:") for s in (a.get("serves") or [])):
+                continue
+            if scheme and has(a, scheme):
+                pick, pick_scheme = a, scheme
+                break
+        if pick:
+            break
+    if not pick:
+        for a in anchors:
+            for sch in (a.get("panos") or {}):
+                if has(a, sch):
+                    pick, pick_scheme = a, sch
+                    break
+            if pick:
+                break
+    if pick:
+        cam = None
+        plates = plates if plates is not None else _shot_plates(base, ep)
+        sp = plates.get(first) or {}
+        for pl in (sp.get("plates") or []):
+            if isinstance(pl, dict) and isinstance(pl.get("camera"), dict):
+                cam = pl["camera"]
+                break
+        src = {"scene_id": sid, "mode": "pano_sweep", "anchor_id": pick["anchor_id"], "scheme": pick_scheme,
+               "scheme_match": pick_scheme == scheme, "sweep_deg": 16.0, "fov_v_deg": 45.0}
+        if cam and isinstance(cam.get("position"), list) and isinstance(cam.get("target"), list):
+            src["look_dir"] = [round(float(cam["target"][i]) - float(cam["position"][i]), 4) for i in range(3)]
+        return src
+    plates = plates if plates is not None else _shot_plates(base, ep)
+    sp = plates.get(first) or {}
+    for pl in (sp.get("plates") or []):
+        if isinstance(pl, dict) and pl.get("file") and (Path(base) / pl["file"]).is_file():
+            return {"scene_id": sid, "mode": "plate_kenburns", "file": pl["file"], "scheme": sp.get("lighting_scheme_id") or scheme,
+                    "scheme_match": True, "zoom": 1.08}
+    return None
+
+
+def timelapse_source(base: Path, g: dict) -> dict | None:
+    """同锚点两个光照方案(时光流转)。"""
+    sid = g.get("scene_id")
+    if not sid:
+        return None
+    idx = _panos_index(base, sid)
+    pdir = Path(base) / "assets" / "concepts" / "scenes" / sid / "panos"
+    for a in idx.get("anchors") or []:
+        schemes = [s for s, p in (a.get("panos") or {}).items() if p.get("file") and (pdir / a["anchor_id"] / p["file"]).is_file()]
+        if len(schemes) >= 2:
+            want = g.get("lighting_scheme_id")
+            to = want if want in schemes else schemes[-1]
+            frm = next(s for s in schemes if s != to)
+            return {"scene_id": sid, "anchor_id": a["anchor_id"], "scheme_from": frm, "scheme_to": to, "fov_v_deg": 45.0}
+    return None
+
+
+def boundary_id(a: str, b: str) -> str:
+    return f"B-{a}-{b}"
+
+
+def diagnose(base: Path, ep: str) -> list[dict]:
+    """逐边界诊断(不写文件):变化标签 + 剧本转场句 + 导演声明 + continuity 判定 + 字卡文字候选 + 定场素材可用性。"""
+    base = Path(base)
+    sl = _shot_list(base, ep)
+    groups = [g for g in (sl.get("generation_groups") or []) if isinstance(g, dict) and g.get("group_id")]
+    shots = {s.get("shot_id"): s for s in (sl.get("shots") or []) if isinstance(s, dict)}
+    scenes = _scenes_index(base)
+    sp = _screenplay(base, ep)
+    dnotes = _director_notes(base, ep)
+    cont = _continuity(base, ep)
+    plates = _shot_plates(base, ep)
+    from check_generation_groups import transition_of  # noqa: E402  (code/ 已入 sys.path)
+    out = []
+    for i in range(1, len(groups)):
+        a, b = groups[i - 1], groups[i]
+        fa, fb = _first_shot(a, shots), _first_shot(b, shots)
+        ba, bb = _block(a), _block(b)
+        sc = a.get("scene_id") != b.get("scene_id")
+        tj = (a.get("time_of_day") or "") != (b.get("time_of_day") or "")
+        cast = set(a.get("characters_union") or []) != set(b.get("characters_union") or [])
+        light = (a.get("lighting_scheme_id") or "") != (b.get("lighting_scheme_id") or "")
+        edge = None
+        if bb and not ba:
+            edge = "enter"
+        elif ba and not bb:
+            edge = "exit"
+        elif ba and bb and ba.get("id") != bb.get("id"):
+            edge = "enter"
+        elif ba and bb:
+            edge = "inside"
+        spb = sp.get(str(b.get("scene_no") or fb.get("scene_no") or "")) or {}
+        spa = sp.get(str(a.get("scene_no") or fa.get("scene_no") or "")) or {}
+        hint = spa.get("transition_out") if (sc or (spa.get("transition_out") and a.get("scene_no") != b.get("scene_no"))) else None
+        ct = cont.get((a["group_id"], b["group_id"])) or {}
+        # 相对时间词:剧本场次头 > continuity 说明 > 无(派生只给时段词)
+        time_word, time_src = None, None
+        # 关系词只从「进入本组」的边界文本找:剧本场次头 > 上一场末转场句 > continuity 该边界说明;只在真跳时段 / 换场景时采纳
+        if tj or sc:
+            for text, srcname in ((spb.get("tod") or "", "screenplay"), (spb.get("header") or "", "screenplay"),
+                                  (hint or "", "screenplay"),
+                                  (" ".join(str(ct.get(k) or "") for k in ("anchor_basis", "notes")), "continuity")):
+                m = TIME_WORD_RE.search(text)
+                if m:
+                    time_word, time_src = m.group(1), srcname
+                    break
+        if not time_word and tj:
+            tod = str(b.get("time_of_day") or "").strip()
+            time_word, time_src = (TOD_WORD.get(tod, tod) or None), "derived"
+        loc = scene_display_name(base, b.get("scene_id") or "", scenes) if b.get("scene_id") else None
+        lines, srcs = [], []
+        if time_word:
+            lines.append(time_word)
+            srcs.append(time_src)
+        if loc:
+            lines.append(loc.replace("·", " · "))
+            srcs.append("scenes_index")
+        cls = ("block_enter" if edge == "enter" else "block_exit" if edge == "exit" else
+               "time_jump" if tj else "scene_change" if sc else "same_scene")
+        estab = establishing_source(base, ep, b, shots, plates)
+        tl = timelapse_source(base, b) if (tj and not sc) else None
+        out.append({
+            "id": boundary_id(a["group_id"], b["group_id"]), "from_group": a["group_id"], "to_group": b["group_id"],
+            "index": i, "boundary_shots": [(a.get("shots") or [None])[-1], (b.get("shots") or [None])[0]],
+            "diagnosis": {
+                "class": cls,
+                "scene_change": [a.get("scene_id"), b.get("scene_id")] if sc else None,
+                "scene_names": [scene_display_name(base, a.get("scene_id") or "", scenes), loc] if sc else None,
+                "time_jump": [a.get("time_of_day"), b.get("time_of_day")] if tj else None,
+                "time_word": time_word, "time_word_source": time_src,
+                "cast_change": cast, "light_jump": light,
+                "narrative_block_edge": edge, "narrative_block": (bb or ba) or None,
+                "screenplay_hint": hint, "screenplay_header": spb.get("header"),
+                "director_notes": dnotes,
+                "continuity": {k: ct.get(k) for k in ("id", "anchor", "boundary_type", "cast_change", "framing_change_ok")} if ct else None,
+                "first_shot_wide": _is_wide(fb), "first_shot_size": fb.get("size"),
+                "has_change": bool(sc or tj or cast or light or edge in ("enter", "exit")),
+            },
+            "card_lines": lines, "card_sources": srcs,
+            "establishing": estab, "timelapse": tl,
+            "current": transition_of(b) if b.get("transition_in") else {"type": "hard_cut"},
+            "current_raw": b.get("transition_in") if isinstance(b.get("transition_in"), dict) else None,
+            "to_duration_s": b.get("total_duration_s"), "from_duration_s": a.get("total_duration_s"),
+        })
+    return out
+
+
+# ---------------------------------------------------------------- proposals
+
+def _card_insert(lines, srcs, bg="black", dur=CARD_S, audio="mute", join_out="dip_black"):
+    return {"kind": "title_card", "duration_s": dur, "card": {"lines": list(lines), "sources": list(srcs), "bg": bg, "fade_s": 0.4},
+            "join_out": join_out, "join_out_s": CARD_JOIN_S, "audio": audio}
+
+
+def _estab_insert(src, dur=ESTAB_S, overlay=None, join_out="hard_cut"):
+    x = {"kind": "establishing", "duration_s": dur, "source": dict(src), "join_out": join_out, "audio": "mute"}
+    if join_out != "hard_cut":
+        x["join_out_s"] = CARD_JOIN_S
+    if overlay:
+        x["overlay_card"] = overlay
+    return x
+
+
+def _overlay(lines, srcs, dur=CARD_S, position="bottom_left"):
+    return {"lines": list(lines), "sources": list(srcs), "duration_s": dur, "position": position}
+
+
+def _reason(d: dict, what: str) -> str:
+    bits = []
+    if d.get("scene_names"):
+        bits.append(f"{d['scene_names'][0]} → {d['scene_names'][1]}")
+    if d.get("time_jump"):
+        bits.append(f"{d['time_jump'][0]} → {d['time_jump'][1]}")
+    if d.get("narrative_block_edge") in ("enter", "exit"):
+        nb = d.get("narrative_block") or {}
+        bits.append(("进入" if d["narrative_block_edge"] == "enter" else "离开") + f"叙事块 {nb.get('id') or ''}({nb.get('kind') or ''})")
+    if d.get("cast_change"):
+        bits.append("阵容变化")
+    if d.get("light_jump"):
+        bits.append("光线跳变")
+    return f"过场设计:{what};诊断 " + ("、".join(bits) or "无显著变化") + (f";剧本 {d['screenplay_hint']}" if d.get("screenplay_hint") else "")
+
+
+def _intent(d: dict) -> str:
+    e = d.get("narrative_block_edge")
+    kind = ((d.get("narrative_block") or {}).get("kind") or "")
+    if e == "enter":
+        return "dream_in" if kind == "dream" else "montage" if kind == "montage" else "flashback_in"
+    if e == "exit":
+        return "dream_out" if kind == "dream" else "flashback_out"
+    if d.get("time_jump"):
+        return "time_skip"
+    if d.get("scene_change"):
+        return "scene_change"
+    return "other"
+
+
+def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
+    """按生效模式给边界出主设计 + 候选;返回 (design_transition_in | None, alternatives[])。None = 不建议改(保持现状)。"""
+    d = b["diagnosis"]
+    mode = eff["mode"]
+    allow_cards = bool(eff.get("allow_cards"))
+    lines, srcs = b.get("card_lines") or [], b.get("card_sources") or []
+    have_lines = bool(lines)
+    estab, tl = b.get("establishing"), b.get("timelapse")
+    cur = b.get("current") or {"type": "hard_cut"}
+    intent = _intent(d)
+    alts: list[dict] = []
+
+    def keep_hard():
+        return {"type": "hard_cut", "intent": intent if intent != "other" else "other", "reason": _reason(d, "保持硬切"), "source": "transition_design"}
+
+    def card_only():
+        return {"type": "fade_black", "duration_s": 0.6, "intent": intent, "reason": _reason(d, "字卡"), "source": "transition_design",
+                "inserts": [_card_insert(lines, srcs)]}
+
+    def overlay_only():
+        return {"type": cur.get("type", "hard_cut") if cur.get("type") in ("hard_cut", "dissolve", "dip_white", "dip_black") else "hard_cut",
+                **({"duration_s": cur["duration_s"]} if cur.get("type") != "hard_cut" and cur.get("duration_s") else {}),
+                "intent": intent, "reason": _reason(d, "叠地点/时间字幕"), "source": "transition_design",
+                "overlay_card": _overlay(lines, srcs)}
+
+    def estab_only(overlay=False):
+        return {"type": "hard_cut", "intent": intent, "reason": _reason(d, "定场空镜" + ("+叠字" if overlay else "")), "source": "transition_design",
+                "inserts": [_estab_insert(estab, overlay=_overlay(lines, srcs) if (overlay and have_lines and allow_cards) else None)]}
+
+    def card_plus_estab():
+        return {"type": "fade_black", "duration_s": 0.6, "intent": intent, "reason": _reason(d, "字卡+定场"), "source": "transition_design",
+                "inserts": [_card_insert(lines, srcs, join_out="dissolve"), _estab_insert(estab)]}
+
+    def timelapse_only():
+        return {"type": "dissolve", "duration_s": 0.6, "intent": intent, "reason": _reason(d, "时光流转"), "source": "transition_design",
+                "inserts": [{"kind": "timelapse", "duration_s": 3.0, "source": dict(tl), "join_out": "dissolve", "join_out_s": 0.6, "audio": "mute"}]}
+
+    def block_in(with_overlay=True):
+        kind = ((d.get("narrative_block") or {}).get("kind") or "flashback")
+        t = {"type": "dip_white" if kind != "dream" else "dissolve", "duration_s": 1.0 if kind != "dream" else 0.8, "freeze_s": 0.3,
+             "intent": intent, "reason": _reason(d, "进叙事块:白场 + 定格" + ("+叠字" if with_overlay else "")), "source": "transition_design"}
+        if kind == "dream":
+            t["join"] = {"style": "blur_through"}
+        if with_overlay and have_lines and allow_cards:
+            t["overlay_card"] = _overlay(lines, srcs, dur=2.5)
+        return t
+
+    def block_out():
+        if cur.get("type") not in (None, "hard_cut") and cur.get("source") != "transition_design":
+            return None   # 导演已设计出口(match_cut 等)
+        return {"type": "hard_cut", "intent": intent, "reason": _reason(d, "出叙事块有意硬切"), "source": "transition_design"}
+
+    cls = d["class"]
+    if mode == "minimal":
+        return None, []
+    if mode == "custom":
+        opt = (eff.get("custom_map") or CUSTOM_MAP_DEFAULT).get(cls, "director")
+        table = {
+            "director": lambda: None, "hard_cut": keep_hard,
+            "dissolve": lambda: {"type": "dissolve", "duration_s": 0.6, "intent": intent, "reason": _reason(d, "叠化"), "source": "transition_design"},
+            "dip_black": lambda: {"type": "dip_black", "duration_s": 0.8, "intent": intent, "reason": _reason(d, "黑场"), "source": "transition_design"},
+            "dip_white": lambda: {"type": "dip_white", "duration_s": 0.8, "intent": intent, "reason": _reason(d, "白场"), "source": "transition_design"},
+            "title_card": lambda: card_only() if (have_lines and allow_cards) else keep_hard(),
+            "overlay_card": lambda: overlay_only() if (have_lines and allow_cards) else keep_hard(),
+            "establishing": lambda: estab_only() if estab else (overlay_only() if (have_lines and allow_cards) else keep_hard()),
+            "establishing_overlay": lambda: estab_only(True) if estab else (overlay_only() if (have_lines and allow_cards) else keep_hard()),
+            "timelapse": lambda: timelapse_only() if tl else (card_only() if (have_lines and allow_cards) else keep_hard()),
+            "bridge": lambda: keep_hard(),   # 生成式桥接归三期:先按硬切,候选里标注
+        }
+        design = table.get(opt, lambda: None)()
+        if design is not None:
+            alts.append({"label": "保持硬切", "transition_in": keep_hard()})
+        return design, alts
+    # classic / cinematic
+    design = None
+    if cls == "block_enter":
+        design = block_in(True)
+        alts.append({"label": "只白场不叠字", "transition_in": block_in(False)})
+        if have_lines and allow_cards:
+            alts.append({"label": "白底字卡", "transition_in": {**card_only(), "type": "fade_white", "inserts": [_card_insert(lines, srcs, bg="white", join_out="dip_white")]}})
+    elif cls == "block_exit":
+        design = block_out()
+        if design is None:
+            return None, []
+        if have_lines and allow_cards:
+            alts.append({"label": "叠「当下」地点字幕", "transition_in": overlay_only()})
+    elif cls == "time_jump":
+        if have_lines and allow_cards:
+            design = card_plus_estab() if (mode == "cinematic" and estab and not d.get("first_shot_wide")) else card_only()
+            alts.append({"label": "只叠字幕(不变长)", "transition_in": overlay_only()})
+            if tl:
+                alts.append({"label": "时光流转", "transition_in": timelapse_only()})
+            if estab and design.get("inserts") and len(design["inserts"]) == 1:
+                alts.append({"label": "字卡+定场", "transition_in": card_plus_estab()})
+        elif tl:
+            design = timelapse_only()
+        elif estab:
+            design = estab_only(False)
+        else:
+            design = {"type": "dip_black", "duration_s": 0.8, "intent": intent, "reason": _reason(d, "黑场(无字卡/定场素材)"), "source": "transition_design"}
+    elif cls == "scene_change":
+        overlay_ok = have_lines and allow_cards
+        if estab and not d.get("first_shot_wide"):
+            design = estab_only(mode == "cinematic" and overlay_ok)
+            if overlay_ok:
+                alts.append({"label": "只叠地点字幕(不变长)", "transition_in": overlay_only()})
+                alts.append({"label": "定场+叠字" if mode != "cinematic" else "只定场", "transition_in": estab_only(mode != "cinematic")})
+        elif overlay_ok:
+            design = overlay_only()
+            if estab:
+                alts.append({"label": "定场空镜(首镜已是远景,通常不必)", "transition_in": estab_only(False)})
+        elif estab:
+            design = estab_only(False)
+        else:
+            design = {"type": "dissolve", "duration_s": 0.5, "intent": intent, "reason": _reason(d, "叠化(无字卡/定场素材)"), "source": "transition_design"}
+    else:   # same_scene
+        if not d.get("has_change"):
+            return None, []
+        if cur.get("type") not in (None, "hard_cut"):
+            return None, []
+        design = None   # 同场景默认不动;给候选
+        alts.append({"label": "定格 0.2s 再硬切", "transition_in": {"type": "hard_cut", "freeze_s": 0.2, "intent": "other", "reason": _reason(d, "定格软化硬切"), "source": "transition_design"}})
+        alts.append({"label": "叠化 0.5s", "transition_in": {"type": "dissolve", "duration_s": 0.5, "intent": "other", "reason": _reason(d, "叠化"), "source": "transition_design"}})
+        return None, alts
+    if design is not None:
+        alts.append({"label": "保持硬切", "transition_in": keep_hard()})
+    return design, alts
+
+
+def propose(base: Path, ep: str, *, force: bool = False) -> dict:
+    """按生效模式重出全集建议,写 transition_design.json。已 accepted / rejected 的边界保留裁决(force=True 时也重出但保留 feedback);
+    shot_list 里非本模块来源的非硬切设计(导演清单)记为 status=accepted, source=shot_list。"""
+    base = Path(base)
+    eff = effective(base, ep)
+    old = load_design(base, ep) or {}
+    old_by = {b.get("id"): b for b in (old.get("boundaries") or []) if isinstance(b, dict)}
+    rows = []
+    for b in diagnose(base, ep):
+        prev = old_by.get(b["id"]) or {}
+        design, alts = _designs_for(b, eff)
+        cur = b.get("current") or {"type": "hard_cut"}
+        cur_raw = b.get("current_raw") or {}
+        entry = {**b, "alternatives": alts, "feedback": prev.get("feedback") or [],
+                 "prev_transition_in": prev.get("prev_transition_in", cur_raw if cur_raw.get("source") != "transition_design" else prev.get("prev_transition_in"))}
+        if cur_raw and cur_raw.get("source") not in ("transition_design",) and (cur.get("type") != "hard_cut" or cur_raw.get("reason")):
+            # 导演清单 / 后期页写入的现有设计:视为已定稿,建议只进候选
+            entry["design"] = dict(cur_raw)
+            entry["status"] = "accepted"
+            entry["source"] = "post_plan" if cur_raw.get("source") == "post_plan" else "shot_list"
+            if design is not None:
+                entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + alts
+        elif prev.get("status") in ("accepted", "rejected") and not force:
+            entry["design"] = prev.get("design")
+            entry["status"] = prev["status"]
+            entry["source"] = prev.get("source") or "user"
+            if design is not None and not any(a.get("transition_in") == design for a in entry["alternatives"]):
+                entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + entry["alternatives"]
+        elif design is None:
+            entry["design"] = None
+            entry["status"] = "none"
+            entry["source"] = "mode"
+        else:
+            entry["design"] = design
+            entry["status"] = "proposed"
+            entry["source"] = "mode"
+        rows.append(entry)
+    data = {"schema": SCHEMA, "episode": ep, "mode": eff["mode"], "mode_source": eff["mode_source"],
+            "settings": {k: eff.get(k) for k in ("allow_cards", "insert_budget_pct", "allow_generative", "establishing_first_shot")},
+            "written_at": dt.datetime.now().isoformat(timespec="seconds"), "boundaries": rows}
+    _write(design_path(base, ep), data)
+    return data
+
+
+def _find(data: dict, bid: str) -> dict:
+    for b in data.get("boundaries") or []:
+        if b.get("id") == bid:
+            return b
+    raise KeyError(f"边界 {bid} 不在设计表")
+
+
+def accept(base: Path, ep: str, bid: str, *, alt: int | None = None, transition_in: dict | None = None, by: str = "user") -> dict:
+    """接受主设计 / 第 alt 个候选 / 用户给的 transition_in,写回 shot_list。"""
+    data = load_design(base, ep)
+    if not data:
+        data = propose(base, ep)
+    b = _find(data, bid)
+    if transition_in is not None:
+        design = dict(transition_in)
+        design.setdefault("source", "transition_design")
+        b["source"] = "user"
+    elif alt is not None:
+        alts = b.get("alternatives") or []
+        if not (0 <= alt < len(alts)):
+            raise ValueError(f"候选序号 {alt} 越界(共 {len(alts)})")
+        design = dict(alts[alt]["transition_in"])
+        b["source"] = "user"
+    else:
+        if not b.get("design"):
+            raise ValueError("该边界没有主设计可接受")
+        design = dict(b["design"])
+        b["source"] = b.get("source") if b.get("source") in ("shot_list", "post_plan") else "user"
+    design.setdefault("source", "transition_design")
+    b["design"] = design
+    b["status"] = "accepted"
+    b["decided_at"] = dt.datetime.now().isoformat(timespec="seconds")
+    b["decided_by"] = by
+    _write(design_path(base, ep), data)
+    apply(base, ep)
+    return _find(load_design(base, ep), bid)
+
+
+def reject(base: Path, ep: str, bid: str, *, by: str = "user", note: str = "") -> dict:
+    """裁定保持硬切(写显式 hard_cut + reason;若原 shot_list 有导演设计则恢复原设计)。"""
+    data = load_design(base, ep) or propose(base, ep)
+    b = _find(data, bid)
+    prev = b.get("prev_transition_in")
+    if isinstance(prev, dict) and prev and prev.get("source") != "transition_design":
+        b["design"] = dict(prev)
+    else:
+        b["design"] = {"type": "hard_cut", "intent": "other", "reason": ("用户裁定保持硬切" + (":" + note if note else "")), "source": "transition_design"}
+    b["status"] = "rejected"
+    b["source"] = "user"
+    b["decided_at"] = dt.datetime.now().isoformat(timespec="seconds")
+    b["decided_by"] = by
+    _write(design_path(base, ep), data)
+    apply(base, ep)
+    return _find(load_design(base, ep), bid)
+
+
+def add_feedback(base: Path, ep: str, bid: str, text: str, by: str = "user") -> dict:
+    data = load_design(base, ep) or propose(base, ep)
+    b = _find(data, bid)
+    b.setdefault("feedback", []).append({"at": dt.datetime.now().isoformat(timespec="seconds"), "by": by, "text": text, "resolved": False})
+    _write(design_path(base, ep), data)
+    return b
+
+
+def set_card_lines(base: Path, ep: str, bid: str, lines: list[str]) -> dict:
+    """用户直接改字卡 / 叠字幕文字(source 改 user),已接受的同步写回 shot_list。"""
+    data = load_design(base, ep) or propose(base, ep)
+    b = _find(data, bid)
+    lines = [str(x).strip() for x in lines if str(x).strip()][:3]
+    b["card_lines"], b["card_sources"] = lines, ["user"] * len(lines)
+
+    def patch(t):
+        if not isinstance(t, dict):
+            return
+        if isinstance(t.get("overlay_card"), dict):
+            t["overlay_card"]["lines"], t["overlay_card"]["sources"] = list(lines), ["user"] * len(lines)
+        for x in t.get("inserts") or []:
+            if x.get("kind") == "title_card":
+                x.setdefault("card", {})["lines"] = list(lines)
+                x["card"]["sources"] = ["user"] * len(lines)
+            if isinstance(x.get("overlay_card"), dict):
+                x["overlay_card"]["lines"], x["overlay_card"]["sources"] = list(lines), ["user"] * len(lines)
+    patch(b.get("design"))
+    for a in b.get("alternatives") or []:
+        patch(a.get("transition_in"))
+    _write(design_path(base, ep), data)
+    if b.get("status") == "accepted":
+        apply(base, ep)
+    return b
+
+
+def apply(base: Path, ep: str) -> dict:
+    """设计表 → shot_list.transition_in 投影:accepted / rejected 的边界写 design;其余不动。json 读写保真(浮点不塌缩)。
+    返回 {written: [gid...], unchanged: n}。"""
+    base = Path(base)
+    data = load_design(base, ep)
+    if not data:
+        return {"written": [], "unchanged": 0}
+    slp = base / "directing" / ep / "shot_list.json"
+    sl = _read(slp, None)
+    if not isinstance(sl, dict):
+        raise FileNotFoundError(f"缺 {slp}")
+    by_to = {b["to_group"]: b for b in data["boundaries"] if b.get("status") in ("accepted", "rejected") and isinstance(b.get("design"), dict)}
+    written, changed = [], False
+    for g in sl.get("generation_groups") or []:
+        b = by_to.get(g.get("group_id"))
+        if not b:
+            continue
+        new = _clean_design(b["design"])
+        if g.get("transition_in") != new:
+            g["transition_in"] = new
+            changed = True
+        written.append(g["group_id"])
+    if changed:
+        sl.setdefault("_meta", {})["transition_design_applied_at"] = dt.datetime.now().isoformat(timespec="seconds")
+        _write(slp, sl)
+    return {"written": written, "unchanged": len(data["boundaries"]) - len(written), "changed": changed}
+
+
+def _clean_design(t: dict) -> dict:
+    """写回 shot_list 的 transition_in:去掉设计表私有键(sources 保留在 card 内供页面显示「推定」)。"""
+    out = {k: v for k, v in t.items() if not str(k).startswith("_") or k == "_post_prev"}
+    if out.get("type") == "hard_cut":
+        out.pop("duration_s", None)
+    return out
+
+
+# ---------------------------------------------------------------- check
+
+def check(base: Path, ep: str) -> tuple[bool, list[dict]]:
+    """transition_design_ok:设计表存在且契约合法(复用 transition_ok 的接缝/插入规则)、有变化的边界都已裁决(proposed=WARN,缺=FAIL,
+    minimal 模式降 WARN)、已接受的设计与 shot_list 一致(apply 幂等)。"""
+    from check_generation_groups import _check_inserts, _check_join, check_transitions, transition_of  # noqa: E402
+    base = Path(base)
+    eff = effective(base, ep)
+    items, fails = [], 0
+
+    def rec(name, ok, detail="", warn=False):
+        nonlocal fails
+        tag = "PASS" if ok else ("WARN" if warn else "FAIL")
+        if tag == "FAIL":
+            fails += 1
+        items.append({"check": name, "result": tag, "detail": detail})
+
+    data = load_design(base, ep)
+    if not data:
+        rec("transition_design_present", eff["mode"] == "minimal", f"缺 {DESIGN_FILE}(过场模式 {eff['mode']};minimal 不要求)", warn=eff["mode"] == "minimal")
+        return fails == 0, items
+    rec("transition_design_present", True, f"{len(data['boundaries'])} 个边界;模式 {data.get('mode')}({data.get('mode_source')})")
+    errs = []
+    for b in data["boundaries"]:
+        for label, t in ([("design", b.get("design"))] + [(f"alt{i}", a.get("transition_in")) for i, a in enumerate(b.get("alternatives") or [])]):
+            if not isinstance(t, dict):
+                continue
+            tn = transition_of({"transition_in": t})
+            errs += [f"{b['id']}/{label}: {e}" for e in _check_join(b["to_group"], tn)]
+            e2, _ = _check_inserts(b["to_group"], tn, False)
+            errs += [f"{b['id']}/{label}: {e}" for e in e2]
+    rec("transition_design_contract", not errs, f"设计/候选契约异常 {len(errs)}" + (f":{errs[:4]}" if errs else ""))
+    pend = [b["id"] for b in data["boundaries"] if b.get("status") == "proposed"]
+    need = [b["id"] for b in data["boundaries"] if (b.get("diagnosis") or {}).get("class") in ("scene_change", "time_jump", "block_enter", "block_exit")]
+    missing = [i for i in need if not any(b["id"] == i and b.get("status") in ("accepted", "rejected", "proposed", "none") for b in data["boundaries"])]
+    rec("transition_design_coverage", not pend and not missing,
+        f"换场景/跳时间/叙事块边界 {len(need)};待裁决 {len(pend)}" + (f" {pend[:6]}" if pend else "") + (f";缺条目 {missing}" if missing else ""),
+        warn=bool(pend) and not missing or eff["mode"] == "minimal")
+    sl = _shot_list(base, ep)
+    by = {g.get("group_id"): g for g in (sl.get("generation_groups") or []) if isinstance(g, dict)}
+    mism = [b["id"] for b in data["boundaries"] if b.get("status") in ("accepted", "rejected") and isinstance(b.get("design"), dict)
+            and (by.get(b["to_group"]) or {}).get("transition_in") != _clean_design(b["design"])]
+    rec("transition_design_applied", not mism, f"已裁决 {sum(1 for b in data['boundaries'] if b.get('status') in ('accepted', 'rejected'))} 处" + (f";shot_list 未同步 {mism[:4]}(跑 apply)" if mism else ""))
+    slerr = check_transitions(sl, eff["insert_budget_pct"]) if sl else []
+    slerr = [e for e in slerr if "transition_" in e]
+    rec("transition_ok", not slerr, f"shot_list transition_ok:{len(slerr)} 条" + (f" {slerr[:3]}" if slerr else ""))
+    return fails == 0, items
+
+
+# ---------------------------------------------------------------- rendering helpers(build 与页面预览共用)
+
+FONT_CANDIDATES = [
+    "/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/Hiragino Sans GB.ttc", "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", "C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/msyh.ttc",
+]
+
+
+def find_font(size: int, prefer_serif: bool = True):
+    from PIL import ImageFont
+    cands = [str(p) for p in sorted((ROOT / "data" / "fonts").glob("*")) if p.suffix.lower() in (".ttf", ".otf", ".ttc")]
+    order = FONT_CANDIDATES if prefer_serif else [f for f in FONT_CANDIDATES if "Songti" not in f and "Serif" not in f]
+    for f in cands + order:
+        if Path(f).is_file():
+            try:
+                return ImageFont.truetype(f, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def _text_w(draw, text, font):
+    l, t, r, b = draw.textbbox((0, 0), text, font=font)
+    return r - l, b - t
+
+
+def render_card_png(lines: list[str], width: int, height: int, out: Path, *, bg: str = "black", color: str | None = None,
+                    bg_image: Path | None = None) -> dict:
+    """字幕卡:黑/白/纯色/前组尾帧模糊底 + 居中 1–3 行(首行大字、余行小字、字间距),返回 {file, text_bbox, contrast}。"""
+    from PIL import Image, ImageDraw, ImageFilter
+    lines = [str(x) for x in lines if str(x).strip()][:3]
+    if bg == "blur_prev" and bg_image and Path(bg_image).is_file():
+        im = Image.open(bg_image).convert("RGB").resize((width, height)).filter(ImageFilter.GaussianBlur(max(8, width // 60)))
+        dark = Image.new("RGB", (width, height), (0, 0, 0))
+        im = Image.blend(im, dark, 0.55)
+        fg = (245, 245, 245)
+    elif bg == "white":
+        im = Image.new("RGB", (width, height), (245, 243, 238))
+        fg = (28, 28, 28)
+    elif bg == "color":
+        im = Image.new("RGB", (width, height), _hex(color, (20, 24, 34)))
+        fg = (235, 235, 235)
+    else:
+        im = Image.new("RGB", (width, height), (0, 0, 0))
+        fg = (235, 235, 235)
+    draw = ImageDraw.Draw(im)
+    sizes = [max(18, height // 12)] + [max(14, height // 20)] * 2
+    fonts = [find_font(s) for s in sizes[:len(lines)]]
+    gaps = [int(height * 0.045)] * len(lines)
+    heights = []
+    for ln, f in zip(lines, fonts):
+        heights.append(_text_w(draw, ln, f)[1])
+    total = sum(heights) + sum(gaps[:-1]) if lines else 0
+    y = (height - total) // 2
+    bbox = None
+    for i, (ln, f) in enumerate(zip(lines, fonts)):
+        spaced = " ".join(ln) if (i == 0 and len(ln) <= 8 and re.search(r"[\u4e00-\u9fff]", ln)) else ln
+        w, h = _text_w(draw, spaced, f)
+        x = (width - w) // 2
+        draw.text((x, y), spaced, font=f, fill=fg)
+        bb = (x, y, x + w, y + h)
+        bbox = bb if bbox is None else (min(bbox[0], bb[0]), min(bbox[1], bb[1]), max(bbox[2], bb[2]), max(bbox[3], bb[3]))
+        y += h + gaps[i]
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    im.save(out, "PNG")
+    lum_bg = _lum(im.getpixel((8, 8)))
+    lum_fg = _lum(fg)
+    contrast = (max(lum_bg, lum_fg) + 0.05) / (min(lum_bg, lum_fg) + 0.05)
+    safe = bbox is not None and bbox[0] >= width * 0.05 and bbox[2] <= width * 0.95 and bbox[1] >= height * 0.05 and bbox[3] <= height * 0.95
+    return {"file": str(out), "text_bbox": bbox, "contrast": round(contrast, 2), "in_safe_area": bool(safe), "lines": lines}
+
+
+def render_overlay_png(lines: list[str], width: int, height: int, out: Path, *, position: str = "bottom_left") -> dict:
+    """叠字幕(透明 RGBA):白字 + 深描边 + 软阴影,位置 bottom_left / bottom_right / center / top_*。"""
+    from PIL import Image, ImageDraw, ImageFilter
+    lines = [str(x) for x in lines if str(x).strip()][:3]
+    im = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    sizes = [max(16, height // 20)] + [max(13, height // 28)] * 2
+    fonts = [find_font(s, prefer_serif=False) for s in sizes[:len(lines)]]
+    draw = ImageDraw.Draw(im)
+    dims = [_text_w(draw, ln, f) for ln, f in zip(lines, fonts)]
+    gap = int(height * 0.018)
+    block_w = max((d[0] for d in dims), default=0)
+    block_h = sum(d[1] for d in dims) + gap * max(0, len(lines) - 1)
+    mx, my = int(width * 0.06), int(height * 0.08)
+    if position == "center":
+        x0, y0 = (width - block_w) // 2, (height - block_h) // 2
+    else:
+        x0 = mx if position.endswith("left") else width - mx - block_w
+        y0 = my if position.startswith("top") else height - my - block_h
+    shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shadow)
+    def _x(w):
+        return x0 if position.endswith("left") else (x0 + block_w - w if position.endswith("right") else x0 + (block_w - w) // 2)
+    y = y0
+    for ln, f, (w, h) in zip(lines, fonts, dims):
+        sd.text((_x(w) + 3, y + 3), ln, font=f, fill=(0, 0, 0, 170))
+        y += h + gap
+    shadow = shadow.filter(ImageFilter.GaussianBlur(4))
+    im = Image.alpha_composite(im, shadow)
+    draw = ImageDraw.Draw(im)
+    y = y0
+    for ln, f, (w, h) in zip(lines, fonts, dims):
+        draw.text((_x(w), y), ln, font=f, fill=(250, 250, 250, 255), stroke_width=max(1, height // 360), stroke_fill=(10, 10, 10, 220))
+        y += h + gap
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    im.save(out, "PNG")
+    return {"file": str(out), "text_bbox": (x0, y0, x0 + block_w, y0 + block_h), "lines": lines}
+
+
+def _hex(c, default):
+    try:
+        c = str(c or "").lstrip("#")
+        return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) if len(c) == 6 else default
+    except ValueError:
+        return default
+
+
+def _lum(rgb):
+    def ch(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = rgb[:3]
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+
+def _pano_load(base: Path, sid: str, anchor_id: str, scheme: str):
+    """全景图(RGB ndarray)+ 锚点位置 + 全景 yaw0(弧度;与 scene_panos._sample_pano 同约定)。"""
+    import cv2
+    import numpy as np
+    pdir = Path(base) / "assets" / "concepts" / "scenes" / sid / "panos" / anchor_id
+    idx = _panos_index(base, sid)
+    anchor = next((a for a in idx.get("anchors") or [] if a.get("anchor_id") == anchor_id), None)
+    if not anchor:
+        raise FileNotFoundError(f"{sid}/{anchor_id}: 锚点不在 panos/index.json")
+    rec = (anchor.get("panos") or {}).get(scheme) or {}
+    f = pdir / (rec.get("file") or f"{scheme}.png")
+    if not f.is_file():
+        raise FileNotFoundError(f"{sid}/{anchor_id}: 缺全景 {f.name}")
+    pano = cv2.cvtColor(cv2.imread(str(f), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    drec = _read(pdir / "depth_pano.json", {}) or {}
+    cam = (drec.get("camera") or {})
+    yaw0 = math.radians(float(cam.get("yaw_deg", anchor.get("yaw_deg") or 0) or 0))
+    pos = np.array(cam.get("position") or anchor.get("position") or [0, 1.6, 0], dtype=np.float64)
+    return pano, pos, yaw0, f
+
+
+def pano_view(base: Path, sid: str, anchor_id: str, scheme: str, look_dir, width: int, height: int, *, fov_v_deg: float = 45.0,
+              yaw_offset_deg: float = 0.0, pitch_deg: float = 0.0, _cache: dict | None = None):
+    """从锚点位置看 look_dir(世界方向,可绕 y 转 yaw_offset)的透视视窗(RGB ndarray)。纯球面采样(机位 = 锚点,无视差,不需白模深度)。"""
+    import cv2
+    import numpy as np
+    try:
+        from modules.scene_panos import _view_rays  # noqa: E402
+    except ImportError:
+        from scene_panos import _view_rays  # noqa: E402  code/ CLI:_common 已把 modules/ 入 sys.path
+    key = (sid, anchor_id, scheme)
+    if _cache is not None and key in _cache:
+        pano, pos, yaw0, _ = _cache[key]
+    else:
+        pano, pos, yaw0, _ = _pano_load(base, sid, anchor_id, scheme)
+        if _cache is not None:
+            _cache[key] = (pano, pos, yaw0, None)
+    d = np.array(look_dir if look_dir is not None else [math.sin(yaw0), 0.0, -math.cos(yaw0)], dtype=np.float64)
+    d[1] = 0.0
+    if np.linalg.norm(d) < 1e-6:
+        d = np.array([0.0, 0.0, -1.0])
+    d /= np.linalg.norm(d)
+    a = math.radians(yaw_offset_deg)
+    d = np.array([d[0] * math.cos(a) + d[2] * math.sin(a), 0.0, -d[0] * math.sin(a) + d[2] * math.cos(a)])
+    d[1] = math.tan(math.radians(pitch_deg))
+    d /= np.linalg.norm(d)
+    cam = {"position": pos.tolist(), "target": (pos + d).tolist(), "fov_v_deg": fov_v_deg}
+    _, dirs = _view_rays(cam, width, height)
+    H, W = pano.shape[:2]
+    cy, sy = math.cos(yaw0), math.sin(yaw0)
+    lx = cy * dirs[:, 0] - sy * dirs[:, 2]
+    lz = sy * dirs[:, 0] + cy * dirs[:, 2]
+    ly = dirs[:, 1]
+    theta = np.arctan2(lx, -lz)
+    phi = np.arccos(np.clip(ly, -1, 1))
+    u = ((theta + np.pi) / (2 * np.pi) * W).astype(np.float32).reshape(height, width)
+    v = (phi / np.pi * H).astype(np.float32).reshape(height, width)
+    img = cv2.remap(pano, u, v, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP)
+    return img
+
+
+def pano_sweep_frames(base: Path, src: dict, width: int, height: int, n: int, out_dir: Path) -> list[Path]:
+    """定场空镜帧序列:sweep_deg 度横摇(居中于 look_dir),轻微推进(fov 收 6%)。写 out_dir/f%04d.jpg。"""
+    import cv2
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for p in out_dir.glob("f*.jpg"):
+        p.unlink()
+    sweep = float(src.get("sweep_deg") or 16.0)
+    fov = float(src.get("fov_v_deg") or 45.0)
+    cache: dict = {}
+    files = []
+    for i in range(max(1, n)):
+        t = i / max(1, n - 1)
+        e = t * t * (3 - 2 * t)          # smoothstep
+        img = pano_view(base, src["scene_id"], src["anchor_id"], src["scheme"], src.get("look_dir"), width, height,
+                        fov_v_deg=fov * (1 - 0.06 * e), yaw_offset_deg=-sweep / 2 + sweep * e, pitch_deg=float(src.get("pitch_deg") or 2.0), _cache=cache)
+        f = out_dir / f"f{i:04d}.jpg"
+        cv2.imwrite(str(f), cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 94])
+        files.append(f)
+    return files
+
+
+def pano_still(base: Path, src: dict, width: int, height: int, out: Path, scheme: str | None = None) -> Path:
+    import cv2
+    img = pano_view(base, src["scene_id"], src["anchor_id"], scheme or src["scheme"], src.get("look_dir"), width, height,
+                    fov_v_deg=float(src.get("fov_v_deg") or 45.0), pitch_deg=float(src.get("pitch_deg") or 2.0))
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out), cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return out
+
+
+def source_fingerprint(base: Path, t: dict) -> str:
+    """设计 + 素材指纹(素材文件 size/mtime):任一变化 = 已渲染段过期。"""
+    h = hashlib.sha256(json.dumps(t, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    for x in (t.get("inserts") or []):
+        s = x.get("source") or {}
+        paths = []
+        if x.get("kind") == "establishing" and s.get("mode") == "pano_sweep":
+            paths.append(Path(base) / "assets" / "concepts" / "scenes" / str(s.get("scene_id")) / "panos" / str(s.get("anchor_id")) / f"{s.get('scheme')}.png")
+        elif x.get("kind") == "establishing" and s.get("file"):
+            paths.append(Path(base) / s["file"])
+        elif x.get("kind") == "timelapse":
+            for sch in (s.get("scheme_from"), s.get("scheme_to")):
+                paths.append(Path(base) / "assets" / "concepts" / "scenes" / str(s.get("scene_id")) / "panos" / str(s.get("anchor_id")) / f"{sch}.png")
+        elif x.get("kind") == "bridge" and x.get("file"):
+            paths.append(Path(base) / x["file"])
+        for p in paths:
+            try:
+                st = p.stat()
+                h.update(f"{p.name}:{st.st_size}:{int(st.st_mtime)}".encode())
+            except OSError:
+                h.update(f"{p.name}:missing".encode())
+    return h.hexdigest()[:16]
+
+
+# ---------------------------------------------------------------- page payload
+
+def payload(base: Path, ep: str) -> dict:
+    """分镜预览页「过场卡」数据:设计表(无则即时诊断、status=undecided)+ 当前 shot_list 值 + 渲染台账状态 + 预览/缩略图 URL + 预算汇总。"""
+    base = Path(base)
+    eff = effective(base, ep)
+    data = load_design(base, ep)
+    sl = _shot_list(base, ep)
+    by = {g.get("group_id"): g for g in (sl.get("generation_groups") or []) if isinstance(g, dict)}
+    budget_s = float(sl.get("budget_s") or sl.get("total_duration_s") or 0)
+    ledger = _read(base / "edit" / ep / "transitions_render.json", {}) or {}
+    led_by = {(e.get("from_group"), e.get("to_group")): e for e in (ledger.get("transitions") or []) if isinstance(e, dict)}
+    builds = {b.get("id"): b for b in (ledger.get("inserts") or []) if isinstance(b, dict)}
+    rows = data["boundaries"] if data else diagnose(base, ep)
+    from check_generation_groups import insert_total_s, transition_of  # noqa: E402
+    out_rows, ins_total = [], 0.0
+    tdir = base / "edit" / ep / "transitions"
+
+    def url(rel: Path | str | None):
+        if not rel:
+            return None
+        p = base / rel if not Path(str(rel)).is_absolute() else Path(rel)
+        if not p.is_file():
+            return None
+        return f"/projects/{base.name}/{p.relative_to(base).as_posix()}?v={int(p.stat().st_mtime)}"
+
+    for b in rows:
+        g = by.get(b["to_group"]) or {}
+        cur = transition_of(g) if g.get("transition_in") else {"type": "hard_cut"}
+        ins_total += insert_total_s(cur)
+        bid = b["id"]
+        led = led_by.get((b["from_group"], b["to_group"])) or {}
+        bd = tdir / bid
+        meta = _read(bd / "meta.json", {}) or {}
+        fp_now = source_fingerprint(base, cur)
+        built = bool(meta.get("fingerprint")) and meta.get("fingerprint") == fp_now
+        rendered = bool(led) and led.get("fingerprint") == fp_now if led.get("fingerprint") else bool(led) and not (cur.get("inserts") or cur.get("overlay_card"))
+        status = b.get("status") or "undecided"
+        if status == "accepted" and (cur.get("inserts") or cur.get("overlay_card") or cur.get("type") != "hard_cut"):
+            render_state = "rendered" if (led and rendered) else ("built" if built else "pending")
+        else:
+            render_state = None
+        stale = bool(meta.get("fingerprint")) and meta.get("fingerprint") != fp_now
+        thumbs = {
+            "prev_tail": url(f"assets/clips/{ep}/{b['from_group']}.last_frame.png"),
+            "next_head": url(f"edit/{ep}/transitions/thumbs/{b['to_group']}.first.jpg"),
+            "card": url(bd / "card.png") if (bd / "card.png").is_file() else None,
+            "overlay": url(bd / "overlay.png") if (bd / "overlay.png").is_file() else None,
+            "establishing": url(bd / "establishing.jpg") if (bd / "establishing.jpg").is_file() else None,
+            "preview": url(bd / "preview.mp4") if (bd / "preview.mp4").is_file() else None,
+        }
+        out_rows.append({
+            "id": bid, "from_group": b["from_group"], "to_group": b["to_group"], "boundary_shots": b.get("boundary_shots"),
+            "diagnosis": b.get("diagnosis"), "card_lines": b.get("card_lines"), "card_sources": b.get("card_sources"),
+            "establishing_available": bool(b.get("establishing")), "timelapse_available": bool(b.get("timelapse")),
+            "design": b.get("design"), "alternatives": b.get("alternatives") or [], "status": status, "source": b.get("source"),
+            "feedback": b.get("feedback") or [], "current": cur, "insert_total_s": round(insert_total_s(cur), 3),
+            "render_state": render_state, "stale": stale, "ledger": {k: led.get(k) for k in ("type", "duration_s", "cut_time_s", "renders_as")} if led else None,
+            "thumbs": thumbs, "preview_meta": meta.get("preview") or None,
+        })
+    n_change = sum(1 for r in out_rows if (r.get("diagnosis") or {}).get("has_change"))
+    n_non_hard = sum(1 for r in out_rows if (r.get("current") or {}).get("type") != "hard_cut" or (r.get("current") or {}).get("inserts") or (r.get("current") or {}).get("overlay_card"))
+    return {
+        "ep": ep, "settings": eff, "designed": bool(data), "design_mode": data.get("mode") if data else None,
+        "design_written_at": data.get("written_at") if data else None,
+        "summary": {"boundaries": len(out_rows), "with_change": n_change, "non_hard_cut": n_non_hard,
+                    "pending": sum(1 for r in out_rows if r["status"] == "proposed"),
+                    "insert_total_s": round(ins_total, 2), "budget_s": round(budget_s * eff["insert_budget_pct"] / 100.0, 2),
+                    "episode_budget_s": budget_s},
+        "boundaries": out_rows,
+    }
+
+
+def ensure_head_thumbs(base: Path, ep: str, groups: list[str] | None = None) -> int:
+    """组视频首帧缩略(edit/<ep>/transitions/thumbs/<gid>.first.jpg,按 clip mtime 复用),供过场卡设计链显示本组首帧。"""
+    import subprocess
+    base = Path(base)
+    cdir = base / "assets" / "clips" / ep
+    tdir = base / "edit" / ep / "transitions" / "thumbs"
+    n = 0
+    gids = groups if groups is not None else sorted(p.stem for p in cdir.glob("grp*.mp4")) if cdir.is_dir() else []
+    for gid in gids:
+        clip = cdir / f"{gid}.mp4"
+        out = tdir / f"{gid}.first.jpg"
+        if not clip.is_file():
+            continue
+        if out.is_file() and out.stat().st_mtime >= clip.stat().st_mtime:
+            continue
+        tdir.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(clip), "-frames:v", "1", "-vf", "scale=480:-2", str(out)],
+                           check=True, capture_output=True, timeout=60)
+            n += 1
+        except Exception:
+            continue
+    return n

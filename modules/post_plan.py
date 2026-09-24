@@ -160,14 +160,17 @@ KINDS: list[dict] = [
                 {"key": "type", "label": "类型", "type": "select", "options": ["headline", "keyword", "location"], "default": "keyword"}],
      "hint": "成片时生效,出成片前由花字工位按 captions.json 契约落地(须开启 output.caption_enabled)"},
     {"id": "transition", "section": "pack", "label": "组间转场(入)", "exec": "record", "scopes": ["group"],
-     "params": [{"key": "type", "label": "类型", "type": "select", "options": ["hard_cut", "dissolve", "dip_black", "dip_white", "fade_black"], "default": "dissolve"},
+     "params": [{"key": "type", "label": "类型", "type": "select", "options": ["hard_cut", "dissolve", "dip_black", "dip_white", "fade_black", "fade_white"], "default": "dissolve"},
+                # 接缝风格(2026-09-24 过场设计):只配 dissolve,把 xfade=fade 换成风格族模式;字卡/定场/时光流转等插入段在分镜预览页「过场卡」设计
+                {"key": "style", "label": "接缝风格(仅叠化)", "type": "select", "options": ["", "wipe", "blur_through", "zoom_through", "iris", "pixelize", "fadegrays"], "default": ""},
                 {"key": "duration_s", "label": "时长 s", "type": "range", "min": 0.2, "max": 1.5, "step": 0.1, "default": 0.6},
                 # 节奏垫片(2026-09-17,§9C):本组前黑场停留 / 前组尾帧定格,组边界插入帧,成片变长,声轨字幕按 timemap 平移
                 {"key": "freeze_s", "label": "前组尾帧定格 s", "type": "range", "min": 0, "max": 3, "step": 0.04, "default": 0},
                 {"key": "hold_s", "label": "黑场停留 s", "type": "range", "min": 0, "max": 3, "step": 0.04, "default": 0},
                 {"key": "hold_audio", "label": "黑场声音", "type": "select", "options": ["sustain", "fade", "mute"], "default": "sustain"}],
      "hint": "提交即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲;定格/黑场停留会插入帧使成片变长,"
-             "外挂声轨与字幕由 finalize_episode 按同一张 timemap 平移(黑场停留只配 hard_cut/dip_black/fade_black)"},
+             "外挂声轨与字幕由 finalize_episode 按同一张 timemap 平移(黑场停留只配 hard_cut/dip_black/fade_black);"
+             "字卡 / 定场空镜 / 时光流转等插入段请到分镜预览页「过场卡」设计(本处方提交会保留该组已有的插入段设计)"},
     # ---- 音效与声音 ----
     {"id": "ambience", "section": "sound", "label": "环境声", "exec": "record", "scopes": ["scene", "episode"],
      "params": [{"key": "desc", "label": "描述", "type": "text", "default": ""},
@@ -635,6 +638,13 @@ def write_transition_in(base: Path, ep: str, recipe: dict, remove: bool = False)
                         "recipe_id": recipe["id"], "_post_prev": prev if isinstance(prev, dict) else {}}
                 if ty != "hard_cut":
                     t_in["duration_s"] = float(p.get("duration_s") or 0.6)
+                if ty == "dissolve" and str(p.get("style") or ""):
+                    t_in["join"] = {"style": str(p["style"])}
+                # 过场设计(2026-09-24):分镜预览页接受的插入段 / 叠字幕不因后期页改接缝而丢
+                cur = g.get("transition_in") if isinstance(g.get("transition_in"), dict) else {}
+                for k in ("inserts", "overlay_card"):
+                    if cur.get(k):
+                        t_in[k] = cur[k]
                 # 节奏垫片:0 不写字段(与 transition_ok 契约一致);黑场停留只配「到黑」类型
                 fz, hd = float(p.get("freeze_s") or 0), float(p.get("hold_s") or 0)
                 if fz > 0:

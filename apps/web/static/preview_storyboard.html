@@ -154,6 +154,33 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .nomedia{color:var(--dim);font-size:12px;align-self:center}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
 .grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:clip}
+/* 过场卡(2026-09-24,docs/transition_design.md):每两个生成组之间一张;有变化的边界展开,无变化且硬切折叠成细线 */
+.trline{height:0;border-top:1px dashed var(--border);margin:6px 24px;position:relative}
+.trline::after{content:'✂';position:absolute;right:0;top:-9px;font-size:10px;color:var(--dim);background:var(--bg,#111);padding:0 4px}
+.trans{border:1px dashed var(--accent,#1d6f7a);border-radius:10px;margin:10px 0;padding:8px 12px;background:color-mix(in srgb,var(--accent,#1d6f7a) 6%,transparent);font-size:12.5px}
+.trans .trhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.trans .trhead .trt{font-weight:600;color:var(--accent,#1d6f7a)}
+.trans .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
+.trans .tag.warn{color:var(--yellow);border-color:var(--yellow)}
+.trans .tag.ok{color:var(--green);border-color:var(--green)}
+.trans .trdiag{color:var(--dim);margin:4px 0;line-height:1.6}
+.trans .trchain{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+.trans .trchain .seg{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--dim)}
+.trans .trchain .seg img,.trans .trchain .seg .ph{height:64px;width:114px;object-fit:cover;border-radius:5px;background:#000;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;color:#ccc;padding:2px;box-sizing:border-box;cursor:zoom-in}
+.trans .trchain .seg .ph.card{background:#000;color:#eee;white-space:pre-line;line-height:1.3}
+.trans .trchain .seg .ph.card.white{background:#f2f0eb;color:#222}
+.trans .trchain .join{color:var(--accent,#1d6f7a);font-size:11px;white-space:nowrap;text-align:center}
+.trans .trchain .join b{display:block;font-size:14px}
+.trans .tracts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.trans .tracts select{font-size:12px;max-width:260px}
+.trans .trprev video{max-width:480px;width:100%;border-radius:6px;display:block;margin-top:6px}
+.trans .trfb{color:var(--dim);font-size:11.5px;margin-top:4px}
+.trans .tredit input{width:260px;font-size:12px;margin:2px 4px 2px 0}
+#trsum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--dim);margin:6px 0 10px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+#trsum b{color:var(--text)}
+#trsum .bar{display:inline-block;width:120px;height:6px;border-radius:3px;background:var(--border);overflow:hidden;vertical-align:middle}
+#trsum .bar i{display:block;height:100%;background:var(--accent,#1d6f7a)}
+#trsum .bar i.over{background:var(--yellow)}
 .grp>.ghead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:var(--panel);padding:8px 12px}
 .grp>.ghead .gid{font-weight:600;color:var(--purple)}
 .grp>.ghead .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
@@ -1075,7 +1102,7 @@ try{
       if(ev.project!==($('#project').value.trim()||'demo'))return;
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
-      else if(ev.type==='prompt_skill'||ev.type==='group_settings'||ev.type==='episode_settings')load(true);
+      else if(ev.type==='prompt_skill'||ev.type==='group_settings'||ev.type==='episode_settings'||ev.type==='transition_design')load(true);
     }catch(_){}
   };
 }catch(_){}
@@ -1420,6 +1447,168 @@ function gsChip(g){
     I18N.f('本组提示词技能:{s}({mode})',{s:gs.skill_dir||t('不套用'),mode:gs.skill_mode}),gs.warning?'⚠️ '+gs.warning:''].filter(Boolean).join('\n');
   return `<span class="tag gsov" style="${gs.warning?'color:var(--yellow)':''}" title="${esc(tip)}">🎛 ${esc(parts.join(' · ')||t('组级设定'))}</span>`;
 }
+/* ---------- 过场卡(2026-09-24,docs/transition_design.md §5):数据 d.transitions(services/runtime/core._transitions_payload →
+   modules/transition_design.payload);每两组之间一张,插在接收组卡之前。有变化的边界展开,无变化且硬切折叠成细线。
+   操作:▶ 出预览(宿主 CLI render_transitions.py preview,同步等)· ✔ 接受(主设计或下拉选中的候选)· ⏭ 保持硬切 · ✎ 改字 · ✏️ 反馈(EditPopup data-kind=transition)
+   顶部汇总条 #trsum:本集模式下拉(集级覆盖 → 重出建议)· 边界/非硬切/待裁决计数 · 插入时长/预算条 · 出建议 */
+const TR_KIND={title_card:'字卡',establishing:'定场空镜',timelapse:'时光流转',bridge:'生成式桥接'};
+const TR_CLASS={scene_change:'换场景',time_jump:'跳时间',block_enter:'进叙事块',block_exit:'出叙事块',same_scene:'同场景'};
+const TR_STATUS={proposed:'建议',accepted:'已定稿',rejected:'已裁硬切',none:'无需',undecided:'未出建议'};
+const TR_RENDER={pending:'待渲染(出成片时)',built:'已构建·待渲染',rendered:'已渲染'};
+const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'自定义'};
+const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
+const TR_SRC={screenplay:'剧本',continuity:'连戏表',scenes_index:'场景库',derived:'推定',user:'用户'};
+let TR_BY_TO={};
+function trJoinLabel(tr){
+  if(!tr)return t('硬切');
+  const ty=tr.type||'hard_cut';
+  let s=ty==='hard_cut'?t('硬切'):t(TR_LABEL[ty]||ty);
+  if(tr.join&&tr.join.style)s+='·'+t(TR_JOIN_STYLE[tr.join.style]||tr.join.style);
+  if(tr.duration_s)s+=' '+tr.duration_s+'s';
+  const pads=[];if(tr.freeze_s)pads.push(t('定格')+' '+tr.freeze_s+'s');if(tr.hold_s)pads.push(t('黑场')+' '+tr.hold_s+'s');
+  return s+(pads.length?' + '+pads.join(' + '):'');
+}
+function trInsertSeg(x,tr,idx){
+  const th=tr.thumbs||{};
+  if(x.kind==='title_card'){
+    const c=x.card||{},lines=(c.lines||[]);
+    const img=idx===0&&th.card?`<img src="${esc(th.card)}" onclick="zoom(this.src)">`:`<div class="ph card ${c.bg==='white'?'white':''}">${esc(lines.join('\n'))}</div>`;
+    const srcs=(c.sources||[]).map(s=>TR_SRC[s]?t(TR_SRC[s]):s).filter(Boolean);
+    return `<div class="seg">${img}<span>${t('字卡')} ${x.duration_s}s${srcs.includes(t('推定'))?' · <span class="tag warn">'+t('推定')+'</span>':''}</span></div>`;
+  }
+  if(x.kind==='establishing'){
+    const s=x.source||{};
+    const img=th.establishing?`<img src="${esc(th.establishing)}" onclick="zoom(this.src)">`:`<div class="ph">${t('定场空镜')}<br>${esc(s.scene_id||'')}${s.anchor_id?' / '+esc(s.anchor_id):''}<br>${esc(s.mode||'')}</div>`;
+    return `<div class="seg">${img}<span>${t('定场空镜')} ${x.duration_s}s${x.overlay_card?' · '+t('叠字'):''}</span></div>`;
+  }
+  if(x.kind==='timelapse'){const s=x.source||{};return `<div class="seg"><div class="ph">${t('时光流转')}<br>${esc(s.scheme_from||'')} → ${esc(s.scheme_to||'')}</div><span>${t('时光流转')} ${x.duration_s}s</span></div>`;}
+  return `<div class="seg"><div class="ph">${t(TR_KIND[x.kind]||x.kind)}<br>${t('待生成')}</div><span>${t(TR_KIND[x.kind]||x.kind)} ${x.duration_s}s</span></div>`;
+}
+function trChainHtml(tr,design){
+  const th=tr.thumbs||{},d=design||{type:'hard_cut'};
+  const prev=th.prev_tail?`<img src="${esc(th.prev_tail)}" onclick="zoom(this.src)">`:`<div class="ph">${esc(tr.from_group)}<br>${t('尾帧未出')}</div>`;
+  const next=th.next_head?`<img src="${esc(th.next_head)}" onclick="zoom(this.src)">`:`<div class="ph">${esc(tr.to_group)}<br>${t('首帧未出')}</div>`;
+  let h=`<div class="seg">${prev}<span>${esc(tr.from_group)} ${t('尾')}</span></div>`;
+  h+=`<div class="join"><b>⟶</b>${esc(trJoinLabel(d))}</div>`;
+  (d.inserts||[]).forEach((x,i)=>{
+    h+=trInsertSeg(x,tr,i);
+    const jo=x.join_out&&x.join_out!=='hard_cut'?t(TR_LABEL[x.join_out]||x.join_out)+(x.join_out_s?' '+x.join_out_s+'s':''):t('硬切');
+    h+=`<div class="join"><b>⟶</b>${esc(jo)}</div>`;
+  });
+  const ov=d.overlay_card?`<span class="tag" title="${esc((d.overlay_card.lines||[]).join(' / '))}">${t('叠字')} ${d.overlay_card.duration_s}s${(d.overlay_card.sources||[]).includes('derived')?' · '+t('推定'):''}</span>`:'';
+  h+=`<div class="seg">${next}<span>${esc(tr.to_group)} ${t('首')} ${ov}</span></div>`;
+  return `<div class="trchain">${h}</div>`;
+}
+function trDiagHtml(tr){
+  const d=tr.diagnosis||{},bits=[];
+  if(d.scene_change)bits.push(`<span class="tag">${t('换场景')}:${esc((d.scene_names||d.scene_change).join(' → '))}</span>`);
+  if(d.time_jump)bits.push(`<span class="tag">${t('跳时间')}:${esc(d.time_jump.join(' → '))}${d.time_word?' · '+esc(d.time_word)+'('+t(TR_SRC[d.time_word_source]||d.time_word_source||'')+')':''}</span>`);
+  if(d.narrative_block_edge==='enter'||d.narrative_block_edge==='exit')bits.push(`<span class="tag">${d.narrative_block_edge==='enter'?t('进叙事块'):t('出叙事块')} ${esc((d.narrative_block||{}).id||'')}</span>`);
+  if(d.cast_change)bits.push(`<span class="tag">${t('阵容变化')}</span>`);
+  if(d.light_jump)bits.push(`<span class="tag">${t('光线跳变')}</span>`);
+  if(d.first_shot_wide)bits.push(`<span class="tag">${t('首镜已是远景')}</span>`);
+  const lines=[];
+  if(d.screenplay_hint)lines.push(`📜 ${esc(d.screenplay_hint)}`);
+  if((d.director_notes||[]).length)lines.push(`🎬 ${t('导演阐述')}:${esc(d.director_notes[0])}${d.director_notes.length>1?' …':''} <span class="tag" title="${t('已拍板:过场模式的选择优先于导演/编剧散文里的「无字幕板」声明,此处只作提示')}">${t('仅提示')}</span>`);
+  if(d.continuity&&d.continuity.id)lines.push(`⛓ ${esc(d.continuity.id)} anchor=${esc(d.continuity.anchor||'')}${d.continuity.framing_change_ok===false?' · <span class="tag warn">framing</span>':''}`);
+  return `<div class="trdiag">${bits.join(' ')}${lines.length?'<br>'+lines.join('<br>'):''}</div>`;
+}
+function transCard(tr){
+  const d=tr.diagnosis||{},cur=tr.current||{type:'hard_cut'};
+  const nonHard=cur.type!=='hard_cut'||(cur.inserts||[]).length||cur.overlay_card||cur.freeze_s||cur.hold_s;
+  const id=`a-t-${aid(tr.id)}`;
+  if(!d.has_change&&!nonHard&&tr.status!=='proposed')
+    return `<div class="trline" id="${id}" title="${esc(tr.from_group+' → '+tr.to_group+' · '+t('硬切,无显著变化'))}"></div>`;
+  const decided=tr.status==='accepted'||tr.status==='rejected';
+  const shown=decided?cur:(tr.design||cur);
+  const alts=tr.alternatives||[];
+  const stChip=`<span class="tag ${tr.status==='proposed'?'warn':decided?'ok':''}">${t(TR_STATUS[tr.status]||tr.status)}</span>`;
+  const rsChip=tr.render_state?`<span class="tag ${tr.render_state==='rendered'?'ok':''}">${t(TR_RENDER[tr.render_state])}</span>`:'';
+  const stale=tr.stale?`<span class="tag warn" title="${t('前后组视频或素材已变化,已构建的插入段过期,出成片时自动重建')}">${t('素材已变')}</span>`:'';
+  const proj=$('#project').value.trim()||'demo';
+  const loc=I18N.f('过场 {ep} {a}→{b}(设计表 directing/{ep}/transition_design.json 边界 {bid};定稿字段 directing/{ep}/shot_list.json generation_groups group_id={b} 的 transition_in)',{ep:EP,a:tr.from_group,b:tr.to_group,bid:tr.id});
+  const altSel=(alts.length||tr.design)?`<select class="tralt" data-bid="${esc(tr.id)}">${tr.design?`<option value="main">${t('主设计')}:${esc(trJoinLabel(tr.design))}${(tr.design.inserts||[]).map(x=>' +'+t(TR_KIND[x.kind]||x.kind)).join('')}${tr.design.overlay_card?' +'+t('叠字'):''}</option>`:''}${alts.map((a,i)=>`<option value="${i}">${esc(a.label)}:${esc(trJoinLabel(a.transition_in))}${((a.transition_in||{}).inserts||[]).map(x=>' +'+t(TR_KIND[x.kind]||x.kind)).join('')}${(a.transition_in||{}).overlay_card?' +'+t('叠字'):''}</option>`).join('')}</select>`:'';
+  const cardLines=tr.card_lines||[];
+  const editable=(shown.inserts||[]).some(x=>x.kind==='title_card'||x.overlay_card)||shown.overlay_card||(tr.design&&((tr.design.inserts||[]).length||tr.design.overlay_card));
+  const fb=(tr.feedback||[]).slice(-2).map(f=>`<div class="trfb">💬 ${esc(f.by||'')} ${esc((f.at||'').slice(0,16))}:${esc(f.text)}</div>`).join('');
+  const prev=(tr.thumbs||{}).preview?`<div class="trprev"><video controls preload="metadata" src="${esc(bust(tr.thumbs.preview))}"></video></div>`:'';
+  return `<div class="trans" id="${id}" data-bid="${esc(tr.id)}">
+    <div class="trhead"><span class="trt">⟿ ${t('过场')} ${esc(tr.from_group)} → ${esc(tr.to_group)}</span>
+      <span class="tag">${t(TR_CLASS[d.class]||d.class||'')}</span>${stChip}${rsChip}${stale}
+      ${tr.insert_total_s?`<span class="tag">+${tr.insert_total_s}s</span>`:''}
+      <span class="tag" title="${esc(shown.reason||'')}">${esc(decided?t('当前定稿'):t('建议'))}:${esc(trJoinLabel(shown))}${(shown.inserts||[]).map(x=>' + '+t(TR_KIND[x.kind]||x.kind)+' '+x.duration_s+'s').join('')}${shown.overlay_card?' + '+t('叠字'):''}</span></div>
+    ${trDiagHtml(tr)}
+    ${trChainHtml(tr,shown)}
+    ${prev}
+    <div class="tracts">
+      ${altSel}
+      ${(tr.design||alts.length)?`<button class="editbtn trbtn" data-act="accept" data-bid="${esc(tr.id)}" title="${t('接受下拉里选中的设计,写回 shot_list transition_in(出成片时由 render_transitions 落地)')}">✔ ${t('接受')}</button>`:''}
+      <button class="editbtn trbtn" data-act="reject" data-bid="${esc(tr.id)}" title="${t('裁定保持硬切(原有导演设计则恢复)')}">⏭ ${t('保持硬切')}</button>
+      ${editable?`<button class="editbtn trbtn" data-act="edit" data-bid="${esc(tr.id)}" title="${t('改字卡 / 叠字幕文字')}">✎ ${t('改字')}</button>`:''}
+      <button class="editbtn trbtn" data-act="preview" data-bid="${esc(tr.id)}" title="${t('渲染边界预览小片:前组尾 2s + 过场 + 本组首 2s,与成片同一滤镜链(约 10–40 秒)')}">▶ ${t('出预览')}</button>
+      <button class="editbtn" data-kind="transition" data-id="${esc(tr.id)}" data-loc="${esc(loc)}" title="${t('对这处过场提修改意见,发给修改师处理')}">✏️ ${t('反馈')}</button>
+      <span class="tredit" style="display:none" data-bid="${esc(tr.id)}">${[0,1,2].map(i=>`<input placeholder="${t('第')} ${i+1} ${t('行')}" value="${esc(cardLines[i]||'')}">`).join('')}<button class="editbtn trbtn" data-act="save-lines" data-bid="${esc(tr.id)}">💾</button><button class="editbtn trbtn" data-act="cancel-edit" data-bid="${esc(tr.id)}">✕</button></span>
+      <span class="trmsg" style="color:var(--dim);font-size:11.5px"></span>
+    </div>${fb}
+  </div>`;
+}
+function trSummaryHtml(T){
+  if(!T||T.error)return T&&T.error?`<div id="trsum">⟿ ${t('过场')}:<span style="color:var(--yellow)">${esc(T.error)}</span></div>`:'';
+  const s=T.summary||{},st=T.settings||{};
+  const pct=s.budget_s?Math.min(100,Math.round(100*(s.insert_total_s||0)/s.budget_s)):0;
+  const over=s.budget_s?(s.insert_total_s||0)>s.budget_s+1e-6:(s.insert_total_s||0)>0;
+  const projMode=st.project_mode||st.mode;
+  const sel=`<select id="tr-mode" title="${t('本集过场模式(集级覆盖,项目默认在「视频节奏」设置);改模式即重出建议,不自动接受')}"><option value="project"${st.mode_source!=='episode'?' selected':''}>${t('跟随项目')}(${t(TR_MODES[projMode]||projMode)})</option>${Object.keys(TR_MODES).map(m=>`<option value="${m}"${st.mode_source==='episode'&&st.mode===m?' selected':''}>${t(TR_MODES[m])}</option>`).join('')}</select>`;
+  return `<div id="trsum">⟿ <b>${t('过场')}</b> ${sel}
+    <span>${I18N.f('{n} 边界 · {c} 有变化 · {h} 非硬切 · 待裁决 {p}',{n:s.boundaries||0,c:s.with_change||0,h:s.non_hard_cut||0,p:s.pending||0})}</span>
+    <span title="${t('插入段(字卡/定场/时光流转/桥接)总时长 / 本集预算(集预算 × 过场模式预算%)')}">${t('插入')} <b>${s.insert_total_s||0}s</b> / ${s.budget_s||0}s <span class="bar"><i class="${over?'over':''}" style="width:${pct}%"></i></span></span>
+    ${st.allow_cards===false?`<span class="tag">${t('字卡禁止')}</span>`:''}
+    <button class="editbtn" id="tr-propose" title="${t('按本集过场模式重出建议(已裁决的边界保留)')}">${T.designed?t('重出建议'):t('出建议')}</button>
+    ${T.design_written_at?`<span title="${esc(T.design_written_at)}">${t('设计表')} ${esc(String(T.design_written_at).slice(0,16))}</span>`:''}</div>`;
+}
+async function trApi(path,body){
+  const proj=$('#project').value.trim()||'demo';
+  const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/transitions/'+encodeURIComponent(EP)+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||r.status);
+  return j;
+}
+document.addEventListener('change',async e=>{
+  const sel=e.target.closest('#tr-mode');if(!sel)return;
+  sel.disabled=true;
+  try{await trApi('/mode',{mode:sel.value,propose:true});KEEP_SCROLL=true;load(true);}
+  catch(err){JumpAnchor.toast(t('保存失败:')+err.message);sel.disabled=false}
+});
+document.addEventListener('click',async e=>{
+  if(e.target.closest('#tr-propose')){
+    const b=e.target.closest('#tr-propose');b.disabled=true;
+    try{await trApi('/propose',{});KEEP_SCROLL=true;load(true);}catch(err){JumpAnchor.toast(t('出建议失败:')+err.message);b.disabled=false}
+    return;
+  }
+  const b=e.target.closest('.trbtn');if(!b)return;
+  const bid=b.dataset.bid,card=b.closest('.trans'),msg=card.querySelector('.trmsg'),act=b.dataset.act;
+  const setMsg=s=>{if(msg)msg.textContent=s};
+  if(act==='edit'){card.querySelector('.tredit').style.display='';return}
+  if(act==='cancel-edit'){card.querySelector('.tredit').style.display='none';return}
+  card.querySelectorAll('.trbtn,.tralt').forEach(x=>x.disabled=true);
+  try{
+    let r;
+    if(act==='accept'){
+      const sel=card.querySelector('.tralt');const v=sel?sel.value:'main';
+      r=await trApi('/'+encodeURIComponent(bid)+'/decide',v==='main'?{action:'accept'}:{action:'accept',alt:parseInt(v)});
+    }else if(act==='reject'){r=await trApi('/'+encodeURIComponent(bid)+'/decide',{action:'reject'});}
+    else if(act==='save-lines'){
+      const lines=[...card.querySelectorAll('.tredit input')].map(i=>i.value.trim()).filter(Boolean);
+      if(!lines.length){setMsg(t('至少一行文字'));card.querySelectorAll('.trbtn,.tralt').forEach(x=>x.disabled=false);return}
+      r=await trApi('/'+encodeURIComponent(bid)+'/decide',{action:'card',lines});
+    }else if(act==='preview'){
+      setMsg(t('渲染预览中…(约 10–40 秒)'));
+      r=await trApi('/'+encodeURIComponent(bid)+'/preview',{});
+    }
+    if(r&&r.check&&r.check.ok===false)JumpAnchor.toast(t('已写回,但机检 transition_ok 有异常:')+(r.check.errors||[]).slice(0,2).join(';'));
+    KEEP_SCROLL=true;load(true);
+  }catch(err){setMsg(t('失败:')+err.message);card.querySelectorAll('.trbtn,.tralt').forEach(x=>x.disabled=false)}
+});
 function groupCard(g,inner){
   const range=(g.shots||[]).length>1?`${g.shots[0]}–${g.shots[g.shots.length-1]}`:(g.shots||[])[0]||'';
   // 组角色/服装/生物三类 chip 独占头部下一行 .gcast(2026-08-30,原挤在 .ghead 首行太乱),置于 💡 光照行之上
@@ -1593,6 +1782,9 @@ function render(d){
     }
     h+=`</div>`;
   }
+  // 过场(2026-09-24):顶部汇总条 + 每个接收组卡前一张过场卡(按 to_group 索引)
+  TR_BY_TO={};((d.transitions||{}).boundaries||[]).forEach(b=>{TR_BY_TO[b.to_group]=b});
+  if(ggroups.length&&d.transitions)h+=trSummaryHtml(d.transitions);
   // 白模样片(2026-09-11):顶部折叠块,整集摄影机视角白模视频 + 对白/旁白字幕;「人物精确空间位置」关闭的项目不显示
   if(WB_ON&&d.whitebox_reel&&!d.whitebox_reel.disabled)h+=`<div id="wbreelbox">${wbReelHtml(d.whitebox_reel,d.ep)}</div>`;
   if(d.dialogue_tts)h+=`<div id="dttsbox">${DialogueTTS.html(d.dialogue_tts,$('#project').value.trim()||'demo',d.ep)}</div>`;
@@ -1714,6 +1906,7 @@ function render(d){
         const gAnchor=`a-g-${aid(g.group_id)}`,kids=gsids.filter(sid=>byId[sid]);
         NAV.push({cls:'g',id:gAnchor,label:g.group_id,hint:I18N.f('{n} 镜',{n:gsids.length}),badges:badges.join(' '),kids:kids.length});
         kids.forEach(sid=>NAV.push({cls:'s',id:`a-s-${aid(sid)}`,label:sid,g:gAnchor,hint:byId[sid].duration_s!=null?`${byId[sid].duration_s}s`:''}));
+        if(TR_BY_TO[g.group_id])h+=transCard(TR_BY_TO[g.group_id]);
         h+=groupCard(g,(g.shots||[]).map(sid=>
           (musByShot[sid]?musBlock(musByShot[sid]):'')+(narrByShot[sid]?narrBlock(narrByShot[sid]):'')+(byId[sid]?shotCard(byId[sid],g.group_id):'')).join(''));
       }else if(!gMember[s.shot_id]){ // 未入组的镜:平铺(向后兼容旧数据)
