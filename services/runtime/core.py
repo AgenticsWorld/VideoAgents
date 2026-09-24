@@ -8068,6 +8068,11 @@ def _preview_storyboard(project: str, ep: str):
         return rows
     # 花字烧录副本(clips_caption,WORKFLOW.md §9A):有则随组下发,预览页并列展示
     cap_clips = _asset_urls(base, base / "assets" / "clips_caption" / ep, VIDEO_EXTS)
+    # 组花字条数(2026-09-24「✨ 花字」按钮角标,同「🎬 视频」计数):读本集 captions.json 一次按 group_id 归并
+    cap_counts: dict[str, int] = {}
+    for c in ((_read_json_safe(base / "edit" / ep / "captions.json") or {}).get("captions") or []):
+        if isinstance(c, dict) and c.get("group_id"):
+            cap_counts[str(c["group_id"])] = cap_counts.get(str(c["group_id"]), 0) + 1
     # 对白正文(2026-08-27):镜条目的编号回 dialogue.md 解析成台词,预览页显示台词而非编号
     dlg_idx = _dialogue_index(_read_text(f"story/episodes/{ep}/dialogue.md") or "")
     shots = []
@@ -8215,6 +8220,7 @@ def _preview_storyboard(project: str, ep: str):
             "clips": [c for c in clips if gid and _id_name_match(gid, c["name"])],
             "caption_clips": [c for c in cap_clips
                               if gid and _id_name_match(gid, c["name"])],
+            "caption_count": cap_counts.get(gid, 0),
             "boundaries_s": meta.get("boundaries_s") or [],
             "sketches": _sketch_list(base.name, ep, gid),
             "user_note": _grpnote_get(base.name, ep, gid).get("text", ""),
