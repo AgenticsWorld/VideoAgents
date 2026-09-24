@@ -9,6 +9,12 @@
 
 基准指纹只看**组级本地 time_ops**(组内秒,与 timeline 是否存在、组起点怎么累计无关),盖章与核对两端口径一致;
 版本号指纹另算(只影响声音内容不影响时轴,失配只 WARN)。
+
+组边界层(过场设计,2026-09-24;前科 fengshen3 ep06:字卡处 BGM 断 2.5 s):shot_list `transition_in` 的定格 / 黑场停留 /
+插入段(字卡、定场空镜、时光流转、桥接)会在组边界**插入**时长,以前混音不知道这层,finalize 按 timemap 把混好的整条轨切开填静音,
+BGM 一起断。现在 `sources` 直接给出边界层(帧量化,与 render_transitions.pad_ops 同口径)且 `cum_start_s` 已含它:混音把 BGM / 旁白
+铺在**带过场的最终时间线**上(跨越插入段的 cue 连续播),原生轨在边界处按策略留白;盖章记边界指纹,finalize 一致时**不再**对声轨套
+边界层重映射(字幕仍按表平移);边界层改了 = 须重跑 p8-mix。
 """
 from __future__ import annotations
 
@@ -30,6 +36,9 @@ MANIFEST_SUFFIX = ".mix.json"
 CHECK_NAME = "mix_basis_current"
 STATUS_NONE, STATUS_CURRENT, STATUS_VERSIONS_CHANGED, STATUS_STALE = "none", "current", "versions_changed", "stale"
 DUR_TOL_S = 1.0     # 混音 wav 时长 vs Σ组时长(尾部余量容忍)
+BOUNDARY_FPS_DEFAULT = 24.0
+# 边界层状态:current(盖章边界层 = 当前 shot_list)/ stale(变了)/ absent(旧清单无边界层但当前有边界插入)/ none(两边都没有边界插入)
+BND_CURRENT, BND_STALE, BND_ABSENT, BND_NONE = "current", "stale", "absent", "none"
 
 
 def _now() -> str:
@@ -101,10 +110,80 @@ def has_ops(rows: list[dict]) -> bool:
     return any(timemap.normalize_ops(r.get("time_ops") or []) for r in rows)
 
 
-def with_timing(proj: Path, ep: str, rows: list[dict]) -> list[dict]:
-    """补实测时长与两套累计起点:cum_start_s(混音 / 后期基准 = 当前版本实测时长累计)、cum_start_v0_s(母本基准)。"""
+def _probe_fps(path: Path) -> float:
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate",
+                              "-of", "csv=p=0", str(path)], capture_output=True, text=True, timeout=60).stdout.strip()
+        n, d = out.split("/")
+        f = float(n) / float(d)
+        return f if f > 0 else BOUNDARY_FPS_DEFAULT
+    except Exception:  # noqa: BLE001
+        return BOUNDARY_FPS_DEFAULT
+
+
+def _q(x, fps: float) -> float:
+    """秒 → 帧量化秒(与 render_transitions._frames 同口径:round(x×fps)/fps)。"""
+    try:
+        return round(int(round(float(x or 0.0) * fps)) / fps, 6)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def boundary_layer(proj: Path, ep: str, rows: list[dict], fps: float | None = None) -> list[dict]:
+    """组边界层:按 shot_list transition_in(hold_s / freeze_s / inserts[])算每个边界在混音时间线上占的秒数(帧量化)。
+    返回按组序的 [{from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts:[{kind,duration_s}]}],
+    只含 total_s > 0 的边界;顺序:前组尾 → 定格 → 黑场 → 插入段 → 本组首。audio = 原生轨在该边界的留白策略(hold_audio / 插入段 audio)。"""
     proj = Path(proj)
-    cum, cum0 = 0.0, 0.0
+    sl = pp.read_json(proj / "directing" / ep / "shot_list.json") or {}
+    by = {g.get("group_id"): g for g in (sl.get("generation_groups") or []) if isinstance(g, dict)}
+    if fps is None:
+        first = next((proj / r["src"] for r in rows if r.get("src") and (proj / r["src"]).is_file()), None)
+        fps = _probe_fps(first) if first else BOUNDARY_FPS_DEFAULT
+    out = []
+    for a, b in zip(rows, rows[1:]):
+        g = by.get(b["group_id"]) or {}
+        t = g.get("transition_in") if isinstance(g.get("transition_in"), dict) else {}
+        fz, hd = _q(t.get("freeze_s"), fps), _q(t.get("hold_s"), fps)
+        ins = [x for x in (t.get("inserts") or []) if isinstance(x, dict) and x.get("kind")]
+        ins_rows = [{"kind": x.get("kind"), "duration_s": max(2.0 / fps, _q(x.get("duration_s"), fps)) if float(x.get("duration_s") or 0) > 0 else 0.0} for x in ins]
+        ins_s = round(sum(x["duration_s"] for x in ins_rows), 6)
+        total = round(fz + hd + ins_s, 6)
+        if total <= 0:
+            continue
+        if hd:
+            audio = str(t.get("hold_audio") or "sustain")
+        elif ins_rows:
+            a0 = str(ins[0].get("audio") or "mute")
+            audio = "sustain" if a0 == "sustain" else "mute"
+        else:
+            audio = str(t.get("hold_audio") or "sustain")
+        out.append({"from_group": a["group_id"], "to_group": b["group_id"], "freeze_s": fz, "hold_s": hd, "insert_s": ins_s,
+                    "total_s": total, "audio": audio, "type": str(t.get("type") or "hard_cut"), "inserts": ins_rows})
+    return out
+
+
+def boundary_fingerprint(bounds: list[dict]) -> str:
+    """边界层指纹:只看 (from, to, 占时 ms),与 transitions_render.json#timemap.ops 的 (from_group, to_group, out_len) 同口径。"""
+    slim = [[b.get("from_group"), b.get("to_group"), int(round(float(b.get("total_s", b.get("out_len")) or 0.0) * 1000))]
+            for b in bounds if float(b.get("total_s", b.get("out_len")) or 0.0) > 0]
+    return hashlib.sha256(json.dumps(slim, sort_keys=False).encode("utf-8")).hexdigest()[:16]
+
+
+def boundary_delta(bounds: list[dict]) -> float:
+    return round(sum(float(b.get("total_s", b.get("out_len")) or 0.0) for b in bounds), 6)
+
+
+def boundary_has_inserts(bounds: list[dict]) -> bool:
+    return any(float(b.get("insert_s") or 0.0) > 0 for b in bounds)
+
+
+def with_timing(proj: Path, ep: str, rows: list[dict], boundaries: list[dict] | None = None) -> list[dict]:
+    """补实测时长与两套累计起点:cum_start_s(混音 / 后期基准 = 当前版本实测时长累计 **+ 组边界层**,2026-09-24)、
+    cum_start_v0_s(母本基准,不含边界层);另给 boundary_before_s(本组前边界占时)与 cum_start_groups_s(不含边界层的组累计)。"""
+    proj = Path(proj)
+    bounds = boundaries if boundaries is not None else boundary_layer(proj, ep, rows)
+    b_by = {b["to_group"]: b for b in bounds}
+    cum, cum0, cumg = 0.0, 0.0, 0.0
     out = []
     for r in rows:
         row = dict(r)
@@ -115,9 +194,13 @@ def with_timing(proj: Path, ep: str, rows: list[dict]) -> list[dict]:
             d0 = probe_duration(v0) if v0.is_file() else d - timemap.total_delta(r.get("time_ops") or [])
         else:
             d0 = d
-        row.update({"duration_s": round(d, 6), "cum_start_s": round(cum, 6),
+        bb = float((b_by.get(r["group_id"]) or {}).get("total_s") or 0.0)
+        cum += bb
+        row.update({"duration_s": round(d, 6), "cum_start_s": round(cum, 6), "boundary_before_s": round(bb, 6),
+                    "cum_start_groups_s": round(cumg, 6),
                     "v0_duration_s": round(d0, 6), "cum_start_v0_s": round(cum0, 6)})
         cum += d
+        cumg += d
         cum0 += d0
         out.append(row)
     return out
@@ -133,7 +216,9 @@ def write_manifest(proj: Path, ep: str, task_id: str, cli: str = "code/mix_basis
     """交付盖章:把当前采纳版本基准写进 assets/audio/final/epNN.mix.json。返回 (manifest, warnings)。"""
     proj = Path(proj)
     plan = plan if plan is not None else pp.load_plan(proj, ep)
-    rows = with_timing(proj, ep, current_basis(proj, ep, plan))
+    basis = current_basis(proj, ep, plan)
+    bounds = boundary_layer(proj, ep, basis)
+    rows = with_timing(proj, ep, basis, bounds)
     audio = Path(audio) if audio else audio_path(proj, ep)
     if audio is None or not audio.is_file():
         raise FileNotFoundError(f"混音产物不存在:assets/audio/final/{ep}.wav")
@@ -142,16 +227,19 @@ def write_manifest(proj: Path, ep: str, task_id: str, cli: str = "code/mix_basis
     if missing:
         warns.append(f"{len(missing)} 组无视频文件(未出片或 skipped):{', '.join(missing[:6])}")
     a_dur = probe_duration(audio)
-    total = round(sum(r["duration_s"] for r in rows), 6)
+    total = round(sum(r["duration_s"] for r in rows) + boundary_delta(bounds), 6)
     if abs(a_dur - total) > DUR_TOL_S:
-        warns.append(f"混音时长 {a_dur:.3f}s 与 Σ组时长 {total:.3f}s 相差 {abs(a_dur - total):.3f}s(>{DUR_TOL_S:g}s);"
-                     "请核对原生轨是否按当前版本逐组拼接")
+        warns.append(f"混音时长 {a_dur:.3f}s 与 Σ组时长 + Σ边界层 {total:.3f}s 相差 {abs(a_dur - total):.3f}s(>{DUR_TOL_S:g}s);"
+                     "请核对原生轨是否按当前版本逐组拼接、组边界(定格/黑场/字卡等插入段)是否按 sources 的 boundaries 留出")
     n_post = sum(1 for r in rows if int(r.get("v") or 0) > 0)
     man = {"schema": SCHEMA, "episode": ep, "stamped_at": _now(), "task_id": task_id, "cli": cli,
            "basis": "post_versions", "all_v0": n_post == 0,
            "plan_fingerprint": pp.plan_fingerprint(plan), "ops_fingerprint": ops_fingerprint(rows),
            "versions_fingerprint": versions_fingerprint(rows), "delta_s": basis_delta(rows),
            "groups": rows, "groups_on_post_version": n_post,
+           # 组边界层(2026-09-24 过场设计):混音已把 BGM / 旁白铺在含边界插入的时间线上;finalize 一致时不再对声轨套边界层重映射
+           "boundaries": {"source": "shot_list.transition_in", "ops": bounds, "fingerprint": boundary_fingerprint(bounds),
+                          "delta_s": boundary_delta(bounds), "has_inserts": boundary_has_inserts(bounds)},
            "audio": {"file": str(audio.relative_to(proj)) if audio.is_relative_to(proj) else str(audio),
                      "duration_s": a_dur, "fingerprint": pp.file_fingerprint(audio)}}
     pp.write_json(manifest_path(proj, ep), man)
@@ -164,8 +252,12 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     proj = Path(proj)
     plan = plan if plan is not None else pp.load_plan(proj, ep)
     cur = current_basis(proj, ep, plan)
+    cur_b = boundary_layer(proj, ep, cur)
     res = {"status": STATUS_NONE, "cur_ops_fp": ops_fingerprint(cur), "cur_delta_s": basis_delta(cur), "cur_has_ops": has_ops(cur),
            "cur_groups_on_post_version": sum(1 for r in cur if int(r.get("v") or 0) > 0),
+           "cur_boundary_fp": boundary_fingerprint(cur_b), "cur_boundary_delta_s": boundary_delta(cur_b),
+           "cur_boundary_has_inserts": boundary_has_inserts(cur_b), "mix_boundary_fp": None, "mix_boundary_delta_s": 0.0,
+           "boundary_status": BND_NONE if not cur_b else BND_ABSENT,
            "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "detail": ""}
     man = load_manifest(proj, ep)
     if not man:
@@ -203,6 +295,23 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
         res["detail"] = ("混音基准过期:" + "; ".join(changed[:6]) + ("…" if len(changed) > 6 else "")
                          + (";混音按后期版本基准盖章,须重跑 p8-mix 或回滚采纳" if res["mix_has_ops"]
                             else ";混音按 v0 母本基准盖章,出成片时按 timemap 重映射兜底(旧口径)"))
+    # 组边界层(2026-09-24):盖章边界指纹 vs 当前 shot_list;有插入段而混音不含/不一致 = 出成片时 BGM 会在过场处断,须重混
+    mb_ = man.get("boundaries") if isinstance(man.get("boundaries"), dict) else None
+    if mb_ is not None:
+        res["mix_boundary_fp"], res["mix_boundary_delta_s"] = mb_.get("fingerprint"), float(mb_.get("delta_s") or 0.0)
+        if not cur_b and not (mb_.get("ops") or []):
+            res["boundary_status"] = BND_NONE
+        elif res["mix_boundary_fp"] == res["cur_boundary_fp"]:
+            res["boundary_status"] = BND_CURRENT
+        else:
+            res["boundary_status"] = BND_STALE
+    if res["boundary_status"] == BND_STALE:
+        res["status"] = STATUS_STALE
+        res["detail"] += (";组边界层已变(混音 Δ{:+.3f}s → 当前 Δ{:+.3f}s:过场的定格/黑场/字卡等插入段与混音时不同),"
+                          "须重跑 p8-mix,否则过场处声轨按 timemap 切开、BGM 会断").format(res["mix_boundary_delta_s"], res["cur_boundary_delta_s"])
+    elif res["boundary_status"] == BND_ABSENT:
+        res["detail"] += (";混音清单不含组边界层(旧口径)而当前 shot_list 有边界插入 Δ{:+.3f}s:出成片时声轨按 timemap 切开"
+                          "{}").format(res["cur_boundary_delta_s"], ",字卡/定场处 BGM 会断,须重跑 p8-mix" if res["cur_boundary_has_inserts"] else "(仅定格/黑场,可接受)")
     if res.get("audio_fingerprint_ok") is False:
         res["detail"] += ";⚠ 混音文件在盖章后被改动(指纹不符)"
     return res
@@ -211,6 +320,11 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
 def check_row(res: dict) -> tuple[str, str]:
     """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;其余失配只 WARN。"""
     st = res.get("status")
+    bst = res.get("boundary_status")
+    if bst == BND_STALE and (res.get("cur_boundary_has_inserts") or float(res.get("mix_boundary_delta_s") or 0) > 0):
+        return "FAIL", res.get("detail", "")
+    if bst == BND_ABSENT and res.get("cur_boundary_has_inserts"):
+        return "FAIL", res.get("detail", "")
     if st == STATUS_CURRENT:
         return "PASS", res.get("detail", "")
     if st == STATUS_STALE and res.get("mix_has_ops"):

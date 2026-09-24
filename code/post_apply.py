@@ -38,8 +38,10 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
                  sfx_cues_resolved     音效点位表每条已选来源或显式略过(WARN)
                  transitions_synced    已采纳转场处方与 shot_list.transition_in 一致(FAIL)
                  flashback_graded      闪回块的每组都落在带「调色与光感」处方的已采纳版本上(WARN;无闪回块 = PASS)
-  sync-timeline 把各组当前指针写进 edit/epNN/timeline.json:tracks.video[].src 指向 build-cut 归一化的后期段文件
+  sync-timeline 把各组当前指针写进 edit/epNN/timeline.json:tracks.video[].src 指向 build-cut 归一化的后期段文件,
                (assets/post/epNN/_cut/<grp>.mp4,与 render_transitions 分段流拷贝口径一致),原值存 src_orig/in_orig/out_orig,
+               并同步重算每条目成片占时 duration_s / 累计 timeline_in·timeline_out / 段帧数与顶层 duration_s、transitions[].cut_time_s
+               (render_transitions 按 timeline_in/out 定占帧,只改 in/out 会按原粗剪占时末帧补回 — DEF-ep06-edit-0003)
                首次改写备份 timeline.pre_post.json;同时把各组当前版本的时长编辑(插黑/定格/删段,版本条目 time_ops)
                平移到原粗剪基准写成 edit/epNN/timemap.json(post_versions 层),finalize_episode 据此平移外挂声轨/字幕(§9B)
   build-cut    按 timeline 组序把各组当前版本归一化后拼成 edit/epNN/cut_post.mp4(整集级 ffmpeg 处方如水印在此施加)
@@ -526,8 +528,12 @@ def do_check(proj: Path, ep: str, write: bool = True) -> tuple[bool, list[dict]]
             f = pp.current_file(proj, ep, g["group_id"], plan)
             if not f:
                 continue
-            dur = max(0.0, g["out"] - g["in"])
-            stats[g["group_id"]] = fx.frame_stats(f, g["in"] + dur / 2)
+            # 组入出点是原粗剪基准;版本带时长编辑(删段/慢动作)时须经版本 time_ops 映射到版本自己的时间轴,
+            # 否则中点会落在变短的版本文件之外(DEF-ep06-edit-0003 同根:grp008 v1 7.58s 却按 24.04s 取 12s 处)
+            vops = pp.effective_time_ops(plan, g["group_id"])
+            t_in = timemap.map_time(vops, g["in"]) if vops else g["in"]
+            t_out = (timemap.map_time(vops, g["out"]) if vops else g["out"]) if g["out"] > g["in"] else fx.probe(f)["duration"]
+            stats[g["group_id"]] = fx.frame_stats(f, t_in + max(0.0, t_out - t_in) / 2)
             measured += 1
         for a, b in zip(groups, groups[1:]):
             if a["scene_id"] and a["scene_id"] == b["scene_id"] and a["group_id"] in stats and b["group_id"] in stats:
@@ -626,16 +632,57 @@ def do_sync_timeline(proj: Path, ep: str) -> int:
         seg = segdir / f"{gid}.mp4"
         meta = pp.read_json(segdir / f"{gid}.json") or {}
         f = pp.current_file(proj, ep, gid, plan)
+        for k in ("timeline_in", "timeline_out", "timeline_in_s", "timeline_out_s", "duration_s"):
+            if isinstance(t.get(k), (int, float)):
+                t.setdefault(k + "_orig", t[k])
         if seg.is_file() and int(meta.get("v", -1)) == v and meta.get("frames"):
+            fps = float(meta.get("fps") or tl.get("fps") or 24)
             t["src"] = str(seg.relative_to(proj))
             t["in"] = 0.0
-            t["out"] = round(float(meta["frames"]) / float(meta.get("fps") or 24), 6)
+            t["out"] = round(float(meta["frames"]) / fps, 6)
+            # 段文件已按目标规格归一、整文件原样占帧:源帧数/容器时长按段文件登记,edit 为对齐声轨补的尾帧已烘进段内
+            t["src_video_frames"] = int(meta["frames"])
+            t["src_container_duration_s"] = t["out"]
+            t["tail_pad_frames"] = 0
             n_seg += 1
         elif f:
             t["src"] = str(f.relative_to(proj))
             t["in"], t["out"] = t.get("in_orig") or 0.0, t.get("out_orig") or t.get("out")
+            if v > 0:   # 指向后期版本文件而非母本:母本的帧数/尾帧登记不再成立
+                for k in ("src_video_frames", "src_container_duration_s", "tail_pad_frames"):
+                    t.pop(k, None)
         t["post_v"] = v
         versions[gid] = {"v": v, "src": t["src"]}
+    # 各条目成片占时与时间线起止(2026-09-24 DEF-ep06-edit-0003):render_transitions._entry_dur 优先读
+    # timeline_in/timeline_out(其次 out−in),此前只改 in/out 不改这些字段 → 删短的版本按原粗剪占时被末帧
+    # 克隆补回(grp008 补 395 帧),成片长度与各组边界全部错位。占时口径与 _entry_dur 同源:(out−in)/speed(+定格帧)
+    prev_post = tl.get("post") if isinstance(tl.get("post"), dict) else {}
+    duration_orig = prev_post.get("duration_orig_s", tl.get("duration_s"))   # 首次同步前的原粗剪总长,重复同步不被覆盖
+    cum = 0.0
+    bound_at = {}
+    prev_gid = None
+    for t in ((tl.get("tracks") or {}).get("video") or []):
+        if not isinstance(t, dict):
+            continue
+        dur = max(0.0, float(t.get("out") or 0.0) - float(t.get("in") or 0.0)) / float(t.get("speed") or 1.0)
+        if isinstance(t.get("hold_frames"), (int, float)) and t.get("hold_frames"):
+            dur += float(t["hold_frames"]) / float(tl.get("fps") or 24)
+        dur = round(dur, 6)
+        gid = t.get("group_id")
+        if gid and prev_gid and gid != prev_gid:
+            bound_at[(prev_gid, gid)] = round(cum, 6)
+        if "duration_s" in t:
+            t["duration_s"] = dur
+        for a, b in (("timeline_in", "timeline_out"), ("timeline_in_s", "timeline_out_s")):
+            if a in t or b in t:
+                t[a], t[b] = round(cum, 6), round(cum + dur, 6)
+        cum = round(cum + dur, 6)
+        if gid:
+            prev_gid = gid
+    tl["duration_s"] = cum
+    for e in (tl.get("transitions") or []):     # 边界时刻先按新占时更新;render plan 会再按帧重量化
+        if isinstance(e, dict) and (e.get("from_group"), e.get("to_group")) in bound_at:
+            e["cut_time_s"] = bound_at[(e["from_group"], e["to_group"])]
     # 时长编辑表(2026-09-17):各组当前版本的 time_ops(组内秒)按**原始**组序累计起点平移到原粗剪基准;
     # 起点按 in_orig/out_orig 顺序累加(与 final_audio / subtitles 同基准),不信任 agent 写的 cum_start_s
     orig, acc = [], 0.0
@@ -656,10 +703,12 @@ def do_sync_timeline(proj: Path, ep: str) -> int:
                          "plan_fingerprint": pp.plan_fingerprint(plan)})
     tl["post"] = {"schema": "post_sync/1.0", "synced_at": pp._now(), "cut": f"edit/{ep}/{pp.CUT_POST}", "versions": versions,
                   "segments": n_seg, "plan_fingerprint": pp.plan_fingerprint(plan),
+                  "duration_s": cum, "duration_orig_s": duration_orig,
                   "timemap": f"edit/{ep}/{timemap.TIMEMAP_FILE}", "timemap_delta_s": timemap.total_delta(ops)}
     pp.write_json(tlp, tl)
     n = sum(1 for v in versions.values() if v["v"] > 0)
     _log("DONE", f"timeline#post 同步 {len(versions)} 组(段文件 {n_seg}),其中 {n} 组指向后期版本;"
+                 f"成片占时 {cum:.3f}s(原粗剪 {float(duration_orig or 0):.3f}s);"
                  f"timemap {timemap.describe(ops)} → {tm_p.relative_to(proj)}")
     return 0
 

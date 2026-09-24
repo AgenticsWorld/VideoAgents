@@ -220,13 +220,40 @@ def load_timemap(proj, ep, cut, notes=None, audio_used=True):
         if post_ops:
             info["layers"].append({"layer": "post_versions", "file": str(tmp.relative_to(proj)),
                                    "ops": len(post_ops), "delta_s": timemap.total_delta(post_ops)})
-    post_ops = _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio_used)
+    post_ops, mres = _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio_used)
     ops = timemap.compose(post_ops, pad_ops) if post_ops else pad_ops
     info["ops"] = ops
     info["delta_s"] = timemap.total_delta(ops)
+    # 组边界层与混音(2026-09-24 过场设计):混音盖章的边界层 = 本 cut 的边界层(指纹同口径:from/to/占时 ms)→ 声轨已铺在含过场的
+    # 时间线上,不再套边界层重映射(否则字卡/定场处被填静音、BGM 断);字幕仍按全表平移。混音含边界层而正片没经 render_transitions
+    # (pad_ops 空)= 音画长度不等,FAIL。
+    audio_ops = ops
+    mix_b_fp, mix_b_delta = mres.get("mix_boundary_fp"), float(mres.get("mix_boundary_delta_s") or 0.0)
+    if pad_ops and mix_b_fp and mres.get("status") in (mix_manifest.STATUS_CURRENT, mix_manifest.STATUS_VERSIONS_CHANGED):
+        cut_b_fp = mix_manifest.boundary_fingerprint(pad_ops)
+        if cut_b_fp == mix_b_fp:
+            audio_ops = post_ops if post_ops else []
+            info["layers"] = [l for l in info["layers"] if l.get("layer") != "boundary_pads"]
+            info["layers"].append({"layer": "boundary_pads", "file": str(tr.relative_to(proj)), "ops": len(pad_ops),
+                                   "delta_s": timemap.total_delta(pad_ops), "audio_skipped": True, "reason": "mix_boundary_current"})
+            notes.append(f"混音已含组边界层(盖章 {mres.get('stamped_at')},{len(pad_ops)} 处 +{timemap.total_delta(pad_ops):.3f}s),"
+                         "外挂声轨不再套边界层重映射(BGM 跨过场连续);字幕仍按表平移")
+        else:
+            msg = (f"混音盖章的组边界层(Δ{mix_b_delta:+.3f}s)与正片 {Path(cut).name} 的边界层(Δ{timemap.total_delta(pad_ops):+.3f}s)不一致:"
+                   "请重跑 p8-mix(或重跑 render_transitions 使两边一致)")
+            if audio_used:
+                raise SystemExit("[FAIL] " + msg)
+            notes.append("⚠ " + msg)
+    elif not pad_ops and mix_b_delta > 0 and audio_used and mres.get("status") in (mix_manifest.STATUS_CURRENT, mix_manifest.STATUS_VERSIONS_CHANGED):
+        raise SystemExit(f"[FAIL] 混音已按含组边界层(+{mix_b_delta:.3f}s)的时间线铺轨,而正片 {Path(cut).name} 没有经 render_transitions 插入过场"
+                         "(不是转场台账的 out_cut):请先跑 render_transitions.py render 再封装其产物")
+    elif pad_ops and audio_used and mres.get("cur_boundary_has_inserts") and not mix_b_fp:
+        notes.append("⚠ 混音清单不含组边界层而正片有字卡/定场插入:声轨按 timemap 切开、BGM 会在过场处断——请重跑 p8-mix(sources 已给 boundaries)")
+    info["audio_ops"] = audio_ops
+    info["audio_delta_s"] = timemap.total_delta(audio_ops)
     if ops:
         notes.append(f"正片带时长编辑表 timemap:{timemap.describe(ops)}(" + " + ".join(l["layer"] for l in info["layers"])
-                     + "),外挂声轨/字幕按表平移")
+                     + "),字幕按表平移" + (";外挂声轨按表重映射" if audio_ops else ";外挂声轨不重映射"))
     return ops, info
 
 
@@ -234,10 +261,11 @@ def _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio
     """按混音基准清单决定层 1(post_versions)是否套用;返回生效的 post_ops(可能被清空)。"""
     res = mix_manifest.compare(proj, ep)
     info["mix_basis"] = {k: res.get(k) for k in ("status", "stamped_at", "task_id", "mix_ops_fp", "cur_ops_fp",
-                                                   "mix_delta_s", "cur_delta_s", "changed_groups")}
+                                                   "mix_delta_s", "cur_delta_s", "changed_groups",
+                                                   "boundary_status", "mix_boundary_fp", "cur_boundary_fp", "mix_boundary_delta_s", "cur_boundary_delta_s")}
     st = res.get("status")
     if st == mix_manifest.STATUS_NONE:
-        return post_ops
+        return post_ops, res
     if st in (mix_manifest.STATUS_CURRENT, mix_manifest.STATUS_VERSIONS_CHANGED):
         if st == mix_manifest.STATUS_VERSIONS_CHANGED:
             notes.append("⚠ 混音后采纳版本号有变但时轴未变(声音内容可能与画面版本不同):" + "; ".join(res.get("changed_groups") or [])[:300])
@@ -248,25 +276,25 @@ def _apply_mix_basis(proj, ep, cut, post_ops, post_basis_cut, info, notes, audio
                 if audio_used:
                     raise SystemExit("[FAIL] " + msg)
                 notes.append("⚠ " + msg)
-                return post_ops
+                return post_ops, res
             if post_ops:
                 info["layers"] = [l for l in info["layers"] if l.get("layer") != "post_versions"]
                 info["layers"].append({"layer": "post_versions", "skipped": True, "reason": "mix_basis_current",
                                        "ops": len(post_ops), "delta_s": timemap.total_delta(post_ops)})
                 notes.append(f"混音已按采纳版本基准(盖章 {res.get('stamped_at')} / {res.get('task_id')},"
                              f"{timemap.describe(post_ops)}),final_audio / 字幕不再套 post_versions 层重映射")
-            return []
-        return post_ops
+            return [], res
+        return post_ops, res
     # stale
-    if res.get("mix_has_ops"):
+    if res.get("mix_has_ops") or res.get("boundary_status") == mix_manifest.BND_STALE:
         msg = "混音基准过期:" + res.get("detail", "") + ";请重跑 p8-mix(或在后期页回滚到混音时的采纳版本)"
         if audio_used:
             raise SystemExit("[FAIL] " + msg)
         notes.append("⚠ " + msg)
-        return post_ops
+        return post_ops, res
     notes.append("⚠ 混音按 v0 母本基准盖章而采纳版本已变:" + "; ".join(res.get("changed_groups") or [])[:300]
                  + ";按 timemap 重映射兜底(旧口径:BGM 剪点无交叉淡化、跨剪点旁白会被切断,建议重跑 p8-mix)")
-    return post_ops
+    return post_ops, res
 
 
 def timemapped_audio(proj, ep, audio, ops, notes=None):
@@ -293,8 +321,9 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
             audio = find_audio(proj, ep, audio_override)
             ops, tm_info = load_timemap(proj, ep, cut, notes, audio_used=audio is not None)
             audio_src = audio
-            if audio is not None and ops:
-                audio = timemapped_audio(proj, ep, audio, ops, notes)
+            audio_ops = tm_info.get("audio_ops", ops)   # 混音已含组边界层时 = 去掉边界层的表(2026-09-24)
+            if audio is not None and audio_ops:
+                audio = timemapped_audio(proj, ep, audio, audio_ops, notes)
             v = probe_duration(cut)
             st = _probe_streams(cut)
             if audio is not None:

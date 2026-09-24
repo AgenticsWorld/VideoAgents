@@ -14,7 +14,11 @@ BGM cue 与旁白挂点按剪后时间线(cum_start_s)摆位;交付时盖章记�
 
 sources 输出的每组字段:
   src            本组混音取源(项目相对路径;v>0 = 后期采纳版本,v0 = 母本)
-  duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计,BGM / 旁白摆位用这个)
+  duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计 **+ 本组前的组边界层**,BGM / 旁白摆位用这个)
+  boundary_before_s 本组前组边界占时(定格 + 黑场停留 + 插入段,过场设计 2026-09-24):原生轨在此留白(按 boundaries[].audio:
+                 mute 静音 / sustain 延续前段房间声),BGM / 旁白照常跨过去铺——跨越边界的 cue 不断;cum_start_groups_s = 不含边界层的组累计
+顶层 boundaries[]:每个有占时的边界 {from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts[]};
+  boundary_delta_s = Σ占时;混音 wav 总长应 = Σ组时长 + boundary_delta_s(stamp 核对)
   cum_start_v0_s 母本基准起点(只用于换算旧口径的 meta boundary_map:组内时刻经 time_ops 映射 = timemap.map_time)
   time_ops       该版本相对母本的组内时长编辑(删段 out_len=0 / 变速 / 插入);boundary_map、对白开口时段都是母本
                  基准,落在删除区间内的事件在本版本里已不存在,不得再往上铺声音
@@ -39,7 +43,9 @@ def _log(tag: str, msg: str) -> None:
 
 def do_sources(proj: Path, ep: str, as_json: bool) -> int:
     plan = pp.load_plan(proj, ep)
-    rows = mb.with_timing(proj, ep, mb.current_basis(proj, ep, plan))
+    basis = mb.current_basis(proj, ep, plan)
+    bounds = mb.boundary_layer(proj, ep, basis)
+    rows = mb.with_timing(proj, ep, basis, bounds)
     if not rows:
         _log("FAIL", "没有分镜组(timeline / shot_list 都为空)")
         return 1
@@ -49,18 +55,27 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
         if latest > int(r["v"]):
             pending[r["group_id"]] = latest
     total = round(sum(r["duration_s"] for r in rows), 6)
-    out = {"episode": ep, "groups": rows, "total_duration_s": total, "delta_vs_v0_s": mb.basis_delta(rows),
+    out = {"episode": ep, "groups": rows, "total_duration_s": round(total + mb.boundary_delta(bounds), 6),
+           "groups_total_s": total, "delta_vs_v0_s": mb.basis_delta(rows),
            "groups_on_post_version": sum(1 for r in rows if int(r["v"]) > 0),
            "ops_fingerprint": mb.ops_fingerprint(rows), "plan_fingerprint": pp.plan_fingerprint(plan),
+           "boundaries": bounds, "boundary_delta_s": mb.boundary_delta(bounds), "boundary_fingerprint": mb.boundary_fingerprint(bounds),
            "unadopted_newer_versions": pending}
     missing = [r["group_id"] for r in rows if not r.get("src")]
     if as_json:
         print(json.dumps(out, ensure_ascii=False, indent=2))
     else:
         _log("PLAN", f"{ep} 混音取源:{len(rows)} 组,{out['groups_on_post_version']} 组在后期采纳版本,"
-                     f"总时长 {total:.3f}s(相对母本 Δ{out['delta_vs_v0_s']:+.3f}s),基准指纹 {out['ops_fingerprint']}")
+                     f"组时长 {total:.3f}s + 组边界层 {out['boundary_delta_s']:.3f}s = 混音总长 {out['total_duration_s']:.3f}s"
+                     f"(相对母本 Δ{out['delta_vs_v0_s']:+.3f}s),基准指纹 {out['ops_fingerprint']},边界指纹 {out['boundary_fingerprint']}")
+        b_by = {b["to_group"]: b for b in bounds}
         for r in rows:
             ops = timemap.describe(r["time_ops"]) if r["time_ops"] else ""
+            b = b_by.get(r["group_id"])
+            if b:
+                parts = ([f"定格 {b['freeze_s']:g}s"] if b["freeze_s"] else []) + ([f"黑场 {b['hold_s']:g}s"] if b["hold_s"] else []) \
+                    + [f"{x['kind']} {x['duration_s']:g}s" for x in b["inserts"]]
+                _log("BND ", f"{b['from_group']}→{b['to_group']} 组边界 +{b['total_s']:.3f}s({' + '.join(parts)};原生轨 {b['audio']},BGM/旁白连续铺过)")
             _log("SRC ", f"{r['group_id']} v{r['v']} {r.get('src') or '(无文件)'} {r['duration_s']:.3f}s @{r['cum_start_s']:.3f}s"
                          + (f"  [{ops}]" if ops else ""))
         for gid, v in pending.items():
@@ -80,7 +95,8 @@ def do_stamp(proj: Path, ep: str, task_id: str, audio: str | None) -> int:
     for w in warns:
         _log("WARN", w)
     _log("DONE", f"盖章 {mb.manifest_path(proj, ep).relative_to(proj)}:{man['groups_on_post_version']} 组在后期版本,"
-                 f"Δ{man['delta_s']:+.3f}s,基准指纹 {man['ops_fingerprint']},任务 {task_id}")
+                 f"Δ{man['delta_s']:+.3f}s,基准指纹 {man['ops_fingerprint']},组边界层 {len(man['boundaries']['ops'])} 处 "
+                 f"+{man['boundaries']['delta_s']:.3f}s(指纹 {man['boundaries']['fingerprint']}),任务 {task_id}")
     return 0
 
 
