@@ -78,6 +78,12 @@ def normalize_settings(raw: dict | None) -> dict:
         raise ValueError(f"transitions.mode must be one of {list(MODES)}")
     out = {"mode": mode, "card_style": str(raw.get("card_style") or DEFAULT_SETTINGS["card_style"]),
            "card_language": str(raw.get("card_language") or DEFAULT_SETTINGS["card_language"])}
+    # 字卡 / 叠字字体(2026-09-24):项目内相对路径(refs/fonts/xx.ttf)或花字引擎 id(proj:<family>);空 = 自动取 refs/fonts/ 首个
+    cf = str(raw.get("card_font") or "").strip()
+    if cf:
+        if cf.startswith("/") or ".." in Path(cf).parts or (":" in cf and not cf.startswith("proj:")):
+            raise ValueError("transitions.card_font must be a path inside the project (e.g. refs/fonts/x.ttf) or a proj:<family> id")
+        out["card_font"] = cf
     if mode == "custom":
         out["allow_cards"] = bool(raw.get("allow_cards", CUSTOM_DEFAULTS["allow_cards"]))
         try:
@@ -835,16 +841,63 @@ FONT_CANDIDATES = [
 ]
 
 
-def find_font(size: int, prefer_serif: bool = True):
+FONT_EXTS = (".ttf", ".otf", ".ttc")
+PROJECT_FONTS_SUBDIR = "refs/fonts"     # 与 modules/captions.py 同一目录(「参考文件」页「字体」板块上传)
+
+
+def project_fonts(base: Path) -> list[Path]:
+    """项目字体 refs/fonts/(WORKFLOW §2 规则 9:有则全片统一优先),按文件名排序。"""
+    d = Path(base) / PROJECT_FONTS_SUBDIR
+    return [p for p in sorted(d.glob("*")) if p.is_file() and p.suffix.lower() in FONT_EXTS] if d.is_dir() else []
+
+
+def resolve_card_font(base: Path) -> Path | None:
+    """字卡 / 叠字字体:settings.json#transitions.card_font(项目内相对路径 或 proj:<family> 花字 id)→ 项目 refs/fonts/ 首个 → None(走全局 data/fonts/ 与系统字体)。
+    找不到指定字体时回落到 refs/fonts/ 首个而不是静默用系统字体,并由 build 日志提示。"""
+    base = Path(base)
+    spec = str(project_settings(base).get("card_font") or "").strip()
+    if spec.startswith("proj:"):
+        try:
+            try:
+                from modules.captions import scan_project_fonts  # noqa: PLC0415
+            except ImportError:
+                from captions import scan_project_fonts  # noqa: PLC0415
+            for rec in scan_project_fonts(base):
+                if rec.get("id") == spec and Path(rec.get("path") or "").is_file():
+                    return Path(rec["path"])
+        except Exception:
+            pass
+    elif spec:
+        p = base / spec
+        if p.is_file() and p.suffix.lower() in FONT_EXTS:
+            return p
+    pf = project_fonts(base)
+    return pf[0] if pf else None
+
+
+def font_path(prefer_serif: bool = True, font: Path | str | None = None) -> str | None:
+    """实际用于渲染的字体文件:指定字体(resolve_card_font)→ 全局 data/fonts/ → 系统候选;None = PIL 默认位图字体。"""
     from PIL import ImageFont
-    cands = [str(p) for p in sorted((ROOT / "data" / "fonts").glob("*")) if p.suffix.lower() in (".ttf", ".otf", ".ttc")]
+    cands = [str(p) for p in sorted((ROOT / "data" / "fonts").glob("*")) if p.suffix.lower() in FONT_EXTS]
     order = FONT_CANDIDATES if prefer_serif else [f for f in FONT_CANDIDATES if "Songti" not in f and "Serif" not in f]
-    for f in cands + order:
+    for f in ([str(font)] if font else []) + cands + order:
         if Path(f).is_file():
             try:
-                return ImageFont.truetype(f, size)
+                ImageFont.truetype(f, 12)
+                return f
             except Exception:
                 continue
+    return None
+
+
+def find_font(size: int, prefer_serif: bool = True, font: Path | str | None = None):
+    from PIL import ImageFont
+    f = font_path(prefer_serif, font)
+    if f:
+        try:
+            return ImageFont.truetype(f, size)
+        except Exception:
+            pass
     return ImageFont.load_default()
 
 
@@ -854,8 +907,9 @@ def _text_w(draw, text, font):
 
 
 def render_card_png(lines: list[str], width: int, height: int, out: Path, *, bg: str = "black", color: str | None = None,
-                    bg_image: Path | None = None) -> dict:
-    """字幕卡:黑/白/纯色/前组尾帧模糊底 + 居中 1–3 行(首行大字、余行小字、字间距),返回 {file, text_bbox, contrast}。"""
+                    bg_image: Path | None = None, font: Path | str | None = None) -> dict:
+    """字幕卡:黑/白/纯色/前组尾帧模糊底 + 居中 1–3 行(首行大字、余行小字、字间距),返回 {file, text_bbox, contrast, font}。
+    font = resolve_card_font(base)(项目字体优先);None 时走全局/系统字体。"""
     from PIL import Image, ImageDraw, ImageFilter
     lines = [str(x) for x in lines if str(x).strip()][:3]
     if bg == "blur_prev" and bg_image and Path(bg_image).is_file():
@@ -874,7 +928,7 @@ def render_card_png(lines: list[str], width: int, height: int, out: Path, *, bg:
         fg = (235, 235, 235)
     draw = ImageDraw.Draw(im)
     sizes = [max(18, height // 12)] + [max(14, height // 20)] * 2
-    fonts = [find_font(s) for s in sizes[:len(lines)]]
+    fonts = [find_font(s, font=font) for s in sizes[:len(lines)]]
     gaps = [int(height * 0.045)] * len(lines)
     heights = []
     for ln, f in zip(lines, fonts):
@@ -897,16 +951,18 @@ def render_card_png(lines: list[str], width: int, height: int, out: Path, *, bg:
     lum_fg = _lum(fg)
     contrast = (max(lum_bg, lum_fg) + 0.05) / (min(lum_bg, lum_fg) + 0.05)
     safe = bbox is not None and bbox[0] >= width * 0.05 and bbox[2] <= width * 0.95 and bbox[1] >= height * 0.05 and bbox[3] <= height * 0.95
-    return {"file": str(out), "text_bbox": bbox, "contrast": round(contrast, 2), "in_safe_area": bool(safe), "lines": lines}
+    return {"file": str(out), "text_bbox": bbox, "contrast": round(contrast, 2), "in_safe_area": bool(safe), "lines": lines,
+            "font": font_path(True, font)}
 
 
-def render_overlay_png(lines: list[str], width: int, height: int, out: Path, *, position: str = "bottom_left") -> dict:
-    """叠字幕(透明 RGBA):白字 + 深描边 + 软阴影,位置 bottom_left / bottom_right / center / top_*。"""
+def render_overlay_png(lines: list[str], width: int, height: int, out: Path, *, position: str = "bottom_left",
+                       font: Path | str | None = None) -> dict:
+    """叠字幕(透明 RGBA):白字 + 深描边 + 软阴影,位置 bottom_left / bottom_right / center / top_*;font 同 render_card_png。"""
     from PIL import Image, ImageDraw, ImageFilter
     lines = [str(x) for x in lines if str(x).strip()][:3]
     im = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     sizes = [max(16, height // 20)] + [max(13, height // 28)] * 2
-    fonts = [find_font(s, prefer_serif=False) for s in sizes[:len(lines)]]
+    fonts = [find_font(s, prefer_serif=False, font=font) for s in sizes[:len(lines)]]
     draw = ImageDraw.Draw(im)
     dims = [_text_w(draw, ln, f) for ln, f in zip(lines, fonts)]
     gap = int(height * 0.018)
@@ -936,7 +992,7 @@ def render_overlay_png(lines: list[str], width: int, height: int, out: Path, *, 
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     im.save(out, "PNG")
-    return {"file": str(out), "text_bbox": (x0, y0, x0 + block_w, y0 + block_h), "lines": lines}
+    return {"file": str(out), "text_bbox": (x0, y0, x0 + block_w, y0 + block_h), "lines": lines, "font": font_path(False, font)}
 
 
 def _hex(c, default):
@@ -1048,9 +1104,26 @@ def pano_still(base: Path, src: dict, width: int, height: int, out: Path, scheme
     return out
 
 
+def _has_text_render(t: dict) -> bool:
+    """该边界是否要渲染文字(字卡 / 叠字):决定字体是否进指纹。"""
+    if isinstance(t.get("overlay_card"), dict):
+        return True
+    return any(isinstance(x, dict) and (x.get("kind") == "title_card" or isinstance(x.get("overlay_card"), dict))
+               for x in (t.get("inserts") or []))
+
+
 def source_fingerprint(base: Path, t: dict) -> str:
-    """设计 + 素材指纹(素材文件 size/mtime):任一变化 = 已渲染段过期。"""
+    """设计 + 素材指纹(素材文件 size/mtime)+ 字卡/叠字所用项目字体(文件名/size/mtime):任一变化 = 已渲染段过期。
+    无项目字体(走全局/系统字体)时字体不进指纹,存量指纹不变。"""
     h = hashlib.sha256(json.dumps(t, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    if _has_text_render(t):
+        f = resolve_card_font(base)
+        if f is not None:
+            try:
+                st = f.stat()
+                h.update(f"font:{f.name}:{st.st_size}:{int(st.st_mtime)}".encode())
+            except OSError:
+                h.update(f"font:{f.name}:missing".encode())
     for x in (t.get("inserts") or []):
         s = x.get("source") or {}
         paths = []

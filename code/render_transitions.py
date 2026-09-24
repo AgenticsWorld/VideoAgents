@@ -1046,9 +1046,10 @@ def _build_insert(proj, ep, e, k, x, spec, d, src_path, log):
     rec = {"kind": kind, "file": str(out), "frames": n, "duration_s": round(n / fps, 6)}
     ov = x.get("overlay_card") if isinstance(x.get("overlay_card"), dict) else None
     ov_args, ov_flt, ov_png = [], None, None
+    font = td.resolve_card_font(proj)          # 项目字体 refs/fonts/ 优先(settings.transitions.card_font 可指定)
     if ov and kind in ("establishing", "timelapse"):
         ov_png = d / f"ins{k}.overlay.png"
-        info = td.render_overlay_png(ov.get("lines") or [], w, h, ov_png, position=str(ov.get("position") or "bottom_left"))
+        info = td.render_overlay_png(ov.get("lines") or [], w, h, ov_png, position=str(ov.get("position") or "bottom_left"), font=font)
         ovf = min(n, max(2, _frames(ov.get("duration_s") or 2.5, fps)))
         ov_args, ov_flt = _overlay_inputs_and_filter("[base]", ov_png, ovf, fps, w, h, 1)
         rec["overlay"] = {"file": str(ov_png), "frames": ovf, "lines": info["lines"]}
@@ -1057,7 +1058,7 @@ def _build_insert(proj, ep, e, k, x, spec, d, src_path, log):
         bg = str(card.get("bg") or "black")
         bg_img = _prev_tail_png(proj, ep, e, src_path, fps, d / "prev_tail.png") if bg == "blur_prev" else None
         png = d / ("card.png" if k == 0 else f"card{k}.png")
-        info = td.render_card_png(card.get("lines") or [], w, h, png, bg=bg, color=card.get("color"), bg_image=bg_img)
+        info = td.render_card_png(card.get("lines") or [], w, h, png, bg=bg, color=card.get("color"), bg_image=bg_img, font=font)
         ff = max(1, _frames(card.get("fade_s", 0.4) or 0.0, fps))
         color = "white" if bg == "white" else "black"
         vf = (f"scale={w}:{h},setsar=1,format=yuv420p,fade=t=in:st=0:d={ff / fps:.6f}:color={color},"
@@ -1065,7 +1066,8 @@ def _build_insert(proj, ep, e, k, x, spec, d, src_path, log):
         _run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-framerate", f"{fps:g}", "-t", f"{(n + 2) / fps:.4f}", "-i", str(png),
               "-vf", vf, "-frames:v", str(n), "-an", *_x264(out)], timeout=600)
         rec.update({"card": {**info, "bg": bg}, "thumb": str(png)})
-        log(f"         ins{k} 字卡 {n} 帧 {info['lines']} bg={bg} 对比度 {info['contrast']}{'' if info['in_safe_area'] else ' ⚠ 文字出安全区'}")
+        log(f"         ins{k} 字卡 {n} 帧 {info['lines']} bg={bg} 字体 {Path(info['font']).name if info.get('font') else '默认'}"
+            f" 对比度 {info['contrast']}{'' if info['in_safe_area'] else ' ⚠ 文字出安全区'}")
     elif kind == "establishing":
         src = x.get("source") if isinstance(x.get("source"), dict) else {}
         mode = str(src.get("mode") or "pano_sweep")
@@ -1177,10 +1179,11 @@ def do_build(proj, ep, src_path, entries=None, spec=None, force=False, only=None
         if e.get("overlay_card"):
             oc = e["overlay_card"]
             png = d / "overlay.png"
-            info = td.render_overlay_png(oc.get("lines") or [], w, h, png, position=str(oc.get("position") or "bottom_left"))
+            info = td.render_overlay_png(oc.get("lines") or [], w, h, png, position=str(oc.get("position") or "bottom_left"),
+                                         font=td.resolve_card_font(proj))
             ov_meta = {"file": str(png), "frames": max(2, _frames(oc.get("duration_s") or 2.5, fps)), "fade_f": max(1, _frames(OVERLAY_FADE_S, fps)),
-                       "lines": info["lines"], "position": oc.get("position") or "bottom_left"}
-            log(f"         叠字幕 {info['lines']} {ov_meta['frames']} 帧 @{ov_meta['position']}")
+                       "lines": info["lines"], "position": oc.get("position") or "bottom_left", "font": info.get("font")}
+            log(f"         叠字幕 {info['lines']} {ov_meta['frames']} 帧 @{ov_meta['position']} 字体 {Path(info['font']).name if info.get('font') else '默认'}")
         for r in recs:
             for key in ("file", "thumb"):
                 if r.get(key):
@@ -1395,6 +1398,13 @@ def do_check(proj, ep, src_path, out_path, write=True):
             continue
         if meta.get("fingerprint") != e.get("fingerprint"):
             ins_problems.append(f"{e['at_shot']} 构建指纹过期(重跑 build+render)")
+        # 构建晚于成片(如换了字体后只 build 未 render):成片里仍是旧段,不得算已渲染
+        try:
+            built_ts = datetime.fromisoformat(str(meta.get("built_at") or "")).timestamp()
+        except ValueError:
+            built_ts = None
+        if built_ts and out_path and out_path.exists() and built_ts > out_path.stat().st_mtime + 1:
+            ins_problems.append(f"{e['at_shot']} 插入段/叠字构建晚于成片(重跑 render)")
         for k, r in enumerate(meta.get("inserts") or []):
             if r.get("missing"):
                 ins_problems.append(f"{e['at_shot']} ins{k} 桥接 clip 缺失 {r.get('expected')}")

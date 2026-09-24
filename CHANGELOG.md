@@ -2,6 +2,12 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Transition title cards and overlay captions now use the project's fonts** (`refs/fonts/`, WORKFLOW §2 rule 9). `render_transitions.py build` used to pick the first usable face from the global `data/fonts/` directory or the system, ignoring fonts uploaded on the Reference Files page, and `settings.json#transitions.card_style` was never read at render time. The host now resolves the card font once per project (`modules/transition_design.py resolve_card_font`): the optional new `transitions.card_font` setting (a project-relative path such as `refs/fonts/huiwen.ttf`, or a caption-engine id such as `proj:Huiwen-mincho`) wins, otherwise the first file in `refs/fonts/` is used for every card and overlay in the project, otherwise the previous global/system order applies. The font file (name / size / mtime) is part of the build fingerprint whenever a boundary renders text, so a changed or newly uploaded font rebuilds the affected cards on the next `build` / `render` without `--force`; projects without project fonts keep their existing fingerprints. Build logs and `meta.json` record the face that was used. `render_transitions.py check` gains a staleness test inside `inserts_built`: a segment or overlay built after the transition cut was rendered (e.g. `build` after a font change without `render`) now fails with "构建晚于成片(重跑 render)" instead of passing and showing the boundary as rendered on the storyboard page.
+
 ## [1.0.36] - 2026-09-24
 
 ### Added
