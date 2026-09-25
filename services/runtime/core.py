@@ -14597,6 +14597,7 @@ async def api_agent_advanced_get():
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
               "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
               "whitebox_selfcheck": whitebox_selfcheck_setting(),
+              "debug_mode": debug_mode(),
               "max_turns": max_turns_setting(),
               "max_turns_default": MAX_TURNS_DEFAULT,
               "max_turns_min": MAX_TURNS_MIN,
@@ -14618,7 +14619,9 @@ async def api_agent_advanced_set(body: dict):
       跑 `render_whitebox.py --stills` 读静帧联系表核对取景;持久化,对后续启动的运行生效
     - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
       引擎有 --max-turns 参数,撞上限即被切断且无续跑,大批量工位需放宽);持久化,
-      对后续启动的运行生效"""
+      对后续启动的运行生效
+    - debug_mode:Debug 模式(布尔,默认关):控制台各 Agent 面板显示 SOUL.md 等开发者入口;
+      纯前端显隐,不影响任何运行;持久化,立即生效(旧入口 api_diagnostics_set 仍兼容)"""
     updates: dict = {}
     if body.get("max_turns") is not None:
         try:
@@ -14636,6 +14639,8 @@ async def api_agent_advanced_set(body: dict):
         updates["thinking_effort"] = lv
     if body.get("whitebox_selfcheck") is not None:
         updates["whitebox_selfcheck"] = bool(body.get("whitebox_selfcheck"))
+    if body.get("debug_mode") is not None:
+        updates["debug_mode"] = bool(body.get("debug_mode"))
     if body.get("max_retries") is not None:
         try:
             n = int(body.get("max_retries"))
@@ -14665,7 +14670,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("global_concurrency", "agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck / debug_mode")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:
@@ -15046,13 +15051,14 @@ async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str =
 
 
 # ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
-# 两个开关:Debug 模式(开发者入口显隐)与 Issue 反馈(成员运行中确认问题属于宿主
+# 两个开关:Debug 模式(开发者入口显隐;开关 UI 已移到「Agent 高级设置」弹窗,经
+# api_agent_advanced_set 读写,本节接口仍兼容)与 Issue 反馈(成员运行中确认问题属于宿主
 # 代码缺陷/需要宿主新增功能时,经 code/report_issue.py 整理成 issue,用户在设置页一键到浏览器提交 GitHub;
 # 运行提示词只在开关开启时注入该节,见 build_role_prompt)。实现在 modules/issue_feedback.py。
 
 
 def debug_mode() -> bool:
-    """Debug 模式(默认关)。开启后控制台各 Agent 面板才显示 SOUL.md 按钮等面向开发者的入口。"""
+    """Debug 模式(默认关;设置→高级→Agent 高级设置)。开启后控制台各 Agent 面板才显示 SOUL.md 按钮等面向开发者的入口。"""
     return bool(STATE.get("debug_mode", False))
 
 

@@ -282,13 +282,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
-          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度、白模自检">Agent 高级设置</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度、白模自检、Debug 模式">Agent 高级设置</a>
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
           <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
           <a href="/clawbot" title="手机消息:绑定微信 ClawBot / 飞书 / WhatsApp 后,可在手机上与总制片互发消息,并同步收到系统自动通知">手机消息</a>
           <a href="#" id="menu-voice" title="语音输入:开启后控制台与预览页「修改」浮窗的输入框出现麦克风按钮,录音由本机 faster-whisper 转成文字,音频不出本机">语音输入</a>
-          <a href="#" id="menu-diag" title="诊断数据:Debug 模式与 Issue 反馈(Agent 发现宿主代码问题时整理成 GitHub issue)">诊断数据<span id="menu-diag-n"></span></a>
+          <a href="#" id="menu-diag" title="诊断数据:Issue 反馈(Agent 发现宿主代码问题时整理成 GitHub issue)">诊断数据<span id="menu-diag-n"></span></a>
           <a href="#" id="menu-net" title="网络检测:显示出口 IP 与归属地,实测 google/youtube/claude 等站点在命令行环境的连通性">网络检测</a>
         </div>
       </div>
@@ -314,7 +314,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span class="hbtns">
         <button id="btn-skills" style="display:none" title="本 Agent 的技能:点击查看已安装清单,选择一项即把技能路径(如 skills/sd25-pe)插入输入框;「加载技能」可上传技能 zip 包或单个 SKILL.md 安装到本 Agent">技能</button>
         <button id="btn-models" title="该 Agent 的引擎/模型配置(优先级高于右上角全局)">模型</button>
-        <button id="btn-soul" style="display:none" title="查看该 Agent 的 SOUL.md 原文(Debug 模式,设置→高级→诊断数据)">SOUL.md</button>
+        <button id="btn-soul" style="display:none" title="查看该 Agent 的 SOUL.md 原文(Debug 模式,设置→高级→Agent 高级设置)">SOUL.md</button>
       </span>
     </div>
     <div id="messages"><div class="empty">左侧选择 Agent;跟「总制片」对话可自动调度整个团队</div></div>
@@ -802,6 +802,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" id="conc-wbcheck" checked style="flex:none;width:auto;margin:0"><span onclick="$('#conc-wbcheck').click()" style="cursor:pointer">白模调度编译后出静帧自检取景</span></span>
     <button type="button" class="info-btn" data-info="conc-info-wbcheck" title="说明">i</button></div>
     <div class="note info-note" id="conc-info-wbcheck">默认勾选:白模调度 Agent 每次新建或修改分镜白模、编译通过后,用宿主命令 render_whitebox.py --stills 对本单改动过的组做无头渲染——每镜取首/中/尾等时刻的摄影机视角加一张空间视角,拼成每组一张联系表(项目 directing 下该集的 whitebox/stills 目录),Agent 读图核对主体是否在画内、有无被墙或道具遮挡、正面/背影与调度是否一致、景别是否相符,有问题先自行修正或开待决项,再交你在预览页审看签字。渲染全在本机完成,不调用任何生成模型、不产生费用,也不导出 camera.mp4(导出仍须 H3W 签字);每组约多花十几秒与一次读图的 token。取消勾选则只做数值自检与宿主机检,不出静帧。全局设置,通过运行提示词注入白模调度 Agent,保存后对后续启动的工单生效。</div>
+    <div class="row"><label>Debug 模式</label>
+      <span style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" id="conc-debug" style="flex:none;width:auto;margin:0"><span onclick="$('#conc-debug').click()" style="cursor:pointer">显示 SOUL.md 等开发者入口</span></span>
+    <button type="button" class="info-btn" data-info="conc-info-debug" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-debug">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;关闭时若正在看 SOUL.md 原文会自动退回对话。全局设置,保存后立即生效,不影响任何 Agent 的运行。</div>
     <div class="row"><label>对话记忆</label>
       <input type="range" id="mem-range" min="0" max="256" step="1" style="flex:1">
       <input type="number" id="mem-num" min="0" max="256" step="1" style="width:64px">
@@ -915,9 +919,6 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="diag-modal" class="modal">
   <div class="box" style="width:600px">
     <h3>🩺 诊断数据</h3>
-    <div class="row"><label>Debug 模式</label>
-      <input type="checkbox" id="diag-debug" style="flex:none;margin:0">
-      <span class="note" style="flex:1">默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文</span></div>
     <div class="row"><label>Issue 反馈</label>
       <input type="checkbox" id="diag-issue" style="flex:none;margin:0">
       <span class="note" style="flex:1">默认开。Agent 运行中确认问题属于宿主代码缺陷、或需要宿主新增功能时,自动整理成 issue 列在下方,点「在浏览器中提交」即打开预填好的 GitHub 页面由你确认提交。正文只写机制,宿主已脱敏(路径、项目名、密钥),不含剧情、提示词与项目内容</span></div>
@@ -2201,7 +2202,7 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 重跑等待确认 + 思考深度 + 白模自检 + 对话记忆) ---------- */
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 重跑等待确认 + 思考深度 + 白模自检 + Debug 模式 + 对话记忆) ---------- */
 let gconcMax=50,concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000,concCfMin=5,concCfMax=3600;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
@@ -2235,10 +2236,11 @@ async function openConcModal(){
     $('#conc-turns').value=c.max_turns==null?(c.max_turns_default||250):c.max_turns;
     $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     $('#conc-wbcheck').checked=c.whitebox_selfcheck!==false;
+    $('#conc-debug').checked=!!c.debug_mode;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#gconc-range').value=8;$('#gconc-num').value=8;syncConcMax(8);$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=0;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#conc-wbcheck').checked=true;$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#gconc-range').value=8;$('#gconc-num').value=8;syncConcMax(8);$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=0;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#conc-wbcheck').checked=true;$('#conc-debug').checked=DEBUG_MODE;$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
@@ -2279,7 +2281,8 @@ $('#conc-ok').onclick=async()=>{
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    await api('/api/v1/config/agent-advanced',{global_concurrency:g,agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value,whitebox_selfcheck:$('#conc-wbcheck').checked});
+    const r=await api('/api/v1/config/agent-advanced',{global_concurrency:g,agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value,whitebox_selfcheck:$('#conc-wbcheck').checked,debug_mode:$('#conc-debug').checked});
+    DEBUG_MODE=!!(r&&r.debug_mode);applyDebugMode();   // Debug 模式随保存立即生效(SOUL.md 入口显隐)
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
 };
@@ -2435,8 +2438,9 @@ $('#voice-dl').onclick=async()=>{
   catch(e){$('#voice-err').textContent=t('下载失败')+':'+e.message;$('#voice-dl').disabled=false}
 };
 
-/* ---------- 诊断数据弹窗(设置菜单「高级」;Debug 模式 + Issue 反馈) ---------- */
-let DEBUG_MODE=false;   // 设置→高级→诊断数据「Debug 模式」,默认关;控制 SOUL.md 等开发者入口显隐
+/* ---------- 诊断数据弹窗(设置菜单「高级」;Issue 反馈)。Debug 模式开关在「Agent 高级设置」弹窗,
+   但 DEBUG_MODE 状态与 SOUL.md 入口显隐在这里维护 ---------- */
+let DEBUG_MODE=false;   // 设置→高级→Agent 高级设置「Debug 模式」,默认关;控制 SOUL.md 等开发者入口显隐
 function applyDebugMode(){
   $('#btn-soul').style.display=DEBUG_MODE?'':'none';
   if(!DEBUG_MODE&&$('#soul-view').style.display==='block'){   // 关闭时若正在看 SOUL 原文,退回对话
@@ -2462,7 +2466,6 @@ function diagIssueRow(r){
   return d;
 }
 function diagRender(d){
-  $('#diag-debug').checked=DEBUG_MODE=!!d.debug_mode;applyDebugMode();
   $('#diag-issue').checked=!!d.issue_feedback;
   $('#diag-repo').href=d.repo_url;
   $('#diag-auth').textContent=d.auth?t('已设置 VIDEOAGENTS_GITHUB_TOKEN:宿主直接发布'):'';
@@ -2487,10 +2490,6 @@ async function diagSave(body){
   try{await api('/api/v1/config/diagnostics',body)}
   catch(e){$('#diag-err').textContent=t('保存失败')+':'+e.message}
 }
-$('#diag-debug').onchange=()=>{
-  DEBUG_MODE=$('#diag-debug').checked;applyDebugMode();
-  diagSave({debug_mode:DEBUG_MODE});
-};
 $('#diag-issue').onchange=()=>diagSave({issue_feedback:$('#diag-issue').checked});
 $('#diag-republish').onclick=async()=>{
   $('#diag-err').textContent='';$('#diag-republish').disabled=true;
@@ -3338,7 +3337,7 @@ function liveBox(runId){
     syncDaProvider();
   });
   await restorePrefs();
-  loadDebugMode();   // Debug 模式开关(默认关):决定 SOUL.md 按钮显隐,不阻塞启动
+  loadDebugMode();   // Debug 模式开关(Agent 高级设置,默认关):决定 SOUL.md 按钮显隐,不阻塞启动
   checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
   // 外部入口预填通道:?project=xx&compose=预填指令(选中总制片并填入输入框);预览页「✏️ 修改」已改为页内编辑浮窗(edit-popup.js)直发,不再经此跳转;
   // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片
