@@ -5109,6 +5109,12 @@ def _rh_upscale_resize_node(workflow: dict) -> tuple[str, dict] | None:
                 if is_resize(inputs):
                     return nid, inputs
                 link = inputs.get("image") or inputs.get("images") or inputs.get("input")
+    # 新版一体节点 SeedVR2VideoUpscaler(numz):目标尺寸就是自身 resolution 位(短边),
+    # 没有独立缩放节点;resolution 常连一个 INTConstant
+    for nid, node in workflow.items():
+        if isinstance(node, dict) and node.get("class_type") == "SeedVR2VideoUpscaler" \
+                and "resolution" in (node.get("inputs") or {}):
+            return nid, node.setdefault("inputs", {})
     for nid, node in workflow.items():
         if not isinstance(node, dict):
             continue
@@ -5135,10 +5141,18 @@ def _apply_rh_upscale_bindings(workflow: dict, video_name: str, width: int, heig
     if resize is None:
         raise RuntimeError(
             "RunningHub 超分工作流未定位到目标尺寸缩放节点(SeedVR2Preprocess 上游的 "
-            "ImageScaleByAspectRatio / ResizeImageMaskNode / width+height 类节点),"
+            "ImageScaleByAspectRatio / ResizeImageMaskNode / width+height 类节点,或 "
+            "SeedVR2VideoUpscaler 的 resolution 位),"
             "--resolution/--aspect 无法注入;请精简云端工作流或改用 {{WIDTH}}/{{HEIGHT}} 占位符")
     nid, r = resize
-    if "scale_to_side" in r and "scale_to_length" in r:
+    if (workflow.get(nid) or {}).get("class_type") == "SeedVR2VideoUpscaler":
+        # numz 一体节点:resolution = 目标短边,长边按源画幅等比;max_resolution 保持模板值
+        target = min(width, height)
+        if not _rh_bind_number_like(workflow, r, "resolution", target):
+            raise RuntimeError(f"RunningHub 超分工作流节点 {nid}(SeedVR2VideoUpscaler)的 resolution 位"
+                               f"不可写(值 {r.get('resolution')!r}),目标尺寸无法注入")
+        summary["target"] = f"shortest={target}"
+    elif "scale_to_side" in r and "scale_to_length" in r:
         # LayerUtility ImageScaleByAspectRatio V2:按边长缩放,画幅跟随源视频
         side = str(r.get("scale_to_side") or "").lower()
         if side == "longest":
@@ -5169,11 +5183,17 @@ def _apply_rh_upscale_bindings(workflow: dict, video_name: str, width: int, heig
         summary["target"] = f"{width}x{height}"
 
     if seed is not None:
-        try:
-            _apply_rh_image_seed(workflow, _image_primary_sampler(workflow), seed)
-        except RuntimeError:
-            print("[genmedia] RunningHub 超分工作流未定位到采样器,seed 未注入(按模板内种子生成)",
-                  file=sys.stderr)
+        seedvr2 = [n for n in workflow.values() if isinstance(n, dict)
+                   and n.get("class_type") == "SeedVR2VideoUpscaler"]
+        if seedvr2:
+            for n in seedvr2:
+                _apply_rh_image_seed(workflow, n, seed)
+        else:
+            try:
+                _apply_rh_image_seed(workflow, _image_primary_sampler(workflow), seed)
+            except RuntimeError:
+                print("[genmedia] RunningHub 超分工作流未定位到采样器,seed 未注入(按模板内种子生成)",
+                      file=sys.stderr)
 
     # VHS 元批处理(VHS_BatchManager + LoadVideo/VideoCombine 的 meta_batch)靠服务端
     # 把同一提示词以新 prompt_id 反复重排队分批处理,RunningHub 只跟踪首个 prompt:
