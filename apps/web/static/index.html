@@ -499,9 +499,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <select id="npo-plate-mode" style="flex:none">
           <option value="pano">全景图</option>
           <option value="world">世界模型</option>
+          <option value="grid">九宫格</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-plate-mode-hint" title="说明">i</button></div>
-      <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成</div>
+      <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用</div>
       <div class="row" id="npo-scene-plates-row"><label>场景图模式</label>
         <select id="npo-scene-plates" style="flex:none">
           <option value="auto">自动:正向必出,反向按分镜按需</option>
@@ -611,9 +612,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <select id="out-plate-mode" style="flex:none">
         <option value="pano">全景图</option>
         <option value="world">世界模型</option>
+        <option value="grid">九宫格</option>
       </select>
       <button type="button" class="info-btn" data-info="out-plate-mode-hint" title="说明">i</button></div>
-    <div class="note info-note" id="out-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成</div>
+    <div class="note info-note" id="out-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用</div>
     <div class="row" id="out-scene-plates-row"><label>场景图模式</label>
       <select id="out-scene-plates" style="flex:none">
         <option value="auto">自动:正向必出,反向按分镜按需</option>
@@ -1833,7 +1835,7 @@ function sgApplyPreset(pfx,key){
 }
 // 白模开关说明随勾选状态切换(2026-09-12):勾选=白模链说明,关闭=单张概念图说明;文案经 t() 走词典
 const SCENE_PLATES_MODES=['auto','single','pair'];   // 输出设置「场景图」(2026-09-17):白模关闭项目的场景一致性方案(正向/反向场景图)
-const PLATE_MODES=['pano','world'];   // 输出设置「背景图模式」(2026-09-22):白模开启项目分镜背景图的参考来源(全景图重投影 / 世界模型截图)
+const PLATE_MODES=['pano','world','grid'];   // 输出设置「背景图模式」(2026-09-22):白模开启项目分镜背景图的参考来源(全景图重投影 / 世界模型截图 / 九宫格一次出图,2026-09-25)
 function syncSpatialHint(id){
   const cb=$('#'+id),h=$('#'+id+'-hint');if(!cb||!h)return;
   h.textContent=t(cb.checked?'建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物':'走「场景图(正向/反向)」流程,不建白模');

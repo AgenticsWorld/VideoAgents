@@ -8,7 +8,9 @@ const renderer=new WhiteboxRenderer(document.querySelector('#render'),{width:dat
 // 2026-09-08:只导出摄影机视角(camera.mp4),不再导出俯视 top.mp4——俯视只在预览页交互查看。
 window.whiteboxExport={
   load(gid){const group=data.episode.groups.find(g=>g.group_id===gid);renderer.load(data.episode.scenes[group.scene_id],group);},
-  frame(time){renderer.setTime(time);renderer.render('camera');return renderer.canvas.toDataURL('image/jpeg',.9).split(',')[1];}
+  frame(time){renderer.setTime(time);renderer.render('camera');return renderer.canvas.toDataURL('image/jpeg',.9).split(',')[1];},
+  // 2026-09-25 九宫格背景图模式:按指定机位(母图机位 position/target/fov,白模坐标)渲 time 时刻的干净帧,不用该时刻的分镜机位
+  frameAt(time,cam){renderer.setTime(time);const c=renderer.camera;c.position.fromArray(cam.position);c.lookAt(cam.target[0],cam.target[1],cam.target[2]);c.fov=cam.fov;c.updateProjectionMatrix();renderer.render('camera');return renderer.canvas.toDataURL('image/jpeg',.9).split(',')[1];}
 };
 window.whiteboxReady=true;
 </script></body></html>

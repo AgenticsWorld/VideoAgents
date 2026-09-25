@@ -2737,6 +2737,8 @@ window.I18N_DICT = {
 // 世界模型(World Labs Marble,2026-09-12):场景预览页板块 + 生成模型页配置 + Spark 视窗
 "🌍 世界模型": "🌍 Modèle de monde",
 "世界模型": "Modèle de monde",
+"九宫格": "Grille 3×3",
+"九宫格 {g} 第 {n} 格": "grille {g}, case {n}",
 "生成世界模型": "Générer le modèle de monde",
 "重新生成世界模型": "Régénérer le modèle de monde",
 "确认重新生成(旧版归档到 world/variants/)": "Confirmer la régénération (ancienne version archivée dans world/variants/)",
@@ -3173,7 +3175,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Mode de fond de plan",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Source de référence des fonds de plan quand la whitebox est activée (réglage global ; remplaçable par scène dans l’aperçu des scènes) : Panorama = les ancres sont planifiées automatiquement à partir des positions de caméra de la whitebox, les panoramas sont reprojetés selon la direction du plan puis régénérés ; Modèle du monde = vous choisissez une ancre dans l’aperçu des scènes pour créer un panorama, générez un modèle du monde à partir de celui-ci (World Labs Marble, payant), puis des captures prises dans le modèle selon la direction du plan sont régénérées",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用": "Source de référence des fonds de plan quand la whitebox est activée (réglage global ; remplaçable par scène dans l’aperçu des scènes) : Panorama = les ancres sont planifiées automatiquement à partir des positions de caméra de la whitebox, les panoramas sont reprojetés selon la direction du plan puis régénérés ; Modèle du monde = vous choisissez une ancre dans l’aperçu des scènes pour créer un panorama, générez un modèle du monde à partir de celui-ci (World Labs Marble, payant), puis des captures prises dans le modèle selon la direction du plan sont régénérées ; Grille 3×3 = sans panorama : les plaques maîtresses nécessaires à l’épisode sont regroupées par scène et schéma d’éclairage, neuf par planche, et générées en une seule image en grille (référence = planche-contact des images whitebox depuis la caméra de chaque case + plan vu de dessus) ; la planche est découpée en cases versées dans la bibliothèque et les plans réutilisent toujours les plaques maîtresses",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Source de référence des fonds de plan de cette scène ; suit par défaut le réglage de sortie du projet « Mode de fond de plan », remplaçable ici",
 "跟随全局({m})": "Suivre le global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Le mode de fond de cette scène est « Modèle du monde » mais aucun modèle n’a encore été généré : la chaîne des fonds s’arrêtera (code de sortie 4). Générez-le d’abord dans le panneau « 🌍 Modèle du monde » ci-dessus",

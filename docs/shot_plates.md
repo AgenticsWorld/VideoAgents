@@ -52,14 +52,21 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - 提示词：空场景声明 + 组 `time_of_day` + 光照方案 `prompt_fragment_en` + 机位事实（景别、等效焦距、机高档、俯仰、机位落在哪个几何上、罗盘朝向、画左/画右/身后各是什么——由 `layout.json#orientation` 把白模坐标映射到东南西北）+ 白模帧用法 + 俯视图用法 + 画内自左向右清单（白模几何盒采样投影，按基名/地标归并）+ **画外不可见清单**（在画幅外/身后的地标，明令不画——实测没有这句时场景描述会把身后的大门院墙带进画面）+ 场景描述（architecture.json 的 form / arch_style / era_region / scale / materials / details，声明只作材质与年代参考）+ 禁人/禁网格/禁俯视 + `style_fragment_en`。negative = `negative_prompt_en` + architecture.negative + 人物/网格/俯视词。**空场景图去人物用语(2026-09-20)**:`style_fragment_en` 过 `plate_style()` 剔除描述人物的分句(subject / hair / skin / 服装面料),`negative_prompt_en` 过 `plate_negative()` 剔除人脸/人物/服装类条目及「须有前景/比例参照物」类条目——方舟等渠道没有独立负面通道,negative 以「避免出现:…」并进正文,参考图几乎全空(仰拍天空/大片水雾)时这些词会被当内容画出来(实证 fengshen3 SCN-0110 母图画出白须老人);场景视角图 `scene_plates.py` / `scene_pair_plates.py` 同用这两个函数。可选 `--sun <罗盘>` 写太阳相对机位方向。
 - 分辨率：母图长边 2880、派生分镜图长边 1920，按项目画幅；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
 
-## 背景图模式（2026-09-22：全景图 | 世界模型）
+## 背景图模式（2026-09-22：全景图 | 世界模型；2026-09-25 加九宫格）
 
-分镜背景图的参考来源分两种模式，**全局设置**在输出设置（新建向导与项目设置「输出设置」均有，仅白模开启时显示）`output.plate_mode`，**场景级覆盖**在场景预览页「🎦 分镜背景图」板块标题后的「按场景选择」（跟随全局 / 全景图 / 世界模型，存库 `assets/concepts/scenes/<sid>/plates/index.json#mode`，`POST /projects/<p>/scenes/<sid>/plates/plate-mode`）。生效值 = 场景级非 inherit 时取场景级，否则取项目级；`modules/shot_plates.py#effective_plate_mode`。
+分镜背景图的参考来源分三种模式，**全局设置**在输出设置（新建向导与项目设置「输出设置」均有，仅白模开启时显示）`output.plate_mode`，**场景级覆盖**在场景预览页「🎦 分镜背景图」板块标题后的「按场景选择」（跟随全局 / 全景图 / 世界模型 / 九宫格，存库 `assets/concepts/scenes/<sid>/plates/index.json#mode`，`POST /projects/<p>/scenes/<sid>/plates/plate-mode`）。生效值 = 场景级非 inherit 时取场景级，否则取项目级；`modules/shot_plates.py#effective_plate_mode`。
 
 - **全景图（pano，默认）**：即上节全景制——按白模机位自动规划锚点出 2:1 全景，每张母图把全景按母图机位重投影成 `<key>.pano.jpg` 作 `[Image 1]` 二次生成。
 - **世界模型（world）**：用户在场景预览页「🌐 全景图」板块**自选锚点**创建全景图 → 在「🌍 世界模型」板块基于该全景生成世界模型（World Labs Marble，1500 credits/次，`docs/worldlabs_world.md`）→ `render_shot_plates.py` 在 world 里按母图机位（position/target/fov，白模坐标）用无头 Chromium + Spark 截图 `<key>.world.jpg`（`modules/worldlabs.py#render_world_views`，渲染页 `apps/web/static/world-view-export.html`；先试 GPU 无头，不可用退回 swiftshader，`VIDEOAGENTS_WORLD_GPU=0` 强制 swiftshader）作 `[Image 1]` 二次生成。提示词口径改为「world 内渲染截图，可能糊/噪，内容与位置权威」；其余（母图制、复用、接线、机检）与全景制完全一致，两种模式的母图同库同键。**场景没有世界模型时整条链停下**：`WorldMissing` → CLI 退出码 4 并打印 `[world_missing]`（列出场景），一张都不出；由用户到场景预览页生成世界模型（计费）或把该场景/项目改回全景图；Agent 不得自行跑 `worldlabs_world.py`。`--dry-run` 不要求已有 world，只列决策并标注模式。
 - 世界模型模式**不跑** `ensure_scene_panos`（锚点规划/自动出全景）：全景由用户手选锚点在预览页出；光照方案只影响提示词，world 只有一个（按生成时选的全景方案）。
 - 库条目 `pano_ref.kind = pano | world`（world 条目另记 `world_id` / 来源锚点 / 方案 / splats 精度），`plate_mode` 记出图时的模式；`is_legacy` 判定不分模式（有 `pano_ref` 且 `master` 即非 legacy）。场景预览页背景图 caption 显示「世界模型(全景 A1)」；分镜预览页不区分。
+- **九宫格（grid，2026-09-25）**：不出全景、不用世界模型。用户原方案是「按俯视图出一张九宫格 → 拆 9 张 → 按白模机位选最近的一张」，评审后改为**格位 = 本集母图机位**：`run_episode` 先按母图制（`same_station` / `plan_master`）算出本集待出的母图，再按同场景、同光照方案每 ≤9 张一批拼成一张宫格一次出图，出图后按版式拆格放大到母图规格入库，分镜仍按母图制派生与复用（`find_master`），所以「自动选最合适的一张」退化为已有的簇归属判定，不需要新度量。
+  - 参考图：`[Image 1]` = 各格母图机位的**白模干净帧**按同版式拼成的联系表 `<方案>_gridNN.whitebox.jpg`（`compose_grid_sheet`；白模帧由 `whitebox-export.html#frameAt` 按母图机位渲，视场按拆格内缩比例 `GRID_INSET` 预先放宽，拆后恰为母图视场——格与格的几何由白模保证，不靠模型自觉）；`[Image 2]` = 场景俯视图 `layout_top.png`（有则挂，提示词声明只作布局参考、任何格不得画成俯视）。
+  - 版式：`grid_layout(n)` 按待出张数取 1×1 / 2×1 / 2×2 / 3×2 / 3×3，多余格位留白（提示词逐格写明留白）；`grid_geometry` 格子按项目画幅、整图面积 ≤ 4.6 MP（方舟单图上限）、格间白线 24 px；每格原生约 1.2 MP（16:9 三行三列），`split_grid_sheet` 四边内缩 1.5% 去白线后 Lanczos 放大到母图规格 `master_size`。模型返回尺寸宽高比与版式偏差 >3% 视为未按版式出图，整张作废、该批各镜报错。
+  - 提示词 `build_grid_prompt`：整图声明（几行几列、白线、与 [Image 1] 版式一致）+ 逐格机位事实与画内/画外清单（口径同母图提示词）+ 留白格 + 禁人/禁字/禁并格 + 风格串；负面词用 `NEGATIVE_GRID`（去掉母图负面里的 tiled grid / split screen / contact sheet）。
+  - 台账：宫格整图 `<方案>_gridNN.png` + 同名 `.json`（prompt / refs / seed / 各格对应的 key、镜号）只作记录，**不进视频 refs**（refs 只挂拆出的母图 `<key>.png`）；文件名不用退役的 `grid_9views*` 前缀（`layout_map_bound_check` / `sync_shot_plates` / `scene_plates` 对该前缀黑名单）。库条目 `pano_ref = {kind: 'grid', sheet, whitebox_sheet, cols, rows, tile, box, sheet_size, tile_native, scheme}`，`plate_mode = 'grid'`；场景预览页 caption 显示「九宫格 <方案>_gridNN 第 n 格」。
+  - `--max-new` 按格计数（一批最多出到剩余额度，其余镜报 pending_new 退出码 3）；`--dry-run` 只拼白模联系表到 `directing/<ep>/whitebox/plate_frames/` 并打印提示词。镜尾母图与镜首母图在同一张宫格里，不再另挂镜首成图作第二参考。
+  - 代价与取舍：每格分辨率比单出母图低一个量级（放大补足像素不补细节），换来一次调用出九张与跨格风格一致；几何一致性靠白模联系表而非俯视图。
 - 预览数据：`/previews/scenes` 顶层 `plate_mode`（项目级），`scenes[].plate_mode{mode, effective, has_world}`；世界模型模式且尚无 world 的场景板块内有黄字提示 + 「前往世界模型」。世界模型板块自 2026-09-22 起挂在「分镜背景图」板块之上（全景图 → 世界模型 → 分镜背景图，与流程顺序一致）。
 
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）

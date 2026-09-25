@@ -2735,6 +2735,8 @@ window.I18N_DICT = {
 // 世界模型(World Labs Marble,2026-09-12):场景预览页板块 + 生成模型页配置 + Spark 视窗
 "🌍 世界模型": "🌍 Model dunia",
 "世界模型": "Model dunia",
+"九宫格": "Grid 3×3",
+"九宫格 {g} 第 {n} 格": "grid {g}, petak {n}",
 "生成世界模型": "Buat model dunia",
 "重新生成世界模型": "Buat ulang model dunia",
 "确认重新生成(旧版归档到 world/variants/)": "Konfirmasi buat ulang (versi lama diarsipkan ke world/variants/)",
@@ -3171,7 +3173,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Mode pelat latar",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Sumber referensi pelat latar shot saat whitebox aktif (pengaturan global; dapat ditimpa per adegan di pratinjau adegan): Panorama = jangkar direncanakan otomatis dari posisi kamera whitebox, panorama dibuat, diproyeksikan ulang sesuai arah shot lalu dibuat ulang; Model dunia = Anda memilih jangkar di pratinjau adegan untuk membuat panorama, membangun model dunia darinya (World Labs Marble, berbayar), lalu tangkapan layar di dalam model dunia sesuai arah shot dibuat ulang",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用": "Sumber referensi pelat latar shot saat whitebox aktif (pengaturan global; dapat ditimpa per adegan di pratinjau adegan): Panorama = jangkar direncanakan otomatis dari posisi kamera whitebox, panorama dibuat, diproyeksikan ulang sesuai arah shot lalu dibuat ulang; Model dunia = Anda memilih jangkar di pratinjau adegan untuk membuat panorama, membangun model dunia darinya (World Labs Marble, berbayar), lalu tangkapan layar di dalam model dunia sesuai arah shot dibuat ulang; Grid 3×3 = tanpa panorama: pelat induk yang dibutuhkan episode dikelompokkan per adegan dan skema pencahayaan, sembilan per lembar, lalu dibuat sebagai satu gambar grid (referensi = lembar kontak frame whitebox dari kamera tiap petak + denah atas); lembar dipotong menjadi petak yang masuk pustaka, dan shot tetap memakai ulang pelat induk",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Sumber referensi pelat shot adegan ini; secara default mengikuti pengaturan output proyek 「Mode pelat latar」, dapat ditimpa di sini",
 "跟随全局({m})": "Ikuti global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Mode pelat adegan ini adalah 「Model dunia」 tetapi model dunia belum dibuat: rantai pelat akan berhenti (kode keluar 4). Buat dulu di panel 「🌍 Model dunia」 di atas",

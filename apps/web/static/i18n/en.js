@@ -2840,6 +2840,8 @@ window.I18N_DICT = {
 // 世界模型(World Labs Marble,2026-09-12):场景预览页板块 + 生成模型页配置 + Spark 视窗
 "🌍 世界模型": "🌍 World model",
 "世界模型": "World model",
+"九宫格": "Nine-grid",
+"九宫格 {g} 第 {n} 格": "nine-grid {g} tile {n}",
 "生成世界模型": "Generate world model",
 "重新生成世界模型": "Regenerate world model",
 "确认重新生成(旧版归档到 world/variants/)": "Confirm regenerate (previous version archived to world/variants/)",
@@ -3336,7 +3338,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Background plate mode",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Reference source for shot background plates when whitebox is on (global setting; can be overridden per scene on the scene preview page): Panorama = anchors are planned automatically from whitebox camera positions, panoramas are re-projected to each shot direction and regenerated; World model = you pick an anchor on the scene preview page to create a panorama, build a world model from it (World Labs Marble, billed), then screenshots taken inside the world model per shot direction are regenerated",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用": "Reference source for shot background plates when whitebox is on (global setting; can be overridden per scene on the scene preview page): Panorama = anchors are planned automatically from whitebox camera positions, panoramas are re-projected to each shot direction and regenerated; World model = you pick an anchor on the scene preview page to create a panorama, build a world model from it (World Labs Marble, billed), then screenshots taken inside the world model per shot direction are regenerated; Nine-grid = no panorama: the master plates the episode needs are batched per scene and lighting scheme, nine per sheet, and generated as one grid image (reference = a contact sheet of whitebox frames from each tile's camera + the top-down plan); the sheet is split into tiles that go into the library, and shots still reuse the master plates",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Reference source for this scene's shot plates; follows the project output setting \"Background plate mode\" by default, can be overridden here",
 "跟随全局({m})": "Follow global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "This scene's plate mode is \"World model\" but no world model has been generated yet: the plate chain will stop (exit code 4). Generate one in the \"🌍 World model\" panel above first",

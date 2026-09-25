@@ -2735,6 +2735,8 @@ window.I18N_DICT = {
 // 世界模型(World Labs Marble,2026-09-12):场景预览页板块 + 生成模型页配置 + Spark 视窗
 "🌍 世界模型": "🌍 Weltmodell",
 "世界模型": "Weltmodell",
+"九宫格": "Neuner-Raster",
+"九宫格 {g} 第 {n} 格": "Neuner-Raster {g}, Kachel {n}",
 "生成世界模型": "Weltmodell erzeugen",
 "重新生成世界模型": "Weltmodell neu erzeugen",
 "确认重新生成(旧版归档到 world/variants/)": "Neu erzeugen bestätigen (alte Version wird in world/variants/ archiviert)",
@@ -3171,7 +3173,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Hintergrundplatten-Modus",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Referenzquelle der Shot-Hintergrundplatten bei aktivierter Whitebox (globale Einstellung; pro Szene in der Szenenvorschau überschreibbar): Panorama = Anker werden automatisch aus den Whitebox-Kamerapositionen geplant, Panoramen erzeugt, je Shot-Richtung reprojiziert und neu generiert; Weltmodell = du wählst in der Szenenvorschau einen Anker, erzeugst daraus ein Panorama und ein Weltmodell (World Labs Marble, kostenpflichtig); anschließend werden Screenshots aus dem Weltmodell je Shot-Richtung neu generiert",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用": "Referenzquelle der Shot-Hintergrundplatten bei aktivierter Whitebox (globale Einstellung; pro Szene in der Szenenvorschau überschreibbar): Panorama = Anker werden automatisch aus den Whitebox-Kamerapositionen geplant, Panoramen erzeugt, je Shot-Richtung reprojiziert und neu generiert; Weltmodell = du wählst in der Szenenvorschau einen Anker, erzeugst daraus ein Panorama und ein Weltmodell (World Labs Marble, kostenpflichtig); anschließend werden Screenshots aus dem Weltmodell je Shot-Richtung neu generiert; Neuner-Raster = kein Panorama: die für die Folge nötigen Masterplatten werden je Szene und Lichtschema zu neunt in einem Rasterbild erzeugt (Referenz = Kontaktbogen aus Whitebox-Frames der jeweiligen Kachelkamera + Grundriss); das Raster wird in Kacheln zerlegt und in die Bibliothek übernommen, die Shots nutzen weiterhin die Masterplatten",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Referenzquelle der Shot-Platten dieser Szene; folgt standardmäßig der Projekt-Ausgabeeinstellung „Hintergrundplatten-Modus“, hier überschreibbar",
 "跟随全局({m})": "Global folgen ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Der Plattenmodus dieser Szene ist „Weltmodell“, aber es wurde noch kein Weltmodell erzeugt: die Plattenkette stoppt (Exit-Code 4). Bitte zuerst im Panel „🌍 Weltmodell“ oben erzeugen",

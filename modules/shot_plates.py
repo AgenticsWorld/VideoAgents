@@ -31,6 +31,11 @@
     modules/worldlabs.py),出图时在 world 里按母图机位截图 <key>.world.jpg 作 [Image 1] 二次生成(modules/worldlabs.py#render_world_views,
     无头 Chromium + Spark);场景没有 world 时整条链停下(WorldMissing,CLI 退出码 4 [world_missing]),不自动生成世界模型(计费,用户决定)。
     库条目 pano_ref.kind = pano|world 记来源;两种模式的母图同库同键,复用判定不分模式。
+    grid(九宫格,2026-09-25)= 不出全景、不用 world:本集待出的母图按同场景/同光照方案 ≤9 张一批拼成一张宫格一次出图——格位就是母图机位
+    (簇规则同上,分镜仍按母图制派生/复用),[Image 1] = 各格母图机位的白模干净帧按同版式拼的联系表(几何由白模保证)、[Image 2] = 俯视图
+    (有则挂,只作布局参考);出图后按版式拆格(四边内缩去白线,白模帧预先按内缩比例渲宽,拆后恰为母图视场)放大到母图规格入库,
+    库条目 pano_ref.kind='grid' 记宫格文件 <方案>_gridNN.png / 格号 / 版式;--max-new 按格计数。格数取版式 1/2x1/2x2/3x2/3x3,
+    多余格位留白。宫格不进视频 refs(refs 只挂拆出的母图);宫格文件名不用退役的 grid_9views* 前缀(三处机检黑名单)。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -461,8 +466,8 @@ def is_legacy(entry: dict) -> bool:
 
 
 # ---------------------------------------------------------------- 背景图模式(2026-09-22):全景图 | 世界模型
-PLATE_MODES = ('pano', 'world')                  # 项目输出设置 output.plate_mode(白模开启时显示;默认 pano)
-SCENE_PLATE_MODES = ('inherit', 'pano', 'world')  # 场景级覆盖:库 assets/concepts/scenes/<sid>/plates/index.json#mode(默认 inherit)
+PLATE_MODES = ('pano', 'world', 'grid')                  # 项目输出设置 output.plate_mode(白模开启时显示;默认 pano;grid = 九宫格,2026-09-25)
+SCENE_PLATE_MODES = ('inherit', 'pano', 'world', 'grid')  # 场景级覆盖:库 assets/concepts/scenes/<sid>/plates/index.json#mode(默认 inherit)
 DEFAULT_PLATE_MODE = 'pano'
 
 
@@ -502,6 +507,179 @@ def set_scene_plate_mode(base: Path, sid: str, mode: str):
     else:
         lib['mode'] = mode
     save_library(base, sid, lib)
+
+
+# ---------------------------------------------------------------- 九宫格模式(2026-09-25):本集母图机位分批拼成一张宫格一次出图
+# 用户提的原方案是「按俯视图出一张九宫格 → 拆 9 张 → 按白模机位选最近的一张」;评审后改为:九个格位不取 layout.json#views 的语义机位,
+# 而是取本集按母图簇规则(same_station / plan_master)算出的母图机位——每格就是一张母图,分镜仍按母图制派生(纯旋转单应、find_master 复用),
+# 「自动选最合适」退化为已有的簇归属判定,不需要新度量。参考图 [Image 1] = 各格母图机位的白模干净帧按同版式拼成的联系表(格与格的几何
+# 由白模保证,不靠模型自觉),[Image 2] = 场景俯视图(有则挂,只作布局参考)。出图后按版式拆格、内缩去白线、放大到母图规格入库,
+# 库条目 pano_ref.kind = 'grid' 记宫格文件/格号。格数按待出母图数取版式(1/2/4/6/9 格恰好,其余留白格),超过 9 张出第二张宫格。
+# 宫格文件名 <方案>_gridNN.png(不用退役的 grid_9views* 前缀:layout_map_bound / sync_shot_plates / scene_plates 三处机检对该前缀黑名单)。
+GRID_MAX_TILES = 9
+GRID_GUTTER_PX = 24               # 格间白线像素(在宫格整图尺度上)
+GRID_MAX_PIXELS = MASTER_MAX_PIXELS   # 宫格整图面积上限(方舟 Seedream 单图硬上限 4,624,220)
+GRID_INSET = 0.015                # 拆格时四边各内缩的比例(防白线渗入);白模帧按此比例渲得略宽,内缩后恰为母图视场
+GRID_ASPECT_TOLERANCE = 0.03      # 模型返回尺寸与宫格版式宽高比偏差超此值视为未按版式出图
+NEGATIVE_GRID = ('people, person, human figure, silhouette, crowd, pedestrian, grey boxes, untextured 3D blocks, wireframe, '
+                 "top-down view, bird's-eye view, map, text, letters, numbers, labels, watermark, merged tiles, uneven gutters, "
+                 'tiles bleeding into each other')
+_ROW_WORDS = {1: [''], 2: ['top', 'bottom'], 3: ['top', 'middle', 'bottom']}
+_COL_WORDS = {1: [''], 2: ['left', 'right'], 3: ['left', 'centre', 'right']}
+
+
+def grid_layout(n: int) -> tuple[int, int]:
+    """待出母图数 → (列数, 行数):1→1x1、2→2x1、3–4→2x2、5–6→3x2、7–9→3x3。"""
+    n = max(1, min(GRID_MAX_TILES, int(n)))
+    return (1, 1) if n <= 1 else (2, 1) if n == 2 else (2, 2) if n <= 4 else (3, 2) if n <= 6 else (3, 3)
+
+
+def grid_geometry(n: int, fmt: dict, max_pixels: int = GRID_MAX_PIXELS, gutter: int = GRID_GUTTER_PX) -> dict:
+    """宫格版式:格子按项目画幅,整图面积 ≤ max_pixels(偶数边)。返回 cols/rows/tile_w/tile_h/gutter/width/height/slots。"""
+    cols, rows = grid_layout(n)
+    aspect = fmt['width'] / fmt['height']
+    tw = int(math.sqrt(max_pixels * aspect / (cols * rows))) // 2 * 2
+    while tw > 16:
+        th = int(tw / aspect) // 2 * 2
+        width, height = cols * tw + (cols + 1) * gutter, rows * th + (rows + 1) * gutter
+        if width * height <= max_pixels:
+            break
+        tw -= 2
+    return {'cols': cols, 'rows': rows, 'tile_w': tw, 'tile_h': th, 'gutter': gutter, 'width': width, 'height': height,
+            'slots': cols * rows, 'inset': GRID_INSET}
+
+
+def grid_tile_box(geom: dict, i: int) -> tuple[int, int, int, int]:
+    """第 i 格(0 起,行优先)在宫格整图上的像素框 (x0, y0, x1, y1)。"""
+    c, r = i % geom['cols'], i // geom['cols']
+    x0 = geom['gutter'] + c * (geom['tile_w'] + geom['gutter'])
+    y0 = geom['gutter'] + r * (geom['tile_h'] + geom['gutter'])
+    return x0, y0, x0 + geom['tile_w'], y0 + geom['tile_h']
+
+
+def grid_tile_word(geom: dict, i: int) -> str:
+    """格位英文名:top-left / centre / bottom-right …(单行只写列名,单列只写行名)。"""
+    c, r = i % geom['cols'], i // geom['cols']
+    rw, cw = _ROW_WORDS[geom['rows']][r], _COL_WORDS[geom['cols']][c]
+    if rw and cw:
+        return 'centre' if rw == 'middle' and cw == 'centre' else f'{rw}-{cw}'
+    return rw or cw or 'single'
+
+
+def grid_render_fov(fov_v_deg: float, inset: float = GRID_INSET) -> float:
+    """白模帧按拆格内缩比例渲得略宽:内缩后剩下的画面恰为母图视场(纯几何,保证库里记录的机位与拆出的格子一致)。"""
+    return 2 * math.degrees(math.atan(math.tan(math.radians(fov_v_deg / 2)) / (1 - 2 * inset)))
+
+
+def compose_grid_sheet(frames: list, geom: dict, output: Path) -> Path:
+    """把各格白模干净帧按版式拼成联系表(白底白线;空格位留浅灰),作宫格出图的 [Image 1]。"""
+    from PIL import Image
+    sheet = Image.new('RGB', (geom['width'], geom['height']), (255, 255, 255))
+    for i in range(geom['slots']):
+        box = grid_tile_box(geom, i)
+        src = frames[i] if i < len(frames) else None
+        if src and Path(src).is_file():
+            sheet.paste(Image.open(src).convert('RGB').resize((geom['tile_w'], geom['tile_h']), Image.LANCZOS), box[:2])
+        else:
+            sheet.paste((235, 235, 235), box)
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(output, quality=92)
+    return Path(output)
+
+
+def split_grid_sheet(sheet: Path, geom: dict, outputs: list, size: tuple[int, int]) -> list[dict]:
+    """按版式把模型出的宫格拆成各格(四边内缩 inset 去白线),放大到母图规格另存。模型返回尺寸不同时按比例换算格框;
+    宽高比偏差超 GRID_ASPECT_TOLERANCE 抛 ValueError(视为未按版式出图,整张作废)。"""
+    from PIL import Image
+    im = Image.open(sheet).convert('RGB')
+    want = geom['width'] / geom['height']
+    if abs(im.width / im.height - want) > GRID_ASPECT_TOLERANCE * want:
+        raise ValueError(f'宫格返回 {im.width}x{im.height},宽高比与版式 {geom["width"]}x{geom["height"]} 不符,无法按格拆分')
+    sx, sy = im.width / geom['width'], im.height / geom['height']
+    inset = geom.get('inset', GRID_INSET)
+    results = []
+    for i, out in enumerate(outputs):
+        x0, y0, x1, y1 = grid_tile_box(geom, i)
+        dx, dy = (x1 - x0) * inset, (y1 - y0) * inset
+        box = (round((x0 + dx) * sx), round((y0 + dy) * sy), round((x1 - dx) * sx), round((y1 - dy) * sy))
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        im.crop(box).resize(size, Image.LANCZOS).save(out)
+        results.append({'tile': i, 'box': list(box), 'native': [box[2] - box[0], box[3] - box[1]]})
+    return results
+
+
+def build_grid_prompt(tiles: list, geom: dict, group: dict, scene: dict, layout: dict, style: str, lighting: str, desc: str,
+                      has_plan: bool = False, sun: dict | None = None) -> str:
+    """宫格提示词:整图声明 + 每格机位事实/画内清单(口径同 build_prompt)+ 白模联系表/俯视图用法 + 留白格 + 风格。
+    tiles=[{'facts','phrases','out_of_frame'}],顺序 = 格位(行优先)。"""
+    n = len(tiles)
+    name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or scene.get('name') or scene['scene_id']).strip()
+    head = (f"One image that is a {geom['cols']} by {geom['rows']} grid of {n} separate empty location background plates of the exact same "
+            f"location, photographed with nobody present, laid out as {geom['rows']} row{'s' if geom['rows'] > 1 else ''} of {geom['cols']} equal "
+            f"rectangular tile{'s' if geom['cols'] > 1 else ''} with thin straight pure-white gutters between them, exactly matching the tiling of [Image 1]. "
+            f"Location: {name}. Time of day: {group.get('time_of_day', '')}.")
+    if lighting:
+        head += f" Lighting: {lighting}."
+    ref = ("[Image 1] is a contact sheet of untextured grey 3D block renders (a whitebox) of this exact location laid out in the same grid, "
+           "one render per tile taken from that tile's exact camera: for every tile treat the render at the same position in [Image 1] as the "
+           "authoritative reference for what stands where — walls, floors, ceilings, openings, furniture volumes, facades, roads, terrain — keep "
+           "its perspective and its horizon line, keep every element at the position it has there, and paint the tile as a finished sharp "
+           "photograph over that structure; never copy the grey block look. The field of view of each tile is exactly what its render covers: "
+           "do not widen it, do not step back, and do not add a ceiling, floor, walls, doorways, windows or furniture the render does not show.")
+    if has_plan:
+        ref += (" [Image 2] is the top-down plan of the same location, for spatial layout reference only (which wall, door and piece of "
+                "furniture is where); no tile may be drawn as a top-down, overhead or plan view.")
+    lines = [head, ref,
+             "The architecture, materials, set dressing, weather, light direction and colour grade are identical in every tile; only the "
+             "camera position, direction and lens change from tile to tile. Each tile is a wide master view from which tighter shots will be "
+             "cropped, so finish every part of every tile at full sharpness: deep focus from the nearest object to the farthest, no shallow "
+             "depth of field, no bokeh, no vignetting, no blur anywhere."]
+    for i, t in enumerate(tiles):
+        f = t['facts']
+        cam = (f"Tile {i + 1} ({grid_tile_word(geom, i)}): {lens_word(f['fov_h_deg'])}, {f['lens_mm_equiv']}mm-equivalent lens "
+               f"({f['fov_h_deg']} degrees horizontal field of view), camera height {f['height_m']} m ({f['height_word']}), {f['tilt_word']}, "
+               f"standing {f['standing']}, facing {f['facing']}.")
+        if f.get('facing_desc'):
+            cam += f" Looking {f['facing_cardinal']}: {f['facing_desc']}."
+        cam += f" Frame left is {f['frame_left']}, frame right is {f['frame_right']}; behind the camera, out of frame, lies {f['behind']}"
+        cam += (f" ({f['behind_desc']})" if f.get('behind_desc') else '') + '.'
+        if sun:
+            s = sun_relative(sun['compass'], f['bearing_deg'])
+            cam += f" The low sun is in the {s['compass']}, {s['relative']}; long shadows fall {s['shadows']}."
+        if t.get('phrases'):
+            cam += " In frame from left to right: " + '; '.join(t['phrases']) + '.'
+        if t.get('out_of_frame'):
+            cam += " Not visible in this tile (behind or beside the camera, do not paint them in): " + '; '.join(t['out_of_frame']) + '.'
+        if f.get('standing_hidden'):
+            cam += (f" The camera stands {f['standing']}, but that surface lies below the bottom edge of the tile and is not visible; "
+                    "do not put any road or ground in the foreground.")
+        lines.append(cam)
+    for i in range(n, geom['slots']):
+        lines.append(f"Tile {i + 1} ({grid_tile_word(geom, i)}): leave this tile plain flat white with nothing drawn in it.")
+    if desc:
+        lines.append("General location description for materials and era only (only the elements listed per tile are in frame): " + desc)
+    lines.append("Every tile is an empty location plate: no people, no characters, no human figures or silhouettes, no animals, no moving "
+                 "vehicles, no text, no numbers, no labels, no watermark. Keep the gutters thin, straight and pure white; never merge two "
+                 "tiles into one picture and never draw anything across a gutter.")
+    style = plate_style(strip_dof(style))
+    if style:
+        lines.append("Style: " + style)
+    return '\n'.join(lines)
+
+
+def next_grid_name(lib: dict, plates_dir: Path, scheme_key: str, extra_used=()) -> str:
+    """下一张宫格文件基名 <方案>_gridNN(库条目、目录里已有的与本次运行已用的都跳过)。"""
+    used = set(extra_used)
+    for e in lib.get('plates', []):
+        sheet = ((e.get('pano_ref') or {}).get('sheet') or '')
+        if sheet:
+            used.add(Path(sheet).stem)
+    if plates_dir.is_dir():
+        used.update(p.stem for p in plates_dir.glob(f'{scheme_key}_grid*.png'))
+    n = 1
+    while f'{scheme_key}_grid{n:02d}' in used:
+        n += 1
+    return f'{scheme_key}_grid{n:02d}'
 
 
 # ---------------------------------------------------------------- master plate geometry(同机位纯旋转单应)
@@ -638,7 +816,12 @@ def render_clean_frames(base: Path, episode: dict, requests: list, width: int, h
             for gid, reqs in by_group.items():
                 page.evaluate('(gid)=>window.whiteboxExport.load(gid)', gid)
                 for r in reqs:
-                    frame = page.evaluate('(t)=>window.whiteboxExport.frame(t)', r['t'])
+                    if r.get('camera'):   # 九宫格模式(2026-09-25):按指定机位(母图机位)渲,不用该时刻的分镜机位
+                        frame = page.evaluate('(o)=>window.whiteboxExport.frameAt(o.t, o.camera)',
+                                              {'t': r['t'], 'camera': {'position': list(r['camera']['position']),
+                                                                       'target': list(r['camera']['target']), 'fov': float(r['camera']['fov'])}})
+                    else:
+                        frame = page.evaluate('(t)=>window.whiteboxExport.frame(t)', r['t'])
                     Path(r['output']).parent.mkdir(parents=True, exist_ok=True)
                     Path(r['output']).write_bytes(base64.b64decode(frame))
         finally:
@@ -890,6 +1073,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     decisions = []
     pending = {}   # sid -> 本次运行里决定新出、尚未落盘的母图条目(供后续镜位派生判断)
     decided = set()
+    modes = {}     # sid -> 生效的背景图模式(pano | world | grid)
     for shot_id, shot_jobs in by_shot.items():
         shot_jobs.sort(key=lambda j: j['role'] == 'end')
         prev = idx['shots'].get(shot_id) or {}
@@ -930,7 +1114,11 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             # 白模干净帧(首个派生它的分镜在 t 时刻的白模视角,预览核对用):真跑落库(与母图同名);dry-run 落工作目录不污染场景库
             wb_rel = (f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.whitebox.jpg" if not dry_run
                       else f"directing/{ep}/whitebox/plate_frames/{key}.whitebox.jpg")
-            pending_frames.append({'group_id': j['group_id'], 't': j['t'], 'output': base/wb_rel})
+            mode = modes.setdefault(sid, effective_plate_mode(base, sid))
+            frame_req = {'group_id': j['group_id'], 't': j['t'], 'output': base/wb_rel}
+            if mode == 'grid':   # 九宫格:白模帧就是宫格参考图的格子,按母图机位渲,视场按拆格内缩放宽(拆后恰为母图视场)
+                frame_req['camera'] = {'position': mkey['position'], 'target': mkey['target'], 'fov': grid_render_fov(mkey['fov'])}
+            pending_frames.append(frame_req)
             pending.setdefault(sid, []).append({'key': key, 'file': f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png",
                                                 'camera': mfacts, 'lighting_scheme_id': scheme, 'pending': True, 'master': True})
             decisions.append({**j, 'mode': 'new', 'entry': None, 'key': key, 'master_key': mkey, 'master_facts': mfacts,
@@ -948,7 +1136,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     pano_idx = {}
     new_scenes = sorted({d['scene_id'] for d in decisions if d['mode'] == 'new'})
     for sid in new_scenes:
-        stats['modes'][sid] = effective_plate_mode(base, sid)
+        stats['modes'][sid] = modes.get(sid) or effective_plate_mode(base, sid)
     world_scenes = [sid for sid in new_scenes if stats['modes'][sid] == 'world']
     if world_scenes:
         from modules import worldlabs
@@ -973,7 +1161,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 views = [{'error': str(error)} for _ in reqs]
             for d, v in zip(reqs, views):
                 d['world_view'] = v
-    for sid in [x for x in new_scenes if stats['modes'][x] != 'world']:
+    for sid in [x for x in new_scenes if stats['modes'][x] not in ('world', 'grid')]:
         schemes = {}
         for d in decisions:
             if d['scene_id'] == sid and d['mode'] == 'new':
@@ -982,6 +1170,89 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         log(f"== {sid} 场景全景:{len(cams)} 个机位,光照方案 {sorted(schemes)}")
         stats['panos'][sid] = scene_panos.ensure_scene_panos(base, sid, cameras=cams, schemes=schemes, dry_run=dry_run, seed=seed, log=log)
         pano_idx[sid] = scene_panos.load_index(base, sid)
+    # 九宫格模式(2026-09-25):同场景、同光照方案的待出母图按 ≤9 张一批拼成宫格一次出图(参考图 = 各格母图机位白模帧联系表 + 俯视图),
+    # 出图后按版式拆格放大到母图规格;下方逐决策循环只做入库/写索引。--max-new 按格计数。
+    grid_channel = None
+    grid_names_used = set()
+    for sid in [x for x in new_scenes if stats['modes'][x] == 'grid']:
+        layout = layouts[sid]; scene = episode['scenes'][sid]; lib = libs[sid]
+        plates_dir = library_dir(base, sid)
+        plan_file = base/'assets/concepts/scenes'/sid/((layout.get('layout_top') or 'layout_top.png'))
+        has_plan = plan_file.is_file()
+        lighting_cache, (desc, scene_neg) = {}, scene_description(base, sid)
+        batches = {}
+        for d in decisions:
+            if d['scene_id'] == sid and d['mode'] == 'new':
+                batches.setdefault(scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day')), []).append(d)
+        for scheme_key, ds in batches.items():
+            for start in range(0, len(ds), GRID_MAX_TILES):
+                chunk = ds[start:start + GRID_MAX_TILES]
+                if max_new is not None:
+                    room = max_new - stats['new'] - sum(1 for x in decisions if x.get('grid'))
+                    if room <= 0:
+                        for d in chunk:
+                            d['grid_budget'] = True
+                        continue
+                    if room < len(chunk):
+                        for d in chunk[room:]:
+                            d['grid_budget'] = True
+                        chunk = chunk[:room]
+                geom = grid_geometry(len(chunk), fmt)
+                gname = next_grid_name(lib, plates_dir, scheme_key, grid_names_used); grid_names_used.add(gname)
+                sheet_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{gname}.png"
+                wb_sheet_rel = (f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{gname}.whitebox.jpg" if not dry_run
+                                else f"directing/{ep}/whitebox/plate_frames/{gname}.whitebox.jpg")
+                compose_grid_sheet([base/d['whitebox_frame'] for d in chunk], geom, base/wb_sheet_rel)
+                tiles = []
+                for d in chunk:
+                    mfacts = d['master_facts']
+                    items, phrases, out_of_frame = inventory(scene, layout, d['master_key'], fmt)
+                    stand = mfacts.get('standing', '')
+                    mfacts['standing_hidden'] = bool(stand.startswith('on ')) and not any(it['name'] == stand[3:] for it in items)
+                    d['grid_items'] = items
+                    tiles.append({'facts': mfacts, 'phrases': phrases, 'out_of_frame': out_of_frame})
+                d0 = chunk[0]
+                lighting = lighting_cache.setdefault(d0['scheme'], lighting_fragment(base, sid, d0['scheme']))
+                prompt = build_grid_prompt(tiles, geom, d0['raw_group'], scene, layout, style, lighting, desc, has_plan=has_plan,
+                                           sun={'compass': sun.lower()} if sun else None)
+                negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_GRID, NEGATIVE_MASTER) if x)
+                refs = [wb_sheet_rel] + ([str(plan_file.relative_to(base))] if has_plan else [])
+                use_seed = seed if seed is not None else __import__('random').randint(1, 2**31-1)
+                log(f"== {sid} 九宫格 {gname}:{len(chunk)} 格({geom['cols']}x{geom['rows']},{geom['width']}x{geom['height']},"
+                    f"格 {geom['tile_w']}x{geom['tile_h']} → 拆后放大到 {mwidth}x{mheight});方案 {scheme_key};"
+                    + ', '.join(f"{i+1}:{d['shot_id']}/{d['role']}" for i, d in enumerate(chunk)))
+                info = {'kind': 'grid', 'sheet': sheet_rel, 'whitebox_sheet': wb_sheet_rel, 'cols': geom['cols'], 'rows': geom['rows'],
+                        'sheet_size': f"{geom['width']}x{geom['height']}", 'tile_native': f"{geom['tile_w']}x{geom['tile_h']}", 'scheme': scheme_key}
+                if dry_run:
+                    log(prompt); log('refs: ' + json.dumps(refs, ensure_ascii=False))
+                    for i, d in enumerate(chunk):
+                        d['grid'] = {**info, 'tile': i, 'prompt': prompt, 'negative': negative, 'refs': refs, 'seed': use_seed, 'dry_run': True}
+                    continue
+                from modules.genmedia import generate_image, get_config
+                if grid_channel is None:
+                    from modules.genmedia import image_pref_env
+                    with image_pref_env('scenes'):
+                        cfg = get_config('image')
+                    grid_channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
+                try:
+                    generate_image(prompt, str(base/sheet_rel), negative=negative, refs=[str(base/r) for r in refs],
+                                   size=f"{geom['width']}x{geom['height']}", seed=use_seed)
+                    results = split_grid_sheet(base/sheet_rel, geom,
+                                               [base/f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png" for d in chunk], (mwidth, mheight))
+                except Exception as error:  # noqa: BLE001
+                    for d in chunk:
+                        d['grid_error'] = f'宫格 {gname} 出图/拆分失败 {error}'
+                    continue
+                (base/sheet_rel).with_suffix('.json').write_text(json.dumps(
+                    {**info, 'prompt': prompt, 'negative': negative, 'refs': refs, 'seed': use_seed, 'channel': grid_channel,
+                     'tiles': [{'tile': i, 'key': d['key'], 'shot_id': d['shot_id'], 'role': d['role']} for i, d in enumerate(chunk)],
+                     'written_at': dt.datetime.now().isoformat(timespec='seconds')}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                for d, r in zip(chunk, results):
+                    d['grid'] = {**info, 'tile': r['tile'], 'box': r['box'], 'prompt': prompt, 'negative': negative, 'refs': refs,
+                                 'seed': use_seed, 'channel': grid_channel}
+                stats.setdefault('grids', []).append(sheet_rel)
+                log(f"saved: {sheet_rel}")
+
     def flush_shot(shot_id):
         """某镜全部决策落地后立即写集索引(进程中途被杀也不丢已出图;重跑按索引/库续跑)。"""
         ds = [d for d in decisions if d['shot_id'] == shot_id and d.get('file')]
@@ -1037,6 +1308,41 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             group_first.setdefault(d['group_id'], entry)
             continue
         # new master
+        if stats['modes'].get(sid) == 'grid':   # 九宫格模式:格子已在上面出好/拆好,这里只入库、写索引
+            if d.get('grid_budget'):
+                stats['pending_new'] += 1
+                continue
+            if d.get('grid_error') or not d.get('grid'):
+                stats['errors'].append(f"{shot_id}/{role}: {d.get('grid_error') or '宫格未出图'}")
+                continue
+            g = d['grid']; mfacts = d['master_facts']
+            out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png"
+            pano_info = {k: g[k] for k in ('kind', 'sheet', 'whitebox_sheet', 'cols', 'rows', 'tile', 'sheet_size', 'tile_native', 'scheme') if k in g}
+            if 'box' in g:
+                pano_info['box'] = g['box']
+            entry = {'key': d['key'], 'master': True, 'file': out_rel, 'whitebox_frame': d['whitebox_frame'], 'lighting_scheme_id': d['scheme'],
+                     'time_of_day': d['raw_group'].get('time_of_day'), 'camera': mfacts, 'size': f'{mwidth}x{mheight}', 'seed': g['seed'],
+                     'refs': g['refs'], 'prompt': g['prompt'], 'negative': g['negative'], 'in_frame': d.get('grid_items') or [],
+                     'pano_ref': pano_info, 'plate_mode': 'grid', 'channel': g.get('channel'),
+                     'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': d['group_id'], 'role': role},
+                     'written_at': dt.datetime.now().isoformat(timespec='seconds')}
+            log(f"== {shot_id} {role} ({d['group_id']}) new master {d['key']} facing {mfacts['facing']} h={mfacts['height_m']}m "
+                f"lens≈{mfacts['lens_mm_equiv']}mm ({mwidth}x{mheight});九宫格 {Path(g['sheet']).stem} 第 {g['tile'] + 1} 格;"
+                f"本镜 {d['facts']['lens_mm_equiv']}mm 从母图派生")
+            if dry_run:
+                entry['dry_run'] = True
+            else:
+                (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+                lib['plates'] = [e for e in lib['plates'] if e['key'] != entry['key']] + [entry]
+                save_library(base, sid, lib)
+                log(f"saved: {out_rel}")
+            d['entry'] = entry; d['file'] = out_rel; d['view'] = view_info(entry, d['facts'])
+            by_key[entry['key']] = entry
+            stats['new'] += 1
+            generated[(shot_id, role)] = entry
+            group_first.setdefault(d['group_id'], entry)
+            flush_shot(shot_id)
+            continue
         if budget_hit or (max_new is not None and stats['new'] >= max_new):
             budget_hit = True
             stats['pending_new'] += 1

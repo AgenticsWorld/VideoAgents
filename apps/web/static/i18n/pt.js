@@ -2737,6 +2737,8 @@ window.I18N_DICT = {
 // 世界模型(World Labs Marble,2026-09-12):场景预览页板块 + 生成模型页配置 + Spark 视窗
 "🌍 世界模型": "🌍 Modelo de mundo",
 "世界模型": "Modelo de mundo",
+"九宫格": "Grade 3×3",
+"九宫格 {g} 第 {n} 格": "grade {g}, célula {n}",
 "生成世界模型": "Gerar modelo de mundo",
 "重新生成世界模型": "Regerar modelo de mundo",
 "确认重新生成(旧版归档到 world/variants/)": "Confirmar regeração (versão anterior arquivada em world/variants/)",
@@ -3173,7 +3175,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Modo de fundo de plano",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成": "Fonte de referência dos fundos de plano com whitebox ativado (configuração global; pode ser substituída por cena na pré-visualização de cenas): Panorama = as âncoras são planejadas automaticamente a partir das posições de câmera do whitebox, os panoramas são reprojetados na direção do plano e regenerados; Modelo do mundo = você escolhe uma âncora na pré-visualização de cenas para criar um panorama, gera um modelo do mundo a partir dele (World Labs Marble, cobrado) e depois capturas feitas dentro do modelo na direção do plano são regeneradas",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,把本集要出的母图按场景、光照方案每 9 张拼成一张宫格一次生成(参考图为各格机位的白模帧拼图+俯视图),拆格后入库,分镜仍按母图复用": "Fonte de referência dos fundos de plano com whitebox ativado (configuração global; pode ser substituída por cena na pré-visualização de cenas): Panorama = as âncoras são planejadas automaticamente a partir das posições de câmera do whitebox, os panoramas são reprojetados na direção do plano e regenerados; Modelo do mundo = você escolhe uma âncora na pré-visualização de cenas para criar um panorama, gera um modelo do mundo a partir dele (World Labs Marble, cobrado) e depois capturas feitas dentro do modelo na direção do plano são regeneradas; Grade 3×3 = sem panorama: as placas-mestras de que o episódio precisa são agrupadas por cena e esquema de luz, nove por folha, e geradas como uma única imagem em grade (referência = folha de contato de quadros whitebox da câmera de cada célula + planta vista de cima); a folha é dividida em células que entram na biblioteca e os planos continuam reutilizando as placas-mestras",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Fonte de referência dos fundos de plano desta cena; por padrão segue a configuração de saída do projeto «Modo de fundo de plano», pode ser substituída aqui",
 "跟随全局({m})": "Seguir global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "O modo de fundo desta cena é «Modelo do mundo», mas nenhum modelo foi gerado ainda: a cadeia de fundos vai parar (código de saída 4). Gere primeiro no painel «🌍 Modelo do mundo» acima",
