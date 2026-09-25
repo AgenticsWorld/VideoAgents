@@ -139,6 +139,7 @@ button:disabled{opacity:.5;cursor:default}
     <h2>🔍 超分 <span class="cur">生效渠道=当前选中的标签页(✅),不再跟随视频渠道,保存后生效</span></h2>
     <div class="tabs" id="upscale-tabs">
       <div class="tab" id="tab-up-ffmpeg">ffmpeg</div>
+      <div class="tab" id="tab-up-agentics">Agentics</div>
       <div class="tab" id="tab-up-volcengine">火山引擎</div>
       <div class="tab" id="tab-up-minimax">MiniMax</div>
       <div class="tab" id="tab-up-comfyui">ComfyUI</div>
@@ -167,6 +168,9 @@ button:disabled{opacity:.5;cursor:default}
       <div class="hint">激活条件:视频生效渠道为火山引擎(或 BytePlus,方舟同一 API)且模型为 Seedance 2.5;项目「输出设置」草稿分辨率 = 480p、成片分辨率 = 1080p(官方:样片仅 480p,出原片仅 1080p)。不满足时视频照常按普通模式生成,并在日志提示。</div>
       <div class="hint">工作方式:① 生成阶段自动带 draft=true 出 480p 样片(token 用量与普通 480p 一致),Draft 任务 ID 写进组 clip 同名 meta.json 的 draft_task 段;② 超分阶段 genmedia.py upscale 按该 ID 让方舟复用同一提示词/素材/时长/画幅/seed/音频设置生成 1080p 原片(正常推理计费),画面关键要素与过审样片一致;③ Draft 任务 ID 自创建起 7 天有效,过期只能重出样片。</div>
     </div>
+    <!-- Agentics 面板由 buildPanel('scale','agentics') 生成:账号 + 超分 profile(media_type=Scale,如 scale-seedvr2),
+         数据源与视频等段同一份 Agentics 媒体目录 -->
+    <div class="panel" id="panel-up-agentics"></div>
     <!-- MiniMax 面板由 buildUpscaleMinimaxPanel() 生成:接口区域 / API Key(两区域分存)/ 模型(仅 Regenerate-2K)+ 适用条件 -->
     <div class="panel" id="panel-up-minimax"></div>
     <!-- ComfyUI 面板由 buildPanel('scale','comfyui') 生成:运行方式 本地/云端(Comfy Cloud)/RunningHub;工作流下拉列 comfy/scale-* 模板 -->
@@ -574,6 +578,8 @@ function buildPanel(kind,p){
       t('Voice Design 模型按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用),Voice Clone 模型按嗓音样本 + 对白文字生成对白')));
     if(kind==='digitalhuman')d.appendChild(el('div',{className:'hint'},
       t('数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段')));
+    if(kind==='scale')d.appendChild(el('div',{className:'hint'},
+      t('超分模型(如 scale-seedvr2):源视频上传后出高分辨率版,目标尺寸=成片分辨率 × 画幅,输出尺寸不一致时自动缩到成片档;登录桌面端账号计费')));
   }else if(p==='openrouter'){
     d.appendChild(keyRow(`${kind}-or-key`,'sk-or-v1-…'));
     const vr=el('div',{className:'row'});
@@ -1193,13 +1199,13 @@ function cfgSection(kind){
   return kind==='digitalhuman'?CFG.digital_human:kind==='scale'?CFG.upscale:CFG[kind];
 }
 
-/* 超分板块(2026-09-23,配置段 upscale):渠道 ffmpeg / 火山引擎样片模式 / MiniMax Regenerate-2K / ComfyUI SeedVR2;
-   唯一路由源,不再跟随视频渠道;无降级开关(渠道失败即报错) */
-const UP_PROVIDERS=['ffmpeg','volcengine','minimax','comfyui'];
+/* 超分板块(2026-09-23,配置段 upscale):渠道 ffmpeg(默认,首位)/ Agentics 超分 profile(2026-09-25,media_type=Scale,
+   第二位)/ 火山引擎样片模式 / MiniMax Regenerate-2K / ComfyUI SeedVR2;唯一路由源,不再跟随视频渠道;无降级开关(渠道失败即报错) */
+const UP_PROVIDERS=['ffmpeg','agentics','volcengine','minimax','comfyui'];
 let UP_PROVIDER='ffmpeg';
 function showUpscalePanel(provider){
   UP_PROVIDER=provider;
-  const labels={ffmpeg:'ffmpeg',volcengine:'火山引擎',minimax:'MiniMax',comfyui:'ComfyUI'};
+  const labels={agentics:'Agentics',ffmpeg:'ffmpeg',volcengine:'火山引擎',minimax:'MiniMax',comfyui:'ComfyUI'};
   UP_PROVIDERS.forEach(p=>{
     const tab=$(`#tab-up-${p}`);
     tab.classList.toggle('active',p===provider);
@@ -1262,9 +1268,10 @@ async function testDigitalHuman(provider){
 
 /* ---------- OpenRouter 模型列表 ---------- */
 const orSaved=kind=>kind==='text'?(CFG.deepagents?.openrouter||{}):CFG[kind].openrouter;
-/* 数字人在页面里 kind='digitalhuman'(与 ComfyUI 段 id 同口径),配置段与 Agentics 目录键都是 digital_human */
-const AGENTICS_MEDIA_KINDS=[...Object.keys(SECTIONS),'digitalhuman'];
-const agenticsCfgKey=kind=>kind==='digitalhuman'?'digital_human':kind;
+/* 数字人在页面里 kind='digitalhuman'(与 ComfyUI 段 id 同口径),配置段与 Agentics 目录键都是 digital_human;
+   超分在页面里 kind='scale',配置段与目录键都是 upscale(media_type=Scale) */
+const AGENTICS_MEDIA_KINDS=[...Object.keys(SECTIONS),'digitalhuman','scale'];
+const agenticsCfgKey=kind=>kind==='digitalhuman'?'digital_human':kind==='scale'?'upscale':kind;
 const agenticsSaved=kind=>kind==='text'?(CFG.deepagents?.agentics||{}):((CFG[agenticsCfgKey(kind)]||{}).agentics||{});
 let AGENTICS_MEDIA_CATALOG_PROMISE=null;
 function agenticsMediaCatalog(refresh=false){
@@ -1609,6 +1616,10 @@ function loadIntoForm(){
     :dh.provider==='runninghub'?'comfyui':DH_PROVIDERS[0]);
   loadAgenticsModels('digitalhuman');
   const up=CFG.upscale||{},uff=up.ffmpeg||{},uco=up.comfyui||{};
+  // Agentics:先用已保存的 profile_code 预填,再拉超分目录(与视频等段同一份媒体目录,media_type=Scale)
+  const upAgentics=$('#scale-agentics-model');upAgentics.innerHTML='';
+  const upWanted=agenticsWanted('scale',up.agentics||{},'');
+  if(upWanted)upAgentics.appendChild(el('option',{value:upWanted,textContent:upWanted}));
   $('#up-ff-filter').value=['lanczos','bicubic','spline','bilinear'].includes(uff.filter)?uff.filter:'lanczos';
   $('#up-ff-crf').value=Number.isInteger(uff.crf)?uff.crf:18;
   $('#up-ff-preset').value=['ultrafast','fast','medium','slow','veryslow'].includes(uff.preset)?uff.preset:'slow';
@@ -1621,6 +1632,7 @@ function loadIntoForm(){
   mmRegionUI('scale');
   $('#scale-mm-model').value=UP_MINIMAX_MODELS[0][0];
   showUpscalePanel(UP_PROVIDERS.includes(up.provider)?up.provider:'ffmpeg');
+  loadAgenticsModels('scale');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1739,6 +1751,7 @@ function collect(){
     comfyui:collectComfy('digitalhuman')};
   const crf=parseInt($('#up-ff-crf').value,10);
   out.upscale={provider:UP_PROVIDER,
+    agentics:{profile_code:$('#scale-agentics-model').value||''},
     ffmpeg:{filter:$('#up-ff-filter').value,crf:Number.isInteger(crf)?Math.min(51,Math.max(0,crf)):18,
             preset:$('#up-ff-preset').value},
     volcengine:{},
@@ -1767,6 +1780,7 @@ $('#save').onclick=async()=>{
     const draft=collect();
     const agenticsKinds=Object.keys(SECTIONS).filter(kind=>draft[kind].provider==='agentics');
     if(draft.digital_human.provider==='agentics')agenticsKinds.push('digitalhuman');
+    if(draft.upscale.provider==='agentics')agenticsKinds.push('scale');
     if(draft.deepagents.provider==='agentics')agenticsKinds.push('text');
     if(agenticsKinds.length&&!agenticsBridge())throw new Error(t('AgenticsLLM 仅支持桌面客户端'));
     if(agenticsKinds.length&&!AGENTICS_ACCOUNT)throw new Error(t('请先登录 AgenticsLLM 账号'));
@@ -1810,6 +1824,9 @@ $('#save').onclick=async()=>{
   const upPanel=buildPanel('scale','comfyui');upPanel.id='panel-up-comfyui';
   $('#panel-up-comfyui').replaceWith(upPanel);
   $('#panel-up-minimax').replaceWith(buildUpscaleMinimaxPanel());
+  // 超分 Agentics 面板:账号行 + 超分 profile 下拉,目录来自同一份 Agentics 媒体目录(media_type=Scale)
+  const upAgenticsPanel=buildPanel('scale','agentics');upAgenticsPanel.id='panel-up-agentics';
+  $('#panel-up-agentics').replaceWith(upAgenticsPanel);
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),

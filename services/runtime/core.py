@@ -847,9 +847,12 @@ DEFAULT_GENCONFIG = {
     #                (docs.volcengine.com/docs/ark/seedance-2-5 样片模式;无独立凭证/模型设置)
     #   minimax    = Regenerate-2K(自有凭证:接口区域 + 两区域 Key,model 固定 MiniMax-H3;仅收 H3 768P 直出规格源片)
     #   comfyui    = SeedVR2 类工作流,自有连接/工作流(comfy/scale-* 模板;RunningHub 用自有 rh_workflow_id)
+    #   agentics   = AgenticsLLM 超分 profile(2026-09-25;media_type=Scale,如 scale-seedvr2),登录桌面端账号计费,
+    #                目录与视频段同一份 Agentics 媒体目录
     # 无降级开关(用户拍板 2026-09-23):所选渠道预检失败/出错即工单报错交用户,不静默换手段;选 ffmpeg 就是插值放大
     "upscale": {
-        "provider": "ffmpeg",   # ffmpeg | volcengine | minimax | comfyui
+        "provider": "ffmpeg",   # ffmpeg | volcengine | minimax | comfyui | agentics
+        "agentics": {"profile_code": "scale-seedvr2"},
         "ffmpeg": {"filter": "lanczos", "crf": 18, "preset": "slow"},
         "volcengine": {},
         "minimax": {"api_key_io": "", "api_key_cn": "",
@@ -1083,7 +1086,7 @@ OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt",
 # MiniMax Regenerate-2K 原生出 2K,SeedVR2/ffmpeg 按短边 1440 放大
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "2k", "4k")
 # 超分设置枚举(genconfig.upscale,2026-09-23;与 modules/genmedia.py 同步)
-UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui")
+UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui", "agentics")
 UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
@@ -1385,6 +1388,10 @@ def upscale_settings(cfg: dict | None = None) -> dict:
         mode = str(pc.get("mode") or "local")
         detail = (f"运行方式 {mode} · " + (f"云端工作流 {pc.get('rh_workflow_id') or '(未选)'}"
                   if mode in RH_BASES else f"工作流 {pc.get('workflow') or 'comfy/scale-seedvr2-api.json'}"))
+    elif provider == "agentics":
+        ac = up.get("agentics") or {}
+        detail = (f"AgenticsLLM 超分 profile {ac.get('profile_code') or 'scale-seedvr2'}"
+                  "(登录桌面端账号计费;输出尺寸≠成片档时由 CLI 缩到成片档)")
     return {"provider": provider, "detail": detail}
 
 
@@ -11223,7 +11230,7 @@ async def api_genconfig_set(body: dict):
     if up_comfy.get("rh_instance_type") not in {"standard", "plus", "ultra"}:
         raise ServiceError(400, "upscale.comfyui.rh_instance_type must be standard, plus or ultra")
     if any((cfg.get(kind) or {}).get("provider") == "agentics"
-           for kind in ("image", "video", "music", "tts", "digital_human", "deepagents")):
+           for kind in ("image", "video", "music", "tts", "digital_human", "upscale", "deepagents")):
         resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
     if dh_comfy.get("mode") not in ("local", "cloud", *RH_BASES):
@@ -11563,8 +11570,10 @@ OPENROUTER_TTS_MODELS = [
     ("canopylabs/orpheus-3b-0.1-ft", "Orpheus 3B(Canopy)· 英文 7 音色(tara/leah/leo 等)"),
 ]
 
-# 与 modules/genmedia.py 同步;digital_human(2026-09-18)=数字人 profile(infiniteTalk-1char 等)
-AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5}
+# 与 modules/genmedia.py 同步;digital_human(2026-09-18)=数字人 profile(infiniteTalk-1char 等);
+# upscale(2026-09-25)=超分 profile(media_type=Scale,如 scale-seedvr2;数值按服务端枚举顺序取 6,未实测)
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5,
+                        "upscale": 6}
 
 
 def _agentics_response_data(payload: dict) -> dict:
@@ -11582,7 +11591,7 @@ async def api_agentics_models(modality: str = "image", refresh: bool = False):
     """List signed-in Agentics media profiles or AgenticsLLM text models."""
     del refresh  # Service-side ordering and freshness are authoritative.
     if modality not in (*AGENTICS_MEDIA_TYPES, "media", "text"):
-        raise ServiceError(400, "modality must be one of image / video / music / tts / digital_human / media / text")
+        raise ServiceError(400, "modality must be one of image / video / music / tts / digital_human / upscale / media / text")
     connection = resolve_agentics_connection()
     headers = {"Authorization": f"Bearer {connection['api_key']}"}
     try:

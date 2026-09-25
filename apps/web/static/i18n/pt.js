@@ -3194,6 +3194,7 @@ window.I18N_DICT = {
 "首版固定使用中国北京接口": "A primeira versão usa fixamente o endpoint de Pequim (China)",
 "，采用 Bearer API Key 鉴权。": ", com autenticação Bearer API Key.",
 "数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段": "Modelo de humano digital (ex. infiniteTalk-1char uma pessoa / infiniteTalk-2char duas pessoas): gera clipes falados a partir de uma imagem do personagem + áudio do diálogo",
+"超分模型(如 scale-seedvr2):源视频上传后出高分辨率版,目标尺寸=成片分辨率 × 画幅,输出尺寸不一致时自动缩到成片档;登录桌面端账号计费": "Modelo de upscale (ex.: scale-seedvr2): envia o vídeo de origem e devolve uma versão em resolução maior; tamanho alvo = resolução final × proporção, e uma saída com tamanho diferente é redimensionada automaticamente para o nível final; cobrado na conta desktop conectada",
 "云端数字人工作流": "Workflow de humano digital na nuvem",
 "InfiniteTalk 工作流": "Workflow InfiniteTalk",
 "本地 ComfyUI + InfiniteTalk;使用本地服务地址和": "ComfyUI local + InfiniteTalk; usa o endereço do serviço local e o JSON API em",

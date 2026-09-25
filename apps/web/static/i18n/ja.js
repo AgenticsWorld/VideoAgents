@@ -3201,6 +3201,7 @@ window.I18N_DICT = {
 "首版固定使用中国北京接口": "初版では中国・北京エンドポイント",
 "，采用 Bearer API Key 鉴权。": "に固定し、Bearer API Key で認証します。",
 "数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段": "デジタルヒューマンモデル(例:infiniteTalk-1char 一人 / infiniteTalk-2char 二人):人物画像 + 台詞音声から話す映像クリップを生成",
+"超分模型(如 scale-seedvr2):源视频上传后出高分辨率版,目标尺寸=成片分辨率 × 画幅,输出尺寸不一致时自动缩到成片档;登录桌面端账号计费": "超解像モデル(例:scale-seedvr2):元動画をアップロードして高解像度版を生成。目標サイズ=完成版解像度 × 画角、出力サイズが異なる場合は自動で完成版の段階に縮小;ログイン中のデスクトップアカウントに課金",
 "云端数字人工作流": "クラウドのデジタルヒューマンワークフロー",
 "InfiniteTalk 工作流": "InfiniteTalk ワークフロー",
 "本地 ComfyUI + InfiniteTalk;使用本地服务地址和": "ローカル ComfyUI + InfiniteTalk。ローカルのサービスアドレスと",

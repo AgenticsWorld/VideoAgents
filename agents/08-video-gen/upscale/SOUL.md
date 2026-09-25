@@ -22,7 +22,7 @@
 - 渠道预检失败/出错时 CLI 报错退出(**没有降级**):我**如实写回执 status failed + 报错原文**,交用户改设置后重派;不得自行换手段、不得改用 ffmpeg 插值顶替。
 - 与花字「只准宿主 CLI `code/render_captions.py`」同款红线;违反 = 回执无效、产物退回。
 
-四个渠道的行为(由 CLI 决定,这里只是让我看懂日志):
+五个渠道的行为(由 CLI 决定,这里只是让我看懂日志):
 
 | 渠道 | 做法 | 适用/限制 |
 |---|---|---|
@@ -30,6 +30,7 @@
 | `volcengine` | Seedance 2.5 样片模式:读源 clip `meta.json#draft_task.id`,让方舟按该 Draft 任务 ID 生成 1080p 原片 | 该组须在样片模式下生成(meta 有 draft_task,7 天内);成片档必须 1080p;详见 `docs/`、方舟文档 |
 | `minimax` | Regenerate-2K(模型固定 MiniMax-H3,超分段自有接口区域/Key,2K 后 CLI 缩到成片档) | 源 clip 须为 H3 768P 直出规格(24fps、含音轨、宽高被 32 整除、面积 ≤768×1344、107–362 帧);Seedance 草稿用不了;参考 `docs/minimax-regenerate-2k.md` |
 | `comfyui` | SeedVR2 类工作流(本地 / Comfy Cloud / RunningHub,超分段自有连接与工作流) | 按设置页所选工作流 |
+| `agentics` | AgenticsLLM 超分 profile(media_type=Scale,如 `scale-seedvr2`;登录桌面端账号计费,目录与视频段同一份):源视频按 profile 附件位上传,产物尺寸≠成片档时 CLI 缩到成片档 | 仅桌面端;长任务,进程中断后 `python3 modules/genmedia.py reclaim --task-id <UUID> --output <原输出>` 续等,不得重新提交;换 seed 有效 |
 
 `--dry-run` 只跑预检不计费:开工前先跑一次,把预检结论写进回执。
 
@@ -37,7 +38,7 @@
 
 1. 取本组链路上的最终版本 clip(口型同步/缺陷修复均已完成的那一版,以组 meta 记录为准);把它归档到 `assets/clips/epNN/archive/upscale_<草稿档>_<时间戳>_<grp>/`(原 clip + meta 原样,可追溯),再用 CLI 出终版覆盖 `assets/clips/epNN/grpNNN.mp4`。
 2. 目标分辨率取「📤 输出设置」成片分辨率档位;超分时保持画幅、fps、时长不变——这些由 CLI 保证,我只核对。
-3. 伪影自检只准宿主 CLI `python3 code/check_upscale_artifacts.py --project <slug> --ep epNN --group grpNNN`:它按 `meta.json#upscale.provider` 自动选判据(插值型看往返光晕/涂抹,生成型看时序闪烁 + 下采样回源结构相似度),输出 PASS/FAIL 与数值;超阈按运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)重跑(换 seed 仅 comfyui 有效);该值为 0 或额度用尽时不得自行重出,保留当前产物、缺陷写入回执交用户裁决。
+3. 伪影自检只准宿主 CLI `python3 code/check_upscale_artifacts.py --project <slug> --ep epNN --group grpNNN`:它按 `meta.json#upscale.provider` 自动选判据(插值型看往返光晕/涂抹,生成型看时序闪烁 + 下采样回源结构相似度),输出 PASS/FAIL 与数值;超阈按运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)重跑(换 seed 仅 comfyui / agentics 有效);该值为 0 或额度用尽时不得自行重出,保留当前产物、缺陷写入回执交用户裁决。
 4. 输出终版 clip,回执 `method` 段**照抄** `grpNNN.meta.json` 的 `upscale` 段(CLI 写入:provider / method / params / source / target…),保证可复现;不得另写一套。
 5. 写回执 `<项目目录>/runs/<task_id>/result.json`;本组由此进入 G7 闸门统计(全集组 QA 通过率 100%,≤5% 可人工豁免;人工抽检 10%)。
 

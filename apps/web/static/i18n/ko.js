@@ -3192,6 +3192,7 @@ window.I18N_DICT = {
 "首版固定使用中国北京接口": "첫 버전은 중국 베이징 엔드포인트",
 "，采用 Bearer API Key 鉴权。": "로 고정되며 Bearer API Key 인증을 사용합니다.",
 "数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段": "디지털 휴먼 모델(예: infiniteTalk-1char 1인 / infiniteTalk-2char 2인): 인물 이미지 + 대사 오디오로 말하는 클립 생성",
+"超分模型(如 scale-seedvr2):源视频上传后出高分辨率版,目标尺寸=成片分辨率 × 画幅,输出尺寸不一致时自动缩到成片档;登录桌面端账号计费": "업스케일 모델(예: scale-seedvr2): 원본 영상을 업로드해 고해상도 버전을 생성; 목표 크기 = 최종 해상도 × 화면비, 출력 크기가 다르면 자동으로 최종 단계로 축소; 로그인된 데스크톱 계정으로 과금",
 "云端数字人工作流": "클라우드 디지털 휴먼 워크플로",
 "InfiniteTalk 工作流": "InfiniteTalk 워크플로",
 "本地 ComfyUI + InfiniteTalk;使用本地服务地址和": "로컬 ComfyUI + InfiniteTalk. 로컬 서비스 주소와",

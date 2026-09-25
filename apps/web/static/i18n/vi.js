@@ -3192,6 +3192,7 @@ window.I18N_DICT = {
 "首版固定使用中国北京接口": "Bản đầu cố định dùng điểm cuối Bắc Kinh (Trung Quốc)",
 "，采用 Bearer API Key 鉴权。": ", xác thực bằng Bearer API Key.",
 "数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段": "Mô hình người ảo (ví dụ infiniteTalk-1char một người / infiniteTalk-2char hai người): tạo đoạn nói chuyện từ ảnh nhân vật + âm thanh thoại",
+"超分模型(如 scale-seedvr2):源视频上传后出高分辨率版,目标尺寸=成片分辨率 × 画幅,输出尺寸不一致时自动缩到成片档;登录桌面端账号计费": "Mô hình nâng độ phân giải (vd. scale-seedvr2): tải video nguồn lên và trả về bản độ phân giải cao hơn; kích thước mục tiêu = độ phân giải thành phẩm × tỷ lệ khung hình, đầu ra khác kích thước sẽ tự động thu về mức thành phẩm; tính phí vào tài khoản desktop đã đăng nhập",
 "云端数字人工作流": "Workflow người ảo trên đám mây",
 "InfiniteTalk 工作流": "Workflow InfiniteTalk",
 "本地 ComfyUI + InfiniteTalk;使用本地服务地址和": "ComfyUI cục bộ + InfiniteTalk; dùng địa chỉ dịch vụ cục bộ và API JSON trong",

@@ -51,6 +51,9 @@ CLI:
     comfyui    SeedVR2 类工作流,自有连接配置:本地/Comfy Cloud 用超分段选中的 comfy/scale-* 模板
                (默认 scale-seedvr2-api.json);RunningHub 用超分段自有的云端工作流(无占位符时直绑
                源视频加载节点 + SeedVR2Preprocess 上游缩放节点 + 采样器种子;源视频 ≤30MB)
+    agentics   AgenticsLLM 超分 profile(media_type=Scale,如 scale-seedvr2;登录桌面端账号计费):
+               源视频按 profile 声明的附件位上传,目标档位/宽高/种子按固定字段提交,任务同视频
+               为长任务(中断后 reclaim --task-id <UUID> 续等);产物尺寸≠目标时自动缩到成片档
   目标尺寸 = --resolution(缺省项目成片档)短边 × 画幅(--aspect 缺省跟随源视频实测宽高),
   fps、时长和音轨跟随源视频。无降级:所选渠道预检失败/出错直接报错(退出码非 0),不自动改用
   ffmpeg。成功后把 upscale{provider, method, params, source, target…} 合并写进输出同名
@@ -187,9 +190,12 @@ AGENTICS_SERVICE_ORIGINS = {
 # Agentics 媒体 profile 的 media_type 枚举(与 services/runtime/core.py 同步)。
 # digital_human(2026-09-18)=数字人:人物图 + 对白音频出说话片段,现有 profile
 # infiniteTalk-1char / infiniteTalk-2char;数值按服务端枚举顺序取 5
-AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5}
+# upscale(2026-09-25)=超分:源视频出高分辨率版,现有 profile scale-seedvr2;数值按服务端枚举顺序取 6
+# (媒体类型 Scale;本机无 JWT 未实测,若目录里 scale-* profile 归不进超分段即此值须订正)
+AGENTICS_MEDIA_TYPES = {"video": 1, "image": 2, "music": 3, "tts": 4, "digital_human": 5,
+                        "upscale": 6}
 # 长任务类别:等待上限同视频,超时不自动取消服务端任务(可 reclaim 继续等)
-AGENTICS_LONG_KINDS = {"video", "digital_human"}
+AGENTICS_LONG_KINDS = {"video", "digital_human", "upscale"}
 
 ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024),
                 "4:3": (1152, 864), "3:4": (864, 1152), "21:9": (1680, 720)}
@@ -853,10 +859,25 @@ _AGENTICS_FIXED_FILES = {
 # reference_images(按 profile 实际映射),对白音频走 reference_audios
 _AGENTICS_FIXED_PARAMETERS["digital_human"] = _AGENTICS_FIXED_PARAMETERS["video"]
 _AGENTICS_FIXED_FILES["digital_human"] = _AGENTICS_FIXED_FILES["video"]
+# 超分 profile(media_type=Scale,2026-09-25):固定字段=目标档位/宽高/放大倍数/种子/步数/fps,
+# prompt 可选(SeedVR2 类不需要);源视频只可能走 input_video / input_videos / reference_videos
+# 之一(按 profile 实际映射选第一个声明的附件位),客户端不猜其它 token
+_AGENTICS_FIXED_PARAMETERS["upscale"] = {
+    "prompt": ("string", None, None), "negative_prompt": ("string", None, None),
+    "resolution": ("string", None, None), "aspect_ratio": ("string", None, None),
+    "width": ("integer", 64, None), "height": ("integer", 64, None),
+    "scale": ("number", 1, None), "seed": ("integer", None, None),
+    "steps": ("integer", 1, None), "fps": ("integer", 1, 120),
+    "guidance_scale": ("number", 0, None),
+}
+_AGENTICS_UPSCALE_VIDEO_TOKENS = ("input_video", "input_videos", "reference_videos", "video")
+_AGENTICS_FIXED_FILES["upscale"] = set(_AGENTICS_UPSCALE_VIDEO_TOKENS)
 # token_schema.media_type 文本别名 -> 本地 kind
 _AGENTICS_SCHEMA_KIND_ALIASES = {
     "digital_human": "digital_human", "digitalhuman": "digital_human",
     "digital-human": "digital_human", "avatar": "digital_human",
+    "upscale": "upscale", "scale": "upscale", "video_upscale": "upscale",
+    "video-upscale": "upscale", "super_resolution": "upscale", "sr": "upscale",
 }
 
 
@@ -1018,6 +1039,7 @@ def _agentics_download(task_id: str, artifact_url: str, deadline: float) -> byte
 def _agentics_wait(kind: str, task_id: str, task: dict | None = None) -> bytes:
     """Wait for one existing task; transport failures never create a replacement task."""
     timeout = {"video": AGENTICS_VIDEO_TIMEOUT, "digital_human": AGENTICS_VIDEO_TIMEOUT,
+               "upscale": AGENTICS_VIDEO_TIMEOUT,
                "image": IMAGE_TIMEOUT, "music": MUSIC_TIMEOUT, "tts": TTS_TIMEOUT}.get(kind, 600)
     started = time.time()
     deadline = started + timeout
@@ -4743,10 +4765,11 @@ def _video_fal(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     return saved
 
 
-# ---------------- 超分:ffmpeg / 火山样片模式 / MiniMax / ComfyUI SeedVR2 ----------------
+# ---------------- 超分:ffmpeg / 火山样片模式 / MiniMax / ComfyUI SeedVR2 / AgenticsLLM ----------------
 # 2026-09-23 起唯一路由源 = genconfig.upscale(「生成模型」页超分段),不再跟随 video.provider。
+# agentics(2026-09-25):超分 profile(media_type=Scale,如 scale-seedvr2),与视频段同一份媒体目录
 
-UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui")
+UPSCALE_PROVIDERS = ("ffmpeg", "volcengine", "minimax", "comfyui", "agentics")
 UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 UPSCALE_DEFAULTS = {"provider": "ffmpeg",
@@ -4775,7 +4798,8 @@ def _upscale_config() -> dict:
     except (TypeError, ValueError):
         ff["crf"] = 18
     return {"provider": provider, "ffmpeg": ff,
-            "comfyui": dict(up.get("comfyui") or {}), "raw": up}
+            "comfyui": dict(up.get("comfyui") or {}),
+            "agentics": dict(up.get("agentics") or {}), "raw": up}
 
 
 # /v2/video_regeneration 仅支持 MiniMax-H3 + resolution=2K;源视频须满足 H3 768P
@@ -5246,6 +5270,44 @@ def _upscale_seedvr2(cfg, input_video: str, output: str, resolution: str,
     workflow = _comfy_workflow(cfg, {"VIDEO": uploaded, "WIDTH": width,
                                      "HEIGHT": height, "SEED": seed}, "video")
     return _comfy_run(base, workflow, output, want_video=True, headers=headers)
+
+
+AGENTICS_UPSCALE_DEFAULT_PROFILE = "scale-seedvr2"
+
+
+def _agentics_upscale_config() -> dict:
+    """超分渠道 agentics:读「生成模型」页超分段 Agentics 标签页选中的 profile_code
+    (缺省 scale-seedvr2);凭证同其它 Agentics 段 = 登录桌面端账号 JWT。"""
+    ac = dict(_upscale_config()["agentics"] or {})
+    code = str(ac.get("profile_code") or ac.get("model") or "").strip() or AGENTICS_UPSCALE_DEFAULT_PROFILE
+    return {"provider": "agentics", "profile_code": code, "model": code}
+
+
+def _upscale_agentics(cfg, input_video: str, output: str, resolution: str, aspect: str,
+                      width: int, height: int, seed: int) -> tuple[str, dict]:
+    """AgenticsLLM 超分:源视频按 profile 声明的视频附件位上传,目标档位/宽高/画幅/种子按固定字段
+    提交(未映射的字段由 _agentics_payload 忽略);任务同视频为长任务,进程中断后
+    `reclaim --task-id <UUID>` 续等。返回 (保存路径, 记录信息)。"""
+    p = Path(input_video or "")
+    if not input_video or not p.is_file():
+        raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
+    profile = _agentics_profile("upscale", cfg.get("profile_code") or "")
+    schema = profile.get("token_schema") or {}
+    file_mappings = schema.get("files") if isinstance(schema, dict) else {}
+    file_mappings = file_mappings if isinstance(file_mappings, dict) else {}
+    token = next((t for t in _AGENTICS_UPSCALE_VIDEO_TOKENS if t in file_mappings), "")
+    if not token:
+        raise RuntimeError(f"AgenticsLLM 超分 profile {profile.get('profile_code')} 未声明源视频附件位"
+                           f"(可选 {'/'.join(_AGENTICS_UPSCALE_VIDEO_TOKENS)})")
+    src = _probe_video_meta(str(p)) or {}
+    values: dict = {"resolution": resolution, "aspect_ratio": aspect,
+                    "width": width, "height": height, "seed": seed}
+    if src.get("width") and src.get("height"):
+        values["scale"] = round(max(width / src["width"], height / src["height"]), 4)
+    info: dict = {"profile": profile.get("profile_code"), "video_token": token}
+    data = _agentics_generate("upscale", cfg, values, {token: [str(p)]}, profile=profile,
+                              on_submit=lambda tid: info.update(task_id=tid))
+    return _save(data, output), info
 
 
 def _video_comfyui(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -6264,7 +6326,8 @@ def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
                      aspect: str = "", seed: int | None = None) -> str:
     """视频超分,返回保存的绝对路径。渠道只看「生成模型」页超分段(genconfig.upscale):
     ffmpeg 插值放大 / volcengine 样片模式按 Draft 任务 ID 出 1080p 原片 / minimax Regenerate-2K
-    (2K 后缩到成片档)/ comfyui SeedVR2 类工作流。目标尺寸 = 成片档短边 × 画幅(缺省跟随源视频)。
+    (2K 后缩到成片档)/ comfyui SeedVR2 类工作流 / agentics AgenticsLLM 超分 profile(scale-seedvr2 等)。
+    目标尺寸 = 成片档短边 × 画幅(缺省跟随源视频)。
     所选渠道预检失败/出错直接抛错,不降级(用户拍板 2026-09-23)。
     成功后把 upscale 段合并写进输出同名 .meta.json。
     """
@@ -6304,6 +6367,17 @@ def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
             rec["workflow"] = (cfg.get("rh_workflow_id") if _comfy_is_rh(cfg) else cfg.get("workflow"))
             rec["params"] = {"mode": cfg.get("mode") or "local", "seed": seed,
                              "site": cfg.get("mode") if _comfy_is_rh(cfg) else ""}
+            if _rescale_to(saved, width, height):
+                rec["rescaled_to_target"] = True
+        elif provider == "agentics":
+            cfg = _agentics_upscale_config()
+            seed = seed if seed is not None else random.randint(1, 2**31)
+            saved, info = _upscale_agentics(cfg, input_video, output, resolution, aspect,
+                                            width, height, seed)
+            rec["model"] = info.get("profile") or cfg["profile_code"]
+            rec["params"] = {"resolution": resolution, "seed": seed,
+                             "video_token": info.get("video_token", ""),
+                             "task_id": info.get("task_id", "")}
             if _rescale_to(saved, width, height):
                 rec["rescaled_to_target"] = True
         else:
@@ -6685,6 +6759,17 @@ def _cmd_upscale(args):
                 print(f"[dry-run] 源视频 {args.input} 通过 Regenerate-2K 输入规格预检")
             print(f"{head} model={MINIMAX_UPSCALE_MODEL} resolution=2K(→缩到 {width}x{height})"
                   f" api_base={_minimax_base(cfg)} → {args.output}")
+            return
+        if provider == "agentics":
+            cfg = _agentics_upscale_config()
+            if not args.input or not Path(args.input).is_file():
+                raise RuntimeError(f"源视频不存在: {args.input or '(未传 --input)'}")
+            # 只核对登录态与 profile 存在(拉目录不上传、不建任务)
+            profile = _agentics_profile("upscale", cfg["profile_code"])
+            files = (profile.get("token_schema") or {}).get("files") or {}
+            token = next((t for t in _AGENTICS_UPSCALE_VIDEO_TOKENS if t in files), "(未声明)")
+            print(f"{head} agentics profile={profile.get('profile_code')} video_token={token}"
+                  f" seed={args.seed if args.seed is not None else '(random)'} → {args.output}")
             return
         cfg = _seedvr2_config()
         if _comfy_is_rh(cfg):

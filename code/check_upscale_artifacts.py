@@ -12,7 +12,7 @@
              halo   强边邻域超出源局部极值的像素占比(振铃/过锐)      ≤ 0.01
              smear  往返后高频能量 / 源高频能量(涂抹)               ≥ 0.25
              flicker 终版相邻帧亮度差 / 源相邻帧亮度差(闪烁)          ≤ 1.6
-  generative 生成型(comfyui SeedVR2 / minimax Regenerate-2K / volcengine 样片原片):模型会画出源里
+  generative 生成型(comfyui SeedVR2 / minimax Regenerate-2K / volcengine 样片原片 / agentics 超分 profile):模型会画出源里
              没有的细节,往返 halo 必然超阈(fengshen3 grp004 反例 halo=0.117),故改看——
              flicker 同上                                            ≤ 1.6
              ssim   终版下采样回源尺寸与源逐帧灰度 SSIM 均值(结构一致)  ≥ 0.80
@@ -41,7 +41,7 @@ SMEAR_THRESH = 0.25
 FLICKER_RATIO = 1.6
 SSIM_MEAN_THRESH = 0.80
 SSIM_MIN_THRESH = 0.65
-GENERATIVE_METHODS = {"comfyui", "minimax", "volcengine"}
+GENERATIVE_METHODS = {"comfyui", "minimax", "volcengine", "agentics"}
 
 
 def _probe(path: str) -> dict:
