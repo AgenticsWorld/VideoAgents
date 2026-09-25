@@ -9,6 +9,9 @@ mark_submitted();显式设了环境变量 VIDEOAGENTS_GITHUB_TOKEN 时宿主直�
 
 开关:state.json `issue_feedback`(设置→高级→诊断数据「Issue 反馈」,默认开)。
 
+正文尾部元信息含服务版本(services.api.__version__)与客户端版本(桌面端经
+VIDEOAGENTS_CLIENT_VERSION 传入,否则记 web)。
+
 隐私:issue 公开可见范围 = 仓库可见范围。正文由 Agent 按「只写机制、不写项目内容」
 的规约撰写,宿主侧 scrub() 再兜一层:家目录/仓库根/项目目录置占位符,疑似密钥打码。
 """
@@ -64,6 +67,17 @@ def _app_version() -> str:
         return __version__
     except Exception:
         return ""
+
+
+def _client_version() -> str:
+    """用户客户端版本。桌面端(apps/desktop)拉起本服务时经 VIDEOAGENTS_CLIENT_VERSION /
+    VIDEOAGENTS_CLIENT_BUILD(channel/buildHash)传入 → "desktop 1.0.36 (release/abc123)";
+    没有该变量 = 浏览器直连本服务 → "web"。远程后端模式桌面端不拉起服务,取不到,同 web。"""
+    v = os.environ.get("VIDEOAGENTS_CLIENT_VERSION", "").strip()
+    if not v:
+        return "web"
+    build = os.environ.get("VIDEOAGENTS_CLIENT_BUILD", "").strip()
+    return f"desktop {v}" + (f" ({build})" if build else "")
 
 
 # ---------------- 凭据 ----------------
@@ -162,6 +176,7 @@ def file_issue(kind: str, title: str, body: str, *, component: str = "",
         "component": scrub(component)[:200], "agent": agent[:80], "engine": engine[:40],
         "signature": sig, "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "app_version": _app_version(),
+        "client_version": _client_version(),
         "platform": f"{platform.system()} {platform.release()} {platform.machine()}",
         "state": "pending", "url": "", "error": "",
     }
@@ -198,7 +213,7 @@ def _render_body(rec: dict) -> str:
     meta = [("类型", "宿主缺陷" if rec["kind"] == "bug" else "功能需求"),
             ("涉及代码", rec.get("component")), ("上报 Agent", rec.get("agent")),
             ("引擎", rec.get("engine")), ("版本", rec.get("app_version")),
-            ("平台", rec.get("platform"))]
+            ("客户端", rec.get("client_version")), ("平台", rec.get("platform"))]
     lines = [rec["body"], "", "---",
              "_由 VideoAgents「Issue 反馈」自动提交(Agent 运行中整理,已脱敏)_", ""]
     lines += [f"- {k}:{v}" for k, v in meta if v]

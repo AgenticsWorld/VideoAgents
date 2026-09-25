@@ -565,6 +565,7 @@ async function ensureWebServer(): Promise<void> {
   activeRuntime = await ensurePythonRuntime(backend)
   console.log(`[runtime] ${activeRuntime.source}: ${activeRuntime.manifest?.version || activeRuntime.python}`)
   const chromiumPath = bundledChromiumPath(app.getPath('userData'), activeRuntime)
+  const clientBuild = readBuildInfo(process.resourcesPath, app.isPackaged)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopExecutablePath(),
@@ -584,6 +585,9 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_SERVICE_SSO_ORIGIN: authRegion?.ssoOrigin || '',
     VIDEOAGENTS_SERVICE_API_ORIGIN: authRegion?.apiOrigin || '',
     VIDEOAGENTS_OPENROUTER_WRAPPER_URL: authRegion?.openrouterWrapperUrl || '',
+    // 客户端版本:Issue 反馈提交正文里的「客户端」行(modules/issue_feedback.py)。
+    VIDEOAGENTS_CLIENT_VERSION: app.getVersion(),
+    VIDEOAGENTS_CLIENT_BUILD: `${clientBuild.channel}/${clientBuild.buildHash}`,
     ...(chromiumPath ? {PLAYWRIGHT_BROWSERS_PATH: chromiumPath} : {}),
   }
   webServer = spawn(activeRuntime.python, [path.join(root, 'server.py')], {
