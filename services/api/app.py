@@ -864,6 +864,16 @@ async def set_agent_memory(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_agent_memory_set(body)
 
 
+@api.get("/config/nsfw", tags=["nsfw"])
+async def nsfw_get() -> dict[str, Any]:
+    return await core.api_nsfw_get()
+
+
+@api.post("/config/nsfw", tags=["nsfw"])
+async def nsfw_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_nsfw_set(body)
+
+
 @api.get("/voice-input", tags=["voice-input"])
 async def voice_input_get() -> dict[str, Any]:
     return await core.api_voice_input_get()

@@ -57,13 +57,14 @@
            "summary": "…", "beats": ["…"], "characters": ["CHAR-0001"], "hook_point": {"opening": "ev00101", "cliffhanger": "ev01101"},
            "carry_over": ["fs-002"], "recap_needed": []},
   "events": [{"id": "ev00101", "chapter": "ch001", "time_hint": "…", "location": "…", "characters": ["王三合"],
-              "importance": "major", "cause": "…", "process": "…", "result": "…"}],
+              "importance": "major", "cause": "…", "process": "…", "result": "…",
+              "content_flags": []}],   // 可选;仅 NSFW 模式开启时必填:枚举 nudity/sex/gore/extreme_violence/drugs/self_harm,无则 [];下游 shot_list 组 nsfw 的唯一来源
   "structure": {"current_act": "act1", "acts": [{"id": "act1", "title": "机缘拜师", "type": "narrative", "chapters": ["ch001","ch011"], "desc": "…"}]},
   "issues": [{"level": "warn", "scene": "S03A", "text": "S03A 没有时长分配"}]   // error | warn | info
 }
 ```
 
-必填:`schema_version`、`ep`、`scenes[].no`(唯一);`scenes[].summary` 缺则 WARN。`emotion.intensity`、`emotion_curve[].intensity` ∈ [0,1];`alloc_s/dialogue_s/narration_s/silent_s` 非负;`tempo` ∈ {slow, medium, fast};`dialogue[]` 每句 `speaker` + `text`;`narration[].scene` 须在场次表内;`scene_id`/`cast` 对照 Bible 索引(WARN)。
+必填:`schema_version`、`ep`、`scenes[].no`(唯一);`scenes[].summary` 缺则 WARN。`emotion.intensity`、`emotion_curve[].intensity` ∈ [0,1];`alloc_s/dialogue_s/narration_s/silent_s` 非负;`tempo` ∈ {slow, medium, fast};`dialogue[]` 每句 `speaker` + `text`;`narration[].scene` 须在场次表内;`scene_id`/`cast` 对照 Bible 索引(WARN)。`events[].content_flags` 可选数组(枚举 `nudity / sex / gore / extreme_violence / drugs / self_harm`),**仅当运行提示词含「## NSFW 模式:开启」时必填**(无则 `[]`),按原文判定、不得编造;shot-planning 据此给场景所属组写 `nsfw`,宿主按标记路由到备用模型(WORKFLOW.md §6/§9)。
 
 ## 页面:一张表,左列读剧本、右列看关联信息
 

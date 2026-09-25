@@ -446,6 +446,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let EP='';
+let NSFW_MODE=false;   // 设置→高级→NSFW 模式 开关(服务端 payload nsfw_mode):开启时组卡显示 🔞 开关
 
 // 图片/视频 URL 加版本参数,避免文件覆写后浏览器仍用旧缓存;服务端已带 ?v= 时原样保留
 const LOAD_T=Date.now();
@@ -1071,6 +1072,8 @@ document.addEventListener('click',async e=>{
   if(gb)return openNote(gb.dataset.grp);
   const gsb=e.target.closest('.gsbtn');
   if(gsb)return openGroupSettings(gsb.dataset.grp);
+  const nb=e.target.closest('.nsfwbtn');
+  if(nb)return toggleNsfw(nb.dataset.grp);
   const ud=e.target.closest('.urdel');
   if(ud){ // 组卡上删除用户添加的参考图(与添加参考图弹窗内的 🗑 同一后端接口)
     if(!confirm(I18N.f('确认移除这张参考图?\n{ref}\n(移除后随本组重出生效)',{ref:ud.dataset.ref})))return;
@@ -1439,6 +1442,28 @@ const refFn=(icon,k)=>{
   return `<a class="fn charlink" href="${page}?project=${encodeURIComponent(proj)}&id=${encodeURIComponent(m[2])}" title="${esc(t(tip)+m[2])}">${icon} ${esc(k.name)}</a>`;
 };
 
+// 🔞 组级 NSFW 标记(2026-09-25,设置→高级→NSFW 模式开启时显示):点击在 true/false 间切换(手动标记,优先于
+// shot_list 推导与 genmedia 兜底回写);亮黄 = 本组图像/视频走备用渠道、派单带 nsfw: true。数据 g.nsfw={nsfw,source,reason}
+function nsfwBtn(g){
+  if(!NSFW_MODE)return '';
+  const st=g.nsfw||{nsfw:false,source:''};
+  const src={manual:t('手动标记'),failover:t('审核拒收后自动切换'),shot_list:t('分镜表按事件 content_flags 推导')}[st.source]||'';
+  const tip=st.nsfw?I18N.f('本组已标记 NSFW({src}):图像/视频走备用渠道,派单带 nsfw: true;点击取消标记',{src})
+                   :t('标记本组为 NSFW:图像/视频改走「设置→高级→NSFW 模式」的备用渠道,派单带 nsfw: true');
+  return `<button class="editbtn nsfwbtn" data-grp="${esc(g.group_id)}" title="${esc(tip)}"${st.nsfw?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🔞${st.nsfw?' '+t('已标记'):''}</button>`;
+}
+async function toggleNsfw(grp){
+  const proj=$('#project').value.trim()||'demo';
+  const btn=document.querySelector(`.nsfwbtn[data-grp="${grp}"]`);
+  const cur=btn&&btn.getAttribute('style');   // 亮黄 = 当前已标记
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'/settings',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nsfw:!cur})});
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    load(true);
+  }catch(e){alert(t('保存失败')+':'+e.message)}
+}
+
 // 🎛 组级视频模型/提示词技能覆盖 chip(2026-08-30):仅覆盖了的组显示,悬停显完整解析结果
 function gsChip(g){
   const gs=g.group_settings;if(!gs||!gs.overridden)return '';
@@ -1734,6 +1759,7 @@ function groupCard(g,inner){
       ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
+      ${nsfwBtn(g)}
       <button class="editbtn promptbtn" data-grp="${esc(g.group_id)}" title="查看本组传给视频生成模型的文字 prompt">📄 提示词</button>
       <button class="editbtn refpickbtn" data-grp="${esc(g.group_id)}" title="从人物/场景/道具资产选图,加入本组参考图"${g.refs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🖼 图片${nRefsHead?`<span> ${nRefsHead}</span>`:''}</button>
       <button class="editbtn vrefbtn" data-grp="${esc(g.group_id)}" title="查看/播放/删除/上传本组参考视频(video_refs,[Video N] 编号与 prompt 正文同号),并核对总时长是否超过本组生效模型上限"${g.vrefs_blocked?' style="color:var(--yellow);border-color:var(--yellow)"':''}>🎬 视频${(g.video_refs||[]).length?`<span> ${g.video_refs.length}</span>`:''}</button>
@@ -1744,6 +1770,7 @@ function groupCard(g,inner){
     ${lightHtml(g)}
     ${g.refs_blocked?`<div class="gnote" style="color:var(--yellow)" title="${esc(g.refs_blocked_reason||'')}">${esc(I18N.f('⚠ 参考图 {n} 张超过本组生效上限 {cap}({model}):点「🎛 模型」给本组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或手动删减本组参考图;处理后重出本组',{n:g.refs_total,cap:g.refs_cap,model:(g.group_settings||{}).model_label||''}))}</div>`:''}
     ${g.vrefs_blocked?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('⚠ {reason}:点「🎬 视频」删除参考视频,或点「🎛 模型」给本组单独换参考视频上限更高的视频模型;处理后重出本组',{reason:vrReason(g)}))}</div>`:''}
+    ${(NSFW_MODE&&g.nsfw_hint&&Object.keys(g.nsfw_hint).length)?`<div class="gnote" style="color:var(--yellow)">${esc(I18N.f('🔞 本组文字命中敏感词 {words},但未标记 NSFW:如需改走备用模型请点「🔞」标记本组(机检 nsfw_hint 只提示不路由)',{words:Object.values(g.nsfw_hint).flat().slice(0,4).join(' / ')}))}</div>`:''}
     ${g.user_note?`<div class="gnote"><span class="glabel">📝 组注释(已注入 prompt)</span>${esc(g.user_note)}</div>`:''}
     ${media}
     <div class="gshots${WB_ON?'':' nowb'}"><div class="glist">${inner}</div>${WB_ON?`<div class="wb-host" data-grp="${esc(g.group_id)}">${esc(t('正在加载分镜组白模…'))} ${esc(t('如果长时间未完成加载，点击右上角刷新按钮'))}</div>`:''}</div>
@@ -2081,6 +2108,7 @@ async function load(keep){
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';
+    NSFW_MODE=!!d.nsfw_mode;
     psRender(d);
     if(!(d.episodes||[]).length){$('#eps').innerHTML='';$('#nav').innerHTML='';$('#content').innerHTML='<div class="empty">该项目还没有分集/分镜数据</div>';return}
     // 集号记忆:记住的集已不存在(改名/删集)时回落到首集,避免停在空页

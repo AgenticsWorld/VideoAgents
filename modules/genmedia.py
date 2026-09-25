@@ -392,6 +392,193 @@ def apply_group_video_override(cfg: dict, group: str) -> dict:
     return cfg
 
 
+# ---------------- NSFW 模式(设置→高级→NSFW 模式,2026-09-25) ----------------
+# 控制台 state.json#nsfw = {enabled, failover, text{engine,model}, image{provider,model}, video{provider,model}}。
+# 路由(显式标记优先):① 宿主派单时工单带 nsfw → 子进程 VIDEOAGENTS_NSFW=1;② 组标记 group_settings/<ep>/<grp>.json
+# `nsfw`(手动 🔞 / 兜底回写)> shot_list 组 `nsfw`(shot-planning 按事件 content_flags 推导)。命中即把图像/视频改到
+# 备用渠道(Key 仍取该渠道在 genconfig 的配置);备用渠道不可用时**不回落主模型**,报错交用户裁决。
+# 兜底:主渠道返回内容审核拒收(is_moderation_error)且 failover 开 → 同一调用内改备用渠道重提一次(不计重跑次数),
+# 成功后回写组 `nsfw: true, nsfw_reason: failover`(粘性,后续直接走备用),并写 <output>.meta.json#nsfw_route 留痕。
+_NSFW_MODERATION_RE = re.compile(
+    r"SensitiveContentDetected|sensitive (?:content|information|material)|"
+    r"content[_ \-]?(?:policy|filter|moderation|safety)|moderation|\bnsfw\b|not[_ ]safe[_ ]for[_ ]work|"
+    r"unsafe[_ ](?:content|image|prompt)|safety[_ ](?:filter|check|checker|violation|system|guideline)|"
+    r"inappropriate (?:content|request)|violat\w* (?:our|the|its|of) (?:content |usage |safety )?(?:policy|policies|guidelines|terms)|"
+    r"risk[_ ]control|flagged (?:as|by)|"
+    r"审核(?:不通过|未通过|拒绝|失败|拦截)|敏感(?:内容|信息|词|图像)|涉黄|色情|不合规|内容(?:安全|违规|存在风险)|违规(?:内容|词|图)",
+    re.IGNORECASE)
+_NSFW_MODERATION_CODE_RE = re.compile(r"(?:status_code|\"code\"|code)\W{0,3}\b1026\b")   # MiniMax 1026=输入内容敏感
+_NSFW_STATE_CACHE: dict | None = None
+
+
+def nsfw_settings() -> dict:
+    """读 state.json#nsfw(与 core.nsfw_settings 同口径;读不到=关)。"""
+    out = {"enabled": False, "failover": True, "text": {"engine": "", "model": ""},
+           "image": {"provider": "", "model": ""}, "video": {"provider": "", "model": ""}}
+    try:
+        saved = (json.loads(STATE_PATH.read_text()) or {}).get("nsfw")
+    except Exception:
+        return out
+    if not isinstance(saved, dict):
+        return out
+    out["enabled"] = bool(saved.get("enabled", False))
+    out["failover"] = bool(saved.get("failover", True))
+    for k, fields in (("text", ("engine", "model")), ("image", ("provider", "model")), ("video", ("provider", "model"))):
+        sub = saved.get(k) if isinstance(saved.get(k), dict) else {}
+        out[k] = {f: str(sub.get(f) or "").strip() for f in fields}
+    return out
+
+
+def _nsfw_project_dir() -> Path | None:
+    proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
+    return (DATA_DIR / "projects" / proj) if proj else None
+
+
+def _nsfw_group_file(group: str) -> Path | None:
+    base = _nsfw_project_dir()
+    if not base or not group or "/" not in group:
+        return None
+    ep, grp = group.split("/", 1)
+    return base / "assets" / "group_settings" / ep / f"{grp}.json"
+
+
+def nsfw_group_flag(group: str) -> str:
+    """组的 NSFW 标记来源:'' | manual | failover | shot_list(group_settings 手动/兜底 > shot_list 推导;手动 false 压掉推导)。"""
+    gf = _nsfw_group_file(group)
+    if gf is None:
+        return ""
+    gs = _read_override_json(gf)
+    if isinstance(gs.get("nsfw"), bool):
+        return (str(gs.get("nsfw_reason") or "manual") if gs["nsfw"] else "")
+    ep, grp = group.split("/", 1)
+    sl = _read_override_json(_nsfw_project_dir() / "directing" / ep / "shot_list.json")
+    for g in sl.get("generation_groups") or []:
+        if isinstance(g, dict) and str(g.get("group_id") or "") == grp:
+            return "shot_list" if g.get("nsfw") is True else ""
+    return ""
+
+
+def nsfw_route_reason(group: str = "") -> str:
+    """本次调用是否按 NSFW 路由:'' | workorder(宿主派单 VIDEOAGENTS_NSFW=1)| group:<manual|failover|shot_list>。"""
+    if not nsfw_settings()["enabled"]:
+        return ""
+    if os.environ.get("VIDEOAGENTS_NSFW") == "1":
+        return "workorder"
+    src = nsfw_group_flag(group)
+    return f"group:{src}" if src else ""
+
+
+def _nsfw_fb_desc(kind: str, fb: dict) -> str:
+    if fb["provider"] == "comfyui":
+        return f"{fb['provider']} 运行方式 {COMFY_MODE_LABELS.get(fb['model'], fb['model']) or '(生成模型页所选)'}"
+    return f"{fb['provider']} / {fb['model'] or '(该渠道默认模型)'}"
+
+
+def _nsfw_same_as(cfg: dict, fb: dict) -> bool:
+    if str(cfg.get("provider") or "") != fb["provider"]:
+        return False
+    if not fb["model"]:
+        return True
+    cur = cfg.get("mode") if fb["provider"] == "comfyui" else cfg.get("model")
+    return str(cur or "") == fb["model"]
+
+
+def apply_nsfw_route(kind: str, cfg: dict, group: str = "") -> dict:
+    """显式标记路由:命中 NSFW 标记时把 image/video 配置换成备用渠道(cfg['_nsfw_route']=来源)。
+    未配置该类备用渠道 → stderr 提示后按当前渠道执行;备用渠道不可用 → 抛错,不偷跑主模型。"""
+    reason = nsfw_route_reason(group)
+    if not reason:
+        return cfg
+    fb = nsfw_settings()[kind]
+    if not fb["provider"]:
+        print(f"[genmedia] NSFW 标记({reason})但未配置备用{kind}渠道(设置→高级→NSFW 模式),"
+              f"本次按当前渠道 {cfg.get('provider')} 执行", file=sys.stderr, flush=True)
+        return cfg
+    if _nsfw_same_as(cfg, fb):
+        cfg = dict(cfg, _nsfw_route=reason)
+        return cfg
+    try:
+        ncfg = get_config(kind, provider_override=fb["provider"], model_override=fb["model"])
+    except RuntimeError as e:
+        raise RuntimeError(f"NSFW 备用{kind}渠道 {_nsfw_fb_desc(kind, fb)} 不可用({e});"
+                           "按规约不回落主模型——请到「设置→高级→NSFW 模式」修正备用渠道配置,"
+                           "或取消本组 🔞 标记后重跑") from e
+    ncfg["_nsfw_route"] = reason
+    for k in ("_group_override", "_override_scope"):
+        if k in cfg:
+            ncfg[k] = cfg[k]
+    print(f"[genmedia] NSFW 路由({reason}):{kind} 改用备用渠道 {_nsfw_fb_desc(kind, fb)}"
+          f"(原渠道 {cfg.get('provider')} {cfg.get('model') or cfg.get('mode') or ''})", file=sys.stderr, flush=True)
+    return ncfg
+
+
+def is_moderation_error(exc: BaseException) -> bool:
+    """渠道内容审核拒收(而非网络/鉴权/额度/参数错误)。方舟 *SensitiveContentDetected、MiniMax 1026、
+    Fal/OpenRouter content_policy、RunningHub/ComfyUI 审核文案等按错误文本判定;
+    PrivacyInformation(真人脸拒收)不算 NSFW,走人像库/彩铅化流程。"""
+    if isinstance(exc, _TransportError):
+        return False
+    if isinstance(exc, _HTTPStatusError) and exc.status in (401, 402, 404, 408, 429) or \
+            (isinstance(exc, _HTTPStatusError) and exc.status >= 500):
+        return False
+    text = str(exc)
+    if "PrivacyInformation" in text and "Sensitive" not in text:
+        return False
+    return bool(_NSFW_MODERATION_RE.search(text) or _NSFW_MODERATION_CODE_RE.search(text))
+
+
+def nsfw_failover_cfg(kind: str, cfg: dict, exc: BaseException, group: str = "") -> dict | None:
+    """审核拒收兜底:NSFW 模式开 + failover 开 + 当前不在备用渠道 + 错误属内容审核 + 已配备用渠道 → 返回备用配置;
+    其它情况返回 None(调用方原样抛出)。成功切换即回写组 `nsfw: true`(粘性)。"""
+    st = nsfw_settings()
+    if not (st["enabled"] and st["failover"]) or cfg.get("_nsfw_route"):
+        return None
+    if not is_moderation_error(exc):
+        return None
+    fb = st[kind]
+    if not fb["provider"]:
+        print(f"[genmedia] NSFW 兜底:{kind} 被内容审核拒收,但未配置备用{kind}渠道(设置→高级→NSFW 模式),照常报错",
+              file=sys.stderr, flush=True)
+        return None
+    if _nsfw_same_as(cfg, fb):
+        return None
+    try:
+        ncfg = get_config(kind, provider_override=fb["provider"], model_override=fb["model"])
+    except RuntimeError as e:
+        print(f"[genmedia] NSFW 兜底:备用{kind}渠道 {_nsfw_fb_desc(kind, fb)} 不可用({e}),照常报错", file=sys.stderr, flush=True)
+        return None
+    ncfg["_nsfw_route"] = "failover"
+    ncfg["_nsfw_error"] = str(exc)[:300]
+    print(f"[genmedia] NSFW 兜底:{kind} 被渠道 {cfg.get('provider')} 内容审核拒收({str(exc).splitlines()[0][:160]}),"
+          f"改用备用渠道 {_nsfw_fb_desc(kind, fb)} 重提一次(不计重跑次数)", file=sys.stderr, flush=True)
+    _nsfw_write_group_flag(group, str(exc))
+    return ncfg
+
+
+def _nsfw_write_group_flag(group: str, error: str) -> None:
+    """兜底切换成功后的粘性回写:group_settings/<ep>/<grp>.json nsfw=true(reason=failover);已手动标记的不动。"""
+    gf = _nsfw_group_file(group)
+    if gf is None:
+        return
+    gs = _read_override_json(gf)
+    if isinstance(gs.get("nsfw"), bool):
+        return
+    gs.update(nsfw=True, nsfw_reason="failover", nsfw_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+              nsfw_error=error.splitlines()[0][:200] if error else "")
+    try:
+        gf.parent.mkdir(parents=True, exist_ok=True)
+        gf.write_text(json.dumps(gs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[genmedia] NSFW 兜底:已回写组 {group} nsfw=true(reason=failover),后续重出直接走备用渠道", file=sys.stderr, flush=True)
+    except OSError as e:
+        print(f"[genmedia] NSFW 兜底:回写组标记失败 {gf}: {e}", file=sys.stderr, flush=True)
+
+
+def _nsfw_route_record(cfg: dict) -> dict:
+    return {"reason": cfg.get("_nsfw_route"), "provider": cfg.get("provider"),
+            "model": cfg.get("model") or cfg.get("mode") or "", "error": cfg.get("_nsfw_error") or "",
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+
+
 # ---------------- 预览页按资产类别单独选的图像模型(2026-09-11) ----------------
 # 场景/人物/生物/道具预览页顶部各有图像模型下拉(同故事板页草图模型;场景页分平面/全景两块),存控制台
 # state.json image_model_prefs[<kind>] = {provider, model}(空 = 跟随全局「生成模型」设置)。
@@ -6104,7 +6291,20 @@ def generate_image(prompt: str, output: str, negative: str = "",
 def _generate_image(prompt: str, output: str, negative: str = "",
                     refs: list[str] | None = None, aspect: str = "",
                     size: str = "", seed: int | None = None) -> str:
-    cfg = get_config("image")
+    group = _group_from_output(output)
+    cfg = apply_nsfw_route("image", get_config("image"), group)
+    try:
+        return _generate_image_with(cfg, prompt, output, negative, refs, aspect, size, seed)
+    except Exception as e:      # noqa: BLE001
+        alt = nsfw_failover_cfg("image", cfg, e, group)
+        if alt is None:
+            raise
+        return _generate_image_with(alt, prompt, output, negative, refs, aspect, size, seed)
+
+
+def _generate_image_with(cfg: dict, prompt: str, output: str, negative: str = "",
+                         refs: list[str] | None = None, aspect: str = "",
+                         size: str = "", seed: int | None = None) -> str:
     if size:
         width, height = (int(x) for x in size.lower().split("x"))
     else:
@@ -6206,7 +6406,30 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
-    cfg = apply_group_video_override(get_config("video"), group or _group_from_output(output))
+    group = group or _group_from_output(output)
+    cfg = apply_nsfw_route("video", apply_group_video_override(get_config("video"), group), group)
+    try:
+        saved = _generate_video_with(cfg, prompt, output, first_frame, last_frame, duration, resolution, aspect,
+                                     seed, refs, audio_refs, generate_audio, return_last_frame, video_refs,
+                                     ref_image_size)
+    except Exception as e:      # noqa: BLE001
+        alt = nsfw_failover_cfg("video", cfg, e, group)
+        if alt is None:
+            raise
+        cfg = alt
+        saved = _generate_video_with(cfg, prompt, output, first_frame, last_frame, duration, resolution, aspect,
+                                     seed, refs, audio_refs, generate_audio, return_last_frame, video_refs,
+                                     ref_image_size)
+    if cfg.get("_nsfw_route"):
+        _merge_meta(output, "nsfw_route", _nsfw_route_record(cfg))
+    return saved
+
+
+def _generate_video_with(cfg: dict, prompt: str, output: str, first_frame: str, last_frame: str,
+                         duration: float | None, resolution: str, aspect: str, seed: int | None,
+                         refs: list[str] | None, audio_refs: list[str] | None, generate_audio: bool | None,
+                         return_last_frame: str, video_refs: list[str] | None, ref_image_size: str) -> str:
+    """按给定 cfg 校验并分发到各渠道(generate_video 的主体;NSFW 兜底换渠道后重跑同一函数)。"""
     from modules.continuity_refs import validate_request
     validate_request(output, prompt, refs, video_refs, cfg, first_frame, last_frame)
     if ref_image_size and cfg["provider"] != "comfyui":
@@ -6610,8 +6833,12 @@ def _cmd_info(args):
             cfg = get_config(kind)
             if kind == "video" and group:
                 cfg = apply_group_video_override(cfg, group)
+            if kind in ("image", "video"):
+                cfg = apply_nsfw_route(kind, cfg, group)
             desc = f"model={cfg['model']}" if cfg["provider"] != "comfyui" \
                 else _comfy_desc(cfg)
+            if cfg.get("_nsfw_route"):
+                desc += f"  🔞 NSFW 路由({cfg['_nsfw_route']})"
             if cfg["provider"] == "agentics" and not cfg.get("model"):
                 sides = {"image": ("t2i", "i2i"), "tts": ("design", "clone")}.get(kind)
                 if sides:   # 两个 profile 按用途自动选,没有单一模型 id
@@ -6636,10 +6863,10 @@ def _cmd_image(args):
     _pref_ctx = image_pref_env(args.output)
     _pref_ctx.__enter__()
     if args.dry_run:
-        cfg = get_config("image")
+        cfg = apply_nsfw_route("image", get_config("image"), _group_from_output(args.output))
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}"
-        line = f"[dry-run] image via {cfg['provider']} {desc} → {args.output}"
+        line = f"[dry-run] image via {cfg['provider']} {desc}" + (f" 🔞NSFW({cfg['_nsfw_route']})" if cfg.get("_nsfw_route") else "") + f" → {args.output}"
         if cfg["provider"] == "fal":
             # 走真实构造逻辑校验(家族/端点/参考图上限/尺寸映射),不发请求、不内联文件
             if args.size:
@@ -6669,13 +6896,13 @@ def _cmd_video(args):
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
     group = args.group or _group_from_output(args.output)
     if args.dry_run:
-        cfg = apply_group_video_override(get_config("video"), group)
+        cfg = apply_nsfw_route("video", apply_group_video_override(get_config("video"), group), group)
         from modules.continuity_refs import validate_request
         validate_request(args.output, args.prompt, args.ref, args.ref_video, cfg, args.first_frame, args.last_frame)
         resolution = _resolution_gate(args.resolution)
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}" + (f" (组级覆盖 {group})" if cfg.get("_group_override") else "")
-        line = f"[dry-run] video via {cfg['provider']} {desc} → {args.output}"
+        line = f"[dry-run] video via {cfg['provider']} {desc}" + (f" 🔞NSFW({cfg['_nsfw_route']})" if cfg.get("_nsfw_route") else "") + f" → {args.output}"
         if cfg["provider"] in ("volcengine", "byteplus"):
             # 走真实构造逻辑校验参数组合(互斥/上限/时长),但不发请求、不内联文件
             draft = _draft_mode_active(cfg, resolution)

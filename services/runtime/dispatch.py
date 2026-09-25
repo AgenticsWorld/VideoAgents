@@ -79,6 +79,12 @@ def fmt_run(r: dict) -> str:
     elif r.get("orphaned_children"):
         tag = (f" ⚠️成员提前结单(回复时子进程仍在跑,宿主已代等 {r.get('orphan_wait', 0)}s;"
                "自述早于完成,验收只认机检)")
+    if r.get("nsfw_suspect"):
+        tag += " 🔞疑似被主语言模型审核拒绝(NSFW 模式:同 task_id 重派自动改备用语言模型,重派工单加 nsfw: true/--nsfw)"
+    elif r.get("nsfw_route"):
+        nr = r["nsfw_route"]
+        tag += (f" 🔞NSFW 路由({nr.get('reason')}:"
+                + (f"{nr['engine']}/{nr.get('model') or '默认'}" if nr.get("engine") else "仅图像/视频备用渠道") + ")")
     return (f"[{r['status']:>7}] {r['id']} {r['agent']}{par}{dur} "
             f"| {r.get('message', '')[:60]}{tag}")
 
@@ -218,6 +224,9 @@ def main():
                     help="逗号分隔的按钮选项(默认 签字,暂缓 / 重跑,跳过);按钮文字由界面按用户语言显示,"
                          "不要为了界面语言传译文,各语言译文会被归一回中文原键")
     ap.add_argument("--default", default=None, dest="default_opt")
+    ap.add_argument("--nsfw", action="store_true",
+                    help="NSFW 模式(设置→高级→NSFW 模式 开启时有效):本工单走备用语言/图像/视频模型;"
+                         "工单正文写 `nsfw: true` 效果相同")
     args = ap.parse_args()
 
     if args.list:
@@ -266,9 +275,19 @@ def main():
         "engine": args.engine or DEFAULT_ENGINE,
         "force": bool(args.engine or args.model),
         "source": "director" if PARENT else "cli", "parent": PARENT,
+        "nsfw": bool(args.nsfw),
     })
     run_id = resp["run_id"]
     print(f"已派单 run_id={run_id} → {args.agent}")
+    if args.nsfw:
+        r0 = api(f"/runs/{run_id}")
+        nr = r0.get("nsfw_route") or {}
+        if nr.get("engine"):
+            print(f"🔞 NSFW 路由:备用语言模型 {nr['engine']}/{nr.get('model') or '(引擎默认)'};图像/视频走备用渠道")
+        elif nr:
+            print("🔞 NSFW 路由:未配置备用语言模型(语言模型照常),图像/视频走备用渠道")
+        else:
+            print("⚠️ --nsfw 未生效:NSFW 模式未开启(设置→高级→NSFW 模式),本工单按主模型执行")
 
     if args.wait:
         wait_timeout = args.timeout or WAIT_TIMEOUT_DEFAULT

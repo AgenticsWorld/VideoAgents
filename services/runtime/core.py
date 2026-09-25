@@ -3288,6 +3288,7 @@ def build_role_prompt(agent_id: str, project: str,
               "- **只写机制,不写项目内容**:正文与标题禁止出现剧情、人物名、台词、提示词原文、项目名、绝对路径、API Key。\n"
               "- 提交 issue **不改变**既有纪律:宿主代码仍然禁止自行修改/改写,照常上报 orchestrator 并在回执里注明已提交的 issue;"
               "同一问题只提交一次(重复提交会被签名去重)。")
+    p += nsfw_prompt_section(project)     # NSFW 模式(仅开关开启时注入,条件式)
     if agent_id == WHITEBOX_REEL_AGENT:
         p += ("\n\n## 白模自检设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
               + ("- 白模自检:**开启** —— 白模调度/修改类工单在 `--compile-only` 通过后,**仅对本单新建或改动过的组**运行 "
@@ -3857,6 +3858,7 @@ def run_public(run: dict) -> dict:
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
         "net_error", "orphaned_children", "orphan_wait", "engine", "model", "tokens",
+        "nsfw_route", "nsfw_suspect",
         "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
@@ -3950,6 +3952,22 @@ def _keypoints_postcheck(run: dict):
     except Exception as error:
         run["status"] = "error"
         run["error"] = f"关键点保留检查失败：{error}"
+
+
+def _nsfw_refusal_postcheck(run: dict) -> None:
+    """NSFW 模式开启时:run 末尾正文像审核拒绝 → 打 nsfw_suspect 标记并把 task_id 记入项目
+    runs/nsfw_suspect.json,供同 task_id 重派时改用备用语言模型(「第二次尝试才换」,不做进程内切换)。
+    已按 NSFW 路由跑在备用模型上的 run 不再标记(备用模型也拒 = 交用户裁决)。"""
+    if run.get("nsfw_route") and run["nsfw_route"].get("engine"):
+        return
+    if not nsfw_enabled() or run.get("stopped") or run.get("net_error"):
+        return
+    text = run.get("result") or run.get("text") or ""
+    if not llm_refusal_suspect(text):
+        return
+    tid = _wo_task_id(run.get("message") or "")
+    run["nsfw_suspect"] = {"task_id": tid, "at": time.time()}
+    nsfw_mark_suspect(run["project"], tid, run["id"], run["agent"], text.strip()[-300:])
 
 
 def _prompt_skill_postcheck(run: dict):
@@ -4234,6 +4252,9 @@ async def execute_run(run: dict, message: str, model: str | None):
                "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
                # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
                "WEBUI_PROJECT": run["project"]}
+        if run.get("nsfw_route"):
+            # NSFW 路由的 run:子进程 genmedia 图像/视频调用按备用渠道出图(modules/genmedia.py nsfw_route_reason)
+            env["VIDEOAGENTS_NSFW"] = "1"
         env.pop("CLAUDECODE", None)
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)
         if engine == "claude":
@@ -4422,6 +4443,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             run.pop("progress", None)
             _prompt_skill_postcheck(run)
             _keypoints_postcheck(run)
+            _nsfw_refusal_postcheck(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -4462,6 +4484,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
                 reply = f"{reply}\n\n--- 运行以 error 结束 ---\n{run['error']}"
                 chat_entry["text"] = reply
+            elif run.get("nsfw_suspect"):
+                # 语言模型疑似审核拒绝(NSFW 模式开):只标记不切换,同 task_id 重派时改用备用引擎
+                tid = run["nsfw_suspect"].get("task_id") or ""
+                fb = nsfw_text_fallback()
+                reply = ("🔞 疑似被主语言模型审核拒绝(NSFW 模式开启):本次未自动切换;"
+                         + (f"task_id `{tid}` 已记为 nsfw_suspect,同 task_id 重派时宿主自动改用备用语言模型"
+                            f"{' ' + fb['engine'] + '/' + (fb['model'] or '(引擎默认)') if fb else '(尚未配置备用语言模型,请到「设置→高级→NSFW 模式」配置)'}"
+                            if tid else "工单未写 task_id,无法记入重派名单;重派时请带 `nsfw: true` / --nsfw")
+                         + "。\n\n" + reply)
+                chat_entry.update(text=reply, nsfw_suspect=True)
             elif run.get("orphaned_children"):
                 # 成员回复时子进程还在跑:回执写于完成之前,标明宿主已代等,验收只认机检
                 reply = ("⚠️ 成员提前结单:给出回复时其派生子进程仍在运行(违反「进程寿命 = 本轮回复」纪律),"
@@ -5291,6 +5323,23 @@ def _grpsettings_get(project: str, ep: str, grp: str) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+_GRP_NSFW_KEYS = ("nsfw", "nsfw_reason", "nsfw_at")
+
+
+def group_nsfw_state(project: str, ep: str, grp: str, shot_group: dict | None = None,
+                     gs: dict | None = None) -> dict:
+    """组的 NSFW 标记(2026-09-25):group_settings/<ep>/<grp>.json 的 nsfw(手动 🔞 / genmedia 兜底切换回写)
+    优先于 shot_list 组的 nsfw(shot-planning 工位按事件 content_flags 推导)。
+    返回 {nsfw: bool, source: manual|failover|shot_list|"", reason}。手动 nsfw=false 可压掉 shot_list 的 true。"""
+    gs = gs if isinstance(gs, dict) else _grpsettings_get(project, ep, grp)
+    if isinstance(gs.get("nsfw"), bool):
+        reason = str(gs.get("nsfw_reason") or "manual")
+        return {"nsfw": gs["nsfw"], "source": "failover" if reason == "failover" else "manual", "reason": reason}
+    if isinstance(shot_group, dict) and shot_group.get("nsfw") is True:
+        return {"nsfw": True, "source": "shot_list", "reason": "content_flags"}
+    return {"nsfw": False, "source": "", "reason": ""}
+
+
 def _epsettings_path(project: str, ep: str) -> Path:
     """集级视频模型覆盖(分镜预览顶部下拉,2026-09-11):assets/group_settings/<ep>/episode.json
     {video_model, provider, effective}。层级 全局 → 本集 → 本组;组文件 glob grp*.json 不会误读它。"""
@@ -5746,6 +5795,9 @@ async def api_grpsettings_set(body: dict):
     if not ep or not grp:
         raise ServiceError(400, "ep and grp are required")
     _proj_base(project)
+    if "nsfw" in (body or {}) and "video_model" not in body and "prompt_skill" not in body:
+        # 组卡 🔞 开关(NSFW 模式,2026-09-25):只改 nsfw 三键,不动模型/技能覆盖;null = 清除手动标记(回到 shot_list 推导)
+        return await _api_grp_nsfw_set(project, ep, grp, body.get("nsfw"))
     cfg = load_genconfig()
     cand = group_video_candidates(project, cfg, ep)
     model = str((body or {}).get("video_model") or "")
@@ -5767,13 +5819,14 @@ async def api_grpsettings_set(body: dict):
         raise ServiceError(400, f"prompt_skill.skill_id 不是 {PROMPT_AGENT_ID} 已安装的提示词技能: {sid or '(空)'}")
     path = _grpsettings_path(project, ep, grp)
     old = _grpsettings_get(project, ep, grp)
-    if not model and mode == "global":
+    keep = {k: old[k] for k in _GRP_NSFW_KEYS if k in old}      # 🔞 标记独立于模型/技能覆盖,保留
+    if not model and mode == "global" and not keep:
         path.unlink(missing_ok=True)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(path, {"video_model": model, "provider": cand["provider"] if model else "",
                                  "prompt_skill": {"mode": mode, "skill_id": sid},
-                                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+                                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"), **keep})
     sync_group_settings_effective(project)
     out = await api_grpsettings_get(project, ep, grp)
     # 组 prompt 文件记一笔(存在时),方便回溯;组模型变了参考图上限也变,预览页据此重判超限
@@ -5792,6 +5845,40 @@ async def api_grpsettings_set(body: dict):
     HUB.publish({"type": "group_settings", "project": project, "ep": ep, "grp": grp,
                  "resolved": out["resolved"], "changed": old != _grpsettings_get(project, ep, grp)})
     return out
+
+
+async def _api_grp_nsfw_set(project: str, ep: str, grp: str, value):
+    """组卡 🔞:value true/false = 手动标记(优先于 shot_list 推导;false 可压掉推导的 true),None = 清除手动标记。"""
+    if value is not None and not isinstance(value, bool):
+        raise ServiceError(400, "nsfw must be true / false / null")
+    path = _grpsettings_path(project, ep, grp)
+    gs = _grpsettings_get(project, ep, grp)
+    old_state = group_nsfw_state(project, ep, grp, None, gs)
+    for k in _GRP_NSFW_KEYS:
+        gs.pop(k, None)
+    if value is not None:
+        gs.update(nsfw=value, nsfw_reason="manual", nsfw_at=time.strftime("%Y-%m-%d %H:%M:%S"))
+    rest = {k: v for k, v in gs.items() if k not in ("updated_at", "effective", "video_model", "provider", "prompt_skill")}
+    ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
+    has_override = bool(gs.get("video_model")) or (ps.get("mode") or "global") != "global"
+    if not rest and not has_override:
+        path.unlink(missing_ok=True)      # 既无 🔞 标记也无模型/技能覆盖 = 空文件,删掉
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        gs["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        atomic_write_json(path, gs)
+    sg = next((g for g in _shot_groups_for(project, ep) if g.get("group_id") == grp), None)
+    state = group_nsfw_state(project, ep, grp, sg)
+    HUB.publish({"type": "group_settings", "project": project, "ep": ep, "grp": grp,
+                 "nsfw": state, "changed": old_state != state})
+    return {"project": project, "ep": ep, "grp": grp, "nsfw": state}
+
+
+def _shot_groups_for(project: str, ep: str) -> list[dict]:
+    """directing/<ep>/shot_list.json 的 generation_groups(读不到返回空表)。"""
+    d = _read_json_safe(PROJECTS_DIR / project / "directing" / ep / "shot_list.json")
+    groups = d.get("generation_groups") if isinstance(d, dict) else None
+    return [g for g in (groups or []) if isinstance(g, dict)]
 
 
 async def api_epsettings_get(project: str, ep: str):
@@ -8186,6 +8273,7 @@ def _preview_storyboard(project: str, ep: str):
                             "reason": eres["reason"]}
     # 集级三下拉(渠道/模型/技能)所需的存盘配置与可选清单
     data["episode_settings"] = {k: epay[k] for k in ("config", "providers", "skills", "project_skill")}
+    data["nsfw_mode"] = nsfw_enabled()      # 组卡 🔞 开关只在 NSFW 模式开启时显示(设置→高级→NSFW 模式)
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
@@ -8257,6 +8345,10 @@ def _preview_storyboard(project: str, ep: str):
             "group_settings": ({k: gres[k] for k in ("video_model", "model_source", "model_label",
                                                      "skill_dir", "skill_mode", "skill_source",
                                                      "warning", "overridden")} if gres else None),
+            # NSFW 标记(2026-09-25):组卡 🔞 开关/chip;手动 > genmedia 兜底回写 > shot_list 推导
+            "nsfw": group_nsfw_state(base.name, ep, gid, g) if gid else None,
+            # 关键字提示(WARN-only,modules/nsfw_hint.py):命中且未标记时组卡黄条建议点 🔞;模式关时不扫
+            "nsfw_hint": (_nsfw_hint_mod().hint_for_group(base, ep, gid, g, pd) if gid and nsfw_enabled() else {}),
             "refs_blocked": (pd.get("status") == "blocked_refs_cap"
                              or len(pd.get("refs") or []) > ref_cap),
             "refs_blocked_reason": str(pd.get("blocked_reason") or ""),
@@ -13771,6 +13863,12 @@ async def api_chat(body: dict):
                 model = gp["model"]
     if engine not in ENGINES:
         raise ServiceError(400, f"engine must be one of {ENGINES}")
+    # NSFW 模式(2026-09-25):工单带 nsfw 字段/--nsfw,或同 task_id 曾被主模型审核拒绝(nsfw_suspect)的重派,
+    # 宿主改用备用语言模型(宿主级路由,不受「禁止切换引擎」约束);未配备用语言模型时只打标记,
+    # 子进程 genmedia 仍按 VIDEOAGENTS_NSFW=1 走备用图像/视频渠道。
+    nsfw_route = nsfw_route_for_run(project, message, bool(body.get("nsfw")))
+    if nsfw_route and nsfw_route.get("engine"):
+        engine, model = nsfw_route["engine"], nsfw_route.get("model") or None
     ensure_project(project)
 
     agents = {a["id"]: a for a in list_agents()}
@@ -13785,6 +13883,8 @@ async def api_chat(body: dict):
     if agent == REVISER_ID:
         run["target"] = target or {}
         run["user_message"] = user_message
+    if nsfw_route:
+        run["nsfw_route"] = nsfw_route
     init_skill_records(run)
     RUNS[run["id"]] = run
     append_chat(agent, project, {"role": "user", "text": message,
@@ -15048,6 +15148,237 @@ async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str =
         lang = ui_lang_code()
     lang = "" if lang == "auto" else re.sub(r"[^a-z]", "", lang.lower())[:5]
     return await asyncio.to_thread(_voice_transcribe_sync, data, content_type, lang)
+
+
+# ---------------- NSFW 模式(设置菜单「高级→NSFW 模式」,2026-09-25) ----------------
+# 总开关默认关。开启后可分别配置三类「备用模型」:语言模型(engine+model)、图像模型(渠道+模型)、
+# 视频模型(渠道+模型),存 state.json#nsfw(全局;genmedia 子进程按 STATE_PATH 直读同一份)。
+# 三层路由(方案 2026-09-25):① 显式标记优先——工单 `nsfw: true`(dispatch.py --nsfw)/ 分镜组
+# `nsfw`(shot_list 组或 group_settings/<ep>/<grp>.json)首次派单即走备用模型;② 审核拒收兜底——
+# genmedia 识别渠道的内容审核错误码后同一调用内切备用渠道重提一次(不计重跑次数);语言模型
+# 不做进程内切换,run 结束时末尾正文命中拒绝句式只打 nsfw_suspect 标记,同 task_id 重派时改用备用
+# engine(「第二次尝试才换」);③ 粘性——兜底切换成功即回写组 `nsfw: true`,后续不再先撞主模型。
+# 备用模型不可用(未配 Key)时不偷跑主模型,stderr 提示并按用户裁决;所有切换在回执/运行记录留痕。
+NSFW_DEFAULT = {"enabled": False, "failover": True,
+                "text": {"engine": "", "model": ""},
+                "image": {"provider": "", "model": ""},
+                "video": {"provider": "", "model": ""}}
+# 工单正文里的 nsfw 字段(§6 可选字段)/ task_id 字段
+_WO_NSFW_RE = re.compile(r"^\s*nsfw:\s*(true|yes|on|1)\s*(#.*)?$", re.IGNORECASE | re.MULTILINE)
+_WO_TASK_ID_RE = re.compile(r"^\s*task_id:\s*([\w.\-/]+)", re.MULTILINE)
+# 语言模型审核拒绝句式(多语言;末尾正文命中 + 无其它产物即判 nsfw_suspect,只标记不切换)
+_LLM_REFUSAL_RE = re.compile(
+    r"(I can(?:'|’)?t (?:help|assist|create|write|generate|produce|continue) with|"
+    r"I(?:'m| am) (?:not able|unable) to (?:help|assist|create|write|generate|produce)|"
+    r"I (?:must|have to|will) (?:decline|refuse)|"
+    r"(?:against|violates?) (?:my|the|our) (?:content |usage |safety )?(?:policy|policies|guidelines)|"
+    r"sexually explicit|explicit sexual|graphic (?:sexual|violence)|"
+    r"无法(?:协助|帮助|继续|生成|创作|撰写|完成)(?:这|该|此|你|您)?(?:个|项)?(?:请求|内容|任务)|"
+    r"不能(?:协助|帮助|生成|创作|撰写)(?:这|该|此)?(?:类|种)?(?:内容|请求)|"
+    r"(?:违反|不符合)(?:我的|平台|内容|使用|安全)(?:政策|准则|规范|规定)|"
+    r"涉及(?:色情|性暗示|露骨|血腥暴力)(?:的)?内容|包含(?:露骨|色情|成人)内容)",
+    re.IGNORECASE)
+
+
+def _nsfw_hint_mod():
+    from modules import nsfw_hint
+    return nsfw_hint
+
+
+def nsfw_settings() -> dict:
+    cfg = json.loads(json.dumps(NSFW_DEFAULT))
+    saved = STATE.get("nsfw")
+    if isinstance(saved, dict):
+        cfg["enabled"] = bool(saved.get("enabled", False))
+        cfg["failover"] = bool(saved.get("failover", True))
+        for k, fields in (("text", ("engine", "model")), ("image", ("provider", "model")),
+                          ("video", ("provider", "model"))):
+            sub = saved.get(k) if isinstance(saved.get(k), dict) else {}
+            cfg[k] = {f: str(sub.get(f) or "").strip() for f in fields}
+    if cfg["text"]["engine"] not in ENGINES:
+        cfg["text"] = {"engine": "", "model": ""}
+    return cfg
+
+
+def nsfw_enabled() -> bool:
+    return nsfw_settings()["enabled"]
+
+
+def nsfw_text_fallback() -> dict | None:
+    """NSFW 模式开启且配置了备用语言模型时返回 {engine, model},否则 None。"""
+    cfg = nsfw_settings()
+    if not cfg["enabled"] or not cfg["text"]["engine"]:
+        return None
+    return dict(cfg["text"])
+
+
+def nsfw_flagged_groups(project: str) -> list[dict]:
+    """本项目当前标记 NSFW 的组 [{ep, grp, source, reason}](group_settings 手动/兜底 + shot_list 推导)。"""
+    out, seen = [], set()
+    try:
+        for ep, grp, gs in _grpsettings_all(project):
+            st = group_nsfw_state(project, ep, grp, None, gs)
+            seen.add((ep, grp))
+            if st["nsfw"]:
+                out.append({"ep": ep, "grp": grp, **st})
+        for epdir in sorted((PROJECTS_DIR / project / "directing").glob("ep*")):
+            for g in _shot_groups_for(project, epdir.name):
+                gid = str(g.get("group_id") or "")
+                if gid and (epdir.name, gid) not in seen and g.get("nsfw") is True:
+                    out.append({"ep": epdir.name, "grp": gid, "nsfw": True, "source": "shot_list", "reason": "content_flags"})
+    except Exception:
+        pass
+    return out
+
+
+def nsfw_prompt_section(project: str = "") -> str:
+    """运行提示词注入节(仅开关开启时;条件式,避免 codex 逐字守规每单必跑)。"""
+    cfg = nsfw_settings()
+    if not cfg["enabled"]:
+        return ""
+    flagged = nsfw_flagged_groups(project) if project else []
+    flagged_txt = ("、".join(f"{r['ep']}/{r['grp']}({r['source']})" for r in flagged[:40])
+                   + (f" 等共 {len(flagged)} 组" if len(flagged) > 40 else "")) if flagged else "(暂无)"
+    t, i, v = cfg["text"], cfg["image"], cfg["video"]
+    fb = []
+    fb.append("语言模型 " + (f"{t['engine']} / {t['model'] or '(引擎默认)'}" if t["engine"] else "未配置"))
+    fb.append("图像 " + (f"{i['provider']} / {i['model'] or '(渠道默认)'}" if i["provider"] else "未配置"))
+    fb.append("视频 " + (f"{v['provider']} / {v['model'] or '(渠道默认)'}" if v["provider"] else "未配置"))
+    return (
+        "\n\n## NSFW 模式:开启(Web 客户端「设置→高级→NSFW 模式」全局设置,实时生效)\n"
+        f"- 备用模型:{';'.join(fb)}。备用模型由宿主按下列标记自动套用,成员**不得**自行 --engine/--model 换模型、不得直连各家 API。\n"
+        "- **标记来源(显式优先)**:① 剧本拆解表(script_breakdown.json)逐事件 `content_flags[]`"
+        "(枚举:nudity / sex / gore / extreme_violence / drugs / self_harm;无则空数组)——p5-breakdown 工位在本模式下必填;"
+        "② 分镜表(shot_list.json)每组 `nsfw: true|false`——shot-planning 工位按该组任一镜头所涉事件的 content_flags 非空即置 true;"
+        "③ 用户在分镜预览组卡点 🔞 手动标记(group_settings/<ep>/<grp>.json `nsfw`),手动标记优先于 ②。\n"
+        "- **派单**:总制片给 `nsfw: true` 的组/资产派工单(视频生成、提示词、锚点/概念图、含露骨描写的剧本/分镜段落)时,"
+        "工单 YAML 加可选字段 `nsfw: true`,并用 `python3 services/runtime/dispatch.py … --nsfw` 派单;宿主据此把该成员切到备用语言模型,"
+        "其子进程的 genmedia 图像/视频调用自动走备用渠道。未标记的工单照常走主模型。\n"
+        "- **兜底**:genmedia 遇渠道内容审核拒收(如 InputTextSensitiveContentDetected / OutputVideoSensitiveContentDetected)"
+        "会自动改备用渠道重提一次并回写组 `nsfw: true`(stderr 有 `[genmedia] NSFW` 行,回执必须照抄该切换记录);"
+        "该次切换**不计入**重跑次数。语言模型被主模型拒绝(回复为拒绝说明而非产物)时不要原地重试:按重跑规则退回总制片,"
+        "宿主已把该 task_id 记为 nsfw_suspect,同 task_id 重派自动改用备用语言模型;重派工单请补 `nsfw: true`。\n"
+        f"- 本项目当前已标记 NSFW 的组:{flagged_txt}。给这些组派单(提示词/锚点/视频生成/白模不需要)必须带 `nsfw: true` + `--nsfw`。\n"
+        "- 本模式只决定「用哪套模型」,不放宽内容安全 QA(11-qa/content-safety)与各平台分级判定;不得为触发备用模型而虚标 content_flags。")
+
+
+def _wo_nsfw_flag(message: str) -> bool:
+    return bool(message) and bool(_WO_NSFW_RE.search(message))
+
+
+def _wo_task_id(message: str) -> str:
+    m = _WO_TASK_ID_RE.search(message or "")
+    return m.group(1) if m else ""
+
+
+def _nsfw_suspect_path(project: str) -> Path:
+    return PROJECTS_DIR / project / "runs" / "nsfw_suspect.json"
+
+
+def nsfw_suspect_tasks(project: str) -> dict:
+    try:
+        d = json.loads(_nsfw_suspect_path(project).read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def nsfw_mark_suspect(project: str, task_id: str, run_id: str, agent: str, snippet: str) -> None:
+    """语言模型疑似审核拒绝:记 task_id,同 task_id 重派时改用备用引擎(「第二次尝试才换」)。"""
+    if not project or not task_id:
+        return
+    d = nsfw_suspect_tasks(project)
+    d[task_id] = {"run_id": run_id, "agent": agent, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                  "snippet": (snippet or "")[:300]}
+    try:
+        _nsfw_suspect_path(project).parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(_nsfw_suspect_path(project), d)
+    except Exception as e:      # noqa: BLE001
+        print(f"[nsfw] nsfw_suspect 写入失败 {project}: {e}", file=sys.stderr)
+
+
+def llm_refusal_suspect(text: str) -> bool:
+    """末尾正文是否像审核拒绝:只看最后 1200 字,命中拒绝句式且正文很短(拒绝说明,不是产物)。"""
+    if not text:
+        return False
+    tail = text.strip()[-1200:]
+    return len(text.strip()) < 4000 and bool(_LLM_REFUSAL_RE.search(tail))
+
+
+def nsfw_route_for_run(project: str, message: str, requested: bool) -> dict | None:
+    """派单时判定该 run 是否按 NSFW 路由:返回 {reason, engine?, model?} 或 None(模式关/未标记)。
+    reason: workorder(工单 nsfw 字段/--nsfw)| retry_after_refusal(同 task_id 曾被主模型拒绝)。
+    engine/model 仅在配置了备用语言模型时给出;未配置时只打标记(子进程 genmedia 仍按 VIDEOAGENTS_NSFW 走备用图像/视频渠道)。"""
+    cfg = nsfw_settings()
+    if not cfg["enabled"]:
+        return None
+    route = None
+    if requested or _wo_nsfw_flag(message):
+        route = {"reason": "workorder"}
+    else:
+        tid = _wo_task_id(message)
+        if tid and project and tid in nsfw_suspect_tasks(project):
+            route = {"reason": "retry_after_refusal", "task_id": tid}
+    if route and cfg["text"]["engine"]:
+        route.update(engine=cfg["text"]["engine"], model=cfg["text"]["model"])
+    return route
+
+
+async def api_nsfw_get():
+    cfg = nsfw_settings()
+    gc = load_genconfig()
+    return {**cfg, "engines": list(ENGINES),
+            "video_providers": video_provider_options(gc),
+            "image_channels": _image_channels()}
+
+
+async def api_nsfw_set(body: dict):
+    cfg = nsfw_settings()
+    touched = False
+    for key in ("enabled", "failover"):
+        if key in body:
+            if not isinstance(body[key], bool):
+                raise ServiceError(400, f"{key} must be a boolean")
+            cfg[key] = body[key]
+            touched = True
+    if isinstance(body.get("text"), dict):
+        eng = str(body["text"].get("engine") or "").strip().lower()
+        if eng and eng not in ENGINES:
+            raise ServiceError(400, f"text.engine must be one of {ENGINES}")
+        cfg["text"] = {"engine": eng, "model": str(body["text"].get("model") or "").strip() if eng else ""}
+        touched = True
+    if isinstance(body.get("image"), dict):
+        provider = str(body["image"].get("provider") or "").strip()
+        model = str(body["image"].get("model") or "").strip()
+        if provider and provider not in IMAGE_PROVIDERS:
+            raise ServiceError(400, f"image.provider must be one of {IMAGE_PROVIDERS}")
+        if provider == "agentics":
+            model = ""
+        if provider == "comfyui":
+            model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))
+            if model not in COMFY_MODES:
+                raise ServiceError(400, f"ComfyUI 运行方式须为 {COMFY_MODES} 之一,收到 {model}")
+        cfg["image"] = {"provider": provider, "model": model if provider else ""}
+        touched = True
+    if isinstance(body.get("video"), dict):
+        provider = str(body["video"].get("provider") or "").strip()
+        model = str(body["video"].get("model") or "").strip()
+        if provider:
+            opts = {o["id"]: o for o in video_provider_options(load_genconfig())}
+            if provider not in opts:
+                raise ServiceError(400, f"video.provider must be one of {tuple(opts)}")
+            if provider == "comfyui":
+                model = model or opts[provider]["default_model"]
+                if model not in COMFY_MODES:
+                    raise ServiceError(400, f"ComfyUI 运行方式须为 {COMFY_MODES} 之一,收到 {model}")
+        cfg["video"] = {"provider": provider, "model": model if provider else ""}
+        touched = True
+    if not touched:
+        raise ServiceError(400, "nothing to update: pass enabled / failover / text{engine,model} / "
+                                "image{provider,model} / video{provider,model}")
+    STATE["nsfw"] = cfg
+    save_state(STATE)
+    return await api_nsfw_get()
 
 
 # ---------------- 诊断:Debug 模式与 Issue 反馈(左下角「待提交问题」) ----------------

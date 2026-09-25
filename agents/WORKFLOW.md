@@ -827,6 +827,8 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 **子任务「网络中断快速失败」不计 attempt**:claude CLI 遇 `API Error: Connection dropped (ECONNRESET)`/连接超时这类连接层错误(没拿到任何 HTTP 响应)时,宿主不再让它在「等待重试」里干耗(CLI 默认指数退避重试 10 次,多个并发 Agent 会一起卡死),而是**立刻终止进程并报错**:`status: error`,API 字段 `net_error: true`,`dispatch.py --status/--runs/--wait/--wait-all` 输出附「🔌网络中断快速失败」标记,该 Agent 对话记录以「🔌 网络中断…」开头(HTTP 状态类错误 429/529/5xx 仍由 CLI 自行重试,不在此列)。调度层见到此标记:不追查程序原因、不计入 `max_retries` 的 attempt;可用**原指令原引擎直接重派一次**(等片刻确认网络恢复后),重派仍是网络中断则停止自动重派,节点记 `failed`(note 写明「网络中断」),以 `--confirm` 升级用户修好代理/VPN 后再继续。总制片自身运行若因此中断,由用户重新发起。
 
+**「NSFW 模式」下的两类切换不计 attempt(2026-09-25)**【仅当运行提示词含「## NSFW 模式:开启」一节时适用(宿主只在「设置→高级→NSFW 模式」开启时注入);关闭时不存在任何路由,本条不适用】:① genmedia 图像/视频调用被渠道内容审核拒收(方舟 `InputText/InputImage/OutputVideo/OutputImageSensitiveContentDetected`、MiniMax 1026、Fal/OpenRouter content_policy 等)且「审核拒收后自动切换」开着时,宿主在**同一次调用内**改用备用渠道重提**一次**——这是路由变更不是重 roll,**不计入用户设定的重跑次数,也不算 attempt**;成功后回写 `assets/group_settings/epNN/grpNNN.json` `nsfw: true, nsfw_reason: "failover"`(粘性,该组后续重 roll/重出直走备用渠道)。② 语言模型的审核拒绝**不在进程内切换**:run 最终正文像审核拒绝时宿主标 `nsfw_suspect`(`dispatch.py --status/--runs/--wait/--wait-all` 输出附「🔞疑似被主语言模型审核拒绝」),task_id 记入 `<项目目录>/runs/nsfw_suspect.json`;调度层照常按重跑次数**用同一 task_id 重派**(正常返工),宿主自动改用备用语言模型(「第二次尝试才换」),重派工单同时带 `nsfw: true` 并以 `--nsfw` 派发(§6)。
+
 **任务进程寿命 = 本轮回复(2026-09-14)**:每个 Agent 运行都是宿主起的一个独立进程,Agent 给出最终回复的那一刻宿主运行结束、进程退出,它启动的全部子进程一并被杀——包括被工具因单次超时**自动**转到后台的命令(Claude Code Bash 工具默认 2 分钟超时即转后台;前科 2026-09-14 p6-shot-plates:成员称「工具超时自动转后台,不是我主动丢的,我会等退出码」后结单,出图脚本随之被杀)。因此「有在飞子进程」是不可结单状态:回复里出现「后台等待 / 完成后通知 / 稍后汇报 / 等它退出码返回再继续」等措辞等同于任务未做,验收按机检不过退回,是否「主动」丢后台不影响判定。命令被转到后台后唯一合规动作:立刻阻塞等待它退出(Claude Code 用 TaskOutput 阻塞等待该任务 ID;子任务用 `dispatch.py --wait-all`)拿到退出码再继续。预防:耗时命令必须显式给工具足够大的 timeout(宿主已把 claude 引擎 Bash 默认超时提到 1 小时、上限 2 小时,环境变量 `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS`),并按每批能在超时内跑完的粒度分批(如 `--max-new 3`)。**宿主兜底**:CLI 退出后其进程组里仍有存活子进程时,宿主不立即结单,代等其排空(受运行超时约束,用户手动停止即杀组)后再收尾,`dispatch.py --status/--wait-all` 输出附「⚠️成员提前结单」标记(API `orphaned_children: true`、`orphan_wait` 秒数,对话记录以 ⚠️ 开头);调度层见此标记不采信回执自述、只认机检定验收。**总制片同理**:派出子任务后必须 `--wait-all` 等到回执,不得带着在飞子任务结束本轮(仅已发起 `--confirm/--sign` 例外,签字后宿主唤醒)。
 
 ## 6. 工单(Work Order)统一格式
@@ -860,6 +862,8 @@ on_fail: escalate_human
 ```
 
 Agent 完成后必须回执:`<项目目录>/runs/<task_id>/result.json`(产物路径、自检结果、遇到的设定冲突上报)。
+
+**可选字段 `nsfw: true`(NSFW 模式,2026-09-25)**【仅当运行提示词含「## NSFW 模式:开启」一节时适用;关闭时不写此字段,宿主也不做任何路由】:被派对象已标记敏感时——组 `directing/epNN/shot_list.json#generation_groups[].nsfw: true`,或 `assets/group_settings/epNN/grpNNN.json#nsfw: true`(用户在分镜预览页组卡点 🔞 写入,`nsfw_reason: "manual"`;手标优先于推导值,手标 false 压制推导 true),或资产/剧本/故事板段落所对应事件卡 `script_breakdown.json#events[].content_flags` 非空——orchestrator 给该组/资产的 prompt、锚点/概念图、视频生成以及含明确敏感内容的剧本/故事板工单加 `nsfw: true`,并以 `python3 services/runtime/dispatch.py … --nsfw` 派发。宿主据此把该成员运行在备用语言模型上(**宿主级路由**,不是成员自己换引擎,不违反 §9「报错/返工禁止切换执行引擎」),并给子进程设 `VIDEOAGENTS_NSFW=1`,成员的 genmedia 图像/视频调用随之走备用渠道。`nsfw_suspect` 的同 task_id 重派(§5)同样带此字段。严禁为触发备用模型编造标记;本字段只决定用哪个模型,不放松任何审查。
 
 **交付方式纪律(执行 Agent)**:工单要的是产物文件本身——JSON/MD 类设计产物直接逐份写出终稿,不写「生成脚本」再跑(§2「静态数据产物直接落盘」);
 批处理工单一次做完不拆批;确需脚本(计算/媒体处理/机检)才写,落项目 `code/`,`runs/<task_id>/` 只放运行记录。
@@ -969,6 +973,10 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 > 派单时该配置自动生效。**报错/返工禁止切换执行引擎**;总制片不得用 `--engine` 覆盖成员引擎
 > (服务端会忽略换引擎请求)。同引擎内如需指定模型可用 `--model`。
 > **赛马(改派多 Agent 并行重做同一任务、择优交付)仅限用户明确下令,严禁自行发起**,且赛马同样不换引擎。
+
+> **NSFW 模式的路由由宿主/genmedia 完成,成员不参与(2026-09-25;仅当运行提示词含「## NSFW 模式:开启」一节时存在,关闭时无此路由)**:备用语言/图像/视频模型在「设置→高级→NSFW 模式」配置,按工单 `nsfw: true`(§6)、组标记(shot_list / group_settings)与审核拒收兜底(§5)自动生效;成员**不得**为此传 `--engine/--model`、自选渠道或改 genconfig。
+> `python3 modules/genmedia.py info --group epNN/grpNNN` 显示「🔞 NSFW 路由(…)」即该组已路由;调用中 stderr 出现 `[genmedia] NSFW 兜底: …` 或产物 `<output>.meta.json#nsfw_route {reason, provider, model, error, at}` 时,原文抄进 result.json 回执。
+> 备用渠道配了但不可用(无 Key)= genmedia 直接报错、不回落主模型,照常上报;该模态未配备用则只 WARN 并按主渠道继续。本模式只决定用哪个模型,不放松 11-qa/content-safety 与平台分级审查。
 
 ```bash
 # 查看当前生效渠道与模型(接工单后先跑一次,把结果记入产物 meta)

@@ -34,8 +34,9 @@
 5. **定稿旁白挂点(narration_anchors,WORKFLOW.md §7D ①)**:把 `narration.md` 每条旁白落到具体镜/组区间——**起点取 storyboard 每镜 `narration_ref`(分镜师标的起播镜,2026-09-15;用户在 H3S 已按它签字)**,`anchor_shots` 首镜 = 该草案镜对应的定稿镜,拆镜时取拆出的首镜;确需挪到别的镜(窗口装不下等)要在 anchor 记录 `moved_from` 并写明理由,不得默默改——算出可用画面窗口秒数(窗口扣除其中对白占时);窗口 ≥ 该条 `est_duration_s`×1.15 才算装得下——不满足优先调镜时长消化,画面确实装不下再上报 orchestrator 回派 narration 精简文本。这是 H3A 签字的前置机检:旁白挤不进画面的问题必须在视频生成前解决,组 clip 生成后再扩镜=整组重 roll。
 6. **对白适配核查(估时级,§7D ①)**:dialogue 组逐组核对台词总估时(取 screenplay 对白层 `est_duration_s`,口径已按角色声线语速)能否装进组时长,机检 `Σ台词估时 ≤ 组总时长×0.7`(留动作/反应/停顿空间)。**2026-08-30 起用宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 执行(禁人算/自查放行)**:定稿 shot_list 落盘后必跑一遍,报告 `directing/epNN/dialogue_fit.json`;有超限组时**我不删台词**——在 result.json 报出超限组清单并交 `p6-dialogue-fit`(dialogue-rewrite 按报告 trim_targets 逐句精简);精简 3 轮仍装不下回到我调镜时长/拆组。定镜时长时就把每组 0.7 承载算进去,别把删台词留给下游。**组总时长是生成硬约束——台词超出承载力时,视频模型会为念完台词强行提速,语速异常且只能整组重 roll**。超限的解法优先级:上报 orchestrator 回派 dialogue-rewrite **改短台词**(文本层,最便宜)> 调镜时长/拆组;严禁指望模型压语速消化。
 7. **逐组定稿音频形态 audio_plan 与无声组核查(§7D ①)**:每组必填 `audio_plan ∈ {dialogue, narration_over, ambient_only}`(有对白镜=dialogue;无对白但有旁白挂点=narration_over;两者皆无=ambient_only)。**每个 ambient_only 组逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」并写 `silent_rationale`**(纯动作/氛围/蒙太奇等有意留白要说明白);讲不清的上报 orchestrator 回派 narration 补写旁白(补写条目新版本写回 narration.md,narration.md 是旁白唯一事实源),确需加对白的走剧本变更流程。audio_plan 是下游 prompt 的硬输入——非对白组据此写无对白约束,防视频模型自编台词(§7D ③)。
-8. 产出 `directing/epNN/shot_list.json`,附与 storyboard 草案的映射(哪镜来自哪条草案、改了什么)。
-9. G6 后 shot_list(含 generation_groups、narration_anchors、audio_plan)冻结:任何改动走变更流程新开版本,由 orchestrator 标脏重跑受影响链路。
+8. **逐组敏感内容标记 `nsfw`(NSFW 模式,2026-09-25)**【仅当运行提示词含「## NSFW 模式:开启」一节时适用(宿主只在「设置→高级→NSFW 模式」开启时注入);关闭时不写此字段】:每组必填 `nsfw: true|false`——本组场景挂的任一事件(`script_breakdown.json#scenes[].events` → `events[].content_flags`)`content_flags` 非空即 `true`,否则 `false`;只按拆解表判定,不自行推断、不为触发备用模型编造。**不写 `assets/group_settings/` 文件**(那是宿主与用户的);用户在分镜预览页组卡手标的 🔞(group_settings `nsfw_reason: "manual"`)优先于本字段。宿主/genmedia 据此把该组的 prompt、锚图、视频生成路由到备用模型(WORKFLOW.md §6/§9)。
+9. 产出 `directing/epNN/shot_list.json`,附与 storyboard 草案的映射(哪镜来自哪条草案、改了什么)。
+10. G6 后 shot_list(含 generation_groups、narration_anchors、audio_plan)冻结:任何改动走变更流程新开版本,由 orchestrator 标脏重跑受影响链路。
 
 ## 不做什么(边界)
 
@@ -83,6 +84,7 @@
     "total_duration_s": 12,
     "characters_union": ["c003", "c007"], "costumes_by_char": { "c003": "c003_battle_02", "c007": "c007_daily_01" }, "creatures_union": [], "has_dialogue": true,
     "audio_plan": "dialogue",
+    "nsfw": false,   // NSFW 模式开启时必填:场景任一事件 content_flags 非空 → true;关闭时不写
     "continuity_from": "grp004",
     "storyboard_group_ref": "S03/group_order:2",
     "scene_refs": { "layout_top": "assets/concepts/scenes/s012/layout_top.png", "layout_json": "assets/concepts/scenes/s012/layout.json" },
