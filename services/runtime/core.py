@@ -3046,8 +3046,8 @@ def build_role_prompt(agent_id: str, project: str,
         "`finalize_episode.py check` 全 PASS 才可交付),发布期按平台字幕清单处理")
     caption_line = (
         "**开启** —— caption Agent 在关键叙事节点设计花字+配套音效(WORKFLOW.md §9A),"
-        "超分后的终版组 clip 上烧录副本(assets/clips_caption/,原 clip 不动),"
-        "另封装花字版成片 edit/{ep}/final_caption.mp4(a:0=声轨+SFX 预混、a:1=声轨存档);"
+        "各组当前采纳的后期版本(未采纳 = 超分后的终版母本)上烧录副本(assets/clips_caption/,源文件不动),"
+        "花字版成片 edit/{ep}/final_caption.mp4 由宿主 render_captions.py final 在干净版 final.mp4 上按成片时间轴一步产出(a:0=声轨+SFX 预混、a:1=声轨存档);"
         "干净版 final.mp4 照常产出,双版本并列;渲染/封装只准宿主 CLI code/render_captions.py,"
         "机检 code/check_captions.py 三阶段;"
         + ("花字策略=**手动**(只准出用户勾选类型:" + "、".join(_ccat.normalize_policy(out)["types"]) + ")"
@@ -3345,8 +3345,9 @@ def build_role_prompt(agent_id: str, project: str,
 ## 用户花字设定(「🎚️ 后期处理」页「花字」板块,当前项目已开启;详细规范 WORKFLOW.md §9A)
 - 设计(10-editing/caption):edit/epNN/captions.json 用 **schema v3**(HTML 引擎)——样式与动画封装在项目内 HTML 模版 edit/caption_templates/(协议 captpl.v1,动画按内容逐条创作,全集模版数 ≤20);每条 template_ref + em_pct + params;字体 font://<font_id>(用户上传到 refs/fonts/ 的项目字体自动并入,id 为 proj:<family>,有则优先);每条必填 group_id + 组内 local_start/local_end,与集级 start/end 双写对账;**入出点 = 语音里这段文字被念出的起止**(render_captions.py speech-align / speech-snap,机检 caption_speech_aligned;语音里没念的画面标注型文字标 speech_free:true,av 项目不允许);音效只从 data/sfx/manifest.json 按 tags 选 sfx_id,**不生成新音效**。密度按 caption SOUL(平均 8–12 秒一条、同屏 ≤2 条且错位、不入底部字幕安全区)。无 bible/dictionary.json 的项目,花字文案必须逐片段命中 av/beat_track.json 母带原文(禁造词)
 """ + _ccat.prompt_block(_cpol, PROJECTS_DIR / safe_slug(project)) + """
-- 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;产物是 assets/clips_caption/ 副本,原组 clip 永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
-- 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,用 clips_caption 副本替换对应组按同一 EDL 重拼,SFX 轨与封装走 `render_captions.py sfx-track` + `mux`——**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest
+- 烧录(caption-render 工单):**只准执行 `python3 code/render_captions.py render --project <slug> --ep epNN`,禁止自写花字 ffmpeg 滤镜/脚本**;源 = 各组当前采纳的后期版本(未采纳 = 母本),local 时间由宿主按版本 time_ops 换算,落在删段内的花字不烧(WARN);产物是 assets/clips_caption/ 副本,源文件永不改动;manifest 缺失先跑 fonts-scan / sfx-scan(幂等);单组返工 = 改该组条目后 `render --grp grpNNN`
+- 时间轴(2026-09-25):captions.json 的 local 是母本 v0 组内坐标,集级 start/end 与 word_track / speech-lookup 一律是 cut 基准(后期版本 + 组边界层,不含片头),由宿主 modules/caption_timeline.py 换算;**Agent 不手算后期删段 / 过场字卡 / 片头偏移**,`render_captions.py timeline` 可查各组起点与取源版本
+- 花字版成片(caption-final 工单,归 10-editing/edit):干净版 final.mp4 照常产出后,**只准 `python3 code/render_captions.py final --project <slug> --ep epNN` 一步产出**——宿主在干净版上按成片时间轴叠全部花字、同轴建 SFX 轨并封装,**a:0=声轨权威+SFX 预混(开箱即听),a:1=声轨权威流拷贝(存档轨)**;不再用 clips_caption 副本重拼 EDL,禁止自写 concat / overlay / 偏移;干净版未出或 timeline 与采纳版本不一致时 final 会 FAIL,先 post_apply.py finalize;MP4 多音轨是互斥备选流,严禁指望播放器叠加混播;严禁 -shortest;交付前 check_captions.py --require final(含 caption_final_fresh)
 - 机检:各阶段交付前 `python3 code/check_captions.py --project <slug> --ep epNN --require design|render|final` 全 PASS;干净版既有机检口径不变,零重编码承诺只对干净版 final.mp4 成立
 - 发布(platform-adapter):发布物料默认基于**花字版** final_caption.mp4 转码(其 a:0 已含音效);用户显式要求无花字版本时才用干净版
 - 调度(orchestrator):按 DAG condition 正常排产 caption 节点,把本设定要点(含花字策略与允许类型)写入相关工单 instruction"""

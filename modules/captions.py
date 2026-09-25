@@ -582,19 +582,26 @@ def build_sfx_track(data: dict, sfx_manifest: dict, sfx_dir: Path,
             "duration_s": round(probe_duration(str(out_path)), 3)}
 
 
-def mux_caption_final(video_path: Path, master_path: Path, sfx_track: Path,
+def mux_caption_final(video_path: Path, master_path: Path, sfx_track: Path | None,
                       out_path: Path) -> dict:
-    """花字版成片封装:v=烧录后拼装视频(流拷贝),a:0=母带+SFX 预混(开箱即听),
-    a:1=母带流拷贝(零重编码存档,机检 final_caption_master_frames_intact 对它查)。
-    时长权威=母带(amix duration=first 以母带为第一路);严禁 -shortest。"""
+    """花字版成片封装:v=烧录后的成片画面(流拷贝),a:0=声轨权威+SFX 预混(开箱即听),
+    a:1=声轨权威流拷贝(零重编码存档,机检 final_caption_master_frames_intact 对它查)。
+    声轨权威(master_path)= 母带文件或干净版 final.mp4(取其 a:0;caption_timeline.audio_authority 决定)。
+    时长权威=声轨权威(amix duration=first 以它为第一路);严禁 -shortest。
+    sfx_track=None(全集无音效引用)时 a:0 = 声轨权威单独转码,布局不变。"""
     require_tools("ffmpeg")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fc = (f"[1:a]aresample={SFX_SR}[m];[2:a]aresample={SFX_SR}[s];"
-          f"[m][s]amix=inputs=2:duration=first:normalize=0,"
-          f"alimiter=limit=0.891[premix]")
+    if sfx_track is not None:
+        fc = (f"[1:a:0]aresample={SFX_SR}[m];[2:a:0]aresample={SFX_SR}[s];"
+              f"[m][s]amix=inputs=2:duration=first:normalize=0,"
+              f"alimiter=limit=0.891[premix]")
+        sfx_in = ["-i", str(sfx_track)]
+    else:
+        fc = f"[1:a:0]aresample={SFX_SR},anull[premix]"
+        sfx_in = []
     cmd = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(video_path),
-           "-i", str(master_path), "-i", str(sfx_track),
+           "-i", str(master_path), *sfx_in,
            "-filter_complex", fc,
            "-map", "0:v:0", "-map", "[premix]", "-map", "1:a:0",
            "-c:v", "copy", "-c:a:0", "aac", "-b:a:0", SFX_BITRATE,

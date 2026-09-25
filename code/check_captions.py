@@ -13,8 +13,11 @@
 
   [design] 设计阶段(caption 设计工单交付前必跑)
     1. caption_schema_v2          schema_version=3、字段/枚举合法(检查名保持历史沿用)
-    2. caption_groups_valid       group_id 命中 shot_list,local 时间落在组时长内
-    3. caption_time_consistent    集级 start == 组起点 + local_start(±0.1s,双写对账)
+    2. caption_groups_valid       group_id 命中 shot_list,local 时间落在组时长内(母本 v0 坐标)
+    3. caption_time_consistent    集级 start == 组起点 + local_start(±0.1s,双写对账);主流程按**花字时间轴**
+                                  (modules/caption_timeline.py:cut 基准 = 后期采纳版本 + 组边界层,不含片头)核对,
+                                  落在后期删段内的花字亦 FAIL;av 项目仍按 shot_list audio_in_s;
+                                  混音基准过期等时间轴无法解析的硬错误在此 FAIL
     4. caption_assets_resolved    font_id/sfx_id 全部在 manifest 命中
     5. caption_text_from_source   花字文本片段能在母带原文找到(仅 av 项目,防造词;
                                   有 bible/dictionary.json 的主流程项目仍走 dictionary_match_100)
@@ -36,12 +39,16 @@
    7a. caption_glyph_coverage     模版 font:// 可解析 + 花字文本字形全覆盖
                                   (浏览器缺字形静默回退,libass 时代同款陷阱)
     8. captions_rendered_all      每个含花字的组都有副本+回执,且回执指纹新鲜
-                                  (v3:源 clip sha / 花字+模版+字体 hash / 引擎版本)
+                                  (v3:源 sha / 花字+模版+字体 hash / 引擎版本;源 = 该组**当前采纳的后期版本**,
+                                  未采纳 = 母本;花字 local 时间按版本 time_ops 换算后参与 hash,2026-09-25)
     9. caption_render_spec_ok     副本 宽/高/fps 与源一致,时长差 ≤1 帧
    10. caption_clip_audio_intact  av:副本保持无声;主流程:副本音轨参数与源一致
 
   [final] 成片阶段(av4/p9 caption-final 交付前必跑)
-   11. caption_final_duration_match  花字版时长 == 声轨权威时长 ±0.10s
+   11. caption_final_duration_match  花字版时长 == 声轨权威时长 ±0.10s(权威 = caption_timeline.audio_authority:
+                                  干净版 final.mp4 自带声轨,或 av 项目母带)
+  11a. caption_final_fresh         花字版回执 edit/epNN/final_caption.json 与当前干净版成片 / 花字 / 声轨 / 时间轴一致
+                                  (render_captions.py final 写;无回执的旧产物 FAIL——须用 final 重出)
    12. caption_premix_present       a:0 为 AAC 预混轨且另有 a:1 存档轨(≥2 条音轨)
    13. final_caption_master_frames_intact  a:1 与母带逐帧 md5 一致(仅 av;
                                   a:0 是预混轨,零重编码的存档口径移到 a:1)
@@ -67,6 +74,7 @@ from _common import DATA_DIR, parse_args, reexec_with_host_python               
 import captions as cap                                            # noqa: E402
 import caption_catalog as ccat                                    # noqa: E402
 import captions_html as chtml                                     # noqa: E402
+import caption_timeline as ct                                     # noqa: E402
 import avsync                                                     # noqa: E402
 import speechalign as sa                                          # noqa: E402
 
@@ -148,6 +156,37 @@ def main():
         buckets["caption_schema_v2"] = []
         for msg in issues:
             buckets[_bucket(msg)].append(msg)
+        # 花字时间轴(2026-09-25):主流程集级 start/end 必须是 cut 基准 = local 经后期版本 time_ops + 组边界层换算
+        tl, tl_err = None, None
+        try:
+            tl = ct.CaptionTimeline.resolve(proj, ep, audio_used=True)
+        except SystemExit as e:
+            tl_err = str(e)
+        if tl_err:
+            buckets["caption_time_consistent"].append(f"花字时间轴无法解析:{tl_err}")
+        else:
+            for w in tl.warnings:
+                print(f"[WARN ] {w}")
+            print(f"[AXIS ] {tl.describe()}(指纹 {tl.fingerprint()})")
+            for i, c in enumerate(data.get("captions", [])):
+                tag = c.get("id") or f"captions[{i}]"
+                g = tl.groups.get(c.get("group_id"))
+                if g is None or g.authority == "audio_in_s":
+                    continue                      # 组不存在(groups_valid 已报)/ av 项目沿用 audio_in_s 口径
+                try:
+                    ls, le = float(c.get("local_start")), float(c.get("local_end"))
+                except (TypeError, ValueError):
+                    continue
+                exp0 = tl.local_to_cut(c["group_id"], ls)
+                exp1 = tl.local_to_cut(c["group_id"], le, end=True)
+                if exp0 is None or exp1 is None or exp1 - exp0 < ct.MIN_BURN_S:
+                    buckets["caption_time_consistent"].append(
+                        f"{tag}: local {ls}-{le} 落在 {c['group_id']} 的后期删段 / 修剪之外(该版本里不存在这段画面,改挂或删除)")
+                    continue
+                st = c.get("start")
+                if isinstance(st, (int, float)) and abs(float(st) - exp0) > 0.1:
+                    buckets["caption_time_consistent"].append(
+                        f"{tag}: start {st} 与 组起点+local_start 的 cut 基准 {exp0:.3f} 不一致(speech-snap 可回写)")
         for name in ("caption_schema_v2", "caption_groups_valid",
                      "caption_time_consistent", "caption_assets_resolved"):
             check(name, not buckets[name], "; ".join(buckets[name][:3]))
@@ -168,10 +207,10 @@ def main():
         else:
             try:
                 track = sa.load_word_track(wt_path)
-                stale = sa.staleness(track, proj, ep)
+                stale = sa.staleness(track, proj, ep, tl)
                 sp_issues = (["word_track 过期:" + "; ".join(stale)] if stale else []) \
                     + sa.check_speech_alignment(data, track, shot_list,
-                                                allow_speech_free=beat_text is None)
+                                                allow_speech_free=beat_text is None, tl=tl)
             except (ValueError, OSError) as e:
                 sp_issues = [f"word_track 无法读取:{e}"]
             check("caption_speech_aligned", not sp_issues,
@@ -204,7 +243,13 @@ def main():
         fonts_m = cap.load_fonts_manifest(FONTS_DIR / "manifest.json", proj)
         missing, stale, spec_bad, audio_bad = [], [], [], []
         for grp, caps in sorted(by_grp.items()):
-            src = proj / "assets" / "clips" / ep / f"{grp}.mp4"
+            g = tl.groups.get(grp) if tl is not None else None
+            src = g.src if (g is not None and g.src is not None) else proj / "assets" / "clips" / ep / f"{grp}.mp4"
+            burn = caps
+            if g is not None:
+                burn, _dropped = tl.burn_captions(grp, caps)
+                if not burn:
+                    continue                      # 本组花字全部落在删段内:不应有副本
             out = cap_dir / f"{grp}.mp4"
             receipt = cap_dir / f"{grp}.render.json"
             if not (out.is_file() and receipt.is_file()):
@@ -218,7 +263,9 @@ def main():
                 fresh = (old.get("renderer") == chtml.HTML_RENDERER_VERSION
                          and old.get("src_sha256") == avsync.file_sha256(str(src))
                          and old.get("captions_hash")
-                         == chtml._captions_hash_v3(caps, proj, fonts_m))
+                         == chtml._captions_hash_v3(burn, proj, fonts_m))
+                if fresh and g is not None and int(old.get("src_version", 0) or 0) != g.v:
+                    fresh = False                 # 回执写的版本号与当前采纳指针不符(旧回执无此字段 = v0 母本)
             except (json.JSONDecodeError, OSError, RuntimeError):
                 fresh = False
             if not fresh:
@@ -255,7 +302,7 @@ def main():
         check("caption_glyph_coverage", not glyph_bad, "; ".join(glyph_bad[:3]))
         check("captions_rendered_all", not missing and not stale,
               (f"缺副本:{missing[:5]} " if missing else "")
-              + (f"回执过期(需重渲):{stale[:5]}" if stale else ""))
+              + (f"回执过期(需重渲,源 = 当前采纳版本):{stale[:5]}" if stale else ""))
         check("caption_render_spec_ok", not spec_bad, "; ".join(spec_bad[:3]))
         check("caption_clip_audio_intact", not audio_bad, "; ".join(audio_bad[:3]))
 
@@ -268,21 +315,45 @@ def main():
             skip("final", f"{final_cap} 不存在(未到封装阶段)")
     else:
         master = None
-        for cand in (*(proj / "assets" / "audio" / "master" / f"{ep}.{ext}"
-                       for ext in ("mp3", "m4a", "wav")),
-                     proj / "assets" / "audio" / "final" / f"{ep}.wav"):
+        for cand in (proj / "assets" / "audio" / "master" / f"{ep}.{ext}" for ext in ("mp3", "m4a", "wav")):
             if cand.is_file():
                 master = cand
                 break
-        ref_dur = avsync.probe_duration(str(master)) if master else \
-            (avsync.probe_duration(str(proj / "edit" / ep / "final.mp4"))
-             if (proj / "edit" / ep / "final.mp4").is_file() else None)
+        tl_f, tl_f_err = None, None
+        try:
+            tl_f = ct.CaptionTimeline.resolve(proj, ep, audio_used=True)
+        except SystemExit as e:
+            tl_f_err = str(e)
+        authority, auth_kind = (tl_f.audio_authority() if tl_f is not None else (master, "master" if master else "none"))
+        ref_dur = avsync.probe_duration(str(authority)) if authority else None
         got = avsync.probe_duration(str(final_cap))
         if ref_dur is None:
-            check("caption_final_duration_match", False, "找不到声轨母带或干净版成片作时长权威")
+            check("caption_final_duration_match", False, tl_f_err or "找不到声轨权威(干净版 final.mp4 / 母带)作时长权威")
         else:
             check("caption_final_duration_match", abs(got - ref_dur) <= DUR_TOL_S,
-                  f"got={got:.3f}s ref={ref_dur:.3f}s tol={DUR_TOL_S}")
+                  f"got={got:.3f}s ref={ref_dur:.3f}s({auth_kind}) tol={DUR_TOL_S}")
+        # 花字版回执(render_captions.py final):源成片 / 花字+入出点 / 声轨 / 时间轴任一变了都要重出
+        rp = ct.final_receipt_path(proj, ep)
+        if tl_f is None or data is None:
+            check("caption_final_fresh", False, tl_f_err or "缺 captions.json")
+        elif not rp.is_file():
+            check("caption_final_fresh", False, f"缺 {rp.relative_to(proj)}(旧路径产物;用 render_captions.py final 重出)")
+        else:
+            items, _dropped = ct.plan_final_items(tl_f, data)
+            fonts_f = cap.load_fonts_manifest(FONTS_DIR / "manifest.json", proj) \
+                if (FONTS_DIR / "manifest.json").is_file() else {"fonts": []}
+            try:
+                old = json.loads(rp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                old = {}
+            expect = {"src_sha256": avsync.file_sha256(str(tl_f.final)) if tl_f.final else None,
+                      "captions_hash": chtml.episode_items_hash(items, proj, fonts_f) if items else None,
+                      "renderer": chtml.HTML_RENDERER_VERSION,
+                      "audio_sha256": avsync.file_sha256(str(authority)) if authority else None,
+                      "sfx_plan": ct.sfx_plan_fingerprint(items), "timeline_fingerprint": tl_f.fingerprint(),
+                      "out_sha256": avsync.file_sha256(str(final_cap))}
+            diff = [k for k, v in expect.items() if old.get(k) != v]
+            check("caption_final_fresh", not diff, ("过期字段:" + ",".join(diff) + "(重跑 render_captions.py final)") if diff else "")
         streams = _audio_streams(final_cap)
         premix_ok = (len(streams) >= 2 and streams[0].get("codec_name") == "aac")
         check("caption_premix_present", premix_ok,
@@ -299,7 +370,10 @@ def main():
             skip("final_caption_master_frames_intact",
                  "主流程项目(混音轨非零重编码口径)" if not is_av else "花字版缺 a:1")
         spans = _black_spans(final_cap)
-        check("no_black_frames", not spans, f"黑帧段:{spans[:3]}")
+        # 设计内的黑场(字卡 / fade_black / 黑场垫片)按转场台账白名单豁免(与干净版 transition_render_ok 同口径,窗口 +片头偏移)
+        wl = _black_whitelist(proj, ep, tl_f)
+        spans, exempt = _drop_whitelisted(spans, wl)
+        check("no_black_frames", not spans, f"黑帧段:{spans[:3]}" if spans else (f"设计内黑场 {exempt} 段已豁免" if exempt else ""))
 
     print()
     n_fail = sum(1 for _, ok in checks if not ok)
@@ -324,6 +398,38 @@ def _audio_streams(path: Path) -> list[dict]:
         return json.loads(out).get("streams") or []
     except json.JSONDecodeError:
         return []
+
+
+def _black_whitelist(proj: Path, ep: str, tl) -> list[tuple[float, float]]:
+    """transitions_render.json#black_frame_whitelist(out_cut 基准)→ 成片基准窗口;台账 out_cut 不是当前正片时不豁免。"""
+    tr = proj / "edit" / ep / "transitions_render.json"
+    if tl is None or tl.cut is None or not tr.is_file():
+        return []
+    try:
+        d = json.loads(tr.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    if Path(d.get("out_cut") or "").name != tl.cut.name:
+        return []
+    off = float(tl.cut_offset_s or 0.0)
+    out = []
+    for w in d.get("black_frame_whitelist") or []:
+        try:
+            out.append((float(w["start_s"]) + off, float(w["end_s"]) + off))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _drop_whitelisted(spans: list[str], wl: list[tuple[float, float]], tol: float = 0.15) -> tuple[list[str], int]:
+    keep, n = [], 0
+    for sp in spans:
+        a, b = (float(x) for x in sp.rstrip("s").split("-"))
+        if any(a >= s0 - tol and b <= s1 + tol for s0, s1 in wl):
+            n += 1
+        else:
+            keep.append(sp)
+    return keep, n
 
 
 def _black_spans(path: Path, min_d: float = 0.4) -> list[str]:

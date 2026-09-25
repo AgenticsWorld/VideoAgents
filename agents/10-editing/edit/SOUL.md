@@ -21,10 +21,11 @@
    - **字幕**:同一 CLI 的 `shift` 子命令(assemble 已自动跑)把 `subtitles.srt`/`.ass` 整体 +片头实测时长(`ffprobe intro.mp4`,与 `placement.json` 声明值交叉核对,不一致以实测为准并上报)生成 `subtitles_final.srt`/`.ass`;未启用片头 = 原样拷贝;
    - **机检**:`python3 code/finalize_episode.py check --project <slug> --ep epNN`(机检 `intro_offset_ok`)全 PASS 才算封装完成——它逐条核对字幕平移量、按成片声轨与 final_audio 互相关实测片头偏移(±80ms,首/中/尾三窗一致)、核对成片总时长 = Σ各段实测;FAIL 即不交付、不烧录、不发布;台账落 `edit/epNN/final_layout.json`;
    - 已有 final.mp4 由别的路径产出(如花字版、外部返修)时,至少 `shift` + `check` 必跑。**烧录字幕、交付发布一律用 subtitles_final 版,严禁把正片基准的 subtitles.srt 直接配 final.mp4**。
-7. **花字版成片封装(caption-final 工单,花字开关开启时)**:干净版 `final.mp4` 照常产出后,另封装花字版 `edit/epNN/final_caption.mp4`——
-   - **视频**:按干净版同一 EDL/时间线重拼,凡 `assets/clips_caption/epNN/` 有烧录副本的组用副本替换,其余组用原 clip。副本与原 clip 编码参数不一致时,退回逐组重编码路径(与干净版拼装同法),不硬 concat;
-   - **音轨(2026-08-08 定,不可变更)**:MP4 多音轨是互斥备选流,播放器默认只播 a:0 且**不会叠加混播**——所以 `a:0 = 声轨权威 + 花字 SFX 预混`(AAC,开箱即听),`a:1 = 声轨权威原样流拷贝`(存档轨,零重编码机检对它逐帧校验)。SFX 轨与封装**只准走宿主 CLI**:`python3 code/render_captions.py sfx-track` + `mux`,禁止自写混音滤镜;
-   - **严禁 -shortest**(会静默截断音频末帧);交付前 `python3 code/check_captions.py --require final` 全 PASS;干净版的既有机检(av 项目的 `check_av_sync.py --require final`)照常只对 `final.mp4` 负责,不受花字版影响。
+7. **花字版成片封装(caption-final 工单,花字开关开启时)**:干净版 `final.mp4` 照常产出后,另出花字版 `edit/epNN/final_caption.mp4`——**唯一工序 `python3 code/render_captions.py final --project <slug> --ep epNN`(2026-09-25)**:
+   - **视频**:宿主在干净版 `final.mp4` 上按**成片时间轴**把全部花字一次叠上(每条按 `group_id + local` 经花字时间轴换算:后期采纳版本的删段 / 变速、组边界层的定格 / 黑场 / 字卡、片头偏移都由 `modules/caption_timeline.py` 算,干净版本身就是同一 EDL)——**不再用 clips_caption 副本重拼**,我不自写 concat / overlay / 偏移;
+   - **音轨(2026-08-08 定,不可变更)**:MP4 多音轨是互斥备选流,播放器默认只播 a:0 且**不会叠加混播**——所以 `a:0 = 声轨权威 + 花字 SFX 预混`(AAC,开箱即听),`a:1 = 声轨权威原样流拷贝`(存档轨,零重编码机检对它逐帧校验);声轨权威 = 干净版 final.mp4 自带声轨(av 项目且无片头 / 无时长编辑时 = 母带);SFX 轨同轴落点由 `final` 内部生成(`sfx-track` / `mux --video` 只留作画面由别的路径产出时的旧式封装),禁止自写混音滤镜;
+   - **前提**:干净版已产出且 `timeline.json` 与当前采纳版本一致(否则 `final` FAIL,先 `post_apply.py finalize` 重出干净版);干净版 / 花字 / 声轨 / 时间轴任一变了,回执 `edit/epNN/final_caption.json` 过期,重跑 `final` 即可(幂等);
+   - **严禁 -shortest**(会静默截断音频末帧);交付前 `python3 code/check_captions.py --require final` 全 PASS(含 `caption_final_fresh`);干净版的既有机检(av 项目的 `check_av_sync.py --require final`)照常只对 `final.mp4` 负责,不受花字版影响。
 8. **剪辑期穿帮的低成本处置(V2V 定向修改通道)**:剪辑中发现**局部穿帮**(服饰/道具/小物件/背景元素级不一致,如"一镜手有袖子一镜没有"),不再一律按整组重 roll 上报——开缺陷单时标注 `repair_mode: v2v_edit`,写清:①问题组 id 与画面时间窗;②穿帮对象与正确样式(附对照帧截图或正确参考图路径);③修改指令草稿(以"其余画面、动作、运镜与声音保持完全不变"收尾)。执行仍由 `08-video-gen/video-generation`(V2V 修复路径,成本远低于整组重 roll);修复版回来后我只做替换素材与时轴核对,复检归 visual-qa。仅**元素级**缺陷走此通道,动作/表演/构图级缺陷仍按整组重 roll 上报——**整组重 roll 缺陷单须注明该组是否处于续接链上**(后组 refs 含其尾帧即是,WORKFLOW §7C),提醒 video-generation 做前向接缝评估;重 roll 版返回替换素材时,目检该组与**前后两侧**组边界的接缝,轻微状态差异由既有硬切结构消化(必要时提请 transition 加转场遮蔽),明显跳变报 visual-qa 按 §7C 处置,我不自行裁帧硬掩。
 
 ## 不做什么(边界)
@@ -55,7 +56,7 @@
 | 粗成片 | `edit/epNN/cut_v1.mp4` | 时长 = 预算 ±5%,分辨率/fps 与 `bible/aspect_ratio.json` 一致 |
 | 成片基准字幕(终版封装时) | `edit/epNN/subtitles_final.srt`(+`.ass`) | `finalize_episode.py shift` 产出:subtitles.srt 整体 +片头实测时长(职责 6);无片头 = 原样拷贝;烧录/发布唯一字幕源 |
 | 成片时间轴台账(终版封装时) | `edit/epNN/final_layout.json` | `finalize_episode.py` 写:各段实测时长/起点、`cut_offset_s`(片头偏移)、`check` 结果;platform-adapter/QA 据此核对 |
-| 花字版成片(花字开关开启时,职责 7) | `edit/epNN/final_caption.mp4` + `edit/epNN/caption_sfx.m4a` | a:0=预混(开箱即听)、a:1=声轨权威存档;含 `final` 名 → 成片发布页与干净版并列收录 |
+| 花字版成片(花字开关开启时,职责 7) | `edit/epNN/final_caption.mp4` + `edit/epNN/caption_sfx.m4a` + 回执 `edit/epNN/final_caption.json` | `render_captions.py final` 一步产出:a:0=预混(开箱即听)、a:1=声轨权威存档;含 `final` 名 → 成片发布页与干净版并列收录 |
 
 关键字段/结构约定:
 ```json

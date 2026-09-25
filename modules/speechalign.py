@@ -471,7 +471,10 @@ def _confidence(source: str, stats: dict) -> str:
 
 
 def assemble(ep: str, proj: Path, audio: Path | None, kind: str, tpath: Path,
-             segs: list[dict], words: list[dict], source: str, stats: dict) -> dict:
+             segs: list[dict], words: list[dict], source: str, stats: dict,
+             time_axis: dict | None = None) -> dict:
+    """time_axis(2026-09-25):words 所在基准的说明与指纹({basis:"cut", fingerprint, cut, audio_ops, transcript_ops});
+    None = 旧口径(声轨基准)。"""
     for i, w in enumerate(words):
         w["i"] = i
     audio_meta = None
@@ -485,7 +488,7 @@ def assemble(ep: str, proj: Path, audio: Path | None, kind: str, tpath: Path,
                            "path": str(tpath.relative_to(proj)) if tpath.is_relative_to(proj) else str(tpath),
                            "sha256": _sha_segments(segs)},
             "source": source, "confidence": _confidence(source, stats),
-            "stats": stats, "words": words}
+            "time_axis": time_axis, "stats": stats, "words": words}
 
 
 def word_track_path(proj: Path, ep: str) -> Path:
@@ -499,9 +502,16 @@ def load_word_track(path: Path) -> dict:
     return data
 
 
-def staleness(track: dict, proj: Path, ep: str) -> list[str]:
-    """word_track 是否过期:台本(逐句时间码)或音频变了都要重建。"""
+def staleness(track: dict, proj: Path, ep: str, tl=None) -> list[str]:
+    """word_track 是否过期:台本(逐句时间码)或音频变了都要重建;给了花字时间轴 tl(caption_timeline)时,
+    时间轴指纹(后期版本 / 组边界层 / 片头)变了也要重建(逐字时刻是 cut 基准)。"""
     why = []
+    if tl is not None:
+        ta = track.get("time_axis") or {}
+        if not ta.get("fingerprint"):
+            why.append("word_track 为旧口径(无 time_axis,声轨基准),须重跑 speech-align 折到 cut 基准")
+        elif ta.get("fingerprint") != tl.fingerprint():
+            why.append("花字时间轴已变更(后期版本 / 过场 / 片头,重跑 speech-align)")
     found = find_transcript(proj, ep)
     if found is None:
         why.append("台本来源(beat_track/subtitles.srt)已不存在")
@@ -580,7 +590,9 @@ def locate(track: dict, text: str, near_s: float | None = None,
     return best
 
 
-def _group_window(cap: dict, groups: dict) -> tuple[float, float] | None:
+def _group_window(cap: dict, groups: dict, tl=None) -> tuple[float, float] | None:
+    if tl is not None and cap.get("group_id") in tl.groups:
+        return tl.group_window(cap["group_id"])
     g = groups.get(cap.get("group_id")) or {}
     base = g.get("audio_in_s")
     if base is None:
@@ -593,9 +605,9 @@ def _group_window(cap: dict, groups: dict) -> tuple[float, float] | None:
     return (float(base), float(base) + span)
 
 
-def speech_span(track: dict, cap: dict, groups: dict) -> dict | None:
+def speech_span(track: dict, cap: dict, groups: dict, tl=None) -> dict | None:
     """一条花字对应的语音区间(以现有 start 为参考,组窗口为范围)。"""
-    win = _group_window(cap, groups)
+    win = _group_window(cap, groups, tl)
     near = cap.get("start") if isinstance(cap.get("start"), (int, float)) else None
     return locate(track, cap.get("text") or "", near_s=near, window=win)
 
@@ -615,8 +627,10 @@ def expected_span(sp: dict, win: tuple[float, float] | None,
     return round(s, 3), round(e, 3)
 
 
-def group_at(groups: dict, t: float) -> str | None:
-    """av 项目:时刻 t 落在哪个组(audio_in_s ≤ t < audio_in_s+span);主流程组无 audio_in_s 返回 None。"""
+def group_at(groups: dict, t: float, tl=None) -> str | None:
+    """时刻 t 落在哪个组:有花字时间轴 tl 时按 cut 基准组窗口;否则 av 项目按 audio_in_s,主流程返回 None。"""
+    if tl is not None:
+        return tl.group_at(t)
     for gid, g in groups.items():
         base = g.get("audio_in_s")
         if base is None:
@@ -630,7 +644,7 @@ def group_at(groups: dict, t: float) -> str | None:
 # ---------------------------------------------------------------- 对账与吸附
 
 def check_speech_alignment(data: dict, track: dict, shot_list: dict,
-                           tol_s: float = SPEECH_TOL_S, allow_speech_free: bool = True) -> list[str]:
+                           tol_s: float = SPEECH_TOL_S, allow_speech_free: bool = True, tl=None) -> list[str]:
     """机检 caption_speech_aligned 的问题列表(空=通过)。"""
     groups = {g["group_id"]: g for g in shot_list.get("generation_groups", [])}
     issues = []
@@ -640,7 +654,7 @@ def check_speech_alignment(data: dict, track: dict, shot_list: dict,
             if not allow_speech_free:
                 issues.append(f"{tag}: av 项目文本必来自母带,不允许 speech_free 豁免")
             continue
-        sp = speech_span(track, c, groups)
+        sp = speech_span(track, c, groups, tl)
         if sp is None:
             issues.append(f"{tag}:「{c.get('text')}」在语音逐字轨中找不到(非语音文字请标 "
                           "speech_free:true;否则核对文案是否与台本一字不差)")
@@ -649,10 +663,10 @@ def check_speech_alignment(data: dict, track: dict, shot_list: dict,
         if not (isinstance(s, (int, float)) and isinstance(e, (int, float))):
             issues.append(f"{tag}: start/end 缺失")
             continue
-        win = _group_window(c, groups)
+        win = _group_window(c, groups, tl)
         exp = expected_span(sp, win)
         if exp is None:
-            g_hint = group_at(groups, sp["start"])
+            g_hint = group_at(groups, sp["start"], tl)
             issues.append(f"{tag}:「{c.get('text')}」的语音 {sp['start']}-{sp['end']} 不在本组 "
                           f"{c.get('group_id')} 窗口内"
                           + (f"(应挂到 {g_hint})" if g_hint else "") + ";speech-snap 可自动改挂")
@@ -665,12 +679,13 @@ def check_speech_alignment(data: dict, track: dict, shot_list: dict,
 
 
 def snap_captions(data: dict, track: dict, shot_list: dict,
-                  min_dur_s: float = MIN_CAPTION_S) -> dict:
+                  min_dur_s: float = MIN_CAPTION_S, tl=None) -> dict:
     """把每条花字的 start/end/local_start/local_end 吸附到语音区间(原地修改)。
 
     - 语音起点落在别的组(av 项目按 audio_in_s 判定)→ 改挂 group_id 到该组(花字不跨组);
     - 语音区间跨组尾 → end 裁到组尾;短于 min_dur_s(渲染器下限 0.2s)→ 从起点补足;
-    - 组内 local 时间随集级同步重算(av 组起点=audio_in_s;主流程沿用原 start-local_start 差)。
+    - 组内 local 时间随集级同步重算(有花字时间轴 tl 时 = tl.cut_to_local,即母本 v0 坐标;
+      av 组起点=audio_in_s;都没有时沿用原 start-local_start 差)。
     返回 {snapped:[…], skipped:[…], not_found:[…]}。
     """
     groups = {g["group_id"]: g for g in shot_list.get("generation_groups", [])}
@@ -680,28 +695,32 @@ def snap_captions(data: dict, track: dict, shot_list: dict,
         if c.get("speech_free"):
             rep["skipped"].append(f"{tag}(speech_free)")
             continue
-        sp = speech_span(track, c, groups)
+        sp = speech_span(track, c, groups, tl)
         if sp is None:
             rep["not_found"].append(f"{tag}「{c.get('text')}」")
             continue
         moved = None
-        gid = group_at(groups, sp["start"])
+        gid = group_at(groups, sp["start"], tl)
         if gid and gid != c.get("group_id"):
             moved, c["group_id"] = c.get("group_id"), gid
-        exp = expected_span(sp, _group_window(c, groups), min_dur_s)
+        exp = expected_span(sp, _group_window(c, groups, tl), min_dur_s)
         if exp is None:
             rep["skipped"].append(f"{tag}(语音区间 {sp['start']}-{sp['end']} 无法落进组窗口)")
             if moved:
                 c["group_id"] = moved
             continue
         g = groups.get(c.get("group_id")) or {}
-        base = g.get("audio_in_s")
-        if base is None:
-            base = float(c.get("start", 0)) - float(c.get("local_start", 0))
-        base = float(base)
         old = (c.get("start"), c.get("end"))
         c["start"], c["end"] = exp
-        c["local_start"], c["local_end"] = round(exp[0] - base, 3), round(exp[1] - base, 3)
+        if tl is not None and c.get("group_id") in tl.groups:
+            ls, le = tl.cut_to_local(c["group_id"], exp[0]), tl.cut_to_local(c["group_id"], exp[1])
+            c["local_start"], c["local_end"] = round(max(0.0, ls), 3), round(max(0.0, le), 3)
+        else:
+            base = g.get("audio_in_s")
+            if base is None:
+                base = float(old[0] or 0) - float(c.get("local_start", 0))
+            base = float(base)
+            c["local_start"], c["local_end"] = round(exp[0] - base, 3), round(exp[1] - base, 3)
         c["speech_match"] = sp["match"]
         rep["snapped"].append({"id": tag, "text": c.get("text"), "old": old, "new": exp,
                                "match": sp["match"], "moved": moved})

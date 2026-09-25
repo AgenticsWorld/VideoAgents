@@ -305,8 +305,17 @@ def _anchor_xy(position: str, bbox: dict, W: int, H: int) -> tuple[float, float]
     return x, y
 
 
+# 参与烧录回执指纹的字段(2026-09-25):只看真正影响画面的字段,集级 start/end / sfx / 备注 / 类型改了不重渲
+RENDER_FIELDS = ("text", "template_ref", "em_pct", "params", "position", "local_start", "local_end", "segments")
+
+
+def _render_view(c: dict) -> dict:
+    return {k: v for k, v in c.items() if k in RENDER_FIELDS or k.startswith("_final")}
+
+
 def _captions_hash_v3(captions: list[dict], proj_root: Path,
                       fonts_manifest: dict) -> str:
+    captions = [_render_view(c) for c in captions]
     tpl = {}
     for c in captions:
         ref = c.get("template_ref") or ""
@@ -323,12 +332,15 @@ def _captions_hash_v3(captions: list[dict], proj_root: Path,
 
 def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
                       fonts_manifest: dict, proj_root: Path,
-                      renderer: StickerRenderer, force: bool = False) -> dict:
+                      renderer: StickerRenderer, force: bool = False,
+                      receipt_extra: dict | None = None) -> dict:
     """单组烧录(HTML 引擎):clip + 该组花字 → clips_caption 副本。
 
     幂等回执语义与 libass 版一致:(源 clip sha, 花字+模版+字体 hash, 引擎版本)
     一致即 SKIP。原组 clip 永不改动。cards 图卡 v3 暂不支持(默认关,启用需求
-    出现时再移植)。
+    出现时再移植)。clip_path 是该组**当前采纳版本**(caption_timeline 取源,2026-09-25),
+    captions 的 local_start/local_end 已由调用方换到该版本坐标;receipt_extra 附进回执
+    (src_version / timeline_fingerprint 等,只记录不参与幂等判定)。
     """
     require_tools("ffmpeg", "ffprobe")
     clip_path, out_path = Path(clip_path), Path(out_path)
@@ -346,9 +358,28 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
             pass
 
     info = probe_video_info(str(clip_path))
+    items = [{"cap": c, "t0": float(c["local_start"]), "t1": float(c["local_end"])} for c in captions]
+    _composite(clip_path, out_path, items, info, fonts_manifest, proj_root, renderer, timeout=1800)
+    receipt = {"schema": "caption.render.v2", "renderer": HTML_RENDERER_VERSION,
+               "engine": "html", "protocol": PROTOCOL_VERSION,
+               "src": str(clip_path), "src_sha256": src_sha,
+               "captions_hash": cap_hash, "captions_count": len(captions),
+               "out_sha256": file_sha256(str(out_path)),
+               "encoder": " ".join(X264_ARGS), **(receipt_extra or {})}
+    receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=1),
+                            encoding="utf-8")
+    return {"status": "rendered", "out": str(out_path)}
+
+
+def _composite(src_video: Path, out_path: Path, items: list[dict], info: dict,
+               fonts_manifest: dict, proj_root: Path, renderer: StickerRenderer,
+               timeout: int = 1800) -> None:
+    """把 items(每项 {cap, t0, t1},t 为 src_video 自身时间轴秒)渲成贴片并叠到 src_video → out_path。
+    组副本与花字版成片共用:同一贴片缓存、同一叠加链、同一编码参数;音轨流拷贝、分辨率/时长不变。"""
     W, H, fps = info["width"], info["height"], float(info["fps"])
     stickers = []
-    for c in captions:
+    for it in items:
+        c = it["cap"]
         tag = c.get("id") or c.get("text")
         ref, em_pct, params = _style_v3(c)
         html, _ = resolve_template(proj_root, ref, fonts_manifest)
@@ -366,7 +397,7 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
         if est_w * dsf > 0.9 * W:
             dsf *= (0.9 * W) / (est_w * dsf)
         dsf = min(max(dsf, DSF_RANGE[0]), DSF_RANGE[1])
-        ls, le = float(c["local_start"]), float(c["local_end"])
+        ls, le = float(it["t0"]), float(it["t1"])
         le = min(le, info["duration_s"])
         dur = round(le - ls, 3)
         if dur <= 0.2:
@@ -377,7 +408,7 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
         stickers.append({"mov": mov, "x": x, "y": y, "ls": ls, "le": le})
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    inputs = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(clip_path)]
+    inputs = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(src_video)]
     chains, prev = [], "0:v"
     for i, s in enumerate(stickers):
         inputs += ["-i", str(s["mov"])]
@@ -386,15 +417,18 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
             f"[{prev}][stk{i}]overlay={s['x']:.0f}:{s['y']:.0f}:"
             f"enable='between(t,{s['ls']:.3f},{s['le']:.3f})'[v{i}]")
         prev = f"v{i}"
+    if not chains:                       # 无贴片(全部被删段裁掉):画面原样重编码,保持副本契约
+        chains.append("[0:v]null[v0]")
+        prev = "v0"
     audio = ["-c:a", "copy"] if info["has_audio"] else ["-an"]
     cmd = inputs + ["-filter_complex", ";".join(chains), "-map", f"[{prev}]",
                     *([] if not info["has_audio"] else ["-map", "0:a"]),
                     *X264_ARGS,
                     "-colorspace", "bt709", "-color_primaries", "bt709",
                     "-color_trc", "bt709", *audio, str(out_path)]
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if p.returncode != 0 or not out_path.is_file():
-        raise RuntimeError(f"合成失败 {clip_path.name}: {(p.stderr or '')[-400:]}")
+        raise RuntimeError(f"合成失败 {src_video.name}: {(p.stderr or '')[-400:]}")
 
     out_info = probe_video_info(str(out_path))
     if (out_info["width"], out_info["height"]) != (W, H):
@@ -403,15 +437,48 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
     if abs(out_info["duration_s"] - info["duration_s"]) > 1.0 / max(1, fps) + 0.001:
         raise RuntimeError(f"合成后时长漂移:{info['duration_s']} → "
                            f"{out_info['duration_s']}")
-    receipt = {"schema": "caption.render.v2", "renderer": HTML_RENDERER_VERSION,
+
+
+def episode_items_hash(items: list[dict], proj_root: Path, fonts_manifest: dict) -> str:
+    """花字版成片的花字指纹:每条(花字条目 + 成片时间轴上的入出点)+ 模版 + 字体。"""
+    rows = [{**it["cap"], "_final_t0": round(float(it["t0"]), 3), "_final_t1": round(float(it["t1"]), 3)} for it in items]
+    return _captions_hash_v3(rows, proj_root, fonts_manifest)
+
+
+def render_episode_html(video_path: Path, out_path: Path, items: list[dict],
+                        fonts_manifest: dict, proj_root: Path,
+                        renderer: StickerRenderer, receipt_path: Path,
+                        force: bool = False, receipt_extra: dict | None = None,
+                        timeout: int = 7200) -> dict:
+    """花字版成片画面(2026-09-25):在**干净版成片**上按成片时间轴把全部花字一次叠上 → out_path(无声 / 音轨流拷贝随源)。
+
+    items 每项 {cap, t0, t1},t 为成片秒(caption_timeline.final_time:后期版本 + 组边界层 + 片头)。
+    与以前「clips_caption 副本替换后重拼 EDL」相比,成片本身就是同一 EDL,后期版本 / 过场 / 片头天然一致。
+    幂等回执 receipt_path:(源成片 sha, 花字+入出点+模版+字体 hash, 引擎版本)一致即 SKIP。
+    """
+    require_tools("ffmpeg", "ffprobe")
+    video_path, out_path = Path(video_path), Path(out_path)
+    src_sha = file_sha256(str(video_path))
+    cap_hash = episode_items_hash(items, proj_root, fonts_manifest)
+    if not force and receipt_path.is_file() and out_path.is_file():
+        try:
+            old = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if (old.get("src_sha256"), old.get("captions_hash"), old.get("renderer")) == \
+                    (src_sha, cap_hash, HTML_RENDERER_VERSION) and old.get("out_sha256") == file_sha256(str(out_path)):
+                return {"status": "skipped", "out": str(out_path), "receipt": old}
+        except (json.JSONDecodeError, OSError):
+            pass
+    info = probe_video_info(str(video_path))
+    _composite(video_path, out_path, items, info, fonts_manifest, proj_root, renderer, timeout=timeout)
+    receipt = {"schema": "caption.final.v1", "renderer": HTML_RENDERER_VERSION,
                "engine": "html", "protocol": PROTOCOL_VERSION,
-               "src": str(clip_path), "src_sha256": src_sha,
-               "captions_hash": cap_hash, "captions_count": len(captions),
+               "src": str(video_path), "src_sha256": src_sha,
+               "captions_hash": cap_hash, "captions_count": len(items),
                "out_sha256": file_sha256(str(out_path)),
-               "encoder": " ".join(X264_ARGS)}
-    receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=1),
-                            encoding="utf-8")
-    return {"status": "rendered", "out": str(out_path)}
+               "encoder": " ".join(X264_ARGS), **(receipt_extra or {})}
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"status": "rendered", "out": str(out_path), "receipt": receipt}
 
 # ---------------------------------------------------------------- 环境自检
 

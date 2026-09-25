@@ -426,15 +426,15 @@ phases:
                                caption_types_allowed, caption_policy_fresh] } }
       - { id: p9-caption-render, agent: 10-editing/caption, depends_on: [p9-caption],
           condition: caption_enabled, outputs: ["assets/clips_caption/{ep}/"],
-          # 终版(超分后)组 clip 上逐组烧录副本,原 clip 不动;只准宿主 CLI render_captions.py
+          # 各组当前采纳的后期版本(未采纳 = 终版母本)上逐组烧录副本,源文件不动;只准宿主 CLI render_captions.py
           validation: { auto: [caption_toolchain_verified, captions_rendered_all,
                                caption_render_spec_ok, caption_clip_audio_intact] } }
       - { id: p9-caption-final, agent: 10-editing/edit, depends_on: [p9-caption-render, p9-title],
           condition: caption_enabled,
           outputs: ["edit/{ep}/final_caption.mp4", "edit/{ep}/caption_sfx.m4a"],
-          # 花字版成片:clips_caption 副本替换重拼;a:0=混音轨+SFX 预混、a:1=混音轨流拷贝存档;
-          # 严禁 -shortest;干净版 final.mp4 照旧产出,双版本并列
-          validation: { auto: [caption_final_duration_match, caption_premix_present,
+          # 花字版成片:只准 render_captions.py final(干净版 final.mp4 上按成片时间轴叠花字 + 同轴 SFX + 封装);
+          # a:0=声轨权威+SFX 预混、a:1=声轨权威流拷贝存档;严禁 -shortest;干净版 final.mp4 照旧产出,双版本并列
+          validation: { auto: [caption_final_duration_match, caption_final_fresh, caption_premix_present,
                                no_black_frames], rubric: edit_v1 } }
       - { id: p9-title, agent: 10-editing/title, depends_on: [p9-edit],
           # 下集预告默认不配旁白:文案走字卡/花字,声轨=画面原声+BGM;配音须工单显式指定

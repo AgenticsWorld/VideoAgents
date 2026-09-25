@@ -7,7 +7,7 @@
 - **类别**:剪辑(10-editing)
 - **目录**:`agents/10-editing/caption/`
 - **流水线阶段**:
-  - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,G7/超分后的终版组 clip 上执行);任务粒度:每集级
+  - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,在各组**当前采纳的后期版本**上执行,未采纳 = G7/超分后的终版母本);任务粒度:每集级
   - **av 插件(audio-to-video)**:av2-caption(设计,随 AVH3 分镜确认一并签字)+ av4-caption-render(烧录,AVH4 之后)
   - **派发前提**:项目「🎚️ 后期处理」页「花字」板块的**启用花字开关(output.caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
   - **花字策略(2026-09-24,同板块「模式」)**:`output.caption_mode` = **auto(默认)**——我按题材与内容从用途目录 `modules/caption_catalog.json` 自选类型;**manual**——用户在弹窗按分类勾选了 `output.caption_types`,**captions.json 每条 `type` 必在勾选集合内**(机检 `caption_types_allowed`),选中 = 允许、不 = 必出,按内容决定是否落屏。生效策略与本项目不可用类型(av 项目 / 缺上游数据)用 `python3 code/render_captions.py policy --project <slug> --ep epNN` 查;派单系统提示词也会列出。
@@ -54,7 +54,7 @@
 6. **时轴落位:入出点 = 这段文字被念出的起止(2026-08-18 用户裁定,机检 `caption_speech_aligned`)**:
    - 花字**出现的时刻 = 语音里这段花字文字的第一个字开始被念出的时刻,消失的时刻 = 最后一个字念完的时刻**(允差 ±0.15s ≈ 3–4 帧);不是"落在这句话里",更不是整句从头挂到尾。
    - 依据是集级**逐字语音时间轴** `edit/epNN/word_track.json`:设计前先跑 `python3 code/render_captions.py speech-align --project <slug> --ep epNN`(台本:av 项目 `av/epNN/beat_track.json`,主流程 `edit/epNN/subtitles.srt`;声轨:母带/final;后端 auto = 装了 faster-whisper 走 ASR 逐字对齐,否则句内静音检测+字重插值)。逐条填时间用 `speech-lookup --text "文案"`;或先写文案+组,再 `speech-snap` 一键把全部 start/end/local 吸附到语音起止(语音起点落在别的组时自动改挂 group_id,跨组尾时裁到组尾;短于 0.25s 从起点补足)。
-   - 每条花字必填 `group_id` + 组内局部时间 `local_start`/`local_end`(渲染用),同时写集级 `start`/`end`(SFX 轨与预览用);两者须满足 `start = 组时间轴起点 + local_start`(av 项目组起点 = shot_list 该组 `audio_in_s`;主流程组起点按 transition 定稿的 `edit/epNN/timeline.json`)。花字不跨组:语音跨组衔接点时以起点所在组为准、end 裁到组尾。
+   - 每条花字必填 `group_id` + 组内局部时间 `local_start`/`local_end`(**母本 v0 clip 坐标**,与 shot_list 同基准;宿主烧录时按后期版本换算),同时写集级 `start`/`end`(SFX 轨与预览用);**集级时间 = cut 基准**(2026-09-25):正片 = 后期采纳版本 + 组边界层(定格 / 黑场 / 字卡插入),不含片头——`speech-lookup` 报的时间、`word_track.json`、`speech-snap` 写回的 start/end 都是这把尺,`speech-snap` 同时把 local 折回 v0 坐标;**我不手算后期删段 / 过场 / 片头偏移**(`render_captions.py timeline` 可查各组起点与取源版本;av 项目组起点仍 = shot_list `audio_in_s`)。落在后期删段内的花字烧不出来(render WARN、机检 `caption_time_consistent` FAIL),改挂或删。花字不跨组:语音跨组衔接点时以起点所在组为准、end 裁到组尾。
    - 语音里没念出来的画面标注型文字(仅主流程可能出现,如年份/地名标注)须显式标 `"speech_free": true` 才豁免对齐机检;av 项目文案必来自母带原文,不允许豁免。
    - word_track 记录台本/声轨 sha,台本或声轨改了必须重跑 `speech-align`(过期即机检 FAIL);ASR 后端缺失时 interp 精度受上游逐句时间码质量影响,交付前 AVH3/G9 审看仍要抽听几条入点。
 7. **素材图卡(cards)——默认不使用(2026-08-11 用户裁定)**:仅当用户**显式要求**时才启用;启用时只准项目内图片(`assets/concepts/`、keyframes),纸质白框由渲染器自动加,卡片**静止**(禁任何漂浮/抖动动画),尺寸 `size_pct` 26–34,位置 mid_left 为主,每卡配轻音效。
@@ -88,7 +88,8 @@
 | **用户(人工输入口)** | 项目字体(ttf/otf/ttc,全片统一优先使用)+ 可选逐文件用途注释 | `refs/fonts/`、`refs/NOTES.md`(引擎自动并入,id `proj:<family>`) |
 | 宿主字体库 | 可用字体(font_id/family/cjk) | `data/fonts/manifest.json` |
 | 宿主音效库 | 可用音效(sfx_id/tags/license) | `data/sfx/manifest.json` |
-| 08-video-gen 流水线 | 终版组 clip(超分后) | `assets/clips/epNN/grpNNN.mp4` |
+| 08-video-gen 流水线 | 终版组 clip(超分后,母本 v0) | `assets/clips/epNN/grpNNN.mp4` |
+| 10-editing/post-finishing / 用户 H3P(主流程) | 各组当前采纳的后期版本(烧录取源;删段 / 变速的 `time_ops` 决定 local 换算) | `edit/epNN/post_plan.json` + `assets/post/epNN/<grp>/v{n}.mp4` |
 
 ## 输出
 
@@ -98,7 +99,7 @@
 |---|---|---|
 | 花字清单(schema v3) | `edit/epNN/captions.json` | 见下方结构约定 |
 | 逐字语音时间轴 | `edit/epNN/word_track.json` | `render_captions.py speech-align` 产出;记台本/声轨 sha,变更即重跑 |
-| 花字烧录副本(render 工单) | `assets/clips_caption/epNN/grpNNN.mp4` + `.render.json` | 由宿主 CLI 产出;规格与源 clip 一致;无花字的组不产副本 |
+| 花字烧录副本(render 工单) | `assets/clips_caption/epNN/grpNNN.mp4` + `.render.json` | 由宿主 CLI 产出;源 = 该组当前采纳版本(回执记 `src_version`);规格与源一致;无花字 / 花字全在删段内的组不产副本 |
 
 关键字段/结构约定(schema v2):
 ```json
@@ -146,8 +147,8 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回,`code/check_captions.py`)**:
-- design 段:`caption_schema_v2`(结构/枚举/字号档)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账)、`caption_types_allowed`(手动策略下 type ∈ 勾选集合;自动 SKIP)、`caption_policy_fresh`(caption_policy 盖章 == 当前设置)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
-- render 段:`caption_toolchain_verified`(ffmpeg 含 libass;旧宿主在此拦住)、`captions_rendered_all`(副本+回执齐且指纹新鲜)、`caption_render_spec_ok`(宽/高/fps 不变、时长差 ≤1 帧)、`caption_clip_audio_intact`(av 副本保持无声;主流程音轨参数不变)。
+- design 段:`caption_schema_v2`(结构/枚举/字号档)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账:主流程按花字时间轴 cut 基准核对,落在后期删段内的花字 FAIL)、`caption_types_allowed`(手动策略下 type ∈ 勾选集合;自动 SKIP)、`caption_policy_fresh`(caption_policy 盖章 == 当前设置)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
+- render 段:`caption_toolchain_verified`(ffmpeg 含 libass;旧宿主在此拦住)、`captions_rendered_all`(副本+回执齐且指纹新鲜;源 = 当前采纳版本,采纳指针变了即过期)、`caption_render_spec_ok`(宽/高/fps 不变、时长差 ≤1 帧)、`caption_clip_audio_intact`(av 副本保持无声;主流程音轨参数不变)。
 
 **评分(evaluation Agent)**:
 - 设计工单走 rubric `creative_v1`;花字密度与观感由 G9/H4(主流程)或 AVH3/AVH5(av)人工审看反馈,按缺陷单返工。
