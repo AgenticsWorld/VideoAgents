@@ -584,12 +584,32 @@ async function mountPanoSection(host,s){
     // 归档图子行(2026-09-25):机检拒掉(.rejected-projection/-conformity)/ 非 2:1(.rejected)/ --redo 归档(.redo)的成图不入索引,
     // 这里列出来给用户目视裁决:点图进 360° 视窗(接缝在图的左右缘=视窗里转到背后看),「认领」= render_scene_panos.py --adopt --pick(免费)
     const arch=(a.archived||[]).filter(r=>r.url);
+    // 机检 reason 按 reason_code 走词典拼句(模板与 modules/scene_panos.py CHECK_REASON_TPL_ZH 同一份,改一处须同步另一处);
+    // 无 code 的存量 sidecar 服务端已按中文原句反向解析,仍解析不出时回退显示原句
+    const CHECK_REASON_TPL={
+      nadir_aniso_fail:'天底未拉伸:底部纹理横/纵细节比 {aniso} > {limit}(像广角照片的清晰前景)',
+      poles_seam_fail:'天顶/天底不成色带(行方差 {top}/{bot})且左右缘接不上(接缝比 {seam})',
+      seam_fail:'左右缘接不上(接缝比 {seam} > {limit}),且机位 {cams} 的视域跨过接缝,接缝会落进背景图',
+      nadir_detail_warn:'近地前景偏实(底部/中段横向细节比 {nadir})',
+      nadir_detail_warn_cams:'近地前景偏实(底部/中段横向细节比 {nadir}),俯拍机位 {cams} 的背景图留意地面纹理尺度',
+      seam_warn:'左右缘接不上(接缝比 {seam} > {limit})',
+      seam_warn_cams:'左右缘接不上(接缝比 {seam} > {limit}),机位 {cams} 的视域跨过接缝,其背景图留意接缝',
+      check_in_preview:'请在预览页核对',
+      edges_too_dense:'成图边缘过密,对齐度指标失效',
+      low_alignment:'白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可',
+      alignment_not_above_null:'成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对'};
+    const camsText=(cams,n)=>{cams=Array.isArray(cams)?cams:[];n=n||cams.length;return cams.slice(0,4).join(I18N.lang==='zh'?'、':', ')+(n>4?' '+I18N.f('等 {n} 个',{n}):'')};
+    const reasonPart=(code,params)=>{const tpl=CHECK_REASON_TPL[code];if(!tpl)return '';const q={...(params||{})};if('cams' in q)q.cams=camsText(q.cams,q.n);return I18N.f(tpl,q)};
+    const reasonText=c=>{if(!c)return '';
+      if(Array.isArray(c.reason_codes)){const t=c.reason_codes.map(x=>reasonPart(x.code,x.params)).filter(Boolean).join('; ');if(t)return t;}
+      if(c.reason_code){const t=reasonPart(c.reason_code,c.reason_params);if(t)return t;}
+      return c.reason||''};
     if(arch.length){
       const kindText=k=>k==='projection'?t('❌ 投影机检未过'):k==='conformity'?t('❌ 白模一致性未过'):k==='aspect'?t('❌ 非 2:1'):t('🗄 重出前旧版');
       h+=`<div class="pano-archived"><div class="pano-arch-head">${esc(I18N.f('归档图 {n} 张(未入索引;目视认可可「认领」为正式全景,不花钱)',{n:arch.length}))}</div><div class="pano-row">`;
       arch.forEach(r=>{
         const chk=r.checks||{};const fail=Object.keys(chk).find(k=>chk[k].verdict==='FAIL');
-        const reason=fail?chk[fail].reason:Object.values(chk).map(c=>c.reason).filter(Boolean)[0]||'';
+        const reason=fail?reasonText(chk[fail]):Object.values(chk).map(reasonText).filter(Boolean)[0]||'';
         const meta=[r.scheme,(r.written_at||'').replace('T',' '),r.channel?.model||'',r.seed!=null?`seed ${r.seed}`:''].filter(Boolean).join(' · ');
         const has=formal.includes(r.scheme);
         const why=r.pose_differs?t('按别的锚点位姿出的图,不能认领'):r.kind==='aspect'?t('不是 2:1,不能认领'):has?t('该方案已有正式全景,先重出或挪走才能认领'):'';

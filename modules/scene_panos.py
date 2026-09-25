@@ -1546,6 +1546,71 @@ def adopt_rejected(base: Path, sid: str, anchor_id: str, scheme: str | None = No
     return rec
 
 
+# 机检 reason 结构化(2026-09-25):reason_code + reason_params 随中文 reason 一起写进 sidecar / 索引,页面按 code 走 i18n 词典拼句,
+# CLI 日志与 Agent 上报仍用中文 reason。模板与 apps/web/static/preview_scenes.html 的 CHECK_REASON_TPL 同一份(改一处须同步另一处)。
+# 机位名列表参数统一为 cams(list)+ n(总数),中文拼法「a、b、c、d 等 n 个」由 _names_zh 完成,页面按语言各自拼。
+CHECK_REASON_TPL_ZH = {
+    'nadir_aniso_fail': '天底未拉伸:底部纹理横/纵细节比 {aniso} > {limit}(像广角照片的清晰前景)',
+    'poles_seam_fail': '天顶/天底不成色带(行方差 {top}/{bot})且左右缘接不上(接缝比 {seam})',
+    'seam_fail': '左右缘接不上(接缝比 {seam} > {limit}),且机位 {cams} 的视域跨过接缝,接缝会落进背景图',
+    'nadir_detail_warn': '近地前景偏实(底部/中段横向细节比 {nadir})',
+    'nadir_detail_warn_cams': '近地前景偏实(底部/中段横向细节比 {nadir}),俯拍机位 {cams} 的背景图留意地面纹理尺度',
+    'seam_warn': '左右缘接不上(接缝比 {seam} > {limit})',
+    'seam_warn_cams': '左右缘接不上(接缝比 {seam} > {limit}),机位 {cams} 的视域跨过接缝,其背景图留意接缝',
+    'check_in_preview': '请在预览页核对',
+    'edges_too_dense': '成图边缘过密,对齐度指标失效',
+    'low_alignment': '白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可',
+    'alignment_not_above_null': '成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对',
+}
+
+
+def _names_zh(cams: list[str], n: int | None = None) -> str:
+    n = len(cams) if n is None else n
+    return '、'.join(cams[:4]) + (f' 等 {n} 个' if n > 4 else '')
+
+
+def check_reason(code: str, **params) -> dict:
+    """返回 {'reason': 中文句, 'reason_code': code, 'reason_params': params};params 里的 cams 列表在中文句里按「a、b、c、d 等 n 个」拼,
+    params 原样(列表 + n)保留给页面。"""
+    fmt = {k: (_names_zh(v, params.get('n')) if k == 'cams' else v) for k, v in params.items()}
+    return {'reason': CHECK_REASON_TPL_ZH[code].format(**fmt), 'reason_code': code, 'reason_params': params}
+
+
+def parse_reason_zh(reason: str) -> dict:
+    """存量 sidecar 只有中文 reason 没有 code 时反向解析(2026-09-25 之前出的图):按模板转正则逐段匹配,机位串「a、b、c、d 等 n 个」
+    还原为 cams + n。解析不出的段落丢弃,整句都解析不出返回 {}(页面回退显示原句)。"""
+    if not reason:
+        return {}
+    pats = []
+    for code, tpl in CHECK_REASON_TPL_ZH.items():
+        rx = re.escape(tpl)
+        rx = re.sub(r'\\\{(\w+)\\\}', lambda m: r'(?P<cams>.+?)(?: 等 (?P<n>\d+) 个)?' if m.group(1) == 'cams' else rf'(?P<{m.group(1)}>[^,;,;()()]+?)', rx)
+        pats.append((code, re.compile('^' + rx + '$')))
+    def match(seg: str):
+        for code, rx in pats:
+            m = rx.match(seg.strip())
+            if m:
+                params = {k: v for k, v in m.groupdict().items() if v is not None}
+                if 'cams' in params:
+                    params['cams'] = [c.strip() for c in params['cams'].split('、')]
+                    params['n'] = int(params.pop('n')) if 'n' in params else len(params['cams'])
+                return {'code': code, 'params': params}
+        return None
+    whole = match(reason)                                # 先整句匹配(low_alignment 模板自带「;」,不能先切)
+    parts = [whole] if whole else [x for x in (match(seg) for seg in re.split(r'[;;]', reason.replace(',请在预览页核对', ';请在预览页核对'))) if x]
+    if not parts:
+        return {}
+    if len(parts) == 1:
+        return {'reason_code': parts[0]['code'], 'reason_params': parts[0]['params']}
+    return {'reason_codes': parts}
+
+
+def check_reasons(items: list[tuple[str, dict]]) -> dict:
+    """多条并列(WARN 汇总):中文句用「;」连接,结构化为 reason_codes=[{code, params}, …]。"""
+    parts = [check_reason(c, **p) for c, p in items]
+    return {'reason': ';'.join(x['reason'] for x in parts), 'reason_codes': [{'code': x['reason_code'], 'params': x['reason_params']} for x in parts]}
+
+
 NADIR_ANISO_FAIL = 0.65          # 天底带 横向细节 / 纵向细节:等距柱状里天底被横向拉伸,纹理成横向拉丝 → 实测合格 0.34–0.58、广角照片 0.71–0.76
 NADIR_ANISO_SOFT = 0.55
 NADIR_DETAIL_WARN = 0.7          # 底部横向细节 / 中段横向细节:中段是水面 / 雾 / 纯墙时会被放大(SCN-0110 重出图 1.37 却是合格全景,误拒)→ 只作 WARN
@@ -1579,31 +1644,37 @@ def projection_check(path: Path, usage: dict | None = None) -> dict | None:
     rec = {'nadir_aniso': round(aniso, 2), 'nadir_detail': round(nadir, 2), 'zenith_detail': round(zenith, 2), 'seam_ratio': round(seam_ratio, 1),
            'top_row_std': round(top_std, 1), 'bottom_row_std': round(bot_std, 1)}
     if aniso > NADIR_ANISO_FAIL:
-        return {**rec, 'verdict': 'FAIL', 'reason': f"天底未拉伸:底部纹理横/纵细节比 {aniso:.2f} > {NADIR_ANISO_FAIL}(像广角照片的清晰前景)"}
+        return {**rec, 'verdict': 'FAIL', **check_reason('nadir_aniso_fail', aniso=f'{aniso:.2f}', limit=NADIR_ANISO_FAIL)}
     if aniso > NADIR_ANISO_SOFT and top_std > 25 and bot_std > 15 and seam_ratio > SEAM_RATIO_WARN:
-        return {**rec, 'verdict': 'FAIL', 'reason': f"天顶/天底不成色带(行方差 {top_std:.0f}/{bot_std:.0f})且左右缘接不上(接缝比 {seam_ratio:.1f})"}
+        return {**rec, 'verdict': 'FAIL', **check_reason('poles_seam_fail', top=f'{top_std:.0f}', bot=f'{bot_std:.0f}', seam=f'{seam_ratio:.1f}')}
     # 局部缺陷按服务机位的实际视域判:没有机位碰到的只记 notes 不拦不警;碰到的才 WARN / FAIL。usage 未知(没传机位)按碰到算。
     # 注意主判据(天底各向异性)不在此列:它超限说明整张图不是等距柱状,哪个方向重投影都是错的。
     known = bool(usage and usage.get('known'))
     seam_hit = (usage or {}).get('seam') or []; nadir_hit = (usage or {}).get('nadir') or []
     if known:
         rec['usage'] = {'cameras': usage['cameras'], 'seam': seam_hit, 'nadir': nadir_hit}
-    names = lambda ks: '、'.join(ks[:4]) + (f' 等 {len(ks)} 个' if len(ks) > 4 else '')
     warns, notes = [], []
     if nadir > NADIR_DETAIL_WARN:
         if known and not nadir_hit:
             notes.append(f"近地前景偏实({nadir:.2f}),但没有服务机位俯拍到天底带,不影响")
+        elif nadir_hit:
+            warns.append(('nadir_detail_warn_cams', {'nadir': f'{nadir:.2f}', 'cams': nadir_hit[:4], 'n': len(nadir_hit)}))
         else:
-            warns.append(f"近地前景偏实(底部/中段横向细节比 {nadir:.2f})" + (f",俯拍机位 {names(nadir_hit)} 的背景图留意地面纹理尺度" if nadir_hit else ''))
+            warns.append(('nadir_detail_warn', {'nadir': f'{nadir:.2f}'}))
     if seam_ratio > SEAM_RATIO_WARN:
         if known and not seam_hit:
             notes.append(f"左右缘接不上(接缝比 {seam_ratio:.1f}),但接缝方向没有服务机位看到,不影响")
         elif known and seam_ratio > SEAM_RATIO_FAIL:
-            return {**rec, 'verdict': 'FAIL', 'reason': f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_FAIL}),且机位 {names(seam_hit)} 的视域跨过接缝,接缝会落进背景图"}
+            return {**rec, 'verdict': 'FAIL', **check_reason('seam_fail', seam=f'{seam_ratio:.1f}', limit=SEAM_RATIO_FAIL, cams=seam_hit[:4], n=len(seam_hit))}
+        elif seam_hit:
+            warns.append(('seam_warn_cams', {'seam': f'{seam_ratio:.1f}', 'limit': SEAM_RATIO_WARN, 'cams': seam_hit[:4], 'n': len(seam_hit)}))
         else:
-            warns.append(f"左右缘接不上(接缝比 {seam_ratio:.1f} > {SEAM_RATIO_WARN})" + (f",机位 {names(seam_hit)} 的视域跨过接缝,其背景图留意接缝" if seam_hit else ''))
+            warns.append(('seam_warn', {'seam': f'{seam_ratio:.1f}', 'limit': SEAM_RATIO_WARN}))
     if warns:
-        return {**rec, 'verdict': 'WARN', 'reason': ';'.join(warns) + ',请在预览页核对', 'notes': notes}
+        r = check_reasons(warns)
+        r['reason'] += ',请在预览页核对'
+        r['reason_codes'].append({'code': 'check_in_preview', 'params': {}})
+        return {**rec, 'verdict': 'WARN', **r, 'notes': notes}
     return {**rec, 'verdict': 'PASS', 'reason': '', 'notes': notes}
 
 
@@ -1639,15 +1710,14 @@ def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     z = (s0 - mean) / std
     rec = {'aligned': round(s0, 2), 'null': round(mean, 2), 'z': round(z, 1)}
     if mean >= CONFORMITY_BUSY_NULL:
-        return {**rec, 'verdict': 'N/A', 'reason': '成图边缘过密,对齐度指标失效'}
+        return {**rec, 'verdict': 'N/A', **check_reason('edges_too_dense')}
     # 只警不拦(2026-09-20 晚订正):本指标看的是白模轮廓在成图里有没有边缘,而白模轮廓大头是墙顶线 / 墙角线——岩洞、暗场、
     # 有机形体里模型把它们画成连续岩面是对的,没有边缘;暗图 Canny 也提不出边。实测 SCN-0046 A1 两张同样跟了白模的洞内全景
     # (法宝架、丹炉逐块对位)对齐度 27% 与 26%,只因错位基线 22% / 15% 的噪声一张被拒一张放行。不足以当花钱重出的闸门。
     if s0 < CONFORMITY_FAIL_S0 and z < 1.0:
-        return {**rec, 'verdict': 'WARN', 'reason': f"白模轮廓只有 {s0:.0%} 在成图里找得到(错位基线 {mean:.0%}):若成图是别的视点 / 建筑外观请重出;"
-                                                     "暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可"}
+        return {**rec, 'verdict': 'WARN', **check_reason('low_alignment', aligned=f'{s0:.0%}', null=f'{mean:.0%}')}
     if z < CONFORMITY_WARN_Z:
-        return {**rec, 'verdict': 'WARN', 'reason': f"成图与白模轮廓对齐度不高于错位基线(对齐 {s0:.0%} / 基线 {mean:.0%}),请在预览页对照白模全景核对"}
+        return {**rec, 'verdict': 'WARN', **check_reason('alignment_not_above_null', aligned=f'{s0:.0%}', null=f'{mean:.0%}')}
     return {**rec, 'verdict': 'PASS', 'reason': ''}
 
 
@@ -1943,8 +2013,11 @@ def archived_panos(base: Path, sid: str, anchor: dict) -> list[dict]:
         m = re.search(r'\.(rejected-([a-z]+)|redo)-(\d{8}-\d{6})\.png$', f.name)
         kind = 'aspect' if aspect_rejected else (side.get('rejected') or (m.group(2) if m and m.group(2) else 'redo'))
         scheme = ARCHIVED_PANO_RE.split(f.name)[0] if archived else f.name[:-len('.rejected.png')]
-        checks = {k: {kk: side[k][kk] for kk in ('verdict', 'reason') if kk in side[k]}
+        checks = {k: {kk: side[k][kk] for kk in ('verdict', 'reason', 'reason_code', 'reason_params', 'reason_codes') if kk in side[k]}
                   for k in ('projection_check', 'conformity_check') if isinstance(side.get(k), dict)}
+        for c in checks.values():                       # 存量 sidecar 没 code:按中文原句反向解析,页面才能按语言拼句
+            if 'reason_code' not in c and 'reason_codes' not in c:
+                c.update(parse_reason_zh(c.get('reason') or ''))
         size = side.get('size')
         rows.append({'file': f.name, 'scheme': scheme, 'kind': kind, 'stamp': m.group(3) if m else None,
                      'mtime': int(f.stat().st_mtime), 'written_at': side.get('written_at'),
