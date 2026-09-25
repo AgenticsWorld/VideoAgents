@@ -31,6 +31,10 @@
   edit/epNN/final_audio_timemapped.wav(黑场声音按 hold_audio:延续/淡出/静音)再进 concat;字幕逐条按表平移再 +片头;
   check 的 subtitle_offset_all_cues / audio_offset_measured 按表对位(期望滞后仍 = 片头)。无表 = 行为与以前完全一致。
 
+集尾收束(2026-09-25,§9C):正片为 render_transitions 产物且台账 transitions_render.json#episode_close 在时,画面已在末尾淡出/切黑并停留
+  hold_s;本 CLI 在 assemble 时对外挂声轨施加同刻处理——fade_black/fade_white 在 fade_end_s 前 duration_s 内 afade 淡出、cut_black/cut_white
+  在 fade_end_s 硬切(20ms 防爆音)、hold_audio=mute 到黑即静音——其后补静音到与画面等长。停留不平移任何时刻,不进 timemap、不改混音基准。
+
 约定:
   - 段序默认 intro,cut,outro,teaser(--layout 可改);settings.json#packaging 关闭的段与不存在的文件自动跳过;
   - 正片段时长 = max(cut 画面时长, final_audio 时长)——严禁 -shortest 截音频,画面不足用末帧补齐;
@@ -191,6 +195,38 @@ def _declared_duration(placement, seg):
 from timemap_layers import load_timemap, _apply_mix_basis  # noqa: E402,F401  2026-09-25 抽到 modules/,与 render_captions 共用
 
 
+def load_episode_close(proj, ep, cut):
+    """正片 cut 的集尾收束台账(transitions_render.json#episode_close,仅当 cut 就是该台账的 out_cut);无 = None。"""
+    tr = proj / "edit" / ep / "transitions_render.json"
+    if not tr.is_file():
+        return None
+    try:
+        d = json.loads(tr.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    ec = d.get("episode_close")
+    if not isinstance(ec, dict) or not d.get("out_cut") or Path(d["out_cut"]).name != Path(cut).name:
+        return None
+    if ec.get("fade_end_s") is None:
+        return None
+    return ec
+
+
+def close_audio_filter(ec, cut_dur):
+    """外挂声轨的集尾处理滤镜(assemble 时插在 aresample 之后):淡出类在 fade_end_s 前 duration_s 内 afade(mute 策略 = 到黑即切),
+    切黑类在 fade_end_s 硬切(20ms 防爆音淡出);黑场停留段由 apad 补静音。返回滤镜串(可为空)。"""
+    if not ec:
+        return ""
+    end = float(ec.get("fade_end_s") or 0.0)
+    if end <= 0:
+        return ""
+    ty = str(ec.get("type") or "")
+    d = float(ec.get("duration_s") or 0.0) if ty in ("fade_black", "fade_white") else 0.0
+    if str(ec.get("hold_audio") or "fade") == "mute" or d <= 0:
+        d = 0.02
+    return f"afade=t=out:st={max(0.0, end - d):.6f}:d={d:.6f}"
+
+
 def timemapped_audio(proj, ep, audio, ops, notes=None):
     """外挂声轨按 timemap 重映射(缓存于 edit/epNN/final_audio_timemapped.wav);无 ops 原样返回。"""
     if not ops or audio is None:
@@ -227,13 +263,18 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
                 notes.append(f"cut 段使用 {cut.name} 自带音轨(未找到 assets/audio/final/{ep}.*)")
             else:
                 raise SystemExit(f"[FAIL] 正片 {cut.name} 无音轨且找不到外挂声轨 assets/audio/final/{ep}.wav")
-            if audio is not None and abs(a - v) > 0.5:
-                notes.append(f"⚠ 正片画面 {v:.3f}s 与声轨 {a:.3f}s 相差 {abs(a - v):.3f}s(>0.5s);"
+            close = load_episode_close(proj, ep, cut)
+            close_hold = float((close or {}).get("hold_s") or 0.0)
+            if close:
+                notes.append(f"集尾收束 {close.get('type')}:画面全黑 @{float(close['fade_end_s']):.3f}s,停留 {close_hold:.3f}s;"
+                             f"外挂声轨同刻{'切断' if (str(close.get('type', '')).startswith('cut') or close.get('hold_audio') == 'mute') else '淡出'}并补静音")
+            if audio is not None and abs(a - (v - close_hold)) > 0.5:
+                notes.append(f"⚠ 正片画面 {v:.3f}s" + (f"(含尾停留 {close_hold:.3f}s)" if close_hold else "") + f" 与声轨 {a:.3f}s 相差 {abs(a - (v - close_hold)):.3f}s(>0.5s);"
                              "按较长者封装,画面不足用末帧补齐、严禁截音频;差异过大请先回 edit 对齐")
             segs.append({"name": "cut", "path": str(cut), "audio": str(audio) if audio else None,
                          "audio_src": str(audio_src) if audio_src else None, "timemap": tm_info,
                          "v_dur": v, "a_dur": a, "dur": max(v, a), "has_audio": True,
-                         "declared": None, "streams": st})
+                         "declared": None, "streams": st, "episode_close": close})
             continue
         if name not in SEG_FILES:
             raise SystemExit(f"[FAIL] 未知段名 {name!r},可用:{','.join(SEGMENTS)}")
@@ -384,6 +425,7 @@ def write_ledger(proj, ep, segs, extra=None):
         "cut_offset_s": round(intro_s, 6),
         "total_expected_s": round(total, 6),
         "timemap": next((s.get("timemap") for s in segs if s["name"] == "cut"), None),
+        "episode_close": next((s.get("episode_close") for s in segs if s["name"] == "cut"), None),
         "segments": [{
             "name": s["name"], "file": str(Path(s["path"]).relative_to(proj)),
             "audio": (str(Path(s["audio"]).relative_to(proj)) if s.get("audio") else None),
@@ -449,8 +491,10 @@ def do_assemble(proj, ep, segs, out_path, crf=18, preset="medium"):
         vf += f",trim=duration={s['dur']:.6f},setpts=PTS-STARTPTS[v{vi}]"
         fc.append(vf)
         if ai is not None:
+            close_af = close_audio_filter(s.get("episode_close"), s["dur"]) if s["name"] == "cut" else ""
             af = (f"[{ai}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                  f"apad=whole_dur={s['dur']:.6f},atrim=duration={s['dur']:.6f},asetpts=PTS-STARTPTS[a{vi}]")
+                  + (close_af + "," if close_af else "")
+                  + f"apad=whole_dur={s['dur']:.6f},atrim=duration={s['dur']:.6f},asetpts=PTS-STARTPTS[a{vi}]")
         else:
             af = (f"anullsrc=r=48000:cl=stereo,atrim=duration={s['dur']:.6f},"
                   f"asetpts=PTS-STARTPTS[a{vi}]")

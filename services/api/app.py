@@ -1049,6 +1049,12 @@ async def transitions_propose(project: str, ep: str, body: dict[str, Any] | None
     return _artifact_urls(await core.api_transitions_propose(project, ep, body or {}), project)
 
 
+@api.post("/projects/{project}/transitions/{ep}/close", tags=["storyboard"])
+async def transitions_close(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """集尾收束(2026-09-25):集级覆盖 shot_list 顶层 episode_close(mode=project 跟随项目设置 / custom 写入)。"""
+    return _artifact_urls(await core.api_transitions_close(project, ep, body or {}), project)
+
+
 @api.post("/projects/{project}/transitions/{ep}/{bid}/decide", tags=["storyboard"])
 async def transitions_decide(project: str, ep: str, bid: str, body: dict[str, Any]) -> dict[str, Any]:
     return _artifact_urls(await core.api_transitions_decide(project, ep, bid, body), project)

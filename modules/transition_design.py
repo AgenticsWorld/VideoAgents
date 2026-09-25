@@ -8,6 +8,9 @@ shot_list.generation_groups[].transition_in 仍是唯一定稿字段,只由本�
 存量项目 settings.json 无 transitions 段 = minimal(现状不变);新建向导默认 classic。
 
 契约常量与机检在 code/check_generation_groups.py(transition_ok);渲染与成片机检在 code/render_transitions.py(plan → build → render → check)。
+集尾收束(2026-09-25):settings.json#transitions.episode_close {type: fade_black|fade_white|cut_black|cut_white|hard_cut, duration_s, hold_s, hold_audio}(所有模式都有,
+默认淡出到黑 1.0s + 黑场 0.5s);shot_list 顶层 episode_close 写了就按它(hard_cut = 显式不处理);effective_episode_close() 给出本集生效值,
+render_transitions.py 在成片末尾施加画面淡出 + 停留,finalize_episode.py 同刻淡出外挂声轨。
 本模块提供:effective() 模式展开、diagnose() 边界诊断、propose() 按模式出建议、accept/reject/apply、check()、payload()(分镜预览页过场卡数据)、
 字卡 PNG 与全景视窗渲染(build 与页面预览共用)。
 """
@@ -42,6 +45,7 @@ CUSTOM_OPTIONS = ("director", "hard_cut", "dissolve", "dip_black", "dip_white", 
 CUSTOM_MAP_DEFAULT = {"scene_change": "establishing", "time_jump": "title_card", "block_enter": "dip_white",
                       "block_exit": "director", "same_scene": "hard_cut", "episode_open": "director"}
 DEFAULT_SETTINGS = {"mode": "minimal", "card_style": "caption_default", "card_language": "script"}
+EPISODE_CLOSE_KEYS = ("type", "duration_s", "hold_s", "hold_audio")   # 设置项只存这四键(reason / source 归 shot_list)
 CARD_S, ESTAB_S, CARD_JOIN_S = 2.5, 2.5, 0.4
 WIDE_SIZES = ("大远景", "远景", "全景", "大全景", "EWS", "WS", "LS", "ELS", "extreme wide", "wide", "establishing")
 # 相对时间词(只认「跨日/跨期」关系词;单纯时段词 清晨/午后/黄昏 不算——那些由 time_of_day 派生并打「推定」)
@@ -84,6 +88,8 @@ def normalize_settings(raw: dict | None) -> dict:
         if cf.startswith("/") or ".." in Path(cf).parts or (":" in cf and not cf.startswith("proj:")):
             raise ValueError("transitions.card_font must be a path inside the project (e.g. refs/fonts/x.ttf) or a proj:<family> id")
         out["card_font"] = cf
+    # 集尾收束(2026-09-25):所有模式都有;缺 = 默认淡出到黑 1.0s + 黑场 0.5s;hard_cut = 不处理(停在末帧,即 2026-09-25 前的行为)
+    out["episode_close"] = normalize_close_setting(raw.get("episode_close"))
     if mode == "custom":
         out["allow_cards"] = bool(raw.get("allow_cards", CUSTOM_DEFAULTS["allow_cards"]))
         try:
@@ -113,6 +119,72 @@ def expand(settings: dict | None) -> dict:
     if mode == "custom":
         return dict(st)
     return {**st, **MODE_TABLE[mode], "custom_map": None}
+
+
+def normalize_close_setting(raw) -> dict:
+    """settings.json#transitions.episode_close 规范化:缺 / 空 = 默认;非法抛 ValueError(服务端 400)。只留 type/duration_s/hold_s/hold_audio。"""
+    from check_generation_groups import EPISODE_CLOSE_DEFAULT, check_episode_close, normalize_episode_close  # noqa: E402
+    if not isinstance(raw, dict) or not raw:
+        return dict(EPISODE_CLOSE_DEFAULT)
+    t = normalize_episode_close(raw, source="settings")
+    errs = check_episode_close(t, "transitions.episode_close")
+    if errs:
+        raise ValueError(errs[0].split(": ", 1)[-1])
+    if t["type"] == "hard_cut":
+        return {"type": "hard_cut"}
+    return {k: t[k] for k in EPISODE_CLOSE_KEYS}
+
+
+def effective_episode_close(base: Path, ep: str | None = None, shot_list: dict | None = None) -> dict | None:
+    """本集生效的集尾收束:shot_list 顶层 episode_close 写了就按它(hard_cut → None = 不处理),否则项目设置。
+    返回 None 或 {type, duration_s, hold_s, hold_audio, reason?, source}(source = shot_list.episode_close | settings.transitions.episode_close)。"""
+    from check_generation_groups import check_episode_close, episode_close_of  # noqa: E402
+    base = Path(base)
+    if shot_list is None and ep:
+        shot_list = _shot_list(base, ep)
+    t = episode_close_of(shot_list or {})
+    if t is not None:
+        if check_episode_close(t):
+            return None                     # 契约不合法:transition_ok 会 FAIL,这里不猜
+        return None if t["type"] == "hard_cut" else t
+    st = effective(base, ep).get("episode_close") or {}
+    if not st or st.get("type") == "hard_cut":
+        return None
+    return {**st, "source": "settings.transitions.episode_close"}
+
+
+def set_episode_close(base: Path, ep: str, value: dict | None) -> dict | None:
+    """写 / 清 shot_list 顶层 episode_close(json 读写保真):None = 删键(跟随项目设置);{type: hard_cut} = 显式不处理;
+    fade_* 缺 duration_s/hold_s/hold_audio 时按项目设置补。返回生效值。"""
+    from check_generation_groups import check_episode_close, normalize_episode_close  # noqa: E402
+    base = Path(base)
+    slp = base / "directing" / ep / "shot_list.json"
+    sl = _read(slp, None)
+    if not isinstance(sl, dict):
+        raise FileNotFoundError(f"缺 {slp}")
+    if value is None:
+        changed = sl.pop("episode_close", None) is not None
+    else:
+        if not isinstance(value, dict) or not value.get("type"):
+            raise ValueError("episode_close must be an object with type")
+        from check_generation_groups import EPISODE_CLOSE_CUT_DEFAULT, EPISODE_CLOSE_DEFAULT, EPISODE_CLOSE_FADES  # noqa: E402
+        st = effective(base, ep).get("episode_close") or {}
+        # 只在同一族(淡出类 ↔ 淡出类 / 切黑类 ↔ 切黑类)内继承项目设置的时长/停留/声音;跨族按该族默认(切黑 1.0s/mute,淡出 1.0s/0.5s/fade)
+        is_fade = value.get("type") in EPISODE_CLOSE_FADES
+        same_family = (st.get("type") in EPISODE_CLOSE_FADES) == is_fade and st.get("type") not in (None, "hard_cut")
+        family_default = EPISODE_CLOSE_DEFAULT if is_fade else EPISODE_CLOSE_CUT_DEFAULT
+        merged = {**({k: v for k, v in st.items() if k in EPISODE_CLOSE_KEYS} if same_family else family_default), **value}
+        t = normalize_episode_close(merged, source="user")
+        errs = check_episode_close(t)
+        if errs:
+            raise ValueError(errs[0].split(": ", 1)[-1])
+        new = {k: v for k, v in t.items() if k in EPISODE_CLOSE_KEYS or k in ("reason", "source")}
+        changed = sl.get("episode_close") != new
+        sl["episode_close"] = new
+    if changed:
+        sl.setdefault("_meta", {})["episode_close_set_at"] = dt.datetime.now().isoformat(timespec="seconds")
+        _write(slp, sl)
+    return effective_episode_close(base, ep, sl)
 
 
 def project_settings(base: Path) -> dict:
@@ -1145,6 +1217,13 @@ def source_fingerprint(base: Path, t: dict) -> str:
     return h.hexdigest()[:16]
 
 
+def close_fingerprint(t: dict | None) -> str:
+    """集尾收束指纹:只看 type / duration_s / hold_s / hold_audio(来源与 reason 不影响渲染)。"""
+    if not t:
+        return ""
+    return source_fingerprint(Path("."), {k: t.get(k) for k in EPISODE_CLOSE_KEYS})
+
+
 # ---------------------------------------------------------------- page payload
 
 def payload(base: Path, ep: str) -> dict:
@@ -1205,6 +1284,22 @@ def payload(base: Path, ep: str) -> dict:
             "render_state": render_state, "stale": stale, "ledger": {k: led.get(k) for k in ("type", "duration_s", "cut_time_s", "renders_as")} if led else None,
             "thumbs": thumbs, "preview_meta": meta.get("preview") or None,
         })
+    # 集尾收束(2026-09-25):生效值 + 来源 + 渲染台账状态 + 末组尾帧 / 预览小片
+    close_eff = effective_episode_close(base, ep, sl)
+    close_raw = sl.get("episode_close") if isinstance(sl.get("episode_close"), dict) else None
+    last_gid = (sl.get("generation_groups") or [{}])[-1].get("group_id") if sl.get("generation_groups") else None
+    led_close = ledger.get("episode_close") if isinstance(ledger.get("episode_close"), dict) else None
+    cdir = tdir / "episode_close"
+    cmeta = _read(cdir / "meta.json", {}) or {}
+    close_fp = close_fingerprint(close_eff)
+    episode_close = {
+        "effective": close_eff, "shot_list": close_raw, "settings": eff.get("episode_close"),
+        "source": ("shot_list" if close_raw else "settings"), "last_group": last_gid,
+        "render_state": ("rendered" if (led_close and led_close.get("fingerprint") == close_fp) else ("pending" if close_eff else None)),
+        "ledger": led_close,
+        "thumbs": {"prev_tail": url(f"assets/clips/{ep}/{last_gid}.last_frame.png") if last_gid else None,
+                   "preview": url(cdir / "preview.mp4") if (cdir / "preview.mp4").is_file() and cmeta.get("preview_fingerprint") == close_fp else None},
+    }
     n_change = sum(1 for r in out_rows if (r.get("diagnosis") or {}).get("has_change"))
     n_non_hard = sum(1 for r in out_rows if (r.get("current") or {}).get("type") != "hard_cut" or (r.get("current") or {}).get("inserts") or (r.get("current") or {}).get("overlay_card"))
     return {
@@ -1215,6 +1310,7 @@ def payload(base: Path, ep: str) -> dict:
                     "insert_total_s": round(ins_total, 2), "budget_s": round(budget_s * eff["insert_budget_pct"] / 100.0, 2),
                     "episode_budget_s": budget_s},
         "boundaries": out_rows,
+        "episode_close": episode_close,
     }
 
 

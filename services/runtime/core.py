@@ -5879,9 +5879,30 @@ def _tr_ep(ep: str) -> str:
 
 def _tr_bid(bid: str) -> str:
     bid = re.sub(r"[^\w\-]", "", bid or "")
-    if not bid.startswith("B-"):
-        raise ServiceError(400, "boundary id must look like B-grpA-grpB")
+    if not bid.startswith("B-") and bid != "episode_close":
+        raise ServiceError(400, "boundary id must look like B-grpA-grpB (or episode_close)")
     return bid
+
+
+async def api_transitions_close(project: str, ep: str, body: dict):
+    """集尾收束(2026-09-25):{mode: project|custom, episode_close?: {type: fade_black|fade_white|cut_black|cut_white|hard_cut, duration_s?, hold_s?, hold_audio?}}。
+    project = 删 shot_list 顶层 episode_close(跟随项目设置);custom = 写入(缺的字段按项目设置补)。已有成片时页面提示需重跑 p9-transition。"""
+    from modules import transition_design as _td
+    base = _proj_base(project)
+    ep = _tr_ep(ep)
+    mode = str((body or {}).get("mode") or "custom")
+
+    def work():
+        if mode == "project":
+            return _td.set_episode_close(base, ep, None)
+        return _td.set_episode_close(base, ep, (body or {}).get("episode_close"))
+    try:
+        eff = await asyncio.to_thread(work)
+    except (ValueError, FileNotFoundError) as ex:
+        raise ServiceError(400, str(ex)) from None
+    HUB.publish({"type": "transition_design", "project": base.name, "ep": ep, "episode_close": eff})
+    payload = await asyncio.to_thread(_transitions_payload, base, ep)
+    return {"episode_close": payload.get("episode_close"), "summary": payload["summary"]}
 
 
 async def api_transitions_get(project: str, ep: str):
@@ -5989,7 +6010,7 @@ async def api_transitions_preview(project: str, ep: str, bid: str, body: dict):
         tail = (r.stdout or "").strip().splitlines()[-6:] + (r.stderr or "").strip().splitlines()[-4:]
         raise ServiceError(500, "预览渲染失败:" + " | ".join(x for x in tail if x))
     payload = await asyncio.to_thread(_transitions_payload, base, ep)
-    row = next((b for b in payload["boundaries"] if b["id"] == bid), None)
+    row = payload.get("episode_close") if bid == "episode_close" else next((b for b in payload["boundaries"] if b["id"] == bid), None)
     return {"boundary": row, "log": (r.stdout or "").strip().splitlines()[-8:]}
 
 

@@ -155,6 +155,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .stats{color:var(--dim);font-size:12.5px;margin:8px 0}
 .grp{border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:10px;margin:12px 0;overflow:clip}
 /* 过场卡(2026-09-24,docs/transition_design.md):每两个生成组之间一张;有变化的边界展开,无变化且硬切折叠成细线 */
+#trclose{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-4px 0 10px;padding:6px 10px;border:1px dashed var(--border);border-radius:8px;background:var(--panel);font-size:12.5px;color:var(--dim)}
+#trclose .trmsg{color:var(--dim)}
 .trline{height:0;border-top:1px dashed var(--border);margin:6px 24px;position:relative}
 .trline::after{content:'✂';position:absolute;right:0;top:-9px;font-size:10px;color:var(--dim);background:var(--bg,#111);padding:0 4px}
 .trans{border:1px dashed var(--accent,#1d6f7a);border-radius:10px;margin:10px 0;padding:8px 12px;background:color-mix(in srgb,var(--accent,#1d6f7a) 6%,transparent);font-size:12.5px}
@@ -1456,6 +1458,7 @@ const TR_CLASS={scene_change:'换场景',time_jump:'跳时间',block_enter:'进�
 const TR_STATUS={proposed:'建议',accepted:'已定稿',rejected:'已裁硬切',none:'无需',undecided:'未出建议'};
 const TR_RENDER={pending:'待渲染(出成片时)',built:'已构建·待渲染',rendered:'已渲染'};
 const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'自定义'};
+const TR_CLOSE={fade_black:'淡出到黑',fade_white:'淡出到白',cut_black:'切黑(突然黑屏)',cut_white:'切白',hard_cut:'不处理(停在末帧)'};
 const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
 const TR_SRC={screenplay:'剧本',continuity:'连戏表',scenes_index:'场景库',derived:'推定',user:'用户'};
 let TR_BY_TO={};
@@ -1564,8 +1567,51 @@ function trSummaryHtml(T){
     <span title="${t('插入段(字卡/定场/时光流转/桥接)总时长 / 本集预算(集预算 × 过场模式预算%)')}">${t('插入')} <b>${s.insert_total_s||0}s</b> / ${s.budget_s||0}s <span class="bar"><i class="${over?'over':''}" style="width:${pct}%"></i></span></span>
     ${st.allow_cards===false?`<span class="tag">${t('字卡禁止')}</span>`:''}
     <button class="editbtn" id="tr-propose" title="${t('按本集过场模式重出建议(已裁决的边界保留)')}">${T.designed?t('重出建议'):t('出建议')}</button>
-    ${T.design_written_at?`<span title="${esc(T.design_written_at)}">${t('设计表')} ${esc(String(T.design_written_at).slice(0,16))}</span>`:''}</div>`;
+    ${T.design_written_at?`<span title="${esc(T.design_written_at)}">${t('设计表')} ${esc(String(T.design_written_at).slice(0,16))}</span>`:''}</div>`
+    +trCloseHtml(T.episode_close);
 }
+/* 集尾收束(2026-09-25):汇总条下一行——生效值(项目设置 / 本集覆盖)+ 类型下拉(集级覆盖写 shot_list 顶层 episode_close)+ 停留 + ▶ 预览(末组尾 2s + 收束) */
+function trCloseLabel(ec){
+  if(!ec)return t('不处理(停在末帧)');
+  let s=t(TR_CLOSE[ec.type]||ec.type);
+  if((ec.type||'').startsWith('fade')&&ec.duration_s)s+=' '+ec.duration_s+'s';
+  if(ec.hold_s)s+=' + '+t('停留')+' '+ec.hold_s+'s';
+  if(ec.hold_s)s+=' · '+(ec.hold_audio==='mute'?t('到黑即静音'):t('声音随画面淡出'));
+  return s;
+}
+function trCloseHtml(C){
+  if(!C)return '';
+  const eff=C.effective,st=C.settings||{},ovr=C.source==='shot_list';
+  const proj=$('#project').value.trim()||'demo';
+  const opts=[`<option value="project"${!ovr?' selected':''}>${t('跟随项目')}(${esc(trCloseLabel(st.type==='hard_cut'?null:st))})</option>`]
+    .concat(Object.keys(TR_CLOSE).map(k=>`<option value="${k}"${ovr&&(C.shot_list||{}).type===k?' selected':''}>${t(TR_CLOSE[k])}</option>`)).join('');
+  const rs=C.render_state?`<span class="tag ${C.render_state==='rendered'?'ok':''}">${t(TR_RENDER[C.render_state]||C.render_state)}</span>`:'';
+  const th=C.thumbs||{};
+  const prev=th.preview?`<video src="${esc(th.preview)}" controls muted preload="metadata" style="height:64px;border-radius:4px;vertical-align:middle"></video>`:'';
+  return `<div id="trclose" class="trsum-close" title="${t('正片结尾的收束:最后一组尾部淡出/切黑后停留,外挂声轨同刻淡出或切断;片尾包装接在停留之后')}">⏹ <b>${t('集尾')}</b>
+    <select id="tr-close" title="${t('本集集尾收束(集级覆盖,项目默认在「视频节奏」设置);改后出成片时落地,已有成片须重跑转场')}">${opts}</select>
+    <span class="trclose-hold" style="${(C.shot_list&&C.shot_list.type!=='hard_cut')?'':'display:none'}">${t('停留')} <input type="number" id="tr-close-h" min="0" max="3" step="0.1" value="${(C.shot_list||{}).hold_s??''}" style="width:56px"> s</span>
+    <span>${esc(trCloseLabel(eff))}${ovr?' <span class="tag">'+t('本集覆盖')+'</span>':''}</span> ${rs}
+    ${eff?`<button class="editbtn" id="tr-close-preview" title="${t('渲染集尾预览小片:末组尾 2s + 收束,与成片同一滤镜链')}">▶ ${t('预览')}</button>`:''} ${prev}
+    <span class="trmsg"></span></div>`;
+}
+document.addEventListener('change',async e=>{
+  const el=e.target.closest('#tr-close,#tr-close-h');if(!el)return;
+  const box=el.closest('#trclose'),sel=box.querySelector('#tr-close'),msg=box.querySelector('.trmsg');
+  const v=sel.value;box.querySelectorAll('select,input,button').forEach(x=>x.disabled=true);
+  try{
+    if(v==='project')await trApi('/close',{mode:'project'});
+    else{const ec={type:v};const h=parseFloat(box.querySelector('#tr-close-h').value);if(el.id==='tr-close-h'&&h>=0)ec.hold_s=h;await trApi('/close',{mode:'custom',episode_close:ec});}
+    KEEP_SCROLL=true;load(true);
+  }catch(err){if(msg)msg.textContent=t('保存失败:')+err.message;box.querySelectorAll('select,input,button').forEach(x=>x.disabled=false)}
+});
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('#tr-close-preview');if(!b)return;
+  const box=b.closest('#trclose'),msg=box.querySelector('.trmsg');b.disabled=true;
+  if(msg)msg.textContent=t('渲染预览中…(约 10–40 秒)');
+  try{await trApi('/episode_close/preview',{});KEEP_SCROLL=true;load(true);}
+  catch(err){if(msg)msg.textContent=t('失败:')+err.message;b.disabled=false}
+});
 async function trApi(path,body){
   const proj=$('#project').value.trim()||'demo';
   const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/transitions/'+encodeURIComponent(EP)+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});

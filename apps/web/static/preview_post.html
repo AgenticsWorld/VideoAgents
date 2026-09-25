@@ -1405,7 +1405,7 @@ function renderFoot(){
   const pos=g=>`left:${(g.cum_start_s/T*100).toFixed(3)}%;width:${Math.max(0.3,g.duration/T*100).toFixed(3)}%`;
   h+=`<div class="tlgrid"><div class="lb g">${esc(t('分镜组'))}</div><div class="row g"><div class="ph" style="left:0"></div>`;
   for(const g of D.groups)h+=`<div class="blk ${g.group_id===SEL?'sel':''} ${g.has_clip?'':'nofile'}" style="${pos(g)}" data-g="${esc(g.group_id)}" title="${esc(g.group_id)} ${num(g.duration,1)}s${g.current?' · v'+g.current:''}">${esc(g.group_id.replace('grp',''))}${defects[g.group_id]?'<span class="d"></span>':''}</div>`;
-  for(const tr of (D.transitions||[])){if(!tr.type||tr.type==='hard_cut'||tr.cut_time_s==null)continue;h+=`<div class="trs" style="left:calc(${(tr.cut_time_s/T*100).toFixed(3)}% - 4px)" data-tr="${esc(tr.to_group)}" title="${esc(tr.type)} ${num(tr.duration_s,1)}s → ${esc(tr.to_group)}"></div>`}
+  for(const tr of (D.transitions||[])){if(!tr.type||tr.type==='hard_cut'||tr.cut_time_s==null)continue;h+=`<div class="trs" style="left:calc(${(tr.cut_time_s/T*100).toFixed(3)}% - 4px)" data-tr="${esc(tr.to_group||'episode_close')}" title="${esc(tr.type)} ${num(tr.duration_s,1)}s → ${esc(tr.to_group||t('集尾'))}"></div>`}
   h+=`</div>`;
   const lanes=[['picture',t('画面'),'pic'],['pack',t('包装'),'pack'],['sound',t('声音'),'snd']];
   for(const [layer,lb,cls] of lanes){

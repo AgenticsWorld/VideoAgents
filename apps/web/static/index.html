@@ -434,6 +434,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <button type="button" class="info-btn" data-info="npd-trmode-info" title="说明">i</button></div>
       <div class="note info-note" id="npd-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
       <div class="rhythm-detail" id="npd-trmode-detail"></div>
+      <div class="row"><label>集尾收束</label>
+        <select id="npd-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select>
+        <span class="trclose-fade" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">淡出 <input type="number" id="npd-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span>
+        <span class="trclose-hold" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">停留 <input type="number" id="npd-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span>
+        <span class="trclose-audio" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">声音 <select id="npd-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span>
+        <button type="button" class="info-btn" data-info="npd-trclose-info" title="说明">i</button></div>
+      <div class="note info-note" id="npd-trclose-info">正片结尾的收束:最后一组尾部淡出到黑/白后停留,或直接切黑(突然黑屏,悬念感;声音默认同刻切断);外挂声轨同刻淡出/切断,片尾包装接在停留之后。出成片时由 render_transitions 落地;某一集要不同处理可在分镜预览页过场汇总条单独设。</div>
       <div id="npd-trcustom" class="trcustom" style="display:none">
         <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
           <div id="npd-trmap" style="flex:1;display:grid;grid-template-columns:1fr;gap:4px 12px;font-size:12px"></div></div>
@@ -675,6 +682,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <button type="button" class="info-btn" data-info="dur-trmode-info" title="说明">i</button></div>
       <div class="note info-note" id="dur-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
       <div class="rhythm-detail" id="dur-trmode-detail"></div>
+      <div class="row"><label>集尾收束</label>
+        <select id="dur-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select>
+        <span class="trclose-fade" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">淡出 <input type="number" id="dur-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span>
+        <span class="trclose-hold" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">停留 <input type="number" id="dur-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span>
+        <span class="trclose-audio" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">声音 <select id="dur-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span>
+        <button type="button" class="info-btn" data-info="dur-trclose-info" title="说明">i</button></div>
+      <div class="note info-note" id="dur-trclose-info">正片结尾的收束:最后一组尾部淡出到黑/白后停留,或直接切黑(突然黑屏,悬念感;声音默认同刻切断);外挂声轨同刻淡出/切断,片尾包装接在停留之后。出成片时由 render_transitions 落地;某一集要不同处理可在分镜预览页过场汇总条单独设。</div>
       <div id="dur-trcustom" class="trcustom" style="display:none">
         <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
           <div id="dur-trmap" style="flex:1;display:grid;grid-template-columns:1fr;gap:4px 12px;font-size:12px"></div></div>
@@ -1298,11 +1312,11 @@ const TR_MODE_DETAIL={   // 每模式的说明行 [标签, 内容],渲染样式�
            ['附属','说明性字卡 禁止 · 过场时长 0%(只保留接缝 1% / 垫片 5%)· 不用生成式 · 新场景首镜不强制定场']],
   classic:[['换场景','定场空镜 2.5s(首镜已是远景则改叠地点字幕)'],['跳时间','时间字卡 2.5s'],
            ['进闪回/梦境','白场 1.0s + 定格 + 叠「N 日前·地点」+ 回忆调色'],['出闪回/梦境','匹配剪辑,可叠「当下」'],
-           ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],
+           ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],['集尾','按下方「集尾收束」'],
            ['附属','说明性字卡 允许 · 过场时长 ≤ 8%(≈24 s @ 300 s)· 不用生成式 · 新场景首镜不强制定场']],
   cinematic:[['换场景','定场空镜 + 叠地点字幕'],['跳时间','时间字卡 + 定场空镜'],
              ['进闪回/梦境','白场 + 定格 + 叠字(生成式桥接为候选)'],['出闪回/梦境','匹配剪辑,可叠「当下」'],
-             ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],
+             ['同场景同时段','硬切(色差过大时给定格/叠化候选)'],['集首','淡入'],['集尾','按下方「集尾收束」'],
              ['附属','说明性字卡 允许 · 过场时长 ≤ 10% · 允许生成式过场(仍逐处点、显示成本)· 新场景首镜必须先出定场镜头(设计期规则)']],
   custom:[['自定义','六类边界逐项选处理方式,四个附属项自填']]};
 const TR_MAP_ROWS=[['scene_change','换场景'],['time_jump','跳时间'],['block_enter','进闪回/梦境'],['block_exit','出闪回/梦境'],['same_scene','同场景同时段'],['episode_open','集首']];
@@ -1315,8 +1329,41 @@ function trModeInit(prefix){
   const sync=()=>{$('#'+prefix+'-trmode-detail').innerHTML=(TR_MODE_DETAIL[sel.value]||[]).map(([k,v])=>`<div><b>${esc(tr_(k))}:</b>${esc(tr_(v))}</div>`).join('');$('#'+prefix+'-trcustom').style.display=sel.value==='custom'?'':'none'};
   sel.onchange=sync;sync();
 }
+const TR_CLOSE_TYPES=['fade_black','fade_white','cut_black','cut_white','hard_cut'];
+function trCloseSync(prefix){   // 集尾收束(2026-09-25):淡出类显示淡出时长;切黑类只有停留;不处理全隐藏
+  const ty=$('#'+prefix+'-trclose').value,row=$('#'+prefix+'-trclose').closest('.row');
+  row.querySelector('.trclose-fade').style.display=ty.startsWith('fade')?'':'none';
+  row.querySelector('.trclose-hold').style.display=ty==='hard_cut'?'none':'';
+  row.querySelector('.trclose-audio').style.display=ty==='hard_cut'?'none':'';
+}
+function trCloseApply(prefix,ec){
+  ec=ec||{};const sel=$('#'+prefix+'-trclose');if(!sel)return;
+  sel.value=TR_CLOSE_TYPES.includes(ec.type)?ec.type:'fade_black';
+  const cut=sel.value.startsWith('cut');
+  $('#'+prefix+'-trclose-d').value=ec.duration_s??1.0;
+  $('#'+prefix+'-trclose-h').value=ec.hold_s??(cut?1.0:0.5);
+  $('#'+prefix+'-trclose-a').value=ec.hold_audio||(cut?'mute':'fade');
+  sel.onchange=()=>{const c=sel.value.startsWith('cut');if(c&&!(parseFloat($('#'+prefix+'-trclose-h').value)>0))$('#'+prefix+'-trclose-h').value=1.0;$('#'+prefix+'-trclose-a').value=c?'mute':'fade';trCloseSync(prefix)};
+  trCloseSync(prefix);
+}
+function trCloseCollect(prefix){
+  const ty=$('#'+prefix+'-trclose').value;
+  if(ty==='hard_cut')return {type:'hard_cut'};
+  const ec={type:ty,hold_s:parseFloat($('#'+prefix+'-trclose-h').value)||0,hold_audio:$('#'+prefix+'-trclose-a').value};
+  if(ty.startsWith('fade'))ec.duration_s=parseFloat($('#'+prefix+'-trclose-d').value)||1.0;
+  return ec;
+}
+function trCloseValidate(prefix){   // 返回错误文案或 ''
+  const ec=trCloseCollect(prefix);
+  if(ec.type==='hard_cut')return '';
+  if(ec.type.startsWith('fade')&&!(ec.duration_s>=0.3&&ec.duration_s<=3))return '集尾淡出时长需在 0.3–3 秒之间';
+  if(!(ec.hold_s>=0&&ec.hold_s<=3))return '集尾停留需在 0–3 秒之间';
+  if(ec.type.startsWith('cut')&&!(ec.hold_s>0))return '切黑须停留 >0 秒(否则等于停在末帧)';
+  return '';
+}
 function trModeApply(prefix,cfg){
   trModeInit(prefix);cfg=cfg||{};
+  trCloseApply(prefix,cfg.episode_close);
   const sel=$('#'+prefix+'-trmode');sel.value=['minimal','classic','cinematic','custom'].includes(cfg.mode)?cfg.mode:'classic';
   const m={...TR_MAP_DEFAULT,...(cfg.custom_map||{})};
   document.querySelectorAll('#'+prefix+'-trmap select').forEach(s=>{s.value=m[s.dataset.trmap]||'hard_cut'});
@@ -1327,12 +1374,12 @@ function trModeApply(prefix,cfg){
   sel.onchange();
 }
 function trModeCollect(prefix){
-  const mode=$('#'+prefix+'-trmode').value;
-  if(mode!=='custom')return {mode};
+  const mode=$('#'+prefix+'-trmode').value,episode_close=trCloseCollect(prefix);
+  if(mode!=='custom')return {mode,episode_close};
   const custom_map={};document.querySelectorAll('#'+prefix+'-trmap select').forEach(s=>{custom_map[s.dataset.trmap]=s.value});
   return {mode,custom_map,allow_cards:document.querySelector(`input[name="${prefix}-trcards"]:checked`).value==='1',
     insert_budget_pct:parseFloat($('#'+prefix+'-trpct').value)||0,allow_generative:$('#'+prefix+'-trgen').checked,
-    establishing_first_shot:$('#'+prefix+'-trestab').checked};
+    establishing_first_shot:$('#'+prefix+'-trestab').checked,episode_close};
 }
 $('#npo-aspect').onchange=()=>{
   $('#npo-custom-row').style.display=$('#npo-aspect').value==='custom'?'':'none'};
@@ -1377,6 +1424,7 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
     trModeInit('npd');
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
     if($('#npd-trmode').value==='custom'){const pct=parseFloat($('#npd-trpct').value);if(!(pct>=0&&pct<=30))return '过场时长预算需在 0–30% 之间'}
+    {const ce=trCloseValidate('npd');if(ce)return ce}
     if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
   }
@@ -1782,6 +1830,7 @@ $('#dur-ok').onclick=async()=>{
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
   const trc=trModeCollect('dur');
   if(trc.mode==='custom'&&!(trc.insert_budget_pct>=0&&trc.insert_budget_pct<=30)){$('#dur-err').textContent='过场时长预算需在 0–30% 之间';return}
+  {const ce=trCloseValidate('dur');if(ce){$('#dur-err').textContent=ce;return}}
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value},transitions:trc});
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留

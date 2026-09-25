@@ -35,6 +35,9 @@
                                        kind 在枚举内、单段 ∈ [0.5,4]s、单边界 Σ ≤ 6s、join_out 在枚举内、首组不得插入;
                                        Σ插入 ≤ 集预算 × 项目「过场模式」预算%(极简 0 / 经典 8 / 电影感 10 / 自定义自填);
                                        overlay_card(叠字幕,不变长)duration_s ≤ 6s;audio_lead_s ∈ [0,1]
+  11e. transition_close_valid         集尾收束(2026-09-25,§9C):shot_list 顶层可选 episode_close {type: hard_cut|fade_black|fade_white|cut_black|cut_white,
+                                       duration_s ∈ [0.3,3](淡出类), hold_s ∈ [0,3](淡出后黑/白场停留;切黑类须 >0), hold_audio ∈ fade|mute};缺省 = 项目设置
+                                       settings.json#transitions.episode_close(默认淡出到黑 1.0s + 黑场 0.5s);hard_cut = 显式不处理(停在末帧)
   12. narrative_block_paired          narrative_block 同 id 的组必须连续,role 序列 start[/middle…]/end(单组 single);
                                        块首组必有 transition_in(可为显式 hard_cut + reason),块尾组的下一组同样必有
 
@@ -92,6 +95,17 @@ JOIN_STYLES = {
     "pixelize": {},           # 梦境/数字感
     "fadegrays": {},          # 回忆去色
 }
+# —— 集尾收束(2026-09-25,§9C):shot_list 顶层 episode_close(可选)——最后一组尾部淡出到黑/白 + 可选黑/白场停留;
+#    render_transitions.py 在成片末尾施加(画面),finalize_episode.py 在同一时刻淡出外挂声轨;不进 timemap(尾部插帧不平移任何时刻)、
+#    不进混音边界层(黑场段声轨由 finalize 补静音)。缺省 = 项目设置 settings.json#transitions.episode_close;hard_cut = 显式不处理
+EPISODE_CLOSE_TYPES = ("hard_cut", "fade_black", "fade_white", "cut_black", "cut_white")
+EPISODE_CLOSE_FADES = ("fade_black", "fade_white")     # 末组尾淡出 duration_s 到黑/白,再停留 hold_s
+EPISODE_CLOSE_CUTS = ("cut_black", "cut_white")        # 突然黑屏(悬念收束):不淡出,末帧直接切到黑/白场停留 hold_s(须 >0);声音默认同刻切断(mute)
+EPISODE_CLOSE_DURATION = (0.3, 3.0)
+EPISODE_CLOSE_HOLD_MAX_S = 3.0
+EPISODE_CLOSE_AUDIO = ("fade", "mute")
+EPISODE_CLOSE_DEFAULT = {"type": "fade_black", "duration_s": 1.0, "hold_s": 0.5, "hold_audio": "fade"}
+EPISODE_CLOSE_CUT_DEFAULT = {"hold_s": 1.0, "hold_audio": "mute"}
 INSERT_KINDS = ("title_card", "establishing", "timelapse", "bridge")
 INSERT_MIN_S, INSERT_MAX_S = 0.5, 4.0          # 单段
 BOUNDARY_INSERT_MAX_S = 6.0                    # 单边界 Σinserts
@@ -440,6 +454,68 @@ def pad_of(t: dict) -> tuple[float, float, str]:
     return float(t.get("freeze_s") or 0.0), float(t.get("hold_s") or 0.0), str(t.get("hold_audio") or "sustain")
 
 
+def normalize_episode_close(raw, *, source: str = "shot_list.episode_close") -> dict | None:
+    """集尾收束规范化:None / 非对象 → None(未指定);{type: hard_cut} → {"type": "hard_cut"}(显式不处理);
+    fade_black / fade_white → {type, duration_s, hold_s, hold_audio, reason?, source}。数值不合法的原样保留给 check_episode_close 报错。"""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    t = {"type": str(raw.get("type") or "hard_cut")}
+    if t["type"] == "hard_cut":
+        if str(raw.get("reason") or "").strip():
+            t["reason"] = str(raw["reason"]).strip()
+        t["source"] = str(raw.get("source") or source)
+        return t
+    is_cut = t["type"] in EPISODE_CLOSE_CUTS
+    for k, dflt in (("duration_s", 0.0 if is_cut else EPISODE_CLOSE_DEFAULT["duration_s"]),
+                    ("hold_s", EPISODE_CLOSE_CUT_DEFAULT["hold_s"] if is_cut else 0.0)):
+        v = raw.get(k, dflt)
+        if k == "duration_s" and is_cut:
+            v = 0.0                       # 切黑不淡出
+        try:
+            t[k] = float(v)
+        except (TypeError, ValueError):
+            t[k] = v
+    t["hold_audio"] = str(raw.get("hold_audio") or (EPISODE_CLOSE_CUT_DEFAULT if is_cut else EPISODE_CLOSE_DEFAULT)["hold_audio"])
+    if str(raw.get("reason") or "").strip():
+        t["reason"] = str(raw["reason"]).strip()
+    t["source"] = str(raw.get("source") or source)
+    return t
+
+
+def check_episode_close(t: dict | None, label: str = "episode_close") -> list[str]:
+    """集尾收束契约(transition_close_valid):type 枚举、duration_s / hold_s 范围、hold_audio 枚举。"""
+    if not t:
+        return []
+    errs = []
+    ty = t.get("type")
+    if ty not in EPISODE_CLOSE_TYPES:
+        return [f"{label} transition_close_valid: type={ty!r} 不在枚举 {list(EPISODE_CLOSE_TYPES)}"]
+    if ty == "hard_cut":
+        return errs
+    lo, hi = EPISODE_CLOSE_DURATION
+    d = t.get("duration_s")
+    if ty in EPISODE_CLOSE_FADES:
+        if isinstance(d, bool) or not isinstance(d, (int, float)):
+            errs.append(f"{label} transition_close_valid: duration_s={d!r} 须为秒数(范围 {lo}–{hi}s)")
+        elif not (lo - 1e-9 <= float(d) <= hi + 1e-9):
+            errs.append(f"{label} transition_close_valid: duration_s={d} ∉ [{lo},{hi}]")
+    h = t.get("hold_s", 0.0)
+    if isinstance(h, bool) or not isinstance(h, (int, float)):
+        errs.append(f"{label} transition_close_valid: hold_s={h!r} 须为秒数(范围 0–{EPISODE_CLOSE_HOLD_MAX_S:g}s)")
+    elif not (0 <= float(h) <= EPISODE_CLOSE_HOLD_MAX_S + 1e-9):
+        errs.append(f"{label} transition_close_valid: hold_s={h} ∉ [0,{EPISODE_CLOSE_HOLD_MAX_S:g}]")
+    elif ty in EPISODE_CLOSE_CUTS and float(h) <= 0:
+        errs.append(f"{label} transition_close_valid: {ty}(切黑)须 hold_s > 0(否则等于停在末帧)")
+    if t.get("hold_audio") not in EPISODE_CLOSE_AUDIO:
+        errs.append(f"{label} transition_close_valid: hold_audio={t.get('hold_audio')!r} 不在枚举 {list(EPISODE_CLOSE_AUDIO)}")
+    return errs
+
+
+def episode_close_of(shot_list: dict) -> dict | None:
+    """shot_list 顶层 episode_close(规范化);未写 = None(由项目设置决定,见 modules.transition_design.effective_episode_close)。"""
+    return normalize_episode_close((shot_list or {}).get("episode_close"))
+
+
 def _check_join(gid: str, t: dict) -> list[str]:
     j = t.get("join")
     if not j:
@@ -594,6 +670,13 @@ def check_transitions(shot_list: dict, insert_budget_pct: float | None = None) -
     if budget and pad_total > float(budget) * PAD_BUDGET_RATIO + 1e-9:
         errors.append(f"transition_pad_valid: Σ黑场停留+定格 {pad_total:g}s > 集预算 {budget}s × {PAD_BUDGET_RATIO:g}"
                       f" = {float(budget) * PAD_BUDGET_RATIO:.2f}s")
+
+    # 集尾收束(2026-09-25):顶层 episode_close 可选,写了就要合法
+    raw_close = shot_list.get("episode_close")
+    if raw_close is not None and not isinstance(raw_close, dict):
+        errors.append(f"episode_close transition_close_valid: episode_close 须为对象,得到 {type(raw_close).__name__}")
+    else:
+        errors += check_episode_close(episode_close_of(shot_list))
 
     # narrative_block:同 id 连续、role 序列合法、块首与块尾下一组都有 transition_in
     blocks: dict[str, list[tuple[int, str, str]]] = {}
