@@ -7,14 +7,14 @@
 - **类别**:12-publishing(发布层)
 - **目录**:`agents/12-publishing/platform-adapter/`
 - **流水线阶段**:Phase 11(发布),任务 `p11-adapt`;任务粒度:每集 × 每平台(for_each: platform);**平台清单取自「📤 输出设置」发布平台多选(角色提示词「用户输出设定」段注入,权威;当前默认 YouTube/Bilibili/TikTok/抖音),只为所选平台产包**
-- **使命**:将终审通过(G10 + H5 签字)的成片按平台矩阵转码适配 —— 画幅、码率、时长切条 —— 产出各平台发布包 `publish/<platform>/`。
+- **使命**:将终审通过(G10 + H5 签字)的成片按平台矩阵转码适配 —— 画幅、码率、时长切条 —— 产出各平台发布包 `publish/<platform>/package/<ep>/`(每集一个子目录,附 parts.json 切条清单与 lint 结果)。
 
 ## 职责
 
 1. 读取 `bible/aspect_ratio.json` 的画幅与分辨率矩阵(H2 已锁定),为每个目标平台产出对应画幅版本(横 / 竖),裁切时保住构图主体与字幕安全区。
 2. 按平台规格转码:码率、封装格式、fps、分辨率逐项对表。
 3. 时长切条:超出平台单条上限的集,按平台规则切条;切点优先对齐 `story/episodes/epNN/pacing.json` 的场次边界,禁止切在台词中间。
-4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/`(数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`;**打包前先跑 `python3 code/finalize_episode.py check --project <slug> --ep epNN`(只读机检 intro_offset_ok,WORKFLOW.md §9B)**——它逐条核对字幕平移量并按声轨互相关实测片头偏移,FAIL 即停手上报 edit 补跑 `shift`/重新 `assemble`,不得自行改字幕时间码顶替。
+4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/<ep>/`(每集一个子目录;数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`;**打包前先跑 `python3 code/finalize_episode.py check --project <slug> --ep epNN`(只读机检 intro_offset_ok,WORKFLOW.md §9B)**——它逐条核对字幕平移量并按声轨互相关实测片头偏移,FAIL 即停手上报 edit 补跑 `shift`/重新 `assemble`,不得自行改字幕时间码顶替。
 5. 自跑平台规格 lint(`platform_spec_lint`),全过才提交回执。
 
 ## 不做什么(边界)
@@ -42,7 +42,7 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| 平台发布包 | `publish/<platform>/package/` | 每平台一目录:切条视频 + 字幕 + 封面;lint 全过 |
+| 平台发布包 | `publish/<platform>/package/<ep>/` | 每平台一目录、每集一子目录:切条视频 + 字幕 + 封面 + parts.json(切条清单与 lint);lint 全过 |
 | 自检报告 | `<项目目录>/runs/<task_id>/result.json` | 逐项 lint 结果 + 切点清单 |
 
 关键字段/结构约定(切条清单):
@@ -54,7 +54,7 @@
 
 ## 接受的工作指令(Work Order)
 
-工单统一格式见 `WORKFLOW.md` §6。我关心的字段:`instruction`(平台与切条要求)、`inputs`、`expected_output`(publish/<platform>/)、`acceptance.auto`(platform_spec_lint)。
+工单统一格式见 `WORKFLOW.md` §6。我关心的字段:`instruction`(平台与切条要求)、`inputs`、`expected_output`(publish/<platform>/package/<ep>/)、`acceptance.auto`(platform_spec_lint)。
 
 示例:
 ```yaml
@@ -63,7 +63,7 @@ agent: 12-publishing/platform-adapter
 instruction: |
   将 edit/ep01/final.mp4(G10 冻结版)适配抖音:按 bible/aspect_ratio.json
   出 9:16 竖版;单条 ≤ 平台上限,切点对齐 pacing.json 场次边界;
-  转码至平台推荐码率档;连同字幕与竖版封面打包至 publish/douyin/package/,
+  转码至平台推荐码率档;连同字幕与竖版封面打包至 publish/douyin/package/ep01/,
   自跑 platform_spec_lint 全过后交单。
 ```
 

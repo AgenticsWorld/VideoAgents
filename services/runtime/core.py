@@ -7378,6 +7378,9 @@ def _preview_scenes(project: str):
                         rec["url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/panos/{aid}/{f.name}?v={int(f.stat().st_mtime)}"
                     else:
                         a["panos"].pop(s)
+                # 归档图(2026-09-25):机检拒掉 / --redo 归档的成图不入索引,预览页「归档图」子行给用户目视裁决 + 「认领」按钮
+                for r in a.get("archived") or []:
+                    r["url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/panos/{aid}/{r['file']}?v={r.get('mtime') or 0}"
             lt = adir / sid / (((_read_json_safe(adir / sid / "layout.json") or {}).get("layout_top")) or "layout_top.png")
             panos["layout_top_url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/{lt.name}?v={int(lt.stat().st_mtime)}" if lt.is_file() else None
         # 世界模型(2026-09-12):assets/concepts/scenes/<sid>/world/world.json,预览页「🌍 世界模型」板块用 Spark 渲染 splats_*.spz;
@@ -7786,6 +7789,52 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
                      kwargs={"rc2_error": "当前全景模型不支持 2:1 全景,请到本页顶部「🌐 全景模型」切换后重试"}, daemon=True).start()
     HUB.publish({"type": "scene_panos", "project": base.name, "scene": sid, "status": "running", "line": ""})
     return {"ok": True, "job": jobkey}
+
+
+def _scene_pano_adopt(project: str, sid: str, body: dict) -> dict:
+    """场景预览页归档图「认领」(2026-09-25):{anchor, file} → modules.scene_panos.adopt_rejected(--adopt <anchor> --pick <时间戳>),
+    用户目视认可后把那一张被拒 / 归档图认领为正式全景(不花钱,不入重跑计数)。只认页面列出的那一张(按文件名里的时间戳 --pick),
+    位姿不符 / 非 2:1 / 已有正式全景时由 adopt_rejected 抛 PanoError → 409 原文回给页面。"""
+    from modules import scene_panos as _sp
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
+    fname = re.sub(r"[^\w\-.]", "", str(body.get("file") or ""))
+    if not sid or not anchor or not fname:
+        raise ServiceError(400, "scene id / anchor / file is required")
+    src = base / "assets" / "concepts" / "scenes" / sid / "panos" / anchor / fname
+    if not src.is_file() or not _sp.ARCHIVED_PANO_RE.search(fname):
+        raise ServiceError(404, f"{sid}/{anchor}: 没有可认领的归档图 {fname}" if zh else f"{sid}/{anchor}: no adoptable archived image {fname}")
+    m = re.search(r"-(\d{8}-\d{6})\.png$", fname)
+    scheme = _sp.ARCHIVED_PANO_RE.split(fname)[0]
+    if (PANO_JOBS.get(f"{base.name}/{sid}") or {}).get("status") == "running":
+        raise ServiceError(409, f"{sid} 正在生成全景图,稍后再认领" if zh else f"{sid} is generating a panorama; adopt after it finishes")
+    # 先按页面同一套判定预检,给出双语原因(adopt_rejected 内部的 PanoError 文案是 CLI 中文,不随界面语言)
+    idx = _sp.load_index(base, sid)
+    anc = next((a for a in idx.get("anchors", []) if a.get("anchor_id") == anchor), None)
+    if not anc:
+        raise ServiceError(404, f"{sid}: 锚点不存在:{anchor}" if zh else f"{sid}: anchor {anchor} does not exist")
+    row = next((r for r in _sp.archived_panos(base, sid, anc) if r["file"] == fname), None)
+    if row and row.get("pose_differs"):
+        raise ServiceError(409, (f"{fname} 是按别的锚点位姿出的(锚点当前 yaw {anc.get('yaw_deg', 0)}°),不能认领" if zh
+                                 else f"{fname} was rendered at a different anchor pose (anchor yaw is now {anc.get('yaw_deg', 0)}°); cannot adopt"))
+    if row and not row.get("adoptable"):
+        raise ServiceError(409, f"{fname} 不是 2:1 全景,不能认领" if zh else f"{fname} is not a 2:1 panorama; cannot adopt")
+    if (src.parent / f"{scheme}.png").is_file():
+        raise ServiceError(409, (f"{sid}/{anchor}/{scheme}: 已有正式全景 {scheme}.png,不覆盖(要换先 --redo 或手工挪走)" if zh
+                                 else f"{sid}/{anchor}/{scheme}: an official panorama {scheme}.png already exists; redo or move it away first"))
+    lines: list[str] = []
+    try:
+        rec = _sp.adopt_rejected(base, sid, anchor, scheme, log=lambda x: lines.append(str(x)), pick=m.group(1) if m else fname)
+    except _sp.PanoError as e:
+        raise ServiceError(409, str(e) if zh else f"Adopt failed: {e}") from None
+    return {"ok": True, "scene_id": sid, "anchor": anchor, "scheme": scheme, "file": rec.get("file"),
+            "checks": {k: (rec.get(k) or {}).get("verdict") for k in ("projection_check", "conformity_check")}, "log": lines}
+
+
+async def api_scene_pano_adopt(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_pano_adopt, project, sid, body or {})
 
 
 async def api_scene_world_start(project: str, sid: str, body: dict):

@@ -88,7 +88,7 @@ data/projects/<slug>/
 │                   #   subtitles.srt=正片(cut)0 秒基准;subtitles_final.srt=成片基准
 │                   #   (接入片头后整体 +intro 实测时长,烧录/发布一律用 final 版)
 ├── qa/             # reports/, defects/(缺陷工单)
-├── publish/        # <platform>/package/, seo.json, metadata.json, receipts/
+├── publish/        # <platform>/package/<ep>/(每集一子目录+parts.json), seo.json(items 按 ep×platform), metadata.json(episodes[] 按 ep), receipts/
 ├── code/           # 本项目的一次性制作脚本(Agent 为完成任务写的脚本,内嵌本项目创作数据)
 └── runs/           # 工单、评分记录、日志(runs/<task_id>/)
 ```
@@ -807,7 +807,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
-| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成;字幕一律取成片基准 `subtitles_final.srt`,严禁用正片基准 subtitles.srt 随 final.mp4 打包;打包前重跑 `code/finalize_episode.py check`(§9B,只读)** | final.mp4、subtitles_final.srt、final_layout.json、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台;**intro_offset_ok 复检(`finalize_episode.py check` 全 PASS,字幕逐条与声轨互相关均对齐)** |
+| platform-adapter | 按平台矩阵转码(画幅/码率/时长切条);**发布目标平台取自「📤 输出设置」发布平台多选(提示词注入),仅面向所选平台产包;与主画幅不同画幅的平台从单母版裁/补适配,不重新生成;字幕一律取成片基准 `subtitles_final.srt`,严禁用正片基准 subtitles.srt 随 final.mp4 打包;打包前重跑 `code/finalize_episode.py check`(§9B,只读)** | final.mp4、subtitles_final.srt、final_layout.json、aspect_ratio.json、「📤 输出设置」发布平台 | `publish/<platform>/package/<ep>/` | 机检:平台规格 lint 全过;产包平台集 = 输出设置所选平台;**intro_offset_ok 复检(`finalize_episode.py check` 全 PASS,字幕逐条与声轨互相关均对齐)** |
 | seo | 标题(3 备选)/tag/简介,按平台调性 | 剧本、hooks、平台 | `publish/seo.json` | 机检:长度/敏感词合规;QA:人工挑标题 |
 | metadata | 元数据(合集归属、集数、分级、封面绑定) | episode_plan、safety 报告 | `publish/metadata.json` | 机检:schema + 必填齐 |
 | publisher | 定时/立即发布,回收平台回执 | 以上全部 | `publish/receipts/` | 机检:回执状态 = 成功;失败自动重试 2 次后报人工 |

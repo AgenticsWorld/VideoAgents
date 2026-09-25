@@ -2,7 +2,7 @@
 name: douyin-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」把一集成片视频 + 标题/简介(含#话题)/封面填进抖音创作者中心（creator.douyin.com）的发布表单，填完停住，由用户人工点击「发布」完成提交（本 skill 永不代点）。
-  适用场景：收到「发布 <ep> 到抖音」工单后，基于 data/projects/<slug>/publish/<ep>/ 的发布包自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  适用场景：收到「发布 <ep> 到抖音」工单后，基于 data/projects/<slug>/publish/<platform>/package/<ep>/ 的发布包（seo/metadata 取 publish/seo.json、publish/metadata.json 的本集条目）自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
 metadata:
   trigger: 发布某集成片到抖音（半自动，用户点最后一步发布）
   builds_on: skills/skill-xhs-cdp-draft（共用 launch_cdp_chrome.sh 与专用 Chrome profile）
@@ -50,9 +50,9 @@ python3 <skills>/skill-douyin-cdp-draft/scripts/dycreator_draft.py check-login
 
 ### 3) 选定素材
 
-都在 `data/projects/<slug>/publish/<ep>/` 下，用绝对路径：
-- 视频：`douyin/package/*.mp4`（9:16 适配包）优先;没有则回退 16:9 通用包 `bilibili/package/<ep>_*.mp4`（抖音支持横屏,>40s 建议横版）或母版,回执注明。
-- 封面：`douyin/package/thumbnail*.png` → 回退 `bilibili/package/thumbnail.png` / `edit/<ep>/thumbnail_A.png`。16:9 封面走「横封面」裁 4:3;竖封面(3:4)脚本不设,留用户用 AI 推荐或手动补。
+都在 `data/projects/<slug>/publish/` 下（WORKFLOW §2 项目级布局：平台包在 `<platform>/package/<ep>/`；单集老项目可能直接放在 `<platform>/package/`，两处都找），用绝对路径：
+- 视频：`douyin/package/<ep>/*.mp4`（9:16 适配包）优先;没有则回退 16:9 通用包 `bilibili/package/<ep>/*.mp4`（抖音支持横屏,>40s 建议横版）或母版,回执注明。
+- 封面：`douyin/package/<ep>/thumbnail*.png` → 回退 `bilibili/package/<ep>/*cover*.jpg|thumbnail*.png` / `edit/<ep>/thumbnail_A.png`。16:9 封面走「横封面」裁 4:3;竖封面(3:4)脚本不设,留用户用 AI 推荐或手动补。
 
 ### 4) 准备标题 / 简介
 
@@ -62,16 +62,16 @@ printf '%s\n' '标题文本' > /tmp/dy-<ep>/title.txt   # ≤30 字
 # 简介写入 /tmp/dy-<ep>/desc.txt,#话题 标签直接内联写在文本末尾（≤1000 字）
 ```
 
-来源：`publish/<ep>/seo.json` douyin 条目（`picked` 已定则逐字用;未定则代选并在回执注明）;话题用 tags 里挑 4–6 个内联进简介。
+来源：`publish/seo.json` 的 items 中 `ep=<ep>` 且 `platform=douyin` 的条目（`picked` 已定则逐字用;未定则代选并在回执注明）;话题用 tags 里挑 4–6 个内联进简介。
 
 ### 5) 上传 + 填写（填完即停，不点发布）
 
 ```bash
 python3 <skills>/skill-douyin-cdp-draft/scripts/dycreator_draft.py upload \
-  --video /abs/path/publish/<ep>/.../xxx.mp4 \
+  --video /abs/path/publish/<platform>/package/<ep>/xxx.mp4 \
   --title-file /tmp/dy-<ep>/title.txt \
   --desc-file /tmp/dy-<ep>/desc.txt \
-  --cover /abs/path/publish/<ep>/.../thumbnail.png
+  --cover /abs/path/publish/<platform>/package/<ep>/cover.jpg
 ```
 
 脚本行为：进上传页塞视频（上传在浏览器后台继续）→ 等编辑表单出现 → 填标题/简介 → 走封面弹窗传横封面 → 按停滞超时等上传完成 → 打印 `FILL_STATUS: READY_FOR_HUMAN_SUBMIT`。

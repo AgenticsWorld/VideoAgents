@@ -1919,6 +1919,38 @@ def preview_summary(base: Path, sid: str) -> dict | None:
                         'locked': bool(a.get('locked')), 'serves': a.get('serves', []),
                         'xy': [round(p[0] / dims[0] + .5, 4), round(p[2] / dims[2] + .5, 4)],
                         'panos': {s: {k: v for k, v in (rec or {}).items() if k in ('file', 'mode', 'parent', 'time_of_day', 'written_at', 'channel')}
-                                  for s, rec in (a.get('panos') or {}).items()}})
+                                  for s, rec in (a.get('panos') or {}).items()},
+                        'archived': archived_panos(base, sid, a)})
     return {'anchors': anchors, 'indoor': idx.get('indoor'), 'planned_at': idx.get('planned_at'), 'blocked': idx.get('blocked'),
             'dimensions_m': dims}
+
+
+def archived_panos(base: Path, sid: str, anchor: dict) -> list[dict]:
+    """预览页「归档图」子行(2026-09-25):该锚点目录下不入索引的成图——机检拒掉的 <scheme>.rejected-<判据>-<时间>.png、
+    --redo 时归档的上一版 <scheme>.redo-<时间>.png、非 2:1 的 <scheme>.rejected.png。用户目视判断误拒与否要看得到这些图
+    (SCN-long-hall A1 接缝比 5.4 被拒,页面上却无处可看)。sidecar 有就带出拒因 / 机检数值 / 渠道 / seed;adoptable = --adopt
+    会认领(归档正则匹配 + 位姿与锚点当前一致 + 2:1)。按时间倒序,最新在前。"""
+    out = panos_dir(base, sid) / str(anchor.get('anchor_id') or '')
+    if not out.is_dir():
+        return []
+    rows = []
+    for f in out.glob('*.png'):
+        archived = bool(ARCHIVED_PANO_RE.search(f.name))
+        aspect_rejected = f.name.endswith('.rejected.png')
+        if not (archived or aspect_rejected):
+            continue
+        side = read(f.with_suffix('.json'), {}) or {}
+        m = re.search(r'\.(rejected-([a-z]+)|redo)-(\d{8}-\d{6})\.png$', f.name)
+        kind = 'aspect' if aspect_rejected else (side.get('rejected') or (m.group(2) if m and m.group(2) else 'redo'))
+        scheme = ARCHIVED_PANO_RE.split(f.name)[0] if archived else f.name[:-len('.rejected.png')]
+        checks = {k: {kk: side[k][kk] for kk in ('verdict', 'reason') if kk in side[k]}
+                  for k in ('projection_check', 'conformity_check') if isinstance(side.get(k), dict)}
+        size = side.get('size')
+        rows.append({'file': f.name, 'scheme': scheme, 'kind': kind, 'stamp': m.group(3) if m else None,
+                     'mtime': int(f.stat().st_mtime), 'written_at': side.get('written_at'),
+                     'channel': side.get('channel'), 'seed': side.get('seed'), 'size': size, 'mode': side.get('mode'),
+                     'checks': checks, 'pose_differs': _pose_differs(side, anchor),
+                     'adoptable': archived and not _pose_differs(side, anchor)
+                                  and not (isinstance(size, list) and len(size) == 2 and size[1] and abs(size[0] / size[1] - 2.0) > ASPECT_TOLERANCE)})
+    rows.sort(key=lambda r: r['mtime'], reverse=True)
+    return rows

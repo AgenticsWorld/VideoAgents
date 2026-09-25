@@ -2,7 +2,7 @@
 name: xhs-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」+ XiaohongshuSkills，把一集成片视频 + 标题/正文填充成一条小红书**视频笔记**草稿，停在发布页由用户人工点击「发布」完成提交（本 skill 永不自动发布）。
-  适用场景：收到「发布 <ep> 到小红书」工单后，基于 data/projects/<slug>/publish/<ep>/ 的发布包（mp4 + seo.json + metadata.json）自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  适用场景：收到「发布 <ep> 到小红书」工单后，基于 data/projects/<slug>/publish/<platform>/package/<ep>/ 的发布包（mp4 + 封面）与 publish/seo.json、publish/metadata.json 的本集条目自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
 metadata:
   trigger: 发布某集成片到小红书（视频笔记，半自动，用户点最后一步发布）
   builds_on: skills/XiaohongshuSkills
@@ -51,14 +51,14 @@ python3 scripts/cdp_publish.py --reuse-existing-tab check-login
 
 ### 3) 选定成片视频
 
-按优先级取（都在 `data/projects/<slug>/publish/<ep>/` 下，用绝对路径）：
-1. `xiaohongshu/package/*.mp4` —— platform-adapter 出过小红书包时首选；
-2. 没有小红书包时回退 16:9 通用包：`bilibili/package/<ep>_*.mp4`（或 `youtube/package/`）；
+按优先级取（都在 `data/projects/<slug>/publish/` 下（WORKFLOW §2 项目级布局：平台包在 `<platform>/package/<ep>/`；单集老项目可能直接放在 `<platform>/package/`，两处都找），用绝对路径）：
+1. `xiaohongshu/package/<ep>/*.mp4` —— platform-adapter 出过小红书包时首选；
+2. 没有小红书包时回退 16:9 通用包：`bilibili/package/<ep>/*.mp4`（或 `youtube/package/<ep>/`）；
 3. 再没有才考虑母版 `edit/<ep>/<ep>_final*.mp4`（以 metadata.json `master.path` 口径为准）。
 
 回退取用时在回执里注明所用文件与原因。视频与图片二选一，视频笔记不传图片。
 
-封面图同理按优先级取：`publish/<ep>/<platform>/package/thumbnail.png` → `edit/<ep>/thumbnail_A.png`（H4 人工选定版）。有封面就传（`--cover`），没有才用平台默认首帧。
+封面图同理按优先级取：`publish/<platform>/package/<ep>/*cover*.jpg|thumbnail*.png` → `edit/<ep>/thumbnail_A.png`（H4 人工选定版）。有封面就传（`--cover`），没有才用平台默认首帧。
 
 ### 4) 准备标题 / 正文
 
@@ -68,7 +68,7 @@ printf '%s\n' '标题文本' > /tmp/xhs-<ep>/title.txt
 # 正文写入 /tmp/xhs-<ep>/content.txt；最后一行放 #话题 标签（空格分隔），pipeline 会自动识别并勾选为话题
 ```
 
-- 标题/正文素材来源：`publish/<ep>/seo.json`（有 xiaohongshu 条目且 `picked` 已定则逐字用 picked 版；没有 xiaohongshu 条目时，从 series_title/episode_title 与既有平台文案改写出小红书风格短标题+短正文，并在回执注明"非 picked、现场改写"）。
+- 标题/正文素材来源：`publish/seo.json`（items 中有 `ep=<ep>` 且 `platform=xiaohongshu` 的条目且 `picked` 已定则逐字用 picked 版；没有 xiaohongshu 条目时，从 series_title/episode_title 与既有平台文案改写出小红书风格短标题+短正文，并在回执注明"非 picked、现场改写"）。
 - **标题宽度 ≤38**（中文/中文标点=2，英文数字=1），超宽先裁剪再写文件。
 - 话题标签从 seo.json tags 里挑 3–6 个,写成 `#时之门 #一千零一夜 ...` 放正文最后一行。
 
@@ -79,8 +79,8 @@ cd <skills>/XiaohongshuSkills
 python3 scripts/publish_pipeline.py --reuse-existing-tab --preview \
   --title-file /tmp/xhs-<ep>/title.txt \
   --content-file /tmp/xhs-<ep>/content.txt \
-  --video /abs/path/to/publish/<ep>/.../xxx.mp4 \
-  --cover /abs/path/to/publish/<ep>/.../thumbnail.png
+  --video /abs/path/to/publish/<platform>/package/<ep>/xxx.mp4 \
+  --cover /abs/path/to/publish/<platform>/package/<ep>/cover.jpg
 ```
 
 - 视频模式会自动点「上传视频」页签、上传文件并**等待平台转码处理完成**（成片约 10 分钟的视频要多等一会，不要提前中断）。

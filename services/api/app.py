@@ -449,6 +449,12 @@ async def scene_pano_start(project: str, sid: str, body: dict[str, Any]) -> dict
     return await core.api_scene_pano_start(project, sid, body)
 
 
+@api.post("/projects/{project}/scenes/{sid}/panos/adopt", tags=["artifacts"])
+async def scene_pano_adopt(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页全景「归档图」子行「认领」:{anchor, file} → 用户目视认可后把该被拒 / 归档图认领为正式全景(不花钱)。"""
+    return await core.api_scene_pano_adopt(project, sid, body)
+
+
 @api.post("/projects/{project}/scenes/{sid}/plates/crop", tags=["artifacts"])
 async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
     """场景预览页「✂ 裁剪」分镜背景图:{key, left, top, width, height}(0..1 归一化选区)→ 按项目画幅比例裁切并覆盖原图。"""

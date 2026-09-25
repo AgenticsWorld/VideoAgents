@@ -2,7 +2,7 @@
 name: bilibili-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」把一集成片视频 + 标题/简介/标签/封面填进 B 站创作中心（member.bilibili.com/platform/upload/video/）的投稿表单，填完停住，由用户人工点击「立即投稿」完成提交（本 skill 永不代点）。
-  适用场景：收到「发布 <ep> 到 bilibili」工单后，基于 data/projects/<slug>/publish/<ep>/ 的发布包自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  适用场景：收到「发布 <ep> 到 bilibili」工单后，基于 data/projects/<slug>/publish/<platform>/package/<ep>/ 的发布包（seo/metadata 取 publish/seo.json、publish/metadata.json 的本集条目）自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
 metadata:
   trigger: 发布某集成片到 bilibili（半自动，用户点最后一步立即投稿）
   builds_on: skills/skill-xhs-cdp-draft（共用 launch_cdp_chrome.sh 与专用 Chrome profile）
@@ -51,9 +51,9 @@ python3 <skills>/skill-bilibili-cdp-draft/scripts/blbl_draft.py check-login
 
 ### 3) 选定素材
 
-都在 `data/projects/<slug>/publish/<ep>/` 下，用绝对路径：
-- 视频：`bilibili/package/<ep>_bilibili.mp4`（16:9 平台包）优先；没有则回退母版 `edit/<ep>/<ep>_final.mp4`，回执注明。
-- 封面：`bilibili/package/thumbnail.png` → 回退 `edit/<ep>/thumbnail_A.png`。B 站封面裁 16:10 展示，16:9 图会被上下轻裁，无需预处理。
+都在 `data/projects/<slug>/publish/` 下（WORKFLOW §2 项目级布局：平台包在 `<platform>/package/<ep>/`；单集老项目可能直接放在 `<platform>/package/`，两处都找），用绝对路径：
+- 视频：`bilibili/package/<ep>/<slug>_<ep>_bilibili.mp4`（文件名以 parts.json 为准）（16:9 平台包）优先；没有则回退母版 `edit/<ep>/<ep>_final.mp4`，回执注明。
+- 封面：`bilibili/package/<ep>/*cover*.jpg|thumbnail*.png` → 回退 `edit/<ep>/thumbnail_A.png`。B 站封面裁 16:10 展示，16:9 图会被上下轻裁，无需预处理。
 
 ### 4) 准备标题 / 简介 / 标签
 
@@ -63,17 +63,17 @@ printf '%s\n' '标题文本' > /tmp/blbl-<ep>/title.txt   # ≤80 字
 # 简介写入 /tmp/blbl-<ep>/desc.txt（≤2000 字）；标签不进简介，走 --tags
 ```
 
-来源：`publish/<ep>/seo.json` bilibili 条目（`picked` 已定则逐字用；未定则代选并在回执注明）；tags 逐字取 seo.json 的 tags（≤10 个）。
+来源：`publish/seo.json` 的 items 中 `ep=<ep>` 且 `platform=bilibili` 的条目（`picked` 已定则逐字用；未定则代选并在回执注明）；tags 逐字取 seo.json 的 tags（≤10 个）。
 
 ### 5) 上传 + 填写（填完即停，不点投稿）
 
 ```bash
 python3 <skills>/skill-bilibili-cdp-draft/scripts/blbl_draft.py upload \
-  --video /abs/path/publish/<ep>/bilibili/package/<ep>_bilibili.mp4 \
+  --video /abs/path/publish/bilibili/package/<ep>/<slug>_<ep>_bilibili.mp4 \
   --title-file /tmp/blbl-<ep>/title.txt \
   --desc-file /tmp/blbl-<ep>/desc.txt \
   --tags "标签1,标签2,标签3" \
-  --cover /abs/path/publish/<ep>/bilibili/package/thumbnail.png
+  --cover /abs/path/publish/bilibili/package/<ep>/<slug>_<ep>_bilibili_cover.jpg
 ```
 
 脚本行为：进上传页塞视频（上传在浏览器后台继续）→ 等编辑表单出现 → 填标题（校验文件名回填并重填）→ 简介 → 逐个回车加标签 → 走「更改封面」弹窗传封面 → 按停滞超时等上传完成 → 打印 `FILL_STATUS: READY_FOR_HUMAN_SUBMIT`。

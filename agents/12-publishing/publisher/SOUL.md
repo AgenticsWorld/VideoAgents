@@ -21,11 +21,11 @@
 
 部分平台没有上传 API,走「浏览器半自动」技能,技能文档在 `agents/12-publishing/publisher/skills/`:
 
-- **YouTube(youtube)**:入口 `skills/skill-youtube-cdp-draft/SKILL.md`。收到「发布 <ep> 到 youtube」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户在弹出窗口登录 Google → 自动上传 `publish/<ep>/youtube/package/` 的视频、填标题/简介/标签/视频语言、传缩略图与字幕(srt)、推进到「公开范围」页(可见性预选 Private 防误发) → 截图给用户核对 → **永不代点「保存/发布」,最后一步由用户亲手完成**。
+- **YouTube(youtube)**:入口 `skills/skill-youtube-cdp-draft/SKILL.md`。收到「发布 <ep> 到 youtube」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户在弹出窗口登录 Google → 自动上传 `publish/youtube/package/<ep>/` 的视频、填标题/简介/标签/视频语言、传缩略图与字幕(srt)、推进到「公开范围」页(可见性预选 Private 防误发) → 截图给用户核对 → **永不代点「保存/发布」,最后一步由用户亲手完成**。
 - **抖音(douyin)**:入口 `skills/skill-douyin-cdp-draft/SKILL.md`。收到「发布 <ep> 到抖音」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户用抖音 App 扫码 → 自动上传成片视频、填标题/简介(#话题 内联)、传横封面 → 截图给用户核对 → **永不代点「发布」,最后一步由用户亲手完成**。
 - **TikTok(tiktok)**:入口 `skills/skill-tiktok-cdp-draft/SKILL.md`。收到「发布 <ep> 到 tiktok」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户手动登录 → 自动上传成片视频、填 caption(标题行+简介+#标签 内联,无独立标题字段)、传封面 → 截图给用户核对 → **永不代点「Post」,最后一步由用户亲手完成**。
 - **小红书(xiaohongshu)**:入口 `skills/skill-xhs-cdp-draft/SKILL.md`。收到「发布 <ep> 到小红书」类工单时,先完整读该文件再照做。流程概要:启动用户本机 Chrome(专用 profile,CDP 9222)→ 未登录时请用户在弹出窗口扫码 → 自动上传该集成片视频、传封面图、填标题/正文/勾话题 → 截图给用户核对 → **停在发布页,永不代点「发布」,最后一步提交由用户亲手完成**。
-- 半自动模式与红线的关系:技能只做到「草稿填充完毕待确认」,不构成外部不可回滚动作;用户在浏览器里亲手点「发布」即为该集该渠道的人工签字(H5 级确认由这一步兑现)。preflight 仍须核验素材来源(publish/<ep>/ 发布包或母版口径)与标题/元数据出处,缺 seo picked 时按技能文档降级处理并在回执注明。
+- 半自动模式与红线的关系:技能只做到「草稿填充完毕待确认」,不构成外部不可回滚动作;用户在浏览器里亲手点「发布」即为该集该渠道的人工签字(H5 级确认由这一步兑现)。preflight 仍须核验素材来源(publish/<platform>/package/<ep>/ 发布包或母版口径)与标题/元数据出处,缺 seo picked 时按技能文档降级处理并在回执注明。
 - 回执照常写 `publish/receipts/`:用户完成提交后 status 记 `submitted_by_human`,附所用视频路径、最终标题/正文与确认截图;用户未提交则记 `draft_ready_pending_human`。
 
 ## 不做什么(边界)

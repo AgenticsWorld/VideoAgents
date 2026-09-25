@@ -2,7 +2,7 @@
 name: youtube-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」把一集成片视频 + 标题/简介/标签/缩略图填充成 YouTube Studio 的**上传草稿**，推进到「公开范围」页后停下，由用户人工选择可见性并点击「保存/发布」完成提交（本 skill 永不代点）。
-  适用场景：收到「发布 <ep> 到 youtube」工单后，基于 data/projects/<slug>/publish/<ep>/youtube/package/（mp4 + thumbnail + seo.json/metadata.json）自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  适用场景：收到「发布 <ep> 到 youtube」工单后，基于 data/projects/<slug>/publish/youtube/package/<ep>/ 的发布包（mp4 + thumbnail + srt）与 publish/seo.json、publish/metadata.json 的本集条目自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
 metadata:
   trigger: 发布某集成片到 YouTube（半自动，用户点最后一步保存/发布）
   builds_on: skills/skill-xhs-cdp-draft（共用 launch_cdp_chrome.sh 与专用 Chrome profile）
@@ -47,10 +47,10 @@ python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py check-login
 
 ### 3) 选定成片视频、缩略图与字幕
 
-都在 `data/projects/<slug>/publish/<ep>/` 下，用绝对路径：
-- 视频：`youtube/package/<ep>_youtube.mp4`（platform-adapter 出的 YouTube 包；没有才回退母版 `edit/<ep>/<ep>_final*.mp4`，回执注明）。
-- 缩略图：`youtube/package/thumbnail.png`（回退 `edit/<ep>/thumbnail_A.png`）。频道未验证时缩略图会设不上，脚本按非致命告警跳过。
-- 字幕：`youtube/package/<ep>_captions_zh.srt`（含时间戳），在 Video elements 步自动上传；前置条件是视频语言已设（`--language`,默认 zh-CN）。
+都在 `data/projects/<slug>/publish/` 下（WORKFLOW §2 项目级布局：平台包在 `<platform>/package/<ep>/`；单集老项目可能直接放在 `<platform>/package/`，两处都找），用绝对路径：
+- 视频：`youtube/package/<ep>/<slug>_<ep>_youtube.mp4`（文件名以 parts.json 为准）（platform-adapter 出的 YouTube 包；没有才回退母版 `edit/<ep>/<ep>_final*.mp4`，回执注明）。
+- 缩略图：`youtube/package/<ep>/*cover*.jpg|thumbnail*.png`（回退 `edit/<ep>/thumbnail_A.png`）。频道未验证时缩略图会设不上，脚本按非致命告警跳过。
+- 字幕：`youtube/package/<ep>/*.srt`（含时间戳），在 Video elements 步自动上传；前置条件是视频语言已设（`--language`,默认 zh-CN）。
 
 ### 4) 准备标题 / 简介 / 标签
 
@@ -60,19 +60,19 @@ printf '%s\n' '标题文本' > /tmp/yt-<ep>/title.txt   # ≤100 字符
 # 简介写入 /tmp/yt-<ep>/desc.txt（可多行,含话题 tag 行）
 ```
 
-- 来源：`publish/<ep>/seo.json` youtube 条目——`picked` 已定则**逐字用 picked 版**；未定则停下来问用户挑哪条，或按工单指示选用并在回执注明"非 picked、代选 t-xxx"。
+- 来源：`publish/seo.json` 的 items 中 `ep=<ep>` 且 `platform=youtube` 的条目——`picked` 已定则**逐字用 picked 版**；未定则停下来问用户挑哪条，或按工单指示选用并在回执注明"非 picked、代选 t-xxx"。
 - 简介直接用 seo.json youtube `description`；标签用 `tags`（逗号分隔传给 `--tags`）。
-- 元数据口径（made_for_kids 等）以 `publish/<ep>/metadata.json` 为准（`rating_made_for_kids: false` → 不加 `--made-for-kids`）。
+- 元数据口径（made_for_kids 等）以 `publish/metadata.json` 中 episodes[] 的 `ep=<ep>` 条目为准（platform_fields.youtube 为平台字段）（`rating_made_for_kids: false` → 不加 `--made-for-kids`）。
 
 ### 5) 上传 + 填写（自动推进到「公开范围」页，不保存）
 
 ```bash
 python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py upload \
-  --video /abs/path/publish/<ep>/youtube/package/<ep>_youtube.mp4 \
+  --video /abs/path/publish/youtube/package/<ep>/<slug>_<ep>_youtube.mp4 \
   --title-file /tmp/yt-<ep>/title.txt \
   --desc-file /tmp/yt-<ep>/desc.txt \
-  --thumbnail /abs/path/publish/<ep>/youtube/package/thumbnail.png \
-  --subtitles /abs/path/publish/<ep>/youtube/package/<ep>_captions_zh.srt \
+  --thumbnail /abs/path/publish/youtube/package/<ep>/<slug>_<ep>_youtube_cover.jpg \
+  --subtitles /abs/path/publish/youtube/package/<ep>/<slug>_<ep>_youtube.srt \
   --tags "时之门,一千零一夜,奇幻动画"
 ```
 

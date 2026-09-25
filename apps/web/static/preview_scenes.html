@@ -121,6 +121,18 @@ ul.arr>li{margin:2px 0}
 .pano-row figure{margin:0;width:100%;text-align:center}
 .pano-row img{width:100%;height:auto;display:block;border-radius:5px;cursor:zoom-in}
 .pano-row figcaption{font-size:11px;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 归档图子行(2026-09-25):机检拒掉 / --redo 归档的成图,不入索引,供用户目视裁决 + 认领 */
+.pano-archived{margin-top:8px;padding-top:6px;border-top:1px dashed var(--border)}
+.pano-archived .pano-arch-head{font-size:12px;color:var(--dim);margin-bottom:4px}
+.pano-archived figure{position:relative}
+.pano-archived img{opacity:.92;outline:1px solid var(--red)}
+.pano-archived .pano-badge{position:absolute;z-index:1;left:6px;top:6px;font-size:11px;line-height:1;padding:3px 6px;border-radius:4px;background:var(--red);color:#fff;pointer-events:none}
+.pano-archived .pano-badge.redo{background:var(--dim)}
+.pano-archived figcaption{white-space:normal;text-align:left;line-height:1.4}
+.pano-archived .pano-reason{display:block;color:var(--fg);overflow-wrap:anywhere}
+.pano-archived .pano-arch-meta{display:block;color:var(--dim)}
+.pano-archived .pano-adopt{margin-top:4px;font-size:12px}
+.pano-archived .pano-adopt[disabled]{opacity:.5;cursor:not-allowed}
 .pano-blocked{border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px}
 /* 创建全景图(2026-09-13):俯视图点选坐标 → 黄色待定点 + 坐标/方案表单 + 后台日志 */
 .pano-map.picking{cursor:crosshair}
@@ -561,16 +573,56 @@ async function mountPanoSection(host,s){
   anchors.forEach(a=>{
     const p=a.position;
     const serves=(a.serves||[]).length?I18N.f('服务机位:{s}',{s:servesText(a)}):t('尚未服务任何机位');
-    h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}${a.source==='manual'?` · ${esc(t('手动'))}`:''}`
+    const noFormal=!Object.values(a.panos||{}).some(r=>r.url)&&(a.archived||[]).some(r=>r.url);
+    h+=`<div class="pano-anchor"><div class="pano-title"><strong>${esc(a.anchor_id)}</strong> · ${esc(I18N.f('中心 ({x}, {z}) m · 高 {h} m · yaw {yaw}°',{x:p[0],z:p[2],h:p[1],yaw:a.yaw_deg||0}))}${a.locked?` · 🔒 ${esc(t('锁定'))}`:''}${a.source==='manual'?` · ${esc(t('手动'))}`:''}${noFormal?` · <span style="color:var(--red)">${esc(t('尚无正式全景'))}</span>`:''}`
       +`<div class="pano-serves" title="${esc(t('点击展开/收起'))}">${esc(serves)}</div></div><div class="pano-row">`;
-    Object.keys(a.panos||{}).sort().forEach(sch=>{const rec=a.panos[sch];if(!rec.url)return;
+    const formal=Object.keys(a.panos||{}).sort().filter(sch=>a.panos[sch].url);
+    formal.forEach(sch=>{const rec=a.panos[sch];
       const cap=`${sch}${rec.time_of_day?` · ${rec.time_of_day}`:''} · ${modeText(rec)}`;
       h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoomPano(this.src)" title="${esc(t('点击打开 360° 预览'))}"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
-    h+='</div></div>';
+    h+='</div>';
+    // 归档图子行(2026-09-25):机检拒掉(.rejected-projection/-conformity)/ 非 2:1(.rejected)/ --redo 归档(.redo)的成图不入索引,
+    // 这里列出来给用户目视裁决:点图进 360° 视窗(接缝在图的左右缘=视窗里转到背后看),「认领」= render_scene_panos.py --adopt --pick(免费)
+    const arch=(a.archived||[]).filter(r=>r.url);
+    if(arch.length){
+      const kindText=k=>k==='projection'?t('❌ 投影机检未过'):k==='conformity'?t('❌ 白模一致性未过'):k==='aspect'?t('❌ 非 2:1'):t('🗄 重出前旧版');
+      h+=`<div class="pano-archived"><div class="pano-arch-head">${esc(I18N.f('归档图 {n} 张(未入索引;目视认可可「认领」为正式全景,不花钱)',{n:arch.length}))}</div><div class="pano-row">`;
+      arch.forEach(r=>{
+        const chk=r.checks||{};const fail=Object.keys(chk).find(k=>chk[k].verdict==='FAIL');
+        const reason=fail?chk[fail].reason:Object.values(chk).map(c=>c.reason).filter(Boolean)[0]||'';
+        const meta=[r.scheme,(r.written_at||'').replace('T',' '),r.channel?.model||'',r.seed!=null?`seed ${r.seed}`:''].filter(Boolean).join(' · ');
+        const has=formal.includes(r.scheme);
+        const why=r.pose_differs?t('按别的锚点位姿出的图,不能认领'):r.kind==='aspect'?t('不是 2:1,不能认领'):has?t('该方案已有正式全景,先重出或挪走才能认领'):'';
+        h+=`<figure><span class="pano-badge${r.kind==='redo'?' redo':''}">${esc(kindText(r.kind))}</span>`
+          +`<img src="${esc(bust(r.url))}" loading="lazy" onclick="zoomPano(this.src)" title="${esc(t('点击打开 360° 预览'))}">`
+          +`<figcaption>${reason?`<span class="pano-reason">${esc(reason)}</span>`:''}<span class="pano-arch-meta" title="${esc(r.file)}">${esc(meta)}</span>`
+          +`<button type="button" class="pano-adopt" data-anchor="${esc(a.anchor_id)}" data-file="${esc(r.file)}" data-scheme="${esc(r.scheme)}"${(r.adoptable&&!has)?'':' disabled'} title="${esc(why||t('目视认可这张全景后认领为正式全景(等同 render_scene_panos.py --adopt,不花钱;之后分镜背景图链用它出图)'))}">${esc(t('✔ 认领为正式全景'))}</button></figcaption></figure>`;
+      });
+      h+='</div></div>';
+    }
+    h+='</div>';
   });
   if(anchors.length)h+='</div>';
   sec.innerHTML=h;
   sec.querySelectorAll('.pano-serves').forEach(el=>el.addEventListener('click',()=>el.classList.toggle('open')));
+  // 归档图「认领」:确认 → POST panos/adopt(同步,不花钱)→ 原位重载;失败原文显示(位姿不符 / 已有正式全景 / 服务未重启 404)
+  sec.querySelectorAll('.pano-adopt').forEach(b=>b.addEventListener('click',async()=>{
+    const {anchor,file,scheme}=b.dataset;
+    if(!confirm(I18N.f('把 {anchor} 的这张归档图认领为方案 {scheme} 的正式全景?\n{file}\n\n不花钱;认领后分镜背景图链按它出图。机检数值照实记入 sidecar。',{anchor,file,scheme})))return;
+    const st=sec.querySelector('.ps-status');
+    b.disabled=true;b.textContent=t('认领中…');
+    if(st){st.className='wb-status ps-status';st.textContent=I18N.f('正在认领 {anchor}/{scheme} …',{anchor,scheme});}
+    try{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos/adopt`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({anchor,file})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:认领接口不可用'):String(r.status)));
+      if(st){st.className='wb-status ps-status ok';st.textContent=I18N.f('已认领 {anchor}/{scheme} → {file};当前判据:投影 {p} / 白模一致性 {c}',{anchor,scheme,file:d.file||'',p:d.checks?.projection_check||'-',c:d.checks?.conformity_check||'-'});}
+      reloadKeep();
+    }catch(e){
+      b.disabled=false;b.textContent=t('✔ 认领为正式全景');
+      if(st){st.className='wb-status ps-status err';st.textContent=t('认领失败:')+e.message;}
+    }
+  }));
   // ---- 创建全景图:点选/填坐标 → 提交后台任务
   const btn=sec.querySelector('.ps-create'),status=sec.querySelector('.ps-status'),log=sec.querySelector('.ps-log'),hint=sec.querySelector('.ps-hint'),form=sec.querySelector('.ps-form'),map=sec.querySelector('.pano-map');
   const [W,,D]=dims;

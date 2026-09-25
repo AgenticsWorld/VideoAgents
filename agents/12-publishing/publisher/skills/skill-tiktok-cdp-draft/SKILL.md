@@ -2,7 +2,7 @@
 name: tiktok-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」把一集成片视频 + caption(标题行+简介+#标签)/封面填进 TikTok Studio（tiktok.com/tiktokstudio/upload）的发布表单，填完停住，由用户人工点击「Post/发布」完成提交（本 skill 永不代点）。
-  适用场景：收到「发布 <ep> 到 tiktok」工单后，基于 data/projects/<slug>/publish/<ep>/ 的发布包自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  适用场景：收到「发布 <ep> 到 tiktok」工单后，基于 data/projects/<slug>/publish/<platform>/package/<ep>/ 的发布包（seo/metadata 取 publish/seo.json、publish/metadata.json 的本集条目）自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
 metadata:
   trigger: 发布某集成片到 TikTok（半自动，用户点最后一步 Post）
   builds_on: skills/skill-douyin-cdp-draft（同构；共用 skill-xhs-cdp-draft 的 launch_cdp_chrome.sh 与专用 Chrome profile）
@@ -50,9 +50,9 @@ python3 <skills>/skill-tiktok-cdp-draft/scripts/ttstudio_draft.py check-login
 
 ### 3) 选定素材
 
-都在 `data/projects/<slug>/publish/<ep>/` 下，用绝对路径：
-- 视频：`tiktok/package/*.mp4`（9:16 适配包）优先;没有则回退 16:9 通用包 `bilibili/package/<ep>_*.mp4` 或母版,回执注明。
-- 封面：`tiktok/package/thumbnail*.png` → 回退 `bilibili/package/thumbnail.png` / `edit/<ep>/thumbnail_A.png`。
+都在 `data/projects/<slug>/publish/` 下（WORKFLOW §2 项目级布局：平台包在 `<platform>/package/<ep>/`；单集老项目可能直接放在 `<platform>/package/`，两处都找），用绝对路径：
+- 视频：`tiktok/package/<ep>/*.mp4`（9:16 适配包）优先;没有则回退 16:9 通用包 `bilibili/package/<ep>/*.mp4` 或母版,回执注明。
+- 封面：`tiktok/package/<ep>/thumbnail*.png` → 回退 `bilibili/package/<ep>/*cover*.jpg|thumbnail*.png` / `edit/<ep>/thumbnail_A.png`。
 
 ### 4) 准备 caption
 
@@ -61,15 +61,15 @@ mkdir -p /tmp/tt-<ep>
 # caption.txt = 标题行 + 简介 + 末行内联 #标签（总长 ≤4000 字符）
 ```
 
-来源：`publish/<ep>/seo.json` tiktok 条目（`picked` 已定则逐字用;未定则代选并在回执注明）,标题行 + description（其中已含 #标签 行）。
+来源：`publish/seo.json` 的 items 中 `ep=<ep>` 且 `platform=tiktok` 的条目（`picked` 已定则逐字用;未定则代选并在回执注明）,标题行 + description（其中已含 #标签 行）。
 
 ### 5) 上传 + 填写（填完即停，不点 Post）
 
 ```bash
 python3 <skills>/skill-tiktok-cdp-draft/scripts/ttstudio_draft.py upload \
-  --video /abs/path/publish/<ep>/.../xxx.mp4 \
+  --video /abs/path/publish/<platform>/package/<ep>/xxx.mp4 \
   --caption-file /tmp/tt-<ep>/caption.txt \
-  --cover /abs/path/publish/<ep>/.../thumbnail.png
+  --cover /abs/path/publish/<platform>/package/<ep>/cover.jpg
 ```
 
 脚本行为：进上传页塞视频（上传后台继续）→ 等 DraftJS 编辑器出现 → 填 caption（含校验重试）→ Edit cover 弹窗传封面并 Save → 按停滞超时等 `Uploaded` → 打印 `FILL_STATUS: READY_FOR_HUMAN_SUBMIT`。
