@@ -3276,7 +3276,7 @@ def build_role_prompt(agent_id: str, project: str,
           + ";文档中所有写死的重跑/重 roll 次数一律以本值为准(publisher 特例仍按其 SOUL 取 min(本值, 2))")
     if issue_feedback_enabled():
         # 只在开关开启时注入(条件白名单式写法:codex 逐字守规,无条件条款=每单必跑)
-        p += ("\n\n## Issue 反馈:开启(Web 客户端「设置→高级→诊断数据」全局设置,实时生效)\n"
+        p += ("\n\n## Issue 反馈:开启(系统默认开启;整理好的 issue 列在 Web 客户端左下角「待提交问题」,由用户决定是否提交)\n"
               "- **仅当**本轮工作中你已经**定位确认**以下两种情形之一时,才提交一条 issue;没遇到就什么都不做,"
               "不要为提交 issue 而专门排查、不要每单例行提交:\n"
               "  ① **宿主代码缺陷** —— 问题出在仓库自带程序(`code/`、`modules/`、`services/`、`apps/`、`plugins/` 下的代码,"
@@ -4476,7 +4476,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 except Exception as e:  # noqa: BLE001
                     print(f"[revision] 修改记录落盘失败:{e}", flush=True)
             try:
-                # Issue 反馈旁路(设置「高级→诊断数据」,modules/issue_feedback.py):成员经
+                # Issue 反馈旁路(左下角「待提交问题」,modules/issue_feedback.py):成员经
                 # code/report_issue.py 登记、子进程内没发出去的 issue,在此由宿主补发
                 if issue_feedback_enabled():
                     from modules import issue_feedback
@@ -15050,11 +15050,11 @@ async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str =
     return await asyncio.to_thread(_voice_transcribe_sync, data, content_type, lang)
 
 
-# ---------------- 诊断数据(设置菜单「高级→诊断数据」) ----------------
+# ---------------- 诊断:Debug 模式与 Issue 反馈(左下角「待提交问题」) ----------------
 # 两个开关:Debug 模式(开发者入口显隐;开关 UI 已移到「Agent 高级设置」弹窗,经
 # api_agent_advanced_set 读写,本节接口仍兼容)与 Issue 反馈(成员运行中确认问题属于宿主
-# 代码缺陷/需要宿主新增功能时,经 code/report_issue.py 整理成 issue,用户在设置页一键到浏览器提交 GitHub;
-# 运行提示词只在开关开启时注入该节,见 build_role_prompt)。实现在 modules/issue_feedback.py。
+# 代码缺陷/需要宿主新增功能时,经 code/report_issue.py 整理成 issue,用户在左下角「待提交问题」点「提交」到浏览器提交 GitHub;
+# 开关 issue_feedback 默认开、2026-09-25 起无 UI 入口(仅 state.json 可关),运行提示词只在开关开启时注入该节,见 build_role_prompt)。实现在 modules/issue_feedback.py。
 
 
 def debug_mode() -> bool:
@@ -15063,7 +15063,7 @@ def debug_mode() -> bool:
 
 
 def issue_feedback_enabled() -> bool:
-    """Issue 反馈开关(默认开)。"""
+    """Issue 反馈开关(默认开;无 UI 入口,是否提交由用户在「待提交问题」逐条决定)。"""
     return bool(STATE.get("issue_feedback", True))
 
 
@@ -15104,7 +15104,7 @@ async def api_issue_feedback_get():
 
 
 async def api_issue_feedback_submitted(issue_id: str):
-    """用户点了「在浏览器中提交」。"""
+    """用户点了「提交」(打开预填的 GitHub 页面)。"""
     from modules import issue_feedback as fb
     rec = await asyncio.to_thread(fb.mark_submitted, issue_id)
     if not rec:

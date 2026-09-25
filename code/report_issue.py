@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Issue 反馈 CLI:Agent 运行中确认问题出在宿主代码(code/ modules/ services/ apps/ 等仓库
 自带程序)或需要宿主新增功能时,整理成 issue 登记到宿主(modules/issue_feedback.py),
-由用户在「设置→高级→诊断数据」一键到浏览器提交 GitHub。
+由用户在 Web 客户端左下角「待提交问题」一键到浏览器提交 GitHub。
 
 用法(仅当运行提示词含「Issue 反馈:开启」一节时才调用,触发条件见该节):
   python code/report_issue.py --type bug --title "<一句话标题>" --component code/xxx.py \
@@ -36,7 +36,7 @@ def main() -> None:
 
     if not issue_feedback.enabled():
         print(json.dumps({"ok": False, "state": "disabled",
-                          "message": "Issue 反馈已关闭(设置→高级→诊断数据),未提交"}, ensure_ascii=False))
+                          "message": "Issue 反馈已关闭(state.json issue_feedback=false),未提交"}, ensure_ascii=False))
         return
     try:
         body = Path(args.body_file).read_text() if args.body_file else args.body
@@ -49,8 +49,8 @@ def main() -> None:
         return
     print(json.dumps({"ok": True, "id": rec["id"], "state": rec["state"], "url": rec.get("url", ""),
                       "duplicate": bool(rec.get("duplicate_of_local")) or rec["state"] == "duplicate",
-                      "message": {"pending": "已登记,待用户在「设置→高级→诊断数据」确认提交",
-                                  "failed": "已登记,直接发布失败,待用户在设置页提交:" + rec.get("error", "")
+                      "message": {"pending": "已登记,待用户在左下角「待提交问题」确认提交",
+                                  "failed": "已登记,直接发布失败,待用户在「待提交问题」提交:" + rec.get("error", "")
                                   }.get(rec["state"], "")}, ensure_ascii=False))
 
 

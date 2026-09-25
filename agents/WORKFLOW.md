@@ -879,7 +879,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 
 **任务收尾钩子(on_task_complete,orchestrator 执行)**:任务回执后必须依次 (a) 校验三件套齐备;(b) 更新 `<项目目录>/runs/dag.json` 对应节点的 `state` 与 `run_id`。两步未完成,节点 state 不得变更为 done/passed;dag.json 与 gate 文件、runs/ 产物三者不一致视为调度缺陷。
 
-**Issue 反馈(2026-09-21,取代原经验卡 `lesson.md`;由运行提示词按开关注入,默认开)**。仅当运行提示词中出现「Issue 反馈:开启」一节、且成员本轮工作中已**定位确认**问题属于 ① 宿主代码缺陷(`code/`、`modules/`、`services/`、`apps/`、`plugins/` 下的仓库自带程序,或 SOUL/WORKFLOW 规约自相矛盾)或 ② 需要宿主新增功能(现有宿主 CLI/接口确实做不到)时,才用 `python code/report_issue.py --type bug|feature --title … --component … --body-file …` 提交一条 issue,由宿主脱敏、签名去重后登记,用户在「设置→高级→诊断数据」点「在浏览器中提交」确认发到 GitHub Issues(见 `modules/issue_feedback.py`)。两种情形都不满足、或提示词中没有该节(开关关闭)就**不提交**——项目数据问题、用法错误、渠道/网络/额度故障、模型生成质量、内容性返工一律不属此列,不得为提交 issue 专门排查或每单例行提交。正文只写机制(现象/复现命令/期望行为/原因或建议),**禁止出现剧情、人物名、台词、提示词原文、项目名、绝对路径与 API Key**;提交 issue 不改变「宿主代码禁止自行改写、照常上报 orchestrator」的纪律,回执里注明已提交的 issue。存量 `runs/*/lesson.md` 不再读取、不再产出。
+**Issue 反馈(2026-09-21,取代原经验卡 `lesson.md`;由运行提示词按开关注入,默认开)**。仅当运行提示词中出现「Issue 反馈:开启」一节、且成员本轮工作中已**定位确认**问题属于 ① 宿主代码缺陷(`code/`、`modules/`、`services/`、`apps/`、`plugins/` 下的仓库自带程序,或 SOUL/WORKFLOW 规约自相矛盾)或 ② 需要宿主新增功能(现有宿主 CLI/接口确实做不到)时,才用 `python code/report_issue.py --type bug|feature --title … --component … --body-file …` 提交一条 issue,由宿主脱敏、签名去重后登记,用户在 Web 客户端左下角「待提交问题」点「提交」确认发到 GitHub Issues(见 `modules/issue_feedback.py`)。两种情形都不满足、或提示词中没有该节(开关关闭)就**不提交**——项目数据问题、用法错误、渠道/网络/额度故障、模型生成质量、内容性返工一律不属此列,不得为提交 issue 专门排查或每单例行提交。正文只写机制(现象/复现命令/期望行为/原因或建议),**禁止出现剧情、人物名、台词、提示词原文、项目名、绝对路径与 API Key**;提交 issue 不改变「宿主代码禁止自行改写、照常上报 orchestrator」的纪律,回执里注明已提交的 issue。存量 `runs/*/lesson.md` 不再读取、不再产出。
 
 **中英文与格式纪律**:记录字段名一律英文 snake_case;时间戳一律完整 ISO 8601(禁止只写日期);同一 gate/eval 不得复制粘贴时间戳。
 

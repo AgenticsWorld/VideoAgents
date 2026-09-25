@@ -3,11 +3,11 @@
 
 链路:Agent 调 `code/report_issue.py`(用法由运行提示词在开关开启时注入)→ file_issue()
 脱敏 + 签名去重后落盘 data/.videoagents/issues/<id>.json(state=pending)。默认由用户在
-设置页点「在浏览器中提交」(manual_url 预填 issues/new,GitHub 不支持匿名建 issue)→
+左下角「待提交问题」点「提交」(manual_url 预填 issues/new,GitHub 不支持匿名建 issue)→
 mark_submitted();显式设了环境变量 VIDEOAGENTS_GITHUB_TOKEN 时宿主直接经 API 发布
 (publish / run 收敛处 publish_pending 补发)。旁路故障一律静默,绝不影响主链路。
 
-开关:state.json `issue_feedback`(设置→高级→诊断数据「Issue 反馈」,默认开)。
+开关:state.json `issue_feedback`(默认开;2026-09-25 起无 UI 开关,是否提交由用户在「待提交问题」逐条决定)。
 
 正文尾部元信息含服务版本(services.api.__version__)与客户端版本(桌面端经
 VIDEOAGENTS_CLIENT_VERSION 传入,否则记 web)。
@@ -83,7 +83,7 @@ def _client_version() -> str:
 # ---------------- 凭据 ----------------
 
 def _token() -> tuple[str, str]:
-    """(token, 来源)。默认无凭据=走「在浏览器中提交」;只有显式设置环境变量
+    """(token, 来源)。默认无凭据=走「待提交问题」页「提交」到浏览器;只有显式设置环境变量
     VIDEOAGENTS_GITHUB_TOKEN(classic PAT,public_repo)才由宿主直接发布——不读通用的
     GITHUB_TOKEN / gh 登录,免得在用户不知情时以其账号发帖。"""
     v = os.environ.get("VIDEOAGENTS_GITHUB_TOKEN", "").strip()
@@ -235,7 +235,7 @@ def manual_url(rec: dict, max_len: int = 7000) -> str:
 
 
 def mark_submitted(issue_id: str) -> dict | None:
-    """用户点了「在浏览器中提交」:记为 submitted(是否真的提交无从得知,链接仍保留可再点)。"""
+    """用户点了「提交」(浏览器预填页):记为 submitted(是否真的提交无从得知,链接仍保留可再点)。"""
     if not re.fullmatch(r"[\w-]{1,64}", issue_id or ""):
         return None
     rec = _load(ISSUES_DIR / f"{issue_id}.json")
