@@ -992,8 +992,8 @@ DEFAULT_GENCONFIG = {
                #   场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划);world=用户在场景预览页自选锚点创建全景图 → 基于它
                #   生成世界模型(World Labs Marble)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
                #   「分镜背景图」板块覆盖(库 plates/index.json#mode)。世界模型模式的场景没有 world 时 render_shot_plates.py 退出码 4
-               #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格,2026-09-25)=不出全景,本集待出母图按场景/方案
-               #   ≤9 张一批拼成宫格一次出图(参考图=各格母图机位白模帧联系表+俯视图),拆格入库后分镜仍按母图制派生
+               #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格,2026-09-25)=不出全景不出母图,每场景每方案按
+               #   layout.json#views 以俯视图为参考出一张 3x3 宫格、拆 9 张入库,每镜按白模机位自动选最合适的一格
                "plate_mode": "pano",
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
@@ -3074,8 +3074,9 @@ def build_role_prompt(agent_id: str, project: str,
         "pano = 分镜背景图由场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划,`render_scene_panos.py`);"
         "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
         "**世界模型模式的场景没有世界模型时脚本退出码 4 并打印 `[world_missing]`,一张背景图也不出:原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;Agent 不得自行跑 `worldlabs_world.py` 生成世界模型、不得改模式绕过**;"
-        "grid(九宫格,2026-09-25)= 不出全景、不用世界模型:`render_shot_plates.py` 把本集待出的母图按同场景/同光照方案 ≤9 张一批拼成一张宫格一次出图"
-        "(参考图 = 各格母图机位的白模帧联系表 + 俯视图,宿主自动拼),出图后按版式拆格放大到母图规格入库,分镜仍按母图制派生/复用;宫格整图 `<方案>_gridNN.png` 只作台账不进视频 refs,Agent 不得手工拆图或自绘宫格"
+        "grid(九宫格,2026-09-25)= 不出全景、不用世界模型、不出母图:`render_shot_plates.py` 每场景每光照方案按 `layout.json#views`(tile 1..9)以俯视图为参考出一张 3x3 宫格 `<方案>_grid9.png`,"
+        "拆成 9 张背景图入库,每镜按白模机位自动从九格里选最合适的一格(日志逐镜打印选格依据);宫格整图只作台账不进视频 refs,Agent 不得手工拆图、不得自绘宫格、不得用退役的 grid_9views.png 代替;"
+        "layout.json 缺 views(tile 1..9)时脚本报 Grid9LayoutError,先派 environment-concept 补布局包"
         if spatial_on else
         "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p4-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
         f"本项目「场景图」设置 = **{scene_plates_mode}**(auto=正向必出、反向按分镜 plate_view 按需;single=只出正向;pair=每场景正反两张;场景级可在场景预览页覆盖)。"

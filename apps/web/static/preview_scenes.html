@@ -348,7 +348,7 @@ function renderDetail(s){
       +plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
-        const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='grid'?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+        const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
