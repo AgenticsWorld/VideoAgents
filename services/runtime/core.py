@@ -9352,74 +9352,207 @@ def _project_llm_tokens(project: str):
     return total if found else None
 
 
-def _ep_publish_info(base: Path, ep: str):
-    """publish/<ep>/ 发布物料聚合:metadata.json 关键字段、seo.json 标题备选/标签/简介、
-    各平台子目录的 spec_report.json 核对结论与 package/ 发布包文件清单。目录不存在返回 None。"""
-    pdir = base / "publish" / ep
-    if not pdir.is_dir():
+_PUBLISH_NON_PLATFORM_DIRS = {"package", "receipts", "subtitles", "thumbnails", "covers", "drafts"}
+
+
+def _publish_pick_ep_entry(doc, ep: str):
+    """项目级 publish/metadata.json | seo.json(12-publishing 规约:按平台 × 集组织)里挑出本集条目。
+    兼容三种写法:文件本身就是本集(顶层 ep 字段)/ episodes|items 列表里 ep 匹配 / episodes 字典按 ep 键。"""
+    if not isinstance(doc, dict):
         return None
-    info = {"metadata": None, "seo": None, "platforms": []}
-    meta = _read_json_safe(pdir / "metadata.json")
-    if isinstance(meta, dict):
-        v = meta.get("video") or {}
-        nxt = meta.get("next_episode") or {}
-        info["metadata"] = {
-            "date": meta.get("date"),
-            "series": meta.get("series"),
-            "episode_no": meta.get("episode_no"),
-            "episode_total": meta.get("episode_total"),
-            "episode_title": meta.get("episode_title"),
-            "producer": meta.get("producer"),
-            "production_credit": meta.get("production_credit"),
-            "rating": meta.get("rating"),
-            "made_for_kids": meta.get("rating_made_for_kids"),
-            "age_restricted": meta.get("rating_age_restricted"),
-            "source_file": v.get("source_file"),
-            "duration_s": v.get("duration_s_measured") or v.get("duration_s_nominal"),
-            "resolution": v.get("resolution"),
-            "fps": v.get("fps"),
-            "gate_verdict": v.get("h5_gate_verdict"),
-            "next_episode": " ".join(str(nxt.get(k) or "") for k in ("ep", "title")).strip(),
-        }
-    seo = _read_json_safe(pdir / "seo.json")
-    if isinstance(seo, dict):
-        items = seo.get("items") or []
-        it = items[0] if items and isinstance(items[0], dict) else {}
-        info["seo"] = {
-            "platform": (seo.get("meta") or {}).get("platform"),
-            "titles": [t for t in (it.get("titles") or []) if isinstance(t, dict)],
-            "picked": it.get("picked"),
-            "tags": [str(t) for t in (it.get("tags") or [])],
-            "description": str(it.get("description") or ""),
-        }
-    for d in sorted(x for x in pdir.iterdir()
-                    if x.is_dir() and not x.name.startswith(".")):
+    if str(doc.get("ep") or "") == ep:
+        return doc
+    for key in ("episodes", "items"):
+        coll = doc.get(key)
+        if isinstance(coll, dict) and isinstance(coll.get(ep), dict):
+            return coll[ep]
+        if isinstance(coll, list):
+            for x in coll:
+                if isinstance(x, dict) and str(x.get("ep") or "") == ep:
+                    return x
+    return None
+
+
+def _publish_scalar(v):
+    """页面只显示字符串:agent 有时把合集名/分级写成带 status/note 的对象(liaozhai3、offer 口径),取其显示字段。"""
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    if isinstance(v, dict):
+        for k in ("display_name", "name", "label", "title", "text", "value", "source_work", "status"):
+            if isinstance(v.get(k), (str, int, float)) and str(v.get(k)).strip():
+                return v[k]
+        return None
+    if isinstance(v, list):
+        return " / ".join(str(x) for x in v if isinstance(x, (str, int, float)))[:200] or None
+    return str(v)
+
+
+def _publish_meta_view(meta: dict, parent: dict | None) -> dict:
+    """metadata 条目 → 页面关键字段。集级文件(publish/<ep>/metadata.json)顶层就是字段;
+    项目级文件(publish/metadata.json,SOUL 规约)条目在 episodes[] 里,规格散在 platform_fields.<平台> 下。"""
+    parent = parent if isinstance(parent, dict) else {}
+    pmeta = parent.get("_meta") if isinstance(parent.get("_meta"), dict) else {}
+    v = meta.get("video") if isinstance(meta.get("video"), dict) else {}
+    nxt = meta.get("next_episode") if isinstance(meta.get("next_episode"), dict) else {}
+    pf = meta.get("platform_fields") if isinstance(meta.get("platform_fields"), dict) else {}
+    first_pf = next((x for x in pf.values() if isinstance(x, dict)), {})
+    parts = first_pf.get("parts") if isinstance(first_pf.get("parts"), list) else []
+    first_part = parts[0] if parts and isinstance(parts[0], dict) else {}
+
+    def pick(*cands):
+        for c in cands:
+            if c not in (None, "", [], {}):
+                return c
+        return None
+
+    return {
+        "date": pick(meta.get("date"), meta.get("generated_at"), pmeta.get("generated_at"), parent.get("generated_at")),
+        "series": _publish_scalar(meta.get("series")),
+        "episode_no": meta.get("episode_no"),
+        "episode_total": pick(meta.get("episode_total"), meta.get("total_episodes"), pmeta.get("season_episode_count")),
+        "episode_title": _publish_scalar(meta.get("episode_title")),
+        "producer": _publish_scalar(meta.get("producer")),
+        "production_credit": _publish_scalar(meta.get("production_credit")),
+        "rating": _publish_scalar(meta.get("rating")),
+        "made_for_kids": meta.get("rating_made_for_kids"),
+        "age_restricted": meta.get("rating_age_restricted"),
+        "thumbnail": meta.get("thumbnail") if isinstance(meta.get("thumbnail"), str) else None,
+        "source_file": pick(v.get("source_file"), first_part.get("video"), first_pf.get("package_dir")),
+        "duration_s": pick(v.get("duration_s_measured"), v.get("duration_s_nominal"),
+                           first_part.get("duration_s"), first_pf.get("duration_s"), first_pf.get("时长_秒")),
+        "resolution": pick(v.get("resolution"), first_pf.get("resolution"), first_pf.get("分辨率")),
+        "fps": pick(v.get("fps"), first_pf.get("fps"), first_pf.get("帧率")),
+        "gate_verdict": pick(v.get("h5_gate_verdict"), meta.get("h5_gate_verdict")),
+        "next_episode": " ".join(str(nxt.get(k) or "") for k in ("ep", "title")).strip(),
+    }
+
+
+def _publish_seo_view(seo: dict, ep: str) -> dict | None:
+    """seo.json → 页面字段。items 按 ep 过滤(项目级文件多集共存);无 items 时文件本身即条目。
+    标题兼容 [{id,text,orientation}] 与纯字符串列表(+title_angles 对位);picked 兼容 id / 原文 / picked_index。"""
+    items = [x for x in (seo.get("items") or []) if isinstance(x, dict)]
+    mine = [x for x in items if not x.get("ep") or str(x.get("ep")) == ep]
+    it = mine[0] if mine else (seo if isinstance(seo.get("titles"), list) else None)
+    if it is None:
+        return None
+    angles = it.get("title_angles") if isinstance(it.get("title_angles"), list) else []
+    titles = []
+    for i, t in enumerate(it.get("titles") or []):
+        if isinstance(t, dict):
+            titles.append({"id": str(t.get("id") or f"t{i + 1}"), "text": str(t.get("text") or ""),
+                           "orientation": str(t.get("orientation") or (angles[i] if i < len(angles) else "") or "")})
+        elif isinstance(t, str):
+            titles.append({"id": f"t{i + 1}", "text": t, "orientation": str(angles[i] if i < len(angles) else "")})
+    picked = it.get("picked")
+    if isinstance(picked, dict):  # offer 口径:{"title_id": "T1", ...}
+        picked = picked.get("title_id") or picked.get("id") or picked.get("text")
+    if picked not in (None, "", False):
+        hit = next((t for t in titles if t["id"] == str(picked) or t["text"] == str(picked)), None)
+        picked = hit["id"] if hit else str(picked)
+    elif isinstance(it.get("picked_index"), int) and 0 <= it["picked_index"] < len(titles):
+        picked = titles[it["picked_index"]]["id"]
+    else:
+        picked = None
+    return {
+        "platform": (seo.get("meta") or {}).get("platform") if isinstance(seo.get("meta"), dict) else it.get("platform") or seo.get("platform"),
+        "titles": titles,
+        "picked": picked,
+        "tags": [str(t) for t in (it.get("tags") or [])],
+        "description": str(it.get("description") or ""),
+    }
+
+
+def _publish_platform_view(base: Path, name: str, rep_dirs: list, pkg: Path) -> dict:
+    """一个平台目录 → 核对结论 + 发布包文件清单。spec_report.json 缺失时退回 package/parts.json 的 lint 段。"""
+    rep = {}
+    for d in rep_dirs:
         rep = _read_json_safe(d / "spec_report.json") or {}
-        lint = rep.get("lint_summary") or {}
-        files = []
-        pkg = d / "package"
-        if pkg.is_dir():
-            for f in sorted(pkg.rglob("*")):
-                if not f.is_file() or f.name.startswith("."):
-                    continue
-                st = f.stat()
-                ext = f.suffix.lower()
-                files.append({"name": f.relative_to(pkg).as_posix(),
-                              "size_mb": round(st.st_size / 1048576, 1),
-                              "kind": ("video" if ext in VIDEO_EXTS
-                                       else "image" if ext in IMG_EXTS else "file"),
-                              "url": (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
-                                      f"?v={int(st.st_mtime)}")})
-        info["platforms"].append({
-            "platform": d.name,
-            "verdict": rep.get("overall_verdict"),
-            "uploaded": rep.get("uploaded"),
-            "note": rep.get("note"),
-            "lint_total": len(lint),
-            "lint_flagged": {k: str(v) for k, v in lint.items()
-                             if isinstance(v, str)
-                             and not re.match(r"pass\s*(?:[（(]|$)", v.strip(), re.I)},
-            "files": files})
+        if rep:
+            break
+    lint = rep.get("lint_summary") if isinstance(rep.get("lint_summary"), dict) else None
+    if lint is None:
+        parts = _read_json_safe(pkg / "parts.json") if pkg.is_dir() else None
+        lint = parts.get("lint") if isinstance(parts, dict) and isinstance(parts.get("lint"), dict) else {}
+    files = []
+    if pkg.is_dir():
+        for f in sorted(pkg.rglob("*")):
+            if not f.is_file() or f.name.startswith("."):
+                continue
+            st = f.stat()
+            ext = f.suffix.lower()
+            files.append({"name": f.relative_to(pkg).as_posix(),
+                          "size_mb": round(st.st_size / 1048576, 1),
+                          "kind": ("video" if ext in VIDEO_EXTS
+                                   else "image" if ext in IMG_EXTS else "file"),
+                          "url": (f"/projects/{base.name}/{f.relative_to(base).as_posix()}"
+                                  f"?v={int(st.st_mtime)}")})
+    return {
+        "platform": name,
+        "verdict": rep.get("overall_verdict"),
+        "uploaded": rep.get("uploaded"),
+        "note": rep.get("note"),
+        "lint_total": len(lint),
+        "lint_flagged": {k: str(v) for k, v in lint.items()
+                         if isinstance(v, str)
+                         and not re.match(r"pass\s*(?:[（(]|$)", v.strip(), re.I)},
+        "files": files}
+
+
+def _ep_publish_info(base: Path, ep: str):
+    """发布物料聚合:metadata.json 关键字段、seo.json 标题备选/标签/简介、
+    各平台 spec_report.json 核对结论与 package/ 发布包文件清单。
+
+    两种落盘布局都读(2026-09-25:fengshen3 ep06 的 seo/片名在页面消失,根因是 agent 按 SOUL 规约
+    写到项目级 publish/seo.json + publish/metadata.json + publish/<platform>/package/<ep>/,而这里只读 publish/<ep>/):
+      集级  publish/<ep>/{metadata.json, seo.json, <platform>/{spec_report.json, package/}}
+      项目级 publish/{metadata.json(episodes[]), seo.json(items[] 按 ep), <platform>/{package/<ep>/ | <ep>/}}
+    集级优先,项目级补缺;两处都没有本集物料返回 None。"""
+    proot = base / "publish"
+    pdir = proot / ep
+    if not proot.is_dir():
+        return None
+    info = {"metadata": None, "seo": None, "platforms": [], "source": f"publish/{ep}/"}
+
+    meta = _read_json_safe(pdir / "metadata.json") if pdir.is_dir() else None
+    if isinstance(meta, dict):
+        info["metadata"] = _publish_meta_view(_publish_pick_ep_entry(meta, ep) or meta, meta)
+    else:
+        doc = _read_json_safe(proot / "metadata.json")
+        entry = _publish_pick_ep_entry(doc, ep)
+        if isinstance(entry, dict):
+            info["metadata"] = _publish_meta_view(entry, doc)
+            info["source"] = "publish/"
+
+    seo = _read_json_safe(pdir / "seo.json") if pdir.is_dir() else None
+    if isinstance(seo, dict):
+        info["seo"] = _publish_seo_view(seo, ep)
+    if info["seo"] is None:
+        doc = _read_json_safe(proot / "seo.json")
+        if isinstance(doc, dict):
+            info["seo"] = _publish_seo_view(doc, ep)
+            if info["seo"] is not None and not pdir.is_dir():
+                info["source"] = "publish/"
+
+    seen = set()
+    if pdir.is_dir():
+        for d in sorted(x for x in pdir.iterdir() if x.is_dir() and not x.name.startswith(".")
+                        and x.name not in _PUBLISH_NON_PLATFORM_DIRS):
+            seen.add(d.name)
+            info["platforms"].append(_publish_platform_view(base, d.name, [d], d / "package"))
+    for d in sorted(x for x in proot.iterdir()
+                    if x.is_dir() and not x.name.startswith(".") and x.name not in _PUBLISH_NON_PLATFORM_DIRS
+                    and not re.match(r"^ep\d+$", x.name, re.I) and x.name not in seen):
+        pkg_ep, ep_sub = d / "package" / ep, d / ep
+        if pkg_ep.is_dir():
+            info["platforms"].append(_publish_platform_view(base, d.name, [ep_sub, d, pkg_ep], pkg_ep))
+        elif ep_sub.is_dir():
+            info["platforms"].append(_publish_platform_view(base, d.name, [ep_sub], ep_sub / "package"))
+        elif (d / "package").is_dir() and not any(
+                re.match(r"^ep\d+$", s.name, re.I) for s in (d / "package").iterdir() if s.is_dir()):
+            # 单集项目的平台包直接放 package/ 下(offer / xiaohongmao 口径):没有分集子目录时视为本集
+            info["platforms"].append(_publish_platform_view(base, d.name, [d], d / "package"))
+    if not pdir.is_dir() and info["metadata"] is None and info["seo"] is None and not info["platforms"]:
+        return None
     return info
 
 

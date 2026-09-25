@@ -44,6 +44,13 @@ h2.title{font-size:20px;display:flex;align-items:baseline;gap:12px;flex-wrap:wra
 h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 h3.sec{font-size:15px;margin:26px 0 10px;border-left:3px solid var(--accent);padding-left:10px;display:flex;align-items:baseline;gap:10px}
 h3.sec .n{color:var(--dim);font-size:12px;font-weight:400}
+details.fold>summary{list-style:none;cursor:pointer;user-select:none}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary h3.sec{margin-bottom:0}
+details.fold[open]>summary h3.sec{margin-bottom:10px}
+details.fold .fold-hint{color:var(--dim);font-size:12px;font-weight:400;margin-left:auto}
+details.fold .fold-hint::before{content:"▸ "}
+details.fold[open] .fold-hint::before{content:"▾ "}
 .none{color:var(--dim);font-size:13px;margin:6px 0 0 13px}
 /* 成片视频卡 */
 .vids{display:flex;gap:16px;flex-wrap:wrap}
@@ -141,6 +148,7 @@ function pubHtml(p,ep){
     h+=`<div class="pcard"><div class="ph">📋 发布元数据<span class="n">metadata.json${m.date?' · '+esc(m.date):''}</span></div><div class="pkvs">`
       +kv('系列',m.series?m.series+(m.episode_no?I18N.f(' · 第 {a}/{b} 集',{a:m.episode_no,b:m.episode_total||'?'}):''):'')
       +kv('本集标题',m.episode_title)
+      +kv('封面',m.thumbnail)
       +kv('分级',m.rating?m.rating+(m.made_for_kids===false?t(' · 非儿童向'):m.made_for_kids?t(' · 儿童向'):'')+(m.age_restricted?t(' · 年龄限制'):''):'')
       +kv('成片源',m.source_file)
       +kv('规格',[m.resolution,m.fps?m.fps+'fps':'',m.duration_s?Math.round(m.duration_s)+'s':''].filter(Boolean).join(' · '))
@@ -199,12 +207,14 @@ function render(d){
     :'<div class="none">'+esc(I18N.f('该集还没有封面(edit/{ep}/thumbnail_*.png)',{ep:d.ep}))+'</div>';
 
   const pub=d.publish,pubN=pub?[pub.metadata?1:0,pub.seo?1:0].reduce((a,b)=>a+b,0)+(pub.platforms||[]).length:0;
-  h+=`<h3 class="sec">📤 发布相关<span class="n">publish/${esc(d.ep)}/${pub?esc(I18N.f(' · {n} 项物料',{n:pubN})):''}</span></h3>`;
+  h+=`<h3 class="sec">📤 发布相关<span class="n">${esc((pub&&pub.source)||('publish/'+d.ep+'/'))}${pub?esc(I18N.f(' · {n} 项物料',{n:pubN})):''}</span></h3>`;
   h+=pubHtml(pub,d.ep);
 
   // 组 clip 超分方法标签(2026-09-23;2026-09-23 移到页面最下、发布相关之后):meta.json upscale 段(genmedia.py upscale 写入);一眼分辨插值 / 真超分
   const groups=d.groups||[];
-  h+=`<h3 class="sec">🧩 组 clip 与超分方法<span class="n">${esc(I18N.f('{n} 组 · assets/clips/{ep}/',{n:groups.length,ep:d.ep}))}</span></h3>`;
+  // 2026-09-25 默认折叠(用户要求):<details> 记住展开状态(localStorage vid-clips-open),标题文本节点保持原样以便词典整节点匹配
+  const clipsOpen=(()=>{try{return localStorage.getItem('vid-clips-open')==='1'}catch(e){return false}})();
+  h+=`<details class="fold"${clipsOpen?' open':''} ontoggle="try{localStorage.setItem('vid-clips-open',this.open?'1':'0')}catch(e){}"><summary><h3 class="sec">🧩 组 clip 与超分方法<span class="n">${esc(I18N.f('{n} 组 · assets/clips/{ep}/',{n:groups.length,ep:d.ep}))}</span><span class="fold-hint">点击展开/收起</span></h3></summary>`;
   h+=groups.length?`<div class="grows">${groups.map(g=>{
     const u=g.upscale;
     let tag,cls,detail='';
@@ -222,6 +232,7 @@ function render(d){
       +(g.draft_task?`<span class="ud">📝 ${esc(t('已记 Draft 任务'))}</span>`:'')+`<span class="sz">${g.size_mb} MB</span></div>`;
   }).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有组 clip(assets/clips/{ep}/grpNNN.mp4)',{ep:d.ep}))+'</div>';
+  h+='</details>';
   // 审核问题反馈(qa/defects/)2026-09-19 移到独立页:项目设置 → 缺陷单(/defects)
 
   $('#content').innerHTML=h;restoreScroll($('#content'),d.ep);
