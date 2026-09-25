@@ -1558,7 +1558,7 @@ window.I18N_DICT = {
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "In die Volcano-Ark-Porträt-Bibliothek hochladen (asynchrone Prüfung; wirksam ab Status Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "In der Bibliothek registriert: wird bei Neugenerierung dieser Gruppe als Asset-URI übermittelt und umgeht Gesichtsreferenz-Moderation",
 "白模": "Whitebox",
-"建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)": "Szenen-Whitebox bauen und pro Shot-Gruppe ein Kameraansicht-Whitebox-Video exportieren, das automatisch als Referenzvideo der Gruppe zur Positionierung der Figuren dient (plus Layout-Draufsicht)",
+"建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物": "Szenen-Whitebox bauen und Kameraansicht-Whitebox-Videos als Videoreferenz zur Figurenplatzierung exportieren",
 "仅单张场景概念图流程,不建白模": "Nur der Ablauf mit einem einzelnen Szenen-Konzeptbild, keine Whitebox",
 "服装 sheet:已出图/总套数": "Kostüm-Sheets: erstellt / gesamt",
 "服装": "Kostüme",

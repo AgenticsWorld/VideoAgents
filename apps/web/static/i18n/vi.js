@@ -1558,7 +1558,7 @@ window.I18N_DICT = {
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Tải lên thư viện chân dung ảo Volcano Ark (kiểm duyệt bất đồng bộ; có hiệu lực khi Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Đã vào thư viện chân dung ảo: khi tạo lại nhóm này sẽ gửi bằng URI tài sản, tránh chặn kiểm duyệt ảnh tham chiếu khuôn mặt",
 "白模": "Whitebox",
-"建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)": "Dựng whitebox cảnh và xuất video whitebox góc máy quay theo từng nhóm cảnh quay, tự động gắn làm video tham chiếu của nhóm để mô hình định vị nhân vật (kèm sơ đồ nhìn từ trên)",
+"建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物": "Dựng whitebox cảnh và xuất video whitebox góc máy quay làm tham chiếu định vị nhân vật",
 "仅单张场景概念图流程,不建白模": "Chỉ quy trình một ảnh concept cảnh, không dựng whitebox",
 "服装 sheet:已出图/总套数": "Bảng trang phục: đã vẽ / tổng",
 "服装": "Trang phục",

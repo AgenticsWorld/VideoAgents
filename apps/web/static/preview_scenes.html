@@ -291,7 +291,7 @@ function renderDetail(s){
     const nm=strip?im.name.slice(strip.length+1):im.name;
     return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></figcaption></figure>`;
   };
-  // 🖼 图库板块:场景目录下全部图(grid_9views.png / layout_top.png / 概念图…)+ archive、candidates 等子文件夹
+  // 🖼 场景图板块(原「图库」,2026-09-25 改名):场景目录下全部图(grid_9views.png / layout_top.png / 概念图…)+ archive、candidates 等子文件夹
   let g='';
   if(FOLDER){
     const ims=folders[FOLDER];
@@ -308,7 +308,7 @@ function renderDetail(s){
   }else{
     g+='<div class="meta-line">(暂无概念图)</div>';
   }
-  h+=blk('gallery',`🖼 ${esc(t('图库'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:s.images.length}))}</span>`,g);
+  h+=blk('gallery',`🖼 ${esc(t('场景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:s.images.length}))}</span>`,g);
   // 场景图(正向/反向,2026-09-17,白模关闭项目的场景一致性 A 方案):scene_plates.json 登记 + 模式覆盖(继承项目/只出正向/正反两张)
   if(s.scene_plates&&!WB_ON){
     const sp=s.scene_plates;

@@ -1560,7 +1560,7 @@ window.I18N_DICT = {
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Enviar para a biblioteca de retratos virtuais do Volcano Ark (revisão assíncrona; vale após ficar Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Registrado na biblioteca: enviado como URI de ativo ao regenerar este grupo, evitando bloqueios de moderação facial",
 "白模": "Whitebox",
-"建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)": "Construir whitebox da cena e exportar por grupo de planos um vídeo whitebox em vista de câmera, anexado automaticamente como vídeo de referência do grupo para o modelo posicionar as pessoas (mais planta de cima)",
+"建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物": "Construir whitebox da cena e exportar vídeos whitebox em vista de câmera como referência para posicionar personagens",
 "仅单张场景概念图流程,不建白模": "Apenas o fluxo com uma única imagem de conceito da cena, sem whitebox",
 "服装 sheet:已出图/总套数": "Fichas de figurino: geradas / total",
 "服装": "Figurino",

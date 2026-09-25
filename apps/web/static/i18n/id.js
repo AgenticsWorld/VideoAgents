@@ -1558,7 +1558,7 @@ window.I18N_DICT = {
 "上传到火山方舟虚拟人像资产库(异步审核,Active 后生成视频时生效)": "Unggah ke pustaka potret virtual Volcano Ark (tinjauan asinkron; berlaku setelah Active)",
 "已入虚拟人像库:重出本组时以资产 URI 提交,规避人脸参考图审核拦截": "Terdaftar di pustaka: dikirim sebagai URI aset saat grup ini dibuat ulang, menghindari pemblokiran moderasi wajah",
 "白模": "Whitebox",
-"建场景白模并按分镜组导出白模摄影机视角视频,自动作为该组视频生成的参考视频给模型定位人物(另出俯视布局图)": "Bangun whitebox adegan dan ekspor video whitebox sudut kamera per grup shot, otomatis dilampirkan sebagai video referensi grup agar model menempatkan karakter (plus peta tata letak atas)",
+"建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物": "Bangun whitebox adegan dan ekspor video whitebox sudut kamera sebagai referensi penempatan karakter",
 "仅单张场景概念图流程,不建白模": "Hanya alur satu gambar konsep adegan, tanpa whitebox",
 "服装 sheet:已出图/总套数": "Lembar kostum: selesai / total",
 "服装": "Kostum",
