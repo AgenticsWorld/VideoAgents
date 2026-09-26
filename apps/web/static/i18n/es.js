@@ -2739,6 +2739,7 @@ window.I18N_DICT = {
 "世界模型": "Modelo de mundo",
 "九宫格": "Cuadrícula 3×3",
 "九宫格 {g} 第 {n} 格": "cuadrícula {g}, casilla {n}",
+"九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)": "placa de respaldo de nueve casillas (casilla inadecuada; cámara propia desde plano + cuadrícula)",
 "生成世界模型": "Generar modelo de mundo",
 "重新生成世界模型": "Regenerar modelo de mundo",
 "确认重新生成(旧版归档到 world/variants/)": "Confirmar regeneración (versión anterior archivada en world/variants/)",
@@ -3176,7 +3177,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Modo de fondo de plano",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格": "Fuente de referencia de los fondos de plano con whitebox activado (ajuste global; se puede sobrescribir por escena en la vista previa de escenas): Panorama = los anclajes se planifican automáticamente desde las posiciones de cámara del whitebox, se generan panoramas, se reproyectan según la dirección del plano y se regeneran; Modelo del mundo = eliges un anclaje en la vista previa de escenas para crear un panorama, generas un modelo del mundo a partir de él (World Labs Marble, con coste) y luego se regeneran capturas tomadas dentro del modelo según la dirección del plano; Cuadrícula 3×3 = sin panorama: cada escena genera en una sola llamada una cuadrícula 3×3 a partir de las nueve posiciones de cámara de su paquete de layout, con el plano cenital como referencia; la cuadrícula se divide en 9 fondos y cada plano elige automáticamente la casilla más cercana a su cámara whitebox",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Fuente de referencia de las placas de plano con la maqueta blanca activa (ajuste global; se puede sobrescribir por escena en la página de vista previa de escenas). Nueve casillas: por escena se genera una cuadrícula 3×3 a partir de las nueve posiciones de cámara del paquete de distribución usando el plano cenital como referencia, se divide en 9 placas y se guarda; cada plano elige automáticamente la casilla que mejor encaja según su cámara de maqueta, y si ninguna encaja (orientación / inclinación / distancia / altura fuera de rango) se genera automáticamente una placa para la cámara propia del plano usando el plano + la cuadrícula.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Fuente de referencia de los fondos de plano de esta escena; por defecto sigue el ajuste de salida del proyecto «Modo de fondo de plano» y se puede sobrescribir aquí",
 "跟随全局({m})": "Seguir global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "El modo de fondo de esta escena es «Modelo del mundo» pero aún no se ha generado ninguno: la cadena de fondos se detendrá (código de salida 4). Genéralo primero en el panel «🌍 Modelo del mundo» de arriba",

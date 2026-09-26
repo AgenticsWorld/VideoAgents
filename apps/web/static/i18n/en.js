@@ -2842,6 +2842,7 @@ window.I18N_DICT = {
 "世界模型": "World model",
 "九宫格": "Nine-grid",
 "九宫格 {g} 第 {n} 格": "nine-grid {g} tile {n}",
+"九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)": "nine-grid fallback plate (tile unsuitable; own-camera render from plan + grid)",
 "生成世界模型": "Generate world model",
 "重新生成世界模型": "Regenerate world model",
 "确认重新生成(旧版归档到 world/variants/)": "Confirm regenerate (previous version archived to world/variants/)",
@@ -3339,7 +3340,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Background plate mode",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格": "Reference source for shot background plates when whitebox is on (global setting; can be overridden per scene on the scene preview page): Panorama = anchors are planned automatically from whitebox camera positions, panoramas are re-projected to each shot direction and regenerated; World model = you pick an anchor on the scene preview page to create a panorama, build a world model from it (World Labs Marble, billed), then screenshots taken inside the world model per shot direction are regenerated; Nine-grid = no panorama: each scene generates one 3×3 grid in a single call from the nine camera positions in its layout pack, with the top-down plan as reference; the grid is split into 9 background plates and each shot automatically picks the tile closest to its whitebox camera",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Reference source for shot plates when the whitebox is on (global setting; can be overridden per scene on the scene preview page). Nine-grid: for each scene, one 3×3 grid is generated from the nine camera positions in the layout pack using the top-down plan as reference, split into 9 plates and stored; each shot automatically picks the best-fitting tile by its whitebox camera, and when no tile fits (bearing / pitch / distance / height out of range) one plate is rendered automatically for that shot's own camera using the plan + the grid sheet as references.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Reference source for this scene's shot plates; follows the project output setting \"Background plate mode\" by default, can be overridden here",
 "跟随全局({m})": "Follow global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "This scene's plate mode is \"World model\" but no world model has been generated yet: the plate chain will stop (exit code 4). Generate one in the \"🌍 World model\" panel above first",

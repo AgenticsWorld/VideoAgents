@@ -1005,13 +1005,13 @@ DEFAULT_GENCONFIG = {
                #   p6-scene-plates 以正向图为母版补出反向图(从里回望入口);single=只出正向(平面动画/单面布景);pair=每场景正反两张 p4 一并出。
                #   场景级可在场景预览页覆盖(scene_plates.json mode)。组 prompt 由 code/sync_scene_plates.py --write 挂图并逐镜点名用哪张(机检 scene_plate_bound)
                "scene_plates": "auto",
-               # plate_mode=背景图模式(2026-09-22,仅白模开启时显示/生效;docs/shot_plates.md「背景图模式」):pano(默认)=分镜背景图由
+               # plate_mode=背景图模式(2026-09-22,仅白模开启时显示/生效;docs/shot_plates.md「背景图模式」;2026-09-26 起默认 grid,界面只露九宫格):pano=分镜背景图由
                #   场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划);world=用户在场景预览页自选锚点创建全景图 → 基于它
                #   生成世界模型(World Labs Marble)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
                #   「分镜背景图」板块覆盖(库 plates/index.json#mode)。世界模型模式的场景没有 world 时 render_shot_plates.py 退出码 4
                #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格,2026-09-25)=不出全景不出母图,每场景每方案按
                #   layout.json#views 以俯视图为参考出一张 3x3 宫格、拆 9 张入库,每镜按白模机位自动选最合适的一格
-               "plate_mode": "pano",
+               "plate_mode": "grid",   # 2026-09-26 默认九宫格(含自动补图);pano/world 仍受理但界面隐藏
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
@@ -3078,7 +3078,7 @@ def build_role_prompt(agent_id: str, project: str,
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
     spatial_on = out.get("spatial_blocking") is True
     scene_plates_mode = out.get("scene_plates") if out.get("scene_plates") in SCENE_PLATES_MODES else "auto"
-    plate_mode = out.get("plate_mode") if out.get("plate_mode") in PLATE_MODES else "pano"
+    plate_mode = out.get("plate_mode") if out.get("plate_mode") in PLATE_MODES else "grid"
     spatial_line = (
         "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
         "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"

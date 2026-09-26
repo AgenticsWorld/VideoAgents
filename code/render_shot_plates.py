@@ -21,7 +21,9 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   一张都不出——Agent 须原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;不得自行生成世界模型。
   九宫格(grid,2026-09-25)= 不出全景/不用世界模型/不出母图:每场景每光照方案按 layout.json#views(tile 1..9)以俯视图为参考出一张
   3x3 宫格 <方案>_grid9.png,拆成 9 张背景图入库(pano_ref.kind=grid9),每镜按白模机位自动从九格里选最合适的一格(朝向/距离/机高/俯仰打分,
-  日志逐镜打印选格依据)。layout.json 没有 tile 1..9 的 views 或地标缺失时抛 Grid9LayoutError(退出码 1),请先补场景布局包。
+  日志逐镜打印选格依据);**最近格不合适**(朝向差 >30° / 俯仰差 >20° / 机位距 >6 m / 机高档差 ≥2 任一,2026-09-26 默认流程)的镜自动以
+  俯视图 + 九宫格整图为参考按本镜机位单独出一张补图(pano_ref.kind=grid9_fallback,相近机位复用;日志「格子不合适(…)」逐镜给原因),
+  --max-new 同样限补图张数;--no-grid-fallback 关闭。layout.json 没有 tile 1..9 的 views 或地标缺失时抛 Grid9LayoutError(退出码 1),请先补场景布局包。
 库里非母图的旧图(2026-09-10 前白模帧直出、2026-09-14 前逐镜全景直出,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜
 (WARN 不算 FAIL);--repano 把这些镜整体按母图制重出(有费用,仅用户明确要求时用)。
 
@@ -33,6 +35,7 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   python code/render_shot_plates.py --project <slug> --ep ep01 --max-new 6   # 分批:每次最多新出 6 张即返回(退出码 3=还有待出),前台循环直到 0
   python code/render_shot_plates.py --project <slug> --ep ep01 --status      # 验收机检 shot_plates_complete:逐镜覆盖状态,不齐退出码 1
   python code/render_shot_plates.py --project <slug> --ep ep01 grp027 --repano  # 把仍指向 legacy(非全景制)图的镜重出(用户明确要求时)
+  python code/render_shot_plates.py --project <slug> --ep ep01 --no-grid-fallback  # 九宫格模式关掉自动补图(只选格;加 --force 才重出宫格本身)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
   退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成)。
 
@@ -63,6 +66,8 @@ def main():
         ap.add_argument('--max-new', type=int, default=None, help='本次最多新出 N 张后停止(索引已按镜落盘);还有待出图时退出码 3,Agent 在前台循环再跑直到 0')
         ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
         ap.add_argument('--repano', action='store_true', help='集索引里仍指向 legacy(非全景制)库图的镜视为需重做,按全景制重出(有费用,仅用户明确要求时)')
+        ap.add_argument('--grid-fallback', action='store_true', help='九宫格模式补图(2026-09-26 试验):最近格朝向/俯仰/距离/机高任一分量超限的镜,'
+                        '改以俯视图 + 九宫格整图为参考按本镜机位单独出图(相近机位复用);索引里已用不合适格子的镜也会重新决策(有费用,仅用户明确要求时)')
     args, base = parse_args(__doc__, configure=configure)
     reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
     ep = component(args.ep)
@@ -98,7 +103,7 @@ def main():
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
-                            max_new=args.max_new, repano=args.repano)
+                            max_new=args.max_new, repano=args.repano, grid_fallback=args.grid_fallback)
     except PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_unsupported', 'detail': str(error)}}, ensure_ascii=False), flush=True)

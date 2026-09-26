@@ -2737,6 +2737,7 @@ window.I18N_DICT = {
 "世界模型": "Weltmodell",
 "九宫格": "Neuner-Raster",
 "九宫格 {g} 第 {n} 格": "Neuner-Raster {g}, Kachel {n}",
+"九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)": "Neunfeld-Ersatzplatte (Kachel unpassend; eigene Kamera aus Plan + Raster)",
 "生成世界模型": "Weltmodell erzeugen",
 "重新生成世界模型": "Weltmodell neu erzeugen",
 "确认重新生成(旧版归档到 world/variants/)": "Neu erzeugen bestätigen (alte Version wird in world/variants/ archiviert)",
@@ -3174,7 +3175,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Hintergrundplatten-Modus",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格": "Referenzquelle der Shot-Hintergrundplatten bei aktivierter Whitebox (globale Einstellung; pro Szene in der Szenenvorschau überschreibbar): Panorama = Anker werden automatisch aus den Whitebox-Kamerapositionen geplant, Panoramen erzeugt, je Shot-Richtung reprojiziert und neu generiert; Weltmodell = du wählst in der Szenenvorschau einen Anker, erzeugst daraus ein Panorama und ein Weltmodell (World Labs Marble, kostenpflichtig); anschließend werden Screenshots aus dem Weltmodell je Shot-Richtung neu generiert; Neuner-Raster = kein Panorama: jede Szene erzeugt aus den neun Kamerapositionen ihres Layout-Pakets mit dem Grundriss als Referenz in einem Aufruf ein 3×3-Raster; das Raster wird in 9 Hintergrundplatten zerlegt und jeder Shot wählt automatisch die Kachel, die seiner Whitebox-Kamera am nächsten liegt",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Referenzquelle der Shot-Platten bei aktivem Whitebox (globale Einstellung; auf der Szenen-Vorschau je Szene überschreibbar). Neunfeld: pro Szene wird aus den neun Kamerapositionen des Layout-Pakets mit dem Grundriss als Referenz ein 3×3-Raster erzeugt, in 9 Platten zerlegt und abgelegt; jede Einstellung wählt automatisch die passendste Kachel nach ihrer Whitebox-Kamera, und passt keine Kachel (Richtung / Neigung / Abstand / Höhe außerhalb der Grenzen), wird automatisch eine Platte für die eigene Kamera der Einstellung aus Plan + Rasterbogen gerendert.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Referenzquelle der Shot-Platten dieser Szene; folgt standardmäßig der Projekt-Ausgabeeinstellung „Hintergrundplatten-Modus“, hier überschreibbar",
 "跟随全局({m})": "Global folgen ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Der Plattenmodus dieser Szene ist „Weltmodell“, aber es wurde noch kein Weltmodell erzeugt: die Plattenkette stoppt (Exit-Code 4). Bitte zuerst im Panel „🌍 Weltmodell“ oben erzeugen",

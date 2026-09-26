@@ -2739,6 +2739,7 @@ window.I18N_DICT = {
 "世界模型": "Modèle de monde",
 "九宫格": "Grille 3×3",
 "九宫格 {g} 第 {n} 格": "grille {g}, case {n}",
+"九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)": "plaque de secours neuf-cases (case inadaptée ; rendu caméra propre depuis plan + grille)",
 "生成世界模型": "Générer le modèle de monde",
 "重新生成世界模型": "Régénérer le modèle de monde",
 "确认重新生成(旧版归档到 world/variants/)": "Confirmer la régénération (ancienne version archivée dans world/variants/)",
@@ -3176,7 +3177,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Mode de fond de plan",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖):全景图=按白模机位自动规划锚点出全景,按镜头方位重投影后二次生成;世界模型=由你在场景预览页选锚点创建全景图、基于它生成世界模型(World Labs Marble,计费),再在世界模型里按镜头方位截图二次生成;九宫格=不出全景,每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格": "Source de référence des fonds de plan quand la whitebox est activée (réglage global ; remplaçable par scène dans l’aperçu des scènes) : Panorama = les ancres sont planifiées automatiquement à partir des positions de caméra de la whitebox, les panoramas sont reprojetés selon la direction du plan puis régénérés ; Modèle du monde = vous choisissez une ancre dans l’aperçu des scènes pour créer un panorama, générez un modèle du monde à partir de celui-ci (World Labs Marble, payant), puis des captures prises dans le modèle selon la direction du plan sont régénérées ; Grille 3×3 = sans panorama : chaque scène génère en un seul appel une grille 3×3 à partir des neuf positions de caméra de son pack de layout, avec le plan vu de dessus comme référence ; la grille est découpée en 9 fonds et chaque plan choisit automatiquement la case la plus proche de sa caméra whitebox",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Source de référence des plaques de plan quand la maquette blanche est active (réglage global ; remplaçable par scène sur la page d'aperçu des scènes). Neuf cases : pour chaque scène, une grille 3×3 est générée à partir des neuf positions de caméra du pack de disposition avec le plan vu de dessus comme référence, découpée en 9 plaques et stockée ; chaque plan choisit automatiquement la case la plus proche de sa caméra de maquette, et si aucune case ne convient (orientation / inclinaison / distance / hauteur hors limites), une plaque est rendue automatiquement pour la caméra du plan à partir du plan + de la planche.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Source de référence des fonds de plan de cette scène ; suit par défaut le réglage de sortie du projet « Mode de fond de plan », remplaçable ici",
 "跟随全局({m})": "Suivre le global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Le mode de fond de cette scène est « Modèle du monde » mais aucun modèle n’a encore été généré : la chaîne des fonds s’arrêtera (code de sortie 4). Générez-le d’abord dans le panneau « 🌍 Modèle du monde » ci-dessus",

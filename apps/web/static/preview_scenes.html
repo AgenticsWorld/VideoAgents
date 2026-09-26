@@ -212,7 +212,7 @@ let WB_ON=true;
 // 项目「场景图」设置(output.scene_plates,随预览数据 scene_plates_mode 下发):白模关闭项目的场景一致性方案,场景级可覆盖
 let SP_MODE='auto';
 // 项目「背景图模式」(output.plate_mode,随预览数据 plate_mode 下发,2026-09-22):白模开启项目分镜背景图的参考来源,场景级可覆盖
-let PLATE_MODE='pano';
+let PLATE_MODE='grid';   // 2026-09-26 默认九宫格
 const PLATE_MODE_NAMES={pano:'全景图',world:'世界模型',grid:'九宫格'};
 // 深链定位:分镜预览页参考图标签跳转 ?id=<SCN-ID>,首次加载直接选中该场景
 let JUMP_ID=new URLSearchParams(location.search).get('id');
@@ -348,9 +348,9 @@ function renderDetail(s){
     const plates=s.plates||[];
     const pmSel=pm?` <select class="pm-mode" data-sid="${esc(s.id)}" title="${esc(t('本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖'))}">`
       +`<option value="inherit"${pm.mode==='inherit'?' selected':''}>${esc(I18N.f('跟随全局({m})',{m:t(PLATE_MODE_NAMES[PLATE_MODE]||PLATE_MODE)}))}</option>`
-      +`<option value="pano"${pm.mode==='pano'?' selected':''}>${esc(t('全景图'))}</option>`
-      +`<option value="world"${pm.mode==='world'?' selected':''}>${esc(t('世界模型'))}</option>`
-      +`<option value="grid"${pm.mode==='grid'?' selected':''}>${esc(t('九宫格'))}</option></select>`:'';
+      +`<option value="grid"${pm.mode==='grid'?' selected':''}>${esc(t('九宫格'))}</option>`
+      +`<option value="pano"${pm.mode==='pano'?' selected':''} hidden>${esc(t('全景图'))}</option>`   // 2026-09-26 用户拍板:只露九宫格;pano/world 隐藏但保留,存量场景旧值仍能显示
+      +`<option value="world"${pm.mode==='world'?' selected':''} hidden>${esc(t('世界模型'))}</option></select>`:'';
     let body='';
     if(pm&&pm.effective==='world'&&!pm.has_world){
       body+=`<div class="meta-line pm-warn" style="color:#e6b422">⚠ ${esc(t('本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成'))} `
@@ -360,7 +360,7 @@ function renderDetail(s){
       +plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
-        const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+        const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
@@ -499,7 +499,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'pano';
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -878,7 +878,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'pano';
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   await EpFilter.load(proj);
