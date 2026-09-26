@@ -2027,7 +2027,7 @@ window.I18N_DICT = {
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Height {height} m · Grid 1 m · Aspect {aspect}",
 "推断尺寸": "Estimated dimensions",
 "已标定尺寸": "Calibrated dimensions",
-"切换旋转视角后可拖动旋转、滚轮缩放；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "Switch to orbit view, then drag to rotate and scroll to zoom; click the view, then W/S forward/back · A/D strafe · Q/E up/down · Shift = fast",
+"切换旋转视角后拖动=转头、滚轮=前进；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "In orbit view, drag = look and wheel = move forward; click the view, then W/S forward/back · A/D strafe · Q/E up/down · Shift = fast",
 "场景白模": "Scene blockout",
 "摄像机白模": "Camera blockout",
 "空间与摄像机位置": "Space and camera position",

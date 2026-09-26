@@ -72,35 +72,43 @@ export class WhiteboxRenderer {
     // 实景图视图(2026-09-09):assetBase 指向项目 artifacts 根时,把场景俯视图 layout_top.png 铺在地面,
     // 'real' 视图隐藏灰盒几何只留实景俯视图 + 人物 + 机位,便于比对分镜背景图;导出页不设 assetBase 不加载贴图
     this.assetBase=null; this.onRealPlate=null; this.solids=[]; this.realPlane=null;
-    this.keys=null; this.flyRadius=5;   // 旋转视角键盘漫游(bindFlyKeys 后启用);flyRadius 由 load 按取景半径写,决定移动速度
+    this.fly=null; this.flyRadius=5;   // 旋转视角第一人称漫游(bindFly 后启用);flyRadius 由 load 按取景半径写,决定移动速度
   }
-  // 旋转视角键盘漫游(2026-09-26,与世界模型视窗同一套按键):画面可聚焦(tabindex),按下时收键、松开/失焦清空;
-  // 只在自带 OrbitControls 的视口上生效,导出页/共享上下文(controls=false)不绑定
-  bindFlyKeys(canvas=this.canvas) {
-    if(!this.controls||!canvas||typeof canvas.addEventListener!=='function'||this.keys)return this.keys;
-    const keys=this.keys=new Set();
+  // 旋转视角漫游(2026-09-26,鼠标与键盘都与世界模型视窗同一套):拖动=转头(原地转视线,不再绕目标点公转)、滚轮=沿视线前进,
+  // 画面可聚焦(tabindex),W/S/A/D/Q/E 平移、Shift 加速;绑定后 OrbitControls 停用。只在自带 controls 的视口上生效,导出页/共享上下文不绑定
+  bindFly(canvas=this.canvas) {
+    if(!this.controls||!canvas||typeof canvas.addEventListener!=='function'||this.fly)return this.fly;
+    const fly=this.fly={keys:new Set(),yaw:0,pitch:0,drag:null};
+    this.controls.enabled=false;
+    this.syncFly();
     const watched=['w','a','s','d','q','e','shift'];
-    canvas.tabIndex=0;
-    canvas.addEventListener('pointerdown',()=>{try{canvas.focus({preventScroll:true});}catch(e){}});
-    canvas.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!watched.includes(k))return;keys.add(k);if(k!=='shift')e.preventDefault();});
-    canvas.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
-    canvas.addEventListener('blur',()=>keys.clear());
-    return keys;
+    canvas.tabIndex=0;canvas.style.cursor='grab';
+    canvas.addEventListener('pointerdown',e=>{fly.drag={x:e.clientX,y:e.clientY};try{canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});}catch(err){}canvas.style.cursor='grabbing';});
+    const stop=()=>{fly.drag=null;canvas.style.cursor='grab';};
+    canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
+    canvas.addEventListener('pointermove',e=>{if(!fly.drag)return;fly.yaw-=(e.clientX-fly.drag.x)*.004;fly.pitch=Math.max(-1.5,Math.min(1.5,fly.pitch-(e.clientY-fly.drag.y)*.004));fly.drag={x:e.clientX,y:e.clientY};this.applyFly();});
+    canvas.addEventListener('wheel',e=>{e.preventDefault();this.overview.position.addScaledVector(this.flyDirection(),-e.deltaY*.002*this.flyScale());},{passive:false});
+    canvas.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!watched.includes(k))return;fly.keys.add(k);if(k!=='shift')e.preventDefault();});
+    canvas.addEventListener('keyup',e=>fly.keys.delete(e.key.toLowerCase()));
+    canvas.addEventListener('blur',()=>fly.keys.clear());
+    return fly;
   }
-  // 每帧按当前按键平移旋转视角:W/S 沿视线水平前后、A/D 左右、Q/E 升降,Shift 加速;
-  // 相机与 OrbitControls 目标同步平移,拖动旋转 / 滚轮缩放行为不变。返回是否移动了(调用方据此重绘)
-  flyKeys(keys=this.keys, dt=1/60) {
-    if(!this.controls||!keys||!keys.size)return false;
-    const speed=Math.max(1.5,this.flyRadius*.15)*(keys.has('shift')?3:1)*dt;
-    const f=new THREE.Vector3().subVectors(this.controls.target,this.overview.position);f.y=0;
-    if(f.lengthSq()<1e-9)f.set(0,0,-1);f.normalize();
-    const r=new THREE.Vector3().crossVectors(f,new THREE.Vector3(0,1,0)).normalize();
+  flyScale(){return Math.max(1,this.flyRadius/5);}   // 世界模型视窗按人眼尺度;白模视口按取景半径放大移动量
+  flyDirection(){return new THREE.Vector3(0,0,-1).applyQuaternion(this.overview.quaternion);}
+  // load 取景(lookAt)后把相机朝向换算成 yaw/pitch,之后拖动只改这两个角
+  syncFly(){if(!this.fly)return;const d=this.flyDirection();this.fly.yaw=Math.atan2(-d.x,-d.z);this.fly.pitch=Math.asin(Math.max(-1,Math.min(1,d.y)));this.applyFly();}
+  applyFly(){const c=this.overview;c.rotation.set(0,0,0,'YXZ');c.rotation.y=this.fly.yaw;c.rotation.x=this.fly.pitch;}
+  // 每帧按当前按键平移:W/S 沿视线水平前后、A/D 左右、Q/E 升降,Shift 加速。返回是否移动了(调用方据此重绘)
+  flyKeys(dt=1/60) {
+    const fly=this.fly;if(!fly||!fly.keys.size)return false;
+    const keys=fly.keys,speed=Math.max(1.5,this.flyRadius*.15)*(keys.has('shift')?3:1)*dt;
+    const f=new THREE.Vector3(-Math.sin(fly.yaw),0,-Math.cos(fly.yaw)),r=new THREE.Vector3(-f.z,0,f.x);
     const mv=new THREE.Vector3();
     if(keys.has('w'))mv.addScaledVector(f,speed);if(keys.has('s'))mv.addScaledVector(f,-speed);
     if(keys.has('d'))mv.addScaledVector(r,speed);if(keys.has('a'))mv.addScaledVector(r,-speed);
     if(keys.has('e'))mv.y+=speed;if(keys.has('q'))mv.y-=speed;
     if(mv.lengthSq()===0)return false;
-    this.overview.position.add(mv);this.controls.target.add(mv);this.controls.update();
+    this.overview.position.add(mv);
     return true;
   }
   disposeScene() {
@@ -241,7 +249,7 @@ export class WhiteboxRenderer {
     this.overview.position.copy(center).add(new THREE.Vector3(.65,.9,.9).normalize().multiplyScalar(distance));
     this.overview.lookAt(center);
     if(this.controls){this.controls.target.copy(center);this.controls.update();}
-    this.flyRadius=radius;
+    this.flyRadius=radius;if(this.fly)this.syncFly();
     this.overview.far=Math.max(3000,distance+radius*4);this.overview.updateProjectionMatrix();
     this.camera.far=Math.max(2000,bounds.max.y*4);
     this.top.far=Math.max(3000,bounds.max.y*4);
@@ -364,7 +372,7 @@ export class WhiteboxRenderer {
   // WebGL context is shared); ignored when rendering straight into an own context.
   render(view='overview', target=null) {
     if(!this.scene)return;
-    if(this.controls)this.controls.enabled=view==='overview';
+    if(this.controls)this.controls.enabled=view==='overview'&&!this.fly;
     this.marker.visible=!!this.group;this.ray.visible=!!this.group;
     const real=view==='real';
     for(const m of this.solids)m.visible=!real;

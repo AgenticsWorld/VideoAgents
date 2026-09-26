@@ -1988,7 +1988,7 @@ window.I18N_DICT = {
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Höhe {height} m · Raster 1 m · Format {aspect}",
 "推断尺寸": "Geschätzte Maße",
 "已标定尺寸": "Kalibrierte Maße",
-"切换旋转视角后可拖动旋转、滚轮缩放；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "Zur Drehansicht wechseln, dann zum Drehen ziehen und zum Zoomen scrollen; Ansicht anklicken, dann W/S vor/zurück · A/D seitwärts · Q/E hoch/runter · Shift schnell",
+"切换旋转视角后拖动=转头、滚轮=前进；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "In der Drehansicht: Ziehen = umsehen, Rad = vorwärts; Ansicht anklicken, dann W/S vor/zurück · A/D seitwärts · Q/E hoch/runter · Shift schnell",
 "场景白模": "Szenen-Blockmodell",
 "摄像机白模": "Blockmodell aus Kamerasicht",
 "空间与摄像机位置": "Raum und Kameraposition",
