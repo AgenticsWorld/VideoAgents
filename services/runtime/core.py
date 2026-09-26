@@ -14078,6 +14078,45 @@ async def _auto_command(message: str, project: str) -> str:
     return f"🤖 已{'开启' if sub == 'on' else '关闭'}项目 {project} 的自动运行。"
 
 
+_STOP_USAGE_ZH = "用法:/stop all — 停止目前所有正在运行/排队中的 Agent 任务(全部项目)"
+_STOP_USAGE_EN = "Usage: /stop all — stop every running/queued agent task (all projects)"
+
+
+async def _stop_command(message: str, project: str) -> str:
+    """/stop 聊天命令(api_chat 已确保首词为 /stop):返回要回给用户的文本。
+    逻辑参照 /auto:不派发运行、零引擎配额;/stop all 走运行面板「⏹ 停止」同一入口
+    api_stop_all,停掉全部项目的排队/运行中任务(by="user",下游看到的是「用户手动停止」)。"""
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
+    usage = _STOP_USAGE_ZH if zh else _STOP_USAGE_EN
+    parts = message.split()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    active = [r for r in RUNS.values() if r.get("status") in ("queued", "running")]
+    if not sub:
+        n_run = sum(1 for r in active if r.get("status") == "running")
+        n_q = len(active) - n_run
+        head = (f"⏹ 当前运行中 {n_run} 个、排队中 {n_q} 个 Agent 任务。" if zh
+                else f"⏹ Currently {n_run} running and {n_q} queued agent task(s).")
+        return f"{head}\n{usage}"
+    if sub != "all" or len(parts) > 2:
+        return (f"无法识别的命令「{message}」。{usage}" if zh
+                else f"Unrecognized command \"{message}\". {usage}")
+    if not active:
+        return "⏹ 当前没有正在运行或排队中的 Agent 任务。" if zh else "⏹ No agent task is running or queued."
+    stopped = (await api_stop_all(by="user"))["stopped"]
+    names = sorted({f"{RUNS[i].get('agent_name') or RUNS[i]['agent']}({RUNS[i].get('project')})"
+                    for i in stopped if i in RUNS})
+    listing = "、".join(names) if zh else ", ".join(names)
+    reply = (f"⏹ 已停止 {len(stopped)} 个 Agent 任务:{listing}。" if zh
+             else f"⏹ Stopped {len(stopped)} agent task(s): {listing}.")
+    try:
+        if (await api_watchdog_get(project))["enabled"]:
+            reply += ("\n⚠️ 本项目自动运行仍为开启,闲置后看门狗会再次派单;如需彻底停下请发 /auto off。" if zh
+                      else "\n⚠️ Auto-run is still on for this project; the idle watchdog will dispatch again. Send /auto off to stop it for good.")
+    except Exception:  # noqa: BLE001
+        pass
+    return reply
+
+
 async def api_chat(body: dict):
     agent = safe_agent(body.get("agent", ""))
     message = (body.get("message") or "").strip()
@@ -14125,6 +14164,15 @@ async def api_chat(body: dict):
         append_chat(agent, project, {"role": "user", "text": message, "source": source})
         append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
         return {"ok": True, "watchdog": (await api_watchdog_get(project))["enabled"]}
+    if message.split()[0].lower() == "/stop":
+        # 停止命令(2026-09-26):与 /auto 同一机制——本地拦截、不派发运行、零引擎配额,
+        # 任何通道发来都在此处理;/stop all 调 api_stop_all(运行面板「⏹ 停止」同一入口),
+        # 各 run 的收尾经 publish_run/HUB 同步刷新网页运行面板。
+        reply = await _stop_command(message, project)
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True,
+                "active": sum(1 for r in RUNS.values() if r.get("status") in ("queued", "running"))}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)

@@ -126,7 +126,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .shot .plates .pl .editbtn{font-size:10px;padding:0 5px}
 .shot .plates .pl .pl-link{color:var(--dim);text-decoration:underline dotted;text-underline-offset:2px;cursor:pointer}
 .shot .plates .pl .pl-link:hover{color:var(--accent)}
-.shot .plateslabel{width:100%;font-size:11px;color:var(--dim)}
+.shot .plateslabel{width:100%;font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.shot .plateslabel .wb-seek{font-size:12px;line-height:1;padding:1px 5px}
 .editbtn{font-size:10.5px;padding:0 6px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .cpid{font-size:13px;line-height:1;padding:1px 4px;flex:none;background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);cursor:pointer;opacity:.6;vertical-align:baseline}
@@ -1343,8 +1344,6 @@ function shotCard(s,grp){
         ${cres?`<span class="tag" title="${esc(t('本镜出场生物(creatures)'))}">🐎 ${esc(cres)}</span>`:''}
         <button class="editbtn" data-kind="shot" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="对这个分镜提修改意见,发给修改师处理">✏️ 修改</button>${
           JumpAnchor.group([
-            // 📍 看现场(2026-09-22):右侧白模时间轴跳到本镜起点(不自动播放);默认 hidden,白模面板建好后由 whitebox-ui.js 按本组 cameras 揭示,没白模的镜不显示
-            WB_ON&&grp?`<button type="button" class="jumplink wb-seek" hidden data-grp="${esc(grp)}" data-shot="${esc(s.shot_id)}" title="${esc(t('看现场:右侧白模跳到本镜起点'))}" data-no-i18n>📍</button>`:'',
             s.board_key?JumpAnchor.link('board',$('#project').value.trim()||'demo',EP,'shot',s.board_key):''])}</div>
       <div class="content">${esc(s.content||'')}</div>
       ${dlgHtml(s)}
@@ -1353,7 +1352,9 @@ function shotCard(s,grp){
       ${camHtml(s)}
     </div>
     ${vids.length?`<div class="clips"><div class="clipslabel">▶ 输出视频预览</div>${vids.join('')}</div>`:''}
-    ${plates.length?`<div class="plates"><div class="plateslabel">🖼 ${(s.plates||[]).some(p=>p.reuse==='scene')?t('场景图'):t('分镜背景图')}</div>${plates.join('')}</div>`:''}
+    ${(plates.length||(WB_ON&&grp))?`<div class="plates"><div class="plateslabel">🖼 ${(s.plates||[]).some(p=>p.reuse==='scene')?t('场景图'):t('分镜背景图')}${
+      // 📍 看现场(2026-09-22;2026-09-26 从分镜行头挪到背景图标题后):右侧白模时间轴跳到本镜起点(不自动播放);默认 hidden,白模面板建好后由 whitebox-ui.js 按本组 cameras 揭示,没白模的镜不显示
+      WB_ON&&grp?` <button type="button" class="jumplink wb-seek" hidden data-grp="${esc(grp)}" data-shot="${esc(s.shot_id)}" title="${esc(t('看现场:右侧白模跳到本镜起点'))}" data-no-i18n>📍</button>`:''}</div>${plates.join('')}</div>`:''}
   </div>`;
 }
 
