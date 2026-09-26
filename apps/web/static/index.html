@@ -154,10 +154,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .info-note.on{display:block}
 .modal .err{font-size:12px;color:var(--red);min-height:16px}
 .modal .rhythm-kind{flex:none;width:60px;color:var(--dim);font-size:12px}
-.modal .rhythm-detail{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;line-height:1.6}
+.modal .rhythm-detail{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;line-height:1.6;max-height:calc(1.6em*2 + 6px + 2px);overflow-y:auto}   /* 2026-09-26 叙事节奏/过场模式说明默认只显示两行:两行行高+上内边距+边框(滚动视口含底内边距,不计入以免第三行露头),超出内置滚动 */
 /* 过场模式「自定义」附属项:限高滚动,弹窗不随之变长(2026-09-24) */
 .modal .trcustom{max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 10px;background:var(--panel)}
 .modal .trcustom .row{margin:6px 0}
+.modal .trclose-opts{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.modal .trclose-opts>span{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}   /* 集尾收束附属项(2026-09-26):样式走类,trCloseSync 只切 display */
 .modal .rhythm-detail b{color:var(--text);font-weight:500}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
@@ -439,12 +441,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <button type="button" class="info-btn" data-info="npd-trmode-info" title="说明">i</button></div>
       <div class="note info-note" id="npd-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
       <div class="rhythm-detail" id="npd-trmode-detail"></div>
-      <div class="row"><label>集尾收束</label>
-        <select id="npd-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select>
-        <span class="trclose-fade" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">淡出 <input type="number" id="npd-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span>
-        <span class="trclose-hold" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">停留 <input type="number" id="npd-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span>
-        <span class="trclose-audio" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">声音 <select id="npd-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span>
-        <button type="button" class="info-btn" data-info="npd-trclose-info" title="说明">i</button></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">集尾收束</label>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><select id="npd-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select><button type="button" class="info-btn" data-info="npd-trclose-info" title="说明">i</button></div>
+          <div class="trclose-opts"><span class="trclose-fade">淡出 <input type="number" id="npd-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span><span class="trclose-hold">停留 <input type="number" id="npd-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span><span class="trclose-audio">声音 <select id="npd-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span></div>
+        </div></div>
       <div class="note info-note" id="npd-trclose-info">正片结尾的收束:最后一组尾部淡出到黑/白后停留,或直接切黑(突然黑屏,悬念感;声音默认同刻切断);外挂声轨同刻淡出/切断,片尾包装接在停留之后。出成片时由 render_transitions 落地;某一集要不同处理可在分镜预览页过场汇总条单独设。</div>
       <div id="npd-trcustom" class="trcustom" style="display:none">
         <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
@@ -687,12 +688,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <button type="button" class="info-btn" data-info="dur-trmode-info" title="说明">i</button></div>
       <div class="note info-note" id="dur-trmode-info">组与组之间的过场设计:每换场景/跳时间/进出闪回的边界由「过场设计」按模式出建议,在分镜预览页逐处预览、接受或改字,出成片时落地</div>
       <div class="rhythm-detail" id="dur-trmode-detail"></div>
-      <div class="row"><label>集尾收束</label>
-        <select id="dur-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select>
-        <span class="trclose-fade" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">淡出 <input type="number" id="dur-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span>
-        <span class="trclose-hold" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">停留 <input type="number" id="dur-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span>
-        <span class="trclose-audio" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">声音 <select id="dur-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span>
-        <button type="button" class="info-btn" data-info="dur-trclose-info" title="说明">i</button></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">集尾收束</label>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><select id="dur-trclose" style="flex:none;width:150px"><option value="fade_black">淡出到黑</option><option value="fade_white">淡出到白</option><option value="cut_black">切黑(突然黑屏)</option><option value="cut_white">切白</option><option value="hard_cut">不处理(停在末帧)</option></select><button type="button" class="info-btn" data-info="dur-trclose-info" title="说明">i</button></div>
+          <div class="trclose-opts"><span class="trclose-fade">淡出 <input type="number" id="dur-trclose-d" min="0.3" max="3" step="0.1" value="1.0" style="width:60px;flex:none"> s</span><span class="trclose-hold">停留 <input type="number" id="dur-trclose-h" min="0" max="3" step="0.1" value="0.5" style="width:60px;flex:none"> s</span><span class="trclose-audio">声音 <select id="dur-trclose-a" style="flex:none"><option value="fade">随画面淡出</option><option value="mute">到黑即静音</option></select></span></div>
+        </div></div>
       <div class="note info-note" id="dur-trclose-info">正片结尾的收束:最后一组尾部淡出到黑/白后停留,或直接切黑(突然黑屏,悬念感;声音默认同刻切断);外挂声轨同刻淡出/切断,片尾包装接在停留之后。出成片时由 render_transitions 落地;某一集要不同处理可在分镜预览页过场汇总条单独设。</div>
       <div id="dur-trcustom" class="trcustom" style="display:none">
         <div class="row" style="align-items:flex-start"><label style="padding-top:6px">边界处理</label>
@@ -1375,6 +1375,7 @@ function trCloseSync(prefix){   // 集尾收束(2026-09-25):淡出类显示淡�
   row.querySelector('.trclose-fade').style.display=ty.startsWith('fade')?'':'none';
   row.querySelector('.trclose-hold').style.display=ty==='hard_cut'?'none':'';
   row.querySelector('.trclose-audio').style.display=ty==='hard_cut'?'none':'';
+  row.querySelector('.trclose-opts').style.display=ty==='hard_cut'?'none':'';   // 附属项整行(2026-09-26 排版:换到第二行折行,避免超出弹窗宽度)
 }
 function trCloseApply(prefix,ec){
   ec=ec||{};const sel=$('#'+prefix+'-trclose');if(!sel)return;
