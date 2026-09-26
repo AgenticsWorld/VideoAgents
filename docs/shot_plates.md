@@ -67,6 +67,15 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
   - **九宫格自动补图（2026-09-26，九宫格模式默认流程；`--no-grid-fallback` 关闭）**：「先从九格里选，没有合适的再单独出图」。最近格的选格分量任一超限（`GRID9_FIT`：朝向差 > 30° / 俯仰差 > 20° / 机位水平距 > 6 m / 机高档差 ≥ 2）即视为不合适，改以**俯视图 `[Image 1]` + 整张九宫格 `[Image 2]`**（镜尾另加镜首成图 `[Image 3]`、同 seed）为参考，按本镜白模机位事实单独出一张分镜图规格的背景图（`build_grid9_fallback_prompt`：机位句同母图口径 + 俯视图只作布局参考 + 九宫格是同一地点材质/陈设/光线的权威参考且逐格列出机位、点名最近的一格「从它出发再把相机挪到本机位」+ 画内清单/画外清单 + 单幅禁宫格）。库条目 `grid9_fallback: true`、`master: false`、`pano_ref = {kind: 'grid9_fallback', sheet, scheme, nearest_tile, reasons}`，key = `plate_key + _g9fb`；相近机位（`GRID9_FB_TOLERANCE`：朝向 ±15° / 水平距 ≤1 m / 机高 ±0.3 m / 俯仰 ±10° / 视场 ±10°）复用同一张补图（`find_grid9_fallback`，含本次待出的 pending）。集索引 `reuse = grid9_fallback`、`view.grid9` 仍记被拒的最近格、`view.fallback = {reasons, key, source: new|library}`；开启时索引里仍用不合适格子的镜会重新决策（不动已出的宫格，不需要 `--force`；补图开着时 `--force` 只重出目标镜的补图，要重出宫格本身须 `--no-grid-fallback --force`）；`--max-new` 同样限补图张数。结果比较页 `code/grid9_compare.py --project <slug> --ep <ep> --scene <sid>` → `qa/grid9_compare/<sid>.html`（白模帧 / 所选格 + 打分 / 补图三列并排，控制台文件路由 `/api/v1/projects/<slug>/artifacts/qa/grid9_compare/<sid>.html` 可直接打开）。alices2 SCN-long-hall 实测（67 条需求 22 合适 / 45 补图，31 张新出）见该页，用户据此拍板作为默认流程；已知局限：极端俯仰（仰 80° / 俯 −88°）模型只做到明显低/高角度。
 - 预览数据：`/previews/scenes` 顶层 `plate_mode`（项目级），`scenes[].plate_mode{mode, effective, has_world}`；世界模型模式且尚无 world 的场景板块内有黄字提示 + 「前往世界模型」。世界模型板块自 2026-09-22 起挂在「分镜背景图」板块之上（全景图 → 世界模型 → 分镜背景图，与流程顺序一致）。
 
+## 手工截取背景图(2026-09-26:全景图 / 世界模型视窗「💾 背景图」)
+
+全景图与世界模型自 2026-09-26 起不再作为自动出图模式(界面隐藏),改为**手工补背景图**的来源:
+
+- 场景预览页「🌐 全景图」板块点正式全景进 360° 视窗(`apps/web/static/pano-viewer.js`,`openPano360(src, meta)`,meta 带 project/sid/anchor_id/scheme/锚点 position/yaw_deg/画幅),右上角「💾 背景图」把当前画面按项目画幅(长边 1920)离屏渲一帧,连同换算出的白模机位 `camera{position, target, fov_v_deg}` `POST /projects/<p>/scenes/<sid>/plates/manual`。方向换算:全景图中心列 = 锚点 yaw(与 `modules/scene_panos.py` 投影约定一致,`fwd = (−sin yaw, 0, −cos yaw)`),视窗 `lon` 与贴图 u 的关系 `u = lon/360`(LON0 = 180 正对中心列)→ 世界 yaw = yaw0 − (lon − 180);`lat` 为仰角。虚线框 = 将保存的画幅范围(屏幕比 ≥ 画幅比时同垂直视场左右裁,否则以屏幕水平视场为准上下裁)。
+- 「🌍 世界模型」板块的 Spark 视窗(`world-viewer.js`)默认**不显示白模线框、不画全景机位红球**,工具栏「💾 背景图」同样按画幅离屏渲一帧,相机方向直接取 three 相机(已在白模坐标系),`view` 记 yaw(罗盘,北 0 · 东 90)/pitch/fov/精度。
+- 服务端 `_scene_plate_manual`(services/runtime/core.py):校验宽高比与项目画幅一致(不一致 400)、按 `camera_facts` 算机位事实(朝向/机高/俯仰/视场/罗盘/standing),存 `plates/<plate_key>_hand<时间戳>.png`(JPEG 内容)+ 同名 `.json`,库条目 `master: true`、`manual: true`、`pano_ref = {kind: pano_manual | world_manual, anchor_id, scheme, view, source_file}`、`plate_mode: manual`。`is_legacy` 为否;分镜预览页「换图」候选列表自动包含,母图制 `find_master` 也能复用。场景预览页 caption 显示「手工截取(全景 A3)」/「手工截取(世界模型)」。
+- 保存后页面原位重载(`reloadKeep`)以刷新「分镜背景图」板块;世界模型视窗重挂后状态行保留保存提示 60 s。隔离实例(8730/8740)无头实测:全景 A1/A3、世界模型各保存成功,候选列表可见。
+
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）
 
 grp003 的 sh005 背景图（机位在路上、朝南南西横看绿化带，54 mm）被画成了朝西沿马路望向夕阳的纵深街景，视频模型因此把 sh006 的图当成整组唯一背景，两镜同景。原因是提示词里「画左/画右」引用了布局图 orientation 的四边文字（「马路向路口延伸、夕阳压在这一端」），加上路端方向地标出现在画幅边缘时仍写成「马路向远处延伸」。现在：

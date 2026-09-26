@@ -1,5 +1,7 @@
 // 场景预览页「🌍 世界模型」板块(2026-09-12 World Labs Marble):用 Spark 在浏览器里渲染场景的高斯泼溅 world,
-// 按 world.json#alignment 对齐到白模坐标(米,Y 向上),叠加白模线框便于比对;拖动转头、WASD 漫游。
+// 按 world.json#alignment 对齐到白模坐标(米,Y 向上),可叠加白模线框比对(2026-09-26 起默认关、不再画全景机位红球);拖动转头、WASD 漫游。
+// 「💾 背景图」(2026-09-26):把视窗当前画面按项目画幅(长边 1920)离屏渲一帧,连同相机白模坐标(position/target/fov)POST 到
+// scenes/<sid>/plates/manual 存为本场景一张新背景图(opts.format 给画幅,opts.onSaved 保存后回调)。
 // 依赖页面 importmap:three / three/addons/ / @sparkjsdev/spark(见 preview_scenes.html)。
 import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
@@ -7,6 +9,7 @@ import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t=s=>window.I18N?.t?window.I18N.t(s):s;
 const deg=r=>r*180/Math.PI;
+let lastSaved=null;   // {sid,text,at}:保存背景图后页面会重载板块(视窗重挂),把成功提示带到重挂后的状态行
 
 function whiteboxWire(scene){
   // 白模几何线框(墙/家具)+ 地面外框,用于核对 world 与白模的对齐;不写深度,透过 splat 可见
@@ -35,8 +38,8 @@ async function compiledScene(project,sid){
   return null;
 }
 
-// host:板块内的视窗容器;world:预览 API 的 scenes[].world(files/alignment/base_url)。返回 dispose()。
-export async function mountWorld(host,project,sid,world){
+// host:板块内的视窗容器;world:预览 API 的 scenes[].world(files/alignment/base_url);opts:{format:{width,height}, onSaved(d)}。返回 dispose()。
+export async function mountWorld(host,project,sid,world,opts={}){
   const base=world.base_url||`/api/v1/projects/${encodeURIComponent(project)}/artifacts/assets/concepts/scenes/${encodeURIComponent(sid)}/world/`;
   const scene=await compiledScene(project,sid);
   const al=world.alignment||{};
@@ -46,12 +49,13 @@ export async function mountWorld(host,project,sid,world){
   const W=960,H=540;
   host.innerHTML=`<div class="wb-toolbar wv-toolbar">
     <label>${esc(t('精度'))} <select class="wv-res">${resOptions.map(r=>`<option value="${esc(r)}"${r===pick?' selected':''}>${esc(r)}</option>`).join('')}</select></label>
-    <label><input type="checkbox" class="wv-wire" checked> ${esc(t('白模线框'))}</label>
+    <label><input type="checkbox" class="wv-wire"> ${esc(t('白模线框'))}</label>
     <label><input type="checkbox" class="wv-splat" checked> ${esc(t('世界'))}</label>
     <button type="button" class="wv-home">${esc(t('回到全景机位'))}</button>
     <label>${esc(t('yaw 微调°'))} <input class="wv-yaw" type="number" step="1" value="${Number(al.yaw_fix_deg||0)}" style="width:60px"></label>
-    <label>${esc(t('尺度微调'))} <input class="wv-scale" type="number" step="0.01" value="${Number(al.scale_fix||1)}" style="width:64px"></label></div>
-    <div class="wb-status wv-status">${esc(t('加载中…'))}</div>
+    <label>${esc(t('尺度微调'))} <input class="wv-scale" type="number" step="0.01" value="${Number(al.scale_fix||1)}" style="width:64px"></label>
+    <button type="button" class="wv-save" title="${esc(t('把当前画面保存为本场景的一张新背景图(记录机位坐标),之后可在分镜预览页「换图」选用'))}">💾 ${esc(t('背景图'))}</button></div>
+    <div class="wb-status wv-status${(lastSaved&&lastSaved.sid===sid&&Date.now()-lastSaved.at<60000)?' ok':''}">${esc((lastSaved&&lastSaved.sid===sid&&Date.now()-lastSaved.at<60000)?lastSaved.text+' · '+t('加载中…'):t('加载中…'))}</div>
     <div class="wb-views"><figure style="--wb-aspect:16/9"><canvas class="wv-canvas" width="${W}" height="${H}" tabindex="0" style="max-width:100%;outline:none;cursor:grab"></canvas>
       <figcaption>${esc(t('拖动=转头 · W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速 · 滚轮=前进'))}</figcaption></figure></div>
     <div class="wb-status wv-info" data-no-i18n></div>`;
@@ -63,8 +67,7 @@ export async function mountWorld(host,project,sid,world){
   // 对齐:外层 Group = 绕 Y 转全景 yaw、平移到全景相机位;内层 SplatMesh = ×scale、y 减 ground offset、绕 X 转 180°(OpenCV→three.js)
   const outer=new THREE.Group();three.add(outer);
   let splat=null;
-  const wire=scene?.objects&&scene.dimensions_m?whiteboxWire(scene):null;if(wire)three.add(wire);
-  const marker=new THREE.Mesh(new THREE.SphereGeometry(.06,12,8),new THREE.MeshBasicMaterial({color:0xff4060}));marker.position.fromArray(cam0);three.add(marker);
+  const wire=scene?.objects&&scene.dimensions_m?whiteboxWire(scene):null;if(wire){wire.visible=false;three.add(wire);}   // 默认不显示线框(2026-09-26)
   const applyAlignment=()=>{
     const fix=Number(host.querySelector('.wv-scale').value||1);
     const s=(al.metric_scale_factor||1)*fix;
@@ -77,7 +80,8 @@ export async function mountWorld(host,project,sid,world){
     if(splat){outer.remove(splat);splat.dispose?.();splat=null;}
     status.textContent=t('加载世界模型中…')+` (${res})`;
     const m=new SplatMesh({url:base+world.files.splats[res]});outer.add(m);splat=m;applyAlignment();
-    try{await m.initialized;status.textContent=`${t('已加载')} ${res} · ${m.numSplats.toLocaleString()} splats · scale ${al.metric_scale_factor??'?'} · ground offset ${al.ground_plane_offset??'?'} m(${t('全景相机离地')} ${cam0[1]} m)`;}
+    try{await m.initialized;const keep=(lastSaved&&lastSaved.sid===sid&&Date.now()-lastSaved.at<60000)?lastSaved.text+' · ':'';
+      status.textContent=keep+`${t('已加载')} ${res} · ${m.numSplats.toLocaleString()} splats · scale ${al.metric_scale_factor??'?'} · ground offset ${al.ground_plane_offset??'?'} m(${t('全景相机离地')} ${cam0[1]} m)`;}
     catch(e){status.textContent=t('世界模型加载失败:')+(e?.message||e);}
   };
   // 漫游控制:拖动转头(yaw/pitch),键盘平移
@@ -97,6 +101,32 @@ export async function mountWorld(host,project,sid,world){
   host.querySelector('.wv-splat').onchange=e=>{outer.visible=e.target.checked;};
   host.querySelector('.wv-yaw').oninput=applyAlignment;host.querySelector('.wv-scale').oninput=applyAlignment;
   host.querySelector('.wv-res').onchange=e=>loadSplat(e.target.value);
+  // 💾 背景图:按项目画幅离屏渲一帧(同一任务内 toDataURL)→ POST plates/manual;相机方向直接取 three 相机(已在白模坐标系)
+  const saveBtn=host.querySelector('.wv-save');
+  saveBtn.onclick=async()=>{
+    if(!splat||saveBtn.disabled)return;
+    const f=opts.format||{},fw=f.width>0?f.width:16,fh=f.height>0?f.height:9,sc=1920/Math.max(fw,fh);
+    const PW=Math.round(fw*sc/2)*2,PH=Math.round(fh*sc/2)*2;
+    const asp0=camera.aspect;
+    camera.aspect=PW/PH;camera.updateProjectionMatrix();renderer.setSize(PW,PH,false);renderer.render(three,camera);
+    const dataUrl=canvas.toDataURL('image/jpeg',.92);
+    camera.aspect=asp0;camera.updateProjectionMatrix();renderer.setSize(W,H,false);
+    const dir=new THREE.Vector3();camera.getWorldDirection(dir);const p=camera.position,D=5;
+    const body={source:'world',image:dataUrl,anchor_id:world.input?.anchor_id||'',scheme:world.input?.scheme||'',
+      source_file:`assets/concepts/scenes/${sid}/world/world.json`,
+      camera:{position:[p.x,p.y,p.z],target:[p.x+dir.x*D,p.y+dir.y*D,p.z+dir.z*D],fov_v_deg:camera.fov},
+      view:{yaw_deg:((360-deg(yawPitch.yaw))%360+360)%360,pitch_deg:deg(yawPitch.pitch),fov_v_deg:camera.fov,res:host.querySelector('.wv-res').value}};
+    saveBtn.disabled=true;const txt=saveBtn.textContent;saveBtn.textContent=t('保存中…');
+    try{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/scenes/${encodeURIComponent(sid)}/plates/manual`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:保存背景图接口不可用'):String(r.status)));
+      status.className='wb-status wv-status ok';status.textContent=(window.I18N?.f?I18N.f('已保存背景图 {key}',{key:d.key}):'saved '+d.key)+` · ${d.camera?.facing||''} h=${d.camera?.height_m}m ${d.camera?.lens_mm_equiv}mm`;
+      lastSaved={sid,text:status.textContent,at:Date.now()};
+      if(typeof opts.onSaved==='function')opts.onSaved(d);
+    }catch(e){status.className='wb-status wv-status err';status.textContent=t('保存失败:')+(e.message||e);}
+    finally{saveBtn.disabled=false;saveBtn.textContent=txt;}
+  };
   let last=performance.now(),disposed=false;
   const loop=now=>{
     if(disposed||!host.isConnected){disposed=true;renderer.dispose();return;}

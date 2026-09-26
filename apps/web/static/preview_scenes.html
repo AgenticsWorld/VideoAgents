@@ -360,7 +360,7 @@ function renderDetail(s){
       +plates.map(p=>{
         const cam=p.camera||{};
         const used=(p.used_by||[]).join(', ');
-        const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+        const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)'):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
@@ -489,7 +489,7 @@ function mountWorldSection(whitebox,s){
   }};
   if(world&&world.files&&Object.keys(world.files.splats||{}).length){
     const host=sec.querySelector('.ws-viewer');
-    import('/static/world-viewer.js?v=20260912-world').then(m=>m.mountWorld(host,proj,s.id,world)).catch(e=>{host.textContent=t('世界模型加载失败:')+(e.message||e);});
+    import('/static/world-viewer.js?v=20260926-save2').then(m=>m.mountWorld(host,proj,s.id,world,{format:FORMAT||null,onSaved:()=>reloadKeep()})).catch(e=>{host.textContent=t('世界模型加载失败:')+(e.message||e);});
   }
 }
 // 后台任务完成后重取预览数据并原位重绘(保留当前场景与滚动位置)
@@ -579,7 +579,9 @@ async function mountPanoSection(host,s){
     const formal=Object.keys(a.panos||{}).sort().filter(sch=>a.panos[sch].url);
     formal.forEach(sch=>{const rec=a.panos[sch];
       const cap=`${sch}${rec.time_of_day?` · ${rec.time_of_day}`:''} · ${modeText(rec)}`;
-      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" onclick="zoomPano(this.src)" title="${esc(t('点击打开 360° 预览'))}"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
+      // 正式全景带锚点信息进 360° 视窗(2026-09-26):视窗右上角「💾 背景图」把当前画面连同机位坐标存为本场景新背景图
+      const pm={anchor_id:a.anchor_id,scheme:sch,position:a.position,yaw_deg:a.yaw_deg||0,time_of_day:rec.time_of_day||null,source_file:rec.file?`assets/concepts/scenes/${s.id}/panos/${a.anchor_id}/${rec.file}`:''};
+      h+=`<figure><img src="${esc(bust(rec.url))}" loading="lazy" data-pano='${esc(JSON.stringify(pm))}' onclick="zoomPanoAnchor(this)" title="${esc(t('点击打开 360° 预览;视窗里可「💾 背景图」保存当前画面'))}"><figcaption><span class="fn" title="${esc(cap)}">${esc(cap)}</span></figcaption></figure>`;});
     h+='</div>';
     // 归档图子行(2026-09-25):机检拒掉(.rejected-projection/-conformity)/ 非 2:1(.rejected)/ --redo 归档(.redo)的成图不入索引,
     // 这里列出来给用户目视裁决:点图进 360° 视窗(接缝在图的左右缘=视窗里转到背后看),「认领」= render_scene_panos.py --adopt --pick(免费)
@@ -753,7 +755,13 @@ function closeFolder(){openFolder(null)}
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 // 全景图(2:1 等距柱状)点击 → 可拖动的 360° 预览(pano-viewer.js,three 内翻球);模块加载失败时退回平面灯箱
-function zoomPano(src){import('/static/pano-viewer.js?v=20260921').then(m=>m.openPano360(src)).catch(()=>zoom(src))}
+function zoomPano(src){import('/static/pano-viewer.js?v=20260926b').then(m=>m.openPano360(src)).catch(()=>zoom(src))}
+// 正式全景(带锚点数据)进 360° 视窗:附 project/sid/画幅与保存回调,视窗显示「💾 背景图」(2026-09-26)
+function zoomPanoAnchor(img){
+  let pm={};try{pm=JSON.parse(img.dataset.pano||'{}');}catch(e){pm={};}
+  const info={...pm,project:$('#project').value.trim()||'demo',sid:CUR,format:FORMAT||null,onSaved:()=>reloadKeep()};
+  import('/static/pano-viewer.js?v=20260926b').then(m=>m.openPano360(img.src,info)).catch(()=>zoom(img.src));
+}
 
 // ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 项目画幅(预览数据 format,
 // 缺失时退回图片自身比例);拖选框移动、拖四角缩放(对角固定);确认 → POST scenes/<sid>/plates/crop,服务端裁切覆盖原图后原地换图,不整页重载。

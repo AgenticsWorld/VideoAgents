@@ -462,6 +462,12 @@ async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict
 
 
 
+@api.post("/projects/{project}/scenes/{sid}/plates/manual", tags=["artifacts"])
+async def scene_plate_manual(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「💾 背景图」(2026-09-26):把全景 360° 视窗 / 世界模型视窗当前画面(客户端渲染的 dataURL)连同机位坐标存为本场景一张新背景图。"""
+    return _artifact_urls(await core.api_scene_plate_manual(project, sid, body), project)
+
+
 @api.post("/projects/{project}/scenes/{sid}/plates/mode", tags=["artifacts"])
 async def scene_plates_mode(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
     """场景级「场景图」模式覆盖(inherit|single|pair;白模关闭项目的正向/反向场景图方案,2026-09-17)。"""

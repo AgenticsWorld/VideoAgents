@@ -7613,6 +7613,98 @@ async def api_scene_plate_crop(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_plate_crop, project, sid, body)
 
 
+# ---------------- 场景预览页「💾 背景图」(2026-09-26):把全景 360° 视窗 / 世界模型视窗当前画面存为一张新背景图 ----------------
+def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
+    """{source: pano|world, image: dataURL(JPEG/PNG,客户端已按分镜图规格渲染), camera: {position, target, fov_v_deg}(白模坐标,米),
+    anchor_id, scheme, view: {lon,lat} | {yaw_deg,pitch_deg}, source_file} → 存到本场景背景图库 plates/<key>.png(JPEG 内容,与库图同一约定)
+    + <key>.json 台账,条目 master=True / manual=True / pano_ref.kind = pano_manual | world_manual,camera 为按 camera_facts 算出的机位事实
+    (朝向/机高/俯仰/视场/罗盘),之后可在分镜预览页「换图」里选用,也参与母图制 find_master 复用。图片尺寸不满分镜图规格时按长边放大到规格。"""
+    import base64 as _b64
+    import io as _io
+    from modules import shot_plates
+    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
+    try:
+        from PIL import Image
+    except ImportError:  # pragma: no cover
+        raise ServiceError(501, "缺少 Pillow,无法保存:pip install Pillow") from None
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    if not sid or not (base / "assets/concepts/scenes" / sid).is_dir():
+        raise ServiceError(404, f"场景 {sid} 不存在")
+    body = body or {}
+    source = str(body.get("source") or "").strip().lower()
+    if source not in ("pano", "world"):
+        raise ServiceError(400, "source must be pano or world")
+    data = str(body.get("image") or "")
+    m = re.match(r"^data:image/(jpeg|jpg|png|webp);base64,(.+)$", data, re.S)
+    if not m:
+        raise ServiceError(400, "image 须为 data:image/jpeg|png;base64 数据")
+    try:
+        raw = _b64.b64decode(m.group(2), validate=False)
+    except Exception:  # noqa: BLE001
+        raise ServiceError(400, "image base64 解码失败") from None
+    if len(raw) > 40 * 1024 * 1024:
+        raise ServiceError(413, "图片超过 40 MB")
+    cam = body.get("camera") or {}
+    try:
+        pos = [float(v) for v in cam.get("position")]; tgt = [float(v) for v in cam.get("target")]
+        fov = float(cam.get("fov_v_deg"))
+        assert len(pos) == 3 and len(tgt) == 3 and all(math.isfinite(v) for v in pos + tgt + [fov]) and 5 <= fov <= 150
+    except Exception:  # noqa: BLE001
+        raise ServiceError(400, "camera.position / camera.target(白模坐标,米)与 camera.fov_v_deg(5–150)必填") from None
+    if math.dist(pos, tgt) < 1e-3:
+        raise ServiceError(400, "camera.target 不能与 position 重合")
+    scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or "")) or "nolight"
+    anchor_id = re.sub(r"[^\w\-]", "", str(body.get("anchor_id") or ""))
+    fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
+    pw, ph = shot_plates.plate_size(fmt)
+    layout = _wb_read(base / "assets/concepts/scenes" / sid / "layout.json", {}) or {}
+    scene = _wb_read(base / "assets/concepts/scenes" / sid / "whitebox.scene.json", {}) or {}
+    ex, ez, texts = shot_plates.orientation_axes(layout)
+    key_cam = {"position": pos, "target": tgt, "fov": fov}
+    facts = shot_plates.camera_facts(key_cam, fmt, ex, ez, texts)
+    try:
+        facts["standing"] = shot_plates.standing_on(scene, layout, key_cam) if scene.get("objects") else ""
+    except Exception:  # noqa: BLE001
+        facts["standing"] = ""
+    with Image.open(_io.BytesIO(raw)) as im:
+        im = im.convert("RGB")
+        W, H = im.size
+        if min(W, H) < 64:
+            raise ServiceError(400, "图片太小")
+        if abs(W / H - pw / ph) > 0.02:
+            raise ServiceError(400, f"图片宽高比 {W}x{H} 与项目画幅 {pw}x{ph} 不符")
+        if (W, H) != (pw, ph):
+            im = im.resize((pw, ph), Image.LANCZOS)
+        now = datetime.now()
+        stamp = now.strftime("%Y%m%d-%H%M%S")
+        key = f"{shot_plates.plate_key(scheme, facts)}_hand{stamp}"
+        lib = shot_plates.load_library(base, sid)
+        while any(e.get("key") == key for e in lib["plates"]):
+            key += "x"
+        rel = f"assets/concepts/scenes/{sid}/{shot_plates.PLATES_DIR}/{key}.png"
+        out = base / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        im.save(out, format="JPEG", quality=92)   # 文件名 .png、内容 JPEG:与库图约定一致
+    view = body.get("view") if isinstance(body.get("view"), dict) else {}
+    view = {k: (round(float(v), 3) if isinstance(v, (int, float)) else v) for k, v in view.items() if k in ("lon", "lat", "yaw_deg", "pitch_deg", "fov_v_deg", "res")}
+    src_file = str(body.get("source_file") or "")
+    entry = {"key": key, "master": True, "manual": True, "file": rel, "lighting_scheme_id": scheme, "time_of_day": body.get("time_of_day"),
+             "camera": facts, "size": f"{pw}x{ph}", "refs": [src_file] if src_file else [],
+             "pano_ref": {"kind": f"{source}_manual", "anchor_id": anchor_id or None, "scheme": scheme, "view": view, "source_file": src_file or None},
+             "plate_mode": "manual", "created_by": {"source": "preview_ui", "tool": "pano360" if source == "pano" else "world-viewer"},
+             "written_at": now.isoformat(timespec="seconds")}
+    (base / rel).with_suffix(".json").write_text(json.dumps(entry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    lib["plates"] = [e for e in lib["plates"] if e.get("key") != key] + [entry]
+    shot_plates.save_library(base, sid, lib)
+    return {"ok": True, "key": key, "file": rel, "size": entry["size"], "camera": {k: facts.get(k) for k in ("facing", "bearing_deg", "height_m", "pitch_deg", "lens_mm_equiv", "fov_h_deg")},
+            "url": f"/projects/{base.name}/{rel}?v={int(out.stat().st_mtime)}"}
+
+
+async def api_scene_plate_manual(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plate_manual, project, sid, body)
+
+
 # ---------------- 分镜预览「🔁 换图」(2026-09-23):从本场景背景图库里手选一张替换本镜的起点/终点背景图 ----------------
 def _shot_plate_ctx(project: str, ep: str, shot_id: str):
     from modules import shot_plates
