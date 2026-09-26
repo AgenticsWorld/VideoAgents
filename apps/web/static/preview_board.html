@@ -51,6 +51,10 @@ header input{cursor:text;width:220px}
 #eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
 #eps button .st{font-size:10px;margin-left:4px;opacity:.75}
+/* 📨 提交注释(2026-09-26):分集行靠右,把本集全部注释一次性发修改师并清空;有注释时黄色 */
+#eps .notes-submit{margin-left:auto}
+#eps .notes-submit.has{color:var(--yellow);border-color:rgba(251,191,36,.55)}
+#eps .notes-submit:disabled{opacity:.45;cursor:default}
 #content{flex:1;overflow-y:auto;padding:16px 22px 60px}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
 h2.title{font-size:19px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
@@ -291,7 +295,7 @@ async function saveNote(text){
     const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/board/${encodeURIComponent(ep)}/notes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,text})});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(j.detail||j.error||r.status);
-    NOTES=j.notes||{};closeNote();renderNoteTarget(key);
+    NOTES=j.notes||{};closeNote();renderNoteTarget(key);refreshNotesSubmit();
   }catch(err){np.querySelector('.err').textContent=I18N.f('保存失败:{e}',{e:err.message})}
   finally{np.querySelectorAll('button').forEach(b=>b.disabled=false)}
 }
@@ -331,7 +335,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 function render(d){
   LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};NOTES=d.notes||{};
   PORTRAIT=aspectPortrait(d.aspect);
-  renderEps(d.episodes||[]);
+  renderEps(d.episodes||[]);$('#eps').appendChild(notesSubmitBtn());
   const box=$('#content'),ep=d.ep;
   renderNav(null);
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
@@ -652,6 +656,30 @@ function renderEps(episodes){
   EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()},{
     btnTag:e=>`<span class="st" title="${esc(e.has_storyboard?t('已有分镜草案'):e.has_plan?t('仅导演计划,尚无分镜'):t('无分镜'))}">${glyph(e)}</span>`,
     optTag:glyph});
+}
+/* 📨 提交注释(2026-09-26):分集行靠右;本集全部注释(整集/场次/镜,含对象定位信息)由服务端拼成一张修改单发修改师,
+   派单成功后 storyboard_notes.json 清空;无注释时禁用 */
+function notesSubmitBtn(){
+  const n=Object.keys(NOTES||{}).length,b=document.createElement('button');
+  b.className='notes-submit editbtn'+(n?' has':'');b.id='notes-submit';b.disabled=!n;
+  b.innerHTML=`📨 ${esc(t('提交注释'))}${n?`<span class="st">${n}</span>`:''}`;
+  b.title=n?I18N.f('把本集 {n} 条注释(含对象定位信息)一次性发给修改师处理;提交后清空注释',{n}):t('本集暂无注释');
+  b.onclick=submitNotes;
+  return b;
+}
+function refreshNotesSubmit(){const old=$('#notes-submit');if(old)old.replaceWith(notesSubmitBtn());else if(LAST)$('#eps').appendChild(notesSubmitBtn())}
+async function submitNotes(){
+  if(!LAST||!LAST.ep)return;
+  const n=Object.keys(NOTES||{}).length;if(!n)return;
+  if(!confirm(I18N.f('把本集 {n} 条注释一次性发给修改师处理,并清空这些注释?',{n})))return;
+  const proj=$('#project').value.trim()||'demo',b=$('#notes-submit');if(b)b.disabled=true;
+  try{
+    const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/board/${encodeURIComponent(LAST.ep)}/notes/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    NOTES={};JumpAnchor.toast(I18N.f('✅ 已把 {n} 条注释发给修改师,注释已清空',{n:j.count??n}));
+    load(true);
+  }catch(err){JumpAnchor.toast(t('提交失败:')+err.message);refreshNotesSubmit()}
 }
 
 async function load(keep){

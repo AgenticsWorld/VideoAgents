@@ -3841,4 +3841,15 @@ window.I18N_DICT = {
 "工位建议": "Đề xuất của trạm",
 "成对运镜": "Chuyển động máy ghép đôi",
 "音先入": "Âm thanh vào trước (J-cut)",
+
+// 📨 提交注释(2026-09-26,故事板页 / 分镜预览页分集行)
+"提交注释": "Gửi ghi chú",
+"把本集 {n} 条注释(含对象定位信息)一次性发给修改师处理;提交后清空注释": "Gửi cùng lúc {n} ghi chú của tập này (kèm thông tin vị trí đối tượng) cho người sửa; ghi chú sẽ được xóa sau khi gửi",
+"本集暂无注释": "Tập này chưa có ghi chú",
+"把本集 {n} 条注释一次性发给修改师处理,并清空这些注释?": "Gửi cùng lúc {n} ghi chú của tập này cho người sửa và xóa chúng?",
+"✅ 已把 {n} 条注释发给修改师,注释已清空": "✅ Đã gửi {n} ghi chú cho người sửa; ghi chú đã được xóa",
+"把本集 {n} 条组注释(含组定位信息)一次性发给修改师处理;提交后清空注释": "Gửi cùng lúc {n} ghi chú nhóm của tập này (kèm thông tin vị trí nhóm) cho người sửa; ghi chú sẽ được xóa sau khi gửi",
+"本集暂无组注释": "Tập này chưa có ghi chú nhóm",
+"把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Gửi cùng lúc {n} ghi chú nhóm của tập này cho người sửa và xóa chúng?",
+"✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ Đã gửi {n} ghi chú nhóm cho người sửa; ghi chú đã được xóa",
 };

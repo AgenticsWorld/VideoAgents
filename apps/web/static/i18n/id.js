@@ -3841,4 +3841,15 @@ window.I18N_DICT = {
 "工位建议": "Usulan stasiun",
 "成对运镜": "Gerak kamera berpasangan",
 "音先入": "Audio mendahului (J-cut)",
+
+// 📨 提交注释(2026-09-26,故事板页 / 分镜预览页分集行)
+"提交注释": "Kirim catatan",
+"把本集 {n} 条注释(含对象定位信息)一次性发给修改师处理;提交后清空注释": "Kirim semua {n} catatan episode ini (dengan info lokasi objek) ke reviser sekaligus; catatan dihapus setelah dikirim",
+"本集暂无注释": "Episode ini belum punya catatan",
+"把本集 {n} 条注释一次性发给修改师处理,并清空这些注释?": "Kirim semua {n} catatan episode ini ke reviser sekaligus dan hapus catatannya?",
+"✅ 已把 {n} 条注释发给修改师,注释已清空": "✅ {n} catatan terkirim ke reviser; catatan dihapus",
+"把本集 {n} 条组注释(含组定位信息)一次性发给修改师处理;提交后清空注释": "Kirim semua {n} catatan grup episode ini (dengan info lokasi grup) ke reviser sekaligus; catatan dihapus setelah dikirim",
+"本集暂无组注释": "Episode ini belum punya catatan grup",
+"把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Kirim semua {n} catatan grup episode ini ke reviser sekaligus dan hapus catatannya?",
+"✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} catatan grup terkirim ke reviser; catatan dihapus",
 };

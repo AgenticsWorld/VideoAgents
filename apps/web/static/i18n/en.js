@@ -3852,4 +3852,15 @@ window.I18N_DICT = {
 "工位建议": "Workstation proposal",
 "成对运镜": "Paired camera move",
 "音先入": "Audio lead (J-cut)",
+
+// 📨 提交注释(2026-09-26,故事板页 / 分镜预览页分集行)
+"提交注释": "Submit notes",
+"把本集 {n} 条注释(含对象定位信息)一次性发给修改师处理;提交后清空注释": "Send all {n} notes of this episode (with object location info) to the reviser in one go; notes are cleared after submission",
+"本集暂无注释": "This episode has no notes",
+"把本集 {n} 条注释一次性发给修改师处理,并清空这些注释?": "Send all {n} notes of this episode to the reviser in one go and clear them?",
+"✅ 已把 {n} 条注释发给修改师,注释已清空": "✅ {n} notes sent to the reviser; notes cleared",
+"把本集 {n} 条组注释(含组定位信息)一次性发给修改师处理;提交后清空注释": "Send all {n} group notes of this episode (with group location info) to the reviser in one go; notes are cleared after submission",
+"本集暂无组注释": "This episode has no group notes",
+"把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Send all {n} group notes of this episode to the reviser in one go and clear them?",
+"✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} group notes sent to the reviser; notes cleared",
 };

@@ -292,6 +292,12 @@ async def board_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, A
     return await core.api_board_note_set(project, ep, body)
 
 
+@api.post("/projects/{project}/board/{ep}/notes/submit", tags=["artifacts"])
+async def board_notes_submit(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """故事板页「📨 提交注释」(2026-09-26):本集全部注释(含对象定位信息)拼成一张修改单发修改师,派单成功后清空注释;{rerun_downstream?}。"""
+    return await core.api_board_notes_submit(project, ep, body or {})
+
+
 @api.post("/projects/{project}/board/{ep}/animatic", tags=["artifacts"])
 async def board_animatic(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """故事板/成片发布页「出动态样片」:{no_audio?};宿主后台跑 code/animatic.py,结束发 SSE board_animatic。"""
@@ -980,6 +986,12 @@ async def sketchgen_status(project: str = "", ep: str = "", grp: str = "") -> di
 @api.post("/storyboard/notes", tags=["storyboard"])
 async def storyboard_note(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_grpnote_set(body)
+
+
+@api.post("/storyboard/notes/submit", tags=["storyboard"])
+async def storyboard_notes_submit(body: dict[str, Any]) -> dict[str, Any]:
+    """分镜预览页「📨 提交注释」(2026-09-26):{project, ep, rerun_downstream?} 本集全部组注释一次性发修改师,派单成功后逐组清空。"""
+    return await core.api_grpnotes_submit(body)
 
 
 @api.post("/storyboard/prompt", tags=["storyboard"])

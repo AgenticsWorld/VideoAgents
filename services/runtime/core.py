@@ -8933,6 +8933,172 @@ async def api_board_note_set(project: str, ep: str, body: dict):
     return await asyncio.to_thread(_board_note_set, project, ep, body)
 
 
+def _notes_submit_zh() -> bool:
+    """「提交注释」修改单正文语言:界面语言中文写中文,其余一律英文(服务端文案规约)。"""
+    code = (ui_lang_code() or "zh").lower()
+    return code.startswith("zh")
+
+
+def _board_notes_submit_message(ep: str, notes: dict, board: dict, zh: bool) -> tuple[str, list[str]]:
+    """把故事板页本集全部注释按 整集 → 场次 → 镜(故事板顺序)排成修改单正文,每条带对象定位信息
+    (场次号/地点/scene_id;镜的草案序号/内容摘要/定稿镜号)。返回 (正文, 条目顺序键)。"""
+    scenes = board.get("scenes") or []
+    order: list[str] = ["*"] + [k for sc in scenes for k in [sc.get("scene_no")] + [sh.get("key") for sh in sc.get("shots") or []] if k]
+    keys = [k for k in order if k in notes] + sorted(k for k in notes if k not in order)
+    sc_by_no = {sc.get("scene_no"): sc for sc in scenes}
+    sh_by_key = {sh.get("key"): (sc, sh) for sc in scenes for sh in sc.get("shots") or []}
+    lines = []
+    for i, k in enumerate(keys, 1):
+        n = notes[k] or {}
+        text = str(n.get("text") or "").strip()
+        if k == "*":
+            obj = (f"整集 {ep} {board.get('title') or n.get('title') or ''}" if zh
+                   else f"Whole episode {ep} {board.get('title') or n.get('title') or ''}").strip()
+        elif k in sc_by_no:
+            sc = sc_by_no[k]
+            loc = sc.get("location") or n.get("location") or ""
+            sid = sc.get("scene_id") or n.get("scene_id") or ""
+            obj = (f"场次 {k}{' ' + loc if loc else ''}{'(' + sid + ')' if sid else ''}" if zh
+                   else f"Scene {k}{' ' + loc if loc else ''}{' (' + sid + ')' if sid else ''}")
+        elif k in sh_by_key:
+            sc, sh = sh_by_key[k]
+            finals = [f.get("shot_id") for f in sh.get("final") or [] if f.get("shot_id")]
+            content = (sh.get("content") or "").strip()
+            old = (n.get("content") or "").strip()
+            obj = (f"场次 {sc.get('scene_no')} 第 {sh.get('order')} 镜(草案 {k}"
+                   f"{';定稿镜号 ' + ', '.join(finals) if finals else ''}):{content[:120]}" if zh
+                   else f"Scene {sc.get('scene_no')} draft shot {sh.get('order')} ({k}"
+                   f"{'; final shot ids ' + ', '.join(finals) if finals else ''}): {content[:120]}")
+            if old and content and not content.startswith(old[:40]):
+                obj += (f"(写注释时该镜内容:{old})" if zh else f" (shot content when the note was written: {old})")
+        else:
+            lvl = n.get("level") or ""
+            obj = (f"{k}(当前故事板里已找不到该{'场次' if lvl == 'scene' else '镜'};写注释时:场次 {n.get('scene_no') or '-'}"
+                   f"{' 第 ' + str(n.get('order')) + ' 镜' if n.get('order') else ''}"
+                   f"{' ' + n.get('content') if n.get('content') else ''}{' ' + n.get('location') if n.get('location') else ''})" if zh
+                   else f"{k} (no longer in the current storyboard; when written: scene {n.get('scene_no') or '-'}"
+                   f"{' shot ' + str(n.get('order')) if n.get('order') else ''}"
+                   f"{' ' + n.get('content') if n.get('content') else ''}{' ' + n.get('location') if n.get('location') else ''})")
+        when = n.get("updated_at") or n.get("created_at") or ""
+        lines.append(f"{i}. [{k}] {obj}" + (f"({when})" if when and zh else f" ({when})" if when else "") + "\n"
+                     + ("   注释:" if zh else "   Note: ") + text.replace("\n", "\n   "))
+    n = len(keys)
+    if zh:
+        head = (f"以下是用户在「📋 故事板」页对 {ep} 写的全部注释(共 {n} 条),一次性提交给你处理;每条前面是它挂在的对象"
+                f"(整集 * / 场次 SNN / 草案镜 SNN-MM)及定位信息。请逐条落实到 directing/{ep}/storyboard.json"
+                f"(牵涉镜头表 shot_list.json / 组 prompt 时按代行工位规约一并处理),落实不了的在汇报里逐条说明原因。"
+                f"提交时这些注释已从 directing/{ep}/storyboard_notes.json 清空,以本单为准。")
+    else:
+        head = (f"Below are all {n} notes the user wrote on the Storyboard page for {ep}, submitted together for you to act on; "
+                f"each is prefixed with the object it is attached to (whole episode * / scene SNN / draft shot SNN-MM) and its location info. "
+                f"Apply every note to directing/{ep}/storyboard.json (and to shot_list.json / group prompts where it reaches them, "
+                f"per the delegated workstation rules); for any note you cannot apply, explain why, one by one, in your report. "
+                f"The notes were cleared from directing/{ep}/storyboard_notes.json on submission; this order is the source of truth.")
+    return head + "\n\n" + "\n".join(lines), keys
+
+
+async def api_board_notes_submit(project: str, ep: str, body: dict | None = None):
+    """故事板页「📨 提交注释」(2026-09-26):把本集全部注释(含对象定位信息)拼成一张修改单发修改师,
+    派单成功后清空 directing/<ep>/storyboard_notes.json。{rerun_downstream?} 透传修改单。"""
+    from modules import storyboard_board as sbb
+    body = body or {}
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    notes = sbb.load_notes(base, ep)["notes"]
+    if not notes:
+        raise ServiceError(400, "本集没有注释可提交" if _notes_submit_zh() else "This episode has no notes to submit")
+    zh = _notes_submit_zh()
+    board = await asyncio.to_thread(sbb.load_board, base, ep)
+    message, keys = _board_notes_submit_message(ep, notes, board, zh)
+    files = [f"directing/{ep}/storyboard.json"]
+    if (base / "directing" / ep / "shot_list.json").is_file():
+        files.append(f"directing/{ep}/shot_list.json")
+    target = {"kind": "storyboard", "id": "", "ep": ep, "files": files,
+              "label": (f"故事板 {ep} 全部注释({len(keys)} 条)" if zh else f"Storyboard {ep}: all notes ({len(keys)})"),
+              "rerun_downstream": bool(body.get("rerun_downstream"))}
+    res = await api_chat({"agent": REVISER_ID, "message": message, "project": base.name, "target": target, "source": "user"})
+    cleared = await asyncio.to_thread(sbb.clear_notes, base, ep)
+    print(f"[notes-submit] 故事板注释 {base.name}/{ep} {cleared} 条已发修改师 run={res.get('run_id')}", flush=True)
+    return {"ok": True, "run_id": res.get("run_id"), "count": cleared, "keys": keys, "notes": {}}
+
+
+async def api_grpnotes_submit(body: dict):
+    """分镜预览页「📨 提交注释」(2026-09-26):把本集全部组注释(assets/notes/<ep>/<grp>.json,含组定位信息:
+    场次/场景/镜号/时长/节拍/prompt 路径)拼成一张修改单发修改师,派单成功后逐组清空注释
+    (同「清空保存」:从 video_prompt 移除 Director's note 句)。"""
+    project = safe_slug(body.get("project") or "")
+    ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
+    if not project or not ep:
+        raise ServiceError(400, "project and ep are required")
+    zh = _notes_submit_zh()
+    ndir = PROJECTS_DIR / project / "assets" / "notes" / ep
+    groups = _shot_groups_for(project, ep)
+    gmap = {str(g.get("group_id") or ""): g for g in groups}
+    order = {gid: i for i, gid in enumerate(gmap)}
+    items = []
+    for f in (sorted(ndir.glob("*.json")) if ndir.is_dir() else []):
+        text = str((_read_json_safe(f) or {}).get("text") or "").strip()
+        if text:
+            items.append((f.stem, text, (_read_json_safe(f) or {}).get("updated_at") or ""))
+    items.sort(key=lambda x: (order.get(x[0], 10 ** 6), x[0]))
+    if not items:
+        raise ServiceError(400, "本集没有组注释可提交" if zh else "This episode has no group notes to submit")
+    lines, files, gids = [], [f"directing/{ep}/shot_list.json"], []
+    for i, (gid, text, when) in enumerate(items, 1):
+        g = gmap.get(gid) or {}
+        shots = [str(x) for x in (g.get("shots") or []) if x]
+        parts = []
+        if g:
+            if g.get("scene_no") or g.get("scene_id"):
+                parts.append((f"场次 {g.get('scene_no') or '-'} 场景 {g.get('scene_id') or '-'}" if zh
+                              else f"scene {g.get('scene_no') or '-'} / {g.get('scene_id') or '-'}"))
+            if shots:
+                parts.append((f"镜 {', '.join(shots)}" if zh else f"shots {', '.join(shots)}"))
+            if g.get("total_duration_s") is not None:
+                parts.append(f"Σ{g.get('total_duration_s')}s")
+            if g.get("beat"):
+                parts.append((f"节拍:{g.get('beat')}" if zh else f"beat: {g.get('beat')}"))
+        else:
+            parts.append("当前 shot_list 里已没有这个组" if zh else "group no longer in the current shot_list")
+        pf = f"assets/prompts/{ep}/{gid}.json"
+        parts.append(("组 prompt " if zh else "group prompt ") + pf)
+        lines.append(f"{i}. [{gid}] " + " · ".join(parts) + (f"({when})" if when and zh else f" ({when})" if when else "")
+                     + "\n" + ("   注释:" if zh else "   Note: ") + text.replace("\n", "\n   "))
+        if _grp_prompt_path(project, ep, gid).is_file() and len(files) < 20:
+            files.append(pf)
+        gids.append(gid)
+    n = len(items)
+    if zh:
+        head = (f"以下是用户在「分镜预览」页对 {ep} 各生成组写的全部组注释(共 {n} 条),一次性提交给你处理;"
+                f"每条前面是它所属的生成组及定位信息(场次/场景/镜号/时长/节拍/组 prompt 路径)。"
+                f"请逐条落实:该改镜头表(directing/{ep}/shot_list.json)的改镜头表,该改组 prompt(assets/prompts/{ep}/<grp>.json)的"
+                f"按 prompt 工位规约重写相应段落,落实不了的在汇报里逐条说明原因。"
+                f"提交时这些组注释已清空(注入 video_prompt 的 Director's note 句已一并移除),以本单为准;不要再把原注释原句塞回 prompt。")
+    else:
+        head = (f"Below are all {n} group notes the user wrote on the Storyboard preview page for the generation groups of {ep}, "
+                f"submitted together for you to act on; each is prefixed with its generation group and location info "
+                f"(scene / shots / duration / beat / group prompt path). Apply every note: shot-list changes go to "
+                f"directing/{ep}/shot_list.json, prompt changes are rewritten into assets/prompts/{ep}/<grp>.json per the prompt "
+                f"workstation rules; for any note you cannot apply, explain why, one by one, in your report. "
+                f"The group notes were cleared on submission (their injected Director's note sentences were removed from the "
+                f"video_prompt); this order is the source of truth — do not paste the original note sentences back into the prompt.")
+    message = head + "\n\n" + "\n".join(lines)
+    ids = ",".join(gids)
+    target = {"kind": "group", "id": ids if len(ids) <= 120 else "", "ep": ep, "files": files,
+              "label": (f"分镜 {ep} 全部组注释({n} 条:{ids})" if zh else f"Storyboard preview {ep}: all group notes ({n}: {ids})"),
+              "rerun_downstream": bool(body.get("rerun_downstream"))}
+    res = await api_chat({"agent": REVISER_ID, "message": message, "project": project, "target": target, "source": "user"})
+    cleared = []
+    for gid in gids:
+        try:
+            await api_grpnote_set({"project": project, "ep": ep, "grp": gid, "text": ""})
+        except ServiceError:      # 组 prompt 文件已不存在:只删注释文件
+            _grpnote_path(project, ep, gid).unlink(missing_ok=True)
+        cleared.append(gid)
+    print(f"[notes-submit] 组注释 {project}/{ep} {cleared} 已发修改师 run={res.get('run_id')}", flush=True)
+    return {"ok": True, "run_id": res.get("run_id"), "count": len(cleared), "groups": cleared}
+
+
 async def api_board_sketches(project: str, ep: str):
     """草图台账 + 后台任务状态(页面轮询/SSE 兜底)。"""
     from modules import storyboard_board as sbb

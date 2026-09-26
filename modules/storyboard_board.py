@@ -286,6 +286,21 @@ def update_note(base: Path, ep: str, key: str, text: str, meta: dict | None = No
     return d
 
 
+def clear_notes(base: Path, ep: str) -> int:
+    """「提交注释」后清空本集全部注释(2026-09-26):删 storyboard_notes.json(flock 串行),返回清掉的条数。
+    注释正文已随修改单进入修改师的对话记录,文件不留副本。"""
+    p = notes_path(base, ep)
+    lock = p.with_suffix(".lock")
+    with open(lock, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            n = len(load_notes(base, ep)["notes"])
+            p.unlink(missing_ok=True)
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+    return n
+
+
 def note_meta(board: dict, key: str) -> dict:
     """按注释键从归一化故事板取定位元数据(镜级:scene_no/order/shot_id/content 摘要;场级:scene_no/location)。"""
     if key == "*":

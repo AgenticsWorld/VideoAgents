@@ -58,6 +58,11 @@ header .ps-info select.ov{color:var(--accent)}
 #eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
 #eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+/* 📨 提交注释(2026-09-26):分集行靠右,把本集全部组注释一次性发修改师并清空;有注释时紫色同 📝 组注释 */
+#eps .notes-submit{margin-left:auto}
+#eps .notes-submit.has{color:var(--purple);border-color:var(--purple)}
+#eps .notes-submit:disabled{opacity:.45;cursor:default}
+#eps .notes-submit .st{font-size:10px;margin-left:4px;opacity:.75}
 #main{flex:1;display:flex;min-height:0}
 #cwrap{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;min-height:0}
 #content{flex:1;min-height:0;overflow-y:auto;padding:20px 26px;--stick:0px}
@@ -1253,7 +1258,30 @@ $('#gs-ok').onclick=async()=>{
 };
 
 // 集行:≤12 集逐集按钮,更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
-function renderEps(episodes){EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()})}
+function renderEps(episodes){EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()});$('#eps').appendChild(notesSubmitBtn())}
+/* 📨 提交注释(2026-09-26):分集行靠右;本集全部组注释(assets/notes/<ep>/<grp>.json,含组定位:场次/场景/镜号/时长/节拍/prompt 路径)
+   由服务端拼成一张修改单发修改师,派单成功后逐组清空(同「清空保存」,Director's note 句从 video_prompt 移除);无注释时禁用 */
+function notesSubmitBtn(){
+  const n=((LAST_DATA&&LAST_DATA.generation_groups)||[]).filter(g=>(g.user_note||'').trim()).length,b=document.createElement('button');
+  b.className='notes-submit editbtn'+(n?' has':'');b.id='notes-submit';b.disabled=!n;
+  b.innerHTML=`📨 ${esc(t('提交注释'))}${n?`<span class="st">${n}</span>`:''}`;
+  b.title=n?I18N.f('把本集 {n} 条组注释(含组定位信息)一次性发给修改师处理;提交后清空注释',{n}):t('本集暂无组注释');
+  b.onclick=submitNotes;
+  return b;
+}
+async function submitNotes(){
+  const n=((LAST_DATA&&LAST_DATA.generation_groups)||[]).filter(g=>(g.user_note||'').trim()).length;
+  if(!n||!EP)return;
+  if(!confirm(I18N.f('把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?',{n})))return;
+  const proj=$('#project').value.trim()||'demo',b=$('#notes-submit');if(b)b.disabled=true;
+  try{
+    const r=await fetch('/api/v1/storyboard/notes/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:proj,ep:EP})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    JumpAnchor.toast(I18N.f('✅ 已把 {n} 条组注释发给修改师,注释已清空',{n:j.count??n}));
+    KEEP_SCROLL=true;load(true);
+  }catch(err){JumpAnchor.toast(t('提交失败:')+err.message);if(b)b.disabled=false}
+}
 
 // 对白:后端已把 dialogue_refs 编号回 dialogue.md 解析成台词(dialogue_lines);
 // 解析不到正文的只剩编号,灰显编号提示回查 dialogue.md;老数据无 dialogue_lines 时退回 dialogue_ref 原样

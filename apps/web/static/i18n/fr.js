@@ -3843,4 +3843,15 @@ window.I18N_DICT = {
 "工位建议": "Proposition du poste",
 "成对运镜": "Mouvement de caméra apparié",
 "音先入": "Son en avance (J-cut)",
+
+// 📨 提交注释(2026-09-26,故事板页 / 分镜预览页分集行)
+"提交注释": "Envoyer les notes",
+"把本集 {n} 条注释(含对象定位信息)一次性发给修改师处理;提交后清空注释": "Envoyer d'un coup les {n} notes de cet épisode (avec la localisation de chaque objet) au réviseur ; les notes sont effacées après l'envoi",
+"本集暂无注释": "Cet épisode n'a aucune note",
+"把本集 {n} 条注释一次性发给修改师处理,并清空这些注释?": "Envoyer d'un coup les {n} notes de cet épisode au réviseur et les effacer ?",
+"✅ 已把 {n} 条注释发给修改师,注释已清空": "✅ {n} notes envoyées au réviseur ; notes effacées",
+"把本集 {n} 条组注释(含组定位信息)一次性发给修改师处理;提交后清空注释": "Envoyer d'un coup les {n} notes de groupe de cet épisode (avec la localisation de chaque groupe) au réviseur ; les notes sont effacées après l'envoi",
+"本集暂无组注释": "Cet épisode n'a aucune note de groupe",
+"把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Envoyer d'un coup les {n} notes de groupe de cet épisode au réviseur et les effacer ?",
+"✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} notes de groupe envoyées au réviseur ; notes effacées",
 };
