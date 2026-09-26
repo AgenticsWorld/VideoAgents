@@ -1989,6 +1989,11 @@ function render(d){
     });
   });
   const prevScroll=box.scrollTop;
+  // 页内操作重渲染(load(true))的滚动锚:记下视口顶部那张场次/组/镜卡及其到容器顶的偏移。
+  // 只按像素恢复 scrollTop 会漂:刚替换的 DOM 里白模面板 minHeight 尚未套(mountGroups 异步)、
+  // 背景图小图 height:auto 未加载=0 高,上方内容一时变矮,恢复后再撑回来时 Chrome 滚动锚定把位置带偏
+  // (2026-09-26 实测换背景图后偏 ~650px)。改为按元素定位并在 1.5s 内持续校正(复用 jumpTo)。
+  const anchor=(!FIRST_RENDER&&KEEP_SCROLL)?scrollAnchor(box):null;
   box.innerHTML=h;
   // 每组右半常驻的白模面板:滚入视口附近才建 3D,见 whitebox-ui.js mountGroups
   if(WB_ON)wbModule().then(m=>m.mountGroups(box,d.project||$('#project').value.trim()||'demo',EP)).catch(e=>{for(const host of box.querySelectorAll('.wb-host'))host.textContent='3D 白模加载失败：'+e.message;});
@@ -1997,7 +2002,10 @@ function render(d){
   const skey='sb-scroll:'+(d.project||'')+':'+(d.ep||'');
   box.dataset.skey=skey;
   if(FIRST_RENDER){box.scrollTop=+localStorage.getItem(skey)||0;FIRST_RENDER=false}
-  else if(KEEP_SCROLL){box.scrollTop=prevScroll}
+  else if(KEEP_SCROLL){
+    const el=anchor&&document.getElementById(anchor.id);
+    if(el)jumpTo(el,anchor.off);else box.scrollTop=prevScroll;
+  }
   else box.scrollTop=0;
   KEEP_SCROLL=false;
   // 从剧本/故事板跳来:#scene=S01 → 该场次首块,#shot=sh020 → 镜卡,#group=grp011 → 组卡;用 jumpTo(白模面板懒建会撑高,需持续校正)
@@ -2026,9 +2034,23 @@ function renderNav(){
 // (占位文字 → 整块 3D 面板),上方内容撑高会把目标推走,之前要点好几次才到位;
 // 这里按滚动容器算目标 scrollTop 立即跳,再在 1.5s 内每帧校正锚点位置,用户一滚轮/触屏即停止校正
 let navHold=0;
-function jumpTo(el){
+// 滚动锚:视口顶部(置顶栏之下)最近的一张场次/组/镜卡 + 它到容器顶的偏移;重渲染后按这个元素回位
+function scrollAnchor(box){
+  const bt=box.getBoundingClientRect().top+STICK_H;
+  let best=null;
+  for(const el of box.querySelectorAll('.scene[id],.grp[id],.shot[id]')){
+    const r=el.getBoundingClientRect();
+    if(r.height<=0||r.bottom<=bt)continue;
+    const d=Math.abs(r.top-bt);
+    if(!best||d<best.d)best={id:el.id,off:r.top-box.getBoundingClientRect().top,d};
+  }
+  return best;
+}
+// off:目标元素到容器顶的偏移(默认让出置顶栏);滚动锚回位时传原偏移
+function jumpTo(el,off){
   const box=$('#content');
-  const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-6-STICK_H;
+  const o=off==null?6+STICK_H:off;
+  const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-o;
   cancelAnimationFrame(navHold);
   box.scrollTop=want();
   const t0=performance.now();
