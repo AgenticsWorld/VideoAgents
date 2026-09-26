@@ -2003,10 +2003,20 @@ function render(d){
   // 滚动位置记忆:刷新页面回到原位;页内操作(保存注释/删线稿等 load(true))保持原位;切集/切项目回顶
   const skey='sb-scroll:'+(d.project||'')+':'+(d.ep||'');
   box.dataset.skey=skey;
-  if(FIRST_RENDER){box.scrollTop=+localStorage.getItem(skey)||0;FIRST_RENDER=false}
+  // 刷新回位同样不能只按像素:此刻白模面板 minHeight 未套(mountGroups 异步)、懒加载图/视频 0 高,
+  // 上方内容比保存时矮,像素位落到更靠后的卡上,随后撑高时 Chrome 滚动锚定又把 scrollTop 往下带,
+  // 下次保存的就是带偏后的值——每刷新一次往后漂一段(2026-09-26 alices2 ep01 实测一次 ~650px+)。
+  // 改存「视口顶部那张卡 id + 偏移」,按元素回位并校正到布局稳定;旧的纯数字记忆仍兼容。
+  if(FIRST_RENDER){
+    FIRST_RENDER=false;
+    const mem=readScrollMem(skey);
+    const el=mem&&mem.id&&document.getElementById(mem.id);
+    if(el)jumpTo(el,mem.off,{settle:true});
+    else box.scrollTop=(mem&&mem.y)||0;
+  }
   else if(KEEP_SCROLL){
     const el=anchor&&document.getElementById(anchor.id);
-    if(el)jumpTo(el,anchor.off);else box.scrollTop=prevScroll;
+    if(el)jumpTo(el,anchor.off,{settle:true});else box.scrollTop=prevScroll;
   }
   else box.scrollTop=0;
   KEEP_SCROLL=false;
@@ -2049,19 +2059,37 @@ function scrollAnchor(box){
   return best;
 }
 // off:目标元素到容器顶的偏移(默认让出置顶栏);滚动锚回位时传原偏移
-function jumpTo(el,off){
+// opts.settle:回位模式——不止校正 1.5s,而是容器 scrollHeight 每变一次(白模面板建好/图片视频到达)就再续 1.5s,
+// 最长 12s;用户一滚轮/触屏/按键即停
+function jumpTo(el,off,opts){
   const box=$('#content');
   const o=off==null?6+STICK_H:off;
+  const settle=!!(opts&&opts.settle);
   const want=()=>el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-o;
   cancelAnimationFrame(navHold);
   box.scrollTop=want();
   const t0=performance.now();
+  let last=t0,sh=box.scrollHeight;
   const hold=()=>{
     const y=want();
     if(Math.abs(box.scrollTop-y)>1)box.scrollTop=y;
-    navHold=performance.now()-t0<1500?requestAnimationFrame(hold):0;
+    const now=performance.now();
+    if(settle&&box.scrollHeight!==sh){sh=box.scrollHeight;last=now}
+    const go=settle?(now-last<1500&&now-t0<12000):(now-t0<1500);
+    navHold=go?requestAnimationFrame(hold):0;
   };
   navHold=requestAnimationFrame(hold);
+}
+// 滚动位置记忆的读写:新格式 {id,off,y}(视口顶部卡片 + 偏移 + 像素兜底),旧格式纯数字仍可读
+function readScrollMem(key){
+  const v=localStorage.getItem(key);if(!v)return null;
+  if(/^\d+$/.test(v))return {y:+v};
+  try{const m=JSON.parse(v);return m&&typeof m==='object'?m:null}catch(_){return null}
+}
+function saveScrollMem(box){
+  const k=box.dataset.skey;if(!k)return;
+  const a=scrollAnchor(box);
+  localStorage.setItem(k,JSON.stringify(a?{id:a.id,off:Math.round(a.off),y:Math.round(box.scrollTop)}:{y:Math.round(box.scrollTop)}));
 }
 for(const ev of ['wheel','touchstart','keydown'])$('#content').addEventListener(ev,()=>{cancelAnimationFrame(navHold);navHold=0;},{passive:true});
 $('#nav').addEventListener('click',e=>{
@@ -2115,8 +2143,7 @@ $('#content').addEventListener('scroll',()=>{
   if(scrollSaveTick)return;
   scrollSaveTick=requestAnimationFrame(()=>{
     scrollSaveTick=null;
-    const k=$('#content').dataset.skey;
-    if(k)localStorage.setItem(k,Math.round($('#content').scrollTop));
+    saveScrollMem($('#content'));
     updateNavActive();
   });
 });
