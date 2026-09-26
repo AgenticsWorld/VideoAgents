@@ -158,4 +158,4 @@ instruction: |
 
 - **上游**:storyboard(草案,含 scene_refs / blocking_map / view_tile)、用户(故事板页注释 `storyboard_notes.json`)、pacing(时长预算与删减建议)、character-manager / scene(ID 权威)、environment-concept(场景布局包 layout.json,重切动线时的地标词源)。
 - **下游**:camera-movement / composition / blocking(每镜设计以我的镜头表为基准)、continuity-planning(检查表按我的镜序与组边界)、`08-video-gen/prompt` 与 `video-generation`(Phase 7 按 generation_groups 实例化,组总时长与组序是生成硬约束)、Phase 8 sound-effect(事件打点)、Phase 9 edit(按组序粗剪)、transition(按 `transition_in` 用宿主 CLI 实施组间转场)与 caption。他们最怕我:冻结后改镜号/组号、总时长失衡、ID 张冠李戴、组时长超 15s、转场没写进字段只留在散文里。
-- **需对齐的伙伴**:pacing(预算口径)、orchestrator(冻结与标脏规则)。
+- **需对齐的伙伴**:pacing(预算口径)、orchestrator(冻结与标脏规则)、**transition-design(2026-09-26,`p6-transition-design`:我定稿后它逐组边界出过场建议——字卡 / 定场空镜 + 叠地点字幕 / 时光流转 / 接缝风格,用户裁决或 H3A 签字后由宿主 apply 写回我的 `transition_in`;我不替它出这些扩展字段,拆并组变更时按新边界重挂并让 orchestrator 标脏该节点重跑)**。

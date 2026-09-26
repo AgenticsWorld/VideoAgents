@@ -45,7 +45,8 @@ transition Agent 按 directing_plan 自由文本自写 ffmpeg xfade,一项目一
                                           风格接缝中点与两侧都不同且非纯黑;
                                           硬切边界两侧帧与源一致(无时间漂移,有垫片时按 timemap 对位)
              insert_budget_ok             Σ插入段 ≤ 集预算 × 项目「过场模式」预算%(极简 0 / 经典 8 / 电影感 10 / 自定义)
-             inserts_built                插入段/叠字构建台账在、指纹与 timeline 条目一致、段文件在(桥接 clip 缺失 = FAIL)
+             inserts_built                插入段/叠字构建台账在、指纹与 timeline 条目一致、段文件在(生成式 clip 缺失 = FAIL:
+                                          桥接 <B-id>.bridge.mp4 / i2v 定场 <B-id>.establishing.mp4,均由 Phase 7 p7-transition-clips 出)
              insert_frames_verified       每段中点帧 ≈ 段文件中点帧;黑底字卡中点非黑(文字在);叠字窗口内与源有差、窗口后一致;
                                           桥接首/末帧贴合前组尾/本组首
              (集尾收束并入上述各项:时长 = 源 + Σ垫片 + 尾停留;末帧近黑/近白、停留中点近黑;声轨随之延长)
@@ -89,7 +90,7 @@ XFADE_OF = {"dissolve": "fade", "dip_black": "fadeblack", "dip_white": "fadewhit
 INSERT_DIR = "transitions"          # edit/epNN/transitions/<B-from-to>/:插入段(ins{k}.mp4)、字卡/叠字 PNG、预览小片、meta.json
 PREVIEW_PAD_S = 2.0                 # 边界预览小片:前组尾 / 本组首各取秒数
 OVERLAY_FADE_S = 0.3
-BRIDGE_DIR = "assets/transitions"   # 生成式桥接 clip:assets/transitions/epNN/<B-id>.bridge.mp4(三期由 video-generation 出)
+BRIDGE_DIR = "assets/transitions"   # 生成式 clip:assets/transitions/epNN/<B-id>.bridge.mp4(桥接)/ <B-id>.establishing.mp4(i2v 定场),Phase 7 p7-transition-clips 由 video-generation 出
 FADE_COLOR = {"fade_black": "black", "fade_white": "white"}
 CUT_COLOR = {"cut_black": "black", "cut_white": "white"}   # 集尾「切黑 / 切白」:不淡出,末帧直接切到纯色停留(悬念收束)
 CLOSE_COLOR = {**FADE_COLOR, **CUT_COLOR}
@@ -1203,8 +1204,28 @@ def _build_insert(proj, ep, e, k, x, spec, d, src_path, log):
             _run(["ffmpeg", "-y", "-v", "error", "-i", str(out), "-frames:v", "1", str(thumb)], timeout=120)
             rec.update({"thumb": str(thumb), "source": {k2: src.get(k2) for k2 in ("scene_id", "mode", "file", "scheme", "zoom")}})
             log(f"         ins{k} 定场(母图推进 {plate.name}){n} 帧" + (" +叠字" if ov else ""))
+        elif mode == "i2v":
+            # 生成式定场空镜(2026-09-26):Phase 7 p7-transition-clips 图生视频出的 clip;缺失 = 记 missing(check inserts_built FAIL),
+            # 由 orchestrator 派 video-generation 出片后再 build;不得在此退回全景横摇顶替(设计已定稿为 i2v)
+            f = proj / str(src.get("file") or td.clip_paths(ep, _bid(e), "establishing")["file"])
+            if not f.is_file():
+                rec.update({"missing": True, "expected": str(f.relative_to(proj)), "source": {k2: src.get(k2) for k2 in ("scene_id", "mode", "file", "still", "scheme")}})
+                log(f"         ins{k} 定场 clip 缺失:{f.relative_to(proj)}(由 p7-transition-clips / video-generation 按首帧静帧生成后再 build)")
+                return rec
+            base_flt = (f"[0:v]fps={fps:g},scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,format=yuv420p,"
+                        f"tpad=stop_mode=clone:stop_duration=10,setpts=N/({fps:g}*TB)")
+            if ov_flt:
+                _run(["ffmpeg", "-y", "-v", "error", "-i", str(f), *ov_args, "-filter_complex", base_flt + "[base];" + ov_flt,
+                      "-map", "[v]", "-frames:v", str(n), "-an", *_x264(out)], timeout=900)
+            else:
+                _run(["ffmpeg", "-y", "-v", "error", "-i", str(f), "-vf", base_flt[5:], "-frames:v", str(n), "-an", *_x264(out)], timeout=900)
+            thumb = d / ("establishing.jpg" if k == 0 else f"establishing{k}.jpg")
+            _run(["ffmpeg", "-y", "-v", "error", "-i", str(out), "-frames:v", "1", str(thumb)], timeout=120)
+            rec.update({"thumb": str(thumb), "source_file": str(f.relative_to(proj)),
+                        "source": {k2: src.get(k2) for k2 in ("scene_id", "mode", "file", "still", "scheme")}})
+            log(f"         ins{k} 定场(图生视频 {f.name})→ {n} 帧" + (" +叠字" if ov else ""))
         else:
-            raise SystemExit(f"[FAIL] {_bid(e)} 定场模式 {mode} 本期不支持(i2v 归三期,需用户开启生成式过场)")
+            raise SystemExit(f"[FAIL] {_bid(e)} 定场模式 {mode} 不支持(可用 pano_sweep / plate_kenburns / i2v)")
     elif kind == "timelapse":
         src = x.get("source") if isinstance(x.get("source"), dict) else {}
         a, b = d / f"tl{k}_a.jpg", d / f"tl{k}_b.jpg"
@@ -1525,7 +1546,7 @@ def do_check(proj, ep, src_path, out_path, write=True):
             ins_problems.append(f"{e['at_shot']} 插入段/叠字构建晚于成片(重跑 render)")
         for k, r in enumerate(meta.get("inserts") or []):
             if r.get("missing"):
-                ins_problems.append(f"{e['at_shot']} ins{k} 桥接 clip 缺失 {r.get('expected')}")
+                ins_problems.append(f"{e['at_shot']} ins{k} 生成式 clip({r.get('kind')})缺失 {r.get('expected')}(p7-transition-clips 出片后重跑 build+render)")
             elif not Path(r.get("file", "")).is_file():
                 ins_problems.append(f"{e['at_shot']} ins{k} 段文件缺失")
         ins_meta.append(meta)

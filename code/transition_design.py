@@ -13,19 +13,29 @@ shot_list.generation_groups[].transition_in 仍是唯一定稿字段,只由本 C
   reject    --boundary …:裁定保持硬切(原有导演设计则恢复),并 apply
   card      --boundary … --lines "次日清晨" "天庭 · 南天门":改字卡 / 叠字幕文字(source=user),已接受则同步 apply
   apply     设计表 → shot_list.transition_in(accepted / rejected 的边界)
-  check     transition_design_ok:设计表存在、契约合法(复用 transition_ok 接缝/插入规则)、有变化边界已裁决(proposed=WARN)、已接受与 shot_list 一致
+  check     transition_design_ok:设计表存在、契约合法(复用 transition_ok 接缝/插入规则)、有变化边界已裁决(proposed=WARN)、已接受与 shot_list 一致、
+            生成式插入段只在模式允许时出(transition_design_generative_allowed)、已定稿生成式 clip 是否齐(transition_clips_ready,WARN)
   mode      --set minimal|classic|cinematic|custom|project:写 / 清集级模式覆盖(不自动重出建议;--propose 一并重出)
+  design    二期工位(07-directing/transition-design)专用:--boundary … [--alt N | --design '<json>'] [--note 理由]:把候选 / 给定 transition_in
+            升为主设计,状态仍 proposed(**不接受**;接受归用户过场卡裁决或 H3A 签字);已裁决的边界拒改(用 feedback)
+  clips     生成式过场素材(i2v 定场空镜 / 桥接)清单:每行 边界 / 种类 / clip 路径 / 首帧静帧 / 提示词 / 需时长 / 是否已存在;
+            --prepare 渲首帧静帧(全景锚点视窗 / 母图,含 proposed 设计);--check 机检 transition_clips_ready(p7-transition-clips 验收);
+            --all 连 proposed 设计一起列
+  feedback  --boundary … --note 意见:对已裁决 / 不归自己改的边界记一条反馈(不改设计;工位对用户裁决有异议时用)
+  accept-all H3A 签字即接受:把仍 proposed 的边界全部接受并 apply(服务端签字时自动调用;CLI 供补跑)
 
 用法:
   python3 code/transition_design.py diagnose --project <slug> --ep epNN
   python3 code/transition_design.py propose  --project <slug> --ep epNN [--force]
+  python3 code/transition_design.py design   --project <slug> --ep epNN --boundary B-grp020-grp009 --alt 1 --note "首镜已是远景,只叠字不定场"
   python3 code/transition_design.py accept   --project <slug> --ep epNN --boundary B-grp020-grp009 [--alt 1]
   python3 code/transition_design.py reject   --project <slug> --ep epNN --boundary B-grp020-grp009 [--note 说明]
   python3 code/transition_design.py card     --project <slug> --ep epNN --boundary B-grp020-grp009 --lines 次日清晨 "天庭 · 南天门"
   python3 code/transition_design.py apply    --project <slug> --ep epNN
   python3 code/transition_design.py check    --project <slug> --ep epNN
+  python3 code/transition_design.py clips    --project <slug> --ep epNN [--all] [--prepare] [--check] [--json]
   python3 code/transition_design.py mode     --project <slug> --ep epNN --set classic [--propose]
-退出码:check 任一 FAIL=1;其余异常=2。
+退出码:check / clips --check 任一 FAIL=1;其余异常=2。
 渲染与成片机检见 code/render_transitions.py(plan → build → preview/render → check)。
 """
 import json
@@ -64,13 +74,17 @@ def _fmt_design(t):
 
 def main(argv=None):
     def configure(ap):
-        ap.add_argument("cmd", choices=("diagnose", "propose", "accept", "reject", "card", "apply", "check", "mode"))
+        ap.add_argument("cmd", choices=("diagnose", "propose", "design", "feedback", "accept", "accept-all", "reject", "card", "apply", "check", "clips", "mode"))
         ap.add_argument("--boundary", help="边界 id,如 B-grp020-grp009")
-        ap.add_argument("--alt", type=int, help="accept:候选序号(0 起)")
-        ap.add_argument("--design", help="accept:直接给 transition_in JSON")
+        ap.add_argument("--alt", type=int, help="accept / design:候选序号(0 起)")
+        ap.add_argument("--design", help="accept / design:直接给 transition_in JSON")
         ap.add_argument("--lines", nargs="*", help="card:字卡 / 叠字幕文字(1–3 行)")
-        ap.add_argument("--note", default="", help="reject:说明")
-        ap.add_argument("--force", action="store_true", help="propose:忽略已有裁决重出(feedback 保留)")
+        ap.add_argument("--note", default="", help="reject / design:说明 / 工位理由")
+        ap.add_argument("--by", default="", help="design / accept-all:操作方(缺省 07-directing/transition-design / sign:g6)")
+        ap.add_argument("--force", action="store_true", help="propose:忽略已有裁决重出(feedback 保留);clips --prepare:重渲首帧")
+        ap.add_argument("--all", action="store_true", help="clips:连设计表 proposed 的一起列")
+        ap.add_argument("--prepare", action="store_true", help="clips:渲首帧静帧")
+        ap.add_argument("--check", action="store_true", help="clips:机检 transition_clips_ready")
         ap.add_argument("--set", dest="set_mode", help="mode:minimal|classic|cinematic|custom|project(=清集级覆盖)")
         ap.add_argument("--propose", action="store_true", help="mode:切换后立即重出建议")
         ap.add_argument("--json", action="store_true", help="以 JSON 输出")
@@ -103,6 +117,50 @@ def main(argv=None):
                 if b.get("status") in ("proposed", "accepted"):
                     print(f"  {b['id']:<22} {b['status']:<9} {_fmt_design(b.get('design'))}"
                           + (f"   候选 {[a['label'] for a in b.get('alternatives') or []]}" if b.get("alternatives") else ""))
+            return 0
+        if args.cmd == "design":
+            if not args.boundary:
+                raise SystemExit("[FAIL] 须给 --boundary")
+            design = json.loads(args.design) if args.design else None
+            b = td.set_design(proj, ep, args.boundary, alt=args.alt, transition_in=design,
+                              by=args.by or "07-directing/transition-design", note=args.note)
+            print(f"[DONE ] {b['id']} proposed(工位主设计,未接受):{_fmt_design(b.get('design'))}"
+                  + (f"   候选 {[a['label'] for a in b.get('alternatives') or []]}" if b.get("alternatives") else ""))
+            return 0
+        if args.cmd == "feedback":
+            if not args.boundary or not args.note:
+                raise SystemExit("[FAIL] feedback 须给 --boundary 与 --note")
+            b = td.add_feedback(proj, ep, args.boundary, args.note, by=args.by or "07-directing/transition-design")
+            print(f"[DONE ] {b['id']} 反馈已记({len(b.get('feedback') or [])} 条),不改设计")
+            return 0
+        if args.cmd == "accept-all":
+            done = td.accept_all_proposed(proj, ep, by=args.by or "cli:accept-all")
+            print(f"[DONE ] 接受剩余建议 {len(done)} 处 {done}(已 apply 到 shot_list)")
+            return 0
+        if args.cmd == "clips":
+            rows = td.clips_needed(proj, ep, include_proposed=args.all or args.prepare)
+            if args.prepare:
+                done = td.prepare_clip_stills(proj, ep, rows, force=args.force)
+                for r in done:
+                    print(f"[DONE ] 首帧静帧 {r['still']}" if r.get("still_exists") else f"[WARN ] {r['id']} {r.get('still_error')}")
+                rows = td.clips_needed(proj, ep, include_proposed=args.all or args.prepare)
+            if args.json:
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+            else:
+                if not rows:
+                    print("[INFO ] 本集无生成式过场素材(定场 i2v / 桥接)")
+                for r in rows:
+                    print(f"  {r['id']:<22} {r['kind']:<12} {r['status']:<9} clip {'√' if r['exists'] else '×'} {r['file']}"
+                          f"  需 {r['duration_s']:g}s(请求 {r['request_duration_s']:g}s)"
+                          + (f"  首帧 {'√' if r['still_exists'] else '×'} {r['still']}" if r.get("still") else ""))
+                    if r.get("prompt"):
+                        print(f"      提示词:{r['prompt']}")
+            if args.check:
+                ok, items = td.check_clips(proj, ep)
+                for it in items:
+                    print(f"[{it['result']:<5}] {it['check']}: {it['detail']}")
+                print(f"[{'PASS' if ok else 'FAIL'} ] transition_clips_ready")
+                return 0 if ok else 1
             return 0
         if args.cmd in ("accept", "reject", "card"):
             if not args.boundary:

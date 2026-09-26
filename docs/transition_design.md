@@ -1,0 +1,103 @@
+# 过场设计(transition design)· 组边界的字卡 / 定场空镜 / 叠字幕 / 时光流转(2026-09-24 一期,2026-09-26 二期)
+
+适用:所有项目。项目「过场模式」(🎵 视频节奏弹窗 / 新建向导第二步,`settings.json#transitions.mode`)决定做多少:极简 = 现状(硬切为主,只按导演转场清单做叠化 / 黑白场),经典 = 字卡 / 全景扫动定场 / 叠字幕 / 定格 / 接缝风格,电影感 = 定场 + 叠字、**生成式**定场空镜与桥接、成对运镜,自定义 = 六类边界逐项选。存量项目无该段 = 极简;新项目默认经典。
+
+## 为什么
+
+组视频是一组一组生成的,组之间原本只有硬切或导演清单里点名的叠化 / 黑白场。换场景、跳时段、进出闪回时观众没有任何「被带过去」的手段:没有地点字幕、没有定场空镜、没有时间字卡,fengshen3 ep06 一集里换了七次场景全靠硬切。一期把「组边界」升为一等对象,给了设计表 + 页面裁决 + 成片渲染的整条链;二期补上**谁来设计**(工位)和**定场空镜怎么真的出片**(视频生成的位置)。
+
+## 数据
+
+| 文件 | 谁写 | 内容 |
+|---|---|---|
+| `directing/epNN/transition_design.json` | 宿主 CLI `code/transition_design.py`(propose / design / card / accept / reject / apply) | 每集一张设计表 `schema transition_design.v1`:逐边界 `id B-grpA-grpB` / 诊断(换场景 / 跳时段 / 阵容 / 光线 / 叙事块进出、剧本转场句、导演声明、continuity 判定、字卡文字候选、定场素材可用性)/ `design` / `alternatives[]` / `status`(proposed / accepted / rejected / none)/ `source`(mode / agent / user / shot_list / post_plan)/ `feedback[]` |
+| `directing/epNN/shot_list.json#generation_groups[].transition_in` | 只由 `apply` 投影写回 | **唯一定稿字段**。一期扩展:`join.style`(dissolve 的 xfade 风格族)、`inserts[]`(`title_card` / `establishing` / `timelapse` / `bridge`,单段 0.5–4 s、单边界 Σ ≤ 6 s、首组不得)、`overlay_card`(叠字幕,不变长)、`audio_lead_s` |
+| `assets/transitions/epNN/<B-id>.establishing.mp4` + `.still.jpg` | video-generation(clip)/ 宿主 `clips --prepare`(首帧静帧) | 二期:生成式定场空镜 clip 与其首帧 |
+| `assets/transitions/epNN/<B-id>.bridge.mp4` | video-generation | 生成式桥接 clip(首尾帧贴前组尾 / 本组首) |
+| `edit/epNN/transitions/<B-id>/` | `render_transitions.py build` | 渲好的插入段 `ins{k}.mp4`、字卡 / 叠字 PNG、预览小片、`meta.json`(指纹) |
+| `edit/epNN/transitions_render.json` | `render_transitions.py check` | 成片台账:`inserts[]` 构建状态、`timemap`(插入段占时)、黑场白名单 |
+
+`transition_in` 契约与机检 `transition_ok` 在 `code/check_generation_groups.py`(INSERT_KINDS / ESTABLISHING_MODES = pano_sweep | plate_kenburns | i2v / 预算);设计表机检 `transition_design_ok` 在 `modules/transition_design.check`;成片机检 `transition_render_ok`(含 `insert_budget_ok` / `inserts_built` / `insert_frames_verified`)在 `code/render_transitions.py`。
+
+## 流程(按流水线位置)
+
+```
+Phase 6  director 转场清单 → storyboard/shot-planning 定稿 transition_in(非硬切转场)
+         → p6-continuity → [p6-shot-plates | p6-scene-plates](定场素材)
+         → p6-transition-design(07-directing/transition-design,模式 ≠ 极简)        ← 二期
+             transition_design.py propose → 逐边界复核 design / card → clips --prepare(i2v 首帧)→ check
+         → 用户在分镜预览页过场卡裁决(✔ 接受 / 候选 / ⏭ 保持硬切 / ✎ 改字 / ✏️ 反馈)
+         → g6 H3A 签字:签字卡带待裁决数,**签字即接受剩余 proposed 并 apply 进 shot_list**    ← 二期
+Phase 7  p7-transition-clips(video-generation,每集;仅定稿含 i2v 定场 / 桥接时)                ← 二期
+             transition_design.py clips --prepare → genmedia video --first-frame <still> … → clips --check
+         (与组视频并行,进 g7 H3B 依赖)
+Phase 9  p9-transition:render_transitions.py plan → build(消费 clip;缺 = missing/FAIL,不顶替)→ render → check
+         p8-mix 混音边界层按 mix_basis sources 的 boundaries[] 留空档;finalize 按 timemap 平移
+```
+
+### 一期(2026-09-24)
+
+- 诊断 `diagnose`:相邻组比对 scene_id / time_of_day / characters_union / lighting_scheme_id / narrative_block,读剧本场次头与场尾「转场:」句、导演阐述「无字幕板」声明(仅提示)、continuity 衔接表;字卡文字候选 = 关系时间词(剧本 > continuity > 推定时段词)+ 场景库地名;定场素材 = 服务本组首镜的全景锚点(pano_sweep)> 首镜起点母图(plate_kenburns)。
+- 建议 `propose`:按模式表出主设计 + 候选;导演清单 / 后期页已写的设计记 accepted 不动;用户裁决保留。
+- 页面:分镜预览页每两组之间一张过场卡,顶部汇总条(集级模式下拉 / 插入预算条 / 出建议 / ⏹ 集尾);`▶ 出预览` 走 `render_transitions.py preview`。
+- 成片:`build` 把插入段渲成段文件,`render` 按段链插到组边界(前组尾 → 定格 → 黑场 → 插入段 → 本组首),成片按 Σ 变长、timemap 同表 `kind: boundary_insert`;字卡 / 叠字字体按 §2 规则 9 自动取项目字体。
+
+### 二期(2026-09-26):工位 + 生成式定场空镜
+
+**工位 `07-directing/transition-design`**(节点 `p6-transition-design`,条件 `transition_design_enabled` = 生效模式 ≠ minimal)
+
+- 只跑宿主 CLI。`propose` 之后逐边界复核:归类是否与剧本 / 导演清单一致、字卡文字(推定时间词)是否对、按首镜景别 / 素材可用性 / 预算在候选间取舍。
+- 新 CLI 动词 `design --boundary … --alt N | --design '<json>' --note 理由`:把候选或自拟设计升为主设计,**状态仍 proposed**,原主设计退入候选「原建议」;`source=agent`,`designed_by` / `agent_note` 落表,页面打「🤖 工位建议」。已裁决(accepted / rejected / source=shot_list|post_plan)的边界拒改,只能 `feedback`。
+- `propose`(非 `--force`)不再覆盖工位定过的主设计,模式默认建议只进候选。
+- 工位不接受、不 apply。**H3A 签字即接受**:服务端签字时 `accept_all_proposed(by=sign:g6)` 把仍 proposed 的边界接受并 apply(同 H3W 待决项「签字即接受默认」先例);签字卡末尾自动追加「过场设计待裁决:epNN N 处(含 M 段需视频生成的定场/桥接)」。想保留硬切的边界在签字前点「⏭ 保持硬切」。CLI `accept-all` 供补跑。
+- 机检 `transition_design_ok` 新增 `transition_design_generative_allowed`(i2v / bridge 只在模式 `allow_generative` 时可出)与 `transition_clips_ready`(WARN:定稿的生成式 clip 是否齐,Phase 7 的事)。
+- 修改师 `REVISION_KIND["transition"]` 首位换成本工位 SOUL(过场卡 ✏️ 反馈由修改师按本工位规约代行 design / card)。
+
+**生成式定场空镜(i2v)——「换场景:定场空镜 + 叠地点字幕」**
+
+- 何时:生效模式 `allow_generative` 为真(电影感;自定义勾选「生成式过场」)。`propose` 直接把 `establishing.source` 出成
+  ```json
+  {"scene_id": "SCN-0002", "mode": "i2v",
+   "file": "assets/transitions/ep01/B-grp002-grp003.establishing.mp4",
+   "still": "assets/transitions/ep01/B-grp002-grp003.establishing.still.jpg",
+   "base": {"mode": "plate_kenburns", "file": "assets/concepts/scenes/SCN-0002/plates/p1.png", "zoom": 1.08},
+   "prompt": "定场空镜:南天门(外景);时段:日间;画面严格延续首帧的场景与光线,镜头极缓慢推进…;全程无人物…;无字幕…;不切镜…",
+   "camera": "slow_push_in"}
+  ```
+  `base` 保留一期的全景锚点 / 母图信息供渲首帧;契约要求 i2v 必给 `source.file`(assets/transitions/ 下 .mp4)。经典 / 极简 / 自定义未勾 → 仍是 `pano_sweep` / `plate_kenburns`(ffmpeg 合成,零视频生成费)。
+- 首帧静帧:`transition_design.py clips --prepare`(`prepare_clip_stills`)按项目画幅从全景锚点视窗(`pano_still`)或母图(居中裁切缩放)渲出 `.still.jpg`;过场卡在 clip 未出时显示它 + 「待生成」。
+- **clip 在 Phase 7 出**(为什么放这里:它是一次视频模型调用,归 08-video-gen,须在 H3A 定稿之后、H3B 审看之前,与组视频并行且不进组序续接链):节点 `p7-transition-clips`(video-generation,每集,条件 `transition_clips_requested` = `clips` 清单非空,依赖 g6、进 g7 依赖)。工位按清单逐段 `genmedia video --first-frame <still> --prompt <提示词> --duration <请求时长 = max(4, ceil(插入段时长))> --generate-audio off --output <file>`,不挂人物参考图、不传参考视频;`clips --check` = 机检 `transition_clips_ready`(文件在、时长 ≥ 插入段时长、首帧在)。
+- Phase 9:`render_transitions.py build` 对 `i2v` 只消费文件——按 fps 重采样、裁到插入段帧数(不足尾帧克隆)、叠地点字幕照一期路径合成到定场段上;**缺文件 = `meta.inserts[k].missing`,`inserts_built` FAIL**,transition 工位上报补派 `p7-transition-clips`,不得退回全景横摇顶替(设计已过 H3A)。指纹含 clip 文件(size / mtime),clip 出片后自动重建。
+- 页面:过场卡 `render_state` 新值 `awaiting_clip`(待生成);i2v 段显示首帧静帧与 已生成 / 待生成 chip。
+
+## 配置
+
+| 层级 | 位置 | 取值 | 说明 |
+|---|---|---|---|
+| 项目 | `settings.json#transitions.mode`(🎵 视频节奏弹窗 / 新建向导) | `minimal` / `classic` / `cinematic` / `custom` | 预设附属项固定:极简 禁字卡·0%·生成式关·首镜定场关;经典 允许·8%·关·关;电影感 允许·10%·**开**·开;custom 四项 + 六类边界 `custom_map` 可选 |
+| 集 | `assets/group_settings/epNN/episode.json#transitions_mode`(分镜预览页「⟿ 过场」下拉) | 同上 / project | 改模式即重出建议,不自动接受 |
+| 字体 | `settings.json#transitions.card_font` | 项目内路径 / `proj:<family>` | 缺省 `refs/fonts/` 首个 > 全局 > 系统 |
+| 集尾 | `settings.json#transitions.episode_close`;shot_list 顶层 `episode_close` | fade_black / fade_white / cut_black / cut_white / hard_cut | 见 WORKFLOW §9C「集尾收束」 |
+
+## CLI 速查
+
+```
+python3 code/transition_design.py diagnose|propose|design|feedback|accept|accept-all|reject|card|apply|check|clips|mode --project <slug> --ep epNN …
+python3 code/render_transitions.py plan|build|preview|render|check --project <slug> --ep epNN
+```
+
+## 机检一览
+
+| 机检 | 在哪 | 何时 FAIL |
+|---|---|---|
+| `transition_ok`(transition_type_valid / transition_reason_required / transition_pad_valid / transition_join_valid / transition_insert_valid / transition_insert_budget / transition_close_valid / narrative_block_paired) | check_generation_groups.py | shot_list `transition_in` 契约不合法;i2v 缺 `source.file` |
+| `transition_design_ok`(present / contract / coverage / applied / generative_allowed / transition_ok;clips_ready WARN) | transition_design.py check | 设计表缺(非极简)、契约不合法、有变化边界缺条目、已裁决未同步、模式不允许却出了 i2v / bridge |
+| `transition_clips_ready`(+ `transition_clip_stills` WARN) | transition_design.py clips --check | 定稿的 i2v / bridge clip 缺文件或时长不足 |
+| `transition_render_ok`(… inserts_built / insert_frames_verified / insert_budget_ok) | render_transitions.py check | 生成式 clip 缺失、段文件缺、指纹过期、预算超 |
+
+## 未做 / 后续
+
+- 三期「生成式桥接」(`bridge`)只有路径与 build 消费,propose 不出它(自定义选 bridge 暂落硬切 + 候选标注);首尾帧贴合核验已在 `insert_frames_verified`。
+- 四期 `audio_lead_s`(音先入)只有契约,未渲。
+- 机检 `establishing_on_scene_change`(电影感 / 自定义「新场景首镜必须定场」时新场景首镜景别 ≥ 全景且无近景人物)未落地。
+- 真项目未跑二期节点;服务须重启后 H3A 签字接受 / 提示词「过场模式」段才生效。

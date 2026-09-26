@@ -3837,4 +3837,6 @@ window.I18N_DICT = {
 "白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可": "Nur {aligned} der Whitebox-Konturen sind im Bild zu finden (versetzte Basislinie {null}): neu erstellen, wenn das Bild einen anderen Blickpunkt oder eine Gebäudeaußenansicht zeigt; dunkle Szenen, Höhlen u. ä. ohne klare Wandkanten sind normal, einfach visuell mit dem Whitebox-Panorama vergleichen",
 "成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对": "Die Ausrichtung des Bildes an den Whitebox-Konturen liegt nicht über der versetzten Basislinie (ausgerichtet {aligned} / Basis {null}); auf der Vorschauseite mit dem Whitebox-Panorama vergleichen",
 "等 {n} 个": "(insgesamt {n})",
+"首帧": "Erstes Bild",
+"工位建议": "Vorschlag der Station",
 };

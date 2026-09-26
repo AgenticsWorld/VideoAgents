@@ -3837,4 +3837,6 @@ window.I18N_DICT = {
 "白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可": "Chỉ tìm thấy {aligned} đường viền whitebox trong ảnh (đường cơ sở lệch {null}): làm lại nếu ảnh là góc nhìn khác hoặc ngoại thất; cảnh tối, hang động và không gian không có đường mép/góc tường rõ là bình thường, chỉ cần đối chiếu bằng mắt với toàn cảnh whitebox",
 "成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对": "Độ khớp của ảnh với đường viền whitebox không vượt đường cơ sở lệch (khớp {aligned} / cơ sở {null}); đối chiếu với toàn cảnh whitebox trên trang xem trước",
 "等 {n} 个": "(tổng {n})",
+"首帧": "Khung hình đầu",
+"工位建议": "Đề xuất của trạm",
 };

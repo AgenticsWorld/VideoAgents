@@ -316,8 +316,9 @@ REVISION_KIND_AGENTS: dict[str, list[str]] = {
     # 后期处理页波形四轨「✏️ 发修改意见」(2026-09-16):对白段 / 音效点位
     "dialogue":        ["09-audio/voice-generation", "08-video-gen/video-generation"],
     "sfx":             ["09-audio/sound-effect", "09-audio/audio-mixing"],
-    # 分镜预览页「过场卡」✏️ 反馈(2026-09-24):组边界过场设计(shot_list transition_in / directing/epNN/transition_design.json)
-    "transition":      ["07-directing/shot-planning", "10-editing/transition"],
+    # 分镜预览页「过场卡」✏️ 反馈(2026-09-24):组边界过场设计(shot_list transition_in / directing/epNN/transition_design.json);
+    # 2026-09-26 二期工位 07-directing/transition-design 代行为主(宿主 CLI transition_design.py design/card),shot-planning / transition 附规约
+    "transition":      ["07-directing/transition-design", "07-directing/shot-planning", "10-editing/transition"],
 }
 REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
 REVISION_HISTORY_MAX = 3              # 修改单头里列出的同对象历史修改记录条数
@@ -3146,6 +3147,26 @@ def build_role_prompt(agent_id: str, project: str,
         "视频原声模式下仍严禁把库音频混进成片对白(§8A 红线不变)**"
         if (out.get("dialogue_tts") is True or dubbing) else
         "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨")
+    # 过场模式(2026-09-24 设置项;2026-09-26 二期工位):项目级 settings.json#transitions,集级 episode.json#transitions_mode 可覆盖
+    try:
+        from modules import transition_design as _td_prompt
+        _tr = _td_prompt.effective(PROJECTS_DIR / project)
+        _tr_mode = _tr["mode"]
+        _tr_label = {"minimal": "极简", "classic": "经典", "cinematic": "电影感", "custom": "自定义"}.get(_tr_mode, _tr_mode)
+        transitions_line = (
+            f"**{_tr_label}({_tr_mode})**(集级可在分镜预览页「⟿ 过场」下拉覆盖,以 `python3 code/transition_design.py mode --project <slug> --ep epNN` 输出为准)"
+            + (";极简 = 硬切为主,只按导演转场清单做叠化/黑白场,**不实例化 `p6-transition-design` / `p7-transition-clips`**(workflow.yaml 条件 transition_design_enabled=false),g6 不因缺它们而 HOLD"
+               if _tr_mode == "minimal" else
+               f";说明性字卡 {'允许' if _tr.get('allow_cards') else '禁止'} · 插入段预算 {_tr.get('insert_budget_pct'):g}% 集预算 · 生成式过场(定场空镜 i2v / 桥接){'**开**' if _tr.get('allow_generative') else '关'}"
+               " —— Phase 6 每集派 `p6-transition-design`(07-directing/transition-design:宿主 `transition_design.py propose` 后逐边界复核,只出建议不接受;"
+               "机检 transition_design_ok),用户在分镜预览页过场卡裁决、**H3A 签字即接受剩余建议**;"
+               + ("生成式过场开:定稿设计里的 i2v 定场空镜 / 桥接 clip 在 Phase 7 由 `p7-transition-clips`(08-video-gen/video-generation,每集,H3A 后、H3B 前)"
+                  "按宿主 `transition_design.py clips` 清单图生视频到 `assets/transitions/epNN/`(机检 transition_clips_ready),Phase 9 render_transitions build 只消费文件;"
+                  "无生成式插入段的集该节点视同满足"
+                  if _tr.get("allow_generative") else
+                  "生成式过场关:定场空镜由 render_transitions build 用全景横摇 / 母图推进 ffmpeg 合成,不派 `p7-transition-clips`、不花视频生成费")))
+    except Exception as _e:  # noqa: BLE001
+        transitions_line = f"(读取失败:{str(_e)[:80]};按极简处理)"
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
@@ -3262,6 +3283,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 旁白:{narration_line}
 - 对白配音:{dialogue_voice}
 - 生成对白语音:{dialogue_tts_line}
+- 过场模式:{transitions_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
 - 超分渠道:「🎨 生成模型 → 超分」当前 = **{upscale_provider}**;超分只准 `modules/genmedia.py upscale`,渠道由该设置决定、失败即报错不降级,工单不得指定别的手段(WORKFLOW.md §7B)
@@ -13951,6 +13973,9 @@ async def api_confirm_create(body: dict):
             if str(checkpoint or "").upper().startswith("H3W"):
                 # H3W 白模确认:签字卡追加待决项摘要(docs/whitebox.md「待决项与用户裁决」)
                 q = _whitebox_issue_question(project, gate_id, q)
+            elif str(checkpoint or "").upper().startswith("H3A"):
+                # H3A 分镜确认:签字卡追加过场设计待裁决数(签字即接受剩余建议,docs/transition_design.md)
+                q = _transition_design_question(project, gate_id, q)
     if kind == "sign":
         dups = [o for o in CONFIRMS.values()
                 if o["kind"] == "sign" and o["question"] == q[:500]]
@@ -14041,6 +14066,14 @@ async def api_confirm_answer(cid: str, body: dict):
                         sync_prompt_skill_effective(proj)
                 except Exception as e:  # noqa: BLE001
                     print(f"[prompt_skill] H3A 签字快照失败:{e}", flush=True)
+                # 过场设计(2026-09-26,二期):签字即接受本集仍为「建议」的过场设计并写回 shot_list(同 H3W 待决项「签字即接受默认」先例;
+                # 用户想保留硬切的边界应在签字前于分镜预览页过场卡点「⏭ 保持硬切」)
+                try:
+                    proj = _approval_project(c)
+                    if proj:
+                        _transition_design_sign_accept(proj, c.get("gate_id"))
+                except Exception as e:  # noqa: BLE001
+                    print(f"[transition_design] H3A 签字接受建议失败:{e}", flush=True)
             c["continuation_attempted"] = time.time()
             try:
                 continuation = await _continue_signed_gate(c)
@@ -14572,6 +14605,66 @@ def _sign_gate_binding(proj: str, question: str,
         node = ready[0]
         return node["id"], _gate_checkpoint(node)
     return None
+
+
+def _transition_gate_episodes(proj: str, gate_id: str | None) -> list[str]:
+    """H3A 闸门对应哪些集(过场设计):节点 for_each.episode → 节点 id 里的 epNN → 项目里所有有过场设计表的集。"""
+    dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
+    node = next((n for n in _dag_load_nodes(dag_path) if n.get("id") == gate_id), None) if gate_id else None
+    fe = (node or {}).get("for_each")
+    ep = fe.get("episode") if isinstance(fe, dict) else None
+    if not ep and gate_id:
+        m = re.search(r"(?<![A-Za-z0-9])(ep\d+)(?![A-Za-z0-9])", gate_id)
+        ep = m.group(1) if m else None
+    if ep:
+        return [ep]
+    directing = PROJECTS_DIR / proj / "directing"
+    return sorted(d.name for d in directing.iterdir()
+                  if d.is_dir() and (d / "transition_design.json").is_file()) if directing.is_dir() else []
+
+
+def _transition_design_question(proj: str, gate_id: str | None, question: str) -> str:
+    """H3A 签字卡问题末尾追加过场设计待裁决摘要(签字即接受剩余建议;总长仍受 500 字上限)。"""
+    try:
+        from modules import transition_design as _td
+        lang = ui_lang_code() or "zh"
+        base = PROJECTS_DIR / proj
+        bits = []
+        for ep in _transition_gate_episodes(proj, gate_id):
+            data = _td.load_design(base, ep)
+            if not data:
+                continue
+            pend = [b for b in data.get("boundaries") or [] if b.get("status") == "proposed"]
+            if pend:
+                gen = sum(1 for b in pend for x in (b.get("design") or {}).get("inserts") or []
+                          if x.get("kind") == "bridge" or (x.get("kind") == "establishing" and (x.get("source") or {}).get("mode") == "i2v"))
+                bits.append((ep, len(pend), gen))
+        if not bits:
+            return question
+        if lang == "zh":
+            tail = "过场设计待裁决:" + "、".join(f"{ep} {n} 处" + (f"(含 {g} 段需视频生成的定场/桥接)" if g else "") for ep, n, g in bits) \
+                + ";签字即接受这些建议并写回 shot_list,想保留硬切请先在分镜预览页过场卡点「⏭ 保持硬切」"
+        else:
+            tail = "Transition designs pending: " + ", ".join(f"{ep} {n}" + (f" (incl. {g} generated establishing/bridge clips)" if g else "") for ep, n, g in bits) \
+                + "; signing accepts these proposals into shot_list — click ⏭ Keep hard cut on the storyboard preview first to keep any boundary as a hard cut"
+        return question[: max(40, 500 - len(tail) - 1)] + "\n" + tail
+    except Exception as e:  # noqa: BLE001
+        print(f"[transition_design] 签字卡摘要失败:{e}", flush=True)
+        return question
+
+
+def _transition_design_sign_accept(proj: str, gate_id: str | None) -> None:
+    """H3A 签字后:把各集仍 proposed 的过场设计接受并 apply(记 by=sign:g6)。"""
+    from modules import transition_design as _td
+    base = PROJECTS_DIR / proj
+    for ep in _transition_gate_episodes(proj, gate_id):
+        try:
+            done = _td.accept_all_proposed(base, ep, by="sign:g6")
+            if done:
+                print(f"[transition_design] {proj}/{ep} H3A 签字接受过场建议 {len(done)} 处:{', '.join(done[:5])}", flush=True)
+                HUB.publish({"type": "transition_design", "project": proj, "ep": ep, "accepted": done})
+        except Exception as e:  # noqa: BLE001
+            print(f"[transition_design] {proj}/{ep} 签字接受建议失败:{e}", flush=True)
 
 
 def _whitebox_gate_episodes(proj: str, gate_id: str | None) -> list[str]:

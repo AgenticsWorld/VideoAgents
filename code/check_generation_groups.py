@@ -571,6 +571,11 @@ def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]
                 errs.append(f"{tag} transition_insert_valid: {kind} 缺 source.scene_id")
             if kind == "establishing" and src.get("mode", "pano_sweep") not in ESTABLISHING_MODES:
                 errs.append(f"{tag} transition_insert_valid: source.mode={src.get('mode')!r} 不在枚举 {list(ESTABLISHING_MODES)}")
+            if kind == "establishing" and src.get("mode") == "i2v":
+                # 生成式定场空镜(2026-09-26):clip 文件约定在 assets/transitions/epNN/<B-id>.establishing.mp4,由 Phase 7 p7-transition-clips 出
+                f = str(src.get("file") or "")
+                if not f.startswith("assets/transitions/") or not f.endswith(".mp4"):
+                    errs.append(f"{tag} transition_insert_valid: i2v 定场须给 source.file(assets/transitions/epNN/<B-id>.establishing.mp4),得到 {f!r}")
             if kind == "timelapse" and not (src.get("scheme_from") and src.get("scheme_to")):
                 errs.append(f"{tag} transition_insert_valid: timelapse 须给 source.scheme_from / scheme_to(同锚点两个光照方案)")
         elif kind == "bridge":

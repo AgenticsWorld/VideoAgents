@@ -3837,4 +3837,6 @@ window.I18N_DICT = {
 "白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可": "Hanya {aligned} kontur whitebox yang ditemukan di gambar (garis dasar bergeser {null}): buat ulang jika gambar menunjukkan sudut pandang lain atau eksterior bangunan; adegan gelap, gua, dan ruang tanpa garis atas/sudut tembok yang jelas adalah normal, cukup bandingkan secara visual dengan panorama whitebox",
 "成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对": "Penyelarasan gambar dengan kontur whitebox tidak melebihi garis dasar bergeser (selaras {aligned} / dasar {null}); bandingkan dengan panorama whitebox di halaman pratinjau",
 "等 {n} 个": "(total {n})",
+"首帧": "Bingkai pertama",
+"工位建议": "Usulan stasiun",
 };

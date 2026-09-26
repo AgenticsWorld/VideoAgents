@@ -1483,7 +1483,7 @@ function gsChip(g){
 const TR_KIND={title_card:'字卡',establishing:'定场空镜',timelapse:'时光流转',bridge:'生成式桥接'};
 const TR_CLASS={scene_change:'换场景',time_jump:'跳时间',block_enter:'进叙事块',block_exit:'出叙事块',same_scene:'同场景'};
 const TR_STATUS={proposed:'建议',accepted:'已定稿',rejected:'已裁硬切',none:'无需',undecided:'未出建议'};
-const TR_RENDER={pending:'待渲染(出成片时)',built:'已构建·待渲染',rendered:'已渲染'};
+const TR_RENDER={pending:'待渲染(出成片时)',built:'已构建·待渲染',rendered:'已渲染',awaiting_clip:'待生成'};   // awaiting_clip:定场 i2v / 桥接 clip 未出(Phase 7 p7-transition-clips)
 const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'自定义'};
 const TR_CLOSE={fade_black:'淡出到黑',fade_white:'淡出到白',cut_black:'切黑(突然黑屏)',cut_white:'切白',hard_cut:'不处理(停在末帧)'};
 const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
@@ -1508,8 +1508,12 @@ function trInsertSeg(x,tr,idx){
   }
   if(x.kind==='establishing'){
     const s=x.source||{};
-    const img=th.establishing?`<img src="${esc(th.establishing)}" onclick="zoom(this.src)">`:`<div class="ph">${t('定场空镜')}<br>${esc(s.scene_id||'')}${s.anchor_id?' / '+esc(s.anchor_id):''}<br>${esc(s.mode||'')}</div>`;
-    return `<div class="seg">${img}<span>${t('定场空镜')} ${x.duration_s}s${x.overlay_card?' · '+t('叠字'):''}</span></div>`;
+    // i2v(2026-09-26):clip 由 Phase 7 生成;未出片时显示宿主渲的首帧静帧(有则)+「待生成」
+    const clip=s.mode==='i2v'?((tr.clips||[]).find(c=>c.kind==='establishing')||null):null;
+    const still=clip&&clip.still_url?`<img src="${esc(clip.still_url)}" onclick="zoom(this.src)" title="${t('首帧')}">`:null;
+    const img=th.establishing?`<img src="${esc(th.establishing)}" onclick="zoom(this.src)">`:(still||`<div class="ph">${t('定场空镜')}<br>${esc(s.scene_id||'')}${s.anchor_id?' / '+esc(s.anchor_id):''}<br>${esc(s.mode||'')}</div>`);
+    const gen=s.mode==='i2v'?` · <span class="tag ${clip&&clip.exists?'ok':'warn'}" title="${esc(s.file||'')}">${clip&&clip.exists?t('已生成'):t('待生成')}</span>`:'';
+    return `<div class="seg">${img}<span>${t('定场空镜')} ${x.duration_s}s${x.overlay_card?' · '+t('叠字'):''}${gen}</span></div>`;
   }
   if(x.kind==='timelapse'){const s=x.source||{};return `<div class="seg"><div class="ph">${t('时光流转')}<br>${esc(s.scheme_from||'')} → ${esc(s.scheme_to||'')}</div><span>${t('时光流转')} ${x.duration_s}s</span></div>`;}
   return `<div class="seg"><div class="ph">${t(TR_KIND[x.kind]||x.kind)}<br>${t('待生成')}</div><span>${t(TR_KIND[x.kind]||x.kind)} ${x.duration_s}s</span></div>`;
@@ -1553,7 +1557,8 @@ function transCard(tr){
   const shown=decided?cur:(tr.design||cur);
   const alts=tr.alternatives||[];
   const stChip=`<span class="tag ${tr.status==='proposed'?'warn':decided?'ok':''}">${t(TR_STATUS[tr.status]||tr.status)}</span>`;
-  const rsChip=tr.render_state?`<span class="tag ${tr.render_state==='rendered'?'ok':''}">${t(TR_RENDER[tr.render_state])}</span>`:'';
+  const rsChip=(tr.render_state?`<span class="tag ${tr.render_state==='rendered'?'ok':tr.render_state==='awaiting_clip'?'warn':''}">${t(TR_RENDER[tr.render_state])}</span>`:'')
+    +(tr.designed_by?`<span class="tag" title="${esc(tr.designed_by+(tr.agent_note?' · '+tr.agent_note:''))}">🤖 ${t('工位建议')}</span>`:'');   // 二期工位 07-directing/transition-design 定的主设计
   const stale=tr.stale?`<span class="tag warn" title="${t('前后组视频或素材已变化,已构建的插入段过期,出成片时自动重建')}">${t('素材已变')}</span>`:'';
   const proj=$('#project').value.trim()||'demo';
   const loc=I18N.f('过场 {ep} {a}→{b}(设计表 directing/{ep}/transition_design.json 边界 {bid};定稿字段 directing/{ep}/shot_list.json generation_groups group_id={b} 的 transition_in)',{ep:EP,a:tr.from_group,b:tr.to_group,bid:tr.id});

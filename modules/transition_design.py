@@ -13,6 +13,11 @@ shot_list.generation_groups[].transition_in 仍是唯一定稿字段,只由本�
 render_transitions.py 在成片末尾施加画面淡出 + 停留,finalize_episode.py 同刻淡出外挂声轨。
 本模块提供:effective() 模式展开、diagnose() 边界诊断、propose() 按模式出建议、accept/reject/apply、check()、payload()(分镜预览页过场卡数据)、
 字卡 PNG 与全景视窗渲染(build 与页面预览共用)。
+二期工位(2026-09-26,07-directing/transition-design,workflow.yaml p6-transition-design,条件 transition_design_enabled = 模式 ≠ minimal):
+propose 之后由工位逐边界复核 / 用 set_design() 换主设计(仍 proposed,不接受)、card 改字;用户在分镜预览页过场卡裁决,
+**H3A 签字即接受剩余 proposed**(accept_all_proposed,同 H3W 待决项先例)。生效模式允许生成式过场(allow_generative)时定场空镜按 i2v 出设计:
+首帧静帧由 prepare_clip_stills() 渲(全景锚点视窗 / 母图),clip 由 Phase 7 p7-transition-clips(08-video-gen/video-generation)图生视频到
+assets/transitions/epNN/<B-id>.establishing.mp4(clips_needed / check_clips = 机检 transition_clips_ready),render_transitions build 只消费文件。
 """
 from __future__ import annotations
 
@@ -497,6 +502,10 @@ def diagnose(base: Path, ep: str) -> list[dict]:
             },
             "card_lines": lines, "card_sources": srcs,
             "establishing": estab, "timelapse": tl,
+            # 二期(2026-09-26):生成式定场空镜(i2v)的素材口径——场景名 / 时段 / 内外景,供 i2v_source 组提示词与首帧静帧
+            "ep": ep,
+            "scene": {"id": b.get("scene_id"), "name": loc, "time_of_day": b.get("time_of_day"),
+                      "int_ext": spb.get("int_ext"), "lighting_scheme_id": b.get("lighting_scheme_id")},
             "current": transition_of(b) if b.get("transition_in") else {"type": "hard_cut"},
             "current_raw": b.get("transition_in") if isinstance(b.get("transition_in"), dict) else None,
             "to_duration_s": b.get("total_duration_s"), "from_duration_s": a.get("total_duration_s"),
@@ -522,6 +531,62 @@ def _estab_insert(src, dur=ESTAB_S, overlay=None, join_out="hard_cut"):
 
 def _overlay(lines, srcs, dur=CARD_S, position="bottom_left"):
     return {"lines": list(lines), "sources": list(srcs), "duration_s": dur, "position": position}
+
+
+# ---------------------------------------------------------------- 生成式定场空镜(i2v,二期 2026-09-26)
+#
+# 「换场景 → 定场空镜 + 叠地点字幕」在生效模式允许生成式过场(allow_generative:电影感 / 自定义勾选)时,定场空镜不再只是全景横摇 /
+# 母图推进的 ffmpeg 合成,而是一段**由视频模型图生视频**的空镜 clip:首帧 = 宿主从该场景全景锚点(或首镜母图)渲出的静帧,提示词 = 场景名 /
+# 时段 / 内外景 + 无人物 + 缓慢运镜。设计仍在 Phase 6 定(本模块 propose / 工位 07-directing/transition-design),clip 的**生成放在 Phase 7**
+# (workflow.yaml p7-transition-clips → 08-video-gen/video-generation,H3A 签字后、H3B 前),Phase 9 render_transitions build 只消费文件:
+#   assets/transitions/epNN/<B-id>.establishing.mp4     生成的空镜 clip(build 按插入段时长裁到帧数,缺失 = build 记 missing、check FAIL)
+#   assets/transitions/epNN/<B-id>.establishing.still.jpg 首帧静帧(宿主 clips --prepare 渲出;图生视频的 --first-frame)
+CLIP_DIR = "assets/transitions"
+I2V_MIN_DURATION_S = 4.0     # 图生视频请求时长下限(多数模型最短 4s;build 只取插入段所需帧数,多余裁掉)
+
+
+def clip_paths(ep: str, bid: str, kind: str = "establishing") -> dict:
+    """生成式插入段的约定路径(项目根相对):establishing → <B-id>.establishing.{mp4,still.jpg};bridge → <B-id>.bridge.mp4。"""
+    stem = f"{CLIP_DIR}/{ep}/{bid}.{kind}"
+    out = {"file": f"{stem}.mp4"}
+    if kind == "establishing":
+        out["still"] = f"{stem}.still.jpg"
+    return out
+
+
+def i2v_source(ep: str, b: dict, estab: dict) -> dict:
+    """把 establishing_source 给出的全景 / 母图素材包成 i2v 源:保留原素材(base)供渲首帧,加 file / still 约定路径与提示词。"""
+    if not estab or estab.get("mode") == "i2v":
+        return estab
+    sc = b.get("scene") or {}
+    paths = clip_paths(ep, b["id"], "establishing")
+    src = {"scene_id": estab.get("scene_id") or sc.get("id"), "mode": "i2v", "file": paths["file"], "still": paths["still"],
+           "base": {k: v for k, v in estab.items() if k not in ("scene_id",)},
+           "scheme": estab.get("scheme"), "scheme_match": estab.get("scheme_match", True),
+           "prompt": clip_prompt(sc, estab), "camera": "slow_push_in"}
+    return src
+
+
+def _has_cjk(s: str) -> bool:
+    return any("一" <= ch <= "鿿" for ch in str(s or ""))
+
+
+def clip_prompt(scene: dict, estab: dict | None = None) -> str:
+    """定场空镜 i2v 提示词(语言跟场景名:中文场景名出中文,其余英文;工位可按场景圣经描述改写,但须保留「无人物」「无文字」「不转场」三句)。"""
+    name = str((scene or {}).get("name") or (scene or {}).get("id") or "")
+    tod = str((scene or {}).get("time_of_day") or "").strip()
+    ie = str((scene or {}).get("int_ext") or "").upper()
+    ie_zh = {"INT": "内景", "EXT": "外景", "内": "内景", "外": "外景"}.get(ie, "")
+    ie_en = {"INT": "interior", "EXT": "exterior", "内": "interior", "外": "exterior"}.get(ie, "")
+    if _has_cjk(name) or _has_cjk(tod):
+        bits = [f"定场空镜:{name}" + (f"({ie_zh})" if ie_zh else ""), f"时段:{tod}" if tod else "",
+                "画面严格延续首帧的场景与光线,镜头极缓慢推进,环境细节轻微动态(光影、尘埃、风)",
+                "全程无人物、无动物、无生物入画;无字幕、无文字、无水印;不切镜、不做任何转场;结尾保持静止环境"]
+        return ";".join(x for x in bits if x) + "。"
+    bits = [f"Establishing shot, empty {ie_en or 'location'}: {name}", f"time of day: {tod}" if tod else "",
+            "the scene and lighting strictly continue from the first frame; the camera pushes in very slowly with subtle ambient motion (light, dust, wind)",
+            "no people, no animals, no creatures in frame at any time; no captions, no text, no watermark; no cuts, no transitions; ends on a still environment"]
+    return "; ".join(x for x in bits if x) + "."
 
 
 def _reason(d: dict, what: str) -> str:
@@ -555,13 +620,17 @@ def _intent(d: dict) -> str:
 
 
 def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
-    """按生效模式给边界出主设计 + 候选;返回 (design_transition_in | None, alternatives[])。None = 不建议改(保持现状)。"""
+    """按生效模式给边界出主设计 + 候选;返回 (design_transition_in | None, alternatives[])。None = 不建议改(保持现状)。
+    生效模式允许生成式过场(allow_generative)时,定场空镜按 i2v(视频模型图生视频,Phase 7 p7-transition-clips 出 clip)出设计;
+    否则全景横摇 / 母图推进(ffmpeg 合成,不花视频生成费)。"""
     d = b["diagnosis"]
     mode = eff["mode"]
     allow_cards = bool(eff.get("allow_cards"))
     lines, srcs = b.get("card_lines") or [], b.get("card_sources") or []
     have_lines = bool(lines)
     estab, tl = b.get("establishing"), b.get("timelapse")
+    if estab and eff.get("allow_generative") and b.get("ep"):
+        estab = i2v_source(b["ep"], b, estab)
     cur = b.get("current") or {"type": "hard_cut"}
     intent = _intent(d)
     alts: list[dict] = []
@@ -711,6 +780,16 @@ def propose(base: Path, ep: str, *, force: bool = False) -> dict:
             entry["source"] = prev.get("source") or "user"
             if design is not None and not any(a.get("transition_in") == design for a in entry["alternatives"]):
                 entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + entry["alternatives"]
+        elif prev.get("status") == "proposed" and prev.get("source") == "agent" and isinstance(prev.get("design"), dict) and not force:
+            # 二期工位(07-directing/transition-design)定过的建议:重出建议不覆盖,模式默认建议只进候选
+            entry["design"] = prev["design"]
+            entry["status"] = "proposed"
+            entry["source"] = "agent"
+            for k in ("agent_note", "designed_by", "designed_at"):
+                if prev.get(k):
+                    entry[k] = prev[k]
+            if design is not None and design != prev["design"] and not any(a.get("transition_in") == design for a in entry["alternatives"]):
+                entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + entry["alternatives"]
         elif design is None:
             entry["design"] = None
             entry["status"] = "none"
@@ -789,6 +868,212 @@ def add_feedback(base: Path, ep: str, bid: str, text: str, by: str = "user") -> 
     b.setdefault("feedback", []).append({"at": dt.datetime.now().isoformat(timespec="seconds"), "by": by, "text": text, "resolved": False})
     _write(design_path(base, ep), data)
     return b
+
+
+def set_design(base: Path, ep: str, bid: str, *, alt: int | None = None, transition_in: dict | None = None,
+               by: str = "07-directing/transition-design", note: str = "") -> dict:
+    """二期工位(07-directing/transition-design)改主设计:第 alt 个候选 / 给定 transition_in 升为主设计,状态仍是 proposed
+    (**不接受**——接受归用户在分镜预览页过场卡裁决,或 H3A 签字即接受);原主设计退入候选首位。
+    已由用户 / 导演清单裁决(accepted / rejected / source=shot_list|post_plan)的边界拒改(ValueError),工位只能提反馈。"""
+    data = load_design(base, ep) or propose(base, ep)
+    b = _find(data, bid)
+    if b.get("status") in ("accepted", "rejected") or b.get("source") in ("shot_list", "post_plan"):
+        raise ValueError(f"{bid} 已裁决({b.get('status')} / {b.get('source')}),工位不得改主设计;有异议用 feedback")
+    alts = b.get("alternatives") or []
+    if transition_in is not None:
+        if not isinstance(transition_in, dict) or not transition_in.get("type"):
+            raise ValueError("transition_in must be an object with type")
+        design = dict(transition_in)
+    elif alt is not None:
+        if not (0 <= alt < len(alts)):
+            raise ValueError(f"候选序号 {alt} 越界(共 {len(alts)})")
+        design = dict(alts[alt]["transition_in"])
+        alts = [a for i, a in enumerate(alts) if i != alt]
+    else:
+        raise ValueError("须给 --alt 或 --design")
+    design.setdefault("source", "transition_design")
+    if note:
+        design["reason"] = (str(design.get("reason") or "过场设计").rstrip("。;") + f";工位:{note}")
+    old = b.get("design")
+    if isinstance(old, dict) and old != design and not any(a.get("transition_in") == old for a in alts):
+        alts = [{"label": "原建议", "transition_in": old}] + alts
+    b["design"], b["alternatives"] = design, alts
+    b["status"], b["source"] = "proposed", "agent"
+    b["designed_by"], b["designed_at"] = by, dt.datetime.now().isoformat(timespec="seconds")
+    if note:
+        b["agent_note"] = note
+    _write(design_path(base, ep), data)
+    return b
+
+
+def accept_all_proposed(base: Path, ep: str, *, by: str = "sign:g6") -> list[str]:
+    """把仍是 proposed 的边界全部接受并 apply(H3A 签字即接受默认设计,同 H3W 待决项先例)。返回接受的边界 id。"""
+    data = load_design(base, ep)
+    if not data:
+        return []
+    done = []
+    now = dt.datetime.now().isoformat(timespec="seconds")
+    for b in data["boundaries"]:
+        if b.get("status") == "proposed" and isinstance(b.get("design"), dict):
+            b["design"].setdefault("source", "transition_design")
+            b["status"], b["decided_at"], b["decided_by"] = "accepted", now, by
+            b["source"] = b.get("source") if b.get("source") == "agent" else "mode"
+            done.append(b["id"])
+    if done:
+        _write(design_path(base, ep), data)
+        apply(base, ep)
+    return done
+
+
+def enabled(base: Path, ep: str | None = None) -> bool:
+    """本集是否启用过场设计工位(workflow.yaml 条件 transition_design_enabled):生效过场模式 ≠ minimal。"""
+    return effective(base, ep)["mode"] != "minimal"
+
+
+# ---------------------------------------------------------------- 生成式插入段 clip(Phase 7 p7-transition-clips)
+
+def _frame_size(base: Path) -> tuple[int, int]:
+    """首帧静帧尺寸:按项目输出画幅(settings.json#output.aspect,缺省 16:9)。"""
+    st = _read(Path(base) / "settings.json", {}) or {}
+    asp = str(((st.get("output") or {}).get("aspect")) or "16:9").replace("x", ":")
+    return {"9:16": (1080, 1920), "1:1": (1440, 1440), "4:3": (1600, 1200), "3:4": (1200, 1600), "21:9": (2520, 1080)}.get(asp, (1920, 1080))
+
+
+def _clip_rows_from(base: Path, ep: str, t: dict, bid: str, to_group: str, status: str) -> list[dict]:
+    """一个 transition_in 里需要外部 clip 的插入段(establishing i2v / bridge)→ 行。"""
+    rows = []
+    for k, x in enumerate(t.get("inserts") or []):
+        kind = x.get("kind")
+        src = x.get("source") if isinstance(x.get("source"), dict) else {}
+        if kind == "establishing" and src.get("mode") == "i2v":
+            paths = clip_paths(ep, bid, "establishing")
+            rows.append({"id": bid, "to_group": to_group, "insert_index": k, "kind": "establishing", "status": status,
+                         "file": src.get("file") or paths["file"], "still": src.get("still") or paths["still"],
+                         "prompt": src.get("prompt") or "", "scene_id": src.get("scene_id"), "base": src.get("base") or {},
+                         "duration_s": float(x.get("duration_s") or 0.0), "request_duration_s": max(I2V_MIN_DURATION_S, math.ceil(float(x.get("duration_s") or 0.0)))})
+        elif kind == "bridge":
+            paths = clip_paths(ep, bid, "bridge")
+            rows.append({"id": bid, "to_group": to_group, "insert_index": k, "kind": "bridge", "status": status,
+                         "file": x.get("file") or paths["file"], "still": None, "prompt": x.get("prompt") or "",
+                         "duration_s": float(x.get("duration_s") or 0.0), "request_duration_s": max(I2V_MIN_DURATION_S, math.ceil(float(x.get("duration_s") or 0.0)))})
+    return rows
+
+
+def clips_needed(base: Path, ep: str, *, include_proposed: bool = False) -> list[dict]:
+    """本集需要视频生成的过场素材:shot_list 已定稿(accepted)设计里的 establishing(i2v)/ bridge 插入段;
+    include_proposed=True 时另含设计表 proposed 的(供工位提前渲首帧)。每行带 exists / still_exists / duration_ok(有 ffprobe 时)。"""
+    from check_generation_groups import transition_of  # noqa: E402
+    base = Path(base)
+    sl = _shot_list(base, ep)
+    rows, seen = [], set()
+    for g in sl.get("generation_groups") or []:
+        if not isinstance(g, dict) or not isinstance(g.get("transition_in"), dict):
+            continue
+        t = transition_of(g)
+        gid = g.get("group_id")
+        # 边界 id 由设计表反查(缺表时按组序推前组)
+        prev_gid = None
+        groups = [x.get("group_id") for x in sl.get("generation_groups") or []]
+        if gid in groups and groups.index(gid) > 0:
+            prev_gid = groups[groups.index(gid) - 1]
+        if not prev_gid:
+            continue
+        bid = boundary_id(prev_gid, gid)
+        for r in _clip_rows_from(base, ep, t, bid, gid, "accepted"):
+            rows.append(r)
+            seen.add((r["id"], r["kind"]))
+    if include_proposed:
+        data = load_design(base, ep)
+        for b in (data or {}).get("boundaries") or []:
+            if b.get("status") == "proposed" and isinstance(b.get("design"), dict):
+                for r in _clip_rows_from(base, ep, transition_of({"transition_in": b["design"]}), b["id"], b["to_group"], "proposed"):
+                    if (r["id"], r["kind"]) not in seen:
+                        rows.append(r)
+                        seen.add((r["id"], r["kind"]))
+    for r in rows:
+        f = base / r["file"]
+        r["exists"] = f.is_file()
+        r["still_exists"] = bool(r.get("still")) and (base / r["still"]).is_file()
+        r["clip_duration_s"] = _probe_duration(f) if r["exists"] else None
+        r["duration_ok"] = (r["clip_duration_s"] is None) or (r["clip_duration_s"] + 1e-3 >= r["duration_s"])
+    return rows
+
+
+def _probe_duration(p: Path) -> float | None:
+    import shutil
+    import subprocess
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "format=duration",
+                              "-of", "default=nw=1:nk=1", str(p)], capture_output=True, text=True, timeout=60, check=True).stdout.strip()
+        return float(out) if out else None
+    except Exception:
+        return None
+
+
+def prepare_clip_stills(base: Path, ep: str, rows: list[dict] | None = None, *, force: bool = False) -> list[dict]:
+    """为 establishing(i2v)行渲首帧静帧(全景锚点视窗 pano_view / 首镜母图缩放),写到 still 路径;返回处理过的行。"""
+    base = Path(base)
+    rows = rows if rows is not None else clips_needed(base, ep, include_proposed=True)
+    w, h = _frame_size(base)
+    done = []
+    for r in rows:
+        if r.get("kind") != "establishing" or not r.get("still"):
+            continue
+        out = base / r["still"]
+        if out.is_file() and not force:
+            r["still_exists"] = True
+            continue
+        b = r.get("base") or {}
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if b.get("mode") == "pano_sweep" and b.get("anchor_id"):
+            pano_still(base, {"scene_id": r.get("scene_id"), "anchor_id": b["anchor_id"], "scheme": b.get("scheme"),
+                              "look_dir": b.get("look_dir"), "fov_v_deg": b.get("fov_v_deg") or 45.0}, w, h, out)
+        elif b.get("file") and (base / b["file"]).is_file():
+            from PIL import Image
+            im = Image.open(base / b["file"]).convert("RGB")
+            # 按目标画幅居中裁切再缩放(母图 55° 广角比例通常已接近输出画幅)
+            sw, sh = im.size
+            tr = w / h
+            if sw / sh > tr:
+                nw = int(round(sh * tr))
+                im = im.crop(((sw - nw) // 2, 0, (sw - nw) // 2 + nw, sh))
+            else:
+                nh = int(round(sw / tr))
+                im = im.crop((0, (sh - nh) // 2, sw, (sh - nh) // 2 + nh))
+            im.resize((w, h), Image.LANCZOS).save(out, quality=93)
+        else:
+            r["still_error"] = "定场素材缺失(无全景锚点 / 母图),无法渲首帧"
+            continue
+        r["still_exists"] = out.is_file()
+        done.append(r)
+    return done
+
+
+def check_clips(base: Path, ep: str) -> tuple[bool, list[dict]]:
+    """transition_clips_ready(p7-transition-clips 验收):本集 shot_list 已定稿的 establishing(i2v)/ bridge 插入段,
+    clip 文件在、时长 ≥ 插入段时长、首帧静帧在;一条都不需要 = PASS 并注明。"""
+    items, fails = [], 0
+
+    def rec(name, ok, detail="", warn=False):
+        nonlocal fails
+        tag = "PASS" if ok else ("WARN" if warn else "FAIL")
+        if tag == "FAIL":
+            fails += 1
+        items.append({"check": name, "result": tag, "detail": detail})
+
+    rows = clips_needed(base, ep)
+    if not rows:
+        rec("transition_clips_ready", True, "本集定稿设计无生成式插入段(无需 clip)")
+        return True, items
+    missing = [f"{r['id']}.{r['kind']}" for r in rows if not r["exists"]]
+    short = [f"{r['id']}.{r['kind']}({r['clip_duration_s']:.2f}s<{r['duration_s']:g}s)" for r in rows if r["exists"] and not r["duration_ok"]]
+    no_still = [r["id"] for r in rows if r["kind"] == "establishing" and not r["still_exists"]]
+    rec("transition_clips_ready", not missing and not short,
+        f"需 {len(rows)} 段;缺文件 {missing[:6]}" if missing else (f"需 {len(rows)} 段;时长不足 {short[:4]}" if short else f"{len(rows)} 段 clip 齐全"))
+    rec("transition_clip_stills", not no_still, ("缺首帧静帧 " + ", ".join(no_still[:6]) + "(跑 clips --prepare)") if no_still else "首帧静帧齐全", warn=True)
+    return fails == 0, items
 
 
 def set_card_lines(base: Path, ep: str, bid: str, lines: list[str]) -> dict:
@@ -897,6 +1182,19 @@ def check(base: Path, ep: str) -> tuple[bool, list[dict]]:
     mism = [b["id"] for b in data["boundaries"] if b.get("status") in ("accepted", "rejected") and isinstance(b.get("design"), dict)
             and (by.get(b["to_group"]) or {}).get("transition_in") != _clean_design(b["design"])]
     rec("transition_design_applied", not mism, f"已裁决 {sum(1 for b in data['boundaries'] if b.get('status') in ('accepted', 'rejected'))} 处" + (f";shot_list 未同步 {mism[:4]}(跑 apply)" if mism else ""))
+    # 二期(2026-09-26):生成式插入段(定场 i2v / 桥接)只在生效模式允许生成式过场时可出;clip 由 Phase 7 p7-transition-clips 生成,这里只 WARN
+    gen = []
+    for b in data["boundaries"]:
+        if b.get("status") in ("accepted", "proposed") and isinstance(b.get("design"), dict):
+            for x in transition_of({"transition_in": b["design"]}).get("inserts") or []:
+                if x.get("kind") == "bridge" or (x.get("kind") == "establishing" and (x.get("source") or {}).get("mode") == "i2v"):
+                    gen.append(f"{b['id']}.{x.get('kind')}")
+    rec("transition_design_generative_allowed", not gen or bool(eff.get("allow_generative")),
+        (f"生成式插入段 {len(gen)} 处 {gen[:4]};过场模式 {eff['mode']} " + ("允许" if eff.get("allow_generative") else "**不允许**生成式过场(改模式或换定场方式)")) if gen else "无生成式插入段")
+    if gen:
+        rows = clips_needed(base, ep)
+        miss = [f"{r['id']}.{r['kind']}" for r in rows if not r["exists"]]
+        rec("transition_clips_ready", not miss, (f"已定稿 {len(rows)} 段生成式 clip;缺 {miss[:4]}(Phase 7 p7-transition-clips 出片)" if miss else f"{len(rows)} 段 clip 齐全") if rows else "定稿设计尚无生成式插入段", warn=True)
     slerr = check_transitions(sl, eff["insert_budget_pct"]) if sl else []
     slerr = [e for e in slerr if "transition_" in e]
     rec("transition_ok", not slerr, f"shot_list transition_ok:{len(slerr)} 条" + (f" {slerr[:3]}" if slerr else ""))
@@ -1262,8 +1560,20 @@ def payload(base: Path, ep: str) -> dict:
         built = bool(meta.get("fingerprint")) and meta.get("fingerprint") == fp_now
         rendered = bool(led) and led.get("fingerprint") == fp_now if led.get("fingerprint") else bool(led) and not (cur.get("inserts") or cur.get("overlay_card"))
         status = b.get("status") or "undecided"
+        # 二期(2026-09-26):生成式插入段(定场 i2v / 桥接)的 clip 状态——缺 clip 时先等 Phase 7 p7-transition-clips 出片
+        clips = []
+        for x in (cur.get("inserts") or []):
+            src = x.get("source") if isinstance(x.get("source"), dict) else {}
+            if x.get("kind") == "bridge" or (x.get("kind") == "establishing" and src.get("mode") == "i2v"):
+                paths = clip_paths(ep, bid, "establishing" if x.get("kind") == "establishing" else "bridge")
+                f = (src.get("file") if x.get("kind") == "establishing" else x.get("file")) or paths["file"]
+                still = src.get("still") or paths.get("still") if x.get("kind") == "establishing" else None
+                clips.append({"kind": x.get("kind"), "file": f, "exists": (base / f).is_file(),
+                              "still": still, "still_url": url(still) if still else None})
         if status == "accepted" and (cur.get("inserts") or cur.get("overlay_card") or cur.get("type") != "hard_cut"):
             render_state = "rendered" if (led and rendered) else ("built" if built else "pending")
+            if any(not c["exists"] for c in clips) and render_state in ("pending", "built"):
+                render_state = "awaiting_clip"     # 缺生成式 clip:build 只记 missing,先等 p7-transition-clips 出片
         else:
             render_state = None
         stale = bool(meta.get("fingerprint")) and meta.get("fingerprint") != fp_now
@@ -1283,6 +1593,7 @@ def payload(base: Path, ep: str) -> dict:
             "feedback": b.get("feedback") or [], "current": cur, "insert_total_s": round(insert_total_s(cur), 3),
             "render_state": render_state, "stale": stale, "ledger": {k: led.get(k) for k in ("type", "duration_s", "cut_time_s", "renders_as")} if led else None,
             "thumbs": thumbs, "preview_meta": meta.get("preview") or None,
+            "clips": clips, "designed_by": b.get("designed_by"), "agent_note": b.get("agent_note"),
         })
     # 集尾收束(2026-09-25):生效值 + 来源 + 渲染台账状态 + 末组尾帧 / 预览小片
     close_eff = effective_episode_close(base, ep, sl)

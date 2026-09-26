@@ -3848,4 +3848,6 @@ window.I18N_DICT = {
 "白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可": "Only {aligned} of the whitebox contours are found in the image (misaligned baseline {null}): redo if the image shows a different viewpoint or a building exterior; dark scenes, caves and other spaces without clear wall-top/corner lines are normal, just compare visually with the whitebox panorama",
 "成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对": "Image alignment with the whitebox contours is not above the misaligned baseline (aligned {aligned} / baseline {null}); compare with the whitebox panorama on the preview page",
 "等 {n} 个": "({n} in total)",
+"首帧": "First frame",
+"工位建议": "Workstation proposal",
 };

@@ -3839,4 +3839,6 @@ window.I18N_DICT = {
 "白模轮廓只有 {aligned} 在成图里找得到(错位基线 {null}):若成图是别的视点 / 建筑外观请重出;暗场、岩洞等墙顶墙角不成线的空间属正常,目视对照白模全景即可": "Seulement {aligned} des contours du whitebox se retrouvent dans l’image (ligne de base décalée {null}) : régénérer si l’image montre un autre point de vue ou un extérieur ; scènes sombres, grottes et autres espaces sans arêtes de murs nettes sont normaux, comparer visuellement au panorama whitebox",
 "成图与白模轮廓对齐度不高于错位基线(对齐 {aligned} / 基线 {null}),请在预览页对照白模全景核对": "L’alignement de l’image sur les contours du whitebox ne dépasse pas la ligne de base décalée (aligné {aligned} / base {null}) ; comparer au panorama whitebox sur la page d’aperçu",
 "等 {n} 个": "({n} au total)",
+"首帧": "Première image",
+"工位建议": "Proposition du poste",
 };
