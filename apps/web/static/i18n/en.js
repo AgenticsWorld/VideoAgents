@@ -3850,4 +3850,6 @@ window.I18N_DICT = {
 "等 {n} 个": "({n} in total)",
 "首帧": "First frame",
 "工位建议": "Workstation proposal",
+"成对运镜": "Paired camera move",
+"音先入": "Audio lead (J-cut)",
 };

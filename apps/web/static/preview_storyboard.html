@@ -1496,6 +1496,9 @@ function trJoinLabel(tr){
   if(tr.join&&tr.join.style)s+='·'+t(TR_JOIN_STYLE[tr.join.style]||tr.join.style);
   if(tr.duration_s)s+=' '+tr.duration_s+'s';
   const pads=[];if(tr.freeze_s)pads.push(t('定格')+' '+tr.freeze_s+'s');if(tr.hold_s)pads.push(t('黑场')+' '+tr.hold_s+'s');
+  // 三期成对运镜 / 四期音先入(2026-09-26)
+  if(tr.motion_pair&&tr.motion_pair.out)pads.push(t('成对运镜')+' '+tr.motion_pair.out+'→'+(tr.motion_pair.in||''));
+  if(tr.audio_lead_s)pads.push(t('音先入')+' '+tr.audio_lead_s+'s');
   return s+(pads.length?' + '+pads.join(' + '):'');
 }
 function trInsertSeg(x,tr,idx){
@@ -1516,6 +1519,13 @@ function trInsertSeg(x,tr,idx){
     return `<div class="seg">${img}<span>${t('定场空镜')} ${x.duration_s}s${x.overlay_card?' · '+t('叠字'):''}${gen}</span></div>`;
   }
   if(x.kind==='timelapse'){const s=x.source||{};return `<div class="seg"><div class="ph">${t('时光流转')}<br>${esc(s.scheme_from||'')} → ${esc(s.scheme_to||'')}</div><span>${t('时光流转')} ${x.duration_s}s</span></div>`;}
+  if(x.kind==='bridge'){
+    // 三期(2026-09-26):桥接 clip 由 Phase 7 生成;首尾帧静帧(前组尾帧 / 本组首帧)由 clips --prepare 抽出
+    const clip=(tr.clips||[]).find(c=>c.kind==='bridge')||null;
+    const img=th.establishing&&idx===0?`<img src="${esc(th.establishing)}" onclick="zoom(this.src)">`:(clip&&clip.still_url?`<img src="${esc(clip.still_url)}" onclick="zoom(this.src)" title="${t('首帧')}">`:`<div class="ph">${t('生成式桥接')}<br>${t('待生成')}</div>`);
+    const gen=`<span class="tag ${clip&&clip.exists?'ok':'warn'}" title="${esc(x.file||'')}">${clip&&clip.exists?t('已生成'):t('待生成')}</span>`;
+    return `<div class="seg">${img}<span>${t('生成式桥接')} ${x.duration_s}s · ${gen}</span></div>`;
+  }
   return `<div class="seg"><div class="ph">${t(TR_KIND[x.kind]||x.kind)}<br>${t('待生成')}</div><span>${t(TR_KIND[x.kind]||x.kind)} ${x.duration_s}s</span></div>`;
 }
 function trChainHtml(tr,design){

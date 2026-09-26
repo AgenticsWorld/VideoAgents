@@ -3841,4 +3841,6 @@ window.I18N_DICT = {
 "等 {n} 个": "({n} en total)",
 "首帧": "Primer fotograma",
 "工位建议": "Propuesta del puesto",
+"成对运镜": "Movimiento de cámara emparejado",
+"音先入": "Audio adelantado (J-cut)",
 };

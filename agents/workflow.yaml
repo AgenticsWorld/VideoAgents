@@ -326,6 +326,7 @@ phases:
                                prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
                                h3_prompt_structure,   # 2026-09-09:期望 h3-pe 的组正文必须按 H3 Ref2VA 六段结构(subject_definitions 逐图 <Subject N>…<Picture i> / retention_analysis 逐份 / <d> 台词 / <Audio N> 绑 (Sx);背景图 <Picture N> 构图锚与 Plate anchor 由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
+                               motion_pair_bound,   # 2026-09-26 三期:组边界 transition_in.motion_pair(成对运镜)两侧组 prompt 含宿主写入的「【运镜对接】」句(前组末 Shot 段尾镜带出 / 本组首 Shot 段接入),残留过期句 = 违规;code/sync_motion_pairs.py --write 机器写入,无 motion_pair 的集 PASS
                                shot_timing_bound] } }   # 2026-09-23:镜次时长——shot_list 每镜 duration_s 按生效模型官方写法进正文(2.5/Wan 3.0 连续整数秒时间段标在段首镜段头后、H3 Shot k≥2 切点 At MM:SS.mmm,、2.0 不写),标签齐全/连续/末段止于 round(total_duration_s)/Σ duration_s = total_duration_s;code/sync_shot_timing.py --write 机器写入(§7F ⑩)
       - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
@@ -366,8 +367,10 @@ phases:
       #   modules/genmedia.py video --first-frame <still> --prompt <提示词> --duration <请求时长> --output assets/transitions/epNN/<B-id>.establishing.mp4
       #   python3 code/transition_design.py clips --project <slug> --ep epNN --check     → 机检 transition_clips_ready
       # Phase 9 render_transitions build 只消费这些文件(缺 = inserts_built FAIL,不顶替);模式不允许生成式过场(极简 / 经典)= 不实例化,g7 不因缺它而 HOLD
+      #   三期(2026-09-26)桥接段 bridge:首帧 = 前组尾帧、尾帧 = 本组首帧(clips --prepare 从两侧组 clip 抽),故本节点依赖全组 p7-video;
+      #   定场 i2v 只需首帧静帧,也随本节点一并出(不进组序续接链、与 H3B 审看同批)
       - { id: p7-transition-clips, agent: 08-video-gen/video-generation, scope: episode, condition: transition_clips_requested,
-          depends_on: [g6],
+          depends_on: [g6, p7-video],
           outputs: ["assets/transitions/{ep}/"],
           validation: { auto: [transition_clips_ready], qa: [11-qa/visual-qa] } }   # transition_clips_requested = 本集 shot_list 定稿设计含 establishing(source.mode=i2v)/ bridge 插入段(transition_design.py clips 非空)
       - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale, p7-transition-clips],

@@ -3839,4 +3839,6 @@ window.I18N_DICT = {
 "等 {n} 个": "(total {n})",
 "首帧": "Bingkai pertama",
 "工位建议": "Usulan stasiun",
+"成对运镜": "Gerak kamera berpasangan",
+"音先入": "Audio mendahului (J-cut)",
 };

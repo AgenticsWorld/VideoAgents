@@ -148,7 +148,10 @@ def boundary_layer(proj: Path, ep: str, rows: list[dict], fps: float | None = No
         ins_rows = [{"kind": x.get("kind"), "duration_s": max(2.0 / fps, _q(x.get("duration_s"), fps)) if float(x.get("duration_s") or 0) > 0 else 0.0} for x in ins]
         ins_s = round(sum(x["duration_s"] for x in ins_rows), 6)
         total = round(fz + hd + ins_s, 6)
-        if total <= 0:
+        # 四期(2026-09-26):音先入 audio_lead_s(J-cut)——本组原生轨比画面早 lead 秒进入,压在前组尾画面上;不占时、不进 timemap,
+        # 只影响混音摆位,故边界层也列出 total_s=0 但 audio_lead_s>0 的边界,并进指纹(改了 lead = 须重混)
+        lead = min(1.0, _q(t.get("audio_lead_s"), fps)) if float(t.get("audio_lead_s") or 0) > 0 and not ins_rows and not hd else 0.0
+        if total <= 0 and lead <= 0:
             continue
         if hd:
             audio = str(t.get("hold_audio") or "sustain")
@@ -158,15 +161,29 @@ def boundary_layer(proj: Path, ep: str, rows: list[dict], fps: float | None = No
         else:
             audio = str(t.get("hold_audio") or "sustain")
         out.append({"from_group": a["group_id"], "to_group": b["group_id"], "freeze_s": fz, "hold_s": hd, "insert_s": ins_s,
-                    "total_s": total, "audio": audio, "type": str(t.get("type") or "hard_cut"), "inserts": ins_rows})
+                    "total_s": total, "audio": audio, "type": str(t.get("type") or "hard_cut"), "inserts": ins_rows,
+                    "audio_lead_s": lead})
     return out
 
 
 def boundary_fingerprint(bounds: list[dict]) -> str:
-    """边界层指纹:只看 (from, to, 占时 ms),与 transitions_render.json#timemap.ops 的 (from_group, to_group, out_len) 同口径。"""
-    slim = [[b.get("from_group"), b.get("to_group"), int(round(float(b.get("total_s", b.get("out_len")) or 0.0) * 1000))]
-            for b in bounds if float(b.get("total_s", b.get("out_len")) or 0.0) > 0]
+    """边界层指纹:看 (from, to, 占时 ms[, 音先入 ms]),占时部分与 transitions_render.json#timemap.ops 的 (from_group, to_group, out_len) 同口径;
+    音先入(四期)只在 >0 时追加第 4 项,无音先入的项目指纹与旧口径完全一致。"""
+    slim = []
+    for b in bounds:
+        total = float(b.get("total_s", b.get("out_len")) or 0.0)
+        lead = float(b.get("audio_lead_s") or 0.0)
+        if total <= 0 and lead <= 0:
+            continue
+        row = [b.get("from_group"), b.get("to_group"), int(round(total * 1000))]
+        if lead > 0:
+            row.append(int(round(lead * 1000)))
+        slim.append(row)
     return hashlib.sha256(json.dumps(slim, sort_keys=False).encode("utf-8")).hexdigest()[:16]
+
+
+def boundary_has_leads(bounds: list[dict]) -> bool:
+    return any(float(b.get("audio_lead_s") or 0.0) > 0 for b in bounds)
 
 
 def boundary_delta(bounds: list[dict]) -> float:
@@ -307,8 +324,11 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
             res["boundary_status"] = BND_STALE
     if res["boundary_status"] == BND_STALE:
         res["status"] = STATUS_STALE
-        res["detail"] += (";组边界层已变(混音 Δ{:+.3f}s → 当前 Δ{:+.3f}s:过场的定格/黑场/字卡等插入段与混音时不同),"
-                          "须重跑 p8-mix,否则过场处声轨按 timemap 切开、BGM 会断").format(res["mix_boundary_delta_s"], res["cur_boundary_delta_s"])
+        if abs(res["mix_boundary_delta_s"] - res["cur_boundary_delta_s"]) < 1e-6:
+            res["detail"] += ";组边界层已变(占时未变:过场的音先入 audio_lead_s 或边界归属与混音时不同),须重跑 p8-mix 让声轨按新的先入摆位"
+        else:
+            res["detail"] += (";组边界层已变(混音 Δ{:+.3f}s → 当前 Δ{:+.3f}s:过场的定格/黑场/字卡等插入段与混音时不同),"
+                              "须重跑 p8-mix,否则过场处声轨按 timemap 切开、BGM 会断").format(res["mix_boundary_delta_s"], res["cur_boundary_delta_s"])
     elif res["boundary_status"] == BND_ABSENT:
         res["detail"] += (";混音清单不含组边界层(旧口径)而当前 shot_list 有边界插入 Δ{:+.3f}s:出成片时声轨按 timemap 切开"
                           "{}").format(res["cur_boundary_delta_s"], ",字卡/定场处 BGM 会断,须重跑 p8-mix" if res["cur_boundary_has_inserts"] else "(仅定格/黑场,可接受)")

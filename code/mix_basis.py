@@ -17,8 +17,10 @@ sources 输出的每组字段:
   duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计 **+ 本组前的组边界层**,BGM / 旁白摆位用这个)
   boundary_before_s 本组前组边界占时(定格 + 黑场停留 + 插入段,过场设计 2026-09-24):原生轨在此留白(按 boundaries[].audio:
                  mute 静音 / sustain 延续前段房间声),BGM / 旁白照常跨过去铺——跨越边界的 cue 不断;cum_start_groups_s = 不含边界层的组累计
-顶层 boundaries[]:每个有占时的边界 {from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts[]};
+顶层 boundaries[]:每个有占时或有音先入的边界 {from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts[], audio_lead_s};
   boundary_delta_s = Σ占时;混音 wav 总长应 = Σ组时长 + boundary_delta_s(stamp 核对)
+  audio_lead_s(四期 2026-09-26,J-cut):>0 时本组原生轨要比 cum_start_s 早这么多秒进入,压在前组尾画面上(前组原生轨在重叠段渐弱、
+                 本组在重叠段渐强,各 ≤ lead;BGM / 旁白不受影响);不占时、不进 timemap、不改 wav 总长;改了 = 边界指纹变 = 须重混
   cum_start_v0_s 母本基准起点(只用于换算旧口径的 meta boundary_map:组内时刻经 time_ops 映射 = timemap.map_time)
   time_ops       该版本相对母本的组内时长编辑(删段 out_len=0 / 变速 / 插入);boundary_map、对白开口时段都是母本
                  基准,落在删除区间内的事件在本版本里已不存在,不得再往上铺声音
@@ -72,10 +74,13 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
         for r in rows:
             ops = timemap.describe(r["time_ops"]) if r["time_ops"] else ""
             b = b_by.get(r["group_id"])
-            if b:
+            if b and b["total_s"] > 0:
                 parts = ([f"定格 {b['freeze_s']:g}s"] if b["freeze_s"] else []) + ([f"黑场 {b['hold_s']:g}s"] if b["hold_s"] else []) \
                     + [f"{x['kind']} {x['duration_s']:g}s" for x in b["inserts"]]
                 _log("BND ", f"{b['from_group']}→{b['to_group']} 组边界 +{b['total_s']:.3f}s({' + '.join(parts)};原生轨 {b['audio']},BGM/旁白连续铺过)")
+            if b and float(b.get("audio_lead_s") or 0) > 0:
+                _log("LEAD", f"{b['from_group']}→{b['to_group']} 音先入 {b['audio_lead_s']:g}s:本组原生轨从 {r['cum_start_s'] - b['audio_lead_s']:.3f}s 起进入(J-cut),"
+                             f"重叠段前组渐弱 / 本组渐强;不占时、不改 wav 总长")
             _log("SRC ", f"{r['group_id']} v{r['v']} {r.get('src') or '(无文件)'} {r['duration_s']:.3f}s @{r['cum_start_s']:.3f}s"
                          + (f"  [{ops}]" if ops else ""))
         for gid, v in pending.items():

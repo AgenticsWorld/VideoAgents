@@ -93,11 +93,35 @@ python3 code/render_transitions.py plan|build|preview|render|check --project <sl
 | `transition_ok`(transition_type_valid / transition_reason_required / transition_pad_valid / transition_join_valid / transition_insert_valid / transition_insert_budget / transition_close_valid / narrative_block_paired) | check_generation_groups.py | shot_list `transition_in` 契约不合法;i2v 缺 `source.file` |
 | `transition_design_ok`(present / contract / coverage / applied / generative_allowed / transition_ok;clips_ready WARN) | transition_design.py check | 设计表缺(非极简)、契约不合法、有变化边界缺条目、已裁决未同步、模式不允许却出了 i2v / bridge |
 | `transition_clips_ready`(+ `transition_clip_stills` WARN) | transition_design.py clips --check | 定稿的 i2v / bridge clip 缺文件或时长不足 |
+| `motion_pair_valid` / `transition_audio_lead_valid`(入 transition_ok) | check_generation_groups.py | 配对不合法 / 与 inserts 并用 / 首组 / 缺 reason;音先入 >1 s / 配了插入段或黑场 |
+| `motion_pair_bound` | sync_motion_pairs.py | 两侧组 prompt 缺运镜对接句、句子不在正确 Shot 段、残留过期句 |
 | `transition_render_ok`(… inserts_built / insert_frames_verified / insert_budget_ok) | render_transitions.py check | 生成式 clip 缺失、段文件缺、指纹过期、预算超 |
+
+### 三期(2026-09-26):生成式桥接 + 成对运镜
+
+**桥接 `bridge`**(允许生成式过场的模式)
+
+- 何时:进闪回 / 梦境 / 想象块的边界 propose 主设计 = `{"type":"hard_cut","inserts":[{"kind":"bridge","duration_s":2.0,"join_out":"hard_cut","audio":"sustain","file":"assets/transitions/epNN/<B-id>.bridge.mp4","first_frame":"…/<B-id>.bridge.first.jpg","last_frame":"…/<B-id>.bridge.last.jpg","prompt":"过渡桥接:画面从首帧(书房)连续形变、流动到尾帧(南天门),记忆浮现…;中段不出现任何新的人物…"}]}`(可带叠字);白场 + 定格退作候选;出块边界给「桥接回到当下」候选;自定义 `custom_map` 选 `bridge` 同。经典 / 极简 / 自定义未勾生成式 → 不出(机检 `transition_design_generative_allowed`)。
+- 首尾帧:首帧 = 前组尾帧(`assets/clips/epNN/<from>.last_frame.png`,无则从前组 clip 抽末帧),尾帧 = 本组 clip 首帧;`clips --prepare` 抽出到 `assets/transitions/epNN/`。两侧组视频未出时 `--prepare` 报「组视频尚未生成」——所以 **`p7-transition-clips` 依赖全组 `p7-video`**。
+- clip:video-generation 首尾帧模式 `genmedia video --first-frame … --last-frame … --prompt <桥接句> --duration 4`;`clips --check` = `transition_clips_ready`(文件、时长)+ `transition_clip_stills`(首尾帧在)。build 消费文件,`insert_frames_verified` 核桥接首末帧贴合前组尾 / 本组首。契约:bridge 须给 `file`,与 `motion_pair` 互斥。
+
+**成对运镜 `motion_pair`**
+
+- 字段:`transition_in.motion_pair {"out": <前组尾镜运镜>, "in": <本组首镜运镜>, "speed": slow|medium|fast}`;合法配对 `MOTION_PAIRS`(check_generation_groups.py):`pan_left/right`、`tilt_up/down`、`whip_pan_left/right`、`dolly_left/right` 同向延续,`push_in ↔ pull_out` 互补。机检 `motion_pair_valid`:配对合法、type ∈ hard_cut/dissolve、与 inserts 互斥、首组不得、须写 reason。
+- 出处:电影感模式下换场景 / 跳时间边界的候选「成对运镜 + 音先入」(默认 pan_right→pan_right medium;工位按两侧构图 `design --design` 改方向);自定义 `custom_map` 选 `motion_pair` 为主设计。
+- 落地:不是插入段,而是**两侧组 prompt 各一句**。宿主 `code/sync_motion_pairs.py --project <slug> --ep epNN [grp…] --write`(`modules/motion_pairs.py`):前组**最后一个** `Shot N:` 段末追加「【运镜对接】本镜结尾以中速向右横摇带出画面,收尾时主体已移出画外,运镜不停、不减速;下一组从同一向右横摇接入。」,本组 **`Shot 1:`** 段末追加「【运镜对接】本镜开头延续上一组的中速向右横摇接入,前 0.5 秒画面仍在向右横摇中,随后稳定到本镜构图;开头不切镜、不叠化。」(非中文界面 `Motion pair:` 英文句);幂等(先剔旧标记句),设计撤了只剔除,原 prompt 首次备份到 `directing/epNN/whitebox/prompt_backups/`。机检 `motion_pair_bound`(p7-prompt 验收项):两侧句子在、落在正确 Shot 段、无残留过期句;组 prompt 未写 = skipped;无 motion_pair 的集 PASS。
+- 页面:过场卡接缝标签显示「成对运镜 out→in」。
+
+### 四期(2026-09-26):音先入 `audio_lead_s`(J-cut)
+
+- 字段:`transition_in.audio_lead_s` ∈ (0, 1](默认 0.5)——本组原生声轨比画面早这么多秒进入,压在前组尾画面上。机检 `transition_audio_lead_valid`:只配无 inserts / 无 hold_s 的 hard_cut / dissolve、首组不得、须写 reason。
+- 出处:电影感模式下换场景的「只叠地点字幕(不变长)」方案与「成对运镜」候选默认带 0.5 s;出块边界给「硬切 + 音先入」候选;自定义 `custom_map` 选 `j_cut`。经典 / 极简不出。
+- 落地在混音,不在画面:`render_transitions` 不处理它(cut_v2 自带声轨不是成片声轨),timemap 不变。`mix_basis.py sources` 的 `boundaries[]` 也列出 `total_s=0` 但 `audio_lead_s>0` 的边界(`LEAD` 行打印起点),边界指纹在 lead>0 时追加第 4 项(无音先入的项目指纹与旧口径一致);audio-mixing 把该组原生轨从 `cum_start_s − audio_lead_s` 起铺、重叠段前组渐弱 / 本组渐强,BGM / 旁白 / wav 总长不变。改了 lead = 边界指纹变 = `mix_basis_current` 报 stale(占时未变的专用文案)须重跑 p8-mix。
+- 页面:过场卡接缝标签显示「音先入 0.5s」。
 
 ## 未做 / 后续
 
-- 三期「生成式桥接」(`bridge`)只有路径与 build 消费,propose 不出它(自定义选 bridge 暂落硬切 + 候选标注);首尾帧贴合核验已在 `insert_frames_verified`。
-- 四期 `audio_lead_s`(音先入)只有契约,未渲。
 - 机检 `establishing_on_scene_change`(电影感 / 自定义「新场景首镜必须定场」时新场景首镜景别 ≥ 全景且无近景人物)未落地。
-- 真项目未跑二期节点;服务须重启后 H3A 签字接受 / 提示词「过场模式」段才生效。
+- 音先入只在成片混音里体现,过场卡「▶ 出预览」小片仍是静音,听不到 J-cut。
+- 成对运镜只写 prompt,不回写 `shots/<id>/camera.json`;运镜工位 / 白模不知道这一对。
+- 真项目未跑二至四期节点;服务须重启后 H3A 签字接受 / 提示词「过场模式」段才生效。

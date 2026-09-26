@@ -46,7 +46,11 @@ CUSTOM_DEFAULTS = {"allow_cards": True, "insert_budget_pct": 8.0, "allow_generat
 # 自定义模式六类边界 → 处理方式(custom_map 的键与可选值)
 BOUNDARY_CLASSES = ("scene_change", "time_jump", "block_enter", "block_exit", "same_scene", "episode_open")
 CUSTOM_OPTIONS = ("director", "hard_cut", "dissolve", "dip_black", "dip_white", "title_card", "overlay_card",
-                  "establishing", "establishing_overlay", "timelapse", "bridge")
+                  "establishing", "establishing_overlay", "timelapse", "bridge",
+                  "motion_pair", "j_cut")     # 三期 成对运镜 / 四期 音先入(2026-09-26)
+BRIDGE_S = 2.0            # 生成式桥接默认时长(前组尾帧 → 本组首帧的形变过渡)
+AUDIO_LEAD_S = 0.5        # 音先入默认(J-cut:本组声轨提前 0.5 s 压在前组尾画面上)
+MOTION_DEFAULT = ("pan_right", "pan_right", "medium")
 CUSTOM_MAP_DEFAULT = {"scene_change": "establishing", "time_jump": "title_card", "block_enter": "dip_white",
                       "block_exit": "director", "same_scene": "hard_cut", "episode_open": "director"}
 DEFAULT_SETTINGS = {"mode": "minimal", "card_style": "caption_default", "card_language": "script"}
@@ -506,6 +510,9 @@ def diagnose(base: Path, ep: str) -> list[dict]:
             "ep": ep,
             "scene": {"id": b.get("scene_id"), "name": loc, "time_of_day": b.get("time_of_day"),
                       "int_ext": spb.get("int_ext"), "lighting_scheme_id": b.get("lighting_scheme_id")},
+            # 三期(2026-09-26):桥接提示词要知道「从哪来」
+            "scene_from": {"id": a.get("scene_id"), "name": scene_display_name(base, a.get("scene_id") or "", scenes) if a.get("scene_id") else None,
+                           "time_of_day": a.get("time_of_day"), "int_ext": spa.get("int_ext")},
             "current": transition_of(b) if b.get("transition_in") else {"type": "hard_cut"},
             "current_raw": b.get("transition_in") if isinstance(b.get("transition_in"), dict) else None,
             "to_duration_s": b.get("total_duration_s"), "from_duration_s": a.get("total_duration_s"),
@@ -546,12 +553,41 @@ I2V_MIN_DURATION_S = 4.0     # 图生视频请求时长下限(多数模型最短
 
 
 def clip_paths(ep: str, bid: str, kind: str = "establishing") -> dict:
-    """生成式插入段的约定路径(项目根相对):establishing → <B-id>.establishing.{mp4,still.jpg};bridge → <B-id>.bridge.mp4。"""
+    """生成式插入段的约定路径(项目根相对):establishing → <B-id>.establishing.{mp4,still.jpg};
+    bridge → <B-id>.bridge.mp4 + 首尾帧 <B-id>.bridge.first.jpg(前组尾帧)/ <B-id>.bridge.last.jpg(本组首帧)。"""
     stem = f"{CLIP_DIR}/{ep}/{bid}.{kind}"
     out = {"file": f"{stem}.mp4"}
     if kind == "establishing":
         out["still"] = f"{stem}.still.jpg"
+    elif kind == "bridge":
+        out["first"], out["last"] = f"{stem}.first.jpg", f"{stem}.last.jpg"
     return out
+
+
+def bridge_prompt(scene_from: dict, scene_to: dict, block: dict | None) -> str:
+    """生成式桥接 i2v(首尾帧)提示词:从前组尾帧连续形变 / 流动到本组首帧;按叙事块种类给记忆 / 梦境 / 想象的质感;无新增人物、无文字。"""
+    kind = str((block or {}).get("kind") or "")
+    a = str((scene_from or {}).get("name") or (scene_from or {}).get("id") or "")
+    b = str((scene_to or {}).get("name") or (scene_to or {}).get("id") or "")
+    zh = _has_cjk(a) or _has_cjk(b)
+    feel_zh = {"flashback": "记忆浮现:轻微光晕与褪色,像被回忆卷入", "dream": "梦境:朦胧、失焦、缓慢漂浮",
+               "imagination": "想象:画面如水面般泛起再重组", "montage": "时间流逝:光影快速掠过"}.get(kind, "同一空间在光影中连续转换")
+    feel_en = {"flashback": "memory surfacing: a soft halo and fading colour, as if pulled into recollection", "dream": "dream: hazy, defocused, slowly drifting",
+               "imagination": "imagination: the image ripples like water and reassembles", "montage": "passing time: light and shadow sweep quickly"}.get(kind, "one space transforming continuously through light")
+    if zh:
+        return (f"过渡桥接:画面从首帧({a})连续形变、流动到尾帧({b}),{feel_zh};中段不出现任何新的人物、面孔或文字,"
+                "只让首帧已有的形体与光线渐变为尾帧的形体与光线;不切镜、不闪白、不黑场;结尾稳定停在尾帧构图。")
+    return (f"Transition bridge: the image morphs and flows continuously from the first frame ({a}) into the last frame ({b}); {feel_en}; "
+            "no new people, faces or text appear mid-way — only the shapes and light already present in the first frame gradually become those of the last frame; "
+            "no cuts, no white flash, no black; ends settled on the last frame's composition.")
+
+
+def bridge_insert(ep: str, b: dict, dur: float = BRIDGE_S, audio: str = "sustain") -> dict:
+    """生成式桥接插入段:文件 / 首尾帧按约定路径,提示词由宿主生成。"""
+    paths = clip_paths(ep, b["id"], "bridge")
+    return {"kind": "bridge", "duration_s": dur, "join_out": "hard_cut", "audio": audio,
+            "file": paths["file"], "first_frame": paths["first"], "last_frame": paths["last"],
+            "prompt": bridge_prompt(b.get("scene_from") or {}, b.get("scene") or {}, (b.get("diagnosis") or {}).get("narrative_block"))}
 
 
 def i2v_source(ep: str, b: dict, estab: dict) -> dict:
@@ -675,6 +711,38 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             return None   # 导演已设计出口(match_cut 等)
         return {"type": "hard_cut", "intent": intent, "reason": _reason(d, "出叙事块有意硬切"), "source": "transition_design"}
 
+    # —— 三期 / 四期(2026-09-26) ——
+    generative = bool(eff.get("allow_generative")) and bool(b.get("ep"))
+
+    def bridge_design(with_overlay=True):
+        """生成式桥接:前组尾帧 → 本组首帧的形变过渡(clip 由 Phase 7 p7-transition-clips 出);进块可叠字。"""
+        t = {"type": "hard_cut", "intent": intent, "reason": _reason(d, "生成式桥接" + ("+叠字" if with_overlay else "")), "source": "transition_design",
+             "inserts": [bridge_insert(b["ep"], b)]}
+        if with_overlay and have_lines and allow_cards:
+            t["overlay_card"] = _overlay(lines, srcs, dur=2.5)
+        return t
+
+    def j_cut(base_design=None):
+        """音先入:在无插入段 / 无黑场的 hard_cut / dissolve 设计上加 audio_lead_s。"""
+        t = dict(base_design or keep_hard())
+        if t.get("type") not in ("hard_cut", "dissolve") or t.get("inserts") or t.get("hold_s"):
+            return None
+        t["audio_lead_s"] = AUDIO_LEAD_S
+        t["reason"] = str(t.get("reason") or _reason(d, "音先入")).rstrip("。") + f";音先入 {AUDIO_LEAD_S:g}s(本组声轨压前组尾画面,J-cut)"
+        return t
+
+    def motion_pair_design(with_overlay=True, lead=True):
+        """成对运镜:前组尾镜 out 运镜带出、本组首镜 in 运镜接入(写进两侧 prompt,sync_motion_pairs);默认再配音先入。"""
+        out, inn, speed = MOTION_DEFAULT
+        t = {"type": "hard_cut", "intent": intent, "reason": _reason(d, f"成对运镜 {out}→{inn}"), "source": "transition_design",
+             "motion_pair": {"out": out, "in": inn, "speed": speed}}
+        if with_overlay and have_lines and allow_cards:
+            t["overlay_card"] = _overlay(lines, srcs)
+        if lead:
+            t["audio_lead_s"] = AUDIO_LEAD_S
+            t["reason"] += f";音先入 {AUDIO_LEAD_S:g}s"
+        return t
+
     cls = d["class"]
     if mode == "minimal":
         return None, []
@@ -690,7 +758,10 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             "establishing": lambda: estab_only() if estab else (overlay_only() if (have_lines and allow_cards) else keep_hard()),
             "establishing_overlay": lambda: estab_only(True) if estab else (overlay_only() if (have_lines and allow_cards) else keep_hard()),
             "timelapse": lambda: timelapse_only() if tl else (card_only() if (have_lines and allow_cards) else keep_hard()),
-            "bridge": lambda: keep_hard(),   # 生成式桥接归三期:先按硬切,候选里标注
+            # 三期:生成式桥接只在勾选「生成式过场」时可出;否则退硬切(候选里仍不给 bridge,机检 generative_allowed 会拦)
+            "bridge": lambda: bridge_design(True) if generative else keep_hard(),
+            "motion_pair": lambda: motion_pair_design(True, lead=True),
+            "j_cut": lambda: j_cut(),   # 四期:硬切 + 音先入
         }
         design = table.get(opt, lambda: None)()
         if design is not None:
@@ -699,7 +770,12 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
     # classic / cinematic
     design = None
     if cls == "block_enter":
-        design = block_in(True)
+        if generative:
+            # 电影感(允许生成式):闪回 / 梦境进块用生成式桥接,白场 + 定格退作候选
+            design = bridge_design(True)
+            alts.append({"label": "白场 + 定格(不生成)", "transition_in": block_in(True)})
+        else:
+            design = block_in(True)
         alts.append({"label": "只白场不叠字", "transition_in": block_in(False)})
         if have_lines and allow_cards:
             alts.append({"label": "白底字卡", "transition_in": {**card_only(), "type": "fade_white", "inserts": [_card_insert(lines, srcs, bg="white", join_out="dip_white")]}})
@@ -709,6 +785,11 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             return None, []
         if have_lines and allow_cards:
             alts.append({"label": "叠「当下」地点字幕", "transition_in": overlay_only()})
+        if generative:
+            alts.append({"label": "生成式桥接回到当下", "transition_in": bridge_design(False)})
+        jc = j_cut(design) if mode == "cinematic" else None
+        if jc:
+            alts.append({"label": "硬切 + 音先入(J-cut)", "transition_in": jc})
     elif cls == "time_jump":
         if have_lines and allow_cards:
             design = card_plus_estab() if (mode == "cinematic" and estab and not d.get("first_shot_wide")) else card_only()
@@ -723,21 +804,32 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             design = estab_only(False)
         else:
             design = {"type": "dip_black", "duration_s": 0.8, "intent": intent, "reason": _reason(d, "黑场(无字卡/定场素材)"), "source": "transition_design"}
+        if mode == "cinematic":
+            alts.append({"label": "成对运镜 + 音先入", "transition_in": motion_pair_design(have_lines and allow_cards, lead=True)})
     elif cls == "scene_change":
         overlay_ok = have_lines and allow_cards
         if estab and not d.get("first_shot_wide"):
             design = estab_only(mode == "cinematic" and overlay_ok)
             if overlay_ok:
-                alts.append({"label": "只叠地点字幕(不变长)", "transition_in": overlay_only()})
+                # 四期:不变长的叠字方案在电影感下默认带音先入(J-cut)
+                ov = overlay_only()
+                alts.append({"label": "只叠地点字幕(不变长)" + (" + 音先入" if mode == "cinematic" else ""), "transition_in": (j_cut(ov) if mode == "cinematic" else None) or ov})
                 alts.append({"label": "定场+叠字" if mode != "cinematic" else "只定场", "transition_in": estab_only(mode != "cinematic")})
         elif overlay_ok:
             design = overlay_only()
+            if mode == "cinematic":
+                design = j_cut(design) or design
             if estab:
                 alts.append({"label": "定场空镜(首镜已是远景,通常不必)", "transition_in": estab_only(False)})
         elif estab:
             design = estab_only(False)
         else:
             design = {"type": "dissolve", "duration_s": 0.5, "intent": intent, "reason": _reason(d, "叠化(无字卡/定场素材)"), "source": "transition_design"}
+            if mode == "cinematic":
+                design = j_cut(design) or design
+        if mode == "cinematic":
+            # 三期:成对运镜(前组尾镜横摇带出、本组首镜同向横摇接入)作候选;方向由工位按两侧构图改(design --design)
+            alts.append({"label": "成对运镜 + 音先入", "transition_in": motion_pair_design(overlay_ok, lead=True)})
     else:   # same_scene
         if not d.get("has_change"):
             return None, []
@@ -954,7 +1046,9 @@ def _clip_rows_from(base: Path, ep: str, t: dict, bid: str, to_group: str, statu
         elif kind == "bridge":
             paths = clip_paths(ep, bid, "bridge")
             rows.append({"id": bid, "to_group": to_group, "insert_index": k, "kind": "bridge", "status": status,
-                         "file": x.get("file") or paths["file"], "still": None, "prompt": x.get("prompt") or "",
+                         "file": x.get("file") or paths["file"], "still": x.get("first_frame") or paths["first"],
+                         "first_frame": x.get("first_frame") or paths["first"], "last_frame": x.get("last_frame") or paths["last"],
+                         "prompt": x.get("prompt") or "",
                          "duration_s": float(x.get("duration_s") or 0.0), "request_duration_s": max(I2V_MIN_DURATION_S, math.ceil(float(x.get("duration_s") or 0.0)))})
     return rows
 
@@ -994,9 +1088,34 @@ def clips_needed(base: Path, ep: str, *, include_proposed: bool = False) -> list
         f = base / r["file"]
         r["exists"] = f.is_file()
         r["still_exists"] = bool(r.get("still")) and (base / r["still"]).is_file()
+        if r["kind"] == "bridge":
+            r["last_frame_exists"] = bool(r.get("last_frame")) and (base / r["last_frame"]).is_file()
+            r["still_exists"] = r["still_exists"] and r["last_frame_exists"]
         r["clip_duration_s"] = _probe_duration(f) if r["exists"] else None
         r["duration_ok"] = (r["clip_duration_s"] is None) or (r["clip_duration_s"] + 1e-3 >= r["duration_s"])
     return rows
+
+
+def _extract_frame(src: Path, out: Path, *, last: bool = False) -> bool:
+    """用 ffmpeg 抽首帧 / 末帧为 jpg;失败返回 False。"""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg") or not Path(src).is_file():
+        return False
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["ffmpeg", "-y", "-v", "error"] + (["-sseof", "-0.08"] if last else []) + ["-i", str(src), "-frames:v", "1", "-q:v", "2", str(out)]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+    except Exception:
+        return False
+    if last and not out.is_file():       # 极短 clip 时 -sseof 可能落空,退回按时长定位
+        d = _probe_duration(Path(src)) or 0.0
+        try:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{max(0.0, d - 0.05):.3f}", "-i", str(src), "-frames:v", "1", "-q:v", "2", str(out)],
+                           check=True, capture_output=True, timeout=120)
+        except Exception:
+            return False
+    return out.is_file()
 
 
 def _probe_duration(p: Path) -> float | None:
@@ -1019,6 +1138,28 @@ def prepare_clip_stills(base: Path, ep: str, rows: list[dict] | None = None, *, 
     w, h = _frame_size(base)
     done = []
     for r in rows:
+        if r.get("kind") == "bridge":
+            # 三期:桥接首尾帧 = 前组尾帧(assets/clips/<from>.last_frame.png 或从前组 clip 抽末帧)+ 本组 clip 首帧;两侧组视频未出即无法准备
+            from_gid = r["id"].split("-")[1] if r["id"].count("-") >= 2 else None
+            to_gid = r.get("to_group")
+            first_out, last_out = base / r["first_frame"], base / r["last_frame"]
+            ok_first = first_out.is_file() and not force
+            if not ok_first:
+                lf = base / "assets" / "clips" / ep / f"{from_gid}.last_frame.png"
+                if lf.is_file():
+                    from PIL import Image
+                    first_out.parent.mkdir(parents=True, exist_ok=True)
+                    Image.open(lf).convert("RGB").save(first_out, quality=93)
+                    ok_first = True
+                else:
+                    ok_first = _extract_frame(base / "assets" / "clips" / ep / f"{from_gid}.mp4", first_out, last=True)
+            ok_last = (last_out.is_file() and not force) or _extract_frame(base / "assets" / "clips" / ep / f"{to_gid}.mp4", last_out, last=False)
+            r["still_exists"] = r["last_frame_exists"] = ok_first and ok_last
+            if not (ok_first and ok_last):
+                r["still_error"] = f"桥接首尾帧缺:前组 {from_gid} / 本组 {to_gid} 的组视频尚未生成(p7-video 后再 --prepare)"
+                continue
+            done.append(r)
+            continue
         if r.get("kind") != "establishing" or not r.get("still"):
             continue
         out = base / r["still"]
@@ -1069,10 +1210,10 @@ def check_clips(base: Path, ep: str) -> tuple[bool, list[dict]]:
         return True, items
     missing = [f"{r['id']}.{r['kind']}" for r in rows if not r["exists"]]
     short = [f"{r['id']}.{r['kind']}({r['clip_duration_s']:.2f}s<{r['duration_s']:g}s)" for r in rows if r["exists"] and not r["duration_ok"]]
-    no_still = [r["id"] for r in rows if r["kind"] == "establishing" and not r["still_exists"]]
+    no_still = [f"{r['id']}.{r['kind']}" for r in rows if not r["still_exists"]]
     rec("transition_clips_ready", not missing and not short,
         f"需 {len(rows)} 段;缺文件 {missing[:6]}" if missing else (f"需 {len(rows)} 段;时长不足 {short[:4]}" if short else f"{len(rows)} 段 clip 齐全"))
-    rec("transition_clip_stills", not no_still, ("缺首帧静帧 " + ", ".join(no_still[:6]) + "(跑 clips --prepare)") if no_still else "首帧静帧齐全", warn=True)
+    rec("transition_clip_stills", not no_still, ("缺首帧 / 桥接首尾帧静帧 " + ", ".join(no_still[:6]) + "(跑 clips --prepare;桥接须两侧组视频已出)") if no_still else "首帧 / 首尾帧静帧齐全", warn=True)
     return fails == 0, items
 
 
@@ -1567,9 +1708,13 @@ def payload(base: Path, ep: str) -> dict:
             if x.get("kind") == "bridge" or (x.get("kind") == "establishing" and src.get("mode") == "i2v"):
                 paths = clip_paths(ep, bid, "establishing" if x.get("kind") == "establishing" else "bridge")
                 f = (src.get("file") if x.get("kind") == "establishing" else x.get("file")) or paths["file"]
-                still = src.get("still") or paths.get("still") if x.get("kind") == "establishing" else None
+                if x.get("kind") == "establishing":
+                    still, last = src.get("still") or paths.get("still"), None
+                else:   # 三期桥接:首帧 = 前组尾帧、尾帧 = 本组首帧
+                    still, last = x.get("first_frame") or paths.get("first"), x.get("last_frame") or paths.get("last")
                 clips.append({"kind": x.get("kind"), "file": f, "exists": (base / f).is_file(),
-                              "still": still, "still_url": url(still) if still else None})
+                              "still": still, "still_url": url(still) if still else None,
+                              "last": last, "last_url": url(last) if last else None})
         if status == "accepted" and (cur.get("inserts") or cur.get("overlay_card") or cur.get("type") != "hard_cut"):
             render_state = "rendered" if (led and rendered) else ("built" if built else "pending")
             if any(not c["exists"] for c in clips) and render_state in ("pending", "built"):

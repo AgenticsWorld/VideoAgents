@@ -34,7 +34,11 @@
   11d. transition_insert_valid        组边界插入段 inserts[](title_card 字幕卡 / establishing 定场空镜 / timelapse 时光流转 / bridge 生成式桥接):
                                        kind 在枚举内、单段 ∈ [0.5,4]s、单边界 Σ ≤ 6s、join_out 在枚举内、首组不得插入;
                                        Σ插入 ≤ 集预算 × 项目「过场模式」预算%(极简 0 / 经典 8 / 电影感 10 / 自定义自填);
-                                       overlay_card(叠字幕,不变长)duration_s ≤ 6s;audio_lead_s ∈ [0,1]
+                                       overlay_card(叠字幕,不变长)duration_s ≤ 6s;bridge / i2v 定场须给 clip 文件路径(assets/transitions/)
+  11f. motion_pair_valid              三期(2026-09-26):成对运镜 motion_pair {out, in, speed}:out/in 在 MOTION_PAIRS 配对表内且互为配对,
+                                       type ∈ hard_cut/dissolve,与 inserts / bridge 互斥,首组不得,须写 reason(写进两侧组 prompt:code/sync_motion_pairs.py)
+  11g. transition_audio_lead_valid    四期(2026-09-26):音先入 audio_lead_s ∈ (0,1],只配无 inserts / 无 hold_s 的 hard_cut/dissolve,首组不得,须写 reason
+                                       (由 audio-mixing 按 mix_basis sources boundaries[].audio_lead_s 摆位,画面与 timemap 不动)
   11e. transition_close_valid         集尾收束(2026-09-25,§9C):shot_list 顶层可选 episode_close {type: hard_cut|fade_black|fade_white|cut_black|cut_white,
                                        duration_s ∈ [0.3,3](淡出类), hold_s ∈ [0,3](淡出后黑/白场停留;切黑类须 >0), hold_audio ∈ fade|mute};缺省 = 项目设置
                                        settings.json#transitions.episode_close(默认淡出到黑 1.0s + 黑场 0.5s);hard_cut = 显式不处理(停在末帧)
@@ -107,6 +111,20 @@ EPISODE_CLOSE_AUDIO = ("fade", "mute")
 EPISODE_CLOSE_DEFAULT = {"type": "fade_black", "duration_s": 1.0, "hold_s": 0.5, "hold_audio": "fade"}
 EPISODE_CLOSE_CUT_DEFAULT = {"hold_s": 1.0, "hold_audio": "mute"}
 INSERT_KINDS = ("title_card", "establishing", "timelapse", "bridge")
+# —— 三期(2026-09-26):成对运镜 motion_pair {out, in, speed?}——前组尾镜以 out 运镜带出画面、本组首镜以 in 运镜接入(写进两侧组 prompt,
+#    code/sync_motion_pairs.py,机检 motion_pair_bound);out → in 的合法配对固定如下(同向延续或推拉互补);与 inserts / bridge 互斥,
+#    type 只能 hard_cut / dissolve(运镜对接本身就是过场,不再叠黑白场)
+MOTION_PAIRS = {
+    "pan_left": "pan_left", "pan_right": "pan_right",           # 同向横摇延续
+    "tilt_up": "tilt_up", "tilt_down": "tilt_down",             # 同向俯仰延续
+    "whip_pan_left": "whip_pan_left", "whip_pan_right": "whip_pan_right",   # 甩镜同向
+    "dolly_left": "dolly_left", "dolly_right": "dolly_right",   # 横移延续
+    "push_in": "pull_out", "pull_out": "push_in",               # 推进 ↔ 拉出互补
+}
+MOTION_SPEEDS = ("slow", "medium", "fast")
+# —— 四期(2026-09-26):音先入 audio_lead_s(J-cut)——本组原生声轨比画面早 0–1 s 进入,由 audio-mixing 按 mix_basis sources 的
+#    boundaries[].audio_lead_s 摆位(render_transitions 不动画面、不动 timemap);只配无插入段、无黑场停留的 hard_cut / dissolve 边界
+AUDIO_LEAD_TYPES = ("hard_cut", "dissolve")
 INSERT_MIN_S, INSERT_MAX_S = 0.5, 4.0          # 单段
 BOUNDARY_INSERT_MAX_S = 6.0                    # 单边界 Σinserts
 INSERT_JOINS = ("hard_cut", "dissolve", "dip_black", "dip_white", "fade_black", "fade_white")   # 插入段 → 下一段的接缝
@@ -422,7 +440,23 @@ def transition_of(group: dict) -> dict:
         t["audio_lead_s"] = al
     else:
         t.pop("audio_lead_s", None)
+    # 三期(2026-09-26):成对运镜 motion_pair 规范化——非对象 / 缺 out 即丢弃;speed 缺省 medium
+    mp = t.get("motion_pair")
+    if isinstance(mp, dict) and mp.get("out"):
+        mp = dict(mp)
+        mp["out"] = str(mp.get("out"))
+        mp["in"] = str(mp.get("in") or MOTION_PAIRS.get(mp["out"]) or "")
+        mp["speed"] = str(mp.get("speed") or "medium")
+        t["motion_pair"] = mp
+    else:
+        t.pop("motion_pair", None)
     return t
+
+
+def motion_pair_of(t: dict) -> dict | None:
+    """已规范化 transition_in 的成对运镜 {out, in, speed} 或 None。"""
+    mp = t.get("motion_pair") if isinstance(t, dict) else None
+    return mp if isinstance(mp, dict) and mp.get("out") else None
 
 
 def inserts_of(t: dict) -> list[dict]:
@@ -534,6 +568,30 @@ def _check_join(gid: str, t: dict) -> list[str]:
     return errs
 
 
+def _check_motion_pair(gid: str, t: dict, is_first: bool) -> list[str]:
+    """motion_pair_valid(三期 2026-09-26):out/in 在配对表内且互为合法配对、speed 枚举、type ∈ hard_cut/dissolve、与 inserts 互斥、首组不得、须写 reason。"""
+    mp = motion_pair_of(t)
+    if not mp:
+        return []
+    errs = []
+    out, inn = str(mp.get("out") or ""), str(mp.get("in") or "")
+    if out not in MOTION_PAIRS:
+        errs.append(f"{gid} motion_pair_valid: motion_pair.out={out!r} 不在枚举 {list(MOTION_PAIRS)}")
+    elif inn != MOTION_PAIRS[out]:
+        errs.append(f"{gid} motion_pair_valid: motion_pair.in={inn!r} 与 out={out} 不配对(应为 {MOTION_PAIRS[out]})")
+    if str(mp.get("speed") or "medium") not in MOTION_SPEEDS:
+        errs.append(f"{gid} motion_pair_valid: motion_pair.speed={mp.get('speed')!r} 不在枚举 {list(MOTION_SPEEDS)}")
+    if t.get("type") not in ("hard_cut", "dissolve"):
+        errs.append(f"{gid} motion_pair_valid: motion_pair 只配 hard_cut / dissolve(运镜对接本身就是过场),得到 {t.get('type')}")
+    if inserts_of(t):
+        errs.append(f"{gid} motion_pair_valid: motion_pair 与 inserts 互斥(插入段会打断运镜衔接)")
+    if is_first:
+        errs.append(f"{gid} motion_pair_valid: 首组无前组,不得 motion_pair")
+    if not str(t.get("reason") or "").strip():
+        errs.append(f"{gid} motion_pair_valid: 带 motion_pair 须写 reason")
+    return errs
+
+
 def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]:
     ins = inserts_of(t)
     if not ins:
@@ -581,6 +639,10 @@ def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]
         elif kind == "bridge":
             if t.get("motion_pair"):
                 errs.append(f"{tag} transition_insert_valid: bridge 与 motion_pair 互斥")
+            # 三期(2026-09-26):桥接 clip 由 Phase 7 p7-transition-clips 出到 assets/transitions/epNN/<B-id>.bridge.mp4
+            f = str(x.get("file") or "")
+            if not f.startswith("assets/transitions/") or not f.endswith(".mp4"):
+                errs.append(f"{tag} transition_insert_valid: bridge 须给 file(assets/transitions/epNN/<B-id>.bridge.mp4),得到 {f!r}")
     if total > BOUNDARY_INSERT_MAX_S + 1e-9:
         errs.append(f"{gid} transition_insert_valid: 单边界 Σinserts {total:g}s > {BOUNDARY_INSERT_MAX_S:g}s")
     return errs, total
@@ -664,8 +726,20 @@ def check_transitions(shot_list: dict, insert_budget_pct: float | None = None) -
                 errors.append(f"{gid} transition_insert_valid: overlay_card.duration_s={oc.get('duration_s')} ∉ (0,{OVERLAY_MAX_S:g}]")
             if oc.get("position") not in OVERLAY_POSITIONS:
                 errors.append(f"{gid} transition_insert_valid: overlay_card.position={oc.get('position')!r} 不在枚举 {list(OVERLAY_POSITIONS)}")
-        if t.get("audio_lead_s") and float(t["audio_lead_s"]) > AUDIO_LEAD_MAX_S + 1e-9:
-            errors.append(f"{gid} transition_insert_valid: audio_lead_s={t['audio_lead_s']} > {AUDIO_LEAD_MAX_S:g}")
+        if t.get("audio_lead_s"):
+            # 四期(2026-09-26):音先入只配无插入段 / 无黑场停留的 hard_cut / dissolve 边界;首组无前组不得先入
+            al = float(t["audio_lead_s"])
+            if al > AUDIO_LEAD_MAX_S + 1e-9:
+                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s={t['audio_lead_s']} > {AUDIO_LEAD_MAX_S:g}")
+            if ty not in AUDIO_LEAD_TYPES:
+                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s 只配 {list(AUDIO_LEAD_TYPES)}(音先入压在前组尾画面上),得到 {ty}")
+            if inserts_of(t) or hold_s:
+                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s 不得与 inserts / hold_s 并用(先入声无处可压)")
+            if i == 0:
+                errors.append(f"{gid} transition_audio_lead_valid: 首组无前组,不得 audio_lead_s")
+            if not str(t.get("reason") or "").strip():
+                errors.append(f"{gid} transition_audio_lead_valid: 带 audio_lead_s 须写 reason")
+        errors += _check_motion_pair(gid, t, i == 0)
     if budget and insert_total > float(budget) * insert_budget_pct / 100.0 + 1e-9:
         errors.append(f"transition_insert_budget: Σ插入段 {insert_total:g}s > 集预算 {budget}s × {insert_budget_pct:g}%"
                       f" = {float(budget) * insert_budget_pct / 100.0:.2f}s(项目「过场模式」预算;极简档为 0)")

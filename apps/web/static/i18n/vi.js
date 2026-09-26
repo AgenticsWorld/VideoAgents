@@ -3839,4 +3839,6 @@ window.I18N_DICT = {
 "等 {n} 个": "(tổng {n})",
 "首帧": "Khung hình đầu",
 "工位建议": "Đề xuất của trạm",
+"成对运镜": "Chuyển động máy ghép đôi",
+"音先入": "Âm thanh vào trước (J-cut)",
 };
